@@ -2,8 +2,8 @@
  * Pure view-tab reorder math — no React, no DOM event wiring.
  * UI handlers stay flat peers; they call into this module.
  *
- * While dragging, the source tab collapses out of the strip and hit-testing
- * uses peer tabs only (remaining). Insert slots are 0..peers.length.
+ * While dragging, hit-testing uses a frozen peer strip (captured at drag
+ * start) so the in-flow ghost cannot shift midpoints and jitter the slot.
  */
 
 export interface ViewTabDragState {
@@ -14,6 +14,17 @@ export interface ViewTabDragState {
   hasMoved: boolean
   /** Tab width captured before the source collapses (ghost sizing). */
   widthPx: number
+  /** Frozen peer geometry for jitter-free hit-testing while the ghost is in flow. */
+  peerStrip: PeerStripMetrics | null
+}
+
+export interface PeerStripMetrics {
+  /** Content-box left of the tab strip (client coordinates). */
+  originLeft: number
+  /** Flex gap between tabs (px). */
+  gapPx: number
+  /** Peer widths in order, source excluded. */
+  peerWidths: readonly number[]
 }
 
 export type ViewTabDropAction =
@@ -46,6 +57,26 @@ export function tabInsertSlotFromClientX(
   return tabRects.length
 }
 
+/** Lay out peer rects from frozen strip metrics (ignores the live ghost). */
+export function syntheticPeerRects(
+  strip: PeerStripMetrics,
+): Array<{ left: number; width: number }> {
+  let left = strip.originLeft
+  return strip.peerWidths.map((width) => {
+    const rect = { left, width }
+    left += width + strip.gapPx
+    return rect
+  })
+}
+
+export function remainingSlotFromPointer(
+  strip: PeerStripMetrics | null,
+  clientX: number,
+): number {
+  if (!strip) return 0
+  return tabInsertSlotFromClientX(syntheticPeerRects(strip), clientX)
+}
+
 /**
  * Remaining-based insert slot → `reorderViews` toIndex.
  * Peers are the list with the dragged tab removed; inserting at `slot`
@@ -53,15 +84,6 @@ export function tabInsertSlotFromClientX(
  */
 export function toIndexFromRemainingSlot(remainingSlot: number): number {
   return Math.max(0, remainingSlot)
-}
-
-/**
- * Home gap among peers after the source collapses equals `fromIndex`.
- * Only then is the strip a closed peer row with no ghost.
- */
-export function remainingSlotWouldMove(fromIndex: number, remainingSlot: number): boolean {
-  if (fromIndex < 0) return false
-  return remainingSlot !== fromIndex
 }
 
 /**
@@ -75,13 +97,25 @@ export function fullIndexFromRemainingSlot(fromIndex: number, remainingSlot: num
   return remainingSlot + 1
 }
 
-export function readTabRects(container: HTMLElement | null): Array<{ left: number; width: number }> {
-  if (!container) return []
-  // Skip the collapsed drag source — hit-test peers only.
-  return [...container.querySelectorAll<HTMLElement>("[data-view-id]:not([data-view-dragging])")].map((el) => {
-    const rect = el.getBoundingClientRect()
-    return { left: rect.left, width: rect.width }
-  })
+/**
+ * Capture peer strip metrics before the source collapses.
+ * Live DOM midpoints must not be used after the ghost enters the flow.
+ */
+export function capturePeerStrip(
+  container: HTMLElement | null,
+  dragViewId: string,
+): PeerStripMetrics | null {
+  if (!container) return null
+  const tabs = [...container.querySelectorAll<HTMLElement>("[data-view-id]")]
+  const peers = tabs.filter((el) => el.dataset.viewId !== dragViewId)
+  const styles = getComputedStyle(container)
+  const gapPx = parseFloat(styles.columnGap || styles.gap || "4") || 4
+  const padLeft = parseFloat(styles.paddingLeft || "0") || 0
+  return {
+    originLeft: container.getBoundingClientRect().left + padLeft,
+    gapPx,
+    peerWidths: peers.map((el) => el.offsetWidth),
+  }
 }
 
 /** Distance before a press becomes a reorder drag (keeps clicks as activate). */

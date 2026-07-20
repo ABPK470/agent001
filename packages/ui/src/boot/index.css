@@ -2840,25 +2840,35 @@ textarea.input {
   border: 1px dashed color-mix(in srgb, var(--color-border) 70%, transparent);
 }
 
-/* View-tab reorder — source collapses; in-flow ghost opens the destination gap. */
+/*
+ * View-tab reorder — source leaves flex flow (no gap stub) so replacing it
+ * with the same-width ghost does not shove the plus button.
+ * Kept mounted for pointer capture; absolute so peers/ghost own the row.
+ */
 .view-tab-dragging {
+  position: absolute;
   width: 0 !important;
   min-width: 0 !important;
-  padding-left: 0 !important;
-  padding-right: 0 !important;
+  height: 0 !important;
+  padding: 0 !important;
   margin: 0 !important;
   opacity: 0;
   overflow: hidden;
   border: none;
-  gap: 0 !important;
 }
 
 .view-tab-peer-dim {
   opacity: 0.78;
 }
 
+/* Dark: slightly lifted. Light keeps the quieter panel wash. */
 .view-tab-drop-ghost {
   color: var(--color-text);
+  background: color-mix(in srgb, var(--color-panel-2) 90%, var(--color-text) 7%);
+  border: 1px dashed color-mix(in srgb, var(--color-border-strong) 70%, var(--color-text) 18%);
+}
+
+:root[data-theme="light"] .view-tab-drop-ghost {
   background: color-mix(in srgb, var(--color-panel) 70%, transparent);
   border: 1px dashed color-mix(in srgb, var(--color-border) 85%, transparent);
 }

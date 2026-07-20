@@ -117,7 +117,7 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
                 data-view-id={view.id}
                 {...(isDragging ? { "data-view-dragging": "" } : {})}
                 className={[
-                  "group relative flex h-9 shrink-0 cursor-grab items-center gap-1 rounded-lg px-2.5 text-[13px] transition-[width,padding,opacity,background-color] active:cursor-grabbing",
+                  "group relative flex h-9 shrink-0 cursor-grab items-center gap-1 rounded-lg px-2.5 text-[13px] transition-[opacity,background-color] active:cursor-grabbing",
                   view.id === activeViewId
                     ? "font-semibold text-text"
                     : "text-text-muted hover:text-text-secondary",

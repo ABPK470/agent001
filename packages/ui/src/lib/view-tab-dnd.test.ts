@@ -2,8 +2,9 @@ import { describe, expect, it } from "vitest"
 import {
   fullIndexFromRemainingSlot,
   markDragMoved,
-  remainingSlotWouldMove,
+  remainingSlotFromPointer,
   resolveViewTabDrop,
+  syntheticPeerRects,
   tabIndexFromClientX,
   tabInsertSlotFromClientX,
   toIndexFromRemainingSlot,
@@ -37,13 +38,37 @@ describe("view-tab-dnd", () => {
     // Drag index 1 out of [A,B,C,D] → peers [A,C,D]; home remaining slot = 1.
     expect(toIndexFromRemainingSlot(0)).toBe(0)
     expect(toIndexFromRemainingSlot(2)).toBe(2)
-    expect(remainingSlotWouldMove(1, 1)).toBe(false)
-    expect(remainingSlotWouldMove(1, 0)).toBe(true)
-    expect(remainingSlotWouldMove(1, 2)).toBe(true)
     expect(fullIndexFromRemainingSlot(1, 0)).toBe(0)
     expect(fullIndexFromRemainingSlot(1, 1)).toBe(1)
     expect(fullIndexFromRemainingSlot(1, 2)).toBe(3)
     expect(fullIndexFromRemainingSlot(1, 3)).toBe(4)
+  })
+
+  it("builds synthetic peer rects that ignore a live ghost", () => {
+    const rects = syntheticPeerRects({
+      originLeft: 100,
+      gapPx: 4,
+      peerWidths: [80, 90],
+    })
+    expect(rects).toEqual([
+      { left: 100, width: 80 },
+      { left: 184, width: 90 },
+    ])
+    expect(remainingSlotFromPointer({
+      originLeft: 100,
+      gapPx: 4,
+      peerWidths: [80, 90],
+    }, 120)).toBe(0)
+    expect(remainingSlotFromPointer({
+      originLeft: 100,
+      gapPx: 4,
+      peerWidths: [80, 90],
+    }, 200)).toBe(1)
+    expect(remainingSlotFromPointer({
+      originLeft: 100,
+      gapPx: 4,
+      peerWidths: [80, 90],
+    }, 300)).toBe(2)
   })
 
   it("marks movement past threshold", () => {
@@ -54,6 +79,7 @@ describe("view-tab-dnd", () => {
       pointerId: 1,
       hasMoved: false,
       widthPx: 96,
+      peerStrip: null,
     }
     expect(markDragMoved(drag, 14, 10)).toBe(false)
     expect(markDragMoved(drag, 23, 10)).toBe(true)
@@ -68,6 +94,7 @@ describe("view-tab-dnd", () => {
       pointerId: 1,
       hasMoved: true,
       widthPx: 96,
+      peerStrip: null,
     }
     expect(resolveViewTabDrop(drag, 2, 0)).toEqual({
       kind: "reorder",
@@ -84,6 +111,7 @@ describe("view-tab-dnd", () => {
       pointerId: 1,
       hasMoved: false,
       widthPx: 96,
+      peerStrip: null,
     }
     expect(resolveViewTabDrop(drag, 1, 0)).toEqual({
       kind: "activate",

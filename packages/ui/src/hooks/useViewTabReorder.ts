@@ -2,17 +2,17 @@
  * Flat peer handlers for view-tab drag reorder.
  * Transient drag state lives in a ref — no nested listener allocations.
  *
- * After the move threshold: source collapses (still mounted for pointer
- * capture), peers close the gap, and an in-flow ghost opens space at the
- * remaining-based insert slot.
+ * After the move threshold: source collapses out of flex flow (still mounted
+ * for pointer capture), peers close, and an in-flow ghost opens the insert
+ * gap. Hit-testing uses frozen peer metrics so the ghost cannot jitter slots.
  */
 
 import { useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from "react"
 import {
+  capturePeerStrip,
   markDragMoved,
-  readTabRects,
+  remainingSlotFromPointer,
   resolveViewTabDrop,
-  tabInsertSlotFromClientX,
   toIndexFromRemainingSlot,
   type ViewTabDragState,
 } from "../lib/view-tab-dnd"
@@ -35,7 +35,8 @@ export function useViewTabReorder(
   }
 
   function slotFromPointer(clientX: number): number {
-    return tabInsertSlotFromClientX(readTabRects(tabsRef.current), clientX)
+    const drag = dragRef.current
+    return remainingSlotFromPointer(drag?.peerStrip ?? null, clientX)
   }
 
   function onTabPointerDown(viewId: string, event: ReactPointerEvent<HTMLDivElement>) {
@@ -52,6 +53,7 @@ export function useViewTabReorder(
       pointerId: event.pointerId,
       hasMoved: false,
       widthPx: target.offsetWidth,
+      peerStrip: null,
     }
     // Do not enter drag chrome until the press clears the move threshold —
     // otherwise a normal click feels like a reorder gesture.
@@ -67,11 +69,18 @@ export function useViewTabReorder(
 
     // Enter drag chrome only after the threshold clears (not on pointer-down).
     if (!alreadyDragging) {
+      const views = useLayoutStore.getState().views
+      const fromIndex = views.findIndex((view) => view.id === drag.viewId)
+      // Freeze peer geometry before collapse/ghost shift the live DOM.
+      drag.peerStrip = capturePeerStrip(tabsRef.current, drag.viewId)
       setDragWidthPx(drag.widthPx)
       setDraggingId(drag.viewId)
+      // Start at home so the first paint replaces the source with the ghost
+      // (same width) — no empty closed gap, no slot flicker under the pointer.
+      setDropSlot(Math.max(0, fromIndex))
+      return
     }
 
-    // Always show the ghost — including when the pointer returns to home.
     setDropSlot(slotFromPointer(event.clientX))
   }
 
@@ -92,7 +101,8 @@ export function useViewTabReorder(
 
     const { views, reorderViews, setActiveView } = useLayoutStore.getState()
     const fromIndex = views.findIndex((view) => view.id === drag.viewId)
-    const slot = slotFromPointer(event.clientX)
+    // peerStrip still on local `drag` after we nulled dragRef.
+    const slot = remainingSlotFromPointer(drag.peerStrip, event.clientX)
     const toIndex = toIndexFromRemainingSlot(slot)
     const action = resolveViewTabDrop(drag, toIndex, fromIndex)
 
