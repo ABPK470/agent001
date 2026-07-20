@@ -26,7 +26,7 @@ import {
   quotePgTable,
   splitOracleTable,
 } from "../sql-idents.js"
-import type { MssqlDriver, MssqlTransaction } from "./mssql.js"
+import type { MssqlDriver, MssqlInsertOptions, MssqlTransaction } from "./mssql.js"
 import type {
   OracleDriver,
   OracleInsertOptions,
@@ -106,8 +106,8 @@ export function defaultMssqlDriver(pool: sql.ConnectionPool): MssqlDriver {
       await txCtx.begin()
       return makeMssqlTransaction(pool, txCtx)
     },
-    async insertBatches(table, rows) {
-      return mssqlInsertBatches(pool, null, table, rows)
+    async insertBatches(table, rows, options) {
+      return mssqlInsertBatches(pool, null, table, rows, options)
     },
     async close() {
       // Pools are owned by the boot host; do not close here.
@@ -120,18 +120,14 @@ function makeMssqlTransaction(pool: sql.ConnectionPool, txCtx: sql.Transaction):
     async truncate(table) {
       await new sql.Request(txCtx).query(`TRUNCATE TABLE ${quoteMssqlTable(table)}`)
     },
-    async setIdentityInsert(table, on) {
-      const flag = on ? "ON" : "OFF"
-      await new sql.Request(txCtx).query(`SET IDENTITY_INSERT ${quoteMssqlTable(table)} ${flag}`)
-    },
     async setConstraintsChecked(table, checked) {
       const verb = checked ? "CHECK" : "NOCHECK"
       await new sql.Request(txCtx).query(
         `ALTER TABLE ${quoteMssqlTable(table)} ${verb} CONSTRAINT ALL`,
       )
     },
-    async insertBatches(table, rows) {
-      return mssqlInsertBatches(pool, txCtx, table, rows)
+    async insertBatches(table, rows, options) {
+      return mssqlInsertBatches(pool, txCtx, table, rows, options)
     },
     async commit() {
       await txCtx.commit()
@@ -147,15 +143,22 @@ async function mssqlInsertBatches(
   txCtx: sql.Transaction | null,
   table: string,
   rows: AsyncGenerator<RowBatch>,
+  options?: MssqlInsertOptions,
 ): Promise<MoveSummary> {
   let rowsWritten = 0
+  const qTable = quoteMssqlTable(table)
   for await (const batch of rows) {
     if (batch.length === 0) continue
     const cols = Object.keys(batch[0]!)
     const values = batch
       .map((r) => `(${cols.map((c) => quoteLit(r[c])).join(",")})`)
       .join(",")
-    const stmt = `INSERT INTO ${quoteMssqlTable(table)} (${cols.map(quoteMssqlIdent).join(",")}) VALUES ${values}`
+    // IDENTITY_INSERT must share the INSERT batch — a prior SET request is ignored
+    // by node-mssql/tedious even inside a transaction (see tediousjs/node-mssql#936).
+    const insert = `INSERT INTO ${qTable} (${cols.map(quoteMssqlIdent).join(",")}) VALUES ${values}`
+    const stmt = options?.identityInsert
+      ? `SET IDENTITY_INSERT ${qTable} ON;\n${insert};\nSET IDENTITY_INSERT ${qTable} OFF;`
+      : insert
     const req = txCtx ? new sql.Request(txCtx) : new sql.Request(pool)
     await req.query(stmt)
     rowsWritten += batch.length

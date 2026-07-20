@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest"
 import type { Connector, MoveSummary, Row } from "@mia/shared-types"
-import { createMssqlAdapter, type MssqlDriver, type MssqlTransaction } from "../../src/adapters/mssql.js"
+import {
+  createMssqlAdapter,
+  type MssqlDriver,
+  type MssqlInsertOptions,
+  type MssqlTransaction,
+} from "../../src/adapters/mssql.js"
 
 function mockConnector(): Connector {
   return {
@@ -21,8 +26,8 @@ interface MockDriver extends MssqlDriver {
   truncated: string | null
   committed: boolean
   rolledBack: boolean
-  identityStates: boolean[]
   constraintsChecked: boolean[]
+  lastInsertOpts: MssqlInsertOptions | undefined
   insertFailAtBatch?: number
 }
 
@@ -32,8 +37,8 @@ function mockDriver(streamBatches: Row[][]): MockDriver {
     truncated: null,
     committed: false,
     rolledBack: false,
-    identityStates: [],
     constraintsChecked: [],
+    lastInsertOpts: undefined,
     async *streamQuery(_sql, batchSize) {
       let buf: Row[] = []
       for (const row of streamBatches.flat()) {
@@ -48,7 +53,8 @@ function mockDriver(streamBatches: Row[][]): MockDriver {
     async beginTransaction() {
       return makeTx()
     },
-    async insertBatches(table, rows) {
+    async insertBatches(table, rows, options) {
+      driver.lastInsertOpts = options
       return doInsert(null, table, rows)
     },
     async close() {},
@@ -58,13 +64,11 @@ function mockDriver(streamBatches: Row[][]): MockDriver {
       async truncate(table) {
         driver.truncated = table
       },
-      async setIdentityInsert(_table, on) {
-        driver.identityStates.push(on)
-      },
       async setConstraintsChecked(_table, checked) {
         driver.constraintsChecked.push(checked)
       },
-      async insertBatches(table, rows) {
+      async insertBatches(table, rows, options) {
+        driver.lastInsertOpts = options
         return doInsert(driver, table, rows)
       },
       async commit() {
@@ -134,7 +138,7 @@ describe("mssql adapter", () => {
     expect(summary.rowsWritten).toBe(3)
     expect(driver.inserted).toEqual([[{ a: 1 }], [{ a: 2 }, { a: 3 }]])
     expect(driver.truncated).toBeNull()
-    expect(driver.identityStates).toEqual([])
+    expect(driver.lastInsertOpts).toBeUndefined()
   })
 
   it("replace truncates + inserts in a transaction and commits", async () => {
@@ -155,7 +159,7 @@ describe("mssql adapter", () => {
     expect(driver.rolledBack).toBe(false)
   })
 
-  it("append with identity + relax toggles ON then restores before commit", async () => {
+  it("append with identity passes identityInsert into the insert batch", async () => {
     const driver = mockDriver([])
     const adapter = createMssqlAdapter(mockConnector(), {
       driverProvider: async () => driver,
@@ -176,7 +180,7 @@ describe("mssql adapter", () => {
     expect(summary.status).toBe("completed")
     expect(driver.truncated).toBeNull()
     expect(driver.constraintsChecked).toEqual([false, true])
-    expect(driver.identityStates).toEqual([true, false])
+    expect(driver.lastInsertOpts).toEqual({ identityInsert: true })
     expect(driver.committed).toBe(true)
   })
 

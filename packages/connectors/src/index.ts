@@ -39,6 +39,7 @@ export {
   createMssqlAdapter,
   type MssqlAdapterOptions,
   type MssqlDriver,
+  type MssqlInsertOptions,
   type MssqlTransaction,
 } from "./adapters/mssql.js"
 

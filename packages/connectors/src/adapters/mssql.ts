@@ -24,6 +24,15 @@ import { makeSummary } from "../engine.js"
 /** A row batch yielded by the streaming read. */
 export type RowBatch = Row[]
 
+/** Options for a powered insert batch (same SQL batch as the INSERT). */
+export type MssqlInsertOptions = {
+  /**
+   * Prefix each INSERT with `SET IDENTITY_INSERT … ON` in the *same* query
+   * string. Separate SET + INSERT requests are not reliable with node-mssql.
+   */
+  readonly identityInsert?: boolean
+}
+
 /** Streaming read + transactional batch write, abstracted over `mssql`. */
 export interface MssqlDriver {
   /** Stream rows from a SQL query in fixed-size batches. */
@@ -31,17 +40,23 @@ export interface MssqlDriver {
   /** Open a transaction (also used when identity/constraint power-ups need one session). */
   beginTransaction(): Promise<MssqlTransaction>
   /** Batch-insert rows into a table (plain append — no session power-ups). */
-  insertBatches(table: string, rows: AsyncGenerator<RowBatch>): Promise<MoveSummary>
+  insertBatches(
+    table: string,
+    rows: AsyncGenerator<RowBatch>,
+    options?: MssqlInsertOptions,
+  ): Promise<MoveSummary>
   close(): Promise<void>
 }
 
 export interface MssqlTransaction {
   truncate(table: string): Promise<void>
-  /** `SET IDENTITY_INSERT … ON/OFF` on this connection. */
-  setIdentityInsert(table: string, on: boolean): Promise<void>
   /** `NOCHECK` (false) or `CHECK CONSTRAINT ALL` (true) on the target table. */
   setConstraintsChecked(table: string, checked: boolean): Promise<void>
-  insertBatches(table: string, rows: AsyncGenerator<RowBatch>): Promise<MoveSummary>
+  insertBatches(
+    table: string,
+    rows: AsyncGenerator<RowBatch>,
+    options?: MssqlInsertOptions,
+  ): Promise<MoveSummary>
   commit(): Promise<void>
   rollback(): Promise<void>
 }
@@ -112,8 +127,10 @@ export function createMssqlAdapter(
 }
 
 /**
- * One connection for replace and/or identity/constraint overrides.
- * IDENTITY_INSERT is session-scoped; NOCHECK persists until restored — always restore.
+ * One connection for replace and/or constraint overrides.
+ * IDENTITY_INSERT is applied in the same SQL batch as each INSERT (node-mssql
+ * does not reliably keep a prior SET across requests). NOCHECK is metadata —
+ * always restore after the write.
  */
 async function writePowered(
   driver: MssqlDriver,
@@ -121,27 +138,26 @@ async function writePowered(
   rows: AsyncGenerator<RowBatch>,
 ): Promise<MoveSummary> {
   const tx = await driver.beginTransaction()
-  let identityOn = false
   let nocheck = false
   let rowsWritten = 0
+  const insertOpts: MssqlInsertOptions | undefined = spec.allowIdentityInsert
+    ? { identityInsert: true }
+    : undefined
   try {
     if (spec.relaxConstraints) {
       await tx.setConstraintsChecked(spec.table, false)
       nocheck = true
     }
-    if (spec.allowIdentityInsert) {
-      await tx.setIdentityInsert(spec.table, true)
-      identityOn = true
-    }
     if (spec.mode === "replace") {
       await tx.truncate(spec.table)
     }
-    const insertSummary = await tx.insertBatches(spec.table, rows)
+    const insertSummary = await tx.insertBatches(spec.table, rows, insertOpts)
     rowsWritten = insertSummary.rowsWritten
 
-    await restoreMssqlGuards(tx, spec.table, identityOn, nocheck)
-    identityOn = false
-    nocheck = false
+    if (nocheck) {
+      await tx.setConstraintsChecked(spec.table, true)
+      nocheck = false
+    }
 
     if (insertSummary.status !== "completed") {
       await tx.rollback()
@@ -157,7 +173,7 @@ async function writePowered(
     return makeSummary("completed", insertSummary.rowsRead, rowsWritten, [], null)
   } catch (e) {
     try {
-      await restoreMssqlGuards(tx, spec.table, identityOn, nocheck)
+      if (nocheck) await tx.setConstraintsChecked(spec.table, true)
     } catch {
       // Best-effort restore before rollback / pool return.
     }
@@ -168,16 +184,6 @@ async function writePowered(
     }
     return makeSummary("failed", rowsWritten, rowsWritten, [{ row: rowsWritten, message: messageOf(e) }], rowsWritten)
   }
-}
-
-async function restoreMssqlGuards(
-  tx: MssqlTransaction,
-  table: string,
-  identityOn: boolean,
-  nocheck: boolean,
-): Promise<void> {
-  if (identityOn) await tx.setIdentityInsert(table, false)
-  if (nocheck) await tx.setConstraintsChecked(table, true)
 }
 
 function messageOf(e: unknown): string {
