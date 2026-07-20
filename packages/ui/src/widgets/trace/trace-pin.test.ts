@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest"
 import { computePinnedScopeIds } from "./trace-pin.js"
 
-function fakeScroll(scopes: Array<{ id: string; kind: string; call?: number; top: number }>, scrollTop: number) {
+function fakeScroll(
+  scopes: Array<{ id: string; kind: string; call?: number; top: number }>,
+  scrollTop: number,
+) {
   const scrollEl = {
     scrollTop,
-    getBoundingClientRect: () => ({ top: 0, left: 0, right: 0, bottom: 400, width: 300, height: 400 }),
     querySelectorAll: () =>
       scopes.map((s) => {
         const el = {
@@ -12,15 +14,9 @@ function fakeScroll(scopes: Array<{ id: string; kind: string; call?: number; top
             traceScope: s.id,
             traceKind: s.kind,
             traceCall: s.call == null ? "" : String(s.call),
+            // Layout top — stable even if the node were visually sticky.
+            traceFlowTop: String(s.top),
           },
-          getBoundingClientRect: () => ({
-            top: s.top - scrollTop,
-            left: 0,
-            right: 300,
-            bottom: s.top - scrollTop + 34,
-            width: 300,
-            height: 34,
-          }),
         }
         return el as unknown as HTMLElement
       }),
@@ -40,8 +36,7 @@ describe("computePinnedScopeIds", () => {
     { id: "received:2", kind: "received", call: 2, top: 800 },
   ]
 
-  it("pins nothing at the very top before any header passes", () => {
-    // scrollTop 0: context top is 0, so context is pinned (top <= scrollTop)
+  it("pins context at scrollTop 0", () => {
     expect(fakeScroll(scopes, 0)).toEqual(["context"])
   })
 
@@ -66,5 +61,12 @@ describe("computePinnedScopeIds", () => {
       "sent:2",
       "received:2",
     ])
+  })
+
+  it("does not unpin when visual sticky would skew getBoundingClientRect", () => {
+    // Flow tops stay at layout positions; even if sticky moved the visual
+    // box to the viewport top, pin decisions still use flow tops.
+    expect(fakeScroll(scopes, 620)).toEqual(["context", "call:0", "call:1", "call:2"])
+    expect(fakeScroll(scopes, 620)).toEqual(["context", "call:0", "call:1", "call:2"])
   })
 })

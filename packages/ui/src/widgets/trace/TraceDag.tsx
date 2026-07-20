@@ -28,8 +28,8 @@ import {
   type TraceToolCall,
 } from "./build-trace-dag"
 import {
-  applyTracePinStack,
-  computePinnedScopeIds,
+  pinFromCache,
+  remeasureAndPin,
   type TraceScopeKind,
 } from "./trace-pin"
 
@@ -747,10 +747,17 @@ export function TraceDag({
     return map
   }, [dag.calls, query, runId, threadId])
 
-  function refreshPin() {
+  function onScrollPin() {
     const el = scrollRef.current
     if (!el) return
-    applyTracePinStack(el, computePinnedScopeIds(el))
+    // Cached flow tops only — never remeasure with sticky applied.
+    pinFromCache(el)
+  }
+
+  function onLayoutPin() {
+    const el = scrollRef.current
+    if (!el) return
+    remeasureAndPin(el)
   }
 
   useEffect(() => {
@@ -800,14 +807,10 @@ export function TraceDag({
     const el = scrollRef.current
     if (!el) return
 
-    function onScroll() {
-      refreshPin()
-    }
-
-    el.addEventListener("scroll", onScroll, { passive: true })
-    const raf = requestAnimationFrame(() => refreshPin())
+    el.addEventListener("scroll", onScrollPin, { passive: true })
+    const raf = requestAnimationFrame(() => onLayoutPin())
     return () => {
-      el.removeEventListener("scroll", onScroll)
+      el.removeEventListener("scroll", onScrollPin)
       cancelAnimationFrame(raf)
     }
   }, [

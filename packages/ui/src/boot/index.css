@@ -1829,6 +1829,7 @@ textarea.input {
 }
 
 .trace-scroll {
+  position: relative; /* offsetParent root for layout-top measurement */
   padding: 0 0.15rem 1.25rem;
   /* no top padding — pin stack must sit flush at 0 */
 }
@@ -1890,13 +1891,10 @@ textarea.input {
   border-left: none;
   border-right: none;
   border-top: none;
+  /* Solid — never translucent (looks like flicker over scrolling content) */
   background: var(--bg);
-  box-shadow: 0 1px 0 var(--border-subtle, var(--color-border-subtle));
-}
-
-.trace-scope.is-pinned.is-open,
-.trace-scope.is-pinned {
-  background: color-mix(in srgb, var(--text, var(--color-text)) 4%, var(--bg));
+  opacity: 1;
+  box-shadow: 0 1px 0 var(--border, var(--color-border));
 }
 
 .trace-scope:hover {
