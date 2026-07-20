@@ -1,50 +1,125 @@
 /**
- * DebugInspector — the "why did the agent do that?" widget.
+ * Trace (DebugInspector) — why the agent did that.
  *
- * Shows what no other widget shows:
- *   - The FULL system prompt the LLM received (every character)
- *   - Every tool available to the agent with full parameter schemas
- *   - The COMPLETE message array sent in each LLM call
- *   - The FULL LLM response: content + tool calls with arguments
- *   - Token usage per call
- *
- * This is not a duplicate of Agent Trace — Trace shows WHAT happened,
- * this shows the raw inputs/outputs that explain WHY.
+ * Primary object: the LLM call timeline (iteration · tokens · time · outcome).
+ * Context (system prompt, tools, SQL quality) is secondary and collapsed by default.
+ * Message parts (system / user / agent / tool) can be fully collapsed or expanded.
  */
 
 import { ChevronDown, ChevronRight, Clock, Copy, Search } from "lucide-react"
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react"
 import { EmptyState } from "../components/EmptyState"
 import { JsonViewer } from "../components/JsonViewer"
+import { fmtTokens, formatMs } from "../lib/util"
 import { useStore } from "../state/store"
 import type { TraceEntry } from "../types"
-import { fmtTokens } from "../lib/util"
 import { WIDGET_ICONS } from "./widget-icons"
 
-// ── Helpers ─────────────────────────────────────────────────────
+// ── Types ────────────────────────────────────────────────────────
 
-const ROLE_COLORS: Record<string, string> = {
-  system: "text-accent",
-  user: "text-success",
-  assistant: "text-warning",
-  tool: "text-info",
+type LlmRequest = Extract<TraceEntry, { kind: "llm-request" }>
+type LlmResponse = Extract<TraceEntry, { kind: "llm-response" }>
+type SystemPrompt = Extract<TraceEntry, { kind: "system-prompt" }>
+type ToolsResolved = Extract<TraceEntry, { kind: "tools-resolved" }>
+type SqlQuality = Extract<TraceEntry, { kind: "planner-sql-quality" }>
+
+type TraceMessage = LlmRequest["messages"][number]
+type LlmCall = { request: LlmRequest; response: LlmResponse | null }
+type FilterKind = "calls" | "context" | "all"
+type PartsMode = "collapsed" | "expanded"
+
+// ── Role / meta helpers ──────────────────────────────────────────
+
+/** Wire role → product label (never “assistant”). */
+function roleLabel(role: string): string {
+  if (role === "assistant") return "Agent"
+  if (role === "system") return "System"
+  if (role === "user") return "User"
+  if (role === "tool") return "Tool"
+  return role
 }
 
-/** Collapsed preview length for long system / user / tool / assistant text. */
-const TEXT_PREVIEW_CHARS = 300
+function roleTone(role: string): string {
+  if (role === "system") return "text-accent"
+  if (role === "user") return "text-success"
+  if (role === "assistant") return "text-warning"
+  if (role === "tool") return "text-info"
+  return "text-text-muted"
+}
 
-function copyText(text: string) {
-  navigator.clipboard.writeText(text)
+function roleBorder(role: string): string {
+  if (role === "system") return "var(--color-accent)"
+  if (role === "user") return "var(--color-success)"
+  if (role === "assistant") return "var(--color-warning)"
+  if (role === "tool") return "var(--color-info)"
+  return "var(--color-border)"
 }
 
 function formatCharCount(n: number): string {
   return n.toLocaleString()
 }
 
-/**
- * Long text with a dedicated Show more / Show less control.
- * The body itself is never a toggle target — selection and copy stay intact.
- */
+function copyText(text: string) {
+  navigator.clipboard.writeText(text)
+}
+
+function durationTone(ms: number): string {
+  if (ms > 5000) return "text-error"
+  if (ms > 2000) return "text-warning"
+  return "text-success"
+}
+
+/** Pair each request with its response by iteration (positional fallback). */
+function pairLlmCalls(trace: TraceEntry[]): LlmCall[] {
+  const requests = trace.filter((e): e is LlmRequest => e.kind === "llm-request")
+  const responses = trace.filter((e): e is LlmResponse => e.kind === "llm-response")
+  const responseByIter = new Map<number, LlmResponse>()
+  for (const response of responses) {
+    if (!responseByIter.has(response.iteration)) {
+      responseByIter.set(response.iteration, response)
+    }
+  }
+  return requests.map((request, i) => ({
+    request,
+    response: responseByIter.get(request.iteration) ?? responses[i] ?? null,
+  }))
+}
+
+function callOutcome(res: LlmResponse | null): string {
+  if (!res) return "pending"
+  if (res.toolCalls.length > 0) {
+    const names = res.toolCalls.map((t) => t.name)
+    const shown = names.slice(0, 3).join(", ")
+    const more = names.length > 3 ? ` +${names.length - 3}` : ""
+    return `${res.toolCalls.length} tool${res.toolCalls.length === 1 ? "" : "s"} · ${shown}${more}`
+  }
+  if (res.content) return "final answer"
+  return "empty"
+}
+
+function messagePreview(msg: TraceMessage): string {
+  if (msg.toolCalls.length > 0) {
+    return msg.toolCalls.map((t) => t.name).join(", ")
+  }
+  if (msg.content) {
+    const line = msg.content.replace(/\s+/g, " ").trim()
+    return line.length > 96 ? `${line.slice(0, 95)}…` : line
+  }
+  if (msg.toolCallId) return `← ${msg.toolCallId.slice(0, 12)}`
+  return "empty"
+}
+
+// ── Expandable text ──────────────────────────────────────────────
+
+const TEXT_PREVIEW_CHARS = 300
+
 function ExpandableText({
   text,
   className = "text-sm font-mono text-text-secondary whitespace-pre-wrap break-words leading-relaxed",
@@ -54,7 +129,6 @@ function ExpandableText({
   text: string
   className?: string
   previewChars?: number
-  /** When expanded, cap height and scroll (system prompt, big payloads). */
   maxExpandedHeight?: number
 }) {
   const [expanded, setExpanded] = useState(false)
@@ -63,10 +137,6 @@ function ExpandableText({
   useEffect(() => {
     setExpanded(false)
   }, [text])
-
-  function toggleExpanded() {
-    setExpanded((v) => !v)
-  }
 
   const display = !isLong || expanded ? text : `${text.slice(0, previewChars)}…`
 
@@ -86,7 +156,7 @@ function ExpandableText({
         <button
           type="button"
           className="trace-expand-toggle"
-          onClick={toggleExpanded}
+          onClick={() => setExpanded((v) => !v)}
           aria-expanded={expanded}
         >
           {expanded
@@ -98,7 +168,7 @@ function ExpandableText({
   )
 }
 
-// ── Collapsible section ─────────────────────────────────────────
+// ── Collapsible section ──────────────────────────────────────────
 
 function Section({
   label,
@@ -113,7 +183,7 @@ function Section({
   badgeColor?: string
   defaultOpen?: boolean
   copyable?: string
-  children: React.ReactNode
+  children: ReactNode
 }) {
   const [open, setOpen] = useState(defaultOpen)
   return (
@@ -123,16 +193,26 @@ function Section({
         className="flex items-center gap-2 w-full px-3 py-2 text-left bg-elevated/30 hover:bg-elevated/50 transition-colors"
         onClick={() => setOpen(!open)}
       >
-        {open ? <ChevronDown size={14} className="text-text-muted shrink-0" /> : <ChevronRight size={14} className="text-text-muted shrink-0" />}
+        {open ? (
+          <ChevronDown size={14} className="text-text-muted shrink-0" />
+        ) : (
+          <ChevronRight size={14} className="text-text-muted shrink-0" />
+        )}
         <span className="text-sm font-medium text-text">{label}</span>
-        {badge && <span className={`text-sm font-mono ml-auto ${badgeColor}`}>{badge}</span>}
+        {badge && (
+          <span className={`text-sm font-mono ml-auto ${badgeColor}`}>{badge}</span>
+        )}
       </button>
       {open && (
         <div className="px-3 py-2 border-t border-border/30 relative">
           {copyable && (
             <button
+              type="button"
               className="absolute top-2 right-2 p-1 rounded hover:bg-elevated/50 text-text-muted/40 hover:text-text-muted transition-colors"
-              onClick={(e) => { e.stopPropagation(); copyText(copyable) }}
+              onClick={(e) => {
+                e.stopPropagation()
+                copyText(copyable)
+              }}
               title="Copy to clipboard"
             >
               <Copy size={12} />
@@ -145,67 +225,116 @@ function Section({
   )
 }
 
-// ── Message renderer (used in LLM request/response) ─────────────
+// ── Message part (system / user / agent / tool) ──────────────────
 
-function MessageBubble({ msg, index }: {
-  msg: { role: string; content: string | null; toolCalls: Array<{ id: string; name: string; arguments: Record<string, unknown> }>; toolCallId: string | null }
+function MessagePart({
+  msg,
+  index,
+  partsMode,
+}: {
+  msg: TraceMessage
   index: number
+  partsMode: PartsMode
 }) {
+  const [open, setOpen] = useState(partsMode === "expanded")
+
+  useEffect(() => {
+    setOpen(partsMode === "expanded")
+  }, [partsMode, msg])
+
+  const preview = messagePreview(msg)
+
   return (
-    <div className="border-l-2 pl-2 py-1" style={{ borderColor: msg.role === "system" ? "var(--color-accent)" : msg.role === "user" ? "var(--color-success)" : msg.role === "assistant" ? "var(--color-warning)" : "var(--color-info)" }}>
-      <div className="flex items-center gap-2 mb-0.5">
-        <span className={`text-sm font-mono font-bold uppercase ${ROLE_COLORS[msg.role] ?? "text-text-muted"}`}>
-          {msg.role}
+    <div
+      className="border-l-2 pl-2 py-1 min-w-0"
+      style={{ borderColor: roleBorder(msg.role) }}
+    >
+      <button
+        type="button"
+        className="flex items-center gap-2 w-full text-left min-w-0 group"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+      >
+        {open ? (
+          <ChevronDown size={12} className="text-text-muted shrink-0" />
+        ) : (
+          <ChevronRight size={12} className="text-text-muted shrink-0" />
+        )}
+        <span className={`text-sm font-mono font-bold ${roleTone(msg.role)}`}>
+          {roleLabel(msg.role)}
         </span>
-        <span className="text-xs text-text-muted/30">#{index}</span>
+        <span className="text-xs text-text-muted/40">#{index + 1}</span>
         {msg.toolCallId && (
-          <span className="text-xs text-text-muted/40 font-mono">← {msg.toolCallId.slice(0, 12)}</span>
+          <span className="text-xs text-text-muted/40 font-mono shrink-0">
+            ← {msg.toolCallId.slice(0, 12)}
+          </span>
         )}
         {msg.content && (
-          <span className="text-xs text-text-muted/30">{formatCharCount(msg.content.length)} chars</span>
+          <span className="text-xs text-text-muted/35 shrink-0">
+            {formatCharCount(msg.content.length)}
+          </span>
         )}
-      </div>
+        {!open && (
+          <span className="text-xs text-text-muted/50 truncate min-w-0 flex-1 font-mono">
+            {preview}
+          </span>
+        )}
+      </button>
 
-      {msg.content && (
-        <ExpandableText text={msg.content} />
-      )}
+      {open && (
+        <div className="mt-1 pl-4 min-w-0">
+          {msg.content && <ExpandableText text={msg.content} />}
 
-      {!msg.content && msg.toolCalls.length === 0 && (
-        <span className="text-sm text-text-muted/30 italic">null</span>
-      )}
+          {!msg.content && msg.toolCalls.length === 0 && (
+            <span className="text-sm text-text-muted/35 italic">null</span>
+          )}
 
-      {msg.toolCalls.length > 0 && (
-        <div className="mt-1 space-y-1">
-          {msg.toolCalls.map((tc) => (
-            <div key={tc.id} className="bg-warning/5 border border-warning/10 rounded px-2 py-1">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-mono font-semibold text-warning">{tc.name}</span>
-                <span className="text-xs text-text-muted/30 font-mono">{tc.id.slice(0, 12)}</span>
-              </div>
-              <JsonViewer value={tc.arguments} label="arguments" defaultExpandDepth={2} maxHeight={200} />
+          {msg.toolCalls.length > 0 && (
+            <div className="space-y-1">
+              {msg.toolCalls.map((tc) => (
+                <div
+                  key={tc.id}
+                  className="bg-warning/5 border border-warning/10 rounded px-2 py-1"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-mono font-semibold text-warning">
+                      {tc.name}
+                    </span>
+                    <span className="text-xs text-text-muted/30 font-mono">
+                      {tc.id.slice(0, 12)}
+                    </span>
+                  </div>
+                  <JsonViewer
+                    value={tc.arguments}
+                    label="arguments"
+                    defaultExpandDepth={2}
+                    maxHeight={200}
+                  />
+                </div>
+              ))}
             </div>
-          ))}
+          )}
         </div>
       )}
     </div>
   )
 }
 
-// ── Tool definition renderer ────────────────────────────────────
+// ── Tool definition ──────────────────────────────────────────────
 
-function ToolDefinition({ tool }: {
+function ToolDefinition({
+  tool,
+}: {
   tool: { name: string; description: string; parameters?: Record<string, unknown> }
 }) {
   const [showSchema, setShowSchema] = useState(false)
 
-  function toggleSchema() {
-    setShowSchema((v) => !v)
-  }
-
   return (
     <div className="border border-border/30 rounded px-2 py-1.5">
       <div className="flex items-start gap-2 min-w-0">
-        <span className="text-sm font-mono font-semibold text-warning shrink-0">{tool.name}</span>
+        <span className="text-sm font-mono font-semibold text-warning shrink-0">
+          {tool.name}
+        </span>
         <div className="min-w-0 flex-1">
           <ExpandableText
             text={tool.description}
@@ -219,13 +348,18 @@ function ToolDefinition({ tool }: {
           <button
             type="button"
             className="trace-expand-toggle mt-1"
-            onClick={toggleSchema}
+            onClick={() => setShowSchema((v) => !v)}
             aria-expanded={showSchema}
           >
             {showSchema ? "Hide schema" : "Show parameter schema"}
           </button>
           {showSchema && (
-            <JsonViewer value={tool.parameters} label="schema" defaultExpandDepth={2} maxHeight={200} />
+            <JsonViewer
+              value={tool.parameters}
+              label="schema"
+              defaultExpandDepth={2}
+              maxHeight={200}
+            />
           )}
         </>
       )}
@@ -233,19 +367,190 @@ function ToolDefinition({ tool }: {
   )
 }
 
-// ── Main widget ─────────────────────────────────────────────────
+// ── LLM call card ────────────────────────────────────────────────
 
-type FilterKind = "all" | "llm" | "tools" | "prompt"
+function LlmCallEntry({
+  call,
+  index,
+  partsMode,
+}: {
+  call: LlmCall
+  index: number
+  partsMode: PartsMode
+}) {
+  const [open, setOpen] = useState(false)
+  const rootRef = useRef<HTMLDivElement>(null)
+  const req = call.request
+  const res = call.response
+  const usage = res?.usage ?? null
+  const outcome = callOutcome(res)
+
+  function toggleOpen() {
+    const next = !open
+    setOpen(next)
+    if (next) {
+      requestAnimationFrame(() => {
+        rootRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" })
+      })
+    }
+  }
+
+  return (
+    <div
+      ref={rootRef}
+      className="debug-trace-block shrink-0 rounded-lg border border-border/40 overflow-clip"
+    >
+      <button
+        type="button"
+        className="flex items-center gap-2.5 px-3 py-2 bg-elevated/20 w-full text-left cursor-pointer hover:bg-elevated/40 transition-colors flex-wrap"
+        onClick={toggleOpen}
+      >
+        {open ? (
+          <ChevronDown size={14} className="text-text-muted shrink-0" />
+        ) : (
+          <ChevronRight size={14} className="text-text-muted shrink-0" />
+        )}
+        <span className="text-sm font-semibold text-info shrink-0">
+          LLM #{index + 1}
+        </span>
+        <span className="text-sm font-mono text-text-muted shrink-0">
+          iter {req.iteration + 1}
+        </span>
+        <span className="text-sm font-mono text-text-secondary truncate min-w-0">
+          {outcome}
+        </span>
+        <span className="flex items-center gap-2 ml-auto shrink-0 text-sm font-mono">
+          {usage ? (
+            <span className="text-text-muted" title="prompt → completion (total)">
+              {fmtTokens(usage.promptTokens)}→{fmtTokens(usage.completionTokens)}
+              <span className="text-text-muted/50"> · {fmtTokens(usage.totalTokens)}</span>
+            </span>
+          ) : (
+            <span className="text-text-muted/40">— tok</span>
+          )}
+          {res ? (
+            <span className={durationTone(res.durationMs)}>{formatMs(res.durationMs)}</span>
+          ) : (
+            <span className="text-text-muted/40">…</span>
+          )}
+        </span>
+      </button>
+
+      {open && (
+        <>
+          <div className="px-3 py-2 border-t border-border/20">
+            <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+              <span className="text-xs font-medium text-text-muted/55 uppercase tracking-wider">
+                Request
+              </span>
+              <span className="text-xs font-mono text-text-muted/45">
+                {req.messageCount} part{req.messageCount === 1 ? "" : "s"} · {req.toolCount}{" "}
+                tool def{req.toolCount === 1 ? "" : "s"}
+              </span>
+            </div>
+            {req.messages.length === 0 ? (
+              <span className="text-sm text-text-muted/40 italic">No messages recorded</span>
+            ) : (
+              <div className="space-y-1">
+                {req.messages.map((msg, mi) => (
+                  <MessagePart
+                    key={`${req.iteration}-${mi}`}
+                    msg={msg}
+                    index={mi}
+                    partsMode={partsMode}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+
+          {res && (
+            <div className="px-3 py-2 border-t border-border/20 bg-elevated/10">
+              <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                <span className="text-xs font-medium text-text-muted/55 uppercase tracking-wider">
+                  Response
+                </span>
+                {usage && (
+                  <span className="text-xs font-mono text-text-muted/50">
+                    {fmtTokens(usage.promptTokens)} prompt ·{" "}
+                    {fmtTokens(usage.completionTokens)} completion ·{" "}
+                    {fmtTokens(usage.totalTokens)} total
+                  </span>
+                )}
+                <span className={`text-xs font-mono ${durationTone(res.durationMs)}`}>
+                  {formatMs(res.durationMs)}
+                </span>
+              </div>
+
+              {res.content && (
+                <div className="mb-2">
+                  <div className="text-xs text-text-muted/40 mb-0.5">content</div>
+                  <ExpandableText
+                    text={res.content}
+                    className="code-pre"
+                    maxExpandedHeight={360}
+                  />
+                </div>
+              )}
+
+              {res.toolCalls.length > 0 && (
+                <div>
+                  <div className="text-xs text-text-muted/40 mb-0.5">tool calls</div>
+                  <div className="space-y-1">
+                    {res.toolCalls.map((tc) => (
+                      <div
+                        key={tc.id}
+                        className="bg-warning/5 border border-warning/10 rounded px-2 py-1"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-mono font-semibold text-warning">
+                            {tc.name}
+                          </span>
+                          <span className="text-xs text-text-muted/30 font-mono">
+                            {tc.id}
+                          </span>
+                        </div>
+                        <JsonViewer
+                          value={tc.arguments}
+                          label="arguments"
+                          defaultExpandDepth={2}
+                          maxHeight={200}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {res.toolCalls.length === 0 && !res.content && (
+                <div className="text-sm text-error/50 italic">
+                  Empty response — no content and no tool calls
+                </div>
+              )}
+
+              {res.toolCalls.length === 0 && res.content && (
+                <div className="text-sm text-success/60 mt-1">
+                  ↳ No tool calls — this became the final answer
+                </div>
+              )}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
+// ── Main widget ──────────────────────────────────────────────────
 
 export function DebugInspector() {
   const trace = useStore((s) => s.trace)
   const activeRunId = useStore((s) => s.activeRunId)
-  const [filter, setFilter] = useState<FilterKind>("llm")
+  const [filter, setFilter] = useState<FilterKind>("calls")
+  const [partsMode, setPartsMode] = useState<PartsMode>("collapsed")
   const [search, setSearch] = useState("")
   const scrollRef = useRef<HTMLDivElement>(null)
 
-  // Follow new trace entries only when already near the bottom — never yank
-  // the viewport while the user is reading an expanded earlier call.
   useEffect(() => {
     const el = scrollRef.current
     if (!el) return
@@ -253,79 +558,126 @@ export function DebugInspector() {
     if (distance < 80) el.scrollTop = el.scrollHeight
   }, [trace.length])
 
-  // Extract the 4 debug entry types
   const systemPrompt = useMemo(
-    () => trace.find((e) => e.kind === "system-prompt") as Extract<TraceEntry, { kind: "system-prompt" }> | undefined,
+    () => trace.find((e): e is SystemPrompt => e.kind === "system-prompt"),
     [trace],
   )
   const toolsResolved = useMemo(
-    () => trace.find((e) => e.kind === "tools-resolved") as Extract<TraceEntry, { kind: "tools-resolved" }> | undefined,
+    () => trace.find((e): e is ToolsResolved => e.kind === "tools-resolved"),
     [trace],
   )
-  const llmCalls = useMemo(() => {
-    const requests = trace.filter((e) => e.kind === "llm-request") as Array<Extract<TraceEntry, { kind: "llm-request" }>>
-    const responses = trace.filter((e) => e.kind === "llm-response") as Array<Extract<TraceEntry, { kind: "llm-response" }>>
-    // Pair request[i] with response[i]
-    return requests.map((req, i) => ({
-      request: req,
-      response: responses[i] ?? null,
-    }))
-  }, [trace])
+  const llmCalls = useMemo(() => pairLlmCalls(trace), [trace])
   const sqlQualityEntries = useMemo(
-    () => trace.filter((e) => e.kind === "planner-sql-quality") as Array<Extract<TraceEntry, { kind: "planner-sql-quality" }>>,
+    () => trace.filter((e): e is SqlQuality => e.kind === "planner-sql-quality"),
     [trace],
   )
 
-  // Summary stats
   const stats = useMemo(() => {
-    const totalDuration = llmCalls.reduce((sum, c) => sum + (c.response?.durationMs ?? 0), 0)
-    const answered = llmCalls.filter((c) => c.response)
+    let promptTokens = 0
+    let completionTokens = 0
+    let totalTokens = 0
+    let totalDuration = 0
+    let answered = 0
+    let minIter: number | null = null
+    let maxIter: number | null = null
+    for (const c of llmCalls) {
+      const iter = c.request.iteration + 1
+      minIter = minIter == null ? iter : Math.min(minIter, iter)
+      maxIter = maxIter == null ? iter : Math.max(maxIter, iter)
+      if (!c.response) continue
+      answered += 1
+      totalDuration += c.response.durationMs
+      const u = c.response.usage
+      if (u) {
+        promptTokens += u.promptTokens
+        completionTokens += u.completionTokens
+        totalTokens += u.totalTokens
+      }
+    }
     return {
-      promptLen: systemPrompt?.text.length ?? 0,
       toolCount: toolsResolved?.tools.length ?? 0,
       callCount: llmCalls.length,
+      promptTokens,
+      completionTokens,
+      totalTokens,
       totalDuration,
-      avgDuration: answered.length > 0 ? Math.round(totalDuration / answered.length) : 0,
+      avgDuration: answered > 0 ? Math.round(totalDuration / answered) : 0,
+      minIter,
+      maxIter,
     }
-  }, [systemPrompt, toolsResolved, llmCalls])
+  }, [toolsResolved, llmCalls])
 
-  // Search filter
-  const matchesSearch = useCallback((text: string) => {
-    if (!search) return true
-    return text.toLowerCase().includes(search.toLowerCase())
-  }, [search])
+  const matchesSearch = useCallback(
+    (text: string) => {
+      if (!search) return true
+      return text.toLowerCase().includes(search.toLowerCase())
+    },
+    [search],
+  )
 
-  const hasDebugData = systemPrompt || toolsResolved || llmCalls.length > 0 || sqlQualityEntries.length > 0
+  const hasDebugData =
+    Boolean(systemPrompt) ||
+    Boolean(toolsResolved) ||
+    llmCalls.length > 0 ||
+    sqlQualityEntries.length > 0
+
+  const showCalls = filter === "calls" || filter === "all"
+  const showContext = filter === "context" || filter === "all"
+
+  const iterLabel =
+    stats.minIter != null && stats.maxIter != null
+      ? stats.minIter === stats.maxIter
+        ? `iter ${stats.minIter}`
+        : `iter ${stats.minIter}–${stats.maxIter}`
+      : null
 
   return (
     <div className="flex flex-col h-full gap-2">
-      {/* Stats bar */}
-      <div className="flex items-center gap-3 shrink-0 flex-wrap">
-        <div className="flex items-center gap-1.5 text-sm font-mono text-text-muted bg-elevated/50 px-2 py-1 rounded">
-          <span className="text-accent">prompt</span> {stats.promptLen > 0 ? `${(stats.promptLen / 1000).toFixed(1)}k` : "—"}
-        </div>
-        <div className="flex items-center gap-1.5 text-sm font-mono text-text-muted bg-elevated/50 px-2 py-1 rounded">
-          <span className="text-warning">tools</span> {stats.toolCount}
-        </div>
-        <div className="flex items-center gap-1.5 text-sm font-mono text-text-muted bg-elevated/50 px-2 py-1 rounded">
-          <span className="text-info">llm</span> {stats.callCount} calls · {stats.avgDuration}ms avg
-        </div>
-        <div className="flex items-center gap-1.5 text-sm font-mono text-text-muted bg-elevated/50 px-2 py-1 rounded">
-          <Clock size={12} /> {stats.totalDuration}ms total
-        </div>
+      {/* Glanceable run meta */}
+      <div className="flex items-center gap-2 shrink-0 flex-wrap">
+        <MetaChip
+          label="llm"
+          value={
+            stats.callCount > 0
+              ? `${stats.callCount} · ${formatMs(stats.avgDuration)} avg`
+              : "—"
+          }
+          accent="text-info"
+        />
+        <MetaChip
+          label="tokens"
+          value={
+            stats.totalTokens > 0
+              ? `${fmtTokens(stats.promptTokens)}→${fmtTokens(stats.completionTokens)} · ${fmtTokens(stats.totalTokens)}`
+              : "—"
+          }
+          accent="text-warning"
+        />
+        <MetaChip
+          label="time"
+          value={stats.totalDuration > 0 ? formatMs(stats.totalDuration) : "—"}
+          accent="text-text-muted"
+          icon={<Clock size={12} />}
+        />
+        {iterLabel && <MetaChip label="loop" value={iterLabel} accent="text-accent" />}
+        {stats.toolCount > 0 && (
+          <MetaChip label="tools" value={String(stats.toolCount)} accent="text-warning" />
+        )}
       </div>
 
-      {/* Filter + search */}
-      <div className="flex items-center gap-2 shrink-0">
+      {/* Filters · parts · search */}
+      <div className="flex items-center gap-2 shrink-0 flex-wrap">
         <div className="flex items-center gap-1 bg-elevated/30 rounded-lg p-0.5">
-          {([
-            ["all", "All"],
-            ["prompt", "Prompt"],
-            ["tools", "Tools"],
-            ["llm", "LLM Calls"],
-          ] as [FilterKind, string][]).map(([key, label]) => (
+          {(
+            [
+              ["calls", "Calls"],
+              ["context", "Context"],
+              ["all", "All"],
+            ] as [FilterKind, string][]
+          ).map(([key, label]) => (
             <button
               key={key}
+              type="button"
               className={`px-2.5 py-1 text-sm font-medium rounded-md transition-colors ${
                 filter === key ? "bg-accent/20 text-accent" : "text-text-muted hover:text-text"
               }`}
@@ -335,11 +687,40 @@ export function DebugInspector() {
             </button>
           ))}
         </div>
-        <div className="flex items-center gap-1.5 flex-1 ml-auto bg-elevated/30 rounded-lg px-2 py-1">
+
+        <div
+          className="flex items-center gap-1 bg-elevated/30 rounded-lg p-0.5"
+          title="Collapse or expand system / user / agent / tool parts inside each LLM call"
+        >
+          <span className="px-1.5 text-xs text-text-muted/50 uppercase tracking-wide">
+            Parts
+          </span>
+          {(
+            [
+              ["collapsed", "Collapsed"],
+              ["expanded", "Expanded"],
+            ] as [PartsMode, string][]
+          ).map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              className={`px-2 py-1 text-sm font-medium rounded-md transition-colors ${
+                partsMode === key
+                  ? "bg-elevated text-text"
+                  : "text-text-muted hover:text-text"
+              }`}
+              onClick={() => setPartsMode(key)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex items-center gap-1.5 flex-1 min-w-[8rem] ml-auto bg-elevated/30 rounded-lg px-2 py-1">
           <Search size={14} className="text-text-muted/50 shrink-0" />
           <input
             type="text"
-            placeholder="Search..."
+            placeholder="Search…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="bg-transparent text-sm text-text w-full outline-none placeholder:text-text-muted/30"
@@ -347,12 +728,12 @@ export function DebugInspector() {
         </div>
       </div>
 
-      {/* Main content — block flow, not flex-col. Flex + overflow-hidden
-          children lets an expanded LLM card shrink siblings to zero height
-          ("covers" the previous calls). */}
       <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto space-y-2 pr-1">
         {!activeRunId && (
-          <EmptyState icon={WIDGET_ICONS["debug-inspector"]} message="Select a run to inspect" />
+          <EmptyState
+            icon={WIDGET_ICONS["debug-inspector"]}
+            message="Select a run to inspect"
+          />
         )}
 
         {activeRunId && !hasDebugData && (
@@ -366,10 +747,10 @@ export function DebugInspector() {
           />
         )}
 
-        {/* ── System Prompt ── */}
-        {(filter === "all" || filter === "prompt") && systemPrompt && matchesSearch(systemPrompt.text) && (
+        {/* Context — secondary, collapsed by default */}
+        {showContext && systemPrompt && matchesSearch(systemPrompt.text) && (
           <Section
-            label="System Prompt"
+            label="System prompt"
             badge={`${formatCharCount(systemPrompt.text.length)} chars`}
             badgeColor="text-accent/70"
             copyable={systemPrompt.text}
@@ -383,13 +764,11 @@ export function DebugInspector() {
           </Section>
         )}
 
-        {/* ── Tools Available ── */}
-        {(filter === "all" || filter === "tools") && toolsResolved && (
+        {showContext && toolsResolved && (
           <Section
-            label="Tools Available to Agent"
-            badge={`${toolsResolved.tools.length} tools`}
+            label="Tools available"
+            badge={`${toolsResolved.tools.length}`}
             badgeColor="text-warning/70"
-            defaultOpen
           >
             <div className="space-y-1.5">
               {toolsResolved.tools
@@ -401,28 +780,11 @@ export function DebugInspector() {
           </Section>
         )}
 
-        {/* ── LLM Calls ── */}
-        {(filter === "all" || filter === "llm") && llmCalls.map((call, i) => {
-          const req = call.request
-          const res = call.response
-
-          // Search: match against messages content or tool call names
-          if (search) {
-            const blob = JSON.stringify(req) + JSON.stringify(res)
-            if (!blob.toLowerCase().includes(search.toLowerCase())) return null
-          }
-
-          return (
-            <LlmCallEntry key={i} call={call} index={i} />
-          )
-        })}
-
-        {(filter === "all") && sqlQualityEntries.length > 0 && (
+        {showContext && sqlQualityEntries.length > 0 && (
           <Section
-            label="SQL Quality"
-            badge={`${sqlQualityEntries.length} entries`}
+            label="SQL quality"
+            badge={`${sqlQualityEntries.length}`}
             badgeColor="text-warning/70"
-            defaultOpen
           >
             <div className="space-y-1.5">
               {sqlQualityEntries
@@ -430,18 +792,48 @@ export function DebugInspector() {
                 .map((entry, index) => {
                   const notes: string[] = []
                   if (entry.validationCode) notes.push(`blocked=${entry.validationCode}`)
-                  if (entry.missingPersistedMirrorCandidates.length > 0) notes.push(`mirror=${entry.missingPersistedMirrorCandidates.join(",")}`)
+                  if (entry.missingPersistedMirrorCandidates.length > 0) {
+                    notes.push(
+                      `mirror=${entry.missingPersistedMirrorCandidates.join(",")}`,
+                    )
+                  }
                   const overusedRefs = entry.largeObjectRefs.filter((ref) => ref.count > 2)
-                  if (overusedRefs.length > 0) notes.push(overusedRefs.map((ref) => `${ref.name}×${ref.count}`).join(", "))
-                  if (entry.tempScalarSubqueryCount > 0) notes.push(`temp-subq=${entry.tempScalarSubqueryCount}`)
+                  if (overusedRefs.length > 0) {
+                    notes.push(
+                      overusedRefs.map((ref) => `${ref.name}×${ref.count}`).join(", "),
+                    )
+                  }
+                  if (entry.tempScalarSubqueryCount > 0) {
+                    notes.push(`temp-subq=${entry.tempScalarSubqueryCount}`)
+                  }
                   return (
-                    <div key={`${entry.toolCallId}-${index}`} className="border border-border/30 rounded px-2 py-1.5">
-                      <div className="flex items-center gap-2">
-                        <span className={`text-sm font-mono font-semibold ${entry.phase === "blocked" ? "text-error" : entry.validationOk ? "text-success" : "text-warning"}`}>
+                    <div
+                      key={`${entry.toolCallId}-${index}`}
+                      className="border border-border/30 rounded px-2 py-1.5"
+                    >
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span
+                          className={`text-sm font-mono font-semibold ${
+                            entry.phase === "blocked"
+                              ? "text-error"
+                              : entry.validationOk
+                                ? "text-success"
+                                : "text-warning"
+                          }`}
+                        >
                           {entry.phase}
                         </span>
-                        <span className="text-sm font-mono text-text-muted">{entry.toolName}</span>
-                        <span className="text-xs text-text-muted/40">iter {entry.iteration + 1}</span>
+                        <span className="text-sm font-mono text-text-muted">
+                          {entry.toolName}
+                        </span>
+                        <span className="text-xs text-text-muted/40">
+                          iter {entry.iteration + 1}
+                        </span>
+                        {entry.durationMs != null && (
+                          <span className="text-xs font-mono text-text-muted/40 ml-auto">
+                            {formatMs(entry.durationMs)}
+                          </span>
+                        )}
                       </div>
                       <div className="text-sm text-text-secondary mt-1">
                         {notes.join(" · ") || "ok"}
@@ -462,128 +854,44 @@ export function DebugInspector() {
             </div>
           </Section>
         )}
+
+        {/* Primary: LLM call timeline */}
+        {showCalls &&
+          llmCalls.map((call, i) => {
+            if (search) {
+              const blob = JSON.stringify(call.request) + JSON.stringify(call.response)
+              if (!blob.toLowerCase().includes(search.toLowerCase())) return null
+            }
+            return (
+              <LlmCallEntry
+                key={`llm-${call.request.iteration}-${i}`}
+                call={call}
+                index={i}
+                partsMode={partsMode}
+              />
+            )
+          })}
       </div>
     </div>
   )
 }
 
-/** Collapsible LLM call entry — click header to expand/collapse */
-function LlmCallEntry({ call, index }: {
-  call: { request: Extract<TraceEntry, { kind: "llm-request" }>; response: Extract<TraceEntry, { kind: "llm-response" }> | null }
-  index: number
+function MetaChip({
+  label,
+  value,
+  accent,
+  icon,
+}: {
+  label: string
+  value: string
+  accent: string
+  icon?: ReactNode
 }) {
-  const [open, setOpen] = useState(false)
-  const rootRef = useRef<HTMLDivElement>(null)
-  const req = call.request
-  const res = call.response
-
-  function toggleOpen() {
-    const next = !open
-    setOpen(next)
-    // Keep this call's header in view; do not yank the list to the bottom.
-    if (next) {
-      requestAnimationFrame(() => {
-        rootRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" })
-      })
-    }
-  }
-
   return (
-    <div
-      ref={rootRef}
-      className="debug-trace-block shrink-0 rounded-lg border border-border/40 overflow-clip"
-    >
-      {/* Clickable call header */}
-      <button
-        type="button"
-        className="flex items-center gap-3 px-3 py-2 bg-elevated/20 w-full text-left cursor-pointer hover:bg-elevated/40 transition-colors"
-        onClick={toggleOpen}
-      >
-        {open ? <ChevronDown size={14} className="text-text-muted shrink-0" /> : <ChevronRight size={14} className="text-text-muted shrink-0" />}
-        <span className="text-sm font-semibold text-info">LLM Call #{index + 1}</span>
-        <span className="text-sm font-mono text-text-muted">
-          iteration {req.iteration + 1}
-        </span>
-        <span className="text-sm font-mono text-text-muted">
-          {req.messageCount} msgs → LLM → {res ? (res.toolCalls.length > 0 ? `${res.toolCalls.length} tool calls` : "text response") : "pending..."}
-        </span>
-        {res && (
-          <span className={`text-sm font-mono ml-auto ${res.durationMs > 5000 ? "text-error" : res.durationMs > 2000 ? "text-warning" : "text-success"}`}>
-            {res.durationMs}ms
-          </span>
-        )}
-      </button>
-
-      {/* Collapsible body — in normal document flow so siblings stay above */}
-      {open && (
-        <>
-          {/* Request: full message array */}
-          <div className="px-3 py-2 border-t border-border/20">
-            <div className="text-xs font-medium text-text-muted/50 uppercase tracking-wider mb-1.5">
-              Request — {req.messageCount} messages, {req.toolCount} tool definitions
-            </div>
-            <div className="space-y-1.5 max-h-[min(400px,50vh)] overflow-y-auto overscroll-contain">
-              {req.messages.map((msg, mi) => (
-                <MessageBubble key={mi} msg={msg} index={mi} />
-              ))}
-            </div>
-          </div>
-
-          {/* Response */}
-          {res && (
-            <div className="px-3 py-2 border-t border-border/20 bg-elevated/10">
-              <div className="flex items-center gap-3 mb-1.5">
-                <span className="text-xs font-medium text-text-muted/50 uppercase tracking-wider">Response</span>
-                {res.usage && (
-                  <span className="text-sm font-mono text-text-muted/40">
-                    {fmtTokens(res.usage.promptTokens)} prompt + {fmtTokens(res.usage.completionTokens)} completion = {fmtTokens(res.usage.totalTokens)} total
-                  </span>
-                )}
-              </div>
-
-              {/* Response content */}
-              {res.content && (
-                <div className="mb-2">
-                  <div className="text-xs text-text-muted/40 mb-0.5">content:</div>
-                  <ExpandableText
-                    text={res.content}
-                    className="code-pre"
-                    maxExpandedHeight={360}
-                  />
-                </div>
-              )}
-
-              {/* Response tool calls */}
-              {res.toolCalls.length > 0 && (
-                <div>
-                  <div className="text-xs text-text-muted/40 mb-0.5">tool calls:</div>
-                  <div className="space-y-1">
-                    {res.toolCalls.map((tc) => (
-                      <div key={tc.id} className="bg-warning/5 border border-warning/10 rounded px-2 py-1">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-mono font-semibold text-warning">{tc.name}</span>
-                          <span className="text-xs text-text-muted/30 font-mono">{tc.id}</span>
-                        </div>
-                        <JsonViewer value={tc.arguments} label="arguments" defaultExpandDepth={2} maxHeight={200} />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* No tool calls and no content = weird */}
-              {res.toolCalls.length === 0 && !res.content && (
-                <div className="text-sm text-error/50 italic">Empty response — no content and no tool calls</div>
-              )}
-
-              {/* Final answer indicator */}
-              {res.toolCalls.length === 0 && res.content && (
-                <div className="text-sm text-success/60 mt-1">↳ No tool calls — this became the final answer</div>
-              )}
-            </div>
-          )}
-        </>
-      )}
+    <div className="flex items-center gap-1.5 text-sm font-mono text-text-muted bg-elevated/50 px-2 py-1 rounded">
+      {icon}
+      <span className={accent}>{label}</span>
+      <span className="text-text-secondary">{value}</span>
     </div>
   )
 }
