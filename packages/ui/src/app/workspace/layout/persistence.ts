@@ -1,5 +1,10 @@
 /**
  * Dashboard state auto-sync — debounced save to server.
+ *
+ * Geometry invariant: tile y/h row-units must match the live viewport row
+ * budget (`viewportRows`). Restoring with a hardcoded row count while the
+ * canvas has already measured a different budget leaves tiles short of the
+ * viewport — widgets look crushed to the top.
  */
 
 import { api } from "../../../client/index"
@@ -34,8 +39,9 @@ export function flushDashboardSave(): void {
   api.saveDashboardState({ views: wireViews, activeViewId }).catch(() => {})
 }
 
-function normalizeWireViews(views: ViewConfig[]): ViewConfig[] {
-  return pruneUnknownWidgets(views).map((view) => viewToWire(viewFromWire(view)))
+/** Hydrate wire views into workspace views projected for the live row budget. */
+function hydrateViews(views: ViewConfig[], rows: number) {
+  return pruneUnknownWidgets(views).map((view) => viewFromWire(view, rows))
 }
 
 let _suppressSave = false
@@ -46,10 +52,13 @@ export async function restoreDashboardState(): Promise<void> {
   try {
     const state = await api.getDashboardState() as { views: ViewConfig[]; activeViewId: string } | null
     if (myVersion !== _restoreVersion) return
+    // Use the live row budget (canvas may already have measured). Never
+    // reproject for a stale default — that desyncs tiles from rowPx.
+    const rows = useLayoutStore.getState().viewportRows
     if (state?.views?.length) {
       _suppressSave = true
       useLayoutStore.setState({
-        views: normalizeWireViews(state.views).map(viewFromWire),
+        views: hydrateViews(state.views, rows),
         activeViewId: state.activeViewId,
       })
       _suppressSave = false
@@ -78,4 +87,10 @@ export function startDashboardSync() {
       }
     },
   )
+}
+
+/** @deprecated Kept for callers that expected wire round-trip; prefer hydrateViews. */
+export function normalizeWireViews(views: ViewConfig[], rows?: number): ViewConfig[] {
+  const rowBudget = rows ?? useLayoutStore.getState().viewportRows
+  return hydrateViews(views, rowBudget).map(viewToWire)
 }

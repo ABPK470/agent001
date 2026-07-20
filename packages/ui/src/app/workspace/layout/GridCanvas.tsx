@@ -7,6 +7,7 @@ import {
 } from "../../../lib/grid-math"
 import {
   reparentLeaf,
+  projectTiles,
   type DropZone,
   type SplitNode,
 } from "../../../lib/split-tree"
@@ -239,10 +240,16 @@ export function GridCanvas({ viewId, tiles, split }: Props) {
   }, [focusedTileId, tiles, commitSplit, viewId, maxRows, soloTileId, split])
 
   const soloTile = soloTileId ? tiles.find((tile) => tile.id === soloTileId) : null
+  // Paint from split × measured rows — never trust a stale tile cache that
+  // was projected for a different row budget (e.g. late dashboard restore).
+  const projectedTiles = useMemo(
+    () => projectTiles(split, tiles, COLS, maxRows),
+    [split, tiles, maxRows],
+  )
   // Drag keeps committed geometry (static). Resize still uses live layoutPreview.
   const visibleTiles = soloTile
     ? [{ ...soloTile, x: 0, y: 0, w: COLS, h: maxRows }]
-    : (interactionMode === "resize" ? (layoutPreview ?? tiles) : tiles)
+    : (interactionMode === "resize" ? (layoutPreview ?? projectedTiles) : projectedTiles)
 
   const interacting = !soloTileId && !!draggingId
   const dragSource = draggingId ? tiles.find((tile) => tile.id === draggingId) : null
