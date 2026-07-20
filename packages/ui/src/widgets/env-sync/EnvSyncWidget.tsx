@@ -726,7 +726,17 @@ export function EnvSync() {
         ) : displayPlan ? (
           <PlanView plan={displayPlan} expanded={expanded} setExpanded={setExpanded} exec={exec} />
         ) : (
-          <Empty envs={envs} blocker={blocker} srcEnv={srcEnv} tgtEnv={tgtEnv} hasDefinitions={definitions.length > 0} />
+          <Empty
+            envs={envs}
+            blocker={blocker}
+            srcEnv={srcEnv}
+            tgtEnv={tgtEnv}
+            hasDefinitions={definitions.length > 0}
+            publishArmed={Boolean(
+              publishStatus?.catalogNeedsPublish
+                || (publishStatus?.unpublishedEntityCount ?? 0) > 0,
+            )}
+          />
         )}
       </div>
 
