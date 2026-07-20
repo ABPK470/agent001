@@ -141,7 +141,11 @@ export interface ConnectorPort {
   moveData(
     source: { connectorId: string; spec: ReadSpec },
     target: { connectorId: string; spec: WriteSpec; stopOnError?: boolean },
-    options?: { transform?: Transform; signal?: AbortSignal },
+    options?: {
+      transform?: Transform
+      signal?: AbortSignal
+      onProgress?: (progress: { rowsRead: number; rowsWritten: number }) => void
+    },
   ): Promise<MoveSummary>
   /** Read up to `limit` rows from the source, apply the transform, return them (no write). */
   previewMove(

@@ -60,6 +60,7 @@ export interface ConnectorPortMoveTarget {
 export interface ConnectorPortMoveOptions {
   readonly transform?: Transform
   readonly signal?: AbortSignal
+  readonly onProgress?: MoveOptions["onProgress"]
 }
 
 export interface ConnectorPort {
@@ -132,6 +133,7 @@ export function buildConnectorPort(
       const moveOptions: MoveOptions = {
         transform: options?.transform,
         signal: options?.signal,
+        onProgress: options?.onProgress,
       }
       return moveData(
         { adapter: srcAdapter, spec: source.spec },

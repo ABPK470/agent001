@@ -8,7 +8,14 @@
 
 import { randomUUID } from "node:crypto"
 import { EventType } from "@mia/shared-enums"
-import type { MoveSummary, ReadSpec, Transform, WriteSpec } from "@mia/shared-types"
+import {
+  summarizeBridgeReadSpec,
+  summarizeBridgeWriteSpec,
+  type MoveSummary,
+  type ReadSpec,
+  type Transform,
+  type WriteSpec,
+} from "@mia/shared-types"
 import type { AgentHost } from "../../runtime/runtime.js"
 import type { ExecutableTool, ToolMetadata } from "../../domain/types/agent-types.js"
 
@@ -24,9 +31,19 @@ function emitBridge(
   }
 }
 
-function connectorLabel(host: AgentHost, connectorId: string): string {
+function connectorMeta(host: AgentHost, connectorId: string): { name: string; kind: string } {
   const hit = host.connectors.port.value?.listAdapters().find((c) => c.id === connectorId)
-  return hit?.displayName ?? connectorId
+  return { name: hit?.displayName ?? connectorId, kind: hit?.kind ?? "?" }
+}
+
+function errorsPreview(
+  errors: readonly { row: number; message: string }[],
+  cap = 5,
+): { row: number; message: string }[] {
+  return errors.slice(0, cap).map((e) => ({
+    row: e.row,
+    message: e.message.length > 200 ? `${e.message.slice(0, 199)}…` : e.message,
+  }))
 }
 
 function buildBridgeDataTool(host: AgentHost): ExecutableTool {
@@ -98,64 +115,80 @@ function buildBridgeDataTool(host: AgentHost): ExecutableTool {
       if (!target?.connectorId || !target.spec) return "bridge_data: target.connectorId and target.spec are required."
       const transform = (args["transform"] ?? undefined) as Transform | undefined
       const moveId = randomUUID()
-      const sourceName = connectorLabel(host, source.connectorId)
-      const targetName = connectorLabel(host, target.connectorId)
-      emitBridge(host, EventType.BridgeRunStarted, {
+      const t0 = Date.now()
+      const src = connectorMeta(host, source.connectorId)
+      const tgt = connectorMeta(host, target.connectorId)
+      const writeSpec = target.spec
+      const base = {
         moveId,
         sourceId: source.connectorId,
         targetId: target.connectorId,
-        source: sourceName,
-        target: targetName,
+        source: src.name,
+        target: tgt.name,
+        sourceKind: src.kind,
+        targetKind: tgt.kind,
+        sourceSpec: summarizeBridgeReadSpec(source.spec),
+        targetSpec: summarizeBridgeWriteSpec(writeSpec),
         hasTransform: Boolean(transform),
-        via: "agent",
-      })
+        allowIdentityInsert:
+          writeSpec.kind === "sql" ? Boolean(writeSpec.allowIdentityInsert) : false,
+        relaxConstraints: writeSpec.kind === "sql" ? Boolean(writeSpec.relaxConstraints) : false,
+        writeMode: writeSpec.kind === "sql" ? writeSpec.mode : null,
+        via: "agent" as const,
+      }
+      emitBridge(host, EventType.BridgeRunStarted, base)
+      let lastProgressAt = 0
+      let lastProgressRows = 0
       try {
         const summary: MoveSummary = await port.moveData(
           { connectorId: source.connectorId, spec: source.spec },
           { connectorId: target.connectorId, spec: target.spec, stopOnError: target.stopOnError },
-          transform ? { transform } : undefined,
+          {
+            ...(transform ? { transform } : {}),
+            onProgress: ({ rowsRead, rowsWritten }) => {
+              const now = Date.now()
+              if (now - lastProgressAt < 750 && rowsRead - lastProgressRows < 500) return
+              lastProgressAt = now
+              lastProgressRows = rowsRead
+              emitBridge(host, EventType.BridgeRunProgress, {
+                moveId,
+                sourceId: source.connectorId,
+                targetId: target.connectorId,
+                source: src.name,
+                target: tgt.name,
+                rowsRead,
+                rowsWritten,
+                elapsedMs: now - t0,
+                via: "agent",
+              })
+            },
+          },
         )
+        const terminal = {
+          ...base,
+          status: summary.status,
+          rowsRead: summary.rowsRead,
+          rowsWritten: summary.rowsWritten,
+          failedAtRow: summary.failedAtRow,
+          errorCount: summary.errors.length,
+          errorsPreview: errorsPreview(summary.errors),
+          durationMs: Date.now() - t0,
+        }
         if (summary.status === "failed") {
           emitBridge(host, EventType.BridgeRunFailed, {
-            moveId,
-            sourceId: source.connectorId,
-            targetId: target.connectorId,
-            source: sourceName,
-            target: targetName,
-            status: summary.status,
-            rowsRead: summary.rowsRead,
-            rowsWritten: summary.rowsWritten,
-            failedAtRow: summary.failedAtRow,
+            ...terminal,
             error: summary.errors[0]?.message ?? "move failed",
-            errorCount: summary.errors.length,
-            via: "agent",
           })
         } else {
-          emitBridge(host, EventType.BridgeRunCompleted, {
-            moveId,
-            sourceId: source.connectorId,
-            targetId: target.connectorId,
-            source: sourceName,
-            target: targetName,
-            status: summary.status,
-            rowsRead: summary.rowsRead,
-            rowsWritten: summary.rowsWritten,
-            failedAtRow: summary.failedAtRow,
-            errorCount: summary.errors.length,
-            via: "agent",
-          })
+          emitBridge(host, EventType.BridgeRunCompleted, terminal)
         }
         return formatSummary(summary)
       } catch (e) {
         const error = e instanceof Error ? e.message : String(e)
         emitBridge(host, EventType.BridgeRunFailed, {
-          moveId,
-          sourceId: source.connectorId,
-          targetId: target.connectorId,
-          source: sourceName,
-          target: targetName,
+          ...base,
           error,
-          via: "agent",
+          durationMs: Date.now() - t0,
         })
         return `bridge_data failed: ${error}`
       }

@@ -233,6 +233,8 @@ export const EventType = {
   BridgePreviewCompleted: "bridge.preview.completed",
   BridgePreviewFailed: "bridge.preview.failed",
   BridgeRunStarted: "bridge.run.started",
+  /** Throttled mid-move progress (rows pulled toward the target). */
+  BridgeRunProgress: "bridge.run.progress",
   BridgeRunCompleted: "bridge.run.completed",
   BridgeRunFailed: "bridge.run.failed",
 } as const

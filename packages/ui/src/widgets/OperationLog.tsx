@@ -477,6 +477,13 @@ function formatEventLabel(ev: OperationEvent): string {
     case "sync.proposer.run.failed": return "Scan failed"
     case "sync.proposer.run.cancelled": return "Scan cancelled"
     case "sync.proposal.created": return "Proposal created"
+    case "bridge.preview.started": return "Preview started"
+    case "bridge.preview.completed": return "Preview complete"
+    case "bridge.preview.failed": return "Preview failed"
+    case "bridge.run.started": return "Move started"
+    case "bridge.run.progress": return "Progress"
+    case "bridge.run.completed": return "Move complete"
+    case "bridge.run.failed": return "Move failed"
     case "step.started": return "Tool call"
     case "step.completed": return "Tool result"
     case "step.failed": return "Tool failed"
@@ -1504,6 +1511,55 @@ function pickEventSummary(ev: OperationEvent): string {
     const table = ev.data["table"] ?? "table"
     const durationMs = ev.data["durationMs"]
     return `${table} · ${ins} ins · ${upd} upd · ${del} del${typeof durationMs === "number" ? ` · ${durationMs}ms` : ""}`
+  }
+  if (ev.type === "bridge.preview.started" || ev.type === "bridge.run.started") {
+    const source = ev.data["source"]
+    const target = ev.data["target"]
+    const sourceSpec = ev.data["sourceSpec"]
+    const targetSpec = ev.data["targetSpec"]
+    const route =
+      target != null ? `${source ?? "?"} → ${target}` : String(source ?? "?")
+    const specs =
+      typeof sourceSpec === "string" && typeof targetSpec === "string"
+        ? `${sourceSpec} → ${targetSpec}`
+        : typeof sourceSpec === "string"
+          ? sourceSpec
+          : typeof targetSpec === "string"
+            ? targetSpec
+            : null
+    return [route, specs].filter(Boolean).join(" · ")
+  }
+  if (ev.type === "bridge.run.progress") {
+    const rowsRead = ev.data["rowsRead"]
+    const rowsWritten = ev.data["rowsWritten"]
+    const elapsedMs = ev.data["elapsedMs"]
+    return [
+      rowsRead != null || rowsWritten != null
+        ? `read ${rowsRead ?? "?"} · wrote ${rowsWritten ?? "?"}`
+        : null,
+      typeof elapsedMs === "number" ? `${elapsedMs}ms` : null,
+    ]
+      .filter(Boolean)
+      .join(" · ")
+  }
+  if (
+    ev.type === "bridge.preview.completed" ||
+    ev.type === "bridge.run.completed" ||
+    ev.type === "bridge.preview.failed" ||
+    ev.type === "bridge.run.failed"
+  ) {
+    const parts: string[] = []
+    if (ev.data["rowCount"] != null) parts.push(`${ev.data["rowCount"]} rows`)
+    if (ev.data["rowsRead"] != null || ev.data["rowsWritten"] != null) {
+      parts.push(`read ${ev.data["rowsRead"] ?? "?"} · wrote ${ev.data["rowsWritten"] ?? "?"}`)
+    }
+    if (typeof ev.data["errorCount"] === "number" && ev.data["errorCount"] > 0) {
+      parts.push(`${ev.data["errorCount"]} error(s)`)
+    }
+    if (typeof ev.data["error"] === "string") parts.push(ev.data["error"])
+    if (typeof ev.data["durationMs"] === "number") parts.push(`${ev.data["durationMs"]}ms`)
+    if (ev.data["truncated"] === true) parts.push("truncated")
+    return parts.join(" · ")
   }
   if (ev.type === "sync.preview.table.start") {
     const table = ev.data["table"] ?? "table"

@@ -598,36 +598,93 @@ function formatLogEntryInner(
   // ── Bridge events ───────────────────────────────────────────
   if (type.startsWith("bridge.")) {
     const moveId = (data["moveId"] as string | undefined)?.slice(0, 8) ?? ""
+    const sourceSpec = typeof data["sourceSpec"] === "string" ? data["sourceSpec"] : null
+    const targetSpec = typeof data["targetSpec"] === "string" ? data["targetSpec"] : null
+    const durationMs = typeof data["durationMs"] === "number" ? data["durationMs"] : null
+    const elapsedMs = typeof data["elapsedMs"] === "number" ? data["elapsedMs"] : null
+    const dur =
+      durationMs != null
+        ? durationMs < 1000
+          ? `${durationMs}ms`
+          : `${(durationMs / 1000).toFixed(1)}s`
+        : elapsedMs != null
+          ? elapsedMs < 1000
+            ? `${elapsedMs}ms`
+            : `${(elapsedMs / 1000).toFixed(1)}s`
+          : null
     switch (type) {
       case "bridge.preview.started":
         return {
           type: t,
-          message: `Bridge preview started — ${data["source"] ?? "?"}${moveId ? ` (${moveId})` : ""}`,
+          message: [
+            `Bridge preview started — ${data["source"] ?? "?"}`,
+            sourceSpec,
+            moveId ? `(${moveId})` : null,
+          ]
+            .filter(Boolean)
+            .join(" · "),
           timestamp,
         }
       case "bridge.preview.completed":
         return {
           type: t,
-          message: `Bridge preview complete — ${data["rowCount"] ?? "?"} rows${data["truncated"] ? " (truncated)" : ""}`,
+          message: [
+            `Bridge preview complete — ${data["rowCount"] ?? "?"} rows`,
+            data["truncated"] ? "(truncated)" : null,
+            dur,
+          ]
+            .filter(Boolean)
+            .join(" · "),
           timestamp,
         }
       case "bridge.preview.failed":
         return {
           type: t,
           error: true,
-          message: `Bridge preview failed: ${data["error"] ?? "unknown"}`,
+          message: [
+            `Bridge preview failed: ${data["error"] ?? "unknown"}`,
+            dur,
+          ]
+            .filter(Boolean)
+            .join(" · "),
           timestamp,
         }
       case "bridge.run.started":
         return {
           type: t,
-          message: `Bridge move started — ${data["source"] ?? "?"} → ${data["target"] ?? "?"}${moveId ? ` (${moveId})` : ""}`,
+          message: [
+            `Bridge move started — ${data["source"] ?? "?"} → ${data["target"] ?? "?"}`,
+            sourceSpec && targetSpec ? `${sourceSpec} → ${targetSpec}` : sourceSpec ?? targetSpec,
+            moveId ? `(${moveId})` : null,
+          ]
+            .filter(Boolean)
+            .join(" · "),
+          timestamp,
+        }
+      case "bridge.run.progress":
+        return {
+          type: t,
+          message: [
+            `Bridge move progress — ${data["source"] ?? "?"} → ${data["target"] ?? "?"}`,
+            `read ${data["rowsRead"] ?? "?"} · wrote ${data["rowsWritten"] ?? "?"}`,
+            dur,
+          ]
+            .filter(Boolean)
+            .join(" · "),
           timestamp,
         }
       case "bridge.run.completed":
         return {
           type: t,
-          message: `Bridge move ${data["status"] ?? "completed"} — read ${data["rowsRead"] ?? "?"} · wrote ${data["rowsWritten"] ?? "?"}`,
+          message: [
+            `Bridge move ${data["status"] ?? "completed"} — read ${data["rowsRead"] ?? "?"} · wrote ${data["rowsWritten"] ?? "?"}`,
+            typeof data["errorCount"] === "number" && data["errorCount"] > 0
+              ? `${data["errorCount"]} error(s)`
+              : null,
+            dur,
+          ]
+            .filter(Boolean)
+            .join(" · "),
           timestamp,
           error: data["status"] === "partial",
         }
@@ -635,7 +692,15 @@ function formatLogEntryInner(
         return {
           type: t,
           error: true,
-          message: `Bridge move failed: ${data["error"] ?? "unknown"}`,
+          message: [
+            `Bridge move failed: ${data["error"] ?? "unknown"}`,
+            data["rowsRead"] != null || data["rowsWritten"] != null
+              ? `read ${data["rowsRead"] ?? "?"} · wrote ${data["rowsWritten"] ?? "?"}`
+              : null,
+            dur,
+          ]
+            .filter(Boolean)
+            .join(" · "),
           timestamp,
         }
       default:

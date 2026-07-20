@@ -7,6 +7,7 @@ export {
   moveData,
   makeSummary,
   type MoveOptions,
+  type MoveProgress,
   type MoveSource,
   type MoveTarget,
 } from "./engine.js"
@@ -25,6 +26,7 @@ export {
 } from "./registry.js"
 
 export { listTablesSql, tableNameFromRow } from "./list-tables.js"
+export { summarizeBridgeReadSpec, summarizeBridgeWriteSpec } from "./bridge-labels.js"
 export {
   quoteMssqlIdent,
   quoteMssqlTable,

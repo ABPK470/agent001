@@ -39,9 +39,17 @@ export interface MoveTarget {
   readonly stopOnError?: boolean
 }
 
+export type MoveProgress = {
+  readonly rowsRead: number
+  /** Approximate — equals rowsRead while streaming into a 1:1 writer. */
+  readonly rowsWritten: number
+}
+
 export interface MoveOptions {
   readonly transform?: Transform
   readonly signal?: AbortSignal
+  /** Called as source batches are pulled into the target writer (throttled by caller). */
+  readonly onProgress?: (progress: MoveProgress) => void
 }
 
 function hasTransformWork(transform: Transform | undefined): boolean {
@@ -211,6 +219,22 @@ function throwIfAborted(signal?: AbortSignal): void {
 }
 
 /**
+ * Count batches as the target writer pulls them — drives mid-move progress.
+ * For 1:1 inserts, rowsWritten ≈ rowsRead until the writer returns a summary.
+ */
+async function* withMoveProgress(
+  batches: AsyncGenerator<Row[]>,
+  onProgress: ((progress: MoveProgress) => void) | undefined,
+): AsyncGenerator<Row[]> {
+  let rowsRead = 0
+  for await (const batch of batches) {
+    rowsRead += batch.length
+    onProgress?.({ rowsRead, rowsWritten: rowsRead })
+    yield batch
+  }
+}
+
+/**
  * Move data from `source` to `target`. Adapters are opened, the stream is
  * piped through the transform, and both adapters are closed at the end
  * (success or failure). The returned summary comes from the target writer.
@@ -229,7 +253,8 @@ export async function moveData(
       options.transform,
       options.signal,
     )
-    return await target.adapter.write(target.spec, transformed, {
+    const counted = withMoveProgress(transformed, options.onProgress)
+    return await target.adapter.write(target.spec, counted, {
       stopOnError: target.stopOnError ?? true,
       signal: options.signal,
     })

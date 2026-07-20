@@ -1,14 +1,21 @@
 /**
  * Bridge transport routes — admin-only preview + run over the
- * connector-adapter engine. Emits bridge.* lifecycle events into the
- * platform event bus (Event Stream + Pipelines), same path as sync.
+ * connector-adapter engine. Emits bridge.* lifecycle (+ progress) events into
+ * the platform event bus (Event Stream + Pipelines), same path as sync.
  */
 
 import { randomUUID } from "node:crypto"
 import { type AgentHost } from "@mia/agent"
 import { EventType } from "@mia/shared-enums"
-import type { ReadSpec, Transform, WriteSpec } from "@mia/shared-types"
+import {
+  summarizeBridgeReadSpec,
+  summarizeBridgeWriteSpec,
+  type ReadSpec,
+  type Transform,
+  type WriteSpec,
+} from "@mia/shared-types"
 import type { FastifyInstance } from "fastify"
+import { createBridgeProgressThrottle, errorsPreview } from "./bridge-telemetry.js"
 
 interface PreviewBody {
   source: { connectorId: string; spec: ReadSpec }
@@ -34,9 +41,13 @@ function emitBridge(
   }
 }
 
-function connectorLabel(host: AgentHost, connectorId: string): string {
-  const hit = host.connectors.port.value?.listAdapters().find((c) => c.id === connectorId)
-  return hit?.displayName ?? connectorId
+function adapters(host: AgentHost) {
+  return host.connectors.port.value?.listAdapters() ?? []
+}
+
+function connectorMeta(host: AgentHost, connectorId: string): { name: string; kind: string } {
+  const hit = adapters(host).find((c) => c.id === connectorId)
+  return { name: hit?.displayName ?? connectorId, kind: hit?.kind ?? "?" }
 }
 
 export function registerBridgeRoutes(app: FastifyInstance, host: AgentHost): void {
@@ -66,34 +77,38 @@ export function registerBridgeRoutes(app: FastifyInstance, host: AgentHost): voi
       return { error: "source.connectorId and source.spec are required" }
     }
     const moveId = randomUUID()
-    const sourceName = connectorLabel(host, body.source.connectorId)
-    emitBridge(host, EventType.BridgePreviewStarted, {
+    const t0 = Date.now()
+    const src = connectorMeta(host, body.source.connectorId)
+    const sourceSpecLabel = summarizeBridgeReadSpec(body.source.spec)
+    const base = {
       moveId,
       sourceId: body.source.connectorId,
-      source: sourceName,
+      source: src.name,
+      sourceKind: src.kind,
+      sourceSpec: sourceSpecLabel,
       limit: body.limit ?? null,
       hasTransform: Boolean(body.transform),
-    })
+      via: "ui" as const,
+    }
+    emitBridge(host, EventType.BridgePreviewStarted, base)
     try {
       const result = await port.previewMove(
         { connectorId: body.source.connectorId, spec: body.source.spec },
         { transform: body.transform, limit: body.limit },
       )
       emitBridge(host, EventType.BridgePreviewCompleted, {
-        moveId,
-        sourceId: body.source.connectorId,
-        source: sourceName,
+        ...base,
         rowCount: result.rows.length,
         truncated: result.truncated,
+        durationMs: Date.now() - t0,
       })
       return { rows: result.rows, truncated: result.truncated }
     } catch (e) {
       const error = e instanceof Error ? e.message : String(e)
       emitBridge(host, EventType.BridgePreviewFailed, {
-        moveId,
-        sourceId: body.source.connectorId,
-        source: sourceName,
+        ...base,
         error,
+        durationMs: Date.now() - t0,
       })
       reply.code(400)
       return { error }
@@ -120,16 +135,29 @@ export function registerBridgeRoutes(app: FastifyInstance, host: AgentHost): voi
       return { error: "target.connectorId and target.spec are required" }
     }
     const moveId = randomUUID()
-    const sourceName = connectorLabel(host, body.source.connectorId)
-    const targetName = connectorLabel(host, body.target.connectorId)
-    emitBridge(host, EventType.BridgeRunStarted, {
+    const t0 = Date.now()
+    const src = connectorMeta(host, body.source.connectorId)
+    const tgt = connectorMeta(host, body.target.connectorId)
+    const writeSpec = body.target.spec
+    const base = {
       moveId,
       sourceId: body.source.connectorId,
       targetId: body.target.connectorId,
-      source: sourceName,
-      target: targetName,
+      source: src.name,
+      target: tgt.name,
+      sourceKind: src.kind,
+      targetKind: tgt.kind,
+      sourceSpec: summarizeBridgeReadSpec(body.source.spec),
+      targetSpec: summarizeBridgeWriteSpec(writeSpec),
       hasTransform: Boolean(body.transform),
-    })
+      allowIdentityInsert:
+        writeSpec.kind === "sql" ? Boolean(writeSpec.allowIdentityInsert) : false,
+      relaxConstraints: writeSpec.kind === "sql" ? Boolean(writeSpec.relaxConstraints) : false,
+      writeMode: writeSpec.kind === "sql" ? writeSpec.mode : "mode" in writeSpec ? writeSpec.mode : null,
+      via: "ui" as const,
+    }
+    emitBridge(host, EventType.BridgeRunStarted, base)
+    const throttle = createBridgeProgressThrottle()
     try {
       const summary = await port.moveData(
         { connectorId: body.source.connectorId, spec: body.source.spec },
@@ -138,46 +166,50 @@ export function registerBridgeRoutes(app: FastifyInstance, host: AgentHost): voi
           spec: body.target.spec,
           stopOnError: body.target.stopOnError,
         },
-        body.transform ? { transform: body.transform } : undefined,
+        {
+          ...(body.transform ? { transform: body.transform } : {}),
+          onProgress: ({ rowsRead, rowsWritten }) => {
+            throttle(rowsRead, () => {
+              emitBridge(host, EventType.BridgeRunProgress, {
+                moveId,
+                sourceId: body.source.connectorId,
+                targetId: body.target.connectorId,
+                source: src.name,
+                target: tgt.name,
+                rowsRead,
+                rowsWritten,
+                elapsedMs: Date.now() - t0,
+                via: "ui",
+              })
+            })
+          },
+        },
       )
+      const terminal = {
+        ...base,
+        status: summary.status,
+        rowsRead: summary.rowsRead,
+        rowsWritten: summary.rowsWritten,
+        failedAtRow: summary.failedAtRow,
+        errorCount: summary.errors.length,
+        errorsPreview: errorsPreview(summary.errors),
+        durationMs: Date.now() - t0,
+      }
       if (summary.status === "failed") {
         emitBridge(host, EventType.BridgeRunFailed, {
-          moveId,
-          sourceId: body.source.connectorId,
-          targetId: body.target.connectorId,
-          source: sourceName,
-          target: targetName,
-          status: summary.status,
-          rowsRead: summary.rowsRead,
-          rowsWritten: summary.rowsWritten,
-          failedAtRow: summary.failedAtRow,
+          ...terminal,
           error: summary.errors[0]?.message ?? "move failed",
-          errorCount: summary.errors.length,
         })
       } else {
-        emitBridge(host, EventType.BridgeRunCompleted, {
-          moveId,
-          sourceId: body.source.connectorId,
-          targetId: body.target.connectorId,
-          source: sourceName,
-          target: targetName,
-          status: summary.status,
-          rowsRead: summary.rowsRead,
-          rowsWritten: summary.rowsWritten,
-          failedAtRow: summary.failedAtRow,
-          errorCount: summary.errors.length,
-        })
+        emitBridge(host, EventType.BridgeRunCompleted, terminal)
       }
       return summary
     } catch (e) {
       const error = e instanceof Error ? e.message : String(e)
       emitBridge(host, EventType.BridgeRunFailed, {
-        moveId,
-        sourceId: body.source.connectorId,
-        targetId: body.target.connectorId,
-        source: sourceName,
-        target: targetName,
+        ...base,
         error,
+        durationMs: Date.now() - t0,
       })
       reply.code(400)
       return { error }

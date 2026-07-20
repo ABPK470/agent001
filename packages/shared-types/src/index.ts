@@ -93,6 +93,11 @@ export {
   withConnectorConfigDefaults,
 } from "./connectors.js"
 
+export {
+  summarizeBridgeReadSpec,
+  summarizeBridgeWriteSpec,
+} from "./bridge-labels.js"
+
 
 // ── Run ──────────────────────────────────────────────────────────
 
