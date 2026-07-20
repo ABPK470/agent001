@@ -28,8 +28,9 @@ import {
   type TraceToolCall,
 } from "./build-trace-dag"
 import {
-  pinFromCache,
-  remeasureAndPin,
+  computePinnedScopeIds,
+  expandPathForScope,
+  layoutOffsetInScroll,
   type TraceScopeKind,
 } from "./trace-pin"
 
@@ -185,6 +186,51 @@ function ScopeRow({
       {summary ? <span className="trace-scope__sum">{summary}</span> : null}
       {trailing ? <span className="trace-scope__trail">{trailing}</span> : null}
     </button>
+  )
+}
+
+type PinRow = {
+  id: string
+  kind: TraceScopeKind
+  leading: string
+  title: string
+  summary: string
+  soft: boolean
+  open: boolean
+}
+
+function PinOverlay({
+  rows,
+  onReveal,
+}: {
+  rows: PinRow[]
+  onReveal: (scopeId: string) => void
+}) {
+  if (rows.length === 0) return null
+  return (
+    <div className="trace-pin" role="navigation" aria-label="Sticky trace scopes">
+      <div className="trace-pin__stack">
+        {rows.map((row) => (
+          <button
+            key={row.id}
+            type="button"
+            className={`trace-scope is-pinned${row.open ? " is-open" : ""}${row.soft ? " is-soft" : ""}`}
+            data-trace-kind={row.kind}
+            onClick={() => onReveal(row.id)}
+            title="Go to scope and expand"
+          >
+            {row.open ? (
+              <ChevronDown size={14} className="trace-scope__chev" />
+            ) : (
+              <ChevronRight size={14} className="trace-scope__chev" />
+            )}
+            <span className="trace-scope__lead">{row.leading}</span>
+            {row.title ? <span className="trace-scope__title">{row.title}</span> : null}
+            {row.summary ? <span className="trace-scope__sum">{row.summary}</span> : null}
+          </button>
+        ))}
+      </div>
+    </div>
   )
 }
 
@@ -719,9 +765,11 @@ export function TraceDag({
 }) {
   const [search, setSearch] = useState("")
   const [openState, setOpenState] = useState<OpenState>(() => emptyOpen())
+  const [pinnedIds, setPinnedIds] = useState<string[]>([])
   const scrollRef = useRef<HTMLDivElement>(null)
   const seededRef = useRef(false)
   const searchSeedRef = useRef("")
+  const suppressFollowRef = useRef(false)
 
   const query = search.trim()
   const { stats } = dag
@@ -747,17 +795,10 @@ export function TraceDag({
     return map
   }, [dag.calls, query, runId, threadId])
 
-  function onScrollPin() {
+  function refreshPinStack() {
     const el = scrollRef.current
     if (!el) return
-    // Cached flow tops only — never remeasure with sticky applied.
-    pinFromCache(el)
-  }
-
-  function onLayoutPin() {
-    const el = scrollRef.current
-    if (!el) return
-    remeasureAndPin(el)
+    setPinnedIds(computePinnedScopeIds(el))
   }
 
   useEffect(() => {
@@ -770,6 +811,7 @@ export function TraceDag({
     seededRef.current = false
     searchSeedRef.current = ""
     setOpenState(emptyOpen())
+    setPinnedIds([])
   }, [runId])
 
   useEffect(() => {
@@ -807,10 +849,14 @@ export function TraceDag({
     const el = scrollRef.current
     if (!el) return
 
-    el.addEventListener("scroll", onScrollPin, { passive: true })
-    const raf = requestAnimationFrame(() => onLayoutPin())
+    function onScroll() {
+      refreshPinStack()
+    }
+
+    el.addEventListener("scroll", onScroll, { passive: true })
+    const raf = requestAnimationFrame(() => refreshPinStack())
     return () => {
-      el.removeEventListener("scroll", onScrollPin)
+      el.removeEventListener("scroll", onScroll)
       cancelAnimationFrame(raf)
     }
   }, [
@@ -826,10 +872,110 @@ export function TraceDag({
 
   useEffect(() => {
     const el = scrollRef.current
-    if (!el) return
+    if (!el || suppressFollowRef.current) return
     const distance = el.scrollHeight - el.scrollTop - el.clientHeight
     if (distance < 80) el.scrollTop = el.scrollHeight
   }, [dag.calls.length])
+
+  const pinRows = useMemo((): PinRow[] => {
+    const rows: PinRow[] = []
+    for (const id of pinnedIds) {
+      if (id === "context") {
+        rows.push({
+          id,
+          kind: "context",
+          leading: "Context",
+          title: "",
+          summary: "",
+          soft: true,
+          open: openState.preamble,
+        })
+        continue
+      }
+      const callMatch = /^call:(\d+)$/.exec(id)
+      if (callMatch) {
+        const index = Number(callMatch[1])
+        const call = dag.calls[index]
+        if (!call) continue
+        rows.push({
+          id,
+          kind: "call",
+          leading: `Call ${index + 1}`,
+          title: call.headline,
+          summary: `iter ${call.iteration + 1}`,
+          soft: false,
+          open: openState.calls.has(index),
+        })
+        continue
+      }
+      const sentMatch = /^sent:(\d+)$/.exec(id)
+      if (sentMatch) {
+        const index = Number(sentMatch[1])
+        const call = dag.calls[index]
+        if (!call) continue
+        rows.push({
+          id,
+          kind: "sent",
+          leading: "Sent",
+          title: "",
+          summary: callSentSummary(call),
+          soft: true,
+          open: openState.sent.has(index),
+        })
+        continue
+      }
+      const recvMatch = /^received:(\d+)$/.exec(id)
+      if (recvMatch) {
+        const index = Number(recvMatch[1])
+        const call = dag.calls[index]
+        if (!call) continue
+        rows.push({
+          id,
+          kind: "received",
+          leading: "Received",
+          title: "",
+          summary: callReceivedSummary(call),
+          soft: true,
+          open: openState.received.has(index),
+        })
+      }
+    }
+    return rows
+  }, [pinnedIds, dag.calls, openState])
+
+  function onRevealScope(scopeId: string) {
+    const path = expandPathForScope(scopeId)
+    setOpenState((prev) => {
+      const calls = new Set(prev.calls)
+      const sent = new Set(prev.sent)
+      const received = new Set(prev.received)
+      let preamble = prev.preamble
+      if (path.preamble) preamble = true
+      if (path.callIndex != null) {
+        calls.add(path.callIndex)
+        if (path.sent) sent.add(path.callIndex)
+        if (path.received) received.add(path.callIndex)
+      }
+      return { ...prev, preamble, calls, sent, received }
+    })
+    // Reveal after expand paints (VS Code: click sticky → go there).
+    suppressFollowRef.current = true
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const el = scrollRef.current
+        if (!el) {
+          suppressFollowRef.current = false
+          return
+        }
+        const target = el.querySelector(`[data-trace-scope="${CSS.escape(scopeId)}"]`)
+        if (target instanceof HTMLElement) {
+          el.scrollTop = Math.max(0, layoutOffsetInScroll(el, target))
+        }
+        refreshPinStack()
+        suppressFollowRef.current = false
+      })
+    })
+  }
 
   function onToggleCall(index: number) {
     setOpenState((prev) => {
@@ -987,6 +1133,8 @@ export function TraceDag({
       </div>
 
       <div ref={scrollRef} className="trace-scroll min-h-0 flex-1 overflow-y-auto">
+        <PinOverlay rows={pinRows} onReveal={onRevealScope} />
+
         {emptySlot}
 
         {runId &&

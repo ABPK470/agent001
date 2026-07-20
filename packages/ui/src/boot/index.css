@@ -1742,7 +1742,7 @@ textarea.input {
   padding: 0.2rem 0.45rem;
   border-radius: 0.3rem;
   border: 1px solid var(--border-subtle, var(--color-border-subtle));
-  font-size: 0.9375rem;
+  font-size: 0.875rem;
   line-height: 1.35;
   color: var(--text-muted, var(--color-text-muted));
   background: color-mix(in srgb, var(--text, var(--color-text)) 2.5%, transparent);
@@ -1752,7 +1752,7 @@ textarea.input {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.03em;
-  font-size: 0.9375rem;
+  font-size: 0.75rem;
   opacity: 0.75;
   flex-shrink: 0;
   margin-top: 0.12rem;
@@ -1829,9 +1829,29 @@ textarea.input {
 }
 
 .trace-scroll {
-  position: relative; /* offsetParent root for layout-top measurement */
+  position: relative;
   padding: 0 0.15rem 1.25rem;
-  /* no top padding — pin stack must sit flush at 0 */
+}
+
+/* VS Code–style pin overlay — floats flush at top, does not sticky-mutate rows */
+.trace-pin {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  height: 0;
+  margin: 0;
+  padding: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.trace-pin__stack {
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border, var(--color-border));
+  box-shadow: 0 1px 0 var(--border-subtle, var(--color-border-subtle));
 }
 
 .trace-flow {
@@ -1886,15 +1906,14 @@ textarea.input {
 }
 
 .trace-scope.is-pinned {
-  margin: 0; /* never leave a gap under the pin stack */
+  margin: 0;
   border-radius: 0;
-  border-left: none;
-  border-right: none;
-  border-top: none;
-  /* Solid — never translucent (looks like flicker over scrolling content) */
+  border: none;
+  border-bottom: 1px solid var(--border-subtle, var(--color-border-subtle));
   background: var(--bg);
   opacity: 1;
-  box-shadow: 0 1px 0 var(--border, var(--color-border));
+  height: 34px;
+  min-height: 34px;
 }
 
 .trace-scope:hover {
@@ -1902,7 +1921,7 @@ textarea.input {
 }
 
 .trace-scope.is-soft {
-  font-size: 0.9375rem;
+  font-size: 0.875rem;
   padding-left: 1rem;
   border-radius: 0;
   border-left: none;
@@ -1951,11 +1970,11 @@ textarea.input {
 }
 
 .trace-scope.is-soft .trace-scope__lead {
-  min-width: 5rem;
+  min-width: 4.5rem;
   font-weight: 650;
   letter-spacing: 0.03em;
   text-transform: uppercase;
-  font-size: 0.9375rem;
+  font-size: 0.8125rem; /* label cue — not body size */
 }
 
 .trace-scope__title {
@@ -2134,7 +2153,7 @@ textarea.input {
   display: flex;
   align-items: center;
   gap: 0.45rem;
-  font-size: 0.9375rem;
+  font-size: 0.8125rem;
   font-weight: 650;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -2161,7 +2180,7 @@ textarea.input {
   width: 100%;
   text-align: left;
   padding: 0.45rem 0.65rem;
-  font-size: 0.9375rem;
+  font-size: 0.875rem;
   color: var(--text, var(--color-text));
   background: color-mix(in srgb, var(--text, var(--color-text)) 2%, var(--bg));
 }
@@ -2223,7 +2242,7 @@ textarea.input {
 }
 
 .trace-sql-check__badge {
-  font-size: 0.9375rem;
+  font-size: 0.8125rem;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
