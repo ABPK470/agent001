@@ -199,24 +199,19 @@ function messagePreview(msg: TraceMessage): string {
   return "empty"
 }
 
-/**
- * In / out token split — one bar + two labels. No arrows, no “total” noise
- * (total is just in+out and the bar already shows the ratio).
- */
+/** Run-level in/out bar only — never beside “Agent replied”. */
 function TokenSplit({
   promptTokens,
   completionTokens,
-  compact = false,
 }: {
   promptTokens: number
   completionTokens: number
-  compact?: boolean
 }) {
   const total = promptTokens + completionTokens
   if (total <= 0) return null
   const inPct = Math.max(2, Math.round((promptTokens / total) * 100))
   return (
-    <div className={compact ? "trace-token-split trace-token-split--compact" : "trace-token-split"}>
+    <div className="trace-token-split">
       <div
         className="trace-token-split__bar"
         role="img"
@@ -673,18 +668,9 @@ function LlmCallEntry({
             )}
           </div>
 
-          {/* Agent reply — primary, always visible when call is open */}
+          {/* Agent reply — primary; tokens live on the call header only */}
           <div className="trace-agent-reply px-3 py-3">
-            <div className="flex items-center gap-3 mb-2 flex-wrap">
-              <span className="text-base font-semibold text-text">Agent replied</span>
-              {usage && (
-                <TokenSplit
-                  promptTokens={usage.promptTokens}
-                  completionTokens={usage.completionTokens}
-                  compact
-                />
-              )}
-            </div>
+            <div className="text-sm font-medium text-text-muted mb-2">Agent replied</div>
 
             {!res && (
               <p className="trace-chat-body text-text-muted italic">Waiting for reply…</p>

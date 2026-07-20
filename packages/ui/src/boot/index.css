@@ -1765,20 +1765,12 @@ textarea.input {
   min-width: 0;
 }
 
-.trace-token-split--compact {
-  max-width: 16rem;
-}
-
 .trace-token-split__bar {
   display: flex;
   height: 5px;
   border-radius: 999px;
   overflow: hidden;
   background: color-mix(in srgb, var(--text, var(--color-text)) 8%, transparent);
-}
-
-.trace-token-split--compact .trace-token-split__bar {
-  height: 4px;
 }
 
 .trace-token-split__in {
@@ -1822,8 +1814,7 @@ textarea.input {
 }
 
 .trace-agent-reply {
-  background: color-mix(in srgb, var(--color-text) 3.5%, transparent);
-  border-left: 3px solid var(--color-text-muted);
+  border-left: 2px solid color-mix(in srgb, var(--border, var(--color-border)) 80%, transparent);
 }
 
 .trace-history-msg {
