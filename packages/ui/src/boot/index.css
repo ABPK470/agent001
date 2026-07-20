@@ -1833,7 +1833,12 @@ textarea.input {
   padding: 0 0.15rem 1.25rem;
 }
 
-/* VS Code–style pin overlay — floats flush at top, does not sticky-mutate rows */
+/*
+ * VS Code–style pin overlay: height 0 in flow (no jump when stack grows),
+ * stack paints opaquely over the viewport top. Correct pin membership
+ * (every scope scrolled past) prevents a later Call’s Sent from looking
+ * like it belongs to the previous Call.
+ */
 .trace-pin {
   position: sticky;
   top: 0;
@@ -1851,7 +1856,7 @@ textarea.input {
   flex-direction: column;
   background: var(--bg);
   border-bottom: 1px solid var(--border, var(--color-border));
-  box-shadow: 0 1px 0 var(--border-subtle, var(--color-border-subtle));
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--bg) 80%, transparent);
 }
 
 .trace-flow {
@@ -1914,6 +1919,41 @@ textarea.input {
   opacity: 1;
   height: 34px;
   min-height: 34px;
+  padding: 0 0.55rem 0 0.2rem;
+}
+
+.trace-scope__chevbtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 1.5rem;
+  height: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: var(--text-muted, var(--color-text-muted));
+}
+
+.trace-scope__chevbtn:hover {
+  color: var(--text, var(--color-text));
+}
+
+.trace-scope__jump {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+  flex: 1;
+  height: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
 }
 
 .trace-scope:hover {

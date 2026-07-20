@@ -1,16 +1,13 @@
 /**
  * VS Code–style sticky outline for Trace.
  *
- * In-flow headers are never position:sticky. A separate pin overlay renders
- * the active stack. Pin decisions use layout tops measured while nothing is
- * sticky — no feedback loop / flicker.
+ * In-flow headers are never position:sticky. A pin overlay renders the stack.
  *
- * Stack model (outer scopes):
- *   - every Context / Call whose flow-top has scrolled past stays pinned
- *   - Sent / Received of the *current* (last) Call pin under it when past
+ * Stack rule (document order): every scope whose layout top has scrolled past
+ * `scrollTop` stays pinned — Context, Call 1, Sent, Received, Call 2, Sent…
+ * Previous siblings unstick only when you scroll back above them.
  *
- * Click (handled in the view): reveal that scope — expand ancestors + scroll
- * so its header sits under the pin stack.
+ * That way Call 2 always appears between Call 1’s Received and Call 2’s Sent.
  */
 
 export const TRACE_STICKY_ROW_H = 34
@@ -28,7 +25,7 @@ export type TraceScopeEntry = {
 
 /**
  * Layout Y of `el` within `scrollEl` content.
- * Headers must not be sticky when this runs.
+ * Headers must not be sticky when this runs (overlay model — always true).
  */
 export function layoutOffsetInScroll(scrollEl: HTMLElement, el: HTMLElement): number {
   const s = scrollEl.getBoundingClientRect()
@@ -36,7 +33,7 @@ export function layoutOffsetInScroll(scrollEl: HTMLElement, el: HTMLElement): nu
   return e.top - s.top + scrollEl.scrollTop
 }
 
-/** Read all scope rows and their layout tops (sticky must be off — always true for overlay model). */
+/** Read all scope rows and their layout tops. */
 export function listTraceScopes(scrollEl: HTMLElement): TraceScopeEntry[] {
   const nodes = [...scrollEl.querySelectorAll<HTMLElement>("[data-trace-scope]")]
   return nodes.map((el) => ({
@@ -52,40 +49,14 @@ export function listTraceScopes(scrollEl: HTMLElement): TraceScopeEntry[] {
 }
 
 /**
- * Which scopes belong in the pin stack for `scrollTop`.
- * Pure over a measured entry list — unit-tested without DOM sticky.
+ * Pin every scope scrolled past, in document order.
+ * Pure — unit-tested without DOM sticky.
  */
 export function computePinnedFromEntries(
-  entries: Array<Omit<TraceScopeEntry, "el"> & { el?: HTMLElement }>,
+  entries: Array<{ id: string; top: number }>,
   scrollTop: number,
 ): string[] {
-  if (entries.length === 0) return []
-
-  const pinned: typeof entries = []
-  for (const e of entries) {
-    if (e.kind === "context" || e.kind === "call") {
-      if (e.top <= scrollTop + 0.5) pinned.push(e)
-    }
-  }
-
-  let currentCall: number | null = null
-  for (let i = pinned.length - 1; i >= 0; i--) {
-    const hit = pinned[i]!
-    if (hit.kind === "call" && hit.callIndex != null) {
-      currentCall = hit.callIndex
-      break
-    }
-  }
-
-  if (currentCall != null) {
-    for (const e of entries) {
-      if (e.callIndex !== currentCall) continue
-      if (e.kind !== "sent" && e.kind !== "received") continue
-      if (e.top <= scrollTop + 0.5) pinned.push(e)
-    }
-  }
-
-  return pinned.map((e) => e.id)
+  return entries.filter((e) => e.top <= scrollTop + 0.5).map((e) => e.id)
 }
 
 export function computePinnedScopeIds(scrollEl: HTMLElement): string[] {
@@ -93,8 +64,7 @@ export function computePinnedScopeIds(scrollEl: HTMLElement): string[] {
 }
 
 /**
- * Ancestors to expand so `scopeId` is reachable in the tree.
- * Order: context (if needed) → call → sent/received.
+ * Ancestors to expand so `scopeId` is in the DOM / reachable.
  */
 export function expandPathForScope(scopeId: string): {
   preamble?: boolean

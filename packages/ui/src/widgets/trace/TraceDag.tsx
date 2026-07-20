@@ -201,9 +201,13 @@ type PinRow = {
 
 function PinOverlay({
   rows,
+  onToggle,
   onReveal,
 }: {
   rows: PinRow[]
+  /** Chevron — expand/collapse only (VS Code folding icon). */
+  onToggle: (scopeId: string) => void
+  /** Row body — go to that scope (VS Code click line). */
   onReveal: (scopeId: string) => void
 }) {
   if (rows.length === 0) return null
@@ -211,23 +215,38 @@ function PinOverlay({
     <div className="trace-pin" role="navigation" aria-label="Sticky trace scopes">
       <div className="trace-pin__stack">
         {rows.map((row) => (
-          <button
+          <div
             key={row.id}
-            type="button"
             className={`trace-scope is-pinned${row.open ? " is-open" : ""}${row.soft ? " is-soft" : ""}`}
             data-trace-kind={row.kind}
-            onClick={() => onReveal(row.id)}
-            title="Go to scope and expand"
           >
-            {row.open ? (
-              <ChevronDown size={14} className="trace-scope__chev" />
-            ) : (
-              <ChevronRight size={14} className="trace-scope__chev" />
-            )}
-            <span className="trace-scope__lead">{row.leading}</span>
-            {row.title ? <span className="trace-scope__title">{row.title}</span> : null}
-            {row.summary ? <span className="trace-scope__sum">{row.summary}</span> : null}
-          </button>
+            <button
+              type="button"
+              className="trace-scope__chevbtn"
+              onClick={(e) => {
+                e.stopPropagation()
+                onToggle(row.id)
+              }}
+              aria-label={row.open ? "Collapse" : "Expand"}
+              aria-expanded={row.open}
+            >
+              {row.open ? (
+                <ChevronDown size={14} className="trace-scope__chev" />
+              ) : (
+                <ChevronRight size={14} className="trace-scope__chev" />
+              )}
+            </button>
+            <button
+              type="button"
+              className="trace-scope__jump"
+              onClick={() => onReveal(row.id)}
+              title="Go to scope"
+            >
+              <span className="trace-scope__lead">{row.leading}</span>
+              {row.title ? <span className="trace-scope__title">{row.title}</span> : null}
+              {row.summary ? <span className="trace-scope__sum">{row.summary}</span> : null}
+            </button>
+          </div>
         ))}
       </div>
     </div>
@@ -943,6 +962,27 @@ export function TraceDag({
     return rows
   }, [pinnedIds, dag.calls, openState])
 
+  function onTogglePinnedScope(scopeId: string) {
+    if (scopeId === "context") {
+      onTogglePreamble()
+      return
+    }
+    const callMatch = /^call:(\d+)$/.exec(scopeId)
+    if (callMatch) {
+      onToggleCall(Number(callMatch[1]))
+      return
+    }
+    const sentMatch = /^sent:(\d+)$/.exec(scopeId)
+    if (sentMatch) {
+      onToggleSent(Number(sentMatch[1]))
+      return
+    }
+    const recvMatch = /^received:(\d+)$/.exec(scopeId)
+    if (recvMatch) {
+      onToggleReceived(Number(recvMatch[1]))
+    }
+  }
+
   function onRevealScope(scopeId: string) {
     const path = expandPathForScope(scopeId)
     setOpenState((prev) => {
@@ -958,7 +998,7 @@ export function TraceDag({
       }
       return { ...prev, preamble, calls, sent, received }
     })
-    // Reveal after expand paints (VS Code: click sticky → go there).
+    // Reveal after expand paints (VS Code: click sticky line → go there).
     suppressFollowRef.current = true
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
@@ -1133,7 +1173,11 @@ export function TraceDag({
       </div>
 
       <div ref={scrollRef} className="trace-scroll min-h-0 flex-1 overflow-y-auto">
-        <PinOverlay rows={pinRows} onReveal={onRevealScope} />
+        <PinOverlay
+          rows={pinRows}
+          onToggle={onTogglePinnedScope}
+          onReveal={onRevealScope}
+        />
 
         {emptySlot}
 
