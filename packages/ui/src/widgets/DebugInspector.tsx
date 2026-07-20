@@ -56,6 +56,47 @@ function copyText(text: string) {
   navigator.clipboard.writeText(text)
 }
 
+/**
+ * Quiet correlator chip — label + id, click copies the full value.
+ * Used for run / thread / tool-call ids when matching Event Stream & logs.
+ */
+function IdChip({
+  label,
+  value,
+  short = 12,
+}: {
+  label: string
+  value: string
+  /** Visible prefix length; full value is always in title + clipboard. */
+  short?: number
+}) {
+  const [copied, setCopied] = useState(false)
+
+  function onCopy(e: { stopPropagation: () => void }) {
+    e.stopPropagation()
+    copyText(value)
+    setCopied(true)
+    window.setTimeout(() => setCopied(false), 1200)
+  }
+
+  const display =
+    value.length > short + 1 ? `${value.slice(0, short)}…` : value
+
+  return (
+    <button
+      type="button"
+      className="trace-id-chip"
+      onClick={onCopy}
+      title={`${label} ${value} — click to copy`}
+    >
+      <span className="trace-id-chip__label">{label}</span>
+      <span className="trace-id-chip__value font-mono">
+        {copied ? "copied" : display}
+      </span>
+    </button>
+  )
+}
+
 /** Pair each request with its response by iteration (positional fallback). */
 function pairLlmCalls(trace: TraceEntry[]): LlmCall[] {
   const requests = trace.filter((e): e is LlmRequest => e.kind === "llm-request")
@@ -72,15 +113,19 @@ function pairLlmCalls(trace: TraceEntry[]): LlmCall[] {
   }))
 }
 
+/**
+ * One-line outcome for a call header. Only these forms appear:
+ *   Waiting… | Called <tools> | Final answer | Empty reply
+ * Tool names are the signal when the agent called tools; any accompanying
+ * message text is in the expanded “Agent replied” body — not hinted here.
+ */
 function replyHeadline(res: LlmResponse | null): string {
-  if (!res) return "Waiting for reply…"
-  if (res.toolCalls.length > 0 && res.content) {
-    return `Called ${res.toolCalls.length} tool${res.toolCalls.length === 1 ? "" : "s"} · with text`
-  }
+  if (!res) return "Waiting…"
   if (res.toolCalls.length > 0) {
     const names = res.toolCalls.map((t) => t.name)
-    if (names.length <= 2) return `Called ${names.join(", ")}`
-    return `Called ${names.slice(0, 2).join(", ")} +${names.length - 2}`
+    if (names.length === 1) return names[0]!
+    if (names.length === 2) return `${names[0]}, ${names[1]}`
+    return `${names[0]}, ${names[1]} +${names.length - 2}`
   }
   if (res.content) return "Final answer"
   return "Empty reply"
@@ -170,6 +215,10 @@ function searchCall(call: LlmCall, index: number, rawQuery: string): CallSearchH
         reasons.push(`tool ${tc.name}`)
         inReply = true
       }
+      if (tc.id.toLowerCase().includes(q)) {
+        reasons.push("tool call id")
+        inReply = true
+      }
       const args = JSON.stringify(tc.arguments).toLowerCase()
       if (args.includes(q) && !reasons.some((r) => r.startsWith("tool "))) {
         reasons.push(`tool args (${tc.name})`)
@@ -196,8 +245,14 @@ function searchCall(call: LlmCall, index: number, rawQuery: string): CallSearchH
       inHistory = true
       break
     }
+    if (msg.toolCallId?.toLowerCase().includes(q)) {
+      reasons.push("tool call id")
+      inHistory = true
+      break
+    }
     for (const tc of msg.toolCalls) {
-      if (tc.name.toLowerCase().includes(q)) {
+      if (tc.name.toLowerCase().includes(q) || tc.id.toLowerCase().includes(q)) {
+        if (tc.id.toLowerCase().includes(q)) reasons.push("tool call id")
         inHistory = true
         break
       }
@@ -351,11 +406,6 @@ function HistoryMessage({
         <span className="text-sm font-semibold text-text-secondary shrink-0">
           {historySpeaker(msg.role)}
         </span>
-        {isToolResult && msg.toolCallId && (
-          <span className="text-sm text-text-muted/50 font-mono shrink-0">
-            {msg.toolCallId.slice(0, 10)}
-          </span>
-        )}
         {!open && (
           <span className="text-sm text-text-muted truncate min-w-0 flex-1">
             {preview}
@@ -369,7 +419,10 @@ function HistoryMessage({
       </button>
 
       {open && (
-        <div className="pl-6 pb-2 min-w-0">
+        <div className="pl-6 pb-2 min-w-0 space-y-1.5">
+          {isToolResult && msg.toolCallId && (
+            <IdChip label="tool call" value={msg.toolCallId} short={16} />
+          )}
           {msg.content && <ExpandableText text={msg.content} />}
           {!msg.content && msg.toolCalls.length === 0 && (
             <span className="text-base text-text-muted/40 italic">null</span>
@@ -378,8 +431,11 @@ function HistoryMessage({
             <div className="space-y-1.5 mt-1">
               {msg.toolCalls.map((tc) => (
                 <div key={tc.id} className="trace-nested-tool">
-                  <div className="text-base font-mono font-medium text-text">
-                    {tc.name}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-base font-mono font-medium text-text">
+                      {tc.name}
+                    </span>
+                    <IdChip label="tool call" value={tc.id} short={16} />
                   </div>
                   <JsonViewer
                     value={tc.arguments}
@@ -476,48 +532,36 @@ function LlmCallEntry({
     <div className={`trace-call shrink-0${open ? " is-open" : ""}`}>
       <button
         type="button"
-        className="trace-call-header flex items-start gap-3 px-3 py-2.5 w-full text-left transition-colors"
+        className="trace-call-header flex items-center gap-2 px-2.5 py-1.5 w-full text-left transition-colors"
         onClick={onToggle}
       >
         {open ? (
-          <ChevronDown size={16} className="text-text-muted shrink-0 mt-1" />
+          <ChevronDown size={14} className="text-text-muted shrink-0" />
         ) : (
-          <ChevronRight size={16} className="text-text-muted shrink-0 mt-1" />
+          <ChevronRight size={14} className="text-text-muted shrink-0" />
         )}
-        <div className="min-w-0 flex-1 space-y-1.5">
-          <div className="flex items-start gap-3">
-            <div className="min-w-0 flex-1">
-              <div className="text-base font-semibold text-text leading-tight">
-                Call {index + 1}
-                {req.iteration + 1 !== index + 1 && (
-                  <span className="text-sm font-normal text-text-muted ml-2">
-                    iter {req.iteration + 1}
-                  </span>
-                )}
-              </div>
-              <div className="text-base text-text-secondary truncate mt-0.5">
-                {headline}
-              </div>
-            </div>
-            {res && (
-              <span className="text-sm text-text-muted shrink-0 tabular-nums pt-0.5">
-                {formatMs(res.durationMs)}
-              </span>
-            )}
-          </div>
-          {usage && (
-            <TokenSplit
-              promptTokens={usage.promptTokens}
-              completionTokens={usage.completionTokens}
-              compact
-            />
-          )}
+        <span className="text-sm font-semibold text-text shrink-0 tabular-nums">
+          Call {index + 1}
+        </span>
+        <span className="text-sm text-text-muted shrink-0 tabular-nums">
+          iter {req.iteration + 1}
+        </span>
+        <span className="text-sm text-text-secondary truncate min-w-0 flex-1">
+          {headline}
           {searchHit && searchHit.reasons.length > 0 && (
-            <div className="text-sm text-text-muted">
-              Matched {searchHit.reasons.join(" · ")}
-            </div>
+            <span className="text-text-muted"> · matched {searchHit.reasons[0]}</span>
           )}
-        </div>
+        </span>
+        <span className="flex items-center gap-2 shrink-0 text-sm text-text-muted tabular-nums">
+          {usage && (
+            <span title="Tokens in / out">
+              {fmtTokens(usage.promptTokens)}
+              <span className="text-text-muted/40"> / </span>
+              {fmtTokens(usage.completionTokens)}
+            </span>
+          )}
+          {res && <span>{formatMs(res.durationMs)}</span>}
+        </span>
       </button>
 
       {open && (
@@ -564,7 +608,16 @@ function LlmCallEntry({
 
           {/* Agent reply — primary, always visible when call is open */}
           <div className="trace-agent-reply px-3 py-3">
-            <div className="text-base font-semibold text-text mb-2">Agent replied</div>
+            <div className="flex items-center gap-3 mb-2 flex-wrap">
+              <span className="text-base font-semibold text-text">Agent replied</span>
+              {usage && (
+                <TokenSplit
+                  promptTokens={usage.promptTokens}
+                  completionTokens={usage.completionTokens}
+                  compact
+                />
+              )}
+            </div>
 
             {!res && (
               <p className="trace-chat-body text-text-muted italic">Waiting for reply…</p>
@@ -588,13 +641,11 @@ function LlmCallEntry({
                 </div>
                 {res.toolCalls.map((tc) => (
                   <div key={tc.id} className="trace-nested-tool">
-                    <div className="flex items-baseline gap-2 flex-wrap">
+                    <div className="flex items-center gap-2 flex-wrap mb-1">
                       <span className="text-base font-mono font-medium text-text">
                         {tc.name}
                       </span>
-                      <span className="text-sm text-text-muted/40 font-mono">
-                        {tc.id.slice(0, 14)}
-                      </span>
+                      <IdChip label="tool call" value={tc.id} short={16} />
                     </div>
                     <JsonViewer
                       value={tc.arguments}
@@ -628,6 +679,10 @@ function LlmCallEntry({
 export function DebugInspector() {
   const trace = useStore((s) => s.trace)
   const activeRunId = useStore((s) => s.activeRunId)
+  const activeThreadId = useStore((s) => {
+    if (!s.activeRunId) return null
+    return s.runs.find((r) => r.id === s.activeRunId)?.threadId ?? null
+  })
   const [filter, setFilter] = useState<FilterKind>("calls")
   const [partsMode, setPartsMode] = useState<PartsMode>("collapsed")
   const [search, setSearch] = useState("")
@@ -653,13 +708,24 @@ export function DebugInspector() {
   const query = search.trim()
   const callHits = useMemo(() => {
     if (!query) return null
+    const q = query.toLowerCase()
+    const matchedRun = Boolean(activeRunId && activeRunId.toLowerCase().includes(q))
+    const matchedThread = Boolean(activeThreadId && activeThreadId.toLowerCase().includes(q))
     const map = new Map<number, CallSearchHit>()
     llmCalls.forEach((call, i) => {
+      if (matchedRun || matchedThread) {
+        map.set(i, {
+          reasons: [matchedRun ? "run id" : "thread id"],
+          inHistory: false,
+          inReply: false,
+        })
+        return
+      }
       const hit = searchCall(call, i, query)
       if (hit) map.set(i, hit)
     })
     return map
-  }, [llmCalls, query])
+  }, [llmCalls, query, activeRunId, activeThreadId])
 
   // Open the latest call by default once we have data.
   useEffect(() => {
@@ -813,6 +879,12 @@ export function DebugInspector() {
             </>
           )}
         </div>
+        {(activeRunId || activeThreadId) && (
+          <div className="trace-summary__ids">
+            {activeRunId && <IdChip label="run" value={activeRunId} short={10} />}
+            {activeThreadId && <IdChip label="thread" value={activeThreadId} short={10} />}
+          </div>
+        )}
         {(stats.promptTokens > 0 || stats.completionTokens > 0) && (
           <TokenSplit
             promptTokens={stats.promptTokens}
@@ -875,7 +947,7 @@ export function DebugInspector() {
           <Search size={14} className="text-text-muted/50 shrink-0" />
           <input
             type="search"
-            placeholder="Filter: tool name, reply text, iter 3…"
+            placeholder="Filter: run id, tool call id, tool name…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="bg-transparent text-sm text-text w-full outline-none placeholder:text-text-muted/35"
