@@ -1,10 +1,9 @@
 /**
- * Phase 3 wiring — resolvedFacts block assembly.
+ * resolvedFacts block assembly.
  *
  * Verifies the pure helper:
- *   - returns "" when nothing relevant is present
- *   - surfaces ALWAYS_TRACKED objects when the catalog has them
- *   - reports persistedView mirror presence honestly
+ *   - returns "" when nothing goal-relevant is present (no ambient top-N dump)
+ *   - reports persistedView mirror presence honestly for goal-named objects
  *   - extracts goal-mentioned objects (case-insensitive, brackets tolerated)
  *   - never throws on a missing catalog
  */
@@ -82,7 +81,7 @@ describe("buildResolvedFactsBlock", () => {
     expect(out).toContain("no persistedView mirror")
   })
 
-  it("skips ALWAYS_TRACKED objects that don't exist anywhere", () => {
+  it("returns empty when goal has no object tokens and catalog is empty", () => {
     const out = buildResolvedFactsBlock({
       goal: "compute foo bar baz",
       catalog: graph([])
@@ -90,7 +89,34 @@ describe("buildResolvedFactsBlock", () => {
     expect(out).toBe("")
   })
 
-  it("threads schemaFingerprint into the block", () => {
+  it("does not dump top catalog large objects into unrelated goals (e.g. Hi)", () => {
+    const cat = graph([
+      table("archive.account", ["id"]),
+      table("publish.Revenue", ["pkClient", "amount"]),
+      table("dim.Client", ["pkClient"])
+    ])
+    // Large row counts must not force inclusion — only goal relevance does.
+    for (const [, t] of cat.tables) {
+      ;(t as { rowCount: number }).rowCount = 50_000_000
+    }
+    const out = buildResolvedFactsBlock({
+      goal: "Hi",
+      catalog: cat,
+      schemaFingerprint: "sha1:deadbeef"
+    })
+    expect(out).toBe("")
+  })
+
+  it("still surfaces objects the goal actually names", () => {
+    const cat = graph([table("publish.Revenue", ["pkClient", "amount"])])
+    const out = buildResolvedFactsBlock({
+      goal: "scan publish.Revenue",
+      catalog: cat
+    })
+    expect(out).toContain("publish.revenue")
+  })
+
+  it("threads schemaFingerprint into the block only when there are goal facts", () => {
     const out = buildResolvedFactsBlock({
       goal: "scan publish.Revenue",
       catalog: graph([table("publish.Revenue", ["pkClient"])]),

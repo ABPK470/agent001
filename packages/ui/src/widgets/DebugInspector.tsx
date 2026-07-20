@@ -1,12 +1,12 @@
 /**
- * Trace — review what the agent sent to the model and what it replied.
+ * Trace — review each model round-trip.
  *
  * Mental model (chat, not a debug dump):
  *   each Call = one model round-trip (iteration)
- *   · Sent to model  — history the LLM saw (collapsible)
- *   · Agent replied  — the answer for that round (text and/or tool calls)
+ *   · Result — what the model returned (text and/or tool calls) — primary
+ *   · Prompt sent to model — history the LLM saw (collapsed by default)
  *
- * Tool *results* live in history. Tool *calls* are part of the agent reply —
+ * Tool *results* live in prompt history. Tool *calls* are part of Result —
  * never a separate “TOOL” speaker for the response.
  */
 
@@ -173,7 +173,7 @@ function pairLlmCalls(trace: TraceEntry[]): LlmCall[] {
  * One-line outcome for a call header. Only these forms appear:
  *   Waiting… | Called <tools> | Final answer | Empty reply
  * Tool names are the signal when the agent called tools; any accompanying
- * message text is in the expanded “Agent replied” body — not hinted here.
+ * message text is in the expanded Result body — not hinted here.
  */
 function replyHeadline(res: LlmResponse | null): string {
   if (!res) return "Waiting…"
@@ -199,7 +199,7 @@ function messagePreview(msg: TraceMessage): string {
   return "empty"
 }
 
-/** Run-level in/out bar only — never beside “Agent replied”. */
+/** Run-level in/out bar only — never beside Result. */
 function TokenSplit({
   promptTokens,
   completionTokens,
@@ -626,51 +626,9 @@ function LlmCallEntry({
 
       {open && (
         <div className="trace-call-body">
-          {/* History — secondary */}
-          <div className="px-3 py-2 border-b border-border/20">
-            <button
-              type="button"
-              className="flex items-center gap-2 w-full text-left py-1"
-              onClick={() => setHistoryOpen((v) => !v)}
-              aria-expanded={historyOpen}
-            >
-              {historyOpen ? (
-                <ChevronDown size={14} className="text-text-muted shrink-0" />
-              ) : (
-                <ChevronRight size={14} className="text-text-muted shrink-0" />
-              )}
-              <span className="text-sm font-medium text-text-muted">
-                Sent to model
-              </span>
-              <span className="text-sm text-text-muted/50">
-                {req.messageCount} message{req.messageCount === 1 ? "" : "s"}
-                {req.toolCount > 0 ? ` · ${req.toolCount} tools in schema` : ""}
-              </span>
-            </button>
-            {historyOpen && (
-              <div className="mt-1 space-y-0.5">
-                {req.messages.length === 0 ? (
-                  <span className="text-base text-text-muted/40 italic pl-6">
-                    No messages recorded
-                  </span>
-                ) : (
-                  req.messages.map((msg, mi) => (
-                    <HistoryMessage
-                      key={`${req.iteration}-${mi}`}
-                      msg={msg}
-                      index={mi}
-                      messages={req.messages}
-                      partsMode={partsMode}
-                    />
-                  ))
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Agent reply — primary; tokens live on the call header only */}
+          {/* Primary: what the model returned this round */}
           <div className="trace-agent-reply px-3 py-3">
-            <div className="text-sm font-medium text-text-muted mb-2">Agent replied</div>
+            <div className="trace-agent-reply__label">Result</div>
 
             {!res && (
               <p className="trace-chat-body text-text-muted italic">Waiting for reply…</p>
@@ -688,7 +646,7 @@ function LlmCallEntry({
 
             {res && res.toolCalls.length > 0 && (
               <div className="space-y-2">
-                <div className="text-sm font-medium text-text-muted">
+                <div className="text-sm text-text-muted">
                   Called {res.toolCalls.length} tool
                   {res.toolCalls.length === 1 ? "" : "s"}
                 </div>
@@ -725,9 +683,46 @@ function LlmCallEntry({
                 Empty reply — no text and no tool calls
               </p>
             )}
+          </div>
 
-            {res && res.toolCalls.length === 0 && res.content && (
-              <p className="text-sm text-text-muted mt-2">Final answer for this call</p>
+          {/* Secondary: prompt history (collapsed by default) */}
+          <div className="trace-history-panel px-3 py-2">
+            <button
+              type="button"
+              className="flex items-center gap-2 w-full text-left py-1"
+              onClick={() => setHistoryOpen((v) => !v)}
+              aria-expanded={historyOpen}
+            >
+              {historyOpen ? (
+                <ChevronDown size={14} className="text-text-muted shrink-0" />
+              ) : (
+                <ChevronRight size={14} className="text-text-muted shrink-0" />
+              )}
+              <span className="text-sm font-medium text-text-muted">
+                Prompt sent to model
+              </span>
+              <span className="text-sm text-text-muted/50">
+                {req.messageCount} message{req.messageCount === 1 ? "" : "s"}
+              </span>
+            </button>
+            {historyOpen && (
+              <div className="mt-1 space-y-0.5">
+                {req.messages.length === 0 ? (
+                  <span className="text-base text-text-muted/40 italic pl-6">
+                    No messages recorded
+                  </span>
+                ) : (
+                  req.messages.map((msg, mi) => (
+                    <HistoryMessage
+                      key={`${req.iteration}-${mi}`}
+                      msg={msg}
+                      index={mi}
+                      messages={req.messages}
+                      partsMode={partsMode}
+                    />
+                  ))
+                )}
+              </div>
             )}
           </div>
         </div>

@@ -1,22 +1,17 @@
 /**
- * Phase 3 wiring — assemble the `system_law` resolvedFacts block.
+ * Assemble the `system_law` resolvedFacts block for a run.
  *
- * Pure inputs in, single string out. The orchestrator calls this once
- * per run and injects the result as a `system_law` message at the top
- * of system messages.
+ * First principles: facts about *this goal against this environment* —
+ * not an ambient dump of the warehouse’s biggest tables. Dumping top-N
+ * large objects into every prompt (including “Hi”) looks like cross-run
+ * memory leakage and pollutes unrelated chats.
  *
- * Inputs:
- *   - `goal` — the user's request text, scanned for known-large objects.
- *   - `catalog` — live CatalogGraph (or null when no catalog is built).
+ * Include only:
+ *   - `schema.object` tokens that appear in the goal text, and
+ *   - objects resolved by goal-data-anchors from the goal + catalog.
  *
- * Design:
- *   - Detection is case-insensitive and tolerant of bracket/quote noise
- *     (`[publish].[Revenue]` and `publish.revenue` both match).
- *   - Mirror existence is decided ONLY by live catalog membership, never
- *     by a static lineage artifact — lineage describes shape, the catalog
- *     describes what currently exists in the environment.
- *   - When neither goal nor catalog contributes any large objects, we
- *     return an empty string so the caller skips the section entirely.
+ * Mirror existence is decided ONLY by live catalog membership.
+ * Empty string → caller skips the section entirely.
  *
  * @module
  */
@@ -25,21 +20,11 @@ import type { CatalogGraph } from "@mia/agent"
 import {
   buildResolvedFacts,
   getTenantConfig,
-  listLargeObjects,
   persistedMirrorOf,
   resolveGoalDataAnchors,
   type LargeObjectFact
 } from "@mia/agent"
 import { listTableVerdicts } from "../../../../infra/persistence/memory.js"
-
-/**
- * Maximum number of catalog-derived large objects to include in the
- * resolvedFacts block even when the goal doesn't mention them. Acts as
- * the universal replacement for the prior ALWAYS_TRACKED hardcoding —
- * the top-N largest objects (by rowCount / viewSourceRows) are always
- * worth surfacing.
- */
-const ALWAYS_TRACKED_TOPN = 5
 
 /** Quick regex: `schema.Object` with optional bracket/quote noise. */
 const OBJECT_TOKEN = /\b\[?(\w+)\]?\.\[?(\w+)\]?\b/g
@@ -72,30 +57,21 @@ export function buildResolvedFactsBlock(input: {
   const { goal, catalog } = input
   const mirrorSchema = input.mirrorSchema !== undefined ? input.mirrorSchema : getTenantConfig().mirrorSchema
 
-  // Union: top-N largest objects (catalog-derived) ∪ goal-mentioned tokens
-  // that live in catalog. Stripping unknown tokens keeps the block honest —
-  // we never claim a fact about a table that isn't there.
   const goalTokens = extractObjectTokens(goal)
   const candidates = new Set<string>()
+  for (const tok of goalTokens) candidates.add(tok)
   if (catalog) {
-    const top = [...listLargeObjects({ accessor: () => catalog })].slice(0, ALWAYS_TRACKED_TOPN)
-    for (const name of top) candidates.add(name)
     for (const anchor of resolveGoalDataAnchors(goal, catalog)) {
       candidates.add(anchor.qualifiedName.toLowerCase())
     }
   }
-  for (const tok of goalTokens) candidates.add(tok)
 
   const largeObjects: LargeObjectFact[] = []
-  const inCatalogNames: string[] = []
   for (const name of candidates) {
-    const isGoalMentioned = goalTokens.includes(name)
-    const inCatalog = catalog?.getTable(name) !== null
-    // Don't surface ALWAYS_TRACKED entries that aren't actually present
-    // anywhere — that just adds noise for environments where the object
-    // doesn't exist.
-    if (!isGoalMentioned && !inCatalog) continue
-    if (inCatalog) inCatalogNames.push(name)
+    const inCatalog = catalog?.getTable(name) != null
+    // Goal-mentioned tokens that aren't in catalog still get a line so the
+    // model sees "you named X; it isn't here" — only when the goal said so.
+    if (!inCatalog && !goalTokens.includes(name)) continue
 
     const hasPersistedMirror = catalog ? hasMirror(catalog, name, mirrorSchema) : false
     const fanInRows = catalog ? (catalog.viewSourceRows.get(name) ?? 0) : 0
@@ -108,8 +84,7 @@ export function buildResolvedFactsBlock(input: {
     })
   }
 
-  // Plan v3 Phase 7 — overlay durable verdicts from memory. Silent
-  // no-op when the memory DB is unavailable (tests, cold start).
+  // Overlay durable verdicts from memory when available (prior reflection).
   if (largeObjects.length > 0) {
     try {
       const verdicts = listTableVerdicts({ qnames: largeObjects.map((o) => o.name) })
@@ -125,7 +100,9 @@ export function buildResolvedFactsBlock(input: {
     }
   }
 
-  if (largeObjects.length === 0 && !input.schemaFingerprint) return ""
+  // No goal-relevant objects → omit the block entirely (including fingerprint-
+  // only noise on greetings / empty goals).
+  if (largeObjects.length === 0) return ""
 
   return buildResolvedFacts({
     largeObjects,
@@ -144,9 +121,6 @@ function structuralRankIn(catalog: CatalogGraph, lowerName: string): number | un
   if (!target) return undefined
   const targetSchema = target.schema.toLowerCase()
   const targetBase = target.name.toLowerCase()
-  // Treat as siblings: tables/views in the same schema whose names share
-  // the shortest power-of-2 prefix with `target` (so `Revenue` /
-  // `RevenueESGRules` cluster while `Revenue` / `Sales` do not).
   const minPrefixLen = Math.max(3, Math.floor(targetBase.length / 2))
   const prefix = targetBase.slice(0, minPrefixLen)
   const siblings: string[] = []
@@ -156,18 +130,11 @@ function structuralRankIn(catalog: CatalogGraph, lowerName: string): number | un
     siblings.push(t.name.toLowerCase())
   }
   if (siblings.length < 2) return undefined
-  // Rank: shortest name first (bare wins), tiebreak alphabetical.
   siblings.sort((a, b) => a.length - b.length || a.localeCompare(b))
   const idx = siblings.indexOf(targetBase)
   return idx >= 0 ? idx + 1 : undefined
 }
 
-/**
- * Does the live catalog contain a `<mirrorSchema>.<schema>.<object>`
- * mirror for the given lowercased `schema.object` token? Mirror schema
- * comes from tenant config; when unset, no object is ever flagged as
- * having a mirror. Convention is documented per-deployment.
- */
 function hasMirror(catalog: CatalogGraph, lowerName: string, mirrorSchema: string | null): boolean {
   if (!mirrorSchema) return false
   return (

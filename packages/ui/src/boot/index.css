@@ -1670,7 +1670,50 @@ textarea.input {
 /* ── Trace / DebugInspector ───────────────────────────────────── */
 .trace-widget {
   font-size: 0.9375rem;
-  line-height: 1.45;
+  line-height: 1.5;
+  color: var(--text, var(--color-text));
+}
+
+.trace-chat-body {
+  margin: 0;
+  font-family: var(--font-sans, inherit);
+  font-size: 0.9375rem;
+  line-height: 1.55;
+  color: var(--text, var(--color-text));
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.trace-agent-reply {
+  background: color-mix(in srgb, var(--text, var(--color-text)) 4%, var(--bg));
+  border-bottom: 1px solid color-mix(in srgb, var(--border, var(--color-border)) 55%, transparent);
+}
+
+.trace-agent-reply__label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted, var(--color-text-muted));
+  margin-bottom: 0.55rem;
+}
+
+.trace-history-panel {
+  background: transparent;
+}
+
+.trace-history-msg {
+  border-left: 2px solid color-mix(in srgb, var(--border, var(--color-border)) 55%, transparent);
+  padding-left: 0.5rem;
+  margin-left: 0.15rem;
+  color: var(--text-muted, var(--color-text-muted));
+}
+
+.trace-nested-tool {
+  padding: 0.5rem 0.65rem;
+  border-radius: 0.375rem;
+  border: 1px solid color-mix(in srgb, var(--border, var(--color-border)) 65%, transparent);
+  background: color-mix(in srgb, var(--text, var(--color-text)) 2.5%, var(--bg));
 }
 
 .trace-summary {
@@ -1803,33 +1846,6 @@ textarea.input {
   margin-right: 0.2rem;
 }
 
-.trace-chat-body {
-  margin: 0;
-  font-family: var(--font-sans, inherit);
-  font-size: 0.9375rem;
-  line-height: 1.55;
-  color: var(--color-text);
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-.trace-agent-reply {
-  border-left: 2px solid color-mix(in srgb, var(--border, var(--color-border)) 80%, transparent);
-}
-
-.trace-history-msg {
-  border-left: 2px solid color-mix(in srgb, var(--color-border) 80%, transparent);
-  padding-left: 0.5rem;
-  margin-left: 0.25rem;
-}
-
-.trace-nested-tool {
-  padding: 0.5rem 0.65rem;
-  border-radius: 0.375rem;
-  border: 1px solid var(--color-border);
-  background: color-mix(in srgb, var(--color-elevated, var(--color-bg)) 60%, transparent);
-}
-
 /*
  * display:contents so sticky headers share the scrollport as containing
  * block — they stack with increasing --trace-stack-top instead of each
@@ -1844,22 +1860,21 @@ textarea.input {
   top: var(--trace-stack-top, 0px);
   z-index: var(--trace-stack-z, 2);
   background: var(--bg);
-  border: 1px solid color-mix(in srgb, var(--border, var(--color-border)) 70%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border, var(--color-border)) 45%, transparent);
   border-radius: 0.5rem;
-  box-shadow: 0 1px 0 color-mix(in srgb, var(--border, var(--color-border)) 55%, transparent);
 }
 
 .trace-call-header:hover {
-  background: color-mix(in srgb, var(--text, var(--color-text)) 3.5%, var(--bg));
+  background: color-mix(in srgb, var(--text, var(--color-text)) 2.5%, var(--bg));
 }
 
 .trace-call.is-open .trace-call-header {
   border-radius: 0.5rem 0.5rem 0 0;
-  border-bottom-color: color-mix(in srgb, var(--border, var(--color-border)) 70%, transparent);
+  border-bottom-color: transparent;
 }
 
 .trace-call-body {
-  border: 1px solid color-mix(in srgb, var(--border, var(--color-border)) 70%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border, var(--color-border)) 45%, transparent);
   border-top: none;
   border-radius: 0 0 0.5rem 0.5rem;
   background: var(--bg);
