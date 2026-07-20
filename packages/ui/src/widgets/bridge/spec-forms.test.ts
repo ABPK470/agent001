@@ -145,6 +145,16 @@ describe("buildWriteSpec", () => {
     expect(plain["allowIdentityInsert"]).toBeUndefined()
     expect(plain["relaxConstraints"]).toBeUndefined()
   })
+  it("treats truthy power-up bags as opted in", () => {
+    const spec = buildWriteSpec("mssql", {
+      table: "t",
+      mode: "append",
+      allowIdentityInsert: 1,
+      relaxConstraints: "yes",
+    }) as unknown as Record<string, unknown>
+    expect(spec["allowIdentityInsert"]).toBe(true)
+    expect(spec["relaxConstraints"]).toBe(true)
+  })
   it("builds an httpApi write spec", () => {
     const spec = buildWriteSpec("httpApi", { method: "PUT", path: "/up", body: '{"source":"etl"}' }) as unknown as Record<string, unknown>
     expect(spec["kind"]).toBe("httpApi")

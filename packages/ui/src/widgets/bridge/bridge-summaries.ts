@@ -44,7 +44,13 @@ export function summarizeWriteSpec(kind: ConnectorKindId, bag: Record<string, un
   if (k === "sql") {
     const table = String(bag["table"] ?? "").trim()
     const mode = String(bag["mode"] ?? "append")
-    return table ? `${clip(table, 36)} · ${mode}` : "Choose a table"
+    if (!table) return "Choose a table"
+    const extras: string[] = []
+    if (bag["allowIdentityInsert"]) extras.push("identity")
+    if (bag["relaxConstraints"]) extras.push("relax")
+    return extras.length > 0
+      ? `${clip(table, 28)} · ${mode} · ${extras.join("+")}`
+      : `${clip(table, 36)} · ${mode}`
   }
   if (k === "httpApi") {
     const method = String(bag["method"] ?? "POST")

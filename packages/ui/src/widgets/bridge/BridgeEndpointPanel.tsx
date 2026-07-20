@@ -31,7 +31,8 @@ export function BridgeEndpointCard({
   expanded: boolean
   onToggle: () => void
   onConnectorChange: (id: string) => void
-  onSpecChange: (next: Record<string, unknown>) => void
+  /** Partial field patch — shell merges into the live spec bag. */
+  onSpecChange: (patch: Record<string, unknown>) => void
   /** Shared height with the Map path chip when collapsed. */
   pathPillClassName?: string
 }): JSX.Element {

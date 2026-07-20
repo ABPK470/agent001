@@ -128,8 +128,9 @@ export function buildWriteSpec(kind: ConnectorKindId, bag: Record<string, unknow
       table: String(bag["table"] ?? ""),
       mode: (bag["mode"] as "append" | "replace") ?? "append",
       ...(bs !== undefined && bs !== "" ? { batchSize: Number(bs) } : {}),
-      ...(bag["allowIdentityInsert"] === true ? { allowIdentityInsert: true } : {}),
-      ...(bag["relaxConstraints"] === true ? { relaxConstraints: true } : {}),
+      // Truthy — never require strict `=== true` (stale/stringy bags must still opt in).
+      ...(bag["allowIdentityInsert"] ? { allowIdentityInsert: true } : {}),
+      ...(bag["relaxConstraints"] ? { relaxConstraints: true } : {}),
     } as WriteSpec
   }
   if (k === "httpApi") {
@@ -341,7 +342,8 @@ export function ReadSpecForm({
 }): JSX.Element | null {
   const k = readSpecKindFor(kind)
   if (!k) return null
-  const patch = (p: Record<string, unknown>) => onPatch({ ...spec, ...p })
+  // Partial patches only — parent merges with functional setState (avoids stale wipes).
+  const patch = (p: Record<string, unknown>) => onPatch(p)
 
   if (k === "sql") {
     return (
@@ -472,7 +474,8 @@ export function WriteSpecForm({
       </p>
     )
   }
-  const patch = (p: Record<string, unknown>) => onPatch({ ...spec, ...p })
+  // Partial patches only — parent merges with functional setState (avoids stale wipes).
+  const patch = (p: Record<string, unknown>) => onPatch(p)
 
   if (k === "sql") {
     return (

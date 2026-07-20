@@ -256,8 +256,8 @@ export function BridgeShell(): JSX.Element {
       onToggleTarget={() => setTargetOpen((v) => !v)}
       onSourceConnectorChange={selectSource}
       onTargetConnectorChange={selectTarget}
-      onSourceSpecChange={setSourceSpec}
-      onTargetSpecChange={setTargetSpec}
+      onSourceSpecChange={(patch) => setSourceSpec((prev) => ({ ...prev, ...patch }))}
+      onTargetSpecChange={(patch) => setTargetSpec((prev) => ({ ...prev, ...patch }))}
       onOpenMap={() => setMapOpen(true)}
     />
   )
@@ -391,8 +391,8 @@ function PathBlock({
   onToggleTarget: () => void
   onSourceConnectorChange: (id: string) => void
   onTargetConnectorChange: (id: string) => void
-  onSourceSpecChange: (next: Record<string, unknown>) => void
-  onTargetSpecChange: (next: Record<string, unknown>) => void
+  onSourceSpecChange: (patch: Record<string, unknown>) => void
+  onTargetSpecChange: (patch: Record<string, unknown>) => void
   onOpenMap: () => void
 }): JSX.Element {
   const sourceCard = (
