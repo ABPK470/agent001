@@ -3,11 +3,14 @@
  *
  * In-flow headers are never position:sticky. A pin overlay renders the stack.
  *
- * Stack rule (document order): every scope whose layout top has scrolled past
- * `scrollTop` stays pinned — Context, Call 1, Sent, Received, Call 2, Sent…
- * Previous siblings unstick only when you scroll back above them.
+ * Stick timing (critical): a scope pins the moment its top reaches the
+ * *bottom of the current pin stack*, not bare scrollTop:
  *
- * That way Call 2 always appears between Call 1’s Received and Call 2’s Sent.
+ *   threshold = scrollTop + pinnedSoFar * ROW_H
+ *   if scope.top <= threshold → pin it
+ *
+ * Using only `top <= scrollTop` sticks one (or more) rows late — the header
+ * has already scrolled under the previous sticky row before we pin it.
  */
 
 export const TRACE_STICKY_ROW_H = 34
@@ -49,14 +52,24 @@ export function listTraceScopes(scrollEl: HTMLElement): TraceScopeEntry[] {
 }
 
 /**
- * Pin every scope scrolled past, in document order.
+ * Pin scopes in document order as each reaches the bottom of the stack.
  * Pure — unit-tested without DOM sticky.
  */
 export function computePinnedFromEntries(
   entries: Array<{ id: string; top: number }>,
   scrollTop: number,
+  rowH: number = TRACE_STICKY_ROW_H,
 ): string[] {
-  return entries.filter((e) => e.top <= scrollTop + 0.5).map((e) => e.id)
+  const pinned: string[] = []
+  for (const e of entries) {
+    // Stick when this header would be covered by (or flush with) the
+    // already-pinned rows — not after several more pixels of scroll.
+    const threshold = scrollTop + pinned.length * rowH
+    if (e.top <= threshold + 0.5) {
+      pinned.push(e.id)
+    }
+  }
+  return pinned
 }
 
 export function computePinnedScopeIds(scrollEl: HTMLElement): string[] {
