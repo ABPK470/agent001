@@ -3,9 +3,10 @@
  */
 
 import { ChevronDown, GripVertical, LayoutGrid, MessageSquare, Plus, X } from "lucide-react"
-import { useEffect, useRef, useState } from "react"
+import { Fragment, useEffect, useRef, useState } from "react"
 import type { Me } from "../../hooks/useMe"
 import { useViewTabReorder } from "../../hooks/useViewTabReorder"
+import { fullIndexFromRemainingSlot } from "../../lib/view-tab-dnd"
 import { SessionMenu } from "../SessionMenu"
 import { CHAT_BRAND_LOGO_SIZE } from "../brand"
 import type { AppShellMode } from "../types"
@@ -42,6 +43,7 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
   const {
     draggingId,
     dropSlot,
+    dragWidthPx,
     onTabPointerDown,
     onTabPointerMove,
     onTabPointerUp,
@@ -87,6 +89,12 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
     setEditing(null)
   }
 
+  const dragView = draggingId ? views.find((v) => v.id === draggingId) : null
+  const fromIndex = dragView ? views.findIndex((v) => v.id === dragView.id) : -1
+  const ghostAt = dropSlot != null && fromIndex >= 0
+    ? fullIndexFromRemainingSlot(fromIndex, dropSlot)
+    : null
+
   return (
     <header className="toolbar-shell flex h-14 shrink-0 select-none items-center gap-2 px-4 sm:gap-4 sm:px-6 bg-canvas">
       <div className="toolbar-brand flex h-9 shrink-0 items-center">
@@ -95,23 +103,21 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
 
       <div
         ref={tabsRef}
-        className={[
-          "flex min-w-0 flex-1 items-center gap-1 overflow-x-auto scrollbar-none",
-          // Room for the first-slot drop marker (absolute, half outside the first tab).
-          draggingId ? "pl-2" : "",
-        ].join(" ")}
+        className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto scrollbar-none"
       >
         {views.map((view, index) => {
           const isDragging = draggingId === view.id
-          const showMarker = dropSlot === index
 
           return (
-            <div key={view.id} className="relative flex shrink-0 items-center">
-              {showMarker && <ViewTabDropMarker edge="before" />}
+            <Fragment key={view.id}>
+              {ghostAt === index && dragView && (
+                <ViewTabDropMarker name={dragView.name} widthPx={dragWidthPx} />
+              )}
               <div
                 data-view-id={view.id}
+                {...(isDragging ? { "data-view-dragging": "" } : {})}
                 className={[
-                  "group relative flex h-9 shrink-0 cursor-grab items-center gap-1 rounded-lg px-2.5 text-[13px] transition-[opacity,background-color] active:cursor-grabbing",
+                  "group relative flex h-9 shrink-0 cursor-grab items-center gap-1 rounded-lg px-2.5 text-[13px] transition-[width,padding,opacity,background-color] active:cursor-grabbing",
                   view.id === activeViewId
                     ? "font-semibold text-text"
                     : "text-text-muted hover:text-text-secondary",
@@ -163,13 +169,11 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
                   </button>
                 )}
               </div>
-            </div>
+            </Fragment>
           )
         })}
-        {dropSlot === views.length && (
-          <div className="relative h-9 w-2 shrink-0">
-            <ViewTabDropMarker edge="after" />
-          </div>
+        {ghostAt === views.length && dragView && (
+          <ViewTabDropMarker name={dragView.name} widthPx={dragWidthPx} />
         )}
 
         <button

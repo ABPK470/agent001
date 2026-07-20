@@ -239,11 +239,13 @@ export function GridCanvas({ viewId, tiles, split }: Props) {
   }, [focusedTileId, tiles, commitSplit, viewId, maxRows, soloTileId, split])
 
   const soloTile = soloTileId ? tiles.find((tile) => tile.id === soloTileId) : null
+  // Drag keeps committed geometry (static). Resize still uses live layoutPreview.
   const visibleTiles = soloTile
     ? [{ ...soloTile, x: 0, y: 0, w: COLS, h: maxRows }]
-    : (layoutPreview ?? tiles)
+    : (interactionMode === "resize" ? (layoutPreview ?? tiles) : tiles)
 
   const interacting = !soloTileId && !!draggingId
+  const dragSource = draggingId ? tiles.find((tile) => tile.id === draggingId) : null
 
   return (
     <div
@@ -290,7 +292,12 @@ export function GridCanvas({ viewId, tiles, split }: Props) {
           })}
 
           {!soloTileId && interactionMode === "drag" && (
-            <DropZoneOverlay preview={dropPreview} colWidth={cw} rowPx={rowPx} />
+            <DropZoneOverlay
+              preview={dropPreview}
+              widgetType={dragSource?.type ?? null}
+              colWidth={cw}
+              rowPx={rowPx}
+            />
           )}
         </div>
       )}

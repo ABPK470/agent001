@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest"
 import {
-  insertSlotWouldMove,
+  fullIndexFromRemainingSlot,
   markDragMoved,
+  remainingSlotWouldMove,
   resolveViewTabDrop,
   tabIndexFromClientX,
   tabInsertSlotFromClientX,
-  toIndexFromInsertSlot,
+  toIndexFromRemainingSlot,
   type ViewTabDragState,
 } from "./view-tab-dnd"
 
@@ -32,13 +33,17 @@ describe("view-tab-dnd", () => {
     expect(tabInsertSlotFromClientX(rects, 280)).toBe(3)
   })
 
-  it("converts insert slots to reorder toIndex", () => {
-    expect(toIndexFromInsertSlot(0, 3)).toBe(2)
-    expect(toIndexFromInsertSlot(2, 0)).toBe(0)
-    expect(insertSlotWouldMove(1, 1)).toBe(false)
-    expect(insertSlotWouldMove(1, 2)).toBe(false)
-    expect(insertSlotWouldMove(1, 0)).toBe(true)
-    expect(insertSlotWouldMove(1, 3)).toBe(true)
+  it("remaining slots map to reorder toIndex and full-list ghost index", () => {
+    // Drag index 1 out of [A,B,C,D] → peers [A,C,D]; home remaining slot = 1.
+    expect(toIndexFromRemainingSlot(0)).toBe(0)
+    expect(toIndexFromRemainingSlot(2)).toBe(2)
+    expect(remainingSlotWouldMove(1, 1)).toBe(false)
+    expect(remainingSlotWouldMove(1, 0)).toBe(true)
+    expect(remainingSlotWouldMove(1, 2)).toBe(true)
+    expect(fullIndexFromRemainingSlot(1, 0)).toBe(0)
+    expect(fullIndexFromRemainingSlot(1, 1)).toBe(1)
+    expect(fullIndexFromRemainingSlot(1, 2)).toBe(3)
+    expect(fullIndexFromRemainingSlot(1, 3)).toBe(4)
   })
 
   it("marks movement past threshold", () => {
@@ -48,6 +53,7 @@ describe("view-tab-dnd", () => {
       startY: 10,
       pointerId: 1,
       hasMoved: false,
+      widthPx: 96,
     }
     expect(markDragMoved(drag, 14, 10)).toBe(false)
     expect(markDragMoved(drag, 23, 10)).toBe(true)
@@ -61,6 +67,7 @@ describe("view-tab-dnd", () => {
       startY: 0,
       pointerId: 1,
       hasMoved: true,
+      widthPx: 96,
     }
     expect(resolveViewTabDrop(drag, 2, 0)).toEqual({
       kind: "reorder",
@@ -76,6 +83,7 @@ describe("view-tab-dnd", () => {
       startY: 0,
       pointerId: 1,
       hasMoved: false,
+      widthPx: 96,
     }
     expect(resolveViewTabDrop(drag, 1, 0)).toEqual({
       kind: "activate",

@@ -109,14 +109,12 @@ interface DropResolve {
   preview: DropPreview
   /** Tree after drop — same as commit on pointer-up. */
   split: SplitNode
-  /** Projected tiles for that tree (overlay + live reflow). */
-  tiles: LayoutTile[]
 }
 
 /**
  * Hit-test against the *pre-drag* layout, then resolve destination from the
- * post-drop tree. Center of a leaf → leaf-id swap (preview = target's slot);
- * edge bands → dock/split as before.
+ * post-drop tree. Layout stays frozen during drag — only the destination
+ * ghost moves. Center of a leaf → swap; edge bands → dock/split.
  */
 function resolveDrop(
   tiles: readonly LayoutTile[],
@@ -184,7 +182,6 @@ function resolveDrop(
       rect: { x: dest.x, y: dest.y, w: dest.w, h: dest.h },
     },
     split: next,
-    tiles: projected,
   }
 }
 
@@ -235,6 +232,7 @@ export function useGridInteraction({
       if (!session || !base || cw <= 0) return
 
       if (session.mode === "drag") {
+        // Keep peers frozen — only the destination ghost updates.
         const drop = resolveDrop(
           tilesRef.current,
           base,
@@ -246,13 +244,7 @@ export function useGridInteraction({
           rowPx,
           rows,
         )
-        if (!drop) {
-          setDropPreview(null)
-          setLayoutPreview(projectTiles(base, tilesRef.current, COLS, rows))
-          return
-        }
-        setDropPreview(drop.preview)
-        setLayoutPreview(drop.tiles)
+        setDropPreview(drop?.preview ?? null)
         return
       }
 
@@ -339,7 +331,7 @@ export function useGridInteraction({
     }
     setDraggingId(tile.id)
     setInteractionMode("drag")
-    setLayoutPreview(tilesRef.current)
+    setLayoutPreview(null)
     setDropPreview(null)
   }, [cw, interactionsLocked, rowPx])
 

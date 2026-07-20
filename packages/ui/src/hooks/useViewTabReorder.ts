@@ -1,16 +1,19 @@
 /**
  * Flat peer handlers for view-tab drag reorder.
  * Transient drag state lives in a ref — no nested listener allocations.
+ *
+ * After the move threshold: source collapses (still mounted for pointer
+ * capture), peers close the gap, and an in-flow ghost opens space at the
+ * remaining-based insert slot.
  */
 
 import { useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from "react"
 import {
-  insertSlotWouldMove,
   markDragMoved,
   readTabRects,
   resolveViewTabDrop,
   tabInsertSlotFromClientX,
-  toIndexFromInsertSlot,
+  toIndexFromRemainingSlot,
   type ViewTabDragState,
 } from "../lib/view-tab-dnd"
 import { useLayoutStore } from "../state/layout-store"
@@ -21,8 +24,9 @@ export function useViewTabReorder(
 ) {
   const dragRef = useRef<ViewTabDragState | null>(null)
   const [draggingId, setDraggingId] = useState<string | null>(null)
-  /** Insertion gap 0..n while dragging; null when idle or click-without-drag. */
+  /** Remaining-based insert slot while dragging (including home). */
   const [dropSlot, setDropSlot] = useState<number | null>(null)
+  const [dragWidthPx, setDragWidthPx] = useState(96)
 
   function clearDragSession(): void {
     dragRef.current = null
@@ -47,6 +51,7 @@ export function useViewTabReorder(
       startY: event.clientY,
       pointerId: event.pointerId,
       hasMoved: false,
+      widthPx: target.offsetWidth,
     }
     // Do not enter drag chrome until the press clears the move threshold —
     // otherwise a normal click feels like a reorder gesture.
@@ -61,12 +66,13 @@ export function useViewTabReorder(
     if (!moved) return
 
     // Enter drag chrome only after the threshold clears (not on pointer-down).
-    if (!alreadyDragging) setDraggingId(drag.viewId)
+    if (!alreadyDragging) {
+      setDragWidthPx(drag.widthPx)
+      setDraggingId(drag.viewId)
+    }
 
-    const views = useLayoutStore.getState().views
-    const fromIndex = views.findIndex((view) => view.id === drag.viewId)
-    const slot = slotFromPointer(event.clientX)
-    setDropSlot(insertSlotWouldMove(fromIndex, slot) ? slot : null)
+    // Always show the ghost — including when the pointer returns to home.
+    setDropSlot(slotFromPointer(event.clientX))
   }
 
   function onTabPointerUp(event: ReactPointerEvent<HTMLDivElement>) {
@@ -87,7 +93,7 @@ export function useViewTabReorder(
     const { views, reorderViews, setActiveView } = useLayoutStore.getState()
     const fromIndex = views.findIndex((view) => view.id === drag.viewId)
     const slot = slotFromPointer(event.clientX)
-    const toIndex = toIndexFromInsertSlot(fromIndex, slot)
+    const toIndex = toIndexFromRemainingSlot(slot)
     const action = resolveViewTabDrop(drag, toIndex, fromIndex)
 
     if (action.kind === "reorder") {
@@ -111,6 +117,7 @@ export function useViewTabReorder(
   return {
     draggingId,
     dropSlot,
+    dragWidthPx,
     onTabPointerDown,
     onTabPointerMove,
     onTabPointerUp,

@@ -1,6 +1,9 @@
 /**
  * Pure view-tab reorder math — no React, no DOM event wiring.
  * UI handlers stay flat peers; they call into this module.
+ *
+ * While dragging, the source tab collapses out of the strip and hit-testing
+ * uses peer tabs only (remaining). Insert slots are 0..peers.length.
  */
 
 export interface ViewTabDragState {
@@ -9,6 +12,8 @@ export interface ViewTabDragState {
   startY: number
   pointerId: number
   hasMoved: boolean
+  /** Tab width captured before the source collapses (ghost sizing). */
+  widthPx: number
 }
 
 export type ViewTabDropAction =
@@ -41,22 +46,39 @@ export function tabInsertSlotFromClientX(
   return tabRects.length
 }
 
-/** Map an insertion slot to the `toIndex` consumed by `reorderViews`. */
-export function toIndexFromInsertSlot(fromIndex: number, insertSlot: number): number {
-  if (fromIndex < 0) return Math.max(0, insertSlot)
-  if (insertSlot > fromIndex) return insertSlot - 1
-  return insertSlot
+/**
+ * Remaining-based insert slot → `reorderViews` toIndex.
+ * Peers are the list with the dragged tab removed; inserting at `slot`
+ * is exactly the final index of the moved tab.
+ */
+export function toIndexFromRemainingSlot(remainingSlot: number): number {
+  return Math.max(0, remainingSlot)
 }
 
-/** True when the insert slot would actually move the dragged tab. */
-export function insertSlotWouldMove(fromIndex: number, insertSlot: number): boolean {
+/**
+ * Home gap among peers after the source collapses equals `fromIndex`.
+ * Only then is the strip a closed peer row with no ghost.
+ */
+export function remainingSlotWouldMove(fromIndex: number, remainingSlot: number): boolean {
   if (fromIndex < 0) return false
-  return insertSlot !== fromIndex && insertSlot !== fromIndex + 1
+  return remainingSlot !== fromIndex
+}
+
+/**
+ * Map a remaining-based insert slot onto an index in the full views array
+ * (where the collapsed source still occupies its original index).
+ * Used to place the in-flow ghost among full-list children.
+ */
+export function fullIndexFromRemainingSlot(fromIndex: number, remainingSlot: number): number {
+  if (fromIndex < 0) return Math.max(0, remainingSlot)
+  if (remainingSlot <= fromIndex) return remainingSlot
+  return remainingSlot + 1
 }
 
 export function readTabRects(container: HTMLElement | null): Array<{ left: number; width: number }> {
   if (!container) return []
-  return [...container.querySelectorAll<HTMLElement>("[data-view-id]")].map((el) => {
+  // Skip the collapsed drag source — hit-test peers only.
+  return [...container.querySelectorAll<HTMLElement>("[data-view-id]:not([data-view-dragging])")].map((el) => {
     const rect = el.getBoundingClientRect()
     return { left: rect.left, width: rect.width }
   })
