@@ -1,12 +1,16 @@
 /**
- * Trace (DebugInspector) — why the agent did that.
+ * Trace — review what the agent sent to the model and what it replied.
  *
- * Primary object: the LLM call timeline (iteration · tokens · time · outcome).
- * Context (system prompt, tools, SQL quality) is secondary and collapsed by default.
- * Message parts (system / user / agent / tool) can be fully collapsed or expanded.
+ * Mental model (chat, not a debug dump):
+ *   each Call = one model round-trip (iteration)
+ *   · Sent to model  — history the LLM saw (collapsible)
+ *   · Agent replied  — the answer for that round (text and/or tool calls)
+ *
+ * Tool *results* live in history. Tool *calls* are part of the agent reply —
+ * never a separate “TOOL” speaker for the response.
  */
 
-import { ChevronDown, ChevronRight, Clock, Copy, Search } from "lucide-react"
+import { ChevronDown, ChevronRight, Copy, Search } from "lucide-react"
 import {
   useCallback,
   useEffect,
@@ -35,31 +39,14 @@ type LlmCall = { request: LlmRequest; response: LlmResponse | null }
 type FilterKind = "calls" | "context" | "all"
 type PartsMode = "collapsed" | "expanded"
 
-// ── Role / meta helpers ──────────────────────────────────────────
+// ── Labels (product language, not API roles) ─────────────────────
 
-/** Wire role → product label (never “assistant”). */
-function roleLabel(role: string): string {
+function historySpeaker(role: string): string {
   if (role === "assistant") return "Agent"
   if (role === "system") return "System"
   if (role === "user") return "User"
-  if (role === "tool") return "Tool"
+  if (role === "tool") return "Tool result"
   return role
-}
-
-function roleTone(role: string): string {
-  if (role === "system") return "text-accent"
-  if (role === "user") return "text-success"
-  if (role === "assistant") return "text-warning"
-  if (role === "tool") return "text-info"
-  return "text-text-muted"
-}
-
-function roleBorder(role: string): string {
-  if (role === "system") return "var(--color-accent)"
-  if (role === "user") return "var(--color-success)"
-  if (role === "assistant") return "var(--color-warning)"
-  if (role === "tool") return "var(--color-info)"
-  return "var(--color-border)"
 }
 
 function formatCharCount(n: number): string {
@@ -68,12 +55,6 @@ function formatCharCount(n: number): string {
 
 function copyText(text: string) {
   navigator.clipboard.writeText(text)
-}
-
-function durationTone(ms: number): string {
-  if (ms > 5000) return "text-error"
-  if (ms > 2000) return "text-warning"
-  return "text-success"
 }
 
 /** Pair each request with its response by iteration (positional fallback). */
@@ -92,37 +73,48 @@ function pairLlmCalls(trace: TraceEntry[]): LlmCall[] {
   }))
 }
 
-function callOutcome(res: LlmResponse | null): string {
-  if (!res) return "pending"
+function replyHeadline(res: LlmResponse | null): string {
+  if (!res) return "Waiting for reply…"
+  if (res.toolCalls.length > 0 && res.content) {
+    return `Called ${res.toolCalls.length} tool${res.toolCalls.length === 1 ? "" : "s"} · with text`
+  }
   if (res.toolCalls.length > 0) {
     const names = res.toolCalls.map((t) => t.name)
-    const shown = names.slice(0, 3).join(", ")
-    const more = names.length > 3 ? ` +${names.length - 3}` : ""
-    return `${res.toolCalls.length} tool${res.toolCalls.length === 1 ? "" : "s"} · ${shown}${more}`
+    if (names.length <= 2) return `Called ${names.join(", ")}`
+    return `Called ${names.slice(0, 2).join(", ")} +${names.length - 2}`
   }
-  if (res.content) return "final answer"
-  return "empty"
+  if (res.content) return "Final answer"
+  return "Empty reply"
 }
 
 function messagePreview(msg: TraceMessage): string {
   if (msg.toolCalls.length > 0) {
-    return msg.toolCalls.map((t) => t.name).join(", ")
+    return `called ${msg.toolCalls.map((t) => t.name).join(", ")}`
   }
   if (msg.content) {
     const line = msg.content.replace(/\s+/g, " ").trim()
-    return line.length > 96 ? `${line.slice(0, 95)}…` : line
+    return line.length > 100 ? `${line.slice(0, 99)}…` : line
   }
-  if (msg.toolCallId) return `← ${msg.toolCallId.slice(0, 12)}`
+  if (msg.toolCallId) return `for ${msg.toolCallId.slice(0, 12)}`
   return "empty"
+}
+
+function tokensInOut(usage: {
+  promptTokens: number
+  completionTokens: number
+  totalTokens: number
+} | null): string | null {
+  if (!usage) return null
+  return `${fmtTokens(usage.promptTokens)} in · ${fmtTokens(usage.completionTokens)} out · ${fmtTokens(usage.totalTokens)} total`
 }
 
 // ── Expandable text ──────────────────────────────────────────────
 
-const TEXT_PREVIEW_CHARS = 300
+const TEXT_PREVIEW_CHARS = 400
 
 function ExpandableText({
   text,
-  className = "text-sm font-mono text-text-secondary whitespace-pre-wrap break-words leading-relaxed",
+  className = "trace-chat-body whitespace-pre-wrap break-words",
   previewChars = TEXT_PREVIEW_CHARS,
   maxExpandedHeight,
 }: {
@@ -168,19 +160,17 @@ function ExpandableText({
   )
 }
 
-// ── Collapsible section ──────────────────────────────────────────
+// ── Collapsible section (context) ────────────────────────────────
 
 function Section({
   label,
   badge,
-  badgeColor = "text-text-muted",
   defaultOpen = false,
   copyable,
   children,
 }: {
   label: string
   badge?: string
-  badgeColor?: string
   defaultOpen?: boolean
   copyable?: string
   children: ReactNode
@@ -190,21 +180,21 @@ function Section({
     <div className="debug-trace-block shrink-0 rounded-lg border border-border/50 overflow-clip">
       <button
         type="button"
-        className="flex items-center gap-2 w-full px-3 py-2 text-left bg-elevated/30 hover:bg-elevated/50 transition-colors"
+        className="flex items-center gap-2 w-full px-3 py-2.5 text-left bg-elevated/30 hover:bg-elevated/50 transition-colors"
         onClick={() => setOpen(!open)}
       >
         {open ? (
-          <ChevronDown size={14} className="text-text-muted shrink-0" />
+          <ChevronDown size={16} className="text-text-muted shrink-0" />
         ) : (
-          <ChevronRight size={14} className="text-text-muted shrink-0" />
+          <ChevronRight size={16} className="text-text-muted shrink-0" />
         )}
-        <span className="text-sm font-medium text-text">{label}</span>
+        <span className="text-base font-medium text-text">{label}</span>
         {badge && (
-          <span className={`text-sm font-mono ml-auto ${badgeColor}`}>{badge}</span>
+          <span className="text-sm font-mono text-text-muted ml-auto">{badge}</span>
         )}
       </button>
       {open && (
-        <div className="px-3 py-2 border-t border-border/30 relative">
+        <div className="px-3 py-2.5 border-t border-border/30 relative">
           {copyable && (
             <button
               type="button"
@@ -225,15 +215,13 @@ function Section({
   )
 }
 
-// ── Message part (system / user / agent / tool) ──────────────────
+// ── History message (sent to model) ──────────────────────────────
 
-function MessagePart({
+function HistoryMessage({
   msg,
-  index,
   partsMode,
 }: {
   msg: TraceMessage
-  index: number
   partsMode: PartsMode
 }) {
   const [open, setOpen] = useState(partsMode === "expanded")
@@ -243,72 +231,59 @@ function MessagePart({
   }, [partsMode, msg])
 
   const preview = messagePreview(msg)
+  const isToolResult = msg.role === "tool"
 
   return (
-    <div
-      className="border-l-2 pl-2 py-1 min-w-0"
-      style={{ borderColor: roleBorder(msg.role) }}
-    >
+    <div className="trace-history-msg min-w-0">
       <button
         type="button"
-        className="flex items-center gap-2 w-full text-left min-w-0 group"
+        className="flex items-baseline gap-2 w-full text-left min-w-0 py-1"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
       >
         {open ? (
-          <ChevronDown size={12} className="text-text-muted shrink-0" />
+          <ChevronDown size={14} className="text-text-muted shrink-0 mt-0.5" />
         ) : (
-          <ChevronRight size={12} className="text-text-muted shrink-0" />
+          <ChevronRight size={14} className="text-text-muted shrink-0 mt-0.5" />
         )}
-        <span className={`text-sm font-mono font-bold ${roleTone(msg.role)}`}>
-          {roleLabel(msg.role)}
+        <span className="text-sm font-semibold text-text-secondary shrink-0">
+          {historySpeaker(msg.role)}
         </span>
-        <span className="text-xs text-text-muted/40">#{index + 1}</span>
-        {msg.toolCallId && (
-          <span className="text-xs text-text-muted/40 font-mono shrink-0">
-            ← {msg.toolCallId.slice(0, 12)}
-          </span>
-        )}
-        {msg.content && (
-          <span className="text-xs text-text-muted/35 shrink-0">
-            {formatCharCount(msg.content.length)}
+        {isToolResult && msg.toolCallId && (
+          <span className="text-sm text-text-muted/50 font-mono shrink-0">
+            {msg.toolCallId.slice(0, 10)}
           </span>
         )}
         {!open && (
-          <span className="text-xs text-text-muted/50 truncate min-w-0 flex-1 font-mono">
+          <span className="text-sm text-text-muted truncate min-w-0 flex-1">
             {preview}
+          </span>
+        )}
+        {open && msg.content && (
+          <span className="text-sm text-text-muted/40 shrink-0 ml-auto">
+            {formatCharCount(msg.content.length)}
           </span>
         )}
       </button>
 
       {open && (
-        <div className="mt-1 pl-4 min-w-0">
+        <div className="pl-6 pb-2 min-w-0">
           {msg.content && <ExpandableText text={msg.content} />}
-
           {!msg.content && msg.toolCalls.length === 0 && (
-            <span className="text-sm text-text-muted/35 italic">null</span>
+            <span className="text-base text-text-muted/40 italic">null</span>
           )}
-
           {msg.toolCalls.length > 0 && (
-            <div className="space-y-1">
+            <div className="space-y-1.5 mt-1">
               {msg.toolCalls.map((tc) => (
-                <div
-                  key={tc.id}
-                  className="bg-warning/5 border border-warning/10 rounded px-2 py-1"
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-mono font-semibold text-warning">
-                      {tc.name}
-                    </span>
-                    <span className="text-xs text-text-muted/30 font-mono">
-                      {tc.id.slice(0, 12)}
-                    </span>
+                <div key={tc.id} className="trace-nested-tool">
+                  <div className="text-base font-mono font-medium text-text">
+                    {tc.name}
                   </div>
                   <JsonViewer
                     value={tc.arguments}
                     label="arguments"
-                    defaultExpandDepth={2}
-                    maxHeight={200}
+                    defaultExpandDepth={1}
+                    maxHeight={180}
                   />
                 </div>
               ))}
@@ -320,7 +295,7 @@ function MessagePart({
   )
 }
 
-// ── Tool definition ──────────────────────────────────────────────
+// ── Tool schema (context) ────────────────────────────────────────
 
 function ToolDefinition({
   tool,
@@ -330,9 +305,9 @@ function ToolDefinition({
   const [showSchema, setShowSchema] = useState(false)
 
   return (
-    <div className="border border-border/30 rounded px-2 py-1.5">
+    <div className="border border-border/30 rounded px-2.5 py-2">
       <div className="flex items-start gap-2 min-w-0">
-        <span className="text-sm font-mono font-semibold text-warning shrink-0">
+        <span className="text-base font-mono font-medium text-text shrink-0">
           {tool.name}
         </span>
         <div className="min-w-0 flex-1">
@@ -367,175 +342,178 @@ function ToolDefinition({
   )
 }
 
-// ── LLM call card ────────────────────────────────────────────────
+// ── One model round-trip ─────────────────────────────────────────
 
 function LlmCallEntry({
   call,
   index,
   partsMode,
+  open,
+  onToggle,
+  callId,
+  rootRef,
 }: {
   call: LlmCall
   index: number
   partsMode: PartsMode
+  open: boolean
+  onToggle: () => void
+  callId: string
+  rootRef: (el: HTMLDivElement | null) => void
 }) {
-  const [open, setOpen] = useState(false)
-  const rootRef = useRef<HTMLDivElement>(null)
+  const [historyOpen, setHistoryOpen] = useState(false)
   const req = call.request
   const res = call.response
   const usage = res?.usage ?? null
-  const outcome = callOutcome(res)
-
-  function toggleOpen() {
-    const next = !open
-    setOpen(next)
-    if (next) {
-      requestAnimationFrame(() => {
-        rootRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" })
-      })
-    }
-  }
+  const tokenLine = tokensInOut(usage)
+  const headline = replyHeadline(res)
 
   return (
     <div
+      id={callId}
       ref={rootRef}
-      className="debug-trace-block shrink-0 rounded-lg border border-border/40 overflow-clip"
+      className="debug-trace-block shrink-0 rounded-lg border border-border/40 overflow-clip scroll-mt-14"
     >
+      {/* Sticky-friendly call chrome */}
       <button
         type="button"
-        className="flex items-center gap-2.5 px-3 py-2 bg-elevated/20 w-full text-left cursor-pointer hover:bg-elevated/40 transition-colors flex-wrap"
-        onClick={toggleOpen}
+        className="trace-call-header flex items-start gap-3 px-3 py-3 w-full text-left hover:bg-elevated/35 transition-colors"
+        onClick={onToggle}
       >
         {open ? (
-          <ChevronDown size={14} className="text-text-muted shrink-0" />
+          <ChevronDown size={16} className="text-text-muted shrink-0 mt-0.5" />
         ) : (
-          <ChevronRight size={14} className="text-text-muted shrink-0" />
+          <ChevronRight size={16} className="text-text-muted shrink-0 mt-0.5" />
         )}
-        <span className="text-sm font-semibold text-info shrink-0">
-          LLM #{index + 1}
-        </span>
-        <span className="text-sm font-mono text-text-muted shrink-0">
-          iter {req.iteration + 1}
-        </span>
-        <span className="text-sm font-mono text-text-secondary truncate min-w-0">
-          {outcome}
-        </span>
-        <span className="flex items-center gap-2 ml-auto shrink-0 text-sm font-mono">
-          {usage ? (
-            <span className="text-text-muted" title="prompt → completion (total)">
-              {fmtTokens(usage.promptTokens)}→{fmtTokens(usage.completionTokens)}
-              <span className="text-text-muted/50"> · {fmtTokens(usage.totalTokens)}</span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-baseline gap-2 flex-wrap">
+            <span className="text-base font-semibold text-text">
+              Call {index + 1}
             </span>
-          ) : (
-            <span className="text-text-muted/40">— tok</span>
+            <span className="text-sm text-text-muted">
+              Iteration {req.iteration + 1}
+            </span>
+            {res && (
+              <span className="text-sm text-text-muted">{formatMs(res.durationMs)}</span>
+            )}
+          </div>
+          <div className="text-base text-text-secondary mt-0.5 truncate">
+            {headline}
+          </div>
+          {tokenLine && (
+            <div className="text-sm text-text-muted mt-0.5 font-mono">{tokenLine}</div>
           )}
-          {res ? (
-            <span className={durationTone(res.durationMs)}>{formatMs(res.durationMs)}</span>
-          ) : (
-            <span className="text-text-muted/40">…</span>
-          )}
-        </span>
+        </div>
       </button>
 
       {open && (
-        <>
-          <div className="px-3 py-2 border-t border-border/20">
-            <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-              <span className="text-xs font-medium text-text-muted/55 uppercase tracking-wider">
-                Request
+        <div className="border-t border-border/25">
+          {/* History — secondary */}
+          <div className="px-3 py-2 border-b border-border/20">
+            <button
+              type="button"
+              className="flex items-center gap-2 w-full text-left py-1"
+              onClick={() => setHistoryOpen((v) => !v)}
+              aria-expanded={historyOpen}
+            >
+              {historyOpen ? (
+                <ChevronDown size={14} className="text-text-muted shrink-0" />
+              ) : (
+                <ChevronRight size={14} className="text-text-muted shrink-0" />
+              )}
+              <span className="text-sm font-medium text-text-muted">
+                Sent to model
               </span>
-              <span className="text-xs font-mono text-text-muted/45">
-                {req.messageCount} part{req.messageCount === 1 ? "" : "s"} · {req.toolCount}{" "}
-                tool def{req.toolCount === 1 ? "" : "s"}
+              <span className="text-sm text-text-muted/50">
+                {req.messageCount} message{req.messageCount === 1 ? "" : "s"}
+                {req.toolCount > 0 ? ` · ${req.toolCount} tools in schema` : ""}
               </span>
-            </div>
-            {req.messages.length === 0 ? (
-              <span className="text-sm text-text-muted/40 italic">No messages recorded</span>
-            ) : (
-              <div className="space-y-1">
-                {req.messages.map((msg, mi) => (
-                  <MessagePart
-                    key={`${req.iteration}-${mi}`}
-                    msg={msg}
-                    index={mi}
-                    partsMode={partsMode}
-                  />
-                ))}
+            </button>
+            {historyOpen && (
+              <div className="mt-1 space-y-0.5">
+                {req.messages.length === 0 ? (
+                  <span className="text-base text-text-muted/40 italic pl-6">
+                    No messages recorded
+                  </span>
+                ) : (
+                  req.messages.map((msg, mi) => (
+                    <HistoryMessage
+                      key={`${req.iteration}-${mi}`}
+                      msg={msg}
+                      partsMode={partsMode}
+                    />
+                  ))
+                )}
               </div>
             )}
           </div>
 
-          {res && (
-            <div className="px-3 py-2 border-t border-border/20 bg-elevated/10">
-              <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-                <span className="text-xs font-medium text-text-muted/55 uppercase tracking-wider">
-                  Response
+          {/* Agent reply — primary, always visible when call is open */}
+          <div className="trace-agent-reply px-3 py-3">
+            <div className="flex items-baseline gap-2 flex-wrap mb-2">
+              <span className="text-base font-semibold text-text">Agent replied</span>
+              {res && (
+                <span className="text-sm text-text-muted">{formatMs(res.durationMs)}</span>
+              )}
+              {tokenLine && (
+                <span className="text-sm text-text-muted font-mono ml-auto">
+                  {tokenLine}
                 </span>
-                {usage && (
-                  <span className="text-xs font-mono text-text-muted/50">
-                    {fmtTokens(usage.promptTokens)} prompt ·{" "}
-                    {fmtTokens(usage.completionTokens)} completion ·{" "}
-                    {fmtTokens(usage.totalTokens)} total
-                  </span>
-                )}
-                <span className={`text-xs font-mono ${durationTone(res.durationMs)}`}>
-                  {formatMs(res.durationMs)}
-                </span>
-              </div>
-
-              {res.content && (
-                <div className="mb-2">
-                  <div className="text-xs text-text-muted/40 mb-0.5">content</div>
-                  <ExpandableText
-                    text={res.content}
-                    className="code-pre"
-                    maxExpandedHeight={360}
-                  />
-                </div>
-              )}
-
-              {res.toolCalls.length > 0 && (
-                <div>
-                  <div className="text-xs text-text-muted/40 mb-0.5">tool calls</div>
-                  <div className="space-y-1">
-                    {res.toolCalls.map((tc) => (
-                      <div
-                        key={tc.id}
-                        className="bg-warning/5 border border-warning/10 rounded px-2 py-1"
-                      >
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-mono font-semibold text-warning">
-                            {tc.name}
-                          </span>
-                          <span className="text-xs text-text-muted/30 font-mono">
-                            {tc.id}
-                          </span>
-                        </div>
-                        <JsonViewer
-                          value={tc.arguments}
-                          label="arguments"
-                          defaultExpandDepth={2}
-                          maxHeight={200}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {res.toolCalls.length === 0 && !res.content && (
-                <div className="text-sm text-error/50 italic">
-                  Empty response — no content and no tool calls
-                </div>
-              )}
-
-              {res.toolCalls.length === 0 && res.content && (
-                <div className="text-sm text-success/60 mt-1">
-                  ↳ No tool calls — this became the final answer
-                </div>
               )}
             </div>
-          )}
-        </>
+
+            {!res && (
+              <p className="trace-chat-body text-text-muted italic">Waiting for reply…</p>
+            )}
+
+            {res && res.content && (
+              <div className="mb-3">
+                <ExpandableText
+                  text={res.content}
+                  className="trace-chat-body whitespace-pre-wrap break-words"
+                  maxExpandedHeight={480}
+                />
+              </div>
+            )}
+
+            {res && res.toolCalls.length > 0 && (
+              <div className="space-y-2">
+                <div className="text-sm font-medium text-text-muted">
+                  Called {res.toolCalls.length} tool
+                  {res.toolCalls.length === 1 ? "" : "s"}
+                </div>
+                {res.toolCalls.map((tc) => (
+                  <div key={tc.id} className="trace-nested-tool">
+                    <div className="flex items-baseline gap-2 flex-wrap">
+                      <span className="text-base font-mono font-medium text-text">
+                        {tc.name}
+                      </span>
+                      <span className="text-sm text-text-muted/40 font-mono">
+                        {tc.id.slice(0, 14)}
+                      </span>
+                    </div>
+                    <JsonViewer
+                      value={tc.arguments}
+                      label="arguments"
+                      defaultExpandDepth={1}
+                      maxHeight={220}
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {res && res.toolCalls.length === 0 && !res.content && (
+              <p className="trace-chat-body text-error/70 italic">
+                Empty reply — no text and no tool calls
+              </p>
+            )}
+
+            {res && res.toolCalls.length === 0 && res.content && (
+              <p className="text-sm text-text-muted mt-2">Final answer for this call</p>
+            )}
+          </div>
+        </div>
       )}
     </div>
   )
@@ -549,14 +527,11 @@ export function DebugInspector() {
   const [filter, setFilter] = useState<FilterKind>("calls")
   const [partsMode, setPartsMode] = useState<PartsMode>("collapsed")
   const [search, setSearch] = useState("")
+  const [openCalls, setOpenCalls] = useState<Set<number>>(() => new Set())
+  const [activeNav, setActiveNav] = useState(0)
   const scrollRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    const el = scrollRef.current
-    if (!el) return
-    const distance = el.scrollHeight - el.scrollTop - el.clientHeight
-    if (distance < 80) el.scrollTop = el.scrollHeight
-  }, [trace.length])
+  const callElsRef = useRef<Map<number, HTMLDivElement>>(new Map())
+  const seededOpenRef = useRef(false)
 
   const systemPrompt = useMemo(
     () => trace.find((e): e is SystemPrompt => e.kind === "system-prompt"),
@@ -572,18 +547,54 @@ export function DebugInspector() {
     [trace],
   )
 
+  // Open the latest call by default once we have data.
+  useEffect(() => {
+    if (seededOpenRef.current || llmCalls.length === 0) return
+    seededOpenRef.current = true
+    setOpenCalls(new Set([llmCalls.length - 1]))
+    setActiveNav(llmCalls.length - 1)
+  }, [llmCalls.length])
+
+  useEffect(() => {
+    seededOpenRef.current = false
+  }, [activeRunId])
+
+  // Follow new entries only when near the bottom.
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    const distance = el.scrollHeight - el.scrollTop - el.clientHeight
+    if (distance < 80) el.scrollTop = el.scrollHeight
+  }, [trace.length])
+
+  // Track which call is in view for sticky nav highlight.
+  useEffect(() => {
+    const root = scrollRef.current
+    if (!root || llmCalls.length === 0) return
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries
+          .filter((e) => e.isIntersecting)
+          .sort((a, b) => b.intersectionRatio - a.intersectionRatio)
+        const top = visible[0]
+        if (!top?.target.id) return
+        const match = /^trace-call-(\d+)$/.exec(top.target.id)
+        if (!match) return
+        setActiveNav(Number(match[1]))
+      },
+      { root, rootMargin: "-10% 0px -55% 0px", threshold: [0.1, 0.35, 0.6] },
+    )
+    for (const el of callElsRef.current.values()) observer.observe(el)
+    return () => observer.disconnect()
+  }, [llmCalls.length, filter])
+
   const stats = useMemo(() => {
     let promptTokens = 0
     let completionTokens = 0
     let totalTokens = 0
     let totalDuration = 0
     let answered = 0
-    let minIter: number | null = null
-    let maxIter: number | null = null
     for (const c of llmCalls) {
-      const iter = c.request.iteration + 1
-      minIter = minIter == null ? iter : Math.min(minIter, iter)
-      maxIter = maxIter == null ? iter : Math.max(maxIter, iter)
       if (!c.response) continue
       answered += 1
       totalDuration += c.response.durationMs
@@ -602,8 +613,6 @@ export function DebugInspector() {
       totalTokens,
       totalDuration,
       avgDuration: answered > 0 ? Math.round(totalDuration / answered) : 0,
-      minIter,
-      maxIter,
     }
   }, [toolsResolved, llmCalls])
 
@@ -624,44 +633,59 @@ export function DebugInspector() {
   const showCalls = filter === "calls" || filter === "all"
   const showContext = filter === "context" || filter === "all"
 
-  const iterLabel =
-    stats.minIter != null && stats.maxIter != null
-      ? stats.minIter === stats.maxIter
-        ? `iter ${stats.minIter}`
-        : `iter ${stats.minIter}–${stats.maxIter}`
-      : null
+  function toggleCall(index: number) {
+    setOpenCalls((prev) => {
+      const next = new Set(prev)
+      if (next.has(index)) next.delete(index)
+      else next.add(index)
+      return next
+    })
+  }
+
+  function jumpToCall(index: number) {
+    setOpenCalls((prev) => new Set(prev).add(index))
+    setActiveNav(index)
+    setFilter((f) => (f === "context" ? "calls" : f))
+    requestAnimationFrame(() => {
+      callElsRef.current.get(index)?.scrollIntoView({
+        block: "start",
+        behavior: "smooth",
+      })
+    })
+  }
+
+  function bindCallEl(index: number, el: HTMLDivElement | null) {
+    if (el) callElsRef.current.set(index, el)
+    else callElsRef.current.delete(index)
+  }
+
+  const summaryLine = useMemo(() => {
+    if (stats.callCount === 0) return "No model calls yet"
+    const parts = [
+      `${stats.callCount} call${stats.callCount === 1 ? "" : "s"}`,
+      stats.totalDuration > 0 ? formatMs(stats.totalDuration) : null,
+      stats.avgDuration > 0 ? `${formatMs(stats.avgDuration)} avg` : null,
+    ].filter(Boolean)
+    return parts.join(" · ")
+  }, [stats])
+
+  const tokenLine = useMemo(() => {
+    if (stats.totalTokens <= 0) return null
+    return `${fmtTokens(stats.promptTokens)} in · ${fmtTokens(stats.completionTokens)} out · ${fmtTokens(stats.totalTokens)} total`
+  }, [stats])
 
   return (
-    <div className="flex flex-col h-full gap-2">
-      {/* Glanceable run meta */}
-      <div className="flex items-center gap-2 shrink-0 flex-wrap">
-        <MetaChip
-          label="llm"
-          value={
-            stats.callCount > 0
-              ? `${stats.callCount} · ${formatMs(stats.avgDuration)} avg`
-              : "—"
-          }
-          accent="text-info"
-        />
-        <MetaChip
-          label="tokens"
-          value={
-            stats.totalTokens > 0
-              ? `${fmtTokens(stats.promptTokens)}→${fmtTokens(stats.completionTokens)} · ${fmtTokens(stats.totalTokens)}`
-              : "—"
-          }
-          accent="text-warning"
-        />
-        <MetaChip
-          label="time"
-          value={stats.totalDuration > 0 ? formatMs(stats.totalDuration) : "—"}
-          accent="text-text-muted"
-          icon={<Clock size={12} />}
-        />
-        {iterLabel && <MetaChip label="loop" value={iterLabel} accent="text-accent" />}
+    <div className="trace-widget flex flex-col h-full gap-2">
+      {/* Readable summary — prose, not cryptic chips */}
+      <div className="shrink-0 px-0.5 space-y-0.5">
+        <div className="text-base text-text font-medium">{summaryLine}</div>
+        {tokenLine && (
+          <div className="text-sm text-text-muted font-mono">{tokenLine}</div>
+        )}
         {stats.toolCount > 0 && (
-          <MetaChip label="tools" value={String(stats.toolCount)} accent="text-warning" />
+          <div className="text-sm text-text-muted">
+            {stats.toolCount} tool{stats.toolCount === 1 ? "" : "s"} available to the agent
+          </div>
         )}
       </div>
 
@@ -678,7 +702,7 @@ export function DebugInspector() {
             <button
               key={key}
               type="button"
-              className={`px-2.5 py-1 text-sm font-medium rounded-md transition-colors ${
+              className={`px-2.5 py-1.5 text-sm font-medium rounded-md transition-colors ${
                 filter === key ? "bg-accent/20 text-accent" : "text-text-muted hover:text-text"
               }`}
               onClick={() => setFilter(key)}
@@ -690,10 +714,10 @@ export function DebugInspector() {
 
         <div
           className="flex items-center gap-1 bg-elevated/30 rounded-lg p-0.5"
-          title="Collapse or expand system / user / agent / tool parts inside each LLM call"
+          title="Collapse or expand messages sent to the model"
         >
           <span className="px-1.5 text-xs text-text-muted/50 uppercase tracking-wide">
-            Parts
+            History
           </span>
           {(
             [
@@ -704,7 +728,7 @@ export function DebugInspector() {
             <button
               key={key}
               type="button"
-              className={`px-2 py-1 text-sm font-medium rounded-md transition-colors ${
+              className={`px-2 py-1.5 text-sm font-medium rounded-md transition-colors ${
                 partsMode === key
                   ? "bg-elevated text-text"
                   : "text-text-muted hover:text-text"
@@ -716,7 +740,7 @@ export function DebugInspector() {
           ))}
         </div>
 
-        <div className="flex items-center gap-1.5 flex-1 min-w-[8rem] ml-auto bg-elevated/30 rounded-lg px-2 py-1">
+        <div className="flex items-center gap-1.5 flex-1 min-w-[8rem] ml-auto bg-elevated/30 rounded-lg px-2 py-1.5">
           <Search size={14} className="text-text-muted/50 shrink-0" />
           <input
             type="text"
@@ -728,7 +752,40 @@ export function DebugInspector() {
         </div>
       </div>
 
-      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto space-y-2 pr-1">
+      {/* Sticky jump rail — always reachable while scrolling */}
+      {showCalls && llmCalls.length > 1 && (
+        <div className="trace-call-nav shrink-0">
+          <div className="trace-call-nav__inner">
+            {llmCalls.map((call, i) => {
+              const res = call.response
+              const label = `Call ${i + 1}`
+              const sub = res
+                ? res.toolCalls.length > 0
+                  ? res.toolCalls[0]!.name
+                  : "answer"
+                : "…"
+              return (
+                <button
+                  key={`nav-${call.request.iteration}-${i}`}
+                  type="button"
+                  className={
+                    activeNav === i
+                      ? "trace-call-nav__btn trace-call-nav__btn--active"
+                      : "trace-call-nav__btn"
+                  }
+                  onClick={() => jumpToCall(i)}
+                  title={`Iteration ${call.request.iteration + 1}${res ? ` · ${formatMs(res.durationMs)}` : ""}`}
+                >
+                  <span className="trace-call-nav__label">{label}</span>
+                  <span className="trace-call-nav__sub">{sub}</span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto space-y-3 pr-1">
         {!activeRunId && (
           <EmptyState
             icon={WIDGET_ICONS["debug-inspector"]}
@@ -747,12 +804,10 @@ export function DebugInspector() {
           />
         )}
 
-        {/* Context — secondary, collapsed by default */}
         {showContext && systemPrompt && matchesSearch(systemPrompt.text) && (
           <Section
             label="System prompt"
             badge={`${formatCharCount(systemPrompt.text.length)} chars`}
-            badgeColor="text-accent/70"
             copyable={systemPrompt.text}
           >
             <ExpandableText
@@ -765,11 +820,7 @@ export function DebugInspector() {
         )}
 
         {showContext && toolsResolved && (
-          <Section
-            label="Tools available"
-            badge={`${toolsResolved.tools.length}`}
-            badgeColor="text-warning/70"
-          >
+          <Section label="Tools available" badge={`${toolsResolved.tools.length}`}>
             <div className="space-y-1.5">
               {toolsResolved.tools
                 .filter((t) => matchesSearch(`${t.name} ${t.description}`))
@@ -781,11 +832,7 @@ export function DebugInspector() {
         )}
 
         {showContext && sqlQualityEntries.length > 0 && (
-          <Section
-            label="SQL quality"
-            badge={`${sqlQualityEntries.length}`}
-            badgeColor="text-warning/70"
-          >
+          <Section label="SQL quality" badge={`${sqlQualityEntries.length}`}>
             <div className="space-y-1.5">
               {sqlQualityEntries
                 .filter((entry) => matchesSearch(JSON.stringify(entry)))
@@ -797,45 +844,28 @@ export function DebugInspector() {
                       `mirror=${entry.missingPersistedMirrorCandidates.join(",")}`,
                     )
                   }
-                  const overusedRefs = entry.largeObjectRefs.filter((ref) => ref.count > 2)
-                  if (overusedRefs.length > 0) {
-                    notes.push(
-                      overusedRefs.map((ref) => `${ref.name}×${ref.count}`).join(", "),
-                    )
-                  }
-                  if (entry.tempScalarSubqueryCount > 0) {
-                    notes.push(`temp-subq=${entry.tempScalarSubqueryCount}`)
-                  }
                   return (
                     <div
                       key={`${entry.toolCallId}-${index}`}
-                      className="border border-border/30 rounded px-2 py-1.5"
+                      className="border border-border/30 rounded px-2.5 py-2"
                     >
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span
-                          className={`text-sm font-mono font-semibold ${
-                            entry.phase === "blocked"
-                              ? "text-error"
-                              : entry.validationOk
-                                ? "text-success"
-                                : "text-warning"
-                          }`}
-                        >
+                      <div className="flex items-baseline gap-2 flex-wrap">
+                        <span className="text-base font-medium text-text">
                           {entry.phase}
                         </span>
-                        <span className="text-sm font-mono text-text-muted">
+                        <span className="text-base font-mono text-text-secondary">
                           {entry.toolName}
                         </span>
-                        <span className="text-xs text-text-muted/40">
-                          iter {entry.iteration + 1}
+                        <span className="text-sm text-text-muted">
+                          Iteration {entry.iteration + 1}
                         </span>
                         {entry.durationMs != null && (
-                          <span className="text-xs font-mono text-text-muted/40 ml-auto">
+                          <span className="text-sm text-text-muted ml-auto">
                             {formatMs(entry.durationMs)}
                           </span>
                         )}
                       </div>
-                      <div className="text-sm text-text-secondary mt-1">
+                      <div className="text-sm text-text-muted mt-1">
                         {notes.join(" · ") || "ok"}
                       </div>
                       {entry.sqlPreview && (
@@ -855,7 +885,6 @@ export function DebugInspector() {
           </Section>
         )}
 
-        {/* Primary: LLM call timeline */}
         {showCalls &&
           llmCalls.map((call, i) => {
             if (search) {
@@ -868,30 +897,14 @@ export function DebugInspector() {
                 call={call}
                 index={i}
                 partsMode={partsMode}
+                open={openCalls.has(i)}
+                onToggle={() => toggleCall(i)}
+                callId={`trace-call-${i}`}
+                rootRef={(el) => bindCallEl(i, el)}
               />
             )
           })}
       </div>
-    </div>
-  )
-}
-
-function MetaChip({
-  label,
-  value,
-  accent,
-  icon,
-}: {
-  label: string
-  value: string
-  accent: string
-  icon?: ReactNode
-}) {
-  return (
-    <div className="flex items-center gap-1.5 text-sm font-mono text-text-muted bg-elevated/50 px-2 py-1 rounded">
-      {icon}
-      <span className={accent}>{label}</span>
-      <span className="text-text-secondary">{value}</span>
     </div>
   )
 }
