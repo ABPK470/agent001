@@ -541,13 +541,13 @@ function PreviewStage({
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden px-5 py-4">
       <div className="mb-2 flex shrink-0 items-center justify-between gap-3">
-        <p className={`min-w-0 truncate ${META_TEXT}`}>
+        <p className="min-w-0 truncate text-sm text-text-muted">
           Preview · {rows.length} row{rows.length === 1 ? "" : "s"}
           {truncated ? " (truncated)" : ""} · nothing written
         </p>
         {slice.pageCount > 1 ? (
           <div className="flex shrink-0 items-center gap-1">
-            <span className={`tabular-nums ${META_TEXT}`}>
+            <span className="tabular-nums text-sm text-text-muted">
               {slice.start + 1}–{slice.end} of {rows.length}
             </span>
             <button
@@ -600,30 +600,30 @@ function PreviewStage({
 }
 
 function SummaryStage({ summary }: { summary: MoveSummary }): JSX.Element {
+  const Icon = WIDGET_ICONS.bridge
   const tone =
     summary.status === "completed"
       ? "text-emerald-500"
       : summary.status === "partial"
         ? "text-amber-500"
         : "text-rose-500"
+  // Match Pipelines body (`text-sm`) — EmptyState's detail is xs; results need readable type.
   return (
-    <EmptyState
-      icon={WIDGET_ICONS.bridge}
-      message={<span className={tone}>{summary.status}</span>}
-      detail={
-        <div className="space-y-1">
-          <p>
-            Read {summary.rowsRead} · wrote {summary.rowsWritten}
-            {summary.failedAtRow !== null ? ` · stopped at row ${summary.failedAtRow}` : ""}
+    <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-6 py-12 text-center">
+      <Icon size={20} className="shrink-0 text-text-muted opacity-40" aria-hidden />
+      <p className={`text-sm font-medium ${tone}`}>{summary.status}</p>
+      <div className="max-w-lg space-y-1.5 text-sm text-text-muted">
+        <p>
+          Read {summary.rowsRead} · wrote {summary.rowsWritten}
+          {summary.failedAtRow !== null ? ` · stopped at row ${summary.failedAtRow}` : ""}
+        </p>
+        {summary.errors.slice(0, 3).map((e, i) => (
+          <p key={i} className="font-mono text-sm leading-snug">
+            row {e.row}: {e.message}
           </p>
-          {summary.errors.slice(0, 3).map((e, i) => (
-            <p key={i} className="font-mono text-[11px]">
-              row {e.row}: {e.message}
-            </p>
-          ))}
-        </div>
-      }
-    />
+        ))}
+      </div>
+    </div>
   )
 }
 
