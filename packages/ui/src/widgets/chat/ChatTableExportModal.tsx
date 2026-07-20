@@ -12,6 +12,7 @@ import {
   exportChatTablesJson,
 } from "../../lib/chat-table-export"
 import type { Run } from "../../types"
+import { modalOverlayClass } from "../entity-registry/modal-overlay"
 
 export interface ChatTableExportModalProps {
   open: boolean
@@ -175,7 +176,10 @@ export function ChatTableExportModal({
   if (!open) return null
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/50" onClick={onClose}>
+    <div
+      className={modalOverlayClass("detail", { zIndexClass: "z-[80]" })}
+      onClick={onClose}
+    >
       <div
         className="w-full max-w-lg max-h-[min(90dvh,720px)] flex flex-col rounded-lg border border-border-subtle bg-base shadow-2xl"
         onClick={(e) => e.stopPropagation()}
