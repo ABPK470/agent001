@@ -28,7 +28,7 @@ import {
   type TraceToolCall,
 } from "./build-trace-dag"
 
-const STICKY_ROW_H = 28
+const STICKY_ROW_H = 34
 
 // ── Open-state (explicit, flat) ──────────────────────────────────
 
@@ -170,8 +170,8 @@ function StickyRow({
         <ChevronRight size={13} className="trace-sticky__chev" />
       )}
       <span className="trace-sticky__lead">{leading}</span>
-      <span className="trace-sticky__title">{title}</span>
-      {summary && <span className="trace-sticky__sum">{summary}</span>}
+      {title ? <span className="trace-sticky__title">{title}</span> : null}
+      {summary ? <span className="trace-sticky__sum">{summary}</span> : null}
       {trailing && <span className="trace-sticky__trail">{trailing}</span>}
     </button>
   )
@@ -392,8 +392,8 @@ function callSentSummary(call: TraceCallNode): string {
   const n = call.messageCount
   const firstUser = call.messages.find((m) => m.role === "user" || m.speaker === "User")
   const peek = firstUser?.content ? shortLine(firstUser.content, 48) : ""
-  if (peek) return `${n} msg · ${peek}`
-  return `${n} message${n === 1 ? "" : "s"}`
+  if (peek) return `${n} messages · ${peek}`
+  return `${n} message${n === 1 ? "" : "s"} to model`
 }
 
 function callReceivedSummary(call: TraceCallNode): string {
@@ -464,7 +464,7 @@ function CallOutline({
             open={sentOpen}
             onToggle={() => onToggleSent(call.index)}
             leading="Sent"
-            title="to model"
+            title=""
             summary={callSentSummary(call)}
             soft
           />
@@ -494,7 +494,7 @@ function CallOutline({
             open={receivedOpen}
             onToggle={() => onToggleReceived(call.index)}
             leading="Received"
-            title={call.waiting ? "…" : call.headline}
+            title=""
             summary={callReceivedSummary(call)}
             soft
           />
@@ -823,33 +823,34 @@ export function TraceDag({
   return (
     <div className="trace-dag flex flex-col h-full min-h-0">
       <div className="trace-toolbar shrink-0">
-        <div className="trace-toolbar__meta">
-          {stats.callCount === 0 ? (
-            <span>No model calls yet</span>
-          ) : (
-            <>
-              <span>
-                {stats.callCount} call{stats.callCount === 1 ? "" : "s"}
-              </span>
-              {stats.totalDuration > 0 && (
-                <span className="tabular-nums">{formatMs(stats.totalDuration)}</span>
-              )}
-              {(stats.promptTokens > 0 || stats.completionTokens > 0) && (
-                <span className="tabular-nums">
-                  {fmtTokens(stats.promptTokens)}/{fmtTokens(stats.completionTokens)} tok
+        <div className="trace-toolbar__row">
+          <div className="trace-toolbar__meta">
+            {stats.callCount === 0 ? (
+              <span>No model calls yet</span>
+            ) : (
+              <>
+                <span>
+                  {stats.callCount} call{stats.callCount === 1 ? "" : "s"}
                 </span>
-              )}
-            </>
-          )}
-        </div>
-
-        <div className="trace-toolbar__actions">
-          <button type="button" className="trace-toolbtn" onClick={onExpandAll}>
-            Expand all
-          </button>
-          <button type="button" className="trace-toolbtn" onClick={onCollapseAll}>
-            Collapse all
-          </button>
+                {stats.totalDuration > 0 && (
+                  <span className="tabular-nums">{formatMs(stats.totalDuration)}</span>
+                )}
+                {(stats.promptTokens > 0 || stats.completionTokens > 0) && (
+                  <span className="tabular-nums">
+                    {fmtTokens(stats.promptTokens)} in · {fmtTokens(stats.completionTokens)} out
+                  </span>
+                )}
+              </>
+            )}
+          </div>
+          <div className="trace-toolbar__actions">
+            <button type="button" className="trace-toolbtn" onClick={onExpandAll}>
+              Expand all
+            </button>
+            <button type="button" className="trace-toolbtn" onClick={onCollapseAll}>
+              Collapse all
+            </button>
+          </div>
         </div>
 
         {(runId || threadId) && (
@@ -860,10 +861,10 @@ export function TraceDag({
         )}
 
         <div className="trace-search">
-          <Search size={13} className="trace-search__icon" />
+          <Search size={14} className="trace-search__icon" />
           <input
             type="search"
-            placeholder="Filter…"
+            placeholder="Filter calls, tools, reply…"
             value={search}
             onChange={(e) => onSearchChange(e.target.value)}
             className="trace-search__input"
@@ -876,7 +877,7 @@ export function TraceDag({
               onClick={() => onSearchChange("")}
               aria-label="Clear filter"
             >
-              <X size={13} />
+              <X size={14} />
             </button>
           )}
         </div>
