@@ -4,7 +4,7 @@
  */
 
 import { Check, Copy, Download } from "lucide-react"
-import { useRef, useState, type JSX } from "react"
+import { useEffect, useRef, useState, type JSX } from "react"
 import {
   copyChatTableCsv,
   exportChatTable,
@@ -26,7 +26,8 @@ export interface TableExportActionsProps {
   revealOnHover?: boolean
 }
 
-type Feedback = "copied" | "exported" | null
+/** Which control just succeeded — drives the green check on that button only. */
+type FeedbackAction = "copy" | "csv" | "json"
 
 export function TableExportActions({
   headers,
@@ -36,10 +37,16 @@ export function TableExportActions({
   compact = false,
   revealOnHover = false,
 }: TableExportActionsProps): JSX.Element {
-  const [feedback, setFeedback] = useState<Feedback>(null)
-  const [busy, setBusy] = useState(false)
+  const [feedback, setFeedback] = useState<FeedbackAction | null>(null)
+  const [busyAction, setBusyAction] = useState<FeedbackAction | null>(null)
   const [error, setError] = useState<string | null>(null)
   const clearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (clearTimerRef.current) clearTimeout(clearTimerRef.current)
+    }
+  }, [])
 
   function scheduleClearFeedback(): void {
     if (clearTimerRef.current) clearTimeout(clearTimerRef.current)
@@ -50,32 +57,32 @@ export function TableExportActions({
   }
 
   async function onCopy(): Promise<void> {
-    if (disabled || busy || rows.length === 0) return
+    if (disabled || busyAction || rows.length === 0) return
     setError(null)
-    setBusy(true)
+    setBusyAction("copy")
     try {
       await copyChatTableCsv(headers, rows)
-      setFeedback("copied")
+      setFeedback("copy")
       scheduleClearFeedback()
     } catch (e) {
       setError(e instanceof Error ? e.message : "Copy failed")
     } finally {
-      setBusy(false)
+      setBusyAction(null)
     }
   }
 
   async function onExport(format: TableExportFormat): Promise<void> {
-    if (disabled || busy || rows.length === 0) return
+    if (disabled || busyAction || rows.length === 0) return
     setError(null)
-    setBusy(true)
+    setBusyAction(format)
     try {
       await exportChatTable({ source, format, headers, rows })
-      setFeedback("exported")
+      setFeedback(format)
       scheduleClearFeedback()
     } catch (e) {
       setError(e instanceof Error ? e.message : "Export failed")
     } finally {
-      setBusy(false)
+      setBusyAction(null)
     }
   }
 
@@ -84,8 +91,8 @@ export function TableExportActions({
       ? "inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[12px] text-text-muted hover:text-text hover:bg-overlay-hover disabled:opacity-40 disabled:pointer-events-none cursor-pointer"
       : "inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-sm text-text-muted hover:text-text hover:bg-overlay-2 disabled:opacity-40 disabled:pointer-events-none cursor-pointer"
 
-  const idle = !disabled && !busy
-  const pinnedVisible = Boolean(feedback || busy || error)
+  const idle = !disabled && !busyAction
+  const pinnedVisible = Boolean(feedback || busyAction || error)
 
   return (
     <div
@@ -106,9 +113,15 @@ export function TableExportActions({
         .filter(Boolean)
         .join(" ")}
     >
-      <button type="button" className={btn} disabled={!idle} onClick={() => void onCopy()} aria-label="Copy table as CSV">
-        {feedback === "copied" ? <Check size={11} className="text-success" /> : <Copy size={11} />}
-        <span>{feedback === "copied" ? "Copied" : "Copy"}</span>
+      <button
+        type="button"
+        className={btn}
+        disabled={!idle}
+        onClick={() => void onCopy()}
+        aria-label="Copy table as CSV"
+      >
+        {feedback === "copy" ? <Check size={11} className="text-success" /> : <Copy size={11} />}
+        <span>{feedback === "copy" ? "Copied" : "Copy"}</span>
       </button>
       <button
         type="button"
@@ -117,8 +130,8 @@ export function TableExportActions({
         onClick={() => void onExport("csv")}
         aria-label="Export table as CSV"
       >
-        {feedback === "exported" ? <Check size={11} className="text-success" /> : <Download size={11} />}
-        <span>Export CSV</span>
+        {feedback === "csv" ? <Check size={11} className="text-success" /> : <Download size={11} />}
+        <span>{feedback === "csv" ? "Exported" : "Export CSV"}</span>
       </button>
       <button
         type="button"
@@ -127,8 +140,8 @@ export function TableExportActions({
         onClick={() => void onExport("json")}
         aria-label="Export table as JSON"
       >
-        <Download size={11} />
-        <span>Export JSON</span>
+        {feedback === "json" ? <Check size={11} className="text-success" /> : <Download size={11} />}
+        <span>{feedback === "json" ? "Exported" : "Export JSON"}</span>
       </button>
       {error ? <span className="text-[11px] text-error truncate max-w-[14rem]">{error}</span> : null}
     </div>
