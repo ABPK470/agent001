@@ -289,36 +289,49 @@ export function EnvSync() {
 
   useEffect(() => {
     let dead = false
-    // Parallel independent reads — allSettled so publish-status (optional for
-    // boot) cannot fail environments/definitions, matching Entity Registry.
+    // Independent reads — unpublished definitions must not wipe a successful
+    // environments load (that falsely showed "need 2 environments").
     void Promise.allSettled([
       api.syncEnvironments(),
       api.syncDefinitions(),
       api.getSyncPublishStatus(),
     ]).then(([envsResult, definitionsResult, publishStatusResult]) => {
       if (dead) return
-      if (envsResult.status === "rejected" || definitionsResult.status === "rejected") {
-        const err =
-          envsResult.status === "rejected" ? envsResult.reason
-            : definitionsResult.status === "rejected" ? definitionsResult.reason
-              : null
-        notifyError(err instanceof Error ? err.message : String(err ?? "Failed to load sync boot data"))
-        return
+
+      if (envsResult.status === "fulfilled") {
+        const nextEnvs = envsResult.value
+        setEnvs(nextEnvs)
+        const sources = listSyncSourceOptions(nextEnvs)
+        const nextForm: Partial<typeof form> = {}
+        if (sources.length >= 1 && !source) nextForm.source = sources[0].name
+        const sourceForTargets = nextForm.source ?? source
+        const targets = listSyncTargetOptions(nextEnvs, sourceForTargets || null)
+        if (targets.length >= 1 && !target) {
+          nextForm.target = targets.find((env) => env.name !== sourceForTargets)?.name ?? targets[0].name
+        }
+        if (Object.keys(nextForm).length) setForm(nextForm)
+      } else {
+        notifyError(
+          envsResult.reason instanceof Error
+            ? envsResult.reason.message
+            : String(envsResult.reason ?? "Failed to load sync environments"),
+        )
       }
-      const nextEnvs = envsResult.value
-      const nextDefinitions = definitionsResult.value
-      setEnvs(nextEnvs)
-      setDefinitions(nextDefinitions)
+
+      if (definitionsResult.status === "fulfilled") {
+        setDefinitions(definitionsResult.value)
+      } else {
+        setDefinitions([])
+        // Missing published bundle is an empty state, not a toast storm.
+        const msg = definitionsResult.reason instanceof Error
+          ? definitionsResult.reason.message
+          : String(definitionsResult.reason ?? "")
+        if (msg && !/no published sync definitions/i.test(msg)) {
+          notifyError(msg)
+        }
+      }
+
       setPublishStatus(publishStatusResult.status === "fulfilled" ? publishStatusResult.value : null)
-      const sources = listSyncSourceOptions(nextEnvs)
-      const nextForm: Partial<typeof form> = {}
-      if (sources.length >= 1 && !source) nextForm.source = sources[0].name
-      const sourceForTargets = nextForm.source ?? source
-      const targets = listSyncTargetOptions(nextEnvs, sourceForTargets || null)
-      if (targets.length >= 1 && !target) {
-        nextForm.target = targets.find((env) => env.name !== sourceForTargets)?.name ?? targets[0].name
-      }
-      if (Object.keys(nextForm).length) setForm(nextForm)
     })
     return () => { dead = true }
   }, [])

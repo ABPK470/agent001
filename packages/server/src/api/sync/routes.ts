@@ -226,7 +226,17 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
       }
     })
   })
-  app.get("/api/sync/definitions", async () => listPublishedSyncDefinitions(host, projectRoot))
+  app.get("/api/sync/definitions", async () => {
+    // List is empty-safe: no published bundle → [] (not 500). Preview/execute
+    // still fail closed when a specific definition is required.
+    try {
+      return listPublishedSyncDefinitions(host, projectRoot)
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error)
+      if (/no published sync definitions/i.test(msg)) return []
+      throw error
+    }
+  })
   app.get<{ Params: { entityId: string } }>(
     "/api/sync/definitions/:entityId/published-bundle",
     async (req, reply) => {
