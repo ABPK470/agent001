@@ -1829,66 +1829,105 @@ textarea.input {
 }
 
 .trace-scroll {
-  padding: 0.25rem 0.15rem 1.25rem;
+  padding: 0 0.15rem 1.25rem;
+  /* no top padding — pin stack must sit flush at 0 */
+}
+
+.trace-flow {
   display: flex;
   flex-direction: column;
-  gap: 0.55rem;
+  gap: 0; /* gap creates a hole under sticky headers — space via margins only */
+  padding-top: 0;
 }
 
-/* Each call / context is a clear block */
+/*
+ * display:contents so Call / Context headers share the scrollport as
+ * sticky containing block — Call 1+2+3 can stack like VS Code.
+ */
 .trace-call {
-  border: 1px solid var(--border, var(--color-border));
-  border-radius: 0.5rem;
-  background: color-mix(in srgb, var(--text, var(--color-text)) 1.5%, var(--bg));
-  overflow: clip;
+  display: contents;
 }
 
-.trace-sticky {
-  position: sticky;
-  top: var(--trace-sticky-top, 0px);
-  z-index: var(--trace-sticky-z, 2);
+.trace-call-panel {
+  border: 1px solid var(--border, var(--color-border));
+  border-top: none;
+  border-radius: 0 0 0.5rem 0.5rem;
+  background: color-mix(in srgb, var(--text, var(--color-text)) 1.5%, var(--bg));
+  margin: 0 0 0.55rem;
+}
+
+.trace-scope {
   display: flex;
   align-items: center;
   gap: 0.45rem;
   width: 100%;
   min-height: 34px;
-  padding: 0.35rem 0.55rem;
+  height: 34px;
+  margin: 0;
+  padding: 0 0.55rem;
   text-align: left;
-  background: color-mix(in srgb, var(--text, var(--color-text)) 3%, var(--bg));
-  border-bottom: 1px solid var(--border-subtle, var(--color-border-subtle));
+  background: color-mix(in srgb, var(--text, var(--color-text)) 3.5%, var(--bg));
+  border: 1px solid var(--border, var(--color-border));
+  border-radius: 0.5rem;
   color: var(--text, var(--color-text));
   font-size: 0.9375rem;
+  box-sizing: border-box;
 }
 
-.trace-sticky:hover {
-  background: color-mix(in srgb, var(--text, var(--color-text)) 5%, var(--bg));
+/* Closed call/context — spacing to the next block */
+.trace-scope:not(.is-soft):not(.is-open) {
+  margin-bottom: 0.55rem;
 }
 
-.trace-sticky.is-open {
+.trace-scope.is-open {
+  border-radius: 0.5rem 0.5rem 0 0;
+  margin-bottom: 0;
+}
+
+.trace-scope.is-pinned {
+  margin: 0; /* never leave a gap under the pin stack */
+  border-radius: 0;
+  border-left: none;
+  border-right: none;
+  border-top: none;
+  background: var(--bg);
+  box-shadow: 0 1px 0 var(--border-subtle, var(--color-border-subtle));
+}
+
+.trace-scope.is-pinned.is-open,
+.trace-scope.is-pinned {
   background: color-mix(in srgb, var(--text, var(--color-text)) 4%, var(--bg));
 }
 
-.trace-sticky.is-soft {
+.trace-scope:hover {
+  background: color-mix(in srgb, var(--text, var(--color-text)) 5.5%, var(--bg));
+}
+
+.trace-scope.is-soft {
   font-size: 0.875rem;
-  min-height: 34px;
-  padding-left: 1.1rem;
+  padding-left: 1rem;
+  border-radius: 0;
+  border-left: none;
+  border-right: none;
+  border-top: 1px solid var(--border-subtle, var(--color-border-subtle));
+  border-bottom: 1px solid var(--border-subtle, var(--color-border-subtle));
   background: var(--bg);
   color: var(--text-secondary, var(--text-muted, var(--color-text-muted)));
 }
 
-.trace-sticky.is-soft:hover,
-.trace-sticky.is-soft.is-open {
+.trace-scope.is-soft:hover,
+.trace-scope.is-soft.is-open {
   background: color-mix(in srgb, var(--text, var(--color-text)) 2.5%, var(--bg));
   color: var(--text, var(--color-text));
 }
 
-.trace-sticky__chev {
+.trace-scope__chev {
   flex-shrink: 0;
   opacity: 0.55;
   color: var(--text-muted, var(--color-text-muted));
 }
 
-.trace-sticky__lead {
+.trace-scope__lead {
   flex-shrink: 0;
   font-weight: 650;
   font-variant-numeric: tabular-nums;
@@ -1896,7 +1935,7 @@ textarea.input {
   min-width: 3.6rem;
 }
 
-.trace-sticky.is-soft .trace-sticky__lead {
+.trace-scope.is-soft .trace-scope__lead {
   min-width: 5rem;
   font-weight: 600;
   letter-spacing: 0.03em;
@@ -1905,7 +1944,7 @@ textarea.input {
   color: var(--text-muted, var(--color-text-muted));
 }
 
-.trace-sticky__title {
+.trace-scope__title {
   flex-shrink: 0;
   max-width: 36%;
   overflow: hidden;
@@ -1915,7 +1954,7 @@ textarea.input {
   font-weight: 500;
 }
 
-.trace-sticky__sum {
+.trace-scope__sum {
   min-width: 0;
   flex: 1;
   overflow: hidden;
@@ -1924,7 +1963,7 @@ textarea.input {
   color: var(--text-muted, var(--color-text-muted));
 }
 
-.trace-sticky__trail {
+.trace-scope__trail {
   display: flex;
   align-items: center;
   gap: 0.55rem;
@@ -2007,20 +2046,49 @@ textarea.input {
   color: color-mix(in srgb, var(--text, var(--color-text)) 72%, var(--text-muted, var(--color-text-muted)));
 }
 
+.trace-expand.is-clipped {
+  position: relative;
+}
+
+.trace-expand.is-clipped::after {
+  content: "";
+  display: block;
+  height: 1.75rem;
+  margin-top: -1.75rem;
+  pointer-events: none;
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    var(--bg)
+  );
+}
+
+.trace-more-bar {
+  display: flex;
+  justify-content: stretch;
+  margin-top: 0.45rem;
+  position: relative;
+  z-index: 1;
+}
+
 .trace-more {
-  display: inline-flex;
-  margin-top: 0.2rem;
-  padding: 0;
-  border: none;
-  background: transparent;
-  color: var(--text-muted, var(--color-text-muted));
-  font-size: 0.8125rem;
-  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  margin: 0;
+  padding: 0.45rem 0.75rem;
+  border: 1px solid var(--border, var(--color-border));
+  border-radius: 0.375rem;
+  background: color-mix(in srgb, var(--text, var(--color-text)) 5%, var(--bg));
+  color: var(--text, var(--color-text));
+  font-size: 0.875rem;
+  font-weight: 600;
   cursor: pointer;
 }
 
 .trace-more:hover {
-  color: var(--text, var(--color-text));
+  background: color-mix(in srgb, var(--text, var(--color-text)) 8%, var(--bg));
 }
 
 .trace-empty {

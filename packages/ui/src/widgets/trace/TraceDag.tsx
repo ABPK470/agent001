@@ -1,9 +1,9 @@
 /**
- * Trace outline — chronological scopes with VS Code–style sticky parents.
+ * Trace outline — chronological scopes with VS Code–style pin stack.
  *
  * Flow per call: Sent → Received → Next (tools).
- * Sticky stack builds as you scroll: Call → Sent → Received.
- * Everything collapses to one-line summaries; expand only what you need.
+ * Scroll treats the list as one document: Call 1 → 2 → 3 accumulate
+ * flush at the top; Sent/Received of the current call stack under it.
  */
 
 import { Check, ChevronDown, ChevronRight, Copy, Search, X } from "lucide-react"
@@ -12,7 +12,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type CSSProperties,
   type ReactNode,
 } from "react"
 import { JsonViewer } from "../../components/JsonViewer"
@@ -27,8 +26,11 @@ import {
   type TraceSqlQuality,
   type TraceToolCall,
 } from "./build-trace-dag"
-
-const STICKY_ROW_H = 34
+import {
+  applyTracePinStack,
+  computePinnedScopeIds,
+  type TraceScopeKind,
+} from "./trace-pin"
 
 // ── Open-state (explicit, flat) ──────────────────────────────────
 
@@ -55,8 +57,6 @@ function emptyOpen(): OpenState {
 function seedLatest(callCount: number): OpenState {
   const next = emptyOpen()
   if (callCount === 0) return next
-  // Latest call open as an outline only — Sent / Received stay collapsed
-  // so sticky parents + one-line summaries are readable at a glance.
   next.calls.add(callCount - 1)
   return next
 }
@@ -132,8 +132,10 @@ function shortLine(text: string, max = 72): string {
   return line.length > max ? `${line.slice(0, max - 1)}…` : line
 }
 
-function StickyRow({
-  depth,
+function ScopeRow({
+  scopeId,
+  kind,
+  callIndex,
   open,
   onToggle,
   leading,
@@ -142,37 +144,36 @@ function StickyRow({
   trailing,
   soft = false,
 }: {
-  depth: number
+  scopeId: string
+  kind: TraceScopeKind
+  callIndex?: number | null
   open: boolean
   onToggle: () => void
   leading: string
-  title: string
+  title?: string
   summary?: string
   trailing?: ReactNode
   soft?: boolean
 }) {
-  const style = {
-    ["--trace-sticky-top" as string]: `${depth * STICKY_ROW_H}px`,
-    ["--trace-sticky-z" as string]: String(40 - depth),
-  } as CSSProperties
-
   return (
     <button
       type="button"
-      className={`trace-sticky${open ? " is-open" : ""}${soft ? " is-soft" : ""}`}
-      style={style}
+      data-trace-scope={scopeId}
+      data-trace-kind={kind}
+      data-trace-call={callIndex == null ? "" : String(callIndex)}
+      className={`trace-scope${open ? " is-open" : ""}${soft ? " is-soft" : ""}`}
       onClick={onToggle}
       aria-expanded={open}
     >
       {open ? (
-        <ChevronDown size={13} className="trace-sticky__chev" />
+        <ChevronDown size={14} className="trace-scope__chev" />
       ) : (
-        <ChevronRight size={13} className="trace-sticky__chev" />
+        <ChevronRight size={14} className="trace-scope__chev" />
       )}
-      <span className="trace-sticky__lead">{leading}</span>
-      {title ? <span className="trace-sticky__title">{title}</span> : null}
-      {summary ? <span className="trace-sticky__sum">{summary}</span> : null}
-      {trailing && <span className="trace-sticky__trail">{trailing}</span>}
+      <span className="trace-scope__lead">{leading}</span>
+      {title ? <span className="trace-scope__title">{title}</span> : null}
+      {summary ? <span className="trace-scope__sum">{summary}</span> : null}
+      {trailing ? <span className="trace-scope__trail">{trailing}</span> : null}
     </button>
   )
 }
@@ -196,23 +197,23 @@ function ExpandableText({
   const display = !isLong || expanded ? text : `${text.slice(0, previewChars)}…`
 
   return (
-    <div className="min-w-0">
+    <div className={`trace-expand${isLong && !expanded ? " is-clipped" : ""}`}>
       <pre className={className}>{display}</pre>
       {isLong && (
-        <button
-          type="button"
-          className="trace-more"
-          onClick={() => setExpanded((v) => !v)}
-          aria-expanded={expanded}
-        >
-          {expanded ? "Show less" : `Show more · ${formatCharCount(text.length)} chars`}
-        </button>
+        <div className="trace-more-bar">
+          <button
+            type="button"
+            className="trace-more"
+            onClick={() => setExpanded((v) => !v)}
+            aria-expanded={expanded}
+          >
+            {expanded ? "Show less" : `Show more · ${formatCharCount(text.length)} chars`}
+          </button>
+        </div>
       )}
     </div>
   )
 }
-
-// ── Prompt message (one line until expanded) ─────────────────────
 
 function PromptMessageRow({
   msg,
@@ -235,9 +236,9 @@ function PromptMessageRow({
         aria-expanded={open}
       >
         {open ? (
-          <ChevronDown size={12} className="trace-sticky__chev" />
+          <ChevronDown size={12} className="trace-scope__chev" />
         ) : (
-          <ChevronRight size={12} className="trace-sticky__chev" />
+          <ChevronRight size={12} className="trace-scope__chev" />
         )}
         <span className={isUserAnswer ? "trace-row__speaker is-em" : "trace-row__speaker"}>
           {msg.speaker}
@@ -272,8 +273,6 @@ function PromptMessageRow({
   )
 }
 
-// ── Tool under “Next” ────────────────────────────────────────────
-
 function ToolRow({
   tool,
   open,
@@ -292,9 +291,9 @@ function ToolRow({
         aria-expanded={open}
       >
         {open ? (
-          <ChevronDown size={12} className="trace-sticky__chev" />
+          <ChevronDown size={12} className="trace-scope__chev" />
         ) : (
-          <ChevronRight size={12} className="trace-sticky__chev" />
+          <ChevronRight size={12} className="trace-scope__chev" />
         )}
         <span className="font-mono text-sm">{tool.name}</span>
         {!open && (
@@ -315,8 +314,6 @@ function ToolRow({
     </div>
   )
 }
-
-// ── SQL / tools context ──────────────────────────────────────────
 
 function SqlQualityRow({ entry }: { entry: TraceSqlQuality }) {
   const notes: string[] = []
@@ -370,7 +367,7 @@ function ToolDef({
             onClick={() => setShowSchema((v) => !v)}
             aria-expanded={showSchema}
           >
-            {showSchema ? "Hide schema" : "Schema"}
+            {showSchema ? "Hide schema" : "Show schema"}
           </button>
           {showSchema && (
             <JsonViewer
@@ -385,8 +382,6 @@ function ToolDef({
     </div>
   )
 }
-
-// ── Call outline ─────────────────────────────────────────────────
 
 function callSentSummary(call: TraceCallNode): string {
   const n = call.messageCount
@@ -430,9 +425,11 @@ function CallOutline({
   const usage = call.usage
 
   return (
-    <section className="trace-call">
-      <StickyRow
-        depth={0}
+    <div className="trace-call">
+      <ScopeRow
+        scopeId={`call:${call.index}`}
+        kind="call"
+        callIndex={call.index}
         open={callOpen}
         onToggle={() => onToggleCall(call.index)}
         leading={`Call ${call.index + 1}`}
@@ -457,14 +454,14 @@ function CallOutline({
       />
 
       {callOpen && (
-        <div className="trace-call__inner">
-          {/* 1. Sent */}
-          <StickyRow
-            depth={1}
+        <div className="trace-call-panel">
+          <ScopeRow
+            scopeId={`sent:${call.index}`}
+            kind="sent"
+            callIndex={call.index}
             open={sentOpen}
             onToggle={() => onToggleSent(call.index)}
             leading="Sent"
-            title=""
             summary={callSentSummary(call)}
             soft
           />
@@ -488,13 +485,13 @@ function CallOutline({
             </div>
           )}
 
-          {/* 2. Received */}
-          <StickyRow
-            depth={sentOpen ? 2 : 1}
+          <ScopeRow
+            scopeId={`received:${call.index}`}
+            kind="received"
+            callIndex={call.index}
             open={receivedOpen}
             onToggle={() => onToggleReceived(call.index)}
             leading="Received"
-            title=""
             summary={callReceivedSummary(call)}
             soft
           />
@@ -522,7 +519,6 @@ function CallOutline({
             </div>
           )}
 
-          {/* 3. Next */}
           {call.toolBranches.length > 0 && (
             <div className="trace-next">
               <div className="trace-next__label">
@@ -544,11 +540,9 @@ function CallOutline({
           )}
         </div>
       )}
-    </section>
+    </div>
   )
 }
-
-// ── Context preamble ─────────────────────────────────────────────
 
 function PreambleOutline({
   dag,
@@ -596,17 +590,18 @@ function PreambleOutline({
   if (preamble.sqlQuality.length > 0) bits.push(`${preamble.sqlQuality.length} sql`)
 
   return (
-    <section className="trace-call">
-      <StickyRow
-        depth={0}
+    <div className="trace-call">
+      <ScopeRow
+        scopeId="context"
+        kind="context"
         open={open}
         onToggle={onToggle}
         leading="Context"
-        title={bits.join(" · ") || "empty"}
+        summary={bits.join(" · ") || "empty"}
         soft
       />
       {open && (
-        <div className="trace-call__inner">
+        <div className="trace-call-panel">
           {preamble.systemPrompt && promptMatches && (
             <div className="trace-scope-body">
               <div className="trace-next__label">
@@ -646,7 +641,7 @@ function PreambleOutline({
           )}
         </div>
       )}
-    </section>
+    </div>
   )
 }
 
@@ -693,6 +688,12 @@ export function TraceDag({
     return map
   }, [dag.calls, query, runId, threadId])
 
+  function refreshPin() {
+    const el = scrollRef.current
+    if (!el) return
+    applyTracePinStack(el, computePinnedScopeIds(el))
+  }
+
   useEffect(() => {
     if (seededRef.current || dag.calls.length === 0) return
     seededRef.current = true
@@ -731,17 +732,40 @@ export function TraceDag({
     })
   }, [query, callHits])
 
+  const visibleIndexesList = useMemo(
+    () => visibleIndexes(dag, callHits),
+    [dag, callHits],
+  )
+
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+
+    function onScroll() {
+      refreshPin()
+    }
+
+    el.addEventListener("scroll", onScroll, { passive: true })
+    const raf = requestAnimationFrame(() => refreshPin())
+    return () => {
+      el.removeEventListener("scroll", onScroll)
+      cancelAnimationFrame(raf)
+    }
+  }, [
+    dag.calls.length,
+    openState.calls,
+    openState.sent,
+    openState.received,
+    openState.preamble,
+    visibleIndexesList,
+  ])
+
   useEffect(() => {
     const el = scrollRef.current
     if (!el) return
     const distance = el.scrollHeight - el.scrollTop - el.clientHeight
     if (distance < 80) el.scrollTop = el.scrollHeight
   }, [dag.calls.length])
-
-  const visibleIndexes = useMemo(() => {
-    if (!callHits) return dag.calls.map((c) => c.index)
-    return [...callHits.keys()]
-  }, [dag.calls, callHits])
 
   function onToggleCall(index: number) {
     setOpenState((prev) => {
@@ -890,19 +914,19 @@ export function TraceDag({
         {runId &&
           dag.hasData &&
           query &&
-          visibleIndexes.length === 0 && (
+          visibleIndexesList.length === 0 && (
             <p className="trace-empty px-2 py-3">No matches for “{query}”</p>
           )}
 
         {runId && dag.hasData && (
-          <>
+          <div className="trace-flow">
             <PreambleOutline
               dag={dag}
               open={openState.preamble}
               onToggle={onTogglePreamble}
               query={query}
             />
-            {visibleIndexes.map((i) => {
+            {visibleIndexesList.map((i) => {
               const call = dag.calls[i]!
               return (
                 <CallOutline
@@ -918,9 +942,17 @@ export function TraceDag({
                 />
               )
             })}
-          </>
+          </div>
         )}
       </div>
     </div>
   )
+}
+
+function visibleIndexes(
+  dag: TraceDag,
+  callHits: Map<number, TraceCallSearchHit> | null,
+): number[] {
+  if (!callHits) return dag.calls.map((c) => c.index)
+  return [...callHits.keys()]
 }
