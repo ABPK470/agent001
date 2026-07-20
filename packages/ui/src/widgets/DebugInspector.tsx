@@ -98,13 +98,42 @@ function messagePreview(msg: TraceMessage): string {
   return "empty"
 }
 
-function tokensInOut(usage: {
+/**
+ * In / out token split — one bar + two labels. No arrows, no “total” noise
+ * (total is just in+out and the bar already shows the ratio).
+ */
+function TokenSplit({
+  promptTokens,
+  completionTokens,
+  compact = false,
+}: {
   promptTokens: number
   completionTokens: number
-  totalTokens: number
-} | null): string | null {
-  if (!usage) return null
-  return `${fmtTokens(usage.promptTokens)} in · ${fmtTokens(usage.completionTokens)} out · ${fmtTokens(usage.totalTokens)} total`
+  compact?: boolean
+}) {
+  const total = promptTokens + completionTokens
+  if (total <= 0) return null
+  const inPct = Math.max(2, Math.round((promptTokens / total) * 100))
+  return (
+    <div className={compact ? "trace-token-split trace-token-split--compact" : "trace-token-split"}>
+      <div
+        className="trace-token-split__bar"
+        role="img"
+        aria-label={`Tokens: ${fmtTokens(promptTokens)} in, ${fmtTokens(completionTokens)} out`}
+      >
+        <span className="trace-token-split__in" style={{ width: `${inPct}%` }} />
+        <span className="trace-token-split__out" style={{ width: `${100 - inPct}%` }} />
+      </div>
+      <div className="trace-token-split__labels">
+        <span>
+          <span className="trace-token-split__tag">In</span> {fmtTokens(promptTokens)}
+        </span>
+        <span>
+          <span className="trace-token-split__tag">Out</span> {fmtTokens(completionTokens)}
+        </span>
+      </div>
+    </div>
+  )
 }
 
 /** Where a call matched the filter — shown so search feels intentional. */
@@ -436,7 +465,6 @@ function LlmCallEntry({
   const req = call.request
   const res = call.response
   const usage = res?.usage ?? null
-  const tokenLine = tokensInOut(usage)
   const headline = replyHeadline(res)
 
   // When search hits history, open that section so the match is reachable.
@@ -448,34 +476,44 @@ function LlmCallEntry({
     <div className={`trace-call shrink-0${open ? " is-open" : ""}`}>
       <button
         type="button"
-        className="trace-call-header flex items-start gap-3 px-3 py-3 w-full text-left transition-colors"
+        className="trace-call-header flex items-start gap-3 px-3 py-2.5 w-full text-left transition-colors"
         onClick={onToggle}
       >
         {open ? (
-          <ChevronDown size={16} className="text-text-muted shrink-0 mt-0.5" />
+          <ChevronDown size={16} className="text-text-muted shrink-0 mt-1" />
         ) : (
-          <ChevronRight size={16} className="text-text-muted shrink-0 mt-0.5" />
+          <ChevronRight size={16} className="text-text-muted shrink-0 mt-1" />
         )}
-        <div className="min-w-0 flex-1">
-          <div className="flex items-baseline gap-2 flex-wrap">
-            <span className="text-base font-semibold text-text">
-              Call {index + 1}
-            </span>
-            <span className="text-sm text-text-muted">
-              Iteration {req.iteration + 1}
-            </span>
+        <div className="min-w-0 flex-1 space-y-1.5">
+          <div className="flex items-start gap-3">
+            <div className="min-w-0 flex-1">
+              <div className="text-base font-semibold text-text leading-tight">
+                Call {index + 1}
+                {req.iteration + 1 !== index + 1 && (
+                  <span className="text-sm font-normal text-text-muted ml-2">
+                    iter {req.iteration + 1}
+                  </span>
+                )}
+              </div>
+              <div className="text-base text-text-secondary truncate mt-0.5">
+                {headline}
+              </div>
+            </div>
             {res && (
-              <span className="text-sm text-text-muted">{formatMs(res.durationMs)}</span>
+              <span className="text-sm text-text-muted shrink-0 tabular-nums pt-0.5">
+                {formatMs(res.durationMs)}
+              </span>
             )}
           </div>
-          <div className="text-base text-text-secondary mt-0.5 truncate">
-            {headline}
-          </div>
-          {tokenLine && (
-            <div className="text-sm text-text-muted mt-0.5 font-mono">{tokenLine}</div>
+          {usage && (
+            <TokenSplit
+              promptTokens={usage.promptTokens}
+              completionTokens={usage.completionTokens}
+              compact
+            />
           )}
           {searchHit && searchHit.reasons.length > 0 && (
-            <div className="text-sm text-text-muted mt-1">
+            <div className="text-sm text-text-muted">
               Matched {searchHit.reasons.join(" · ")}
             </div>
           )}
@@ -526,17 +564,7 @@ function LlmCallEntry({
 
           {/* Agent reply — primary, always visible when call is open */}
           <div className="trace-agent-reply px-3 py-3">
-            <div className="flex items-baseline gap-2 flex-wrap mb-2">
-              <span className="text-base font-semibold text-text">Agent replied</span>
-              {res && (
-                <span className="text-sm text-text-muted">{formatMs(res.durationMs)}</span>
-              )}
-              {tokenLine && (
-                <span className="text-sm text-text-muted font-mono ml-auto">
-                  {tokenLine}
-                </span>
-              )}
-            </div>
+            <div className="text-base font-semibold text-text mb-2">Agent replied</div>
 
             {!res && (
               <p className="trace-chat-body text-text-muted italic">Waiting for reply…</p>
@@ -667,30 +695,23 @@ export function DebugInspector() {
   const stats = useMemo(() => {
     let promptTokens = 0
     let completionTokens = 0
-    let totalTokens = 0
     let totalDuration = 0
-    let answered = 0
     for (const c of llmCalls) {
       if (!c.response) continue
-      answered += 1
       totalDuration += c.response.durationMs
       const u = c.response.usage
       if (u) {
         promptTokens += u.promptTokens
         completionTokens += u.completionTokens
-        totalTokens += u.totalTokens
       }
     }
     return {
-      toolCount: toolsResolved?.tools.length ?? 0,
       callCount: llmCalls.length,
       promptTokens,
       completionTokens,
-      totalTokens,
       totalDuration,
-      avgDuration: answered > 0 ? Math.round(totalDuration / answered) : 0,
     }
-  }, [toolsResolved, llmCalls])
+  }, [llmCalls])
 
   const filteredTools = useMemo(() => {
     if (!toolsResolved) return []
@@ -772,32 +793,31 @@ export function DebugInspector() {
     })
   }
 
-  const summaryLine = useMemo(() => {
-    if (stats.callCount === 0) return "No model calls yet"
-    const parts = [
-      `${stats.callCount} call${stats.callCount === 1 ? "" : "s"}`,
-      stats.totalDuration > 0 ? formatMs(stats.totalDuration) : null,
-      stats.avgDuration > 0 ? `${formatMs(stats.avgDuration)} avg` : null,
-    ].filter(Boolean)
-    return parts.join(" · ")
-  }, [stats])
-
-  const tokenLine = useMemo(() => {
-    if (stats.totalTokens <= 0) return null
-    return `${fmtTokens(stats.promptTokens)} in · ${fmtTokens(stats.completionTokens)} out · ${fmtTokens(stats.totalTokens)} total`
-  }, [stats])
-
   return (
     <div className="trace-widget flex flex-col h-full gap-2">
-      <div className="shrink-0 px-0.5 space-y-0.5">
-        <div className="text-base text-text font-medium">{summaryLine}</div>
-        {tokenLine && (
-          <div className="text-sm text-text-muted font-mono">{tokenLine}</div>
-        )}
-        {stats.toolCount > 0 && (
-          <div className="text-sm text-text-muted">
-            {stats.toolCount} tool{stats.toolCount === 1 ? "" : "s"} available to the agent
-          </div>
+      <div className="trace-summary shrink-0">
+        <div className="trace-summary__meta">
+          {stats.callCount === 0 ? (
+            <span>No model calls yet</span>
+          ) : (
+            <>
+              <span>
+                {stats.callCount} call{stats.callCount === 1 ? "" : "s"}
+              </span>
+              {stats.totalDuration > 0 && (
+                <>
+                  <span className="trace-summary__dot" aria-hidden />
+                  <span className="tabular-nums">{formatMs(stats.totalDuration)}</span>
+                </>
+              )}
+            </>
+          )}
+        </div>
+        {(stats.promptTokens > 0 || stats.completionTokens > 0) && (
+          <TokenSplit
+            promptTokens={stats.promptTokens}
+            completionTokens={stats.completionTokens}
+          />
         )}
       </div>
 
