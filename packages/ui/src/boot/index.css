@@ -792,8 +792,8 @@ body {
   border-color: var(--color-accent);
 }
 
-/* Custom checkbox — sync-admin modals and forms */
-.form-check__box {
+/* Platform checkbox — single visual dialect (components/Checkbox.tsx) */
+.mia-checkbox {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -806,7 +806,7 @@ body {
 }
 
 /* Do not rely on Tailwind `sr-only` — keep the native input out of layout. */
-.form-check__input {
+.mia-checkbox__input {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -819,12 +819,18 @@ body {
   appearance: none;
 }
 
-.form-check__box--on {
+.mia-checkbox--on {
   border-color: var(--color-accent);
   background: var(--color-accent);
 }
 
-.form-check:focus-within .form-check__box {
+.mia-checkbox--disabled {
+  opacity: 0.5;
+}
+
+.mia-checkbox-field:focus-within .mia-checkbox,
+label:focus-within > .mia-checkbox,
+.mia-checkbox:focus-within {
   outline: 2px solid color-mix(in srgb, var(--color-accent) 45%, transparent);
   outline-offset: 2px;
 }

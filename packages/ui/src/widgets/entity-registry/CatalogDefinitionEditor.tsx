@@ -3,6 +3,7 @@
  */
 
 import type { JSX, ReactNode } from "react"
+import { LabeledCheckbox } from "../../components/Checkbox"
 import { Listbox } from "../../components/Listbox"
 import type {
   AuthoredSyncFlowStep,
@@ -148,10 +149,12 @@ export function StepTypeDefinitionEditor({
       </div>
 
       {showSkipWhenDatasetFailed && (
-        <label className={`flex items-start gap-2 ${HELP_TEXT}`}>
-          <input type="checkbox" className="mt-0.5" checked={!!value.skipWhenDatasetLayerFailed} onChange={(e) => onChange({ ...value, skipWhenDatasetLayerFailed: e.target.checked || undefined })} />
-          <span className="font-medium text-text">Skip when contract dataset create failed</span>
-        </label>
+        <LabeledCheckbox
+          label="Skip when contract dataset create failed"
+          checked={!!value.skipWhenDatasetLayerFailed}
+          onChange={(next) => onChange({ ...value, skipWhenDatasetLayerFailed: next || undefined })}
+          className={HELP_TEXT}
+        />
       )}
     </div>
   )

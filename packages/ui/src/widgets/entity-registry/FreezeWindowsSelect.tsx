@@ -12,6 +12,7 @@ import { CalendarClock, Loader2 } from "lucide-react"
 import type { JSX } from "react"
 import { useEffect, useState } from "react"
 import { api } from "../../client/index"
+import { Checkbox } from "../../components/Checkbox"
 import type { FreezeWindow } from "../../types"
 
 export interface FreezeWindowsSelectProps {
@@ -63,12 +64,7 @@ export function FreezeWindowsSelect({ selected, onSelected }: FreezeWindowsSelec
         const checked = selected.includes(w.id)
         return (
           <label key={w.id} className="flex items-start gap-2 rounded border border-border-subtle bg-panel px-2 py-1.5 hover:bg-overlay-2">
-            <input
-              type="checkbox"
-              checked={checked}
-              onChange={() => toggle(w.id)}
-              className="mt-0.5 accent-accent"
-            />
+            <Checkbox checked={checked} onChange={() => toggle(w.id)} className="mt-0.5" />
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1.5">
                 <CalendarClock className="h-3 w-3 text-text-faint" />
@@ -87,12 +83,7 @@ export function FreezeWindowsSelect({ selected, onSelected }: FreezeWindowsSelec
       })}
       {orphans.map((id) => (
         <label key={id} className="flex items-start gap-2 rounded border border-rose-500/40 bg-rose-500/10 px-2 py-1.5">
-          <input
-            type="checkbox"
-            checked
-            onChange={() => toggle(id)}
-            className="mt-0.5 accent-rose-500"
-          />
+          <Checkbox checked onChange={() => toggle(id)} className="mt-0.5" />
           <div className="flex-1">
             <span className="font-mono text-sm text-rose-300">{id}</span>
             <span className="ml-2 text-xs text-rose-300">

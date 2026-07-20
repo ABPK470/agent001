@@ -9,6 +9,7 @@
  *     - Canonical top-level folders (boot/app/client/state/widgets/components/…)
  *     - Forbidden shell/features/api/kit/surfaces/…
  *     - Layer import direction
+ *     - Platform checkbox only via components/Checkbox.tsx (no ad-hoc natives)
  *
  * Run: `npm run lint:arch`  (or `node scripts/lint-arch.mjs`)
  */
@@ -752,10 +753,32 @@ for (const f of syncFiles) {
 lintUiForbiddenTrees()
 lintUiTopLevel()
 const uiFiles = existsSync(UI_SRC) ? walk(UI_SRC) : []
+const UI_CHECKBOX_SOURCE = join(UI_SRC, "components/Checkbox.tsx")
 for (const f of uiFiles) {
   const src = readFileSync(f, "utf8")
   lintUiLayerImports(f, src)
   lintFlatControlFlow(f, src)
+  lintUiPlatformCheckbox(f, src)
+}
+
+/**
+ * One painted checkbox dialect — raw type="checkbox" only inside Checkbox.tsx.
+ * Menu patterns (role=menuitemcheckbox without a native input) are fine.
+ */
+function lintUiPlatformCheckbox(file, src) {
+  if (!/\.(tsx?|jsx?)$/.test(file)) return
+  if (resolve(file) === resolve(UI_CHECKBOX_SOURCE)) return
+  const lines = src.split("\n")
+  for (let i = 0; i < lines.length; i++) {
+    if (/type\s*=\s*["']checkbox["']/.test(lines[i])) {
+      fail(
+        file,
+        i + 1,
+        "ui-platform-checkbox",
+        `Raw <input type="checkbox"> — use Checkbox / LabeledCheckbox from components/Checkbox.tsx so every control shares one visual dialect.`,
+      )
+    }
+  }
 }
 
 /**

@@ -2,8 +2,9 @@
  * Shared chrome for Sync Operations — reuses entity-registry layout tokens.
  */
 
-import { Check, CheckCircle2, ChevronRight, Inbox, Loader2, MousePointer2, X, XCircle, type LucideIcon } from "lucide-react"
+import { CheckCircle2, ChevronRight, Inbox, Loader2, MousePointer2, X, XCircle, type LucideIcon } from "lucide-react"
 import type { ComponentType, JSX, ReactNode } from "react"
+import { LabeledCheckbox } from "../../components/Checkbox"
 import { EmptyState } from "../../components/EmptyState"
 import {
   META_TEXT,
@@ -480,6 +481,7 @@ export function SectionTitle({ children }: { children: ReactNode }): JSX.Element
   return <h3 className="field-label mb-1">{children}</h3>
 }
 
+/** Card-layout labeled checkbox for admin forms (h-auto — never stretch in split panes). */
 export function FormCheck({
   label,
   checked,
@@ -494,28 +496,14 @@ export function FormCheck({
   hint?: string
 }): JSX.Element {
   return (
-    <label
-      className={[
-        // h-auto shrink-0 — never absorb leftover flex height in split-pane forms.
-        "form-check flex h-auto min-h-9 shrink-0 cursor-pointer items-center gap-2.5 rounded-lg border border-border-subtle bg-base/30 px-3 py-2 text-sm text-text",
-        disabled ? "pointer-events-none opacity-50" : "hover:bg-elevated/50",
-      ].join(" ")}
-    >
-      <span className={`form-check__box relative shrink-0 ${checked ? "form-check__box--on" : ""}`}>
-        <input
-          type="checkbox"
-          className="form-check__input"
-          checked={checked}
-          disabled={disabled}
-          onChange={(e) => onChange(e.target.checked)}
-        />
-        {checked ? <Check className="h-3 w-3 text-text" strokeWidth={3} aria-hidden /> : null}
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="font-medium text-text">{label}</span>
-        {hint ? <span className="mt-0.5 block text-xs leading-snug text-text-muted">{hint}</span> : null}
-      </span>
-    </label>
+    <LabeledCheckbox
+      layout="card"
+      label={label}
+      hint={hint}
+      checked={checked}
+      onChange={onChange}
+      disabled={disabled}
+    />
   )
 }
 

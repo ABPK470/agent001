@@ -8,6 +8,7 @@
 
 import { Download, Plus, Save, Search, Trash2, Upload, X } from "lucide-react"
 import { useCallback, useMemo, useRef, useState, type JSX } from "react"
+import { LabeledCheckbox } from "../../components/Checkbox"
 import { EmptyState } from "../../components/EmptyState"
 import {
   CONNECTOR_KINDS,
@@ -657,15 +658,12 @@ function ConnectorForm({
             />
           </FormFieldGroup>
           <FormFieldGroup label="Enabled">
-            <label className="flex h-[34px] items-center gap-2 text-sm text-text">
-              <input
-                type="checkbox"
-                checked={form.enabled}
-                onChange={(e) => onPatch({ enabled: e.target.checked })}
-                className="h-4 w-4"
-              />
-              <span>Use this connector</span>
-            </label>
+            <LabeledCheckbox
+              label="Use this connector"
+              checked={form.enabled}
+              onChange={(enabled) => onPatch({ enabled })}
+              className="h-[34px]"
+            />
           </FormFieldGroup>
         </div>
       </FormSectionCard>
@@ -712,15 +710,12 @@ function ConfigFieldRow({
   if (type === "boolean") {
     return (
       <FormFieldGroup label={label} hint={hint}>
-        <label className="flex h-[34px] items-center gap-2 text-sm text-text">
-          <input
-            type="checkbox"
-            checked={Boolean(value)}
-            onChange={(e) => onChange(e.target.checked)}
-            className="h-4 w-4"
-          />
-          <span>{Boolean(value) ? "Yes" : "No"}</span>
-        </label>
+        <LabeledCheckbox
+          label={Boolean(value) ? "Yes" : "No"}
+          checked={Boolean(value)}
+          onChange={onChange}
+          className="h-[34px]"
+        />
       </FormFieldGroup>
     )
   }
