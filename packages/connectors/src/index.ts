@@ -25,6 +25,12 @@ export {
 } from "./registry.js"
 
 export { listTablesSql, tableNameFromRow } from "./list-tables.js"
+export {
+  quoteMssqlIdent,
+  quoteMssqlTable,
+  quotePgIdent,
+  quotePgTable,
+} from "./sql-idents.js"
 
 export {
   createMssqlAdapter,

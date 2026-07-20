@@ -8,7 +8,7 @@
  */
 
 import type { ConnectorInfo, MoveSummary, Transform } from "@mia/shared-types"
-import { Eye, Play, Shuffle } from "lucide-react"
+import { ChevronLeft, ChevronRight, Eye, Play, Shuffle } from "lucide-react"
 import {
   useEffect,
   useRef,
@@ -24,6 +24,7 @@ import { WIDGET_ICONS } from "../widget-icons"
 import { BridgeEndpointCard } from "./BridgeEndpointPanel"
 import { BridgeMapModal } from "./BridgeMapModal"
 import { summarizeMap } from "./bridge-summaries"
+import { previewPageSlice } from "./preview-page"
 import {
   buildReadSpec,
   buildWriteSpec,
@@ -516,19 +517,63 @@ function PreviewStage({
   rows: Record<string, unknown>[]
   truncated: boolean
 }): JSX.Element {
+  const [page, setPage] = useState(0)
+
+  useEffect(() => {
+    setPage(0)
+  }, [rows])
+
   if (rows.length === 0) {
     return <EmptyState icon={WIDGET_ICONS.bridge} message="Preview returned 0 rows" />
   }
+
+  const slice = previewPageSlice(rows, page)
   const cols = Object.keys(rows[0]!)
+
+  function onPrevPage(): void {
+    setPage((p) => Math.max(0, p - 1))
+  }
+
+  function onNextPage(): void {
+    setPage((p) => Math.min(slice.pageCount - 1, p + 1))
+  }
+
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden px-5 py-4">
-      <div className={`mb-2 shrink-0 ${META_TEXT}`}>
-        Preview · {rows.length} row{rows.length === 1 ? "" : "s"}
-        {truncated ? " (truncated)" : ""} · nothing written
+      <div className="mb-2 flex shrink-0 items-center justify-between gap-3">
+        <p className={`min-w-0 truncate ${META_TEXT}`}>
+          Preview · {rows.length} row{rows.length === 1 ? "" : "s"}
+          {truncated ? " (truncated)" : ""} · nothing written
+        </p>
+        {slice.pageCount > 1 ? (
+          <div className="flex shrink-0 items-center gap-1">
+            <span className={`tabular-nums ${META_TEXT}`}>
+              {slice.start + 1}–{slice.end} of {rows.length}
+            </span>
+            <button
+              type="button"
+              className="rounded p-1 text-text-muted transition-colors hover:bg-overlay-2 hover:text-text disabled:cursor-default disabled:opacity-30"
+              disabled={slice.page === 0}
+              onClick={onPrevPage}
+              aria-label="Previous preview page"
+            >
+              <ChevronLeft size={14} aria-hidden />
+            </button>
+            <button
+              type="button"
+              className="rounded p-1 text-text-muted transition-colors hover:bg-overlay-2 hover:text-text disabled:cursor-default disabled:opacity-30"
+              disabled={slice.page >= slice.pageCount - 1}
+              onClick={onNextPage}
+              aria-label="Next preview page"
+            >
+              <ChevronRight size={14} aria-hidden />
+            </button>
+          </div>
+        ) : null}
       </div>
       <div className="min-h-0 flex-1 overflow-auto rounded-xl border border-border-subtle">
         <table className="min-w-full text-xs">
-          <thead className="sticky top-0 bg-elevated/90 backdrop-blur-sm">
+          <thead className="sticky top-0 z-[1] border-b border-border-subtle bg-elevated/95 backdrop-blur-sm">
             <tr>
               {cols.map((c) => (
                 <th key={c} className="whitespace-nowrap px-3 py-2 text-left font-semibold text-text">
@@ -538,8 +583,8 @@ function PreviewStage({
             </tr>
           </thead>
           <tbody>
-            {rows.map((row, i) => (
-              <tr key={i} className="odd:bg-base/25">
+            {slice.rows.map((row, i) => (
+              <tr key={slice.start + i} className="odd:bg-base/25">
                 {cols.map((c) => (
                   <td key={c} className="whitespace-nowrap px-3 py-1.5 font-mono text-text-muted">
                     {formatCell(row[c])}

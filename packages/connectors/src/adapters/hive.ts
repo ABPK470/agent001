@@ -194,8 +194,12 @@ async function hiveInsertBatches(
   return makeSummary("completed", rowsWritten, rowsWritten, [], null)
 }
 
+/** `db.tbl` → `` `db`.`tbl` `` (whole-string backticks would be one illegal name). */
 function quoteIdent(name: string): string {
-  return `\`${name.replace(/`/g, "``")}\``
+  return name
+    .split(".")
+    .map((part) => `\`${part.replace(/`/g, "``")}\``)
+    .join(".")
 }
 
 function quoteLit(value: unknown): string {

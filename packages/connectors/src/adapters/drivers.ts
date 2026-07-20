@@ -16,6 +16,12 @@ import { BlobServiceClient } from "@azure/storage-blob"
 import { Client as FtpClient } from "basic-ftp"
 import type { Connector, MoveSummary, Row } from "@mia/shared-types"
 import { makeSummary } from "../engine.js"
+import {
+  quoteMssqlIdent,
+  quoteMssqlTable,
+  quotePgIdent,
+  quotePgTable,
+} from "../sql-idents.js"
 import type { MssqlDriver, MssqlTransaction } from "./mssql.js"
 import type { PostgresDriver, PostgresTransaction } from "./postgres.js"
 import type { DenodoDriver } from "./denodo.js"
@@ -82,7 +88,9 @@ export function defaultMssqlDriver(pool: sql.ConnectionPool): MssqlDriver {
       }
     },
     async beginTransaction() {
-      const txCtx = await pool.transaction()
+      // pool.transaction() only constructs; node-mssql requires begin() before Request.
+      const txCtx = pool.transaction()
+      await txCtx.begin()
       return makeMssqlTransaction(pool, txCtx)
     },
     async insertBatches(table, rows) {
@@ -97,7 +105,7 @@ export function defaultMssqlDriver(pool: sql.ConnectionPool): MssqlDriver {
 function makeMssqlTransaction(pool: sql.ConnectionPool, txCtx: sql.Transaction): MssqlTransaction {
   return {
     async truncate(table) {
-      await new sql.Request(txCtx).query(`TRUNCATE TABLE ${quoteIdent(table)}`)
+      await new sql.Request(txCtx).query(`TRUNCATE TABLE ${quoteMssqlTable(table)}`)
     },
     async insertBatches(table, rows) {
       return mssqlInsertBatches(pool, txCtx, table, rows)
@@ -124,7 +132,7 @@ async function mssqlInsertBatches(
     const values = batch
       .map((r) => `(${cols.map((c) => quoteLit(r[c])).join(",")})`)
       .join(",")
-    const stmt = `INSERT INTO ${quoteIdent(table)} (${cols.map(quoteIdent).join(",")}) VALUES ${values}`
+    const stmt = `INSERT INTO ${quoteMssqlTable(table)} (${cols.map(quoteMssqlIdent).join(",")}) VALUES ${values}`
     const req = txCtx ? new sql.Request(txCtx) : new sql.Request(pool)
     await req.query(stmt)
     rowsWritten += batch.length
@@ -159,7 +167,7 @@ export function defaultPostgresDriver(pool: Pool): PostgresDriver {
       return makePostgresTransaction(client)
     },
     async insertBatches(table, rows) {
-      return pgInsertBatches(null, table, rows)
+      return pgInsertBatches(pool, table, rows)
     },
     async close() {
       await pool.end()
@@ -170,7 +178,7 @@ export function defaultPostgresDriver(pool: Pool): PostgresDriver {
 function makePostgresTransaction(client: PoolClient): PostgresTransaction {
   return {
     async truncate(table) {
-      await client.query(`TRUNCATE TABLE ${quoteIdent(table)}`)
+      await client.query(`TRUNCATE TABLE ${quotePgTable(table)}`)
     },
     async insertBatches(table, rows) {
       return pgInsertBatches(client, table, rows)
@@ -187,7 +195,7 @@ function makePostgresTransaction(client: PoolClient): PostgresTransaction {
 }
 
 async function pgInsertBatches(
-  client: PoolClient | null,
+  db: Pool | PoolClient,
   table: string,
   rows: AsyncGenerator<RowBatch>,
 ): Promise<MoveSummary> {
@@ -199,18 +207,14 @@ async function pgInsertBatches(
       (_, i) => `(${cols.map((_, c) => `$${i * cols.length + c + 1}`).join(",")})`,
     )
     const values = batch.flatMap((r) => cols.map((c) => r[c]))
-    const stmt = `INSERT INTO ${quoteIdent(table)} (${cols.map(quoteIdent).join(",")}) VALUES ${paramRows.join(",")}`
-    if (client) await client.query(stmt, values)
+    const stmt = `INSERT INTO ${quotePgTable(table)} (${cols.map(quotePgIdent).join(",")}) VALUES ${paramRows.join(",")}`
+    await db.query(stmt, values)
     rowsWritten += batch.length
   }
   return makeSummary("completed", rowsWritten, rowsWritten, [], null)
 }
 
 // ── shared SQL helpers ──────────────────────────────────────────
-
-function quoteIdent(name: string): string {
-  return `"${name.replace(/"/g, '""')}"`
-}
 
 function quoteLit(value: unknown): string {
   if (value === null || value === undefined) return "NULL"
@@ -631,7 +635,7 @@ export function defaultDatabricksDriver(connector: Connector): DatabricksDriver 
     },
     async insertBatches(table, mode, rows) {
       if (mode === "replace") {
-        await executeSql(`TRUNCATE TABLE ${quoteIdent(table)}`)
+        await executeSql(`TRUNCATE TABLE ${quotePgTable(table)}`)
       }
       let rowsWritten = 0
       for await (const batch of rows) {
@@ -640,7 +644,7 @@ export function defaultDatabricksDriver(connector: Connector): DatabricksDriver 
         const values = batch
           .map((r) => `(${cols.map((c) => quoteLit(r[c])).join(",")})`)
           .join(",")
-        const stmt = `INSERT INTO ${quoteIdent(table)} (${cols.map(quoteIdent).join(",")}) VALUES ${values}`
+        const stmt = `INSERT INTO ${quotePgTable(table)} (${cols.map(quotePgIdent).join(",")}) VALUES ${values}`
         await executeSql(stmt)
         rowsWritten += batch.length
       }
