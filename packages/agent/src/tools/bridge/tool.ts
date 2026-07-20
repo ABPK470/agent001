@@ -36,13 +36,13 @@ function buildBridgeDataTool(host: AgentHost): ExecutableTool {
       "Move (copy) rows from a source connector to a target connector through an optional declarative transform. " +
       "Streaming — handles arbitrarily large datasets without loading them all into memory (Parquet/HTTP JSON payloads are bounded by file/response size). " +
       "Use list_adapters to see connectors and their capabilities. " +
-      "source.spec / target.spec are kind-specific: SQL kinds (mssql, postgres, databricks) use { kind: 'sql', sql | table+mode }; " +
+      "source.spec / target.spec are kind-specific: SQL kinds (mssql, postgres, oracle, databricks) use { kind: 'sql', sql | table+mode }; " +
       "httpApi uses { kind: 'httpApi', method, path, ... }; webhdfs/aws/azure/ftp use { kind, path, format: 'csv'|'json'|'parquet', mode? }; " +
       "denodo uses { kind: 'denodo', view, params }. " +
       "transform = { columns: [{ from, to, cast?, default? }], derive: [{ to, template }], defaults: [{ column, value }], filter: [{ column, op, value? }] }. " +
       "casts: string|number|boolean|date|datetime|json. filter ops: eq|neq|gt|gte|lt|lte|in|exists|empty. " +
       "Write modes: 'append' (batch insert / merge-rewrite for parquet) or 'replace' (truncate+insert / overwrite file). " +
-      "SQL write power-ups (mssql/postgres, opt-in): allowIdentityInsert, relaxConstraints. " +
+      "SQL write power-ups (mssql/postgres/oracle, opt-in): allowIdentityInsert, relaxConstraints. " +
       "Returns a summary: status (completed|partial|failed), rowsRead, rowsWritten, errors.",
     parameters: {
       type: "object",

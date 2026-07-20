@@ -1,7 +1,7 @@
 {
   "name": "@mia/connectors",
   "version": "0.1.0",
-  "description": "Connector-adapter framework + streaming Bridge engine. Per-kind adapters (mssql, postgres, hive, webhdfs, denodo, httpApi) behind driver ports; the engine moves rows source-to-target through a declarative transform.",
+  "description": "Connector-adapter framework + streaming Bridge engine. Per-kind adapters (mssql, postgres, oracle, hive, webhdfs, denodo, httpApi, …) behind driver ports; the engine moves rows source-to-target through a declarative transform.",
   "type": "module",
   "exports": {
     ".": "./src/index.ts"
@@ -19,12 +19,14 @@
     "hyparquet": "^1.26.2",
     "hyparquet-writer": "^0.16.1",
     "mssql": "^12.2.1",
+    "oracledb": "^6.10.0",
     "pg": "^8.13.1",
     "pg-query-stream": "^4.8.1"
   },
   "devDependencies": {
     "@types/mssql": "^9.1.11",
     "@types/node": "^22.16.4",
+    "@types/oracledb": "^7.0.1",
     "@types/pg": "^8.11.10",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4"

@@ -13,9 +13,11 @@ describe("readSpecKindFor / writeSpecKindFor", () => {
   it("maps SQL kinds to the sql spec", () => {
     expect(readSpecKindFor("mssql")).toBe("sql")
     expect(readSpecKindFor("postgres")).toBe("sql")
+    expect(readSpecKindFor("oracle")).toBe("sql")
     expect(readSpecKindFor("hive")).toBe("sql")
     expect(readSpecKindFor("databricks")).toBe("sql")
     expect(writeSpecKindFor("mssql")).toBe("sql")
+    expect(writeSpecKindFor("oracle")).toBe("sql")
     expect(writeSpecKindFor("databricks")).toBe("sql")
   })
   it("maps httpApi / webhdfs / denodo / object stores / aqueduct", () => {

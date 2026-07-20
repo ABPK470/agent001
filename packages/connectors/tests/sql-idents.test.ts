@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest"
 import {
   quoteMssqlIdent,
   quoteMssqlTable,
+  quoteOracleTable,
   quotePgIdent,
   quotePgTable,
+  splitOracleTable,
 } from "../src/sql-idents.js"
 
 describe("quoteMssqlTable", () => {
@@ -27,5 +29,16 @@ describe("quotePgTable", () => {
 
   it("escapes embedded double quotes", () => {
     expect(quotePgIdent('a"b')).toBe('"a""b"')
+  })
+})
+
+describe("oracle idents", () => {
+  it("quotes OWNER.TABLE like Postgres delimited identifiers", () => {
+    expect(quoteOracleTable("HR.EMPLOYEES")).toBe('"HR"."EMPLOYEES"')
+  })
+
+  it("splits owner.table for dictionary lookups", () => {
+    expect(splitOracleTable("hr.employees")).toEqual({ owner: "HR", table: "EMPLOYEES" })
+    expect(splitOracleTable("EMPLOYEES")).toEqual({ owner: null, table: "EMPLOYEES" })
   })
 })

@@ -21,7 +21,15 @@ import { FormFieldGroup } from "../entity-registry/form-section"
 export function readSpecKindFor(
   kind: ConnectorKindId,
 ): "sql" | "httpApi" | "webhdfs" | "denodo" | "aws" | "azure" | "ftp" | "aqueduct" | null {
-  if (kind === "mssql" || kind === "postgres" || kind === "hive" || kind === "databricks") return "sql"
+  if (
+    kind === "mssql" ||
+    kind === "postgres" ||
+    kind === "oracle" ||
+    kind === "hive" ||
+    kind === "databricks"
+  ) {
+    return "sql"
+  }
   if (kind === "httpApi") return "httpApi"
   if (kind === "webhdfs") return "webhdfs"
   if (kind === "denodo") return "denodo"
@@ -36,7 +44,15 @@ export function readSpecKindFor(
 export function writeSpecKindFor(
   kind: ConnectorKindId,
 ): "sql" | "httpApi" | "webhdfs" | "aws" | "azure" | "ftp" | null {
-  if (kind === "mssql" || kind === "postgres" || kind === "hive" || kind === "databricks") return "sql"
+  if (
+    kind === "mssql" ||
+    kind === "postgres" ||
+    kind === "oracle" ||
+    kind === "hive" ||
+    kind === "databricks"
+  ) {
+    return "sql"
+  }
   if (kind === "httpApi") return "httpApi"
   if (kind === "webhdfs") return "webhdfs"
   if (kind === "aws") return "aws"
@@ -504,7 +520,7 @@ export function WriteSpecForm({
             />
           </FormFieldGroup>
         </div>
-        {(kind === "mssql" || kind === "postgres") && (
+        {(kind === "mssql" || kind === "postgres" || kind === "oracle") && (
           <div className="flex min-w-0 flex-col gap-2">
             <LabeledCheckbox
               layout="card"
@@ -523,7 +539,9 @@ export function WriteSpecForm({
               hint={
                 kind === "mssql"
                   ? "Temporarily NOCHECK all constraints on the target table, then re-enable after the write."
-                  : "SET LOCAL session_replication_role = replica for this write (skips FK/trigger checks; needs privileges)."
+                  : kind === "oracle"
+                    ? "Disable CHECK / FK / UNIQUE constraints on the target table for this write, then re-enable."
+                    : "SET LOCAL session_replication_role = replica for this write (skips FK/trigger checks; needs privileges)."
               }
               checked={Boolean(spec["relaxConstraints"])}
               onChange={(v) => patch({ relaxConstraints: v })}

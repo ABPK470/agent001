@@ -12,12 +12,14 @@ import ftpIcon from "./brand-icons/ftp.svg"
 import hiveIcon from "./brand-icons/hive.svg"
 import httpApiIcon from "./brand-icons/httpApi.svg"
 import mssqlIcon from "./brand-icons/mssql.svg"
+import oracleIcon from "./brand-icons/oracle.svg"
 import postgresIcon from "./brand-icons/postgres.svg"
 import webhdfsIcon from "./brand-icons/webhdfs.svg"
 
 const BRAND_ICON_SRC: Record<ConnectorKindId, string> = {
   mssql: mssqlIcon,
   postgres: postgresIcon,
+  oracle: oracleIcon,
   databricks: databricksIcon,
   azure: azureIcon,
   aws: awsIcon,

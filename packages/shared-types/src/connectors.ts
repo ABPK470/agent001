@@ -2,23 +2,20 @@
  * Connectors — typed connections to external data sources.
  *
  * A connector is a UI-managed, persisted connection to an external system
- * (MSSQL today; postgres / databricks / azure / aws / denodo / HTTP API /
- * FTP / aqueduct later). Each connector instance belongs to a `kind`; each
- * kind declares the config fields its create/edit form renders and the
- * server validates against.
+ * (MSSQL, postgres, oracle, databricks, object stores, HTTP, …). Each
+ * connector instance belongs to a `kind`; each kind declares the config
+ * fields its create/edit form renders and the server validates against.
  *
  * Storage: SQLite `connectors` table (plaintext body_json, admin-only API).
  * Seeding: `deploy/connectors/connectors.json` if present; else synthesise
  * one `mssql` connector per MSSQL connection registered at boot (the
  * migration bridge that lets the DB become the source of truth).
- *
- * Only `mssql` is `enabled` today. Other kinds are declared so the UI can
- * show them greyed-out (roadmap), but the server rejects creating them.
  */
 
 export type ConnectorKindId =
   | "mssql"
   | "postgres"
+  | "oracle"
   | "databricks"
   | "azure"
   | "aws"
@@ -105,6 +102,29 @@ const postgresConfigSchema: ConnectorConfigField[] = [
   { key: "writeEnabled", label: "Write enabled", type: "boolean", default: false },
 ]
 
+const oracleConfigSchema: ConnectorConfigField[] = [
+  { key: "host", label: "Host", type: "text", required: true, placeholder: "db.example.com" },
+  { key: "port", label: "Port", type: "number", default: 1521 },
+  {
+    key: "serviceName",
+    label: "Service name",
+    type: "text",
+    required: true,
+    placeholder: "ORCL",
+    help: "Oracle service name (EZCONNECT). Prefer service name over SID.",
+  },
+  { key: "user", label: "User", type: "text", required: true },
+  { key: "password", label: "Password", type: "password" },
+  {
+    key: "connectString",
+    label: "Connect string (optional override)",
+    type: "text",
+    placeholder: "host:1521/ORCL",
+    help: "When set, used instead of host/port/service name (full Easy Connect or TNS).",
+  },
+  { key: "writeEnabled", label: "Write enabled", type: "boolean", default: false },
+]
+
 const databricksConfigSchema: ConnectorConfigField[] = [
   { key: "host", label: "Workspace URL", type: "url", required: true, placeholder: "https://dbc-….cloud.databricks.com" },
   { key: "httpPath", label: "SQL warehouse HTTP path", type: "text", required: true, placeholder: "/sql/1.0/warehouses/…" },
@@ -178,6 +198,7 @@ const webhdfsConfigSchema: ConnectorConfigField[] = [
 export const CONNECTOR_KINDS: readonly ConnectorKind[] = [
   { id: "mssql", displayName: "SQL Server", description: "Microsoft SQL Server.", icon: "Database", enabled: true, configSchema: mssqlConfigSchema },
   { id: "postgres", displayName: "PostgreSQL", description: "PostgreSQL — streaming SELECT and batched INSERT.", icon: "Database", enabled: true, configSchema: postgresConfigSchema },
+  { id: "oracle", displayName: "Oracle", description: "Oracle Database — streaming SELECT and batched INSERT via node-oracledb.", icon: "Database", enabled: true, configSchema: oracleConfigSchema },
   { id: "databricks", displayName: "Databricks", description: "Databricks SQL warehouse — SELECT / INSERT over the SQL Statements API.", icon: "Database", enabled: true, configSchema: databricksConfigSchema },
   { id: "azure", displayName: "Azure Blob / Data Lake", description: "Read/write CSV or JSON blobs in Azure Storage.", icon: "Cloud", enabled: true, configSchema: azureConfigSchema },
   { id: "aws", displayName: "AWS S3", description: "Read/write CSV or JSON objects in S3.", icon: "Cloud", enabled: true, configSchema: awsConfigSchema },
@@ -399,7 +420,7 @@ export interface SqlWriteSpec {
   readonly batchSize?: number
   /**
    * Opt-in: insert explicit values into identity / generated columns.
-   * MSSQL → `SET IDENTITY_INSERT`; Postgres → `OVERRIDING SYSTEM VALUE`.
+   * MSSQL → `SET IDENTITY_INSERT`; Postgres / Oracle → `OVERRIDING SYSTEM VALUE`.
    * Ignored by hive / databricks. Default off.
    */
   readonly allowIdentityInsert?: boolean
@@ -407,6 +428,7 @@ export interface SqlWriteSpec {
    * Opt-in: temporarily skip CHECK / FK enforcement for this write.
    * MSSQL → `NOCHECK` / `CHECK CONSTRAINT ALL` on the target table.
    * Postgres → `SET LOCAL session_replication_role = replica` (needs privileges).
+   * Oracle → disable then re-enable table constraints (CHECK / FK / UNIQUE).
    * Ignored by hive / databricks. Default off. Always restored after the write.
    */
   readonly relaxConstraints?: boolean

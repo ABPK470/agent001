@@ -4,6 +4,7 @@
  * Wires persisted connectors to per-kind adapter factories:
  *   - mssql resolves a live pool by connector id via host.mssql.pools (MssqlPoolProvider).
  *   - postgres creates a per-move pg.Pool from the connector config.
+ *   - oracle creates a per-move oracledb pool from the connector config.
  *
  * The returned port is injected into configureAgent({ connectors }) and is the
  * sole runtime surface the agent + UI call for Bridge.
@@ -19,8 +20,10 @@ import {
   createHttpApiAdapter,
   createMssqlAdapter,
   createObjectFileAdapter,
+  createOracleAdapter,
   createPostgresAdapter,
   createWebhdfsAdapter,
+  createOraclePool,
   defaultAqueductDriver,
   defaultAwsDriver,
   defaultAzureDriver,
@@ -29,6 +32,7 @@ import {
   defaultFtpDriver,
   defaultHttpDriver,
   defaultMssqlDriver,
+  defaultOracleDriver,
   defaultPostgresDriver,
   defaultWebhdfsDriver,
   type ConnectorPort,
@@ -112,6 +116,17 @@ export function buildMovementPort(host: AgentHost): ConnectorPort {
       driverProvider: () => {
         const pool = new Pool(pgPoolConfig(connector))
         return Promise.resolve(defaultPostgresDriver(pool))
+      },
+      writeEnabled,
+    })
+  })
+
+  registry.register("oracle", (connector) => {
+    const writeEnabled = asBoolean(connector.config["writeEnabled"], false)
+    return createOracleAdapter(connector, {
+      driverProvider: async () => {
+        const pool = await createOraclePool(connector)
+        return defaultOracleDriver(pool)
       },
       writeEnabled,
     })

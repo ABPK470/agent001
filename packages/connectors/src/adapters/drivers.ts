@@ -1,13 +1,14 @@
 /**
  * adapters/drivers.ts — default driver implementations wrapping the real
- * `mssql` and `pg` / `pg-query-stream` drivers.
+ * `mssql`, `pg` / `pg-query-stream`, and `oracledb` drivers.
  *
  * These are the production bindings, exercised against live backends. The
  * adapter unit tests use mock drivers instead (see tests/adapters/*.test.ts),
- * so a live SQL Server / Postgres is not required to verify the framework.
+ * so a live SQL Server / Postgres / Oracle is not required to verify the framework.
  */
 
 import sql from "mssql"
+import oracledb from "oracledb"
 import QueryStream from "pg-query-stream"
 import { Readable, Writable } from "node:stream"
 import type { Pool, PoolClient } from "pg"
@@ -19,10 +20,18 @@ import { makeSummary } from "../engine.js"
 import {
   quoteMssqlIdent,
   quoteMssqlTable,
+  quoteOracleIdent,
+  quoteOracleTable,
   quotePgIdent,
   quotePgTable,
+  splitOracleTable,
 } from "../sql-idents.js"
 import type { MssqlDriver, MssqlTransaction } from "./mssql.js"
+import type {
+  OracleDriver,
+  OracleInsertOptions,
+  OracleTransaction,
+} from "./oracle.js"
 import type {
   PostgresDriver,
   PostgresInsertOptions,
@@ -234,6 +243,169 @@ async function pgInsertBatches(
       `INSERT INTO ${quotePgTable(table)} (${cols.map(quotePgIdent).join(",")})` +
       `${overriding} VALUES ${paramRows.join(",")}`
     await db.query(stmt, values)
+    rowsWritten += batch.length
+  }
+  return makeSummary("completed", rowsWritten, rowsWritten, [], null)
+}
+
+// ── oracle ──────────────────────────────────────────────────────
+
+export type OraclePool = oracledb.Pool
+
+/** Build Easy Connect string from connector config (or use connectString override). */
+export function oracleConnectString(connector: Connector): string {
+  const c = connector.config
+  const override = typeof c["connectString"] === "string" ? c["connectString"].trim() : ""
+  if (override) return override
+  const host = typeof c["host"] === "string" ? c["host"].trim() : ""
+  const port = typeof c["port"] === "number" && Number.isFinite(c["port"]) ? c["port"] : 1521
+  const service =
+    typeof c["serviceName"] === "string" && c["serviceName"].trim()
+      ? c["serviceName"].trim()
+      : ""
+  if (!host || !service) {
+    throw new Error("oracle connector requires host + serviceName (or connectString)")
+  }
+  return `${host}:${port}/${service}`
+}
+
+export async function createOraclePool(connector: Connector): Promise<OraclePool> {
+  const c = connector.config
+  const user = typeof c["user"] === "string" ? c["user"] : ""
+  const password = typeof c["password"] === "string" ? c["password"] : ""
+  return oracledb.createPool({
+    user,
+    password,
+    connectString: oracleConnectString(connector),
+    poolMin: 0,
+    poolMax: 4,
+    poolIncrement: 1,
+  })
+}
+
+export function defaultOracleDriver(pool: OraclePool): OracleDriver {
+  return {
+    async *streamQuery(querySql, batchSize) {
+      const connection = await pool.getConnection()
+      let resultSet: oracledb.ResultSet<Row> | undefined
+      try {
+        const result = await connection.execute<Row>(querySql, [], {
+          resultSet: true,
+          outFormat: oracledb.OUT_FORMAT_OBJECT,
+        })
+        resultSet = result.resultSet ?? undefined
+        if (!resultSet) return
+        while (true) {
+          const rows = await resultSet.getRows(batchSize)
+          if (rows.length === 0) break
+          yield rows
+        }
+      } finally {
+        try {
+          if (resultSet) await resultSet.close()
+        } catch {
+          /* ignore */
+        }
+        await connection.close()
+      }
+    },
+    async beginTransaction() {
+      const connection = await pool.getConnection()
+      return makeOracleTransaction(connection)
+    },
+    async insertBatches(table, rows, options) {
+      const connection = await pool.getConnection()
+      try {
+        return await oracleInsertBatches(connection, table, rows, options, true)
+      } finally {
+        await connection.close()
+      }
+    },
+    async close() {
+      await pool.close(0)
+    },
+  }
+}
+
+function makeOracleTransaction(connection: oracledb.Connection): OracleTransaction {
+  return {
+    async truncate(table) {
+      // DDL — Oracle issues an implicit commit. Constraints stay as left.
+      await connection.execute(`TRUNCATE TABLE ${quoteOracleTable(table)}`)
+    },
+    async setConstraintsChecked(table, checked) {
+      await oracleToggleConstraints(connection, table, checked)
+    },
+    async insertBatches(table, rows, options) {
+      return oracleInsertBatches(connection, table, rows, options, false)
+    },
+    async commit() {
+      await connection.commit()
+      await connection.close()
+    },
+    async rollback() {
+      try {
+        await connection.rollback()
+      } finally {
+        await connection.close()
+      }
+    },
+  }
+}
+
+async function oracleToggleConstraints(
+  connection: oracledb.Connection,
+  table: string,
+  checked: boolean,
+): Promise<void> {
+  const { owner, table: tableName } = splitOracleTable(table)
+  const quoted = quoteOracleTable(table)
+  const verb = checked ? "ENABLE" : "DISABLE"
+  // Resolve constraints from the data dictionary, then ALTER each one.
+  const sql = owner
+    ? `SELECT constraint_name AS name FROM all_constraints
+       WHERE owner = :owner AND table_name = :tbl
+         AND constraint_type IN ('R', 'C', 'U')
+         AND status = :wantStatus`
+    : `SELECT constraint_name AS name FROM user_constraints
+       WHERE table_name = :tbl
+         AND constraint_type IN ('R', 'C', 'U')
+         AND status = :wantStatus`
+  const binds = owner
+    ? { owner, tbl: tableName, wantStatus: checked ? "DISABLED" : "ENABLED" }
+    : { tbl: tableName, wantStatus: checked ? "DISABLED" : "ENABLED" }
+  const result = await connection.execute<{ NAME: string }>(sql, binds, {
+    outFormat: oracledb.OUT_FORMAT_OBJECT,
+  })
+  for (const row of result.rows ?? []) {
+    const name = row.NAME
+    if (!name) continue
+    await connection.execute(
+      `ALTER TABLE ${quoted} ${verb} CONSTRAINT ${quoteOracleIdent(name)}`,
+    )
+  }
+}
+
+async function oracleInsertBatches(
+  connection: oracledb.Connection,
+  table: string,
+  rows: AsyncGenerator<RowBatch>,
+  options: OracleInsertOptions | undefined,
+  autoCommit: boolean,
+): Promise<MoveSummary> {
+  let rowsWritten = 0
+  const overriding = options?.overridingSystemValue ? " OVERRIDING SYSTEM VALUE" : ""
+  for await (const batch of rows) {
+    if (batch.length === 0) continue
+    const cols = Object.keys(batch[0]!)
+    const paramRows = batch.map(
+      (_, i) => `(${cols.map((_, c) => `:${i * cols.length + c + 1}`).join(",")})`,
+    )
+    const values = batch.flatMap((r) => cols.map((c) => r[c]))
+    const stmt =
+      `INSERT INTO ${quoteOracleTable(table)} (${cols.map(quoteOracleIdent).join(",")})` +
+      `${overriding} VALUES ${paramRows.join(",")}`
+    await connection.execute(stmt, values, { autoCommit })
     rowsWritten += batch.length
   }
   return makeSummary("completed", rowsWritten, rowsWritten, [], null)

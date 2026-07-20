@@ -36,6 +36,18 @@ ORDER BY table_schema, table_name
     // HiveQL — tab_name only; schema is the current database.
     return `SHOW TABLES`
   }
+  if (kind === "oracle") {
+    return `
+SELECT owner || '.' || table_name AS name
+FROM all_tables
+WHERE owner NOT IN (
+  'SYS', 'SYSTEM', 'XDB', 'CTXSYS', 'MDSYS', 'ORDDATA', 'ORDSYS', 'OLAPSYS',
+  'WMSYS', 'LBACSYS', 'DVSYS', 'AUDSYS', 'DBSNMP', 'OUTLN', 'GSMADMIN_INTERNAL',
+  'APPQOSSYS', 'OJVMSYS', 'DBSFWUSER', 'REMOTE_SCHEDULER_AGENT'
+)
+ORDER BY owner, table_name
+`.trim()
+  }
   return null
 }
 

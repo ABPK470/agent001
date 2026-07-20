@@ -24,3 +24,18 @@ export function quotePgIdent(part: string): string {
 export function quotePgTable(name: string): string {
   return name.split(".").map(quotePgIdent).join(".")
 }
+
+/** Oracle uses the same double-quote rules as Postgres for delimited identifiers. */
+export const quoteOracleIdent = quotePgIdent
+
+/** `HR.EMPLOYEES` → `"HR"."EMPLOYEES"`. */
+export const quoteOracleTable = quotePgTable
+
+/** Split `OWNER.TABLE` (or bare `TABLE`) for Oracle data-dictionary lookups. */
+export function splitOracleTable(name: string): { owner: string | null; table: string } {
+  const parts = name.split(".").filter((p) => p.length > 0)
+  if (parts.length >= 2) {
+    return { owner: parts[0]!.toUpperCase(), table: parts[parts.length - 1]!.toUpperCase() }
+  }
+  return { owner: null, table: (parts[0] ?? name).toUpperCase() }
+}

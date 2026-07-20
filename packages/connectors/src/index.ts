@@ -28,8 +28,11 @@ export { listTablesSql, tableNameFromRow } from "./list-tables.js"
 export {
   quoteMssqlIdent,
   quoteMssqlTable,
+  quoteOracleIdent,
+  quoteOracleTable,
   quotePgIdent,
   quotePgTable,
+  splitOracleTable,
 } from "./sql-idents.js"
 
 export {
@@ -46,6 +49,14 @@ export {
   type PostgresInsertOptions,
   type PostgresTransaction,
 } from "./adapters/postgres.js"
+
+export {
+  createOracleAdapter,
+  type OracleAdapterOptions,
+  type OracleDriver,
+  type OracleInsertOptions,
+  type OracleTransaction,
+} from "./adapters/oracle.js"
 
 export {
   createHttpApiAdapter,
@@ -98,6 +109,9 @@ export {
 export {
   defaultMssqlDriver,
   defaultPostgresDriver,
+  defaultOracleDriver,
+  createOraclePool,
+  oracleConnectString,
   defaultHttpDriver,
   defaultDenodoDriver,
   defaultWebhdfsDriver,
@@ -106,4 +120,5 @@ export {
   defaultFtpDriver,
   defaultDatabricksDriver,
   defaultAqueductDriver,
+  type OraclePool,
 } from "./adapters/drivers.js"

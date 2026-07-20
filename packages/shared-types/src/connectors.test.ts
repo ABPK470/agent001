@@ -16,6 +16,7 @@ describe("connector kind catalogue", () => {
     expect(ENABLED_CONNECTOR_KINDS.map((k) => k.id)).toEqual([
       "mssql",
       "postgres",
+      "oracle",
       "databricks",
       "azure",
       "aws",
