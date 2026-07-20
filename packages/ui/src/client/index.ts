@@ -460,6 +460,10 @@ export const api = {
     json<{ connectors: import("@mia/shared-types").ConnectorInfo[] }>(
       "/api/bridge/connectors",
     ),
+  listBridgeTables: (connectorId: string) =>
+    json<{ tables: string[] }>(
+      `/api/bridge/connectors/${encodeURIComponent(connectorId)}/tables`,
+    ),
   previewBridge: (body: {
     source: { connectorId: string; spec: import("@mia/shared-types").ReadSpec }
     transform?: import("@mia/shared-types").Transform

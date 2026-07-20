@@ -24,6 +24,7 @@ import type {
   WriteSpec,
 } from "@mia/shared-types"
 import { applyTransform, moveData, type MoveOptions } from "./engine.js"
+import { listTablesSql, tableNameFromRow } from "./list-tables.js"
 
 export class AdapterRegistry {
   private readonly factories = new Map<ConnectorKindId, AdapterFactory>()
@@ -72,6 +73,11 @@ export interface ConnectorPort {
     source: ConnectorPortMoveSource,
     options?: { transform?: Transform; limit?: number; signal?: AbortSignal },
   ): Promise<{ rows: Row[]; truncated: boolean }>
+  /**
+   * List schema-qualified base tables on a SQL connector (Bridge target picker).
+   * Throws when the connector kind has no table catalog.
+   */
+  listTables(connectorId: string): Promise<string[]>
   listAdapters(): ConnectorInfo[]
 }
 
@@ -159,6 +165,38 @@ export function buildConnectorPort(
         return { rows, truncated }
       } finally {
         await srcAdapter.close()
+      }
+    },
+    async listTables(connectorId) {
+      const list = readConnectors(connectors)
+      const connector = resolveConnector(list, connectorId)
+      const sql = listTablesSql(connector.kind)
+      if (!sql) {
+        throw new Error(`table listing is not supported for connector kind '${connector.kind}'`)
+      }
+      if (!registry.has(connector.kind)) {
+        throw new Error(`no adapter registered for kind '${connector.kind}'`)
+      }
+      const adapter = registry.forConnector(connector)
+      if (!adapter.capabilities.read && !adapter.capabilities.query) {
+        throw new Error(`connector '${connectorId}' cannot list tables`)
+      }
+      await adapter.open()
+      try {
+        const names: string[] = []
+        const seen = new Set<string>()
+        for await (const batch of adapter.read({ kind: "sql", sql })) {
+          for (const row of batch) {
+            const name = tableNameFromRow(row)
+            if (!name || seen.has(name)) continue
+            seen.add(name)
+            names.push(name)
+          }
+        }
+        names.sort((a, b) => a.localeCompare(b))
+        return names
+      } finally {
+        await adapter.close()
       }
     },
     listAdapters() {

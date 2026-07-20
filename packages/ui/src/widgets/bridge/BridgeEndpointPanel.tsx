@@ -125,6 +125,7 @@ export function BridgeEndpointCard({
                   kind={selected.kind as ConnectorKindId}
                   spec={spec}
                   onPatch={onSpecChange}
+                  connectorId={connectorId || undefined}
                 />
               )}
             </div>

@@ -28,7 +28,7 @@ const adapters: ConnectorInfo[] = [
 
 describe("list_adapters tool", () => {
   it("lists configured connectors with capabilities", async () => {
-    const tool = createListAdaptersTool(hostWith({ listAdapters: () => adapters, moveData: async () => ({}) as MoveSummary, previewMove: async () => ({ rows: [], truncated: false }) }))
+    const tool = createListAdaptersTool(hostWith({ listAdapters: () => adapters, listTables: async () => [], moveData: async () => ({}) as MoveSummary, previewMove: async () => ({ rows: [], truncated: false }) }))
     const out = await tool.execute({})
     expect(out).toContain("2 connector(s)")
     expect(out).toContain("pg-src [postgres]")
@@ -56,6 +56,7 @@ describe("bridge_data tool", () => {
     }
     const port = {
       listAdapters: () => adapters,
+      listTables: async () => [],
       moveData: async (s: { connectorId: string }, t: { connectorId: string }, o: { transform?: unknown }) => {
         captured = { source: s.connectorId, target: t.connectorId, transform: o?.transform }
         return summary
@@ -79,7 +80,7 @@ describe("bridge_data tool", () => {
   })
 
   it("validates missing source/target", async () => {
-    const tool = createBridgeDataTool(hostWith({ listAdapters: () => [], moveData: async () => ({}) as MoveSummary, previewMove: async () => ({ rows: [], truncated: false }) }))
+    const tool = createBridgeDataTool(hostWith({ listAdapters: () => [], listTables: async () => [], moveData: async () => ({}) as MoveSummary, previewMove: async () => ({ rows: [], truncated: false }) }))
     const out = await tool.execute({ target: { connectorId: "x", spec: { kind: "sql", table: "t", mode: "append" } } })
     expect(out).toContain("source.connectorId and source.spec are required")
   })
@@ -87,6 +88,7 @@ describe("bridge_data tool", () => {
   it("surfaces a partial summary with failedAtRow and errors", async () => {
     const port = {
       listAdapters: () => [],
+      listTables: async () => [],
       moveData: async () => ({
         status: "partial",
         rowsRead: 10,

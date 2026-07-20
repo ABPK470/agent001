@@ -148,6 +148,8 @@ export interface ConnectorPort {
     source: { connectorId: string; spec: ReadSpec },
     options?: { transform?: Transform; limit?: number },
   ): Promise<{ rows: Record<string, unknown>[]; truncated: boolean }>
+  /** Schema-qualified table names for SQL target pickers (mssql/postgres/…). */
+  listTables(connectorId: string): Promise<string[]>
   listAdapters(): ConnectorInfo[]
 }
 

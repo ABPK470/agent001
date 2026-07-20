@@ -25,6 +25,7 @@ interface MockPort {
   listAdapters: () => ConnectorInfo[]
   moveData: (s: { connectorId: string }, t: { connectorId: string }, o: { transform?: unknown }) => Promise<MoveSummary>
   previewMove: (s: { connectorId: string }, o: { transform?: unknown; limit?: number }) => Promise<{ rows: Record<string, unknown>[]; truncated: boolean }>
+  listTables: (connectorId: string) => Promise<string[]>
 }
 
 function hostWith(port: MockPort | null): AgentHost {
@@ -60,6 +61,7 @@ describe("bridge routes", () => {
         listAdapters: () => adapters,
         moveData: async () => ({}) as MoveSummary,
         previewMove: async () => ({ rows: [], truncated: false }),
+        listTables: async () => [],
       },
     )
     const res = await app.inject({ method: "GET", url: "/api/bridge/connectors" })
@@ -83,6 +85,7 @@ describe("bridge routes", () => {
         listAdapters: () => adapters,
         moveData: async () => ({}) as MoveSummary,
         previewMove: async () => ({ rows: [], truncated: false }),
+        listTables: async () => [],
       },
     )
     const list = await app.inject({ method: "GET", url: "/api/bridge/connectors" })
@@ -105,6 +108,7 @@ describe("bridge routes", () => {
         return { status: "completed", rowsRead: 5, rowsWritten: 5, errors: [], failedAtRow: null }
       },
       previewMove: async () => ({ rows: [], truncated: false }),
+      listTables: async () => [],
     })
     const res = await app.inject({
       method: "POST",
@@ -130,6 +134,7 @@ describe("bridge routes", () => {
       listAdapters: () => adapters,
       moveData: async () => ({}) as MoveSummary,
       previewMove: async () => ({ rows: [], truncated: false }),
+      listTables: async () => [],
     })
     const res = await app.inject({
       method: "POST",
@@ -168,6 +173,7 @@ describe("bridge routes", () => {
         previewCaptured = { limit: o?.limit, transform: o?.transform }
         return { rows: [{ a: 1 }, { a: 2 }], truncated: true }
       },
+      listTables: async () => [],
     })
     const res = await app.inject({
       method: "POST",
@@ -192,6 +198,7 @@ describe("bridge routes", () => {
         throw new Error("boom")
       },
       previewMove: async () => ({ rows: [], truncated: false }),
+      listTables: async () => [],
     })
     const res = await app.inject({
       method: "POST",
@@ -203,6 +210,19 @@ describe("bridge routes", () => {
     })
     expect(res.statusCode).toBe(400)
     expect(res.json()).toMatchObject({ error: "boom" })
+    await app.close()
+  })
+
+  it("lists tables for a SQL connector", async () => {
+    const app = await buildApp(adminSession(), {
+      listAdapters: () => adapters,
+      moveData: async () => ({ status: "completed", rowsRead: 0, rowsWritten: 0, errors: [], failedAtRow: null }),
+      previewMove: async () => ({ rows: [], truncated: false }),
+      listTables: async (id) => (id === "pg-src" ? ["public.a", "public.b"] : []),
+    })
+    const res = await app.inject({ method: "GET", url: "/api/bridge/connectors/pg-src/tables" })
+    expect(res.statusCode).toBe(200)
+    expect(res.json()).toEqual({ tables: ["public.a", "public.b"] })
     await app.close()
   })
 })

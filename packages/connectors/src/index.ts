@@ -24,6 +24,8 @@ export {
   type ConnectorSource,
 } from "./registry.js"
 
+export { listTablesSql, tableNameFromRow } from "./list-tables.js"
+
 export {
   createMssqlAdapter,
   type MssqlAdapterOptions,

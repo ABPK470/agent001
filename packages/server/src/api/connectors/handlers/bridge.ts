@@ -183,4 +183,24 @@ export function registerBridgeRoutes(app: FastifyInstance, host: AgentHost): voi
       return { error }
     }
   })
+
+  app.get<{ Params: { id: string } }>("/api/bridge/connectors/:id/tables", async (req, reply) => {
+    if (!req.session?.isAdmin) {
+      reply.code(403)
+      return { error: "admin only" }
+    }
+    const port = host.connectors.port.value
+    if (!port) {
+      reply.code(503)
+      return { error: "connector bridge is not configured on this server" }
+    }
+    try {
+      const tables = await port.listTables(req.params.id)
+      return { tables }
+    } catch (e) {
+      const error = e instanceof Error ? e.message : String(e)
+      reply.code(400)
+      return { error }
+    }
+  })
 }

@@ -9,7 +9,13 @@
 
 import type { ConnectorInfo, MoveSummary, Transform } from "@mia/shared-types"
 import { Eye, Play, Shuffle } from "lucide-react"
-import { useEffect, useState, type JSX } from "react"
+import {
+  useEffect,
+  useRef,
+  useState,
+  type JSX,
+  type PointerEvent as ReactPointerEvent,
+} from "react"
 import { api } from "../../client/index"
 import { EmptyState } from "../../components/EmptyState"
 import { META_TEXT, TEXT_BTN, TEXT_BTN_PRIMARY } from "../entity-registry/chrome"
@@ -35,6 +41,23 @@ import {
 /** Idle path chips — Source, Map, and Target share this height. */
 const PATH_PILL_H = "h-[6.75rem]"
 
+const STAGE_PREVIEW_MIN_PX = 120
+const STAGE_PREVIEW_DEFAULT_PX = 280
+const STAGE_PATH_MIN_PX = 96
+const STAGE_HANDLE_PX = 8
+
+type StageResizeDrag = {
+  pointerId: number
+  startY: number
+  startPreviewH: number
+  stageH: number
+}
+
+function clampStagePreviewH(heightPx: number, stageH: number): number {
+  const max = Math.max(STAGE_PREVIEW_MIN_PX, stageH - STAGE_PATH_MIN_PX - STAGE_HANDLE_PX)
+  return Math.min(max, Math.max(STAGE_PREVIEW_MIN_PX, Math.round(heightPx)))
+}
+
 export function BridgeShell(): JSX.Element {
   const { toasts, pushToast, dismissToast } = useModalToasts()
   const [connectors, setConnectors] = useState<ConnectorInfo[]>([])
@@ -48,6 +71,9 @@ export function BridgeShell(): JSX.Element {
   const [preview, setPreview] = useState<{ rows: Record<string, unknown>[]; truncated: boolean } | null>(null)
   const [summary, setSummary] = useState<MoveSummary | null>(null)
   const [busy, setBusy] = useState<"preview" | "run" | "sample" | null>(null)
+  const [stagePreviewH, setStagePreviewH] = useState(STAGE_PREVIEW_DEFAULT_PX)
+  const stageRef = useRef<HTMLDivElement>(null)
+  const stageResizeDragRef = useRef<StageResizeDrag | null>(null)
   const [sourceOpen, setSourceOpen] = useState(false)
   const [targetOpen, setTargetOpen] = useState(false)
   const [mapOpen, setMapOpen] = useState(false)
@@ -174,6 +200,47 @@ export function BridgeShell(): JSX.Element {
   const mapLabel = summarizeMap(mapDraft)
   const hasStage = Boolean(preview || summary)
 
+  function onStageResizePointerDown(event: ReactPointerEvent<HTMLDivElement>): void {
+    if (event.button !== 0) return
+    const stage = stageRef.current
+    if (!stage) return
+    event.currentTarget.setPointerCapture(event.pointerId)
+    stageResizeDragRef.current = {
+      pointerId: event.pointerId,
+      startY: event.clientY,
+      startPreviewH: stagePreviewH,
+      stageH: stage.clientHeight,
+    }
+  }
+
+  function onStageResizePointerMove(event: ReactPointerEvent<HTMLDivElement>): void {
+    const drag = stageResizeDragRef.current
+    if (!drag || event.pointerId !== drag.pointerId) return
+    // Path is above preview: drag handle up → taller preview.
+    const next = drag.startPreviewH - (event.clientY - drag.startY)
+    setStagePreviewH(clampStagePreviewH(next, drag.stageH))
+  }
+
+  function onStageResizePointerUp(event: ReactPointerEvent<HTMLDivElement>): void {
+    const drag = stageResizeDragRef.current
+    if (!drag) return
+    stageResizeDragRef.current = null
+    try {
+      event.currentTarget.releasePointerCapture(drag.pointerId)
+    } catch {
+      // Capture may already be gone after cancel.
+    }
+  }
+
+  function onStageResizePointerCancel(): void {
+    stageResizeDragRef.current = null
+  }
+
+  function onStageResizeLostPointerCapture(): void {
+    if (!stageResizeDragRef.current) return
+    stageResizeDragRef.current = null
+  }
+
   const path = (
     <PathBlock
       connectors={connectors}
@@ -210,16 +277,37 @@ export function BridgeShell(): JSX.Element {
         <>
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
             {hasStage ? (
-              <>
-                <div className="shrink-0 border-b border-border-subtle px-4 py-3 sm:px-5">{path}</div>
-                <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+              <div ref={stageRef} className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                <div className="min-h-0 flex-1 overflow-auto px-4 py-3 sm:px-5">{path}</div>
+                <div
+                  role="separator"
+                  aria-orientation="horizontal"
+                  aria-label="Resize preview"
+                  aria-valuenow={stagePreviewH}
+                  aria-valuemin={STAGE_PREVIEW_MIN_PX}
+                  className="group relative z-10 flex h-2 shrink-0 cursor-row-resize items-center justify-center border-y border-border-subtle bg-panel hover:bg-elevated"
+                  onPointerDown={onStageResizePointerDown}
+                  onPointerMove={onStageResizePointerMove}
+                  onPointerUp={onStageResizePointerUp}
+                  onPointerCancel={onStageResizePointerCancel}
+                  onLostPointerCapture={onStageResizeLostPointerCapture}
+                >
+                  <span
+                    className="h-0.5 w-10 rounded-full bg-border transition-colors group-hover:bg-border-focus"
+                    aria-hidden
+                  />
+                </div>
+                <div
+                  className="flex shrink-0 flex-col overflow-hidden"
+                  style={{ height: stagePreviewH }}
+                >
                   {preview ? (
                     <PreviewStage rows={preview.rows} truncated={preview.truncated} />
                   ) : (
                     <SummaryStage summary={summary!} />
                   )}
                 </div>
-              </>
+              </div>
             ) : (
               <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 py-3 sm:px-5">
                 {path}
@@ -433,7 +521,7 @@ function PreviewStage({
   }
   const cols = Object.keys(rows[0]!)
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-5 py-4">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden px-5 py-4">
       <div className={`mb-2 shrink-0 ${META_TEXT}`}>
         Preview · {rows.length} row{rows.length === 1 ? "" : "s"}
         {truncated ? " (truncated)" : ""} · nothing written

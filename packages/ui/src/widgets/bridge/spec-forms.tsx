@@ -8,8 +8,11 @@
  */
 
 import type { JSX, ReactNode } from "react"
+import { useEffect, useMemo, useState } from "react"
 import type { ConnectorKindId, FileFormat, ReadSpec, WriteMode, WriteSpec } from "@mia/shared-types"
+import { api } from "../../client/index"
 import { Listbox, type ListboxOption } from "../../components/Listbox"
+import { SearchablePick, type SearchablePickOption } from "../../components/SearchablePick"
 import { FIELD_LABEL, META_TEXT } from "../entity-registry/chrome"
 import { FormFieldGroup } from "../entity-registry/form-section"
 
@@ -428,10 +431,13 @@ export function WriteSpecForm({
   kind,
   spec,
   onPatch,
+  connectorId,
 }: {
   kind: ConnectorKindId
   spec: Record<string, unknown>
   onPatch: (patch: Record<string, unknown>) => void
+  /** When set for SQL targets, table field becomes a searchable catalog pick. */
+  connectorId?: string
 }): JSX.Element | null {
   const k = writeSpecKindFor(kind)
   if (!k) {
@@ -446,8 +452,28 @@ export function WriteSpecForm({
   if (k === "sql") {
     return (
       <>
-        <FormFieldGroup label="Table" hint="Schema-qualified destination table.">
-          <TextInput value={String(spec["table"] ?? "")} onChange={(v) => patch({ table: v })} placeholder="dbo.staging_items" mono />
+        <FormFieldGroup
+          label="Table"
+          hint={
+            connectorId
+              ? "Search existing tables, or type a schema-qualified name."
+              : "Schema-qualified destination table."
+          }
+        >
+          {connectorId ? (
+            <SqlTablePick
+              connectorId={connectorId}
+              value={String(spec["table"] ?? "")}
+              onChange={(table) => patch({ table })}
+            />
+          ) : (
+            <TextInput
+              value={String(spec["table"] ?? "")}
+              onChange={(v) => patch({ table: v })}
+              placeholder="dbo.staging_items"
+              mono
+            />
+          )}
         </FormFieldGroup>
         <div className="bridge-form-row bridge-form-row--2">
           <FormFieldGroup label="Mode" hint="Replace runs TRUNCATE+INSERT in one transaction.">
@@ -544,4 +570,69 @@ export function WriteSpecForm({
     )
   }
   return null
+}
+
+/** Searchable catalog of existing tables for SQL Bridge targets. */
+function SqlTablePick({
+  connectorId,
+  value,
+  onChange,
+}: {
+  connectorId: string
+  value: string
+  onChange: (table: string) => void
+}): JSX.Element {
+  const [tables, setTables] = useState<string[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    setError(null)
+    api
+      .listBridgeTables(connectorId)
+      .then((res) => {
+        if (cancelled) return
+        setTables(res.tables)
+      })
+      .catch((e) => {
+        if (cancelled) return
+        setTables([])
+        setError(e instanceof Error ? e.message : String(e))
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [connectorId])
+
+  const options: SearchablePickOption[] = useMemo(
+    () => tables.map((name) => ({ value: name, label: name })),
+    [tables],
+  )
+
+  return (
+    <div className="min-w-0 space-y-1">
+      <SearchablePick
+        value={value}
+        options={options}
+        onChange={onChange}
+        placeholder={loading ? "Loading tables…" : "Search or type dbo.TableName"}
+        ariaLabel="Destination table"
+        size="sm"
+        className="w-full min-w-0 font-mono"
+        disabled={loading}
+      />
+      {error ? (
+        <p className="text-xs text-warning">
+          Could not load catalog — type the table name. {error}
+        </p>
+      ) : !loading && tables.length === 0 ? (
+        <p className={`${META_TEXT}`}>No tables found — type a schema-qualified name.</p>
+      ) : null}
+    </div>
+  )
 }
