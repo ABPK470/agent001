@@ -1701,73 +1701,28 @@ textarea.input {
   background: color-mix(in srgb, var(--color-elevated, var(--color-bg)) 60%, transparent);
 }
 
-.trace-call-header {
-  background: color-mix(in srgb, var(--color-elevated, transparent) 35%, transparent);
+/* Call header sticks inside the scrollport like a normal sticky row. */
+.trace-call {
+  border: 1px solid color-mix(in srgb, var(--border, var(--color-border)) 70%, transparent);
+  border-radius: 0.5rem;
+  background: var(--bg);
 }
 
-.trace-call-nav {
+.trace-call-header {
   position: sticky;
   top: 0;
-  z-index: 5;
-  margin: 0 -0.15rem;
-  padding: 0.15rem 0.15rem 0.35rem;
-  background: color-mix(in srgb, var(--color-bg, var(--bg)) 92%, transparent);
-  backdrop-filter: blur(6px);
+  z-index: 2;
+  background: var(--bg);
+  border-bottom: 1px solid transparent;
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--border, var(--color-border)) 70%, transparent);
 }
 
-.trace-call-nav__inner {
-  display: flex;
-  gap: 0.35rem;
-  overflow-x: auto;
-  padding-bottom: 0.1rem;
-  scrollbar-width: thin;
+.trace-call-header:hover {
+  background: color-mix(in srgb, var(--text, var(--color-text)) 3.5%, var(--bg));
 }
 
-.trace-call-nav__btn {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.05rem;
-  flex: 0 0 auto;
-  min-width: 4.5rem;
-  max-width: 7.5rem;
-  padding: 0.35rem 0.55rem;
-  border-radius: 0.375rem;
-  border: 1px solid var(--color-border);
-  background: color-mix(in srgb, var(--color-elevated, transparent) 40%, transparent);
-  color: var(--color-text-muted);
-  text-align: left;
-  transition:
-    background-color 120ms ease,
-    border-color 120ms ease,
-    color 120ms ease;
-}
-
-.trace-call-nav__btn:hover {
-  color: var(--color-text);
-  border-color: color-mix(in srgb, var(--color-text-muted) 45%, var(--color-border));
-}
-
-.trace-call-nav__btn--active {
-  color: var(--color-text);
-  border-color: color-mix(in srgb, var(--color-text) 28%, var(--color-border));
-  background: color-mix(in srgb, var(--color-text) 6%, transparent);
-}
-
-.trace-call-nav__label {
-  font-size: 0.8125rem;
-  font-weight: 600;
-  line-height: 1.2;
-}
-
-.trace-call-nav__sub {
-  font-size: 0.6875rem;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  opacity: 0.7;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.trace-call.is-open > .trace-call-header {
+  border-bottom-color: color-mix(in srgb, var(--color-border) 70%, transparent);
 }
 
 .trace-expand-toggle {

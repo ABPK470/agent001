@@ -10,9 +10,8 @@
  * never a separate “TOOL” speaker for the response.
  */
 
-import { ChevronDown, ChevronRight, Copy, Search } from "lucide-react"
+import { ChevronDown, ChevronRight, Copy, Search, X } from "lucide-react"
 import {
-  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -106,6 +105,80 @@ function tokensInOut(usage: {
 } | null): string | null {
   if (!usage) return null
   return `${fmtTokens(usage.promptTokens)} in · ${fmtTokens(usage.completionTokens)} out · ${fmtTokens(usage.totalTokens)} total`
+}
+
+/** Where a call matched the filter — shown so search feels intentional. */
+interface CallSearchHit {
+  reasons: string[]
+  inHistory: boolean
+  inReply: boolean
+}
+
+function searchCall(call: LlmCall, index: number, rawQuery: string): CallSearchHit | null {
+  const q = rawQuery.trim().toLowerCase()
+  if (!q) return null
+
+  const reasons: string[] = []
+  let inHistory = false
+  let inReply = false
+  const req = call.request
+  const res = call.response
+  const callNo = index + 1
+  const iterNo = req.iteration + 1
+
+  if (q === String(callNo) || q === `call ${callNo}` || q === `#${callNo}`) {
+    reasons.push(`Call ${callNo}`)
+  }
+  if (q === `iteration ${iterNo}` || q === `iter ${iterNo}` || q === `i${iterNo}`) {
+    reasons.push(`Iteration ${iterNo}`)
+  } else if (q === String(iterNo) && !reasons.includes(`Call ${callNo}`)) {
+    reasons.push(`Iteration ${iterNo}`)
+  }
+
+  if (res) {
+    for (const tc of res.toolCalls) {
+      if (tc.name.toLowerCase().includes(q)) {
+        reasons.push(`tool ${tc.name}`)
+        inReply = true
+      }
+      const args = JSON.stringify(tc.arguments).toLowerCase()
+      if (args.includes(q) && !reasons.some((r) => r.startsWith("tool "))) {
+        reasons.push(`tool args (${tc.name})`)
+        inReply = true
+      }
+    }
+    if (res.content?.toLowerCase().includes(q)) {
+      reasons.push("agent reply")
+      inReply = true
+    }
+    const headline = replyHeadline(res).toLowerCase()
+    if (headline.includes(q) && !inReply) {
+      reasons.push("outcome")
+      inReply = true
+    }
+  }
+
+  for (const msg of req.messages) {
+    if (msg.content?.toLowerCase().includes(q)) {
+      inHistory = true
+      break
+    }
+    if (msg.role.toLowerCase().includes(q) || historySpeaker(msg.role).toLowerCase().includes(q)) {
+      inHistory = true
+      break
+    }
+    for (const tc of msg.toolCalls) {
+      if (tc.name.toLowerCase().includes(q)) {
+        inHistory = true
+        break
+      }
+    }
+    if (inHistory) break
+  }
+  if (inHistory && !reasons.includes("history")) reasons.push("history")
+
+  if (reasons.length === 0) return null
+  return { reasons: reasons.slice(0, 3), inHistory, inReply }
 }
 
 // ── Expandable text ──────────────────────────────────────────────
@@ -350,16 +423,14 @@ function LlmCallEntry({
   partsMode,
   open,
   onToggle,
-  callId,
-  rootRef,
+  searchHit,
 }: {
   call: LlmCall
   index: number
   partsMode: PartsMode
   open: boolean
   onToggle: () => void
-  callId: string
-  rootRef: (el: HTMLDivElement | null) => void
+  searchHit: CallSearchHit | null
 }) {
   const [historyOpen, setHistoryOpen] = useState(false)
   const req = call.request
@@ -368,16 +439,16 @@ function LlmCallEntry({
   const tokenLine = tokensInOut(usage)
   const headline = replyHeadline(res)
 
+  // When search hits history, open that section so the match is reachable.
+  useEffect(() => {
+    if (searchHit?.inHistory) setHistoryOpen(true)
+  }, [searchHit])
+
   return (
-    <div
-      id={callId}
-      ref={rootRef}
-      className="debug-trace-block shrink-0 rounded-lg border border-border/40 overflow-clip scroll-mt-14"
-    >
-      {/* Sticky-friendly call chrome */}
+    <div className={`trace-call shrink-0${open ? " is-open" : ""}`}>
       <button
         type="button"
-        className="trace-call-header flex items-start gap-3 px-3 py-3 w-full text-left hover:bg-elevated/35 transition-colors"
+        className="trace-call-header flex items-start gap-3 px-3 py-3 w-full text-left transition-colors"
         onClick={onToggle}
       >
         {open ? (
@@ -403,11 +474,16 @@ function LlmCallEntry({
           {tokenLine && (
             <div className="text-sm text-text-muted mt-0.5 font-mono">{tokenLine}</div>
           )}
+          {searchHit && searchHit.reasons.length > 0 && (
+            <div className="text-sm text-text-muted mt-1">
+              Matched {searchHit.reasons.join(" · ")}
+            </div>
+          )}
         </div>
       </button>
 
       {open && (
-        <div className="border-t border-border/25">
+        <div>
           {/* History — secondary */}
           <div className="px-3 py-2 border-b border-border/20">
             <button
@@ -528,10 +604,9 @@ export function DebugInspector() {
   const [partsMode, setPartsMode] = useState<PartsMode>("collapsed")
   const [search, setSearch] = useState("")
   const [openCalls, setOpenCalls] = useState<Set<number>>(() => new Set())
-  const [activeNav, setActiveNav] = useState(0)
   const scrollRef = useRef<HTMLDivElement>(null)
-  const callElsRef = useRef<Map<number, HTMLDivElement>>(new Map())
   const seededOpenRef = useRef(false)
+  const searchOpenSeedRef = useRef("")
 
   const systemPrompt = useMemo(
     () => trace.find((e): e is SystemPrompt => e.kind === "system-prompt"),
@@ -547,17 +622,39 @@ export function DebugInspector() {
     [trace],
   )
 
+  const query = search.trim()
+  const callHits = useMemo(() => {
+    if (!query) return null
+    const map = new Map<number, CallSearchHit>()
+    llmCalls.forEach((call, i) => {
+      const hit = searchCall(call, i, query)
+      if (hit) map.set(i, hit)
+    })
+    return map
+  }, [llmCalls, query])
+
   // Open the latest call by default once we have data.
   useEffect(() => {
     if (seededOpenRef.current || llmCalls.length === 0) return
     seededOpenRef.current = true
     setOpenCalls(new Set([llmCalls.length - 1]))
-    setActiveNav(llmCalls.length - 1)
   }, [llmCalls.length])
 
   useEffect(() => {
     seededOpenRef.current = false
+    searchOpenSeedRef.current = ""
   }, [activeRunId])
+
+  // Searching opens matching calls so results are immediately readable.
+  useEffect(() => {
+    if (!query || !callHits) {
+      searchOpenSeedRef.current = ""
+      return
+    }
+    if (searchOpenSeedRef.current === query) return
+    searchOpenSeedRef.current = query
+    setOpenCalls(new Set(callHits.keys()))
+  }, [query, callHits])
 
   // Follow new entries only when near the bottom.
   useEffect(() => {
@@ -566,27 +663,6 @@ export function DebugInspector() {
     const distance = el.scrollHeight - el.scrollTop - el.clientHeight
     if (distance < 80) el.scrollTop = el.scrollHeight
   }, [trace.length])
-
-  // Track which call is in view for sticky nav highlight.
-  useEffect(() => {
-    const root = scrollRef.current
-    if (!root || llmCalls.length === 0) return
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const visible = entries
-          .filter((e) => e.isIntersecting)
-          .sort((a, b) => b.intersectionRatio - a.intersectionRatio)
-        const top = visible[0]
-        if (!top?.target.id) return
-        const match = /^trace-call-(\d+)$/.exec(top.target.id)
-        if (!match) return
-        setActiveNav(Number(match[1]))
-      },
-      { root, rootMargin: "-10% 0px -55% 0px", threshold: [0.1, 0.35, 0.6] },
-    )
-    for (const el of callElsRef.current.values()) observer.observe(el)
-    return () => observer.disconnect()
-  }, [llmCalls.length, filter])
 
   const stats = useMemo(() => {
     let promptTokens = 0
@@ -616,13 +692,31 @@ export function DebugInspector() {
     }
   }, [toolsResolved, llmCalls])
 
-  const matchesSearch = useCallback(
-    (text: string) => {
-      if (!search) return true
-      return text.toLowerCase().includes(search.toLowerCase())
-    },
-    [search],
-  )
+  const filteredTools = useMemo(() => {
+    if (!toolsResolved) return []
+    if (!query) return toolsResolved.tools
+    const q = query.toLowerCase()
+    return toolsResolved.tools.filter(
+      (t) =>
+        t.name.toLowerCase().includes(q) || t.description.toLowerCase().includes(q),
+    )
+  }, [toolsResolved, query])
+
+  const filteredSql = useMemo(() => {
+    if (!query) return sqlQualityEntries
+    const q = query.toLowerCase()
+    return sqlQualityEntries.filter((entry) => {
+      return (
+        entry.toolName.toLowerCase().includes(q) ||
+        entry.phase.toLowerCase().includes(q) ||
+        entry.sqlPreview.toLowerCase().includes(q) ||
+        (entry.validationCode?.toLowerCase().includes(q) ?? false)
+      )
+    })
+  }, [sqlQualityEntries, query])
+
+  const promptMatches =
+    !query || (systemPrompt?.text.toLowerCase().includes(query.toLowerCase()) ?? false)
 
   const hasDebugData =
     Boolean(systemPrompt) ||
@@ -633,6 +727,42 @@ export function DebugInspector() {
   const showCalls = filter === "calls" || filter === "all"
   const showContext = filter === "context" || filter === "all"
 
+  const visibleCallIndexes = useMemo(() => {
+    if (!callHits) return llmCalls.map((_, i) => i)
+    return [...callHits.keys()]
+  }, [llmCalls, callHits])
+
+  const searchStatus = useMemo(() => {
+    if (!query) return null
+    const callPart =
+      showCalls && llmCalls.length > 0
+        ? `${callHits?.size ?? 0} of ${llmCalls.length} calls`
+        : null
+    const contextBits: string[] = []
+    if (showContext && systemPrompt && promptMatches) contextBits.push("prompt")
+    if (showContext && filteredTools.length > 0) {
+      contextBits.push(`${filteredTools.length} tool${filteredTools.length === 1 ? "" : "s"}`)
+    }
+    if (showContext && filteredSql.length > 0) {
+      contextBits.push(`${filteredSql.length} sql`)
+    }
+    const parts = [callPart, contextBits.length > 0 ? contextBits.join(" · ") : null].filter(
+      Boolean,
+    )
+    if (parts.length === 0) return "No matches"
+    return parts.join(" · ")
+  }, [
+    query,
+    showCalls,
+    showContext,
+    llmCalls.length,
+    callHits,
+    systemPrompt,
+    promptMatches,
+    filteredTools.length,
+    filteredSql.length,
+  ])
+
   function toggleCall(index: number) {
     setOpenCalls((prev) => {
       const next = new Set(prev)
@@ -640,23 +770,6 @@ export function DebugInspector() {
       else next.add(index)
       return next
     })
-  }
-
-  function jumpToCall(index: number) {
-    setOpenCalls((prev) => new Set(prev).add(index))
-    setActiveNav(index)
-    setFilter((f) => (f === "context" ? "calls" : f))
-    requestAnimationFrame(() => {
-      callElsRef.current.get(index)?.scrollIntoView({
-        block: "start",
-        behavior: "smooth",
-      })
-    })
-  }
-
-  function bindCallEl(index: number, el: HTMLDivElement | null) {
-    if (el) callElsRef.current.set(index, el)
-    else callElsRef.current.delete(index)
   }
 
   const summaryLine = useMemo(() => {
@@ -676,7 +789,6 @@ export function DebugInspector() {
 
   return (
     <div className="trace-widget flex flex-col h-full gap-2">
-      {/* Readable summary — prose, not cryptic chips */}
       <div className="shrink-0 px-0.5 space-y-0.5">
         <div className="text-base text-text font-medium">{summaryLine}</div>
         {tokenLine && (
@@ -689,7 +801,6 @@ export function DebugInspector() {
         )}
       </div>
 
-      {/* Filters · parts · search */}
       <div className="flex items-center gap-2 shrink-0 flex-wrap">
         <div className="flex items-center gap-1 bg-elevated/30 rounded-lg p-0.5">
           {(
@@ -740,48 +851,33 @@ export function DebugInspector() {
           ))}
         </div>
 
-        <div className="flex items-center gap-1.5 flex-1 min-w-[8rem] ml-auto bg-elevated/30 rounded-lg px-2 py-1.5">
+        <div className="flex items-center gap-1.5 flex-1 min-w-[10rem] ml-auto bg-elevated/30 rounded-lg px-2 py-1.5">
           <Search size={14} className="text-text-muted/50 shrink-0" />
           <input
-            type="text"
-            placeholder="Search…"
+            type="search"
+            placeholder="Filter: tool name, reply text, iter 3…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="bg-transparent text-sm text-text w-full outline-none placeholder:text-text-muted/30"
+            className="bg-transparent text-sm text-text w-full outline-none placeholder:text-text-muted/35"
+            aria-label="Filter trace"
           />
+          {search && (
+            <button
+              type="button"
+              className="p-0.5 rounded text-text-muted/50 hover:text-text-muted"
+              onClick={() => setSearch("")}
+              title="Clear filter"
+              aria-label="Clear filter"
+            >
+              <X size={14} />
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Sticky jump rail — always reachable while scrolling */}
-      {showCalls && llmCalls.length > 1 && (
-        <div className="trace-call-nav shrink-0">
-          <div className="trace-call-nav__inner">
-            {llmCalls.map((call, i) => {
-              const res = call.response
-              const label = `Call ${i + 1}`
-              const sub = res
-                ? res.toolCalls.length > 0
-                  ? res.toolCalls[0]!.name
-                  : "answer"
-                : "…"
-              return (
-                <button
-                  key={`nav-${call.request.iteration}-${i}`}
-                  type="button"
-                  className={
-                    activeNav === i
-                      ? "trace-call-nav__btn trace-call-nav__btn--active"
-                      : "trace-call-nav__btn"
-                  }
-                  onClick={() => jumpToCall(i)}
-                  title={`Iteration ${call.request.iteration + 1}${res ? ` · ${formatMs(res.durationMs)}` : ""}`}
-                >
-                  <span className="trace-call-nav__label">{label}</span>
-                  <span className="trace-call-nav__sub">{sub}</span>
-                </button>
-              )
-            })}
-          </div>
+      {searchStatus && (
+        <div className="text-sm text-text-muted shrink-0 px-0.5">
+          {searchStatus}
         </div>
       )}
 
@@ -804,7 +900,19 @@ export function DebugInspector() {
           />
         )}
 
-        {showContext && systemPrompt && matchesSearch(systemPrompt.text) && (
+        {activeRunId &&
+          hasDebugData &&
+          query &&
+          visibleCallIndexes.length === 0 &&
+          !(showContext && (promptMatches || filteredTools.length > 0 || filteredSql.length > 0)) && (
+            <EmptyState
+              icon={WIDGET_ICONS["debug-inspector"]}
+              message={`No matches for “${query}”`}
+              detail="Try a tool name, part of the agent reply, or an iteration number"
+            />
+          )}
+
+        {showContext && systemPrompt && promptMatches && (
           <Section
             label="System prompt"
             badge={`${formatCharCount(systemPrompt.text.length)} chars`}
@@ -819,78 +927,85 @@ export function DebugInspector() {
           </Section>
         )}
 
-        {showContext && toolsResolved && (
-          <Section label="Tools available" badge={`${toolsResolved.tools.length}`}>
+        {showContext && toolsResolved && filteredTools.length > 0 && (
+          <Section
+            label="Tools available"
+            badge={
+              query
+                ? `${filteredTools.length} of ${toolsResolved.tools.length}`
+                : `${toolsResolved.tools.length}`
+            }
+          >
             <div className="space-y-1.5">
-              {toolsResolved.tools
-                .filter((t) => matchesSearch(`${t.name} ${t.description}`))
-                .map((t) => (
-                  <ToolDefinition key={t.name} tool={t} />
-                ))}
+              {filteredTools.map((t) => (
+                <ToolDefinition key={t.name} tool={t} />
+              ))}
             </div>
           </Section>
         )}
 
-        {showContext && sqlQualityEntries.length > 0 && (
-          <Section label="SQL quality" badge={`${sqlQualityEntries.length}`}>
+        {showContext && filteredSql.length > 0 && (
+          <Section
+            label="SQL quality"
+            badge={
+              query
+                ? `${filteredSql.length} of ${sqlQualityEntries.length}`
+                : `${sqlQualityEntries.length}`
+            }
+          >
             <div className="space-y-1.5">
-              {sqlQualityEntries
-                .filter((entry) => matchesSearch(JSON.stringify(entry)))
-                .map((entry, index) => {
-                  const notes: string[] = []
-                  if (entry.validationCode) notes.push(`blocked=${entry.validationCode}`)
-                  if (entry.missingPersistedMirrorCandidates.length > 0) {
-                    notes.push(
-                      `mirror=${entry.missingPersistedMirrorCandidates.join(",")}`,
-                    )
-                  }
-                  return (
-                    <div
-                      key={`${entry.toolCallId}-${index}`}
-                      className="border border-border/30 rounded px-2.5 py-2"
-                    >
-                      <div className="flex items-baseline gap-2 flex-wrap">
-                        <span className="text-base font-medium text-text">
-                          {entry.phase}
+              {filteredSql.map((entry, index) => {
+                const notes: string[] = []
+                if (entry.validationCode) notes.push(`blocked=${entry.validationCode}`)
+                if (entry.missingPersistedMirrorCandidates.length > 0) {
+                  notes.push(
+                    `mirror=${entry.missingPersistedMirrorCandidates.join(",")}`,
+                  )
+                }
+                return (
+                  <div
+                    key={`${entry.toolCallId}-${index}`}
+                    className="border border-border/30 rounded px-2.5 py-2"
+                  >
+                    <div className="flex items-baseline gap-2 flex-wrap">
+                      <span className="text-base font-medium text-text">
+                        {entry.phase}
+                      </span>
+                      <span className="text-base font-mono text-text-secondary">
+                        {entry.toolName}
+                      </span>
+                      <span className="text-sm text-text-muted">
+                        Iteration {entry.iteration + 1}
+                      </span>
+                      {entry.durationMs != null && (
+                        <span className="text-sm text-text-muted ml-auto">
+                          {formatMs(entry.durationMs)}
                         </span>
-                        <span className="text-base font-mono text-text-secondary">
-                          {entry.toolName}
-                        </span>
-                        <span className="text-sm text-text-muted">
-                          Iteration {entry.iteration + 1}
-                        </span>
-                        {entry.durationMs != null && (
-                          <span className="text-sm text-text-muted ml-auto">
-                            {formatMs(entry.durationMs)}
-                          </span>
-                        )}
-                      </div>
-                      <div className="text-sm text-text-muted mt-1">
-                        {notes.join(" · ") || "ok"}
-                      </div>
-                      {entry.sqlPreview && (
-                        <div className="mt-1">
-                          <ExpandableText
-                            text={entry.sqlPreview}
-                            className="code-pre"
-                            previewChars={240}
-                            maxExpandedHeight={320}
-                          />
-                        </div>
                       )}
                     </div>
-                  )
-                })}
+                    <div className="text-sm text-text-muted mt-1">
+                      {notes.join(" · ") || "ok"}
+                    </div>
+                    {entry.sqlPreview && (
+                      <div className="mt-1">
+                        <ExpandableText
+                          text={entry.sqlPreview}
+                          className="code-pre"
+                          previewChars={240}
+                          maxExpandedHeight={320}
+                        />
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
             </div>
           </Section>
         )}
 
         {showCalls &&
-          llmCalls.map((call, i) => {
-            if (search) {
-              const blob = JSON.stringify(call.request) + JSON.stringify(call.response)
-              if (!blob.toLowerCase().includes(search.toLowerCase())) return null
-            }
+          visibleCallIndexes.map((i) => {
+            const call = llmCalls[i]!
             return (
               <LlmCallEntry
                 key={`llm-${call.request.iteration}-${i}`}
@@ -899,8 +1014,7 @@ export function DebugInspector() {
                 partsMode={partsMode}
                 open={openCalls.has(i)}
                 onToggle={() => toggleCall(i)}
-                callId={`trace-call-${i}`}
-                rootRef={(el) => bindCallEl(i, el)}
+                searchHit={callHits?.get(i) ?? null}
               />
             )
           })}
