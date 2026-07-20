@@ -105,7 +105,7 @@ const STATUS_MESSAGE_BOX: Record<OperationStatus, string> = {
 }
 
 const LOG_ROW_ACTION =
-  "shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 text-[0.8125rem] font-mono text-accent hover:text-accent-hover hover:bg-accent/10 rounded transition-colors"
+  "shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 text-sm font-mono text-accent hover:text-accent-hover hover:bg-accent/10 rounded transition-colors"
 
 function StatusMessage({ status, children }: { status: OperationStatus; children: ReactNode }) {
   return (
@@ -606,7 +606,7 @@ export function OperationLog() {
       {/* ── Body — bottom padding keeps the last card off the widget lip ─ */}
       <div ref={scrollRef} className="flex min-h-0 flex-1 flex-col overflow-y-auto pr-1 pb-4">
         {loading && filtered.length === 0 && (
-          <div className="flex flex-1 items-center justify-center gap-2 text-center text-xs text-text-muted/60">
+          <div className="flex flex-1 items-center justify-center gap-2 text-center text-sm text-text-muted/60">
             <Loader2 size={14} className="animate-spin" />
             Loading operations…
           </div>
@@ -636,7 +636,7 @@ export function OperationLog() {
         {hasMore && (
           <div ref={sentinelRef} className="py-6 flex justify-center">
             {loadingMore && (
-              <span className="text-xs text-text-muted/60 flex items-center gap-2">
+              <span className="text-sm text-text-muted/60 flex items-center gap-2">
                 <Loader2 size={12} className="animate-spin" />
                 Loading more…
               </span>
@@ -697,8 +697,8 @@ export function OperationPipelineList({
           <button
             className={`sticky top-0 z-10 w-full flex items-center gap-1.5 px-2 py-1 mb-1 text-left ${
               linear
-                ? "text-[11px] font-medium uppercase tracking-wider text-text-muted bg-surface/95 backdrop-blur-sm"
-                : "text-xs uppercase tracking-wider text-text-muted/50 bg-surface/80 backdrop-blur-sm hover:text-text-muted/80"
+                ? "text-sm font-medium uppercase tracking-wider text-text-muted bg-surface/95 backdrop-blur-sm"
+                : "text-sm uppercase tracking-wider text-text-muted/50 bg-surface/80 backdrop-blur-sm hover:text-text-muted/80"
             } transition-colors`}
             onClick={() => toggleDay(group.label)}
           >
@@ -781,10 +781,10 @@ function PipelineRow({ pipeline, expanded, onToggle, actExpanded, toggleActivity
                 <span className={`${OP_LOG_MONO} font-normal ${OP_LOG_DESC}`}> · {formattedSubtitle}</span>
               )}
             </span>
-            <span className={`shrink-0 tabular-nums text-[13px] ${OP_LOG_MUTED}`}>
+            <span className={`shrink-0 tabular-nums ${OP_LOG} ${OP_LOG_MUTED}`}>
               {fmtDuration(pipeline.durationMs)}
             </span>
-            <span className={`shrink-0 tabular-nums text-[13px] w-[4.5rem] text-right ${OP_LOG_MUTED}`}>
+            <span className={`shrink-0 tabular-nums ${OP_LOG} w-[4.5rem] text-right ${OP_LOG_MUTED}`}>
               {fmtTime(pipeline.startedAt)}
             </span>
           </button>
@@ -808,7 +808,7 @@ function PipelineRow({ pipeline, expanded, onToggle, actExpanded, toggleActivity
               </div>
             )}
             {pipeline.activities.length === 0 && (
-              <div className="px-3 py-2 text-xs text-text-muted">No activities recorded.</div>
+              <div className="px-3 py-2 text-sm text-text-muted">No activities recorded.</div>
             )}
             {pipeline.activities.map((a, idx) => {
               const key = pipelineActivityKey(pipeline.id, a.id)
@@ -880,7 +880,7 @@ function PipelineRow({ pipeline, expanded, onToggle, actExpanded, toggleActivity
             </div>
           )}
           {pipeline.activities.length === 0 && (
-            <div className="px-2.5 py-2 text-xs text-text-muted">No activities recorded.</div>
+            <div className="px-2.5 py-2 text-sm text-text-muted">No activities recorded.</div>
           )}
           {pipeline.activities.map((a, idx) => {
             const key = pipelineActivityKey(pipeline.id, a.id)

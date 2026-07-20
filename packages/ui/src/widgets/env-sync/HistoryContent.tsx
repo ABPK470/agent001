@@ -365,7 +365,7 @@ export function HistoryContent({
             <button
               type="button"
               onClick={clearFilters}
-              className="text-xs font-medium text-text-muted hover:text-text"
+              className="text-sm font-medium text-text-muted hover:text-text"
             >
               Clear all
             </button>
@@ -463,7 +463,7 @@ export function HistoryContent({
                 <button
                   type="button"
                   onClick={clearFilters}
-                  className="text-xs text-accent hover:text-accent/80 transition-colors"
+                  className="text-sm text-accent hover:text-accent/80 transition-colors"
                 >
                   Clear filters
                 </button>
@@ -552,7 +552,7 @@ function HistorySearchBar({
         >
           <ChevronLeft size={14} />
         </button>
-        <span className="font-mono text-[11px] tabular-nums text-text-muted">
+        <span className="font-mono text-sm tabular-nums text-text-muted">
           {page}
           {totalPages > 0 ? `/${totalPages}` : ""}
         </span>
@@ -737,11 +737,11 @@ function HistoryRunRow({
       {open && (
         <div className="px-3 py-2.5 bg-base/20 border-t border-border/30 space-y-2.5 text-sm">
           <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-            <code className="min-w-0 break-all text-[11px] font-mono text-text-muted">{run.planId}</code>
+            <code className="min-w-0 break-all text-sm font-mono text-text-muted">{run.planId}</code>
             {onOpen && run.planAvailable && (
               <button
                 type="button"
-                className="inline-flex items-center gap-1 text-[11px] text-accent hover:text-accent/80 transition-colors shrink-0"
+                className="inline-flex items-center gap-1 text-sm text-accent hover:text-accent/80 transition-colors shrink-0"
                 onClick={(e) => {
                   e.stopPropagation()
                   onOpen(run.planId)
@@ -753,7 +753,7 @@ function HistoryRunRow({
             )}
           </div>
 
-          <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-text-muted">
+          <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-sm text-text-muted">
             <MetaItem label="Actor" value={run.actorUpn ?? "—"} />
             <MetaSep />
             <MetaItem label="Route" value={`${run.source} → ${run.target}`} mono />
@@ -774,7 +774,7 @@ function HistoryRunRow({
           </div>
 
           {run.error && (
-            <div className="rounded-md border border-error/20 bg-error/5 px-2.5 py-1.5 text-[11px] font-mono leading-relaxed break-all text-error">
+            <div className="rounded-md border border-error/20 bg-error/5 px-2.5 py-1.5 text-sm font-mono leading-relaxed break-all text-error">
               {run.error}
             </div>
           )}
@@ -841,7 +841,7 @@ function HistoryRunDetail({
     <>
       <div className="rounded-md border border-border-subtle overflow-hidden">
         {planLoading && (
-          <div className="flex items-center gap-2 px-3 py-2 text-xs text-text-muted border-b border-border/30">
+          <div className="flex items-center gap-2 px-3 py-2 text-sm text-text-muted border-b border-border/30">
             <Loader2 size={12} className="animate-spin" />
             Loading persisted plan…
           </div>
@@ -854,13 +854,13 @@ function HistoryRunDetail({
         {showTimeline && (
           <div className="px-3 py-2">
             <div className="flex items-center justify-between gap-2 mb-1.5">
-              <span className="field-label mb-0">What happened</span>
+              <span className="text-sm font-medium text-text-muted">What happened</span>
               {!sqlTraceLoading && timeline.length > 0 && (
-                <span className="text-xs font-mono text-text tabular-nums">{timeline.length} events</span>
+                <span className="text-sm font-mono text-text tabular-nums">{timeline.length} events</span>
               )}
             </div>
             {sqlTraceLoading && timeline.length === 0 ? (
-              <div className="flex items-center gap-2 text-xs text-text-muted py-1">
+              <div className="flex items-center gap-2 text-sm text-text-muted py-1">
                 <Loader2 size={12} className="animate-spin" />
                 Loading run timeline…
               </div>
@@ -878,7 +878,7 @@ function HistoryRunDetail({
                     const jsonKey = `${key}:json`
                     return (
                       <div key={key}>
-                        <div className="flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-elevated/30 transition-colors">
+                        <div className="flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-elevated/30 transition-colors">
                           <span className="font-medium shrink-0" style={tone ? { color: tone } : undefined}>
                             {formatAuditAction(entry.event.action)}
                           </span>
@@ -889,7 +889,7 @@ function HistoryRunDetail({
                           {entry.event.detail != null && (
                             <button
                               type="button"
-                              className="text-[10px] uppercase tracking-wide text-accent hover:text-accent-hover shrink-0"
+                              className="text-sm text-accent hover:text-accent-hover shrink-0"
                               onClick={() => setExpandedJson((v) => (v === jsonKey ? null : jsonKey))}
                             >
                               {expandedJson === jsonKey ? "hide" : "detail"}
@@ -922,7 +922,7 @@ function HistoryRunDetail({
                     item.rowCount != null ? `${item.rowCount} rows` : null,
                   ].filter(Boolean).join(" · ")
                   return (
-                    <div key={key} className="flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-elevated/30 transition-colors">
+                    <div key={key} className="flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-elevated/30 transition-colors">
                       <span className="font-medium text-text shrink-0">SQL · {item.label}</span>
                       <span className="text-text-muted truncate min-w-0 flex-1">{detail}</span>
                       <span className="text-text-muted font-mono tabular-nums shrink-0">
@@ -930,7 +930,7 @@ function HistoryRunDetail({
                       </span>
                       <button
                         type="button"
-                        className="text-[10px] uppercase tracking-wide text-accent hover:text-accent-hover shrink-0 font-mono"
+                        className="text-sm text-accent hover:text-accent-hover shrink-0 font-mono"
                         onClick={() => setSqlModal(fields)}
                       >
                         SQL
@@ -943,7 +943,7 @@ function HistoryRunDetail({
             {sqlTrace && sqlTrace.count < sqlTrace.total && (
               <button
                 type="button"
-                className="mt-2 text-xs text-accent hover:text-accent-hover font-mono"
+                className="mt-2 text-sm text-accent hover:text-accent-hover font-mono"
                 disabled={sqlTraceLoadingMore}
                 onClick={onLoadMoreSql}
               >

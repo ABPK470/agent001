@@ -132,8 +132,8 @@ export function HistoryPlanTables({ plan }: { plan: SyncPlan }) {
     <>
       <div className="space-y-1.5">
         <div className="flex items-center justify-between gap-2">
-          <span className="field-label">Plan tables</span>
-          <span className="text-xs font-mono text-text tabular-nums">
+          <span className="text-sm font-medium text-text-muted">Plan tables</span>
+          <span className="text-sm font-mono text-text tabular-nums">
             {changedCount > 0 ? `${changedCount} with changes` : "no changes"} · {sorted.length} total
           </span>
         </div>
@@ -142,7 +142,6 @@ export function HistoryPlanTables({ plan }: { plan: SyncPlan }) {
             <PlanTableSummaryRow
               key={row.table}
               row={row}
-              compact
               onOpen={() => setSelectedTable(row)}
             />
           ))}
@@ -179,7 +178,7 @@ export function HistoryPlanTableModal({
       stackLevel={1}
       onClose={onClose}
       footer={
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-mono tabular-nums text-text-muted">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm font-mono tabular-nums text-text-muted">
           {movement.insert > 0 && <span style={{ color: DIFF.ins }}>{movement.insert.toLocaleString()} ins</span>}
           {movement.update > 0 && <span style={{ color: DIFF.upd }}>{movement.update.toLocaleString()} upd</span>}
           {movement.delete > 0 && <span style={{ color: DIFF.del }}>{movement.delete.toLocaleString()} del</span>}
@@ -218,7 +217,7 @@ function PlanTableSummaryRow({
   const hasActivity = net(row) > 0 || row.conflicts.length > 0
   const interactive = Boolean(onToggle ?? onOpen)
   const py = compact ? "py-1.5" : "py-2"
-  const textSize = compact ? "text-xs" : "text-sm"
+  const textSize = "text-sm"
   const showRunning = status === "running" || status === "applying"
 
   return (
@@ -261,8 +260,8 @@ function PlanTableSummaryRow({
         <Ct n={row.conflicts.length} color="var(--color-warning)" label="conflict" compact={compact} neutral={compact} />
       )}
       <Ct n={row.stats.unchanged} color={DIFF.eqDim} label="eq" dim compact={compact} neutral={compact} />
-      {onOpen && compact && (
-        <span className="text-[10px] uppercase tracking-wide text-text-muted/40 opacity-0 transition-opacity group-hover:opacity-100 shrink-0">
+      {onOpen && (
+        <span className="text-sm text-text-muted/40 opacity-0 transition-opacity group-hover:opacity-100 shrink-0">
           Open
         </span>
       )}
@@ -343,7 +342,6 @@ function Ct({
   color,
   label,
   dim,
-  compact,
   neutral,
 }: {
   n: number
@@ -357,7 +355,7 @@ function Ct({
   if (neutral) {
     return (
       <span
-        className={`${compact ? "text-xs" : "text-sm"} font-mono tabular-nums shrink-0 ${
+        className={`text-sm font-mono tabular-nums shrink-0 ${
           dim ? "text-text-muted" : "text-text"
         }`}
       >
@@ -367,7 +365,7 @@ function Ct({
   }
   return (
     <span
-      className={`${compact ? "text-xs" : "text-sm"} font-mono tabular-nums shrink-0`}
+      className="text-sm font-mono tabular-nums shrink-0"
       style={{ color, opacity: dim ? 0.4 : 1 }}
     >
       {n.toLocaleString()} <span className="opacity-60">{label}</span>
