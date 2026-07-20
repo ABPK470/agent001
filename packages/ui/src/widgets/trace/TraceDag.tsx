@@ -305,7 +305,7 @@ function ToolRow({
         ) : (
           <ChevronRight size={12} className="trace-scope__chev" />
         )}
-        <span className="font-mono text-sm">{tool.name}</span>
+        <span className="font-mono">{tool.name}</span>
         {!open && (
           <span className="trace-row__preview font-mono">{tool.id.slice(0, 12)}</span>
         )}
