@@ -1,7 +1,9 @@
 /**
- * Hybrid Trace DAG view — vertical LLM spine + soft tool/result branches.
+ * Trace outline — chronological scopes with VS Code–style sticky parents.
  *
- * Flat peer handlers; open state is explicit Sets, not nested closures.
+ * Flow per call: Sent → Received → Next (tools).
+ * Sticky stack builds as you scroll: Call → Sent → Received.
+ * Everything collapses to one-line summaries; expand only what you need.
  */
 
 import { Check, ChevronDown, ChevronRight, Copy, Search, X } from "lucide-react"
@@ -10,6 +12,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type ReactNode,
 } from "react"
 import { JsonViewer } from "../../components/JsonViewer"
@@ -25,7 +28,40 @@ import {
   type TraceToolCall,
 } from "./build-trace-dag"
 
-// ── Shared chrome ────────────────────────────────────────────────
+const STICKY_ROW_H = 28
+
+// ── Open-state (explicit, flat) ──────────────────────────────────
+
+type OpenState = {
+  preamble: boolean
+  calls: Set<number>
+  sent: Set<number>
+  received: Set<number>
+  messages: Set<string>
+  tools: Set<string>
+}
+
+function emptyOpen(): OpenState {
+  return {
+    preamble: false,
+    calls: new Set(),
+    sent: new Set(),
+    received: new Set(),
+    messages: new Set(),
+    tools: new Set(),
+  }
+}
+
+function seedLatest(callCount: number): OpenState {
+  const next = emptyOpen()
+  if (callCount === 0) return next
+  // Latest call open as an outline only — Sent / Received stay collapsed
+  // so sticky parents + one-line summaries are readable at a glance.
+  next.calls.add(callCount - 1)
+  return next
+}
+
+// ── Shared helpers ───────────────────────────────────────────────
 
 function useCopyFeedback() {
   const [copied, setCopied] = useState(false)
@@ -39,14 +75,17 @@ function useCopyFeedback() {
 
   function copyValue(value: string, e?: { stopPropagation: () => void }) {
     e?.stopPropagation()
-    void navigator.clipboard.writeText(value).then(() => {
-      if (clearTimerRef.current) clearTimeout(clearTimerRef.current)
-      setCopied(true)
-      clearTimerRef.current = setTimeout(() => {
-        setCopied(false)
-        clearTimerRef.current = null
-      }, 1600)
-    }).catch(() => { /* ignore */ })
+    void navigator.clipboard
+      .writeText(value)
+      .then(() => {
+        if (clearTimerRef.current) clearTimeout(clearTimerRef.current)
+        setCopied(true)
+        clearTimerRef.current = setTimeout(() => {
+          setCopied(false)
+          clearTimerRef.current = null
+        }, 1600)
+      })
+      .catch(() => { /* ignore */ })
   }
 
   return { copied, copyValue }
@@ -87,18 +126,65 @@ function formatCharCount(n: number): string {
   return n.toLocaleString()
 }
 
-const TEXT_PREVIEW_CHARS = 400
+function shortLine(text: string, max = 72): string {
+  const line = text.replace(/\s+/g, " ").trim()
+  if (!line) return ""
+  return line.length > max ? `${line.slice(0, max - 1)}…` : line
+}
+
+function StickyRow({
+  depth,
+  open,
+  onToggle,
+  leading,
+  title,
+  summary,
+  trailing,
+  soft = false,
+}: {
+  depth: number
+  open: boolean
+  onToggle: () => void
+  leading: string
+  title: string
+  summary?: string
+  trailing?: ReactNode
+  soft?: boolean
+}) {
+  const style = {
+    ["--trace-sticky-top" as string]: `${depth * STICKY_ROW_H}px`,
+    ["--trace-sticky-z" as string]: String(40 - depth),
+  } as CSSProperties
+
+  return (
+    <button
+      type="button"
+      className={`trace-sticky${open ? " is-open" : ""}${soft ? " is-soft" : ""}`}
+      style={style}
+      onClick={onToggle}
+      aria-expanded={open}
+    >
+      {open ? (
+        <ChevronDown size={13} className="trace-sticky__chev" />
+      ) : (
+        <ChevronRight size={13} className="trace-sticky__chev" />
+      )}
+      <span className="trace-sticky__lead">{leading}</span>
+      <span className="trace-sticky__title">{title}</span>
+      {summary && <span className="trace-sticky__sum">{summary}</span>}
+      {trailing && <span className="trace-sticky__trail">{trailing}</span>}
+    </button>
+  )
+}
 
 function ExpandableText({
   text,
-  className = "trace-prose",
-  previewChars = TEXT_PREVIEW_CHARS,
-  maxExpandedHeight,
+  className,
+  previewChars = 280,
 }: {
   text: string
-  className?: string
+  className: string
   previewChars?: number
-  maxExpandedHeight?: number
 }) {
   const [expanded, setExpanded] = useState(false)
   const isLong = text.length > previewChars
@@ -111,16 +197,7 @@ function ExpandableText({
 
   return (
     <div className="min-w-0">
-      <pre
-        className={className}
-        style={
-          expanded && maxExpandedHeight
-            ? { maxHeight: maxExpandedHeight, overflowY: "auto" }
-            : undefined
-        }
-      >
-        {display}
-      </pre>
+      <pre className={className}>{display}</pre>
       {isLong && (
         <button
           type="button"
@@ -128,132 +205,66 @@ function ExpandableText({
           onClick={() => setExpanded((v) => !v)}
           aria-expanded={expanded}
         >
-          {expanded
-            ? "Show less"
-            : `Show more · ${formatCharCount(text.length)} chars`}
+          {expanded ? "Show less" : `Show more · ${formatCharCount(text.length)} chars`}
         </button>
       )}
     </div>
   )
 }
 
-// ── Header ───────────────────────────────────────────────────────
+// ── Prompt message (one line until expanded) ─────────────────────
 
-function TraceHeader({
-  dag,
-  runId,
-  threadId,
-  search,
-  onSearchChange,
-  searchStatus,
+function PromptMessageRow({
+  msg,
+  open,
+  onToggle,
 }: {
-  dag: TraceDag
-  runId: string | null
-  threadId: string | null
-  search: string
-  onSearchChange: (value: string) => void
-  searchStatus: string | null
+  msg: TracePromptMessage
+  open: boolean
+  onToggle: () => void
 }) {
-  const { stats } = dag
-  return (
-    <div className="trace-header shrink-0">
-      <div className="trace-header__meta">
-        {stats.callCount === 0 ? (
-          <span>No model calls yet</span>
-        ) : (
-          <>
-            <span>
-              {stats.callCount} call{stats.callCount === 1 ? "" : "s"}
-            </span>
-            {stats.totalDuration > 0 && (
-              <>
-                <span className="trace-header__sep" aria-hidden />
-                <span className="tabular-nums">{formatMs(stats.totalDuration)}</span>
-              </>
-            )}
-            {(stats.promptTokens > 0 || stats.completionTokens > 0) && (
-              <>
-                <span className="trace-header__sep" aria-hidden />
-                <span className="tabular-nums text-text-muted">
-                  {fmtTokens(stats.promptTokens)} in
-                  <span className="opacity-40"> · </span>
-                  {fmtTokens(stats.completionTokens)} out
-                </span>
-              </>
-            )}
-          </>
-        )}
-      </div>
-
-      {(runId || threadId) && (
-        <div className="trace-header__ids">
-          {runId && <IdChip label="run" value={runId} />}
-          {threadId && <IdChip label="thread" value={threadId} />}
-        </div>
-      )}
-
-      <div className="trace-search">
-        <Search size={14} className="trace-search__icon" />
-        <input
-          type="search"
-          placeholder="Filter calls, tools, reply…"
-          value={search}
-          onChange={(e) => onSearchChange(e.target.value)}
-          className="trace-search__input"
-          aria-label="Filter trace"
-        />
-        {search && (
-          <button
-            type="button"
-            className="trace-search__clear"
-            onClick={() => onSearchChange("")}
-            aria-label="Clear filter"
-          >
-            <X size={14} />
-          </button>
-        )}
-      </div>
-
-      {searchStatus && (
-        <div className="trace-search__status">{searchStatus}</div>
-      )}
-    </div>
-  )
-}
-
-// ── Prompt history (secondary) ───────────────────────────────────
-
-function PromptMessage({ msg }: { msg: TracePromptMessage }) {
-  const [open, setOpen] = useState(false)
   const preview = messagePreview(msg)
   const isUserAnswer = msg.speaker === "User answer"
 
   return (
-    <div className="trace-prompt-msg">
+    <div className="trace-row">
       <button
         type="button"
-        className="trace-prompt-msg__btn"
-        onClick={() => setOpen((v) => !v)}
+        className="trace-row__btn"
+        onClick={onToggle}
         aria-expanded={open}
       >
         {open ? (
-          <ChevronDown size={12} className="shrink-0 opacity-50" />
+          <ChevronDown size={12} className="trace-sticky__chev" />
         ) : (
-          <ChevronRight size={12} className="shrink-0 opacity-50" />
+          <ChevronRight size={12} className="trace-sticky__chev" />
         )}
-        <span className={isUserAnswer ? "text-text" : undefined}>{msg.speaker}</span>
-        {msg.detail && <span className="opacity-50">{msg.detail}</span>}
-        {!open && <span className="trace-prompt-msg__preview">{preview}</span>}
+        <span className={isUserAnswer ? "trace-row__speaker is-em" : "trace-row__speaker"}>
+          {msg.speaker}
+        </span>
+        {msg.detail && <span className="trace-row__detail">{msg.detail}</span>}
+        {!open && <span className="trace-row__preview">{preview}</span>}
       </button>
       {open && (
-        <div className="trace-prompt-msg__body">
+        <div className="trace-row__body">
           {msg.toolCallId && <IdChip label="tool call" value={msg.toolCallId} />}
-          {msg.content && <ExpandableText text={msg.content} className="trace-prose-muted" />}
+          {msg.content && (
+            <ExpandableText text={msg.content} className="trace-body-muted" />
+          )}
           {!msg.content && msg.toolCalls.length === 0 && (
-            <span className="italic opacity-40">null</span>
+            <span className="trace-empty">null</span>
           )}
           {msg.toolCalls.map((tc) => (
-            <ToolBranch key={tc.id} tool={tc} compact />
+            <div key={tc.id} className="trace-tool-inline">
+              <span className="font-mono">{tc.name}</span>
+              <IdChip label="tool call" value={tc.id} />
+              <JsonViewer
+                value={tc.arguments}
+                label="arguments"
+                defaultExpandDepth={0}
+                maxHeight={160}
+              />
+            </div>
           ))}
         </div>
       )}
@@ -261,40 +272,43 @@ function PromptMessage({ msg }: { msg: TracePromptMessage }) {
   )
 }
 
-// ── Tool branch ──────────────────────────────────────────────────
+// ── Tool under “Next” ────────────────────────────────────────────
 
-function ToolBranch({
+function ToolRow({
   tool,
-  compact = false,
+  open,
+  onToggle,
 }: {
   tool: TraceToolCall
-  compact?: boolean
+  open: boolean
+  onToggle: () => void
 }) {
-  const [open, setOpen] = useState(false)
   return (
-    <div className={`trace-branch${compact ? " is-compact" : ""}`}>
+    <div className="trace-row">
       <button
         type="button"
-        className="trace-branch__btn"
-        onClick={() => setOpen((v) => !v)}
+        className="trace-row__btn"
+        onClick={onToggle}
         aria-expanded={open}
       >
         {open ? (
-          <ChevronDown size={12} className="shrink-0 opacity-50" />
+          <ChevronDown size={12} className="trace-sticky__chev" />
         ) : (
-          <ChevronRight size={12} className="shrink-0 opacity-50" />
+          <ChevronRight size={12} className="trace-sticky__chev" />
         )}
-        <span className="font-mono">{tool.name}</span>
-        <span className="trace-branch__id font-mono">{tool.id.slice(0, 10)}</span>
+        <span className="font-mono text-sm">{tool.name}</span>
+        {!open && (
+          <span className="trace-row__preview font-mono">{tool.id.slice(0, 12)}</span>
+        )}
       </button>
       {open && (
-        <div className="trace-branch__body">
+        <div className="trace-row__body">
           <IdChip label="tool call" value={tool.id} />
           <JsonViewer
             value={tool.arguments}
             label="arguments"
             defaultExpandDepth={1}
-            maxHeight={220}
+            maxHeight={200}
           />
         </div>
       )}
@@ -302,149 +316,7 @@ function ToolBranch({
   )
 }
 
-// ── Call spine node ──────────────────────────────────────────────
-
-function CallNode({
-  call,
-  open,
-  onToggle,
-  searchHit,
-}: {
-  call: TraceCallNode
-  open: boolean
-  onToggle: () => void
-  searchHit: TraceCallSearchHit | null
-}) {
-  const [promptOpen, setPromptOpen] = useState(false)
-
-  useEffect(() => {
-    if (searchHit?.inHistory) setPromptOpen(true)
-  }, [searchHit])
-
-  const usage = call.usage
-
-  return (
-    <div className={`trace-node${open ? " is-open" : ""}`}>
-      <button
-        type="button"
-        className="trace-node__head"
-        onClick={onToggle}
-        aria-expanded={open}
-      >
-        <span className="trace-node__dot" aria-hidden />
-        {open ? (
-          <ChevronDown size={14} className="shrink-0 opacity-45" />
-        ) : (
-          <ChevronRight size={14} className="shrink-0 opacity-45" />
-        )}
-        <span className="trace-node__call tabular-nums">Call {call.index + 1}</span>
-        <span className="trace-node__iter tabular-nums">iter {call.iteration + 1}</span>
-        <span className="trace-node__headline">
-          {call.headline}
-          {searchHit && searchHit.reasons.length > 0 && (
-            <span className="trace-node__match"> · matched {searchHit.reasons[0]}</span>
-          )}
-        </span>
-        <span className="trace-node__meta tabular-nums">
-          {usage && (
-            <span title="Tokens in / out">
-              {fmtTokens(usage.promptTokens)}
-              <span className="opacity-35"> / </span>
-              {fmtTokens(usage.completionTokens)}
-            </span>
-          )}
-          {call.durationMs != null && <span>{formatMs(call.durationMs)}</span>}
-        </span>
-      </button>
-
-      {open && (
-        <div className="trace-node__body">
-          <div className="trace-result">
-            <div className="trace-result__label">Result</div>
-
-            {call.waiting && (
-              <p className="trace-prose opacity-55 italic">Waiting for reply…</p>
-            )}
-
-            {!call.waiting && call.content && (
-              <ExpandableText
-                text={call.content}
-                maxExpandedHeight={480}
-              />
-            )}
-
-            {!call.waiting && call.toolBranches.length > 0 && (
-              <div className="trace-branches">
-                <div className="trace-result__sub">
-                  Called {call.toolBranches.length} tool
-                  {call.toolBranches.length === 1 ? "" : "s"}
-                </div>
-                {call.toolBranches.map((tc) => (
-                  <ToolBranch key={tc.id} tool={tc} />
-                ))}
-              </div>
-            )}
-
-            {call.askedUser && (
-              <p className="trace-result__note">
-                Waiting on the human — their answer appears on the next call as{" "}
-                <span className="text-text-secondary">User answer</span>.
-              </p>
-            )}
-
-            {!call.waiting &&
-              call.toolBranches.length === 0 &&
-              !call.content && (
-                <p className="trace-prose text-error/70 italic">
-                  Empty reply — no text and no tool calls
-                </p>
-              )}
-
-            {call.sqlQuality.length > 0 && (
-              <div className="trace-sql-inline">
-                {call.sqlQuality.map((entry, i) => (
-                  <SqlQualityRow key={`${entry.toolCallId}-${i}`} entry={entry} />
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="trace-prompt">
-            <button
-              type="button"
-              className="trace-prompt__toggle"
-              onClick={() => setPromptOpen((v) => !v)}
-              aria-expanded={promptOpen}
-            >
-              {promptOpen ? (
-                <ChevronDown size={12} className="shrink-0 opacity-45" />
-              ) : (
-                <ChevronRight size={12} className="shrink-0 opacity-45" />
-              )}
-              <span>Prompt sent to model</span>
-              <span className="opacity-45">
-                {call.messageCount} message{call.messageCount === 1 ? "" : "s"}
-              </span>
-            </button>
-            {promptOpen && (
-              <div className="trace-prompt__list">
-                {call.messages.length === 0 ? (
-                  <span className="italic opacity-40 pl-5">No messages recorded</span>
-                ) : (
-                  call.messages.map((msg, mi) => (
-                    <PromptMessage key={`${call.iteration}-${mi}`} msg={msg} />
-                  ))
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ── Context preamble ─────────────────────────────────────────────
+// ── SQL / tools context ──────────────────────────────────────────
 
 function SqlQualityRow({ entry }: { entry: TraceSqlQuality }) {
   const notes: string[] = []
@@ -453,28 +325,21 @@ function SqlQualityRow({ entry }: { entry: TraceSqlQuality }) {
     notes.push(`mirror=${entry.missingPersistedMirrorCandidates.join(",")}`)
   }
   return (
-    <div className="trace-sql-row">
-      <div className="flex items-baseline gap-2 flex-wrap">
-        <span className="font-medium text-text">{entry.phase}</span>
-        <span className="font-mono text-text-secondary">{entry.toolName}</span>
-        <span className="text-text-muted text-sm">
-          Iteration {entry.iteration + 1}
-        </span>
+    <div className="trace-ctx-item">
+      <div className="trace-ctx-item__head">
+        <span>{entry.phase}</span>
+        <span className="font-mono">{entry.toolName}</span>
+        <span className="trace-row__detail">iter {entry.iteration + 1}</span>
         {entry.durationMs != null && (
-          <span className="text-text-muted text-sm ml-auto">
-            {formatMs(entry.durationMs)}
-          </span>
+          <span className="trace-row__detail ml-auto">{formatMs(entry.durationMs)}</span>
         )}
       </div>
-      <div className="text-sm text-text-muted mt-0.5">
-        {notes.join(" · ") || "ok"}
-      </div>
+      <div className="trace-row__detail">{notes.join(" · ") || "ok"}</div>
       {entry.sqlPreview && (
         <ExpandableText
           text={entry.sqlPreview}
-          className="code-pre mt-1"
-          previewChars={240}
-          maxExpandedHeight={280}
+          className="code-pre"
+          previewChars={180}
         />
       )}
     </div>
@@ -488,15 +353,15 @@ function ToolDef({
 }) {
   const [showSchema, setShowSchema] = useState(false)
   return (
-    <div className="trace-tool-def">
-      <div className="flex items-start gap-2 min-w-0">
-        <span className="font-mono font-medium text-text shrink-0">{tool.name}</span>
-        <ExpandableText
-          text={tool.description}
-          className="trace-prose-muted"
-          previewChars={160}
-        />
+    <div className="trace-ctx-item">
+      <div className="trace-ctx-item__head">
+        <span className="font-mono">{tool.name}</span>
       </div>
+      <ExpandableText
+        text={tool.description}
+        className="trace-body-muted"
+        previewChars={120}
+      />
       {tool.parameters && (
         <>
           <button
@@ -505,14 +370,14 @@ function ToolDef({
             onClick={() => setShowSchema((v) => !v)}
             aria-expanded={showSchema}
           >
-            {showSchema ? "Hide schema" : "Show parameter schema"}
+            {showSchema ? "Hide schema" : "Schema"}
           </button>
           {showSchema && (
             <JsonViewer
               value={tool.parameters}
               label="schema"
-              defaultExpandDepth={2}
-              maxHeight={200}
+              defaultExpandDepth={1}
+              maxHeight={180}
             />
           )}
         </>
@@ -521,7 +386,171 @@ function ToolDef({
   )
 }
 
-function PreambleNode({
+// ── Call outline ─────────────────────────────────────────────────
+
+function callSentSummary(call: TraceCallNode): string {
+  const n = call.messageCount
+  const firstUser = call.messages.find((m) => m.role === "user" || m.speaker === "User")
+  const peek = firstUser?.content ? shortLine(firstUser.content, 48) : ""
+  if (peek) return `${n} msg · ${peek}`
+  return `${n} message${n === 1 ? "" : "s"}`
+}
+
+function callReceivedSummary(call: TraceCallNode): string {
+  if (call.waiting) return "Waiting…"
+  if (call.content) return shortLine(call.content, 56) || "Final answer"
+  if (call.toolBranches.length > 0) {
+    return call.toolBranches.map((t) => t.name).join(", ")
+  }
+  return "Empty reply"
+}
+
+function CallOutline({
+  call,
+  openState,
+  searchHit,
+  onToggleCall,
+  onToggleSent,
+  onToggleReceived,
+  onToggleMessage,
+  onToggleTool,
+}: {
+  call: TraceCallNode
+  openState: OpenState
+  searchHit: TraceCallSearchHit | null
+  onToggleCall: (index: number) => void
+  onToggleSent: (index: number) => void
+  onToggleReceived: (index: number) => void
+  onToggleMessage: (key: string) => void
+  onToggleTool: (id: string) => void
+}) {
+  const callOpen = openState.calls.has(call.index)
+  const sentOpen = openState.sent.has(call.index)
+  const receivedOpen = openState.received.has(call.index)
+  const usage = call.usage
+
+  return (
+    <section className="trace-call">
+      <StickyRow
+        depth={0}
+        open={callOpen}
+        onToggle={() => onToggleCall(call.index)}
+        leading={`Call ${call.index + 1}`}
+        title={call.headline}
+        summary={
+          searchHit?.reasons[0]
+            ? `matched ${searchHit.reasons[0]}`
+            : `iter ${call.iteration + 1}`
+        }
+        trailing={
+          <>
+            {usage && (
+              <span className="tabular-nums">
+                {fmtTokens(usage.promptTokens)}/{fmtTokens(usage.completionTokens)}
+              </span>
+            )}
+            {call.durationMs != null && (
+              <span className="tabular-nums">{formatMs(call.durationMs)}</span>
+            )}
+          </>
+        }
+      />
+
+      {callOpen && (
+        <div className="trace-call__inner">
+          {/* 1. Sent */}
+          <StickyRow
+            depth={1}
+            open={sentOpen}
+            onToggle={() => onToggleSent(call.index)}
+            leading="Sent"
+            title="to model"
+            summary={callSentSummary(call)}
+            soft
+          />
+          {sentOpen && (
+            <div className="trace-scope-body">
+              {call.messages.length === 0 ? (
+                <span className="trace-empty">No messages recorded</span>
+              ) : (
+                call.messages.map((msg, mi) => {
+                  const key = `${call.iteration}:m:${mi}`
+                  return (
+                    <PromptMessageRow
+                      key={key}
+                      msg={msg}
+                      open={openState.messages.has(key)}
+                      onToggle={() => onToggleMessage(key)}
+                    />
+                  )
+                })
+              )}
+            </div>
+          )}
+
+          {/* 2. Received */}
+          <StickyRow
+            depth={sentOpen ? 2 : 1}
+            open={receivedOpen}
+            onToggle={() => onToggleReceived(call.index)}
+            leading="Received"
+            title={call.waiting ? "…" : call.headline}
+            summary={callReceivedSummary(call)}
+            soft
+          />
+          {receivedOpen && (
+            <div className="trace-scope-body">
+              {call.waiting && <span className="trace-empty">Waiting for reply…</span>}
+              {!call.waiting && call.content && (
+                <ExpandableText text={call.content} className="trace-body-reply" />
+              )}
+              {!call.waiting &&
+                call.toolBranches.length === 0 &&
+                !call.content && (
+                  <span className="trace-empty is-error">
+                    Empty reply — no text and no tool calls
+                  </span>
+                )}
+              {call.askedUser && (
+                <p className="trace-note">
+                  Waiting on human — answer lands on the next call as User answer.
+                </p>
+              )}
+              {call.sqlQuality.map((entry, i) => (
+                <SqlQualityRow key={`${entry.toolCallId}-${i}`} entry={entry} />
+              ))}
+            </div>
+          )}
+
+          {/* 3. Next */}
+          {call.toolBranches.length > 0 && (
+            <div className="trace-next">
+              <div className="trace-next__label">
+                Next
+                <span className="trace-row__detail">
+                  {call.toolBranches.length} tool
+                  {call.toolBranches.length === 1 ? "" : "s"}
+                </span>
+              </div>
+              {call.toolBranches.map((tc) => (
+                <ToolRow
+                  key={tc.id}
+                  tool={tc}
+                  open={openState.tools.has(tc.id)}
+                  onToggle={() => onToggleTool(tc.id)}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </section>
+  )
+}
+
+// ── Context preamble ─────────────────────────────────────────────
+
+function PreambleOutline({
   dag,
   open,
   onToggle,
@@ -533,6 +562,14 @@ function PreambleNode({
   query: string
 }) {
   const { preamble } = dag
+  if (
+    !preamble.systemPrompt &&
+    preamble.tools.length === 0 &&
+    preamble.sqlQuality.length === 0
+  ) {
+    return null
+  }
+
   const q = query.trim().toLowerCase()
   const promptMatches =
     !q || (preamble.systemPrompt?.toLowerCase().includes(q) ?? false)
@@ -553,103 +590,67 @@ function PreambleNode({
           (entry.validationCode?.toLowerCase().includes(q) ?? false),
       )
 
-  const hasAny =
-    (preamble.systemPrompt && promptMatches) ||
-    tools.length > 0 ||
-    sql.length > 0
-  if (!hasAny && !preamble.systemPrompt && preamble.tools.length === 0 && preamble.sqlQuality.length === 0) {
-    return null
-  }
-
   const bits: string[] = []
   if (preamble.systemPrompt) bits.push("prompt")
   if (preamble.tools.length > 0) bits.push(`${preamble.tools.length} tools`)
   if (preamble.sqlQuality.length > 0) bits.push(`${preamble.sqlQuality.length} sql`)
 
   return (
-    <div className={`trace-node trace-preamble${open ? " is-open" : ""}`}>
-      <button
-        type="button"
-        className="trace-node__head"
-        onClick={onToggle}
-        aria-expanded={open}
-      >
-        <span className="trace-node__dot is-soft" aria-hidden />
-        {open ? (
-          <ChevronDown size={14} className="shrink-0 opacity-45" />
-        ) : (
-          <ChevronRight size={14} className="shrink-0 opacity-45" />
-        )}
-        <span className="trace-node__call">Context</span>
-        <span className="trace-node__headline opacity-60">
-          {bits.join(" · ") || "empty"}
-        </span>
-      </button>
+    <section className="trace-call">
+      <StickyRow
+        depth={0}
+        open={open}
+        onToggle={onToggle}
+        leading="Context"
+        title={bits.join(" · ") || "empty"}
+        soft
+      />
       {open && (
-        <div className="trace-node__body trace-preamble__body">
+        <div className="trace-call__inner">
           {preamble.systemPrompt && promptMatches && (
-            <section className="trace-ctx-section">
-              <div className="trace-result__label">
+            <div className="trace-scope-body">
+              <div className="trace-next__label">
                 System prompt
-                <span className="opacity-45 font-normal normal-case tracking-normal ml-2">
+                <span className="trace-row__detail">
                   {formatCharCount(preamble.systemPrompt.length)} chars
                 </span>
-                <span className="ml-auto">
-                  <CopyControl value={preamble.systemPrompt} ariaLabel="Copy prompt" />
-                </span>
+                <CopyControl value={preamble.systemPrompt} ariaLabel="Copy prompt" />
               </div>
               <ExpandableText
                 text={preamble.systemPrompt}
-                className="code-pre"
-                previewChars={500}
-                maxExpandedHeight={500}
+                className="trace-body-muted"
+                previewChars={360}
               />
-            </section>
+            </div>
           )}
           {tools.length > 0 && (
-            <section className="trace-ctx-section">
-              <div className="trace-result__label">
-                Tools available
-                <span className="opacity-45 font-normal normal-case tracking-normal ml-2">
-                  {q
-                    ? `${tools.length} of ${preamble.tools.length}`
-                    : String(tools.length)}
+            <div className="trace-scope-body">
+              <div className="trace-next__label">
+                Tools
+                <span className="trace-row__detail">
+                  {q ? `${tools.length} of ${preamble.tools.length}` : tools.length}
                 </span>
               </div>
-              <div className="space-y-2">
-                {tools.map((t) => (
-                  <ToolDef key={t.name} tool={t} />
-                ))}
-              </div>
-            </section>
+              {tools.map((t) => (
+                <ToolDef key={t.name} tool={t} />
+              ))}
+            </div>
           )}
           {sql.length > 0 && (
-            <section className="trace-ctx-section">
-              <div className="trace-result__label">
-                SQL quality
-                <span className="opacity-45 font-normal normal-case tracking-normal ml-2">
-                  {q
-                    ? `${sql.length} of ${preamble.sqlQuality.length}`
-                    : String(sql.length)}
-                </span>
-              </div>
-              <div className="space-y-2">
-                {sql.map((entry, i) => (
-                  <SqlQualityRow key={`${entry.toolCallId}-${i}`} entry={entry} />
-                ))}
-              </div>
-            </section>
-          )}
-          {!hasAny && q && (
-            <p className="text-sm text-text-muted italic">No context matches</p>
+            <div className="trace-scope-body">
+              <div className="trace-next__label">SQL quality</div>
+              {sql.map((entry, i) => (
+                <SqlQualityRow key={`${entry.toolCallId}-${i}`} entry={entry} />
+              ))}
+            </div>
           )}
         </div>
       )}
-    </div>
+    </section>
   )
 }
 
-// ── Main DAG ─────────────────────────────────────────────────────
+// ── Main ─────────────────────────────────────────────────────────
 
 export function TraceDag({
   dag,
@@ -663,13 +664,13 @@ export function TraceDag({
   emptySlot?: ReactNode
 }) {
   const [search, setSearch] = useState("")
-  const [openCalls, setOpenCalls] = useState<Set<number>>(() => new Set())
-  const [preambleOpen, setPreambleOpen] = useState(false)
+  const [openState, setOpenState] = useState<OpenState>(() => emptyOpen())
   const scrollRef = useRef<HTMLDivElement>(null)
-  const seededOpenRef = useRef(false)
-  const searchOpenSeedRef = useRef("")
+  const seededRef = useRef(false)
+  const searchSeedRef = useRef("")
 
   const query = search.trim()
+  const { stats } = dag
 
   const callHits = useMemo(() => {
     if (!query) return null
@@ -677,41 +678,57 @@ export function TraceDag({
     const matchedRun = Boolean(runId && runId.toLowerCase().includes(q))
     const matchedThread = Boolean(threadId && threadId.toLowerCase().includes(q))
     const map = new Map<number, TraceCallSearchHit>()
-    dag.calls.forEach((call) => {
+    for (const call of dag.calls) {
       if (matchedRun || matchedThread) {
         map.set(call.index, {
           reasons: [matchedRun ? "run id" : "thread id"],
           inHistory: false,
           inReply: false,
         })
-        return
+        continue
       }
       const hit = searchCall(call, query)
       if (hit) map.set(call.index, hit)
-    })
+    }
     return map
   }, [dag.calls, query, runId, threadId])
 
   useEffect(() => {
-    if (seededOpenRef.current || dag.calls.length === 0) return
-    seededOpenRef.current = true
-    setOpenCalls(new Set([dag.calls.length - 1]))
+    if (seededRef.current || dag.calls.length === 0) return
+    seededRef.current = true
+    setOpenState(seedLatest(dag.calls.length))
   }, [dag.calls.length])
 
   useEffect(() => {
-    seededOpenRef.current = false
-    searchOpenSeedRef.current = ""
-    setPreambleOpen(false)
+    seededRef.current = false
+    searchSeedRef.current = ""
+    setOpenState(emptyOpen())
   }, [runId])
 
   useEffect(() => {
     if (!query || !callHits) {
-      searchOpenSeedRef.current = ""
+      searchSeedRef.current = ""
       return
     }
-    if (searchOpenSeedRef.current === query) return
-    searchOpenSeedRef.current = query
-    setOpenCalls(new Set(callHits.keys()))
+    if (searchSeedRef.current === query) return
+    searchSeedRef.current = query
+    setOpenState((prev) => {
+      const next: OpenState = {
+        ...prev,
+        calls: new Set(callHits.keys()),
+        sent: new Set(prev.sent),
+        received: new Set(prev.received),
+      }
+      for (const [i, hit] of callHits) {
+        if (hit.inHistory) next.sent.add(i)
+        if (hit.inReply) next.received.add(i)
+        if (!hit.inHistory && !hit.inReply) {
+          next.sent.add(i)
+          next.received.add(i)
+        }
+      }
+      return next
+    })
   }, [query, callHits])
 
   useEffect(() => {
@@ -726,76 +743,180 @@ export function TraceDag({
     return [...callHits.keys()]
   }, [dag.calls, callHits])
 
-  const searchStatus = useMemo(() => {
-    if (!query) return null
-    if (dag.calls.length === 0) return null
-    const n = callHits?.size ?? 0
-    if (n === 0) return "No matching calls"
-    return `${n} of ${dag.calls.length} calls`
-  }, [query, callHits, dag.calls.length])
-
   function onToggleCall(index: number) {
-    setOpenCalls((prev) => {
-      const next = new Set(prev)
-      if (next.has(index)) next.delete(index)
-      else next.add(index)
-      return next
+    setOpenState((prev) => {
+      const calls = new Set(prev.calls)
+      if (calls.has(index)) calls.delete(index)
+      else calls.add(index)
+      return { ...prev, calls }
     })
+  }
+
+  function onToggleSent(index: number) {
+    setOpenState((prev) => {
+      const sent = new Set(prev.sent)
+      if (sent.has(index)) sent.delete(index)
+      else sent.add(index)
+      return { ...prev, sent }
+    })
+  }
+
+  function onToggleReceived(index: number) {
+    setOpenState((prev) => {
+      const received = new Set(prev.received)
+      if (received.has(index)) received.delete(index)
+      else received.add(index)
+      return { ...prev, received }
+    })
+  }
+
+  function onToggleMessage(key: string) {
+    setOpenState((prev) => {
+      const messages = new Set(prev.messages)
+      if (messages.has(key)) messages.delete(key)
+      else messages.add(key)
+      return { ...prev, messages }
+    })
+  }
+
+  function onToggleTool(id: string) {
+    setOpenState((prev) => {
+      const tools = new Set(prev.tools)
+      if (tools.has(id)) tools.delete(id)
+      else tools.add(id)
+      return { ...prev, tools }
+    })
+  }
+
+  function onTogglePreamble() {
+    setOpenState((prev) => ({ ...prev, preamble: !prev.preamble }))
+  }
+
+  function onExpandAll() {
+    setOpenState({
+      preamble: true,
+      calls: new Set(dag.calls.map((c) => c.index)),
+      sent: new Set(dag.calls.map((c) => c.index)),
+      received: new Set(dag.calls.map((c) => c.index)),
+      messages: new Set(
+        dag.calls.flatMap((c) =>
+          c.messages.map((_, mi) => `${c.iteration}:m:${mi}`),
+        ),
+      ),
+      tools: new Set(dag.calls.flatMap((c) => c.toolBranches.map((t) => t.id))),
+    })
+  }
+
+  function onCollapseAll() {
+    setOpenState(emptyOpen())
   }
 
   function onSearchChange(value: string) {
     setSearch(value)
   }
 
-  function onTogglePreamble() {
-    setPreambleOpen((v) => !v)
-  }
+  const searchStatus =
+    query && dag.calls.length > 0
+      ? `${callHits?.size ?? 0} of ${dag.calls.length} calls`
+      : null
 
   return (
-    <div className="trace-dag flex flex-col h-full gap-2">
-      <TraceHeader
-        dag={dag}
-        runId={runId}
-        threadId={threadId}
-        search={search}
-        onSearchChange={onSearchChange}
-        searchStatus={searchStatus}
-      />
+    <div className="trace-dag flex flex-col h-full min-h-0">
+      <div className="trace-toolbar shrink-0">
+        <div className="trace-toolbar__meta">
+          {stats.callCount === 0 ? (
+            <span>No model calls yet</span>
+          ) : (
+            <>
+              <span>
+                {stats.callCount} call{stats.callCount === 1 ? "" : "s"}
+              </span>
+              {stats.totalDuration > 0 && (
+                <span className="tabular-nums">{formatMs(stats.totalDuration)}</span>
+              )}
+              {(stats.promptTokens > 0 || stats.completionTokens > 0) && (
+                <span className="tabular-nums">
+                  {fmtTokens(stats.promptTokens)}/{fmtTokens(stats.completionTokens)} tok
+                </span>
+              )}
+            </>
+          )}
+        </div>
 
-      <div ref={scrollRef} className="trace-spine min-h-0 flex-1 overflow-y-auto pr-1">
+        <div className="trace-toolbar__actions">
+          <button type="button" className="trace-toolbtn" onClick={onExpandAll}>
+            Expand all
+          </button>
+          <button type="button" className="trace-toolbtn" onClick={onCollapseAll}>
+            Collapse all
+          </button>
+        </div>
+
+        {(runId || threadId) && (
+          <div className="trace-toolbar__ids">
+            {runId && <IdChip label="run" value={runId} />}
+            {threadId && <IdChip label="thread" value={threadId} />}
+          </div>
+        )}
+
+        <div className="trace-search">
+          <Search size={13} className="trace-search__icon" />
+          <input
+            type="search"
+            placeholder="Filter…"
+            value={search}
+            onChange={(e) => onSearchChange(e.target.value)}
+            className="trace-search__input"
+            aria-label="Filter trace"
+          />
+          {search && (
+            <button
+              type="button"
+              className="trace-search__clear"
+              onClick={() => onSearchChange("")}
+              aria-label="Clear filter"
+            >
+              <X size={13} />
+            </button>
+          )}
+        </div>
+        {searchStatus && <div className="trace-search__status">{searchStatus}</div>}
+      </div>
+
+      <div ref={scrollRef} className="trace-scroll min-h-0 flex-1 overflow-y-auto">
         {emptySlot}
 
         {runId &&
           dag.hasData &&
           query &&
           visibleIndexes.length === 0 && (
-            <p className="text-sm text-text-muted px-1 py-3">
-              No matches for “{query}”
-            </p>
+            <p className="trace-empty px-2 py-3">No matches for “{query}”</p>
           )}
 
         {runId && dag.hasData && (
           <>
-            <PreambleNode
+            <PreambleOutline
               dag={dag}
-              open={preambleOpen}
+              open={openState.preamble}
               onToggle={onTogglePreamble}
               query={query}
             />
-            <div className="trace-rail" aria-hidden={!dag.calls.length}>
-              {visibleIndexes.map((i) => {
-                const call = dag.calls[i]!
-                return (
-                  <CallNode
-                    key={`llm-${call.iteration}-${i}`}
-                    call={call}
-                    open={openCalls.has(i)}
-                    onToggle={() => onToggleCall(i)}
-                    searchHit={callHits?.get(i) ?? null}
-                  />
-                )
-              })}
-            </div>
+            {visibleIndexes.map((i) => {
+              const call = dag.calls[i]!
+              return (
+                <CallOutline
+                  key={`llm-${call.iteration}-${i}`}
+                  call={call}
+                  openState={openState}
+                  searchHit={callHits?.get(i) ?? null}
+                  onToggleCall={onToggleCall}
+                  onToggleSent={onToggleSent}
+                  onToggleReceived={onToggleReceived}
+                  onToggleMessage={onToggleMessage}
+                  onToggleTool={onToggleTool}
+                />
+              )
+            })}
           </>
         )}
       </div>
