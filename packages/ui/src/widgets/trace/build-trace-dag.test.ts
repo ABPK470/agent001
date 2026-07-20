@@ -114,7 +114,7 @@ describe("buildTraceDag", () => {
     expect(dag.stats.totalDuration).toBe(250)
   })
 
-  it("attaches sql quality to matching iteration and keeps full list in preamble", () => {
+  it("attaches sql quality to the matching call (not context preamble)", () => {
     const sql: Extract<TraceEntry, { kind: "planner-sql-quality" }> = {
       kind: "planner-sql-quality",
       toolCallId: "tc1",
@@ -151,7 +151,6 @@ describe("buildTraceDag", () => {
       llmResponse(0, { content: "ok" }),
       sql,
     ])
-    expect(dag.preamble.sqlQuality).toHaveLength(1)
     expect(dag.calls[0]!.sqlQuality).toHaveLength(1)
     expect(dag.calls[0]!.sqlQuality[0]!.sqlPreview).toBe("select 1")
   })

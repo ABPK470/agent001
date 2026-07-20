@@ -16,6 +16,7 @@ import {
 } from "react"
 import { JsonViewer } from "../../components/JsonViewer"
 import { fmtTokens, formatMs } from "../../lib/util"
+import { SegmentToggle } from "../entity-registry/SegmentToggle"
 import {
   messagePreview,
   searchCall,
@@ -34,23 +35,32 @@ import {
 
 // ── Open-state (explicit, flat) ──────────────────────────────────
 
+type FoldMode = "expanded" | "collapsed"
+
 type OpenState = {
   preamble: boolean
+  /** Context subsections — collapse Prompt / Tools as wholes. */
+  contextPrompt: boolean
+  contextTools: boolean
   calls: Set<number>
   sent: Set<number>
   received: Set<number>
   messages: Set<string>
   tools: Set<string>
+  foldMode: FoldMode
 }
 
 function emptyOpen(): OpenState {
   return {
     preamble: false,
+    contextPrompt: false,
+    contextTools: false,
     calls: new Set(),
     sent: new Set(),
     received: new Set(),
     messages: new Set(),
     tools: new Set(),
+    foldMode: "collapsed",
   }
 }
 
@@ -315,23 +325,34 @@ function ToolRow({
   )
 }
 
+/**
+ * Per-call SQL validation telemetry (planner-sql-quality) — not part of the
+ * system prompt. Lives on the call that ran the SQL.
+ */
 function SqlQualityRow({ entry }: { entry: TraceSqlQuality }) {
-  const notes: string[] = []
-  if (entry.validationCode) notes.push(`blocked=${entry.validationCode}`)
-  if (entry.missingPersistedMirrorCandidates.length > 0) {
-    notes.push(`mirror=${entry.missingPersistedMirrorCandidates.join(",")}`)
-  }
+  const phaseClass =
+    entry.phase === "blocked"
+      ? "is-blocked"
+      : entry.phase === "failed"
+        ? "is-failed"
+        : "is-ok"
   return (
-    <div className="trace-ctx-item">
-      <div className="trace-ctx-item__head">
-        <span>{entry.phase}</span>
+    <div className={`trace-sql-check ${phaseClass}`}>
+      <div className="trace-sql-check__head">
+        <span className="trace-sql-check__badge">{entry.phase}</span>
         <span className="font-mono">{entry.toolName}</span>
-        <span className="trace-row__detail">iter {entry.iteration + 1}</span>
+        {entry.validationCode && (
+          <span className="trace-sql-check__code">{entry.validationCode}</span>
+        )}
         {entry.durationMs != null && (
           <span className="trace-row__detail ml-auto">{formatMs(entry.durationMs)}</span>
         )}
       </div>
-      <div className="trace-row__detail">{notes.join(" · ") || "ok"}</div>
+      {entry.missingPersistedMirrorCandidates.length > 0 && (
+        <div className="trace-row__detail">
+          missing mirror: {entry.missingPersistedMirrorCandidates.join(", ")}
+        </div>
+      )}
       {entry.sqlPreview && (
         <ExpandableText
           text={entry.sqlPreview}
@@ -513,15 +534,25 @@ function CallOutline({
                   Waiting on human — answer lands on the next call as User answer.
                 </p>
               )}
-              {call.sqlQuality.map((entry, i) => (
-                <SqlQualityRow key={`${entry.toolCallId}-${i}`} entry={entry} />
-              ))}
+              {call.sqlQuality.length > 0 && (
+                <div className="trace-sql-block">
+                  <div className="trace-next__label is-sql">
+                    SQL check
+                    <span className="trace-row__detail">
+                      run telemetry · not in the prompt
+                    </span>
+                  </div>
+                  {call.sqlQuality.map((entry, i) => (
+                    <SqlQualityRow key={`${entry.toolCallId}-${i}`} entry={entry} />
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
           {call.toolBranches.length > 0 && (
             <div className="trace-next">
-              <div className="trace-next__label">
+              <div className="trace-next__label is-next">
                 Next
                 <span className="trace-row__detail">
                   {call.toolBranches.length} tool
@@ -544,23 +575,63 @@ function CallOutline({
   )
 }
 
+function ContextFold({
+  open,
+  onToggle,
+  label,
+  detail,
+  tone,
+  children,
+}: {
+  open: boolean
+  onToggle: () => void
+  label: string
+  detail?: string
+  tone: "prompt" | "tools"
+  children: ReactNode
+}) {
+  return (
+    <div className={`trace-ctx-fold is-${tone}`}>
+      <button
+        type="button"
+        className="trace-ctx-fold__btn"
+        onClick={onToggle}
+        aria-expanded={open}
+      >
+        {open ? (
+          <ChevronDown size={14} className="trace-scope__chev" />
+        ) : (
+          <ChevronRight size={14} className="trace-scope__chev" />
+        )}
+        <span className="trace-ctx-fold__label">{label}</span>
+        {detail && <span className="trace-row__detail">{detail}</span>}
+      </button>
+      {open && <div className="trace-ctx-fold__body">{children}</div>}
+    </div>
+  )
+}
+
 function PreambleOutline({
   dag,
   open,
+  contextPromptOpen,
+  contextToolsOpen,
   onToggle,
+  onTogglePrompt,
+  onToggleTools,
   query,
 }: {
   dag: TraceDag
   open: boolean
+  contextPromptOpen: boolean
+  contextToolsOpen: boolean
   onToggle: () => void
+  onTogglePrompt: () => void
+  onToggleTools: () => void
   query: string
 }) {
   const { preamble } = dag
-  if (
-    !preamble.systemPrompt &&
-    preamble.tools.length === 0 &&
-    preamble.sqlQuality.length === 0
-  ) {
+  if (!preamble.systemPrompt && preamble.tools.length === 0) {
     return null
   }
 
@@ -574,20 +645,10 @@ function PreambleOutline({
           t.name.toLowerCase().includes(q) ||
           t.description.toLowerCase().includes(q),
       )
-  const sql = !q
-    ? preamble.sqlQuality
-    : preamble.sqlQuality.filter(
-        (entry) =>
-          entry.toolName.toLowerCase().includes(q) ||
-          entry.phase.toLowerCase().includes(q) ||
-          entry.sqlPreview.toLowerCase().includes(q) ||
-          (entry.validationCode?.toLowerCase().includes(q) ?? false),
-      )
 
   const bits: string[] = []
   if (preamble.systemPrompt) bits.push("prompt")
   if (preamble.tools.length > 0) bits.push(`${preamble.tools.length} tools`)
-  if (preamble.sqlQuality.length > 0) bits.push(`${preamble.sqlQuality.length} sql`)
 
   return (
     <div className="trace-call">
@@ -603,12 +664,14 @@ function PreambleOutline({
       {open && (
         <div className="trace-call-panel">
           {preamble.systemPrompt && promptMatches && (
-            <div className="trace-scope-body">
-              <div className="trace-next__label">
-                System prompt
-                <span className="trace-row__detail">
-                  {formatCharCount(preamble.systemPrompt.length)} chars
-                </span>
+            <ContextFold
+              open={contextPromptOpen}
+              onToggle={onTogglePrompt}
+              label="Prompt"
+              detail={`${formatCharCount(preamble.systemPrompt.length)} chars`}
+              tone="prompt"
+            >
+              <div className="flex justify-end mb-1">
                 <CopyControl value={preamble.systemPrompt} ariaLabel="Copy prompt" />
               </div>
               <ExpandableText
@@ -616,28 +679,24 @@ function PreambleOutline({
                 className="trace-body-muted"
                 previewChars={360}
               />
-            </div>
+            </ContextFold>
           )}
           {tools.length > 0 && (
-            <div className="trace-scope-body">
-              <div className="trace-next__label">
-                Tools
-                <span className="trace-row__detail">
-                  {q ? `${tools.length} of ${preamble.tools.length}` : tools.length}
-                </span>
-              </div>
+            <ContextFold
+              open={contextToolsOpen}
+              onToggle={onToggleTools}
+              label="Tools"
+              detail={
+                q
+                  ? `${tools.length} of ${preamble.tools.length}`
+                  : String(tools.length)
+              }
+              tone="tools"
+            >
               {tools.map((t) => (
                 <ToolDef key={t.name} tool={t} />
               ))}
-            </div>
-          )}
-          {sql.length > 0 && (
-            <div className="trace-scope-body">
-              <div className="trace-next__label">SQL quality</div>
-              {sql.map((entry, i) => (
-                <SqlQualityRow key={`${entry.toolCallId}-${i}`} entry={entry} />
-              ))}
-            </div>
+            </ContextFold>
           )}
         </div>
       )}
@@ -757,6 +816,8 @@ export function TraceDag({
     openState.sent,
     openState.received,
     openState.preamble,
+    openState.contextPrompt,
+    openState.contextTools,
     visibleIndexesList,
   ])
 
@@ -816,23 +877,34 @@ export function TraceDag({
     setOpenState((prev) => ({ ...prev, preamble: !prev.preamble }))
   }
 
-  function onExpandAll() {
-    setOpenState({
-      preamble: true,
-      calls: new Set(dag.calls.map((c) => c.index)),
-      sent: new Set(dag.calls.map((c) => c.index)),
-      received: new Set(dag.calls.map((c) => c.index)),
-      messages: new Set(
-        dag.calls.flatMap((c) =>
-          c.messages.map((_, mi) => `${c.iteration}:m:${mi}`),
-        ),
-      ),
-      tools: new Set(dag.calls.flatMap((c) => c.toolBranches.map((t) => t.id))),
-    })
+  function onToggleContextPrompt() {
+    setOpenState((prev) => ({ ...prev, contextPrompt: !prev.contextPrompt }))
   }
 
-  function onCollapseAll() {
-    setOpenState(emptyOpen())
+  function onToggleContextTools() {
+    setOpenState((prev) => ({ ...prev, contextTools: !prev.contextTools }))
+  }
+
+  function onFoldModeChange(mode: FoldMode) {
+    if (mode === "expanded") {
+      setOpenState({
+        preamble: true,
+        contextPrompt: true,
+        contextTools: true,
+        calls: new Set(dag.calls.map((c) => c.index)),
+        sent: new Set(dag.calls.map((c) => c.index)),
+        received: new Set(dag.calls.map((c) => c.index)),
+        messages: new Set(
+          dag.calls.flatMap((c) =>
+            c.messages.map((_, mi) => `${c.iteration}:m:${mi}`),
+          ),
+        ),
+        tools: new Set(dag.calls.flatMap((c) => c.toolBranches.map((t) => t.id))),
+        foldMode: "expanded",
+      })
+      return
+    }
+    setOpenState({ ...emptyOpen(), foldMode: "collapsed" })
   }
 
   function onSearchChange(value: string) {
@@ -868,12 +940,15 @@ export function TraceDag({
             )}
           </div>
           <div className="trace-toolbar__actions">
-            <button type="button" className="trace-toolbtn" onClick={onExpandAll}>
-              Expand all
-            </button>
-            <button type="button" className="trace-toolbtn" onClick={onCollapseAll}>
-              Collapse all
-            </button>
+            <SegmentToggle
+              value={openState.foldMode}
+              options={[
+                { value: "expanded", label: "Expanded" },
+                { value: "collapsed", label: "Collapsed" },
+              ]}
+              onChange={onFoldModeChange}
+              ariaLabel="Expand or collapse all trace scopes"
+            />
           </div>
         </div>
 
@@ -923,7 +998,11 @@ export function TraceDag({
             <PreambleOutline
               dag={dag}
               open={openState.preamble}
+              contextPromptOpen={openState.contextPrompt}
+              contextToolsOpen={openState.contextTools}
               onToggle={onTogglePreamble}
+              onTogglePrompt={onToggleContextPrompt}
+              onToggleTools={onToggleContextTools}
               query={query}
             />
             {visibleIndexesList.map((i) => {

@@ -2,7 +2,8 @@
  * Pure Trace → hybrid DAG model.
  *
  * Spine = LLM round-trips (calls). Branches = tool calls from each response.
- * Preamble = system prompt, tools, SQL quality (context that isn't a call).
+ * Preamble = system prompt + tools available (what the model was given as
+ * context). SQL quality is per-call telemetry — attached to calls, not here.
  */
 
 import type { TraceEntry } from "../../types"
@@ -56,7 +57,6 @@ export type TracePreamble = {
     description: string
     parameters?: Record<string, unknown>
   }>
-  sqlQuality: TraceSqlQuality[]
 }
 
 export type TraceDagStats = {
@@ -196,7 +196,6 @@ export function buildTraceDag(trace: TraceEntry[]): TraceDag {
   const preamble: TracePreamble = {
     systemPrompt,
     tools: toolsResolved?.tools ?? [],
-    sqlQuality,
   }
 
   const hasData =

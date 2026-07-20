@@ -1935,13 +1935,29 @@ textarea.input {
   min-width: 3.6rem;
 }
 
+/* Color cues — orientation without heavy chrome */
+.trace-scope[data-trace-kind="call"] .trace-scope__lead {
+  color: var(--accent, var(--color-accent));
+}
+
+.trace-scope[data-trace-kind="sent"] .trace-scope__lead {
+  color: var(--info, var(--color-info, #5b9fd4));
+}
+
+.trace-scope[data-trace-kind="received"] .trace-scope__lead {
+  color: var(--success, var(--color-success, #5a9e6f));
+}
+
+.trace-scope[data-trace-kind="context"] .trace-scope__lead {
+  color: var(--text-muted, var(--color-text-muted));
+}
+
 .trace-scope.is-soft .trace-scope__lead {
   min-width: 5rem;
   font-weight: 600;
   letter-spacing: 0.03em;
   text-transform: uppercase;
   font-size: 0.75rem;
-  color: var(--text-muted, var(--color-text-muted));
 }
 
 .trace-scope__title {
@@ -2126,6 +2142,109 @@ textarea.input {
   text-transform: uppercase;
   color: var(--text-muted, var(--color-text-muted));
   padding: 0.25rem 0;
+}
+
+.trace-next__label.is-next {
+  color: var(--warning, var(--color-warning, #c4a35a));
+}
+
+.trace-next__label.is-sql {
+  color: var(--info, var(--color-info, #5b9fd4));
+}
+
+.trace-ctx-fold {
+  border-bottom: 1px solid var(--border-subtle, var(--color-border-subtle));
+}
+
+.trace-ctx-fold__btn {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  width: 100%;
+  text-align: left;
+  padding: 0.45rem 0.65rem;
+  font-size: 0.875rem;
+  color: var(--text, var(--color-text));
+  background: color-mix(in srgb, var(--text, var(--color-text)) 2%, var(--bg));
+}
+
+.trace-ctx-fold__btn:hover {
+  background: color-mix(in srgb, var(--text, var(--color-text)) 4.5%, var(--bg));
+}
+
+.trace-ctx-fold.is-prompt .trace-ctx-fold__label {
+  font-weight: 650;
+  color: var(--info, var(--color-info, #5b9fd4));
+}
+
+.trace-ctx-fold.is-tools .trace-ctx-fold__label {
+  font-weight: 650;
+  color: var(--accent, var(--color-accent));
+}
+
+.trace-ctx-fold__body {
+  padding: 0.35rem 0.65rem 0.55rem 1.35rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  background: var(--bg);
+}
+
+.trace-sql-block {
+  padding: 0.35rem 0.55rem 0.55rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border-subtle, var(--color-border-subtle));
+}
+
+.trace-sql-check {
+  padding: 0.35rem 0.45rem;
+  border-radius: 0.35rem;
+  border: 1px solid var(--border-subtle, var(--color-border-subtle));
+}
+
+.trace-sql-check.is-blocked,
+.trace-sql-check.is-failed {
+  border-color: color-mix(in srgb, var(--error, var(--color-error)) 45%, transparent);
+  background: color-mix(in srgb, var(--error, var(--color-error)) 6%, transparent);
+}
+
+.trace-sql-check.is-ok {
+  border-color: color-mix(in srgb, var(--success, var(--color-success)) 35%, transparent);
+  background: color-mix(in srgb, var(--success, var(--color-success)) 5%, transparent);
+}
+
+.trace-sql-check__head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.55rem;
+  font-size: 0.875rem;
+}
+
+.trace-sql-check__badge {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted, var(--color-text-muted));
+}
+
+.trace-sql-check.is-blocked .trace-sql-check__badge,
+.trace-sql-check.is-failed .trace-sql-check__badge {
+  color: var(--error, var(--color-error));
+}
+
+.trace-sql-check.is-ok .trace-sql-check__badge {
+  color: var(--success, var(--color-success));
+}
+
+.trace-sql-check__code {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.8125rem;
+  color: var(--text-secondary, var(--text-muted, var(--color-text-muted)));
 }
 
 .trace-ctx-item {
