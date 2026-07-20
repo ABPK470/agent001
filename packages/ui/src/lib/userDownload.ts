@@ -1,5 +1,5 @@
 /**
- * User download — every export leaves the server as a browser save dialog.
+ * Browser save for Export — every export reaches the user as a save dialog.
  * Remote-hosted MI:A never writes export files to the server filesystem for
  * the user; artifacts are streamed with Content-Disposition: attachment.
  */

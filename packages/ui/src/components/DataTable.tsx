@@ -6,7 +6,7 @@
  *   - Global text filter (single search box, case-insensitive)
  *   - Pagination with selectable page size (10 / 25 / 50 / 100 / All)
  *   - Auto-detects numeric columns → right-aligned + numeric sort
- *   - Sticky header, dark theme, copy-as-CSV button
+ *   - Sticky header, dark theme, Export CSV / JSON + Copy
  *   - Handles thousands of rows comfortably (sort + filter on raw arrays;
  *     virtualization not required for typical UI ranges, only ~pageSize DOM rows
  *     are rendered at any time)
@@ -17,9 +17,11 @@
  *   - Future: JSON arrays of objects, CSV, etc.
  */
 
-import { ArrowDown, ArrowUp, ArrowUpDown, Check, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Copy, Search, X } from "lucide-react"
+import { ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Search, X } from "lucide-react"
 import { useEffect, useMemo, useState, type ReactNode } from "react"
+import type { ChatTableExportSource } from "../lib/chat-table-export"
 import { C } from "../theme/tokens"
+import { TableExportActions } from "./TableExportActions"
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -38,6 +40,9 @@ export interface DataTableProps {
   renderCell?: (value: string, columnIndex: number) => ReactNode
   /** Optional column-header renderer (defaults to plain text). */
   renderHeader?: (value: string, columnIndex: number) => ReactNode
+  /** When set, show Export / Copy controls for the full (unfiltered) table. */
+  exportSource?: ChatTableExportSource
+  exportDisabled?: boolean
 }
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100, -1] as const // -1 = "All"
@@ -110,17 +115,6 @@ function formatNumericCell(raw: string, isMoney: boolean, isPk: boolean, hasDeci
   return raw
 }
 
-function escapeCsvCell(v: string): string {
-  if (v.includes(",") || v.includes("\"") || v.includes("\n")) {
-    return `"${v.replace(/"/g, "\"\"")}"`
-  }
-  return v
-}
-
-function rowsToCsv(headers: string[], rows: string[][]): string {
-  return [headers.map(escapeCsvCell).join(","), ...rows.map((r) => r.map(escapeCsvCell).join(","))].join("\n")
-}
-
 function measureCellWidthHint(value: string): number {
   if (!value) return 0
   const longestLine = value
@@ -146,12 +140,13 @@ export function DataTable({
   maxHeight = 360,
   renderCell,
   renderHeader,
+  exportSource,
+  exportDisabled = false,
 }: DataTableProps) {
   const [sort, setSort] = useState<SortState>(null)
   const [filter, setFilter] = useState("")
   const [pageSize, setPageSize] = useState<number>(defaultPageSize)
   const [page, setPage] = useState(0)
-  const [copied, setCopied] = useState(false)
 
   // Detect numeric columns once per (headers, rows) identity
   const numericCols = useMemo(
@@ -253,13 +248,6 @@ export function DataTable({
     })
   }
 
-  function copyCsv() {
-    const csv = rowsToCsv(headers, sorted)
-    navigator.clipboard.writeText(csv).catch(() => {})
-    setCopied(true)
-    setTimeout(() => setCopied(false), 1500)
-  }
-
   const displayCell = renderCell ?? ((v: string) => v)
   const displayHeader = renderHeader ?? ((v: string) => v)
 
@@ -305,16 +293,14 @@ export function DataTable({
             </button>
           )}
         </div>
-        <button
-          type="button"
-          onClick={copyCsv}
-          className="flex items-center gap-1 px-1.5 py-0.5 rounded text-sm cursor-pointer transition-colors hover:bg-overlay-2"
-          style={{ color: copied ? C.success : C.dim }}
-          aria-label="Copy as CSV"
-        >
-          {copied ? <Check size={11} /> : <Copy size={11} />}
-          <span>{copied ? "Copied" : "CSV"}</span>
-        </button>
+        {exportSource ? (
+          <TableExportActions
+            headers={headers}
+            rows={rows}
+            source={exportSource}
+            disabled={exportDisabled}
+          />
+        ) : null}
       </div>
 
       {/* Table */}

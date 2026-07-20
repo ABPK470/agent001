@@ -44,6 +44,7 @@ import {
   transcriptFadeOverlayClass,
 } from "../app/chatTranscriptLayout.js"
 import { useComposerDraft } from "./chat/useComposerDraft"
+import { ChatTableExportModal } from "./chat/ChatTableExportModal"
 import { useChatSlashActions } from "./chat/useChatSlashActions"
 import { coerceSlashOnlyInput } from "./chat/commands"
 import type { ChatSlashCatalogEntry } from "./chat/commands"
@@ -2487,6 +2488,7 @@ function RunMessageImpl({
             text={part.text}
             streaming={part.streaming === true}
             compact
+            exportRunId={run.id}
           />,
         )
         return
@@ -2523,7 +2525,7 @@ function RunMessageImpl({
     }
 
     return items
-  }, [isLiveRun, iterationMeta, onRespond, responseParts])
+  }, [isLiveRun, iterationMeta, onRespond, responseParts, run.id])
 
   // Show workspace diff card when run completes with file changes
   const showDiff = isDone && (run.pendingWorkspaceChanges ?? 0) > 0
@@ -2847,6 +2849,8 @@ export function TermChat({
     [runs, continuityThreadId],
   )
 
+  const [tableExportOpen, setTableExportOpen] = useState(false)
+
   const { tryDispatchSlash, slashCommands, slashOnlyMode } = useChatSlashActions({
     activeThreadId: continuityThreadId,
     runs: scopedRuns,
@@ -2858,6 +2862,7 @@ export function TermChat({
     },
     console: cmdConsole.api,
     openFilePicker: () => fileInputRef.current?.click(),
+    openTableExport: () => setTableExportOpen(true),
   })
 
   useEffect(() => {
@@ -3550,6 +3555,14 @@ export function TermChat({
         </div>
       )}
       <ToastStack toasts={toasts} onDismiss={dismissToast} />
+      <ChatTableExportModal
+        open={tableExportOpen}
+        onClose={() => setTableExportOpen(false)}
+        runs={scopedRuns}
+        preferredRunId={scopedActiveRunId}
+        onExported={(message) => cmdConsole.api.logSuccess(message)}
+        onError={(message) => cmdConsole.api.logError(message)}
+      />
     </div>
   )
 }

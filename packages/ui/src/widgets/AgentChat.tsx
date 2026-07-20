@@ -20,6 +20,7 @@ import { useContainerSize } from "../hooks/useContainerSize"
 import { useStickToBottomScroll } from "../hooks/useStickToBottomScroll"
 import { CHAT_SCROLL_HOST_ATTR, preserveScrollAnchor } from "../lib/chatScroll"
 import { useComposerDraft } from "./chat/useComposerDraft"
+import { ChatTableExportModal } from "./chat/ChatTableExportModal"
 import { useChatSlashActions } from "./chat/useChatSlashActions"
 import { coerceSlashOnlyInput } from "./chat/commands"
 import { useSlashCommandInput } from "./chat/useSlashCommandInput"
@@ -321,6 +322,8 @@ export function AgentChat() {
     [runs, activeThreadId],
   )
 
+  const [tableExportOpen, setTableExportOpen] = useState(false)
+
   const { tryDispatchSlash, slashCommands, slashOnlyMode } = useChatSlashActions({
     activeThreadId,
     runs: scopedRuns,
@@ -332,6 +335,7 @@ export function AgentChat() {
     },
     console: cmdConsole.api,
     openFilePicker: () => fileInputRef.current?.click(),
+    openTableExport: () => setTableExportOpen(true),
   })
 
   useEffect(() => {
@@ -740,9 +744,10 @@ export function AgentChat() {
                                                           "running" ||
                                                       run.status === "planning"
                                                   }
+                                                  exportRunId={run.id}
                                               />
                                           ) : (
-                                              <SmartAnswer text={run.answer} />
+                                              <SmartAnswer text={run.answer} exportRunId={run.id} />
                                           )}
                                       </div>
                                   </div>
@@ -762,6 +767,7 @@ export function AgentChat() {
                                       <TypewriterAnswer
                                           text={streamingAnswer}
                                           streaming
+                                          exportRunId={run.id}
                                       />
                                   </div>
                               )}
@@ -1519,6 +1525,14 @@ export function AgentChat() {
               </ChatComposerShell>
               </div>
           </div>
+      <ChatTableExportModal
+        open={tableExportOpen}
+        onClose={() => setTableExportOpen(false)}
+        runs={scopedRuns}
+        preferredRunId={activeRunId}
+        onExported={(message) => cmdConsole.api.logSuccess(message)}
+        onError={(message) => cmdConsole.api.logError(message)}
+      />
       </div>
   );
 }

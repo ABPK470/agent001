@@ -28,7 +28,15 @@ const bodyClass = (compact: boolean) =>
     : "text-text-secondary text-base leading-relaxed w-full min-w-0"
 
 /** Live stream — formatted committed blocks + quiet tail for in-flight prose. */
-function StreamingLiveAnswer({ text, compact }: { text: string; compact: boolean }) {
+function StreamingLiveAnswer({
+  text,
+  compact,
+  exportRunId,
+}: {
+  text: string
+  compact: boolean
+  exportRunId?: string
+}) {
   const { blocks, glyphTail, layout } = useMemo(() => getLiveStreamingRenderParts(text), [text])
 
   const hasBlockContent = blocks.length > 0
@@ -41,7 +49,7 @@ function StreamingLiveAnswer({ text, compact }: { text: string; compact: boolean
   return (
     <div className={[bodyClass(compact), "space-y-3"].join(" ")}>
       {hasBlockContent ? (
-        <SmartAnswer blocks={blocks} compact={compact} streaming />
+        <SmartAnswer blocks={blocks} compact={compact} streaming exportRunId={exportRunId} />
       ) : null}
       {hasGlyphTail ? (
         <div className="whitespace-pre-wrap break-words">
@@ -61,9 +69,11 @@ function StreamingLiveAnswer({ text, compact }: { text: string; compact: boolean
 function TypewriterRevealAnswer({
   text,
   compact = false,
+  exportRunId,
 }: {
   text: string
   compact?: boolean
+  exportRunId?: string
 }) {
   const [units, setUnits] = useState(0)
   const unitsRef = useRef(0)
@@ -149,7 +159,7 @@ function TypewriterRevealAnswer({
   const finished = units >= targetUnits
 
   if (finished) {
-    return <SmartAnswer text={text} compact={compact} />
+    return <SmartAnswer text={text} compact={compact} exportRunId={exportRunId} />
   }
 
   const hasBlockContent = segments.blocks.length > 0 && (blockReveal.doneCount > 0 || blockReveal.partial)
@@ -163,11 +173,12 @@ function TypewriterRevealAnswer({
           reveal={blockReveal}
           streaming
           compact={compact}
+          exportRunId={exportRunId}
         />
       ) : null}
       {hasProse ? (
         <div>
-          <SmartAnswer text={proseTail} streaming compact={compact} />
+          <SmartAnswer text={proseTail} streaming compact={compact} exportRunId={exportRunId} />
         </div>
       ) : null}
       {showStructuredPending && segments.layout.remainderKind === "fenced" ? (
@@ -184,10 +195,12 @@ export function TypewriterAnswer({
   text,
   streaming = false,
   compact = false,
+  exportRunId,
 }: {
   text: string
   streaming?: boolean
   compact?: boolean
+  exportRunId?: string
 }) {
   // Preserve the component across the live → completed transition. A streamed
   // answer is already fully visible; starting TypewriterRevealAnswer from zero
@@ -198,10 +211,10 @@ export function TypewriterAnswer({
   if (streaming) hasStreamedRef.current = true
 
   if (streaming) {
-    return <StreamingLiveAnswer text={text} compact={compact} />
+    return <StreamingLiveAnswer text={text} compact={compact} exportRunId={exportRunId} />
   }
   if (hasStreamedRef.current) {
-    return <SmartAnswer text={text} compact={compact} />
+    return <SmartAnswer text={text} compact={compact} exportRunId={exportRunId} />
   }
-  return <TypewriterRevealAnswer text={text} compact={compact} />
+  return <TypewriterRevealAnswer text={text} compact={compact} exportRunId={exportRunId} />
 }

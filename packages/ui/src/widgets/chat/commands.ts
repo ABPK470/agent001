@@ -1,8 +1,8 @@
 /**
  * Chat slash commands — shared by TermChat, AgentChat, and IOE goal input.
  *
- * Exact command names only (no aliases). Every export streams to the user's
- * browser; the server never writes export files for delivery.
+ * Exact command names only (no aliases). Product verb for file delivery: Export
+ * (browser save). The server never writes export files to disk for the user.
  */
 
 import { canResumeRun, canRollbackRun } from "@mia/shared-types"
@@ -83,6 +83,7 @@ function unavailableReasonFor(cmd: ChatSlashCommand): string {
   switch (cmd.id) {
     case "trace":
     case "files":
+    case "export":
     case "rerun":
       return "Requires a run in this thread"
     case "resume":
@@ -115,6 +116,7 @@ function defineChatSlashCommands(deps: {
   createThread: () => Promise<void>
   openThreads: () => void
   openAttach: () => void
+  openTableExport: () => void
 }): ChatSlashCommand[] {
   return [
     {
@@ -132,7 +134,7 @@ function defineChatSlashCommands(deps: {
     },
     {
       id: "trace-thread",
-      label: "Download entire thread trace",
+      label: "Export entire thread trace",
       hint: "--txt or --json",
       slash: "trace-thread",
       when: (c) => !!c.activeThreadId,
@@ -140,11 +142,18 @@ function defineChatSlashCommands(deps: {
     },
     {
       id: "trace",
-      label: "Download last run trace in this thread",
+      label: "Export last run trace in this thread",
       hint: "--txt or --json",
       slash: "trace",
       when: (c) => !!c.lastRunId,
       run: (args) => deps.downloadLastRunTrace(parseTraceExportFormat(args)),
+    },
+    {
+      id: "export",
+      label: "Export answer tables (CSV or JSON)",
+      slash: "export",
+      when: (c) => !!c.lastRunId && !c.busy,
+      run: () => deps.openTableExport(),
     },
     {
       id: "status",
@@ -193,7 +202,7 @@ function defineChatSlashCommands(deps: {
     },
     {
       id: "files",
-      label: "List downloadable run files",
+      label: "List exportable run files",
       slash: "files",
       when: (c) => !!c.lastRunId && !c.busy,
       run: () => deps.listArtifacts(),
@@ -221,6 +230,7 @@ export function buildChatSlashCatalog(deps: {
   createThread: () => Promise<void>
   openThreads: () => void
   openAttach: () => void
+  openTableExport: () => void
 }): ChatSlashCatalogEntry[] {
   const { ctx } = deps
   return defineChatSlashCommands(deps).map((cmd) => {

@@ -1843,6 +1843,19 @@ export {
 } from "./trace-export.js"
 export type { TraceExportRunMeta, TraceExportThreadMeta } from "./trace-export.js"
 export {
+  extractAnswerTables,
+  isTableExportFormat,
+  resolveTablesForExport,
+  serializeAnswerTableCsv,
+  serializeAnswerTablesJson,
+  tableExportFilename,
+} from "./table-export.js"
+export type {
+  AnswerTable,
+  TableExportFormat,
+  TableExportRequest,
+} from "./table-export.js"
+export {
   emptyPlatformImportImpact,
   type PlatformImportGateResult,
   type PlatformImportImpact,

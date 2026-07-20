@@ -32,6 +32,7 @@ export interface ChatSlashActionsOptions {
   onRunStarted?: (runId: string) => void
   console: CommandConsoleApi
   openFilePicker?: () => void
+  openTableExport?: () => void
 }
 
 export function useChatSlashActions(opts: ChatSlashActionsOptions) {
@@ -43,6 +44,7 @@ export function useChatSlashActions(opts: ChatSlashActionsOptions) {
     onRunStarted,
     console,
     openFilePicker,
+    openTableExport,
   } = opts
 
   const threads = useStore((s) => s.threads)
@@ -92,7 +94,7 @@ export function useChatSlashActions(opts: ChatSlashActionsOptions) {
         path,
         traceExportFilename(lastRunId, format),
       )
-      consoleRef.current.logSuccess(`Downloaded ${filename} (${bytes.toLocaleString()} bytes)`)
+      consoleRef.current.logSuccess(`Exported ${filename} (${bytes.toLocaleString()} bytes)`)
     },
     [lastRunId],
   )
@@ -108,7 +110,7 @@ export function useChatSlashActions(opts: ChatSlashActionsOptions) {
         path,
         threadExportFilename(activeThreadId, format),
       )
-      consoleRef.current.logSuccess(`Downloaded ${filename} (${bytes.toLocaleString()} bytes)`)
+      consoleRef.current.logSuccess(`Exported ${filename} (${bytes.toLocaleString()} bytes)`)
     },
     [activeThreadId],
   )
@@ -239,6 +241,10 @@ export function useChatSlashActions(opts: ChatSlashActionsOptions) {
           consoleRef.current.logList(items)
         },
         openAttach: () => openFilePicker?.(),
+        openTableExport: () => {
+          if (!openTableExport) throw new Error("Table export is not available here")
+          openTableExport()
+        },
       }),
     [
       ctx,
@@ -248,6 +254,7 @@ export function useChatSlashActions(opts: ChatSlashActionsOptions) {
       lastRun,
       onRunStarted,
       openFilePicker,
+      openTableExport,
       threads,
       activeThreadId,
       liveUsage,

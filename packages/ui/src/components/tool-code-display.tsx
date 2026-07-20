@@ -123,6 +123,7 @@ export function ToolResultTable({
       totalRowsHint={rowCount}
       truncated={truncated}
       maxHeight={maxHeight}
+      exportSource={{ kind: "local", title: "Tool result" }}
     />
   )
 }

@@ -3,8 +3,15 @@
  */
 
 import { EventType } from "@mia/agent"
-import type { AuditEntry, LogEntry, Run, RunDetail } from "@mia/shared-types"
-import { formatTraceExportText, traceExportFilename } from "@mia/shared-types"
+import type { AuditEntry, LogEntry, Run, RunDetail, TableExportRequest } from "@mia/shared-types"
+import {
+  formatTraceExportText,
+  resolveTablesForExport,
+  serializeAnswerTableCsv,
+  serializeAnswerTablesJson,
+  tableExportFilename,
+  traceExportFilename,
+} from "@mia/shared-types"
 import type { FastifyInstance } from "fastify"
 import { runHasCompensatableEffects } from "../../infra/effects/index.js"
 import { getAttachment, type AttachmentRow } from "../../infra/persistence/attachments.js"
@@ -437,6 +444,50 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
       body: JSON.stringify({ runId: req.params.id, entries }, null, 2),
     })
   })
+
+  /**
+   * Export markdown tables from the run answer (CSV or JSON).
+   * Audited via api_request_log like other authenticated exports.
+   * Distinct from agent tool export_query_to_file (full SQL → sandbox).
+   */
+  app.post<{ Params: { id: string }; Body: TableExportRequest }>(
+    "/api/runs/:id/export/tables",
+    async (req, reply) => {
+      const run = db.getRun(req.params.id)
+      if (!run || !canAccessRun(req.session, run)) {
+        reply.code(404)
+        return { error: "Run not found" }
+      }
+
+      const resolved = resolveTablesForExport(run.answer, {
+        format: req.body?.format,
+        tableIndexes: req.body?.tableIndexes,
+      })
+      if (!resolved.ok) {
+        reply.code(400)
+        return { error: resolved.error }
+      }
+
+      const { tables } = resolved
+      if (req.body.format === "csv") {
+        const table = tables[0]!
+        return sendUserDownload(reply, {
+          filename: tableExportFilename(req.params.id, "csv", { tableIndex: table.index }),
+          contentType: "text/csv; charset=utf-8",
+          body: serializeAnswerTableCsv(table),
+        })
+      }
+
+      return sendUserDownload(reply, {
+        filename: tableExportFilename(req.params.id, "json", {
+          tableIndex: tables.length === 1 ? tables[0]!.index : undefined,
+          multi: tables.length > 1,
+        }),
+        contentType: "application/json; charset=utf-8",
+        body: serializeAnswerTablesJson(req.params.id, tables),
+      })
+    },
+  )
 
   /** List files in the run sandbox the user may download. */
   app.get<{ Params: { id: string } }>("/api/runs/:id/artifacts", async (req, reply) => {

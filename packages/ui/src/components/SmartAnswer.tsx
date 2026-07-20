@@ -18,6 +18,8 @@ import { parseAnswerBlocks } from "./answer-parser"
 import type { StreamRevealState } from "./answer-stream-reveal"
 import { sliceBlockForReveal } from "./answer-stream-reveal"
 import { DataTable } from "./DataTable"
+import { TableExportActions } from "./TableExportActions"
+import type { ChatTableExportSource } from "../lib/chat-table-export"
 import { InlineDiagram, isDiagramLang, tryInferDiagramKind } from "./InlineDiagram"
 import { StructuredPendingBlock } from "./StreamingBlocks"
 
@@ -249,63 +251,79 @@ export function CompactTable({
   headers,
   rows,
   animateRows = false,
+  exportSource,
+  exportDisabled = false,
 }: {
   headers: string[]
   rows: string[][]
   animateRows?: boolean
+  exportSource?: ChatTableExportSource
+  exportDisabled?: boolean
 }) {
+  const showExport = Boolean(exportSource) && rows.length > 0
   return (
-    <div className={COMPACT_TABLE_WRAPPER_CLASS}>
-      {/*
-        `w-auto min-w-full`: let the table choose its natural column widths
-        (so 10-column result sets don't get squished into the viewport) but
-        stretch to fill the wrapper when there are only a few short columns.
-        When natural width exceeds the wrapper, the outer `overflow-x-auto`
-        kicks in and the user can scroll horizontally to see every column.
-        With `w-full` (the old value) the table was always pinned at 100 %,
-        cells wrapped aggressively, and trailing columns got clipped — the
-        user reported this as "cut out, not acceptable".
-      */}
-      <table className="w-auto min-w-full text-[15px] leading-6 border-collapse">
-        {/* <thead className="bg-overlay-hover/40"> */}
-        <thead>
-          <tr>
-            {headers.map((h, hi) => (
-              <th
-                key={hi}
-                className={[
-                  "text-left font-bold text-text-secondary text-[15px] px-3 py-1.5 border-b border-border-subtle whitespace-nowrap",
-                  // "text-left font-bold text-text-muted tracking-wide text-[11px] px-3 py-1.5 border-b border-border-subtle whitespace-nowrap",
-                  hi < headers.length - 1 ? "border-r border-border-subtle" : "",
-                ].join(" ")}
-              >
-                <InlineText text={h} />
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-border-subtle">
-          {rows.map((row, ri) => (
-            <tr
-              key={ri}
-              className={animateRows ? "stream-table-row" : undefined}
-              style={animateRows ? { animationDelay: `${Math.min(ri, 12) * 45}ms` } : undefined}
-            >
-              {row.map((cell, ci) => (
-                <td
-                  key={ci}
+    <div className="w-full min-w-0 my-1.5 space-y-1">
+      {showExport && exportSource ? (
+        <div className="flex justify-end px-0.5">
+          <TableExportActions
+            headers={headers}
+            rows={rows}
+            source={exportSource}
+            disabled={exportDisabled || animateRows}
+            compact
+          />
+        </div>
+      ) : null}
+      <div className={COMPACT_TABLE_WRAPPER_CLASS}>
+        {/*
+          `w-auto min-w-full`: let the table choose its natural column widths
+          (so 10-column result sets don't get squished into the viewport) but
+          stretch to fill the wrapper when there are only a few short columns.
+          When natural width exceeds the wrapper, the outer `overflow-x-auto`
+          kicks in and the user can scroll horizontally to see every column.
+          With `w-full` (the old value) the table was always pinned at 100 %,
+          cells wrapped aggressively, and trailing columns got clipped — the
+          user reported this as "cut out, not acceptable".
+        */}
+        <table className="w-auto min-w-full text-[15px] leading-6 border-collapse">
+          <thead>
+            <tr>
+              {headers.map((h, hi) => (
+                <th
+                  key={hi}
                   className={[
-                    "px-3 py-1.5 align-top text-text-secondary",
-                    ci < row.length - 1 ? "border-r border-border-subtle" : "",
+                    "text-left font-bold text-text-secondary text-[15px] px-3 py-1.5 border-b border-border-subtle whitespace-nowrap",
+                    hi < headers.length - 1 ? "border-r border-border-subtle" : "",
                   ].join(" ")}
                 >
-                  <InlineText text={cell} />
-                </td>
+                  <InlineText text={h} />
+                </th>
               ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody className="divide-y divide-border-subtle">
+            {rows.map((row, ri) => (
+              <tr
+                key={ri}
+                className={animateRows ? "stream-table-row" : undefined}
+                style={animateRows ? { animationDelay: `${Math.min(ri, 12) * 45}ms` } : undefined}
+              >
+                {row.map((cell, ci) => (
+                  <td
+                    key={ci}
+                    className={[
+                      "px-3 py-1.5 align-top text-text-secondary",
+                      ci < row.length - 1 ? "border-r border-border-subtle" : "",
+                    ].join(" ")}
+                  >
+                    <InlineText text={cell} />
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }
@@ -371,12 +389,21 @@ function CompactCodeBlock({ lang, text }: { lang: string; text: string }) {
   )
 }
 
+function markdownTableIndex(blocks: AnswerBlock[], blockIndex: number): number {
+  let index = 0
+  for (let i = 0; i < blockIndex; i++) {
+    if (blocks[i]?.type === "table") index++
+  }
+  return index
+}
+
 export function SmartAnswer({
   text,
   blocks: blocksIn,
   reveal,
   streaming: _streaming = false,
   compact = false,
+  exportRunId,
 }: {
   text?: string
   blocks?: AnswerBlock[]
@@ -384,9 +411,13 @@ export function SmartAnswer({
   /** @deprecated Kept for callers; spacing no longer differs while streaming. */
   streaming?: boolean
   compact?: boolean
+  /** When set, markdown tables Export via audited run API. */
+  exportRunId?: string
 }) {
   void _streaming
   const blocks = blocksIn ?? parseAnswerBlocks(text ?? "")
+  /** Export only when the answer is settled — never mid-stream / mid-reveal. */
+  const exportSettled = !_streaming && !reveal
 
   return (
     <CompactContext.Provider value={compact}>
@@ -562,16 +593,25 @@ export function SmartAnswer({
         if (b.type === "ordered-list") {
           const tableData = tryConvertOrderedListToTable(b.items)
           if (tableData) {
+            const localSource: ChatTableExportSource = { kind: "local", title: "List table" }
             return (
               <div key={bi} className={`py-2 ${wrapClass}`}>
                 {compact ? (
-                  <CompactTable headers={tableData.headers} rows={tableData.rows} animateRows={printing} />
+                  <CompactTable
+                    headers={tableData.headers}
+                    rows={tableData.rows}
+                    animateRows={printing}
+                    exportSource={localSource}
+                    exportDisabled={!exportSettled || printing}
+                  />
                 ) : (
                   <DataTable
                     headers={tableData.headers}
                     rows={tableData.rows}
                     renderCell={(v) => <InlineText text={v} />}
                     renderHeader={(v) => <InlineText text={v} />}
+                    exportSource={localSource}
+                    exportDisabled={!exportSettled || printing}
                   />
                 )}
               </div>
@@ -595,16 +635,28 @@ export function SmartAnswer({
 
         if (b.type === "table") {
           const tablePrinting = printing && reveal?.partial?.kind === "table"
+          const tableIndex = markdownTableIndex(blocks, bi)
+          const exportSource: ChatTableExportSource | undefined = exportRunId
+            ? { kind: "run", runId: exportRunId, tableIndex }
+            : { kind: "local", title: `Table ${tableIndex + 1}` }
           return (
             <div key={bi} className={`py-2 ${wrapClass}`}>
               {compact ? (
-                <CompactTable headers={b.headers} rows={b.rows} animateRows={tablePrinting} />
+                <CompactTable
+                  headers={b.headers}
+                  rows={b.rows}
+                  animateRows={tablePrinting}
+                  exportSource={exportSource}
+                  exportDisabled={!exportSettled || tablePrinting}
+                />
               ) : (
                 <DataTable
                   headers={b.headers}
                   rows={b.rows}
                   renderCell={(v) => <InlineText text={v} />}
                   renderHeader={(v) => <InlineText text={v} />}
+                  exportSource={exportSource}
+                  exportDisabled={!exportSettled || tablePrinting}
                 />
               )}
               {tablePrinting && b.rows.length < (block.type === "table" ? block.rows.length : 0) ? (
