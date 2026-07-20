@@ -1839,28 +1839,44 @@ textarea.input {
   background: color-mix(in srgb, var(--color-elevated, var(--color-bg)) 60%, transparent);
 }
 
-/* Call header sticks inside the scrollport like a normal sticky row. */
+/*
+ * display:contents so sticky headers share the scrollport as containing
+ * block — they stack with increasing --trace-stack-top instead of each
+ * being trapped inside its own call card.
+ */
 .trace-call {
-  border: 1px solid color-mix(in srgb, var(--border, var(--color-border)) 70%, transparent);
-  border-radius: 0.5rem;
-  background: var(--bg);
+  display: contents;
 }
 
 .trace-call-header {
   position: sticky;
-  top: 0;
-  z-index: 2;
+  top: var(--trace-stack-top, 0px);
+  z-index: var(--trace-stack-z, 2);
   background: var(--bg);
-  border-bottom: 1px solid transparent;
-  box-shadow: 0 1px 0 color-mix(in srgb, var(--border, var(--color-border)) 70%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border, var(--color-border)) 70%, transparent);
+  border-radius: 0.5rem;
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--border, var(--color-border)) 55%, transparent);
 }
 
 .trace-call-header:hover {
   background: color-mix(in srgb, var(--text, var(--color-text)) 3.5%, var(--bg));
 }
 
-.trace-call.is-open > .trace-call-header {
-  border-bottom-color: color-mix(in srgb, var(--color-border) 70%, transparent);
+.trace-call.is-open .trace-call-header {
+  border-radius: 0.5rem 0.5rem 0 0;
+  border-bottom-color: color-mix(in srgb, var(--border, var(--color-border)) 70%, transparent);
+}
+
+.trace-call-body {
+  border: 1px solid color-mix(in srgb, var(--border, var(--color-border)) 70%, transparent);
+  border-top: none;
+  border-radius: 0 0 0.5rem 0.5rem;
+  background: var(--bg);
+  margin-bottom: 0.5rem;
+}
+
+.trace-call:not(.is-open) .trace-call-header {
+  margin-bottom: 0.35rem;
 }
 
 .trace-expand-toggle {

@@ -48,6 +48,32 @@ function historySpeaker(role: string): string {
   return role
 }
 
+/**
+ * Label a history row. ask_user answers are tool-role messages in the LLM
+ * protocol — show them as “User answer”, not a generic tool result.
+ */
+function historyRowLabel(
+  msg: TraceMessage,
+  messages: TraceMessage[],
+  index: number,
+): { speaker: string; detail?: string } {
+  if (msg.role !== "tool") return { speaker: historySpeaker(msg.role) }
+  for (let i = index - 1; i >= 0; i--) {
+    const prev = messages[i]!
+    if (prev.role !== "assistant") continue
+    const tc = prev.toolCalls.find((t) => t.id === msg.toolCallId)
+    if (!tc) continue
+    if (tc.name === "ask_user") {
+      return { speaker: "User answer", detail: "via ask_user" }
+    }
+    return { speaker: "Tool result", detail: tc.name }
+  }
+  return { speaker: "Tool result" }
+}
+
+/** Fixed header height used for stacked sticky offsets. */
+const TRACE_CALL_HEADER_H_PX = 34
+
 function formatCharCount(n: number): string {
   return n.toLocaleString()
 }
@@ -396,9 +422,13 @@ function Section({
 
 function HistoryMessage({
   msg,
+  index,
+  messages,
   partsMode,
 }: {
   msg: TraceMessage
+  index: number
+  messages: TraceMessage[]
   partsMode: PartsMode
 }) {
   const [open, setOpen] = useState(partsMode === "expanded")
@@ -409,6 +439,8 @@ function HistoryMessage({
 
   const preview = messagePreview(msg)
   const isToolResult = msg.role === "tool"
+  const label = historyRowLabel(msg, messages, index)
+  const isUserAnswer = label.speaker === "User answer"
 
   return (
     <div className="trace-history-msg min-w-0">
@@ -423,9 +455,16 @@ function HistoryMessage({
         ) : (
           <ChevronRight size={14} className="text-text-muted shrink-0 mt-0.5" />
         )}
-        <span className="text-sm font-semibold text-text-secondary shrink-0">
-          {historySpeaker(msg.role)}
+        <span
+          className={`text-sm font-semibold shrink-0 ${
+            isUserAnswer ? "text-text" : "text-text-secondary"
+          }`}
+        >
+          {label.speaker}
         </span>
+        {label.detail && (
+          <span className="text-sm text-text-muted/50 shrink-0">{label.detail}</span>
+        )}
         {!open && (
           <span className="text-sm text-text-muted truncate min-w-0 flex-1">
             {preview}
@@ -542,6 +581,11 @@ function LlmCallEntry({
   const res = call.response
   const usage = res?.usage ?? null
   const headline = replyHeadline(res)
+  const askedUser = Boolean(res?.toolCalls.some((t) => t.name === "ask_user"))
+  const stackStyle = {
+    ["--trace-stack-top" as string]: `${index * TRACE_CALL_HEADER_H_PX}px`,
+    ["--trace-stack-z" as string]: String(20 + index),
+  }
 
   // When search hits history, open that section so the match is reachable.
   useEffect(() => {
@@ -549,10 +593,11 @@ function LlmCallEntry({
   }, [searchHit])
 
   return (
-    <div className={`trace-call shrink-0${open ? " is-open" : ""}`}>
+    <div className={`trace-call${open ? " is-open" : ""}`}>
       <button
         type="button"
         className="trace-call-header flex items-center gap-2 px-2.5 py-1.5 w-full text-left transition-colors"
+        style={stackStyle}
         onClick={onToggle}
       >
         {open ? (
@@ -585,7 +630,7 @@ function LlmCallEntry({
       </button>
 
       {open && (
-        <div>
+        <div className="trace-call-body">
           {/* History — secondary */}
           <div className="px-3 py-2 border-b border-border/20">
             <button
@@ -618,6 +663,8 @@ function LlmCallEntry({
                     <HistoryMessage
                       key={`${req.iteration}-${mi}`}
                       msg={msg}
+                      index={mi}
+                      messages={req.messages}
                       partsMode={partsMode}
                     />
                   ))
@@ -676,6 +723,15 @@ function LlmCallEntry({
                   </div>
                 ))}
               </div>
+            )}
+
+            {askedUser && (
+              <p className="text-sm text-text-muted mt-2">
+                Waiting on the human — their answer appears on the{" "}
+                <span className="text-text-secondary">next</span> call as{" "}
+                <span className="text-text-secondary">User answer</span> (tool
+                protocol), not as a User message on this call.
+              </p>
             )}
 
             {res && res.toolCalls.length === 0 && !res.content && (
