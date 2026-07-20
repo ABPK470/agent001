@@ -102,19 +102,20 @@ export const OP_LOG_MUTED = "text-text-muted"
 /** Description / summary after the middle dot — one step lighter than the label. */
 export const OP_LOG_DESC = "text-text-faint"
 
-/** Colored status badge — soft background + status-colored text (pipeline / parent rows). */
+/** Colored status badge — soft background + status-colored text (pipeline / parent rows).
+ *  Slightly smaller than body `text-sm` so the label doesn’t dominate the row. */
 export function LogStatusLabel({
   status,
 }: {
   status: OperationStatus
-  /** @deprecated Font size is always text-sm (same as sync history rows). */
+  /** @deprecated Size is fixed; kept for call-site compat. */
   compact?: boolean
 }) {
   return (
     <span
-      className={`inline-flex items-center gap-0.5 shrink-0 rounded px-1.5 py-0.5 font-semibold uppercase tracking-wide text-sm ${statusSoftBgClass(status)} ${statusTextClass(status)}`}
+      className={`inline-flex items-center gap-0.5 shrink-0 rounded px-1.5 py-0.5 text-xs font-semibold uppercase tracking-wide ${statusSoftBgClass(status)} ${statusTextClass(status)}`}
     >
-      {status === "running" && <Loader2 size={11} className="animate-spin" />}
+      {status === "running" && <Loader2 size={10} className="animate-spin" />}
       {status}
     </span>
   )
