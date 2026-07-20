@@ -1,10 +1,11 @@
 /**
  * /export — pick answer tables from thread runs and Export as CSV or JSON.
  * Product verb: Export. One path: audited POST /api/runs/:id/export/tables.
+ * Chrome: ModalShell (theme surface + shared scrim) — same dialect as platform modals.
  */
 
 import { extractAnswerTables, type TableExportFormat } from "@mia/shared-types"
-import { FileSpreadsheet, X } from "lucide-react"
+import { FileSpreadsheet } from "lucide-react"
 import { useEffect, useMemo, useState, type JSX } from "react"
 import { LabeledCheckbox } from "../../components/Checkbox"
 import {
@@ -12,7 +13,7 @@ import {
   exportChatTablesJson,
 } from "../../lib/chat-table-export"
 import type { Run } from "../../types"
-import { modalOverlayClass } from "../entity-registry/modal-overlay"
+import { ModalShell } from "../entity-registry/ModalShell"
 
 export interface ChatTableExportModalProps {
   open: boolean
@@ -176,81 +177,24 @@ export function ChatTableExportModal({
   if (!open) return null
 
   return (
-    <div
-      className={modalOverlayClass("detail", { zIndexClass: "z-[80]" })}
-      onClick={onClose}
-    >
-      <div
-        className="w-full max-w-lg max-h-[min(90dvh,720px)] flex flex-col rounded-lg border border-border-subtle bg-base shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="chat-table-export-title"
-      >
-        <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-border-subtle">
-          <div className="min-w-0 flex items-center gap-2">
-            <FileSpreadsheet size={16} className="shrink-0 text-accent" />
-            <div className="min-w-0">
-              <div id="chat-table-export-title" className="text-sm font-medium text-text">
-                Export tables
-              </div>
-              <div className="text-xs text-text-muted">
-                Markdown tables from run answers · CSV or JSON
-              </div>
-            </div>
-          </div>
-          <button type="button" className="text-text-muted hover:text-text cursor-pointer" onClick={onClose} aria-label="Close">
-            <X size={18} />
-          </button>
-        </div>
-
-        <div className="flex-1 min-h-0 overflow-auto px-4 py-3 space-y-4">
-          {tables.length === 0 ? (
-            <p className="text-sm text-text-muted">
-              No markdown tables in this thread yet. Tables appear when a run answer includes a markdown table.
-            </p>
-          ) : (
-            runsInList.map((group) => {
-              const allOn = group.tables.every((t) => selected.has(t.key))
-              return (
-                <div key={group.runId} className="space-y-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="text-xs font-medium text-text-muted truncate">{group.label}</div>
-                    <button
-                      type="button"
-                      className="text-[11px] text-accent hover:underline cursor-pointer shrink-0"
-                      onClick={() => selectAllInRun(group.runId, !allOn)}
-                    >
-                      {allOn ? "Clear" : "Select all"}
-                    </button>
-                  </div>
-                  <div className="space-y-1.5">
-                    {group.tables.map((table) => (
-                      <LabeledCheckbox
-                        key={table.key}
-                        layout="card"
-                        checked={selected.has(table.key)}
-                        onChange={(on) => toggleKey(table.key, on)}
-                        label={table.title}
-                        hint={`${table.rowCount} row${table.rowCount === 1 ? "" : "s"} · ${table.columnCount} col${table.columnCount === 1 ? "" : "s"} · #${table.tableIndex}`}
-                      />
-                    ))}
-                  </div>
-                </div>
-              )
-            })
-          )}
-        </div>
-
-        <div className="border-t border-border-subtle px-4 py-3 space-y-3">
-          <div className="flex items-center gap-2">
+    <ModalShell
+      title="Export tables"
+      subtitle="Markdown tables from run answers · CSV or JSON"
+      icon={<FileSpreadsheet size={18} />}
+      size="detail"
+      onClose={onClose}
+      footer={
+        <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2 min-w-0">
             <span className="text-xs text-text-muted shrink-0">Format</span>
-            <div className="flex rounded-md border border-border-subtle overflow-hidden">
+            <div className="flex rounded-md border border-border-subtle overflow-hidden bg-panel">
               <button
                 type="button"
                 className={[
-                  "px-3 py-1 text-xs cursor-pointer",
-                  format === "csv" ? "bg-accent text-text-on-accent" : "text-text-muted hover:bg-overlay-hover",
+                  "px-3 py-1.5 text-xs cursor-pointer transition-colors",
+                  format === "csv"
+                    ? "bg-accent text-text-on-accent"
+                    : "text-text-muted hover:bg-overlay-hover hover:text-text",
                 ].join(" ")}
                 onClick={() => setFormat("csv")}
               >
@@ -259,8 +203,10 @@ export function ChatTableExportModal({
               <button
                 type="button"
                 className={[
-                  "px-3 py-1 text-xs cursor-pointer border-l border-border-subtle",
-                  format === "json" ? "bg-accent text-text-on-accent" : "text-text-muted hover:bg-overlay-hover",
+                  "px-3 py-1.5 text-xs cursor-pointer border-l border-border-subtle transition-colors",
+                  format === "json"
+                    ? "bg-accent text-text-on-accent"
+                    : "text-text-muted hover:bg-overlay-hover hover:text-text",
                 ].join(" ")}
                 onClick={() => setFormat("json")}
               >
@@ -268,13 +214,13 @@ export function ChatTableExportModal({
               </button>
             </div>
             {format === "csv" && selected.size > 1 ? (
-              <span className="text-[11px] text-text-muted">One file per table</span>
+              <span className="text-[11px] text-text-muted truncate">One file per table</span>
             ) : null}
           </div>
-          <div className="flex justify-end gap-2">
+          <div className="flex justify-end gap-2 shrink-0">
             <button
               type="button"
-              className="px-3 py-1.5 text-sm rounded-md text-text-muted hover:bg-overlay-hover cursor-pointer"
+              className="px-3 py-1.5 text-sm rounded-lg text-text-muted hover:bg-overlay-hover hover:text-text cursor-pointer disabled:opacity-40"
               onClick={onClose}
               disabled={busy}
             >
@@ -282,7 +228,7 @@ export function ChatTableExportModal({
             </button>
             <button
               type="button"
-              className="px-3 py-1.5 text-sm rounded-md bg-accent text-text-on-accent hover:opacity-90 disabled:opacity-40 cursor-pointer"
+              className="px-3 py-1.5 text-sm rounded-lg bg-accent text-text-on-accent hover:bg-accent-hover disabled:opacity-40 cursor-pointer"
               onClick={() => void onExport()}
               disabled={busy || selected.size === 0 || tables.length === 0}
             >
@@ -290,7 +236,45 @@ export function ChatTableExportModal({
             </button>
           </div>
         </div>
+      }
+    >
+      <div className="min-h-0 flex-1 overflow-auto px-6 py-4 space-y-4">
+        {tables.length === 0 ? (
+          <p className="text-sm text-text-muted">
+            No markdown tables in this thread yet. Tables appear when a run answer includes a markdown table.
+          </p>
+        ) : (
+          runsInList.map((group) => {
+            const allOn = group.tables.every((t) => selected.has(t.key))
+            return (
+              <div key={group.runId} className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-xs font-medium text-text-muted truncate">{group.label}</div>
+                  <button
+                    type="button"
+                    className="text-[11px] text-accent hover:underline cursor-pointer shrink-0"
+                    onClick={() => selectAllInRun(group.runId, !allOn)}
+                  >
+                    {allOn ? "Clear" : "Select all"}
+                  </button>
+                </div>
+                <div className="space-y-1.5">
+                  {group.tables.map((table) => (
+                    <LabeledCheckbox
+                      key={table.key}
+                      layout="card"
+                      checked={selected.has(table.key)}
+                      onChange={(on) => toggleKey(table.key, on)}
+                      label={table.title}
+                      hint={`${table.rowCount} row${table.rowCount === 1 ? "" : "s"} · ${table.columnCount} col${table.columnCount === 1 ? "" : "s"} · #${table.tableIndex}`}
+                    />
+                  ))}
+                </div>
+              </div>
+            )
+          })
+        )}
       </div>
-    </div>
+    </ModalShell>
   )
 }

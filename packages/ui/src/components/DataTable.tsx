@@ -255,7 +255,19 @@ export function DataTable({
   const showFooterControls = total > 10 || pageSize !== defaultPageSize || filter !== ""
 
   return (
-    <div className="rounded-lg overflow-hidden" style={{ border: `1px solid ${C.border}`, background: C.base }}>
+    <div className="group relative rounded-lg overflow-hidden" style={{ border: `1px solid ${C.border}`, background: C.base }}>
+      {exportSource ? (
+        <div className="absolute top-1.5 right-1.5 z-20">
+          <TableExportActions
+            headers={headers}
+            rows={rows}
+            source={exportSource}
+            disabled={exportDisabled}
+            compact
+            revealOnHover
+          />
+        </div>
+      ) : null}
       {/* Toolbar */}
       <div
         className="flex items-center gap-2 px-2 py-1.5 flex-wrap"
@@ -293,14 +305,6 @@ export function DataTable({
             </button>
           )}
         </div>
-        {exportSource ? (
-          <TableExportActions
-            headers={headers}
-            rows={rows}
-            source={exportSource}
-            disabled={exportDisabled}
-          />
-        ) : null}
       </div>
 
       {/* Table */}

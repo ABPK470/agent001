@@ -262,15 +262,16 @@ export function CompactTable({
 }) {
   const showExport = Boolean(exportSource) && rows.length > 0
   return (
-    <div className="w-full min-w-0 my-1.5 space-y-1">
+    <div className="group relative w-full min-w-0 my-1.5">
       {showExport && exportSource ? (
-        <div className="flex justify-end px-0.5">
+        <div className="absolute top-1 right-1 z-10">
           <TableExportActions
             headers={headers}
             rows={rows}
             source={exportSource}
             disabled={exportDisabled || animateRows}
             compact
+            revealOnHover
           />
         </div>
       ) : null}

@@ -19,6 +19,11 @@ export interface TableExportActionsProps {
   disabled?: boolean
   /** Visual density — compact for TermChat tables. */
   compact?: boolean
+  /**
+   * Hide until the parent `group` is hovered / focused.
+   * Stays visible while Copy/Export feedback or an error is showing.
+   */
+  revealOnHover?: boolean
 }
 
 type Feedback = "copied" | "exported" | null
@@ -29,6 +34,7 @@ export function TableExportActions({
   source,
   disabled = false,
   compact = false,
+  revealOnHover = false,
 }: TableExportActionsProps): JSX.Element {
   const [feedback, setFeedback] = useState<Feedback>(null)
   const [busy, setBusy] = useState(false)
@@ -79,9 +85,27 @@ export function TableExportActions({
       : "inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-sm text-text-muted hover:text-text hover:bg-overlay-2 disabled:opacity-40 disabled:pointer-events-none cursor-pointer"
 
   const idle = !disabled && !busy
+  const pinnedVisible = Boolean(feedback || busy || error)
 
   return (
-    <div className="flex flex-wrap items-center gap-1 min-w-0">
+    <div
+      className={[
+        "flex flex-wrap items-center gap-1 min-w-0",
+        compact
+          ? "rounded-md border border-border-subtle bg-panel/95 px-1 py-0.5 shadow-sm backdrop-blur-sm"
+          : "",
+        revealOnHover
+          ? [
+              "transition-opacity duration-150",
+              pinnedVisible
+                ? "opacity-100"
+                : "opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto group-focus-within:opacity-100 group-focus-within:pointer-events-auto",
+            ].join(" ")
+          : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+    >
       <button type="button" className={btn} disabled={!idle} onClick={() => void onCopy()} aria-label="Copy table as CSV">
         {feedback === "copied" ? <Check size={11} className="text-success" /> : <Copy size={11} />}
         <span>{feedback === "copied" ? "Copied" : "Copy"}</span>
