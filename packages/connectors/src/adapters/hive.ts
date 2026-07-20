@@ -25,6 +25,7 @@ import type {
   WriteSpec,
 } from "@mia/shared-types"
 import { makeSummary } from "../engine.js"
+import { quoteSqlLiteral } from "../sql-literals.js"
 
 type RowBatch = Row[]
 
@@ -187,7 +188,7 @@ async function hiveInsertBatches(
   for await (const batch of rows) {
     if (batch.length === 0) continue
     const cols = Object.keys(batch[0]!)
-    const values = batch.map((r) => `(${cols.map((c) => quoteLit(r[c])).join(",")})`).join(",")
+    const values = batch.map((r) => `(${cols.map((c) => quoteSqlLiteral(r[c])).join(",")})`).join(",")
     await client.execute(`INSERT INTO TABLE ${quoteIdent(table)} (${cols.map(quoteIdent).join(",")}) VALUES ${values}`)
     rowsWritten += batch.length
   }
@@ -200,10 +201,4 @@ function quoteIdent(name: string): string {
     .split(".")
     .map((part) => `\`${part.replace(/`/g, "``")}\``)
     .join(".")
-}
-
-function quoteLit(value: unknown): string {
-  if (value === null || value === undefined) return "NULL"
-  if (typeof value === "number" || typeof value === "boolean") return String(value)
-  return `'${String(value).replace(/'/g, "''")}'`
 }

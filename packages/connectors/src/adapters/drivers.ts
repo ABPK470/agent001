@@ -26,6 +26,7 @@ import {
   quotePgTable,
   splitOracleTable,
 } from "../sql-idents.js"
+import { quoteSqlLiteral } from "../sql-literals.js"
 import type { MssqlDriver, MssqlInsertOptions, MssqlTransaction } from "./mssql.js"
 import type {
   OracleDriver,
@@ -151,7 +152,7 @@ async function mssqlInsertBatches(
     if (batch.length === 0) continue
     const cols = Object.keys(batch[0]!)
     const values = batch
-      .map((r) => `(${cols.map((c) => quoteLit(r[c])).join(",")})`)
+      .map((r) => `(${cols.map((c) => quoteSqlLiteral(r[c])).join(",")})`)
       .join(",")
     // IDENTITY_INSERT must share the INSERT batch — a prior SET request is ignored
     // by node-mssql/tedious even inside a transaction (see tediousjs/node-mssql#936).
@@ -412,14 +413,6 @@ async function oracleInsertBatches(
     rowsWritten += batch.length
   }
   return makeSummary("completed", rowsWritten, rowsWritten, [], null)
-}
-
-// ── shared SQL helpers ──────────────────────────────────────────
-
-function quoteLit(value: unknown): string {
-  if (value === null || value === undefined) return "NULL"
-  if (typeof value === "number" || typeof value === "boolean") return String(value)
-  return `'${String(value).replace(/'/g, "''")}'`
 }
 
 // ── httpApi ─────────────────────────────────────────────────────
@@ -842,7 +835,7 @@ export function defaultDatabricksDriver(connector: Connector): DatabricksDriver 
         if (batch.length === 0) continue
         const cols = Object.keys(batch[0]!)
         const values = batch
-          .map((r) => `(${cols.map((c) => quoteLit(r[c])).join(",")})`)
+          .map((r) => `(${cols.map((c) => quoteSqlLiteral(r[c])).join(",")})`)
           .join(",")
         const stmt = `INSERT INTO ${quotePgTable(table)} (${cols.map(quotePgIdent).join(",")}) VALUES ${values}`
         await executeSql(stmt)

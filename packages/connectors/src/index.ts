@@ -34,6 +34,7 @@ export {
   quotePgTable,
   splitOracleTable,
 } from "./sql-idents.js"
+export { quoteSqlLiteral } from "./sql-literals.js"
 
 export {
   createMssqlAdapter,
