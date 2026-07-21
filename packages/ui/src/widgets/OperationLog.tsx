@@ -4,6 +4,7 @@
  * Data: paginated GET /api/operations (SQLite event_log). SSE only signals refresh.
  */
 
+import { describeDebugTracePayload, eventLabel } from "@mia/shared-types"
 import { Brain, ChevronRight, Database, GitCompareArrows, Loader2, Settings, Shuffle, Square, Wrench } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import type { OperationActivity, OperationEvent, OperationPipeline } from "../client/index"
@@ -323,131 +324,24 @@ export function syncPlanIdFromPipeline(pipeline: OperationPipeline): string {
   return pipeline.planId ?? pipeline.id.replace(/:(preview|execute)$/, "")
 }
 
-// ── Debug trace (agent telemetry) ────────────────────────────────
-
-const TRACE_KIND_LABELS: Record<string, string> = {
-  "goal": "Goal",
-  "iteration": "Iteration",
-  "thinking": "Thinking",
-  "tool-call": "Tool call",
-  "tool-result": "Tool result",
-  "tool-error": "Tool error",
-  "answer": "Answer",
-  "error": "Error",
-  "usage": "Usage",
-  "llm-request": "LLM request",
-  "llm-response": "LLM response",
-  "system-prompt": "System prompt",
-  "tools-resolved": "Tools resolved",
-  "tools-filtered": "Tools filtered",
-  "nudge": "Nudge",
-  "delegation-start": "Delegation start",
-  "delegation-end": "Delegation end",
-  "delegation-iteration": "Delegation iteration",
-  "delegation-parallel-start": "Delegation parallel start",
-  "delegation-parallel-end": "Delegation parallel end",
-  "user-input-request": "User input request",
-  "user-input-response": "User input response",
-  "planner-decision": "Planner decision",
-  "planner-plan-generated": "Planner plan generated",
-  "planner-step-start": "Planner step start",
-  "planner-step-end": "Planner step end",
-  "planner-retry": "Planner retry",
-  "planner-escalation": "Planner escalation",
-}
+// ── Debug trace (agent telemetry) — labels from event catalog ─────
 
 function describeDebugTraceEntry(ev: OperationEvent): { label: string; summary: string } {
-  const entry = ev.data["entry"]
-  const e = entry && typeof entry === "object" ? (entry as Record<string, unknown>) : {}
-  const kind = typeof e["kind"] === "string" ? (e["kind"] as string) : "trace"
-  const label = TRACE_KIND_LABELS[kind] ?? humanizeToken(kind)
-
-  const summary = describeTraceKindDetail(kind, e)
-  return { label, summary }
-}
-
-function describeTraceKindDetail(kind: string, e: Record<string, unknown>): string {
-  switch (kind) {
-    case "iteration":
-      return `${e["current"] ?? "?"}/${e["max"] ?? "?"}`
-    case "thinking":
-      return truncate(String(e["text"] ?? ""), 160)
-    case "llm-request": {
-      const msgs = e["messageCount"]
-      const tools = e["toolCount"]
-      return [
-        typeof msgs === "number" ? `${msgs} msgs` : null,
-        typeof tools === "number" ? `${tools} tools` : null,
-        typeof e["iteration"] === "number" ? `iter ${e["iteration"]}` : null,
-      ].filter(Boolean).join(" · ")
-    }
-    case "llm-response": {
-      const dur = e["durationMs"]
-      const usage = e["usage"] && typeof e["usage"] === "object" ? (e["usage"] as Record<string, unknown>) : {}
-      const tokens = usage["totalTokens"]
-      return [
-        typeof dur === "number" ? `${dur}ms` : null,
-        typeof tokens === "number" ? `${tokens} tok` : null,
-        typeof e["iteration"] === "number" ? `iter ${e["iteration"]}` : null,
-      ].filter(Boolean).join(" · ")
-    }
-    case "usage": {
-      const total = e["totalTokens"]
-      const iter = e["iterationTokens"]
-      const llm = e["llmCalls"]
-      return [
-        typeof total === "number" ? `${total} tok total` : null,
-        typeof iter === "number" ? `${iter} tok iter` : null,
-        typeof llm === "number" ? `${llm} llm call${llm === 1 ? "" : "s"}` : null,
-      ].filter(Boolean).join(" · ")
-    }
-    case "tool-call": {
-      const tool = e["tool"]
-      const args = e["argsSummary"]
-      return [typeof tool === "string" ? tool : null, typeof args === "string" ? truncate(args, 120) : null]
-        .filter(Boolean).join(" · ")
-    }
-    case "tool-result":
-    case "tool-error":
-    case "answer":
-    case "error":
-    case "nudge":
-    case "user-input-request":
-    case "user-input-response":
-      return truncate(String(e["text"] ?? e["message"] ?? ""), 200)
-    case "delegation-start":
-      return [String(e["goal"] ?? ""), `depth ${e["depth"] ?? "?"}`].filter(Boolean).join(" · ")
-    case "delegation-end":
-      return `depth ${e["depth"] ?? "?"} · ${e["status"] ?? "?"}`
-    case "delegation-iteration":
-      return `depth ${e["depth"] ?? "?"} · ${e["iteration"] ?? "?"}/${e["maxIterations"] ?? "?"}`
-    case "delegation-parallel-start":
-      return `${e["taskCount"] ?? "?"} tasks · depth ${e["depth"] ?? "?"}`
-    case "delegation-parallel-end":
-      return `${e["fulfilled"] ?? "?"}/${e["taskCount"] ?? "?"} fulfilled`
-    case "planner-decision":
-      return `shouldPlan ${e["shouldPlan"] ?? "?"} · ${truncate(String(e["reason"] ?? ""), 140)}`
-    case "planner-plan-generated":
-      return `${e["stepCount"] ?? "?"} steps · ${truncate(String(e["reason"] ?? ""), 120)}`
-    case "planner-retry":
-      return `attempt ${e["attempt"] ?? "?"} · ${truncate(String(e["reason"] ?? ""), 140)}`
-    case "planner-escalation":
-      return `${e["action"] ?? "?"} · ${truncate(String(e["reason"] ?? ""), 140)}`
-    case "tools-filtered":
-      return `kept ${e["kept"] ?? "?"} · ${truncate(String(e["reason"] ?? ""), 120)}`
-    default:
-      return ""
-  }
-}
-
-function truncate(s: string, n: number): string {
-  const t = s.trim()
-  if (t.length <= n) return t
-  return t.slice(0, n - 1) + "…"
+  return describeDebugTracePayload((ev.data ?? {}) as Record<string, unknown>)
 }
 
 function formatEventLabel(ev: OperationEvent): string {
   if (ev.type === "debug.trace") return describeDebugTraceEntry(ev).label
+  // Prefer shared catalog for known SSE types; keep OpLog switch for sync chrome.
+  const fromCatalog = eventLabel(ev.type)
+  if (
+    fromCatalog &&
+    fromCatalog !== "Event" &&
+    !ev.type.startsWith("sync.") &&
+    !ev.type.startsWith("bridge.")
+  ) {
+    return fromCatalog
+  }
   switch (ev.type) {
     case "sync.preview.completed": return "Preview complete"
     case "sync.preview.table.start": return "Table scan"

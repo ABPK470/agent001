@@ -621,6 +621,11 @@ const UI_ALLOWED = {
 
 const UI_LAYER_ALLOWLIST = []
 
+/** Phase 2 debt: TermChat buildResponseParts still switches on TraceEntry.kind. */
+const UI_EVENT_CATALOG_ALLOWLIST = new Set([
+  "widgets/TermChat.tsx",
+])
+
 const FORBIDDEN_UI_TREES = [
   "shell",
   "chrome",
@@ -759,6 +764,38 @@ for (const f of uiFiles) {
   lintUiLayerImports(f, src)
   lintFlatControlFlow(f, src)
   lintUiPlatformCheckbox(f, src)
+  lintUiEventKindSwitch(f, src)
+}
+
+/**
+ * Event catalog doctrine — widgets must not switch on TraceEntry.kind /
+ * high-traffic EventType strings for labels / outline roles. Look up
+ * @mia/shared-types event-catalog or project via lib/events.
+ */
+function lintUiEventKindSwitch(file, src) {
+  if (!/\.(tsx?|jsx?)$/.test(file)) return
+  const rel = relative(UI_SRC, file)
+  if (rel.endsWith(".test.ts") || rel.endsWith(".test.tsx")) return
+  if (rel.startsWith("lib/events/")) return
+  if (rel.startsWith("components/outline/")) return
+  if (!rel.startsWith("widgets/") && !rel.startsWith("state/")) return
+  if (UI_EVENT_CATALOG_ALLOWLIST.has(rel)) return
+
+  if (/\bTRACE_KIND_LABELS\b/.test(src)) {
+    fail(file, 0, "event-catalog",
+      `TRACE_KIND_LABELS is banned — use eventLabel / describeDebugTracePayload from @mia/shared-types (event-catalog).`)
+  }
+
+  const WIRE_KIND_CASE =
+    /case\s+["'](llm-request|llm-response|system-prompt|tools-resolved|tool-call|tool-result|tool-error|planner-step-start|planner-step-end|planner-decision|planner-plan-generated|delegation-start|delegation-end)["']/
+  const lines = src.split("\n")
+  for (let i = 0; i < lines.length; i++) {
+    if (WIRE_KIND_CASE.test(lines[i])) {
+      fail(file, i + 1, "event-catalog",
+        `Widget/state must not switch on wire TraceEntry.kind / EventType for presentation. ` +
+          `Use packages/shared-types/src/event-catalog.ts + lib/events projection. See docs/doctrine.md`)
+    }
+  }
 }
 
 /**

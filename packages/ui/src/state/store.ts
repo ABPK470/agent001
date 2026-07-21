@@ -21,7 +21,7 @@ import {
 } from "./sync-trace-progress.js"
 import { pendingApprovalFromEvent, type PendingToolApproval } from "./pending-approval.js"
 import { api } from "../client/index"
-import { readSseEntityId, readSseRunId, readSseStepId } from "@mia/shared-types"
+import { readSseRunId, readSseStepId, lookupEventDescriptor } from "@mia/shared-types"
 import {
   traceEntryFromStepCompleted,
   traceEntryFromStepFailed,
@@ -532,8 +532,9 @@ function eventType(type: string): string {
 
 /**
  * Build a LogEntry with the correct type, error flag, and a clean
- * human-readable message for every known event. Returns null for
- * high-frequency events that would spam the log (answer.chunk, debug.trace).
+ * human-readable message via the shared event catalog.
+ * Returns null for high-frequency spam (answer.chunk, most debug.trace).
+ * Unknown types → JSON preview (never silent).
  */
 export function formatLogEntry(
   type: string,
@@ -555,393 +556,62 @@ function formatLogEntryInner(
 ): LogEntry | null {
   const t = eventType(type)
 
+  if (type === "answer.chunk") return null
+
   if (type === "debug.trace") {
     const entry = data["entry"] as Record<string, unknown> | undefined
     if (!entry) return null
-    if ((entry["kind"] as string) === "planner-sql-quality") {
-      const validationCode = typeof entry["validationCode"] === "string" ? entry["validationCode"] : null
-      const missingMirrors = Array.isArray(entry["missingPersistedMirrorCandidates"])
-        ? (entry["missingPersistedMirrorCandidates"] as string[])
-        : []
-      const tempScalarSubqueryCount = Number(entry["tempScalarSubqueryCount"] ?? 0)
-      const largeObjectRefs = Array.isArray(entry["largeObjectRefs"])
-        ? (entry["largeObjectRefs"] as Array<{ name?: string; count?: number }>).filter((ref) => Number(ref.count ?? 0) > 2)
-        : []
-      const notes: string[] = []
-      if (validationCode) notes.push(`blocked=${validationCode}`)
-      if (missingMirrors.length > 0) notes.push(`mirror=${missingMirrors.join(",")}`)
-      if (largeObjectRefs.length > 0) notes.push(largeObjectRefs.map((ref) => `${ref.name ?? "object"}×${Number(ref.count ?? 0)}`).join(", "))
-      if (tempScalarSubqueryCount > 0) notes.push(`temp-subq=${tempScalarSubqueryCount}`)
-      return {
-        type: t,
-        message: `SQL quality — ${String(entry["phase"] ?? "checked")}${notes.length ? ` · ${notes.join(" · ")}` : " · ok"}`,
-        timestamp,
-        error: validationCode != null || entry["phase"] === "blocked",
-      }
-    }
-    if ((entry["kind"] as string) === "planner-prompt-budget") {
-      const before = Number(entry["totalBeforeChars"] ?? 0)
-      const after = Number(entry["totalAfterChars"] ?? 0)
-      const dropped = Array.isArray(entry["droppedSections"]) ? (entry["droppedSections"] as string[]) : []
-      const parts = [`${before.toLocaleString()} → ${after.toLocaleString()} chars`]
-      if (dropped.length > 0) parts.push(`dropped=${dropped.join(",")}`)
-      return {
-        type: t,
-        message: `Prompt budget · ${parts.join(" · ")}`,
-        timestamp,
-        error: false,
-      }
-    }
-    return null
-  }
-
-  // ── Bridge events ───────────────────────────────────────────
-  if (type.startsWith("bridge.")) {
-    const moveId = (data["moveId"] as string | undefined)?.slice(0, 8) ?? ""
-    const sourceSpec = typeof data["sourceSpec"] === "string" ? data["sourceSpec"] : null
-    const targetSpec = typeof data["targetSpec"] === "string" ? data["targetSpec"] : null
-    const durationMs = typeof data["durationMs"] === "number" ? data["durationMs"] : null
-    const elapsedMs = typeof data["elapsedMs"] === "number" ? data["elapsedMs"] : null
-    const dur =
-      durationMs != null
-        ? durationMs < 1000
-          ? `${durationMs}ms`
-          : `${(durationMs / 1000).toFixed(1)}s`
-        : elapsedMs != null
-          ? elapsedMs < 1000
-            ? `${elapsedMs}ms`
-            : `${(elapsedMs / 1000).toFixed(1)}s`
-          : null
-    switch (type) {
-      case "bridge.preview.started":
-        return {
-          type: t,
-          message: [
-            `Bridge preview started — ${data["source"] ?? "?"}`,
-            sourceSpec,
-            moveId ? `(${moveId})` : null,
-          ]
-            .filter(Boolean)
-            .join(" · "),
-          timestamp,
-        }
-      case "bridge.preview.completed":
-        return {
-          type: t,
-          message: [
-            `Bridge preview complete — ${data["rowCount"] ?? "?"} rows`,
-            data["truncated"] ? "(truncated)" : null,
-            dur,
-          ]
-            .filter(Boolean)
-            .join(" · "),
-          timestamp,
-        }
-      case "bridge.preview.failed":
-        return {
-          type: t,
-          error: true,
-          message: [
-            `Bridge preview failed: ${data["error"] ?? "unknown"}`,
-            dur,
-          ]
-            .filter(Boolean)
-            .join(" · "),
-          timestamp,
-        }
-      case "bridge.run.started":
-        return {
-          type: t,
-          message: [
-            `Bridge move started — ${data["source"] ?? "?"} → ${data["target"] ?? "?"}`,
-            sourceSpec && targetSpec ? `${sourceSpec} → ${targetSpec}` : sourceSpec ?? targetSpec,
-            moveId ? `(${moveId})` : null,
-          ]
-            .filter(Boolean)
-            .join(" · "),
-          timestamp,
-        }
-      case "bridge.run.progress":
-        return {
-          type: t,
-          message: [
-            `Bridge move progress — ${data["source"] ?? "?"} → ${data["target"] ?? "?"}`,
-            `read ${data["rowsRead"] ?? "?"} · wrote ${data["rowsWritten"] ?? "?"}`,
-            dur,
-          ]
-            .filter(Boolean)
-            .join(" · "),
-          timestamp,
-        }
-      case "bridge.run.completed":
-        return {
-          type: t,
-          message: [
-            `Bridge move ${data["status"] ?? "completed"} — read ${data["rowsRead"] ?? "?"} · wrote ${data["rowsWritten"] ?? "?"}`,
-            typeof data["errorCount"] === "number" && data["errorCount"] > 0
-              ? `${data["errorCount"]} error(s)`
-              : null,
-            dur,
-          ]
-            .filter(Boolean)
-            .join(" · "),
-          timestamp,
-          error: data["status"] === "partial",
-        }
-      case "bridge.run.failed":
-        return {
-          type: t,
-          error: true,
-          message: [
-            `Bridge move failed: ${data["error"] ?? "unknown"}`,
-            data["rowsRead"] != null || data["rowsWritten"] != null
-              ? `read ${data["rowsRead"] ?? "?"} · wrote ${data["rowsWritten"] ?? "?"}`
-              : null,
-            dur,
-          ]
-            .filter(Boolean)
-            .join(" · "),
-          timestamp,
-        }
-      default:
-        return { type: t, message: type, timestamp }
-    }
-  }
-
-  // ── Sync events ─────────────────────────────────────────────
-  if (type.startsWith("sync.")) {
-    const planId = (data["planId"] as string | undefined)?.slice(0, 8) ?? ""
-    switch (type) {
-      case "sync.preview.started":
-        return {
-          type: t,
-          message: `Preview started — ${data["entityType"]}#${readSseEntityId(data) ?? "?"} (${data["source"]} → ${data["target"]})`,
-          timestamp
-        }
-      case "sync.preview.completed":
-        return { type: t, message: `Preview complete — plan ${planId}`, timestamp }
-      case "sync.preview.failed":
-        return { type: t, error: true, message: `Preview failed: ${data["error"] ?? "unknown"}`, timestamp }
-      case "sync.preview.sql":
-      case "sync.execute.sql":
-      case "sync.catalog.sql":
-      case "sync.discovery.sql": {
-        const rows = data["rowCount"] != null ? `${data["rowCount"]} rows` : "?"
-        const dur = data["durationMs"] != null ? `${data["durationMs"]}ms` : ""
-        const scope = data["scope"] ? ` [${data["scope"]}]` : ""
-        const prefix =
-          type === "sync.execute.sql"
-            ? "SQL execute"
-            : type === "sync.catalog.sql"
-              ? "SQL catalog"
-              : type === "sync.discovery.sql"
-                ? "SQL discovery"
-                : "SQL preview"
-        return {
-          type: t,
-          message: `${prefix}${scope} — ${data["label"] ?? "?"} @ ${data["connection"] ?? "?"} → ${rows}${dur ? ` in ${dur}` : ""}`,
-          timestamp,
-          error: Boolean(data["error"]),
-        }
-      }
-      case "sync.preview.table.start":
-        return { type: t, message: `Scanning ${data["table"]}…`, timestamp }
-      case "sync.preview.table.done":
-        return { type: t, message: `${data["table"]} — ${data["insert"] ?? 0} ins, ${data["update"] ?? 0} upd, ${data["delete"] ?? 0} del`, timestamp }
-      case "sync.preview.table.failed":
-        return { type: t, error: true, message: `${data["table"]} — failed: ${data["error"] ?? "unknown"}`, timestamp }
-      case "sync.retry": {
-        const conn = String(data["connection"] ?? "?")
-        const attempt = Number(data["attempt"] ?? 1)
-        const max = Number(data["maxAttempts"] ?? 3)
-        return {
-          type: t,
-          error: false,
-          message: `Connection retry ${conn} (${attempt}/${max}): ${data["error"] ?? "transient error"}`,
-          timestamp
-        }
-      }
-      case "sync.execute.started":
-        return { type: t, message: `Execute started — plan ${planId} (${data["source"]} → ${data["target"]})`, timestamp }
-      case "sync.execute.step":
-        return { type: t, message: `${data["step"]}`, timestamp }
-      case "sync.execute.step.failed":
-        return {
-          type: t,
-          error: true,
-          message: [
-            data["step"],
-            data["op"],
-            data["table"],
-          ].filter(Boolean).join(" · ") + ` failed — ${data["cause"] ?? data["error"] ?? "unknown"}`,
-          timestamp,
-        }
-      case "sync.execute.table.start":
-        return { type: t, message: `${data["table"]} — ${data["op"]} ${data["rowsTotal"]} rows…`, timestamp }
-      case "sync.execute.table.done":
-        return { type: t, message: `${data["table"]} — ${data["rowsApplied"]} rows applied`, timestamp }
-      case "sync.execute.completed": {
-        const dur = data["durationMs"] as number | undefined
-        const durStr = dur != null ? ` in ${(dur / 1000).toFixed(1)}s` : ""
-        const warns = data["warnings"] as Array<{ step: string; error: string }> | undefined
-        const hasWarnings = Array.isArray(warns) && warns.length > 0
-        const warnStr = hasWarnings
-          ? ` — ${warns!.length} deploy failure${warns!.length === 1 ? "" : "s"}`
-          : ""
-        return {
-          type: t,
-          error: hasWarnings,
-          message: hasWarnings
-            ? `Execute finished with deploy failures — plan ${planId}${durStr}${warnStr}`
-            : `Execute complete — plan ${planId}${durStr}`,
-          timestamp,
-        }
-      }
-      case "sync.execute.failed":
-        return {
-          type: t,
-          error: true,
-          message: `Execute failed — plan ${planId}: ${[
-            data["step"],
-            data["op"],
-            data["table"],
-          ].filter(Boolean).join(" · ") || "execute"} — ${data["cause"] ?? data["error"] ?? "unknown"}`,
-          timestamp,
-        }
-      case "sync.execute.archive.skipped":
-        return { type: t, message: `Archive skipped — ${data["reason"] ?? ""}`, timestamp }
-      default:
-        if (type.endsWith(".sql") && type.startsWith("sync.")) {
-          const rows = data["rowCount"] != null ? `${data["rowCount"]} rows` : "?"
-          const dur = data["durationMs"] != null ? `${data["durationMs"]}ms` : ""
-          return {
-            type: t,
-            message: `SQL — ${data["label"] ?? "?"} @ ${data["connection"] ?? "?"} → ${rows}${dur ? ` in ${dur}` : ""}`,
-            timestamp,
-            error: Boolean(data["error"]),
-          }
-        }
-        return { type: t, message: type.slice(5), timestamp }
-    }
-  }
-
-  // ── All other events ────────────────────────────────────────
-  switch (type) {
-    // Run lifecycle
-    case "run.queued":
-      return { type: t, message: `Queued — ${((data["goal"] as string) ?? "").slice(0, 120)}`, timestamp }
-    case "run.started":
-      return { type: t, message: `Started — run ${(data["runId"] as string)?.slice(0, 8)}`, timestamp }
-    case "run.completed":
-      return { type: t, message: `Completed — ${data["stepCount"] ?? "?"} steps`, timestamp }
-    case "run.failed":
-      return { type: t, error: true, message: `Failed — ${((data["error"] as string) ?? "unknown").slice(0, 200)}`, timestamp }
-    case "run.cancelled":
-      return { type: t, error: true, message: `Cancelled`, timestamp }
-
-    // Steps
-    case "step.started":
-      return { type: t, message: `${(data["action"] as string) ?? "unknown"} started`, timestamp }
-    case "step.completed":
-      return { type: t, message: `${(data["action"] as string) ?? "unknown"} completed`, timestamp }
-    case "step.failed":
-      return { type: t, error: true, message: `${(data["action"] as string) ?? "unknown"} failed — ${((data["error"] as string) ?? "unknown").slice(0, 200)}`, timestamp }
-
-    // Tool calls
-    case "tool_call.executing":
-      return { type: t, message: `Executing ${data["toolName"]}`, timestamp }
-    case "tool_call.completed":
-      return { type: t, message: `${data["toolName"] ?? "tool"} done`, timestamp }
-    case "tool_call.killed":
-      return { type: t, error: true, message: `${data["toolName"] ?? "tool"} killed`, timestamp }
-
-    // Delegation
-    case "delegation.started":
-      return { type: t, message: `Delegated — ${((data["goal"] as string) ?? "").slice(0, 120)}`, timestamp }
-    case "delegation.ended":
-      return { type: t, error: data["status"] === "error" || undefined, message: `Delegation ${data["status"]}`, timestamp }
-    case "delegation.iteration":
-      return { type: t, message: `Iteration ${data["iteration"]}/${data["maxIterations"]}`, timestamp }
-    case "delegation.parallel-started":
-      return { type: t, message: `Parallel — ${data["taskCount"]} tasks`, timestamp }
-    case "delegation.parallel-ended":
-      return { type: t, message: `Parallel done — ${data["fulfilled"]} ok, ${data["rejected"]} failed`, timestamp }
-
-    // Planner
-    case "planner.started":
-      return { type: t, message: `Planning started`, timestamp }
-    case "planner.completed":
-      return { type: t, message: `Planning completed — ${data["completedSteps"] ?? "?"}/${data["totalSteps"] ?? "?"} steps`, timestamp }
-    case "planner.validation.failed":
-      return { type: t, error: true, message: `Validation failed`, timestamp }
-    case "planner.validation.remediated":
-      return { type: t, message: `Validation remediated`, timestamp }
-    case "planner.pipeline.started":
-      return { type: t, message: `Pipeline attempt ${data["attempt"]}/${data["maxRetries"]}`, timestamp }
-
-    // Thinking
-    case "agent.thinking":
-      return { type: t, message: (data["content"] as string) ?? "", timestamp }
-    case "agent.bus.message": {
-      const from = (data["fromAgent"] as string) ?? "?"
-      const proto = (data["protocol"] as string) ?? "broadcast"
-      const topic = (data["topic"] as string) ?? "?"
-      const content = ((data["content"] as string) ?? "").slice(0, 120)
-      return { type: t, message: `[bus ${proto}] ${from} → ${topic}: ${content}`, timestamp }
-    }
-    case "agent.help.requested": {
-      const from = (data["fromAgent"] as string) ?? "?"
-      const content = ((data["content"] as string) ?? "").slice(0, 120)
-      return { type: t, error: true, message: `[HELP] ${from}: ${content}`, timestamp }
-    }
-    case "answer.chunk":
+    const kind = typeof entry["kind"] === "string" ? entry["kind"] : ""
+    // High-volume loop noise — Trace / OpLog own these.
+    if (
+      kind === "tool-call" ||
+      kind === "tool-result" ||
+      kind === "tool-error" ||
+      kind === "llm-request" ||
+      kind === "llm-response" ||
+      kind === "thinking" ||
+      kind === "iteration" ||
+      kind === "usage"
+    ) {
       return null
-
-    // API
-    case "api.request": {
-      const method = data["method"] as string | undefined
-      const url = data["url"] as string | undefined
-      const status = data["status_code"] as number | undefined
-      const dur = data["duration_ms"] as number | undefined
-      const isErr = status != null && status >= 400
-      return { type: t, error: isErr || undefined, message: `${method ?? "?"} ${url ?? "?"} → ${status ?? "?"} (${dur ?? "?"}ms)`, timestamp }
     }
-
-    // System / notifications / memory / usage / misc
-    case "audit":
-      return { type: t, message: `${data["action"]} by ${data["actor"]}`, timestamp }
-    case "notification":
-      return { type: t, message: `${data["title"]}`, timestamp }
-    case "user_input.required":
-      return { type: t, message: `Waiting for input — ${((data["question"] as string) ?? "").slice(0, 120)}`, timestamp }
-    case "user_input.response":
-      return { type: t, message: `Input received`, timestamp }
-    case "usage.updated":
-      return { type: t, message: `${data["totalTokens"]} tokens, ${data["llmCalls"]} calls`, timestamp }
-    case "message.queued":
-      return { type: t, message: `Message queued — ${data["channelType"]}`, timestamp }
-    case "message.failed":
-      return { type: t, error: true, message: `Message failed — ${data["error"] ?? "unknown"}`, timestamp }
-    case "checkpoint.saved":
-      return { type: t, message: `Checkpoint saved — iteration ${data["iteration"]}`, timestamp }
-    case "rollback.started":
-      return { type: t, message: `Rollback started — ${data["effectCount"]} effects`, timestamp }
-    case "rollback.effect":
-      return { type: t, message: `Rollback ${data["action"]} — ${data["target"]}`, timestamp }
-    case "approval.required":
-      return { type: t, message: `Approval required — ${data["toolName"]}: ${data["reason"]}`, timestamp }
-    case "approval.resolved":
-      return { type: t, message: `Approval ${data["decision"]} — ${data["runId"]}`, timestamp }
-    case "events.connected":
-      return { type: t, message: `Connected to event stream`, timestamp }
-    case "events.disconnected":
-      return { type: t, error: true, message: `Disconnected from event stream`, timestamp }
-    case "debug.trace":
-      return null // suppress — high volume internal traces
-
-    default:
-      return { type: t, message: type.replace(/^[^.]+\./, ""), timestamp }
+    const d = lookupEventDescriptor(kind || "unknown")
+    const summary = d.summary(entry)
+    return {
+      type: t,
+      message: summary ? `${d.label} — ${summary}` : d.label,
+      timestamp,
+      error: d.severity === "error" || undefined,
+    }
   }
+
+  const d = lookupEventDescriptor(type)
+  const isUnknown = d.id === "unknown" || (d.label === "Event" && !SSE_KNOWN(type))
+  let message = d.summary(data)
+  if (!message || message === "event") {
+    message = d.label !== "Event" ? d.label : ""
+  }
+  if (isUnknown || !message) {
+    try {
+      const raw = JSON.stringify(data)
+      message = raw.length > 160 ? `${raw.slice(0, 159)}…` : raw || type
+    } catch {
+      message = type
+    }
+  } else if (d.label && !message.startsWith(d.label)) {
+    message = `${d.label} — ${message}`
+  }
+
+  return {
+    type: t,
+    message,
+    timestamp,
+    error: d.severity === "error" || undefined,
+  }
+}
+
+function SSE_KNOWN(type: string): boolean {
+  return lookupEventDescriptor(type).id === type
 }
 
 // ── Store ────────────────────────────────────────────────────────

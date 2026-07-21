@@ -1824,6 +1824,22 @@ export type {
   ToolPresentationSpec
 } from "./tool-call-presentation.js"
 export {
+  TRACE_EVENT_CATALOG,
+  SSE_EVENT_CATALOG,
+  lookupEventDescriptor,
+  eventLabel,
+  eventSummary,
+  describeDebugTracePayload,
+  isTraceKind,
+} from "./event-catalog.js"
+export type {
+  EventSeverity,
+  EventOutlineRole,
+  EventFamily,
+  EventPayload,
+  EventDescriptor,
+} from "./event-catalog.js"
+export {
   deriveStepFields,
   deriveStepFieldsFromHandler,
   normalizeKindDefinition,

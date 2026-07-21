@@ -30,4 +30,5 @@ packages/*/data/
 
 # ── Personal scratch (kept local, not shared) ────────────────────
 notes
-docs
+docs/*
+!docs/doctrine.md
