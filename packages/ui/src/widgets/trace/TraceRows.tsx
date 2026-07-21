@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronRight, ChevronsDown, ChevronsUp } from "lucide-react"
+import { ListChevronsDownUp, ListChevronsUpDown } from "lucide-react"
 import { useState } from "react"
 import { JsonViewer } from "../../components/JsonViewer"
 import { formatMs } from "../../lib/util"
@@ -9,47 +9,38 @@ import {
   type TraceToolCall,
 } from "./build-trace-dag"
 import { ExpandableText } from "./TraceExpandable"
+import { ScopeRow } from "./TraceScope"
 
 export function PromptMessageRow({
+  scopeId,
+  callIndex,
   msg,
   open,
   onToggle,
 }: {
+  scopeId: string
+  callIndex: number
   msg: TracePromptMessage
   open: boolean
   onToggle: () => void
 }) {
   const preview = messagePreview(msg)
-  const isUserAnswer = msg.speaker === "User answer"
 
   return (
-    <div className="trace-row">
-      <button
-        type="button"
-        className="trace-row__btn"
-        onClick={onToggle}
-        aria-expanded={open}
-      >
-        <span className="trace-scope__chevslot" aria-hidden>
-          {open ? (
-            <ChevronDown size={12} className="trace-scope__chev" />
-          ) : (
-            <ChevronRight size={12} className="trace-scope__chev" />
-          )}
-        </span>
-        <span className={isUserAnswer ? "trace-row__speaker is-em" : "trace-row__speaker"}>
-          {msg.speaker}
-        </span>
-        {msg.detail && <span className="trace-row__detail">{msg.detail}</span>}
-        {msg.toolCallId && (
-          <span className="trace-row__id font-mono" title={msg.toolCallId}>
-            {msg.toolCallId}
-          </span>
-        )}
-        {!open && <span className="trace-row__preview">{preview}</span>}
-      </button>
+    <div className="trace-msg">
+      <ScopeRow
+        scopeId={scopeId}
+        kind="message"
+        callIndex={callIndex}
+        depth={3}
+        open={open}
+        onToggle={onToggle}
+        leading={msg.speaker}
+        title={msg.detail ?? undefined}
+        summary={!open ? preview : (msg.toolCallId ?? undefined)}
+      />
       {open && (
-        <div className="trace-row__body">
+        <div className="trace-scope-body">
           {msg.content && (
             <ExpandableText text={msg.content} className="trace-body-muted" />
           )}
@@ -79,36 +70,32 @@ export function PromptMessageRow({
 }
 
 export function ToolRow({
+  scopeId,
+  callIndex,
   tool,
   open,
   onToggle,
 }: {
+  scopeId: string
+  callIndex: number
   tool: TraceToolCall
   open: boolean
   onToggle: () => void
 }) {
   return (
-    <div className="trace-row">
-      <button
-        type="button"
-        className="trace-row__btn"
-        onClick={onToggle}
-        aria-expanded={open}
-      >
-        <span className="trace-scope__chevslot" aria-hidden>
-          {open ? (
-            <ChevronDown size={12} className="trace-scope__chev" />
-          ) : (
-            <ChevronRight size={12} className="trace-scope__chev" />
-          )}
-        </span>
-        <span className="font-mono">{tool.name}</span>
-        <span className="trace-row__id font-mono" title={tool.id}>
-          {tool.id}
-        </span>
-      </button>
+    <div className="trace-msg">
+      <ScopeRow
+        scopeId={scopeId}
+        kind="tool"
+        callIndex={callIndex}
+        depth={3}
+        open={open}
+        onToggle={onToggle}
+        leading={tool.name}
+        summary={tool.id}
+      />
       {open && (
-        <div className="trace-row__body">
+        <div className="trace-scope-body">
           <JsonViewer
             value={tool.arguments}
             defaultExpandDepth={1}
@@ -198,7 +185,11 @@ export function ToolDef({
               aria-label={descOpen ? "Show less description" : "Show more description"}
               title={descOpen ? "Show less description" : "Show more description"}
             >
-              {descOpen ? <ChevronsUp size={11} /> : <ChevronsDown size={11} />}
+              {descOpen ? (
+                <ListChevronsDownUp size={14} strokeWidth={1.75} />
+              ) : (
+                <ListChevronsUpDown size={14} strokeWidth={1.75} />
+              )}
               <span>{descOpen ? "Less" : "More"}</span>
             </button>
           )}
@@ -211,21 +202,18 @@ export function ToolDef({
               aria-label={showSchema ? "Hide schema" : "Show schema"}
               title={showSchema ? "Hide schema" : "Show schema"}
             >
-              {showSchema ? <ChevronsUp size={11} /> : <ChevronsDown size={11} />}
-              <span>Schema</span>
+              <span>{showSchema ? "Hide schema" : "Schema"}</span>
             </button>
           )}
         </div>
       )}
-      {tool.parameters && showSchema && (
-        <div className="trace-ctx-item__schema">
-          <JsonViewer
-            value={tool.parameters}
-            label="schema"
-            defaultExpandDepth={1}
-            maxHeight={180}
-          />
-        </div>
+      {showSchema && tool.parameters && (
+        <JsonViewer
+          value={tool.parameters}
+          defaultExpandDepth={1}
+          maxHeight={220}
+          className="trace-json"
+        />
       )}
     </div>
   )

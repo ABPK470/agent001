@@ -1,11 +1,18 @@
 /**
- * VS Code–style sticky outline for Trace.
+ * Cursor / VS Code sticky scroll for Trace — treat the outline like a
+ * nested JSON document: pin the ancestor chain of the focus line only.
+ *
+ * Nesting (depths):
+ *   Trace (0)
+ *     Context | Call (1)
+ *       Prompt | Tools | Sent | Received (2)
+ *         Message | Tool (3)
  *
  * In-flow headers are never position:sticky. A pin overlay renders the stack.
  *
- * Stick rule (matches editor sticky scroll): a scope pins only while the
- * focus line is *inside* that scope — [top, end). Leaving a block unsticks
- * it (siblings don’t accumulate). End = next same-or-shallower scope top.
+ * Stick rule: a scope pins only while the focus line is inside [top, end).
+ * End = next same-or-shallower scope top. Leaving a block unsticks it
+ * (siblings don’t accumulate).
  *
  * Stick timing: threshold = scrollTop + pinnedSoFar * ROW_H so a child
  * pins as soon as it reaches the bottom of the current stack.
@@ -14,12 +21,15 @@
 export const TRACE_STICKY_ROW_H = 34
 
 export type TraceScopeKind =
+  | "trace"
   | "context"
   | "prompt"
   | "tools"
   | "call"
   | "sent"
   | "received"
+  | "message"
+  | "tool"
 
 export type TraceScopeEntry = {
   id: string
@@ -103,17 +113,22 @@ export function computePinnedScopeIds(scrollEl: HTMLElement): string[] {
   return computePinnedFromEntries(listTraceScopes(scrollEl), scrollEl.scrollTop)
 }
 
-/**
- * Ancestors to expand so `scopeId` is in the DOM / reachable.
- */
-export function expandPathForScope(scopeId: string): {
+export type ExpandPath = {
   preamble?: boolean
   contextPrompt?: boolean
   contextTools?: boolean
   callIndex?: number
   sent?: boolean
   received?: boolean
-} {
+  messageKey?: string
+  toolId?: string
+}
+
+/**
+ * Ancestors to expand so `scopeId` is in the DOM / reachable.
+ */
+export function expandPathForScope(scopeId: string): ExpandPath {
+  if (scopeId === "trace") return {}
   if (scopeId === "context") return { preamble: true }
   if (scopeId === "prompt") return { preamble: true, contextPrompt: true }
   if (scopeId === "tools") return { preamble: true, contextTools: true }
@@ -131,5 +146,32 @@ export function expandPathForScope(scopeId: string): {
     return { callIndex: Number(recvMatch[1]), received: true }
   }
 
+  const msgMatch = /^message:(\d+):m:(\d+)$/.exec(scopeId)
+  if (msgMatch) {
+    const callIndex = Number(msgMatch[1])
+    const mi = msgMatch[2]!
+    return {
+      callIndex,
+      sent: true,
+      messageKey: `${callIndex}:m:${mi}`,
+    }
+  }
+
+  const toolMatch = /^tool:(.+)$/.exec(scopeId)
+  if (toolMatch) {
+    return { toolId: toolMatch[1], received: true }
+  }
+
   return {}
+}
+
+/** Resolve call index for a tool branch id from the open path helper. */
+export function callIndexForTool(
+  toolId: string,
+  calls: Array<{ index: number; toolBranches: Array<{ id: string }> }>,
+): number | undefined {
+  for (const call of calls) {
+    if (call.toolBranches.some((t) => t.id === toolId)) return call.index
+  }
+  return undefined
 }

@@ -1,8 +1,9 @@
 /**
  * Trace outline shell — toolbar + chronological call cards.
  *
- * Sticky scroll = VS Code dialect: pin overlay shows the ancestor chain
- * for the focus line; clones keep full header chrome; click jumps there.
+ * Sticky scroll = Cursor/VS Code dialect on a nested document:
+ * pin overlay shows the ancestor chain (Trace → Call → Sent → Message…);
+ * clones keep full header chrome; click jumps to that scope.
  */
 
 import { Search, X } from "lucide-react"
@@ -10,6 +11,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { fmtTokens, formatMs } from "../../lib/util"
 import { SegmentToggle } from "../entity-registry/SegmentToggle"
 import {
+  messagePreview,
   searchCall,
   type TraceCallSearchHit,
   type TraceDag,
@@ -18,6 +20,7 @@ import { emptyOpen, seedLatest, type FoldMode, type OpenState } from "./open-sta
 import { formatCharCount, callReceivedSummary, callSentSummary } from "./trace-format"
 import {
   TRACE_STICKY_ROW_H,
+  callIndexForTool,
   computePinnedScopeIds,
   expandPathForScope,
   layoutOffsetInScroll,
@@ -25,7 +28,7 @@ import {
 import { CallOutline } from "./TraceCall"
 import { PreambleOutline } from "./TraceContext"
 import { IdChip } from "./TraceCopy"
-import { PinOverlay, type PinRow } from "./TraceScope"
+import { PinOverlay, type PinRow, ScopeRow } from "./TraceScope"
 
 export function TraceDag({
   dag,
@@ -134,9 +137,14 @@ export function TraceDag({
     }
 
     el.addEventListener("scroll", onScroll, { passive: true })
+    const ro = new ResizeObserver(() => {
+      refreshPinStack()
+    })
+    ro.observe(el)
     const raf = requestAnimationFrame(() => refreshPinStack())
     return () => {
       el.removeEventListener("scroll", onScroll)
+      ro.disconnect()
       cancelAnimationFrame(raf)
     }
   }, [
@@ -144,6 +152,8 @@ export function TraceDag({
     openState.calls,
     openState.sent,
     openState.received,
+    openState.messages,
+    openState.tools,
     openState.preamble,
     openState.contextPrompt,
     openState.contextTools,
@@ -169,11 +179,28 @@ export function TraceDag({
   const pinRows = useMemo((): PinRow[] => {
     const rows: PinRow[] = []
     for (const id of pinnedIds) {
+      if (id === "trace") {
+        rows.push({
+          id,
+          kind: "trace",
+          depth: 0,
+          leading: "Trace",
+          title: "",
+          summary:
+            stats.callCount === 0
+              ? "empty"
+              : `${stats.callCount} call${stats.callCount === 1 ? "" : "s"}`,
+          soft: false,
+          open: true,
+          foldable: false,
+        })
+        continue
+      }
       if (id === "context") {
         rows.push({
           id,
           kind: "context",
-          depth: 0,
+          depth: 1,
           leading: "Context",
           title: "",
           summary: contextSummary,
@@ -187,12 +214,10 @@ export function TraceDag({
         rows.push({
           id,
           kind: "prompt",
-          depth: 1,
+          depth: 2,
           leading: "Prompt",
           title: "",
-          summary: prompt
-            ? `${formatCharCount(prompt.length)} chars`
-            : "",
+          summary: prompt ? `${formatCharCount(prompt.length)} chars` : "",
           soft: true,
           open: openState.contextPrompt,
         })
@@ -202,7 +227,7 @@ export function TraceDag({
         rows.push({
           id,
           kind: "tools",
-          depth: 1,
+          depth: 2,
           leading: "Tools",
           title: "",
           summary: String(dag.preamble.tools.length),
@@ -220,7 +245,7 @@ export function TraceDag({
         rows.push({
           id,
           kind: "call",
-          depth: 0,
+          depth: 1,
           leading: `Call ${index + 1}`,
           title: call.headline,
           summary: `iter ${call.iteration + 1}`,
@@ -249,7 +274,7 @@ export function TraceDag({
         rows.push({
           id,
           kind: "sent",
-          depth: 1,
+          depth: 2,
           leading: "Sent",
           title: "",
           summary: callSentSummary(call),
@@ -266,19 +291,62 @@ export function TraceDag({
         rows.push({
           id,
           kind: "received",
-          depth: 1,
+          depth: 2,
           leading: "Received",
           title: "",
           summary: callReceivedSummary(call),
           soft: true,
           open: openState.received.has(index),
         })
+        continue
+      }
+      const msgMatch = /^message:(\d+):m:(\d+)$/.exec(id)
+      if (msgMatch) {
+        const index = Number(msgMatch[1])
+        const mi = Number(msgMatch[2])
+        const call = dag.calls[index]
+        const msg = call?.messages[mi]
+        if (!call || !msg) continue
+        const key = `${index}:m:${mi}`
+        rows.push({
+          id,
+          kind: "message",
+          depth: 3,
+          leading: msg.speaker,
+          title: msg.detail ?? "",
+          summary: openState.messages.has(key)
+            ? (msg.toolCallId ?? "")
+            : messagePreview(msg),
+          soft: false,
+          open: openState.messages.has(key),
+        })
+        continue
+      }
+      const toolMatch = /^tool:(.+)$/.exec(id)
+      if (toolMatch) {
+        const toolId = toolMatch[1]!
+        const callIndex = callIndexForTool(toolId, dag.calls)
+        if (callIndex == null) continue
+        const call = dag.calls[callIndex]
+        const tool = call?.toolBranches.find((t) => t.id === toolId)
+        if (!tool) continue
+        rows.push({
+          id,
+          kind: "tool",
+          depth: 3,
+          leading: tool.name,
+          title: "",
+          summary: tool.id,
+          soft: false,
+          open: openState.tools.has(toolId),
+        })
       }
     }
     return rows
-  }, [pinnedIds, dag, openState, contextSummary])
+  }, [pinnedIds, dag, openState, contextSummary, stats.callCount])
 
   function onTogglePinnedScope(scopeId: string) {
+    if (scopeId === "trace") return
     if (scopeId === "context") {
       onTogglePreamble()
       return
@@ -304,6 +372,16 @@ export function TraceDag({
     const recvMatch = /^received:(\d+)$/.exec(scopeId)
     if (recvMatch) {
       onToggleReceived(Number(recvMatch[1]))
+      return
+    }
+    const msgMatch = /^message:(\d+):m:(\d+)$/.exec(scopeId)
+    if (msgMatch) {
+      onToggleMessage(`${msgMatch[1]}:m:${msgMatch[2]}`)
+      return
+    }
+    const toolMatch = /^tool:(.+)$/.exec(scopeId)
+    if (toolMatch) {
+      onToggleTool(toolMatch[1]!)
     }
   }
 
@@ -313,17 +391,26 @@ export function TraceDag({
       const calls = new Set(prev.calls)
       const sent = new Set(prev.sent)
       const received = new Set(prev.received)
+      const messages = new Set(prev.messages)
+      const tools = new Set(prev.tools)
       let preamble = prev.preamble
       let contextPrompt = prev.contextPrompt
       let contextTools = prev.contextTools
       if (path.preamble) preamble = true
       if (path.contextPrompt) contextPrompt = true
       if (path.contextTools) contextTools = true
-      if (path.callIndex != null) {
-        calls.add(path.callIndex)
-        if (path.sent) sent.add(path.callIndex)
-        if (path.received) received.add(path.callIndex)
+      let callIndex = path.callIndex
+      if (path.toolId) {
+        const found = callIndexForTool(path.toolId, dag.calls)
+        if (found != null) callIndex = found
+        tools.add(path.toolId)
       }
+      if (callIndex != null) {
+        calls.add(callIndex)
+        if (path.sent) sent.add(callIndex)
+        if (path.received) received.add(callIndex)
+      }
+      if (path.messageKey) messages.add(path.messageKey)
       return {
         ...prev,
         preamble,
@@ -332,6 +419,8 @@ export function TraceDag({
         calls,
         sent,
         received,
+        messages,
+        tools,
       }
     })
     // VS Code: click sticky line → that line sits at its stack slot.
@@ -425,7 +514,7 @@ export function TraceDag({
         received: new Set(dag.calls.map((c) => c.index)),
         messages: new Set(
           dag.calls.flatMap((c) =>
-            c.messages.map((_, mi) => `${c.iteration}:m:${mi}`),
+            c.messages.map((_, mi) => `${c.index}:m:${mi}`),
           ),
         ),
         tools: new Set(dag.calls.flatMap((c) => c.toolBranches.map((t) => t.id))),
@@ -444,6 +533,11 @@ export function TraceDag({
     query && dag.calls.length > 0
       ? `${callHits?.size ?? 0} of ${dag.calls.length} calls`
       : null
+
+  const traceSummary =
+    stats.callCount === 0
+      ? "empty"
+      : `${stats.callCount} call${stats.callCount === 1 ? "" : "s"}`
 
   return (
     <div className="trace-dag flex flex-col h-full min-h-0">
@@ -531,6 +625,16 @@ export function TraceDag({
 
         {runId && dag.hasData && (
           <div className="trace-flow">
+            <ScopeRow
+              scopeId="trace"
+              kind="trace"
+              depth={0}
+              open
+              foldable={false}
+              onToggle={() => {}}
+              leading="Trace"
+              summary={traceSummary}
+            />
             <PreambleOutline
               dag={dag}
               open={openState.preamble}

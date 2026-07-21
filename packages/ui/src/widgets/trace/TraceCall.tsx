@@ -1,7 +1,8 @@
 /**
  * One LLM call as a bordered card: Call → Sent → Received (+ Next tools).
- * Sent / Received are indented children. Next lives under Received so the
- * chevron collapses the whole reply branch (VS Code fold).
+ * Nesting matches Cursor JSON sticky scroll depths.
+ * Sent / Received / messages / tools are outline scopes (pin + indent).
+ * Next lives under Received so the chevron collapses the reply branch.
  */
 
 import { fmtTokens, formatMs } from "../../lib/util"
@@ -42,7 +43,7 @@ export function CallOutline({
         scopeId={`call:${call.index}`}
         kind="call"
         callIndex={call.index}
-        depth={0}
+        depth={1}
         open={callOpen}
         onToggle={() => onToggleCall(call.index)}
         leading={`Call ${call.index + 1}`}
@@ -72,7 +73,7 @@ export function CallOutline({
             scopeId={`sent:${call.index}`}
             kind="sent"
             callIndex={call.index}
-            depth={1}
+            depth={2}
             open={sentOpen}
             onToggle={() => onToggleSent(call.index)}
             leading="Sent"
@@ -85,10 +86,12 @@ export function CallOutline({
                 <span className="trace-empty">No messages recorded</span>
               ) : (
                 call.messages.map((msg, mi) => {
-                  const key = `${call.iteration}:m:${mi}`
+                  const key = `${call.index}:m:${mi}`
                   return (
                     <PromptMessageRow
                       key={key}
+                      scopeId={`message:${key}`}
+                      callIndex={call.index}
                       msg={msg}
                       open={openState.messages.has(key)}
                       onToggle={() => onToggleMessage(key)}
@@ -103,7 +106,7 @@ export function CallOutline({
             scopeId={`received:${call.index}`}
             kind="received"
             callIndex={call.index}
-            depth={1}
+            depth={2}
             open={receivedOpen}
             onToggle={() => onToggleReceived(call.index)}
             leading="Received"
@@ -153,6 +156,8 @@ export function CallOutline({
                   {call.toolBranches.map((tc) => (
                     <ToolRow
                       key={tc.id}
+                      scopeId={`tool:${tc.id}`}
+                      callIndex={call.index}
                       tool={tc}
                       open={openState.tools.has(tc.id)}
                       onToggle={() => onToggleTool(tc.id)}

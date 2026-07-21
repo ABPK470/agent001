@@ -2032,9 +2032,61 @@ textarea.input {
   color: var(--accent, var(--color-accent));
 }
 
+.trace-scope[data-trace-kind="trace"] .trace-scope__lead {
+  color: var(--text-muted, var(--color-text-muted));
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-size: 0.8125rem;
+}
+
+.trace-scope[data-trace-kind="message"] .trace-scope__lead {
+  color: var(--text, var(--color-text));
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 0.9375rem;
+  min-width: auto;
+}
+
+.trace-scope[data-trace-kind="tool"] .trace-scope__lead {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 0.875rem;
+  min-width: auto;
+}
+
+.trace-scope.is-root {
+  cursor: default;
+  background: transparent;
+  border-bottom: 1px solid var(--border-subtle, var(--color-border-subtle));
+  margin-bottom: 0.35rem;
+}
+
+.trace-pin__stack > .trace-scope.is-root {
+  border-bottom: none;
+  margin-bottom: 0;
+  background: color-mix(in srgb, var(--text, var(--color-text)) 4%, var(--bg));
+}
+
 /* Code-like offsets — nested scopes indent like editor sticky scroll */
 .trace-scope[data-trace-depth="1"] {
-  padding-left: 1.45rem;
+  padding-left: 1.1rem;
+}
+
+.trace-scope[data-trace-depth="2"] {
+  padding-left: 1.85rem;
+}
+
+.trace-scope[data-trace-depth="3"] {
+  padding-left: 2.6rem;
+}
+
+/* In-flow messages/tools already sit inside an indented scope body */
+.trace-scope-body .trace-scope[data-trace-depth="3"] {
+  padding-left: 0.35rem;
 }
 
 .trace-nest > .trace-scope-body {
