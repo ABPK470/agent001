@@ -5910,7 +5910,7 @@ textarea.input {
 /* ── Thread run navigator — bars + hover capsule ── */
 .thread-run-rail {
   --thread-run-track-h: 4rem;
-  --thread-run-bar-w: 18px;
+  --thread-run-bar-w: 17px;
   --thread-run-bar-h: 2px;
   --thread-run-bar-h-active: 3px;
   --thread-run-capsule-w: 17.5rem;
@@ -5978,7 +5978,9 @@ textarea.input {
 }
 
 :root[data-theme="light"] .thread-run-rail-chrome {
+  /* Solid canvas — blur made the chip read darker than the page. */
   background: var(--canvas);
+  backdrop-filter: none;
 }
 
 .thread-run-rail-track {
