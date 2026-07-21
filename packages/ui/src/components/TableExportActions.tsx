@@ -25,6 +25,12 @@ export interface TableExportActionsProps {
    * Stays visible while Copy/CSV/JSON feedback or an error is showing.
    */
   revealOnHover?: boolean
+  /**
+   * Solid surface chip (same element that fades on hover) so header text
+   * under the controls is covered only while the actions are visible.
+   * Matches the chat scroll surface — not a darker canvas slab.
+   */
+  overlayChip?: boolean
 }
 
 /** Which control just succeeded — drives the green check on that button only. */
@@ -37,6 +43,7 @@ export function TableExportActions({
   disabled = false,
   compact = false,
   revealOnHover = false,
+  overlayChip = false,
 }: TableExportActionsProps): JSX.Element {
   const [feedback, setFeedback] = useState<FeedbackAction | null>(null)
   const [busyAction, setBusyAction] = useState<FeedbackAction | null>(null)
@@ -101,6 +108,8 @@ export function TableExportActions({
     <div
       className={[
         "flex flex-wrap items-center gap-1 min-w-0",
+        // Chip bg lives here (not a parent) so idle opacity:0 hides it too.
+        overlayChip ? "rounded-md px-1.5 py-0.5" : "",
         revealOnHover
           ? [
               "transition-opacity duration-150",
@@ -112,6 +121,14 @@ export function TableExportActions({
       ]
         .filter(Boolean)
         .join(" ")}
+      style={
+        overlayChip
+          ? {
+              // Match the chat transcript surface (light home = panel, dark = canvas).
+              backgroundColor: "var(--chathome-scroll-fade, var(--canvas))",
+            }
+          : undefined
+      }
     >
       <button
         type="button"
