@@ -270,7 +270,7 @@ export function CompactTable({
   return (
     <div className="group relative my-1.5 w-full min-w-0">
       {showExport && exportSource ? (
-        <div className="absolute top-1 right-1 z-10">
+        <div className="absolute top-1.5 right-1.5 z-10">
           <TableExportActions
             headers={headers}
             rows={rows}

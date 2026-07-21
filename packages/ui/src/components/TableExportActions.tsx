@@ -96,7 +96,9 @@ export function TableExportActions({
 
   const btn = [
     "inline-flex items-center gap-0.5 rounded-sm px-1 py-0.5",
-    compact ? "text-[12.5px] leading-none" : "text-[14.5px] leading-none",
+    // Match table header band (15px / leading-6) — not leading-none, which
+    // left the chip sitting too high in the th padding.
+    compact ? "text-[12.5px] leading-5" : "text-[14.5px] leading-5",
     "text-text hover:bg-overlay-2",
     "disabled:opacity-40 disabled:pointer-events-none disabled:hover:bg-transparent cursor-pointer",
   ].join(" ")
