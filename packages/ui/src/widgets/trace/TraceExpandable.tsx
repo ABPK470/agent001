@@ -1,9 +1,14 @@
 /**
  * Long text with a sticky right-rail More/Less control.
- * The rail stays in view while you scroll the block — always reachable.
+ * Uses the same bordered icon button as Entity Registry sidebar actions.
  */
 
+import { ChevronsDown, ChevronsUp } from "lucide-react"
 import { useEffect, useState } from "react"
+import {
+  IconButton,
+  TOOLBAR_ICON,
+} from "../entity-registry/IconButton"
 import { formatCharCount } from "./trace-format"
 
 export function ExpandableText({
@@ -28,6 +33,10 @@ export function ExpandableText({
     setExpanded((v) => !v)
   }
 
+  const label = expanded
+    ? "Show less"
+    : `Show more · ${formatCharCount(text.length)} chars`
+
   return (
     <div
       className={`trace-expand${isLong ? " has-rail" : ""}${isLong && !expanded ? " is-clipped" : ""}`}
@@ -36,27 +45,21 @@ export function ExpandableText({
         <pre className={className}>{display}</pre>
       </div>
       {isLong && (
-        <div className="trace-expand__rail" aria-hidden={false}>
-          <button
-            type="button"
-            className="trace-expand__btn"
-            onClick={onToggleExpand}
-            aria-expanded={expanded}
-            title={
-              expanded
-                ? "Show less"
-                : `Show more · ${formatCharCount(text.length)} chars`
-            }
-          >
-            <span className="trace-expand__btn-label">
-              {expanded ? "Less" : "More"}
-            </span>
-            {!expanded && (
-              <span className="trace-expand__btn-meta">
-                {formatCharCount(text.length)}
-              </span>
-            )}
-          </button>
+        <div className="trace-expand__rail">
+          <div className="trace-expand__sticky">
+            <IconButton
+              label={label}
+              active={expanded}
+              onClick={onToggleExpand}
+              aria-expanded={expanded}
+            >
+              {expanded ? (
+                <ChevronsUp {...TOOLBAR_ICON} />
+              ) : (
+                <ChevronsDown {...TOOLBAR_ICON} />
+              )}
+            </IconButton>
+          </div>
         </div>
       )}
     </div>

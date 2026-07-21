@@ -2163,45 +2163,17 @@ textarea.input {
 
 .trace-expand__rail {
   flex-shrink: 0;
-  width: 3.5rem;
+  width: 2.25rem; /* matches IconButton w-9 */
   align-self: stretch;
   position: relative;
 }
 
-.trace-expand__btn {
+.trace-expand__sticky {
   position: sticky;
   top: calc(var(--trace-pin-stack-h, 0px) + 0.45rem);
   z-index: 4;
   display: flex;
-  flex-direction: column;
-  align-items: center;
   justify-content: center;
-  gap: 0.1rem;
-  width: 3.5rem;
-  min-height: 2.25rem;
-  margin: 0;
-  padding: 0.4rem 0.3rem;
-  border: 1px solid var(--border, var(--color-border));
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--text, var(--color-text)) 5%, var(--bg));
-  color: var(--text, var(--color-text));
-  font-size: 0.6875rem;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  line-height: 1.15;
-  cursor: pointer;
-  box-shadow: 0 1px 4px color-mix(in srgb, var(--text, var(--color-text)) 8%, transparent);
-}
-
-.trace-expand__btn:hover {
-  background: color-mix(in srgb, var(--text, var(--color-text)) 9%, var(--bg));
-}
-
-.trace-expand__btn-meta {
-  font-size: 0.5625rem;
-  font-weight: 500;
-  font-variant-numeric: tabular-nums;
-  color: var(--text-muted, var(--color-text-muted));
 }
 
 /* Schema toggle etc. — full-width secondary control */
@@ -2386,12 +2358,12 @@ textarea.input {
   padding: 0.25rem 0;
 }
 
-/* JsonViewer / nested chrome inside Trace — same size as body */
-.trace-dag .font-mono.text-xs,
-.trace-dag .text-xs.font-mono,
-.trace-dag .text-xs,
-.trace-dag .text-sm,
-.trace-dag .text-\[10px\] {
+/* JsonViewer / nested chrome inside Trace cards — keep body scale.
+ * Do not target toolbar chrome (SegmentToggle uses text-sm). */
+.trace-dag .trace-scroll .font-mono.text-xs,
+.trace-dag .trace-scroll .text-xs.font-mono,
+.trace-dag .trace-scroll .text-xs,
+.trace-dag .trace-scroll .text-\[10px\] {
   font-size: 0.9375rem !important;
   line-height: 1.5;
 }
