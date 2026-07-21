@@ -255,7 +255,7 @@ export function DataTable({
   const showFooterControls = total > 10 || pageSize !== defaultPageSize || filter !== ""
 
   return (
-    <div className={`group relative ${exportSource ? "pr-[3.5rem]" : ""}`}>
+    <div className="group relative">
       <div
         className="rounded-lg overflow-hidden"
         style={{ border: `1px solid ${C.border}`, background: C.base }}
@@ -435,7 +435,7 @@ export function DataTable({
       )}
       </div>
       {exportSource ? (
-        <div className="absolute top-1/2 right-0 z-20 -translate-y-1/2">
+        <div className="pointer-events-none absolute left-full top-0 z-20 ml-2 group-hover:pointer-events-auto group-focus-within:pointer-events-auto">
           <TableExportActions
             headers={headers}
             rows={rows}

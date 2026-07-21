@@ -262,14 +262,7 @@ export function CompactTable({
 }) {
   const showExport = Boolean(exportSource) && rows.length > 0
   return (
-    <div
-      className={[
-        "group relative my-1.5 w-full min-w-0",
-        // Reserve a right gutter so the rail sits outside the table border
-        // (vertically centered) without being clipped by the scrollport.
-        showExport ? "pr-[3.5rem]" : "",
-      ].join(" ")}
-    >
+    <div className="group relative my-1.5 w-full min-w-0">
       <div className={COMPACT_TABLE_WRAPPER_CLASS}>
         {/*
           `w-auto min-w-full`: let the table choose its natural column widths
@@ -321,7 +314,7 @@ export function CompactTable({
         </table>
       </div>
       {showExport && exportSource ? (
-        <div className="absolute top-1/2 right-0 z-10 -translate-y-1/2">
+        <div className="pointer-events-none absolute left-full top-0 z-10 ml-2 group-hover:pointer-events-auto group-focus-within:pointer-events-auto">
           <TableExportActions
             headers={headers}
             rows={rows}

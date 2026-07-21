@@ -1683,7 +1683,7 @@ textarea.input {
   padding: 0.6rem 0.5rem 0.75rem;
   margin: 0;
   background: transparent;
-  border-bottom: 1px solid var(--border-subtle, var(--color-border-subtle));
+  border-bottom: none;
   position: relative;
   z-index: 8;
 }
@@ -1941,7 +1941,8 @@ textarea.input {
 .trace-card {
   border: 1px solid var(--border, var(--color-border));
   border-radius: 0.5rem;
-  overflow: hidden;
+  /* visible so More/Less sticky can pin against .trace-scroll */
+  overflow: visible;
   background: var(--bg);
   box-sizing: border-box;
   min-width: 0;
@@ -2690,7 +2691,8 @@ textarea.input {
 }
 
 /*
- * Expandable text — Copy + More/Less rail (document flow, no sticky).
+ * Expandable text — Copy + More/Less rail.
+ * Rail sticks while scrolling the Trace host so More/Less stays reachable.
  */
 .trace-expand {
   display: block;
@@ -2711,13 +2713,17 @@ textarea.input {
 
 .trace-expand__rail {
   flex-shrink: 0;
-  align-self: flex-start;
+  align-self: stretch;
   position: relative;
   width: auto;
   min-width: fit-content;
 }
 
 .trace-expand__sticky {
+  position: sticky;
+  /* Sit just under the pin stack when present */
+  top: calc(var(--trace-pin-stack-h, 0px) + 0.35rem);
+  z-index: 4;
   display: flex;
   flex-direction: column;
   align-items: flex-end;

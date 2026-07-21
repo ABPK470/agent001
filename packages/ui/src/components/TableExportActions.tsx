@@ -1,6 +1,6 @@
 /**
  * Per-table Copy / CSV / JSON controls for chat markdown tables.
- * Product verb for file delivery: Export (CSV / JSON). Copy = clipboard CSV.
+ * Bare icon+label rail — no pill, no border; appears beside the table on hover.
  */
 
 import { Braces, Check, Copy, Sheet } from "lucide-react"
@@ -90,19 +90,13 @@ export function TableExportActions({
   }
 
   const vertical = orientation === "vertical"
-  const btn = compact
-    ? [
-        "inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[12px]",
-        "text-text-muted hover:text-text hover:bg-overlay-hover",
-        "disabled:opacity-40 disabled:pointer-events-none cursor-pointer",
-        vertical ? "w-full justify-start" : "",
-      ].join(" ")
-    : [
-        "inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-sm",
-        "text-text-muted hover:text-text hover:bg-overlay-2",
-        "disabled:opacity-40 disabled:pointer-events-none cursor-pointer",
-        vertical ? "w-full justify-start" : "",
-      ].join(" ")
+  const btn = [
+    "inline-flex items-center gap-1 rounded-sm py-0.5",
+    compact ? "text-[12px] px-0.5" : "text-sm px-1",
+    "text-text-muted hover:text-text",
+    "disabled:opacity-40 disabled:pointer-events-none cursor-pointer",
+    vertical ? "justify-start" : "",
+  ].join(" ")
 
   const idle = !disabled && !busyAction
   const pinnedVisible = Boolean(feedback || busyAction || error)
@@ -110,11 +104,8 @@ export function TableExportActions({
   return (
     <div
       className={[
-        vertical ? "flex flex-col items-stretch gap-0.5" : "flex flex-wrap items-center gap-1",
-        "min-w-0",
-        compact
-          ? "rounded-md border border-border-subtle bg-panel/95 px-1 py-0.5 shadow-sm backdrop-blur-sm"
-          : "",
+        vertical ? "flex flex-col items-start gap-0.5" : "flex flex-wrap items-center gap-1",
+        "min-w-0 bg-transparent",
         revealOnHover
           ? [
               "transition-opacity duration-150",

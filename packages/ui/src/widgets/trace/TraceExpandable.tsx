@@ -1,5 +1,5 @@
 /**
- * Expandable text — Copy + More/Less rail.
+ * Expandable text — Copy + More/Less rail (sticky while Trace scrolls).
  * Toggle keeps scroll anchored so the row does not jump upward.
  */
 
