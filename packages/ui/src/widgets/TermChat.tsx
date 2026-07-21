@@ -467,6 +467,8 @@ interface ResponseNarrativePart {
   id: string
   text: string
   tone?: "neutral" | "error"
+  /** status = muted system chrome (planner beats); prose = assistant voice */
+  role?: "status" | "prose"
 }
 
 interface ResponseInputPart {
@@ -949,19 +951,36 @@ function deriveActiveMilestoneLabel(parts: ResponsePart[]): string {
     }
   }
 
-  // 3. PRIMARY_ACTIVITY fallback. Skip the bare routing decisions
-  //    ("Direct") when nothing else is going on — they're not
-  //    descriptive of work — and only keep the meatier ones
-  //    (Plan / Generating / Verifying).
+  // 3. In-flight plan-step / repair / pipeline — real work labels, not
+  //    routing names. Prefer these over bare "Plan" / "Direct".
   for (let i = parts.length - 1; i >= 0; i--) {
     const part = parts[i]
-    if (part.kind === "progress" && part.status === "running" && PRIMARY_ACTIVITY_IDS.has(part.id)) {
-      if (part.id === "direct") continue   // routing label, not work
+    if (part.kind !== "progress" || part.status !== "running") continue
+    const id = part.id
+    if (
+      id.startsWith("step-") ||
+      id.startsWith("pipeline-") ||
+      id.startsWith("repair-") ||
+      id === "verification" ||
+      id === "generation"
+    ) {
       return part.detail ? `${part.label} — ${part.detail}` : part.label
     }
   }
 
-  // 4. Thinking with no tools yet — common at the very start of a turn.
+  // 4. PRIMARY_ACTIVITY fallback. Skip bare routing decisions
+  //    ("Direct") — they're not descriptive of work. Keep meatier ones
+  //    (Plan with a detail / Verifying).
+  for (let i = parts.length - 1; i >= 0; i--) {
+    const part = parts[i]
+    if (part.kind === "progress" && part.status === "running" && PRIMARY_ACTIVITY_IDS.has(part.id)) {
+      if (part.id === "direct") continue
+      if (part.id === "plan" && !part.detail) continue
+      return part.detail ? `${part.label} — ${part.detail}` : part.label
+    }
+  }
+
+  // 5. Thinking with no tools yet — common at the very start of a turn.
   for (let i = parts.length - 1; i >= 0; i--) {
     const part = parts[i]
     if (part.kind === "progress" && part.id === "thinking" && part.status === "running") {
@@ -969,7 +988,7 @@ function deriveActiveMilestoneLabel(parts: ResponsePart[]): string {
     }
   }
 
-  // 5. Generic — LLM working, answer not streaming yet.
+  // 6. Generic — LLM working, answer not streaming yet.
   return "Thinking…"
 }
 
@@ -1069,11 +1088,21 @@ function pushNarrativePart(
   id: string,
   text: string,
   tone: "neutral" | "error" = "neutral",
+  role: "status" | "prose" = "prose",
 ): ResponsePart[] {
   const trimmedText = text.trim()
   if (!trimmedText) return parts
   if (parts.some((part) => part.kind === "narrative" && part.id === id)) return parts
-  return parts.concat({ kind: "narrative", id, text: trimmedText, tone })
+  return parts.concat({ kind: "narrative", id, text: trimmedText, tone, role })
+}
+
+function pushStatusLine(
+  parts: ResponsePart[],
+  id: string,
+  text: string,
+  tone: "neutral" | "error" = "neutral",
+): ResponsePart[] {
+  return pushNarrativePart(parts, id, text, tone, "status")
 }
 
 function hasHiddenToolDetails(summary: string, details?: string): boolean {
@@ -1300,6 +1329,11 @@ function buildResponseParts(
         break
       case "planner-plan-generated":
         parts = setActivityPart(parts, "plan", "Plan", "done", `${entry.stepCount} step${entry.stepCount !== 1 ? "s" : ""}`)
+        parts = pushStatusLine(
+          parts,
+          `status-plan-${index}`,
+          `Mapped out a ${entry.stepCount}-step approach.`,
+        )
         break
       case "planner-pipeline-start":
         currentPipelineAttempt = entry.attempt
@@ -1307,6 +1341,14 @@ function buildResponseParts(
         break
       case "planner-pipeline-end": {
         parts = setActivityPart(parts, `pipeline-${currentPipelineAttempt}`, "Pipeline", entry.status === "success" ? "done" : "error", `${entry.completedSteps}/${entry.totalSteps} steps`)
+        if (entry.status !== "success") {
+          parts = pushStatusLine(
+            parts,
+            `status-pipeline-${index}`,
+            `Stopped after ${entry.completedSteps} of ${entry.totalSteps} planned steps.`,
+            "error",
+          )
+        }
         break
       }
       case "planner-step-start": {
@@ -1316,12 +1358,21 @@ function buildResponseParts(
       }
       case "planner-step-end": {
         if (runningSteps.has(entry.stepName)) {
+          const ok = entry.status === "pass" || entry.status === "success"
           parts = setActivityPart(
             parts,
             `step-${entry.stepName}`,
             `Generating ${humanizeStepName(entry.stepName)}`,
-            entry.status === "pass" || entry.status === "success" ? "done" : "error",
+            ok ? "done" : "error",
             entry.durationMs ? formatMs(entry.durationMs) : entry.error,
+          )
+          parts = pushStatusLine(
+            parts,
+            `status-step-${entry.stepName}-${index}`,
+            ok
+              ? `Finished ${humanizeStepName(entry.stepName)}.`
+              : `Hit a problem during ${humanizeStepName(entry.stepName)}.`,
+            ok ? "neutral" : "error",
           )
           runningSteps.delete(entry.stepName)
         }
@@ -1376,9 +1427,20 @@ function buildResponseParts(
       case "planner-verification":
         parts = settlePrimaryActivities(parts, "verification")
         parts = setActivityPart(parts, "verification", "Verifying", entry.overall === "pass" ? "done" : entry.overall === "fail" ? "error" : "running", undefined, entry.overall !== "pass" && entry.overall !== "fail")
+        if (entry.overall === "pass") {
+          parts = pushStatusLine(parts, `status-verification-${index}`, "Verification passed.")
+        } else if (entry.overall === "fail") {
+          parts = pushStatusLine(parts, `status-verification-${index}`, "Verification found an issue.", "error")
+        }
         break
       case "planner-repair-plan":
         parts = setActivityPart(parts, `repair-${entry.attempt}`, "Repairing", "running", `attempt ${entry.attempt}`, true)
+        parts = pushStatusLine(
+          parts,
+          `status-repair-${index}`,
+          `Starting repair attempt ${entry.attempt}.`,
+          "error",
+        )
         break
       case "planner-sql-quality": {
         const summary = summarizeSqlQualityEntry(entry)
@@ -1420,7 +1482,7 @@ function buildResponseParts(
           )
         } else {
           const narrativeId = `narrative-sql-quality-${index}`
-          parts = pushNarrativePart(parts, narrativeId, text, tone)
+          parts = pushNarrativePart(parts, narrativeId, text, tone, "status")
           lastSqlNarrative = { sig, narrativeId, count: 1, baseText: text, tone }
         }
         break
@@ -1955,11 +2017,19 @@ function ProgressPill({ part }: { part: ResponseProgressPart }) {
 }
 
 function NarrativeUpdate({ part }: { part: ResponseNarrativePart }) {
-  // The agent's reasoning is real prose — render it as compact markdown
-  // in the *primary text tone* (bright zinc-100) so it visually
-  // dominates the muted grey iteration-block headers above and below it.
-  // This is the Copilot pattern: alternating bands of grey system rows
-  // and bright assistant prose.
+  // Status lines = muted system chrome (same band as tool headers).
+  // Prose = assistant voice — bright, dominates the thread.
+  if (part.role === "status") {
+    return (
+      <div
+        className={`py-1 pr-2 text-[15px] leading-6 ${
+          part.tone === "error" ? "text-text-muted" : "text-text-faint"
+        }`}
+      >
+        {part.text}
+      </div>
+    )
+  }
   return (
     <div className={`py-1.5 pr-2 ${part.tone === "error" ? "text-text-muted" : "text-text"}`}>
       <SmartAnswer text={part.text} compact />
@@ -2418,10 +2488,13 @@ function RunMessageImpl({
       if (candidate.kind !== "iteration-block") return
       meta.set(candidate.id, {
         isLastIteration: index === lastIterationIndex,
-        // Only real assistant prose/answers fold tools — not progress chrome.
-        hasNarrativeAfter: responseParts
-          .slice(index + 1)
-          .some((p) => p.kind === "narrative" || p.kind === "markdown"),
+        // Only real assistant prose/answers fold tools — muted planner
+        // status lines stay in the chrome band and must not collapse work.
+        hasNarrativeAfter: responseParts.slice(index + 1).some(
+          (p) =>
+            (p.kind === "narrative" && p.role !== "status") ||
+            p.kind === "markdown",
+        ),
       })
     })
     return meta
@@ -2433,20 +2506,15 @@ function RunMessageImpl({
       if (part.kind === "sync-progress") syncByInvocation.set(part.invocationId, part)
     }
 
-    // Copilot-style flat thread: every responsePart renders as a single
-    // row in chronological order. Planner progress chips stay visible so
-    // plan-mode work is readable; tool blocks carry the concrete actions.
+    // Copilot-style flat thread: tools + muted status + assistant prose.
+    // Progress parts stay off-canvas — they only feed the live bottom
+    // shimmer (never "Direct" / "Plan" blips in the transcript).
     const items: React.ReactNode[] = []
 
     let lastToolHasRunning = false
 
     responseParts.forEach((part) => {
       if (part.kind === "progress") {
-        // Skip the bare "Thinking" placeholder — bottom shimmer covers idle wait.
-        // Keep Plan / Pipeline / step / Verify / Repair chips — that is the
-        // plan-mode story when child work does not look like direct-loop tools.
-        if (part.id === "thinking") return
-        items.push(<ProgressPill key={part.id} part={part} />)
         return
       }
 
