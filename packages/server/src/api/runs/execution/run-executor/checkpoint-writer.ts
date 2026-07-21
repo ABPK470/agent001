@@ -12,9 +12,12 @@
  *     failure), so resume picks up from the most recent tool result — not
  *     from the last completed iteration. This is what makes resume
  *     tool-call granular: only the single in-flight tool call re-runs.
- *   • `onStep` calls this at end-of-iteration as a safety net for the
- *     guard-abort paths (circuit breaker / forced abort) that append a
- *     system message without firing `onToolResult`.
+ *   • `onStep` also runs BEFORE tools execute (see `runTools`) so a first-tool
+ *     `require_approval` park still has a durable resume point — historically
+ *     that path left `lastMessages` empty and `resumeRun` returned null.
+ *   • `onStep` at end-of-iteration is a safety net for guard-abort paths
+ *     (circuit breaker / forced abort) that append a system message without
+ *     firing `onToolResult`.
  *   • The failure and waiting-for-approval finalizers call this with the
  *     last live messages so a crash/timeout/approval-park is resumable too.
  *

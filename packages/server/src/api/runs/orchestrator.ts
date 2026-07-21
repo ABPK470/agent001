@@ -364,6 +364,10 @@ export class AgentOrchestrator {
       display_name: resumeSession!.displayName
     })
 
+    // Parent was parked for approval — close it so the thread follows the
+    // resumed child instead of staying stuck on "waiting for approval".
+    db.markRunCancelled(runId)
+
     if (originalRun.thread_id) {
       db.touchThread(originalRun.thread_id)
     }

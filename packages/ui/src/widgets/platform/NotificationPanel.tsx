@@ -108,8 +108,11 @@ export function NotificationPanel() {
         if (result.resumedRunId) {
           setActiveRun(result.resumedRunId)
           upsertRun({ id: result.resumedRunId, status: RunStatus.Running })
+          upsertRun({ id: result.runId, status: RunStatus.Cancelled, completedAt: new Date().toISOString() })
         } else {
+          // Approval saved but resume failed (historically: missing checkpoint).
           upsertRun({ id: result.runId, status: RunStatus.WaitingForApproval })
+          return
         }
       } else {
         await api.denyRunToolStep(approvalId)

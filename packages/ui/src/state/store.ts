@@ -1202,6 +1202,18 @@ export const useStore = create<AppState>()(
               stepData: [],
               threadId: get().activeThreadId,
             })
+            const resumedFrom = data["resumedFrom"] as string | undefined
+            if (resumedFrom) {
+              store.upsertRun({
+                id: resumedFrom,
+                status: RunStatus.Cancelled,
+                completedAt: timestamp,
+              })
+              // Follow the resumed child — do not stay on the parked parent.
+              if (get().activeRunId === resumedFrom || !get().activeRunId) {
+                set({ activeRunId: data["runId"] as string })
+              }
+            }
             if (get().activeThreadId) {
               const threadId = get().activeThreadId!
               const existing = get().threads.find((t) => t.id === threadId)

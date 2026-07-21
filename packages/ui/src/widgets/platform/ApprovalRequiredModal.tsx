@@ -51,8 +51,13 @@ export function ApprovalRequiredModal(): JSX.Element | null {
         if (result.resumedRunId) {
           setActiveRun(result.resumedRunId)
           upsertRun({ id: result.resumedRunId, status: RunStatus.Running })
+          upsertRun({ id: result.runId, status: RunStatus.Cancelled, completedAt: new Date().toISOString() })
         } else {
+          setError(
+            "Approval was recorded, but the run could not be resumed (missing checkpoint). Retry the goal, or check server logs.",
+          )
           upsertRun({ id: result.runId, status: RunStatus.WaitingForApproval })
+          return
         }
       } else {
         await api.denyRunToolStep(pending.approvalId)
