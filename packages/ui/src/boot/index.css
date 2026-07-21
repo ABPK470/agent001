@@ -1844,13 +1844,23 @@ textarea.input {
 
 /*
  * One bordered card per Call / Context.
- * Card owns L/R/top/bottom chrome. No overflow:hidden — sticky needs it open.
+ * Top chrome lives on the sticky header so it stays when stuck
+ * (card L/R alone would poke straight past the rounded corner).
+ * No overflow:hidden — sticky needs a visible ancestor chain.
  */
 .trace-card {
-  border: 1px solid var(--border, var(--color-border));
+  border-left: 1px solid var(--border, var(--color-border));
+  border-right: 1px solid var(--border, var(--color-border));
+  border-bottom: 1px solid var(--border, var(--color-border));
+  border-top: none;
   border-radius: 0.5rem;
   background: var(--bg);
   box-sizing: border-box;
+}
+
+.trace-card:not(.is-open) {
+  border: none;
+  background: transparent;
 }
 
 .trace-card__body {
@@ -1883,15 +1893,30 @@ textarea.input {
   cursor: pointer;
 }
 
+/*
+ * Call / Context header owns top + L/R stroke and radius.
+ * Wider by 1px each side so it covers the card’s straight L/R at the curve.
+ */
 .trace-card > .trace-scope {
   position: sticky;
   top: 0;
   z-index: 6;
-  border-radius: 0.5rem;
+  border-top: 1px solid var(--border, var(--color-border));
+  border-left: 1px solid var(--border, var(--color-border));
+  border-right: 1px solid var(--border, var(--color-border));
+  border-bottom: none;
+  border-radius: 0.5rem 0.5rem 0 0;
+  margin-left: -1px;
+  margin-right: -1px;
+  width: calc(100% + 2px);
 }
 
-.trace-card.is-open > .trace-scope {
-  border-radius: 0.5rem 0.5rem 0 0;
+.trace-card:not(.is-open) > .trace-scope {
+  border: 1px solid var(--border, var(--color-border));
+  border-radius: 0.5rem;
+  margin-left: 0;
+  margin-right: 0;
+  width: 100%;
 }
 
 .trace-stick-block > .trace-scope {
@@ -1925,7 +1950,8 @@ textarea.input {
 }
 
 .trace-card > .trace-scope.is-soft {
-  border-top: none;
+  /* Keep the sticky top stroke (not the soft in-body separator) */
+  border-top-color: var(--border, var(--color-border));
 }
 
 .trace-scope.is-soft:hover,
