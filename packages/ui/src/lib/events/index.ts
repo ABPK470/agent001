@@ -50,3 +50,27 @@ export type {
   TraceDag,
   TraceCallSearchHit,
 } from "./build-trace-view"
+export {
+  buildResponseParts,
+  CHAT_VIEW_SPEC,
+  PRIMARY_ACTIVITY_IDS,
+  extractToolTarget,
+  buildToolNarrative,
+  buildIterationHeader,
+  compactToolPreview,
+  humanizeStepName,
+} from "./build-chat-parts"
+export type {
+  ToolRow,
+  ResponseProgressPart,
+  ResponseToolPart,
+  ResponseIterationPart,
+  ResponsePlanPart,
+  ResponseStepBlockPart,
+  ResponseMarkdownPart,
+  ResponseNarrativePart,
+  ResponseInputPart,
+  ResponseErrorPart,
+  ResponseSyncProgressPart,
+  ResponsePart,
+} from "./build-chat-parts"

@@ -224,12 +224,13 @@ Widgets supply a ViewSpec + leaf body renderers (Sent JSON, SQL, tool args).
 They do **not** own `switch (entry.kind)` / parallel `TRACE_KIND_LABELS` maps
 for labels or outline roles.
 
-**Phase 2 debt:** `widgets/TermChat.tsx` `buildResponseParts` still switches on
-trace kinds (allowlisted in `lint-arch.mjs`). Migrate to a chat ViewSpec over
-the same atoms.
+**Phase 2:** TermChat `buildResponseParts` lives in `lib/events/build-chat-parts.ts`
+(kind switches allowed there). Widgets render `ResponsePart[]` only.
+Exhaustive catalog coverage is enforced by `lint:arch` (every `TraceEntry.kind`
+and every `EventType` has a descriptor).
 
 Adding a new BE event = enum member + one catalog row. Trace / Pipelines /
-Event Stream pick it up without new widget switches.
+Event Stream / TermChat pick it up without new widget switches.
 
 `npm run lint:arch` bans widget-level kind switches for catalogued wire kinds
 outside `lib/events/` and the catalog.

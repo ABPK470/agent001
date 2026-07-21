@@ -304,6 +304,7 @@ describe("buildTraceDag", () => {
           hasBlueprintSource: false,
           verificationMode: "run_tests",
         },
+        envelope: { targetArtifacts: ["site/index.html"] },
       },
       llmRequest(0),
       llmResponse(0, {
