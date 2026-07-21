@@ -1,12 +1,42 @@
 /**
  * Scope header row + pin overlay (VS Code outline dialect).
- * In-flow rows and pinned clones share the same grid so chevrons line up.
- * depth drives indent — same idea as editor sticky scroll + indent guides.
+ * Pinned clones keep the same text, trailing chrome, and visual dialect
+ * as the in-flow row — only stick, don’t restyle.
  */
 
 import { ChevronDown, ChevronRight } from "lucide-react"
 import type { ReactNode } from "react"
 import type { TraceScopeKind } from "./trace-pin"
+
+function ScopeChrome({
+  open,
+  leading,
+  title,
+  summary,
+  trailing,
+}: {
+  open: boolean
+  leading: string
+  title?: string
+  summary?: string
+  trailing?: ReactNode
+}) {
+  return (
+    <>
+      <span className="trace-scope__chevslot" aria-hidden>
+        {open ? (
+          <ChevronDown size={14} className="trace-scope__chev" />
+        ) : (
+          <ChevronRight size={14} className="trace-scope__chev" />
+        )}
+      </span>
+      <span className="trace-scope__lead">{leading}</span>
+      {title ? <span className="trace-scope__title">{title}</span> : null}
+      {summary ? <span className="trace-scope__sum">{summary}</span> : null}
+      {trailing ? <span className="trace-scope__trail">{trailing}</span> : null}
+    </>
+  )
+}
 
 export function ScopeRow({
   scopeId,
@@ -44,17 +74,13 @@ export function ScopeRow({
       onClick={onToggle}
       aria-expanded={open}
     >
-      <span className="trace-scope__chevslot" aria-hidden>
-        {open ? (
-          <ChevronDown size={14} className="trace-scope__chev" />
-        ) : (
-          <ChevronRight size={14} className="trace-scope__chev" />
-        )}
-      </span>
-      <span className="trace-scope__lead">{leading}</span>
-      {title ? <span className="trace-scope__title">{title}</span> : null}
-      {summary ? <span className="trace-scope__sum">{summary}</span> : null}
-      {trailing ? <span className="trace-scope__trail">{trailing}</span> : null}
+      <ScopeChrome
+        open={open}
+        leading={leading}
+        title={title}
+        summary={summary}
+        trailing={trailing}
+      />
     </button>
   )
 }
@@ -68,6 +94,7 @@ export type PinRow = {
   summary: string
   soft: boolean
   open: boolean
+  trailing?: ReactNode
 }
 
 export function PinOverlay({
@@ -76,9 +103,7 @@ export function PinOverlay({
   onReveal,
 }: {
   rows: PinRow[]
-  /** Chevron — expand/collapse only. */
   onToggle: (scopeId: string) => void
-  /** Row body — navigate to that scope (VS Code click sticky line). */
   onReveal: (scopeId: string) => void
 }) {
   if (rows.length === 0) return null
@@ -117,6 +142,9 @@ export function PinOverlay({
               <span className="trace-scope__lead">{row.leading}</span>
               {row.title ? <span className="trace-scope__title">{row.title}</span> : null}
               {row.summary ? <span className="trace-scope__sum">{row.summary}</span> : null}
+              {row.trailing ? (
+                <span className="trace-scope__trail">{row.trailing}</span>
+              ) : null}
             </button>
           </div>
         ))}

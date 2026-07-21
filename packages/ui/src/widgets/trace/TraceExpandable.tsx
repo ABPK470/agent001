@@ -5,7 +5,7 @@
  * Collapsing reveals the block under the pin stack (no jump to later calls).
  */
 
-import { ChevronsDown, ChevronsUp } from "lucide-react"
+import { ListChevronsDownUp, ListChevronsUpDown } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { CopyControl } from "./TraceCopy"
 import { beginCollapseReveal } from "./trace-scroll-anchor"
@@ -26,7 +26,11 @@ function ExpandToggle({
       aria-label={expanded ? "Show less" : "Show more"}
       title={expanded ? "Show less" : "Show more"}
     >
-      {expanded ? <ChevronsUp size={11} /> : <ChevronsDown size={11} />}
+      {expanded ? (
+        <ListChevronsDownUp size={14} strokeWidth={1.75} />
+      ) : (
+        <ListChevronsUpDown size={14} strokeWidth={1.75} />
+      )}
       <span>{expanded ? "Less" : "More"}</span>
     </button>
   )

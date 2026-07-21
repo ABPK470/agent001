@@ -1858,6 +1858,11 @@ textarea.input {
   box-shadow: 0 2px 8px color-mix(in srgb, var(--bg) 80%, transparent);
 }
 
+/* Pinned stack rows keep in-flow fill; last separator is the stack edge */
+.trace-pin__stack > .trace-scope.is-pinned:last-child {
+  border-bottom: none;
+}
+
 .trace-flow {
   display: flex;
   flex-direction: column;
@@ -1911,14 +1916,14 @@ textarea.input {
 }
 
 .trace-scope.is-pinned {
+  /* Same chrome as in-flow — only flat for the stack, opaque bg */
   margin: 0;
   border-radius: 0;
-  border: none;
+  border-left: none;
+  border-right: none;
+  border-top: none;
   border-bottom: 1px solid var(--border-subtle, var(--color-border-subtle));
-  background: var(--bg);
-  height: 34px;
-  min-height: 34px;
-  padding: 0 0.55rem 0 0.35rem;
+  opacity: 1;
 }
 
 .trace-scope__chevslot,
@@ -1995,11 +2000,11 @@ textarea.input {
   min-width: 3.6rem;
 }
 
-.trace-scope[data-trace-kind="call"]:not(.is-pinned) {
+.trace-scope[data-trace-kind="call"] {
   background: color-mix(in srgb, var(--accent, var(--color-accent)) 7%, var(--bg));
 }
 
-.trace-scope[data-trace-kind="call"]:not(.is-pinned):hover {
+.trace-scope[data-trace-kind="call"]:hover {
   background: color-mix(in srgb, var(--accent, var(--color-accent)) 11%, var(--bg));
 }
 
@@ -5118,8 +5123,8 @@ textarea.input {
 }
 
 .thread-rail-item-title {
-  font-size: 13px;
-  line-height: 1.45;
+  font-size: 1rem; /* match chat bubbles (text-base) */
+  line-height: 1.5;
   font-weight: 450;
   letter-spacing: -0.01em;
 }

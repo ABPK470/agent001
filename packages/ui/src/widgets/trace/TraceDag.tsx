@@ -204,6 +204,7 @@ export function TraceDag({
         const index = Number(callMatch[1])
         const call = dag.calls[index]
         if (!call) continue
+        const usage = call.usage
         rows.push({
           id,
           kind: "call",
@@ -213,6 +214,18 @@ export function TraceDag({
           summary: `iter ${call.iteration + 1}`,
           soft: false,
           open: openState.calls.has(index),
+          trailing: (
+            <>
+              {usage && (
+                <span className="tabular-nums">
+                  {fmtTokens(usage.promptTokens)}/{fmtTokens(usage.completionTokens)}
+                </span>
+              )}
+              {call.durationMs != null && (
+                <span className="tabular-nums">{formatMs(call.durationMs)}</span>
+              )}
+            </>
+          ),
         })
         continue
       }
