@@ -876,12 +876,10 @@ function StepBlock({
 
   const hasTools = part.tools.length > 0
   const Chevron = open ? ChevronDown : ChevronRight
+  // Step gaps are process detail — same muted chrome as successful steps.
   const labelClass =
-    part.status === "error"
-      ? "text-text"
-      : part.status === "running"
-        ? "text-text-muted"
-        : "text-text-faint"
+    part.status === "running" ? "text-text-muted" : "text-text-faint"
+  const dotStatus = part.status === "error" ? "done" : part.status
 
   return (
     <div className="py-1">
@@ -899,7 +897,7 @@ function StepBlock({
         className={`flex w-full max-w-full items-start gap-3 py-0.5 text-left ${hasTools ? "" : "cursor-default"}`}
       >
         <span className="mt-0.5 shrink-0">
-          <StatusDot status={part.status} animated={part.status === "running"} />
+          <StatusDot status={dotStatus} animated={part.status === "running"} />
         </span>
         <span className="min-w-0 flex-1">
           <span className={`inline-flex flex-wrap items-baseline gap-x-1.5 text-[15px] leading-6 ${labelClass}`}>
@@ -1014,26 +1012,21 @@ function IterationToolList({
 
 function ProgressPill({ part }: { part: ResponseProgressPart }) {
   const hasDetail = Boolean(part.detail)
+  // Settled process outcomes (including "needs work") share one muted band —
+  // never treat planner gaps as alarm-red incidents.
   const labelClass =
-    part.status === "error"
-      ? "text-text"
-      : part.status === "running"
-        ? "text-text-muted"
-        : "text-text-faint"
+    part.status === "running" ? "text-text-muted" : "text-text-faint"
+  const dotStatus = part.status === "error" ? "done" : part.status
 
   return (
     <div className={`flex gap-3 py-1 min-w-0 ${hasDetail ? "items-start" : "items-center"}`}>
-      <StatusDot status={part.status} animated={part.shimmer === true} />
+      <StatusDot status={dotStatus} animated={part.shimmer === true} />
       <div className="min-w-0 flex-1">
         <span className={`text-[15px] font-normal tracking-[-0.01em] block ${labelClass}`}>
           {part.label}
         </span>
         {part.detail && (
-          <div
-            className={`pt-0.5 text-[15px] leading-6 whitespace-pre-wrap break-words ${
-              part.status === "error" ? "text-text-muted" : "text-text-faint"
-            }`}
-          >
+          <div className="pt-0.5 text-[15px] leading-6 whitespace-pre-wrap break-words text-text-faint">
             {part.detail}
           </div>
         )}

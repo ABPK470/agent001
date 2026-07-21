@@ -178,4 +178,59 @@ describe("buildResponseParts — TermChat projection", () => {
     )
     expect(bareRepair).toHaveLength(0)
   })
+
+  it("demotes verify/step gaps to settled neutral chrome (not Check failed / error)", () => {
+    const parts = buildResponseParts(
+      [
+        {
+          kind: "planner-step-start",
+          stepName: "frontend_layer",
+          stepType: "subagent_task",
+        },
+        {
+          kind: "planner-step-end",
+          stepName: "frontend_layer",
+          status: "fail",
+          error: "build failed — missing brand-tokens",
+          durationMs: 1200,
+        },
+        {
+          kind: "planner-verification",
+          overall: "fail",
+          confidence: 0.4,
+          steps: [
+            {
+              stepName: "frontend_layer",
+              outcome: "fail",
+              issues: ["missing brand-tokens"],
+            },
+          ],
+        },
+      ],
+      "running",
+      "",
+      null,
+      null,
+      null,
+      "run-1",
+    )
+
+    const step = parts.find((p) => p.kind === "step-block")
+    expect(step?.kind).toBe("step-block")
+    if (step?.kind === "step-block") {
+      expect(step.status).toBe("done")
+      expect(step.detail).toContain("missing brand-tokens")
+    }
+
+    const check = parts.find(
+      (p) => p.kind === "progress" && p.id.startsWith("verification-"),
+    )
+    expect(check?.kind).toBe("progress")
+    if (check?.kind === "progress") {
+      expect(check.label).toBe("Check · needs work")
+      expect(check.status).toBe("done")
+      expect(check.detail).toContain("missing brand-tokens")
+      expect(check.label).not.toMatch(/failed/i)
+    }
+  })
 })

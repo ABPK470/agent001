@@ -798,12 +798,14 @@ export function buildResponseParts(
           ? entry.durationMs
             ? formatMs(entry.durationMs)
             : undefined
-          : entry.error || "failed"
+          : entry.error || "needs work"
+        // Process gaps (verify fail → repair) are normal agent work — settle
+        // as done chrome with the reason in detail, never alarm-red "error".
         parts = parts.map((part) => {
           if (part.kind !== "step-block" || part.id !== activityId) return part
           return {
             ...part,
-            status: ok ? ("done" as const) : ("error" as const),
+            status: "done" as const,
             detail,
             hasRunning: part.tools.some((t) => t.row.status === "running"),
           }
@@ -879,11 +881,12 @@ export function buildResponseParts(
         if (!activityId) break
         parts = parts.map((part) => {
           if (part.kind !== "step-block" || part.id !== activityId) return part
-          if (part.status === "done" || part.status === "error") return part
+          if (part.status === "done") return part
           return {
             ...part,
-            status: entry.status === "done" ? ("done" as const) : ("error" as const),
-            detail: entry.error ?? part.detail,
+            // Delegation gaps are process — settle neutrally; detail keeps the reason.
+            status: "done" as const,
+            detail: entry.status === "done" ? part.detail : (entry.error ?? part.detail),
             hasRunning: part.tools.some((t) => t.row.status === "running"),
           }
         })
@@ -903,11 +906,13 @@ export function buildResponseParts(
                 )
                 .slice(0, 2)
                 .join(" · ") || entry.overall
+        // Pass and "found gaps" are both settled checks — never alarm-red.
+        // Copy carries the outcome; chrome matches Subagent / Repair / Checked work.
         parts = setActivityPart(
           parts,
           `verification-${index}`,
-          entry.overall === "pass" ? "Checked work" : "Check failed",
-          entry.overall === "pass" ? "done" : entry.overall === "fail" ? "error" : "running",
+          entry.overall === "pass" ? "Checked work" : "Check · needs work",
+          entry.overall === "pass" || entry.overall === "fail" ? "done" : "running",
           verifyDetail,
           entry.overall !== "pass" && entry.overall !== "fail",
         )
