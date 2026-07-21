@@ -176,14 +176,18 @@ export function JsonViewer({
     >
       {(copyable || label) && (
         <div className="flex items-center justify-between gap-2 px-2 py-1 border-b border-border-subtle/80 bg-overlay-1/60">
-          <span className="text-[10px] uppercase tracking-wide text-text-muted/70 font-mono">
-            {label ?? "JSON"}
-          </span>
+          {label ? (
+            <span className="text-[10px] uppercase tracking-wide text-text-muted/70 font-mono">
+              {label}
+            </span>
+          ) : (
+            <span />
+          )}
           {copyable && (
             <button
               type="button"
               onClick={copy}
-              className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-mono text-text-muted hover:text-text hover:bg-overlay-2 rounded transition-colors"
+              className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-mono text-text-muted hover:text-text hover:bg-overlay-2 rounded transition-colors ml-auto"
               title="Copy JSON"
             >
               {copied ? <Check size={10} className="text-success" /> : <Copy size={10} />}

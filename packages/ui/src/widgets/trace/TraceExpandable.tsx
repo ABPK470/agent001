@@ -1,22 +1,45 @@
 /**
- * Long text with a sticky action bar — Copy and More/Less share the
- * same control dialect (icon + label) and stick together while scrolling.
+ * Expandable text — More/Less sits under the text it discloses.
+ * Copy (when present) sticks at the top; Less joins it once expanded
+ * so you can collapse without scrolling back to the end.
  */
 
 import { ChevronsDown, ChevronsUp } from "lucide-react"
 import { useEffect, useState } from "react"
 import { CopyControl } from "./TraceCopy"
 
+function ExpandToggle({
+  expanded,
+  onToggle,
+}: {
+  expanded: boolean
+  onToggle: () => void
+}) {
+  return (
+    <button
+      type="button"
+      className="trace-copy"
+      onClick={onToggle}
+      aria-expanded={expanded}
+      aria-label={expanded ? "Show less" : "Show more"}
+      title={expanded ? "Show less" : "Show more"}
+    >
+      {expanded ? <ChevronsUp size={11} /> : <ChevronsDown size={11} />}
+      <span>{expanded ? "Less" : "More"}</span>
+    </button>
+  )
+}
+
 export function ExpandableText({
   text,
   className,
-  previewChars = 280,
+  previewChars = 480,
   copyLabel,
 }: {
   text: string
   className: string
   previewChars?: number
-  /** When set, show a Copy control in the sticky action bar. */
+  /** When set, show a sticky Copy control above the text. */
   copyLabel?: string
 }) {
   const [expanded, setExpanded] = useState(false)
@@ -27,7 +50,8 @@ export function ExpandableText({
   }, [text])
 
   const display = !isLong || expanded ? text : `${text.slice(0, previewChars)}…`
-  const showActions = Boolean(copyLabel) || isLong
+  const stickyLess = Boolean(copyLabel) && isLong && expanded
+  const footToggle = isLong && !stickyLess
 
   function onToggleExpand() {
     setExpanded((v) => !v)
@@ -37,29 +61,22 @@ export function ExpandableText({
     <div
       className={`trace-expand${isLong && !expanded ? " is-clipped" : ""}`}
     >
-      {showActions && (
+      {copyLabel && (
         <div className="trace-expand__actions">
-          {copyLabel && (
-            <CopyControl value={text} ariaLabel={copyLabel} />
-          )}
-          {isLong && (
-            <button
-              type="button"
-              className="trace-copy"
-              onClick={onToggleExpand}
-              aria-expanded={expanded}
-              aria-label={expanded ? "Show less" : "Show more"}
-              title={expanded ? "Show less" : "Show more"}
-            >
-              {expanded ? <ChevronsUp size={11} /> : <ChevronsDown size={11} />}
-              <span>{expanded ? "Less" : "More"}</span>
-            </button>
+          <CopyControl value={text} ariaLabel={copyLabel} />
+          {stickyLess && (
+            <ExpandToggle expanded onToggle={onToggleExpand} />
           )}
         </div>
       )}
       <div className="trace-expand__main">
         <pre className={className}>{display}</pre>
       </div>
+      {footToggle && (
+        <div className="trace-expand__foot">
+          <ExpandToggle expanded={expanded} onToggle={onToggleExpand} />
+        </div>
+      )}
     </div>
   )
 }

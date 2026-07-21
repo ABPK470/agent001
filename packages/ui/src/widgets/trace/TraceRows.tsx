@@ -8,7 +8,6 @@ import {
   type TraceSqlQuality,
   type TraceToolCall,
 } from "./build-trace-dag"
-import { IdChip } from "./TraceCopy"
 import { ExpandableText } from "./TraceExpandable"
 
 export function PromptMessageRow({
@@ -42,11 +41,15 @@ export function PromptMessageRow({
           {msg.speaker}
         </span>
         {msg.detail && <span className="trace-row__detail">{msg.detail}</span>}
+        {msg.toolCallId && (
+          <span className="trace-row__id font-mono" title={msg.toolCallId}>
+            {msg.toolCallId}
+          </span>
+        )}
         {!open && <span className="trace-row__preview">{preview}</span>}
       </button>
       {open && (
         <div className="trace-row__body">
-          {msg.toolCallId && <IdChip label="tool call" value={msg.toolCallId} />}
           {msg.content && (
             <ExpandableText text={msg.content} className="trace-body-muted" />
           )}
@@ -55,13 +58,17 @@ export function PromptMessageRow({
           )}
           {msg.toolCalls.map((tc) => (
             <div key={tc.id} className="trace-tool-inline">
-              <span className="font-mono">{tc.name}</span>
-              <IdChip label="tool call" value={tc.id} />
+              <div className="trace-tool-inline__head">
+                <span className="font-mono">{tc.name}</span>
+                <span className="trace-row__id font-mono" title={tc.id}>
+                  {tc.id}
+                </span>
+              </div>
               <JsonViewer
                 value={tc.arguments}
-                label="arguments"
                 defaultExpandDepth={0}
                 maxHeight={160}
+                className="trace-json"
               />
             </div>
           ))}
@@ -96,18 +103,17 @@ export function ToolRow({
           )}
         </span>
         <span className="font-mono">{tool.name}</span>
-        {!open && (
-          <span className="trace-row__preview font-mono">{tool.id.slice(0, 12)}</span>
-        )}
+        <span className="trace-row__id font-mono" title={tool.id}>
+          {tool.id}
+        </span>
       </button>
       {open && (
         <div className="trace-row__body">
-          <IdChip label="tool call" value={tool.id} />
           <JsonViewer
             value={tool.arguments}
-            label="arguments"
             defaultExpandDepth={1}
             maxHeight={200}
+            className="trace-json"
           />
         </div>
       )}
@@ -144,7 +150,7 @@ export function SqlQualityRow({ entry }: { entry: TraceSqlQuality }) {
         <ExpandableText
           text={entry.sqlPreview}
           className="code-pre"
-          previewChars={180}
+          previewChars={320}
         />
       )}
     </div>
@@ -157,41 +163,69 @@ export function ToolDef({
   tool: { name: string; description: string; parameters?: Record<string, unknown> }
 }) {
   const [showSchema, setShowSchema] = useState(false)
+  const [descOpen, setDescOpen] = useState(false)
+  const previewChars = 400
+  const descLong = tool.description.length > previewChars
+  const descText =
+    !descLong || descOpen
+      ? tool.description
+      : `${tool.description.slice(0, previewChars)}…`
 
   function onToggleSchema() {
     setShowSchema((v) => !v)
   }
 
+  function onToggleDesc() {
+    setDescOpen((v) => !v)
+  }
+
   return (
     <div className="trace-ctx-item">
-      <div className="trace-ctx-item__head">
-        <span className="font-mono">{tool.name}</span>
-        {tool.parameters && (
-          <button
-            type="button"
-            className="trace-copy"
-            onClick={onToggleSchema}
-            aria-expanded={showSchema}
-            aria-label={showSchema ? "Hide schema" : "Show schema"}
-            title={showSchema ? "Hide schema" : "Show schema"}
-          >
-            {showSchema ? <ChevronsUp size={11} /> : <ChevronsDown size={11} />}
-            <span>Schema</span>
-          </button>
-        )}
-      </div>
-      <ExpandableText
-        text={tool.description}
-        className="trace-body-muted"
-        previewChars={120}
-      />
+      <div className="trace-ctx-item__name font-mono">{tool.name}</div>
+      {tool.description ? (
+        <pre className="trace-body-muted">{descText}</pre>
+      ) : (
+        <span className="trace-empty">No description</span>
+      )}
+      {(descLong || tool.parameters) && (
+        <div className="trace-ctx-item__foot">
+          {descLong && (
+            <button
+              type="button"
+              className="trace-copy"
+              onClick={onToggleDesc}
+              aria-expanded={descOpen}
+              aria-label={descOpen ? "Show less description" : "Show more description"}
+              title={descOpen ? "Show less description" : "Show more description"}
+            >
+              {descOpen ? <ChevronsUp size={11} /> : <ChevronsDown size={11} />}
+              <span>{descOpen ? "Less" : "More"}</span>
+            </button>
+          )}
+          {tool.parameters && (
+            <button
+              type="button"
+              className="trace-copy"
+              onClick={onToggleSchema}
+              aria-expanded={showSchema}
+              aria-label={showSchema ? "Hide schema" : "Show schema"}
+              title={showSchema ? "Hide schema" : "Show schema"}
+            >
+              {showSchema ? <ChevronsUp size={11} /> : <ChevronsDown size={11} />}
+              <span>Schema</span>
+            </button>
+          )}
+        </div>
+      )}
       {tool.parameters && showSchema && (
-        <JsonViewer
-          value={tool.parameters}
-          label="schema"
-          defaultExpandDepth={1}
-          maxHeight={180}
-        />
+        <div className="trace-ctx-item__schema">
+          <JsonViewer
+            value={tool.parameters}
+            label="schema"
+            defaultExpandDepth={1}
+            maxHeight={180}
+          />
+        </div>
       )}
     </div>
   )

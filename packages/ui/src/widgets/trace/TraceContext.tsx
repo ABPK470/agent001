@@ -111,7 +111,7 @@ export function PreambleOutline({
               <ExpandableText
                 text={preamble.systemPrompt}
                 className="trace-body-muted"
-                previewChars={360}
+                previewChars={720}
                 copyLabel="Copy prompt"
               />
             </ContextFold>

@@ -2107,6 +2107,18 @@ textarea.input {
   color: var(--text-muted, var(--color-text-muted));
 }
 
+.trace-row__id {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: inherit;
+  font-weight: 450;
+  color: var(--text-muted, var(--color-text-muted));
+  opacity: 0.85;
+}
+
 .trace-row__body {
   padding: 0.25rem 0 0.45rem 1.85rem;
   display: flex;
@@ -2130,8 +2142,8 @@ textarea.input {
 }
 
 /*
- * Expandable text — sticky Copy + More/Less bar (same control dialect).
- * top clears the pin stack via --trace-pin-stack-h on .trace-scroll.
+ * Expandable text — More under the text; Copy sticky above when present.
+ * Less joins Copy once expanded (pin-stack clearance via --trace-pin-stack-h).
  */
 .trace-expand {
   display: flex;
@@ -2159,6 +2171,13 @@ textarea.input {
   min-width: 0;
 }
 
+.trace-expand__foot {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+  margin-top: 0.05rem;
+}
+
 .trace-expand.is-clipped .trace-expand__main {
   position: relative;
 }
@@ -2166,8 +2185,8 @@ textarea.input {
 .trace-expand.is-clipped .trace-expand__main::after {
   content: "";
   display: block;
-  height: 1.75rem;
-  margin-top: -1.75rem;
+  height: 1.25rem;
+  margin-top: -1.25rem;
   pointer-events: none;
   background: linear-gradient(to bottom, transparent, var(--bg));
 }
@@ -2312,19 +2331,35 @@ textarea.input {
 }
 
 .trace-ctx-item {
-  padding: 0.3rem 0;
+  padding: 0.45rem 0;
   display: flex;
   flex-direction: column;
   gap: 0.2rem;
 }
 
-.trace-ctx-item__head {
+.trace-ctx-item + .trace-ctx-item {
+  border-top: 1px solid var(--border-subtle, var(--color-border-subtle));
+  margin-top: 0.15rem;
+  padding-top: 0.55rem;
+}
+
+.trace-ctx-item__name {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--text, var(--color-text));
+}
+
+.trace-ctx-item__foot {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 0.35rem 0.55rem;
-  font-size: 0.9375rem;
-  color: var(--text-secondary, var(--text, var(--color-text)));
+  gap: 0.15rem 0.45rem;
+  margin-top: 0.1rem;
+}
+
+.trace-ctx-item__schema {
+  margin-top: 0.25rem;
+  padding-left: 0.15rem;
 }
 
 .trace-tool-inline {
@@ -2332,6 +2367,23 @@ textarea.input {
   flex-direction: column;
   gap: 0.3rem;
   padding: 0.25rem 0;
+}
+
+.trace-tool-inline__head {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+  font-size: 0.9375rem;
+}
+
+.trace-json {
+  border-radius: 0.35rem;
+  font-size: 0.9375rem;
+}
+
+.trace-json .text-xs {
+  font-size: inherit !important;
 }
 
 /* JsonViewer / nested chrome inside Trace cards — keep body scale.
