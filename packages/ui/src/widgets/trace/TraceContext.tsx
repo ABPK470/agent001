@@ -1,52 +1,12 @@
 /**
- * Shared Context card — system prompt + tool definitions.
+ * Shared Context card — Prompt / Tools as real outline scopes (sticky + indent).
  */
 
-import { ChevronDown, ChevronRight } from "lucide-react"
-import type { ReactNode } from "react"
 import type { TraceDag } from "./build-trace-dag"
 import { formatCharCount } from "./trace-format"
 import { ExpandableText } from "./TraceExpandable"
 import { ToolDef } from "./TraceRows"
 import { ScopeRow } from "./TraceScope"
-
-function ContextFold({
-  open,
-  onToggle,
-  label,
-  detail,
-  tone,
-  children,
-}: {
-  open: boolean
-  onToggle: () => void
-  label: string
-  detail?: string
-  tone: "prompt" | "tools"
-  children: ReactNode
-}) {
-  return (
-    <div className={`trace-ctx-fold is-${tone}`}>
-      <button
-        type="button"
-        className="trace-ctx-fold__btn"
-        onClick={onToggle}
-        aria-expanded={open}
-      >
-        <span className="trace-scope__chevslot" aria-hidden>
-          {open ? (
-            <ChevronDown size={14} className="trace-scope__chev" />
-          ) : (
-            <ChevronRight size={14} className="trace-scope__chev" />
-          )}
-        </span>
-        <span className="trace-ctx-fold__label">{label}</span>
-        {detail && <span className="trace-row__detail">{detail}</span>}
-      </button>
-      {open && <div className="trace-ctx-fold__body">{children}</div>}
-    </div>
-  )
-}
 
 export function PreambleOutline({
   dag,
@@ -92,6 +52,7 @@ export function PreambleOutline({
       <ScopeRow
         scopeId="context"
         kind="context"
+        depth={0}
         open={open}
         onToggle={onToggle}
         leading="Context"
@@ -99,39 +60,55 @@ export function PreambleOutline({
         soft
       />
       {open && (
-        <div className="trace-card__body">
+        <div className="trace-card__body trace-nest">
           {preamble.systemPrompt && promptMatches && (
-            <ContextFold
-              open={contextPromptOpen}
-              onToggle={onTogglePrompt}
-              label="Prompt"
-              detail={`${formatCharCount(preamble.systemPrompt.length)} chars`}
-              tone="prompt"
-            >
-              <ExpandableText
-                text={preamble.systemPrompt}
-                className="trace-body-muted"
-                previewChars={720}
-                copyLabel="Copy prompt"
+            <>
+              <ScopeRow
+                scopeId="prompt"
+                kind="prompt"
+                depth={1}
+                open={contextPromptOpen}
+                onToggle={onTogglePrompt}
+                leading="Prompt"
+                summary={`${formatCharCount(preamble.systemPrompt.length)} chars`}
+                soft
               />
-            </ContextFold>
+              {contextPromptOpen && (
+                <div className="trace-scope-body">
+                  <ExpandableText
+                    text={preamble.systemPrompt}
+                    className="trace-body-muted"
+                    previewChars={720}
+                    copyLabel="Copy prompt"
+                  />
+                </div>
+              )}
+            </>
           )}
           {tools.length > 0 && (
-            <ContextFold
-              open={contextToolsOpen}
-              onToggle={onToggleTools}
-              label="Tools"
-              detail={
-                q
-                  ? `${tools.length} of ${preamble.tools.length}`
-                  : String(preamble.tools.length)
-              }
-              tone="tools"
-            >
-              {tools.map((t) => (
-                <ToolDef key={t.name} tool={t} />
-              ))}
-            </ContextFold>
+            <>
+              <ScopeRow
+                scopeId="tools"
+                kind="tools"
+                depth={1}
+                open={contextToolsOpen}
+                onToggle={onToggleTools}
+                leading="Tools"
+                summary={
+                  q
+                    ? `${tools.length} of ${preamble.tools.length}`
+                    : String(preamble.tools.length)
+                }
+                soft
+              />
+              {contextToolsOpen && (
+                <div className="trace-scope-body">
+                  {tools.map((t) => (
+                    <ToolDef key={t.name} tool={t} />
+                  ))}
+                </div>
+              )}
+            </>
           )}
         </div>
       )}

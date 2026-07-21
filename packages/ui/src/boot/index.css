@@ -2019,6 +2019,26 @@ textarea.input {
   color: var(--text-muted, var(--color-text-muted));
 }
 
+.trace-scope[data-trace-kind="prompt"] .trace-scope__lead {
+  color: var(--info, var(--color-info, #5b9fd4));
+}
+
+.trace-scope[data-trace-kind="tools"] .trace-scope__lead {
+  color: var(--accent, var(--color-accent));
+}
+
+/* Code-like offsets — nested scopes indent like editor sticky scroll */
+.trace-scope[data-trace-depth="1"],
+.trace-scope.is-pinned[data-trace-depth="1"] {
+  padding-left: 1.45rem;
+}
+
+.trace-nest > .trace-scope-body {
+  margin-left: 0.85rem;
+  padding-left: 1.35rem;
+  border-left: 1px solid var(--border-subtle, var(--color-border-subtle));
+}
+
 .trace-scope.is-soft .trace-scope__lead {
   min-width: 4.5rem;
   font-weight: 650;
@@ -2142,40 +2162,43 @@ textarea.input {
 }
 
 /*
- * Expandable text — More under the text; Copy sticky above when present.
- * Less joins Copy once expanded (pin-stack clearance via --trace-pin-stack-h).
+ * Expandable text — sticky right-rail Copy + More/Less.
+ * top clears the pin stack via --trace-pin-stack-h on .trace-scroll.
  */
 .trace-expand {
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
+  display: block;
   min-width: 0;
 }
 
-.trace-expand__actions {
+.trace-expand.has-rail {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.45rem;
+}
+
+.trace-expand__main {
+  flex: 1;
+  min-width: 0;
+}
+
+.trace-expand__rail {
+  flex-shrink: 0;
+  align-self: stretch;
+  position: relative;
+  width: auto;
+  min-width: fit-content;
+}
+
+.trace-expand__sticky {
   position: sticky;
   top: calc(var(--trace-pin-stack-h, 0px) + 0.35rem);
   z-index: 4;
   display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  gap: 0.15rem;
-  align-self: flex-end;
-  width: fit-content;
-  max-width: 100%;
-  padding: 0.1rem 0;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.1rem;
   background: var(--bg);
-}
-
-.trace-expand__main {
-  min-width: 0;
-}
-
-.trace-expand__foot {
-  display: flex;
-  align-items: center;
-  gap: 0.15rem;
-  margin-top: 0.05rem;
+  padding: 0.05rem 0;
 }
 
 .trace-expand.is-clipped .trace-expand__main {
@@ -2209,11 +2232,11 @@ textarea.input {
 }
 
 .trace-next {
-  padding: 0.35rem 0.55rem 0.65rem 2.2rem;
+  padding: 0.35rem 0 0.15rem;
   display: flex;
   flex-direction: column;
   gap: 0.15rem;
-  background: var(--bg);
+  background: transparent;
 }
 
 .trace-next__label {
@@ -2234,44 +2257,6 @@ textarea.input {
 
 .trace-next__label.is-sql {
   color: var(--info, var(--color-info, #5b9fd4));
-}
-
-.trace-ctx-fold {
-  border-bottom: 1px solid var(--border-subtle, var(--color-border-subtle));
-}
-
-.trace-ctx-fold__btn {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  width: 100%;
-  text-align: left;
-  padding: 0.45rem 0.55rem 0.45rem 0.35rem;
-  font-size: 0.875rem;
-  color: var(--text, var(--color-text));
-  background: color-mix(in srgb, var(--text, var(--color-text)) 2%, var(--bg));
-}
-
-.trace-ctx-fold__btn:hover {
-  background: color-mix(in srgb, var(--text, var(--color-text)) 4.5%, var(--bg));
-}
-
-.trace-ctx-fold.is-prompt .trace-ctx-fold__label {
-  font-weight: 650;
-  color: var(--info, var(--color-info, #5b9fd4));
-}
-
-.trace-ctx-fold.is-tools .trace-ctx-fold__label {
-  font-weight: 650;
-  color: var(--accent, var(--color-accent));
-}
-
-.trace-ctx-fold__body {
-  padding: 0.35rem 0.65rem 0.55rem 1.35rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-  background: var(--bg);
 }
 
 .trace-sql-block {

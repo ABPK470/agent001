@@ -1,8 +1,8 @@
 /**
  * Trace outline shell — toolbar, pin stack, chronological call cards.
  *
- * Flow per call: Sent → Received → Next (tools).
- * Pin overlay stacks scopes scrolled past (VS Code dialect).
+ * Flow per call: Sent → Received (+ Next tools under Received).
+ * Pin overlay = VS Code sticky scroll (ancestor chain only).
  */
 
 import { Search, X } from "lucide-react"
@@ -164,11 +164,38 @@ export function TraceDag({
         rows.push({
           id,
           kind: "context",
+          depth: 0,
           leading: "Context",
           title: "",
           summary: "",
           soft: true,
           open: openState.preamble,
+        })
+        continue
+      }
+      if (id === "prompt") {
+        rows.push({
+          id,
+          kind: "prompt",
+          depth: 1,
+          leading: "Prompt",
+          title: "",
+          summary: "",
+          soft: true,
+          open: openState.contextPrompt,
+        })
+        continue
+      }
+      if (id === "tools") {
+        rows.push({
+          id,
+          kind: "tools",
+          depth: 1,
+          leading: "Tools",
+          title: "",
+          summary: "",
+          soft: true,
+          open: openState.contextTools,
         })
         continue
       }
@@ -180,6 +207,7 @@ export function TraceDag({
         rows.push({
           id,
           kind: "call",
+          depth: 0,
           leading: `Call ${index + 1}`,
           title: call.headline,
           summary: `iter ${call.iteration + 1}`,
@@ -196,6 +224,7 @@ export function TraceDag({
         rows.push({
           id,
           kind: "sent",
+          depth: 1,
           leading: "Sent",
           title: "",
           summary: callSentSummary(call),
@@ -212,6 +241,7 @@ export function TraceDag({
         rows.push({
           id,
           kind: "received",
+          depth: 1,
           leading: "Received",
           title: "",
           summary: callReceivedSummary(call),
@@ -226,6 +256,14 @@ export function TraceDag({
   function onTogglePinnedScope(scopeId: string) {
     if (scopeId === "context") {
       onTogglePreamble()
+      return
+    }
+    if (scopeId === "prompt") {
+      onToggleContextPrompt()
+      return
+    }
+    if (scopeId === "tools") {
+      onToggleContextTools()
       return
     }
     const callMatch = /^call:(\d+)$/.exec(scopeId)
@@ -251,14 +289,27 @@ export function TraceDag({
       const sent = new Set(prev.sent)
       const received = new Set(prev.received)
       let preamble = prev.preamble
+      let contextPrompt = prev.contextPrompt
+      let contextTools = prev.contextTools
       if (path.preamble) preamble = true
+      if (path.contextPrompt) contextPrompt = true
+      if (path.contextTools) contextTools = true
       if (path.callIndex != null) {
         calls.add(path.callIndex)
         if (path.sent) sent.add(path.callIndex)
         if (path.received) received.add(path.callIndex)
       }
-      return { ...prev, preamble, calls, sent, received }
+      return {
+        ...prev,
+        preamble,
+        contextPrompt,
+        contextTools,
+        calls,
+        sent,
+        received,
+      }
     })
+    // VS Code: click sticky line → that line is under the pin stack.
     suppressFollowRef.current = true
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
@@ -271,7 +322,10 @@ export function TraceDag({
           `[data-trace-scope="${CSS.escape(scopeId)}"]`,
         )
         if (target instanceof HTMLElement) {
-          el.scrollTop = Math.max(0, layoutOffsetInScroll(el, target))
+          const top = layoutOffsetInScroll(el, target)
+          const depth = Number(target.dataset.traceDepth ?? "0") || 0
+          // Leave room for ancestor pins (depth parents above this row).
+          el.scrollTop = Math.max(0, top - depth * TRACE_STICKY_ROW_H)
         }
         refreshPinStack()
         suppressFollowRef.current = false

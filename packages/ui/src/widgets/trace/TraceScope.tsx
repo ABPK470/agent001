@@ -1,6 +1,7 @@
 /**
  * Scope header row + pin overlay (VS Code outline dialect).
  * In-flow rows and pinned clones share the same grid so chevrons line up.
+ * depth drives indent — same idea as editor sticky scroll + indent guides.
  */
 
 import { ChevronDown, ChevronRight } from "lucide-react"
@@ -11,6 +12,7 @@ export function ScopeRow({
   scopeId,
   kind,
   callIndex,
+  depth = 0,
   open,
   onToggle,
   leading,
@@ -22,6 +24,7 @@ export function ScopeRow({
   scopeId: string
   kind: TraceScopeKind
   callIndex?: number | null
+  depth?: number
   open: boolean
   onToggle: () => void
   leading: string
@@ -36,6 +39,7 @@ export function ScopeRow({
       data-trace-scope={scopeId}
       data-trace-kind={kind}
       data-trace-call={callIndex == null ? "" : String(callIndex)}
+      data-trace-depth={String(depth)}
       className={`trace-scope${open ? " is-open" : ""}${soft ? " is-soft" : ""}`}
       onClick={onToggle}
       aria-expanded={open}
@@ -58,6 +62,7 @@ export function ScopeRow({
 export type PinRow = {
   id: string
   kind: TraceScopeKind
+  depth: number
   leading: string
   title: string
   summary: string
@@ -73,7 +78,7 @@ export function PinOverlay({
   rows: PinRow[]
   /** Chevron — expand/collapse only. */
   onToggle: (scopeId: string) => void
-  /** Row body — navigate to that scope. */
+  /** Row body — navigate to that scope (VS Code click sticky line). */
   onReveal: (scopeId: string) => void
 }) {
   if (rows.length === 0) return null
@@ -85,6 +90,7 @@ export function PinOverlay({
             key={row.id}
             className={`trace-scope is-pinned${row.open ? " is-open" : ""}${row.soft ? " is-soft" : ""}`}
             data-trace-kind={row.kind}
+            data-trace-depth={String(row.depth)}
           >
             <button
               type="button"

@@ -3,24 +3,29 @@
  *
  * In-flow headers are never position:sticky. A pin overlay renders the stack.
  *
- * Stick timing (critical): a scope pins the moment its top reaches the
- * *bottom of the current pin stack*, not bare scrollTop:
+ * Stick rule (matches editor sticky scroll): a scope pins only while the
+ * focus line is *inside* that scope — [top, end). Leaving a block unsticks
+ * it (siblings don’t accumulate). End = next same-or-shallower scope top.
  *
- *   threshold = scrollTop + pinnedSoFar * ROW_H
- *   if scope.top <= threshold → pin it
- *
- * Using only `top <= scrollTop` sticks one (or more) rows late — the header
- * has already scrolled under the previous sticky row before we pin it.
+ * Stick timing: threshold = scrollTop + pinnedSoFar * ROW_H so a child
+ * pins as soon as it reaches the bottom of the current stack.
  */
 
 export const TRACE_STICKY_ROW_H = 34
 
-export type TraceScopeKind = "context" | "call" | "sent" | "received"
+export type TraceScopeKind =
+  | "context"
+  | "prompt"
+  | "tools"
+  | "call"
+  | "sent"
+  | "received"
 
 export type TraceScopeEntry = {
   id: string
   kind: TraceScopeKind
   callIndex: number | null
+  depth: number
   /** Layout Y in scroll content (normal flow). */
   top: number
   el: HTMLElement
@@ -46,26 +51,48 @@ export function listTraceScopes(scrollEl: HTMLElement): TraceScopeEntry[] {
       el.dataset.traceCall == null || el.dataset.traceCall === ""
         ? null
         : Number(el.dataset.traceCall),
+    depth: Number(el.dataset.traceDepth ?? "0") || 0,
     top: layoutOffsetInScroll(scrollEl, el),
     el,
   }))
 }
 
+export type PinEntry = {
+  id: string
+  top: number
+  depth: number
+}
+
+/** End Y of each scope = top of next same-or-shallower scope (or +Infinity). */
+export function withScopeEnds(
+  entries: PinEntry[],
+): Array<PinEntry & { end: number }> {
+  return entries.map((e, i) => {
+    let end = Number.POSITIVE_INFINITY
+    for (let j = i + 1; j < entries.length; j++) {
+      if (entries[j]!.depth <= e.depth) {
+        end = entries[j]!.top
+        break
+      }
+    }
+    return { ...e, end }
+  })
+}
+
 /**
- * Pin scopes in document order as each reaches the bottom of the stack.
+ * Pin scopes that still contain the focus line (VS Code sticky scroll).
  * Pure — unit-tested without DOM sticky.
  */
 export function computePinnedFromEntries(
-  entries: Array<{ id: string; top: number }>,
+  entries: PinEntry[],
   scrollTop: number,
   rowH: number = TRACE_STICKY_ROW_H,
 ): string[] {
+  const ranged = withScopeEnds(entries)
   const pinned: string[] = []
-  for (const e of entries) {
-    // Stick when this header would be covered by (or flush with) the
-    // already-pinned rows — not after several more pixels of scroll.
+  for (const e of ranged) {
     const threshold = scrollTop + pinned.length * rowH
-    if (e.top <= threshold + 0.5) {
+    if (e.top <= threshold + 0.5 && e.end > threshold + 0.5) {
       pinned.push(e.id)
     }
   }
@@ -81,11 +108,15 @@ export function computePinnedScopeIds(scrollEl: HTMLElement): string[] {
  */
 export function expandPathForScope(scopeId: string): {
   preamble?: boolean
+  contextPrompt?: boolean
+  contextTools?: boolean
   callIndex?: number
   sent?: boolean
   received?: boolean
 } {
   if (scopeId === "context") return { preamble: true }
+  if (scopeId === "prompt") return { preamble: true, contextPrompt: true }
+  if (scopeId === "tools") return { preamble: true, contextTools: true }
 
   const callMatch = /^call:(\d+)$/.exec(scopeId)
   if (callMatch) return { callIndex: Number(callMatch[1]) }

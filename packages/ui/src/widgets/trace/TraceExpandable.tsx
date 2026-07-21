@@ -1,10 +1,8 @@
 /**
- * Expandable text — More/Less sits under the text it discloses.
- * Copy (when present) sticks at the top; Less joins it once expanded
- * so you can collapse without scrolling back to the end.
+ * Expandable text — sticky right-rail Copy + More/Less (Context dialect).
+ * Same control for Call / Sent / Received bodies.
  *
- * Collapsing restores scroll so the block stays in view (does not jump
- * to later LLM calls after shrinking a long Context prompt).
+ * Collapsing reveals the block under the pin stack (no jump to later calls).
  */
 
 import { ChevronsDown, ChevronsUp } from "lucide-react"
@@ -43,7 +41,7 @@ export function ExpandableText({
   text: string
   className: string
   previewChars?: number
-  /** When set, show a sticky Copy control above the text. */
+  /** When set, show Copy in the sticky rail. */
   copyLabel?: string
 }) {
   const [expanded, setExpanded] = useState(false)
@@ -55,8 +53,7 @@ export function ExpandableText({
   }, [text])
 
   const display = !isLong || expanded ? text : `${text.slice(0, previewChars)}…`
-  const stickyLess = Boolean(copyLabel) && isLong && expanded
-  const footToggle = isLong && !stickyLess
+  const showRail = Boolean(copyLabel) || isLong
 
   function onToggleExpand() {
     if (expanded) {
@@ -72,22 +69,21 @@ export function ExpandableText({
   return (
     <div
       ref={rootRef}
-      className={`trace-expand${isLong && !expanded ? " is-clipped" : ""}`}
+      className={`trace-expand${showRail ? " has-rail" : ""}${isLong && !expanded ? " is-clipped" : ""}`}
     >
-      {copyLabel && (
-        <div className="trace-expand__actions">
-          <CopyControl value={text} ariaLabel={copyLabel} />
-          {stickyLess && (
-            <ExpandToggle expanded onToggle={onToggleExpand} />
-          )}
-        </div>
-      )}
       <div className="trace-expand__main">
         <pre className={className}>{display}</pre>
       </div>
-      {footToggle && (
-        <div className="trace-expand__foot">
-          <ExpandToggle expanded={expanded} onToggle={onToggleExpand} />
+      {showRail && (
+        <div className="trace-expand__rail">
+          <div className="trace-expand__sticky">
+            {copyLabel && (
+              <CopyControl value={text} ariaLabel={copyLabel} />
+            )}
+            {isLong && (
+              <ExpandToggle expanded={expanded} onToggle={onToggleExpand} />
+            )}
+          </div>
         </div>
       )}
     </div>

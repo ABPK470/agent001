@@ -1,5 +1,7 @@
 /**
- * One LLM call as a bordered card: Call → Sent → Received → Next.
+ * One LLM call as a bordered card: Call → Sent → Received (+ Next tools).
+ * Sent / Received are indented children. Next lives under Received so the
+ * chevron collapses the whole reply branch (VS Code fold).
  */
 
 import { fmtTokens, formatMs } from "../../lib/util"
@@ -40,6 +42,7 @@ export function CallOutline({
         scopeId={`call:${call.index}`}
         kind="call"
         callIndex={call.index}
+        depth={0}
         open={callOpen}
         onToggle={() => onToggleCall(call.index)}
         leading={`Call ${call.index + 1}`}
@@ -64,11 +67,12 @@ export function CallOutline({
       />
 
       {callOpen && (
-        <div className="trace-card__body">
+        <div className="trace-card__body trace-nest">
           <ScopeRow
             scopeId={`sent:${call.index}`}
             kind="sent"
             callIndex={call.index}
+            depth={1}
             open={sentOpen}
             onToggle={() => onToggleSent(call.index)}
             leading="Sent"
@@ -99,6 +103,7 @@ export function CallOutline({
             scopeId={`received:${call.index}`}
             kind="received"
             callIndex={call.index}
+            depth={1}
             open={receivedOpen}
             onToggle={() => onToggleReceived(call.index)}
             leading="Received"
@@ -136,26 +141,25 @@ export function CallOutline({
                   ))}
                 </div>
               )}
-            </div>
-          )}
-
-          {call.toolBranches.length > 0 && (
-            <div className="trace-next">
-              <div className="trace-next__label is-next">
-                Next
-                <span className="trace-row__detail">
-                  {call.toolBranches.length} tool
-                  {call.toolBranches.length === 1 ? "" : "s"}
-                </span>
-              </div>
-              {call.toolBranches.map((tc) => (
-                <ToolRow
-                  key={tc.id}
-                  tool={tc}
-                  open={openState.tools.has(tc.id)}
-                  onToggle={() => onToggleTool(tc.id)}
-                />
-              ))}
+              {call.toolBranches.length > 0 && (
+                <div className="trace-next">
+                  <div className="trace-next__label is-next">
+                    Next
+                    <span className="trace-row__detail">
+                      {call.toolBranches.length} tool
+                      {call.toolBranches.length === 1 ? "" : "s"}
+                    </span>
+                  </div>
+                  {call.toolBranches.map((tc) => (
+                    <ToolRow
+                      key={tc.id}
+                      tool={tc}
+                      open={openState.tools.has(tc.id)}
+                      onToggle={() => onToggleTool(tc.id)}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
