@@ -21,7 +21,7 @@ export const HOME_CHAT_INPUT_DOCK_CLASS = "relative shrink-0 px-6 pb-4 pt-2"
  */
 export const USER_GOAL_COLUMN_CLASS = "w-fit max-w-[82%] min-w-0"
 
-/** Pin-slot width; must match the appendage button in UserGoalBubble. */
+/** Reserved left pin-rail width in UserGoalBubble — always present so text never shifts. */
 export const USER_GOAL_PIN_SLOT_CLASS = "w-10"
 
 /** Bubble shell inside the goal column — never force full column width. */

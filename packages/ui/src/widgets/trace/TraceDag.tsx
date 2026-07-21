@@ -1,14 +1,14 @@
 /**
  * Trace outline shell — toolbar + chronological cards.
  *
- * Sticky = VS Code pin overlay (lib/events/pin), never CSS sticky on cards.
- * Nesting is structural: Subagent/step phases own Call + Work children.
+ * Document flow only. Sticky pin overlay was removed: absolute clones
+ * overlapped in-flow headers and fought card chrome. Nesting is structural:
+ * Subagent/step phases own Call + Work children.
  * Structure from buildOutline + TRACE_VIEW_SPEC; leaf bodies stay private.
  */
 
 import { Search, X } from "lucide-react"
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
-import { StickyPinOverlay, type StickyPinRow } from "../../components/outline"
 import { fmtTokens, formatMs } from "../../lib/util"
 import { SegmentToggle } from "../entity-registry/SegmentToggle"
 import {
@@ -21,7 +21,6 @@ import { CallOutline } from "./TraceCall"
 import { PreambleOutline } from "./TraceContext"
 import { IdChip } from "./TraceCopy"
 import { PhaseOutline } from "./TracePhase"
-import { TRACE_STICKY_ROW_H } from "./trace-pin"
 import { WorkOutline } from "./TraceWork"
 
 export function TraceDag({
@@ -329,15 +328,7 @@ export function TraceDag({
         {searchStatus && <div className="trace-search__status">{searchStatus}</div>}
       </div>
 
-      <div ref={scrollRef} className="trace-scroll min-h-0 flex-1 relative" data-trace-scroll-host>
-        {runId && dag.hasData ? (
-          <StickyPinOverlay
-            scrollRef={scrollRef}
-            rowHeight={TRACE_STICKY_ROW_H}
-            rows={tracePinRows(dag)}
-            className="trace-pin-overlay"
-          />
-        ) : null}
+      <div ref={scrollRef} className="trace-scroll min-h-0 flex-1" data-trace-scroll-host>
         {emptySlot}
 
         {runId &&
@@ -450,110 +441,5 @@ export function TraceDag({
       </div>
     </div>
   )
-}
-
-/** Pin chrome for sticky overlay — ids must match data-trace-scope. */
-function tracePinRows(dag: TraceDag): StickyPinRow[] {
-  const rows: StickyPinRow[] = [
-    {
-      id: "context",
-      depth: 0,
-      content: (
-        <span className="trace-scope__lead">Context</span>
-      ),
-    },
-    {
-      id: "prompt",
-      depth: 1,
-      content: <span className="trace-scope__lead">Prompt</span>,
-    },
-    {
-      id: "tools",
-      depth: 1,
-      content: <span className="trace-scope__lead">Tools</span>,
-    },
-  ]
-  for (const entry of dag.spine) {
-    if (entry.kind === "phase") {
-      rows.push({
-        id: entry.phase.id,
-        depth: 0,
-        content: (
-          <>
-            <span className="trace-scope__lead">
-              {entry.phase.leading ?? entry.phase.title}
-            </span>
-            {entry.phase.leading ? (
-              <span className="trace-scope__title">{entry.phase.title}</span>
-            ) : null}
-            <span className="trace-scope__sum">{entry.phase.summary}</span>
-          </>
-        ),
-      })
-      for (const child of entry.phase.children ?? []) {
-        if (child.kind === "call") {
-          const call = dag.calls[child.callIndex]
-          if (call) pushCallPinRows(rows, call, 1)
-        } else {
-          rows.push({
-            id: child.work.id,
-            depth: 1,
-            content: (
-              <>
-                <span className="trace-scope__lead">Work</span>
-                <span className="trace-scope__title">{child.work.title}</span>
-                <span className="trace-scope__sum">{child.work.summary}</span>
-              </>
-            ),
-          })
-        }
-      }
-      continue
-    }
-    if (entry.kind === "work") {
-      rows.push({
-        id: entry.work.id,
-        depth: 0,
-        content: (
-          <>
-            <span className="trace-scope__lead">Work</span>
-            <span className="trace-scope__title">{entry.work.title}</span>
-            <span className="trace-scope__sum">{entry.work.summary}</span>
-          </>
-        ),
-      })
-      continue
-    }
-    const call = dag.calls[entry.callIndex]
-    if (call) pushCallPinRows(rows, call, 0)
-  }
-  return rows
-}
-
-function pushCallPinRows(
-  rows: StickyPinRow[],
-  call: { index: number; headline: string },
-  depth: number,
-) {
-  rows.push({
-    id: `call:${call.index}`,
-    depth,
-    content: (
-      <>
-        <span className="trace-scope__lead">Call {call.index + 1}</span>
-        <span className="trace-scope__sum">{call.headline}</span>
-      </>
-    ),
-  })
-  rows.push({
-    id: `sent:${call.index}`,
-    depth: depth + 1,
-    content: <span className="trace-scope__lead">Sent</span>,
-  })
-  rows.push({
-    id: `received:${call.index}`,
-    depth: depth + 1,
-    content: <span className="trace-scope__lead">Received</span>,
-  })
 }
 

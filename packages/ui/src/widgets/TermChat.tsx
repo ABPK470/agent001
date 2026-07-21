@@ -188,30 +188,27 @@ function UserGoalBubble({
     "overflow-hidden rounded-2xl border border-border-subtle bg-panel-2 text-[15px] leading-relaxed text-text dark:bg-bubble-user"
   const shellStyle = { boxShadow: "var(--shadow-bubble)" }
   const bodyClass = "min-w-0 px-5 py-3"
-  const appendageClass =
-    `flex shrink-0 items-center justify-center self-stretch ${USER_GOAL_PIN_SLOT_CLASS} border-r border-border-subtle/70 bg-panel text-text-muted transition-colors hover:bg-panel-2 hover:text-text dark:border-white/8 dark:bg-black/10 dark:hover:bg-bubble-user dark:hover:text-text`
-
-  if (!showUnpin || !onUnpin) {
-    return (
-      <div className={`ml-auto ${shellClass} ${USER_GOAL_TEXT_MAX_CLASS}`} style={shellStyle}>
-        <div className={bodyClass}>
-          <UserGoalText text={goal} />
-        </div>
-      </div>
-    )
-  }
+  // Always reserve the left pin rail so goal text never shifts; the control
+  // only paints into that slot when stuck (append from the left).
+  const pinSlotClass = `flex shrink-0 items-center justify-center self-stretch ${USER_GOAL_PIN_SLOT_CLASS}`
+  const pinButtonClass =
+    `${pinSlotClass} border-r border-border-subtle/70 bg-panel text-text-muted transition-colors hover:bg-panel-2 hover:text-text dark:border-white/8 dark:bg-black/10 dark:hover:bg-bubble-user dark:hover:text-text`
 
   return (
     <div className={`ml-auto flex ${USER_GOAL_TEXT_MAX_CLASS} items-stretch ${shellClass}`} style={shellStyle}>
-      <button
-        type="button"
-        onClick={onUnpin}
-        className={appendageClass}
-        title="Unpin message"
-        aria-label="Unpin message"
-      >
-        <Dot size={15} strokeWidth={2} />
-      </button>
+      {showUnpin && onUnpin ? (
+        <button
+          type="button"
+          onClick={onUnpin}
+          className={pinButtonClass}
+          title="Unpin message"
+          aria-label="Unpin message"
+        >
+          <Dot size={15} strokeWidth={2} />
+        </button>
+      ) : (
+        <div className={pinSlotClass} aria-hidden />
+      )}
       <div className={`${bodyClass} min-w-0`}>
         <UserGoalText text={goal} />
       </div>
