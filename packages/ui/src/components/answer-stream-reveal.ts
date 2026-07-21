@@ -1,12 +1,12 @@
 import { isDiagramLang, tryInferDiagramKind } from "./InlineDiagram"
 import type { AnswerBlock } from "./answer-parser"
 import { parseAnswerBlocks } from "./answer-parser"
-import { splitStreamingAnswer, splitProseRemainder, type StreamingAnswerLayout } from "./answer-stream-layout"
+import { splitStreamingAnswer, splitProseRemainder, isMarkdownShapedLine, type StreamingAnswerLayout } from "./answer-stream-layout"
 
 export const BLOCK_GAP_UNITS = 36
-export const UNITS_PER_SECOND = 128
+export const UNITS_PER_SECOND = 72
 export const CATCHUP_UNITS_THRESHOLD = 220
-export const CATCHUP_MULTIPLIER = 3.2
+export const CATCHUP_MULTIPLIER = 2.4
 
 const TABLE_HEADER_UNITS = 48
 const TABLE_ROW_UNITS = 54
@@ -35,7 +35,7 @@ export function getStreamingSegments(text: string): StreamingSegments {
   return { blocks, layout }
 }
 
-/** Live SSE path — merge committed prefix + complete prose lines, glyph only the in-flight tail. */
+/** Live SSE path — merge committed prefix + complete prose lines, glyph only plain in-flight prose. */
 export function getLiveStreamingRenderParts(text: string): {
   blocks: AnswerBlock[]
   glyphTail: string
@@ -48,7 +48,9 @@ export function getLiveStreamingRenderParts(text: string): {
   if (layout.remainderKind === "prose" && layout.remainder) {
     const split = splitProseRemainder(layout.remainder)
     extraCommitted = split.renderable
-    glyphTail = split.inFlight
+    // Hold markdown-shaped tails until the line completes — then SmartAnswer
+    // renders them. Only plain prose goes through the ASCII glyph stream.
+    glyphTail = isMarkdownShapedLine(split.inFlight) ? "" : split.inFlight
   }
 
   const committedAll =

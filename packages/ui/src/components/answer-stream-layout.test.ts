@@ -40,10 +40,16 @@ describe("splitProseRemainder", () => {
 })
 
 describe("getLiveStreamingRenderParts", () => {
-  it("formats committed bullets while the last item is still arriving", () => {
+  it("formats committed bullets while holding the incomplete markdown line", () => {
     const { blocks, glyphTail } = getLiveStreamingRenderParts("## Results\n- First\n- Sec")
     expect(blocks.some((b) => b.type === "heading")).toBe(true)
     expect(blocks.some((b) => b.type === "bullet-list" && b.items.includes("First"))).toBe(true)
-    expect(glyphTail).toBe("- Sec")
+    // Incomplete list line is markdown-shaped — never ASCII-streamed.
+    expect(glyphTail).toBe("")
+  })
+
+  it("ASCII-streams plain prose tails only", () => {
+    const { glyphTail } = getLiveStreamingRenderParts("Hello there, this is still arriv")
+    expect(glyphTail).toBe("Hello there, this is still arriv")
   })
 })

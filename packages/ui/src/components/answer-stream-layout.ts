@@ -125,7 +125,7 @@ function trailingProseLayout(text: string): StreamingAnswerLayout | null {
 
 /**
  * Within a prose remainder, split complete lines (render as markdown) from the
- * single in-flight line (glyph-settle animation).
+ * single in-flight line (glyph-settle animation — plain prose only).
  */
 export function splitProseRemainder(remainder: string): { renderable: string; inFlight: string } {
   if (!remainder) return { renderable: "", inFlight: "" }
@@ -141,6 +141,20 @@ export function splitProseRemainder(remainder: string): { renderable: string; in
     renderable: remainder.slice(0, nl).replace(/\s+$/, ""),
     inFlight: remainder.slice(nl + 1),
   }
+}
+
+/** Markdown-shaped lines must never go through the ASCII glyph stream. */
+export function isMarkdownShapedLine(line: string): boolean {
+  const t = line.trimStart()
+  if (!t) return false
+  return (
+    /^#{1,6}(\s|$)/.test(t) ||
+    /^([-*•]|\d+[.)])(\s|$)/.test(t) ||
+    t.startsWith("|") ||
+    t.startsWith("```") ||
+    t.startsWith(">") ||
+    /^(-{3,}|\*{3,}|_{3,})\s*$/.test(t)
+  )
 }
 
 export function splitStreamingAnswer(text: string): StreamingAnswerLayout {

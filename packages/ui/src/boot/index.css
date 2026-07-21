@@ -6190,10 +6190,20 @@ textarea.input {
   opacity: 0.75;
 }
 
-/* Live answer stream — prose as itself + quiet trailing cue (no width thrash). */
+/* Live answer stream — ASCII settle on prose; monospace cells limit reflow. */
 .glyph-stream-text {
   font: inherit;
   letter-spacing: inherit;
+}
+
+.glyph-stream-cell {
+  display: inline-block;
+  min-width: 0.55em;
+  text-align: center;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", "Courier New", monospace;
+  color: var(--text-muted);
+  opacity: 0.8;
 }
 
 .glyph-stream-cue {
