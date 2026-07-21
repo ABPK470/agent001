@@ -2,11 +2,15 @@
  * Expandable text — More/Less sits under the text it discloses.
  * Copy (when present) sticks at the top; Less joins it once expanded
  * so you can collapse without scrolling back to the end.
+ *
+ * Collapsing restores scroll so the block stays in view (does not jump
+ * to later LLM calls after shrinking a long Context prompt).
  */
 
 import { ChevronsDown, ChevronsUp } from "lucide-react"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { CopyControl } from "./TraceCopy"
+import { beginCollapseReveal } from "./trace-scroll-anchor"
 
 function ExpandToggle({
   expanded,
@@ -43,6 +47,7 @@ export function ExpandableText({
   copyLabel?: string
 }) {
   const [expanded, setExpanded] = useState(false)
+  const rootRef = useRef<HTMLDivElement>(null)
   const isLong = text.length > previewChars
 
   useEffect(() => {
@@ -54,11 +59,19 @@ export function ExpandableText({
   const footToggle = isLong && !stickyLess
 
   function onToggleExpand() {
-    setExpanded((v) => !v)
+    if (expanded) {
+      const root = rootRef.current
+      const restore = root ? beginCollapseReveal(root) : () => {}
+      setExpanded(false)
+      restore()
+      return
+    }
+    setExpanded(true)
   }
 
   return (
     <div
+      ref={rootRef}
       className={`trace-expand${isLong && !expanded ? " is-clipped" : ""}`}
     >
       {copyLabel && (
