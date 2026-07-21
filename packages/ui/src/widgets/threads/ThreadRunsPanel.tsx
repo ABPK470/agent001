@@ -16,6 +16,13 @@ import { WIDGET_ICONS } from "../../widgets/widget-icons"
 import { DeleteThreadModal } from "./DeleteThreadModal"
 import { ThreadRowMenu } from "./ThreadRowMenu"
 
+/** Threads widget: newest runs at the top, oldest at the bottom. */
+function sortRunsNewestFirst(runs: readonly Run[]): Run[] {
+  return [...runs].sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+  )
+}
+
 function RunRow({
   run,
   active,
@@ -255,7 +262,10 @@ export function ThreadRunsPanel(): React.ReactElement {
   const createNewThread = useStore((s) => s.createNewThread)
 
   const activeThreadRuns = useMemo(
-    () => (activeThreadId ? storeRuns.filter((r) => r.threadId === activeThreadId) : []),
+    () =>
+      activeThreadId
+        ? sortRunsNewestFirst(storeRuns.filter((r) => r.threadId === activeThreadId))
+        : [],
     [storeRuns, activeThreadId],
   )
 
@@ -282,7 +292,7 @@ export function ThreadRunsPanel(): React.ReactElement {
     if (alreadyLoaded) return
     setLoadingId(threadId)
     try {
-      const runs = await api.listThreadRuns(threadId)
+      const runs = sortRunsNewestFirst(await api.listThreadRuns(threadId))
       setRunsByThread((prev) => ({ ...prev, [threadId]: runs }))
     } catch {
       setRunsByThread((prev) => ({ ...prev, [threadId]: [] }))
@@ -352,7 +362,9 @@ export function ThreadRunsPanel(): React.ReactElement {
             runs={
               thread.id === activeThreadId
                 ? activeThreadRuns
-                : (runsByThread[thread.id] ?? []).filter((r) => r.threadId === thread.id)
+                : sortRunsNewestFirst(
+                    (runsByThread[thread.id] ?? []).filter((r) => r.threadId === thread.id),
+                  )
             }
             loading={loadingId === thread.id}
             activeRunId={activeRunId}

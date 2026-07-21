@@ -150,7 +150,7 @@ export function listRunsWithUsageForThread(
       FROM runs r
       LEFT JOIN token_usage t ON t.run_id = r.id
       WHERE r.thread_id = @threadId
-      ORDER BY r.created_at ASC
+      ORDER BY r.created_at DESC
       LIMIT @limit OFFSET @offset
     `
     )
