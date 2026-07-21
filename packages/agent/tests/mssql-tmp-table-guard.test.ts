@@ -164,7 +164,7 @@ describe("validateQuery — #temp micro-ETL allowance (read-only mode)", () => {
 
   it("rejects garbage that is neither read nor a known mutation opener", () => {
     expect(validateQuery("GRANT SELECT ON dim.Client TO public", RO, { accessor })).toMatch(
-      /Write operations are disabled/i
+      /Connector is read-only/i
     )
   })
 

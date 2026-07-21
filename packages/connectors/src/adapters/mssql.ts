@@ -116,7 +116,10 @@ export function createMssqlAdapter(
       if (!driver) throw new Error("mssql adapter write before open")
       if (!isSqlWrite(spec)) throw new Error(`mssql adapter cannot write spec kind '${spec.kind}'`)
       if (!options.writeEnabled) {
-        return makeSummary("failed", 0, 0, [{ row: 0, message: "connector is read-only (writeEnabled=false)" }], 0)
+        return makeSummary("failed", 0, 0, [{
+          row: 0,
+          message: "Connector is read-only (writeEnabled=false). Enable Write on the connector before mutating data.",
+        }], 0)
       }
       if (needsPoweredWrite(spec)) {
         return writePowered(driver, spec, rows)

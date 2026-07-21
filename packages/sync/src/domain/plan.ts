@@ -146,6 +146,13 @@ export interface SyncPlanPreflight {
   /** False when child upserts need a root row that is neither on target nor inserted by this plan. */
   rootParentReady: boolean
   rootParentIssue: string | null
+  /**
+   * Target connector write capability (writeEnabled). Same ceiling as query_mssql.
+   * Null when preview could not resolve the pool/capability.
+   */
+  targetWriteEnabled: boolean | null
+  /** Operator-facing reason when targetWriteEnabled === false. */
+  targetWriteIssue: string | null
 }
 
 export interface SyncPlan {

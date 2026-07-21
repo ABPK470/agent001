@@ -130,7 +130,10 @@ describe("executeSync pre-execution gates", () => {
     detectCatalogDriftMock.mockResolvedValue({ catalogCompatible: true, issues: [] })
     evaluateRootParentMock.mockResolvedValue({ ready: true, issue: null, details: {} })
     fetchPkColumnsMock.mockResolvedValue(new Map())
-    getPoolMock.mockResolvedValue({ pool: { request: () => ({ query: async () => ({ recordset: [] }) }) } })
+    getPoolMock.mockResolvedValue({
+      pool: { request: () => ({ query: async () => ({ recordset: [] }) }) },
+      entry: { writeEnabled: true },
+    })
     runMetadataSyncMock.mockResolvedValue({ applied: { insert: 0, update: 0, delete: 0 } })
     runPostMetadataMock.mockResolvedValue(undefined)
   })
@@ -187,6 +190,16 @@ describe("executeSync pre-execution gates", () => {
         confirm: true
       })
     ).rejects.toThrow(/PROD is currently disabled/)
+  })
+
+  it("refuses target connector when writeEnabled is false", async () => {
+    getPoolMock.mockResolvedValue({
+      pool: { request: () => ({ query: async () => ({ recordset: [] }) }) },
+      entry: { writeEnabled: false },
+    })
+    await expect(
+      executeSync("gate-plan", { host: hostWithEnvs(), confirm: true }),
+    ).rejects.toThrow(/connector is read-only/)
   })
 
   it("refuses catalog drift at execute time", async () => {
@@ -249,7 +262,10 @@ describe("executeSync entity scenarios (gate matrix)", () => {
     planTooOldMock.mockReturnValue(false)
     detectCatalogDriftMock.mockResolvedValue({ catalogCompatible: true, issues: [] })
     fetchPkColumnsMock.mockResolvedValue(new Map())
-    getPoolMock.mockResolvedValue({ pool: { request: () => ({ query: async () => ({ recordset: [] }) }) } })
+    getPoolMock.mockResolvedValue({
+      pool: { request: () => ({ query: async () => ({ recordset: [] }) }) },
+      entry: { writeEnabled: true },
+    })
     runMetadataSyncMock.mockResolvedValue({ applied: { insert: 0, update: 0, delete: 0 } })
     runPostMetadataMock.mockResolvedValue({ stepWarnings: [] })
   })

@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import { api } from "../../../client/index"
 import { Listbox, type ListboxOption } from "../../../components/Listbox"
+import { conflictForSyncEnvironment, writeEnabledForConnectorId } from "../../../lib/connector-write-capability"
 import type { ConnectorAdmin, SyncEnvironmentAdmin } from "../../../types"
 import { FormFieldGroup, FormSectionCard } from "../form-section"
 import { HELP_TEXT } from "../chrome"
@@ -17,6 +18,7 @@ import {
   OP_LABELS,
   suggestAccessForName,
 } from "../../sync-admin/env-access"
+import { CapabilityConflictBanner } from "../../platform/CapabilityConflictBanner"
 import { EnvColorPicker } from "./EnvColorPicker"
 import { ServiceUrlsField } from "./ServiceUrlsField"
 import { SyncPolicySection } from "./SyncPolicySection"
@@ -71,12 +73,15 @@ export function SyncEnvironmentForm({
     const none: ListboxOption<string> = { value: "", label: "None", hint: "No linked connector" }
     const opts: ListboxOption<string>[] = connectors.map((c) => {
       const selectable = c.kind === "mssql" && c.enabled
+      const writeOn = writeEnabledForConnectorId(connectors, c.id) === true
       const hint =
         c.kind !== "mssql"
           ? `${c.kind} (Sync needs MSSQL)`
-          : c.enabled
-            ? c.kind
-            : "disabled — enable in Connectors"
+          : !c.enabled
+            ? "disabled — enable in Connectors"
+            : writeOn
+              ? "mssql · Write on"
+              : "mssql · read-only"
       return {
         value: c.id,
         label: c.displayName,
@@ -86,6 +91,19 @@ export function SyncEnvironmentForm({
     })
     return [none, ...opts]
   }, [connectors])
+
+  const writeConflict = useMemo(
+    () =>
+      conflictForSyncEnvironment(
+        {
+          name: value.name.trim() || "(unnamed)",
+          connectorId: value.connectorId,
+          allowedOperations: effectiveOps,
+        },
+        connectors,
+      ),
+    [value.name, value.connectorId, effectiveOps, connectors],
+  )
 
   function onConnectorChange(id: string): void {
     const next = id || null
@@ -217,7 +235,7 @@ export function SyncEnvironmentForm({
 
       <FormSectionCard
         title="Access"
-        description="Default access mode and write blocks for this environment."
+        description="Governance for this environment (policy seeding). Connector Write is a separate hard ceiling — both must allow for sync execute / DML to succeed."
       >
         <FormFieldGroup label="Access mode">
           <Listbox
@@ -255,6 +273,7 @@ export function SyncEnvironmentForm({
             </span>
           ))}
         </div>
+        {writeConflict && <CapabilityConflictBanner conflict={writeConflict} className="mt-3" />}
       </FormSectionCard>
 
       <ServiceUrlsField

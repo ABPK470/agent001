@@ -10,7 +10,14 @@ function minimalPlan(overrides: Partial<SyncPlan> = {}): SyncPlan {
     entity: { type: "contract", id: 1, displayName: "ACSRawTest" },
     source: "uat",
     target: "dev",
-    preflight: { catalogCompatible: true, issues: [], rootParentReady: true, rootParentIssue: null },
+    preflight: {
+      catalogCompatible: true,
+      issues: [],
+      rootParentReady: true,
+      rootParentIssue: null,
+      targetWriteEnabled: true,
+      targetWriteIssue: null,
+    },
     tables: [],
     totals: {
       insert: 102,

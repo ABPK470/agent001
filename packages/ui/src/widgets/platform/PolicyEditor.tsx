@@ -30,9 +30,12 @@ import {
     Trash2,
     X,
 } from "lucide-react"
+import type { ConnectorWriteConflict } from "@mia/shared-types"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { api } from "../../client/index"
+import { conflictsForPolicyRules } from "../../lib/connector-write-capability"
 import type { PolicyRule, ToolInfo } from "../../types"
+import { CapabilityConflictBanner } from "./CapabilityConflictBanner"
 import { SelectorRulesTab } from "./policy/SelectorRulesTab"
 import { modalOverlayClass, MODAL_ADMIN_PANEL, MODAL_SURFACE_CLASS } from "../entity-registry/modal-overlay"
 
@@ -95,6 +98,7 @@ export function PolicyEditor({ onClose }: Props) {
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<Tab>("tools")
   const [error, setError] = useState<string | null>(null)
+  const [writeConflicts, setWriteConflicts] = useState<ConnectorWriteConflict[]>([])
 
   // Security section expand
   const [shellExpanded, setShellExpanded] = useState(false)
@@ -151,6 +155,36 @@ export function PolicyEditor({ onClose }: Props) {
   }, [])
 
   useEffect(() => { loadRules() }, [loadRules])
+
+  useEffect(() => {
+    if (rules.length === 0) {
+      setWriteConflicts([])
+      return
+    }
+    let alive = true
+    void Promise.all([api.listConnectors(), api.listSyncEnvironments()])
+      .then(([connectors, envs]) => {
+        if (!alive) return
+        setWriteConflicts(
+          conflictsForPolicyRules({
+            rules: rules.map((r) => ({
+              name: r.name,
+              effect: r.effect,
+              condition: r.condition,
+              parameters: (r.parameters ?? {}) as Record<string, unknown>,
+            })),
+            connectors,
+            envs,
+          }),
+        )
+      })
+      .catch(() => {
+        if (alive) setWriteConflicts([])
+      })
+    return () => {
+      alive = false
+    }
+  }, [rules])
 
   useEffect(() => {
     api.getPlatformHealth()
@@ -381,12 +415,24 @@ export function PolicyEditor({ onClose }: Props) {
             </div>
           ) : tab === "rules" ? (
             /* ── Selector Rules tab — see ./policy/SelectorRulesTab.tsx ── */
-            <SelectorRulesTab
-              rules={rules}
-              tools={tools}
-              onReload={loadRules}
-              onDelete={handleDelete}
-            />
+            <div className="space-y-3">
+              {writeConflicts.length > 0 && (
+                <div className="space-y-2">
+                  {writeConflicts.slice(0, 3).map((conflict) => (
+                    <CapabilityConflictBanner
+                      key={`${conflict.policyName ?? ""}:${conflict.envName ?? ""}`}
+                      conflict={conflict}
+                    />
+                  ))}
+                </div>
+              )}
+              <SelectorRulesTab
+                rules={rules}
+                tools={tools}
+                onReload={loadRules}
+                onDelete={handleDelete}
+              />
+            </div>
           ) : tab === "model" ? (
             /* ── Model tab ────────────────────────────────── */
             <div className="space-y-4">
@@ -601,10 +647,27 @@ export function PolicyEditor({ onClose }: Props) {
                   All policy rules are evaluated <strong>before every tool call</strong>.
                   Denied actions throw an error immediately. "Require Approval" blocks
                   the agent until approved. Rules apply to all new runs.
+                  Approving a tool does <strong>not</strong> enable connector Write —
+                  that latch still caps <code className="font-mono text-text">query_mssql</code> and sync execute.
                 </p>
+                {writeConflicts.length > 0 && (
+                  <div className="mt-3 space-y-2">
+                    {writeConflicts.slice(0, 5).map((conflict) => (
+                      <CapabilityConflictBanner
+                        key={`${conflict.policyName ?? ""}:${conflict.envName ?? ""}`}
+                        conflict={conflict}
+                      />
+                    ))}
+                    {writeConflicts.length > 5 && (
+                      <p className="text-xs text-text-muted">
+                        …and {writeConflicts.length - 5} more conflict(s).
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
 
-              {/* SQL engine invariants — hard-coded in the tool layer, not policy-editable */}
+              {/* SQL / connector capability — tool layer + connector Write, not policy-editable */}
               <div className="px-4 py-3.5 rounded-xl bg-overlay-2 border border-border-subtle">
                 <button
                   className="flex items-center gap-2.5 w-full text-left"
@@ -612,30 +675,27 @@ export function PolicyEditor({ onClose }: Props) {
                 >
                   {sqlGuardExpanded ? <ChevronDown size={14} className="text-text-muted" /> : <ChevronRight size={14} className="text-text-muted" />}
                   <Database size={15} className="text-text-muted" />
-                  <span className="text-sm font-semibold text-text">SQL Engine Invariants</span>
-                  <span className="text-sm text-text-muted ml-auto">read-only · enforced in tool layer</span>
+                  <span className="text-sm font-semibold text-text">Connector Write &amp; SQL Rails</span>
+                  <span className="text-sm text-text-muted ml-auto">capability · not policy</span>
                 </button>
                 {sqlGuardExpanded && (
                   <div className="mt-3 space-y-2.5">
                     <p className="text-sm text-text-muted leading-relaxed">
-                      These rails are baked into <code className="font-mono text-text">query_mssql</code> /
-                      <code className="font-mono text-text"> export_query_to_file</code> at the agent layer
-                      (<code className="font-mono text-text">packages/agent/src/tools/mssql/validation.ts</code>).
-                      They are <strong>not</strong> stored in the policy DB and are intentionally
-                      <strong> not operator-toggleable</strong> — weakening them would let the agent
-                      mutate production data.
+                      <strong className="text-text">Connector Write</strong> (Connectors → Write enabled) is the hard
+                      ceiling for real-table mutations via <code className="font-mono text-text">query_mssql</code> and
+                      for <strong>sync execute</strong> to environments linked to that connector.
+                      Policy allow / approve cannot override a read-only connector.
+                    </p>
+                    <p className="text-sm text-text-muted leading-relaxed">
+                      Additional SQL rails live in the tool layer (dangerous ops, <code className="font-mono">#temp</code> discipline).
+                      They are <strong>not</strong> stored in the policy DB.
                     </p>
                     <ul className="text-sm text-text-secondary leading-relaxed space-y-1.5 pl-1">
-                      <li><span className="text-success font-medium">✓ ALLOWED on local <code className="font-mono">#temp</code> tables</span> — <code className="font-mono">CREATE TABLE</code>, <code className="font-mono">SELECT … INTO</code>, <code className="font-mono">INSERT</code>, <code className="font-mono">UPDATE</code>, <code className="font-mono">DELETE</code>, <code className="font-mono">CREATE INDEX</code>, <code className="font-mono">TRUNCATE</code>, <code className="font-mono">DROP</code>, <code className="font-mono">MERGE</code>.</li>
-                      <li><span className="text-error font-medium">✗ BLOCKED forever</span> — any mutation (CREATE/INSERT/UPDATE/DELETE/DROP/ALTER/TRUNCATE/MERGE/CREATE INDEX/SELECT INTO) targeting an <strong>existing real table, view, index, procedure, schema</strong>, or <code className="font-mono">sys.*</code> object.</li>
-                      <li><span className="text-error font-medium">✗ BLOCKED</span> — global <code className="font-mono">##temp</code> tables (would survive past the session and leak across runs). Only single-<code className="font-mono">#</code> local temps are permitted.</li>
-                      <li><span className="text-error font-medium">✗ BLOCKED</span> — <code className="font-mono">EXEC</code>, <code className="font-mono">sp_executesql</code>, <code className="font-mono">xp_*</code>, <code className="font-mono">OPENROWSET</code>, <code className="font-mono">OPENQUERY</code>, <code className="font-mono">BULK INSERT</code>, <code className="font-mono">DBCC</code>, <code className="font-mono">SHUTDOWN</code>, <code className="font-mono">RECONFIGURE</code>.</li>
+                      <li><span className="text-success font-medium">✓ When connector Write is off</span> — SELECT/WITH and local <code className="font-mono">#temp</code> micro-ETL only.</li>
+                      <li><span className="text-success font-medium">✓ When connector Write is on</span> — real-table DML/DDL still require matching policy (and approval when configured).</li>
+                      <li><span className="text-error font-medium">✗ Always blocked</span> — <code className="font-mono">EXEC</code>, <code className="font-mono">xp_*</code>, <code className="font-mono">OPENROWSET</code>, <code className="font-mono">BULK INSERT</code>, <code className="font-mono">DBCC</code>, global <code className="font-mono">##temp</code>.</li>
                       <li><span className="text-text-muted">ℹ Per-row safety cap</span> — <code className="font-mono">query_mssql</code> hard-limits to 1 000 rows; use <code className="font-mono">export_query_to_file</code> for larger pulls.</li>
                     </ul>
-                    <p className="text-sm text-text-muted/80 leading-relaxed pt-2 border-t border-border-subtle/40">
-                      Want to relax this? You can't, by design. To stage data, the agent uses a <code className="font-mono text-text">#temp</code> table
-                      and follows the micro-ETL pattern (that prompt section is injected only on data-shaped goals to keep token cost low for non-DB chats).
-                    </p>
                   </div>
                 )}
               </div>

@@ -88,7 +88,14 @@ const mssqlConfigSchema: ConnectorConfigField[] = [
   { key: "domain", label: "Domain (AD)", type: "text" },
   { key: "encrypt", label: "Encrypt", type: "boolean", default: true },
   { key: "trustServerCertificate", label: "Trust server certificate", type: "boolean", default: true },
-  { key: "writeEnabled", label: "Write enabled", type: "boolean", default: false },
+  {
+    key: "writeEnabled",
+    label: "Write enabled",
+    type: "boolean",
+    default: false,
+    help:
+      "Hard ceiling for this connection: when off, agent SQL (query_mssql) and sync execute to environments linked here cannot mutate real tables. Policy allow/approve cannot override this — enable Write here first.",
+  },
   { key: "knowledgePath", label: "Knowledge file path", type: "text", placeholder: "./deploy/mssql/mymi-knowledge.md", help: "Optional markdown loaded as SQL-generation guidance for this connection." },
 ]
 

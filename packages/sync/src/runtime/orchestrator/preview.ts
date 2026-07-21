@@ -6,7 +6,12 @@
  * @module
  */
 
-import { computePlanTotals, movementFromChangeSet } from "@mia/shared-types"
+import {
+  computePlanTotals,
+  movementFromChangeSet,
+  syncTargetConnectorReadOnlyMessage,
+} from "@mia/shared-types"
+import { getPool } from "../../adapters/mssql/connection.js"
 import { randomUUID } from "node:crypto"
 import { resolvePreviewTableConcurrency } from "../../adapters/mssql/pool-concurrency.js"
 import { requirePublishedFlowCatalog } from "../../domain/flow-catalog.js"
@@ -110,6 +115,23 @@ async function previewSyncInner(
     // Hard block: PROD is read-only until explicitly unlocked by ops (SYNC_ALLOW_PROD=1).
     if (targetEnv.name.toLowerCase() === "prod" && !process.env["SYNC_ALLOW_PROD"]) {
       throw new Error(`Sync to PROD is currently disabled. Set SYNC_ALLOW_PROD=1 to unlock.`)
+    }
+
+    let targetWriteEnabled: boolean | null = null
+    let targetWriteIssue: string | null = null
+    try {
+      const { entry } = await getPool(input.host, input.target)
+      targetWriteEnabled = entry.writeEnabled
+      if (!entry.writeEnabled) {
+        targetWriteIssue = syncTargetConnectorReadOnlyMessage(
+          targetEnv.name,
+          targetEnv.connectorId,
+        )
+      }
+    } catch (e) {
+      targetWriteEnabled = null
+      targetWriteIssue =
+        `Could not resolve target connector write capability: ${e instanceof Error ? e.message : String(e)}`
     }
 
     const freezeEvaluation = evaluateFreezeWindows(definition.governance.freezeWindowIds)
@@ -279,6 +301,7 @@ async function previewSyncInner(
     const warnings: string[] = [...governanceWarnings.map((warning) => `[governance] ${warning}`)]
     for (const d of definition.metadata.discrepancies) warnings.push(`[${d.kind}] ${d.table}: ${d.note}`)
     for (const issue of catalogPreflight.issues) warnings.push(`[drift] ${issue}`)
+    if (targetWriteIssue) warnings.push(`[capability] ${targetWriteIssue}`)
     const activeNames = new Set(activeTables.map((table) => table.name))
     const disabledOptionalTables = definition.metadata.tables
       .filter((table) => table.userControllable && !activeNames.has(table.name))
@@ -421,7 +444,9 @@ async function previewSyncInner(
       preflight: {
         ...catalogPreflight,
         rootParentReady: true,
-        rootParentIssue: null
+        rootParentIssue: null,
+        targetWriteEnabled,
+        targetWriteIssue,
       },
       tables: tableResults,
       totals,

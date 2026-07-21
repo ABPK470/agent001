@@ -297,7 +297,8 @@ function HelpPanel({ open, onToggle, toolCount }: { open: boolean; onToggle: () 
               <code className="font-mono">require_approval</code> pauses the run and emits{" "}
               <code className="font-mono">approval.required</code>. A modal opens immediately so you
               can approve or deny; the same actions stay available in the notification bell until
-              the run is resumed or cancelled.
+              the run is resumed or cancelled. Approval clears governance only — connector Write
+              still caps <code className="font-mono">query_mssql</code> and sync execute.
             </p>
           </section>
 

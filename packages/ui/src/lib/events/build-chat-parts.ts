@@ -578,7 +578,11 @@ void summarizeThinking
 
 function summarizeSqlQualityEntry(entry: Extract<TraceEntry, { kind: "planner-sql-quality" }>): string {
   const notes: string[] = []
-  if (entry.validationCode) notes.push(`blocked by ${entry.validationCode}`)
+  if (entry.validationCode) {
+    const label =
+      entry.validationCode === "write_disabled" ? "connector read-only" : entry.validationCode
+    notes.push(`blocked by ${label}`)
+  }
   if (entry.missingPersistedMirrorCandidates.length > 0) {
     notes.push(`missed persisted mirror for ${entry.missingPersistedMirrorCandidates.join(", ")}`)
   }
@@ -624,12 +628,18 @@ function describeSqlQualityForChat(
   const notes = summarizeSqlQualityEntry(entry)
   if (entry.phase === "blocked") {
     const reason = entry.validationCode
-      ? entry.validationCode
+      ? (entry.validationCode === "write_disabled"
+          ? "connector read-only"
+          : entry.validationCode)
       : notes !== "blocked"
         ? notes
         : "validator refused the query"
+    const hint =
+      entry.validationCode === "write_disabled"
+        ? "enable Write on the connector (policy alone cannot override)."
+        : "query needs a tighter filter."
     return {
-      text: `Blocked before send (${reason}) — query needs a tighter filter.`,
+      text: `Blocked before send (${reason}) — ${hint}`,
       tone: "error",
     }
   }
@@ -977,7 +987,11 @@ export function buildResponseParts(
           (entry.phase === "failed"
             ? `SQL failed: ${cleanSqlError(entry.error) || "server error"}`
             : entry.phase === "blocked"
-              ? `Blocked before send: ${entry.validationCode ?? summarizeSqlQualityEntry(entry)}`
+              ? `Blocked before send: ${
+                  entry.validationCode === "write_disabled"
+                    ? "connector read-only"
+                    : (entry.validationCode ?? summarizeSqlQualityEntry(entry))
+                }`
               : summarizeSqlQualityEntry(entry))
         parts = annotateToolSqlQuality(parts, entry.toolCallId, status, message)
         break

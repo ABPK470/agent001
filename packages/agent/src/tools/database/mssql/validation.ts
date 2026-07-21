@@ -1,5 +1,6 @@
 // ── Query validation ─────────────────────────────────────────────
 
+import { QUERY_WRITE_DISABLED_MESSAGE } from "@mia/shared-types"
 import {
   DOCTRINE_FIX_HINTS,
   getDoctrineLessonTemplate
@@ -1442,8 +1443,7 @@ export function validateQueryDetailed(
     if (!isPureRead && !opensWithMutation) {
       return {
         ok: false,
-        error:
-          "Write operations are disabled. Only SELECT/WITH queries are allowed (or DDL/DML targeting local #temp tables only).",
+        error: QUERY_WRITE_DISABLED_MESSAGE,
         code: "write_disabled",
         analysis
       }

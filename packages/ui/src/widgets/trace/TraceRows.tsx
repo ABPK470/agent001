@@ -14,7 +14,7 @@ import {
   type TraceSqlQuality,
   type TraceToolCall,
 } from "./build-trace-dag"
-import { sqlQualityPhaseLabel } from "./trace-format"
+import { sqlQualityPhaseLabel, sqlQualityValidationLabel } from "./trace-format"
 import { ExpandableText } from "./TraceExpandable"
 
 export function PromptMessageRow({
@@ -203,13 +203,16 @@ export function SqlQualityRow({ entry }: { entry: TraceSqlQuality }) {
         ? "is-failed"
         : "is-ok"
   const phaseLabel = sqlQualityPhaseLabel(entry.phase)
+  const codeLabel = sqlQualityValidationLabel(entry.validationCode)
   return (
     <div className={`trace-sql-check ${phaseClass}`}>
       <div className="trace-sql-check__head">
         <span className="trace-sql-check__badge">{phaseLabel}</span>
         <span className="font-mono">{entry.toolName}</span>
-        {entry.validationCode && (
-          <span className="trace-sql-check__code">{entry.validationCode}</span>
+        {codeLabel && (
+          <span className="trace-sql-check__code" title={entry.validationCode ?? undefined}>
+            {codeLabel}
+          </span>
         )}
         {entry.durationMs != null && (
           <span className="trace-row__detail ml-auto">{formatMs(entry.durationMs)}</span>

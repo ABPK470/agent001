@@ -698,6 +698,14 @@ export interface SyncPlanPreflight {
   issues: string[]
   rootParentReady: boolean
   rootParentIssue: string | null
+  /**
+   * Target connector write capability at preview time.
+   * False blocks execute (same ceiling as query_mssql writeEnabled).
+   * Null when the check could not be resolved at preview.
+   */
+  targetWriteEnabled: boolean | null
+  /** Non-null when targetWriteEnabled === false — operator-facing reason. */
+  targetWriteIssue: string | null
 }
 
 export interface SyncPlan {
@@ -1892,3 +1900,22 @@ export {
   rollbackAvailableFromPreview,
   type RollbackConfirmPreview,
 } from "./run-capabilities.js"
+
+export {
+  APPROVAL_STILL_CAPPED_BY_CONNECTOR_NOTE,
+  allowedOpsNeedConnectorWrite,
+  conflictForApprovalVsConnector,
+  conflictForEnvAccessVsConnector,
+  conflictForPolicyRuleVsConnector,
+  connectorWriteEnabled,
+  labelValidationCode,
+  operationNeedsConnectorWrite,
+  POLICY_ALLOWS_CONNECTOR_FORBIDS_SUMMARY,
+  policyConnectorWriteConflictDetail,
+  QUERY_WRITE_DISABLED_MESSAGE,
+  syncTargetConnectorReadOnlyMessage,
+  toolMayHitConnectorWriteLatch,
+  WRITE_DISABLED_LABEL,
+  WRITE_DISABLED_VALIDATION_CODE,
+  type ConnectorWriteConflict,
+} from "./connector-write-capability.js"

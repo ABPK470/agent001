@@ -19,6 +19,7 @@ import {
   readyMssqlConnectorIds,
 } from "../../domain/sync-env-eligibility.js"
 import { evaluateFreezeWindows } from "../../domain/governance/freeze-windows.js"
+import { syncTargetConnectorReadOnlyMessage } from "@mia/shared-types"
 import { getPool } from "../../adapters/mssql/connection.js"
 import {
   EventType,
@@ -63,7 +64,6 @@ export async function executeSync(
   throwIfAborted(signal)
   onProgress({ type: SyncProgressKind.Step, step: "preflight", message: "Validating environments and permissions…" })
 
-  // Safety: target writeEnabled
   const sourceEnv = getEnvironment(opts.host, plan.source)
   const targetEnv = getEnvironment(opts.host, plan.target)
   if (sourceEnv.role === "target") throw new Error(`Source "${sourceEnv.name}" is target-only.`)
@@ -72,6 +72,16 @@ export async function executeSync(
   assertEnvConnectorReady(sourceEnv, readyIds)
   assertEnvConnectorReady(targetEnv, readyIds)
   assertSupportedSyncDirection(sourceEnv, targetEnv)
+  // Hard ceiling: same connector writeEnabled latch as query_mssql.
+  // Governance / approval cannot override a read-only target connector.
+  {
+    const { entry } = await getPool(opts.host, plan.target)
+    if (!entry.writeEnabled) {
+      throw new Error(
+        syncTargetConnectorReadOnlyMessage(targetEnv.name, targetEnv.connectorId),
+      )
+    }
+  }
   // Hard block: PROD is read-only until explicitly unlocked by ops (SYNC_ALLOW_PROD=1).
   if (targetEnv.name.toLowerCase() === "prod" && !process.env["SYNC_ALLOW_PROD"]) {
     throw new Error(`Sync to PROD is currently disabled. Set SYNC_ALLOW_PROD=1 to unlock.`)

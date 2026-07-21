@@ -5,14 +5,17 @@
  * The bell notification keeps the same Approve / Deny actions as durable backup.
  */
 
+import { APPROVAL_STILL_CAPPED_BY_CONNECTOR_NOTE, type ConnectorWriteConflict } from "@mia/shared-types"
 import { AlertTriangle, ShieldCheck, ShieldX, X } from "lucide-react"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import type { JSX } from "react"
 import { api } from "../../client/index"
 import { JsonViewer } from "../../components/JsonViewer"
 import { RunStatus } from "../../enums"
+import { conflictForPendingApproval } from "../../lib/connector-write-capability"
 import { useStore } from "../../state/store"
 import { modalOverlayClass, MODAL_SURFACE_CLASS } from "../entity-registry/modal-overlay"
+import { CapabilityConflictBanner } from "./CapabilityConflictBanner"
 
 function formatArgs(args: Record<string, unknown> | undefined): Record<string, unknown> | null {
   if (!args || Object.keys(args).length === 0) return null
@@ -30,6 +33,33 @@ export function ApprovalRequiredModal(): JSX.Element | null {
 
   const [busy, setBusy] = useState<"approve" | "deny" | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [capabilityConflict, setCapabilityConflict] = useState<ConnectorWriteConflict | null>(null)
+
+  useEffect(() => {
+    if (!pending || !open) {
+      setCapabilityConflict(null)
+      return
+    }
+    let alive = true
+    void Promise.all([api.listConnectors(), api.listSyncEnvironments()])
+      .then(([connectors, envs]) => {
+        if (!alive) return
+        setCapabilityConflict(
+          conflictForPendingApproval({
+            toolName: pending.toolName,
+            args: pending.args,
+            connectors,
+            envs,
+          }),
+        )
+      })
+      .catch(() => {
+        if (alive) setCapabilityConflict(null)
+      })
+    return () => {
+      alive = false
+    }
+  }, [pending, open])
 
   if (!pending || !open) return null
 
@@ -98,6 +128,9 @@ export function ApprovalRequiredModal(): JSX.Element | null {
                 A governance policy blocked <code className="font-mono text-text">{pending.toolName}</code>.
                 Approve once to let this run continue, or deny to cancel it.
               </p>
+              <p className="text-xs text-text-muted mt-2 leading-relaxed">
+                {APPROVAL_STILL_CAPPED_BY_CONNECTOR_NOTE}
+              </p>
             </div>
           </div>
           <button
@@ -133,6 +166,7 @@ export function ApprovalRequiredModal(): JSX.Element | null {
               <p className="text-sm text-text-muted italic">(no arguments)</p>
             )}
           </div>
+          {capabilityConflict && <CapabilityConflictBanner conflict={capabilityConflict} />}
           {error && (
             <p className="text-sm text-error">{error}</p>
           )}

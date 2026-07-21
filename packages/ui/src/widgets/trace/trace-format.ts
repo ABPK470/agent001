@@ -1,3 +1,4 @@
+import { labelValidationCode } from "@mia/shared-types"
 import type { TraceCallNode, TraceSqlQuality } from "./build-trace-dag"
 
 export function formatCharCount(n: number): string {
@@ -10,6 +11,11 @@ export function sqlQualityPhaseLabel(phase: TraceSqlQuality["phase"]): string {
   if (phase === "blocked") return "blocked"
   if (phase === "failed") return "failed"
   return phase
+}
+
+/** Operator-facing validation code — e.g. write_disabled → connector read-only. */
+export function sqlQualityValidationLabel(code: string | null | undefined): string | null {
+  return labelValidationCode(code)
 }
 
 export function shortLine(text: string, max = 72): string {
