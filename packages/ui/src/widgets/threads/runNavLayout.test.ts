@@ -11,6 +11,7 @@ import {
   rightGutterPx,
   RUN_NAV_BAR_SLOT_MAX,
   scrollTranscriptFraction,
+  shouldShowRunMinimap,
   transcriptOverflows,
   type RunNavMarker,
 } from "./runNavLayout"
@@ -57,6 +58,29 @@ describe("transcriptOverflows", () => {
 
   it("is true when content exceeds the viewport", () => {
     expect(transcriptOverflows(800, 900)).toBe(true)
+  })
+})
+
+describe("shouldShowRunMinimap", () => {
+  const screen = 800
+
+  it("hides with three or fewer runs even when content is huge", () => {
+    expect(shouldShowRunMinimap(3, screen, screen * 20)).toBe(false)
+    expect(shouldShowRunMinimap(2, screen, screen * 20)).toBe(false)
+  })
+
+  it("hides when runs are short — not enough to get lost", () => {
+    // 4 runs, each ~1 screen → average under 2 screens
+    expect(shouldShowRunMinimap(4, screen, screen * 4)).toBe(false)
+  })
+
+  it("shows when more than 3 runs and average run exceeds 2 screens", () => {
+    // 4 runs × >2 screens each
+    expect(shouldShowRunMinimap(4, screen, screen * 8 + 1)).toBe(true)
+  })
+
+  it("hides when content still fits the viewport", () => {
+    expect(shouldShowRunMinimap(4, screen, screen)).toBe(false)
   })
 })
 

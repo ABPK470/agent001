@@ -19,7 +19,7 @@ import {
   layoutRunNavBars,
   pickNavRunInView,
   runLabel,
-  transcriptOverflows,
+  shouldShowRunMinimap,
   type RunNavMarker,
 } from "./runNavLayout"
 
@@ -131,10 +131,7 @@ export function ThreadRunRail({
     const dockTop = chatChromeDockTop(host)
     const markerInputs = collectRunNavMarkers(content, host, transcriptRunIds)
 
-    const visible =
-      markerInputs.length >= 2 && transcriptOverflows(clientHeight, contentHeight)
-
-    if (!visible) {
+    if (!shouldShowRunMinimap(markerInputs.length, clientHeight, contentHeight)) {
       markersRef.current = []
       setLayout(EMPTY)
       return
