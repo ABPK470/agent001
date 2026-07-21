@@ -1,5 +1,5 @@
 /**
- * Shared Context card — Prompt / Tools as real outline scopes (sticky + indent).
+ * Shared Context card — Prompt / Tools in stick-blocks (native sticky).
  */
 
 import type { TraceDag } from "./build-trace-dag"
@@ -62,7 +62,7 @@ export function PreambleOutline({
       {open && (
         <div className="trace-card__body trace-nest">
           {preamble.systemPrompt && promptMatches && (
-            <>
+            <div className="trace-stick-block">
               <ScopeRow
                 scopeId="prompt"
                 kind="prompt"
@@ -83,10 +83,10 @@ export function PreambleOutline({
                   />
                 </div>
               )}
-            </>
+            </div>
           )}
           {tools.length > 0 && (
-            <>
+            <div className="trace-stick-block">
               <ScopeRow
                 scopeId="tools"
                 kind="tools"
@@ -108,7 +108,7 @@ export function PreambleOutline({
                   ))}
                 </div>
               )}
-            </>
+            </div>
           )}
         </div>
       )}

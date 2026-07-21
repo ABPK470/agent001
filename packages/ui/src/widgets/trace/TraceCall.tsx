@@ -1,7 +1,8 @@
 /**
  * One LLM call as a bordered card: Call → Sent → Received (+ Next tools).
- * Sent / Received are sticky outline scopes; messages/tools are leaf rows.
- * Next lives under Received so the chevron collapses the reply branch.
+ *
+ * Sticky = native CSS on the real headers. Sent / Received each sit in a
+ * .trace-stick-block so leaving that block unsticks the sibling (no clones).
  */
 
 import { fmtTokens, formatMs } from "../../lib/util"
@@ -68,100 +69,104 @@ export function CallOutline({
 
       {callOpen && (
         <div className="trace-card__body trace-nest">
-          <ScopeRow
-            scopeId={`sent:${call.index}`}
-            kind="sent"
-            callIndex={call.index}
-            depth={1}
-            open={sentOpen}
-            onToggle={() => onToggleSent(call.index)}
-            leading="Sent"
-            summary={callSentSummary(call)}
-            soft
-          />
-          {sentOpen && (
-            <div className="trace-scope-body">
-              {call.messages.length === 0 ? (
-                <span className="trace-empty">No messages recorded</span>
-              ) : (
-                call.messages.map((msg, mi) => {
-                  const key = `${call.index}:m:${mi}`
-                  return (
-                    <PromptMessageRow
-                      key={key}
-                      msg={msg}
-                      open={openState.messages.has(key)}
-                      onToggle={() => onToggleMessage(key)}
-                    />
-                  )
-                })
-              )}
-            </div>
-          )}
-
-          <ScopeRow
-            scopeId={`received:${call.index}`}
-            kind="received"
-            callIndex={call.index}
-            depth={1}
-            open={receivedOpen}
-            onToggle={() => onToggleReceived(call.index)}
-            leading="Received"
-            summary={callReceivedSummary(call)}
-            soft
-          />
-          {receivedOpen && (
-            <div className="trace-scope-body">
-              {call.waiting && <span className="trace-empty">Waiting for reply…</span>}
-              {!call.waiting && call.content && (
-                <ExpandableText text={call.content} className="trace-body-reply" />
-              )}
-              {!call.waiting &&
-                call.toolBranches.length === 0 &&
-                !call.content && (
-                  <span className="trace-empty is-error">
-                    Empty reply — no text and no tool calls
-                  </span>
+          <div className="trace-stick-block">
+            <ScopeRow
+              scopeId={`sent:${call.index}`}
+              kind="sent"
+              callIndex={call.index}
+              depth={1}
+              open={sentOpen}
+              onToggle={() => onToggleSent(call.index)}
+              leading="Sent"
+              summary={callSentSummary(call)}
+              soft
+            />
+            {sentOpen && (
+              <div className="trace-scope-body">
+                {call.messages.length === 0 ? (
+                  <span className="trace-empty">No messages recorded</span>
+                ) : (
+                  call.messages.map((msg, mi) => {
+                    const key = `${call.index}:m:${mi}`
+                    return (
+                      <PromptMessageRow
+                        key={key}
+                        msg={msg}
+                        open={openState.messages.has(key)}
+                        onToggle={() => onToggleMessage(key)}
+                      />
+                    )
+                  })
                 )}
-              {call.askedUser && (
-                <p className="trace-note">
-                  Waiting on human — answer lands on the next call as User answer.
-                </p>
-              )}
-              {call.sqlQuality.length > 0 && (
-                <div className="trace-sql-block">
-                  <div className="trace-next__label is-sql">
-                    SQL check
-                    <span className="trace-row__detail">
-                      run telemetry · not in the prompt
+              </div>
+            )}
+          </div>
+
+          <div className="trace-stick-block">
+            <ScopeRow
+              scopeId={`received:${call.index}`}
+              kind="received"
+              callIndex={call.index}
+              depth={1}
+              open={receivedOpen}
+              onToggle={() => onToggleReceived(call.index)}
+              leading="Received"
+              summary={callReceivedSummary(call)}
+              soft
+            />
+            {receivedOpen && (
+              <div className="trace-scope-body">
+                {call.waiting && <span className="trace-empty">Waiting for reply…</span>}
+                {!call.waiting && call.content && (
+                  <ExpandableText text={call.content} className="trace-body-reply" />
+                )}
+                {!call.waiting &&
+                  call.toolBranches.length === 0 &&
+                  !call.content && (
+                    <span className="trace-empty is-error">
+                      Empty reply — no text and no tool calls
                     </span>
+                  )}
+                {call.askedUser && (
+                  <p className="trace-note">
+                    Waiting on human — answer lands on the next call as User answer.
+                  </p>
+                )}
+                {call.sqlQuality.length > 0 && (
+                  <div className="trace-sql-block">
+                    <div className="trace-next__label is-sql">
+                      SQL check
+                      <span className="trace-row__detail">
+                        run telemetry · not in the prompt
+                      </span>
+                    </div>
+                    {call.sqlQuality.map((entry, i) => (
+                      <SqlQualityRow key={`${entry.toolCallId}-${i}`} entry={entry} />
+                    ))}
                   </div>
-                  {call.sqlQuality.map((entry, i) => (
-                    <SqlQualityRow key={`${entry.toolCallId}-${i}`} entry={entry} />
-                  ))}
-                </div>
-              )}
-              {call.toolBranches.length > 0 && (
-                <div className="trace-next">
-                  <div className="trace-next__label is-next">
-                    Next
-                    <span className="trace-row__detail">
-                      {call.toolBranches.length} tool
-                      {call.toolBranches.length === 1 ? "" : "s"}
-                    </span>
+                )}
+                {call.toolBranches.length > 0 && (
+                  <div className="trace-next">
+                    <div className="trace-next__label is-next">
+                      Next
+                      <span className="trace-row__detail">
+                        {call.toolBranches.length} tool
+                        {call.toolBranches.length === 1 ? "" : "s"}
+                      </span>
+                    </div>
+                    {call.toolBranches.map((tc) => (
+                      <ToolRow
+                        key={tc.id}
+                        tool={tc}
+                        open={openState.tools.has(tc.id)}
+                        onToggle={() => onToggleTool(tc.id)}
+                      />
+                    ))}
                   </div>
-                  {call.toolBranches.map((tc) => (
-                    <ToolRow
-                      key={tc.id}
-                      tool={tc}
-                      open={openState.tools.has(tc.id)}
-                      onToggle={() => onToggleTool(tc.id)}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
+                )}
+              </div>
+            )}
+          </div>
         </div>
       )}
     </article>

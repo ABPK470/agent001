@@ -1830,49 +1830,9 @@ textarea.input {
 .trace-scroll {
   position: relative;
   padding: 0 0.25rem 1.25rem;
-  --trace-pin-stack-h: 0px;
-}
-
-/*
- * VS Code sticky scroll: height-0 pin overlay inside the scroller;
- * stack paints the ancestor chain with the same .trace-scope chrome.
- */
-.trace-pin {
-  position: sticky;
-  top: 0;
-  z-index: 50;
-  height: 0;
-  margin: 0;
-  padding: 0;
-  overflow: visible;
-  pointer-events: none;
-}
-
-.trace-pin__stack {
-  pointer-events: auto;
-  display: flex;
-  flex-direction: column;
-  /* Same chrome as .trace-card — keep L/R borders + rounded top when pinned */
-  background: var(--bg);
-  border: 1px solid var(--border, var(--color-border));
-  border-radius: 0.5rem;
-  box-shadow: 0 2px 8px color-mix(in srgb, var(--bg) 70%, transparent);
-  overflow: hidden;
-}
-
-.trace-pin__stack > .trace-scope {
-  width: 100%;
-  cursor: default;
-  border-radius: 0;
-}
-
-/* Soft child under a pinned Call/Context — same separator as in-card body */
-.trace-pin__stack > .trace-scope.is-soft {
-  border-top-color: var(--border, var(--color-border));
-}
-
-.trace-pin__stack > .trace-scope:first-child.is-soft {
-  border-top: none;
+  /* Room under Call + Sent when More/Less rail sticks */
+  --trace-sticky-row-h: 34px;
+  --trace-pin-stack-h: calc(2 * var(--trace-sticky-row-h));
 }
 
 .trace-flow {
@@ -1884,8 +1844,7 @@ textarea.input {
 
 /*
  * One bordered card per Call / Context.
- * Card owns L/R/top/bottom chrome so open headers never “borrow”
- * the content background or lose side borders.
+ * Card owns L/R/top/bottom chrome. No overflow:hidden — sticky needs it open.
  */
 .trace-card {
   border: 1px solid var(--border, var(--color-border));
@@ -1899,14 +1858,19 @@ textarea.input {
   background: var(--bg);
 }
 
-/* Scope rows — in-flow only (never position:sticky; pin overlay handles that) */
+/* Sibling stick containment — sticky ends when this block scrolls away */
+.trace-stick-block {
+  display: block;
+}
+
+/* Scope rows — native sticky (the real header, never a clone) */
 .trace-scope {
   display: flex;
   align-items: center;
   gap: 0.35rem;
   width: 100%;
-  min-height: 34px;
-  height: 34px;
+  min-height: var(--trace-sticky-row-h);
+  height: var(--trace-sticky-row-h);
   margin: 0;
   padding: 0 0.55rem 0 0.35rem;
   text-align: left;
@@ -1920,6 +1884,9 @@ textarea.input {
 }
 
 .trace-card > .trace-scope {
+  position: sticky;
+  top: 0;
+  z-index: 6;
   border-radius: 0.5rem;
 }
 
@@ -1927,8 +1894,13 @@ textarea.input {
   border-radius: 0.5rem 0.5rem 0 0;
 }
 
-.trace-scope__chevslot,
-.trace-scope__chevbtn {
+.trace-stick-block > .trace-scope {
+  position: sticky;
+  top: var(--trace-sticky-row-h);
+  z-index: 5;
+}
+
+.trace-scope__chevslot {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1936,34 +1908,7 @@ textarea.input {
   width: 1.5rem;
   height: 100%;
   padding: 0;
-  border: none;
-  background: transparent;
   color: var(--text-muted, var(--color-text-muted));
-}
-
-.trace-scope__chevbtn {
-  cursor: pointer;
-  flex-shrink: 0;
-}
-
-.trace-scope__chevbtn:hover {
-  color: var(--text, var(--color-text));
-}
-
-.trace-scope__jump {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  min-width: 0;
-  flex: 1;
-  height: 100%;
-  padding: 0;
-  border: none;
-  background: transparent;
-  text-align: left;
-  cursor: pointer;
-  color: inherit;
-  font: inherit;
 }
 
 .trace-scope:hover {
@@ -1973,7 +1918,8 @@ textarea.input {
 /* Soft = Sent / Received / Context / Prompt / Tools */
 .trace-scope.is-soft {
   font-size: 0.875rem;
-  background: color-mix(in srgb, var(--text, var(--color-text)) 2%, var(--bg));
+  /* Opaque enough that stuck headers don’t show content bleeding through */
+  background: color-mix(in srgb, var(--text, var(--color-text)) 3.5%, var(--bg));
   color: var(--text-secondary, var(--text-muted, var(--color-text-muted)));
   border-top: 1px solid var(--border-subtle, var(--color-border-subtle));
 }
