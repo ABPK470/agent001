@@ -1,8 +1,8 @@
 /**
- * Trace outline shell — toolbar, pin stack, chronological call cards.
+ * Trace outline shell — toolbar + chronological call cards.
  *
  * Flow per call: Sent → Received (+ Next tools under Received).
- * Pin overlay = VS Code sticky scroll (ancestor chain only).
+ * Headers use native position:sticky (same element, same chrome).
  */
 
 import { Search, X } from "lucide-react"
@@ -15,17 +15,9 @@ import {
   type TraceDag,
 } from "./build-trace-dag"
 import { emptyOpen, seedLatest, type FoldMode, type OpenState } from "./open-state"
-import {
-  TRACE_STICKY_ROW_H,
-  computePinnedScopeIds,
-  expandPathForScope,
-  layoutOffsetInScroll,
-} from "./trace-pin"
-import { callReceivedSummary, callSentSummary } from "./trace-format"
 import { CallOutline } from "./TraceCall"
 import { PreambleOutline } from "./TraceContext"
 import { IdChip } from "./TraceCopy"
-import { PinOverlay, type PinRow } from "./TraceScope"
 
 export function TraceDag({
   dag,
@@ -40,7 +32,6 @@ export function TraceDag({
 }) {
   const [search, setSearch] = useState("")
   const [openState, setOpenState] = useState<OpenState>(() => emptyOpen())
-  const [pinnedIds, setPinnedIds] = useState<string[]>([])
   const scrollRef = useRef<HTMLDivElement>(null)
   const seededRef = useRef(false)
   const searchSeedRef = useRef("")
@@ -70,17 +61,6 @@ export function TraceDag({
     return map
   }, [dag.calls, query, runId, threadId])
 
-  function refreshPinStack() {
-    const el = scrollRef.current
-    if (!el) return
-    const ids = computePinnedScopeIds(el)
-    el.style.setProperty(
-      "--trace-pin-stack-h",
-      `${ids.length * TRACE_STICKY_ROW_H}px`,
-    )
-    setPinnedIds(ids)
-  }
-
   useEffect(() => {
     if (seededRef.current || dag.calls.length === 0) return
     seededRef.current = true
@@ -91,7 +71,6 @@ export function TraceDag({
     seededRef.current = false
     searchSeedRef.current = ""
     setOpenState(emptyOpen())
-    setPinnedIds([])
   }, [runId])
 
   useEffect(() => {
@@ -127,224 +106,10 @@ export function TraceDag({
 
   useEffect(() => {
     const el = scrollRef.current
-    if (!el) return
-
-    function onScroll() {
-      refreshPinStack()
-    }
-
-    el.addEventListener("scroll", onScroll, { passive: true })
-    const raf = requestAnimationFrame(() => refreshPinStack())
-    return () => {
-      el.removeEventListener("scroll", onScroll)
-      cancelAnimationFrame(raf)
-    }
-  }, [
-    dag.calls.length,
-    openState.calls,
-    openState.sent,
-    openState.received,
-    openState.preamble,
-    openState.contextPrompt,
-    openState.contextTools,
-    visibleIndexesList,
-  ])
-
-  useEffect(() => {
-    const el = scrollRef.current
     if (!el || suppressFollowRef.current) return
     const distance = el.scrollHeight - el.scrollTop - el.clientHeight
     if (distance < 80) el.scrollTop = el.scrollHeight
   }, [dag.calls.length])
-
-  const pinRows = useMemo((): PinRow[] => {
-    const rows: PinRow[] = []
-    for (const id of pinnedIds) {
-      if (id === "context") {
-        rows.push({
-          id,
-          kind: "context",
-          depth: 0,
-          leading: "Context",
-          title: "",
-          summary: "",
-          soft: true,
-          open: openState.preamble,
-        })
-        continue
-      }
-      if (id === "prompt") {
-        rows.push({
-          id,
-          kind: "prompt",
-          depth: 1,
-          leading: "Prompt",
-          title: "",
-          summary: "",
-          soft: true,
-          open: openState.contextPrompt,
-        })
-        continue
-      }
-      if (id === "tools") {
-        rows.push({
-          id,
-          kind: "tools",
-          depth: 1,
-          leading: "Tools",
-          title: "",
-          summary: "",
-          soft: true,
-          open: openState.contextTools,
-        })
-        continue
-      }
-      const callMatch = /^call:(\d+)$/.exec(id)
-      if (callMatch) {
-        const index = Number(callMatch[1])
-        const call = dag.calls[index]
-        if (!call) continue
-        const usage = call.usage
-        rows.push({
-          id,
-          kind: "call",
-          depth: 0,
-          leading: `Call ${index + 1}`,
-          title: call.headline,
-          summary: `iter ${call.iteration + 1}`,
-          soft: false,
-          open: openState.calls.has(index),
-          trailing: (
-            <>
-              {usage && (
-                <span className="tabular-nums">
-                  {fmtTokens(usage.promptTokens)}/{fmtTokens(usage.completionTokens)}
-                </span>
-              )}
-              {call.durationMs != null && (
-                <span className="tabular-nums">{formatMs(call.durationMs)}</span>
-              )}
-            </>
-          ),
-        })
-        continue
-      }
-      const sentMatch = /^sent:(\d+)$/.exec(id)
-      if (sentMatch) {
-        const index = Number(sentMatch[1])
-        const call = dag.calls[index]
-        if (!call) continue
-        rows.push({
-          id,
-          kind: "sent",
-          depth: 1,
-          leading: "Sent",
-          title: "",
-          summary: callSentSummary(call),
-          soft: true,
-          open: openState.sent.has(index),
-        })
-        continue
-      }
-      const recvMatch = /^received:(\d+)$/.exec(id)
-      if (recvMatch) {
-        const index = Number(recvMatch[1])
-        const call = dag.calls[index]
-        if (!call) continue
-        rows.push({
-          id,
-          kind: "received",
-          depth: 1,
-          leading: "Received",
-          title: "",
-          summary: callReceivedSummary(call),
-          soft: true,
-          open: openState.received.has(index),
-        })
-      }
-    }
-    return rows
-  }, [pinnedIds, dag.calls, openState])
-
-  function onTogglePinnedScope(scopeId: string) {
-    if (scopeId === "context") {
-      onTogglePreamble()
-      return
-    }
-    if (scopeId === "prompt") {
-      onToggleContextPrompt()
-      return
-    }
-    if (scopeId === "tools") {
-      onToggleContextTools()
-      return
-    }
-    const callMatch = /^call:(\d+)$/.exec(scopeId)
-    if (callMatch) {
-      onToggleCall(Number(callMatch[1]))
-      return
-    }
-    const sentMatch = /^sent:(\d+)$/.exec(scopeId)
-    if (sentMatch) {
-      onToggleSent(Number(sentMatch[1]))
-      return
-    }
-    const recvMatch = /^received:(\d+)$/.exec(scopeId)
-    if (recvMatch) {
-      onToggleReceived(Number(recvMatch[1]))
-    }
-  }
-
-  function onRevealScope(scopeId: string) {
-    const path = expandPathForScope(scopeId)
-    setOpenState((prev) => {
-      const calls = new Set(prev.calls)
-      const sent = new Set(prev.sent)
-      const received = new Set(prev.received)
-      let preamble = prev.preamble
-      let contextPrompt = prev.contextPrompt
-      let contextTools = prev.contextTools
-      if (path.preamble) preamble = true
-      if (path.contextPrompt) contextPrompt = true
-      if (path.contextTools) contextTools = true
-      if (path.callIndex != null) {
-        calls.add(path.callIndex)
-        if (path.sent) sent.add(path.callIndex)
-        if (path.received) received.add(path.callIndex)
-      }
-      return {
-        ...prev,
-        preamble,
-        contextPrompt,
-        contextTools,
-        calls,
-        sent,
-        received,
-      }
-    })
-    // VS Code: click sticky line → that line is under the pin stack.
-    suppressFollowRef.current = true
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        const el = scrollRef.current
-        if (!el) {
-          suppressFollowRef.current = false
-          return
-        }
-        const target = el.querySelector(
-          `[data-trace-scope="${CSS.escape(scopeId)}"]`,
-        )
-        if (target instanceof HTMLElement) {
-          const top = layoutOffsetInScroll(el, target)
-          const depth = Number(target.dataset.traceDepth ?? "0") || 0
-          // Leave room for ancestor pins (depth parents above this row).
-          el.scrollTop = Math.max(0, top - depth * TRACE_STICKY_ROW_H)
-        }
-        refreshPinStack()
-        suppressFollowRef.current = false
-      })
-    })
-  }
 
   function onToggleCall(index: number) {
     setOpenState((prev) => {
@@ -503,12 +268,6 @@ export function TraceDag({
       </div>
 
       <div ref={scrollRef} className="trace-scroll min-h-0 flex-1 overflow-y-auto">
-        <PinOverlay
-          rows={pinRows}
-          onToggle={onTogglePinnedScope}
-          onReveal={onRevealScope}
-        />
-
         {emptySlot}
 
         {runId &&

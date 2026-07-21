@@ -1831,36 +1831,8 @@ textarea.input {
 .trace-scroll {
   position: relative;
   padding: 0 0.25rem 1.25rem;
-  --trace-pin-stack-h: 0px;
-}
-
-/*
- * VS Code–style pin overlay: height 0 in flow (no jump when stack grows),
- * stack paints opaquely over the viewport top.
- */
-.trace-pin {
-  position: sticky;
-  top: 0;
-  z-index: 50;
-  height: 0;
-  margin: 0;
-  padding: 0;
-  overflow: visible;
-  pointer-events: none;
-}
-
-.trace-pin__stack {
-  pointer-events: auto;
-  display: flex;
-  flex-direction: column;
-  background: var(--bg);
-  border-bottom: 1px solid var(--border, var(--color-border));
-  box-shadow: 0 2px 8px color-mix(in srgb, var(--bg) 80%, transparent);
-}
-
-/* Pinned stack rows keep in-flow fill; last separator is the stack edge */
-.trace-pin__stack > .trace-scope.is-pinned:last-child {
-  border-bottom: none;
+  /* Max sticky stack = Call/Context + one nested scope (34+34) */
+  --trace-pin-stack-h: 68px;
 }
 
 .trace-flow {
@@ -1887,8 +1859,10 @@ textarea.input {
   background: var(--bg);
 }
 
-/* Scope rows — header strip inside the card (or pin clone) */
+/* Scope rows — same chrome always; native sticky (no clone / restyle) */
 .trace-scope {
+  position: sticky;
+  z-index: 20;
   display: flex;
   align-items: center;
   gap: 0.35rem;
@@ -1907,6 +1881,10 @@ textarea.input {
   cursor: pointer;
 }
 
+.trace-scope[data-trace-depth="1"] {
+  z-index: 19;
+}
+
 .trace-card > .trace-scope {
   border-radius: 0.5rem;
 }
@@ -1915,19 +1893,7 @@ textarea.input {
   border-radius: 0.5rem 0.5rem 0 0;
 }
 
-.trace-scope.is-pinned {
-  /* Same chrome as in-flow — only flat for the stack, opaque bg */
-  margin: 0;
-  border-radius: 0;
-  border-left: none;
-  border-right: none;
-  border-top: none;
-  border-bottom: 1px solid var(--border-subtle, var(--color-border-subtle));
-  opacity: 1;
-}
-
-.trace-scope__chevslot,
-.trace-scope__chevbtn {
+.trace-scope__chevslot {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1940,35 +1906,11 @@ textarea.input {
   color: var(--text-muted, var(--color-text-muted));
 }
 
-.trace-scope__chevbtn {
-  cursor: pointer;
-}
-
-.trace-scope__chevbtn:hover {
-  color: var(--text, var(--color-text));
-}
-
-.trace-scope__jump {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  min-width: 0;
-  flex: 1;
-  height: 100%;
-  padding: 0;
-  border: none;
-  background: transparent;
-  text-align: left;
-  cursor: pointer;
-  color: inherit;
-  font: inherit;
-}
-
 .trace-scope:hover {
   background: color-mix(in srgb, var(--text, var(--color-text)) 6.5%, var(--bg));
 }
 
-/* Soft = Sent / Received / Context — same grid, quieter strip */
+/* Soft = Sent / Received / Context / Prompt / Tools */
 .trace-scope.is-soft {
   font-size: 0.875rem;
   background: color-mix(in srgb, var(--text, var(--color-text)) 2%, var(--bg));
@@ -2033,8 +1975,7 @@ textarea.input {
 }
 
 /* Code-like offsets — nested scopes indent like editor sticky scroll */
-.trace-scope[data-trace-depth="1"],
-.trace-scope.is-pinned[data-trace-depth="1"] {
+.trace-scope[data-trace-depth="1"] {
   padding-left: 1.45rem;
 }
 
