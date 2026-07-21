@@ -1828,24 +1828,28 @@ textarea.input {
   color: var(--text-muted, var(--color-text-muted));
 }
 
-.trace-scroll {
+.trace-scroll-host {
   position: relative;
+  min-height: 0;
+}
+
+.trace-scroll {
   padding: 0 0.25rem 1.25rem;
   --trace-pin-stack-h: 0px;
 }
 
 /*
- * VS Code sticky scroll: height-0 pin overlay; stack paints the ancestor
- * chain with the *same* .trace-scope chrome as in-flow (no restyle).
+ * VS Code sticky scroll: pin overlay is fixed to the scroll viewport
+ * (not position:sticky inside content — that fought measurement/jump).
  */
 .trace-pin {
-  position: sticky;
+  position: absolute;
   top: 0;
+  left: 0;
+  right: 0;
   z-index: 50;
-  height: 0;
   margin: 0;
-  padding: 0;
-  overflow: visible;
+  padding: 0 0.25rem;
   pointer-events: none;
 }
 
@@ -1871,6 +1875,11 @@ textarea.input {
 
 .trace-pin__stack > .trace-scope:first-child.is-soft {
   border-top: none;
+}
+
+/* In-flow header covered by the pin stack — keep layout, hide duplicate text */
+.trace-scope.is-pin-covered {
+  visibility: hidden;
 }
 
 .trace-flow {
@@ -2032,14 +2041,6 @@ textarea.input {
   color: var(--accent, var(--color-accent));
 }
 
-.trace-scope[data-trace-kind="trace"] .trace-scope__lead {
-  color: var(--text-muted, var(--color-text-muted));
-  font-weight: 650;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  font-size: 0.8125rem;
-}
-
 .trace-scope[data-trace-kind="message"] .trace-scope__lead {
   color: var(--text, var(--color-text));
   font-weight: 600;
@@ -2058,19 +2059,6 @@ textarea.input {
   min-width: auto;
 }
 
-.trace-scope.is-root {
-  cursor: default;
-  background: transparent;
-  border-bottom: 1px solid var(--border-subtle, var(--color-border-subtle));
-  margin-bottom: 0.35rem;
-}
-
-.trace-pin__stack > .trace-scope.is-root {
-  border-bottom: none;
-  margin-bottom: 0;
-  background: color-mix(in srgb, var(--text, var(--color-text)) 4%, var(--bg));
-}
-
 /* Code-like offsets — nested scopes indent like editor sticky scroll */
 .trace-scope[data-trace-depth="1"] {
   padding-left: 1.1rem;
@@ -2080,12 +2068,8 @@ textarea.input {
   padding-left: 1.85rem;
 }
 
-.trace-scope[data-trace-depth="3"] {
-  padding-left: 2.6rem;
-}
-
 /* In-flow messages/tools already sit inside an indented scope body */
-.trace-scope-body .trace-scope[data-trace-depth="3"] {
+.trace-scope-body .trace-scope[data-trace-depth="2"] {
   padding-left: 0.35rem;
 }
 
@@ -5750,7 +5734,7 @@ textarea.input {
   padding: 0.5rem 0.7rem;
   font-size: 15px;
   line-height: 1.45;
-  font-weight: 450;
+  font-weight: 400;
   letter-spacing: -0.01em;
   color: var(--text);
   overflow-wrap: anywhere;

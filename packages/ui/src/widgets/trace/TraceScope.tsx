@@ -3,7 +3,7 @@
  *
  * In-flow rows are never position:sticky. A pin overlay clones the *same*
  * chrome for the ancestor chain of the focus line — click line to jump,
- * chevron to fold (editor dialect). Trace root has no fold.
+ * chevron to fold (editor dialect).
  */
 
 import { ChevronDown, ChevronRight } from "lucide-react"

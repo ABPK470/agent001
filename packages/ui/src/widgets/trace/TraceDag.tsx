@@ -24,11 +24,13 @@ import {
   computePinnedScopeIds,
   expandPathForScope,
   layoutOffsetInScroll,
+  samePinnedIds,
+  syncPinCoveredClasses,
 } from "./trace-pin"
 import { CallOutline } from "./TraceCall"
 import { PreambleOutline } from "./TraceContext"
 import { IdChip } from "./TraceCopy"
-import { PinOverlay, type PinRow, ScopeRow } from "./TraceScope"
+import { PinOverlay, type PinRow } from "./TraceScope"
 
 export function TraceDag({
   dag,
@@ -81,7 +83,8 @@ export function TraceDag({
       "--trace-pin-stack-h",
       `${ids.length * TRACE_STICKY_ROW_H}px`,
     )
-    setPinnedIds(ids)
+    syncPinCoveredClasses(el, ids)
+    setPinnedIds((prev) => (samePinnedIds(prev, ids) ? prev : ids))
   }
 
   useEffect(() => {
@@ -179,28 +182,11 @@ export function TraceDag({
   const pinRows = useMemo((): PinRow[] => {
     const rows: PinRow[] = []
     for (const id of pinnedIds) {
-      if (id === "trace") {
-        rows.push({
-          id,
-          kind: "trace",
-          depth: 0,
-          leading: "Trace",
-          title: "",
-          summary:
-            stats.callCount === 0
-              ? "empty"
-              : `${stats.callCount} call${stats.callCount === 1 ? "" : "s"}`,
-          soft: false,
-          open: true,
-          foldable: false,
-        })
-        continue
-      }
       if (id === "context") {
         rows.push({
           id,
           kind: "context",
-          depth: 1,
+          depth: 0,
           leading: "Context",
           title: "",
           summary: contextSummary,
@@ -214,7 +200,7 @@ export function TraceDag({
         rows.push({
           id,
           kind: "prompt",
-          depth: 2,
+          depth: 1,
           leading: "Prompt",
           title: "",
           summary: prompt ? `${formatCharCount(prompt.length)} chars` : "",
@@ -227,7 +213,7 @@ export function TraceDag({
         rows.push({
           id,
           kind: "tools",
-          depth: 2,
+          depth: 1,
           leading: "Tools",
           title: "",
           summary: String(dag.preamble.tools.length),
@@ -245,7 +231,7 @@ export function TraceDag({
         rows.push({
           id,
           kind: "call",
-          depth: 1,
+          depth: 0,
           leading: `Call ${index + 1}`,
           title: call.headline,
           summary: `iter ${call.iteration + 1}`,
@@ -274,7 +260,7 @@ export function TraceDag({
         rows.push({
           id,
           kind: "sent",
-          depth: 2,
+          depth: 1,
           leading: "Sent",
           title: "",
           summary: callSentSummary(call),
@@ -291,7 +277,7 @@ export function TraceDag({
         rows.push({
           id,
           kind: "received",
-          depth: 2,
+          depth: 1,
           leading: "Received",
           title: "",
           summary: callReceivedSummary(call),
@@ -311,7 +297,7 @@ export function TraceDag({
         rows.push({
           id,
           kind: "message",
-          depth: 3,
+          depth: 2,
           leading: msg.speaker,
           title: msg.detail ?? "",
           summary: openState.messages.has(key)
@@ -333,7 +319,7 @@ export function TraceDag({
         rows.push({
           id,
           kind: "tool",
-          depth: 3,
+          depth: 2,
           leading: tool.name,
           title: "",
           summary: tool.id,
@@ -343,10 +329,9 @@ export function TraceDag({
       }
     }
     return rows
-  }, [pinnedIds, dag, openState, contextSummary, stats.callCount])
+  }, [pinnedIds, dag, openState, contextSummary])
 
   function onTogglePinnedScope(scopeId: string) {
-    if (scopeId === "trace") return
     if (scopeId === "context") {
       onTogglePreamble()
       return
@@ -534,11 +519,6 @@ export function TraceDag({
       ? `${callHits?.size ?? 0} of ${dag.calls.length} calls`
       : null
 
-  const traceSummary =
-    stats.callCount === 0
-      ? "empty"
-      : `${stats.callCount} call${stats.callCount === 1 ? "" : "s"}`
-
   return (
     <div className="trace-dag flex flex-col h-full min-h-0">
       <div className="trace-toolbar shrink-0">
@@ -607,13 +587,13 @@ export function TraceDag({
         {searchStatus && <div className="trace-search__status">{searchStatus}</div>}
       </div>
 
-      <div ref={scrollRef} className="trace-scroll min-h-0 flex-1 overflow-y-auto">
+      <div className="trace-scroll-host min-h-0 flex-1">
         <PinOverlay
           rows={pinRows}
           onToggle={onTogglePinnedScope}
           onReveal={onRevealScope}
         />
-
+        <div ref={scrollRef} className="trace-scroll min-h-0 h-full overflow-y-auto">
         {emptySlot}
 
         {runId &&
@@ -625,16 +605,6 @@ export function TraceDag({
 
         {runId && dag.hasData && (
           <div className="trace-flow">
-            <ScopeRow
-              scopeId="trace"
-              kind="trace"
-              depth={0}
-              open
-              foldable={false}
-              onToggle={() => {}}
-              leading="Trace"
-              summary={traceSummary}
-            />
             <PreambleOutline
               dag={dag}
               open={openState.preamble}
@@ -663,6 +633,7 @@ export function TraceDag({
             })}
           </div>
         )}
+        </div>
       </div>
     </div>
   )

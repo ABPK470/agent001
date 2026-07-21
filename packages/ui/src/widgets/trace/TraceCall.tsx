@@ -43,7 +43,7 @@ export function CallOutline({
         scopeId={`call:${call.index}`}
         kind="call"
         callIndex={call.index}
-        depth={1}
+        depth={0}
         open={callOpen}
         onToggle={() => onToggleCall(call.index)}
         leading={`Call ${call.index + 1}`}
@@ -73,7 +73,7 @@ export function CallOutline({
             scopeId={`sent:${call.index}`}
             kind="sent"
             callIndex={call.index}
-            depth={2}
+            depth={1}
             open={sentOpen}
             onToggle={() => onToggleSent(call.index)}
             leading="Sent"
@@ -106,7 +106,7 @@ export function CallOutline({
             scopeId={`received:${call.index}`}
             kind="received"
             callIndex={call.index}
-            depth={2}
+            depth={1}
             open={receivedOpen}
             onToggle={() => onToggleReceived(call.index)}
             leading="Received"

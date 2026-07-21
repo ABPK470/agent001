@@ -32,7 +32,7 @@ export function PromptMessageRow({
         scopeId={scopeId}
         kind="message"
         callIndex={callIndex}
-        depth={3}
+        depth={2}
         open={open}
         onToggle={onToggle}
         leading={msg.speaker}
@@ -88,7 +88,7 @@ export function ToolRow({
         scopeId={scopeId}
         kind="tool"
         callIndex={callIndex}
-        depth={3}
+        depth={2}
         open={open}
         onToggle={onToggle}
         leading={tool.name}

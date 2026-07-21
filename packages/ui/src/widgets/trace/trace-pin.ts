@@ -1,27 +1,29 @@
 /**
- * Cursor / VS Code sticky scroll for Trace — treat the outline like a
- * nested JSON document: pin the ancestor chain of the focus line only.
+ * Cursor / VS Code sticky scroll for Trace.
  *
- * Nesting (depths):
- *   Trace (0)
- *     Context | Call (1)
- *       Prompt | Tools | Sent | Received (2)
- *         Message | Tool (3)
+ * Outline nesting (depths):
+ *   Context | Call (0)
+ *     Prompt | Tools | Sent | Received (1)
+ *       Message | Tool (2)
  *
- * In-flow headers are never position:sticky. A pin overlay renders the stack.
+ * In-flow headers stay in normal flow. A pin overlay paints the ancestor
+ * chain of the focus line (never CSS position:sticky on the rows).
  *
- * Stick rule: a scope pins only while the focus line is inside [top, end).
- * End = next same-or-shallower scope top. Leaving a block unsticks it
- * (siblings don’t accumulate).
+ * Stick rule (matches editor sticky scroll):
+ *   A scope pins only after its header has scrolled *past* its stack slot
+ *   (top < threshold) and the focus line is still inside [top, end).
+ *   End = next same-or-shallower scope top. Siblings never accumulate.
  *
  * Stick timing: threshold = scrollTop + pinnedSoFar * ROW_H so a child
- * pins as soon as it reaches the bottom of the current stack.
+ * pins when it reaches the bottom of the current stack.
+ *
+ * Cap: at most TRACE_STICKY_MAX lines; prefer inner scopes (drop outer).
  */
 
 export const TRACE_STICKY_ROW_H = 34
+export const TRACE_STICKY_MAX = 5
 
 export type TraceScopeKind =
-  | "trace"
   | "context"
   | "prompt"
   | "tools"
@@ -91,26 +93,48 @@ export function withScopeEnds(
 
 /**
  * Pin scopes that still contain the focus line (VS Code sticky scroll).
- * Pure — unit-tested without DOM sticky.
+ * Pure — unit-tested without DOM.
  */
 export function computePinnedFromEntries(
   entries: PinEntry[],
   scrollTop: number,
   rowH: number = TRACE_STICKY_ROW_H,
+  maxLines: number = TRACE_STICKY_MAX,
 ): string[] {
   const ranged = withScopeEnds(entries)
   const pinned: string[] = []
   for (const e of ranged) {
     const threshold = scrollTop + pinned.length * rowH
-    if (e.top <= threshold + 0.5 && e.end > threshold + 0.5) {
+    // Strict `<` — do not pin while the in-flow header still occupies the slot
+    // (avoids duplicate header at the stick boundary).
+    if (e.top < threshold - 0.5 && e.end > threshold + 0.5) {
       pinned.push(e.id)
     }
   }
-  return pinned
+  if (pinned.length <= maxLines) return pinned
+  // Prefer inner scopes when over the cap (VS Code default).
+  return pinned.slice(pinned.length - maxLines)
 }
 
 export function computePinnedScopeIds(scrollEl: HTMLElement): string[] {
   return computePinnedFromEntries(listTraceScopes(scrollEl), scrollEl.scrollTop)
+}
+
+export function samePinnedIds(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return false
+  }
+  return true
+}
+
+/** Mark in-flow headers that are currently covered by the pin overlay. */
+export function syncPinCoveredClasses(scrollEl: HTMLElement, pinnedIds: string[]): void {
+  const pinned = new Set(pinnedIds)
+  for (const el of scrollEl.querySelectorAll<HTMLElement>("[data-trace-scope]")) {
+    const id = el.dataset.traceScope
+    el.classList.toggle("is-pin-covered", Boolean(id && pinned.has(id)))
+  }
 }
 
 export type ExpandPath = {
@@ -128,7 +152,6 @@ export type ExpandPath = {
  * Ancestors to expand so `scopeId` is in the DOM / reachable.
  */
 export function expandPathForScope(scopeId: string): ExpandPath {
-  if (scopeId === "trace") return {}
   if (scopeId === "context") return { preamble: true }
   if (scopeId === "prompt") return { preamble: true, contextPrompt: true }
   if (scopeId === "tools") return { preamble: true, contextTools: true }

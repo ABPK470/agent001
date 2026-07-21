@@ -52,7 +52,7 @@ export function PreambleOutline({
       <ScopeRow
         scopeId="context"
         kind="context"
-        depth={1}
+        depth={0}
         open={open}
         onToggle={onToggle}
         leading="Context"
@@ -66,7 +66,7 @@ export function PreambleOutline({
               <ScopeRow
                 scopeId="prompt"
                 kind="prompt"
-                depth={2}
+                depth={1}
                 open={contextPromptOpen}
                 onToggle={onTogglePrompt}
                 leading="Prompt"
@@ -90,7 +90,7 @@ export function PreambleOutline({
               <ScopeRow
                 scopeId="tools"
                 kind="tools"
-                depth={2}
+                depth={1}
                 open={contextToolsOpen}
                 onToggle={onToggleTools}
                 leading="Tools"
