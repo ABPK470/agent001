@@ -49,9 +49,10 @@ describe("computePinnedFromEntries — structural ancestor chain only", () => {
     expect(computePinnedFromEntries(tree, 600)).toEqual(["call:0", "sent:0"])
   })
 
-  it("does not pin Call until its header has scrolled past the slot", () => {
+  it("does not pin Call until its header has fully scrolled past the slot", () => {
     expect(computePinnedFromEntries(tree, 1000)).toEqual([])
-    expect(computePinnedFromEntries(tree, 1000 + 1)).toEqual(["call:1"])
+    expect(computePinnedFromEntries(tree, 1000 + H)).toEqual([])
+    expect(computePinnedFromEntries(tree, 1000 + H + 1)).toEqual(["call:1"])
   })
 
   it("pins Call → Received while still inside that call", () => {
@@ -61,18 +62,36 @@ describe("computePinnedFromEntries — structural ancestor chain only", () => {
     ])
   })
 
-  it("chains stick timing under an active parent", () => {
+  it("chains stick timing under an active parent — fully past header", () => {
     const spaced = [
       { id: "call:0", top: 0, depth: 0 },
       { id: "sent:0", top: 100, depth: 1 },
       { id: "received:0", top: 200, depth: 1 },
     ]
-    const sentStick = 100 - H
-    expect(computePinnedFromEntries(spaced, sentStick)).toEqual(["call:0"])
-    expect(computePinnedFromEntries(spaced, sentStick + 1)).toEqual([
+    // Sent header top is 100; sticks only after top + rowH clears the slot.
+    expect(computePinnedFromEntries(spaced, 100)).toEqual(["call:0"])
+    expect(computePinnedFromEntries(spaced, 101)).toEqual([
       "call:0",
       "sent:0",
     ])
+  })
+
+  it("yields a peer pin before the next header is covered", () => {
+    // Context must release when Plan's header reaches the pin slot —
+    // otherwise opaque Context covers "Plan" and Timeline looks nested under it.
+    const peers = [
+      { id: "context", top: 0, depth: 0 },
+      { id: "phase-plan", top: 400, depth: 0 },
+      { id: "call:0", top: 800, depth: 0 },
+    ]
+    // Plan header at the bottom of a 1-line pin stack — Context already yielded
+    expect(computePinnedFromEntries(peers, 400 - H)).toEqual([])
+    // Still inside Context body — Context pinned, Plan not yet at the slot
+    expect(computePinnedFromEntries(peers, 300)).toEqual(["context"])
+    // Plan header has reached the pin zone — Context yields (no cover)
+    expect(computePinnedFromEntries(peers, 400 - H + 1)).toEqual([])
+    // Plan fully past its own header — Plan pins
+    expect(computePinnedFromEntries(peers, 400 + H + 1)).toEqual(["phase-plan"])
   })
 
   it("caps the stack and prefers inner scopes", () => {
@@ -85,11 +104,39 @@ describe("computePinnedFromEntries — structural ancestor chain only", () => {
     ]
     expect(computePinnedFromEntries(deep, 500, H, 3)).toEqual(["c", "d", "e"])
   })
+
+  it("pins Call → Sent → System while reading the system body", () => {
+    const msgs = [
+      { id: "call:0", top: 0, depth: 0 },
+      { id: "sent:0", top: 40, depth: 1 },
+      { id: "message:0:m:0", top: 80, depth: 2 },
+      { id: "message:0:m:1", top: 400, depth: 2 },
+    ]
+    expect(computePinnedFromEntries(msgs, 200)).toEqual([
+      "call:0",
+      "sent:0",
+      "message:0:m:0",
+    ])
+    // Peer yield: System releases; User takes the leaf slot (same depth)
+    expect(computePinnedFromEntries(msgs, 400 + H + 1)).toEqual([
+      "call:0",
+      "sent:0",
+      "message:0:m:1",
+    ])
+  })
 })
 
 describe("expandPathForScope", () => {
   it("expands call + sent", () => {
     expect(expandPathForScope("sent:1")).toEqual({ callIndex: 1, sent: true })
+  })
+
+  it("expands message under sent", () => {
+    expect(expandPathForScope("message:2:m:1")).toEqual({
+      callIndex: 2,
+      sent: true,
+      messageKey: "2:m:1",
+    })
   })
 
   it("expands context prompt", () => {

@@ -24,8 +24,11 @@ export type TraceToolCall = {
   id: string
   name: string
   arguments: Record<string, unknown>
-  /** Filled when a matching tool-result / tool-error follows in the loop. */
-  status?: "running" | "done" | "error"
+  /**
+   * `proposed` = model asked for this tool in the reply (Received).
+   * `running` / `done` / `error` = actual execution (Work).
+   */
+  status?: "proposed" | "running" | "done" | "error"
   resultText?: string
   argsSummary?: string
   argsFormatted?: string
@@ -105,6 +108,8 @@ export type TraceWorkNode = {
   summary: string
   tools: TraceToolCall[]
   notes: TraceWorkNote[]
+  /** SQL validation that ran during this work (not part of the prompt). */
+  sqlQuality: TraceSqlQuality[]
 }
 
 /** Chronological spine after Context — phases, calls, and between-call work. */
@@ -771,7 +776,7 @@ export function buildTraceDag(trace: TraceEntry[]): TraceDag {
       id: tc.id,
       name: tc.name,
       arguments: tc.arguments,
-      status: "running" as const,
+      status: "proposed" as const,
     }))
     const usage = response?.usage ?? null
     return {
@@ -804,32 +809,24 @@ export function buildTraceDag(trace: TraceEntry[]): TraceDag {
     if (openWork.tools.length > 0 || openWork.notes.length > 0) {
       openWork.title = workTitle(openWork.tools, openWork.notes)
       openWork.summary = workSummary(openWork.tools, openWork.notes)
+      // SQL validation runs during tool execution — attach to Work, not Received.
+      const call = calls[openWork.afterCallIndex]
+      if (call && call.sqlQuality.length > 0) {
+        const matched = call.sqlQuality.filter((s) =>
+          openWork!.tools.some(
+            (t) => t.id === s.toolCallId || t.name === s.toolName,
+          ),
+        )
+        openWork.sqlQuality = matched.length > 0 ? matched : call.sqlQuality
+      }
       if (openPhase && isStepFamily(openPhase.family)) {
         openPhase.children = openPhase.children ?? []
         openPhase.children.push({ kind: "work", work: openWork })
       } else {
         spine.push({ kind: "work", work: openWork })
       }
-      // Mirror execution status onto the preceding call’s Next branches.
-      const call = calls[openWork.afterCallIndex]
-      if (call) {
-        call.toolBranches = call.toolBranches.map((branch) => {
-          const exec = openWork!.tools.find(
-            (t) => t.id === branch.id || t.name === branch.name,
-          )
-          return exec
-            ? {
-                ...branch,
-                status: exec.status,
-                resultText: exec.resultText,
-                argsSummary: exec.argsSummary,
-                argsFormatted: exec.argsFormatted,
-                arguments:
-                  Object.keys(exec.arguments).length > 0 ? exec.arguments : branch.arguments,
-              }
-            : branch
-        })
-      }
+      // Do not mirror execution onto Received toolBranches — Received shows
+      // proposals only; Work owns run + result (clear agent-loop chronology).
     }
     openWork = null
   }
@@ -882,6 +879,7 @@ export function buildTraceDag(trace: TraceEntry[]): TraceDag {
       summary: "",
       tools: [],
       notes: [],
+      sqlQuality: [],
     }
     return openWork
   }
@@ -1001,16 +999,6 @@ export function buildTraceDag(trace: TraceEntry[]): TraceDag {
 
   flushWork()
   flushPhase()
-
-  // Mark unanswered tool branches still running only if call is waiting;
-  // otherwise leave as-is after work merge.
-  for (const call of calls) {
-    if (!call.waiting) {
-      call.toolBranches = call.toolBranches.map((t) =>
-        t.status === "running" && t.resultText == null ? { ...t, status: undefined } : t,
-      )
-    }
-  }
 
   let promptTokens = 0
   let completionTokens = 0

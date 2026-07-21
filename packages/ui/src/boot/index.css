@@ -1862,7 +1862,8 @@ textarea.input {
   gap: 0.55rem;
   min-width: 0;
   max-width: 100%;
-  padding-top: 0.55rem;
+  /* No top padding — pin stack is flush; gap here looked like a hole under pins */
+  padding-top: 0;
 }
 
 /*
@@ -1896,7 +1897,7 @@ textarea.input {
   display: flex;
   flex-direction: column;
   background: var(--bg);
-  box-shadow: 0 2px 8px color-mix(in srgb, var(--bg) 70%, transparent);
+  box-shadow: 0 1px 0 var(--border, var(--color-border));
   border-bottom: 1px solid var(--border, var(--color-border));
 }
 
@@ -1904,6 +1905,29 @@ textarea.input {
   border-radius: 0;
   width: 100%;
   cursor: default;
+  /* Depth 0 — hug the label like in-flow roots */
+  padding-left: 0.35rem;
+}
+
+/* Pin stack must mirror in-flow depth offsets (Sent → System/User under it) */
+.trace-pin__stack > .trace-scope[data-trace-depth="1"] {
+  padding-left: 1.1rem;
+}
+
+.trace-pin__stack > .trace-scope[data-trace-depth="2"] {
+  padding-left: 1.85rem;
+}
+
+.trace-pin__stack > .trace-scope[data-trace-depth="3"] {
+  padding-left: 2.6rem;
+}
+
+.trace-pin__stack > .trace-scope[data-trace-depth="4"] {
+  padding-left: 3.35rem;
+}
+
+.trace-pin__stack > .trace-scope .trace-scope__lead {
+  min-width: 0;
 }
 
 .trace-pin__stack > .trace-scope.is-soft {
@@ -1955,7 +1979,8 @@ textarea.input {
   box-shadow: 0 1px 0 color-mix(in srgb, var(--text) 6%, transparent);
 }
 
-[data-outline-pinned] {
+[data-outline-pinned],
+[data-trace-pinned] {
   visibility: hidden;
 }
 
@@ -2226,6 +2251,10 @@ textarea.input {
 
 .trace-work-note {
   padding: 0.35rem 0 0.45rem;
+}
+
+/* Divider only between notes / after tools — not above the first body row */
+.trace-scope-body > * + .trace-work-note {
   border-top: 1px solid var(--border-subtle, var(--color-border-subtle));
 }
 
@@ -2284,8 +2313,17 @@ textarea.input {
   padding-left: 1.85rem;
 }
 
+.trace-scope[data-trace-depth="3"] {
+  padding-left: 2.6rem;
+}
+
+.trace-scope[data-trace-depth="4"] {
+  padding-left: 3.35rem;
+}
+
 /* In-flow messages/tools already sit inside an indented scope body */
-.trace-scope-body .trace-scope[data-trace-depth="2"] {
+.trace-scope-body .trace-scope[data-trace-depth="2"],
+.trace-scope-body .trace-scope[data-trace-depth="3"] {
   padding-left: 0.35rem;
 }
 
@@ -2738,6 +2776,15 @@ textarea.input {
   padding: 0.25rem 0;
 }
 
+.trace-next__hint {
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--text-muted, var(--color-text-muted));
+  opacity: 0.85;
+}
+
 .trace-next__label.is-next {
   color: var(--warning, var(--color-warning, #c4a35a));
 }
@@ -2776,13 +2823,13 @@ textarea.input {
   align-items: baseline;
   flex-wrap: wrap;
   gap: 0.4rem 0.55rem;
-  font-size: 0.9375rem;
+  font-size: 0.8125rem;
 }
 
 .trace-sql-check__badge {
-  font-size: 0.8125rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
+  font-size: 0.75rem;
+  font-weight: 650;
+  letter-spacing: 0.03em;
   text-transform: uppercase;
   color: var(--text-muted, var(--color-text-muted));
 }

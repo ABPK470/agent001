@@ -4,8 +4,8 @@
  * In-flow headers stay in document flow. A pin overlay clones the ancestor
  * chain of the focus line (ViewSpec stickyFamilies / stickyTypes).
  *
- * Stick rule: pin after the header has scrolled *past* its stack slot
- * (top < threshold) while focus is still inside [top, end).
+ * Stick rule: pin after the header has scrolled *fully past* its stack slot
+ * (top + rowH < threshold) while focus is still inside [top, end).
  * End = next same-or-shallower scope top.
  */
 
@@ -27,6 +27,7 @@ export const OUTLINE_PIN_FAMILIES = new Set([
   "step",
   "verify",
   "repair",
+  "message",
 ])
 
 export type OutlineScopeEntry = {
@@ -105,7 +106,13 @@ export function computePinnedFromEntries(
   const pinned: string[] = []
   for (const e of ranged) {
     const threshold = scrollTop + pinned.length * rowH
-    if (e.top < threshold - 0.5 && e.end > threshold + 0.5) {
+    // Stick only after the header has fully cleared the slot…
+    const pastHeader = e.top + rowH < threshold - 0.5
+    // …and yield before the *next* same-or-shallower header slides under
+    // the pin. Otherwise opaque Context covers "Plan" and Timeline looks
+    // nested under Context.
+    const nextHeaderClear = e.end > threshold + rowH + 0.5
+    if (pastHeader && nextHeaderClear) {
       pinned.push(e.id)
     }
   }

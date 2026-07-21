@@ -116,13 +116,14 @@ describe("buildTraceDag", () => {
     expect(c0.toolBranches.map((t) => t.name)).toEqual(["query_mssql", "ask_user"])
     expect(c0.askedUser).toBe(true)
     expect(c0.waiting).toBe(false)
-    expect(c0.toolBranches[0]?.status).toBe("done")
-    expect(c0.toolBranches[0]?.resultText).toBe("1")
+    expect(c0.toolBranches[0]?.status).toBe("proposed")
+    expect(c0.toolBranches[0]?.resultText).toBeUndefined()
 
     const work = dag.spine.find((e) => e.kind === "work")
     expect(work?.kind).toBe("work")
     if (work?.kind === "work") {
       expect(work.work.tools[0]?.resultText).toBe("1")
+      expect(work.work.tools[0]?.status).toBe("done")
     }
     expect(dag.stats.toolRunCount).toBe(1)
 
@@ -139,7 +140,7 @@ describe("buildTraceDag", () => {
     expect(dag.stats.totalDuration).toBe(250)
   })
 
-  it("attaches sql quality to the matching call (not context preamble)", () => {
+  it("attaches sql quality to the matching call and Work card", () => {
     const sql: Extract<TraceEntry, { kind: "planner-sql-quality" }> = {
       kind: "planner-sql-quality",
       toolCallId: "tc1",
@@ -173,11 +174,35 @@ describe("buildTraceDag", () => {
     }
     const dag = buildTraceDag([
       llmRequest(0),
-      llmResponse(0, { content: "ok" }),
+      llmResponse(0, {
+        content: "ok",
+        toolCalls: [{ id: "tc1", name: "query_mssql", arguments: { sql: "select 1" } }],
+      }),
+      {
+        kind: "tool-call",
+        invocationId: "inv1",
+        toolCallId: "tc1",
+        tool: "query_mssql",
+        argsSummary: "sql",
+        argsFormatted: '{"sql":"select 1"}',
+      },
+      {
+        kind: "tool-result",
+        invocationId: "inv1",
+        toolCallId: "tc1",
+        text: "1",
+      },
       sql,
     ])
     expect(dag.calls[0]!.sqlQuality).toHaveLength(1)
     expect(dag.calls[0]!.sqlQuality[0]!.sqlPreview).toBe("select 1")
+    expect(dag.calls[0]!.toolBranches[0]?.status).toBe("proposed")
+    const work = dag.spine.find((e) => e.kind === "work")
+    expect(work?.kind).toBe("work")
+    if (work?.kind === "work") {
+      expect(work.work.sqlQuality).toHaveLength(1)
+      expect(work.work.tools[0]?.status).toBe("done")
+    }
   })
 
   it("marks waiting when response is missing", () => {

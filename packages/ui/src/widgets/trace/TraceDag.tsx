@@ -2,8 +2,8 @@
  * Trace outline shell — toolbar + chronological cards.
  *
  * Sticky scroll = VS Code dialect: height-0 sticky pin stack clones the
- * ancestor chain (Context/Phase → Call → Sent|Received, …). Leaf message/tool
- * rows never pin. Click label to jump; chevron to fold.
+ * ancestor chain (Phase → Call → Sent → System/User/…). Click label to jump;
+ * chevron to fold.
  */
 
 import { Search, X } from "lucide-react"
@@ -12,6 +12,7 @@ import { fmtTokens, formatMs } from "../../lib/util"
 import { parkScrollOnScope, offsetInScrollHost } from "../../lib/chatScroll"
 import { SegmentToggle } from "../entity-registry/SegmentToggle"
 import {
+  messagePreview,
   searchCall,
   type TraceCallSearchHit,
   type TraceDag,
@@ -25,6 +26,7 @@ import {
   expandPathForScope,
   layoutOffsetInScroll,
   samePinnedIds,
+  syncPinnedInFlow,
 } from "./trace-pin"
 import { CallOutline } from "./TraceCall"
 import { PreambleOutline } from "./TraceContext"
@@ -63,6 +65,7 @@ export function TraceDag({
       "--trace-pin-stack-h",
       `${ids.length * TRACE_STICKY_ROW_H}px`,
     )
+    syncPinnedInFlow(el, ids, TRACE_STICKY_ROW_H)
     setPinnedIds((prev) => (samePinnedIds(prev, ids) ? prev : ids))
   }
 
@@ -432,6 +435,33 @@ export function TraceDag({
         })
         continue
       }
+      const msgMatch = /^message:(\d+):m:(\d+)$/.exec(id)
+      if (msgMatch) {
+        const callIndex = Number(msgMatch[1])
+        const mi = Number(msgMatch[2])
+        const call = dag.calls[callIndex]
+        const msg = call?.messages[mi]
+        if (!msg) continue
+        const nested = dag.spine.some(
+          (e) =>
+            e.kind === "phase" &&
+            e.phase.children?.some(
+              (c) => c.kind === "call" && c.callIndex === callIndex,
+            ),
+        )
+        const msgKey = `${callIndex}:m:${mi}`
+        rows.push({
+          id,
+          kind: "message",
+          depth: nested ? 3 : 2,
+          leading: msg.speaker,
+          title: "",
+          summary: messagePreview(msg),
+          soft: true,
+          open: openState.messages.has(msgKey),
+        })
+        continue
+      }
       const phaseEntry = dag.spine.find(
         (e) => e.kind === "phase" && e.phase.id === id,
       )
@@ -507,6 +537,10 @@ export function TraceDag({
     if (sentMatch) return openState.sent.has(Number(sentMatch[1]))
     const recvMatch = /^received:(\d+)$/.exec(scopeId)
     if (recvMatch) return openState.received.has(Number(recvMatch[1]))
+    const msgMatch = /^message:(\d+):m:(\d+)$/.exec(scopeId)
+    if (msgMatch) {
+      return openState.messages.has(`${msgMatch[1]}:m:${msgMatch[2]}`)
+    }
     if (scopeId.startsWith("phase-")) return openState.phases.has(scopeId)
     if (scopeId.startsWith("work-")) return openState.work.has(scopeId)
     return false
@@ -537,8 +571,12 @@ export function TraceDag({
         else {
           const recvMatch = /^received:(\d+)$/.exec(scopeId)
           if (recvMatch) onToggleReceived(Number(recvMatch[1]))
-          else if (scopeId.startsWith("phase-")) onTogglePhase(scopeId)
-          else if (scopeId.startsWith("work-")) onToggleWork(scopeId)
+          else {
+            const msgMatch = /^message:(\d+):m:(\d+)$/.exec(scopeId)
+            if (msgMatch) onToggleMessage(`${msgMatch[1]}:m:${msgMatch[2]}`)
+            else if (scopeId.startsWith("phase-")) onTogglePhase(scopeId)
+            else if (scopeId.startsWith("work-")) onToggleWork(scopeId)
+          }
         }
       }
     }

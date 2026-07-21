@@ -1,5 +1,6 @@
 /**
- * One LLM call as a bordered card: Call → Sent → Received (+ Next tools).
+ * One LLM call as a bordered card: Call → Sent → Received (reply + proposed tools).
+ * Tool execution and SQL validation live on the Work card that follows.
  */
 
 import { fmtTokens, formatMs } from "../../lib/util"
@@ -7,7 +8,7 @@ import type { TraceCallNode, TraceCallSearchHit } from "./build-trace-dag"
 import type { OpenState } from "./open-state"
 import { callReceivedSummary, callSentSummary } from "./trace-format"
 import { ExpandableText } from "./TraceExpandable"
-import { PromptMessageRow, SqlQualityRow, ToolRow } from "./TraceRows"
+import { PromptMessageRow, ToolRow } from "./TraceRows"
 import { ScopeRow } from "./TraceScope"
 
 export function CallOutline({
@@ -91,6 +92,8 @@ export function CallOutline({
                     return (
                       <PromptMessageRow
                         key={key}
+                        scopeId={`message:${key}`}
+                        depth={nested ? 3 : 2}
                         msg={msg}
                         open={openState.messages.has(key)}
                         onToggle={() => onToggleMessage(key)}
@@ -132,26 +135,12 @@ export function CallOutline({
                     Waiting on human — answer lands on the next call as User answer.
                   </p>
                 )}
-                {call.sqlQuality.length > 0 && (
-                  <div className="trace-sql-block">
-                    <div className="trace-next__label is-sql">
-                      SQL check
-                      <span className="trace-row__detail">
-                        run telemetry · not in the prompt
-                      </span>
-                    </div>
-                    {call.sqlQuality.map((entry, i) => (
-                      <SqlQualityRow key={`${entry.toolCallId}-${i}`} entry={entry} />
-                    ))}
-                  </div>
-                )}
                 {call.toolBranches.length > 0 && (
                   <div className="trace-next">
                     <div className="trace-next__label is-next">
-                      Next
-                      <span className="trace-row__detail">
-                        {call.toolBranches.length} tool
-                        {call.toolBranches.length === 1 ? "" : "s"}
+                      Tool calls
+                      <span className="trace-next__hint">
+                        proposed · run in Work below
                       </span>
                     </div>
                     {call.toolBranches.map((tc) => (

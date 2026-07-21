@@ -11,6 +11,7 @@ export {
   computePinnedFromEntries,
   computePinnedScopeIds,
   samePinnedIds,
+  syncPinnedInFlow,
   type PinEntry,
 } from "../../lib/events/pin"
 
@@ -48,7 +49,8 @@ export function listTraceScopes(scrollEl: HTMLElement): TraceScopeEntry[] {
       kind !== "sent" &&
       kind !== "received" &&
       kind !== "phase" &&
-      kind !== "work"
+      kind !== "work" &&
+      kind !== "message"
     ) {
       continue
     }

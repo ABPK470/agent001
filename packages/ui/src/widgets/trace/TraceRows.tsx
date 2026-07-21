@@ -1,6 +1,6 @@
 /**
- * Leaf rows inside Sent / Received — not sticky-scroll scopes.
- * Collapsed row: speaker · detail · preview (one flowing line, no far-right gap).
+ * Leaf rows inside Sent / Received — also pin-eligible (System / User / …)
+ * so sticky scroll stacks them under Sent instead of covering them.
  */
 
 import { ChevronDown, ChevronRight, ListChevronsDownUp, ListChevronsUpDown } from "lucide-react"
@@ -18,10 +18,15 @@ import { ExpandableText } from "./TraceExpandable"
 
 export function PromptMessageRow({
   msg,
+  scopeId,
+  depth,
   open,
   onToggle,
 }: {
   msg: TracePromptMessage
+  /** `message:{callIndex}:m:{mi}` — pin overlay identity. */
+  scopeId: string
+  depth: number
   open: boolean
   onToggle: () => void
 }) {
@@ -31,10 +36,19 @@ export function PromptMessageRow({
   const hasBody =
     Boolean(msg.content) || msg.toolCalls.length > 0 || Boolean(msg.toolCallId)
   const buttonRef = useRef<HTMLButtonElement>(null)
+  const scopeAttrs = {
+    "data-trace-scope": scopeId,
+    "data-trace-kind": "message",
+    "data-trace-depth": String(depth),
+  } as const
 
   if (!hasBody && !preview) {
     return (
-      <div className={`trace-msg${isSystem ? " is-system" : ""}`}>
+      <div
+        {...scopeAttrs}
+        className={`trace-msg${isSystem ? " is-system" : ""}`}
+        role="group"
+      >
         <span className="trace-scope__chevslot" aria-hidden />
         <span className={isUserAnswer ? "trace-row__speaker is-em" : "trace-row__speaker"}>
           {msg.speaker}
@@ -53,6 +67,7 @@ export function PromptMessageRow({
       <button
         ref={buttonRef}
         type="button"
+        {...scopeAttrs}
         className="trace-msg__btn"
         onClick={onClick}
         aria-expanded={open}
@@ -146,6 +161,7 @@ export function ToolRow({
         {tool.status === "error" && <span className="trace-msg__detail is-error">failed</span>}
         {tool.status === "done" && <span className="trace-msg__detail">done</span>}
         {tool.status === "running" && <span className="trace-msg__detail">running</span>}
+        {tool.status === "proposed" && <span className="trace-msg__detail">proposed</span>}
         {!open && resultPeek && (
           <span className="trace-msg__preview">
             {resultPeek.length >= 72 ? `${resultPeek.slice(0, 71)}…` : resultPeek}
@@ -185,10 +201,18 @@ export function SqlQualityRow({ entry }: { entry: TraceSqlQuality }) {
       : entry.phase === "failed"
         ? "is-failed"
         : "is-ok"
+  const phaseLabel =
+    entry.phase === "executed"
+      ? "validated"
+      : entry.phase === "blocked"
+        ? "blocked"
+        : entry.phase === "failed"
+          ? "failed"
+          : entry.phase
   return (
     <div className={`trace-sql-check ${phaseClass}`}>
       <div className="trace-sql-check__head">
-        <span className="trace-sql-check__badge">{entry.phase}</span>
+        <span className="trace-sql-check__badge">{phaseLabel}</span>
         <span className="font-mono">{entry.toolName}</span>
         {entry.validationCode && (
           <span className="trace-sql-check__code">{entry.validationCode}</span>

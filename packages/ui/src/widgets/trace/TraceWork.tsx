@@ -1,11 +1,12 @@
 /**
- * Between-call Work card — tool runs, nudges, sync, human wait.
- * Sits on the spine after a Call so the loop is visible end-to-end.
+ * Between-call Work card — tool runs, SQL validation, nudges, sync, human wait.
+ * Sits on the spine after a Call so the loop is visible end-to-end:
+ *   Call (Sent → Received / proposed tools) → Work (execute + validate).
  */
 
 import type { OpenState } from "./open-state"
 import type { TraceWorkNode } from "./build-trace-dag"
-import { ToolRow } from "./TraceRows"
+import { SqlQualityRow, ToolRow } from "./TraceRows"
 import { ScopeRow } from "./TraceScope"
 import { ExpandableText } from "./TraceExpandable"
 
@@ -25,7 +26,8 @@ export function WorkOutline({
   /** True when this work sits under a step / subagent phase. */
   nested?: boolean
 }) {
-  const expandable = work.tools.length > 0 || work.notes.length > 0
+  const expandable =
+    work.tools.length > 0 || work.notes.length > 0 || work.sqlQuality.length > 0
 
   return (
     <article className={`trace-card${open && expandable ? " is-open" : ""}${nested ? " is-nested" : ""}`}>
@@ -52,6 +54,17 @@ export function WorkOutline({
                 onToggle={() => onToggleTool(tool.id)}
               />
             ))}
+            {work.sqlQuality.length > 0 && (
+              <div className="trace-sql-block">
+                <div className="trace-next__label is-sql">
+                  SQL check
+                  <span className="trace-next__hint">validation · not in the prompt</span>
+                </div>
+                {work.sqlQuality.map((entry, i) => (
+                  <SqlQualityRow key={`${entry.toolCallId}-${i}`} entry={entry} />
+                ))}
+              </div>
+            )}
             {work.notes.map((note) => (
               <div
                 key={note.id}
