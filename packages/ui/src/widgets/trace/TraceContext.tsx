@@ -6,7 +6,6 @@ import { ChevronDown, ChevronRight } from "lucide-react"
 import type { ReactNode } from "react"
 import type { TraceDag } from "./build-trace-dag"
 import { formatCharCount } from "./trace-format"
-import { CopyControl } from "./TraceCopy"
 import { ExpandableText } from "./TraceExpandable"
 import { ToolDef } from "./TraceRows"
 import { ScopeRow } from "./TraceScope"
@@ -109,13 +108,11 @@ export function PreambleOutline({
               detail={`${formatCharCount(preamble.systemPrompt.length)} chars`}
               tone="prompt"
             >
-              <div className="flex justify-end mb-1">
-                <CopyControl value={preamble.systemPrompt} ariaLabel="Copy prompt" />
-              </div>
               <ExpandableText
                 text={preamble.systemPrompt}
                 className="trace-body-muted"
                 previewChars={360}
+                copyLabel="Copy prompt"
               />
             </ContextFold>
           )}

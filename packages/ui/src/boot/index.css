@@ -2130,21 +2130,32 @@ textarea.input {
 }
 
 /*
- * Expandable text — sticky More/Less rail on the right.
+ * Expandable text — sticky Copy + More/Less bar (same control dialect).
  * top clears the pin stack via --trace-pin-stack-h on .trace-scroll.
  */
 .trace-expand {
-  display: block;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
 }
 
-.trace-expand.has-rail {
+.trace-expand__actions {
+  position: sticky;
+  top: calc(var(--trace-pin-stack-h, 0px) + 0.35rem);
+  z-index: 4;
   display: flex;
-  align-items: flex-start;
-  gap: 0.45rem;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.15rem;
+  align-self: flex-end;
+  width: fit-content;
+  max-width: 100%;
+  padding: 0.1rem 0;
+  background: var(--bg);
 }
 
 .trace-expand__main {
-  flex: 1;
   min-width: 0;
 }
 
@@ -2159,41 +2170,6 @@ textarea.input {
   margin-top: -1.75rem;
   pointer-events: none;
   background: linear-gradient(to bottom, transparent, var(--bg));
-}
-
-.trace-expand__rail {
-  flex-shrink: 0;
-  width: 2.25rem; /* matches IconButton w-9 */
-  align-self: stretch;
-  position: relative;
-}
-
-.trace-expand__sticky {
-  position: sticky;
-  top: calc(var(--trace-pin-stack-h, 0px) + 0.45rem);
-  z-index: 4;
-  display: flex;
-  justify-content: center;
-}
-
-/* Schema toggle etc. — full-width secondary control */
-.trace-more {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  margin: 0.25rem 0 0;
-  padding: 0.3rem 0.65rem;
-  border: 1px solid var(--border, var(--color-border));
-  border-radius: 0.35rem;
-  background: color-mix(in srgb, var(--text, var(--color-text)) 4%, var(--bg));
-  color: var(--text, var(--color-text));
-  font-size: 0.8125rem;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.trace-more:hover {
-  background: color-mix(in srgb, var(--text, var(--color-text)) 7%, var(--bg));
 }
 
 .trace-empty {
@@ -2344,9 +2320,9 @@ textarea.input {
 
 .trace-ctx-item__head {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   flex-wrap: wrap;
-  gap: 0.4rem 0.55rem;
+  gap: 0.35rem 0.55rem;
   font-size: 0.9375rem;
   color: var(--text-secondary, var(--text, var(--color-text)));
 }

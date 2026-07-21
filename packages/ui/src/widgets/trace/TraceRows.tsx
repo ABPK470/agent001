@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronRight } from "lucide-react"
+import { ChevronDown, ChevronRight, ChevronsDown, ChevronsUp } from "lucide-react"
 import { useState } from "react"
 import { JsonViewer } from "../../components/JsonViewer"
 import { formatMs } from "../../lib/util"
@@ -166,31 +166,32 @@ export function ToolDef({
     <div className="trace-ctx-item">
       <div className="trace-ctx-item__head">
         <span className="font-mono">{tool.name}</span>
+        {tool.parameters && (
+          <button
+            type="button"
+            className="trace-copy"
+            onClick={onToggleSchema}
+            aria-expanded={showSchema}
+            aria-label={showSchema ? "Hide schema" : "Show schema"}
+            title={showSchema ? "Hide schema" : "Show schema"}
+          >
+            {showSchema ? <ChevronsUp size={11} /> : <ChevronsDown size={11} />}
+            <span>Schema</span>
+          </button>
+        )}
       </div>
       <ExpandableText
         text={tool.description}
         className="trace-body-muted"
         previewChars={120}
       />
-      {tool.parameters && (
-        <>
-          <button
-            type="button"
-            className="trace-more"
-            onClick={onToggleSchema}
-            aria-expanded={showSchema}
-          >
-            {showSchema ? "Hide schema" : "Show schema"}
-          </button>
-          {showSchema && (
-            <JsonViewer
-              value={tool.parameters}
-              label="schema"
-              defaultExpandDepth={1}
-              maxHeight={180}
-            />
-          )}
-        </>
+      {tool.parameters && showSchema && (
+        <JsonViewer
+          value={tool.parameters}
+          label="schema"
+          defaultExpandDepth={1}
+          maxHeight={180}
+        />
       )}
     </div>
   )
