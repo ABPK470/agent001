@@ -90,7 +90,7 @@ export function TableExportActions({
   const btn = [
     "inline-flex items-center gap-1 rounded-sm py-0.5",
     compact ? "text-[12px] px-0.5" : "text-sm px-1",
-    "text-text-muted hover:text-text",
+    "text-text",
     "disabled:opacity-40 disabled:pointer-events-none cursor-pointer",
   ].join(" ")
 
@@ -100,7 +100,7 @@ export function TableExportActions({
   return (
     <div
       className={[
-        "flex flex-wrap items-center gap-1 min-w-0 bg-transparent",
+        "flex flex-wrap items-center gap-1 min-w-0",
         revealOnHover
           ? [
               "transition-opacity duration-150",
