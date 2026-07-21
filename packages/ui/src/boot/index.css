@@ -1677,9 +1677,10 @@ textarea.input {
 .trace-toolbar {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  padding: 0.35rem 0.4rem 0.65rem;
-  margin-bottom: 0.35rem;
+  /* Three equal bands: metrics/fold → identity → filter */
+  gap: 1rem;
+  padding: 0.6rem 0.5rem 0.9rem;
+  margin-bottom: 0.25rem;
 }
 
 .trace-toolbar__row {
@@ -1706,8 +1707,15 @@ textarea.input {
 
 .trace-toolbar__actions {
   display: flex;
+  align-items: center;
   gap: 0.4rem;
   margin-left: auto;
+}
+
+/* Trace fold toggle sits above identity chips — keep it compact so bands don’t collide */
+.trace-toolbar__actions button {
+  padding-block: 0.4rem;
+  padding-inline: 0.75rem;
 }
 
 .trace-toolbtn {
@@ -1729,7 +1737,8 @@ textarea.input {
 .trace-toolbar__ids {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.4rem;
+  align-items: flex-start;
+  gap: 0.45rem;
 }
 
 .trace-id {
