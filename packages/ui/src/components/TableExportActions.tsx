@@ -1,9 +1,9 @@
 /**
- * Per-table Export / Copy controls for chat markdown tables.
- * Product verb: Export (CSV / JSON). Copy = clipboard CSV only.
+ * Per-table Copy / CSV / JSON controls for chat markdown tables.
+ * Product verb for file delivery: Export (CSV / JSON). Copy = clipboard CSV.
  */
 
-import { Check, Copy, Download } from "lucide-react"
+import { Braces, Check, Copy, Sheet } from "lucide-react"
 import { useEffect, useRef, useState, type JSX } from "react"
 import {
   copyChatTableCsv,
@@ -21,9 +21,11 @@ export interface TableExportActionsProps {
   compact?: boolean
   /**
    * Hide until the parent `group` is hovered / focused.
-   * Stays visible while Copy/Export feedback or an error is showing.
+   * Stays visible while Copy/CSV/JSON feedback or an error is showing.
    */
   revealOnHover?: boolean
+  /** Vertical rail beside the table (outside the border). */
+  orientation?: "horizontal" | "vertical"
 }
 
 /** Which control just succeeded — drives the green check on that button only. */
@@ -36,6 +38,7 @@ export function TableExportActions({
   disabled = false,
   compact = false,
   revealOnHover = false,
+  orientation = "horizontal",
 }: TableExportActionsProps): JSX.Element {
   const [feedback, setFeedback] = useState<FeedbackAction | null>(null)
   const [busyAction, setBusyAction] = useState<FeedbackAction | null>(null)
@@ -86,10 +89,20 @@ export function TableExportActions({
     }
   }
 
-  const btn =
-    compact
-      ? "inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[12px] text-text-muted hover:text-text hover:bg-overlay-hover disabled:opacity-40 disabled:pointer-events-none cursor-pointer"
-      : "inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-sm text-text-muted hover:text-text hover:bg-overlay-2 disabled:opacity-40 disabled:pointer-events-none cursor-pointer"
+  const vertical = orientation === "vertical"
+  const btn = compact
+    ? [
+        "inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[12px]",
+        "text-text-muted hover:text-text hover:bg-overlay-hover",
+        "disabled:opacity-40 disabled:pointer-events-none cursor-pointer",
+        vertical ? "w-full justify-start" : "",
+      ].join(" ")
+    : [
+        "inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-sm",
+        "text-text-muted hover:text-text hover:bg-overlay-2",
+        "disabled:opacity-40 disabled:pointer-events-none cursor-pointer",
+        vertical ? "w-full justify-start" : "",
+      ].join(" ")
 
   const idle = !disabled && !busyAction
   const pinnedVisible = Boolean(feedback || busyAction || error)
@@ -97,7 +110,8 @@ export function TableExportActions({
   return (
     <div
       className={[
-        "flex flex-wrap items-center gap-1 min-w-0",
+        vertical ? "flex flex-col items-stretch gap-0.5" : "flex flex-wrap items-center gap-1",
+        "min-w-0",
         compact
           ? "rounded-md border border-border-subtle bg-panel/95 px-1 py-0.5 shadow-sm backdrop-blur-sm"
           : "",
@@ -130,8 +144,8 @@ export function TableExportActions({
         onClick={() => void onExport("csv")}
         aria-label="Export table as CSV"
       >
-        {feedback === "csv" ? <Check size={11} className="text-success" /> : <Download size={11} />}
-        <span>{feedback === "csv" ? "Exported" : "Export CSV"}</span>
+        {feedback === "csv" ? <Check size={11} className="text-success" /> : <Sheet size={11} />}
+        <span>CSV</span>
       </button>
       <button
         type="button"
@@ -140,10 +154,14 @@ export function TableExportActions({
         onClick={() => void onExport("json")}
         aria-label="Export table as JSON"
       >
-        {feedback === "json" ? <Check size={11} className="text-success" /> : <Download size={11} />}
-        <span>{feedback === "json" ? "Exported" : "Export JSON"}</span>
+        {feedback === "json" ? <Check size={11} className="text-success" /> : <Braces size={11} />}
+        <span>JSON</span>
       </button>
-      {error ? <span className="text-[11px] text-error truncate max-w-[14rem]">{error}</span> : null}
+      {error ? (
+        <span className={`text-[11px] text-error ${vertical ? "max-w-[4.5rem] break-words" : "truncate max-w-[14rem]"}`}>
+          {error}
+        </span>
+      ) : null}
     </div>
   )
 }

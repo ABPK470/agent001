@@ -244,7 +244,7 @@ function StreamingCaret({ compact }: { compact?: boolean }) {
 // (not ring) so home-chat scrollports do not clip the right edge; rings paint
 // outside the box and are clipped by overflow scroll containers.
 export const COMPACT_TABLE_WRAPPER_CLASS =
-  "w-full min-w-0 overflow-x-auto rounded-md border border-border-subtle my-1.5"
+  "w-full min-w-0 overflow-x-auto rounded-md border border-border-subtle"
 
 /** Compact markdown table — shared by SmartAnswer and the live stream shell. */
 export function CompactTable({
@@ -262,19 +262,14 @@ export function CompactTable({
 }) {
   const showExport = Boolean(exportSource) && rows.length > 0
   return (
-    <div className="group relative w-full min-w-0 my-1.5">
-      {showExport && exportSource ? (
-        <div className="absolute top-1 right-1 z-10">
-          <TableExportActions
-            headers={headers}
-            rows={rows}
-            source={exportSource}
-            disabled={exportDisabled || animateRows}
-            compact
-            revealOnHover
-          />
-        </div>
-      ) : null}
+    <div
+      className={[
+        "group relative my-1.5 w-full min-w-0",
+        // Reserve a right gutter so the rail sits outside the table border
+        // (vertically centered) without being clipped by the scrollport.
+        showExport ? "pr-[3.5rem]" : "",
+      ].join(" ")}
+    >
       <div className={COMPACT_TABLE_WRAPPER_CLASS}>
         {/*
           `w-auto min-w-full`: let the table choose its natural column widths
@@ -325,6 +320,19 @@ export function CompactTable({
           </tbody>
         </table>
       </div>
+      {showExport && exportSource ? (
+        <div className="absolute top-1/2 right-0 z-10 -translate-y-1/2">
+          <TableExportActions
+            headers={headers}
+            rows={rows}
+            source={exportSource}
+            disabled={exportDisabled || animateRows}
+            compact
+            revealOnHover
+            orientation="vertical"
+          />
+        </div>
+      ) : null}
     </div>
   )
 }
