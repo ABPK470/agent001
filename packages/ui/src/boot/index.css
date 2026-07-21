@@ -1830,14 +1830,13 @@ textarea.input {
 
 .trace-scroll {
   position: relative;
-  padding: 0 0.15rem 1.25rem;
+  padding: 0 0.25rem 1.25rem;
+  --trace-pin-stack-h: 0px;
 }
 
 /*
  * VS Code–style pin overlay: height 0 in flow (no jump when stack grows),
- * stack paints opaquely over the viewport top. Correct pin membership
- * (every scope scrolled past) prevents a later Call’s Sent from looking
- * like it belongs to the previous Call.
+ * stack paints opaquely over the viewport top.
  */
 .trace-pin {
   position: sticky;
@@ -1862,52 +1861,53 @@ textarea.input {
 .trace-flow {
   display: flex;
   flex-direction: column;
-  gap: 0; /* gap creates a hole under sticky headers — space via margins only */
+  gap: 0.55rem;
   padding-top: 0;
 }
 
 /*
- * display:contents so Call / Context headers share the scrollport as
- * sticky containing block — Call 1+2+3 can stack like VS Code.
+ * One bordered card per Call / Context.
+ * Card owns L/R/top/bottom chrome so open headers never “borrow”
+ * the content background or lose side borders.
  */
-.trace-call {
-  display: contents;
-}
-
-.trace-call-panel {
+.trace-card {
   border: 1px solid var(--border, var(--color-border));
-  border-top: none;
-  border-radius: 0 0 0.5rem 0.5rem;
-  background: color-mix(in srgb, var(--text, var(--color-text)) 1.5%, var(--bg));
-  margin: 0 0 0.55rem;
+  border-radius: 0.5rem;
+  background: var(--bg);
+  box-sizing: border-box;
 }
 
+.trace-card__body {
+  border-top: 1px solid var(--border, var(--color-border));
+  background: var(--bg);
+}
+
+/* Scope rows — header strip inside the card (or pin clone) */
 .trace-scope {
   display: flex;
   align-items: center;
-  gap: 0.45rem;
+  gap: 0.35rem;
   width: 100%;
   min-height: 34px;
   height: 34px;
   margin: 0;
-  padding: 0 0.55rem;
+  padding: 0 0.55rem 0 0.35rem;
   text-align: left;
-  background: color-mix(in srgb, var(--text, var(--color-text)) 3.5%, var(--bg));
-  border: 1px solid var(--border, var(--color-border));
-  border-radius: 0.5rem;
+  background: color-mix(in srgb, var(--text, var(--color-text)) 4%, var(--bg));
+  border: none;
+  border-radius: 0;
   color: var(--text, var(--color-text));
   font-size: 0.9375rem;
   box-sizing: border-box;
+  cursor: pointer;
 }
 
-/* Closed call/context — spacing to the next block */
-.trace-scope:not(.is-soft):not(.is-open) {
-  margin-bottom: 0.55rem;
+.trace-card > .trace-scope {
+  border-radius: 0.5rem;
 }
 
-.trace-scope.is-open {
+.trace-card.is-open > .trace-scope {
   border-radius: 0.5rem 0.5rem 0 0;
-  margin-bottom: 0;
 }
 
 .trace-scope.is-pinned {
@@ -1916,12 +1916,12 @@ textarea.input {
   border: none;
   border-bottom: 1px solid var(--border-subtle, var(--color-border-subtle));
   background: var(--bg);
-  opacity: 1;
   height: 34px;
   min-height: 34px;
-  padding: 0 0.55rem 0 0.2rem;
+  padding: 0 0.55rem 0 0.35rem;
 }
 
+.trace-scope__chevslot,
 .trace-scope__chevbtn {
   display: inline-flex;
   align-items: center;
@@ -1932,8 +1932,11 @@ textarea.input {
   padding: 0;
   border: none;
   background: transparent;
-  cursor: pointer;
   color: var(--text-muted, var(--color-text-muted));
+}
+
+.trace-scope__chevbtn {
+  cursor: pointer;
 }
 
 .trace-scope__chevbtn:hover {
@@ -1943,7 +1946,7 @@ textarea.input {
 .trace-scope__jump {
   display: flex;
   align-items: center;
-  gap: 0.45rem;
+  gap: 0.35rem;
   min-width: 0;
   flex: 1;
   height: 100%;
@@ -1957,24 +1960,24 @@ textarea.input {
 }
 
 .trace-scope:hover {
-  background: color-mix(in srgb, var(--text, var(--color-text)) 5.5%, var(--bg));
+  background: color-mix(in srgb, var(--text, var(--color-text)) 6.5%, var(--bg));
 }
 
+/* Soft = Sent / Received / Context — same grid, quieter strip */
 .trace-scope.is-soft {
   font-size: 0.875rem;
-  padding-left: 1rem;
-  border-radius: 0;
-  border-left: none;
-  border-right: none;
-  border-top: 1px solid var(--border-subtle, var(--color-border-subtle));
-  border-bottom: 1px solid var(--border-subtle, var(--color-border-subtle));
-  background: var(--bg);
+  background: color-mix(in srgb, var(--text, var(--color-text)) 2%, var(--bg));
   color: var(--text-secondary, var(--text-muted, var(--color-text-muted)));
+  border-top: 1px solid var(--border-subtle, var(--color-border-subtle));
+}
+
+.trace-card > .trace-scope.is-soft {
+  border-top: none;
 }
 
 .trace-scope.is-soft:hover,
 .trace-scope.is-soft.is-open {
-  background: color-mix(in srgb, var(--text, var(--color-text)) 2.5%, var(--bg));
+  background: color-mix(in srgb, var(--text, var(--color-text)) 4%, var(--bg));
   color: var(--text, var(--color-text));
 }
 
@@ -1992,7 +1995,14 @@ textarea.input {
   min-width: 3.6rem;
 }
 
-/* Color cues — orientation without heavy chrome */
+.trace-scope[data-trace-kind="call"]:not(.is-pinned) {
+  background: color-mix(in srgb, var(--accent, var(--color-accent)) 7%, var(--bg));
+}
+
+.trace-scope[data-trace-kind="call"]:not(.is-pinned):hover {
+  background: color-mix(in srgb, var(--accent, var(--color-accent)) 11%, var(--bg));
+}
+
 .trace-scope[data-trace-kind="call"] .trace-scope__lead {
   color: var(--accent, var(--color-accent));
 }
@@ -2014,7 +2024,7 @@ textarea.input {
   font-weight: 650;
   letter-spacing: 0.03em;
   text-transform: uppercase;
-  font-size: 0.8125rem; /* label cue — not body size */
+  font-size: 0.8125rem;
 }
 
 .trace-scope__title {
@@ -2047,7 +2057,7 @@ textarea.input {
 }
 
 .trace-scope-body {
-  padding: 0.35rem 0.55rem 0.55rem 1.5rem;
+  padding: 0.35rem 0.55rem 0.55rem 2.2rem;
   display: flex;
   flex-direction: column;
   gap: 0.15rem;
@@ -2057,11 +2067,11 @@ textarea.input {
 
 .trace-row__btn {
   display: flex;
-  align-items: baseline;
-  gap: 0.4rem;
+  align-items: center;
+  gap: 0.35rem;
   width: 100%;
   text-align: left;
-  padding: 0.3rem 0.35rem;
+  padding: 0.3rem 0.35rem 0.3rem 0;
   border-radius: 0.3rem;
   font-size: 0.9375rem;
   color: var(--text-secondary, var(--text-muted, var(--color-text-muted)));
@@ -2098,7 +2108,7 @@ textarea.input {
 }
 
 .trace-row__body {
-  padding: 0.25rem 0 0.45rem 1.25rem;
+  padding: 0.25rem 0 0.45rem 1.85rem;
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
@@ -2119,49 +2129,99 @@ textarea.input {
   color: color-mix(in srgb, var(--text, var(--color-text)) 72%, var(--text-muted, var(--color-text-muted)));
 }
 
-.trace-expand.is-clipped {
+/*
+ * Expandable text — sticky More/Less rail on the right.
+ * top clears the pin stack via --trace-pin-stack-h on .trace-scroll.
+ */
+.trace-expand {
+  display: block;
+}
+
+.trace-expand.has-rail {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.45rem;
+}
+
+.trace-expand__main {
+  flex: 1;
+  min-width: 0;
+}
+
+.trace-expand.is-clipped .trace-expand__main {
   position: relative;
 }
 
-.trace-expand.is-clipped::after {
+.trace-expand.is-clipped .trace-expand__main::after {
   content: "";
   display: block;
   height: 1.75rem;
   margin-top: -1.75rem;
   pointer-events: none;
-  background: linear-gradient(
-    to bottom,
-    transparent,
-    var(--bg)
-  );
+  background: linear-gradient(to bottom, transparent, var(--bg));
 }
 
-.trace-more-bar {
-  display: flex;
-  justify-content: stretch;
-  margin-top: 0.45rem;
+.trace-expand__rail {
+  flex-shrink: 0;
+  width: 3.5rem;
+  align-self: stretch;
   position: relative;
-  z-index: 1;
 }
 
-.trace-more {
+.trace-expand__btn {
+  position: sticky;
+  top: calc(var(--trace-pin-stack-h, 0px) + 0.45rem);
+  z-index: 4;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  width: 100%;
+  gap: 0.1rem;
+  width: 3.5rem;
+  min-height: 2.25rem;
   margin: 0;
-  padding: 0.45rem 0.75rem;
+  padding: 0.4rem 0.3rem;
   border: 1px solid var(--border, var(--color-border));
-  border-radius: 0.375rem;
+  border-radius: 999px;
   background: color-mix(in srgb, var(--text, var(--color-text)) 5%, var(--bg));
   color: var(--text, var(--color-text));
-  font-size: 0.9375rem;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1.15;
+  cursor: pointer;
+  box-shadow: 0 1px 4px color-mix(in srgb, var(--text, var(--color-text)) 8%, transparent);
+}
+
+.trace-expand__btn:hover {
+  background: color-mix(in srgb, var(--text, var(--color-text)) 9%, var(--bg));
+}
+
+.trace-expand__btn-meta {
+  font-size: 0.5625rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted, var(--color-text-muted));
+}
+
+/* Schema toggle etc. — full-width secondary control */
+.trace-more {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0.25rem 0 0;
+  padding: 0.3rem 0.65rem;
+  border: 1px solid var(--border, var(--color-border));
+  border-radius: 0.35rem;
+  background: color-mix(in srgb, var(--text, var(--color-text)) 4%, var(--bg));
+  color: var(--text, var(--color-text));
+  font-size: 0.8125rem;
   font-weight: 600;
   cursor: pointer;
 }
 
 .trace-more:hover {
-  background: color-mix(in srgb, var(--text, var(--color-text)) 8%, var(--bg));
+  background: color-mix(in srgb, var(--text, var(--color-text)) 7%, var(--bg));
 }
 
 .trace-empty {
@@ -2182,7 +2242,7 @@ textarea.input {
 }
 
 .trace-next {
-  padding: 0.35rem 0.55rem 0.65rem 1.5rem;
+  padding: 0.35rem 0.55rem 0.65rem 2.2rem;
   display: flex;
   flex-direction: column;
   gap: 0.15rem;
@@ -2216,10 +2276,10 @@ textarea.input {
 .trace-ctx-fold__btn {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: 0.35rem;
   width: 100%;
   text-align: left;
-  padding: 0.45rem 0.65rem;
+  padding: 0.45rem 0.55rem 0.45rem 0.35rem;
   font-size: 0.875rem;
   color: var(--text, var(--color-text));
   background: color-mix(in srgb, var(--text, var(--color-text)) 2%, var(--bg));
@@ -2248,12 +2308,11 @@ textarea.input {
 }
 
 .trace-sql-block {
-  padding: 0.35rem 0.55rem 0.55rem 1.5rem;
+  padding: 0.35rem 0 0.55rem;
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
   background: var(--bg);
-  border-bottom: 1px solid var(--border-subtle, var(--color-border-subtle));
 }
 
 .trace-sql-check {
