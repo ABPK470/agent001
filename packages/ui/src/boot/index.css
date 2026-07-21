@@ -1848,27 +1848,25 @@ textarea.input {
   display: flex;
   flex-direction: column;
   gap: 0.55rem;
-  padding-top: 0;
+  /* 1px air so the first sticky pin engages before the scrollport edge eats the top seam */
+  padding-top: 1px;
 }
 
 /*
  * One bordered card per Call / Context.
  *
- * Rounded corners = card border-radius + overflow: clip.
  * Open sticky header stays square forever (border-radius: 0).
+ * NEVER put border-radius or L/R strokes on the open sticky header —
+ * radius leaves transparent corner cutouts (L/R stubs when stuck).
  *
- * NEVER put border-radius or L/R strokes on the open sticky header.
- * Radius leaves transparent corner cutouts; any side stroke behind them
- * (card or body) shows through as vertical stubs when stuck. That is the
- * bug we fixed — do not "restore rounding" on .trace-card > .trace-scope.
- *
- * overflow: clip (not hidden) clips to the radius without creating a
- * scroll container, so sticky still tracks .trace-scroll.
+ * overflow: clip must NOT wrap the sticky header. Clip on the card
+ * chops the pinned top against the card radius / scrollport seam.
+ * Rounding for open cards lives on the body only (bottom corners).
  */
 .trace-card {
   border: 1px solid var(--border, var(--color-border));
   border-radius: 0.5rem;
-  overflow: clip;
+  overflow: visible;
   background: var(--bg);
   box-sizing: border-box;
 }
@@ -1881,6 +1879,11 @@ textarea.input {
 
 .trace-card__body {
   background: var(--bg);
+}
+
+.trace-card.is-open > .trace-card__body {
+  border-radius: 0 0 calc(0.5rem - 1px) calc(0.5rem - 1px);
+  overflow: clip;
 }
 
 /* Sibling stick containment — sticky ends when this block scrolls away */
@@ -1909,14 +1912,19 @@ textarea.input {
 }
 
 /*
- * Call / Context — square sticky row inside a clipped rounded card.
- * Card owns the outer frame (including top curve). Header only draws the
- * bottom seam. No L/R, no radius on this row — rounding is the card clip.
+ * Call / Context / Phase / Work — square sticky row.
+ * top: -1px pins one device pixel sooner so the top seam is not shaved by
+ * the scrollport edge. Height +1px keeps the visible band at --trace-sticky-row-h
+ * so Sent/Received still stack flush under Call (no mid-glyph cut).
+ * No L/R, no radius — card border owns the frame; body owns bottom rounding.
  */
 .trace-card > .trace-scope {
   position: sticky;
-  top: 0;
+  top: -1px;
   z-index: 6;
+  height: calc(var(--trace-sticky-row-h) + 1px);
+  min-height: calc(var(--trace-sticky-row-h) + 1px);
+  padding-top: 1px;
   border: none;
   border-bottom: 1px solid var(--border, var(--color-border));
   border-radius: 0;
@@ -1925,12 +1933,17 @@ textarea.input {
 }
 
 .trace-card:not(.is-open) > .trace-scope {
+  top: 0;
+  height: var(--trace-sticky-row-h);
+  min-height: var(--trace-sticky-row-h);
+  padding-top: 0;
   border: 1px solid var(--border, var(--color-border));
   border-radius: 0.5rem;
 }
 
 .trace-stick-block > .trace-scope {
   position: sticky;
+  /* Flush under Call’s visible band (the +1px lives above the scrollport). */
   top: var(--trace-sticky-row-h);
   z-index: 5;
 }
