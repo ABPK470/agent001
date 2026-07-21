@@ -1831,8 +1831,46 @@ textarea.input {
 .trace-scroll {
   position: relative;
   padding: 0 0.25rem 1.25rem;
-  /* Max sticky stack = Call/Context + one nested scope (34+34) */
-  --trace-pin-stack-h: 68px;
+  --trace-pin-stack-h: 0px;
+}
+
+/*
+ * VS Code sticky scroll: height-0 pin overlay; stack paints the ancestor
+ * chain with the *same* .trace-scope chrome as in-flow (no restyle).
+ */
+.trace-pin {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  height: 0;
+  margin: 0;
+  padding: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.trace-pin__stack {
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--bg) 70%, transparent);
+  border-bottom: 1px solid var(--border, var(--color-border));
+}
+
+/* Pin rows = same .trace-scope rules; only flatten card radius in the stack */
+.trace-pin__stack > .trace-scope {
+  border-radius: 0;
+  width: 100%;
+  cursor: default;
+}
+
+.trace-pin__stack > .trace-scope.is-soft {
+  border-top-color: var(--border-subtle, var(--color-border-subtle));
+}
+
+.trace-pin__stack > .trace-scope:first-child.is-soft {
+  border-top: none;
 }
 
 .trace-flow {
@@ -1859,10 +1897,8 @@ textarea.input {
   background: var(--bg);
 }
 
-/* Scope rows — same chrome always; native sticky (no clone / restyle) */
+/* Scope rows — in-flow only (never position:sticky; pin overlay handles that) */
 .trace-scope {
-  position: sticky;
-  z-index: 20;
   display: flex;
   align-items: center;
   gap: 0.35rem;
@@ -1881,10 +1917,6 @@ textarea.input {
   cursor: pointer;
 }
 
-.trace-scope[data-trace-depth="1"] {
-  z-index: 19;
-}
-
 .trace-card > .trace-scope {
   border-radius: 0.5rem;
 }
@@ -1893,7 +1925,8 @@ textarea.input {
   border-radius: 0.5rem 0.5rem 0 0;
 }
 
-.trace-scope__chevslot {
+.trace-scope__chevslot,
+.trace-scope__chevbtn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1904,6 +1937,31 @@ textarea.input {
   border: none;
   background: transparent;
   color: var(--text-muted, var(--color-text-muted));
+}
+
+.trace-scope__chevbtn {
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.trace-scope__chevbtn:hover {
+  color: var(--text, var(--color-text));
+}
+
+.trace-scope__jump {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+  flex: 1;
+  height: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
 }
 
 .trace-scope:hover {
