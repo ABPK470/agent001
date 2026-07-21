@@ -408,6 +408,8 @@ interface ToolRow {
   id: string
   tool: string
   summary: string
+  /** Wire id from the LLM tool_call — used to attach SQL-quality events. */
+  toolCallId?: string | null
   // Raw JSON args from the tool-call event — kept verbatim so the
   // expanded view can show the FULL command/query/path the agent
   // dispatched (not just a truncated summary). Mirrors what Copilot
@@ -452,6 +454,31 @@ interface ResponseIterationPart {
   tools: ResponseToolPart[]
   // Whether any contained tool is still running. Used to keep the block
   // expanded by default while the iteration is in flight.
+  hasRunning: boolean
+}
+
+/** Planner outline — expandable list of named steps (not engine jargon). */
+interface ResponsePlanPart {
+  kind: "plan"
+  id: string
+  status: "running" | "done" | "error"
+  stepCount: number
+  steps: Array<{ name: string; type?: string }>
+}
+
+/**
+ * One planned step as a parent for the tools that ran inside it.
+ * Same collapsible dialect as iteration-block — hierarchy, not a flat peer list.
+ */
+interface ResponseStepBlockPart {
+  kind: "step-block"
+  id: string
+  title: string
+  status: "running" | "done" | "error"
+  detail?: string
+  /** True when this step is a repair re-run (tools under it are the fix). */
+  repair?: boolean
+  tools: ResponseToolPart[]
   hasRunning: boolean
 }
 
@@ -509,6 +536,8 @@ type ResponsePart =
   | ResponseProgressPart
   | ResponseToolPart
   | ResponseIterationPart
+  | ResponsePlanPart
+  | ResponseStepBlockPart
   | ResponseMarkdownPart
   | ResponseNarrativePart
   | ResponseInputPart
@@ -543,9 +572,18 @@ function StatusDot({ status, animated = true }: { status: "running" | "done" | "
     )
   }
   return (
-    <span className="flex shrink-0 items-center justify-center w-4 h-4 rounded-full border border-border-subtle">
-      <span className="inline-flex h-2 w-2 rounded-full bg-text-faint" />
+    <span className="flex shrink-0 items-center justify-center w-4 h-4 rounded-full border border-error/50">
+      <span className="inline-flex h-1.5 w-1.5 rounded-full bg-error" />
     </span>
+  )
+}
+
+/** Progress rows that belong in the live shimmer only — not the transcript. */
+function isOffThreadProgress(part: ResponseProgressPart): boolean {
+  return (
+    part.id === "direct" ||
+    part.id === "thinking" ||
+    part.id.startsWith("pipeline-")
   )
 }
 
@@ -951,17 +989,19 @@ function deriveActiveMilestoneLabel(parts: ResponsePart[]): string {
     }
   }
 
-  // 3. In-flight plan-step / repair / pipeline — real work labels, not
-  //    routing names. Prefer these over bare "Plan" / "Direct".
+  // 3. In-flight plan-step / repair — real work labels, not routing names.
   for (let i = parts.length - 1; i >= 0; i--) {
     const part = parts[i]
+    if (part.kind === "step-block" && part.hasRunning) {
+      return part.detail ? `${part.title} — ${part.detail}` : part.title
+    }
     if (part.kind !== "progress" || part.status !== "running") continue
     const id = part.id
     if (
       id.startsWith("step-") ||
-      id.startsWith("pipeline-") ||
       id.startsWith("repair-") ||
-      id === "verification" ||
+      id.startsWith("verification") ||
+      id.startsWith("sql-quality-") ||
       id === "generation"
     ) {
       return part.detail ? `${part.label} — ${part.detail}` : part.label
@@ -1006,7 +1046,7 @@ function patchToolStatus(
     if (part.kind === "tool" && part.id === invocationId) {
       return { ...part, row: { ...part.row, status, details: text || part.row.details } }
     }
-    if (part.kind === "iteration-block") {
+    if (part.kind === "iteration-block" || part.kind === "step-block") {
       let changed = false
       const tools = part.tools.map((p) => {
         if (p.id !== invocationId) return p
@@ -1014,7 +1054,51 @@ function patchToolStatus(
         return { ...p, row: { ...p.row, status, details: text || p.row.details } }
       })
       if (!changed) return part
-      return { ...part, tools, hasRunning: tools.some((p) => p.row.status === "running") }
+      return {
+        ...part,
+        tools,
+        hasRunning: tools.some((p) => p.row.status === "running"),
+      }
+    }
+    return part
+  })
+}
+
+/** Attach SQL-gate outcome onto the matching tool row (by toolCallId). */
+function annotateToolSqlQuality(
+  parts: ResponsePart[],
+  toolCallId: string,
+  status: "done" | "error",
+  message: string,
+): ResponsePart[] {
+  function patchRow(row: ToolRow): ToolRow | null {
+    if (row.toolCallId !== toolCallId && row.id !== toolCallId) return null
+    return {
+      ...row,
+      status: status === "error" ? "error" : row.status === "running" ? "done" : row.status,
+      details: message || row.details,
+    }
+  }
+
+  return parts.map((part) => {
+    if (part.kind === "tool") {
+      const next = patchRow(part.row)
+      return next ? { ...part, row: next } : part
+    }
+    if (part.kind === "iteration-block" || part.kind === "step-block") {
+      let changed = false
+      const tools = part.tools.map((p) => {
+        const next = patchRow(p.row)
+        if (!next) return p
+        changed = true
+        return { ...p, row: next }
+      })
+      if (!changed) return part
+      return {
+        ...part,
+        tools,
+        hasRunning: tools.some((t) => t.row.status === "running"),
+      }
     }
     return part
   })
@@ -1081,28 +1165,6 @@ function buildArgsSummary(tool: string, argsFormatted: string): string {
 
 function humanizeStepName(stepName: string): string {
   return stepName.replace(/_/g, " ")
-}
-
-function pushNarrativePart(
-  parts: ResponsePart[],
-  id: string,
-  text: string,
-  tone: "neutral" | "error" = "neutral",
-  role: "status" | "prose" = "prose",
-): ResponsePart[] {
-  const trimmedText = text.trim()
-  if (!trimmedText) return parts
-  if (parts.some((part) => part.kind === "narrative" && part.id === id)) return parts
-  return parts.concat({ kind: "narrative", id, text: trimmedText, tone, role })
-}
-
-function pushStatusLine(
-  parts: ResponsePart[],
-  id: string,
-  text: string,
-  tone: "neutral" | "error" = "neutral",
-): ResponsePart[] {
-  return pushNarrativePart(parts, id, text, tone, "status")
 }
 
 function hasHiddenToolDetails(summary: string, details?: string): boolean {
@@ -1189,7 +1251,10 @@ function describeSqlQualityForChat(
       : notes !== "blocked"
         ? notes
         : "validator refused the query"
-    return { text: `I caught a problem in my own SQL before sending it (${reason}).`, tone: "error" }
+    return {
+      text: `Blocked before send (${reason}) — query needs a tighter filter.`,
+      tone: "error",
+    }
   }
   if (entry.phase === "failed") {
     const err = cleanSqlError(entry.error)
@@ -1207,18 +1272,6 @@ function describeSqlQualityForChat(
   return { text: "", tone: "neutral" }
 }
 
-// Stable signature of an SQL-quality event for coalescing identical
-// consecutive retries into a single "× N" narrative line. Identical
-// signature == "this is the same failure we already narrated"; bump the
-// counter instead of stacking a duplicate line.
-function sqlQualitySignature(
-  entry: Extract<TraceEntry, { kind: "planner-sql-quality" }>,
-): string {
-  if (entry.phase === "failed") return `failed::${cleanSqlError(entry.error)}`
-  if (entry.phase === "blocked") return `blocked::${entry.validationCode ?? summarizeSqlQualityEntry(entry)}`
-  return `executed::${summarizeSqlQualityEntry(entry)}`
-}
-
 function buildResponseParts(
   trace: TraceEntry[],
   runStatus: string,
@@ -1230,7 +1283,14 @@ function buildResponseParts(
 ): ResponsePart[] {
   let parts: ResponsePart[] = []
   const runningSteps = new Map<string, string>()
-  let currentPipelineAttempt = 1
+  /** Open planner step — tools nest here instead of floating as peers. */
+  let openStepId: string | null = null
+  /**
+   * Repair is control-plane (plan / retry / escalate) + the step that
+   * re-runs. Chat shows only the re-run step — titled "Repair · …" —
+   * with tools nested under it. Empty "Repair" progress peers hide the work.
+   */
+  let pendingRepair: { attempt: number; steps: Set<string> } | null = null
   // Track tool calls used since the last narrative/iteration boundary.
   // We carry the tool name AND a short target (file basename, command,
   // URL, etc.) so the synthesized narrative reads like
@@ -1247,19 +1307,6 @@ function buildResponseParts(
   let pendingTools: ResponseToolPart[] = []
   let pendingTargets: Array<{ tool: string; target?: string }> = []
   let blockSeq = 0
-  // SQL-quality coalescing state. Consecutive sql-quality events that
-  // produce the same narrative signature (same blocker / same server
-  // error) are collapsed into one narrative line with a "(× N)" suffix
-  // — three retries of the same `Invalid column name 'pkMonth'` now
-  // read as one line, not three identical lines that look like the
-  // agent is stuck in a loop.
-  let lastSqlNarrative: {
-    sig: string
-    narrativeId: string
-    count: number
-    baseText: string
-    tone: "neutral" | "error"
-  } | null = null
 
   const flushIterationBlock = (boundaryIndex: number) => {
     if (pendingTools.length === 0) return
@@ -1327,164 +1374,224 @@ function buildResponseParts(
         parts = settlePrimaryActivities(parts, "plan")
         parts = setActivityPart(parts, "plan", "Plan", "running", "Generating plan...", true)
         break
-      case "planner-plan-generated":
-        parts = setActivityPart(parts, "plan", "Plan", "done", `${entry.stepCount} step${entry.stepCount !== 1 ? "s" : ""}`)
-        parts = pushStatusLine(
-          parts,
-          `status-plan-${index}`,
-          `Mapped out a ${entry.stepCount}-step approach.`,
-        )
-        break
-      case "planner-pipeline-start":
-        currentPipelineAttempt = entry.attempt
-        parts = setActivityPart(parts, `pipeline-${entry.attempt}`, "Pipeline", "running", entry.attempt > 1 ? `attempt ${entry.attempt}` : undefined, true)
-        break
-      case "planner-pipeline-end": {
-        parts = setActivityPart(parts, `pipeline-${currentPipelineAttempt}`, "Pipeline", entry.status === "success" ? "done" : "error", `${entry.completedSteps}/${entry.totalSteps} steps`)
-        if (entry.status !== "success") {
-          parts = pushStatusLine(
-            parts,
-            `status-pipeline-${index}`,
-            `Stopped after ${entry.completedSteps} of ${entry.totalSteps} planned steps.`,
-            "error",
-          )
-        }
+      case "planner-plan-generated": {
+        // Replace the generating chip with an expandable plan outline.
+        parts = parts.filter((p) => !(p.kind === "progress" && p.id === "plan"))
+        parts = parts.concat({
+          kind: "plan",
+          id: "plan",
+          status: "done",
+          stepCount: entry.stepCount,
+          steps: entry.steps.map((s) => ({ name: s.name, type: s.type })),
+        })
         break
       }
+      case "planner-pipeline-start":
+      case "planner-pipeline-end":
+        // Pipeline is orchestrator jargon (retry loop) — steps are the parent units.
+        break
       case "planner-step-start": {
-        runningSteps.set(entry.stepName, "activity")
-        parts = setActivityPart(parts, `step-${entry.stepName}`, `Generating ${humanizeStepName(entry.stepName)}`, "running", undefined, true)
+        flushIterationBlock(index)
+        const activityId = `step-${entry.stepName}-${index}`
+        runningSteps.set(entry.stepName, activityId)
+        openStepId = activityId
+        const isRepair = !!pendingRepair?.steps.has(entry.stepName)
+        const stepTitle = humanizeStepName(entry.stepName)
+        parts = parts.concat({
+          kind: "step-block",
+          id: activityId,
+          title: isRepair ? `Repair · ${stepTitle}` : stepTitle,
+          status: "running",
+          detail: isRepair && pendingRepair ? `attempt ${pendingRepair.attempt}` : undefined,
+          repair: isRepair || undefined,
+          tools: [],
+          hasRunning: true,
+        })
         break
       }
       case "planner-step-end": {
-        if (runningSteps.has(entry.stepName)) {
-          const ok = entry.status === "pass" || entry.status === "success"
-          parts = setActivityPart(
-            parts,
-            `step-${entry.stepName}`,
-            `Generating ${humanizeStepName(entry.stepName)}`,
-            ok ? "done" : "error",
-            entry.durationMs ? formatMs(entry.durationMs) : entry.error,
-          )
-          parts = pushStatusLine(
-            parts,
-            `status-step-${entry.stepName}-${index}`,
-            ok
-              ? `Finished ${humanizeStepName(entry.stepName)}.`
-              : `Hit a problem during ${humanizeStepName(entry.stepName)}.`,
-            ok ? "neutral" : "error",
-          )
-          runningSteps.delete(entry.stepName)
+        const activityId = runningSteps.get(entry.stepName) ?? `step-${entry.stepName}-${index}`
+        const ok = entry.status === "pass" || entry.status === "success"
+        const detail = ok
+          ? entry.durationMs
+            ? formatMs(entry.durationMs)
+            : undefined
+          : entry.error || "failed"
+        parts = parts.map((part) => {
+          if (part.kind !== "step-block" || part.id !== activityId) return part
+          return {
+            ...part,
+            status: ok ? ("done" as const) : ("error" as const),
+            detail,
+            hasRunning: part.tools.some((t) => t.row.status === "running"),
+          }
+        })
+        if (ok && pendingRepair?.steps.has(entry.stepName)) {
+          pendingRepair.steps.delete(entry.stepName)
+          if (pendingRepair.steps.size === 0) pendingRepair = null
         }
+        runningSteps.delete(entry.stepName)
+        if (openStepId === activityId) openStepId = null
         break
       }
       case "planner-delegation-start": {
-        runningSteps.set(entry.stepName, "activity")
-        parts = setActivityPart(
-          parts,
-          `step-${entry.stepName}`,
-          `Generating ${humanizeStepName(entry.stepName)}`,
-          "running",
-          entry.tools.length > 0 ? entry.tools.slice(0, 4).join(", ") : undefined,
-          true,
-        )
+        let activityId = runningSteps.get(entry.stepName)
+        if (!activityId) {
+          flushIterationBlock(index)
+          activityId = `step-${entry.stepName}-${index}`
+          runningSteps.set(entry.stepName, activityId)
+          openStepId = activityId
+          const isRepair = !!pendingRepair?.steps.has(entry.stepName)
+          const stepTitle = humanizeStepName(entry.stepName)
+          parts = parts.concat({
+            kind: "step-block",
+            id: activityId,
+            title: isRepair ? `Repair · ${stepTitle}` : stepTitle,
+            status: "running",
+            detail:
+              isRepair && pendingRepair
+                ? `attempt ${pendingRepair.attempt}`
+                : entry.tools.length > 0
+                  ? entry.tools.slice(0, 4).join(", ")
+                  : "working",
+            repair: isRepair || undefined,
+            tools: [],
+            hasRunning: true,
+          })
+        } else {
+          parts = parts.map((part) =>
+            part.kind === "step-block" && part.id === activityId
+              ? {
+                  ...part,
+                  status: "running" as const,
+                  detail:
+                    part.repair && pendingRepair
+                      ? `attempt ${pendingRepair.attempt}`
+                      : entry.tools.length > 0
+                        ? entry.tools.slice(0, 4).join(", ")
+                        : part.detail,
+                  hasRunning: true,
+                }
+              : part,
+          )
+          openStepId = activityId
+        }
         break
       }
       case "planner-delegation-iteration": {
+        const activityId = runningSteps.get(entry.stepName) ?? openStepId
+        if (!activityId) break
         const toolBit =
           entry.toolNames && entry.toolNames.length > 0
             ? entry.toolNames.slice(0, 3).join(", ")
             : undefined
-        const detail = [
-          `iteration ${entry.iteration}/${entry.maxIterations}`,
-          toolBit,
-        ]
+        const detail = [`iteration ${entry.iteration}/${entry.maxIterations}`, toolBit]
           .filter(Boolean)
           .join(" · ")
-        parts = setActivityPart(
-          parts,
-          `step-${entry.stepName}`,
-          `Generating ${humanizeStepName(entry.stepName)}`,
-          "running",
-          detail,
-          true,
+        parts = parts.map((part) =>
+          part.kind === "step-block" && part.id === activityId
+            ? { ...part, detail, status: "running" as const, hasRunning: true }
+            : part,
         )
         break
       }
       case "planner-delegation-end": {
-        // Step end owns the final done/error chip; keep a live hint if step-end is late.
-        if (runningSteps.has(entry.stepName)) {
-          parts = setActivityPart(
-            parts,
-            `step-${entry.stepName}`,
-            `Generating ${humanizeStepName(entry.stepName)}`,
-            entry.status === "done" ? "done" : "error",
-            entry.error ?? undefined,
-          )
+        const activityId = runningSteps.get(entry.stepName)
+        if (!activityId) break
+        parts = parts.map((part) => {
+          if (part.kind !== "step-block" || part.id !== activityId) return part
+          if (part.status === "done" || part.status === "error") return part
+          return {
+            ...part,
+            status: entry.status === "done" ? ("done" as const) : ("error" as const),
+            detail: entry.error ?? part.detail,
+            hasRunning: part.tools.some((t) => t.row.status === "running"),
+          }
+        })
+        break
+      }
+      case "planner-verification": {
+        parts = settlePrimaryActivities(parts, "verification")
+        const verifyDetail =
+          entry.overall === "pass"
+            ? undefined
+            : entry.steps
+                .filter((s) => s.outcome !== "pass")
+                .map((s) =>
+                  s.issues.length > 0
+                    ? `${humanizeStepName(s.stepName)}: ${s.issues[0]}`
+                    : humanizeStepName(s.stepName),
+                )
+                .slice(0, 2)
+                .join(" · ") || entry.overall
+        parts = setActivityPart(
+          parts,
+          `verification-${index}`,
+          entry.overall === "pass" ? "Checked work" : "Check failed",
+          entry.overall === "pass" ? "done" : entry.overall === "fail" ? "error" : "running",
+          verifyDetail,
+          entry.overall !== "pass" && entry.overall !== "fail",
+        )
+        break
+      }
+      case "planner-repair-plan": {
+        // Remember which steps will re-run — the next matching step-start
+        // becomes "Repair · …" with tools nested. No empty Repair peer.
+        const steps = new Set(
+          (entry.tasks.length > 0
+            ? entry.tasks.map((t) => t.stepName)
+            : entry.rerunOrder ?? []
+          ).filter(Boolean),
+        )
+        pendingRepair = { attempt: entry.attempt, steps }
+        break
+      }
+      case "planner-retry": {
+        // Same control-plane as repair-plan: update attempt / targets only.
+        const steps = new Set(
+          (entry.rerunOrder ?? [...(pendingRepair?.steps ?? [])]).filter(Boolean),
+        )
+        if (steps.size > 0) {
+          pendingRepair = { attempt: entry.attempt, steps }
         }
         break
       }
-      case "planner-verification":
-        parts = settlePrimaryActivities(parts, "verification")
-        parts = setActivityPart(parts, "verification", "Verifying", entry.overall === "pass" ? "done" : entry.overall === "fail" ? "error" : "running", undefined, entry.overall !== "pass" && entry.overall !== "fail")
-        if (entry.overall === "pass") {
-          parts = pushStatusLine(parts, `status-verification-${index}`, "Verification passed.")
-        } else if (entry.overall === "fail") {
-          parts = pushStatusLine(parts, `status-verification-${index}`, "Verification found an issue.", "error")
+      case "planner-escalation": {
+        // revise / retry → next step re-run is the repair body (already pending).
+        // escalate (gave up) → surface once as error prose, not a Repair chip.
+        if (entry.action === "escalate") {
+          parts = parts.concat({
+            kind: "narrative",
+            id: `escalation-${index}`,
+            text: entry.reason
+              ? `Could not finish after repair attempt ${entry.attempt}: ${entry.reason.replace(/_/g, " ")}`
+              : `Could not finish after repair attempt ${entry.attempt}`,
+            tone: "error",
+            role: "status",
+          })
         }
         break
-      case "planner-repair-plan":
-        parts = setActivityPart(parts, `repair-${entry.attempt}`, "Repairing", "running", `attempt ${entry.attempt}`, true)
-        parts = pushStatusLine(
-          parts,
-          `status-repair-${index}`,
-          `Starting repair attempt ${entry.attempt}.`,
-          "error",
-        )
-        break
+      }
       case "planner-sql-quality": {
-        const summary = summarizeSqlQualityEntry(entry)
-        const status: "done" | "error" = entry.phase === "blocked" || entry.phase === "failed" || !!entry.validationCode ? "error" : "done"
-        // Compact "SQL review" progress chip — short phase tag plus a
-        // hint of the cause so the chip itself carries signal even
-        // before the narrative line below.
-        const chipDetail =
-          entry.phase === "failed"
-            ? `failed: ${cleanSqlError(entry.error) || "server error"}`
-            : entry.phase === "blocked"
-              ? `blocked: ${entry.validationCode ?? summary}`
-              : summary
-        parts = parts.concat({
-          kind: "progress",
-          id: `sql-quality-${index}`,
-          label: "SQL review",
-          status,
-          detail: chipDetail,
-        })
-        const { text, tone } = describeSqlQualityForChat(entry)
-        if (!text) {
-          // executed cleanly with no notes — no chat narration needed.
-          lastSqlNarrative = null
+        // Real gate on query_mssql (validator / server), NOT an LLM review
+        // of every tool. Clean passes stay silent — the tool result is enough.
+        // Blocked/failed annotate the matching tool so cause stays on that row.
+        const { text: narrativeText } = describeSqlQualityForChat(entry)
+        if (entry.phase === "executed" && !narrativeText) {
           break
         }
-        const sig = sqlQualitySignature(entry)
-        if (lastSqlNarrative && lastSqlNarrative.sig === sig) {
-          // Same blocker / same server error as the immediately previous
-          // sql-quality narrative — bump the retry counter in place
-          // instead of stacking a duplicate line.
-          lastSqlNarrative.count += 1
-          const narrId = lastSqlNarrative.narrativeId
-          const updatedText = `${lastSqlNarrative.baseText} (× ${lastSqlNarrative.count})`
-          parts = parts.map((part) =>
-            part.kind === "narrative" && part.id === narrId
-              ? { ...part, text: updatedText }
-              : part,
-          )
-        } else {
-          const narrativeId = `narrative-sql-quality-${index}`
-          parts = pushNarrativePart(parts, narrativeId, text, tone, "status")
-          lastSqlNarrative = { sig, narrativeId, count: 1, baseText: text, tone }
-        }
+        const status: "done" | "error" =
+          entry.phase === "blocked" || entry.phase === "failed" || !!entry.validationCode
+            ? "error"
+            : "done"
+        const message =
+          narrativeText ||
+          (entry.phase === "failed"
+            ? `SQL failed: ${cleanSqlError(entry.error) || "server error"}`
+            : entry.phase === "blocked"
+              ? `Blocked before send: ${entry.validationCode ?? summarizeSqlQualityEntry(entry)}`
+              : summarizeSqlQualityEntry(entry))
+        parts = annotateToolSqlQuality(parts, entry.toolCallId, status, message)
         break
       }
       case "direct_loop_fallback":
@@ -1525,6 +1632,7 @@ function buildResponseParts(
           row: {
             id: entry.invocationId,
             tool: entry.tool,
+            toolCallId: entry.toolCallId ?? null,
             // Recompute from argsFormatted so historically-persisted
             // traces (which had argsSummary sliced to 60 chars) also
             // render the full single-arg value. Fall back to the
@@ -1536,6 +1644,20 @@ function buildResponseParts(
             details: undefined,
             status: "running",
           },
+        }
+        if (openStepId) {
+          // Nest under the active plan step — not as a flat peer of "Plan".
+          parts = parts.map((part) =>
+            part.kind === "step-block" && part.id === openStepId
+              ? {
+                  ...part,
+                  tools: [...part.tools, toolPart],
+                  hasRunning: true,
+                  status: "running" as const,
+                }
+              : part,
+          )
+          break
         }
         pendingTools.push(toolPart)
         pendingTargets.push({
@@ -1562,10 +1684,51 @@ function buildResponseParts(
       }
       case "tool-error": {
         if (!entry.invocationId) break
-        parts = patchToolStatus(parts, entry.invocationId, "error", entry.text)
+        // Prefer an earlier SQL-gate annotation over the raw blocked string.
+        parts = parts.map((part) => {
+          if (part.kind === "tool" && part.id === entry.invocationId) {
+            return {
+              ...part,
+              row: {
+                ...part.row,
+                status: "error",
+                details: part.row.details || entry.text || part.row.details,
+              },
+            }
+          }
+          if (part.kind === "iteration-block" || part.kind === "step-block") {
+            let changed = false
+            const tools = part.tools.map((p) => {
+              if (p.id !== entry.invocationId) return p
+              changed = true
+              return {
+                ...p,
+                row: {
+                  ...p.row,
+                  status: "error" as const,
+                  details: p.row.details || entry.text || p.row.details,
+                },
+              }
+            })
+            if (!changed) return part
+            return {
+              ...part,
+              tools,
+              hasRunning: tools.some((t) => t.row.status === "running"),
+            }
+          }
+          return part
+        })
         pendingTools = pendingTools.map((p) =>
           p.id === entry.invocationId
-            ? { ...p, row: { ...p.row, status: "error", details: entry.text || p.row.details } }
+            ? {
+                ...p,
+                row: {
+                  ...p.row,
+                  status: "error",
+                  details: p.row.details || entry.text || p.row.details,
+                },
+              }
             : p,
         )
         break
@@ -1645,6 +1808,22 @@ function buildResponseParts(
             : p,
         )
         return { ...part, tools, hasRunning: false }
+      }
+      if (part.kind === "step-block" && (part.hasRunning || part.status === "running")) {
+        const tools = part.tools.map((p) =>
+          p.row.status === "running"
+            ? { ...p, row: { ...p.row, status: terminalStatus } }
+            : p,
+        )
+        return {
+          ...part,
+          tools,
+          hasRunning: false,
+          status: part.status === "running" ? terminalStatus : part.status,
+        }
+      }
+      if (part.kind === "plan" && part.status === "running") {
+        return { ...part, status: terminalStatus }
       }
       return part
     })
@@ -1912,6 +2091,133 @@ function IterationBlock({
   )
 }
 
+/** Expandable plan outline — named steps, not a bare "3 steps" chip. */
+function PlanBlock({ part }: { part: ResponsePlanPart }) {
+  const { preserveToggle } = useChatScroll()
+  const [open, setOpen] = useState(part.steps.length > 0 && part.steps.length <= 8)
+  const buttonRef = useRef<HTMLButtonElement>(null)
+  const Chevron = open ? ChevronDown : ChevronRight
+
+  return (
+    <div className="py-1">
+      <button
+        ref={buttonRef}
+        type="button"
+        onClick={() =>
+          preserveToggle(buttonRef.current, () => setOpen((v) => !v))
+        }
+        className="flex w-full max-w-full items-start gap-3 py-0.5 text-left"
+      >
+        <span className="mt-0.5 flex shrink-0 items-center gap-1">
+          <StatusDot status={part.status} animated={part.status === "running"} />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="inline-flex items-center gap-1.5 text-[15px] leading-6 text-text-muted">
+            <Chevron size={12} strokeWidth={1.5} className="text-text-faint shrink-0" />
+            <span>Plan</span>
+            <span className="text-text-faint">
+              {part.stepCount} step{part.stepCount !== 1 ? "s" : ""}
+            </span>
+          </span>
+        </span>
+      </button>
+      {open && part.steps.length > 0 && (
+        <ol className="mt-1 ml-[1.65rem] pl-3 border-l border-border-subtle space-y-1 list-none">
+          {part.steps.map((step, i) => (
+            <li key={`${step.name}-${i}`} className="flex gap-2 text-[15px] leading-6 text-text-muted">
+              <span className="tabular-nums text-text-faint shrink-0 w-4">{i + 1}.</span>
+              <span className="min-w-0">
+                <span>{humanizeStepName(step.name)}</span>
+                {step.type && step.type !== "subagent_task" && (
+                  <span className="ml-1.5 text-text-faint">{step.type.replace(/_/g, " ")}</span>
+                )}
+              </span>
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
+  )
+}
+
+/**
+ * One planned step as parent — tools nest underneath (same fold dialect
+ * as iteration blocks). This is the hierarchy Plan → Step → tools.
+ */
+function StepBlock({
+  part,
+  syncByInvocation,
+  isLiveRun = false,
+  keepOpen = false,
+}: {
+  part: ResponseStepBlockPart
+  syncByInvocation: Map<string, ResponseSyncProgressPart>
+  isLiveRun?: boolean
+  keepOpen?: boolean
+}) {
+  const { preserveToggle } = useChatScroll()
+  const [open, setOpen] = useState(part.hasRunning || keepOpen)
+  const userToggledRef = useRef(false)
+  const buttonRef = useRef<HTMLButtonElement>(null)
+
+  useEffect(() => {
+    if (userToggledRef.current) return
+    if (part.hasRunning || keepOpen) setOpen(true)
+    else if (!keepOpen && part.status !== "running") setOpen(false)
+  }, [part.hasRunning, part.status, keepOpen])
+
+  const hasTools = part.tools.length > 0
+  const Chevron = open ? ChevronDown : ChevronRight
+  const labelClass =
+    part.status === "error"
+      ? "text-text"
+      : part.status === "running"
+        ? "text-text-muted"
+        : "text-text-faint"
+
+  return (
+    <div className="py-1">
+      <button
+        ref={buttonRef}
+        type="button"
+        disabled={!hasTools}
+        onClick={() => {
+          if (!hasTools) return
+          preserveToggle(buttonRef.current, () => {
+            userToggledRef.current = true
+            setOpen((v) => !v)
+          })
+        }}
+        className={`flex w-full max-w-full items-start gap-3 py-0.5 text-left ${hasTools ? "" : "cursor-default"}`}
+      >
+        <span className="mt-0.5 shrink-0">
+          <StatusDot status={part.status} animated={part.status === "running"} />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className={`inline-flex flex-wrap items-baseline gap-x-1.5 text-[15px] leading-6 ${labelClass}`}>
+            {hasTools && (
+              <Chevron size={12} strokeWidth={1.5} className="text-text-faint shrink-0 translate-y-[2px]" />
+            )}
+            <span>{part.title}</span>
+            {part.detail && (
+              <span className="text-[15px] text-text-faint font-normal">{part.detail}</span>
+            )}
+          </span>
+        </span>
+      </button>
+      {open && hasTools && (
+        <div className="mt-0.5 ml-[1.65rem] pl-3 border-l border-border-subtle">
+          <IterationToolList
+            tools={part.tools}
+            syncByInvocation={syncByInvocation}
+            stickToBottom={part.hasRunning && isLiveRun}
+          />
+        </div>
+      )}
+    </div>
+  )
+}
+
 // Caps the expanded iteration body so a single tool-call burst can't
 // monopolise the chat viewport. Once content overflows the cap, the
 // list becomes scrollable and rows visually dissolve into the top/bottom
@@ -2000,14 +2306,26 @@ function IterationToolList({
 
 function ProgressPill({ part }: { part: ResponseProgressPart }) {
   const hasDetail = Boolean(part.detail)
+  const labelClass =
+    part.status === "error"
+      ? "text-text"
+      : part.status === "running"
+        ? "text-text-muted"
+        : "text-text-faint"
 
   return (
-    <div className={`flex gap-3 py-1.5 min-w-0 ${hasDetail ? "items-start" : "items-center"}`}>
+    <div className={`flex gap-3 py-1 min-w-0 ${hasDetail ? "items-start" : "items-center"}`}>
       <StatusDot status={part.status} animated={part.shimmer === true} />
       <div className="min-w-0 flex-1">
-        <span className="text-[15px] font-normal tracking-[-0.01em] block text-text-muted">{part.label}</span>
+        <span className={`text-[15px] font-normal tracking-[-0.01em] block ${labelClass}`}>
+          {part.label}
+        </span>
         {part.detail && (
-          <div className="pt-0.5 text-[15px] leading-relaxed whitespace-pre-wrap break-words text-text-faint">
+          <div
+            className={`pt-0.5 text-[15px] leading-6 whitespace-pre-wrap break-words ${
+              part.status === "error" ? "text-text-muted" : "text-text-faint"
+            }`}
+          >
             {part.detail}
           </div>
         )}
@@ -2021,18 +2339,31 @@ function NarrativeUpdate({ part }: { part: ResponseNarrativePart }) {
   // Prose = assistant voice — bright, dominates the thread.
   if (part.role === "status") {
     return (
-      <div
-        className={`py-1 pr-2 text-[15px] leading-6 ${
-          part.tone === "error" ? "text-text-muted" : "text-text-faint"
-        }`}
-      >
-        {part.text}
+      <div className="flex gap-3 py-1 min-w-0 items-start">
+        <StatusDot status={part.tone === "error" ? "error" : "done"} animated={false} />
+        <div
+          className={`min-w-0 flex-1 text-[15px] leading-6 ${
+            part.tone === "error" ? "text-text-muted" : "text-text-faint"
+          }`}
+        >
+          {part.text}
+        </div>
       </div>
     )
   }
   return (
     <div className={`py-1.5 pr-2 ${part.tone === "error" ? "text-text-muted" : "text-text"}`}>
       <SmartAnswer text={part.text} compact />
+    </div>
+  )
+}
+
+function ErrorNote({ text }: { text: string }) {
+  // Same chrome as activity rows — never scream red mono for recoverable notes.
+  return (
+    <div className="flex gap-3 py-1 min-w-0 items-start">
+      <StatusDot status="error" animated={false} />
+      <div className="min-w-0 flex-1 text-[15px] leading-6 text-text-muted">{text}</div>
     </div>
   )
 }
@@ -2479,17 +2810,15 @@ function RunMessageImpl({
   const isLiveRun = isActive && !isDone
 
   const iterationMeta = useMemo(() => {
-    const lastIterationIndex = responseParts.reduce(
-      (last, candidate, index) => (candidate.kind === "iteration-block" ? index : last),
-      -1,
-    )
-    const meta = new Map<string, { isLastIteration: boolean; hasNarrativeAfter: boolean }>()
+    const lastWorkIndex = responseParts.reduce((last, candidate, index) => {
+      if (candidate.kind === "iteration-block" || candidate.kind === "step-block") return index
+      return last
+    }, -1)
+    const meta = new Map<string, { isLastWork: boolean; hasNarrativeAfter: boolean }>()
     responseParts.forEach((candidate, index) => {
-      if (candidate.kind !== "iteration-block") return
+      if (candidate.kind !== "iteration-block" && candidate.kind !== "step-block") return
       meta.set(candidate.id, {
-        isLastIteration: index === lastIterationIndex,
-        // Only real assistant prose/answers fold tools — muted planner
-        // status lines stay in the chrome band and must not collapse work.
+        isLastWork: index === lastWorkIndex,
         hasNarrativeAfter: responseParts.slice(index + 1).some(
           (p) =>
             (p.kind === "narrative" && p.role !== "status") ||
@@ -2506,15 +2835,37 @@ function RunMessageImpl({
       if (part.kind === "sync-progress") syncByInvocation.set(part.invocationId, part)
     }
 
-    // Copilot-style flat thread: tools + muted status + assistant prose.
-    // Progress parts stay off-canvas — they only feed the live bottom
-    // shimmer (never "Direct" / "Plan" blips in the transcript).
+    // Hierarchy: Plan (outline) → Step (tools nested) → Checked work → answer.
+    // Direct / Thinking / Pipeline stay off-canvas.
     const items: React.ReactNode[] = []
 
     let lastToolHasRunning = false
 
     responseParts.forEach((part) => {
+      if (part.kind === "plan") {
+        items.push(<PlanBlock key={part.id} part={part} />)
+        return
+      }
+
+      if (part.kind === "step-block") {
+        const meta = iterationMeta.get(part.id)
+        items.push(
+          <StepBlock
+            key={part.id}
+            part={part}
+            syncByInvocation={syncByInvocation}
+            isLiveRun={isLiveRun}
+            keepOpen={Boolean(meta?.isLastWork && !meta.hasNarrativeAfter)}
+          />,
+        )
+        if (part.hasRunning) lastToolHasRunning = true
+        else lastToolHasRunning = false
+        return
+      }
+
       if (part.kind === "progress") {
+        if (isOffThreadProgress(part)) return
+        items.push(<ProgressPill key={part.id} part={part} />)
         return
       }
 
@@ -2545,7 +2896,7 @@ function RunMessageImpl({
             part={part}
             syncByInvocation={syncByInvocation}
             isLiveRun={isLiveRun}
-            isLastIteration={meta?.isLastIteration ?? false}
+            isLastIteration={meta?.isLastWork ?? false}
             hasNarrativeAfter={meta?.hasNarrativeAfter ?? false}
           />,
         )
@@ -2586,7 +2937,7 @@ function RunMessageImpl({
       }
 
       if (part.kind === "error") {
-        items.push(<div key={part.id} className="text-[15px] text-error font-mono">{part.text}</div>)
+        items.push(<ErrorNote key={part.id} text={part.text} />)
       }
     })
 

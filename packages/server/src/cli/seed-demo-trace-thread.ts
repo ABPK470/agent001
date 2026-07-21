@@ -656,6 +656,29 @@ function buildKitchenSink(): TraceEntry[] {
     msg("assistant", null, [tcBoom]),
     msg("tool", "Error: Module not found", [], "k-tc-boom"),
   ]
+  const tcTokens = {
+    id: "k-tc-tokens",
+    name: "write_file",
+    arguments: {
+      path: "site/brand-tokens.js",
+      content: "export const brand = { navy: '#0a1628', cream: '#f5f0e8' }",
+    },
+  }
+  const afterTokens = [
+    ...afterBoom,
+    msg("assistant", null, [tcTokens]),
+    msg("tool", "Wrote site/brand-tokens.js", [], "k-tc-tokens"),
+  ]
+  const tcRebuild = {
+    id: "k-tc-rebuild",
+    name: "run_command",
+    arguments: { command: "npm run build" },
+  }
+  const afterRebuild = [
+    ...afterTokens,
+    msg("assistant", null, [tcRebuild]),
+    msg("tool", "Build succeeded", [], "k-tc-rebuild"),
+  ]
 
   return [
     { kind: "goal", text: goal },
@@ -1121,7 +1144,41 @@ function buildKitchenSink(): TraceEntry[] {
     },
     { kind: "iteration", current: 7, max: 20 },
     llmReq(6, afterBoom, 7),
-    llmRes(6, {
+    llmRes(6, { toolCalls: [tcTokens] }),
+    {
+      kind: "tool-call",
+      invocationId: "k-inv-tokens",
+      toolCallId: "k-tc-tokens",
+      tool: "write_file",
+      argsSummary: "site/brand-tokens.js",
+      argsFormatted: JSON.stringify(tcTokens.arguments),
+    },
+    {
+      kind: "tool-result",
+      invocationId: "k-inv-tokens",
+      toolCallId: "k-tc-tokens",
+      text: "Wrote site/brand-tokens.js",
+    },
+    { kind: "iteration", current: 8, max: 20 },
+    llmReq(7, afterTokens, 7),
+    llmRes(7, { toolCalls: [tcRebuild] }),
+    {
+      kind: "tool-call",
+      invocationId: "k-inv-rebuild",
+      toolCallId: "k-tc-rebuild",
+      tool: "run_command",
+      argsSummary: "npm run build",
+      argsFormatted: JSON.stringify(tcRebuild.arguments),
+    },
+    {
+      kind: "tool-result",
+      invocationId: "k-inv-rebuild",
+      toolCallId: "k-tc-rebuild",
+      text: "Build succeeded",
+    },
+    { kind: "iteration", current: 9, max: 20 },
+    llmReq(8, afterRebuild, 7),
+    llmRes(8, {
       content:
         "I fixed the missing brand tokens and rebuilt successfully. Contact form is live with navy/cream styling.",
       prompt: 520,
@@ -1160,12 +1217,6 @@ function buildKitchenSink(): TraceEntry[] {
       totalSteps: 4,
     },
     {
-      kind: "planner-escalation",
-      action: "revise",
-      reason: "needs_revision",
-      attempt: 2,
-    },
-    {
       kind: "planner-retry-skipped",
       reason: "pipeline_succeeded",
     },
@@ -1180,15 +1231,11 @@ function buildKitchenSink(): TraceEntry[] {
       totalTokens: 4800,
       promptTokens: 3200,
       completionTokens: 1600,
-      llmCalls: 7,
+      llmCalls: 9,
     },
     {
       kind: "answer",
       text: "Site is ready: landing/about/contact with navy/cream branding. Schema, sync preview, and build all passed after one repair round.",
-    },
-    {
-      kind: "error",
-      text: "Transient build failure earlier in the run (recovered).",
     },
     {
       kind: "workspace_diff",
