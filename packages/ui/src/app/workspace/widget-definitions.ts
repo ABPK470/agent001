@@ -35,7 +35,7 @@ const CATALOG_META: Array<{
   { type: "entity-registry", label: "Entity Registry", desc: "Browse, edit, and version entity definitions for the sync platform" },
   { type: "operation-log", label: "Pipelines", desc: "Pipeline monitor — agent runs, sync, Bridge" },
   { type: "bridge", label: "Bridge", desc: "Move rows between connectors through a declarative transform" },
-  { type: "debug-inspector", label: "Trace", desc: "System prompts, tool resolution, LLM requests & responses" },
+  { type: "debug-inspector", label: "Trace", desc: "Agent loop outline — context, plan phases, LLM calls, and between-call work" },
   { type: "active-users", label: "Active Users", desc: "Who's online, what they're running" },
   { type: "mymi-db", label: "Mymi DB", desc: "Browse MyMI DB schemas, tables, views, and preview data" },
   { type: "run-history", label: "Run History", desc: "Browse past agent runs" },

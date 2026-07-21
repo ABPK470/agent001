@@ -1677,10 +1677,13 @@ textarea.input {
 .trace-toolbar {
   display: flex;
   flex-direction: column;
-  /* Three equal bands: metrics/fold → identity → filter */
-  gap: 1rem;
-  padding: 0.6rem 0.5rem 0.9rem;
-  margin-bottom: 0.25rem;
+  /* Three bands: metrics/fold → identity → filter — tight to the scroll edge */
+  gap: 0.75rem;
+  padding: 0.5rem 0.5rem 0.45rem;
+  margin-bottom: 0;
+  /* Soft sep so sticky card tops don’t read as “cut” under empty air */
+  border-bottom: 1px solid var(--border-subtle, var(--color-border-subtle));
+  background: var(--bg, var(--color-bg));
 }
 
 .trace-toolbar__row {
@@ -1838,7 +1841,8 @@ textarea.input {
 
 .trace-scroll {
   position: relative;
-  padding: 0 0.25rem 1.25rem;
+  /* 1px top pad so stuck header top borders aren’t clipped by the scrollport */
+  padding: 1px 0.25rem 1.25rem;
   /* Room under Call + Sent when More/Less rail sticks */
   --trace-sticky-row-h: 34px;
   --trace-pin-stack-h: calc(2 * var(--trace-sticky-row-h));
@@ -1848,7 +1852,7 @@ textarea.input {
   display: flex;
   flex-direction: column;
   gap: 0.55rem;
-  padding-top: 0;
+  padding-top: 0.35rem;
 }
 
 /*
@@ -2014,6 +2018,42 @@ textarea.input {
 
 .trace-scope[data-trace-kind="tools"] .trace-scope__lead {
   color: var(--accent, var(--color-accent));
+}
+
+.trace-scope[data-trace-kind="phase"] .trace-scope__lead {
+  color: var(--text-secondary, var(--text-muted, var(--color-text-muted)));
+}
+
+.trace-scope[data-trace-kind="work"] .trace-scope__lead {
+  color: var(--info, var(--color-info, #5b9fd4));
+}
+
+.trace-work-note {
+  padding: 0.35rem 0 0.45rem;
+  border-top: 1px solid var(--border-subtle, var(--color-border-subtle));
+}
+
+.trace-work-note__label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-muted, var(--color-text-muted));
+  margin-bottom: 0.2rem;
+}
+
+.trace-work-note.is-error .trace-work-note__label {
+  color: var(--error, var(--color-error));
+}
+
+.trace-tool-result {
+  margin-top: 0.45rem;
+}
+
+.trace-row.is-error .font-mono {
+  color: var(--error, var(--color-error));
+}
+
+.trace-row__detail.is-error {
+  color: var(--error, var(--color-error));
 }
 
 .trace-scope[data-trace-kind="message"] .trace-scope__lead {

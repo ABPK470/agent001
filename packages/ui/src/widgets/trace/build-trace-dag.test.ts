@@ -69,6 +69,20 @@ describe("buildTraceDag", () => {
         durationMs: 200,
         usage: { promptTokens: 40, completionTokens: 12, totalTokens: 52 },
       }),
+      {
+        kind: "tool-call",
+        invocationId: "inv1",
+        toolCallId: "tc1",
+        tool: "query_mssql",
+        argsSummary: "sql",
+        argsFormatted: '{"sql":"select 1"}',
+      },
+      {
+        kind: "tool-result",
+        invocationId: "inv1",
+        toolCallId: "tc1",
+        text: "1",
+      },
       llmRequest(1, [
         { role: "user", content: "Hi", toolCalls: [], toolCallId: null },
         {
@@ -102,6 +116,15 @@ describe("buildTraceDag", () => {
     expect(c0.toolBranches.map((t) => t.name)).toEqual(["query_mssql", "ask_user"])
     expect(c0.askedUser).toBe(true)
     expect(c0.waiting).toBe(false)
+    expect(c0.toolBranches[0]?.status).toBe("done")
+    expect(c0.toolBranches[0]?.resultText).toBe("1")
+
+    const work = dag.spine.find((e) => e.kind === "work")
+    expect(work?.kind).toBe("work")
+    if (work?.kind === "work") {
+      expect(work.work.tools[0]?.resultText).toBe("1")
+    }
+    expect(dag.stats.toolRunCount).toBe(1)
 
     const c1 = dag.calls[1]!
     expect(c1.headline).toBe("Final answer")

@@ -15,6 +15,8 @@ export type OpenState = {
   received: Set<number>
   messages: Set<string>
   tools: Set<string>
+  phases: Set<string>
+  work: Set<string>
   foldMode: FoldMode
 }
 
@@ -28,6 +30,8 @@ export function emptyOpen(): OpenState {
     received: new Set(),
     messages: new Set(),
     tools: new Set(),
+    phases: new Set(),
+    work: new Set(),
     foldMode: "collapsed",
   }
 }

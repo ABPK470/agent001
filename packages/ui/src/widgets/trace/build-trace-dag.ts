@@ -1,9 +1,14 @@
 /**
  * Pure Trace → hybrid DAG model.
  *
- * Spine = LLM round-trips (calls). Branches = tool calls from each response.
- * Preamble = system prompt + tools available (what the model was given as
- * context). SQL quality is per-call telemetry — attached to calls, not here.
+ * Chronological outline of the agent loop:
+ *   Context → Phase* → Call → Work* → Call → …
+ *
+ * Call = one LLM round-trip (Sent / Received).
+ * Work = what happened after that reply (tool runs, nudges, sync, human wait).
+ * Phase = planner routing / pipeline / verify / repair spans.
+ *
+ * Not an OperationLog dump — structural cards in the same dialect as Call.
  */
 
 import type { TraceEntry } from "../../types"
@@ -12,12 +17,20 @@ type LlmRequest = Extract<TraceEntry, { kind: "llm-request" }>
 type LlmResponse = Extract<TraceEntry, { kind: "llm-response" }>
 type SystemPrompt = Extract<TraceEntry, { kind: "system-prompt" }>
 type ToolsResolved = Extract<TraceEntry, { kind: "tools-resolved" }>
+type ToolCallEntry = Extract<TraceEntry, { kind: "tool-call" }>
+type ToolResultEntry = Extract<TraceEntry, { kind: "tool-result" }>
+type ToolErrorEntry = Extract<TraceEntry, { kind: "tool-error" }>
 export type TraceSqlQuality = Extract<TraceEntry, { kind: "planner-sql-quality" }>
 
 export type TraceToolCall = {
   id: string
   name: string
   arguments: Record<string, unknown>
+  /** Filled when a matching tool-result / tool-error follows in the loop. */
+  status?: "running" | "done" | "error"
+  resultText?: string
+  argsSummary?: string
+  argsFormatted?: string
 }
 
 export type TracePromptMessage = {
@@ -50,6 +63,36 @@ export type TraceCallNode = {
   sqlQuality: TraceSqlQuality[]
 }
 
+export type TracePhaseNode = {
+  id: string
+  title: string
+  summary: string
+  status: "running" | "done" | "error"
+  lines: string[]
+}
+
+export type TraceWorkNote = {
+  id: string
+  label: string
+  text: string
+  tone?: "neutral" | "error"
+}
+
+export type TraceWorkNode = {
+  id: string
+  afterCallIndex: number
+  title: string
+  summary: string
+  tools: TraceToolCall[]
+  notes: TraceWorkNote[]
+}
+
+/** Chronological spine after Context — phases, calls, and between-call work. */
+export type TraceSpineEntry =
+  | { kind: "phase"; phase: TracePhaseNode }
+  | { kind: "call"; callIndex: number }
+  | { kind: "work"; work: TraceWorkNode }
+
 export type TracePreamble = {
   systemPrompt: string | null
   tools: Array<{
@@ -64,11 +107,14 @@ export type TraceDagStats = {
   promptTokens: number
   completionTokens: number
   totalDuration: number
+  toolRunCount: number
+  phaseCount: number
 }
 
 export type TraceDag = {
   preamble: TracePreamble
   calls: TraceCallNode[]
+  spine: TraceSpineEntry[]
   stats: TraceDagStats
   hasData: boolean
 }
@@ -154,6 +200,182 @@ function enrichMessages(messages: LlmRequest["messages"]): TracePromptMessage[] 
   })
 }
 
+function parseToolArgs(argsFormatted: string): Record<string, unknown> {
+  try {
+    const v = JSON.parse(argsFormatted) as unknown
+    return v && typeof v === "object" && !Array.isArray(v)
+      ? (v as Record<string, unknown>)
+      : { raw: argsFormatted }
+  } catch {
+    return argsFormatted ? { raw: argsFormatted } : {}
+  }
+}
+
+function humanizeStep(name: string): string {
+  return name.replace(/_/g, " ")
+}
+
+function phaseFromEntry(
+  entry: TraceEntry,
+  index: number,
+): TracePhaseNode | null {
+  switch (entry.kind) {
+    case "planning_preflight":
+      return { id: `phase-preflight-${index}`, title: "Plan", summary: "Preparing…", status: "running", lines: [] }
+    case "planner-decision": {
+      const direct = !entry.shouldPlan || entry.route === "direct"
+      return {
+        id: `phase-decision-${index}`,
+        title: direct ? "Direct" : "Plan",
+        summary: entry.reason || (direct ? "tool loop" : "orchestrated"),
+        status: "done",
+        lines: entry.score != null ? [`score ${entry.score}`] : [],
+      }
+    }
+    case "planner-generating":
+      return { id: `phase-generating-${index}`, title: "Plan", summary: "Generating plan…", status: "running", lines: [] }
+    case "planner-plan-generated":
+      return {
+        id: `phase-plan-${index}`,
+        title: "Plan",
+        summary: `${entry.stepCount} step${entry.stepCount !== 1 ? "s" : ""}`,
+        status: "done",
+        lines: [],
+      }
+    case "planner-pipeline-start":
+      return {
+        id: `phase-pipeline-${entry.attempt}`,
+        title: "Pipeline",
+        summary: entry.attempt > 1 ? `attempt ${entry.attempt}` : "running",
+        status: "running",
+        lines: [],
+      }
+    case "planner-pipeline-end":
+      return {
+        id: `phase-pipeline-end-${index}`,
+        title: "Pipeline",
+        summary: `${entry.completedSteps}/${entry.totalSteps} steps`,
+        status: entry.status === "success" ? "done" : "error",
+        lines: [],
+      }
+    case "planner-step-start":
+      return {
+        id: `phase-step-${entry.stepName}`,
+        title: humanizeStep(entry.stepName),
+        summary: "running",
+        status: "running",
+        lines: [],
+      }
+    case "planner-step-end": {
+      const ok = entry.status === "pass" || entry.status === "success"
+      return {
+        id: `phase-step-${entry.stepName}`,
+        title: humanizeStep(entry.stepName),
+        summary: ok ? "done" : entry.error || "failed",
+        status: ok ? "done" : "error",
+        lines: entry.durationMs != null ? [`${entry.durationMs}ms`] : [],
+      }
+    }
+    case "planner-delegation-start":
+      return {
+        id: `phase-step-${entry.stepName}`,
+        title: humanizeStep(entry.stepName),
+        summary: "delegating",
+        status: "running",
+        lines: entry.tools.slice(0, 4),
+      }
+    case "planner-delegation-iteration":
+      return {
+        id: `phase-step-${entry.stepName}`,
+        title: humanizeStep(entry.stepName),
+        summary: `iteration ${entry.iteration}/${entry.maxIterations}`,
+        status: "running",
+        lines: entry.toolNames?.slice(0, 3) ?? [],
+      }
+    case "planner-delegation-end":
+      return {
+        id: `phase-step-${entry.stepName}`,
+        title: humanizeStep(entry.stepName),
+        summary: entry.status === "done" ? "done" : entry.error || "failed",
+        status: entry.status === "done" ? "done" : "error",
+        lines: [],
+      }
+    case "planner-verification":
+      return {
+        id: `phase-verify-${index}`,
+        title: "Verifying",
+        summary: entry.overall,
+        status:
+          entry.overall === "pass" ? "done" : entry.overall === "fail" ? "error" : "running",
+        lines: [],
+      }
+    case "planner-repair-plan":
+      return {
+        id: `phase-repair-${entry.attempt}`,
+        title: "Repairing",
+        summary: `attempt ${entry.attempt}`,
+        status: "running",
+        lines: [],
+      }
+    case "direct_loop_fallback":
+      return { id: `phase-direct-${index}`, title: "Direct", summary: "tool loop", status: "done", lines: [] }
+    default:
+      return null
+  }
+}
+
+function mergePhase(prev: TracePhaseNode | null, next: TracePhaseNode): TracePhaseNode {
+  if (!prev || prev.id !== next.id) return next
+  return {
+    ...next,
+    lines: [...prev.lines, ...next.lines].filter((v, i, a) => a.indexOf(v) === i).slice(0, 6),
+  }
+}
+
+function applyToolResult(
+  tools: TraceToolCall[],
+  entry: ToolResultEntry | ToolErrorEntry,
+): TraceToolCall[] {
+  const status: "done" | "error" = entry.kind === "tool-error" ? "error" : "done"
+  const id = entry.toolCallId || entry.invocationId
+  if (!id) return tools
+  let hit = false
+  const next = tools.map((t) => {
+    if (t.id !== id && t.id !== entry.invocationId && t.id !== entry.toolCallId) return t
+    hit = true
+    return { ...t, status, resultText: entry.text }
+  })
+  if (hit) return next
+  return next.concat({
+    id,
+    name: "tool",
+    arguments: {},
+    status,
+    resultText: entry.text,
+  })
+}
+
+function workTitle(tools: TraceToolCall[], notes: TraceWorkNote[]): string {
+  if (tools.length === 0 && notes.length > 0) return notes[0]!.label
+  if (tools.length === 1) return tools[0]!.name
+  if (tools.length > 1) return `${tools.length} tools`
+  return "Work"
+}
+
+function workSummary(tools: TraceToolCall[], notes: TraceWorkNote[]): string {
+  const bits: string[] = []
+  const done = tools.filter((t) => t.status === "done").length
+  const err = tools.filter((t) => t.status === "error").length
+  const run = tools.filter((t) => t.status === "running" || !t.status).length
+  if (tools.length > 0) {
+    if (err) bits.push(`${err} failed`)
+    if (done) bits.push(`${done} done`)
+    if (run) bits.push(`${run} running`)
+  }
+  if (notes.length > 0) bits.push(`${notes.length} note${notes.length !== 1 ? "s" : ""}`)
+  return bits.join(" · ") || "between calls"
+}
+
 /** Build the hybrid DAG view-model from a raw trace stream. */
 export function buildTraceDag(trace: TraceEntry[]): TraceDag {
   const systemPrompt =
@@ -163,7 +385,12 @@ export function buildTraceDag(trace: TraceEntry[]): TraceDag {
 
   const paired = pairLlmCalls(trace)
   const calls: TraceCallNode[] = paired.map(({ request, response }, index) => {
-    const toolBranches = response?.toolCalls ?? []
+    const toolBranches = (response?.toolCalls ?? []).map((tc) => ({
+      id: tc.id,
+      name: tc.name,
+      arguments: tc.arguments,
+      status: "running" as const,
+    }))
     const usage = response?.usage ?? null
     return {
       index,
@@ -182,6 +409,201 @@ export function buildTraceDag(trace: TraceEntry[]): TraceDag {
     }
   })
 
+  const callByIteration = new Map(calls.map((c) => [c.iteration, c]))
+  const spine: TraceSpineEntry[] = []
+  let openPhase: TracePhaseNode | null = null
+  let openWork: TraceWorkNode | null = null
+  let lastCallIndex = -1
+  let workSeq = 0
+
+  function flushPhase() {
+    if (!openPhase) return
+    // Skip bare Direct routing chips — noise in the outline.
+    if (!(openPhase.title === "Direct" && openPhase.lines.length === 0)) {
+      spine.push({ kind: "phase", phase: openPhase })
+    }
+    openPhase = null
+  }
+
+  function flushWork() {
+    if (!openWork) return
+    if (openWork.tools.length > 0 || openWork.notes.length > 0) {
+      openWork.title = workTitle(openWork.tools, openWork.notes)
+      openWork.summary = workSummary(openWork.tools, openWork.notes)
+      spine.push({ kind: "work", work: openWork })
+      // Mirror execution status onto the preceding call’s Next branches.
+      const call = calls[openWork.afterCallIndex]
+      if (call) {
+        call.toolBranches = call.toolBranches.map((branch) => {
+          const exec = openWork!.tools.find(
+            (t) => t.id === branch.id || t.name === branch.name,
+          )
+          return exec
+            ? {
+                ...branch,
+                status: exec.status,
+                resultText: exec.resultText,
+                argsSummary: exec.argsSummary,
+                argsFormatted: exec.argsFormatted,
+                arguments:
+                  Object.keys(exec.arguments).length > 0 ? exec.arguments : branch.arguments,
+              }
+            : branch
+        })
+      }
+    }
+    openWork = null
+  }
+
+  function ensureWork(afterCallIndex: number): TraceWorkNode {
+    if (openWork && openWork.afterCallIndex === afterCallIndex) return openWork
+    flushWork()
+    workSeq += 1
+    openWork = {
+      id: `work-${afterCallIndex}-${workSeq}`,
+      afterCallIndex,
+      title: "Work",
+      summary: "",
+      tools: [],
+      notes: [],
+    }
+    return openWork
+  }
+
+  for (let i = 0; i < trace.length; i++) {
+    const entry = trace[i]!
+
+    if (entry.kind === "llm-request") {
+      flushPhase()
+      flushWork()
+      const call = callByIteration.get(entry.iteration)
+      if (call) {
+        spine.push({ kind: "call", callIndex: call.index })
+        lastCallIndex = call.index
+      }
+      continue
+    }
+
+    if (entry.kind === "llm-response" || entry.kind === "system-prompt" || entry.kind === "tools-resolved") {
+      continue
+    }
+
+    if (entry.kind === "planner-sql-quality") {
+      continue
+    }
+
+    const phase = phaseFromEntry(entry, i)
+    if (phase) {
+      flushWork()
+      openPhase = mergePhase(openPhase, phase)
+      if (phase.status === "done" || phase.status === "error") {
+        // Close completed phases so the next distinct phase starts fresh.
+        if (
+          entry.kind === "planner-pipeline-end" ||
+          entry.kind === "planner-step-end" ||
+          entry.kind === "planner-delegation-end" ||
+          entry.kind === "planner-plan-generated" ||
+          entry.kind === "planner-decision" ||
+          entry.kind === "direct_loop_fallback" ||
+          (entry.kind === "planner-verification" &&
+            (entry.overall === "pass" || entry.overall === "fail"))
+        ) {
+          flushPhase()
+        }
+      }
+      continue
+    }
+
+    if (lastCallIndex < 0) continue
+
+    if (entry.kind === "tool-call") {
+      const work = ensureWork(lastCallIndex)
+      const tc = entry as ToolCallEntry
+      const id = tc.toolCallId || tc.invocationId
+      const existing = work.tools.findIndex((t) => t.id === id || t.id === tc.invocationId)
+      const row: TraceToolCall = {
+        id,
+        name: tc.tool,
+        arguments: parseToolArgs(tc.argsFormatted),
+        status: "running",
+        argsSummary: tc.argsSummary,
+        argsFormatted: tc.argsFormatted,
+      }
+      if (existing >= 0) work.tools[existing] = { ...work.tools[existing]!, ...row }
+      else work.tools.push(row)
+      continue
+    }
+
+    if (entry.kind === "tool-result" || entry.kind === "tool-error") {
+      const work = ensureWork(lastCallIndex)
+      work.tools = applyToolResult(work.tools, entry)
+      continue
+    }
+
+    if (entry.kind === "nudge") {
+      const work = ensureWork(lastCallIndex)
+      work.notes.push({
+        id: `nudge-${i}`,
+        label: entry.tag || "Nudge",
+        text: entry.message,
+      })
+      continue
+    }
+
+    if (entry.kind === "sync-progress") {
+      const work = ensureWork(lastCallIndex)
+      work.notes.push({
+        id: `sync-${entry.invocationId}-${i}`,
+        label: entry.headline || entry.tool || "Sync",
+        text: entry.detail || entry.status,
+      })
+      continue
+    }
+
+    if (entry.kind === "user-input-request") {
+      const work = ensureWork(lastCallIndex)
+      work.notes.push({
+        id: `ask-${i}`,
+        label: "Waiting on user",
+        text: entry.question,
+      })
+      continue
+    }
+
+    if (entry.kind === "user-input-response") {
+      const work = ensureWork(lastCallIndex)
+      work.notes.push({
+        id: `answer-${i}`,
+        label: "User answered",
+        text: entry.text,
+      })
+      continue
+    }
+
+    if (entry.kind === "error" && entry.text !== "Run cancelled by user") {
+      const work = ensureWork(lastCallIndex)
+      work.notes.push({
+        id: `err-${i}`,
+        label: "Error",
+        text: entry.text,
+        tone: "error",
+      })
+    }
+  }
+
+  flushPhase()
+  flushWork()
+
+  // Mark unanswered tool branches still running only if call is waiting;
+  // otherwise leave as-is after work merge.
+  for (const call of calls) {
+    if (!call.waiting) {
+      call.toolBranches = call.toolBranches.map((t) =>
+        t.status === "running" && t.resultText == null ? { ...t, status: undefined } : t,
+      )
+    }
+  }
+
   let promptTokens = 0
   let completionTokens = 0
   let totalDuration = 0
@@ -198,20 +620,30 @@ export function buildTraceDag(trace: TraceEntry[]): TraceDag {
     tools: toolsResolved?.tools ?? [],
   }
 
+  const toolRunCount = spine.reduce(
+    (n, e) => (e.kind === "work" ? n + e.work.tools.length : n),
+    0,
+  )
+  const phaseCount = spine.filter((e) => e.kind === "phase").length
+
   const hasData =
     Boolean(systemPrompt) ||
     preamble.tools.length > 0 ||
     calls.length > 0 ||
-    sqlQuality.length > 0
+    sqlQuality.length > 0 ||
+    spine.length > 0
 
   return {
     preamble,
     calls,
+    spine,
     stats: {
       callCount: calls.length,
       promptTokens,
       completionTokens,
       totalDuration,
+      toolRunCount,
+      phaseCount,
     },
     hasData,
   }

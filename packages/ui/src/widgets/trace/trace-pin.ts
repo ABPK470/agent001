@@ -26,6 +26,8 @@ export const TRACE_PIN_KINDS = new Set([
   "call",
   "sent",
   "received",
+  "phase",
+  "work",
 ])
 
 export type TraceScopeKind =
@@ -35,6 +37,8 @@ export type TraceScopeKind =
   | "call"
   | "sent"
   | "received"
+  | "phase"
+  | "work"
   | "message"
   | "tool"
 

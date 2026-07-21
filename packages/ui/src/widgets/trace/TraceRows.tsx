@@ -92,8 +92,11 @@ export function ToolRow({
   open: boolean
   onToggle: () => void
 }) {
+  const statusClass =
+    tool.status === "error" ? " is-error" : tool.status === "done" ? " is-done" : ""
+
   return (
-    <div className="trace-row">
+    <div className={`trace-row${statusClass}`}>
       <button
         type="button"
         className="trace-row__btn"
@@ -108,6 +111,9 @@ export function ToolRow({
           )}
         </span>
         <span className="font-mono">{tool.name}</span>
+        {tool.status === "error" && <span className="trace-row__detail is-error">failed</span>}
+        {tool.status === "done" && <span className="trace-row__detail">done</span>}
+        {tool.status === "running" && <span className="trace-row__detail">running</span>}
         <span className="trace-row__id font-mono" title={tool.id}>
           {tool.id}
         </span>
@@ -120,6 +126,14 @@ export function ToolRow({
             maxHeight={200}
             className="trace-json"
           />
+          {tool.resultText != null && tool.resultText !== "" && (
+            <div className="trace-tool-result">
+              <div className="trace-next__label">
+                {tool.status === "error" ? "Error" : "Result"}
+              </div>
+              <ExpandableText text={tool.resultText} className="trace-body-muted" />
+            </div>
+          )}
         </div>
       )}
     </div>

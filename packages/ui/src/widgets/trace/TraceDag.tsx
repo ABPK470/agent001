@@ -19,6 +19,8 @@ import { emptyOpen, seedLatest, type FoldMode, type OpenState } from "./open-sta
 import { CallOutline } from "./TraceCall"
 import { PreambleOutline } from "./TraceContext"
 import { IdChip } from "./TraceCopy"
+import { PhaseOutline } from "./TracePhase"
+import { WorkOutline } from "./TraceWork"
 
 export function TraceDag({
   dag,
@@ -62,10 +64,17 @@ export function TraceDag({
   }, [dag.calls, query, runId, threadId])
 
   useEffect(() => {
-    if (seededRef.current || dag.calls.length === 0) return
+    if (seededRef.current || (dag.calls.length === 0 && dag.spine.length === 0)) return
     seededRef.current = true
-    setOpenState(seedLatest(dag.calls.length))
-  }, [dag.calls.length])
+    setOpenState((prev) => {
+      const next = seedLatest(dag.calls.length)
+      const lastWork = [...dag.spine].reverse().find((e) => e.kind === "work")
+      if (lastWork && lastWork.kind === "work") {
+        next.work.add(lastWork.work.id)
+      }
+      return { ...next, foldMode: prev.foldMode }
+    })
+  }, [dag.calls.length, dag.spine])
 
   useEffect(() => {
     seededRef.current = false
@@ -99,17 +108,12 @@ export function TraceDag({
     })
   }, [query, callHits])
 
-  const visibleIndexesList = useMemo(
-    () => visibleIndexes(dag, callHits),
-    [dag, callHits],
-  )
-
   useEffect(() => {
     const el = scrollRef.current
     if (!el) return
     const distance = el.scrollHeight - el.scrollTop - el.clientHeight
     if (distance < 80) el.scrollTop = el.scrollHeight
-  }, [dag.calls.length])
+  }, [dag.calls.length, dag.spine.length])
 
   function onToggleCall(index: number) {
     setOpenState((prev) => {
@@ -156,6 +160,24 @@ export function TraceDag({
     })
   }
 
+  function onTogglePhase(id: string) {
+    setOpenState((prev) => {
+      const phases = new Set(prev.phases)
+      if (phases.has(id)) phases.delete(id)
+      else phases.add(id)
+      return { ...prev, phases }
+    })
+  }
+
+  function onToggleWork(id: string) {
+    setOpenState((prev) => {
+      const work = new Set(prev.work)
+      if (work.has(id)) work.delete(id)
+      else work.add(id)
+      return { ...prev, work }
+    })
+  }
+
   function onTogglePreamble() {
     setOpenState((prev) => ({ ...prev, preamble: !prev.preamble }))
   }
@@ -170,6 +192,9 @@ export function TraceDag({
 
   function onFoldModeChange(mode: FoldMode) {
     if (mode === "expanded") {
+      const workTools = dag.spine.flatMap((e) =>
+        e.kind === "work" ? e.work.tools.map((t) => t.id) : [],
+      )
       setOpenState({
         preamble: true,
         contextPrompt: true,
@@ -182,7 +207,16 @@ export function TraceDag({
             c.messages.map((_, mi) => `${c.index}:m:${mi}`),
           ),
         ),
-        tools: new Set(dag.calls.flatMap((c) => c.toolBranches.map((t) => t.id))),
+        tools: new Set([
+          ...dag.calls.flatMap((c) => c.toolBranches.map((t) => t.id)),
+          ...workTools,
+        ]),
+        phases: new Set(
+          dag.spine.filter((e) => e.kind === "phase").map((e) => e.phase.id),
+        ),
+        work: new Set(
+          dag.spine.filter((e) => e.kind === "work").map((e) => e.work.id),
+        ),
         foldMode: "expanded",
       })
       return
@@ -204,13 +238,25 @@ export function TraceDag({
       <div className="trace-toolbar shrink-0">
         <div className="trace-toolbar__row">
           <div className="trace-toolbar__meta">
-            {stats.callCount === 0 ? (
-              <span>No model calls yet</span>
+            {stats.callCount === 0 && stats.toolRunCount === 0 ? (
+              <span>No agent loop yet</span>
             ) : (
               <>
-                <span>
-                  {stats.callCount} call{stats.callCount === 1 ? "" : "s"}
-                </span>
+                {stats.callCount > 0 && (
+                  <span>
+                    {stats.callCount} call{stats.callCount === 1 ? "" : "s"}
+                  </span>
+                )}
+                {stats.toolRunCount > 0 && (
+                  <span>
+                    {stats.toolRunCount} tool{stats.toolRunCount === 1 ? "" : "s"}
+                  </span>
+                )}
+                {stats.phaseCount > 0 && (
+                  <span>
+                    {stats.phaseCount} phase{stats.phaseCount === 1 ? "" : "s"}
+                  </span>
+                )}
                 {stats.totalDuration > 0 && (
                   <span className="tabular-nums">{formatMs(stats.totalDuration)}</span>
                 )}
@@ -247,7 +293,7 @@ export function TraceDag({
           <Search size={14} className="trace-search__icon" />
           <input
             type="search"
-            placeholder="Filter calls, tools, reply…"
+            placeholder="Filter calls, tools, work…"
             value={search}
             onChange={(e) => onSearchChange(e.target.value)}
             className="trace-search__input"
@@ -273,7 +319,7 @@ export function TraceDag({
         {runId &&
           dag.hasData &&
           query &&
-          visibleIndexesList.length === 0 && (
+          (callHits?.size ?? 0) === 0 && (
             <p className="trace-empty px-2 py-3">No matches for “{query}”</p>
           )}
 
@@ -289,14 +335,41 @@ export function TraceDag({
               onToggleTools={onToggleContextTools}
               query={query}
             />
-            {visibleIndexesList.map((i) => {
-              const call = dag.calls[i]!
+            {dag.spine.map((entry) => {
+              if (entry.kind === "phase") {
+                return (
+                  <PhaseOutline
+                    key={entry.phase.id}
+                    phase={entry.phase}
+                    open={openState.phases.has(entry.phase.id)}
+                    onToggle={() => onTogglePhase(entry.phase.id)}
+                  />
+                )
+              }
+              if (entry.kind === "work") {
+                if (query && callHits && !callHits.has(entry.work.afterCallIndex)) {
+                  return null
+                }
+                return (
+                  <WorkOutline
+                    key={entry.work.id}
+                    work={entry.work}
+                    open={openState.work.has(entry.work.id)}
+                    openState={openState}
+                    onToggle={() => onToggleWork(entry.work.id)}
+                    onToggleTool={onToggleTool}
+                  />
+                )
+              }
+              const call = dag.calls[entry.callIndex]
+              if (!call) return null
+              if (query && callHits && !callHits.has(call.index)) return null
               return (
                 <CallOutline
-                  key={`llm-${call.iteration}-${i}`}
+                  key={`llm-${call.iteration}-${call.index}`}
                   call={call}
                   openState={openState}
-                  searchHit={callHits?.get(i) ?? null}
+                  searchHit={callHits?.get(call.index) ?? null}
                   onToggleCall={onToggleCall}
                   onToggleSent={onToggleSent}
                   onToggleReceived={onToggleReceived}
@@ -312,10 +385,3 @@ export function TraceDag({
   )
 }
 
-function visibleIndexes(
-  dag: TraceDag,
-  callHits: Map<number, TraceCallSearchHit> | null,
-): number[] {
-  if (!callHits) return dag.calls.map((c) => c.index)
-  return [...callHits.keys()]
-}
