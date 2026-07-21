@@ -1,5 +1,5 @@
 /**
- * Expandable text — sticky right-rail Copy + More/Less.
+ * Expandable text — Copy + More/Less rail.
  * Toggle keeps scroll anchored so the row does not jump upward.
  */
 

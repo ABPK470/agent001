@@ -1672,6 +1672,7 @@ textarea.input {
   font-size: 0.9375rem;
   line-height: 1.5;
   color: var(--text, var(--color-text));
+  min-height: 0;
 }
 
 .trace-toolbar {
@@ -1679,8 +1680,13 @@ textarea.input {
   flex-direction: column;
   /* Three equal bands: metrics/fold → identity → filter */
   gap: 1rem;
-  padding: 0.6rem 0.5rem 0.9rem;
-  margin-bottom: 0.25rem;
+  padding: 0.6rem 0.5rem 0.75rem;
+  margin: 0;
+  /* Opaque seam so scrolling cards never ghost under the chrome */
+  background: var(--bg, var(--color-bg));
+  border-bottom: 1px solid var(--border-subtle, var(--color-border-subtle));
+  position: relative;
+  z-index: 8;
 }
 
 .trace-toolbar__row {
@@ -1838,18 +1844,14 @@ textarea.input {
 
 .trace-dag .trace-scroll {
   position: relative;
-  padding: 0 0.25rem 1.25rem;
-  /* Room under Call + Sent when More/Less rail sticks */
-  --trace-sticky-row-h: 34px;
-  --trace-pin-stack-h: calc(2 * var(--trace-sticky-row-h));
+  padding: 0.55rem 0.35rem 1.25rem;
+  --trace-row-h: 34px;
   /*
-   * Set BOTH axes. overflow-y-auto alone computes overflow-x to auto —
-   * any 1px-wider child then shows a horizontal scrollbar and shears
-   * card corners.
+   * Set BOTH axes. overflow-y alone computes overflow-x to auto and
+   * shears card corners with a horizontal scrollbar.
    */
   overflow-x: hidden;
   overflow-y: auto;
-  /* Expanding a row must grow downward — not yank the header via anchoring. */
   overflow-anchor: none;
 }
 
@@ -1857,26 +1859,27 @@ textarea.input {
   display: flex;
   flex-direction: column;
   gap: 0.55rem;
-  /* 1px air so the first sticky pin engages before the scrollport edge eats the top seam */
-  padding-top: 1px;
   min-width: 0;
   max-width: 100%;
 }
 
 /*
- * One bordered card per Call / Context.
+ * ── Trace cards — document flow, no sticky ─────────────────────────
  *
- * Open header keeps the card’s top radius (at rest and when pinned).
- * No L/R strokes on the sticky row — those caused the old corner stubs.
+ * ROOT CAUSE of the long clipping / missing-corner saga:
+ *   position:sticky on headers inside border-radius cards fights
+ *   overflow, z-index, and nested cards. Patches (top:-1px, overflow:clip,
+ *   nested sticky off, opaque toolbar) never converge.
  *
- * overflow: clip must NOT wrap the sticky header (card stays visible).
- * Clip on the body only: bottom rounding + no horizontal bleed.
- * clip (unlike hidden) does not become a sticky containing block.
+ * Model now:
+ *   • Normal document flow. Expand keeps the header via preserveScrollAnchor.
+ *   • overflow:hidden + border-radius — corners always paint correctly.
+ *   • Nested Subagent → Call → Work stays structural nesting, not pin stacks.
  */
 .trace-card {
   border: 1px solid var(--border, var(--color-border));
   border-radius: 0.5rem;
-  overflow: visible;
+  overflow: hidden;
   background: var(--bg);
   box-sizing: border-box;
   min-width: 0;
@@ -1895,18 +1898,10 @@ textarea.input {
   min-width: 0;
 }
 
-.trace-card.is-open > .trace-card__body {
-  border-radius: 0 0 calc(0.5rem - 1px) calc(0.5rem - 1px);
-  overflow-x: clip;
-  overflow-y: clip;
-}
-
-/* Sibling stick containment — sticky ends when this block scrolls away */
 .trace-stick-block {
   display: block;
 }
 
-/* Scope rows — native sticky (the real header, never a clone) */
 .trace-scope {
   display: flex;
   align-items: center;
@@ -1914,8 +1909,8 @@ textarea.input {
   width: 100%;
   max-width: 100%;
   min-width: 0;
-  min-height: var(--trace-sticky-row-h);
-  height: var(--trace-sticky-row-h);
+  min-height: var(--trace-row-h, 34px);
+  height: var(--trace-row-h, 34px);
   margin: 0;
   padding: 0 0.55rem 0 0.35rem;
   text-align: left;
@@ -1926,46 +1921,21 @@ textarea.input {
   font-size: 0.9375rem;
   box-sizing: border-box;
   cursor: pointer;
+  position: relative;
 }
 
-/*
- * Call / Context / Phase / Work — sticky card header.
- * top: -1px pins one device pixel sooner so the top seam is not shaved by
- * the scrollport edge. Height +1px keeps the visible band at --trace-sticky-row-h
- * so Sent/Received still stack flush under Call (no mid-glyph cut).
- * Top radius matches the card so corners exist even before pin engages.
- */
-.trace-card > .trace-scope {
-  position: sticky;
-  top: -1px;
-  z-index: 6;
-  height: calc(var(--trace-sticky-row-h) + 1px);
-  min-height: calc(var(--trace-sticky-row-h) + 1px);
-  padding-top: 1px;
-  border: none;
+.trace-card.is-open > .trace-scope {
   border-bottom: 1px solid var(--border, var(--color-border));
-  border-radius: calc(0.5rem - 1px) calc(0.5rem - 1px) 0 0;
-  margin: 0;
-  width: 100%;
-  max-width: 100%;
-  min-width: 0;
-  box-sizing: border-box;
+  background: color-mix(in srgb, var(--text, var(--color-text)) 5%, var(--bg));
 }
 
 .trace-card:not(.is-open) > .trace-scope {
-  top: 0;
-  height: var(--trace-sticky-row-h);
-  min-height: var(--trace-sticky-row-h);
-  padding-top: 0;
   border: 1px solid var(--border, var(--color-border));
   border-radius: 0.5rem;
 }
 
-.trace-stick-block > .trace-scope {
-  position: sticky;
-  /* Flush under Call’s visible band (the +1px lives above the scrollport). */
-  top: var(--trace-sticky-row-h);
-  z-index: 5;
+.trace-card.is-nested {
+  margin: 0;
 }
 
 .trace-scope__chevslot {
@@ -1986,13 +1956,11 @@ textarea.input {
 /* Soft = Sent / Received / Context / Prompt / Tools */
 .trace-scope.is-soft {
   font-size: 0.875rem;
-  /* Opaque enough that stuck headers don’t show content bleeding through */
   background: color-mix(in srgb, var(--text, var(--color-text)) 3.5%, var(--bg));
   color: var(--text-secondary, var(--text-muted, var(--color-text-muted)));
 }
 
-/* Seam between sibling stick-blocks (Received under Sent, Tools under Prompt).
- * First block uses the Call/Context header’s bottom border — no double stroke. */
+/* Seam between sibling blocks (Received under Sent, Tools under Prompt). */
 .trace-stick-block + .trace-stick-block > .trace-scope {
   border-top: 1px solid var(--border-subtle, var(--color-border-subtle));
 }
@@ -2138,10 +2106,6 @@ textarea.input {
   margin-left: 0;
   padding-left: 1.35rem;
   min-width: 0;
-}
-
-.trace-expand.has-rail {
-  max-width: 100%;
 }
 
 .trace-scope.is-soft .trace-scope__lead {
@@ -2336,7 +2300,8 @@ textarea.input {
   display: flex;
   flex-direction: column;
   gap: 0.45rem;
-  padding: 0.35rem 0.55rem 0.65rem 0.85rem;
+  /* Inset so nested cards keep full rounded corners inside the parent */
+  padding: 0.45rem 0.55rem 0.7rem;
   border-top: 1px solid var(--border-subtle, var(--color-border-subtle));
   min-width: 0;
 }
@@ -2487,8 +2452,7 @@ textarea.input {
 }
 
 /*
- * Expandable text — sticky right-rail Copy + More/Less.
- * top clears the pin stack via --trace-pin-stack-h on .trace-scroll.
+ * Expandable text — Copy + More/Less rail (document flow, no sticky).
  */
 .trace-expand {
   display: block;
@@ -2499,6 +2463,7 @@ textarea.input {
   display: flex;
   align-items: flex-start;
   gap: 0.45rem;
+  max-width: 100%;
 }
 
 .trace-expand__main {
@@ -2508,16 +2473,13 @@ textarea.input {
 
 .trace-expand__rail {
   flex-shrink: 0;
-  align-self: stretch;
+  align-self: flex-start;
   position: relative;
   width: auto;
   min-width: fit-content;
 }
 
 .trace-expand__sticky {
-  position: sticky;
-  top: calc(var(--trace-pin-stack-h, 0px) + 0.35rem);
-  z-index: 4;
   display: flex;
   flex-direction: column;
   align-items: flex-end;

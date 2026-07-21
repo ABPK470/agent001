@@ -1,8 +1,5 @@
 /**
  * One LLM call as a bordered card: Call → Sent → Received (+ Next tools).
- *
- * Sticky = native CSS on the real headers. Sent / Received each sit in a
- * .trace-stick-block so leaving that block unsticks the sibling (no clones).
  */
 
 import { fmtTokens, formatMs } from "../../lib/util"

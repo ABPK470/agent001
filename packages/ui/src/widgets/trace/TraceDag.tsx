@@ -1,9 +1,8 @@
 /**
- * Trace outline shell — toolbar + chronological call cards.
+ * Trace outline shell — toolbar + chronological cards.
  *
- * Sticky headers = native CSS sticky on the real rows (no clone overlay).
- * Each Sent/Received/Prompt/Tools lives in a .trace-stick-block so siblings
- * unstick when you leave their block (VS Code ancestor-chain dialect).
+ * Document flow only (no sticky pin). Nesting is structural:
+ * Subagent/step phases own Call + Work children.
  */
 
 import { Search, X } from "lucide-react"

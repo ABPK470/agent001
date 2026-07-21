@@ -1,5 +1,5 @@
 /**
- * Shared Context card — Prompt / Tools in stick-blocks (native sticky).
+ * Shared Context card — Prompt / Tools in sibling blocks.
  */
 
 import type { TraceDag } from "./build-trace-dag"

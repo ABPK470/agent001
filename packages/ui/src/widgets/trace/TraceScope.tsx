@@ -1,5 +1,5 @@
 /**
- * Scope headers — real in-flow rows; sticky via CSS (.trace-card / .trace-stick-block).
+ * Scope headers — in-flow rows inside Trace cards.
  * Leaf rows (no expandable body) keep the chevron slot for alignment but are not buttons.
  * Expand keeps the header where it is — body opens downward (preserveScrollAnchor).
  */

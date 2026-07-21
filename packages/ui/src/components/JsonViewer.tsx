@@ -32,6 +32,9 @@ function serialize(value: unknown): string {
 }
 
 function previewScalar(value: unknown): string {
+  if (value !== null && typeof value === "object") {
+    return Array.isArray(value) ? `[${value.length}]` : "{…}"
+  }
   return formatScalarDisplay(value)
 }
 
