@@ -1854,19 +1854,17 @@ textarea.input {
 /*
  * One bordered card per Call / Context.
  *
- * Sticky headers stay square — radius on a stuck header leaves transparent
- * corner cutouts where the card’s straight L/R borders poke through as stubs.
- *
- * overflow: clip + border-radius on the card clips those corners without
- * creating a scroll container (unlike overflow: hidden), so sticky still
- * tracks .trace-scroll. Header owns the top stroke so it remains when the
- * card’s top edge has scrolled away.
+ * Why borders are split (do not “unify” this back onto the card):
+ * A sticky header with border-radius has transparent corner cutouts. If the
+ * card also paints straight L/R borders, those strokes show through the
+ * cutouts as vertical stubs when stuck. So:
+ *   - card: clip + radius only (no side strokes)
+ *   - sticky header: full top chrome (top + L/R + top radius) — self-contained
+ *   - body: L/R + bottom + bottom radius
+ * overflow: clip (not hidden) so sticky still tracks .trace-scroll.
  */
 .trace-card {
-  border-left: 1px solid var(--border, var(--color-border));
-  border-right: 1px solid var(--border, var(--color-border));
-  border-bottom: 1px solid var(--border, var(--color-border));
-  border-top: none;
+  border: none;
   border-radius: 0.5rem;
   overflow: clip;
   background: var(--bg);
@@ -1874,13 +1872,17 @@ textarea.input {
 }
 
 .trace-card:not(.is-open) {
-  border: none;
   background: transparent;
   overflow: visible;
 }
 
 .trace-card__body {
+  border-left: 1px solid var(--border, var(--color-border));
+  border-right: 1px solid var(--border, var(--color-border));
+  border-bottom: 1px solid var(--border, var(--color-border));
+  border-radius: 0 0 0.5rem 0.5rem;
   background: var(--bg);
+  box-sizing: border-box;
 }
 
 /* Sibling stick containment — sticky ends when this block scrolls away */
@@ -1908,20 +1910,21 @@ textarea.input {
   cursor: pointer;
 }
 
-/* Call / Context — top stroke + bottom seam; no L/R (card owns those) */
+/*
+ * Call / Context — owns the full top chrome (including L/R).
+ * Rounded top is safe: nothing behind these corners paints a side stroke.
+ */
 .trace-card > .trace-scope {
   position: sticky;
   top: 0;
   z-index: 6;
-  border-top: 1px solid var(--border, var(--color-border));
-  border-bottom: 1px solid var(--border, var(--color-border));
-  border-radius: 0;
+  border: 1px solid var(--border, var(--color-border));
+  border-radius: 0.5rem 0.5rem 0 0;
   margin: 0;
   width: 100%;
 }
 
 .trace-card:not(.is-open) > .trace-scope {
-  border: 1px solid var(--border, var(--color-border));
   border-radius: 0.5rem;
 }
 
