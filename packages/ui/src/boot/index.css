@@ -5123,9 +5123,11 @@ textarea.input {
 }
 
 .thread-rail-item-title {
-  font-size: 1rem; /* match chat bubbles (text-base) */
-  line-height: 1.5;
-  font-weight: 450;
+  /* Same as TermChat system output + nav pill + .thread-nav-thread-title */
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.45;
+  font-weight: 400;
   letter-spacing: -0.01em;
 }
 
@@ -5407,6 +5409,7 @@ textarea.input {
 }
 
 .thread-nav-thread-title {
+  font-family: var(--font-sans);
   font-size: 15px;
   line-height: 1.45;
   font-weight: 400;

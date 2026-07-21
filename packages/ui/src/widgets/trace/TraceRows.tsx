@@ -1,5 +1,5 @@
 import { ChevronDown, ChevronRight, ChevronsDown, ChevronsUp } from "lucide-react"
-import { useRef, useState } from "react"
+import { useState } from "react"
 import { JsonViewer } from "../../components/JsonViewer"
 import { formatMs } from "../../lib/util"
 import {
@@ -9,7 +9,6 @@ import {
   type TraceToolCall,
 } from "./build-trace-dag"
 import { ExpandableText } from "./TraceExpandable"
-import { beginCollapseReveal } from "./trace-scroll-anchor"
 
 export function PromptMessageRow({
   msg,
@@ -165,7 +164,6 @@ export function ToolDef({
 }) {
   const [showSchema, setShowSchema] = useState(false)
   const [descOpen, setDescOpen] = useState(false)
-  const rootRef = useRef<HTMLDivElement>(null)
   const previewChars = 400
   const descLong = tool.description.length > previewChars
   const descText =
@@ -178,18 +176,11 @@ export function ToolDef({
   }
 
   function onToggleDesc() {
-    if (descOpen) {
-      const root = rootRef.current
-      const restore = root ? beginCollapseReveal(root) : () => {}
-      setDescOpen(false)
-      restore()
-      return
-    }
-    setDescOpen(true)
+    setDescOpen((v) => !v)
   }
 
   return (
-    <div ref={rootRef} className="trace-ctx-item">
+    <div className="trace-ctx-item">
       <div className="trace-ctx-item__name font-mono">{tool.name}</div>
       {tool.description ? (
         <pre className="trace-body-muted">{descText}</pre>

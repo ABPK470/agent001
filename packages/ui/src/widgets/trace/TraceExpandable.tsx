@@ -1,14 +1,11 @@
 /**
- * Expandable text — sticky right-rail Copy + More/Less (Context dialect).
- * Same control for Call / Sent / Received bodies.
- *
- * Collapsing reveals the block under the pin stack (no jump to later calls).
+ * Expandable text — sticky right-rail Copy + More/Less.
+ * Toggle only changes open state — scroll position is left alone.
  */
 
 import { ListChevronsDownUp, ListChevronsUpDown } from "lucide-react"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useState } from "react"
 import { CopyControl } from "./TraceCopy"
-import { beginCollapseReveal } from "./trace-scroll-anchor"
 
 function ExpandToggle({
   expanded,
@@ -49,7 +46,6 @@ export function ExpandableText({
   copyLabel?: string
 }) {
   const [expanded, setExpanded] = useState(false)
-  const rootRef = useRef<HTMLDivElement>(null)
   const isLong = text.length > previewChars
 
   useEffect(() => {
@@ -60,19 +56,11 @@ export function ExpandableText({
   const showRail = Boolean(copyLabel) || isLong
 
   function onToggleExpand() {
-    if (expanded) {
-      const root = rootRef.current
-      const restore = root ? beginCollapseReveal(root) : () => {}
-      setExpanded(false)
-      restore()
-      return
-    }
-    setExpanded(true)
+    setExpanded((v) => !v)
   }
 
   return (
     <div
-      ref={rootRef}
       className={`trace-expand${showRail ? " has-rail" : ""}${isLong && !expanded ? " is-clipped" : ""}`}
     >
       <div className="trace-expand__main">
