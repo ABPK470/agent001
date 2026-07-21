@@ -453,7 +453,7 @@ export type TraceEntry =
     }
     envelope: { workspaceRoot?: string; effectClass?: EffectClass; verificationMode?: VerificationMode; targetArtifacts?: string[] }
   }
-  | { kind: "planner-delegation-iteration"; stepName: string; depth: number; iteration: number; maxIterations: number }
+  | { kind: "planner-delegation-iteration"; stepName: string; depth: number; iteration: number; maxIterations: number; toolNames?: string[]; content?: string | null }
   | { kind: "planner-delegation-end"; stepName: string; depth: number; status: DelegationEndStatus; answer?: string; error?: string }
   // Debug/inspector entries
   | { kind: "system-prompt"; text: string }

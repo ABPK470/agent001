@@ -1300,7 +1300,6 @@ function buildResponseParts(
         break
       case "planner-plan-generated":
         parts = setActivityPart(parts, "plan", "Plan", "done", `${entry.stepCount} step${entry.stepCount !== 1 ? "s" : ""}`)
-        parts = pushNarrativePart(parts, `narrative-plan-${index}`, `I mapped out a ${entry.stepCount}-step approach.`)
         break
       case "planner-pipeline-start":
         currentPipelineAttempt = entry.attempt
@@ -1308,19 +1307,11 @@ function buildResponseParts(
         break
       case "planner-pipeline-end": {
         parts = setActivityPart(parts, `pipeline-${currentPipelineAttempt}`, "Pipeline", entry.status === "success" ? "done" : "error", `${entry.completedSteps}/${entry.totalSteps} steps`)
-        parts = pushNarrativePart(
-          parts,
-          `narrative-pipeline-${index}`,
-          entry.status === "success"
-            ? `I finished the planned flow across ${entry.completedSteps} step${entry.completedSteps !== 1 ? "s" : ""}.`
-            : `The planned flow stopped after ${entry.completedSteps} of ${entry.totalSteps} steps.`,
-          entry.status === "success" ? "neutral" : "error",
-        )
         break
       }
       case "planner-step-start": {
         runningSteps.set(entry.stepName, "activity")
-        parts = setActivityPart(parts, `step-${entry.stepName}`, `Generating ${humanizeStepName(entry.stepName)}`, "running")
+        parts = setActivityPart(parts, `step-${entry.stepName}`, `Generating ${humanizeStepName(entry.stepName)}`, "running", undefined, true)
         break
       }
       case "planner-step-end": {
@@ -1332,30 +1323,62 @@ function buildResponseParts(
             entry.status === "pass" || entry.status === "success" ? "done" : "error",
             entry.durationMs ? formatMs(entry.durationMs) : entry.error,
           )
-          parts = pushNarrativePart(
-            parts,
-            `narrative-step-${entry.stepName}-${index}`,
-            entry.status === "pass" || entry.status === "success"
-              ? `I completed ${humanizeStepName(entry.stepName)}.`
-              : `I ran into a problem during ${humanizeStepName(entry.stepName)}.`,
-            entry.status === "pass" || entry.status === "success" ? "neutral" : "error",
-          )
           runningSteps.delete(entry.stepName)
+        }
+        break
+      }
+      case "planner-delegation-start": {
+        runningSteps.set(entry.stepName, "activity")
+        parts = setActivityPart(
+          parts,
+          `step-${entry.stepName}`,
+          `Generating ${humanizeStepName(entry.stepName)}`,
+          "running",
+          entry.tools.length > 0 ? entry.tools.slice(0, 4).join(", ") : undefined,
+          true,
+        )
+        break
+      }
+      case "planner-delegation-iteration": {
+        const toolBit =
+          entry.toolNames && entry.toolNames.length > 0
+            ? entry.toolNames.slice(0, 3).join(", ")
+            : undefined
+        const detail = [
+          `iteration ${entry.iteration}/${entry.maxIterations}`,
+          toolBit,
+        ]
+          .filter(Boolean)
+          .join(" · ")
+        parts = setActivityPart(
+          parts,
+          `step-${entry.stepName}`,
+          `Generating ${humanizeStepName(entry.stepName)}`,
+          "running",
+          detail,
+          true,
+        )
+        break
+      }
+      case "planner-delegation-end": {
+        // Step end owns the final done/error chip; keep a live hint if step-end is late.
+        if (runningSteps.has(entry.stepName)) {
+          parts = setActivityPart(
+            parts,
+            `step-${entry.stepName}`,
+            `Generating ${humanizeStepName(entry.stepName)}`,
+            entry.status === "done" ? "done" : "error",
+            entry.error ?? undefined,
+          )
         }
         break
       }
       case "planner-verification":
         parts = settlePrimaryActivities(parts, "verification")
         parts = setActivityPart(parts, "verification", "Verifying", entry.overall === "pass" ? "done" : entry.overall === "fail" ? "error" : "running", undefined, entry.overall !== "pass" && entry.overall !== "fail")
-        if (entry.overall === "pass") {
-          parts = pushNarrativePart(parts, `narrative-verification-${index}`, "I checked the result and it passed verification.")
-        } else if (entry.overall === "fail") {
-          parts = pushNarrativePart(parts, `narrative-verification-${index}`, "I found an issue while verifying the result.", "error")
-        }
         break
       case "planner-repair-plan":
         parts = setActivityPart(parts, `repair-${entry.attempt}`, "Repairing", "running", `attempt ${entry.attempt}`, true)
-        parts = pushNarrativePart(parts, `narrative-repair-${index}`, `I found an issue and started repair attempt ${entry.attempt}.`, "error")
         break
       case "planner-sql-quality": {
         const summary = summarizeSqlQualityEntry(entry)
@@ -1782,17 +1805,17 @@ function IterationBlock({
   const { preserveToggle } = useChatScroll()
   const [open, setOpen] = useState(false)
   const userToggledRef = useRef(false)
-  // Live: keep the newest iteration open while tools stream in; fold only
-  // once a narration paragraph lands for that step (not when tools finish).
+  // Live or completed: keep the newest tool block open until a real
+  // assistant prose/answer lands after it. Planner status used to fake
+  // narratives that collapsed tools and looked like the answer.
   useEffect(() => {
     if (userToggledRef.current) return
-    if (!isLiveRun) return
     if (isLastIteration && !hasNarrativeAfter) {
       setOpen(true)
     } else if (hasNarrativeAfter) {
       setOpen(false)
     }
-  }, [isLiveRun, isLastIteration, hasNarrativeAfter, part.hasRunning])
+  }, [isLastIteration, hasNarrativeAfter, part.hasRunning])
 
   const buttonRef = useRef<HTMLButtonElement>(null)
   const errored = part.tools.some((p) => p.row.status === "error")
@@ -2395,7 +2418,10 @@ function RunMessageImpl({
       if (candidate.kind !== "iteration-block") return
       meta.set(candidate.id, {
         isLastIteration: index === lastIterationIndex,
-        hasNarrativeAfter: responseParts.slice(index + 1).some((p) => p.kind === "narrative"),
+        // Only real assistant prose/answers fold tools — not progress chrome.
+        hasNarrativeAfter: responseParts
+          .slice(index + 1)
+          .some((p) => p.kind === "narrative" || p.kind === "markdown"),
       })
     })
     return meta
@@ -2408,22 +2434,19 @@ function RunMessageImpl({
     }
 
     // Copilot-style flat thread: every responsePart renders as a single
-    // row in chronological order. No DetailViewport buffering, no
-    // HistoryDisclosure aggregation, no ActiveMilestone footer. The
-    // assistant's prose paragraphs (narrative) and tool-action lines
-    // sit as siblings at the same indent level — that's the layout
-    // the user is going for.
+    // row in chronological order. Planner progress chips stay visible so
+    // plan-mode work is readable; tool blocks carry the concrete actions.
     const items: React.ReactNode[] = []
 
     let lastToolHasRunning = false
 
     responseParts.forEach((part) => {
       if (part.kind === "progress") {
-        // Internal planner phases (Plan / Direct / Generating / Verifying /
-        // Pipeline / step-*) are bookkeeping. They produce no narrative
-        // text the user benefits from — the tool calls and the agent's
-        // thinking already tell the story. Suppress entirely from the
-        // visible thread; the bottom shimmer covers "still working".
+        // Skip the bare "Thinking" placeholder — bottom shimmer covers idle wait.
+        // Keep Plan / Pipeline / step / Verify / Repair chips — that is the
+        // plan-mode story when child work does not look like direct-loop tools.
+        if (part.id === "thinking") return
+        items.push(<ProgressPill key={part.id} part={part} />)
         return
       }
 

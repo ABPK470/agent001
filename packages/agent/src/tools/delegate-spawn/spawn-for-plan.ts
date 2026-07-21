@@ -167,7 +167,9 @@ export async function spawnChildForPlan(
         stepName: step.name,
         depth: ctx.depth + 1,
         iteration: iteration + 1,
-        maxIterations: maxIter
+        maxIterations: maxIter,
+        toolNames: _toolCalls.map((c) => c.name),
+        content: _content ? _content.slice(0, 200) : null,
       })
       for (const ev of pendingPlannerLlmEvents) ctx.onChildTrace?.(ev)
       pendingPlannerLlmEvents = []

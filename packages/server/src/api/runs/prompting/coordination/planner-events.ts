@@ -190,7 +190,9 @@ export function handlePlannerTrace(
         stepName: e.stepName,
         depth: e.depth,
         iteration: e.iteration,
-        maxIterations: e.maxIterations
+        maxIterations: e.maxIterations,
+        toolNames: e.toolNames,
+        content: e.content,
       }
     })
   } else if (kind === "planner-delegation-end") {
