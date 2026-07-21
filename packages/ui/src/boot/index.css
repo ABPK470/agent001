@@ -1853,9 +1853,14 @@ textarea.input {
 
 /*
  * One bordered card per Call / Context.
- * Top chrome lives on the sticky header so it stays when stuck
- * (card L/R alone would poke straight past the rounded corner).
- * No overflow:hidden — sticky needs a visible ancestor chain.
+ *
+ * Sticky headers stay square — radius on a stuck header leaves transparent
+ * corner cutouts where the card’s straight L/R borders poke through as stubs.
+ *
+ * overflow: clip + border-radius on the card clips those corners without
+ * creating a scroll container (unlike overflow: hidden), so sticky still
+ * tracks .trace-scroll. Header owns the top stroke so it remains when the
+ * card’s top edge has scrolled away.
  */
 .trace-card {
   border-left: 1px solid var(--border, var(--color-border));
@@ -1863,6 +1868,7 @@ textarea.input {
   border-bottom: 1px solid var(--border, var(--color-border));
   border-top: none;
   border-radius: 0.5rem;
+  overflow: clip;
   background: var(--bg);
   box-sizing: border-box;
 }
@@ -1870,10 +1876,10 @@ textarea.input {
 .trace-card:not(.is-open) {
   border: none;
   background: transparent;
+  overflow: visible;
 }
 
 .trace-card__body {
-  border-top: 1px solid var(--border, var(--color-border));
   background: var(--bg);
 }
 
@@ -1902,30 +1908,21 @@ textarea.input {
   cursor: pointer;
 }
 
-/*
- * Call / Context header owns top + L/R stroke and radius.
- * Wider by 1px each side so it covers the card’s straight L/R at the curve.
- */
+/* Call / Context — top stroke + bottom seam; no L/R (card owns those) */
 .trace-card > .trace-scope {
   position: sticky;
   top: 0;
   z-index: 6;
   border-top: 1px solid var(--border, var(--color-border));
-  border-left: 1px solid var(--border, var(--color-border));
-  border-right: 1px solid var(--border, var(--color-border));
-  border-bottom: none;
-  border-radius: 0.5rem 0.5rem 0 0;
-  margin-left: -1px;
-  margin-right: -1px;
-  width: calc(100% + 2px);
+  border-bottom: 1px solid var(--border, var(--color-border));
+  border-radius: 0;
+  margin: 0;
+  width: 100%;
 }
 
 .trace-card:not(.is-open) > .trace-scope {
   border: 1px solid var(--border, var(--color-border));
   border-radius: 0.5rem;
-  margin-left: 0;
-  margin-right: 0;
-  width: 100%;
 }
 
 .trace-stick-block > .trace-scope {
@@ -1955,12 +1952,12 @@ textarea.input {
   /* Opaque enough that stuck headers don’t show content bleeding through */
   background: color-mix(in srgb, var(--text, var(--color-text)) 3.5%, var(--bg));
   color: var(--text-secondary, var(--text-muted, var(--color-text-muted)));
-  border-top: 1px solid var(--border-subtle, var(--color-border-subtle));
 }
 
-.trace-card > .trace-scope.is-soft {
-  /* Keep the sticky top stroke (not the soft in-body separator) */
-  border-top-color: var(--border, var(--color-border));
+/* Seam between sibling stick-blocks (Received under Sent, Tools under Prompt).
+ * First block uses the Call/Context header’s bottom border — no double stroke. */
+.trace-stick-block + .trace-stick-block > .trace-scope {
+  border-top: 1px solid var(--border-subtle, var(--color-border-subtle));
 }
 
 .trace-scope.is-soft:hover,
