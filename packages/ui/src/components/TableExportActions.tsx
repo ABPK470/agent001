@@ -95,21 +95,22 @@ export function TableExportActions({
   }
 
   const btn = [
-    "inline-flex items-center gap-1 rounded-sm py-0.5",
-    compact ? "text-[12px] px-0.5" : "text-sm px-1",
-    "text-text",
-    "disabled:opacity-40 disabled:pointer-events-none cursor-pointer",
+    "inline-flex items-center gap-0.5 rounded-sm px-1 py-0.5",
+    compact ? "text-[12.5px] leading-none" : "text-[14.5px] leading-none",
+    "text-text hover:bg-overlay-2",
+    "disabled:opacity-40 disabled:pointer-events-none disabled:hover:bg-transparent cursor-pointer",
   ].join(" ")
 
   const idle = !disabled && !busyAction
   const pinnedVisible = Boolean(feedback || busyAction || error)
+  const iconSize = compact ? 11 : 12
 
   return (
     <div
       className={[
-        "flex flex-wrap items-center gap-1 min-w-0",
+        "flex flex-wrap items-center gap-0 min-w-0",
         // Chip bg lives here (not a parent) so idle opacity:0 hides it too.
-        overlayChip ? "rounded-md px-1.5 py-0.5" : "",
+        overlayChip ? "rounded-md px-0.5 py-0.5" : "",
         revealOnHover
           ? [
               "transition-opacity duration-150",
@@ -137,7 +138,7 @@ export function TableExportActions({
         onClick={() => void onCopy()}
         aria-label="Copy table as CSV"
       >
-        {feedback === "copy" ? <Check size={11} className="text-success" /> : <Copy size={11} />}
+        {feedback === "copy" ? <Check size={iconSize} className="text-success" /> : <Copy size={iconSize} />}
         <span>{feedback === "copy" ? "Copied" : "Copy"}</span>
       </button>
       <button
@@ -147,7 +148,7 @@ export function TableExportActions({
         onClick={() => void onExport("csv")}
         aria-label="Export table as CSV"
       >
-        {feedback === "csv" ? <Check size={11} className="text-success" /> : <Sheet size={11} />}
+        {feedback === "csv" ? <Check size={iconSize} className="text-success" /> : <Sheet size={iconSize} />}
         <span>CSV</span>
       </button>
       <button
@@ -157,11 +158,11 @@ export function TableExportActions({
         onClick={() => void onExport("json")}
         aria-label="Export table as JSON"
       >
-        {feedback === "json" ? <Check size={11} className="text-success" /> : <Braces size={11} />}
+        {feedback === "json" ? <Check size={iconSize} className="text-success" /> : <Braces size={iconSize} />}
         <span>JSON</span>
       </button>
       {error ? (
-        <span className="text-[11px] text-error truncate max-w-[14rem]">{error}</span>
+        <span className="text-[11.5px] text-error truncate max-w-[14rem] px-1">{error}</span>
       ) : null}
     </div>
   )
