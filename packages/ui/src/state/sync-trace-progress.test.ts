@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest"
 import {
   createSyncProgressState,
+  finalizeSyncProgress,
   reduceSyncSseEvent,
-  syncProgressToTraceEntry
+  syncProgressResultLine,
+  syncProgressToTraceEntry,
 } from "./sync-trace-progress.js"
 
 describe("sync-trace-progress", () => {
@@ -54,5 +56,25 @@ describe("sync-trace-progress", () => {
     if (entry.kind !== "sync-progress") throw new Error("expected sync-progress")
     expect(entry.sql?.preview).toContain("HASHBYTES")
     expect(entry.detail).toContain("42 rows")
+  })
+
+  it("finalize keeps SSE summary on success (does not dump full tool text)", () => {
+    let state = createSyncProgressState("step-3", "sync_preview")
+    state = reduceSyncSseEvent(state, "sync.preview.completed", {
+      planId: "abcdefgh-1234",
+      totals: { insert: 3, update: 1, delete: 0 },
+    })
+    const finalized = finalizeSyncProgress(state, "Plan abcdefgh…\n  huge dump…", false)
+    expect(finalized.result).toContain("Preview complete — plan abcdefgh")
+    expect(finalized.result).not.toContain("huge dump")
+  })
+
+  it("hides stub result lines like ok/done", () => {
+    expect(syncProgressResultLine("ok", "done")).toBeNull()
+    expect(syncProgressResultLine("done", "done")).toBeNull()
+    expect(syncProgressResultLine("Preview complete — plan abc", "done")).toBe(
+      "Preview complete — plan abc",
+    )
+    expect(syncProgressResultLine("ok", "error")).toBe("ok")
   })
 })

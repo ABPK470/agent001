@@ -629,7 +629,12 @@ function buildKitchenSink(): TraceEntry[] {
   const tcSync = {
     id: "k-tc-sync",
     name: "sync_preview",
-    arguments: { planId: "plan-demo", environment: "dev" },
+    arguments: {
+      entityType: "client",
+      entityId: 42,
+      source: "dev",
+      target: "uat",
+    },
   }
   const afterSync = [
     ...afterSqlOk,
@@ -942,7 +947,7 @@ function buildKitchenSink(): TraceEntry[] {
       invocationId: "k-inv-sync",
       toolCallId: "k-tc-sync",
       tool: "sync_preview",
-      argsSummary: "plan-demo",
+      argsSummary: "client 42",
       argsFormatted: JSON.stringify(tcSync.arguments),
     },
     {
@@ -962,7 +967,7 @@ function buildKitchenSink(): TraceEntry[] {
       status: "done",
       headline: "Sync preview complete",
       detail: "2 tables ready",
-      result: "ok",
+      result: "Preview complete — plan plan-dem: +3 ~1 -0",
       lastTable: { name: "orders", index: 2, total: 2, insert: 3, update: 1, delete: 0, status: "done" },
       sql: {
         label: "preview",
@@ -976,7 +981,7 @@ function buildKitchenSink(): TraceEntry[] {
       kind: "tool-result",
       invocationId: "k-inv-sync",
       toolCallId: "k-tc-sync",
-      text: "Preview OK — 2 tables",
+      text: "Plan plan-demo — client 42\n  dev → uat\n  Totals: +3 ~1 -0 (=0 unchanged) across 2 table(s)",
     },
     {
       kind: "delegation-parallel-end",

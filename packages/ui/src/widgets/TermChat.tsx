@@ -40,6 +40,7 @@ import { useMe } from "../hooks/useMe"
 import { ToastStack, useWidgetToasts } from "../components/useWidgetToasts"
 import { useStickToBottomScroll } from "../hooks/useStickToBottomScroll"
 import { CHAT_SCROLL_HOST_ATTR, isNearBottom } from "../lib/chatScroll"
+import { syncProgressResultLine } from "../state/sync-trace-progress"
 import {
   HOME_CHAT_COLUMN_CLASS,
   HOME_CHAT_GUTTER_X_CLASS,
@@ -408,29 +409,6 @@ function isRunActiveStatus(status: string | null | undefined): boolean {
   return status === RunStatus.Pending || status === RunStatus.Running || status === RunStatus.Planning
 }
 
-function StatusDot({ status, animated = true }: { status: "running" | "done" | "error"; animated?: boolean }) {
-  if (status === "running") {
-    return (
-      <span className="relative flex shrink-0 w-4 h-4 items-center justify-center">
-        {animated && <span className="animate-ping absolute inline-flex h-2 w-2 rounded-full bg-text-faint opacity-50" />}
-        <span className="relative inline-flex rounded-full w-2 h-2 bg-text-muted" />
-      </span>
-    )
-  }
-  if (status === "done") {
-    return (
-      <span className="flex shrink-0 items-center justify-center w-4 h-4 rounded-full border border-text-muted">
-        <Check size={8} strokeWidth={2} className="text-text-muted" />
-      </span>
-    )
-  }
-  return (
-    <span className="flex shrink-0 items-center justify-center w-4 h-4 rounded-full border border-error/50">
-      <span className="inline-flex h-1.5 w-1.5 rounded-full bg-error" />
-    </span>
-  )
-}
-
 const TOOL_LABELS: Record<string, string> = {
   read_file: "read",
   write_file: "write",
@@ -609,6 +587,9 @@ function ToolSyncProgressBody({ part }: { part: ResponseSyncProgressPart }) {
   const isRunning = part.status === "running"
   const tone = part.level === "error" || part.status === "error" ? "error" : "neutral"
   const lineClass = ["text-[15px] leading-5 font-mono", tone === "error" ? "text-error" : "text-text-faint"].join(" ")
+  // Skip stub/trivial statuses ("ok", "done") — they read as orphan junk under the SQL chip.
+  // Real SSE summaries look like "Preview complete — plan abc12345: +3 ~1 -0".
+  const resultLine = syncProgressResultLine(part.result, part.status)
 
   return (
     <div className="ml-[14px] mt-0.5 pl-3 border-l border-border-subtle space-y-1">
@@ -626,11 +607,11 @@ function ToolSyncProgressBody({ part }: { part: ResponseSyncProgressPart }) {
           <CodeBlock code={part.sql.preview} lang="sql" maxHeight={120} />
         </div>
       )}
-      {part.result && (
+      {resultLine ? (
         <p className={["text-[15px] leading-5 font-mono", part.status === "error" ? "text-error" : "text-text-secondary"].join(" ")}>
-          {part.result}
+          {resultLine}
         </p>
-      )}
+      ) : null}
     </div>
   )
 }
@@ -812,23 +793,16 @@ function PlanBlock({ part }: { part: ResponsePlanPart }) {
         onClick={() =>
           preserveToggle(buttonRef.current, () => setOpen((v) => !v))
         }
-        className="flex w-full max-w-full items-start gap-3 py-0.5 text-left"
+        className="inline-flex max-w-full items-center gap-1.5 py-0.5 text-left text-[15px] leading-6 text-text-muted transition-colors hover:text-text-secondary"
       >
-        <span className="mt-0.5 flex shrink-0 items-center gap-1">
-          <StatusDot status={part.status} animated={part.status === "running"} />
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="inline-flex items-center gap-1.5 text-[15px] leading-6 text-text-muted">
-            <Chevron size={12} strokeWidth={1.5} className="text-text-faint shrink-0" />
-            <span>Plan</span>
-            <span className="text-text-faint">
-              {part.stepCount} step{part.stepCount !== 1 ? "s" : ""}
-            </span>
-          </span>
+        <Chevron size={12} strokeWidth={1.5} className="text-text-faint shrink-0" />
+        <span>Plan</span>
+        <span className="text-text-faint">
+          {part.stepCount} step{part.stepCount !== 1 ? "s" : ""}
         </span>
       </button>
       {open && part.steps.length > 0 && (
-        <ol className="mt-1 ml-[1.65rem] pl-3 border-l border-border-subtle space-y-1 list-none">
+        <ol className="mt-1 ml-[0.35rem] pl-3 border-l border-border-subtle space-y-1 list-none">
           {part.steps.map((step, i) => (
             <li key={`${step.name}-${i}`} className="flex gap-2 text-[15px] leading-6 text-text-muted">
               <span className="tabular-nums text-text-faint shrink-0 w-4">{i + 1}.</span>
@@ -879,7 +853,6 @@ function StepBlock({
   // Step gaps are process detail — same muted chrome as successful steps.
   const labelClass =
     part.status === "running" ? "text-text-muted" : "text-text-faint"
-  const dotStatus = part.status === "error" ? "done" : part.status
 
   return (
     <div className="py-1">
@@ -894,25 +867,18 @@ function StepBlock({
             setOpen((v) => !v)
           })
         }}
-        className={`flex w-full max-w-full items-start gap-3 py-0.5 text-left ${hasTools ? "" : "cursor-default"}`}
+        className={`inline-flex max-w-full items-baseline gap-1.5 py-0.5 text-left text-[15px] leading-6 ${labelClass} ${hasTools ? "transition-colors hover:text-text-secondary" : "cursor-default"}`}
       >
-        <span className="mt-0.5 shrink-0">
-          <StatusDot status={dotStatus} animated={part.status === "running"} />
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className={`inline-flex flex-wrap items-baseline gap-x-1.5 text-[15px] leading-6 ${labelClass}`}>
-            {hasTools && (
-              <Chevron size={12} strokeWidth={1.5} className="text-text-faint shrink-0 translate-y-[2px]" />
-            )}
-            <span>{part.title}</span>
-            {part.detail && (
-              <span className="text-[15px] text-text-faint font-normal">{part.detail}</span>
-            )}
-          </span>
-        </span>
+        {hasTools ? (
+          <Chevron size={12} strokeWidth={1.5} className="text-text-faint shrink-0 translate-y-[2px]" />
+        ) : null}
+        <span>{part.title}</span>
+        {part.detail ? (
+          <span className="text-[15px] text-text-faint font-normal">{part.detail}</span>
+        ) : null}
       </button>
       {open && hasTools && (
-        <div className="mt-0.5 ml-[1.65rem] pl-3 border-l border-border-subtle">
+        <div className="mt-0.5 ml-[0.35rem] pl-3 border-l border-border-subtle">
           <IterationToolList
             tools={part.tools}
             syncByInvocation={syncByInvocation}
@@ -1011,26 +977,22 @@ function IterationToolList({
 }
 
 function ProgressPill({ part }: { part: ResponseProgressPart }) {
-  const hasDetail = Boolean(part.detail)
   // Settled process outcomes (including "needs work") share one muted band —
-  // never treat planner gaps as alarm-red incidents.
+  // never treat planner gaps as alarm-red incidents. Labels carry status;
+  // no status-dot chrome (text + bottom shimmer are enough while live).
   const labelClass =
     part.status === "running" ? "text-text-muted" : "text-text-faint"
-  const dotStatus = part.status === "error" ? "done" : part.status
 
   return (
-    <div className={`flex gap-3 py-1 min-w-0 ${hasDetail ? "items-start" : "items-center"}`}>
-      <StatusDot status={dotStatus} animated={part.shimmer === true} />
-      <div className="min-w-0 flex-1">
-        <span className={`text-[15px] font-normal tracking-[-0.01em] block ${labelClass}`}>
-          {part.label}
-        </span>
-        {part.detail && (
-          <div className="pt-0.5 text-[15px] leading-6 whitespace-pre-wrap break-words text-text-faint">
-            {part.detail}
-          </div>
-        )}
-      </div>
+    <div className="py-1 min-w-0">
+      <span className={`text-[15px] font-normal tracking-[-0.01em] block ${labelClass}`}>
+        {part.label}
+      </span>
+      {part.detail && (
+        <div className="pt-0.5 text-[15px] leading-6 whitespace-pre-wrap break-words text-text-faint">
+          {part.detail}
+        </div>
+      )}
     </div>
   )
 }
@@ -1040,15 +1002,12 @@ function NarrativeUpdate({ part }: { part: ResponseNarrativePart }) {
   // Prose = assistant voice — bright, dominates the thread.
   if (part.role === "status") {
     return (
-      <div className="flex gap-3 py-1 min-w-0 items-start">
-        <StatusDot status={part.tone === "error" ? "error" : "done"} animated={false} />
-        <div
-          className={`min-w-0 flex-1 text-[15px] leading-6 ${
-            part.tone === "error" ? "text-text-muted" : "text-text-faint"
-          }`}
-        >
-          {part.text}
-        </div>
+      <div
+        className={`py-1 min-w-0 text-[15px] leading-6 ${
+          part.tone === "error" ? "text-text-muted" : "text-text-faint"
+        }`}
+      >
+        {part.text}
       </div>
     )
   }
@@ -1062,10 +1021,7 @@ function NarrativeUpdate({ part }: { part: ResponseNarrativePart }) {
 function ErrorNote({ text }: { text: string }) {
   // Same chrome as activity rows — never scream red mono for recoverable notes.
   return (
-    <div className="flex gap-3 py-1 min-w-0 items-start">
-      <StatusDot status="error" animated={false} />
-      <div className="min-w-0 flex-1 text-[15px] leading-6 text-text-muted">{text}</div>
-    </div>
+    <div className="py-1 min-w-0 text-[15px] leading-6 text-text-muted">{text}</div>
   )
 }
 
@@ -1594,11 +1550,8 @@ function RunMessageImpl({
 
     // Single bottom shimmer — the persistent "we're still working"
     // milestone indicator. Shown whenever the run is active and we're
-    // not already streaming the final answer. We deliberately keep it
-    // visible while a tool row is also pulsing (the per-tool dot
-    // signals that *this* tool is active; the shimmer signals that the
-    // overall iteration / agent loop is still progressing — they answer
-    // different questions for the user).
+    // not already streaming the final answer. Labels + this shimmer are
+    // enough; activity rows no longer carry status dots.
     const hasStreamingAnswer = responseParts.some(
       (p) => p.kind === "markdown" && p.streaming === true,
     )

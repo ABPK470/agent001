@@ -285,11 +285,17 @@ export function finalizeSyncProgress(
   resultText: string | null,
   failed: boolean
 ): SyncProgressState {
+  // On success, keep the short SSE summary (e.g. "Preview complete — plan …").
+  // Never replace it with the full tool dump — that already lives on the
+  // tool-result pill. On failure, prefer the error text.
+  const nextResult = failed
+    ? (resultText ?? state.result)
+    : state.result
   return {
     ...state,
     status: failed ? "error" : "done",
     level: failed ? "error" : state.level,
-    result: resultText ?? state.result
+    result: nextResult,
   }
 }
 
@@ -297,4 +303,22 @@ function truncate(text: string, max: number): string {
   const t = text.replace(/\s+/g, " ").trim()
   if (t.length <= max) return t
   return t.slice(0, max - 1) + "…"
+}
+
+/**
+ * What to show under the sync SQL chip. Drops stub statuses ("ok"/"done")
+ * that used to render as orphan text in the progress body.
+ */
+export function syncProgressResultLine(
+  result: string | null | undefined,
+  status: SyncProgressState["status"],
+): string | null {
+  if (!result) return null
+  const trimmed = result.trim()
+  if (!trimmed) return null
+  if (status !== "error") {
+    const lower = trimmed.toLowerCase()
+    if (lower === "ok" || lower === "done" || lower === "success") return null
+  }
+  return trimmed
 }
