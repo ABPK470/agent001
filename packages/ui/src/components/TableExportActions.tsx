@@ -4,6 +4,7 @@
  * its full width; no permanent side gutter.
  */
 
+import type { TableExportFormat } from "@mia/shared-types"
 import { Braces, Check, Copy, Sheet } from "lucide-react"
 import { useEffect, useRef, useState, type JSX } from "react"
 import {
@@ -11,7 +12,6 @@ import {
   exportChatTable,
   type ChatTableExportSource,
 } from "../lib/chat-table-export"
-import type { TableExportFormat } from "@mia/shared-types"
 
 export interface TableExportActionsProps {
   headers: string[]
@@ -98,7 +98,7 @@ export function TableExportActions({
     "inline-flex items-center gap-0.5 rounded-sm px-1 py-0.5",
     // Match table header band (15px / leading-6) — not leading-none, which
     // left the chip sitting too high in the th padding.
-    compact ? "text-[12.5px] leading-5" : "text-[14.5px] leading-5",
+    compact ? "text-[13px] leading-5" : "text-[15px] leading-6",
     "text-text hover:bg-overlay-2",
     "disabled:opacity-40 disabled:pointer-events-none disabled:hover:bg-transparent cursor-pointer",
   ].join(" ")
