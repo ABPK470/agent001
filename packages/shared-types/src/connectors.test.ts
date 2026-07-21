@@ -66,7 +66,6 @@ describe("validateConnectorConfig", () => {
       domain: null,
       encrypt: true,
       trustServerCertificate: true,
-      writeEnabled: false,
     })
     expect(result.ok).toBe(true)
     expect(result.error).toBeNull()
@@ -80,7 +79,6 @@ describe("withConnectorConfigDefaults", () => {
     expect(config["database"]).toBe("mymi")
     expect(config["port"]).toBe(1433)
     expect(config["encrypt"]).toBe(true)
-    expect(config["writeEnabled"]).toBe(false)
     expect(config["domain"]).toBeNull()
   })
 })

@@ -16,8 +16,6 @@ function minimalPlan(overrides?: Partial<SyncPlan["preflight"]>): SyncPlan {
       issues: [],
       rootParentReady: true,
       rootParentIssue: null,
-      targetWriteEnabled: true,
-      targetWriteIssue: null,
       ...overrides
     },
     tables: [],
@@ -46,23 +44,6 @@ describe("execPreflight", () => {
 
   it("passes when all blocking checks are green", () => {
     expect(execPreflightBlocked(minimalPlan())).toBe(false)
-  })
-
-  it("blocks when target connector Write is disabled", () => {
-    const plan = minimalPlan({
-      targetWriteEnabled: false,
-      targetWriteIssue: 'Target "DEV" connector is read-only (writeEnabled=false).',
-    })
-    expect(execPreflightBlocked(plan)).toBe(true)
-    expect(buildExecPreflightChecks(plan).find((c) => c.id === "target-write")?.passed).toBe(false)
-  })
-
-  it("does not block execute when target write capability is unknown at preview", () => {
-    const plan = minimalPlan({ targetWriteEnabled: null, targetWriteIssue: "pool unavailable" })
-    expect(execPreflightBlocked(plan)).toBe(false)
-    const check = buildExecPreflightChecks(plan).find((c) => c.id === "target-write")
-    expect(check?.passed).toBe(true)
-    expect(check?.blocking).toBe(false)
   })
 
   it("does not block when metadata is already in sync (zero row changes)", () => {

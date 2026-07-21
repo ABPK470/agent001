@@ -49,7 +49,6 @@ function isWebhdfsWrite(spec: WriteSpec): spec is WebhdfsWriteSpec {
 
 export interface WebhdfsAdapterOptions {
   readonly driverProvider: () => Promise<WebHdfsDriver>
-  readonly writeEnabled: boolean
   readonly batchSize?: number
 }
 
@@ -83,9 +82,6 @@ export function createWebhdfsAdapter(
     async write(spec: WriteSpec, rows: AsyncGenerator<RowBatch>, writeOpts?: WriteOptions): Promise<MoveSummary> {
       if (!driver) throw new Error("webhdfs adapter write before open")
       if (!isWebhdfsWrite(spec)) throw new Error(`webhdfs adapter cannot write spec kind '${spec.kind}'`)
-      if (!options.writeEnabled) {
-        return makeSummary("failed", 0, 0, [{ row: 0, message: "connector is read-only (writeEnabled=false)" }], 0)
-      }
       try {
         throwIfAborted(writeOpts?.signal)
         if (spec.format === "parquet") {

@@ -580,7 +580,7 @@ function summarizeSqlQualityEntry(entry: Extract<TraceEntry, { kind: "planner-sq
   const notes: string[] = []
   if (entry.validationCode) {
     const label =
-      entry.validationCode === "write_disabled" ? "connector read-only" : entry.validationCode
+      entry.validationCode === "read_only_tool" ? "tool read-only" : entry.validationCode
     notes.push(`blocked by ${label}`)
   }
   if (entry.missingPersistedMirrorCandidates.length > 0) {
@@ -628,15 +628,15 @@ function describeSqlQualityForChat(
   const notes = summarizeSqlQualityEntry(entry)
   if (entry.phase === "blocked") {
     const reason = entry.validationCode
-      ? (entry.validationCode === "write_disabled"
-          ? "connector read-only"
+      ? (entry.validationCode === "read_only_tool"
+          ? "tool read-only"
           : entry.validationCode)
       : notes !== "blocked"
         ? notes
         : "validator refused the query"
     const hint =
-      entry.validationCode === "write_disabled"
-        ? "enable Write on the connector (policy alone cannot override)."
+      entry.validationCode === "read_only_tool"
+        ? "this tool only allows SELECT/WITH/#temp."
         : "query needs a tighter filter."
     return {
       text: `Blocked before send (${reason}) — ${hint}`,
@@ -988,8 +988,8 @@ export function buildResponseParts(
             ? `SQL failed: ${cleanSqlError(entry.error) || "server error"}`
             : entry.phase === "blocked"
               ? `Blocked before send: ${
-                  entry.validationCode === "write_disabled"
-                    ? "connector read-only"
+                  entry.validationCode === "read_only_tool"
+                    ? "tool read-only"
                     : (entry.validationCode ?? summarizeSqlQualityEntry(entry))
                 }`
               : summarizeSqlQualityEntry(entry))

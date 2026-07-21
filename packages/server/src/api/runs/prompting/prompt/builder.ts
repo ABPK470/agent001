@@ -203,12 +203,11 @@ export function buildToolContext(tools: Tool[], opts?: BuildToolContextOptions):
     const cfgs = opts?.host ? getMssqlConfig(opts.host) : []
     if (cfgs.length > 0) {
       const dbList = cfgs
-        .map((c) => {
-          const mode = c.writeEnabled ? "read-write" : "read-only"
-          return cfgs.length === 1
-            ? `${mode} access to ${c.server}/${c.database}`
-            : `"${c.name}" (${c.server}/${c.database}, ${mode})`
-        })
+        .map((c) =>
+          cfgs.length === 1
+            ? `access to ${c.server}/${c.database}`
+            : `"${c.name}" (${c.server}/${c.database})`
+        )
         .join("; ")
       sections.push(`Database: You have access to Microsoft SQL Server — ${dbList}.`)
 

@@ -75,7 +75,6 @@ function configFingerprint(connector: Connector): string {
     domain: asString(c["domain"]),
     encrypt: asBoolean(c["encrypt"], true),
     trustServerCertificate: asBoolean(c["trustServerCertificate"], true),
-    writeEnabled: asBoolean(c["writeEnabled"], false),
     knowledgePath: asString(c["knowledgePath"]),
   })
 }
@@ -83,7 +82,6 @@ function configFingerprint(connector: Connector): string {
 /** Build a finalized `sql.config` (mirrors the agent's setMssqlConfig defaults). */
 function buildConfig(connector: Connector, projectRoot: string): {
   config: sql.config
-  writeEnabled: boolean
   knowledge: string | null
 } {
   const c = connector.config
@@ -119,7 +117,6 @@ function buildConfig(connector: Connector, projectRoot: string): {
   }
   return {
     config,
-    writeEnabled: asBoolean(c["writeEnabled"], false),
     knowledge: knowledgePath ? readKnowledgeFile(projectRoot, knowledgePath) : null,
   }
 }
@@ -129,7 +126,6 @@ interface CachedEntry {
   fingerprint: string
   pool: sql.ConnectionPool | null
   config: sql.config
-  writeEnabled: boolean
   knowledge: string | null
 }
 
@@ -156,7 +152,6 @@ export function createMssqlPoolProvider(projectRoot: string): MssqlPoolProvider 
         fingerprint: fp,
         pool: null,
         config: built.config,
-        writeEnabled: built.writeEnabled,
         knowledge: built.knowledge,
       }
       cache.set(connector.id, entry)
@@ -191,7 +186,6 @@ export function createMssqlPoolProvider(projectRoot: string): MssqlPoolProvider 
       connectorId: entry.connectorId,
       pool: entry.pool,
       config: entry.config,
-      writeEnabled: entry.writeEnabled,
       knowledge: entry.knowledge,
     }
   }

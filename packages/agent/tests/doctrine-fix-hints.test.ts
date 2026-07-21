@@ -59,30 +59,24 @@ describe("doctrine fixHints", () => {
   })
 
   it("validator appends the doctrine fixHint to its error string", () => {
-    const aggErr = validateQuery("SELECT SUM(x) AS Avg_y FROM t", false) ?? ""
+    const aggErr = validateQuery("SELECT SUM(x) AS Avg_y FROM t") ?? ""
     expect(aggErr).toMatch(/aggregate-semantic mismatch/i)
     expect(aggErr).toContain("Fix:")
     expect(aggErr).toContain("match the alias")
 
     const tempErr =
-      validateQuery(
-        ["CREATE TABLE #created_a3f91c08 (x int);", "SELECT * FROM #missing_a3f91c08;"].join("\n"),
-        false
-      ) ?? ""
+      validateQuery(["CREATE TABLE #created_a3f91c08 (x int);", "SELECT * FROM #missing_a3f91c08;"].join("\n")) ?? ""
     expect(tempErr).toMatch(/referenced without being created/i)
     expect(tempErr).toContain("Fix:")
     expect(tempErr).toMatch(/8-hex suffix|ONE query_mssql call/i)
 
     const scalarErr =
-      validateQuery(
-        [
+      validateQuery([
           "SELECT t.k,",
           "  (SELECT COUNT(*) FROM #s_a3f91c08 s WHERE s.k = t.k) AS c1,",
           "  (SELECT SUM(v)   FROM #s_a3f91c08 s WHERE s.k = t.k) AS c2",
           "FROM #t_a3f91c08 t"
-        ].join("\n"),
-        false
-      ) ?? ""
+        ].join("\n")) ?? ""
     expect(scalarErr).toMatch(/repeated scalar subqueries/i)
     expect(scalarErr).toContain("Fix:")
     expect(scalarErr).toMatch(/GROUP BY pkClient|JOIN that small aggregate/i)

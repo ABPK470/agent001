@@ -2,13 +2,13 @@ import { describe, expect, it } from "vitest"
 import type { Connector, Row } from "@mia/shared-types"
 import { createObjectFileAdapter, type FileTransferDriver } from "../../src/adapters/object-file.js"
 
-function connector(kind: "aws" | "azure" | "ftp", writeEnabled = true): Connector {
+function connector(kind: "aws" | "azure" | "ftp"): Connector {
   return {
     id: kind,
     kind,
     name: kind,
     displayName: kind,
-    config: { writeEnabled },
+    config: {},
     enabled: true,
     createdAt: "",
     updatedAt: "",
@@ -41,7 +41,6 @@ describe("object-file adapter", () => {
     const driver = mockDriver(async () => csv)
     const adapter = createObjectFileAdapter("aws", connector("aws"), {
       driverProvider: async () => driver,
-      writeEnabled: false,
       batchSize: 10,
     })
     await adapter.open()
@@ -51,11 +50,10 @@ describe("object-file adapter", () => {
     expect(out).toEqual([[{ id: "1", name: "alice" }, { id: "2", name: "bob" }]])
   })
 
-  it("writes via ftp kind when writeEnabled", async () => {
+  it("writes via ftp kind", async () => {
     const driver = mockDriver(async () => "")
     const adapter = createObjectFileAdapter("ftp", connector("ftp"), {
       driverProvider: async () => driver,
-      writeEnabled: true,
     })
     await adapter.open()
     async function* rows(): AsyncGenerator<Row[]> {

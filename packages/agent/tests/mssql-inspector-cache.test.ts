@@ -38,7 +38,6 @@ function makeFixture(): {
       connected: true,
       close: async () => undefined
     } as never,
-    writeEnabled: false,
     knowledge: null
   })
   catalogInstances.set("default", canonicalFixtureCatalog())

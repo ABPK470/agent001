@@ -8,14 +8,12 @@ export function getMssqlConfig(host: MssqlAccessHost): Array<{
   name: string
   server: string
   database: string
-  writeEnabled: boolean
   knowledge: string | null
 }> {
   return Array.from(host.mssql.databases.entries()).map(([name, entry]) => ({
     name,
     server: entry.config.server!,
     database: entry.config.database!,
-    writeEnabled: entry.writeEnabled,
     knowledge: entry.knowledge
   }))
 }
@@ -46,7 +44,6 @@ export async function getPool(
     entry: {
       config: resolved.config,
       pool: resolved.pool,
-      writeEnabled: resolved.writeEnabled,
       knowledge: resolved.knowledge
     }
   }

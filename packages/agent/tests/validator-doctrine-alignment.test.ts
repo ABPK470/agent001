@@ -43,7 +43,7 @@ const CASES: readonly Case[] = [
 describe("validator ↔ doctrine alignment", () => {
   for (const c of CASES) {
     it(`${c.name}: validator and doctrine agree`, () => {
-      const v = validateQueryDetailed(c.sql, /* writeEnabled */ false)
+      const v = validateQueryDetailed(c.sql)
       expect(v.ok, "validator should block this case").toBe(false)
       expect(v.code).toBe(c.expectedValidatorCode)
 

@@ -65,7 +65,7 @@ function fixtureCatalog(): CatalogGraph {
 }
 
 function bootDeps(): BootHostDeps {
-  const databases = new Map<string, unknown>([["default", { config: null, pool: null, writeEnabled: false, knowledge: null }]])
+  const databases = new Map<string, unknown>([["default", { config: null, pool: null, knowledge: null }]])
   const instances = new Map<string, CatalogGraph>([["default", fixtureCatalog()]])
   return {
     mssql: { databases: databases as never, defaultConnection: { value: null } },

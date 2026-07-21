@@ -35,7 +35,6 @@ services:
       - MSSQL_DATABASES=${MSSQL_DATABASES:-}
       - MSSQL_ENCRYPT=true
       - MSSQL_TRUST_CERT=true
-      - MSSQL_WRITE_ENABLED=false
     volumes:
       - app-data:/data
       - workspace:/workspace

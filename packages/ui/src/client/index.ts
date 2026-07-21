@@ -769,7 +769,7 @@ export const api = {
 
   // Mymi DB explorer
   mymiListDatabases: () =>
-    json<Array<{ name: string; server: string; database: string; writeEnabled: boolean }>>("/api/mymi/databases"),
+    json<Array<{ name: string; server: string; database: string }>>("/api/mymi/databases"),
   mymiOverview: (db?: string) =>
     json<Array<{ schema: string; tableCount: number; viewCount: number; totalRows: number; totalMb: number }>>(
       `/api/mymi/overview${db ? `?db=${encodeURIComponent(db)}` : ""}`,

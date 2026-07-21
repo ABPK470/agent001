@@ -72,7 +72,6 @@ function needsPoweredWrite(spec: SqlWriteSpec): boolean {
 
 export interface OracleAdapterOptions {
   readonly driverProvider: () => Promise<OracleDriver>
-  readonly writeEnabled: boolean
   readonly batchSize?: number
 }
 
@@ -104,9 +103,6 @@ export function createOracleAdapter(
     async write(spec: WriteSpec, rows: AsyncGenerator<RowBatch>): Promise<MoveSummary> {
       if (!driver) throw new Error("oracle adapter write before open")
       if (!isSqlWrite(spec)) throw new Error(`oracle adapter cannot write spec kind '${spec.kind}'`)
-      if (!options.writeEnabled) {
-        return makeSummary("failed", 0, 0, [{ row: 0, message: "connector is read-only (writeEnabled=false)" }], 0)
-      }
       const insertOpts: OracleInsertOptions | undefined = spec.allowIdentityInsert
         ? { overridingSystemValue: true }
         : undefined

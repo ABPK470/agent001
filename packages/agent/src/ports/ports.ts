@@ -145,7 +145,6 @@ export interface TableVerdictsReader {
 export interface MssqlEntry {
   config: sql.config
   pool: sql.ConnectionPool | null
-  writeEnabled: boolean
   knowledge: string | null
 }
 
@@ -161,7 +160,6 @@ export interface MssqlConnectorPool {
   connectorId: string
   pool: sql.ConnectionPool
   config: sql.config
-  writeEnabled: boolean
   knowledge: string | null
 }
 

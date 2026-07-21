@@ -15,8 +15,6 @@ function minimalPlan(overrides: Partial<SyncPlan> = {}): SyncPlan {
       issues: [],
       rootParentReady: true,
       rootParentIssue: null,
-      targetWriteEnabled: true,
-      targetWriteIssue: null,
     },
     tables: [],
     totals: {

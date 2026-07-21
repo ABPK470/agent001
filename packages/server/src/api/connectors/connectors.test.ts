@@ -18,7 +18,6 @@ const mssqlDev: ConfigureMssqlConnection = {
   password: "pw",
   database: "mymi_dev",
   options: { encrypt: true, trustServerCertificate: true },
-  writeEnabled: true,
 }
 
 describe("connector persistence", () => {
@@ -62,7 +61,6 @@ describe("loadPersistedConnectors seeding", () => {
     expect(result.connectors.map((c) => c.id)).toEqual(["dev"])
     expect(result.connectors[0]!.kind).toBe("mssql")
     expect(result.connectors[0]!.config["host"]).toBe("db-dev")
-    expect(result.connectors[0]!.config["writeEnabled"]).toBe(true)
     // persisted to the table
     expect(db.countConnectors()).toBe(1)
   })

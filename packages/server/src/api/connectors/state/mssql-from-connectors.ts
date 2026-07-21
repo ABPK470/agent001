@@ -62,7 +62,6 @@ export function mssqlConfigsFromConnectors(
         encrypt: asBoolean(c["encrypt"], true),
         trustServerCertificate: asBoolean(c["trustServerCertificate"], true),
       },
-      writeEnabled: asBoolean(c["writeEnabled"], false),
       knowledgePath: knowledgePath,
       knowledge: knowledgePath ? readKnowledgeFile(projectRoot, knowledgePath) : null,
     })

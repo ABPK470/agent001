@@ -5,8 +5,7 @@ export {
   getPool,
   setDefaultMssqlConnection,
   setMssqlConfig,
-  setMssqlConfigs,
-  setMssqlWriteEnabled
+  setMssqlConfigs
 } from "./connection.js"
 export {
   canonicalizeConfiguredConnectionName,

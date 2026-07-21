@@ -64,7 +64,6 @@ function isSqlWrite(spec: WriteSpec): spec is SqlWriteSpec {
 export interface PostgresAdapterOptions {
   /** Resolved lazily on `open()` so connection pools stay lazy until a move runs. */
   readonly driverProvider: () => Promise<PostgresDriver>
-  readonly writeEnabled: boolean
   readonly batchSize?: number
 }
 
@@ -96,9 +95,6 @@ export function createPostgresAdapter(
     async write(spec: WriteSpec, rows: AsyncGenerator<RowBatch>): Promise<MoveSummary> {
       if (!driver) throw new Error("postgres adapter write before open")
       if (!isSqlWrite(spec)) throw new Error(`postgres adapter cannot write spec kind '${spec.kind}'`)
-      if (!options.writeEnabled) {
-        return makeSummary("failed", 0, 0, [{ row: 0, message: "connector is read-only (writeEnabled=false)" }], 0)
-      }
       const insertOpts: PostgresInsertOptions | undefined = spec.allowIdentityInsert
         ? { overridingSystemValue: true }
         : undefined

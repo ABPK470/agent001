@@ -13,7 +13,7 @@ function mockConnector(): Connector {
     kind: "oracle",
     name: "ora",
     displayName: "Oracle",
-    config: { writeEnabled: true },
+    config: {},
     enabled: true,
     createdAt: "",
     updatedAt: "",
@@ -112,7 +112,6 @@ describe("oracle adapter", () => {
     const driver = mockDriver([[{ A: 1 }, { A: 2 }], [{ A: 3 }]])
     const adapter = createOracleAdapter(mockConnector(), {
       driverProvider: async () => driver,
-      writeEnabled: true,
       batchSize: 2,
     })
     await adapter.open()
@@ -126,7 +125,6 @@ describe("oracle adapter", () => {
     const driver = mockDriver([])
     const adapter = createOracleAdapter(mockConnector(), {
       driverProvider: async () => driver,
-      writeEnabled: true,
     })
     await adapter.open()
     const summary = await adapter.write(
@@ -144,7 +142,6 @@ describe("oracle adapter", () => {
     const driver = mockDriver([])
     const adapter = createOracleAdapter(mockConnector(), {
       driverProvider: async () => driver,
-      writeEnabled: true,
     })
     await adapter.open()
     await adapter.write(
@@ -159,7 +156,6 @@ describe("oracle adapter", () => {
     const driver = mockDriver([])
     const adapter = createOracleAdapter(mockConnector(), {
       driverProvider: async () => driver,
-      writeEnabled: true,
     })
     await adapter.open()
     const summary = await adapter.write(
@@ -178,21 +174,6 @@ describe("oracle adapter", () => {
     expect(driver.committed).toBe(true)
   })
 
-  it("refuses to write when writeEnabled is false", async () => {
-    const driver = mockDriver([])
-    const adapter = createOracleAdapter(mockConnector(), {
-      driverProvider: async () => driver,
-      writeEnabled: false,
-    })
-    await adapter.open()
-    const summary = await adapter.write(
-      { kind: "sql", table: "T", mode: "append" },
-      toAsync([[{ A: 1 }]]),
-    )
-    await adapter.close()
-    expect(summary.status).toBe("failed")
-    expect(summary.errors[0]!.message).toContain("read-only")
-  })
 })
 
 async function* toAsync(batches: Row[][]): AsyncGenerator<Row[]> {

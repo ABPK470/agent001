@@ -24,7 +24,7 @@ describe("aggregate-semantic guard — BLOCK (alias-function mismatch)", () => {
     const q = "SELECT SUM(b.AverageCreditBalanceZARMTD) AS AvgCreditBalZAR FROM #scope b"
     const issues = findAggregateSemanticIssues(q)
     expect(issues.some((i) => i.severity === AggregateSeverity.Block)).toBe(true)
-    expect(validateQuery(q, false)).toMatch(/aggregate-semantic mismatch/i)
+    expect(validateQuery(q)).toMatch(/aggregate-semantic mismatch/i)
   })
 
   it("blocks AVG(...) AS Total…", () => {
@@ -59,7 +59,7 @@ describe("aggregate-semantic guard — WARN (suspect column name)", () => {
     const q = "SELECT SUM(b.AverageCreditBalanceZARMTD) AS CreditBalZAR FROM #scope b"
     const issues = findAggregateSemanticIssues(q)
     expect(issues.some((i) => i.severity === AggregateSeverity.Warn)).toBe(true)
-    expect(validateQuery(q, false)).toBeNull() // does NOT block
+    expect(validateQuery(q)).toBeNull() // does NOT block
     expect(getQueryWarnings(q)).toMatch(/CORRECTNESS WARNING/)
   })
 

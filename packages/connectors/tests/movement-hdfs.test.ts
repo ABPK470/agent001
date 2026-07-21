@@ -63,7 +63,7 @@ describe("data movement: httpApi ↔ webhdfs (e2e via port)", () => {
     const http = mockHttp(null)
 
     const registry = new AdapterRegistry()
-    registry.register("webhdfs", (c) => createWebhdfsAdapter(c, { driverProvider: async () => hdfs, writeEnabled: false, batchSize: 2 }))
+    registry.register("webhdfs", (c) => createWebhdfsAdapter(c, { driverProvider: async () => hdfs, batchSize: 2 }))
     registry.register("httpApi", (c) => createHttpApiAdapter(c, { driverProvider: async () => http }))
 
     const port = buildConnectorPort(registry, [
@@ -91,12 +91,12 @@ describe("data movement: httpApi ↔ webhdfs (e2e via port)", () => {
     const http = mockHttp([{ a: 1, b: "x" }, { a: 2, b: "y" }])
 
     const registry = new AdapterRegistry()
-    registry.register("webhdfs", (c) => createWebhdfsAdapter(c, { driverProvider: async () => hdfs, writeEnabled: true }))
+    registry.register("webhdfs", (c) => createWebhdfsAdapter(c, { driverProvider: async () => hdfs }))
     registry.register("httpApi", (c) => createHttpApiAdapter(c, { driverProvider: async () => http }))
 
     const port = buildConnectorPort(registry, [
       connector("api-src", "httpApi", { baseUrl: "https://a" }),
-      connector("hdfs-tgt", "webhdfs", { host: "nn", writeEnabled: true }),
+      connector("hdfs-tgt", "webhdfs", { host: "nn" }),
     ])
 
     const summary = await port.moveData(
@@ -116,7 +116,7 @@ describe("data movement: httpApi ↔ webhdfs (e2e via port)", () => {
     const hdfs = mockHdfs({ "/in/x.csv": "k,v\n1,foo\n2,bar" })
     const http = mockHttp(null)
     const registry = new AdapterRegistry()
-    registry.register("webhdfs", (c) => createWebhdfsAdapter(c, { driverProvider: async () => hdfs, writeEnabled: false }))
+    registry.register("webhdfs", (c) => createWebhdfsAdapter(c, { driverProvider: async () => hdfs }))
     registry.register("httpApi", (c) => createHttpApiAdapter(c, { driverProvider: async () => http }))
     const port = buildConnectorPort(registry, [
       connector("hdfs-src", "webhdfs", {}),
@@ -138,7 +138,7 @@ describe("data movement: httpApi ↔ webhdfs (e2e via port)", () => {
   it("listAdapters reports webhdfs capabilities", () => {
     const hdfs = mockHdfs({})
     const registry = new AdapterRegistry()
-    registry.register("webhdfs", (c) => createWebhdfsAdapter(c, { driverProvider: async () => hdfs, writeEnabled: true }))
+    registry.register("webhdfs", (c) => createWebhdfsAdapter(c, { driverProvider: async () => hdfs }))
     const port = buildConnectorPort(registry, [connector("hdfs", "webhdfs", {})])
     const list = port.listAdapters()
     expect(list[0]!.capabilities).toEqual({ read: true, write: true, query: false })

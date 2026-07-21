@@ -13,7 +13,7 @@ function mockConnector(): Connector {
     kind: "mssql",
     name: "src",
     displayName: "Source",
-    config: { writeEnabled: true },
+    config: {},
     enabled: true,
     createdAt: "",
     updatedAt: "",
@@ -112,7 +112,6 @@ describe("mssql adapter", () => {
     const driver = mockDriver([[{ a: 1 }, { a: 2 }], [{ a: 3 }]])
     const adapter = createMssqlAdapter(mockConnector(), {
       driverProvider: async () => driver,
-      writeEnabled: true,
       batchSize: 2,
     })
     await adapter.open()
@@ -126,7 +125,6 @@ describe("mssql adapter", () => {
     const driver = mockDriver([])
     const adapter = createMssqlAdapter(mockConnector(), {
       driverProvider: async () => driver,
-      writeEnabled: true,
     })
     await adapter.open()
     const summary = await adapter.write(
@@ -145,7 +143,6 @@ describe("mssql adapter", () => {
     const driver = mockDriver([])
     const adapter = createMssqlAdapter(mockConnector(), {
       driverProvider: async () => driver,
-      writeEnabled: true,
     })
     await adapter.open()
     const summary = await adapter.write(
@@ -163,7 +160,6 @@ describe("mssql adapter", () => {
     const driver = mockDriver([])
     const adapter = createMssqlAdapter(mockConnector(), {
       driverProvider: async () => driver,
-      writeEnabled: true,
     })
     await adapter.open()
     const summary = await adapter.write(
@@ -189,7 +185,6 @@ describe("mssql adapter", () => {
     driver.insertFailAtBatch = 1
     const adapter = createMssqlAdapter(mockConnector(), {
       driverProvider: async () => driver,
-      writeEnabled: true,
     })
     await adapter.open()
     const summary = await adapter.write(
@@ -202,22 +197,6 @@ describe("mssql adapter", () => {
     expect(driver.committed).toBe(false)
   })
 
-  it("refuses to write when writeEnabled is false", async () => {
-    const driver = mockDriver([])
-    const adapter = createMssqlAdapter(mockConnector(), {
-      driverProvider: async () => driver,
-      writeEnabled: false,
-    })
-    await adapter.open()
-    const summary = await adapter.write(
-      { kind: "sql", table: "t", mode: "append" },
-      toAsync([[{ a: 1 }]]),
-    )
-    await adapter.close()
-    expect(summary.status).toBe("failed")
-    expect(summary.errors[0]!.message).toContain("read-only")
-    expect(driver.inserted).toEqual([])
-  })
 })
 
 async function* toAsync(batches: Row[][]): AsyncGenerator<Row[]> {

@@ -2,7 +2,7 @@
 
 How `@mia/agent` connects to SQL Server, builds a mental model of a vast database, and traverses it safely for analysis (and how that differs from sync).
 
-**Scope:** Microsoft SQL Server only. One connection pool per named environment (`default`, `uat`, `prod`, …). The agent is read-only on real tables by default; `#temp` staging is allowed inside `query_mssql` batches. Sync (`@mia/sync`) reuses the same pool machinery but follows its own scoped diff/execute path — see [packages/sync/SYNC-MECHANICS.md](../sync/SYNC-MECHANICS.md) and [packages/sync/SYNC-PREVIEW-EXECUTE.md](../sync/SYNC-PREVIEW-EXECUTE.md).
+**Scope:** Microsoft SQL Server only. One connection pool per named environment (`default`, `uat`, `prod`, …). Policy / env access governs DML on real tables; `#temp` staging is allowed inside `query_mssql` batches. `export_query_to_file` is tool-level read-only (SELECT/WITH/#temp). Sync (`@mia/sync`) reuses the same pool machinery but follows its own scoped diff/execute path — see [packages/sync/SYNC-MECHANICS.md](../sync/SYNC-MECHANICS.md) and [packages/sync/SYNC-PREVIEW-EXECUTE.md](../sync/SYNC-PREVIEW-EXECUTE.md).
 
 ---
 
@@ -62,7 +62,7 @@ The in-memory graph (`host.catalog.instances`) is also serialized to JSON (versi
 
 Each run’s system prompt (`buildToolContext` / `buildRunPrompt`) adds:
 
-- **Which servers** exist and whether they are read-only.
+- **Which servers** exist (policy/env access governs writes).
 - **Default connection** name in multi-env mode (so `connection=` vs `database=` is not confused).
 - **Knowledge file body** (full or header-only, depending on goal classification).
 - **Catalog prompt summary** — compact stats (schema count, largest tables, etc.) from `getCatalogPromptSummary`.
@@ -207,7 +207,7 @@ Never guess column or table names — the catalog and `explore_mssql_schema` exi
 | Connections | `connection='uat'` etc. | `source` + `target` env names |
 | Scope | User goal — any tables catalog finds | One entity, published definition tables + predicates only |
 | Schema model | Full catalog graph | Per-table drift check on recipe tables |
-| Writes | Disabled unless `writeEnabled` | Target MERGE/DELETE in execute |
+| Writes | Policy / env access (no connector write latch) | Target MERGE/DELETE in execute |
 | Knowledge | `mymi-knowledge.md` + catalog | Published sync definitions bundle |
 
 Same SQL Server driver (`mssql` npm), same `getPool(host, name)` — different orchestration on top.

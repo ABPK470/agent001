@@ -50,7 +50,6 @@ export function setupMssql(projectRoot: string): {
       database?: string
       encrypt?: boolean
       trustServerCertificate?: boolean
-      writeEnabled?: boolean
       knowledgePath?: string
     }>
     try {
@@ -73,7 +72,6 @@ export function setupMssql(projectRoot: string): {
         encrypt: db.encrypt !== false,
         trustServerCertificate: db.trustServerCertificate !== false
       },
-      writeEnabled: db.writeEnabled ?? false,
       knowledgePath: db.knowledgePath ?? null,
       knowledge: db.knowledgePath ? readKnowledgeFile(projectRoot, db.knowledgePath) : null
     }))
@@ -108,17 +106,11 @@ export function setupMssql(projectRoot: string): {
           encrypt: process.env["MSSQL_ENCRYPT"] !== "false",
           trustServerCertificate: process.env["MSSQL_TRUST_CERT"] !== "false"
         },
-        writeEnabled: process.env["MSSQL_WRITE_ENABLED"] === "true",
         knowledgePath: knowledgePath ?? null,
         knowledge: knowledgePath ? readKnowledgeFile(projectRoot, knowledgePath) : null
       }
     ]
-    if (process.env["MSSQL_WRITE_ENABLED"] === "true") {
-      const summary = `${mssqlServer} (WRITE mode enabled)`
-      console.log(`MSSQL: ${summary}`)
-      return { configs, defaultConnectionName: null, summary }
-    }
-    const summary = `${mssqlServer} (read-only)`
+    const summary = mssqlServer
     console.log(`MSSQL: ${summary}`)
     return { configs, defaultConnectionName: null, summary }
   }

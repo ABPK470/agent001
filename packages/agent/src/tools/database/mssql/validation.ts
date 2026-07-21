@@ -1,6 +1,5 @@
 // ── Query validation ─────────────────────────────────────────────
 
-import { QUERY_WRITE_DISABLED_MESSAGE } from "@mia/shared-types"
 import {
   DOCTRINE_FIX_HINTS,
   getDoctrineLessonTemplate
@@ -223,7 +222,7 @@ export type QueryValidationCode =
   | "publish_view_topn_without_branch_aggregation"
   | "avg_of_coalesce_zero"
   | "invented_column"
-  | "write_disabled"
+  | "read_only_tool"
   | "non_temp_mutation"
   | "large_object_overused"
   | "unsafe_large_object_scan"
@@ -964,6 +963,12 @@ export interface QueryValidationOptions {
    * profile_data / known_objects seeding. Null/undefined disables the gate.
    */
   verifiedTables?: ReadonlySet<string> | null
+  /**
+   * Tool-level read-only gate (e.g. export_query_to_file).
+   * When true, only SELECT/WITH/#temp batches are allowed.
+   * Default false — policy governs DML for query_mssql.
+   */
+  readOnly?: boolean
 }
 
 // ── Cross-source reconciliation guard (Phase 5) ──────────────────
@@ -1187,15 +1192,13 @@ export function isUnsafeScan(query: string, largeObjects: string[]): string | nu
 
 export function validateQuery(
   query: string,
-  writeEnabled: boolean,
   options: QueryValidationOptions = {}
 ): string | null {
-  return validateQueryDetailed(query, writeEnabled, options).error
+  return validateQueryDetailed(query, options).error
 }
 
 export function validateQueryDetailed(
   query: string,
-  writeEnabled: boolean,
   options: QueryValidationOptions = {}
 ): QueryValidationDiagnostics {
   const aliasPrep = prepareMssqlQueryAliases(query)
@@ -1431,20 +1434,19 @@ export function validateQueryDetailed(
     }
   }
 
-  if (!writeEnabled) {
-    // Two valid shapes when write is disabled:
+  if (options.readOnly) {
+    // Tool-level read-only (e.g. export_query_to_file) — not a connector latch.
+    // Two valid shapes:
     //   1. Pure read query (SELECT/WITH/EXPLAIN/...)
     //   2. Micro-ETL batch where every mutation targets a local #temp table.
-    //      The agent is encouraged to stage small slices into #tmp tables and
-    //      join those against the big warehouse views — see default-system.md
-    //      "Big-table query discipline".
     const isPureRead = READ_ONLY_PATTERN.test(query)
     const opensWithMutation = TMP_TABLE_OPENER.test(query)
     if (!isPureRead && !opensWithMutation) {
       return {
         ok: false,
-        error: QUERY_WRITE_DISABLED_MESSAGE,
-        code: "write_disabled",
+        error:
+          "This tool is read-only. Only SELECT/WITH queries are allowed, or DDL/DML targeting local #temp tables.",
+        code: "read_only_tool",
         analysis
       }
     }

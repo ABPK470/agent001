@@ -3,13 +3,13 @@ import type { Connector, Row } from "@mia/shared-types"
 import { createWebhdfsAdapter, type WebHdfsDriver } from "../../src/adapters/webhdfs.js"
 import { parseCsv, serializeRows } from "../../src/adapters/webhdfs.js"
 
-function connector(writeEnabled = true): Connector {
+function connector(): Connector {
   return {
     id: "hdfs",
     kind: "webhdfs",
     name: "hdfs",
     displayName: "HDFS",
-    config: { host: "nn", port: 50070, writeEnabled },
+    config: { host: "nn", port: 50070 },
     enabled: true,
     createdAt: "",
     updatedAt: "",
@@ -98,7 +98,7 @@ describe("webhdfs adapter — read", () => {
 describe("webhdfs adapter — write", () => {
   it("serializes rows to CSV and uploads a single byte stream (replace)", async () => {
     const driver = mockDriver(async () => "")
-    const adapter = createWebhdfsAdapter(connector(), { driverProvider: async () => driver, writeEnabled: true })
+    const adapter = createWebhdfsAdapter(connector(), { driverProvider: async () => driver })
     await adapter.open()
     const summary = await adapter.write(
       { kind: "webhdfs", path: "/out/x.csv", format: "csv", mode: "replace" },
@@ -116,7 +116,7 @@ describe("webhdfs adapter — write", () => {
 
   it("serializes rows to a JSON array (append)", async () => {
     const driver = mockDriver(async () => "")
-    const adapter = createWebhdfsAdapter(connector(), { driverProvider: async () => driver, writeEnabled: true })
+    const adapter = createWebhdfsAdapter(connector(), { driverProvider: async () => driver })
     await adapter.open()
     const summary = await adapter.write(
       { kind: "webhdfs", path: "/out/x.json", format: "json", mode: "append" },
@@ -131,7 +131,7 @@ describe("webhdfs adapter — write", () => {
 
   it("quotes CSV fields containing commas / quotes / newlines", async () => {
     const driver = mockDriver(async () => "")
-    const adapter = createWebhdfsAdapter(connector(), { driverProvider: async () => driver, writeEnabled: true })
+    const adapter = createWebhdfsAdapter(connector(), { driverProvider: async () => driver })
     await adapter.open()
     await adapter.write(
       { kind: "webhdfs", path: "/out/x.csv", format: "csv", mode: "replace" },
@@ -145,7 +145,7 @@ describe("webhdfs adapter — write", () => {
   it("reports failed when the upload errors", async () => {
     const driver = mockDriver(async () => "")
     driver.putError = new Error("namenode unavailable")
-    const adapter = createWebhdfsAdapter(connector(), { driverProvider: async () => driver, writeEnabled: true })
+    const adapter = createWebhdfsAdapter(connector(), { driverProvider: async () => driver })
     await adapter.open()
     const summary = await adapter.write(
       { kind: "webhdfs", path: "/out/x.csv", format: "csv", mode: "replace" },
@@ -156,19 +156,6 @@ describe("webhdfs adapter — write", () => {
     expect(summary.errors[0]!.message).toContain("namenode unavailable")
   })
 
-  it("refuses to write when writeEnabled is false", async () => {
-    const driver = mockDriver(async () => "")
-    const adapter = createWebhdfsAdapter(connector(false), { driverProvider: async () => driver, writeEnabled: false })
-    await adapter.open()
-    const summary = await adapter.write(
-      { kind: "webhdfs", path: "/out/x.csv", format: "csv", mode: "replace" },
-      toAsync([[{ a: 1 }]]),
-    )
-    await adapter.close()
-    expect(summary.status).toBe("failed")
-    expect(summary.errors[0]!.message).toContain("read-only")
-    expect(driver.putCalls).toHaveLength(0)
-  })
 
   it("rejects a non-webhdfs spec", async () => {
     const driver = mockDriver(async () => "")

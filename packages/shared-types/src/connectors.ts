@@ -88,14 +88,6 @@ const mssqlConfigSchema: ConnectorConfigField[] = [
   { key: "domain", label: "Domain (AD)", type: "text" },
   { key: "encrypt", label: "Encrypt", type: "boolean", default: true },
   { key: "trustServerCertificate", label: "Trust server certificate", type: "boolean", default: true },
-  {
-    key: "writeEnabled",
-    label: "Write enabled",
-    type: "boolean",
-    default: false,
-    help:
-      "Hard ceiling for this connection: when off, agent SQL (query_mssql) and sync execute to environments linked here cannot mutate real tables. Policy allow/approve cannot override this — enable Write here first.",
-  },
   { key: "knowledgePath", label: "Knowledge file path", type: "text", placeholder: "./deploy/mssql/mymi-knowledge.md", help: "Optional markdown loaded as SQL-generation guidance for this connection." },
 ]
 
@@ -106,7 +98,6 @@ const postgresConfigSchema: ConnectorConfigField[] = [
   { key: "user", label: "User", type: "text" },
   { key: "password", label: "Password", type: "password" },
   { key: "ssl", label: "SSL", type: "boolean", default: false },
-  { key: "writeEnabled", label: "Write enabled", type: "boolean", default: false },
 ]
 
 const oracleConfigSchema: ConnectorConfigField[] = [
@@ -129,7 +120,6 @@ const oracleConfigSchema: ConnectorConfigField[] = [
     placeholder: "host:1521/ORCL",
     help: "When set, used instead of host/port/service name (full Easy Connect or TNS).",
   },
-  { key: "writeEnabled", label: "Write enabled", type: "boolean", default: false },
 ]
 
 const databricksConfigSchema: ConnectorConfigField[] = [
@@ -137,14 +127,12 @@ const databricksConfigSchema: ConnectorConfigField[] = [
   { key: "httpPath", label: "SQL warehouse HTTP path", type: "text", required: true, placeholder: "/sql/1.0/warehouses/…" },
   { key: "token", label: "Personal access token", type: "password", required: true },
   { key: "catalog", label: "Catalog", type: "text" },
-  { key: "writeEnabled", label: "Write enabled", type: "boolean", default: false },
 ]
 
 const azureConfigSchema: ConnectorConfigField[] = [
   { key: "account", label: "Storage account", type: "text", required: true },
   { key: "container", label: "Container", type: "text", required: true },
   { key: "connectionString", label: "Connection string", type: "password" },
-  { key: "writeEnabled", label: "Write enabled", type: "boolean", default: false },
 ]
 
 const awsConfigSchema: ConnectorConfigField[] = [
@@ -152,7 +140,6 @@ const awsConfigSchema: ConnectorConfigField[] = [
   { key: "accessKeyId", label: "Access key id", type: "text", required: true },
   { key: "secretAccessKey", label: "Secret access key", type: "password", required: true },
   { key: "bucket", label: "Bucket", type: "text", required: true },
-  { key: "writeEnabled", label: "Write enabled", type: "boolean", default: false },
 ]
 
 const denodoConfigSchema: ConnectorConfigField[] = [
@@ -174,7 +161,6 @@ const ftpConfigSchema: ConnectorConfigField[] = [
   { key: "password", label: "Password", type: "password" },
   { key: "path", label: "Default remote directory", type: "text", placeholder: "/exports" },
   { key: "secure", label: "Use SFTP (SSH)", type: "boolean", default: false },
-  { key: "writeEnabled", label: "Write enabled", type: "boolean", default: false },
 ]
 
 const aqueductConfigSchema: ConnectorConfigField[] = [
@@ -190,7 +176,6 @@ const hiveConfigSchema: ConnectorConfigField[] = [
   { key: "user", label: "User", type: "text" },
   { key: "password", label: "Password", type: "password" },
   { key: "transport", label: "Transport", type: "text", default: "binary", placeholder: "binary | http" },
-  { key: "writeEnabled", label: "Write enabled", type: "boolean", default: false },
 ]
 
 const webhdfsConfigSchema: ConnectorConfigField[] = [
@@ -199,7 +184,6 @@ const webhdfsConfigSchema: ConnectorConfigField[] = [
   { key: "user", label: "Proxy user (doAs)", type: "text" },
   { key: "token", label: "Bearer token", type: "password", help: "Optional — sent as Authorization: Bearer for HA / token-auth clusters." },
   { key: "ssl", label: "SSL", type: "boolean", default: false },
-  { key: "writeEnabled", label: "Write enabled", type: "boolean", default: false },
 ]
 
 export const CONNECTOR_KINDS: readonly ConnectorKind[] = [

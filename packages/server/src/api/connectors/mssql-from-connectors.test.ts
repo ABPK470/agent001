@@ -34,7 +34,6 @@ describe("mssqlConfigsFromConnectors (Phase 2 source of truth)", () => {
       database: "mymi_dev",
       domain: "corp",
       options: { encrypt: true, trustServerCertificate: true },
-      writeEnabled: true,
       knowledgePath,
       knowledge: null,
     }
@@ -46,7 +45,6 @@ describe("mssqlConfigsFromConnectors (Phase 2 source of truth)", () => {
       password: "pw2",
       database: "mymi_prod",
       options: { encrypt: true, trustServerCertificate: false },
-      writeEnabled: false,
       knowledgePath: null,
       knowledge: null,
     }
@@ -70,7 +68,6 @@ describe("mssqlConfigsFromConnectors (Phase 2 source of truth)", () => {
     expect(gotDev.domain).toBe("corp")
     expect(gotDev.options?.encrypt).toBe(true)
     expect(gotDev.options?.trustServerCertificate).toBe(true)
-    expect(gotDev.writeEnabled).toBe(true)
     expect(gotDev.knowledgePath).toBe(knowledgePath)
     expect(gotDev.knowledge).toBe("# Knowledge\nSchema guidance for dev.")
 
@@ -160,7 +157,6 @@ describe("mssqlConfigsFromConnectors (Phase 2 source of truth)", () => {
     expect(got.user).toBe("sa")
     expect(got.password).toBe("")
     expect(got.options?.encrypt).toBe(true)
-    expect(got.writeEnabled).toBe(false)
     expect(got.knowledge).toBeNull()
   })
 })

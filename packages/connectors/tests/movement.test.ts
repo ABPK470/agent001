@@ -10,13 +10,13 @@ import type {
 } from "@mia/shared-types"
 import { AdapterRegistry, buildConnectorPort, makeSummary } from "../src/index.js"
 
-function connector(id: string, kind: Connector["kind"], writeEnabled: boolean): Connector {
+function connector(id: string, kind: Connector["kind"]): Connector {
   return {
     id,
     kind,
     name: id,
     displayName: id,
-    config: { writeEnabled },
+    config: {},
     enabled: true,
     createdAt: "",
     updatedAt: "",
@@ -61,8 +61,8 @@ function targetAdapter(received: Row[][]): ConnectorAdapter {
 
 describe("connector port (postgres -> mssql e2e)", () => {
   it("resolves connector ids, runs the engine, and applies the transform", async () => {
-    const pg = connector("pg-src", "postgres", false)
-    const mssql = connector("ms-tgt", "mssql", true)
+    const pg = connector("pg-src", "postgres")
+    const mssql = connector("ms-tgt", "mssql")
     const received: Row[][] = []
     const registry = new AdapterRegistry()
     registry.register("postgres", () => sourceAdapter([[{ id: 1, name: "a" }], [{ id: 2, name: "b" }]]))
@@ -87,8 +87,8 @@ describe("connector port (postgres -> mssql e2e)", () => {
   })
 
   it("listAdapters surfaces capabilities per connector", () => {
-    const pg = connector("pg-src", "postgres", false)
-    const mssql = connector("ms-tgt", "mssql", true)
+    const pg = connector("pg-src", "postgres")
+    const mssql = connector("ms-tgt", "mssql")
     const registry = new AdapterRegistry()
     registry.register("postgres", () => sourceAdapter([]))
     registry.register("mssql", () => targetAdapter([]))
@@ -102,7 +102,7 @@ describe("connector port (postgres -> mssql e2e)", () => {
   it("throws on an unknown connector id", async () => {
     const registry = new AdapterRegistry()
     registry.register("mssql", () => targetAdapter([]))
-    const port = buildConnectorPort(registry, [connector("ms-tgt", "mssql", true)])
+    const port = buildConnectorPort(registry, [connector("ms-tgt", "mssql")])
     await expect(
       port.moveData(
         { connectorId: "nope", spec: { kind: "sql", sql: "SELECT 1" } },

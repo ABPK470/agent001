@@ -80,7 +80,6 @@ describe("getPlatformHealth catalog", () => {
           password: "",
           database: "mymi",
           options: { encrypt: false, trustServerCertificate: true },
-          writeEnabled: false,
           knowledge: null,
         },
         {
@@ -91,7 +90,6 @@ describe("getPlatformHealth catalog", () => {
           password: "",
           database: "mymi",
           options: { encrypt: false, trustServerCertificate: true },
-          writeEnabled: false,
           knowledge: null,
         },
       ],

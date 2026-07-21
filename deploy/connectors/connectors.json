@@ -16,7 +16,6 @@
         "domain": "corp",
         "encrypt": true,
         "trustServerCertificate": true,
-        "writeEnabled": false,
         "knowledgePath": null
       }
     },
@@ -35,7 +34,6 @@
         "domain": "corp",
         "encrypt": true,
         "trustServerCertificate": true,
-        "writeEnabled": false,
         "knowledgePath": null
       }
     },
@@ -54,7 +52,6 @@
         "domain": "corp",
         "encrypt": true,
         "trustServerCertificate": true,
-        "writeEnabled": false,
         "knowledgePath": null
       }
     }

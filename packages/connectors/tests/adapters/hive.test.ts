@@ -2,13 +2,13 @@ import { describe, expect, it } from "vitest"
 import type { Connector, MoveSummary, Row } from "@mia/shared-types"
 import { createHiveAdapter, defaultHiveDriver, type HiveClient, type HiveDriver, type HiveTransaction } from "../../src/adapters/hive.js"
 
-function connector(writeEnabled = true): Connector {
+function connector(): Connector {
   return {
     id: "hv",
     kind: "hive",
     name: "hv",
     displayName: "Hive",
-    config: { host: "h", writeEnabled },
+    config: { host: "h" },
     enabled: true,
     createdAt: "",
     updatedAt: "",
@@ -82,7 +82,7 @@ async function* toAsync(batches: Row[][]): AsyncGenerator<Row[]> {
 describe("hive adapter", () => {
   it("streams rows from a SQL read spec", async () => {
     const driver = mockDriver([{ a: 1 }, { a: 2 }, { a: 3 }])
-    const adapter = createHiveAdapter(connector(), { driverProvider: async () => driver, writeEnabled: true, batchSize: 2 })
+    const adapter = createHiveAdapter(connector(), { driverProvider: async () => driver, batchSize: 2 })
     await adapter.open()
     const out: Row[][] = []
     for await (const b of adapter.read({ kind: "sql", sql: "SELECT a FROM t" })) out.push(b)
@@ -92,7 +92,7 @@ describe("hive adapter", () => {
 
   it("append-writes via insertBatches", async () => {
     const driver = mockDriver([])
-    const adapter = createHiveAdapter(connector(), { driverProvider: async () => driver, writeEnabled: true })
+    const adapter = createHiveAdapter(connector(), { driverProvider: async () => driver })
     await adapter.open()
     const summary = await adapter.write({ kind: "sql", table: "t", mode: "append" }, toAsync([[{ a: 1 }], [{ a: 2 }, { a: 3 }]]))
     await adapter.close()
@@ -104,7 +104,7 @@ describe("hive adapter", () => {
 
   it("replace truncates + inserts in a transaction and commits", async () => {
     const driver = mockDriver([])
-    const adapter = createHiveAdapter(connector(), { driverProvider: async () => driver, writeEnabled: true })
+    const adapter = createHiveAdapter(connector(), { driverProvider: async () => driver })
     await adapter.open()
     await adapter.write({ kind: "sql", table: "t", mode: "replace" }, toAsync([[{ a: 1 }], [{ a: 2 }]]))
     await adapter.close()
@@ -116,7 +116,7 @@ describe("hive adapter", () => {
   it("replace rolls back when an insert batch fails", async () => {
     const driver = mockDriver([])
     driver.insertFailAtBatch = 1
-    const adapter = createHiveAdapter(connector(), { driverProvider: async () => driver, writeEnabled: true })
+    const adapter = createHiveAdapter(connector(), { driverProvider: async () => driver })
     await adapter.open()
     const summary = await adapter.write({ kind: "sql", table: "t", mode: "replace" }, toAsync([[{ a: 1 }], [{ a: 2 }], [{ a: 3 }]]))
     await adapter.close()
@@ -125,15 +125,6 @@ describe("hive adapter", () => {
     expect(driver.committed).toBe(false)
   })
 
-  it("refuses to write when writeEnabled is false", async () => {
-    const driver = mockDriver([])
-    const adapter = createHiveAdapter(connector(false), { driverProvider: async () => driver, writeEnabled: false })
-    await adapter.open()
-    const summary = await adapter.write({ kind: "sql", table: "t", mode: "append" }, toAsync([[{ a: 1 }]]))
-    await adapter.close()
-    expect(summary.status).toBe("failed")
-    expect(summary.errors[0]!.message).toContain("read-only")
-  })
 })
 
 describe("defaultHiveDriver (wraps a HiveClient)", () => {

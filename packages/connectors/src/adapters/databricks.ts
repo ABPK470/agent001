@@ -41,7 +41,6 @@ function isSqlWrite(spec: WriteSpec): spec is SqlWriteSpec {
 
 export interface DatabricksAdapterOptions {
   readonly driverProvider: () => Promise<DatabricksDriver>
-  readonly writeEnabled: boolean
   readonly batchSize?: number
 }
 
@@ -73,9 +72,6 @@ export function createDatabricksAdapter(
     async write(spec: WriteSpec, rows: AsyncGenerator<RowBatch>): Promise<MoveSummary> {
       if (!driver) throw new Error("databricks adapter write before open")
       if (!isSqlWrite(spec)) throw new Error(`databricks adapter cannot write spec kind '${spec.kind}'`)
-      if (!options.writeEnabled) {
-        return makeSummary("failed", 0, 0, [{ row: 0, message: "connector is read-only (writeEnabled=false)" }], 0)
-      }
       return driver.insertBatches(spec.table, spec.mode, rows)
     },
   }

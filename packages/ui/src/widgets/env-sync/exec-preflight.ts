@@ -18,30 +18,12 @@ export function buildExecPreflightChecks(plan: SyncPlan): ExecPreflightCheck[] {
   const conflictCount = plan.totals.conflicts ?? 0
   const { insert, update, delete: del, tablesCount } = plan.totals
 
-  const targetWriteEnabled = plan.preflight.targetWriteEnabled
-  const targetWritePassed = targetWriteEnabled !== false
-
   return [
     {
       id: "catalog",
       label: "Catalog compatible (source vs target schema)",
       passed: plan.preflight.catalogCompatible,
       detail: plan.preflight.issues[0] ?? null
-    },
-    {
-      id: "target-write",
-      label: "Target connector Write enabled",
-      passed: targetWritePassed,
-      detail:
-        targetWriteEnabled === false
-          ? (plan.preflight.targetWriteIssue ??
-            "Target connector is read-only (writeEnabled=false). Enable Write on the linked connector.")
-          : targetWriteEnabled == null
-            ? (plan.preflight.targetWriteIssue ??
-              "Target connector write capability was not resolved at preview — execute will re-check.")
-            : null,
-      // Unknown at preview is informative; execute still enforces the hard gate.
-      blocking: targetWriteEnabled === false,
     },
     {
       id: "root-parent",

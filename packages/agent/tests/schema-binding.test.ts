@@ -133,9 +133,7 @@ describe("validateQueryDetailed — schema binding", () => {
 
   it("blocks query_mssql when a joined table was not verified", () => {
     const verified = new Set(["publish.revenue"])
-    const v = validateQueryDetailed(
-      "SELECT c.ClientName FROM publish.Revenue r JOIN dim.Client c ON c.pkClient = r.pkClient",
-      false,
+    const v = validateQueryDetailed("SELECT c.ClientName FROM publish.Revenue r JOIN dim.Client c ON c.pkClient = r.pkClient",
       { accessor: () => cat, verifiedTables: verified }
     )
     expect(v.ok).toBe(false)

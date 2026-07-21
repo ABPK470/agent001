@@ -132,7 +132,7 @@ describe("executeSync pre-execution gates", () => {
     fetchPkColumnsMock.mockResolvedValue(new Map())
     getPoolMock.mockResolvedValue({
       pool: { request: () => ({ query: async () => ({ recordset: [] }) }) },
-      entry: { writeEnabled: true },
+      entry: {},
     })
     runMetadataSyncMock.mockResolvedValue({ applied: { insert: 0, update: 0, delete: 0 } })
     runPostMetadataMock.mockResolvedValue(undefined)
@@ -192,15 +192,6 @@ describe("executeSync pre-execution gates", () => {
     ).rejects.toThrow(/PROD is currently disabled/)
   })
 
-  it("refuses target connector when writeEnabled is false", async () => {
-    getPoolMock.mockResolvedValue({
-      pool: { request: () => ({ query: async () => ({ recordset: [] }) }) },
-      entry: { writeEnabled: false },
-    })
-    await expect(
-      executeSync("gate-plan", { host: hostWithEnvs(), confirm: true }),
-    ).rejects.toThrow(/connector is read-only/)
-  })
 
   it("refuses catalog drift at execute time", async () => {
     detectCatalogDriftMock.mockResolvedValue({
@@ -264,7 +255,7 @@ describe("executeSync entity scenarios (gate matrix)", () => {
     fetchPkColumnsMock.mockResolvedValue(new Map())
     getPoolMock.mockResolvedValue({
       pool: { request: () => ({ query: async () => ({ recordset: [] }) }) },
-      entry: { writeEnabled: true },
+      entry: {},
     })
     runMetadataSyncMock.mockResolvedValue({ applied: { insert: 0, update: 0, delete: 0 } })
     runPostMetadataMock.mockResolvedValue({ stepWarnings: [] })

@@ -68,7 +68,6 @@ function isSqlWrite(spec: WriteSpec): spec is SqlWriteSpec {
 
 export interface HiveAdapterOptions {
   readonly driverProvider: () => Promise<HiveDriver>
-  readonly writeEnabled: boolean
   readonly batchSize?: number
 }
 
@@ -100,9 +99,6 @@ export function createHiveAdapter(
     async write(spec: WriteSpec, rows: AsyncGenerator<RowBatch>): Promise<MoveSummary> {
       if (!driver) throw new Error("hive adapter write before open")
       if (!isSqlWrite(spec)) throw new Error(`hive adapter cannot write spec kind '${spec.kind}'`)
-      if (!options.writeEnabled) {
-        return makeSummary("failed", 0, 0, [{ row: 0, message: "connector is read-only (writeEnabled=false)" }], 0)
-      }
       if (spec.mode === "replace") {
         return writeReplace(driver, spec, rows)
       }

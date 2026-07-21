@@ -26,8 +26,7 @@ function makeProfileDataTool(): ReturnType<typeof createProfileDataTool> {
   const databases = new Map<string, import("../src/runtime/runtime.js").MssqlEntry>()
   databases.set("default", {
     config: { server: "stub", database: "stub", user: "u", password: "p" } as never,
-    pool: null,
-    writeEnabled: false,
+    pool: null
     knowledge: null
   })
   return createProfileDataTool(configureAgent({ mssqlDatabases: databases }))

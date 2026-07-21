@@ -95,17 +95,16 @@ function buildQueryMssqlTool(host: AgentHost, run?: RunContext): Tool {
       const toolTrace = readToolTraceContext(args)
 
       let pool: sql.ConnectionPool
-      let writeEnabled: boolean
       try {
         const result = await getPool(host, connectionName)
         pool = result.pool
-        writeEnabled = result.entry.writeEnabled
       } catch (err) {
         return `Error: ${err instanceof Error ? err.message : String(err)}`
       }
 
       // Validate before executing (auto-normalizes alias bracketing).
-      const validation = validateQueryDetailed(query, writeEnabled, {
+      // Policy governs DML — no connector write latch.
+      const validation = validateQueryDetailed(query, {
         accessor,
         profiledTables: run?.mssqlProfileCalls ?? null,
         verifiedTables: run?.mssqlVerifiedTables ?? null

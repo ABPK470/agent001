@@ -34,7 +34,6 @@ export function registerMymiRoutes(app: FastifyInstance, host: AgentHost): void 
       name: config.name,
       server: config.server,
       database: config.database,
-      writeEnabled: config.writeEnabled
     }))
   )
 

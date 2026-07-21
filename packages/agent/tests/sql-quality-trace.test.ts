@@ -42,7 +42,7 @@ describe("SQL quality analysis", () => {
       "DROP TABLE #revLines_a3f91c08;"
     ].join("\n")
 
-    const validation = validateQueryDetailed(query, false)
+    const validation = validateQueryDetailed(query)
 
     expect(validation.ok).toBe(false)
     expect(validation.code).toBe("temp_scalar_subquery_overused")
@@ -73,7 +73,7 @@ describe("SQL quality analysis", () => {
 
     const analysis = analyzeMssqlQueryQuality(query)
     expect(analysis.tempScalarSubqueryCount).toBe(0)
-    const validation = validateQueryDetailed(query, false)
+    const validation = validateQueryDetailed(query)
     if (!validation.ok) {
       expect(validation.code).not.toBe("temp_scalar_subquery_overused")
     }
@@ -136,7 +136,7 @@ describe("SQL quality analysis", () => {
 
     const analysis = analyzeMssqlQueryQuality(query)
     expect(analysis.tempScalarSubqueryCount).toBe(2)
-    const validation = validateQueryDetailed(query, false)
+    const validation = validateQueryDetailed(query)
     expect(validation.ok).toBe(false)
     expect(validation.code).toBe("temp_scalar_subquery_overused")
   })
@@ -159,7 +159,7 @@ describe("publish.Revenue / publish.Balances branch-aggregation guard", () => {
       "GROUP BY r.pkClient",
       "ORDER BY SUM(r.RevenueZARMTD) DESC, r.pkClient;"
     ].join("\n")
-    const v = validateQueryDetailed(query, false)
+    const v = validateQueryDetailed(query)
     expect(v.ok).toBe(false)
     expect(v.code).toBe("publish_view_topn_without_branch_aggregation")
     expect(v.error ?? "").toContain("publish.Revenue")
@@ -176,7 +176,7 @@ describe("publish.Revenue / publish.Balances branch-aggregation guard", () => {
       "GROUP BY b.pkAccount",
       "ORDER BY AVG(b.AverageCreditBalanceZARMTD) DESC, b.pkAccount;"
     ].join("\n")
-    const v = validateQueryDetailed(query, false)
+    const v = validateQueryDetailed(query)
     expect(v.ok).toBe(false)
     expect(v.code).toBe("publish_view_topn_without_branch_aggregation")
     expect(v.error ?? "").toContain("publish.Balances")
@@ -200,9 +200,9 @@ describe("publish.Revenue / publish.Balances branch-aggregation guard", () => {
       "GROUP BY x.pkClient",
       "ORDER BY SUM(x.RevenueZAR) DESC, x.pkClient;"
     ].join("\n")
-    const v = validateQueryDetailed(query, false)
+    const v = validateQueryDetailed(query)
     if (!v.ok) {
-      // Other guards may still complain (e.g. write_disabled if there's an
+      // Other guards may still complain (e.g. read_only_tool if there's an
       // INTO without a preceding CREATE batch context) — but the branch-agg
       // guard specifically must NOT fire on the per-branch UNION shape.
       expect(v.code).not.toBe("publish_view_topn_without_branch_aggregation")
@@ -217,7 +217,7 @@ describe("publish.Revenue / publish.Balances branch-aggregation guard", () => {
       "JOIN #range_8e5a1c2f rg ON r.pkMonth BETWEEN rg.pkMonthFrom AND rg.pkMonthTo",
       "WHERE r.pkClient IN (SELECT pkClient FROM #topClients_8e5a1c2f);"
     ].join("\n")
-    const v = validateQueryDetailed(query, false)
+    const v = validateQueryDetailed(query)
     if (!v.ok) {
       expect(v.code).not.toBe("publish_view_topn_without_branch_aggregation")
     }
@@ -231,7 +231,7 @@ describe("publish.Revenue / publish.Balances branch-aggregation guard", () => {
       "GROUP BY pkMonth",
       "ORDER BY pkMonth;"
     ].join("\n")
-    const v = validateQueryDetailed(query, false)
+    const v = validateQueryDetailed(query)
     if (!v.ok) {
       expect(v.code).not.toBe("publish_view_topn_without_branch_aggregation")
     }
@@ -252,7 +252,7 @@ describe("publish.Revenue / publish.Balances branch-aggregation guard", () => {
       "  ORDER BY SUM(r.RevenueZARMTD) DESC;",
       "DROP TABLE #scope_a1b2c3d4;"
     ].join("\n")
-    const v = validateQueryDetailed(query, false)
+    const v = validateQueryDetailed(query)
     if (!v.ok) {
       expect(v.code).not.toBe("publish_view_topn_without_branch_aggregation")
     }
@@ -269,7 +269,7 @@ describe("AVG(COALESCE/ISNULL(col, 0)) statistical guard", () => {
       "FROM #balLines_x b",
       "GROUP BY pkClient;"
     ].join("\n")
-    const v = validateQueryDetailed(query, false)
+    const v = validateQueryDetailed(query)
     expect(v.ok).toBe(false)
     expect(v.code).toBe("avg_of_coalesce_zero")
     expect(v.error ?? "").toContain("Fix:")
@@ -278,14 +278,14 @@ describe("AVG(COALESCE/ISNULL(col, 0)) statistical guard", () => {
 
   it("BLOCKS AVG(ISNULL(col, 0)) (the T-SQL synonym)", () => {
     const query = "SELECT AVG(ISNULL(b.SpotCreditBalanceZARMTD, 0)) AS AvgSpot FROM #b b;"
-    const v = validateQueryDetailed(query, false)
+    const v = validateQueryDetailed(query)
     expect(v.ok).toBe(false)
     expect(v.code).toBe("avg_of_coalesce_zero")
   })
 
   it("ALLOWS plain AVG(col) (the correct shape — AVG already skips NULLs)", () => {
     const query = "SELECT AVG(b.AverageCreditBalanceZARMTD) AS AvgCreditBal FROM #b b;"
-    const v = validateQueryDetailed(query, false)
+    const v = validateQueryDetailed(query)
     if (!v.ok) expect(v.code).not.toBe("avg_of_coalesce_zero")
   })
 
@@ -295,14 +295,14 @@ describe("AVG(COALESCE/ISNULL(col, 0)) statistical guard", () => {
       "  SUM(COALESCE(b.RevenueZARMTD, 0)) AS TotalRevenue", // explicit zero-fill in SUM is OK
       "FROM #r b GROUP BY pkClient;"
     ].join("\n")
-    const v = validateQueryDetailed(query, false)
+    const v = validateQueryDetailed(query)
     if (!v.ok) expect(v.code).not.toBe("avg_of_coalesce_zero")
   })
 
   it("ALLOWS AVG(COALESCE(col, otherCol)) — non-zero fallback is a real fallback", () => {
     const query =
       "SELECT AVG(COALESCE(b.SpotCreditBalanceZARMTD, b.AverageCreditBalanceZARMTD)) AS AvgBal FROM #b b;"
-    const v = validateQueryDetailed(query, false)
+    const v = validateQueryDetailed(query)
     if (!v.ok) expect(v.code).not.toBe("avg_of_coalesce_zero")
   })
 })
@@ -318,7 +318,7 @@ describe("SQL quality trace emission", () => {
       parameters: { type: "object", properties: { query: { type: "string" } }, required: ["query"] },
       async execute(args) {
         const sql = String(args.query)
-        const validation = validateQueryDetailed(sql, false)
+        const validation = validateQueryDetailed(sql)
         const toolTrace = readToolTraceContext(args)
         emitMssqlQualityTrace(
           {

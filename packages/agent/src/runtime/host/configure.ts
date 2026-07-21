@@ -17,7 +17,6 @@ import { canonicalizeConfiguredConnectionName } from "../../tools/database/mssql
 
 export interface ConfigureMssqlConnection extends sql.config {
   name: string
-  writeEnabled?: boolean
   /** Resolved knowledge file content (read at boot). */
   knowledge?: string | null
   /** Original knowledge file path — preserved so the connectors seed can store it. */
@@ -223,7 +222,7 @@ function buildMssqlDatabases(
     AgentHost["mssql"]["databases"] extends Map<string, infer Entry> ? Entry : never
   >()
   for (const config of configs ?? []) {
-    const { name, writeEnabled = false, knowledge = null, ...rest } = config
+    const { name, knowledge = null, ...rest } = config
     databases.set(name, {
       config: {
         ...rest,
@@ -242,7 +241,6 @@ function buildMssqlDatabases(
         connectionTimeout: rest.connectionTimeout ?? 15_000
       },
       pool: null,
-      writeEnabled,
       knowledge
     })
   }

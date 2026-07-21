@@ -62,8 +62,6 @@ export function buildEntityPlan(options: BuildPlanOptions): SyncPlan {
       issues: [],
       rootParentReady: true,
       rootParentIssue: null,
-      targetWriteEnabled: true,
-      targetWriteIssue: null,
     },
     warnings = [],
     createdAtMs = Date.now()
@@ -154,8 +152,6 @@ export function contractChildUpsertWithoutParent(entityId = 4368): SyncPlan {
       issues: [],
       rootParentReady: false,
       rootParentIssue: "missing parent",
-      targetWriteEnabled: true,
-      targetWriteIssue: null,
     }
   })
 }

@@ -39,7 +39,6 @@ function makeFixtureWithPool(memory: RunMemoryWriter | null = null): {
       connected: true,
       close: async () => undefined
     } as never,
-    writeEnabled: false,
     knowledge: null
   })
   const run = makeRunContext({ memory })
@@ -100,7 +99,7 @@ describe("DOCTRINE_LESSON_TEMPLATES registry", () => {
 
 describe("validateQueryDetailed attaches lesson on blocking diagnostics", () => {
   it("aggregate-semantic mismatch yields a lesson", () => {
-    const out = validateQueryDetailed("SELECT SUM(x) AS Avg_y FROM t", false)
+    const out = validateQueryDetailed("SELECT SUM(x) AS Avg_y FROM t")
     expect(out.ok).toBe(false)
     expect(out.code).toBe("aggregate_semantic_mismatch")
     expect(out.lesson).not.toBeNull()
@@ -108,10 +107,7 @@ describe("validateQueryDetailed attaches lesson on blocking diagnostics", () => 
   })
 
   it("temp-table integrity violation yields a lesson", () => {
-    const out = validateQueryDetailed(
-      "CREATE TABLE #created_a3f91c08 (x int);\nSELECT * FROM #missing_a3f91c08;",
-      false
-    )
+    const out = validateQueryDetailed("CREATE TABLE #created_a3f91c08 (x int);\nSELECT * FROM #missing_a3f91c08;")
     expect(out.ok).toBe(false)
     expect(out.code).toBe("temp_table_integrity")
     expect(out.lesson).not.toBeNull()
@@ -119,15 +115,12 @@ describe("validateQueryDetailed attaches lesson on blocking diagnostics", () => 
   })
 
   it("repeated temp scalar subqueries yield a lesson", () => {
-    const out = validateQueryDetailed(
-      [
+    const out = validateQueryDetailed([
         "SELECT t.k,",
         "  (SELECT COUNT(*) FROM #s_a3f91c08 s WHERE s.k = t.k) AS c1,",
         "  (SELECT SUM(v)   FROM #s_a3f91c08 s WHERE s.k = t.k) AS c2",
         "FROM #t_a3f91c08 t"
-      ].join("\n"),
-      false
-    )
+      ].join("\n"))
     expect(out.ok).toBe(false)
     expect(out.code).toBe("temp_scalar_subquery_overused")
     expect(out.lesson).not.toBeNull()
@@ -135,7 +128,7 @@ describe("validateQueryDetailed attaches lesson on blocking diagnostics", () => 
   })
 
   it("non-blocking validation leaves lesson absent/null", () => {
-    const out = validateQueryDetailed("SELECT 1", false)
+    const out = validateQueryDetailed("SELECT 1")
     expect(out.ok).toBe(true)
     expect(out.lesson ?? null).toBeNull()
   })

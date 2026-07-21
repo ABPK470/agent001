@@ -35,7 +35,7 @@ import { useContainerSize } from "../hooks/useContainerSize"
 
 // ── Types ────────────────────────────────────────────────────────
 
-type DbConfig  = { name: string; server: string; database: string; writeEnabled: boolean }
+type DbConfig  = { name: string; server: string; database: string }
 type SchemaStat = { schema: string; tableCount: number; viewCount: number; totalRows: number; totalMb: number }
 type SchemaInfo = { name: string; tableCount: number; viewCount: number }
 type DbObject  = { name: string; type: "table" | "view"; rowCount: number; sizeMb: number; columnCount: number }

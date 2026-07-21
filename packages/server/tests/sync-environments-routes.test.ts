@@ -31,8 +31,8 @@ function createHost(root: string): AgentHost {
   const host = {
     mssql: {
       databases: new Map([
-        ["DEV", { config: { server: "dev-sql", database: "mymi" }, writeEnabled: true, knowledge: null }],
-        ["UAT", { config: { server: "uat-sql", database: "mymi" }, writeEnabled: true, knowledge: null }]
+        ["DEV", { config: { server: "dev-sql", database: "mymi" }, knowledge: null }],
+        ["UAT", { config: { server: "uat-sql", database: "mymi" }, knowledge: null }]
       ]),
       defaultConnection: { value: "DEV" }
     },
@@ -54,8 +54,8 @@ function createHost(root: string): AgentHost {
 async function seedLiveEnvironments(root: string, host: AgentHost): Promise<void> {
   const { loadPersistedSyncEnvironments } = await import("../src/api/sync/index.js")
   const loaded = loadPersistedSyncEnvironments(root, [
-    { name: "DEV", server: "dev-sql", database: "mymi", writeEnabled: true, knowledge: null },
-    { name: "UAT", server: "uat-sql", database: "mymi", writeEnabled: true, knowledge: null }
+    { name: "DEV", server: "dev-sql", database: "mymi", knowledge: null },
+    { name: "UAT", server: "uat-sql", database: "mymi", knowledge: null }
   ])
   host.sync.environments.items = new Map(loaded.environments.map((env) => [env.name, env]))
 }

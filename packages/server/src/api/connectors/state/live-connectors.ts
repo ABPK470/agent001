@@ -98,7 +98,6 @@ function mssqlConfigFromConnection(
     domain: conn.domain ?? null,
     encrypt: conn.options?.encrypt ?? true,
     trustServerCertificate: conn.options?.trustServerCertificate ?? true,
-    writeEnabled: conn.writeEnabled ?? false,
     knowledgePath: conn.knowledgePath ?? null,
   }
 }

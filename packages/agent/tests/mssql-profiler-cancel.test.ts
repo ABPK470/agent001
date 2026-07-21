@@ -34,7 +34,6 @@ function makeFixture(signal: AbortSignal | null): {
       connected: true,
       close: async () => undefined
     } as never,
-    writeEnabled: false,
     knowledge: null
   })
   catalogInstances.set("default", canonicalFixtureCatalog())
@@ -56,7 +55,6 @@ describe("profile_data abort wiring", () => {
     databases.set("default", {
       config: { server: "stub", database: "stub", user: "u", password: "p" } as never,
       pool: { request: requestSpy, connected: true, close: async () => undefined } as never,
-      writeEnabled: false,
       knowledge: null
     })
 
@@ -91,7 +89,6 @@ describe("profile_data abort wiring", () => {
         connected: true,
         close: async () => undefined
       } as never,
-      writeEnabled: false,
       knowledge: null
     })
 

@@ -83,7 +83,6 @@ function needsPoweredWrite(spec: SqlWriteSpec): boolean {
 export interface MssqlAdapterOptions {
   /** Resolved lazily on `open()` so connection pools stay lazy until a move runs. */
   readonly driverProvider: () => Promise<MssqlDriver>
-  readonly writeEnabled: boolean
   readonly batchSize?: number
 }
 
@@ -115,12 +114,6 @@ export function createMssqlAdapter(
     async write(spec: WriteSpec, rows: AsyncGenerator<RowBatch>): Promise<MoveSummary> {
       if (!driver) throw new Error("mssql adapter write before open")
       if (!isSqlWrite(spec)) throw new Error(`mssql adapter cannot write spec kind '${spec.kind}'`)
-      if (!options.writeEnabled) {
-        return makeSummary("failed", 0, 0, [{
-          row: 0,
-          message: "Connector is read-only (writeEnabled=false). Enable Write on the connector before mutating data.",
-        }], 0)
-      }
       if (needsPoweredWrite(spec)) {
         return writePowered(driver, spec, rows)
       }

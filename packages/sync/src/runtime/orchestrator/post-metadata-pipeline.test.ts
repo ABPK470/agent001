@@ -488,8 +488,6 @@ function createPlan(entityType: string, actions: PostMetadataActionKind[]): Sync
       issues: [],
       rootParentReady: true,
       rootParentIssue: null,
-      targetWriteEnabled: true,
-      targetWriteIssue: null,
     },
     tables: [],
     totals: { insert: 0, update: 0, delete: 0, unchanged: 0, lowConfidence: 0, conflicts: 0, tablesCount: 0 },

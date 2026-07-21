@@ -30,12 +30,9 @@ import {
     Trash2,
     X,
 } from "lucide-react"
-import type { ConnectorWriteConflict } from "@mia/shared-types"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { api } from "../../client/index"
-import { conflictsForPolicyRules } from "../../lib/connector-write-capability"
 import type { PolicyRule, ToolInfo } from "../../types"
-import { CapabilityConflictBanner } from "./CapabilityConflictBanner"
 import { SelectorRulesTab } from "./policy/SelectorRulesTab"
 import { modalOverlayClass, MODAL_ADMIN_PANEL, MODAL_SURFACE_CLASS } from "../entity-registry/modal-overlay"
 
@@ -98,7 +95,6 @@ export function PolicyEditor({ onClose }: Props) {
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<Tab>("tools")
   const [error, setError] = useState<string | null>(null)
-  const [writeConflicts, setWriteConflicts] = useState<ConnectorWriteConflict[]>([])
 
   // Security section expand
   const [shellExpanded, setShellExpanded] = useState(false)
@@ -155,36 +151,6 @@ export function PolicyEditor({ onClose }: Props) {
   }, [])
 
   useEffect(() => { loadRules() }, [loadRules])
-
-  useEffect(() => {
-    if (rules.length === 0) {
-      setWriteConflicts([])
-      return
-    }
-    let alive = true
-    void Promise.all([api.listConnectors(), api.listSyncEnvironments()])
-      .then(([connectors, envs]) => {
-        if (!alive) return
-        setWriteConflicts(
-          conflictsForPolicyRules({
-            rules: rules.map((r) => ({
-              name: r.name,
-              effect: r.effect,
-              condition: r.condition,
-              parameters: (r.parameters ?? {}) as Record<string, unknown>,
-            })),
-            connectors,
-            envs,
-          }),
-        )
-      })
-      .catch(() => {
-        if (alive) setWriteConflicts([])
-      })
-    return () => {
-      alive = false
-    }
-  }, [rules])
 
   useEffect(() => {
     api.getPlatformHealth()
@@ -416,16 +382,6 @@ export function PolicyEditor({ onClose }: Props) {
           ) : tab === "rules" ? (
             /* ── Selector Rules tab — see ./policy/SelectorRulesTab.tsx ── */
             <div className="space-y-3">
-              {writeConflicts.length > 0 && (
-                <div className="space-y-2">
-                  {writeConflicts.slice(0, 3).map((conflict) => (
-                    <CapabilityConflictBanner
-                      key={`${conflict.policyName ?? ""}:${conflict.envName ?? ""}`}
-                      conflict={conflict}
-                    />
-                  ))}
-                </div>
-              )}
               <SelectorRulesTab
                 rules={rules}
                 tools={tools}
@@ -647,27 +603,10 @@ export function PolicyEditor({ onClose }: Props) {
                   All policy rules are evaluated <strong>before every tool call</strong>.
                   Denied actions throw an error immediately. "Require Approval" blocks
                   the agent until approved. Rules apply to all new runs.
-                  Approving a tool does <strong>not</strong> enable connector Write —
-                  that latch still caps <code className="font-mono text-text">query_mssql</code> and sync execute.
                 </p>
-                {writeConflicts.length > 0 && (
-                  <div className="mt-3 space-y-2">
-                    {writeConflicts.slice(0, 5).map((conflict) => (
-                      <CapabilityConflictBanner
-                        key={`${conflict.policyName ?? ""}:${conflict.envName ?? ""}`}
-                        conflict={conflict}
-                      />
-                    ))}
-                    {writeConflicts.length > 5 && (
-                      <p className="text-xs text-text-muted">
-                        …and {writeConflicts.length - 5} more conflict(s).
-                      </p>
-                    )}
-                  </div>
-                )}
               </div>
 
-              {/* SQL / connector capability — tool layer + connector Write, not policy-editable */}
+              {/* SQL rails — tool layer, not policy-editable */}
               <div className="px-4 py-3.5 rounded-xl bg-overlay-2 border border-border-subtle">
                 <button
                   className="flex items-center gap-2.5 w-full text-left"
@@ -675,25 +614,19 @@ export function PolicyEditor({ onClose }: Props) {
                 >
                   {sqlGuardExpanded ? <ChevronDown size={14} className="text-text-muted" /> : <ChevronRight size={14} className="text-text-muted" />}
                   <Database size={15} className="text-text-muted" />
-                  <span className="text-sm font-semibold text-text">Connector Write &amp; SQL Rails</span>
-                  <span className="text-sm text-text-muted ml-auto">capability · not policy</span>
+                  <span className="text-sm font-semibold text-text">SQL Rails</span>
+                  <span className="text-sm text-text-muted ml-auto">tool layer · not policy</span>
                 </button>
                 {sqlGuardExpanded && (
                   <div className="mt-3 space-y-2.5">
                     <p className="text-sm text-text-muted leading-relaxed">
-                      <strong className="text-text">Connector Write</strong> (Connectors → Write enabled) is the hard
-                      ceiling for real-table mutations via <code className="font-mono text-text">query_mssql</code> and
-                      for <strong>sync execute</strong> to environments linked to that connector.
-                      Policy allow / approve cannot override a read-only connector.
-                    </p>
-                    <p className="text-sm text-text-muted leading-relaxed">
-                      Additional SQL rails live in the tool layer (dangerous ops, <code className="font-mono">#temp</code> discipline).
-                      They are <strong>not</strong> stored in the policy DB.
+                      SQL safety rails live in the tool layer (dangerous ops, <code className="font-mono">#temp</code> discipline).
+                      They are <strong>not</strong> stored in the policy DB. Real-table DML/DDL still require matching
+                      policy (and approval when configured).
                     </p>
                     <ul className="text-sm text-text-secondary leading-relaxed space-y-1.5 pl-1">
-                      <li><span className="text-success font-medium">✓ When connector Write is off</span> — SELECT/WITH and local <code className="font-mono">#temp</code> micro-ETL only.</li>
-                      <li><span className="text-success font-medium">✓ When connector Write is on</span> — real-table DML/DDL still require matching policy (and approval when configured).</li>
                       <li><span className="text-error font-medium">✗ Always blocked</span> — <code className="font-mono">EXEC</code>, <code className="font-mono">xp_*</code>, <code className="font-mono">OPENROWSET</code>, <code className="font-mono">BULK INSERT</code>, <code className="font-mono">DBCC</code>, global <code className="font-mono">##temp</code>.</li>
+                      <li><span className="text-text-muted">ℹ export_query_to_file</span> — tool-level read-only (SELECT/WITH/#temp only).</li>
                       <li><span className="text-text-muted">ℹ Per-row safety cap</span> — <code className="font-mono">query_mssql</code> hard-limits to 1 000 rows; use <code className="font-mono">export_query_to_file</code> for larger pulls.</li>
                     </ul>
                   </div>

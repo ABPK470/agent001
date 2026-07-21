@@ -303,7 +303,7 @@ describe("validateQueryDetailed — invented_column block", () => {
     // Without an injected accessor the validator degrades to "no catalog",
     // so the invented-column guard must stay silent.
     const query = "SELECT r.ClientName FROM publish.Revenue r"
-    const v = validateQueryDetailed(query, false)
+    const v = validateQueryDetailed(query)
     expect(v.code).not.toBe("invented_column")
   })
 })

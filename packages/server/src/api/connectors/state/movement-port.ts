@@ -35,8 +35,7 @@ import {
   defaultOracleDriver,
   defaultPostgresDriver,
   defaultWebhdfsDriver,
-  type ConnectorPort,
-} from "@mia/connectors"
+  type ConnectorPort} from "@mia/connectors"
 import { Pool } from "pg"
 import type { Connector, ConnectorKindId } from "@mia/shared-types"
 import * as db from "../../../infra/persistence/sqlite.js"
@@ -68,8 +67,7 @@ function parseConnector(row: db.DbConnector): Connector {
     enabled: row.enabled === 1,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-    updatedBy: row.updated_by,
-  }
+    updatedBy: row.updated_by}
 }
 
 /**
@@ -98,37 +96,31 @@ export function buildMovementPort(host: AgentHost): ConnectorPort {
   const registry = new AdapterRegistry()
 
   registry.register("mssql", (connector) => {
-    const writeEnabled = asBoolean(connector.config["writeEnabled"], false)
     return createMssqlAdapter(connector, {
       driverProvider: async () => {
         const pools = host.mssql.pools
         if (!pools) throw new Error("MSSQL pool provider not configured for Bridge.")
         const { pool } = await pools.get(connector.id)
         return defaultMssqlDriver(pool)
-      },
-      writeEnabled,
+      }
     })
   })
 
   registry.register("postgres", (connector) => {
-    const writeEnabled = asBoolean(connector.config["writeEnabled"], false)
     return createPostgresAdapter(connector, {
       driverProvider: () => {
         const pool = new Pool(pgPoolConfig(connector))
         return Promise.resolve(defaultPostgresDriver(pool))
-      },
-      writeEnabled,
+      }
     })
   })
 
   registry.register("oracle", (connector) => {
-    const writeEnabled = asBoolean(connector.config["writeEnabled"], false)
     return createOracleAdapter(connector, {
       driverProvider: async () => {
         const pool = await createOraclePool(connector)
         return defaultOracleDriver(pool)
-      },
-      writeEnabled,
+      }
     })
   })
 
@@ -145,42 +137,32 @@ export function buildMovementPort(host: AgentHost): ConnectorPort {
   })
 
   registry.register("webhdfs", (connector) => {
-    const writeEnabled = asBoolean(connector.config["writeEnabled"], false)
     return createWebhdfsAdapter(connector, {
-      driverProvider: () => Promise.resolve(defaultWebhdfsDriver(connector)),
-      writeEnabled,
+      driverProvider: () => Promise.resolve(defaultWebhdfsDriver(connector))
     })
   })
 
   registry.register("aws", (connector) => {
-    const writeEnabled = asBoolean(connector.config["writeEnabled"], false)
     return createObjectFileAdapter("aws", connector, {
-      driverProvider: () => Promise.resolve(defaultAwsDriver(connector)),
-      writeEnabled,
+      driverProvider: () => Promise.resolve(defaultAwsDriver(connector))
     })
   })
 
   registry.register("azure", (connector) => {
-    const writeEnabled = asBoolean(connector.config["writeEnabled"], false)
     return createObjectFileAdapter("azure", connector, {
-      driverProvider: () => Promise.resolve(defaultAzureDriver(connector)),
-      writeEnabled,
+      driverProvider: () => Promise.resolve(defaultAzureDriver(connector))
     })
   })
 
   registry.register("ftp", (connector) => {
-    const writeEnabled = asBoolean(connector.config["writeEnabled"], false)
     return createObjectFileAdapter("ftp", connector, {
-      driverProvider: () => Promise.resolve(defaultFtpDriver(connector)),
-      writeEnabled,
+      driverProvider: () => Promise.resolve(defaultFtpDriver(connector))
     })
   })
 
   registry.register("databricks", (connector) => {
-    const writeEnabled = asBoolean(connector.config["writeEnabled"], false)
     return createDatabricksAdapter(connector, {
-      driverProvider: () => Promise.resolve(defaultDatabricksDriver(connector)),
-      writeEnabled,
+      driverProvider: () => Promise.resolve(defaultDatabricksDriver(connector))
     })
   })
 

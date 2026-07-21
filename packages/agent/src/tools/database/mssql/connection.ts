@@ -12,7 +12,6 @@ import {
 export interface DatabaseEntry {
   config: sql.config
   pool: sql.ConnectionPool | null
-  writeEnabled: boolean
   knowledge: string | null
 }
 
@@ -65,7 +64,6 @@ export function setMssqlConfig(
       connectionTimeout: config.connectionTimeout ?? 15_000
     },
     pool: null,
-    writeEnabled: false,
     knowledge
   })
 }
@@ -76,10 +74,10 @@ export function setMssqlConfig(
  */
 export function setMssqlConfigs(
   host: AgentHost,
-  configs: Array<{ name: string; writeEnabled?: boolean; knowledge?: string | null } & sql.config>
+  configs: Array<{ name: string; knowledge?: string | null } & sql.config>
 ): void {
   host.mssql.databases.clear()
-  for (const { name, writeEnabled = false, knowledge = null, ...rest } of configs) {
+  for (const { name, knowledge = null, ...rest } of configs) {
     host.mssql.databases.set(name, {
       config: {
         ...rest,
@@ -98,17 +96,9 @@ export function setMssqlConfigs(
         connectionTimeout: (rest as sql.config).connectionTimeout ?? 15_000
       },
       pool: null,
-      writeEnabled,
       knowledge
     })
   }
-}
-
-/** Enable/disable write operations for a named connection (default: "default"). */
-export function setMssqlWriteEnabled(host: AgentHost, enabled: boolean, name = "default"): void {
-  const resolved = tryResolveMssqlConnectionName(host, name) ?? name
-  const entry = host.mssql.databases.get(resolved)
-  if (entry) entry.writeEnabled = enabled
 }
 
 /** Return a safe summary of all configured connections (no credentials). */
@@ -116,14 +106,12 @@ export function getMssqlConfig(host: AgentHost): Array<{
   name: string
   server: string
   database: string
-  writeEnabled: boolean
   knowledge: string | null
 }> {
   return Array.from(host.mssql.databases.entries()).map(([name, entry]) => ({
     name,
     server: entry.config.server!,
     database: entry.config.database!,
-    writeEnabled: entry.writeEnabled,
     knowledge: entry.knowledge
   }))
 }
@@ -140,7 +128,7 @@ export async function getPool(
     const r = await pools.get(resolvedName)
     return {
       pool: r.pool,
-      entry: { config: r.config, pool: r.pool, writeEnabled: r.writeEnabled, knowledge: r.knowledge }
+      entry: { config: r.config, pool: r.pool, knowledge: r.knowledge }
     }
   }
   // Legacy databases-map path (tests/hosts without a live provider).

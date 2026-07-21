@@ -243,19 +243,16 @@ async function executeExportQueryToFile(
   const accessor = () => getCatalog(opts.host, connectionName)
 
   let pool: sql.ConnectionPool
-  let writeEnabled: boolean
   try {
     const result = await getPool(opts.host, connectionName)
     pool = result.pool
-    writeEnabled = result.entry.writeEnabled
   } catch (err) {
     return `Error: ${err instanceof Error ? err.message : String(err)}`
   }
 
-  // Read-only validation. We deliberately ignore the "writeEnabled" override
-  // here because exporting is fundamentally a read operation — even if the
-  // connection allows writes we don't want this tool used for them.
-  const validation = validateQueryDetailed(query, /* writeEnabled */ false && writeEnabled, {
+  // Tool-level read-only: export is SELECT/WITH/#temp only (not a connector latch).
+  const validation = validateQueryDetailed(query, {
+    readOnly: true,
     accessor,
     profiledTables: opts.run?.mssqlProfileCalls ?? null,
     verifiedTables: opts.run?.mssqlVerifiedTables ?? null
