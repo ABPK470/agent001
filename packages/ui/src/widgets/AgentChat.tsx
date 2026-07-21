@@ -6,7 +6,6 @@
  * Includes agent picker to select which configured agent to use.
  */
 
-import { toolCallDetailPreview } from "@mia/shared-types"
 import { AlertCircle, Brain, CheckCircle2, ChevronDown, ChevronRight, Clock, FolderOpen, Loader2, MessageSquare, Mic, MicOff, Paperclip, Send, ShieldAlert, Square, User, X, XCircle } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { api } from "../client/index"
@@ -29,41 +28,12 @@ import { useCommandConsole } from "./chat/useCommandConsole"
 import { useStore } from "../state/store"
 import type { AgentDefinition, TraceEntry, WorkspaceDiff } from "../types"
 import { formatMs } from "../lib/util"
-
-// ── User-safe failure detection ─────────────────────────────
-// These prefix sentinels are produced by the agent (platform-errors module)
-// when something went wrong that the user cannot fix. The chat must render
-// these as a small notice card with the run reference, NOT as a normal
-// agent answer. Keep these strings in lockstep with
-// packages/agent/src/service/core/planner-cluster/platform-errors.ts.
-const PLATFORM_UNCONFIGURED_PREFIX = "This request can\u2019t be completed right now."
-const GENERIC_FAILURE_PREFIX = "This request couldn\u2019t be completed."
-// Invisible marker prepended to LLM-polished failure replies (zero-width
-// joiner sequence — won't render but lets the UI flag the message as a
-// failure card with the run-ref chip).
-const POLISHED_FAILURE_MARKER = "\u2063pfm:\u2063"
-function isUserSafeFailureAnswer(text: string): boolean {
-  return text.startsWith(PLATFORM_UNCONFIGURED_PREFIX)
-    || text.startsWith(GENERIC_FAILURE_PREFIX)
-    || text.startsWith(POLISHED_FAILURE_MARKER)
-}
-function stripFailureMarkers(text: string): string {
-  if (text.startsWith(POLISHED_FAILURE_MARKER)) return text.slice(POLISHED_FAILURE_MARKER.length)
-  return text
-}
-function extractRunRef(text: string): string | null {
-  // Accept "Reference: <id>", "reference: <id>", or "include the reference: <id>"
-  const m = text.match(/reference:\s*([A-Za-z0-9._-]+)/i)
-  return m ? m[1] : null
-}
-
-function formatRunFailureMessage(text: string): string {
-  const normalized = text.trim().toLowerCase()
-  if (normalized.startsWith("device flow") || normalized.startsWith("copilot oauth token expired")) {
-    return "Authentication with Copilot expired. Please re-authorize and try again."
-  }
-  return text
-}
+import {
+  formatFailureAnswerBody,
+  formatRunFailureMessage,
+  isUserSafeFailureAnswer,
+} from "./agentchat/failureAnswer"
+import { formatToolArgs, formatToolOutput, getToolDetail } from "./agentchat/toolFormat"
 
 // Web Speech API types
 interface SpeechRecognitionEvent extends Event {
@@ -111,42 +81,6 @@ const TOOL_LABELS: Record<string, string> = {
   compare_catalogs:      "Comparing catalogs",
 }
 
-// Render a tool's full input as `key="value"` pairs, copilot-cli style.
-// Used in the expanded step view so the user sees the EXACT command/query/args
-// the agent dispatched, not just the brief one-line summary.
-function formatToolArgs(input: Record<string, unknown>): string {
-  const entries = Object.entries(input)
-  if (entries.length === 0) return ""
-  return entries
-    .map(([k, v]) => {
-      if (v === null || v === undefined) return `${k}=null`
-      if (typeof v === "string") return `${k}=${JSON.stringify(v)}`
-      if (typeof v === "number" || typeof v === "boolean") return `${k}=${v}`
-      // Objects / arrays — inline JSON; multi-line acceptable, the panel uses
-      // pre-wrap so it stays readable.
-      try { return `${k}=${JSON.stringify(v)}` }
-      catch { return `${k}=[unserialisable]` }
-    })
-    .join(" ")
-}
-
-// Coerce a step's output payload into displayable text. step.output is
-// typically `{ result: "..." }` from the orchestrator's step.completed event
-// (and from the trace-derived path in tracesToSteps). Fall back to a
-// JSON dump for unusual shapes so nothing is silently dropped.
-function formatToolOutput(output: Record<string, unknown>, error: string | null): string {
-  if (error) return error
-  if (!output || Object.keys(output).length === 0) return ""
-  const result = output["result"]
-  if (typeof result === "string") return result
-  if (typeof result === "number" || typeof result === "boolean") return String(result)
-  try { return JSON.stringify(output, null, 2) }
-  catch { return String(result ?? "") }
-}
-
-function getToolDetail(tool: string, input: Record<string, unknown>): string | null {
-  return toolCallDetailPreview(tool, input)
-}
 
 // ── Workspace changes card ─────────────────────────────────────────
 // Rendered inline in the chat when the agent produced isolated file changes.
@@ -685,20 +619,7 @@ export function AgentChat() {
                           {run.answer &&
                               (isUserSafeFailureAnswer(run.answer) ? (
                                   (() => {
-                                      const ref = extractRunRef(run.answer);
-                                      // Strip invisible marker + the trailing "Reference: <id>"
-                                      // line so we render only the model's friendly prose.
-                                      const stripped = stripFailureMarkers(
-                                          run.answer,
-                                      );
-                                      const body = (
-                                          ref
-                                              ? stripped.replace(
-                                                    /\n*\s*Reference:\s*[A-Za-z0-9._-]+\s*$/i,
-                                                    "",
-                                                )
-                                              : stripped
-                                      ).trim();
+                                      const { body, ref } = formatFailureAnswerBody(run.answer);
                                       return (
                                           <div className="flex items-start gap-2 w-full">
                                               <div className="shrink-0 w-7 h-7 rounded-full flex items-center justify-center bg-warning/20">

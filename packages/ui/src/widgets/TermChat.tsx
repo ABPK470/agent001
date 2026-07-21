@@ -14,15 +14,11 @@ import { AskUserPrompt } from "../components/AskUserPrompt"
 import { AttachmentChips, type PendingAttachment } from "../components/AttachmentChips"
 import { ChatScrollProvider, useChatScroll } from "../components/ChatScrollContext"
 import {
-  PRIMARY_ACTIVITY_IDS,
   buildResponseParts,
-  buildToolNarrative,
   compactToolPreview,
-  extractToolTarget,
   humanizeStepName,
   type ResponseIterationPart,
   type ResponseNarrativePart,
-  type ResponsePart,
   type ResponsePlanPart,
   type ResponseProgressPart,
   type ResponseStepBlockPart,
@@ -37,7 +33,7 @@ import {
 } from "../components/tool-code-display"
 import { ScrollToLatestButton } from "../components/ScrollToLatestButton"
 import { SmartAnswer } from "../components/SmartAnswer"
-import { STICKY_GOAL_HOME_OFFSET_PX, STICKY_GOAL_HOME_TOP, StickyUserGoal } from "../components/StickyUserGoal"
+import { STICKY_GOAL_HOME_TOP, StickyUserGoal } from "../components/StickyUserGoal"
 import { TypewriterAnswer } from "../components/TypewriterAnswer"
 import { RunStatus } from "../enums"
 import { useMe } from "../hooks/useMe"
@@ -49,8 +45,6 @@ import {
   HOME_CHAT_GUTTER_X_CLASS,
   HOME_CHAT_INPUT_DOCK_CLASS,
   USER_GOAL_COLUMN_CLASS,
-  USER_GOAL_PIN_SLOT_CLASS,
-  USER_GOAL_TEXT_MAX_CLASS,
   USER_GOAL_TO_RESPONSE_GAP_CLASS,
 } from "../app/chatLayout.js"
 import {
@@ -69,24 +63,21 @@ import { useCommandConsole } from "./chat/useCommandConsole"
 import type { CommandConsoleState } from "./chat/useCommandConsole"
 import { useStore, type GeneratedAttachment } from "../state/store"
 import type { AgentDefinition, TraceEntry, WorkspaceDiff } from "../types"
-/** Pin/unpin dot layout — home + thread share one profile; widget has its own. */
-type GoalPinProfile = "home" | "widget"
-
-function goalPinLayout(profile: GoalPinProfile): {
-  stickyOffsetPx: number
-  topClass: string
-  stuckScrollThreshold: number
-} {
-  if (profile === "widget") {
-    // Widget scroll host uses py-5; align sticky + stuck detection with that inset.
-    return { stickyOffsetPx: 20, topClass: "top-5", stuckScrollThreshold: 6 }
-  }
-  return {
-    stickyOffsetPx: STICKY_GOAL_HOME_OFFSET_PX,
-    topClass: STICKY_GOAL_HOME_TOP,
-    stuckScrollThreshold: 20,
-  }
-}
+import {
+  computeGoalStuck,
+  goalPinLayout,
+  type GoalPinProfile,
+  userGoalPinSlotClass,
+  userGoalTextClass,
+} from "./termchat/goalPin"
+import {
+  canElementScrollVertically,
+  deriveActiveMilestoneLabel,
+  formatDeliverableBytes,
+  isOffThreadProgress,
+  summarizeHistory,
+  summarizeRunError,
+} from "./termchat/milestone"
 
 // Local cap mirrors the Fastify route limit. Larger files get a friendly
 // inline error instead of round-tripping for a 413.
@@ -189,13 +180,13 @@ function UserGoalBubble({
   const shellStyle = { boxShadow: "var(--shadow-bubble)" }
   const bodyClass = "min-w-0 px-5 py-3"
   const appendageClass =
-    `flex shrink-0 items-center justify-center self-stretch ${USER_GOAL_PIN_SLOT_CLASS} border-r border-border-subtle/70 bg-panel text-text-muted transition-colors hover:bg-panel-2 hover:text-text dark:border-white/8 dark:bg-black/10 dark:hover:bg-bubble-user dark:hover:text-text`
+    `flex shrink-0 items-center justify-center self-stretch ${userGoalPinSlotClass()} border-r border-border-subtle/70 bg-panel text-text-muted transition-colors hover:bg-panel-2 hover:text-text dark:border-white/8 dark:bg-black/10 dark:hover:bg-bubble-user dark:hover:text-text`
 
   // Unpinned: pill caps at column − pin slot (ml-auto), so the left gutter
   // stays outside the pill. Pinned: pin fills that gutter; text does not move.
   if (!showUnpin || !onUnpin) {
     return (
-      <div className={`ml-auto ${shellClass} ${USER_GOAL_TEXT_MAX_CLASS}`} style={shellStyle}>
+      <div className={`ml-auto ${shellClass} ${userGoalTextClass(false)}`} style={shellStyle}>
         <div className={bodyClass}>
           <UserGoalText text={goal} />
         </div>
@@ -283,24 +274,17 @@ function ChatTurn({
     const updateStuck = () => {
       const hostRect = host.getBoundingClientRect()
       const sentinelRect = sentinel.getBoundingClientRect()
-      const stickLine = hostRect.top + stickyOffsetPx
-      const scrolled = host.scrollTop > stuckScrollThreshold
-
-      // Widget: sticky CSS already pins the goal — show the dot when the
-      // sentinel has scrolled past the stick line (no rect equality check;
-      // that was never true in the nested widget scrollport).
-      if (pinProfile === "widget") {
-        setIsStuck(scrolled && sentinelRect.bottom <= stickLine)
-        return
-      }
-
-      const sentinelPast = sentinelRect.bottom < stickLine - 4
-
       const stickyRect = sticky.getBoundingClientRect()
-      const stickyVisible =
-        stickyRect.bottom > hostRect.top && stickyRect.top < hostRect.bottom
-      const atStickLine = stickyRect.top <= stickLine + 1
-      setIsStuck(scrolled && sentinelPast && stickyVisible && atStickLine)
+      setIsStuck(
+        computeGoalStuck(pinProfile, { stickyOffsetPx, topClass: pinTopClass, stuckScrollThreshold }, {
+          hostTop: hostRect.top,
+          hostBottom: hostRect.bottom,
+          scrollTop: host.scrollTop,
+          sentinelBottom: sentinelRect.bottom,
+          stickyTop: stickyRect.top,
+          stickyBottom: stickyRect.bottom,
+        }),
+      )
     }
 
     updateStuck()
@@ -447,15 +431,6 @@ function StatusDot({ status, animated = true }: { status: "running" | "done" | "
   )
 }
 
-/** Progress rows that belong in the live shimmer only — not the transcript. */
-function isOffThreadProgress(part: ResponseProgressPart): boolean {
-  return (
-    part.id === "direct" ||
-    part.id === "thinking" ||
-    part.id.startsWith("pipeline-")
-  )
-}
-
 const TOOL_LABELS: Record<string, string> = {
   read_file: "read",
   write_file: "write",
@@ -564,144 +539,11 @@ function presentTenseLabel(tool: string, target?: string): string {
 }
 void presentTenseLabel
 
-// Coarse, high-level verb for the parent live shimmer ("Querying" rather
-// than "Querying ;WITH latest_month AS (\n SELECT MAX(...)). Per-tool
-// verbs in TOOL_PRESENT_TENSE are good for the collapsed history rows
-// where targets like a filename add real signal, but the bottom shimmer
-// must read as a one-word narrative state. Unknown tools fall back to
-// "Working".
-const LIVE_ACTIVITY_VERB: Record<string, string> = {
-  read_file:               "Reading",
-  write_file:              "Writing",
-  replace_in_file:         "Writing",
-  append_file:             "Writing",
-  list_directory:          "Listing",
-  search_files:            "Searching",
-  search_catalog:          "Searching",
-  run_command:             "Executing",
-  query_mssql:             "Executing",
-  export_query_to_file:    "Exporting",
-  explore_mssql_schema:    "Analyzing",
-  inspect_definition:      "Analyzing",
-  discover_relationships:  "Analyzing",
-  profile_data:            "Analyzing",
-  compare_catalogs:        "Analyzing",
-  fetch_url:               "Fetching",
-  delegate:                "Delegating",
-  delegate_parallel:       "Delegating",
-  ask_user:                "Asking",
-  think:                   "Thinking",
-  note:                    "Noting",
-  get_chart_specs:         "Loading chart specs",
-  sync_preview:            "Synchronizing",
-  sync_execute:            "Synchronizing",
-  list_sync_definitions:   "Discovering",
-  resolve_sync_scope:        "Resolving",
-  sync_diff_scan:          "Comparing",
-  list_environments:       "Synchronizing",
-  list_attachments:        "Reading attachments",
-  read_attachment:         "Reading attachments",
-  import_attachment:       "Importing attachment",
-  promote_attachment:      "Promoting attachment",
-  record_table_verdict:    "Reflecting",
-}
-
-function liveActivityVerb(tool: string): string {
-  return LIVE_ACTIVITY_VERB[tool] ?? "Working"
-}
-
-function deriveActiveMilestoneLabel(parts: ResponsePart[]): string {
-  // 1. Most recent in-flight tool — search top-level + inside iteration
-  //    blocks since the build pass moves tools into blocks at boundaries.
-  let lastRunningTool: ResponseToolPart | null = null
-  for (let i = parts.length - 1; i >= 0; i--) {
-    const part = parts[i]
-    if (part.kind === "tool" && part.row.status === "running") {
-      lastRunningTool = part
-      break
-    }
-    if (part.kind === "iteration-block" && part.hasRunning) {
-      for (let j = part.tools.length - 1; j >= 0; j--) {
-        if (part.tools[j].row.status === "running") {
-          lastRunningTool = part.tools[j]
-          break
-        }
-      }
-      if (lastRunningTool) break
-    }
-  }
-  if (lastRunningTool) {
-    // Parent shimmer reads as a high-level narrative verb only —
-    // never the messy tool argument (long SQL, multi-line script…).
-    // The collapsed history row already shows the verb + target;
-    // duplicating it in the live label is noise.
-    return liveActivityVerb(lastRunningTool.row.tool)
-  }
-
-  // 2. Iteration block still settling (e.g. tool finished but block
-  //    not yet sealed by next iteration boundary) — mirror the header
-  //    so the parent reads as the cumulative sum.
-  for (let i = parts.length - 1; i >= 0; i--) {
-    const part = parts[i]
-    if (part.kind === "iteration-block" && part.hasRunning) {
-      return part.summary || "Working"
-    }
-  }
-
-  // 3. In-flight plan-step / repair — real work labels, not routing names.
-  for (let i = parts.length - 1; i >= 0; i--) {
-    const part = parts[i]
-    if (part.kind === "step-block" && part.hasRunning) {
-      return part.detail ? `${part.title} — ${part.detail}` : part.title
-    }
-    if (part.kind !== "progress" || part.status !== "running") continue
-    const id = part.id
-    if (
-      id.startsWith("step-") ||
-      id.startsWith("repair-") ||
-      id.startsWith("verification") ||
-      id.startsWith("sql-quality-") ||
-      id === "generation"
-    ) {
-      return part.detail ? `${part.label} — ${part.detail}` : part.label
-    }
-  }
-
-  // 4. PRIMARY_ACTIVITY fallback. Skip bare routing decisions
-  //    ("Direct") — they're not descriptive of work. Keep meatier ones
-  //    (Plan with a detail / Verifying).
-  for (let i = parts.length - 1; i >= 0; i--) {
-    const part = parts[i]
-    if (part.kind === "progress" && part.status === "running" && PRIMARY_ACTIVITY_IDS.has(part.id)) {
-      if (part.id === "direct") continue
-      if (part.id === "plan" && !part.detail) continue
-      return part.detail ? `${part.label} — ${part.detail}` : part.label
-    }
-  }
-
-  // 5. Thinking with no tools yet — common at the very start of a turn.
-  for (let i = parts.length - 1; i >= 0; i--) {
-    const part = parts[i]
-    if (part.kind === "progress" && part.id === "thinking" && part.status === "running") {
-      return "Thinking"
-    }
-  }
-
-  // 6. Generic — LLM working, answer not streaming yet.
-  return "Thinking…"
-}
-
 // Patch a tool's status both at the top level AND inside any
 // already-flushed iteration block. The build pass may have moved the
 // tool into a block before its result event arrived (e.g. when an
 // `iteration` boundary fired between tool-call and tool-result).
 
-function canElementScrollVertically(el: HTMLElement, deltaY: number): boolean {
-  if (el.scrollHeight <= el.clientHeight + 1) return false
-  if (deltaY < 0) return el.scrollTop > 0
-  if (deltaY > 0) return el.scrollTop + el.clientHeight < el.scrollHeight - 1
-  return false
-}
 
 function findNestedScrollable(target: EventTarget | null, container: HTMLDivElement): HTMLElement | null {
   let node = target instanceof HTMLElement ? target : null
@@ -1362,25 +1204,6 @@ function DetailViewportRows({
 }
 
 
-function summarizeHistory(parts: Array<ResponseProgressPart | ResponseToolPart>): string {
-  const tools = parts
-    .filter((part): part is ResponseToolPart => part.kind === "tool")
-    .map((part) => ({
-      tool: part.row.tool,
-      target: extractToolTarget(part.row.tool, part.row.details ?? "", part.row.summary ?? ""),
-    }))
-
-  if (tools.length > 0) {
-    // Strip the leading "I " from the narrative so the disclosure label
-    // reads as a phrase, not a sentence ("read store.ts and 2 more").
-    const sentence = buildToolNarrative(tools).replace(/^I\s+/, "").replace(/\.$/, "")
-    if (sentence) return sentence
-  }
-
-  const lastProgress = [...parts].reverse().find((part): part is ResponseProgressPart => part.kind === "progress")
-  return lastProgress?.label ?? "Technical flow"
-}
-
 function HistoryDisclosure({
   parts,
 }: {
@@ -1416,26 +1239,6 @@ function HistoryDisclosure({
 void HistoryDisclosure
 
 // ── Run error ─────────────────────────────────────────────────────
-
-function summarizeRunError(error: string): { summary: string; details: string | null } {
-  const lower = error.toLowerCase()
-  if (
-    lower.startsWith("device flow")
-    || lower.startsWith("copilot oauth token expired")
-    || lower.includes("copilot token exchange failed")
-  ) {
-    return {
-      summary: "Authentication with Copilot failed. Please re-authorize and try again.",
-      details: error,
-    }
-  }
-  const firstLine = (error.split("\n")[0] ?? error).trim()
-  if (error.length > 220 || error.includes("{")) {
-    const short = firstLine.length > 180 ? `${firstLine.slice(0, 180)}…` : firstLine
-    return { summary: short, details: error }
-  }
-  return { summary: error, details: null }
-}
 
 function RunErrorBanner({ error }: { error: string }) {
   const [expanded, setExpanded] = useState(false)
@@ -1575,11 +1378,6 @@ function WorkspaceDiffCard({ runId, onNotify, onNotifyError }: {
 
 // ── Run message block ─────────────────────────────────────────────
 
-function formatDeliverableBytes(n: number): string {
-  if (n < 1024) return `${n} B`
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
-  return `${(n / 1024 / 1024).toFixed(1)} MB`
-}
 
 /**
  * Stable empty-array sentinel. MUST live at module scope (not created inline

@@ -1,0 +1,181 @@
+import { describe, expect, it } from "vitest"
+import type { TraceEntry } from "../../types"
+import {
+  buildIterationHeader,
+  buildResponseParts,
+  buildToolNarrative,
+  extractToolTarget,
+  humanizeStepName,
+} from "./build-chat-parts.js"
+
+function llmRequest(iteration: number): TraceEntry {
+  return {
+    kind: "llm-request",
+    iteration,
+    messageCount: 1,
+    toolCount: 1,
+    messages: [{ role: "user", content: "go", toolCalls: [], toolCallId: null }],
+  }
+}
+
+function llmResponse(
+  iteration: number,
+  toolCalls: Array<{ id: string; name: string; arguments: Record<string, unknown> }> = [],
+  content: string | null = null,
+): TraceEntry {
+  return {
+    kind: "llm-response",
+    iteration,
+    durationMs: 50,
+    content,
+    toolCalls,
+    usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 },
+  }
+}
+
+describe("extractToolTarget / narratives", () => {
+  it("extracts path / command / query targets", () => {
+    expect(
+      extractToolTarget("write_file", JSON.stringify({ path: "site/index.html" }), ""),
+    ).toMatch(/index\.html/)
+    expect(
+      extractToolTarget("run_command", JSON.stringify({ command: "npm run build" }), ""),
+    ).toMatch(/npm/)
+    expect(
+      extractToolTarget("query_mssql", "", 'sql="select 1"'),
+    ).toBeTruthy()
+  })
+
+  it("builds first-person narratives and iteration headers", () => {
+    const tools = [
+      { tool: "read_file", target: "a.ts" },
+      { tool: "write_file", target: "b.ts" },
+    ]
+    expect(buildToolNarrative(tools)).toMatch(/^I /)
+    expect(buildIterationHeader(tools).length).toBeGreaterThan(0)
+    expect(humanizeStepName("frontend_layer")).toBe("frontend layer")
+  })
+})
+
+describe("buildResponseParts — TermChat projection", () => {
+  it("rolls tools into an iteration block and keeps results off the answer path", () => {
+    const parts = buildResponseParts(
+      [
+        { kind: "iteration", current: 0, max: 10 },
+        llmRequest(0),
+        llmResponse(0, [{ id: "tc1", name: "write_file", arguments: { path: "a.html" } }]),
+        {
+          kind: "tool-call",
+          invocationId: "inv1",
+          toolCallId: "tc1",
+          tool: "write_file",
+          argsSummary: "a.html",
+          argsFormatted: JSON.stringify({ path: "a.html" }),
+        },
+        {
+          kind: "tool-result",
+          invocationId: "inv1",
+          toolCallId: "tc1",
+          text: "ok",
+        },
+        { kind: "iteration", current: 1, max: 10 },
+        llmRequest(1),
+        llmResponse(1, [], "Done."),
+      ],
+      "completed",
+      "",
+      "Done.",
+      null,
+      null,
+      "run-1",
+    )
+
+    expect(parts.some((p) => p.kind === "iteration-block")).toBe(true)
+    expect(parts.some((p) => p.kind === "markdown")).toBe(true)
+    const block = parts.find((p) => p.kind === "iteration-block")
+    if (block?.kind === "iteration-block") {
+      expect(block.tools.some((t) => t.row.tool === "write_file")).toBe(true)
+      expect(block.tools[0]?.row.status).toBe("done")
+      expect(block.tools[0]?.row.details).toBe("ok")
+    }
+  })
+
+  it("strips polished failure markers from final answers", () => {
+    const marker = "\u2063pfm:\u2063"
+    const parts = buildResponseParts(
+      [],
+      "failed",
+      "",
+      `${marker}Could not finish.\nReference: run_9`,
+      null,
+      null,
+      "run-9",
+    )
+    const md = parts.find((p) => p.kind === "markdown")
+    expect(md?.kind).toBe("markdown")
+    if (md?.kind === "markdown") {
+      expect(md.text).not.toContain(marker)
+    }
+  })
+
+  it("surfaces pending ask_user as an input part", () => {
+    const parts = buildResponseParts(
+      [],
+      "running",
+      "",
+      null,
+      null,
+      { runId: "run-1", question: "Which color?", options: ["navy", "cream"] },
+      "run-1",
+    )
+    expect(parts.some((p) => p.kind === "input")).toBe(true)
+  })
+
+  it("hides empty repair progress peers (work nests under repair steps)", () => {
+    const parts = buildResponseParts(
+      [
+        {
+          kind: "planner-repair-plan",
+          attempt: 1,
+          rerunOrder: ["frontend_layer"],
+          tasks: [],
+        },
+        {
+          kind: "planner-step-start",
+          stepName: "frontend_layer",
+          stepType: "subagent_task",
+        },
+        {
+          kind: "tool-call",
+          invocationId: "inv",
+          toolCallId: "tc",
+          tool: "write_file",
+          argsSummary: "x",
+          argsFormatted: JSON.stringify({ path: "x" }),
+        },
+        {
+          kind: "tool-result",
+          invocationId: "inv",
+          toolCallId: "tc",
+          text: "ok",
+        },
+        {
+          kind: "planner-step-end",
+          stepName: "frontend_layer",
+          status: "pass",
+          durationMs: 10,
+        },
+      ],
+      "running",
+      "",
+      null,
+      null,
+      null,
+      "run-1",
+    )
+    const bareRepair = parts.filter(
+      (p) => p.kind === "progress" && p.id.startsWith("repair") && !p.detail,
+    )
+    expect(bareRepair).toHaveLength(0)
+  })
+})
