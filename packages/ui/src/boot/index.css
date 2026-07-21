@@ -1680,7 +1680,6 @@ textarea.input {
   gap: 0.5rem;
   padding: 0.35rem 0.4rem 0.65rem;
   margin-bottom: 0.35rem;
-  border-bottom: 1px solid var(--border, var(--color-border));
 }
 
 .trace-toolbar__row {
@@ -1853,20 +1852,23 @@ textarea.input {
   pointer-events: auto;
   display: flex;
   flex-direction: column;
+  /* Same chrome as .trace-card — keep L/R borders + rounded top when pinned */
   background: var(--bg);
+  border: 1px solid var(--border, var(--color-border));
+  border-radius: 0.5rem;
   box-shadow: 0 2px 8px color-mix(in srgb, var(--bg) 70%, transparent);
-  border-bottom: 1px solid var(--border, var(--color-border));
+  overflow: hidden;
 }
 
-/* Pin rows = same .trace-scope rules; only flatten card radius in the stack */
 .trace-pin__stack > .trace-scope {
-  border-radius: 0;
   width: 100%;
   cursor: default;
+  border-radius: 0;
 }
 
+/* Soft child under a pinned Call/Context — same separator as in-card body */
 .trace-pin__stack > .trace-scope.is-soft {
-  border-top-color: var(--border-subtle, var(--color-border-subtle));
+  border-top-color: var(--border, var(--color-border));
 }
 
 .trace-pin__stack > .trace-scope:first-child.is-soft {
@@ -5973,14 +5975,9 @@ textarea.input {
   justify-content: center;
   padding: 3px 4px;
   border-radius: 7px;
-  background: color-mix(in srgb, var(--canvas) 88%, transparent);
+  /* Same frosted chip as ChatChromeButton (bg-panel/72 + blur) */
+  background: color-mix(in srgb, var(--panel) 72%, transparent);
   backdrop-filter: blur(10px);
-}
-
-:root[data-theme="light"] .thread-run-rail-chrome {
-  /* Solid canvas — blur made the chip read darker than the page. */
-  background: var(--canvas);
-  backdrop-filter: none;
 }
 
 .thread-run-rail-track {
