@@ -18,7 +18,7 @@ import { parseAnswerBlocks } from "./answer-parser"
 import type { StreamRevealState } from "./answer-stream-reveal"
 import { sliceBlockForReveal } from "./answer-stream-reveal"
 import { DataTable } from "./DataTable"
-import { TableExportActions } from "./TableExportActions"
+import { TABLE_EXPORT_RAIL_CLASS, TableExportActions } from "./TableExportActions"
 import type { ChatTableExportSource } from "../lib/chat-table-export"
 import { InlineDiagram, isDiagramLang, tryInferDiagramKind } from "./InlineDiagram"
 import { StructuredPendingBlock } from "./StreamingBlocks"
@@ -244,9 +244,15 @@ function StreamingCaret({ compact }: { compact?: boolean }) {
 // (not ring) so home-chat scrollports do not clip the right edge; rings paint
 // outside the box and are clipped by overflow scroll containers.
 export const COMPACT_TABLE_WRAPPER_CLASS =
-  "w-full min-w-0 overflow-x-auto rounded-md border border-border-subtle"
+  "min-w-0 flex-1 overflow-x-auto rounded-md border border-border-subtle"
 
-/** Compact markdown table — shared by SmartAnswer and the live stream shell. */
+/**
+ * Compact markdown table — shared by SmartAnswer and the live stream shell.
+ *
+ * Layout contract: flex row where ONLY the bordered table scrolls horizontally.
+ * Copy/CSV/JSON live in a sibling rail (always in the answer column) so they
+ * never require panning past the table edge to reach.
+ */
 export function CompactTable({
   headers,
   rows,
@@ -262,17 +268,14 @@ export function CompactTable({
 }) {
   const showExport = Boolean(exportSource) && rows.length > 0
   return (
-    <div className="group relative my-1.5 w-full min-w-0">
+    <div className="group my-1.5 flex w-full min-w-0 items-start gap-2">
       <div className={COMPACT_TABLE_WRAPPER_CLASS}>
         {/*
           `w-auto min-w-full`: let the table choose its natural column widths
           (so 10-column result sets don't get squished into the viewport) but
           stretch to fill the wrapper when there are only a few short columns.
-          When natural width exceeds the wrapper, the outer `overflow-x-auto`
-          kicks in and the user can scroll horizontally to see every column.
-          With `w-full` (the old value) the table was always pinned at 100 %,
-          cells wrapped aggressively, and trailing columns got clipped — the
-          user reported this as "cut out, not acceptable".
+          When natural width exceeds the wrapper, THIS box scrolls horizontally —
+          the action rail stays put as a flex sibling.
         */}
         <table className="w-auto min-w-full text-[15px] leading-6 border-collapse">
           <thead>
@@ -314,7 +317,7 @@ export function CompactTable({
         </table>
       </div>
       {showExport && exportSource ? (
-        <div className="pointer-events-none absolute left-full top-0 z-10 ml-2 group-hover:pointer-events-auto group-focus-within:pointer-events-auto">
+        <div className={TABLE_EXPORT_RAIL_CLASS}>
           <TableExportActions
             headers={headers}
             rows={rows}

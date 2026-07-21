@@ -1,6 +1,7 @@
 /**
- * Per-table Copy / CSV / JSON controls for chat markdown tables.
- * Bare icon+label rail — no pill, no border; appears beside the table on hover.
+ * Per-table Copy / CSV / JSON — bare icon+label rail (no pill).
+ * Parent lays this out as a flex sibling of the scrolling table box so the
+ * controls stay in the answer column (never past a horizontal scroll edge).
  */
 
 import { Braces, Check, Copy, Sheet } from "lucide-react"
@@ -11,6 +12,9 @@ import {
   type ChatTableExportSource,
 } from "../lib/chat-table-export"
 import type { TableExportFormat } from "@mia/shared-types"
+
+/** Fixed gutter for the vertical action rail (and streaming placeholders). */
+export const TABLE_EXPORT_RAIL_CLASS = "w-14 shrink-0 pt-0.5"
 
 export interface TableExportActionsProps {
   headers: string[]

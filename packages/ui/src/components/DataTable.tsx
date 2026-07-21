@@ -21,7 +21,7 @@ import { ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight, ChevronsLef
 import { useEffect, useMemo, useState, type ReactNode } from "react"
 import type { ChatTableExportSource } from "../lib/chat-table-export"
 import { C } from "../theme/tokens"
-import { TableExportActions } from "./TableExportActions"
+import { TABLE_EXPORT_RAIL_CLASS, TableExportActions } from "./TableExportActions"
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -255,9 +255,9 @@ export function DataTable({
   const showFooterControls = total > 10 || pageSize !== defaultPageSize || filter !== ""
 
   return (
-    <div className="group relative">
+    <div className="group flex w-full min-w-0 items-start gap-2">
       <div
-        className="rounded-lg overflow-hidden"
+        className="min-w-0 flex-1 rounded-lg overflow-hidden"
         style={{ border: `1px solid ${C.border}`, background: C.base }}
       >
       {/* Toolbar */}
@@ -435,7 +435,7 @@ export function DataTable({
       )}
       </div>
       {exportSource ? (
-        <div className="pointer-events-none absolute left-full top-0 z-20 ml-2 group-hover:pointer-events-auto group-focus-within:pointer-events-auto">
+        <div className={TABLE_EXPORT_RAIL_CLASS}>
           <TableExportActions
             headers={headers}
             rows={rows}
