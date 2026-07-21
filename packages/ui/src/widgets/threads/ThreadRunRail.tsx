@@ -6,8 +6,11 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type FocusEvent,
+  type MouseEvent,
   type RefObject,
 } from "react"
+import { TruncationHint, isTextTruncated } from "../../components/TruncationHint"
 import {
   activeBarIndexForRun,
   chatChromeDockTop,
@@ -57,6 +60,7 @@ export function ThreadRunRail({
   const [open, setOpen] = useState(false)
   const [layout, setLayout] = useState<RailLayout>(EMPTY)
   const [navRunId, setNavRunId] = useState<string | null>(null)
+  const [hint, setHint] = useState<{ text: string; anchor: DOMRect } | null>(null)
 
   const markersRef = useRef<RunNavMarker[]>([])
   const transcriptRunIdsRef = useRef<string[]>([])
@@ -89,8 +93,29 @@ export function ThreadRunRail({
   const selectRun = useCallback((runId: string) => {
     pinnedRunIdRef.current = runId
     setNavRunId(runId)
+    setHint(null)
     onSelectRun(runId)
   }, [onSelectRun])
+
+  function onCapsuleItemEnter(
+    event: MouseEvent<HTMLButtonElement> | FocusEvent<HTMLButtonElement>,
+    goal: string,
+  ) {
+    const el = event.currentTarget
+    const shown = runLabel(goal)
+    // Hint when CSS ellipsis kicks in, or when the label was string-clipped.
+    if (!isTextTruncated(el) && shown === goal) return
+    setHint({ text: goal, anchor: el.getBoundingClientRect() })
+  }
+
+  function onCapsuleItemLeave() {
+    setHint(null)
+  }
+
+  function onRailLeave() {
+    setOpen(false)
+    setHint(null)
+  }
 
   const recomputeLayout = useCallback(() => {
     const host = scrollHostRef.current
@@ -189,10 +214,10 @@ export function ThreadRunRail({
       <div
         className={`thread-run-rail-hit${open ? " thread-run-rail-hit--open" : ""}`}
         onMouseEnter={() => setOpen(true)}
-        onMouseLeave={() => setOpen(false)}
+        onMouseLeave={onRailLeave}
         onFocus={() => setOpen(true)}
         onBlur={(event) => {
-          if (!event.currentTarget.contains(event.relatedTarget as Node)) setOpen(false)
+          if (!event.currentTarget.contains(event.relatedTarget as Node)) onRailLeave()
         }}
       >
         <div className="thread-run-rail-bars" aria-hidden={open}>
@@ -224,9 +249,12 @@ export function ThreadRunRail({
                 className={`thread-run-rail-capsule-item${
                   run.id === highlightRunId ? " thread-run-rail-capsule-item--active" : ""
                 }`}
-                title={run.goal}
                 aria-current={run.id === highlightRunId ? "true" : undefined}
                 onClick={() => selectRun(run.id)}
+                onMouseEnter={(e) => onCapsuleItemEnter(e, run.goal)}
+                onMouseLeave={onCapsuleItemLeave}
+                onFocus={(e) => onCapsuleItemEnter(e, run.goal)}
+                onBlur={onCapsuleItemLeave}
               >
                 {runLabel(run.goal)}
               </button>
@@ -234,6 +262,7 @@ export function ThreadRunRail({
           </div>
         </div>
       </div>
+      {hint && <TruncationHint text={hint.text} anchor={hint.anchor} side="left" />}
     </nav>
   )
 }

@@ -2,6 +2,7 @@ import { MoreVertical, PanelLeft, PanelLeftClose, Pencil, Pin, Plus, Trash2 } fr
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { api } from "../../client/index"
+import { TruncationHint, isTextTruncated } from "../../components/TruncationHint"
 import { placeAnchoredPanelForElements } from "../../lib/anchored-panel"
 import { useStore } from "../../state/store"
 import type { Thread } from "../../types"
@@ -185,9 +186,7 @@ function ThreadRailItem({
   }
 
   const refreshTitleTruncation = () => {
-    const el = titleRef.current
-    if (!el) return false
-    const truncated = el.scrollWidth > el.clientWidth + 1
+    const truncated = isTextTruncated(titleRef.current)
     setTitleTruncated(truncated)
     return truncated
   }
@@ -287,18 +286,8 @@ function ThreadRailItem({
             <MoreVertical size={15} strokeWidth={1.75} />
           </button>
 
-          {titleTooltipOpen && titleTooltipAnchor && titleTruncated && createPortal(
-            <div
-              className="thread-rail-title-tooltip"
-              role="tooltip"
-              style={{
-                top: titleTooltipAnchor.top + titleTooltipAnchor.height / 2,
-                left: titleTooltipAnchor.right + 10,
-              }}
-            >
-              {displayTitle}
-            </div>,
-            document.body,
+          {titleTooltipOpen && titleTooltipAnchor && titleTruncated && (
+            <TruncationHint text={displayTitle} anchor={titleTooltipAnchor} />
           )}
 
           {menuOpen && menuPos && createPortal(

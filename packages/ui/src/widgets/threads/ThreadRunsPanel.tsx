@@ -4,9 +4,9 @@
 
 import { ChevronRight, Plus } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { createPortal } from "react-dom"
 import { api } from "../../client/index"
 import { EmptyState } from "../../components/EmptyState"
+import { TruncationHint, isTextTruncated } from "../../components/TruncationHint"
 import { RunStatus } from "../../enums"
 import { useStore } from "../../state/store"
 import type { Run, Thread } from "../../types"
@@ -25,26 +25,45 @@ function RunRow({
   active: boolean
   onSelect: () => void
 }) {
+  const goalRef = useRef<HTMLSpanElement>(null)
+  const [hintAnchor, setHintAnchor] = useState<DOMRect | null>(null)
   const isLive =
     run.status === RunStatus.Pending ||
     run.status === RunStatus.Running ||
     run.status === RunStatus.Planning
+
+  function onGoalEnter() {
+    const el = goalRef.current
+    if (!isTextTruncated(el)) return
+    setHintAnchor(el!.getBoundingClientRect())
+  }
+
+  function onGoalLeave() {
+    setHintAnchor(null)
+  }
 
   return (
     <button
       type="button"
       className={`thread-nav-run ${active ? "thread-nav-run--active" : ""}`}
       onClick={onSelect}
+      onMouseEnter={onGoalEnter}
+      onMouseLeave={onGoalLeave}
+      onFocus={onGoalEnter}
+      onBlur={onGoalLeave}
     >
       <span
         className="thread-nav-run-dot"
         style={{ background: statusDot(run.status) }}
         aria-hidden
       />
-      <span className="thread-nav-run-goal">{run.goal}</span>
+      <span ref={goalRef} className="thread-nav-run-goal">
+        {run.goal}
+      </span>
       <span className="thread-nav-run-meta">
         {isLive ? "live" : timeAgo(run.createdAt)}
       </span>
+      {hintAnchor && <TruncationHint text={run.goal} anchor={hintAnchor} />}
     </button>
   )
 }
@@ -85,15 +104,14 @@ function WidgetThreadBlock({
   const runCount = thread.runCount ?? runs?.length ?? 0
   const emptyRuns = expanded && !loading && (runs?.length ?? 0) === 0
 
-  const closeTitleTooltip = () => {
+  function closeTitleTooltip() {
     setTitleTooltipOpen(false)
     setTitleTooltipAnchor(null)
   }
 
-  const openTitleTooltip = () => {
+  function openTitleTooltip() {
     if (menuOpen) return
-    const el = titleRef.current
-    if (!el || el.scrollWidth <= el.clientWidth + 1) return
+    if (!isTextTruncated(titleRef.current)) return
     const rect = rowRef.current?.getBoundingClientRect()
     if (!rect) return
     setTitleTooltipAnchor(rect)
@@ -195,18 +213,8 @@ function WidgetThreadBlock({
               onMenuOpenChange={setMenuOpen}
             />
           </div>
-          {titleTooltipOpen && titleTooltipAnchor && createPortal(
-            <div
-              className="thread-rail-title-tooltip"
-              role="tooltip"
-              style={{
-                top: titleTooltipAnchor.top + titleTooltipAnchor.height / 2,
-                left: titleTooltipAnchor.right + 10,
-              }}
-            >
-              {displayTitle}
-            </div>,
-            document.body,
+          {titleTooltipOpen && titleTooltipAnchor && (
+            <TruncationHint text={displayTitle} anchor={titleTooltipAnchor} />
           )}
         </div>
       </div>

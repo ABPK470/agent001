@@ -5741,13 +5741,14 @@ textarea.input {
   }
 }
 
-/* Full title bubble — appears to the right when the row title is truncated */
+/* Full-text bubble — truncated labels in Threads / chat nav */
+.truncation-hint,
 .thread-rail-title-tooltip {
   position: fixed;
   z-index: 210;
   max-width: min(22rem, calc(100vw - 1.5rem));
-  padding: 0.42rem 0.62rem;
-  font-size: 13px;
+  padding: 0.5rem 0.7rem;
+  font-size: 15px;
   line-height: 1.45;
   font-weight: 450;
   letter-spacing: -0.01em;
@@ -5759,9 +5760,10 @@ textarea.input {
   background: var(--panel-2);
   box-shadow: 0 8px 24px color-mix(in srgb, var(--canvas) 50%, transparent);
   transform: translateY(-50%);
-  animation: thread-rail-title-tooltip-in 140ms ease;
+  animation: truncation-hint-in 140ms ease;
 }
 
+.truncation-hint::before,
 .thread-rail-title-tooltip::before {
   content: "";
   position: absolute;
@@ -5775,22 +5777,55 @@ textarea.input {
   transform: translateY(-50%) rotate(45deg);
 }
 
+.truncation-hint--left::before {
+  left: auto;
+  right: -5px;
+  border-left: none;
+  border-bottom: none;
+  border-right: 1px solid color-mix(in srgb, var(--border-subtle) 70%, transparent);
+  border-top: 1px solid color-mix(in srgb, var(--border-subtle) 70%, transparent);
+}
+
+:root[data-theme="light"] .truncation-hint,
 :root[data-theme="light"] .thread-rail-title-tooltip {
   background: #fff;
   border-color: rgba(30, 25, 20, 0.08);
   box-shadow: 0 8px 22px rgba(30, 25, 20, 0.08);
 }
 
+:root[data-theme="light"] .truncation-hint::before,
 :root[data-theme="light"] .thread-rail-title-tooltip::before {
   background: #fff;
   border-left-color: rgba(30, 25, 20, 0.08);
   border-bottom-color: rgba(30, 25, 20, 0.08);
 }
 
-@keyframes thread-rail-title-tooltip-in {
+:root[data-theme="light"] .truncation-hint--left::before {
+  border-left-color: transparent;
+  border-bottom-color: transparent;
+  border-right-color: rgba(30, 25, 20, 0.08);
+  border-top-color: rgba(30, 25, 20, 0.08);
+}
+
+@keyframes truncation-hint-in {
   from {
     opacity: 0;
     transform: translateY(-50%) translateX(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(-50%) translateX(0);
+  }
+}
+
+.truncation-hint--left {
+  animation-name: truncation-hint-in-left;
+}
+
+@keyframes truncation-hint-in-left {
+  from {
+    opacity: 0;
+    transform: translateY(-50%) translateX(4px);
   }
   to {
     opacity: 1;
