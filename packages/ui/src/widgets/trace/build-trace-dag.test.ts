@@ -390,6 +390,75 @@ describe("buildTraceDag", () => {
     expect(dag.calls[0]!.messages[0]?.content).toBe("You are Mia.")
     expect(dag.calls[0]!.messages[1]?.speaker).toBe("User")
   })
+
+  it("keeps Received tools proposed (no results) and Work as execute+validate", () => {
+    const dag = buildTraceDag([
+      llmRequest(0),
+      llmResponse(0, {
+        content: null,
+        toolCalls: [{ id: "tc1", name: "query_mssql", arguments: { sql: "select 1" } }],
+      }),
+      {
+        kind: "tool-call",
+        invocationId: "inv1",
+        toolCallId: "tc1",
+        tool: "query_mssql",
+        argsSummary: "sql",
+        argsFormatted: '{"sql":"select 1"}',
+      },
+      {
+        kind: "tool-result",
+        invocationId: "inv1",
+        toolCallId: "tc1",
+        text: "1",
+      },
+      {
+        kind: "planner-sql-quality",
+        toolCallId: "tc1",
+        toolName: "query_mssql",
+        iteration: 0,
+        toolMode: "query",
+        phase: "executed",
+        connection: "main",
+        database: "db",
+        validationOk: true,
+        validationCode: null,
+        largeObjectRefs: [],
+        usesPersistedMirrors: [],
+        missingPersistedMirrorCandidates: [],
+        hasWhereClause: true,
+        unsafeScanReason: null,
+        tempTableRefs: 0,
+        tempTablesCreated: 0,
+        tempTableSuffixes: [],
+        malformedTempSuffixes: [],
+        missingTempCreations: [],
+        aggregateWarningCount: 0,
+        aggregateBlockCount: 0,
+        tempScalarSubqueryCount: 0,
+        stagePatternLikely: false,
+        durationMs: 12,
+        rowCount: 1,
+        error: null,
+        sqlPreview: "select 1",
+        sqlLength: 8,
+      },
+    ])
+    const call = dag.calls[0]!
+    expect(call.toolBranches).toHaveLength(1)
+    expect(call.toolBranches[0]?.status).toBe("proposed")
+    expect(call.toolBranches[0]?.resultText).toBeUndefined()
+    expect(call.sqlQuality[0]?.phase).toBe("executed")
+
+    const work = dag.spine.find((e) => e.kind === "work")
+    expect(work?.kind).toBe("work")
+    if (work?.kind === "work") {
+      expect(work.work.tools[0]?.status).toBe("done")
+      expect(work.work.tools[0]?.resultText).toBe("1")
+      expect(work.work.sqlQuality).toHaveLength(1)
+      expect(work.work.sqlQuality[0]?.phase).toBe("executed")
+    }
+  })
 })
 
 describe("replyHeadline", () => {

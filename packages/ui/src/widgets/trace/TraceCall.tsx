@@ -7,6 +7,7 @@ import { fmtTokens, formatMs } from "../../lib/util"
 import type { TraceCallNode, TraceCallSearchHit } from "./build-trace-dag"
 import type { OpenState } from "./open-state"
 import { callReceivedSummary, callSentSummary } from "./trace-format"
+import { traceScopeDepth } from "./trace-pin"
 import { ExpandableText } from "./TraceExpandable"
 import { PromptMessageRow, ToolRow } from "./TraceRows"
 import { ScopeRow } from "./TraceScope"
@@ -44,7 +45,7 @@ export function CallOutline({
         scopeId={`call:${call.index}`}
         kind="call"
         callIndex={call.index}
-        depth={nested ? 1 : 0}
+        depth={traceScopeDepth("call", nested)}
         open={callOpen}
         onToggle={() => onToggleCall(call.index)}
         leading={`Call ${call.index + 1}`}
@@ -75,7 +76,7 @@ export function CallOutline({
               scopeId={`sent:${call.index}`}
               kind="sent"
               callIndex={call.index}
-              depth={nested ? 2 : 1}
+              depth={traceScopeDepth("sent", nested)}
               open={sentOpen}
               onToggle={() => onToggleSent(call.index)}
               leading="Sent"
@@ -93,7 +94,7 @@ export function CallOutline({
                       <PromptMessageRow
                         key={key}
                         scopeId={`message:${key}`}
-                        depth={nested ? 3 : 2}
+                        depth={traceScopeDepth("message", nested)}
                         msg={msg}
                         open={openState.messages.has(key)}
                         onToggle={() => onToggleMessage(key)}
@@ -110,7 +111,7 @@ export function CallOutline({
               scopeId={`received:${call.index}`}
               kind="received"
               callIndex={call.index}
-              depth={nested ? 2 : 1}
+              depth={traceScopeDepth("received", nested)}
               open={receivedOpen}
               onToggle={() => onToggleReceived(call.index)}
               leading="Received"

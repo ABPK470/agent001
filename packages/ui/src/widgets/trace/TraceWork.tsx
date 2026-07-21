@@ -7,6 +7,7 @@
 import type { OpenState } from "./open-state"
 import type { TraceWorkNode } from "./build-trace-dag"
 import { SqlQualityRow, ToolRow } from "./TraceRows"
+import { traceScopeDepth } from "./trace-pin"
 import { ScopeRow } from "./TraceScope"
 import { ExpandableText } from "./TraceExpandable"
 
@@ -34,7 +35,7 @@ export function WorkOutline({
       <ScopeRow
         scopeId={work.id}
         kind="work"
-        depth={nested ? 1 : 0}
+        depth={traceScopeDepth("work", nested)}
         open={open && expandable}
         onToggle={onToggle}
         leading="Work"

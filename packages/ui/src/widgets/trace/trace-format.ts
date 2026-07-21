@@ -1,7 +1,15 @@
-import type { TraceCallNode } from "./build-trace-dag"
+import type { TraceCallNode, TraceSqlQuality } from "./build-trace-dag"
 
 export function formatCharCount(n: number): string {
   return n.toLocaleString()
+}
+
+/** UI badge for SQL check phase — executed runs read as "validated". */
+export function sqlQualityPhaseLabel(phase: TraceSqlQuality["phase"]): string {
+  if (phase === "executed") return "validated"
+  if (phase === "blocked") return "blocked"
+  if (phase === "failed") return "failed"
+  return phase
 }
 
 export function shortLine(text: string, max = 72): string {

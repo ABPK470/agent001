@@ -27,6 +27,7 @@ import {
   layoutOffsetInScroll,
   samePinnedIds,
   syncPinnedInFlow,
+  traceScopeDepth,
 } from "./trace-pin"
 import { CallOutline } from "./TraceCall"
 import { PreambleOutline } from "./TraceContext"
@@ -314,7 +315,7 @@ export function TraceDag({
         rows.push({
           id,
           kind: "context",
-          depth: 0,
+          depth: traceScopeDepth("context"),
           leading: "Context",
           title: "",
           summary: contextSummary,
@@ -328,7 +329,7 @@ export function TraceDag({
         rows.push({
           id,
           kind: "prompt",
-          depth: 1,
+          depth: traceScopeDepth("prompt"),
           leading: "Prompt",
           title: "",
           summary: prompt ? `${formatCharCount(prompt.length)} chars` : "",
@@ -341,7 +342,7 @@ export function TraceDag({
         rows.push({
           id,
           kind: "tools",
-          depth: 1,
+          depth: traceScopeDepth("tools"),
           leading: "Tools",
           title: "",
           summary: String(dag.preamble.tools.length),
@@ -366,7 +367,7 @@ export function TraceDag({
         rows.push({
           id,
           kind: "call",
-          depth: nested ? 1 : 0,
+          depth: traceScopeDepth("call", nested),
           leading: `Call ${index + 1}`,
           title: call.headline,
           summary: `iter ${call.iteration + 1}`,
@@ -402,7 +403,7 @@ export function TraceDag({
         rows.push({
           id,
           kind: "sent",
-          depth: nested ? 2 : 1,
+          depth: traceScopeDepth("sent", nested),
           leading: "Sent",
           title: "",
           summary: callSentSummary(call),
@@ -426,7 +427,7 @@ export function TraceDag({
         rows.push({
           id,
           kind: "received",
-          depth: nested ? 2 : 1,
+          depth: traceScopeDepth("received", nested),
           leading: "Received",
           title: "",
           summary: callReceivedSummary(call),
@@ -453,7 +454,7 @@ export function TraceDag({
         rows.push({
           id,
           kind: "message",
-          depth: nested ? 3 : 2,
+          depth: traceScopeDepth("message", nested),
           leading: msg.speaker,
           title: "",
           summary: messagePreview(msg),
@@ -470,7 +471,7 @@ export function TraceDag({
         rows.push({
           id,
           kind: "phase",
-          depth: 0,
+          depth: traceScopeDepth("phase"),
           leading: phase.leading ?? phase.title,
           title: phase.leading ? phase.title : "",
           summary: phase.summary,
@@ -515,7 +516,7 @@ export function TraceDag({
         rows.push({
           id,
           kind: "work",
-          depth: workNode.nested ? 1 : 0,
+          depth: traceScopeDepth("work", workNode.nested),
           leading: "Work",
           title: workNode.title !== "Work" ? workNode.title : "",
           summary: workNode.summary,

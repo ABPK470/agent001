@@ -27,6 +27,32 @@ export type TraceScopeKind =
   | "message"
   | "tool"
 
+/**
+ * Indent depth for in-flow headers and pin clones.
+ * Messages nest under Sent (one deeper than Sent/Received).
+ */
+export function traceScopeDepth(
+  kind: Exclude<TraceScopeKind, "tool">,
+  nestedUnderPhase = false,
+): number {
+  switch (kind) {
+    case "context":
+    case "phase":
+      return 0
+    case "prompt":
+    case "tools":
+      return 1
+    case "call":
+    case "work":
+      return nestedUnderPhase ? 1 : 0
+    case "sent":
+    case "received":
+      return nestedUnderPhase ? 2 : 1
+    case "message":
+      return nestedUnderPhase ? 3 : 2
+  }
+}
+
 export type TraceScopeEntry = {
   id: string
   kind: TraceScopeKind
