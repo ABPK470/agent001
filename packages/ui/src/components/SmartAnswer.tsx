@@ -18,7 +18,7 @@ import { parseAnswerBlocks } from "./answer-parser"
 import type { StreamRevealState } from "./answer-stream-reveal"
 import { sliceBlockForReveal } from "./answer-stream-reveal"
 import { DataTable } from "./DataTable"
-import { TABLE_EXPORT_RAIL_CLASS, TableExportActions } from "./TableExportActions"
+import { TableExportActions } from "./TableExportActions"
 import type { ChatTableExportSource } from "../lib/chat-table-export"
 import { InlineDiagram, isDiagramLang, tryInferDiagramKind } from "./InlineDiagram"
 import { StructuredPendingBlock } from "./StreamingBlocks"
@@ -244,14 +244,14 @@ function StreamingCaret({ compact }: { compact?: boolean }) {
 // (not ring) so home-chat scrollports do not clip the right edge; rings paint
 // outside the box and are clipped by overflow scroll containers.
 export const COMPACT_TABLE_WRAPPER_CLASS =
-  "min-w-0 flex-1 overflow-x-auto rounded-md border border-border-subtle"
+  "w-full min-w-0 overflow-x-auto rounded-md border border-border-subtle"
 
 /**
  * Compact markdown table — shared by SmartAnswer and the live stream shell.
  *
- * Layout contract: flex row where ONLY the bordered table scrolls horizontally.
- * Copy/CSV/JSON live in a sibling rail (always in the answer column) so they
- * never require panning past the table edge to reach.
+ * Layout: full-width bordered table. Copy/CSV/JSON overlay the header's
+ * top-right (no permanent gutter) and stay pinned to the visible box so
+ * horizontal table scroll never hides them past the edge.
  */
 export function CompactTable({
   headers,
@@ -268,14 +268,26 @@ export function CompactTable({
 }) {
   const showExport = Boolean(exportSource) && rows.length > 0
   return (
-    <div className="group my-1.5 flex w-full min-w-0 items-start gap-2">
+    <div className="group relative my-1.5 w-full min-w-0">
+      {showExport && exportSource ? (
+        <div className="absolute top-1 right-1 z-10">
+          <TableExportActions
+            headers={headers}
+            rows={rows}
+            source={exportSource}
+            disabled={exportDisabled || animateRows}
+            compact
+            revealOnHover
+          />
+        </div>
+      ) : null}
       <div className={COMPACT_TABLE_WRAPPER_CLASS}>
         {/*
           `w-auto min-w-full`: let the table choose its natural column widths
           (so 10-column result sets don't get squished into the viewport) but
           stretch to fill the wrapper when there are only a few short columns.
-          When natural width exceeds the wrapper, THIS box scrolls horizontally —
-          the action rail stays put as a flex sibling.
+          When natural width exceeds the wrapper, the outer `overflow-x-auto`
+          kicks in and the user can scroll horizontally to see every column.
         */}
         <table className="w-auto min-w-full text-[15px] leading-6 border-collapse">
           <thead>
@@ -316,19 +328,6 @@ export function CompactTable({
           </tbody>
         </table>
       </div>
-      {showExport && exportSource ? (
-        <div className={TABLE_EXPORT_RAIL_CLASS}>
-          <TableExportActions
-            headers={headers}
-            rows={rows}
-            source={exportSource}
-            disabled={exportDisabled || animateRows}
-            compact
-            revealOnHover
-            orientation="vertical"
-          />
-        </div>
-      ) : null}
     </div>
   )
 }

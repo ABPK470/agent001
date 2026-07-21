@@ -21,7 +21,7 @@ import { ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight, ChevronsLef
 import { useEffect, useMemo, useState, type ReactNode } from "react"
 import type { ChatTableExportSource } from "../lib/chat-table-export"
 import { C } from "../theme/tokens"
-import { TABLE_EXPORT_RAIL_CLASS, TableExportActions } from "./TableExportActions"
+import { TableExportActions } from "./TableExportActions"
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -255,12 +255,11 @@ export function DataTable({
   const showFooterControls = total > 10 || pageSize !== defaultPageSize || filter !== ""
 
   return (
-    <div className="group flex w-full min-w-0 items-start gap-2">
-      <div
-        className="min-w-0 flex-1 rounded-lg overflow-hidden"
-        style={{ border: `1px solid ${C.border}`, background: C.base }}
-      >
-      {/* Toolbar */}
+    <div
+      className="group relative rounded-lg overflow-hidden"
+      style={{ border: `1px solid ${C.border}`, background: C.base }}
+    >
+      {/* Toolbar — row count, export, filter */}
       <div
         className="flex items-center gap-2 px-2 py-1.5 flex-wrap"
         style={{ background: C.elevated, borderBottom: `1px solid ${C.border}` }}
@@ -271,6 +270,16 @@ export function DataTable({
             : `${headerCount.toLocaleString()} row${headerCount !== 1 ? "s" : ""}`}
           {truncated ? " (preview)" : ""}
         </span>
+        {exportSource ? (
+          <TableExportActions
+            headers={headers}
+            rows={rows}
+            source={exportSource}
+            disabled={exportDisabled}
+            compact
+            revealOnHover
+          />
+        ) : null}
         {/* Filter */}
         <div
           className="flex items-center gap-1 px-1.5 py-0.5 rounded ml-auto"
@@ -433,20 +442,6 @@ export function DataTable({
           </div>
         </div>
       )}
-      </div>
-      {exportSource ? (
-        <div className={TABLE_EXPORT_RAIL_CLASS}>
-          <TableExportActions
-            headers={headers}
-            rows={rows}
-            source={exportSource}
-            disabled={exportDisabled}
-            compact
-            revealOnHover
-            orientation="vertical"
-          />
-        </div>
-      ) : null}
     </div>
   )
 }

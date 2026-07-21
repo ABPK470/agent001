@@ -1,7 +1,7 @@
 /**
- * Per-table Copy / CSV / JSON — bare icon+label rail (no pill).
- * Parent lays this out as a flex sibling of the scrolling table box so the
- * controls stay in the answer column (never past a horizontal scroll edge).
+ * Per-table Copy / CSV / JSON — bare icon+label controls (no pill).
+ * Parents overlay these on the table header (top-right) so the table keeps
+ * its full width; no permanent side gutter.
  */
 
 import { Braces, Check, Copy, Sheet } from "lucide-react"
@@ -12,9 +12,6 @@ import {
   type ChatTableExportSource,
 } from "../lib/chat-table-export"
 import type { TableExportFormat } from "@mia/shared-types"
-
-/** Fixed gutter for the vertical action rail (and streaming placeholders). */
-export const TABLE_EXPORT_RAIL_CLASS = "w-14 shrink-0 pt-0.5"
 
 export interface TableExportActionsProps {
   headers: string[]
@@ -28,8 +25,6 @@ export interface TableExportActionsProps {
    * Stays visible while Copy/CSV/JSON feedback or an error is showing.
    */
   revealOnHover?: boolean
-  /** Vertical rail beside the table (outside the border). */
-  orientation?: "horizontal" | "vertical"
 }
 
 /** Which control just succeeded — drives the green check on that button only. */
@@ -42,7 +37,6 @@ export function TableExportActions({
   disabled = false,
   compact = false,
   revealOnHover = false,
-  orientation = "horizontal",
 }: TableExportActionsProps): JSX.Element {
   const [feedback, setFeedback] = useState<FeedbackAction | null>(null)
   const [busyAction, setBusyAction] = useState<FeedbackAction | null>(null)
@@ -93,13 +87,11 @@ export function TableExportActions({
     }
   }
 
-  const vertical = orientation === "vertical"
   const btn = [
     "inline-flex items-center gap-1 rounded-sm py-0.5",
     compact ? "text-[12px] px-0.5" : "text-sm px-1",
     "text-text-muted hover:text-text",
     "disabled:opacity-40 disabled:pointer-events-none cursor-pointer",
-    vertical ? "justify-start" : "",
   ].join(" ")
 
   const idle = !disabled && !busyAction
@@ -108,8 +100,7 @@ export function TableExportActions({
   return (
     <div
       className={[
-        vertical ? "flex flex-col items-start gap-0.5" : "flex flex-wrap items-center gap-1",
-        "min-w-0 bg-transparent",
+        "flex flex-wrap items-center gap-1 min-w-0 bg-transparent",
         revealOnHover
           ? [
               "transition-opacity duration-150",
@@ -153,9 +144,7 @@ export function TableExportActions({
         <span>JSON</span>
       </button>
       {error ? (
-        <span className={`text-[11px] text-error ${vertical ? "max-w-[4.5rem] break-words" : "truncate max-w-[14rem]"}`}>
-          {error}
-        </span>
+        <span className="text-[11px] text-error truncate max-w-[14rem]">{error}</span>
       ) : null}
     </div>
   )
