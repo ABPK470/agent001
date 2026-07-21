@@ -8,6 +8,9 @@
  * Work = what happened after that reply (tool runs, nudges, sync, human wait).
  * Phase = planner routing / pipeline / verify / repair spans.
  *
+ * Step phases (`step:name`, usually subagent_task) own their Call + Work
+ * as children — same nesting dialect as Chat (Subagent → tools).
+ *
  * Not an OperationLog dump — structural cards in the same dialect as Call.
  */
 
@@ -73,7 +76,13 @@ export type TracePhaseDetail =
  * Planner / routing milestone on the spine.
  * `family` is the merge key (plan, pipeline:N, step:name, verify:N, …) —
  * consecutive same-family events collapse into one card.
+ *
+ * Step families nest Call/Work in `children` (subagent body).
  */
+export type TracePhaseChild =
+  | { kind: "call"; callIndex: number }
+  | { kind: "work"; work: TraceWorkNode }
+
 export type TracePhaseNode = {
   id: string
   family: string
@@ -81,6 +90,10 @@ export type TracePhaseNode = {
   summary: string
   status: "running" | "done" | "error"
   details: TracePhaseDetail[]
+  /** Scope lead — e.g. "Subagent" while `title` is the step name. */
+  leading?: string
+  /** Call / Work that ran inside this step (not flat spine peers). */
+  children?: TracePhaseChild[]
 }
 
 export type TraceWorkNote = {
@@ -278,8 +291,19 @@ type PhaseUpdate = {
   summary: string
   status: TracePhaseNode["status"]
   details: TracePhaseDetail[]
+  leading?: string
   /** Bare Direct with nothing to show — omit from the spine. */
   skip?: boolean
+}
+
+function isStepFamily(family: string): boolean {
+  return family.startsWith("step:")
+}
+
+function truncatePhaseText(text: string, max = 72): string {
+  const t = text.trim().replace(/\s+/g, " ")
+  if (!t) return t
+  return t.length > max ? `${t.slice(0, max - 1)}…` : t
 }
 
 function phaseFromEntry(entry: TraceEntry, index: number): PhaseUpdate | null {
@@ -439,14 +463,22 @@ function phaseFromEntry(entry: TraceEntry, index: number): PhaseUpdate | null {
           ),
         ],
       }
-    case "planner-step-start":
+    case "planner-step-start": {
+      const subagent = entry.stepType === "subagent_task"
       return {
         family: `step:${entry.stepName}`,
+        leading: subagent ? "Subagent" : "Step",
         title: humanizeStep(entry.stepName),
-        summary: "running",
+        summary: subagent ? "running" : entry.stepType.replace(/_/g, " "),
         status: "running",
-        details: [detailEvent(`step-start-${index}`, `Started (${entry.stepType})`)],
+        details: [
+          detailEvent(
+            `step-start-${index}`,
+            subagent ? "Subagent started" : `Started (${entry.stepType})`,
+          ),
+        ],
       }
+    }
     case "planner-step-transition":
       return {
         family: `step:${entry.stepName}`,
@@ -505,26 +537,23 @@ function phaseFromEntry(entry: TraceEntry, index: number): PhaseUpdate | null {
       )
       return {
         family: `step:${entry.stepName}`,
+        leading: "Subagent",
         title: humanizeStep(entry.stepName),
-        summary: "delegating",
+        summary: truncatePhaseText(entry.goal) || "delegating",
         status: "running",
         details,
       }
     }
     case "planner-delegation-iteration": {
-      const details: TracePhaseDetail[] = [
-        detailEvent(
-          `del-iter-${index}`,
-          `Iteration ${entry.iteration}/${entry.maxIterations}${entry.content ? ` — ${entry.content}` : ""}`,
-        ),
-      ]
-      if (entry.toolNames?.length) {
-        details.push(detailEvent(`del-iter-tools-${index}`, `Tools: ${entry.toolNames.join(", ")}`))
+      // Keep timeline quiet — Call/Work under the step are the body.
+      const details: TracePhaseDetail[] = []
+      if (entry.content) {
+        details.push(detailEvent(`del-iter-${index}`, entry.content))
       }
       return {
         family: `step:${entry.stepName}`,
         title: humanizeStep(entry.stepName),
-        summary: `iteration ${entry.iteration}/${entry.maxIterations}`,
+        summary: "running",
         status: "running",
         details,
       }
@@ -682,6 +711,8 @@ function mergePhase(prev: TracePhaseNode, next: PhaseUpdate): TracePhaseNode {
     summary: mergePhaseSummary(prev.summary, next.summary),
     status: next.status,
     details: [...prev.details, ...next.details].slice(0, 48),
+    leading: next.leading ?? prev.leading,
+    children: prev.children,
   }
 }
 
@@ -770,40 +801,17 @@ export function buildTraceDag(trace: TraceEntry[]): TraceDag {
   let workSeq = 0
   let phaseSeq = 0
 
-  function flushPhase() {
-    if (!openPhase) return
-    // Skip bare Direct routing chips — noise in the outline.
-    if (!(openPhase.family === "direct" && openPhase.details.length === 0)) {
-      spine.push({ kind: "phase", phase: openPhase })
-    }
-    openPhase = null
-  }
-
-  function applyPhase(update: PhaseUpdate) {
-    if (update.skip && update.details.length === 0) return
-    flushWork()
-    if (openPhase && openPhase.family !== update.family) flushPhase()
-    if (!openPhase) {
-      phaseSeq += 1
-      openPhase = {
-        id: `phase-${phaseSeq}`,
-        family: update.family,
-        title: update.title,
-        summary: update.summary,
-        status: update.status,
-        details: update.details,
-      }
-      return
-    }
-    openPhase = mergePhase(openPhase, update)
-  }
-
   function flushWork() {
     if (!openWork) return
     if (openWork.tools.length > 0 || openWork.notes.length > 0) {
       openWork.title = workTitle(openWork.tools, openWork.notes)
       openWork.summary = workSummary(openWork.tools, openWork.notes)
-      spine.push({ kind: "work", work: openWork })
+      if (openPhase && isStepFamily(openPhase.family)) {
+        openPhase.children = openPhase.children ?? []
+        openPhase.children.push({ kind: "work", work: openWork })
+      } else {
+        spine.push({ kind: "work", work: openWork })
+      }
       // Mirror execution status onto the preceding call’s Next branches.
       const call = calls[openWork.afterCallIndex]
       if (call) {
@@ -828,6 +836,43 @@ export function buildTraceDag(trace: TraceEntry[]): TraceDag {
     openWork = null
   }
 
+  /**
+   * Close the open phase pointer. Phase is already on the spine (pushed at
+   * create) so we only clear the handle — children keep accumulating until then.
+   */
+  function flushPhase() {
+    flushWork()
+    openPhase = null
+  }
+
+  function applyPhase(update: PhaseUpdate) {
+    if (update.skip && update.details.length === 0) return
+    flushWork()
+    if (openPhase && openPhase.family !== update.family) flushPhase()
+    if (!openPhase) {
+      phaseSeq += 1
+      openPhase = {
+        id: `phase-${phaseSeq}`,
+        family: update.family,
+        title: update.title,
+        summary: update.summary,
+        status: update.status,
+        details: update.details,
+        ...(update.leading ? { leading: update.leading } : {}),
+        ...(isStepFamily(update.family) ? { children: [] } : {}),
+      }
+      spine.push({ kind: "phase", phase: openPhase })
+      return
+    }
+    // Mutate in place — spine holds this object reference (live Trace).
+    const merged = mergePhase(openPhase, update)
+    openPhase.title = merged.title
+    openPhase.summary = merged.summary
+    openPhase.status = merged.status
+    openPhase.details = merged.details
+    if (merged.leading) openPhase.leading = merged.leading
+  }
+
   function ensureWork(afterCallIndex: number): TraceWorkNode {
     if (openWork && openWork.afterCallIndex === afterCallIndex) return openWork
     flushWork()
@@ -843,17 +888,25 @@ export function buildTraceDag(trace: TraceEntry[]): TraceDag {
     return openWork
   }
 
+  function pushCall(callIndex: number) {
+    if (openPhase && isStepFamily(openPhase.family)) {
+      flushWork()
+      openPhase.children = openPhase.children ?? []
+      openPhase.children.push({ kind: "call", callIndex })
+    } else {
+      flushWork()
+      openPhase = null
+      spine.push({ kind: "call", callIndex })
+    }
+    lastCallIndex = callIndex
+  }
+
   for (let i = 0; i < trace.length; i++) {
     const entry = trace[i]!
 
     if (entry.kind === "llm-request") {
-      flushPhase()
-      flushWork()
       const call = callByIteration.get(entry.iteration)
-      if (call) {
-        spine.push({ kind: "call", callIndex: call.index })
-        lastCallIndex = call.index
-      }
+      if (call) pushCall(call.index)
       continue
     }
 
@@ -948,8 +1001,8 @@ export function buildTraceDag(trace: TraceEntry[]): TraceDag {
     }
   }
 
-  flushPhase()
   flushWork()
+  flushPhase()
 
   // Mark unanswered tool branches still running only if call is waiting;
   // otherwise leave as-is after work merge.
@@ -977,10 +1030,19 @@ export function buildTraceDag(trace: TraceEntry[]): TraceDag {
     tools: toolsResolved?.tools ?? [],
   }
 
-  const toolRunCount = spine.reduce(
-    (n, e) => (e.kind === "work" ? n + e.work.tools.length : n),
-    0,
-  )
+  const toolRunCount = spine.reduce((n, e) => {
+    if (e.kind === "work") return n + e.work.tools.length
+    if (e.kind === "phase" && e.phase.children) {
+      return (
+        n +
+        e.phase.children.reduce(
+          (m, c) => (c.kind === "work" ? m + c.work.tools.length : m),
+          0,
+        )
+      )
+    }
+    return n
+  }, 0)
   const phaseCount = spine.filter((e) => e.kind === "phase").length
 
   const hasData =

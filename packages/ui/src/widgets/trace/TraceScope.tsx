@@ -1,10 +1,12 @@
 /**
  * Scope headers — real in-flow rows; sticky via CSS (.trace-card / .trace-stick-block).
  * Leaf rows (no expandable body) keep the chevron slot for alignment but are not buttons.
+ * Expand keeps the header where it is — body opens downward (preserveScrollAnchor).
  */
 
 import { ChevronDown, ChevronRight } from "lucide-react"
-import type { ReactNode } from "react"
+import { useRef, type ReactNode } from "react"
+import { preserveScrollAnchor } from "../../lib/chatScroll"
 import type { TraceScopeKind } from "./trace-pin"
 
 function ScopeLabel({
@@ -70,6 +72,7 @@ export function ScopeRow({
   /** False when the body has nothing to show — no chevron, not a toggle. */
   expandable?: boolean
 }) {
+  const buttonRef = useRef<HTMLButtonElement>(null)
   const className = `trace-scope${open && expandable ? " is-open" : ""}${soft ? " is-soft" : ""}${
     expandable ? "" : " is-leaf"
   }`
@@ -98,15 +101,20 @@ export function ScopeRow({
     )
   }
 
+  function onClick() {
+    preserveScrollAnchor(buttonRef.current, onToggle)
+  }
+
   return (
     <button
+      ref={buttonRef}
       type="button"
       data-trace-scope={scopeId}
       data-trace-kind={kind}
       data-trace-call={callIndex == null ? "" : String(callIndex)}
       data-trace-depth={String(depth)}
       className={className}
-      onClick={onToggle}
+      onClick={onClick}
       aria-expanded={open}
     >
       <ScopeChevron open={open} expandable />

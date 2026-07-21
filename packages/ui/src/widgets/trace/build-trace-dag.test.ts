@@ -272,11 +272,73 @@ describe("buildTraceDag", () => {
     ])
     const step = phases[0]
     if (step?.kind !== "phase") throw new Error("expected step phase")
+    expect(step.phase.leading).toBe("Subagent")
     expect(step.phase.title).toBe("frontend layer")
     expect(step.phase.summary).toBe("done")
     expect(step.phase.details.some((d) => d.kind === "event" && d.text.includes("Artifacts"))).toBe(
       true,
     )
+  })
+
+  it("nests Call and Work under an open subagent step phase", () => {
+    const dag = buildTraceDag([
+      { kind: "planner-step-start", stepName: "frontend_layer", stepType: "subagent_task" },
+      {
+        kind: "planner-delegation-start",
+        goal: "Build frontend",
+        stepName: "frontend_layer",
+        depth: 1,
+        tools: ["write_file"],
+        budget: {
+          hint: "medium",
+          parsedHint: 8,
+          baseBudget: 8,
+          contractFloor: 4,
+          complexityBoost: 0,
+          computedMaxIterations: 10,
+          targetArtifactCount: 1,
+          requiredSourceArtifactCount: 0,
+          acceptanceCriteriaCount: 0,
+          codeArtifactCount: 1,
+          hasComplexImplementation: false,
+          hasBlueprintSource: false,
+          verificationMode: "run_tests",
+        },
+      },
+      llmRequest(0),
+      llmResponse(0, {
+        toolCalls: [{ id: "tc-w", name: "write_file", arguments: { path: "a.html" } }],
+      }),
+      {
+        kind: "tool-call",
+        invocationId: "inv-w",
+        toolCallId: "tc-w",
+        tool: "write_file",
+        argsSummary: "a.html",
+        argsFormatted: JSON.stringify({ path: "a.html" }),
+      },
+      {
+        kind: "tool-result",
+        invocationId: "inv-w",
+        toolCallId: "tc-w",
+        text: "Wrote a.html",
+      },
+      {
+        kind: "planner-step-end",
+        stepName: "frontend_layer",
+        status: "pass",
+        durationMs: 400,
+      },
+    ])
+    const spineKinds = dag.spine.map((e) => e.kind)
+    expect(spineKinds).toEqual(["phase"])
+    const phase = dag.spine[0]
+    if (phase?.kind !== "phase") throw new Error("expected phase")
+    expect(phase.phase.leading).toBe("Subagent")
+    expect(phase.phase.children?.map((c) => c.kind)).toEqual(["call", "work"])
+    expect(dag.stats.toolRunCount).toBe(1)
+    // Call/Work are not flat peers of the step.
+    expect(dag.spine.some((e) => e.kind === "call" || e.kind === "work")).toBe(false)
   })
 
   it("omits Direct chips with nothing to expand", () => {

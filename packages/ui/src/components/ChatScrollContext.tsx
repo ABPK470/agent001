@@ -3,7 +3,7 @@ import { preserveScrollAnchor } from "../lib/chatScroll"
 
 interface ChatScrollContextValue {
   pauseAutoScroll: () => void
-  preserveToggle: (button: HTMLButtonElement | null, toggle: () => void) => void
+  preserveToggle: (button: HTMLElement | null, toggle: () => void) => void
   scrollHostRef: RefObject<HTMLDivElement | null>
   hydrateRunTrace?: (runId: string) => Promise<void>
   /** When false, only the latest turn may load trace data (open-at-bottom UX). */

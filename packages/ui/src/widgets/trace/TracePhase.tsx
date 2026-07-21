@@ -5,10 +5,12 @@
  *   Events → timeline
  *   Steps  → named plan graph
  *   JSON   → collapsed raw payload
+ *   Children → Call / Work nested under a step (subagent body)
  */
 
-import { useState } from "react"
+import { useRef, useState, type ReactNode } from "react"
 import { JsonViewer } from "../../components/JsonViewer"
+import { preserveScrollAnchor } from "../../lib/chatScroll"
 import { ScopeRow } from "./TraceScope"
 import type { TracePhaseDetail, TracePhaseNode } from "./build-trace-dag"
 
@@ -46,7 +48,9 @@ function PhaseSteps({ steps }: { steps: Extract<TracePhaseDetail, { kind: "step"
             <div className="trace-phase-step__body">
               <div className="trace-phase-step__name font-mono">{step.name}</div>
               <div className="trace-phase-step__meta">
-                <span>{step.type.replace(/_/g, " ")}</span>
+                <span>
+                  {step.type === "subagent_task" ? "subagent" : step.type.replace(/_/g, " ")}
+                </span>
                 {step.dependsOn && step.dependsOn.length > 0 && (
                   <span className="trace-phase-step__deps">
                     after {step.dependsOn.join(", ")}
@@ -68,30 +72,53 @@ function PhaseJson({ blocks }: { blocks: Extract<TracePhaseDetail, { kind: "json
   return (
     <section className="trace-phase-section">
       <div className="trace-phase-section__label">Raw</div>
-      {blocks.map((block) => {
-        const open = openId === block.id
-        return (
-          <div key={block.id} className="trace-phase-json">
-            <button
-              type="button"
-              className="trace-phase-json__toggle"
-              aria-expanded={open}
-              onClick={() => setOpenId(open ? null : block.id)}
-            >
-              {open ? "Hide" : "Show"} {block.label}
-            </button>
-            {open && (
-              <JsonViewer
-                value={block.value}
-                defaultExpandDepth={1}
-                maxHeight={220}
-                className="trace-json"
-              />
-            )}
-          </div>
-        )
-      })}
+      {blocks.map((block) => (
+        <PhaseJsonBlock
+          key={block.id}
+          block={block}
+          open={openId === block.id}
+          onToggle={() => setOpenId(openId === block.id ? null : block.id)}
+        />
+      ))}
     </section>
+  )
+}
+
+function PhaseJsonBlock({
+  block,
+  open,
+  onToggle,
+}: {
+  block: Extract<TracePhaseDetail, { kind: "json" }>
+  open: boolean
+  onToggle: () => void
+}) {
+  const buttonRef = useRef<HTMLButtonElement>(null)
+
+  function onClick() {
+    preserveScrollAnchor(buttonRef.current, onToggle)
+  }
+
+  return (
+    <div className="trace-phase-json">
+      <button
+        ref={buttonRef}
+        type="button"
+        className="trace-phase-json__toggle"
+        aria-expanded={open}
+        onClick={onClick}
+      >
+        {open ? "Hide" : "Show"} {block.label}
+      </button>
+      {open && (
+        <JsonViewer
+          value={block.value}
+          defaultExpandDepth={1}
+          maxHeight={220}
+          className="trace-json"
+        />
+      )}
+    </div>
   )
 }
 
@@ -99,12 +126,17 @@ export function PhaseOutline({
   phase,
   open,
   onToggle,
+  nested,
 }: {
   phase: TracePhaseNode
   open: boolean
   onToggle: () => void
+  /** Call / Work cards that belong inside this step. */
+  nested?: ReactNode
 }) {
-  const expandable = phase.details.length > 0
+  const hasDetails = phase.details.length > 0
+  const hasNested = Boolean(nested)
+  const expandable = hasDetails || hasNested
   const events = phase.details.filter((d): d is Extract<TracePhaseDetail, { kind: "event" }> => d.kind === "event")
   const steps = phase.details.filter((d): d is Extract<TracePhaseDetail, { kind: "step" }> => d.kind === "step")
   const json = phase.details.filter((d): d is Extract<TracePhaseDetail, { kind: "json" }> => d.kind === "json")
@@ -117,18 +149,22 @@ export function PhaseOutline({
         depth={0}
         open={open && expandable}
         onToggle={onToggle}
-        leading={phase.title}
+        leading={phase.leading ?? phase.title}
+        title={phase.leading ? phase.title : undefined}
         summary={phase.summary}
         soft
         expandable={expandable}
       />
       {open && expandable && (
         <div className="trace-card__body">
-          <div className="trace-scope-body trace-phase-body">
-            <PhaseEvents events={events} />
-            <PhaseSteps steps={steps} />
-            <PhaseJson blocks={json} />
-          </div>
+          {hasDetails && (
+            <div className="trace-scope-body trace-phase-body">
+              <PhaseEvents events={events} />
+              <PhaseSteps steps={steps} />
+              <PhaseJson blocks={json} />
+            </div>
+          )}
+          {hasNested && <div className="trace-phase-nested">{nested}</div>}
         </div>
       )}
     </article>

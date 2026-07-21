@@ -478,6 +478,8 @@ interface ResponseStepBlockPart {
   detail?: string
   /** True when this step is a repair re-run (tools under it are the fix). */
   repair?: boolean
+  /** True when the planner ran this step as a subagent_task. */
+  subagent?: boolean
   tools: ResponseToolPart[]
   hasRunning: boolean
 }
@@ -1167,6 +1169,24 @@ function humanizeStepName(stepName: string): string {
   return stepName.replace(/_/g, " ")
 }
 
+/** Plan step title — Subagent / Repair are first-class, not hidden chrome. */
+function stepBlockTitle(opts: {
+  stepName: string
+  stepType?: string
+  repair?: boolean
+}): string {
+  const name = humanizeStepName(opts.stepName)
+  if (opts.repair) return `Repair · ${name}`
+  if (opts.stepType === "subagent_task") return `Subagent · ${name}`
+  return name
+}
+
+function truncateStepDetail(text: string, max = 88): string {
+  const t = text.trim().replace(/\s+/g, " ")
+  if (!t) return t
+  return t.length > max ? `${t.slice(0, max - 1)}…` : t
+}
+
 function hasHiddenToolDetails(summary: string, details?: string): boolean {
   const full = (details ?? "").trim()
   if (!full) return false
@@ -1396,14 +1416,19 @@ function buildResponseParts(
         runningSteps.set(entry.stepName, activityId)
         openStepId = activityId
         const isRepair = !!pendingRepair?.steps.has(entry.stepName)
-        const stepTitle = humanizeStepName(entry.stepName)
+        const isSubagent = entry.stepType === "subagent_task"
         parts = parts.concat({
           kind: "step-block",
           id: activityId,
-          title: isRepair ? `Repair · ${stepTitle}` : stepTitle,
+          title: stepBlockTitle({
+            stepName: entry.stepName,
+            stepType: entry.stepType,
+            repair: isRepair,
+          }),
           status: "running",
           detail: isRepair && pendingRepair ? `attempt ${pendingRepair.attempt}` : undefined,
           repair: isRepair || undefined,
+          subagent: isSubagent || undefined,
           tools: [],
           hasRunning: true,
         })
@@ -1436,25 +1461,28 @@ function buildResponseParts(
       }
       case "planner-delegation-start": {
         let activityId = runningSteps.get(entry.stepName)
+        const goalDetail = truncateStepDetail(entry.goal)
         if (!activityId) {
           flushIterationBlock(index)
           activityId = `step-${entry.stepName}-${index}`
           runningSteps.set(entry.stepName, activityId)
           openStepId = activityId
           const isRepair = !!pendingRepair?.steps.has(entry.stepName)
-          const stepTitle = humanizeStepName(entry.stepName)
           parts = parts.concat({
             kind: "step-block",
             id: activityId,
-            title: isRepair ? `Repair · ${stepTitle}` : stepTitle,
+            title: stepBlockTitle({
+              stepName: entry.stepName,
+              stepType: "subagent_task",
+              repair: isRepair,
+            }),
             status: "running",
             detail:
               isRepair && pendingRepair
                 ? `attempt ${pendingRepair.attempt}`
-                : entry.tools.length > 0
-                  ? entry.tools.slice(0, 4).join(", ")
-                  : "working",
+                : goalDetail || "working",
             repair: isRepair || undefined,
+            subagent: true,
             tools: [],
             hasRunning: true,
           })
@@ -1464,12 +1492,12 @@ function buildResponseParts(
               ? {
                   ...part,
                   status: "running" as const,
+                  // Goal is the work description — not tool allowlists / iteration chrome.
                   detail:
                     part.repair && pendingRepair
                       ? `attempt ${pendingRepair.attempt}`
-                      : entry.tools.length > 0
-                        ? entry.tools.slice(0, 4).join(", ")
-                        : part.detail,
+                      : goalDetail || part.detail,
+                  subagent: part.subagent || true,
                   hasRunning: true,
                 }
               : part,
@@ -1479,18 +1507,12 @@ function buildResponseParts(
         break
       }
       case "planner-delegation-iteration": {
+        // Keep the goal on the step header; tools already nest underneath.
         const activityId = runningSteps.get(entry.stepName) ?? openStepId
         if (!activityId) break
-        const toolBit =
-          entry.toolNames && entry.toolNames.length > 0
-            ? entry.toolNames.slice(0, 3).join(", ")
-            : undefined
-        const detail = [`iteration ${entry.iteration}/${entry.maxIterations}`, toolBit]
-          .filter(Boolean)
-          .join(" · ")
         parts = parts.map((part) =>
           part.kind === "step-block" && part.id === activityId
-            ? { ...part, detail, status: "running" as const, hasRunning: true }
+            ? { ...part, status: "running" as const, hasRunning: true }
             : part,
         )
         break
@@ -2128,8 +2150,10 @@ function PlanBlock({ part }: { part: ResponsePlanPart }) {
               <span className="tabular-nums text-text-faint shrink-0 w-4">{i + 1}.</span>
               <span className="min-w-0">
                 <span>{humanizeStepName(step.name)}</span>
-                {step.type && step.type !== "subagent_task" && (
-                  <span className="ml-1.5 text-text-faint">{step.type.replace(/_/g, " ")}</span>
+                {step.type && (
+                  <span className="ml-1.5 text-text-faint">
+                    {step.type === "subagent_task" ? "subagent" : step.type.replace(/_/g, " ")}
+                  </span>
                 )}
               </span>
             </li>

@@ -15,21 +15,24 @@ export function WorkOutline({
   openState,
   onToggle,
   onToggleTool,
+  nested = false,
 }: {
   work: TraceWorkNode
   open: boolean
   openState: OpenState
   onToggle: () => void
   onToggleTool: (id: string) => void
+  /** True when this work sits under a step / subagent phase. */
+  nested?: boolean
 }) {
   const expandable = work.tools.length > 0 || work.notes.length > 0
 
   return (
-    <article className={`trace-card${open && expandable ? " is-open" : ""}`}>
+    <article className={`trace-card${open && expandable ? " is-open" : ""}${nested ? " is-nested" : ""}`}>
       <ScopeRow
         scopeId={work.id}
         kind="work"
-        depth={0}
+        depth={nested ? 1 : 0}
         open={open && expandable}
         onToggle={onToggle}
         leading="Work"

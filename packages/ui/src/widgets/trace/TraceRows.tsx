@@ -4,8 +4,9 @@
  */
 
 import { ChevronDown, ChevronRight, ListChevronsDownUp, ListChevronsUpDown } from "lucide-react"
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { JsonViewer } from "../../components/JsonViewer"
+import { preserveScrollAnchor } from "../../lib/chatScroll"
 import { formatMs } from "../../lib/util"
 import {
   messagePreview,
@@ -29,6 +30,7 @@ export function PromptMessageRow({
   const isSystem = msg.role === "system" || msg.speaker === "System"
   const hasBody =
     Boolean(msg.content) || msg.toolCalls.length > 0 || Boolean(msg.toolCallId)
+  const buttonRef = useRef<HTMLButtonElement>(null)
 
   if (!hasBody && !preview) {
     return (
@@ -42,12 +44,17 @@ export function PromptMessageRow({
     )
   }
 
+  function onClick() {
+    preserveScrollAnchor(buttonRef.current, onToggle)
+  }
+
   return (
     <div className={`trace-msg${isSystem ? " is-system" : ""}${open ? " is-open" : ""}`}>
       <button
+        ref={buttonRef}
         type="button"
         className="trace-msg__btn"
-        onClick={onToggle}
+        onClick={onClick}
         aria-expanded={open}
       >
         <span className="trace-scope__chevslot" aria-hidden>
@@ -113,13 +120,19 @@ export function ToolRow({
     tool.resultText && !open
       ? tool.resultText.replace(/\s+/g, " ").trim().slice(0, 72)
       : null
+  const buttonRef = useRef<HTMLButtonElement>(null)
+
+  function onClick() {
+    preserveScrollAnchor(buttonRef.current, onToggle)
+  }
 
   return (
     <div className={`trace-msg${statusClass}${open ? " is-open" : ""}`}>
       <button
+        ref={buttonRef}
         type="button"
         className="trace-msg__btn"
-        onClick={onToggle}
+        onClick={onClick}
         aria-expanded={open}
       >
         <span className="trace-scope__chevslot" aria-hidden>
@@ -207,6 +220,8 @@ export function ToolDef({
 }) {
   const [showSchema, setShowSchema] = useState(false)
   const [descOpen, setDescOpen] = useState(false)
+  const descBtnRef = useRef<HTMLButtonElement>(null)
+  const schemaBtnRef = useRef<HTMLButtonElement>(null)
   const previewChars = 400
   const descLong = tool.description.length > previewChars
   const descText =
@@ -215,11 +230,11 @@ export function ToolDef({
       : `${tool.description.slice(0, previewChars)}…`
 
   function onToggleSchema() {
-    setShowSchema((v) => !v)
+    preserveScrollAnchor(schemaBtnRef.current, () => setShowSchema((v) => !v))
   }
 
   function onToggleDesc() {
-    setDescOpen((v) => !v)
+    preserveScrollAnchor(descBtnRef.current, () => setDescOpen((v) => !v))
   }
 
   return (
@@ -234,6 +249,7 @@ export function ToolDef({
         <div className="trace-ctx-item__foot">
           {descLong && (
             <button
+              ref={descBtnRef}
               type="button"
               className="trace-copy"
               onClick={onToggleDesc}
@@ -251,6 +267,7 @@ export function ToolDef({
           )}
           {tool.parameters && (
             <button
+              ref={schemaBtnRef}
               type="button"
               className="trace-copy"
               onClick={onToggleSchema}

@@ -1,10 +1,11 @@
 /**
  * Expandable text — sticky right-rail Copy + More/Less.
- * Toggle only changes open state — scroll position is left alone.
+ * Toggle keeps scroll anchored so the row does not jump upward.
  */
 
 import { ListChevronsDownUp, ListChevronsUpDown } from "lucide-react"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
+import { preserveScrollAnchor } from "../../lib/chatScroll"
 import { CopyControl } from "./TraceCopy"
 
 function ExpandToggle({
@@ -14,11 +15,18 @@ function ExpandToggle({
   expanded: boolean
   onToggle: () => void
 }) {
+  const buttonRef = useRef<HTMLButtonElement>(null)
+
+  function onClick() {
+    preserveScrollAnchor(buttonRef.current, onToggle)
+  }
+
   return (
     <button
+      ref={buttonRef}
       type="button"
       className="trace-copy"
-      onClick={onToggle}
+      onClick={onClick}
       aria-expanded={expanded}
       aria-label={expanded ? "Show less" : "Show more"}
       title={expanded ? "Show less" : "Show more"}

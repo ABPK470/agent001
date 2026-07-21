@@ -68,9 +68,23 @@ export function TraceDag({
     seededRef.current = true
     setOpenState((prev) => {
       const next = seedLatest(dag.calls.length)
+      const lastCall = dag.calls.length - 1
       const lastWork = [...dag.spine].reverse().find((e) => e.kind === "work")
       if (lastWork && lastWork.kind === "work") {
         next.work.add(lastWork.work.id)
+      }
+      // Open step / subagent phases that own the latest call (or nested work).
+      for (const entry of dag.spine) {
+        if (entry.kind !== "phase" || !entry.phase.children?.length) continue
+        const ownsLatest = entry.phase.children.some((child) => {
+          if (child.kind === "call") return child.callIndex === lastCall
+          if (child.kind === "work") {
+            next.work.add(child.work.id)
+            return child.work.afterCallIndex === lastCall
+          }
+          return false
+        })
+        if (ownsLatest) next.phases.add(entry.phase.id)
       }
       return { ...next, foldMode: prev.foldMode }
     })
@@ -313,7 +327,7 @@ export function TraceDag({
         {searchStatus && <div className="trace-search__status">{searchStatus}</div>}
       </div>
 
-      <div ref={scrollRef} className="trace-scroll min-h-0 flex-1 overflow-y-auto">
+      <div ref={scrollRef} className="trace-scroll min-h-0 flex-1" data-trace-scroll-host>
         {emptySlot}
 
         {runId &&
@@ -337,12 +351,55 @@ export function TraceDag({
             />
             {dag.spine.map((entry) => {
               if (entry.kind === "phase") {
+                const nested =
+                  entry.phase.children && entry.phase.children.length > 0
+                    ? entry.phase.children.map((child) => {
+                        if (child.kind === "work") {
+                          if (
+                            query &&
+                            callHits &&
+                            !callHits.has(child.work.afterCallIndex)
+                          ) {
+                            return null
+                          }
+                          return (
+                            <WorkOutline
+                              key={child.work.id}
+                              work={child.work}
+                              open={openState.work.has(child.work.id)}
+                              openState={openState}
+                              onToggle={() => onToggleWork(child.work.id)}
+                              onToggleTool={onToggleTool}
+                              nested
+                            />
+                          )
+                        }
+                        const call = dag.calls[child.callIndex]
+                        if (!call) return null
+                        if (query && callHits && !callHits.has(call.index)) return null
+                        return (
+                          <CallOutline
+                            key={`llm-${call.iteration}-${call.index}`}
+                            call={call}
+                            openState={openState}
+                            searchHit={callHits?.get(call.index) ?? null}
+                            onToggleCall={onToggleCall}
+                            onToggleSent={onToggleSent}
+                            onToggleReceived={onToggleReceived}
+                            onToggleMessage={onToggleMessage}
+                            onToggleTool={onToggleTool}
+                            nested
+                          />
+                        )
+                      })
+                    : null
                 return (
                   <PhaseOutline
                     key={entry.phase.id}
                     phase={entry.phase}
                     open={openState.phases.has(entry.phase.id)}
                     onToggle={() => onTogglePhase(entry.phase.id)}
+                    nested={nested}
                   />
                 )
               }

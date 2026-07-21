@@ -22,6 +22,7 @@ export function CallOutline({
   onToggleReceived,
   onToggleMessage,
   onToggleTool,
+  nested = false,
 }: {
   call: TraceCallNode
   openState: OpenState
@@ -31,6 +32,8 @@ export function CallOutline({
   onToggleReceived: (index: number) => void
   onToggleMessage: (key: string) => void
   onToggleTool: (id: string) => void
+  /** True when this call sits under a step / subagent phase. */
+  nested?: boolean
 }) {
   const callOpen = openState.calls.has(call.index)
   const sentOpen = openState.sent.has(call.index)
@@ -38,12 +41,12 @@ export function CallOutline({
   const usage = call.usage
 
   return (
-    <article className={`trace-card${callOpen ? " is-open" : ""}`}>
+    <article className={`trace-card${callOpen ? " is-open" : ""}${nested ? " is-nested" : ""}`}>
       <ScopeRow
         scopeId={`call:${call.index}`}
         kind="call"
         callIndex={call.index}
-        depth={0}
+        depth={nested ? 1 : 0}
         open={callOpen}
         onToggle={() => onToggleCall(call.index)}
         leading={`Call ${call.index + 1}`}
