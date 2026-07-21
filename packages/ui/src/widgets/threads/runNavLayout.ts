@@ -19,10 +19,10 @@ export const RUN_NAV_BAR_SLOT_MAX = 12
 export const RUN_NAV_CAPSULE_MAX_ROWS = 16
 export const RUN_NAV_CAPSULE_MAX_HEIGHT_PX = 432
 
-const MIN_TRACK = 36
-const MAX_TRACK_PX = 120
-const PER_SLOT_PX = 15
-const BASE_PAD_PX = 8
+const MIN_TRACK = 32
+const MAX_TRACK_PX = 100
+const PER_SLOT_PX = 11
+const BASE_PAD_PX = 6
 const MIN_RIGHT_GUTTER_PX = 56
 
 export function rightGutterPx(viewportWidth: number): number {
@@ -48,7 +48,7 @@ function layoutBarsEvenly(ids: string[], trackHeight: number): RunBarSlot[] {
   const count = ids.length
   if (count === 0) return []
 
-  const edge = 4
+  const edge = 3
   const usable = Math.max(0, trackHeight - edge * 2)
   if (count === 1) {
     return [{ id: ids[0]!, top: Math.round(edge + usable / 2) }]

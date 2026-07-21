@@ -1,9 +1,9 @@
 /**
  * Trace outline shell — toolbar + chronological call cards.
  *
- * Sticky scroll = Cursor/VS Code dialect on a nested document:
- * pin overlay shows the ancestor chain (Trace → Call → Sent → Message…);
- * clones keep full header chrome; click jumps to that scope.
+ * Sticky scroll = VS Code dialect: pin overlay shows structural ancestors
+ * only (Context/Call → Prompt|Tools|Sent|Received). Leaf message/tool rows
+ * never pin. Click a pin to jump; chevron folds.
  */
 
 import { Search, X } from "lucide-react"
@@ -11,7 +11,6 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { fmtTokens, formatMs } from "../../lib/util"
 import { SegmentToggle } from "../entity-registry/SegmentToggle"
 import {
-  messagePreview,
   searchCall,
   type TraceCallSearchHit,
   type TraceDag,
@@ -25,7 +24,6 @@ import {
   expandPathForScope,
   layoutOffsetInScroll,
   samePinnedIds,
-  syncPinCoveredClasses,
 } from "./trace-pin"
 import { CallOutline } from "./TraceCall"
 import { PreambleOutline } from "./TraceContext"
@@ -83,7 +81,6 @@ export function TraceDag({
       "--trace-pin-stack-h",
       `${ids.length * TRACE_STICKY_ROW_H}px`,
     )
-    syncPinCoveredClasses(el, ids)
     setPinnedIds((prev) => (samePinnedIds(prev, ids) ? prev : ids))
   }
 
@@ -285,47 +282,6 @@ export function TraceDag({
           open: openState.received.has(index),
         })
         continue
-      }
-      const msgMatch = /^message:(\d+):m:(\d+)$/.exec(id)
-      if (msgMatch) {
-        const index = Number(msgMatch[1])
-        const mi = Number(msgMatch[2])
-        const call = dag.calls[index]
-        const msg = call?.messages[mi]
-        if (!call || !msg) continue
-        const key = `${index}:m:${mi}`
-        rows.push({
-          id,
-          kind: "message",
-          depth: 2,
-          leading: msg.speaker,
-          title: msg.detail ?? "",
-          summary: openState.messages.has(key)
-            ? (msg.toolCallId ?? "")
-            : messagePreview(msg),
-          soft: false,
-          open: openState.messages.has(key),
-        })
-        continue
-      }
-      const toolMatch = /^tool:(.+)$/.exec(id)
-      if (toolMatch) {
-        const toolId = toolMatch[1]!
-        const callIndex = callIndexForTool(toolId, dag.calls)
-        if (callIndex == null) continue
-        const call = dag.calls[callIndex]
-        const tool = call?.toolBranches.find((t) => t.id === toolId)
-        if (!tool) continue
-        rows.push({
-          id,
-          kind: "tool",
-          depth: 2,
-          leading: tool.name,
-          title: "",
-          summary: tool.id,
-          soft: false,
-          open: openState.tools.has(toolId),
-        })
       }
     }
     return rows
@@ -587,13 +543,12 @@ export function TraceDag({
         {searchStatus && <div className="trace-search__status">{searchStatus}</div>}
       </div>
 
-      <div className="trace-scroll-host min-h-0 flex-1">
+      <div ref={scrollRef} className="trace-scroll min-h-0 flex-1 overflow-y-auto">
         <PinOverlay
           rows={pinRows}
           onToggle={onTogglePinnedScope}
           onReveal={onRevealScope}
         />
-        <div ref={scrollRef} className="trace-scroll min-h-0 h-full overflow-y-auto">
         {emptySlot}
 
         {runId &&
@@ -633,7 +588,6 @@ export function TraceDag({
             })}
           </div>
         )}
-        </div>
       </div>
     </div>
   )

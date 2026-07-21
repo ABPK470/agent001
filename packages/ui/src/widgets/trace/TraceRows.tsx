@@ -1,4 +1,9 @@
-import { ListChevronsDownUp, ListChevronsUpDown } from "lucide-react"
+/**
+ * Leaf rows inside Sent / Received — not sticky-scroll scopes.
+ * (Pinning every System/User row stacked a broken tower of headers.)
+ */
+
+import { ChevronDown, ChevronRight, ListChevronsDownUp, ListChevronsUpDown } from "lucide-react"
 import { useState } from "react"
 import { JsonViewer } from "../../components/JsonViewer"
 import { formatMs } from "../../lib/util"
@@ -9,38 +14,47 @@ import {
   type TraceToolCall,
 } from "./build-trace-dag"
 import { ExpandableText } from "./TraceExpandable"
-import { ScopeRow } from "./TraceScope"
 
 export function PromptMessageRow({
-  scopeId,
-  callIndex,
   msg,
   open,
   onToggle,
 }: {
-  scopeId: string
-  callIndex: number
   msg: TracePromptMessage
   open: boolean
   onToggle: () => void
 }) {
   const preview = messagePreview(msg)
+  const isUserAnswer = msg.speaker === "User answer"
 
   return (
-    <div className="trace-msg">
-      <ScopeRow
-        scopeId={scopeId}
-        kind="message"
-        callIndex={callIndex}
-        depth={2}
-        open={open}
-        onToggle={onToggle}
-        leading={msg.speaker}
-        title={msg.detail ?? undefined}
-        summary={!open ? preview : (msg.toolCallId ?? undefined)}
-      />
+    <div className="trace-row">
+      <button
+        type="button"
+        className="trace-row__btn"
+        onClick={onToggle}
+        aria-expanded={open}
+      >
+        <span className="trace-scope__chevslot" aria-hidden>
+          {open ? (
+            <ChevronDown size={12} className="trace-scope__chev" />
+          ) : (
+            <ChevronRight size={12} className="trace-scope__chev" />
+          )}
+        </span>
+        <span className={isUserAnswer ? "trace-row__speaker is-em" : "trace-row__speaker"}>
+          {msg.speaker}
+        </span>
+        {msg.detail && <span className="trace-row__detail">{msg.detail}</span>}
+        {msg.toolCallId && (
+          <span className="trace-row__id font-mono" title={msg.toolCallId}>
+            {msg.toolCallId}
+          </span>
+        )}
+        {!open && <span className="trace-row__preview">{preview}</span>}
+      </button>
       {open && (
-        <div className="trace-scope-body">
+        <div className="trace-row__body">
           {msg.content && (
             <ExpandableText text={msg.content} className="trace-body-muted" />
           )}
@@ -70,32 +84,36 @@ export function PromptMessageRow({
 }
 
 export function ToolRow({
-  scopeId,
-  callIndex,
   tool,
   open,
   onToggle,
 }: {
-  scopeId: string
-  callIndex: number
   tool: TraceToolCall
   open: boolean
   onToggle: () => void
 }) {
   return (
-    <div className="trace-msg">
-      <ScopeRow
-        scopeId={scopeId}
-        kind="tool"
-        callIndex={callIndex}
-        depth={2}
-        open={open}
-        onToggle={onToggle}
-        leading={tool.name}
-        summary={tool.id}
-      />
+    <div className="trace-row">
+      <button
+        type="button"
+        className="trace-row__btn"
+        onClick={onToggle}
+        aria-expanded={open}
+      >
+        <span className="trace-scope__chevslot" aria-hidden>
+          {open ? (
+            <ChevronDown size={12} className="trace-scope__chev" />
+          ) : (
+            <ChevronRight size={12} className="trace-scope__chev" />
+          )}
+        </span>
+        <span className="font-mono">{tool.name}</span>
+        <span className="trace-row__id font-mono" title={tool.id}>
+          {tool.id}
+        </span>
+      </button>
       {open && (
-        <div className="trace-scope-body">
+        <div className="trace-row__body">
           <JsonViewer
             value={tool.arguments}
             defaultExpandDepth={1}

@@ -1,7 +1,6 @@
 /**
  * One LLM call as a bordered card: Call → Sent → Received (+ Next tools).
- * Nesting matches Cursor JSON sticky scroll depths.
- * Sent / Received / messages / tools are outline scopes (pin + indent).
+ * Sent / Received are sticky outline scopes; messages/tools are leaf rows.
  * Next lives under Received so the chevron collapses the reply branch.
  */
 
@@ -90,8 +89,6 @@ export function CallOutline({
                   return (
                     <PromptMessageRow
                       key={key}
-                      scopeId={`message:${key}`}
-                      callIndex={call.index}
                       msg={msg}
                       open={openState.messages.has(key)}
                       onToggle={() => onToggleMessage(key)}
@@ -156,8 +153,6 @@ export function CallOutline({
                   {call.toolBranches.map((tc) => (
                     <ToolRow
                       key={tc.id}
-                      scopeId={`tool:${tc.id}`}
-                      callIndex={call.index}
                       tool={tc}
                       open={openState.tools.has(tc.id)}
                       onToggle={() => onToggleTool(tc.id)}

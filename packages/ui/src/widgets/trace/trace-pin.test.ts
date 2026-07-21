@@ -25,51 +25,37 @@ describe("withScopeEnds", () => {
   })
 })
 
-describe("computePinnedFromEntries — VS Code sticky (ancestor chain)", () => {
+describe("computePinnedFromEntries — structural ancestor chain only", () => {
   const tree = [
     { id: "context", top: 0, depth: 0 },
     { id: "prompt", top: 40, depth: 1 },
     { id: "tools", top: 200, depth: 1 },
     { id: "call:0", top: 400, depth: 0 },
     { id: "sent:0", top: 440, depth: 1 },
-    { id: "message:0:m:0", top: 480, depth: 2 },
     { id: "received:0", top: 800, depth: 1 },
     { id: "call:1", top: 1000, depth: 0 },
     { id: "sent:1", top: 1040, depth: 1 },
-    { id: "message:1:m:0", top: 1080, depth: 2 },
   ]
 
-  it("pins nothing at the top of the document (no duplicate headers)", () => {
+  it("pins nothing at the top of the document", () => {
     expect(computePinnedFromEntries(tree, 0)).toEqual([])
   })
 
   it("pins Context + Tools inside Tools (prompt unsticks)", () => {
-    const scrollTop = 280
-    expect(computePinnedFromEntries(tree, scrollTop)).toEqual([
-      "context",
-      "tools",
-    ])
+    expect(computePinnedFromEntries(tree, 280)).toEqual(["context", "tools"])
   })
 
-  it("pins Call → Sent → Message while reading a long message", () => {
-    const scrollTop = 1200
-    expect(computePinnedFromEntries(tree, scrollTop)).toEqual([
-      "call:1",
-      "sent:1",
-      "message:1:m:0",
-    ])
+  it("pins Call → Sent while reading long sent content", () => {
+    expect(computePinnedFromEntries(tree, 600)).toEqual(["call:0", "sent:0"])
   })
 
-  it("does not pin Call until its header has scrolled past the stack slot", () => {
-    // Call header still sits in the first slot — in-flow shows it.
+  it("does not pin Call until its header has scrolled past the slot", () => {
     expect(computePinnedFromEntries(tree, 1000)).toEqual([])
-    // Past Call header: Call pins.
     expect(computePinnedFromEntries(tree, 1000 + 1)).toEqual(["call:1"])
   })
 
   it("pins Call → Received while still inside that call", () => {
-    const scrollTop = 850
-    expect(computePinnedFromEntries(tree, scrollTop)).toEqual([
+    expect(computePinnedFromEntries(tree, 850)).toEqual([
       "call:0",
       "received:0",
     ])
@@ -79,19 +65,13 @@ describe("computePinnedFromEntries — VS Code sticky (ancestor chain)", () => {
     const spaced = [
       { id: "call:0", top: 0, depth: 0 },
       { id: "sent:0", top: 100, depth: 1 },
-      { id: "message:0:m:0", top: 200, depth: 2 },
+      { id: "received:0", top: 200, depth: 1 },
     ]
     const sentStick = 100 - H
     expect(computePinnedFromEntries(spaced, sentStick)).toEqual(["call:0"])
     expect(computePinnedFromEntries(spaced, sentStick + 1)).toEqual([
       "call:0",
       "sent:0",
-    ])
-    const msgStick = 200 - 2 * H
-    expect(computePinnedFromEntries(spaced, msgStick + 1)).toEqual([
-      "call:0",
-      "sent:0",
-      "message:0:m:0",
     ])
   })
 
@@ -102,32 +82,20 @@ describe("computePinnedFromEntries — VS Code sticky (ancestor chain)", () => {
       { id: "c", top: 20, depth: 2 },
       { id: "d", top: 30, depth: 3 },
       { id: "e", top: 40, depth: 4 },
-      { id: "f", top: 50, depth: 5 },
     ]
-    expect(computePinnedFromEntries(deep, 500, H, 3)).toEqual(["d", "e", "f"])
+    expect(computePinnedFromEntries(deep, 500, H, 3)).toEqual(["c", "d", "e"])
   })
 })
 
 describe("expandPathForScope", () => {
-  it("expands call + sent + message", () => {
-    expect(expandPathForScope("message:1:m:0")).toEqual({
-      callIndex: 1,
-      sent: true,
-      messageKey: "1:m:0",
-    })
+  it("expands call + sent", () => {
+    expect(expandPathForScope("sent:1")).toEqual({ callIndex: 1, sent: true })
   })
 
   it("expands context prompt", () => {
     expect(expandPathForScope("prompt")).toEqual({
       preamble: true,
       contextPrompt: true,
-    })
-  })
-
-  it("expands tool id for received branch", () => {
-    expect(expandPathForScope("tool:abc")).toEqual({
-      toolId: "abc",
-      received: true,
     })
   })
 })
