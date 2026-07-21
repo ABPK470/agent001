@@ -1414,7 +1414,7 @@ export function validateQueryDetailed(
       `Query blocked — references columns that do not exist in the live catalog:`,
       lines.join("\n") + more,
       ``,
-      `The catalog is the live sys.all_columns snapshot for this connection. If the column truly exists, the catalog is stale — call \`refresh_catalog\` and retry. Otherwise the column is hallucinated; use \`search_catalog\` to confirm names before writing SQL.`
+      `The catalog is the live sys.columns snapshot for this connection. If the column truly exists, the catalog is stale — call \`refresh_catalog\` and retry. Otherwise the column is hallucinated; use \`search_catalog\` to confirm names before writing SQL.`
     ].join("\n")
     const first = inventedColumns[0]
     return {

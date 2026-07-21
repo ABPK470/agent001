@@ -153,7 +153,30 @@ describe("validateQueryDetailed — schema binding", () => {
     expect(offenders.some((o) => o.column === "agg")).toBe(false)
   })
 
-  it("flags bare invented tokens in WHERE", () => {
+  it("does not scan nested subquery identifiers against outer FROM tables", () => {
+    const aliasMap = new Map([
+      ["rm", { alias: "rm", qualifiedTable: "ai.RevenueMart" }],
+      ["c", { alias: "c", qualifiedTable: "publish.Client" }],
+    ])
+    const offenders = detectBareInventedColumns(
+      [
+        "SELECT rm.pkClient FROM ai.RevenueMart rm",
+        "JOIN publish.Client c ON c.ClientKey = rm.ClientKey",
+        "WHERE EXISTS (",
+        "  SELECT 1 FROM dim.Officer o WHERE o.BankerName = c.ClientName",
+        ")",
+      ].join("\n"),
+      aliasMap,
+      (q) => {
+        if (q === "ai.RevenueMart") return { columns: [{ name: "pkClient" }, { name: "ClientKey" }] }
+        if (q === "publish.Client") return { columns: [{ name: "ClientKey" }, { name: "ClientName" }] }
+        return null
+      },
+    )
+    expect(offenders.some((o) => o.column === "BankerName")).toBe(false)
+  })
+
+  it("still flags bare invented tokens in top-level WHERE", () => {
     const cat = buildGraph([
       table("publish", "Revenue", ["pkClient", "RevenueZARMTD"]),
       table("dim", "Client", ["pkClient", "ClientName"])
@@ -168,5 +191,19 @@ describe("validateQueryDetailed — schema binding", () => {
       (q) => cat.getTable(q)
     )
     expect(offenders.some((o) => o.column === "Name")).toBe(true)
+  })
+
+  it("extracts CTE output names even when SELECT list contains a nested FROM", () => {
+    const cols = extractCteOutputColumns(`
+      SELECT
+        r.pkClient,
+        (SELECT TOP 1 x.v FROM #t x) AS NestedVal,
+        SUM(r.RevenueZARMTD) AS TotalRevenueMTD
+      FROM publish.Revenue r
+      GROUP BY r.pkClient
+    `)
+    expect(cols.has("totalrevenuemtd")).toBe(true)
+    expect(cols.has("nestedval")).toBe(true)
+    expect(cols.has("pkclient")).toBe(true)
   })
 })

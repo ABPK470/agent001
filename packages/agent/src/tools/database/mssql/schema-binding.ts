@@ -73,6 +73,31 @@ function stripTableHints(text: string): string {
   return text.replace(/\bWITH\s*\([^)]*\)/gi, (m) => " ".repeat(m.length))
 }
 
+/**
+ * Blank out `(...)` regions so nested subqueries / EXISTS / IN (SELECT …)
+ * do not contribute bare identifiers to the outer ON/WHERE invented-column
+ * scan. Preserves length so match indices stay valid against the original.
+ */
+export function blankNestedParens(text: string): string {
+  const out = text.split("")
+  let depth = 0
+  for (let i = 0; i < out.length; i++) {
+    const ch = out[i]!
+    if (ch === "(") {
+      depth++
+      out[i] = " "
+      continue
+    }
+    if (ch === ")") {
+      if (depth > 0) depth--
+      out[i] = " "
+      continue
+    }
+    if (depth > 0) out[i] = " "
+  }
+  return out.join("")
+}
+
 export interface CteDefinition {
   readonly name: string
   readonly body: string
@@ -124,17 +149,34 @@ export function outputNameFromSelectItem(item: string): string | null {
   return null
 }
 
+/** Top-level SELECT … FROM span (paren-aware) — nested FROM inside subqueries is ignored. */
+export function extractTopLevelSelectList(body: string): string | null {
+  const stripped = stripTableHints(stripForScan(body))
+  const selectRe = /\bSELECT\s+(?:DISTINCT\s+)?(?:TOP\s+(?:\(\s*\d+\s*\)|\d+)\s+(?:PERCENT\s+)?)?/i
+  const selectMatch = selectRe.exec(stripped)
+  if (!selectMatch) return null
+  const listStart = selectMatch.index + selectMatch[0].length
+  let depth = 0
+  for (let i = listStart; i < stripped.length; i++) {
+    const ch = stripped[i]!
+    if (ch === "(") depth++
+    else if (ch === ")") depth = Math.max(0, depth - 1)
+    else if (depth === 0 && /\s/.test(ch)) {
+      const tail = stripped.slice(i)
+      const fromAt = /^\s+FROM\b/i.exec(tail)
+      if (fromAt) return stripped.slice(listStart, i + fromAt.index).trim()
+    }
+  }
+  return null
+}
+
 /** Output column names exposed by a CTE/subquery SELECT body. */
 export function extractCteOutputColumns(body: string): ReadonlySet<string> {
-  const stripped = stripTableHints(stripForScan(body))
-  const m =
-    /\bSELECT\s+(?:DISTINCT\s+)?(?:TOP\s+(?:\(\s*\d+\s*\)|\d+)\s+(?:PERCENT\s+)?)?([\s\S]*?)\s+FROM\b/i.exec(
-      stripped
-    )
-  if (!m?.[1]) return new Set()
+  const selectList = extractTopLevelSelectList(body)
+  if (!selectList) return new Set()
 
   const cols = new Set<string>()
-  for (const item of splitSelectListItems(m[1])) {
+  for (const item of splitSelectListItems(selectList)) {
     const name = outputNameFromSelectItem(item)
     if (name) cols.add(name.toLowerCase())
   }
@@ -336,7 +378,7 @@ export function detectBareInventedColumns(
     return { table: t, cols: new Set((tbl?.columns ?? []).map((c) => c.name.toLowerCase())) }
   })
 
-  const stripped = stripTableHints(statement)
+  const stripped = blankNestedParens(stripTableHints(statement))
   const clauses: string[] = []
   for (const m of stripped.matchAll(
     /\bON\s+([\s\S]*?)(?=\b(?:JOIN|WHERE|GROUP\s+BY|ORDER\s+BY|HAVING|UNION)\b|$)/gi

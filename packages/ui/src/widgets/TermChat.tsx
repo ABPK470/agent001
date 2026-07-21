@@ -424,6 +424,19 @@ const TOOL_LABELS: Record<string, string> = {
   fetch_url: "fetch",
   delegate: "delegate",
   ask_user: "ask user",
+  // Sync tools — same human dialect as query database (no raw snake_case).
+  sync_preview: "preview sync",
+  sync_execute: "run sync",
+  sync_diff_scan: "scan sync diffs",
+  compare_catalogs: "compare catalogs",
+  list_sync_definitions: "list sync definitions",
+  resolve_sync_scope: "resolve sync scope",
+  list_environments: "list environments",
+  search_sync_entities: "search sync entities",
+}
+
+function toolDisplayLabel(tool: string): string {
+  return TOOL_LABELS[tool] ?? tool.replace(/_/g, " ")
 }
 
 const TOOL_PAST_TENSE: Record<string, string> = {
@@ -591,8 +604,9 @@ function ToolSyncProgressBody({ part }: { part: ResponseSyncProgressPart }) {
   // Real SSE summaries look like "Preview complete — plan abc12345: +3 ~1 -0".
   const resultLine = syncProgressResultLine(part.result, part.status)
 
+  // Same indent as expanded tool I/O — no second border-l (parent timeline owns the rail).
   return (
-    <div className="ml-[14px] mt-0.5 pl-3 border-l border-border-subtle space-y-1">
+    <div className="ml-[14px] mt-1 pl-3 space-y-1">
       <p className={["text-[15px] leading-5 font-mono", isRunning ? "activity-shimmer-tight text-text-muted" : "text-text-secondary"].join(" ")}>
         {part.headline}
       </p>
@@ -628,7 +642,7 @@ function ToolPill({
   isLiveRun?: boolean
 }) {
   const { preserveToggle } = useChatScroll()
-  const label = TOOL_LABELS[row.tool] ?? row.tool
+  const label = toolDisplayLabel(row.tool)
   const isRunning = row.status === "running" && isLiveRun
   const calmRunning = isRunning && row.tool === "ask_user"
   const [expanded, setExpanded] = useState(false)
@@ -638,15 +652,24 @@ function ToolPill({
   // the tool's output (details). Previously the expanded body showed
   // only the output — the input was hidden once the result arrived
   // because `details` was overloaded for both.
-  const previewText = compactToolPreview(row.summary || "")
+  const previewText = (() => {
+    if (expanded) return ""
+    if (syncProgress && !isRunning) {
+      return syncProgress.detail?.trim() || syncProgress.headline?.trim() || compactToolPreview(row.summary || "")
+    }
+    return compactToolPreview(row.summary || "")
+  })()
   const hasInput = Boolean(row.argsFormatted && row.argsFormatted.trim().length > 0)
   const hasOutput = Boolean(row.details && row.details.trim().length > 0)
-  const canExpand = hasInput || hasOutput
+  const canExpand = hasInput || hasOutput || Boolean(syncProgress)
   const extractedInput = row.argsFormatted ? extractToolCode(row.tool, row.argsFormatted) : null
   const displayInput = row.argsFormatted ? formatToolInputDisplay(row.tool, row.argsFormatted) : ""
   const extractedOutput = row.details ? extractToolCode(row.tool, row.details) : null
   const isError = row.status === "error"
   const buttonRef = useRef<HTMLButtonElement>(null)
+  // Sync progress detail only while live or when the user expands the row —
+  // never dump headline/SQL under a collapsed pill.
+  const showSyncProgress = Boolean(syncProgress) && (expanded || isRunning)
   return (
     <div className="relative py-0.5">
       {!isLast && <div className="pointer-events-none absolute left-[11px] top-[20px] -bottom-1 w-px bg-border-subtle" />}
@@ -686,7 +709,7 @@ function ToolPill({
           )}
         </div>
       </div>
-      {syncProgress && <ToolSyncProgressBody part={syncProgress} />}
+      {showSyncProgress && syncProgress ? <ToolSyncProgressBody part={syncProgress} /> : null}
       {expanded && (hasInput || hasOutput) && (
         <div className="ml-[14px] mt-1 pl-3 space-y-2">
           {hasInput && row.argsFormatted && (
