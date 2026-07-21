@@ -207,13 +207,15 @@ reinvented per widget — same dialect as `tool-call-presentation`
 
 **Three layers — one thought process:**
 
-1. **Catalog (declarative)** — `packages/shared-types/src/event-catalog.ts`.
+1. **Catalog (semantic only)** — `packages/shared-types/src/event-catalog.ts`.
    Every `TraceEntry.kind` and high-traffic `EventType` gets one descriptor:
-   family, label, severity, outline role (`scope` | `leaf` | `ignore`), nest key,
-   sticky eligibility, summary fn.
+   `family`, `label`, `severity`, `summary`, optional `instanceKey` (merge
+   identity for the same entity, e.g. `step:frontend_layer` — **not** parent/child).
+   No hierarchy, sticky, or scope-vs-leaf — those are view-local.
 2. **Projection (pure)** — `packages/ui/src/lib/events/`.
-   `EventAtom[]` → `buildOutline` / `buildFlatLog` driven by a **ViewSpec**
-   (nest rules, fold defaults). No React.
+   `EventAtom[]` → `buildOutline` / `buildFlatLog` driven by a **ViewSpec**:
+   nest rules, `roleByFamily` / `roleByType` (`scope` | `leaf` | `omit`),
+   `stickyFamilies` / `stickyTypes`, fold defaults. No React.
 3. **Shell (one UI)** — `packages/ui/src/components/outline/`.
    Renders any outline; sticky = **pin overlay** (Cursor/VS Code dialect via
    `lib/events/pin.ts`), never `position: sticky` on rounded card chrome.

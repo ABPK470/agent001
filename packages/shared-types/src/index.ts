@@ -1834,7 +1834,6 @@ export {
 } from "./event-catalog.js"
 export type {
   EventSeverity,
-  EventOutlineRole,
   EventFamily,
   EventPayload,
   EventDescriptor,

@@ -3,17 +3,19 @@ export type {
   EventAtomSource,
   OutlineNode,
   OutlineNodeKind,
+  ViewOutlineRole,
   ViewSpec,
   ViewSpecNestRule,
   FlatLogRow,
 } from "./types"
+export { resolveOutlineRole, isStickyInView } from "./types"
 export { atomFromTraceEntry, atomsFromTrace, atomFromSse } from "./normalize"
 export {
   buildOutline,
   TRACE_VIEW_SPEC,
   PIPELINES_TRACE_VIEW_SPEC,
 } from "./build-outline"
-export { buildFlatLog, flatRowFromAtom } from "./build-flat-log"
+export { buildFlatLog, flatRowFromAtom, FLAT_LOG_VIEW_SPEC } from "./build-flat-log"
 export {
   OUTLINE_STICKY_ROW_H,
   OUTLINE_STICKY_MAX,

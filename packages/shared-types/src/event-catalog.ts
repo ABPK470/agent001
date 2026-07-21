@@ -2,18 +2,16 @@
  * Event catalog — single source of truth for how wire events present.
  *
  * Every `TraceEntry.kind` and high-traffic `EventType` gets one descriptor.
- * Widgets must not switch on kind/type strings for labels or outline roles —
+ * Widgets must not switch on kind/type strings for labels —
  * look up the catalog (same dialect as tool-call-presentation).
+ * Hierarchy / sticky / scope-vs-leaf live on ViewSpec, not here.
  *
  * Add a row here when introducing a new BE event (after shared-enums).
  */
 
 export type EventSeverity = "info" | "warn" | "error"
 
-/** How the event participates in an outline tree. */
-export type EventOutlineRole = "scope" | "leaf" | "ignore"
-
-/** Structural family — ViewSpec nest rules key off these. */
+/** Structural family — ViewSpec nest / sticky / roles key off these. */
 export type EventFamily =
   | "context"
   | "plan"
@@ -36,20 +34,21 @@ export type EventFamily =
 /** Loose payload — catalog summaries must not assume a full TraceEntry cast. */
 export type EventPayload = Record<string, unknown>
 
+/**
+ * Semantic descriptor only — no hierarchy, sticky, or outline role.
+ * Those belong on ViewSpec (Trace vs Chat vs Timeline disagree).
+ */
 export type EventDescriptor = {
   /** TraceEntry.kind or EventType string. */
   id: string
   family: EventFamily
   label: string
   severity: EventSeverity
-  outline: EventOutlineRole
-  /** Eligible for VS Code–style pin overlay. */
-  sticky?: boolean
   /**
-   * Nest / merge key while this scope is open.
-   * Same key collapses consecutive scope updates (e.g. step:frontend_layer).
+   * Semantic instance id for merging consecutive updates of the same entity
+   * (e.g. step:frontend_layer). Not parent/child hierarchy.
    */
-  nestKey?: (payload: EventPayload) => string | null
+  instanceKey?: (payload: EventPayload) => string | null
   summary: (payload: EventPayload) => string
 }
 
@@ -82,7 +81,6 @@ export const TRACE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "context",
     label: "Goal",
     severity: "info",
-    outline: "leaf",
     summary: (p) => truncate(str(p.text, "Goal")),
   },
   "system-prompt": {
@@ -90,9 +88,7 @@ export const TRACE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "context",
     label: "Prompt",
     severity: "info",
-    outline: "scope",
-    sticky: true,
-    nestKey: () => "context:prompt",
+    instanceKey: () => "context:prompt",
     summary: (p) => {
       const t = str(p.text)
       return t ? `${t.length} chars` : "system prompt"
@@ -103,9 +99,7 @@ export const TRACE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "context",
     label: "Tools",
     severity: "info",
-    outline: "scope",
-    sticky: true,
-    nestKey: () => "context:tools",
+    instanceKey: () => "context:tools",
     summary: (p) => {
       const tools = Array.isArray(p.tools) ? p.tools : []
       return `${tools.length} tool${tools.length === 1 ? "" : "s"}`
@@ -116,7 +110,6 @@ export const TRACE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "context",
     label: "Tools filtered",
     severity: "info",
-    outline: "leaf",
     summary: (p) => str(p.reason, `kept ${num(p.kept) ?? "?"}`),
   },
   iteration: {
@@ -124,7 +117,6 @@ export const TRACE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "telemetry",
     label: "Iteration",
     severity: "info",
-    outline: "ignore",
     summary: (p) => `${num(p.current) ?? "?"}/${num(p.max) ?? "?"}`,
   },
   thinking: {
@@ -132,7 +124,6 @@ export const TRACE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "telemetry",
     label: "Thinking",
     severity: "info",
-    outline: "ignore",
     summary: () => "thinking",
   },
   "tool-call": {
@@ -140,7 +131,6 @@ export const TRACE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "work",
     label: "Tool",
     severity: "info",
-    outline: "leaf",
     summary: (p) =>
       str(p.tool, "tool") + (str(p.argsSummary) ? ` · ${truncate(str(p.argsSummary), 40)}` : ""),
   },
@@ -149,7 +139,6 @@ export const TRACE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "work",
     label: "Result",
     severity: "info",
-    outline: "leaf",
     summary: (p) => truncate(str(p.text, "done"), 48),
   },
   "tool-error": {
@@ -157,7 +146,6 @@ export const TRACE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "work",
     label: "Tool error",
     severity: "error",
-    outline: "leaf",
     summary: (p) => truncate(str(p.text, "failed"), 48),
   },
   answer: {
@@ -165,7 +153,6 @@ export const TRACE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "answer",
     label: "Answer",
     severity: "info",
-    outline: "leaf",
     summary: (p) => truncate(str(p.text, "answer"), 64),
   },
   error: {
@@ -173,7 +160,6 @@ export const TRACE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "error",
     label: "Error",
     severity: "error",
-    outline: "leaf",
     summary: (p) => truncate(str(p.text, "error"), 64),
   },
   usage: {
@@ -181,7 +167,6 @@ export const TRACE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "telemetry",
     label: "Usage",
     severity: "info",
-    outline: "ignore",
     summary: (p) => `${num(p.totalTokens) ?? 0} tokens`,
   },
   "llm-request": {
@@ -189,9 +174,7 @@ export const TRACE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "call",
     label: "Call",
     severity: "info",
-    outline: "scope",
-    sticky: true,
-    nestKey: (p) => `call:${num(p.iteration) ?? "?"}`,
+    instanceKey: (p) => `call:${num(p.iteration) ?? "?"}`,
     summary: (p) => `iter ${(num(p.iteration) ?? 0) + 1}`,
   },
   "llm-response": {
@@ -199,7 +182,6 @@ export const TRACE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "call",
     label: "Received",
     severity: "info",
-    outline: "leaf",
     summary: (p) => {
       const ms = num(p.durationMs)
       const tools = Array.isArray(p.toolCalls) ? p.toolCalls.length : 0
@@ -212,9 +194,7 @@ export const TRACE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "plan",
     label: "Plan",
     severity: "info",
-    outline: "scope",
-    sticky: true,
-    nestKey: () => "plan",
+    instanceKey: () => "plan",
     summary: () => "Preparing…",
   },
   "planner-decision": {
@@ -222,9 +202,7 @@ export const TRACE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "plan",
     label: "Plan",
     severity: "info",
-    outline: "scope",
-    sticky: true,
-    nestKey: (p) => (p.shouldPlan === false || p.route === "direct" ? "direct" : "plan"),
+    instanceKey: (p) => (p.shouldPlan === false || p.route === "direct" ? "direct" : "plan"),
     summary: (p) => str(p.reason, p.shouldPlan === false ? "direct" : "orchestrated"),
   },
   "planner-generating": {
@@ -232,9 +210,7 @@ export const TRACE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "plan",
     label: "Plan",
     severity: "info",
-    outline: "scope",
-    sticky: true,
-    nestKey: () => "plan",
+    instanceKey: () => "plan",
     summary: () => "Generating…",
   },
   "planner-plan-generated": {
@@ -242,9 +218,7 @@ export const TRACE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "plan",
     label: "Plan",
     severity: "info",
-    outline: "scope",
-    sticky: true,
-    nestKey: () => "plan",
+    instanceKey: () => "plan",
     summary: (p) => {
       const n = num(p.stepCount) ?? (Array.isArray(p.steps) ? p.steps.length : 0)
       return `${n} step${n === 1 ? "" : "s"}`
@@ -255,9 +229,7 @@ export const TRACE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "plan",
     label: "Plan",
     severity: "info",
-    outline: "scope",
-    sticky: true,
-    nestKey: () => "plan",
+    instanceKey: () => "plan",
     summary: () => "Runtime compiled",
   },
   "planner-generation-failed": {
@@ -265,8 +237,7 @@ export const TRACE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "plan",
     label: "Plan",
     severity: "error",
-    outline: "scope",
-    nestKey: () => "plan",
+    instanceKey: () => "plan",
     summary: () => "Generation failed",
   },
   "planner-validation-failed": {
@@ -274,8 +245,7 @@ export const TRACE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "plan",
     label: "Plan",
     severity: "error",
-    outline: "scope",
-    nestKey: () => "plan",
+    instanceKey: () => "plan",
     summary: () => "Validation failed",
   },
   "planner-validation-remediated": {
@@ -283,8 +253,7 @@ export const TRACE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "plan",
     label: "Plan",
     severity: "info",
-    outline: "scope",
-    nestKey: () => "plan",
+    instanceKey: () => "plan",
     summary: () => "Validation remediated",
   },
   "planner-validation-warnings": {
@@ -292,8 +261,7 @@ export const TRACE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "plan",
     label: "Plan",
     severity: "warn",
-    outline: "scope",
-    nestKey: () => "plan",
+    instanceKey: () => "plan",
     summary: (p) => `${num(p.warningCount) ?? 0} warnings`,
   },
   "planner-output-root-forced": {
@@ -301,8 +269,7 @@ export const TRACE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "plan",
     label: "Plan",
     severity: "info",
-    outline: "scope",
-    nestKey: () => "plan",
+    instanceKey: () => "plan",
     summary: (p) => truncate(str(p.outputRoot, "output root"), 40),
   },
   "planner-prompt-budget": {
@@ -310,7 +277,6 @@ export const TRACE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "telemetry",
     label: "Prompt budget",
     severity: "info",
-    outline: "ignore",
     summary: (p) => (p.constrained ? "constrained" : "ok"),
   },
   "planner-pipeline-start": {
@@ -318,9 +284,7 @@ export const TRACE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "pipeline",
     label: "Pipeline",
     severity: "info",
-    outline: "scope",
-    sticky: true,
-    nestKey: (p) => `pipeline:${num(p.attempt) ?? 1}`,
+    instanceKey: (p) => `pipeline:${num(p.attempt) ?? 1}`,
     summary: (p) => `attempt ${num(p.attempt) ?? 1}`,
   },
   "planner-pipeline-end": {
@@ -328,8 +292,7 @@ export const TRACE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "pipeline",
     label: "Pipeline",
     severity: "info",
-    outline: "scope",
-    nestKey: () => "pipeline",
+    instanceKey: () => "pipeline",
     summary: (p) => str(p.status, "done"),
   },
   "planner-budget-extended": {
@@ -337,8 +300,7 @@ export const TRACE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "pipeline",
     label: "Pipeline",
     severity: "info",
-    outline: "scope",
-    nestKey: () => "pipeline",
+    instanceKey: () => "pipeline",
     summary: (p) => `budget → ${num(p.effectiveBudget) ?? "?"}`,
   },
   "planner-step-start": {
@@ -346,9 +308,7 @@ export const TRACE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "step",
     label: "Subagent",
     severity: "info",
-    outline: "scope",
-    sticky: true,
-    nestKey: (p) => `step:${str(p.stepName, "step")}`,
+    instanceKey: (p) => `step:${str(p.stepName, "step")}`,
     summary: (p) => {
       const type = str(p.stepType)
       return type === "subagent_task" ? "running" : humanize(type || "running")
@@ -359,9 +319,7 @@ export const TRACE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "step",
     label: "Step",
     severity: "info",
-    outline: "scope",
-    sticky: true,
-    nestKey: (p) => `step:${str(p.stepName, "step")}`,
+    instanceKey: (p) => `step:${str(p.stepName, "step")}`,
     summary: (p) => `${str(p.phase)} · ${str(p.state)}`,
   },
   "planner-step-end": {
@@ -369,9 +327,7 @@ export const TRACE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "step",
     label: "Step",
     severity: "info",
-    outline: "scope",
-    sticky: true,
-    nestKey: (p) => `step:${str(p.stepName, "step")}`,
+    instanceKey: (p) => `step:${str(p.stepName, "step")}`,
     summary: (p) => {
       const status = str(p.status, "done")
       const ok = status === "pass" || status === "success"
@@ -383,9 +339,7 @@ export const TRACE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "step",
     label: "Subagent",
     severity: "info",
-    outline: "scope",
-    sticky: true,
-    nestKey: (p) => `step:${str(p.stepName, "step")}`,
+    instanceKey: (p) => `step:${str(p.stepName, "step")}`,
     summary: (p) => truncate(str(p.goal, "delegating")),
   },
   "planner-delegation-iteration": {
@@ -393,8 +347,7 @@ export const TRACE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "step",
     label: "Subagent",
     severity: "info",
-    outline: "scope",
-    nestKey: (p) => `step:${str(p.stepName, "step")}`,
+    instanceKey: (p) => `step:${str(p.stepName, "step")}`,
     summary: () => "running",
   },
   "planner-delegation-end": {
@@ -402,8 +355,7 @@ export const TRACE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "step",
     label: "Subagent",
     severity: "info",
-    outline: "scope",
-    nestKey: (p) => `step:${str(p.stepName, "step")}`,
+    instanceKey: (p) => `step:${str(p.stepName, "step")}`,
     summary: (p) => (str(p.status) === "done" ? "done" : truncate(str(p.error, "failed"))),
   },
   "planner-delegation-decision": {
@@ -411,7 +363,6 @@ export const TRACE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "delegation",
     label: "Delegation",
     severity: "info",
-    outline: "leaf",
     summary: (p) => str(p.reason, p.shouldDelegate ? "delegate" : "skip"),
   },
   "planner-verification": {
@@ -419,9 +370,7 @@ export const TRACE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "verify",
     label: "Verifying",
     severity: "info",
-    outline: "scope",
-    sticky: true,
-    nestKey: (p) => `verify:${num(p.verifierRound) ?? 1}`,
+    instanceKey: (p) => `verify:${num(p.verifierRound) ?? 1}`,
     summary: (p) => {
       const overall = str(p.overall, "?")
       const conf = num(p.confidence)
@@ -433,8 +382,7 @@ export const TRACE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "verify",
     label: "Verifying",
     severity: "warn",
-    outline: "scope",
-    nestKey: () => "verify",
+    instanceKey: () => "verify",
     summary: (p) => {
       const steps = Array.isArray(p.requestedSteps) ? p.requestedSteps.length : 0
       return `follow-up · ${steps} step${steps === 1 ? "" : "s"}`
@@ -445,7 +393,6 @@ export const TRACE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "verify",
     label: "Issues",
     severity: "warn",
-    outline: "leaf",
     summary: (p) => {
       const issues = Array.isArray(p.issues) ? p.issues.length : 0
       return `${issues} issue${issues === 1 ? "" : "s"}`
@@ -456,9 +403,7 @@ export const TRACE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "repair",
     label: "Repairing",
     severity: "warn",
-    outline: "scope",
-    sticky: true,
-    nestKey: (p) => `repair:${num(p.attempt) ?? 1}`,
+    instanceKey: (p) => `repair:${num(p.attempt) ?? 1}`,
     summary: (p) => {
       const tasks = Array.isArray(p.tasks) ? p.tasks.length : 0
       return `attempt ${num(p.attempt) ?? 1} · ${tasks} task${tasks === 1 ? "" : "s"}`
@@ -469,9 +414,7 @@ export const TRACE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "repair",
     label: "Repairing",
     severity: "warn",
-    outline: "scope",
-    sticky: true,
-    nestKey: (p) => `repair:${num(p.attempt) ?? 1}`,
+    instanceKey: (p) => `repair:${num(p.attempt) ?? 1}`,
     summary: (p) => str(p.reason, `retry ${num(p.attempt) ?? 1}`),
   },
   "planner-retry-skipped": {
@@ -479,7 +422,6 @@ export const TRACE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "repair",
     label: "Repairing",
     severity: "info",
-    outline: "leaf",
     summary: (p) => str(p.reason, "skipped"),
   },
   "planner-retry-skip": {
@@ -487,8 +429,7 @@ export const TRACE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "step",
     label: "Step",
     severity: "info",
-    outline: "scope",
-    nestKey: (p) => `step:${str(p.stepName, "step")}`,
+    instanceKey: (p) => `step:${str(p.stepName, "step")}`,
     summary: (p) => `skipped — ${str(p.reason)}`,
   },
   "planner-retry-abort": {
@@ -496,7 +437,6 @@ export const TRACE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "repair",
     label: "Repairing",
     severity: "error",
-    outline: "leaf",
     summary: (p) => str(p.reason, "aborted"),
   },
   "planner-escalation": {
@@ -504,8 +444,7 @@ export const TRACE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "repair",
     label: "Repairing",
     severity: "warn",
-    outline: "scope",
-    nestKey: (p) => `repair:${num(p.attempt) ?? 1}`,
+    instanceKey: (p) => `repair:${num(p.attempt) ?? 1}`,
     summary: (p) => `${str(p.action)} · ${str(p.reason)}`,
   },
   "planner-sql-quality": {
@@ -513,7 +452,6 @@ export const TRACE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "work",
     label: "SQL quality",
     severity: "info",
-    outline: "leaf",
     summary: (p) =>
       str(p.phase, "sql") + (str(p.validationCode) ? ` · ${str(p.validationCode)}` : ""),
   },
@@ -522,7 +460,6 @@ export const TRACE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "sync",
     label: "Sync",
     severity: "info",
-    outline: "leaf",
     summary: (p) => str(p.headline, str(p.detail, str(p.status, "sync"))),
   },
   "user-input-request": {
@@ -530,7 +467,6 @@ export const TRACE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "input",
     label: "Waiting on user",
     severity: "info",
-    outline: "leaf",
     summary: (p) => truncate(str(p.question, "input")),
   },
   "user-input-response": {
@@ -538,7 +474,6 @@ export const TRACE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "input",
     label: "User answered",
     severity: "info",
-    outline: "leaf",
     summary: (p) => truncate(str(p.text, "answered")),
   },
   "delegation-start": {
@@ -546,7 +481,6 @@ export const TRACE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "delegation",
     label: "Delegation",
     severity: "info",
-    outline: "leaf",
     summary: (p) => truncate(str(p.goal, "delegating")),
   },
   "delegation-iteration": {
@@ -554,7 +488,6 @@ export const TRACE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "delegation",
     label: "Delegation",
     severity: "info",
-    outline: "ignore",
     summary: (p) => `${num(p.iteration) ?? "?"}/${num(p.maxIterations) ?? "?"}`,
   },
   "delegation-end": {
@@ -562,7 +495,6 @@ export const TRACE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "delegation",
     label: "Delegation",
     severity: "info",
-    outline: "leaf",
     summary: (p) => str(p.status, "done"),
   },
   "delegation-parallel-start": {
@@ -570,7 +502,6 @@ export const TRACE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "delegation",
     label: "Parallel",
     severity: "info",
-    outline: "leaf",
     summary: (p) => `${num(p.taskCount) ?? 0} tasks`,
   },
   "delegation-parallel-end": {
@@ -578,7 +509,6 @@ export const TRACE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "delegation",
     label: "Parallel",
     severity: "info",
-    outline: "leaf",
     summary: (p) => `${num(p.fulfilled) ?? 0}/${num(p.taskCount) ?? 0} done`,
   },
   nudge: {
@@ -586,7 +516,6 @@ export const TRACE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "telemetry",
     label: "Nudge",
     severity: "info",
-    outline: "leaf",
     summary: (p) => truncate(str(p.message, str(p.tag, "nudge"))),
   },
   workspace_diff: {
@@ -594,7 +523,6 @@ export const TRACE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "telemetry",
     label: "Workspace",
     severity: "info",
-    outline: "ignore",
     summary: () => "diff",
   },
   workspace_diff_applied: {
@@ -602,7 +530,6 @@ export const TRACE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "telemetry",
     label: "Workspace",
     severity: "info",
-    outline: "ignore",
     summary: () => "applied",
   },
   direct_loop_fallback: {
@@ -610,7 +537,6 @@ export const TRACE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "misc",
     label: "Fallback",
     severity: "info",
-    outline: "ignore",
     summary: (p) => str(p.reason, str(p.source)),
   },
 }
@@ -625,7 +551,6 @@ export const SSE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "run",
     label: "Run queued",
     severity: "info",
-    outline: "leaf",
     summary: () => "queued",
   },
   "run.started": {
@@ -633,7 +558,6 @@ export const SSE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "run",
     label: "Run started",
     severity: "info",
-    outline: "leaf",
     summary: () => "started",
   },
   "run.completed": {
@@ -641,7 +565,6 @@ export const SSE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "run",
     label: "Run completed",
     severity: "info",
-    outline: "leaf",
     summary: () => "completed",
   },
   "run.failed": {
@@ -649,7 +572,6 @@ export const SSE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "run",
     label: "Run failed",
     severity: "error",
-    outline: "leaf",
     summary: (p) => truncate(str(p.error, str(p.message, "failed"))),
   },
   "run.cancelled": {
@@ -657,7 +579,6 @@ export const SSE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "run",
     label: "Run cancelled",
     severity: "warn",
-    outline: "leaf",
     summary: () => "cancelled",
   },
   "step.started": {
@@ -665,7 +586,6 @@ export const SSE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "tool",
     label: "Step started",
     severity: "info",
-    outline: "leaf",
     summary: (p) => str(p.tool, str(p.name, "step")),
   },
   "step.completed": {
@@ -673,7 +593,6 @@ export const SSE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "tool",
     label: "Step completed",
     severity: "info",
-    outline: "leaf",
     summary: (p) => str(p.tool, str(p.name, "done")),
   },
   "step.failed": {
@@ -681,7 +600,6 @@ export const SSE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "tool",
     label: "Step failed",
     severity: "error",
-    outline: "leaf",
     summary: (p) => truncate(str(p.error, str(p.tool, "failed"))),
   },
   "tool.invoked": {
@@ -689,7 +607,6 @@ export const SSE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "tool",
     label: "Tool",
     severity: "info",
-    outline: "leaf",
     summary: (p) => str(p.tool, str(p.name, "invoked")),
   },
   "tool.completed": {
@@ -697,7 +614,6 @@ export const SSE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "tool",
     label: "Tool done",
     severity: "info",
-    outline: "leaf",
     summary: (p) => str(p.tool, "completed"),
   },
   "tool.failed": {
@@ -705,7 +621,6 @@ export const SSE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "tool",
     label: "Tool failed",
     severity: "error",
-    outline: "leaf",
     summary: (p) => truncate(str(p.error, str(p.tool, "failed"))),
   },
   "debug.trace": {
@@ -713,7 +628,6 @@ export const SSE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "telemetry",
     label: "Trace",
     severity: "info",
-    outline: "leaf",
     summary: (p) => {
       const entry = p.entry
       if (entry && typeof entry === "object" && entry !== null && "kind" in entry) {
@@ -730,7 +644,6 @@ export const SSE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "input",
     label: "Approval required",
     severity: "warn",
-    outline: "leaf",
     summary: (p) => str(p.tool, "approval"),
   },
   "user_input.required": {
@@ -738,7 +651,6 @@ export const SSE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "input",
     label: "Input required",
     severity: "info",
-    outline: "leaf",
     summary: (p) => truncate(str(p.question, "input")),
   },
   "sync.preview.completed": {
@@ -746,7 +658,6 @@ export const SSE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "sync",
     label: "Preview complete",
     severity: "info",
-    outline: "leaf",
     summary: () => "preview complete",
   },
   "sync.preview.table.start": {
@@ -754,7 +665,6 @@ export const SSE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "sync",
     label: "Table scan",
     severity: "info",
-    outline: "leaf",
     summary: (p) => str(p.table, str(p.name, "table")),
   },
   "answer.chunk": {
@@ -762,7 +672,6 @@ export const SSE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "answer",
     label: "Answer",
     severity: "info",
-    outline: "ignore",
     summary: () => "chunk",
   },
   "delegation.started": {
@@ -770,7 +679,6 @@ export const SSE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "delegation",
     label: "Delegation started",
     severity: "info",
-    outline: "leaf",
     summary: (p) => truncate(str(p.goal, "delegation")),
   },
   "delegation.ended": {
@@ -778,7 +686,6 @@ export const SSE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "delegation",
     label: "Delegation ended",
     severity: "info",
-    outline: "leaf",
     summary: (p) => str(p.status, "ended"),
   },
   "planner.step.started": {
@@ -786,7 +693,6 @@ export const SSE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "step",
     label: "Planner step",
     severity: "info",
-    outline: "leaf",
     summary: (p) => stepName(p),
   },
   "planner.step.completed": {
@@ -794,7 +700,6 @@ export const SSE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "step",
     label: "Planner step",
     severity: "info",
-    outline: "leaf",
     summary: (p) => `${stepName(p)} · done`,
   },
 }
@@ -804,14 +709,13 @@ const UNKNOWN: EventDescriptor = {
   family: "misc",
   label: "Event",
   severity: "info",
-  outline: "leaf",
   summary: (p) => {
     const kind = str(p.kind, str(p.type, "event"))
     return humanize(kind)
   },
 }
 
-/** Lookup TraceEntry.kind or EventType. Never throws — unknown → generic leaf. */
+/** Lookup TraceEntry.kind or EventType. Never throws — unknown → generic descriptor. */
 export function lookupEventDescriptor(id: string): EventDescriptor {
   return (
     TRACE_EVENT_CATALOG[id] ??

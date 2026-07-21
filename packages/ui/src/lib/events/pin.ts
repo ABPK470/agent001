@@ -2,7 +2,7 @@
  * Cursor / VS Code sticky-scroll pin algorithm for outline shells.
  *
  * In-flow headers stay in document flow. A pin overlay clones the ancestor
- * chain of the focus line (`sticky: true` scopes only).
+ * chain of the focus line (ViewSpec stickyFamilies / stickyTypes).
  *
  * Stick rule: pin after the header has scrolled *past* its stack slot
  * (top < threshold) while focus is still inside [top, end).

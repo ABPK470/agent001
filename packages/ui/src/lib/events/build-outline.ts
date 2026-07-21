@@ -1,8 +1,8 @@
 /**
  * buildOutline — chronological EventAtom[] → OutlineNode[] via catalog + ViewSpec.
  *
- * Nest rules: while a parent scope (e.g. step) is open, child families
- * (call, work) attach under it instead of becoming spine peers.
+ * Catalog: semantic (family, label, summary, instanceKey).
+ * ViewSpec: hierarchy (nest), roles (scope|leaf|omit), sticky, terminals.
  */
 
 import {
@@ -10,7 +10,14 @@ import {
   type EventFamily,
   type EventPayload,
 } from "@mia/shared-types"
-import type { EventAtom, OutlineNode, ViewSpec, ViewSpecNestRule } from "./types"
+import {
+  isStickyInView,
+  resolveOutlineRole,
+  type EventAtom,
+  type OutlineNode,
+  type ViewSpec,
+  type ViewSpecNestRule,
+} from "./types"
 
 function humanize(name: string): string {
   return name.replace(/_/g, " ")
@@ -18,13 +25,6 @@ function humanize(name: string): string {
 
 function str(v: unknown, fallback = ""): string {
   return typeof v === "string" ? v : fallback
-}
-
-function allowedFamily(family: string, spec: ViewSpec): boolean {
-  if (spec.includeFamilies && spec.includeFamilies.length > 0) {
-    return spec.includeFamilies.includes(family)
-  }
-  return true
 }
 
 function childParents(
@@ -43,10 +43,7 @@ function scopeTitle(type: string, payload: EventPayload, family: EventFamily | s
     const name = str(payload.stepName)
     return name ? humanize(name) : undefined
   }
-  if (type === "llm-request") {
-    const iter = typeof payload.iteration === "number" ? payload.iteration : null
-    return iter != null ? undefined : undefined
-  }
+  void type
   return undefined
 }
 
@@ -64,17 +61,24 @@ function scopeLabel(type: string, payload: EventPayload, catalogLabel: string, f
   return catalogLabel
 }
 
+const DEFAULT_TERMINAL_TYPES = [
+  "planner-step-end",
+  "planner-pipeline-end",
+  "planner-delegation-end",
+]
+
 /**
  * Build an outline tree.
  * Direct (empty-detail) plan chips are omitted — same as Trace today.
  */
 export function buildOutline(atoms: EventAtom[], viewSpec: ViewSpec): OutlineNode[] {
   const roots: OutlineNode[] = []
-  /** Open scopes by nestKey (mutated in place; already on tree). */
+  /** Open scopes by instanceKey (mutated in place; already on tree). */
   const openByKey = new Map<string, OutlineNode>()
-  /** Stack of open nestKeys for parent lookup (innermost last). */
+  /** Stack of open instanceKeys for parent lookup (innermost last). */
   const stack: string[] = []
   let seq = 0
+  const terminalTypes = new Set(viewSpec.terminalTypes ?? DEFAULT_TERMINAL_TYPES)
 
   function closeKey(key: string) {
     openByKey.delete(key)
@@ -93,7 +97,7 @@ export function buildOutline(atoms: EventAtom[], viewSpec: ViewSpec): OutlineNod
     for (let i = stack.length - 1; i >= 0; i--) {
       const node = openByKey.get(stack[i]!)
       if (!node) continue
-      // Same-family leaf under open scope (e.g. llm-response under Call).
+      // Same-family leaf under open scope (e.g. detail under Call).
       if (node.family === childFamily) return node
       if (parents.has(String(node.family))) return node
     }
@@ -127,12 +131,6 @@ export function buildOutline(atoms: EventAtom[], viewSpec: ViewSpec): OutlineNod
   }
 
   for (const atom of atoms) {
-    if (viewSpec.excludeTypes?.includes(atom.type)) continue
-
-    const desc = lookupEventDescriptor(atom.type)
-    if (desc.outline === "ignore") continue
-    if (!allowedFamily(desc.family, viewSpec)) continue
-
     // debug.trace with embedded entry — prefer inner kind for outline
     let type = atom.type
     let payload = atom.payload
@@ -144,32 +142,30 @@ export function buildOutline(atoms: EventAtom[], viewSpec: ViewSpec): OutlineNod
         payload = inner
       }
     }
-    const d = lookupEventDescriptor(type)
-    if (d.outline === "ignore") continue
-    if (!allowedFamily(d.family, viewSpec)) continue
 
-    // Skip bare Direct routing chips
+    const d = lookupEventDescriptor(type)
+    const role = resolveOutlineRole(type, d.family, viewSpec)
+    if (role === "omit") continue
+
+    // Skip bare Direct routing chips (Trace dialect).
     if (
       type === "planner-decision" &&
       (payload.shouldPlan === false || payload.route === "direct") &&
-      d.outline === "scope"
+      role === "scope"
     ) {
       continue
     }
 
-    const nestKey = d.nestKey?.(payload) ?? null
+    const instanceKey = d.instanceKey?.(payload) ?? null
     const summary = d.summary(payload)
     const label = scopeLabel(type, payload, d.label, d.family)
     const title = scopeTitle(type, payload, d.family)
+    const sticky = isStickyInView(type, d.family, viewSpec)
+    const isTerminal = terminalTypes.has(type)
 
-    const isTerminal =
-      type === "planner-step-end" ||
-      type === "planner-pipeline-end" ||
-      type === "planner-delegation-end"
-
-    if (d.outline === "scope") {
-      if (nestKey && openByKey.has(nestKey)) {
-        const existing = openByKey.get(nestKey)!
+    if (role === "scope") {
+      if (instanceKey && openByKey.has(instanceKey)) {
+        const existing = openByKey.get(instanceKey)!
         existing.summary = summary
         // Keep Subagent lead once established (step-end would otherwise downgrade).
         if (!(existing.label === "Subagent" && label === "Step")) {
@@ -178,17 +174,16 @@ export function buildOutline(atoms: EventAtom[], viewSpec: ViewSpec): OutlineNod
         if (title) existing.title = title
         existing.atomIds.push(atom.id)
         existing.severity = d.severity
-        // Terminal statuses close after merge
         if (isTerminal) {
-          closeKey(nestKey)
+          closeKey(instanceKey)
         }
         continue
       }
 
       // Terminal after scope already closed (e.g. step-end after delegation-end)
       // — fold into the existing node; do not open a duplicate.
-      if (isTerminal && nestKey) {
-        const closed = findNodeByNestKey(roots, nestKey)
+      if (isTerminal && instanceKey) {
+        const closed = findNodeByNestKey(roots, instanceKey)
         if (closed) {
           closed.summary = summary
           if (!(closed.label === "Subagent" && label === "Step")) {
@@ -201,11 +196,9 @@ export function buildOutline(atoms: EventAtom[], viewSpec: ViewSpec): OutlineNod
         }
       }
 
-      // Opening a new family scope closes previous peers of same family
-      // unless nest key continues (handled above).
-      if (nestKey) {
+      if (instanceKey) {
         for (const [key, node] of [...openByKey.entries()]) {
-          if (node.family === d.family && key !== nestKey) closeKey(key)
+          if (node.family === d.family && key !== instanceKey) closeKey(key)
         }
       } else {
         closeFamily(d.family)
@@ -213,28 +206,27 @@ export function buildOutline(atoms: EventAtom[], viewSpec: ViewSpec): OutlineNod
 
       const parent = findOpenParent(d.family)
       const node: OutlineNode = {
-        id: `scope-${seq++}-${nestKey ?? type}`,
+        id: `scope-${seq++}-${instanceKey ?? type}`,
         kind: "scope",
         family: d.family,
         label,
         title,
         summary,
         depth: 0,
-        sticky: d.sticky,
+        sticky,
         severity: d.severity,
         children: [],
         atomIds: [atom.id],
-        nestKey: nestKey ?? undefined,
+        nestKey: instanceKey ?? undefined,
       }
       attach(node, parent)
-      if (nestKey) {
-        openByKey.set(nestKey, node)
-        stack.push(nestKey)
+      if (instanceKey) {
+        openByKey.set(instanceKey, node)
+        stack.push(instanceKey)
       }
 
-      // Terminal step/pipeline/verify statuses close the scope after merge
-      if (isTerminal) {
-        if (nestKey) closeKey(nestKey)
+      if (isTerminal && instanceKey) {
+        closeKey(instanceKey)
       }
       continue
     }
@@ -263,7 +255,35 @@ export function buildOutline(atoms: EventAtom[], viewSpec: ViewSpec): OutlineNod
 export const TRACE_VIEW_SPEC: ViewSpec = {
   id: "trace",
   // Context lives in preamble; llm-response is Call body, not a spine leaf.
-  excludeTypes: ["system-prompt", "tools-resolved", "llm-response"],
+  excludeTypes: ["system-prompt", "tools-resolved", "llm-response", "answer.chunk", "direct_loop_fallback"],
+  excludeFamilies: ["telemetry"],
+  roleByFamily: {
+    plan: "scope",
+    pipeline: "scope",
+    step: "scope",
+    call: "scope",
+    work: "leaf",
+    verify: "scope",
+    repair: "scope",
+    context: "scope",
+    input: "leaf",
+    delegation: "leaf",
+    answer: "leaf",
+    error: "leaf",
+    sync: "leaf",
+    tool: "leaf",
+    run: "leaf",
+    misc: "omit",
+  },
+  roleByType: {
+    goal: "leaf",
+    "tools-filtered": "leaf",
+    "planner-issue-timeline": "leaf",
+    "planner-retry-skipped": "leaf",
+    "planner-retry-abort": "leaf",
+    "planner-delegation-decision": "leaf",
+  },
+  stickyFamilies: ["plan", "pipeline", "step", "call", "verify", "repair", "context"],
   nest: [
     { parentFamily: "step", childFamilies: ["call", "work", "input", "delegation"] },
     { parentFamily: "plan", childFamilies: [] },
@@ -271,15 +291,37 @@ export const TRACE_VIEW_SPEC: ViewSpec = {
     { parentFamily: "verify", childFamilies: ["work"] },
     { parentFamily: "repair", childFamilies: ["work"] },
   ],
+  terminalTypes: [
+    "planner-step-end",
+    "planner-pipeline-end",
+    "planner-delegation-end",
+  ],
   foldDefault: "latest",
 }
 
 /** Pipelines compact outline for a run's debug.trace slice. */
 export const PIPELINES_TRACE_VIEW_SPEC: ViewSpec = {
   id: "pipelines-trace",
-  excludeTypes: ["system-prompt", "tools-resolved", "llm-response"],
+  excludeTypes: ["system-prompt", "tools-resolved", "llm-response", "answer.chunk"],
+  excludeFamilies: ["telemetry"],
+  roleByFamily: {
+    plan: "scope",
+    pipeline: "scope",
+    step: "scope",
+    call: "scope",
+    work: "leaf",
+    verify: "scope",
+    repair: "scope",
+    input: "leaf",
+  },
+  stickyFamilies: ["step", "call"],
   nest: [
     { parentFamily: "step", childFamilies: ["call", "work", "input"] },
+  ],
+  terminalTypes: [
+    "planner-step-end",
+    "planner-pipeline-end",
+    "planner-delegation-end",
   ],
   foldDefault: "collapsed",
 }
