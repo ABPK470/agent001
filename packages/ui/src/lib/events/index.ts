@@ -26,6 +26,7 @@ export {
   computePinnedFromEntries,
   computePinnedScopeIds,
   samePinnedIds,
+  syncPinnedInFlow,
 } from "./pin"
 export {
   buildTraceDag,

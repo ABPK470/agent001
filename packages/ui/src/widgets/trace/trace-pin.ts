@@ -80,6 +80,8 @@ export type ExpandPath = {
   received?: boolean
   messageKey?: string
   toolId?: string
+  phaseId?: string
+  workId?: string
 }
 
 export function expandPathForScope(scopeId: string): ExpandPath {
@@ -115,6 +117,9 @@ export function expandPathForScope(scopeId: string): ExpandPath {
   if (toolMatch) {
     return { toolId: toolMatch[1], received: true }
   }
+
+  if (scopeId.startsWith("phase-")) return { phaseId: scopeId }
+  if (scopeId.startsWith("work-")) return { workId: scopeId }
 
   return {}
 }

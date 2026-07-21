@@ -3,6 +3,9 @@
  *
  * Clones the ancestor chain of the focus line. Never uses position:sticky
  * on in-flow card headers (overflow/radius fight).
+ *
+ * Replace contract: while a scope is pinned, its in-flow header is hidden
+ * (visibility) so clone + original never double-paint.
  */
 
 import { useEffect, useRef, useState, type ReactNode } from "react"
@@ -10,12 +13,13 @@ import {
   OUTLINE_STICKY_ROW_H,
   computePinnedScopeIds,
   samePinnedIds,
+  syncPinnedInFlow,
 } from "../../lib/events/pin"
 
 export type StickyPinRow = {
   id: string
   depth: number
-  /** Rendered chrome — same dialect as in-flow header. */
+  /** Rendered chrome — text column aligned with in-flow labels (chevron slot reserved). */
   content: ReactNode
   onJump?: () => void
   onToggle?: () => void
@@ -44,6 +48,8 @@ export function StickyPinOverlay({
       const host = scrollRef.current
       if (!host) return
       const next = computePinnedScopeIds(host)
+      // Re-apply replace attrs every tick — React may remount in-flow rows.
+      syncPinnedInFlow(host, next, rowHeight)
       if (samePinnedIds(pinnedRef.current, next)) return
       pinnedRef.current = next
       setPinnedIds(next)
@@ -56,8 +62,15 @@ export function StickyPinOverlay({
     return () => {
       el.removeEventListener("scroll", refresh)
       ro.disconnect()
+      syncPinnedInFlow(el, [], rowHeight)
     }
-  }, [scrollRef])
+  }, [scrollRef, rowHeight])
+
+  useEffect(() => {
+    const host = scrollRef.current
+    if (!host) return
+    syncPinnedInFlow(host, pinnedIds, rowHeight)
+  }, [pinnedIds, rowHeight, scrollRef])
 
   const byId = new Map(rows.map((r) => [r.id, r]))
   const visible = pinnedIds.map((id) => byId.get(id)).filter(Boolean) as StickyPinRow[]

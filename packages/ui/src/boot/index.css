@@ -1682,8 +1682,7 @@ textarea.input {
   gap: 1rem;
   padding: 0.6rem 0.5rem 0.75rem;
   margin: 0;
-  /* Opaque seam so scrolling cards never ghost under the chrome */
-  background: var(--bg, var(--color-bg));
+  background: transparent;
   border-bottom: 1px solid var(--border-subtle, var(--color-border-subtle));
   position: relative;
   z-index: 8;
@@ -1803,7 +1802,7 @@ textarea.input {
   padding: 0.4rem 0.55rem;
   border-radius: 0.375rem;
   border: 1px solid var(--border, var(--color-border));
-  background: color-mix(in srgb, var(--text, var(--color-text)) 2%, transparent);
+  background: transparent;
 }
 
 .trace-search__icon {
@@ -1895,6 +1894,18 @@ textarea.input {
   box-shadow: 0 1px 0 color-mix(in srgb, var(--text) 6%, transparent);
 }
 
+/* Match Trace scroll horizontal padding so pin labels align with cards */
+.trace-dag .trace-pin-overlay {
+  left: 0.35rem;
+  right: 0.35rem;
+}
+
+/* Replace contract: in-flow header stays in layout but is invisible while pinned */
+[data-outline-pinned],
+[data-trace-pinned] {
+  visibility: hidden;
+}
+
 .outline-pin__row {
   position: relative;
   height: var(--outline-pin-row-h, 34px);
@@ -1916,8 +1927,43 @@ textarea.input {
   background: transparent;
   color: inherit;
   font: inherit;
+  font-size: 0.9375rem;
   text-align: left;
   cursor: pointer;
+  overflow: hidden;
+}
+
+.outline-pin__hit .trace-scope__lead,
+.outline-pin__hit .outline-scope__lead {
+  flex-shrink: 0;
+  font-weight: 650;
+}
+
+.outline-pin__hit .trace-scope__title,
+.outline-pin__hit .outline-scope__title {
+  font-weight: 500;
+  opacity: 0.9;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.outline-pin__hit .trace-scope__sum,
+.outline-pin__hit .outline-scope__sum {
+  opacity: 0.65;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.outline-pin__row[data-outline-depth="1"] .outline-pin__hit {
+  padding-left: 1.1rem;
+}
+
+.outline-pin__row[data-outline-depth="2"] .outline-pin__hit {
+  padding-left: 1.85rem;
 }
 
 .outline-scope {
@@ -2322,7 +2368,8 @@ textarea.input {
 
 .trace-msg__tool {
   flex-shrink: 0;
-  font-weight: 550;
+  font-size: 0.8125rem;
+  font-weight: 600;
   color: var(--text, var(--color-text));
 }
 
@@ -2707,7 +2754,7 @@ textarea.input {
 }
 
 .trace-ctx-item__name {
-  font-size: 0.9375rem;
+  font-size: 0.8125rem;
   font-weight: 600;
   color: var(--text, var(--color-text));
 }
@@ -2737,7 +2784,7 @@ textarea.input {
   align-items: center;
   gap: 0.45rem;
   min-width: 0;
-  font-size: 0.9375rem;
+  font-size: 0.8125rem;
 }
 
 .trace-json {
@@ -2750,13 +2797,21 @@ textarea.input {
 }
 
 /* JsonViewer / nested chrome inside Trace cards — keep body scale.
- * Do not target toolbar chrome (SegmentToggle uses text-sm). */
+ * Do not target toolbar chrome (SegmentToggle uses text-sm).
+ * Tool names stay at their own size (.trace-msg__tool / .trace-ctx-item__name). */
 .trace-dag .trace-scroll .font-mono.text-xs,
 .trace-dag .trace-scroll .text-xs.font-mono,
 .trace-dag .trace-scroll .text-xs,
 .trace-dag .trace-scroll .text-\[10px\] {
   font-size: 0.9375rem !important;
   line-height: 1.5;
+}
+
+.trace-dag .trace-scroll .trace-msg__tool,
+.trace-dag .trace-scroll .trace-ctx-item__name {
+  font-size: 0.8125rem !important;
+  font-weight: 600;
+  line-height: 1.4;
 }
 
 

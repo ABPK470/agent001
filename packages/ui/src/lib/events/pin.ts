@@ -130,3 +130,31 @@ export function samePinnedIds(a: string[], b: string[]): boolean {
   }
   return true
 }
+
+/**
+ * Replace contract: hide in-flow headers that are currently pinned so the
+ * overlay does not double-paint them, and reserve scroll-padding for the stack.
+ */
+export function syncPinnedInFlow(
+  host: HTMLElement,
+  pinnedIds: string[],
+  rowH: number = OUTLINE_STICKY_ROW_H,
+): void {
+  for (const el of host.querySelectorAll<HTMLElement>(
+    "[data-outline-pinned], [data-trace-pinned]",
+  )) {
+    el.removeAttribute("data-outline-pinned")
+    el.removeAttribute("data-trace-pinned")
+  }
+  for (const id of pinnedIds) {
+    const escaped = CSS.escape(id)
+    const el = host.querySelector<HTMLElement>(
+      `[data-outline-scope="${escaped}"], [data-trace-scope="${escaped}"]`,
+    )
+    if (!el) continue
+    if (el.hasAttribute("data-outline-scope")) el.setAttribute("data-outline-pinned", "")
+    if (el.hasAttribute("data-trace-scope")) el.setAttribute("data-trace-pinned", "")
+  }
+  host.style.scrollPaddingTop =
+    pinnedIds.length > 0 ? `${pinnedIds.length * rowH}px` : ""
+}

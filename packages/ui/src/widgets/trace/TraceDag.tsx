@@ -1,14 +1,15 @@
 /**
  * Trace outline shell — toolbar + chronological cards.
  *
- * Document flow only. Sticky pin overlay was removed: absolute clones
- * overlapped in-flow headers and fought card chrome. Nesting is structural:
- * Subagent/step phases own Call + Work children.
+ * Sticky = VS Code pin overlay (lib/events/pin): clones ancestor chain,
+ * hides in-flow headers while pinned (replace, don't double-paint).
+ * Nesting is structural: Subagent/step phases own Call + Work children.
  * Structure from buildOutline + TRACE_VIEW_SPEC; leaf bodies stay private.
  */
 
 import { Search, X } from "lucide-react"
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
+import { StickyPinOverlay, type StickyPinRow } from "../../components/outline"
 import { fmtTokens, formatMs } from "../../lib/util"
 import { SegmentToggle } from "../entity-registry/SegmentToggle"
 import {
@@ -21,6 +22,11 @@ import { CallOutline } from "./TraceCall"
 import { PreambleOutline } from "./TraceContext"
 import { IdChip } from "./TraceCopy"
 import { PhaseOutline } from "./TracePhase"
+import {
+  TRACE_STICKY_ROW_H,
+  expandPathForScope,
+  layoutOffsetInScroll,
+} from "./trace-pin"
 import { WorkOutline } from "./TraceWork"
 
 export function TraceDag({
@@ -239,6 +245,43 @@ export function TraceDag({
     setOpenState({ ...emptyOpen(), foldMode: "collapsed" })
   }
 
+  function onPinJump(scopeId: string) {
+    const path = expandPathForScope(scopeId)
+    setOpenState((prev) => {
+      const next: OpenState = { ...prev }
+      if (path.preamble) next.preamble = true
+      if (path.contextPrompt) next.contextPrompt = true
+      if (path.contextTools) next.contextTools = true
+      if (path.callIndex != null) {
+        next.calls = new Set(prev.calls).add(path.callIndex)
+        if (path.sent) next.sent = new Set(prev.sent).add(path.callIndex)
+        if (path.received) next.received = new Set(prev.received).add(path.callIndex)
+      }
+      if (path.phaseId) next.phases = new Set(prev.phases).add(path.phaseId)
+      if (path.workId) next.work = new Set(prev.work).add(path.workId)
+      if (path.messageKey) next.messages = new Set(prev.messages).add(path.messageKey)
+      if (path.toolId) next.tools = new Set(prev.tools).add(path.toolId)
+      return next
+    })
+    requestAnimationFrame(() => {
+      const host = scrollRef.current
+      if (!host) return
+      const el = host.querySelector<HTMLElement>(
+        `[data-trace-scope="${CSS.escape(scopeId)}"]`,
+      )
+      if (!el) return
+      const top = layoutOffsetInScroll(host, el)
+      host.scrollTop = Math.max(0, top - 2)
+    })
+  }
+
+  const pinRows = useMemo(
+    () => buildTracePinRows(dag, onPinJump),
+    // dag identity drives chrome; jump closes over latest scrollRef/setState
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [dag],
+  )
+
   function onSearchChange(value: string) {
     setSearch(value)
   }
@@ -329,6 +372,14 @@ export function TraceDag({
       </div>
 
       <div ref={scrollRef} className="trace-scroll min-h-0 flex-1" data-trace-scroll-host>
+        {runId && dag.hasData ? (
+          <StickyPinOverlay
+            scrollRef={scrollRef}
+            rowHeight={TRACE_STICKY_ROW_H}
+            rows={pinRows}
+            className="trace-pin-overlay"
+          />
+        ) : null}
         {emptySlot}
 
         {runId &&
@@ -441,5 +492,139 @@ export function TraceDag({
       </div>
     </div>
   )
+}
+
+/** Pin chrome — chevron slot reserved so labels align with in-flow text. */
+function PinChrome({
+  leading,
+  title,
+  summary,
+}: {
+  leading: string
+  title?: string
+  summary?: string
+}) {
+  return (
+    <>
+      <span className="trace-scope__chevslot" aria-hidden />
+      <span className="trace-scope__lead">{leading}</span>
+      {title ? <span className="trace-scope__title">{title}</span> : null}
+      {summary ? <span className="trace-scope__sum">{summary}</span> : null}
+    </>
+  )
+}
+
+function buildTracePinRows(
+  dag: TraceDag,
+  onJump: (scopeId: string) => void,
+): StickyPinRow[] {
+  const rows: StickyPinRow[] = [
+    {
+      id: "context",
+      depth: 0,
+      content: <PinChrome leading="Context" />,
+      onJump: () => onJump("context"),
+    },
+    {
+      id: "prompt",
+      depth: 1,
+      content: <PinChrome leading="Prompt" />,
+      onJump: () => onJump("prompt"),
+    },
+    {
+      id: "tools",
+      depth: 1,
+      content: <PinChrome leading="Tools" />,
+      onJump: () => onJump("tools"),
+    },
+  ]
+  for (const entry of dag.spine) {
+    if (entry.kind === "phase") {
+      const phaseId = entry.phase.id
+      rows.push({
+        id: phaseId,
+        depth: 0,
+        content: (
+          <PinChrome
+            leading={entry.phase.leading ?? entry.phase.title}
+            title={entry.phase.leading ? entry.phase.title : undefined}
+            summary={entry.phase.summary}
+          />
+        ),
+        onJump: () => onJump(phaseId),
+      })
+      for (const child of entry.phase.children ?? []) {
+        if (child.kind === "call") {
+          const call = dag.calls[child.callIndex]
+          if (call) pushCallPinRows(rows, call, 1, onJump)
+        } else {
+          const workId = child.work.id
+          rows.push({
+            id: workId,
+            depth: 1,
+            content: (
+              <PinChrome
+                leading="Work"
+                title={child.work.title}
+                summary={child.work.summary}
+              />
+            ),
+            onJump: () => onJump(workId),
+          })
+        }
+      }
+      continue
+    }
+    if (entry.kind === "work") {
+      const workId = entry.work.id
+      rows.push({
+        id: workId,
+        depth: 0,
+        content: (
+          <PinChrome
+            leading="Work"
+            title={entry.work.title}
+            summary={entry.work.summary}
+          />
+        ),
+        onJump: () => onJump(workId),
+      })
+      continue
+    }
+    const call = dag.calls[entry.callIndex]
+    if (call) pushCallPinRows(rows, call, 0, onJump)
+  }
+  return rows
+}
+
+function pushCallPinRows(
+  rows: StickyPinRow[],
+  call: { index: number; headline: string },
+  depth: number,
+  onJump: (scopeId: string) => void,
+) {
+  const callId = `call:${call.index}`
+  const sentId = `sent:${call.index}`
+  const recvId = `received:${call.index}`
+  rows.push({
+    id: callId,
+    depth,
+    content: (
+      <PinChrome leading={`Call ${call.index + 1}`} summary={call.headline} />
+    ),
+    onJump: () => onJump(callId),
+  })
+  rows.push({
+    id: sentId,
+    depth: depth + 1,
+    content: <PinChrome leading="Sent" />,
+    onJump: () => onJump(sentId),
+  })
+  rows.push({
+    id: recvId,
+    depth: depth + 1,
+    content: <PinChrome leading="Received" />,
+    onJump: () => onJump(recvId),
+  })
 }
 
