@@ -1,16 +1,15 @@
 /**
  * Trace outline shell — toolbar + chronological cards.
  *
- * Sticky = VS Code pin overlay (lib/events/pin): clones ancestor chain,
- * hides in-flow headers while pinned (replace, don't double-paint).
- * Nesting is structural: Subagent/step phases own Call + Work children.
- * Structure from buildOutline + TRACE_VIEW_SPEC; leaf bodies stay private.
+ * Sticky scroll = VS Code dialect: height-0 sticky pin stack clones the
+ * ancestor chain (Context/Phase → Call → Sent|Received, …). Leaf message/tool
+ * rows never pin. Click label to jump; chevron to fold.
  */
 
 import { Search, X } from "lucide-react"
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
-import { StickyPinOverlay, type StickyPinRow } from "../../components/outline"
 import { fmtTokens, formatMs } from "../../lib/util"
+import { parkScrollOnScope, offsetInScrollHost } from "../../lib/chatScroll"
 import { SegmentToggle } from "../entity-registry/SegmentToggle"
 import {
   searchCall,
@@ -18,15 +17,20 @@ import {
   type TraceDag,
 } from "./build-trace-dag"
 import { emptyOpen, seedLatest, type FoldMode, type OpenState } from "./open-state"
+import { callReceivedSummary, callSentSummary, formatCharCount } from "./trace-format"
+import {
+  TRACE_STICKY_ROW_H,
+  callIndexForTool,
+  computePinnedScopeIds,
+  expandPathForScope,
+  layoutOffsetInScroll,
+  samePinnedIds,
+} from "./trace-pin"
 import { CallOutline } from "./TraceCall"
 import { PreambleOutline } from "./TraceContext"
 import { IdChip } from "./TraceCopy"
 import { PhaseOutline } from "./TracePhase"
-import {
-  TRACE_STICKY_ROW_H,
-  expandPathForScope,
-  layoutOffsetInScroll,
-} from "./trace-pin"
+import { PinOverlay, type PinRow } from "./TraceScope"
 import { WorkOutline } from "./TraceWork"
 
 export function TraceDag({
@@ -42,12 +46,25 @@ export function TraceDag({
 }) {
   const [search, setSearch] = useState("")
   const [openState, setOpenState] = useState<OpenState>(() => emptyOpen())
+  const [pinnedIds, setPinnedIds] = useState<string[]>([])
   const scrollRef = useRef<HTMLDivElement>(null)
   const seededRef = useRef(false)
   const searchSeedRef = useRef("")
+  const suppressFollowRef = useRef(false)
 
   const query = search.trim()
   const { stats } = dag
+
+  function refreshPinStack() {
+    const el = scrollRef.current
+    if (!el) return
+    const ids = computePinnedScopeIds(el)
+    el.style.setProperty(
+      "--trace-pin-stack-h",
+      `${ids.length * TRACE_STICKY_ROW_H}px`,
+    )
+    setPinnedIds((prev) => (samePinnedIds(prev, ids) ? prev : ids))
+  }
 
   const callHits = useMemo(() => {
     if (!query) return null
@@ -101,6 +118,7 @@ export function TraceDag({
     seededRef.current = false
     searchSeedRef.current = ""
     setOpenState(emptyOpen())
+    setPinnedIds([])
   }, [runId])
 
   useEffect(() => {
@@ -132,6 +150,38 @@ export function TraceDag({
   useEffect(() => {
     const el = scrollRef.current
     if (!el) return
+    function onScroll() {
+      refreshPinStack()
+    }
+    el.addEventListener("scroll", onScroll, { passive: true })
+    const ro = new ResizeObserver(() => {
+      refreshPinStack()
+    })
+    ro.observe(el)
+    const raf = requestAnimationFrame(() => refreshPinStack())
+    return () => {
+      el.removeEventListener("scroll", onScroll)
+      ro.disconnect()
+      cancelAnimationFrame(raf)
+    }
+  }, [
+    dag.calls.length,
+    dag.spine.length,
+    openState.calls,
+    openState.sent,
+    openState.received,
+    openState.messages,
+    openState.tools,
+    openState.preamble,
+    openState.contextPrompt,
+    openState.contextTools,
+    openState.phases,
+    openState.work,
+  ])
+
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el || suppressFollowRef.current) return
     const distance = el.scrollHeight - el.scrollTop - el.clientHeight
     if (distance < 80) el.scrollTop = el.scrollHeight
   }, [dag.calls.length, dag.spine.length])
@@ -245,24 +295,314 @@ export function TraceDag({
     setOpenState({ ...emptyOpen(), foldMode: "collapsed" })
   }
 
-  function onPinJump(scopeId: string) {
+  const contextSummary = useMemo(() => {
+    const bits: string[] = []
+    if (dag.preamble.systemPrompt) bits.push("prompt")
+    if (dag.preamble.tools.length > 0) {
+      bits.push(`${dag.preamble.tools.length} tools`)
+    }
+    return bits.join(" · ") || "empty"
+  }, [dag.preamble])
+
+  const pinRows = useMemo((): PinRow[] => {
+    const rows: PinRow[] = []
+    for (const id of pinnedIds) {
+      if (id === "context") {
+        rows.push({
+          id,
+          kind: "context",
+          depth: 0,
+          leading: "Context",
+          title: "",
+          summary: contextSummary,
+          soft: true,
+          open: openState.preamble,
+        })
+        continue
+      }
+      if (id === "prompt") {
+        const prompt = dag.preamble.systemPrompt ?? ""
+        rows.push({
+          id,
+          kind: "prompt",
+          depth: 1,
+          leading: "Prompt",
+          title: "",
+          summary: prompt ? `${formatCharCount(prompt.length)} chars` : "",
+          soft: true,
+          open: openState.contextPrompt,
+        })
+        continue
+      }
+      if (id === "tools") {
+        rows.push({
+          id,
+          kind: "tools",
+          depth: 1,
+          leading: "Tools",
+          title: "",
+          summary: String(dag.preamble.tools.length),
+          soft: true,
+          open: openState.contextTools,
+        })
+        continue
+      }
+      const callMatch = /^call:(\d+)$/.exec(id)
+      if (callMatch) {
+        const index = Number(callMatch[1])
+        const call = dag.calls[index]
+        if (!call) continue
+        const nested = dag.spine.some(
+          (e) =>
+            e.kind === "phase" &&
+            e.phase.children?.some(
+              (c) => c.kind === "call" && c.callIndex === index,
+            ),
+        )
+        const usage = call.usage
+        rows.push({
+          id,
+          kind: "call",
+          depth: nested ? 1 : 0,
+          leading: `Call ${index + 1}`,
+          title: call.headline,
+          summary: `iter ${call.iteration + 1}`,
+          soft: false,
+          open: openState.calls.has(index),
+          trailing: (
+            <>
+              {usage && (
+                <span className="tabular-nums">
+                  {fmtTokens(usage.promptTokens)}/{fmtTokens(usage.completionTokens)}
+                </span>
+              )}
+              {call.durationMs != null && (
+                <span className="tabular-nums">{formatMs(call.durationMs)}</span>
+              )}
+            </>
+          ),
+        })
+        continue
+      }
+      const sentMatch = /^sent:(\d+)$/.exec(id)
+      if (sentMatch) {
+        const index = Number(sentMatch[1])
+        const call = dag.calls[index]
+        if (!call) continue
+        const nested = dag.spine.some(
+          (e) =>
+            e.kind === "phase" &&
+            e.phase.children?.some(
+              (c) => c.kind === "call" && c.callIndex === index,
+            ),
+        )
+        rows.push({
+          id,
+          kind: "sent",
+          depth: nested ? 2 : 1,
+          leading: "Sent",
+          title: "",
+          summary: callSentSummary(call),
+          soft: true,
+          open: openState.sent.has(index),
+        })
+        continue
+      }
+      const recvMatch = /^received:(\d+)$/.exec(id)
+      if (recvMatch) {
+        const index = Number(recvMatch[1])
+        const call = dag.calls[index]
+        if (!call) continue
+        const nested = dag.spine.some(
+          (e) =>
+            e.kind === "phase" &&
+            e.phase.children?.some(
+              (c) => c.kind === "call" && c.callIndex === index,
+            ),
+        )
+        rows.push({
+          id,
+          kind: "received",
+          depth: nested ? 2 : 1,
+          leading: "Received",
+          title: "",
+          summary: callReceivedSummary(call),
+          soft: true,
+          open: openState.received.has(index),
+        })
+        continue
+      }
+      const phaseEntry = dag.spine.find(
+        (e) => e.kind === "phase" && e.phase.id === id,
+      )
+      if (phaseEntry && phaseEntry.kind === "phase") {
+        const phase = phaseEntry.phase
+        rows.push({
+          id,
+          kind: "phase",
+          depth: 0,
+          leading: phase.leading ?? phase.title,
+          title: phase.leading ? phase.title : "",
+          summary: phase.summary,
+          soft: false,
+          open: openState.phases.has(id),
+        })
+        continue
+      }
+      // Resolve work from spine or nested phase children
+      let workNode: {
+        id: string
+        title: string
+        summary: string
+        nested: boolean
+      } | null = null
+      for (const entry of dag.spine) {
+        if (entry.kind === "work" && entry.work.id === id) {
+          workNode = {
+            id: entry.work.id,
+            title: entry.work.title,
+            summary: entry.work.summary,
+            nested: false,
+          }
+          break
+        }
+        if (entry.kind === "phase") {
+          for (const child of entry.phase.children ?? []) {
+            if (child.kind === "work" && child.work.id === id) {
+              workNode = {
+                id: child.work.id,
+                title: child.work.title,
+                summary: child.work.summary,
+                nested: true,
+              }
+              break
+            }
+          }
+          if (workNode) break
+        }
+      }
+      if (workNode) {
+        rows.push({
+          id,
+          kind: "work",
+          depth: workNode.nested ? 1 : 0,
+          leading: "Work",
+          title: workNode.title !== "Work" ? workNode.title : "",
+          summary: workNode.summary,
+          soft: false,
+          open: openState.work.has(id),
+        })
+      }
+    }
+    return rows
+  }, [pinnedIds, dag, openState, contextSummary])
+
+  function isScopeOpen(scopeId: string): boolean {
+    if (scopeId === "context") return openState.preamble
+    if (scopeId === "prompt") return openState.contextPrompt
+    if (scopeId === "tools") return openState.contextTools
+    const callMatch = /^call:(\d+)$/.exec(scopeId)
+    if (callMatch) return openState.calls.has(Number(callMatch[1]))
+    const sentMatch = /^sent:(\d+)$/.exec(scopeId)
+    if (sentMatch) return openState.sent.has(Number(sentMatch[1]))
+    const recvMatch = /^received:(\d+)$/.exec(scopeId)
+    if (recvMatch) return openState.received.has(Number(recvMatch[1]))
+    if (scopeId.startsWith("phase-")) return openState.phases.has(scopeId)
+    if (scopeId.startsWith("work-")) return openState.work.has(scopeId)
+    return false
+  }
+
+  function onTogglePinnedScope(scopeId: string) {
+    const host = scrollRef.current
+    const scopeEl = host?.querySelector<HTMLElement>(
+      `[data-trace-scope="${CSS.escape(scopeId)}"]`,
+    )
+    const wasOpen = isScopeOpen(scopeId)
+    const scrolledIntoBody = Boolean(
+      host &&
+        scopeEl &&
+        wasOpen &&
+        host.scrollTop > offsetInScrollHost(host, scopeEl) + 1,
+    )
+
+    if (scopeId === "context") onTogglePreamble()
+    else if (scopeId === "prompt") onToggleContextPrompt()
+    else if (scopeId === "tools") onToggleContextTools()
+    else {
+      const callMatch = /^call:(\d+)$/.exec(scopeId)
+      if (callMatch) onToggleCall(Number(callMatch[1]))
+      else {
+        const sentMatch = /^sent:(\d+)$/.exec(scopeId)
+        if (sentMatch) onToggleSent(Number(sentMatch[1]))
+        else {
+          const recvMatch = /^received:(\d+)$/.exec(scopeId)
+          if (recvMatch) onToggleReceived(Number(recvMatch[1]))
+          else if (scopeId.startsWith("phase-")) onTogglePhase(scopeId)
+          else if (scopeId.startsWith("work-")) onToggleWork(scopeId)
+        }
+      }
+    }
+
+    // Collapsing while deep in the body: park on this header (stay in Context,
+    // not jump into later Call/Phase content that slid into the hole).
+    if (scrolledIntoBody && host && scopeEl) {
+      suppressFollowRef.current = true
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          if (!scopeEl.isConnected) return
+          parkScrollOnScope(host, scopeEl, TRACE_STICKY_ROW_H, computePinnedScopeIds)
+          refreshPinStack()
+          suppressFollowRef.current = false
+        })
+      })
+    }
+  }
+
+  function onRevealScope(scopeId: string) {
     const path = expandPathForScope(scopeId)
     setOpenState((prev) => {
-      const next: OpenState = { ...prev }
-      if (path.preamble) next.preamble = true
-      if (path.contextPrompt) next.contextPrompt = true
-      if (path.contextTools) next.contextTools = true
-      if (path.callIndex != null) {
-        next.calls = new Set(prev.calls).add(path.callIndex)
-        if (path.sent) next.sent = new Set(prev.sent).add(path.callIndex)
-        if (path.received) next.received = new Set(prev.received).add(path.callIndex)
+      const calls = new Set(prev.calls)
+      const sent = new Set(prev.sent)
+      const received = new Set(prev.received)
+      const messages = new Set(prev.messages)
+      const tools = new Set(prev.tools)
+      const phases = new Set(prev.phases)
+      const work = new Set(prev.work)
+      let preamble = prev.preamble
+      let contextPrompt = prev.contextPrompt
+      let contextTools = prev.contextTools
+      if (path.preamble) preamble = true
+      if (path.contextPrompt) contextPrompt = true
+      if (path.contextTools) contextTools = true
+      let callIndex = path.callIndex
+      if (path.toolId) {
+        const found = callIndexForTool(path.toolId, dag.calls)
+        if (found != null) callIndex = found
+        tools.add(path.toolId)
       }
-      if (path.phaseId) next.phases = new Set(prev.phases).add(path.phaseId)
-      if (path.workId) next.work = new Set(prev.work).add(path.workId)
-      if (path.messageKey) next.messages = new Set(prev.messages).add(path.messageKey)
-      if (path.toolId) next.tools = new Set(prev.tools).add(path.toolId)
-      return next
+      if (callIndex != null) {
+        calls.add(callIndex)
+        if (path.sent) sent.add(callIndex)
+        if (path.received) received.add(callIndex)
+      }
+      if (path.messageKey) messages.add(path.messageKey)
+      if (path.phaseId) phases.add(path.phaseId)
+      if (path.workId) work.add(path.workId)
+      return {
+        ...prev,
+        preamble,
+        contextPrompt,
+        contextTools,
+        calls,
+        sent,
+        received,
+        messages,
+        tools,
+        phases,
+        work,
+      }
     })
+    suppressFollowRef.current = true
     requestAnimationFrame(() => {
       const host = scrollRef.current
       if (!host) return
@@ -271,16 +611,14 @@ export function TraceDag({
       )
       if (!el) return
       const top = layoutOffsetInScroll(host, el)
-      host.scrollTop = Math.max(0, top - 2)
+      const stackH = pinnedIds.length * TRACE_STICKY_ROW_H
+      host.scrollTop = Math.max(0, top - stackH - 2)
+      requestAnimationFrame(() => {
+        suppressFollowRef.current = false
+        refreshPinStack()
+      })
     })
   }
-
-  const pinRows = useMemo(
-    () => buildTracePinRows(dag, onPinJump),
-    // dag identity drives chrome; jump closes over latest scrollRef/setState
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [dag],
-  )
 
   function onSearchChange(value: string) {
     setSearch(value)
@@ -372,14 +710,11 @@ export function TraceDag({
       </div>
 
       <div ref={scrollRef} className="trace-scroll min-h-0 flex-1" data-trace-scroll-host>
-        {runId && dag.hasData ? (
-          <StickyPinOverlay
-            scrollRef={scrollRef}
-            rowHeight={TRACE_STICKY_ROW_H}
-            rows={pinRows}
-            className="trace-pin-overlay"
-          />
-        ) : null}
+        <PinOverlay
+          rows={pinRows}
+          onToggle={onTogglePinnedScope}
+          onReveal={onRevealScope}
+        />
         {emptySlot}
 
         {runId &&
@@ -492,139 +827,5 @@ export function TraceDag({
       </div>
     </div>
   )
-}
-
-/** Pin chrome — chevron slot reserved so labels align with in-flow text. */
-function PinChrome({
-  leading,
-  title,
-  summary,
-}: {
-  leading: string
-  title?: string
-  summary?: string
-}) {
-  return (
-    <>
-      <span className="trace-scope__chevslot" aria-hidden />
-      <span className="trace-scope__lead">{leading}</span>
-      {title ? <span className="trace-scope__title">{title}</span> : null}
-      {summary ? <span className="trace-scope__sum">{summary}</span> : null}
-    </>
-  )
-}
-
-function buildTracePinRows(
-  dag: TraceDag,
-  onJump: (scopeId: string) => void,
-): StickyPinRow[] {
-  const rows: StickyPinRow[] = [
-    {
-      id: "context",
-      depth: 0,
-      content: <PinChrome leading="Context" />,
-      onJump: () => onJump("context"),
-    },
-    {
-      id: "prompt",
-      depth: 1,
-      content: <PinChrome leading="Prompt" />,
-      onJump: () => onJump("prompt"),
-    },
-    {
-      id: "tools",
-      depth: 1,
-      content: <PinChrome leading="Tools" />,
-      onJump: () => onJump("tools"),
-    },
-  ]
-  for (const entry of dag.spine) {
-    if (entry.kind === "phase") {
-      const phaseId = entry.phase.id
-      rows.push({
-        id: phaseId,
-        depth: 0,
-        content: (
-          <PinChrome
-            leading={entry.phase.leading ?? entry.phase.title}
-            title={entry.phase.leading ? entry.phase.title : undefined}
-            summary={entry.phase.summary}
-          />
-        ),
-        onJump: () => onJump(phaseId),
-      })
-      for (const child of entry.phase.children ?? []) {
-        if (child.kind === "call") {
-          const call = dag.calls[child.callIndex]
-          if (call) pushCallPinRows(rows, call, 1, onJump)
-        } else {
-          const workId = child.work.id
-          rows.push({
-            id: workId,
-            depth: 1,
-            content: (
-              <PinChrome
-                leading="Work"
-                title={child.work.title}
-                summary={child.work.summary}
-              />
-            ),
-            onJump: () => onJump(workId),
-          })
-        }
-      }
-      continue
-    }
-    if (entry.kind === "work") {
-      const workId = entry.work.id
-      rows.push({
-        id: workId,
-        depth: 0,
-        content: (
-          <PinChrome
-            leading="Work"
-            title={entry.work.title}
-            summary={entry.work.summary}
-          />
-        ),
-        onJump: () => onJump(workId),
-      })
-      continue
-    }
-    const call = dag.calls[entry.callIndex]
-    if (call) pushCallPinRows(rows, call, 0, onJump)
-  }
-  return rows
-}
-
-function pushCallPinRows(
-  rows: StickyPinRow[],
-  call: { index: number; headline: string },
-  depth: number,
-  onJump: (scopeId: string) => void,
-) {
-  const callId = `call:${call.index}`
-  const sentId = `sent:${call.index}`
-  const recvId = `received:${call.index}`
-  rows.push({
-    id: callId,
-    depth,
-    content: (
-      <PinChrome leading={`Call ${call.index + 1}`} summary={call.headline} />
-    ),
-    onJump: () => onJump(callId),
-  })
-  rows.push({
-    id: sentId,
-    depth: depth + 1,
-    content: <PinChrome leading="Sent" />,
-    onJump: () => onJump(sentId),
-  })
-  rows.push({
-    id: recvId,
-    depth: depth + 1,
-    content: <PinChrome leading="Received" />,
-    onJump: () => onJump(recvId),
-  })
 }
 

@@ -1843,8 +1843,10 @@ textarea.input {
 
 .trace-dag .trace-scroll {
   position: relative;
-  padding: 0.55rem 0.35rem 1.25rem;
+  /* No top padding — pin stack must sit flush under the toolbar (swallow gap). */
+  padding: 0 0.35rem 1.25rem;
   --trace-row-h: 34px;
+  --trace-pin-stack-h: 0px;
   /*
    * Set BOTH axes. overflow-y alone computes overflow-x to auto and
    * shears card corners with a horizontal scrollbar.
@@ -1860,27 +1862,86 @@ textarea.input {
   gap: 0.55rem;
   min-width: 0;
   max-width: 100%;
+  padding-top: 0.55rem;
 }
 
 /*
- * ── Trace cards — document flow + pin overlay ─────────────────────
+ * ── Trace cards — document flow + VS Code pin stack ───────────────
  *
- * ROOT CAUSE of the long clipping / missing-corner saga:
- *   position:sticky on headers inside border-radius cards fights
- *   overflow, z-index, and nested cards. Patches never converge.
- *
- * Model now:
- *   • Normal document flow. Expand keeps the header via preserveScrollAnchor.
- *   • overflow:hidden + border-radius — corners always paint correctly.
- *   • Sticky = .outline-pin / .trace-pin-overlay (VS Code dialect), not CSS sticky.
+ * In-flow headers are never position:sticky (overflow/radius fight).
+ * Sticky = height-0 .trace-pin stack that paints the ancestor chain
+ * flush at the top of the scrollport (no gap above the pin).
  */
 .trace-scroll {
   position: relative;
 }
 
-/* VS Code pin overlay — clones ancestor chain above the scroll flow */
-.outline-pin,
-.trace-pin-overlay {
+/*
+ * VS Code sticky scroll: height-0 pin overlay inside the scroller;
+ * stack paints the ancestor chain with the same .trace-scope chrome.
+ */
+.trace-pin {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  height: 0;
+  margin: 0;
+  padding: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.trace-pin__stack {
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--bg) 70%, transparent);
+  border-bottom: 1px solid var(--border, var(--color-border));
+}
+
+.trace-pin__stack > .trace-scope {
+  border-radius: 0;
+  width: 100%;
+  cursor: default;
+}
+
+.trace-pin__stack > .trace-scope.is-soft {
+  border-top-color: var(--border-subtle, var(--color-border-subtle));
+}
+
+.trace-pin__stack > .trace-scope:first-child.is-soft {
+  border-top: none;
+}
+
+.trace-card {
+  border: 1px solid var(--border, var(--color-border));
+  border-radius: 0.5rem;
+  overflow: hidden;
+  background: var(--bg);
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+  overflow-anchor: none;
+}
+
+.trace-card:not(.is-open) {
+  border: none;
+  background: transparent;
+  overflow: visible;
+}
+
+.trace-card.is-open > .trace-scope {
+  border-radius: 0.5rem 0.5rem 0 0;
+}
+
+.trace-card__body {
+  background: var(--bg);
+  min-width: 0;
+}
+
+/* OutlineTree pin overlay (generic) — Trace uses .trace-pin instead */
+.outline-pin {
   position: absolute;
   top: 0;
   left: 0;
@@ -1894,15 +1955,7 @@ textarea.input {
   box-shadow: 0 1px 0 color-mix(in srgb, var(--text) 6%, transparent);
 }
 
-/* Match Trace scroll horizontal padding so pin labels align with cards */
-.trace-dag .trace-pin-overlay {
-  left: 0.35rem;
-  right: 0.35rem;
-}
-
-/* Replace contract: in-flow header stays in layout but is invisible while pinned */
-[data-outline-pinned],
-[data-trace-pinned] {
+[data-outline-pinned] {
   visibility: hidden;
 }
 
@@ -1933,13 +1986,11 @@ textarea.input {
   overflow: hidden;
 }
 
-.outline-pin__hit .trace-scope__lead,
 .outline-pin__hit .outline-scope__lead {
   flex-shrink: 0;
   font-weight: 650;
 }
 
-.outline-pin__hit .trace-scope__title,
 .outline-pin__hit .outline-scope__title {
   font-weight: 500;
   opacity: 0.9;
@@ -1949,7 +2000,6 @@ textarea.input {
   min-width: 0;
 }
 
-.outline-pin__hit .trace-scope__sum,
 .outline-pin__hit .outline-scope__sum {
   opacity: 0.65;
   overflow: hidden;
@@ -2013,28 +2063,6 @@ textarea.input {
   flex: 1;
 }
 
-.trace-card {
-  border: 1px solid var(--border, var(--color-border));
-  border-radius: 0.5rem;
-  overflow: hidden;
-  background: var(--bg);
-  box-sizing: border-box;
-  min-width: 0;
-  max-width: 100%;
-  overflow-anchor: none;
-}
-
-.trace-card:not(.is-open) {
-  border: none;
-  background: transparent;
-  overflow: visible;
-}
-
-.trace-card__body {
-  background: var(--bg);
-  min-width: 0;
-}
-
 .trace-stick-block {
   display: block;
 }
@@ -2084,6 +2112,40 @@ textarea.input {
   height: 100%;
   padding: 0;
   color: var(--text-muted, var(--color-text-muted));
+}
+
+.trace-scope__chevbtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 1.5rem;
+  height: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-muted, var(--color-text-muted));
+  cursor: pointer;
+}
+
+.trace-scope__chevbtn:hover {
+  color: var(--text, var(--color-text));
+}
+
+.trace-scope__jump {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+  flex: 1;
+  height: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
 }
 
 .trace-scope:hover {

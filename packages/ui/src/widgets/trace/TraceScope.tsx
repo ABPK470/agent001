@@ -1,7 +1,9 @@
 /**
- * Scope headers — in-flow rows inside Trace cards.
- * Leaf rows (no expandable body) keep the chevron slot for alignment but are not buttons.
- * Expand keeps the header where it is — body opens downward (preserveScrollAnchor).
+ * Scope headers + Cursor/VS Code sticky-scroll pin overlay.
+ *
+ * In-flow rows are never position:sticky. A height-0 sticky pin stack clones
+ * the same chrome for the ancestor chain of the focus line — click label to
+ * jump, chevron to fold (editor dialect).
  */
 
 import { ChevronDown, ChevronRight } from "lucide-react"
@@ -120,5 +122,87 @@ export function ScopeRow({
       <ScopeChevron open={open} expandable />
       {label}
     </button>
+  )
+}
+
+export type PinRow = {
+  id: string
+  kind: TraceScopeKind
+  depth: number
+  leading: string
+  title: string
+  summary: string
+  soft: boolean
+  open: boolean
+  foldable?: boolean
+  trailing?: ReactNode
+}
+
+/**
+ * Sticky stack — identical visual dialect to ScopeRow.
+ * Chevron folds; label navigates (VS Code sticky scroll).
+ */
+export function PinOverlay({
+  rows,
+  onToggle,
+  onReveal,
+}: {
+  rows: PinRow[]
+  onToggle: (scopeId: string) => void
+  onReveal: (scopeId: string) => void
+}) {
+  if (rows.length === 0) return null
+  return (
+    <div className="trace-pin" role="navigation" aria-label="Sticky trace scopes">
+      <div className="trace-pin__stack">
+        {rows.map((row) => {
+          const foldable = row.foldable !== false
+          return (
+            <div
+              key={row.id}
+              className={`trace-scope${row.open ? " is-open" : ""}${row.soft ? " is-soft" : ""}${
+                foldable ? "" : " is-root"
+              }`}
+              data-trace-kind={row.kind}
+              data-trace-depth={String(row.depth)}
+            >
+              {foldable ? (
+                <button
+                  type="button"
+                  className="trace-scope__chevbtn"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onToggle(row.id)
+                  }}
+                  aria-label={row.open ? "Collapse" : "Expand"}
+                  aria-expanded={row.open}
+                >
+                  {row.open ? (
+                    <ChevronDown size={14} className="trace-scope__chev" />
+                  ) : (
+                    <ChevronRight size={14} className="trace-scope__chev" />
+                  )}
+                </button>
+              ) : (
+                <span className="trace-scope__chevslot" aria-hidden />
+              )}
+              <button
+                type="button"
+                className="trace-scope__jump"
+                onClick={() => onReveal(row.id)}
+                title="Go to scope"
+              >
+                <ScopeLabel
+                  leading={row.leading}
+                  title={row.title || undefined}
+                  summary={row.summary || undefined}
+                  trailing={row.trailing}
+                />
+              </button>
+            </div>
+          )
+        })}
+      </div>
+    </div>
   )
 }

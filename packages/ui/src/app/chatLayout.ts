@@ -16,16 +16,18 @@ export const HOME_CHAT_GUTTER_X_CLASS = "px-6"
 export const HOME_CHAT_INPUT_DOCK_CLASS = "relative shrink-0 px-6 pb-4 pt-2"
 
 /**
- * User goal row — hug content, cap at 82% of the transcript column.
- * `w-fit` keeps short goals tight; long goals grow up to the cap.
+ * User goal row in the transcript — full width of the sticky row (capped).
+ * The pin appendage shares this cap: text is limited to
+ * `USER_GOAL_TEXT_MAX_CLASS` so the left pin slot is reserved *outside*
+ * the unpinned pill (empty gutter), and text never shifts when the pin appears.
  */
-export const USER_GOAL_COLUMN_CLASS = "w-fit max-w-[82%] min-w-0"
+export const USER_GOAL_COLUMN_CLASS = "w-full max-w-[82%] min-w-0"
 
-/** Reserved left pin-rail width in UserGoalBubble — always present so text never shifts. */
+/** Pin-slot width; must match the appendage button in UserGoalBubble. */
 export const USER_GOAL_PIN_SLOT_CLASS = "w-10"
 
-/** Bubble shell inside the goal column — never force full column width. */
-export const USER_GOAL_TEXT_MAX_CLASS = "w-fit max-w-full"
+/** Text-area cap inside USER_GOAL_COLUMN_CLASS (100% − pin slot). */
+export const USER_GOAL_TEXT_MAX_CLASS = "max-w-[calc(100%-2.5rem)]"
 
 /**
  * Vertical gap between the user goal pill and the agent response / status
