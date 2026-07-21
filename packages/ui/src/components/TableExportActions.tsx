@@ -95,7 +95,7 @@ export function TableExportActions({
   }
 
   const btn = [
-    "inline-flex items-center gap-0.5 rounded-sm px-1 py-0.5",
+    "inline-flex items-center gap-1.5 rounded-sm px-1.5 py-0.5",
     // Match table header band (15px / leading-6) — not leading-none, which
     // left the chip sitting too high in the th padding.
     compact ? "text-[13px] leading-5" : "text-[15px] leading-6",
@@ -110,7 +110,7 @@ export function TableExportActions({
   return (
     <div
       className={[
-        "flex flex-wrap items-center gap-0 min-w-0",
+        "flex flex-wrap items-center gap-1 min-w-0",
         // Chip bg lives here (not a parent) so idle opacity:0 hides it too.
         overlayChip ? "rounded-md px-0.5 py-0.5" : "",
         revealOnHover
