@@ -129,7 +129,9 @@ describe("buildTraceDag", () => {
     const c1 = dag.calls[1]!
     expect(c1.headline).toBe("Final answer")
     expect(c1.content).toBe("Hello!")
-    expect(c1.messages[2]?.speaker).toBe("User answer")
+    expect(c1.messages[0]?.speaker).toBe("System")
+    expect(c1.messages.map((m) => m.speaker)).toContain("User answer")
+    expect(c1.messages.find((m) => m.speaker === "User answer")?.content).toBe("yes")
 
     expect(dag.stats.callCount).toBe(2)
     expect(dag.stats.promptTokens).toBe(100)
@@ -182,6 +184,123 @@ describe("buildTraceDag", () => {
     const dag = buildTraceDag([llmRequest(0)])
     expect(dag.calls[0]!.waiting).toBe(true)
     expect(dag.calls[0]!.headline).toBe("Waiting…")
+  })
+
+  it("merges consecutive plan events into one expandable phase", () => {
+    const dag = buildTraceDag([
+      {
+        kind: "planner-decision",
+        score: 4,
+        shouldPlan: true,
+        route: "planner",
+        reason: "multi_step+implementation_scope",
+      },
+      {
+        kind: "planner-plan-generated",
+        reason: "multi_step+implementation_scope",
+        stepCount: 3,
+        steps: [
+          { name: "schema_contract", type: "subagent_task" },
+          { name: "api_endpoints", type: "subagent_task", dependsOn: ["schema_contract"] },
+          { name: "frontend_pages", type: "subagent_task", dependsOn: ["api_endpoints"] },
+        ],
+      },
+    ])
+    const phases = dag.spine.filter((e) => e.kind === "phase")
+    expect(phases).toHaveLength(1)
+    if (phases[0]?.kind !== "phase") throw new Error("expected phase")
+    const plan = phases[0].phase
+    expect(plan.family).toBe("plan")
+    expect(plan.title).toBe("Plan")
+    expect(plan.summary).toMatch(/3 steps/)
+    expect(plan.details.length).toBeGreaterThan(0)
+    expect(plan.details.some((d) => d.kind === "json" && d.label === "Plan graph")).toBe(true)
+    expect(plan.details.filter((d) => d.kind === "step")).toHaveLength(3)
+  })
+
+  it("merges one step’s lifecycle into a single phase until family changes", () => {
+    const dag = buildTraceDag([
+      { kind: "planner-step-start", stepName: "frontend_layer", stepType: "subagent_task" },
+      {
+        kind: "planner-delegation-start",
+        goal: "Build frontend",
+        stepName: "frontend_layer",
+        depth: 1,
+        tools: ["write_file", "run_command"],
+        budget: {
+          hint: "medium",
+          parsedHint: 8,
+          baseBudget: 8,
+          contractFloor: 4,
+          complexityBoost: 0,
+          computedMaxIterations: 10,
+          targetArtifactCount: 1,
+          requiredSourceArtifactCount: 0,
+          acceptanceCriteriaCount: 0,
+          codeArtifactCount: 1,
+          hasComplexImplementation: false,
+          hasBlueprintSource: false,
+          verificationMode: "run_tests",
+        },
+        envelope: { targetArtifacts: ["site/index.html"] },
+      },
+      {
+        kind: "planner-delegation-end",
+        stepName: "frontend_layer",
+        depth: 1,
+        status: "done",
+        answer: "ok",
+      },
+      {
+        kind: "planner-step-end",
+        stepName: "frontend_layer",
+        status: "pass",
+        durationMs: 900,
+        producedArtifacts: ["site/index.html"],
+      },
+      {
+        kind: "planner-verification",
+        overall: "pass",
+        confidence: 0.9,
+        steps: [{ stepName: "frontend_layer", outcome: "pass", issues: [] }],
+      },
+    ])
+    const phases = dag.spine.filter((e) => e.kind === "phase")
+    expect(phases.map((e) => (e.kind === "phase" ? e.phase.family : ""))).toEqual([
+      "step:frontend_layer",
+      "verify",
+    ])
+    const step = phases[0]
+    if (step?.kind !== "phase") throw new Error("expected step phase")
+    expect(step.phase.title).toBe("frontend layer")
+    expect(step.phase.summary).toBe("done")
+    expect(step.phase.details.some((d) => d.kind === "event" && d.text.includes("Artifacts"))).toBe(
+      true,
+    )
+  })
+
+  it("omits Direct chips with nothing to expand", () => {
+    const dag = buildTraceDag([
+      {
+        kind: "planner-decision",
+        score: 1,
+        shouldPlan: false,
+        route: "direct",
+        reason: "simple_dialogue",
+      },
+    ])
+    expect(dag.spine.filter((e) => e.kind === "phase")).toHaveLength(0)
+  })
+
+  it("injects System into Sent when llm-request omitted it", () => {
+    const dag = buildTraceDag([
+      { kind: "system-prompt", text: "You are Mia." },
+      llmRequest(0, [{ role: "user", content: "Hi", toolCalls: [], toolCallId: null }]),
+      llmResponse(0, { content: "Hello" }),
+    ])
+    expect(dag.calls[0]!.messages[0]?.speaker).toBe("System")
+    expect(dag.calls[0]!.messages[0]?.content).toBe("You are Mia.")
+    expect(dag.calls[0]!.messages[1]?.speaker).toBe("User")
   })
 })
 

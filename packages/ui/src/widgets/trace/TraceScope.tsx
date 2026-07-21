@@ -1,5 +1,6 @@
 /**
  * Scope headers — real in-flow rows; sticky via CSS (.trace-card / .trace-stick-block).
+ * Leaf rows (no expandable body) keep the chevron slot for alignment but are not buttons.
  */
 
 import { ChevronDown, ChevronRight } from "lucide-react"
@@ -27,14 +28,16 @@ function ScopeLabel({
   )
 }
 
-function ScopeChevron({ open }: { open: boolean }) {
+function ScopeChevron({ open, expandable }: { open: boolean; expandable: boolean }) {
   return (
     <span className="trace-scope__chevslot" aria-hidden>
-      {open ? (
-        <ChevronDown size={14} className="trace-scope__chev" />
-      ) : (
-        <ChevronRight size={14} className="trace-scope__chev" />
-      )}
+      {expandable ? (
+        open ? (
+          <ChevronDown size={14} className="trace-scope__chev" />
+        ) : (
+          <ChevronRight size={14} className="trace-scope__chev" />
+        )
+      ) : null}
     </span>
   )
 }
@@ -51,6 +54,7 @@ export function ScopeRow({
   summary,
   trailing,
   soft = false,
+  expandable = true,
 }: {
   scopeId: string
   kind: TraceScopeKind
@@ -63,7 +67,37 @@ export function ScopeRow({
   summary?: string
   trailing?: ReactNode
   soft?: boolean
+  /** False when the body has nothing to show — no chevron, not a toggle. */
+  expandable?: boolean
 }) {
+  const className = `trace-scope${open && expandable ? " is-open" : ""}${soft ? " is-soft" : ""}${
+    expandable ? "" : " is-leaf"
+  }`
+  const label = (
+    <ScopeLabel
+      leading={leading}
+      title={title}
+      summary={summary}
+      trailing={trailing}
+    />
+  )
+
+  if (!expandable) {
+    return (
+      <div
+        data-trace-scope={scopeId}
+        data-trace-kind={kind}
+        data-trace-call={callIndex == null ? "" : String(callIndex)}
+        data-trace-depth={String(depth)}
+        className={className}
+        role="group"
+      >
+        <ScopeChevron open={false} expandable={false} />
+        {label}
+      </div>
+    )
+  }
+
   return (
     <button
       type="button"
@@ -71,17 +105,12 @@ export function ScopeRow({
       data-trace-kind={kind}
       data-trace-call={callIndex == null ? "" : String(callIndex)}
       data-trace-depth={String(depth)}
-      className={`trace-scope${open ? " is-open" : ""}${soft ? " is-soft" : ""}`}
+      className={className}
       onClick={onToggle}
       aria-expanded={open}
     >
-      <ScopeChevron open={open} />
-      <ScopeLabel
-        leading={leading}
-        title={title}
-        summary={summary}
-        trailing={trailing}
-      />
+      <ScopeChevron open={open} expandable />
+      {label}
     </button>
   )
 }

@@ -22,20 +22,23 @@ export function WorkOutline({
   onToggle: () => void
   onToggleTool: (id: string) => void
 }) {
+  const expandable = work.tools.length > 0 || work.notes.length > 0
+
   return (
-    <article className={`trace-card${open ? " is-open" : ""}`}>
+    <article className={`trace-card${open && expandable ? " is-open" : ""}`}>
       <ScopeRow
         scopeId={work.id}
         kind="work"
         depth={0}
-        open={open}
+        open={open && expandable}
         onToggle={onToggle}
         leading="Work"
         title={work.title !== "Work" ? work.title : undefined}
         summary={work.summary}
         soft
+        expandable={expandable}
       />
-      {open && (
+      {open && expandable && (
         <div className="trace-card__body">
           <div className="trace-scope-body">
             {work.tools.map((tool) => (
@@ -55,9 +58,6 @@ export function WorkOutline({
                 <ExpandableText text={note.text} className="trace-body-muted" />
               </div>
             ))}
-            {work.tools.length === 0 && work.notes.length === 0 && (
-              <span className="trace-empty">No recorded work</span>
-            )}
           </div>
         </div>
       )}

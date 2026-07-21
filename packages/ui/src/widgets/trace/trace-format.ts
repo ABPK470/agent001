@@ -11,7 +11,7 @@ export function shortLine(text: string, max = 72): string {
 }
 
 export function callSentSummary(call: TraceCallNode): string {
-  const n = call.messageCount
+  const n = call.messages.length
   const firstUser = call.messages.find((m) => m.role === "user" || m.speaker === "User")
   const peek = firstUser?.content ? shortLine(firstUser.content, 48) : ""
   if (peek) return `${n} messages · ${peek}`

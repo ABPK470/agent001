@@ -63,12 +63,24 @@ export type TraceCallNode = {
   sqlQuality: TraceSqlQuality[]
 }
 
+/** Expandable body — empty `details` ⇒ leaf card (no chevron). */
+export type TracePhaseDetail =
+  | { id: string; kind: "event"; text: string; tone?: "neutral" | "warn" | "error" }
+  | { id: string; kind: "step"; name: string; type: string; dependsOn?: string[] }
+  | { id: string; kind: "json"; label: string; value: unknown }
+
+/**
+ * Planner / routing milestone on the spine.
+ * `family` is the merge key (plan, pipeline:N, step:name, verify:N, …) —
+ * consecutive same-family events collapse into one card.
+ */
 export type TracePhaseNode = {
   id: string
+  family: string
   title: string
   summary: string
   status: "running" | "done" | "error"
-  lines: string[]
+  details: TracePhaseDetail[]
 }
 
 export type TraceWorkNote = {
@@ -186,8 +198,11 @@ function pairLlmCalls(trace: TraceEntry[]): Array<{
   }))
 }
 
-function enrichMessages(messages: LlmRequest["messages"]): TracePromptMessage[] {
-  return messages.map((msg, index) => {
+function enrichMessages(
+  messages: LlmRequest["messages"],
+  systemPrompt: string | null,
+): TracePromptMessage[] {
+  const enriched = messages.map((msg, index) => {
     const label = historyRowLabel(msg, messages, index)
     return {
       role: msg.role,
@@ -198,6 +213,22 @@ function enrichMessages(messages: LlmRequest["messages"]): TracePromptMessage[] 
       ...(label.detail ? { detail: label.detail } : {}),
     }
   })
+  // System is often emitted once as `system-prompt` and omitted from later
+  // llm-request payloads — still show it first in Sent so the prompt is whole.
+  if (systemPrompt && !enriched.some((m) => m.role === "system")) {
+    return [
+      {
+        role: "system",
+        content: systemPrompt,
+        toolCalls: [],
+        toolCallId: null,
+        speaker: "System",
+        detail: "shared prompt",
+      },
+      ...enriched,
+    ]
+  }
+  return enriched
 }
 
 function parseToolArgs(argsFormatted: string): Record<string, unknown> {
@@ -215,120 +246,442 @@ function humanizeStep(name: string): string {
   return name.replace(/_/g, " ")
 }
 
-function phaseFromEntry(
-  entry: TraceEntry,
-  index: number,
-): TracePhaseNode | null {
+function detailEvent(
+  id: string,
+  text: string,
+  tone: "neutral" | "warn" | "error" = "neutral",
+): TracePhaseDetail {
+  return { id, kind: "event", text, tone }
+}
+
+function detailStep(
+  id: string,
+  step: { name: string; type: string; dependsOn?: string[] },
+): TracePhaseDetail {
+  return {
+    id,
+    kind: "step",
+    name: step.name,
+    type: step.type,
+    ...(step.dependsOn?.length ? { dependsOn: step.dependsOn } : {}),
+  }
+}
+
+function detailJson(id: string, label: string, value: unknown): TracePhaseDetail {
+  return { id, kind: "json", label, value }
+}
+
+/** One update from a trace entry — merged into an open phase by `family`. */
+type PhaseUpdate = {
+  family: string
+  title: string
+  summary: string
+  status: TracePhaseNode["status"]
+  details: TracePhaseDetail[]
+  /** Bare Direct with nothing to show — omit from the spine. */
+  skip?: boolean
+}
+
+function phaseFromEntry(entry: TraceEntry, index: number): PhaseUpdate | null {
   switch (entry.kind) {
     case "planning_preflight":
-      return { id: `phase-preflight-${index}`, title: "Plan", summary: "Preparing…", status: "running", lines: [] }
+      return {
+        family: "plan",
+        title: "Plan",
+        summary: "Preparing…",
+        status: "running",
+        details: [detailEvent(`preflight-${index}`, "Planner-first preflight")],
+      }
     case "planner-decision": {
       const direct = !entry.shouldPlan || entry.route === "direct"
+      if (direct) {
+        return {
+          family: "direct",
+          title: "Direct",
+          summary: entry.reason || "tool loop",
+          status: "done",
+          details: [],
+          skip: true,
+        }
+      }
+      const bits = [
+        entry.route ? `route ${entry.route}` : null,
+        entry.score != null ? `score ${entry.score}` : null,
+        entry.reason || null,
+      ].filter(Boolean)
       return {
-        id: `phase-decision-${index}`,
-        title: direct ? "Direct" : "Plan",
-        summary: entry.reason || (direct ? "tool loop" : "orchestrated"),
+        family: "plan",
+        title: "Plan",
+        summary: entry.reason || "orchestrated",
         status: "done",
-        lines: entry.score != null ? [`score ${entry.score}`] : [],
+        details: [detailEvent(`decision-${index}`, bits.join(" · "))],
       }
     }
     case "planner-generating":
-      return { id: `phase-generating-${index}`, title: "Plan", summary: "Generating plan…", status: "running", lines: [] }
-    case "planner-plan-generated":
       return {
-        id: `phase-plan-${index}`,
+        family: "plan",
+        title: "Plan",
+        summary: "Generating…",
+        status: "running",
+        details: [detailEvent(`generating-${index}`, "Generating plan")],
+      }
+    case "planner-plan-generated": {
+      const stepLines = entry.steps.map((s, si) =>
+        detailStep(`plan-step-${index}-${si}`, s),
+      )
+      return {
+        family: "plan",
         title: "Plan",
         summary: `${entry.stepCount} step${entry.stepCount !== 1 ? "s" : ""}`,
         status: "done",
-        lines: [],
+        details: [
+          ...stepLines,
+          detailJson(`plan-graph-${index}`, "Plan graph", {
+            reason: entry.reason,
+            stepCount: entry.stepCount,
+            steps: entry.steps,
+            ...(entry.edges ? { edges: entry.edges } : {}),
+          }),
+        ],
       }
+    }
+    case "planner-runtime-compiled":
+      return {
+        family: "plan",
+        title: "Plan",
+        summary: "Runtime compiled",
+        status: "done",
+        details: [
+          detailJson(`runtime-${index}`, "Runtime", {
+            executionSteps: entry.executionSteps,
+            ownershipArtifacts: entry.ownershipArtifacts,
+            runtimeEntities: entry.runtimeEntities,
+          }),
+        ],
+      }
+    case "planner-generation-failed":
+      return {
+        family: "plan",
+        title: "Plan",
+        summary: "Generation failed",
+        status: "error",
+        details: entry.diagnostics.map((d, di) =>
+          detailEvent(`gen-fail-${index}-${di}`, `${d.code}: ${d.message}`, "error"),
+        ),
+      }
+    case "planner-validation-failed":
+    case "planner-validation-remediated":
+    case "planner-validation-warnings": {
+      const label =
+        entry.kind === "planner-validation-failed"
+          ? "Validation failed"
+          : entry.kind === "planner-validation-remediated"
+            ? "Validation remediated"
+            : `Validation warnings (${entry.warningCount})`
+      const tone =
+        entry.kind === "planner-validation-failed"
+          ? "error"
+          : entry.kind === "planner-validation-warnings"
+            ? "warn"
+            : "neutral"
+      return {
+        family: "plan",
+        title: "Plan",
+        summary: label,
+        status: entry.kind === "planner-validation-failed" ? "error" : "done",
+        details: entry.diagnostics.map((d, di) =>
+          detailEvent(`val-${index}-${di}`, `${d.code}: ${d.message}`, tone),
+        ),
+      }
+    }
     case "planner-pipeline-start":
       return {
-        id: `phase-pipeline-${entry.attempt}`,
+        family: "pipeline",
         title: "Pipeline",
         summary: entry.attempt > 1 ? `attempt ${entry.attempt}` : "running",
         status: "running",
-        lines: [],
+        details: [
+          detailEvent(
+            `pipe-start-${index}`,
+            [
+              `attempt ${entry.attempt}`,
+              entry.verifierRound != null ? `verifier round ${entry.verifierRound}` : null,
+              `max retries ${entry.maxRetries}`,
+            ]
+              .filter(Boolean)
+              .join(" · "),
+          ),
+        ],
       }
     case "planner-pipeline-end":
       return {
-        id: `phase-pipeline-end-${index}`,
+        family: "pipeline",
         title: "Pipeline",
-        summary: `${entry.completedSteps}/${entry.totalSteps} steps`,
+        summary: `${entry.completedSteps}/${entry.totalSteps} · ${entry.status}`,
         status: entry.status === "success" ? "done" : "error",
-        lines: [],
+        details: [
+          detailEvent(
+            `pipe-end-${index}`,
+            `Finished ${entry.completedSteps}/${entry.totalSteps} steps (${entry.status})`,
+          ),
+        ],
+      }
+    case "planner-budget-extended":
+      return {
+        family: "pipeline",
+        title: "Pipeline",
+        summary: `budget → ${entry.effectiveBudget}`,
+        status: "running",
+        details: [
+          detailEvent(
+            `budget-${index}`,
+            `Extended budget to ${entry.effectiveBudget} (${entry.extensions}×) after ${entry.completedSteps} steps`,
+          ),
+        ],
       }
     case "planner-step-start":
       return {
-        id: `phase-step-${entry.stepName}`,
+        family: `step:${entry.stepName}`,
         title: humanizeStep(entry.stepName),
         summary: "running",
         status: "running",
-        lines: [],
+        details: [detailEvent(`step-start-${index}`, `Started (${entry.stepType})`)],
+      }
+    case "planner-step-transition":
+      return {
+        family: `step:${entry.stepName}`,
+        title: humanizeStep(entry.stepName),
+        summary: `${entry.phase} · ${entry.state}`,
+        status: "running",
+        details: [
+          detailEvent(`step-tr-${index}`, `${entry.phase} → ${entry.state} (attempt ${entry.attempt})`),
+        ],
       }
     case "planner-step-end": {
       const ok = entry.status === "pass" || entry.status === "success"
+      const details: TracePhaseDetail[] = [
+        detailEvent(
+          `step-end-${index}`,
+          [
+            ok ? "Finished" : entry.error || "Failed",
+            entry.durationMs != null ? `${entry.durationMs}ms` : null,
+            entry.acceptanceState ? `acceptance ${entry.acceptanceState}` : null,
+          ]
+            .filter(Boolean)
+            .join(" · "),
+        ),
+      ]
+      if (entry.producedArtifacts?.length) {
+        details.push(
+          detailEvent(`step-art-${index}`, `Artifacts: ${entry.producedArtifacts.join(", ")}`),
+        )
+      }
+      if (entry.verificationAttempts?.length) {
+        details.push(detailJson(`step-verify-${index}`, "Verification attempts", entry.verificationAttempts))
+      }
+      if (entry.reconciliation) {
+        details.push(detailJson(`step-recon-${index}`, "Reconciliation", entry.reconciliation))
+      }
       return {
-        id: `phase-step-${entry.stepName}`,
+        family: `step:${entry.stepName}`,
         title: humanizeStep(entry.stepName),
         summary: ok ? "done" : entry.error || "failed",
         status: ok ? "done" : "error",
-        lines: entry.durationMs != null ? [`${entry.durationMs}ms`] : [],
+        details,
       }
     }
-    case "planner-delegation-start":
+    case "planner-delegation-start": {
+      const details: TracePhaseDetail[] = [
+        detailEvent(`del-goal-${index}`, entry.goal),
+      ]
+      if (entry.tools.length > 0) {
+        details.push(detailEvent(`del-tools-${index}`, `Tools: ${entry.tools.join(", ")}`))
+      }
+      if (entry.envelope) {
+        details.push(detailJson(`del-env-${index}`, "Delegation envelope", entry.envelope))
+      }
+      details.push(
+        detailJson(`del-budget-${index}`, "Budget", entry.budget),
+      )
       return {
-        id: `phase-step-${entry.stepName}`,
+        family: `step:${entry.stepName}`,
         title: humanizeStep(entry.stepName),
         summary: "delegating",
         status: "running",
-        lines: entry.tools.slice(0, 4),
+        details,
       }
-    case "planner-delegation-iteration":
+    }
+    case "planner-delegation-iteration": {
+      const details: TracePhaseDetail[] = [
+        detailEvent(
+          `del-iter-${index}`,
+          `Iteration ${entry.iteration}/${entry.maxIterations}${entry.content ? ` — ${entry.content}` : ""}`,
+        ),
+      ]
+      if (entry.toolNames?.length) {
+        details.push(detailEvent(`del-iter-tools-${index}`, `Tools: ${entry.toolNames.join(", ")}`))
+      }
       return {
-        id: `phase-step-${entry.stepName}`,
+        family: `step:${entry.stepName}`,
         title: humanizeStep(entry.stepName),
         summary: `iteration ${entry.iteration}/${entry.maxIterations}`,
         status: "running",
-        lines: entry.toolNames?.slice(0, 3) ?? [],
+        details,
       }
+    }
     case "planner-delegation-end":
       return {
-        id: `phase-step-${entry.stepName}`,
+        family: `step:${entry.stepName}`,
         title: humanizeStep(entry.stepName),
         summary: entry.status === "done" ? "done" : entry.error || "failed",
         status: entry.status === "done" ? "done" : "error",
-        lines: [],
+        details: [
+          detailEvent(
+            `del-end-${index}`,
+            entry.status === "done"
+              ? entry.answer
+                ? `Delegation done — ${entry.answer}`
+                : "Delegation done"
+              : entry.error || "Delegation failed",
+          ),
+        ],
       }
-    case "planner-verification":
+    case "planner-delegation-decision":
       return {
-        id: `phase-verify-${index}`,
+        family: "plan",
+        title: "Plan",
+        summary: entry.shouldDelegate ? "will delegate" : "no delegation",
+        status: "done",
+        details: [
+          detailEvent(
+            `del-dec-${index}`,
+            [
+              entry.shouldDelegate ? "Delegate" : "Skip delegation",
+              entry.reason,
+              `utility ${entry.utilityScore.toFixed(2)}`,
+              `safety ${entry.safetyRisk.toFixed(2)}`,
+            ].join(" · "),
+          ),
+        ],
+      }
+    case "planner-verification": {
+      const details: TracePhaseDetail[] = entry.steps.map((s, si) =>
+        detailEvent(
+          `verify-step-${index}-${si}`,
+          `${s.stepName}: ${s.outcome}${s.issues.length ? ` — ${s.issues.join("; ")}` : ""}`,
+        ),
+      )
+      if (entry.systemChecks?.length) {
+        details.push(detailJson(`verify-sys-${index}`, "System checks", entry.systemChecks))
+      }
+      details.push(
+        detailJson(`verify-full-${index}`, "Verification", {
+          overall: entry.overall,
+          confidence: entry.confidence,
+          verifierRound: entry.verifierRound,
+          steps: entry.steps,
+        }),
+      )
+      return {
+        family: "verify",
         title: "Verifying",
-        summary: entry.overall,
+        summary: `${entry.overall} · ${Math.round(entry.confidence * 100)}%`,
         status:
           entry.overall === "pass" ? "done" : entry.overall === "fail" ? "error" : "running",
-        lines: [],
+        details,
       }
+    }
     case "planner-repair-plan":
       return {
-        id: `phase-repair-${entry.attempt}`,
+        family: `repair:${entry.attempt}`,
         title: "Repairing",
-        summary: `attempt ${entry.attempt}`,
+        summary: `attempt ${entry.attempt} · ${entry.tasks.length} task${entry.tasks.length !== 1 ? "s" : ""}`,
         status: "running",
-        lines: [],
+        details: [
+          ...entry.tasks.map((t, ti) =>
+            detailEvent(
+              `repair-task-${index}-${ti}`,
+              `${t.stepName}: ${t.mode}${t.ownedIssueCodes.length ? ` (${t.ownedIssueCodes.join(", ")})` : ""}`,
+            ),
+          ),
+          detailJson(`repair-full-${index}`, "Repair plan", {
+            attempt: entry.attempt,
+            rerunOrder: entry.rerunOrder,
+            tasks: entry.tasks,
+          }),
+        ],
+      }
+    case "planner-retry":
+      return {
+        family: `repair:${entry.attempt}`,
+        title: "Repairing",
+        summary: `retry ${entry.attempt}`,
+        status: "running",
+        details: [
+          detailEvent(
+            `retry-${index}`,
+            [
+              entry.reason,
+              entry.retrySteps != null ? `${entry.retrySteps} to retry` : null,
+              entry.skippedSteps != null ? `${entry.skippedSteps} skipped` : null,
+              entry.rerunOrder?.length ? `order: ${entry.rerunOrder.join(" → ")}` : null,
+            ]
+              .filter(Boolean)
+              .join(" · "),
+          ),
+        ],
+      }
+    case "planner-escalation":
+      return {
+        family: `repair:${entry.attempt}`,
+        title: "Repairing",
+        summary: `${entry.action} · ${entry.reason}`,
+        status: entry.action === "pass" ? "done" : "running",
+        details: [
+          detailEvent(`esc-${index}`, `Escalation: ${entry.action} (${entry.reason})`),
+        ],
+      }
+    case "planner-retry-skip":
+      return {
+        family: `step:${entry.stepName}`,
+        title: humanizeStep(entry.stepName),
+        summary: "skipped",
+        status: "done",
+        details: [detailEvent(`retry-skip-${index}`, `Retry skipped — ${entry.reason}`)],
       }
     case "direct_loop_fallback":
-      return { id: `phase-direct-${index}`, title: "Direct", summary: "tool loop", status: "done", lines: [] }
+      return {
+        family: "direct",
+        title: "Direct",
+        summary: entry.reason || "tool loop",
+        status: "done",
+        details: [],
+        skip: true,
+      }
     default:
       return null
   }
 }
 
-function mergePhase(prev: TracePhaseNode | null, next: TracePhaseNode): TracePhaseNode {
-  if (!prev || prev.id !== next.id) return next
+function mergePhaseSummary(prev: string, next: string): string {
+  if (prev === next) return next
+  const stepBit = [prev, next].find((s) => /^\d+ steps?\b/.test(s))
+  if (stepBit) {
+    const other = prev === stepBit ? next : prev
+    if (!other || other === stepBit) return stepBit
+    if (other.includes(stepBit) || stepBit.includes(other)) return stepBit.length >= other.length ? stepBit : other
+    return `${stepBit} · ${other}`
+  }
+  return next
+}
+
+function mergePhase(prev: TracePhaseNode, next: PhaseUpdate): TracePhaseNode {
   return {
-    ...next,
-    lines: [...prev.lines, ...next.lines].filter((v, i, a) => a.indexOf(v) === i).slice(0, 6),
+    ...prev,
+    title: next.title,
+    summary: mergePhaseSummary(prev.summary, next.summary),
+    status: next.status,
+    details: [...prev.details, ...next.details].slice(0, 48),
   }
 }
 
@@ -397,7 +750,7 @@ export function buildTraceDag(trace: TraceEntry[]): TraceDag {
       iteration: request.iteration,
       messageCount: request.messageCount,
       toolCount: request.toolCount,
-      messages: enrichMessages(request.messages),
+      messages: enrichMessages(request.messages, systemPrompt),
       content: response?.content ?? null,
       toolBranches,
       durationMs: response?.durationMs ?? null,
@@ -415,14 +768,34 @@ export function buildTraceDag(trace: TraceEntry[]): TraceDag {
   let openWork: TraceWorkNode | null = null
   let lastCallIndex = -1
   let workSeq = 0
+  let phaseSeq = 0
 
   function flushPhase() {
     if (!openPhase) return
     // Skip bare Direct routing chips — noise in the outline.
-    if (!(openPhase.title === "Direct" && openPhase.lines.length === 0)) {
+    if (!(openPhase.family === "direct" && openPhase.details.length === 0)) {
       spine.push({ kind: "phase", phase: openPhase })
     }
     openPhase = null
+  }
+
+  function applyPhase(update: PhaseUpdate) {
+    if (update.skip && update.details.length === 0) return
+    flushWork()
+    if (openPhase && openPhase.family !== update.family) flushPhase()
+    if (!openPhase) {
+      phaseSeq += 1
+      openPhase = {
+        id: `phase-${phaseSeq}`,
+        family: update.family,
+        title: update.title,
+        summary: update.summary,
+        status: update.status,
+        details: update.details,
+      }
+      return
+    }
+    openPhase = mergePhase(openPhase, update)
   }
 
   function flushWork() {
@@ -494,23 +867,7 @@ export function buildTraceDag(trace: TraceEntry[]): TraceDag {
 
     const phase = phaseFromEntry(entry, i)
     if (phase) {
-      flushWork()
-      openPhase = mergePhase(openPhase, phase)
-      if (phase.status === "done" || phase.status === "error") {
-        // Close completed phases so the next distinct phase starts fresh.
-        if (
-          entry.kind === "planner-pipeline-end" ||
-          entry.kind === "planner-step-end" ||
-          entry.kind === "planner-delegation-end" ||
-          entry.kind === "planner-plan-generated" ||
-          entry.kind === "planner-decision" ||
-          entry.kind === "direct_loop_fallback" ||
-          (entry.kind === "planner-verification" &&
-            (entry.overall === "pass" || entry.overall === "fail"))
-        ) {
-          flushPhase()
-        }
-      }
+      applyPhase(phase)
       continue
     }
 

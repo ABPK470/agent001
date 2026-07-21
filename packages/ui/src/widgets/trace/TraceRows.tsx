@@ -1,6 +1,6 @@
 /**
  * Leaf rows inside Sent / Received — not sticky-scroll scopes.
- * (Pinning every System/User row stacked a broken tower of headers.)
+ * Collapsed row: speaker · detail · preview (one flowing line, no far-right gap).
  */
 
 import { ChevronDown, ChevronRight, ListChevronsDownUp, ListChevronsUpDown } from "lucide-react"
@@ -26,12 +26,27 @@ export function PromptMessageRow({
 }) {
   const preview = messagePreview(msg)
   const isUserAnswer = msg.speaker === "User answer"
+  const isSystem = msg.role === "system" || msg.speaker === "System"
+  const hasBody =
+    Boolean(msg.content) || msg.toolCalls.length > 0 || Boolean(msg.toolCallId)
+
+  if (!hasBody && !preview) {
+    return (
+      <div className={`trace-msg${isSystem ? " is-system" : ""}`}>
+        <span className="trace-scope__chevslot" aria-hidden />
+        <span className={isUserAnswer ? "trace-row__speaker is-em" : "trace-row__speaker"}>
+          {msg.speaker}
+        </span>
+        <span className="trace-empty">empty</span>
+      </div>
+    )
+  }
 
   return (
-    <div className="trace-row">
+    <div className={`trace-msg${isSystem ? " is-system" : ""}${open ? " is-open" : ""}`}>
       <button
         type="button"
-        className="trace-row__btn"
+        className="trace-msg__btn"
         onClick={onToggle}
         aria-expanded={open}
       >
@@ -45,16 +60,16 @@ export function PromptMessageRow({
         <span className={isUserAnswer ? "trace-row__speaker is-em" : "trace-row__speaker"}>
           {msg.speaker}
         </span>
-        {msg.detail && <span className="trace-row__detail">{msg.detail}</span>}
-        {msg.toolCallId && (
-          <span className="trace-row__id font-mono" title={msg.toolCallId}>
-            {msg.toolCallId}
-          </span>
-        )}
-        {!open && <span className="trace-row__preview">{preview}</span>}
+        {msg.detail && <span className="trace-msg__detail">{msg.detail}</span>}
+        {!open && preview && <span className="trace-msg__preview">{preview}</span>}
       </button>
       {open && (
-        <div className="trace-row__body">
+        <div className="trace-msg__body">
+          {msg.toolCallId && (
+            <div className="trace-msg__meta font-mono" title={msg.toolCallId}>
+              {msg.toolCallId}
+            </div>
+          )}
           {msg.content && (
             <ExpandableText text={msg.content} className="trace-body-muted" />
           )}
@@ -65,7 +80,7 @@ export function PromptMessageRow({
             <div key={tc.id} className="trace-tool-inline">
               <div className="trace-tool-inline__head">
                 <span className="font-mono">{tc.name}</span>
-                <span className="trace-row__id font-mono" title={tc.id}>
+                <span className="trace-msg__meta font-mono" title={tc.id}>
                   {tc.id}
                 </span>
               </div>
@@ -94,12 +109,16 @@ export function ToolRow({
 }) {
   const statusClass =
     tool.status === "error" ? " is-error" : tool.status === "done" ? " is-done" : ""
+  const resultPeek =
+    tool.resultText && !open
+      ? tool.resultText.replace(/\s+/g, " ").trim().slice(0, 72)
+      : null
 
   return (
-    <div className={`trace-row${statusClass}`}>
+    <div className={`trace-msg${statusClass}${open ? " is-open" : ""}`}>
       <button
         type="button"
-        className="trace-row__btn"
+        className="trace-msg__btn"
         onClick={onToggle}
         aria-expanded={open}
       >
@@ -110,16 +129,21 @@ export function ToolRow({
             <ChevronRight size={12} className="trace-scope__chev" />
           )}
         </span>
-        <span className="font-mono">{tool.name}</span>
-        {tool.status === "error" && <span className="trace-row__detail is-error">failed</span>}
-        {tool.status === "done" && <span className="trace-row__detail">done</span>}
-        {tool.status === "running" && <span className="trace-row__detail">running</span>}
-        <span className="trace-row__id font-mono" title={tool.id}>
-          {tool.id}
-        </span>
+        <span className="font-mono trace-msg__tool">{tool.name}</span>
+        {tool.status === "error" && <span className="trace-msg__detail is-error">failed</span>}
+        {tool.status === "done" && <span className="trace-msg__detail">done</span>}
+        {tool.status === "running" && <span className="trace-msg__detail">running</span>}
+        {!open && resultPeek && (
+          <span className="trace-msg__preview">
+            {resultPeek.length >= 72 ? `${resultPeek.slice(0, 71)}…` : resultPeek}
+          </span>
+        )}
       </button>
       {open && (
-        <div className="trace-row__body">
+        <div className="trace-msg__body">
+          <div className="trace-msg__meta font-mono" title={tool.id}>
+            {tool.id}
+          </div>
           <JsonViewer
             value={tool.arguments}
             defaultExpandDepth={1}

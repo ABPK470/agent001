@@ -60,6 +60,11 @@ function llmReq(
   }
 }
 
+/** Prefixed with the run system prompt — matches what the model actually receives. */
+function withSystem(system: string, messages: ReturnType<typeof msg>[]): ReturnType<typeof msg>[] {
+  return [msg("system", system), ...messages]
+}
+
 function llmRes(
   iteration: number,
   opts: {
@@ -166,33 +171,39 @@ function buildDirectFourCalls(): TraceEntry[] {
     { name: "list_directory", description: "List files", parameters: { type: "object" } },
   ]
 
-  const u0 = [msg("user", goal)]
+  const u0 = withSystem(system, [msg("user", goal)])
   const tcExplore = { id: "d-tc-explore", name: "list_directory", arguments: { path: "." } }
-  const u1 = [
-    ...u0,
+  const u1 = withSystem(system, [
+    msg("user", goal),
     msg("assistant", null, [tcExplore]),
     msg("tool", "README.md\nsrc/\ndata/", [], "d-tc-explore"),
-  ]
+  ])
   const tcSql = {
     id: "d-tc-sql",
     name: "query_mssql",
     arguments: { sql: "SELECT TOP 5 name, revenue FROM bankers ORDER BY revenue DESC" },
   }
-  const u2 = [
-    ...u1,
+  const u2 = withSystem(system, [
+    msg("user", goal),
+    msg("assistant", null, [tcExplore]),
+    msg("tool", "README.md\nsrc/\ndata/", [], "d-tc-explore"),
     msg("assistant", null, [tcSql]),
     msg("tool", "name | revenue\nAda | 120\nBea | 95", [], "d-tc-sql"),
-  ]
+  ])
   const tcExport = {
     id: "d-tc-export",
     name: "export_query_to_file",
     arguments: { sql: "SELECT TOP 5 name, revenue FROM bankers ORDER BY revenue DESC", path: "top-bankers.csv" },
   }
-  const u3 = [
-    ...u2,
+  const u3 = withSystem(system, [
+    msg("user", goal),
+    msg("assistant", null, [tcExplore]),
+    msg("tool", "README.md\nsrc/\ndata/", [], "d-tc-explore"),
+    msg("assistant", null, [tcSql]),
+    msg("tool", "name | revenue\nAda | 120\nBea | 95", [], "d-tc-sql"),
     msg("assistant", null, [tcExport]),
     msg("tool", "Wrote top-bankers.csv (5 rows)", [], "d-tc-export"),
-  ]
+  ])
 
   return [
     { kind: "goal", text: goal },
@@ -306,7 +317,7 @@ function buildPlannerFiveCalls(): TraceEntry[] {
     { name: "frontend_pages", type: "subagent_task", dependsOn: ["api_endpoints"] },
   ]
 
-  const u0 = [msg("user", goal)]
+  const u0 = withSystem(system, [msg("user", goal)])
   const tcWriteSchema = {
     id: "p-tc-schema",
     name: "write_file",
@@ -588,7 +599,7 @@ function buildKitchenSink(): TraceEntry[] {
     { name: "delegate", description: "Delegate", parameters: { type: "object" } },
   ]
 
-  const base = [msg("user", goal)]
+  const base = withSystem(system, [msg("user", goal)])
   const tcAsk = { id: "k-tc-ask", name: "ask_user", arguments: { question: "Which brand colors?" } }
   const afterAsk = [
     ...base,
