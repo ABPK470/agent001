@@ -1016,10 +1016,19 @@ export const api = {
    * Used on cold start to backfill the LiveLogs widget so prior sync /
    * agent / system events survive a server restart.
    */
-  recentEvents: (limit = 500) =>
-    json<{ events: Array<{ id: number; type: string; data: Record<string, unknown>; timestamp: string }>; count: number; hasMore: boolean }>(
-      `/api/events?limit=${limit}`,
-    ),
+  /** Cold-start backfill for Event Stream. Skips debug.trace so the window is
+   *  step/tool/run/sync surface events — same population search finds, not loop noise. */
+  recentEvents: (limit = 2000) => {
+    const params = new URLSearchParams({
+      limit: String(limit),
+      exclude_types: "debug.trace",
+    })
+    return json<{
+      events: Array<{ id: number; type: string; data: Record<string, unknown>; timestamp: string }>
+      count: number
+      hasMore: boolean
+    }>(`/api/events?${params}`)
+  },
 
   /** Full-text search of the persistent event_log table. Used by LiveLogs DB-fallback. */
   searchEvents: (

@@ -27,6 +27,8 @@ export function listEvents(opts?: {
   before?: string
   after?: string
   types?: string[]
+  /** Drop these types before applying LIMIT (Event Stream hydrate skips debug.trace spam). */
+  excludeTypes?: string[]
 }): DbEvent[] {
   const limit = opts?.limit ?? 200
   const conditions: string[] = []
@@ -43,6 +45,10 @@ export function listEvents(opts?: {
   if (opts?.types && opts.types.length > 0) {
     conditions.push(`type IN (${opts.types.map(() => "?").join(",")})`)
     params.push(...opts.types)
+  }
+  if (opts?.excludeTypes && opts.excludeTypes.length > 0) {
+    conditions.push(`type NOT IN (${opts.excludeTypes.map(() => "?").join(",")})`)
+    params.push(...opts.excludeTypes)
   }
 
   const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : ""

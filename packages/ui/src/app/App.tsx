@@ -292,8 +292,8 @@ export function App() {
   useEffect(() => {
     if (!me) return
     if (!shouldHydrateRecentEvents) return
-    // Enough recent history that Event Stream isn't only "step X completed"
-    // after a refresh; spam filter still drops high-volume debug.trace kinds.
+    // Surface events only (API excludes debug.trace) so hydrate matches what
+    // operators see in search — step/tool_call/run/sync, not loop noise.
     api.recentEvents(2000).then((res) => {
       useStore.getState().hydrateLogsFromEvents(res.events)
     }).catch(() => {})

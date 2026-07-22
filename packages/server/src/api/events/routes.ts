@@ -7,36 +7,50 @@ import { randomUUID } from "node:crypto"
 import * as db from "../../infra/persistence/sqlite.js"
 
 export function registerEventRoutes(app: FastifyInstance): void {
-  app.get<{ Querystring: { limit?: string; before?: string; after?: string; types?: string } }>(
-    "/api/events",
-    async (req) => {
-      const limit = Math.min(Number(req.query.limit) || 200, 1000)
-      const types = req.query.types
-        ? req.query.types
-            .split(",")
-            .map((type) => type.trim())
-            .filter(Boolean)
-        : undefined
-
-      const events = db.listEvents({
-        limit,
-        before: req.query.before,
-        after: req.query.after,
-        types
-      })
-
-      return {
-        events: events.map((event) => ({
-          id: event.id,
-          type: event.type,
-          data: JSON.parse(event.data),
-          timestamp: event.created_at
-        })),
-        count: events.length,
-        hasMore: events.length === limit
-      }
+  app.get<{
+    Querystring: {
+      limit?: string
+      before?: string
+      after?: string
+      types?: string
+      exclude_types?: string
     }
-  )
+  }>("/api/events", async (req) => {
+    // Event Stream hydrate asks for ~2k surface events; debug.trace is excluded
+    // via exclude_types so the window is not all loop noise.
+    const limit = Math.min(Number(req.query.limit) || 200, 5000)
+    const types = req.query.types
+      ? req.query.types
+          .split(",")
+          .map((type) => type.trim())
+          .filter(Boolean)
+      : undefined
+    const excludeTypes = req.query.exclude_types
+      ? req.query.exclude_types
+          .split(",")
+          .map((type) => type.trim())
+          .filter(Boolean)
+      : undefined
+
+    const events = db.listEvents({
+      limit,
+      before: req.query.before,
+      after: req.query.after,
+      types,
+      excludeTypes
+    })
+
+    return {
+      events: events.map((event) => ({
+        id: event.id,
+        type: event.type,
+        data: JSON.parse(event.data),
+        timestamp: event.created_at
+      })),
+      count: events.length,
+      hasMore: events.length === limit
+    }
+  })
 
   app.get("/api/webhooks/drains", async () => {
     const drains = db.listWebhookDrains()

@@ -26,11 +26,13 @@ function createKillManager(
 ): ToolKillManager {
   const { request, runtime } = command
   const callSignals = new Map<string, AbortSignal>()
+  const callToolNames = new Map<string, string>()
   return {
     register: (toolCallId: string, toolName: string) => {
       const perToolCtrl = new AbortController()
       const composed = AbortSignal.any([runtime.controller.signal, perToolCtrl.signal])
       callSignals.set(toolCallId, composed)
+      callToolNames.set(toolCallId, toolName)
       env.runContext.signal = composed
       return new Promise<string>((resolve) => {
         const key = `${request.runId}:${toolCallId}`
@@ -42,10 +44,15 @@ function createKillManager(
       })
     },
     unregister: (toolCallId: string) => {
+      const toolName = callToolNames.get(toolCallId)
       callSignals.delete(toolCallId)
+      callToolNames.delete(toolCallId)
       runtime.interaction.clearPendingKill(`${request.runId}:${toolCallId}`)
       env.runContext.signal = runtime.controller.signal
-      broadcast({ type: EventType.ToolCallCompleted, data: { runId: request.runId, toolCallId } })
+      broadcast({
+        type: EventType.ToolCallCompleted,
+        data: { runId: request.runId, toolCallId, ...(toolName ? { toolName } : {}) }
+      })
     },
     wrap: async <T>(toolCallId: string, fn: () => Promise<T>): Promise<T> => {
       void toolCallId

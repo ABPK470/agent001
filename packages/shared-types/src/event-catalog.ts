@@ -76,9 +76,9 @@ function stepName(payload: EventPayload): string {
   return humanize(str(payload.stepName, "step"))
 }
 
-/** Wire step/tool rows use action (preferred), then name, then tool. */
+/** Wire step/tool rows: action → name → tool → toolName. Empty when unknown. */
 function resolveToolName(payload: EventPayload): string {
-  return str(payload.action, str(payload.name, str(payload.tool, "step")))
+  return str(payload.action, str(payload.name, str(payload.tool, str(payload.toolName, ""))))
 }
 
 function formatStepOutput(payload: EventPayload): string {
@@ -96,37 +96,36 @@ function formatStepOutput(payload: EventPayload): string {
   }
 }
 
+/** Self-contained Event Stream lines: `query_mssql started · sql=…` (no label prefix). */
 function stepStartedSummary(payload: EventPayload): string {
-  const tool = resolveToolName(payload)
+  const tool = resolveToolName(payload) || "tool"
   const input =
     payload.input && typeof payload.input === "object" && !Array.isArray(payload.input)
       ? (payload.input as Record<string, unknown>)
       : {}
   const args = Object.keys(input).length > 0 ? presentToolCall(tool, input).summary : ""
-  const stepId = str(payload.stepId, "")
-  const idPart = stepId ? ` (#${stepId.length > 8 ? stepId.slice(0, 8) : stepId})` : ""
-  if (args) return truncate(`${tool} · ${args}${idPart}`, 96)
-  return `${tool}${idPart}`
+  if (args) return truncate(`${tool} started · ${args}`, 120)
+  return `${tool} started`
 }
 
 function stepCompletedSummary(payload: EventPayload): string {
-  const tool = resolveToolName(payload)
+  const tool = resolveToolName(payload) || "tool"
   const out = formatStepOutput(payload)
   const ms = num(payload.durationMs)
   const dur = ms != null ? `${(ms / 1000).toFixed(1)}s` : ""
-  const parts = [tool, out || "done", dur].filter(Boolean)
-  return truncate(parts.join(" · "), 96)
+  const parts = [`${tool} completed`, out || null, dur || null].filter(Boolean)
+  return truncate(parts.join(" · "), 120)
 }
 
 function stepFailedSummary(payload: EventPayload): string {
-  const tool = resolveToolName(payload)
+  const tool = resolveToolName(payload) || "tool"
   const err = truncate(str(payload.error, "failed"), 72)
-  return truncate(`${tool} · ${err}`, 96)
+  return truncate(`${tool} failed · ${err}`, 120)
 }
 
 function toolCallSummary(payload: EventPayload, verb: string): string {
   const tool = str(payload.toolName, str(payload.tool, str(payload.action, "")))
-  return tool ? `${tool} · ${verb}` : verb
+  return tool ? `${tool} ${verb}` : `tool ${verb}`
 }
 
 /** TraceEntry.kind → descriptor. */
@@ -641,21 +640,21 @@ export const SSE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
   "step.started": {
     id: "step.started",
     family: "tool",
-    label: "Step started",
+    label: "Step",
     severity: "info",
     summary: stepStartedSummary,
   },
   "step.completed": {
     id: "step.completed",
     family: "tool",
-    label: "Step completed",
+    label: "Step",
     severity: "info",
     summary: stepCompletedSummary,
   },
   "step.failed": {
     id: "step.failed",
     family: "tool",
-    label: "Step failed",
+    label: "Step",
     severity: "error",
     summary: stepFailedSummary,
   },
@@ -825,21 +824,21 @@ export const SSE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
   "tool_call.executing": {
     id: "tool_call.executing",
     family: "tool",
-    label: "Executing",
+    label: "Tool call",
     severity: "info",
     summary: (p) => toolCallSummary(p, "executing"),
   },
   "tool_call.completed": {
     id: "tool_call.completed",
     family: "tool",
-    label: "Completed",
+    label: "Tool call",
     severity: "info",
     summary: (p) => toolCallSummary(p, "completed"),
   },
   "tool_call.killed": {
     id: "tool_call.killed",
     family: "tool",
-    label: "Killed",
+    label: "Tool call",
     severity: "info",
     summary: (p) => toolCallSummary(p, "killed"),
   },

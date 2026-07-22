@@ -530,6 +530,14 @@ function eventType(type: string): string {
   return "system"
 }
 
+/** step.*/tool_call.* summaries already include tool + verb — don't wrap again. */
+function isSelfContainedStreamSummary(type: string, message: string): boolean {
+  if (type.startsWith("step.") || type.startsWith("tool_call.") || type.startsWith("tool.")) {
+    return /\b(started|completed|failed|executing|killed|done)\b/i.test(message)
+  }
+  return false
+}
+
 /**
  * Build a LogEntry with the correct type, error flag, and a clean
  * human-readable message via the shared event catalog.
@@ -598,7 +606,9 @@ function formatLogEntryInner(
     } catch {
       message = type
     }
-  } else if (d.label && !message.startsWith(d.label)) {
+  } else if (d.label && !message.startsWith(d.label) && !isSelfContainedStreamSummary(type, message)) {
+    // Prefix short fragments ("cancelled") with the catalog label. Skip when the
+    // summary already names the tool + verb (`query_mssql started · …`).
     message = `${d.label} — ${message}`
   }
 

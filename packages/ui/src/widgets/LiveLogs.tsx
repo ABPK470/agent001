@@ -415,6 +415,27 @@ export function LiveLogs() {
 
 // ── Expandable log row ───────────────────────────────────────────
 
+/** Always date + time so cross-day streams are readable (time-only was ambiguous). */
+function formatLogTimestamp(iso: string | undefined, tiny: boolean): string {
+  if (!iso) return ""
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) {
+    const date = iso.slice(0, 10)
+    const time = iso.slice(11, 19)
+    return date && time ? `${date} ${time}` : iso
+  }
+  const date = d.toLocaleDateString(undefined, tiny
+    ? { month: "short", day: "numeric" }
+    : { year: "numeric", month: "short", day: "numeric" })
+  const time = d.toLocaleTimeString(undefined, {
+    hour12: false,
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  })
+  return `${date} ${time}`
+}
+
 function LogRow({ log, setTypeFilters, compact, tiny }: {
   log: LogEntry; setTypeFilters: React.Dispatch<React.SetStateAction<Set<EventType>>>; compact: boolean; tiny: boolean
 }) {
@@ -433,20 +454,21 @@ function LogRow({ log, setTypeFilters, compact, tiny }: {
         <span className="shrink-0 w-3 flex items-center justify-center" style={{ color: msgColor, opacity: 0.3 }}>
           {hasData ? <ChevronRight size={13} className={`transition-transform ${expanded ? "rotate-90" : ""}`} /> : null}
         </span>
-        <span className="shrink-0 text-sm tabular-nums" style={{ color: msgColor, opacity: 0.55 }}>
-          {tiny ? log.timestamp?.slice(11, 19) : log.timestamp?.slice(11, 23)}
+        <span className="shrink-0 text-sm tabular-nums whitespace-nowrap" style={{ color: msgColor, opacity: 0.55 }}>
+          {formatLogTimestamp(log.timestamp, tiny)}
         </span>
         <button
-          className="shrink-0 w-16 text-sm font-medium text-left truncate hover:opacity-70 transition-opacity text-text-muted"
+          className="shrink-0 w-14 text-sm font-medium text-left truncate hover:opacity-70 transition-opacity text-text-muted"
           onClick={(e) => { e.stopPropagation(); setTypeFilters((prev) => { const next = new Set(prev); const t = log.type as EventType; if (next.has(t)) next.delete(t); else next.add(t); return next }) }}
         >
           {log.type}
         </button>
-        {!compact && (
-          <span className="shrink-0 text-sm text-text-muted/50 whitespace-nowrap">
-            {log.eventName ?? ""}
-          </span>
-        )}
+        <span
+          className={`shrink-0 text-sm text-text-muted/50 truncate ${compact ? "max-w-[9rem]" : "max-w-[14rem]"}`}
+          title={log.eventName ?? ""}
+        >
+          {log.eventName ?? ""}
+        </span>
         <span className="min-w-0 break-all text-sm" style={{ color: msgColor }}>
           {log.message}
         </span>

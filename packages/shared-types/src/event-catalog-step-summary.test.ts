@@ -10,7 +10,7 @@ describe("event-catalog step summaries", () => {
       input: { sql: "SELECT 1 AS n" },
       stepId: "step-22",
     })
-    expect(summary).toContain("query_mssql")
+    expect(summary).toMatch(/^query_mssql started/)
     expect(summary.toLowerCase()).toMatch(/select|sql/)
   })
 
@@ -21,7 +21,7 @@ describe("event-catalog step summaries", () => {
       output: { result: "Found 3 entities matching customers" },
       durationMs: 1200,
     })
-    expect(summary).toContain("search_catalog")
+    expect(summary).toMatch(/^search_catalog completed/)
     expect(summary).toContain("Found 3 entities")
     expect(summary).toContain("1.2s")
   })
@@ -32,14 +32,14 @@ describe("event-catalog step summaries", () => {
       action: "query_mssql",
       error: 'Tool "query_mssql" timed out after 120000ms',
     })
-    expect(summary).toContain("query_mssql")
+    expect(summary).toMatch(/^query_mssql failed/)
     expect(summary).toContain("timed out")
   })
 
   it("names the tool on tool_call.completed", () => {
     const d = lookupEventDescriptor("tool_call.completed")
     expect(d.summary({ toolName: "explore_mssql_schema" })).toBe(
-      "explore_mssql_schema · completed",
+      "explore_mssql_schema completed",
     )
   })
 })
