@@ -19,7 +19,6 @@ import { entranceClassName } from "./motion"
 import { useGridInteraction, type ResizeEdge } from "./useGridInteraction"
 
 const RESIZE_EDGES: ResizeEdge[] = ["n", "s", "e", "w", "ne", "nw", "se", "sw"]
-const CANVAS_PAD_PX = 4
 
 interface Props {
   viewId: string
@@ -159,13 +158,13 @@ export function GridCanvas({ viewId, tiles, split }: Props) {
   const setViewportRows = useLayoutStore((s) => s.setViewportRows)
   const viewportRows = useLayoutStore((s) => s.viewportRows)
 
+  // contentRect already excludes the host's `p-1` padding — do not subtract again
+  // or the grid is 8px short and left-aligned tiles leave the slack on the right.
   const metrics = useMemo(() => {
-    const innerW = Math.max(0, containerWidth - CANVAS_PAD_PX * 2)
-    const innerH = Math.max(0, containerHeight - CANVAS_PAD_PX * 2)
-    if (innerW <= 0 || innerH <= 0) {
+    if (containerWidth <= 0 || containerHeight <= 0) {
       return { rows: viewportRows, colW: 0, rowPx: 32 }
     }
-    return viewportGridMetrics(innerW, innerH)
+    return viewportGridMetrics(containerWidth, containerHeight)
   }, [containerWidth, containerHeight, viewportRows])
 
   const maxRows = metrics.rows
@@ -183,7 +182,7 @@ export function GridCanvas({ viewId, tiles, split }: Props) {
     viewId,
     tiles,
     split,
-    containerWidth: Math.max(0, containerWidth - CANVAS_PAD_PX * 2),
+    containerWidth,
     maxRows,
     rowPx,
     canvasRef: containerRef,
