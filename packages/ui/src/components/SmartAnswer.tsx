@@ -337,6 +337,10 @@ export function CompactTable({
 // bar unless lang is meaningful. Reads as a distinct snippet against the
 // chat background while staying visually quiet. Hovering reveals a copy
 // button in the top-right corner.
+//
+// Use inset `border` (not `ring`) — same rule as CompactTable. TermChat's
+// transcript host is `overflow-x-hidden`; rings paint outside the box and
+// the right edge gets clipped (left often survives thanks to `pl-1`).
 function CompactCodeBlock({ lang, text }: { lang: string; text: string }) {
   const showLang = Boolean(lang) && lang.toLowerCase() !== "text"
   // `copied` drives visibility (the button stays pinned visible during the
@@ -365,7 +369,7 @@ function CompactCodeBlock({ lang, text }: { lang: string; text: string }) {
     }).catch(() => { /* ignore */ })
   }, [text])
   return (
-    <div className="group relative rounded-md ring-1 ring-border-subtle my-1.5 overflow-hidden">
+    <div className="group relative my-1.5 w-full min-w-0 rounded-md border border-border-subtle overflow-hidden">
       {showLang && (
         <div className="px-3 pt-1.5 text-[10.5px] font-mono uppercase tracking-[0.08em] text-text-muted">
           {lang}
