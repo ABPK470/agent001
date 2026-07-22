@@ -1,5 +1,6 @@
 /**
  * Inline target editor — same form chrome as Configuration flows/actions/wiring.
+ * Environments are Sync topology only (connector, role, direction) — Policies own allow/deny/approve.
  */
 
 import type { JSX } from "react"
@@ -10,13 +11,6 @@ import { Listbox, type ListboxOption } from "../../../components/Listbox"
 import type { ConnectorAdmin, SyncEnvironmentAdmin } from "../../../types"
 import { FormFieldGroup, FormSectionCard } from "../form-section"
 import { HELP_TEXT } from "../chrome"
-import { FormCheck } from "../../sync-admin/shared"
-import {
-  deriveAllowedOperations,
-  denyFlagsForAccessMode,
-  OP_LABELS,
-  suggestAccessForName,
-} from "../../sync-admin/env-access"
 import { EnvColorPicker } from "./EnvColorPicker"
 import { ServiceUrlsField } from "./ServiceUrlsField"
 import { SyncPolicySection } from "./SyncPolicySection"
@@ -27,11 +21,6 @@ const ROLE_OPTIONS: ListboxOption<SyncEnvironmentAdmin["role"]>[] = [
   { value: "source", label: "source" },
   { value: "target", label: "target" },
   { value: "both", label: "both" },
-]
-
-const ACCESS_MODE_OPTIONS: ListboxOption<SyncEnvironmentAdmin["defaultAccessMode"]>[] = [
-  { value: "read_only", label: "read_only" },
-  { value: "read_write", label: "read_write" },
 ]
 
 export function SyncEnvironmentForm({
@@ -49,12 +38,6 @@ export function SyncEnvironmentForm({
   stackLevel?: number
   peerEnvironments?: Array<{ name: string; displayName: string }>
 }): JSX.Element {
-  const effectiveOps = useMemo(
-    () => deriveAllowedOperations(value.defaultAccessMode, value.denyDml, value.denyDdl),
-    [value.defaultAccessMode, value.denyDml, value.denyDdl],
-  )
-
-  const lastSuggestedNameRef = useRef("")
   const valueRef = useRef(value)
   valueRef.current = value
 
@@ -106,31 +89,6 @@ export function SyncEnvironmentForm({
     [onChange],
   )
 
-  useEffect(() => {
-    if (mode !== "create" || readOnly) return
-    const trimmed = value.name.trim()
-    if (!trimmed || trimmed === lastSuggestedNameRef.current) return
-    lastSuggestedNameRef.current = trimmed
-    const suggested = suggestAccessForName(trimmed)
-    onChange({
-      ...valueRef.current,
-      defaultAccessMode: suggested.defaultAccessMode,
-      denyDml: suggested.denyDml,
-      denyDdl: suggested.denyDdl,
-    })
-  }, [mode, onChange, readOnly, value.name])
-
-  function onAccessModeChange(modeValue: SyncEnvironmentAdmin["defaultAccessMode"]): void {
-    const flags = denyFlagsForAccessMode(modeValue)
-    onChange({
-      ...value,
-      defaultAccessMode: modeValue,
-      denyDml: flags.denyDml,
-      denyDdl: flags.denyDdl,
-    })
-  }
-
-  const accessReadOnly = readOnly || value.defaultAccessMode === "read_only"
   const policyPeers = peerEnvironments.filter((target) => target.name !== value.name)
 
   const handleServiceUrlsChange = useCallback(
@@ -148,7 +106,7 @@ export function SyncEnvironmentForm({
 
       <FormSectionCard
         title="Identity"
-        description="Logical Sync place. Link an enabled MSSQL connector for pools; name is a free-form slug."
+        description="Logical Sync place. Link an enabled MSSQL connector for pools; name is a free-form slug. Allow / deny / approve live in Policies."
         emphasized
       >
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -212,48 +170,6 @@ export function SyncEnvironmentForm({
               className="input font-mono text-sm"
             />
           </FormFieldGroup>
-        </div>
-      </FormSectionCard>
-
-      <FormSectionCard
-        title="Access"
-        description="Governance for this environment (policy seeding). Connector Write is a separate hard ceiling — both must allow for sync execute / DML to succeed."
-      >
-        <FormFieldGroup label="Access mode">
-          <Listbox
-            value={value.defaultAccessMode}
-            options={ACCESS_MODE_OPTIONS}
-            onChange={onAccessModeChange}
-            size="sm"
-            className="listbox-control w-full"
-            ariaLabel="Access"
-            disabled={readOnly}
-          />
-        </FormFieldGroup>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <FormCheck
-            label="Block DML"
-            checked={value.denyDml}
-            disabled={readOnly || accessReadOnly}
-            onChange={(denyDml) => patch({ denyDml })}
-          />
-          <FormCheck
-            label="Block DDL"
-            checked={value.denyDdl}
-            disabled={readOnly || accessReadOnly}
-            onChange={(denyDdl) => patch({ denyDdl })}
-          />
-        </div>
-        <div className="flex flex-wrap gap-1.5 pt-1">
-          {effectiveOps.map((op) => (
-            <span
-              key={op}
-              className="rounded-full border border-accent/30 bg-accent/10 px-2 py-0.5 text-xs font-mono text-accent"
-              title={OP_LABELS[op]}
-            >
-              {op}
-            </span>
-          ))}
         </div>
       </FormSectionCard>
 

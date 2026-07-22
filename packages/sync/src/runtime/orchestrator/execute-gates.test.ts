@@ -120,11 +120,8 @@ function readyPlan(overrides?: Partial<SyncPlan>): SyncPlan {
 }
 
 describe("executeSync pre-execution gates", () => {
-  const originalProd = process.env["SYNC_ALLOW_PROD"]
-
   beforeEach(() => {
     vi.clearAllMocks()
-    delete process.env["SYNC_ALLOW_PROD"]
     loadPlanMock.mockReturnValue(readyPlan())
     planTooOldMock.mockReturnValue(false)
     detectCatalogDriftMock.mockResolvedValue({ catalogCompatible: true, issues: [] })
@@ -136,11 +133,6 @@ describe("executeSync pre-execution gates", () => {
     })
     runMetadataSyncMock.mockResolvedValue({ applied: { insert: 0, update: 0, delete: 0 } })
     runPostMetadataMock.mockResolvedValue(undefined)
-  })
-
-  afterEach(() => {
-    if (originalProd === undefined) delete process.env["SYNC_ALLOW_PROD"]
-    else process.env["SYNC_ALLOW_PROD"] = originalProd
   })
 
   it("requires confirm=true", async () => {
@@ -180,18 +172,6 @@ describe("executeSync pre-execution gates", () => {
       })
     ).rejects.toThrow(/source-only/)
   })
-
-  it("refuses PROD target without SYNC_ALLOW_PROD", async () => {
-    const plan = readyPlan({ source: "DEV", target: "PROD" })
-    loadPlanMock.mockReturnValue(plan)
-    await expect(
-      executeSync("gate-plan", {
-        host: hostWithEnvs({ targetName: "PROD" }),
-        confirm: true
-      })
-    ).rejects.toThrow(/PROD is currently disabled/)
-  })
-
 
   it("refuses catalog drift at execute time", async () => {
     detectCatalogDriftMock.mockResolvedValue({

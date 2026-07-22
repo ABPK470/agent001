@@ -41,6 +41,37 @@ import {
   runRegisteredSyncExecute,
   SYNC_EXECUTE_OPERATION,
 } from "./state/execute-session.js"
+import {
+  assertSyncHttpPolicy,
+  isSyncHttpApprovalRequiredError,
+  isSyncHttpPolicyDeniedError,
+  SYNC_APPROVAL_REQUIRED_CODE,
+  SYNC_POLICY_DENIED_CODE,
+} from "./service/sync-http-policy.js"
+
+function replySyncPolicyError(reply: FastifyReply, error: unknown): Record<string, unknown> | null {
+  if (isSyncHttpPolicyDeniedError(error)) {
+    reply.code(403)
+    return {
+      error: error.message,
+      code: SYNC_POLICY_DENIED_CODE,
+      policyName: error.policyName,
+      toolName: error.toolName,
+    }
+  }
+  if (isSyncHttpApprovalRequiredError(error)) {
+    reply.code(409)
+    return {
+      error: error.message,
+      code: SYNC_APPROVAL_REQUIRED_CODE,
+      approvalId: error.approvalId,
+      policyName: error.policyName,
+      toolName: error.toolName,
+      args: error.args,
+    }
+  }
+  return null
+}
 
 interface PublishSyncDefinitionsResponse {
   publishedAt: string
@@ -430,6 +461,20 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
     try {
       // Gate lives in previewSync (same path as agent sync_preview / sync_diff_scan).
       rebuildLiveSyncEnvironments(host)
+      await assertSyncHttpPolicy({
+        session: req.session,
+        toolName: "sync_preview",
+        args: {
+          entityType: req.body.entityType,
+          entityId: req.body.entityId,
+          source: req.body.source,
+          target: req.body.target,
+          force: Boolean(req.body.force),
+          enabledOptionalTables: Array.isArray(req.body.enabledOptionalTables)
+            ? req.body.enabledOptionalTables
+            : [],
+        },
+      })
       const plan = await previewSync({
         host,
         entityType: req.body.entityType,
@@ -470,6 +515,8 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
       )
       return plan
     } catch (error) {
+      const policyBody = replySyncPolicyError(reply, error)
+      if (policyBody) return policyBody
       if (isSyncPublishRequiredError(error)) {
         reply.code(409)
         return {
@@ -503,6 +550,18 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
     const planDetail = planSummary && plan ? buildSyncAuditDetail(planSummary, plan.totals) : {}
     auditSync(req.params.planId, actor, actorUpn, "sync.execute.start", planDetail)
     try {
+      await assertSyncHttpPolicy({
+        session: req.session,
+        toolName: "sync_execute",
+        args: {
+          planId: req.params.planId,
+          confirm: true,
+          source: plan?.source,
+          target: plan?.target,
+          entityType: plan?.entity.type,
+          entityId: plan?.entity.id,
+        },
+      })
       const result = await runRegisteredSyncExecute({
         host,
         planId: req.params.planId,
@@ -518,6 +577,15 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
       if (!result.success && !result.skipped && result.error !== "Cancelled by user") reply.code(500)
       return result
     } catch (error) {
+      const policyBody = replySyncPolicyError(reply, error)
+      if (policyBody) {
+        auditSync(req.params.planId, actor, actorUpn, "sync.execute.failed", {
+          ...planDetail,
+          error: policyBody.error,
+          code: policyBody.code,
+        })
+        return policyBody
+      }
       if (isSyncPublishRequiredError(error)) {
         auditSync(req.params.planId, actor, actorUpn, "sync.execute.failed", {
           ...planDetail,
@@ -558,6 +626,31 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
     const plan = loadPlan(host, req.params.planId)
     const planSummary = plan ? summarizeSyncPlan(plan) : loadPersistedSyncPlanSummary(req.params.planId)
     const planDetail = planSummary && plan ? buildSyncAuditDetail(planSummary, plan.totals) : {}
+    try {
+      await assertSyncHttpPolicy({
+        session: req.session,
+        toolName: "sync_execute",
+        args: {
+          planId: req.params.planId,
+          confirm: true,
+          source: plan?.source,
+          target: plan?.target,
+          entityType: plan?.entity.type,
+          entityId: plan?.entity.id,
+        },
+      })
+    } catch (error) {
+      const policyBody = replySyncPolicyError(reply, error)
+      if (policyBody) {
+        auditSync(req.params.planId, actor, actorUpn, "sync.execute.failed", {
+          ...planDetail,
+          error: policyBody.error,
+          code: policyBody.code,
+        })
+        return policyBody
+      }
+      throw error
+    }
     auditSync(req.params.planId, actor, actorUpn, "sync.execute.start", planDetail)
     setupSse(reply)
     const send = (event: ExecuteProgress) => reply.raw.write(`data: ${JSON.stringify(event)}\n\n`)
@@ -598,6 +691,42 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
       clearInterval(heartbeat)
       reply.raw.end()
     }
+  })
+
+  app.post<{ Params: { id: string } }>("/api/sync/policy-approvals/:id/approve", async (req, reply) => {
+    const approval = db.getSyncToolApproval(req.params.id)
+    if (!approval) {
+      reply.code(404)
+      return { error: "Approval not found" }
+    }
+    if (approval.actorUpn !== req.session.upn && !req.session.isAdmin) {
+      reply.code(403)
+      return { error: "Not allowed to resolve this approval" }
+    }
+    if (approval.status !== "pending") {
+      reply.code(409)
+      return { error: `Approval is already ${approval.status}` }
+    }
+    const updated = db.markSyncToolApprovalApproved(req.params.id, req.session.upn)
+    return { approval: updated }
+  })
+
+  app.post<{ Params: { id: string } }>("/api/sync/policy-approvals/:id/deny", async (req, reply) => {
+    const approval = db.getSyncToolApproval(req.params.id)
+    if (!approval) {
+      reply.code(404)
+      return { error: "Approval not found" }
+    }
+    if (approval.actorUpn !== req.session.upn && !req.session.isAdmin) {
+      reply.code(403)
+      return { error: "Not allowed to resolve this approval" }
+    }
+    if (approval.status !== "pending") {
+      reply.code(409)
+      return { error: `Approval is already ${approval.status}` }
+    }
+    const updated = db.markSyncToolApprovalDenied(req.params.id, req.session.upn)
+    return { approval: updated }
   })
 
   app.get<{

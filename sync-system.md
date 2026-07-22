@@ -185,14 +185,12 @@ savePlan(SyncPlan)
 | Source not target-only | Hard | Hard | `getEnvironment` |
 | Target not source-only | Hard | Hard | `getEnvironment` |
 | Direction allowed | Hard | Hard | `assertSupportedSyncDirection` |
-| PROD target | Hard* | Hard* | `SYNC_ALLOW_PROD=1` |
+| Policies (allow / deny / approve) | Hard (HTTP + agent) | Hard (HTTP + agent) | Policy evaluator (`sync_preview` / `sync_execute`) |
 | Catalog drift | Soft (warning) | Hard | `detectCatalogDrift` |
 | Freeze windows active | Soft (warning) | Hard** | `evaluateFreezeWindows` |
-| Hosted policy (read-only target) | Hard | Hard | `defaultAccessMode`, `allowedOperations` |
 | Scope conflicts | Surfaced | Hard | `detectScopeMisattribution` |
 | Plan age | — | Hard (>1h) | `planTooOldToExecute` |
 
-\* Unless `SYNC_ALLOW_PROD=1` is set in the server environment.  
 \** Unless `overrideFreezeWindow=true` on execute (audited).
 
 ---
@@ -983,15 +981,13 @@ Parses goals like `sync contract abcd from uat to dev` into `SyncOperationIntent
 - Evaluated at preview (warning) and execute (block).
 - Override: `overrideFreezeWindow: true` on execute (audited in decision log).
 
-### Hosted access policy
+### Policies (single governance rail)
 
-Per-environment `defaultAccessMode`, `allowedOperations`, `denyDml`, and `denyDdl` drive the hosted policy engine. Execute is blocked when the target environment is read-only or does not allow `sync_execute`. Approvals are configured through the dedicated approval workflow, not per-environment UPN lists.
+Allow / deny / require approval for Sync live in **Policies** (same evaluator as agent tools). HTTP `/api/sync/preview` and `/api/sync/execute` call `assertSyncHttpPolicy` before the orchestrator. Environments are Sync topology only (connector, role, direction) — they do not configure Access overrides. Hosted defaults include allow `sync_preview` and require approval for `sync_execute`.
 
-**Removed:** `syncAllowlist` (per-env UPN execute list) was removed — do not add it to config; the API and file loader reject it.
+**Removed:** `SYNC_ALLOW_PROD` process.env lock, Environment Access UI (mode / Block DML-DDL / Sync op pills), and env_derived Access→policy seeding.
 
-### Production target lock
-
-Sync to environment named `prod` (case-insensitive) requires `SYNC_ALLOW_PROD=1` on the server process.
+**Removed:** `syncAllowlist` (per-env UPN execute list) — do not add it to config; the API and file loader reject it.
 
 ### Plan staleness
 
@@ -999,8 +995,7 @@ Plans older than **1 hour** cannot execute — forces re-preview against current
 
 ### Approvals
 
-`approvalRequiredOperations` on environments exists for hosted policy integration. The core orchestrator does not implement a separate approval workflow inside `executeSync` — external approval gates may wrap execute at the API/UI layer.
-
+HTTP Sync RequireApproval returns `409 approval_required` with an `approvalId`. Env Sync approves via `/api/sync/policy-approvals/:id/approve`, then retries. Agent Sync continues to use run-tool approvals.
 ### Risk multiplier
 
 `governance.riskMultiplier` on definitions is snapshotted into plans for proposer/annotation tooling (`packages/sync/src/service/core/proposer/`).
@@ -1050,9 +1045,14 @@ Server records preview/execute actions via `recordSyncAudit` (routes layer) for 
 
 ### Environment variables
 
+Perf/debug only (not governance):
+
 | Variable | Effect |
 |----------|--------|
-| `SYNC_ALLOW_PROD=1` | Allow sync environment named `prod` |
+| `SYNC_PREVIEW_CONCURRENCY` | Parallel table diffs (default 4) |
+| `SYNC_DEBUG_SQL` | Extra SQL telemetry when `1` |
+
+Governance (allow / deny / approve) is configured in **Policies**, not process.env.
 
 ### Orchestrator tuning (`db-helpers.ts`)
 

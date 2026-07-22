@@ -347,6 +347,19 @@ export {
 } from "./run-tool-approvals.js"
 
 export {
+  consumeSyncToolApprovalGrant,
+  ensureSyncToolApprovalsTable,
+  getSyncToolApproval,
+  listApprovedSyncToolGrants,
+  markSyncToolApprovalApproved,
+  markSyncToolApprovalDenied,
+  syncToolArgsKey,
+  upsertPendingSyncToolApproval,
+  type SyncToolApprovalRecord,
+  type SyncToolApprovalStatus,
+} from "./sync-tool-approvals.js"
+
+export {
   countAdmins,
   countUsers,
   findUserByUpn,

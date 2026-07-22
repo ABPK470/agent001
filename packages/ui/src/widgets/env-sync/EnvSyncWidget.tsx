@@ -49,6 +49,10 @@ import { createPreviewProgress, isPreviewInProgress } from "../../state/env-sync
 import type { ModalKind, SearchHit } from "./types"
 import { listSyncSourceOptions, listSyncTargetOptions } from "./sync-env-eligibility"
 import {
+  SyncPolicyApprovalModal,
+  type SyncPolicyPending,
+} from "./SyncPolicyApprovalModal"
+import {
   formatSearchHitLabel,
   getPlanEntityType,
   isPreviewEntityReady,
@@ -83,6 +87,7 @@ export function EnvSync() {
   const [publishStatus, setPublishStatus] = useState<SyncPublishStatus | null>(null)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [execModalOpen, setExecModalOpen] = useState(false)
+  const [policyPending, setPolicyPending] = useState<SyncPolicyPending | null>(null)
   const exec = useSyncExternalStore(subscribeExec, getExecSnapshot)
   const execPlanId = useSyncExternalStore(subscribeExec, getExecPlanId)
 
@@ -369,9 +374,26 @@ export function EnvSync() {
 
   useEffect(() => { isFirstMountRef.current = false }, [])
 
+  function beginExecStream(planId: string): void {
+    startExecStream(planId, {
+      onPolicyApprovalRequired: (meta) => {
+        setPolicyPending({
+          approvalId: meta.approvalId,
+          toolName: "sync_execute",
+          reason: meta.reason,
+          policyName: meta.policyName,
+          onApproved: () => {
+            setExecModalOpen(true)
+            beginExecStream(planId)
+          },
+        })
+      },
+    })
+  }
+
   useEffect(() => {
     if (!agentSyncExecStarted) return
-    startExecStream(agentSyncExecStarted)
+    beginExecStream(agentSyncExecStarted)
     setExecModalOpen(true)
     setHasNewAgentSync(true)
   }, [agentSyncExecStarted])
@@ -441,13 +463,23 @@ export function EnvSync() {
         )
       }
     } catch (error) {
-      notifyError(error instanceof Error ? error.message : String(error))
+      const err = error as Error & { code?: string; approvalId?: string; policyName?: string }
+      if (err.code === "approval_required" && err.approvalId) {
+        setPolicyPending({
+          approvalId: err.approvalId,
+          toolName: "sync_preview",
+          reason: err.message,
+          policyName: err.policyName,
+          onApproved: () => {
+            void onPreview()
+          },
+        })
+      } else {
+        notifyError(err.message || String(error))
+      }
       setForm({ planId: null })
       // Server gate (same as agent tools) — refresh strip if tip-vs-publish raced the UI.
-      if (
-        error instanceof Error
-        && (error as Error & { code?: string }).code === "publish_required"
-      ) {
+      if (err.code === "publish_required") {
         void api.getSyncPublishStatus().then(setPublishStatus).catch(() => {})
       }
     } finally {
@@ -458,7 +490,7 @@ export function EnvSync() {
 
   function onExecConfirmed() {
     if (!displayPlan) return
-    startExecStream(displayPlan.planId)
+    beginExecStream(displayPlan.planId)
   }
 
   const srcOpts: ListboxOption<string>[] = listSyncSourceOptions(envs).map((entry) => ({
@@ -807,6 +839,12 @@ export function EnvSync() {
             if (exec.kind === "running") void cancelExec()
             setExecModalOpen(false)
           }}
+        />
+      )}
+      {policyPending && (
+        <SyncPolicyApprovalModal
+          pending={policyPending}
+          onClose={() => setPolicyPending(null)}
         />
       )}
       <ToastStack toasts={toasts} onDismiss={dismissToast} />

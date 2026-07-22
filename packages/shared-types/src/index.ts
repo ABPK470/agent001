@@ -1028,7 +1028,6 @@ export interface CompiledSyncGovernanceDecision {
   targetEnvironment: {
     name: string
     role: string
-    prodSyncUnlocked: boolean
     actorUpn: string | null
   }
   warnings: string[]

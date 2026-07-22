@@ -1,6 +1,6 @@
 import { SYNC_HTTP_SERVICE_SLOTS } from "@mia/shared-types"
 import type { SyncEnvironmentAdmin } from "../../../types"
-import { deriveAllowedOperations } from "../../sync-admin/env-access"
+import { deriveAllowedOperations, suggestAccessForName } from "../../sync-admin/env-access"
 
 export type ServiceUrlEntry = {
   key: string
@@ -80,9 +80,11 @@ export function cloneEnvironmentFormSnapshot(snapshot: EnvironmentFormSnapshot):
 
 export function environmentFormToPayload(snapshot: EnvironmentFormSnapshot): Record<string, unknown> {
   const name = snapshot.name.trim()
-  const defaultAccessMode = snapshot.defaultAccessMode
-  const denyDml = snapshot.denyDml
-  const denyDdl = snapshot.denyDdl
+  // Access fields are silent API defaults (not operator governance). Policies own allow/deny/approve.
+  const suggested = suggestAccessForName(name)
+  const defaultAccessMode = suggested.defaultAccessMode
+  const denyDml = suggested.denyDml
+  const denyDdl = suggested.denyDdl
   const serviceUrlMap = serviceUrlMapFromEntries(snapshot.serviceUrls)
 
   return {

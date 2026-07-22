@@ -38,7 +38,16 @@ export function subscribeExec(cb: () => void): () => void {
   return () => { execListeners.delete(cb) }
 }
 
-export function startExecStream(planId: string): void {
+export function startExecStream(
+  planId: string,
+  opts?: {
+    onPolicyApprovalRequired?: (meta: {
+      approvalId: string
+      reason: string
+      policyName?: string
+    }) => void
+  },
+): void {
   execStream?.close()
   userCancelled = false
   const events: SyncExecuteProgress[] = []
@@ -67,8 +76,21 @@ export function startExecStream(planId: string): void {
       }
       notifyExec()
     },
-    (error) => {
+    (error, meta) => {
       if (userCancelled) return
+      if (meta?.code === "approval_required" && meta.approvalId) {
+        execState = { kind: "idle" }
+        execPlanId = null
+        execStream?.close()
+        execStream = null
+        notifyExec()
+        opts?.onPolicyApprovalRequired?.({
+          approvalId: meta.approvalId,
+          reason: error,
+          policyName: meta.policyName,
+        })
+        return
+      }
       execState = { kind: "done", success: false, events: [...events], error }
       execStream?.close()
       execStream = null

@@ -472,6 +472,7 @@ export function policyRulesFromEnvironments(envs: ReadonlyArray<EnvLike>): Polic
     }
     for (const op of e.approvalRequiredOperations) {
       if (!isPolicyDbOperation(op)) continue
+      const tool = syncToolForDbOperation(op)
       rules.push({
         name: `env_${envKey}_approval_${op}`,
         effect: PolicyEffect.RequireApproval,
@@ -479,8 +480,10 @@ export function policyRulesFromEnvironments(envs: ReadonlyArray<EnvLike>): Polic
         parameters: {
           priority: PER_ENV_APPROVAL_PRIORITY,
           reason: `${envKey}.approvalRequiredOperations: ${op} requires confirmation`,
-          selectors: { tool: "mssql_*", dbEnvironment: envKey, dbOperation: op }
-        }
+          selectors: tool
+            ? { tool, dbEnvironment: envKey, dbOperation: op }
+            : { tool: "mssql_*", dbEnvironment: envKey, dbOperation: op },
+        },
       })
     }
     // Explicit per-env allow for DEV widenings (e.g. `allowedOperations: ["dml"]`).
@@ -499,6 +502,7 @@ export function policyRulesFromEnvironments(envs: ReadonlyArray<EnvLike>): Polic
       // Don't emit an allow that contradicts an explicit deny on the same env.
       if (op === PolicyDbOperation.Dml && e.denyDml) continue
       if (op === PolicyDbOperation.Ddl && e.denyDdl) continue
+      const syncTool = syncToolForDbOperation(op)
       rules.push({
         name: `env_${envKey}_allow_${op}`,
         effect: PolicyEffect.Allow,
@@ -506,10 +510,21 @@ export function policyRulesFromEnvironments(envs: ReadonlyArray<EnvLike>): Polic
         parameters: {
           priority: PER_ENV_ALLOW_PRIORITY,
           reason: `${envKey}.allowedOperations: ${op} explicitly permitted`,
-          selectors: { tool: "mssql_*", dbEnvironment: envKey, dbOperation: op }
-        }
+          selectors: syncTool
+            ? { tool: syncTool, dbEnvironment: envKey, dbOperation: op }
+            : { tool: "mssql_*", dbEnvironment: envKey, dbOperation: op },
+        },
       })
     }
   }
   return rules
+}
+
+/** Sync ops must match sync tools — not mssql_* — or HTTP/agent Sync never hits the rule. */
+function syncToolForDbOperation(op: string): string | null {
+  if (op === PolicyDbOperation.SyncExecute) return "sync_execute"
+  if (op === PolicyDbOperation.SyncPreview) return "sync_preview"
+  if (op === PolicyDbOperation.SyncCustomSql) return "sync_custom_sql"
+  if (op === PolicyDbOperation.SyncShellExecute) return "sync_shell_execute"
+  return null
 }

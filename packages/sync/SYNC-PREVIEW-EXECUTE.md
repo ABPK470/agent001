@@ -341,8 +341,7 @@ History UI reads `sync_runs` (paginated), not `event_log`.
 |------|------|----------|
 | Plan exists + age | `loadPlan`, `planTooOldToExecute` | 404 / error if >1h |
 | Environment roles | `getEnvironment` | Source cannot be target-only |
-| PROD lock | env check | Unless `SYNC_ALLOW_PROD=1` |
-| Allowlist | target env | User UPN must be listed |
+| Policies | HTTP `assertSyncHttpPolicy` / agent `governTool` | Deny → 403; RequireApproval → 409 then grant |
 | Catalog drift | `detectCatalogDrift` | **Hard refuse** if incompatible |
 | Scope conflicts | plan `tables[].conflicts` | **Hard refuse** if any |
 | Plan validation | `validatePlan` | **Hard refuse** if changeSet missing or `totals` ≠ derived from changeSets |

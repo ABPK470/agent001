@@ -75,10 +75,6 @@ export async function executeSync(
   assertEnvConnectorReady(sourceEnv, readyIds)
   assertEnvConnectorReady(targetEnv, readyIds)
   assertSupportedSyncDirection(sourceEnv, targetEnv)
-  // Hard block: PROD is read-only until explicitly unlocked by ops (SYNC_ALLOW_PROD=1).
-  if (targetEnv.name.toLowerCase() === "prod" && !process.env["SYNC_ALLOW_PROD"]) {
-    throw new Error(`Sync to PROD is currently disabled. Set SYNC_ALLOW_PROD=1 to unlock.`)
-  }
 
   if (!plan.executionContract) {
     throw new Error(`Plan ${planId} predates the unified execution contract — re-preview before executing.`)

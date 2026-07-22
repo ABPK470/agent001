@@ -134,24 +134,7 @@ export function extractToolFacts(step: Step, ctx?: HostedPolicyContext): ToolFac
     // treat it as a synonym for `environment` when its value happens to
     // be one of the well-known environment keys, so per-env policy
     // selectors fire without requiring the model to learn a new arg.
-    const candidates = [input["environment"], input["dbEnvironment"], input["env"], input["connection"]]
-    let extracted: PolicyDbEnvironment | undefined
-    for (const raw of candidates) {
-      if (
-        raw === PolicyDbEnvironment.Dev ||
-        raw === PolicyDbEnvironment.Uat ||
-        raw === PolicyDbEnvironment.Prod
-      ) {
-        extracted = raw
-        break
-      }
-    }
-    if (extracted) {
-      facts.dbEnvironment = extracted
-    } else if (ctx?.defaultDbEnvironment) {
-      facts.dbEnvironment = ctx.defaultDbEnvironment
-    }
-
+    facts.dbEnvironment = extractDbEnvironment(input, ctx)
     const sql =
       typeof input["sql"] === "string"
         ? (input["sql"] as string)
@@ -161,12 +144,50 @@ export function extractToolFacts(step: Step, ctx?: HostedPolicyContext): ToolFac
     facts.dbOperation = classifyDbOperation(step.action, sql)
   }
 
+  // Sync tools — target environment + operation (preview vs execute).
+  // Agent tools and HTTP Sync both synthesize steps with these action
+  // names; `target` is the Sync env name used as the write destination.
+  if (
+    step.action === "sync_preview" ||
+    step.action === "sync_execute" ||
+    step.action === "sync_diff_scan" ||
+    step.action === "resolve_sync_scope"
+  ) {
+    facts.dbEnvironment = extractDbEnvironment(input, ctx)
+    facts.dbOperation = classifyDbOperation(step.action, "")
+  }
+
   // Network-capable tools.
   if (step.action === "fetch_url") {
     facts.network = PolicyNetwork.Allow
   }
 
   return facts
+}
+
+function extractDbEnvironment(
+  input: Record<string, unknown>,
+  ctx?: HostedPolicyContext,
+): PolicyDbEnvironment | undefined {
+  const candidates = [
+    input["environment"],
+    input["dbEnvironment"],
+    input["env"],
+    input["connection"],
+    input["target"],
+  ]
+  for (const raw of candidates) {
+    if (typeof raw !== "string") continue
+    const key = raw.toLowerCase()
+    if (
+      key === PolicyDbEnvironment.Dev ||
+      key === PolicyDbEnvironment.Uat ||
+      key === PolicyDbEnvironment.Prod
+    ) {
+      return key
+    }
+  }
+  return ctx?.defaultDbEnvironment
 }
 
 function classifyPath(raw: string, sandboxRoot: string | null): PolicyScope {

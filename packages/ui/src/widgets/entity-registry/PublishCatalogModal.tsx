@@ -40,24 +40,25 @@ function MetaCell({
   label,
   value,
   mono = true,
-  className,
+  grow = false,
 }: {
   label: string
   value: string
   mono?: boolean
-  className?: string
+  /** Let long values wrap instead of truncating. */
+  grow?: boolean
 }): JSX.Element {
   return (
-    <div className={`min-w-0 px-4 py-2.5 ${className ?? ""}`.trim()}>
+    <div className={grow ? "min-w-0 flex-1 basis-[12rem]" : "shrink-0"}>
       <p className={FIELD_LABEL}>{label}</p>
       <p
         className={[
-          "mt-0.5 truncate text-sm font-medium text-text",
+          "mt-0.5 text-sm font-medium text-text",
+          grow ? "break-words" : "whitespace-nowrap",
           mono ? "font-mono tabular-nums" : "",
         ]
           .filter(Boolean)
           .join(" ")}
-        title={value}
       >
         {value}
       </p>
@@ -175,12 +176,6 @@ export function PublishCatalogModal({
     compileSections.length > 0
       ? compileSections.map((id) => SECTION_LABELS[id] ?? id).join(", ")
       : "—"
-  const affectedLabel =
-    unpublished.length === 0
-      ? "—"
-      : unpublished.length <= 6
-        ? unpublished.map((item) => item.id).join(", ")
-        : `${unpublished.slice(0, 4).map((item) => item.id).join(", ")} +${unpublished.length - 4}`
 
   const subtitle =
     phase === "idle"
@@ -231,13 +226,12 @@ export function PublishCatalogModal({
     >
       {phase === "idle" && (
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <div className="grid shrink-0 grid-cols-2 border-b border-border-subtle sm:grid-cols-3 lg:grid-cols-6">
+          <div className="flex shrink-0 flex-wrap items-start gap-x-8 gap-y-3 border-b border-border-subtle px-6 py-3">
             <MetaCell label="Tip" value={tipLabel} />
             <MetaCell label="Published" value={publishedLabel} />
             <MetaCell label="Changes" value={String(changeCount)} />
             <MetaCell label="Entities" value={`${unpublished.length} / ${entityCount}`} />
-            <MetaCell label="Tip sections" value={tipSectionsLabel} mono={false} />
-            <MetaCell label="Affected" value={affectedLabel} mono={unpublished.length > 0} />
+            <MetaCell label="Tip sections" value={tipSectionsLabel} mono={false} grow />
           </div>
           {(stampDrift || operationalOnly) && (
             <div className="shrink-0 space-y-1 border-b border-warning/30 bg-warning/10 px-6 py-2 text-xs leading-relaxed text-warning">

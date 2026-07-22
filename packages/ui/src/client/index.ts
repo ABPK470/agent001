@@ -215,6 +215,12 @@ async function json<T>(path: string, opts?: RequestInit): Promise<T> {
     if (body && typeof body === "object" && typeof (body as { code?: unknown }).code === "string") {
       err.code = (body as { code: string }).code
     }
+    if (body && typeof body === "object" && typeof (body as { approvalId?: unknown }).approvalId === "string") {
+      ;(err as Error & { approvalId?: string }).approvalId = (body as { approvalId: string }).approvalId
+    }
+    if (body && typeof body === "object" && typeof (body as { policyName?: unknown }).policyName === "string") {
+      ;(err as Error & { policyName?: string }).policyName = (body as { policyName: string }).policyName
+    }
     if (body && typeof body === "object" && Array.isArray((body as { stderr?: unknown }).stderr)) {
       err.stderr = (body as { stderr: string[] }).stderr
     }
@@ -850,6 +856,16 @@ export const api = {
       `/api/sync/execute/${encodeURIComponent(planId)}`,
       { method: "POST" },
     ),
+  approveSyncPolicyApproval: (id: string) =>
+    json<{ approval: { id: string; status: string } }>(
+      `/api/sync/policy-approvals/${encodeURIComponent(id)}/approve`,
+      { method: "POST" },
+    ),
+  denySyncPolicyApproval: (id: string) =>
+    json<{ approval: { id: string; status: string } }>(
+      `/api/sync/policy-approvals/${encodeURIComponent(id)}/deny`,
+      { method: "POST" },
+    ),
   cancelSyncExecute: (planId: string) =>
     json<{ cancelled: boolean; planId: string }>(
       `/api/sync/execute/${encodeURIComponent(planId)}/cancel`,
@@ -1476,18 +1492,66 @@ export interface OperationAuditResponse extends OperationsResponse {
 export function syncExecuteStream(
   planId: string,
   onEvent: (e: SyncExecuteProgress) => void,
-  onError?: (err: string) => void,
+  onError?: (err: string, meta?: { code?: string; approvalId?: string; policyName?: string }) => void,
 ): { close: () => void } {
-  const es = new EventSource(`/api/sync/execute/${encodeURIComponent(planId)}/stream`, { withCredentials: true })
-  es.onmessage = (msg) => {
-    try { onEvent(JSON.parse(msg.data) as SyncExecuteProgress) }
-    catch (e) { onError?.(e instanceof Error ? e.message : String(e)) }
-  }
-  es.onerror = () => {
-    onError?.("SSE connection error")
-    es.close()
-  }
-  return { close: () => es.close() }
+  const ctrl = new AbortController()
+  const url = `/api/sync/execute/${encodeURIComponent(planId)}/stream`
+
+  void (async () => {
+    try {
+      const res = await fetch(url, {
+        method: "GET",
+        credentials: "include",
+        headers: { Accept: "text/event-stream" },
+        signal: ctrl.signal,
+      })
+      const contentType = res.headers.get("content-type") ?? ""
+      if (!res.ok || contentType.includes("application/json")) {
+        const body = (await res.json().catch(() => null)) as {
+          error?: string
+          code?: string
+          approvalId?: string
+          policyName?: string
+        } | null
+        onError?.(body?.error ?? `Execute failed (${res.status})`, {
+          code: body?.code,
+          approvalId: body?.approvalId,
+          policyName: body?.policyName,
+        })
+        return
+      }
+      if (!res.body) {
+        onError?.("Empty execute stream")
+        return
+      }
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ""
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        const chunks = buffer.split("\n\n")
+        buffer = chunks.pop() ?? ""
+        for (const chunk of chunks) {
+          const dataLine = chunk
+            .split("\n")
+            .find((line) => line.startsWith("data: "))
+          if (!dataLine) continue
+          try {
+            onEvent(JSON.parse(dataLine.slice(6)) as SyncExecuteProgress)
+          } catch (e) {
+            onError?.(e instanceof Error ? e.message : String(e))
+          }
+        }
+      }
+    } catch (e) {
+      if (ctrl.signal.aborted) return
+      onError?.(e instanceof Error ? e.message : String(e))
+    }
+  })()
+
+  return { close: () => ctrl.abort() }
 }
 
 // ── Live event stream + cross-tab relay via BroadcastChannel ─────

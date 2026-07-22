@@ -113,10 +113,6 @@ async function previewSyncInner(
     assertEnvConnectorReady(sourceEnv, readyIds)
     assertEnvConnectorReady(targetEnv, readyIds)
     assertSupportedSyncDirection(sourceEnv, targetEnv)
-    // Hard block: PROD is read-only until explicitly unlocked by ops (SYNC_ALLOW_PROD=1).
-    if (targetEnv.name.toLowerCase() === "prod" && !process.env["SYNC_ALLOW_PROD"]) {
-      throw new Error(`Sync to PROD is currently disabled. Set SYNC_ALLOW_PROD=1 to unlock.`)
-    }
 
     const freezeEvaluation = evaluateFreezeWindows(definition.governance.freezeWindowIds)
     const governanceWarnings: string[] = []
@@ -149,7 +145,6 @@ async function previewSyncInner(
       targetEnvironment: {
         name: targetEnv.name,
         role: targetEnv.role,
-        prodSyncUnlocked: targetEnv.name.toLowerCase() !== "prod" || Boolean(process.env["SYNC_ALLOW_PROD"]),
         actorUpn: input.userUpn ?? null,
       },
       warnings: governanceWarnings

@@ -110,6 +110,22 @@ describe("extractToolFacts — command normalization", () => {
   })
 })
 
+describe("extractToolFacts — sync tools", () => {
+  it("classifies sync_preview with target=prod", () => {
+    const facts = extractToolFacts(
+      makeStep("sync_preview", { entityType: "content", source: "dev", target: "prod" }),
+    )
+    expect(facts.dbEnvironment).toBe("prod")
+    expect(facts.dbOperation).toBe("sync_preview")
+  })
+
+  it("classifies sync_execute with target=uat", () => {
+    const facts = extractToolFacts(makeStep("sync_execute", { planId: "p1", confirm: true, target: "uat" }))
+    expect(facts.dbEnvironment).toBe("uat")
+    expect(facts.dbOperation).toBe("sync_execute")
+  })
+})
+
 // ── Derived per-env rules ────────────────────────────────────────
 
 describe("policyRulesFromEnvironments", () => {
@@ -129,8 +145,24 @@ describe("policyRulesFromEnvironments", () => {
   it("emits approval rules only when approvalRequiredOperations is explicitly configured", () => {
     const env = withPermissionDefaults({ name: "uat", approvalRequiredOperations: ["sync_execute"] })
     const rules = policyRulesFromEnvironments([env])
-    const approvals = rules.filter((r) => r.effect === PolicyEffect.RequireApproval).map((r) => r.name)
-    expect(approvals).toContain("env_uat_approval_sync_execute")
+    const approvals = rules.filter((r) => r.effect === PolicyEffect.RequireApproval)
+    expect(approvals.map((r) => r.name)).toContain("env_uat_approval_sync_execute")
+    const syncApproval = approvals.find((r) => r.name === "env_uat_approval_sync_execute")
+    expect(syncApproval?.parameters).toMatchObject({
+      selectors: { tool: "sync_execute", dbEnvironment: "uat", dbOperation: "sync_execute" },
+    })
+  })
+
+  it("emits sync_execute allow with tool sync_execute not mssql_*", () => {
+    const env = withPermissionDefaults({
+      name: "dev",
+      allowedOperations: ["sync_execute"],
+    })
+    const rules = policyRulesFromEnvironments([env])
+    const allow = rules.find((r) => r.name === "env_dev_allow_sync_execute")
+    expect(allow?.parameters).toMatchObject({
+      selectors: { tool: "sync_execute", dbEnvironment: "dev", dbOperation: "sync_execute" },
+    })
   })
 
   it("emits an explicit ALLOW rule when DEV opts in to DML via allowedOperations", () => {
