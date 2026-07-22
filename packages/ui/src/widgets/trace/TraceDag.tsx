@@ -749,122 +749,126 @@ export function TraceDag({
       </div>
 
       <div className="trace-body min-h-0 flex-1 flex flex-col">
-        <PinOverlay
-          rows={pinRows}
-          onToggle={onTogglePinnedScope}
-          onReveal={onRevealScope}
-        />
-        <div ref={scrollRef} className="trace-scroll min-h-0 flex-1" data-trace-scroll-host>
-          {emptySlot}
+        {emptySlot ? (
+          emptySlot
+        ) : (
+          <>
+            <PinOverlay
+              rows={pinRows}
+              onToggle={onTogglePinnedScope}
+              onReveal={onRevealScope}
+            />
+            <div ref={scrollRef} className="trace-scroll min-h-0 flex-1" data-trace-scroll-host>
+              {runId &&
+                dag.hasData &&
+                query &&
+                (callHits?.size ?? 0) === 0 && (
+                  <p className="trace-empty px-2 py-3">No matches for “{query}”</p>
+                )}
 
-          {runId &&
-            dag.hasData &&
-            query &&
-            (callHits?.size ?? 0) === 0 && (
-              <p className="trace-empty px-2 py-3">No matches for “{query}”</p>
-            )}
-
-          {runId && dag.hasData && (
-            <div className="trace-flow">
-              <PreambleOutline
-                dag={dag}
-                open={openState.preamble}
-                contextPromptOpen={openState.contextPrompt}
-                contextToolsOpen={openState.contextTools}
-                onToggle={onTogglePreamble}
-                onTogglePrompt={onToggleContextPrompt}
-                onToggleTools={onToggleContextTools}
-                query={query}
-              />
-              {dag.spine.map((entry) => {
-                if (entry.kind === "phase") {
-                  const nested =
-                    entry.phase.children && entry.phase.children.length > 0
-                      ? entry.phase.children.map((child) => {
-                          if (child.kind === "work") {
-                            if (
-                              query &&
-                              callHits &&
-                              !callHits.has(child.work.afterCallIndex)
-                            ) {
-                              return null
-                            }
-                            return (
-                              <WorkOutline
-                                key={child.work.id}
-                                work={child.work}
-                                open={openState.work.has(child.work.id)}
-                                openState={openState}
-                                onToggle={() => onToggleWork(child.work.id)}
-                                onToggleTool={onToggleTool}
-                                nested
-                              />
-                            )
-                          }
-                          const call = dag.calls[child.callIndex]
-                          if (!call) return null
-                          if (query && callHits && !callHits.has(call.index)) return null
-                          return (
-                            <CallOutline
-                              key={`llm-${call.iteration}-${call.index}`}
-                              call={call}
-                              openState={openState}
-                              searchHit={callHits?.get(call.index) ?? null}
-                              onToggleCall={onToggleCall}
-                              onToggleSent={onToggleSent}
-                              onToggleReceived={onToggleReceived}
-                              onToggleMessage={onToggleMessage}
-                              onToggleTool={onToggleTool}
-                              nested
-                            />
-                          )
-                        })
-                      : null
-                  return (
-                    <PhaseOutline
-                      key={entry.phase.id}
-                      phase={entry.phase}
-                      open={openState.phases.has(entry.phase.id)}
-                      onToggle={() => onTogglePhase(entry.phase.id)}
-                      nested={nested}
-                    />
-                  )
-                }
-                if (entry.kind === "work") {
-                  if (query && callHits && !callHits.has(entry.work.afterCallIndex)) {
-                    return null
-                  }
-                  return (
-                    <WorkOutline
-                      key={entry.work.id}
-                      work={entry.work}
-                      open={openState.work.has(entry.work.id)}
-                      openState={openState}
-                      onToggle={() => onToggleWork(entry.work.id)}
-                      onToggleTool={onToggleTool}
-                    />
-                  )
-                }
-                const call = dag.calls[entry.callIndex]
-                if (!call) return null
-                if (query && callHits && !callHits.has(call.index)) return null
-                return (
-                  <CallOutline
-                    key={`llm-${call.iteration}-${call.index}`}
-                    call={call}
-                    openState={openState}
-                    searchHit={callHits?.get(call.index) ?? null}
-                    onToggleCall={onToggleCall}
-                    onToggleSent={onToggleSent}
-                    onToggleReceived={onToggleReceived}
-                    onToggleMessage={onToggleMessage}
-                    onToggleTool={onToggleTool}
+              {runId && dag.hasData && (
+                <div className="trace-flow">
+                  <PreambleOutline
+                    dag={dag}
+                    open={openState.preamble}
+                    contextPromptOpen={openState.contextPrompt}
+                    contextToolsOpen={openState.contextTools}
+                    onToggle={onTogglePreamble}
+                    onTogglePrompt={onToggleContextPrompt}
+                    onToggleTools={onToggleContextTools}
+                    query={query}
                   />
-                )
-              })}
+                  {dag.spine.map((entry) => {
+                    if (entry.kind === "phase") {
+                      const nested =
+                        entry.phase.children && entry.phase.children.length > 0
+                          ? entry.phase.children.map((child) => {
+                              if (child.kind === "work") {
+                                if (
+                                  query &&
+                                  callHits &&
+                                  !callHits.has(child.work.afterCallIndex)
+                                ) {
+                                  return null
+                                }
+                                return (
+                                  <WorkOutline
+                                    key={child.work.id}
+                                    work={child.work}
+                                    open={openState.work.has(child.work.id)}
+                                    openState={openState}
+                                    onToggle={() => onToggleWork(child.work.id)}
+                                    onToggleTool={onToggleTool}
+                                    nested
+                                  />
+                                )
+                              }
+                              const call = dag.calls[child.callIndex]
+                              if (!call) return null
+                              if (query && callHits && !callHits.has(call.index)) return null
+                              return (
+                                <CallOutline
+                                  key={`llm-${call.iteration}-${call.index}`}
+                                  call={call}
+                                  openState={openState}
+                                  searchHit={callHits?.get(call.index) ?? null}
+                                  onToggleCall={onToggleCall}
+                                  onToggleSent={onToggleSent}
+                                  onToggleReceived={onToggleReceived}
+                                  onToggleMessage={onToggleMessage}
+                                  onToggleTool={onToggleTool}
+                                  nested
+                                />
+                              )
+                            })
+                          : null
+                      return (
+                        <PhaseOutline
+                          key={entry.phase.id}
+                          phase={entry.phase}
+                          open={openState.phases.has(entry.phase.id)}
+                          onToggle={() => onTogglePhase(entry.phase.id)}
+                          nested={nested}
+                        />
+                      )
+                    }
+                    if (entry.kind === "work") {
+                      if (query && callHits && !callHits.has(entry.work.afterCallIndex)) {
+                        return null
+                      }
+                      return (
+                        <WorkOutline
+                          key={entry.work.id}
+                          work={entry.work}
+                          open={openState.work.has(entry.work.id)}
+                          openState={openState}
+                          onToggle={() => onToggleWork(entry.work.id)}
+                          onToggleTool={onToggleTool}
+                        />
+                      )
+                    }
+                    const call = dag.calls[entry.callIndex]
+                    if (!call) return null
+                    if (query && callHits && !callHits.has(call.index)) return null
+                    return (
+                      <CallOutline
+                        key={`llm-${call.iteration}-${call.index}`}
+                        call={call}
+                        openState={openState}
+                        searchHit={callHits?.get(call.index) ?? null}
+                        onToggleCall={onToggleCall}
+                        onToggleSent={onToggleSent}
+                        onToggleReceived={onToggleReceived}
+                        onToggleMessage={onToggleMessage}
+                        onToggleTool={onToggleTool}
+                      />
+                    )
+                  })}
+                </div>
+              )}
             </div>
-          )}
-        </div>
+          </>
+        )}
       </div>
     </div>
   )
