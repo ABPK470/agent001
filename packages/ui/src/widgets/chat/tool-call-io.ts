@@ -47,6 +47,37 @@ export function readToolIoFromActivity(activity: OperationActivity): ToolIoDetai
   return raw as ToolIoDetails
 }
 
+const NON_TOOL_ACTIVITY_NAMES = new Set([
+  "queued",
+  "started",
+  "completed",
+  "failed",
+  "cancelled",
+  "step",
+])
+
+/** Last-resort I/O for named tool rows when step.* payloads were lost but the
+ *  activity still carries a tool name + summary (partial window / synth step). */
+export function coerceToolIoFromActivity(activity: OperationActivity): ToolIoDetails | null {
+  const fromDetails = readToolIoFromActivity(activity)
+  if (fromDetails) return fromDetails
+  const fromEvents = buildToolIoFromStepEvents(activity.events)
+  if (fromEvents) return fromEvents
+  if (NON_TOOL_ACTIVITY_NAMES.has(activity.name)) return null
+  if (activity.id.startsWith("telemetry:")) return null
+  if (!/^[a-z][a-z0-9_]*$/.test(activity.name)) return null
+  // Require a real args/output hint — bare duration is not enough (lifecycle rows).
+  if (!activity.summary) return null
+  const status: ToolIoDetails["status"] =
+    activity.status === "failed" ? "failed" : activity.status === "running" ? "running" : "success"
+  return {
+    tool: activity.name,
+    status,
+    argsSummary: activity.summary,
+    durationMs: activity.durationMs
+  }
+}
+
 export function buildToolIoFromStepEvents(events: readonly OperationEvent[]): ToolIoDetails | null {
   let started: OperationEvent | undefined
   let ended: OperationEvent | undefined

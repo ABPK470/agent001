@@ -160,6 +160,97 @@ describe("agent-run pipeline telemetry grouping", () => {
     expect(step.events.some((e) => e.type === EventType.ToolCallExecuting)).toBe(true)
   })
 
+  it("buffers tool_call.executing that arrives before step.started (no orphan Tool call row)", async () => {
+    listEventsForRunId.mockReturnValue([
+      { type: EventType.RunStarted, created_at: "2026-05-27T14:55:00.000Z", data: JSON.stringify({ runId: "run-1", goal: "g" }) },
+      // kill-manager register broadcasts BEFORE govern-tool publishes step.started
+      {
+        type: EventType.ToolCallExecuting,
+        created_at: "2026-05-27T14:55:01.000Z",
+        data: JSON.stringify({ runId: "run-1", toolCallId: "tc-1", toolName: "query_mssql" }),
+      },
+      {
+        type: EventType.StepStarted,
+        created_at: "2026-05-27T14:55:01.050Z",
+        data: JSON.stringify({
+          runId: "run-1",
+          action: "query_mssql",
+          input: { sql: "SELECT 1" },
+        }),
+      },
+      {
+        type: EventType.StepCompleted,
+        created_at: "2026-05-27T14:55:02.000Z",
+        data: JSON.stringify({ runId: "run-1", durationMs: 950, output: { result: "ok" } }),
+      },
+      {
+        type: EventType.ToolCallCompleted,
+        created_at: "2026-05-27T14:55:02.050Z",
+        data: JSON.stringify({ runId: "run-1", toolCallId: "tc-1" }),
+      },
+      { type: EventType.RunCompleted, created_at: "2026-05-27T14:55:03.000Z", data: JSON.stringify({ runId: "run-1" }) },
+    ])
+
+    const { listOperationsForRun } = await import("../src/api/operations/service/query/index.ts")
+    const { operation } = listOperationsForRun("run-1")
+    const names = operation!.activities.map((a) => a.name)
+    expect(names).toEqual(["started", "query_mssql", "completed"])
+    expect(names.filter((n) => n === "Tool call").length).toBe(0)
+    const step = operation!.activities.find((a) => a.name === "query_mssql")!
+    expect(step.details?.["toolIo"]).toBeTruthy()
+    expect(step.events.some((e) => e.type === EventType.ToolCallExecuting)).toBe(true)
+  })
+
+  it("promotes orphan tool_call.* to a named tool row when step.* events are missing", async () => {
+    listEventsForRunId.mockReturnValue([
+      { type: EventType.RunStarted, created_at: "2026-05-27T14:55:00.000Z", data: JSON.stringify({ runId: "run-1", goal: "g" }) },
+      {
+        type: EventType.ToolCallExecuting,
+        created_at: "2026-05-27T14:55:01.000Z",
+        data: JSON.stringify({ runId: "run-1", toolCallId: "tc-1", toolName: "query_mssql" }),
+      },
+      {
+        type: EventType.ToolCallCompleted,
+        created_at: "2026-05-27T14:55:02.000Z",
+        data: JSON.stringify({ runId: "run-1", toolCallId: "tc-1" }),
+      },
+      { type: EventType.CheckpointSaved, created_at: "2026-05-27T14:55:03.000Z", data: JSON.stringify({ runId: "run-1" }) },
+      { type: EventType.RunCompleted, created_at: "2026-05-27T14:55:04.000Z", data: JSON.stringify({ runId: "run-1" }) },
+    ])
+
+    const { listOperationsForRun } = await import("../src/api/operations/service/query/index.ts")
+    const { operation } = listOperationsForRun("run-1")
+    const names = operation!.activities.map((a) => a.name)
+    expect(names).toEqual(["started", "query_mssql", "Checkpoint", "completed"])
+    expect(names.filter((n) => n === "Tool call").length).toBe(0)
+    const step = operation!.activities.find((a) => a.name === "query_mssql")!
+    expect(step.details?.["toolIo"]).toBeTruthy()
+  })
+
+  it("attaches toolIo on orphan step.completed (window missing step.started)", async () => {
+    listEventsForRunId.mockReturnValue([
+      { type: EventType.RunStarted, created_at: "2026-05-27T14:55:00.000Z", data: JSON.stringify({ runId: "run-1", goal: "g" }) },
+      {
+        type: EventType.StepCompleted,
+        created_at: "2026-05-27T14:55:02.000Z",
+        data: JSON.stringify({
+          runId: "run-1",
+          action: "read_file",
+          durationMs: 5,
+          output: { result: "/** file contents */" },
+        }),
+      },
+      { type: EventType.RunCompleted, created_at: "2026-05-27T14:55:03.000Z", data: JSON.stringify({ runId: "run-1" }) },
+    ])
+
+    const { listOperationsForRun } = await import("../src/api/operations/service/query/index.ts")
+    const { operation } = listOperationsForRun("run-1")
+    const step = operation!.activities.find((a) => a.name === "read_file")!
+    expect(step).toBeTruthy()
+    expect(step.details?.["toolIo"]).toBeTruthy()
+    expect((step.details!["toolIo"] as { outputText?: string }).outputText).toContain("file contents")
+  })
+
   it("marks a telemetry group failed when any entry carries an error", async () => {
     listEventsForRunId.mockReturnValue([
       { type: EventType.RunStarted, created_at: "2026-05-27T14:55:00.000Z", data: JSON.stringify({ runId: "run-1", goal: "g" }) },

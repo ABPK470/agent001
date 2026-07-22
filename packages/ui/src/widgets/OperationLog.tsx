@@ -47,9 +47,8 @@ import {
   readHttpTraceFields,
 } from "./sync/trace/sync-http-trace"
 import {
-  buildToolIoFromStepEvents,
+  coerceToolIoFromActivity,
   isAgentStepEventType,
-  readToolIoFromActivity,
   readToolIoFromEvent,
   stripToolIoForInlineDisplay,
 } from "./chat/tool-call-io"
@@ -1012,9 +1011,7 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, pipel
   const hasChildren = (activity.children?.length ?? 0) > 0
   const sqlEvents = activity.events.filter((ev) => isSyncSqlEventType(ev.type))
   const httpEvents = activity.events.filter((ev) => isSyncHttpEventType(ev.type))
-  const toolIo =
-    readToolIoFromActivity(activity) ??
-    (activity.events.length > 0 ? buildToolIoFromStepEvents(activity.events) : null)
+  const toolIo = coerceToolIoFromActivity(activity)
   const renderedSummary =
     defaultActivitySummary(effectiveKind, activity) ??
     toolIo?.argsSummary ??

@@ -105,14 +105,24 @@ function groupAgentRunActivities(
   // of one row per event or all telemetry dumped at the end.
   let openTelemetry: OperationActivity | null = null
   let openTelemetryType: string | null = null
-  // Most recent step activity (open or closed). Orphan tool_call.* kill-signals
-  // fold into it so every tool — including ask_user — is a step row, never a
-  // separate generic "Tool call" telemetry row.
+  // Most recent step activity (open or closed). tool_call.completed/killed after
+  // step.completed fold into it (unregister races past step close).
   let lastStepActivity: OperationActivity | null = null
+  // tool_call.executing is broadcast BEFORE step.started (kill-manager register
+  // wraps govern-tool). Buffer those orphans and fold into the next step — never
+  // emit a bare "Tool call" telemetry row when a step is about to arrive.
+  let pendingToolCalls: OperationEvent[] = []
 
   const closeTelemetryGroup = (): void => {
     openTelemetry = null
     openTelemetryType = null
+  }
+
+  const attachToolIo = (step: OperationActivity): void => {
+    const toolIo = buildToolIoFromStepEvents(step.events)
+    if (!toolIo) return
+    step.details = { ...(step.details ?? {}), toolIo }
+    step.summary = buildToolIoSummary(toolIo) ?? step.summary
   }
 
   const appendTelemetryEvent = (type: string, ev: OperationEvent): void => {
@@ -137,6 +147,59 @@ function groupAgentRunActivities(
     activities.push(openTelemetry)
   }
 
+  /** When step.* never arrived (window gap / persist miss), promote buffered
+   *  tool_call.* into a named tool row instead of opaque "Tool call" telemetry. */
+  const flushPendingToolCalls = (): void => {
+    if (pendingToolCalls.length === 0) return
+    closeTelemetryGroup()
+    const byCallId = new Map<string, OperationEvent[]>()
+    for (const ev of pendingToolCalls) {
+      const callId = strField(ev.data, "toolCallId") ?? `anon:${ev.timestamp}:${byCallId.size}`
+      const bucket = byCallId.get(callId)
+      if (bucket) bucket.push(ev)
+      else byCallId.set(callId, [ev])
+    }
+    pendingToolCalls = []
+
+    for (const evs of byCallId.values()) {
+      const toolName = evs
+        .map((e) => strField(e.data, "toolName"))
+        .find((n): n is string => typeof n === "string" && n.length > 0)
+      if (!toolName) {
+        for (const ev of evs) appendTelemetryEvent(ev.type, ev)
+        continue
+      }
+      const startedAt = evs[0]!.timestamp
+      const endedAt = evs[evs.length - 1]!.timestamp
+      const killed = evs.some((e) => e.type === EventType.ToolCallKilled)
+      const finished = evs.some(
+        (e) => e.type === EventType.ToolCallCompleted || e.type === EventType.ToolCallKilled
+      )
+      const act: OperationActivity = {
+        id: `step-synth:${activities.length}`,
+        name: toolName,
+        status: killed
+          ? OperationStatus.Failed
+          : finished
+            ? OperationStatus.Success
+            : OperationStatus.Running,
+        startedAt,
+        endedAt: finished ? endedAt : null,
+        durationMs: finished ? durationOf(startedAt, endedAt) : null,
+        details: {
+          toolIo: {
+            tool: toolName,
+            status: killed ? "failed" : finished ? "success" : "running",
+            durationMs: finished ? durationOf(startedAt, endedAt) : null
+          }
+        },
+        events: evs
+      }
+      activities.push(act)
+      lastStepActivity = act
+    }
+  }
+
   const closeOpenStep = (endTs: string, failed: boolean, error?: string): void => {
     const step = openSteps.pop()
     if (!step) return
@@ -146,6 +209,7 @@ function groupAgentRunActivities(
       step.status = failed ? OperationStatus.Failed : OperationStatus.Success
     }
     if (error) step.error = error
+    attachToolIo(step)
   }
 
   const closeAllOpenSteps = (endTs: string, failed: boolean, error?: string): void => {
@@ -172,22 +236,26 @@ function groupAgentRunActivities(
     const t = ev.type
 
     if (t === EventType.RunQueued) {
+      flushPendingToolCalls()
       closeTelemetryGroup()
       activities.push(instantActivity("queued", "queued", OperationStatus.Success, ev))
       continue
     }
     if (t === EventType.RunStarted) {
+      flushPendingToolCalls()
       closeTelemetryGroup()
       activities.push(instantActivity("started", "started", OperationStatus.Success, ev))
       continue
     }
     if (t === EventType.RunCompleted) {
+      flushPendingToolCalls()
       closeTelemetryGroup()
       closeAllOpenSteps(ev.timestamp, false)
       activities.push(instantActivity("completed", "completed", OperationStatus.Success, ev))
       continue
     }
     if (t === EventType.RunFailed) {
+      flushPendingToolCalls()
       closeTelemetryGroup()
       const error = strField(ev.data, "error") ?? undefined
       closeAllOpenSteps(ev.timestamp, true, error)
@@ -202,6 +270,7 @@ function groupAgentRunActivities(
       continue
     }
     if (t === EventType.RunCancelled) {
+      flushPendingToolCalls()
       closeTelemetryGroup()
       closeAllOpenSteps(ev.timestamp, true, "Cancelled")
       activities.push(
@@ -217,6 +286,7 @@ function groupAgentRunActivities(
     }
 
     if (t === EventType.SyncAgentPreview) {
+      flushPendingToolCalls()
       closeTelemetryGroup()
       const planId = strField(ev.data, "planId") ?? "unknown"
       const source = strField(ev.data, "source")
@@ -241,6 +311,7 @@ function groupAgentRunActivities(
     }
 
     if (t === EventType.SyncAgentExecuteStarted) {
+      flushPendingToolCalls()
       closeTelemetryGroup()
       const planId = strField(ev.data, "planId") ?? "unknown"
       const act: OperationActivity = {
@@ -272,15 +343,17 @@ function groupAgentRunActivities(
       const input = (ev.data["input"] as Record<string, unknown> | undefined) ?? {}
       const argsSummary =
         Object.keys(input).length > 0 ? presentToolCall(toolName, input).summary : undefined
+      const prior = pendingToolCalls
+      pendingToolCalls = []
       const act: OperationActivity = {
         id: `step:${activities.length}`,
         name: toolName,
         status: OperationStatus.Running,
-        startedAt: ev.timestamp,
+        startedAt: prior[0]?.timestamp ?? ev.timestamp,
         endedAt: null,
         durationMs: null,
         summary: argsSummary,
-        events: [ev]
+        events: [...prior, ev]
       }
       activities.push(act)
       openSteps.push(act)
@@ -296,19 +369,17 @@ function groupAgentRunActivities(
         step.durationMs = durationOf(step.startedAt, ev.timestamp)
         step.status = t === EventType.StepCompleted ? OperationStatus.Success : OperationStatus.Failed
         if (t === EventType.StepFailed) step.error = strField(ev.data, "error") ?? "step failed"
-        const toolIo = buildToolIoFromStepEvents(step.events)
-        if (toolIo) {
-          step.details = { toolIo }
-          step.summary = buildToolIoSummary(toolIo) ?? step.summary
-        } else {
+        attachToolIo(step)
+        if (!step.details?.["toolIo"]) {
           const dur = numField(ev.data, "durationMs")
           if (dur != null && !step.summary) step.summary = `${(dur / 1000).toFixed(1)}s`
         }
       } else {
+        flushPendingToolCalls()
         closeTelemetryGroup()
         const orphan: OperationActivity = {
           id: `step-orphan:${activities.length}`,
-          name: strField(ev.data, "tool") ?? "step",
+          name: resolveStepToolName(ev.data),
           status: t === EventType.StepCompleted ? OperationStatus.Success : OperationStatus.Failed,
           startedAt: ev.timestamp,
           endedAt: ev.timestamp,
@@ -316,6 +387,7 @@ function groupAgentRunActivities(
           error: t === EventType.StepFailed ? strField(ev.data, "error") ?? undefined : undefined,
           events: [ev]
         }
+        attachToolIo(orphan)
         activities.push(orphan)
         lastStepActivity = orphan
       }
@@ -323,30 +395,40 @@ function groupAgentRunActivities(
     }
 
     // tool_call.* are kill-management signals wrapping the same tool execution
-    // a step.* row already represents (with full I/O). Fold them into the open
-    // (or most recent) step so every tool is a step row, never a separate
-    // generic "Tool call" telemetry row. Do NOT fold debug/usage/checkpoint
-    // into the open step — that buries I/O under noise when the operator expands.
+    // a step.* row already represents (with full I/O).
+    // - open step: fold in
+    // - completed/killed after step close: fold into last step (unregister race)
+    // - executing before step.started: buffer (never lastStep — that is the prior tool)
     if (
       t === EventType.ToolCallExecuting ||
       t === EventType.ToolCallCompleted ||
       t === EventType.ToolCallKilled
     ) {
-      const target = openSteps.length > 0 ? openSteps[openSteps.length - 1]! : lastStepActivity
-      if (target) {
+      if (openSteps.length > 0) {
         closeTelemetryGroup()
-        target.events.push(ev)
+        openSteps[openSteps.length - 1]!.events.push(ev)
         continue
       }
-      appendTelemetryEvent(t, ev)
+      if (
+        (t === EventType.ToolCallCompleted || t === EventType.ToolCallKilled) &&
+        lastStepActivity &&
+        pendingToolCalls.length === 0
+      ) {
+        closeTelemetryGroup()
+        lastStepActivity.events.push(ev)
+        continue
+      }
+      pendingToolCalls.push(ev)
       continue
     }
 
     // Non-action event (debug.trace, checkpoint.saved, usage.updated, …).
     // Sibling telemetry rows — even while a step is open — keep tool rows clean.
+    flushPendingToolCalls()
     appendTelemetryEvent(t, ev)
   }
 
+  flushPendingToolCalls()
   const lastTs = events[events.length - 1]?.timestamp ?? new Date().toISOString()
   if (pipelineStatus === OperationStatus.Failed || pipelineStatus === OperationStatus.Cancelled) {
     closeAllOpenSteps(lastTs, true)
