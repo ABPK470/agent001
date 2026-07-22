@@ -20,6 +20,7 @@ import { Listbox, type ListboxOption } from "../../components/Listbox"
 import { SetupHintStrip } from "../../components/SetupHintStrip"
 import { ToastStack, useWidgetToasts } from "../../components/useWidgetToasts"
 import { useContainerSize } from "../../hooks/useContainerSize"
+import { countSyncEnvSseEvents } from "../../lib/sync-env-sse"
 import { useStore } from "../../state/store"
 import type {
   PublishedSyncDefinition,
@@ -47,7 +48,11 @@ import { net, PlanView } from "./PlanTables"
 import { PreviewProgressPanel } from "./PreviewProgressPanel"
 import { createPreviewProgress, isPreviewInProgress } from "../../state/env-sync-preview-progress"
 import type { ModalKind, SearchHit } from "./types"
-import { listSyncSourceOptions, listSyncTargetOptions } from "./sync-env-eligibility"
+import {
+  clampSyncDirectionSelection,
+  listSyncSourceOptions,
+  listSyncTargetOptions,
+} from "./sync-env-eligibility"
 import {
   SyncPolicyApprovalModal,
   type SyncPolicyPending,
@@ -68,9 +73,11 @@ export function EnvSync() {
   const [modal, setModal] = useState<ModalKind>(null)
   const [hasNewAgentSync, setHasNewAgentSync] = useState(false)
   const isFirstMountRef = useRef(true)
+  const lastEnvTickRef = useRef<number | null>(null)
 
   const form = useStore((s) => s.envSyncForm)
   const setForm = useStore((s) => s.setEnvSyncForm)
+  const envTick = useStore((s) => countSyncEnvSseEvents(s.sseEventLog))
   const plan = useStore((s) => s.envSyncPlan)
   const setPlan = useStore((s) => s.setEnvSyncPlan)
   const previewProgress = useStore((s) => s.envSyncPreviewProgress)
@@ -308,15 +315,10 @@ export function EnvSync() {
       if (envsResult.status === "fulfilled") {
         const nextEnvs = envsResult.value
         setEnvs(nextEnvs)
-        const sources = listSyncSourceOptions(nextEnvs)
-        const nextForm: Partial<typeof form> = {}
-        if (sources.length >= 1 && !source) nextForm.source = sources[0].name
-        const sourceForTargets = nextForm.source ?? source
-        const targets = listSyncTargetOptions(nextEnvs, sourceForTargets || null)
-        if (targets.length >= 1 && !target) {
-          nextForm.target = targets.find((env) => env.name !== sourceForTargets)?.name ?? targets[0].name
+        const clamped = clampSyncDirectionSelection(nextEnvs, source, target)
+        if (clamped.source !== source || clamped.target !== target) {
+          setForm({ source: clamped.source, target: clamped.target })
         }
-        if (Object.keys(nextForm).length) setForm(nextForm)
       } else {
         notifyError(
           envsResult.reason instanceof Error
@@ -342,6 +344,30 @@ export function EnvSync() {
     })
     return () => { dead = true }
   }, [])
+
+  // Configuration → Environments save broadcasts sync_env.update; refresh From/To live.
+  useEffect(() => {
+    if (lastEnvTickRef.current === null) {
+      lastEnvTickRef.current = envTick
+      return
+    }
+    if (envTick === lastEnvTickRef.current) return
+    lastEnvTickRef.current = envTick
+    let dead = false
+    void api.syncEnvironments().then((nextEnvs) => {
+      if (dead) return
+      setEnvs(nextEnvs)
+      const current = useStore.getState().envSyncForm
+      const clamped = clampSyncDirectionSelection(nextEnvs, current.source, current.target)
+      if (clamped.source !== current.source || clamped.target !== current.target) {
+        setForm({ source: clamped.source, target: clamped.target })
+      }
+    }).catch((error) => {
+      if (dead) return
+      notifyError(error instanceof Error ? error.message : String(error))
+    })
+    return () => { dead = true }
+  }, [envTick, setForm, notifyError])
 
   useEffect(() => {
     const newPlanId = form.planId

@@ -1,18 +1,9 @@
-import { EventType } from "@mia/shared-enums"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import { api } from "../../../client/index"
+import { countSyncEnvSseEvents } from "../../../lib/sync-env-sse"
 import { useStore } from "../../../state/store"
 import type { SyncEnvironmentAdmin } from "../../../types"
-
-function envEventCount(log: ReadonlyArray<{ type: unknown }>): number {
-  let count = 0
-  for (const event of log) {
-    const type = String(event.type)
-    if (type === EventType.SyncEnvUpdate || type === EventType.SyncEnvReset) count++
-  }
-  return count
-}
 
 export function useSyncEnvironments(
   notify: (message: string) => void,
@@ -32,7 +23,7 @@ export function useSyncEnvironments(
   notifyRef.current = notify
   notifyErrorRef.current = notifyError
 
-  const envTick = useStore((s) => envEventCount(s.sseEventLog))
+  const envTick = useStore((s) => countSyncEnvSseEvents(s.sseEventLog))
   const lastEnvTickRef = useRef<number | null>(null)
 
   const load = useCallback(async (): Promise<void> => {
