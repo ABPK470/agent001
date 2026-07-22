@@ -30,6 +30,13 @@ describe("splitStreamingAnswer", () => {
     expect(layout.remainderKind).toBe("none")
   })
 
+  it("holds a single in-progress table line like a chart fence (pending Table)", () => {
+    const layout = splitStreamingAnswer("| Name | Amt |")
+    expect(layout.committed).toBe("")
+    expect(layout.remainderKind).toBe("table")
+    expect(layout.remainder).toBe("| Name | Amt |")
+  })
+
   it("holds a trailing pipe-table until non-table content follows", () => {
     const layout = splitStreamingAnswer(
       "## Results\n| Name | Amt |\n| --- | --- |\n| Ada | 1 |\n| Bea | 2 |",

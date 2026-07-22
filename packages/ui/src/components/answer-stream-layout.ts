@@ -112,6 +112,14 @@ function trailingPartialLineLayout(text: string): StreamingAnswerLayout | null {
   if (!before.trim()) return null
 
   // Markdown-shaped in-flight line — hold with the markdown remainder, not prose glyph.
+  // Pipe-tables use the same pending path as charts/KPIs (remainderKind "table").
+  if (isTableLine(tail)) {
+    return {
+      committed: before.replace(/\s+$/, ""),
+      remainder: tail,
+      remainderKind: "table",
+    }
+  }
   if (isMarkdownShapedLine(tail) || isHoldableMarkdownLine(tail)) {
     return {
       committed: before.replace(/\s+$/, ""),
@@ -219,7 +227,11 @@ export function splitStreamingAnswer(text: string): StreamingAnswerLayout {
   const singleHeadingLayout = trailingSingleHeadingLayout(text)
   if (singleHeadingLayout) return singleHeadingLayout
 
-  // Single-line markdown still arriving (list/table start) — hold, don't glyph.
+  // Single-line markdown still arriving — hold, don't glyph.
+  // Tables share the chart/KPI pending path (shimmer "Table").
+  if (isTableLine(text)) {
+    return { committed: "", remainder: text, remainderKind: "table" }
+  }
   if (isMarkdownShapedLine(text) || isHoldableMarkdownLine(text)) {
     return { committed: "", remainder: text, remainderKind: "markdown" }
   }

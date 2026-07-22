@@ -1,24 +1,25 @@
 /**
  * TypewriterAnswer — answer reveal for agent responses.
  *
- * Live SSE: finished prose/headings render via SmartAnswer; tables, fences
- * (charts/KPIs/dashboards), and lists hold a quiet pending shell until the
- * whole block is ready — then appear as one unit. Plain prose may glyph-drip.
- * Settled answers render fully via SmartAnswer (no re-type).
+ * Live SSE: finished prose/headings render via SmartAnswer. Incomplete
+ * tables and chart/KPI/dashboard blocks share one pending path — the same
+ * quiet shimmer as tool "Working" — until the whole block is ready, then
+ * appear as one unit. Plain prose may glyph-drip. Settled answers render
+ * fully via SmartAnswer.
  */
 
 import { useMemo, useRef } from "react"
 import { getLiveStreamingRenderParts } from "./answer-stream-reveal"
 import { GlyphStreamText } from "./GlyphStreamText"
 import { SmartAnswer } from "./SmartAnswer"
-import { StructuredPendingBlock, TablePendingBlock } from "./StreamingBlocks"
+import { StructuredPendingBlock } from "./StreamingBlocks"
 
 const bodyClass = (compact: boolean) =>
   compact
     ? "text-text-secondary text-[15px] leading-6 w-full min-w-0"
     : "text-text-secondary text-base leading-relaxed w-full min-w-0"
 
-/** Live stream — whole markdown blocks only; never format partial tables/fences/lists. */
+/** Live stream — whole markdown blocks only; never format partial tables/charts. */
 function StreamingLiveAnswer({
   text,
   compact,
@@ -32,8 +33,13 @@ function StreamingLiveAnswer({
 
   const hasBlockContent = blocks.length > 0
   const hasGlyphTail = glyphTail.length > 0
-  const showFencePending = layout.remainderKind === "fenced" && layout.remainder.length > 0
-  const showTablePending = layout.remainderKind === "table" && layout.remainder.length > 0
+  // Charts/KPIs/dashboards (open fence) and pipe-tables share one pending chrome.
+  const pendingLang =
+    layout.remainderKind === "fenced"
+      ? (layout.fencedLang ?? "chart")
+      : layout.remainderKind === "table"
+        ? "table"
+        : null
 
   return (
     <div className={[bodyClass(compact), "space-y-3"].join(" ")}>
@@ -45,10 +51,7 @@ function StreamingLiveAnswer({
           <GlyphStreamText text={glyphTail} />
         </div>
       ) : null}
-      {showFencePending ? (
-        <StructuredPendingBlock lang={layout.fencedLang ?? "chart"} />
-      ) : null}
-      {showTablePending ? <TablePendingBlock /> : null}
+      {pendingLang ? <StructuredPendingBlock lang={pendingLang} /> : null}
     </div>
   )
 }
