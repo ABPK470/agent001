@@ -3,11 +3,12 @@
  * Shows event preview immediately; fetches sync_sql_log only when sqlLogId
  * is present and the preview is missing or truncated.
  *
- * host="local" — fill Pipelines (or other) widget bounds
- * host="viewport" — portal to document.body (default)
+ * host="local" — pin to widget hostRef (Pipelines)
+ * host="viewport" — portal full-screen (default)
  */
 
 import { X } from "lucide-react"
+import type { RefObject } from "react"
 import { useEffect, useState } from "react"
 import { createPortal } from "react-dom"
 import { CodeBlock } from "../../../components/CodeBlock"
@@ -74,10 +75,12 @@ export function SqlTraceModal({
   fields,
   onClose,
   host = "viewport",
+  hostRef,
 }: {
   fields: SqlTraceFields
   onClose: () => void
   host?: ModalHost
+  hostRef?: RefObject<HTMLElement | null>
 }) {
   const previewSql = normalizeSqlTraceText(fields.sql)
   const cached =
@@ -156,8 +159,12 @@ export function SqlTraceModal({
   )
 
   if (host === "local") {
+    if (!hostRef) {
+      console.warn("SqlTraceModal host=local requires hostRef")
+      return null
+    }
     return (
-      <WidgetLocalOverlay onClose={onClose} aria-label="SQL trace">
+      <WidgetLocalOverlay hostRef={hostRef} onClose={onClose} aria-label="SQL trace">
         {body}
       </WidgetLocalOverlay>
     )

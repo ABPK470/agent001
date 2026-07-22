@@ -1,8 +1,9 @@
 /**
- * Tool I/O detail modal — viewport (portal) or in-widget local host.
+ * Tool I/O detail modal — viewport (portal) or widget-local (anchored) host.
  */
 
 import { Brain, X } from "lucide-react"
+import type { RefObject } from "react"
 import { createPortal } from "react-dom"
 import { CodeBlock } from "../../components/CodeBlock"
 import { formatToolIoMeta, type ToolIoDetails } from "./tool-call-io"
@@ -100,15 +101,21 @@ export function ToolCallModal({
   io,
   onClose,
   host = "viewport",
+  hostRef,
 }: {
   io: ToolIoDetails
   onClose: () => void
-  /** local = fill parent widget; viewport = portal to document.body */
+  /** local = pin to widget hostRef; viewport = full-screen portal */
   host?: ModalHost
+  hostRef?: RefObject<HTMLElement | null>
 }) {
   if (host === "local") {
+    if (!hostRef) {
+      console.warn("ToolCallModal host=local requires hostRef")
+      return null
+    }
     return (
-      <WidgetLocalOverlay onClose={onClose} aria-label="Tool I/O">
+      <WidgetLocalOverlay hostRef={hostRef} onClose={onClose} aria-label="Tool I/O">
         <ToolCallModalBody io={io} onClose={onClose} codeMaxHeight={480} />
       </WidgetLocalOverlay>
     )

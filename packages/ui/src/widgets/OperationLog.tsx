@@ -489,7 +489,7 @@ export function OperationLog() {
 
   return (
     <OperationLogModalsProvider>
-    <div ref={rootRef} className={`h-full flex flex-col gap-2.5 overflow-hidden ${OP_LOG}`}>
+    <div ref={rootRef} className={`flex h-full min-h-0 flex-1 flex-col gap-2.5 overflow-hidden ${OP_LOG}`}>
 
       <OperationLogToolbar
         kindView={kindView}
