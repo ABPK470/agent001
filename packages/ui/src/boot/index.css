@@ -6767,39 +6767,29 @@ textarea.input {
   opacity: 0.75;
 }
 
-/* Live answer stream — ASCII settle on prose; monospace cells limit reflow. */
-.glyph-stream-text {
+/* Live answer prose — word cadence (no glyph scramble). */
+.word-stream-text {
   font: inherit;
   letter-spacing: inherit;
 }
 
-.glyph-stream-cell {
+.word-stream-cue {
   display: inline-block;
-  min-width: 0.55em;
-  text-align: center;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
-    "Liberation Mono", "Courier New", monospace;
-  color: var(--text-muted);
-  opacity: 0.8;
-}
-
-.glyph-stream-cue {
-  display: inline-block;
-  width: 0.4em;
+  width: 0.35em;
   height: 0.85em;
-  margin-left: 0.12em;
+  margin-left: 0.1em;
   vertical-align: -0.12em;
   border-radius: 1px;
-  background: color-mix(in srgb, var(--accent) 50%, transparent);
-  animation: glyph-stream-cue-pulse 1.15s ease-in-out infinite;
+  background: color-mix(in srgb, var(--text-muted) 45%, transparent);
+  animation: word-stream-cue-pulse 1.4s ease-in-out infinite;
 }
 
-@keyframes glyph-stream-cue-pulse {
-  0%, 100% { opacity: 0.35; }
-  50% { opacity: 0.85; }
+@keyframes word-stream-cue-pulse {
+  0%, 100% { opacity: 0.25; }
+  50% { opacity: 0.7; }
 }
 
-/* Chart/KPI pending shell — soft fill while fence is still open. */
+/* Structured pending shell — soft fill while table / chart fence is still open. */
 .stream-pending-shell__skeleton {
   flex: 1 1 auto;
   min-height: 3.5rem;
@@ -6821,13 +6811,13 @@ textarea.input {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .glyph-stream-cue,
+  .word-stream-cue,
   .stream-pending-shell__skeleton {
     animation: none;
   }
 
-  .glyph-stream-cue {
-    opacity: 0.55;
+  .word-stream-cue {
+    opacity: 0.4;
   }
 }
 

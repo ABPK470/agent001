@@ -1,41 +1,58 @@
 import { isDiagramLang, tryInferDiagramKind } from "./InlineDiagram"
 
 /**
- * Same chrome as TermChat's live "Working" / tool milestone shimmer —
- * 15px, muted, activity-shimmer-tight. Used for incomplete tables and for
- * incomplete chart/KPI/dashboard fences — one visual language.
+ * Quiet pending shell for incomplete structured answer blocks
+ * (pipe-tables and ``` chart / KPI / dashboard fences).
+ *
+ * No shimmering labels — just a soft skeleton placeholder until the whole
+ * block is ready, then SmartAnswer paints it in one shot.
  */
-function StreamPendingLabel({ label }: { label: string }) {
-  return (
-    <div className="py-1.5 pr-2">
-      <span className="activity-shimmer-tight text-[15px] leading-6 font-normal inline-block text-text-muted">
-        {label}
-      </span>
-    </div>
-  )
+
+function pendingShellMinHeight(lang: string): number {
+  const lower = lang.toLowerCase().trim()
+  if (lower === "table") return 120
+  if (lower === "kpi" || lower === "kpis" || lower === "metric" || lower === "metrics") {
+    return 120
+  }
+  if (lower === "dashboard") return 288
+  if (
+    isDiagramLang(lower)
+    || lower === ""
+    || lower === "json"
+    || lower === "json5"
+    || lower === "chart"
+  ) {
+    return 264
+  }
+  return 120
 }
 
-/** Human label for an incomplete structured block (table / chart / KPI / …). */
-export function pendingLabelForFenceLang(lang: string): string {
+function pendingAriaLabel(lang: string): string {
   const lower = lang.toLowerCase().trim()
-  if (lower === "table") return "Table"
+  if (lower === "table") return "Loading table"
   if (lower === "kpi" || lower === "kpis" || lower === "metric" || lower === "metrics") {
-    return "KPI"
+    return "Loading KPI"
   }
-  if (lower === "dashboard") return "Dashboard"
-  if (isDiagramLang(lower)) return "Chart"
-  if (lower === "" || lower === "json" || lower === "json5" || lower === "chart") {
-    return "Chart"
+  if (lower === "dashboard") return "Loading dashboard"
+  if (isDiagramLang(lower) || lower === "chart" || lower === "json" || lower === "json5" || !lower) {
+    return "Loading chart"
   }
-  if (lower && lower !== "text") {
-    return lower.charAt(0).toUpperCase() + lower.slice(1)
-  }
-  return "Chart"
+  return "Loading"
 }
 
 /** Pending chrome for open fences and for pipe-tables (lang="table"). */
 export function StructuredPendingBlock({ lang }: { lang: string }) {
-  return <StreamPendingLabel label={pendingLabelForFenceLang(lang)} />
+  const minHeight = pendingShellMinHeight(lang)
+  return (
+    <div
+      className="stream-pending-shell rounded-lg border border-border-subtle px-3 py-2.5 flex flex-col my-1.5"
+      style={{ minHeight }}
+      role="status"
+      aria-label={pendingAriaLabel(lang)}
+    >
+      <div className="stream-pending-shell__skeleton flex-1" aria-hidden="true" />
+    </div>
+  )
 }
 
 /** Infer diagram kind from partial JSON inside an open fence (best-effort). */
@@ -44,10 +61,12 @@ export function inferPendingDiagramLabel(lang: string, partialSource: string): s
   if (isDiagramLang(lower)) return "Chart"
   if (lower === "" || lower === "json" || lower === "json5") {
     const inferred = tryInferDiagramKind(partialSource)
-    if (inferred === "kpi" || inferred === "dashboard") {
-      return pendingLabelForFenceLang(inferred)
-    }
+    if (inferred === "kpi") return "KPI"
+    if (inferred === "dashboard") return "Dashboard"
     if (inferred) return "Chart"
   }
-  return pendingLabelForFenceLang(lower)
+  if (lower === "table") return "Table"
+  if (lower === "kpi" || lower === "kpis") return "KPI"
+  if (lower === "dashboard") return "Dashboard"
+  return "Chart"
 }

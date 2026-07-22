@@ -2,15 +2,15 @@
  * TypewriterAnswer — answer reveal for agent responses.
  *
  * Live SSE: finished prose/headings render via SmartAnswer. Incomplete
- * tables and chart/KPI/dashboard blocks share one pending path — the same
- * quiet shimmer as tool "Working" — until the whole block is ready, then
- * appear as one unit. Plain prose may glyph-drip. Settled answers render
- * fully via SmartAnswer.
+ * tables and chart/KPI/dashboard blocks share one quiet pending shell
+ * (no shimmer labels) until the whole block is ready, then appear as one
+ * unit. Plain prose advances by words — no glyph scramble. Settled answers
+ * render fully via SmartAnswer.
  */
 
 import { useMemo, useRef } from "react"
 import { getLiveStreamingRenderParts } from "./answer-stream-reveal"
-import { GlyphStreamText } from "./GlyphStreamText"
+import { WordStreamText } from "./WordStreamText"
 import { SmartAnswer } from "./SmartAnswer"
 import { StructuredPendingBlock } from "./StreamingBlocks"
 
@@ -32,8 +32,8 @@ function StreamingLiveAnswer({
   const { blocks, glyphTail, layout } = useMemo(() => getLiveStreamingRenderParts(text), [text])
 
   const hasBlockContent = blocks.length > 0
-  const hasGlyphTail = glyphTail.length > 0
-  // Charts/KPIs/dashboards (open fence) and pipe-tables share one pending chrome.
+  const hasProseTail = glyphTail.length > 0
+  // Charts/KPIs/dashboards (open fence) and pipe-tables share one pending shell.
   const pendingLang =
     layout.remainderKind === "fenced"
       ? (layout.fencedLang ?? "chart")
@@ -46,9 +46,9 @@ function StreamingLiveAnswer({
       {hasBlockContent ? (
         <SmartAnswer blocks={blocks} compact={compact} streaming exportRunId={exportRunId} />
       ) : null}
-      {hasGlyphTail ? (
+      {hasProseTail ? (
         <div className="whitespace-pre-wrap break-words">
-          <GlyphStreamText text={glyphTail} />
+          <WordStreamText text={glyphTail} />
         </div>
       ) : null}
       {pendingLang ? <StructuredPendingBlock lang={pendingLang} /> : null}

@@ -8,9 +8,9 @@
  * round. Once text is visible, it must never be revoked.
  *
  * The approved answer is released as incremental chunks so the UI can render
- * it with the live ASCII-glyph streaming effect — the reveal targets a natural
+ * it with a calm word-cadence reveal — the reveal targets a natural
  * ~2s window regardless of length (long answers use larger chunks, short ones
- * smaller), keeping the glyph shimmer perceptible without dragging on.
+ * smaller), keeping motion perceptible without dragging on.
  */
 
 const MIN_CHUNK = 2
