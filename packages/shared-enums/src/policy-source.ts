@@ -5,8 +5,8 @@
  * editor compares with `===` to render source badges.
  *
  *   - Db            : explicitly authored by a host operator (persisted).
- *   - HostedDefault : seeded by hosted-mode bootstrap; may be overridden.
- *   - EnvDerived    : synthesized from environment configuration at boot.
+ *   - HostedDefault : seeded from `deploy/policies/defaults.json` (factory).
+ *   - EnvDerived    : obsolete leftover; cleared on boot / factory reset.
  */
 export const PolicySource = {
   Db:            "db",

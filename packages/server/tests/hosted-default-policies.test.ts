@@ -1,21 +1,26 @@
 /**
- * Hosted-default policy rule tests.
+ * Factory policy defaults — loaded from deploy/policies/defaults.json.
  *
  * Validates the curated rule set behaves as designed when seeded into the
  * agent's selector policy engine. Mirrors the deployment seeding path
- * (orchestrator loads rules into `services.policyEvaluator` for hosted
- * runs).
+ * (orchestrator loads rules into `services.policyEvaluator` for hosted runs).
  */
+
+import { dirname, resolve } from "node:path"
+import { fileURLToPath } from "node:url"
 
 import {
   PolicyViolationError,
   RulePolicyEvaluator,
   type AgentRun,
   type HostedPolicyContext,
-  type Step
+  type Step,
 } from "@mia/agent"
 import { describe, expect, it } from "vitest"
-import { hostedDefaultPolicyRules } from "../src/api/policies/types/hosted-defaults.js"
+
+import { loadPolicyDefaults } from "../src/api/policies/service/load-policy-defaults.js"
+
+const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..")
 
 function makeStep(action: string, input: Record<string, unknown> = {}): Step {
   return {
@@ -31,7 +36,7 @@ function makeStep(action: string, input: Record<string, unknown> = {}): Step {
     output: {},
     error: null,
     startedAt: null,
-    completedAt: null
+    completedAt: null,
   }
 }
 
@@ -41,20 +46,20 @@ function hostedCtx(over: Partial<HostedPolicyContext> = {}): HostedPolicyContext
     runMode: "hosted",
     role: "hosted_user",
     sandboxRoot: "/tmp/sb",
-    ...over
+    ...over,
   }
 }
 
 function buildHostedEvaluator(): RulePolicyEvaluator {
   const ev = new RulePolicyEvaluator()
-  for (const rule of hostedDefaultPolicyRules()) ev.addRule(rule)
+  for (const rule of loadPolicyDefaults(REPO_ROOT).rules) ev.addRule(rule)
   return ev
 }
 
 async function evaluate(
   evaluator: RulePolicyEvaluator,
   step: Step,
-  ctx: HostedPolicyContext
+  ctx: HostedPolicyContext,
 ): Promise<{ approval: string | null; error?: PolicyViolationError }> {
   const run = { id: "r1" } as AgentRun
   try {
@@ -66,7 +71,14 @@ async function evaluate(
   }
 }
 
-describe("hosted default policy rules", () => {
+describe("deploy/policies/defaults.json", () => {
+  it("loads a non-empty validated factory set", () => {
+    const { version, rules } = loadPolicyDefaults(REPO_ROOT)
+    expect(version).toBe(1)
+    expect(rules.length).toBeGreaterThan(10)
+    expect(rules.map((r) => r.name)).toContain("hosted_require_approval_sync_execute_prod")
+  })
+
   it("allows reads/writes inside the sandbox", async () => {
     const ev = buildHostedEvaluator()
     const read = await evaluate(ev, makeStep("read_file", { path: "/tmp/sb/notes.txt" }), hostedCtx())
@@ -74,7 +86,7 @@ describe("hosted default policy rules", () => {
     const write = await evaluate(
       ev,
       makeStep("write_file", { path: "/tmp/sb/out.csv", content: "x" }),
-      hostedCtx()
+      hostedCtx(),
     )
     expect(write.error).toBeUndefined()
   })
@@ -86,7 +98,7 @@ describe("hosted default policy rules", () => {
     const write = await evaluate(
       ev,
       makeStep("write_file", { path: "/etc/passwd", content: "x" }),
-      hostedCtx()
+      hostedCtx(),
     )
     expect(write.error).toBeInstanceOf(PolicyViolationError)
   })
@@ -104,12 +116,12 @@ describe("hosted default policy rules", () => {
     const uatRead = await evaluate(
       ev,
       makeStep("mssql_query", { environment: "uat", sql: "SELECT 1" }),
-      hostedCtx()
+      hostedCtx(),
     )
     const prodRead = await evaluate(
       ev,
       makeStep("mssql_query", { environment: "prod", sql: "SELECT 1" }),
-      hostedCtx()
+      hostedCtx(),
     )
     expect(uatRead.error).toBeUndefined()
     expect(prodRead.error).toBeUndefined()
@@ -117,26 +129,23 @@ describe("hosted default policy rules", () => {
     const uatDml = await evaluate(
       ev,
       makeStep("mssql_query", { environment: "uat", sql: "UPDATE t SET x=1" }),
-      hostedCtx()
+      hostedCtx(),
     )
     const prodDml = await evaluate(
       ev,
       makeStep("mssql_query", { environment: "prod", sql: "INSERT INTO t VALUES (1)" }),
-      hostedCtx()
+      hostedCtx(),
     )
     expect(uatDml.error?.message).toMatch(/UAT/)
     expect(prodDml.error?.message).toMatch(/PROD/)
   })
 
   it("allows DEV DML through default-deny for operator override (no explicit rule for DEV DML)", async () => {
-    // The defaults intentionally do not define a DEV DML rule. Hosted
-    // default-deny will still block it unless the operator explicitly opts
-    // in via a DB-stored rule. This test documents that contract.
     const ev = buildHostedEvaluator()
     const devDml = await evaluate(
       ev,
       makeStep("mssql_query", { environment: "dev", sql: "UPDATE t SET x=1" }),
-      hostedCtx()
+      hostedCtx(),
     )
     expect(devDml.error?.message).toMatch(/hosted_default_deny/)
   })

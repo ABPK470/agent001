@@ -7,8 +7,8 @@
  *     policy config, memory tiers, infra, or agent definitions.
  *   - Admin sessions skip the section entirely so they can introspect.
  *
- * Hard-rail enforcement lives in `policy/hosted-defaults.ts`; that is
- * covered by the existing hosted-profile redaction tests + the policy
+ * Hard-rail enforcement lives in `deploy/policies/defaults.json` (seeded into
+ * `policy_configs`); that is covered by the factory-policy tests + the policy
  * selector engine — not re-tested here.
  */
 

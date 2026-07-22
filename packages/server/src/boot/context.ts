@@ -114,7 +114,7 @@ export async function createServerContext(): Promise<ServerContext> {
     console.log(`Connectors (from persisted DB): ${connectors.summary}`)
   }
   console.log(`MSSQL databases (from connectors): ${mssqlSummary}`)
-  seedDefaultPoliciesIfMissing(bootHost)
+  seedDefaultPoliciesIfMissing(projectRoot)
   configurePlanStore(bootHost, resolveSyncPlansDir())
 
   return {

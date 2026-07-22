@@ -357,7 +357,7 @@ Preview and execute run SQL against **source** (read hashes, tree expansion, dis
 
 ### Hosted access control
 
-Environments with `defaultAccessMode: read_only` restrict DML/DDL via the hosted policy engine (`policyRulesFromEnvironments`). Sync preview requires `sync_preview` in `allowedOperations`; execute requires `sync_execute`.
+Environments with `defaultAccessMode: read_only` restrict DML/DDL via sync orchestration gates (`assertEnvOperationAllowed`). Agent tools and HTTP Sync allow/deny/approve live in Policies — factory seed `deploy/policies/defaults.json`, then DB/UI. Sync preview requires an allow (or absence of deny) for `sync_preview`; execute is governed the same way (`sync_execute`, typically DEV allow / UAT deny / PROD require approval).
 
 ---
 

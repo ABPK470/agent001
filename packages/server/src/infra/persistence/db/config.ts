@@ -45,12 +45,12 @@ export function deleteLayout(id: string): void {
 /**
  * `source` distinguishes how a rule got into the table:
  *   - 'db'             — operator-authored via the admin UI / API.
- *   - 'hosted_default' — seeded from `hostedDefaultPolicyRules()`.
- *   - 'env_derived'    — derived from `policyRulesFromEnvironments()`.
+ *   - 'hosted_default' — seeded from `deploy/policies/defaults.json`.
+ *   - 'env_derived'    — obsolete leftover; cleared on boot / factory reset.
  *
- * Operators can edit/delete any rule; the seeder only re-creates a
- * rule if no row with that `name` exists. Deletes are persistent
- * (operator opt-out is intentional and survives restart).
+ * Operators can edit/delete any rule; boot only inserts when a `name` is
+ * missing. Factory reset (Platform) re-reads the JSON on purpose.
+ * Deletes of factory names survive restart until that explicit reset.
  */
 
 export interface DbPolicyRule {

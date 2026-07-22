@@ -233,15 +233,15 @@ export const SOURCE_META: Record<PolicySource, SourceMeta> = {
   },
   [PolicySource.HostedDefault]: {
     value:       PolicySource.HostedDefault,
-    label:       "hosted default",
+    label:       "factory default",
     badgeClass:  "text-text-muted bg-overlay-3",
-    description: "Built-in baseline that ships with the app. Override by creating a higher-priority operator rule with the same selectors.",
+    description: "Seeded from deploy/policies/defaults.json. Boot never overwrites edits. Policies → Platform → Reset factory policy defaults restores them on purpose.",
   },
   [PolicySource.EnvDerived]: {
     value:       PolicySource.EnvDerived,
     label:       "env-derived",
     badgeClass:  "text-warning bg-warning/10",
-    description: "Auto-generated from the per-environment config in the Environments tab. Edit there to change.",
+    description: "Obsolete leftover from the old Access→policy path. Cleared on boot and on factory policy reset — edit Policies directly.",
   },
 }
 

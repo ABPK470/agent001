@@ -25,6 +25,11 @@ describe("setup checks", () => {
   beforeEach(() => {
     tempRoot = mkdtempSync(join(tmpdir(), "mia-setup-"))
     mkdirSync(resolve(tempRoot, "deploy/sync/artifacts"), { recursive: true })
+    mkdirSync(resolve(tempRoot, "deploy/policies"), { recursive: true })
+    writeFileSync(
+      resolve(tempRoot, "deploy/policies/defaults.json"),
+      JSON.stringify({ version: 1, rules: [{ name: "t", effect: "allow", condition: "selectors", parameters: {} }] }),
+    )
     process.env = { ...originalEnv }
     delete process.env.MIA_DATA_DIR
     delete process.env.MIA_COOKIE_SECRET

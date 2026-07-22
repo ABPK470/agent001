@@ -8,6 +8,7 @@ import {
   getPlatformHealth,
   rebuildPlatformCatalog,
 } from "./service/platform-health-service.js"
+import { resetFactoryPolicyDefaults } from "../policies/service/policy-seeder.js"
 import {
   refreshDeployArtifactsFromDatabase,
   useShippedDeployArtifacts,
@@ -116,6 +117,36 @@ export function registerPlatformRoutes(app: FastifyInstance, opts: RegisterPlatf
       return {
         ok: false,
         message: error instanceof Error ? error.message : "Factory reset failed",
+      }
+    }
+  })
+
+  /**
+   * Re-read deploy/policies/defaults.json and replace factory-named policy rows.
+   * Never runs on boot — admin must confirm explicitly.
+   */
+  app.post("/api/platform/policies/reset-defaults", async (req, reply) => {
+    if (!req.session?.isAdmin) {
+      reply.code(403)
+      return { ok: false, message: "Admin only" }
+    }
+    const body = (req.body ?? {}) as { confirm?: string }
+    if (body.confirm !== "RESET POLICY DEFAULTS") {
+      reply.code(400)
+      return { ok: false, message: 'Type confirm: "RESET POLICY DEFAULTS"' }
+    }
+    try {
+      const result = resetFactoryPolicyDefaults(opts.projectRoot)
+      return {
+        ok: true,
+        message: `Restored ${result.inserted} factory policy rule(s) from ${result.seedPath} (removed ${result.removed} prior factory/edited factory-named row(s)). Operator rules with other names were preserved.`,
+        ...result,
+      }
+    } catch (error) {
+      reply.code(500)
+      return {
+        ok: false,
+        message: error instanceof Error ? error.message : "Policy defaults reset failed",
       }
     }
   })

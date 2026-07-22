@@ -160,8 +160,9 @@ export class AgentOrchestrator {
         parameters: JSON.parse(r.parameters)
       })
     }
-    // Hosted-default and per-env-derived rules live in the DB now (seeded
-    // at server boot via policy-seeder.ts). Operators edit/delete them
+    // Factory defaults live in the DB (seeded at boot from
+    // deploy/policies/defaults.json via policy-seeder.ts).
+    // Operators edit/delete them; boot never refreshes existing names.
     // through the admin UI; this loop already loaded them above.
 
     const threadId = this.resolveThreadId(config?.threadId, upn)
@@ -325,7 +326,7 @@ export class AgentOrchestrator {
       })
     }
     // (See startRun: hosted defaults + env-derived rules now seeded into
-    // policy_configs at server boot via policy-seeder.ts, so loading dbRules
+    // policy_configs at server boot via policy-seeder.ts (deploy/policies/defaults.json), so loading dbRules
     // above already covers them.)
 
     const resumeRole: PolicyRole = resumeSession!.isAdmin ? PolicyRole.Admin : PolicyRole.HostedUser

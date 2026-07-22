@@ -134,6 +134,18 @@ export function runSetupChecks(layout: SetupLayout): SetupReport {
         ),
   )
 
+  const policyDefaults = resolve(layout.projectRoot, "deploy/policies/defaults.json")
+  checks.push(
+    existsSync(policyDefaults)
+      ? ok("policy-defaults", "Factory policy defaults", policyDefaults)
+      : error(
+          "policy-defaults",
+          "Factory policy defaults",
+          `Missing ${policyDefaults}`,
+          "Ship deploy/policies/defaults.json with the release (boot seed + Platform reset).",
+        ),
+  )
+
   const llmProvider = env.get("LLM_PROVIDER")
   if (!llmProvider) {
     checks.push(

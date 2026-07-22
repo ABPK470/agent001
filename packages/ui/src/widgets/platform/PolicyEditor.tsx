@@ -117,6 +117,12 @@ export function PolicyEditor({ onClose }: Props) {
   const [factoryResetPhrase, setFactoryResetPhrase] = useState("")
   const [factoryResetting, setFactoryResetting] = useState(false)
 
+  // Reset factory policy defaults from deploy/policies/defaults.json
+  const [confirmPolicyDefaultsReset, setConfirmPolicyDefaultsReset] = useState(false)
+  const [policyDefaultsResetPhrase, setPolicyDefaultsResetPhrase] = useState("")
+  const [policyDefaultsResetting, setPolicyDefaultsResetting] = useState(false)
+  const [policyDefaultsResetMessage, setPolicyDefaultsResetMessage] = useState<string | null>(null)
+
   // Platform health (sync readiness)
   const [platformHealth, setPlatformHealth] = useState<Awaited<ReturnType<typeof api.getPlatformHealth>> | null>(null)
   const [catalogRebuilding, setCatalogRebuilding] = useState(false)
@@ -816,6 +822,88 @@ export function PolicyEditor({ onClose }: Props) {
                 </div>
                 {artifactsMessage && (
                   <p className="text-sm text-text-muted mt-2">{artifactsMessage}</p>
+                )}
+              </div>
+
+              <div className="h-px bg-overlay-3 my-1" />
+
+              <div className="px-4 py-3.5 rounded-xl bg-overlay-2 border border-border-subtle">
+                <div className="flex items-center gap-2.5 mb-1.5">
+                  <Shield size={15} className="text-accent" />
+                  <span className="text-sm font-semibold text-text">Factory policy defaults</span>
+                </div>
+                <p className="text-sm text-text-muted leading-relaxed mb-3">
+                  Boot seeds missing rules from{" "}
+                  <code className="font-mono text-text">deploy/policies/defaults.json</code> only —
+                  never overwrites the DB. This action re-reads that file on purpose and replaces every
+                  factory-named row (including ones you edited under the same name). Operator rules with
+                  other names stay. Sync entities and publish state are untouched.
+                </p>
+                {policyDefaultsResetMessage && (
+                  <p className="text-sm text-text-muted mb-3">{policyDefaultsResetMessage}</p>
+                )}
+                {!confirmPolicyDefaultsReset ? (
+                  <button
+                    type="button"
+                    className="px-4 py-2 text-sm text-accent border border-accent/30 rounded-lg hover:bg-accent/10"
+                    onClick={() => {
+                      setConfirmPolicyDefaultsReset(true)
+                      setPolicyDefaultsResetMessage(null)
+                    }}
+                  >
+                    Reset factory policy defaults
+                  </button>
+                ) : (
+                  <div className="space-y-3">
+                    <p className="text-sm text-text-secondary">
+                      Type <code className="font-mono text-text">RESET POLICY DEFAULTS</code> to confirm.
+                    </p>
+                    <input
+                      type="text"
+                      value={policyDefaultsResetPhrase}
+                      onChange={(e) => setPolicyDefaultsResetPhrase(e.target.value)}
+                      placeholder="RESET POLICY DEFAULTS"
+                      className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text focus:outline-none focus:ring-1 focus:ring-border-strong"
+                    />
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        className="px-4 py-2 text-sm bg-accent text-text rounded-lg disabled:opacity-40"
+                        disabled={
+                          policyDefaultsResetting ||
+                          policyDefaultsResetPhrase !== "RESET POLICY DEFAULTS"
+                        }
+                        onClick={async () => {
+                          setPolicyDefaultsResetting(true)
+                          setPolicyDefaultsResetMessage(null)
+                          try {
+                            const result = await api.resetFactoryPolicyDefaults("RESET POLICY DEFAULTS")
+                            setPolicyDefaultsResetMessage(result.message)
+                            setConfirmPolicyDefaultsReset(false)
+                            setPolicyDefaultsResetPhrase("")
+                          } catch (err) {
+                            setPolicyDefaultsResetMessage(
+                              err instanceof Error ? err.message : "Failed to reset policy defaults",
+                            )
+                          } finally {
+                            setPolicyDefaultsResetting(false)
+                          }
+                        }}
+                      >
+                        {policyDefaultsResetting ? "Resetting…" : "Reset policy defaults"}
+                      </button>
+                      <button
+                        type="button"
+                        className="px-3 py-2 text-sm text-text-muted hover:text-text rounded-lg"
+                        onClick={() => {
+                          setConfirmPolicyDefaultsReset(false)
+                          setPolicyDefaultsResetPhrase("")
+                        }}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
                 )}
               </div>
 

@@ -160,7 +160,7 @@ MIA_BOOTSTRAP_ADMIN_DISPLAY_NAME=Admin
 
 1. **Register or log in** at the welcome screen. The **first local account** becomes admin automatically (`users.is_admin`). Later accounts are non-admin until promoted in **Active Users** (expand a user → Grant admin / Revoke admin).
 2. **Platform readiness** (admins): if sync is not ready, a banner explains what is missing — usually publish from Entity Registry, or MSSQL + catalog when targeting SQL Server.
-3. **Policies** (widget or modal): LLM provider/model, tool policies, permissions, sync environments (`deploy/sync/sync-environments.json` is the seed — edit in UI after boot). **Policies → Platform**: **Use shipped artifacts** or **Refresh from database** (MSSQL), plus schema catalog rebuild.
+3. **Policies** (widget or modal): LLM provider/model, tool policies, permissions, sync environments (`deploy/sync/sync-environments.json` is the seed — edit in UI after boot). Factory policy rules seed from `deploy/policies/defaults.json` (insert-if-missing on boot). **Policies → Platform**: **Use shipped artifacts** / **Refresh from database**, **Reset factory policy defaults**, schema catalog rebuild.
 4. **Entity registry**: review entities, table scopes, **⚙ → Sync metadata → Flows** (ordered step types — not a separate phase catalog), then **⚙ → Publish** when you change definitions.
 5. **Env sync** widget: confirm environments appear and a test preview works against MSSQL.
 

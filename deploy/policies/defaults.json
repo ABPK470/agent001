@@ -1,0 +1,302 @@
+{
+  "version": 1,
+  "_comment": "Factory policy defaults. Boot inserts missing names only (DB/Policies UI is SoT after seed). Platform → Reset factory policy defaults re-reads this file on purpose and replaces factory-named rows. Environments are topology; Policies are the sole allow/deny/approve rail. AGENT_HOSTED_MODE is workspace isolation only.",
+  "rules": [
+    {
+      "name": "hosted_allow_sandbox_reads",
+      "effect": "allow",
+      "condition": "selectors",
+      "parameters": {
+        "priority": 10,
+        "reason": "sandbox reads are allowed for hosted runs",
+        "selectors": { "tool": "read_file", "scope": "sandbox" }
+      }
+    },
+    {
+      "name": "hosted_allow_sandbox_writes",
+      "effect": "allow",
+      "condition": "selectors",
+      "parameters": {
+        "priority": 10,
+        "reason": "sandbox writes are allowed for hosted runs",
+        "selectors": { "tool": "write_file", "scope": "sandbox" }
+      }
+    },
+    {
+      "name": "hosted_allow_sandbox_listing",
+      "effect": "allow",
+      "condition": "selectors",
+      "parameters": {
+        "priority": 10,
+        "reason": "sandbox listing is allowed for hosted runs",
+        "selectors": { "tool": "list_directory", "scope": "sandbox" }
+      }
+    },
+    {
+      "name": "hosted_deny_workspace_file_access",
+      "effect": "deny",
+      "condition": "selectors",
+      "parameters": {
+        "priority": 60,
+        "reason": "hosted users may not access the application workspace (disclosure: internals)",
+        "selectors": { "tool": "read_file", "scope": "app_workspace" }
+      }
+    },
+    {
+      "name": "hosted_deny_workspace_writes",
+      "effect": "deny",
+      "condition": "selectors",
+      "parameters": {
+        "priority": 60,
+        "reason": "hosted users may not write to the application workspace (disclosure: internals)",
+        "selectors": { "tool": "write_file", "scope": "app_workspace" }
+      }
+    },
+    {
+      "name": "hosted_deny_workspace_listing",
+      "effect": "deny",
+      "condition": "selectors",
+      "parameters": {
+        "priority": 60,
+        "reason": "hosted users may not list the application workspace (disclosure: internals)",
+        "selectors": { "tool": "list_directory", "scope": "app_workspace" }
+      }
+    },
+    {
+      "name": "hosted_allow_sandbox_shell",
+      "effect": "allow",
+      "condition": "selectors",
+      "parameters": {
+        "priority": 10,
+        "reason": "shell commands are allowed inside the sandbox for hosted runs",
+        "selectors": { "tool": "run_command" }
+      }
+    },
+    {
+      "name": "hosted_deny_privileged_commands",
+      "effect": "deny",
+      "condition": "selectors",
+      "parameters": {
+        "priority": 60,
+        "reason": "privileged or destructive shell commands are blocked in hosted mode",
+        "selectors": {
+          "tool": "run_command",
+          "command": "/\\b(sudo|ssh|scp|git\\s+push|winget|powershell\\s+Set-|icacls|reg\\s+add|net\\s+user|chmod\\s+\\+s)\\b/i"
+        }
+      }
+    },
+    {
+      "name": "hosted_allow_mssql_reads",
+      "effect": "allow",
+      "condition": "selectors",
+      "parameters": {
+        "priority": 10,
+        "reason": "MSSQL reads are allowed across environments",
+        "selectors": { "tool": "mssql_*", "dbOperation": "query_read" }
+      }
+    },
+    {
+      "name": "hosted_allow_query_mssql_reads",
+      "effect": "allow",
+      "condition": "selectors",
+      "parameters": {
+        "priority": 10,
+        "reason": "query_mssql reads are allowed across environments",
+        "selectors": { "tool": "query_mssql", "dbOperation": "query_read" }
+      }
+    },
+    {
+      "name": "hosted_allow_schema_introspection",
+      "effect": "allow",
+      "condition": "selectors",
+      "parameters": {
+        "priority": 10,
+        "reason": "schema introspection is allowed across environments",
+        "selectors": { "tool": "explore_mssql_schema" }
+      }
+    },
+    {
+      "name": "hosted_deny_uat_dml",
+      "effect": "deny",
+      "condition": "selectors",
+      "parameters": {
+        "priority": 60,
+        "reason": "UAT is read-only by default in hosted mode",
+        "selectors": { "tool": "mssql_*", "dbEnvironment": "uat", "dbOperation": "dml" }
+      }
+    },
+    {
+      "name": "hosted_deny_uat_ddl",
+      "effect": "deny",
+      "condition": "selectors",
+      "parameters": {
+        "priority": 60,
+        "reason": "UAT DDL is denied by default in hosted mode",
+        "selectors": { "tool": "mssql_*", "dbEnvironment": "uat", "dbOperation": "ddl" }
+      }
+    },
+    {
+      "name": "hosted_deny_prod_dml",
+      "effect": "deny",
+      "condition": "selectors",
+      "parameters": {
+        "priority": 60,
+        "reason": "PROD is read-only by default in hosted mode",
+        "selectors": { "tool": "mssql_*", "dbEnvironment": "prod", "dbOperation": "dml" }
+      }
+    },
+    {
+      "name": "hosted_deny_prod_ddl",
+      "effect": "deny",
+      "condition": "selectors",
+      "parameters": {
+        "priority": 60,
+        "reason": "PROD DDL is denied by default in hosted mode",
+        "selectors": { "tool": "mssql_*", "dbEnvironment": "prod", "dbOperation": "ddl" }
+      }
+    },
+    {
+      "name": "hosted_allow_sync_preview",
+      "effect": "allow",
+      "condition": "selectors",
+      "parameters": {
+        "priority": 10,
+        "reason": "sync previews are read-only and allowed by default",
+        "selectors": { "tool": "sync_preview" }
+      }
+    },
+    {
+      "name": "hosted_allow_sync_execute_dev",
+      "effect": "allow",
+      "condition": "selectors",
+      "parameters": {
+        "priority": 40,
+        "reason": "sync_execute to DEV is allowed without approval by default",
+        "selectors": { "tool": "sync_execute", "dbEnvironment": "dev" }
+      }
+    },
+    {
+      "name": "hosted_deny_sync_execute_uat",
+      "effect": "deny",
+      "condition": "selectors",
+      "parameters": {
+        "priority": 60,
+        "reason": "sync_execute to UAT is denied by default",
+        "selectors": { "tool": "sync_execute", "dbEnvironment": "uat" }
+      }
+    },
+    {
+      "name": "hosted_require_approval_sync_execute_prod",
+      "effect": "require_approval",
+      "condition": "selectors",
+      "parameters": {
+        "priority": 60,
+        "reason": "sync_execute to PROD requires explicit confirmation",
+        "selectors": { "tool": "sync_execute", "dbEnvironment": "prod" }
+      }
+    },
+    {
+      "name": "hosted_deny_sync_shell_execute",
+      "effect": "deny",
+      "condition": "selectors",
+      "parameters": {
+        "priority": 85,
+        "reason": "shell commands during sync are denied in hosted mode unless a higher-priority allow rule is added",
+        "selectors": { "dbOperation": "sync_shell_execute" }
+      }
+    },
+    {
+      "name": "hosted_deny_sync_custom_sql_prod_uat",
+      "effect": "deny",
+      "condition": "selectors",
+      "parameters": {
+        "priority": 70,
+        "reason": "ad-hoc SQL during sync is denied on UAT/PROD unless explicitly allowed",
+        "selectors": { "dbOperation": "sync_custom_sql", "dbEnvironment": "uat" }
+      }
+    },
+    {
+      "name": "hosted_deny_sync_custom_sql_prod",
+      "effect": "deny",
+      "condition": "selectors",
+      "parameters": {
+        "priority": 70,
+        "reason": "ad-hoc SQL during sync is denied on UAT/PROD unless explicitly allowed",
+        "selectors": { "dbOperation": "sync_custom_sql", "dbEnvironment": "prod" }
+      }
+    },
+    {
+      "name": "hosted_require_approval_outbound_fetch",
+      "effect": "require_approval",
+      "condition": "selectors",
+      "parameters": {
+        "priority": 10,
+        "reason": "outbound HTTP fetches require explicit approval in hosted mode",
+        "selectors": { "tool": "fetch_url", "network": "allow" }
+      }
+    },
+    {
+      "name": "hosted_allow_think",
+      "effect": "allow",
+      "condition": "selectors",
+      "parameters": {
+        "priority": 10,
+        "selectors": { "tool": "think" }
+      }
+    },
+    {
+      "name": "hosted_allow_ask_user",
+      "effect": "allow",
+      "condition": "selectors",
+      "parameters": {
+        "priority": 10,
+        "selectors": { "tool": "ask_user" }
+      }
+    },
+    {
+      "name": "hosted_allow_list_environments",
+      "effect": "allow",
+      "condition": "selectors",
+      "parameters": {
+        "priority": 10,
+        "selectors": { "tool": "list_environments" }
+      }
+    },
+    {
+      "name": "hosted_allow_list_sync_definitions",
+      "effect": "allow",
+      "condition": "selectors",
+      "parameters": {
+        "priority": 10,
+        "selectors": { "tool": "list_sync_definitions" }
+      }
+    },
+    {
+      "name": "hosted_allow_resolve_sync_scope",
+      "effect": "allow",
+      "condition": "selectors",
+      "parameters": {
+        "priority": 10,
+        "selectors": { "tool": "resolve_sync_scope" }
+      }
+    },
+    {
+      "name": "hosted_allow_sync_diff_scan",
+      "effect": "allow",
+      "condition": "selectors",
+      "parameters": {
+        "priority": 10,
+        "selectors": { "tool": "sync_diff_scan" }
+      }
+    },
+    {
+      "name": "hosted_allow_search_catalog",
+      "effect": "allow",
+      "condition": "selectors",
+      "parameters": {
+        "priority": 10,
+        "selectors": { "tool": "search_catalog" }
+      }
+    }
+  ]
+}

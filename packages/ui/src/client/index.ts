@@ -681,6 +681,18 @@ export const api = {
         body: JSON.stringify({ confirm }),
       },
     ),
+  resetFactoryPolicyDefaults: (confirm: string) =>
+    json<{
+      ok: boolean
+      message: string
+      removed?: number
+      inserted?: number
+      clearedEnvDerived?: number
+      seedPath?: string
+    }>("/api/platform/policies/reset-defaults", {
+      method: "POST",
+      body: JSON.stringify({ confirm }),
+    }),
   setUserAdmin: (identifier: string, isAdmin: boolean) =>
     json<{ upn: string; displayName: string; isAdmin: boolean }>(
       `/api/admin/users/${encodeURIComponent(identifier)}/admin`,

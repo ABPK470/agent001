@@ -79,9 +79,9 @@ export interface SyncEnvironment {
   // ── Hosted-mode access control ────────────────────────────────
   /**
    * Default access mode for this environment. UAT and PROD default to
-   * `read_only`; DEV defaults to `read_write`. The hosted policy engine
-   * derives concrete deny rules from this field via
-   * {@link policyRulesFromEnvironments}.
+   * `read_only`; DEV defaults to `read_write`. Used by sync orchestration
+   * gates (`assertEnvOperationAllowed`); allow/deny/approve for agent and
+   * HTTP Sync tools live in Policies (`deploy/policies/defaults.json` + UI).
    */
   defaultAccessMode: EnvAccessMode
   /**

@@ -3,9 +3,10 @@
  *
  * Vocabulary for "what kind of internal information would this leak?"
  * Used by the prompt section in `<information_disclosure>` to teach the
- * model what to keep private under non-admin roles, and tagged on policy
- * rules in `hosted-defaults.ts` so an operator scanning the rule set can
- * see WHY each deny exists. Data only — no runtime behaviour here.
+ * model what to keep private under non-admin roles, and tagged in reason
+ * strings on factory rules in `deploy/policies/defaults.json` so an
+ * operator scanning the rule set can see WHY each deny exists. Data only —
+ * no runtime behaviour here.
  *
  * Categories are intentionally coarse: enough to explain the rules, not
  * so fine-grained that adding a new tool requires inventing a new tag.
