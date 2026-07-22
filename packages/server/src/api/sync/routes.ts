@@ -6,10 +6,12 @@ import { type AgentHost } from "@mia/agent"
 import { EventType, isSyncRunStatus, type SyncRunStatus } from "@mia/shared-enums"
 import {
   getEnvironments,
+  isSyncPublishRequiredError,
   listPublishedSyncDefinitions,
   loadPlan,
   loadPublishedSyncDefinitionBundle,
   previewSync,
+  PUBLISH_REQUIRED_CODE,
   searchEntities,
   type EntityType,
   type ExecuteProgress
@@ -22,7 +24,6 @@ import {
   listSyncDefinitionAdminItems,
   listSyncDefinitionRuntimeOptions,
   defaultEntityFlowId,
-  entityNeedsRepublish,
   getSyncPublishPreview,
   getSyncPublishStatus,
   PublishSyncDefinitionsError,
@@ -427,18 +428,7 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
     const actor = req.session.upn
     const actorUpn = req.session.upn
     try {
-      // Preview runs published SyncDefinitions only. Block when this entity's
-      // compile-relevant tip is ahead so operators cannot assume tip edits apply.
-      if (entityNeedsRepublish(projectRoot, req.body.entityType)) {
-        reply.code(409)
-        return {
-          error:
-            `Published sync contract for "${req.body.entityType}" is behind the catalog tip. ` +
-            `Publish from Entity Registry before preview/execute.`,
-          code: "publish_required",
-          entityType: req.body.entityType,
-        }
-      }
+      // Gate lives in previewSync (same path as agent sync_preview / sync_diff_scan).
       rebuildLiveSyncEnvironments(host)
       const plan = await previewSync({
         host,
@@ -480,6 +470,14 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
       )
       return plan
     } catch (error) {
+      if (isSyncPublishRequiredError(error)) {
+        reply.code(409)
+        return {
+          error: error.message,
+          code: PUBLISH_REQUIRED_CODE,
+          entityType: error.entityType,
+        }
+      }
       const msg = error instanceof Error ? error.message : String(error)
       console.warn(`[sync.preview] failed for ${req.body.entityType} ${req.body.entityId}: ${msg}`)
       reply.code(400)
@@ -520,6 +518,19 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
       if (!result.success && !result.skipped && result.error !== "Cancelled by user") reply.code(500)
       return result
     } catch (error) {
+      if (isSyncPublishRequiredError(error)) {
+        auditSync(req.params.planId, actor, actorUpn, "sync.execute.failed", {
+          ...planDetail,
+          error: error.message,
+          code: PUBLISH_REQUIRED_CODE,
+        })
+        reply.code(409)
+        return {
+          error: error.message,
+          code: PUBLISH_REQUIRED_CODE,
+          entityType: error.entityType,
+        }
+      }
       const msg = error instanceof Error ? error.message : String(error)
       auditSync(req.params.planId, actor, actorUpn, "sync.execute.failed", {
         ...planDetail,
@@ -579,7 +590,8 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
         send({ type: "failed", error: msg })
         auditSync(req.params.planId, actor, actorUpn, "sync.execute.failed", {
           ...planDetail,
-          error: msg
+          error: msg,
+          ...(isSyncPublishRequiredError(error) ? { code: PUBLISH_REQUIRED_CODE } : {}),
         })
       }
     } finally {

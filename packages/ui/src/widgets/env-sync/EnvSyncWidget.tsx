@@ -443,6 +443,13 @@ export function EnvSync() {
     } catch (error) {
       notifyError(error instanceof Error ? error.message : String(error))
       setForm({ planId: null })
+      // Server gate (same as agent tools) — refresh strip if tip-vs-publish raced the UI.
+      if (
+        error instanceof Error
+        && (error as Error & { code?: string }).code === "publish_required"
+      ) {
+        void api.getSyncPublishStatus().then(setPublishStatus).catch(() => {})
+      }
     } finally {
       setPreviewing(false)
       setPreviewProgress(null)

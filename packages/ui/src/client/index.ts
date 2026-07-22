@@ -210,7 +210,11 @@ async function json<T>(path: string, opts?: RequestInit): Promise<T> {
         msg = record.error
       }
     }
-    const err = new Error(msg) as Error & { stderr?: string[] }
+    const err = new Error(msg) as Error & { stderr?: string[]; code?: string; status?: number }
+    err.status = res.status
+    if (body && typeof body === "object" && typeof (body as { code?: unknown }).code === "string") {
+      err.code = (body as { code: string }).code
+    }
     if (body && typeof body === "object" && Array.isArray((body as { stderr?: unknown }).stderr)) {
       err.stderr = (body as { stderr: string[] }).stderr
     }

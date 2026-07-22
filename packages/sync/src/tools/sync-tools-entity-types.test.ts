@@ -8,6 +8,7 @@ import { join } from "node:path"
 import { afterEach, describe, expect, it } from "vitest"
 
 import {
+  ALWAYS_PUBLISH_READY,
   createPublishedSyncDefinitionRegistry,
   createSyncPreviewTool,
   listPublishedSyncDefinitionIds,
@@ -41,7 +42,11 @@ function createHost(projectRoot: string): SyncRuntimeHost {
         ])
       },
       plans: { diskRoot: null, memCache: new Map() },
-      project: { dbProjectRoot: projectRoot, publishedDefinitions: createPublishedSyncDefinitionRegistry() }
+      project: {
+        dbProjectRoot: projectRoot,
+        publishedDefinitions: createPublishedSyncDefinitionRegistry(),
+        publishReadiness: ALWAYS_PUBLISH_READY,
+      }
     }
   } as unknown as SyncRuntimeHost
 }

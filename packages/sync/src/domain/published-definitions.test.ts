@@ -5,6 +5,7 @@ import { join, resolve } from "node:path"
 import { afterEach, describe, expect, it } from "vitest"
 
 import type { SyncRuntimeHost } from "../ports/host.js"
+import { ALWAYS_PUBLISH_READY } from "./publish-readiness.js"
 import { createPublishedSyncDefinitionRegistry } from "../runtime/published-definition-registry.js"
 import { createRepoBundleHost } from "../test-support/repo-bundle.js"
 import {
@@ -32,7 +33,8 @@ function createFileBundleHost(projectRoot: string): SyncRuntimeHost {
       plans: { diskRoot: null, memCache: new Map() },
       project: {
         dbProjectRoot: projectRoot,
-        publishedDefinitions: createPublishedSyncDefinitionRegistry()
+        publishedDefinitions: createPublishedSyncDefinitionRegistry(),
+        publishReadiness: ALWAYS_PUBLISH_READY,
       }
     }
   }

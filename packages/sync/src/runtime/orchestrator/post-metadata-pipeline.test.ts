@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { PostMetadataActionKind } from "../../domain/enums.js"
 import { loadDeployFlowCatalogForTests } from "../../test-support/test-flow-catalog.js"
 import { createPublishedSyncDefinitionRegistry } from "../published-definition-registry.js"
+import { ALWAYS_PUBLISH_READY } from "../../domain/publish-readiness.js"
 import type { SyncRuntimeHost } from "../../ports/host.js"
 import type { SyncExecutionContractStep, SyncPlan } from "../plan-store.js"
 import { trackedExecute, trackedQuery } from "./db-helpers.js"
@@ -600,7 +601,8 @@ function createHost(): SyncRuntimeHost {
       },
       project: {
         dbProjectRoot: null,
-        publishedDefinitions: createPublishedSyncDefinitionRegistry()
+        publishedDefinitions: createPublishedSyncDefinitionRegistry(),
+        publishReadiness: ALWAYS_PUBLISH_READY,
       },
       environments: {
         items: new Map([

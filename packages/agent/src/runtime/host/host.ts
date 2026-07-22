@@ -22,6 +22,7 @@ import type {
   SyncEnvironment,
   SyncEventSink,
   SyncPlan,
+  SyncPublishReadinessPort,
   SyncRunSink
 } from "@mia/sync"
 import type {
@@ -111,6 +112,8 @@ export interface SyncPlansHost {
 export interface SyncProjectHost {
   dbProjectRoot: string | null
   publishedDefinitions: PublishedSyncDefinitionRegistry
+  /** Tip-vs-published gate — server wires classifyCatalogPublish. */
+  publishReadiness: SyncPublishReadinessPort
 }
 
 /** Mutable container for sync state. This is the host-owned sync surface. */

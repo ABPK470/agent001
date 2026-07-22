@@ -3,8 +3,11 @@ import type { SyncPlan } from "../domain/plan.js"
 import type { ToolControlDirective, ToolOutcomeSeverity } from "../domain/enums.js"
 import type { SyncEnvironment } from "../domain/environments.js"
 import type { PublishedSyncDefinitionRegistry } from "../domain/published-definition-registry.js"
+import type { SyncPublishReadinessPort } from "../domain/publish-readiness.js"
 import type { SyncEventSink } from "./events.js"
 import type { SyncRunSink } from "./run-sink.js"
+
+export type { SyncPublishReadinessPort }
 
 /** Live connector-keyed pool handle resolved through {@link MssqlPoolProvider}. */
 export interface MssqlConnectorPool {
@@ -96,6 +99,8 @@ export interface SyncPlanRegistry {
 export interface SyncProjectRegistry {
   dbProjectRoot: string | null
   publishedDefinitions: PublishedSyncDefinitionRegistry
+  /** Shell wires tip-vs-published; tests use {@link ALWAYS_PUBLISH_READY}. */
+  publishReadiness: SyncPublishReadinessPort
 }
 
 export interface SyncHost {

@@ -1,5 +1,5 @@
 import { configureAgent, type AgentHost } from "@mia/agent"
-import { configurePlanStore } from "@mia/sync"
+import { configurePlanStore, createDbPublishedSyncDefinitionRegistry } from "@mia/sync"
 import { seedDefaultPoliciesIfMissing } from "../api/policies/service/policy-seeder.js"
 import { setupMssql } from "../infra/mssql/setup.js"
 import { listFreezeWindowDefinitionsForTenant } from "../infra/persistence/index.js"
@@ -10,7 +10,7 @@ import {
   type ServerWorkspaceRef
 } from "./server-workspace.js"
 import { resolveSyncPlansDir } from "../infra/persistence/server-data-dir.js"
-import { createDbPublishedSyncDefinitionRegistry } from "@mia/sync"
+import { entityNeedsRepublish } from "../api/sync/service/definitions.js"
 
 import { loadPublishedBundleFromSqlite } from "./published-sync-bundle.js"
 import { projectRoot } from "./paths.js"
@@ -83,6 +83,9 @@ export async function createServerContext(): Promise<ServerContext> {
       project: {
         dbProjectRoot: projectRoot,
         publishedDefinitions: createDbPublishedSyncDefinitionRegistry(loadPublishedBundleFromSqlite),
+        publishReadiness: {
+          entityNeedsRepublish: (entityId) => entityNeedsRepublish(projectRoot, entityId),
+        },
       },
       governance: { freezeWindowsReader: () => listFreezeWindowDefinitionsForTenant() }
     }

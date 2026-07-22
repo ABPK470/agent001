@@ -40,6 +40,8 @@ flowchart LR
 
 **Key idea:** Preview classifies rows and persists a **SyncPlan** whose per-table **`changeSet`** lists every PK to insert, update, or delete. Execute applies **only those PKs** — no re-diff, no scope-wide reads.
 
+**Publish gate:** `previewSync` / `executeSync` / `syncDiffScan` call `assertPublishedContractCurrent` via `host.sync.project.publishReadiness` (server wires tip-vs-published classification). HTTP widget and agent tools share this gate — tip ahead of published contract → `SyncPublishRequiredError` (`publish_required`).
+
 ---
 
 ## 2. Who calls what

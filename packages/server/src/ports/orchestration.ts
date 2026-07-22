@@ -14,6 +14,7 @@ import type {
   SyncEnvironment,
   SyncEventSink,
   SyncPlan,
+  SyncPublishReadinessPort,
   SyncRunSink
 } from "@mia/sync"
 import type { RunWorkspaceContext, WorkspaceDiff } from "./workspace.js"
@@ -111,6 +112,7 @@ export interface BootSyncState {
   project: {
     dbProjectRoot: string | null
     publishedDefinitions: PublishedSyncDefinitionRegistry
+    publishReadiness: SyncPublishReadinessPort
   }
 }
 

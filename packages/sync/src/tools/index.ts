@@ -18,6 +18,7 @@ import {
   listPublishedSyncDefinitionIds,
   listPublishedSyncDefinitionsForHost
 } from "../domain/published-definitions.js"
+import { isSyncPublishRequiredError, PUBLISH_REQUIRED_CODE } from "../domain/publish-readiness.js"
 import type { SyncEntityId } from "../domain/definition-selection.js"
 import {
   formatSyncScopeResolution,
@@ -48,6 +49,17 @@ function validatePublishedEntityType(host: SyncRuntimeHost, entityType: string):
   } catch (e) {
     return `Error: ${e instanceof Error ? e.message : String(e)}`
   }
+}
+
+/** Agent-visible error string — includes publish_required code when gated. */
+function formatSyncToolError(error: unknown): string {
+  if (isSyncPublishRequiredError(error)) {
+    return (
+      `Error [${PUBLISH_REQUIRED_CODE}]: ${error.message} ` +
+      `Do not retry preview/execute until the user Publishes from Entity Registry.`
+    )
+  }
+  return `Error: ${error instanceof Error ? error.message : String(error)}`
 }
 
 // ── compare_catalogs ─────────────────────────────────────────────
@@ -224,6 +236,7 @@ function buildSyncPreviewTool(host: SyncRuntimeHost): Tool {
       "Compute a SyncPlan for migrating one published ABI sync entity instance " +
       "from a source environment to a target environment. READ-ONLY — only computes the diff, does not modify data. " +
       "entityType comes from list_sync_definitions or resolve_sync_scope. Returns a planId for sync_execute. " +
+      "Refuses with publish_required when the catalog tip is ahead of the published contract for this entity — tell the user to Publish from Entity Registry. " +
       "gave a name, call search_sync_entities first. Use compare_catalogs first if drift is suspected. " +
       "Always emit the returned summary inline in your chat answer using a `dashboard` fenced block; never write the " +
       "result to a file.",
@@ -310,7 +323,7 @@ function buildSyncPreviewTool(host: SyncRuntimeHost): Tool {
         lines.push(`sync_execute planId="${plan.planId}" confirm=true`)
         return lines.join("\n")
       } catch (e) {
-        return `Error: ${e instanceof Error ? e.message : String(e)}`
+        return formatSyncToolError(e)
       }
     }
   }
@@ -341,6 +354,7 @@ function buildSyncExecuteTool(host: SyncRuntimeHost): Tool {
       "Apply a previously-computed sync plan (from sync_preview) to the target environment. " +
       "MUTATIVE — modifies target data inside a single transaction with rollback on any error. " +
       "Refuses to run if: confirm!=true, plan is missing/expired, plan is older than 1 hour, " +
+      "catalog tip is ahead of published contract (publish_required), " +
       "target environment is read-only (hosted policy), PROD is locked, or governance preflight fails.",
     parameters: {
       type: "object",
@@ -361,7 +375,7 @@ function buildSyncExecuteTool(host: SyncRuntimeHost): Tool {
         if (result.success) return `Plan ${planId} executed successfully against ${plan.target}.`
         return `Execute failed: ${result.error}`
       } catch (e) {
-        return `Error: ${e instanceof Error ? e.message : String(e)}`
+        return formatSyncToolError(e)
       }
     }
   }
@@ -665,7 +679,7 @@ function buildSyncDiffScanTool(host: SyncRuntimeHost): Tool {
         )
         return lines.join("\n")
       } catch (e) {
-        return `Error: ${e instanceof Error ? e.message : String(e)}`
+        return formatSyncToolError(e)
       }
     }
   }

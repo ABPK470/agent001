@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 
 import type { SyncRuntimeHost } from "../ports/host.js"
+import { ALWAYS_PUBLISH_READY } from "../domain/publish-readiness.js"
 import { createPublishedSyncDefinitionRegistry } from "./published-definition-registry.js"
 
 const queryMock = vi.fn()
@@ -42,7 +43,8 @@ function createHost(): SyncRuntimeHost {
       plans: { diskRoot: null, memCache: new Map() },
       project: {
         dbProjectRoot: null,
-        publishedDefinitions: createPublishedSyncDefinitionRegistry()
+        publishedDefinitions: createPublishedSyncDefinitionRegistry(),
+        publishReadiness: ALWAYS_PUBLISH_READY,
       }
     }
   }

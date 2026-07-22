@@ -10,7 +10,7 @@ import type { CurrentSession } from "../src/api/auth/index.js"
 import { writeEntityBundle } from "../../sync/src/test-support/entity-fixtures.js"
 import { buildEntityPlan } from "../../sync/src/test-support/plan-fixtures.js"
 import { ENTITY_SPECS } from "../../sync/src/test-support/entity-fixtures.js"
-import { createPublishedSyncDefinitionRegistry } from "@mia/sync"
+import { ALWAYS_PUBLISH_READY, createPublishedSyncDefinitionRegistry } from "@mia/sync"
 
 const previewSyncMock = vi.fn()
 const executeSyncMock = vi.fn()
@@ -54,7 +54,11 @@ function createHost(root: string): AgentHost {
       governance: { freezeWindowsReader: () => [] },
       environments: { items: new Map() },
       plans: { diskRoot: null, memCache: new Map() },
-      project: { dbProjectRoot: root, publishedDefinitions: createPublishedSyncDefinitionRegistry() }
+      project: {
+        dbProjectRoot: root,
+        publishedDefinitions: createPublishedSyncDefinitionRegistry(),
+        publishReadiness: ALWAYS_PUBLISH_READY,
+      }
     }
   } as unknown as AgentHost
 }

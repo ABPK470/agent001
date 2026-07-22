@@ -10,6 +10,7 @@ import { existsSync, readFileSync } from "node:fs"
 import { join, resolve } from "node:path"
 
 import { createDbPublishedSyncDefinitionRegistry } from "../runtime/db-published-definition-registry.js"
+import { ALWAYS_PUBLISH_READY } from "../domain/publish-readiness.js"
 import type { PublishedSyncDefinitionBundle } from "../domain/published-definitions.js"
 import { withPermissionDefaults } from "../domain/environments.js"
 import type { SyncRuntimeHost } from "../ports/host.js"
@@ -98,7 +99,8 @@ export function createRepoBundleHost(): SyncRuntimeHost {
       plans: { diskRoot: null, memCache: new Map() },
       project: {
         dbProjectRoot: REPO_ROOT,
-        publishedDefinitions: createDbPublishedSyncDefinitionRegistry(loadFixturePublishedBundle)
+        publishedDefinitions: createDbPublishedSyncDefinitionRegistry(loadFixturePublishedBundle),
+        publishReadiness: ALWAYS_PUBLISH_READY,
       }
     }
   } as unknown as SyncRuntimeHost

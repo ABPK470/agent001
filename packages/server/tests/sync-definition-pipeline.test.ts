@@ -19,6 +19,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest"
 
 import type { AgentHost } from "@mia/agent"
 import {
+  ALWAYS_PUBLISH_READY,
   compileFkPathPredicate,
   compilePublishedSyncDefinition,
   createDbPublishedSyncDefinitionRegistry,
@@ -48,6 +49,7 @@ function createHost(root: string): AgentHost {
       project: {
         dbProjectRoot: root,
         publishedDefinitions: createDbPublishedSyncDefinitionRegistry(loadPublishedBundleFromSqlite),
+        publishReadiness: ALWAYS_PUBLISH_READY,
       }
     }
   } as unknown as AgentHost

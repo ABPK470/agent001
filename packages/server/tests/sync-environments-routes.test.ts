@@ -6,7 +6,7 @@ import { join } from "node:path"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 
 import type { AgentHost } from "@mia/agent"
-import { createDbPublishedSyncDefinitionRegistry } from "@mia/sync"
+import { ALWAYS_PUBLISH_READY, createDbPublishedSyncDefinitionRegistry } from "@mia/sync"
 import type { CurrentSession } from "../src/api/auth/index.js"
 import { loadPublishedBundleFromSqlite } from "../src/boot/published-sync-bundle.js"
 import * as db from "../src/infra/persistence/db/index.js"
@@ -44,7 +44,8 @@ function createHost(root: string): AgentHost {
       plans: { diskRoot: null, memCache: new Map() },
       project: {
         dbProjectRoot: root,
-        publishedDefinitions: createDbPublishedSyncDefinitionRegistry(loadPublishedBundleFromSqlite)
+        publishedDefinitions: createDbPublishedSyncDefinitionRegistry(loadPublishedBundleFromSqlite),
+        publishReadiness: ALWAYS_PUBLISH_READY,
       }
     }
   } as unknown as AgentHost

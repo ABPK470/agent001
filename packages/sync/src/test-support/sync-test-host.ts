@@ -6,6 +6,7 @@ import { mkdirSync, mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
+import { ALWAYS_PUBLISH_READY } from "../domain/publish-readiness.js"
 import { createPublishedSyncDefinitionRegistry } from "../runtime/published-definition-registry.js"
 import { withPermissionDefaults } from "../domain/environments.js"
 import type { MssqlPoolProvider } from "../ports/host.js"
@@ -97,7 +98,8 @@ export function createSyncTestHost(projectRoot: string): SyncRuntimeHost {
       plans: { diskRoot: null, memCache: new Map() },
       project: {
         dbProjectRoot: projectRoot,
-        publishedDefinitions: createPublishedSyncDefinitionRegistry()
+        publishedDefinitions: createPublishedSyncDefinitionRegistry(),
+        publishReadiness: ALWAYS_PUBLISH_READY,
       }
     }
   } as unknown as SyncRuntimeHost

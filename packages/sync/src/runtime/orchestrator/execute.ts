@@ -19,6 +19,7 @@ import {
   readyMssqlConnectorIds,
 } from "../../domain/sync-env-eligibility.js"
 import { evaluateFreezeWindows } from "../../domain/governance/freeze-windows.js"
+import { assertPublishedContractCurrent } from "../../domain/publish-readiness.js"
 import { getPool } from "../../adapters/mssql/connection.js"
 import {
   EventType,
@@ -59,6 +60,9 @@ export async function executeSync(
   if (!plan) throw new Error(`Plan ${planId} not found or expired.`)
   if (planTooOldToExecute(plan))
     throw new Error(`Plan ${planId} is older than 1 hour — re-preview before executing.`)
+
+  // Re-check at execute: tip may have advanced after preview (widget or agent).
+  assertPublishedContractCurrent(opts.host.sync.project.publishReadiness, plan.entity.type)
 
   throwIfAborted(signal)
   onProgress({ type: SyncProgressKind.Step, step: "preflight", message: "Validating environments and permissions…" })

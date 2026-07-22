@@ -16,6 +16,7 @@ import {
   readyMssqlConnectorIds,
 } from "../domain/sync-env-eligibility.js"
 import { getPublishedSyncDefinitionForHost, type PublishedSyncDefinition } from "../domain/published-definitions.js"
+import { assertPublishedContractCurrent } from "../domain/publish-readiness.js"
 import type { SyncRuntimeHost } from "../ports/index.js"
 import { emitSyncEvent } from "./events.js"
 import { mapWithConcurrency, trackedQuery } from "./orchestrator/db-helpers.js"
@@ -188,6 +189,8 @@ export async function syncDiffScan(input: SyncDiffScanInput): Promise<SyncDiffSc
   assertEnvConnectorReady(sourceEnv, readyIds)
   assertEnvConnectorReady(targetEnv, readyIds)
   assertSupportedSyncDirection(sourceEnv, targetEnv)
+  // Fail once for the entity type — don't preview N instances that all refuse.
+  assertPublishedContractCurrent(input.host.sync.project.publishReadiness, input.entityType)
 
   const definition = getPublishedSyncDefinitionForHost(input.host, input.entityType)
   const onlyDivergent = input.onlyDivergent !== false

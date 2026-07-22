@@ -25,6 +25,7 @@ import {
 } from "../../domain/sync-env-eligibility.js"
 import { evaluateFreezeWindows } from "../../domain/governance/freeze-windows.js"
 import { getPublishedSyncDefinition } from "../../domain/published-definitions.js"
+import { assertPublishedContractCurrent } from "../../domain/publish-readiness.js"
 import { instantiatePredicate, instantiatePredicateWithTree } from "../../domain/predicate.js"
 import { EventType, SyncOperationType, type SyncRuntimeHost } from "../../ports/index.js"
 import { emitSyncEvent as emit, type SyncTelemetryContext } from "../events.js"
@@ -60,6 +61,8 @@ export async function previewSync(input: PreviewInput): Promise<SyncPlan> {
     ...input,
     entityId: coerceSyncEntityId(input.entityId)
   }
+  // Same gate for HTTP widget and agent tools — published contract only.
+  assertPublishedContractCurrent(normalized.host.sync.project.publishReadiness, normalized.entityType)
   const previewId = randomUUID()
   const planId = allocPlanId()
   const t0 = Date.now()

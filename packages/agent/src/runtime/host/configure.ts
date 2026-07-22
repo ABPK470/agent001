@@ -10,7 +10,7 @@
  * sole composition root for the agent.
  */
 
-import { createPublishedSyncDefinitionRegistry, type SyncEnvironment } from "@mia/sync"
+import { ALWAYS_PUBLISH_READY, createPublishedSyncDefinitionRegistry, type SyncEnvironment } from "@mia/sync"
 import type sql from "mssql"
 import type { AgentHost } from "./host.js"
 import { canonicalizeConfiguredConnectionName } from "../../tools/database/mssql/resolve-connection.js"
@@ -133,7 +133,8 @@ export function configureAgent(options: ConfigureAgentOptions = {}): AgentHost {
     project: {
       dbProjectRoot: syncOptions?.project?.dbProjectRoot ?? null,
       publishedDefinitions:
-        syncOptions?.project?.publishedDefinitions ?? createPublishedSyncDefinitionRegistry()
+        syncOptions?.project?.publishedDefinitions ?? createPublishedSyncDefinitionRegistry(),
+      publishReadiness: syncOptions?.project?.publishReadiness ?? ALWAYS_PUBLISH_READY,
     }
   }
 
