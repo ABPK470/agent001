@@ -1908,7 +1908,12 @@ textarea.input {
   padding-left: 0.35rem;
 }
 
-/* Pin stack must mirror in-flow depth offsets (Sent → System/User under it) */
+/*
+ * Pin indent must match in-flow chrome, not abstract depth steps.
+ * Sent/Received sit in a stick-block (margin + header pad).
+ * Messages sit in that block's scope-body (margin + body pad).
+ * Using ScopeRow depth steps alone left pinned User left of in-flow Agent.
+ */
 .trace-pin__stack > .trace-scope[data-trace-depth="1"] {
   padding-left: 1.1rem;
 }
@@ -1923,6 +1928,26 @@ textarea.input {
 
 .trace-pin__stack > .trace-scope[data-trace-depth="4"] {
   padding-left: 3.35rem;
+}
+
+/* Stick-block peers — override depth steps with real nest geometry */
+.trace-pin__stack > .trace-scope[data-trace-kind="sent"],
+.trace-pin__stack > .trace-scope[data-trace-kind="received"] {
+  padding-left: calc(0.85rem + 0.55rem);
+}
+
+.trace-pin__stack > .trace-scope[data-trace-kind="message"] {
+  padding-left: calc(0.85rem + 1.35rem);
+}
+
+/* Nested call under a phase: phase-nested horizontal pad + stick-block nest */
+.trace-pin__stack > .trace-scope[data-trace-kind="sent"][data-trace-depth="2"],
+.trace-pin__stack > .trace-scope[data-trace-kind="received"][data-trace-depth="2"] {
+  padding-left: calc(0.55rem + 0.85rem + 0.55rem);
+}
+
+.trace-pin__stack > .trace-scope[data-trace-kind="message"][data-trace-depth="3"] {
+  padding-left: calc(0.55rem + 0.85rem + 1.35rem);
 }
 
 .trace-pin__stack > .trace-scope .trace-scope__lead {

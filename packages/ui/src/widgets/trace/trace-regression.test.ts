@@ -371,11 +371,14 @@ describe("Trace CSS contract — pin indent + work-note divider", () => {
     expect(css).toContain('.trace-pin__stack > .trace-scope[data-trace-depth="1"]')
     expect(css).toContain('.trace-pin__stack > .trace-scope[data-trace-depth="2"]')
     expect(css).toContain('.trace-pin__stack > .trace-scope[data-trace-depth="3"]')
+  })
+
+  it("pin message indent matches in-flow nest geometry (not ScopeRow depth steps)", () => {
     expect(css).toMatch(
-      /\.trace-pin__stack\s*>\s*\.trace-scope\[data-trace-depth="2"\]\s*\{\s*padding-left:\s*1\.85rem/,
+      /\.trace-pin__stack\s*>\s*\.trace-scope\[data-trace-kind="message"\]\s*\{[^}]*padding-left:\s*calc\(0\.85rem\s*\+\s*1\.35rem\)/s,
     )
     expect(css).toMatch(
-      /\.trace-pin__stack\s*>\s*\.trace-scope\[data-trace-depth="3"\]\s*\{\s*padding-left:\s*2\.6rem/,
+      /\.trace-pin__stack\s*>\s*\.trace-scope\[data-trace-kind="sent"\]\s*,\s*\n\s*\.trace-pin__stack\s*>\s*\.trace-scope\[data-trace-kind="received"\]\s*\{[^}]*padding-left:\s*calc\(0\.85rem\s*\+\s*0\.55rem\)/s,
     )
   })
 
