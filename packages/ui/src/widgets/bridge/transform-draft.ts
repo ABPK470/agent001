@@ -8,6 +8,8 @@
  * Semantics (must stay aligned with packages/connectors applyTransform):
  *   - empty draft  → undefined transform → pass rows through unchanged
  *   - columns[]    → project/rename/cast (non-empty list replaces the row shape)
+ *                    · from + optional default = COALESCE(source, default)
+ *                    · empty from + to + default = constant target column
  *   - derive[]     → add computed string columns via ${field} templates
  *   - defaults[]   → fill missing/null/empty after projection + derive
  *   - filter[]     → keep row only when every predicate passes (AND)
@@ -131,11 +133,18 @@ export function newFilterDraft(partial?: Partial<Omit<FilterDraft, "id">>): Filt
 /** True when the draft would compile to `undefined` (pass-through). */
 export function isPassThrough(draft: TransformDraft): boolean {
   return (
-    draft.columns.every((c) => !c.from.trim()) &&
+    draft.columns.every((c) => !columnDraftHasWork(c)) &&
     draft.derive.every((d) => !d.to.trim()) &&
     draft.defaults.every((d) => !d.column.trim()) &&
     draft.filters.every((f) => !f.column.trim())
   )
+}
+
+/** Column row counts toward the map when it has a source and/or a target (+ optional const). */
+export function columnDraftHasWork(c: ColumnDraft): boolean {
+  if (c.from.trim()) return true
+  if (c.to.trim()) return true
+  return c.defaultText.trim() !== ""
 }
 
 /**
@@ -143,7 +152,7 @@ export function isPassThrough(draft: TransformDraft): boolean {
  * Does not overwrite an existing non-empty column list.
  */
 export function seedIdentityColumns(draft: TransformDraft, columnNames: readonly string[]): TransformDraft {
-  if (draft.columns.some((c) => c.from.trim()) || columnNames.length === 0) return draft
+  if (draft.columns.some((c) => columnDraftHasWork(c)) || columnNames.length === 0) return draft
   return {
     ...draft,
     columns: columnNames.map((name) => newColumnDraft({ from: name, to: name })),
@@ -177,13 +186,33 @@ export function compileTransform(draft: TransformDraft): CompileResult {
     const columns: TransformColumn[] = []
     for (const c of draft.columns) {
       const from = c.from.trim()
-      if (!from) continue
       const to = c.to.trim() || from
+      const defaultText = c.defaultText.trim()
+      if (!from) {
+        // Constant target column — From empty, To + Default required.
+        if (!to && defaultText === "") continue
+        if (!to) {
+          return { ok: false, error: "A column Default without From needs a To (target column)." }
+        }
+        if (defaultText === "") {
+          return {
+            ok: false,
+            error: `Column "${to}" has no From — set a Default (constant), or pick a source column.`,
+          }
+        }
+        columns.push({
+          from: "",
+          to,
+          ...(c.cast ? { cast: c.cast } : {}),
+          default: parseValueText(c.defaultText),
+        })
+        continue
+      }
       columns.push({
         from,
         to,
         ...(c.cast ? { cast: c.cast } : {}),
-        ...(c.defaultText.trim() !== "" ? { default: parseValueText(c.defaultText) } : {}),
+        ...(defaultText !== "" ? { default: parseValueText(c.defaultText) } : {}),
       })
     }
 

@@ -26,7 +26,7 @@ describe("transform-draft", () => {
     const draft = emptyTransformDraft()
     draft.columns = [
       newColumnDraft({ from: "id", to: "key", cast: "string", defaultText: "0" }),
-      newColumnDraft({ from: "  ", to: "skip" }),
+      newColumnDraft({ from: "  ", to: "  " }),
     ]
     draft.derive = [newDeriveDraft({ to: "label", template: "row-${id}" })]
     draft.filters = [
@@ -45,6 +45,30 @@ describe("transform-draft", () => {
         { column: "n", op: "gt", value: 1 },
       ],
     })
+  })
+
+  it("compiles constant target columns (empty From + Default)", () => {
+    const draft = emptyTransformDraft()
+    draft.columns = [
+      newColumnDraft({ from: "id", to: "id" }),
+      newColumnDraft({ from: "", to: "Status", defaultText: "imported" }),
+    ]
+    expect(isPassThrough(draft)).toBe(false)
+    const compiled = compileTransform(draft)
+    expect(compiled.ok).toBe(true)
+    if (!compiled.ok) return
+    expect(compiled.transform).toEqual({
+      columns: [
+        { from: "id", to: "id" },
+        { from: "", to: "Status", default: "imported" },
+      ],
+    })
+  })
+
+  it("rejects target-only column without Default", () => {
+    const draft = emptyTransformDraft()
+    draft.columns = [newColumnDraft({ from: "", to: "Status" })]
+    expect(compileTransform(draft).ok).toBe(false)
   })
 
   it("rejects incomplete derive / filter values", () => {

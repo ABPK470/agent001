@@ -20,6 +20,7 @@ import { SegmentToggle } from "../entity-registry/SegmentToggle"
 import { WIDGET_ICONS } from "../widget-icons"
 import {
   CAST_OPTIONS,
+  columnDraftHasWork,
   FILTER_OPS,
   formatTransformJson,
   isPassThrough,
@@ -71,7 +72,7 @@ export function TransformMap({
   const [jsonError, setJsonError] = useState<string | null>(null)
 
   const passThrough = isPassThrough(draft)
-  const mappedCount = draft.columns.filter((c) => c.from.trim()).length
+  const mappedCount = draft.columns.filter((c) => columnDraftHasWork(c)).length
   const rulesCount = useMemo(() => {
     return (
       draft.derive.filter((d) => d.to.trim()).length +
@@ -196,7 +197,9 @@ export function TransformMap({
                       <th className={thClass}>From</th>
                       <th className={thClass}>To</th>
                       <th className={thClass}>Cast</th>
-                      <th className={thClass}>Default</th>
+                      <th className={thClass} title="If From is set: used when source is null/empty. If From is empty: constant value for To (target must already have this column).">
+                        If empty / const
+                      </th>
                       <th className="w-10 px-2 py-2.5" />
                     </tr>
                   </thead>
@@ -220,7 +223,7 @@ export function TransformMap({
                               setColumns(next)
                             }}
                             suggestions={sourceColumns}
-                            placeholder="e.g. customer_id"
+                            placeholder="source (optional)"
                             ariaLabel={`From ${index + 1}`}
                           />
                         </td>
@@ -233,7 +236,7 @@ export function TransformMap({
                               next[index] = { ...next[index]!, to: e.target.value }
                               setColumns(next)
                             }}
-                            placeholder="e.g. cust_id"
+                            placeholder="target column"
                             aria-label={`To ${index + 1}`}
                           />
                         </td>
@@ -260,7 +263,7 @@ export function TransformMap({
                               next[index] = { ...next[index]!, defaultText: e.target.value }
                               setColumns(next)
                             }}
-                            placeholder='e.g. 0 or ""'
+                            placeholder='if empty / or constant'
                             aria-label={`Default ${index + 1}`}
                           />
                         </td>
@@ -297,7 +300,7 @@ export function TransformMap({
               <div className="grid gap-6 lg:grid-cols-3">
                 <RuleGroup
                   title="Derive"
-                  hint="Build a new field from ${other_fields}"
+                  hint="Fill a target column from ${other_fields} (column must already exist on target)"
                   onAdd={() => onChange({ ...draft, derive: [...draft.derive, newDeriveDraft()] })}
                   addLabel="Add"
                 >
@@ -314,7 +317,7 @@ export function TransformMap({
                             next[index] = { ...next[index]!, to: e.target.value }
                             onChange({ ...draft, derive: next })
                           }}
-                          placeholder="new name"
+                          placeholder="target column"
                         />
                         <input
                           className={`${cellInput} border-border-subtle/80 bg-base/40`}
@@ -338,7 +341,7 @@ export function TransformMap({
 
                 <RuleGroup
                   title="Defaults"
-                  hint="Fill a field after mapping if still empty"
+                  hint="Fill a target column after map/derive if still empty (NOT NULL / missing source)"
                   onAdd={() => onChange({ ...draft, defaults: [...draft.defaults, newDefaultDraft()] })}
                   addLabel="Add"
                 >

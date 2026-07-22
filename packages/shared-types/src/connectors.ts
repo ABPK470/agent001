@@ -474,13 +474,19 @@ export type WriteSpec =
 export type CastKind = "string" | "number" | "boolean" | "date" | "datetime" | "json"
 
 export interface TransformColumn {
-  /** Source column name. */
+  /**
+   * Source column name. Empty string = constant column: always emit
+   * {@link default} under {@link to} (target-only / NOT NULL fills).
+   */
   readonly from: string
-  /** Target column name (defaults to `from` if omitted). */
+  /** Target column name (defaults to `from` if omitted when `from` is set). */
   readonly to: string
   /** Optional cast applied in the engine (no source-side pushdown). */
   readonly cast?: CastKind
-  /** If source is null/undefined/empty, use this value before cast. */
+  /**
+   * When `from` is set: use if source is null/undefined/empty (before cast).
+   * When `from` is empty: required constant value for {@link to}.
+   */
   readonly default?: MovementValue
 }
 

@@ -85,6 +85,12 @@ export async function* applyTransform(
     for (const row of batch) {
       const mapped: Row = cols.length === 0 ? { ...row } : {}
       for (const c of cols) {
+        // Constant target column (no source) — always emit default.
+        if (!c.from) {
+          const raw = c.default !== undefined ? c.default : null
+          mapped[c.to] = c.cast ? castValue(raw, c.cast) : (raw as MovementValue)
+          continue
+        }
         const raw = isEmpty(row[c.from]) && c.default !== undefined ? c.default : row[c.from]
         mapped[c.to] = c.cast ? castValue(raw, c.cast) : (raw as MovementValue)
       }

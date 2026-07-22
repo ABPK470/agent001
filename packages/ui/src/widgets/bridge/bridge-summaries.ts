@@ -5,7 +5,7 @@
 
 import type { ConnectorKindId } from "@mia/shared-types"
 import { readSpecKindFor, writeSpecKindFor } from "./spec-forms"
-import { isPassThrough, type TransformDraft } from "./transform-draft"
+import { columnDraftHasWork, isPassThrough, type TransformDraft } from "./transform-draft"
 
 function clip(text: string, max = 56): string {
   const t = text.replace(/\s+/g, " ").trim()
@@ -66,7 +66,7 @@ export function summarizeWriteSpec(kind: ConnectorKindId, bag: Record<string, un
 export function summarizeMap(draft: TransformDraft): string {
   if (isPassThrough(draft)) return "Pass-through"
   const parts: string[] = []
-  const cols = draft.columns.filter((c) => c.from.trim()).length
+  const cols = draft.columns.filter((c) => columnDraftHasWork(c)).length
   const der = draft.derive.filter((d) => d.to.trim()).length
   const defs = draft.defaults.filter((d) => d.column.trim()).length
   const fil = draft.filters.filter((f) => f.column.trim()).length

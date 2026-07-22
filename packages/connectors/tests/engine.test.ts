@@ -77,12 +77,41 @@ describe("applyTransform", () => {
     expect(out).toEqual([[{ id: "1", count: 5 }, { id: "2", count: 6 }]])
   })
 
-  it("derives columns via templates without eval", async () => {
-    const transform: Transform = { derive: [{ to: "label", template: "${a}-${b}" }] }
-    const batches = [[{ a: "x", b: "y" }]]
+  it("applies column default when source is null or missing", async () => {
+    const transform: Transform = {
+      columns: [
+        { from: "id", to: "id" },
+        { from: "status", to: "status", default: "pending" },
+      ],
+    }
+    const batches = [[{ id: 1, status: null }, { id: 2 }, { id: 3, status: "live" }]]
     const out: Row[][] = []
     for await (const b of applyTransform(toAsync(batches), transform)) out.push(b)
-    expect(out).toEqual([[{ a: "x", b: "y", label: "x-y" }]])
+    expect(out).toEqual([
+      [
+        { id: 1, status: "pending" },
+        { id: 2, status: "pending" },
+        { id: 3, status: "live" },
+      ],
+    ])
+  })
+
+  it("emits constant target columns when from is empty", async () => {
+    const transform: Transform = {
+      columns: [
+        { from: "id", to: "id" },
+        { from: "", to: "Status", default: "imported" },
+      ],
+    }
+    const batches = [[{ id: 1 }, { id: 2 }]]
+    const out: Row[][] = []
+    for await (const b of applyTransform(toAsync(batches), transform)) out.push(b)
+    expect(out).toEqual([
+      [
+        { id: 1, Status: "imported" },
+        { id: 2, Status: "imported" },
+      ],
+    ])
   })
 })
 
