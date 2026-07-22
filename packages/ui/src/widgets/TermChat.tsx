@@ -2161,8 +2161,7 @@ export function TermChat({
   }, [])
 
   // Build message list: each "run" is a (user msg, assistant response) pair.
-  // History is oldest-first; the active run is pinned at the bottom so the
-  // input bar anchors to the most recent activity.
+  // Always oldest → newest so the input bar sits under the most recent turn.
   const threadRunsChronological = useMemo(() => {
     const scoped = continuityThreadId
       ? runs.filter((r) => r.threadId === continuityThreadId)
@@ -2172,11 +2171,9 @@ export function TermChat({
     )
   }, [runs, continuityThreadId])
 
-  const displayRuns = useMemo(() => {
-    const history = threadRunsChronological.filter((r) => r.id !== scopedActiveRunId)
-    if (scopedActiveRun) return [...history, scopedActiveRun]
-    return history
-  }, [threadRunsChronological, scopedActiveRunId, scopedActiveRun])
+  // Transcript is always oldest → newest. Selecting a run (Threads widget)
+  // must not yank that run to the bottom — that reorders the chat.
+  const displayRuns = threadRunsChronological
 
   const showEmptyState = FORCE_EMPTY_STATE_PREVIEW || displayRuns.length === 0
   const latestDisplayRunId = displayRuns.length > 0 ? displayRuns[displayRuns.length - 1]!.id : null
@@ -2330,7 +2327,19 @@ export function TermChat({
     })
   }, [suspendAutoFollow, scrollHostRef, hydrateRunTrace])
 
-  // Top-to-bottom transcript order (oldest → newest, active run last).
+  // Threads widget sets activeRunId without moving DOM order. Scroll to that
+  // turn instead of reordering the transcript.
+  const prevActiveForJumpRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!scopedActiveRunId) return
+    const prev = prevActiveForJumpRef.current
+    prevActiveForJumpRef.current = scopedActiveRunId
+    if (!prev || prev === scopedActiveRunId) return
+    if (scopedActiveRunId === latestDisplayRunId) return
+    jumpToRun(scopedActiveRunId)
+  }, [scopedActiveRunId, latestDisplayRunId, jumpToRun])
+
+  // Top-to-bottom transcript order (oldest → newest).
   const threadNavRuns = useMemo(
     () => threadRunsChronological.map((run) => ({
       id: run.id,

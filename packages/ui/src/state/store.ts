@@ -835,7 +835,12 @@ export const useStore = create<AppState>()(
           // visible in-progress answers during thread navigation.
           get().setRuns(runs)
           if (runs.length > 0) {
-            get().setActiveRun(runs[runs.length - 1]!.id)
+            // listThreadRuns is newest-first; activate the most recent run
+            // (not runs.at(-1), which would be the oldest).
+            const newest = runs.reduce((a, b) =>
+              new Date(a.createdAt).getTime() >= new Date(b.createdAt).getTime() ? a : b,
+            )
+            get().setActiveRun(newest.id)
           } else {
             set({ activeRunId: null })
           }
