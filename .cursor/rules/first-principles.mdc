@@ -9,6 +9,20 @@ Every feature, bug fix, gap, scaling change, and refactor starts from **first pr
 
 Optimize for **predictability**, **cohesion**, and **low cognitive load**. Those fail first in large codebases and kill velocity. The codebase must stay **coherent, cohesive, and uniform** — one thought process everywhere. Self-explanatory. Easy to follow, reason about, extend, and maintain.
 
+## Quality bar (non-negotiable)
+
+Polish and craft sit **downstream of reliability**. Handsome software that breaks is not quality software. The through-line is **respect for the user**.
+
+1. **It does not break.** Correct under real conditions: offline, hung connections, thin clients, partial failure, empty/corrupt state. If the user has to notice the failure mode, we failed. Prefer boring paths that keep working over clever paths that look good in the happy case.
+2. **It fixes fast.** Nothing is unbreakable. The test is what happens next: find the break, push the fix, arrive without ceremony. Updates do their work and leave the user where they were — only slightly better. Users should not have to attend to their own tools.
+3. **It does not demand attention.** Quiet by default. No banners, badges, tours, or chrome that advertise themselves. Confidence is silence — interrupt only when the user must act.
+4. **It knows its limits.**
+   - **Size:** every dependency, megabyte, and button claims machine and attention. Restraint is respect — cut weight before adding surface.
+   - **Purpose:** solve the named problem well. Software that tries to do everything does nothing you can rely on — and that is just another way of breaking.
+5. **AI has boundaries.** Agents build the software. Words a human is expected to read — UI copy, docs, commit messages meant for people, product prose — must stay human. Slop in that surface is not a quality miss; it is a respect problem. Prefer short, plain, owned language over generated filler.
+
+When two designs work, pick the one that is more reliable, quieter, faster to fix, and smaller in claim — then keep the codebase coherent under the rules below.
+
 ## How to think
 
 1. **Name the real problem** before naming folders or patterns. Write the real path first; abstract only after the data and control flow are clear — never architecture for its own sake.
@@ -77,4 +91,4 @@ function handleRequest(req) {
 
 ## Hallmark
 
-Simplicity is the quality bar of high thought — predictable, cohesive, cheap to change. If two designs work, pick the one that is clearer, more uniform, easier to follow tomorrow, and still honest about execution cost — then **enforce it with `lint:arch`** so the next change cannot drift.
+Quality is respect: reliability, fast recovery without ceremony, quiet restraint, clear purpose, and human-owned words in front of people. Simplicity is the quality bar of high thought — predictable, cohesive, cheap to change, honest about cost. If two designs work, pick the one that is clearer, more uniform, quieter, easier to follow tomorrow, and still honest about execution cost — then **enforce it with `lint:arch`** so the next change cannot drift.
