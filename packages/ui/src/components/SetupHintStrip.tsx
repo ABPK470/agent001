@@ -2,8 +2,8 @@
  * SetupHintStrip — persistent “something needs attention” strip.
  *
  * One dialect for widgets and Configuration modals (Entity Registry):
- * edge-to-edge `border-b` + `bg-panel-2`. Warning = action required;
- * muted = informational (no action / Publish not required).
+ * edge-to-edge `border-b`. Warning = amber wash (action required);
+ * muted = panel wash (informational / Publish not required).
  *
  * Not for transient failures — those stay on ToastStack / ModalToastStack.
  */
@@ -29,15 +29,15 @@ export function SetupHintStrip({
 }): JSX.Element {
   const toneClass =
     tone === "warning"
-      ? "border-warning/40 text-text"
-      : "border-border-subtle text-text-muted"
+      ? "border-warning/40 bg-warning/10 text-text"
+      : "border-border-subtle bg-panel-2 text-text-muted"
 
   return (
     <div
       role="status"
       aria-live="polite"
       className={[
-        "shrink-0 border-b bg-panel-2 px-5 py-2.5 text-sm",
+        "shrink-0 border-b px-5 py-2.5 text-sm",
         toneClass,
         className,
       ].join(" ")}

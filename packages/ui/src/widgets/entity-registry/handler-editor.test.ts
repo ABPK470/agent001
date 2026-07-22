@@ -63,7 +63,7 @@ describe("handler-editor", () => {
       },
     }
     expect(handlerConfigHighlight(def, catalog)).toContain("EXEC core.uspCreateDataset")
-    expect(handlerConfigHighlight(def, catalog)).toContain("@ContractName ← Query: contractName")
+    expect(handlerConfigHighlight(def, catalog)).toContain("@ContractName ← contractName")
     expect(handlerConfigHighlight(def, catalog)).toContain("@type = 'stage'")
     expect(handlerConfigHighlight(def, catalog)).not.toContain("SQL on target")
     expect(infersCreatesDatasetLayer(def)).toBe(true)
@@ -74,13 +74,19 @@ describe("handler-editor", () => {
     expect(defaultHandlerForType("custom_sql").sqlBatch).toBe("")
   })
 
-  it("lists value sources from the catalog", () => {
+  it("lists value sources from the catalog using name and key", () => {
     const items = sourcesCatalogListItems([
       {
         id: "planEntityId",
         label: "Plan entity id",
         builtIn: true,
         definition: { description: "Entity id", resolver: { kind: "planEntityId" } },
+      },
+      {
+        id: "opsActorUpn",
+        label: "Ops plan actor",
+        builtIn: false,
+        definition: { description: "Custom actor", resolver: { kind: "planActor" } },
       },
       {
         id: "myLookup",
@@ -96,7 +102,9 @@ describe("handler-editor", () => {
         },
       },
     ])
-    expect(items.some((item) => item.id === "planEntityId")).toBe(true)
-    expect(items.some((item) => item.id === "myLookup")).toBe(true)
+    expect(items.find((item) => item.id === "planEntityId")?.label).toBe("Plan entity id (planEntityId)")
+    expect(items.find((item) => item.id === "opsActorUpn")?.label).toBe("Ops plan actor (opsActorUpn)")
+    expect(items.find((item) => item.id === "myLookup")?.label).toBe("My lookup (myLookup)")
+    expect(items.find((item) => item.id === "opsActorUpn")?.hint).toMatch(/Auto/)
   })
 })

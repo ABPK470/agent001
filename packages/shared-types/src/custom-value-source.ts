@@ -201,27 +201,12 @@ export function formatCustomValueSourcePreview(
   label: string,
   id: string,
 ): string {
-  const trimmed = label.trim() || id
-  switch (definition.resolver.kind) {
-    case "planEntityId":
-      return "Auto: Plan entity id"
-    case "planActor":
-      return "Auto: Run user (UPN)"
-    case "currentStepId":
-      return "Auto: Current step id"
-    case "stepField": {
-      const fieldLabels: Record<SyncStepFieldKey, string> = {
-        objectName: "Text: Object name",
-        auditObjectType: "Text: Audit object type",
-        pipelineName: "Text: Pipeline name",
-      }
-      return fieldLabels[definition.resolver.field] ?? definition.resolver.field
-    }
-    case "targetSql": {
-      const tagged = `Query: ${trimmed}`
-      return trimmed.startsWith("Query:") ? trimmed : tagged
-    }
-  }
+  // Operator identity (name + key) is what you pick in flow/action wiring.
+  // Resolution kind is shown separately via catalogResolverFamilyLabel (list hints).
+  void definition
+  const name = label.trim() || id
+  if (name === id) return id
+  return `${name} (${id})`
 }
 
 export function formatCatalogResolverRuntimePreview(

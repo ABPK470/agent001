@@ -32,7 +32,7 @@ describe("ValueSource", () => {
     expect(collectCatalogIdsFromValueSource({ type: "catalog", id: "objectName" })).toEqual(["objectName"])
   })
 
-  it("formats preview labels from catalog context", () => {
+  it("formats preview labels from catalog identity (name + key), not resolution Auto: tags", () => {
     expect(formatValueSourcePreview({ type: "catalog", id: "planEntityId" })).toBe("planEntityId")
     expect(
       formatValueSourcePreview(
@@ -44,7 +44,18 @@ describe("ValueSource", () => {
           customLabels: { planEntityId: "Plan entity id" },
         },
       ),
-    ).toContain("Plan entity id")
+    ).toBe("Plan entity id (planEntityId)")
+    expect(
+      formatValueSourcePreview(
+        { type: "catalog", id: "opsActorUpn" },
+        {
+          customCatalog: {
+            opsActorUpn: { description: "Ops UPN", resolver: { kind: "planActor" } },
+          },
+          customLabels: { opsActorUpn: "Ops plan actor" },
+        },
+      ),
+    ).toBe("Ops plan actor (opsActorUpn)")
     expect(
       formatValueSourcePreview({
         type: "priorOutput",
