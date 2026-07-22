@@ -79,11 +79,16 @@ export function WidgetFrame({ widgetId, viewId, type, children }: Props) {
   }
 
   const isTransparent = type === "term-chat" || type === "thread-nav"
+  // Flush (p-0): SetupHintStrip and full-bleed chrome sit under the title bar
+  // with no padded gap. env-sync is the Manual Sync tile (not sync-*).
   const isFlush =
     isTransparent
     || type === "entity-registry"
+    || type === "env-sync"
     || type === "sync-admin"
     || type === "bridge"
+    || type === "operation-log"
+    || type === "live-logs"
     || type.startsWith("sync-")
 
   return (

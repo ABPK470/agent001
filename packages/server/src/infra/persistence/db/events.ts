@@ -28,6 +28,8 @@ export function listEvents(opts?: {
   after?: string
   /** Inclusive lower bound (ISO). Event Stream time ranges use this. */
   since?: string
+  /** Inclusive upper bound (ISO). Custom From/Until windows use this. */
+  until?: string
   types?: string[]
   /** Drop these types before applying LIMIT (Event Stream skips debug.trace spam). */
   excludeTypes?: string[]
@@ -47,6 +49,10 @@ export function listEvents(opts?: {
   if (opts?.since) {
     conditions.push("created_at >= ?")
     params.push(opts.since)
+  }
+  if (opts?.until) {
+    conditions.push("created_at <= ?")
+    params.push(opts.until)
   }
   if (opts?.types && opts.types.length > 0) {
     conditions.push(`type IN (${opts.types.map(() => "?").join(",")})`)

@@ -50,8 +50,12 @@ const CATALOG_META: Array<{
 
 function chromeForType(type: WidgetType): WidgetChrome {
   if (type === "term-chat" || type === "thread-nav") return "transparent"
+  // Flush: SetupHintStrip / full-bleed chrome sit under the title bar (no pad gap).
   if (
     type === "entity-registry"
+    || type === "env-sync"
+    || type === "live-logs"
+    || type === "operation-log"
     || type === "sync-admin"
     || type === "bridge"
     || type.startsWith("sync-")

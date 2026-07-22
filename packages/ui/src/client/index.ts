@@ -1025,6 +1025,7 @@ export const api = {
     before?: string
     after?: string
     since?: string
+    until?: string
     exclude_types?: string[]
     types?: string[]
   } = {}) => {
@@ -1033,6 +1034,7 @@ export const api = {
     if (opts.before) p.set("before", opts.before)
     if (opts.after) p.set("after", opts.after)
     if (opts.since) p.set("since", opts.since)
+    if (opts.until) p.set("until", opts.until)
     if (opts.exclude_types?.length) p.set("exclude_types", opts.exclude_types.join(","))
     if (opts.types?.length) p.set("types", opts.types.join(","))
     return json<{

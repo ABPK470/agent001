@@ -527,7 +527,7 @@ export function EnvSync() {
   return (
     <div ref={rootRef} className="relative flex h-full flex-col overflow-hidden text-text pb-1">
       {showPublishSetupHint && (
-        <SetupHintStrip icon={Rocket} className="px-3">
+        <SetupHintStrip icon={Rocket}>
           {definitions.length === 0 ? (
             <>
               No published sync bundle yet. Publish from Entity Registry before preview/execute.

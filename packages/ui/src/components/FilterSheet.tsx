@@ -157,6 +157,66 @@ export function FilterField({
   )
 }
 
+const FILTER_CHOICE_BTN =
+  "rounded-md border px-2 py-1.5 text-xs font-medium transition-colors"
+
+const FILTER_CHOICE_ON = "border-accent/40 bg-accent/15 text-accent"
+const FILTER_CHOICE_OFF =
+  "border-border-subtle bg-base text-text-muted hover:border-border hover:text-text"
+
+/**
+ * Choice grid — same look as Event Stream “Quick range” / Sync History toggles.
+ * `multi` = checkbox chips; `single` = radio (one value, or none when cleared).
+ */
+export function FilterChoiceGrid<T extends string>({
+  options,
+  values,
+  onChange,
+  columns = 3,
+  mode = "multi",
+}: {
+  options: readonly { value: T; label: string }[]
+  values: readonly T[]
+  onChange: (values: T[]) => void
+  columns?: 2 | 3 | 4
+  mode?: "multi" | "single"
+}): JSX.Element {
+  const selected = new Set(values)
+
+  function choose(value: T): void {
+    if (mode === "single") {
+      onChange([value])
+      return
+    }
+    const next = new Set(selected)
+    if (next.has(value)) next.delete(value)
+    else next.add(value)
+    onChange([...next])
+  }
+
+  const colClass =
+    columns === 2 ? "grid-cols-2" : columns === 4 ? "grid-cols-4" : "grid-cols-3"
+
+  return (
+    <div className={`grid ${colClass} gap-1.5`}>
+      {options.map((option) => {
+        const on = selected.has(option.value)
+        return (
+          <button
+            key={option.value}
+            type="button"
+            aria-pressed={on}
+            onClick={() => choose(option.value)}
+            className={[FILTER_CHOICE_BTN, on ? FILTER_CHOICE_ON : FILTER_CHOICE_OFF].join(" ")}
+          >
+            {option.label}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
 /** Multi-select toggles for a small fixed option set (status, kind). */
 export function FilterToggles<T extends string>({
   options,
@@ -167,37 +227,14 @@ export function FilterToggles<T extends string>({
   values: readonly T[]
   onChange: (values: T[]) => void
 }): JSX.Element {
-  const selected = new Set(values)
-
-  function toggle(value: T): void {
-    const next = new Set(selected)
-    if (next.has(value)) next.delete(value)
-    else next.add(value)
-    onChange([...next])
-  }
-
   return (
-    <div className="flex flex-wrap gap-1.5">
-      {options.map((option) => {
-        const on = selected.has(option.value)
-        return (
-          <button
-            key={option.value}
-            type="button"
-            aria-pressed={on}
-            onClick={() => toggle(option.value)}
-            className={[
-              "rounded-md border px-2 py-1 text-xs font-medium transition-colors",
-              on
-                ? "border-accent/40 bg-accent/15 text-accent"
-                : "border-border-subtle bg-base text-text-muted hover:border-border hover:text-text",
-            ].join(" ")}
-          >
-            {option.label}
-          </button>
-        )
-      })}
-    </div>
+    <FilterChoiceGrid
+      options={options}
+      values={values}
+      onChange={onChange}
+      columns={3}
+      mode="multi"
+    />
   )
 }
 

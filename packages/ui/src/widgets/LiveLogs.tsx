@@ -2,16 +2,24 @@
  * Event Stream — Datadog-style live tail + time-bounded history.
  *
  * One stream (no separate "from database" pane):
- *   - Range chips: Live (last 1h + follow) | 15m | 1h | 6h | 24h
+ *   - One Filters sheet: quick range + From/Until + type + severity (Sync History dialect)
  *   - Scroll up → older pages within the range
  *   - SSE appends in Live; fixed ranges show "N new → Jump to live"
  *   - Search / type filters apply to the loaded buffer; deep search hits event_log
  */
 
-import { AlertCircle, ArrowDown, ChevronRight, Filter, Pause, Play, Radio } from "lucide-react"
+import { ArrowDown, ChevronRight, Filter, Pause, Play, Radio, SlidersHorizontal } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { api } from "../client/index"
+import { DateField } from "../components/DateField"
 import { EmptyState } from "../components/EmptyState"
+import {
+  ActiveFilterChips,
+  FilterChoiceGrid,
+  FilterField,
+  FilterSheet,
+  type ActiveFilterChipModel,
+} from "../components/FilterSheet"
 import { SqlTraceFromEventData } from "./sync/trace/SqlTrace"
 import { JsonViewer } from "../components/JsonViewer"
 import { useContainerSize } from "../hooks/useContainerSize"
@@ -24,24 +32,17 @@ import type { LogEntry } from "../types"
 import { isSyncSqlEventType } from "./sync/trace/sync-sql-trace"
 import { WIDGET_ICONS } from "./widget-icons"
 import {
-  LOG_TOOLBAR_CHIP,
-  LOG_TOOLBAR_CHIP_ACTIVE,
-  LOG_TOOLBAR_CHIP_IDLE,
-  LOG_TOOLBAR_DIVIDER,
   LOG_TOOLBAR_ICON_BTN,
-  LogWidgetToolbar,
-  LogWidgetToolbarCount,
-  LogWidgetToolbarFilters,
-  LogWidgetToolbarSearch,
-  LogWidgetToolbarTail,
-  WidgetToolbarFilterMenu,
-  WidgetToolbarFilterMenuItem,
+  WidgetToolbarCount,
+  WidgetToolbarSearch,
 } from "./widget-toolbar"
 
-const EVENT_TYPES = ["all", "run", "step", "sync", "bridge", "agent", "api", "system"] as const
+const EVENT_TYPES = ["run", "step", "sync", "bridge", "agent", "api", "system"] as const
 type EventType = (typeof EVENT_TYPES)[number]
 
-const RANGES: { id: EventStreamRange; label: string }[] = [
+const TYPE_OPTIONS = EVENT_TYPES.map((value) => ({ value, label: value }))
+
+const QUICK_RANGES: { id: EventStreamRange; label: string }[] = [
   { id: "live", label: "Live" },
   { id: "15m", label: "15m" },
   { id: "1h", label: "1h" },
@@ -106,6 +107,7 @@ export function LiveLogs() {
   const [typeFilters, setTypeFilters] = useState<Set<EventType>>(new Set())
   const [errorsOnly, setErrorsOnly] = useState(false)
   const [searchText, setSearchText] = useState("")
+  const [filtersOpen, setFiltersOpen] = useState(false)
 
   const {
     entries,
@@ -116,14 +118,19 @@ export function LiveLogs() {
     error,
     pendingLiveCount,
     jumpToLive,
-    range,
-    setRange,
+    window: timeWindow,
+    setQuickRange,
+    setFromDate,
+    setToDate,
+    clearCustomDates,
+    followLive,
   } = useEventStreamData({ paused })
 
   const bottomRef = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const rootRef = useRef<HTMLDivElement>(null)
   const topSentinelRef = useRef<HTMLDivElement>(null)
+  const filterBtnRef = useRef<HTMLButtonElement>(null)
   const { width: rootWidth } = useContainerSize(rootRef)
   const compact = rootWidth > 0 && rootWidth < 860
   const tiny = rootWidth > 0 && rootWidth < 480
@@ -194,11 +201,11 @@ export function LiveLogs() {
   }, [entries])
 
   useEffect(() => {
-    if (autoScroll && !paused && range === "live") {
+    if (autoScroll && !paused && followLive) {
       const el = containerRef.current
       if (el) el.scrollTop = el.scrollHeight
     }
-  }, [filtered, autoScroll, paused, range])
+  }, [filtered, autoScroll, paused, followLive])
 
   function onScroll() {
     const el = containerRef.current
@@ -207,13 +214,13 @@ export function LiveLogs() {
     if (el.scrollTop < 80) loadOlder()
   }
 
-  const onRangeClick = useCallback(
+  const onQuickRange = useCallback(
     (next: EventStreamRange) => {
       setPaused(false)
       setAutoScroll(true)
-      setRange(next)
+      setQuickRange(next)
     },
-    [setRange],
+    [setQuickRange],
   )
 
   const displayRows = filtered.length > 0 ? filtered : searchOnly
@@ -223,147 +230,214 @@ export function LiveLogs() {
     displayRows.length === 0 &&
     (searchActive || entries.length === 0)
 
+  const hasCustomDates = Boolean(timeWindow.from || timeWindow.to)
+  const timeFiltered = hasCustomDates || timeWindow.range !== "live"
+  const filtersActive = typeFilters.size > 0 || errorsOnly || timeFiltered
+  const activeFilterCount =
+    typeFilters.size + (errorsOnly ? 1 : 0) + (hasCustomDates ? (timeWindow.from ? 1 : 0) + (timeWindow.to ? 1 : 0) : timeFiltered ? 1 : 0)
+
+  const activeChips = useMemo((): ActiveFilterChipModel[] => {
+    const chips: ActiveFilterChipModel[] = []
+    if (hasCustomDates) {
+      if (timeWindow.from) {
+        chips.push({
+          id: "from",
+          label: "From",
+          value: timeWindow.from,
+          onRemove: () => setFromDate(undefined),
+        })
+      }
+      if (timeWindow.to) {
+        chips.push({
+          id: "to",
+          label: "Until",
+          value: timeWindow.to,
+          onRemove: () => setToDate(undefined),
+        })
+      }
+    } else if (timeWindow.range !== "live") {
+      chips.push({
+        id: "range",
+        label: "Range",
+        value: timeWindow.range,
+        onRemove: () => onQuickRange("live"),
+      })
+    }
+    for (const et of typeFilters) {
+      chips.push({
+        id: `type:${et}`,
+        label: "Type",
+        value: et,
+        onRemove: () => {
+          setTypeFilters((prev) => {
+            const next = new Set(prev)
+            next.delete(et)
+            return next
+          })
+        },
+      })
+    }
+    if (errorsOnly) {
+      chips.push({
+        id: "errors",
+        label: "Errors",
+        value: "only",
+        onRemove: () => setErrorsOnly(false),
+      })
+    }
+    return chips
+  }, [
+    hasCustomDates,
+    timeWindow.from,
+    timeWindow.to,
+    timeWindow.range,
+    typeFilters,
+    errorsOnly,
+    setFromDate,
+    setToDate,
+    onQuickRange,
+  ])
+
+  function clearAllFilters(): void {
+    setTypeFilters(new Set())
+    setErrorsOnly(false)
+    clearCustomDates()
+    onQuickRange("live")
+  }
+
   return (
-    <div ref={rootRef} className="h-full min-h-0 overflow-hidden flex flex-col gap-2.5 text-text">
-      <LogWidgetToolbar compact={compact}>
-        <LogWidgetToolbarFilters>
-          {RANGES.map((r) => {
-            const active = range === r.id
-            return (
-              <button
-                key={r.id}
-                type="button"
-                onClick={() => onRangeClick(r.id)}
-                className={`${LOG_TOOLBAR_CHIP} ${active ? LOG_TOOLBAR_CHIP_ACTIVE : LOG_TOOLBAR_CHIP_IDLE}`}
-                title={
-                  r.id === "live"
-                    ? "Last 1 hour + follow new events"
-                    : `Events from the last ${r.label}`
-                }
-              >
-                {r.id === "live" && <Radio size={12} className={active ? "text-accent" : ""} />}
-                {r.label}
-              </button>
-            )
-          })}
+    <div ref={rootRef} className="h-full min-h-0 overflow-hidden flex flex-col text-text">
+      {/* Sync History dialect: one Filters sheet (time + type), same choice grid. */}
+      <div className="widget-toolbar shrink-0 m-3 mb-0">
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="min-w-0 flex-1">
+            <WidgetToolbarSearch
+              value={searchText}
+              onChange={setSearchText}
+              placeholder="Search message, type, plan id…"
+              loading={searching || loading}
+            />
+          </div>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <WidgetToolbarCount filtered={filtered.length} total={entries.length} hidden={tiny} />
 
-          {!compact && <div className={LOG_TOOLBAR_DIVIDER} aria-hidden />}
-
-          {!compact ? (
-            EVENT_TYPES.map((et) => {
-              const active = et === "all" ? typeFilters.size === 0 : typeFilters.has(et)
-              const count = counts[et] ?? 0
-              return (
-                <button
-                  key={et}
-                  type="button"
-                  onClick={() => {
-                    if (et === "all") setTypeFilters(new Set())
-                    else {
-                      setTypeFilters((prev) => {
-                        const next = new Set(prev)
-                        if (next.has(et)) next.delete(et)
-                        else next.add(et)
-                        return next
-                      })
-                    }
-                  }}
-                  className={`${LOG_TOOLBAR_CHIP} ${active ? LOG_TOOLBAR_CHIP_ACTIVE : LOG_TOOLBAR_CHIP_IDLE}`}
-                >
-                  {et}
-                  {count > 0 && (
-                    <span className={`text-xs tabular-nums ${active ? "text-accent/60" : "text-text-muted/40"}`}>
-                      {count}
-                    </span>
-                  )}
-                </button>
-              )
-            })
-          ) : (
-            <WidgetToolbarFilterMenu
-              ariaLabel="Filter event types"
-              active={typeFilters.size > 0}
-              label={
-                <>
-                  <Filter size={14} />
-                  {typeFilters.size === 0 ? "all" : `${typeFilters.size} types`}
-                </>
+            <button
+              ref={filterBtnRef}
+              type="button"
+              onClick={() => setFiltersOpen((o) => !o)}
+              className={`widget-toolbar__icon-btn relative ${
+                filtersOpen || filtersActive ? "text-accent" : ""
+              }`}
+              title={
+                filtersActive
+                  ? `Filters (${activeFilterCount} active)`
+                  : "Filters"
               }
+              aria-pressed={filtersOpen}
             >
-              {EVENT_TYPES.map((et) => {
-                const active = et === "all" ? typeFilters.size === 0 : typeFilters.has(et)
-                const count = counts[et] ?? 0
-                return (
-                  <WidgetToolbarFilterMenuItem
-                    key={et}
-                    label={et}
-                    active={active}
-                    count={count}
-                    onClick={() => {
-                      if (et === "all") {
-                        setTypeFilters(new Set())
-                        return
-                      }
-                      setTypeFilters((prev) => {
-                        const next = new Set(prev)
-                        if (next.has(et)) next.delete(et)
-                        else next.add(et)
-                        return next
-                      })
-                    }}
-                  />
-                )
-              })}
-            </WidgetToolbarFilterMenu>
-          )}
+              <SlidersHorizontal size={14} />
+              {filtersActive && (
+                <span className="absolute -top-0.5 -right-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-accent px-0.5 text-[9px] font-mono font-medium leading-none text-text-on-accent">
+                  {activeFilterCount > 9 ? "9+" : activeFilterCount}
+                </span>
+              )}
+            </button>
 
-          <button
-            type="button"
-            onClick={() => setErrorsOnly((e) => !e)}
-            className={`${LOG_TOOLBAR_CHIP} shrink-0 ${
-              errorsOnly ? "bg-error-soft text-error font-medium" : LOG_TOOLBAR_CHIP_IDLE
-            }`}
-            title="Errors only"
-          >
-            <AlertCircle size={14} />
-            {!tiny && "errors"}
-            {(counts.error ?? 0) > 0 && (
-              <span className={`text-xs tabular-nums ${errorsOnly ? "text-error/60" : "text-text-muted/40"}`}>
-                {counts.error}
-              </span>
-            )}
-          </button>
-        </LogWidgetToolbarFilters>
+            <button
+              type="button"
+              title={paused ? `Resume (${pendingLiveCount} buffered)` : "Pause live append"}
+              className={`${LOG_TOOLBAR_ICON_BTN} relative ${
+                paused ? "bg-error/15 text-error" : "text-text-muted/60 hover:text-text hover:bg-elevated/40"
+              }`}
+              onClick={() => setPaused((p) => !p)}
+            >
+              {paused ? <Play size={15} /> : <Pause size={15} />}
+              {paused && pendingLiveCount > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 text-xs font-bold bg-error text-text rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-0.5">
+                  {pendingLiveCount > 99 ? "99+" : pendingLiveCount}
+                </span>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
 
-        <LogWidgetToolbarSearch
-          value={searchText}
-          onChange={setSearchText}
-          placeholder="Search message, event type, plan id…"
-          loading={searching || loading}
-        />
+      <ActiveFilterChips
+        chips={activeChips}
+        onClear={activeFilterCount > 0 ? clearAllFilters : undefined}
+      />
 
-        <LogWidgetToolbarTail>
-          <LogWidgetToolbarCount filtered={filtered.length} total={entries.length} hidden={tiny} />
+      <FilterSheet
+        open={filtersOpen}
+        onClose={() => setFiltersOpen(false)}
+        anchorRef={filterBtnRef}
+        footer={
+          filtersActive ? (
+            <button
+              type="button"
+              onClick={clearAllFilters}
+              className="text-sm font-medium text-text-muted hover:text-text"
+            >
+              Clear all
+            </button>
+          ) : null
+        }
+      >
+        <FilterField label="Quick range">
+          <FilterChoiceGrid
+            options={QUICK_RANGES.map((r) => ({ value: r.id, label: r.label }))}
+            values={hasCustomDates ? [] : [timeWindow.range]}
+            onChange={(values) => {
+              const next = values[0]
+              if (next) onQuickRange(next)
+            }}
+            columns={3}
+            mode="single"
+          />
+        </FilterField>
+        <div className="grid grid-cols-2 gap-3">
+          <FilterField label="From">
+            <DateField
+              value={timeWindow.from}
+              onChange={(from) => setFromDate(from || undefined)}
+              placeholder="Pick date"
+              ariaLabel="From"
+              size="sm"
+              className="w-full"
+            />
+          </FilterField>
+          <FilterField label="Until">
+            <DateField
+              value={timeWindow.to}
+              onChange={(to) => setToDate(to || undefined)}
+              placeholder="Pick date"
+              ariaLabel="Until"
+              size="sm"
+              className="w-full"
+            />
+          </FilterField>
+        </div>
+        <FilterField label="Type">
+          <FilterChoiceGrid
+            options={TYPE_OPTIONS}
+            values={[...typeFilters]}
+            onChange={(values) => setTypeFilters(new Set(values))}
+            columns={3}
+            mode="multi"
+          />
+        </FilterField>
+        <FilterField label="Severity">
+          <FilterChoiceGrid
+            options={[{ value: "errors" as const, label: "Errors only" }]}
+            values={errorsOnly ? ["errors"] : []}
+            onChange={(values) => setErrorsOnly(values.includes("errors"))}
+            columns={3}
+            mode="multi"
+          />
+        </FilterField>
+      </FilterSheet>
 
-          <button
-            type="button"
-            title={paused ? `Resume (${pendingLiveCount} buffered)` : "Pause live append"}
-            className={`${LOG_TOOLBAR_ICON_BTN} relative ${
-              paused ? "bg-error/15 text-error" : "text-text-muted/60 hover:text-text hover:bg-elevated/40"
-            }`}
-            onClick={() => setPaused((p) => !p)}
-          >
-            {paused ? <Play size={15} /> : <Pause size={15} />}
-            {paused && pendingLiveCount > 0 && (
-              <span className="absolute -top-1.5 -right-1.5 text-xs font-bold bg-error text-text rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-0.5">
-                {pendingLiveCount > 99 ? "99+" : pendingLiveCount}
-              </span>
-            )}
-          </button>
-        </LogWidgetToolbarTail>
-      </LogWidgetToolbar>
-
-      {(pendingLiveCount > 0 && (paused || range !== "live")) && (
+      {(pendingLiveCount > 0 && (paused || !followLive)) && (
         <button
           type="button"
           className="flex items-center justify-center gap-1.5 py-1.5 text-sm text-accent hover:text-accent-hover bg-accent/5 border border-accent/20 rounded"
@@ -439,7 +513,7 @@ export function LiveLogs() {
         <div ref={bottomRef} />
       </div>
 
-      {!autoScroll && !paused && range === "live" && (
+      {!autoScroll && !paused && followLive && (
         <button
           type="button"
           className="flex items-center justify-center gap-1.5 py-1.5 text-sm text-accent hover:text-accent-hover transition-colors"

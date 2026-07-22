@@ -1,10 +1,10 @@
 /**
  * Event Stream data layer — Datadog Live Tail / Log Explorer model:
  *
- * - Time range (Live / 15m / 1h / 6h / 24h) loads surface events from event_log
+ * - Quick range (Live / 15m / 1h / 6h / 24h) or custom From/Until dates
  * - Live mode also appends SSE rows from the global store as they arrive
- * - Scroll-up loads older pages via `before` cursor within the same `since` window
- * - High-volume debug.trace is excluded at the API (not a separate "DB" pane)
+ * - Scroll-up loads older pages via `before` cursor within the same window
+ * - High-volume debug.trace is excluded at the API
  */
 
 import { useCallback, useEffect, useRef, useState } from "react"
@@ -22,8 +22,7 @@ export const EVENT_STREAM_PAGE_SIZE = 500
 export const EVENT_STREAM_MAX_BUFFER = 5000
 
 /**
- * Live Tail default lookback (Datadog-style): open → last hour of history,
- * then follow new events. Longer history = pick an explicit range.
+ * Live Tail default lookback: open → last hour of history, then follow.
  */
 export const EVENT_STREAM_LIVE_LOOKBACK_MS = 60 * 60 * 1000
 
@@ -39,6 +38,44 @@ const RANGE_MS: Record<Exclude<EventStreamRange, "live">, number> = {
 export function sinceForRange(range: EventStreamRange, now = Date.now()): string {
   const ms = range === "live" ? EVENT_STREAM_LIVE_LOOKBACK_MS : RANGE_MS[range]
   return new Date(now - ms).toISOString()
+}
+
+/** Local calendar day → ISO bounds (matches DateField / Sync History). */
+export function startOfLocalDay(isoDate: string): string {
+  const [y, m, d] = isoDate.split("-").map(Number)
+  return new Date(y!, m! - 1, d!, 0, 0, 0, 0).toISOString()
+}
+
+export function endOfLocalDay(isoDate: string): string {
+  const [y, m, d] = isoDate.split("-").map(Number)
+  return new Date(y!, m! - 1, d!, 23, 59, 59, 999).toISOString()
+}
+
+export type EventStreamWindow = {
+  range: EventStreamRange
+  /** YYYY-MM-DD from DateField */
+  from?: string
+  /** YYYY-MM-DD from DateField */
+  to?: string
+}
+
+export function resolveWindowBounds(window: EventStreamWindow): {
+  since: string
+  until?: string
+  followLive: boolean
+} {
+  const hasCustom = Boolean(window.from || window.to)
+  if (hasCustom) {
+    return {
+      since: window.from ? startOfLocalDay(window.from) : sinceForRange(window.range),
+      until: window.to ? endOfLocalDay(window.to) : undefined,
+      followLive: false,
+    }
+  }
+  return {
+    since: sinceForRange(window.range),
+    followLive: window.range === "live",
+  }
 }
 
 function logDedupeKey(log: LogEntry): string {
@@ -76,18 +113,21 @@ export interface UseEventStreamDataResult {
   hasMore: boolean
   loadOlder: () => void
   error: string | null
-  /** Live events arrived while paused or while viewing a fixed range. */
   pendingLiveCount: number
   jumpToLive: () => void
-  range: EventStreamRange
-  setRange: (range: EventStreamRange) => void
+  window: EventStreamWindow
+  setQuickRange: (range: EventStreamRange) => void
+  setFromDate: (from: string | undefined) => void
+  setToDate: (to: string | undefined) => void
+  clearCustomDates: () => void
+  followLive: boolean
 }
 
 export function useEventStreamData(opts: {
   paused: boolean
 }): UseEventStreamDataResult {
   const { paused } = opts
-  const [range, setRangeState] = useState<EventStreamRange>("live")
+  const [window, setWindow] = useState<EventStreamWindow>({ range: "live" })
   const [entries, setEntries] = useState<LogEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [loadingOlder, setLoadingOlder] = useState(false)
@@ -96,27 +136,33 @@ export function useEventStreamData(opts: {
   const [error, setError] = useState<string | null>(null)
   const [pendingLiveCount, setPendingLiveCount] = useState(0)
 
-  const sinceRef = useRef<string>(sinceForRange("live"))
+  const bounds = resolveWindowBounds(window)
+  const sinceRef = useRef(bounds.since)
+  const untilRef = useRef<string | undefined>(bounds.until)
+  const followLiveRef = useRef(bounds.followLive)
   const generation = useRef(0)
-  /** Newest timestamp already merged into `entries`. */
   const liveWatermarkRef = useRef<string>("")
-  /** Newest timestamp already counted toward pendingLiveCount while paused / not Live. */
   const pendingAckRef = useRef<string>("")
   const storeLogs = useStore((s) => s.logs)
 
+  sinceRef.current = bounds.since
+  untilRef.current = bounds.until
+  followLiveRef.current = bounds.followLive
+
   const fetchPage = useCallback(async (args: {
     since: string
+    until?: string
     before?: string
     replace: boolean
   }) => {
     return api.listEvents({
       limit: EVENT_STREAM_PAGE_SIZE,
       since: args.since,
+      until: args.until,
       before: args.before,
       exclude_types: [...EVENT_STREAM_EXCLUDE_TYPES],
     }).then((res) => {
       const mapped = mapRawEvents(res.events)
-      // API returns newest-first; mergeLogEntries sorts ASC.
       if (args.replace) {
         setEntries(mergeLogEntries(mapped))
         setOldestCursor(res.oldestTimestamp)
@@ -131,17 +177,23 @@ export function useEventStreamData(opts: {
     })
   }, [])
 
-  const reloadRange = useCallback((next: EventStreamRange) => {
+  const reload = useCallback((next: EventStreamWindow) => {
     const gen = ++generation.current
-    const since = sinceForRange(next)
-    sinceRef.current = since
+    const nextBounds = resolveWindowBounds(next)
+    sinceRef.current = nextBounds.since
+    untilRef.current = nextBounds.until
+    followLiveRef.current = nextBounds.followLive
     setLoading(true)
     setError(null)
     setPendingLiveCount(0)
     pendingAckRef.current = ""
     setHasMore(false)
     setOldestCursor(null)
-    void fetchPage({ since, replace: true })
+    void fetchPage({
+      since: nextBounds.since,
+      until: nextBounds.until,
+      replace: true,
+    })
       .catch((err: unknown) => {
         if (gen !== generation.current) return
         setEntries([])
@@ -153,54 +205,67 @@ export function useEventStreamData(opts: {
   }, [fetchPage])
 
   useEffect(() => {
-    reloadRange(range)
-  }, [range, reloadRange])
+    reload(window)
+  }, [window, reload])
 
-  const setRange = useCallback((next: EventStreamRange) => {
-    setRangeState(next)
+  const setQuickRange = useCallback((range: EventStreamRange) => {
+    setWindow({ range, from: undefined, to: undefined })
+  }, [])
+
+  const setFromDate = useCallback((from: string | undefined) => {
+    setWindow((prev) => ({ ...prev, from: from || undefined }))
+  }, [])
+
+  const setToDate = useCallback((to: string | undefined) => {
+    setWindow((prev) => ({ ...prev, to: to || undefined }))
+  }, [])
+
+  const clearCustomDates = useCallback(() => {
+    setWindow((prev) => ({ range: prev.range, from: undefined, to: undefined }))
   }, [])
 
   const jumpToLive = useCallback(() => {
     setPendingLiveCount(0)
-    if (range !== "live") {
-      setRangeState("live")
-      return
-    }
-    reloadRange("live")
-  }, [range, reloadRange])
+    setWindow({ range: "live" })
+  }, [])
 
   const loadOlder = useCallback(() => {
     if (loadingOlder || !hasMore || !oldestCursor) return
     const gen = generation.current
     setLoadingOlder(true)
-    void fetchPage({ since: sinceRef.current, before: oldestCursor, replace: false })
+    void fetchPage({
+      since: sinceRef.current,
+      until: untilRef.current,
+      before: oldestCursor,
+      replace: false,
+    })
       .catch(() => { /* keep current page */ })
       .finally(() => {
         if (gen === generation.current) setLoadingOlder(false)
       })
   }, [fetchPage, hasMore, loadingOlder, oldestCursor])
 
-  // Live tip: fold store SSE rows into the stream (Live + not paused).
   useEffect(() => {
     if (storeLogs.length === 0) return
     const watermark = liveWatermarkRef.current
+    const until = untilRef.current
     const fresh = storeLogs.filter((l) => {
       if (l.eventName === "debug.trace") return false
       if (!l.timestamp) return false
       if (watermark && l.timestamp <= watermark) return false
       if (l.timestamp < sinceRef.current) return false
+      if (until && l.timestamp > until) return false
       return true
     })
     if (fresh.length === 0) return
 
-    const followLive = range === "live" && !paused
+    const followLive = followLiveRef.current && !paused
     if (!followLive) {
       const unacked = fresh.filter(
         (l) => !pendingAckRef.current || l.timestamp > pendingAckRef.current,
       )
       if (unacked.length === 0) return
-      const newest = unacked[unacked.length - 1]!.timestamp
-      pendingAckRef.current = newest
+      pendingAckRef.current = unacked[unacked.length - 1]!.timestamp
       setPendingLiveCount((n) => n + unacked.length)
       return
     }
@@ -215,7 +280,7 @@ export function useEventStreamData(opts: {
       return merged
     })
     setPendingLiveCount(0)
-  }, [storeLogs, range, paused])
+  }, [storeLogs, paused, window])
 
   return {
     entries,
@@ -226,7 +291,11 @@ export function useEventStreamData(opts: {
     error,
     pendingLiveCount,
     jumpToLive,
-    range,
-    setRange,
+    window,
+    setQuickRange,
+    setFromDate,
+    setToDate,
+    clearCustomDates,
+    followLive: bounds.followLive,
   }
 }

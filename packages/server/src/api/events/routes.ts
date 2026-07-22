@@ -13,6 +13,7 @@ export function registerEventRoutes(app: FastifyInstance): void {
       before?: string
       after?: string
       since?: string
+      until?: string
       types?: string
       exclude_types?: string
     }
@@ -35,12 +36,16 @@ export function registerEventRoutes(app: FastifyInstance): void {
     const since = typeof req.query.since === "string" && req.query.since.length > 0
       ? req.query.since
       : undefined
+    const until = typeof req.query.until === "string" && req.query.until.length > 0
+      ? req.query.until
+      : undefined
 
     const events = db.listEvents({
       limit,
       before: req.query.before,
       after: req.query.after,
       since,
+      until,
       types,
       excludeTypes
     })
