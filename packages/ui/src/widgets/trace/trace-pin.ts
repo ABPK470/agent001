@@ -19,12 +19,11 @@ export {
 } from "../../lib/events/pin"
 
 /**
- * Trace reserved-band pin math — focus line is the scrollport top.
- * Pins live in a sibling band above `.trace-scroll` (not an overlay).
- * Scroll jumps from band height changes are compensated in TraceDag
- * via `pinBandScrollDelta`.
+ * Trace in-scroll overlay pin math — focus line steps down per pinned row
+ * (same dialect as OutlineTree). Do not use an external flex band: resizing
+ * the scrollport + scrollTop compensation oscillates at peer handoff.
  */
-export const TRACE_PIN_OPTS = { stackInScroll: false } as const
+export const TRACE_PIN_OPTS = { stackInScroll: true } as const
 
 export function computeTracePinnedScopeIds(scrollEl: HTMLElement): string[] {
   return computePinnedScopeIds(scrollEl, undefined, TRACE_PIN_OPTS)

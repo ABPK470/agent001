@@ -1,10 +1,9 @@
 /**
- * Scope headers + Cursor/VS Code sticky-scroll pin band.
+ * Scope headers + Cursor/VS Code sticky-scroll pin overlay.
  *
- * In-flow rows are never position:sticky. A reserved pin band above the
- * scrollport clones the same chrome for the ancestor chain of the focus
- * line — click label to jump, chevron to fold (editor dialect). Content
- * never scrolls under the pins.
+ * In-flow rows are never position:sticky. An absolute pin stack inside the
+ * scrollport clones the ancestor chain — click label to jump, chevron to fold.
+ * Same placement as OutlineTree (.outline-pin).
  */
 
 import { ChevronDown, ChevronRight } from "lucide-react"
@@ -141,7 +140,7 @@ export type PinRow = {
 
 /**
  * Sticky stack — identical visual dialect to ScopeRow.
- * Lives in a reserved band above the scrollport (not an overlay).
+ * Absolute overlay at the top of the scrollport (Outline dialect).
  * Chevron folds; label navigates (VS Code sticky scroll).
  */
 export function PinOverlay({

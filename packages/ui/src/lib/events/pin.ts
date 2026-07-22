@@ -1,8 +1,8 @@
 /**
  * Cursor / VS Code sticky-scroll pin algorithm for outline shells.
  *
- * In-flow headers stay in document flow. A pin band (Trace) or overlay
- * (OutlineTree) clones the ancestor chain of the focus line
+ * In-flow headers stay in document flow. An absolute pin overlay (Trace +
+ * OutlineTree) clones the ancestor chain of the focus line
  * (ViewSpec stickyFamilies / stickyTypes).
  *
  * Stick rule: pin after the header's own bottom has cleared the focus line
@@ -12,11 +12,9 @@
  * shorter than ScopeRow, and a fixed rowH leaves a dead zone where the label
  * has scrolled away but is not yet pinned.
  *
- * `stackInScroll` (Outline overlay): focus line steps down by one row per
- * already-pinned ancestor — pins eat into the scrollport.
- * `stackInScroll: false` (Trace reserved band): focus line is always the
- * scrollport top — pins live outside; TraceDag compensates scrollTop when
- * band height changes so wheel scroll is not cancelled at peer handoff.
+ * `stackInScroll` (default, Trace + Outline): focus line steps down by one
+ * row per already-pinned ancestor — pins eat into the scrollport without
+ * resizing it. `stackInScroll: false` is legacy external-band math only.
  */
 
 export const OUTLINE_STICKY_ROW_H = 34
@@ -113,8 +111,8 @@ export type PinEntry = {
 
 export type PinComputeOpts = {
   /**
-   * When true (Outline overlay), each pinned row shifts the focus line down
-   * inside the scrollport. When false (Trace band), focus is always scrollTop.
+   * When true (default overlay), each pinned row shifts the focus line down
+   * inside the scrollport. When false (legacy external band), focus is always scrollTop.
    */
   stackInScroll?: boolean
 }
