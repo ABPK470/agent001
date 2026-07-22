@@ -1,9 +1,9 @@
 /**
- * Default product policy rules (seeded into `policy_configs` as hosted_default).
+ * Default product policy rules (first-boot seed into `policy_configs`).
  *
- * Apply to **everyone** under the single governance rail (default-deny): agent
- * tools and HTTP Sync share {@link buildPolicyContext}. Selectors are not
- * locked to `hosted_user` — admin does not bypass Policies.
+ * After seed, the DB / Policies UI is the source of truth — boot does not
+ * refresh these rows. Apply to everyone under the single governance rail
+ * (default-deny); agent tools and HTTP Sync share {@link buildPolicyContext}.
  *
  * Workspace isolation (`AGENT_HOSTED_MODE`) is separate from this file.
  *
@@ -13,7 +13,7 @@
  *   - MSSQL reads + schema introspection are allowed everywhere.
  *   - MSSQL DML/DDL are denied on UAT and PROD; DEV is left to operator
  *     policy so the deployment can opt in explicitly.
- *   - Sync preview allowed; sync_execute requires approval.
+ *   - Sync preview allowed; sync_execute: allow on DEV, deny on UAT, require approval on PROD.
  *   - Outbound network tools require explicit approval.
  *
  * Disclosure-policy linkage (Phase E.4): the `hosted_deny_workspace_*`
@@ -249,21 +249,48 @@ export function hostedDefaultPolicyRules(): PolicyRule[] {
         priority: DEFAULT_PRIORITY,
         reason: "sync previews are read-only and allowed by default",
         selectors: {
-          tool: "sync_preview"
-        }
-      }
+          tool: "sync_preview",
+        },
+      },
     },
     {
-      name: "hosted_require_approval_sync_execute",
+      name: "hosted_allow_sync_execute_dev",
+      effect: PolicyEffect.Allow,
+      condition: "selectors",
+      parameters: {
+        priority: DEFAULT_PRIORITY + 30,
+        reason: "sync_execute to DEV is allowed without approval by default",
+        selectors: {
+          tool: "sync_execute",
+          dbEnvironment: PolicyDbEnvironment.Dev,
+        },
+      },
+    },
+    {
+      name: "hosted_deny_sync_execute_uat",
+      effect: PolicyEffect.Deny,
+      condition: "selectors",
+      parameters: {
+        priority: DEFAULT_PRIORITY + 50,
+        reason: "sync_execute to UAT is denied by default",
+        selectors: {
+          tool: "sync_execute",
+          dbEnvironment: PolicyDbEnvironment.Uat,
+        },
+      },
+    },
+    {
+      name: "hosted_require_approval_sync_execute_prod",
       effect: PolicyEffect.RequireApproval,
       condition: "selectors",
       parameters: {
-        priority: DEFAULT_PRIORITY + 25,
-        reason: "sync_execute requires explicit user confirmation in hosted mode",
+        priority: DEFAULT_PRIORITY + 50,
+        reason: "sync_execute to PROD requires explicit confirmation",
         selectors: {
-          tool: "sync_execute"
-        }
-      }
+          tool: "sync_execute",
+          dbEnvironment: PolicyDbEnvironment.Prod,
+        },
+      },
     },
     {
       name: "hosted_deny_sync_shell_execute",

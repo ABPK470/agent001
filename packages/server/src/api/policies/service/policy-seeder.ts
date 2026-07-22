@@ -1,9 +1,9 @@
 /**
  * Policy seeding glue.
  *
- * Seeds / refreshes code-defined defaults into `policy_configs`. Operator
- * edits (`source = db`) are never overwritten. Environments do not seed
- * a second allow/deny dialect.
+ * Code defaults are a **first-boot seed only**. After insert, the DB (Policies
+ * UI) is the source of truth — boot never refreshes, overwrites, or prunes
+ * policy rows. Environments do not seed a second allow/deny dialect.
  */
 
 import { type AgentHost } from "@mia/agent"
@@ -11,63 +11,36 @@ import * as db from "../../../infra/persistence/sqlite.js"
 import { hostedDefaultPolicyRules } from "../types/hosted-defaults.js"
 
 /**
- * Insert missing hosted defaults and refresh any row still tagged
- * `hosted_default` from code (so selector cleanups land without wiping
- * operator `db` edits). Clears leftover env_derived Access seeds.
+ * Insert each code default only when that rule name is missing.
+ * Existing rows (any source) are left untouched — including old
+ * `hosted_default` rows an operator never edited.
  */
 export function seedDefaultPoliciesIfMissing(_host: AgentHost): {
   hostedDefault: number
-  refreshed: number
   envDerived: number
 } {
   const now = new Date().toISOString()
   let hostedDefault = 0
-  let refreshed = 0
-  const existingByName = new Map(db.listPolicyRules().map((r) => [r.name, r]))
 
   for (const r of hostedDefaultPolicyRules()) {
-    const parameters = JSON.stringify(r.parameters ?? {})
-    const existing = existingByName.get(r.name)
-    if (!existing) {
-      const inserted = db.seedPolicyRuleIfMissing({
-        name: r.name,
-        effect: r.effect,
-        condition: r.condition,
-        parameters,
-        created_at: now,
-        source: db.PolicySource.HostedDefault,
-      })
-      if (inserted) hostedDefault++
-      continue
-    }
-    if (existing.source !== db.PolicySource.HostedDefault) continue
-    if (
-      existing.effect === r.effect
-      && existing.condition === r.condition
-      && existing.parameters === parameters
-    ) {
-      continue
-    }
-    db.savePolicyRule({
+    const inserted = db.seedPolicyRuleIfMissing({
       name: r.name,
       effect: r.effect,
       condition: r.condition,
-      parameters,
-      created_at: existing.created_at,
+      parameters: JSON.stringify(r.parameters ?? {}),
+      created_at: now,
       source: db.PolicySource.HostedDefault,
-      updated_at: now,
-      updated_by: null,
     })
-    refreshed++
+    if (inserted) hostedDefault++
   }
 
   const removed = clearAllEnvDerivedPolicies()
-  if (hostedDefault || refreshed || removed) {
+  if (hostedDefault || removed) {
     console.log(
-      `[policy-seeder] seeded ${hostedDefault} + refreshed ${refreshed} hosted_default; cleared ${removed} env_derived leftover(s)`,
+      `[policy-seeder] seeded ${hostedDefault} missing default(s); cleared ${removed} env_derived leftover(s)`,
     )
   }
-  return { hostedDefault, refreshed, envDerived: 0 }
+  return { hostedDefault, envDerived: 0 }
 }
 
 /** Drop every env_derived rule (Access is no longer a policy editor). */

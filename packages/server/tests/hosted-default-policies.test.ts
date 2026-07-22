@@ -141,11 +141,42 @@ describe("hosted default policy rules", () => {
     expect(devDml.error?.message).toMatch(/hosted_default_deny/)
   })
 
-  it("requires approval for sync_execute and outbound fetch", async () => {
+  it("allows sync_execute on DEV, denies UAT, requires approval on PROD", async () => {
     const ev = buildHostedEvaluator()
-    const sync = await evaluate(ev, makeStep("sync_execute", { planId: "p1" }), hostedCtx())
-    expect(sync.approval).toMatch(/sync_execute|approval/)
-    expect(sync.error).toBeUndefined()
+    const preview = await evaluate(
+      ev,
+      makeStep("sync_preview", { source: "dev", target: "dev" }),
+      hostedCtx(),
+    )
+    expect(preview.error).toBeUndefined()
+    expect(preview.approval).toBeNull()
+
+    const dev = await evaluate(
+      ev,
+      makeStep("sync_execute", { planId: "p1", target: "dev", confirm: true }),
+      hostedCtx({ role: "admin" }),
+    )
+    expect(dev.error).toBeUndefined()
+    expect(dev.approval).toBeNull()
+
+    const uat = await evaluate(
+      ev,
+      makeStep("sync_execute", { planId: "p1", target: "uat", confirm: true }),
+      hostedCtx({ role: "admin" }),
+    )
+    expect(uat.error?.message).toMatch(/UAT|denied/i)
+
+    const prod = await evaluate(
+      ev,
+      makeStep("sync_execute", { planId: "p1", target: "prod", confirm: true }),
+      hostedCtx({ role: "admin" }),
+    )
+    expect(prod.approval).toMatch(/PROD|approval|sync_execute/i)
+    expect(prod.error).toBeUndefined()
+  })
+
+  it("requires approval for outbound fetch", async () => {
+    const ev = buildHostedEvaluator()
     const fetch = await evaluate(ev, makeStep("fetch_url", { url: "https://example.com" }), hostedCtx())
     expect(fetch.approval).toMatch(/outbound|approval/i)
     expect(fetch.error).toBeUndefined()
@@ -156,8 +187,11 @@ describe("hosted default policy rules", () => {
     const adminCtx = hostedCtx({ role: "admin" })
     const sandboxRead = await evaluate(ev, makeStep("read_file", { path: "/tmp/sb/x" }), adminCtx)
     expect(sandboxRead.error).toBeUndefined()
-    const sync = await evaluate(ev, makeStep("sync_execute", { planId: "p1", target: "dev" }), adminCtx)
-    expect(sync.approval).toMatch(/sync_execute|approval/)
-    expect(sync.error).toBeUndefined()
+    const prod = await evaluate(
+      ev,
+      makeStep("sync_execute", { planId: "p1", target: "prod", confirm: true }),
+      adminCtx,
+    )
+    expect(prod.approval).toMatch(/PROD|approval|sync_execute/i)
   })
 })

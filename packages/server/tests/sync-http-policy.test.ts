@@ -100,11 +100,14 @@ describe("assertSyncHttpPolicy", () => {
     ).resolves.toBeUndefined()
   })
 
-  it("requires approval for admin sessions the same as non-admin", async () => {
+  it("requires approval for admin sessions on PROD (not DEV)", async () => {
     listPolicyRules.mockReturnValue([
-      dbRule("hosted_require_approval_sync_execute", PolicyEffect.RequireApproval, {
-        reason: "confirm execute",
-        selectors: { tool: "sync_execute" },
+      dbRule("hosted_allow_sync_execute_dev", PolicyEffect.Allow, {
+        selectors: { tool: "sync_execute", dbEnvironment: "dev" },
+      }),
+      dbRule("hosted_require_approval_sync_execute_prod", PolicyEffect.RequireApproval, {
+        reason: "confirm prod",
+        selectors: { tool: "sync_execute", dbEnvironment: "prod" },
       }),
     ])
     await expect(
@@ -112,6 +115,13 @@ describe("assertSyncHttpPolicy", () => {
         session: { ...session, isAdmin: true },
         toolName: "sync_execute",
         args: { planId: "p1", confirm: true, target: "dev" },
+      }),
+    ).resolves.toBeUndefined()
+    await expect(
+      assertSyncHttpPolicy({
+        session: { ...session, isAdmin: true },
+        toolName: "sync_execute",
+        args: { planId: "p1", confirm: true, target: "prod" },
       }),
     ).rejects.toMatchObject({
       code: "approval_required",
@@ -137,9 +147,9 @@ describe("assertSyncHttpPolicy", () => {
 
   it("requires approval and persists a pending grant", async () => {
     listPolicyRules.mockReturnValue([
-      dbRule("hosted_require_approval_sync_execute", PolicyEffect.RequireApproval, {
+      dbRule("hosted_require_approval_sync_execute_prod", PolicyEffect.RequireApproval, {
         reason: "confirm execute",
-        selectors: { tool: "sync_execute" },
+        selectors: { tool: "sync_execute", dbEnvironment: "prod" },
       }),
     ])
     await expect(
@@ -161,9 +171,9 @@ describe("assertSyncHttpPolicy", () => {
       { grantId: "g1", toolName: "sync_execute", args },
     ])
     listPolicyRules.mockReturnValue([
-      dbRule("hosted_require_approval_sync_execute", PolicyEffect.RequireApproval, {
+      dbRule("hosted_require_approval_sync_execute_prod", PolicyEffect.RequireApproval, {
         reason: "confirm execute",
-        selectors: { tool: "sync_execute" },
+        selectors: { tool: "sync_execute", dbEnvironment: "prod" },
       }),
     ])
     await expect(
