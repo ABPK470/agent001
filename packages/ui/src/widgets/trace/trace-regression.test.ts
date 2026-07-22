@@ -406,6 +406,16 @@ describe("Trace CSS contract — pin indent + work-note divider", () => {
     )
   })
 
+  it("pin rows match collapsed card chrome (border + radius, stacked)", () => {
+    expect(css).toMatch(
+      /\.trace-pin__stack\s*>\s*\.trace-scope\s*\{[^}]*border:\s*1px\s+solid/s,
+    )
+    expect(css).toMatch(
+      /\.trace-pin__stack\s*>\s*\.trace-scope\s*\{[^}]*border-radius:\s*0\.5rem/s,
+    )
+    expect(css).toMatch(/\.trace-pin__stack\s*\{[^}]*gap:\s*0\.55rem/s)
+  })
+
   it("work notes do not draw a top border on the first body row", () => {
     expect(css).toMatch(
       /\.trace-scope-body\s*>\s*\*\s*\+\s*\.trace-work-note\s*\{[^}]*border-top:/s,

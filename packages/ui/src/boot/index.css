@@ -1879,6 +1879,9 @@ textarea.input {
 /*
  * Reserved pin band (sibling above .trace-scroll). Real height = stack
  * rows; never height:0 overlay painting over body text.
+ *
+ * Each pin row is the same chrome as a collapsed in-flow card header
+ * (border + radius). Multiple pins stack with the same gap as .trace-flow.
  */
 .trace-pin {
   flex-shrink: 0;
@@ -1886,24 +1889,29 @@ textarea.input {
   z-index: 50;
   height: auto;
   margin: 0;
-  padding: 0 0.35rem;
+  padding: 0 0.35rem 0.55rem;
   overflow: visible;
   pointer-events: none;
+  background: transparent;
 }
 
 .trace-pin__stack {
   pointer-events: auto;
   display: flex;
   flex-direction: column;
-  background: var(--bg);
-  box-shadow: 0 1px 0 var(--border, var(--color-border));
-  border-bottom: 1px solid var(--border, var(--color-border));
+  gap: 0.55rem;
+  background: transparent;
+  box-shadow: none;
+  border: none;
 }
 
 .trace-pin__stack > .trace-scope {
-  border-radius: 0;
+  /* Match .trace-card:not(.is-open) > .trace-scope */
+  border: 1px solid var(--border, var(--color-border));
+  border-radius: 0.5rem;
   width: 100%;
   cursor: default;
+  background: color-mix(in srgb, var(--text, var(--color-text)) 4%, var(--bg));
   /* Depth 0 — hug the label like in-flow roots */
   padding-left: 0.35rem;
 }
@@ -1952,14 +1960,6 @@ textarea.input {
 
 .trace-pin__stack > .trace-scope .trace-scope__lead {
   min-width: 0;
-}
-
-.trace-pin__stack > .trace-scope.is-soft {
-  border-top-color: var(--border-subtle, var(--color-border-subtle));
-}
-
-.trace-pin__stack > .trace-scope:first-child.is-soft {
-  border-top: none;
 }
 
 .trace-card {
