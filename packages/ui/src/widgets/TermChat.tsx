@@ -1601,9 +1601,9 @@ function RunMessageImpl({
 
   return (
     <div className="space-y-4">
+      {/* px-1 (not pl-1 only): match left/right inset so bordered answer
+          chrome is not flush against the transcript's overflow-x-hidden edge. */}
       {renderedParts.length > 0 && (
-        {/* px-1 (not pl-1 only): match left/right inset so bordered answer
-            chrome is not flush against the transcript's overflow-x-hidden edge. */}
         <div className="px-1 space-y-1">
           {renderedParts}
         </div>
