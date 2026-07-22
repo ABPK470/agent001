@@ -160,16 +160,23 @@ describe("computePinnedFromEntries — reserved band (stackInScroll: false)", ()
     ])
   })
 
-  it("pins Call → Received while reading received body", () => {
-    const tree = [
-      { id: "call:0", top: 0, depth: 0 },
-      { id: "sent:0", top: 40, depth: 1 },
-      { id: "received:0", top: 800, depth: 1 },
-      { id: "call:1", top: 1000, depth: 0 },
+  it("pins a short message header as soon as its own bottom clears (not fixed rowH)", () => {
+    const band = { stackInScroll: false as const }
+    const msgs = [
+      { id: "call:0", top: 0, depth: 0, height: H },
+      { id: "sent:0", top: 40, depth: 1, height: H },
+      // Agent-like message row — shorter than ScopeRow / TRACE_STICKY_ROW_H
+      { id: "message:0:m:0", top: 80, depth: 2, height: 22 },
     ]
-    expect(computePinnedFromEntries(tree, 850, H, 4, band)).toEqual([
+    // Fixed-rowH stick would still wait until 80+34; real height clears at 102.
+    expect(computePinnedFromEntries(msgs, 80 + 22 - 1, H, 4, band)).toEqual([
       "call:0",
-      "received:0",
+      "sent:0",
+    ])
+    expect(computePinnedFromEntries(msgs, 80 + 22, H, 4, band)).toEqual([
+      "call:0",
+      "sent:0",
+      "message:0:m:0",
     ])
   })
 })

@@ -5,8 +5,12 @@
  * (OutlineTree) clones the ancestor chain of the focus line
  * (ViewSpec stickyFamilies / stickyTypes).
  *
- * Stick rule: pin after the header has scrolled *fully past* the focus line
- * while focus is still inside [top, end). End = next same-or-shallower scope top.
+ * Stick rule: pin after the header's own bottom has cleared the focus line
+ * (`top + height <= focus`, height measured per element) while focus is still
+ * inside [top, end). End = next same-or-shallower scope top.
+ * Using a fixed row height here is wrong — message rows (Agent / System) are
+ * shorter than ScopeRow, and a fixed rowH leaves a dead zone where the label
+ * has scrolled away but is not yet pinned.
  *
  * `stackInScroll` (Outline overlay): focus line steps down by one row per
  * already-pinned ancestor — pins eat into the scrollport.
@@ -41,6 +45,8 @@ export type OutlineScopeEntry = {
   family: string
   depth: number
   top: number
+  /** Live header height — message rows are shorter than ScopeRow. */
+  height: number
   el: HTMLElement
 }
 
@@ -75,6 +81,10 @@ export function listOutlineScopes(
       family,
       depth: Number(el.dataset.outlineDepth ?? el.dataset.traceDepth ?? "0") || 0,
       top: layoutOffsetInScroll(scrollEl, el),
+      height: Math.max(
+        1,
+        el.getBoundingClientRect().height || el.offsetHeight || OUTLINE_STICKY_ROW_H,
+      ),
       el,
     })
   }
@@ -85,6 +95,8 @@ export type PinEntry = {
   id: string
   top: number
   depth: number
+  /** Measured header height; falls back to rowH when omitted (unit tests). */
+  height?: number
 }
 
 export type PinComputeOpts = {
@@ -125,9 +137,12 @@ export function computePinnedFromEntries(
     const threshold = stackInScroll
       ? scrollTop + pinned.length * rowH
       : scrollTop
-    // Stick once the header has fully cleared the focus line (≥, not
-    // strict-past). Float epsilon keeps subpixel layout from flickering.
-    const pastHeader = e.top + rowH <= threshold + 0.5
+    // Stick once this header's *own* bottom has cleared the focus line.
+    // Message rows (Agent / System / …) are shorter than --trace-row-h; using
+    // a fixed rowH here left a dead zone where the label was gone but not yet
+    // pinned — children looked parented by the wrong ancestor.
+    const headerH = e.height ?? rowH
+    const pastHeader = e.top + headerH <= threshold + 0.5
     // …and yield when the next same-or-shallower header reaches the focus
     // line (overlay: +rowH so peers are not covered under the stack).
     const yieldPad = stackInScroll ? rowH : 0
