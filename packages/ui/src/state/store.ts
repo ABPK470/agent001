@@ -530,7 +530,7 @@ function eventType(type: string): string {
   return "system"
 }
 
-/** step.*/tool_call.* summaries already include tool + verb — don't wrap again. */
+/** step.* / tool_call.* summaries already include tool + verb — don't wrap again. */
 function isSelfContainedStreamSummary(type: string, message: string): boolean {
   if (type.startsWith("step.") || type.startsWith("tool_call.") || type.startsWith("tool.")) {
     return /\b(started|completed|failed|executing|killed|done)\b/i.test(message)

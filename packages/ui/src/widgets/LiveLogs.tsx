@@ -1,22 +1,25 @@
 /**
- * Event Stream — live platform event log.
+ * Event Stream — Datadog-style live tail + time-bounded history.
  *
- * Design:
- *   - Muted monochrome toolbar, no colored dots — clean enterprise look
- *   - Message text color varies by type — like proper server terminal output
- *   - Filter input prominent with visible border
- *   - Generous padding / spacing throughout
- *   - Click any row to expand raw event payload
+ * One stream (no separate "from database" pane):
+ *   - Range chips: Live (last 1h + follow) | 15m | 1h | 6h | 24h
+ *   - Scroll up → older pages within the range
+ *   - SSE appends in Live; fixed ranges show "N new → Jump to live"
+ *   - Search / type filters apply to the loaded buffer; deep search hits event_log
  */
 
-import { AlertCircle, ArrowDown, ChevronRight, Database, Filter, Pause, Play } from "lucide-react"
+import { AlertCircle, ArrowDown, ChevronRight, Filter, Pause, Play, Radio } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { api } from "../client/index"
 import { EmptyState } from "../components/EmptyState"
 import { SqlTraceFromEventData } from "./sync/trace/SqlTrace"
 import { JsonViewer } from "../components/JsonViewer"
 import { useContainerSize } from "../hooks/useContainerSize"
-import { formatLogEntry, useStore } from "../state/store"
+import {
+  type EventStreamRange,
+  useEventStreamData,
+} from "../hooks/useEventStreamData"
+import { formatLogEntry } from "../state/store"
 import type { LogEntry } from "../types"
 import { isSyncSqlEventType } from "./sync/trace/sync-sql-trace"
 import { WIDGET_ICONS } from "./widget-icons"
@@ -35,12 +38,17 @@ import {
   WidgetToolbarFilterMenuItem,
 } from "./widget-toolbar"
 
-// ── Type chips shown in toolbar (order matters) ──────────────────
-
 const EVENT_TYPES = ["all", "run", "step", "sync", "bridge", "agent", "api", "system"] as const
 type EventType = (typeof EVENT_TYPES)[number]
 
-/** Words from the search box must all appear somewhere in these fields. */
+const RANGES: { id: EventStreamRange; label: string }[] = [
+  { id: "live", label: "Live" },
+  { id: "15m", label: "15m" },
+  { id: "1h", label: "1h" },
+  { id: "6h", label: "6h" },
+  { id: "24h", label: "24h" },
+]
+
 function logSearchHaystack(log: LogEntry): string {
   return `${log.message} ${log.type} ${log.eventName ?? ""} ${JSON.stringify(log.data ?? {})}`.toLowerCase()
 }
@@ -67,7 +75,6 @@ function logMatchesFilters(
   return logMatchesSearch(log, searchText)
 }
 
-/** Map UI filter chips → event_log.type LIKE prefixes for DB search. */
 function eventTypeDbPatterns(filters: Set<EventType>): string[] | undefined {
   if (filters.size === 0) return undefined
   const patterns: string[] = []
@@ -83,161 +90,165 @@ function eventTypeDbPatterns(filters: Set<EventType>): string[] | undefined {
   return patterns.length > 0 ? patterns : undefined
 }
 
-/** Message text color per type — the core visual differentiation. */
 const MSG_COLOR: Record<string, string> = {
-  run:    "var(--color-info)",
-  step:   "var(--color-accent)",
-  sync:   "var(--color-success)",
+  run: "var(--color-info)",
+  step: "var(--color-accent)",
+  sync: "var(--color-success)",
   bridge: "var(--color-accent)",
-  agent:  "var(--color-accent-hover)",
-  api:    "var(--color-accent)",
+  agent: "var(--color-accent-hover)",
+  api: "var(--color-accent)",
   system: "var(--color-text-muted)",
 }
 
-// ── Component ────────────────────────────────────────────────────
-
 export function LiveLogs() {
-  const logs = useStore((s) => s.logs)
   const [paused, setPaused] = useState(false)
-  const [snapshot, setSnapshot] = useState<LogEntry[]>([])
   const [autoScroll, setAutoScroll] = useState(true)
   const [typeFilters, setTypeFilters] = useState<Set<EventType>>(new Set())
   const [errorsOnly, setErrorsOnly] = useState(false)
   const [searchText, setSearchText] = useState("")
+
+  const {
+    entries,
+    loading,
+    loadingOlder,
+    hasMore,
+    loadOlder,
+    error,
+    pendingLiveCount,
+    jumpToLive,
+    range,
+    setRange,
+  } = useEventStreamData({ paused })
+
   const bottomRef = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const rootRef = useRef<HTMLDivElement>(null)
+  const topSentinelRef = useRef<HTMLDivElement>(null)
   const { width: rootWidth } = useContainerSize(rootRef)
   const compact = rootWidth > 0 && rootWidth < 860
   const tiny = rootWidth > 0 && rootWidth < 480
 
-  // DB fallback search — triggered when in-memory results = 0 and query ≥ 3 chars
-  const [dbResults, setDbResults] = useState<LogEntry[]>([])
-  const [dbSearching, setDbSearching] = useState(false)
-  /** Set when the latest DB query finishes — avoids stale "no matches" flashes. */
-  const [dbSearchKey, setDbSearchKey] = useState("")
-  const dbTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Deep search when the loaded window has no hits (same catalog formatting).
+  const [searchHits, setSearchHits] = useState<LogEntry[]>([])
+  const [searching, setSearching] = useState(false)
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const activeSearchKey = useMemo(
-    () => JSON.stringify({
-      q: searchText.trim(),
-      types: [...typeFilters].sort(),
-      errorsOnly,
-    }),
-    [searchText, typeFilters, errorsOnly],
+  const filtered = useMemo(
+    () => entries.filter((l) => logMatchesFilters(l, typeFilters, errorsOnly, searchText)),
+    [entries, typeFilters, errorsOnly, searchText],
   )
 
   const searchActive = searchText.trim().length >= 2 || typeFilters.size > 0 || errorsOnly
 
-  const runDbSearch = useCallback(async (
-    q: string,
-    filters: Set<EventType>,
-    errorsOnlySearch: boolean,
-    searchKey: string,
-  ) => {
-    const typePatterns = eventTypeDbPatterns(filters)
-    const canSearchText = q.trim().length >= 2
-    if (!canSearchText && !typePatterns && !errorsOnlySearch) {
-      setDbResults([])
-      setDbSearchKey("")
-      return
-    }
-    setDbSearching(true)
-    try {
-      const res = await api.searchEvents(canSearchText ? q.trim() : "", {
-        type_patterns: errorsOnlySearch
-          ? ["%.failed", "%error%"]
-          : typePatterns,
-        limit: 300,
-      })
-      const entries: LogEntry[] = []
-      for (const event of res.events) {
-        const entry = formatLogEntry(event.type, event.data ?? {}, event.timestamp)
-        if (entry) entries.push(entry)
-      }
-      setDbResults(entries)
-      setDbSearchKey(searchKey)
-    } catch { /* ignore */ }
-    setDbSearching(false)
-  }, [])
-
-  // Query SQLite when filtering — in-memory buffer is capped (~5k) and may miss
-  // older events. Type chips map to type_patterns (sync. → sync.preview.*, etc.).
   useEffect(() => {
-    setDbResults([])
-    setDbSearchKey("")
-    if (dbTimer.current) clearTimeout(dbTimer.current)
+    if (searchTimer.current) clearTimeout(searchTimer.current)
+    setSearchHits([])
     if (!searchActive) return
-    dbTimer.current = setTimeout(() => {
-      void runDbSearch(searchText, typeFilters, errorsOnly, activeSearchKey)
-    }, 600)
-    return () => { if (dbTimer.current) clearTimeout(dbTimer.current) }
-  }, [searchText, typeFilters, errorsOnly, searchActive, activeSearchKey, runDbSearch])
+    if (filtered.length > 0) return
 
-  // Freeze on pause
-  useEffect(() => {
-    if (paused) setSnapshot([...logs])
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [paused])
+    searchTimer.current = setTimeout(() => {
+      const q = searchText.trim()
+      const typePatterns = eventTypeDbPatterns(typeFilters)
+      if (q.length < 2 && !typePatterns && !errorsOnly) return
+      setSearching(true)
+      void api
+        .searchEvents(q.length >= 2 ? q : "", {
+          type_patterns: errorsOnly ? ["%.failed", "%error%"] : typePatterns,
+          limit: 300,
+        })
+        .then((res) => {
+          const mapped: LogEntry[] = []
+          for (const event of res.events) {
+            const entry = formatLogEntry(event.type, event.data ?? {}, event.timestamp)
+            if (entry) mapped.push(entry)
+          }
+          setSearchHits(mapped.reverse())
+        })
+        .catch(() => setSearchHits([]))
+        .finally(() => setSearching(false))
+    }, 500)
 
-  const source = paused ? snapshot : logs
+    return () => {
+      if (searchTimer.current) clearTimeout(searchTimer.current)
+    }
+  }, [searchActive, searchText, typeFilters, errorsOnly, filtered.length])
 
-  // Counts per type + error count
+  const searchOnly = useMemo(() => {
+    if (filtered.length > 0 || searchHits.length === 0) return []
+    const liveKeys = new Set(entries.map((l) => `${l.eventName}\0${l.timestamp}\0${l.message}`))
+    return searchHits.filter(
+      (l) =>
+        !liveKeys.has(`${l.eventName}\0${l.timestamp}\0${l.message}`) &&
+        logMatchesFilters(l, typeFilters, errorsOnly, searchText),
+    )
+  }, [filtered.length, searchHits, entries, typeFilters, errorsOnly, searchText])
+
   const counts = useMemo(() => {
     const c: Record<string, number> = { all: 0, error: 0 }
-    for (const l of source) {
+    for (const l of entries) {
       c.all++
       c[l.type] = (c[l.type] ?? 0) + 1
       if (l.error) c.error++
     }
     return c
-  }, [source])
+  }, [entries])
 
-  const filtered = useMemo(
-    () => source.filter((l) => logMatchesFilters(l, typeFilters, errorsOnly, searchText)),
-    [source, typeFilters, errorsOnly, searchText],
-  )
-
-  const dbFiltered = useMemo(
-    () => dbResults.filter((l) => logMatchesFilters(l, typeFilters, errorsOnly, searchText)),
-    [dbResults, typeFilters, errorsOnly, searchText],
-  )
-
-  const dbOnly = useMemo(() => {
-    const liveKeys = new Set(
-      filtered.map((l) => `${l.eventName ?? ""}\0${l.timestamp ?? ""}\0${l.message}`),
-    )
-    return dbFiltered.filter(
-      (l) => !liveKeys.has(`${l.eventName ?? ""}\0${l.timestamp ?? ""}\0${l.message}`),
-    )
-  }, [dbFiltered, filtered])
-
-  const dbReady = searchActive && dbSearchKey === activeSearchKey && !dbSearching
-  const showDbSection = dbReady && dbOnly.length > 0
-  const showDbSearching = searchActive && dbSearching
-  const showEmpty = searchActive && dbReady && filtered.length === 0 && dbOnly.length === 0
-
-  // Auto-scroll — use scrollTop for reliable rapid-fire updates
   useEffect(() => {
-    if (autoScroll && !paused) {
+    if (autoScroll && !paused && range === "live") {
       const el = containerRef.current
       if (el) el.scrollTop = el.scrollHeight
     }
-  }, [filtered, autoScroll, paused])
+  }, [filtered, autoScroll, paused, range])
 
-  function handleScroll() {
+  function onScroll() {
     const el = containerRef.current
     if (!el) return
     setAutoScroll(el.scrollHeight - el.scrollTop - el.clientHeight < 40)
+    if (el.scrollTop < 80) loadOlder()
   }
 
-  const pendingCount = paused ? Math.max(0, logs.length - snapshot.length) : 0
+  const onRangeClick = useCallback(
+    (next: EventStreamRange) => {
+      setPaused(false)
+      setAutoScroll(true)
+      setRange(next)
+    },
+    [setRange],
+  )
+
+  const displayRows = filtered.length > 0 ? filtered : searchOnly
+  const showEmpty =
+    !loading &&
+    !searching &&
+    displayRows.length === 0 &&
+    (searchActive || entries.length === 0)
 
   return (
     <div ref={rootRef} className="h-full min-h-0 overflow-hidden flex flex-col gap-2.5 text-text">
-
       <LogWidgetToolbar compact={compact}>
         <LogWidgetToolbarFilters>
+          {RANGES.map((r) => {
+            const active = range === r.id
+            return (
+              <button
+                key={r.id}
+                type="button"
+                onClick={() => onRangeClick(r.id)}
+                className={`${LOG_TOOLBAR_CHIP} ${active ? LOG_TOOLBAR_CHIP_ACTIVE : LOG_TOOLBAR_CHIP_IDLE}`}
+                title={
+                  r.id === "live"
+                    ? "Last 1 hour + follow new events"
+                    : `Events from the last ${r.label}`
+                }
+              >
+                {r.id === "live" && <Radio size={12} className={active ? "text-accent" : ""} />}
+                {r.label}
+              </button>
+            )
+          })}
+
+          {!compact && <div className={LOG_TOOLBAR_DIVIDER} aria-hidden />}
+
           {!compact ? (
             EVENT_TYPES.map((et) => {
               const active = et === "all" ? typeFilters.size === 0 : typeFilters.has(et)
@@ -245,10 +256,10 @@ export function LiveLogs() {
               return (
                 <button
                   key={et}
+                  type="button"
                   onClick={() => {
-                    if (et === "all") {
-                      setTypeFilters(new Set())
-                    } else {
+                    if (et === "all") setTypeFilters(new Set())
+                    else {
                       setTypeFilters((prev) => {
                         const next = new Set(prev)
                         if (next.has(et)) next.delete(et)
@@ -272,12 +283,12 @@ export function LiveLogs() {
             <WidgetToolbarFilterMenu
               ariaLabel="Filter event types"
               active={typeFilters.size > 0}
-              label={(
+              label={
                 <>
                   <Filter size={14} />
                   {typeFilters.size === 0 ? "all" : `${typeFilters.size} types`}
                 </>
-              )}
+              }
             >
               {EVENT_TYPES.map((et) => {
                 const active = et === "all" ? typeFilters.size === 0 : typeFilters.has(et)
@@ -306,9 +317,8 @@ export function LiveLogs() {
             </WidgetToolbarFilterMenu>
           )}
 
-          {!compact && <div className={LOG_TOOLBAR_DIVIDER} aria-hidden />}
-
           <button
+            type="button"
             onClick={() => setErrorsOnly((e) => !e)}
             className={`${LOG_TOOLBAR_CHIP} shrink-0 ${
               errorsOnly ? "bg-error-soft text-error font-medium" : LOG_TOOLBAR_CHIP_IDLE
@@ -329,93 +339,122 @@ export function LiveLogs() {
           value={searchText}
           onChange={setSearchText}
           placeholder="Search message, event type, plan id…"
-          loading={dbSearching}
+          loading={searching || loading}
         />
 
         <LogWidgetToolbarTail>
-          <LogWidgetToolbarCount filtered={filtered.length} total={source.length} hidden={tiny} />
+          <LogWidgetToolbarCount filtered={filtered.length} total={entries.length} hidden={tiny} />
 
           <button
-            title={paused ? `Resume (${pendingCount} buffered)` : "Pause"}
+            type="button"
+            title={paused ? `Resume (${pendingLiveCount} buffered)` : "Pause live append"}
             className={`${LOG_TOOLBAR_ICON_BTN} relative ${
               paused ? "bg-error/15 text-error" : "text-text-muted/60 hover:text-text hover:bg-elevated/40"
             }`}
             onClick={() => setPaused((p) => !p)}
           >
             {paused ? <Play size={15} /> : <Pause size={15} />}
-            {paused && pendingCount > 0 && (
+            {paused && pendingLiveCount > 0 && (
               <span className="absolute -top-1.5 -right-1.5 text-xs font-bold bg-error text-text rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-0.5">
-                {pendingCount > 99 ? "99+" : pendingCount}
+                {pendingLiveCount > 99 ? "99+" : pendingLiveCount}
               </span>
             )}
           </button>
         </LogWidgetToolbarTail>
       </LogWidgetToolbar>
 
-      {/* ── Log body ─────────────────────────────────────── */}
+      {(pendingLiveCount > 0 && (paused || range !== "live")) && (
+        <button
+          type="button"
+          className="flex items-center justify-center gap-1.5 py-1.5 text-sm text-accent hover:text-accent-hover bg-accent/5 border border-accent/20 rounded"
+          onClick={() => {
+            setPaused(false)
+            setAutoScroll(true)
+            jumpToLive()
+          }}
+        >
+          <Radio size={14} />
+          {pendingLiveCount} new event{pendingLiveCount === 1 ? "" : "s"} — Jump to live
+        </button>
+      )}
+
+      {error && (
+        <div className="px-3 py-2 text-sm text-error bg-error-soft rounded border border-error/20">
+          {error}
+        </div>
+      )}
+
       <div
         ref={containerRef}
         className="log-stream flex min-h-0 flex-1 flex-col overflow-y-auto"
-        onScroll={handleScroll}
+        onScroll={onScroll}
       >
-        {source.length === 0 && !searchActive && (
-          <EmptyState icon={WIDGET_ICONS["live-logs"]} message="Waiting for events…" />
+        <div ref={topSentinelRef} />
+
+        {loadingOlder && (
+          <div className="px-3 py-2 text-sm text-text-muted text-center">Loading older events…</div>
+        )}
+        {!loadingOlder && hasMore && (
+          <button
+            type="button"
+            className="px-3 py-2 text-sm text-accent hover:text-accent-hover"
+            onClick={() => loadOlder()}
+          >
+            Load older events
+          </button>
         )}
 
-        {filtered.map((log, i) => (
-          <LogRow key={i} log={log} setTypeFilters={setTypeFilters} compact={compact} tiny={tiny} />
+        {loading && entries.length === 0 && (
+          <EmptyState icon={WIDGET_ICONS["live-logs"]} message="Loading event history…" />
+        )}
+
+        {!loading && entries.length === 0 && !searchActive && (
+          <EmptyState icon={WIDGET_ICONS["live-logs"]} message="No events in this time range." />
+        )}
+
+        {displayRows.map((log, i) => (
+          <LogRow
+            key={`${log.timestamp}|${log.eventName ?? ""}|${i}`}
+            log={log}
+            setTypeFilters={setTypeFilters}
+            compact={compact}
+            tiny={tiny}
+          />
         ))}
 
-        {showDbSearching && filtered.length === 0 && dbOnly.length === 0 && (
-          <EmptyState icon={Database} message="Searching event log database…" />
-        )}
-
-        {showDbSection && (
-          <div className={`${filtered.length > 0 ? "mt-3" : "mt-2"} border-t border-border-subtle`}>
-            <div className="flex items-center gap-2 px-3 py-3 text-sm text-text-muted bg-elevated/30">
-              <Database size={14} className="shrink-0" />
-              <span>
-                From database — {dbOnly.length} match{dbOnly.length === 1 ? "" : "es"}
-                {searchText.trim() ? ` for “${searchText.trim()}”` : ""}
-                {filtered.length > 0 ? (
-                  <span className="text-text-muted/60"> (older, not in live buffer)</span>
-                ) : (
-                  <span className="text-text-muted/60"> (not in live buffer)</span>
-                )}
-              </span>
-            </div>
-            {dbOnly.map((log, i) => (
-              <LogRow key={`db:${log.eventName ?? i}:${log.timestamp}`} log={log} setTypeFilters={setTypeFilters} compact={compact} tiny={tiny} />
-            ))}
+        {filtered.length === 0 && searchOnly.length > 0 && (
+          <div className="px-3 py-2 text-sm text-text-muted bg-elevated/30 border-t border-border-subtle">
+            Search matches outside the loaded window ({searchOnly.length})
           </div>
         )}
 
-        {showEmpty && (
+        {showEmpty && searchActive && (
           <EmptyState
             icon={Filter}
-            message="No matches in live buffer or database."
-            detail="Search message text, event type (e.g. preview, failed), plan id, entity/table names — or use type chips, then add keywords."
+            message="No matches in this range."
+            detail="Widen the time range, clear filters, or try different keywords."
           />
         )}
 
         <div ref={bottomRef} />
       </div>
 
-      {!autoScroll && !paused && (
+      {!autoScroll && !paused && range === "live" && (
         <button
+          type="button"
           className="flex items-center justify-center gap-1.5 py-1.5 text-sm text-accent hover:text-accent-hover transition-colors"
-          onClick={() => { setAutoScroll(true); bottomRef.current?.scrollIntoView({ behavior: "smooth" }) }}
+          onClick={() => {
+            setAutoScroll(true)
+            bottomRef.current?.scrollIntoView({ behavior: "smooth" })
+          }}
         >
-          <ArrowDown size={14} /> New events
+          <ArrowDown size={14} /> Jump to latest
         </button>
       )}
     </div>
   )
 }
 
-// ── Expandable log row ───────────────────────────────────────────
-
-/** Always date + time so cross-day streams are readable (time-only was ambiguous). */
 function formatLogTimestamp(iso: string | undefined, tiny: boolean): string {
   if (!iso) return ""
   const d = new Date(iso)
@@ -436,8 +475,16 @@ function formatLogTimestamp(iso: string | undefined, tiny: boolean): string {
   return `${date} ${time}`
 }
 
-function LogRow({ log, setTypeFilters, compact, tiny }: {
-  log: LogEntry; setTypeFilters: React.Dispatch<React.SetStateAction<Set<EventType>>>; compact: boolean; tiny: boolean
+function LogRow({
+  log,
+  setTypeFilters,
+  compact,
+  tiny,
+}: {
+  log: LogEntry
+  setTypeFilters: React.Dispatch<React.SetStateAction<Set<EventType>>>
+  compact: boolean
+  tiny: boolean
 }) {
   const [expanded, setExpanded] = useState(false)
   const msgColor = log.error ? "var(--color-error)" : (MSG_COLOR[log.type] ?? "var(--color-text-muted)")
@@ -458,8 +505,18 @@ function LogRow({ log, setTypeFilters, compact, tiny }: {
           {formatLogTimestamp(log.timestamp, tiny)}
         </span>
         <button
+          type="button"
           className="shrink-0 w-14 text-sm font-medium text-left truncate hover:opacity-70 transition-opacity text-text-muted"
-          onClick={(e) => { e.stopPropagation(); setTypeFilters((prev) => { const next = new Set(prev); const t = log.type as EventType; if (next.has(t)) next.delete(t); else next.add(t); return next }) }}
+          onClick={(e) => {
+            e.stopPropagation()
+            setTypeFilters((prev) => {
+              const next = new Set(prev)
+              const t = log.type as EventType
+              if (next.has(t)) next.delete(t)
+              else next.add(t)
+              return next
+            })
+          }}
         >
           {log.type}
         </button>

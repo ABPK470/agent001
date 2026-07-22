@@ -1016,21 +1016,46 @@ export const api = {
    * Used on cold start to backfill the LiveLogs widget so prior sync /
    * agent / system events survive a server restart.
    */
-  /** Cold-start backfill for Event Stream. Skips debug.trace so the window is
-   *  step/tool/run/sync surface events — same population search finds, not loop noise. */
-  recentEvents: (limit = 2000) => {
-    const params = new URLSearchParams({
-      limit: String(limit),
-      exclude_types: "debug.trace",
-    })
+  /**
+   * Event Stream page — cursor + time-bounded query over event_log.
+   * Datadog-style: exclude_types=debug.trace, since=ISO, before=older cursor.
+   */
+  listEvents: (opts: {
+    limit?: number
+    before?: string
+    after?: string
+    since?: string
+    exclude_types?: string[]
+    types?: string[]
+  } = {}) => {
+    const p = new URLSearchParams()
+    p.set("limit", String(opts.limit ?? 500))
+    if (opts.before) p.set("before", opts.before)
+    if (opts.after) p.set("after", opts.after)
+    if (opts.since) p.set("since", opts.since)
+    if (opts.exclude_types?.length) p.set("exclude_types", opts.exclude_types.join(","))
+    if (opts.types?.length) p.set("types", opts.types.join(","))
     return json<{
       events: Array<{ id: number; type: string; data: Record<string, unknown>; timestamp: string }>
       count: number
+      oldestTimestamp: string | null
+      newestTimestamp: string | null
       hasMore: boolean
-    }>(`/api/events?${params}`)
+    }>(`/api/events?${p}`)
   },
 
-  /** Full-text search of the persistent event_log table. Used by LiveLogs DB-fallback. */
+  /** @deprecated Prefer listEvents — kept for any residual callers. */
+  recentEvents: (limit = 500) =>
+    json<{
+      events: Array<{ id: number; type: string; data: Record<string, unknown>; timestamp: string }>
+      count: number
+      hasMore: boolean
+    }>(`/api/events?${new URLSearchParams({
+      limit: String(limit),
+      exclude_types: "debug.trace",
+    })}`),
+
+  /** Full-text search of the persistent event_log table. */
   searchEvents: (
     q: string,
     opts: {

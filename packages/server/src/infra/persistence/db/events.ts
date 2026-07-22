@@ -26,8 +26,10 @@ export function listEvents(opts?: {
   limit?: number
   before?: string
   after?: string
+  /** Inclusive lower bound (ISO). Event Stream time ranges use this. */
+  since?: string
   types?: string[]
-  /** Drop these types before applying LIMIT (Event Stream hydrate skips debug.trace spam). */
+  /** Drop these types before applying LIMIT (Event Stream skips debug.trace spam). */
   excludeTypes?: string[]
 }): DbEvent[] {
   const limit = opts?.limit ?? 200
@@ -41,6 +43,10 @@ export function listEvents(opts?: {
   if (opts?.after) {
     conditions.push("created_at > ?")
     params.push(opts.after)
+  }
+  if (opts?.since) {
+    conditions.push("created_at >= ?")
+    params.push(opts.since)
   }
   if (opts?.types && opts.types.length > 0) {
     conditions.push(`type IN (${opts.types.map(() => "?").join(",")})`)

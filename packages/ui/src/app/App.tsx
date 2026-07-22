@@ -99,8 +99,6 @@ export function App() {
     || visibleWidgetTypes.has("term-chat")
     || visibleWidgetTypes.has("agent-chat")
   const shouldRestoreSyncState = visibleWidgetTypes.has("env-sync")
-  const shouldHydrateRecentEvents = visibleWidgetTypes.has("live-logs")
-
   // Phase state machine — v19 simplified.
   //   Loading   — initial whoami fetch in flight; blank screen
   //   Login     — not authenticated; <WelcomeFlow/> renders intro + form
@@ -284,20 +282,8 @@ export function App() {
     }).catch(() => {})
   }, [me?.upn, shouldRestoreSyncState])
 
-  // Backfill the LiveLogs widget on cold start with recent persisted events
-  // (sync runs, agent runs, audit, system) so the log isn't empty after a
-  // server/page restart. Runs once per identity. Live events still come
-  // through the SSE stream — `hydrateLogsFromEvents` dedups against any
-  // entries already added to the live `logs` array.
-  useEffect(() => {
-    if (!me) return
-    if (!shouldHydrateRecentEvents) return
-    // Surface events only (API excludes debug.trace) so hydrate matches what
-    // operators see in search — step/tool_call/run/sync, not loop noise.
-    api.recentEvents(2000).then((res) => {
-      useStore.getState().hydrateLogsFromEvents(res.events)
-    }).catch(() => {})
-  }, [me?.upn, shouldHydrateRecentEvents])
+  // Event Stream (live-logs) loads its own history via useEventStreamData —
+  // no App-level hydrate. Live rows still arrive through SSE → store.addLog.
 
   // Restore dashboard layout from server + start auto-sync.
   // v19: dashboardIdFor() on the server is `dashboard:${upn}` — single

@@ -12,13 +12,14 @@ export function registerEventRoutes(app: FastifyInstance): void {
       limit?: string
       before?: string
       after?: string
+      since?: string
       types?: string
       exclude_types?: string
     }
   }>("/api/events", async (req) => {
-    // Event Stream hydrate asks for ~2k surface events; debug.trace is excluded
-    // via exclude_types so the window is not all loop noise.
-    const limit = Math.min(Number(req.query.limit) || 200, 5000)
+    // Event Stream: cursor pages of surface events (exclude debug.trace by default
+    // from the client). Cap keeps a single page cheap; scroll loads older.
+    const limit = Math.min(Number(req.query.limit) || 200, 2000)
     const types = req.query.types
       ? req.query.types
           .split(",")
@@ -31,24 +32,34 @@ export function registerEventRoutes(app: FastifyInstance): void {
           .map((type) => type.trim())
           .filter(Boolean)
       : undefined
+    const since = typeof req.query.since === "string" && req.query.since.length > 0
+      ? req.query.since
+      : undefined
 
     const events = db.listEvents({
       limit,
       before: req.query.before,
       after: req.query.after,
+      since,
       types,
       excludeTypes
     })
+
+    // Newest-first from DB; oldestTimestamp is the cursor for the next older page.
+    const oldestTimestamp = events.length > 0 ? events[events.length - 1]!.created_at : null
+    const newestTimestamp = events.length > 0 ? events[0]!.created_at : null
 
     return {
       events: events.map((event) => ({
         id: event.id,
         type: event.type,
-        data: JSON.parse(event.data),
+        data: JSON.parse(event.data) as Record<string, unknown>,
         timestamp: event.created_at
       })),
       count: events.length,
-      hasMore: events.length === limit
+      oldestTimestamp,
+      newestTimestamp,
+      hasMore: events.length >= limit
     }
   })
 
