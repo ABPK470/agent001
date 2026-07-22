@@ -121,7 +121,7 @@ export function AboutModal({ onClose }: { onClose: () => void }) {
   return (
     <ModalShell
       title="About"
-      subtitle="Your usage, file access, and what this instance exposes to you."
+      subtitle="Live snapshot from this instance — usage, topology, and what you can reach."
       icon={<BookOpen size={20} className="text-text-muted" />}
       onClose={onClose}
       widthClass={MODAL_ADMIN_PANEL}
@@ -196,6 +196,9 @@ export function AboutModal({ onClose }: { onClose: () => void }) {
           </Section>
 
           <Section icon={<Layers size={15} />} title="Environments">
+            <p className="text-[15px] leading-relaxed text-text-muted">
+              Live sync topology from this instance. Allow / deny / approval is Policies — not these rows.
+            </p>
             {data.environments.length === 0 ? (
               <p className="text-[15px] text-text-muted">No sync environments configured.</p>
             ) : (
@@ -212,18 +215,15 @@ export function AboutModal({ onClose }: { onClose: () => void }) {
                       </div>
                       <div className="flex flex-wrap gap-1.5">
                         <Pill>{env.role}</Pill>
-                        <Pill>{env.defaultAccessMode}</Pill>
-                        {env.denyDml && <Pill>no DML</Pill>}
-                        {env.denyDdl && <Pill>no DDL</Pill>}
                       </div>
                     </div>
                     <div className="mt-1.5 text-[15px] leading-relaxed text-text-muted">
                       Sync targets:{" "}
-                      {env.allowedSyncTargets == null
+                      {env.allowedSyncEnvironments == null
                         ? "unrestricted"
-                        : env.allowedSyncTargets.length === 0
+                        : env.allowedSyncEnvironments.length === 0
                           ? "none"
-                          : env.allowedSyncTargets.join(", ")}
+                          : env.allowedSyncEnvironments.join(", ")}
                     </div>
                   </div>
                 ))}
@@ -244,7 +244,7 @@ export function AboutModal({ onClose }: { onClose: () => void }) {
               />
             </dl>
             <div className="space-y-1.5">
-              <div className="text-[15px] text-text-muted">Available on this instance</div>
+              <div className="text-[15px] text-text-muted">Supported providers</div>
               {data.providers.available.map((p) => (
                 <div
                   key={p.id}

@@ -45,7 +45,7 @@ export function UsageModal({ onClose }: { onClose: () => void }) {
   return (
     <ModalShell
       title="Token Usage"
-      subtitle="Token consumption across all agent runs. Included with GitHub Copilot Pro — no per-token cost."
+      subtitle="Totals recorded from agent runs on this instance."
       icon={<Activity size={20} className="text-text-muted" />}
       onClose={onClose}
       widthClass={MODAL_ADMIN_PANEL}

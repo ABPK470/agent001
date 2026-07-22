@@ -112,11 +112,7 @@ export interface AboutDossier {
     displayName: string
     role: string
     ringOrder: number
-    defaultAccessMode: string
-    allowedOperations: string[]
-    denyDml: boolean
-    denyDdl: boolean
-    allowedSyncTargets: string[] | null
+    allowedSyncEnvironments: string[] | null
   }>
   providers: {
     active: { id: string; model: string; configured: boolean }

@@ -46,19 +46,16 @@ export interface AboutDossier {
     widgets: string[]
     notes: string[]
   }
-  /** Sync environments visible to the operator (no service URLs). */
+  /** Sync environments (topology from live host registry — not the Policies rail). */
   environments: Array<{
     name: string
     displayName: string
     role: string
     ringOrder: number
-    defaultAccessMode: string
-    allowedOperations: string[]
-    denyDml: boolean
-    denyDdl: boolean
+    /** Source→target direction allowlist; null = unrestricted. */
     allowedSyncEnvironments: string[] | null
   }>
-  /** Active provider/model + catalog of configured providers. */
+  /** Active provider/model + catalog of supported providers. */
   providers: {
     active: { id: string; model: string; configured: boolean }
     available: Array<{ id: string; defaultModel: string; label: string }>
@@ -117,7 +114,9 @@ function buildAccess(isAdmin: boolean): AboutDossier["access"] {
       },
       tools: [],
       widgets: [],
-      notes: [],
+      notes: [
+        "Allow / deny / approval for tools and Sync is governed by Policies (DB), not environment Access flags.",
+      ],
     }
   }
   return {
@@ -134,8 +133,8 @@ function buildAccess(isAdmin: boolean): AboutDossier["access"] {
     tools: [],
     widgets: [],
     notes: [
-      "UAT/PROD database writes (DML/DDL) are blocked; DEV follows that environment’s access mode.",
-      "Running a sync (execute) and outbound URL fetch typically need approval.",
+      "Tool and Sync allow / deny / approval come from Policies on this instance (default-deny).",
+      "Environments below are topology (names, sync direction) — not a second permission rail.",
     ],
   }
 }
@@ -166,10 +165,6 @@ export function buildAboutDossier(opts: {
       displayName: env.displayName || env.name,
       role: String(env.role),
       ringOrder: env.ringOrder,
-      defaultAccessMode: String(env.defaultAccessMode),
-      allowedOperations: [...(env.allowedOperations ?? [])].map(String),
-      denyDml: Boolean(env.denyDml),
-      denyDdl: Boolean(env.denyDdl),
       allowedSyncEnvironments: env.allowedSyncEnvironments,
     }))
 
