@@ -137,12 +137,26 @@ export function wireEventBroadcasting(
         case EventType.RunStarted:
           logMsg = `Started — run ${(data["runId"] as string)?.slice(0, 8) ?? "?"}`
           break
-        case EventType.StepStarted:
-          logMsg = `${resolveToolName(data)} started`
+        case EventType.StepStarted: {
+          const toolName = resolveToolName(data)
+          const input = (data["input"] as Record<string, unknown>) ?? {}
+          const args = Object.keys(input).length > 0 ? presentToolCall(toolName, input).summary : ""
+          logMsg = args ? `${toolName} started · ${args}` : `${toolName} started`
           break
-        case EventType.StepCompleted:
-          logMsg = `${resolveToolName(data)} completed`
+        }
+        case EventType.StepCompleted: {
+          const toolName = resolveToolName(data)
+          const output = (data["output"] as Record<string, unknown>) ?? {}
+          const result =
+            typeof output["result"] === "string"
+              ? output["result"]
+              : Object.keys(output).length > 0
+                ? JSON.stringify(output)
+                : "done"
+          const short = result.length > 80 ? `${result.slice(0, 79)}…` : result
+          logMsg = `${toolName} completed · ${short}`
           break
+        }
         case EventType.StepFailed:
           logMsg = `${resolveToolName(data)} failed — ${((data["error"] as string) ?? "unknown").slice(0, 200)}`
           break

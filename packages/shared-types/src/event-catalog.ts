@@ -9,6 +9,8 @@
  * Add a row here when introducing a new BE event (after shared-enums).
  */
 
+import { presentToolCall } from "./tool-call-presentation.js"
+
 export type EventSeverity = "info" | "warn" | "error"
 
 /** Structural family — ViewSpec nest / sticky / roles key off these. */
@@ -72,6 +74,59 @@ function truncate(text: string, max = 72): string {
 
 function stepName(payload: EventPayload): string {
   return humanize(str(payload.stepName, "step"))
+}
+
+/** Wire step/tool rows use action (preferred), then name, then tool. */
+function resolveToolName(payload: EventPayload): string {
+  return str(payload.action, str(payload.name, str(payload.tool, "step")))
+}
+
+function formatStepOutput(payload: EventPayload): string {
+  const output = payload.output
+  if (!output || typeof output !== "object" || Array.isArray(output)) return ""
+  const record = output as EventPayload
+  const result = record.result
+  if (typeof result === "string" && result.trim()) return truncate(result, 64)
+  const keys = Object.keys(record)
+  if (keys.length === 0) return ""
+  try {
+    return truncate(JSON.stringify(record), 64)
+  } catch {
+    return ""
+  }
+}
+
+function stepStartedSummary(payload: EventPayload): string {
+  const tool = resolveToolName(payload)
+  const input =
+    payload.input && typeof payload.input === "object" && !Array.isArray(payload.input)
+      ? (payload.input as Record<string, unknown>)
+      : {}
+  const args = Object.keys(input).length > 0 ? presentToolCall(tool, input).summary : ""
+  const stepId = str(payload.stepId, "")
+  const idPart = stepId ? ` (#${stepId.length > 8 ? stepId.slice(0, 8) : stepId})` : ""
+  if (args) return truncate(`${tool} · ${args}${idPart}`, 96)
+  return `${tool}${idPart}`
+}
+
+function stepCompletedSummary(payload: EventPayload): string {
+  const tool = resolveToolName(payload)
+  const out = formatStepOutput(payload)
+  const ms = num(payload.durationMs)
+  const dur = ms != null ? `${(ms / 1000).toFixed(1)}s` : ""
+  const parts = [tool, out || "done", dur].filter(Boolean)
+  return truncate(parts.join(" · "), 96)
+}
+
+function stepFailedSummary(payload: EventPayload): string {
+  const tool = resolveToolName(payload)
+  const err = truncate(str(payload.error, "failed"), 72)
+  return truncate(`${tool} · ${err}`, 96)
+}
+
+function toolCallSummary(payload: EventPayload, verb: string): string {
+  const tool = str(payload.toolName, str(payload.tool, str(payload.action, "")))
+  return tool ? `${tool} · ${verb}` : verb
 }
 
 /** TraceEntry.kind → descriptor. */
@@ -588,42 +643,42 @@ export const SSE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "tool",
     label: "Step started",
     severity: "info",
-    summary: (p) => str(p.tool, str(p.name, "step")),
+    summary: stepStartedSummary,
   },
   "step.completed": {
     id: "step.completed",
     family: "tool",
     label: "Step completed",
     severity: "info",
-    summary: (p) => str(p.tool, str(p.name, "done")),
+    summary: stepCompletedSummary,
   },
   "step.failed": {
     id: "step.failed",
     family: "tool",
     label: "Step failed",
     severity: "error",
-    summary: (p) => truncate(str(p.error, str(p.tool, "failed"))),
+    summary: stepFailedSummary,
   },
   "tool.invoked": {
     id: "tool.invoked",
     family: "tool",
     label: "Tool",
     severity: "info",
-    summary: (p) => str(p.tool, str(p.name, "invoked")),
+    summary: (p) => resolveToolName(p),
   },
   "tool.completed": {
     id: "tool.completed",
     family: "tool",
     label: "Tool done",
     severity: "info",
-    summary: (p) => str(p.tool, "completed"),
+    summary: (p) => stepCompletedSummary(p),
   },
   "tool.failed": {
     id: "tool.failed",
     family: "tool",
     label: "Tool failed",
     severity: "error",
-    summary: (p) => truncate(str(p.error, str(p.tool, "failed"))),
+    summary: (p) => stepFailedSummary(p),
   },
   "debug.trace": {
     id: "debug.trace",
@@ -772,21 +827,21 @@ export const SSE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "tool",
     label: "Executing",
     severity: "info",
-    summary: () => "executing",
+    summary: (p) => toolCallSummary(p, "executing"),
   },
   "tool_call.completed": {
     id: "tool_call.completed",
     family: "tool",
     label: "Completed",
     severity: "info",
-    summary: () => "completed",
+    summary: (p) => toolCallSummary(p, "completed"),
   },
   "tool_call.killed": {
     id: "tool_call.killed",
     family: "tool",
     label: "Killed",
     severity: "info",
-    summary: () => "killed",
+    summary: (p) => toolCallSummary(p, "killed"),
   },
   "approval.resolved": {
     id: "approval.resolved",

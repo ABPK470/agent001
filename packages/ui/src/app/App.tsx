@@ -292,7 +292,9 @@ export function App() {
   useEffect(() => {
     if (!me) return
     if (!shouldHydrateRecentEvents) return
-    api.recentEvents(500).then((res) => {
+    // Enough recent history that Event Stream isn't only "step X completed"
+    // after a refresh; spam filter still drops high-volume debug.trace kinds.
+    api.recentEvents(2000).then((res) => {
       useStore.getState().hydrateLogsFromEvents(res.events)
     }).catch(() => {})
   }, [me?.upn, shouldHydrateRecentEvents])
