@@ -120,7 +120,7 @@ describe("computePinnedFromEntries — nested Subagent → Call → Sent → Sys
   })
 
   it("yields System to User at the same depth (Sent stays)", () => {
-    expect(computePinnedFromEntries(nested, 500 + H + 1)).toEqual([
+    expect(computePinnedFromEntries(nested, 500 + H)).toEqual([
       "phase-sub",
       "call:0",
       "sent:0",
@@ -129,7 +129,7 @@ describe("computePinnedFromEntries — nested Subagent → Call → Sent → Sys
   })
 
   it("pins Work under Subagent after the call ends", () => {
-    expect(computePinnedFromEntries(nested, 1200 + H + 1)).toEqual([
+    expect(computePinnedFromEntries(nested, 1200 + H)).toEqual([
       "phase-sub",
       "work-0",
     ])
@@ -150,7 +150,7 @@ describe("peer yield — Context must not cover Plan", () => {
     ]
     expect(computePinnedFromEntries(peers, 300)).toEqual(["context"])
     expect(computePinnedFromEntries(peers, 400 - H + 1)).toEqual([])
-    expect(computePinnedFromEntries(peers, 400 + H + 1)).toEqual(["phase-plan"])
+    expect(computePinnedFromEntries(peers, 400 + H)).toEqual(["phase-plan"])
   })
 
   it("releases Context when Plan reaches the scrollport top (band)", () => {
@@ -163,7 +163,7 @@ describe("peer yield — Context must not cover Plan", () => {
       "context",
     ])
     expect(computePinnedFromEntries(peers, 400, H, 4, band)).toEqual([])
-    expect(computePinnedFromEntries(peers, 400 + H + 1, H, 4, band)).toEqual([
+    expect(computePinnedFromEntries(peers, 400 + H, H, 4, band)).toEqual([
       "phase-plan",
     ])
   })

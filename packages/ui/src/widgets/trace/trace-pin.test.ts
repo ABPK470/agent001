@@ -50,9 +50,8 @@ describe("computePinnedFromEntries — structural ancestor chain only", () => {
   })
 
   it("does not pin Call until its header has fully scrolled past the slot", () => {
-    expect(computePinnedFromEntries(tree, 1000)).toEqual([])
-    expect(computePinnedFromEntries(tree, 1000 + H)).toEqual([])
-    expect(computePinnedFromEntries(tree, 1000 + H + 1)).toEqual(["call:1"])
+    expect(computePinnedFromEntries(tree, 1000 + H - 1)).toEqual([])
+    expect(computePinnedFromEntries(tree, 1000 + H)).toEqual(["call:1"])
   })
 
   it("pins Call → Received while still inside that call", () => {
@@ -68,9 +67,9 @@ describe("computePinnedFromEntries — structural ancestor chain only", () => {
       { id: "sent:0", top: 100, depth: 1 },
       { id: "received:0", top: 200, depth: 1 },
     ]
-    // Sent header top is 100; sticks only after top + rowH clears the slot.
-    expect(computePinnedFromEntries(spaced, 100)).toEqual(["call:0"])
-    expect(computePinnedFromEntries(spaced, 101)).toEqual([
+    // Sent header top is 100; sticks once top + rowH clears the slot (≥).
+    expect(computePinnedFromEntries(spaced, 99)).toEqual(["call:0"])
+    expect(computePinnedFromEntries(spaced, 100)).toEqual([
       "call:0",
       "sent:0",
     ])
@@ -90,8 +89,8 @@ describe("computePinnedFromEntries — structural ancestor chain only", () => {
     expect(computePinnedFromEntries(peers, 300)).toEqual(["context"])
     // Plan header has reached the pin zone — Context yields (no cover)
     expect(computePinnedFromEntries(peers, 400 - H + 1)).toEqual([])
-    // Plan fully past its own header — Plan pins
-    expect(computePinnedFromEntries(peers, 400 + H + 1)).toEqual(["phase-plan"])
+    // Plan fully past its own header — Plan pins (≥ clear)
+    expect(computePinnedFromEntries(peers, 400 + H)).toEqual(["phase-plan"])
   })
 
   it("caps the stack and prefers inner scopes", () => {
@@ -118,7 +117,7 @@ describe("computePinnedFromEntries — structural ancestor chain only", () => {
       "message:0:m:0",
     ])
     // Peer yield: System releases; User takes the leaf slot (same depth)
-    expect(computePinnedFromEntries(msgs, 400 + H + 1)).toEqual([
+    expect(computePinnedFromEntries(msgs, 400 + H)).toEqual([
       "call:0",
       "sent:0",
       "message:0:m:1",
@@ -135,10 +134,11 @@ describe("computePinnedFromEntries — reserved band (stackInScroll: false)", ()
       { id: "sent:0", top: 100, depth: 1 },
       { id: "received:0", top: 200, depth: 1 },
     ]
-    // Overlay would pin Sent at 101 via stack offset; band waits for full clear.
-    expect(computePinnedFromEntries(spaced, 101, H, 4, band)).toEqual(["call:0"])
-    expect(computePinnedFromEntries(spaced, 100 + H, H, 4, band)).toEqual(["call:0"])
-    expect(computePinnedFromEntries(spaced, 100 + H + 1, H, 4, band)).toEqual([
+    // Band waits for full clear; pins at ≥ top + rowH (not strict-past).
+    expect(computePinnedFromEntries(spaced, 100 + H - 1, H, 4, band)).toEqual([
+      "call:0",
+    ])
+    expect(computePinnedFromEntries(spaced, 100 + H, H, 4, band)).toEqual([
       "call:0",
       "sent:0",
     ])
@@ -155,7 +155,7 @@ describe("computePinnedFromEntries — reserved band (stackInScroll: false)", ()
       "context",
     ])
     expect(computePinnedFromEntries(peers, 400, H, 4, band)).toEqual([])
-    expect(computePinnedFromEntries(peers, 400 + H + 1, H, 4, band)).toEqual([
+    expect(computePinnedFromEntries(peers, 400 + H, H, 4, band)).toEqual([
       "phase-plan",
     ])
   })

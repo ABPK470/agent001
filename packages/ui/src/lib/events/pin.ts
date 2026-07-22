@@ -125,8 +125,9 @@ export function computePinnedFromEntries(
     const threshold = stackInScroll
       ? scrollTop + pinned.length * rowH
       : scrollTop
-    // Stick only after the header has fully cleared the focus line…
-    const pastHeader = e.top + rowH < threshold - 0.5
+    // Stick once the header has fully cleared the focus line (≥, not
+    // strict-past). Float epsilon keeps subpixel layout from flickering.
+    const pastHeader = e.top + rowH <= threshold + 0.5
     // …and yield when the next same-or-shallower header reaches the focus
     // line (overlay: +rowH so peers are not covered under the stack).
     const yieldPad = stackInScroll ? rowH : 0
