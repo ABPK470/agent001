@@ -46,6 +46,23 @@ describe("splitStreamingAnswer", () => {
     expect(layout.remainder).toContain("| Ada | 1 |")
   })
 
+  it("holds through half-typed rows (the chart-fence equivalent)", () => {
+    // Previously `|` or `| Ada` broke isTableLine, committed the table, then
+    // yanked it back — UI shake. Must stay held like an open ```kpi fence.
+    const midPipe = splitStreamingAnswer("| Name | Amt |\n| --- | --- |\n| Ada | 1 |\n|")
+    expect(midPipe.remainderKind).toBe("table")
+    expect(midPipe.committed).toBe("")
+
+    const midCell = splitStreamingAnswer("| Name | Amt |\n| --- | --- |\n| Ada | 1 |\n| Bea")
+    expect(midCell.remainderKind).toBe("table")
+    expect(midCell.committed).toBe("")
+
+    const { blocks } = getLiveStreamingRenderParts(
+      "| Name | Amt |\n| --- | --- |\n| Ada | 1 |\n| Bea",
+    )
+    expect(blocks.some((b) => b.type === "table")).toBe(false)
+  })
+
   it("commits a closed table once prose follows", () => {
     const layout = splitStreamingAnswer(
       "| Name | Amt |\n| --- | --- |\n| Ada | 1 |\n\nDone.",

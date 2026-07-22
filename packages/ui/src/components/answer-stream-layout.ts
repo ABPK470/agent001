@@ -27,9 +27,15 @@ function countFenceMarkers(text: string): number {
   return count
 }
 
+/**
+ * Pipe-table lines — including in-progress rows like `|` or `| Ada`.
+ * Requiring a second `|` let half-typed rows fall out of the hold path,
+ * which briefly committed the table into SmartAnswer then yanked it back
+ * (layout shake). Charts/KPIs avoid that because an open fence stays open
+ * until the closing ```; tables need the same sticky hold.
+ */
 function isTableLine(line: string): boolean {
-  const t = line.trimStart()
-  return t.startsWith("|") && t.includes("|", 1)
+  return line.trimStart().startsWith("|")
 }
 
 function isListLine(line: string): boolean {
@@ -103,9 +109,14 @@ function trailingPartialLineLayout(text: string): StreamingAnswerLayout | null {
   const tail = text.slice(lastBreak + 1)
 
   if (tail.length === 0) {
-    const committed = text.replace(/\s+$/, "")
-    if (!committed) return null
-    return { committed, remainder: "", remainderKind: "none" }
+    // Ends on a newline. If the buffer still ends in a pipe-table, keep holding
+    // (same as an open fence) — never commit growing rows on a trailing \n.
+    const trimmed = text.replace(/\s+$/, "")
+    if (!trimmed) return null
+    const lines = trimmed.split("\n")
+    const tableLayout = trailingTableLayout(lines)
+    if (tableLayout) return tableLayout
+    return { committed: trimmed, remainder: "", remainderKind: "none" }
   }
 
   const before = text.slice(0, lastBreak)

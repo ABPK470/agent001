@@ -58,7 +58,13 @@ export function getLiveStreamingRenderParts(text: string): {
     layout.committed && extraCommitted
       ? `${layout.committed}\n${extraCommitted}`
       : layout.committed || extraCommitted
-  const blocks = committedAll ? parseAnswerBlocks(committedAll) : []
+  let blocks = committedAll ? parseAnswerBlocks(committedAll) : []
+
+  // Belt-and-suspenders with chart fences: while a pipe-table is still open,
+  // never paint table blocks (even if a partial commit slipped through).
+  if (layout.remainderKind === "table") {
+    blocks = blocks.filter((b) => b.type !== "table")
+  }
 
   return { blocks, glyphTail, layout }
 }
