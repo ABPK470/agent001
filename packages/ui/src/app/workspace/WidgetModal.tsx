@@ -3,6 +3,11 @@
  */
 
 import { Plus, X } from "lucide-react"
+import {
+  SetupHintChromeProvider,
+  setupHintHeaderClass,
+  useSetupHintChromeTone,
+} from "../../components/SetupHintStrip"
 import { useStore } from "../../state/store"
 import { useLayoutStore } from "../../state/layout-store"
 import {
@@ -39,47 +44,75 @@ export function WidgetModal() {
       className={modalOverlayClass("focus", { zIndexClass: "z-[200]" })}
       onClick={closeModalWidget}
     >
-      <div
-        className={`${MODAL_SURFACE_CLASS} ${MODAL_ENTITY_FOCUS_PANEL} flex flex-col overflow-hidden`}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between px-4 h-12 border-b border-border shrink-0">
-          <div className="flex items-center gap-2">
-            <WidgetIcon size={16} className="text-text-muted" />
-            <span className="text-sm font-semibold text-text">
-              {definition.label}
-            </span>
-          </div>
-
-          <div className="flex items-center gap-1.5">
-            {!alreadyInView && (
-              <button
-                type="button"
-                className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] text-accent bg-accent/10 hover:bg-accent/20 rounded-lg transition-colors"
-                onClick={handleAddToView}
-                title="Add this widget to current view"
-              >
-                <Plus size={13} />
-                Add to view
-              </button>
-            )}
-            <button
-              type="button"
-              className="flex items-center justify-center w-8 h-8 text-text-muted hover:text-text rounded-lg hover:bg-overlay-3 transition-colors"
-              onClick={closeModalWidget}
-            >
-              <X size={16} />
-            </button>
-          </div>
-        </div>
-
+      <SetupHintChromeProvider>
         <div
-          className={`flex-1 overflow-hidden ${
-            definition.chrome === "flush" ? "p-0" : "p-3"
-          }`}
+          className={`${MODAL_SURFACE_CLASS} ${MODAL_ENTITY_FOCUS_PANEL} flex flex-col overflow-hidden`}
+          onClick={(e) => e.stopPropagation()}
         >
-          <WidgetComponent />
+          <WidgetModalHeader
+            label={definition.label}
+            icon={<WidgetIcon size={16} className="text-text-muted" />}
+            alreadyInView={alreadyInView}
+            onAddToView={handleAddToView}
+            onClose={closeModalWidget}
+          />
+
+          <div
+            className={`flex-1 overflow-hidden ${
+              definition.chrome === "flush" ? "p-0" : "p-3"
+            }`}
+          >
+            <WidgetComponent />
+          </div>
         </div>
+      </SetupHintChromeProvider>
+    </div>
+  )
+}
+
+function WidgetModalHeader({
+  label,
+  icon,
+  alreadyInView,
+  onAddToView,
+  onClose,
+}: {
+  label: string
+  icon: React.ReactNode
+  alreadyInView: boolean
+  onAddToView: () => void
+  onClose: () => void
+}) {
+  const hintTone = useSetupHintChromeTone()
+  const hintWash = setupHintHeaderClass(hintTone)
+  const borderClass = hintTone ? "border-b border-transparent" : "border-b border-border"
+
+  return (
+    <div className={`flex items-center justify-between px-4 h-12 shrink-0 ${borderClass} ${hintWash}`}>
+      <div className="flex items-center gap-2">
+        {icon}
+        <span className="text-sm font-semibold text-text">{label}</span>
+      </div>
+
+      <div className="flex items-center gap-1.5">
+        {!alreadyInView && (
+          <button
+            type="button"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] text-accent bg-accent/10 hover:bg-accent/20 rounded-lg transition-colors"
+            onClick={onAddToView}
+            title="Add this widget to current view"
+          >
+            <Plus size={13} />
+            Add to view
+          </button>
+        )}
+        <button
+          type="button"
+          className="flex items-center justify-center w-8 h-8 text-text-muted hover:text-text rounded-lg hover:bg-overlay-3 transition-colors"
+          onClick={onClose}
+        >
+          <X size={16} />
+        </button>
       </div>
     </div>
   )

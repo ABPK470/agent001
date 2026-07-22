@@ -4,6 +4,11 @@
 
 import { ExternalLink, GripVertical, Maximize2, Minimize2, Pin, PinOff, X } from "lucide-react"
 import { type ReactNode } from "react"
+import {
+  SetupHintChromeProvider,
+  setupHintHeaderClass,
+  useSetupHintChromeTone,
+} from "../../components/SetupHintStrip"
 import { useStore } from "../../state/store"
 import { useLayoutStore } from "../../state/layout-store"
 import type { WidgetType } from "../../types"
@@ -113,88 +118,135 @@ export function WidgetShell({
   const showDragHandle = mode === "tile" && !pinned && !maximized
 
   return (
-    <div className="workspace-shell flex flex-col h-full rounded-xl overflow-hidden bg-panel">
-      {showChrome && (
+    <SetupHintChromeProvider>
+      <div className="workspace-shell flex flex-col h-full rounded-xl overflow-hidden bg-panel">
+        {showChrome && (
+          <WidgetShellHeader
+            label={definition.label}
+            mode={mode}
+            pinned={pinned}
+            edgePin={edgePin}
+            maximized={maximized}
+            showDragHandle={showDragHandle}
+            onDragPointerDown={onDragPointerDown}
+            onTogglePin={handleTogglePin}
+            onToggleMaximize={handleToggleMaximize}
+            onPopOut={handlePopOut}
+            onClose={handleClose}
+          />
+        )}
+
         <div
-          className={`widget-drag-handle group flex items-center gap-1.5 px-2.5 h-9 shrink-0 select-none ${
-            showDragHandle ? "cursor-grab active:cursor-grabbing" : "cursor-default"
+          className={`widget-content flex flex-1 flex-col overflow-hidden ${
+            chrome === "flush" ? "p-0" : chrome === "transparent" ? "p-0" : "p-3"
           }`}
-          onPointerDown={showDragHandle ? onDragPointerDown : undefined}
         >
-          {mode === "tile" && (
-            <span
-              className={`text-text-faint shrink-0 ${showDragHandle ? "" : "opacity-40"}`}
-              aria-hidden
-            >
-              <GripVertical size={16} />
-            </span>
-          )}
-          <span className="text-xs font-medium text-text-muted uppercase tracking-wider truncate min-w-0 flex-1">
-            {definition.label}
-            {pinned && !maximized && (
-              <span className="ml-1.5 normal-case tracking-normal text-text-faint">(pinned)</span>
-            )}
-            {edgePin && !maximized && !pinned && (
-              <span className="ml-1.5 normal-case tracking-normal text-text-faint">
-                ({EDGE_PIN_LABEL[edgePin]})
-              </span>
-            )}
+          {children}
+        </div>
+      </div>
+    </SetupHintChromeProvider>
+  )
+}
+
+function WidgetShellHeader({
+  label,
+  mode,
+  pinned,
+  edgePin,
+  maximized,
+  showDragHandle,
+  onDragPointerDown,
+  onTogglePin,
+  onToggleMaximize,
+  onPopOut,
+  onClose,
+}: {
+  label: string
+  mode: ShellMode
+  pinned: boolean
+  edgePin?: EdgePin
+  maximized: boolean
+  showDragHandle: boolean
+  onDragPointerDown?: (event: React.PointerEvent) => void
+  onTogglePin: (event: React.MouseEvent<HTMLButtonElement>) => void
+  onToggleMaximize: (event: React.MouseEvent<HTMLButtonElement>) => void
+  onPopOut: (event: React.MouseEvent<HTMLButtonElement>) => void
+  onClose: (event: React.MouseEvent<HTMLButtonElement>) => void
+}) {
+  const hintTone = useSetupHintChromeTone()
+  const hintWash = setupHintHeaderClass(hintTone)
+
+  return (
+    <div
+      className={`widget-drag-handle group flex items-center gap-1.5 px-2.5 h-9 shrink-0 select-none ${hintWash} ${
+        showDragHandle ? "cursor-grab active:cursor-grabbing" : "cursor-default"
+      }`}
+      onPointerDown={showDragHandle ? onDragPointerDown : undefined}
+    >
+      {mode === "tile" && (
+        <span
+          className={`text-text-faint shrink-0 ${showDragHandle ? "" : "opacity-40"}`}
+          aria-hidden
+        >
+          <GripVertical size={16} />
+        </span>
+      )}
+      <span className="text-xs font-medium text-text-muted uppercase tracking-wider truncate min-w-0 flex-1">
+        {label}
+        {pinned && !maximized && (
+          <span className="ml-1.5 normal-case tracking-normal text-text-faint">(pinned)</span>
+        )}
+        {edgePin && !maximized && !pinned && (
+          <span className="ml-1.5 normal-case tracking-normal text-text-faint">
+            ({EDGE_PIN_LABEL[edgePin]})
           </span>
-          <div
-            className="widget-controls flex items-center gap-0.5 shrink-0"
-            onPointerDown={stopChromePointer}
-            onMouseDown={stopChromePointer}
-          >
-            {mode === "tile" && (
-              <>
-                <button
-                  type="button"
-                  className="flex items-center justify-center w-8 h-8 text-text-muted hover:text-text rounded-lg transition-colors"
-                  onClick={handleTogglePin}
-                  title={pinned ? "Unpin" : "Pin"}
-                  aria-label={pinned ? "Unpin widget" : "Pin widget"}
-                >
-                  {pinned ? <PinOff size={16} /> : <Pin size={16} />}
-                </button>
-                <button
-                  type="button"
-                  className="flex items-center justify-center w-8 h-8 text-text-muted hover:text-text rounded-lg transition-colors"
-                  onClick={handleToggleMaximize}
-                  title={maximized ? "Restore" : "Maximize"}
-                  aria-label={maximized ? "Restore widget" : "Maximize widget"}
-                >
-                  {maximized ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
-                </button>
-                <button
-                  type="button"
-                  className="flex items-center justify-center w-8 h-8 text-text-muted hover:text-text rounded-lg transition-colors"
-                  onClick={handlePopOut}
-                  title="Pop out"
-                  aria-label="Pop out widget"
-                >
-                  <ExternalLink size={16} />
-                </button>
-              </>
-            )}
+        )}
+      </span>
+      <div
+        className="widget-controls flex items-center gap-0.5 shrink-0"
+        onPointerDown={stopChromePointer}
+        onMouseDown={stopChromePointer}
+      >
+        {mode === "tile" && (
+          <>
             <button
               type="button"
-              className="flex items-center justify-center w-8 h-8 text-text-muted hover:text-error rounded-lg transition-colors"
-              onClick={handleClose}
-              title="Close"
-              aria-label="Close widget"
+              className="flex items-center justify-center w-8 h-8 text-text-muted hover:text-text rounded-lg transition-colors"
+              onClick={onTogglePin}
+              title={pinned ? "Unpin" : "Pin"}
+              aria-label={pinned ? "Unpin widget" : "Pin widget"}
             >
-              <X size={16} />
+              {pinned ? <PinOff size={16} /> : <Pin size={16} />}
             </button>
-          </div>
-        </div>
-      )}
-
-      <div
-        className={`widget-content flex flex-1 flex-col overflow-hidden ${
-          chrome === "flush" ? "p-0" : chrome === "transparent" ? "p-0" : "p-3"
-        }`}
-      >
-        {children}
+            <button
+              type="button"
+              className="flex items-center justify-center w-8 h-8 text-text-muted hover:text-text rounded-lg transition-colors"
+              onClick={onToggleMaximize}
+              title={maximized ? "Restore" : "Maximize"}
+              aria-label={maximized ? "Restore widget" : "Maximize widget"}
+            >
+              {maximized ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+            </button>
+            <button
+              type="button"
+              className="flex items-center justify-center w-8 h-8 text-text-muted hover:text-text rounded-lg transition-colors"
+              onClick={onPopOut}
+              title="Pop out"
+              aria-label="Pop out widget"
+            >
+              <ExternalLink size={16} />
+            </button>
+          </>
+        )}
+        <button
+          type="button"
+          className="flex items-center justify-center w-8 h-8 text-text-muted hover:text-error rounded-lg transition-colors"
+          onClick={onClose}
+          title="Close"
+          aria-label="Close widget"
+        >
+          <X size={16} />
+        </button>
       </div>
     </div>
   )

@@ -7,6 +7,11 @@ import type { JSX, ReactNode } from "react"
 import { useEffect, useId, useRef } from "react"
 import { createPortal } from "react-dom"
 
+import {
+  SetupHintChromeProvider,
+  setupHintHeaderClass,
+  useSetupHintChromeTone,
+} from "../../components/SetupHintStrip"
 import { IconButton, TOOLBAR_ICON } from "./IconButton"
 import {
   MODAL_BASE_Z,
@@ -141,38 +146,68 @@ export function ModalShell({
       aria-labelledby="modal-surface-title"
       onClick={onClose}
     >
-      <div
-        className={`${MODAL_SURFACE_CLASS} ${panelClass}`}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <header className="flex shrink-0 items-start justify-between gap-4 border-b border-border-subtle px-6 pt-5 pb-4">
-          <div className="min-w-0 flex-1">
-            <div className="flex min-w-0 items-center gap-2.5">
-              {icon && <span className="shrink-0 text-text-muted">{icon}</span>}
-              <h2 id="modal-surface-title" className="text-lg font-semibold text-text">
-                {title}
-              </h2>
-            </div>
-            {subtitle && (
-              <p className="mt-1.5 text-sm leading-snug text-text-muted">
-                {subtitle}
-              </p>
-            )}
-          </div>
-          <IconButton label="Close" onClick={onClose}>
-            <X {...TOOLBAR_ICON} />
-          </IconButton>
-        </header>
+      <SetupHintChromeProvider>
+        <div
+          className={`${MODAL_SURFACE_CLASS} ${panelClass}`}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <ModalShellHeader
+            title={title}
+            subtitle={subtitle}
+            icon={icon}
+            onClose={onClose}
+          />
 
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{children}</div>
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{children}</div>
 
-        {footer && (
-          <footer className="flex w-full shrink-0 items-center gap-2 border-t border-border-subtle px-6 py-4">
-            {footer}
-          </footer>
-        )}
-      </div>
+          {footer && (
+            <footer className="flex w-full shrink-0 items-center gap-2 border-t border-border-subtle px-6 py-4">
+              {footer}
+            </footer>
+          )}
+        </div>
+      </SetupHintChromeProvider>
     </div>,
     document.body,
+  )
+}
+
+function ModalShellHeader({
+  title,
+  subtitle,
+  icon,
+  onClose,
+}: {
+  title: string
+  subtitle?: string
+  icon?: ReactNode
+  onClose: () => void
+}): JSX.Element {
+  const hintTone = useSetupHintChromeTone()
+  const hintWash = setupHintHeaderClass(hintTone)
+  // When a strip paints the header, drop the mid-band rule so title + strip are one wash.
+  const borderClass = hintTone ? "border-b border-transparent" : "border-b border-border-subtle"
+
+  return (
+    <header
+      className={`flex shrink-0 items-start justify-between gap-4 px-6 pt-5 pb-4 ${borderClass} ${hintWash}`}
+    >
+      <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 items-center gap-2.5">
+          {icon && <span className="shrink-0 text-text-muted">{icon}</span>}
+          <h2 id="modal-surface-title" className="text-lg font-semibold text-text">
+            {title}
+          </h2>
+        </div>
+        {subtitle && (
+          <p className="mt-1.5 text-sm leading-snug text-text-muted">
+            {subtitle}
+          </p>
+        )}
+      </div>
+      <IconButton label="Close" onClick={onClose}>
+        <X {...TOOLBAR_ICON} />
+      </IconButton>
+    </header>
   )
 }
