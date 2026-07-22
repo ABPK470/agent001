@@ -122,6 +122,44 @@ describe("agent-run pipeline telemetry grouping", () => {
     expect(askUser.events.some((e) => e.type === EventType.ToolCallCompleted)).toBe(true)
   })
 
+  it("keeps mid-step debug.trace as sibling telemetry (not stuffed into the tool row)", async () => {
+    listEventsForRunId.mockReturnValue([
+      { type: EventType.RunStarted, created_at: "2026-05-27T14:55:00.000Z", data: JSON.stringify({ runId: "run-1", goal: "g" }) },
+      {
+        type: EventType.StepStarted,
+        created_at: "2026-05-27T14:55:01.000Z",
+        data: JSON.stringify({
+          runId: "run-1",
+          action: "query_mssql",
+          input: { sql: "SELECT 1" },
+        }),
+      },
+      { type: EventType.ToolCallExecuting, created_at: "2026-05-27T14:55:01.100Z", data: JSON.stringify({ runId: "run-1", toolCallId: "tc-1", toolName: "query_mssql" }) },
+      { type: EventType.DebugTrace, created_at: "2026-05-27T14:55:01.200Z", data: trace("thinking", { text: "waiting on mssql" }) },
+      { type: EventType.DebugTrace, created_at: "2026-05-27T14:55:01.300Z", data: trace("usage", { totalTokens: 12 }) },
+      { type: EventType.ToolCallCompleted, created_at: "2026-05-27T14:55:02.000Z", data: JSON.stringify({ runId: "run-1", toolCallId: "tc-1" }) },
+      {
+        type: EventType.StepCompleted,
+        created_at: "2026-05-27T14:55:02.100Z",
+        data: JSON.stringify({ runId: "run-1", durationMs: 1100, output: { result: "ok" } }),
+      },
+      { type: EventType.RunCompleted, created_at: "2026-05-27T14:55:03.000Z", data: JSON.stringify({ runId: "run-1" }) },
+    ])
+
+    const { listOperationsForRun } = await import("../src/api/operations/service/query/index.ts")
+    const { operation } = listOperationsForRun("run-1")
+    expect(operation!.activities.map((a) => a.name)).toEqual([
+      "started",
+      "query_mssql",
+      "Debug trace",
+      "completed",
+    ])
+    const step = operation!.activities.find((a) => a.name === "query_mssql")!
+    expect(step.events.every((e) => e.type !== EventType.DebugTrace)).toBe(true)
+    expect(step.details?.["toolIo"]).toBeTruthy()
+    expect(step.events.some((e) => e.type === EventType.ToolCallExecuting)).toBe(true)
+  })
+
   it("marks a telemetry group failed when any entry carries an error", async () => {
     listEventsForRunId.mockReturnValue([
       { type: EventType.RunStarted, created_at: "2026-05-27T14:55:00.000Z", data: JSON.stringify({ runId: "run-1", goal: "g" }) },

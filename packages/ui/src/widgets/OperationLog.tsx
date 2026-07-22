@@ -1006,24 +1006,35 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, pipel
   const effectiveKind = activityPipelineKind(pipelineKind, phaseId)
   const status = effectiveActivityStatus(activity, pipelineStatus, parentStatus)
   const renderedName = formatActivityName(effectiveKind, activity)
-  const renderedSummary = defaultActivitySummary(effectiveKind, activity)
   const isResultRow = activity.name === "result"
   const isFlowStep = isSyncExecuteFlowStep(effectiveKind, activity)
   const resultChild = activity.children?.find((c) => c.name === "result")
   const hasChildren = (activity.children?.length ?? 0) > 0
   const sqlEvents = activity.events.filter((ev) => isSyncSqlEventType(ev.type))
   const httpEvents = activity.events.filter((ev) => isSyncHttpEventType(ev.type))
-  const visibleEvents = activity.events.filter(
-    (ev) =>
-      !isSyncSqlEventType(ev.type)
-      && !isSyncHttpEventType(ev.type)
-      && !shouldHideSyncExecuteStepEvent(effectiveKind, activity, ev),
-  )
-  const statusMessage =
-    isResultRow || resultChild != null ? null : activity.error ?? null
   const toolIo =
     readToolIoFromActivity(activity) ??
     (activity.events.length > 0 ? buildToolIoFromStepEvents(activity.events) : null)
+  const renderedSummary =
+    defaultActivitySummary(effectiveKind, activity) ??
+    toolIo?.argsSummary ??
+    (toolIo?.status === "failed" ? toolIo.error : undefined)
+  // Agent tool rows: I/O is first-class (button + ToolIoBlock). Nested step.* /
+  // tool_call.* EventRows only repeat that payload with input/output stripped —
+  // hide them so every tool reads as clearly as ask_user.
+  const isAgentToolStep =
+    effectiveKind === OperationKind.AgentRun && toolIo != null && !isFlowStep && !isResultRow
+  const visibleEvents = activity.events.filter((ev) => {
+    if (isSyncSqlEventType(ev.type) || isSyncHttpEventType(ev.type)) return false
+    if (shouldHideSyncExecuteStepEvent(effectiveKind, activity, ev)) return false
+    if (isAgentToolStep) {
+      if (isAgentStepEventType(ev.type)) return false
+      if (ev.type.startsWith("tool_call.")) return false
+    }
+    return true
+  })
+  const statusMessage =
+    isResultRow || resultChild != null ? null : activity.error ?? null
 
   if (isSqlOnlyActivity(activity)) {
     return (
@@ -1044,8 +1055,9 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, pipel
       isFlowStep ||
       isResultRow ||
       hasChildren ||
+      (isAgentToolStep && toolIo != null) ||
       detailEventCount > 0 ||
-      (!isResultRow && activity.events.length > 0) ||
+      (!isResultRow && !isAgentToolStep && activity.events.length > 0) ||
       (!isResultRow && activity.events.length === 0 && activity.details))
 
   const trailingAfterSql = hasChildren || httpEvents.length > 0 || visibleEvents.length > 0
@@ -1133,11 +1145,16 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, pipel
               />
             </div>
           )}
-          {!isResultRow && activity.events.length === 0 && activity.details && !statusMessage && (
+          {isAgentToolStep && toolIo && (
+            <div className="px-2.5 py-1.5">
+              <ToolIoBlock io={toolIo} compact maxHeight={320} />
+            </div>
+          )}
+          {!isResultRow && !isAgentToolStep && activity.events.length === 0 && activity.details && !statusMessage && (
             <div className="px-0 py-0">
-              {toolIo && !activity.events.length && (
+              {toolIo && (
                 <div className="px-2.5 py-1.5">
-                  <ToolIoBlock io={toolIo} compact maxHeight={120} />
+                  <ToolIoBlock io={toolIo} compact maxHeight={280} />
                 </div>
               )}
               {activity.details && Object.keys(activity.details).length > 0 && !toolIo && (
@@ -1175,19 +1192,14 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, pipel
               />
             )
           })}
-          {!isResultRow && activity.events.length > 0 && toolIo && (
-            <div className="px-2.5 py-1">
-              <ToolIoBlock io={toolIo} compact maxHeight={100} />
-            </div>
-          )}
-          {!isResultRow && !isFlowStep && activity.events.map((ev, idx) => {
+          {!isResultRow && !isFlowStep && !isAgentToolStep && visibleEvents.map((ev, idx) => {
             const key = `${pipelineId}|${activity.id}|${idx}`
             return (
               <EventRow
-                key={idx}
+                key={key}
                 linear={linear}
                 depth={depth + 1}
-                isLast={idx === activity.events.length - 1}
+                isLast={idx === visibleEvents.length - 1}
                 ev={ev}
                 expanded={evExpanded.has(key)}
                 onToggle={() => toggleEvent(key)}

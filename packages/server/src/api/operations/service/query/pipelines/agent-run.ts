@@ -322,33 +322,28 @@ function groupAgentRunActivities(
       continue
     }
 
-    if (openSteps.length > 0) {
-      openSteps[openSteps.length - 1].events.push(ev)
-      continue
-    }
-
     // tool_call.* are kill-management signals wrapping the same tool execution
-    // a step.* row already represents (with full I/O). Fold them into the most
-    // recent step so every tool — including ask_user — is a step row, never a
-    // separate generic "Tool call" telemetry row.
+    // a step.* row already represents (with full I/O). Fold them into the open
+    // (or most recent) step so every tool is a step row, never a separate
+    // generic "Tool call" telemetry row. Do NOT fold debug/usage/checkpoint
+    // into the open step — that buries I/O under noise when the operator expands.
     if (
       t === EventType.ToolCallExecuting ||
       t === EventType.ToolCallCompleted ||
       t === EventType.ToolCallKilled
     ) {
-      if (lastStepActivity) {
+      const target = openSteps.length > 0 ? openSteps[openSteps.length - 1]! : lastStepActivity
+      if (target) {
         closeTelemetryGroup()
-        lastStepActivity.events.push(ev)
+        target.events.push(ev)
         continue
       }
-      // No preceding step to fold into — degrade to a telemetry row.
       appendTelemetryEvent(t, ev)
       continue
     }
 
-    // Orphan non-action event (debug.trace, checkpoint.saved, usage.updated,
-    // memory.*, notification, …). Group consecutive same-type events into one
-    // expandable row in chronological position — not one row per event.
+    // Non-action event (debug.trace, checkpoint.saved, usage.updated, …).
+    // Sibling telemetry rows — even while a step is open — keep tool rows clean.
     appendTelemetryEvent(t, ev)
   }
 
