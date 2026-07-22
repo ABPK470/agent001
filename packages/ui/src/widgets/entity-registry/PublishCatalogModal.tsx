@@ -19,6 +19,7 @@ import {
 } from "../platform/CatalogDiffSections"
 import { ACTION_BTN, FIELD_LABEL, PANEL, TEXT_BTN } from "./chrome"
 import { ModalShell } from "./ModalShell"
+import { MODAL_TALL_HEIGHT } from "./modal-overlay"
 
 type PublishPhase = "idle" | "publishing" | "done"
 
@@ -34,7 +35,7 @@ const SECTION_LABELS: Record<string, string> = {
 }
 
 const PUBLISH_MODAL_PANEL =
-  "w-full max-w-4xl h-[min(92vh,960px)] min-h-[36rem] flex flex-col overflow-hidden"
+  `w-full max-w-4xl ${MODAL_TALL_HEIGHT} min-h-[36rem] flex flex-col overflow-hidden`
 
 function MetaCell({
   label,

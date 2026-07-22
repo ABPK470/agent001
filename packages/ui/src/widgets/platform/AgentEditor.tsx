@@ -123,7 +123,7 @@ export function AgentEditor({ onClose }: Props) {
       onClick={onClose}
     >
       <div
-        className={`${MODAL_SURFACE_CLASS} w-full max-w-[720px] h-full sm:h-auto sm:max-h-[85vh] flex flex-col`}
+        className={`${MODAL_SURFACE_CLASS} w-full max-w-[720px] h-full sm:h-auto sm:max-h-[min(96vh,calc(100dvh-1rem))] flex flex-col`}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}

@@ -12,6 +12,7 @@ import {
   fingerprintPayload,
 } from "../../lib/import-gate"
 import { ModalShell } from "../entity-registry/ModalShell"
+import { MODAL_DEFAULT_PANEL } from "../entity-registry/modal-overlay"
 import { TEXT_BTN, TEXT_BTN_PRIMARY } from "../entity-registry/chrome"
 import { ImportImpactPanel } from "./ImportImpactPanel"
 
@@ -167,7 +168,7 @@ export function ImportGateModal({
       onClose={onClose}
       size="default"
       stackLevel={stackLevel}
-      widthClass="w-full max-w-3xl h-[min(88vh,900px)] min-h-[32rem]"
+      widthClass={MODAL_DEFAULT_PANEL}
       footer={(
         <div className="ml-auto flex gap-2">
           <button type="button" className={TEXT_BTN} onClick={onClose} disabled={session.busy}>

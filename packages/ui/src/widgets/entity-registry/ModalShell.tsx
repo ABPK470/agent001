@@ -18,6 +18,7 @@ import {
 import {
   MODAL_DETAIL_PANEL,
   MODAL_ENTITY_FOCUS_PANEL,
+  MODAL_DEFAULT_PANEL,
   type ModalOverlayIntent,
   modalOverlayClass,
   MODAL_SURFACE_CLASS,
@@ -25,8 +26,10 @@ import {
 
 export {
   MODAL_DETAIL_PANEL,
+  MODAL_DEFAULT_PANEL,
   MODAL_ENTITY_FOCUS_PANEL,
   MODAL_ENTITY_WORKSPACE_PANEL,
+  MODAL_TALL_HEIGHT,
   modalOverlayClass,
   type ModalOverlayIntent,
 } from "./modal-overlay"
@@ -68,7 +71,7 @@ export interface ModalShellProps {
 
 const SIZE_PANEL: Record<ModalShellSize, string> = {
   detail: MODAL_DETAIL_PANEL,
-  default: "w-full max-w-3xl h-[min(88vh,900px)] min-h-[32rem]",
+  default: MODAL_DEFAULT_PANEL,
   focus: MODAL_ENTITY_FOCUS_PANEL,
   workspace: MODAL_ENTITY_FOCUS_PANEL,
 }

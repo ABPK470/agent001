@@ -93,7 +93,7 @@ export function SqlTraceModal({
   return createPortal(
     <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/50" onClick={onClose}>
       <div
-        className="w-full max-w-4xl max-h-[min(90dvh,900px)] flex flex-col rounded-lg border border-border-subtle bg-base shadow-2xl"
+        className="w-full max-w-4xl max-h-[min(96vh,calc(100dvh-1rem))] flex flex-col rounded-lg border border-border-subtle bg-base shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-border-subtle">
