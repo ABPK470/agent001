@@ -1,10 +1,14 @@
 /**
  * Trace outline shell — toolbar + chronological cards.
  *
- * Sticky scroll = VS Code / Outline dialect: an absolute pin overlay *inside*
- * the scrollport clones the ancestor chain. Pin height must not be a flex
- * sibling above the scroller — that resizes the viewport; compensating
- * scrollTop then oscillates at peer handoff (Received→Work) and flickers.
+ * Sticky scroll geometry (first principles):
+ *   .trace-scroll-frame  — fixed-size relative shell (flex child)
+ *     .trace-pin         — absolute sibling OVER the scrollport (does not scroll)
+ *     .trace-scroll      — absolute fill; only this node scrolls
+ *
+ * Never put pins inside the overflow node (they scroll away while
+ * data-trace-pinned hides originals → "no pins"). Never make pins a flex
+ * sibling that resizes the scrollport (jump/flicker at peer handoff).
  */
 
 import { Search, X } from "lucide-react"
@@ -767,12 +771,13 @@ export function TraceDag({
         {emptySlot ? (
           emptySlot
         ) : (
-          <div ref={scrollRef} className="trace-scroll min-h-0 flex-1" data-trace-scroll-host>
+          <div className="trace-scroll-frame">
             <PinOverlay
               rows={pinRows}
               onToggle={onTogglePinnedScope}
               onReveal={onRevealScope}
             />
+            <div ref={scrollRef} className="trace-scroll" data-trace-scroll-host>
               {runId &&
                 dag.hasData &&
                 query &&
@@ -880,6 +885,7 @@ export function TraceDag({
                   })}
                 </div>
               )}
+            </div>
           </div>
         )}
       </div>

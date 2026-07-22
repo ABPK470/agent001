@@ -384,22 +384,27 @@ describe("Trace CSS contract — pin indent + work-note divider", () => {
   )
   const css = readFileSync(cssPath, "utf8")
 
-  it("pin overlay is absolute inside the scrollport (Outline dialect, not height:0)", () => {
-    // height:0 clipped the stack while data-trace-pinned hid headers (= zero pins).
-    // External flex band + scrollTop compensation oscillated (= flicker).
+  it("pin chrome is absolute on the scroll frame (not height:0, not inside overflow)", () => {
+    // height:0 clipped the stack while data-trace-pinned hid headers.
+    // Absolute *inside* overflow scrolled away when pins became eligible.
+    // Flex band above scroll resized clientHeight → jump/flicker.
+    expect(css).toMatch(/\.trace-scroll-frame\s*\{[^}]*position:\s*relative/s)
+    expect(css).toMatch(/\.trace-dag\s+\.trace-scroll\s*\{[^}]*position:\s*absolute/s)
     expect(css).toMatch(/\.trace-pin\s*\{[^}]*position:\s*absolute/s)
     expect(css).not.toMatch(/\.trace-pin\s*\{[^}]*height:\s*0\b/s)
-    expect(css).toContain(".trace-body")
   })
 
-  it("PinOverlay is a child of the scroll host (not an external flex band)", () => {
+  it("PinOverlay is a sibling of the scroll host inside the frame", () => {
     const dagPath = join(dirname(fileURLToPath(import.meta.url)), "TraceDag.tsx")
     const src = readFileSync(dagPath, "utf8")
-    expect(src).toMatch(/data-trace-scroll-host>\s*<PinOverlay/)
+    expect(src).toMatch(
+      /trace-scroll-frame">\s*<PinOverlay[\s\S]*?<div ref=\{scrollRef\} className="trace-scroll"/,
+    )
+    expect(src).not.toMatch(/data-trace-scroll-host>\s*<PinOverlay/)
     expect(src).not.toContain("pinBandScrollDelta")
   })
 
-  it("Trace pin math uses in-scroll overlay focus (stackInScroll: true)", () => {
+  it("Trace pin math uses overlay focus (stackInScroll: true)", () => {
     const pinPath = join(dirname(fileURLToPath(import.meta.url)), "trace-pin.ts")
     expect(readFileSync(pinPath, "utf8")).toMatch(
       /TRACE_PIN_OPTS\s*=\s*\{\s*stackInScroll:\s*true/,

@@ -1841,8 +1841,27 @@ textarea.input {
   color: var(--text-muted, var(--color-text-muted));
 }
 
-.trace-dag .trace-scroll {
+/*
+ * ── Trace scroll frame + pin chrome ──────────────────────────────
+ *
+ * Frame owns size. Scroll fills the frame. Pins are a sibling overlay on
+ * the frame — not inside overflow (would scroll away) and not a flex
+ * band above the scroller (would resize clientHeight / flicker).
+ */
+.trace-body {
+  min-height: 0;
+}
+
+.trace-scroll-frame {
   position: relative;
+  flex: 1 1 0;
+  min-height: 0;
+  min-width: 0;
+}
+
+.trace-dag .trace-scroll {
+  position: absolute;
+  inset: 0;
   padding: 0 0.35rem 1.25rem;
   --trace-row-h: 34px;
   /* Updated by refreshPinStack — Expand sticky rail + park/anchor math. */
@@ -1866,21 +1885,8 @@ textarea.input {
 }
 
 /*
- * ── Trace cards — document flow + VS Code pin overlay ────────────
- *
- * In-flow headers are never position:sticky (overflow/radius fight).
- * Pins are an absolute overlay inside .trace-scroll (Outline dialect).
- * Never a flex sibling above the scroller — that resizes the viewport and
- * scrollTop compensation at peer handoff flickers (~every frame).
- * Never height:0 — that clipped the stack while data-trace-pinned hid headers.
- */
-.trace-body {
-  min-height: 0;
-}
-
-/*
- * In-scroll pin overlay — same geometry as .outline-pin (out of flow,
- * stuck to scrollport top). Stack keeps Trace card chrome.
+ * Pin chrome — absolute on .trace-scroll-frame (sibling of .trace-scroll).
+ * Stays glued to the visible top while content scrolls underneath.
  */
 .trace-pin {
   position: absolute;

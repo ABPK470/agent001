@@ -19,9 +19,8 @@ export {
 } from "../../lib/events/pin"
 
 /**
- * Trace in-scroll overlay pin math — focus line steps down per pinned row
- * (same dialect as OutlineTree). Do not use an external flex band: resizing
- * the scrollport + scrollTop compensation oscillates at peer handoff.
+ * Focus line steps down per pinned row — pins overlay a fixed-size scrollport
+ * (frame sibling). Do not use an external flex band (resizes clientHeight).
  */
 export const TRACE_PIN_OPTS = { stackInScroll: true } as const
 
