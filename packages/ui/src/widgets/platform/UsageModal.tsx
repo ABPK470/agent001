@@ -313,14 +313,14 @@ export function UsageModal({ onClose }: { onClose: () => void }) {
           </AdminBrowseFiltersPanel>
         )}
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-3 show-scrollbar">
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 py-3 show-scrollbar">
           {error ? (
-            <EmptyState icon={AlertCircle} message={error} className="py-10" />
+            <EmptyState icon={AlertCircle} message={error} />
           ) : loading && items.length === 0 ? (
             <EmptyState
               icon={Loader2}
               message="Loading usage…"
-              className="py-10 [&_svg]:animate-spin"
+              className="[&_svg]:animate-spin"
             />
           ) : items.length === 0 ? (
             <EmptyState
@@ -331,7 +331,6 @@ export function UsageModal({ onClose }: { onClose: () => void }) {
                   ? "Try clearing or widening your filters."
                   : "Start an agent run to track tokens."
               }
-              className="py-10"
             />
           ) : (
             <div className="space-y-0.5">
