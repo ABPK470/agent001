@@ -33,6 +33,7 @@ import {
   AdminBrowsePaginationFooter,
   AdminBrowseToolbar,
 } from "./admin-browse-chrome"
+import { AdminBrowseDetailPanel, buildBrowseDetailEntries } from "./admin-browse-detail"
 
 const PAGE_SIZE = 50
 
@@ -390,16 +391,23 @@ export function AuditModal({ onClose }: { onClose: () => void }) {
           ) : (
             <div className="space-y-0.5">
               {items.map((entry) => {
+                const entries = buildBrowseDetailEntries(entry.detail, {
+                  runId: entry.runId,
+                  threadId: entry.threadId,
+                })
                 const open = expanded === entry.id
-                const detailKeys = Object.keys(entry.detail)
+                const hasDetail = entries.length > 0
                 return (
                   <div key={entry.id}>
                     <button
                       type="button"
                       className="flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition-colors hover:bg-overlay-2"
-                      onClick={() => setExpanded(open ? null : entry.id)}
+                      onClick={() => {
+                        if (!hasDetail) return
+                        setExpanded(open ? null : entry.id)
+                      }}
                     >
-                      {detailKeys.length > 0 ? (
+                      {hasDetail ? (
                         open ? (
                           <ChevronDown size={14} className="mt-0.5 shrink-0 text-text-muted" />
                         ) : (
@@ -432,30 +440,7 @@ export function AuditModal({ onClose }: { onClose: () => void }) {
                         )}
                       </div>
                     </button>
-                    {open && detailKeys.length > 0 && (
-                      <div className="mb-2 ml-8 space-y-1 rounded-xl border border-border-subtle bg-overlay-2 px-3 py-2 font-mono text-[12px] text-text-secondary">
-                        {entry.runId && (
-                          <div className="flex gap-2">
-                            <span className="shrink-0 text-text-muted">runId:</span>
-                            <span className="break-all">{entry.runId}</span>
-                          </div>
-                        )}
-                        {entry.threadId && (
-                          <div className="flex gap-2">
-                            <span className="shrink-0 text-text-muted">threadId:</span>
-                            <span className="break-all">{entry.threadId}</span>
-                          </div>
-                        )}
-                        {Object.entries(entry.detail).map(([k, v]) => (
-                          <div key={k} className="flex gap-2">
-                            <span className="shrink-0 text-text-muted">{k}:</span>
-                            <span className="break-all">
-                              {typeof v === "string" ? v : JSON.stringify(v)}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                    {open && hasDetail ? <AdminBrowseDetailPanel entries={entries} /> : null}
                   </div>
                 )
               })}
