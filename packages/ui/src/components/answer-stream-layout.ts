@@ -1,11 +1,11 @@
 /**
  * Streaming answer layout — splits an in-progress agent answer into a
  * committed prefix (fully formed blocks safe to render with SmartAnswer)
- * and a volatile tail (prose still arriving, or structured content that
- * should show a skeleton instead of raw markdown / JSON tokens).
+ * and a volatile tail. Structured markdown (tables, fences, lists) is held
+ * until the block is closed, then rendered as a whole — never char/line drip.
  */
 
-export type StreamingRemainderKind = "none" | "prose" | "fenced" | "table"
+export type StreamingRemainderKind = "none" | "prose" | "fenced" | "table" | "markdown"
 
 export interface StreamingAnswerLayout {
   /** Text that is structurally complete and should render formatted immediately. */
@@ -32,45 +32,67 @@ function isTableLine(line: string): boolean {
   return t.startsWith("|") && t.includes("|", 1)
 }
 
-function isTableSeparator(row: string): boolean {
-  return /^\|[\s\-|:]+\|$/.test(row.trim())
+function isListLine(line: string): boolean {
+  const t = line.trimStart()
+  return /^([-*•]|\d+[.)])(\s|$)/.test(t)
 }
 
-function parseTableRow(row: string): string[] {
-  return row.split(/(?<!\\)\|/).slice(1, -1).map((c) => c.trim().replace(/\\\|/g, "|"))
+function isBlockquoteLine(line: string): boolean {
+  return line.trimStart().startsWith(">")
 }
 
+/** Trailing structured markdown that must appear as one unit (not line drip). */
+function isHoldableMarkdownLine(line: string): boolean {
+  return isTableLine(line) || isListLine(line) || isBlockquoteLine(line)
+}
+
+function lastNonEmptyIndex(lines: string[]): number {
+  let i = lines.length - 1
+  while (i >= 0 && lines[i]!.trim() === "") i--
+  return i
+}
+
+/**
+ * Hold a trailing pipe-table until non-table content follows (or the stream
+ * settles). Never commit growing rows into SmartAnswer mid-flight.
+ */
 function trailingTableLayout(lines: string[]): StreamingAnswerLayout | null {
-  let lastNonEmpty = lines.length - 1
-  while (lastNonEmpty >= 0 && lines[lastNonEmpty].trim() === "") lastNonEmpty--
-  if (lastNonEmpty < 0) return null
+  const lastNonEmpty = lastNonEmptyIndex(lines)
+  if (lastNonEmpty < 0 || !isTableLine(lines[lastNonEmpty]!)) return null
 
   let tableStart = lastNonEmpty
-  while (tableStart >= 0 && isTableLine(lines[tableStart])) tableStart--
+  while (tableStart >= 0 && isTableLine(lines[tableStart]!)) tableStart--
   tableStart++
 
-  if (tableStart > lastNonEmpty) return null
-
-  const tableLines = lines.slice(tableStart, lastNonEmpty + 1)
-  const dataLines = tableLines.filter((l) => !isTableSeparator(l))
-  const lastLine = tableLines[tableLines.length - 1] ?? ""
-  const looksIncomplete =
-    dataLines.length < 2 ||
-    !lastLine.trimEnd().endsWith("|") ||
-    (dataLines.length >= 2 &&
-      parseTableRow(dataLines[0]).length > 0 &&
-      dataLines.slice(1).some((row) => {
-        const cells = parseTableRow(row)
-        return cells.length !== parseTableRow(dataLines[0]).length
-      }))
-
-  if (!looksIncomplete) return null
-
-  const committedText = tableStart === 0 ? "" : lines.slice(0, tableStart).join("\n").replace(/\s+$/, "")
+  const committedText =
+    tableStart === 0 ? "" : lines.slice(0, tableStart).join("\n").replace(/\s+$/, "")
   return {
     committed: committedText,
     remainder: lines.slice(tableStart).join("\n"),
     remainderKind: "table",
+  }
+}
+
+/**
+ * Hold trailing lists / blockquotes until the block closes (non-holdable line
+ * or stream settle). Prevents line-by-line markdown formatting.
+ */
+function trailingMarkdownBlockLayout(lines: string[]): StreamingAnswerLayout | null {
+  const lastNonEmpty = lastNonEmptyIndex(lines)
+  if (lastNonEmpty < 0 || !isHoldableMarkdownLine(lines[lastNonEmpty]!)) return null
+  // Tables have their own pending shell.
+  if (isTableLine(lines[lastNonEmpty]!)) return null
+
+  let blockStart = lastNonEmpty
+  while (blockStart >= 0 && isHoldableMarkdownLine(lines[blockStart]!)) blockStart--
+  blockStart++
+
+  const committedText =
+    blockStart === 0 ? "" : lines.slice(0, blockStart).join("\n").replace(/\s+$/, "")
+  return {
+    committed: committedText,
+    remainder: lines.slice(blockStart).join("\n"),
+    remainderKind: "markdown",
   }
 }
 
@@ -88,6 +110,15 @@ function trailingPartialLineLayout(text: string): StreamingAnswerLayout | null {
 
   const before = text.slice(0, lastBreak)
   if (!before.trim()) return null
+
+  // Markdown-shaped in-flight line — hold with the markdown remainder, not prose glyph.
+  if (isMarkdownShapedLine(tail) || isHoldableMarkdownLine(tail)) {
+    return {
+      committed: before.replace(/\s+$/, ""),
+      remainder: tail,
+      remainderKind: "markdown",
+    }
+  }
 
   return {
     committed: before.replace(/\s+$/, ""),
@@ -113,8 +144,7 @@ function trailingProseLayout(text: string): StreamingAnswerLayout | null {
   if (afterBreak.startsWith("```")) return null
   if (isTableLine(afterBreak)) return null
   if (/^#{1,3}\s/.test(afterBreak)) return null
-  if (/^[-*•]\s/.test(afterBreak)) return null
-  if (/^\d+[.)]\s/.test(afterBreak)) return null
+  if (isListLine(afterBreak) || isBlockquoteLine(afterBreak)) return null
 
   return {
     committed: text.slice(0, lastParaBreak).replace(/\s+$/, ""),
@@ -177,6 +207,9 @@ export function splitStreamingAnswer(text: string): StreamingAnswerLayout {
   const tableLayout = trailingTableLayout(lines)
   if (tableLayout) return tableLayout
 
+  const markdownBlockLayout = trailingMarkdownBlockLayout(lines)
+  if (markdownBlockLayout) return markdownBlockLayout
+
   const proseLayout = trailingProseLayout(text)
   if (proseLayout) return proseLayout
 
@@ -186,6 +219,11 @@ export function splitStreamingAnswer(text: string): StreamingAnswerLayout {
   const singleHeadingLayout = trailingSingleHeadingLayout(text)
   if (singleHeadingLayout) return singleHeadingLayout
 
+  // Single-line markdown still arriving (list/table start) — hold, don't glyph.
+  if (isMarkdownShapedLine(text) || isHoldableMarkdownLine(text)) {
+    return { committed: "", remainder: text, remainderKind: "markdown" }
+  }
+
   return { committed: "", remainder: text, remainderKind: "prose" }
 }
 
@@ -193,17 +231,4 @@ export function joinStreamingParts(committed: string, proseTail: string): string
   if (!committed) return proseTail
   if (!proseTail) return committed
   return `${committed}\n\n${proseTail}`
-}
-
-export function parsePartialTable(raw: string): { headers: string[]; rows: string[][] } | null {
-  const lines = raw.split("\n").filter((l) => l.trim())
-  const dataLines = lines.filter((l) => !isTableSeparator(l))
-  if (dataLines.length === 0) return null
-  const headers = parseTableRow(dataLines[0])
-  if (headers.length === 0) return null
-  const rows = dataLines
-    .slice(1)
-    .map(parseTableRow)
-    .filter((r) => r.length === headers.length)
-  return { headers, rows }
 }

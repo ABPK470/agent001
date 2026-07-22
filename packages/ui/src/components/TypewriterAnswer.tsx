@@ -1,10 +1,10 @@
 /**
  * TypewriterAnswer — answer reveal for agent responses.
  *
- * Live SSE: committed markdown blocks render immediately via SmartAnswer;
- * only plain prose drips through GlyphStreamText (ASCII settle).
- * Completed answers render fully via SmartAnswer — no re-type, no markdown
- * animation (that felt rushed and shaky).
+ * Live SSE: finished prose/headings render via SmartAnswer; tables, fences
+ * (charts/KPIs/dashboards), and lists hold a quiet pending shell until the
+ * whole block is ready — then appear as one unit. Plain prose may glyph-drip.
+ * Settled answers render fully via SmartAnswer (no re-type).
  */
 
 import { useMemo, useRef } from "react"
@@ -18,7 +18,7 @@ const bodyClass = (compact: boolean) =>
     ? "text-text-secondary text-[15px] leading-6 w-full min-w-0"
     : "text-text-secondary text-base leading-relaxed w-full min-w-0"
 
-/** Live stream — formatted committed blocks + paced ASCII prose tail. */
+/** Live stream — whole markdown blocks only; never format partial tables/fences/lists. */
 function StreamingLiveAnswer({
   text,
   compact,
@@ -32,9 +32,8 @@ function StreamingLiveAnswer({
 
   const hasBlockContent = blocks.length > 0
   const hasGlyphTail = glyphTail.length > 0
-  const showStructuredPending =
-    (layout.remainderKind === "fenced" || layout.remainderKind === "table") &&
-    layout.remainder.length > 0
+  const showFencePending = layout.remainderKind === "fenced" && layout.remainder.length > 0
+  const showTablePending = layout.remainderKind === "table" && layout.remainder.length > 0
 
   return (
     <div className={[bodyClass(compact), "space-y-3"].join(" ")}>
@@ -46,12 +45,10 @@ function StreamingLiveAnswer({
           <GlyphStreamText text={glyphTail} />
         </div>
       ) : null}
-      {showStructuredPending && layout.remainderKind === "fenced" ? (
+      {showFencePending ? (
         <StructuredPendingBlock lang={layout.fencedLang ?? "chart"} />
       ) : null}
-      {showStructuredPending && layout.remainderKind === "table" ? (
-        <TablePendingBlock raw={layout.remainder} />
-      ) : null}
+      {showTablePending ? <TablePendingBlock /> : null}
     </div>
   )
 }

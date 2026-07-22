@@ -35,7 +35,7 @@ export function getStreamingSegments(text: string): StreamingSegments {
   return { blocks, layout }
 }
 
-/** Live SSE path — merge committed prefix + complete prose lines, glyph only plain in-flight prose. */
+/** Live SSE path — commit only finished blocks; glyph plain prose only. */
 export function getLiveStreamingRenderParts(text: string): {
   blocks: AnswerBlock[]
   glyphTail: string
@@ -52,6 +52,7 @@ export function getLiveStreamingRenderParts(text: string): {
     // renders them. Only plain prose goes through the ASCII glyph stream.
     glyphTail = isMarkdownShapedLine(split.inFlight) ? "" : split.inFlight
   }
+  // fenced | table | markdown → held until whole; no glyph, no partial format.
 
   const committedAll =
     layout.committed && extraCommitted
