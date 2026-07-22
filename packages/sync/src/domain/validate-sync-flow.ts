@@ -11,6 +11,7 @@ import type {
 import {
   handlerInputSlots,
   isStepBoundHandlerSlot,
+  kindAllowsEntityType,
   lookupCustomValueSource,
   METADATA_SYNC_KIND_ID,
   readStepFieldValue,
@@ -30,12 +31,6 @@ export interface SyncFlowValidationIssue {
 export interface SyncFlowValidationResult {
   errors: SyncFlowValidationIssue[]
   warnings: SyncFlowValidationIssue[]
-}
-
-function entityTypeAllowed(kindDef: SyncFlowKindDefinition, entityId: string): boolean {
-  const allowed = kindDef.entityTypes ?? ["any"]
-  if (allowed.includes("any")) return true
-  return allowed.includes(entityId as (typeof allowed)[number])
 }
 
 function isExecutableKind(kindDef: SyncFlowKindDefinition): boolean {
@@ -170,7 +165,7 @@ export function validateAuthoredSyncFlow(
       errors.push({ stepId: step.id, kind: step.kind, message: `Unknown step kind "${step.kind}".` })
       continue
     }
-    if (!options?.skipEntityTypeCheck && !entityTypeAllowed(kindDef, entityId)) {
+    if (!options?.skipEntityTypeCheck && !kindAllowsEntityType(kindDef.entityTypes, entityId)) {
       errors.push({
         stepId: step.id,
         kind: step.kind,

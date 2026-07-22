@@ -16,6 +16,7 @@ import {
   isStepBoundHandlerSlot,
   isSyncStepFieldKey,
   normalizeKindDefinition,
+  normalizeSyncFlowKindEntityTypes,
   stepFieldKeysFromHandler,
   valueSourceCatalogId,
 } from "../../types"
@@ -411,6 +412,12 @@ export function handlerBehaviorRows(def: SyncFlowKindDefinition): Array<{ label:
   const failure =
     def.failureMode === "fatal" ? "Fatal — stops run" : "Warning — logs and continues"
   rows.push({ label: "Failure mode", value: failure })
+
+  const allowed = normalizeSyncFlowKindEntityTypes(def.entityTypes ?? ["any"])
+  rows.push({
+    label: "Allowed entities",
+    value: allowed.includes("any") ? "Any entity type" : allowed.join(", "),
+  })
 
   if (infersCreatesDatasetLayer(def)) {
     rows.push({ label: "Dataset layer", value: "Creates contract dataset layer" })
