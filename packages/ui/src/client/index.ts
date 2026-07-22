@@ -36,6 +36,60 @@ export type SyncHistorySort = "started_desc" | "started_asc" | "finished_desc" |
 
 export type AdminAuditSort = "timestamp_desc" | "timestamp_asc"
 
+export type UsageSort = "created_desc" | "created_asc" | "tokens_desc" | "tokens_asc"
+
+export interface UsageParams {
+  page?: number
+  pageSize?: number
+  q?: string
+  user?: string
+  model?: string
+  from?: string
+  to?: string
+  sort?: UsageSort
+}
+
+export interface UsageItem {
+  runId: string
+  promptTokens: number
+  completionTokens: number
+  totalTokens: number
+  llmCalls: number
+  model: string
+  createdAt: string
+  user: string | null
+  displayName: string | null
+  goal: string | null
+  status: string | null
+  agentId: string | null
+  threadId: string | null
+  threadTitle: string | null
+}
+
+export interface UsageTotalsWire {
+  promptTokens: number
+  completionTokens: number
+  totalTokens: number
+  llmCalls: number
+  runCount: number
+  completedRuns: number
+  failedRuns: number
+}
+
+export interface UsagePage {
+  totals: UsageTotalsWire
+  items: UsageItem[]
+  total: number
+  page: number
+  pageSize: number
+  totalPages: number
+}
+
+export interface UsageFilterOptions {
+  users: Array<{ upn: string; role: "admin" | "operator" }>
+  models: string[]
+}
+
 export interface AdminAuditParams {
   page?: number
   pageSize?: number
@@ -359,11 +413,17 @@ export const api = {
   // Health
   health: () => json<{ status: string, active: number }>("/api/health"),
 
-  // Usage
-  getUsage: () => json<{
-    totals: { promptTokens: number; completionTokens: number; totalTokens: number; llmCalls: number; runCount: number; completedRuns: number; failedRuns: number }
-    runs: Array<{ runId: string; promptTokens: number; completionTokens: number; totalTokens: number; llmCalls: number; model: string; createdAt: string }>
-  }>("/api/usage"),
+  // Usage — admin token browser (filterable; KPIs match the filter set)
+  getUsage: (params: UsageParams = {}) => {
+    const qs = new URLSearchParams()
+    for (const [key, value] of Object.entries(params)) {
+      if (value == null || value === "") continue
+      qs.set(key, String(value))
+    }
+    const suffix = qs.toString() ? `?${qs}` : ""
+    return json<UsagePage>(`/api/usage${suffix}`)
+  },
+  usageOptions: () => json<UsageFilterOptions>("/api/usage/options"),
 
   // About — documentary platform dossier (any authenticated user)
   getAbout: () => json<AboutDossier>("/api/about"),

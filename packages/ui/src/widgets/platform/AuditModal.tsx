@@ -9,13 +9,10 @@
 import {
   AlertCircle,
   ChevronDown,
-  ChevronLeft,
   ChevronRight,
   Download,
   Loader2,
-  RefreshCw,
   Scale,
-  SlidersHorizontal,
   X,
 } from "lucide-react"
 import { useCallback, useEffect, useMemo, useState } from "react"
@@ -26,12 +23,16 @@ import {
   type AdminAuditParams,
   type AdminAuditSort,
 } from "../../client/index"
-import { ModalShell } from "../entity-registry/ModalShell"
-import { MODAL_ADMIN_PANEL } from "../entity-registry/modal-overlay"
 import { DateField } from "../../components/DateField"
 import { EmptyState } from "../../components/EmptyState"
 import { Listbox, type ListboxOption } from "../../components/Listbox"
-import { ModalSearchField } from "../../components/ModalSearchField"
+import { ModalShell } from "../entity-registry/ModalShell"
+import {
+  AdminBrowseFilterField,
+  AdminBrowseFiltersPanel,
+  AdminBrowsePaginationFooter,
+  AdminBrowseToolbar,
+} from "./admin-browse-chrome"
 
 const PAGE_SIZE = 50
 
@@ -78,15 +79,6 @@ function formatWhen(ts: string): string {
   })
 }
 
-function FilterField({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <label className="flex min-w-0 flex-col gap-1">
-      <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-text-faint">{label}</span>
-      {children}
-    </label>
-  )
-}
-
 export function AuditModal({ onClose }: { onClose: () => void }) {
   const [filters, setFilters] = useState(EMPTY_FILTERS)
   const [draftQ, setDraftQ] = useState("")
@@ -97,7 +89,7 @@ export function AuditModal({ onClose }: { onClose: () => void }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [expanded, setExpanded] = useState<number | null>(null)
-  const [filtersOpen, setFiltersOpen] = useState(true)
+  const [filtersOpen, setFiltersOpen] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [options, setOptions] = useState<AdminAuditFilterOptions>({
     users: [],
@@ -175,6 +167,11 @@ export function AuditModal({ onClose }: { onClose: () => void }) {
     setPage(1)
   }
 
+  function onSearchChange(value: string) {
+    setDraftQ(value)
+    setPage(1)
+  }
+
   async function handleExport(format: "csv" | "json") {
     setExporting(true)
     try {
@@ -217,122 +214,81 @@ export function AuditModal({ onClose }: { onClose: () => void }) {
       subtitle="Platform-wide immutable log — agent runs, policy decisions, and admin mutations across all users and threads."
       icon={<Scale size={20} className="text-text-muted" />}
       onClose={onClose}
-      widthClass={MODAL_ADMIN_PANEL}
-      size="default"
+      size="focus"
       footer={
-        <div className="flex w-full items-center justify-between gap-3">
-          <span className="text-[13px] text-text-muted">
-            {loading ? "Loading…" : `${total.toLocaleString()} ${total === 1 ? "entry" : "entries"}`}
-          </span>
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              disabled={page <= 1 || loading}
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              className="rounded-lg p-1.5 text-text-muted hover:bg-overlay-hover hover:text-text disabled:opacity-30"
-              aria-label="Previous page"
-            >
-              <ChevronLeft size={16} />
-            </button>
-            <span className="min-w-[5rem] text-center font-mono text-[12px] text-text-muted">
-              {page} / {totalPages}
-            </span>
-            <button
-              type="button"
-              disabled={page >= totalPages || loading}
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              className="rounded-lg p-1.5 text-text-muted hover:bg-overlay-hover hover:text-text disabled:opacity-30"
-              aria-label="Next page"
-            >
-              <ChevronRight size={16} />
-            </button>
-          </div>
-        </div>
+        <AdminBrowsePaginationFooter
+          loading={loading}
+          total={total}
+          singular="entry"
+          plural="entries"
+          page={page}
+          totalPages={totalPages}
+          onPrev={() => setPage((p) => Math.max(1, p - 1))}
+          onNext={() => setPage((p) => Math.min(totalPages, p + 1))}
+        />
       }
     >
       <div className="flex min-h-0 flex-1 flex-col">
-        <div className="flex shrink-0 items-center gap-2 border-b border-border-subtle px-6 py-3">
-          <div className="min-w-0 flex-1">
-            <ModalSearchField
-              value={draftQ}
-              onChange={(value) => {
-                setDraftQ(value)
-                setPage(1)
-              }}
-              placeholder="Search action, user, detail, run, goal…"
-              aria-label="Search audit log"
-            />
-          </div>
-          <button
-            type="button"
-            onClick={() => setFiltersOpen((v) => !v)}
-            className={`relative flex h-9 w-9 items-center justify-center rounded-lg border border-border-subtle text-text-muted transition-colors hover:bg-overlay-hover hover:text-text ${
-              filtersOpen || activeFilterCount > 0 ? "text-accent" : ""
-            }`}
-            title={activeFilterCount > 0 ? `Filters (${activeFilterCount} active)` : "Filters"}
-            aria-pressed={filtersOpen}
-          >
-            <SlidersHorizontal size={15} />
-            {activeFilterCount > 0 && (
-              <span className="absolute -right-0.5 -top-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-accent px-0.5 text-[9px] font-mono font-medium leading-none text-text-on-accent">
-                {activeFilterCount}
-              </span>
-            )}
-          </button>
-          <button
-            type="button"
-            onClick={() => void load()}
-            className="flex h-9 w-9 items-center justify-center rounded-lg border border-border-subtle text-text-muted transition-colors hover:bg-overlay-hover hover:text-text"
-            title="Refresh"
-          >
-            <RefreshCw size={15} className={loading ? "animate-spin" : undefined} />
-          </button>
-          <button
-            type="button"
-            disabled={exporting || total === 0}
-            onClick={() => void handleExport("csv")}
-            className="flex h-9 items-center gap-1.5 rounded-lg border border-border-subtle px-3 text-[13px] text-text-secondary transition-colors hover:bg-overlay-hover hover:text-text disabled:opacity-30"
-            title="Export filtered results as CSV"
-          >
-            <Download size={14} />
-            CSV
-          </button>
-          <button
-            type="button"
-            disabled={exporting || total === 0}
-            onClick={() => void handleExport("json")}
-            className="flex h-9 items-center gap-1.5 rounded-lg border border-border-subtle px-3 text-[13px] text-text-secondary transition-colors hover:bg-overlay-hover hover:text-text disabled:opacity-30"
-            title="Export filtered results as JSON"
-          >
-            <Download size={14} />
-            JSON
-          </button>
-        </div>
+        <AdminBrowseToolbar
+          search={draftQ}
+          onSearchChange={onSearchChange}
+          searchPlaceholder="Search action, user, detail, run, goal…"
+          searchAriaLabel="Search audit log"
+          filtersOpen={filtersOpen}
+          onToggleFilters={() => setFiltersOpen((v) => !v)}
+          activeFilterCount={activeFilterCount}
+          onRefresh={() => void load()}
+          loading={loading}
+          trailing={
+            <>
+              <button
+                type="button"
+                disabled={exporting || total === 0}
+                onClick={() => void handleExport("csv")}
+                className="flex h-9 items-center gap-1.5 rounded-lg border border-border-subtle px-3 text-[13px] text-text-secondary transition-colors hover:bg-overlay-hover hover:text-text disabled:opacity-30"
+                title="Export filtered results as CSV"
+              >
+                <Download size={14} />
+                CSV
+              </button>
+              <button
+                type="button"
+                disabled={exporting || total === 0}
+                onClick={() => void handleExport("json")}
+                className="flex h-9 items-center gap-1.5 rounded-lg border border-border-subtle px-3 text-[13px] text-text-secondary transition-colors hover:bg-overlay-hover hover:text-text disabled:opacity-30"
+                title="Export filtered results as JSON"
+              >
+                <Download size={14} />
+                JSON
+              </button>
+            </>
+          }
+        />
 
         {filtersOpen && (
-          <div className="shrink-0 space-y-3 border-b border-border-subtle bg-base/30 px-6 py-3">
+          <AdminBrowseFiltersPanel>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <FilterField label="From">
+              <AdminBrowseFilterField label="From">
                 <DateField
-                  value={filters.from}
+                  value={filters.from ?? ""}
                   onChange={(from) => patchFilters({ from })}
                   placeholder="Any start"
                   ariaLabel="Filter from date"
                   size="sm"
                   className="w-full"
                 />
-              </FilterField>
-              <FilterField label="To">
+              </AdminBrowseFilterField>
+              <AdminBrowseFilterField label="To">
                 <DateField
-                  value={filters.to}
+                  value={filters.to ?? ""}
                   onChange={(to) => patchFilters({ to })}
                   placeholder="Any end"
                   ariaLabel="Filter to date"
                   size="sm"
                   className="w-full"
                 />
-              </FilterField>
-              <FilterField label="User">
+              </AdminBrowseFilterField>
+              <AdminBrowseFilterField label="User">
                 <Listbox
                   value={filters.user ?? ""}
                   options={userOptions}
@@ -342,8 +298,8 @@ export function AuditModal({ onClose }: { onClose: () => void }) {
                   ariaLabel="Filter by user"
                   placeholder="All users"
                 />
-              </FilterField>
-              <FilterField label="Scope">
+              </AdminBrowseFilterField>
+              <AdminBrowseFilterField label="Scope">
                 <Listbox
                   value={filters.scopeType ?? ""}
                   options={SCOPE_OPTIONS}
@@ -354,10 +310,10 @@ export function AuditModal({ onClose }: { onClose: () => void }) {
                   className="w-full listbox-control"
                   ariaLabel="Filter by scope type"
                 />
-              </FilterField>
+              </AdminBrowseFilterField>
             </div>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <FilterField label="Scope id">
+              <AdminBrowseFilterField label="Scope id">
                 <Listbox
                   value={filters.scopeId ?? ""}
                   options={scopeIdOptions}
@@ -366,8 +322,8 @@ export function AuditModal({ onClose }: { onClose: () => void }) {
                   className="w-full listbox-control"
                   ariaLabel="Filter by scope id"
                 />
-              </FilterField>
-              <FilterField label="Action">
+              </AdminBrowseFilterField>
+              <AdminBrowseFilterField label="Action">
                 <Listbox
                   value={filters.action ?? ""}
                   options={actionOptions}
@@ -376,8 +332,8 @@ export function AuditModal({ onClose }: { onClose: () => void }) {
                   className="w-full listbox-control"
                   ariaLabel="Filter by action"
                 />
-              </FilterField>
-              <FilterField label="Sort">
+              </AdminBrowseFilterField>
+              <AdminBrowseFilterField label="Sort">
                 <Listbox
                   value={filters.sort ?? "timestamp_desc"}
                   options={SORT_OPTIONS}
@@ -386,25 +342,25 @@ export function AuditModal({ onClose }: { onClose: () => void }) {
                   className="w-full listbox-control"
                   ariaLabel="Sort order"
                 />
-              </FilterField>
+              </AdminBrowseFilterField>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
-              <FilterField label="Run id">
+              <AdminBrowseFilterField label="Run id">
                 <input
                   value={filters.runId ?? ""}
                   onChange={(e) => patchFilters({ runId: e.target.value })}
                   placeholder="Exact run id"
                   className="h-8 w-full rounded-lg border border-border bg-elevated px-2.5 font-mono text-[12px] text-text placeholder:text-text-faint focus:outline-none focus:ring-1 focus:ring-overlay-2"
                 />
-              </FilterField>
-              <FilterField label="Thread id">
+              </AdminBrowseFilterField>
+              <AdminBrowseFilterField label="Thread id">
                 <input
                   value={filters.threadId ?? ""}
                   onChange={(e) => patchFilters({ threadId: e.target.value })}
                   placeholder="Exact thread id"
                   className="h-8 w-full rounded-lg border border-border bg-elevated px-2.5 font-mono text-[12px] text-text placeholder:text-text-faint focus:outline-none focus:ring-1 focus:ring-overlay-2"
                 />
-              </FilterField>
+              </AdminBrowseFilterField>
             </div>
             {activeFilterCount > 0 && (
               <button
@@ -416,7 +372,7 @@ export function AuditModal({ onClose }: { onClose: () => void }) {
                 Clear filters
               </button>
             )}
-          </div>
+          </AdminBrowseFiltersPanel>
         )}
 
         <div className="min-h-0 flex-1 overflow-y-auto px-6 py-3 show-scrollbar">

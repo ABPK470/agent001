@@ -34,6 +34,7 @@ export {
   getTraceEntries,
   getUsageTotals,
   getUsageTotalsForUser,
+  countTokenUsage,
   listAuditFilterOptions,
   listAuditLogPaginated,
   listRuns,
@@ -41,6 +42,8 @@ export {
   listRunsWithUsageForThread,
   listRunsWithUsageForUser,
   listTokenUsage,
+  listTokenUsageFilterOptions,
+  listTokenUsagePaginated,
   markRunCancelled,
   markRunCrashed,
   normaliseUnknownRunStatuses,
@@ -51,6 +54,7 @@ export {
   saveRun,
   saveTokenUsage,
   saveTraceEntry,
+  sumTokenUsage,
   type AuditLogFilters,
   type AuditLogSort,
   type AuditScopeType,
@@ -61,9 +65,13 @@ export {
   type DbRun,
   type DbRunWithUsage,
   type DbTokenUsage,
+  type DbTokenUsageWithRun,
   type DbTraceEntry,
   type ListAuditLogPaginatedInput,
+  type ListTokenUsagePaginatedInput,
   type RunWireExtras,
+  type TokenUsageFilters,
+  type TokenUsageSort,
   type UsageTotals
 } from "./runs.js"
 

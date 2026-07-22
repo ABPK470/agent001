@@ -602,6 +602,193 @@ export function listTokenUsage(limit = 100): DbTokenUsage[] {
     .all(limit) as DbTokenUsage[]
 }
 
+/** Admin token-usage browser filters (join token_usage → runs). */
+export interface TokenUsageFilters {
+  search?: string
+  user?: string
+  model?: string
+  from?: string
+  to?: string
+}
+
+export type TokenUsageSort =
+  | "created_desc"
+  | "created_asc"
+  | "tokens_desc"
+  | "tokens_asc"
+
+export interface ListTokenUsagePaginatedInput extends TokenUsageFilters {
+  page: number
+  pageSize: number
+  sort?: TokenUsageSort
+}
+
+export interface DbTokenUsageWithRun extends DbTokenUsage {
+  run_goal: string | null
+  run_status: string | null
+  run_upn: string | null
+  run_display_name: string | null
+  run_agent_id: string | null
+  thread_id: string | null
+  thread_title: string | null
+}
+
+function buildTokenUsageWhere(filters: TokenUsageFilters): { where: string; params: unknown[] } {
+  const clauses: string[] = []
+  const params: unknown[] = []
+
+  if (filters.user?.trim()) {
+    clauses.push("r.upn = ?")
+    params.push(filters.user.trim())
+  }
+  if (filters.model?.trim()) {
+    clauses.push("t.model = ?")
+    params.push(filters.model.trim())
+  }
+  if (filters.from?.trim()) {
+    const from = filters.from.trim()
+    clauses.push("t.created_at >= ?")
+    params.push(from.includes("T") ? from : `${from}T00:00:00`)
+  }
+  if (filters.to?.trim()) {
+    const to = filters.to.trim()
+    clauses.push("t.created_at <= ?")
+    params.push(to.includes("T") ? to : `${to}T23:59:59.999`)
+  }
+  const search = filters.search?.trim()
+  if (search) {
+    const q = `%${search}%`
+    clauses.push(
+      `(t.run_id LIKE ? OR t.model LIKE ? OR IFNULL(r.goal, '') LIKE ? OR IFNULL(r.upn, '') LIKE ? OR IFNULL(r.display_name, '') LIKE ? OR IFNULL(th.title, '') LIKE ?)`,
+    )
+    params.push(q, q, q, q, q, q)
+  }
+
+  return {
+    where: clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "",
+    params,
+  }
+}
+
+const TOKEN_USAGE_LIST_FROM = `
+  FROM token_usage t
+  INNER JOIN runs r ON r.id = t.run_id
+  LEFT JOIN threads th ON th.id = r.thread_id
+`
+
+const TOKEN_USAGE_LIST_SELECT = `
+  SELECT
+    t.run_id, t.prompt_tokens, t.completion_tokens, t.total_tokens, t.llm_calls, t.model, t.created_at,
+    r.goal AS run_goal, r.status AS run_status, r.upn AS run_upn,
+    r.display_name AS run_display_name, r.agent_id AS run_agent_id,
+    r.thread_id AS thread_id, th.title AS thread_title
+  ${TOKEN_USAGE_LIST_FROM}
+`
+
+function tokenUsageOrderBy(sort: TokenUsageSort | undefined): string {
+  switch (sort) {
+    case "created_asc":
+      return "t.created_at ASC"
+    case "tokens_desc":
+      return "t.total_tokens DESC, t.created_at DESC"
+    case "tokens_asc":
+      return "t.total_tokens ASC, t.created_at DESC"
+    case "created_desc":
+    default:
+      return "t.created_at DESC"
+  }
+}
+
+export function countTokenUsage(filters: TokenUsageFilters = {}): number {
+  const { where, params } = buildTokenUsageWhere(filters)
+  const row = getDb()
+    .prepare(`SELECT COUNT(1) AS c ${TOKEN_USAGE_LIST_FROM} ${where}`)
+    .get(...params) as { c: number }
+  return row.c
+}
+
+export function listTokenUsagePaginated(input: ListTokenUsagePaginatedInput): DbTokenUsageWithRun[] {
+  const page = Math.max(1, input.page)
+  const pageSize = Math.max(1, input.pageSize)
+  const offset = (page - 1) * pageSize
+  const { where, params } = buildTokenUsageWhere(input)
+  const orderBy = tokenUsageOrderBy(input.sort)
+  return getDb()
+    .prepare(`${TOKEN_USAGE_LIST_SELECT} ${where} ORDER BY ${orderBy} LIMIT ? OFFSET ?`)
+    .all(...params, pageSize, offset) as DbTokenUsageWithRun[]
+}
+
+/** Sums for the same filter set as the usage list (KPI strip). */
+export function sumTokenUsage(filters: TokenUsageFilters = {}): {
+  total_prompt_tokens: number
+  total_completion_tokens: number
+  total_tokens: number
+  total_llm_calls: number
+  run_count: number
+  completed_runs: number
+  failed_runs: number
+} {
+  const { where, params } = buildTokenUsageWhere(filters)
+  return getDb()
+    .prepare(
+      `
+      SELECT
+        COALESCE(SUM(t.prompt_tokens), 0) AS total_prompt_tokens,
+        COALESCE(SUM(t.completion_tokens), 0) AS total_completion_tokens,
+        COALESCE(SUM(t.total_tokens), 0) AS total_tokens,
+        COALESCE(SUM(t.llm_calls), 0) AS total_llm_calls,
+        COUNT(1) AS run_count,
+        COALESCE(SUM(CASE WHEN r.status = 'completed' THEN 1 ELSE 0 END), 0) AS completed_runs,
+        COALESCE(SUM(CASE WHEN r.status = 'failed' THEN 1 ELSE 0 END), 0) AS failed_runs
+      ${TOKEN_USAGE_LIST_FROM}
+      ${where}
+    `,
+    )
+    .get(...params) as {
+    total_prompt_tokens: number
+    total_completion_tokens: number
+    total_tokens: number
+    total_llm_calls: number
+    run_count: number
+    completed_runs: number
+    failed_runs: number
+  }
+}
+
+export function listTokenUsageFilterOptions(): {
+  users: Array<{ upn: string; role: "admin" | "operator" }>
+  models: string[]
+} {
+  const db = getDb()
+  const users = (
+    db
+      .prepare(
+        `SELECT x.upn AS upn, COALESCE(u.is_admin, 0) AS is_admin
+         FROM (
+           SELECT DISTINCT r.upn AS upn
+           FROM token_usage t
+           INNER JOIN runs r ON r.id = t.run_id
+           WHERE r.upn IS NOT NULL AND r.upn != ''
+         ) x
+         LEFT JOIN users u ON u.upn = x.upn
+         ORDER BY x.upn
+         LIMIT 200`,
+      )
+      .all() as Array<{ upn: string; is_admin: number }>
+  ).map((r) => ({
+    upn: r.upn,
+    role: r.is_admin === 1 ? ("admin" as const) : ("operator" as const),
+  }))
+  const models = (
+    db
+      .prepare(
+        `SELECT DISTINCT model FROM token_usage WHERE model != '' ORDER BY model LIMIT 100`,
+      )
+      .all() as Array<{ model: string }>
+  ).map((r) => r.model)
+  return { users, models }
+}
+
 export interface UsageTotals {
   total_prompt_tokens: number
   total_completion_tokens: number

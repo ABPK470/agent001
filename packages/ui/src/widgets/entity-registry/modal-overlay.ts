@@ -64,8 +64,8 @@ export const MODAL_VIEWER_PANEL_MOBILE =
   "w-full max-w-none h-[min(96vh,calc(100dvh-0.5rem))]"
 
 /**
- * Admin session modals — Policies, Audit, Usage, About.
- * Same footprint so the session menu opens a consistent workspace.
+ * Admin session modals that stay on the mid panel (About, Policies editor shell).
+ * Audit / Usage use ModalShell size="focus" instead.
  */
 export const MODAL_ADMIN_PANEL =
   "w-full max-w-[min(1080px,calc(100vw-1.5rem))] h-full sm:h-[90vh] sm:max-h-[920px]"
