@@ -59,6 +59,9 @@ export function layoutOffsetInScroll(scrollEl: HTMLElement, el: HTMLElement): nu
 /**
  * List pin-eligible scopes in a scroll host.
  * Prefer `[data-outline-scope]`; fall back to `[data-trace-scope]` for Trace.
+ *
+ * Collapsed headers (`aria-expanded="false"`) are excluded — they have no
+ * interior to contextualize, so pinning them is pure noise ("over-pin").
  */
 export function listOutlineScopes(
   scrollEl: HTMLElement,
@@ -71,6 +74,10 @@ export function listOutlineScopes(
   for (const el of nodes) {
     const id = el.dataset.outlineScope ?? el.dataset.traceScope
     if (!id) continue
+    // Explicitly collapsed toggle — no body in the DOM / nothing to pin for.
+    if (el.getAttribute("aria-expanded") === "false") continue
+    // Non-expandable leaf chrome (no interior).
+    if (el.classList.contains("is-leaf")) continue
     const family =
       el.dataset.outlineFamily ??
       el.dataset.traceKind ??
@@ -97,6 +104,11 @@ export type PinEntry = {
   depth: number
   /** Measured header height; falls back to rowH when omitted (unit tests). */
   height?: number
+  /**
+   * When false, never pin — collapsed scope with no interior.
+   * Omitted / true = eligible (unit tests default to open).
+   */
+  open?: boolean
 }
 
 export type PinComputeOpts = {
@@ -134,6 +146,8 @@ export function computePinnedFromEntries(
   const ranged = withScopeEnds(entries)
   const pinned: string[] = []
   for (const e of ranged) {
+    // Collapsed parents have no body — pinning them is noise.
+    if (e.open === false) continue
     const threshold = stackInScroll
       ? scrollTop + pinned.length * rowH
       : scrollTop

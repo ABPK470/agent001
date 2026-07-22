@@ -160,8 +160,20 @@ describe("computePinnedFromEntries — reserved band (stackInScroll: false)", ()
     ])
   })
 
+  it("pins Call → Received while reading received body", () => {
+    const tree = [
+      { id: "call:0", top: 0, depth: 0 },
+      { id: "sent:0", top: 40, depth: 1 },
+      { id: "received:0", top: 800, depth: 1 },
+      { id: "call:1", top: 1000, depth: 0 },
+    ]
+    expect(computePinnedFromEntries(tree, 850, H, 4, band)).toEqual([
+      "call:0",
+      "received:0",
+    ])
+  })
+
   it("pins a short message header as soon as its own bottom clears (not fixed rowH)", () => {
-    const band = { stackInScroll: false as const }
     const msgs = [
       { id: "call:0", top: 0, depth: 0, height: H },
       { id: "sent:0", top: 40, depth: 1, height: H },
@@ -178,6 +190,16 @@ describe("computePinnedFromEntries — reserved band (stackInScroll: false)", ()
       "sent:0",
       "message:0:m:0",
     ])
+  })
+
+  it("never pins a collapsed scope (no interior to contextualize)", () => {
+    const tree = [
+      { id: "call:0", top: 0, depth: 0, open: false as const },
+      { id: "call:1", top: 100, depth: 0 },
+    ]
+    // Scrolled past the collapsed call header — must not pin it.
+    expect(computePinnedFromEntries(tree, 100, H, 4, band)).toEqual([])
+    expect(computePinnedFromEntries(tree, 100 + H, H, 4, band)).toEqual(["call:1"])
   })
 })
 

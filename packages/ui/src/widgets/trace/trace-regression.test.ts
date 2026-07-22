@@ -176,6 +176,9 @@ type ScopeSpec = {
   kind: string
   depth: number
   top: number
+  /** Default true — collapsed headers are not pin-eligible. */
+  expanded?: boolean
+  leaf?: boolean
 }
 
 function mockRect(top: number, height = 34) {
@@ -198,6 +201,11 @@ function makeScopeEl(spec: ScopeSpec, hostTop: number, scrollTop: number) {
     "data-trace-kind": spec.kind,
     "data-trace-depth": String(spec.depth),
   }
+  if (spec.expanded !== false) {
+    attrs["aria-expanded"] = "true"
+  } else {
+    attrs["aria-expanded"] = "false"
+  }
   return {
     dataset: {
       get traceScope() {
@@ -219,6 +227,9 @@ function makeScopeEl(spec: ScopeSpec, hostTop: number, scrollTop: number) {
         return attrs["data-outline-depth"]
       },
     },
+    classList: {
+      contains: (name: string) => name === "is-leaf" && spec.leaf === true,
+    },
     hasAttribute: (name: string) => name in attrs,
     getAttribute: (name: string) => attrs[name] ?? null,
     setAttribute: (name: string, value: string) => {
@@ -229,6 +240,7 @@ function makeScopeEl(spec: ScopeSpec, hostTop: number, scrollTop: number) {
     },
     getBoundingClientRect: () =>
       mockRect(hostTop + spec.top - scrollTop, H),
+    offsetHeight: H,
   }
 }
 
@@ -301,6 +313,18 @@ describe("listOutlineScopes + computePinnedScopeIds (DOM)", () => {
     ]
     const { host } = mockTraceHost(scopes, 200)
     expect(listOutlineScopes(host).map((e) => e.id)).toEqual(["call:0"])
+  })
+
+  it("ignores collapsed headers (aria-expanded=false)", () => {
+    const scopes: ScopeSpec[] = [
+      { id: "call:0", kind: "call", depth: 0, top: 0, expanded: false },
+      { id: "call:1", kind: "call", depth: 0, top: 200 },
+    ]
+    const { host } = mockTraceHost(scopes, 250)
+    expect(listOutlineScopes(host).map((e) => e.id)).toEqual(["call:1"])
+    expect(computePinnedScopeIds(host, undefined, { stackInScroll: false })).toEqual([
+      "call:1",
+    ])
   })
 })
 
