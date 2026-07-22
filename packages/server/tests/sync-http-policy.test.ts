@@ -4,7 +4,6 @@
 
 import {
   PolicyEffect,
-  PolicyRole,
   PolicyRunMode,
   RulePolicyEvaluator,
   type AgentRun,
@@ -89,7 +88,7 @@ describe("assertSyncHttpPolicy", () => {
   it("allows sync_preview when hosted allow rule matches", async () => {
     listPolicyRules.mockReturnValue([
       dbRule("hosted_allow_sync_preview", PolicyEffect.Allow, {
-        selectors: { role: PolicyRole.HostedUser, tool: "sync_preview" },
+        selectors: { tool: "sync_preview" },
       }),
     ])
     await expect(
@@ -99,6 +98,25 @@ describe("assertSyncHttpPolicy", () => {
         args: { source: "dev", target: "uat", entityType: "content", entityId: 1 },
       }),
     ).resolves.toBeUndefined()
+  })
+
+  it("requires approval for admin sessions the same as non-admin", async () => {
+    listPolicyRules.mockReturnValue([
+      dbRule("hosted_require_approval_sync_execute", PolicyEffect.RequireApproval, {
+        reason: "confirm execute",
+        selectors: { tool: "sync_execute" },
+      }),
+    ])
+    await expect(
+      assertSyncHttpPolicy({
+        session: { ...session, isAdmin: true },
+        toolName: "sync_execute",
+        args: { planId: "p1", confirm: true, target: "dev" },
+      }),
+    ).rejects.toMatchObject({
+      code: "approval_required",
+      approvalId: "approval-1",
+    })
   })
 
   it("denies when a deny rule matches", async () => {
@@ -121,7 +139,7 @@ describe("assertSyncHttpPolicy", () => {
     listPolicyRules.mockReturnValue([
       dbRule("hosted_require_approval_sync_execute", PolicyEffect.RequireApproval, {
         reason: "confirm execute",
-        selectors: { role: PolicyRole.HostedUser, tool: "sync_execute" },
+        selectors: { tool: "sync_execute" },
       }),
     ])
     await expect(
@@ -145,7 +163,7 @@ describe("assertSyncHttpPolicy", () => {
     listPolicyRules.mockReturnValue([
       dbRule("hosted_require_approval_sync_execute", PolicyEffect.RequireApproval, {
         reason: "confirm execute",
-        selectors: { role: PolicyRole.HostedUser, tool: "sync_execute" },
+        selectors: { tool: "sync_execute" },
       }),
     ])
     await expect(
@@ -187,7 +205,7 @@ describe("RulePolicyEvaluator sync facts (smoke)", () => {
       {
         runId: "r1",
         runMode: PolicyRunMode.Hosted,
-        role: PolicyRole.HostedUser,
+        role: "admin",
         sandboxRoot: null,
       },
     )

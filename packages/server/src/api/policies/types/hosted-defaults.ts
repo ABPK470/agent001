@@ -1,14 +1,11 @@
 /**
- * Hosted-profile default policy rules.
+ * Default product policy rules (seeded into `policy_configs` as hosted_default).
  *
- * Seeded into the per-run policy evaluator only when the run executes under
- * the hosted profile. Loaded after the DB-stored rules so operator-defined
- * rules can override defaults via priority. Not persisted to the DB; these
- * defaults belong to the running deployment, not to operator configuration.
+ * Apply to **everyone** under the single governance rail (default-deny): agent
+ * tools and HTTP Sync share {@link buildPolicyContext}. Selectors are not
+ * locked to `hosted_user` — admin does not bypass Policies.
  *
- * The rule shape matches {@link PolicyRule}: `condition: "selectors"` with
- * the selector object on `parameters.selectors`. See the selector engine in
- * `packages/agent/src/engine/policy-selectors.ts` for matching semantics.
+ * Workspace isolation (`AGENT_HOSTED_MODE`) is separate from this file.
  *
  * Defaults are intentionally minimal:
  *   - File I/O is allowed inside the sandbox, denied in the app workspace.
@@ -16,16 +13,12 @@
  *   - MSSQL reads + schema introspection are allowed everywhere.
  *   - MSSQL DML/DDL are denied on UAT and PROD; DEV is left to operator
  *     policy so the deployment can opt in explicitly.
+ *   - Sync preview allowed; sync_execute requires approval.
  *   - Outbound network tools require explicit approval.
  *
  * Disclosure-policy linkage (Phase E.4): the `hosted_deny_workspace_*`
  * rules below are the HARD rail for the soft prose in the prompt's
- * `<information_disclosure>` section. They implement the
- * {@link DisclosureCategory.Internals} and {@link DisclosureCategory.SystemPrompt}
- * categories — by denying `read_file` / `list_directory` against the
- * application workspace, a hosted user cannot exfiltrate `packages/`,
- * `deploy/`, prompt files, policy config, or other internals even if
- * the model tries to comply with a probing request.
+ * `<information_disclosure>` section.
  */
 
 import { DisclosureCategory } from "./disclosure-categories.js"
@@ -36,7 +29,6 @@ import {
   PolicyDbOperation,
   PolicyEffect,
   PolicyNetwork,
-  PolicyRole,
   type PolicyRule
 } from "@mia/agent"
 
@@ -53,7 +45,10 @@ export function hostedDefaultPolicyRules(): PolicyRule[] {
       parameters: {
         priority: DEFAULT_PRIORITY,
         reason: "sandbox reads are allowed for hosted runs",
-        selectors: { role: PolicyRole.HostedUser, tool: "read_file", scope: "sandbox" }
+        selectors: {
+          tool: "read_file",
+          scope: "sandbox"
+        }
       }
     },
     {
@@ -63,7 +58,10 @@ export function hostedDefaultPolicyRules(): PolicyRule[] {
       parameters: {
         priority: DEFAULT_PRIORITY,
         reason: "sandbox writes are allowed for hosted runs",
-        selectors: { role: PolicyRole.HostedUser, tool: "write_file", scope: "sandbox" }
+        selectors: {
+          tool: "write_file",
+          scope: "sandbox"
+        }
       }
     },
     {
@@ -73,7 +71,10 @@ export function hostedDefaultPolicyRules(): PolicyRule[] {
       parameters: {
         priority: DEFAULT_PRIORITY,
         reason: "sandbox listing is allowed for hosted runs",
-        selectors: { role: PolicyRole.HostedUser, tool: "list_directory", scope: "sandbox" }
+        selectors: {
+          tool: "list_directory",
+          scope: "sandbox"
+        }
       }
     },
     {
@@ -83,7 +84,10 @@ export function hostedDefaultPolicyRules(): PolicyRule[] {
       parameters: {
         priority: DEFAULT_PRIORITY + 50,
         reason: `hosted users may not access the application workspace (disclosure: ${DisclosureCategory.Internals})`,
-        selectors: { role: PolicyRole.HostedUser, tool: "read_file", scope: "app_workspace" }
+        selectors: {
+          tool: "read_file",
+          scope: "app_workspace"
+        }
       }
     },
     {
@@ -93,7 +97,10 @@ export function hostedDefaultPolicyRules(): PolicyRule[] {
       parameters: {
         priority: DEFAULT_PRIORITY + 50,
         reason: `hosted users may not write to the application workspace (disclosure: ${DisclosureCategory.Internals})`,
-        selectors: { role: PolicyRole.HostedUser, tool: "write_file", scope: "app_workspace" }
+        selectors: {
+          tool: "write_file",
+          scope: "app_workspace"
+        }
       }
     },
     {
@@ -103,7 +110,10 @@ export function hostedDefaultPolicyRules(): PolicyRule[] {
       parameters: {
         priority: DEFAULT_PRIORITY + 50,
         reason: `hosted users may not list the application workspace (disclosure: ${DisclosureCategory.Internals})`,
-        selectors: { role: PolicyRole.HostedUser, tool: "list_directory", scope: "app_workspace" }
+        selectors: {
+          tool: "list_directory",
+          scope: "app_workspace"
+        }
       }
     },
 
@@ -115,7 +125,9 @@ export function hostedDefaultPolicyRules(): PolicyRule[] {
       parameters: {
         priority: DEFAULT_PRIORITY,
         reason: "shell commands are allowed inside the sandbox for hosted runs",
-        selectors: { role: PolicyRole.HostedUser, tool: "run_command" }
+        selectors: {
+          tool: "run_command"
+        }
       }
     },
     {
@@ -126,7 +138,6 @@ export function hostedDefaultPolicyRules(): PolicyRule[] {
         priority: DEFAULT_PRIORITY + 50,
         reason: "privileged or destructive shell commands are blocked in hosted mode",
         selectors: {
-          role: PolicyRole.HostedUser,
           tool: "run_command",
           command: PRIVILEGED_COMMAND_RE
         }
@@ -142,7 +153,6 @@ export function hostedDefaultPolicyRules(): PolicyRule[] {
         priority: DEFAULT_PRIORITY,
         reason: "MSSQL reads are allowed across environments",
         selectors: {
-          role: PolicyRole.HostedUser,
           tool: "mssql_*",
           dbOperation: PolicyDbOperation.QueryRead
         }
@@ -156,7 +166,6 @@ export function hostedDefaultPolicyRules(): PolicyRule[] {
         priority: DEFAULT_PRIORITY,
         reason: "query_mssql reads are allowed across environments",
         selectors: {
-          role: PolicyRole.HostedUser,
           tool: "query_mssql",
           dbOperation: PolicyDbOperation.QueryRead
         }
@@ -169,7 +178,9 @@ export function hostedDefaultPolicyRules(): PolicyRule[] {
       parameters: {
         priority: DEFAULT_PRIORITY,
         reason: "schema introspection is allowed across environments",
-        selectors: { role: PolicyRole.HostedUser, tool: "explore_mssql_schema" }
+        selectors: {
+          tool: "explore_mssql_schema"
+        }
       }
     },
     {
@@ -180,7 +191,6 @@ export function hostedDefaultPolicyRules(): PolicyRule[] {
         priority: DEFAULT_PRIORITY + 50,
         reason: "UAT is read-only by default in hosted mode",
         selectors: {
-          role: PolicyRole.HostedUser,
           tool: "mssql_*",
           dbEnvironment: PolicyDbEnvironment.Uat,
           dbOperation: PolicyDbOperation.Dml
@@ -195,7 +205,6 @@ export function hostedDefaultPolicyRules(): PolicyRule[] {
         priority: DEFAULT_PRIORITY + 50,
         reason: "UAT DDL is denied by default in hosted mode",
         selectors: {
-          role: PolicyRole.HostedUser,
           tool: "mssql_*",
           dbEnvironment: PolicyDbEnvironment.Uat,
           dbOperation: PolicyDbOperation.Ddl
@@ -210,7 +219,6 @@ export function hostedDefaultPolicyRules(): PolicyRule[] {
         priority: DEFAULT_PRIORITY + 50,
         reason: "PROD is read-only by default in hosted mode",
         selectors: {
-          role: PolicyRole.HostedUser,
           tool: "mssql_*",
           dbEnvironment: PolicyDbEnvironment.Prod,
           dbOperation: PolicyDbOperation.Dml
@@ -225,7 +233,6 @@ export function hostedDefaultPolicyRules(): PolicyRule[] {
         priority: DEFAULT_PRIORITY + 50,
         reason: "PROD DDL is denied by default in hosted mode",
         selectors: {
-          role: PolicyRole.HostedUser,
           tool: "mssql_*",
           dbEnvironment: PolicyDbEnvironment.Prod,
           dbOperation: PolicyDbOperation.Ddl
@@ -241,7 +248,9 @@ export function hostedDefaultPolicyRules(): PolicyRule[] {
       parameters: {
         priority: DEFAULT_PRIORITY,
         reason: "sync previews are read-only and allowed by default",
-        selectors: { role: PolicyRole.HostedUser, tool: "sync_preview" }
+        selectors: {
+          tool: "sync_preview"
+        }
       }
     },
     {
@@ -251,7 +260,9 @@ export function hostedDefaultPolicyRules(): PolicyRule[] {
       parameters: {
         priority: DEFAULT_PRIORITY + 25,
         reason: "sync_execute requires explicit user confirmation in hosted mode",
-        selectors: { role: PolicyRole.HostedUser, tool: "sync_execute" }
+        selectors: {
+          tool: "sync_execute"
+        }
       }
     },
     {
@@ -260,8 +271,11 @@ export function hostedDefaultPolicyRules(): PolicyRule[] {
       condition: "selectors",
       parameters: {
         priority: DEFAULT_PRIORITY + 75,
-        reason: "shell commands during sync are denied in hosted mode unless a higher-priority allow rule is added",
-        selectors: { role: PolicyRole.HostedUser, dbOperation: PolicyDbOperation.SyncShellExecute }
+        reason:
+          "shell commands during sync are denied in hosted mode unless a higher-priority allow rule is added",
+        selectors: {
+          dbOperation: PolicyDbOperation.SyncShellExecute
+        }
       }
     },
     {
@@ -272,7 +286,6 @@ export function hostedDefaultPolicyRules(): PolicyRule[] {
         priority: DEFAULT_PRIORITY + 60,
         reason: "ad-hoc SQL during sync is denied on UAT/PROD unless explicitly allowed",
         selectors: {
-          role: PolicyRole.HostedUser,
           dbOperation: PolicyDbOperation.SyncCustomSql,
           dbEnvironment: PolicyDbEnvironment.Uat
         }
@@ -286,7 +299,6 @@ export function hostedDefaultPolicyRules(): PolicyRule[] {
         priority: DEFAULT_PRIORITY + 60,
         reason: "ad-hoc SQL during sync is denied on UAT/PROD unless explicitly allowed",
         selectors: {
-          role: PolicyRole.HostedUser,
           dbOperation: PolicyDbOperation.SyncCustomSql,
           dbEnvironment: PolicyDbEnvironment.Prod
         }
@@ -299,7 +311,10 @@ export function hostedDefaultPolicyRules(): PolicyRule[] {
       parameters: {
         priority: DEFAULT_PRIORITY,
         reason: "outbound HTTP fetches require explicit approval in hosted mode",
-        selectors: { role: PolicyRole.HostedUser, tool: "fetch_url", network: PolicyNetwork.Allow }
+        selectors: {
+          tool: "fetch_url",
+          network: PolicyNetwork.Allow
+        }
       }
     },
 
@@ -310,7 +325,9 @@ export function hostedDefaultPolicyRules(): PolicyRule[] {
       condition: "selectors",
       parameters: {
         priority: DEFAULT_PRIORITY,
-        selectors: { role: PolicyRole.HostedUser, tool: "think" }
+        selectors: {
+          tool: "think"
+        }
       }
     },
     {
@@ -319,7 +336,9 @@ export function hostedDefaultPolicyRules(): PolicyRule[] {
       condition: "selectors",
       parameters: {
         priority: DEFAULT_PRIORITY,
-        selectors: { role: PolicyRole.HostedUser, tool: "ask_user" }
+        selectors: {
+          tool: "ask_user"
+        }
       }
     },
     {
@@ -328,7 +347,9 @@ export function hostedDefaultPolicyRules(): PolicyRule[] {
       condition: "selectors",
       parameters: {
         priority: DEFAULT_PRIORITY,
-        selectors: { role: PolicyRole.HostedUser, tool: "list_environments" }
+        selectors: {
+          tool: "list_environments"
+        }
       }
     },
     {
@@ -337,7 +358,9 @@ export function hostedDefaultPolicyRules(): PolicyRule[] {
       condition: "selectors",
       parameters: {
         priority: DEFAULT_PRIORITY,
-        selectors: { role: PolicyRole.HostedUser, tool: "list_sync_definitions" }
+        selectors: {
+          tool: "list_sync_definitions"
+        }
       }
     },
     {
@@ -346,7 +369,9 @@ export function hostedDefaultPolicyRules(): PolicyRule[] {
       condition: "selectors",
       parameters: {
         priority: DEFAULT_PRIORITY,
-        selectors: { role: PolicyRole.HostedUser, tool: "resolve_sync_scope" }
+        selectors: {
+          tool: "resolve_sync_scope"
+        }
       }
     },
     {
@@ -355,7 +380,9 @@ export function hostedDefaultPolicyRules(): PolicyRule[] {
       condition: "selectors",
       parameters: {
         priority: DEFAULT_PRIORITY,
-        selectors: { role: PolicyRole.HostedUser, tool: "sync_diff_scan" }
+        selectors: {
+          tool: "sync_diff_scan"
+        }
       }
     },
     {
@@ -364,7 +391,9 @@ export function hostedDefaultPolicyRules(): PolicyRule[] {
       condition: "selectors",
       parameters: {
         priority: DEFAULT_PRIORITY,
-        selectors: { role: PolicyRole.HostedUser, tool: "search_catalog" }
+        selectors: {
+          tool: "search_catalog"
+        }
       }
     }
   ]
@@ -482,8 +511,8 @@ export function policyRulesFromEnvironments(envs: ReadonlyArray<EnvLike>): Polic
           reason: `${envKey}.approvalRequiredOperations: ${op} requires confirmation`,
           selectors: tool
             ? { tool, dbEnvironment: envKey, dbOperation: op }
-            : { tool: "mssql_*", dbEnvironment: envKey, dbOperation: op },
-        },
+            : { tool: "mssql_*", dbEnvironment: envKey, dbOperation: op }
+        }
       })
     }
     // Explicit per-env allow for DEV widenings (e.g. `allowedOperations: ["dml"]`).
@@ -512,8 +541,8 @@ export function policyRulesFromEnvironments(envs: ReadonlyArray<EnvLike>): Polic
           reason: `${envKey}.allowedOperations: ${op} explicitly permitted`,
           selectors: syncTool
             ? { tool: syncTool, dbEnvironment: envKey, dbOperation: op }
-            : { tool: "mssql_*", dbEnvironment: envKey, dbOperation: op },
-        },
+            : { tool: "mssql_*", dbEnvironment: envKey, dbOperation: op }
+        }
       })
     }
   }

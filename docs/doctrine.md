@@ -22,7 +22,7 @@ If a change needs a new edge, update this document first, then the lint.
 | Agent / sync stay reusable | No ambient request context; I/O arrives via ports or host params |
 | Public barrels only | Outside a package, import `@mia/agent` / `@mia/sync` — never `packages/*/src/**` |
 | Ports name the I/O shape | `*Sink`, `*Store`, `*Reader`, `*Client` (see `ARCHITECTURE.md`) |
-| Policies govern mutations | Allow / deny / require approval for agent tools **and** HTTP Sync preview/execute live in Policies. Sync environments are topology only (connector, role, direction). No process.env governance locks. |
+| Policies govern mutations | Allow / deny / require approval for agent tools **and** HTTP Sync share one `buildPolicyContext` (always default-deny). Admin edits Policies; admin does not bypass them. `AGENT_HOSTED_MODE` is workspace isolation only, not a second policy dialect. |
 
 ---
 

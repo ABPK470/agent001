@@ -3,7 +3,6 @@ import {
   configureAgent,
   makeRunContext,
   PolicyRole,
-  PolicyRunMode,
   type AgentHost,
   type HostedPolicyContext
 } from "@mia/agent"
@@ -17,6 +16,7 @@ import {
   saveToolKnowledge
 } from "../../../../infra/persistence/memory.js"
 import * as db from "../../../../infra/persistence/sqlite.js"
+import { buildPolicyContext } from "../../../policies/service/policy-context.js"
 import type { ActiveRunRecord, ExecuteRunCommand, PerRunHostBundle, RunWorkspace } from "./types.js"
 
 function createRunContextForExecution(
@@ -51,7 +51,6 @@ function createPolicyContext(
   runWorkspace: RunWorkspace,
   opts?: { parentRunId?: string | null }
 ): HostedPolicyContext {
-  const role = activeRun?.role ?? PolicyRole.Admin
   const grantRunIds = [runId, opts?.parentRunId].filter((id): id is string => !!id)
   const toolApprovalGrants = db.listApprovedToolGrantsForRuns(grantRunIds).map((grant) => ({
     grantId: grant.id,
@@ -59,15 +58,14 @@ function createPolicyContext(
     args: grant.args,
   }))
 
-  return {
+  return buildPolicyContext({
     runId,
     parentRunId: opts?.parentRunId ?? null,
-    runMode: role === PolicyRole.HostedUser ? PolicyRunMode.Hosted : PolicyRunMode.Developer,
-    role,
+    role: activeRun?.role ?? PolicyRole.Admin,
     sandboxRoot: runWorkspace.executionRoot,
     actorUpn: activeRun?.ownerUpn ?? null,
     toolApprovalGrants: toolApprovalGrants.length > 0 ? toolApprovalGrants : undefined,
-  }
+  })
 }
 
 export function createPerRunHost(

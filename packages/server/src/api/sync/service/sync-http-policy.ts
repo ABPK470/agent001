@@ -1,16 +1,11 @@
 /**
- * HTTP Sync policy gate — same evaluatePreStep rail as agent tools.
- * Product Sync always evaluates under hosted profile so Policies govern
- * the widget path (not process.env locks, not env Access).
+ * HTTP Sync policy gate — same evaluatePreStep + buildPolicyContext as agent tools.
  */
 
 import {
-  PolicyRole,
-  PolicyRunMode,
   PolicyViolationError,
   RulePolicyEvaluator,
   type AgentRun,
-  type HostedPolicyContext,
   type Step,
 } from "@mia/agent"
 import type { CurrentSession } from "../../../ports/session.js"
@@ -22,6 +17,10 @@ import {
   upsertPendingSyncToolApproval,
   type SyncToolApprovalRecord,
 } from "../../../infra/persistence/db/sync-tool-approvals.js"
+import {
+  buildPolicyContext,
+  policyRoleFromAdmin,
+} from "../../policies/service/policy-context.js"
 
 export const SYNC_POLICY_DENIED_CODE = "policy_denied" as const
 export const SYNC_APPROVAL_REQUIRED_CODE = "approval_required" as const
@@ -97,27 +96,6 @@ function loadEvaluator(): RulePolicyEvaluator {
   return ev
 }
 
-function buildHostedContext(
-  session: CurrentSession,
-  toolName: SyncHttpTool,
-  args: Record<string, unknown>,
-): HostedPolicyContext {
-  const actorUpn = session.upn
-  const grants = listApprovedSyncToolGrants(actorUpn, toolName)
-  const argsKey = syncToolArgsKey(args)
-  const matching = grants.filter((g) => syncToolArgsKey(g.args) === argsKey)
-  return {
-    runId: `sync-http:${actorUpn}`,
-    // Product Sync is always hosted-governed (Policies), regardless of isAdmin.
-    runMode: PolicyRunMode.Hosted,
-    role: PolicyRole.HostedUser,
-    sandboxRoot: null,
-    actorUpn,
-    sessionId: session.sid,
-    toolApprovalGrants: matching.length > 0 ? matching : undefined,
-  }
-}
-
 function parsePolicyName(approvalReason: string): string {
   const m = approvalReason.match(/^Policy '([^']+)'/)
   return m?.[1] ?? "policy"
@@ -135,7 +113,18 @@ export async function assertSyncHttpPolicy(input: {
 }): Promise<void> {
   const { session, toolName, args } = input
   const step = makeStep(toolName, args)
-  const ctx = buildHostedContext(session, toolName, args)
+  const actorUpn = session.upn
+  const grants = listApprovedSyncToolGrants(actorUpn, toolName)
+  const argsKey = syncToolArgsKey(args)
+  const matching = grants.filter((g) => syncToolArgsKey(g.args) === argsKey)
+  const ctx = buildPolicyContext({
+    runId: `sync-http:${actorUpn}`,
+    role: policyRoleFromAdmin(session.isAdmin),
+    actorUpn,
+    sessionId: session.sid,
+    sandboxRoot: null,
+    toolApprovalGrants: matching.length > 0 ? matching : undefined,
+  })
   const evaluator = loadEvaluator()
   const dummyRun = { id: ctx.runId } as AgentRun
 
@@ -169,7 +158,6 @@ export async function assertSyncHttpPolicy(input: {
     })
   }
 
-  // Consume one matching approved grant so it is single-use.
   const grant = ctx.toolApprovalGrants?.[0]
   if (grant) consumeSyncToolApprovalGrant(grant.grantId)
 }

@@ -983,11 +983,11 @@ Parses goals like `sync contract abcd from uat to dev` into `SyncOperationIntent
 
 ### Policies (single governance rail)
 
-Allow / deny / require approval for Sync live in **Policies** (same evaluator as agent tools). HTTP `/api/sync/preview` and `/api/sync/execute` call `assertSyncHttpPolicy` before the orchestrator. Environments are Sync topology only (connector, role, direction) — they do not configure Access overrides. Hosted defaults include allow `sync_preview` and require approval for `sync_execute`.
+Allow / deny / require approval live in **Policies**. Agent tools and HTTP Sync share `buildPolicyContext` (always default-deny). Admin does not bypass. Seeded defaults are not locked to `hosted_user`.
 
-**Removed:** `SYNC_ALLOW_PROD` process.env lock, Environment Access UI (mode / Block DML-DDL / Sync op pills), and env_derived Access→policy seeding.
+Environments are Sync topology only. `AGENT_HOSTED_MODE` is workspace isolation only, not governance.
 
-**Removed:** `syncAllowlist` (per-env UPN execute list) — do not add it to config; the API and file loader reject it.
+**Removed:** `SYNC_ALLOW_PROD`, Environment Access UI, env_derived Access seeding, HTTP Sync HostedUser hardcode, admin developer default-allow for policy eval.
 
 ### Plan staleness
 

@@ -65,7 +65,8 @@ export function registerPolicyRoutes(app: FastifyInstance): void {
       condition,
       parameters: JSON.stringify(parameters ?? {}),
       created_at: existing?.created_at ?? now,
-      source: existing?.source ?? db.PolicySource.Db,
+      // Any operator create/update becomes `db` so boot will not overwrite it.
+      source: db.PolicySource.Db,
       updated_at: now,
       updated_by: req.session.upn
     })

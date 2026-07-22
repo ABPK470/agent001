@@ -151,13 +151,13 @@ describe("hosted default policy rules", () => {
     expect(fetch.error).toBeUndefined()
   })
 
-  it("admins are not affected by hosted_user-scoped defaults", async () => {
-    // No admin-targeted defaults exist; in hosted runMode an admin-only
-    // session would still hit hosted_default_deny unless admins are
-    // granted via DB-stored rules. Document that.
+  it("admin role is governed the same as hosted_user (no policy bypass)", async () => {
     const ev = buildHostedEvaluator()
     const adminCtx = hostedCtx({ role: "admin" })
-    const result = await evaluate(ev, makeStep("read_file", { path: "/tmp/sb/x" }), adminCtx)
-    expect(result.error?.message).toMatch(/hosted_default_deny/)
+    const sandboxRead = await evaluate(ev, makeStep("read_file", { path: "/tmp/sb/x" }), adminCtx)
+    expect(sandboxRead.error).toBeUndefined()
+    const sync = await evaluate(ev, makeStep("sync_execute", { planId: "p1", target: "dev" }), adminCtx)
+    expect(sync.approval).toMatch(/sync_execute|approval/)
+    expect(sync.error).toBeUndefined()
   })
 })
