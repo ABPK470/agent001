@@ -1,7 +1,21 @@
-import { createPortal } from "react-dom"
+/**
+ * Full-SQL modal for sync traces.
+ * Shows event preview immediately; fetches sync_sql_log only when sqlLogId
+ * is present and the preview is missing or truncated.
+ *
+ * host="local" — fill Pipelines (or other) widget bounds
+ * host="viewport" — portal to document.body (default)
+ */
+
 import { X } from "lucide-react"
 import { useEffect, useState } from "react"
+import { createPortal } from "react-dom"
 import { CodeBlock } from "../../../components/CodeBlock"
+import {
+  type ModalHost,
+  ViewportOverlay,
+  WidgetLocalOverlay,
+} from "../../widget-local-overlay"
 import { fetchSqlLogText, peekSqlLogText } from "./sync-sql-log-cache"
 import { formatSqlTraceMeta, normalizeSqlTraceText, type SqlTraceFields } from "./sync-sql-trace"
 
@@ -12,17 +26,58 @@ function previewLooksComplete(preview: string, sqlLength?: number): boolean {
   return trimmed.length >= sqlLength
 }
 
-/**
- * Full-SQL modal for sync traces.
- * Shows event preview immediately; fetches sync_sql_log only when sqlLogId
- * is present and the preview is missing or truncated.
- */
-export function SqlTraceModal({
+function SqlTraceModalBody({
   fields,
   onClose,
+  code,
+  loading,
+  error,
+  codeMaxHeight,
 }: {
   fields: SqlTraceFields
   onClose: () => void
+  code: string
+  loading: boolean
+  error: string | null
+  codeMaxHeight: number
+}) {
+  return (
+    <>
+      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border-subtle px-4 py-3">
+        <div className="min-w-0">
+          <div className="break-all font-medium text-text">{fields.label}</div>
+          <div className="break-all font-mono text-[0.8125rem] text-text-muted">
+            {formatSqlTraceMeta(fields)}
+          </div>
+        </div>
+        <button type="button" className="text-text hover:opacity-80" onClick={onClose} aria-label="Close">
+          <X size={18} />
+        </button>
+      </div>
+      <div className="min-h-0 flex-1 overflow-auto p-3">
+        {loading ? (
+          <div className="py-8 text-center text-text">Loading full SQL…</div>
+        ) : error ? (
+          <div className="whitespace-pre-wrap break-all py-4 text-error">{error}</div>
+        ) : (
+          <CodeBlock code={code} lang="sql" maxHeight={codeMaxHeight} />
+        )}
+        {fields.error && (
+          <div className="mt-3 whitespace-pre-wrap break-all text-error">{fields.error}</div>
+        )}
+      </div>
+    </>
+  )
+}
+
+export function SqlTraceModal({
+  fields,
+  onClose,
+  host = "viewport",
+}: {
+  fields: SqlTraceFields
+  onClose: () => void
+  host?: ModalHost
 }) {
   const previewSql = normalizeSqlTraceText(fields.sql)
   const cached =
@@ -53,7 +108,6 @@ export function SqlTraceModal({
       return
     }
 
-    // Preview is enough — no need to block on a fetch.
     if (previewLooksComplete(previewSql, fields.sqlLength)) {
       setSql(previewSql)
       setLoading(false)
@@ -90,37 +144,29 @@ export function SqlTraceModal({
       ? `-- SQL text is not available in this event (${fields.sqlLength} chars were executed)`
       : "-- no SQL recorded for this step")
 
+  const body = (
+    <SqlTraceModalBody
+      fields={fields}
+      onClose={onClose}
+      code={code}
+      loading={loading}
+      error={error}
+      codeMaxHeight={host === "local" ? 480 : 720}
+    />
+  )
+
+  if (host === "local") {
+    return (
+      <WidgetLocalOverlay onClose={onClose} aria-label="SQL trace">
+        {body}
+      </WidgetLocalOverlay>
+    )
+  }
+
   return createPortal(
-    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/50" onClick={onClose}>
-      <div
-        className="w-full max-w-4xl max-h-[min(96vh,calc(100dvh-1rem))] flex flex-col rounded-lg border border-border-subtle bg-base shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-border-subtle">
-          <div className="min-w-0">
-            <div className="font-medium text-text break-all">{fields.label}</div>
-            <div className="font-mono text-text-muted text-[0.8125rem] break-all">
-              {formatSqlTraceMeta(fields)}
-            </div>
-          </div>
-          <button type="button" className="text-text hover:opacity-80" onClick={onClose} aria-label="Close">
-            <X size={18} />
-          </button>
-        </div>
-        <div className="flex-1 min-h-0 overflow-auto p-3">
-          {loading ? (
-            <div className="text-text py-8 text-center">Loading full SQL…</div>
-          ) : error ? (
-            <div className="text-error py-4 break-all whitespace-pre-wrap">{error}</div>
-          ) : (
-            <CodeBlock code={code} lang="sql" maxHeight={720} />
-          )}
-          {fields.error && (
-            <div className="mt-3 text-error break-all whitespace-pre-wrap">{fields.error}</div>
-          )}
-        </div>
-      </div>
-    </div>,
+    <ViewportOverlay onClose={onClose} aria-label="SQL trace">
+      {body}
+    </ViewportOverlay>,
     document.body,
   )
 }

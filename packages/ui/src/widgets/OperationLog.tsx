@@ -13,10 +13,14 @@ import { CodeBlock } from "../components/CodeBlock"
 import { DecisionLogPanel, isSyncDecisionLogDetails } from "./pipelines/DecisionLogPanel"
 import { EmptyState } from "../components/EmptyState"
 import { JsonViewer } from "../components/JsonViewer"
-import { ToolCallModal, ToolIoBlock } from "./chat/ToolCallModal"
+import { ToolIoBlock } from "./chat/ToolCallModal"
 import { useContainerSize } from "../hooks/useContainerSize"
 import { useOperationLogData, type OperationLogKindView } from "../hooks/useOperationLogData"
-import { OperationLogModalsProvider, useOpLogOpenSqlTrace } from "./pipelines/operation-log-modals"
+import {
+  OperationLogModalsProvider,
+  useOpLogOpenSqlTrace,
+  useOpLogOpenToolIo,
+} from "./pipelines/operation-log-modals"
 import { WIDGET_ICONS } from "./widget-icons"
 import {
   fmtDuration,
@@ -997,7 +1001,7 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, pipel
   linear?: boolean
   isLast?: boolean
 }) {
-  const [ioModalOpen, setIoModalOpen] = useState(false)
+  const openToolIo = useOpLogOpenToolIo()
   const phaseId = activity.id.startsWith("phase:") ? activity.id : parentPhaseId
   const effectiveKind = activityPipelineKind(pipelineKind, phaseId)
   const status = effectiveActivityStatus(activity, pipelineStatus, parentStatus)
@@ -1053,7 +1057,7 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, pipel
       className={LOG_ROW_ACTION}
       onClick={(e) => {
         e.stopPropagation()
-        setIoModalOpen(true)
+        openToolIo(toolIo)
       }}
     >
       <Wrench size={10} />
@@ -1206,9 +1210,6 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, pipel
           })}
         </LogNest>
       )}
-      {ioModalOpen && toolIo && (
-        <ToolCallModal io={toolIo} onClose={() => setIoModalOpen(false)} />
-      )}
     </>
   )
 
@@ -1232,7 +1233,7 @@ function EventRow({ ev, expanded, onToggle, linear, isLast, depth = 0 }: {
   depth?: number
 }) {
   const openSqlTrace = useOpLogOpenSqlTrace()
-  const [ioModalOpen, setIoModalOpen] = useState(false)
+  const openToolIo = useOpLogOpenToolIo()
   const hasData = ev.data && Object.keys(ev.data).length > 0
   const isFailedEvent = ev.type.includes(".failed") || !!ev.data["error"]
   const isSkippedEvent = ev.type.includes(".skipped")
@@ -1299,7 +1300,10 @@ function EventRow({ ev, expanded, onToggle, linear, isLast, depth = 0 }: {
               <button
                 type="button"
                 className={LOG_ROW_ACTION}
-                onClick={() => setIoModalOpen(true)}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  openToolIo(toolIo)
+                }}
               >
                 <Wrench size={10} />
                 I/O
@@ -1314,9 +1318,6 @@ function EventRow({ ev, expanded, onToggle, linear, isLast, depth = 0 }: {
           </div>
         )}
       </OpLogRow>
-      {ioModalOpen && toolIo && (
-        <ToolCallModal io={toolIo} onClose={() => setIoModalOpen(false)} />
-      )}
     </>
   )
 }

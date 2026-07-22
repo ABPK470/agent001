@@ -1,6 +1,16 @@
+/**
+ * Tool I/O detail modal — viewport (portal) or in-widget local host.
+ */
+
 import { Brain, X } from "lucide-react"
+import { createPortal } from "react-dom"
 import { CodeBlock } from "../../components/CodeBlock"
 import { formatToolIoMeta, type ToolIoDetails } from "./tool-call-io"
+import {
+  type ModalHost,
+  ViewportOverlay,
+  WidgetLocalOverlay,
+} from "../widget-local-overlay"
 
 export function ToolIoBlock({
   io,
@@ -35,56 +45,79 @@ export function ToolIoBlock({
   )
 }
 
-export function ToolCallModal({
+function ToolCallModalBody({
   io,
   onClose,
+  codeMaxHeight,
 }: {
   io: ToolIoDetails
   onClose: () => void
+  codeMaxHeight: number
 }) {
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/50" onClick={onClose}>
-      <div
-        className="w-full max-w-4xl max-h-[min(96vh,calc(100dvh-1rem))] flex flex-col rounded-lg border border-border-subtle bg-base shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-border-subtle">
-          <div className="min-w-0 flex items-center gap-2">
-            <Brain size={16} className="shrink-0 text-accent" />
-            <div className="min-w-0">
-              <div className="text-sm font-medium text-text truncate font-mono">{io.tool}</div>
-              <div className="text-xs font-mono text-text-muted truncate">{formatToolIoMeta(io)}</div>
-            </div>
+    <>
+      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border-subtle px-4 py-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <Brain size={16} className="shrink-0 text-accent" />
+          <div className="min-w-0">
+            <div className="truncate font-mono text-sm font-medium text-text">{io.tool}</div>
+            <div className="truncate font-mono text-xs text-text-muted">{formatToolIoMeta(io)}</div>
           </div>
-          <button type="button" className="text-text-muted hover:text-text" onClick={onClose} aria-label="Close">
-            <X size={18} />
-          </button>
         </div>
-        <div className="flex-1 min-h-0 overflow-auto p-3 space-y-3">
-          {io.inputFormatted ? (
-            <div>
-              <div className="text-[11px] uppercase tracking-wide text-text-muted/70 mb-1">Input</div>
-              <CodeBlock code={io.inputFormatted} lang="json" maxHeight={9999} />
-            </div>
-          ) : (
-            <div className="text-sm text-text-muted/60 italic">No input recorded.</div>
-          )}
-          {io.status === "success" && io.outputText && (
-            <div>
-              <div className="text-[11px] uppercase tracking-wide text-text-muted/70 mb-1">Output</div>
-              <CodeBlock code={io.outputText} lang="text" maxHeight={9999} />
-            </div>
-          )}
-          {io.status === "failed" && io.error && (
-            <div className="rounded-md border border-error/30 bg-error-soft px-3 py-2 text-sm text-error break-all">
-              {io.error}
-            </div>
-          )}
-          {io.status === "running" && (
-            <div className="text-sm text-text-muted italic">Step still running — output not available yet.</div>
-          )}
-        </div>
+        <button type="button" className="text-text-muted hover:text-text" onClick={onClose} aria-label="Close">
+          <X size={18} />
+        </button>
       </div>
-    </div>
+      <div className="min-h-0 flex-1 space-y-3 overflow-auto p-3">
+        {io.inputFormatted ? (
+          <div>
+            <div className="mb-1 text-[11px] uppercase tracking-wide text-text-muted/70">Input</div>
+            <CodeBlock code={io.inputFormatted} lang="json" maxHeight={codeMaxHeight} />
+          </div>
+        ) : (
+          <div className="text-sm italic text-text-muted/60">No input recorded.</div>
+        )}
+        {io.status === "success" && io.outputText && (
+          <div>
+            <div className="mb-1 text-[11px] uppercase tracking-wide text-text-muted/70">Output</div>
+            <CodeBlock code={io.outputText} lang="text" maxHeight={codeMaxHeight} />
+          </div>
+        )}
+        {io.status === "failed" && io.error && (
+          <div className="rounded-md border border-error/30 bg-error-soft px-3 py-2 text-sm break-all text-error">
+            {io.error}
+          </div>
+        )}
+        {io.status === "running" && (
+          <div className="text-sm italic text-text-muted">Step still running — output not available yet.</div>
+        )}
+      </div>
+    </>
+  )
+}
+
+export function ToolCallModal({
+  io,
+  onClose,
+  host = "viewport",
+}: {
+  io: ToolIoDetails
+  onClose: () => void
+  /** local = fill parent widget; viewport = portal to document.body */
+  host?: ModalHost
+}) {
+  if (host === "local") {
+    return (
+      <WidgetLocalOverlay onClose={onClose} aria-label="Tool I/O">
+        <ToolCallModalBody io={io} onClose={onClose} codeMaxHeight={480} />
+      </WidgetLocalOverlay>
+    )
+  }
+
+  return createPortal(
+    <ViewportOverlay onClose={onClose} aria-label="Tool I/O">
+      <ToolCallModalBody io={io} onClose={onClose} codeMaxHeight={720} />
+    </ViewportOverlay>,
+    document.body,
   )
 }
