@@ -1880,8 +1880,9 @@ textarea.input {
  * Reserved pin band (sibling above .trace-scroll). Real height = stack
  * rows; never height:0 overlay painting over body text.
  *
- * Each pin row is the same chrome as a collapsed in-flow card header
- * (border + radius). Multiple pins stack with the same gap as .trace-flow.
+ * Visual model: one continuous open-card header block (not separate pills).
+ * Rows stack flush with hairline seams; the band's bottom edge meets the
+ * scrolling card body so pinned ancestors + in-flow content read as one unit.
  */
 .trace-pin {
   flex-shrink: 0;
@@ -1889,7 +1890,7 @@ textarea.input {
   z-index: 50;
   height: auto;
   margin: 0;
-  padding: 0 0.35rem 0.55rem;
+  padding: 0 0.35rem;
   overflow: visible;
   pointer-events: none;
   background: transparent;
@@ -1899,21 +1900,29 @@ textarea.input {
   pointer-events: auto;
   display: flex;
   flex-direction: column;
-  gap: 0.55rem;
-  background: transparent;
+  gap: 0;
+  background: var(--bg);
+  border: 1px solid var(--border, var(--color-border));
+  border-radius: 0.5rem 0.5rem 0 0;
+  border-bottom: none;
+  overflow: hidden;
   box-shadow: none;
-  border: none;
 }
 
 .trace-pin__stack > .trace-scope {
-  /* Match .trace-card:not(.is-open) > .trace-scope */
-  border: 1px solid var(--border, var(--color-border));
-  border-radius: 0.5rem;
+  border: none;
+  border-radius: 0;
+  border-bottom: 1px solid var(--border, var(--color-border));
   width: 100%;
   cursor: default;
   background: color-mix(in srgb, var(--text, var(--color-text)) 4%, var(--bg));
   /* Depth 0 — hug the label like in-flow roots */
   padding-left: 0.35rem;
+}
+
+.trace-pin__stack > .trace-scope:last-child {
+  /* Seam between pin stack and the card body in the scrollport */
+  border-bottom: 1px solid var(--border, var(--color-border));
 }
 
 /*
@@ -1982,6 +1991,17 @@ textarea.input {
 
 .trace-card.is-open > .trace-scope {
   border-radius: 0.5rem 0.5rem 0 0;
+}
+
+/*
+ * When this card's header (or a nested scope) is pinned above the scrollport,
+ * drop the card's top chrome so the pin stack + body read as one continuous
+ * open card (no double top border / floating pill over the body).
+ */
+.trace-card.is-open:has([data-trace-pinned]) {
+  border-top: none;
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
 }
 
 .trace-card__body {
