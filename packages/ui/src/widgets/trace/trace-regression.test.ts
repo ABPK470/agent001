@@ -363,7 +363,7 @@ describe("syncPinnedInFlow — replace contract", () => {
 })
 
 describe("parkScrollOnScope — collapse while scrolled into body", () => {
-  it("parks scroll on the scope header below the in-scroll pin stack", () => {
+  it("parks scroll on the scope header (external pin band: no stack offset)", () => {
     const scopes: ScopeSpec[] = [
       { id: "call:0", kind: "call", depth: 0, top: 0 },
       { id: "tools", kind: "tools", depth: 1, top: 40 },
@@ -371,7 +371,8 @@ describe("parkScrollOnScope — collapse while scrolled into body", () => {
     ]
     const { host, els } = mockTraceHost(scopes, 800)
     const toolsEl = els[1]! as unknown as HTMLElement
-    parkScrollOnScope(host, toolsEl, H, () => ["call:0"])
+    // Trace pins live outside the scrollport — empty stack.
+    parkScrollOnScope(host, toolsEl, H, () => [])
     // Must leave the deep scroll that would land on later Call content.
     expect(host.scrollTop).toBeLessThan(200)
   })
@@ -384,10 +385,33 @@ describe("Trace CSS contract — pin indent + work-note divider", () => {
   )
   const css = readFileSync(cssPath, "utf8")
 
-  it("pin overlay is absolute with zero layout height (does not resize scrollport)", () => {
-    expect(css).toMatch(/\.trace-pin\s*\{[^}]*position:\s*absolute/s)
-    expect(css).toMatch(/\.trace-pin\s*\{[^}]*height:\s*0\b/s)
+  it("pin band reserves real height outside the scrollport (not a height-0 overlay)", () => {
+    // height:0 overlay + data-trace-pinned blanked headers with nothing visible.
+    expect(css).toMatch(/\.trace-pin\s*\{[^}]*height:\s*auto/s)
+    expect(css).not.toMatch(/\.trace-pin\s*\{[^}]*height:\s*0\b/s)
     expect(css).toContain(".trace-body")
+  })
+
+  it("PinOverlay is a sibling above the scroll host (not a child overlay)", () => {
+    const dagPath = join(dirname(fileURLToPath(import.meta.url)), "TraceDag.tsx")
+    const src = readFileSync(dagPath, "utf8")
+    // Band must precede the scroll host — nesting PinOverlay inside scroll
+    // with height:0 painted zero pins while still hiding in-flow headers.
+    expect(src).toMatch(
+      /<PinOverlay[\s\S]*?\/>\s*<div ref=\{scrollRef\} className="trace-scroll/,
+    )
+    expect(src).not.toMatch(
+      /data-trace-scroll-host>\s*<PinOverlay/,
+    )
+  })
+
+  it("Trace pin math uses reserved-band focus + band scroll compensation", () => {
+    const pinPath = join(dirname(fileURLToPath(import.meta.url)), "trace-pin.ts")
+    const dagPath = join(dirname(fileURLToPath(import.meta.url)), "TraceDag.tsx")
+    expect(readFileSync(pinPath, "utf8")).toMatch(
+      /TRACE_PIN_OPTS\s*=\s*\{\s*stackInScroll:\s*false/,
+    )
+    expect(readFileSync(dagPath, "utf8")).toContain("pinBandScrollDelta")
   })
 
   it("pin stack honors data-trace-depth (messages under Sent)", () => {

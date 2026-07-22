@@ -1,10 +1,10 @@
 /**
  * Trace outline shell — toolbar + chronological cards.
  *
- * Sticky scroll = VS Code / Outline dialect: an in-scroll pin overlay clones
- * the ancestor chain (Phase → Call → Sent → System/User/…). Pin height must
- * not live outside the scrollport — that resizes the viewport and cancels
- * wheel deltas at Received→Work peer handoff. Click label to jump; chevron to fold.
+ * Sticky scroll = VS Code dialect: a reserved pin band *above* the scrollport
+ * clones the ancestor chain (Phase → Call → Sent → System/User/…). Content
+ * never scrolls under the pins. Band height changes are compensated with
+ * `pinBandScrollDelta` so peer handoff (Received→Work) does not cancel wheel scroll.
  */
 
 import { Search, X } from "lucide-react"
@@ -20,6 +20,7 @@ import {
 } from "./build-trace-dag"
 import { emptyOpen, seedLatest, type FoldMode, type OpenState } from "./open-state"
 import { callReceivedSummary, callSentSummary, formatCharCount } from "./trace-format"
+import { pinBandScrollDelta } from "./pin-band-scroll"
 import {
   TRACE_STICKY_ROW_H,
   callIndexForTool,
@@ -52,6 +53,7 @@ export function TraceDag({
   const [openState, setOpenState] = useState<OpenState>(() => emptyOpen())
   const [pinnedIds, setPinnedIds] = useState<string[]>([])
   const scrollRef = useRef<HTMLDivElement>(null)
+  const pinnedIdsRef = useRef<string[]>([])
   const seededRef = useRef(false)
   const searchSeedRef = useRef("")
   const suppressFollowRef = useRef(false)
@@ -63,10 +65,19 @@ export function TraceDag({
     const el = scrollRef.current
     if (!el) return
     const ids = computeTracePinnedScopeIds(el)
-    const stackH = ids.length * TRACE_STICKY_ROW_H
-    el.style.setProperty("--trace-pin-stack-h", `${stackH}px`)
-    syncPinnedInFlow(el, ids, TRACE_STICKY_ROW_H, { reserveScrollPadding: true })
-    setPinnedIds((prev) => (samePinnedIds(prev, ids) ? prev : ids))
+    // Band is outside the scrollport — no in-scroll overlay clearance.
+    el.style.setProperty("--trace-pin-stack-h", "0px")
+    syncPinnedInFlow(el, ids, TRACE_STICKY_ROW_H, { reserveScrollPadding: false })
+    if (samePinnedIds(pinnedIdsRef.current, ids)) return
+    const delta = pinBandScrollDelta(
+      pinnedIdsRef.current.length,
+      ids.length,
+      TRACE_STICKY_ROW_H,
+    )
+    pinnedIdsRef.current = ids
+    setPinnedIds(ids)
+    // Keep content stable under the band edge when pin count changes.
+    if (delta !== 0) el.scrollTop = Math.max(0, el.scrollTop + delta)
   }
 
   const callHits = useMemo(() => {
@@ -121,6 +132,7 @@ export function TraceDag({
     seededRef.current = false
     searchSeedRef.current = ""
     setOpenState(emptyOpen())
+    pinnedIdsRef.current = []
     setPinnedIds([])
   }, [runId])
 
@@ -588,7 +600,8 @@ export function TraceDag({
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           if (!scopeEl.isConnected) return
-          parkScrollOnScope(host, scopeEl, TRACE_STICKY_ROW_H, computeTracePinnedScopeIds)
+          // Pin band is outside the scrollport — park flush on the header.
+          parkScrollOnScope(host, scopeEl, TRACE_STICKY_ROW_H, () => [])
           refreshPinStack()
           suppressFollowRef.current = false
         })
@@ -751,12 +764,13 @@ export function TraceDag({
         {emptySlot ? (
           emptySlot
         ) : (
-          <div ref={scrollRef} className="trace-scroll min-h-0 flex-1" data-trace-scroll-host>
+          <>
             <PinOverlay
               rows={pinRows}
               onToggle={onTogglePinnedScope}
               onReveal={onRevealScope}
             />
+            <div ref={scrollRef} className="trace-scroll min-h-0 flex-1" data-trace-scroll-host>
               {runId &&
                 dag.hasData &&
                 query &&
@@ -864,7 +878,8 @@ export function TraceDag({
                   })}
                 </div>
               )}
-          </div>
+            </div>
+          </>
         )}
       </div>
     </div>
