@@ -840,9 +840,35 @@ export function buildTraceDag(trace: TraceEntry[]): TraceDag {
     openPhase = null
   }
 
+  function findLastSpinePhase(family: string): TracePhaseNode | null {
+    for (let i = spine.length - 1; i >= 0; i--) {
+      const entry = spine[i]
+      if (entry?.kind === "phase" && entry.phase.family === family) return entry.phase
+    }
+    return null
+  }
+
   function applyPhase(update: PhaseUpdate) {
     if (update.skip && update.details.length === 0) return
     flushWork()
+    // Pipeline / verify lifecycle events often arrive after steps have taken
+    // `openPhase`. Mutate the existing phase on the spine instead of pushing a
+    // second PIPELINE/VERIFYING card.
+    if (
+      (!openPhase || openPhase.family !== update.family) &&
+      (update.family === "pipeline" || update.family === "verify")
+    ) {
+      const prior = findLastSpinePhase(update.family)
+      if (prior) {
+        const merged = mergePhase(prior, update)
+        prior.title = merged.title
+        prior.summary = merged.summary
+        prior.status = merged.status
+        prior.details = merged.details
+        if (merged.leading) prior.leading = merged.leading
+        return
+      }
+    }
     if (openPhase && openPhase.family !== update.family) flushPhase()
     if (!openPhase) {
       phaseSeq += 1
@@ -1150,7 +1176,15 @@ function spineFromOutline(
     if (node.kind === "scope") {
       const key = node.nestKey ?? String(node.family)
       const body = bodyPhases.get(key) ?? findPhaseLoose(bodyPhases, key, node)
-      const children = mapChildren(node.children ?? [])
+      const outlineChildren = mapChildren(node.children ?? [])
+      // Prefer body nesting for steps — body attaches Call/Work under the open
+      // subagent; outline Call keys can still miss when iterations collide.
+      const children =
+        node.family === "step" && body?.children && body.children.length > 0
+          ? body.children
+          : outlineChildren.length > 0
+            ? outlineChildren
+            : (body?.children ?? [])
       if (body) {
         spine.push({
           kind: "phase",
@@ -1159,7 +1193,7 @@ function spineFromOutline(
             title: node.title ?? body.title,
             summary: node.summary ?? body.summary,
             leading: node.label !== body.title ? node.label : body.leading,
-            ...(children.length > 0 ? { children } : { children: body.children }),
+            ...(children.length > 0 ? { children } : {}),
           },
         })
       } else if (children.length > 0 || (node.summary && node.summary.length > 0)) {
@@ -1189,7 +1223,7 @@ function spineFromOutline(
 
 function nestIteration(nestKey: string | undefined): number | null {
   if (!nestKey) return null
-  const m = /^call:(\d+)$/.exec(nestKey)
+  const m = /(?:^|\/)call:(\d+)$/.exec(nestKey)
   return m ? Number(m[1]) : null
 }
 

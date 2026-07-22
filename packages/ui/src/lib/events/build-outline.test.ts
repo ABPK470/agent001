@@ -112,4 +112,45 @@ describe("buildOutline", () => {
     expect(outline[0]!.summary).toMatch(/2 steps/)
     expect(outline[0]!.atomIds.length).toBe(2)
   })
+
+  it("merges pipeline start/end into one scope (no duplicate attempt card)", () => {
+    const trace: TraceEntry[] = [
+      { kind: "planner-pipeline-start", attempt: 1, maxRetries: 2 },
+      { kind: "planner-step-start", stepName: "api_layer", stepType: "subagent_task" },
+      llmRequest(0),
+      llmResponse(0),
+      { kind: "planner-step-end", stepName: "api_layer", status: "pass", durationMs: 10 },
+      {
+        kind: "planner-pipeline-end",
+        status: "success",
+        completedSteps: 1,
+        totalSteps: 1,
+      },
+    ]
+    const outline = buildOutline(atomsFromTrace(trace), TRACE_VIEW_SPEC)
+    const pipelines = outline.filter((n) => n.family === "pipeline")
+    expect(pipelines).toHaveLength(1)
+    expect(pipelines[0]!.summary).toMatch(/success/i)
+  })
+
+  it("gives each subagent its own Call:0 (no cross-step merge)", () => {
+    const trace: TraceEntry[] = [
+      { kind: "planner-step-start", stepName: "api_layer", stepType: "subagent_task" },
+      llmRequest(0),
+      llmResponse(0),
+      { kind: "planner-step-end", stepName: "api_layer", status: "pass", durationMs: 10 },
+      { kind: "planner-step-start", stepName: "frontend_layer", stepType: "subagent_task" },
+      llmRequest(0),
+      llmResponse(0),
+      { kind: "planner-step-end", stepName: "frontend_layer", status: "pass", durationMs: 10 },
+    ]
+    const outline = buildOutline(atomsFromTrace(trace), TRACE_VIEW_SPEC)
+    expect(outline).toHaveLength(2)
+    for (const step of outline) {
+      expect(step.family).toBe("step")
+      expect((step.children ?? []).some((c) => c.family === "call")).toBe(true)
+      const call = (step.children ?? []).find((c) => c.family === "call")
+      expect(call?.nestKey).toContain(step.nestKey!)
+    }
+  })
 })

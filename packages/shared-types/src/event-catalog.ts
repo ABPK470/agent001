@@ -284,7 +284,9 @@ export const TRACE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "pipeline",
     label: "Pipeline",
     severity: "info",
-    instanceKey: (p) => `pipeline:${num(p.attempt) ?? 1}`,
+    // Stable across start/end/budget — bare "pipeline" so terminals merge into
+    // the open attempt instead of emitting a second root card ("attempt 1" + "success").
+    instanceKey: () => "pipeline",
     summary: (p) => `attempt ${num(p.attempt) ?? 1}`,
   },
   "planner-pipeline-end": {
@@ -370,7 +372,7 @@ export const TRACE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "verify",
     label: "Verifying",
     severity: "info",
-    instanceKey: (p) => `verify:${num(p.verifierRound) ?? 1}`,
+    instanceKey: () => "verify",
     summary: (p) => {
       const overall = str(p.overall, "?")
       const conf = num(p.confidence)

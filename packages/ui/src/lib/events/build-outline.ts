@@ -81,9 +81,20 @@ export function buildOutline(atoms: EventAtom[], viewSpec: ViewSpec): OutlineNod
   const terminalTypes = new Set(viewSpec.terminalTypes ?? DEFAULT_TERMINAL_TYPES)
 
   function closeKey(key: string) {
+    const node = openByKey.get(key)
     openByKey.delete(key)
     const idx = stack.lastIndexOf(key)
     if (idx >= 0) stack.splice(idx, 1)
+    // Closing a step/pipeline must release nested Call scopes — otherwise
+    // `call:0` stays open and the next subagent's first LLM request merges
+    // into the previous Call (empty Subagent, flat Calls after pipeline).
+    if (node?.children) {
+      for (const child of node.children) {
+        if (child.nestKey && openByKey.has(child.nestKey)) {
+          closeKey(child.nestKey)
+        }
+      }
+    }
   }
 
   function closeFamily(family: string) {
@@ -156,7 +167,14 @@ export function buildOutline(atoms: EventAtom[], viewSpec: ViewSpec): OutlineNod
       continue
     }
 
-    const instanceKey = d.instanceKey?.(payload) ?? null
+    const instanceKeyRaw = d.instanceKey?.(payload) ?? null
+    // Qualify Call keys by the open parent step so each subagent owns its own
+    // `call:0` instead of colliding on a global iteration index.
+    let instanceKey = instanceKeyRaw
+    if (instanceKey && d.family === "call") {
+      const parent = findOpenParent(d.family)
+      if (parent?.nestKey) instanceKey = `${parent.nestKey}/${instanceKey}`
+    }
     const summary = d.summary(payload)
     const label = scopeLabel(type, payload, d.label, d.family)
     const title = scopeTitle(type, payload, d.family)

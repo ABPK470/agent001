@@ -367,6 +367,108 @@ describe("buildTraceDag", () => {
     expect(dag.spine.some((e) => e.kind === "call" || e.kind === "work")).toBe(false)
   })
 
+  it("keeps one Pipeline card and nests Calls under each Subagent", () => {
+    const dag = buildTraceDag([
+      {
+        kind: "planner-pipeline-start",
+        attempt: 1,
+        maxRetries: 2,
+      },
+      { kind: "planner-step-start", stepName: "api_layer", stepType: "subagent_task" },
+      llmRequest(0),
+      llmResponse(0, {
+        toolCalls: [{ id: "tc-a", name: "list_directory", arguments: { path: "." } }],
+      }),
+      {
+        kind: "tool-call",
+        invocationId: "inv-a",
+        toolCallId: "tc-a",
+        tool: "list_directory",
+        argsSummary: ".",
+        argsFormatted: '{"path":"."}',
+      },
+      {
+        kind: "tool-result",
+        invocationId: "inv-a",
+        toolCallId: "tc-a",
+        text: "ok",
+      },
+      {
+        kind: "planner-step-end",
+        stepName: "api_layer",
+        status: "pass",
+        durationMs: 100,
+      },
+      { kind: "planner-step-start", stepName: "frontend_layer", stepType: "subagent_task" },
+      llmRequest(0),
+      llmResponse(0, {
+        toolCalls: [{ id: "tc-b", name: "write_file", arguments: { path: "a.html" } }],
+      }),
+      {
+        kind: "tool-call",
+        invocationId: "inv-b",
+        toolCallId: "tc-b",
+        tool: "write_file",
+        argsSummary: "a.html",
+        argsFormatted: '{"path":"a.html"}',
+      },
+      {
+        kind: "tool-result",
+        invocationId: "inv-b",
+        toolCallId: "tc-b",
+        text: "Wrote a.html",
+      },
+      {
+        kind: "planner-step-end",
+        stepName: "frontend_layer",
+        status: "pass",
+        durationMs: 200,
+      },
+      {
+        kind: "planner-verification",
+        overall: "fail",
+        confidence: 0.91,
+        steps: [],
+      },
+      {
+        kind: "planner-verification-followup",
+        requestedSteps: ["frontend_layer"],
+      },
+      {
+        kind: "planner-pipeline-end",
+        status: "success",
+        completedSteps: 2,
+        totalSteps: 2,
+      },
+    ])
+
+    const pipelinePhases = dag.spine.filter(
+      (e) => e.kind === "phase" && e.phase.family === "pipeline",
+    )
+    expect(pipelinePhases).toHaveLength(1)
+    if (pipelinePhases[0]?.kind === "phase") {
+      expect(pipelinePhases[0].phase.summary).toMatch(/success/i)
+    }
+
+    const verifyPhases = dag.spine.filter(
+      (e) => e.kind === "phase" && e.phase.family === "verify",
+    )
+    expect(verifyPhases).toHaveLength(1)
+
+    const steps = dag.spine.filter(
+      (e) => e.kind === "phase" && e.phase.family.startsWith("step:"),
+    )
+    expect(steps).toHaveLength(2)
+    for (const step of steps) {
+      if (step.kind !== "phase") throw new Error("expected phase")
+      expect(step.phase.children?.some((c) => c.kind === "call")).toBe(true)
+      expect(step.phase.children?.some((c) => c.kind === "work")).toBe(true)
+    }
+
+    // Calls/Work belong under Subagents — not flat peers after Pipeline success.
+    expect(dag.spine.some((e) => e.kind === "call" || e.kind === "work")).toBe(false)
+  })
+
   it("omits Direct chips with nothing to expand", () => {
     const dag = buildTraceDag([
       {
