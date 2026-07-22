@@ -34,9 +34,10 @@ export function offsetInScrollHost(scrollHost: HTMLElement, el: HTMLElement): nu
 }
 
 /**
- * After collapsing a long body, park the viewport on that scope's header
- * (accounting for a sticky pin stack above it). Without this, scrollTop
- * still points into the removed body and lands on unrelated later content.
+ * After collapsing a long body, park the viewport on that scope's header.
+ * When pins live in a reserved band outside the scrollport, pass an empty
+ * `pinnedIds` (no in-scroll stack to clear). Overlay-style pins still pass
+ * the live pinned set so the header parks below the stack.
  */
 export function parkScrollOnScope(
   scrollHost: HTMLElement,

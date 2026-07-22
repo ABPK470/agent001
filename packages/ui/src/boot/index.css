@@ -1843,9 +1843,9 @@ textarea.input {
 
 .trace-dag .trace-scroll {
   position: relative;
-  /* No top padding — pin stack must sit flush under the toolbar (swallow gap). */
   padding: 0 0.35rem 1.25rem;
   --trace-row-h: 34px;
+  /* Pin band is outside this scroller — no in-scroll overlay clearance. */
   --trace-pin-stack-h: 0px;
   /*
    * Set BOTH axes. overflow-y alone computes overflow-x to auto and
@@ -1862,32 +1862,31 @@ textarea.input {
   gap: 0.55rem;
   min-width: 0;
   max-width: 100%;
-  /* No top padding — pin stack is flush; gap here looked like a hole under pins */
   padding-top: 0;
 }
 
 /*
- * ── Trace cards — document flow + VS Code pin stack ───────────────
+ * ── Trace cards — document flow + VS Code pin band ───────────────
  *
  * In-flow headers are never position:sticky (overflow/radius fight).
- * Sticky = height-0 .trace-pin stack that paints the ancestor chain
- * flush at the top of the scrollport (no gap above the pin).
+ * Pins live in a reserved band *above* the scrollport so content never
+ * scrolls under the opaque ancestor stack.
  */
-.trace-scroll {
-  position: relative;
+.trace-body {
+  min-height: 0;
 }
 
 /*
- * VS Code sticky scroll: height-0 pin overlay inside the scroller;
- * stack paints the ancestor chain with the same .trace-scope chrome.
+ * Reserved pin band (sibling above .trace-scroll). Real height = stack
+ * rows; never height:0 overlay painting over body text.
  */
 .trace-pin {
-  position: sticky;
-  top: 0;
+  flex-shrink: 0;
+  position: relative;
   z-index: 50;
-  height: 0;
+  height: auto;
   margin: 0;
-  padding: 0;
+  padding: 0 0.35rem;
   overflow: visible;
   pointer-events: none;
 }

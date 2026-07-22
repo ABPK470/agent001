@@ -126,6 +126,54 @@ describe("computePinnedFromEntries — structural ancestor chain only", () => {
   })
 })
 
+describe("computePinnedFromEntries — reserved band (stackInScroll: false)", () => {
+  const band = { stackInScroll: false as const }
+
+  it("does not pin a child until its header fully clears the scrollport top", () => {
+    const spaced = [
+      { id: "call:0", top: 0, depth: 0 },
+      { id: "sent:0", top: 100, depth: 1 },
+      { id: "received:0", top: 200, depth: 1 },
+    ]
+    // Overlay would pin Sent at 101 via stack offset; band waits for full clear.
+    expect(computePinnedFromEntries(spaced, 101, H, 4, band)).toEqual(["call:0"])
+    expect(computePinnedFromEntries(spaced, 100 + H, H, 4, band)).toEqual(["call:0"])
+    expect(computePinnedFromEntries(spaced, 100 + H + 1, H, 4, band)).toEqual([
+      "call:0",
+      "sent:0",
+    ])
+  })
+
+  it("keeps a peer pinned until the next peer reaches the scrollport top", () => {
+    const peers = [
+      { id: "context", top: 0, depth: 0 },
+      { id: "phase-plan", top: 400, depth: 0 },
+    ]
+    // Overlay yields at 400-H+1; band still holds Context through that point.
+    expect(computePinnedFromEntries(peers, 300, H, 4, band)).toEqual(["context"])
+    expect(computePinnedFromEntries(peers, 400 - H + 1, H, 4, band)).toEqual([
+      "context",
+    ])
+    expect(computePinnedFromEntries(peers, 400, H, 4, band)).toEqual([])
+    expect(computePinnedFromEntries(peers, 400 + H + 1, H, 4, band)).toEqual([
+      "phase-plan",
+    ])
+  })
+
+  it("pins Call → Received while reading received body", () => {
+    const tree = [
+      { id: "call:0", top: 0, depth: 0 },
+      { id: "sent:0", top: 40, depth: 1 },
+      { id: "received:0", top: 800, depth: 1 },
+      { id: "call:1", top: 1000, depth: 0 },
+    ]
+    expect(computePinnedFromEntries(tree, 850, H, 4, band)).toEqual([
+      "call:0",
+      "received:0",
+    ])
+  })
+})
+
 describe("expandPathForScope", () => {
   it("expands call + sent", () => {
     expect(expandPathForScope("sent:1")).toEqual({ callIndex: 1, sent: true })

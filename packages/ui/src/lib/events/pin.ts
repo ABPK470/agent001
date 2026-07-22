@@ -1,12 +1,18 @@
 /**
  * Cursor / VS Code sticky-scroll pin algorithm for outline shells.
  *
- * In-flow headers stay in document flow. A pin overlay clones the ancestor
- * chain of the focus line (ViewSpec stickyFamilies / stickyTypes).
+ * In-flow headers stay in document flow. A pin band (Trace) or overlay
+ * (OutlineTree) clones the ancestor chain of the focus line
+ * (ViewSpec stickyFamilies / stickyTypes).
  *
- * Stick rule: pin after the header has scrolled *fully past* its stack slot
- * (top + rowH < threshold) while focus is still inside [top, end).
- * End = next same-or-shallower scope top.
+ * Stick rule: pin after the header has scrolled *fully past* the focus line
+ * while focus is still inside [top, end). End = next same-or-shallower scope top.
+ *
+ * `stackInScroll` (Outline overlay): focus line steps down by one row per
+ * already-pinned ancestor — pins eat into the scrollport.
+ * `stackInScroll: false` (Trace reserved band): focus line is always the
+ * scrollport top — pins live outside and must not inflate the threshold
+ * (early stick = blank gap under the band; early yield = pin vanishes too soon).
  */
 
 export const OUTLINE_STICKY_ROW_H = 34
@@ -81,6 +87,14 @@ export type PinEntry = {
   depth: number
 }
 
+export type PinComputeOpts = {
+  /**
+   * When true (Outline overlay), each pinned row shifts the focus line down
+   * inside the scrollport. When false (Trace band), focus is always scrollTop.
+   */
+  stackInScroll?: boolean
+}
+
 export function withScopeEnds(
   entries: PinEntry[],
 ): Array<PinEntry & { end: number }> {
@@ -101,17 +115,22 @@ export function computePinnedFromEntries(
   scrollTop: number,
   rowH: number = OUTLINE_STICKY_ROW_H,
   maxLines: number = OUTLINE_STICKY_MAX,
+  opts: PinComputeOpts = {},
 ): string[] {
+  // Default true preserves Outline overlay + existing unit contracts.
+  const stackInScroll = opts.stackInScroll !== false
   const ranged = withScopeEnds(entries)
   const pinned: string[] = []
   for (const e of ranged) {
-    const threshold = scrollTop + pinned.length * rowH
-    // Stick only after the header has fully cleared the slot…
+    const threshold = stackInScroll
+      ? scrollTop + pinned.length * rowH
+      : scrollTop
+    // Stick only after the header has fully cleared the focus line…
     const pastHeader = e.top + rowH < threshold - 0.5
-    // …and yield before the *next* same-or-shallower header slides under
-    // the pin. Otherwise opaque Context covers "Plan" and Timeline looks
-    // nested under Context.
-    const nextHeaderClear = e.end > threshold + rowH + 0.5
+    // …and yield when the next same-or-shallower header reaches the focus
+    // line (overlay: +rowH so peers are not covered under the stack).
+    const yieldPad = stackInScroll ? rowH : 0
+    const nextHeaderClear = e.end > threshold + yieldPad + 0.5
     if (pastHeader && nextHeaderClear) {
       pinned.push(e.id)
     }
@@ -123,10 +142,14 @@ export function computePinnedFromEntries(
 export function computePinnedScopeIds(
   scrollEl: HTMLElement,
   pinFamilies?: Set<string>,
+  opts?: PinComputeOpts,
 ): string[] {
   return computePinnedFromEntries(
     listOutlineScopes(scrollEl, pinFamilies),
     scrollEl.scrollTop,
+    OUTLINE_STICKY_ROW_H,
+    OUTLINE_STICKY_MAX,
+    opts,
   )
 }
 
@@ -140,13 +163,16 @@ export function samePinnedIds(a: string[], b: string[]): boolean {
 
 /**
  * Replace contract: hide in-flow headers that are currently pinned so the
- * overlay does not double-paint them, and reserve scroll-padding for the stack.
+ * pin band does not double-paint them. Optionally reserve scroll-padding
+ * when the pin paints as an in-scroll overlay (OutlineTree).
  */
 export function syncPinnedInFlow(
   host: HTMLElement,
   pinnedIds: string[],
   rowH: number = OUTLINE_STICKY_ROW_H,
+  opts: { reserveScrollPadding?: boolean } = {},
 ): void {
+  const reserveScrollPadding = opts.reserveScrollPadding !== false
   for (const el of host.querySelectorAll<HTMLElement>(
     "[data-outline-pinned], [data-trace-pinned]",
   )) {
@@ -161,6 +187,10 @@ export function syncPinnedInFlow(
     if (!el) continue
     if (el.hasAttribute("data-outline-scope")) el.setAttribute("data-outline-pinned", "")
     if (el.hasAttribute("data-trace-scope")) el.setAttribute("data-trace-pinned", "")
+  }
+  if (!reserveScrollPadding) {
+    host.style.scrollPaddingTop = ""
+    return
   }
   host.style.scrollPaddingTop =
     pinnedIds.length > 0 ? `${pinnedIds.length * rowH}px` : ""

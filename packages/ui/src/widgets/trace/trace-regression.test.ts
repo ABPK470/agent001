@@ -143,7 +143,7 @@ describe("computePinnedFromEntries — nested Subagent → Call → Sent → Sys
 })
 
 describe("peer yield — Context must not cover Plan", () => {
-  it("releases Context when Plan reaches the pin slot", () => {
+  it("releases Context when Plan reaches the pin slot (overlay)", () => {
     const peers = [
       { id: "context", top: 0, depth: 0 },
       { id: "phase-plan", top: 400, depth: 0 },
@@ -151,6 +151,21 @@ describe("peer yield — Context must not cover Plan", () => {
     expect(computePinnedFromEntries(peers, 300)).toEqual(["context"])
     expect(computePinnedFromEntries(peers, 400 - H + 1)).toEqual([])
     expect(computePinnedFromEntries(peers, 400 + H + 1)).toEqual(["phase-plan"])
+  })
+
+  it("releases Context when Plan reaches the scrollport top (band)", () => {
+    const peers = [
+      { id: "context", top: 0, depth: 0 },
+      { id: "phase-plan", top: 400, depth: 0 },
+    ]
+    const band = { stackInScroll: false as const }
+    expect(computePinnedFromEntries(peers, 400 - H + 1, H, 4, band)).toEqual([
+      "context",
+    ])
+    expect(computePinnedFromEntries(peers, 400, H, 4, band)).toEqual([])
+    expect(computePinnedFromEntries(peers, 400 + H + 1, H, 4, band)).toEqual([
+      "phase-plan",
+    ])
   })
 })
 
@@ -324,7 +339,7 @@ describe("syncPinnedInFlow — replace contract", () => {
 })
 
 describe("parkScrollOnScope — collapse while scrolled into body", () => {
-  it("parks scroll on the scope header accounting for the pin stack", () => {
+  it("parks scroll on the scope header (external pin band: no stack offset)", () => {
     const scopes: ScopeSpec[] = [
       { id: "call:0", kind: "call", depth: 0, top: 0 },
       { id: "tools", kind: "tools", depth: 1, top: 40 },
@@ -332,7 +347,8 @@ describe("parkScrollOnScope — collapse while scrolled into body", () => {
     ]
     const { host, els } = mockTraceHost(scopes, 800)
     const toolsEl = els[1]! as unknown as HTMLElement
-    parkScrollOnScope(host, toolsEl, H, computePinnedScopeIds)
+    // Trace pins live outside the scrollport — empty stack.
+    parkScrollOnScope(host, toolsEl, H, () => [])
     // Must leave the deep scroll that would land on later Call content.
     expect(host.scrollTop).toBeLessThan(200)
   })
@@ -344,6 +360,12 @@ describe("Trace CSS contract — pin indent + work-note divider", () => {
     "../../boot/index.css",
   )
   const css = readFileSync(cssPath, "utf8")
+
+  it("pin band reserves real height outside the scrollport (not a height-0 overlay)", () => {
+    expect(css).toMatch(/\.trace-pin\s*\{[^}]*height:\s*auto/s)
+    expect(css).not.toMatch(/\.trace-pin\s*\{[^}]*height:\s*0\b/s)
+    expect(css).toContain(".trace-body")
+  })
 
   it("pin stack honors data-trace-depth (messages under Sent)", () => {
     expect(css).toContain('.trace-pin__stack > .trace-scope[data-trace-depth="1"]')

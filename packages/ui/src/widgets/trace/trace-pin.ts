@@ -2,6 +2,8 @@
  * Trace pin helpers — thin façade over lib/events/pin + Trace expand paths.
  */
 
+import { computePinnedScopeIds } from "../../lib/events/pin"
+
 export {
   OUTLINE_STICKY_ROW_H as TRACE_STICKY_ROW_H,
   OUTLINE_STICKY_MAX as TRACE_STICKY_MAX,
@@ -13,7 +15,15 @@ export {
   samePinnedIds,
   syncPinnedInFlow,
   type PinEntry,
+  type PinComputeOpts,
 } from "../../lib/events/pin"
+
+/** Trace reserved-band pin math — focus line is the scrollport top. */
+export const TRACE_PIN_OPTS = { stackInScroll: false } as const
+
+export function computeTracePinnedScopeIds(scrollEl: HTMLElement): string[] {
+  return computePinnedScopeIds(scrollEl, undefined, TRACE_PIN_OPTS)
+}
 
 export type TraceScopeKind =
   | "context"
