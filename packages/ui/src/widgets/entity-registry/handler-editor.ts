@@ -103,7 +103,7 @@ export function sourcesCatalogListItems(
           customLabels: { [entry.id]: entry.label },
         },
       ),
-      hint: catalogResolverFamilyLabel(entry.definition.resolver),
+      hint: `${catalogResolverFamilyLabel(entry.definition.resolver)} · ${entry.id}`,
       builtIn: entry.builtIn,
     }))
     .sort((a, b) => a.label.localeCompare(b.label))
@@ -181,7 +181,7 @@ function catalogValueSourceListboxOptions(catalog: CustomValueSourceUiCatalog) {
   return Object.entries(catalog).map(([id, entry]) => ({
     value: `catalog:${id}`,
     label: formatValueSourcePreview({ type: "catalog", id }, options),
-    hint: catalogResolverFamilyLabel(entry.definition.resolver),
+    hint: `${catalogResolverFamilyLabel(entry.definition.resolver)} · ${id}`,
   }))
 }
 
@@ -196,7 +196,7 @@ export function stepFieldListboxOptions(catalog: CustomValueSourceUiCatalog = {}
     .map(([id, entry]) => ({
       value: `catalog:${id}`,
       label: formatValueSourcePreview({ type: "catalog", id }, options),
-      hint: catalogResolverFamilyLabel(entry.definition.resolver),
+      hint: `${catalogResolverFamilyLabel(entry.definition.resolver)} · ${id}`,
     }))
 }
 

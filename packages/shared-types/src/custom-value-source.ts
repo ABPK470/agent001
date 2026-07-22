@@ -201,12 +201,10 @@ export function formatCustomValueSourcePreview(
   label: string,
   id: string,
 ): string {
-  // Operator identity (name + key) is what you pick in flow/action wiring.
+  // Operator name is what you pick in flow/action wiring.
   // Resolution kind is shown separately via catalogResolverFamilyLabel (list hints).
   void definition
-  const name = label.trim() || id
-  if (name === id) return id
-  return `${name} (${id})`
+  return label.trim() || id
 }
 
 export function formatCatalogResolverRuntimePreview(

@@ -102,9 +102,9 @@ describe("handler-editor", () => {
         },
       },
     ])
-    expect(items.find((item) => item.id === "planEntityId")?.label).toBe("Plan entity id (planEntityId)")
-    expect(items.find((item) => item.id === "opsActorUpn")?.label).toBe("Ops plan actor (opsActorUpn)")
-    expect(items.find((item) => item.id === "myLookup")?.label).toBe("My lookup (myLookup)")
-    expect(items.find((item) => item.id === "opsActorUpn")?.hint).toMatch(/Auto/)
+    expect(items.find((item) => item.id === "planEntityId")?.label).toBe("Plan entity id")
+    expect(items.find((item) => item.id === "opsActorUpn")?.label).toBe("Ops plan actor")
+    expect(items.find((item) => item.id === "myLookup")?.label).toBe("My lookup")
+    expect(items.find((item) => item.id === "opsActorUpn")?.hint).toMatch(/opsActorUpn/)
   })
 })

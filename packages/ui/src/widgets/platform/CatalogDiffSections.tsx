@@ -40,6 +40,8 @@ export function CatalogDiffSections({
   onToggleEntry,
   changesOnly = false,
   emptyMessage = "No differences in this comparison.",
+  className,
+  fill = false,
 }: {
   sections: CatalogDiffSection[]
   openEntryKey: string | null
@@ -47,24 +49,48 @@ export function CatalogDiffSections({
   /** Collapse unchanged JSON lines inside each entry. */
   changesOnly?: boolean
   emptyMessage?: string
+  className?: string
+  /** Stretch open entry so the JSON diff consumes remaining modal height. */
+  fill?: boolean
 }): JSX.Element {
   if (sections.length === 0) {
-    return <p className="px-4 py-6 text-sm text-text-muted">{emptyMessage}</p>
+    return (
+      <p className={`px-6 py-6 text-sm text-text-muted ${className ?? ""}`.trim()}>
+        {emptyMessage}
+      </p>
+    )
   }
 
   return (
-    <ul className="min-h-0 flex-1 space-y-3 overflow-y-auto show-scrollbar p-4">
+    <ul
+      className={[
+        "min-h-0 flex-1 overflow-y-auto show-scrollbar px-6 py-4",
+        fill ? "flex flex-col gap-3" : "space-y-3",
+        className ?? "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+    >
       {sections.map((section) => {
         const entries = [...section.creates, ...section.updates, ...section.deletes]
+        const holdsOpen = fill && entries.some(
+          (entry) => catalogDiffEntryKey(section.section, entry) === openEntryKey,
+        )
         return (
-          <li key={section.section} className="rounded-lg border border-border-subtle p-3">
-            <div className="mb-2 flex items-center justify-between gap-2">
+          <li
+            key={section.section}
+            className={[
+              "rounded-lg border border-border-subtle p-3",
+              holdsOpen ? "flex min-h-0 flex-1 flex-col" : "shrink-0",
+            ].join(" ")}
+          >
+            <div className="mb-2 flex shrink-0 items-center justify-between gap-2">
               <h4 className="text-sm font-medium text-text">{section.label}</h4>
               <span className="font-mono text-xs text-text-faint">
                 +{section.creates.length} ~{section.updates.length} −{section.deletes.length}
               </span>
             </div>
-            <div className="space-y-2">
+            <div className={holdsOpen ? "flex min-h-0 flex-1 flex-col gap-2" : "space-y-2"}>
               {entries.map((entry) => {
                 const key = catalogDiffEntryKey(section.section, entry)
                 const open = openEntryKey === key
@@ -74,6 +100,7 @@ export function CatalogDiffSections({
                     entry={entry}
                     open={open}
                     changesOnly={changesOnly}
+                    fill={fill && open}
                     onToggle={() => onToggleEntry(open ? null : key)}
                   />
                 )
@@ -91,11 +118,13 @@ function DiffEntryCard({
   open,
   onToggle,
   changesOnly,
+  fill,
 }: {
   entry: CatalogDiffEntry
   open: boolean
   onToggle: () => void
   changesOnly: boolean
+  fill: boolean
 }): JSX.Element {
   const tone =
     entry.kind === "create"
@@ -107,11 +136,18 @@ function DiffEntryCard({
     entry.kind === "create" ? "Added" : entry.kind === "delete" ? "Removed" : "Changed"
 
   return (
-    <div className="overflow-hidden rounded-md border border-border-subtle/80">
+    <div
+      className={[
+        "overflow-hidden rounded-md border border-border-subtle/80",
+        fill ? "flex min-h-0 flex-1 flex-col" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+    >
       <button
         type="button"
         onClick={onToggle}
-        className="flex w-full items-center gap-2 px-2.5 py-2 text-left hover:bg-elevated/40"
+        className="flex w-full shrink-0 items-center gap-2 px-2.5 py-2 text-left hover:bg-elevated/40"
       >
         {open ? (
           <ChevronDown size={14} className="shrink-0 text-text-faint" />
@@ -128,11 +164,19 @@ function DiffEntryCard({
         )}
       </button>
       {open && (
-        <div className="border-t border-border-subtle p-2">
+        <div
+          className={[
+            "border-t border-border-subtle p-2",
+            fill ? "flex min-h-0 flex-1 flex-col" : "",
+          ]
+            .filter(Boolean)
+            .join(" ")}
+        >
           <CatalogJsonDiff
             beforeJson={entry.beforeJson}
             afterJson={entry.afterJson}
             changesOnly={changesOnly}
+            className={fill ? "min-h-0 flex-1 max-h-none h-full" : undefined}
           />
         </div>
       )}

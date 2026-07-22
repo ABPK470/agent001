@@ -3,7 +3,7 @@
  * Diff SoT is publish-preview (live tip), not catalog version-history snapshots.
  */
 
-import { CheckCircle2, GitCompareArrows, Loader2, Rocket, XCircle } from "lucide-react"
+import { CheckCircle2, Loader2, Rocket, XCircle } from "lucide-react"
 import type { JSX } from "react"
 import { useEffect, useState } from "react"
 import { api } from "../../client/index"
@@ -17,7 +17,7 @@ import {
   firstCatalogDiffEntryKey,
   type CatalogDiffSection,
 } from "../platform/CatalogDiffSections"
-import { ACTION_BTN, META_TEXT, PANEL, TEXT_BTN } from "./chrome"
+import { ACTION_BTN, FIELD_LABEL, PANEL, TEXT_BTN } from "./chrome"
 import { ModalShell } from "./ModalShell"
 
 type PublishPhase = "idle" | "publishing" | "done"
@@ -31,6 +31,38 @@ const SECTION_LABELS: Record<string, string> = {
   valueSources: "Value sources",
   phases: "Phases",
   environments: "Environments",
+}
+
+const PUBLISH_MODAL_PANEL =
+  "w-full max-w-4xl h-[min(92vh,960px)] min-h-[36rem] flex flex-col overflow-hidden"
+
+function MetaCell({
+  label,
+  value,
+  mono = true,
+  className,
+}: {
+  label: string
+  value: string
+  mono?: boolean
+  className?: string
+}): JSX.Element {
+  return (
+    <div className={`min-w-0 px-4 py-2.5 ${className ?? ""}`.trim()}>
+      <p className={FIELD_LABEL}>{label}</p>
+      <p
+        className={[
+          "mt-0.5 truncate text-sm font-medium text-text",
+          mono ? "font-mono tabular-nums" : "",
+        ]
+          .filter(Boolean)
+          .join(" ")}
+        title={value}
+      >
+        {value}
+      </p>
+    </div>
+  )
 }
 
 export function PublishCatalogModal({
@@ -137,18 +169,22 @@ export function PublishCatalogModal({
     && changeCount === 0
     && previewNeedsPublish
 
-  const compareLabel =
-    tipVersion == null
-      ? "Catalog tip"
-      : publishedVersion != null
-        ? `Live tip v${tipVersion} vs published v${publishedVersion}`
-        : `Live tip v${tipVersion}`
+  const tipLabel = tipVersion != null ? `v${tipVersion}` : "—"
+  const publishedLabel = publishedVersion != null ? `v${publishedVersion}` : "—"
+  const tipSectionsLabel =
+    compileSections.length > 0
+      ? compileSections.map((id) => SECTION_LABELS[id] ?? id).join(", ")
+      : "—"
+  const affectedLabel =
+    unpublished.length === 0
+      ? "—"
+      : unpublished.length <= 6
+        ? unpublished.map((item) => item.id).join(", ")
+        : `${unpublished.slice(0, 4).map((item) => item.id).join(", ")} +${unpublished.length - 4}`
 
   const subtitle =
     phase === "idle"
-      ? operationalOnly
-        ? "Environment changes are live at preview/execute — Publish is not required for them."
-        : "Compose Catalog tip into the sync runtime for preview and execute. Environments and connectors stay live."
+      ? "Compose Catalog tip into the sync runtime for preview and execute."
       : phase === "publishing"
         ? "Composing Catalog tip into the sync runtime…"
         : undefined
@@ -161,18 +197,23 @@ export function PublishCatalogModal({
 
   const footer =
     phase === "idle" ? (
-      <>
-        <button type="button" className={`${TEXT_BTN} flex-1 justify-center`} onClick={handleClose}>
-          Cancel
-        </button>
-        <button
-          type="button"
-          className={`${ACTION_BTN} flex-1`}
-          onClick={() => void confirmPublish()}
-        >
-          <Rocket size={14} /> Publish
-        </button>
-      </>
+      <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <p className="max-w-sm text-xs leading-relaxed text-text-muted/55">
+          Invalid flows block that entity. Warnings are logged and do not stop the bundle.
+        </p>
+        <div className="flex shrink-0 gap-2">
+          <button type="button" className={`${TEXT_BTN} min-w-[5.5rem] justify-center`} onClick={handleClose}>
+            Cancel
+          </button>
+          <button
+            type="button"
+            className={`${ACTION_BTN} min-w-[7rem]`}
+            onClick={() => void confirmPublish()}
+          >
+            <Rocket size={14} /> Publish
+          </button>
+        </div>
+      </div>
     ) : phase === "done" ? (
       <button type="button" className={`${ACTION_BTN} w-full`} onClick={handleClose}>
         Close
@@ -185,97 +226,57 @@ export function PublishCatalogModal({
       subtitle={subtitle}
       icon={headerIcon}
       onClose={handleClose}
-      size="default"
+      widthClass={PUBLISH_MODAL_PANEL}
       footer={footer}
     >
       {phase === "idle" && (
-        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden px-6 py-4">
-          <section className={`${PANEL} shrink-0 space-y-3 p-4`}>
-            <div className="flex items-center justify-center gap-8 font-mono text-sm tabular-nums">
-              <div className="text-center">
-                <div className="text-lg font-semibold text-text">{unpublished.length}</div>
-                <div className={`text-xs ${META_TEXT}`}>entities to republish</div>
-              </div>
-              <div className="text-center">
-                <div className="text-lg font-semibold text-text">{entityCount}</div>
-                <div className={`text-xs ${META_TEXT}`}>entities total</div>
-              </div>
-              {changeCount > 0 && (
-                <div className="text-center">
-                  <div className="text-lg font-semibold text-text">{changeCount}</div>
-                  <div className={`text-xs ${META_TEXT}`}>catalog changes</div>
-                </div>
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <div className="grid shrink-0 grid-cols-2 border-b border-border-subtle sm:grid-cols-3 lg:grid-cols-6">
+            <MetaCell label="Tip" value={tipLabel} />
+            <MetaCell label="Published" value={publishedLabel} />
+            <MetaCell label="Changes" value={String(changeCount)} />
+            <MetaCell label="Entities" value={`${unpublished.length} / ${entityCount}`} />
+            <MetaCell label="Tip sections" value={tipSectionsLabel} mono={false} />
+            <MetaCell label="Affected" value={affectedLabel} mono={unpublished.length > 0} />
+          </div>
+          {(stampDrift || operationalOnly) && (
+            <div className="shrink-0 space-y-1 border-b border-warning/30 bg-warning/10 px-6 py-2 text-xs leading-relaxed text-warning">
+              {stampDrift && (
+                <p>
+                  Tip stamp is ahead of publish, but live tip content matches the published
+                  snapshot. Publish reconciles the stamp (v{publishedVersion} → v{tipVersion}).
+                </p>
+              )}
+              {operationalOnly && (
+                <p>
+                  Environment tip updates are live at preview/execute — not listed in the diff
+                  below.
+                </p>
               )}
             </div>
-            {compileSections.length > 0 && (
-              <p className={`text-center ${META_TEXT}`}>
-                Tip changed:{" "}
-                {compileSections.map((id) => SECTION_LABELS[id] ?? id).join(", ")}
-              </p>
-            )}
-            {unpublished.length > 0 && (
-              <p className={`text-center ${META_TEXT}`}>
-                Affected:{" "}
-                <span className="font-mono text-text">
-                  {unpublished.map((item) => item.id).join(", ")}
-                </span>
-              </p>
-            )}
-            {stampDrift && (
-              <p className={`text-center text-sm text-warning`}>
-                Tip stamp is ahead of publish, but live tip content matches the published
-                snapshot. Publish reconciles the stamp (v{publishedVersion} → v{tipVersion}).
-              </p>
-            )}
-            {operationalOnly && (
-              <p className={`text-center ${META_TEXT}`}>
-                Catalog tip also has environment updates (live — not listed below).
-              </p>
-            )}
-          </section>
+          )}
 
-          <section className={`${PANEL} flex min-h-0 flex-1 flex-col overflow-hidden`}>
-            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border-subtle px-4 py-3">
-              <div className="min-w-0">
-                <h3 className="flex items-center gap-2 text-sm font-medium text-text">
-                  <GitCompareArrows size={14} className="text-text-muted" />
-                  Changes
-                </h3>
-                <p className={`mt-0.5 ${META_TEXT}`}>
-                  {compareLabel}
-                  {changeCount > 0
-                    ? ` · ${changeCount} change${changeCount === 1 ? "" : "s"}`
-                    : ""}
-                  {" · compile sections only"}
-                </p>
-              </div>
+          {diffBusy ? (
+            <div className="flex flex-1 items-center justify-center gap-2 px-6 py-10 text-sm text-text-muted">
+              <Loader2 size={16} className="animate-spin" />
+              Loading tip vs published diff…
             </div>
-
-            {diffBusy ? (
-              <div className="flex flex-1 items-center justify-center gap-2 px-4 py-10 text-sm text-text-muted">
-                <Loader2 size={16} className="animate-spin" />
-                Loading live tip vs published diff…
-              </div>
-            ) : diffError ? (
-              <p className="px-4 py-6 text-sm text-error">{diffError}</p>
-            ) : (
-              <CatalogDiffSections
-                sections={sections}
-                openEntryKey={openEntryKey}
-                onToggleEntry={setOpenEntryKey}
-                changesOnly
-                emptyMessage={
-                  stampDrift
-                    ? "No live compile delta — Publish only advances the published catalog stamp to the active tip."
-                    : "No compile-relevant tip changes vs the last publish. Publish still recompiles the full bundle."
-                }
-              />
-            )}
-          </section>
-
-          <p className="shrink-0 text-center text-sm leading-relaxed text-text-muted/60">
-            Invalid flows block publish for that entity. Warnings are logged but do not stop the bundle.
-          </p>
+          ) : diffError ? (
+            <p className="px-6 py-6 text-sm text-error">{diffError}</p>
+          ) : (
+            <CatalogDiffSections
+              sections={sections}
+              openEntryKey={openEntryKey}
+              onToggleEntry={setOpenEntryKey}
+              changesOnly
+              fill
+              emptyMessage={
+                stampDrift
+                  ? "No live compile delta — Publish only advances the published catalog stamp to the active tip."
+                  : "No compile-relevant tip changes vs the last publish. Publish still recompiles the full bundle."
+              }
+            />
+          )}
         </div>
       )}
 

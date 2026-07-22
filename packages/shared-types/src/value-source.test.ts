@@ -44,7 +44,7 @@ describe("ValueSource", () => {
           customLabels: { planEntityId: "Plan entity id" },
         },
       ),
-    ).toBe("Plan entity id (planEntityId)")
+    ).toBe("Plan entity id")
     expect(
       formatValueSourcePreview(
         { type: "catalog", id: "opsActorUpn" },
@@ -55,7 +55,7 @@ describe("ValueSource", () => {
           customLabels: { opsActorUpn: "Ops plan actor" },
         },
       ),
-    ).toBe("Ops plan actor (opsActorUpn)")
+    ).toBe("Ops plan actor")
     expect(
       formatValueSourcePreview({
         type: "priorOutput",

@@ -17,11 +17,13 @@ export function CatalogJsonDiff({
   beforeJson,
   afterJson,
   changesOnly = false,
+  className,
 }: {
   beforeJson: string | null
   afterJson: string | null
   /** Show change hunks + short context — not the entire unchanged JSON. */
   changesOnly?: boolean
+  className?: string
 }): JSX.Element {
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set())
 
@@ -53,7 +55,12 @@ export function CatalogJsonDiff({
   }
 
   return (
-    <pre className="max-h-80 overflow-auto show-scrollbar rounded-md border border-border-subtle bg-base/50 font-mono text-[11px] leading-relaxed">
+    <pre
+      className={[
+        "overflow-auto show-scrollbar rounded-md border border-border-subtle bg-base/50 font-mono text-[11px] leading-relaxed",
+        className ?? "max-h-80",
+      ].join(" ")}
+    >
       <code className="block min-w-full">
         {rows.map((row, index) => (
           <DiffLine
