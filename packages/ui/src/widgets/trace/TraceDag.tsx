@@ -1,9 +1,10 @@
 /**
  * Trace outline shell — toolbar + chronological cards.
  *
- * Sticky scroll = VS Code dialect: a reserved pin band above the scrollport
- * clones the ancestor chain (Phase → Call → Sent → System/User/…). Content
- * never scrolls under the pins. Click label to jump; chevron to fold.
+ * Sticky scroll = VS Code / Outline dialect: an in-scroll pin overlay clones
+ * the ancestor chain (Phase → Call → Sent → System/User/…). Pin height must
+ * not live outside the scrollport — that resizes the viewport and cancels
+ * wheel deltas at Received→Work peer handoff. Click label to jump; chevron to fold.
  */
 
 import { Search, X } from "lucide-react"
@@ -62,10 +63,9 @@ export function TraceDag({
     const el = scrollRef.current
     if (!el) return
     const ids = computeTracePinnedScopeIds(el)
-    // Pin band lives outside the scrollport — no in-scroll overlay height
-    // and no scroll-padding (content cannot sit under opaque pins).
-    el.style.setProperty("--trace-pin-stack-h", "0px")
-    syncPinnedInFlow(el, ids, TRACE_STICKY_ROW_H, { reserveScrollPadding: false })
+    const stackH = ids.length * TRACE_STICKY_ROW_H
+    el.style.setProperty("--trace-pin-stack-h", `${stackH}px`)
+    syncPinnedInFlow(el, ids, TRACE_STICKY_ROW_H, { reserveScrollPadding: true })
     setPinnedIds((prev) => (samePinnedIds(prev, ids) ? prev : ids))
   }
 
@@ -588,8 +588,7 @@ export function TraceDag({
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           if (!scopeEl.isConnected) return
-          // Pin band is outside the scrollport — park flush on the header.
-          parkScrollOnScope(host, scopeEl, TRACE_STICKY_ROW_H, () => [])
+          parkScrollOnScope(host, scopeEl, TRACE_STICKY_ROW_H, computeTracePinnedScopeIds)
           refreshPinStack()
           suppressFollowRef.current = false
         })
@@ -752,13 +751,12 @@ export function TraceDag({
         {emptySlot ? (
           emptySlot
         ) : (
-          <>
+          <div ref={scrollRef} className="trace-scroll min-h-0 flex-1" data-trace-scroll-host>
             <PinOverlay
               rows={pinRows}
               onToggle={onTogglePinnedScope}
               onReveal={onRevealScope}
             />
-            <div ref={scrollRef} className="trace-scroll min-h-0 flex-1" data-trace-scroll-host>
               {runId &&
                 dag.hasData &&
                 query &&
@@ -866,8 +864,7 @@ export function TraceDag({
                   })}
                 </div>
               )}
-            </div>
-          </>
+          </div>
         )}
       </div>
     </div>

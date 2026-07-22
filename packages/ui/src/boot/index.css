@@ -1845,7 +1845,7 @@ textarea.input {
   position: relative;
   padding: 0 0.35rem 1.25rem;
   --trace-row-h: 34px;
-  /* Pin band is outside this scroller — no in-scroll overlay clearance. */
+  /* Updated by refreshPinStack — Expand sticky rail + park/anchor math. */
   --trace-pin-stack-h: 0px;
   /*
    * Set BOTH axes. overflow-y alone computes overflow-x to auto and
@@ -1866,29 +1866,31 @@ textarea.input {
 }
 
 /*
- * ── Trace cards — document flow + VS Code pin band ───────────────
+ * ── Trace cards — document flow + VS Code pin overlay ────────────
  *
  * In-flow headers are never position:sticky (overflow/radius fight).
- * Pins live in a reserved band *above* the scrollport so content never
- * scrolls under the opaque ancestor stack.
+ * Pins are an absolute overlay inside .trace-scroll (Outline dialect):
+ * zero layout height so pin count never resizes the viewport / cancels scroll.
  */
 .trace-body {
   min-height: 0;
 }
 
 /*
- * Reserved pin band (sibling above .trace-scroll). Real height = stack
- * rows; never height:0 overlay painting over body text.
+ * In-scroll pin overlay. height:0 — stack paints into the scrollport;
+ * scroll-padding + --trace-pin-stack-h keep focus under the stack.
  *
  * Visual model: one continuous open-card header block (not separate pills).
- * Rows stack flush with hairline seams; the band's bottom edge meets the
- * scrolling card body so pinned ancestors + in-flow content read as one unit.
+ * Rows stack flush with hairline seams so pinned ancestors + in-flow
+ * content read as one unit.
  */
 .trace-pin {
-  flex-shrink: 0;
-  position: relative;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
   z-index: 50;
-  height: auto;
+  height: 0;
   margin: 0;
   padding: 0 0.35rem;
   overflow: visible;

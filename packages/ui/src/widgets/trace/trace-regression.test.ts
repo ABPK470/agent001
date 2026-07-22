@@ -363,7 +363,7 @@ describe("syncPinnedInFlow — replace contract", () => {
 })
 
 describe("parkScrollOnScope — collapse while scrolled into body", () => {
-  it("parks scroll on the scope header (external pin band: no stack offset)", () => {
+  it("parks scroll on the scope header below the in-scroll pin stack", () => {
     const scopes: ScopeSpec[] = [
       { id: "call:0", kind: "call", depth: 0, top: 0 },
       { id: "tools", kind: "tools", depth: 1, top: 40 },
@@ -371,8 +371,7 @@ describe("parkScrollOnScope — collapse while scrolled into body", () => {
     ]
     const { host, els } = mockTraceHost(scopes, 800)
     const toolsEl = els[1]! as unknown as HTMLElement
-    // Trace pins live outside the scrollport — empty stack.
-    parkScrollOnScope(host, toolsEl, H, () => [])
+    parkScrollOnScope(host, toolsEl, H, () => ["call:0"])
     // Must leave the deep scroll that would land on later Call content.
     expect(host.scrollTop).toBeLessThan(200)
   })
@@ -385,9 +384,9 @@ describe("Trace CSS contract — pin indent + work-note divider", () => {
   )
   const css = readFileSync(cssPath, "utf8")
 
-  it("pin band reserves real height outside the scrollport (not a height-0 overlay)", () => {
-    expect(css).toMatch(/\.trace-pin\s*\{[^}]*height:\s*auto/s)
-    expect(css).not.toMatch(/\.trace-pin\s*\{[^}]*height:\s*0\b/s)
+  it("pin overlay is absolute with zero layout height (does not resize scrollport)", () => {
+    expect(css).toMatch(/\.trace-pin\s*\{[^}]*position:\s*absolute/s)
+    expect(css).toMatch(/\.trace-pin\s*\{[^}]*height:\s*0\b/s)
     expect(css).toContain(".trace-body")
   })
 
