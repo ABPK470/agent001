@@ -73,6 +73,27 @@ function lastRunningToolIn(parts: ResponseToolPart[]): ResponseToolPart | null {
  * Prefer a coarse tool verb; never echo a step title the transcript already shows.
  */
 export function deriveActiveMilestoneLabel(parts: ResponsePart[]): string {
+  const runningSubagents = parts.filter(
+    (part): part is Extract<ResponsePart, { kind: "step-block" }> =>
+      part.kind === "step-block" && part.hasRunning && Boolean(part.subagent),
+  )
+
+  // Parallel fan-out: say how many are live before collapsing to one tool verb.
+  // Otherwise the UI feels serial as soon as the first child emits a tool-call.
+  if (runningSubagents.length > 1) {
+    let lastRunningTool: ResponseToolPart | null = null
+    for (let i = parts.length - 1; i >= 0; i--) {
+      const part = parts[i]!
+      if (part.kind !== "step-block" || !part.hasRunning) continue
+      lastRunningTool = lastRunningToolIn(part.tools)
+      if (lastRunningTool) break
+    }
+    if (lastRunningTool) {
+      return `${runningSubagents.length} subagents · ${liveActivityVerb(lastRunningTool.row.tool)}`
+    }
+    return `${runningSubagents.length} subagents`
+  }
+
   let lastRunningTool: ResponseToolPart | null = null
   for (let i = parts.length - 1; i >= 0; i--) {
     const part = parts[i]!
@@ -91,14 +112,6 @@ export function deriveActiveMilestoneLabel(parts: ResponsePart[]): string {
   }
   if (lastRunningTool) {
     return liveActivityVerb(lastRunningTool.row.tool)
-  }
-
-  const runningSubagents = parts.filter(
-    (part): part is Extract<ResponsePart, { kind: "step-block" }> =>
-      part.kind === "step-block" && part.hasRunning && Boolean(part.subagent),
-  )
-  if (runningSubagents.length > 1) {
-    return `${runningSubagents.length} subagents`
   }
 
   for (let i = parts.length - 1; i >= 0; i--) {

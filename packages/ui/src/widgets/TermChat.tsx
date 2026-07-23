@@ -835,43 +835,73 @@ function StepBlock({
   }, [part.hasRunning, part.status, keepOpen])
 
   const hasTools = part.tools.length > 0
+  const showBody = open && (hasTools || part.hasRunning)
+  const canToggle = hasTools
   const Chevron = open ? ChevronDown : ChevronRight
   // Step gaps are process detail — same muted chrome as successful steps.
   const labelClass =
-    part.status === "running" ? "text-text-muted" : "text-text-faint"
+    part.status === "running" || part.hasRunning ? "text-text-muted" : "text-text-faint"
 
   return (
-    <div className="py-1">
+    <div className="py-1 min-w-0">
       <button
         ref={buttonRef}
         type="button"
-        disabled={!hasTools}
+        disabled={!canToggle}
         onClick={() => {
-          if (!hasTools) return
+          if (!canToggle) return
           preserveToggle(buttonRef.current, () => {
             userToggledRef.current = true
             setOpen((v) => !v)
           })
         }}
-        className={`inline-flex max-w-full items-baseline gap-1.5 py-0.5 text-left text-[15px] leading-6 ${labelClass} ${hasTools ? "transition-colors hover:text-text-secondary" : "cursor-default"}`}
+        className={[
+          "flex max-w-full min-w-0 items-center gap-1.5 py-0.5 text-left text-[15px] leading-6",
+          labelClass,
+          canToggle ? "transition-colors hover:text-text-secondary" : "cursor-default",
+        ].join(" ")}
       >
-        {hasTools ? (
-          <Chevron size={12} strokeWidth={1.5} className="text-text-faint shrink-0 translate-y-[2px]" />
-        ) : null}
-        <span>{part.title}</span>
+        {/* Always reserve the chevron column so the title does not jump
+            when the first nested tool arrives and the control appears. */}
+        <span className="inline-flex h-3 w-3 shrink-0 items-center justify-center">
+          {canToggle ? (
+            <Chevron size={12} strokeWidth={1.5} className="text-text-faint" />
+          ) : part.hasRunning ? (
+            <span className="block h-1.5 w-1.5 rounded-full bg-text-faint/70" aria-hidden />
+          ) : null}
+        </span>
+        <span className="min-w-0 truncate">{part.title}</span>
         {part.detail ? (
-          <span className="text-[15px] text-text-faint font-normal"> · {part.detail}</span>
+          <span className="min-w-0 truncate text-[15px] text-text-faint font-normal">
+            · {part.detail}
+          </span>
         ) : null}
       </button>
-      {open && hasTools && (
-        <div className="mt-0.5 ml-[0.35rem] pl-3 border-l border-border-subtle">
-          <IterationToolList
-            tools={part.tools}
-            syncByInvocation={syncByInvocation}
-            stickToBottom={part.hasRunning && isLiveRun}
-          />
+      {showBody ? (
+        <div className="mt-0.5 ml-[0.35rem] pl-3 border-l border-border-subtle min-w-0">
+          {hasTools ? (
+            <IterationToolList
+              tools={part.tools}
+              syncByInvocation={syncByInvocation}
+              stickToBottom={part.hasRunning && isLiveRun}
+            />
+          ) : (
+            <div className="py-0.5 text-[15px] leading-6 text-text-faint">
+              <span
+                className="activity-shimmer-tight"
+                style={
+                  {
+                    "--sa": "var(--color-text-muted)",
+                    "--sd": "var(--color-text-faint)",
+                  } as React.CSSProperties
+                }
+              >
+                Starting…
+              </span>
+            </div>
+          )}
         </div>
-      )}
+      ) : null}
     </div>
   )
 }
@@ -1533,7 +1563,9 @@ function RunMessageImpl({
             part={part}
             syncByInvocation={syncByInvocation}
             isLiveRun={isLiveRun}
-            keepOpen={Boolean(meta?.isLastWork && !meta.hasNarrativeAfter)}
+            keepOpen={Boolean(
+              part.hasRunning || (meta?.isLastWork && !meta.hasNarrativeAfter),
+            )}
           />,
         )
         if (part.hasRunning) lastToolHasRunning = true

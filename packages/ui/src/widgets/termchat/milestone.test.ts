@@ -153,6 +153,31 @@ describe("liveActivityVerb / deriveActiveMilestoneLabel", () => {
       ]),
     ).toBe("2 subagents")
   })
+
+  it("keeps parallel fan-out visible even after one child starts tooling", () => {
+    expect(
+      deriveActiveMilestoneLabel([
+        {
+          kind: "step-block",
+          id: "a",
+          title: "Subagent · Frontend",
+          hasRunning: true,
+          subagent: true,
+          tools: [tool("search_catalog", "running")],
+          status: "running",
+        },
+        {
+          kind: "step-block",
+          id: "b",
+          title: "Subagent · Api",
+          hasRunning: true,
+          subagent: true,
+          tools: [],
+          status: "running",
+        },
+      ]),
+    ).toBe("2 subagents · Searching")
+  })
 })
 
 describe("summarizeHistory / summarizeRunError / bytes", () => {
