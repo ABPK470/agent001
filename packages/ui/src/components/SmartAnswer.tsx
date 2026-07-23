@@ -242,9 +242,11 @@ function StreamingCaret({ compact }: { compact?: boolean }) {
 
 // Lightweight compact table — used in TermChat. Inset border on the wrapper
 // (not ring) so home-chat scrollports do not clip the right edge; rings paint
-// outside the box and are clipped by overflow scroll containers.
+// outside the box and are clipped by overflow scroll containers. Outer chrome
+// matches ChartFrame / stream-pending-shell (rounded-lg border).
+/** Same outer rhythm as ChartFrame / stream-pending-shell (rounded-lg border). */
 export const COMPACT_TABLE_WRAPPER_CLASS =
-  "w-full min-w-0 overflow-x-auto rounded-md border border-border-subtle"
+  "w-full min-w-0 overflow-x-auto rounded-lg border border-border-subtle"
 
 /**
  * Compact markdown table — shared by SmartAnswer and the live stream shell.
@@ -413,6 +415,7 @@ export function SmartAnswer({
   streaming: _streaming = false,
   compact = false,
   exportRunId,
+  enterBlockIndices,
 }: {
   text?: string
   blocks?: AnswerBlock[]
@@ -422,6 +425,11 @@ export function SmartAnswer({
   compact?: boolean
   /** When set, markdown tables Export via audited run API. */
   exportRunId?: string
+  /**
+   * Structured visuals (tables / charts) that just left the pending shell —
+   * play the same stream-diagram-enter settle charts use.
+   */
+  enterBlockIndices?: ReadonlySet<number>
 }) {
   void _streaming
   const blocks = blocksIn ?? parseAnswerBlocks(text ?? "")
@@ -438,6 +446,7 @@ export function SmartAnswer({
       {blocks.map((block, bi) => {
         if (reveal && bi > reveal.doneCount) return null
         const printing = Boolean(reveal && bi === reveal.doneCount && reveal.partial)
+        const settling = Boolean(enterBlockIndices?.has(bi))
         let activeBlock: Block | "diagram-building" = block
         if (printing && reveal?.partial) {
           const sliced = sliceBlockForReveal(block, reveal.partial)
@@ -455,6 +464,7 @@ export function SmartAnswer({
         }
 
         const wrapClass = reveal ? "stream-block-appear" : ""
+        const structuredEnter = printing || settling ? "stream-diagram-enter" : ""
         const b = activeBlock
 
         if (b.type === "heading") {
@@ -530,7 +540,7 @@ export function SmartAnswer({
               }
             }
             return (
-              <div key={bi} className={`${wrapClass} ${printing ? "stream-diagram-enter" : ""}`}>
+              <div key={bi} className={`${wrapClass} ${structuredEnter}`}>
                 <InlineDiagram kind={b.lang} source={b.text} />
               </div>
             )
@@ -540,7 +550,7 @@ export function SmartAnswer({
             const inferred = tryInferDiagramKind(b.text)
             if (inferred) {
               return (
-                <div key={bi} className={`${wrapClass} ${printing ? "stream-diagram-enter" : ""}`}>
+                <div key={bi} className={`${wrapClass} ${structuredEnter}`}>
                   <InlineDiagram kind={inferred} source={b.text} />
                 </div>
               )
@@ -603,15 +613,16 @@ export function SmartAnswer({
           const tableData = tryConvertOrderedListToTable(b.items)
           if (tableData) {
             const localSource: ChatTableExportSource = { kind: "local", title: "List table" }
+            const listTableEntering = printing || settling
             return (
-              <div key={bi} className={`py-2 ${wrapClass}`}>
+              <div key={bi} className={`${wrapClass} ${structuredEnter}`}>
                 {compact ? (
                   <CompactTable
                     headers={tableData.headers}
                     rows={tableData.rows}
-                    animateRows={printing}
+                    animateRows={listTableEntering}
                     exportSource={localSource}
-                    exportDisabled={!exportSettled || printing}
+                    exportDisabled={!exportSettled || listTableEntering}
                   />
                 ) : (
                   <DataTable
@@ -620,7 +631,7 @@ export function SmartAnswer({
                     renderCell={(v) => <InlineText text={v} />}
                     renderHeader={(v) => <InlineText text={v} />}
                     exportSource={localSource}
-                    exportDisabled={!exportSettled || printing}
+                    exportDisabled={!exportSettled || listTableEntering}
                   />
                 )}
               </div>
@@ -644,19 +655,20 @@ export function SmartAnswer({
 
         if (b.type === "table") {
           const tablePrinting = printing && reveal?.partial?.kind === "table"
+          const tableEntering = tablePrinting || settling
           const tableIndex = markdownTableIndex(blocks, bi)
           const exportSource: ChatTableExportSource | undefined = exportRunId
             ? { kind: "run", runId: exportRunId, tableIndex }
             : { kind: "local", title: `Table ${tableIndex + 1}` }
           return (
-            <div key={bi} className={`py-2 ${wrapClass}`}>
+            <div key={bi} className={`${wrapClass} ${structuredEnter}`}>
               {compact ? (
                 <CompactTable
                   headers={b.headers}
                   rows={b.rows}
-                  animateRows={tablePrinting}
+                  animateRows={tableEntering}
                   exportSource={exportSource}
-                  exportDisabled={!exportSettled || tablePrinting}
+                  exportDisabled={!exportSettled || tableEntering}
                 />
               ) : (
                 <DataTable
@@ -665,7 +677,7 @@ export function SmartAnswer({
                   renderCell={(v) => <InlineText text={v} />}
                   renderHeader={(v) => <InlineText text={v} />}
                   exportSource={exportSource}
-                  exportDisabled={!exportSettled || tablePrinting}
+                  exportDisabled={!exportSettled || tableEntering}
                 />
               )}
               {tablePrinting && b.rows.length < (block.type === "table" ? block.rows.length : 0) ? (

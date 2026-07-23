@@ -5,16 +5,36 @@ import { isDiagramLang, tryInferDiagramKind } from "./InlineDiagram"
  * (pipe-tables and ``` chart / KPI / dashboard fences).
  *
  * No shimmering labels — just a soft skeleton placeholder until the whole
- * block is ready, then SmartAnswer paints it in one shot.
+ * block is ready, then SmartAnswer paints it in one shot. Tables and charts
+ * share the same chrome family so the reserved stage feels identical.
  */
 
-function pendingShellMinHeight(lang: string): number {
+/** Chart / dashboard footprint — tables aim at the same visual stage. */
+export const STRUCTURED_PENDING_CHART_HEIGHT = 264
+export const STRUCTURED_PENDING_DASHBOARD_HEIGHT = 288
+export const STRUCTURED_PENDING_KPI_HEIGHT = 120
+
+/**
+ * Estimate reserved height for an in-flight pipe-table from its remainder.
+ * Floors near a real CompactTable so settle does not jump from a stub shell.
+ */
+export function estimateTablePendingHeight(remainder: string): number {
+  const pipeLines = remainder
+    .split("\n")
+    .filter((line) => line.trimStart().startsWith("|"))
+  // header + separator + rows → visual band roughly header + data rows
+  const visualRows = Math.max(pipeLines.length, 4)
+  const raw = 52 + visualRows * 36
+  return Math.min(STRUCTURED_PENDING_CHART_HEIGHT, Math.max(168, raw))
+}
+
+export function pendingShellMinHeight(lang: string, remainder = ""): number {
   const lower = lang.toLowerCase().trim()
-  if (lower === "table") return 120
+  if (lower === "table") return estimateTablePendingHeight(remainder)
   if (lower === "kpi" || lower === "kpis" || lower === "metric" || lower === "metrics") {
-    return 120
+    return STRUCTURED_PENDING_KPI_HEIGHT
   }
-  if (lower === "dashboard") return 288
+  if (lower === "dashboard") return STRUCTURED_PENDING_DASHBOARD_HEIGHT
   if (
     isDiagramLang(lower)
     || lower === ""
@@ -22,9 +42,9 @@ function pendingShellMinHeight(lang: string): number {
     || lower === "json5"
     || lower === "chart"
   ) {
-    return 264
+    return STRUCTURED_PENDING_CHART_HEIGHT
   }
-  return 120
+  return STRUCTURED_PENDING_KPI_HEIGHT
 }
 
 function pendingAriaLabel(lang: string): string {
@@ -41,8 +61,15 @@ function pendingAriaLabel(lang: string): string {
 }
 
 /** Pending chrome for open fences and for pipe-tables (lang="table"). */
-export function StructuredPendingBlock({ lang }: { lang: string }) {
-  const minHeight = pendingShellMinHeight(lang)
+export function StructuredPendingBlock({
+  lang,
+  remainder = "",
+}: {
+  lang: string
+  /** In-flight fence/table text — used to size the table stage. */
+  remainder?: string
+}) {
+  const minHeight = pendingShellMinHeight(lang, remainder)
   return (
     <div
       className="stream-pending-shell rounded-lg border border-border-subtle px-3 py-2.5 flex flex-col my-1.5"

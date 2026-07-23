@@ -22,6 +22,7 @@ describe("chatTranscriptLayout", () => {
     expect(COMPACT_TABLE_WRAPPER_CLASS).not.toMatch(/\bring-/)
     expect(COMPACT_TABLE_WRAPPER_CLASS).toContain("overflow-x-auto")
     expect(COMPACT_TABLE_WRAPPER_CLASS).toContain("w-full")
+    expect(COMPACT_TABLE_WRAPPER_CLASS).toContain("rounded-lg")
     // Full-width table — no flex-1 sibling rail that steals permanent gutter.
     expect(COMPACT_TABLE_WRAPPER_CLASS).not.toContain("flex-1")
   })

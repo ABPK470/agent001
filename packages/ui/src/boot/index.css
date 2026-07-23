@@ -3765,6 +3765,14 @@ textarea.input {
   animation: stream-diagram-enter 0.35s ease-out both;
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .stream-block-appear,
+  .stream-table-row,
+  .stream-diagram-enter {
+    animation: none;
+  }
+}
+
 /* ── MI:A colon monogram — brand mark + live status ─────────────── */
 
 @keyframes mia-colon-live-rotate {
