@@ -482,6 +482,52 @@ describe("buildResponseParts — TermChat projection", () => {
     }
   })
 
+  it("marks parallel plan steps running together in the outline", () => {
+    const parts = buildResponseParts(
+      [
+        {
+          kind: "planner-plan-generated",
+          stepCount: 2,
+          steps: [
+            { name: "frontend_layer", type: "subagent_task" },
+            { name: "api_layer", type: "subagent_task" },
+          ],
+        },
+        {
+          kind: "planner-delegation-decision",
+          shouldDelegate: true,
+          executionMode: "parallel",
+          reason: "independent",
+        },
+        {
+          kind: "planner-step-start",
+          stepName: "frontend_layer",
+          stepType: "subagent_task",
+        },
+        {
+          kind: "planner-step-start",
+          stepName: "api_layer",
+          stepType: "subagent_task",
+        },
+      ],
+      "running",
+      "",
+      null,
+      null,
+      null,
+      "run-1",
+    )
+
+    const plan = parts.find((p) => p.kind === "plan")
+    expect(plan?.kind).toBe("plan")
+    if (plan?.kind === "plan") {
+      expect(plan.steps.map((s) => s.runStatus)).toEqual(["running", "running"])
+    }
+    const steps = parts.filter((p) => p.kind === "step-block")
+    expect(steps).toHaveLength(2)
+    expect(steps.every((p) => p.kind === "step-block" && p.hasRunning)).toBe(true)
+  })
+
   it("nests parallel subagent tools by stepName (not last openStepId)", () => {
     const parts = buildResponseParts(
       [

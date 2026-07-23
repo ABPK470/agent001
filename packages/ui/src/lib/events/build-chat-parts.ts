@@ -90,13 +90,16 @@ export interface ResponseIterationPart {
   hasRunning: boolean
 }
 
+/** Live status for a named plan step (updated as pipeline events arrive). */
+export type PlanStepRunStatus = "pending" | "running" | "done" | "error"
+
 /** Planner outline — expandable list of named steps (not engine jargon). */
 export interface ResponsePlanPart {
   kind: "plan"
   id: string
   status: "running" | "done" | "error"
   stepCount: number
-  steps: Array<{ name: string; type?: string }>
+  steps: Array<{ name: string; type?: string; runStatus?: PlanStepRunStatus }>
   /** How subagent steps run — folded into the Plan header, not a second chip. */
   executionMode?: "parallel" | "serial" | "guided" | "stop"
 }
@@ -183,6 +186,24 @@ export type ResponsePart =
   | ResponseInputPart
   | ResponseErrorPart
   | ResponseSyncProgressPart
+
+/** Patch one plan outline step's live runStatus (parallel-safe). */
+export function patchPlanStepRunStatus(
+  parts: ResponsePart[],
+  stepName: string,
+  runStatus: PlanStepRunStatus,
+): ResponsePart[] {
+  return parts.map((part) => {
+    if (part.kind !== "plan") return part
+    let changed = false
+    const steps = part.steps.map((step) => {
+      if (step.name !== stepName || step.runStatus === runStatus) return step
+      changed = true
+      return { ...step, runStatus }
+    })
+    return changed ? { ...part, steps } : part
+  })
+}
 
 const TOOL_VERB: Record<string, string> = {
   // Filesystem
@@ -831,7 +852,11 @@ export function buildResponseParts(
           id: "plan",
           status: "done",
           stepCount: entry.stepCount,
-          steps: entry.steps.map((s) => ({ name: s.name, type: s.type })),
+          steps: entry.steps.map((s) => ({
+            name: s.name,
+            type: s.type,
+            runStatus: "pending" as const,
+          })),
         })
         break
       }
@@ -846,6 +871,7 @@ export function buildResponseParts(
         openStepId = activityId
         const isRepair = !!pendingRepair?.steps.has(entry.stepName)
         const isSubagent = entry.stepType === "subagent_task"
+        parts = patchPlanStepRunStatus(parts, entry.stepName, "running")
         parts = parts.concat({
           kind: "step-block",
           id: activityId,
@@ -866,6 +892,7 @@ export function buildResponseParts(
       case "planner-step-end": {
         const activityId = runningSteps.get(entry.stepName) ?? `step-${entry.stepName}-${index}`
         const ok = isPlannerStepSuccessStatus(entry.status)
+        parts = patchPlanStepRunStatus(parts, entry.stepName, ok ? "done" : "error")
         const endDetail = plannerStepEndDetail({
           status: entry.status,
           error: entry.error,

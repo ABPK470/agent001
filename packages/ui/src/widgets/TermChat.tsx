@@ -260,11 +260,32 @@ function ChatTurn({
   const sentinelRef = useRef<HTMLDivElement>(null)
   const stickyRef = useRef<HTMLDivElement>(null)
   const [isStuck, setIsStuck] = useState(false)
-  const { pauseAutoScroll, scrollHostRef } = useChatScroll()
+  const { preserveToggle, scrollHostRef } = useChatScroll()
   const { stickyOffsetPx, topClass: pinTopClass, stuckScrollThreshold } = goalPinLayout(pinProfile)
 
   const pinned = !unpinned
   const showUnpin = pinned && isStuck
+
+  // Concurrent running subagents — pinned with the goal so fan-out stays visible
+  // while stick-to-bottom would otherwise bury earlier step rows.
+  const runningSubagents = useMemo(() => {
+    if (!isActive || !isRunActiveStatus(run.status)) return [] as ResponseStepBlockPart[]
+    const parts = buildResponseParts(
+      run.trace ?? [],
+      run.status,
+      "",
+      run.answer,
+      run.error,
+      pendingInput ?? null,
+      run.id,
+    )
+    return parts.filter(
+      (part): part is ResponseStepBlockPart =>
+        part.kind === "step-block" &&
+        Boolean(part.subagent) &&
+        (part.hasRunning || part.status === "running"),
+    )
+  }, [isActive, run.status, run.trace, run.answer, run.error, run.id, pendingInput])
 
   useEffect(() => {
     if (!pinned) {
@@ -355,8 +376,8 @@ function ChatTurn({
   }, [unpinned, onClearUnpin, run.id, scrollHostRef, pinProfile, stickyOffsetPx])
 
   const handleUnpin = () => {
-    pauseAutoScroll()
-    onUnpin(run.id)
+    // Sticky → in-flow jumps the viewport; preserve the goal's screen position.
+    preserveToggle(stickyRef.current, () => onUnpin(run.id))
   }
 
   const isOwnGoal = !run.upn || run.upn.toLowerCase() === me?.upn?.toLowerCase()
@@ -389,6 +410,24 @@ function ChatTurn({
             )}
             {isOwnGoal && (
               <UserGoalBubble goal={run.goal} showUnpin={showUnpin} onUnpin={handleUnpin} />
+            )}
+            {runningSubagents.length > 0 && (
+              <div
+                className="mt-2 flex w-full flex-col gap-1 rounded-xl border border-border-subtle bg-panel-2/90 px-3 py-2 text-[15px] leading-6 text-text-muted shadow-sm backdrop-blur-sm dark:bg-bubble-user/80"
+                aria-live="polite"
+                aria-label={`${runningSubagents.length} subagent${runningSubagents.length === 1 ? "" : "s"} running`}
+              >
+                {runningSubagents.map((step) => (
+                  <div key={step.id} className="flex min-w-0 items-center gap-1.5">
+                    <span className="inline-flex h-3 w-3 shrink-0 items-center justify-center" aria-hidden>
+                      <Logo size={11} working />
+                    </span>
+                    <span className="min-w-0 truncate">
+                      {step.title.replace(/^Subagent ·\s*/i, "")}
+                    </span>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         </StickyUserGoal>
@@ -761,7 +800,10 @@ function IterationBlock({
 /** Expandable plan outline — named steps, not a bare "3 steps" chip. */
 function PlanBlock({ part }: { part: ResponsePlanPart }) {
   const { preserveToggle } = useChatScroll()
-  const [open, setOpen] = useState(part.steps.length > 0 && part.steps.length <= 8)
+  const runningCount = part.steps.filter((s) => s.runStatus === "running").length
+  const [open, setOpen] = useState(
+    part.steps.length > 0 && (part.steps.length <= 8 || runningCount > 0),
+  )
   const buttonRef = useRef<HTMLButtonElement>(null)
   const Chevron = open ? ChevronDown : ChevronRight
   const modeHint =
@@ -774,6 +816,10 @@ function PlanBlock({ part }: { part: ResponsePlanPart }) {
           : part.executionMode === "stop"
             ? "Blocked"
             : null
+
+  useEffect(() => {
+    if (runningCount > 0) setOpen(true)
+  }, [runningCount])
 
   return (
     <div className="py-1">
@@ -790,23 +836,41 @@ function PlanBlock({ part }: { part: ResponsePlanPart }) {
         <span className="text-text-faint">
           {part.stepCount} step{part.stepCount !== 1 ? "s" : ""}
           {modeHint ? ` · ${modeHint}` : ""}
+          {runningCount > 0 ? ` · ${runningCount} running` : ""}
         </span>
       </button>
       {open && part.steps.length > 0 && (
         <ol className="mt-1 ml-[0.35rem] pl-3 border-l border-border-subtle space-y-1 list-none">
-          {part.steps.map((step, i) => (
-            <li key={`${step.name}-${i}`} className="flex gap-2 text-[15px] leading-6 text-text-muted">
-              <span className="tabular-nums text-text-faint shrink-0 w-4">{i + 1}.</span>
-              <span className="min-w-0">
-                <span>{humanizeStepName(step.name)}</span>
-                {step.type && (
-                  <span className="ml-1.5 text-text-faint">
-                    {step.type === "subagent_task" ? "subagent" : step.type.replace(/_/g, " ")}
+          {part.steps.map((step, i) => {
+            const isRunning = step.runStatus === "running"
+            const isSubagent = step.type === "subagent_task"
+            return (
+              <li
+                key={`${step.name}-${i}`}
+                className="flex gap-2 text-[15px] leading-6 text-text-muted"
+              >
+                <span className="inline-flex h-[1.375rem] w-4 shrink-0 items-center justify-center">
+                  {isRunning && isSubagent ? (
+                    <span className="inline-flex" aria-hidden>
+                      <Logo size={11} working />
+                    </span>
+                  ) : (
+                    <span className="tabular-nums text-text-faint">{i + 1}.</span>
+                  )}
+                </span>
+                <span className="min-w-0">
+                  <span className={isRunning ? "text-text-secondary" : undefined}>
+                    {humanizeStepName(step.name)}
                   </span>
-                )}
-              </span>
-            </li>
-          ))}
+                  {step.type && (
+                    <span className="ml-1.5 text-text-faint">
+                      {isSubagent ? "subagent" : step.type.replace(/_/g, " ")}
+                    </span>
+                  )}
+                </span>
+              </li>
+            )
+          })}
         </ol>
       )}
     </div>
