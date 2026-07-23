@@ -84,6 +84,11 @@ import {
   summarizeHistory,
   summarizeRunError,
 } from "./termchat/milestone"
+import {
+  firstRunningSubagentStepId,
+  isParallelSubagentFanOut,
+  scrollStepToHostTop,
+} from "./termchat/parallelFanOut"
 
 // Local cap mirrors the Fastify route limit. Larger files get a friendly
 // inline error instead of round-tripping for a 413.
@@ -231,6 +236,7 @@ function ChatTurn({
   onRespond,
   onNotify,
   onNotifyError,
+  onParallelFanOutChange,
 }: {
   run: {
     id: string
@@ -255,6 +261,7 @@ function ChatTurn({
   onRespond: (runId: string, response: string) => Promise<void> | void
   onNotify?: (message: string) => void
   onNotifyError?: (message: string) => void
+  onParallelFanOutChange?: (fanOut: boolean) => void
 }): React.ReactElement {
   const turnRef = useRef<HTMLDivElement>(null)
   const sentinelRef = useRef<HTMLDivElement>(null)
@@ -403,6 +410,7 @@ function ChatTurn({
             onRespond={onRespond}
             onNotify={onNotify}
             onNotifyError={onNotifyError}
+            onParallelFanOutChange={isActive ? onParallelFanOutChange : undefined}
           />
         </div>
       </div>
@@ -877,7 +885,7 @@ function StepBlock({
     part.status === "running" || part.hasRunning ? "text-text-muted" : "text-text-faint"
 
   return (
-    <div className="py-1 min-w-0">
+    <div className="py-1 min-w-0" data-chat-step-id={part.id}>
       <button
         ref={buttonRef}
         type="button"
@@ -1550,6 +1558,7 @@ function RunMessageImpl({
   onRespond,
   onNotify,
   onNotifyError,
+  onParallelFanOutChange,
 }: {
   run: {
     id: string
@@ -1565,7 +1574,11 @@ function RunMessageImpl({
   onRespond: (runId: string, response: string) => Promise<void> | void
   onNotify?: (message: string) => void
   onNotifyError?: (message: string) => void
+  /** Active turn only — pauses transcript stick-to-bottom while 2+ subagents run. */
+  onParallelFanOutChange?: (fanOut: boolean) => void
 }) {
+  const { pauseAutoScroll, scrollHostRef } = useChatScroll()
+  const wasFanOutRef = useRef(false)
   const trace = run.trace ?? []
   const liveStreamingAnswer = isActive && isRunActiveStatus(run.status) ? (run.streamingAnswer ?? "") : ""
   const responseParts = useMemo(
@@ -1574,6 +1587,41 @@ function RunMessageImpl({
   )
   const isDone = !isRunActiveStatus(run.status)
   const isLiveRun = isActive && !isDone
+  const parallelFanOut = isParallelSubagentFanOut(responseParts)
+
+  useEffect(() => {
+    if (!isActive) {
+      onParallelFanOutChange?.(false)
+      return
+    }
+    onParallelFanOutChange?.(parallelFanOut)
+  }, [isActive, parallelFanOut, onParallelFanOutChange])
+
+  useLayoutEffect(() => {
+    if (!isLiveRun || !isActive) {
+      wasFanOutRef.current = false
+      return
+    }
+    const rising = parallelFanOut && !wasFanOutRef.current
+    wasFanOutRef.current = parallelFanOut
+    if (!rising) return
+
+    // Stop host follow immediately (followWhen flips one frame later via parent).
+    pauseAutoScroll()
+    const stepId = firstRunningSubagentStepId(responseParts)
+    const host = scrollHostRef.current
+    if (!stepId || !host) return
+    const stepEl = host.querySelector(`[data-chat-step-id="${stepId}"]`)
+    if (!(stepEl instanceof HTMLElement)) return
+    scrollStepToHostTop(host, stepEl)
+  }, [
+    isActive,
+    isLiveRun,
+    parallelFanOut,
+    pauseAutoScroll,
+    responseParts,
+    scrollHostRef,
+  ])
 
   const iterationMeta = useMemo(() => {
     const lastWorkIndex = responseParts.reduce((last, candidate, index) => {
@@ -1810,6 +1858,7 @@ const RunMessage = React.memo(RunMessageImpl, (prev, next) => {
     && prev.onRespond === next.onRespond
     && prev.onNotify === next.onNotify
     && prev.onNotifyError === next.onNotifyError
+    && prev.onParallelFanOutChange === next.onParallelFanOutChange
     // pendingInput only matters for the run it targets
     && (prev.pendingInput?.runId === next.pendingInput?.runId
       ? prev.pendingInput?.question === next.pendingInput?.question
@@ -2068,6 +2117,8 @@ export function TermChat({
   const [transcriptFadeTop, setTranscriptFadeTop] = useState(false)
   const [transcriptFadeBottom, setTranscriptFadeBottom] = useState(false)
   const [unpinnedGoalRunIds, setUnpinnedGoalRunIds] = useState<Set<string>>(() => new Set())
+  /** 2+ live subagents — host stick-to-bottom would bury earlier step rows. */
+  const [parallelFanOut, setParallelFanOut] = useState(false)
   const isThreadMode = mode === "thread"
   const isHomeMode = mode === "home" || isThreadMode
   const pinProfile: GoalPinProfile = mode === "widget" ? "widget" : "home"
@@ -2120,12 +2171,16 @@ export function TermChat({
     pauseAutoScroll,
     suspendAutoFollow,
     resumeAutoFollow,
+    engageFollowIfNearBottom,
     showJumpButton,
     stickIfFollowing,
   } = useStickToBottomScroll({
     resetKey: scrollToRunId,
     initialScroll: "none",
-    followWhen: isRunning || Boolean(scopedActiveRun?.streamingAnswer),
+    // During parallel fan-out, each StepBlock's tool list sticks internally;
+    // host follow would scroll earlier sibling headers off-screen.
+    followWhen:
+      (isRunning || Boolean(scopedActiveRun?.streamingAnswer)) && !parallelFanOut,
     onScrollPosition: (scrollTop, host) => {
       if (!isHomeMode) return
       const overflows = host.scrollHeight > host.clientHeight + 1
@@ -2133,6 +2188,23 @@ export function TermChat({
       setTranscriptFadeBottom(overflows && !isNearBottom(host, 120))
     },
   })
+
+  const handleParallelFanOutChange = useCallback((fanOut: boolean) => {
+    setParallelFanOut(fanOut)
+  }, [])
+
+  useEffect(() => {
+    setParallelFanOut(false)
+  }, [scopedActiveRunId])
+
+  const wasParallelFanOutRef = useRef(false)
+  useEffect(() => {
+    const was = wasParallelFanOutRef.current
+    wasParallelFanOutRef.current = parallelFanOut
+    if (was && !parallelFanOut) {
+      engageFollowIfNearBottom()
+    }
+  }, [parallelFanOut, engageFollowIfNearBottom])
 
   const onTranscriptScrollWithRail = useCallback(() => {
     onTranscriptScroll()
@@ -2560,7 +2632,12 @@ export function TermChat({
       )}
 
       {/* Message list */}
-      <ChatScrollProvider pauseAutoScroll={pauseAutoScroll} scrollHostRef={scrollHostRef}>
+      <ChatScrollProvider
+        pauseAutoScroll={pauseAutoScroll}
+        resumeAutoFollow={resumeAutoFollow}
+        engageFollowIfNearBottom={engageFollowIfNearBottom}
+        scrollHostRef={scrollHostRef}
+      >
       <div className="termchat-transcript-shell relative">
       {isThreadMode && !showEmptyState && (
         <ThreadRunRail
@@ -2665,6 +2742,7 @@ export function TermChat({
                   onRespond={handleRespond}
                   onNotify={notify}
                   onNotifyError={notifyError}
+                  onParallelFanOutChange={handleParallelFanOutChange}
                 />
               ))}
             </div>
@@ -2745,6 +2823,7 @@ export function TermChat({
               onRespond={handleRespond}
               onNotify={notify}
               onNotifyError={notifyError}
+              onParallelFanOutChange={handleParallelFanOutChange}
             />
           ))}
         </div>

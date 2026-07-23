@@ -3,6 +3,8 @@ import { preserveScrollAnchor } from "../lib/chatScroll"
 
 interface ChatScrollContextValue {
   pauseAutoScroll: () => void
+  resumeAutoFollow: () => void
+  engageFollowIfNearBottom: () => void
   preserveToggle: (button: HTMLElement | null, toggle: () => void) => void
   scrollHostRef: RefObject<HTMLDivElement | null>
   hydrateRunTrace?: (runId: string) => Promise<void>
@@ -14,12 +16,16 @@ const ChatScrollContext = createContext<ChatScrollContextValue | null>(null)
 
 export function ChatScrollProvider({
   pauseAutoScroll,
+  resumeAutoFollow = () => { /* optional */ },
+  engageFollowIfNearBottom = () => { /* optional */ },
   scrollHostRef,
   hydrateRunTrace,
   historyHydrationEnabled = false,
   children,
 }: {
   pauseAutoScroll: () => void
+  resumeAutoFollow?: () => void
+  engageFollowIfNearBottom?: () => void
   scrollHostRef: RefObject<HTMLDivElement | null>
   hydrateRunTrace?: (runId: string) => Promise<void>
   historyHydrationEnabled?: boolean
@@ -27,6 +33,8 @@ export function ChatScrollProvider({
 }) {
   const value: ChatScrollContextValue = {
     pauseAutoScroll,
+    resumeAutoFollow,
+    engageFollowIfNearBottom,
     scrollHostRef,
     hydrateRunTrace,
     historyHydrationEnabled,
@@ -40,6 +48,8 @@ export function useChatScroll(): ChatScrollContextValue {
   if (!ctx) {
     return {
       pauseAutoScroll: () => { /* no-op outside provider */ },
+      resumeAutoFollow: () => { /* no-op outside provider */ },
+      engageFollowIfNearBottom: () => { /* no-op outside provider */ },
       preserveToggle: (button, toggle) => preserveScrollAnchor(button, toggle),
       scrollHostRef: { current: null },
       historyHydrationEnabled: true,

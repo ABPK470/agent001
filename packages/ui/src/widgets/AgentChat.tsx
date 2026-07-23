@@ -604,7 +604,11 @@ export function AgentChat() {
 
   return (
       <div ref={rootRef} className="flex flex-col h-full gap-2">
-          <ChatScrollProvider pauseAutoScroll={pauseAutoScroll} scrollHostRef={scrollContainerRef}>
+          <ChatScrollProvider
+            pauseAutoScroll={pauseAutoScroll}
+            resumeAutoFollow={resumeAutoFollow}
+            scrollHostRef={scrollContainerRef}
+          >
           <div className="relative flex-1 min-h-0 flex flex-col">
           {/* Messages area */}
           <div

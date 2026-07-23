@@ -115,6 +115,17 @@ export function useStickToBottomScroll(options: UseStickToBottomScrollOptions = 
     })
   }, [onScrollPosition])
 
+  /** After a temporary pause (e.g. parallel fan-out), re-stick only if still at bottom. */
+  const engageFollowIfNearBottom = useCallback(() => {
+    resumeAutoFollow()
+    const host = scrollHostRef.current
+    if (!host || !followWhenRef.current) return
+    if (!isNearBottom(host, threshold)) return
+    shouldStickRef.current = true
+    setShowJumpButton(false)
+    stickIfFollowing()
+  }, [resumeAutoFollow, stickIfFollowing, threshold])
+
   useLayoutEffect(() => {
     const host = scrollHostRef.current
     if (!host) return
@@ -211,6 +222,7 @@ export function useStickToBottomScroll(options: UseStickToBottomScrollOptions = 
     pauseAutoScroll,
     suspendAutoFollow,
     resumeAutoFollow,
+    engageFollowIfNearBottom,
     showJumpButton,
     stickIfFollowing,
   }

@@ -130,17 +130,6 @@ export function buildOutline(atoms: EventAtom[], viewSpec: ViewSpec): OutlineNod
     }
   }
 
-  function findNodeByNestKey(nodes: OutlineNode[], key: string): OutlineNode | null {
-    for (const n of nodes) {
-      if (n.nestKey === key) return n
-      if (n.children) {
-        const hit = findNodeByNestKey(n.children, key)
-        if (hit) return hit
-      }
-    }
-    return null
-  }
-
   /** Latest closed/open match — retries share a nestKey, so first-match is wrong. */
   function findLastNodeByNestKey(nodes: OutlineNode[], key: string): OutlineNode | null {
     let last: OutlineNode | null = null
