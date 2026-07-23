@@ -341,7 +341,7 @@ export function EnvSync() {
       }
 
       setPublishStatus(publishStatusResult.status === "fulfilled" ? publishStatusResult.value : null)
-    })
+    }).catch((err: unknown) => { console.error("[mia]", err) })
     return () => { dead = true }
   }, [])
 
@@ -391,7 +391,7 @@ export function EnvSync() {
       else loadedPlanIdRef.current = null
     }).finally(() => {
       if (requestId === hydrateRequestRef.current) setPlanLoading(false)
-    })
+    }).catch((err: unknown) => { console.error("[mia]", err) })
 
     return () => {
       hydrateRequestRef.current += 1
@@ -497,7 +497,7 @@ export function EnvSync() {
           reason: err.message,
           policyName: err.policyName,
           onApproved: () => {
-            void onPreview()
+            void onPreview().catch((err: unknown) => { console.error("[mia]", err) })
           },
         })
       } else {
@@ -659,7 +659,7 @@ export function EnvSync() {
                   <input
                     value={searchDraft}
                     onChange={(e) => onSearchInput(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && void onPreview()}
+                    onKeyDown={(e) => e.key === "Enter" && void onPreview().catch((err: unknown) => { console.error("[mia]", err) })}
                     onFocus={() => { if (searchResults.length) setSearchOpen(true) }}
                     placeholder={searchMode === "id" ? (definition?.idColumn ?? "id") : (definition?.labelColumn ?? "name")}
                     aria-busy={searchLoading}
@@ -779,7 +779,7 @@ export function EnvSync() {
               className="env-sync-control-btn"
               label={blocker ?? (hasPlan && !execActive ? "Re-run preview" : "Preview")}
               variant={hasPlan && !execActive ? "default" : "primary"}
-              onClick={() => void onPreview()}
+              onClick={() => void onPreview().catch((err: unknown) => { console.error("[mia]", err) })}
               disabled={!canPreview}
             >
               {previewing ? <Loader2 {...TOOLBAR_ICON} className="animate-spin" /> : hasPlan && !execActive ? <RefreshCw {...TOOLBAR_ICON} /> : <Eye {...TOOLBAR_ICON} />}
@@ -848,7 +848,7 @@ export function EnvSync() {
           size="focus"
           onClose={() => { setModal(null); setHasNewAgentSync(false) }}
         >
-          <HistoryContent onOpen={(planId) => { void openPlanFromHistory(planId) }} onNotifyError={notifyError} />
+          <HistoryContent onOpen={(planId) => { void openPlanFromHistory(planId).catch((err: unknown) => { console.error("[mia]", err) }) }} onNotifyError={notifyError} />
         </ModalShell>
       )}
       {execModalOpen && (displayPlan || execPlanId) && (
@@ -858,9 +858,9 @@ export function EnvSync() {
           execPlanId={execPlanId}
           tgtEnv={tgtEnv}
           onConfirm={onExecConfirmed}
-          onCancel={() => { void cancelExec() }}
+          onCancel={() => { void cancelExec().catch((err: unknown) => { console.error("[mia]", err) }) }}
           onClose={() => {
-            if (exec.kind === "running") void cancelExec()
+            if (exec.kind === "running") void cancelExec().catch((err: unknown) => { console.error("[mia]", err) })
             setExecModalOpen(false)
           }}
         />

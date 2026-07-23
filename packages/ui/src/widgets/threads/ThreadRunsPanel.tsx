@@ -153,11 +153,11 @@ function WidgetThreadBlock({
           type="text"
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
-          onBlur={() => void commitRename()}
+          onBlur={() => void commitRename().catch((err: unknown) => { console.error("[mia]", err) })}
           onKeyDown={(event) => {
             if (event.key === "Enter") {
               event.preventDefault()
-              void commitRename()
+              void commitRename().catch((err: unknown) => { console.error("[mia]", err) })
             }
             if (event.key === "Escape") {
               setDraft(displayTitle)
@@ -302,7 +302,7 @@ export function ThreadRunsPanel(): React.ReactElement {
   }, [])
 
   useEffect(() => {
-    if (expandedId) void loadRuns(expandedId)
+    if (expandedId) void loadRuns(expandedId).catch((err: unknown) => { console.error("[mia]", err) })
   }, [expandedId, loadRuns])
 
   useEffect(() => {
@@ -369,8 +369,8 @@ export function ThreadRunsPanel(): React.ReactElement {
             loading={loadingId === thread.id}
             activeRunId={activeRunId}
             onToggle={() => handleToggle(thread.id)}
-            onSelectThread={() => void handleSelectThread(thread.id)}
-            onSelectRun={(runId) => void handleSelectRun(thread.id, runId)}
+            onSelectThread={() => void handleSelectThread(thread.id).catch((err: unknown) => { console.error("[mia]", err) })}
+            onSelectRun={(runId) => void handleSelectRun(thread.id, runId).catch((err: unknown) => { console.error("[mia]", err) })}
             onDeleteThread={() => handleDeleteThread(thread)}
           />
         ))
@@ -400,7 +400,7 @@ export function ThreadRunsPanel(): React.ReactElement {
         <button
           type="button"
           className="thread-nav-new"
-          onClick={() => void createNewThread()}
+          onClick={() => void createNewThread().catch((err: unknown) => { console.error("[mia]", err) })}
         >
           <Plus size={14} strokeWidth={2} />
           <span>New thread</span>

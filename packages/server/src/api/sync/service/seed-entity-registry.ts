@@ -1,3 +1,5 @@
+import { parseBoundaryJson } from "../../../internal/parse-json.js"
+
 /**
  * Bootstrap the entity registry on a fresh database from deploy-owned artifacts.
  *
@@ -11,6 +13,8 @@
  */
 
 import {
+  asFlowId,
+  asTenantId,
   loadEntityDefinitionsFromDocument,
   projectTablePredicate,
   validateEntityDefinition,
@@ -106,7 +110,7 @@ function seedFromYaml(yamlPath: string, tenantId: string): EntityRegistrySeedRes
   const definitions = loadEntityDefinitionsFromDocument(yamlPath)
   const entityIds: string[] = []
   for (const raw of definitions) {
-    const def = { ...raw, tenantId }
+    const def = { ...raw, tenantId: asTenantId(tenantId) }
     const validation = validateEntityDefinition(def)
     if (!validation.ok) {
       throw new Error(
@@ -146,7 +150,7 @@ function seedFromArtifacts(artifactsDir: string, tenantId: string): EntityRegist
 }
 
 function loadEntitySeedFile(path: string, tenantId: string): EntityDefinition {
-  const raw = JSON.parse(readFileSync(path, "utf-8")) as unknown
+  const raw = parseBoundaryJson(readFileSync(path, "utf-8")) as unknown
   if (!isEntityDefinitionDocument(raw)) {
     throw new Error(
       `Expected EntityDefinition seed at ${path} (Authored seeds are no longer accepted — re-run refresh-from-legacy)`,
@@ -166,9 +170,9 @@ function loadEntitySeedFile(path: string, tenantId: string): EntityDefinition {
   delete doc["run"]
   const entity = doc as unknown as EntityDefinition
   if (!entity.flowId?.trim()) {
-    entity.flowId = entity.id
+    entity.flowId = asFlowId(entity.id)
   }
-  return { ...entity, tenantId }
+  return { ...entity, tenantId: asTenantId(tenantId) }
 }
 
 function isEntityDefinitionDocument(raw: unknown): raw is EntityDefinition {

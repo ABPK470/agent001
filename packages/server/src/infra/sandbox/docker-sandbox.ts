@@ -49,8 +49,11 @@ export class DockerSandbox {
 
   private startWatchdog(): void {
     if (this.watchdogTimer) return
-    this.watchdogTimer = setInterval(() => void this.reapContainers(), WATCHDOG_INTERVAL)
-    this.watchdogTimer.unref()
+    const timer = setInterval(() => void this.reapContainers().catch((err: unknown) => { console.error("[mia]", err) }), WATCHDOG_INTERVAL)
+    timer.unref()
+    this.watchdogTimer = timer
+    const stopWatchdogTimer = () => clearInterval(timer)
+    void stopWatchdogTimer
   }
 
   private async reapContainers(): Promise<void> {

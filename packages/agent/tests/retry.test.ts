@@ -23,19 +23,19 @@ describe("computeDelay", () => {
   }
 
   it("increases exponentially", () => {
-    expect(computeDelay(0, policy)).toBe(100) // 100 * 2^0
-    expect(computeDelay(1, policy)).toBe(200) // 100 * 2^1
-    expect(computeDelay(2, policy)).toBe(400) // 100 * 2^2
-    expect(computeDelay(3, policy)).toBe(800) // 100 * 2^3
+    expect(computeDelay(0, policy, () => 0)).toBe(100) // 100 * 2^0
+    expect(computeDelay(1, policy, () => 0)).toBe(200) // 100 * 2^1
+    expect(computeDelay(2, policy, () => 0)).toBe(400) // 100 * 2^2
+    expect(computeDelay(3, policy, () => 0)).toBe(800) // 100 * 2^3
   })
 
   it("caps at maxDelayMs", () => {
-    expect(computeDelay(10, policy)).toBe(2000)
+    expect(computeDelay(10, policy, () => 0)).toBe(2000)
   })
 
   it("adds jitter within range", () => {
     const jitteryPolicy = { ...policy, jitterFactor: 0.3 }
-    const delays = Array.from({ length: 50 }, () => computeDelay(0, jitteryPolicy))
+    const delays = Array.from({ length: 50 }, () => computeDelay(0, jitteryPolicy, Math.random))
     // base=100, jitter up to 30 → range [100, 130]
     for (const d of delays) {
       expect(d).toBeGreaterThanOrEqual(100)

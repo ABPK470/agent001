@@ -38,7 +38,7 @@ export function StrategySelect(p: StrategySelectProps): JSX.Element {
     void api.listEntityRegistryStrategies()
       .then((r) => { if (!cancelled) setItems(r.items) })
       .catch((e) => { if (!cancelled) setErr(e instanceof Error ? e.message : String(e)) })
-      .finally(() => { if (!cancelled) setLoading(false) })
+      .finally(() => { if (!cancelled) setLoading(false) }).catch((err: unknown) => { console.error("[mia]", err) })
     return () => { cancelled = true }
   }, [])
 

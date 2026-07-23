@@ -10,6 +10,8 @@
  * proposer iterates whatever entities are configured at runtime — not a
  * compile-time list.
  */
+import type { EntityId } from "../../domain/types/branded-ids.js"
+
 
 // ── Finding kinds — what the deterministic scan detects ──────────
 
@@ -153,7 +155,7 @@ export interface ProposerFinding {
   /** Entity machine id (from the registry); not a compile-time union. */
   entityType: string
   /** Specific row id within the entity (e.g. a Contract's ContractId). */
-  entityId: string
+  entityId: EntityId
   /** Human-friendly label captured at scan time so the UI doesn't need to refetch. */
   entityLabel: string
   kind: ProposalKind

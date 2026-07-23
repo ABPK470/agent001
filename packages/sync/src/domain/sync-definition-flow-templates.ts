@@ -1,3 +1,4 @@
+import type { EntityId } from "./types/branded-ids.js"
 import type {
   AuthoredSyncDefinition,
   EntityRegistrySyncFlowTemplateId,
@@ -81,7 +82,7 @@ export function hasSyncDefinitionFlowTemplate(
 }
 
 export function defaultSyncDefinitionFlowTemplateId(
-  entityId: string,
+  entityId: EntityId,
   catalog: SyncDefinitionFlowTemplateCatalog
 ): EntityRegistrySyncFlowTemplateId {
   return hasSyncDefinitionFlowTemplate(catalog, entityId) ? entityId : "metadataOnly"

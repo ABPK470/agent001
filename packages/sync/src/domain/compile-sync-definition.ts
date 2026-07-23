@@ -4,6 +4,8 @@
  * Entity registry + admin config → authored or published definition.
  * All paths (scaffold, publish, runtime) share one metadata builder.
  */
+import { asEntityId, type EntityId, type StrategyId } from "./types/branded-ids.js"
+
 
 import type { AuthoredSyncDefinition, AuthoredSyncFlowStep, PublishedSyncDefinition } from "@mia/shared-types"
 
@@ -42,14 +44,14 @@ export interface CompileAuthoredOptions {
   environmentPolicyRef?: string
   sourceArtifact?: string | null
   ownershipNotes?: string[]
-  resolveScd2Strategy?: (strategyId: string, strategyVersion: number | "latest") => Scd2Strategy | null
+  resolveScd2Strategy?: (strategyId: StrategyId, strategyVersion: number | "latest") => Scd2Strategy | null
 }
 
 /**
  * Compose-time defaults for published bindings/ownership.
  * Not Catalog tip fields and not persisted — Publish stamps these into SyncDefinition only.
  */
-export function defaultConfig(entityId: string, catalog: SyncDefinitionFlowTemplateCatalog): SyncDefinitionConfigInput {
+export function defaultConfig(entityId: EntityId, catalog: SyncDefinitionFlowTemplateCatalog): SyncDefinitionConfigInput {
   const flowTemplateId = defaultSyncDefinitionFlowTemplateId(entityId, catalog)
   return {
     flow_preset: flowTemplateId,
@@ -68,7 +70,7 @@ export function syncDefinitionConfigFromEntity(
   entity: EntityDefinition,
   catalog: SyncDefinitionFlowTemplateCatalog,
 ): SyncDefinitionConfigInput {
-  const base = defaultConfig(entity.id, catalog)
+  const base = defaultConfig(asEntityId(entity.id), catalog)
   const tip = entity.flowId?.trim()
   const resolved =
     tip && hasSyncDefinitionFlowTemplate(catalog, tip) ? tip : base.flow_preset
@@ -89,7 +91,7 @@ function resolveTipFlowId(
   if (config.flow_preset && hasSyncDefinitionFlowTemplate(flowTemplateCatalog, config.flow_preset)) {
     return config.flow_preset
   }
-  return defaultSyncDefinitionFlowTemplateId(entity.id, flowTemplateCatalog)
+  return defaultSyncDefinitionFlowTemplateId(asEntityId(entity.id), flowTemplateCatalog)
 }
 
 function resolveExecutionSteps(
@@ -115,7 +117,7 @@ function buildDefinitionCore(
   flowTemplateCatalog: SyncDefinitionFlowTemplateCatalog,
   provenance: AuthoredSyncDefinition["provenance"],
   flowCatalog?: FlowCatalog,
-  resolveScd2Strategy?: (strategyId: string, strategyVersion: number | "latest") => Scd2Strategy | null,
+  resolveScd2Strategy?: (strategyId: StrategyId, strategyVersion: number | "latest") => Scd2Strategy | null,
 ): AuthoredSyncDefinition {
   const normalized = normalizeEntityDefinition(entity)
   const executionSteps = resolveExecutionSteps(config, flowTemplateCatalog, entity, flowCatalog)
@@ -226,7 +228,7 @@ export function compilePublishedSyncDefinition(
   flowCatalog: FlowCatalog,
   publishedAt: string,
   publishedVersion: string,
-  resolveScd2Strategy: (strategyId: string, strategyVersion: number | "latest") => Scd2Strategy | null,
+  resolveScd2Strategy: (strategyId: StrategyId, strategyVersion: number | "latest") => Scd2Strategy | null,
 ): PublishedSyncDefinition {
   const authored = buildDefinitionCore(
     entity,

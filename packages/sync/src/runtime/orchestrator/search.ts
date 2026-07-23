@@ -9,6 +9,7 @@ import type { PublishedSyncDefinition } from "@mia/shared-types"
 import { parseEntityInstanceRef, coerceSyncEntityId } from "../../domain/entity-instance-ref.js"
 import type { SyncEntityId } from "../../domain/definition-selection.js"
 import { SyncOperationType } from "../../domain/enums.js"
+import { asEntityId } from "../../domain/types/branded-ids.js"
 import { getPublishedSyncDefinition } from "../../domain/published-definitions.js"
 import type { SyncTelemetryContext } from "../../ports/events.js"
 import { getPool } from "../../adapters/mssql/connection.js"
@@ -126,7 +127,7 @@ export async function searchEntities(
   limit = 200,
   mode: EntitySearchMode = "name"
 ): Promise<EntitySearchResult[]> {
-  const definition = getPublishedSyncDefinition(host, projectRoot(host), entityType)
+  const definition = getPublishedSyncDefinition(host, projectRoot(host), asEntityId(entityType))
   const ctx = discoveryContext()
   const displayColumn = await resolveDisplayColumn(host, source, definition, ctx)
   const safeLike = query.replace(/[%_[\]^]/g, "[$&]")

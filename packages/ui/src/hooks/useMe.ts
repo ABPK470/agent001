@@ -41,7 +41,10 @@ export function useMe(): {
   const refresh = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await fetch("/api/auth/whoami", { credentials: "include" })
+      const res = await fetch("/api/auth/whoami", {
+        credentials: "include",
+        signal: AbortSignal.timeout(60_000),
+      })
       if (!res.ok) {
         setMe(null)
         return
@@ -59,7 +62,11 @@ export function useMe(): {
 
   const logout = useCallback(async () => {
     try {
-      await fetch("/api/auth/logout", { method: "POST", credentials: "include" })
+      await fetch("/api/auth/logout", {
+        method: "POST",
+        credentials: "include",
+        signal: AbortSignal.timeout(60_000),
+      })
     } catch (err: unknown) { console.error("[mia]", err) }
     setMe(null)
   }, [])

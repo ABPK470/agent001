@@ -7,6 +7,7 @@ import { createPublishedSyncDefinitionRegistry } from "../published-definition-r
 import { ALWAYS_PUBLISH_READY } from "../../domain/publish-readiness.js"
 import type { SyncRuntimeHost } from "../../ports/host.js"
 import type { SyncExecutionContractStep, SyncPlan } from "../plan-store.js"
+import { asPlanId } from "../../domain/types/branded-ids.js"
 import { trackedExecute, trackedQuery } from "./db-helpers.js"
 import { runPostMetadataPipeline } from "./post-metadata-pipeline.js"
 
@@ -319,7 +320,7 @@ async function runScenario(input: {
     srcPool: createPool(),
     tgtPool: createPool(),
     plan: createPlan(input.entityType, input.actions ?? []),
-    planId: "plan-1",
+    planId: asPlanId("plan-1"),
     entityId: input.entityId,
     entityType: input.entityType,
     steps,
@@ -478,7 +479,7 @@ function stepNames(progress: Array<Record<string, unknown>>): string[] {
 
 function createPlan(entityType: string, actions: PostMetadataActionKind[]): SyncPlan {
   return {
-    planId: "plan-1",
+    planId: asPlanId("plan-1"),
     createdAt: new Date(0).toISOString(),
     createdAtMs: 0,
     entity: { type: entityType as never, id: 1, displayName: entityType },

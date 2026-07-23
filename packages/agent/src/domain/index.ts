@@ -68,3 +68,4 @@ export type { HostedPolicyContext } from "./types/policy-context.js"
 
 export * from "./types/agent-constants.js"
 export * from "./types/agent-types.js"
+export * from "./types/branded-ids.js"

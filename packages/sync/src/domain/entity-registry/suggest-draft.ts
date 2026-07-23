@@ -1,6 +1,8 @@
 /**
  * Suggest entity registry draft fields from root table name + optional schema catalog.
  */
+import { asEntityId, type EntityId } from "../types/branded-ids.js"
+
 
 import { scopeFromAuthoredPredicate } from "./from-authored-sync.js"
 import { orderEntityTablesDetailed } from "./order.js"
@@ -92,7 +94,7 @@ export function suggestIdentityHeuristic(rootTable: string): EntityDraftIdentity
   }
 }
 
-export function suggestFlowTemplateId(entityId: string, available: readonly string[]): string | null {
+export function suggestFlowTemplateId(entityId: EntityId, available: readonly string[]): string | null {
   if (!entityId) return null
   if (available.includes(entityId)) return entityId
   if (entityId === "gateMetadata" && available.includes("gateMetadata")) return "gateMetadata"
@@ -430,7 +432,7 @@ export function suggestEntityDraft(
   return {
     identity,
     tables,
-    flowTemplateId: suggestFlowTemplateId(identity.id, options?.flowTemplateIds ?? []),
+    flowTemplateId: suggestFlowTemplateId(asEntityId(identity.id), options?.flowTemplateIds ?? []),
     source: catalog && rootMeta ? "catalog" : "heuristic",
     notes,
   }

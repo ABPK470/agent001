@@ -30,6 +30,7 @@ export * from "./flow-catalog.js"
 export * from "./normalize-flow-step.js"
 export * from "./resolve-flow-steps.js"
 export * from "./validate-sync-flow.js"
+export * from "./types/branded-ids.js"
 
 /** @deprecated Use SyncEntityId */
 export type { SyncEntityId as EntityType } from "./definition-selection.js"

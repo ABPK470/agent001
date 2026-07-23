@@ -1,3 +1,5 @@
+import { parseBoundaryJson } from "../../internal/parse-json.js"
+
 /**
  * Operation log transport routes.
  */
@@ -137,7 +139,7 @@ export function registerOperationRoutes(app: FastifyInstance): void {
     const events = rows.map((row) => ({
       id: row.id,
       type: row.type,
-      data: JSON.parse(row.data) as Record<string, unknown>,
+      data: parseBoundaryJson(row.data) as Record<string, unknown>,
       timestamp: row.created_at
     }))
     return { events, count: events.length }

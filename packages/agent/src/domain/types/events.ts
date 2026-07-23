@@ -2,6 +2,7 @@
 
 import { randomUUID } from "node:crypto"
 import { EventType } from "../enums/event.js"
+import type { RunId, StepId } from "./branded-ids.js"
 
 export interface DomainEvent {
   readonly eventId: string
@@ -17,27 +18,27 @@ function base<T extends string>(type: T): { eventId: string; type: T; occurredAt
 
 export interface RunStarted extends DomainEvent {
   type: typeof EventType.RunStarted
-  runId: string
+  runId: RunId
   workflowId: string
 }
-export function runStarted(runId: string, workflowId: string): RunStarted {
+export function runStarted(runId: RunId, workflowId: string): RunStarted {
   return { ...base(EventType.RunStarted), runId, workflowId }
 }
 
 export interface RunCompleted extends DomainEvent {
   type: typeof EventType.RunCompleted
-  runId: string
+  runId: RunId
 }
-export function runCompleted(runId: string): RunCompleted {
+export function runCompleted(runId: RunId): RunCompleted {
   return { ...base(EventType.RunCompleted), runId }
 }
 
 export interface RunFailed extends DomainEvent {
   type: typeof EventType.RunFailed
-  runId: string
+  runId: RunId
   reason: string
 }
-export function runFailed(runId: string, reason: string): RunFailed {
+export function runFailed(runId: RunId, reason: string): RunFailed {
   return { ...base(EventType.RunFailed), runId, reason }
 }
 
@@ -45,29 +46,29 @@ export function runFailed(runId: string, reason: string): RunFailed {
 
 export interface StepStarted extends DomainEvent {
   type: typeof EventType.StepStarted
-  runId: string
-  stepId: string
+  runId: RunId
+  stepId: StepId
 }
-export function stepStarted(runId: string, stepId: string): StepStarted {
+export function stepStarted(runId: RunId, stepId: StepId): StepStarted {
   return { ...base(EventType.StepStarted), runId, stepId }
 }
 
 export interface StepCompleted extends DomainEvent {
   type: typeof EventType.StepCompleted
-  runId: string
-  stepId: string
+  runId: RunId
+  stepId: StepId
 }
-export function stepCompleted(runId: string, stepId: string): StepCompleted {
+export function stepCompleted(runId: RunId, stepId: StepId): StepCompleted {
   return { ...base(EventType.StepCompleted), runId, stepId }
 }
 
 export interface StepFailed extends DomainEvent {
   type: typeof EventType.StepFailed
-  runId: string
-  stepId: string
+  runId: RunId
+  stepId: StepId
   reason: string
 }
-export function stepFailed(runId: string, stepId: string, reason: string): StepFailed {
+export function stepFailed(runId: RunId, stepId: StepId, reason: string): StepFailed {
   return { ...base(EventType.StepFailed), runId, stepId, reason }
 }
 
@@ -75,15 +76,15 @@ export function stepFailed(runId: string, stepId: string, reason: string): StepF
 
 export interface ApprovalRequired extends DomainEvent {
   type: typeof EventType.ApprovalRequired
-  runId: string
-  stepId: string
+  runId: RunId
+  stepId: StepId
   toolName: string
   args: Record<string, unknown>
   reason: string
 }
 export function approvalRequired(
-  runId: string,
-  stepId: string,
+  runId: RunId,
+  stepId: StepId,
   toolName: string,
   args: Record<string, unknown>,
   reason: string

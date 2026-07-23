@@ -10,6 +10,8 @@
  * concrete adapters that talk to MSSQL, the entity registry, and the
  * existing diff-engine helpers.
  */
+import { asEntityId, type EntityId } from "../../domain/types/branded-ids.js"
+
 
 import { canonicalSha256 } from "./canonical.js"
 import {
@@ -40,7 +42,7 @@ export interface CatalogDriftProbe {
 }
 
 export interface DivergentEntityRow {
-  entityId: string
+  entityId: EntityId
   entityLabel: string
   counts: ProposalCounts
   /** Per-table breakdown — empty for "new entity" findings. */
@@ -127,7 +129,7 @@ export async function runProposerPass(
           makeFinding({
             envPair,
             ent,
-            entityId: "*",
+            entityId: asEntityId("*"),
             entityLabel: ent.label,
             kind: ProposalKind.Drift,
             counts: emptyCounts(),
@@ -150,7 +152,7 @@ export async function runProposerPass(
           makeFinding({
             envPair,
             ent,
-            entityId: r.entityId,
+            entityId: asEntityId(r.entityId),
             entityLabel: r.entityLabel,
             kind,
             counts: r.counts,
@@ -177,7 +179,7 @@ export async function runProposerPass(
 interface MakeFindingInput {
   envPair: EnvPair
   ent: EntityDescriptor
-  entityId: string
+  entityId: EntityId
   entityLabel: string
   kind: ProposerFinding["kind"]
   counts: ProposalCounts

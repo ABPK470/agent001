@@ -250,7 +250,7 @@ function mergeWithDefaults(o: Partial<TenantConfig>): TenantConfig {
 
 function freezeDeep<T>(v: T): T {
   if (v == null || typeof v !== "object") return v
-  for (const k of Object.keys(v as object)) {
+  for (const k of Object.keys(v as object).sort()) {
     freezeDeep((v as Record<string, unknown>)[k])
   }
   return Object.freeze(v)

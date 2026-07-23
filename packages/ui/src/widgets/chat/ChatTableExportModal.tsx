@@ -229,7 +229,7 @@ export function ChatTableExportModal({
             <button
               type="button"
               className="px-3 py-1.5 text-sm rounded-lg bg-accent text-text-on-accent hover:bg-accent-hover disabled:opacity-40 cursor-pointer"
-              onClick={() => void onExport()}
+              onClick={() => void onExport().catch((err: unknown) => { console.error("[mia]", err) })}
               disabled={busy || selected.size === 0 || tables.length === 0}
             >
               {busy ? "Exporting…" : "Export"}

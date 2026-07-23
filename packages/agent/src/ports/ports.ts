@@ -1,4 +1,4 @@
-import type sql from "mssql"
+import type { MssqlConfig, MssqlConnectionPool } from "../internal/mssql-types.js"
 import type { AttachmentScope } from "../domain/enums/attachment.js"
 import type { IngestionMode } from "../domain/enums/runtime.js"
 
@@ -143,8 +143,8 @@ export interface TableVerdictsReader {
 // ── MSSQL connection registry (host-wired) ───────────────────────
 
 export interface MssqlEntry {
-  config: sql.config
-  pool: sql.ConnectionPool | null
+  config: MssqlConfig
+  pool: MssqlConnectionPool | null
   knowledge: string | null
 }
 
@@ -158,8 +158,8 @@ export interface MssqlEntry {
 
 export interface MssqlConnectorPool {
   connectorId: string
-  pool: sql.ConnectionPool
-  config: sql.config
+  pool: MssqlConnectionPool
+  config: MssqlConfig
   knowledge: string | null
 }
 
@@ -169,7 +169,7 @@ export interface MssqlPoolProvider {
   /** Resolve a pool by connector name (case-insensitive). */
   getByName(name: string): Promise<MssqlConnectorPool>
   /** Read a connector's finalized `sql.config` without connecting (for pool gating). */
-  configOf(connectorId: string): sql.config | undefined
+  configOf(connectorId: string): MssqlConfig | undefined
   /** Enabled mssql connectors (live read). */
   list(): readonly { id: string; name: string }[]
   /** Drop the cached pool for a connector (e.g. after config change). */

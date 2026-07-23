@@ -1,6 +1,7 @@
 import { getDb } from "../../../infra/persistence/sqlite.js"
 import { TrajectoryEditOperation } from "../../../internal/enums/trajectory.js"
 import type { Mutation, Trajectory, TrajectoryEvent } from "./types.js"
+import { parseBoundaryJson } from "../../../internal/parse-json.js"
 
 // ── Loader ───────────────────────────────────────────────────────
 
@@ -13,7 +14,7 @@ export function loadTrajectory(runId: string): Trajectory {
   const events = rows
     .map((row) => {
       try {
-        const event = JSON.parse(row.data) as TrajectoryEvent
+        const event = parseBoundaryJson(row.data) as TrajectoryEvent
         return { seq: row.seq, event, timestamp: row.created_at }
       } catch {
         return null

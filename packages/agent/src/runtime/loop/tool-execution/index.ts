@@ -15,6 +15,7 @@ import { ToolControlDirective, ToolOutcomeSeverity } from "../../../domain/index
  * @module
  */
 
+import { asToolCallId } from "../../../domain/types/branded-ids.js"
 import { READ_ONLY_TOOL_NAMES } from "../../../domain/types/agent-constants.js"
 import { MessageRole } from "../../../domain/enums/message.js"
 import * as log from "../../../internal/index.js"
@@ -101,7 +102,7 @@ export async function executeToolRound(
     if (keyBlock) {
       const msg = `SKIPPED (circuit blocked): ${keyBlock.reason} Try a different approach for this call.`
       if (config.verbose) log.logToolError(msg)
-      messages.push({ role: MessageRole.Tool, toolCallId: call.id, content: msg, section: "history" })
+      messages.push({ role: MessageRole.Tool, toolCallId: asToolCallId(call.id), content: msg, section: "history" })
       roundToolCalls.push({ name: call.name, args: call.arguments, result: msg, isError: true })
       failuresThisRound++
       continue
@@ -113,7 +114,7 @@ export async function executeToolRound(
       if (config.verbose) log.logToolError(errMsg)
       messages.push({
         role: MessageRole.Tool,
-        toolCallId: call.id,
+        toolCallId: asToolCallId(call.id),
         content: errMsg,
         section: "history"
       })
@@ -132,7 +133,7 @@ export async function executeToolRound(
       if (config.verbose) log.logToolError(errMsg)
       messages.push({
         role: MessageRole.Tool,
-        toolCallId: call.id,
+        toolCallId: asToolCallId(call.id),
         content: errMsg,
         section: "history"
       })
@@ -169,7 +170,7 @@ export async function executeToolRound(
           if (config.verbose) log.logToolError(blockedMsg)
           messages.push({
             role: MessageRole.Tool,
-            toolCallId: call.id,
+            toolCallId: asToolCallId(call.id),
             content: blockedMsg,
             section: "history"
           })
@@ -210,7 +211,7 @@ export async function executeToolRound(
       if (config.verbose) log.logToolError(blockedMsg)
       messages.push({
         role: MessageRole.Tool,
-        toolCallId: call.id,
+        toolCallId: asToolCallId(call.id),
         content: blockedMsg,
         section: "history"
       })
@@ -253,7 +254,7 @@ export async function executeToolRound(
     if (killed) {
       const msg = `[TOOL KILLED BY USER] ${killMessage}`
       if (config.verbose) log.logToolError(msg)
-      messages.push({ role: MessageRole.Tool, toolCallId: call.id, content: msg, section: "history" })
+      messages.push({ role: MessageRole.Tool, toolCallId: asToolCallId(call.id), content: msg, section: "history" })
       roundToolCalls.push({ name: call.name, args: call.arguments, result: msg, isError: true })
       failuresThisRound++
       continue
@@ -263,7 +264,7 @@ export async function executeToolRound(
       if (config.verbose) log.logToolError(execResult.result)
       messages.push({
         role: MessageRole.Tool,
-        toolCallId: call.id,
+        toolCallId: asToolCallId(call.id),
         content: execResult.result,
         section: "history"
       })
@@ -280,7 +281,7 @@ export async function executeToolRound(
       try {
         config.onToolResult?.({
           iteration: ctx.iteration,
-          toolCallId: call.id,
+          toolCallId: asToolCallId(call.id),
           toolName: call.name,
           args: call.arguments,
           result: execResult.result,
@@ -313,7 +314,7 @@ export async function executeToolRound(
       if (config.verbose) log.logToolResult(enriched)
       messages.push({
         role: MessageRole.Tool,
-        toolCallId: call.id,
+        toolCallId: asToolCallId(call.id),
         content: compactedForHistory,
         section: "history"
       })
@@ -330,7 +331,7 @@ export async function executeToolRound(
       try {
         config.onToolResult?.({
           iteration: ctx.iteration,
-          toolCallId: call.id,
+          toolCallId: asToolCallId(call.id),
           toolName: call.name,
           args: call.arguments,
           result: enriched,

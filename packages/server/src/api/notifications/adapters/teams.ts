@@ -27,7 +27,8 @@ export async function deliverTeams(i: TeamsDeliveryInput): Promise<void> {
   const r = await fetch(i.target, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify(payload)
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(60_000),
   })
   if (!r.ok) {
     const txt = await safeText(r)

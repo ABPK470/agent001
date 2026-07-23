@@ -337,7 +337,7 @@ export function NotificationPanel() {
                                       ? "text-warning bg-warning/10 hover:bg-warning/20"
                                       : "text-accent bg-accent/10 hover:bg-accent/20"
                                 }`}
-                                onClick={() => void handleAction(n, action)}
+                                onClick={() => void handleAction(n, action).catch((err: unknown) => { console.error("[mia]", err) })}
                               >
                                 {action.label}
                               </button>

@@ -143,7 +143,7 @@ export function PolicyRulesModal({ isAdmin, onClose }: { isAdmin: boolean; onClo
     type === EventType.SyncPolicySaved || type === EventType.SyncPolicyDeleted,
   )
 
-  useEffect(() => { void refresh() }, [refresh])
+  useEffect(() => { void refresh().catch((err: unknown) => { console.error("[mia]", err) }) }, [refresh])
 
   function openNew(): void {
     setDraft(DEFAULT_DRAFT)
@@ -222,7 +222,7 @@ export function PolicyRulesModal({ isAdmin, onClose }: { isAdmin: boolean; onClo
             <>
               <ModalBtnSecondary onClick={closeForm} disabled={busy}>Back</ModalBtnSecondary>
               <div className="ml-auto">
-                <ModalBtnPrimary onClick={() => void save()} disabled={busy}>
+                <ModalBtnPrimary onClick={() => void save().catch((err: unknown) => { console.error("[mia]", err) })} disabled={busy}>
                   <Save size={14} /> Save
                 </ModalBtnPrimary>
               </div>
@@ -250,7 +250,7 @@ export function PolicyRulesModal({ isAdmin, onClose }: { isAdmin: boolean; onClo
                   {formOpen ? (
                     <button
                       type="button"
-                      onClick={() => void save()}
+                      onClick={() => void save().catch((err: unknown) => { console.error("[mia]", err) })}
                       disabled={busy}
                       className={ICON_BTN_PRIMARY}
                       title="Save"
@@ -362,7 +362,7 @@ export function PolicyRulesModal({ isAdmin, onClose }: { isAdmin: boolean; onClo
           error={deleteError}
           stackLevel={1}
           onCancel={() => { if (!deleteBusy) { setDeleting(null); setDeleteError(null) } }}
-          onConfirm={() => void remove(deleting)}
+          onConfirm={() => void remove(deleting).catch((err: unknown) => { console.error("[mia]", err) })}
         />
       )}
     </>

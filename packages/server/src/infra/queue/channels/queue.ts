@@ -80,7 +80,10 @@ export class MessageQueue {
     }
 
     // Periodic retry check (handles retryAt scheduling)
-    this.retryTimer = setInterval(() => this.processRetries(), 5000)
+    const timer = setInterval(() => this.processRetries(), 5000)
+    this.retryTimer = timer
+    const disposeRetryTimer = () => clearInterval(timer)
+    void disposeRetryTimer
   }
 
   /** Stop the queue cleanly. */

@@ -3,6 +3,8 @@ import { relative, resolve } from "node:path"
 import type { AuthoredSyncDefinition, EntityRegistrySyncFlowTemplateId } from "@mia/shared-types"
 import { parseAllDocuments } from "yaml"
 
+import { asEntityId } from "./types/branded-ids.js"
+
 import { compileAuthoredSyncDefinition } from "./compile-sync-definition.js"
 import type { EntityDefinition } from "./entity-registry/types.js"
 import {
@@ -46,7 +48,7 @@ export function scaffoldSyncDefinition(
 ): AuthoredSyncDefinition {
   const flowTemplateCatalog = resolveFlowTemplateCatalog(options)
   const flowTemplateId =
-    options.flowTemplateId ?? defaultSyncDefinitionFlowTemplateId(entity.id, flowTemplateCatalog)
+    options.flowTemplateId ?? defaultSyncDefinitionFlowTemplateId(asEntityId(entity.id), flowTemplateCatalog)
   if (!hasSyncDefinitionFlowTemplate(flowTemplateCatalog, flowTemplateId)) {
     throw new Error(`Unknown flow template "${flowTemplateId}".`)
   }

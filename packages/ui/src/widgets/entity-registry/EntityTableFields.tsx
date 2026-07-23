@@ -260,7 +260,7 @@ export function EntityTableFields({
           <button
             type="button"
             disabled={suggestBusy || !table.name.trim()}
-            onClick={() => void applySuggestion(table.name)}
+            onClick={() => void applySuggestion(table.name).catch((err: unknown) => { console.error("[mia]", err) })}
             className="rounded border border-border-subtle px-2.5 py-1 text-sm text-text-muted hover:bg-overlay-2 hover:text-text disabled:cursor-not-allowed disabled:opacity-40"
           >
             {suggestBusy ? "Suggesting…" : "Suggest from schema"}

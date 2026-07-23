@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 
+import { asFlowId, asStrategyId, asTenantId } from "../types/branded-ids.js"
 import { compileFkPathPredicate, normalizeEntityDefinition } from "./normalize-table-scope.js"
 import { projectTablePredicate } from "./project-predicate.js"
 import type { EntityTable } from "./types.js"
@@ -20,7 +21,7 @@ describe("normalize-table-scope", () => {
     }
     const normalized = normalizeEntityDefinition({
       id: "test",
-      tenantId: "_default",
+      tenantId: asTenantId("_default"),
       displayName: "Test",
       description: "",
       rootTable: "core.TestRoot",
@@ -29,10 +30,10 @@ describe("normalize-table-scope", () => {
       selfJoinColumn: null,
       tables: entity.tables as EntityTable[],
       policies: { freezeWindowIds: [] },
-      scd2: { strategyId: "mymi-scd2", strategyVersion: 1, entityOverride: null },
+      scd2: { strategyId: asStrategyId("mymi-scd2"), strategyVersion: 1, entityOverride: null },
       lineageRefs: [],
       provenance: { kind: "manual" },
-      flowId: "metadataOnly",
+      flowId: asFlowId("metadataOnly"),
       legacyEntrySproc: null,
       reverseOrder: [],
       discrepancies: [],

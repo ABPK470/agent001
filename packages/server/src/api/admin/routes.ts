@@ -1,3 +1,5 @@
+import { parseBoundaryJson } from "../../internal/parse-json.js"
+
 /**
  * Admin observability transport routes.
  */
@@ -39,7 +41,7 @@ function parseAuditQuery(query: Record<string, string | undefined>): db.ListAudi
 
 function parseAuditDetail(raw: string): Record<string, unknown> {
   try {
-    const parsed = JSON.parse(raw) as unknown
+    const parsed = parseBoundaryJson(raw) as unknown
     return parsed && typeof parsed === "object" && !Array.isArray(parsed)
       ? (parsed as Record<string, unknown>)
       : { value: parsed }

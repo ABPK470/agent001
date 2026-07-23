@@ -29,7 +29,7 @@ export function useSyncAdminNavCounts(): SyncAdminNavCounts {
     }
   }, [])
 
-  useEffect(() => { void refresh() }, [refresh])
+  useEffect(() => { void refresh().catch((err: unknown) => { console.error("[mia]", err) }) }, [refresh])
 
   useLiveReload(
     refresh,

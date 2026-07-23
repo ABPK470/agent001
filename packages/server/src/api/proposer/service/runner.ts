@@ -1,3 +1,5 @@
+import { parseBoundaryJson } from "../../../internal/parse-json.js"
+
 /**
  * F1 — Server-side proposer runner.
  *
@@ -21,14 +23,17 @@ import {
   listPublishedSyncDefinitionsForHost,
   rankProposals,
   runProposerPass,
+  asEntityId,
   type EntityDescriptor,
   type EnvPair,
   type LlmCompletionPort,
   type ProposerFinding,
+  type ProposerFindingDetail,
   type ProposerPassDeps,
   type ProposerPassOptions,
   type ProposerPassResult,
-  type RankableProposal
+  type ProposalCounts,
+  type RankableProposal,
 } from "@mia/sync"
 import { broadcast } from "../../../infra/events/broadcaster.js"
 import {
@@ -195,7 +200,7 @@ function buildPassDeps(host: AgentHost, tenantId: string): ProposerPassDeps {
     },
     probeCatalogDrift: async (envPair, ent) => {
       void tenantId
-      const definition = getPublishedSyncDefinitionForHost(host, ent.id)
+      const definition = getPublishedSyncDefinitionForHost(host, asEntityId(ent.id))
       const allowedSchemas = uniqueSchemasFromDefinition(definition.metadata.tables.map((t) => t.name))
       try {
         const r = await detectCatalogDrift(
@@ -283,11 +288,11 @@ function rowToFinding(r: ProposalRow): ProposerFinding {
   return {
     envPair: { source: r.source, target: r.target },
     entityType: r.entity_type,
-    entityId: r.entity_id,
+    entityId: asEntityId(r.entity_id),
     entityLabel: r.entity_label,
     kind: r.kind,
-    counts: r.counts_json ? JSON.parse(r.counts_json) : emptyCounts(),
-    detail: JSON.parse(r.detail_json),
+    counts: r.counts_json ? (parseBoundaryJson(r.counts_json) as ProposalCounts) : emptyCounts(),
+    detail: parseBoundaryJson(r.detail_json) as ProposerFindingDetail,
     fingerprint: r.fingerprint,
     entityDefVersion: r.entity_def_version,
     observedAt: r.observed_at

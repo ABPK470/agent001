@@ -1,4 +1,4 @@
-import type sql from "mssql"
+import type { MssqlConfig, MssqlConnectionPool } from "../internal/mssql-types.js"
 import type { SyncPlan } from "../domain/plan.js"
 import type { ToolControlDirective, ToolOutcomeSeverity } from "../domain/enums.js"
 import type { SyncEnvironment } from "../domain/environments.js"
@@ -12,8 +12,8 @@ export type { SyncPublishReadinessPort }
 /** Live connector-keyed pool handle resolved through {@link MssqlPoolProvider}. */
 export interface MssqlConnectorPool {
   connectorId: string
-  pool: sql.ConnectionPool
-  config: sql.config
+  pool: MssqlConnectionPool
+  config: MssqlConfig
   knowledge: string | null
 }
 
@@ -21,7 +21,7 @@ export interface MssqlConnectorPool {
 export interface MssqlPoolProvider {
   get(connectorId: string): Promise<MssqlConnectorPool>
   getByName(name: string): Promise<MssqlConnectorPool>
-  configOf(connectorId: string): sql.config | undefined
+  configOf(connectorId: string): MssqlConfig | undefined
   list(): readonly { id: string; name: string }[]
   invalidate(connectorId: string): void
 }
@@ -62,8 +62,8 @@ export interface ToolMetadata {
 export type ExecutableTool = Tool
 
 export interface MssqlEntry {
-  config: sql.config
-  pool: sql.ConnectionPool | null
+  config: MssqlConfig
+  pool: MssqlConnectionPool | null
   knowledge: string | null
 }
 

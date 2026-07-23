@@ -403,7 +403,7 @@ export function RunStatus() {
             <button
               type="button"
               className="flex min-h-[44px] items-center gap-1.5 rounded-lg bg-error/10 px-4 py-2 text-[13px] text-error transition-colors hover:bg-error/20"
-              onClick={() => void handleCancel()}
+              onClick={() => void handleCancel().catch((err: unknown) => { console.error("[mia]", err) })}
             >
               <Square size={13} />
               Cancel
@@ -413,7 +413,7 @@ export function RunStatus() {
             <button
               type="button"
               className="flex min-h-[44px] items-center gap-1.5 rounded-lg bg-accent/10 px-4 py-2 text-[13px] text-accent transition-colors hover:bg-accent/20"
-              onClick={() => void handleResume()}
+              onClick={() => void handleResume().catch((err: unknown) => { console.error("[mia]", err) })}
               title="Resume from saved checkpoint"
             >
               <RotateCcw size={13} />
@@ -424,7 +424,7 @@ export function RunStatus() {
             <button
               type="button"
               className="flex min-h-[44px] items-center gap-1.5 rounded-lg bg-warning/10 px-4 py-2 text-[13px] text-warning transition-colors hover:bg-warning/20 disabled:opacity-40"
-              onClick={() => void handleRollbackPreview()}
+              onClick={() => void handleRollbackPreview().catch((err: unknown) => { console.error("[mia]", err) })}
               disabled={rollbackLoading}
               title="Roll back uncompensated file effects"
             >
@@ -485,7 +485,7 @@ export function RunStatus() {
               <button
                 type="button"
                 className="flex items-center gap-1.5 rounded-lg bg-warning/10 px-3 py-1.5 text-[13px] text-warning transition-colors hover:bg-warning/20"
-                onClick={() => void handleRollbackConfirm()}
+                onClick={() => void handleRollbackConfirm().catch((err: unknown) => { console.error("[mia]", err) })}
                 disabled={rollbackLoading}
               >
                 <Undo2 size={12} />
@@ -533,7 +533,7 @@ export function RunStatus() {
             <button
               type="button"
               className="rounded-lg bg-accent/10 px-3 py-1.5 text-[13px] text-accent transition-colors hover:bg-accent/20"
-              onClick={() => void refreshWorkspaceDiff(run.id)}
+              onClick={() => void refreshWorkspaceDiff(run.id).catch((err: unknown) => { console.error("[mia]", err) })}
               disabled={workspaceLoading}
             >
               {workspaceLoading ? "Loading…" : "Refresh"}
@@ -542,7 +542,7 @@ export function RunStatus() {
               <button
                 type="button"
                 className="rounded-lg bg-success/10 px-3 py-1.5 text-[13px] text-success transition-colors hover:bg-success/20"
-                onClick={() => void handleApplyWorkspaceDiff()}
+                onClick={() => void handleApplyWorkspaceDiff().catch((err: unknown) => { console.error("[mia]", err) })}
                 disabled={workspaceLoading}
               >
                 Apply changes

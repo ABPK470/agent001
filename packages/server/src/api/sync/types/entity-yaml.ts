@@ -1,3 +1,5 @@
+import { parseBoundaryJson } from "../../../internal/parse-json.js"
+
 /**
  * Bidirectional YAML/JSON for Catalog entity documents (`EntityDefinition` + `flowId`).
  *
@@ -12,7 +14,7 @@
 import { parseAllDocuments, parseDocument, stringify } from "yaml"
 
 import type { EntityDefinition, EntityFkHop, EntityTable, EntityTableScope, Scd2Override } from "@mia/sync"
-import { normalizeEntityDefinition as normalizeEntityScopes } from "@mia/sync"
+import { asFlowId, asStrategyId, asTenantId, normalizeEntityDefinition as normalizeEntityScopes } from "@mia/sync"
 
 // ── Export ──────────────────────────────────────────────────────────
 
@@ -163,7 +165,7 @@ export function parseEntitiesYaml(text: string): ParseEntityResult[] {
 export function parseEntitiesJson(text: string): ParseEntityResult[] {
   let raw: unknown
   try {
-    raw = JSON.parse(text)
+    raw = parseBoundaryJson(text)
   } catch (e) {
     return [{ ok: false, def: null, error: `json-parse-error: ${(e as Error).message}` }]
   }
@@ -240,7 +242,7 @@ function shapeAsEntity(raw: unknown): ParseEntityResult {
 
   const def: EntityDefinition = {
     id: String(r["id"]),
-    tenantId: String(r["tenantId"]),
+    tenantId: asTenantId(String(r["tenantId"])),
     displayName: String(r["displayName"]),
     description: typeof r["description"] === "string" ? r["description"] : "",
     rootTable: String(r["rootTable"]),
@@ -254,7 +256,7 @@ function shapeAsEntity(raw: unknown): ParseEntityResult {
         : [],
     },
     scd2: {
-      strategyId: String(scd2Raw["strategyId"]),
+      strategyId: asStrategyId(String(scd2Raw["strategyId"])),
       strategyVersion: (scd2Raw["strategyVersion"] === "latest"
         ? "latest"
         : Number(scd2Raw["strategyVersion"])) as number | "latest",
@@ -264,7 +266,7 @@ function shapeAsEntity(raw: unknown): ParseEntityResult {
     },
     lineageRefs: Array.isArray(r["lineageRefs"]) ? (r["lineageRefs"] as EntityDefinition["lineageRefs"]) : [],
     provenance: r["provenance"] as EntityDefinition["provenance"],
-    flowId: flowIdRaw,
+    flowId: asFlowId(flowIdRaw),
     legacyEntrySproc: typeof r["legacyEntrySproc"] === "string" ? r["legacyEntrySproc"] : null,
     reverseOrder: Array.isArray(r["reverseOrder"]) ? (r["reverseOrder"] as unknown[]).map(String) : [],
     discrepancies: Array.isArray(r["discrepancies"]) ? (r["discrepancies"] as unknown[]).map(String) : [],

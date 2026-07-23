@@ -2,6 +2,8 @@
  * API client — HTTP + SSE communication with the server.
  */
 
+import { parseBoundaryJson } from "../lib/parse-json.js"
+
 import type {
     EntityRegistryDraftSuggestion,
     EntityRegistryTableSuggestion,
@@ -239,7 +241,8 @@ async function json<T>(path: string, opts?: RequestInit): Promise<T> {
   const headers: Record<string, string> = { ...opts?.headers as Record<string, string> }
   if (opts?.body) headers["Content-Type"] = "application/json"
   // credentials: include — sends the session cookie cross-port (UI on 5173, server on 3102 in dev).
-  const res = await fetch(`${BASE}${path}`, { ...opts, headers, credentials: "include" })
+  const signal = opts?.signal ?? AbortSignal.timeout(60_000)
+  const res = await fetch(`${BASE}${path}`, { ...opts, headers, credentials: "include", signal })
   if (!res.ok) {
     const body = await res.json().catch((err: unknown) => { console.error("[mia]", err) })
     let msg = `HTTP ${res.status}`
@@ -1170,7 +1173,10 @@ export const api = {
     const p = new URLSearchParams()
     if (opts?.tenant) p.set("tenant", opts.tenant)
     const qs = p.toString()
-    const res = await fetch(`${BASE}/api/entity-registry/entities/${encodeURIComponent(id)}.yaml${qs ? `?${qs}` : ""}`, { credentials: "include" })
+    const res = await fetch(`${BASE}/api/entity-registry/entities/${encodeURIComponent(id)}.yaml${qs ? `?${qs}` : ""}`, {
+      credentials: "include",
+      signal: AbortSignal.timeout(60_000),
+    })
     if (!res.ok) throw new Error(await res.text())
     return await res.text()
   },
@@ -1180,7 +1186,7 @@ export const api = {
     const qs = p.toString()
     const res = await fetch(
       `${BASE}/api/entity-registry/entities/${encodeURIComponent(id)}/registry.json${qs ? `?${qs}` : ""}`,
-      { credentials: "include" },
+      { credentials: "include", signal: AbortSignal.timeout(60_000) },
     )
     if (!res.ok) throw new Error(await res.text())
     return await res.text()
@@ -1620,7 +1626,7 @@ export function syncExecuteStream(
             .find((line) => line.startsWith("data: "))
           if (!dataLine) continue
           try {
-            onEvent(JSON.parse(dataLine.slice(6)) as SyncExecuteProgress)
+            onEvent(parseBoundaryJson(dataLine.slice(6)) as SyncExecuteProgress)
           } catch (e) {
             onError?.(e instanceof Error ? e.message : String(e))
           }
@@ -1630,7 +1636,7 @@ export function syncExecuteStream(
       if (ctrl.signal.aborted) return
       onError?.(e instanceof Error ? e.message : String(e))
     }
-  })()
+  })().catch((err: unknown) => { console.error("[mia]", err) })
 
   return { close: () => ctrl.abort() }
 }
@@ -1690,7 +1696,7 @@ export function createEventStream(
 
     es.onmessage = (e) => {
       try {
-        const event = JSON.parse(e.data as string)
+        const event = parseBoundaryJson(e.data as string) as SseEvent
         if (dedupe(event)) {
           onEvent(event)
           bc.postMessage(event)

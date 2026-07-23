@@ -2,6 +2,8 @@
  * SCD2 strategy resolution + override merging.
  */
 
+import { asStrategyId } from "../types/branded-ids.js"
+
 import { normalizeScd2Override, normalizeScd2Strategy } from "./scd2-policy.js"
 import type { EffectiveScd2, EntityTable, Scd2Override, Scd2Strategy } from "./types.js"
 
@@ -25,7 +27,7 @@ export function resolveEffectiveScd2(args: {
     onUpdate,
     identityHandling,
     resolution: {
-      strategyId: strategy.id,
+      strategyId: asStrategyId(strategy.id),
       strategyVersion: strategy.version,
       entityOverrideApplied: !isEmptyOverride(entityOverride),
       tableOverrideApplied: !isEmptyOverride(tableOverride),

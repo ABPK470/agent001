@@ -56,7 +56,7 @@ export function useConnectors(
     }
     if (initialLoadRef.current) return
     initialLoadRef.current = true
-    void load()
+    void load().catch((err: unknown) => { console.error("[mia]", err) })
   }, [enabled, load])
 
   async function create(fields: Record<string, unknown>): Promise<string | null> {

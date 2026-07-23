@@ -201,7 +201,7 @@ export function useEventStreamData(opts: {
       })
       .finally(() => {
         if (gen === generation.current) setLoading(false)
-      })
+      }).catch((err: unknown) => { console.error("[mia]", err) })
   }, [fetchPage])
 
   useEffect(() => {
@@ -242,7 +242,7 @@ export function useEventStreamData(opts: {
       .catch((err: unknown) => { console.error("[mia]", err) })
       .finally(() => {
         if (gen === generation.current) setLoadingOlder(false)
-      })
+      }).catch((err: unknown) => { console.error("[mia]", err) })
   }, [fetchPage, hasMore, loadingOlder, oldestCursor])
 
   useEffect(() => {

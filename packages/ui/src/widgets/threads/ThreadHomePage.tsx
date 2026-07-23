@@ -143,7 +143,7 @@ export function ThreadHomePage({
                 <>
                   <ChatBrand connected={connected} className="min-w-0 flex-1" />
                   <div className="thread-rail-chrome-actions flex shrink-0 items-center">
-                    <ThreadRailNewButton onClick={() => void handleNewThread()} />
+                    <ThreadRailNewButton onClick={() => void handleNewThread().catch((err: unknown) => { console.error("[mia]", err) })} />
                     <ThreadRailCollapseButton
                       onClick={() => setThreadSidebarCollapsed(true)}
                       title="Hide threads"

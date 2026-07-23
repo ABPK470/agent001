@@ -2177,7 +2177,7 @@ export function TermChat({
           const run = runs.find((r) => r.id === runId)
           if (!run || isRunActiveStatus(run.status)) continue
           if ((run.trace?.length ?? 0) > 0) continue
-          void hydrateRunTrace(runId)
+          void hydrateRunTrace(runId).catch((err: unknown) => { console.error("[mia]", err) })
         }
       },
       { root: host, rootMargin: "240px 0px", threshold: 0 },
@@ -2256,7 +2256,7 @@ export function TermChat({
 
   const jumpToRun = useCallback((runId: string) => {
     suspendAutoFollow()
-    void hydrateRunTrace(runId)
+    void hydrateRunTrace(runId).catch((err: unknown) => { console.error("[mia]", err) })
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         const host = scrollHostRef.current
@@ -2315,7 +2315,7 @@ export function TermChat({
         e.preventDefault()
         setDragOver(false)
         const files = Array.from(e.dataTransfer.files)
-        if (files.length > 0) void uploadFiles(files)
+        if (files.length > 0) void uploadFiles(files).catch((err: unknown) => { console.error("[mia]", err) })
       }}
     >
       {/* Hidden picker — opened by the paperclip button in the input bar. */}
@@ -2326,7 +2326,7 @@ export function TermChat({
         className="hidden"
         onChange={(e) => {
           const files = Array.from(e.target.files ?? [])
-          if (files.length > 0) void uploadFiles(files)
+          if (files.length > 0) void uploadFiles(files).catch((err: unknown) => { console.error("[mia]", err) })
           // Reset so re-selecting the same file still fires onChange.
           e.target.value = ""
         }}

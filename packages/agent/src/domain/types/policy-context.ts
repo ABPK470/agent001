@@ -14,12 +14,13 @@
  */
 
 import { PolicyDbEnvironment, PolicyRole, PolicyRunMode } from "../enums/policy.js"
+import type { ParentRunId, RunId } from "./branded-ids.js"
 
 export interface HostedPolicyContext {
   /** Run identity (for audit cross-referencing). */
-  readonly runId: string
+  readonly runId: RunId
   /** When resuming, the checkpointed run that owns pending approvals/grants. */
-  readonly parentRunId?: string | null
+  readonly parentRunId?: ParentRunId | null
   /** Effective execution profile of the run. Drives default-deny. */
   readonly runMode: PolicyRunMode
   /** Caller role used by selector rules. */

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 
+import { asEntityId } from "./types/branded-ids.js"
 import { buildFlowCatalog } from "./flow-catalog.js"
 import { loadDeployFlowCatalogForTests } from "../test-support/test-flow-catalog.js"
 import { validateAuthoredSyncFlow } from "./validate-sync-flow.js"
@@ -8,7 +9,7 @@ describe("validateAuthoredSyncFlow", () => {
   const catalog = loadDeployFlowCatalogForTests()
 
   it("requires at least one step and metadataSync", () => {
-    const result = validateAuthoredSyncFlow([], "contract", catalog)
+    const result = validateAuthoredSyncFlow([], asEntityId("contract"), catalog)
     expect(result.errors.some((issue) => issue.message.includes("at least one step"))).toBe(true)
   })
 
@@ -38,7 +39,7 @@ describe("validateAuthoredSyncFlow", () => {
           description: "",
         },
       ],
-      "contract",
+      asEntityId("contract"),
       catalog,
     )
     expect(result.errors.some((issue) => issue.kind === "customUnknownKind")).toBe(true)
@@ -63,7 +64,7 @@ describe("validateAuthoredSyncFlow", () => {
           description: "",
         },
       ],
-      "contract",
+      asEntityId("contract"),
       catalog,
     )
     expect(result.errors).toHaveLength(0)
@@ -88,7 +89,7 @@ describe("validateAuthoredSyncFlow", () => {
         { id: "meta", phase: "metadata", kind: "metadataSync", title: "Metadata", description: "" },
         { id: "sql", phase: "postMetadata", kind: "sqlOnly", title: "SQL", description: "" },
       ],
-      "contract",
+      asEntityId("contract"),
       customCatalog,
     )
     expect(result.errors.some((issue) => issue.message.includes("executable handler"))).toBe(true)

@@ -1,3 +1,5 @@
+import { parseBoundaryJson } from "../../internal/parse-json.js"
+
 /**
  * Event stream transport routes.
  */
@@ -58,7 +60,7 @@ export function registerEventRoutes(app: FastifyInstance): void {
       events: events.map((event) => ({
         id: event.id,
         type: event.type,
-        data: JSON.parse(event.data) as Record<string, unknown>,
+        data: parseBoundaryJson(event.data) as Record<string, unknown>,
         timestamp: event.created_at
       })),
       count: events.length,
@@ -74,7 +76,7 @@ export function registerEventRoutes(app: FastifyInstance): void {
       id: drain.id,
       url: drain.url,
       hasSecret: !!drain.secret,
-      eventFilters: JSON.parse(drain.event_filters || "[]"),
+      eventFilters: parseBoundaryJson(drain.event_filters || "[]"),
       enabled: !!drain.enabled,
       createdAt: drain.created_at,
       updatedAt: drain.updated_at
@@ -154,7 +156,7 @@ export function registerEventRoutes(app: FastifyInstance): void {
       id: updated.id,
       url: updated.url,
       hasSecret: !!updated.secret,
-      eventFilters: JSON.parse(updated.event_filters),
+      eventFilters: parseBoundaryJson(updated.event_filters),
       enabled: !!updated.enabled,
       updatedAt: updated.updated_at
     }

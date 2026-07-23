@@ -206,11 +206,11 @@ function ThreadRailItem({
           type="text"
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
-          onBlur={() => void commitRename()}
+          onBlur={() => void commitRename().catch((err: unknown) => { console.error("[mia]", err) })}
           onKeyDown={(event) => {
             if (event.key === "Enter") {
               event.preventDefault()
-              void commitRename()
+              void commitRename().catch((err: unknown) => { console.error("[mia]", err) })
             }
             if (event.key === "Escape") {
               setDraft(displayTitle)
@@ -299,7 +299,7 @@ function ThreadRailItem({
                 type="button"
                 role="menuitem"
                 className="thread-rail-item-dropdown-item"
-                onClick={() => void togglePin()}
+                onClick={() => void togglePin().catch((err: unknown) => { console.error("[mia]", err) })}
               >
                 <Pin size={13} strokeWidth={1.75} />
                 <span>{thread.pinned ? "Unpin" : "Pin"}</span>

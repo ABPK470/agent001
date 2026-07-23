@@ -1,3 +1,5 @@
+import { parseBoundaryJson } from "../../../internal/parse-json.js"
+
 /**
  * Sync catalog versioning — full-configuration snapshots in SQLite.
  *
@@ -155,7 +157,7 @@ export function getSyncCatalogVersionDetail(
   const row = db.getSyncCatalogVersionRow(tenantId, version)
   if (!row) return null
   const activeVersion = getActiveSyncCatalogVersion(tenantId)
-  const snapshot = JSON.parse(row.snapshot_json) as DeployCatalogSnapshot
+  const snapshot = parseBoundaryJson(row.snapshot_json) as DeployCatalogSnapshot
   return {
     tenantId: row.tenant_id,
     version: row.version,
@@ -193,8 +195,8 @@ export function getSyncCatalogVersionDiff(args: {
 
   if (fromVersion === args.version) {
     return diffDeployCatalogSnapshots({
-      from: JSON.parse(toRow.snapshot_json) as DeployCatalogSnapshot,
-      to: JSON.parse(toRow.snapshot_json) as DeployCatalogSnapshot,
+      from: parseBoundaryJson(toRow.snapshot_json) as DeployCatalogSnapshot,
+      to: parseBoundaryJson(toRow.snapshot_json) as DeployCatalogSnapshot,
       fromVersion,
       toVersion: args.version,
       against: againstKind,
@@ -212,13 +214,13 @@ export function getSyncCatalogVersionDiff(args: {
         return null
       }
     } else {
-      fromSnapshot = JSON.parse(fromRow.snapshot_json) as DeployCatalogSnapshot
+      fromSnapshot = parseBoundaryJson(fromRow.snapshot_json) as DeployCatalogSnapshot
     }
   }
 
   return diffDeployCatalogSnapshots({
     from: fromSnapshot,
-    to: JSON.parse(toRow.snapshot_json) as DeployCatalogSnapshot,
+    to: parseBoundaryJson(toRow.snapshot_json) as DeployCatalogSnapshot,
     fromVersion,
     toVersion: args.version,
     against: againstKind,
@@ -236,7 +238,7 @@ export function rollbackSyncCatalogVersion(args: {
   const row = db.getSyncCatalogVersionRow(tenantId, args.targetVersion)
   if (!row) throw new Error(`Unknown catalog version ${args.targetVersion}`)
 
-  const snapshot = JSON.parse(row.snapshot_json) as DeployCatalogSnapshot
+  const snapshot = parseBoundaryJson(row.snapshot_json) as DeployCatalogSnapshot
   const importResult = applyDeployCatalogSnapshot({
     snapshot,
     actor: args.actor,

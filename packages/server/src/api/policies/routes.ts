@@ -1,3 +1,5 @@
+import { parseBoundaryJson } from "../../internal/parse-json.js"
+
 /**
  * Policy transport routes.
  */
@@ -32,7 +34,7 @@ export function registerPolicyRoutes(app: FastifyInstance): void {
       name: rule.name,
       effect: rule.effect,
       condition: rule.condition,
-      parameters: JSON.parse(rule.parameters),
+      parameters: parseBoundaryJson(rule.parameters),
       source: rule.source ?? db.PolicySource.Db,
       createdAt: rule.created_at,
       updatedAt: rule.updated_at ?? null,

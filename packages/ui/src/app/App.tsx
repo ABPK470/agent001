@@ -383,6 +383,7 @@ export function App() {
         credentials: "include",
         headers:     { "content-type": "application/json" },
         body:        JSON.stringify(body),
+        signal:      AbortSignal.timeout(60_000),
       })
     const login = await post("/api/auth/login", { username, password })
     if (login.ok) { await refreshMe(); return }

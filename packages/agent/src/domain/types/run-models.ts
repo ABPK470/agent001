@@ -7,12 +7,13 @@
 import { randomUUID } from "node:crypto"
 import { RunStatus, StepStatus } from "../enums/index.js"
 import { InvalidTransitionError } from "./errors.js"
+import type { DefinitionId, RunId, StepId } from "./branded-ids.js"
 
 // ── Step (runtime) ───────────────────────────────────────────────
 
 export interface Step {
   id: string
-  definitionId: string
+  definitionId: DefinitionId
   name: string
   action: string
   input: Record<string, unknown>
@@ -253,8 +254,8 @@ export function createAuditEntry(params: {
 
 export interface ExecutionRecord {
   id: string
-  runId: string
-  stepId: string
+  runId: RunId
+  stepId: StepId
   action: string
   success: boolean
   durationMs: number

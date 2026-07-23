@@ -1,3 +1,5 @@
+import { parseBoundaryJson } from "../../../internal/parse-json.js"
+
 /**
  * F1.10 — Notification delivery routing + persistence.
  *
@@ -183,7 +185,7 @@ function rowToRoute(r: RouteRow): NotificationRoute {
     id: r.id,
     tenantId: r.tenant_id,
     eventType: r.event_type,
-    filter: JSON.parse(r.filter_json) as NotificationFilter,
+    filter: parseBoundaryJson(r.filter_json) as NotificationFilter,
     channel: r.channel,
     target: r.target,
     enabled: r.enabled === 1,

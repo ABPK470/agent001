@@ -5,6 +5,7 @@
  */
 
 import { randomUUID } from "node:crypto"
+import { asRunId, asStepId } from "../../domain/types/branded-ids.js"
 import { stripRuntimeToolArgs } from "@mia/shared-types"
 import type { ExecutableTool } from "../../domain/types/agent-types.js"
 import {
@@ -84,8 +85,8 @@ export function governTool(
           })
           await services.runRepo.save(state.run)
           throw new ApprovalRequiredError(
-            state.run.id,
-            step.id,
+            asRunId(state.run.id),
+            asStepId(step.id),
             tool.name,
             persistedArgs,
             policyResult,
@@ -111,7 +112,7 @@ export function governTool(
 
       // 2. Start step + emit event
       startStep(step)
-      await services.eventBus.publish(stepStarted(state.run.id, step.id))
+      await services.eventBus.publish(stepStarted(asRunId(state.run.id), asStepId(step.id)))
 
       // 3. Audit: tool invoked
       await services.auditService.log({
@@ -171,12 +172,12 @@ export function governTool(
           // All retries exhausted — fail the step
           const errMsg = retryResult.lastError?.message ?? "Tool execution failed"
           failStep(step, errMsg)
-          await services.eventBus.publish(stepFailed(state.run.id, step.id, errMsg))
+          await services.eventBus.publish(stepFailed(asRunId(state.run.id), asStepId(step.id), errMsg))
 
           const record: ExecutionRecord = {
             id: randomUUID(),
-            runId: state.run.id,
-            stepId: step.id,
+            runId: asRunId(state.run.id),
+            stepId: asStepId(step.id),
             action: tool.name,
             success: false,
             durationMs,
@@ -209,13 +210,13 @@ export function governTool(
 
         // 5. Complete step
         completeStep(step, { result, durationMs, attempts: retryResult.attempts })
-        await services.eventBus.publish(stepCompleted(state.run.id, step.id))
+        await services.eventBus.publish(stepCompleted(asRunId(state.run.id), asStepId(step.id)))
 
         // 6. Record execution metric
         const record: ExecutionRecord = {
           id: randomUUID(),
-          runId: state.run.id,
-          stepId: step.id,
+          runId: asRunId(state.run.id),
+          stepId: asStepId(step.id),
           action: tool.name,
           success: true,
           durationMs,
@@ -249,12 +250,12 @@ export function governTool(
         // Only fail step if not already failed by retry handler above
         if (step.status !== StepStatus.Failed) {
           failStep(step, errMsg)
-          await services.eventBus.publish(stepFailed(state.run.id, step.id, errMsg))
+          await services.eventBus.publish(stepFailed(asRunId(state.run.id), asStepId(step.id), errMsg))
 
           const record: ExecutionRecord = {
             id: randomUUID(),
-            runId: state.run.id,
-            stepId: step.id,
+            runId: asRunId(state.run.id),
+            stepId: asStepId(step.id),
             action: tool.name,
             success: false,
             durationMs,

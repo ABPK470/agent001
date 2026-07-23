@@ -8,6 +8,8 @@ import {
   PolicyRole,
   PolicyRunMode,
   type HostedPolicyContext,
+  asParentRunId,
+  asRunId,
 } from "@mia/agent"
 
 export function policyRoleFromAdmin(isAdmin: boolean): PolicyRole {
@@ -24,8 +26,8 @@ export function buildPolicyContext(input: {
   toolApprovalGrants?: HostedPolicyContext["toolApprovalGrants"]
 }): HostedPolicyContext {
   return {
-    runId: input.runId,
-    parentRunId: input.parentRunId ?? null,
+    runId: asRunId(input.runId),
+    parentRunId: input.parentRunId != null ? asParentRunId(input.parentRunId) : null,
     /** Product governance is always default-deny — admin does not bypass Policies. */
     runMode: PolicyRunMode.Hosted,
     role: input.role,

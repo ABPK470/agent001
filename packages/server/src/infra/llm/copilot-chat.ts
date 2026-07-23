@@ -90,7 +90,8 @@ export class CopilotChatClient implements LLMClient {
     const deviceRes = await fetch("https://github.com/login/device/code", {
       method: "POST",
       headers: { Accept: "application/json", "Content-Type": "application/x-www-form-urlencoded" },
-      body: `client_id=${COPILOT_CLIENT_ID}&scope=copilot`
+      body: `client_id=${COPILOT_CLIENT_ID}&scope=copilot`,
+      signal: AbortSignal.timeout(60_000),
     })
 
     if (!deviceRes.ok) {
@@ -131,7 +132,8 @@ export class CopilotChatClient implements LLMClient {
       const pollRes = await fetch("https://github.com/login/oauth/access_token", {
         method: "POST",
         headers: { Accept: "application/json", "Content-Type": "application/x-www-form-urlencoded" },
-        body: `client_id=${COPILOT_CLIENT_ID}&device_code=${device.device_code}&grant_type=urn:ietf:params:oauth:grant-type:device_code`
+        body: `client_id=${COPILOT_CLIENT_ID}&device_code=${device.device_code}&grant_type=urn:ietf:params:oauth:grant-type:device_code`,
+        signal: AbortSignal.timeout(60_000),
       })
 
       const poll = (await pollRes.json()) as {

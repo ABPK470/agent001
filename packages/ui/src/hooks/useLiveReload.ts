@@ -19,7 +19,7 @@ export function useLiveReload(
   const lastRef = useRef<number | null>(null)
 
   useEffect(() => {
-    void loadRef.current()
+    void Promise.resolve(loadRef.current()).catch((err: unknown) => { console.error("[mia]", err) })
   }, [])
 
   useEffect(() => {
@@ -29,6 +29,6 @@ export function useLiveReload(
     }
     if (tick === lastRef.current) return
     lastRef.current = tick
-    void loadRef.current()
+    void Promise.resolve(loadRef.current()).catch((err: unknown) => { console.error("[mia]", err) })
   }, [tick])
 }

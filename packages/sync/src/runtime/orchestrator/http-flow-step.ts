@@ -100,6 +100,7 @@ async function httpJson(
     method,
     headers: body ? { "content-type": "application/json" } : undefined,
     body: body ? JSON.stringify(body) : undefined,
+    signal: AbortSignal.timeout(60_000),
   })
   const text = await response.text()
   if (!response.ok) {

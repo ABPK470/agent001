@@ -38,10 +38,14 @@ export const TOOL_RETRY_POLICY: ToolRetryPolicy = {
 
 // ── Retry helpers ────────────────────────────────────────────────
 
-export function computeDelay(attempt: number, policy: ToolRetryPolicy): number {
+export function computeDelay(
+  attempt: number,
+  policy: ToolRetryPolicy,
+  rng: () => number
+): number {
   const exponential = policy.baseDelayMs * Math.pow(policy.backoffMultiplier, attempt)
   const capped = Math.min(exponential, policy.maxDelayMs)
-  const jitter = capped * policy.jitterFactor * Math.random()
+  const jitter = capped * policy.jitterFactor * rng()
   return capped + jitter
 }
 
@@ -113,7 +117,7 @@ export async function withToolRetry(
 
       // Don't wait after the last attempt
       if (attempt < policy.maxRetries) {
-        const delay = computeDelay(attempt, policy)
+        const delay = computeDelay(attempt, policy, Math.random)
         await new Promise((resolve) => setTimeout(resolve, delay))
       }
     }

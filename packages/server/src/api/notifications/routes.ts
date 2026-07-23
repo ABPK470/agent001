@@ -1,3 +1,5 @@
+import { parseBoundaryJson } from "../../internal/parse-json.js"
+
 /**
  * Notification transport routes.
  */
@@ -34,7 +36,7 @@ export function registerNotificationRoutes(app: FastifyInstance, orchestrator: A
       ? db.listNotifications(limit)
       : db.listNotificationsForUser(session!.upn, limit)
     return notifications.map((notification) => {
-      const actions = JSON.parse(notification.actions) as NotificationAction[]
+      const actions = parseBoundaryJson(notification.actions) as NotificationAction[]
       return {
         id: notification.id,
         type: notification.type,

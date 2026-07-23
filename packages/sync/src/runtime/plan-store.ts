@@ -15,6 +15,8 @@ import {
 } from "node:fs"
 import { resolve } from "node:path"
 import { randomUUID } from "node:crypto"
+import type { PlanId } from "../domain/types/branded-ids.js"
+import { asPlanId } from "../domain/types/branded-ids.js"
 import type { SyncPlan } from "../domain/plan.js"
 
 export type {
@@ -52,8 +54,8 @@ export function configurePlanStore(host: SyncPlanStoreHost, diskRoot: string): v
 }
 
 /** Allocate a new plan UUID. */
-export function allocPlanId(): string {
-  return randomUUID()
+export function allocPlanId(): PlanId {
+  return asPlanId(randomUUID())
 }
 
 /** Persist a plan (memory + disk + durable sink, if installed). */

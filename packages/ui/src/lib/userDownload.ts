@@ -35,7 +35,8 @@ export async function downloadAuthenticated(
 ): Promise<{ filename: string; bytes: number }> {
   const headers: Record<string, string> = { ...(opts?.headers as Record<string, string> | undefined) }
   if (opts?.body && !headers["Content-Type"]) headers["Content-Type"] = "application/json"
-  const res = await fetch(path, { ...opts, headers, credentials: "include" })
+  const signal = opts?.signal ?? AbortSignal.timeout(60_000)
+  const res = await fetch(path, { ...opts, headers, credentials: "include", signal })
   if (!res.ok) {
     let detail = res.statusText
     try {

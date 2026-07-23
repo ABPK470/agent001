@@ -2,6 +2,8 @@
  * SyncPlan vocabulary — types only.
  * Persistence lives in `runtime/plan-store.ts`.
  */
+import type { PlanId } from "./types/branded-ids.js"
+
 
 import type { CompiledSyncPlanContract, SyncPlanMovement, SyncPlanTableStats } from "@mia/shared-types"
 import type { SyncEntityId } from "./definition-selection.js"
@@ -148,7 +150,7 @@ export interface SyncPlanPreflight {
 }
 
 export interface SyncPlan {
-  planId: string
+  planId: PlanId
   createdAt: string
   /** ms since epoch for fast TTL math. */
   createdAtMs: number

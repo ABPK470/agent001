@@ -268,6 +268,7 @@ export function WelcomeFlowLegacy({ onSubmit, onDone, mode = "intro" }: WelcomeF
     if (blinkTimerRef.current) clearTimeout(blinkTimerRef.current)
     // Resume blinking after 1s of inactivity
     blinkTimerRef.current = setTimeout(() => {
+      if (blinkIntervalRef.current) clearInterval(blinkIntervalRef.current)
       blinkIntervalRef.current = setInterval(() => setCursorOn(v => !v), 530)
     }, 1000)
   }, [])

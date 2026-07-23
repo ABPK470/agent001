@@ -389,7 +389,7 @@ export function CatalogVersionsModal({
           onClose={() => setRestoreVersion(null)}
           onRestored={() => {
             setRestoreVersion(null)
-            void load()
+            void load().catch((err: unknown) => { console.error("[mia]", err) })
             onRolledBack()
           }}
         />

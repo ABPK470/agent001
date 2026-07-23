@@ -7,12 +7,13 @@ import {
   validateAuthoredExportRoundTrip,
   validateEntityExportable,
 } from "./export-validation.js"
+import { asFlowId, asStrategyId, asTenantId } from "../types/branded-ids.js"
 import type { EntityDefinition } from "./types.js"
 
 function minimalEntity(overrides: Partial<EntityDefinition> = {}): EntityDefinition {
   return {
     id: "sample",
-    tenantId: "_default",
+    tenantId: asTenantId("_default"),
     displayName: "Sample",
     description: "",
     rootTable: "core.Sample",
@@ -37,10 +38,10 @@ function minimalEntity(overrides: Partial<EntityDefinition> = {}): EntityDefinit
       },
     ],
     policies: { freezeWindowIds: [] },
-    scd2: { strategyId: "mymi-scd2", strategyVersion: "latest", entityOverride: null },
+    scd2: { strategyId: asStrategyId("mymi-scd2"), strategyVersion: "latest", entityOverride: null },
     lineageRefs: [],
     provenance: { kind: "manual" },
-    flowId: overrides.flowId ?? "metadataOnly",
+    flowId: asFlowId(overrides.flowId ?? "metadataOnly"),
     legacyEntrySproc: null,
     reverseOrder: [],
     discrepancies: [],

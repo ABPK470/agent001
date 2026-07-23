@@ -119,7 +119,7 @@ export function PublishCatalogModal({
         setSections([])
         setDiffBusy(false)
       },
-    )
+    ).catch((err: unknown) => { console.error("[mia]", err) })
     return () => {
       cancelled = true
     }
@@ -204,7 +204,7 @@ export function PublishCatalogModal({
           <button
             type="button"
             className={`${ACTION_BTN} min-w-[7rem]`}
-            onClick={() => void confirmPublish()}
+            onClick={() => void confirmPublish().catch((err: unknown) => { console.error("[mia]", err) })}
           >
             <Rocket size={14} /> Publish
           </button>

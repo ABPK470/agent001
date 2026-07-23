@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest"
 
+import { asFlowId, asStrategyId, asTenantId } from "../types/branded-ids.js"
+
 import type { EntityDefinition } from "./types.js"
 import {
   hasUnresolvedLegacyPipelineNote,
@@ -9,7 +11,7 @@ import { validateEntityDefinition } from "./validate.js"
 
 function degradedContentEntity(): EntityDefinition {
   return {
-    tenantId: "_default",
+    tenantId: asTenantId("_default"),
     id: "content",
     displayName: "Content",
     description: "test",
@@ -39,10 +41,10 @@ function degradedContentEntity(): EntityDefinition {
       },
     ],
     policies: { freezeWindowIds: [] },
-    scd2: { strategyId: "mymi-scd2", strategyVersion: "latest", entityOverride: null },
+    scd2: { strategyId: asStrategyId("mymi-scd2"), strategyVersion: "latest", entityOverride: null },
     lineageRefs: [],
     provenance: { kind: "legacy-migration", legacyPipelineId: 692 },
-    flowId: "content",
+    flowId: asFlowId("content"),
     legacyEntrySproc: "core.uspSyncContentObjectsTran",
     reverseOrder: [],
     discrepancies: [],

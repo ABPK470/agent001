@@ -8,6 +8,7 @@ import type { SyncRuntimeHost } from "../ports/host.js"
 import { ALWAYS_PUBLISH_READY } from "./publish-readiness.js"
 import { createPublishedSyncDefinitionRegistry } from "../runtime/published-definition-registry.js"
 import { createRepoBundleHost } from "../test-support/repo-bundle.js"
+import { asEntityId } from "./types/branded-ids.js"
 import {
   getPublishedSyncDefinitionForHost,
   loadPublishedSyncDefinitionBundle
@@ -77,8 +78,8 @@ describe("published sync definitions", () => {
   it("resolves optional-table semantics from the fixture published definitions", () => {
     const host = createRepoBundleHost()
 
-    const contentDefinition = getPublishedSyncDefinitionForHost(host, "content")
-    const gateMetadataDefinition = getPublishedSyncDefinitionForHost(host, "gateMetadata")
+    const contentDefinition = getPublishedSyncDefinitionForHost(host, asEntityId("content"))
+    const gateMetadataDefinition = getPublishedSyncDefinitionForHost(host, asEntityId("gateMetadata"))
 
     expect(
       contentDefinition.metadata.tables.filter((table) => table.userControllable).map((table) => table.name)

@@ -6,6 +6,7 @@
  */
 
 import { randomUUID } from "node:crypto"
+import { asDefinitionId } from "../../domain/types/branded-ids.js"
 import { type AgentRun, type AuditEntry, type Step, StepStatus } from "../../domain/index.js"
 import { RulePolicyEvaluator } from "../policy/index.js"
 import {
@@ -70,7 +71,7 @@ export function createToolStep(toolName: string, args: Record<string, unknown>, 
   const order = state.stepCounter++
   return {
     id: randomUUID(),
-    definitionId: `tool-${toolName}-${order}`,
+    definitionId: asDefinitionId(`tool-${toolName}-${order}`),
     name: `${toolName} (#${order})`,
     action: toolName,
     input: args,

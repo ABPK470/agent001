@@ -1,5 +1,7 @@
 /** Domain error types for governance control flow. */
 
+import type { RunId, StepId } from "./branded-ids.js"
+
 export class DomainError extends Error {
   constructor(message: string) {
     super(message)
@@ -31,8 +33,8 @@ export class PolicyViolationError extends DomainError {
 /** Tool blocked pending operator approval — run should pause, not fail. */
 export class ApprovalRequiredError extends DomainError {
   constructor(
-    public readonly runId: string,
-    public readonly stepId: string,
+    public readonly runId: RunId,
+    public readonly stepId: StepId,
     public readonly toolName: string,
     public readonly args: Record<string, unknown>,
     public readonly reason: string,

@@ -1,4 +1,5 @@
 import type { FastifyInstance } from "fastify"
+import { parseBoundaryJson } from "../../internal/parse-json.js"
 
 import type { AgentHost } from "@mia/agent"
 
@@ -412,7 +413,7 @@ export function registerPlatformRoutes(app: FastifyInstance, opts: RegisterPlatf
             counts: {},
           })
         }
-        const snapshot = JSON.parse(row.snapshot_json) as {
+        const snapshot = parseBoundaryJson(row.snapshot_json) as {
           entityIds?: string[]
           environments?: { environments?: unknown[] }
         }

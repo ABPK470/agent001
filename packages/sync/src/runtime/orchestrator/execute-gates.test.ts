@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { SyncPlan } from "../plan-store.js"
+import { asPlanId } from "../../domain/types/branded-ids.js"
 import { withPermissionDefaults } from "../../domain/environments.js"
 import {
   buildEntityPlan,
@@ -116,7 +117,7 @@ function hostWithEnvs(overrides?: {
 
 function readyPlan(overrides?: Partial<SyncPlan>): SyncPlan {
   const base = contractRootInsertWithChild(100)
-  return { ...base, planId: "gate-plan", ...overrides }
+  return { ...base, planId: asPlanId("gate-plan"), ...overrides }
 }
 
 describe("executeSync pre-execution gates", () => {

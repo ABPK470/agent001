@@ -15,6 +15,7 @@ import {
   requirePublishedBundle
 } from "../test-support/repo-bundle.js"
 import { selectDefinitionTables } from "./definition-selection.js"
+import { asEntityId } from "./types/branded-ids.js"
 import { getPublishedSyncDefinition, loadPublishedSyncDefinitionBundle } from "./published-definitions.js"
 
 describe("real published bundle (read-only)", () => {
@@ -43,7 +44,7 @@ describe("real published bundle (read-only)", () => {
 
   it("contract executionFlow steps match the flow template catalog", () => {
     const host = createRepoBundleHost()
-    const contract = getPublishedSyncDefinition(host, REPO_ROOT, "contract")
+    const contract = getPublishedSyncDefinition(host, REPO_ROOT, asEntityId("contract"))
     const catalog = JSON.parse(
       readFileSync(resolve(REPO_ROOT, "deploy/sync/artifacts/flow-templates.json"), "utf-8")
     ) as { flowTemplates: { contract: { steps: Array<{ bindings?: unknown; phase?: unknown }> } } }
@@ -55,7 +56,7 @@ describe("real published bundle (read-only)", () => {
 
   it("contract DatasetMapping scopes via datasetId_Left → Dataset, not direct contractId on mapping", () => {
     const host = createRepoBundleHost()
-    const contract = getPublishedSyncDefinition(host, REPO_ROOT, "contract")
+    const contract = getPublishedSyncDefinition(host, REPO_ROOT, asEntityId("contract"))
     const mapping = contract.metadata.tables.find((t) => t.name === "core.DatasetMapping")
 
     expect(mapping).toBeTruthy()
@@ -68,7 +69,7 @@ describe("real published bundle (read-only)", () => {
 
   it("contract DatasetMappingColumn scopes via datasetMappingId → DatasetMapping → Dataset", () => {
     const host = createRepoBundleHost()
-    const contract = getPublishedSyncDefinition(host, REPO_ROOT, "contract")
+    const contract = getPublishedSyncDefinition(host, REPO_ROOT, asEntityId("contract"))
     const mappingColumn = contract.metadata.tables.find((t) => t.name === "core.DatasetMappingColumn")
 
     expect(mappingColumn).toBeTruthy()
@@ -81,7 +82,7 @@ describe("real published bundle (read-only)", () => {
 
   it("contract excludes FK-only optional tables by default", () => {
     const host = createRepoBundleHost()
-    const contract = getPublishedSyncDefinition(host, REPO_ROOT, "contract")
+    const contract = getPublishedSyncDefinition(host, REPO_ROOT, asEntityId("contract"))
     const defaultSelection = selectDefinitionTables(contract, undefined)
     const names = defaultSelection.tables.map((t) => t.name)
 
@@ -106,7 +107,7 @@ describe("real published bundle (read-only)", () => {
 
   it("contract includes optional tables when explicitly enabled", () => {
     const host = createRepoBundleHost()
-    const contract = getPublishedSyncDefinition(host, REPO_ROOT, "contract")
+    const contract = getPublishedSyncDefinition(host, REPO_ROOT, asEntityId("contract"))
     const withStep = selectDefinitionTables(contract, ["core.Step"])
     expect(withStep.tables.map((t) => t.name)).toContain("core.Step")
     expect(withStep.executionOrder).toContain("core.Step")
@@ -114,7 +115,7 @@ describe("real published bundle (read-only)", () => {
 
   it("dataset definition uses datasetId root and self-join column", () => {
     const host = createRepoBundleHost()
-    const dataset = getPublishedSyncDefinition(host, REPO_ROOT, "dataset")
+    const dataset = getPublishedSyncDefinition(host, REPO_ROOT, asEntityId("dataset"))
 
     expect(dataset.rootTable).toBe("core.Dataset")
     expect(dataset.idColumn).toBe("datasetId")
@@ -123,7 +124,7 @@ describe("real published bundle (read-only)", () => {
 
   it("dataset mapping columns scope through dataset mappings, not datasetColumnId_Left", () => {
     const host = createRepoBundleHost()
-    const dataset = getPublishedSyncDefinition(host, REPO_ROOT, "dataset")
+    const dataset = getPublishedSyncDefinition(host, REPO_ROOT, asEntityId("dataset"))
     const mappingColumn = dataset.metadata.tables.find((t) => t.name === "core.DatasetMappingColumn")
 
     expect(mappingColumn?.verified).toBe(true)
@@ -134,7 +135,7 @@ describe("real published bundle (read-only)", () => {
 
   it("gate metadata scopes meta columns and json schema through meta views", () => {
     const host = createRepoBundleHost()
-    const gateMetadata = getPublishedSyncDefinition(host, REPO_ROOT, "gateMetadata")
+    const gateMetadata = getPublishedSyncDefinition(host, REPO_ROOT, asEntityId("gateMetadata"))
     const metaView = gateMetadata.metadata.tables.find((t) => t.name === "gate.MetaView")
     const metaColumn = gateMetadata.metadata.tables.find((t) => t.name === "gate.MetaColumn")
     const jsonSchema = gateMetadata.metadata.tables.find((t) => t.name === "gate.jsonSchema")
@@ -152,7 +153,7 @@ describe("real published bundle (read-only)", () => {
 
   it("content type tables scope through content and content links", () => {
     const host = createRepoBundleHost()
-    const content = getPublishedSyncDefinition(host, REPO_ROOT, "content")
+    const content = getPublishedSyncDefinition(host, REPO_ROOT, asEntityId("content"))
     const contentType = content.metadata.tables.find((t) => t.name === "gate.ContentType")
     const contentLinkType = content.metadata.tables.find((t) => t.name === "gate.ContentLinkType")
 
@@ -166,7 +167,7 @@ describe("real published bundle (read-only)", () => {
 
   it("rule scopes the live rule tree instead of only the root rule id", () => {
     const host = createRepoBundleHost()
-    const rule = getPublishedSyncDefinition(host, REPO_ROOT, "rule")
+    const rule = getPublishedSyncDefinition(host, REPO_ROOT, asEntityId("rule"))
     const rootRule = rule.metadata.tables.find((t) => t.name === "core.Rule")
     const dataset = rule.metadata.tables.find((t) => t.name === "core.Dataset")
     const mappingColumn = rule.metadata.tables.find((t) => t.name === "core.DatasetMappingColumn")
@@ -184,7 +185,7 @@ describe("real published bundle (read-only)", () => {
 
   it("content optional UserGroupPermission matches published-definitions authority", () => {
     const host = createRepoBundleHost()
-    const content = getPublishedSyncDefinition(host, REPO_ROOT, "content")
+    const content = getPublishedSyncDefinition(host, REPO_ROOT, asEntityId("content"))
     const optional = content.metadata.tables.filter((t) => t.userControllable).map((t) => t.name)
     expect(optional).toEqual(["gate.UserGroupPermission"])
   })

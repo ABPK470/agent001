@@ -1,3 +1,5 @@
+import { parseBoundaryJson } from "../../../internal/parse-json.js"
+
 /**
  * About dossier — what this instance is, and (for the viewer) what they
  * can use: personal usage, allowed dirs/tools, sync environments.
@@ -76,7 +78,7 @@ export interface AboutDossier {
 
 function readPackageVersion(projectRoot: string): string {
   try {
-    const raw = JSON.parse(readFileSync(resolve(projectRoot, "package.json"), "utf-8")) as {
+    const raw = parseBoundaryJson(readFileSync(resolve(projectRoot, "package.json"), "utf-8")) as {
       version?: string
     }
     return raw.version?.trim() || "0.0.0"

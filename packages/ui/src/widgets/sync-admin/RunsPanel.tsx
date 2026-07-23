@@ -72,7 +72,7 @@ export function RunsPanel({ initialTab = "runs" }: { initialTab?: RunsTab }): JS
     || type === EventType.RunCancelled,
   )
 
-  useEffect(() => { void loadRuns() }, [loadRuns])
+  useEffect(() => { void loadRuns().catch((err: unknown) => { console.error("[mia]", err) }) }, [loadRuns])
 
   useEffect(() => {
     if (!selected) {
@@ -123,7 +123,7 @@ export function RunsPanel({ initialTab = "runs" }: { initialTab?: RunsTab }): JS
       <ItemShell
         busy={busy}
         listActions={(
-          <ToolbarIconBtn label="Refresh runs" onClick={() => void loadRuns()}>
+          <ToolbarIconBtn label="Refresh runs" onClick={() => void loadRuns().catch((err: unknown) => { console.error("[mia]", err) })}>
             <RefreshCw {...TOOLBAR_ICON} />
           </ToolbarIconBtn>
         )}

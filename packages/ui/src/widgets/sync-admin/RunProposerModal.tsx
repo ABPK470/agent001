@@ -51,7 +51,7 @@ export function RunProposerModal({
         <>
           <ModalBtnSecondary onClick={onClose} disabled={busy}>Cancel</ModalBtnSecondary>
           <div className="ml-auto">
-            <ModalBtnPrimary onClick={() => void run()} disabled={busy || !source || !target}>
+            <ModalBtnPrimary onClick={() => void run().catch((err: unknown) => { console.error("[mia]", err) })} disabled={busy || !source || !target}>
               {busy ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
               Start
             </ModalBtnPrimary>

@@ -1,3 +1,5 @@
+import { parseBoundaryJson } from "../../../internal/parse-json.js"
+
 /**
  * HTTP Sync policy gate — same evaluatePreStep + buildPolicyContext as agent tools.
  */
@@ -5,6 +7,9 @@
 import {
   PolicyViolationError,
   RulePolicyEvaluator,
+  asDefinitionId,
+  asRunId,
+  asStepId,
   type AgentRun,
   type Step,
 } from "@mia/agent"
@@ -67,8 +72,8 @@ export class SyncHttpApprovalRequiredError extends Error {
 
 function makeStep(toolName: SyncHttpTool, args: Record<string, unknown>): Step {
   return {
-    id: "sync-http",
-    definitionId: "sync-http",
+    id: asStepId("sync-http"),
+    definitionId: asDefinitionId("sync-http"),
     name: toolName,
     action: toolName,
     input: args,
@@ -90,7 +95,7 @@ function loadEvaluator(): RulePolicyEvaluator {
       name: rule.name,
       effect: rule.effect,
       condition: rule.condition,
-      parameters: rule.parameters ? JSON.parse(rule.parameters) : {},
+      parameters: rule.parameters ? (parseBoundaryJson(rule.parameters) as Record<string, unknown>) : {},
     })
   }
   return ev
@@ -126,7 +131,7 @@ export async function assertSyncHttpPolicy(input: {
     toolApprovalGrants: matching.length > 0 ? matching : undefined,
   })
   const evaluator = loadEvaluator()
-  const dummyRun = { id: ctx.runId } as AgentRun
+  const dummyRun = { id: asRunId(ctx.runId) } as unknown as AgentRun
 
   let approval: string | null
   try {

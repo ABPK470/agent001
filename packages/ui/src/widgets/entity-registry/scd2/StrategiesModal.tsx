@@ -215,7 +215,7 @@ export function StrategiesModal({
           onSaved={() => {
             setEditor(null)
             onChanged?.()
-            void load()
+            void load().catch((err: unknown) => { console.error("[mia]", err) })
           }}
         />
       )}
@@ -230,7 +230,7 @@ export function StrategiesModal({
           error={retireErr}
           stackLevel={editor ? stackLevel + 2 : stackLevel + 1}
           onCancel={() => !retireBusy && setRetireTarget(null)}
-          onConfirm={() => void confirmRetire()}
+          onConfirm={() => void confirmRetire().catch((err: unknown) => { console.error("[mia]", err) })}
         />
       )}
     </>
@@ -267,7 +267,7 @@ function StrategyDetailPane({
     void api.listEntityRegistryStrategyHistory(strategy.id)
       .then((response) => { if (!cancelled) setHistory(response.items) })
       .catch(() => { if (!cancelled) setHistory([]) })
-      .finally(() => { if (!cancelled) setHistoryBusy(false) })
+      .finally(() => { if (!cancelled) setHistoryBusy(false) }).catch((err: unknown) => { console.error("[mia]", err) })
     return () => { cancelled = true }
   }, [strategy.id])
 
@@ -280,7 +280,7 @@ function StrategyDetailPane({
         setEntities(response.items.filter((definition) => definition.scd2.strategyId === strategy.id))
       })
       .catch(() => { if (!cancelled) setEntities([]) })
-      .finally(() => { if (!cancelled) setEntitiesBusy(false) })
+      .finally(() => { if (!cancelled) setEntitiesBusy(false) }).catch((err: unknown) => { console.error("[mia]", err) })
     return () => { cancelled = true }
   }, [strategy.id])
 

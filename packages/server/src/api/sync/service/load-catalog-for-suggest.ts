@@ -1,4 +1,5 @@
 import { existsSync, readFileSync } from "node:fs"
+import { parseBoundaryJson } from "../../../internal/parse-json.js"
 
 import { catalogSnapshotFromAgentJson, type CatalogSnapshotForSuggest } from "@mia/sync"
 
@@ -19,7 +20,7 @@ export function loadCatalogSnapshotForSuggest(): CatalogSnapshotForSuggest | nul
   for (const path of resolveCatalogCachePaths()) {
     if (!existsSync(path)) continue
     try {
-      const raw = JSON.parse(readFileSync(path, "utf8")) as unknown
+      const raw = parseBoundaryJson(readFileSync(path, "utf8")) as unknown
       const snapshot = catalogSnapshotFromAgentJson(raw)
       if (snapshot) return snapshot
     } catch (error) {

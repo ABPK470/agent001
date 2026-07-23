@@ -108,3 +108,39 @@ export const DOMAIN_SURFACE_PREFIXES = ["widgets/", "state/", "app/"]
 
 /** Root folder under which apiSurface seams are registered. */
 export const SEAM_API_ROOT = "packages/server/src/api"
+
+/** Layers where entropy / map-iteration must be deterministic (injected clock/rng). */
+export const DETERMINISTIC_LAYERS = new Set(["core", "domain"])
+
+/** Path prefixes (pkg-relative) treated as trust boundaries for JSON decode. */
+export const JSON_BOUNDARY_PREFIXES = ["api/", "client/", "http/"]
+
+/**
+ * Files allowed to call JSON.parse (boundary decoders that return unknown).
+ * Add a row when introducing a named decoder — never scatter raw parse+assert.
+ * @type {string[]}
+ */
+export const JSON_PARSE_HELPER_FILES = [
+  "server/internal/parse-json.ts",
+  "ui/lib/parse-json.ts",
+  "agent/internal/parse-json.ts",
+  "sync/internal/parse-json.ts",
+]
+
+/** Property / logging names that must not hit log sinks unredacted. */
+export const SECRET_NAME_RE =
+  /^(password|passwd|secret|token|apiKey|api_key|authorization|accessToken|refreshToken|privateKey|credential)$/i
+
+/**
+ * Files that may define UPPER_SNAKE error `code:` string literals (the registry).
+ * Product code must import codes from these — not invent string literals.
+ * @type {string[]}
+ */
+export const ERROR_CODE_REGISTRY_FILES = [
+  "packages/shared-enums/src/error-codes.ts",
+  "packages/sync/src/domain/entity-registry/types.ts",
+  "packages/agent/src/core/plan/platform-errors.ts",
+]
+
+/** Port layers must not import these path fragments (concrete adapters/drivers). */
+export const PORT_LEAK_PATH_RE = /\/(infra|adapters)\//i

@@ -137,7 +137,7 @@ export function useOperationLogData(opts: {
       })
       .finally(() => {
         if (gen === listGeneration.current) setLoading(false)
-      })
+      }).catch((err: unknown) => { console.error("[mia]", err) })
   }, [kindView, searchQuery, fetchListPage])
 
   useEffect(() => {
@@ -186,7 +186,7 @@ export function useOperationLogData(opts: {
         setHasMore(res.hasMore)
       })
       .catch((err: unknown) => { console.error("[mia]", err) })
-      .finally(() => setLoadingMore(false))
+      .finally(() => setLoadingMore(false)).catch((err: unknown) => { console.error("[mia]", err) })
   }, [loadingMore, hasMore, cursorBefore, fetchListPage])
 
   return {

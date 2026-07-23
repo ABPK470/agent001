@@ -142,7 +142,7 @@ export function UsageModal({ onClose }: { onClose: () => void }) {
   }, [queryParams])
 
   useEffect(() => {
-    void load()
+    void load().catch((err: unknown) => { console.error("[mia]", err) })
   }, [load])
 
   const activeFilterCount = useMemo(() => {
@@ -238,7 +238,7 @@ export function UsageModal({ onClose }: { onClose: () => void }) {
           filtersOpen={filtersOpen}
           onToggleFilters={() => setFiltersOpen((v) => !v)}
           activeFilterCount={activeFilterCount}
-          onRefresh={() => void load()}
+          onRefresh={() => void load().catch((err: unknown) => { console.error("[mia]", err) })}
           loading={loading}
         />
 

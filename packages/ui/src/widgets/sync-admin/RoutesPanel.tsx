@@ -138,7 +138,7 @@ export function RoutesPanel(): JSX.Element {
       {creating && (
         <RouteEditorModal
           onClose={() => setCreating(false)}
-          onSaved={() => void refresh()}
+          onSaved={() => void refresh().catch((err: unknown) => { console.error("[mia]", err) })}
         />
       )}
 
@@ -149,7 +149,7 @@ export function RoutesPanel(): JSX.Element {
           confirmLabel="Delete"
           danger
           onCancel={() => setDeleting(null)}
-          onConfirm={() => void remove(deleting).then(() => setDeleting(null))}
+          onConfirm={() => void remove(deleting).then(() => setDeleting(null)).catch((err: unknown) => { console.error("[mia]", err) })}
         />
       )}
     </ConsolePanel>

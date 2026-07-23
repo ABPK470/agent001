@@ -151,7 +151,7 @@ export function ApprovalRequiredModal(): JSX.Element | null {
             type="button"
             className="inline-flex items-center gap-2 px-4 py-2 text-sm rounded-lg border border-error/30 text-error hover:bg-error/10 disabled:opacity-50"
             disabled={!!busy}
-            onClick={() => void resolve("deny")}
+            onClick={() => void resolve("deny").catch((err: unknown) => { console.error("[mia]", err) })}
           >
             <ShieldX size={16} />
             {busy === "deny" ? "Denying…" : "Deny"}
@@ -160,7 +160,7 @@ export function ApprovalRequiredModal(): JSX.Element | null {
             type="button"
             className="inline-flex items-center gap-2 px-4 py-2 text-sm rounded-lg bg-accent/20 text-accent hover:bg-accent/30 disabled:opacity-50"
             disabled={!!busy}
-            onClick={() => void resolve("approve")}
+            onClick={() => void resolve("approve").catch((err: unknown) => { console.error("[mia]", err) })}
           >
             <ShieldCheck size={16} />
             {busy === "approve" ? "Approving…" : "Approve & resume"}

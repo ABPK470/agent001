@@ -1,3 +1,5 @@
+import { parseBoundaryJson } from "../../../internal/parse-json.js"
+
 /**
  * runtime/mssql-pool-provider.ts — live, connector-keyed MSSQL pool provider.
  *
@@ -35,7 +37,7 @@ function asBoolean(value: unknown, fallback: boolean): boolean {
 
 /** Parse a persisted row's body_json back into a Connector. */
 function parseConnector(row: db.DbConnector): Connector {
-  const body = JSON.parse(row.body_json) as Connector
+  const body = parseBoundaryJson(row.body_json) as Connector
   return {
     ...body,
     id: row.id,
@@ -225,7 +227,7 @@ export function createMssqlPoolProvider(projectRoot: string): MssqlPoolProvider 
       const entry = cache.get(connectorId)
       if (entry?.pool) {
         try {
-          void entry.pool.close()
+          void entry.pool.close().catch((err: unknown) => { console.error("[mia]", err) })
         } catch (err: unknown) { console.error("[mia]", err) }
       }
       cache.delete(connectorId)

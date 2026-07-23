@@ -250,7 +250,7 @@ export function ConnectorsShell(): JSX.Element {
                   </button>
                   <button
                     type="button"
-                    onClick={() => void exportConnectorsFile()}
+                    onClick={() => void exportConnectorsFile().catch((err: unknown) => { console.error("[mia]", err) })}
                     disabled={view !== "connectors" || connectors.busy || connectors.saving !== null}
                     tabIndex={view === "connectors" ? undefined : -1}
                     className={ICON_BTN}
@@ -388,7 +388,7 @@ export function ConnectorsShell(): JSX.Element {
                 <button type="button" onClick={() => setConfirmSaveOpen(false)} disabled={connectors.saving !== null} className={TEXT_BTN}>
                   Keep editing
                 </button>
-                <button type="button" onClick={() => void commitSave()} disabled={connectors.saving !== null} className={TEXT_BTN_PRIMARY}>
+                <button type="button" onClick={() => void commitSave().catch((err: unknown) => { console.error("[mia]", err) })} disabled={connectors.saving !== null} className={TEXT_BTN_PRIMARY}>
                   {formMode === "create" ? "Create" : "Save changes"}
                 </button>
               </div>
@@ -409,7 +409,7 @@ export function ConnectorsShell(): JSX.Element {
           onImported={() => {
             setImportGateOpen(false)
             closeForm()
-            void connectors.load()
+            void connectors.load().catch((err: unknown) => { console.error("[mia]", err) })
             pushToast("Imported connectors.json", "ok")
           }}
         />
@@ -424,7 +424,7 @@ export function ConnectorsShell(): JSX.Element {
           busy={connectors.saving === connectors.deleting}
           stackLevel={1}
           onCancel={() => connectors.setDeleting(null)}
-          onConfirm={() => void remove(connectors.deleting!).then(() => connectors.setDeleting(null))}
+          onConfirm={() => void remove(connectors.deleting!).then(() => connectors.setDeleting(null)).catch((err: unknown) => { console.error("[mia]", err) })}
         />
       )}
     </>

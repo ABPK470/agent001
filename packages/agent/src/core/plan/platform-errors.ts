@@ -17,6 +17,8 @@
  * and the user is given a run reference to forward.
  */
 
+import type { RunId } from "../../domain/types/branded-ids.js"
+
 export interface PlatformUnconfiguredHit {
   /** Short technical label of the missing integration (e.g. "MSSQL connection \"default\""). Operator-facing only. */
   readonly subject: string
@@ -85,7 +87,7 @@ export function synthesizePlatformUnconfiguredAnswer(): string {
 }
 
 /** Replace the {RUN_REF} placeholder with the actual run reference. */
-export function fillRunReference(answer: string, runId: string): string {
+export function fillRunReference(answer: string, runId: RunId): string {
   return answer.replaceAll(RUN_REF_PLACEHOLDER, runId)
 }
 

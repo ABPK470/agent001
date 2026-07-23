@@ -34,11 +34,13 @@ const JWKS_TTL_MS = 60 * 60 * 1000 // refresh keys once per hour
 async function getPublicKey(kid: string): Promise<ReturnType<typeof createPublicKey> | null> {
   const now = Date.now()
   if (!_jwksCache || now - _jwksCache.fetchedAt > JWKS_TTL_MS) {
-    const oidcRes = await fetch("https://login.botframework.com/v1/.well-known/openidconfiguration")
+    const oidcRes = await fetch("https://login.botframework.com/v1/.well-known/openidconfiguration", {
+      signal: AbortSignal.timeout(60_000),
+    })
     if (!oidcRes.ok) return null
     const oidc = (await oidcRes.json()) as { jwks_uri: string }
 
-    const jwksRes = await fetch(oidc.jwks_uri)
+    const jwksRes = await fetch(oidc.jwks_uri, { signal: AbortSignal.timeout(60_000) })
     if (!jwksRes.ok) return null
     const jwks = (await jwksRes.json()) as {
       keys: Array<{ kid: string; kty: string; n: string; e: string; [k: string]: unknown }>
@@ -137,7 +139,8 @@ async function fetchBotToken(appId: string, appPassword: string): Promise<string
       client_id: appId,
       client_secret: appPassword,
       scope: "https://api.botframework.com/.default"
-    })
+    }),
+    signal: AbortSignal.timeout(60_000),
   })
 
   if (!res.ok) {
@@ -205,7 +208,8 @@ export class TeamsChannel implements Channel {
         from: { id: this.config.platformId },
         recipient: { id: ref.userId },
         text
-      })
+      }),
+      signal: AbortSignal.timeout(60_000),
     })
 
     if (!res.ok) {

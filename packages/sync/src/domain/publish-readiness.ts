@@ -6,12 +6,14 @@
  * path (HTTP widget or agent tools). Classification lives in the server shell;
  * this module is the sync-core assert + named error every entry point shares.
  */
+import { asEntityId, type EntityId } from "./types/branded-ids.js"
+
 
 export const PUBLISH_REQUIRED_CODE = "publish_required" as const
 
 export interface SyncPublishReadinessPort {
   /** True when this entity's published contract is behind compile-relevant tip. */
-  entityNeedsRepublish(entityId: string): boolean
+  entityNeedsRepublish(entityId: EntityId): boolean
 }
 
 /** Test / unconfigured hosts — never blocks. Production wires catalog classification. */
@@ -54,7 +56,7 @@ export function assertPublishedContractCurrent(
   readiness: SyncPublishReadinessPort,
   entityType: string,
 ): void {
-  if (readiness.entityNeedsRepublish(entityType)) {
+  if (readiness.entityNeedsRepublish(asEntityId(entityType))) {
     throw new SyncPublishRequiredError(entityType)
   }
 }

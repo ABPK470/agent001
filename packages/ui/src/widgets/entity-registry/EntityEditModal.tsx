@@ -175,7 +175,7 @@ export function EntityEditModal({ mode, initial, reservedEntityIds = [], onClose
     }
   }, [entityId, initial, mode])
 
-  useEffect(() => { void load() }, [load])
+  useEffect(() => { void load().catch((err: unknown) => { console.error("[mia]", err) }) }, [load])
 
   const refreshRunCatalog = useCallback(async () => {
     try {
@@ -200,7 +200,7 @@ export function EntityEditModal({ mode, initial, reservedEntityIds = [], onClose
     const rootTable = form.rootTable.trim()
     if (rootTable.length < 3) return
     const handle = window.setTimeout(() => {
-      void applyDraftSuggestion(rootTable)
+      void applyDraftSuggestion(rootTable).catch((err: unknown) => { console.error("[mia]", err) })
     }, 450)
     return () => window.clearTimeout(handle)
   }, [applyDraftSuggestion, form.rootTable, loading, mode])
@@ -285,7 +285,7 @@ export function EntityEditModal({ mode, initial, reservedEntityIds = [], onClose
         } finally {
           setSourceSyncBusy(false)
         }
-      })()
+      })().catch((err: unknown) => { console.error("[mia]", err) })
     }, 450)
     return () => window.clearTimeout(handle)
   }, [entityId, form.sourceBody, loading, mode])
@@ -330,7 +330,7 @@ export function EntityEditModal({ mode, initial, reservedEntityIds = [], onClose
           structuredEditedRef.current = false
           patch({ sourceBody: json })
         } catch (err: unknown) { console.error("[mia]", err) }
-      })()
+      })().catch((err: unknown) => { console.error("[mia]", err) })
     }, 450)
     return () => window.clearTimeout(handle)
   }, [structuredFormKey, loading, baseDef, form, patch])
@@ -407,7 +407,7 @@ export function EntityEditModal({ mode, initial, reservedEntityIds = [], onClose
         setSavePreviewErr(error instanceof Error ? error.message : String(error))
         setSavePreviewBusy(false)
       }
-    })()
+    })().catch((err: unknown) => { console.error("[mia]", err) })
     return () => {
       cancelled = true
     }
@@ -603,7 +603,7 @@ export function EntityEditModal({ mode, initial, reservedEntityIds = [], onClose
                       {mode === "edit" && (
                         <button
                           type="button"
-                          onClick={() => void reloadSavedSource()}
+                          onClick={() => void reloadSavedSource().catch((err: unknown) => { console.error("[mia]", err) })}
                           disabled={busy}
                           className={TEXT_BTN}
                         >
@@ -760,7 +760,7 @@ export function EntityEditModal({ mode, initial, reservedEntityIds = [], onClose
                       <button
                         type="button"
                         disabled={suggestBusy || !form.rootTable.trim()}
-                        onClick={() => void applyDraftSuggestion(form.rootTable, { forceTables: true })}
+                        onClick={() => void applyDraftSuggestion(form.rootTable, { forceTables: true }).catch((err: unknown) => { console.error("[mia]", err) })}
                         className="rounded border border-border-subtle px-2.5 py-1 text-sm text-text-muted hover:bg-overlay-2 hover:text-text disabled:cursor-not-allowed disabled:opacity-40"
                       >
                         {suggestBusy ? "Suggesting…" : "Suggest from schema"}
@@ -847,7 +847,7 @@ export function EntityEditModal({ mode, initial, reservedEntityIds = [], onClose
               </button>
               <button
                 type="button"
-                onClick={() => void doSave()}
+                onClick={() => void doSave().catch((err: unknown) => { console.error("[mia]", err) })}
                 disabled={busy || savePreviewBusy || !saveApplyEnabled}
                 title={
                   saveApplyEnabled
@@ -882,7 +882,7 @@ export function EntityEditModal({ mode, initial, reservedEntityIds = [], onClose
       <SyncMetadataModal
         stackLevel={1}
         onClose={() => setSyncMetadataOpen(false)}
-        onChanged={() => void refreshRunCatalog()}
+        onChanged={() => void refreshRunCatalog().catch((err: unknown) => { console.error("[mia]", err) })}
       />
     )}
     {freezeWindowsOpen && (

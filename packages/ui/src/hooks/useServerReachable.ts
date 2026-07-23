@@ -21,9 +21,9 @@ export function useServerReachable(enabled = true): { reachable: boolean } {
   }, [enabled])
 
   useEffect(() => {
-    void probe()
+    void probe().catch((err: unknown) => { console.error("[mia]", err) })
     if (!enabled) return
-    const id = window.setInterval(() => void probe(), POLL_MS)
+    const id = window.setInterval(() => void probe().catch((err: unknown) => { console.error("[mia]", err) }), POLL_MS)
     return () => window.clearInterval(id)
   }, [enabled, probe])
 

@@ -152,7 +152,7 @@ export function StrategyEditorModal({
             {missing && !err && !busy && (
               <span className="text-sm text-text-muted">{missing}</span>
             )}
-            <ModalBtnPrimary disabled={busy || missing !== null} onClick={() => void save()}>
+            <ModalBtnPrimary disabled={busy || missing !== null} onClick={() => void save().catch((err: unknown) => { console.error("[mia]", err) })}>
               {busy ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
               {mode === "edit" ? "Save new version" : "Create custom"}
             </ModalBtnPrimary>

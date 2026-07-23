@@ -3,6 +3,7 @@ import {
   detectInternalFailure,
   EventType,
   fillRunReference,
+  asRunId,
   isPlatformUnconfiguredAnswer,
   mapFailureKindForPolish,
   markPolishedFailure,
@@ -290,7 +291,7 @@ export async function normalizeRunAnswer(
       },
       { signal: runtime.controller.signal }
     )
-    nextAnswer = polished ? markPolishedFailure(polished) : fillRunReference(nextAnswer, request.runId)
+    nextAnswer = polished ? markPolishedFailure(polished) : fillRunReference(nextAnswer, asRunId(request.runId))
   }
 
   const internalFailure = detectInternalFailure(nextAnswer)
@@ -338,5 +339,5 @@ export async function normalizeRunAnswer(
   )
   return polished
     ? markPolishedFailure(polished)
-    : fillRunReference(synthesizeGenericFailureAnswer(), request.runId)
+    : fillRunReference(synthesizeGenericFailureAnswer(), asRunId(request.runId))
 }

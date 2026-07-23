@@ -51,7 +51,7 @@ export function OverviewPanel({ onJump }: { onJump: (s: Section) => void }): JSX
     s.sseEventLog.filter((e) => isOverviewRefreshEvent(String(e.type))).length,
   )
 
-  useEffect(() => { void load() }, [])
+  useEffect(() => { void load().catch((err: unknown) => { console.error("[mia]", err) }) }, [])
 
   useEffect(() => {
     if (lastLiveTickRef.current === null) {
@@ -60,7 +60,7 @@ export function OverviewPanel({ onJump }: { onJump: (s: Section) => void }): JSX
     }
     if (liveTick === lastLiveTickRef.current) return
     lastLiveTickRef.current = liveTick
-    void load()
+    void load().catch((err: unknown) => { console.error("[mia]", err) })
   }, [liveTick])
 
   async function load(): Promise<void> {
@@ -125,7 +125,7 @@ export function OverviewPanel({ onJump }: { onJump: (s: Section) => void }): JSX
       loadingRef.current = false
       if (queuedRef.current) {
         queuedRef.current = false
-        void load()
+        void load().catch((err: unknown) => { console.error("[mia]", err) })
       }
     }
   }

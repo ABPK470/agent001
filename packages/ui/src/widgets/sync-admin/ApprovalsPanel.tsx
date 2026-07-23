@@ -76,7 +76,7 @@ export function ApprovalsPanel(): JSX.Element {
   }, [filter, notifyError])
 
   useLiveReload(refresh, (type) => type.startsWith("sync.approval"))
-  useEffect(() => { void refresh() }, [refresh])
+  useEffect(() => { void refresh().catch((err: unknown) => { console.error("[mia]", err) }) }, [refresh])
 
   async function grant(approval: Approval): Promise<void> {
     try {
@@ -202,7 +202,7 @@ function ApprovalDetail({ approval, isAdmin, onGrant, onReject, onBypass }: {
       </DetailGrid>
       {actionable && (
         <div className="mt-4 flex flex-wrap gap-2 border-t border-border-subtle pt-3">
-          <ModalBtnSecondary className="border-success/30 text-success" onClick={() => void onGrant(approval)}>
+          <ModalBtnSecondary className="border-success/30 text-success" onClick={() => void onGrant(approval).catch((err: unknown) => { console.error("[mia]", err) })}>
             <ShieldCheck size={14} /> Grant
           </ModalBtnSecondary>
           <ModalBtnSecondary danger onClick={() => onReject(approval)}>

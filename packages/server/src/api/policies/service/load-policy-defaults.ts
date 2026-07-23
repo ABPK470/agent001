@@ -1,3 +1,5 @@
+import { parseBoundaryJson } from "../../../internal/parse-json.js"
+
 /**
  * Load factory policy defaults from `deploy/policies/defaults.json`.
  *
@@ -33,7 +35,7 @@ export function loadPolicyDefaults(projectRoot: string): PolicyDefaultsFile {
 
   let raw: unknown
   try {
-    raw = JSON.parse(readFileSync(path, "utf-8")) as unknown
+    raw = parseBoundaryJson(readFileSync(path, "utf-8")) as unknown
   } catch (error) {
     throw new Error(
       `Policy factory seed is not valid JSON (${path}): ${

@@ -1,3 +1,5 @@
+import { parseBoundaryJson } from "../../internal/parse-json.js"
+
 /**
  * Layout transport routes.
  */
@@ -13,7 +15,7 @@ function dashboardIdFor(req: { session: { upn: string } }): string {
 export function registerLayoutRoutes(app: FastifyInstance): void {
   app.get("/api/dashboard-state", async (req) => {
     const state = db.getLayout(dashboardIdFor(req))
-    return state ? JSON.parse(state.config) : null
+    return state ? parseBoundaryJson(state.config) : null
   })
 
   app.put<{ Body: { views: unknown; activeViewId: string } }>("/api/dashboard-state", async (req) => {
@@ -34,7 +36,7 @@ export function registerLayoutRoutes(app: FastifyInstance): void {
     return layouts.map((layout) => ({
       id: layout.id,
       name: layout.name,
-      config: JSON.parse(layout.config),
+      config: parseBoundaryJson(layout.config),
       updatedAt: layout.updated_at
     }))
   })

@@ -256,7 +256,7 @@ export function IntroBrandWordmark({
       onBrandReadyRef.current?.()
     }
 
-    void run()
+    void run().catch((err: unknown) => { console.error("[mia]", err) })
     return () => { cancelled = true }
   }, [serverReachable])
 
@@ -298,7 +298,7 @@ export function IntroBrandWordmark({
       setMarkLive(true)
     }
 
-    void run()
+    void run().catch((err: unknown) => { console.error("[mia]", err) })
     return () => { cancelled = true }
   }, [beginResolve, serverReachable])
 

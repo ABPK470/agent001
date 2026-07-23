@@ -140,7 +140,7 @@ export function AuditModal({ onClose }: { onClose: () => void }) {
   }, [queryParams])
 
   useEffect(() => {
-    void load()
+    void load().catch((err: unknown) => { console.error("[mia]", err) })
   }, [load])
 
   const activeFilterCount = useMemo(() => {
@@ -238,14 +238,14 @@ export function AuditModal({ onClose }: { onClose: () => void }) {
           filtersOpen={filtersOpen}
           onToggleFilters={() => setFiltersOpen((v) => !v)}
           activeFilterCount={activeFilterCount}
-          onRefresh={() => void load()}
+          onRefresh={() => void load().catch((err: unknown) => { console.error("[mia]", err) })}
           loading={loading}
           trailing={
             <>
               <button
                 type="button"
                 disabled={exporting || total === 0}
-                onClick={() => void handleExport("csv")}
+                onClick={() => void handleExport("csv").catch((err: unknown) => { console.error("[mia]", err) })}
                 className="flex h-9 items-center gap-1.5 rounded-lg border border-border-subtle px-3 text-[13px] text-text-secondary transition-colors hover:bg-overlay-hover hover:text-text disabled:opacity-30"
                 title="Export filtered results as CSV"
               >
@@ -255,7 +255,7 @@ export function AuditModal({ onClose }: { onClose: () => void }) {
               <button
                 type="button"
                 disabled={exporting || total === 0}
-                onClick={() => void handleExport("json")}
+                onClick={() => void handleExport("json").catch((err: unknown) => { console.error("[mia]", err) })}
                 className="flex h-9 items-center gap-1.5 rounded-lg border border-border-subtle px-3 text-[13px] text-text-secondary transition-colors hover:bg-overlay-hover hover:text-text disabled:opacity-30"
                 title="Export filtered results as JSON"
               >

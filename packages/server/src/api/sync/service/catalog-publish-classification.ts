@@ -1,3 +1,5 @@
+import { parseBoundaryJson } from "../../../internal/parse-json.js"
+
 /**
  * Classify tip vs published catalog for Publish / preview gates.
  *
@@ -93,7 +95,7 @@ function loadSnapshotAtVersion(
   const row = db.getSyncCatalogVersionRow(tenantId, version)
   if (!row) return null
   try {
-    return JSON.parse(row.snapshot_json) as DeployCatalogSnapshot
+    return parseBoundaryJson(row.snapshot_json) as DeployCatalogSnapshot
   } catch {
     return null
   }

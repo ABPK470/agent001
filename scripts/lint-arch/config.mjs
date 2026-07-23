@@ -21,10 +21,20 @@ export const PACKAGE_RULES = [
   "cycles",
   "module-state",
   "flat-control-flow",
+  "scoped-lifecycle",
+  "cancellation-flow",
+  "resource-cleanup",
   "framework-deny",
   "export-surface",
   "silent-failure",
   "named-outcome",
+  "error-registry",
+  "schema-at-boundary",
+  "branded-types",
+  "leak-free-ports",
+  "deterministic-execution",
+  "deterministic-ordering",
+  "data-sanitization",
   "trust",
   "forbidden-constructors",
 ]
@@ -38,11 +48,13 @@ export const PACKAGE_EXTRA_RULES = {
 /** Global rules after all packages. */
 export const GLOBAL_RULES = [
   "seams",
+  "branded-path",
   "owned-identities",
   "dialects",
   "catalog-coverage",
   "resolved-inputs",
   "stale-debt",
+  "stale-allowlist",
 ]
 
 /** @param {string} root */

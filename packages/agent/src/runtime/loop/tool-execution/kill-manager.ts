@@ -6,6 +6,7 @@
  * @module
  */
 
+import { asToolCallId } from "../../../domain/types/branded-ids.js"
 import type { AgentConfig, Tool, ToolResultEnvelope } from "../../../domain/types/agent-types.js"
 import { executeToolWithTimeout } from "../../../tools/_shared/utils/exec-with-timeout.js"
 import { withToolTraceArgs } from "./trace-context.js"
@@ -25,7 +26,7 @@ export async function executeWithKillManager(
   killMessage: string
 }> {
   const killManager = config.toolKillManager
-  const killPromise = killManager?.register(call.id, call.name)
+  const killPromise = killManager?.register(asToolCallId(call.id), call.name)
 
   const runExecute = (a: Record<string, unknown>): Promise<string | ToolResultEnvelope> => {
     const tracedArgs = withToolTraceArgs(a, {
@@ -35,7 +36,7 @@ export async function executeWithKillManager(
       emit: config.onPlannerTrace
     })
     return killManager?.wrap
-      ? killManager.wrap(call.id, () => tool.execute(tracedArgs))
+      ? killManager.wrap(asToolCallId(call.id), () => tool.execute(tracedArgs))
       : tool.execute(tracedArgs)
   }
 
@@ -48,7 +49,7 @@ export async function executeWithKillManager(
       }).then((r) => ({ kind: "exec" as const, value: r })),
       killPromise.then((msg: string) => ({ kind: "kill" as const, value: msg }))
     ])
-    killManager!.unregister(call.id)
+    killManager!.unregister(asToolCallId(call.id))
 
     if (raceResult.kind === "kill") {
       return {

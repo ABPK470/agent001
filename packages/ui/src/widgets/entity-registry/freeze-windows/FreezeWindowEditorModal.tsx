@@ -79,7 +79,7 @@ export function FreezeWindowEditorModal({
         <>
           <ModalBtnSecondary onClick={onCancel} disabled={state.busy}>Cancel</ModalBtnSecondary>
           <div className="ml-auto">
-            <ModalBtnPrimary disabled={state.busy || missing !== null} onClick={() => void save()}>
+            <ModalBtnPrimary disabled={state.busy || missing !== null} onClick={() => void save().catch((err: unknown) => { console.error("[mia]", err) })}>
               {state.busy ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
               Save
             </ModalBtnPrimary>

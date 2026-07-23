@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs"
 import { resolve } from "node:path"
+import { parseBoundaryJson } from "../../../internal/parse-json.js"
 
 import type {
   AuthoredSyncFlowStep,
@@ -10,6 +11,8 @@ import type {
   SyncPublishStatus,
 } from "@mia/shared-types"
 import {
+  asEntityId,
+  asFlowId,
   buildSyncDefinitionFlowTemplateSteps,
   buildSyncDefinitionRuntimeFlowOptions,
   buildFlowCatalog,
@@ -156,7 +159,7 @@ function defaultFlowTemplateId(
   entityId: string,
   flowTemplateCatalog: SyncDefinitionFlowTemplateCatalog
 ): EntityRegistrySyncFlowTemplateId {
-  return defaultSyncDefinitionFlowTemplateId(entityId, flowTemplateCatalog)
+  return defaultSyncDefinitionFlowTemplateId(asEntityId(entityId), flowTemplateCatalog)
 }
 
 /** Prefer shipped seed flowId (legacy run.template accepted). */
@@ -164,7 +167,7 @@ export function seedFlowIdFromRepo(projectRoot: string, entityId: string): strin
   const entityPath = resolve(projectRoot, ENTITY_SEEDS_DIR, `${entityId}.json`)
   if (!existsSync(entityPath)) return null
   try {
-    const raw = JSON.parse(readFileSync(entityPath, "utf-8")) as {
+    const raw = parseBoundaryJson(readFileSync(entityPath, "utf-8")) as {
       flowId?: string
       run?: { template?: string }
     }
@@ -298,7 +301,7 @@ export function listSyncDefinitionAdminItems(
       ownershipTeam: compose.ownership_team,
       ownershipOwner: compose.ownership_owner,
       reviewStatus: compose.review_status,
-      ownershipNotes: JSON.parse(compose.ownership_notes_json) as string[],
+      ownershipNotes: parseBoundaryJson(compose.ownership_notes_json) as string[],
       updatedAt: entity.createdAt,
       updatedBy: entity.createdBy,
       publishedVersion: publishedDefinition?.publishedVersion ?? null,
@@ -325,7 +328,7 @@ export function resetEntityFlowId(
       : defaultFlowTemplateId(entityId, catalog)
   const result = db.saveEntityDefinition({
     tenantId,
-    def: { ...entity, flowId },
+    def: { ...entity, flowId: asFlowId(flowId) },
     actor,
     reason: "sync-definition-config:reset",
   })
@@ -396,7 +399,7 @@ export function publishSyncDefinitionsFromDb(
       { entityId: entity.id, rootTable: entity.rootTable },
       flowCatalog,
     )
-    const validation = validateAuthoredSyncFlow(steps, entity.id, flowCatalog)
+    const validation = validateAuthoredSyncFlow(steps, asEntityId(entity.id), flowCatalog)
     if (validation.errors.length > 0) {
       stderr.push(
         `Refusing to publish "${entity.id}": ${validation.errors.map((issue) => issue.message).join("; ")}`

@@ -1,3 +1,5 @@
+import { parseBoundaryJson } from "../../../../internal/parse-json.js"
+
 /**
  * Small helpers shared across pipeline builders: parse JSON, read fields,
  * compute duration, infer success/failed/running from event sequences.
@@ -17,7 +19,7 @@ import type { OperationActivity, OperationEvent } from "./types.js"
 
 export function safeParse(s: string): Record<string, unknown> {
   try {
-    return JSON.parse(s) as Record<string, unknown>
+    return parseBoundaryJson(s) as Record<string, unknown>
   } catch {
     return {}
   }

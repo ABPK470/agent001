@@ -1,4 +1,5 @@
 import type { PublishedSyncDefinition, PublishedSyncDefinitionBundle } from "@mia/shared-types"
+import type { EntityId } from "./types/branded-ids.js"
 
 import type { SyncProjectRootHost } from "../ports/index.js"
 
@@ -21,7 +22,7 @@ export function loadPublishedSyncDefinitionBundle(
 export function getPublishedSyncDefinition(
   host: SyncProjectRootHost,
   projectRoot: string,
-  entityId: string
+  entityId: EntityId
 ): PublishedSyncDefinition {
   const bundle = loadPublishedSyncDefinitionBundle(host, projectRoot)
   const definition = bundle.definitions[entityId]
@@ -42,7 +43,7 @@ export function listPublishedSyncDefinitions(
 
 export function getPublishedSyncDefinitionForHost(
   host: SyncProjectRootHost,
-  entityId: string
+  entityId: EntityId
 ): PublishedSyncDefinition {
   return getPublishedSyncDefinition(host, requireProjectRoot(host), entityId)
 }

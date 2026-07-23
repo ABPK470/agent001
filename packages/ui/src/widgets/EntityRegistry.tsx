@@ -114,7 +114,7 @@ export function EntityRegistry(): JSX.Element {
   }, [notifyError, refreshAdminItems])
 
   useLiveReload(
-    () => void refreshList({ keepSelection: true }),
+    () => void refreshList({ keepSelection: true }).catch((err: unknown) => { console.error("[mia]", err) }),
     isEntityRegistryReloadEvent,
   )
 
@@ -124,7 +124,7 @@ export function EntityRegistry(): JSX.Element {
       setPublishStatus(null)
       return
     }
-    void refreshAdminItems()
+    void refreshAdminItems().catch((err: unknown) => { console.error("[mia]", err) })
   }, [isAdmin, refreshAdminItems])
 
   useEffect(() => {
@@ -205,7 +205,7 @@ export function EntityRegistry(): JSX.Element {
                 onNew={() => setModal({ kind: "new" })}
                 onSyncMetadata={() => setSyncMetadataOpen(true)}
                 onPublish={openPublish}
-                onExportConfig={() => void exportConfiguration()}
+                onExportConfig={() => void exportConfiguration().catch((err: unknown) => { console.error("[mia]", err) })}
                 onImportConfig={() => setImportOpen(true)}
                 onCatalogVersions={() => setVersionsOpen(true)}
               />
@@ -267,7 +267,7 @@ export function EntityRegistry(): JSX.Element {
                       jsonText={jsonText}
                       isAdmin={isAdmin}
                       onImported={() => {
-                        void refreshList({ keepSelection: true })
+                        void refreshList({ keepSelection: true }).catch((err: unknown) => { console.error("[mia]", err) })
                         void api.getEntityRegistryJson(selected.id).then(setJsonText).catch((e) =>
                           notifyError(String(e)))
                       }}
@@ -296,7 +296,7 @@ export function EntityRegistry(): JSX.Element {
           initial={null}
           reservedEntityIds={reservedEntityIds}
           onClose={() => setModal(null)}
-          onSaved={(id) => { setSelectedId(id); void refreshList({ keepSelection: true }) }}
+          onSaved={(id) => { setSelectedId(id); void refreshList({ keepSelection: true }).catch((err: unknown) => { console.error("[mia]", err) }) }}
         />
       )}
       {modal?.kind === "edit" && (
@@ -304,13 +304,13 @@ export function EntityRegistry(): JSX.Element {
           mode="edit"
           initial={modal.def}
           onClose={() => setModal(null)}
-          onSaved={() => void refreshList({ keepSelection: true })}
+          onSaved={() => void refreshList({ keepSelection: true }).catch((err: unknown) => { console.error("[mia]", err) })}
         />
       )}
       {syncMetadataOpen && (
         <SyncMetadataModal
           onClose={() => setSyncMetadataOpen(false)}
-          onChanged={() => void refreshList({ keepSelection: true })}
+          onChanged={() => void refreshList({ keepSelection: true }).catch((err: unknown) => { console.error("[mia]", err) })}
         />
       )}
       {publishOpen && (
@@ -321,7 +321,7 @@ export function EntityRegistry(): JSX.Element {
           onClose={() => setPublishOpen(false)}
           onPublished={(res) => {
             notify(`Published sync bundle · ${res.definitionCount} definition(s)`)
-            void refreshList({ keepSelection: true })
+            void refreshList({ keepSelection: true }).catch((err: unknown) => { console.error("[mia]", err) })
           }}
         />
       )}
@@ -330,7 +330,7 @@ export function EntityRegistry(): JSX.Element {
           onClose={() => setImportOpen(false)}
           onImported={() => {
             notify("Catalog snapshot imported")
-            void refreshList({ keepSelection: true })
+            void refreshList({ keepSelection: true }).catch((err: unknown) => { console.error("[mia]", err) })
           }}
         />
       )}
@@ -339,7 +339,7 @@ export function EntityRegistry(): JSX.Element {
           onClose={() => setVersionsOpen(false)}
           onRolledBack={() => {
             notify("Configuration restored")
-            void refreshList({ keepSelection: true })
+            void refreshList({ keepSelection: true }).catch((err: unknown) => { console.error("[mia]", err) })
           }}
         />
       )}
@@ -353,7 +353,7 @@ export function EntityRegistry(): JSX.Element {
               <button type="button" onClick={() => setRetireCandidate(null)} disabled={busy} className="rounded border border-border-subtle px-3 py-1.5 text-xs text-text-muted">
                 Cancel
               </button>
-              <button type="button" onClick={() => void doRetire()} disabled={busy} className="rounded bg-rose-500 px-3 py-1.5 text-xs text-white">
+              <button type="button" onClick={() => void doRetire().catch((err: unknown) => { console.error("[mia]", err) })} disabled={busy} className="rounded bg-rose-500 px-3 py-1.5 text-xs text-white">
                 <Trash2 className="h-3 w-3 inline" /> Delete
               </button>
             </div>

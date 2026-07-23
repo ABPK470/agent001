@@ -122,7 +122,7 @@ export function SchedulesPanel(): JSX.Element {
         <ScheduleEditorModal
           connections={connections}
           onClose={() => setCreating(false)}
-          onSaved={() => void refresh()}
+          onSaved={() => void refresh().catch((err: unknown) => { console.error("[mia]", err) })}
         />
       )}
 
@@ -133,7 +133,7 @@ export function SchedulesPanel(): JSX.Element {
           confirmLabel="Delete"
           danger
           onCancel={() => setDeleting(null)}
-          onConfirm={() => void remove(deleting).then(() => setDeleting(null))}
+          onConfirm={() => void remove(deleting).then(() => setDeleting(null)).catch((err: unknown) => { console.error("[mia]", err) })}
         />
       )}
     </ConsolePanel>

@@ -29,6 +29,8 @@
  */
 
 import {
+  asFlowId,
+  asTenantId,
   DEFAULT_TENANT_ID,
   diffEntityDefinitions,
   normalizeEntityDefinition as normalizeEntityCanonical,
@@ -72,7 +74,7 @@ function normalizeEntityDefinition(raw: EntityDefinition): EntityDefinition {
   return normalizeEntityCanonical({
     ...r,
     tables: (r.tables ?? []).map(normalizeEntityTable),
-    flowId: typeof r.flowId === "string" && r.flowId.trim() !== "" ? r.flowId : r.id,
+    flowId: asFlowId(typeof r.flowId === "string" && r.flowId.trim() !== "" ? r.flowId : r.id),
     legacyEntrySproc: r.legacyEntrySproc ?? null,
     reverseOrder: r.reverseOrder ?? [],
     discrepancies: r.discrepancies ?? [],
@@ -209,7 +211,7 @@ export function saveEntityDefinition(args: {
   /** When true, reject if any row exists for this id (including retired). */
   createOnly?: boolean
 }): SaveEntityResult {
-  const tenantId = args.tenantId ?? args.def.tenantId ?? DEFAULT_TENANT_ID
+  const tenantId = asTenantId(args.tenantId ?? args.def.tenantId ?? DEFAULT_TENANT_ID)
   const def = normalizeEntityDefinition({ ...args.def, tenantId, version: 1 })
   const validation = validateEntityDefinition(def)
   if (!validation.ok) throw new EntityRegistryValidationError(validation)

@@ -1,6 +1,8 @@
 /**
  * Publish-time validation for authored sync flow steps.
  */
+import { asStepId, type EntityId, type StepId } from "./types/branded-ids.js"
+
 
 import type {
   AuthoredSyncFlowStep,
@@ -23,7 +25,7 @@ import {
 import type { FlowCatalog } from "./flow-catalog.js"
 
 export interface SyncFlowValidationIssue {
-  stepId?: string
+  stepId?: StepId
   kind?: string
   message: string
 }
@@ -63,7 +65,7 @@ function validateValueSourceRef(
 ): void {
   const shapeError = validateValueSource(source)
   if (shapeError) {
-    errors.push({ stepId: step.id, kind: step.kind, message: shapeError })
+    errors.push({ stepId: asStepId(step.id), kind: step.kind, message: shapeError })
     return
   }
   if (source.type === "catalog") {
@@ -71,7 +73,7 @@ function validateValueSourceRef(
       lookupCustomValueSource(catalog, source.id)
     } catch (e) {
       errors.push({
-        stepId: step.id,
+        stepId: asStepId(step.id),
         kind: step.kind,
         message:
           e instanceof Error
@@ -98,7 +100,7 @@ function validateStepBindings(
     const source = step.bindings?.[slotName]
     if (!source) {
       errors.push({
-        stepId: step.id,
+        stepId: asStepId(step.id),
         kind: step.kind,
         message: `Step "${step.id}" requires binding "${slotName}" on the flow step.`,
       })
@@ -112,7 +114,7 @@ function validateStepBindings(
       readStepFieldValue(step, field)
     } catch {
       errors.push({
-        stepId: step.id,
+        stepId: asStepId(step.id),
         kind: step.kind,
         message: `Step "${step.id}" requires ${field}.`,
       })
@@ -121,9 +123,9 @@ function validateStepBindings(
 
   for (const slotName of requiredStepBoundSlotNames(kindDef.handler)) {
     if (step.bindings?.[slotName]) continue
-    if (errors.some((e) => e.stepId === step.id && e.message.includes(`binding "${slotName}"`))) continue
+    if (errors.some((e) => e.stepId === asStepId(step.id) && e.message.includes(`binding "${slotName}"`))) continue
     errors.push({
-      stepId: step.id,
+      stepId: asStepId(step.id),
       kind: step.kind,
       message: `Step "${step.id}" requires binding "${slotName}" on the flow step.`,
     })
@@ -132,7 +134,7 @@ function validateStepBindings(
 
 export function validateAuthoredSyncFlow(
   steps: readonly AuthoredSyncFlowStep[],
-  entityId: string,
+  entityId: EntityId,
   catalog: FlowCatalog,
   options?: { skipEntityTypeCheck?: boolean },
 ): SyncFlowValidationResult {
@@ -162,19 +164,19 @@ export function validateAuthoredSyncFlow(
     const step = steps[index]!
     const kindDef = catalog.resolveKind(step.kind)
     if (!kindDef) {
-      errors.push({ stepId: step.id, kind: step.kind, message: `Unknown step kind "${step.kind}".` })
+      errors.push({ stepId: asStepId(step.id), kind: step.kind, message: `Unknown step kind "${step.kind}".` })
       continue
     }
     if (!options?.skipEntityTypeCheck && !kindAllowsEntityType(kindDef.entityTypes, entityId)) {
       errors.push({
-        stepId: step.id,
+        stepId: asStepId(step.id),
         kind: step.kind,
         message: `Kind "${step.kind}" is not allowed for entity type "${entityId}".`,
       })
     }
     if (!isExecutableKind(kindDef)) {
       errors.push({
-        stepId: step.id,
+        stepId: asStepId(step.id),
         kind: step.kind,
         message: `Kind "${step.kind}" has no executable handler (procedure, HTTP path, SQL batch, or shell command).`,
       })
@@ -182,7 +184,7 @@ export function validateAuthoredSyncFlow(
 
     if (index < metadataIndex && step.kind === METADATA_SYNC_KIND_ID) {
       errors.push({
-        stepId: step.id,
+        stepId: asStepId(step.id),
         kind: step.kind,
         message: `${METADATA_SYNC_KIND_ID} must appear once in the flow.`,
       })

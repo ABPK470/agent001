@@ -1,4 +1,5 @@
 import { ToolControlDirective, ToolOutcomeSeverity } from "../enums/delegation.js"
+import type { ToolCallId } from "./branded-ids.js"
 import { LLMCallPhase } from "../enums/llm.js"
 import { MessageRole } from "../enums/message.js"
 /**
@@ -73,7 +74,7 @@ export interface Message {
   /** Tool calls the assistant wants to make (only on assistant messages). */
   toolCalls?: ToolCall[]
   /** Which tool call this message is the result of (only on tool messages). */
-  toolCallId?: string
+  toolCallId?: ToolCallId
   /** Budget section tag — used for intelligent truncation. Not sent to LLM. */
   section?: PromptBudgetSection
   /**
@@ -245,16 +246,16 @@ export interface ToolKillManager {
    * Returns a promise that resolves with the user's steering message
    * when/if the tool call is killed.  Never resolves otherwise.
    */
-  register(toolCallId: string, toolName: string): Promise<string>
+  register(toolCallId: ToolCallId, toolName: string): Promise<string>
   /** Unregister when done (tool completed or killed). */
-  unregister(toolCallId: string): void
+  unregister(toolCallId: ToolCallId): void
   /**
    * Optional. If provided, the agent calls `wrap(toolCallId, () => tool.execute(args))`
    * so the orchestrator can install AsyncLocalStorage scopes (e.g. per-tool-call
    * mssql kill signal) that are correct under concurrent runs. Without this,
    * orchestrators must use module-level globals which break under concurrency.
    */
-  wrap?<T>(toolCallId: string, fn: () => Promise<T>): Promise<T>
+  wrap?<T>(toolCallId: ToolCallId, fn: () => Promise<T>): Promise<T>
 }
 
 /**
@@ -330,7 +331,7 @@ export interface AgentConfig {
    */
   onToolResult?: (data: {
     iteration: number
-    toolCallId: string
+    toolCallId: ToolCallId
     toolName: string
     args: Record<string, unknown>
     result: string

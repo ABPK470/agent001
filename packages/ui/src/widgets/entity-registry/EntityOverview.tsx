@@ -85,8 +85,8 @@ export function EntityOverview({
           <TabPanelHeader>
             <EntityJsonExportMenu
               exportBusy={exportBusy}
-              onCopyRegistryJson={() => void copyRegistryJson()}
-              onDownloadRegistryJson={() => void downloadRegistryJson()}
+              onCopyRegistryJson={() => void copyRegistryJson().catch((err: unknown) => { console.error("[mia]", err) })}
+              onDownloadRegistryJson={() => void downloadRegistryJson().catch((err: unknown) => { console.error("[mia]", err) })}
               onImportRegistryJson={isAdmin ? () => setImportOpen(true) : undefined}
             />
             <SegmentToggle

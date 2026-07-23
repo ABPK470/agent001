@@ -6,6 +6,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { isPublishedSyncEntityType } from "../../domain/published-definitions.js"
+import { asEntityId } from "../../domain/types/branded-ids.js"
 import { getPublishedSyncDefinition } from "../../domain/published-definitions.js"
 import { selectDefinitionTables } from "../../domain/definition-selection.js"
 import { REPO_ROOT, createRepoBundleHost } from "../../test-support/repo-bundle.js"
@@ -83,7 +84,7 @@ describe("previewSync with real published bundle (read-only)", () => {
     const host = createRepoBundleHost()
     expect(isPublishedSyncEntityType(host, "rule")).toBe(true)
 
-    const rule = getPublishedSyncDefinition(host, REPO_ROOT, "rule")
+    const rule = getPublishedSyncDefinition(host, REPO_ROOT, asEntityId("rule"))
     const expectedTables = selectDefinitionTables(rule, undefined).tables.map((t) => t.name)
 
     const plan = await previewSync({
@@ -102,7 +103,7 @@ describe("previewSync with real published bundle (read-only)", () => {
 
   it("copies frozen flow catalog from the published bundle (no live DB merge)", async () => {
     const host = createRepoBundleHost()
-    const published = getPublishedSyncDefinition(host, REPO_ROOT, "rule")
+    const published = getPublishedSyncDefinition(host, REPO_ROOT, asEntityId("rule"))
 
     const plan = await previewSync({
       host,

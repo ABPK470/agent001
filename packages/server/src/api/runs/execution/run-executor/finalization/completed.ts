@@ -1,4 +1,4 @@
-import { completeRunPure, EventType, runCompleted, type Agent } from "@mia/agent"
+import { asRunId, completeRunPure, EventType, runCompleted, type Agent } from "@mia/agent"
 import { RunStatus } from "@mia/shared-enums"
 import { broadcast } from "../../../../../infra/events/broadcaster.js"
 import { consolidate, ingestRunTurns } from "../../../../../infra/persistence/memory.js"
@@ -19,7 +19,7 @@ export async function finalizeCompletedRun(
 ): Promise<void> {
   const { request, runtime, sideEffects } = command
   env.state.run = completeRunPure(env.state.run)
-  await sideEffects.eventBus.publish(runCompleted(env.state.run.id))
+  await sideEffects.eventBus.publish(runCompleted(asRunId(env.state.run.id)))
   await sideEffects.auditLog.log({
     actor: env.actor,
     action: "agent.completed",

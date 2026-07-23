@@ -1,4 +1,4 @@
-import { EventType, failRunPure, runFailed, type Agent } from "@mia/agent"
+import { asRunId, EventType, failRunPure, runFailed, type Agent } from "@mia/agent"
 import { RunStatus } from "@mia/shared-enums"
 import { broadcast } from "../../../../../infra/events/broadcaster.js"
 import { ingestRunTurns } from "../../../../../infra/persistence/memory.js"
@@ -35,7 +35,7 @@ export async function finalizeFailedRun(
   const errMsg = error instanceof Error ? error.message : String(error)
   const persistedToolTrace = buildPersistedToolTrace(env.state.run.steps)
   env.state.run = failRunPure(env.state.run)
-  await sideEffects.eventBus.publish(runFailed(env.state.run.id, errMsg))
+  await sideEffects.eventBus.publish(runFailed(asRunId(env.state.run.id), errMsg))
   await sideEffects.auditLog.log({
     actor: env.actor,
     action: "agent.failed",

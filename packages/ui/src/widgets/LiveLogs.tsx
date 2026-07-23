@@ -172,7 +172,7 @@ export function LiveLogs() {
           setSearchHits(mapped.reverse())
         })
         .catch(() => setSearchHits([]))
-        .finally(() => setSearching(false))
+        .finally(() => setSearching(false)).catch((err: unknown) => { console.error("[mia]", err) })
     }, 500)
 
     return () => {

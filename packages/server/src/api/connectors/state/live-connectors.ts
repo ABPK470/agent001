@@ -1,3 +1,5 @@
+import { parseBoundaryJson } from "../../../internal/parse-json.js"
+
 /**
  * Connector seed + reload — mirrors `sync/state/live-environments.ts`.
  *
@@ -70,7 +72,7 @@ function serialiseConnector(
 }
 
 function parseRow(row: db.DbConnector): Connector {
-  const body = JSON.parse(row.body_json) as Connector
+  const body = parseBoundaryJson(row.body_json) as Connector
   return {
     ...body,
     id: row.id,
@@ -124,7 +126,7 @@ function loadFromSeedFile(projectRoot: string, relPath: string): Connector[] {
   const configPath = resolve(projectRoot, relPath)
   if (!existsSync(configPath)) return []
   const raw = readFileSync(configPath, "utf-8")
-  const parsed = JSON.parse(raw) as ConnectorSeedFile
+  const parsed = parseBoundaryJson(raw) as ConnectorSeedFile
   if (parsed.version !== 1) throw new Error(`Unsupported connectors seed version: ${parsed.version}`)
   const now = new Date().toISOString()
   return parsed.connectors.map((entry) => ({
@@ -174,7 +176,7 @@ export function linkSyncEnvironmentConnectorIds(): void {
   for (const row of connectorRows) {
     connectorByKey.set(row.id.toLowerCase(), row.id)
     try {
-      const body = JSON.parse(row.body_json) as { name?: string }
+      const body = parseBoundaryJson(row.body_json) as { name?: string }
       if (typeof body.name === "string" && body.name.trim() !== "") {
         connectorByKey.set(body.name.toLowerCase(), row.id)
       }
@@ -185,7 +187,7 @@ export function linkSyncEnvironmentConnectorIds(): void {
   for (const env of envRows) {
     let body: Record<string, unknown>
     try {
-      body = JSON.parse(env.body_json) as Record<string, unknown>
+      body = parseBoundaryJson(env.body_json) as Record<string, unknown>
     } catch {
       continue
     }

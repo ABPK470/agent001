@@ -212,6 +212,18 @@ Composition roots wire listeners **once**. Do not allocate nested handlers insid
 request / pointer / message paths. (Trivial one-shot `setTimeout` for logging is
 not ceremony.)
 
+### Lifecycle, cancellation, handles
+
+**Fire-and-forget** work must be scoped: `void` an async call only when failure
+is named (`.catch` / supervised task). Dangling promises are not “background.”
+
+**Cancellation flows downhill.** Subpaths that perform I/O (`fetch`, long waits)
+take an `AbortSignal` (or equivalent) from the parent. Unaborted subpaths ignore
+user cancel and leak work.
+
+**Host handles** (intervals, servers, pools, watchers) have a clear owner and a
+reachable dispose/clear on the same lifecycle. No orphaned repeating timers.
+
 ### Where state may live
 
 **Allowed:** process / app objects at the composition root; persistence;
@@ -234,15 +246,42 @@ no quiet defaulting that discards a valid decision — not “no recovery.”
 
 ### Mechanical sympathy
 
-Empty `catch` / `.catch(() => {})` are forbidden unless cataloged as shrinking
-debt. Forgiving systems **name** failure and preserve intent; they do not
-erase it.
+Empty `catch` / `.catch(() => {})` are forbidden. Forgiving systems **name**
+failure and preserve intent; they do not erase it.
+
+### Error codes
+
+Stable machine `code` values live in a **registry** (shared enums / domain error
+modules). Product code imports them — it does not invent `UPPER_SNAKE` string
+literals at throw/emit sites.
 
 ### Trust
 
 In pure decision layers: no `as any`, no `@ts-ignore` / `@ts-nocheck` as
 policy. Dangerous sinks (`eval`, `Function`, unchecked HTML injection) are
-forbidden unless explicitly allowlisted with review. Integrity is not optional.
+forbidden. Integrity is not optional.
+
+### Boundaries and brands
+
+At trust boundaries (HTTP, client transport, persisted JSON), decode through a
+**named boundary helper** that yields `unknown` — never `JSON.parse(...) as T`.
+Validate before use.
+
+Domain identities that cross the stack are **branded** in domain/core (not bare
+`string` for registered `*Id`s). Wire DTOs may still serialize to string.
+
+Ports name contracts. They do not import concrete `infra/` / driver stacks.
+
+### Determinism (decision layers)
+
+`domain` / `core`: no unseeded entropy (`Math.random`, `randomUUID`). Iteration
+that affects outcomes over maps/key sets is ordered explicitly. Wall-clock for
+traces may live at the shell; decision RNG is a parameter.
+
+### Secrets
+
+Do not log or emit raw secret-bearing properties (`password`, `token`,
+`apiKey`, …). Redact at the sink.
 
 ---
 
@@ -265,6 +304,9 @@ Three layers, one thought:
 
 Adding a backend event = enum member + catalog row. Surfaces pick it up without
 new widget switches.
+
+Failure-class checklist (machine SSOT):
+`scripts/lint-arch/registry/failure-classes.mjs`.
 
 ---
 
@@ -300,7 +342,8 @@ unregistered cross-package identity is the shotgun-surgery failure class —
 lint fails it. Erased capabilities forbid resurrecting their identity names.
 
 **No soft-ignore.** Debt allowlists must stay **empty**. Soft-ignore is not
-enforcement — `lint:arch` fails if any debt list grows. Fix the code.
+enforcement — `lint:arch` fails if any debt list grows. Unused debt entries
+also fail (`stale-allowlist`). Fix the code.
 
 ---
 
@@ -313,5 +356,6 @@ Before merging a capability add or remove:
 3. **One dialect?** No second home for the same concept class.  
 4. **Named outcomes?** Decisions are distinguishable in traces and code.  
 5. **Variance is data?** No new tenant/customer code fork.  
-6. **Lint green?** `npm run lint:arch` — and this contract updated only if a
+6. **Boundary safe?** No raw `JSON.parse as T`; signals/cancellation flow; no secret logs.  
+7. **Lint green?** `npm run lint:arch` — and this contract updated only if a
    *new universal edge* appeared (not because of a one-off fix).

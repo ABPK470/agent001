@@ -56,7 +56,7 @@ export function RouteEditorModal({ onClose, onSaved }: { onClose: () => void; on
         <>
           <ModalBtnSecondary onClick={onClose} disabled={busy}>Cancel</ModalBtnSecondary>
           <div className="ml-auto">
-            <ModalBtnPrimary onClick={() => void save()} disabled={busy}>
+            <ModalBtnPrimary onClick={() => void save().catch((err: unknown) => { console.error("[mia]", err) })} disabled={busy}>
               <Plus size={14} /> Save
             </ModalBtnPrimary>
           </div>

@@ -22,6 +22,7 @@ async function loginOrRegister(username: string, password: string): Promise<void
       credentials: "include",
       headers:     { "content-type": "application/json" },
       body:        JSON.stringify(body),
+      signal:      AbortSignal.timeout(60_000),
     })
 
   const login = await post("/api/auth/login", { username, password })
@@ -202,7 +203,7 @@ export function IntroConversation({
       if (cancelled) return
       setInputReady(true)
     }
-    void run()
+    void run().catch((err: unknown) => { console.error("[mia]", err) })
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -331,14 +332,14 @@ export function IntroConversation({
     if (step === "username" && autoplayPhaseRef.current === "idle") {
       autoplayPhaseRef.current = "username"
       const t = window.setTimeout(() => {
-        void submitValue((autoplay.username ?? "test-user").trim())
+        void submitValue((autoplay.username ?? "test-user").trim()).catch((err: unknown) => { console.error("[mia]", err) })
       }, stepDelayMs)
       return () => window.clearTimeout(t)
     }
     if (step === "password" && autoplayPhaseRef.current === "username") {
       autoplayPhaseRef.current = "password"
       const t = window.setTimeout(() => {
-        void submitValue((autoplay.password ?? "test-pass").trim())
+        void submitValue((autoplay.password ?? "test-pass").trim()).catch((err: unknown) => { console.error("[mia]", err) })
       }, stepDelayMs)
       return () => window.clearTimeout(t)
     }

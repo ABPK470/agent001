@@ -1,3 +1,5 @@
+import { parseBoundaryJson } from "../../../internal/parse-json.js"
+
 /**
  * Sync-environment transport routes.
  */
@@ -172,7 +174,7 @@ function serialiseEnvironment(
 function parseEnvironmentRow(
   row: db.DbSyncEnvironment
 ): SyncEnvironment & { updatedAt: string; updatedBy: string | null; builtIn: boolean } {
-  const env = normalizeStoredSyncEnvironment(row.name, JSON.parse(row.body_json) as Record<string, unknown>)
+  const env = normalizeStoredSyncEnvironment(row.name, parseBoundaryJson(row.body_json) as Record<string, unknown>)
   return {
     ...env,
     updatedAt: row.updated_at,
@@ -320,7 +322,7 @@ export function registerSyncEnvironmentRoutes(app: FastifyInstance, host: AgentH
         }
       }
       const env = withPermissionDefaults({
-        ...normalizeStoredSyncEnvironment(req.params.name, JSON.parse(row.body_json) as Record<string, unknown>),
+        ...normalizeStoredSyncEnvironment(req.params.name, parseBoundaryJson(row.body_json) as Record<string, unknown>),
         ...sanitised,
         name: req.params.name,
       })

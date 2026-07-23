@@ -20,7 +20,7 @@
  */
 
 import { getPool, type AgentHost } from "@mia/agent"
-import { canonicalJsonStringify, getPublishedSyncDefinitionForHost } from "@mia/sync"
+import { asEntityId, canonicalJsonStringify, getPublishedSyncDefinitionForHost } from "@mia/sync"
 import { createHash } from "node:crypto"
 
 export interface IndependentVerifyInput {
@@ -70,7 +70,7 @@ export async function runIndependentVerification(i: IndependentVerifyInput): Pro
   void i.tenantId
   let definition
   try {
-    definition = getPublishedSyncDefinitionForHost(i.host, i.entityType)
+    definition = getPublishedSyncDefinitionForHost(i.host, asEntityId(i.entityType))
   } catch {
     return baseReport(startedAt, t0, "fail", [`no published definition for entity "${i.entityType}"`])
   }

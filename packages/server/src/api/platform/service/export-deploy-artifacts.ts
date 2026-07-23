@@ -1,3 +1,5 @@
+import { parseBoundaryJson } from "../../../internal/parse-json.js"
+
 /**
  * Export SQLite catalog to a snapshot folder that mirrors deploy/sync layout.
  * Never overwrites repo seeds.
@@ -141,7 +143,7 @@ function exportStrategiesDocument(tenantId: string) {
 
 function exportEnvironmentsDocument() {
   const environments = db.listSyncEnvironments().map((row) => {
-    const body = JSON.parse(row.body_json) as SyncEnvironment
+    const body = parseBoundaryJson(row.body_json) as SyncEnvironment
     return {
       name: body.name,
       connectorId: body.connectorId ?? null,

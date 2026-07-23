@@ -1,5 +1,6 @@
 /** Service interfaces — contracts for governance infrastructure. */
 
+import type { RunId } from "./branded-ids.js"
 import type { DomainEvent } from "./events.js"
 import type { HostedPolicyContext } from "./policy-context.js"
 import type { AgentRun, AuditEntry, ExecutionRecord, Step } from "./run-models.js"
@@ -8,7 +9,7 @@ import type { AgentRun, AuditEntry, ExecutionRecord, Step } from "./run-models.j
 
 export interface RunRepository {
   save(run: AgentRun): Promise<void>
-  get(runId: string): Promise<AgentRun | null>
+  get(runId: RunId): Promise<AgentRun | null>
 }
 
 export interface AuditRepository {

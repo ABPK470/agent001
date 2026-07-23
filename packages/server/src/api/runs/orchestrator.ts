@@ -1,3 +1,4 @@
+import { parseBoundaryJson } from "../../internal/parse-json.js"
 import {
   computeAutoDetectedExcludeDirs,
   configureAgent,
@@ -69,7 +70,7 @@ export class AgentOrchestrator {
     this.queue = new RunQueue()
     const ttlMs = Number(process.env["AGENT_RUN_WORKSPACE_TTL_MS"] ?? 6 * 60 * 60 * 1000)
     if (Number.isFinite(ttlMs) && ttlMs >= 0) {
-      void cleanupStaleRunWorkspaces(ttlMs)
+      void cleanupStaleRunWorkspaces(ttlMs).catch((err: unknown) => { console.error("[mia]", err) })
     }
     // Tool-cache TTL is per-entry (encoded in each cache file). The boot
     // sweep here drops anything that already expired so the disk does not
@@ -156,7 +157,7 @@ export class AgentOrchestrator {
         name: r.name,
         effect: r.effect as PolicyEffect,
         condition: r.condition,
-        parameters: JSON.parse(r.parameters)
+        parameters: parseBoundaryJson(r.parameters) as Record<string, unknown>
       })
     }
     // Factory defaults live in the DB (seeded at boot from
@@ -317,7 +318,7 @@ export class AgentOrchestrator {
         name: r.name,
         effect: r.effect as PolicyEffect,
         condition: r.condition,
-        parameters: JSON.parse(r.parameters)
+        parameters: parseBoundaryJson(r.parameters) as Record<string, unknown>
       })
     }
     // (See startRun: hosted defaults + env-derived rules now seeded into
@@ -372,7 +373,7 @@ export class AgentOrchestrator {
     })
     saveTrace(this.activeRuns, newRunId, { kind: TrajectoryEventKind.Goal, text: originalRun.goal })
 
-    const messages = JSON.parse(checkpoint.messages) as Message[]
+    const messages = parseBoundaryJson(checkpoint.messages) as Message[]
     const iteration = checkpoint.iteration
     let tools = this.buildBootTools()
     // Visitor allowlist on resume too — safety net even if the original run

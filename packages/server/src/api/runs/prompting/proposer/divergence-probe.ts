@@ -15,6 +15,7 @@
 
 import { getPool, type AgentHost } from "@mia/agent"
 import {
+  asEntityId,
   emptyCounts,
   getPublishedSyncDefinitionForHost,
   movementOfTable,
@@ -39,7 +40,7 @@ export async function probeRowDivergence(i: ProbeRowDivergenceInput): Promise<re
   void i.tenantId
   let definition
   try {
-    definition = getPublishedSyncDefinitionForHost(i.host, i.entityId)
+    definition = getPublishedSyncDefinitionForHost(i.host, asEntityId(i.entityId))
   } catch {
     return []
   }
@@ -81,7 +82,7 @@ export async function probeRowDivergence(i: ProbeRowDivergenceInput): Promise<re
         }
       })
       findings.push({
-        entityId: String(rootId),
+        entityId: asEntityId(String(rootId)),
         entityLabel: plan.entity.displayName ?? `${i.entityLabel} ${rootId}`,
         counts,
         perTable,

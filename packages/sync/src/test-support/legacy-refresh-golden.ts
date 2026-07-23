@@ -21,6 +21,7 @@ import {
 } from "../domain/compile-sync-definition.js"
 import { buildFlowCatalog, type FlowCatalog } from "../domain/flow-catalog.js"
 import type { EntityDefinition } from "../domain/entity-registry/types.js"
+import { asEntityId, asFlowId } from "../domain/types/branded-ids.js"
 import {
   defaultSyncDefinitionFlowTemplateId,
   getSyncDefinitionFlowTemplateSteps,
@@ -99,7 +100,7 @@ export function normalizeEntitySeedDocument(raw: unknown): EntityDefinition {
   delete doc["run"]
   const entity = doc as unknown as EntityDefinition
   if (!entity.flowId?.trim()) {
-    entity.flowId = entity.id
+    entity.flowId = asFlowId(entity.id)
   }
   return entity
 }
@@ -158,7 +159,7 @@ export function seedRunConfigFromAuthored(
 ): SeedRunConfig {
   return {
     entityId: authored.id,
-    flowPreset: defaultSyncDefinitionFlowTemplateId(authored.id, flowTemplateCatalog),
+    flowPreset: defaultSyncDefinitionFlowTemplateId(asEntityId(authored.id), flowTemplateCatalog),
   }
 }
 

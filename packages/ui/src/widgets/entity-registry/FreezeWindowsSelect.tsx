@@ -31,7 +31,7 @@ export function FreezeWindowsSelect({ selected, onSelected }: FreezeWindowsSelec
     void api.listFreezeWindows()
       .then((r) => { if (!cancelled) setItems(r.items) })
       .catch((e) => { if (!cancelled) setErr(e instanceof Error ? e.message : String(e)) })
-      .finally(() => { if (!cancelled) setLoading(false) })
+      .finally(() => { if (!cancelled) setLoading(false) }).catch((err: unknown) => { console.error("[mia]", err) })
     return () => { cancelled = true }
   }, [])
 

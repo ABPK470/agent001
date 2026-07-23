@@ -96,7 +96,7 @@ export function SyncPolicyApprovalModal({
             type="button"
             className={TEXT_BTN}
             disabled={Boolean(busy)}
-            onClick={() => void resolve("deny")}
+            onClick={() => void resolve("deny").catch((err: unknown) => { console.error("[mia]", err) })}
           >
             <ShieldX size={14} /> Deny
           </button>
@@ -104,7 +104,7 @@ export function SyncPolicyApprovalModal({
             type="button"
             className={ACTION_BTN}
             disabled={Boolean(busy)}
-            onClick={() => void resolve("approve")}
+            onClick={() => void resolve("approve").catch((err: unknown) => { console.error("[mia]", err) })}
           >
             <ShieldCheck size={14} /> {busy === "approve" ? "Approving…" : "Approve"}
           </button>

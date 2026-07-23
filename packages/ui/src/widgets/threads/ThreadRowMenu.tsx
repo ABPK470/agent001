@@ -128,7 +128,7 @@ export function ThreadRowMenu({
           role="menu"
           style={{ top: menuPos.top, left: menuPos.left }}
         >
-          <button type="button" role="menuitem" className="thread-rail-item-dropdown-item" onClick={() => void togglePin()}>
+          <button type="button" role="menuitem" className="thread-rail-item-dropdown-item" onClick={() => void togglePin().catch((err: unknown) => { console.error("[mia]", err) })}>
             <Pin size={13} strokeWidth={1.75} />
             <span>{thread.pinned ? "Unpin" : "Pin"}</span>
           </button>

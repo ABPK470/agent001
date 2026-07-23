@@ -7,6 +7,7 @@
 
 import type { AuthoredSyncFlowStep } from "@mia/shared-types"
 import { validateCatalogId } from "@mia/shared-types"
+import { asEntityId } from "@mia/sync"
 import { buildFlowCatalog, validateAuthoredSyncFlow, type FlowCatalog } from "@mia/sync"
 
 export class FlowStepsValidationError extends Error {
@@ -69,7 +70,7 @@ export function validateFlowStepsForCatalog(
   } catch (error) {
     return error instanceof FlowStepsValidationError ? error.message : String(error)
   }
-  const validation = validateAuthoredSyncFlow(steps, "contract", flowCatalog, {
+  const validation = validateAuthoredSyncFlow(steps, asEntityId("contract"), flowCatalog, {
     skipEntityTypeCheck: true,
   })
   if (validation.errors.length === 0) return null

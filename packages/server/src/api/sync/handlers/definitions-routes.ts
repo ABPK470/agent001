@@ -12,6 +12,7 @@ import type {
   EntityRegistryPreviewYamlRequest,
 } from "@mia/shared-types"
 import {
+  asTenantId,
   hasSyncDefinitionFlowTemplate,
   loadSyncDefinitionFlowTemplateCatalog,
   suggestEntityDraft,
@@ -98,7 +99,7 @@ function importEntitiesFromText(args: {
         continue
       }
     }
-    const defWithTenant = { ...item.def, tenantId: args.tenantId }
+    const defWithTenant = { ...item.def, tenantId: asTenantId(args.tenantId) }
     const validation = validateEntityDefinition(defWithTenant)
     if (!validation.ok) {
       rowErrors.push({ id: item.def.id, error: validation })

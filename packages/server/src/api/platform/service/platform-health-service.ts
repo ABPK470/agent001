@@ -1,6 +1,7 @@
 import { buildCatalog, getMssqlConfig, type AgentHost } from "@mia/agent"
 import { validateEntityDefinition } from "@mia/sync"
 import { readFileSync } from "node:fs"
+import { parseBoundaryJson } from "../../../internal/parse-json.js"
 import {
   findExistingCatalogCachePath,
   resolveCatalogCachePath,
@@ -26,7 +27,7 @@ export interface PlatformHealth {
 
 function readCatalogCacheDetail(path: string): string {
   try {
-    const raw = JSON.parse(readFileSync(path, "utf-8")) as {
+    const raw = parseBoundaryJson(readFileSync(path, "utf-8")) as {
       builtAt?: string
       stats?: Record<string, number>
     }

@@ -1,3 +1,5 @@
+import { parseBoundaryJson } from "../../../internal/parse-json.js"
+
 /**
  * Connector transport routes — admin-only CRUD + validate + export/import.
  *
@@ -28,7 +30,7 @@ type ConfigValue = string | number | boolean | null
 type ConfigMap = Record<string, ConfigValue>
 
 function parseRow(row: db.DbConnector): Connector {
-  const body = JSON.parse(row.body_json) as Connector
+  const body = parseBoundaryJson(row.body_json) as Connector
   return {
     ...body,
     id: row.id,

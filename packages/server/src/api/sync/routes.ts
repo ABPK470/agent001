@@ -1,3 +1,5 @@
+import { parseBoundaryJson } from "../../internal/parse-json.js"
+
 /**
  * Sync transport routes.
  */
@@ -5,6 +7,7 @@
 import { type AgentHost } from "@mia/agent"
 import { EventType, isSyncRunStatus, type SyncRunStatus } from "@mia/shared-enums"
 import {
+  asFlowId,
   getEnvironments,
   isSyncPublishRequiredError,
   listPublishedSyncDefinitions,
@@ -354,7 +357,7 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
       }
       db.saveEntityDefinition({
         tenantId: "_default",
-        def: { ...entity, flowId },
+        def: { ...entity, flowId: asFlowId(flowId) },
         actor: req.session.upn,
         reason: "sync-definition-config:flowId",
       })
@@ -774,7 +777,7 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
     const audit = db.listSyncAuditForPlan(req.params.planId).map((entry) => {
       let detail: unknown = null
       try {
-        detail = JSON.parse(entry.detail)
+        detail = parseBoundaryJson(entry.detail)
       } catch {
         detail = entry.detail
       }

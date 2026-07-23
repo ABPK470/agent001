@@ -1,3 +1,5 @@
+import { parseBoundaryJson } from "../../../internal/parse-json.js"
+
 /**
  * Connectors import — plan (dry-run) + apply through the platform import gate.
  * Fail-closed: any invalid entry blocks the whole import.
@@ -43,7 +45,7 @@ export type ConnectorImportPlan = {
 }
 
 function parseRow(row: db.DbConnector): Connector {
-  const body = JSON.parse(row.body_json) as Connector
+  const body = parseBoundaryJson(row.body_json) as Connector
   return {
     ...body,
     id: row.id,

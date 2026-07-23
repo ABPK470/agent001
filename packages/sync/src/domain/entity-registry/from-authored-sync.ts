@@ -6,6 +6,8 @@
  * these artifacts so the Entity Registry widget is populated before any
  * operator import.
  */
+import { asFlowId, asStrategyId, asTenantId, type FlowId } from "../types/branded-ids.js"
+
 
 import type { AuthoredSyncDefinition, AuthoredSyncDefinitionTable } from "@mia/shared-types"
 
@@ -145,7 +147,7 @@ export type EntityDefinitionFromAuthoredOptions = {
   /** Stable stamp for seeds/goldens — defaults to wall clock. */
   createdAt?: string
   /** Flow association — defaults to authored.id (caller may resolve via catalog). */
-  flowId?: string
+  flowId?: FlowId
 }
 
 export function entityDefinitionFromAuthoredSync(
@@ -173,7 +175,7 @@ export function entityDefinitionFromAuthoredSync(
 
   return {
     id: authored.id,
-    tenantId,
+    tenantId: asTenantId(tenantId),
     displayName: authored.displayName,
     description: authored.description,
     rootTable: authored.rootTable,
@@ -185,13 +187,13 @@ export function entityDefinitionFromAuthoredSync(
       freezeWindowIds: [...authored.governance.freezeWindowIds],
     },
     scd2: {
-      strategyId: authored.strategy.strategyId,
+      strategyId: asStrategyId(authored.strategy.strategyId),
       strategyVersion: authored.strategy.strategyVersion,
       entityOverride: null,
     },
     lineageRefs: [],
     provenance,
-    flowId: options?.flowId ?? authored.id,
+    flowId: asFlowId(options?.flowId ?? authored.id),
     legacyEntrySproc: authored.legacy.entrySproc,
     reverseOrder: [...authored.metadata.reverseOrder],
     discrepancies: authored.metadata.discrepancies.map(

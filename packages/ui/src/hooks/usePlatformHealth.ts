@@ -29,7 +29,7 @@ export function usePlatformHealth(enabled: boolean): {
   }, [enabled])
 
   useEffect(() => {
-    void refresh()
+    void refresh().catch((err: unknown) => { console.error("[mia]", err) })
   }, [refresh])
 
   return { health, loading, refresh }

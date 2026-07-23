@@ -58,7 +58,7 @@ export function EvidencePanel({ tabsToolbar }: { tabsToolbar?: ReactNode }): JSX
 
   useLiveReload(refresh, (t) => t.startsWith("sync.evidence") || t.startsWith("sync.run"))
 
-  useEffect(() => { void refresh() }, [refresh])
+  useEffect(() => { void refresh().catch((err: unknown) => { console.error("[mia]", err) }) }, [refresh])
   useEffect(() => { setVerify(null) }, [selected])
 
   async function doVerify(id: string): Promise<void> {
@@ -117,7 +117,7 @@ export function EvidencePanel({ tabsToolbar }: { tabsToolbar?: ReactNode }): JSX
                   <Download size={12} /> evidence.pdf
                 </a>
               )}
-              <ModalBtnSecondary onClick={() => void doVerify(chosen.id)} disabled={verifying || busy}>
+              <ModalBtnSecondary onClick={() => void doVerify(chosen.id).catch((err: unknown) => { console.error("[mia]", err) })} disabled={verifying || busy}>
                 {verifying ? <Loader2 size={12} className="animate-spin" /> : <FileCheck2 size={12} />}
                 Verify
               </ModalBtnSecondary>

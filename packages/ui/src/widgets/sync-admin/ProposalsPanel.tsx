@@ -89,7 +89,7 @@ export function ProposalsPanel(): JSX.Element {
   } = useProposerScanState({
     onCompleted: (inserted) => {
       notify(inserted > 0 ? `Scan complete · ${inserted} new proposal${inserted === 1 ? "" : "s"}` : "Scan complete · no new drift")
-      void refresh()
+      void refresh().catch((err: unknown) => { console.error("[mia]", err) })
     },
     onFailed: (message) => notifyError(message),
     onCancelled: () => {
@@ -133,7 +133,7 @@ export function ProposalsPanel(): JSX.Element {
     }
   }, [])
 
-  useEffect(() => { void refreshPolicies() }, [refreshPolicies])
+  useEffect(() => { void refreshPolicies().catch((err: unknown) => { console.error("[mia]", err) }) }, [refreshPolicies])
 
   useLiveReload(refreshPolicies, (t) =>
     t === EventType.SyncPolicySaved || t === EventType.SyncPolicyDeleted,
@@ -166,7 +166,7 @@ export function ProposalsPanel(): JSX.Element {
           <ActiveOperationBanner
             label="Scanning "
             detail={<span className="font-mono"> {scanning.source} → {scanning.target}</span>}
-            onCancel={isAdmin ? () => void handleCancelScan() : undefined}
+            onCancel={isAdmin ? () => void handleCancelScan().catch((err: unknown) => { console.error("[mia]", err) }) : undefined}
             cancelBusy={cancelBusy}
           >
             {llmInteraction && (
@@ -278,7 +278,7 @@ export function ProposalsPanel(): JSX.Element {
               .finally(() => {
                 setPromptBusy(false)
                 setPrompt(null)
-              })
+              }).catch((err: unknown) => { console.error("[mia]", err) })
           }}
         />
       )}
@@ -325,12 +325,12 @@ function ProposalDetail({ proposal, isAdmin, approvalPolicies, onTransition, onR
           <DetailActionBtn
             disabled={isPreviewed}
             title={isPreviewed ? "Already marked as previewed" : "Mark as reviewed"}
-            onClick={() => void onTransition(proposal, "previewed", "previewed")}
+            onClick={() => void onTransition(proposal, "previewed", "previewed").catch((err: unknown) => { console.error("[mia]", err) })}
           >
             Previewed
           </DetailActionBtn>
           {needsApproval && !isAwaitingApproval && (
-            <DetailActionBtn variant="info" onClick={() => void onRequestApproval(proposal)}>
+            <DetailActionBtn variant="info" onClick={() => void onRequestApproval(proposal).catch((err: unknown) => { console.error("[mia]", err) })}>
               <ShieldCheck size={14} /> Request approval
             </DetailActionBtn>
           )}

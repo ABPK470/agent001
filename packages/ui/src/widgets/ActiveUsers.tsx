@@ -174,8 +174,8 @@ export function ActiveUsers(): ReactNode {
   const refreshSummary = useCallback(async () => {
     try {
       const [u, r] = await Promise.all([
-        fetch("/api/admin/users", { credentials: "include" }),
-        fetch("/api/admin/active-runs", { credentials: "include" }),
+        fetch("/api/admin/users", { credentials: "include", signal: AbortSignal.timeout(60_000) }),
+        fetch("/api/admin/active-runs", { credentials: "include", signal: AbortSignal.timeout(60_000) }),
       ])
       if (u.status === 403 || r.status === 403) { notifyError("Admin only"); setLoading(false); return }
       const uJson = (await u.json()) as { users: UserRow[]; summary: UserSummary }
@@ -213,7 +213,7 @@ export function ActiveUsers(): ReactNode {
     try {
       const res = await fetch(
         `/api/admin/users/${encodeURIComponent(identifier)}/runs?limit=${PAGE_SIZE}&offset=${offset}`,
-        { credentials: "include" },
+        { credentials: "include", signal: AbortSignal.timeout(60_000) },
       )
       if (!res.ok) throw new Error("failed")
       const json = (await res.json()) as { runs: HistoryRow[]; total: number }
@@ -233,7 +233,7 @@ export function ActiveUsers(): ReactNode {
   const toggle = useCallback((identifier: string) => {
     setExpanded((cur) => {
       const next = cur === identifier ? null : identifier
-      if (next && !history[next]) void loadHistory(next, 0)
+      if (next && !history[next]) void loadHistory(next, 0).catch((err: unknown) => { console.error("[mia]", err) })
       return next
     })
   }, [history, loadHistory])
@@ -268,21 +268,21 @@ export function ActiveUsers(): ReactNode {
     const exp = expandedRef.current
     if (!exp) return
     const offset = historyRef.current[exp]?.offset ?? 0
-    void loadHistoryRef.current(exp, offset, { silent: true })
+    void loadHistoryRef.current(exp, offset, { silent: true }).catch((err: unknown) => { console.error("[mia]", err) })
   }, [])
 
   useEffect(() => {
-    void refreshSummary()
+    void refreshSummary().catch((err: unknown) => { console.error("[mia]", err) })
   }, [refreshSummary])
 
   useEffect(() => {
     if (!connected) return
-    void refreshSummary()
+    void refreshSummary().catch((err: unknown) => { console.error("[mia]", err) })
   }, [connected, refreshSummary])
 
   useEffect(() => {
     const onVisible = () => {
-      if (document.visibilityState === "visible") void refreshSummary()
+      if (document.visibilityState === "visible") void refreshSummary().catch((err: unknown) => { console.error("[mia]", err) })
     }
     document.addEventListener("visibilitychange", onVisible)
     return () => document.removeEventListener("visibilitychange", onVisible)
@@ -290,7 +290,7 @@ export function ActiveUsers(): ReactNode {
 
   const onSseEvent = useCallback((event: { type: string; data: Record<string, unknown> }) => {
     if (isSummaryRefreshEvent(event.type)) {
-      void refreshSummary()
+      void refreshSummary().catch((err: unknown) => { console.error("[mia]", err) })
     }
 
     if (isActiveRunStepEvent(event.type)) {
@@ -438,8 +438,8 @@ export function ActiveUsers(): ReactNode {
                         history={hist}
                         stack
                         adminBusy={adminBusy === u.identifier}
-                        onToggleAdmin={(next) => void toggleAdmin(u, next)}
-                        onPageChange={(offset) => void loadHistory(u.identifier, offset)}
+                        onToggleAdmin={(next) => void toggleAdmin(u, next).catch((err: unknown) => { console.error("[mia]", err) })}
+                        onPageChange={(offset) => void loadHistory(u.identifier, offset).catch((err: unknown) => { console.error("[mia]", err) })}
                         onCollapse={() => toggle(u.identifier)}
                         onRunClick={(runId, preview) => setRunModal({ runId, preview })}
                       />
@@ -533,8 +533,8 @@ export function ActiveUsers(): ReactNode {
                             history={hist}
                             stack={false}
                             adminBusy={adminBusy === u.identifier}
-                            onToggleAdmin={(next) => void toggleAdmin(u, next)}
-                            onPageChange={(offset) => void loadHistory(u.identifier, offset)}
+                            onToggleAdmin={(next) => void toggleAdmin(u, next).catch((err: unknown) => { console.error("[mia]", err) })}
+                            onPageChange={(offset) => void loadHistory(u.identifier, offset).catch((err: unknown) => { console.error("[mia]", err) })}
                             onCollapse={() => toggle(u.identifier)}
                             onRunClick={(runId, preview) => setRunModal({ runId, preview })}
                           />
@@ -1355,7 +1355,7 @@ function CopyBtn({ value, label }: { value: string; label?: string }) {
         void navigator.clipboard.writeText(value).then(() => {
           setCopied(true)
           setTimeout(() => setCopied(false), 1400)
-        })
+        }).catch((err: unknown) => { console.error("[mia]", err) })
       }}
       className="ml-1 text-text-muted/30 hover:text-accent transition-colors"
       title={`Copy ${label ?? value}`}

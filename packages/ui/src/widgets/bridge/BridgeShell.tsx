@@ -325,7 +325,7 @@ export function BridgeShell(): JSX.Element {
                 type="button"
                 className={TEXT_BTN}
                 disabled={!canPreview}
-                onClick={() => void onPreview()}
+                onClick={() => void onPreview().catch((err: unknown) => { console.error("[mia]", err) })}
               >
                 <Eye size={14} className="mr-1.5 inline-block opacity-70" aria-hidden />
                 {busy === "preview" ? "Previewing…" : "Preview"}
@@ -334,7 +334,7 @@ export function BridgeShell(): JSX.Element {
                 type="button"
                 className={TEXT_BTN_PRIMARY}
                 disabled={!canRun}
-                onClick={() => void onRun()}
+                onClick={() => void onRun().catch((err: unknown) => { console.error("[mia]", err) })}
               >
                 <Play size={14} className="mr-1.5 inline-block opacity-80" aria-hidden />
                 {busy === "run" ? "Running…" : "Run"}
@@ -349,7 +349,7 @@ export function BridgeShell(): JSX.Element {
           draft={mapDraft}
           onChange={setMapDraft}
           sourceColumns={sourceColumns}
-          onSampleColumns={source ? () => void onSampleColumns() : undefined}
+          onSampleColumns={source ? () => void onSampleColumns().catch((err: unknown) => { console.error("[mia]", err) }) : undefined}
           sampling={busy === "sample"}
           source={source}
           target={target}

@@ -22,6 +22,7 @@ import { walk } from "./lint-arch/fs-walk.mjs"
 import { printReport } from "./lint-arch/report.mjs"
 import { loadCompilerOptions } from "./lint-arch/ts-context.mjs"
 import { FORBIDDEN_CONSTRUCTORS } from "./lint-arch/registry/policy.mjs"
+import { FAILURE_CLASSES } from "./lint-arch/registry/failure-classes.mjs"
 import {
   lintFlatControlFlow,
   lintModuleState,
@@ -53,7 +54,22 @@ import {
 import { lintOwnedIdentities } from "./lint-arch/rules/identities.mjs"
 import { lintNamedOutcomes } from "./lint-arch/rules/named-outcome.mjs"
 import { lintForbiddenTrees, lintTopLevel } from "./lint-arch/rules/trees.mjs"
-import { FAILURE_CLASSES } from "./lint-arch/registry/failure-classes.mjs"
+import {
+  lintCancellationFlow,
+  lintResourceCleanup,
+  lintScopedLifecycle,
+} from "./lint-arch/rules/lifecycle.mjs"
+import {
+  lintDataSanitization,
+  lintDeterministicExecution,
+  lintDeterministicOrdering,
+} from "./lint-arch/rules/determinism.mjs"
+import {
+  lintBrandedTypes,
+  lintErrorRegistry,
+  lintLeakFreePorts,
+  lintSchemaAtBoundary,
+} from "./lint-arch/rules/boundaries.mjs"
 
 const ROOT = resolve(fileURLToPath(import.meta.url), "../..")
 const PACKAGES = createPackageConfigs(ROOT)
@@ -80,10 +96,20 @@ const RUNNERS = new Map([
   ],
   ["module-state", ({ pkg, files }) => lintModuleState(pkg, files)],
   ["flat-control-flow", ({ files }) => lintFlatControlFlow(files)],
+  ["scoped-lifecycle", ({ pkg, files }) => lintScopedLifecycle(pkg, files)],
+  ["cancellation-flow", ({ pkg, files }) => lintCancellationFlow(pkg, files)],
+  ["resource-cleanup", ({ pkg, files }) => lintResourceCleanup(pkg, files)],
   ["framework-deny", ({ pkg, files }) => lintFrameworkDenylist(pkg, files)],
   ["export-surface", ({ pkg, files }) => lintPackageExportSurface(ROOT, pkg.name, files)],
   ["silent-failure", ({ pkg, files }) => lintSilentFailure(pkg, files, DEBT.silentFailureAllowlist)],
   ["named-outcome", ({ pkg, files }) => lintNamedOutcomes(pkg, files, ["core"])],
+  ["error-registry", ({ pkg, files }) => lintErrorRegistry(ROOT, pkg, files)],
+  ["schema-at-boundary", ({ pkg, files }) => lintSchemaAtBoundary(pkg, files)],
+  ["branded-types", ({ pkg, files }) => lintBrandedTypes(pkg, files)],
+  ["leak-free-ports", ({ pkg, files }) => lintLeakFreePorts(pkg, files)],
+  ["deterministic-execution", ({ pkg, files }) => lintDeterministicExecution(pkg, files)],
+  ["deterministic-ordering", ({ pkg, files }) => lintDeterministicOrdering(pkg, files)],
+  ["data-sanitization", ({ pkg, files }) => lintDataSanitization(pkg, files)],
   ["trust", ({ pkg, files }) => lintTrustHygiene(pkg, files, DEBT.trustAllowlist)],
   [
     "forbidden-constructors",
@@ -105,6 +131,10 @@ const RUNNERS = new Map([
       lintRegisteredApiSurfaces(ROOT, DEBT.brandAllowlist, DEBT.brandTokens)
       lintErasedSeams(ROOT, PACKAGES)
     },
+  ],
+  [
+    "branded-path",
+    () => lintRegisteredApiSurfaces(ROOT, DEBT.brandAllowlist, DEBT.brandTokens),
   ],
   [
     "owned-identities",
@@ -137,18 +167,43 @@ const RUNNERS = new Map([
         { list: PACKAGES.sync.layerAllowlist, label: "sync.layerAllowlist" },
         { list: PACKAGES.ui.layerAllowlist, label: "ui.layerAllowlist" },
       ])
+    },
+  ],
+  [
+    "stale-allowlist",
+    () => {
       lintStaleCycleAllowlist(DEBT.cycleAllowlist, "leverage")
-      lintStaleDebtList(DEBT.brandAllowlist, "stale-debt", "brand")
-      lintStaleDebtList(DEBT.presentationAllowlist, "stale-debt", "presentation")
-      lintStaleDebtList(DEBT.tenantBranchAllowlist, "stale-debt", "identity-fork")
-      lintStaleDebtList(DEBT.silentFailureAllowlist, "stale-debt", "silent-failure")
-      lintStaleDebtList(DEBT.trustAllowlist, "stale-debt", "trust")
-      lintStaleDebtList(DEBT.enumForkAllowlist, "stale-debt", "enum-fork")
-      lintStaleDebtList(DEBT.jargonAllowlist, "stale-debt", "jargon")
-      lintStaleDebtList(DEBT.unownedIdentityAllowlist ?? [], "stale-debt", "unowned-identity")
+      lintStaleDebtList(DEBT.brandAllowlist, "stale-allowlist", "brand")
+      lintStaleDebtList(DEBT.presentationAllowlist, "stale-allowlist", "presentation")
+      lintStaleDebtList(DEBT.tenantBranchAllowlist, "stale-allowlist", "identity-fork")
+      lintStaleDebtList(DEBT.silentFailureAllowlist, "stale-allowlist", "silent-failure")
+      lintStaleDebtList(DEBT.trustAllowlist, "stale-allowlist", "trust")
+      lintStaleDebtList(DEBT.enumForkAllowlist, "stale-allowlist", "enum-fork")
+      lintStaleDebtList(DEBT.jargonAllowlist, "stale-allowlist", "jargon")
+      lintStaleDebtList(DEBT.unownedIdentityAllowlist ?? [], "stale-allowlist", "unowned-identity")
     },
   ],
 ])
+
+assertFailureClassesWired()
+
+function assertFailureClassesWired() {
+  const known = new Set([...PACKAGE_RULES, ...GLOBAL_RULES, ...Object.values(PACKAGE_EXTRA_RULES).flat()])
+  for (const cls of FAILURE_CLASSES) {
+    for (const part of cls.rule.split("+")) {
+      if (!RUNNERS.has(part)) {
+        throw new Error(
+          `lint-arch: failure class #${cls.id} "${cls.name}" references rule "${part}" with no runner`,
+        )
+      }
+      if (!known.has(part)) {
+        throw new Error(
+          `lint-arch: failure class #${cls.id} "${cls.name}" rule "${part}" is not in PACKAGE_RULES/GLOBAL_RULES`,
+        )
+      }
+    }
+  }
+}
 
 function runRule(name, ctx) {
   const fn = RUNNERS.get(name)

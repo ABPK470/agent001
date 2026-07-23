@@ -63,7 +63,7 @@ export function CatalogVersionDetailModal({
         setErr(error instanceof Error ? error.message : String(error))
         setBusy(false)
       }
-    })()
+    })().catch((err: unknown) => { console.error("[mia]", err) })
     return () => {
       cancelled = true
     }

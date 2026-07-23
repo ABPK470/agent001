@@ -3,6 +3,7 @@
  */
 
 import type { SyncPlan, SyncPlanChangeSet, SyncPlanTable } from "../domain/plan.js"
+import { asPlanId } from "../domain/types/branded-ids.js"
 import { loadDeployFlowCatalogForTests } from "../test-support/test-flow-catalog.js"
 import { ENTITY_SPECS, type EntityFixtureSpec } from "./entity-fixtures.js"
 import type { AuthoredSyncFlowStep } from "@mia/shared-types"
@@ -87,7 +88,7 @@ export function buildEntityPlan(options: BuildPlanOptions): SyncPlan {
   ]
 
   return {
-    planId,
+    planId: asPlanId(planId),
     createdAt: new Date(createdAtMs).toISOString(),
     createdAtMs,
     entity: { type: entityType as never, id: entityId, displayName: `${entityType} ${entityId}` },

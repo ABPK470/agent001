@@ -10,6 +10,7 @@ import { tmpdir } from "node:os"
 import { join, resolve } from "node:path"
 
 import type { EntityDefinition, EntityTable } from "@mia/sync"
+import { asFlowId, asStrategyId, asTenantId } from "@mia/sync"
 import {
   compilePublishedSyncDefinition,
   compileFkPathPredicate,
@@ -46,7 +47,7 @@ function tbl(over: Partial<EntityTable> & Pick<EntityTable, "name" | "scope" | "
 function makeEntity(over: Partial<EntityDefinition> = {}): EntityDefinition {
   return {
     id: "testEntity",
-    tenantId: "_default",
+    tenantId: asTenantId("_default"),
     displayName: "Test Entity",
     description: "Compiler parity fixture",
     rootTable: "core.TestRoot",
@@ -62,10 +63,10 @@ function makeEntity(over: Partial<EntityDefinition> = {}): EntityDefinition {
       })
     ],
     policies: { freezeWindowIds: [] },
-    scd2: { strategyId: "mymi-scd2", strategyVersion: 1, entityOverride: null },
+    scd2: { strategyId: asStrategyId("mymi-scd2"), strategyVersion: 1, entityOverride: null },
     lineageRefs: [],
     provenance: { kind: "manual" },
-    flowId: over.flowId ?? "metadataOnly",
+    flowId: asFlowId(over.flowId ?? "metadataOnly"),
     legacyEntrySproc: null,
     reverseOrder: [],
     discrepancies: [],

@@ -177,7 +177,7 @@ export function ImportGateModal({
           <button
             type="button"
             className={TEXT_BTN}
-            onClick={() => void onValidate()}
+            onClick={() => void onValidate().catch((err: unknown) => { console.error("[mia]", err) })}
             disabled={session.busy || !canValidate(session.payload)}
           >
             {session.busy ? <Loader2 className="inline h-3 w-3 animate-spin" /> : null} Validate
@@ -185,7 +185,7 @@ export function ImportGateModal({
           <button
             type="button"
             className={TEXT_BTN_PRIMARY}
-            onClick={() => void onApply()}
+            onClick={() => void onApply().catch((err: unknown) => { console.error("[mia]", err) })}
             disabled={session.busy || !applyEnabled}
             title={
               applyEnabled
@@ -208,7 +208,7 @@ export function ImportGateModal({
               className="hidden"
               onChange={(event) => {
                 const file = event.target.files?.[0]
-                if (file) void readFile(file)
+                if (file) void readFile(file).catch((err: unknown) => { console.error("[mia]", err) })
               }}
             />
             <button

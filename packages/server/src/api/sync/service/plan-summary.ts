@@ -1,4 +1,5 @@
 import * as db from "../../../infra/persistence/sqlite.js"
+import { parseBoundaryJson } from "../../../internal/parse-json.js"
 
 type LooseRecord = Record<string, unknown>
 
@@ -57,7 +58,7 @@ export function loadPersistedSyncPlanSummary(planId: string): SyncPlanSummary | 
   const json = db.getSyncRunPlanJson(planId)
   if (!json) return null
   try {
-    return summarizeSyncPlan(JSON.parse(json))
+    return summarizeSyncPlan(parseBoundaryJson(json))
   } catch {
     return null
   }

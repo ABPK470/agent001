@@ -205,7 +205,7 @@ export function FreezeWindowsModal({
             setEditing(null)
             setSelectedId(saved.id)
             onChanged?.()
-            void load()
+            void load().catch((err: unknown) => { console.error("[mia]", err) })
           }}
           onError={pushToast}
         />
@@ -219,7 +219,7 @@ export function FreezeWindowsModal({
           danger
           stackLevel={editing ? stackLevel + 2 : stackLevel + 1}
           onCancel={() => setDeletingId(null)}
-          onConfirm={() => void doDelete(deletingId)}
+          onConfirm={() => void doDelete(deletingId).catch((err: unknown) => { console.error("[mia]", err) })}
         />
       )}
     </>

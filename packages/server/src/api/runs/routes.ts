@@ -1,3 +1,5 @@
+import { parseBoundaryJson } from "../../internal/parse-json.js"
+
 /**
  * Run transport routes.
  */
@@ -111,7 +113,7 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
         (entry): AuditEntry => ({
           actor: entry.actor,
           action: entry.action,
-          detail: JSON.parse(entry.detail),
+          detail: parseBoundaryJson(entry.detail) as Record<string, unknown>,
           timestamp: entry.timestamp
         })
       ),
@@ -129,7 +131,7 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
           let msg = entry.message
           let error: boolean | undefined
           try {
-            const payload = JSON.parse(entry.message.slice(colonIdx + 2)) as Record<string, unknown>
+            const payload = parseBoundaryJson(entry.message.slice(colonIdx + 2)) as Record<string, unknown>
             const action = (payload.action ?? payload.name ?? "unknown") as string
             switch (rawType) {
               case EventType.RunStarted:
@@ -366,7 +368,7 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
       reply.code(404)
       return { error: "Run not found" }
     }
-    return db.getTraceEntries(req.params.id).map((entry) => JSON.parse(entry.data))
+    return db.getTraceEntries(req.params.id).map((entry) => parseBoundaryJson(entry.data))
   })
 
   /** User download — trace as .txt (streamed to browser, not saved on server). */
@@ -376,7 +378,7 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
       reply.code(404)
       return { error: "Run not found" }
     }
-    const entries = db.getTraceEntries(req.params.id).map((entry) => JSON.parse(entry.data) as Record<string, unknown>)
+    const entries = db.getTraceEntries(req.params.id).map((entry) => parseBoundaryJson(entry.data) as Record<string, unknown>)
     const usage = db.getTokenUsage(req.params.id)
     const text = formatTraceExportText(entries, {
       runId: req.params.id,
@@ -399,7 +401,7 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
       reply.code(404)
       return { error: "Run not found" }
     }
-    const entries = db.getTraceEntries(req.params.id).map((entry) => JSON.parse(entry.data))
+    const entries = db.getTraceEntries(req.params.id).map((entry) => parseBoundaryJson(entry.data))
     return sendUserDownload(reply, {
       filename: traceExportFilename(req.params.id, "json"),
       contentType: "application/json; charset=utf-8",

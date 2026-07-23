@@ -1,3 +1,5 @@
+import { parseBoundaryJson } from "../../../internal/parse-json.js"
+
 /**
  * runtime/movement-port.ts — build the opaque `host.connectors` port at boot.
  *
@@ -59,7 +61,7 @@ function asBoolean(value: unknown, fallback: boolean): boolean {
 
 /** Parse a persisted row's body_json back into a Connector. */
 function parseConnector(row: db.DbConnector): Connector {
-  const body = JSON.parse(row.body_json) as Connector
+  const body = parseBoundaryJson(row.body_json) as Connector
   return {
     ...body,
     id: row.id,

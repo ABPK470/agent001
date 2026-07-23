@@ -265,7 +265,7 @@ export function SyncMetadataModal({
     }
   }, [clearToasts, pushToast])
 
-  useEffect(() => { void load() }, [load])
+  useEffect(() => { void load().catch((err: unknown) => { console.error("[mia]", err) }) }, [load])
 
   function reopenSavedEntry(nextCatalog: SyncMetadataCatalogResponse, savedId: string): void {
     if (tab === "flows") {
@@ -900,7 +900,7 @@ export function SyncMetadataModal({
                   const p = catalog.flows.find((x) => x.id === id)
                   if (p) startEdit(p, { description: p.description, steps: p.steps })
                 }}
-                onDelete={(id) => void removeEntry(id)}
+                onDelete={(id) => void removeEntry(id).catch((err: unknown) => { console.error("[mia]", err) })}
               />
             )}
             {catalog && catalogView === "valueSources" && (
@@ -911,7 +911,7 @@ export function SyncMetadataModal({
                 items={sourcesListItems}
                 selectedId={formOpen && formMode === "edit" ? editingId : null}
                 onSelect={(id) => selectSourcesItem(id)}
-                onDelete={(id) => void removeEntry(id)}
+                onDelete={(id) => void removeEntry(id).catch((err: unknown) => { console.error("[mia]", err) })}
               />
             )}
             {catalog && catalogView === "actions" && (
@@ -931,7 +931,7 @@ export function SyncMetadataModal({
                   const k = catalog.actions.find((x) => x.id === id)
                   if (k) startEdit(k, { stepTypeDefinition: k.definition })
                 }}
-                onDelete={(id) => void removeEntry(id)}
+                onDelete={(id) => void removeEntry(id).catch((err: unknown) => { console.error("[mia]", err) })}
               />
             )}
           </div>
@@ -1268,7 +1268,7 @@ export function SyncMetadataModal({
               </button>
               <button
                 type="button"
-                onClick={() => void commitEnvironmentSave()}
+                onClick={() => void commitEnvironmentSave().catch((err: unknown) => { console.error("[mia]", err) })}
                 disabled={environments.saving !== null}
                 className={TEXT_BTN_PRIMARY}
               >
@@ -1297,7 +1297,7 @@ export function SyncMetadataModal({
           if (environmentEditingId === environments.deleting) closeEnvironmentForm()
           environments.setDeleting(null)
           onChanged?.()
-        })}
+        }).catch((err: unknown) => { console.error("[mia]", err) })}
       />
     )}
 
@@ -1331,7 +1331,7 @@ export function SyncMetadataModal({
               </button>
               <button
                 type="button"
-                onClick={() => void commitSaveEntry()}
+                onClick={() => void commitSaveEntry().catch((err: unknown) => { console.error("[mia]", err) })}
                 disabled={busy}
                 className={TEXT_BTN_PRIMARY}
               >

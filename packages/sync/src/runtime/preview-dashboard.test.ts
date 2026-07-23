@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest"
+import { asPlanId } from "../domain/types/branded-ids.js"
 import { buildSyncPreviewDashboard, formatSyncPreviewDashboardFence } from "./preview-dashboard.js"
 import type { SyncPlan } from "./plan-store.js"
 
 function minimalPlan(overrides: Partial<SyncPlan> = {}): SyncPlan {
   return {
-    planId: "plan-1",
+    planId: asPlanId("plan-1"),
     createdAt: "2026-01-01T00:00:00.000Z",
     createdAtMs: 0,
     entity: { type: "contract", id: 1, displayName: "ACSRawTest" },

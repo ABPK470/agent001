@@ -58,7 +58,7 @@ export function useSyncEnvironments(
     }
     if (initialLoadRef.current) return
     initialLoadRef.current = true
-    void load()
+    void load().catch((err: unknown) => { console.error("[mia]", err) })
   }, [enabled, load])
 
   useEffect(() => {
@@ -69,7 +69,7 @@ export function useSyncEnvironments(
     }
     if (envTick === lastEnvTickRef.current) return
     lastEnvTickRef.current = envTick
-    void load()
+    void load().catch((err: unknown) => { console.error("[mia]", err) })
   }, [enabled, envTick, load])
 
   const catalogItems = useMemo(

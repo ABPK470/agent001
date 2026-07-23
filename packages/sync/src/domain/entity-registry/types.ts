@@ -18,6 +18,8 @@
  *   D3: SCD2 handling is hybrid — strategies at template level, per-entity
  *       and per-table overrides.
  */
+import type { EntityId, FlowId, StrategyId, TenantId } from "../types/branded-ids.js"
+
 
 // ── Scope discriminated union ────────────────────────────────────
 
@@ -107,7 +109,7 @@ export interface EffectiveScd2 {
   identityHandling: Scd2Strategy["identityHandling"]
   /** Resolution trace — which layer contributed each field (for diagnostics). */
   resolution: {
-    strategyId: string
+    strategyId: StrategyId
     strategyVersion: number
     entityOverrideApplied: boolean
     tableOverrideApplied: boolean
@@ -131,7 +133,7 @@ export interface Scd2Override {
 
 export type EntityTableProvenance =
   | { kind: "manual" }
-  | { kind: "template"; templateId: string; entityId: string }
+  | { kind: "template"; templateId: string; entityId: EntityId }
   | { kind: "sproc"; sprocName: string; lineRange?: [number, number] }
   | { kind: "importer"; importerId: string }
   | { kind: "fkGraphSuggester"; confidence: "high" | "medium" | "low" }
@@ -209,7 +211,7 @@ export interface EntityDefinition {
   /** Stable machine id chosen at creation; immutable across versions. */
   id: string
   /** Tenant scope. Single-tenant deployments use the sentinel `_default`. */
-  tenantId: string
+  tenantId: TenantId
   displayName: string
   description: string
   /** Schema-qualified root table. */
@@ -232,7 +234,7 @@ export interface EntityDefinition {
    * may be a specific integer (pinned) or `"latest"` (track current).
    */
   scd2: {
-    strategyId: string
+    strategyId: StrategyId
     strategyVersion: number | "latest"
     entityOverride: Scd2Override | null
   }
@@ -242,7 +244,7 @@ export interface EntityDefinition {
    * Flow in sync-metadata that defines execution steps for this entity.
    * Publish resolves steps from this id; tip has no other run bindings.
    */
-  flowId: string
+  flowId: FlowId
 
   // ── Enriched introspection fields (additive, all optional) ───────
   /** Legacy MyMI entry-point stored procedure name (if migrated). */

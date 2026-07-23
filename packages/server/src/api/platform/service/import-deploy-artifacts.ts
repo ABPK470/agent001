@@ -1,3 +1,5 @@
+import { parseBoundaryJson } from "../../../internal/parse-json.js"
+
 /**
  * Import deploy catalog snapshots into SQLite (never writes repo seeds or .env).
  *
@@ -11,7 +13,7 @@ import { tmpdir } from "node:os"
 
 import type { AuthoredSyncFlowStep } from "@mia/shared-types"
 import type { Scd2Strategy, SyncEnvironment } from "@mia/sync"
-import { validateEntityDefinition } from "@mia/sync"
+import { asEntityId, asFlowId, asTenantId, validateEntityDefinition } from "@mia/sync"
 import { defaultSyncDefinitionFlowTemplateId, hasSyncDefinitionFlowTemplate, withPermissionDefaults } from "@mia/sync"
 import { validateCatalogId } from "@mia/shared-types"
 
@@ -89,7 +91,7 @@ type EnvironmentsDoc = {
 }
 
 function readJsonFile(path: string): unknown {
-  return JSON.parse(readFileSync(path, "utf-8")) as unknown
+  return parseBoundaryJson(readFileSync(path, "utf-8")) as unknown
 }
 
 function requireObject(value: unknown, label: string): Record<string, unknown> {
@@ -299,7 +301,7 @@ export function validateDeployCatalogSnapshot(snapshot: DeployCatalogSnapshot): 
         if (item.def) {
           const validation = validateEntityDefinition({
             ...item.def,
-            tenantId: item.def.tenantId || DEFAULT_TENANT,
+            tenantId: asTenantId(item.def.tenantId || DEFAULT_TENANT),
           })
           if (!validation.ok) {
             for (const issue of validation.errors) {
@@ -478,11 +480,11 @@ function applyLegacyConfigFlowIds(
     if (!entity) continue
     const flowId = hasSyncDefinitionFlowTemplate(flowTemplateCatalog, config.flowPreset)
       ? config.flowPreset
-      : defaultSyncDefinitionFlowTemplateId(config.entityId, flowTemplateCatalog)
+      : defaultSyncDefinitionFlowTemplateId(asEntityId(config.entityId), flowTemplateCatalog)
     if (entity.flowId === flowId) continue
     db.saveEntityDefinition({
-      tenantId,
-      def: { ...entity, flowId },
+      tenantId: asTenantId(tenantId),
+      def: { ...entity, flowId: asFlowId(flowId) },
       actor,
       reason: "catalog-import:legacy-config-flowId",
     })
@@ -519,8 +521,8 @@ function applyEntityDefinitions(
     for (const item of parsed) {
       if (!item.ok || !item.def) throw new Error(item.error ?? "entity parse failed")
       db.saveEntityDefinition({
-        tenantId,
-        def: { ...item.def, tenantId },
+        tenantId: asTenantId(tenantId),
+        def: { ...item.def, tenantId: asTenantId(tenantId) },
         actor,
         reason: "catalog-import",
       })

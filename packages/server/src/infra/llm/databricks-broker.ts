@@ -51,7 +51,8 @@ export async function getDatabricksToken(): Promise<string> {
   const res = await fetch(`${getDatabricksHost()}/oidc/v1/token`, {
     method: "POST",
     headers: { Authorization: `Basic ${basic}`, "Content-Type": "application/x-www-form-urlencoded" },
-    body: "grant_type=client_credentials&scope=all-apis"
+    body: "grant_type=client_credentials&scope=all-apis",
+    signal: AbortSignal.timeout(60_000),
   })
   if (!res.ok) {
     const detail = await res.text()

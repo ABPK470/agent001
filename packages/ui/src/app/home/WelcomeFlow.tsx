@@ -179,7 +179,7 @@ function IntroConversationLoginAdapter({
         // Cross-fade complete → hand control back to App so it can flip
         // to Shell phase and unmount this overlay.
         if (phase === "fading" && e.propertyName === "opacity") {
-          void onDone()
+          onDone()
         }
       }}
     >

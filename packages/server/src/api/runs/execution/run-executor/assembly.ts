@@ -1,4 +1,4 @@
-import { createRun, PolicyRole, runStarted, startRunningPure, type RunState } from "@mia/agent"
+import { createRun, PolicyRole, asRunId, runStarted, startRunningPure, type RunState } from "@mia/agent"
 import { RunStatus } from "@mia/shared-enums"
 import { prepareRunWorkspace } from "../../workspace/index.js"
 import { wireEventBroadcasting } from "../../prompting/coordination/event-wiring.js"
@@ -71,7 +71,7 @@ export function createRunPersistence(
     state.run = startRunningPure(state.run, state.run.steps)
     await saveCurrentRun()
     persistCurrentRun()
-    await sideEffects.eventBus.publish(runStarted(state.run.id, "agent-session"))
+    await sideEffects.eventBus.publish(runStarted(asRunId(state.run.id), "agent-session"))
   }
 
   const initialize = async (): Promise<void> => {

@@ -1,4 +1,5 @@
 import { getMssqlConfig, type AgentHost } from "@mia/agent"
+import { parseBoundaryJson } from "../../../internal/parse-json.js"
 import {
   loadSyncEnvironments,
   normalizeStoredSyncEnvironment,
@@ -29,7 +30,7 @@ function mergeLegacyOverrides(environments: SyncEnvironment[]): SyncEnvironment[
   const overrides = new Map<string, Partial<SyncEnvironment>>()
   for (const row of db.listSyncEnvOverrides()) {
     try {
-      overrides.set(row.name, JSON.parse(row.overrides_json) as Partial<SyncEnvironment>)
+      overrides.set(row.name, parseBoundaryJson(row.overrides_json) as Partial<SyncEnvironment>)
     } catch (error) {
       console.warn(
         `[sync-envs] invalid legacy override JSON for env "${row.name}":`,
@@ -44,7 +45,7 @@ function mergeLegacyOverrides(environments: SyncEnvironment[]): SyncEnvironment[
 }
 
 function parsePersistedEnvironment(row: db.DbSyncEnvironment): SyncEnvironment {
-  return normalizeStoredSyncEnvironment(row.name, JSON.parse(row.body_json) as Record<string, unknown>)
+  return normalizeStoredSyncEnvironment(row.name, parseBoundaryJson(row.body_json) as Record<string, unknown>)
 }
 
 function renderSummary(environments: SyncEnvironment[]): string {

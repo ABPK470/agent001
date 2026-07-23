@@ -1,3 +1,5 @@
+import { parseBoundaryJson } from "../../internal/parse-json.js"
+
 /**
  * Thread transport routes — named conversation workspaces.
  */
@@ -115,7 +117,7 @@ export function registerThreadRoutes(app: FastifyInstance, orchestrator: AgentOr
     }
     const runRows = db.listRunsWithUsageForThread(thread.id)
     const runs = runRows.map((run) => {
-      const entries = db.getTraceEntries(run.id).map((entry) => JSON.parse(entry.data) as Record<string, unknown>)
+      const entries = db.getTraceEntries(run.id).map((entry) => parseBoundaryJson(entry.data) as Record<string, unknown>)
       const usage = db.getTokenUsage(run.id)
       return {
         meta: {
@@ -149,7 +151,7 @@ export function registerThreadRoutes(app: FastifyInstance, orchestrator: AgentOr
       goal: run.goal,
       status: run.status,
       createdAt: run.created_at,
-      entries: db.getTraceEntries(run.id).map((entry) => JSON.parse(entry.data)),
+      entries: db.getTraceEntries(run.id).map((entry) => parseBoundaryJson(entry.data)),
     }))
     return sendUserDownload(reply, {
       filename: threadExportFilename(thread.id, "json"),

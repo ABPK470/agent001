@@ -137,7 +137,7 @@ export function TableExportActions({
         type="button"
         className={btn}
         disabled={!idle}
-        onClick={() => void onCopy()}
+        onClick={() => void onCopy().catch((err: unknown) => { console.error("[mia]", err) })}
         aria-label="Copy table as CSV"
       >
         {feedback === "copy" ? <Check size={iconSize} className="text-success" /> : <Copy size={iconSize} />}
@@ -147,7 +147,7 @@ export function TableExportActions({
         type="button"
         className={btn}
         disabled={!idle}
-        onClick={() => void onExport("csv")}
+        onClick={() => void onExport("csv").catch((err: unknown) => { console.error("[mia]", err) })}
         aria-label="Export table as CSV"
       >
         {feedback === "csv" ? <Check size={iconSize} className="text-success" /> : <Sheet size={iconSize} />}
@@ -157,7 +157,7 @@ export function TableExportActions({
         type="button"
         className={btn}
         disabled={!idle}
-        onClick={() => void onExport("json")}
+        onClick={() => void onExport("json").catch((err: unknown) => { console.error("[mia]", err) })}
         aria-label="Export table as JSON"
       >
         {feedback === "json" ? <Check size={iconSize} className="text-success" /> : <Braces size={iconSize} />}

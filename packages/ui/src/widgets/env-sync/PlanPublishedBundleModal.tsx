@@ -45,7 +45,7 @@ export function PlanPublishedBundleModal({
       })
       .finally(() => {
         if (!dead) setLoading(false)
-      })
+      }).catch((err: unknown) => { console.error("[mia]", err) })
     return () => {
       dead = true
     }

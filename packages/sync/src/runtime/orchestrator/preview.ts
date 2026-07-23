@@ -24,6 +24,7 @@ import {
   readyMssqlConnectorIds,
 } from "../../domain/sync-env-eligibility.js"
 import { evaluateFreezeWindows } from "../../domain/governance/freeze-windows.js"
+import { asEntityId, type PlanId } from "../../domain/types/branded-ids.js"
 import { getPublishedSyncDefinition } from "../../domain/published-definitions.js"
 import { assertPublishedContractCurrent } from "../../domain/publish-readiness.js"
 import { instantiatePredicate, instantiatePredicateWithTree } from "../../domain/predicate.js"
@@ -90,7 +91,7 @@ export async function previewSync(input: PreviewInput): Promise<SyncPlan> {
 async function previewSyncInner(
   input: PreviewInput,
   previewId: string,
-  planId: string,
+  planId: PlanId,
   t0: number,
   telemetryContext: SyncTelemetryContext
 ): Promise<SyncPlan> {
@@ -98,7 +99,7 @@ async function previewSyncInner(
   try {
     const createdAt = new Date().toISOString()
     const createdAtMs = Date.now()
-    const definition = getPublishedSyncDefinition(input.host, projectRoot(input.host), input.entityType)
+    const definition = getPublishedSyncDefinition(input.host, projectRoot(input.host), asEntityId(input.entityType))
     const selection = selectDefinitionTables(definition, input.enabledOptionalTables)
     const activeTables = selection.tables
 
