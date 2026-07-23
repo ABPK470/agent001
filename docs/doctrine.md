@@ -6,7 +6,7 @@
 This document is the structural and product-ownership contract for the monorepo.
 `.cursor/rules/first-principles.mdc` is the thinking / quality bar; this file is
 where those ideas become enforceable edges. **Talk is cheap:** change this
-document and `scripts/lint-arch.mjs` together. Run `npm run lint:arch` (also
+document and `scripts/lint-arch/` together. Run `npm run lint:arch` (also
 first under `npm run lint`) before merging.
 
 ---
@@ -191,9 +191,28 @@ domain   →  (self only)*
 internal →  (helpers; no layer ownership)
 ```
 
-\* Transitional allowlists exist in `scripts/lint-arch.mjs` for known debt
+\* Transitional allowlists live in `scripts/lint-arch/config.mjs` for known debt
 (domain type-imports of tools/core; core value-imports of `runtime/delegate`
-validation). Shrink those lists; do not grow them casually.
+validation). Unused entries fail — allowlists must shrink; do not grow them casually.
+
+### `lint:arch` (how doctrine stays true)
+
+`scripts/lint-arch.mjs` is the asymmetric enforcement engine — not a regex police
+officer. It parses TypeScript via the compiler API, resolves modules with
+`ts.resolveModuleName`, and applies one package config schema across agent /
+server / sync / ui.
+
+| Edge | How |
+| ---- | --- |
+| Layer matrix + side-effect imports | AST import/export declarations |
+| Import cycles (incl. intra-layer) | Value-import graph; deferred by default, fail with `LINT_ARCH_STRICT_CYCLES=1` |
+| Flat control flow | AST function nesting + listener registration |
+| Module `let` / timers / ALS | AST statements only (never strings/comments) |
+| Capability ownership | Banned identifiers (`resolveAgent`, agent CRUD, …) |
+| Event catalog coverage | Every `TraceEntry.kind` / `EventType` has a descriptor |
+| Stale debt allowlists | Unused allowlist entries fail |
+
+Change this document and `scripts/lint-arch/` together.
 
 ### What each layer is for
 

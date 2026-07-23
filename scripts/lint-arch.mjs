@@ -1,1018 +1,116 @@
-#!/usr/bin/env node
 /**
- * lint-arch.mjs — architecture / doctrine lint (no ESLint dependency).
+ * lint-arch — asymmetric leverage engine for docs/doctrine.md.
  *
- * Enforces docs/doctrine.md hard edges for @mia/agent, @mia/server, @mia/sync, @mia/ui:
+ * Deterministic TypeScript AST (not line-regex). One package config schema.
+ * Enforces: layers, cycles, side-effect imports, flat control flow,
+ * capability ownership, event catalog, forbidden trees, stale debt allowlists.
  *
- *   Agent / Sync / Server — see sections below
- *   UI:
- *     - Canonical top-level folders (boot/app/client/state/widgets/components/…)
- *     - Forbidden shell/features/api/kit/surfaces/…
- *     - Layer import direction
- *     - Platform checkbox only via components/Checkbox.tsx (no ad-hoc natives)
- *
- * Run: `npm run lint:arch`  (or `node scripts/lint-arch.mjs`)
+ * Run: `npm run lint:arch`  (node scripts/lint-arch.mjs)
  */
 
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs"
-import { join, relative, resolve } from "node:path"
+import { existsSync } from "node:fs"
+import { resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 
+import { createPackageConfigs } from "./lint-arch/config.mjs"
+import { walk } from "./lint-arch/fs-walk.mjs"
+import { errors, printReport } from "./lint-arch/report.mjs"
+import { loadCompilerOptions } from "./lint-arch/ts-context.mjs"
+import {
+  lintFlatControlFlow,
+  lintDeepPackageImports,
+  lintModuleState,
+  lintNoAsyncLocalStorage,
+} from "./lint-arch/rules/code-shape.mjs"
+import {
+  lintImportCycles,
+  lintLayerImports,
+  lintStaleAllowlists,
+} from "./lint-arch/rules/layers.mjs"
+import {
+  lintCapabilityOwnership,
+  lintEventCatalogCoverage,
+  lintUiEventKindSwitch,
+  lintUiPlatformCheckbox,
+} from "./lint-arch/rules/product.mjs"
+import { lintForbiddenTrees, lintTopLevel } from "./lint-arch/rules/trees.mjs"
+
 const ROOT = resolve(fileURLToPath(import.meta.url), "../..")
-const AGENT_SRC = join(ROOT, "packages/agent/src")
-const SERVER_SRC = join(ROOT, "packages/server/src")
-const SYNC_SRC = join(ROOT, "packages/sync/src")
-const UI_SRC = join(ROOT, "packages/ui/src")
-const SHARED_TYPES = join(ROOT, "packages/shared-types/src")
-const SHARED_ENUMS = join(ROOT, "packages/shared-enums/src")
+const PACKAGES = createPackageConfigs(ROOT)
 
-/** Top-level agent layers with an import policy. */
-const LAYERS = new Set([
-  "domain",
-  "core",
-  "runtime",
-  "ports",
-  "tools",
-  "llm",
-  "memory",
-  "internal",
-])
+function lintPackage(pkg) {
+  if (!existsSync(pkg.src)) return { fileCount: 0 }
+  lintForbiddenTrees(pkg)
+  lintTopLevel(pkg)
 
-/**
- * Allowed target layers for each source layer.
- * Intra-layer imports are always allowed.
- */
-const ALLOWED = {
-  domain: new Set(["domain"]),
-  core: new Set(["domain", "ports", "tools", "internal"]),
-  runtime: new Set([
-    "core",
-    "domain",
-    "ports",
-    "tools",
-    "llm",
-    "memory",
-    "internal",
-  ]),
-  ports: new Set(["domain", "internal"]),
-  tools: new Set(["domain", "core", "runtime", "ports", "internal"]),
-  llm: new Set(["domain", "internal"]),
-  memory: new Set(["domain", "internal"]),
-  internal: new Set(["internal"]),
-}
+  const { options, host } = loadCompilerOptions(pkg.tsconfig)
+  const files = walk(pkg.src)
 
-/**
- * Known transitional debt. Key = `${fromRel}→${toLayer}` or
- * `${fromRel}→${toRelPrefix}`. Prefer shrinking this list.
- */
-const LAYER_ALLOWLIST = [
-  // domain types still name loop/tool shapes owned elsewhere
-  {
-    from: "domain/types/agent-loop-state.ts",
-    toPrefix: "core/",
-    note: "CircuitBreaker type; move type to domain or ports when safe",
-  },
-  {
-    from: "domain/types/agent-loop-state.ts",
-    toPrefix: "tools/",
-    note: "Tool loop state shapes; move to domain/types when safe",
-  },
-  {
-    from: "domain/tenant/known-vocabulary.ts",
-    toPrefix: "tools/",
-    note: "Catalog graph vocabulary; keep allowlisted until domain owns the type",
-  },
-  // core plan still calls runtime/delegate validation helpers (should become core)
-  {
-    fromPrefix: "core/plan/",
-    toPrefix: "runtime/delegate",
-    note: "Delegate validation/escalation purity debt — migrate into core/",
-  },
-]
+  const graph = lintLayerImports(pkg, files, options, host)
+  const deferredCycles = lintImportCycles(pkg, graph)
+  lintStaleAllowlists(pkg)
 
-/** Trees that must not exist under packages/agent/src. */
-const FORBIDDEN_AGENT_TREES = [
-  "application",
-  "domain/services",
-  "concepts",
-  "contracts",
-  "decisions",
-  "engine",
-]
-
-/** Files allowed to hold module-level mutable state (`let`/`var`). */
-const STATE_ALLOWLIST = new Set([
-  // intentional process-wide tenant knobs (const record + mutators)
-  "domain/tenant/tenant-config.ts",
-])
-
-/** Module-load timers allowed (cleanup must still be reachable). */
-const TIMER_ALLOWLIST = new Set([
-  // browse session cleanup historically started at load; keep until host owns it
-  "tools/browse-web/session.ts",
-])
-
-const errors = []
-function fail(file, line, rule, detail) {
-  errors.push({ file, line, rule, detail })
-}
-
-function walk(dir) {
-  if (!existsSync(dir)) return []
-  const out = []
-  for (const name of readdirSync(dir)) {
-    if (name === "node_modules" || name === "dist") continue
-    const full = join(dir, name)
-    const st = statSync(full)
-    if (st.isDirectory()) out.push(...walk(full))
-    else if (name.endsWith(".ts") || name.endsWith(".tsx")) out.push(full)
+  if (pkg.name === "agent" || pkg.name === "sync") {
+    lintModuleState(pkg, files)
   }
-  return out
-}
-
-function layerOf(relPath) {
-  const head = relPath.split("/")[0]
-  return LAYERS.has(head) ? head : null
-}
-
-function isLayerAllowlisted(fromRel, toRel) {
-  for (const a of LAYER_ALLOWLIST) {
-    if (a.from && a.from !== fromRel) continue
-    if (a.fromPrefix && !fromRel.startsWith(a.fromPrefix)) continue
-    if (a.toPrefix && !toRel.startsWith(a.toPrefix)) continue
-    return a
-  }
-  return null
-}
-
-function resolveImportTarget(importerFile, spec) {
-  // Strip .js → try .ts; also try as directory index
-  const importerDir = importerFile.split("/").slice(0, -1).join("/")
-  const raw = resolve(importerDir, spec)
-  const candidates = [
-    raw,
-    raw.replace(/\.js$/, ".ts"),
-    raw.replace(/\.js$/, ".tsx"),
-    join(raw, "index.ts"),
-    join(raw.replace(/\.js$/, ""), "index.ts"),
-  ]
-  for (const c of candidates) {
-    if (existsSync(c) && statSync(c).isFile()) return c
-  }
-  // Fall back to normalized .ts path for relative reporting even if missing
-  return raw.replace(/\.js$/, ".ts")
-}
-
-// ── Rule 1: forbidden trees ─────────────────────────────────────
-function lintForbiddenTrees() {
-  for (const tree of FORBIDDEN_AGENT_TREES) {
-    const abs = join(AGENT_SRC, tree)
-    if (existsSync(abs)) {
-      fail(abs, 0, "forbidden-tree",
-        `doctrine forbids packages/agent/src/${tree}/ — see docs/doctrine.md`)
-    }
-  }
-}
-
-// ── Rule 2: layer imports ───────────────────────────────────────
-function lintLayerImports(file, src) {
-  const fromRel = relative(AGENT_SRC, file)
-  const fromLayer = layerOf(fromRel)
-  if (!fromLayer) return
-
-  const lines = src.split("\n")
-  const importRe = /(?:import|export)\s+(?:type\s+)?(?:[^"'`;]+?\s+from\s+)?["']([^"']+)["']/g
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i]
-    // skip block-comment-only lines
-    if (/^\s*\/\//.test(line) || /^\s*\*/.test(line)) continue
-    importRe.lastIndex = 0
-    let m
-    while ((m = importRe.exec(line)) !== null) {
-      const spec = m[1]
-      if (!spec.startsWith(".")) continue
-      const targetAbs = resolveImportTarget(file, spec)
-      const toRel = relative(AGENT_SRC, targetAbs)
-      if (toRel.startsWith("..")) continue
-      const toLayer = layerOf(toRel)
-      if (!toLayer || toLayer === fromLayer) continue
-
-      const allowed = ALLOWED[fromLayer]
-      if (allowed?.has(toLayer)) continue
-
-      const debt = isLayerAllowlisted(fromRel, toRel)
-      if (debt) continue
-
-      fail(file, i + 1, "layer-import",
-        `${fromLayer} may not import ${toLayer} ("${spec}" → ${toRel}). ` +
-          `Allowed from ${fromLayer}: ${[...allowed].join(", ") || "(none)"}. ` +
-          `See docs/doctrine.md`)
-    }
-  }
-}
-
-// ── Rule 3: module-level mutable state ──────────────────────────
-function lintModuleState(file, src) {
-  const rel = relative(AGENT_SRC, file)
-  if (STATE_ALLOWLIST.has(rel)) return
-  const lines = src.split("\n")
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i]
-    if (line.length === 0 || /^\s/.test(line)) continue
-    if (line.startsWith("//") || line.startsWith("/*") || line.startsWith("*")) continue
-
-    if (/^(export\s+)?let\s+\w/.test(line)) {
-      fail(file, i + 1, "no-module-let",
-        `top-level "let" — state belongs on AgentHost / RunContext (or tenant-config allowlist)`)
-    }
-    if (/^(export\s+)?var\s+\w/.test(line)) {
-      fail(file, i + 1, "no-module-var",
-        `top-level "var" declaration at module scope`)
-    }
-    if (!TIMER_ALLOWLIST.has(rel)) {
-      if (
-        /^(const|let)\s+\w[\w\d_]*\s*=\s*setInterval\s*\(/.test(line) ||
-        /^setInterval\s*\(/.test(line)
-      ) {
-        fail(file, i + 1, "no-module-setInterval",
-          `setInterval at module load (move to AgentHost / runtime lifecycle)`)
-      }
-      if (
-        /^(const|let)\s+\w[\w\d_]*\s*=\s*setTimeout\s*\(/.test(line) ||
-        /^setTimeout\s*\(/.test(line)
-      ) {
-        fail(file, i + 1, "no-module-setTimeout",
-          `setTimeout at module load (move to AgentHost / runtime lifecycle)`)
-      }
-    }
-    if (/^export\s+function\s+(get|set|reset)Global[A-Z]/.test(line)) {
-      const name = line.match(/(get|set|reset)Global[A-Za-z]+/)?.[0]
-      fail(file, i + 1, "no-global-getter-setter",
-        `exported "${name}" — thread state via AgentHost / RunContext`)
-    }
-  }
-}
-
-// ── Rule 4: AsyncLocalStorage for DI ────────────────────────────
-function lintNoAls(file, src) {
-  const lines = src.split("\n")
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i]
-    if (/^\s*\/\//.test(line) || /^\s*\*/.test(line)) continue
-    if (/new\s+AsyncLocalStorage\b/.test(line)) {
-      fail(file, i + 1, "no-async-local-storage",
-        `AsyncLocalStorage is forbidden for DI — pass host/context as parameters`)
-    }
-  }
-}
-
-// ── Rule 5: no deep imports into agent/sync src ─────────────────
-function lintNoDeepPackageImports(pkgSrc, pkgLabel) {
-  if (!existsSync(pkgSrc)) return
-  for (const file of walk(pkgSrc)) {
-    const src = readFileSync(file, "utf8")
-    const lines = src.split("\n")
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i]
-      if (/^\s*\/\//.test(line)) continue
-      if (/packages\/agent\/src\//.test(line) && /from\s+["']/.test(line)) {
-        fail(file, i + 1, "no-deep-agent-import",
-          `${pkgLabel} must import "@mia/agent", not packages/agent/src/**`)
-      }
-      if (/from\s+["']@mia\/agent\/src\//.test(line)) {
-        fail(file, i + 1, "no-deep-agent-import",
-          `${pkgLabel} must import "@mia/agent", not @mia/agent/src/**`)
-      }
-      if (/packages\/sync\/src\//.test(line) && /from\s+["']/.test(line)) {
-        fail(file, i + 1, "no-deep-sync-import",
-          `${pkgLabel} must import "@mia/sync", not packages/sync/src/**`)
-      }
-      if (/from\s+["']@mia\/sync\/src\//.test(line)) {
-        fail(file, i + 1, "no-deep-sync-import",
-          `${pkgLabel} must import "@mia/sync", not @mia/sync/src/**`)
-      }
-    }
-  }
-}
-
-// ── Server: canonical layers (target names only — no aliases) ───
-const SERVER_LAYER_ALIAS = {
-  boot: "boot",
-  http: "http",
-  infra: "infra",
-  adapters: "adapters",
-  api: "api",
-  ports: "ports",
-  internal: "internal",
-  cli: "cli",
-}
-
-const SERVER_ALLOWED = {
-  boot: new Set(["boot", "infra", "adapters", "api", "ports", "http", "internal"]),
-  http: new Set(["http", "api", "infra", "boot", "ports", "internal"]),
-  api: new Set(["api", "infra", "adapters", "ports", "boot", "internal"]),
-  adapters: new Set(["adapters", "infra", "ports", "internal"]),
-  infra: new Set(["infra", "internal", "ports"]),
-  ports: new Set(["ports", "internal"]),
-  cli: new Set(["cli", "boot", "infra", "api", "internal", "adapters"]),
-  internal: new Set(["internal"]),
-}
-
-/** Known reverse-edge / contract debt — shrink these. */
-const SERVER_LAYER_ALLOWLIST = []
-
-/** Trees / folder names that must not exist under packages/server/src. */
-const FORBIDDEN_SERVER_TREES = [
-  "crypto",
-  "deploy",
-  "api/deploy",
-  "hosting",
-  "api/runs/hosting",
-  // retired top-level names — do not resurrect
-  "bootstrap",
-  "app",
-  "features",
-  "platform",
-  "shared",
-  "api/runs/core",
-  // erased multi-agent CRUD — one system prompt; planner owns children
-  "api/agents",
-]
-
-/** Nest-style folder names forbidden anywhere under api/ */
-const FORBIDDEN_API_NEST_DIRS = ["application", "domain", "runtime", "transport"]
-
-function serverLayerOf(relPath) {
-  const head = relPath.split("/")[0]
-  return SERVER_LAYER_ALIAS[head] ?? null
-}
-
-function isServerLayerAllowlisted(fromRel, toRel) {
-  for (const a of SERVER_LAYER_ALLOWLIST) {
-    if (a.from && a.from !== fromRel) continue
-    if (a.fromPrefix && !fromRel.startsWith(a.fromPrefix)) continue
-    if (a.toPrefix && !toRel.startsWith(a.toPrefix)) continue
-    return a
-  }
-  return null
-}
-
-function lintServerForbiddenTrees() {
-  for (const tree of FORBIDDEN_SERVER_TREES) {
-    const abs = join(SERVER_SRC, tree)
-    if (existsSync(abs)) {
-      fail(abs, 0, "server-forbidden-tree",
-        `doctrine forbids packages/server/src/${tree}/ — see docs/doctrine.md`)
-    }
-  }
-  const apiRoot = join(SERVER_SRC, "api")
-  if (!existsSync(apiRoot)) return
-  for (const file of walk(apiRoot)) {
-    const parts = relative(SERVER_SRC, file).split("/")
-    for (const nest of FORBIDDEN_API_NEST_DIRS) {
-      if (parts.includes(nest)) {
-        fail(file, 0, "server-forbidden-tree",
-          `doctrine forbids api/**/${nest}/ — use service/ | types/ | state/ | handlers/`)
-        return
-      }
-    }
-    if (parts.includes("hosting")) {
-      fail(file, 0, "server-forbidden-tree",
-        `doctrine forbids hosting/ — use api/runs/prompting/`)
-      return
-    }
-    if (parts.includes("deploy")) {
-      fail(file, 0, "server-forbidden-tree",
-        `doctrine forbids api/**/deploy/ — use api/platform/; keep "deploy" in filenames only`)
-      return
-    }
-    if (parts[0] === "api" && parts[1] === "agents") {
-      fail(file, 0, "capability-ownership",
-        `doctrine forbids api/agents/ — agent profiles erased; runs use resolved systemPrompt only. See docs/doctrine.md (Capability ownership).`)
-      return
-    }
-  }
-}
-
-function lintServerTopLevel() {
-  if (!existsSync(SERVER_SRC)) return
-  const allowedHeads = new Set([
-    ...Object.keys(SERVER_LAYER_ALIAS),
-    "index.ts",
-  ])
-  for (const name of readdirSync(SERVER_SRC)) {
-    if (name.startsWith(".")) continue
-    const abs = join(SERVER_SRC, name)
-    const st = statSync(abs)
-    if (st.isFile()) {
-      if (name === "index.ts") continue
-      // allow stray md next to src root
-      if (name.endsWith(".md")) continue
-      fail(abs, 0, "server-top-level",
-        `unexpected file at server src root: ${name}`)
-      continue
-    }
-    if (!allowedHeads.has(name)) {
-      fail(abs, 0, "server-top-level",
-        `unknown server top-level "${name}". Allowed: boot, http, infra, adapters, api, ports, internal, cli`)
-    }
-  }
-}
-
-function lintServerLayerImports(file, src) {
-  const fromRel = relative(SERVER_SRC, file)
-  const fromLayer = serverLayerOf(fromRel)
-  if (!fromLayer) return
-
-  const lines = src.split("\n")
-  const importRe = /(?:import|export)\s+(?:type\s+)?(?:[^"'`;]+?\s+from\s+)?["']([^"']+)["']/g
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i]
-    if (/^\s*\/\//.test(line) || /^\s*\*/.test(line)) continue
-    importRe.lastIndex = 0
-    let m
-    while ((m = importRe.exec(line)) !== null) {
-      const spec = m[1]
-      if (!spec.startsWith(".")) continue
-      const targetAbs = resolveImportTarget(file, spec)
-      const toRel = relative(SERVER_SRC, targetAbs)
-      if (toRel.startsWith("..")) continue
-      const toLayer = serverLayerOf(toRel)
-      if (!toLayer || toLayer === fromLayer) continue
-
-      const allowed = SERVER_ALLOWED[fromLayer]
-      if (allowed?.has(toLayer)) continue
-
-      const debt = isServerLayerAllowlisted(fromRel, toRel)
-      if (debt) continue
-
-      fail(file, i + 1, "server-layer-import",
-        `${fromLayer} may not import ${toLayer} ("${spec}" → ${toRel}). ` +
-          `Allowed from ${fromLayer}: ${[...allowed].join(", ") || "(none)"}. ` +
-          `See docs/doctrine.md`)
-    }
-  }
-}
-
-// ── Sync: same dialect as agent ─────────────────────────────────
-const SYNC_LAYERS = new Set([
-  "domain",
-  "core",
-  "runtime",
-  "ports",
-  "tools",
-  "adapters",
-  "internal",
-])
-
-const SYNC_ALLOWED = {
-  domain: new Set(["domain", "ports"]),
-  core: new Set(["domain", "ports", "internal"]),
-  runtime: new Set(["core", "domain", "ports", "adapters", "internal", "tools"]),
-  ports: new Set(["domain", "internal"]),
-  tools: new Set(["domain", "core", "runtime", "ports", "adapters", "internal"]),
-  adapters: new Set(["domain", "ports", "internal"]),
-  internal: new Set(["internal"]),
-}
-
-/** Known transitional sync debt — prefer shrinking. */
-const SYNC_LAYER_ALLOWLIST = []
-
-const FORBIDDEN_SYNC_TREES = ["application"]
-
-const SYNC_STATE_ALLOWLIST = new Set([
-  // process-wide freeze map installed at server boot (see docs/doctrine.md)
-  "domain/governance/freeze-windows.ts",
-])
-
-function syncLayerOf(relPath) {
-  const head = relPath.split("/")[0]
-  return SYNC_LAYERS.has(head) ? head : null
-}
-
-function isSyncLayerAllowlisted(fromRel, toRel) {
-  for (const a of SYNC_LAYER_ALLOWLIST) {
-    if (a.from && a.from !== fromRel) continue
-    if (a.fromPrefix && !fromRel.startsWith(a.fromPrefix)) continue
-    if (a.toPrefix && !toRel.startsWith(a.toPrefix)) continue
-    return a
-  }
-  return null
-}
-
-function lintSyncForbiddenTrees() {
-  for (const tree of FORBIDDEN_SYNC_TREES) {
-    const abs = join(SYNC_SRC, tree)
-    if (existsSync(abs)) {
-      fail(abs, 0, "sync-forbidden-tree",
-        `doctrine forbids packages/sync/src/${tree}/ — use core/ + runtime/ (see docs/doctrine.md)`)
-    }
-  }
-}
-
-function lintSyncTopLevel() {
-  if (!existsSync(SYNC_SRC)) return
-  const allowedHeads = new Set([
-    ...SYNC_LAYERS,
-    "test-support",
-    "index.ts",
-  ])
-  for (const name of readdirSync(SYNC_SRC)) {
-    if (name.startsWith(".")) continue
-    const abs = join(SYNC_SRC, name)
-    const st = statSync(abs)
-    if (st.isFile()) {
-      if (name === "index.ts" || name.endsWith(".md")) continue
-      fail(abs, 0, "sync-top-level", `unexpected file at sync src root: ${name}`)
-      continue
-    }
-    if (!allowedHeads.has(name)) {
-      fail(abs, 0, "sync-top-level",
-        `unknown sync top-level "${name}". Allowed: domain, core, runtime, ports, tools, adapters, internal, test-support`)
-    }
-  }
-}
-
-function lintSyncLayerImports(file, src) {
-  const fromRel = relative(SYNC_SRC, file)
-  // Co-located tests may reach into sibling layers; production edges are what we enforce.
-  if (fromRel.endsWith(".test.ts") || fromRel.endsWith(".test.tsx")) return
-  const fromLayer = syncLayerOf(fromRel)
-  if (!fromLayer) return
-
-  const lines = src.split("\n")
-  const importRe = /(?:import|export)\s+(?:type\s+)?(?:[^"'`;]+?\s+from\s+)?["']([^"']+)["']/g
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i]
-    if (/^\s*\/\//.test(line) || /^\s*\*/.test(line)) continue
-    importRe.lastIndex = 0
-    let m
-    while ((m = importRe.exec(line)) !== null) {
-      const spec = m[1]
-      if (!spec.startsWith(".")) continue
-      const targetAbs = resolveImportTarget(file, spec)
-      const toRel = relative(SYNC_SRC, targetAbs)
-      if (toRel.startsWith("..")) continue
-      const toLayer = syncLayerOf(toRel)
-      if (!toLayer || toLayer === fromLayer) continue
-
-      const allowed = SYNC_ALLOWED[fromLayer]
-      if (allowed?.has(toLayer)) continue
-
-      const debt = isSyncLayerAllowlisted(fromRel, toRel)
-      if (debt) continue
-
-      fail(file, i + 1, "sync-layer-import",
-        `${fromLayer} may not import ${toLayer} ("${spec}" → ${toRel}). ` +
-          `Allowed from ${fromLayer}: ${[...allowed].join(", ") || "(none)"}. ` +
-          `See docs/doctrine.md`)
-    }
-  }
-}
-
-function lintSyncModuleState(file, src) {
-  const rel = relative(SYNC_SRC, file)
-  if (SYNC_STATE_ALLOWLIST.has(rel)) return
-  if (rel.startsWith("test-support/")) return
-  if (rel.endsWith(".test.ts") || rel.endsWith(".test.tsx")) return
-
-  const lines = src.split("\n")
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i]
-    if (line.length === 0 || /^\s/.test(line)) continue
-    if (line.startsWith("//") || line.startsWith("/*") || line.startsWith("*")) continue
-
-    if (/^(export\s+)?let\s+\w/.test(line)) {
-      fail(file, i + 1, "sync-no-module-let",
-        `top-level "let" — state belongs on SyncHost / runtime (or freeze-window allowlist)`)
-    }
-    if (/^(export\s+)?var\s+\w/.test(line)) {
-      fail(file, i + 1, "sync-no-module-var",
-        `top-level "var" declaration at module scope`)
-    }
-    if (/^export\s+function\s+(get|set|reset)Global[A-Z]/.test(line)) {
-      const name = line.match(/(get|set|reset)Global[A-Za-z]+/)?.[0]
-      fail(file, i + 1, "sync-no-global-getter-setter",
-        `exported "${name}" — thread state via SyncHost`)
-    }
-  }
-}
-
-// ── UI: FE-native dialect ───────────────────────────────────────
-const UI_LAYERS = new Set([
-  "boot",
-  "app",
-  "client",
-  "state",
-  "widgets",
-  "components",
-  "hooks",
-  "lib",
-  "theme",
-  "enums",
-])
-
-const UI_ALLOWED = {
-  boot: new Set(["app", "components", "theme", "enums"]),
-  app: new Set(["widgets", "state", "client", "components", "hooks", "lib", "enums", "theme", "app"]),
-  widgets: new Set(["client", "state", "app", "components", "hooks", "lib", "enums", "theme", "widgets"]),
-  components: new Set(["hooks", "lib", "theme", "enums", "components"]),
-  state: new Set(["client", "lib", "enums", "state"]),
-  client: new Set(["enums", "lib", "client"]),
-  hooks: new Set(["client", "state", "lib", "enums", "hooks"]),
-  lib: new Set(["enums", "lib"]),
-  theme: new Set(["theme"]),
-  enums: new Set(["enums"]),
-}
-
-const UI_LAYER_ALLOWLIST = []
-
-const UI_EVENT_CATALOG_ALLOWLIST = new Set()
-
-const FORBIDDEN_UI_TREES = [
-  "shell",
-  "chrome",
-  "kit",
-  "surfaces",
-  "ui",
-  "features",
-  "api",
-  "application",
-]
-
-function uiLayerOf(relPath) {
-  const head = relPath.split("/")[0]
-  return UI_LAYERS.has(head) ? head : null
-}
-
-function isUiLayerAllowlisted(fromRel, toRel) {
-  for (const a of UI_LAYER_ALLOWLIST) {
-    if (a.from && a.from !== fromRel) continue
-    if (a.fromPrefix && !fromRel.startsWith(a.fromPrefix)) continue
-    if (a.toPrefix && !toRel.startsWith(a.toPrefix)) continue
-    return a
-  }
-  return null
-}
-
-function lintUiForbiddenTrees() {
-  for (const tree of FORBIDDEN_UI_TREES) {
-    const abs = join(UI_SRC, tree)
-    if (existsSync(abs)) {
-      fail(abs, 0, "ui-forbidden-tree",
-        `doctrine forbids packages/ui/src/${tree}/ — see docs/doctrine.md`)
-    }
-  }
-}
-
-function lintUiTopLevel() {
-  if (!existsSync(UI_SRC)) return
-  const allowedHeads = new Set([
-    ...UI_LAYERS,
-    "types.ts",
-    "vite-env.d.ts",
-  ])
-  for (const name of readdirSync(UI_SRC)) {
-    if (name.startsWith(".")) continue
-    const abs = join(UI_SRC, name)
-    const st = statSync(abs)
-    if (st.isFile()) {
-      if (name === "types.ts" || name === "vite-env.d.ts" || name.endsWith(".md") || name.endsWith(".css")) continue
-      fail(abs, 0, "ui-top-level", `unexpected file at ui src root: ${name}`)
-      continue
-    }
-    if (!allowedHeads.has(name)) {
-      fail(abs, 0, "ui-top-level",
-        `unknown ui top-level "${name}". Allowed: boot, app, client, state, widgets, components, hooks, lib, theme, enums`)
-    }
-  }
-}
-
-function lintUiLayerImports(file, src) {
-  const fromRel = relative(UI_SRC, file)
-  if (fromRel.endsWith(".test.ts") || fromRel.endsWith(".test.tsx")) return
-  const fromLayer = uiLayerOf(fromRel)
-  if (!fromLayer) return
-
-  const lines = src.split("\n")
-  const importRe = /(?:import|export)\s+(?:type\s+)?(?:[^"'`;]+?\s+from\s+)?["']([^"']+)["']/g
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i]
-    if (/^\s*\/\//.test(line) || /^\s*\*/.test(line)) continue
-    importRe.lastIndex = 0
-    let m
-    while ((m = importRe.exec(line)) !== null) {
-      const spec = m[1]
-      if (!spec.startsWith(".")) continue
-      const targetAbs = resolveImportTarget(file, spec)
-      const toRel = relative(UI_SRC, targetAbs)
-      if (toRel.startsWith("..")) continue
-      // types.ts at src root is shared wire façade
-      if (toRel === "types.ts" || toRel.startsWith("types.")) continue
-      const toLayer = uiLayerOf(toRel)
-      if (!toLayer || toLayer === fromLayer) continue
-
-      const allowed = UI_ALLOWED[fromLayer]
-      if (allowed?.has(toLayer)) continue
-
-      const debt = isUiLayerAllowlisted(fromRel, toRel)
-      if (debt) continue
-
-      fail(file, i + 1, "ui-layer-import",
-        `${fromLayer} may not import ${toLayer} ("${spec}" → ${toRel}). ` +
-          `Allowed from ${fromLayer}: ${[...allowed].join(", ") || "(none)"}. ` +
-          `See docs/doctrine.md`)
-    }
-  }
-}
-
-// ── Run ─────────────────────────────────────────────────────────
-lintForbiddenTrees()
-
-const agentFiles = walk(AGENT_SRC)
-for (const f of agentFiles) {
-  const src = readFileSync(f, "utf8")
-  lintLayerImports(f, src)
-  lintModuleState(f, src)
-  lintNoAls(f, src)
-  lintFlatControlFlow(f, src)
-}
-
-lintServerForbiddenTrees()
-lintServerTopLevel()
-const serverFiles = walk(SERVER_SRC)
-for (const f of serverFiles) {
-  const src = readFileSync(f, "utf8")
-  lintServerLayerImports(f, src)
-  lintFlatControlFlow(f, src)
-}
-
-lintSyncForbiddenTrees()
-lintSyncTopLevel()
-const syncFiles = walk(SYNC_SRC)
-for (const f of syncFiles) {
-  const src = readFileSync(f, "utf8")
-  lintSyncLayerImports(f, src)
-  lintSyncModuleState(f, src)
-  lintFlatControlFlow(f, src)
-}
-
-lintUiForbiddenTrees()
-lintUiTopLevel()
-const uiFiles = existsSync(UI_SRC) ? walk(UI_SRC) : []
-const UI_CHECKBOX_SOURCE = join(UI_SRC, "components/Checkbox.tsx")
-for (const f of uiFiles) {
-  const src = readFileSync(f, "utf8")
-  lintUiLayerImports(f, src)
-  lintFlatControlFlow(f, src)
-  lintUiPlatformCheckbox(f, src)
-  lintUiEventKindSwitch(f, src)
-}
-
-/**
- * Capability ownership — ban resurrected agent-profile / ad-hoc delegate dialects.
- * See docs/doctrine.md § Capability ownership and § Agent runtime model.
- */
-function lintCapabilityOwnership() {
-  const agentBanned = [
-    { re: /\bresolveAgent\b/, detail: "resolveAgent is forbidden — cores receive resolved systemPrompt/tools, not profile IDs" },
-    { re: /\bcreateDelegateTools\b/, detail: "createDelegateTools is forbidden — one spawn kernel; planner owns fan-out" },
-    { re: /\bcreateDelegationTools\b/, detail: "createDelegationTools is forbidden — one spawn kernel; planner owns fan-out" },
-    { re: /\bResolvedAgent\b/, detail: "ResolvedAgent / named agent profiles are erased" },
-  ]
-  for (const f of existsSync(AGENT_SRC) ? walk(AGENT_SRC) : []) {
-    if (!/\.(tsx?|jsx?)$/.test(f)) continue
-    if (f.endsWith(".test.ts") || f.endsWith(".test.tsx")) continue
-    const src = readFileSync(f, "utf8")
-    for (const { re, detail } of agentBanned) {
-      if (re.test(src)) {
-        fail(f, 0, "capability-ownership", `${detail}. See docs/doctrine.md`)
-      }
-    }
+  if (pkg.name === "agent") {
+    lintNoAsyncLocalStorage(files)
   }
 
-  const uiBanned = [
-    { re: /\blistAgents\b/, detail: "listAgents / agent CRUD client is forbidden" },
-    { re: /\bcreateAgent\b/, detail: "createAgent is forbidden — no agent profiles" },
-    { re: /\bupdateAgent\b/, detail: "updateAgent is forbidden — no agent profiles" },
-    { re: /\bdeleteAgent\b/, detail: "deleteAgent is forbidden — no agent profiles" },
-    { re: /\bselectedAgentId\b/, detail: "selectedAgentId is forbidden — UI starts runs with goal+thread only" },
-    { re: /\bAgentEditor\b/, detail: "AgentEditor is forbidden — capability erased" },
-    { re: /\bAgentDefinition\b/, detail: "AgentDefinition is forbidden — capability erased" },
-  ]
-  for (const f of existsSync(UI_SRC) ? walk(UI_SRC) : []) {
-    if (!/\.(tsx?|jsx?)$/.test(f)) continue
-    if (f.endsWith(".test.ts") || f.endsWith(".test.tsx")) continue
-    const src = readFileSync(f, "utf8")
-    for (const { re, detail } of uiBanned) {
-      if (re.test(src)) {
-        fail(f, 0, "capability-ownership", `${detail}. See docs/doctrine.md`)
-      }
-    }
+  lintFlatControlFlow(files)
+  lintDeepPackageImports(pkg.name, files)
+
+  if (pkg.name === "ui") {
+    lintUiPlatformCheckbox(pkg, files)
+    lintUiEventKindSwitch(pkg, files)
   }
+
+  return { fileCount: files.length, deferredCycles }
 }
 
-lintCapabilityOwnership()
-
-/**
- * Event catalog doctrine — widgets must not switch on TraceEntry.kind /
- * high-traffic EventType strings for labels / outline roles. Look up
- * @mia/shared-types event-catalog or project via lib/events.
- */
-function lintUiEventKindSwitch(file, src) {
-  if (!/\.(tsx?|jsx?)$/.test(file)) return
-  const rel = relative(UI_SRC, file)
-  if (rel.endsWith(".test.ts") || rel.endsWith(".test.tsx")) return
-  if (rel.startsWith("lib/events/")) return
-  if (rel.startsWith("components/outline/")) return
-  if (!rel.startsWith("widgets/") && !rel.startsWith("state/")) return
-  if (UI_EVENT_CATALOG_ALLOWLIST.has(rel)) return
-
-  if (/\bTRACE_KIND_LABELS\b/.test(src)) {
-    fail(file, 0, "event-catalog",
-      `TRACE_KIND_LABELS is banned — use eventLabel / describeDebugTracePayload from @mia/shared-types (event-catalog).`)
-  }
-
-  const WIRE_KIND_CASE =
-    /case\s+["'](llm-request|llm-response|system-prompt|tools-resolved|tool-call|tool-result|tool-error|planner-step-start|planner-step-end|planner-decision|planner-plan-generated|delegation-start|delegation-end)["']/
-  const lines = src.split("\n")
-  for (let i = 0; i < lines.length; i++) {
-    if (WIRE_KIND_CASE.test(lines[i])) {
-      fail(file, i + 1, "event-catalog",
-        `Widget/state must not switch on wire TraceEntry.kind / EventType for presentation. ` +
-          `Use packages/shared-types/src/event-catalog.ts + lib/events projection. See docs/doctrine.md`)
-    }
-  }
+const counts = {}
+/** @type {{ file: string, line: number, cycle: string[] }[]} */
+const allDeferredCycles = []
+for (const key of ["agent", "server", "sync", "ui"]) {
+  const r = lintPackage(PACKAGES[key])
+  counts[key] = r.fileCount
+  if (r.deferredCycles?.length) allDeferredCycles.push(...r.deferredCycles)
 }
 
-/**
- * One painted checkbox dialect — raw type="checkbox" only inside Checkbox.tsx.
- * Menu patterns (role=menuitemcheckbox without a native input) are fine.
- */
-function lintUiPlatformCheckbox(file, src) {
-  if (!/\.(tsx?|jsx?)$/.test(file)) return
-  if (resolve(file) === resolve(UI_CHECKBOX_SOURCE)) return
-  const lines = src.split("\n")
-  for (let i = 0; i < lines.length; i++) {
-    if (/type\s*=\s*["']checkbox["']/.test(lines[i])) {
-      fail(
-        file,
-        i + 1,
-        "ui-platform-checkbox",
-        `Raw <input type="checkbox"> — use Checkbox / LabeledCheckbox from components/Checkbox.tsx so every control shares one visual dialect.`,
-      )
-    }
-  }
+lintCapabilityOwnership(PACKAGES.agent, PACKAGES.ui)
+lintEventCatalogCoverage(ROOT)
+
+const debt =
+  PACKAGES.agent.layerAllowlist.length +
+  PACKAGES.server.layerAllowlist.length +
+  PACKAGES.sync.layerAllowlist.length +
+  PACKAGES.ui.layerAllowlist.length
+
+if (printReport(ROOT)) {
+  process.exit(1)
 }
 
-/**
- * Flat control flow (UI + Node): ban nested named functions that register
- * listeners or repeating timers from inside a hot-path handler — hides
- * dependencies, allocates per call, raises cognitive load. One-shot
- * setTimeout(() => ...) arrows are fine (not flagged). Composition/setup
- * factories (create*, start*, boot*, ...) may still wire listeners once.
- * See .cursor/rules/first-principles.mdc — Flat control flow.
- */
-function lintFlatControlFlow(file, src) {
-  if (!/\.(tsx?|jsx?)$/.test(file)) return
-
-  // Line comments only — avoid catastrophic regex on large quoted blobs.
-  const lines = src.replace(/\/\/.*$/gm, "").split("\n")
-  let braceDepth = 0
-  /** @type {{ name: string, depth: number, line: number }[]} */
-  const fnStack = []
-  let useEffectDepth = 0
-
-  const SETUP_OUTER = /^(create|make|build|start|boot|wire|install|listen|setup|init)[A-Z_]/
-  const HOT_OUTER = /^(on|handle|process|run|execute|dispatch)[A-Z]|Pointer|Mouse|Touch|Drag|Down|Up|Move|Request|Message|Chunk|Data|Event/
-  const LISTENER = /(?:window|document)\s*\.\s*addEventListener\s*\(|\.\s*on\s*\(|\.\s*once\s*\(|\bsetInterval\s*\(/
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i]
-    const trimmed = line.trim()
-
-    if (/\buse(Layout)?Effect\s*\(/.test(line)) {
-      useEffectDepth = braceDepth + 1
-    }
-
-    const fnMatch = trimmed.match(/^(?:export\s+)?(?:async\s+)?function\s+([A-Za-z0-9_]+)\s*\(/)
-    if (fnMatch) {
-      fnStack.push({ name: fnMatch[1], depth: braceDepth, line: i + 1 })
-    }
-
-    if (LISTENER.test(line) && useEffectDepth === 0 && fnStack.length >= 2) {
-      const outer = fnStack[fnStack.length - 2]
-      const inner = fnStack[fnStack.length - 1]
-      if (!SETUP_OUTER.test(outer.name) && (HOT_OUTER.test(outer.name) || HOT_OUTER.test(inner.name))) {
-        fail(file, inner.line, "flat-control-flow",
-          `Nested function "${inner.name}" inside "${outer.name}" registers a listener or repeating timer. ` +
-            `Keep control flow flat: peer handlers + explicit state (ref/params); wire listeners at setup. ` +
-            `One-shot setTimeout(() => ...) is fine. See .cursor/rules/first-principles.mdc`)
-      }
-    }
-
-    for (let c = 0; c < line.length; c++) {
-      const ch = line[c]
-      if (ch === "{") braceDepth++
-      else if (ch === "}") {
-        braceDepth = Math.max(0, braceDepth - 1)
-        if (useEffectDepth > 0 && braceDepth < useEffectDepth) useEffectDepth = 0
-        while (fnStack.length > 0 && fnStack[fnStack.length - 1].depth >= braceDepth) {
-          fnStack.pop()
-        }
-      }
-    }
-  }
-}
-
-lintNoDeepPackageImports(SERVER_SRC, "server")
-lintNoDeepPackageImports(SYNC_SRC, "sync")
-lintNoDeepPackageImports(UI_SRC, "ui")
-lintNoDeepPackageImports(AGENT_SRC, "agent")
-
-lintEventCatalogCoverage()
-
-/**
- * Every TraceEntry.kind and every EventType wire string must have a catalog
- * descriptor — same spirit as tool-call-presentation completeness.
- */
-function lintEventCatalogCoverage() {
-  const catalogPath = join(SHARED_TYPES, "event-catalog.ts")
-  const typesPath = join(SHARED_TYPES, "index.ts")
-  const eventEnumPath = join(SHARED_ENUMS, "event.ts")
-  if (!existsSync(catalogPath) || !existsSync(typesPath) || !existsSync(eventEnumPath)) {
-    fail(catalogPath, 0, "event-catalog-coverage", "missing catalog or EventType sources")
-    return
-  }
-
-  const catalog = readFileSync(catalogPath, "utf8")
-  const traceBlock = catalog.split("TRACE_EVENT_CATALOG")[1]?.split("SSE_EVENT_CATALOG")[0] ?? ""
-  const sseBlock = catalog.split("SSE_EVENT_CATALOG")[1]?.split("const UNKNOWN")[0] ?? ""
-  const traceIds = new Set([...traceBlock.matchAll(/id:\s*"([^"]+)"/g)].map((m) => m[1]))
-  const sseIds = new Set([...sseBlock.matchAll(/id:\s*"([^"]+)"/g)].map((m) => m[1]))
-
-  const typesSrc = readFileSync(typesPath, "utf8")
-  const teMatch = typesSrc.match(/export type TraceEntry\s*=([\s\S]*?)\nexport type /)
-  const teSlice = teMatch ? teMatch[1] : ""
-  const traceKinds = new Set([...teSlice.matchAll(/kind:\s*"([^"]+)"/g)].map((m) => m[1]))
-
-  for (const kind of traceKinds) {
-    if (!traceIds.has(kind)) {
-      fail(catalogPath, 0, "event-catalog-coverage",
-        `TraceEntry.kind "${kind}" missing from TRACE_EVENT_CATALOG — add a semantic descriptor.`)
-    }
-  }
-  for (const id of traceIds) {
-    if (!traceKinds.has(id)) {
-      fail(catalogPath, 0, "event-catalog-coverage",
-        `TRACE_EVENT_CATALOG "${id}" has no TraceEntry.kind — remove or add the union member.`)
-    }
-  }
-
-  const enumSrc = readFileSync(eventEnumPath, "utf8")
-  const etBlock = enumSrc.match(/export const EventType\s*=\s*\{([\s\S]*?)\}\s*as const/)
-  const eventTypes = new Set(
-    etBlock ? [...etBlock[1].matchAll(/:\s*"([^"]+)"/g)].map((m) => m[1]) : [],
+if (allDeferredCycles.length > 0) {
+  console.warn(
+    `\nlint-arch: ${allDeferredCycles.length} import-cycle(s) deferred (real debt; not failing). ` +
+      `Set LINT_ARCH_STRICT_CYCLES=1 to fail hard.\n`,
   )
-  for (const t of eventTypes) {
-    if (!sseIds.has(t)) {
-      fail(catalogPath, 0, "event-catalog-coverage",
-        `EventType "${t}" missing from SSE_EVENT_CATALOG — add a semantic descriptor.`)
-    }
+  for (const c of allDeferredCycles.slice(0, 20)) {
+    const rel = c.file.startsWith(ROOT) ? c.file.slice(ROOT.length + 1) : c.file
+    console.warn(`  ${rel}:${c.line}  ${c.cycle.join(" → ")}`)
   }
-  for (const id of sseIds) {
-    if (!eventTypes.has(id)) {
-      fail(catalogPath, 0, "event-catalog-coverage",
-        `SSE_EVENT_CATALOG "${id}" is not an EventType — remove or add the enum member.`)
-    }
+  if (allDeferredCycles.length > 20) {
+    console.warn(`  … and ${allDeferredCycles.length - 20} more`)
   }
+  console.warn("")
 }
 
-if (errors.length === 0) {
-  console.log(
-    `lint-arch: ${agentFiles.length} agent + ${serverFiles.length} server + ${syncFiles.length} sync + ${uiFiles.length} ui files OK ` +
-      `(${LAYER_ALLOWLIST.length} agent / ${SERVER_LAYER_ALLOWLIST.length} server / ${SYNC_LAYER_ALLOWLIST.length} sync / ${UI_LAYER_ALLOWLIST.length} ui debt allowlists).`,
-  )
-  process.exit(0)
-}
-
-console.error(`lint-arch: ${errors.length} violation(s):\n`)
-const grouped = new Map()
-for (const e of errors) {
-  const key = relative(ROOT, e.file)
-  if (!grouped.has(key)) grouped.set(key, [])
-  grouped.get(key).push(e)
-}
-for (const [file, items] of grouped) {
-  console.error(`  ${file}`)
-  for (const e of items) {
-    const loc = e.line ? `L${e.line}` : "   "
-    console.error(`    ${loc}  [${e.rule}]  ${e.detail}`)
-  }
-}
-console.error(`\nDoctrine: docs/doctrine.md`)
-process.exit(1)
+console.log(
+  `lint-arch: ${counts.agent} agent + ${counts.server} server + ${counts.sync} sync + ${counts.ui} ui files OK ` +
+    `(AST; ${debt} debt allowlist entries` +
+    (allDeferredCycles.length
+      ? `; ${allDeferredCycles.length} cycle(s) deferred`
+      : "") +
+    `).`,
+)
+process.exit(0)
