@@ -5,6 +5,12 @@
 
 import { join } from "node:path"
 import { CYCLE_ALLOWLIST } from "./cycle-debt.mjs"
+import {
+  ENUM_FORK_ALLOWLIST,
+  JARGON_ALLOWLIST,
+  SILENT_FAILURE_ALLOWLIST,
+  TRUST_ALLOWLIST,
+} from "./external-debt.mjs"
 
 /** @param {string} root */
 export function createPackageConfigs(root) {
@@ -280,6 +286,10 @@ export function createLeverageDebt(root) {
         note: "DEFAULT_TENANT_ID registry refresh — move to data policy",
       },
     ],
+    silentFailureAllowlist: SILENT_FAILURE_ALLOWLIST.map((e) => ({ ...e })),
+    trustAllowlist: TRUST_ALLOWLIST.map((e) => ({ ...e })),
+    enumForkAllowlist: ENUM_FORK_ALLOWLIST.map((e) => ({ ...e })),
+    jargonAllowlist: JARGON_ALLOWLIST.map((e) => ({ ...e })),
     root,
   }
 }

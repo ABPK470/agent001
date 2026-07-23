@@ -197,6 +197,22 @@ internal →  (helpers; no layer ownership)
 (domain type-imports of tools/core; core value-imports of `runtime/delegate`
 validation). Unused entries fail — allowlists must shrink; do not grow them casually.
 
+### External Leverage (machine-enforced)
+
+User-facing product quality — same rule as Internal Leverage: **closed
+invariants**, not slogans. Lint cannot prove “feels instant”; it enforces the
+structural proxies that keep external leverage from rotting.
+
+| Claim | Meaning | Enforcement |
+| ----- | ------- | ----------- |
+| **Zero cognitive overhead** | Domain surface maps 1:1 to shared vocabulary; no platform jargon in UI | `surface-enum-fork`, `surface-jargon`; wire-events dialect; seams erase folklore IDs |
+| **Mechanical sympathy** | Failures are named and observed — never silently swallowed | `sympathy-silent-failure` (empty `catch` / `.catch(() => {})`) |
+| **Uncompromising trust** | Correctness escapes and dangerous sinks are forbidden in pure layers | `trust-as-any`, `trust-ts-escape`, `trust-dangerous-sink` (`eval` / `Function` / `dangerouslySetInnerHTML`) |
+
+Config: `scripts/lint-arch/external.mjs` + shrinking debt in
+`scripts/lint-arch/external-debt.mjs`. Adding a new jargon pattern or sink is
+**config**, not a new special-case rule.
+
 ### Internal Leverage (machine-enforced)
 
 These three claims are **closed doctrine edges**, not slogans. Lint cannot prove
@@ -232,6 +248,7 @@ server / sync / ui.
 | Module `let` / timers / ALS | AST statements (all packages); ALS ban on agent |
 | Seams / erased capabilities | Registry in `scripts/lint-arch/seams.mjs` |
 | Dialect uniqueness | Concept-class owners in seams registry |
+| Domain surface / silent failure / trust | External Leverage (`scripts/lint-arch/external.mjs`) |
 | Event catalog coverage | Every `TraceEntry.kind` / `EventType` has a descriptor |
 | Stale debt allowlists | Unused allowlist entries fail |
 

@@ -1,8 +1,8 @@
 /**
  * lint-arch — asymmetric leverage engine for docs/doctrine.md.
  *
- * Enforces Internal Leverage (elasticity, deterministic evolution, sub-linear ops)
- * via TypeScript AST + seams registry — not one-off historical bans.
+ * Enforces Internal + External Leverage via TypeScript AST, seams registry,
+ * and closed invariants — not one-off historical bans.
  *
  * Run: `npm run lint:arch`  (node scripts/lint-arch.mjs)
  */
@@ -25,6 +25,11 @@ import {
   lintPackageExportSurface,
   lintResolvedInputBoundary,
 } from "./lint-arch/rules/elasticity.mjs"
+import {
+  lintDomainSurface,
+  lintSilentFailure,
+  lintTrustHygiene,
+} from "./lint-arch/rules/external.mjs"
 import {
   lintImportCycles,
   lintLayerImports,
@@ -66,6 +71,8 @@ function lintPackage(pkg) {
   lintFlatControlFlow(files)
   lintFrameworkDenylist(pkg, files)
   lintPackageExportSurface(ROOT, pkg.name, files)
+  lintSilentFailure(pkg, files, DEBT.silentFailureAllowlist)
+  lintTrustHygiene(pkg, files, DEBT.trustAllowlist)
 
   if (pkg.name === "server") {
     lintTenantIdentityForks(pkg, files, DEBT.tenantBranchAllowlist)
@@ -74,6 +81,13 @@ function lintPackage(pkg) {
   if (pkg.name === "ui") {
     lintUiPlatformCheckbox(pkg, files)
     lintWireKindDialect(ROOT, pkg, files)
+    lintDomainSurface(
+      ROOT,
+      pkg,
+      files,
+      DEBT.enumForkAllowlist,
+      DEBT.jargonAllowlist,
+    )
   }
 
   return { fileCount: files.length }
@@ -95,6 +109,10 @@ lintEventCatalogCoverage(ROOT)
 lintStaleDebtList(DEBT.brandAllowlist, "stale-brand-allowlist", "brand surface")
 lintStaleDebtList(DEBT.presentationAllowlist, "stale-presentation-allowlist", "presentation")
 lintStaleDebtList(DEBT.tenantBranchAllowlist, "stale-tenant-branch-allowlist", "tenant-branch")
+lintStaleDebtList(DEBT.silentFailureAllowlist, "stale-silent-failure-allowlist", "silent-failure")
+lintStaleDebtList(DEBT.trustAllowlist, "stale-trust-allowlist", "trust")
+lintStaleDebtList(DEBT.enumForkAllowlist, "stale-enum-fork-allowlist", "enum-fork")
+lintStaleDebtList(DEBT.jargonAllowlist, "stale-jargon-allowlist", "jargon")
 
 const debtCount =
   PACKAGES.agent.layerAllowlist.length +
@@ -104,7 +122,11 @@ const debtCount =
   DEBT.cycleAllowlist.length +
   DEBT.brandAllowlist.length +
   DEBT.presentationAllowlist.length +
-  DEBT.tenantBranchAllowlist.length
+  DEBT.tenantBranchAllowlist.length +
+  DEBT.silentFailureAllowlist.length +
+  DEBT.trustAllowlist.length +
+  DEBT.enumForkAllowlist.length +
+  DEBT.jargonAllowlist.length
 
 if (printReport(ROOT)) {
   process.exit(1)
@@ -112,6 +134,6 @@ if (printReport(ROOT)) {
 
 console.log(
   `lint-arch: ${counts.agent} agent + ${counts.server} server + ${counts.sync} sync + ${counts.ui} ui files OK ` +
-    `(AST + seams; ${debtCount} debt allowlist entries).`,
+    `(AST + seams + external leverage; ${debtCount} debt allowlist entries).`,
 )
 process.exit(0)
