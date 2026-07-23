@@ -419,7 +419,7 @@ WHERE Year = 2025
 ORDER BY pkMonth
 
 -- Option 2: Check the underlying fact table (much faster than the view)
--- publish.Revenue is built from fact tables. Use search_catalog(lineage='publish.Revenue')
+-- publish.Revenue is built from fact tables. Use inspect_definition(depends_on='publish.Revenue')
 -- to find which base fact tables feed it, then query those directly with TOP 1 + date filter.
 -- Example with a single source:
 SELECT TOP 1 pkMonth FROM fact.PNLRevenueMTD WITH (NOLOCK) ORDER BY pkMonth DESC
@@ -561,7 +561,7 @@ ORDER BY ProductRevenue DESC
 ### Key discovery rule: use catalog metadata, not view queries, for exploration
 
 Before querying a large view:
-1. `search_catalog(lineage='publish.Revenue')` — see all source tables and their filter conditions
+1. `inspect_definition(depends_on='publish.Revenue')` — see source tables / dependency map
 2. Query `dim.Date` to resolve any `pkDate/pkMonth` values for your time period  
 3. Only then query the view, WITH a predicate on `pkMonth`/`pkDate` that uses the resolved range
 4. Add `WITH (NOLOCK)` for analytical read-only queries — avoids lock contention on live systems
@@ -665,26 +665,20 @@ milliseconds) and requires no configuration.
 critical views: business area groupings (RBB, UNO, CPA, Africa, IMEX, etc.), filter conditions
 per source, and narrative descriptions. These always overwrite the auto-discovered entries.
 
-**To access lineage:**
-- `search_catalog(lineage='publish.Revenue')` → curated map: 59 source views, business areas, dimension joins, filter conditions
-- `search_catalog(lineage='publish.Balances')` → curated map: 10 source views, balance sheet categories
-- `search_catalog(lineage='publish.AnyOtherView')` → auto-discovered: direct sources, dim joins, schema groups
-- `search_catalog(stats=true)` → see which views have lineage entries
+**To inspect dependencies (catalog v7 — lineage/concepts modes removed):**
+- `inspect_definition(depends_on='publish.Revenue')` → T-SQL sources / dependency chain
+- `inspect_definition(depends_on='publish.Balances')` → same for Balances
+- `search_catalog(search='Revenue')` / `search_catalog(table='publish.Revenue')` → catalog keyword / table detail
+- `search_catalog(stats=true)` → largest views / catalog summary
 
-**Concept graph** — the catalog also builds a semantic concept graph from lineage:
-- Every view with sources creates a ConceptNode (e.g. `Revenue`, `Balances`, `ClientBase`)
-- Source tables are tagged with the concepts they contribute to
-- `search_catalog(concepts='fact.CommissionAllocation')` → which business concepts this table feeds
-- `search_catalog(concept_path=['fact.SomeTable','publish.Revenue'])` → trace join path via FK + implicit + concept edges
-
-**What lineage tells you:**
+**What dependency inspection tells you:**
 - Which source tables/views feed into a publish view
-- Which dimension tables join via pk* keys (auto-detected)
+- Which dimension tables join via pk* keys (when visible in the definition)
 - For curated views: filter conditions applied to each source, business area breakdown
 
-**Use lineage for:**
+**Use dependency inspection for:**
 - Tracing a revenue number to its source fact table
 - Finding which business lines a client participates in
 - Cross-sell analysis (products used vs. not used, compared to peer clients)
-- Understanding what `inspect_definition` will reveal when drilling deeper
+- Understanding what `inspect_definition(object=…)` will reveal when drilling deeper
 

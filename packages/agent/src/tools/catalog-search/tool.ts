@@ -71,6 +71,11 @@ function buildSearchCatalogTool(host: AgentHost, run?: RunContext): Tool {
           type: "boolean",
           description: "Rebuild the catalog from the live database and update the disk cache."
         },
+        sys: {
+          type: "string",
+          description:
+            "Search the SQL Server system catalog (sys.* DMVs). Use for index fragmentation, waits, locking, etc."
+        },
         connection: { type: "string", description: "Named database connection. Omit for default." }
       },
       required: []
@@ -82,6 +87,16 @@ function buildSearchCatalogTool(host: AgentHost, run?: RunContext): Tool {
         connName = resolveMssqlConnectionName(host, args.connection ? String(args.connection).trim() : null)
       } catch (err) {
         return err instanceof Error ? err.message : String(err)
+      }
+
+      // Catalog v7 removed lineage/concept-graph modes — redirect explicitly so
+      // stale prompts do not fall through to the generic "provide a parameter" error.
+      if (args.lineage != null || args.concepts != null || args.concept_path != null) {
+        return (
+          "Error: search_catalog no longer supports lineage/concepts (catalog v7). " +
+          "Use inspect_definition(depends_on='schema.Object') for dependency maps, " +
+          "or search_catalog(search='…' | table='…' | stats=true)."
+        )
       }
 
       if (args.refresh) {
@@ -143,7 +158,10 @@ function buildSearchCatalogTool(host: AgentHost, run?: RunContext): Tool {
         return handleSearch(catalog, String(args.search).trim(), schemaFilter, host.tableVerdicts)
       }
 
-      return "Error: Provide at least one parameter: search, table, column, joins, path, stats, refresh, or sys."
+      return (
+        "Error: Provide at least one mode parameter: search, table, column, joins, path, stats, refresh, or sys. " +
+        "connection= alone is not enough — e.g. search_catalog(search='Revenue') or search_catalog(stats=true)."
+      )
     }
   }
 }

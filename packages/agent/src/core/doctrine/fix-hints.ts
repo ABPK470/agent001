@@ -43,7 +43,7 @@ export const DOCTRINE_FIX_HINTS: Readonly<Record<string, string>> = {
   publish_view_topn_without_branch_aggregation: [
     "Do branch-local aggregation. Aggregate inside each required source branch first, UNION ALL the small per-branch results, then re-aggregate and rank.",
     "Skeleton:  SELECT TOP N x.<keyCol>, SUM(x.<metric>) AS <metric> INTO #top_<suffix> FROM ( SELECT <keyCol>, SUM(<sourceMetric>) AS <metric> FROM <schema>.<BranchA> WITH (NOLOCK) WHERE <dateKey> BETWEEN @from AND @to GROUP BY <keyCol> UNION ALL SELECT <keyCol>, SUM(<sourceMetric>) AS <metric> FROM <schema>.<BranchB> WITH (NOLOCK) WHERE <dateKey> BETWEEN @from AND @to GROUP BY <keyCol> /* repeat per required branch */ ) x GROUP BY x.<keyCol> ORDER BY SUM(x.<metric>) DESC, x.<keyCol>;",
-    "Branch names come from curated lineage: call `search_catalog lineage=<wide-union-view>` to get the exact branch list — do NOT guess branch names.",
+    "Branch names come from curated lineage: call `inspect_definition(depends_on='<wide-union-view>')` to get the exact branch list — do NOT guess branch names.",
     "Only after #top_<suffix> exists, do Stage 2: `SELECT … INTO #detail FROM <wide-union-view> WHERE <keyCol> IN (SELECT <keyCol> FROM #top_<suffix>)`. That second touch is fine — it has a tiny IN-list.",
     "Escape valve: if you already have a small #temp narrowing the <keyCol> set, joining to it (`JOIN #scope s ON s.<keyCol> = r.<keyCol>`) lets the optimizer push the small set into each UNION branch — that pattern is allowed."
   ].join(" "),
@@ -55,9 +55,9 @@ export const DOCTRINE_FIX_HINTS: Readonly<Record<string, string>> = {
   ].join(" "),
 
   invented_column: [
-    "Stop. The column does not exist on the table you aliased — confirm column names via `search_catalog mode=column column=<name>` (or `mode=table table=<schema.table>`) BEFORE writing the next SQL.",
+    "Stop. The column does not exist on the table you aliased — confirm column names via `search_catalog(column='<name>')` (or `search_catalog(table='schema.table')`) BEFORE writing the next SQL.",
     "Common failure mode: the model imagines display-name columns (`<X>Name`, `fullName`, …) on transactional / fact / wide-union views. Those views carry foreign keys to dimension tables; the display name lives on the corresponding dimension — join to the dim.* table to fetch it.",
-    "If the catalog is stale (the column was just added), call `refresh_catalog` and retry. Never invent a column to make a query 'feel right' — the validator will block it and the row would have been NULL anyway."
+    "If the catalog is stale (the column was just added), call `search_catalog(refresh=true)` and retry. Never invent a column to make a query 'feel right' — the validator will block it and the row would have been NULL anyway."
   ].join(" "),
 
   unverified_table_reference: [

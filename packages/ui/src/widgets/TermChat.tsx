@@ -1554,6 +1554,9 @@ function RunMessageImpl({
     const items: React.ReactNode[] = []
 
     let lastToolHasRunning = false
+    const anySubagentRunning = responseParts.some(
+      (part) => part.kind === "step-block" && part.subagent && part.hasRunning,
+    )
 
     responseParts.forEach((part) => {
       if (part.kind === "plan") {
@@ -1563,6 +1566,11 @@ function RunMessageImpl({
 
       if (part.kind === "step-block") {
         const meta = iterationMeta.get(part.id)
+        // While any subagent in this run is still live, keep every subagent
+        // step open — otherwise finished siblings auto-collapse and a
+        // parallel fan-out reads as one serial step at a time.
+        const keepParallelSiblingsOpen =
+          Boolean(part.subagent) && anySubagentRunning
         items.push(
           <StepBlock
             key={part.id}
@@ -1570,7 +1578,9 @@ function RunMessageImpl({
             syncByInvocation={syncByInvocation}
             isLiveRun={isLiveRun}
             keepOpen={Boolean(
-              part.hasRunning || (meta?.isLastWork && !meta.hasNarrativeAfter),
+              part.hasRunning ||
+                keepParallelSiblingsOpen ||
+                (meta?.isLastWork && !meta.hasNarrativeAfter),
             )}
           />,
         )
