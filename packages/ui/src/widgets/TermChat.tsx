@@ -759,6 +759,16 @@ function PlanBlock({ part }: { part: ResponsePlanPart }) {
   const [open, setOpen] = useState(part.steps.length > 0 && part.steps.length <= 8)
   const buttonRef = useRef<HTMLButtonElement>(null)
   const Chevron = open ? ChevronDown : ChevronRight
+  const modeHint =
+    part.executionMode === "parallel"
+      ? "Parallel"
+      : part.executionMode === "serial"
+        ? "Serial"
+        : part.executionMode === "guided"
+          ? "Guided"
+          : part.executionMode === "stop"
+            ? "Blocked"
+            : null
 
   return (
     <div className="py-1">
@@ -774,6 +784,7 @@ function PlanBlock({ part }: { part: ResponsePlanPart }) {
         <span>Plan</span>
         <span className="text-text-faint">
           {part.stepCount} step{part.stepCount !== 1 ? "s" : ""}
+          {modeHint ? ` · ${modeHint}` : ""}
         </span>
       </button>
       {open && part.steps.length > 0 && (
@@ -952,22 +963,12 @@ function IterationToolList({
 }
 
 function ProgressPill({ part }: { part: ResponseProgressPart }) {
-  // Settled process outcomes (including "needs work") share one muted band —
-  // never treat planner gaps as alarm-red incidents. Labels carry status;
-  // no status-dot chrome (text + bottom shimmer are enough while live).
-  const labelClass =
-    part.status === "running" ? "text-text-muted" : "text-text-faint"
-
+  // Same dialect as Plan header: primary + faint meta on one line.
+  // Never stack label / detail — that reads as a broken chip.
   return (
-    <div className="py-1 min-w-0">
-      <span className={`text-[15px] font-normal tracking-[-0.01em] block ${labelClass}`}>
-        {part.label}
-      </span>
-      {part.detail && (
-        <div className="pt-0.5 text-[15px] leading-6 whitespace-pre-wrap break-words text-text-faint">
-          {part.detail}
-        </div>
-      )}
+    <div className="py-1 min-w-0 text-[15px] leading-6 font-normal tracking-[-0.01em]">
+      <span className="text-text-muted">{part.label}</span>
+      {part.detail ? <span className="text-text-faint"> · {part.detail}</span> : null}
     </div>
   )
 }

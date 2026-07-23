@@ -15,6 +15,7 @@ import {
 export function isOffThreadProgress(part: ResponseProgressPart): boolean {
   return (
     part.id === "direct" ||
+    part.id === "plan" ||
     part.id === "thinking" ||
     part.id.startsWith("pipeline-")
   )
@@ -60,6 +61,17 @@ export function liveActivityVerb(tool: string): string {
   return LIVE_ACTIVITY_VERB[tool] ?? "Working"
 }
 
+function lastRunningToolIn(parts: ResponseToolPart[]): ResponseToolPart | null {
+  for (let j = parts.length - 1; j >= 0; j--) {
+    if (parts[j]!.row.status === "running") return parts[j]!
+  }
+  return null
+}
+
+/**
+ * Bottom shimmer label — same dialect for plan and direct routes.
+ * Prefer a coarse tool verb; never echo a step title the transcript already shows.
+ */
 export function deriveActiveMilestoneLabel(parts: ResponsePart[]): string {
   let lastRunningTool: ResponseToolPart | null = null
   for (let i = parts.length - 1; i >= 0; i--) {
@@ -69,12 +81,11 @@ export function deriveActiveMilestoneLabel(parts: ResponsePart[]): string {
       break
     }
     if (part.kind === "iteration-block" && part.hasRunning) {
-      for (let j = part.tools.length - 1; j >= 0; j--) {
-        if (part.tools[j]!.row.status === "running") {
-          lastRunningTool = part.tools[j]!
-          break
-        }
-      }
+      lastRunningTool = lastRunningToolIn(part.tools)
+      if (lastRunningTool) break
+    }
+    if (part.kind === "step-block" && part.hasRunning) {
+      lastRunningTool = lastRunningToolIn(part.tools)
       if (lastRunningTool) break
     }
   }
@@ -92,7 +103,8 @@ export function deriveActiveMilestoneLabel(parts: ResponsePart[]): string {
   for (let i = parts.length - 1; i >= 0; i--) {
     const part = parts[i]!
     if (part.kind === "step-block" && part.hasRunning) {
-      return part.detail ? `${part.title} — ${part.detail}` : part.title
+      // Step title already renders in StepBlock — shimmer stays a coarse verb.
+      return part.subagent ? "Delegating" : "Working"
     }
     if (part.kind !== "progress" || part.status !== "running") continue
     const id = part.id
@@ -111,8 +123,8 @@ export function deriveActiveMilestoneLabel(parts: ResponsePart[]): string {
     const part = parts[i]!
     if (part.kind === "progress" && part.status === "running" && PRIMARY_ACTIVITY_IDS.has(part.id)) {
       if (part.id === "direct") continue
-      if (part.id === "plan" && !part.detail) continue
-      return part.detail ? `${part.label} — ${part.detail}` : part.label
+      // Plan progress is off-thread; label itself is the shimmer voice.
+      return part.label
     }
   }
 

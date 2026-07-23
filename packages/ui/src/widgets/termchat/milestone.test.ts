@@ -34,8 +34,9 @@ function tool(
 }
 
 describe("isOffThreadProgress", () => {
-  it("hides routing/thinking/pipeline from the transcript", () => {
+  it("hides routing/thinking/pipeline/plan from the transcript", () => {
     expect(isOffThreadProgress(progress("direct"))).toBe(true)
+    expect(isOffThreadProgress(progress("plan"))).toBe(true)
     expect(isOffThreadProgress(progress("thinking"))).toBe(true)
     expect(isOffThreadProgress(progress("pipeline-plan"))).toBe(true)
     expect(isOffThreadProgress(progress("step-frontend"))).toBe(false)
@@ -70,7 +71,22 @@ describe("liveActivityVerb / deriveActiveMilestoneLabel", () => {
     expect(deriveActiveMilestoneLabel(parts)).toBe("Writing")
   })
 
-  it("skips bare Direct / empty Plan primary activities", () => {
+  it("reads running tools inside step-blocks (plan route parity)", () => {
+    const parts: ResponsePart[] = [
+      {
+        kind: "step-block",
+        id: "step-1",
+        title: "Subagent · Generate blueprint",
+        hasRunning: true,
+        subagent: true,
+        tools: [tool("write_file", "running")],
+        status: "running",
+      },
+    ]
+    expect(deriveActiveMilestoneLabel(parts)).toBe("Writing")
+  })
+
+  it("uses verbose plan labels for shimmer, never bare Plan", () => {
     expect(
       deriveActiveMilestoneLabel([
         progress("direct"),
@@ -79,30 +95,38 @@ describe("liveActivityVerb / deriveActiveMilestoneLabel", () => {
     ).toBe("Thinking")
     expect(
       deriveActiveMilestoneLabel([
-        { ...progress("plan"), label: "Plan" },
+        { ...progress("plan"), label: "Generating plan…" },
       ]),
-    ).toBe("Thinking…")
-    expect(
-      deriveActiveMilestoneLabel([
-        { ...progress("plan"), label: "Plan", detail: "3 steps" },
-      ]),
-    ).toBe("Plan — 3 steps")
+    ).toBe("Generating plan…")
   })
 
-  it("uses step-block titles while a step is running", () => {
+  it("never echoes step-block titles in the shimmer", () => {
     expect(
       deriveActiveMilestoneLabel([
         {
           kind: "step-block",
           id: "step-1",
-          title: "Frontend layer",
+          title: "Subagent · Generate blueprint",
           detail: "writing pages",
+          hasRunning: true,
+          subagent: true,
+          tools: [],
+          status: "running",
+        },
+      ]),
+    ).toBe("Delegating")
+    expect(
+      deriveActiveMilestoneLabel([
+        {
+          kind: "step-block",
+          id: "step-2",
+          title: "Frontend layer",
           hasRunning: true,
           tools: [],
           status: "running",
         },
       ]),
-    ).toBe("Frontend layer — writing pages")
+    ).toBe("Working")
   })
 })
 

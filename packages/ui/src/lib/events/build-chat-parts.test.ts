@@ -233,4 +233,81 @@ describe("buildResponseParts — TermChat projection", () => {
       expect(check.label).not.toMatch(/failed/i)
     }
   })
+
+  it("uses verbose plan progress, folds parallel mode into PlanBlock, no second Plan chip", () => {
+    const parts = buildResponseParts(
+      [
+        { kind: "planning_preflight" },
+        {
+          kind: "planner-decision",
+          shouldPlan: true,
+          route: "planner",
+          reason: "multi-step",
+        },
+        { kind: "planner-generating" },
+        {
+          kind: "planner-plan-generated",
+          stepCount: 2,
+          steps: [
+            { name: "generate_blueprint", type: "subagent_task" },
+            { name: "frontend_layer", type: "subagent_task" },
+          ],
+        },
+        {
+          kind: "planner-delegation-decision",
+          shouldDelegate: true,
+          executionMode: "parallel",
+          reason: "independent",
+        },
+        {
+          kind: "planner-step-start",
+          stepName: "generate_blueprint",
+          stepType: "subagent_task",
+        },
+      ],
+      "running",
+      "",
+      null,
+      null,
+      null,
+      "run-1",
+    )
+
+    const planProgress = parts.filter((p) => p.kind === "progress" && p.id === "plan")
+    expect(planProgress).toHaveLength(0)
+
+    const plan = parts.find((p) => p.kind === "plan")
+    expect(plan?.kind).toBe("plan")
+    if (plan?.kind === "plan") {
+      expect(plan.stepCount).toBe(2)
+      expect(plan.executionMode).toBe("parallel")
+    }
+
+    expect(parts.some((p) => p.kind === "progress" && p.detail === "Parallel subagents")).toBe(false)
+
+    const step = parts.find((p) => p.kind === "step-block")
+    expect(step?.kind).toBe("step-block")
+    if (step?.kind === "step-block") {
+      expect(step.title).toMatch(/blueprint/i)
+      expect(step.subagent).toBe(true)
+    }
+  })
+
+  it("labels generating plan verbosely before the outline exists", () => {
+    const parts = buildResponseParts(
+      [{ kind: "planner-generating" }],
+      "planning",
+      "",
+      null,
+      null,
+      null,
+      "run-1",
+    )
+    const plan = parts.find((p) => p.kind === "progress" && p.id === "plan")
+    expect(plan?.kind).toBe("progress")
+    if (plan?.kind === "progress") {
+      expect(plan.label).toBe("Generating plan…")
+      expect(plan.detail).toBeUndefined()
+    }
+  })
 })

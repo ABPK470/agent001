@@ -55,6 +55,7 @@ const SpeechRecognition = (globalThis as Record<string, unknown>)["SpeechRecogni
   (new () => SpeechRecognitionInstance) | undefined
 
 import { TOOL_LABELS } from "@mia/shared-types"
+import { liveActivityVerb } from "./termchat/milestone"
 
 
 // ── Workspace changes card ─────────────────────────────────────────
@@ -312,46 +313,48 @@ export function AgentChat() {
   // (2) as a persistent footer line below the step list card while the run is active.
   const currentPhase = useMemo((): string | null => {
     if (!activeRun || activeRun.status === "pending") return null
-    if (activeRun.status === "planning" && trace.length === 0) return "Plan"
+    if (activeRun.status === "planning" && trace.length === 0) return "Preparing plan…"
 
     // Track ended planner-pipeline steps so we can skip them when scanning backwards
     const endedSteps = new Set<string>()
+    const finishedInvocations = new Set<string>()
 
     for (let i = trace.length - 1; i >= 0; i--) {
       const e = trace[i] as TraceEntry
 
-      // Pipeline step lifecycle
       if (e.kind === "planner-step-end") { endedSteps.add(e.stepName); continue }
+      if (e.kind === "tool-result" && "invocationId" in e && e.invocationId) {
+        finishedInvocations.add(String(e.invocationId))
+        continue
+      }
+      if (e.kind === "tool-call") {
+        const inv = "invocationId" in e && e.invocationId ? String(e.invocationId) : null
+        if (inv && finishedInvocations.has(inv)) continue
+        return TOOL_LABELS[e.tool] ?? liveActivityVerb(e.tool)
+      }
+      if (e.kind === "iteration") break
+
       if (e.kind === "planner-step-start" && !endedSteps.has(e.stepName)) {
-        // Convert snake_case step name to human label: "blueprint_chess_contract" → "Generating blueprint chess contract"
-        const label = String(e.stepName).replace(/_/g, " ")
-        return `Generating ${label}`
+        return e.stepType === "subagent_task" ? "Delegating" : "Working"
       }
 
-      // Planner repair / verification
       if (e.kind === "planner-repair-plan") return `Repairing (attempt ${e.attempt})`
       if (e.kind === "planner-verification") return "Verifying"
       if (e.kind === "planner-retry") return `Retry #${e.attempt}`
       if (e.kind === "planner-escalation") return "Escalating"
       if (e.kind === "planner-sql-quality") return e.phase === "blocked" ? "Blocking SQL query" : "Reviewing SQL query"
 
-      // Planner pipeline phases
-      if (e.kind === "planner-pipeline-start") return "Pipeline"
-      if (e.kind === "planner-plan-generated") return `Plan — ${e.stepCount} step${e.stepCount !== 1 ? "s" : ""}`
-      if (e.kind === "planner-generating") return "Generating plan"
-      if (e.kind === "planning_preflight") return "Plan"
+      if (e.kind === "planner-pipeline-start") return "Working"
+      if (e.kind === "planner-plan-generated") return null
+      if (e.kind === "planner-generating") return "Generating plan…"
+      if (e.kind === "planning_preflight") return "Preparing plan…"
 
-      // Delegation
-      if (e.kind === "planner-delegation-start") return e.stepName
+      if (e.kind === "planner-delegation-start") return "Delegating"
       if (e.kind === "delegation-start") return "Delegating"
-
-      // Direct tool loop — use the tool label as activity hint, then stop scanning further
-      if (e.kind === "tool-call") return TOOL_LABELS[e.tool] ?? e.tool
-      if (e.kind === "iteration") break
     }
 
-    if (runningStep) return TOOL_LABELS[runningStep.action] ?? runningStep.name
-    return activeRun.status === "planning" ? "Planning" : null
+    if (runningStep) return TOOL_LABELS[runningStep.action] ?? liveActivityVerb(runningStep.action)
+    return activeRun.status === "planning" ? "Preparing plan…" : null
   }, [activeRun, runningStep, trace])
 
   async function handleCancel() {
@@ -1129,16 +1132,15 @@ export function AgentChat() {
                                                                   {currentPhase ??
                                                                       (run.status ===
                                                                       "planning"
-                                                                          ? "Plan"
+                                                                          ? "Preparing plan…"
                                                                           : "Thinking")}
                                                               </span>
                                                           </div>
                                                       </div>
                                                   )}
 
-                                                  {/* Active phase label — current pipeline step name or macro phase.
-                          Shown below the step list so the user always knows WHY the
-                          tool calls are happening (e.g. "Generating blueprint chess contract"). */}
+                                                  {/* Active phase — coarse verb (Writing / Delegating), same dialect
+                          as TermChat shimmer. Never echo the step title already shown above. */}
                                                   {currentPhase &&
                                                       steps.length > 0 && (
                                                           <div className="flex flex-col gap-0.5">

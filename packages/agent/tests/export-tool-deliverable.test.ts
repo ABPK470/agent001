@@ -84,7 +84,7 @@ describe("promoteExportedFile", () => {
       byteSize: 100,
       purposeTag: null
     })
-    expect(res.note).toContain("no attachment backend")
+    expect(res.note).toContain("no download backend")
   })
 
   it("skips promotion above the 64MB cap and tells the agent to split", async () => {
@@ -99,8 +99,9 @@ describe("promoteExportedFile", () => {
       purposeTag: null
     })
     expect(promote).not.toHaveBeenCalled()
-    expect(res.note).toContain("NOT promoted")
-    expect(res.note).toContain("split")
+    expect(res.note).toContain("NOT offered as a download")
+    expect(res.note).toMatch(/split/i)
+    expect(res.note).not.toMatch(/\bworkspace\b/i)
   })
 
   it("never throws when promote fails — returns a warning note instead", async () => {
@@ -115,7 +116,8 @@ describe("promoteExportedFile", () => {
       byteSize: 100,
       purposeTag: null
     })
-    expect(res.note).toContain("could not promote")
+    expect(res.note).toContain("Could not create a download")
     expect(res.note).toContain("quota exceeded")
+    expect(res.note).not.toMatch(/\bworkspace\b/i)
   })
 })

@@ -7,7 +7,6 @@
  */
 
 import {
-  eventLabel,
   presentToolCallFromFormatted,
   toolCallPreview,
 } from "@mia/shared-types"
@@ -92,6 +91,8 @@ export interface ResponsePlanPart {
   status: "running" | "done" | "error"
   stepCount: number
   steps: Array<{ name: string; type?: string }>
+  /** How subagent steps run — folded into the Plan header, not a second chip. */
+  executionMode?: "parallel" | "serial" | "guided" | "stop"
 }
 
 /**
@@ -748,43 +749,56 @@ export function buildResponseParts(
       }
       case "planning_preflight":
         parts = settlePrimaryActivities(parts, "plan")
-        parts = setActivityPart(parts, "plan", eventLabel("planning_preflight"), "running", undefined, true)
+        parts = setActivityPart(parts, "plan", "Preparing plan…", "running", undefined, true)
         break
       case "planner-decision": {
-        const label = !entry.shouldPlan || entry.route === "direct" ? "Direct" : "Plan"
-        const activityId = label === "Direct" ? "direct" : "plan"
+        const isDirect = !entry.shouldPlan || entry.route === "direct"
+        const activityId = isDirect ? "direct" : "plan"
         parts = settlePrimaryActivities(parts, activityId)
-        parts = setActivityPart(parts, activityId, label, "running", undefined, true)
-        break
-      }
-      case "planner-delegation-decision": {
-        const mode = entry.executionMode
-        const modeLabel =
-          mode === "parallel"
-            ? "Parallel subagents"
-            : mode === "serial"
-              ? "Serial subagents"
-              : mode === "guided"
-                ? "Guided subagents"
-                : mode === "stop"
-                  ? "Subagents blocked"
-                  : entry.shouldDelegate
-                    ? "Parallel subagents"
-                    : "Serial subagents"
-        parts = settlePrimaryActivities(parts, "plan")
         parts = setActivityPart(
           parts,
-          "plan",
-          "Plan",
-          mode === "stop" ? "error" : "done",
-          modeLabel,
+          activityId,
+          isDirect ? "Working…" : "Preparing plan…",
+          "running",
+          undefined,
           true,
         )
         break
       }
+      case "planner-delegation-decision": {
+        // CHAT_VIEW_SPEC omits delegation family — fold mode into the plan
+        // outline on one line. Never reopen a bare "Plan" progress chip.
+        const mode = entry.executionMode
+        const executionMode =
+          mode === "parallel" || mode === "serial" || mode === "guided" || mode === "stop"
+            ? mode
+            : entry.shouldDelegate
+              ? "parallel"
+              : "serial"
+        let folded = false
+        parts = parts.map((part) => {
+          if (part.kind !== "plan") return part
+          folded = true
+          return {
+            ...part,
+            executionMode,
+            status: mode === "stop" ? ("error" as const) : part.status,
+          }
+        })
+        if (!folded && mode === "stop") {
+          parts = parts.concat({
+            kind: "narrative",
+            id: `delegation-stop-${index}`,
+            text: "Subagents blocked",
+            tone: "error",
+            role: "status",
+          })
+        }
+        break
+      }
       case "planner-generating":
         parts = settlePrimaryActivities(parts, "plan")
-        parts = setActivityPart(parts, "plan", eventLabel("planner-generating"), "running", "Generating plan...", true)
+        parts = setActivityPart(parts, "plan", "Generating plan…", "running", undefined, true)
         break
       case "planner-plan-generated": {
         // Replace the generating chip with an expandable plan outline.

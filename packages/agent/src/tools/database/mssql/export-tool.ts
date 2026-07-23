@@ -123,19 +123,19 @@ export async function promoteExportedFile(opts: {
   purposeTag: string | null
 }): Promise<PromotionResult> {
   if (!opts.deliverable) {
-    return { note: `\nWorkspace file only (deliverable=false) — not promoted to a download.` }
+    return { note: `\nSandbox staging only (deliverable=false) — not offered as a user download.` }
   }
   const store = opts.host.attachments
   if (!store) {
     // No attachment backend (CLI / tests). The file is still in the sandbox.
-    return { note: `\nFile saved to workspace only (no attachment backend in this environment).` }
+    return { note: `\nExport written to the run sandbox only (no download backend in this environment).` }
   }
   if (opts.byteSize > PROMOTE_MAX_BYTES) {
     return {
       note:
         `\nFile is ${formatBytes(opts.byteSize)} — above the ${formatBytes(PROMOTE_MAX_BYTES)} ` +
-        `delivery cap, so it was NOT promoted to a download. It remains in the workspace. ` +
-        `If the user needs it as a download, split the export into smaller files.`
+        `download cap, so it was NOT offered as a download. ` +
+        `Split the export into smaller files; do not tell the user to look in the sandbox.`
     }
   }
   try {
@@ -146,15 +146,15 @@ export async function promoteExportedFile(opts: {
     return {
       note:
         `\nSaved as a downloadable file: ${meta.normalizedName} (attachment id=${meta.id}, ` +
-        `${formatBytes(meta.sizeBytes)}). The user can download it via the link in chat — ` +
+        `${formatBytes(meta.sizeBytes)}). The user can download it via the link in chat and save it anywhere they want — ` +
         `mention this in your answer.`
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     return {
       note:
-        `\nFile remains in the workspace; could not promote to a download (${msg}). ` +
-        `The user may not be able to retrieve this file.`
+        `\nCould not create a download for the user (${msg}). ` +
+        `Tell them the download failed and offer to retry — do not present a sandbox path as their save location.`
     }
   }
 }
@@ -172,9 +172,9 @@ const EXPORT_QUERY_TO_FILE_DESCRIPTION =
   "Format is inferred from the file extension (.csv/.tsv/.json/.jsonl/.txt) or pass format= explicitly. " +
   "For single-column queries, .txt produces a clean newline-separated list; otherwise prefer .csv. " +
   "By default (deliverable=true) the file is ALSO saved as a durable, user-downloadable attachment and " +
-  "the user gets a download link in chat — this is what you want whenever the export is meant for the " +
+  "the user gets a download link in chat — they can save it anywhere. This is what you want whenever the export is meant for the " +
   "user to review/keep. Set deliverable=false ONLY for intermediate staging files you will read back " +
-  "yourself (e.g. cross-batch handoff when #temp can't survive) — those stay in the workspace only."
+  "yourself (e.g. cross-batch handoff when #temp can't survive) — those stay in the run sandbox only."
 
 const EXPORT_QUERY_TO_FILE_PARAMETERS = {
   type: "object",
@@ -186,7 +186,9 @@ const EXPORT_QUERY_TO_FILE_PARAMETERS = {
     path: {
       type: "string",
       description:
-        "Destination file path relative to the workspace root (e.g. 'datasets.csv'). Parent directories are created automatically."
+        "Staging path relative to the run sandbox (e.g. 'datasets.csv'). Parent directories are created automatically. " +
+        "This is an internal write path — when deliverable=true the user gets a chat download and can save the file anywhere; " +
+        "never tell the user the sandbox path is their destination."
     },
     format: {
       type: "string",
@@ -201,9 +203,9 @@ const EXPORT_QUERY_TO_FILE_PARAMETERS = {
       type: "boolean",
       description:
         "true (default) = also save the file as a durable, user-downloadable attachment and surface a download link in chat. " +
-        "Use this whenever the export is for the user to review/keep. " +
+        "Use this whenever the export is for the user to review/keep (they can save it anywhere). " +
         "Set false ONLY for intermediate staging files the agent reads back itself (cross-batch handoff); " +
-        "those stay in the workspace only and are NOT promoted."
+        "those stay in the run sandbox only and are NOT offered as a download."
     },
     purposeTag: {
       type: "string",
