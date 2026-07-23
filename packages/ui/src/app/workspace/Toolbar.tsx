@@ -244,12 +244,9 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
           onClick={() => onModeChange("chat")}
           title={`Chat (${shellModeToggleHint()})`}
           aria-label={`Open chat (${shellModeToggleHint()})`}
-          className={`${ICON_BTN} !w-auto gap-1.5 px-2.5`}
+          className={ICON_BTN}
         >
           <MessageSquare size={15} />
-          <kbd className="shell-mode-kbd" aria-hidden>
-            {shellModeToggleHint()}
-          </kbd>
         </button>
         {me && <SessionMenu me={me} onSignOut={onSignOut} />}
       </div>

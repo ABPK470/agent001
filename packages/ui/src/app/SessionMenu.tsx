@@ -73,9 +73,14 @@ export function SessionMenu({ me, onSignOut, chromeVariant = "default" }: Props)
   const triggerClass =
     chromeVariant === "chat"
       ? CHAT_CHROME_BTN
-      : me.isAdmin
-        ? "session-menu-trigger session-menu-trigger--admin flex h-9 w-9 items-center justify-center overflow-hidden rounded-lg text-text-muted transition-colors hover:bg-overlay-hover hover:text-text"
-        : "session-menu-trigger flex h-9 w-9 items-center justify-center overflow-hidden rounded-lg text-text-muted transition-colors hover:bg-overlay-hover hover:text-text"
+      : [
+          "session-menu-trigger",
+          me.isAdmin ? "session-menu-trigger--admin" : "",
+          // Same chrome as Toolbar MessageSquare / NotificationPanel icons.
+          "flex h-9 w-9 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-overlay-hover hover:text-text",
+        ]
+          .filter(Boolean)
+          .join(" ")
 
   const showAsciiAccent = me.isAdmin && chromeVariant !== "chat"
 
@@ -91,8 +96,10 @@ export function SessionMenu({ me, onSignOut, chromeVariant = "default" }: Props)
           aria-expanded={open}
           aria-haspopup="menu"
         >
-          {showAsciiAccent && <AsciiMicroField paused={open} clearCenter={{ w: 18, h: 18 }} />}
-          <span className="relative z-[1] flex items-center justify-center">
+          {showAsciiAccent && (
+            <AsciiMicroField paused={open} inkOpacity={0.5} clearCenter={{ w: 16, h: 16 }} />
+          )}
+          <span className="relative z-[1] flex items-center justify-center text-current">
             <SessionMenuIcon />
           </span>
         </button>

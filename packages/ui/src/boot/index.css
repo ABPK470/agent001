@@ -3978,10 +3978,16 @@ textarea.input {
   }
 }
 
-/* Session menu — admin: running accent ASCII behind muted burger icon. */
+/* Session menu — admin: soft ASCII texture inside the same icon button chrome. */
 .session-menu-trigger {
   position: relative;
   isolation: isolate;
+  overflow: hidden;
+}
+
+.session-menu-trigger--admin {
+  /* Keep glyph field clipped to the same rounded hit target as peers. */
+  overflow: hidden;
 }
 
 .session-menu-panel {
@@ -3996,8 +4002,9 @@ textarea.input {
 
 .session-ascii-micro {
   z-index: 0;
-  /* Match live colon mark bloom — same token, same perceived brightness. */
-  filter: drop-shadow(0 0 6px var(--logo-mark-live-shadow));
+  opacity: 0.9;
+  /* Quiet bloom — same token as live mark, not a loud frame. */
+  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--logo-mark-live-shadow) 55%, transparent));
 }
 
 /* ── Workspace tiling (split-tree projected to absolute panes) ─── */
@@ -4080,14 +4087,16 @@ textarea.input {
 }
 
 .workspace-shell .widget-controls {
-  opacity: 0.55;
+  opacity: 0;
+  pointer-events: none;
   transition: opacity 120ms ease;
 }
 
-.workspace-tile:hover .widget-controls,
-.workspace-tile-focused .widget-controls,
-.workspace-shell:focus-within .widget-controls {
+/* Reveal chrome actions only when the title bar is hovered / focused */
+.workspace-shell .widget-drag-handle:hover .widget-controls,
+.workspace-shell .widget-drag-handle:focus-within .widget-controls {
   opacity: 1;
+  pointer-events: auto;
 }
 
 /* Destination ghost — looks like the panel shell at the post-drop rect. */
@@ -4749,23 +4758,6 @@ textarea.input {
   font-weight: 600;
   line-height: 1.2;
   color: var(--text-secondary);
-}
-
-/* Shell mode toggle — quiet kbd next to chat/workspace icons */
-.shell-mode-kbd {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0.1rem 0.3rem;
-  border-radius: 0.25rem;
-  border: 1px solid color-mix(in srgb, var(--border, currentColor) 80%, transparent);
-  background: color-mix(in srgb, var(--text, currentColor) 4%, transparent);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 0.625rem;
-  font-weight: 600;
-  line-height: 1.15;
-  color: var(--text-faint, var(--text-muted));
-  pointer-events: none;
 }
 
 /* Shared command row — palette */

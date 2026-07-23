@@ -1,20 +1,23 @@
 /**
- * Session menu icon — static crisp burger.
+ * Session menu icon — same visual weight as Lucide toolbar icons (15px).
  */
 
 export function SessionMenuIcon() {
   return (
     <svg
-      width={18}
-      height={18}
-      viewBox="0 0 18 18"
+      width={15}
+      height={15}
+      viewBox="0 0 15 15"
       aria-hidden
-      shapeRendering="crispEdges"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.5}
+      strokeLinecap="round"
       className="block shrink-0"
     >
-      <rect x="3" y="4.5" width="12" height="1.5" fill="currentColor" />
-      <rect x="3" y="8.25" width="12" height="1.5" fill="currentColor" />
-      <rect x="3" y="12" width="12" height="1.5" fill="currentColor" />
+      <path d="M2.5 4h10" />
+      <path d="M2.5 7.5h10" />
+      <path d="M2.5 11h10" />
     </svg>
   )
 }

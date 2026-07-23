@@ -13,17 +13,13 @@ interface Props {
 export function ChatShellActions({ onModeChange, onSignOut, me }: Props) {
   const shortcut = shellModeToggleHint()
   return (
-    <div className="relative z-10 flex shrink-0 items-center gap-1.5">
+    <div className="relative z-10 flex shrink-0 items-center gap-2">
       <ChatChromeButton
         onClick={() => onModeChange("workspace")}
         title={`Workspace (${shortcut})`}
         aria-label={`Open workspace (${shortcut})`}
-        className="!w-auto gap-1.5 px-2.5"
       >
         <LayoutGrid size={17} />
-        <kbd className="shell-mode-kbd" aria-hidden>
-          {shortcut}
-        </kbd>
       </ChatChromeButton>
       {me ? (
         <SessionMenu me={me} onSignOut={onSignOut} chromeVariant="chat" />
