@@ -24,7 +24,7 @@ import {
   resolveGoalDataAnchors,
   type LargeObjectFact
 } from "@mia/agent"
-import { listTableVerdicts } from "../../../../infra/persistence/memory.js"
+import { listTableVerdicts } from "../../../infra/persistence/memory.js"
 
 /** Quick regex: `schema.Object` with optional bracket/quote noise. */
 const OBJECT_TOKEN = /\b\[?(\w+)\]?\.\[?(\w+)\]?\b/g
@@ -61,7 +61,7 @@ export function buildResolvedFactsBlock(input: {
   const candidates = new Set<string>()
   for (const tok of goalTokens) candidates.add(tok)
   if (catalog) {
-    for (const anchor of resolveGoalDataAnchors(goal, catalog)) {
+    for (const anchor of resolveGoalDataAnchors(goal, catalog, mirrorSchema)) {
       candidates.add(anchor.qualifiedName.toLowerCase())
     }
   }

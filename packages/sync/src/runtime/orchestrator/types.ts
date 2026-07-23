@@ -61,6 +61,12 @@ export function formatSyncExecuteFailure(context: SyncExecuteFailureContext, det
 export interface ExecuteOptions {
   host: SyncRuntimeHost
   confirm: boolean
+  /** Resolved MSSQL connector ids — when omitted, probed from host at call site. */
+  readyIds?: ReadonlySet<string>
+  /** Pool resolver — defaults to adapter getPool when omitted. */
+  getPool?: import("../../ports/db-pool.js").DbPoolPort["getPool"]
+  /** HTTP client for flow steps — defaults to fetch adapter when omitted. */
+  http?: import("../../ports/http.js").HttpPort
   /** Optional progress callback (used by SSE route). */
   onProgress?: (p: ExecuteProgress) => void
   /** Identity of the user requesting execute (for safety rails / audit). */
@@ -78,6 +84,17 @@ export interface ExecuteOptions {
 export function throwIfAborted(signal?: AbortSignal): void {
   if (signal?.aborted) throw new Error("Sync execution cancelled")
 }
+
+export type SyncExecuteResult =
+  | { outcome: "refused"; planId: string; success: false; error: string }
+  | {
+      outcome: "completed"
+      planId: string
+      success: boolean
+      skipped?: boolean
+      message?: string
+      error?: string
+    }
 
 /** `uspAuditRunCheck` returned status=stop — sync not required (legacy "To sync or not"). */
 export class AuditGateSkippedError extends Error {

@@ -1,4 +1,4 @@
-import { parseBoundaryJson } from "../../../internal/parse-json.js"
+import { parseBoundaryJson } from "../../internal/parse-json.js"
 
 /**
  * runtime/movement-port.ts — build the opaque `host.connectors` port at boot.
@@ -40,7 +40,7 @@ import {
   type ConnectorPort} from "@mia/connectors"
 import { Pool } from "pg"
 import type { Connector, ConnectorKindId } from "@mia/shared-types"
-import * as db from "../../../infra/persistence/sqlite.js"
+import * as db from "../../infra/persistence/sqlite.js"
 
 function asString(value: unknown): string | undefined {
   return typeof value === "string" && value !== "" ? value : undefined

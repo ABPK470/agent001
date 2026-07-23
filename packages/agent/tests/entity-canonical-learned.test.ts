@@ -66,6 +66,7 @@ function makeCtx(learned: Map<string, string> | undefined, goal: string): Clarif
     goal,
     catalog,
     tenant: getTenantConfig(),
+    publishedSyncEntityIds: [],
     messages: [],
     resolved: [],
     round: 1,

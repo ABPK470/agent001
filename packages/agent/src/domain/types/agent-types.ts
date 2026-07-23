@@ -364,6 +364,14 @@ export interface AgentConfig {
   /** Delegation function for planner-spawned children (injected by server). */
   plannerDelegateFn?: import("./planner-delegate.js").PlannerDelegateFn
   /**
+   * Resolved planner routing inputs — domain keywords and related vocabulary
+   * loaded at the composition root. Core assess/planner paths must not call
+   * getTenantConfig() for these.
+   */
+  plannerRouting?: {
+    readonly domainKeywords: readonly string[]
+  }
+  /**
    * Completion validator — called when the agent tries to exit (0 tool calls).
    * If it returns a non-null string, that string is injected as a system message
    * and the agent is forced to continue. Fires at most once per run.

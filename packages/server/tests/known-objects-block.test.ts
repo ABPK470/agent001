@@ -16,8 +16,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import {
   loadKnownObjects,
   renderKnownObjectsBlock
-} from "../src/api/runs/prompting/data-blocks/known-objects.js"
-import type { PriorTurn } from "../src/api/runs/prompting/data-blocks/prior-turns.js"
+} from "../src/runtime/prompting/data-blocks/known-objects.js"
+import type { PriorTurn } from "../src/runtime/prompting/data-blocks/prior-turns.js"
 
 let testDb: Database.Database
 let dataDir: string

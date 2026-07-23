@@ -1,5 +1,5 @@
 import type { LLMClient } from "@mia/agent"
-import { AgentOrchestrator } from "../api/runs/orchestrator.js"
+import { AgentOrchestrator } from "../runtime/orchestrator.js"
 import { serverAttachmentService } from "../infra/persistence/attachments.js"
 import { buildBootHostDeps, type ServerContext } from "./context.js"
 

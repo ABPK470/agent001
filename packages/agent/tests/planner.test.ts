@@ -199,7 +199,11 @@ describe("Planner decision: assessPlannerDecision", () => {
   })
 
   it("routes domain data questions to the direct loop without planner decomposition", () => {
-    const decision = assessPlannerDecision("Show client revenue breakdown for last month", [])
+    const decision = assessPlannerDecision(
+      "Show client revenue breakdown for last month",
+      [],
+      { domainKeywords: ["client", "revenue"] }
+    )
     expect(decision.route).toBe("direct")
     expect(decision.reason).toBe("domain_data_query")
     expect(decision.shouldPlan).toBe(false)
@@ -279,8 +283,7 @@ describe("Planner delegation gate", () => {
         subagentPlan,
         "create top 5 list of bankers",
         { route: "planner", score: 4, reason: "multi_step+tool_diversity" },
-        {},
-        undefined
+        {}
       )
 
       // Economics decline never discards a validated plan — it only picks
@@ -347,8 +350,7 @@ describe("Planner delegation gate", () => {
         thinPlan,
         "do a small thing",
         { route: "planner", score: 4, reason: "multi_step+tool_diversity" },
-        {},
-        undefined
+        {}
       )
 
       expect(gate.blocked).toBe(false)
@@ -381,8 +383,7 @@ describe("Planner delegation gate", () => {
         subagentPlan,
         "delete production database",
         { route: "planner", score: 6, reason: "delegation_cue" },
-        {},
-        undefined
+        {}
       )
 
       expect(gate.blocked).toBe(true)

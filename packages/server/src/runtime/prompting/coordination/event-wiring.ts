@@ -1,9 +1,9 @@
 import type { DomainEvent, Unsubscribe } from "@mia/agent"
 import { EventType } from "@mia/agent"
 import { presentToolCall, serializeToolCallArgs } from "@mia/shared-types"
-import { broadcast, toBroadcastData } from "../../../../infra/events/broadcaster.js"
-import * as db from "../../../../infra/persistence/sqlite.js"
-import { TrajectoryEventKind } from "../../../../internal/enums/trajectory.js"
+import { broadcast, toBroadcastData } from "../../../infra/events/broadcaster.js"
+import * as db from "../../../infra/persistence/sqlite.js"
+import { TrajectoryEventKind } from "../../../internal/enums/trajectory.js"
 
 type EventWiringServices = {
   eventBus: {

@@ -1,10 +1,10 @@
 import { EventType } from "@mia/agent"
 import { stripRuntimeToolArgs } from "@mia/shared-types"
 
-import { canAccessRun, requireSessionUpn } from "../../auth/service/access.js"
-import type { CurrentSession } from "../../auth/state/context.js"
-import { broadcast } from "../../../infra/events/broadcaster.js"
-import * as db from "../../../infra/persistence/sqlite.js"
+import { canAccessRun, requireSessionUpn } from "../../api/auth/service/access.js"
+import type { CurrentSession } from "../../api/auth/state/context.js"
+import { broadcast } from "../../infra/events/broadcaster.js"
+import * as db from "../../infra/persistence/sqlite.js"
 import type { AgentOrchestrator } from "../orchestrator.js"
 
 function stableArgsKey(args: Record<string, unknown>): string {

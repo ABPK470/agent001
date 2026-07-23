@@ -370,7 +370,10 @@ export async function executeToolRound(
         recordTruncatedQuery(state, enriched, call.arguments)
       }
 
-      if (call.name === "delegate" || call.name === "delegate_parallel") {
+      if (
+        (call.name === "delegate" || call.name === "delegate_parallel") &&
+        (tools.has("delegate") || tools.has("delegate_parallel"))
+      ) {
         delegationThisRound = true
         // Inspect the child's tool whitelist. If absent OR contains any
         // non-read-only tool, treat the delegation as potentially mutating.

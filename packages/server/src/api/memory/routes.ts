@@ -21,14 +21,14 @@ import {
   searchEntries,
   type MemoryTier
 } from "../../infra/persistence/memory.js"
-import type { AgentOrchestrator } from "../runs/orchestrator.js"
+import type { AgentOrchestrator } from "../../runtime/orchestrator.js"
 import {
   compareTrajectories,
   loadTrajectory,
   replay,
   summarizeTrajectory,
   type Mutation
-} from "../runs/trajectory/index.js"
+} from "../../runtime/trajectory/index.js"
 
 export function registerMemoryRoutes(app: FastifyInstance, _orchestrator: AgentOrchestrator): void {
   const tenantScope = (req: { session: { isAdmin: boolean; upn: string } }): string | undefined =>

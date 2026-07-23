@@ -15,8 +15,8 @@ import { canAccessRun } from "../auth/service/access.js"
 import {
   filterNotificationActionsForCapabilities,
   runCapabilityFlags,
-} from "../runs/run-capability-actions.js"
-import type { AgentOrchestrator } from "../runs/orchestrator.js"
+} from "../../runtime/run-capability-actions.js"
+import type { AgentOrchestrator } from "../../runtime/orchestrator.js"
 
 function canSee(
   session: { isAdmin?: boolean; upn?: string | null; sid?: string } | undefined,
@@ -164,7 +164,7 @@ export function registerNotificationRoutes(app: FastifyInstance, orchestrator: A
             reply.code(400)
             return { error: "approvalId required" }
           }
-          const { approveRunToolStep } = await import("../runs/service/run-tool-approval.js")
+          const { approveRunToolStep } = await import("../../runtime/service/run-tool-approval.js")
           return approveRunToolStep(orchestrator, approvalId, req.session ?? null)
         }
         case "deny-run-step": {
@@ -173,7 +173,7 @@ export function registerNotificationRoutes(app: FastifyInstance, orchestrator: A
             reply.code(400)
             return { error: "approvalId required" }
           }
-          const { denyRunToolStep } = await import("../runs/service/run-tool-approval.js")
+          const { denyRunToolStep } = await import("../../runtime/service/run-tool-approval.js")
           return denyRunToolStep(orchestrator, approvalId, req.session ?? null)
         }
         default:

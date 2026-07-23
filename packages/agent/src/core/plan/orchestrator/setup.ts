@@ -34,8 +34,6 @@ export async function runPlannerSetup(
   ctx: PlannerContext,
   decision: PlannerDecision
 ): Promise<SetupOutcome> {
-  const banditTuner = ctx.delegationBanditTuner
-
   ctx.onTrace?.({
     kind: PlannerTraceKind.Decision,
     score: decision.score,
@@ -189,9 +187,9 @@ export async function runPlannerSetup(
     runtimeEntities: runtimeModel.runtimeEntities
   })
 
-  const gate = runDelegationGate(plan, goal, decision, ctx, banditTuner)
+  const gate = runDelegationGate(plan, goal, decision, ctx)
   if (gate.blocked) return { ready: false, result: gate.result }
-  const { banditTrajectory, mode: executionMode } = gate
+  const { mode: executionMode } = gate
 
   return {
     ready: true,
@@ -199,7 +197,7 @@ export async function runPlannerSetup(
       plan,
       runtimeModel,
       decision,
-      banditTrajectory,
+      banditTrajectory: undefined,
       executionMode
     }
   }

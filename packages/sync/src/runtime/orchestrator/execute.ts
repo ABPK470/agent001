@@ -16,8 +16,8 @@ import { detectCatalogDrift } from "../../runtime/catalog-drift.js"
 import { assertSupportedSyncDirection, getEnvironment } from "../../domain/environments.js"
 import {
   assertEnvConnectorReady,
-  readyMssqlConnectorIds,
 } from "../../domain/sync-env-eligibility.js"
+import { readyMssqlConnectorIds } from "../connector-readiness.js"
 import { evaluateFreezeWindows } from "../../domain/governance/freeze-windows.js"
 import { assertPublishedContractCurrent } from "../../domain/publish-readiness.js"
 import { getPool } from "../../adapters/mssql/connection.js"
@@ -42,14 +42,18 @@ import {
 } from "./root-parent-preflight.js"
 import { runPostMetadataPipeline } from "./post-metadata-pipeline.js"
 import { setContractLockOnSource } from "./contract-deploy.js"
-import { toSyncExecuteError, throwIfAborted, isAuditGateSkippedError, type ExecuteOptions, type ExecuteProgress } from "./types.js"
-export type { ExecuteOptions, ExecuteProgress } from "./types.js"
+import { toSyncExecuteError, throwIfAborted, isAuditGateSkippedError, type ExecuteOptions, type ExecuteProgress, type SyncExecuteResult } from "./types.js"
+export type { ExecuteOptions, ExecuteProgress, SyncExecuteResult } from "./types.js"
+
+function refuseExecute(planId: string, error: string): SyncExecuteResult {
+  return { outcome: "refused", planId, success: false, error }
+}
 
 export async function executeSync(
   planId: string,
   opts: ExecuteOptions
-): Promise<{ planId: string; success: boolean; skipped?: boolean; message?: string; error?: string }> {
-  if (!opts.confirm) throw new Error("executeSync requires explicit confirm=true.")
+): Promise<SyncExecuteResult> {
+  if (!opts.confirm) return refuseExecute(planId, "executeSync requires explicit confirm=true.")
   const onProgress = opts.onProgress ?? (() => {})
   const signal = opts.signal
 
@@ -57,27 +61,35 @@ export async function executeSync(
   onProgress({ type: SyncProgressKind.Started, message: `Loading plan ${planId.slice(0, 8)}…` })
 
   const plan = loadPlan(opts.host, planId)
-  if (!plan) throw new Error(`Plan ${planId} not found or expired.`)
+  if (!plan) return refuseExecute(planId, `Plan ${planId} not found or expired.`)
   if (planTooOldToExecute(plan))
-    throw new Error(`Plan ${planId} is older than 1 hour — re-preview before executing.`)
+    return refuseExecute(planId, `Plan ${planId} is older than 1 hour — re-preview before executing.`)
 
   // Re-check at execute: tip may have advanced after preview (widget or agent).
-  assertPublishedContractCurrent(opts.host.sync.project.publishReadiness, plan.entity.type)
+  try {
+    assertPublishedContractCurrent(opts.host.sync.project.publishReadiness, plan.entity.type)
+  } catch (e) {
+    return refuseExecute(planId, e instanceof Error ? e.message : String(e))
+  }
 
   throwIfAborted(signal)
   onProgress({ type: SyncProgressKind.Step, step: "preflight", message: "Validating environments and permissions…" })
 
   const sourceEnv = getEnvironment(opts.host, plan.source)
   const targetEnv = getEnvironment(opts.host, plan.target)
-  if (sourceEnv.role === "target") throw new Error(`Source "${sourceEnv.name}" is target-only.`)
-  if (targetEnv.role === "source") throw new Error(`Target "${targetEnv.name}" is source-only.`)
-  const readyIds = readyMssqlConnectorIds(opts.host)
-  assertEnvConnectorReady(sourceEnv, readyIds)
-  assertEnvConnectorReady(targetEnv, readyIds)
-  assertSupportedSyncDirection(sourceEnv, targetEnv)
+  if (sourceEnv.role === "target") return refuseExecute(planId, `Source "${sourceEnv.name}" is target-only.`)
+  if (targetEnv.role === "source") return refuseExecute(planId, `Target "${targetEnv.name}" is source-only.`)
+  const readyIds = opts.readyIds ?? readyMssqlConnectorIds(opts.host)
+  try {
+    assertEnvConnectorReady(sourceEnv, readyIds)
+    assertEnvConnectorReady(targetEnv, readyIds)
+    assertSupportedSyncDirection(sourceEnv, targetEnv)
+  } catch (e) {
+    return refuseExecute(planId, e instanceof Error ? e.message : String(e))
+  }
 
   if (!plan.executionContract) {
-    throw new Error(`Plan ${planId} predates the unified execution contract — re-preview before executing.`)
+    return refuseExecute(planId, `Plan ${planId} predates the unified execution contract — re-preview before executing.`)
   }
 
   const telemetryContext: SyncTelemetryContext = {
@@ -108,7 +120,8 @@ export async function executeSync(
   )
   throwIfAborted(signal)
   if (!drift.catalogCompatible) {
-    throw new Error(
+    return refuseExecute(
+      planId,
       `Catalog drift detected — refusing to execute. ${drift.issues.length} issue(s):\n` +
         drift.issues
           .slice(0, 10)
@@ -126,7 +139,8 @@ export async function executeSync(
     const ev = evaluateFreezeWindows(plan.executionContract.governance.freezeWindowIds)
     if (ev.active && !opts.overrideFreezeWindow) {
       const names = ev.activeWindows.map((w) => `${w.id} (${w.displayName})`).join(", ")
-      throw new Error(
+      return refuseExecute(
+        planId,
         `Sync blocked by active freeze window(s): ${names}. ` +
           `Pass overrideFreezeWindow=true to bypass (audited).`
       )
@@ -150,7 +164,8 @@ export async function executeSync(
     const sampleLines = conflictedTables
       .flatMap((t) => t.conflicts.slice(0, 3).map((c) => `  • ${t.table}: ${c.summary}`))
       .slice(0, 10)
-    throw new Error(
+    return refuseExecute(
+      planId,
       `Scope misattribution — refusing to execute. ${total} row(s) across ` +
         `${conflictedTables.length} table(s) exist on target under a different parent than source expects:\n` +
         sampleLines.join("\n") +
@@ -167,7 +182,7 @@ export async function executeSync(
   const rootParent = await evaluateRootParentPreflight(opts.host, plan.target, plan)
   throwIfAborted(signal)
   if (!rootParent.ready) {
-    throw new Error(formatRootParentExecuteRefusal(rootParent.issue ?? "Root parent is not ready."))
+    return refuseExecute(planId, formatRootParentExecuteRefusal(rootParent.issue ?? "Root parent is not ready."))
   }
 
   throwIfAborted(signal)
@@ -215,7 +230,7 @@ async function executeSyncInner(
   execT0: number,
   telemetryContext: SyncTelemetryContext,
   signal?: AbortSignal
-): Promise<{ planId: string; success: boolean; skipped?: boolean; message?: string; error?: string }> {
+): Promise<SyncExecuteResult> {
   const executionContract = plan.executionContract
   if (!executionContract) {
     throw new Error(`Plan ${planId} predates the unified execution contract — re-preview before executing.`)
@@ -232,10 +247,13 @@ async function executeSyncInner(
   )
   throwIfAborted(signal)
 
-  const { pool: tgtPool } = await getPool(opts.host, plan.target)
-  const { pool: srcPool } = await getPool(opts.host, plan.source)
-  if (!tgtPool) throw new Error(`Target pool unavailable.`)
-  if (!srcPool) throw new Error(`Source pool unavailable.`)
+  const resolvePool = opts.getPool ?? ((envName: string) => getPool(opts.host, envName))
+  const { pool: tgtPool } = await resolvePool(plan.target)
+  const { pool: srcPool } = await resolvePool(plan.source)
+  if (!tgtPool) return { outcome: "refused", planId, success: false, error: "Target pool unavailable." }
+  if (!srcPool) return { outcome: "refused", planId, success: false, error: "Source pool unavailable." }
+  const targetPool = tgtPool
+  const sourcePool = srcPool
 
   const entityId = plan.entity.id
   const entityType = executionContract.definitionId
@@ -253,7 +271,7 @@ async function executeSyncInner(
     try {
       await setContractLockOnSource(
         opts.host,
-        srcPool,
+        sourcePool,
         plan.source,
         Number(entityId),
         false,
@@ -277,8 +295,8 @@ async function executeSyncInner(
     if (scheduled.beforeMetadata.length > 0) {
       const { stepWarnings: preWarnings } = await runPostMetadataPipeline({
         host: opts.host,
-        tgtPool,
-        srcPool,
+        tgtPool: targetPool,
+        srcPool: sourcePool,
         plan,
         planId,
         entityId,
@@ -297,7 +315,7 @@ async function executeSyncInner(
     const movementTables = dataMovementTables(plan)
     const triggerCache = await probeTriggers(
       opts.host,
-      tgtPool,
+      targetPool,
       planId,
       plan.target,
       [...movementTables],
@@ -312,7 +330,7 @@ async function executeSyncInner(
       triggerCache,
       onProgress,
       target: plan.target,
-      tgtPool,
+      tgtPool: targetPool,
       telemetryContext,
     })
     metadataApplied = applied
@@ -321,8 +339,8 @@ async function executeSyncInner(
     if (scheduled.afterMetadata.length > 0) {
       const { stepWarnings: pipelineWarnings } = await runPostMetadataPipeline({
         host: opts.host,
-        tgtPool,
-        srcPool,
+        tgtPool: targetPool,
+        srcPool: sourcePool,
         plan,
         planId,
         entityId,
@@ -378,7 +396,7 @@ async function executeSyncInner(
     } catch (e) {
       console.warn(`[sync.execute] sink.finish failed:`, e)
     }
-    return { planId, success: !hasStepFailures, error: stepErrorSummary }
+    return { outcome: "completed", planId, success: !hasStepFailures, error: stepErrorSummary }
   } catch (e) {
     if (isAuditGateSkippedError(e)) {
       const skipMsg = e.message
@@ -403,7 +421,7 @@ async function executeSyncInner(
       } catch (finishError) {
         console.warn(`[sync.execute] sink.finish failed:`, finishError)
       }
-      return { planId, success: true, skipped: true, message: skipMsg }
+      return { outcome: "completed", planId, success: true, skipped: true, message: skipMsg }
     }
 
     const failure = toSyncExecuteError(e, { step: "execute" })
@@ -449,7 +467,7 @@ async function executeSyncInner(
         durationMs: Date.now() - execT0
       })
     } catch (err: unknown) { console.error("[mia]", err) }
-    return { planId, success: false, error: msg }
+    return { outcome: "completed", planId, success: false, error: msg }
   } finally {
     await ensureContractUnlockedOnSource()
   }

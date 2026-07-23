@@ -54,7 +54,11 @@ function planner(reason: string, score: number): PlannerDecision {
 /**
  * Decide whether a goal needs structured planning or the direct tool loop.
  */
-export function assessPlannerDecision(messageText: string, history: readonly Message[]): PlannerDecision {
+export function assessPlannerDecision(
+  messageText: string,
+  history: readonly Message[],
+  routing?: { domainKeywords: readonly string[] }
+): PlannerDecision {
   const signals = collectSignals(messageText, history)
   const n = signals.normalized
   const { score, reasons } = computePlannerScore(signals)
@@ -119,7 +123,7 @@ export function assessPlannerDecision(messageText: string, history: readonly Mes
     return direct("top_n_data_list", score)
   }
   if (
-    goalContainsDomainKeyword(n) &&
+    goalContainsDomainKeyword(n, routing?.domainKeywords ?? []) &&
     !signals.hasDelegationCue &&
     !signals.hasImplementationScopeCue &&
     !EXISTING_CODE_COUPLING_RE.test(n)

@@ -35,7 +35,7 @@ export {
   type EntitySearchMode,
   type EntitySearchResult
 } from "./search.js"
-export type { ExecuteOptions, ExecuteProgress } from "./types.js"
+export type { ExecuteOptions, ExecuteProgress, SyncExecuteResult } from "./types.js"
 export {
   changeRowsAsPkHash,
   computePlanTotals,

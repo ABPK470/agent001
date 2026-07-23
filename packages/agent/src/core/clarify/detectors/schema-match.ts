@@ -61,8 +61,8 @@ const VERSION = "1.6.0"
  * in the goal are added — the schema half because the user picked it,
  * the object half because the catalog confirms it pairs with that schema.
  */
-function disambiguatedTokens(goal: string, catalog: CatalogGraph): Set<string> {
-  const anchors = resolveGoalDataAnchors(goal, catalog)
+function disambiguatedTokens(goal: string, catalog: CatalogGraph, mirrorSchema: string | null): Set<string> {
+  const anchors = resolveGoalDataAnchors(goal, catalog, mirrorSchema)
   return anchorConsumedTokens(anchors)
 }
 
@@ -147,8 +147,8 @@ export const schemaMatchDetector: Detector = {
     // Qualified-name guard: any `schema.object` the user already typed
     // and that resolves against the live catalog (with mirrorSchema
     // fallback) consumes BOTH halves — the user disambiguated themselves.
-    const consumed = disambiguatedTokens(ctx.goal, ctx.catalog)
-    const anchors = resolveGoalDataAnchors(ctx.goal, ctx.catalog)
+    const consumed = disambiguatedTokens(ctx.goal, ctx.catalog, ctx.tenant.mirrorSchema)
+    const anchors = resolveGoalDataAnchors(ctx.goal, ctx.catalog, ctx.tenant.mirrorSchema)
     const domainKeywords = ctx.tenant.domainKeywords
     const out = []
     const seenTokens = new Set<string>()
@@ -180,7 +180,8 @@ export const schemaMatchDetector: Detector = {
       }
 
       const candidates = rankEntityTableCandidates(token, matches, ctx.catalog, MAX_CANDIDATES, {
-        goal: ctx.goal
+        goal: ctx.goal,
+        tenant: ctx.tenant
       })
       const totalCount = matches.size
       const canonicalHint = canonical ? ` Prefer ${canonical} unless you need a subset.` : ""

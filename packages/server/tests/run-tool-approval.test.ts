@@ -60,7 +60,7 @@ describe("run tool approval application", () => {
     const unsub = subscribeToEvents((e) => events.push({ type: e.type, data: e.data as Record<string, unknown> }))
 
     const resumeRun = vi.fn(() => "run-1-resumed")
-    const orchestrator = { resumeRun, cancelRun: vi.fn() } as unknown as import("../src/api/runs/orchestrator.js").AgentOrchestrator
+    const orchestrator = { resumeRun, cancelRun: vi.fn() } as unknown as import("../src/runtime/orchestrator.js").AgentOrchestrator
 
     try {
       const { approveRunToolStep } = await import("../src/api/runs/service/run-tool-approval.js")
@@ -100,7 +100,7 @@ describe("run tool approval application", () => {
     const unsub = subscribeToEvents((e) => events.push({ type: e.type, data: e.data as Record<string, unknown> }))
 
     const cancelRun = vi.fn()
-    const orchestrator = { resumeRun: vi.fn(), cancelRun } as unknown as import("../src/api/runs/orchestrator.js").AgentOrchestrator
+    const orchestrator = { resumeRun: vi.fn(), cancelRun } as unknown as import("../src/runtime/orchestrator.js").AgentOrchestrator
 
     try {
       const { denyRunToolStep } = await import("../src/api/runs/service/run-tool-approval.js")

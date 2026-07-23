@@ -6,13 +6,14 @@
 
 import type { SyncFlowKindDefinition } from "@mia/shared-types"
 import { handlerInputSlots, lookupHttpServiceSlot } from "@mia/shared-types"
+import { fetchHttpPort } from "../../adapters/http/fetch-port.js"
 import { getEnvironment } from "../../domain/environments.js"
 import { resolveEnvServiceUrl } from "../../domain/env-service-urls.js"
 import { emitSyncHttpEvent } from "../events.js"
 import type { SyncExecutionContractStep } from "../plan-store.js"
 import type { FlowStepRunContext, FlowStepRunResult } from "./flow-step-executor.js"
 import { resolveHandlerInputs } from "./handler-inputs.js"
-import { mergeHandlerResultOutputs, parseFlatJsonText } from "./step-output-registry.js"
+import { mergeHandlerResultOutputs } from "./step-output-registry.js"
 
 export async function runHttpFlowStep(
   ctx: FlowStepRunContext,
@@ -40,7 +41,11 @@ export async function runHttpFlowStep(
   const body = slots.length > 0 ? await resolveHandlerInputs(slots, ctx, step) : {}
   const started = Date.now()
   try {
-    const { status, responseBody } = await httpJson(method, url, method === "GET" ? undefined : body)
+    const { status, responseBody } = await (ctx.http ?? fetchHttpPort).json(
+      method,
+      url,
+      method === "GET" ? undefined : body,
+    )
     emitSyncHttpEvent(ctx.host, {
       planId: ctx.plan.planId,
       step: step.id,
@@ -89,22 +94,4 @@ function resolveHttpBaseUrl(
     )
   }
   return trimmed
-}
-
-async function httpJson(
-  method: string,
-  url: string,
-  body?: Record<string, unknown>,
-): Promise<{ status: number; responseBody: Record<string, unknown> | null }> {
-  const response = await fetch(url, {
-    method,
-    headers: body ? { "content-type": "application/json" } : undefined,
-    body: body ? JSON.stringify(body) : undefined,
-    signal: AbortSignal.timeout(60_000),
-  })
-  const text = await response.text()
-  if (!response.ok) {
-    throw new Error(`HTTP ${method} ${url} failed with ${response.status}: ${text || response.statusText}`)
-  }
-  return { status: response.status, responseBody: parseFlatJsonText(text) }
 }

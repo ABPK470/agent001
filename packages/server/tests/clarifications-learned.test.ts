@@ -12,7 +12,7 @@ import { join } from "node:path"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import { CatalogGraph, type CatalogTable } from "@mia/agent"
 import type { BootHostDeps } from "../src/ports/orchestration.js"
-import { persistLearnedTermFromResolution } from "../src/api/runs/execution/clarifications-learned.js"
+import { persistLearnedTermFromResolution } from "../src/runtime/execution/clarifications-learned.js"
 
 let testDb: Database.Database
 let dataDir: string

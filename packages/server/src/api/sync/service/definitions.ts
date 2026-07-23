@@ -31,7 +31,7 @@ import {
 } from "@mia/sync"
 
 import { reloadPublishedSyncVocabulary } from "../../../boot/published-sync-bundle.js"
-import { _resetGoalClassificationCache } from "../../runs/prompting/goal-classification.js"
+import { _resetGoalClassificationCache } from "../../../runtime/prompting/goal-classification.js"
 import * as db from "../../../infra/persistence/sqlite.js"
 import {
   COMPILE_CATALOG_SECTIONS,

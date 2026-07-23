@@ -3,7 +3,7 @@
  * Bytes stay out of the prompt — the agent uses attachment tools to read them.
  */
 
-import { getAttachment, type AttachmentRow } from "../../../../infra/persistence/attachments.js"
+import { getAttachment, type AttachmentRow } from "../../../infra/persistence/attachments.js"
 
 export function buildAttachmentManifest(ids: string[]): string {
   if (ids.length === 0) return ""

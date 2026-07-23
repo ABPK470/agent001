@@ -12,10 +12,10 @@ import {
   type Unsubscribe
 } from "@mia/agent"
 import { type WorkspaceDiff, type prepareRunWorkspace } from "../../workspace/index.js"
-import type { MemoryPerTier } from "../../../../infra/persistence/memory/tier-context.js"
-import type { ClarificationsRegistryPort } from "../../../../ports/clarifications.js"
-import type { ActiveRun, BootHostDeps, NotificationOpts } from "../../../../ports/orchestration.js"
-import type { AgentBusPort, RunPriority, RunQueuePort } from "../../../../ports/queue.js"
+import type { MemoryPerTier } from "../../../infra/persistence/memory/tier-context.js"
+import type { ClarificationsRegistryPort } from "../../../ports/clarifications.js"
+import type { ActiveRun, BootHostDeps, NotificationOpts } from "../../../ports/orchestration.js"
+import type { AgentBusPort, RunPriority, RunQueuePort } from "../../../ports/queue.js"
 
 export type RunWorkspace = Awaited<ReturnType<typeof prepareRunWorkspace>>
 export type ActiveRunRecord = ActiveRun

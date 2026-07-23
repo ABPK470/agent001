@@ -15,7 +15,7 @@
 import type { ConfigureMssqlConnection } from "@mia/agent"
 import type { Connector } from "@mia/shared-types"
 
-import { readKnowledgeFile } from "../../../infra/mssql/setup.js"
+import { readKnowledgeFile } from "../../infra/mssql/setup.js"
 
 function asString(value: unknown): string | null {
   return typeof value === "string" && value !== "" ? value : null

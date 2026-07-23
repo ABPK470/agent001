@@ -33,7 +33,7 @@ import { defaultCatalogAccessor, getPublishedSyncEntityIds, getTenantConfig, lis
 import {
   DB_INTENT_GOAL_CLASSES,
   extractGoalClasses
-} from "../../../infra/persistence/memory/goal-class.js"
+} from "../../infra/persistence/memory/goal-class.js"
 
 // ── Tool sets (must match prompt + registry) ───────────────────────
 

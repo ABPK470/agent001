@@ -21,10 +21,10 @@ import {
   createSyncRunSink,
 } from "../adapters/sync/sinks.js"
 import { loadBootSyncEnvironments } from "./sync-environments.js"
-import { loadPersistedConnectors } from "../api/connectors/state/live-connectors.js"
-import { mssqlConfigsFromConnectors } from "../api/connectors/state/mssql-from-connectors.js"
-import { createMssqlPoolProvider } from "../api/connectors/state/mssql-pool-provider.js"
-import { buildMovementPort } from "../api/connectors/state/movement-port.js"
+import { loadPersistedConnectors } from "../adapters/connectors/live-connectors.js"
+import { mssqlConfigsFromConnectors } from "../adapters/connectors/mssql-from-connectors.js"
+import { createMssqlPoolProvider } from "../adapters/connectors/mssql-pool-provider.js"
+import { buildMovementPort } from "../adapters/connectors/movement-port.js"
 
 export interface ServerContext {
   readonly projectRoot: string

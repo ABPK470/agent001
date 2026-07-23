@@ -21,10 +21,10 @@ import {
   filterToolsByGoal,
   scoreDbLikelihood,
   SYNC_CAPABILITY_TOOL_NAMES
-} from "../src/api/runs/prompting/decide-sections.js"
-import { buildToolContext } from "../src/api/runs/prompting/prompt/builder.js"
-import { buildSystemMessages } from "../src/api/runs/prompting/system-messages/index.js"
-import type { RunWorkspaceContext } from "../src/api/runs/workspace/index.js"
+} from "../src/runtime/prompting/decide-sections.js"
+import { buildToolContext } from "../src/runtime/prompting/prompt/builder.js"
+import { buildSystemMessages } from "../src/runtime/prompting/system-messages/index.js"
+import type { RunWorkspaceContext } from "../src/runtime/workspace/index.js"
 
 const RW: RunWorkspaceContext = {
   runId: "run-x",

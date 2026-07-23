@@ -44,7 +44,7 @@ async function setup() {
   testDb.pragma("foreign_keys = OFF")
   const { subscribeToEvents } = await import("../src/infra/events/broadcaster.js")
   const { writeRunCheckpoint } = await import(
-    "../src/api/runs/execution/run-executor/checkpoint-writer.js"
+    "../src/runtime/execution/run-executor/checkpoint-writer.js"
   )
   const db = await import("../src/infra/persistence/sqlite.js")
   return { writeRunCheckpoint, subscribeToEvents, db }

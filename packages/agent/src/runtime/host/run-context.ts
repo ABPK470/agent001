@@ -1,5 +1,5 @@
 import type { PolicyContext, RunContext, RunMemoryWriter, SyncOpContext, ToolTraceContext } from "./host.js"
-import { verifiedTableKey } from "../../tools/database/mssql/schema-verified.js"
+import { verifiedTableKey } from "../../domain/mssql/verified-table-key.js"
 
 export interface MakeRunContextOptions {
   signal?: AbortSignal | null

@@ -38,6 +38,7 @@ import {
   loadPersistedSyncPlanSummary,
   summarizeSyncPlan
 } from "./service/plan-summary.js"
+import { decodePreviewBody } from "./decode-preview.js"
 import { rebuildLiveSyncEnvironments } from "./state/live-environments.js"
 import { registerSyncMetadataRoutes } from "./handlers/sync-metadata-routes.js"
 import {
@@ -84,15 +85,6 @@ interface PublishSyncDefinitionsResponse {
   publishedBundlePath: string
   stdout: string[]
   stderr: string[]
-}
-
-interface PreviewBody {
-  entityType: EntityType
-  entityId: string | number
-  source: string
-  target: string
-  force?: boolean
-  enabledOptionalTables?: string[]
 }
 
 function sanitiseDefinitionConfig(body: Record<string, unknown>):
@@ -191,15 +183,26 @@ function parseSyncHistoryQuery(
   }
 }
 
-function syncExecuteAuditAction(result: {
-  success: boolean
-  skipped?: boolean
-  error?: string
-}): string {
-  if (result.skipped) return "sync.execute.skipped"
-  if (result.success) return "sync.execute.completed"
-  if (result.error === "Cancelled by user") return "sync.execute.cancelled"
+function syncExecuteAuditAction(result: import("@mia/sync").SyncExecuteResult): string {
+  if (result.outcome === "refused") return "sync.execute.failed"
+  if (result.outcome === "completed" && result.skipped) return "sync.execute.skipped"
+  if (result.outcome === "completed" && result.success) return "sync.execute.completed"
+  if (result.outcome === "completed" && result.error === "Cancelled by user") return "sync.execute.cancelled"
   return "sync.execute.failed"
+}
+
+function syncExecuteAuditDetail(
+  planDetail: Record<string, unknown>,
+  result: import("@mia/sync").SyncExecuteResult
+) {
+  if (result.outcome === "refused") {
+    return { ...planDetail, error: result.error, skipped: false }
+  }
+  return {
+    ...planDetail,
+    error: result.error ?? result.message ?? null,
+    skipped: result.skipped ?? false,
+  }
 }
 
 function mapSyncRunRow(row: db.SyncRunRow) {
@@ -399,6 +402,11 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
       }
 
       try {
+        await assertSyncHttpPolicy({
+          session: req.session,
+          toolName: "sync_publish",
+          args: { action: "publish_definitions" },
+        })
         const result = publishSyncDefinitionsFromDb(projectRoot)
         db.saveAdminAudit({
           actor: req.session.upn,
@@ -458,9 +466,15 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
     }
   )
 
-  app.post<{ Body: PreviewBody }>("/api/sync/preview", async (req, reply) => {
+  app.post("/api/sync/preview", async (req, reply) => {
     const actor = req.session.upn
     const actorUpn = req.session.upn
+    const decoded = decodePreviewBody(req.body)
+    if (!decoded.ok) {
+      reply.code(400)
+      return { error: decoded.error }
+    }
+    const body = decoded.value
     try {
       // Gate lives in previewSync (same path as agent sync_preview / sync_diff_scan).
       rebuildLiveSyncEnvironments(host)
@@ -468,26 +482,22 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
         session: req.session,
         toolName: "sync_preview",
         args: {
-          entityType: req.body.entityType,
-          entityId: req.body.entityId,
-          source: req.body.source,
-          target: req.body.target,
-          force: Boolean(req.body.force),
-          enabledOptionalTables: Array.isArray(req.body.enabledOptionalTables)
-            ? req.body.enabledOptionalTables
-            : [],
+          entityType: body.entityType,
+          entityId: body.entityId,
+          source: body.source,
+          target: body.target,
+          force: Boolean(body.force),
+          enabledOptionalTables: body.enabledOptionalTables ?? [],
         },
       })
       const plan = await previewSync({
         host,
-        entityType: req.body.entityType,
-        entityId: req.body.entityId,
-        source: req.body.source,
-        target: req.body.target,
-        force: Boolean(req.body.force),
-        enabledOptionalTables: Array.isArray(req.body.enabledOptionalTables)
-          ? req.body.enabledOptionalTables
-          : undefined,
+        entityType: body.entityType,
+        entityId: body.entityId,
+        source: body.source,
+        target: body.target,
+        force: Boolean(body.force),
+        enabledOptionalTables: body.enabledOptionalTables,
         userUpn: actorUpn,
       })
       const planSummary = summarizeSyncPlan(plan)
@@ -499,20 +509,16 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
         planSummary
           ? {
               ...buildSyncAuditDetail(planSummary, plan.totals),
-              force: Boolean(req.body.force),
-              enabledOptionalTables: Array.isArray(req.body.enabledOptionalTables)
-                ? req.body.enabledOptionalTables
-                : []
+              force: Boolean(body.force),
+              enabledOptionalTables: body.enabledOptionalTables ?? []
             }
           : {
-              entityType: req.body.entityType,
-              entityId: req.body.entityId,
-              source: req.body.source,
-              target: req.body.target,
-              force: Boolean(req.body.force),
-              enabledOptionalTables: Array.isArray(req.body.enabledOptionalTables)
-                ? req.body.enabledOptionalTables
-                : [],
+              entityType: body.entityType,
+              entityId: body.entityId,
+              source: body.source,
+              target: body.target,
+              force: Boolean(body.force),
+              enabledOptionalTables: body.enabledOptionalTables ?? [],
               totals: plan.totals
             }
       )
@@ -529,7 +535,7 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
         }
       }
       const msg = error instanceof Error ? error.message : String(error)
-      console.warn(`[sync.preview] failed for ${req.body.entityType} ${req.body.entityId}: ${msg}`)
+      console.warn(`[sync.preview] failed for ${body.entityType} ${body.entityId}: ${msg}`)
       reply.code(400)
       return { error: msg }
     }
@@ -575,9 +581,24 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
         actor,
         actorUpn,
         syncExecuteAuditAction(result),
-        { ...planDetail, error: result.error ?? result.message ?? null, skipped: result.skipped ?? false }
+        syncExecuteAuditDetail(planDetail, result)
       )
-      if (!result.success && !result.skipped && result.error !== "Cancelled by user") reply.code(500)
+      if (result.outcome === "refused") {
+        auditSync(req.params.planId, actor, actorUpn, "sync.execute.failed", {
+          ...planDetail,
+          error: result.error,
+        })
+        reply.code(400)
+        return result
+      }
+      if (
+        result.outcome === "completed" &&
+        !result.success &&
+        !result.skipped &&
+        result.error !== "Cancelled by user"
+      ) {
+        reply.code(500)
+      }
       return result
     } catch (error) {
       const policyBody = replySyncPolicyError(reply, error)
@@ -677,7 +698,7 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
           actor,
           actorUpn,
           syncExecuteAuditAction(result),
-          { ...planDetail, error: result.error ?? result.message ?? null, skipped: result.skipped ?? false }
+          syncExecuteAuditDetail(planDetail, result)
         )
       }
     } catch (error) {

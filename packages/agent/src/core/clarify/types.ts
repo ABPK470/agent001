@@ -115,6 +115,8 @@ export interface ClarifyContext {
   readonly catalog: CatalogGraph | null
   /** Active tenant config — supplies domainKeywords etc. */
   readonly tenant: TenantConfig
+  /** Published sync entity type ids — resolved at the composition root. */
+  readonly publishedSyncEntityIds: readonly string[]
   /** Conversation history (assistant + user + tool messages). */
   readonly messages: readonly Message[]
   /** Already-answered findings, keyed by finding id — used by detectors to suppress. */

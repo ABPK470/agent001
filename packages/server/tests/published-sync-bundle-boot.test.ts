@@ -11,7 +11,7 @@ import {
   reloadPublishedSyncVocabulary
 } from "../src/boot/published-sync-bundle.js"
 import { resetPublishedSyncEntityIds } from "@mia/agent"
-import { _resetGoalClassificationCache } from "../src/api/runs/prompting/goal-classification.js"
+import { _resetGoalClassificationCache } from "../src/runtime/prompting/goal-classification.js"
 
 describe("published sync vocabulary boot", () => {
   let tempRoot: string

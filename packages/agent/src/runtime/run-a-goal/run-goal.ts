@@ -52,6 +52,7 @@ export interface RunGoalDeps {
     workspaceRoot: string
     onPlannerTrace: AgentConfig["onPlannerTrace"]
     plannerDelegateFn: AgentConfig["plannerDelegateFn"]
+    plannerRouting: AgentConfig["plannerRouting"]
     toolKillManager: AgentConfig["toolKillManager"]
     completionValidator: AgentConfig["completionValidator"]
     enableAnswerStabilityGuard: boolean

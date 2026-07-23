@@ -1,8 +1,8 @@
 import { EventType } from "@mia/agent"
 import { RunStatus } from "@mia/shared-enums"
-import { broadcast } from "../../../infra/events/broadcaster.js"
-import * as db from "../../../infra/persistence/sqlite.js"
-import { NotificationActionType } from "../../../internal/enums/notifications.js"
+import { broadcast } from "../../infra/events/broadcaster.js"
+import * as db from "../../infra/persistence/sqlite.js"
+import { NotificationActionType } from "../../internal/enums/notifications.js"
 import { buildRunCapabilityActions } from "../run-capability-actions.js"
 import { createNotification } from "./persistence.js"
 

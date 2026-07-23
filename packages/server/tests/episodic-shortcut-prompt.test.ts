@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 import { EMPTY_MEMORY_PER_TIER } from "../src/infra/persistence/memory/tier-context.js"
-import { buildMemorySections } from "../src/api/runs/prompting/system-messages/memory-sections.js"
-import type { BuildContext } from "../src/api/runs/prompting/system-messages/types.js"
+import { buildMemorySections } from "../src/runtime/prompting/system-messages/memory-sections.js"
+import type { BuildContext } from "../src/runtime/prompting/system-messages/types.js"
 
 function memoryCtx(perTier: typeof EMPTY_MEMORY_PER_TIER): BuildContext {
   return {

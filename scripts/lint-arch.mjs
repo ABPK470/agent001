@@ -32,6 +32,8 @@ import {
   lintFrameworkDenylist,
   lintPackageExportSurface,
   lintResolvedInputBoundary,
+  lintResolvedInputFolklore,
+  lintServerApiRuntimeBoundary,
 } from "./lint-arch/rules/elasticity.mjs"
 import {
   lintDomainSurface,
@@ -148,7 +150,11 @@ const RUNNERS = new Map([
       }),
   ],
   ["catalog-coverage", () => lintCatalogCoverage(ROOT)],
-  ["resolved-inputs", () => lintResolvedInputBoundary(PACKAGES)],
+  ["resolved-inputs", () => {
+    lintResolvedInputBoundary(PACKAGES)
+    lintResolvedInputFolklore(PACKAGES)
+    lintServerApiRuntimeBoundary(PACKAGES)
+  }],
   [
     "stale-debt",
     () => {

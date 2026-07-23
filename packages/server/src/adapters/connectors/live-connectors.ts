@@ -1,4 +1,4 @@
-import { parseBoundaryJson } from "../../../internal/parse-json.js"
+import { parseBoundaryJson } from "../../internal/parse-json.js"
 
 /**
  * Connector seed + reload — mirrors `sync/state/live-environments.ts`.
@@ -30,8 +30,8 @@ import {
   type ConnectorKindId,
 } from "@mia/shared-types"
 
-import * as db from "../../../infra/persistence/sqlite.js"
-import { getDbPath } from "../../../infra/persistence/connection.js"
+import * as db from "../../infra/persistence/sqlite.js"
+import { getDbPath } from "../../infra/persistence/connection.js"
 
 const DEFAULT_SEED_PATH = "deploy/connectors/connectors.json"
 

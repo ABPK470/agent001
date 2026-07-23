@@ -10,11 +10,9 @@
  */
 
 import type { RunContext } from "../../../runtime/runtime.js"
+import { verifiedTableKey } from "../../../domain/mssql/verified-table-key.js"
 
-/** Normalize a schema-qualified name for per-run verification sets. */
-export function verifiedTableKey(qualifiedName: string): string {
-  return qualifiedName.trim().toLowerCase()
-}
+export { verifiedTableKey } from "../../../domain/mssql/verified-table-key.js"
 
 /** Record a schema-qualified table as verified for this run. */
 export function markMssqlTableVerified(run: RunContext | undefined, qualifiedName: string): void {

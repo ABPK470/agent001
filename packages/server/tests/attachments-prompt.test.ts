@@ -38,7 +38,7 @@ describe("attachments in system prompt", () => {
   it("includes a manifest line per attachment when ids are supplied", async () => {
     const { _setDb, _migrate } = await import("../src/infra/persistence/db/index.js")
     const { uploadAttachment } = await import("../src/infra/persistence/attachments/index.js")
-    const { buildSystemMessages } = await import("../src/api/runs/prompting/system-messages/index.js")
+    const { buildSystemMessages } = await import("../src/runtime/prompting/system-messages/index.js")
     _setDb(testDb)
     _migrate(testDb)
     seedTestUsers(testDb)
@@ -92,7 +92,7 @@ describe("attachments in system prompt", () => {
 
   it("omits the manifest section entirely when no attachments are bound", async () => {
     const { _setDb, _migrate } = await import("../src/infra/persistence/db/index.js")
-    const { buildSystemMessages } = await import("../src/api/runs/prompting/system-messages/index.js")
+    const { buildSystemMessages } = await import("../src/runtime/prompting/system-messages/index.js")
     _setDb(testDb)
     _migrate(testDb)
     seedTestUsers(testDb)

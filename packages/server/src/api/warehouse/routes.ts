@@ -4,6 +4,7 @@
 
 import { getCatalog, getMssqlConfig, getPool, type AgentHost } from "@mia/agent"
 import type { FastifyInstance } from "fastify"
+import { queryWarehouseSampleRows } from "./service.js"
 
 type QS = { Querystring: { db?: string } }
 
@@ -274,7 +275,7 @@ export function registerWarehouseRoutes(app: FastifyInstance, host: AgentHost): 
         reply.code(400)
         return { error: String(error) }
       }
-      const result = await conn.pool.request().query(`SELECT TOP ${limit} * FROM [${schema}].[${table}]`)
+      const result = await queryWarehouseSampleRows(conn.pool, schema, table, limit)
       const colMeta = result.recordset.columns as
         | Record<string, { type?: { declaration?: string } }>
         | undefined

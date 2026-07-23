@@ -5,6 +5,7 @@
 import type { ConnectionPool } from "mssql"
 import type { SyncFlowKindDefinition, CustomValueSourceCatalog } from "@mia/shared-types"
 import { METADATA_SYNC_KIND_ID } from "@mia/shared-types"
+import type { HttpPort } from "../../ports/http.js"
 import type { SyncRuntimeHost } from "../../ports/index.js"
 import type { SyncTelemetryContext } from "../events.js"
 import type { SyncExecutionContractStep, SyncPlan } from "../plan-store.js"
@@ -31,6 +32,7 @@ export interface FlowStepRunContext {
   resolveContractName: () => Promise<string>
   customValueSources: CustomValueSourceCatalog
   stepOutputs: StepOutputRegistry
+  http?: HttpPort
 }
 
 export async function runCatalogFlowStep(

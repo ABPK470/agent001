@@ -21,8 +21,8 @@ import { buildDependencyGraph, diffTable } from "../diff-engine/index.js"
 import { assertSupportedSyncDirection, getEnvironment } from "../../domain/environments.js"
 import {
   assertEnvConnectorReady,
-  readyMssqlConnectorIds,
 } from "../../domain/sync-env-eligibility.js"
+import { readyMssqlConnectorIds } from "../connector-readiness.js"
 import { evaluateFreezeWindows } from "../../domain/governance/freeze-windows.js"
 import { asEntityId, type PlanId } from "../../domain/types/branded-ids.js"
 import { getPublishedSyncDefinition } from "../../domain/published-definitions.js"

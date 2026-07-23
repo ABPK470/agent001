@@ -37,7 +37,7 @@ afterEach(async () => {
   testDb.close()
 })
 
-async function buildApp(orchestrator: import("../src/api/runs/orchestrator.js").AgentOrchestrator) {
+async function buildApp(orchestrator: import("../src/runtime/orchestrator.js").AgentOrchestrator) {
   const { _setDb, _migrate, upsertPendingRunToolApproval } = await import("../src/infra/persistence/db/index.js")
   const { registerRunRoutes } = await import("../src/api/runs/routes.js")
   const { registerNotificationRoutes } = await import("../src/api/notifications/routes.js")
@@ -62,7 +62,7 @@ async function buildApp(orchestrator: import("../src/api/runs/orchestrator.js").
 describe("run tool approval routes", () => {
   it("GET /api/runs/tool-approvals/pending returns pending approvals for the session", async () => {
     const resumeRun = vi.fn()
-    const built = await buildApp({ resumeRun, cancelRun: vi.fn() } as unknown as import("../src/api/runs/orchestrator.js").AgentOrchestrator)
+    const built = await buildApp({ resumeRun, cancelRun: vi.fn() } as unknown as import("../src/runtime/orchestrator.js").AgentOrchestrator)
     app = built.app
     seedRun(testDb, "run-1", { upn: UPN, status: "waiting_for_approval" })
 
@@ -85,7 +85,7 @@ describe("run tool approval routes", () => {
   it("POST approve and deny routes act on pending approvals", async () => {
     const resumeRun = vi.fn(() => "run-1-resumed")
     const cancelRun = vi.fn()
-    const built = await buildApp({ resumeRun, cancelRun } as unknown as import("../src/api/runs/orchestrator.js").AgentOrchestrator)
+    const built = await buildApp({ resumeRun, cancelRun } as unknown as import("../src/runtime/orchestrator.js").AgentOrchestrator)
     app = built.app
     seedRun(testDb, "run-1", { upn: UPN, status: "waiting_for_approval" })
 
@@ -128,7 +128,7 @@ describe("run tool approval routes", () => {
 
   it("notification approve-run-step action delegates to approval service", async () => {
     const resumeRun = vi.fn(() => "run-1-resumed")
-    const built = await buildApp({ resumeRun, cancelRun: vi.fn() } as unknown as import("../src/api/runs/orchestrator.js").AgentOrchestrator)
+    const built = await buildApp({ resumeRun, cancelRun: vi.fn() } as unknown as import("../src/runtime/orchestrator.js").AgentOrchestrator)
     app = built.app
     seedRun(testDb, "run-1", { upn: UPN, status: "waiting_for_approval" })
 

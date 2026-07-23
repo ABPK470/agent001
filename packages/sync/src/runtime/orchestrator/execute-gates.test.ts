@@ -137,41 +137,41 @@ describe("executeSync pre-execution gates", () => {
   })
 
   it("requires confirm=true", async () => {
-    await expect(
-      executeSync("gate-plan", { host: hostWithEnvs(), confirm: false })
-    ).rejects.toThrow(/confirm=true/)
+    const result = await executeSync("gate-plan", { host: hostWithEnvs(), confirm: false })
+    expect(result.outcome).toBe("refused")
+    expect(result.error).toMatch(/confirm=true/)
   })
 
   it("refuses missing plan", async () => {
     loadPlanMock.mockReturnValue(null)
-    await expect(
-      executeSync("missing", { host: hostWithEnvs(), confirm: true })
-    ).rejects.toThrow(/not found/)
+    const result = await executeSync("missing", { host: hostWithEnvs(), confirm: true })
+    expect(result.outcome).toBe("refused")
+    expect(result.error).toMatch(/not found/)
   })
 
   it("refuses stale plan", async () => {
     planTooOldMock.mockReturnValue(true)
-    await expect(
-      executeSync("gate-plan", { host: hostWithEnvs(), confirm: true })
-    ).rejects.toThrow(/older than 1 hour/)
+    const result = await executeSync("gate-plan", { host: hostWithEnvs(), confirm: true })
+    expect(result.outcome).toBe("refused")
+    expect(result.error).toMatch(/older than 1 hour/)
   })
 
   it("refuses target-only source environment", async () => {
-    await expect(
-      executeSync("gate-plan", {
-        host: hostWithEnvs({ sourceRole: "target" }),
-        confirm: true
-      })
-    ).rejects.toThrow(/target-only/)
+    const result = await executeSync("gate-plan", {
+      host: hostWithEnvs({ sourceRole: "target" }),
+      confirm: true
+    })
+    expect(result.outcome).toBe("refused")
+    expect(result.error).toMatch(/target-only/)
   })
 
   it("refuses source-only target environment", async () => {
-    await expect(
-      executeSync("gate-plan", {
-        host: hostWithEnvs({ targetRole: "source" }),
-        confirm: true
-      })
-    ).rejects.toThrow(/source-only/)
+    const result = await executeSync("gate-plan", {
+      host: hostWithEnvs({ targetRole: "source" }),
+      confirm: true
+    })
+    expect(result.outcome).toBe("refused")
+    expect(result.error).toMatch(/source-only/)
   })
 
   it("refuses catalog drift at execute time", async () => {
@@ -179,9 +179,9 @@ describe("executeSync pre-execution gates", () => {
       catalogCompatible: false,
       issues: ["missing column foo"]
     })
-    await expect(
-      executeSync("gate-plan", { host: hostWithEnvs(), confirm: true })
-    ).rejects.toThrow(/Catalog drift detected/)
+    const result = await executeSync("gate-plan", { host: hostWithEnvs(), confirm: true })
+    expect(result.outcome).toBe("refused")
+    expect(result.error).toMatch(/Catalog drift detected/)
   })
 
   it("refuses scope misattribution conflicts", async () => {
@@ -200,9 +200,9 @@ describe("executeSync pre-execution gates", () => {
       ]
     })
     loadPlanMock.mockReturnValue(plan)
-    await expect(
-      executeSync("gate-plan", { host: hostWithEnvs(), confirm: true })
-    ).rejects.toThrow(/Scope misattribution/)
+    const result = await executeSync("gate-plan", { host: hostWithEnvs(), confirm: true })
+    expect(result.outcome).toBe("refused")
+    expect(result.error).toMatch(/Scope misattribution/)
   })
 
   it("refuses when root parent is not ready", async () => {
@@ -212,18 +212,18 @@ describe("executeSync pre-execution gates", () => {
       issue: "Root row missing on target",
       details: { rootTable: "core.Contract" }
     })
-    await expect(
-      executeSync("gate-plan", { host: hostWithEnvs(), confirm: true })
-    ).rejects.toThrow(/Root row missing/)
+    const result = await executeSync("gate-plan", { host: hostWithEnvs(), confirm: true })
+    expect(result.outcome).toBe("refused")
+    expect(result.error).toMatch(/Root row missing/)
   })
 
   it("refuses plan missing execution contract", async () => {
     const plan = readyPlan()
     ;(plan as { executionContract?: unknown }).executionContract = undefined
     loadPlanMock.mockReturnValue(plan)
-    await expect(
-      executeSync("gate-plan", { host: hostWithEnvs(), confirm: true })
-    ).rejects.toThrow(/execution contract/)
+    const result = await executeSync("gate-plan", { host: hostWithEnvs(), confirm: true })
+    expect(result.outcome).toBe("refused")
+    expect(result.error).toMatch(/execution contract/)
   })
 
 })
@@ -291,11 +291,12 @@ describe("executeSync entity scenarios (gate matrix)", () => {
 
       if (scenario.shouldPassGate) {
         const result = await executeSync(plan.planId, { host: hostWithEnvs(), confirm: true })
+        expect(result.outcome).toBe("completed")
         expect(result.success).toBe(true)
       } else {
-        await expect(
-          executeSync(plan.planId, { host: hostWithEnvs(), confirm: true })
-        ).rejects.toThrow(/missing/)
+        const result = await executeSync(plan.planId, { host: hostWithEnvs(), confirm: true })
+        expect(result.outcome).toBe("refused")
+        expect(result.error).toMatch(/missing/)
       }
     })
   }

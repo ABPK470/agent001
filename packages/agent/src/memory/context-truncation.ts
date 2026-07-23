@@ -188,10 +188,6 @@ function buildDroppedHistorySummary(dropped: Message[]): string {
           actions.push(`ran: ${cmd}`)
           break
         }
-        case "delegate":
-        case "delegate_parallel":
-          actions.push(`delegated: ${typeof args.goal === "string" ? args.goal.slice(0, 80) : "subtask"}`)
-          break
         default:
           actions.push(`called ${tc.name}`)
       }

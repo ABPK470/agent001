@@ -34,7 +34,7 @@ events to the UI. Composition root of the monorepo shell.
 - Wire enums live in `@mia/shared-enums`; re-export via `internal/enums/`.
 - Disk writes on behalf of a run go through `infra/effects/`.
 - Operator control plane = `api/platform/` (not `api/deploy/`).
-- Run prompt / tool-gating pure logic = `api/runs/prompting/`.
+- Run prompt / tool-gating pure logic = `runtime/prompting/`.
 - Inside `api/<surface>/` use `service/` · `types/` · `state/` · `handlers/` —
   never Nest names (`runtime/` / `core/`, `domain/`, `runtime/`, `transport/`).
 

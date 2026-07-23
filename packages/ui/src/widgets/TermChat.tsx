@@ -1976,16 +1976,11 @@ export function TermChat({
       if (!threadId) {
         throw new Error("No thread selected")
       }
-      const { runId } = await api.startRun(
+      const { runId } = await useStore.getState().startRun(
         effectiveGoal,
         attachmentIds.length > 0 ? attachmentIds : undefined,
         threadId
       )
-      useStore.getState().beginOptimisticRun({
-        id: runId,
-        goal: effectiveGoal,
-        threadId,
-      })
       useStore.getState().revealThreadTitleFromGoal(threadId, effectiveGoal)
       setScrollToRunId(runId)
       requestAnimationFrame(() => scrollToBottom("instant", { stick: true }))

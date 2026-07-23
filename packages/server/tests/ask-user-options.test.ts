@@ -3,7 +3,7 @@ import {
   compactAskUserQuestion,
   enforceClarificationUiOptions,
   resolveAskUserPresentation
-} from "../src/api/runs/execution/ask-user-options.js"
+} from "../src/runtime/execution/ask-user-options.js"
 
 describe("enforceClarificationUiOptions", () => {
   it("leaves options untouched when ask_user is not tied to a clarification finding", () => {

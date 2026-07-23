@@ -12,9 +12,9 @@
  * reference.
  */
 
-import { truncateAtBoundary } from "../../../../infra/persistence/memory.js"
-import type { DbRun } from "../../../../infra/persistence/sqlite.js"
-import { getDb } from "../../../../infra/persistence/sqlite.js"
+import { truncateAtBoundary } from "../../../infra/persistence/memory.js"
+import type { DbRun } from "../../../infra/persistence/sqlite.js"
+import { getDb } from "../../../infra/persistence/sqlite.js"
 
 /** Maximum chars retained per prior-turn answer. Keeps the anchor inside
  *  the prompt budget while preserving small result tables and the

@@ -4,7 +4,7 @@
 
 import type { FastifyInstance } from "fastify"
 import { getOwnerUsage, getRetentionPolicy } from "../../infra/persistence/attachments.js"
-import { getRunProfile } from "../runs/workspace/index.js"
+import { getRunProfile } from "../../runtime/workspace/index.js"
 
 export function registerProfileRoutes(app: FastifyInstance): void {
   app.get("/api/state/profile", async () => {

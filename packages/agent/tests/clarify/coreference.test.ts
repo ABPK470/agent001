@@ -54,6 +54,7 @@ function ctx(over: Partial<ClarifyContext> & Pick<ClarifyContext, "goal">): Clar
   return {
     catalog: null,
     tenant: DEFAULT_TENANT_CONFIG,
+    publishedSyncEntityIds: [],
     messages: [],
     resolved: [],
     round: 1,

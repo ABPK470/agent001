@@ -1,4 +1,4 @@
-import type { ClarificationMatch } from "../../../ports/clarifications.js"
+import type { ClarificationMatch } from "../../ports/clarifications.js"
 
 /**
  * Clarification findings own the authoritative pick-list contract.

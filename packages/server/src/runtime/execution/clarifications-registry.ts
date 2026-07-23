@@ -22,7 +22,7 @@
 // asked?".
 
 import type { AmbiguityFinding, ResolvedClarification } from "@mia/agent"
-import type { ClarificationMatch, ClarificationsRegistryPort } from "../../../ports/clarifications.js"
+import type { ClarificationMatch, ClarificationsRegistryPort } from "../../ports/clarifications.js"
 
 type EmittedRecord = ClarificationMatch
 

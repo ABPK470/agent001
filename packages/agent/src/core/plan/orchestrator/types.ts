@@ -3,10 +3,6 @@
  * @module
  */
 
-import type {
-  DelegationBanditTunerPort,
-  DelegationTrajectoryRecord,
-} from "../../../domain/types/delegation-learning.js"
 import type { LLMClient, Message, Tool } from "../../types.js"
 import type {
   PipelineResult,
@@ -31,11 +27,8 @@ export interface PlannerContext {
   /** Called with trace events for UI. */
   readonly onTrace?: (entry: Record<string, unknown>) => void
   /**
-   * Optional delegation bandit tuner.
-   * When provided, UCB1 arm selection adjusts the effective score threshold
-   * for delegation decisions and records outcomes for online learning.
+   * Optional delegation bandit tuner — removed; was never wired from server.
    */
-  readonly delegationBanditTuner?: DelegationBanditTunerPort
 }
 
 export interface PlannerResult {
@@ -58,7 +51,7 @@ export interface PlannerSetupContext {
   readonly plan: Plan
   readonly runtimeModel: PlannerRuntimeModel
   readonly decision: PlannerDecision
-  readonly banditTrajectory: DelegationTrajectoryRecord | undefined
+  readonly banditTrajectory: undefined
   /** Tier 1 decision from `runDelegationGate` — how the plan's subagent steps execute. */
   readonly executionMode: PlanExecutionMode
 }

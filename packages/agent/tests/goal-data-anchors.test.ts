@@ -52,6 +52,7 @@ function ctx(overrides: Partial<ClarifyContext> & Pick<ClarifyContext, "goal">):
   return {
     catalog: null,
     tenant: DEFAULT_TENANT_CONFIG,
+    publishedSyncEntityIds: [],
     messages: [],
     resolved: [],
     round: 1,
@@ -65,7 +66,7 @@ afterEach(() => resetTenantConfig())
 describe("resolveGoalDataAnchors", () => {
   it("resolves exact qualified names case-insensitively", () => {
     const cat = buildGraph([table("ai", "RevenueMart", { rowCount: 50_000 })])
-    const anchors = resolveGoalDataAnchors("analysis on ai.revenuemart for q4", cat)
+    const anchors = resolveGoalDataAnchors("analysis on ai.revenuemart for q4", cat, null)
     expect(anchors).toHaveLength(1)
     expect(anchors[0]!.qualifiedName).toBe("ai.RevenueMart")
     expect(anchors[0]!.resolution).toBe("exact")
@@ -73,7 +74,7 @@ describe("resolveGoalDataAnchors", () => {
 
   it("fuzzy-resolves minor typos within the stated schema", () => {
     const cat = buildGraph([table("ai", "RevenueMart", { rowCount: 50_000 })])
-    const anchors = resolveGoalDataAnchors("based on uat ai.revenuMart data", cat)
+    const anchors = resolveGoalDataAnchors("based on uat ai.revenuMart data", cat, null)
     expect(anchors).toHaveLength(1)
     expect(anchors[0]!.qualifiedName).toBe("ai.RevenueMart")
     expect(anchors[0]!.resolution).toBe("fuzzy")
@@ -82,7 +83,7 @@ describe("resolveGoalDataAnchors", () => {
   it("resolves mirror-qualified references", () => {
     setTenantConfig({ mirrorSchema: "persistedView" })
     const cat = buildGraph([table("persistedView", "publish.Revenue", { type: "VIEW" })])
-    const anchors = resolveGoalDataAnchors("use publish.Revenue", cat)
+    const anchors = resolveGoalDataAnchors("use publish.Revenue", cat, getTenantConfig().mirrorSchema)
     expect(anchors).toHaveLength(1)
     expect(anchors[0]!.resolution).toBe("mirror")
   })
@@ -93,7 +94,7 @@ describe("resolveGoalDataAnchors", () => {
       table("publish", "Sales"),
       table("publish", "Balances")
     ])
-    const anchors = resolveGoalDataAnchors("short analysis on RevenueMart for q4 2025", cat)
+    const anchors = resolveGoalDataAnchors("short analysis on RevenueMart for q4 2025", cat, null)
     expect(anchors).toHaveLength(1)
     expect(anchors[0]!.qualifiedName).toBe("ai.RevenueMart")
     expect(anchors[0]!.resolution).toBe("unique-name")

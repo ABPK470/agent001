@@ -28,7 +28,7 @@ async function setupDb() {
   _setDb(testDb)
   _migrate(testDb)
   testDb.pragma("foreign_keys = OFF")
-  return await import("../src/api/runs/execution/tool-result-persister.js")
+  return await import("../src/runtime/execution/tool-result-persister.js")
 }
 
 const THREAD_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
@@ -56,7 +56,7 @@ function seedThreadAndRuns(runIds: string[]): void {
 }
 
 async function loadPriorResultsForThread() {
-  const { loadPriorResults } = await import("../src/api/runs/prompting/data-blocks/prior-results-block.js")
+  const { loadPriorResults } = await import("../src/runtime/prompting/data-blocks/prior-results-block.js")
   return loadPriorResults({ threadId: THREAD_ID, upn: UPN })
 }
 

@@ -81,7 +81,7 @@ export const canonicalAmbiguityDetector: Detector = {
     // Co-reference: defer to prior turn.
     if (looksCoreferential(ctx.goal) && hasRecentAssistantTurn(ctx.messages)) return []
     // User already named a data source → no ambiguity to flag.
-    if (resolveGoalDataAnchors(ctx.goal, ctx.catalog).length > 0) return []
+    if (resolveGoalDataAnchors(ctx.goal, ctx.catalog, ctx.tenant.mirrorSchema).length > 0) return []
     const matchedKeyword = goalHasDomainKeyword(ctx.goal, ctx.tenant.domainKeywords)
     if (!matchedKeyword) return []
     // A prior clarification already resolved this term to a specific table

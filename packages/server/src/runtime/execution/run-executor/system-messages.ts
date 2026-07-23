@@ -1,11 +1,11 @@
-import { getCatalog, PolicyRole, resolveEffectiveMssqlConnection, resolveGoalDataAnchors, seedMssqlVerifiedTables, type AgentHost, type RunContext, type Tool } from "@mia/agent"
-import { broadcastTrace } from "../../../../infra/events/broadcaster.js"
-import { TrajectoryEventKind } from "../../../../internal/enums/trajectory.js"
+import { getCatalog, getTenantConfig, PolicyRole, resolveEffectiveMssqlConnection, resolveGoalDataAnchors, seedMssqlVerifiedTables, type AgentHost, type RunContext, type Tool } from "@mia/agent"
+import { broadcastTrace } from "../../../infra/events/broadcaster.js"
+import { TrajectoryEventKind } from "../../../internal/enums/trajectory.js"
 import { loadCandidateVerdicts, loadKnownObjects } from "../../prompting/data-blocks/known-objects.js"
 import { loadPriorResults } from "../../prompting/data-blocks/prior-results-block.js"
 import { loadPriorTurns } from "../../prompting/data-blocks/prior-turns.js"
 import { buildSystemMessages } from "../../prompting/system-messages/index.js"
-import type { MemoryPerTier } from "../../../../infra/persistence/memory/tier-context.js"
+import type { MemoryPerTier } from "../../../infra/persistence/memory/tier-context.js"
 import type {
   ActiveRunRecord,
   ExecuteRunRequestDto,
@@ -74,7 +74,7 @@ export async function buildExecutionSystemMessages(
       .filter((q) => !catalog || catalog.getTable(q))
     seedMssqlVerifiedTables(input.runContext, verifiedQnames)
     if (catalog) {
-      for (const anchor of resolveGoalDataAnchors(request.goal, catalog)) {
+      for (const anchor of resolveGoalDataAnchors(request.goal, catalog, getTenantConfig().mirrorSchema)) {
         if (catalog.getTable(anchor.qualifiedName)) {
           seedMssqlVerifiedTables(input.runContext, [anchor.qualifiedName])
         }

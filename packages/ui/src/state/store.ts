@@ -244,6 +244,12 @@ interface AppState {
     goal: string
     threadId: string
   }) => void
+  /** Start a run via API and insert the optimistic row. */
+  startRun: (
+    goal: string,
+    attachmentIds?: string[],
+    threadId?: string
+  ) => Promise<{ runId: string; threadId: string }>
 
   // Threads (home chat workspaces)
   threads: Thread[]
@@ -777,6 +783,14 @@ export const useStore = create<AppState>()(
           stepData: [],
         })
         set({ activeRunId: input.id })
+      },
+
+      startRun: async (goal, attachmentIds, threadId) => {
+        const tid = threadId ?? get().activeThreadId
+        if (!tid) throw new Error("No thread selected")
+        const { runId } = await api.startRun(goal, attachmentIds, tid)
+        get().beginOptimisticRun({ id: runId, goal, threadId: tid })
+        return { runId, threadId: tid }
       },
 
       threads: [],

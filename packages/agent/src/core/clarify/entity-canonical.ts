@@ -13,7 +13,7 @@
  */
 
 import type { CatalogGraph } from "../../tools/catalog/graph/index.js"
-import { getTenantConfig, type TenantConfig } from "../../domain/tenant/tenant-config.js"
+import type { TenantConfig } from "../../domain/tenant/tenant-config.js"
 import { isAnalyticEntityCandidate, schemaTierSortKey } from "../../tools/catalog/schema-role.js"
 
 const PREFERRED_ANALYTIC_SCHEMAS = new Set(["publish", "persistedview", "dim", "fact", "list"])
@@ -64,7 +64,7 @@ function schemaWeight(schema: string, tenant: TenantConfig): number {
 export function resolveCanonicalEntityTable(
   token: string,
   catalog: CatalogGraph,
-  tenant: TenantConfig = getTenantConfig(),
+  tenant: TenantConfig,
   learned?: ReadonlyMap<string, string>
 ): string | null {
   const lc = token.toLowerCase()
@@ -115,7 +115,7 @@ export function resolveCanonicalEntityTable(
 export function isCanonicallyGroundedEntity(
   token: string,
   catalog: CatalogGraph,
-  tenant: TenantConfig = getTenantConfig(),
+  tenant: TenantConfig,
   learned?: ReadonlyMap<string, string>
 ): boolean {
   return resolveCanonicalEntityTable(token, catalog, tenant, learned) !== null
@@ -129,7 +129,7 @@ export function rankEntityTableCandidates(
   candidateKeys: Iterable<string>,
   catalog: CatalogGraph,
   limit: number,
-  options: { goal?: string } = {}
+  options: { goal?: string; tenant: TenantConfig } 
 ): string[] {
   const goal = options.goal ?? ""
   const goalMentionsArchive = /\barchive\b/i.test(goal)
@@ -169,7 +169,7 @@ export function rankEntityTableCandidates(
   }
 
   if (ranked.length < limit) {
-    const tenant = getTenantConfig()
+    const tenant = options.tenant
     const rest = [...candidateKeys]
       .map((k) => catalog.getTable(k)?.qualifiedName ?? k)
       .filter((key) => {

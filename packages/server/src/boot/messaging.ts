@@ -1,4 +1,4 @@
-import type { AgentOrchestrator } from "../api/runs/orchestrator.js"
+import type { AgentOrchestrator } from "../runtime/orchestrator.js"
 import {
   MessageQueue,
   MessageRouter,

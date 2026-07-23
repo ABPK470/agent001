@@ -47,7 +47,7 @@ import {
   saveRankScore,
   type ProposalRow
 } from "../../../infra/persistence/proposals.js"
-import { probeRowDivergence } from "../../runs/prompting/proposer/divergence-probe.js"
+import { probeRowDivergence } from "../../../runtime/prompting/proposer/divergence-probe.js"
 import { bindLlmOperationContext, emitLlmInteractionCleared } from "../../../infra/llm/operation-context.js"
 import {
   registerOperation,

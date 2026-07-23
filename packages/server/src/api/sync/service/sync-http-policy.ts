@@ -30,7 +30,7 @@ import {
 export const SYNC_POLICY_DENIED_CODE = "policy_denied" as const
 export const SYNC_APPROVAL_REQUIRED_CODE = "approval_required" as const
 
-export type SyncHttpTool = "sync_preview" | "sync_execute"
+export type SyncHttpTool = "sync_preview" | "sync_execute" | "sync_publish"
 
 export class SyncHttpPolicyDeniedError extends Error {
   readonly code = SYNC_POLICY_DENIED_CODE

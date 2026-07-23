@@ -1,4 +1,4 @@
-import { parseBoundaryJson } from "../../../internal/parse-json.js"
+import { parseBoundaryJson } from "../../internal/parse-json.js"
 
 /**
  * runtime/mssql-pool-provider.ts — live, connector-keyed MSSQL pool provider.
@@ -15,8 +15,8 @@ import { parseBoundaryJson } from "../../../internal/parse-json.js"
 import type { MssqlConnectorPool, MssqlPoolProvider } from "@mia/agent"
 import type { Connector, ConnectorKindId } from "@mia/shared-types"
 import sql from "mssql"
-import * as db from "../../../infra/persistence/sqlite.js"
-import { readKnowledgeFile } from "../../../infra/mssql/setup.js"
+import * as db from "../../infra/persistence/sqlite.js"
+import { readKnowledgeFile } from "../../infra/mssql/setup.js"
 
 function asString(value: unknown): string | null {
   return typeof value === "string" && value !== "" ? value : null

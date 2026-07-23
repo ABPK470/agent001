@@ -7,7 +7,7 @@
  */
 import { loadPublishedSyncEntityIdsFromList, setTenantConfig } from "@mia/agent"
 import { beforeAll, beforeEach } from "vitest"
-import { _resetDecideSectionsCache } from "../src/api/runs/prompting/decide-sections.ts"
+import { _resetDecideSectionsCache } from "../src/runtime/prompting/decide-sections.ts"
 
 process.env.MIA_SKIP_SETUP = "1"
 

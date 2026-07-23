@@ -335,57 +335,9 @@ function describeDebugTraceEntry(ev: OperationEvent): { label: string; summary: 
 
 function formatEventLabel(ev: OperationEvent): string {
   if (ev.type === "debug.trace") return describeDebugTraceEntry(ev).label
-  // Prefer shared catalog for known SSE types; keep OpLog switch for sync chrome.
   const fromCatalog = eventLabel(ev.type)
-  if (
-    fromCatalog &&
-    fromCatalog !== "Event" &&
-    !ev.type.startsWith("sync.") &&
-    !ev.type.startsWith("bridge.")
-  ) {
-    return fromCatalog
-  }
-  switch (ev.type) {
-    case "sync.preview.completed": return "Preview complete"
-    case "sync.preview.table.start": return "Table scan"
-    case "sync.preview.table.done": return "Table diff"
-    case "sync.preview.table.failed": return "Table failed"
-    case "sync.execute.started": return "Execute started"
-    case "sync.execute.step": return "Step"
-    case "sync.execute.step.failed": return "Step failed"
-    case "sync.execute.table.start": return "Table apply"
-    case "sync.execute.table.done": return "Table done"
-    case "sync.execute.sql":
-    case "sync.catalog.sql":
-    case "sync.discovery.sql":
-    case "sync.preview.sql":
-      return "SQL"
-    case "sync.execute.http":
-      return "HTTP"
-    case "sync.execute.archive.probe": return "Archive probe"
-    case "sync.execute.archive.probe.batch": return "Archive probe batch"
-    case "sync.execute.archive.skipped": return "Archive skipped"
-    case "sync.execute.completed": return "Execute complete"
-    case "sync.execute.failed": return "Execute failed"
-    case "sync.execute.cancelled": return "Execute cancelled"
-    case "sync.execute.skipped": return "Execute skipped"
-    case "sync.proposer.run.started": return "Scan started"
-    case "sync.proposer.run.completed": return "Scan completed"
-    case "sync.proposer.run.failed": return "Scan failed"
-    case "sync.proposer.run.cancelled": return "Scan cancelled"
-    case "sync.proposal.created": return "Proposal created"
-    case "bridge.preview.started": return "Preview started"
-    case "bridge.preview.completed": return "Preview complete"
-    case "bridge.preview.failed": return "Preview failed"
-    case "bridge.run.started": return "Move started"
-    case "bridge.run.progress": return "Progress"
-    case "bridge.run.completed": return "Move complete"
-    case "bridge.run.failed": return "Move failed"
-    case "step.started": return "Tool call"
-    case "step.completed": return "Tool result"
-    case "step.failed": return "Tool failed"
-    default: return ev.type
-  }
+  if (fromCatalog && fromCatalog !== "Event") return fromCatalog
+  return ev.type
 }
 
 export function OperationLog() {

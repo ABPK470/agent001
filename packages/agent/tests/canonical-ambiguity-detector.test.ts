@@ -74,6 +74,7 @@ function makeCtx(opts: {
     goal: opts.goal,
     catalog: opts.catalog,
     tenant: getTenantConfig(),
+    publishedSyncEntityIds: [],
     messages: opts.messages ?? [],
     resolved: [],
     round: opts.round ?? 1

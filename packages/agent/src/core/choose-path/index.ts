@@ -12,9 +12,10 @@ import type { AgentLoopState } from "../../domain/types/agent-loop-state.js"
 import type { PlannerContext } from "../plan.js"
 import { assessPlannerDecision, executePlannerPath } from "../plan.js"
 
-export interface PlannerRoutingResult {
-  readonly finalAnswer?: string
-}
+export type PlannerRoutingResult =
+  | { outcome: "answered"; answer: string }
+  | { outcome: "use_tool_loop"; reason: string }
+  | { outcome: "planner_disabled"; reason: string }
 
 export interface PlannerRoutingContext {
   goal: string
@@ -27,6 +28,7 @@ export interface PlannerRoutingContext {
     enablePlanner: boolean
     workspaceRoot: string
     plannerDelegateFn: AgentConfig["plannerDelegateFn"]
+    plannerRouting?: AgentConfig["plannerRouting"]
     signal: AgentConfig["signal"]
     verbose: boolean
     onPlannerTrace: AgentConfig["onPlannerTrace"]
@@ -59,9 +61,26 @@ export interface PlannerRoutingContext {
 export async function attemptPlannerRouting(ctx: PlannerRoutingContext): Promise<PlannerRoutingResult> {
   const { goal, config } = ctx
 
-  if (!config.enablePlanner || !config.plannerDelegateFn) return {}
+  if (!config.enablePlanner) {
+    config.onPlannerTrace?.({
+      kind: PlannerTraceKind.DirectLoopFallback,
+      source: "planner_disabled",
+      reason: "enablePlanner=false"
+    })
+    return { outcome: "planner_disabled", reason: "enablePlanner=false" }
+  }
+  if (!config.plannerDelegateFn) {
+    config.onPlannerTrace?.({
+      kind: PlannerTraceKind.DirectLoopFallback,
+      source: "planner_disabled",
+      reason: "missing plannerDelegateFn"
+    })
+    return { outcome: "planner_disabled", reason: "missing plannerDelegateFn" }
+  }
 
-  const decision = assessPlannerDecision(goal, ctx.messages)
+  const decision = assessPlannerDecision(goal, ctx.messages, {
+    domainKeywords: config.plannerRouting?.domainKeywords ?? []
+  })
   config.onPlannerTrace?.({
     kind: PlannerTraceKind.Decision,
     score: decision.score,
@@ -76,7 +95,7 @@ export async function attemptPlannerRouting(ctx: PlannerRoutingContext): Promise
       source: "planner_declined",
       reason: `route=direct (${decision.reason})`
     })
-    return {}
+    return { outcome: "use_tool_loop", reason: `route=direct (${decision.reason})` }
   }
 
   config.onPlannerTrace?.({ kind: PlannerTraceKind.PlanningPreflight, mode: "planner-first" })
@@ -88,7 +107,7 @@ export async function attemptPlannerRouting(ctx: PlannerRoutingContext): Promise
   if (result.handled) {
     const answer = result.answer ?? "(planner produced no answer)"
     if (config.verbose) log.logFinalAnswer(answer)
-    return { finalAnswer: answer }
+    return { outcome: "answered", answer }
   }
 
   // Defensive backstop only — `runPlannerSetup` returns `handled: false` here
@@ -106,5 +125,8 @@ export async function attemptPlannerRouting(ctx: PlannerRoutingContext): Promise
     reason: result.skipReason ?? "Planner declined — continuing in the direct tool loop."
   })
 
-  return {}
+  return {
+    outcome: "use_tool_loop",
+    reason: result.skipReason ?? "Planner declined — continuing in the direct tool loop."
+  }
 }

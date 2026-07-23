@@ -19,8 +19,8 @@ import {
   type MssqlCatalogHost,
   type ResolvedClarification
 } from "@mia/agent"
-import { saveResolvedTerm } from "../../../infra/persistence/memory.js"
-import type { BootHostDeps } from "../../../ports/orchestration.js"
+import { saveResolvedTerm } from "../../infra/persistence/memory.js"
+import type { BootHostDeps } from "../../ports/orchestration.js"
 
 /**
  * Only these clarification kinds teach a durable term→table mapping.

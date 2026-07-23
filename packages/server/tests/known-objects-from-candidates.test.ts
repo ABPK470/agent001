@@ -15,7 +15,7 @@ import { recordTableVerdict } from "../src/infra/persistence/memory/index.js"
 import {
   loadCandidateVerdicts,
   renderKnownObjectsBlock
-} from "../src/api/runs/prompting/data-blocks/known-objects.js"
+} from "../src/runtime/prompting/data-blocks/known-objects.js"
 
 let testDb: Database.Database
 let dataDir: string

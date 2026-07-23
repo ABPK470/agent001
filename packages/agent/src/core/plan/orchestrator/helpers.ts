@@ -1,5 +1,4 @@
 import {
-  PipelineStatus,
   PlannerTraceKind,
   VerifierOutcome
 } from "../../../domain/index.js"
@@ -8,11 +7,10 @@ import {
  * @module
  */
 
-import type { DelegationTrajectoryRecord } from "../../../domain/types/delegation-learning.js"
-import { detectPlatformUnconfigured } from "../platform-errors.js"
-import { synthesizeAnswer } from "../synthesize.js"
-import type { PipelineResult, Plan, VerifierDecision } from "../types.js"
 import { deriveAcceptanceState } from "../verification-model/index.js"
+import { synthesizeAnswer } from "../synthesize.js"
+import { detectPlatformUnconfigured } from "../platform-errors.js"
+import type { PipelineResult, Plan, VerifierDecision } from "../types.js"
 import type { PlannerContext, PlannerResult } from "./types.js"
 
 /**
@@ -64,30 +62,9 @@ export function tryPlatformUnconfiguredShortCircuit(
 export function finalizePlannerRun(
   plan: Plan,
   pipelineResult: PipelineResult,
-  verifierDecision: VerifierDecision,
-  banditTuner: PlannerContext["delegationBanditTuner"] | undefined,
-  banditTrajectory: DelegationTrajectoryRecord | undefined,
-  pipelineStartMs: number
+  verifierDecision: VerifierDecision
 ): PlannerResult {
   const answer = synthesizeAnswer(plan, pipelineResult, verifierDecision)
-  if (banditTuner && banditTrajectory) {
-    const failedSteps = [...pipelineResult.stepResults.values()].filter(
-      (r) => r.status === PipelineStatus.Failed
-    ).length
-    const verifierPassed = verifierDecision.overall === VerifierOutcome.Pass
-    const qualityProxy = verifierPassed
-      ? verifierDecision.confidence
-      : verifierDecision.overall === VerifierOutcome.Retry
-        ? 0.4
-        : 0.1
-    banditTuner.recordOutcome(banditTrajectory, {
-      durationMs: Date.now() - pipelineStartMs,
-      tokenCount: 0,
-      errorCount: failedSteps,
-      qualityProxy,
-      verifierPassed
-    })
-  }
   if (verifierDecision.overall !== VerifierOutcome.Pass) {
     return {
       handled: true,

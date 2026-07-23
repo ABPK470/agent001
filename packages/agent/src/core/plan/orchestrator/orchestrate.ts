@@ -53,12 +53,10 @@ export async function executePlannerPath(
   options: { decision: PlannerDecision }
 ): Promise<PlannerResult> {
   const MAX_PIPELINE_RETRIES = 2
-  const pipelineStartMs = Date.now()
-  const banditTuner = ctx.delegationBanditTuner
 
   const setupOutcome = await runPlannerSetup(goal, ctx, options.decision)
   if (!setupOutcome.ready) return setupOutcome.result
-  const { plan, runtimeModel, decision, banditTrajectory, executionMode } = setupOutcome.context
+  const { plan, runtimeModel, decision, executionMode } = setupOutcome.context
 
   // Tier 1 — how subagent_task steps run: parallel fan-out when economics
   // approve it, otherwise one child at a time. `guided` additionally widens
@@ -216,12 +214,5 @@ export async function executePlannerPath(
     })
   }
 
-  return finalizePlannerRun(
-    plan,
-    pipelineResult!,
-    verifierDecision!,
-    banditTuner,
-    banditTrajectory,
-    pipelineStartMs
-  )
+  return finalizePlannerRun(plan, pipelineResult!, verifierDecision!)
 }

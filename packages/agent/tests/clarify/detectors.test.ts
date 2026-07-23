@@ -63,6 +63,7 @@ function ctx(overrides: Partial<ClarifyContext> & Pick<ClarifyContext, "goal">):
   return {
     catalog: null,
     tenant: DEFAULT_TENANT_CONFIG,
+    publishedSyncEntityIds: [],
     messages: [],
     resolved: [],
     round: 1,

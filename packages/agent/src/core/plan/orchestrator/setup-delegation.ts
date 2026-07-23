@@ -1,4 +1,4 @@
-import { BanditArmId, DelegationTraceKind } from "../../../domain/index.js"
+import { DelegationTraceKind } from "../../../domain/index.js"
 /**
  * Step 3b of planner setup — delegation gate.
  *
@@ -18,10 +18,6 @@ import {
   type DelegationDecisionReason,
   type DelegationSubagentStepProfile
 } from "../../../core/delegate-decision/index.js"
-import type {
-  DelegationBanditTunerPort,
-  DelegationTrajectoryRecord
-} from "../../../domain/types/delegation-learning.js"
 import type { Plan, PlanExecutionMode, PlanStep } from "../types.js"
 import { buildPlannerFailurePayload } from "./helpers.js"
 import type { PlannerContext, PlannerResult } from "./types.js"
@@ -45,7 +41,6 @@ export type DelegationGateOutcome =
   | {
       readonly blocked: false
       readonly mode: PlanExecutionMode
-      readonly banditTrajectory: DelegationTrajectoryRecord | undefined
     }
 
 /**
@@ -62,8 +57,7 @@ export function runDelegationGate(
   plan: Plan,
   goal: string,
   decision: { route: string; score: number; reason: string },
-  ctx: PlannerContext,
-  banditTuner: DelegationBanditTunerPort | undefined
+  ctx: PlannerContext
 ): DelegationGateOutcome {
   const subagentSteps = plan.steps.filter(
     (s): s is PlanStep & { stepType: "subagent_task" } => s.stepType === "subagent_task"
@@ -78,19 +72,8 @@ export function runDelegationGate(
     effectClass: EFFECT_CLASS_MAP[s.executionContext.effectClass] ?? "mixed"
   }))
 
-  // No subagent work at all — pipeline runs its deterministic_tool steps
-  // only. Mode is moot (nothing to fan out), but parallel is the harmless
-  // default since executePipeline's parallelism only matters when
-  // subagent_task steps exist.
   if (subagentProfiles.length === 0) {
-    return { blocked: false, mode: "parallel", banditTrajectory: undefined }
-  }
-
-  let banditArmId: BanditArmId | undefined
-  let banditThresholdAdjustment = 0
-  if (banditTuner) {
-    banditArmId = banditTuner.selectArm()
-    banditThresholdAdjustment = banditTuner.getThresholdAdjustment(banditArmId)
+    return { blocked: false, mode: "parallel" }
   }
 
   const delegationInput: DelegationDecisionInput = {
@@ -100,27 +83,10 @@ export function runDelegationGate(
     totalSteps: plan.steps.length,
     synthesisSteps: plan.steps.filter((s) => s.stepType === "deterministic_tool").length,
     subagentSteps: subagentProfiles,
-    explicitDelegationRequested: decision.route === "planner",
-    config: banditThresholdAdjustment !== 0 ? { scoreThreshold: 0.2 + banditThresholdAdjustment } : undefined
+    explicitDelegationRequested: decision.route === "planner"
   }
 
   const delegationDecision = assessDelegationDecision(delegationInput)
-
-  let banditTrajectory: DelegationTrajectoryRecord | undefined
-  if (banditTuner && banditArmId) {
-    banditTrajectory = banditTuner.buildTrajectory({
-      armId: banditArmId,
-      appliedThreshold: 0.2 + banditThresholdAdjustment,
-      complexityScore: decision.score,
-      fanoutCount: subagentProfiles.length,
-      stepCount: plan.steps.length,
-      nestingDepth: 1,
-      parallelFraction:
-        subagentProfiles.filter((s) => s.canRunParallel).length / Math.max(1, subagentProfiles.length),
-      shouldDelegate: delegationDecision.shouldDelegate,
-      utilityScore: delegationDecision.utilityScore
-    })
-  }
 
   const isFatal = !delegationDecision.shouldDelegate && DELEGATION_FATAL_REASONS.has(delegationDecision.reason)
 
@@ -147,9 +113,7 @@ export function runDelegationGate(
     utilityScore: delegationDecision.utilityScore,
     safetyRisk: delegationDecision.safetyRisk,
     confidence: delegationDecision.confidence,
-    hardBlockedTaskClass: delegationDecision.hardBlockedTaskClass,
-    banditArmId,
-    banditThresholdAdjustment
+    hardBlockedTaskClass: delegationDecision.hardBlockedTaskClass
   })
 
   if (mode === "stop") {
@@ -177,5 +141,5 @@ export function runDelegationGate(
     }
   }
 
-  return { blocked: false, mode, banditTrajectory }
+  return { blocked: false, mode }
 }

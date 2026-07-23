@@ -61,7 +61,7 @@ async function buildApp(session: CurrentSession | null) {
     startRun,
     getRunWorkspaceDiff: () => null,
     purgeThread: (threadId: string, upn: string) => deleteThreadAndRuns(threadId, upn)
-  } as unknown as import("../src/api/runs/orchestrator.js").AgentOrchestrator
+  } as unknown as import("../src/runtime/orchestrator.js").AgentOrchestrator
   registerThreadRoutes(app, orchestrator)
   registerRunRoutes(app, orchestrator)
   await app.ready()

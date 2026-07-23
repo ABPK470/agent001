@@ -9,9 +9,9 @@ import {
   isRunCapabilityActionAllowed,
   type NotificationAction,
 } from "@mia/shared-types"
-import { runHasCompensatableEffects } from "../../infra/effects/index.js"
-import * as db from "../../infra/persistence/sqlite.js"
-import { NotificationActionType } from "../../internal/enums/notifications.js"
+import { runHasCompensatableEffects } from "../infra/effects/index.js"
+import * as db from "../infra/persistence/sqlite.js"
+import { NotificationActionType } from "../internal/enums/notifications.js"
 
 export function runCapabilityFlags(runId: string): {
   hasCheckpoint: boolean

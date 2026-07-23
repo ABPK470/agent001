@@ -5,7 +5,7 @@ import {
   extractObservedQnames,
   runReflectionTurn,
   type ReflectionStep
-} from "../src/api/runs/prompting/coordination/run-reflection.js"
+} from "../src/runtime/prompting/coordination/run-reflection.js"
 
 // ── helpers ──────────────────────────────────────────────────────
 

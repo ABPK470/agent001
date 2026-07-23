@@ -4,6 +4,7 @@
 
 import { existsSync, readFileSync } from "node:fs"
 import { join } from "node:path"
+import ts from "typescript"
 import {
   BOUNDED_PACKAGES,
   CORE_PACKAGES,
@@ -13,7 +14,7 @@ import {
 } from "../registry/policy.mjs"
 import { fail } from "../report.mjs"
 import { walk } from "../fs-walk.mjs"
-import { collectModuleSpecifiers, parseSourceFile, relToPkg } from "../ts-context.mjs"
+import { collectModuleSpecifiers, lineOf, parseSourceFile, relToPkg } from "../ts-context.mjs"
 
 export function lintFrameworkDenylist(pkg, files) {
   for (const file of files) {
@@ -99,6 +100,61 @@ export function lintResolvedInputBoundary(packages) {
             `${pkg.name} must not import platform shell — composition root resolves inputs`,
           )
         }
+      }
+    }
+  }
+}
+
+const FOLKLORE_IDENTIFIERS = new Set(["getTenantConfig", "getPublishedSyncEntityIds"])
+
+/** Ban ambient folklore resolution under agent core/ and sync domain/. */
+export function lintResolvedInputFolklore(packages) {
+  const checks = [
+    { pkg: "agent", layer: "core/" },
+    { pkg: "sync", layer: "domain/" },
+  ]
+  for (const { pkg: pkgName, layer } of checks) {
+    const pkg = packages[pkgName]
+    if (!pkg || !existsSync(pkg.src)) continue
+    for (const file of walk(pkg.src)) {
+      const rel = relToPkg(pkg.src, file)
+      if (!rel.startsWith(layer)) continue
+      if (rel.endsWith(".test.ts")) continue
+      const sf = parseSourceFile(file)
+      const visit = (node) => {
+        if (ts.isIdentifier(node) && FOLKLORE_IDENTIFIERS.has(node.text)) {
+          fail(
+            file,
+            lineOf(sf, node),
+            "resolved-inputs-folklore",
+            `${pkg.name}/${layer} must not call ${node.text}() — pass resolved inputs from the shell`,
+          )
+        }
+        ts.forEachChild(node, visit)
+      }
+      visit(sf)
+    }
+  }
+}
+
+/** api/ must not import runtime/execution internals (type-only from runtime root is OK). */
+export function lintServerApiRuntimeBoundary(packages) {
+  const pkg = packages.server
+  if (!pkg || !existsSync(pkg.src)) return
+  for (const file of walk(pkg.src)) {
+    const rel = relToPkg(pkg.src, file)
+    if (!rel.startsWith("api/")) continue
+    if (rel.endsWith(".test.ts")) continue
+    const sf = parseSourceFile(file)
+    for (const { specifier, line, isTypeOnly } of collectModuleSpecifiers(sf)) {
+      if (isTypeOnly) continue
+      if (/runtime\/execution\//.test(specifier.replace(/\\/g, "/"))) {
+        fail(
+          file,
+          line,
+          "server-api-runtime-boundary",
+          `api/ must not import runtime/execution/** — use runtime commands or type-only imports`,
+        )
       }
     }
   }

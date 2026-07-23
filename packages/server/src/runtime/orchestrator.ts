@@ -1,4 +1,4 @@
-import { parseBoundaryJson } from "../../internal/parse-json.js"
+import { parseBoundaryJson } from "../internal/parse-json.js"
 import {
   computeAutoDetectedExcludeDirs,
   configureAgent,
@@ -12,24 +12,24 @@ import {
   type Tool
 } from "@mia/agent"
 import { randomUUID } from "node:crypto"
-import { bootHostDepsToConfigureAgentOptions } from "../../adapters/agent/boot-host-deps.js"
+import { bootHostDepsToConfigureAgentOptions } from "../adapters/agent/boot-host-deps.js"
 import type { RunWorkspaceContext, WorkspaceDiff } from "./workspace/index.js"
 import { cleanupRunWorkspace, cleanupStaleRunWorkspaces } from "./workspace/index.js"
-import { broadcast } from "../../infra/events/broadcaster.js"
-import { cleanupExpiredCache } from "../../infra/persistence/index.js"
-import * as db from "../../infra/persistence/sqlite.js"
-import { AgentBus, createBusTools } from "../../infra/queue/agent-bus.js"
-import { RunPriority, RunQueue } from "../../infra/queue/run-queue.js"
-import type { MessageRouterPort } from "../../ports/channels.js"
+import { broadcast } from "../infra/events/broadcaster.js"
+import { cleanupExpiredCache } from "../infra/persistence/index.js"
+import * as db from "../infra/persistence/sqlite.js"
+import { AgentBus, createBusTools } from "../infra/queue/agent-bus.js"
+import { RunPriority, RunQueue } from "../infra/queue/run-queue.js"
+import type { MessageRouterPort } from "../ports/channels.js"
 import type {
   ActiveRun,
   AgentRunConfig,
   BootHostDeps,
   NotificationOpts,
   OrchestratorConfig
-} from "../../ports/orchestration.js"
-import { TrajectoryEventKind } from "../../internal/enums/trajectory.js"
-import type { CurrentSession } from "../auth/state/context.js"
+} from "../ports/orchestration.js"
+import { TrajectoryEventKind } from "../internal/enums/trajectory.js"
+import type { CurrentSession } from "../api/auth/state/context.js"
 import { ClarificationsRegistry } from "./execution/clarifications-registry.js"
 import { persistLearnedTermFromResolution } from "./execution/clarifications-learned.js"
 import { createNotification, saveTrace } from "./execution/persistence.js"
@@ -37,11 +37,11 @@ import { recoverStaleRunsImpl } from "./execution/recovery.js"
 import { executeRunImpl } from "./execution/run-executor.js"
 import type { ExecuteRunCommand } from "./execution/run-executor/types.js"
 import { applyRunWorkspaceDiff, captureRunWorkspaceDiff } from "./execution/workspace-effects.js"
-import { requireSessionUpn } from "../auth/service/access.js"
+import { requireSessionUpn } from "../api/auth/service/access.js"
 import { requireOwnedThreadId } from "./continuity.js"
 import { filterToolsForVisitor, getAllTools } from "./tooling/registry.js"
 
-export type { AgentRunConfig, OrchestratorConfig } from "../../ports/orchestration.js"
+export type { AgentRunConfig, OrchestratorConfig } from "../ports/orchestration.js"
 
 // ── AgentOrchestrator ─────────────────────────────────────────────
 

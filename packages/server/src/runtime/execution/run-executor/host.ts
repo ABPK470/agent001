@@ -6,17 +6,17 @@ import {
   type AgentHost,
   type HostedPolicyContext
 } from "@mia/agent"
-import { bootHostDepsToConfigureAgentOptions } from "../../../../adapters/agent/boot-host-deps.js"
-import { createServerAttachmentService } from "../../../../infra/persistence/attachments.js"
+import { bootHostDepsToConfigureAgentOptions } from "../../../adapters/agent/boot-host-deps.js"
+import { createServerAttachmentService } from "../../../infra/persistence/attachments.js"
 import {
   ingestAgentNote,
   listTableVerdicts,
   lookupToolKnowledge,
   renderCachedHeader,
   saveToolKnowledge
-} from "../../../../infra/persistence/memory.js"
-import * as db from "../../../../infra/persistence/sqlite.js"
-import { buildPolicyContext } from "../../../policies/service/policy-context.js"
+} from "../../../infra/persistence/memory.js"
+import * as db from "../../../infra/persistence/sqlite.js"
+import { buildPolicyContext } from "../../../api/policies/service/policy-context.js"
 import type { ActiveRunRecord, ExecuteRunCommand, PerRunHostBundle, RunWorkspace } from "./types.js"
 
 function createRunContextForExecution(

@@ -372,7 +372,8 @@ function buildSyncExecuteTool(host: SyncRuntimeHost): Tool {
       if (!plan) return `Error: plan ${planId} not found or expired.`
       try {
         const result = await executeSync(planId, { host, confirm: true, userUpn: "agent" })
-        if (result.success) return `Plan ${planId} executed successfully against ${plan.target}.`
+        if (result.outcome === "refused") return `Error: ${result.error}`
+        if (result.outcome === "completed" && result.success) return `Plan ${planId} executed successfully against ${plan.target}.`
         return `Execute failed: ${result.error}`
       } catch (e) {
         return formatSyncToolError(e)

@@ -11,7 +11,7 @@
  * not guess continuity from the browser cookie.
  */
 
-import * as db from "../../infra/persistence/sqlite.js"
+import * as db from "../infra/persistence/sqlite.js"
 
 export class ContinuityError extends Error {
   constructor(message: string) {

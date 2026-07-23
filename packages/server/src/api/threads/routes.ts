@@ -13,7 +13,7 @@ import type { FastifyInstance } from "fastify"
 import * as db from "../../infra/persistence/sqlite.js"
 import { sendUserDownload } from "../../internal/http/attachment-response.js"
 import { canAccessThread } from "../auth/service/thread-access.js"
-import type { AgentOrchestrator } from "../runs/orchestrator.js"
+import type { AgentOrchestrator } from "../../runtime/orchestrator.js"
 
 function mapRuns(rows: db.DbRunWithUsage[], orchestrator: AgentOrchestrator): Run[] {
   return rows.map((run) => {

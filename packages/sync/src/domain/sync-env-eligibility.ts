@@ -10,18 +10,11 @@
  * Sync environments are the only From/To options. Connectors are shared plumbing.
  */
 
-import type { MssqlAccessHost } from "../ports/host.js"
 import { EnvRole } from "./enums.js"
 import type { SyncEnvironment } from "./environments.js"
 
-/** Enabled MSSQL connector ids (live). */
+/** Enabled MSSQL connector ids — resolved at the composition root. */
 export type SyncConnectorReadyIds = ReadonlySet<string>
-
-export function readyMssqlConnectorIds(host: MssqlAccessHost): SyncConnectorReadyIds {
-  const pools = host.mssql.pools
-  if (!pools) return new Set()
-  return new Set(pools.list().map((c) => c.id))
-}
 
 export function envCanBeSyncSource(env: Pick<SyncEnvironment, "role">): boolean {
   return env.role !== EnvRole.Target

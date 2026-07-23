@@ -8,6 +8,7 @@ import {
   filterFindingsForSyncIntent,
   getCatalog,
   getCatalogSchemaFingerprint,
+  getPublishedSyncEntityIds,
   getTenantConfig,
   MessageRole,
   resolveEffectiveMssqlConnection,
@@ -16,7 +17,7 @@ import {
   type Message
 } from "@mia/agent"
 import { buildSyncOperationalVocabularyForHost, formatSyncDriftIntentBlock, formatSyncOperationIntentBlock } from "@mia/sync"
-import { listResolvedTerms } from "../../../../infra/persistence/memory.js"
+import { listResolvedTerms } from "../../../infra/persistence/memory.js"
 import { buildClarificationBlock } from "../clarification-block.js"
 import { buildResolvedFactsBlock } from "../data-blocks/resolved-facts-block.js"
 import type { BuildContext } from "./types.js"
@@ -105,6 +106,7 @@ export async function buildLawSections(ctx: BuildContext): Promise<Message[]> {
   try {
     const catalog = opts.host ? getCatalog(opts.host, effectiveConnection) : null
     const tenant = getTenantConfig()
+    const publishedSyncEntityIds = getPublishedSyncEntityIds()
     const resolved = opts.clarifications.getResolved(runId)
     const learnedTermMappings = buildLearnedTermMappings(effectiveConnection, catalog)
     const synthMessages: Message[] = []
@@ -124,6 +126,7 @@ export async function buildLawSections(ctx: BuildContext): Promise<Message[]> {
       goal,
       catalog,
       tenant,
+      publishedSyncEntityIds,
       messages: synthMessages as readonly Message[],
       resolved,
       round: 0,

@@ -8,7 +8,7 @@ import {
   type SyncEnvironment
 } from "@mia/sync"
 
-import { linkSyncEnvironmentConnectorIds } from "../../connectors/state/live-connectors.js"
+import { linkSyncEnvironmentConnectorIds } from "../../../adapters/connectors/live-connectors.js"
 import * as db from "../../../infra/persistence/sqlite.js"
 
 export interface PersistedSyncEnvironmentLoad {

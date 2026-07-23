@@ -14,7 +14,6 @@
  * @module
  */
 
-import { getTenantConfig } from "../../domain/tenant/tenant-config.js"
 import { tokenize } from "../../tools/catalog/helpers.js"
 import type { CatalogGraph } from "../../tools/catalog/graph/index.js"
 import type { CatalogTable } from "../../tools/catalog/types.js"
@@ -82,13 +81,13 @@ export function resolveTableReference(
   catalog: CatalogGraph,
   schema: string,
   object: string,
-  mirrorSchema?: string | null
+  mirrorSchema: string | null
 ): { table: CatalogTable; resolution: GoalDataAnchor["resolution"] } | null {
   const qname = `${schema}.${object}`
   const direct = catalog.getTable(qname)
   if (direct) return { table: direct, resolution: "exact" }
 
-  const ms = mirrorSchema !== undefined ? mirrorSchema : getTenantConfig().mirrorSchema
+  const ms = mirrorSchema
   if (ms && !schema.toLowerCase().startsWith(`${ms.toLowerCase()}.`)) {
     const mirror = catalog.getTable(`${ms}.${qname}`)
     if (mirror) return { table: mirror, resolution: "mirror" }
@@ -166,8 +165,11 @@ function pushAnchor(
  * All data sources the goal pins — qualified literals (incl. fuzzy/mirror)
  * plus globally-unique bare table names.
  */
-export function resolveGoalDataAnchors(goal: string, catalog: CatalogGraph): GoalDataAnchor[] {
-  const mirrorSchema = getTenantConfig().mirrorSchema
+export function resolveGoalDataAnchors(
+  goal: string,
+  catalog: CatalogGraph,
+  mirrorSchema: string | null
+): GoalDataAnchor[] {
   const anchors: GoalDataAnchor[] = []
   const seen = new Set<string>()
   const consumedBare = new Set<string>()

@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import {
   loadPriorTurns,
   PRIOR_TURN_ANSWER_MAX_CHARS
-} from "../src/api/runs/prompting/data-blocks/prior-turns.js"
+} from "../src/runtime/prompting/data-blocks/prior-turns.js"
 import { seedUser } from "./_fk-helpers.js"
 
 let db: Database.Database

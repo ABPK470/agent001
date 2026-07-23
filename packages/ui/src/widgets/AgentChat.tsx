@@ -405,12 +405,7 @@ export function AgentChat() {
     try {
       const threadId = useStore.getState().activeThreadId
       if (!threadId) throw new Error("No thread selected")
-      const { runId } = await api.startRun(goal, attachmentIds, threadId)
-      useStore.getState().beginOptimisticRun({
-        id: runId,
-        goal,
-        threadId,
-      })
+      const { runId } = await useStore.getState().startRun(goal, attachmentIds, threadId)
       setScrollToRunId(runId)
       requestAnimationFrame(() => scrollToBottom("instant", { stick: true }))
     } catch (err) {

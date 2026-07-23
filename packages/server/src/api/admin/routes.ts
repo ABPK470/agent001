@@ -9,7 +9,7 @@ import { listSessions, listUserHistory, listUsersWithStats } from "../../infra/p
 import { setUserAdmin } from "../../infra/persistence/db/users.js"
 import * as db from "../../infra/persistence/sqlite.js"
 import { getDb } from "../../infra/persistence/sqlite.js"
-import type { AgentOrchestrator } from "../runs/orchestrator.js"
+import type { AgentOrchestrator } from "../../runtime/orchestrator.js"
 
 function parseAuditScopeType(raw: string | undefined): db.AuditScopeType | undefined {
   if (raw === "run" || raw === "admin") return raw

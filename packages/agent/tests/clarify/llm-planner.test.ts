@@ -100,6 +100,7 @@ function ctx(over: Partial<ClarifyContext> & Pick<ClarifyContext, "goal">): Clar
   return {
     catalog: minimalCatalog(),
     tenant: DEFAULT_TENANT_CONFIG,
+    publishedSyncEntityIds: [],
     messages: [],
     resolved: [],
     round: 1,

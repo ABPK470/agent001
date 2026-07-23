@@ -55,7 +55,7 @@ describe("tool approval end-to-end", () => {
 
     const { subscribeToEvents } = await import("../src/infra/events/broadcaster.js")
     const { finalizeWaitingForApprovalRun } = await import(
-      "../src/api/runs/execution/run-executor/finalization/waiting-approval.js"
+      "../src/runtime/execution/run-executor/finalization/waiting-approval.js"
     )
     const { listNotifications, getRun } = await import("../src/infra/persistence/db/index.js")
 
@@ -147,7 +147,7 @@ describe("tool approval end-to-end", () => {
       app.addHook("onRequest", async (req) => {
         ;(req as unknown as { session: CurrentSession }).session = session()
       })
-      registerRunRoutes(app, { resumeRun, cancelRun: vi.fn() } as unknown as import("../src/api/runs/orchestrator.js").AgentOrchestrator)
+      registerRunRoutes(app, { resumeRun, cancelRun: vi.fn() } as unknown as import("../src/runtime/orchestrator.js").AgentOrchestrator)
       await app.ready()
 
       const approve = await app.inject({
@@ -190,7 +190,7 @@ describe("tool approval end-to-end", () => {
     app.addHook("onRequest", async (req) => {
       ;(req as unknown as { session: CurrentSession }).session = session()
     })
-    registerRunRoutes(app, { resumeRun: vi.fn(), cancelRun } as unknown as import("../src/api/runs/orchestrator.js").AgentOrchestrator)
+    registerRunRoutes(app, { resumeRun: vi.fn(), cancelRun } as unknown as import("../src/runtime/orchestrator.js").AgentOrchestrator)
     await app.ready()
 
     try {

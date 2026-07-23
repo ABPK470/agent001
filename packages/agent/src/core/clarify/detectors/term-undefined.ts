@@ -103,7 +103,7 @@ export const termUndefinedDetector: Detector = {
       // skip if any of its tokens is a stopword AND the phrase is single-word
       if (!phrase.includes(" ") && isStopword(phrase)) continue
       if (isKnownInCatalog(lc, catalog)) continue
-      if (isKnownVocabulary(lc, ctx.tenant, catalog)) continue
+      if (isKnownVocabulary(lc, ctx.tenant, ctx.publishedSyncEntityIds, catalog)) continue
       // A prior clarification already resolved this term (or a singular/plural
       // variant of it) to a specific table that still exists. Don't re-ask —
       // re-asking a subject the org already answered is the "agent keeps
@@ -159,10 +159,11 @@ function isKnownInCatalog(lcPhrase: string, catalog: CatalogGraph): boolean {
 function isKnownVocabulary(
   lcPhrase: string,
   tenant: TenantConfig,
+  publishedIds: readonly string[],
   catalog: CatalogGraph
 ): boolean {
   const tokens = lcPhrase.split(/\s+/).filter((t) => t.length > 0)
-  const known = buildKnownVocabulary(tenant, catalog)
+  const known = buildKnownVocabulary(tenant, publishedIds, catalog)
   if (known.has(lcPhrase)) return true
   for (const t of tokens) if (known.has(t)) return true
   return false

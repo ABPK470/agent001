@@ -13,8 +13,8 @@ import { EventType, SyncOperationType } from "../domain/enums.js"
 import { assertSupportedSyncDirection, getEnvironment } from "../domain/environments.js"
 import {
   assertEnvConnectorReady,
-  readyMssqlConnectorIds,
 } from "../domain/sync-env-eligibility.js"
+import { readyMssqlConnectorIds } from "./connector-readiness.js"
 import { asEntityId } from "../domain/types/branded-ids.js"
 import { getPublishedSyncDefinitionForHost, type PublishedSyncDefinition } from "../domain/published-definitions.js"
 import { assertPublishedContractCurrent } from "../domain/publish-readiness.js"

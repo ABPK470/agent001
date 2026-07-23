@@ -29,7 +29,7 @@ import { registerPlatformRoutes } from "../api/platform/routes.js"
 import { registerPolicyRoutes } from "../api/policies/routes.js"
 import { registerProfileRoutes } from "../api/profile/routes.js"
 import { registerProposerRoutes } from "../api/proposer/index.js"
-import type { AgentOrchestrator } from "../api/runs/orchestrator.js"
+import type { AgentOrchestrator } from "../runtime/orchestrator.js"
 import { registerRunRoutes } from "../api/runs/routes.js"
 import {
   registerEntityRegistryRoutes,

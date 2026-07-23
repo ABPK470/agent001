@@ -37,6 +37,7 @@ export class Agent {
     workspaceRoot: string
     onPlannerTrace: AgentConfig["onPlannerTrace"]
     plannerDelegateFn: AgentConfig["plannerDelegateFn"]
+    plannerRouting: AgentConfig["plannerRouting"]
     toolKillManager: AgentConfig["toolKillManager"]
     completionValidator: AgentConfig["completionValidator"]
     enableAnswerStabilityGuard: boolean
@@ -71,6 +72,7 @@ export class Agent {
       workspaceRoot: config.workspaceRoot ?? ".",
       onPlannerTrace: config.onPlannerTrace,
       plannerDelegateFn: config.plannerDelegateFn,
+      plannerRouting: config.plannerRouting,
       toolKillManager: config.toolKillManager,
       completionValidator: config.completionValidator,
       enableAnswerStabilityGuard: config.enableAnswerStabilityGuard ?? true,
