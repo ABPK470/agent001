@@ -1,7 +1,6 @@
 /**
- * Save run sandbox files the same way as /trace: one browser download.
- * Multi-file diffs become a single zip. No folder picker (broken on many
- * localhost/browser setups with "system files" / origin errors).
+ * Save run sandbox files the same way as /trace: fetch → blob → browser download.
+ * Multi-file diffs become a single zip. No folder picker.
  */
 
 import { zipSync } from "fflate"

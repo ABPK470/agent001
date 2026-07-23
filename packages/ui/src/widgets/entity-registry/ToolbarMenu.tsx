@@ -23,6 +23,8 @@ export interface ToolbarMenuProps {
   minWidthClass?: string
   /** Smaller trigger for dense lists */
   compact?: boolean
+  /** Match IconButton chrome when nested in a segment track. */
+  variant?: "default" | "group"
 }
 
 const MENU_ESTIMATE = { width: 180, height: 160 }
@@ -33,6 +35,7 @@ export function ToolbarMenu({
   children,
   minWidthClass = "min-w-[11rem]",
   compact = false,
+  variant = "default",
 }: ToolbarMenuProps): JSX.Element {
   const [open, setOpen] = useState(false)
   const [menuPos, setMenuPos] = useState<{ top: number; left: number; minWidth: number } | null>(null)
@@ -76,10 +79,11 @@ export function ToolbarMenu({
   }, [open])
 
   return (
-    <div className="relative shrink-0">
+    <div className={`relative shrink-0${variant === "group" ? " self-stretch flex" : ""}`}>
       <IconButton
         ref={btnRef}
         label={title}
+        variant={variant}
         onClick={() => {
           if (open) {
             close()
@@ -99,7 +103,13 @@ export function ToolbarMenu({
           setOpen(true)
         }}
         active={open}
-        className={compact ? "!w-7 !h-7 !rounded-md" : undefined}
+        className={
+          variant === "group"
+            ? "!w-8 !min-w-8 !h-auto !self-stretch !rounded-md"
+            : compact
+              ? "!w-7 !h-7 !rounded-md"
+              : undefined
+        }
         aria-expanded={open}
       >
         {trigger}

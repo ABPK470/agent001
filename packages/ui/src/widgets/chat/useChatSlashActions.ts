@@ -95,7 +95,9 @@ export function useChatSlashActions(opts: ChatSlashActionsOptions) {
         path,
         traceExportFilename(lastRunId, options.format, { omitCode: options.omitCode }),
       )
-      consoleRef.current.logSuccess(`Exported ${filename} (${bytes.toLocaleString()} bytes)`)
+      consoleRef.current.logSuccess(
+        `Exported ${filename} (${bytes.toLocaleString()} bytes)`,
+      )
     },
     [lastRunId],
   )
@@ -112,7 +114,9 @@ export function useChatSlashActions(opts: ChatSlashActionsOptions) {
         path,
         threadExportFilename(activeThreadId, options.format, { omitCode: options.omitCode }),
       )
-      consoleRef.current.logSuccess(`Exported ${filename} (${bytes.toLocaleString()} bytes)`)
+      consoleRef.current.logSuccess(
+        `Exported ${filename} (${bytes.toLocaleString()} bytes)`,
+      )
     },
     [activeThreadId],
   )

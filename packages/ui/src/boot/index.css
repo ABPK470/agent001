@@ -1717,8 +1717,8 @@ textarea.input {
   margin-left: auto;
 }
 
-/* Trace fold toggle sits above identity chips — keep it compact so bands don’t collide */
-.trace-toolbar__actions button {
+/* Fold + download share one segment track — keep text segments compact */
+.trace-toolbar__actions [role="group"] > button[role="radio"] {
   padding-block: 0.4rem;
   padding-inline: 0.75rem;
 }

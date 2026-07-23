@@ -2,7 +2,7 @@
  * Segmented toggle — unified track, no per-segment borders on hover.
  */
 
-import type { JSX } from "react"
+import type { JSX, ReactNode } from "react"
 import { TAB_SEGMENT_TRACK } from "./chrome"
 
 export interface SegmentToggleOption<T extends string> {
@@ -15,6 +15,8 @@ export interface SegmentToggleProps<T extends string> {
   options: SegmentToggleOption<T>[]
   onChange: (value: T) => void
   ariaLabel: string
+  /** Extra controls in the same track (right side) — e.g. download. */
+  trailing?: ReactNode
 }
 
 export function SegmentToggle<T extends string>({
@@ -22,6 +24,7 @@ export function SegmentToggle<T extends string>({
   options,
   onChange,
   ariaLabel,
+  trailing,
 }: SegmentToggleProps<T>): JSX.Element {
   return (
     <div className={TAB_SEGMENT_TRACK} role="group" aria-label={ariaLabel}>
@@ -46,6 +49,7 @@ export function SegmentToggle<T extends string>({
           </button>
         )
       })}
+      {trailing}
     </div>
   )
 }

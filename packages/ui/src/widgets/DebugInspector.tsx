@@ -4,6 +4,7 @@
 
 import { useMemo } from "react"
 import { EmptyState } from "../components/EmptyState"
+import { ToastStack, useWidgetToasts } from "../components/useWidgetToasts"
 import { useStore } from "../state/store"
 import { WIDGET_ICONS } from "./widget-icons"
 import { buildTraceDag } from "./trace/build-trace-dag"
@@ -16,6 +17,7 @@ export function DebugInspector() {
     if (!s.activeRunId) return null
     return s.runs.find((r) => r.id === s.activeRunId)?.threadId ?? null
   })
+  const { toasts, dismissToast, notify, notifyError } = useWidgetToasts()
 
   const dag = useMemo(() => buildTraceDag(trace), [trace])
 
@@ -41,11 +43,16 @@ export function DebugInspector() {
   }
 
   return (
-    <TraceDag
-      dag={dag}
-      runId={activeRunId}
-      threadId={activeThreadId}
-      emptySlot={emptySlot}
-    />
+    <>
+      <ToastStack toasts={toasts} onDismiss={dismissToast} />
+      <TraceDag
+        dag={dag}
+        runId={activeRunId}
+        threadId={activeThreadId}
+        emptySlot={emptySlot}
+        onExportMessage={notify}
+        onExportError={notifyError}
+      />
+    </>
   )
 }

@@ -37,6 +37,7 @@ import {
 import { CallOutline } from "./TraceCall"
 import { PreambleOutline } from "./TraceContext"
 import { IdChip } from "./TraceCopy"
+import { TraceExportMenu } from "./TraceExportMenu"
 import { PhaseOutline } from "./TracePhase"
 import { PinOverlay, type PinRow } from "./TraceScope"
 import { WorkOutline } from "./TraceWork"
@@ -46,11 +47,15 @@ export function TraceDag({
   runId,
   threadId,
   emptySlot,
+  onExportMessage,
+  onExportError,
 }: {
   dag: TraceDag
   runId: string | null
   threadId: string | null
   emptySlot?: ReactNode
+  onExportMessage?: (message: string) => void
+  onExportError?: (message: string) => void
 }) {
   const [search, setSearch] = useState("")
   const [openState, setOpenState] = useState<OpenState>(() => emptyOpen())
@@ -732,6 +737,19 @@ export function TraceDag({
               ]}
               onChange={onFoldModeChange}
               ariaLabel="Expand or collapse all trace scopes"
+              trailing={
+                <TraceExportMenu
+                  target={
+                    runId
+                      ? { kind: "run", runId }
+                      : threadId
+                        ? { kind: "thread", threadId }
+                        : null
+                  }
+                  onExported={onExportMessage}
+                  onError={onExportError}
+                />
+              }
             />
           </div>
         </div>
