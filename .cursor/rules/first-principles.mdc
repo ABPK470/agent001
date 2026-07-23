@@ -30,7 +30,13 @@ When two designs work, pick the one that is more reliable, quieter, faster to fi
 3. Prefer the **smallest structure that still scales**; add layers only when the edge is real.
 4. **DI / inversion of control, baked plainly:** composition roots wire dependencies; cores stay testable and reusable. Prefer explicit parameters and simple wiring over heavy runtime DI frameworks, deep reference spaghetti, or indirection that hides execution flow. Dependencies must not bury what the code actually does (mechanical sympathy: avoid needless allocations and pointer mazes for “purity theater”).
 5. Use established **design patterns** when they reduce ambiguity and match the local dialect — never as decoration, never a different solution shape for the same kind of problem next door.
-6. Follow [docs/doctrine.md](docs/doctrine.md) and package layer rules. **Talk is cheap:** update doctrine and `lint:arch` together. Run `npm run lint:arch` (also first under `npm run lint`) before merging — drifted structure must not land. Human discipline fails at scale; the lint is the doctrine.
+6. Follow [docs/doctrine.md](docs/doctrine.md) and package layer rules. Doctrine
+   covers **structural layers** (where files import) **and product seams**
+   (who owns a capability; cores get resolved inputs — never leaked `*Id`
+   folklore). **Talk is cheap:** update doctrine and `lint:arch` together.
+   Run `npm run lint:arch` (also first under `npm run lint`) before merging —
+   drifted structure must not land. Human discipline fails at scale; the lint
+   is the doctrine.
 
 ## How code must read
 

@@ -336,6 +336,8 @@ const FORBIDDEN_SERVER_TREES = [
   "platform",
   "shared",
   "api/runs/core",
+  // erased multi-agent CRUD — one system prompt; planner owns children
+  "api/agents",
 ]
 
 /** Nest-style folder names forbidden anywhere under api/ */
@@ -383,6 +385,11 @@ function lintServerForbiddenTrees() {
     if (parts.includes("deploy")) {
       fail(file, 0, "server-forbidden-tree",
         `doctrine forbids api/**/deploy/ — use api/platform/; keep "deploy" in filenames only`)
+      return
+    }
+    if (parts[0] === "api" && parts[1] === "agents") {
+      fail(file, 0, "capability-ownership",
+        `doctrine forbids api/agents/ — agent profiles erased; runs use resolved systemPrompt only. See docs/doctrine.md (Capability ownership).`)
       return
     }
   }
@@ -765,6 +772,51 @@ for (const f of uiFiles) {
   lintUiPlatformCheckbox(f, src)
   lintUiEventKindSwitch(f, src)
 }
+
+/**
+ * Capability ownership — ban resurrected agent-profile / ad-hoc delegate dialects.
+ * See docs/doctrine.md § Capability ownership and § Agent runtime model.
+ */
+function lintCapabilityOwnership() {
+  const agentBanned = [
+    { re: /\bresolveAgent\b/, detail: "resolveAgent is forbidden — cores receive resolved systemPrompt/tools, not profile IDs" },
+    { re: /\bcreateDelegateTools\b/, detail: "createDelegateTools is forbidden — one spawn kernel; planner owns fan-out" },
+    { re: /\bcreateDelegationTools\b/, detail: "createDelegationTools is forbidden — one spawn kernel; planner owns fan-out" },
+    { re: /\bResolvedAgent\b/, detail: "ResolvedAgent / named agent profiles are erased" },
+  ]
+  for (const f of existsSync(AGENT_SRC) ? walk(AGENT_SRC) : []) {
+    if (!/\.(tsx?|jsx?)$/.test(f)) continue
+    if (f.endsWith(".test.ts") || f.endsWith(".test.tsx")) continue
+    const src = readFileSync(f, "utf8")
+    for (const { re, detail } of agentBanned) {
+      if (re.test(src)) {
+        fail(f, 0, "capability-ownership", `${detail}. See docs/doctrine.md`)
+      }
+    }
+  }
+
+  const uiBanned = [
+    { re: /\blistAgents\b/, detail: "listAgents / agent CRUD client is forbidden" },
+    { re: /\bcreateAgent\b/, detail: "createAgent is forbidden — no agent profiles" },
+    { re: /\bupdateAgent\b/, detail: "updateAgent is forbidden — no agent profiles" },
+    { re: /\bdeleteAgent\b/, detail: "deleteAgent is forbidden — no agent profiles" },
+    { re: /\bselectedAgentId\b/, detail: "selectedAgentId is forbidden — UI starts runs with goal+thread only" },
+    { re: /\bAgentEditor\b/, detail: "AgentEditor is forbidden — capability erased" },
+    { re: /\bAgentDefinition\b/, detail: "AgentDefinition is forbidden — capability erased" },
+  ]
+  for (const f of existsSync(UI_SRC) ? walk(UI_SRC) : []) {
+    if (!/\.(tsx?|jsx?)$/.test(f)) continue
+    if (f.endsWith(".test.ts") || f.endsWith(".test.tsx")) continue
+    const src = readFileSync(f, "utf8")
+    for (const { re, detail } of uiBanned) {
+      if (re.test(src)) {
+        fail(f, 0, "capability-ownership", `${detail}. See docs/doctrine.md`)
+      }
+    }
+  }
+}
+
+lintCapabilityOwnership()
 
 /**
  * Event catalog doctrine — widgets must not switch on TraceEntry.kind /
