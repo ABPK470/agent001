@@ -973,6 +973,59 @@ function ProgressPill({ part }: { part: ResponseProgressPart }) {
   )
 }
 
+/**
+ * Orchestrator verification beat — not agent prose.
+ * First line always shows WHAT needs work; expand only for extra notes.
+ */
+function CheckBlock({ part }: { part: ResponseProgressPart }) {
+  const { preserveToggle } = useChatScroll()
+  const [open, setOpen] = useState(false)
+  const buttonRef = useRef<HTMLButtonElement>(null)
+  const what = part.detail?.trim() || ""
+  const body = part.body?.trim() || ""
+  const hasBody = body.length > 0
+  const Chevron = open ? ChevronDown : ChevronRight
+  const labelClass =
+    part.status === "running" ? "text-text-muted" : "text-text-faint"
+
+  return (
+    <div className="py-1 min-w-0">
+      <button
+        ref={buttonRef}
+        type="button"
+        disabled={!hasBody}
+        onClick={() => {
+          if (!hasBody) return
+          preserveToggle(buttonRef.current, () => setOpen((v) => !v))
+        }}
+        className={[
+          "inline-flex max-w-full items-baseline gap-1.5 py-0.5 text-left text-[15px] leading-6",
+          labelClass,
+          hasBody ? "transition-colors hover:text-text-muted" : "cursor-default",
+        ].join(" ")}
+        aria-expanded={hasBody ? open : undefined}
+      >
+        {hasBody ? (
+          <Chevron size={12} strokeWidth={1.5} className="text-text-faint shrink-0 translate-y-[2px]" />
+        ) : null}
+        <span className="min-w-0">
+          <span>{part.label}</span>
+          {what ? <span className="text-text-faint"> · {what}</span> : null}
+        </span>
+      </button>
+      {open && hasBody ? (
+        <div className="mt-0.5 ml-[0.35rem] pl-3 border-l border-border-subtle text-[15px] leading-6 text-text-faint whitespace-pre-wrap break-words">
+          {body}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function isVerificationProgress(part: ResponseProgressPart): boolean {
+  return part.id === "verification" || part.id.startsWith("verification-")
+}
+
 function NarrativeUpdate({ part }: { part: ResponseNarrativePart }) {
   // Status lines = muted system chrome (same band as tool headers).
   // Prose = assistant voice — bright, dominates the thread.
@@ -1490,6 +1543,10 @@ function RunMessageImpl({
 
       if (part.kind === "progress") {
         if (isOffThreadProgress(part)) return
+        if (isVerificationProgress(part)) {
+          items.push(<CheckBlock key={part.id} part={part} />)
+          return
+        }
         items.push(<ProgressPill key={part.id} part={part} />)
         return
       }

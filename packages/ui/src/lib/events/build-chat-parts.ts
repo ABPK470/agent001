@@ -56,7 +56,13 @@ export interface ResponseProgressPart {
   id: string
   label: string
   status: "running" | "done" | "error"
+  /** Short first-line meta (e.g. what needs work). Always visible. */
   detail?: string
+  /**
+   * Longer process notes — collapsed by default for verification checks.
+   * Everyday readers see label + detail; expand for the rest.
+   */
+  body?: string
   shimmer?: boolean
 }
 
@@ -477,6 +483,7 @@ function setActivityPart(
   status: "running" | "done" | "error",
   detail?: string,
   shimmer?: boolean,
+  body?: string,
 ): ResponsePart[] {
   return upsertProgressPart(parts, {
     kind: "progress",
@@ -485,6 +492,7 @@ function setActivityPart(
     status,
     detail,
     shimmer,
+    ...(body ? { body } : {}),
   })
 }
 
@@ -956,27 +964,37 @@ export function buildResponseParts(
       }
       case "planner-verification": {
         parts = settlePrimaryActivities(parts, "verification")
-        const verifyDetail =
+        const failed = entry.steps.filter((s) => s.outcome !== "pass")
+        const whatLines = failed.map((s) =>
+          s.issues.length > 0
+            ? `${humanizeStepName(s.stepName)}: ${s.issues[0]}`
+            : humanizeStepName(s.stepName),
+        )
+        // First line = WHAT needs work (always visible). Body = fuller notes
+        // (extra issues / steps) — collapsed so everyday readers aren't bothered.
+        const verifyWhat =
           entry.overall === "pass"
             ? undefined
-            : entry.steps
-                .filter((s) => s.outcome !== "pass")
-                .map((s) =>
-                  s.issues.length > 0
-                    ? `${humanizeStepName(s.stepName)}: ${s.issues[0]}`
-                    : humanizeStepName(s.stepName),
-                )
-                .slice(0, 2)
-                .join(" · ") || entry.overall
+            : whatLines[0] || entry.overall
+        const extraNotes = failed.flatMap((s) =>
+          s.issues.length > 1
+            ? s.issues.slice(1).map((issue) => `${humanizeStepName(s.stepName)}: ${issue}`)
+            : [],
+        )
+        const moreSteps = whatLines.slice(1)
+        const verifyBody =
+          entry.overall === "pass"
+            ? undefined
+            : [...moreSteps, ...extraNotes].join("\n") || undefined
         // Pass and "found gaps" are both settled checks — never alarm-red.
-        // Copy carries the outcome; chrome matches Subagent / Repair / Checked work.
         parts = setActivityPart(
           parts,
           `verification-${index}`,
           entry.overall === "pass" ? "Checked work" : "Check · needs work",
           entry.overall === "pass" || entry.overall === "fail" ? "done" : "running",
-          verifyDetail,
+          verifyWhat,
           entry.overall !== "pass" && entry.overall !== "fail",
+          verifyBody,
         )
         break
       }
