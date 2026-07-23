@@ -14,7 +14,6 @@ import type {
 } from "../../types"
 import {
   CatalogDiffSections,
-  firstCatalogDiffEntryKey,
   type CatalogDiffSection,
 } from "../platform/CatalogDiffSections"
 import { ACTION_BTN, FIELD_LABEL, PANEL, TEXT_BTN } from "./chrome"
@@ -110,7 +109,6 @@ export function PublishCatalogModal({
         setTipVersion(preview.activeCatalogVersion)
         setPublishedVersion(preview.publishedCatalogVersion)
         setPreviewNeedsPublish(preview.catalogNeedsPublish)
-        setOpenEntryKey(firstCatalogDiffEntryKey(preview.sections))
         setDiffBusy(false)
       },
       (e: unknown) => {

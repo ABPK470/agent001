@@ -2,6 +2,9 @@
  * Unified line diff for catalog JSON payloads.
  * Default shows the full document; `changesOnly` collapses unchanged runs
  * with click-to-expand ellipses (works above and below change hunks).
+ *
+ * Large one-sided diffs (create / delete) are paginated so the Publish modal
+ * stays responsive.
  */
 
 import type { JSX } from "react"
@@ -12,6 +15,10 @@ import {
   materializeCollapsedDiffRows,
   type LineDiffRow,
 } from "../../lib/line-text-diff"
+
+/** Soft cap before "Show more" — keeps expand clicks from freezing the modal. */
+const INITIAL_VISIBLE_ROWS = 120
+const VISIBLE_STEP = 200
 
 export function CatalogJsonDiff({
   beforeJson,
@@ -26,6 +33,7 @@ export function CatalogJsonDiff({
   className?: string
 }): JSX.Element {
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set())
+  const [visibleLimit, setVisibleLimit] = useState(INITIAL_VISIBLE_ROWS)
 
   const collapsed = useMemo(() => {
     const full = buildLineTextDiff(beforeJson ?? "", afterJson ?? "")
@@ -34,12 +42,16 @@ export function CatalogJsonDiff({
 
   useEffect(() => {
     setExpandedIds(new Set())
+    setVisibleLimit(INITIAL_VISIBLE_ROWS)
   }, [beforeJson, afterJson, changesOnly])
 
   const rows = useMemo(
     () => (changesOnly ? materializeCollapsedDiffRows(collapsed, expandedIds) : collapsed),
     [changesOnly, collapsed, expandedIds],
   )
+
+  const visibleRows = rows.slice(0, visibleLimit)
+  const hiddenCount = Math.max(0, rows.length - visibleLimit)
 
   function onToggleEllipsis(id: string): void {
     setExpandedIds((prev) => {
@@ -55,22 +67,33 @@ export function CatalogJsonDiff({
   }
 
   return (
-    <pre
-      className={[
-        "overflow-auto show-scrollbar rounded-md border border-border-subtle bg-base/50 font-mono text-[11px] leading-relaxed",
-        className ?? "max-h-80",
-      ].join(" ")}
-    >
-      <code className="block min-w-full">
-        {rows.map((row, index) => (
-          <DiffLine
-            key={`${row.kind}-${row.id ?? `${row.oldLine}-${row.newLine}`}-${index}`}
-            row={row}
-            onToggleEllipsis={onToggleEllipsis}
-          />
-        ))}
-      </code>
-    </pre>
+    <div className="space-y-2">
+      <pre
+        className={[
+          "overflow-auto show-scrollbar rounded-md border border-border-subtle bg-base/50 font-mono text-[11px] leading-relaxed",
+          className ?? "max-h-80",
+        ].join(" ")}
+      >
+        <code className="block min-w-full">
+          {visibleRows.map((row, index) => (
+            <DiffLine
+              key={`${row.kind}-${row.id ?? `${row.oldLine}-${row.newLine}`}-${index}`}
+              row={row}
+              onToggleEllipsis={onToggleEllipsis}
+            />
+          ))}
+        </code>
+      </pre>
+      {hiddenCount > 0 && (
+        <button
+          type="button"
+          onClick={() => setVisibleLimit((n) => n + VISIBLE_STEP)}
+          className="w-full rounded-md border border-border-subtle px-2.5 py-1.5 text-xs text-text-muted transition-colors hover:bg-elevated/50 hover:text-text"
+        >
+          Show more ({hiddenCount} line{hiddenCount === 1 ? "" : "s"} remaining)
+        </button>
+      )}
+    </div>
   )
 }
 
