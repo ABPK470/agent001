@@ -138,20 +138,15 @@ export function RunStatus() {
     setWorkspaceLoading(true)
     setWorkspaceResult(null)
     try {
+      const { formatWorkspaceSaveMessage } = await import("../lib/run-artifact-download.js")
       const result = await api.downloadRunWorkspaceFiles(run.id, paths)
-      setWorkspaceResult(
-        result.count === 1
-          ? "Saved file to your computer"
-          : `Saved ${result.count} files to your computer`,
-      )
-      notify(
-        result.count === 1
-          ? "Saved to your computer"
-          : `Saved ${result.count} files to your computer`,
-      )
+      const message = formatWorkspaceSaveMessage(result)
+      setWorkspaceResult(message)
+      notify(message)
     } catch (e) {
-      setWorkspaceResult("Failed to download files")
-      notifyError(e instanceof Error ? e.message : "Failed to download files")
+      if (e instanceof Error && e.name === "WorkspaceSaveCancelled") return
+      setWorkspaceResult("Failed to save files")
+      notifyError(e instanceof Error ? e.message : "Failed to save files")
     } finally {
       workspaceBusyRef.current = false
       setWorkspaceLoading(false)
@@ -576,7 +571,7 @@ export function RunStatus() {
                   className="rounded-lg bg-accent/10 px-3 py-1.5 text-[13px] text-accent transition-colors hover:bg-accent/20"
                   onClick={() => void handleDownloadWorkspaceFiles().catch((err: unknown) => { console.error("[mia]", err) })}
                   disabled={workspaceLoading}
-                  title="Download to your computer — you choose where to save"
+                  title="Choose a folder on your computer for these files"
                 >
                   Save locally
                 </button>

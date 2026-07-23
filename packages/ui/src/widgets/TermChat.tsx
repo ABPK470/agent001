@@ -1317,14 +1317,20 @@ function WorkspaceDiffCard({ runId, onNotify, onNotifyError }: {
     if (downloadablePaths.length === 0) return
     setDownloading(true)
     try {
-      const result = await api.downloadRunWorkspaceFiles(runId, downloadablePaths)
-      onNotify?.(
-        result.count === 1
-          ? "Saved to your computer"
-          : `Saved ${result.count} files to your computer`,
+      const { formatWorkspaceSaveMessage } = await import(
+        "../lib/run-artifact-download.js"
       )
+      const result = await api.downloadRunWorkspaceFiles(runId, downloadablePaths)
+      onNotify?.(formatWorkspaceSaveMessage(result))
       setDownloaded(true)
     } catch (err) {
+      const cancelled =
+        (err instanceof Error && err.name === "WorkspaceSaveCancelled") ||
+        (typeof err === "object" &&
+          err !== null &&
+          "name" in err &&
+          (err as { name: string }).name === "WorkspaceSaveCancelled")
+      if (cancelled) return
       onNotifyError?.(err instanceof Error ? err.message : "Download failed")
     } finally {
       setDownloading(false)
@@ -1410,7 +1416,7 @@ function WorkspaceDiffCard({ runId, onNotify, onNotifyError }: {
           className="flex-1 mt-2 px-3 py-1.5 rounded-lg border border-border bg-transparent hover:bg-overlay-hover text-[15px] text-text-muted hover:text-text-secondary transition-colors disabled:opacity-30"
           onClick={() => void saveLocally()}
           disabled={downloading || applying || downloadablePaths.length === 0}
-          title="Download to your computer — you choose where to save"
+          title="Choose a folder on your computer for these files"
         >
           {downloading ? "Saving…" : downloaded ? "Saved locally" : "Save locally"}
         </button>

@@ -73,6 +73,7 @@ function WorkspaceChangesCard({
   const [downloading, setDownloading] = useState(false)
   const [applied, setApplied] = useState(false)
   const [downloaded, setDownloaded] = useState(false)
+  const [saveMessage, setSaveMessage] = useState("Saved to your computer")
   const [error, setError] = useState<string | null>(null)
   const upsertRun = useStore((s) => s.upsertRun)
 
@@ -104,9 +105,12 @@ function WorkspaceChangesCard({
     setDownloading(true)
     setError(null)
     try {
-      await api.downloadRunWorkspaceFiles(runId, downloadablePaths)
+      const { formatWorkspaceSaveMessage } = await import("../lib/run-artifact-download.js")
+      const result = await api.downloadRunWorkspaceFiles(runId, downloadablePaths)
+      setSaveMessage(formatWorkspaceSaveMessage(result))
       setDownloaded(true)
     } catch (err) {
+      if (err instanceof Error && err.name === "WorkspaceSaveCancelled") return
       setError(err instanceof Error ? err.message : "Download failed")
     } finally {
       setDownloading(false)
@@ -130,7 +134,7 @@ function WorkspaceChangesCard({
       >
         <div className="flex items-center gap-2 px-3 py-2 text-base text-success">
           <CheckCircle2 size={14} className="shrink-0" />
-          <span className="flex-1">Saved to your computer</span>
+          <span className="flex-1">{saveMessage}</span>
           <button
             type="button"
             className="px-2.5 py-1 rounded-lg border border-border text-sm text-text-muted hover:text-text transition-colors"
@@ -223,7 +227,7 @@ function WorkspaceChangesCard({
           className="flex-1 px-3 py-1.5 rounded-lg bg-success hover:bg-success/80 text-text text-base font-medium transition-colors disabled:opacity-40"
           onClick={() => void handleSaveLocally()}
           disabled={downloading || applying || downloadablePaths.length === 0}
-          title="Download to your computer — you choose where to save"
+          title="Choose a folder on your computer for these files"
         >
           {downloading ? "Saving…" : "Save locally"}
         </button>
