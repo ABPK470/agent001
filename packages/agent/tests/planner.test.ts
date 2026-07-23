@@ -4364,6 +4364,51 @@ describe("Pipeline: executePipeline", () => {
     expect(calls).toEqual(["first", "second"])
   })
 
+  it("emits tool-call/result traces for deterministic steps with stepName", async () => {
+    const traces: Array<Record<string, unknown>> = []
+    const tool: Tool = {
+      name: "echo",
+      description: "Echo",
+      parameters: { type: "object", properties: { text: { type: "string" } } },
+      async execute(args) {
+        return `done: ${String(args.text)}`
+      }
+    }
+
+    const plan = makePlan({
+      steps: [
+        {
+          name: "revenue_schema",
+          stepType: "deterministic_tool",
+          tool: "echo",
+          args: { text: "publish.Revenue" }
+        }
+      ],
+      edges: []
+    })
+
+    const result = await executePipeline(plan, [tool], async () => ({ output: "" }), {
+      onTrace: (entry) => {
+        traces.push(entry)
+      }
+    })
+
+    expect(result.status).toBe("completed")
+    const call = traces.find((t) => t.kind === "tool-call")
+    const res = traces.find((t) => t.kind === "tool-result")
+    expect(call).toMatchObject({
+      kind: "tool-call",
+      tool: "echo",
+      stepName: "revenue_schema"
+    })
+    expect(String(call?.argsFormatted ?? "")).toContain("publish.Revenue")
+    expect(res).toMatchObject({
+      kind: "tool-result",
+      invocationId: call?.invocationId
+    })
+    expect(String(res?.text ?? "")).toContain("done:")
+  })
+
   it("starts the next ready step when a parallel slot frees (not after the whole wave)", async () => {
     type Gate = { resolve: () => void; promise: Promise<void> }
     function makeGate(): Gate {

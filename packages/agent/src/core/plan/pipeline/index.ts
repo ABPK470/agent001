@@ -46,6 +46,7 @@ import type {
 import type { DelegateFn } from "../../../domain/types/planner-delegate.js"
 import { buildGraph, buildResult, executeToolForText } from "./graph.js"
 import { buildRepairStep } from "./repair-step.js"
+import { withDeterministicToolTrace, type PipelineTraceEmit } from "./tool-trace.js"
 
 // Re-exports for backwards compatibility
 export { isGibberishIssue } from "../pipeline-validation/index.js"
@@ -68,6 +69,8 @@ export interface PipelineExecutorOptions {
   workspaceRoot?: string
   onStepStart?: (step: PlanStep) => void
   onStepEnd?: (step: PlanStep, result: PipelineStepResult) => void
+  /** Same channel as planner orchestrator traces — tool-call/result for det steps. */
+  onTrace?: PipelineTraceEmit
   priorResults?: ReadonlyMap<string, PipelineStepResult>
   repairPlan?: RepairPlan
   runtimeModel?: PlannerRuntimeModel
@@ -270,9 +273,16 @@ async function executeNamedStep(opts: {
     )
   }
 
+  // Deterministic steps call tools inline (no agent loop). Stamp tool-call /
+  // tool-result onto the planner trace so chat can show input/output.
+  const toolExecFn =
+    effectiveStep.stepType === "deterministic_tool"
+      ? withDeterministicToolTrace(opts.toolExecFn, opts.name, opts.pipelineOpts?.onTrace)
+      : opts.toolExecFn
+
   const result = await executeStep(
     effectiveStep,
-    opts.toolExecFn,
+    toolExecFn,
     opts.delegateFn,
     opts.pipelineOpts?.signal,
     {

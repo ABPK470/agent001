@@ -268,6 +268,57 @@ describe("buildResponseParts — TermChat projection", () => {
     }
   })
 
+  it("nests deterministic tool I/O under the step (chevron + args/output)", () => {
+    const parts = buildResponseParts(
+      [
+        {
+          kind: "planner-step-start",
+          stepName: "revenue_schema",
+          stepType: "deterministic_tool",
+        },
+        {
+          kind: "tool-call",
+          invocationId: "inv-det-1",
+          toolCallId: "det-revenue_schema-abc",
+          tool: "explore_mssql_schema",
+          argsSummary: "table=publish.Revenue",
+          argsFormatted: JSON.stringify({ table: "publish.Revenue" }, null, 2),
+          stepName: "revenue_schema",
+        },
+        {
+          kind: "tool-result",
+          invocationId: "inv-det-1",
+          toolCallId: "det-revenue_schema-abc",
+          text: "columns: Amount, ClientId, …",
+        },
+        {
+          kind: "planner-step-end",
+          stepName: "revenue_schema",
+          status: "completed",
+          durationMs: 4400,
+        },
+      ],
+      "running",
+      "",
+      null,
+      null,
+      null,
+      "run-1",
+    )
+
+    const step = parts.find((p) => p.kind === "step-block")
+    expect(step?.kind).toBe("step-block")
+    if (step?.kind === "step-block") {
+      expect(step.tools).toHaveLength(1)
+      expect(step.tools[0]?.row.tool).toBe("explore_mssql_schema")
+      expect(step.tools[0]?.row.argsFormatted).toContain("publish.Revenue")
+      expect(step.tools[0]?.row.details).toContain("columns")
+      expect(step.tools[0]?.row.status).toBe("done")
+      expect(step.detail).toMatch(/explore|schema|Revenue/i)
+      expect(step.detail).toMatch(/4\.4|4400|s|ms/)
+    }
+  })
+
   it("keeps Check first line to the step name; issues stay in collapsed body", () => {
     const parts = buildResponseParts(
       [

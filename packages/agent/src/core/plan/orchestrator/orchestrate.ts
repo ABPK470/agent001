@@ -98,7 +98,8 @@ export async function executePlannerPath(
       runtimeModel,
       signal: ctx.signal,
       onStepStart: callbacks.onStepStart,
-      onStepEnd: callbacks.onStepEnd
+      onStepEnd: callbacks.onStepEnd,
+      onTrace: ctx.onTrace
     })
 
     ctx.onTrace?.({

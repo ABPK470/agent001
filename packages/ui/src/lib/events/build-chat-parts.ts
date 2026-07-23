@@ -553,6 +553,18 @@ function truncateStepDetail(text: string, max = 88): string {
   return t.length > max ? `${t.slice(0, max - 1)}…` : t
 }
 
+/** Terse tool beat for a step header — same dialect as live subagent tools. */
+function stepToolsDetail(tools: ResponseToolPart[]): string {
+  return tools
+    .slice(0, 3)
+    .map((t) => {
+      const name = t.row.tool.replace(/_/g, " ")
+      const target = extractToolTarget(t.row.tool, t.row.argsFormatted ?? "", t.row.summary)
+      return target ? `${name} ${target}` : name
+    })
+    .join(" · ")
+}
+
 function hasHiddenToolDetails(summary: string, details?: string): boolean {
   const full = (details ?? "").trim()
   if (!full) return false
@@ -851,7 +863,7 @@ export function buildResponseParts(
       case "planner-step-end": {
         const activityId = runningSteps.get(entry.stepName) ?? `step-${entry.stepName}-${index}`
         const ok = isPlannerStepSuccessStatus(entry.status)
-        const detail = plannerStepEndDetail({
+        const endDetail = plannerStepEndDetail({
           status: entry.status,
           error: entry.error,
           durationMs: entry.durationMs,
@@ -860,8 +872,16 @@ export function buildResponseParts(
         // Process gaps (verify fail → repair) are normal agent work — settle
         // as done chrome with the reason in detail, never alarm-red "error".
         // Pipeline success is "completed"; older traces may use pass/success.
+        // When nested tools exist (deterministic I/O), keep the tool label on
+        // the header — same terse dialect as live subagent tool beats.
         parts = parts.map((part) => {
           if (part.kind !== "step-block" || part.id !== activityId) return part
+          const toolLabel =
+            ok && part.tools.length > 0 ? stepToolsDetail(part.tools) : undefined
+          const detail =
+            toolLabel && endDetail
+              ? `${toolLabel} · ${endDetail}`
+              : (toolLabel ?? endDetail)
           return {
             ...part,
             status: "done" as const,
@@ -1121,16 +1141,17 @@ export function buildResponseParts(
         const nestStepId =
           (entry.stepName ? runningSteps.get(entry.stepName) : undefined) ?? openStepId
         if (nestStepId) {
-          parts = parts.map((part) =>
-            part.kind === "step-block" && part.id === nestStepId
-              ? {
-                  ...part,
-                  tools: [...part.tools, toolPart],
-                  hasRunning: true,
-                  status: "running" as const,
-                }
-              : part,
-          )
+          parts = parts.map((part) => {
+            if (part.kind !== "step-block" || part.id !== nestStepId) return part
+            const tools = [...part.tools, toolPart]
+            return {
+              ...part,
+              tools,
+              hasRunning: true,
+              status: "running" as const,
+              detail: stepToolsDetail(tools) || part.detail,
+            }
+          })
           break
         }
         pendingTools.push(toolPart)
