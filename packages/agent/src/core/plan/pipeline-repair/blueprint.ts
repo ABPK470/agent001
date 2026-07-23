@@ -7,9 +7,9 @@
  * @module
  */
 
-import type { ToolCallRecord } from "../../../tools/index.js"
+import type { ToolCallRecord } from "../../../tools/_shared/result.js"
 import { DelegationOutputValidationCode } from "../../../domain/enums/delegation.js"
-import { normalizeToolExecutionOutput } from "../../../tools/index.js"
+import { normalizeToolExecutionOutput } from "../../../tools/_shared/result.js"
 import type { Tool } from "../../types.js"
 import {
   buildBlueprintSeedTemplate,
@@ -18,7 +18,7 @@ import {
 } from "../blueprint-contract/index.js"
 import type { Plan, SubagentTaskStep } from "../types.js"
 import type { SubagentStepValidationContext } from "./artifacts.js"
-import { normalizeToolCallPath } from "./reconcile.js"
+import { normalizeToolCallPath } from "./path-normalize.js"
 
 export interface SubagentValidationFailure {
   code?: DelegationOutputValidationCode

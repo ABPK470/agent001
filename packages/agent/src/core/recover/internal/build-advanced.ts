@@ -7,8 +7,8 @@
  * @module
  */
 
-import type { ToolCallRecord } from "../../../tools/index.js"
-import { parseToolResultObject } from "../../../tools/index.js"
+import type { ToolCallRecord } from "../../../tools/_shared/result.js"
+import { parseToolResultObject } from "../../../tools/_shared/result.js"
 import type { RecoveryHint } from "../recovery.js"
 import {
   extractMissingNpmScriptName,

@@ -1,5 +1,5 @@
 /**
- * Mymi DB explorer transport routes.
+ * Warehouse DB explorer transport routes.
  */
 
 import { getCatalog, getMssqlConfig, getPool, type AgentHost } from "@mia/agent"
@@ -24,12 +24,12 @@ function fmtTypeDetail(dataType: string, maxLength: number | null): string | nul
   return null
 }
 
-export function registerMymiRoutes(app: FastifyInstance, host: AgentHost): void {
+export function registerWarehouseRoutes(app: FastifyInstance, host: AgentHost): void {
   async function acquirePoolH(db: string) {
     return getPool(host, db)
   }
 
-  app.get("/api/mymi/databases", async () =>
+  app.get("/api/warehouse/databases", async () =>
     getMssqlConfig(host).map((config) => ({
       name: config.name,
       server: config.server,
@@ -37,7 +37,7 @@ export function registerMymiRoutes(app: FastifyInstance, host: AgentHost): void 
     }))
   )
 
-  app.get<QS>("/api/mymi/overview", async (req) => {
+  app.get<QS>("/api/warehouse/overview", async (req) => {
     const catalog = getCatalog(host, connName(req.query))
     if (!catalog) return []
     const bySchema = new Map<
@@ -61,7 +61,7 @@ export function registerMymiRoutes(app: FastifyInstance, host: AgentHost): void 
       .sort((a, b) => b.totalRows - a.totalRows || a.schema.localeCompare(b.schema))
   })
 
-  app.get<QS>("/api/mymi/schemas", async (req) => {
+  app.get<QS>("/api/warehouse/schemas", async (req) => {
     const catalog = getCatalog(host, connName(req.query))
     if (!catalog) return []
     const bySchema = new Map<string, { tableCount: number; viewCount: number }>()
@@ -80,7 +80,7 @@ export function registerMymiRoutes(app: FastifyInstance, host: AgentHost): void 
   })
 
   app.get<{ Querystring: { db?: string; q?: string; schemas?: string } }>(
-    "/api/mymi/search",
+    "/api/warehouse/search",
     async (req, reply) => {
       const q = (req.query.q ?? "").trim().toLowerCase()
       const schemaFilter = (req.query.schemas ?? "").split(",").filter(Boolean)
@@ -146,7 +146,7 @@ export function registerMymiRoutes(app: FastifyInstance, host: AgentHost): void 
     }
   )
 
-  app.get<QS & { Params: { schema: string } }>("/api/mymi/schema/:schema", async (req, reply) => {
+  app.get<QS & { Params: { schema: string } }>("/api/warehouse/schema/:schema", async (req, reply) => {
     const { schema } = req.params
     if (!validateIdentifier(schema)) {
       reply.code(400)
@@ -170,7 +170,7 @@ export function registerMymiRoutes(app: FastifyInstance, host: AgentHost): void 
   })
 
   app.get<QS & { Params: { schema: string; table: string } }>(
-    "/api/mymi/schema/:schema/table/:table/columns",
+    "/api/warehouse/schema/:schema/table/:table/columns",
     async (req, reply) => {
       const { schema, table } = req.params
       if (!validateIdentifier(schema) || !validateIdentifier(table)) {
@@ -209,7 +209,7 @@ export function registerMymiRoutes(app: FastifyInstance, host: AgentHost): void 
   )
 
   app.get<QS & { Params: { schema: string; table: string } }>(
-    "/api/mymi/schema/:schema/table/:table/relations",
+    "/api/warehouse/schema/:schema/table/:table/relations",
     async (req, reply) => {
       const { schema, table } = req.params
       if (!validateIdentifier(schema) || !validateIdentifier(table)) {
@@ -258,7 +258,7 @@ export function registerMymiRoutes(app: FastifyInstance, host: AgentHost): void 
   )
 
   app.get<{ Params: { schema: string; table: string }; Querystring: { db?: string; limit?: string } }>(
-    "/api/mymi/schema/:schema/table/:table/preview",
+    "/api/warehouse/schema/:schema/table/:table/preview",
     async (req, reply) => {
       const db = connName(req.query)
       const limit = Math.min(Number(req.query.limit ?? 20), 100)
@@ -290,7 +290,7 @@ export function registerMymiRoutes(app: FastifyInstance, host: AgentHost): void 
     }
   )
 
-  app.get<QS>("/api/mymi/datamodel", async (req) => {
+  app.get<QS>("/api/warehouse/datamodel", async (req) => {
     const catalog = getCatalog(host, connName(req.query))
     if (!catalog) return { objects: [], relations: [] }
     const objects = []

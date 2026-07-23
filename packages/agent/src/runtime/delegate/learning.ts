@@ -1,4 +1,5 @@
 import { BanditArmId } from "../../domain/enums/delegation.js"
+import type { DelegationTrajectoryRecord } from "../../domain/types/delegation-learning.js"
 /**
  * Delegation bandit tuner — online UCB1 arm selection for delegation scoring.
  *
@@ -32,6 +33,7 @@ import { BanditArmId } from "../../domain/enums/delegation.js"
 // ============================================================================
 
 export type { BanditArmId }
+export type { DelegationTrajectoryRecord } from "../../domain/types/delegation-learning.js"
 
 export interface BanditArm {
   readonly id: BanditArmId
@@ -41,42 +43,6 @@ export interface BanditArm {
   meanReward: number
   /** Number of times this arm has been pulled and an outcome recorded. */
   sampleCount: number
-}
-
-// ============================================================================
-// Trajectory record
-// ============================================================================
-
-export interface DelegationTrajectoryRecord {
-  /** Wall time of the delegation decision. */
-  readonly timestamp: number
-  /** Arm selected for this trajectory. */
-  readonly armId: BanditArmId
-  /** Effective scoreThreshold used for this decision. */
-  readonly appliedThreshold: number
-  // ── State features at decision time ───────────────────────────────────────
-  readonly complexityScore: number
-  readonly fanoutCount: number
-  readonly stepCount: number
-  readonly nestingDepth: number
-  readonly parallelFraction: number
-  // ── Decision outcome ──────────────────────────────────────────────────────
-  readonly shouldDelegate: boolean
-  readonly utilityScore: number
-  // ── Execution outcome (filled in after the pipeline run) ─────────────────
-  outcome?: {
-    readonly durationMs: number
-    /** Total LLM tokens consumed by the delegated steps. */
-    readonly tokenCount: number
-    /** Number of tool / step errors. */
-    readonly errorCount: number
-    /** Quality proxy score in [0, 1]. */
-    readonly qualityProxy: number
-    /** Whether the verifier passed for this delegation. */
-    readonly verifierPassed: boolean
-    /** Final computed reward in [0, 1]. */
-    readonly reward: number
-  }
 }
 
 // ============================================================================

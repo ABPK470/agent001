@@ -29,67 +29,19 @@ export type {
   WorkflowStepContract
 } from "./internal/types-execution.js"
 
-// ============================================================================
-// Plan steps
-// ============================================================================
-
-import type { PlannerRoute } from "./internal/types-decision.js"
-import type { ArtifactRelation, ExecutionEnvelope, WorkflowStepContract } from "./internal/types-execution.js"
-
-/**
- * A deterministic tool step — exact tool call with known arguments.
- * Used for things like: readFile, mkdir, bash install, etc.
- */
-export interface DeterministicToolStep {
-  readonly name: string
-  readonly stepType: "deterministic_tool"
-  /** Which step(s) must complete before this one. */
-  readonly dependsOn?: readonly string[]
-  /** Tool to call. */
-  readonly tool: string
-  /** Arguments to pass. */
-  readonly args: Record<string, unknown>
-  /** What to do on error: retry (default), skip, or abort the pipeline. */
-  readonly onError?: "retry" | "skip" | "abort"
-  /** Max retries for this step (default: 2). */
-  readonly maxRetries?: number
-}
-
-/**
- * A subagent task step — complex work delegated to a child agent.
- * This is the heart of quality delegation.
- */
-export interface SubagentTaskStep {
-  readonly name: string
-  readonly stepType: "subagent_task"
-  /** Which step(s) must complete before this one. */
-  readonly dependsOn?: readonly string[]
-  /** What the child must accomplish. */
-  readonly objective: string
-  /** What context/inputs are available to the child. */
-  readonly inputContract: string
-  /** Measurable success conditions the verifier will check. */
-  readonly acceptanceCriteria: readonly string[]
-  /** Tools the child needs (explicit allowlist). */
-  readonly requiredToolCapabilities: readonly string[]
-  /** Human-readable context notes. */
-  readonly contextRequirements: readonly string[]
-  /** Scoped permissions for the child (workspace, tools, artifacts). */
-  readonly executionContext: ExecutionEnvelope
-  /** Max time/iterations hint (e.g., "5m", "15 iterations"). */
-  readonly maxBudgetHint: string
-  /** Whether this step can run in parallel with siblings. */
-  readonly canRunParallel: boolean
-  /** Workflow role and artifact ownership. */
-  readonly workflowStep?: WorkflowStepContract
-}
-
-/** Union of all step types in a plan. */
-export type PlanStep = DeterministicToolStep | SubagentTaskStep
+export type {
+  DeterministicToolStep,
+  PlanStep,
+  SubagentTaskStep,
+} from "../../domain/types/planner-delegate.js"
 
 // ============================================================================
 // Dependency edge
 // ============================================================================
+
+import type { PlannerRoute } from "./internal/types-decision.js"
+import type { ArtifactRelation } from "./internal/types-execution.js"
+import type { PlanStep } from "../../domain/types/planner-delegate.js"
 
 export interface PlanEdge {
   readonly from: string

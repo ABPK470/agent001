@@ -19,13 +19,10 @@ import { READ_ONLY_TOOL_NAMES } from "../../../domain/types/agent-constants.js"
 import { MessageRole } from "../../../domain/enums/message.js"
 import * as log from "../../../internal/index.js"
 import { compactAtWriteTime } from "../../../memory/index.js"
-import type { ToolCallRecord } from "../../../tools/index.js"
-import {
-  buildSemanticToolCallKey,
-  didToolCallFail,
-  enrichToolResultMetadata as enrichResult,
-  trackToolCallFailureState
-} from "../../../tools/index.js"
+import type { ToolCallRecord } from "../../../tools/_shared/result.js"
+import { buildSemanticToolCallKey, didToolCallFail } from "../../../tools/_shared/result.js"
+import { enrichToolResultMetadata as enrichResult } from "../../../tools/_shared/utils/index.js"
+import { trackToolCallFailureState } from "../../../tools/_shared/utils/stuck-detection.js"
 import { extractWritePayload, recordTruncatedQuery } from "./anti-paste-guard.js"
 import {
   collectChildToolNames,
@@ -46,7 +43,6 @@ import {
 // Re-export public types/helpers for backwards compatibility.
 export { emitToolTrace, readToolTraceContext, TOOL_TRACE_ARG, withToolTraceArgs } from "./trace-context.js"
 export type { ToolTraceContext } from "./trace-context.js"
-export { normalizeArtifactPath } from "./types.js"
 export type { ToolExecContext, ToolRoundResult } from "./types.js"
 
 /**

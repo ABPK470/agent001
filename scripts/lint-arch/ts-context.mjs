@@ -88,6 +88,24 @@ export function collectModuleSpecifiers(sourceFile) {
       })
     }
   }
+
+  // `import("…").Type` / `typeof import("…")` — same layer/cycle edges as import decls.
+  const visit = (node) => {
+    if (ts.isImportTypeNode(node) && node.argument && ts.isLiteralTypeNode(node.argument)) {
+      const lit = node.argument.literal
+      if (ts.isStringLiteral(lit)) {
+        out.push({
+          specifier: lit.text,
+          line: sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1,
+          isTypeOnly: true,
+          isSideEffect: false,
+        })
+      }
+    }
+    ts.forEachChild(node, visit)
+  }
+  visit(sourceFile)
+
   return out
 }
 

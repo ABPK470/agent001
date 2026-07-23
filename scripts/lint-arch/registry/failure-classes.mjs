@@ -21,5 +21,5 @@ export const FAILURE_CLASSES = [
   { id: 16, name: "incomplete-observability", rule: "catalog-coverage" },
   { id: 17, name: "trust-escape", rule: "trust" },
   { id: 18, name: "ops-code-forks", rule: "identity-forks+branded-path" },
-  { id: 19, name: "allowlist-creep", rule: "stale-debt" },
+  { id: 19, name: "allowlist-creep", rule: "stale-debt" }, // fails if any debt list is non-empty
 ]

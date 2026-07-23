@@ -1,5 +1,5 @@
-import { MSSQL_DOCTRINES } from "../../../core/doctrine.js"
-import { emitToolTrace, type ToolTraceContext } from "../../../runtime/loop.js"
+import { MSSQL_DOCTRINES } from "../../../core/doctrine/index.js"
+import { emitToolTrace, type ToolTraceContext } from "../../../runtime/loop/tool-execution/trace-context.js"
 import { PlannerTraceKind } from "../../../domain/index.js"
 import type { QueryValidationDiagnostics } from "./validation.js"
 

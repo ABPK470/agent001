@@ -7,8 +7,11 @@
  * @module
  */
 
+import type { ToolRoundProgressSummary } from "../../domain/types/tool-loop-state.js"
 import type { ToolCallRecord } from "./result.js"
 import { buildSemanticToolCallKey, didToolCallFail, extractToolFailureText } from "./result.js"
+
+export type { ToolRoundProgressSummary } from "../../domain/types/tool-loop-state.js"
 
 // ============================================================================
 // Constants
@@ -60,18 +63,6 @@ const MUTATING_COMMANDS = new Set(["cp", "git", "install", "mkdir", "mv", "perl"
 // ============================================================================
 // Progress summary
 // ============================================================================
-
-export interface ToolRoundProgressSummary {
-  readonly durationMs: number
-  readonly totalCalls: number
-  readonly successfulCalls: number
-  readonly newSuccessfulSemanticKeys: number
-  readonly newVerificationFailureDiagnosticKeys: number
-  readonly hadSuccessfulMutation: boolean
-  readonly hadVerificationCall: boolean
-  readonly hadReadCall: boolean
-  readonly hadMaterialProgress: boolean
-}
 
 /**
  * Summarize a tool round's progress for budget extension decisions.

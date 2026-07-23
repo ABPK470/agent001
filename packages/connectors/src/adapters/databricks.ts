@@ -18,7 +18,6 @@ import type {
   SqlWriteSpec,
   WriteSpec,
 } from "@mia/shared-types"
-import { makeSummary } from "../engine.js"
 
 type RowBatch = Row[]
 

@@ -13,16 +13,14 @@
  */
 
 import type { Message } from "../../domain/types/agent-types.js"
-import { estimateTokensFromMessages } from "../tokens.js"
+import { extractFilePath } from "./budget.js"
+export { MAX_CONTEXT_TOKENS, estimateTokens, extractFilePath } from "./budget.js"
 
 export { compactAtWriteTime } from "./write-time-compact.js"
 
 // ============================================================================
 // Constants
 // ============================================================================
-
-/** Max token budget for the request body. */
-export const MAX_CONTEXT_TOKENS = 64000
 
 /**
  * How many recent iterations to preserve in full detail.
@@ -44,38 +42,6 @@ const COMPACT_MIN_SIZE = 500
  * landed on disk, the LLM doesn't need to re-read its own write.
  */
 const WRITE_ARG_MAX = 16384
-
-// ============================================================================
-// Token estimation
-// ============================================================================
-
-/**
- * Token estimate for a message array. Defers to {@link estimateTokensFromMessages}
- * which respects per-model factors when a model hint is provided.
- *
- * @remarks Kept as a single-arg wrapper for backwards compatibility; new
- * call-sites should pass `model` to get accurate counts on Claude/Gemini.
- */
-export function estimateTokens(messages: Message[], model?: string): number {
-  return estimateTokensFromMessages(messages, model)
-}
-
-// ============================================================================
-// File path extraction
-// ============================================================================
-
-/**
- * Extract file path from a tool call's arguments.
- * Different tools use different arg names for file paths.
- */
-export function extractFilePath(toolName: string, args: Record<string, unknown>): string | null {
-  for (const key of ["path", "filePath", "file_path", "file", "filename"]) {
-    if (typeof args[key] === "string") return args[key] as string
-  }
-  if (toolName === "write_file" && typeof args.path === "string") return args.path as string
-  if (toolName === "read_file" && typeof args.path === "string") return args.path as string
-  return null
-}
 
 // ============================================================================
 // Progressive context compaction

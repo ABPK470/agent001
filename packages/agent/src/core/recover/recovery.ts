@@ -15,7 +15,7 @@
  */
 
 import { MAX_RUNTIME_SYSTEM_HINTS } from "../../domain/types/agent-constants.js"
-import { didToolCallFail, type ToolCallRecord } from "../../tools/index.js"
+import { didToolCallFail, type ToolCallRecord } from "../../tools/_shared/result.js"
 import { inferRecoveryHint } from "./internal/build-per-call-hints.js"
 
 // ============================================================================

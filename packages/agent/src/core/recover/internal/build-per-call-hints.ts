@@ -7,7 +7,7 @@
  * @module
  */
 
-import { extractToolFailureText, type ToolCallRecord } from "../../../tools/index.js"
+import { extractToolFailureText, type ToolCallRecord } from "../../../tools/_shared/result.js"
 import type { RecoveryHint } from "../recovery.js"
 import { inferAdvancedRecoveryHint } from "./build-hints-advanced.js"
 import { isShellExecutionAnomalyFailure, isWatchModeOutput } from "./recovery-detectors.js"

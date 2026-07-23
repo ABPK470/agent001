@@ -7,7 +7,7 @@
  */
 
 import type { AgentConfig, Tool, ToolResultEnvelope } from "../../../domain/types/agent-types.js"
-import { executeToolWithTimeout } from "../../../tools/index.js"
+import { executeToolWithTimeout } from "../../../tools/_shared/utils/exec-with-timeout.js"
 import { withToolTraceArgs } from "./trace-context.js"
 
 export async function executeWithKillManager(

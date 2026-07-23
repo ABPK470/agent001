@@ -8,7 +8,7 @@ import {
  * @module
  */
 
-import type { DelegationTrajectoryRecord } from "../../../runtime/delegate.js"
+import type { DelegationTrajectoryRecord } from "../../../domain/types/delegation-learning.js"
 import { detectPlatformUnconfigured } from "../platform-errors.js"
 import { synthesizeAnswer } from "../synthesize.js"
 import type { PipelineResult, Plan, VerifierDecision } from "../types.js"

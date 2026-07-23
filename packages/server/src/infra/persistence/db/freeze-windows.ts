@@ -11,6 +11,7 @@
 
 import { DEFAULT_TENANT_ID, installFreezeWindowRegistry, type FreezeWindowDefinition } from "@mia/sync"
 import { getDb } from "../connection.js"
+import { refreshesGlobalRegistryOnMutation } from "./tenant-inheritance.js"
 
 // ── Public type (matches shared-types `FreezeWindow`) ───────────
 
@@ -129,13 +130,13 @@ export function upsertFreezeWindow(args: UpsertFreezeWindowArgs): FreezeWindowRe
   })
   const fresh = getFreezeWindow(args.tenantId, args.id)
   if (!fresh) throw new Error(`freeze_window not persisted: ${args.id}`)
-  if (args.tenantId === DEFAULT_TENANT_ID) refreshFreezeWindowRegistry()
+  if (refreshesGlobalRegistryOnMutation(args.tenantId)) refreshFreezeWindowRegistry()
   return fresh
 }
 
 export function deleteFreezeWindow(tenantId: string, id: string): boolean {
   const info = getDb().prepare(`DELETE FROM freeze_window_configs WHERE tenant_id = ? AND id = ?`).run(tenantId, id)
-  if (info.changes > 0 && tenantId === DEFAULT_TENANT_ID) refreshFreezeWindowRegistry()
+  if (info.changes > 0 && refreshesGlobalRegistryOnMutation(tenantId)) refreshFreezeWindowRegistry()
   return info.changes > 0
 }
 
@@ -164,6 +165,6 @@ export function listFreezeWindowDefinitionsForTenant(tenantId = DEFAULT_TENANT_I
 
 export function refreshFreezeWindowRegistry(tenantId = DEFAULT_TENANT_ID): FreezeWindowDefinition[] {
   const defs = listFreezeWindowDefinitionsForTenant(tenantId)
-  if (tenantId === DEFAULT_TENANT_ID) installFreezeWindowRegistry(defs)
+  if (refreshesGlobalRegistryOnMutation(tenantId)) installFreezeWindowRegistry(defs)
   return defs
 }

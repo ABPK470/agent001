@@ -3,8 +3,8 @@ export { PipelineBlockCode, PipelineStatus }
 // ============================================================================
 // Pipeline execution types (extracted from types.ts)
 // ============================================================================
-import type { ToolCallRecord } from "../../../tools/index.js"
-import type { DelegationOutputValidationCode } from "../../../runtime/delegate.js"
+import type { ToolCallRecord } from "../../../tools/_shared/result.js"
+import type { DelegationOutputValidationCode } from "../../../domain/enums/delegation.js"
 
 export type PipelineStepStatus = "pending" | "running" | "completed" | "failed" | "skipped"
 

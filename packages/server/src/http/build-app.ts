@@ -21,7 +21,7 @@ import { registerLayoutRoutes } from "../api/layouts/routes.js"
 import { registerLlmRoutes } from "../api/llm/routes.js"
 import { registerMemoryRoutes } from "../api/memory/routes.js"
 import { registerMetricsRoutes } from "../api/metrics/routes.js"
-import { registerMymiRoutes } from "../api/mymi/routes.js"
+import { registerWarehouseRoutes } from "../api/warehouse/routes.js"
 import { registerNotificationManagementRoutes } from "../api/notifications/handlers/management-routes.js"
 import { registerNotificationRoutes } from "../api/notifications/routes.js"
 import { registerOperationRoutes } from "../api/operations/routes.js"
@@ -229,7 +229,7 @@ export async function buildApp(opts: BuildAppOptions) {
   registerProfileRoutes(app)
   registerAttachmentRoutes(app)
   registerUsageRoutes(app)
-  registerMymiRoutes(app, bootHost)
+  registerWarehouseRoutes(app, bootHost)
   registerSyncRoutes(app, projectRoot, bootHost)
   registerEntityRegistryRoutes(app, projectRoot)
   registerToolCacheRoutes(app)

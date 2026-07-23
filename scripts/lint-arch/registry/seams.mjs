@@ -31,9 +31,8 @@ export const SEAMS = [
   {
     id: "warehouse-connector",
     status: "active",
-    owner: "packages/server/src/api/mymi",
-    apiSurface: "mymi",
-    notes: "Branded path debt — rename to domain noun; see brandAllowlist",
+    owner: "packages/server/src/api/warehouse",
+    apiSurface: "warehouse",
   },
   { id: "notifications", status: "active", owner: "packages/server/src/api/notifications", apiSurface: "notifications" },
   { id: "operations", status: "active", owner: "packages/server/src/api/operations", apiSurface: "operations" },

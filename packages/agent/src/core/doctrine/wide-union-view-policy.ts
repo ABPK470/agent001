@@ -12,10 +12,9 @@
 // hardcoded here — the doctrine activates on the SHAPE the catalog reports.
 
 import {
-  detectWideUnionViewTopnWithoutBranchAggregation,
-  listExpensiveUnionViews,
-  unionBranchCount
-} from "../../tools/index.js"
+  detectWideUnionViewTopnWithoutBranchAggregation
+} from "../../tools/database/mssql/validation.js"
+import { listExpensiveUnionViews, unionBranchCount } from "../../tools/catalog/queries.js"
 import { DOCTRINE_FIX_HINTS } from "./fix-hints.js"
 import type { DoctrineModule } from "./types.js"
 

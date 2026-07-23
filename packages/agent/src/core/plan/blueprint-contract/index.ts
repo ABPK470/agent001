@@ -1,55 +1,16 @@
-import { canonicalizeRelative } from "../../../internal/index.js"
 import type { Plan, SubagentTaskStep } from "../types.js"
-
-export interface BlueprintFunctionSpec {
-  readonly name: string
-  readonly signature: string
-}
-
-export interface BlueprintSharedTypeSpec {
-  readonly name: string
-  readonly definition: string
-  readonly usedBy: readonly string[]
-}
-
-export interface BlueprintFileSpec {
-  readonly declaredPath: string
-  readonly basename: string
-  readonly functions: readonly BlueprintFunctionSpec[]
-  readonly structuralMarkers: readonly string[]
-}
-
-export interface BlueprintContractBlock {
-  readonly version: number
-  readonly files: readonly BlueprintFileSpec[]
-  readonly sharedTypes: readonly BlueprintSharedTypeSpec[]
-}
-
-export interface ParsedBlueprintContractBlock {
-  readonly present: boolean
-  readonly files: readonly BlueprintFileSpec[]
-  readonly sharedTypes: readonly BlueprintSharedTypeSpec[]
-  readonly errors: readonly string[]
-}
-
+import { normalizeSpecPath, uniqueStrings } from "./normalize.js"
 import { parseBlueprintContractBlock } from "./parse.js"
+
+export type {
+  BlueprintContractBlock,
+  BlueprintFileSpec,
+  BlueprintFunctionSpec,
+  BlueprintSharedTypeSpec,
+  ParsedBlueprintContractBlock
+} from "./types.js"
+export { normalizeBasename, normalizeSpecPath, uniqueStrings } from "./normalize.js"
 export { parseBlueprintContractBlock } from "./parse.js"
-
-export function normalizeSpecPath(value: string): string {
-  return canonicalizeRelative(value).trim()
-}
-
-export function normalizeBasename(value: string): string {
-  const normalized = normalizeSpecPath(value)
-  const parts = normalized.split("/")
-  return (parts[parts.length - 1] ?? normalized).toLowerCase()
-}
-
-export function uniqueStrings(values: readonly string[]): string[] {
-  return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)))
-}
-
-// normalizers + parseBlueprintContractBlock moved to ./blueprint-contract/parse.ts
 
 function isBlueprintLikeStep(step: SubagentTaskStep): boolean {
   return (

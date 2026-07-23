@@ -16,7 +16,7 @@ import { ApprovalRequiredError } from "../../../domain/types/errors.js"
 import type { ToolCallsBranchInput } from "../iteration-tool-round.js"
 import { executeToolRound, type ToolExecContext } from "../../loop.js"
 import { MessageRole } from "../../../domain/enums/message.js"
-import type { ToolCallRecord } from "../../../tools/index.js"
+import type { ToolCallRecord } from "../../../tools/_shared/result.js"
 import type { Message } from "../../../domain/types/agent-types.js"
 
 export type RunToolsResult = {

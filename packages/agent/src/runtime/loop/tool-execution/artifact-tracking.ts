@@ -8,7 +8,7 @@ import { ToolOutcomeSeverity } from "../../../domain/index.js"
  * @module
  */
 
-import { executeToolWithTimeout } from "../../../tools/index.js"
+import { executeToolWithTimeout } from "../../../tools/_shared/utils/exec-with-timeout.js"
 import type { AgentLoopState } from "../state.js"
 import { normalizeArtifactPath } from "./types.js"
 

@@ -9,7 +9,7 @@ import {
   buildEscalationInput,
   resolveEscalation,
   type EscalationDecision
-} from "../../../runtime/delegate.js"
+} from "../../delegate-decision/escalation.js"
 import type { Tool } from "../../types.js"
 import { createBudgetState, maybeExtendBudget } from "../circuit-breaker.js"
 import type { DelegateFn } from "../pipeline/index.js"

@@ -21,7 +21,7 @@ import {
   stepStarted
 } from "../../domain/index.js"
 import type { HostedPolicyContext } from "../../domain/types/policy-context.js"
-import { normalizeToolExecutionOutput } from "../../tools/index.js"
+import { normalizeToolExecutionOutput } from "../../tools/_shared/result.js"
 import { TOOL_RETRY_POLICY, type ToolRetryPolicy, withToolRetry } from "../recover.js"
 import { type EngineServices, type RunState, createToolStep } from "./types.js"
 

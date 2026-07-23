@@ -824,14 +824,14 @@ export const api = {
 
   // Mymi DB explorer
   mymiListDatabases: () =>
-    json<Array<{ name: string; server: string; database: string }>>("/api/mymi/databases"),
+    json<Array<{ name: string; server: string; database: string }>>("/api/warehouse/databases"),
   mymiOverview: (db?: string) =>
     json<Array<{ schema: string; tableCount: number; viewCount: number; totalRows: number; totalMb: number }>>(
-      `/api/mymi/overview${db ? `?db=${encodeURIComponent(db)}` : ""}`,
+      `/api/warehouse/overview${db ? `?db=${encodeURIComponent(db)}` : ""}`,
     ),
   mymiListSchemas: (db?: string) =>
     json<Array<{ name: string; tableCount: number; viewCount: number }>>(
-      `/api/mymi/schemas${db ? `?db=${encodeURIComponent(db)}` : ""}`,
+      `/api/warehouse/schemas${db ? `?db=${encodeURIComponent(db)}` : ""}`,
     ),
   mymiSearch: (q: string, db?: string, schemas?: string[]) =>
     json<Array<{
@@ -839,11 +839,11 @@ export const api = {
       rowCount: number; matchKind: "object" | "column"
       columnName: string | null; columnType: string | null
     }>>(
-      `/api/mymi/search?q=${encodeURIComponent(q)}${db ? `&db=${encodeURIComponent(db)}` : ""}${schemas?.length ? `&schemas=${schemas.map(encodeURIComponent).join(",")}` : ""}`,
+      `/api/warehouse/search?q=${encodeURIComponent(q)}${db ? `&db=${encodeURIComponent(db)}` : ""}${schemas?.length ? `&schemas=${schemas.map(encodeURIComponent).join(",")}` : ""}`,
     ),
   mymiListObjects: (schema: string, db?: string) =>
     json<Array<{ name: string; type: "table" | "view"; rowCount: number; sizeMb: number; columnCount: number }>>(
-      `/api/mymi/schema/${encodeURIComponent(schema)}${db ? `?db=${encodeURIComponent(db)}` : ""}`,
+      `/api/warehouse/schema/${encodeURIComponent(schema)}${db ? `?db=${encodeURIComponent(db)}` : ""}`,
     ),
   mymiColumns: (schema: string, table: string, db?: string) =>
     json<Array<{
@@ -852,24 +852,24 @@ export const api = {
       fkSchema: string | null; fkTable: string | null; fkColumn: string | null
       description: string | null
     }>>(
-      `/api/mymi/schema/${encodeURIComponent(schema)}/table/${encodeURIComponent(table)}/columns${db ? `?db=${encodeURIComponent(db)}` : ""}`,
+      `/api/warehouse/schema/${encodeURIComponent(schema)}/table/${encodeURIComponent(table)}/columns${db ? `?db=${encodeURIComponent(db)}` : ""}`,
     ),
   mymiRelations: (schema: string, table: string, db?: string) =>
     json<{
       outbound: Array<{ constraintName: string; localColumn: string; refSchema: string; refTable: string; refColumn: string; refRowCount: number }>
       inbound:  Array<{ constraintName: string; srcSchema: string; srcTable: string; srcColumn: string; localColumn: string; srcRowCount: number }>
     }>(
-      `/api/mymi/schema/${encodeURIComponent(schema)}/table/${encodeURIComponent(table)}/relations${db ? `?db=${encodeURIComponent(db)}` : ""}`,
+      `/api/warehouse/schema/${encodeURIComponent(schema)}/table/${encodeURIComponent(table)}/relations${db ? `?db=${encodeURIComponent(db)}` : ""}`,
     ),
   mymiPreview: (schema: string, table: string, db?: string, limit?: number) =>
     json<{ columns: Array<{ name: string; type: string }>; rows: Record<string, unknown>[] }>(
-      `/api/mymi/schema/${encodeURIComponent(schema)}/table/${encodeURIComponent(table)}/preview?${new URLSearchParams({ ...(db ? { db } : {}), ...(limit ? { limit: String(limit) } : {}) }).toString()}`,
+      `/api/warehouse/schema/${encodeURIComponent(schema)}/table/${encodeURIComponent(table)}/preview?${new URLSearchParams({ ...(db ? { db } : {}), ...(limit ? { limit: String(limit) } : {}) }).toString()}`,
     ),
   mymiDataModel: (db?: string) =>
     json<{
       objects: Array<{ schema: string; name: string; isTable: boolean; rowCount: number; sizeMb: number; columnCount: number; fkOut: number; fkIn: number }>
       relations: Array<{ srcSchema: string; srcTable: string; refSchema: string; refTable: string }>
-    }>(`/api/mymi/datamodel${db ? `?db=${encodeURIComponent(db)}` : ""}`),
+    }>(`/api/warehouse/datamodel${db ? `?db=${encodeURIComponent(db)}` : ""}`),
 
   // ── ABI Environment Sync ────────────────────────────────────
   syncEnvironments: () => json<SyncEnvironment[]>("/api/sync/environments"),

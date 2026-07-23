@@ -10,14 +10,9 @@
 import { type AttachmentMetadata, type AttachmentService, type HostedPolicyContext } from "@mia/agent"
 import { mkdir, readFile, writeFile } from "node:fs/promises"
 import { basename, dirname, extname, isAbsolute, normalize, resolve, sep } from "node:path"
-import {
-  getAttachment,
-  listAttachments,
-  readAttachmentBlob,
-  recordAttachmentImport,
-  uploadAttachment,
-  type AttachmentRow
-} from "./index.js"
+import { getAttachment, listAttachments, recordAttachmentImport, type AttachmentRow } from "./repo.js"
+import { uploadAttachment } from "./service.js"
+import { readAttachmentBlob } from "./storage.js"
 import { AttachmentImportMode, AttachmentScope, AttachmentSource } from "../../../internal/enums/attachments.js"
 import { auditAttachmentImported, auditAttachmentPromoted } from "./audit.js"
 

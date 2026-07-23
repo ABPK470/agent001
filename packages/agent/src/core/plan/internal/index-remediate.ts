@@ -8,7 +8,7 @@ import { StepRole } from "../../../domain/index.js"
  * @module
  */
 
-import { mostFrequent, normalizePlanOutputDirectory, uniqueList } from "../normalize/index.js"
+import { mostFrequent, normalizePlanOutputDirectory, uniqueList } from "../normalize/helpers.js"
 import type { Plan, PlanDiagnostic, PlanEdge, PlanStep, SubagentTaskStep } from "../types.js"
 
 export function inferOutputDir(steps: readonly SubagentTaskStep[]): string | null {

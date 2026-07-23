@@ -299,7 +299,8 @@ registered under exactly one owning seam (`registry/identities.mjs`). An
 unregistered cross-package identity is the shotgun-surgery failure class —
 lint fails it. Erased capabilities forbid resurrecting their identity names.
 
-Allowlists are explicit, bounded, and must shrink. Unused entries fail.
+**No soft-ignore.** Debt allowlists must stay **empty**. Soft-ignore is not
+enforcement — `lint:arch` fails if any debt list grows. Fix the code.
 
 ---
 

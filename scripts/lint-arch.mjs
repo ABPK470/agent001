@@ -43,7 +43,7 @@ import {
   lintStaleAllowlists,
   lintStaleCycleAllowlist,
 } from "./lint-arch/rules/layers.mjs"
-import { lintStaleDebtList, lintTenantIdentityForks } from "./lint-arch/rules/ops.mjs"
+import { lintDebtListsEmpty, lintStaleDebtList, lintTenantIdentityForks } from "./lint-arch/rules/ops.mjs"
 import { lintCatalogCoverage, lintJsxAttrBans } from "./lint-arch/rules/catalog.mjs"
 import {
   lintDialects,
@@ -122,6 +122,21 @@ const RUNNERS = new Map([
   [
     "stale-debt",
     () => {
+      lintDebtListsEmpty([
+        { list: DEBT.cycleAllowlist, label: "cycleAllowlist" },
+        { list: DEBT.brandAllowlist, label: "brandAllowlist" },
+        { list: DEBT.presentationAllowlist, label: "presentationAllowlist" },
+        { list: DEBT.tenantBranchAllowlist, label: "tenantBranchAllowlist" },
+        { list: DEBT.silentFailureAllowlist, label: "silentFailureAllowlist" },
+        { list: DEBT.trustAllowlist, label: "trustAllowlist" },
+        { list: DEBT.enumForkAllowlist, label: "enumForkAllowlist" },
+        { list: DEBT.jargonAllowlist, label: "jargonAllowlist" },
+        { list: DEBT.unownedIdentityAllowlist ?? [], label: "unownedIdentityAllowlist" },
+        { list: PACKAGES.agent.layerAllowlist, label: "agent.layerAllowlist" },
+        { list: PACKAGES.server.layerAllowlist, label: "server.layerAllowlist" },
+        { list: PACKAGES.sync.layerAllowlist, label: "sync.layerAllowlist" },
+        { list: PACKAGES.ui.layerAllowlist, label: "ui.layerAllowlist" },
+      ])
       lintStaleCycleAllowlist(DEBT.cycleAllowlist, "leverage")
       lintStaleDebtList(DEBT.brandAllowlist, "stale-debt", "brand")
       lintStaleDebtList(DEBT.presentationAllowlist, "stale-debt", "presentation")
@@ -173,15 +188,8 @@ const debtCount =
 
 if (printReport(ROOT)) process.exit(1)
 
-const enforced = FAILURE_CLASSES.map((c) => c.rule.split("+")[0])
-for (const rule of enforced) {
-  if (!RUNNERS.has(rule) && !PACKAGE_RULES.includes(rule) && !GLOBAL_RULES.includes(rule)) {
-    // compound rules like layers+framework-deny are covered by parts
-  }
-}
-
 console.log(
   `lint-arch: ${counts.agent} agent + ${counts.server} server + ${counts.sync} sync + ${counts.ui} ui files OK ` +
-    `(${FAILURE_CLASSES.length} failure classes enforced; ${debtCount} debt entries).`,
+    `(${FAILURE_CLASSES.length} failure classes enforced; ${debtCount} debt entries — must be 0).`,
 )
 process.exit(0)

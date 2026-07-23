@@ -3,8 +3,7 @@ import type { AgentHost } from "../../../runtime/runtime.js"
 import {
   canonicalizeConfiguredConnectionName,
   listMssqlConnectionNames,
-  resolveMssqlConnectionName,
-  tryResolveMssqlConnectionName
+  resolveMssqlConnectionName
 } from "./resolve-connection.js"
 
 // ── Named connection registry ────────────────────────────────────

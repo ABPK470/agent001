@@ -16,7 +16,6 @@ import { PipelineStatus } from "../../../domain/index.js"
  * @module
  */
 
-import type { ToolCallRecord } from "../../../tools/index.js"
 import type { Tool } from "../../types.js"
 import { injectPriorContext } from "../internal/pipeline-context.js"
 import {
@@ -28,9 +27,7 @@ import {
 import { executeStep } from "../internal/pipeline-steps.js"
 import { compilePlannerRuntime } from "../runtime-model.js"
 import type {
-  ChildExecutionResult,
   DeterministicToolStep,
-  ExecutionEnvelope,
   PipelineResult,
   PipelineStepResult,
   Plan,
@@ -39,6 +36,7 @@ import type {
   RepairPlan,
   SubagentTaskStep
 } from "../types.js"
+import type { DelegateFn } from "../../../domain/types/planner-delegate.js"
 import { buildGraph, buildResult, executeToolForText } from "./graph.js"
 import { buildRepairStep } from "./repair-step.js"
 
@@ -49,13 +47,7 @@ export { isGibberishIssue } from "../pipeline-validation/index.js"
 // Delegation function signature
 // ============================================================================
 
-export interface DelegateResult {
-  readonly output: string
-  readonly toolCalls?: readonly ToolCallRecord[]
-  readonly execution?: ChildExecutionResult
-}
-
-export type DelegateFn = (step: SubagentTaskStep, envelope: ExecutionEnvelope) => Promise<DelegateResult>
+export type { DelegateFn, DelegateResult } from "../../../domain/types/planner-delegate.js"
 
 export type ToolExecFn = (toolName: string, args: Record<string, unknown>) => Promise<string>
 

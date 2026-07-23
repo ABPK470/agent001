@@ -7,7 +7,7 @@
  */
 
 import { MessageRole } from "../../domain/enums/message.js"
-import type { ToolCallRecord } from "../../tools/index.js"
+import type { ToolCallRecord } from "../../tools/_shared/result.js"
 import type { AgentConfig, LLMClient, Message, TokenUsage, Tool } from "../../domain/types/agent-types.js"
 import { DEFAULT_SYSTEM_PROMPT } from "../loop.js"
 import { runGoal } from "./run-goal.js"

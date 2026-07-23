@@ -273,7 +273,7 @@ export function useChatSlashActions(opts: ChatSlashActionsOptions) {
       // Thread list + runs hydrate async after login/restore — wait before dispatch.
       try {
         await useStore.getState().bootstrapThreads()
-      } catch (err: unknown) { console.error("[mia]", err) }
+      } catch (err: unknown) { globalThis.console.error("[mia]", err) }
 
       const catalog = slashCatalogRef.current
       if (catalog.length === 0) {

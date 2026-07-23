@@ -13,7 +13,7 @@
  */
 
 import type { AgentHost } from "../../../runtime/runtime.js"
-import { getPool } from "../../database/mssql/index.js"
+import { getPool } from "../../database/mssql/connection.js"
 import { buildSearchIndexes, computeImplicitEdges, tableKey } from "../helpers.js"
 import { Q_COLUMNS, Q_FKS, Q_FULL_VIEW_DEPS, Q_OBJECTS, Q_VIEW_DEFINITIONS } from "../sql.js"
 import type { CatalogColumn, CatalogFK, CatalogTable, ImplicitEdge, SysEntry } from "../types.js"

@@ -28,6 +28,12 @@ import {
 
 // Public re-exports preserve original shape
 export { resolveDelegationDecisionConfig } from "./config.js"
+export {
+  buildEscalationInput,
+  resolveEscalation,
+  type EscalationDecision,
+  type EscalationInput
+} from "./escalation.js"
 export type {
   DelegationDecision,
   DelegationDecisionConfig,

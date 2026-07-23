@@ -14,6 +14,7 @@ import {
 import { validateSubagentCompletion } from "../pipeline-validation/index.js"
 import type { DelegateFn } from "../pipeline/index.js"
 import type { PipelineStepResult, SubagentTaskStep } from "../types.js"
+import { asChildExecution, asToolCallRecords } from "../internal/delegate-result.js"
 
 export interface MandatoryRetryInput {
   readonly step: SubagentTaskStep
@@ -43,8 +44,8 @@ export async function runSubagentMandatoryRetry(input: MandatoryRetryInput): Pro
 
   const retryResult = await delegateFn(retryStep, retryStep.executionContext)
   const retryOutput = retryResult.output
-  const retryCalls = retryResult.toolCalls
-  const childExec = retryResult.execution
+  const retryCalls = asToolCallRecords(retryResult.toolCalls)
+  const childExec = asChildExecution(retryResult.execution)
 
   if (retryOutput.startsWith("Delegation failed:")) {
     const isSpawnError = retryOutput.includes("not found") || retryOutput.includes("spawn")

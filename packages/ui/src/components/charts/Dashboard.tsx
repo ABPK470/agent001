@@ -4,9 +4,16 @@
  */
 
 import type React from "react"
-import { InlineDiagram, isDiagramLang } from "../InlineDiagram"
-import { renderChart, type ChartKind } from "./index"
+import { RelationshipsDiagram, type RelationshipsData } from "./RelationshipsDiagram"
+import { renderChart, type ChartKind } from "./render-chart"
 import { normalizeDashboardData } from "./normalizeDashboard"
+
+const GRAPH_KINDS = ["relationships", "flow"] as const
+type GraphKind = (typeof GRAPH_KINDS)[number]
+
+function isGraphKind(kind: string): kind is GraphKind {
+  return (GRAPH_KINDS as readonly string[]).includes(kind as GraphKind)
+}
 
 export interface DashboardItem {
   kind: ChartKind | "relationships" | "flow" | "text"
@@ -39,8 +46,8 @@ export function Dashboard({ data }: { data: DashboardData }): React.ReactElement
         {items.map((item, i) => {
           const el = item.kind === "text"
             ? <TextPanel spec={item.spec} />
-            : isDiagramLang(item.kind)
-              ? <InlineDiagram kind={item.kind} source={JSON.stringify(item.spec)} />
+            : isGraphKind(item.kind)
+              ? <RelationshipsDiagram data={item.spec as RelationshipsData} kind={item.kind} />
               : renderChart(item.kind as ChartKind, item.spec)
           // Skip charts that have nothing to show (null return)
           if (el === null) return null

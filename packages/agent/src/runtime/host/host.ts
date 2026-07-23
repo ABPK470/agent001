@@ -41,7 +41,7 @@ import type {
   ToolKnowledgeStore,
   UserInputReader
 } from "../../ports/ports.js"
-import type { CatalogGraph } from "../../tools/index.js"
+import type { CatalogGraph } from "../../tools/catalog/graph/index.js"
 
 // ── AgentHost — wired once at boot ───────────────────────────────
 

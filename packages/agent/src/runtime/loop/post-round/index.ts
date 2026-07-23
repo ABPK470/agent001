@@ -6,12 +6,12 @@
 
 import { buildRecoveryHints } from "../../../core/recover.js"
 import * as log from "../../../internal/index.js"
-import type { ToolCallRecord } from "../../../tools/index.js"
+import type { ToolCallRecord } from "../../../tools/_shared/result.js"
 import {
-  checkToolLoopStuckDetection,
   evaluateToolRoundBudgetExtension,
   summarizeToolRoundProgress
-} from "../../../tools/index.js"
+} from "../../../tools/_shared/progress.js"
+import { checkToolLoopStuckDetection } from "../../../tools/_shared/utils/stuck-detection.js"
 import { MessageRole } from "../../../domain/enums/message.js"
 import type { AgentConfig, Message } from "../../../domain/types/agent-types.js"
 import type { AgentLoopState } from "../state.js"

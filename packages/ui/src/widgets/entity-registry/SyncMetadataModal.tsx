@@ -255,7 +255,7 @@ export function SyncMetadataModal({
         api.getSyncPublishStatus().catch((err: unknown) => { console.error("[mia]", err) }),
       ])
       setCatalog(next)
-      setPublishStatus(status)
+      setPublishStatus(status ?? null)
       return next
     } catch (e) {
       pushToast(e instanceof Error ? e.message : String(e))

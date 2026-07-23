@@ -29,6 +29,7 @@
 import { EventType } from "@mia/shared-enums"
 import type { SseEvent, TraceEntry } from "@mia/shared-types"
 import { createHmac } from "node:crypto"
+import { registerSseBroadcastSink } from "./emit.js"
 import { getRun, listWebhookDrains, saveEvent } from "../persistence/sqlite.js"
 
 export type { SseEvent }
@@ -191,6 +192,8 @@ export class EventBroadcaster {
 // ── Default singleton + module-level helpers ─────────────────────
 
 const _default = new EventBroadcaster()
+
+registerSseBroadcastSink((event) => _default.broadcast(event))
 
 export function addSseClient(sink: SseSink, identity: WsClientIdentity): () => void {
   return _default.addSseClient(sink, identity)

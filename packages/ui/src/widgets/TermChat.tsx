@@ -409,55 +409,7 @@ function isRunActiveStatus(status: string | null | undefined): boolean {
   return status === RunStatus.Pending || status === RunStatus.Running || status === RunStatus.Planning
 }
 
-const TOOL_LABELS: Record<string, string> = {
-  read_file: "read",
-  write_file: "write",
-  replace_in_file: "edit",
-  list_dir: "list",
-  grep_search: "search",
-  file_search: "find",
-  search_files: "search",
-  search_catalog: "search catalog",
-  explore_mssql_schema: "inspect schema",
-  query_mssql: "query database",
-  run_command: "run",
-  fetch_url: "fetch",
-  delegate: "delegate",
-  ask_user: "ask user",
-  // Sync tools — same human dialect as query database (no raw snake_case).
-  sync_preview: "preview sync",
-  sync_execute: "run sync",
-  sync_diff_scan: "scan sync diffs",
-  compare_catalogs: "compare catalogs",
-  list_sync_definitions: "list sync definitions",
-  resolve_sync_scope: "resolve sync scope",
-  list_environments: "list environments",
-  search_sync_entities: "search sync entities",
-}
-
-function toolDisplayLabel(tool: string): string {
-  return TOOL_LABELS[tool] ?? tool.replace(/_/g, " ")
-}
-
-const TOOL_PAST_TENSE: Record<string, string> = {
-  read: "read files",
-  write: "wrote files",
-  edit: "edited files",
-  list: "listed files",
-  search: "searched files",
-  find: "found files",
-  "search catalog": "searched catalog",
-  "inspect schema": "inspected schema",
-  "query database": "queried database",
-  run: "ran command",
-  fetch: "fetched URL",
-  delegate: "delegated work",
-  "ask user": "asked user",
-}
-// Kept for potential future re-use; the live narrative now uses the
-// richer per-target verb phrasing in TOOL_VERB / formatVerbPhrase below.
-void TOOL_PAST_TENSE
-
+import { termToolDisplayLabel } from "@mia/shared-types"
 // ── Narrative target extraction ────────────────────────────────────
 // Each tool call carries the JSON args the model invoked it with. We
 // pull out the most user-meaningful field (file path, command, URL,
@@ -642,7 +594,7 @@ function ToolPill({
   isLiveRun?: boolean
 }) {
   const { preserveToggle } = useChatScroll()
-  const label = toolDisplayLabel(row.tool)
+  const label = termToolDisplayLabel(row.tool)
   const isRunning = row.status === "running" && isLiveRun
   const calmRunning = isRunning && row.tool === "ask_user"
   const [expanded, setExpanded] = useState(false)

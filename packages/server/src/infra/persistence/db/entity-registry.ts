@@ -29,6 +29,7 @@
  */
 
 import {
+  DEFAULT_TENANT_ID,
   diffEntityDefinitions,
   normalizeEntityDefinition as normalizeEntityCanonical,
   normalizeScd2Strategy,
@@ -41,7 +42,11 @@ import {
 import { getDb } from "../connection.js"
 import { listFreezeWindowsForTenant } from "./freeze-windows.js"
 
-const DEFAULT_TENANT_ID = "_default"
+import {
+  mergesBundledStrategies,
+  strategyHistoryTenants,
+  strategyResolutionTenants
+} from "./tenant-inheritance.js"
 
 function parseStoredStrategy(body: string): Scd2Strategy {
   return normalizeScd2Strategy(JSON.parse(body) as Scd2Strategy)
@@ -559,21 +564,19 @@ export function resolveScd2Strategy(
       )
       .get(tenantId, id, version) as { body_json: string } | undefined
     if (row) return parseStoredStrategy(row.body_json)
-    if (tenantId !== DEFAULT_TENANT_ID) {
+    for (const fallbackTenant of strategyResolutionTenants(tenantId).slice(1)) {
       const def = db
         .prepare(
           `SELECT body_json FROM scd2_strategy_versions
            WHERE tenant_id = ? AND id = ? AND version = ?`
         )
-        .get(DEFAULT_TENANT_ID, id, version) as { body_json: string } | undefined
+        .get(fallbackTenant, id, version) as { body_json: string } | undefined
       if (def) return parseStoredStrategy(def.body_json)
     }
     return null
   }
 
-  // "latest" or undefined → current pointer for tenant, then default tenant,
-  // then bundled.
-  for (const t of tenantId === DEFAULT_TENANT_ID ? [DEFAULT_TENANT_ID] : [tenantId, DEFAULT_TENANT_ID]) {
+  for (const t of strategyResolutionTenants(tenantId)) {
     const pointer = db
       .prepare(`SELECT current_version FROM scd2_strategy_active WHERE tenant_id = ? AND id = ?`)
       .get(t, id) as { current_version: number } | undefined
@@ -648,8 +651,8 @@ export function listScd2StrategyHistory(tenantId: string, id: string): Scd2Strat
   const tenantRows = readStrategyHistoryRows(db, tenantId, id)
   if (tenantRows.length > 0) return tenantRows
 
-  if (tenantId !== DEFAULT_TENANT_ID) {
-    const defaultRows = readStrategyHistoryRows(db, DEFAULT_TENANT_ID, id)
+  for (const fallbackTenant of strategyHistoryTenants(tenantId).slice(1)) {
+    const defaultRows = readStrategyHistoryRows(db, fallbackTenant, id)
     if (defaultRows.length > 0) return defaultRows
   }
 
@@ -659,8 +662,8 @@ export function listScd2StrategyHistory(tenantId: string, id: string): Scd2Strat
 export function listAvailableStrategies(tenantId: string): Scd2Strategy[] {
   const db = getDb()
   const tenantStrategies = readTenantStrategies(db, tenantId)
+  if (!mergesBundledStrategies(tenantId)) return tenantStrategies
   const seen = new Set(tenantStrategies.map((s) => s.id))
-  if (tenantId === DEFAULT_TENANT_ID) return tenantStrategies
   const defaults = readTenantStrategies(db, DEFAULT_TENANT_ID).filter((s) => !seen.has(s.id))
   return [...tenantStrategies, ...defaults]
 }

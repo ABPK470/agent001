@@ -5,8 +5,8 @@
  * Runtime owns the factory (`createAgentLoopState`) and may narrow fields.
  */
 
-import type { ToolFailureCircuitBreaker } from "../../core/recover.js"
-import type { RoundStuckState, ToolLoopState, ToolRoundProgressSummary } from "../../tools/index.js"
+import type { ToolFailureCircuitBreakerPort } from "./circuit-breaker.js"
+import type { RoundStuckState, ToolLoopState, ToolRoundProgressSummary } from "./tool-loop-state.js"
 
 export interface AgentLoopState {
   toolLoopState: ToolLoopState
@@ -15,7 +15,7 @@ export interface AgentLoopState {
   seenVerificationFailureDiagKeys: Set<string>
   recentRoundSummaries: ToolRoundProgressSummary[]
   emittedRecoveryHints: Set<string>
-  circuitBreaker: ToolFailureCircuitBreaker
+  circuitBreaker: ToolFailureCircuitBreakerPort
   lastRoundHadDelegation: boolean
   lastDelegationWasReadOnly: boolean
   wroteUnverifiedFiles: boolean

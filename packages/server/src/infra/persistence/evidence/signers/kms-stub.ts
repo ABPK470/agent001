@@ -12,7 +12,7 @@
  * should default to `hmac`.
  */
 
-import { Signer } from "../signer.js"
+import { Signer } from "../signer-types.js"
 
 export interface KmsAdapter {
   readonly providerId: string
@@ -59,7 +59,7 @@ export function buildKmsSigner(o: KmsSignerOptions): Signer {
   return {
     id: o.id,
     alg: `KMS/${adapter.providerId}/${adapter.alg}`,
-    sign: (bytes) => adapter.sign(bytes),
-    verify: (bytes, sig) => adapter.verify(bytes, sig)
+    sign: (bytes) => adapter.sign(Buffer.from(bytes)),
+    verify: (bytes, sig) => adapter.verify(Buffer.from(bytes), sig)
   }
 }

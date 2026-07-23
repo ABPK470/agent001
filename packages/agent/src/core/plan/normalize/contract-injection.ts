@@ -6,7 +6,7 @@
  * @module
  */
 
-import { uniqueList } from "../normalize/index.js"
+import { uniqueList } from "./helpers.js"
 import type { Plan, SubagentTaskStep } from "../types.js"
 
 export function injectSharedDataContract(plan: Plan): void {

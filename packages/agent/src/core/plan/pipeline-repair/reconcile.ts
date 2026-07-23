@@ -99,13 +99,13 @@ export function summarizeRepairTask(task: RepairTask): { primary: string[]; refe
   }
 }
 
+import { normalizeToolCallPath } from "./path-normalize.js"
+
+export { normalizeToolCallPath } from "./path-normalize.js"
+
 // ============================================================================
 // Tool call path normalization + artifact collection
 // ============================================================================
-
-export function normalizeToolCallPath(value: unknown): string {
-  return typeof value === "string" ? value.replace(/^\.\//, "") : ""
-}
 
 export function collectReportedArtifacts(stepResult: PipelineStepResult): Set<string> {
   const artifacts = new Set<string>()

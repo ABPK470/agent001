@@ -15,24 +15,9 @@
 import { buildFileRsaSigner } from "./signers/file-rsa.js"
 import { buildHmacSigner } from "./signers/hmac.js"
 import { buildKmsSigner } from "./signers/kms-stub.js"
+import { SignerKind, type Signer } from "./signer-types.js"
 
-export const SignerKind = {
-  Hmac: "hmac",
-  FileRsa: "file-rsa",
-  Kms: "kms"
-} as const
-export type SignerKind = (typeof SignerKind)[keyof typeof SignerKind]
-
-export interface Signer {
-  /** Stable identifier embedded in `EnvelopeSignature.signerId`. */
-  readonly id: string
-  /** Algorithm tag e.g. "HMAC-SHA256", "RSASSA-PKCS1-v1_5-SHA256". */
-  readonly alg: string
-  /** Sign `bytes` and return base64url signature. */
-  sign(bytes: Buffer): Promise<string>
-  /** Verify a base64url signature; never throws on bad sig — returns false. */
-  verify(bytes: Buffer, sig: string): Promise<boolean>
-}
+export { SignerKind, type Signer } from "./signer-types.js"
 
 export interface SignerConfigError {
   kind: SignerKind

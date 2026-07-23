@@ -7,12 +7,12 @@
  *   3. Published sync bundle — entity type ids (never duplicated in tenant.json)
  */
 
-import type { CatalogGraph } from "../../tools/catalog/index.js"
+import type { CatalogSchemaSource } from "../types/catalog-schema-source.js"
 import { getPublishedSyncEntityIds } from "./published-sync-vocabulary.js"
 import { getTenantConfig, type TenantConfig } from "./tenant-config.js"
 
 /** Lowercase schema names from the live catalog. */
-export function catalogSchemaTokens(catalog: CatalogGraph | null | undefined): string[] {
+export function catalogSchemaTokens(catalog: CatalogSchemaSource | null | undefined): string[] {
   if (!catalog) return []
   const out = new Set<string>()
   for (const [, t] of catalog.tables) out.add(t.schema.toLowerCase())
@@ -22,7 +22,7 @@ export function catalogSchemaTokens(catalog: CatalogGraph | null | undefined): s
 /** Tenant business words + published sync entity ids + catalog schemas. */
 export function buildKnownVocabulary(
   tenant: TenantConfig = getTenantConfig(),
-  catalog?: CatalogGraph | null
+  catalog?: CatalogSchemaSource | null
 ): ReadonlySet<string> {
   const out = new Set<string>()
   for (const w of tenant.domainKeywords) out.add(w.toLowerCase())

@@ -166,7 +166,7 @@ function reportSilent(file, sf, node, repoRel, silentAllowlist, kind) {
     lineOf(sf, node),
     "sympathy-silent-failure",
     `${kind} — mechanical sympathy requires named handling (log, surface error, or typed recovery). ` +
-      `Silent swallow loses user intent and state. Allowlist only with a burn-down note. See docs/doctrine.md.`,
+      `Silent swallow loses user intent and state. See docs/doctrine.md.`,
   )
 }
 

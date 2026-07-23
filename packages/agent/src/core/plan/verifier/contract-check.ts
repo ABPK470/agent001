@@ -10,7 +10,7 @@ import {
   buildContractSpec,
   getCorrectionGuidance,
   validateDelegatedOutputContract
-} from "../../../runtime/delegate.js"
+} from "../../delegation-validation/index.js"
 import type { PipelineResult, Plan, SubagentTaskStep, VerifierStepAssessment } from "../types.js"
 
 export interface ContractCheckOptions {

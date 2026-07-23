@@ -12,11 +12,8 @@
 import { readdirSync, readFileSync } from "node:fs"
 import { join, resolve } from "node:path"
 
-import type {
-  AuthoredSyncDefinition,
-  PublishedSyncDefinition,
-  Scd2Strategy,
-} from "@mia/shared-types"
+import type { AuthoredSyncDefinition, PublishedSyncDefinition } from "@mia/shared-types"
+import type { Scd2Strategy } from "../domain/entity-registry/types.js"
 
 import {
   compilePublishedSyncDefinition,

@@ -16,6 +16,7 @@ import { runPostStepSyntaxValidation, validateSubagentCompletion } from "../pipe
 import type { DelegateFn, ToolExecFn } from "../pipeline/index.js"
 import { detectPlatformUnconfigured } from "../platform-errors.js"
 import type { PipelineStepResult, PlanStep, SubagentTaskStep } from "../types.js"
+import { asChildExecution, asToolCallRecords } from "./delegate-result.js"
 import { isBlueprintLikeStep, type SubagentStepValidationContext } from "./pipeline-repair.js"
 
 // ============================================================================
@@ -61,8 +62,8 @@ async function executeSubagentStep(
   try {
     const delegateResult = await delegateFn(step, step.executionContext)
     const output = delegateResult.output
-    const childToolCalls = delegateResult.toolCalls
-    const childExecution = delegateResult.execution
+    const childToolCalls = asToolCallRecords(delegateResult.toolCalls)
+    const childExecution = asChildExecution(delegateResult.execution)
 
     // Platform-unconfigured short-circuit (subagent path). If the child's
     // narrative output OR any of its tool-call results contain the missing

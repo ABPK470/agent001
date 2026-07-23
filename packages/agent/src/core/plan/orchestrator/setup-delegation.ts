@@ -18,7 +18,10 @@ import {
   type DelegationDecisionReason,
   type DelegationSubagentStepProfile
 } from "../../../core/delegate-decision/index.js"
-import type { DelegationBanditTuner, DelegationTrajectoryRecord } from "../../../runtime/delegate.js"
+import type {
+  DelegationBanditTunerPort,
+  DelegationTrajectoryRecord
+} from "../../../domain/types/delegation-learning.js"
 import type { Plan, PlanExecutionMode, PlanStep } from "../types.js"
 import { buildPlannerFailurePayload } from "./helpers.js"
 import type { PlannerContext, PlannerResult } from "./types.js"
@@ -60,7 +63,7 @@ export function runDelegationGate(
   goal: string,
   decision: { route: string; score: number; reason: string },
   ctx: PlannerContext,
-  banditTuner: DelegationBanditTuner | undefined
+  banditTuner: DelegationBanditTunerPort | undefined
 ): DelegationGateOutcome {
   const subagentSteps = plan.steps.filter(
     (s): s is PlanStep & { stepType: "subagent_task" } => s.stepType === "subagent_task"

@@ -54,31 +54,7 @@ const SpeechRecognition = (globalThis as Record<string, unknown>)["SpeechRecogni
   (globalThis as Record<string, unknown>)["webkitSpeechRecognition"] as
   (new () => SpeechRecognitionInstance) | undefined
 
-const TOOL_LABELS: Record<string, string> = {
-  search_catalog:        "Searching catalog",
-  inspect_definition:    "Inspecting definition",
-  explore_mssql_schema:  "Exploring schema",
-  query_mssql:           "Running SQL query",
-  profile_data:          "Profiling data",
-  discover_relationships:"Discovering relationships",
-  read_file:             "Reading file",
-  write_file:            "Writing file",
-  append_file:           "Appending file",
-  replace_in_file:       "Editing file",
-  list_directory:        "Listing directory",
-  search_files:          "Searching files",
-  run_command:           "Running command",
-  fetch_url:             "Fetching URL",
-  think:                 "Thinking",
-  ask_user:              "Asking user",
-  sync_preview:          "Previewing sync",
-  sync_execute:          "Executing sync",
-  list_sync_definitions: "Listing sync definitions",
-  resolve_sync_scope:    "Resolving sync scope",
-  sync_diff_scan:        "Scanning diffs",
-  list_environments:     "Listing environments",
-  compare_catalogs:      "Comparing catalogs",
-}
+import { TOOL_LABELS } from "@mia/shared-types"
 
 
 // ── Workspace changes card ─────────────────────────────────────────

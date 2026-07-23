@@ -15,7 +15,7 @@
 
 import { createPrivateKey, createPublicKey, createSign, createVerify } from "node:crypto"
 import { readFileSync } from "node:fs"
-import { Signer } from "../signer.js"
+import { Signer } from "../signer-types.js"
 
 export interface FileRsaSignerOptions {
   id: string

@@ -1817,6 +1817,12 @@ export {
   toolCallDetailPreview,
   toolCallPreview
 } from "./tool-call-presentation.js"
+export {
+  TERM_TOOL_LABELS,
+  TOOL_LABELS,
+  TOOL_PAST_TENSE,
+  termToolDisplayLabel
+} from "./presentation-labels.js"
 export type {
   ToolCallArtifact,
   ToolCallPresentation,

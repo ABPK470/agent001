@@ -10,7 +10,7 @@
 import { MessageRole } from "../domain/enums/message.js"
 import type { Message, PromptBudgetSection } from "../domain/types/agent-types.js"
 import { DROP_PRIORITY } from "../domain/types/agent-types.js"
-import { estimateTokens, extractFilePath, MAX_CONTEXT_TOKENS } from "./context-management/index.js"
+import { estimateTokens, extractFilePath, MAX_CONTEXT_TOKENS } from "./context-management/budget.js"
 import { applyPromptBudget, type PromptBudgetDiagnostics } from "./prompt-budget/index.js"
 
 // ============================================================================

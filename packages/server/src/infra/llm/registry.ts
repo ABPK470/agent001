@@ -15,32 +15,17 @@
  */
 
 import { DatabricksClient, type LLMClient } from "@mia/agent"
-import type { DbLlmConfig } from "../persistence/sqlite.js"
+import type { DbLlmConfig } from "../persistence/db/llm-config.js"
 import { CopilotChatClient } from "./copilot-chat.js"
 import { getDatabricksHost, getDatabricksToken, isDatabricksConfigured } from "./databricks-broker.js"
+import { DEFAULT_COPILOT_MODEL, DEFAULT_DATABRICKS_MODEL } from "./provider-defaults.js"
 
-/** Default provider for new installs (persisted in llm_config). */
-export const DEFAULT_PROVIDER = "databricks"
-
-/** Default model when no override is set (Copilot Chat). */
-export const DEFAULT_COPILOT_MODEL = "gpt-5.4"
-
-/** Default Databricks serving endpoint name. */
-export const DEFAULT_DATABRICKS_MODEL = "databricks-gpt-5-4"
-
-/** Default models per provider shown in the UI picker. */
-export const PROVIDER_DEFAULTS: Record<string, { model: string; baseUrl: string; placeholder: string }> = {
-  "copilot-chat": {
-    model: DEFAULT_COPILOT_MODEL,
-    baseUrl: "",
-    placeholder: "Automatic (Device Flow — authorize once)"
-  },
-  databricks: {
-    model: DEFAULT_DATABRICKS_MODEL,
-    baseUrl: "",
-    placeholder: "Automatic (M2M OAuth from .env)"
-  }
-}
+export {
+  DEFAULT_COPILOT_MODEL,
+  DEFAULT_DATABRICKS_MODEL,
+  DEFAULT_PROVIDER,
+  PROVIDER_DEFAULTS
+} from "./provider-defaults.js"
 
 /**
  * Build an LLMClient from a persisted config row.

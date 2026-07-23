@@ -108,7 +108,7 @@ export function lintImportCycles(pkg, graph, cycleAllowlist = []) {
               line,
               `${pkg.name}-import-cycle`,
               `Circular import: ${cycle.join(" → ")}. Break the cycle (extract shared leaf module; never import sibling via barrel). ` +
-                `To defer known debt, add key "${key}" to cycleAllowlist (must shrink).`,
+                `Break it — cycle allowlists are forbidden (must stay empty).`,
             )
           }
         }

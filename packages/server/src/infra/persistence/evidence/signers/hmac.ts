@@ -7,7 +7,7 @@
  */
 
 import { hmacSha256Hex } from "@mia/sync"
-import { Signer } from "../signer.js"
+import { Signer } from "../signer-types.js"
 
 export interface HmacSignerOptions {
   id: string
@@ -22,11 +22,11 @@ export function buildHmacSigner(o: HmacSignerOptions): Signer {
     id: o.id,
     alg: "HMAC-SHA256",
     async sign(bytes) {
-      return Buffer.from(hmacSha256Hex(o.secret, bytes), "hex").toString("base64url")
+      return Buffer.from(hmacSha256Hex(o.secret, Buffer.from(bytes)), "hex").toString("base64url")
     },
     async verify(bytes, sig) {
       try {
-        const expected = Buffer.from(hmacSha256Hex(o.secret, bytes), "hex").toString("base64url")
+        const expected = Buffer.from(hmacSha256Hex(o.secret, Buffer.from(bytes)), "hex").toString("base64url")
         return constantTimeEqualString(expected, sig)
       } catch {
         return false

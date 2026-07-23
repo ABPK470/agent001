@@ -5,7 +5,7 @@
  */
 
 import { posix as pathPosix } from "node:path"
-import { normalizeToolExecutionOutput } from "../../../tools/index.js"
+import { normalizeToolExecutionOutput } from "../../../tools/_shared/result.js"
 import type { Tool } from "../../types.js"
 import { normalizeSpecPath } from "../blueprint-contract/index.js"
 import type { Plan, SubagentTaskStep, VerifierStepAssessment } from "../types.js"

@@ -18,26 +18,19 @@ export {
  * @module
  */
 
+export type {
+  VerifierOwnershipMode,
+  VerifierRepairClass,
+} from "../../../domain/types/planner-delegate.js"
+
+import type {
+  VerifierOwnershipMode,
+  VerifierRepairClass,
+} from "../../../domain/types/planner-delegate.js"
+
 // ============================================================================
 // Verifier
 // ============================================================================
-
-export type VerifierOwnershipMode =
-  | "deterministic_owner"
-  | "shared_owners"
-  | "integration_layer"
-  | "planner_fault"
-  | "ambiguous"
-
-export type VerifierRepairClass =
-  | "owner_implementation"
-  | "integration_wiring"
-  | "contract_drift"
-  | "path_scope"
-  | "runtime_failure"
-  | "syntax_failure"
-  | "placeholder_logic"
-  | "verification_gap"
 
 export interface VerificationEvidence {
   readonly id: string

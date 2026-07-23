@@ -38,7 +38,7 @@ export function lintTenantIdentityForks(pkg, files, tenantBranchAllowlist) {
             lineOf(sf, node),
             "identity-literal-fork",
             `Identity compared to a literal or DEFAULT_* — that forks code per tenant. ` +
-              `Put variance in config/catalog data, or allowlist this adapter (must shrink).`,
+              `Put variance in config/catalog data — tenant code forks are forbidden.`,
           )
         }
       }
@@ -77,6 +77,22 @@ export function lintStaleDebtList(list, rule, label) {
       0,
       rule,
       `Unused ${label} allowlist entry (${a.file ?? a.surface ?? a.key ?? "?"}): ${a.note ?? ""}. Remove it — allowlists must shrink.`,
+    )
+  }
+}
+
+/**
+ * Class 19 — allowlist creep is closed: debt lists must stay empty.
+ * Soft-ignore is not enforcement.
+ */
+export function lintDebtListsEmpty(lists) {
+  for (const { list, label } of lists) {
+    if (!list?.length) continue
+    fail(
+      "lint-arch",
+      0,
+      "allowlist-creep",
+      `${label} has ${list.length} debt entr${list.length === 1 ? "y" : "ies"} — allowlists must stay empty. Fix the code; do not soft-ignore.`,
     )
   }
 }

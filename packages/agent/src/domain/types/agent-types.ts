@@ -361,10 +361,7 @@ export interface AgentConfig {
   /** Called with planner/pipeline trace events for UI. */
   onPlannerTrace?: (entry: Record<string, unknown>) => void
   /** Delegation function for planner-spawned children (injected by server). */
-  plannerDelegateFn?: (
-    step: import("../../core/plan.js").SubagentTaskStep,
-    envelope: import("../../core/plan.js").ExecutionEnvelope
-  ) => Promise<import("../../core/plan.js").DelegateResult>
+  plannerDelegateFn?: import("./planner-delegate.js").PlannerDelegateFn
   /**
    * Completion validator — called when the agent tries to exit (0 tool calls).
    * If it returns a non-null string, that string is injected as a system message

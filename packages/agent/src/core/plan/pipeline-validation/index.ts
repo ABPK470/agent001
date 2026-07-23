@@ -13,14 +13,14 @@ import {
  * @module
  */
 
-import type { ToolCallRecord } from "../../../tools/index.js"
+import type { ToolCallRecord } from "../../../tools/_shared/result.js"
 import {
   buildContractSpec,
   getCorrectionGuidance,
   specRequiresFileMutationEvidence,
   specRequiresSuccessfulToolEvidence,
   validateDelegatedOutputContract
-} from "../../../runtime/delegate.js"
+} from "../../delegation-validation/index.js"
 import { detectInconsistentBranches, detectPlaceholderPatterns } from "../../govern-tools.js"
 import type { Tool } from "../../types.js"
 import {

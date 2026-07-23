@@ -29,7 +29,7 @@ import {
   primaryKeyColumns,
   topNTables,
   topNUnionViews
-} from "../../tools/index.js"
+} from "../../tools/catalog/queries.js"
 
 export interface PromptVars {
   mirrorSchema: string

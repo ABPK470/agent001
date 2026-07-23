@@ -1,12 +1,11 @@
 import type Database from "better-sqlite3"
-import { getDb } from "../sqlite.js"
 import type { MemoryEntry, MemoryRole, MemorySource, MemoryTier } from "./types.js"
 
 /**
  * FTS5 virtual tables and integrity repair — runs after schema migrations on boot.
  * Base tables are created by migration `0001_baseline`.
  */
-export function initMemoryFts(db: Database.Database = getDb()): void {
+export function initMemoryFts(db: Database.Database): void {
 
   try {
     db.exec(`

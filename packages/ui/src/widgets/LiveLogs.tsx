@@ -190,16 +190,6 @@ export function LiveLogs() {
     )
   }, [filtered.length, searchHits, entries, typeFilters, errorsOnly, searchText])
 
-  const counts = useMemo(() => {
-    const c: Record<string, number> = { all: 0, error: 0 }
-    for (const l of entries) {
-      c.all++
-      c[l.type] = (c[l.type] ?? 0) + 1
-      if (l.error) c.error++
-    }
-    return c
-  }, [entries])
-
   useEffect(() => {
     if (autoScroll && !paused && followLive) {
       const el = containerRef.current

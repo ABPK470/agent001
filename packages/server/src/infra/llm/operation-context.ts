@@ -9,7 +9,7 @@
  */
 
 import { EventType, type LlmInteractionKind } from "@mia/shared-enums"
-import { broadcast } from "../events/broadcaster.js"
+import { emitSseEvent } from "../events/emit.js"
 import { throwIfCancelled } from "../operations/cancel-registry.js"
 
 export interface LlmInteractionPrompt {
@@ -46,7 +46,7 @@ export function checkLlmOperationCancelled(): void {
 }
 
 export function emitLlmInteractionRequired(prompt: LlmInteractionPrompt): void {
-  broadcast({
+  emitSseEvent({
     type: EventType.LlmInteractionRequired,
     data: {
       ...prompt,
@@ -59,7 +59,7 @@ export function emitLlmInteractionRequired(prompt: LlmInteractionPrompt): void {
 export function emitLlmInteractionCleared(): void {
   const ctx = bound
   if (!ctx) return
-  broadcast({
+  emitSseEvent({
     type: EventType.LlmInteractionCleared,
     data: {
       operationKind: ctx.operationKind,
@@ -69,7 +69,7 @@ export function emitLlmInteractionCleared(): void {
 }
 
 export function clearLlmInteractionForOperation(operationKind: string, operationId: string): void {
-  broadcast({
+  emitSseEvent({
     type: EventType.LlmInteractionCleared,
     data: { operationKind, operationId },
   })

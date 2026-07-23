@@ -433,6 +433,7 @@ describe("buildTraceDag", () => {
       {
         kind: "planner-verification-followup",
         requestedSteps: ["frontend_layer"],
+        reasons: [{ stepName: "frontend_layer", confidence: 0.91, ambiguousIssues: [] }],
       },
       {
         kind: "planner-pipeline-end",
