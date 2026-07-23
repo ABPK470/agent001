@@ -3743,11 +3743,6 @@ textarea.input {
   to { opacity: 1; }
 }
 
-@keyframes stream-table-row {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
 @keyframes stream-diagram-enter {
   from { opacity: 0; }
   to { opacity: 1; }
@@ -3757,17 +3752,12 @@ textarea.input {
   animation: stream-block-appear 0.28s ease-out both;
 }
 
-.stream-table-row {
-  animation: stream-table-row 0.22s ease-out both;
-}
-
 .stream-diagram-enter {
   animation: stream-diagram-enter 0.35s ease-out both;
 }
 
 @media (prefers-reduced-motion: reduce) {
   .stream-block-appear,
-  .stream-table-row,
   .stream-diagram-enter {
     animation: none;
   }

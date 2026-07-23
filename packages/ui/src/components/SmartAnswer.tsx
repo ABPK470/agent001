@@ -254,17 +254,17 @@ export const COMPACT_TABLE_WRAPPER_CLASS =
  * Layout: full-width bordered table. Copy/CSV/JSON overlay the header's
  * top-right (no permanent gutter) and stay pinned to the visible box so
  * horizontal table scroll never hides them past the edge.
+ *
+ * Settle is whole-block (stream-diagram-enter on the parent) — never row drip.
  */
 export function CompactTable({
   headers,
   rows,
-  animateRows = false,
   exportSource,
   exportDisabled = false,
 }: {
   headers: string[]
   rows: string[][]
-  animateRows?: boolean
   exportSource?: ChatTableExportSource
   exportDisabled?: boolean
 }) {
@@ -277,7 +277,7 @@ export function CompactTable({
             headers={headers}
             rows={rows}
             source={exportSource}
-            disabled={exportDisabled || animateRows}
+            disabled={exportDisabled}
             compact
             revealOnHover
             overlayChip
@@ -310,11 +310,7 @@ export function CompactTable({
           </thead>
           <tbody className="divide-y divide-border-subtle">
             {rows.map((row, ri) => (
-              <tr
-                key={ri}
-                className={animateRows ? "stream-table-row" : undefined}
-                style={animateRows ? { animationDelay: `${Math.min(ri, 12) * 45}ms` } : undefined}
-              >
+              <tr key={ri}>
                 {row.map((cell, ci) => (
                   <td
                     key={ci}
@@ -620,7 +616,6 @@ export function SmartAnswer({
                   <CompactTable
                     headers={tableData.headers}
                     rows={tableData.rows}
-                    animateRows={listTableEntering}
                     exportSource={localSource}
                     exportDisabled={!exportSettled || listTableEntering}
                   />
@@ -654,8 +649,7 @@ export function SmartAnswer({
         }
 
         if (b.type === "table") {
-          const tablePrinting = printing && reveal?.partial?.kind === "table"
-          const tableEntering = tablePrinting || settling
+          const tableEntering = (printing && reveal?.partial?.kind === "table") || settling
           const tableIndex = markdownTableIndex(blocks, bi)
           const exportSource: ChatTableExportSource | undefined = exportRunId
             ? { kind: "run", runId: exportRunId, tableIndex }
@@ -666,7 +660,6 @@ export function SmartAnswer({
                 <CompactTable
                   headers={b.headers}
                   rows={b.rows}
-                  animateRows={tableEntering}
                   exportSource={exportSource}
                   exportDisabled={!exportSettled || tableEntering}
                 />
@@ -680,12 +673,6 @@ export function SmartAnswer({
                   exportDisabled={!exportSettled || tableEntering}
                 />
               )}
-              {tablePrinting && b.rows.length < (block.type === "table" ? block.rows.length : 0) ? (
-                <div className="flex items-center gap-2 px-1 pt-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-accent/60 animate-pulse shrink-0" />
-                  <span className="text-[15px] text-text-muted">Adding rows…</span>
-                </div>
-              ) : null}
             </div>
           )
         }

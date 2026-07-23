@@ -3,8 +3,8 @@
  *
  * Live SSE: finished prose/headings render via SmartAnswer. Incomplete
  * tables and chart/KPI/dashboard blocks share one quiet pending shell
- * until the whole block is ready, then settle with the same enter motion
- * charts use. Plain prose advances by words — no glyph scramble.
+ * until the whole block is ready, then settle as one unit with the same
+ * enter motion charts use. Plain prose advances by words — no glyph scramble.
  *
  * Settled answers keep the same tree when the stream just finished so a
  * trailing table (held until end) lands into its stage instead of popping.
@@ -148,7 +148,7 @@ export function TypewriterAnswer({
   exportRunId?: string
 }) {
   // Once a message has streamed, keep the settle body so trailing tables
-  // (held until stream end) land with the same enter path as mid-stream charts.
+  // (held until stream end) land as one finished unit like mid-stream charts.
   const hasStreamedRef = useRef(streaming)
   if (streaming) hasStreamedRef.current = true
 
