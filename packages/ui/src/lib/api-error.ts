@@ -14,7 +14,7 @@ export type ApiErrorFields = {
   stderr?: string[]
 }
 
-const TOOL_LABELS: Readonly<Record<string, string>> = {
+const API_TOOL_DISPLAY_NAMES: Readonly<Record<string, string>> = {
   sync_publish: "Catalog publish",
   sync_preview: "Sync preview",
   sync_execute: "Sync execute",
@@ -28,7 +28,7 @@ const TOOL_LABELS: Readonly<Record<string, string>> = {
 
 function toolLabel(toolName: string | undefined): string | null {
   if (!toolName) return null
-  return TOOL_LABELS[toolName] ?? toolName.replace(/_/g, " ")
+  return API_TOOL_DISPLAY_NAMES[toolName] ?? toolName.replace(/_/g, " ")
 }
 
 function capitalize(text: string): string {

@@ -2,7 +2,7 @@ import Database from "better-sqlite3"
 import Fastify, { type FastifyInstance } from "fastify"
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
-import { join } from "node:path"
+import { join, resolve } from "node:path"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 
 import type { AgentHost } from "@mia/agent"
@@ -56,6 +56,8 @@ async function buildApp(session: CurrentSession): Promise<{ app: FastifyInstance
   _setDb(testDb)
   _migrate(testDb)
   seedSyncMetadataIfEmpty(projectRoot)
+  const { seedDefaultPoliciesIfMissing } = await import("../src/api/policies/service/policy-seeder.js")
+  seedDefaultPoliciesIfMissing(resolve(import.meta.dirname, "../../.."))
 
   const host = createHost(projectRoot)
   const app = Fastify({ logger: false })
@@ -78,8 +80,8 @@ beforeEach(() => {
   mkdirSync(join(projectRoot, "deploy", "sync", "artifacts"), { recursive: true })
   mkdirSync(join(projectRoot, "sync-definitions", "entities"), { recursive: true })
   writeFileSync(
-    join(projectRoot, "deploy", "sync", "artifacts", "flow-templates.json"),
-    readFileSync(new URL("../../../deploy/sync/artifacts/flow-templates.json", import.meta.url), "utf-8")
+    join(projectRoot, "deploy", "sync", "artifacts", "sync-metadata.json"),
+    readFileSync(new URL("../../../deploy/sync/artifacts/sync-metadata.json", import.meta.url), "utf-8"),
   )
   writeFileSync(
     join(projectRoot, "sync-definitions", "entities", "pipelineActivity.json"),

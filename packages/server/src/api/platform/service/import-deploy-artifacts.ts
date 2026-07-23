@@ -113,10 +113,6 @@ export function parseCatalogBundleFromDir(bundleDir: string): DeployCatalogSnaps
     readJsonFile(join(root, "artifacts", "strategies.json")),
     "artifacts/strategies.json",
   )
-  const flowTemplates = requireObject(
-    readJsonFile(join(root, "artifacts", "flow-templates.json")),
-    "artifacts/flow-templates.json",
-  )
   const environments = requireObject(readJsonFile(join(root, "sync-environments.json")), "sync-environments.json")
 
   const entityRegistry = loadEntityRegistryFromBundle(root)
@@ -138,7 +134,6 @@ export function parseCatalogBundleFromDir(bundleDir: string): DeployCatalogSnaps
     exportedAt: typeof manifest.exportedAt === "string" ? manifest.exportedAt : new Date().toISOString(),
     tenantId: typeof manifest.tenantId === "string" ? manifest.tenantId : DEFAULT_TENANT,
     syncMetadata,
-    flowTemplates,
     strategies,
     environments,
     entityRegistry,

@@ -15,7 +15,6 @@ function snapshot(partial: Partial<DeployCatalogSnapshot>): DeployCatalogSnapsho
       valueSources: [],
       flows: {},
     },
-    flowTemplates: { version: 1, flowTemplates: {} },
     strategies: { version: 1, strategies: [] },
     environments: { version: 1, environments: [] },
     entityRegistry: { version: 1, _comment: "", entities: [] },

@@ -124,10 +124,6 @@ beforeEach(() => {
   projectRoot = mkdtempSync(join(tmpdir(), "mia-sync-pipeline-root-"))
   mkdirSync(join(projectRoot, "deploy", "sync", "artifacts"), { recursive: true })
   writeFileSync(
-    join(projectRoot, "deploy", "sync", "artifacts", "flow-templates.json"),
-    readFileSync(new URL("../../../deploy/sync/artifacts/flow-templates.json", import.meta.url), "utf-8")
-  )
-  writeFileSync(
     join(projectRoot, "deploy", "sync", "artifacts", "sync-metadata.json"),
     readFileSync(new URL("../../../deploy/sync/artifacts/sync-metadata.json", import.meta.url), "utf-8")
   )
@@ -163,7 +159,7 @@ describe("sync definition pipeline (e2e)", () => {
     for (const file of readdirSync(repoArtifactsDir).filter((name) => name.endsWith(".json"))) {
       copyFileSync(join(repoArtifactsDir, file), join(tempArtifactsDir, file))
     }
-    for (const name of ["sync-metadata.json", "flow-templates.json", "strategies.json"]) {
+    for (const name of ["sync-metadata.json", "strategies.json"]) {
       const source = join(repoArtifactsParent, name)
       if (existsSync(source)) {
         copyFileSync(source, join(projectRoot, "deploy", "sync", "artifacts", name))

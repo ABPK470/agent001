@@ -140,11 +140,7 @@ function configsFromSnapshot(snapshot: DeployCatalogSnapshot): unknown[] {
 
 function extractSectionMaps(snapshot: DeployCatalogSnapshot): SectionMaps {
   const syncMetadata = asRecord(snapshot.syncMetadata) ?? {}
-  const flowsDoc = asRecord(snapshot.flowTemplates) ?? {}
-  const flowSource =
-    asRecord(flowsDoc.flowTemplates) ??
-    asRecord(syncMetadata.flows) ??
-    {}
+  const flowSource = asRecord(syncMetadata.flows) ?? {}
 
   return {
     entities: mapById(snapshot.entityRegistry?.entities ?? [], "id"),

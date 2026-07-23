@@ -64,7 +64,6 @@ Handler wiring always uses `{ "type": "catalog", "id": "…" }` — no legacy sh
 | `artifacts/entities/*.json` | `entity_active` + `entity_versions` (`EntityDefinition` + `flowId`) | Entity Registry |
 | `artifacts/sync-metadata.json` | phases, actions, valueSources, flows | Configuration → Flows / Actions / Sources |
 | `artifacts/strategies.json` | `scd2_strategy_active` + `scd2_strategy_versions` | Strategies |
-| `artifacts/flow-templates.json` | derived flow view | publish helper |
 | `sync-environments.json` | `sync_environments` | Environments |
 
 ## Commands

@@ -6,9 +6,9 @@ import { describe, expect, it } from "vitest"
 
 import type { SyncDefinitionFlowTemplateCatalog } from "@mia/sync"
 
-const repoRoot = resolve(import.meta.dirname, "../../../..")
+const repoRoot = resolve(import.meta.dirname, "../../../../..")
 const evidenceFixture = resolve(repoRoot, "deploy/sync/fixtures/legacy-pipeline-evidence.fixture.json")
-const flowTemplatesSeed = resolve(repoRoot, "deploy/sync/artifacts/flow-templates.json")
+const syncMetadataSeed = resolve(repoRoot, "deploy/sync/artifacts/sync-metadata.json")
 const catalogCacheFile = "packages/server/data/catalog-cache.uat.json"
 const catalogCacheHomeFile = join(homedir(), ".mia", "catalog-cache.uat.json")
 const catalogFixtureFile = "deploy/sync/fixtures/catalog-snapshot.fixture.json"
@@ -173,7 +173,7 @@ describe("legacy sync generators", () => {
       "../../../../deploy/sync/helpers/sync-metadata-derivation.mjs",
       import.meta.url
     ).href
-    const specsPath = new URL("../../../../deploy/sync/helpers/legacy-pipeline-evidence.mjs", import.meta.url)
+    const specsPath = new URL("../../../../../deploy/sync/helpers/legacy-pipeline-evidence.mjs", import.meta.url)
       .href
     const { buildFlowTemplateCatalogFromPipelines } = (await import(modulePath)) as {
       buildFlowTemplateCatalogFromPipelines: (
@@ -201,18 +201,18 @@ describe("legacy sync generators", () => {
     expect(catalog.flowTemplates.contract.steps.map((step) => step.id)).not.toContain("auditCheck2")
   })
 
-  it("rebuilds flow-templates.json from the reviewed legacy pipeline set", async () => {
+  it("rebuilds flow recipes matching sync-metadata.flows from the reviewed legacy pipeline set", async () => {
     const modulePath = new URL(
       "../../../../deploy/sync/helpers/sync-metadata-derivation.mjs",
       import.meta.url
     ).href
-    const specsPath = new URL("../../../../deploy/sync/helpers/legacy-pipeline-evidence.mjs", import.meta.url)
+    const specsPath = new URL("../../../../../deploy/sync/helpers/legacy-pipeline-evidence.mjs", import.meta.url)
       .href
     const { buildFlowTemplateCatalogFromPipelines } = (await import(modulePath)) as {
       buildFlowTemplateCatalogFromPipelines: (
         pipelines: unknown[],
         options?: { activitySyncSpecs?: Record<string, unknown> }
-      ) => unknown
+      ) => { flowTemplates: unknown }
     }
     const { loadLegacyActivitySyncSpecs } = (await import(specsPath)) as {
       loadLegacyActivitySyncSpecs: () => Record<string, unknown>
@@ -224,8 +224,8 @@ describe("legacy sync generators", () => {
     const actual = buildFlowTemplateCatalogFromPipelines(selectedPipelines, {
       activitySyncSpecs: loadLegacyActivitySyncSpecs()
     })
-    const expected = JSON.parse(readFileSync(flowTemplatesSeed, "utf-8"))
-    expect(actual).toEqual(expected)
+    const expected = JSON.parse(readFileSync(syncMetadataSeed, "utf-8")) as { flows: unknown }
+    expect(actual.flowTemplates).toEqual(expected.flows)
   })
 
   it("rebuilds deploy/sync/artifacts/entities from the reviewed legacy pipeline set", async () => {

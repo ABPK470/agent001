@@ -29,11 +29,7 @@ function copyNativeSeeds(targetRoot: string): void {
   for (const file of readdirSync(join(srcArtifacts, "entities")).filter((n) => n.endsWith(".json"))) {
     copyFileSync(join(srcArtifacts, "entities", file), join(dstArtifacts, "entities", file))
   }
-  for (const name of [
-    "sync-metadata.json",
-    "strategies.json",
-    "flow-templates.json",
-  ]) {
+  for (const name of ["sync-metadata.json", "strategies.json"]) {
     const source = join(srcArtifacts, name)
     if (existsSync(source)) copyFileSync(source, join(dstArtifacts, name))
   }

@@ -30,7 +30,6 @@ export interface DeployCatalogSnapshot {
   exportedAt: string
   tenantId: string
   syncMetadata: Record<string, unknown>
-  flowTemplates: Record<string, unknown>
   strategies: Record<string, unknown>
   environments: Record<string, unknown>
   /**
@@ -171,17 +170,6 @@ function exportEnvironmentsDocument() {
   }
 }
 
-function exportFlowTemplatesDocument(syncMetadata: Record<string, unknown>) {
-  return {
-    version: 1 as const,
-    _comment:
-      typeof syncMetadata._comment === "string"
-        ? syncMetadata._comment
-        : "Derived view of sync-metadata.flows",
-    flowTemplates: syncMetadata.flows ?? {},
-  }
-}
-
 function exportEntityRegistryDocument(tenantId: string, includeRetired: boolean): {
   document: EntityRegistryExportDocument | null
   entityIds: string[]
@@ -208,7 +196,6 @@ export function buildDeployCatalogSnapshot(
     exportedAt,
     tenantId,
     syncMetadata,
-    flowTemplates: exportFlowTemplatesDocument(syncMetadata),
     strategies: exportStrategiesDocument(tenantId),
     environments: exportEnvironmentsDocument(),
     entityRegistry: entities.document,
@@ -256,7 +243,6 @@ export function writeDeployCatalogSnapshot(
   const artifactFiles = [
     "sync-metadata.json",
     "strategies.json",
-    "flow-templates.json",
     ...entityFiles,
   ]
 
@@ -275,7 +261,6 @@ export function writeDeployCatalogSnapshot(
     writeJsonFile(folderPath, "sync-environments.json", snapshot.environments),
     writeJsonFile(artifactsDir, "sync-metadata.json", snapshot.syncMetadata),
     writeJsonFile(artifactsDir, "strategies.json", snapshot.strategies),
-    writeJsonFile(artifactsDir, "flow-templates.json", snapshot.flowTemplates),
     ...entityFiles,
   ]
 
@@ -329,7 +314,6 @@ export function exportDeployArtifactsFromSqlite(
   return {
     paths: {},
     syncMetadata: snapshot.syncMetadata,
-    flowTemplates: snapshot.flowTemplates,
     strategies: snapshot.strategies,
     environments: snapshot.environments,
     entityRegistry: snapshot.entityRegistry,

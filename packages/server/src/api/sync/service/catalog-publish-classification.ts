@@ -109,11 +109,7 @@ function sectionEntryIds(diff: DeployCatalogSnapshotDiff, section: CatalogDiffSe
 
 function flowStepsFromTip(snapshot: DeployCatalogSnapshot, flowId: string): Array<{ kind?: string; phase?: string }> {
   const syncMetadata = asRecord(snapshot.syncMetadata) ?? {}
-  const flowsDoc = asRecord(snapshot.flowTemplates) ?? {}
-  const flowSource =
-    asRecord(flowsDoc.flowTemplates) ??
-    asRecord(syncMetadata.flows) ??
-    {}
+  const flowSource = asRecord(syncMetadata.flows) ?? {}
   const flow = asRecord(flowSource[flowId])
   if (!flow) return []
   const steps = flow.steps

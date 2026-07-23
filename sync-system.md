@@ -14,7 +14,7 @@ This document describes how cross-environment metadata synchronization works in 
 | Definition publish / compile | `packages/server/src/api/sync/service/definitions.ts` |
 | Published runtime bundle | `sync-definitions/published/definitions.bundle.json` |
 | Environment config (optional file) | `deploy/sync/sync-environments.json` |
-| Flow templates | `deploy/sync/artifacts/flow-templates.json` |
+| Flow templates | `deploy/sync/artifacts/sync-metadata.json (flows)` |
 | Authored entity seeds | `deploy/sync/artifacts/entities/*.json` |
 
 ---
@@ -574,7 +574,7 @@ The selection is frozen in `recipeSnapshot.enabledOptionalTables` on the plan.
 
 ### Execution flow driver
 
-Execute walks `executionContract.flow.steps` **in definition order**. The list is frozen at preview time from the entity’s published flow template (see `deploy/sync/artifacts/flow-templates.json` and admin overrides).
+Execute walks `executionContract.flow.steps` **in definition order**. The list is frozen at preview time from the entity’s published flow template (see `deploy/sync/artifacts/sync-metadata.json (flows)` and admin overrides).
 
 The orchestrator treats the flow as **three bands** — only the middle band is a SQL transaction:
 
@@ -786,7 +786,7 @@ Excluded unless `enabledOptionalTables` explicitly enables them:
 
 ### Execute step sequences (default flow templates)
 
-Steps below are the **default** order from `deploy/sync/artifacts/flow-templates.json`. Published definitions may differ if operators edited flow config. Every entity type includes **`metadataSync`** as the transactional core.
+Steps below are the **default** order from `deploy/sync/artifacts/sync-metadata.json (flows)`. Published definitions may differ if operators edited flow config. Every entity type includes **`metadataSync`** as the transactional core.
 
 #### `contract` — full deploy (21 steps)
 
@@ -876,7 +876,7 @@ Use when an entity definition should apply row changes only — no ETL/Agent/Gat
 | **gateMetadata** | Gate `meta/refresh` → Agent pipeline start |
 | **content** | `handleDependencies("content")` |
 
-Flow templates: `deploy/sync/artifacts/flow-templates.json`.
+Flow templates: `deploy/sync/artifacts/sync-metadata.json (flows)`.
 
 ### Tree expansion entities
 
@@ -1039,7 +1039,7 @@ Server records preview/execute actions via `recordSyncAudit` (routes layer) for 
 |----------|------|---------|
 | Published bundle | `sync-definitions/published/definitions.bundle.json` | Runtime sync contracts |
 | Environment file | `deploy/sync/sync-environments.json` | Default env registry |
-| Flow templates | `deploy/sync/artifacts/flow-templates.json` | Execute step templates |
+| Flow templates | `deploy/sync/artifacts/sync-metadata.json (flows)` | Execute step templates |
 | Entity seeds | `deploy/sync/artifacts/entities/*.json` | Initial registry seeds |
 | Plan storage | `MIA_DATA_DIR/sync-plans/` | Persisted SyncPlans |
 

@@ -338,7 +338,7 @@ export function buildSyncMetadataFromPipelines(pipelines, options = {}) {
   return metadata
 }
 
-/** Flow-template catalog view — same shape as legacy flow-templates.json for loaders. */
+/** In-memory flow-template catalog view of sync-metadata.flows (not a ship artifact). */
 export function buildFlowTemplateCatalogFromSyncMetadata(syncMetadata) {
   return {
     version: 1,

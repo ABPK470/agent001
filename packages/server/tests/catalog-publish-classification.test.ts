@@ -23,7 +23,6 @@ function tipWithEntities(
       valueSources: [],
       flows,
     },
-    flowTemplates: { version: 1, flowTemplates: flows },
     strategies: { version: 1, strategies: [] },
     environments: { version: 1, environments: [] },
     entityRegistry: { version: 1, entities },

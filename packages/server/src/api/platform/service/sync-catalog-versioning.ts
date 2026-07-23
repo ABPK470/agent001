@@ -108,9 +108,6 @@ function countRecordKeys(value: unknown): number {
   if (Array.isArray(record.stepTypes)) return record.stepTypes.length
   if (Array.isArray(record.valueSources)) return record.valueSources.length
   if (Array.isArray(record.customValueSources)) return record.customValueSources.length
-  if (record.flowTemplates && typeof record.flowTemplates === "object") {
-    return Object.keys(record.flowTemplates as Record<string, unknown>).length
-  }
   return Object.keys(record).filter((key) => !key.startsWith("_") && key !== "version").length
 }
 
@@ -127,7 +124,6 @@ export function summarizeDeployCatalogSnapshot(
   }).filter((row) => row.id.length > 0)
 
   const syncMetadata = snapshot.syncMetadata as Record<string, unknown>
-  const flowTemplatesDoc = snapshot.flowTemplates as Record<string, unknown>
   return {
     exportedAt: snapshot.exportedAt,
     tenantId: snapshot.tenantId,
@@ -141,9 +137,7 @@ export function summarizeDeployCatalogSnapshot(
       }).length,
     strategyCount: countRecordKeys(snapshot.strategies),
     environmentCount: countRecordKeys(snapshot.environments),
-    flowCount:
-      countRecordKeys(flowTemplatesDoc.flowTemplates) ||
-      countRecordKeys(syncMetadata.flows),
+    flowCount: countRecordKeys(syncMetadata.flows),
     stepTypeCount: countRecordKeys(syncMetadata.actions ?? syncMetadata.stepTypes),
     customValueSourceCount: countRecordKeys(syncMetadata.valueSources ?? syncMetadata.customValueSources),
     entities,

@@ -40,7 +40,7 @@ export function ShippedDriftDiffModal({
     let cancelled = false
     setBusy(true)
     setError(null)
-    void api.getSyncMetadataShippedDiff(kind, id).then(
+    api.getSyncMetadataShippedDiff(kind, id).then(
       (diff) => {
         if (cancelled) return
         setLabel(diff.label)
@@ -53,7 +53,7 @@ export function ShippedDriftDiffModal({
         setError(formatApiError(e))
         setBusy(false)
       },
-    )
+    ).catch((err: unknown) => { console.error("[mia]", err) })
     return () => {
       cancelled = true
     }

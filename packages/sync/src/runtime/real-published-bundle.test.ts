@@ -42,15 +42,15 @@ describe("real published bundle (read-only)", () => {
     }
   })
 
-  it("contract executionFlow steps match the flow template catalog", () => {
+  it("contract executionFlow steps match sync-metadata flows.contract", () => {
     const host = createRepoBundleHost()
     const contract = getPublishedSyncDefinition(host, REPO_ROOT, asEntityId("contract"))
-    const catalog = JSON.parse(
-      readFileSync(resolve(REPO_ROOT, "deploy/sync/artifacts/flow-templates.json"), "utf-8")
-    ) as { flowTemplates: { contract: { steps: Array<{ bindings?: unknown; phase?: unknown }> } } }
+    const metadata = JSON.parse(
+      readFileSync(resolve(REPO_ROOT, "deploy/sync/artifacts/sync-metadata.json"), "utf-8")
+    ) as { flows: { contract: { steps: Array<{ bindings?: unknown; phase?: unknown }> } } }
 
     expect(stripFlowPresentation(contract.executionFlow.steps)).toEqual(
-      stripFlowPresentation(catalog.flowTemplates.contract.steps)
+      stripFlowPresentation(metadata.flows.contract.steps)
     )
   })
 

@@ -7,8 +7,7 @@
  *
  * Mia model:
  *   entity registry entry  ← derived table scopes + predicates from uspSync*ObjectsTran
- *   sync-metadata.json     ← step types (actions) + flows (pipelines)
- *   flow-templates.json    ← view of sync-metadata.flows
+ *   sync-metadata.json     ← phases, actions, valueSources, flows (pipelines)
  *   legacy-activity-sync-specs.json ← offline overlay keyed by pipelineId:sequence
  *
  * Used by:
@@ -47,7 +46,6 @@ export const SOURCE_ARTIFACT = "deploy/sync/generators/refresh-from-legacy.mjs"
 export const PATHS = {
   entitiesDir: "deploy/sync/artifacts/entities",
   syncMetadata: "deploy/sync/artifacts/sync-metadata.json",
-  flowTemplates: "deploy/sync/artifacts/flow-templates.json",
   activitySpecs: "deploy/sync/fixtures/legacy-activity-sync-specs.json",
   evidenceFixture: "deploy/sync/fixtures/legacy-pipeline-evidence.fixture.json",
 }
@@ -104,8 +102,8 @@ export async function refreshDeployArtifactsFromLegacy(projectRoot, options = {}
 
   writeJson(resolve(projectRoot, PATHS.syncMetadata), syncMetadata, force)
 
+  // In-memory remap for activity-specs builders — not a shipped artifact.
   const flowCatalog = buildFlowTemplateCatalogFromSyncMetadata(syncMetadata)
-  writeJson(resolve(projectRoot, PATHS.flowTemplates), flowCatalog, force)
 
   const specsArtifact = buildLegacyActivitySyncSpecs(evidence, flowCatalog, syncMetadata)
   writeJson(resolve(projectRoot, PATHS.activitySpecs), specsArtifact, force)

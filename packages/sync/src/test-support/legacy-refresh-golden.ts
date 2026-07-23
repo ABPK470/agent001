@@ -262,7 +262,17 @@ export function buildG2LogicalFromNativeSeeds(projectRoot: string): LogicalCatal
     syncMetadata: readJson(resolve(projectRoot, "deploy/sync/artifacts/sync-metadata.json")),
     strategies: readJson(resolve(projectRoot, "deploy/sync/artifacts/strategies.json")),
     environments: readJson(resolve(projectRoot, "deploy/sync/sync-environments.json")),
-    flowTemplates: readJson(resolve(projectRoot, "deploy/sync/artifacts/flow-templates.json")),
+    flowTemplates: (() => {
+      const syncMetadata = readJson(resolve(projectRoot, "deploy/sync/artifacts/sync-metadata.json")) as {
+        _comment?: string
+        flows?: unknown
+      }
+      return {
+        version: 1,
+        _comment: syncMetadata._comment,
+        flowTemplates: syncMetadata.flows ?? {},
+      }
+    })(),
   }
 }
 

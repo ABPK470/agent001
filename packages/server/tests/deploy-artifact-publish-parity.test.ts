@@ -40,11 +40,7 @@ function copyRepoDeployArtifacts(targetRoot: string): void {
   for (const file of readdirSync(REPO_ARTIFACTS_DIR).filter((name) => name.endsWith(".json"))) {
     copyFileSync(join(REPO_ARTIFACTS_DIR, file), join(targetDir, file))
   }
-  for (const name of [
-    "sync-metadata.json",
-    "strategies.json",
-    "flow-templates.json",
-  ]) {
+  for (const name of ["sync-metadata.json", "strategies.json"]) {
     const source = join(REPO_ROOT, "deploy/sync/artifacts", name)
     if (existsSync(source)) {
       mkdirSync(join(targetRoot, "deploy/sync/artifacts"), { recursive: true })

@@ -330,11 +330,8 @@ describe("sync config — zombie tip stamp (version ahead, live matches publish)
     expect(publishedSnapshot).toBeTruthy()
     const snap = JSON.parse(publishedSnapshot!.snapshot_json) as {
       syncMetadata?: { flows?: Record<string, { label?: string; description?: string; steps?: unknown[] }> }
-      flowTemplates?: { flowTemplates?: Record<string, { label?: string; description?: string; steps?: unknown[] }> }
     }
-    const flow =
-      snap.flowTemplates?.flowTemplates?.contract
-      ?? snap.syncMetadata?.flows?.contract
+    const flow = snap.syncMetadata?.flows?.contract
     expect(flow?.steps).toBeTruthy()
     const row = db.getSyncFlow(TENANT, "contract")!
     db.saveSyncFlow({
@@ -373,11 +370,8 @@ describe("sync config — zombie tip stamp (version ahead, live matches publish)
     const publishedSnapshot = db.getSyncCatalogVersionRow(TENANT, publishedVersion!)!
     const snap = JSON.parse(publishedSnapshot.snapshot_json) as {
       syncMetadata?: { flows?: Record<string, { steps?: unknown[]; label?: string; description?: string }> }
-      flowTemplates?: { flowTemplates?: Record<string, { steps?: unknown[]; label?: string; description?: string }> }
     }
-    const flow =
-      snap.flowTemplates?.flowTemplates?.content
-      ?? snap.syncMetadata?.flows?.content
+    const flow = snap.syncMetadata?.flows?.content
     const row = db.getSyncFlow(TENANT, "content")!
     db.saveSyncFlow({
       tenant_id: TENANT,

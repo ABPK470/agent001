@@ -4,16 +4,15 @@ import { join, resolve } from "node:path"
 
 import { describe, expect, it } from "vitest"
 
-const repoRoot = resolve(import.meta.dirname, "../../../..")
+const repoRoot = resolve(import.meta.dirname, "../../../../..")
 const syncMetadataSeed = resolve(repoRoot, "deploy/sync/artifacts/sync-metadata.json")
-const flowTemplatesSeed = resolve(repoRoot, "deploy/sync/artifacts/flow-templates.json")
 const evidenceFixture = resolve(repoRoot, "deploy/sync/fixtures/legacy-pipeline-evidence.fixture.json")
 const pipelineIds = "692,780,788,791,792,798"
 
 describe("sync metadata derivation", () => {
   it("rebuilds sync-metadata.json from legacy pipeline evidence", async () => {
     const tempRoot = mkdtempSync(join(tmpdir(), "sync-metadata-gen-"))
-    const helperPath = new URL("../../../../deploy/sync/helpers/refresh-from-legacy.mjs", import.meta.url)
+    const helperPath = new URL("../../../../../deploy/sync/helpers/refresh-from-legacy.mjs", import.meta.url)
       .href
     const { refreshDeployArtifactsFromLegacy } = (await import(helperPath)) as {
       refreshDeployArtifactsFromLegacy: (
@@ -28,7 +27,7 @@ describe("sync metadata derivation", () => {
     }
 
     await refreshDeployArtifactsFromLegacy(tempRoot, {
-      evidenceFile: resolve(repoRoot, evidenceFixture),
+      evidenceFile: evidenceFixture,
       pipelineIds,
       metadataOnly: true,
       force: true,
@@ -42,7 +41,7 @@ describe("sync metadata derivation", () => {
   })
 
   it("defines every step type and phase referenced by flows", async () => {
-    const modulePath = new URL("../../../../deploy/sync/helpers/sync-metadata-derivation.mjs", import.meta.url)
+    const modulePath = new URL("../../../../../deploy/sync/helpers/sync-metadata-derivation.mjs", import.meta.url)
       .href
     const { validateSyncMetadataCoversFlows } = (await import(modulePath)) as {
       validateSyncMetadataCoversFlows: (metadata: unknown) => {
@@ -97,15 +96,19 @@ describe("sync metadata derivation", () => {
     }
   })
 
-  it("flow-templates view matches committed flow-templates.json", async () => {
-    const modulePath = new URL("../../../../deploy/sync/helpers/sync-metadata-derivation.mjs", import.meta.url)
+  it("flow-templates in-memory view matches sync-metadata.flows", async () => {
+    const modulePath = new URL("../../../../../deploy/sync/helpers/sync-metadata-derivation.mjs", import.meta.url)
       .href
     const { buildFlowTemplateCatalogFromSyncMetadata } = (await import(modulePath)) as {
-      buildFlowTemplateCatalogFromSyncMetadata: (metadata: unknown) => unknown
+      buildFlowTemplateCatalogFromSyncMetadata: (metadata: unknown) => {
+        flowTemplates: unknown
+      }
     }
-    const metadata = JSON.parse(readFileSync(syncMetadataSeed, "utf-8"))
+    const metadata = JSON.parse(readFileSync(syncMetadataSeed, "utf-8")) as {
+      flows: unknown
+      _comment?: string
+    }
     const flowView = buildFlowTemplateCatalogFromSyncMetadata(metadata)
-    const expected = JSON.parse(readFileSync(flowTemplatesSeed, "utf-8"))
-    expect(flowView).toEqual(expected)
+    expect(flowView.flowTemplates).toEqual(metadata.flows)
   })
 })

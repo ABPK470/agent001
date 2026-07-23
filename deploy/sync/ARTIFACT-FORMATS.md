@@ -42,7 +42,6 @@ deploy/sync/                         # also: mia-sync-export-<timestamp>/
     entities/{id}.json               # EntityDefinition + flowId
     sync-metadata.json               # phases, actions, valueSources, flows
     strategies.json
-    flow-templates.json              # derived view of sync-metadata.flows
 ```
 
 | Path | Contents |
@@ -50,7 +49,6 @@ deploy/sync/                         # also: mia-sync-export-<timestamp>/
 | `artifacts/entities/{id}.json` | Catalog entity document (`EntityDefinition` + `flowId`) |
 | `artifacts/sync-metadata.json` | phases, actions, valueSources, flows |
 | `artifacts/strategies.json` | SCD2 strategies |
-| `artifacts/flow-templates.json` | View of flows (not a second hand-edited SoT) |
 | `sync-environments.json` | Environments |
 
 SQLite stores each entity document in `entity_versions.body_json`. Publish and admin resolve flow from `entity.flowId` + the flow catalog only — there is no tip configs table. Bindings/ownership on published SyncDefinitions are compose-time stubs only.
