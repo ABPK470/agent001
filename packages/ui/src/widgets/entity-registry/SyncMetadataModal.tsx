@@ -743,23 +743,22 @@ export function SyncMetadataModal({
     >
       <div className="entity-registry relative flex min-h-0 flex-1 flex-col">
         <ModalToastStack toasts={toasts} onDismiss={dismissToast} />
-        {publishStatus?.catalogNeedsPublish && (
-          <SetupHintStrip icon={Rocket}>
+        <SetupHintStrip open={Boolean(publishStatus?.catalogNeedsPublish)} icon={Rocket}>
             Compile-relevant tip is ahead of published sync contracts
-            {publishStatus.dirtyCompileSections?.length
+            {publishStatus?.dirtyCompileSections?.length
               ? ` (${publishStatus.dirtyCompileSections.join(", ")})`
               : ""}
             . Preview/execute keep the last Publish until you republish from Entity Registry.
-            {publishStatus.unpublishedEntityCount > 0
-              ? ` · ${publishStatus.unpublishedEntityCount} entit${publishStatus.unpublishedEntityCount === 1 ? "y" : "ies"} affected.`
+            {(publishStatus?.unpublishedEntityCount ?? 0) > 0
+              ? ` · ${publishStatus?.unpublishedEntityCount} entit${publishStatus?.unpublishedEntityCount === 1 ? "y" : "ies"} affected.`
               : ""}
           </SetupHintStrip>
-        )}
-        {publishStatus?.operationalCatalogAhead && !publishStatus.catalogNeedsPublish && (
-          <SetupHintStrip tone="muted">
+          <SetupHintStrip
+            open={Boolean(publishStatus?.operationalCatalogAhead && !publishStatus?.catalogNeedsPublish)}
+            tone="muted"
+          >
             Environment tip changes are live at preview/execute — Publish is not required for them.
           </SetupHintStrip>
-        )}
         <div className="shrink-0 space-y-2 border-b border-border-subtle px-5 py-3">
           <div className="flex items-center justify-between gap-3">
             <div className="inline-flex items-center gap-1" role="tablist" aria-label="Configuration sections">

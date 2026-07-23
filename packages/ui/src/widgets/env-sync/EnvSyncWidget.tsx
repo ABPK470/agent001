@@ -552,8 +552,7 @@ export function EnvSync() {
 
   return (
     <div ref={rootRef} className="relative flex h-full flex-col overflow-hidden text-text pb-1">
-      {showPublishSetupHint && (
-        <SetupHintStrip icon={Rocket}>
+      <SetupHintStrip open={showPublishSetupHint} icon={Rocket}>
           {definitions.length === 0 ? (
             <>
               No published sync bundle yet. Publish from Entity Registry before preview/execute.
@@ -567,7 +566,6 @@ export function EnvSync() {
             </>
           )}
         </SetupHintStrip>
-      )}
       <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden pt-3">
       <WidgetToolbar compact={compact} className="env-sync-toolbar overflow-visible z-20">
         <WidgetToolbarLeading>

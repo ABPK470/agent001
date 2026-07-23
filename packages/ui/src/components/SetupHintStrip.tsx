@@ -8,6 +8,9 @@
  * When mounted under SetupHintChromeProvider (WidgetShell / ModalShell),
  * the same wash paints the chrome header so title bar + strip read as one band.
  *
+ * Prefer `open={…}` over conditional mount so height + header wash ease in/out
+ * instead of snapping the layout.
+ *
  * Not for transient failures — those stay on ToastStack / ModalToastStack.
  */
 
@@ -33,17 +36,28 @@ type ChromeHintApi = {
 const ChromeHintApiContext = createContext<ChromeHintApi | null>(null)
 const ChromeHintToneContext = createContext<SetupHintTone | null>(null)
 
+/** Snappy ease — present, not sluggish. */
+const STRIP_MOTION =
+  "transition-[grid-template-rows] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)]"
+
+const STRIP_FADE =
+  "transition-opacity duration-200 ease-[cubic-bezier(0.22,1,0.36,1)]"
+
 function effectiveTone(stack: readonly SetupHintTone[]): SetupHintTone | null {
   if (stack.includes("warning")) return "warning"
   if (stack.length > 0) return "muted"
   return null
 }
 
-/** Header wash classes — same tokens as the strip body. */
+/** Header wash — always include color transition so appear/clear is not a snap. */
 export function setupHintHeaderClass(tone: SetupHintTone | null): string {
-  if (tone === "warning") return "bg-warning/10"
-  if (tone === "muted") return "bg-panel-2"
-  return ""
+  const wash =
+    tone === "warning"
+      ? "bg-warning/10"
+      : tone === "muted"
+        ? "bg-panel-2"
+        : "bg-transparent"
+  return `transition-colors duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] ${wash}`
 }
 
 /**
@@ -77,18 +91,21 @@ export function SetupHintChromeProvider({ children }: { children: ReactNode }): 
   )
 }
 
-/** Current chrome wash tone (null when no strip is mounted). */
+/** Current chrome wash tone (null when no strip is open). */
 export function useSetupHintChromeTone(): SetupHintTone | null {
   return useContext(ChromeHintToneContext)
 }
 
 export function SetupHintStrip({
+  open = true,
   tone = "warning",
   icon: Icon,
   children,
   className = "",
   actions,
 }: {
+  /** When false, collapses smoothly (prefer over conditional unmount). */
+  open?: boolean
   tone?: SetupHintTone
   icon?: LucideIcon
   children: ReactNode
@@ -99,10 +116,10 @@ export function SetupHintStrip({
   const chrome = useContext(ChromeHintApiContext)
 
   useLayoutEffect(() => {
-    if (!chrome) return
+    if (!chrome || !open) return
     chrome.push(tone)
     return () => chrome.pop(tone)
-  }, [chrome, tone])
+  }, [chrome, tone, open])
 
   const toneClass =
     tone === "warning"
@@ -111,27 +128,40 @@ export function SetupHintStrip({
 
   return (
     <div
-      role="status"
-      aria-live="polite"
       className={[
-        "setup-hint-strip shrink-0 border-b px-5 py-2.5 text-sm",
-        toneClass,
-        className,
+        "grid shrink-0",
+        STRIP_MOTION,
+        open ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
       ].join(" ")}
+      aria-hidden={!open}
     >
-      <div className="flex items-start gap-2.5">
-        {Icon ? (
-          <Icon
-            size={16}
-            className={[
-              "mt-0.5 shrink-0",
-              tone === "warning" ? "text-warning" : "text-text-muted",
-            ].join(" ")}
-            aria-hidden
-          />
-        ) : null}
-        <div className="min-w-0 flex-1 leading-relaxed">{children}</div>
-        {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}
+      <div className="min-h-0 overflow-hidden">
+        <div
+          role="status"
+          aria-live="polite"
+          className={[
+            "setup-hint-strip border-b px-5 py-2.5 text-sm",
+            STRIP_FADE,
+            open ? "opacity-100" : "opacity-0",
+            toneClass,
+            className,
+          ].join(" ")}
+        >
+          <div className="flex items-start gap-2.5">
+            {Icon ? (
+              <Icon
+                size={16}
+                className={[
+                  "mt-0.5 shrink-0",
+                  tone === "warning" ? "text-warning" : "text-text-muted",
+                ].join(" ")}
+                aria-hidden
+              />
+            ) : null}
+            <div className="min-w-0 flex-1 leading-relaxed">{children}</div>
+            {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}
+          </div>
+        </div>
       </div>
     </div>
   )
