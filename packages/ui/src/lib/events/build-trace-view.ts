@@ -297,10 +297,50 @@ type PhaseUpdate = {
   leading?: string
   /** Bare Direct with nothing to show — omit from the spine. */
   skip?: boolean
+  /**
+   * Start a new attempt card for this family (e.g. planner-step-start).
+   * Status-only follow-ups (transitions after verify) must NOT set this —
+   * they reattach to the latest card of the same family.
+   */
+  beginNew?: boolean
 }
 
 function isStepFamily(family: string): boolean {
   return family.startsWith("step:")
+}
+
+/** Stable phase ids so open/fold state survives DAG rebuilds. */
+function allocatePhaseId(
+  family: string,
+  beginNew: boolean,
+  stepAttempts: Map<string, number>,
+  fallbackSeq: () => number,
+): string {
+  if (family === "plan") return "phase-plan"
+  if (family === "pipeline") return "phase-pipeline"
+  if (family === "verify") return "phase-verify"
+  if (family === "direct") return "phase-direct"
+  if (family.startsWith("repair:")) return `phase-${family}`
+  if (isStepFamily(family)) {
+    const stepName = family.slice("step:".length)
+    if (beginNew) {
+      const attempt = (stepAttempts.get(stepName) ?? 0) + 1
+      stepAttempts.set(stepName, attempt)
+      return `phase-step:${stepName}:${attempt}`
+    }
+    const attempt = stepAttempts.get(stepName) ?? 1
+    return `phase-step:${stepName}:${attempt}`
+  }
+  return `phase-${fallbackSeq()}`
+}
+
+function assignMergedPhase(target: TracePhaseNode, update: PhaseUpdate): void {
+  const merged = mergePhase(target, update)
+  target.title = merged.title
+  target.summary = merged.summary
+  target.status = merged.status
+  target.details = merged.details
+  if (merged.leading) target.leading = merged.leading
 }
 
 function truncatePhaseText(text: string, max = 72): string {
@@ -474,6 +514,7 @@ function phaseFromEntry(entry: TraceEntry, index: number): PhaseUpdate | null {
         title: humanizeStep(entry.stepName),
         summary: subagent ? "running" : entry.stepType.replace(/_/g, " "),
         status: "running",
+        beginNew: true,
         details: [
           detailEvent(
             `step-start-${index}`,
@@ -818,6 +859,7 @@ export function buildTraceDag(trace: TraceEntry[]): TraceDag {
   let lastCallIndex = -1
   let workSeq = 0
   let phaseSeq = 0
+  const stepAttempts = new Map<string, number>()
 
   function flushWork() {
     if (!openWork) return
@@ -863,50 +905,61 @@ export function buildTraceDag(trace: TraceEntry[]): TraceDag {
     return null
   }
 
+  function createPhase(update: PhaseUpdate): TracePhaseNode {
+    phaseSeq += 1
+    const phase: TracePhaseNode = {
+      id: allocatePhaseId(update.family, Boolean(update.beginNew), stepAttempts, () => phaseSeq),
+      family: update.family,
+      title: update.title,
+      summary: update.summary,
+      status: update.status,
+      details: update.details,
+      ...(update.leading ? { leading: update.leading } : {}),
+      ...(isStepFamily(update.family) ? { children: [] } : {}),
+    }
+    spine.push({ kind: "phase", phase })
+    return phase
+  }
+
   function applyPhase(update: PhaseUpdate) {
     if (update.skip && update.details.length === 0) return
     flushWork()
-    // Pipeline / verify lifecycle events often arrive after steps have taken
-    // `openPhase`. Mutate the existing phase on the spine instead of pushing a
-    // second PIPELINE/VERIFYING card.
-    if (
-      (!openPhase || openPhase.family !== update.family) &&
-      (update.family === "pipeline" || update.family === "verify")
-    ) {
-      const prior = findLastSpinePhase(update.family)
-      if (prior) {
-        const merged = mergePhase(prior, update)
-        prior.title = merged.title
-        prior.summary = merged.summary
-        prior.status = merged.status
-        prior.details = merged.details
-        if (merged.leading) prior.leading = merged.leading
-        return
-      }
-    }
-    if (openPhase && openPhase.family !== update.family) flushPhase()
-    if (!openPhase) {
-      phaseSeq += 1
-      openPhase = {
-        id: `phase-${phaseSeq}`,
-        family: update.family,
-        title: update.title,
-        summary: update.summary,
-        status: update.status,
-        details: update.details,
-        ...(update.leading ? { leading: update.leading } : {}),
-        ...(isStepFamily(update.family) ? { children: [] } : {}),
-      }
-      spine.push({ kind: "phase", phase: openPhase })
+
+    // New step attempt — always a fresh parent card with a stable unique id.
+    if (update.beginNew) {
+      if (openPhase) flushPhase()
+      openPhase = createPhase(update)
       return
     }
-    // Mutate in place — spine holds this object reference (live Trace).
-    const merged = mergePhase(openPhase, update)
-    openPhase.title = merged.title
-    openPhase.summary = merged.summary
-    openPhase.status = merged.status
-    openPhase.details = merged.details
-    if (merged.leading) openPhase.leading = merged.leading
+
+    // Same family still open — merge in place (step-end, delegation, …).
+    if (openPhase && openPhase.family === update.family) {
+      assignMergedPhase(openPhase, update)
+      return
+    }
+
+    // Family changed (or nothing open). Reattach onto the latest spine card
+    // of this family. Critical for post-verify step-transitions: without this
+    // they spawned a second parent reusing the same stable id, so one click
+    // toggled every look-alike card.
+    const canReattach =
+      update.family === "pipeline" ||
+      update.family === "verify" ||
+      isStepFamily(update.family) ||
+      update.family.startsWith("repair:")
+    if (canReattach) {
+      const prior = findLastSpinePhase(update.family)
+      if (prior) {
+        assignMergedPhase(prior, update)
+        openPhase = prior
+        return
+      }
+      // Step status with no prior attempt card — ignore (do not mint colliding ids).
+      if (isStepFamily(update.family)) return
+    }
+
+    if (openPhase) flushPhase()
+    openPhase = createPhase(update)
   }
 
   function ensureWork(afterCallIndex: number): TraceWorkNode {
@@ -1110,11 +1163,15 @@ function spineFromOutline(
   if (outline.length === 0) return bodySpine
 
   const callByIteration = new Map(calls.map((c) => [c.iteration, c]))
-  const bodyPhases = new Map(
-    bodySpine
-      .filter((e): e is Extract<TraceSpineEntry, { kind: "phase" }> => e.kind === "phase")
-      .map((e) => [e.phase.family, e.phase]),
-  )
+  // Chronological queues per family — retries share `step:name` and must not
+  // collapse to the last card in a Map.
+  const bodyPhaseQueues = new Map<string, TracePhaseNode[]>()
+  for (const e of bodySpine) {
+    if (e.kind !== "phase") continue
+    const q = bodyPhaseQueues.get(e.phase.family) ?? []
+    q.push(e.phase)
+    bodyPhaseQueues.set(e.phase.family, q)
+  }
   const bodyWorkByCall = new Map<number, TraceWorkNode>()
   for (const e of bodySpine) {
     if (e.kind === "work") bodyWorkByCall.set(e.work.afterCallIndex, e.work)
@@ -1123,6 +1180,25 @@ function spineFromOutline(
         if (c.kind === "work") bodyWorkByCall.set(c.work.afterCallIndex, c.work)
       }
     }
+  }
+
+  function takeBodyPhase(key: string, node: OutlineNode): TracePhaseNode | undefined {
+    const exact = bodyPhaseQueues.get(key)
+    if (exact && exact.length > 0) return exact.shift()
+    // Loose match still consumes so two outline scopes cannot clone one body
+    // (same phase.id → openState.phases.has toggles every look-alike card).
+    for (const [fam, q] of bodyPhaseQueues) {
+      if (q.length === 0) continue
+      if (
+        fam === key ||
+        fam === node.family ||
+        fam.startsWith(`${node.family}:`) ||
+        key.startsWith(fam)
+      ) {
+        return q.shift()
+      }
+    }
+    return undefined
   }
 
   function mapChildren(nodes: OutlineNode[]): TracePhaseChild[] {
@@ -1160,6 +1236,7 @@ function spineFromOutline(
   }
 
   const spine: TraceSpineEntry[] = []
+  const emittedPhaseIds = new Set<string>()
   let oi = 0
   while (oi < outline.length) {
     const node = outline[oi]!
@@ -1190,7 +1267,7 @@ function spineFromOutline(
     // Phase / plan / step / pipeline / verify / repair scopes
     if (node.kind === "scope") {
       const key = node.nestKey ?? String(node.family)
-      const body = bodyPhases.get(key) ?? findPhaseLoose(bodyPhases, key, node)
+      const body = takeBodyPhase(key, node)
       const outlineChildren = mapChildren(node.children ?? [])
       // Prefer body nesting for steps — body attaches Call/Work under the open
       // subagent; outline Call keys can still miss when iterations collide.
@@ -1201,6 +1278,11 @@ function spineFromOutline(
             ? outlineChildren
             : (body?.children ?? [])
       if (body) {
+        if (emittedPhaseIds.has(body.id)) {
+          oi += 1
+          continue
+        }
+        emittedPhaseIds.add(body.id)
         spine.push({
           kind: "phase",
           phase: {
@@ -1212,6 +1294,11 @@ function spineFromOutline(
           },
         })
       } else if (children.length > 0 || (node.summary && node.summary.length > 0)) {
+        if (emittedPhaseIds.has(node.id)) {
+          oi += 1
+          continue
+        }
+        emittedPhaseIds.add(node.id)
         spine.push({
           kind: "phase",
           phase: {
@@ -1240,22 +1327,6 @@ function nestIteration(nestKey: string | undefined): number | null {
   if (!nestKey) return null
   const m = /(?:^|\/)call:(\d+)$/.exec(nestKey)
   return m ? Number(m[1]) : null
-}
-
-function findPhaseLoose(
-  bodyPhases: Map<string, TracePhaseNode>,
-  key: string,
-  node: OutlineNode,
-): TracePhaseNode | undefined {
-  const direct = bodyPhases.get(key)
-  if (direct) return direct
-  // pipeline / verify may use unversioned family in body spine
-  for (const [fam, phase] of bodyPhases) {
-    if (fam === node.family || fam.startsWith(`${node.family}:`) || key.startsWith(`${fam}`)) {
-      return phase
-    }
-  }
-  return undefined
 }
 
 /** Where a call matched the filter — shown so search feels intentional. */

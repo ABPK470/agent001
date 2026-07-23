@@ -141,6 +141,33 @@ export function buildOutline(atoms: EventAtom[], viewSpec: ViewSpec): OutlineNod
     return null
   }
 
+  /** Latest closed/open match — retries share a nestKey, so first-match is wrong. */
+  function findLastNodeByNestKey(nodes: OutlineNode[], key: string): OutlineNode | null {
+    let last: OutlineNode | null = null
+    function walk(list: OutlineNode[]) {
+      for (const n of list) {
+        if (n.nestKey === key) last = n
+        if (n.children) walk(n.children)
+      }
+    }
+    walk(nodes)
+    return last
+  }
+
+  function patchScopeNode(
+    existing: OutlineNode,
+    next: { summary: string; label: string; title?: string; severity: OutlineNode["severity"]; atomId: string },
+  ) {
+    existing.summary = next.summary
+    // Keep Subagent lead once established (step-end would otherwise downgrade).
+    if (!(existing.label === "Subagent" && next.label === "Step")) {
+      existing.label = next.label
+    }
+    if (next.title) existing.title = next.title
+    existing.atomIds.push(next.atomId)
+    existing.severity = next.severity
+  }
+
   for (const atom of atoms) {
     // debug.trace with embedded entry — prefer inner kind for outline
     let type = atom.type
@@ -184,14 +211,13 @@ export function buildOutline(atoms: EventAtom[], viewSpec: ViewSpec): OutlineNod
     if (role === "scope") {
       if (instanceKey && openByKey.has(instanceKey)) {
         const existing = openByKey.get(instanceKey)!
-        existing.summary = summary
-        // Keep Subagent lead once established (step-end would otherwise downgrade).
-        if (!(existing.label === "Subagent" && label === "Step")) {
-          existing.label = label
-        }
-        if (title) existing.title = title
-        existing.atomIds.push(atom.id)
-        existing.severity = d.severity
+        patchScopeNode(existing, {
+          summary,
+          label,
+          title,
+          severity: d.severity,
+          atomId: atom.id,
+        })
         if (isTerminal) {
           closeKey(instanceKey)
         }
@@ -201,15 +227,36 @@ export function buildOutline(atoms: EventAtom[], viewSpec: ViewSpec): OutlineNod
       // Terminal after scope already closed (e.g. step-end after delegation-end)
       // — fold into the existing node; do not open a duplicate.
       if (isTerminal && instanceKey) {
-        const closed = findNodeByNestKey(roots, instanceKey)
+        const closed = findLastNodeByNestKey(roots, instanceKey)
         if (closed) {
-          closed.summary = summary
-          if (!(closed.label === "Subagent" && label === "Step")) {
-            closed.label = label
-          }
-          if (title) closed.title = title
-          closed.atomIds.push(atom.id)
-          closed.severity = d.severity
+          patchScopeNode(closed, {
+            summary,
+            label,
+            title,
+            severity: d.severity,
+            atomId: atom.id,
+          })
+          continue
+        }
+      }
+
+      // Step status after the attempt card closed (post-verify transitions, etc.)
+      // must update the latest attempt — never mint a twin parent with the same
+      // nestKey. Only planner-step-start opens a new attempt card.
+      if (
+        d.family === "step" &&
+        instanceKey &&
+        type !== "planner-step-start"
+      ) {
+        const prior = findLastNodeByNestKey(roots, instanceKey)
+        if (prior) {
+          patchScopeNode(prior, {
+            summary,
+            label,
+            title,
+            severity: d.severity,
+            atomId: atom.id,
+          })
           continue
         }
       }

@@ -153,4 +153,37 @@ describe("buildOutline", () => {
       expect(call?.nestKey).toContain(step.nestKey!)
     }
   })
+
+  it("does not open a twin step scope for post-end transitions", () => {
+    const trace: TraceEntry[] = [
+      { kind: "planner-step-start", stepName: "frontend_layer", stepType: "subagent_task" },
+      {
+        kind: "planner-step-end",
+        stepName: "frontend_layer",
+        status: "completed",
+        acceptanceState: "accepted",
+        durationMs: 100,
+      },
+      {
+        kind: "planner-step-transition",
+        attempt: 1,
+        stepName: "frontend_layer",
+        phase: "verification",
+        state: "accepted",
+        timestamp: 2,
+      },
+      { kind: "planner-step-start", stepName: "frontend_layer", stepType: "subagent_task" },
+      {
+        kind: "planner-step-end",
+        stepName: "frontend_layer",
+        status: "completed",
+        acceptanceState: "accepted",
+        durationMs: 80,
+      },
+    ]
+    const outline = buildOutline(atomsFromTrace(trace), TRACE_VIEW_SPEC)
+    const steps = outline.filter((n) => n.family === "step")
+    expect(steps).toHaveLength(2)
+    expect(steps[0]!.summary).toMatch(/verification|accepted|done/i)
+  })
 })
