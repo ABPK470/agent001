@@ -29,11 +29,9 @@ import { buildPipelineCallbacks, emitRetryTraces, emitVerificationTraces } from 
 import type { PlannerContext, PlannerResult } from "./types.js"
 
 /**
- * Widen a step's envelope tool allowlist to every tool the parent has
- * available before delegating. Used for `guided` mode: economics
- * declined parallel fanout, but spawning a child per subagent step is still
- * cheaper than folding the work into the parent's own loop — as long as the
- * child isn't blocked by an over-tight per-step allowlist.
+ * Widen every step's envelope tool allowlist to the parent's full tool set
+ * before delegating. Planner LLM allowlists are intent only — children must
+ * never be visibility-filtered down to an incomplete list (parallel or guided).
  */
 function withFullToolAccess(delegateFn: DelegateFn, tools: readonly Tool[]): DelegateFn {
   const allToolNames = tools.map((t) => t.name)
@@ -59,11 +57,10 @@ export async function executePlannerPath(
   const { plan, runtimeModel, decision, executionMode } = setupOutcome.context
 
   // Tier 1 — how subagent_task steps run: parallel fan-out when economics
-  // approve it, otherwise one child at a time. `guided` additionally widens
-  // each step's tool allowlist to the full parent tool set.
+  // approve it, otherwise one child at a time. Always widen the envelope
+  // allowlist so validation + spawn see the full parent tool belt.
   const maxParallel = executionMode === "parallel" ? 4 : 1
-  const effectiveDelegateFn =
-    executionMode === "guided" ? withFullToolAccess(delegateFn, ctx.tools) : delegateFn
+  const effectiveDelegateFn = withFullToolAccess(delegateFn, ctx.tools)
 
   let pipelineResult: PipelineResult | undefined
   let verifierDecision: VerifierDecision | undefined

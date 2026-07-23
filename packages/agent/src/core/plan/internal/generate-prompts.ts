@@ -92,7 +92,7 @@ You MUST respond with valid JSON matching this schema:
 
 ## Rules
 1. Every subagent_task MUST have specific, measurable acceptanceCriteria — never vague
-2. Each subagent_task MUST declare which tools it needs in requiredToolCapabilities  
+2. Each subagent_task MUST declare which tools it intends to use in requiredToolCapabilities (planning intent / documentation). Children always inherit the parent's full tool belt at runtime — do NOT treat this list as a way to restrict tools.
 3. Exactly ONE step may be "write_owner" for a given artifact — no shared writes. If step B writes to a file that step A created, only step B should be write_owner and step A should either not list that artifact or use "read_dependency"
 4. Steps that can run independently SHOULD have canRunParallel: true
 5. SCOPE EACH STEP TO BE COMPLETABLE IN ITS BUDGET. Child budgets are adaptive and can be large for hard implementation steps, but plans should still split work when ownership is genuinely separate. Prefer decomposition when tasks involve many independently owned artifacts, cross-step dependencies, or high overwrite risk. However, if the user asks for a cohesive single-artifact implementation and ownership is unambiguous, a single subagent step is allowed and should use a realistic maxBudgetHint (often 60-140 iterations for deep logic).

@@ -28,46 +28,13 @@ export async function spawnChildForPlan(
   const normalizedEnvelope = canonicalizeEnvelope(envelope)
   const goal = buildPlanChildGoal(step, normalizedEnvelope)
 
-  // Filter tools based on the envelope's allowedTools / requiredToolCapabilities
-  let childTools: Tool[]
-  const allowedToolNames = new Set([...normalizedEnvelope.allowedTools, ...step.requiredToolCapabilities])
-
-  if (allowedToolNames.size > 0 && normalizedEnvelope.effectClass !== "readonly") {
-    for (const essential of [
-      "read_file",
-      "append_file",
-      "replace_in_file",
-      "list_directory",
-      "run_command"
-    ]) {
-      allowedToolNames.add(essential)
-    }
-  }
-
-  // Readonly investigation steps must still read prior evidence and call
-  // data tools. Without this, a sloppy allowlist leaves the child blind
-  // even though the inherited system prompt describes those tools.
-  if (allowedToolNames.size > 0 && normalizedEnvelope.effectClass === "readonly") {
-    for (const essential of [
-      "read_file",
-      "list_directory",
-      "think",
-      "search_catalog",
-      "query_mssql",
-      "inspect_definition",
-      "note"
-    ]) {
-      if (ctx.availableTools.some((t) => t.name === essential)) {
-        allowedToolNames.add(essential)
-      }
-    }
-  }
-
-  if (allowedToolNames.size > 0) {
-    childTools = ctx.availableTools.filter((t) => allowedToolNames.has(t.name))
-  } else {
-    childTools = [...ctx.availableTools]
-  }
+  // Always inherit the parent's full tool belt. Per-step allowedTools /
+  // requiredToolCapabilities are planning intent (what the step expects to
+  // use) — never a visibility filter. Filtering on the planner LLM's list
+  // left investigation/evidence children blind (e.g. missing query_mssql)
+  // and they invented "blocked in this host run". Token savings are not a
+  // reason to strip tools from subagents.
+  let childTools: Tool[] = [...ctx.availableTools]
 
   // Per-child run id — used to attribute bus messages and queue slots
   // to the actual publisher rather than the parent.
