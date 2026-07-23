@@ -65,7 +65,7 @@ export function ApprovalRequiredModal(): JSX.Element | null {
       }
       if (pending.notificationId) {
         markNotificationRead(pending.notificationId)
-        api.markNotificationRead(pending.notificationId).catch(() => {})
+        api.markNotificationRead(pending.notificationId).catch((err: unknown) => { console.error("[mia]", err) })
       }
       clearPending()
     } catch (e) {

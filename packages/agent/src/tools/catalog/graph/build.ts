@@ -114,9 +114,7 @@ export async function loadCatalogFromDb(host: AgentHost, connection?: string): P
         viewSourceRows.set(viewName, (viewSourceRows.get(viewName) ?? 0) + refTable.rowCount)
       }
     }
-  } catch {
-    /* non-fatal */
-  }
+  } catch (err: unknown) { console.error("[mia]", err) }
 
   // Step 7: Fetch view definitions from sys.sql_modules (non-fatal)
   try {
@@ -128,9 +126,7 @@ export async function loadCatalogFromDb(host: AgentHost, connection?: string): P
         t.viewDefinition = String(r.definition)
       }
     }
-  } catch {
-    /* non-fatal */
-  }
+  } catch (err: unknown) { console.error("[mia]", err) }
 
   // Step 8: Await sys catalog
   const sysCatalog = await sysCatalogPromise

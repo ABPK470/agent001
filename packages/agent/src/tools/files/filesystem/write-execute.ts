@@ -67,9 +67,7 @@ async function executeWriteFileCore(
             ? existing
             : existing.slice(0, 24576) + "\n// [truncated — file exceeds 24 KB]"
       }
-    } catch {
-      /* file doesn't exist yet — no regression possible */
-    }
+    } catch (err: unknown) { console.error("[mia]", err) }
 
     // Auto-create parent directories (safe: target is already validated under _basePath)
     const parentDir = dirname(target)

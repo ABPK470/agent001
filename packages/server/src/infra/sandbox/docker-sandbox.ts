@@ -62,7 +62,7 @@ export class DockerSandbox {
         console.log(
           `🧹 Reaping container ${id} (lifetime=${Math.round(lifetime / 1000)}s, idle=${Math.round(idle / 1000)}s)`
         )
-        await exec("docker", ["kill", id], { timeout: 5000 }).catch(() => {})
+        await exec("docker", ["kill", id], { timeout: 5000 }).catch((err: unknown) => { console.error("[mia]", err) })
         this.trackedContainers.delete(id)
         this.activeContainers.delete(id)
       }
@@ -180,7 +180,7 @@ export class DockerSandbox {
 
     const killOnAbort = options?.signal
       ? () => {
-          exec("docker", ["kill", containerId], { timeout: 5000 }).catch(() => {})
+          exec("docker", ["kill", containerId], { timeout: 5000 }).catch((err: unknown) => { console.error("[mia]", err) })
         }
       : undefined
     if (killOnAbort) options!.signal!.addEventListener("abort", killOnAbort, { once: true })
@@ -201,7 +201,7 @@ export class DockerSandbox {
       const error = err as { killed?: boolean; code?: number; stdout?: string; stderr?: string }
       const timedOut = error.killed === true
       if (timedOut) {
-        await exec("docker", ["kill", containerId], { timeout: 5000 }).catch(() => {})
+        await exec("docker", ["kill", containerId], { timeout: 5000 }).catch((err: unknown) => { console.error("[mia]", err) })
       }
       return {
         stdout: truncateOutput(error.stdout ?? ""),
@@ -295,7 +295,7 @@ export class DockerSandbox {
       this.watchdogTimer = null
     }
     const kills = [...this.activeContainers].map((id) =>
-      exec("docker", ["kill", id], { timeout: 5000 }).catch(() => {})
+      exec("docker", ["kill", id], { timeout: 5000 }).catch((err: unknown) => { console.error("[mia]", err) })
     )
     await Promise.all(kills)
     this.trackedContainers.clear()

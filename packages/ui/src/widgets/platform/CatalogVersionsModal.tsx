@@ -67,8 +67,8 @@ export function CatalogVersionsModal({
     try {
       const [res, health, status] = await Promise.all([
         api.listSyncCatalogVersions(),
-        api.getPlatformHealth().catch(() => null),
-        api.getSyncPublishStatus().catch(() => null),
+        api.getPlatformHealth().catch((err: unknown) => { console.error("[mia]", err) }),
+        api.getSyncPublishStatus().catch((err: unknown) => { console.error("[mia]", err) }),
       ])
       setActiveVersion(res.activeVersion)
       setVersions(res.versions)

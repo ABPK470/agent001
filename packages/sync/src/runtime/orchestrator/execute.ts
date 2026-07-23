@@ -448,9 +448,7 @@ async function executeSyncInner(
         error: msg,
         durationMs: Date.now() - execT0
       })
-    } catch {
-      /* ignore */
-    }
+    } catch (err: unknown) { console.error("[mia]", err) }
     return { planId, success: false, error: msg }
   } finally {
     await ensureContractUnlockedOnSource()

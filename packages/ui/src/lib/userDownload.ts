@@ -41,9 +41,7 @@ export async function downloadAuthenticated(
     try {
       const body = (await res.json()) as { error?: string }
       if (body.error) detail = body.error
-    } catch {
-      /* ignore */
-    }
+    } catch (err: unknown) { console.error("[mia]", err) }
     throw new Error(detail || `Download failed (${res.status})`)
   }
   const blob = await res.blob()

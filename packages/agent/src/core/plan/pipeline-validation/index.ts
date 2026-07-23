@@ -233,16 +233,12 @@ export async function tryReadArtifact(
     try {
       const content = await readFileTool.execute({ path: wsPath })
       if (typeof content === "string" && !content.startsWith("Error:")) return content
-    } catch {
-      /* fall through */
-    }
+    } catch (err: unknown) { console.error("[mia]", err) }
   }
   try {
     const content = await readFileTool.execute({ path: artifact })
     if (typeof content === "string" && !content.startsWith("Error:")) return content
-  } catch {
-    /* fall through */
-  }
+  } catch (err: unknown) { console.error("[mia]", err) }
   return null
 }
 

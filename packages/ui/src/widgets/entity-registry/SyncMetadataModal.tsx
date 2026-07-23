@@ -252,7 +252,7 @@ export function SyncMetadataModal({
     try {
       const [next, status] = await Promise.all([
         api.getSyncMetadataCatalog(),
-        api.getSyncPublishStatus().catch(() => null),
+        api.getSyncPublishStatus().catch((err: unknown) => { console.error("[mia]", err) }),
       ])
       setCatalog(next)
       setPublishStatus(status)
@@ -404,9 +404,7 @@ export function SyncMetadataModal({
         setEnvironmentFormBaseline(cloneEnvironmentFormSnapshot(environmentForm))
       }
       onChanged?.()
-    } catch {
-      // useSyncEnvironments already surfaced the error
-    }
+    } catch (err: unknown) { console.error("[mia]", err) }
   }
 
   function closeForm(): void {

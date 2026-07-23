@@ -174,7 +174,7 @@ export function App() {
       setShellRevealing(false)
       setChatHomeHeroStage("hidden")
       setChatHomeHeroRevealProgress(0)
-      try { delete (window as { __miaIntroAsciiStartTs?: number }).__miaIntroAsciiStartTs } catch { /* ignore */ }
+      try { delete (window as { __miaIntroAsciiStartTs?: number }).__miaIntroAsciiStartTs } catch (err: unknown) { console.error("[mia]", err) }
     }
   }, [phase])
 
@@ -195,7 +195,7 @@ export function App() {
   // Load threads + active thread runs on login. Thread-scoped — not global listRuns.
   useEffect(() => {
     if (!me) return
-    void bootstrapThreads().catch(() => {})
+    void bootstrapThreads().catch((err: unknown) => { console.error("[mia]", err) })
   }, [me?.upn, bootstrapThreads])
 
   // Auto-select latest run only when a run-scoped widget is visible and
@@ -220,7 +220,7 @@ export function App() {
     api.listRuns({ threadId }).then((runs) => {
       setRuns(runs)
       if (!useStore.getState().activeRunId) pickLatest(runs)
-    }).catch(() => {})
+    }).catch((err: unknown) => { console.error("[mia]", err) })
   }, [me?.upn, shouldHydrateSelectedRun, setRuns, setActiveRun])
 
   // Reload notifications on identity change so each user only sees their own.
@@ -242,7 +242,7 @@ export function App() {
         notificationId: pendingNote.id,
       })
       useStore.getState().setApprovalModalOpen(false)
-    }).catch(() => {})
+    }).catch((err: unknown) => { console.error("[mia]", err) })
     api.listPendingToolApprovals().then((approvals) => {
       const pending = approvals.find((a) => a.status === "pending")
       if (!pending) return
@@ -259,7 +259,7 @@ export function App() {
         notificationId: state.pendingToolApproval?.notificationId ?? null,
       })
       useStore.getState().setApprovalModalOpen(false)
-    }).catch(() => {})
+    }).catch((err: unknown) => { console.error("[mia]", err) })
   }, [me?.upn, setNotifications, setPendingToolApproval])
 
   // Restore the EnvSync widget operator context from the user's most recent
@@ -279,7 +279,7 @@ export function App() {
         target: latest.target,
         entityType: latest.entityType,
       })
-    }).catch(() => {})
+    }).catch((err: unknown) => { console.error("[mia]", err) })
   }, [me?.upn, shouldRestoreSyncState])
 
   // Event Stream (live-logs) loads its own history via useEventStreamData —
@@ -310,14 +310,14 @@ export function App() {
         if (stashed.steps) setSteps(stashed.steps)
         if (stashed.audit) setAudit(stashed.audit)
         if (stashed.trace) setTrace(stashed.trace as import("../types").TraceEntry[])
-      } catch { /* ignore corrupt data */ }
+      } catch (err: unknown) { console.error("[mia]", err) }
     }
     // No API fallback — popout receives live events via BroadcastChannel relay.
     // If no stashed state, the popout starts empty and accumulates from the stream.
 
     const threadId = useStore.getState().activeThreadId
     if (threadId) {
-      api.listRuns({ threadId }).then((runs) => setRuns(runs)).catch(() => {})
+      api.listRuns({ threadId }).then((runs) => setRuns(runs)).catch((err: unknown) => { console.error("[mia]", err) })
     }
 
     // Sync from main window — receive full live state on activeRunId change
@@ -422,7 +422,7 @@ export function App() {
         mode="outro"
         onSubmit={async () => {}}
         onDone={async () => {
-          try { await logout() } catch { /* server-side already gone */ }
+          try { await logout() } catch (err: unknown) { console.error("[mia]", err) }
           setPhase(AppPhase.Login)
         }}
       />

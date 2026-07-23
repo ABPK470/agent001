@@ -170,7 +170,7 @@ export function HistoryContent({
           })),
         ]),
       )
-      .catch(() => {})
+      .catch((err: unknown) => { console.error("[mia]", err) })
   }, [])
 
   const activeFilterCount = useMemo(() => countActiveFilters(filters, searchDraft), [filters, searchDraft])

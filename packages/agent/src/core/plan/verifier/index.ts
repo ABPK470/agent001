@@ -191,9 +191,7 @@ export async function verify(
             if (typeof content === "string" && content.length > 0) {
               artifactContents.set(artifact, content)
             }
-          } catch {
-            /* skip */
-          }
+          } catch (err: unknown) { console.error("[mia]", err) }
         }
       }
     }

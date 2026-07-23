@@ -148,7 +148,7 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
               default:
                 msg = rawType.replace(/^[^.]+\./, "")
             }
-          } catch {}
+          } catch (err: unknown) { console.error("[mia]", err) }
           if (entry.level === "error") error = true
           return {
             type: typeGroup,

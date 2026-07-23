@@ -147,9 +147,7 @@ export class DatabricksClient implements LLMClient {
     let parsed: unknown = text
     try {
       parsed = JSON.parse(text)
-    } catch {
-      /* keep raw text */
-    }
+    } catch (err: unknown) { console.error("[mia]", err) }
 
     if (parsed && typeof parsed === "object" && "choices" in parsed) {
       const response = parseOpenAICompatibleResponse(parsed)

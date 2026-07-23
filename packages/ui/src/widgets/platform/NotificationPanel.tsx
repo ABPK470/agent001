@@ -100,7 +100,7 @@ export function NotificationPanel() {
     approvalId: string,
   ) => {
     markNotificationRead(notification.id)
-    api.markNotificationRead(notification.id).catch(() => {})
+    api.markNotificationRead(notification.id).catch((err: unknown) => { console.error("[mia]", err) })
 
     try {
       if (decision === "approve") {
@@ -121,9 +121,7 @@ export function NotificationPanel() {
         }
       }
       clearPendingToolApproval()
-    } catch {
-      /* SSE approval.resolved will reconcile if another tab acted */
-    }
+    } catch (err: unknown) { console.error("[mia]", err) }
     setOpen(false)
   }, [
     markNotificationRead,
@@ -136,7 +134,7 @@ export function NotificationPanel() {
     switch (action.action) {
       case "view-run": {
         markNotificationRead(notification.id)
-        api.markNotificationRead(notification.id).catch(() => {})
+        api.markNotificationRead(notification.id).catch((err: unknown) => { console.error("[mia]", err) })
         const runId = action.data?.runId as string | undefined
         if (runId) {
           setActiveRun(runId)
@@ -153,13 +151,13 @@ export function NotificationPanel() {
 
       case "resume-run": {
         markNotificationRead(notification.id)
-        api.markNotificationRead(notification.id).catch(() => {})
+        api.markNotificationRead(notification.id).catch((err: unknown) => { console.error("[mia]", err) })
         const runId = action.data?.runId as string | undefined
         if (runId) {
           try {
             const result = await api.resumeRun(runId)
             if (result.runId) setActiveRun(result.runId)
-          } catch { /* server 409 when capability gone */ }
+          } catch (err: unknown) { console.error("[mia]", err) }
         }
         setOpen(false)
         break
@@ -167,7 +165,7 @@ export function NotificationPanel() {
 
       case "rollback-run": {
         markNotificationRead(notification.id)
-        api.markNotificationRead(notification.id).catch(() => {})
+        api.markNotificationRead(notification.id).catch((err: unknown) => { console.error("[mia]", err) })
         const runId = action.data?.runId as string | undefined
         if (runId) {
           try {
@@ -175,7 +173,7 @@ export function NotificationPanel() {
             if (result.failed.length === 0) {
               upsertRun({ id: runId, rollbackAvailable: false })
             }
-          } catch { /* server 409 when nothing left */ }
+          } catch (err: unknown) { console.error("[mia]", err) }
         }
         setOpen(false)
         break
@@ -183,15 +181,13 @@ export function NotificationPanel() {
 
       case "apply-run-diff": {
         markNotificationRead(notification.id)
-        api.markNotificationRead(notification.id).catch(() => {})
+        api.markNotificationRead(notification.id).catch((err: unknown) => { console.error("[mia]", err) })
         const runId = action.data?.runId as string | undefined
         if (runId) {
           try {
             await api.applyRunWorkspaceDiff(runId)
             setActiveRun(runId)
-          } catch {
-            /* swallow */
-          }
+          } catch (err: unknown) { console.error("[mia]", err) }
         }
         setOpen(false)
         break
@@ -215,7 +211,7 @@ export function NotificationPanel() {
 
       case "open-policies": {
         markNotificationRead(notification.id)
-        api.markNotificationRead(notification.id).catch(() => {})
+        api.markNotificationRead(notification.id).catch((err: unknown) => { console.error("[mia]", err) })
         setPolicyEditorOpen(true)
         setOpen(false)
         break
@@ -250,7 +246,7 @@ export function NotificationPanel() {
 
   const handleMarkAllRead = useCallback(() => {
     markAllRead()
-    api.markAllNotificationsRead().catch(() => {})
+    api.markAllNotificationsRead().catch((err: unknown) => { console.error("[mia]", err) })
   }, [markAllRead])
 
   return (

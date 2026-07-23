@@ -60,7 +60,7 @@ export function useMe(): {
   const logout = useCallback(async () => {
     try {
       await fetch("/api/auth/logout", { method: "POST", credentials: "include" })
-    } catch { /* even if the network fails, fall through to drop client state */ }
+    } catch (err: unknown) { console.error("[mia]", err) }
     setMe(null)
   }, [])
 

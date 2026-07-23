@@ -107,9 +107,7 @@ export async function cancelExec(): Promise<void> {
   const events = appendCancelledTableEvents(execState.events)
   try {
     await api.cancelSyncExecute(planId)
-  } catch {
-    /* execute may have finished between click and request */
-  }
+  } catch (err: unknown) { console.error("[mia]", err) }
   execStream?.close()
   execStream = null
   execState = { kind: "done", success: false, events, error: "Cancelled by user" }

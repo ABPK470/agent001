@@ -29,9 +29,7 @@ export function DeleteThreadModal({
   }, [busy, onClose])
 
   const handleConfirm = () => {
-    void Promise.resolve(onConfirm()).catch(() => {
-      /* caller surfaces error via `error` prop */
-    })
+    void Promise.resolve(onConfirm()).catch((err: unknown) => { console.error("[mia]", err) })
   }
 
   return createPortal(

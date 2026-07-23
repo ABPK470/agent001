@@ -506,7 +506,7 @@ export function EnvSync() {
       setForm({ planId: null })
       // Server gate (same as agent tools) — refresh strip if tip-vs-publish raced the UI.
       if (err.code === "publish_required") {
-        void api.getSyncPublishStatus().then(setPublishStatus).catch(() => {})
+        void api.getSyncPublishStatus().then(setPublishStatus).catch((err: unknown) => { console.error("[mia]", err) })
       }
     } finally {
       setPreviewing(false)

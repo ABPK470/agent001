@@ -127,9 +127,7 @@ export async function buildApp(opts: BuildAppOptions) {
     try {
       saveApiRequest(entry)
       broadcast({ type: EventType.ApiRequest, data: toBroadcastData(entry) })
-    } catch {
-      /* don't break responses if logging fails */
-    }
+    } catch (err: unknown) { console.error("[mia]", err) }
     // Multi-user observability: stamp user identity on console for ops greppability.
     // Skip auth/whoami polling noise + admin observability endpoints.
     if (
@@ -195,22 +193,16 @@ export async function buildApp(opts: BuildAppOptions) {
     const sid = req.session.sid
     try {
       touchSession(sid)
-    } catch {
-      /* observability only */
-    }
+    } catch (err: unknown) { console.error("[mia]", err) }
     // Heartbeat every 25s — keeps intermediaries from idle-closing the
     // stream AND doubles as the liveness ping for the session row.
     const heartbeat = setInterval(() => {
       try {
         reply.raw.write(`: ping\n\n`)
-      } catch {
-        /* dropped */
-      }
+      } catch (err: unknown) { console.error("[mia]", err) }
       try {
         touchSession(sid)
-      } catch {
-        /* observability only */
-      }
+      } catch (err: unknown) { console.error("[mia]", err) }
     }, 25_000)
     req.raw.on("close", () => {
       clearInterval(heartbeat)
@@ -328,9 +320,7 @@ export async function buildApp(opts: BuildAppOptions) {
   const presenceTickHandle = setInterval(() => {
     try {
       broadcast({ type: EventType.SessionPresenceTick, data: {} })
-    } catch {
-      /* observability only */
-    }
+    } catch (err: unknown) { console.error("[mia]", err) }
   }, 30_000)
   // Don't keep the event loop alive solely for this timer.
   if (typeof presenceTickHandle.unref === "function") presenceTickHandle.unref()

@@ -155,7 +155,7 @@ export function JsonViewer({
   const text = useMemo(() => serialize(value), [value])
 
   const copy = useCallback(() => {
-    navigator.clipboard.writeText(text).catch(() => {})
+    navigator.clipboard.writeText(text).catch((err: unknown) => { console.error("[mia]", err) })
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }, [text])

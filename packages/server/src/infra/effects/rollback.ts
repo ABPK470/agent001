@@ -106,9 +106,7 @@ export async function rollbackRun(runId: string): Promise<RollbackResult> {
         } else {
           try {
             await unlink(effect.target)
-          } catch {
-            /* already gone */
-          }
+          } catch (err: unknown) { console.error("[mia]", err) }
         }
         markCompensated(effect.id)
         result.compensated++
@@ -193,9 +191,7 @@ export async function rollbackRun(runId: string): Promise<RollbackResult> {
         }),
         new Date().toISOString()
       )
-  } catch {
-    // Audit insert is best-effort — don't fail the rollback
-  }
+  } catch (err: unknown) { console.error("[mia]", err) }
 
   return result
 }

@@ -98,9 +98,7 @@ export class EffectTracker {
           metadata: { idempotent: true, skipped: true }
         })
       }
-    } catch {
-      // File doesn't exist yet — this will be a EffectKind.Create
-    }
+    } catch (err: unknown) { console.error("[mia]", err) }
 
     let kind: EffectKind = EffectKind.Create
     let preHash: string | null = null
@@ -109,9 +107,7 @@ export class EffectTracker {
       kind = EffectKind.Modify
       const existing = await readFile(opts.filePath, "utf-8")
       preHash = hashContent(existing)
-    } catch {
-      // File doesn't exist
-    }
+    } catch (err: unknown) { console.error("[mia]", err) }
 
     const effect = this.recordEffect({
       runId: opts.runId,

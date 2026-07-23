@@ -95,9 +95,7 @@ export function useViewTabReorder(
 
     try {
       event.currentTarget.releasePointerCapture(drag.pointerId)
-    } catch {
-      // Capture may already be gone after cancel.
-    }
+    } catch (err: unknown) { console.error("[mia]", err) }
 
     const { views, reorderViews, setActiveView } = useLayoutStore.getState()
     const fromIndex = views.findIndex((view) => view.id === drag.viewId)

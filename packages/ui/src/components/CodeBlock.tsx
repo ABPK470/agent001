@@ -53,7 +53,7 @@ export function CodeBlock({
   )
 
   function copy() {
-    navigator.clipboard.writeText(code).catch(() => {})
+    navigator.clipboard.writeText(code).catch((err: unknown) => { console.error("[mia]", err) })
     setCopied(true)
     window.setTimeout(() => setCopied(false), 2000)
   }

@@ -75,17 +75,13 @@ async function runSmtp(i: SmtpInput): Promise<{ ok: boolean; message: string }> 
     const fail = (msg: string): void => {
       try {
         socket.destroy()
-      } catch {
-        /* noop */
-      }
+      } catch (err: unknown) { console.error("[mia]", err) }
       resolve({ ok: false, message: msg })
     }
     const ok = (): void => {
       try {
         socket.destroy()
-      } catch {
-        /* noop */
-      }
+      } catch (err: unknown) { console.error("[mia]", err) }
       resolve({ ok: true, message: "delivered" })
     }
     const send = (line: string): void => {

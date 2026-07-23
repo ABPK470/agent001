@@ -17,9 +17,7 @@ export function initMemoryFts(db: Database.Database = getDb()): void {
         content_rowid='rowid'
       );
     `)
-  } catch {
-    /* already exists */
-  }
+  } catch (err: unknown) { console.error("[mia]", err) }
 
   try {
     const ftsErrors = db

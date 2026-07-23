@@ -459,9 +459,7 @@ function saveCachedToken(token: CachedOAuthToken): void {
 function clearCachedToken(): void {
   try {
     writeFileSync(TOKEN_CACHE_PATH, "{}", { mode: 0o600 })
-  } catch {
-    // ignore
-  }
+  } catch (err: unknown) { console.error("[mia]", err) }
 }
 
 // ── Format helpers (OpenAI-compatible) ───────────────────────────

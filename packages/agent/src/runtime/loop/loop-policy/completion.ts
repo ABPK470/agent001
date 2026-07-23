@@ -109,9 +109,7 @@ const completionValidator: CompletionRuleAsync = async (ctx) => {
   try {
     const issues = await config.completionValidator()
     if (issues) return { tag: "completion-validator", message: issues }
-  } catch {
-    /* validator failed — don't block the agent */
-  }
+  } catch (err: unknown) { console.error("[mia]", err) }
   return null
 }
 

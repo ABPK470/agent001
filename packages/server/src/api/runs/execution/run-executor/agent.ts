@@ -304,9 +304,7 @@ export async function normalizeRunAnswer(
       message: `[user-safe-failure] ${internalFailure.kind} — ${internalFailure.summary}\n${truncatedRaw}`,
       timestamp: new Date().toISOString()
     })
-  } catch {
-    // Log persistence is best-effort.
-  }
+  } catch (err: unknown) { console.error("[mia]", err) }
 
   try {
     await sideEffects.auditLog.log({
@@ -316,18 +314,14 @@ export async function normalizeRunAnswer(
       resourceId: request.runId,
       detail: { kind: internalFailure.kind, summary: internalFailure.summary, raw: truncatedRaw }
     })
-  } catch {
-    // Audit logging is best-effort.
-  }
+  } catch (err: unknown) { console.error("[mia]", err) }
 
   try {
     broadcast({
       type: EventType.RunUserSafeFailure,
       data: { runId: request.runId, kind: internalFailure.kind, summary: internalFailure.summary }
     })
-  } catch {
-    // Broadcasting is best-effort.
-  }
+  } catch (err: unknown) { console.error("[mia]", err) }
 
   console.error(
     `[run-executor] Internal failure for run ${request.runId} (${internalFailure.kind}): ${internalFailure.summary}`

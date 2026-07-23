@@ -142,9 +142,7 @@ function tryResolveSession(req: FastifyRequest, reply: FastifyReply): CurrentSes
     // re-presenting the dead cookie on every request.
     try {
       clearSessionCookie(reply)
-    } catch {
-      /* SSE may have flushed headers */
-    }
+    } catch (err: unknown) { console.error("[mia]", err) }
   }
 
   // 2. SSO header path — trusted if the deployment configured a proxy
@@ -160,9 +158,7 @@ function tryResolveSession(req: FastifyRequest, reply: FastifyReply): CurrentSes
     const newSid = createSession({ upn: user.upn, ip, userAgent })
     try {
       setSessionCookie(reply, newSid)
-    } catch {
-      /* SSE-first request — cookie set on next request */
-    }
+    } catch (err: unknown) { console.error("[mia]", err) }
     return {
       sid: newSid,
       upn: user.upn,

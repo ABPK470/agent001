@@ -154,9 +154,7 @@ export function useOperationLogData(opts: {
         )
         setCursorBefore((before) => before ?? data.oldestTimestamp)
         setHasMore((more) => more || data.hasMore)
-      } catch {
-        /* ignore malformed frames */
-      }
+      } catch (err: unknown) { console.error("[mia]", err) }
     }
     return () => es.close()
   }, [kindView, searchQuery])
@@ -172,7 +170,7 @@ export function useOperationLogData(opts: {
           setCursorBefore((before) => before ?? res.oldestTimestamp)
           setHasMore((more) => more || res.hasMore)
         })
-        .catch(() => { /* keep existing data */ })
+        .catch((err: unknown) => { console.error("[mia]", err) })
     }
     document.addEventListener("visibilitychange", onVisible)
     return () => document.removeEventListener("visibilitychange", onVisible)
@@ -187,7 +185,7 @@ export function useOperationLogData(opts: {
         setCursorBefore(res.oldestTimestamp)
         setHasMore(res.hasMore)
       })
-      .catch(() => { /* ignore */ })
+      .catch((err: unknown) => { console.error("[mia]", err) })
       .finally(() => setLoadingMore(false))
   }, [loadingMore, hasMore, cursorBefore, fetchListPage])
 

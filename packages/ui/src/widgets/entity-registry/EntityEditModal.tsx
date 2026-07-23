@@ -128,7 +128,7 @@ export function EntityEditModal({ mode, initial, reservedEntityIds = [], onClose
     try {
       const [runtimeOptions, catalog, configs] = await Promise.all([
         api.getSyncDefinitionConfigOptions(),
-        api.getSyncMetadataCatalog().catch(() => null),
+        api.getSyncMetadataCatalog().catch((err: unknown) => { console.error("[mia]", err) }),
         api.listSyncDefinitionConfigs().catch(() => []),
       ])
 
@@ -181,7 +181,7 @@ export function EntityEditModal({ mode, initial, reservedEntityIds = [], onClose
     try {
       const [runtimeOptions, catalog] = await Promise.all([
         api.getSyncDefinitionConfigOptions(),
-        api.getSyncMetadataCatalog().catch(() => null),
+        api.getSyncMetadataCatalog().catch((err: unknown) => { console.error("[mia]", err) }),
       ])
       const flowOptions = catalog?.flows.length
         ? catalog.flows.map((p) => ({ value: p.id as EntityRegistrySyncFlowTemplateId, label: p.label, hint: p.description }))
@@ -192,9 +192,7 @@ export function EntityEditModal({ mode, initial, reservedEntityIds = [], onClose
           (catalog?.flows ?? []).map((flow) => [flow.id, flow.steps.map((step) => ({ ...step }))]),
         ),
       )
-    } catch {
-      // keep current preview if refresh fails
-    }
+    } catch (err: unknown) { console.error("[mia]", err) }
   }, [])
 
   useEffect(() => {
@@ -331,9 +329,7 @@ export function EntityEditModal({ mode, initial, reservedEntityIds = [], onClose
           skipFormToSourceRef.current = true
           structuredEditedRef.current = false
           patch({ sourceBody: json })
-        } catch {
-          // keep current source when preview fails
-        }
+        } catch (err: unknown) { console.error("[mia]", err) }
       })()
     }, 450)
     return () => window.clearTimeout(handle)

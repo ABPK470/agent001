@@ -95,9 +95,7 @@ export async function spawnChildForPlan(
               for (const f of findings) {
                 allIssues.push(`${artifact}: ${f}`)
               }
-            } catch {
-              /* file not created yet or unreadable */
-            }
+            } catch (err: unknown) { console.error("[mia]", err) }
           }
 
           if (allIssues.length > 0) {

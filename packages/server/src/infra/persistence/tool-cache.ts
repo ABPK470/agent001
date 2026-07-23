@@ -123,9 +123,7 @@ export async function getOrCompute<T>(opts: {
   const value = await opts.compute()
   try {
     await writeCache({ ...opts, value })
-  } catch {
-    /* swallow */
-  }
+  } catch (err: unknown) { console.error("[mia]", err) }
   return { value, cached: false }
 }
 
@@ -161,17 +159,13 @@ export async function cleanupExpiredCache(): Promise<{ removed: number }> {
         try {
           await rm(path, { force: true })
           removed++
-        } catch {
-          /* ignore */
-        }
+        } catch (err: unknown) { console.error("[mia]", err) }
       }
     }
     try {
       const left = await readdir(partitionDir)
       if (left.length === 0) await rm(partitionDir, { recursive: true, force: true })
-    } catch {
-      /* ignore */
-    }
+    } catch (err: unknown) { console.error("[mia]", err) }
   }
   return { removed }
 }
@@ -190,15 +184,11 @@ export async function clearUserCache(upn: string): Promise<{ removed: number }> 
     try {
       await rm(resolve(dir, entry), { force: true })
       removed++
-    } catch {
-      /* ignore */
-    }
+    } catch (err: unknown) { console.error("[mia]", err) }
   }
   try {
     if ((await readdir(dir)).length === 0) await rm(dir, { recursive: true, force: true })
-  } catch {
-    /* ignore */
-  }
+  } catch (err: unknown) { console.error("[mia]", err) }
   return { removed }
 }
 
@@ -233,9 +223,7 @@ export async function getCacheStats(): Promise<{
         const s = await stat(resolve(partitionDir, entry))
         files++
         bytes += s.size
-      } catch {
-        /* ignore */
-      }
+      } catch (err: unknown) { console.error("[mia]", err) }
     }
   }
   return { users: partitions.length, files, bytes }

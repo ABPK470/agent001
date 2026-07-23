@@ -41,9 +41,7 @@ export async function buildCatalog(
           return catalog
         }
       }
-    } catch {
-      /* no cache or invalid — build fresh */
-    }
+    } catch (err: unknown) { console.error("[mia]", err) }
   }
 
   // Build from live database (expensive — 5 SQL queries)
@@ -57,9 +55,7 @@ export async function buildCatalog(
       const { dirname } = await import("node:path")
       await fs.mkdir(dirname(cachePath), { recursive: true })
       await fs.writeFile(cachePath, JSON.stringify(catalog.toSnapshot(conn)), "utf-8")
-    } catch {
-      /* cache write failure is non-fatal */
-    }
+    } catch (err: unknown) { console.error("[mia]", err) }
   }
 
   return catalog

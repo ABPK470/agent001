@@ -242,9 +242,7 @@ class HostSandboxBackend implements SandboxBackend {
           // path doesn't race the close handler.
           try {
             spawnSync("taskkill", ["/pid", String(child.pid), "/f", "/t"], { windowsHide: true })
-          } catch {
-            /* fall through to child.kill below */
-          }
+          } catch (err: unknown) { console.error("[mia]", err) }
         } else {
           for (const descendantPid of collectPosixDescendantPids(child.pid)) {
             knownDescendantPids.add(descendantPid)
@@ -255,22 +253,16 @@ class HostSandboxBackend implements SandboxBackend {
           // POSIX: negative pid → process group kill.
           try {
             process.kill(-child.pid, signal)
-          } catch {
-            /* ignore ESRCH */
-          }
+          } catch (err: unknown) { console.error("[mia]", err) }
           for (const descendantPid of knownDescendantPids) {
             try {
               process.kill(descendantPid, signal)
-            } catch {
-              /* ignore ESRCH */
-            }
+            } catch (err: unknown) { console.error("[mia]", err) }
           }
         }
         try {
           child.kill(signal)
-        } catch {
-          /* ignore */
-        }
+        } catch (err: unknown) { console.error("[mia]", err) }
       }
 
       const timer = setTimeout(() => {

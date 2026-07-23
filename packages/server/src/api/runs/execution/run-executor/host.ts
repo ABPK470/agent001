@@ -37,9 +37,7 @@ function createRunContextForExecution(
             runId,
             upn: activeRun?.ownerUpn ?? null
           })
-        } catch {
-          // Side-channel persistence must not break the run.
-        }
+        } catch (err: unknown) { console.error("[mia]", err) }
       }
     }
   })

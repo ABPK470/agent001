@@ -25,7 +25,7 @@ function readStoredMode(): ThemeMode {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (raw === "light" || raw === "dark" || raw === "system") return raw
-  } catch { /* ignore */ }
+  } catch (err: unknown) { console.error("[mia]", err) }
   return "system"
 }
 
@@ -64,7 +64,7 @@ export function useTheme(): {
 
   const setTheme = useCallback((next: ThemeMode) => {
     setMode(next)
-    try { localStorage.setItem(STORAGE_KEY, next) } catch { /* ignore */ }
+    try { localStorage.setItem(STORAGE_KEY, next) } catch (err: unknown) { console.error("[mia]", err) }
     const r = resolve(next)
     setResolved(r)
     apply(r)

@@ -22,7 +22,7 @@ export function TransitionTestPage() {
     setHeroRevealProgress(0)
     setEnterTrigger(false)
     setMorphTarget(undefined)
-    try { delete (window as { __miaIntroAsciiStartTs?: number }).__miaIntroAsciiStartTs } catch { /* ignore */ }
+    try { delete (window as { __miaIntroAsciiStartTs?: number }).__miaIntroAsciiStartTs } catch (err: unknown) { console.error("[mia]", err) }
   }
 
   function measureAndTrigger() {

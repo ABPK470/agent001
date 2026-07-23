@@ -289,7 +289,7 @@ export function extractToolTarget(tool: string, argsFormatted: string, argsSumma
   try {
     const parsed = JSON.parse(argsFormatted) as unknown
     if (parsed && typeof parsed === "object") args = parsed as Record<string, unknown>
-  } catch { /* fall through to summary parsing */ }
+  } catch (err: unknown) { console.error("[mia]", err) }
 
   // Args JSON path — preferred, exposes the real field names.
   if (args) {

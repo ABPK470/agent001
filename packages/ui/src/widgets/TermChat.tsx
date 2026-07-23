@@ -1255,7 +1255,7 @@ function WorkspaceDiffCard({ runId, onNotify, onNotifyError }: {
   const upsertRun = useStore((s) => s.upsertRun)
 
   useEffect(() => {
-    api.getRunWorkspaceDiff(runId).then(setDiff).catch(() => {/* ignore */ })
+    api.getRunWorkspaceDiff(runId).then(setDiff).catch((err: unknown) => { console.error("[mia]", err) })
   }, [runId])
 
   async function apply() {
@@ -1379,9 +1379,7 @@ function DeliverableChips({ runId }: { runId: string }) {
     setBusyId(id)
     try {
       await api.downloadAttachment(id, name)
-    } catch {
-      /* ignore — download failures are non-fatal */
-    } finally {
+    } catch (err: unknown) { console.error("[mia]", err) } finally {
       setBusyId(null)
     }
   }
@@ -2058,7 +2056,7 @@ export function TermChat({
 
   const cancel = useCallback(async () => {
     if (!scopedActiveRunId) return
-    try { await api.cancelRun(scopedActiveRunId) } catch { /* ignore */ }
+    try { await api.cancelRun(scopedActiveRunId) } catch (err: unknown) { console.error("[mia]", err) }
   }, [scopedActiveRunId])
 
   const uploadFiles = useCallback(async (files: File[]) => {
@@ -2083,7 +2081,7 @@ export function TermChat({
   const removeAttachment = useCallback((id: string) => {
     setPendingAttachments((prev) => prev.filter((a) => a.id !== id))
     // Best-effort soft-delete; UI removal is the user's source of truth.
-    void api.deleteAttachment(id).catch(() => { /* ignore */ })
+    void api.deleteAttachment(id).catch((err: unknown) => { console.error("[mia]", err) })
   }, [])
 
   const openFilePicker = useCallback(() => {

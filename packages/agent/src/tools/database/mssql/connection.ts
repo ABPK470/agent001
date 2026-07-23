@@ -144,9 +144,7 @@ export async function getPool(
   if (entry.pool) {
     try {
       await entry.pool.close()
-    } catch {
-      /* ignore */
-    }
+    } catch (err: unknown) { console.error("[mia]", err) }
   }
   entry.pool = new sql.ConnectionPool(entry.config)
   // Absorb late/async pool errors (e.g. tedious emitting `socketError` after
@@ -165,9 +163,7 @@ export async function closeMssqlPool(host: AgentHost): Promise<void> {
     if (entry.pool) {
       try {
         await entry.pool.close()
-      } catch {
-        /* ignore */
-      }
+      } catch (err: unknown) { console.error("[mia]", err) }
       entry.pool = null
     }
   }

@@ -239,7 +239,7 @@ export function useEventStreamData(opts: {
       before: oldestCursor,
       replace: false,
     })
-      .catch(() => { /* keep current page */ })
+      .catch((err: unknown) => { console.error("[mia]", err) })
       .finally(() => {
         if (gen === generation.current) setLoadingOlder(false)
       })

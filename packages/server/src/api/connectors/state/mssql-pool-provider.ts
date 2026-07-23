@@ -142,9 +142,7 @@ export function createMssqlPoolProvider(projectRoot: string): MssqlPoolProvider 
       if (entry?.pool) {
         try {
           await entry.pool.close()
-        } catch {
-          /* ignore */
-        }
+        } catch (err: unknown) { console.error("[mia]", err) }
       }
       const built = buildConfig(connector, projectRoot)
       entry = {
@@ -170,9 +168,7 @@ export function createMssqlPoolProvider(projectRoot: string): MssqlPoolProvider 
     } else if (!entry.pool.connected) {
       try {
         await entry.pool.close()
-      } catch {
-        /* ignore */
-      }
+      } catch (err: unknown) { console.error("[mia]", err) }
       entry.pool = new sql.ConnectionPool(entry.config)
       entry.pool.on("error", (err) => {
         console.warn(
@@ -230,9 +226,7 @@ export function createMssqlPoolProvider(projectRoot: string): MssqlPoolProvider 
       if (entry?.pool) {
         try {
           void entry.pool.close()
-        } catch {
-          /* ignore */
-        }
+        } catch (err: unknown) { console.error("[mia]", err) }
       }
       cache.delete(connectorId)
     },

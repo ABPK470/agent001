@@ -241,7 +241,7 @@ async function json<T>(path: string, opts?: RequestInit): Promise<T> {
   // credentials: include — sends the session cookie cross-port (UI on 5173, server on 3102 in dev).
   const res = await fetch(`${BASE}${path}`, { ...opts, headers, credentials: "include" })
   if (!res.ok) {
-    const body = await res.json().catch(() => null)
+    const body = await res.json().catch((err: unknown) => { console.error("[mia]", err) })
     let msg = `HTTP ${res.status}`
     if (body && typeof body === "object") {
       const record = body as Record<string, unknown>
@@ -1588,7 +1588,7 @@ export function syncExecuteStream(
       })
       const contentType = res.headers.get("content-type") ?? ""
       if (!res.ok || contentType.includes("application/json")) {
-        const body = (await res.json().catch(() => null)) as {
+        const body = (await res.json().catch((err: unknown) => { console.error("[mia]", err) })) as {
           error?: string
           code?: string
           approvalId?: string
@@ -1679,7 +1679,7 @@ export function createEventStream(
   bc.onmessage = (e) => {
     try {
       if (dedupe(e.data)) onEvent(e.data)
-    } catch { /* ignore */ }
+    } catch (err: unknown) { console.error("[mia]", err) }
   }
 
   function connect() {
@@ -1695,7 +1695,7 @@ export function createEventStream(
           onEvent(event)
           bc.postMessage(event)
         }
-      } catch { /* ignore malformed messages */ }
+      } catch (err: unknown) { console.error("[mia]", err) }
     }
 
     es.onerror = () => {
@@ -1727,7 +1727,7 @@ export function createPopoutEventRelay(
   const bc = new BroadcastChannel(BC_CHANNEL)
   onStatus(true) // assume connected — main window manages the SSE
   bc.onmessage = (e) => {
-    try { onEvent(e.data) } catch { /* ignore */ }
+    try { onEvent(e.data) } catch (err: unknown) { console.error("[mia]", err) }
   }
   return { close: () => bc.close() }
 }

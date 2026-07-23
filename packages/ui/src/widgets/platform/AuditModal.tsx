@@ -99,7 +99,7 @@ export function AuditModal({ onClose }: { onClose: () => void }) {
   })
 
   useEffect(() => {
-    api.adminAuditOptions().then(setOptions).catch(() => {})
+    api.adminAuditOptions().then(setOptions).catch((err: unknown) => { console.error("[mia]", err) })
   }, [])
 
   const queryParams = useMemo<AdminAuditParams>(

@@ -67,9 +67,7 @@ export async function probeContentCompleteness(
           )
         }
       }
-    } catch {
-      /* already flagged */
-    }
+    } catch (err: unknown) { console.error("[mia]", err) }
   }
 
   const styleArtifacts = sa.executionContext.targetArtifacts.filter((a) =>
@@ -87,9 +85,7 @@ export async function probeContentCompleteness(
           issues.push(`Potential 2D grid styling bug in "${artifact}": ${stripingIssues.join("; ")}`)
         }
       }
-    } catch {
-      /* already flagged */
-    }
+    } catch (err: unknown) { console.error("[mia]", err) }
   }
 
   // JavaScript syntax validation
@@ -114,9 +110,7 @@ export async function probeContentCompleteness(
         ) {
           issues.push(`Syntax error in "${artifact}": ${result.trim().split("\n").slice(0, 3).join(" | ")}`)
         }
-      } catch {
-        /* non-critical */
-      }
+      } catch (err: unknown) { console.error("[mia]", err) }
     }
   }
 
@@ -134,9 +128,7 @@ export async function probeContentCompleteness(
           issues.push(`Corrupted HTML in "${artifact}": ${htmlIssues.join("; ")}`)
         }
       }
-    } catch {
-      /* already flagged */
-    }
+    } catch (err: unknown) { console.error("[mia]", err) }
   }
 }
 

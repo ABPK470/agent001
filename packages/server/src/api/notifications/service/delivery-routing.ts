@@ -78,9 +78,7 @@ export interface DispatchEvent {
 export function dispatchNotification(ev: DispatchEvent): void {
   const routes = listMatchingRoutes(ev)
   for (const r of routes) {
-    void deliverWithRetry(r, ev).catch(() => {
-      /* logged in row */
-    })
+    void deliverWithRetry(r, ev).catch((err: unknown) => { console.error("[mia]", err) })
   }
 }
 

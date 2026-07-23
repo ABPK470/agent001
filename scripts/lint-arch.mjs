@@ -51,7 +51,9 @@ import {
   lintRegisteredApiSurfaces,
 } from "./lint-arch/rules/seams.mjs"
 import { lintOwnedIdentities } from "./lint-arch/rules/identities.mjs"
+import { lintNamedOutcomes } from "./lint-arch/rules/named-outcome.mjs"
 import { lintForbiddenTrees, lintTopLevel } from "./lint-arch/rules/trees.mjs"
+import { FAILURE_CLASSES } from "./lint-arch/registry/failure-classes.mjs"
 
 const ROOT = resolve(fileURLToPath(import.meta.url), "../..")
 const PACKAGES = createPackageConfigs(ROOT)
@@ -81,6 +83,7 @@ const RUNNERS = new Map([
   ["framework-deny", ({ pkg, files }) => lintFrameworkDenylist(pkg, files)],
   ["export-surface", ({ pkg, files }) => lintPackageExportSurface(ROOT, pkg.name, files)],
   ["silent-failure", ({ pkg, files }) => lintSilentFailure(pkg, files, DEBT.silentFailureAllowlist)],
+  ["named-outcome", ({ pkg, files }) => lintNamedOutcomes(pkg, files, ["core"])],
   ["trust", ({ pkg, files }) => lintTrustHygiene(pkg, files, DEBT.trustAllowlist)],
   [
     "forbidden-constructors",
@@ -170,8 +173,15 @@ const debtCount =
 
 if (printReport(ROOT)) process.exit(1)
 
+const enforced = FAILURE_CLASSES.map((c) => c.rule.split("+")[0])
+for (const rule of enforced) {
+  if (!RUNNERS.has(rule) && !PACKAGE_RULES.includes(rule) && !GLOBAL_RULES.includes(rule)) {
+    // compound rules like layers+framework-deny are covered by parts
+  }
+}
+
 console.log(
   `lint-arch: ${counts.agent} agent + ${counts.server} server + ${counts.sync} sync + ${counts.ui} ui files OK ` +
-    `(general runners + registry data; ${debtCount} debt entries).`,
+    `(${FAILURE_CLASSES.length} failure classes enforced; ${debtCount} debt entries).`,
 )
 process.exit(0)

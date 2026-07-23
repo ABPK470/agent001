@@ -137,8 +137,6 @@ export function drainTempSyncProjects(): void {
   for (const root of tempRoots.splice(0)) {
     try {
       rmSync(root, { recursive: true, force: true })
-    } catch {
-      /* ignore */
-    }
+    } catch (err: unknown) { console.error("[mia]", err) }
   }
 }

@@ -551,9 +551,7 @@ function extractStoredText(json: string): string {
   try {
     const parsed = JSON.parse(json) as { text?: unknown }
     if (typeof parsed.text === "string") return parsed.text
-  } catch {
-    /* fall through */
-  }
+  } catch (err: unknown) { console.error("[mia]", err) }
   return json
 }
 

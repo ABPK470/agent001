@@ -228,9 +228,7 @@ export function BridgeShell(): JSX.Element {
     stageResizeDragRef.current = null
     try {
       event.currentTarget.releasePointerCapture(drag.pointerId)
-    } catch {
-      // Capture may already be gone after cancel.
-    }
+    } catch (err: unknown) { console.error("[mia]", err) }
   }
 
   function onStageResizePointerCancel(): void {

@@ -510,7 +510,7 @@ function RuleEditor(props: EditorProps) {
         priority:  typeof parsed["priority"] === "number" ? (parsed["priority"] as number) : s.priority,
         reason:    typeof parsed["reason"]   === "string" ? (parsed["reason"]   as string) : s.reason,
       }))
-    } catch { /* ignore invalid JSON when switching back */ }
+    } catch (err: unknown) { console.error("[mia]", err) }
     setMode("form")
   }
 

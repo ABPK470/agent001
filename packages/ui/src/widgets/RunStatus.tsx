@@ -81,7 +81,7 @@ export function RunStatus() {
         answer: detail.answer,
         completedAt: detail.completedAt,
       })
-    }).catch(() => {})
+    }).catch((err: unknown) => { console.error("[mia]", err) })
     return () => { cancelled = true }
   }, [run?.id, run?.status, run?.hasCheckpoint, run?.rollbackAvailable, upsertRun])
 
@@ -190,7 +190,7 @@ export function RunStatus() {
     }
     const key = `${run.id}:${run.pendingWorkspaceChanges ?? 0}`
     if (autoLoadedKeyRef.current === key) return
-    refreshWorkspaceDiff(run.id).catch(() => {})
+    refreshWorkspaceDiff(run.id).catch((err: unknown) => { console.error("[mia]", err) })
   }, [run?.id, run?.pendingWorkspaceChanges, refreshWorkspaceDiff])
 
   const handleCancel = useCallback(async () => {

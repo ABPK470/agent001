@@ -169,9 +169,7 @@ export function lookupToolKnowledge(opts: LookupOptions): ToolKnowledgeResult {
           WHERE tool = ? AND qname = ? AND mode = ? AND lower(connection) = lower(?)`
       )
       .run(now, opts.tool, opts.qname, mode, connection)
-  } catch {
-    /* non-fatal */
-  }
+  } catch (err: unknown) { console.error("[mia]", err) }
 
   return {
     hit: true,

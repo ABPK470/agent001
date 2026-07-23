@@ -46,7 +46,7 @@ export function SyncEnvironmentForm({
     let alive = true
     void api.listConnectors().then((rows) => {
       if (alive) setConnectors([...rows].sort((a, b) => a.id.localeCompare(b.id)))
-    }).catch(() => { /* admin-only surface; ignore load errors silently */ })
+    }).catch((err: unknown) => { console.error("[mia]", err) })
     return () => { alive = false }
   }, [])
 

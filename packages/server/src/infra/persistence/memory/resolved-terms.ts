@@ -128,9 +128,7 @@ export function listResolvedTerms(options: ListResolvedTermsOptions = {}): Resol
         WHERE term = ? AND lower(connection) = lower(?) AND created_at = ?`
     )
     for (const r of out) bump.run(now, r.term, connection, r.createdAt)
-  } catch {
-    /* non-fatal */
-  }
+  } catch (err: unknown) { console.error("[mia]", err) }
 
   return out
 }

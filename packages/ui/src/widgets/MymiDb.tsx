@@ -218,7 +218,7 @@ export function MymiDb() {
     api.mymiListDatabases().then((dbs) => {
       setDatabases(dbs)
       if (dbs.length > 0) setActiveDb(dbs[0].name)
-    }).catch(() => {})
+    }).catch((err: unknown) => { console.error("[mia]", err) })
   }, [])
 
   const loadSchemas = useCallback(async (db?: string) => {
@@ -254,7 +254,7 @@ export function MymiDb() {
     setObjectFilter("")
     api.mymiListObjects(activeSchema, activeDb)
       .then((d) => setObjects(Array.isArray(d) ? d : []))
-      .catch(() => {})
+      .catch((err: unknown) => { console.error("[mia]", err) })
       .finally(() => setObjectsLoading(false))
   }, [activeSchema, activeDb])
 
@@ -271,13 +271,13 @@ export function MymiDb() {
       setColumnsLoading(true); setColumns([])
       api.mymiColumns(activeSchema, activeObject.name, activeDb)
         .then(setColumns)
-        .catch(() => {})
+        .catch((err: unknown) => { console.error("[mia]", err) })
         .finally(() => setColumnsLoading(false))
     } else if (activeTab === "relations") {
       setRelLoading(true); setRelations(null)
       api.mymiRelations(activeSchema, activeObject.name, activeDb)
         .then(setRelations)
-        .catch(() => {})
+        .catch((err: unknown) => { console.error("[mia]", err) })
         .finally(() => setRelLoading(false))
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -289,7 +289,7 @@ export function MymiDb() {
     setSearchLoading(true)
     api.mymiSearch(debouncedSearch, activeDb, searchSchemas.size > 0 ? [...searchSchemas] : undefined)
       .then(setSearchResults)
-      .catch(() => {})
+      .catch((err: unknown) => { console.error("[mia]", err) })
       .finally(() => setSearchLoading(false))
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedSearch, activeDb, searchSchemas])

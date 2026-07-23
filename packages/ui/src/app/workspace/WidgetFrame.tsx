@@ -60,7 +60,7 @@ export function WidgetFrame({ widgetId, viewId, type, children }: Props) {
         trace: state.trace,
         activeRunId: state.activeRunId,
       }))
-    } catch { /* quota exceeded — popout will fall back to API fetch */ }
+    } catch (err: unknown) { console.error("[mia]", err) }
 
     // Size the popout to mirror the source widget when possible, capped to the screen
     const sourceEl = (event?.currentTarget as HTMLElement | undefined)?.closest(".react-grid-item") as HTMLElement | null

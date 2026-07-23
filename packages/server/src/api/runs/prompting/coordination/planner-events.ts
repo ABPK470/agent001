@@ -49,7 +49,7 @@ export function handlePlannerTrace(
           route: e.route
         }
       })
-      .catch(() => {})
+      .catch((err: unknown) => { console.error("[mia]", err) })
   } else if (kind === "planner-pipeline-end") {
     broadcast({
       type: EventType.PlannerCompleted,
@@ -63,7 +63,7 @@ export function handlePlannerTrace(
         resourceId: runId,
         detail: { status: e.status, completedSteps: e.completedSteps, totalSteps: e.totalSteps }
       })
-      .catch(() => {})
+      .catch((err: unknown) => { console.error("[mia]", err) })
   } else if (kind === "planner-pipeline-start") {
     broadcast({
       type: EventType.PlannerPipelineStarted,
@@ -79,7 +79,7 @@ export function handlePlannerTrace(
         resourceId: runId,
         detail: { diagnostics: e.diagnostics }
       })
-      .catch(() => {})
+      .catch((err: unknown) => { console.error("[mia]", err) })
   } else if (kind === "planner-platform-unconfigured") {
     // Operator-only event — the user-facing answer is opaque on purpose.
     // Persist the technical detail to the run logs (visible to admins via the
@@ -103,7 +103,7 @@ export function handlePlannerTrace(
         resourceId: runId,
         detail: { stepName, subject, remediation, rawError: e.rawError }
       })
-      .catch(() => {})
+      .catch((err: unknown) => { console.error("[mia]", err) })
     // eslint-disable-next-line no-console
     console.error(`[run ${runId}] ${message}`)
   } else if (kind === "planner-validation-remediated") {
@@ -119,7 +119,7 @@ export function handlePlannerTrace(
         resourceId: runId,
         detail: { diagnostics: e.diagnostics }
       })
-      .catch(() => {})
+      .catch((err: unknown) => { console.error("[mia]", err) })
   } else if (kind === "planner-runtime-compiled") {
     broadcast({
       type: EventType.PlannerRuntimeCompiled,
@@ -142,7 +142,7 @@ export function handlePlannerTrace(
           runtimeEntities: e.runtimeEntities
         }
       })
-      .catch(() => {})
+      .catch((err: unknown) => { console.error("[mia]", err) })
   } else if (kind === "planner-step-start") {
     broadcast({
       type: EventType.PlannerStepStarted,
@@ -227,7 +227,7 @@ export function handlePlannerTrace(
         resourceId: runId,
         detail: { overall: e.overall, confidence: e.confidence, steps: e.steps }
       })
-      .catch(() => {})
+      .catch((err: unknown) => { console.error("[mia]", err) })
   } else if (kind === "planner-verification-followup") {
     broadcast({
       type: EventType.PlannerVerificationFollowup,
@@ -251,7 +251,7 @@ export function handlePlannerTrace(
         resourceId: runId,
         detail: { attempt: e.attempt, epoch: e.epoch, rerunOrder: e.rerunOrder, tasks: e.tasks }
       })
-      .catch(() => {})
+      .catch((err: unknown) => { console.error("[mia]", err) })
   }
 
   // Forward delegation + LLM debug events

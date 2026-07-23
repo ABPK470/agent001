@@ -74,7 +74,7 @@ export class AgentOrchestrator {
     // Tool-cache TTL is per-entry (encoded in each cache file). The boot
     // sweep here drops anything that already expired so the disk does not
     // accumulate orphans across restarts.
-    void cleanupExpiredCache().catch(() => {})
+    void cleanupExpiredCache().catch((err: unknown) => { console.error("[mia]", err) })
   }
 
   // ── Configuration ─────────────────────────────────────────────
@@ -500,7 +500,7 @@ export class AgentOrchestrator {
         this.completedRunWorkspaces.get(runId) ?? this.activeRuns.get(runId)?.workspace
       this.completedRunWorkspaces.delete(runId)
       this.activeRuns.delete(runId)
-      if (workspace) void cleanupRunWorkspace(workspace).catch(() => {})
+      if (workspace) void cleanupRunWorkspace(workspace).catch((err: unknown) => { console.error("[mia]", err) })
     }
     return db.deleteThreadAndRuns(threadId, upn)
   }

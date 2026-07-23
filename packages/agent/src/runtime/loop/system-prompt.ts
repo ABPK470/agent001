@@ -95,9 +95,7 @@ function loadPrompt(name: string): string {
           `[prompt] drift: ${name} also exists at ${p} (sha=${otherSha}) — using ${chosenPath} (sha=${sha})`
         )
       }
-    } catch {
-      /* ignore */
-    }
+    } catch (err: unknown) { console.error("[mia]", err) }
   }
 
   return body

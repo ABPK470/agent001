@@ -34,9 +34,7 @@ export function PlatformHealthBanner({
     setDismissed(true)
     try {
       window.sessionStorage.setItem(DISMISS_KEY, "1")
-    } catch {
-      /* ignore */
-    }
+    } catch (err: unknown) { console.error("[mia]", err) }
   }
 
   return (

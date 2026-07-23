@@ -188,9 +188,7 @@ export function applyPromptBudget(
   if (config?.onSectionSizes) {
     try {
       config.onSectionSizes(tokensBySection(finalMessages, config?.model))
-    } catch {
-      // Telemetry must never break a real LLM call.
-    }
+    } catch (err: unknown) { console.error("[mia]", err) }
   }
 
   return {

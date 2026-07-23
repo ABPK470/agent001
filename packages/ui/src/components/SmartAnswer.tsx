@@ -366,7 +366,7 @@ function CompactCodeBlock({ lang, text }: { lang: string; text: string }) {
       // Hold the Check icon a little longer than the opacity transition so
       // the icon never swaps mid-fade.
       timersRef.current.push(window.setTimeout(() => setShowCheck(false), 1400 + 250))
-    }).catch(() => { /* ignore */ })
+    }).catch((err: unknown) => { console.error("[mia]", err) })
   }, [text])
   return (
     <div className="group relative my-1.5 w-full min-w-0 rounded-md border border-border-subtle overflow-hidden">
@@ -524,7 +524,7 @@ export function SmartAnswer({
             // produces a DiagramError flash — show a loading pill instead.
             {
               let isComplete = false
-              try { JSON.parse(b.text); isComplete = true } catch { /* incomplete JSON */ }
+              try { JSON.parse(b.text); isComplete = true } catch (err: unknown) { console.error("[mia]", err) }
               if (!isComplete) {
                 return <StructuredPendingBlock key={bi} lang={b.lang} />
               }

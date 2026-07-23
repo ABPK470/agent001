@@ -151,9 +151,7 @@ function buildDelegateContext(ctx: DelegateRuntimeContext, governedTools: Tool[]
           content: `iteration ${info.iteration}/${info.maxIterations}${preview ? ": " + preview : ""}`,
           protocol: BusProtocol.Status
         })
-      } catch {
-        // Bus publish must not break the run.
-      }
+      } catch (err: unknown) { console.error("[mia]", err) }
     },
     acquireSlot: (childRunId: string) => queue.acquire(childRunId, RunPriority.High, signal),
     onChildTrace: (entry) => {
@@ -173,7 +171,7 @@ function buildDelegateContext(ctx: DelegateRuntimeContext, governedTools: Tool[]
               agentName: entry.agentName
             }
           })
-          .catch(() => {})
+          .catch((err: unknown) => { console.error("[mia]", err) })
       } else if (entry.kind === TrajectoryEventKind.DelegationEnd) {
         broadcast({ type: EventType.DelegationEnded, data: { runId: request.runId, ...entry } })
         services.auditLog
@@ -189,7 +187,7 @@ function buildDelegateContext(ctx: DelegateRuntimeContext, governedTools: Tool[]
               error: entry.error
             }
           })
-          .catch(() => {})
+          .catch((err: unknown) => { console.error("[mia]", err) })
       } else if (entry.kind === TrajectoryEventKind.DelegationIteration) {
         broadcast({ type: EventType.DelegationIteration, data: { runId: request.runId, ...entry } })
       } else if (entry.kind === TrajectoryEventKind.DelegationParallelStart) {

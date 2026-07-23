@@ -112,9 +112,7 @@ export function computeAutoDetectedExcludeDirs(basePath: string): string[] {
       if (stats.isDirectory()) {
         dirs.push(dir)
       }
-    } catch {
-      /* doesn't exist, skip */
-    }
+    } catch (err: unknown) { console.error("[mia]", err) }
   }
   return dirs
 }

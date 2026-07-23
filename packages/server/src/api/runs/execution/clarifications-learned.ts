@@ -78,7 +78,5 @@ export function persistLearnedTermFromResolution(
       connection,
       upn: ownerUpn
     })
-  } catch {
-    // Best-effort: a failed learn-write must never break the run.
-  }
+  } catch (err: unknown) { console.error("[mia]", err) }
 }

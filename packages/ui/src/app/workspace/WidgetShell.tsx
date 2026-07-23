@@ -75,7 +75,7 @@ export function WidgetShell({
         trace: state.trace,
         activeRunId: state.activeRunId,
       }))
-    } catch { /* quota exceeded */ }
+    } catch (err: unknown) { console.error("[mia]", err) }
 
     const sourceEl = event.currentTarget.closest(".workspace-tile") as HTMLElement | null
     const sourceRect = sourceEl?.getBoundingClientRect()

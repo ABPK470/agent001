@@ -23,9 +23,7 @@ function useCopyFeedback() {
           clearTimerRef.current = null
         }, 1600)
       })
-      .catch(() => {
-        /* ignore */
-      })
+      .catch((err: unknown) => { console.error("[mia]", err) })
   }
 
   return { copied, copyValue }

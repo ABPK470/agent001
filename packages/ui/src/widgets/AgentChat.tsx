@@ -380,7 +380,7 @@ export function AgentChat() {
 
   async function handleCancel() {
     if (!activeRunId) return
-    try { await api.cancelRun(activeRunId) } catch { /* ignore */ }
+    try { await api.cancelRun(activeRunId) } catch (err: unknown) { console.error("[mia]", err) }
   }
 
   async function handleRespond(runId: string, response: string) {
@@ -1086,7 +1086,7 @@ export function AgentChat() {
                                                                                                           tc.toolCallId,
                                                                                                           "Cancelled by user",
                                                                                                       ).catch(
-                                                                                                          () => {},
+                                                                                                          (err: unknown) => { console.error("[mia]", err) },
                                                                                                       );
                                                                                                   } else {
                                                                                                       handleCancel();

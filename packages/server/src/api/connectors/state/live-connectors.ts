@@ -178,9 +178,7 @@ export function linkSyncEnvironmentConnectorIds(): void {
       if (typeof body.name === "string" && body.name.trim() !== "") {
         connectorByKey.set(body.name.toLowerCase(), row.id)
       }
-    } catch {
-      /* ignore malformed body */
-    }
+    } catch (err: unknown) { console.error("[mia]", err) }
   }
 
   const now = new Date().toISOString()

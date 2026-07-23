@@ -171,7 +171,7 @@ export function PolicyEditor({ onClose }: Props) {
     api.getWorkspace().then((w) => {
       setWsPath(w.path)
       setWsOriginal(w.path)
-    }).catch(() => {})
+    }).catch((err: unknown) => { console.error("[mia]", err) })
   }, [])
 
   // Load LLM config
@@ -183,7 +183,7 @@ export function PolicyEditor({ onClose }: Props) {
       setLlmDefaults(cfg.defaults ?? {})
       setLlmActiveProvider(cfg.provider)
       setLlmActiveModel(cfg.model)
-    }).catch(() => {})
+    }).catch((err: unknown) => { console.error("[mia]", err) })
   }, [])
 
   async function handleSaveLlm() {

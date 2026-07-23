@@ -428,9 +428,7 @@ export function OperationLog() {
       ) {
         await api.cancelSyncExecute(syncPlanIdFromPipeline(pipeline))
       }
-    } catch {
-      /* SSE refresh will reflect final state */
-    } finally {
+    } catch (err: unknown) { console.error("[mia]", err) } finally {
       setCancellingId(null)
     }
   }, [])

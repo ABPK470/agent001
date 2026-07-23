@@ -180,19 +180,19 @@ export function RunHistory() {
   }
 
   function cancelRun(runId: string) {
-    api.cancelRun(runId).catch(() => {})
+    api.cancelRun(runId).catch((err: unknown) => { console.error("[mia]", err) })
   }
 
   function resumeRun(runId: string) {
     api.resumeRun(runId).then((r) => {
       if (r.runId) setActiveRun(r.runId)
-    }).catch(() => {})
+    }).catch((err: unknown) => { console.error("[mia]", err) })
   }
 
   function rerunRun(runId: string) {
     api.rerunRun(runId).then((r) => {
       if (r.runId) setActiveRun(r.runId)
-    }).catch(() => {})
+    }).catch((err: unknown) => { console.error("[mia]", err) })
   }
 
   function rollbackRun(runId: string) {
@@ -204,7 +204,7 @@ export function RunHistory() {
       }
       setRolledBackIds((prev) => new Set(prev).add(runId))
       upsertRun({ id: runId, rollbackAvailable: false })
-    }).catch(() => {})
+    }).catch((err: unknown) => { console.error("[mia]", err) })
   }
 
   if (!activeThreadId) {

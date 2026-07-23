@@ -50,9 +50,7 @@ async function walkDir(
       const st = await stat(abs)
       const rel = abs.slice(root.length + 1).replace(/\\/g, "/")
       out.push({ path: rel, sizeBytes: st.size })
-    } catch {
-      /* skip unreadable */
-    }
+    } catch (err: unknown) { console.error("[mia]", err) }
   }
 }
 

@@ -273,9 +273,7 @@ async function executeExportQueryToFile(
     if (lesson) {
       try {
         opts.run?.memory?.writeNote?.(lesson)
-      } catch {
-        // Auto-note failures must not mask the block.
-      }
+      } catch (err: unknown) { console.error("[mia]", err) }
     }
     return validation.error ?? "Query blocked"
   }

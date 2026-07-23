@@ -228,9 +228,7 @@ export async function applyWorkspaceDiff(params: {
       if (info.isFile()) {
         await unlink(target)
       }
-    } catch {
-      // Ignore if file already removed.
-    }
+    } catch (err: unknown) { console.error("[mia]", err) }
   }
 
   return {

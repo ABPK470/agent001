@@ -78,9 +78,7 @@ export async function probeArtifact(
       if (!content.startsWith("Error:") && !content.includes("not found") && !content.includes("ENOENT")) {
         return { found: true, resolvedPath: candidate }
       }
-    } catch {
-      /* fall through */
-    }
+    } catch (err: unknown) { console.error("[mia]", err) }
 
     if (runCommand) {
       try {
@@ -90,9 +88,7 @@ export async function probeArtifact(
         if (/__FOUND__/.test(exists)) {
           return { found: true, resolvedPath: candidate }
         }
-      } catch {
-        /* fall through */
-      }
+      } catch (err: unknown) { console.error("[mia]", err) }
     }
   }
 
@@ -105,9 +101,7 @@ export async function probeArtifact(
         if (!content.startsWith("Error:") && !content.includes("not found") && !content.includes("ENOENT")) {
           return { found: true, resolvedPath: actual }
         }
-      } catch {
-        /* fall through */
-      }
+      } catch (err: unknown) { console.error("[mia]", err) }
     }
   }
 
@@ -133,9 +127,7 @@ export async function probeArtifact(
           ) {
             return { found: true, resolvedPath: fp }
           }
-        } catch {
-          /* fall through */
-        }
+        } catch (err: unknown) { console.error("[mia]", err) }
         if (runCommand) {
           try {
             const exists = await executeToolForText(runCommand, {
@@ -144,14 +136,10 @@ export async function probeArtifact(
             if (/__FOUND__/.test(exists)) {
               return { found: true, resolvedPath: fp }
             }
-          } catch {
-            /* fall through */
-          }
+          } catch (err: unknown) { console.error("[mia]", err) }
         }
       }
-    } catch {
-      /* fall through */
-    }
+    } catch (err: unknown) { console.error("[mia]", err) }
   }
 
   // 4. Second-chance find with relative "."
@@ -175,9 +163,7 @@ export async function probeArtifact(
           ) {
             return { found: true, resolvedPath: fp }
           }
-        } catch {
-          /* fall through */
-        }
+        } catch (err: unknown) { console.error("[mia]", err) }
         if (runCommand) {
           try {
             const exists = await executeToolForText(runCommand, {
@@ -186,14 +172,10 @@ export async function probeArtifact(
             if (/__FOUND__/.test(exists)) {
               return { found: true, resolvedPath: fp }
             }
-          } catch {
-            /* fall through */
-          }
+          } catch (err: unknown) { console.error("[mia]", err) }
         }
       }
-    } catch {
-      /* fall through */
-    }
+    } catch (err: unknown) { console.error("[mia]", err) }
   }
 
   return { found: false, resolvedPath: plannedPath }

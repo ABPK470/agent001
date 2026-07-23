@@ -32,7 +32,5 @@ export function writeComposerDraft(
   try {
     if (text) storage.setItem(key, text)
     else storage.removeItem(key)
-  } catch {
-    /* quota / private mode */
-  }
+  } catch (err: unknown) { console.error("[mia]", err) }
 }

@@ -26,9 +26,7 @@ export function registerGracefulShutdown(deps: GracefulShutdownDeps): void {
 
     try {
       await deps.app.close()
-    } catch {
-      /* already closed */
-    }
+    } catch (err: unknown) { console.error("[mia]", err) }
 
     await stopScheduler(60_000)
     deps.messageQueue.stop()

@@ -24,9 +24,7 @@ function scheduleSave() {
   timer = setTimeout(() => {
     const { views, activeViewId } = useLayoutStore.getState()
     const wireViews = views.map(viewToWire)
-    api.saveDashboardState({ views: wireViews, activeViewId }).catch(() => {
-      // Server unreachable — localStorage already has it
-    })
+    api.saveDashboardState({ views: wireViews, activeViewId }).catch((err: unknown) => { console.error("[mia]", err) })
   }, DEBOUNCE_MS)
 }
 
@@ -36,7 +34,7 @@ export function flushDashboardSave(): void {
   timer = null
   const { views, activeViewId } = useLayoutStore.getState()
   const wireViews = views.map(viewToWire)
-  api.saveDashboardState({ views: wireViews, activeViewId }).catch(() => {})
+  api.saveDashboardState({ views: wireViews, activeViewId }).catch((err: unknown) => { console.error("[mia]", err) })
 }
 
 /** Hydrate wire views into workspace views projected for the live row budget. */
@@ -63,7 +61,7 @@ export async function restoreDashboardState(): Promise<void> {
       })
       _suppressSave = false
     } else {
-      try { localStorage.removeItem("mia-layout") } catch { /* ignore */ }
+      try { localStorage.removeItem("mia-layout") } catch (err: unknown) { console.error("[mia]", err) }
       _suppressSave = true
       useLayoutStore.setState({
         views: [makeDefaultView()],
@@ -71,9 +69,7 @@ export async function restoreDashboardState(): Promise<void> {
       })
       _suppressSave = false
     }
-  } catch {
-    // Server not available — use localStorage (zustand persist)
-  }
+  } catch (err: unknown) { console.error("[mia]", err) }
 }
 
 let syncStarted = false

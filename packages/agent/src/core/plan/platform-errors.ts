@@ -184,9 +184,7 @@ export function detectInternalFailure(answer: string): InternalFailureHit | null
           rawDetail: answer
         }
       }
-    } catch {
-      /* fall through */
-    }
+    } catch (err: unknown) { console.error("[mia]", err) }
   }
 
   // Verifier "Task FAILED" / "Task verification FAILED" wall.

@@ -214,15 +214,11 @@ export async function runMetadataSync(
           rollbackCtx,
           tx.request()
         )
-      } catch {
-        /* tx may already be aborted */
-      }
+      } catch (err: unknown) { console.error("[mia]", err) }
     }
     try {
       await tx.rollback()
-    } catch {
-      /* ignore */
-    }
+    } catch (err: unknown) { console.error("[mia]", err) }
     onProgress({
       type: SyncProgressKind.Step,
       step: "metadataSync",

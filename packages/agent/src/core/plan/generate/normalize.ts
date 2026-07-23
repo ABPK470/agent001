@@ -94,9 +94,7 @@ export function salvagePlanFromMalformedResponse(raw: string, _workspaceRoot: st
           const inner = parsePlanFromResponse(candidate)
           if (inner.plan) return inner.plan
         }
-      } catch {
-        /* skip */
-      }
+      } catch (err: unknown) { console.error("[mia]", err) }
     }
   }
 

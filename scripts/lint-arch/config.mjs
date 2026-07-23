@@ -24,6 +24,7 @@ export const PACKAGE_RULES = [
   "framework-deny",
   "export-surface",
   "silent-failure",
+  "named-outcome",
   "trust",
   "forbidden-constructors",
 ]
@@ -80,28 +81,7 @@ export function createPackageConfigs(root) {
         internal: new Set(["internal"]),
       },
       /** @type {DebtAllow[]} */
-      layerAllowlist: [
-        {
-          from: "domain/types/agent-loop-state.ts",
-          toPrefix: "core/",
-          note: "CircuitBreaker type; move type to domain or ports when safe",
-        },
-        {
-          from: "domain/types/agent-loop-state.ts",
-          toPrefix: "tools/",
-          note: "Tool loop state shapes; move to domain/types when safe",
-        },
-        {
-          from: "domain/tenant/known-vocabulary.ts",
-          toPrefix: "tools/",
-          note: "Catalog graph vocabulary; keep allowlisted until domain owns the type",
-        },
-        {
-          fromPrefix: "core/plan/",
-          toPrefix: "runtime/delegate",
-          note: "Delegate validation/escalation purity debt — migrate into core/",
-        },
-      ],
+      layerAllowlist: [],
       forbiddenTrees: [
         "application",
         "domain/services",
@@ -290,37 +270,14 @@ export function createLeverageDebt(root) {
     /** @type {{ pkg: string, key: string, note: string, used?: boolean }[]} */
     cycleAllowlist: CYCLE_ALLOWLIST.map((e) => ({ ...e })),
     /** @type {{ surface: string, note: string, used?: boolean }[]} */
-    brandAllowlist: [
-      {
-        surface: "mymi",
-        note: "Branded api surface — rename to domain noun; shrinking debt",
-      },
-    ],
+    brandAllowlist: [],
     brandTokens: [...BRAND_TOKENS],
     /** @type {{ name: string, note: string, used?: boolean }[]} */
     unownedIdentityAllowlist: [],
     /** @type {{ file: string, note: string, used?: boolean }[]} */
-    presentationAllowlist: [
-      {
-        file: "packages/ui/src/widgets/AgentChat.tsx",
-        note: "TOOL_LABELS → move to @mia/shared-types presentation helper",
-      },
-      {
-        file: "packages/ui/src/widgets/TermChat.tsx",
-        note: "TOOL_LABELS / TOOL_PAST_TENSE → shared-types",
-      },
-    ],
+    presentationAllowlist: [],
     /** @type {{ file: string, note: string, used?: boolean }[]} */
-    tenantBranchAllowlist: [
-      {
-        file: "server/infra/persistence/db/entity-registry.ts",
-        note: "DEFAULT_TENANT_ID dual-read inheritance — move to data policy",
-      },
-      {
-        file: "server/infra/persistence/db/freeze-windows.ts",
-        note: "DEFAULT_TENANT_ID registry refresh — move to data policy",
-      },
-    ],
+    tenantBranchAllowlist: [],
     silentFailureAllowlist: SILENT_FAILURE_ALLOWLIST.map((e) => ({ ...e })),
     trustAllowlist: TRUST_ALLOWLIST.map((e) => ({ ...e })),
     enumForkAllowlist: ENUM_FORK_ALLOWLIST.map((e) => ({ ...e })),

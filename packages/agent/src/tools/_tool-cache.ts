@@ -144,7 +144,5 @@ export function persistToCache(
       payload,
       fingerprint
     })
-  } catch {
-    // non-fatal
-  }
+  } catch (err: unknown) { console.error("[mia]", err) }
 }

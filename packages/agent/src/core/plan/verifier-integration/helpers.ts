@@ -86,9 +86,7 @@ export async function readIntegrationArtifactContents(
       if (typeof raw === "string" && raw.length > 0) {
         contents.set(normalizeSpecPath(artifact.path), raw)
       }
-    } catch {
-      /* ignore */
-    }
+    } catch (err: unknown) { console.error("[mia]", err) }
   }
   return contents
 }
@@ -142,9 +140,7 @@ export async function probeArtifactViaTool(
       if (!content.startsWith("Error:") && !content.includes("not found") && !content.includes("ENOENT")) {
         return { found: true, resolvedPath: candidate }
       }
-    } catch {
-      /* fall through */
-    }
+    } catch (err: unknown) { console.error("[mia]", err) }
   }
 
   return { found: false, resolvedPath: path }

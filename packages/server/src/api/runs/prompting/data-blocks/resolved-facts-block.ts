@@ -95,9 +95,7 @@ export function buildResolvedFactsBlock(input: {
           if (role) largeObjects[i] = { ...largeObjects[i]!, verdictRole: role }
         }
       }
-    } catch {
-      // memory unavailable — proceed without verdicts.
-    }
+    } catch (err: unknown) { console.error("[mia]", err) }
   }
 
   // No goal-relevant objects → omit the block entirely (including fingerprint-

@@ -151,9 +151,7 @@ export function listEventsForPlanId(planId: string, opts?: { limit?: number }): 
         const id = data[key]
         if (typeof id === "string" && id.length > 0 && id !== planId) previewIds.add(id)
       }
-    } catch {
-      /* ignore malformed rows */
-    }
+    } catch (err: unknown) { console.error("[mia]", err) }
   }
 
   if (previewIds.size === 0) return primary

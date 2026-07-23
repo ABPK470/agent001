@@ -26,9 +26,7 @@ function recordDoctrineLesson(
   if (!lesson) return
   try {
     run?.memory?.writeNote?.(lesson)
-  } catch {
-    // Memory write failures must never block the validator response.
-  }
+  } catch (err: unknown) { console.error("[mia]", err) }
 }
 
 // ── The tool ─────────────────────────────────────────────────────
@@ -434,9 +432,7 @@ function buildSchemaMssqlTool(host: AgentHost, run?: RunContext): Tool {
                     lines.join("\n") +
                     `\n  NOTE: these are real value ranges. A surrogate-key int does NOT encode YYYYMM/dates/business codes — filter via a JOIN to the dimension on its natural attributes (Year, MonthNo, …), not by the surrogate value.`
                 }
-              } catch {
-                // Best-effort: missing VIEW DATABASE STATE or no auto-stats — silently skip.
-              }
+              } catch (err: unknown) { console.error("[mia]", err) }
             }
             // Gap 1: persist the live result so the next call can short-circuit.
             // Only persist when we have a real schema-qualified qname AND a

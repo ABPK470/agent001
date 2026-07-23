@@ -55,9 +55,7 @@ async function getPublicKey(kid: string): Promise<ReturnType<typeof createPublic
           if (alg) jwk.alg = String(alg)
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           keys.set(k.kid, createPublicKey({ key: jwk, format: "jwk" } as any))
-        } catch {
-          // skip malformed keys
-        }
+        } catch (err: unknown) { console.error("[mia]", err) }
       }
     }
     _jwksCache = { keys, fetchedAt: now }

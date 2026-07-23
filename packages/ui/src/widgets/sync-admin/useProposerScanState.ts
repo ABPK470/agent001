@@ -61,7 +61,7 @@ export function useProposerScanState({
       if (suppressedRunIdsRef.current.has(id)) return
       if (suppressedPairsRef.current.has(pairKey(source, target))) return
       setScanning({ runId: id, source, target })
-    }).catch(() => {})
+    }).catch((err: unknown) => { console.error("[mia]", err) })
   }, [])
 
   useEffect(() => {

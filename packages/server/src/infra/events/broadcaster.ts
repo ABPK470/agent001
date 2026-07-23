@@ -103,9 +103,7 @@ export class EventBroadcaster {
       if (allowed(identity)) {
         try {
           sink.write(sseFrame)
-        } catch {
-          /* dropped client; close handler cleans up */
-        }
+        } catch (err: unknown) { console.error("[mia]", err) }
       }
     }
 
@@ -118,20 +116,16 @@ export class EventBroadcaster {
     ) {
       try {
         saveEvent(msg.type, msg.data, msg.timestamp)
-      } catch {
-        /* don't break broadcast if DB write fails */
-      }
+      } catch (err: unknown) { console.error("[mia]", err) }
     }
 
     // Push to webhook drains (fire-and-forget, async)
-    this.pushToWebhooks(msg, json).catch(() => {})
+    this.pushToWebhooks(msg, json).catch((err: unknown) => { console.error("[mia]", err) })
     // Notify internal subscribers
     for (const fn of this.subscribers) {
       try {
         fn(msg)
-      } catch {
-        /* ignore */
-      }
+      } catch (err: unknown) { console.error("[mia]", err) }
     }
   }
 
@@ -189,7 +183,7 @@ export class EventBroadcaster {
         headers,
         body: json,
         signal: AbortSignal.timeout(5000)
-      }).catch(() => {})
+      }).catch((err: unknown) => { console.error("[mia]", err) })
     }
   }
 }

@@ -103,7 +103,7 @@ export function UsageModal({ onClose }: { onClose: () => void }) {
   const [options, setOptions] = useState<UsageFilterOptions>({ users: [], models: [] })
 
   useEffect(() => {
-    api.usageOptions().then(setOptions).catch(() => {})
+    api.usageOptions().then(setOptions).catch((err: unknown) => { console.error("[mia]", err) })
   }, [])
 
   const queryParams = useMemo<UsageParams>(

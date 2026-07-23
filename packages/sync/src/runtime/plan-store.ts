@@ -70,9 +70,7 @@ export function savePlan(host: SyncPlanStoreHost, plan: SyncPlan): void {
   // older plans on demand.
   try {
     host.sync.runs.sink.savePlan?.(plan, host.sync.runs.actorUpn)
-  } catch {
-    /* sink failure must not break preview */
-  }
+  } catch (err: unknown) { console.error("[mia]", err) }
 }
 
 /** Load a plan. Returns null if missing. Tries memory → disk → durable sink. */
@@ -92,12 +90,8 @@ export function loadPlan(host: SyncPlanStoreHost, planId: string): SyncPlan | nu
         }
         try {
           unlinkSync(path)
-        } catch {
-          /* ignore */
-        }
-      } catch {
-        /* fall through to durable sink */
-      }
+        } catch (err: unknown) { console.error("[mia]", err) }
+      } catch (err: unknown) { console.error("[mia]", err) }
     }
   }
   // Durable sink (e.g. SQLite). No TTL — required for History re-hydration
@@ -108,9 +102,7 @@ export function loadPlan(host: SyncPlanStoreHost, planId: string): SyncPlan | nu
       plans.memCache.set(planId, fromSink)
       return fromSink
     }
-  } catch {
-    /* sink failure → treat as miss */
-  }
+  } catch (err: unknown) { console.error("[mia]", err) }
   return null
 }
 
@@ -128,9 +120,7 @@ export function deletePlan(host: SyncPlanStoreHost, planId: string): void {
     if (existsSync(path))
       try {
         unlinkSync(path)
-      } catch {
-        /* ignore */
-      }
+      } catch (err: unknown) { console.error("[mia]", err) }
   }
 }
 
@@ -147,8 +137,6 @@ function pruneExpired(host: SyncPlanStoreHost): void {
     try {
       const stats = statSync(path)
       if (Date.now() - stats.mtimeMs > TTL_MS) unlinkSync(path)
-    } catch {
-      // ignore
-    }
+    } catch (err: unknown) { console.error("[mia]", err) }
   }
 }

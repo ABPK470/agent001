@@ -720,7 +720,7 @@ export const useStore = create<AppState>()(
               completedAt: d.completedAt,
             }),
           }))
-        }).catch(() => {})
+        }).catch((err: unknown) => { console.error("[mia]", err) })
       },
       upsertRun: (run) => set((s) => {
         const idx = s.runs.findIndex((r) => r.id === run.id)
@@ -1269,7 +1269,7 @@ export const useStore = create<AppState>()(
                       runs: patchRunFields(s.runs, completedRunId, { trace }),
                       trace: s.activeRunId === completedRunId ? trace : s.trace,
                     }))
-                  }).catch(() => {})
+                  }).catch((err: unknown) => { console.error("[mia]", err) })
                 }
                 // Reconcile deliverable attachments for this run from the
                 // server — catches any promoted mid-run that SSE missed and
@@ -1287,7 +1287,7 @@ export const useStore = create<AppState>()(
                       }))
                     store.setGeneratedAttachments(completedRunId, list)
                   })
-                  .catch(() => {})
+                  .catch((err: unknown) => { console.error("[mia]", err) })
               }
             }
             store.clearStreamingAnswer()

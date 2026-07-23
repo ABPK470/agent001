@@ -17,9 +17,7 @@ export function clearTransactionalData(): void {
   db.exec(`DELETE FROM notifications;`)
   try {
     db.exec("DELETE FROM api_request_log")
-  } catch {
-    /* table may not exist yet */
-  }
+  } catch (err: unknown) { console.error("[mia]", err) }
 }
 
 // ── Data lifecycle / pruning ─────────────────────────────────────
@@ -118,9 +116,7 @@ export function pruneOldData(opts?: {
       )
       .run(keepEvents)
     prunedEvents = evtResult.changes
-  } catch {
-    /* table may not exist yet */
-  }
+  } catch (err: unknown) { console.error("[mia]", err) }
 
   let vacuumed = false
   if (prunedRuns > 50 || prunedApiRequests > 1000 || prunedEvents > 5000) {

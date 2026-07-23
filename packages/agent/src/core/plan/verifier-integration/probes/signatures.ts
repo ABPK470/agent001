@@ -27,9 +27,7 @@ export async function probeCrossFileFunctionSignatures(ctx: IntegrationProbeCont
       if (typeof raw === "string" && raw.length > 0) {
         fileContents.set(artifact.path, { content: raw, stepName: artifact.stepName })
       }
-    } catch {
-      /* skip unreadable files */
-    }
+    } catch (err: unknown) { console.error("[mia]", err) }
   }
 
   if (fileContents.size < 2) return

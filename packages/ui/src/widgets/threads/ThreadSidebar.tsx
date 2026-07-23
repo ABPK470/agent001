@@ -153,9 +153,7 @@ function ThreadRailItem({
     try {
       const updated = await api.updateThread(thread.id, { pinned: !thread.pinned })
       upsertThread(updated)
-    } catch {
-      /* ignore */
-    }
+    } catch (err: unknown) { console.error("[mia]", err) }
   }
 
   const startRename = () => {

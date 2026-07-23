@@ -148,7 +148,7 @@ export function ingestTurn(opts: {
     })
 
   // Optionally embed (async, non-blocking)
-  embedEntry(entry).catch(() => {})
+  embedEntry(entry).catch((err: unknown) => { console.error("[mia]", err) })
 
   broadcast({
     type: EventType.MemoryIngested,
