@@ -206,8 +206,8 @@ function UserGoalBubble({
         type="button"
         onClick={onUnpin}
         className={appendageClass}
-        title="Unpin message"
-        aria-label="Unpin message"
+        title="Hide message"
+        aria-label="Hide message"
       >
         <Dot size={15} strokeWidth={2} />
       </button>
@@ -260,7 +260,7 @@ function ChatTurn({
   const sentinelRef = useRef<HTMLDivElement>(null)
   const stickyRef = useRef<HTMLDivElement>(null)
   const [isStuck, setIsStuck] = useState(false)
-  const { preserveToggle, scrollHostRef } = useChatScroll()
+  const { scrollHostRef } = useChatScroll()
   const { stickyOffsetPx, topClass: pinTopClass, stuckScrollThreshold } = goalPinLayout(pinProfile)
 
   const pinned = !unpinned
@@ -355,8 +355,8 @@ function ChatTurn({
   }, [unpinned, onClearUnpin, run.id, scrollHostRef, pinProfile, stickyOffsetPx])
 
   const handleUnpin = () => {
-    // Sticky → in-flow jumps the viewport; preserve the goal's screen position.
-    preserveToggle(stickyRef.current, () => onUnpin(run.id))
+    // Dismiss in place — do not sticky→flow or scroll-anchor (that yanks you to the goal).
+    onUnpin(run.id)
   }
 
   const isOwnGoal = !run.upn || run.upn.toLowerCase() === me?.upn?.toLowerCase()
@@ -371,27 +371,29 @@ function ChatTurn({
       {/* flex + gap (not margin): home and widget share one rhythm; sticky
           cannot collapse this space. */}
       <div className={`flex min-w-0 flex-col ${USER_GOAL_TO_RESPONSE_GAP_CLASS}`}>
-        <StickyUserGoal
-          ref={stickyRef}
-          align="end"
-          topClass={pinProfile === "home" ? STICKY_GOAL_HOME_TOP : pinTopClass}
-          className="shrink-0"
-          pinned={pinned}
-        >
-          <div className={USER_GOAL_COLUMN_CLASS}>
-            {!isOwnGoal && (
-              <div className="flex flex-col items-end gap-1.5">
-                <span className="px-1.5 text-[15px] font-medium uppercase tracking-wide text-text-muted">
-                  {run.displayName ?? run.upn}
-                </span>
+        {pinned ? (
+          <StickyUserGoal
+            ref={stickyRef}
+            align="end"
+            topClass={pinProfile === "home" ? STICKY_GOAL_HOME_TOP : pinTopClass}
+            className="shrink-0"
+            pinned
+          >
+            <div className={USER_GOAL_COLUMN_CLASS}>
+              {!isOwnGoal && (
+                <div className="flex flex-col items-end gap-1.5">
+                  <span className="px-1.5 text-[15px] font-medium uppercase tracking-wide text-text-muted">
+                    {run.displayName ?? run.upn}
+                  </span>
+                  <UserGoalBubble goal={run.goal} showUnpin={showUnpin} onUnpin={handleUnpin} />
+                </div>
+              )}
+              {isOwnGoal && (
                 <UserGoalBubble goal={run.goal} showUnpin={showUnpin} onUnpin={handleUnpin} />
-              </div>
-            )}
-            {isOwnGoal && (
-              <UserGoalBubble goal={run.goal} showUnpin={showUnpin} onUnpin={handleUnpin} />
-            )}
-          </div>
-        </StickyUserGoal>
+              )}
+            </div>
+          </StickyUserGoal>
+        ) : null}
 
         <div className="min-w-0">
           <RunMessage

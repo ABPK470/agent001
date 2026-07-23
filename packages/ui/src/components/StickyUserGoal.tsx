@@ -18,7 +18,7 @@ export const StickyUserGoal = forwardRef(function StickyUserGoal({
 }: {
   align?: "start" | "end"
   topClass?: string
-  /** When false, the goal stays in normal document flow (unpinned). */
+  /** When false, render in normal flow (Callers usually unmount instead of unpin→flow). */
   pinned?: boolean
   children: ReactNode
   className?: string
