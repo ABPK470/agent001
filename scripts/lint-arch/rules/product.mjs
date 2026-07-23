@@ -1,61 +1,13 @@
+/**
+ * Product rules that remain catalog/UI-platform (not capability ownership —
+ * that lives in seams.mjs registry runner).
+ */
+
 import { join } from "node:path"
 import { existsSync, readFileSync } from "node:fs"
 import ts from "typescript"
 import { fail } from "../report.mjs"
-import { isTestFile, walk } from "../fs-walk.mjs"
-import { lineOf, parseSourceFile, relToPkg } from "../ts-context.mjs"
-
-const AGENT_BANNED = [
-  { id: "resolveAgent", detail: "resolveAgent is forbidden — cores receive resolved systemPrompt/tools, not profile IDs" },
-  { id: "createDelegateTools", detail: "createDelegateTools is forbidden — one spawn kernel; planner owns fan-out" },
-  { id: "createDelegationTools", detail: "createDelegationTools is forbidden — one spawn kernel; planner owns fan-out" },
-  { id: "ResolvedAgent", detail: "ResolvedAgent / named agent profiles are erased" },
-]
-
-const UI_BANNED = [
-  { id: "listAgents", detail: "listAgents / agent CRUD client is forbidden" },
-  { id: "createAgent", detail: "createAgent is forbidden — no agent profiles" },
-  { id: "updateAgent", detail: "updateAgent is forbidden — no agent profiles" },
-  { id: "deleteAgent", detail: "deleteAgent is forbidden — no agent profiles" },
-  { id: "selectedAgentId", detail: "selectedAgentId is forbidden — UI starts runs with goal+thread only" },
-  { id: "AgentEditor", detail: "AgentEditor is forbidden — capability erased" },
-  { id: "AgentDefinition", detail: "AgentDefinition is forbidden — capability erased" },
-]
-
-function lintBannedIdentifiers(files, banned, skipTests = true) {
-  const names = new Set(banned.map((b) => b.id))
-  const detailOf = Object.fromEntries(banned.map((b) => [b.id, b.detail]))
-
-  for (const file of files) {
-    const rel = file
-    if (skipTests && (rel.endsWith(".test.ts") || rel.endsWith(".test.tsx"))) continue
-    const sf = parseSourceFile(file)
-    const visit = (node) => {
-      if (ts.isIdentifier(node) && names.has(node.text)) {
-        // Allow property names in type positions? Ban all identifier uses —
-        // capability must not reappear.
-        fail(file, lineOf(sf, node), "capability-ownership", `${detailOf[node.text]}. See docs/doctrine.md`)
-      }
-      ts.forEachChild(node, visit)
-    }
-    visit(sf)
-  }
-}
-
-export function lintCapabilityOwnership(agentPkg, uiPkg) {
-  if (existsSync(agentPkg.src)) {
-    lintBannedIdentifiers(
-      walk(agentPkg.src).filter((f) => !isTestFile(relToPkg(agentPkg.src, f))),
-      AGENT_BANNED,
-    )
-  }
-  if (existsSync(uiPkg.src)) {
-    lintBannedIdentifiers(
-      walk(uiPkg.src).filter((f) => !isTestFile(relToPkg(uiPkg.src, f))),
-      UI_BANNED,
-    )
-  }
-}
+import { lineOf, parseSourceFile } from "../ts-context.mjs"
 
 export function lintUiPlatformCheckbox(uiPkg, files) {
   const checkboxSource = join(uiPkg.src, "components/Checkbox.tsx")
@@ -95,64 +47,7 @@ export function lintUiPlatformCheckbox(uiPkg, files) {
   }
 }
 
-const WIRE_KINDS = new Set([
-  "llm-request",
-  "llm-response",
-  "system-prompt",
-  "tools-resolved",
-  "tool-call",
-  "tool-result",
-  "tool-error",
-  "planner-step-start",
-  "planner-step-end",
-  "planner-decision",
-  "planner-plan-generated",
-  "delegation-start",
-  "delegation-end",
-])
-
-export function lintUiEventKindSwitch(uiPkg, files) {
-  for (const file of files) {
-    if (!/\.(tsx?|jsx?)$/.test(file)) continue
-    const rel = relToPkg(uiPkg.src, file)
-    if (isTestFile(rel)) continue
-    if (rel.startsWith("lib/events/")) continue
-    if (rel.startsWith("components/outline/")) continue
-    if (!rel.startsWith("widgets/") && !rel.startsWith("state/")) continue
-
-    const sf = parseSourceFile(file)
-    const text = sf.getFullText()
-    if (/\bTRACE_KIND_LABELS\b/.test(text)) {
-      fail(
-        file,
-        0,
-        "event-catalog",
-        `TRACE_KIND_LABELS is banned — use eventLabel / describeDebugTracePayload from @mia/shared-types`,
-      )
-    }
-
-    const visit = (node) => {
-      if (ts.isCaseClause(node) && node.expression && ts.isStringLiteral(node.expression)) {
-        if (WIRE_KINDS.has(node.expression.text)) {
-          fail(
-            file,
-            lineOf(sf, node),
-            "event-catalog",
-            `Widget/state must not switch on wire TraceEntry.kind for presentation. ` +
-              `Use event-catalog + lib/events projection. See docs/doctrine.md`,
-          )
-        }
-      }
-      ts.forEachChild(node, visit)
-    }
-    visit(sf)
-  }
-}
-
-/**
- * Catalog coverage — every TraceEntry.kind and EventType has a descriptor.
- * Uses TS AST on shared-types / shared-enums where practical.
- */
+/** Catalog coverage — every TraceEntry.kind and EventType has a descriptor. */
 export function lintEventCatalogCoverage(root) {
   const catalogPath = join(root, "packages/shared-types/src/event-catalog.ts")
   const typesPath = join(root, "packages/shared-types/src/index.ts")
@@ -162,7 +57,6 @@ export function lintEventCatalogCoverage(root) {
     return
   }
 
-  // Section-bounded extraction: UNKNOWN is an intentional fallback, not EventType.
   const catalog = readFileSync(catalogPath, "utf8")
   const traceBlock = catalog.split("TRACE_EVENT_CATALOG")[1]?.split("SSE_EVENT_CATALOG")[0] ?? ""
   const sseBlock = catalog.split("SSE_EVENT_CATALOG")[1]?.split("const UNKNOWN")[0] ?? ""

@@ -4,6 +4,7 @@
  */
 
 import { join } from "node:path"
+import { CYCLE_ALLOWLIST } from "./cycle-debt.mjs"
 
 /** @param {string} root */
 export function createPackageConfigs(root) {
@@ -115,10 +116,23 @@ export function createPackageConfigs(root) {
         "platform",
         "shared",
         "api/runs/core",
-        "api/agents",
+        // api/agents erased via seams registry, not a static tree string alone
       ],
-      stateAllowlist: new Set(),
-      timerAllowlist: new Set(),
+      stateAllowlist: new Set([
+        "api/proposer/state/scheduler.ts",
+        "api/runs/prompting/goal-classification.ts",
+        "boot/shutdown.ts",
+        "infra/llm/databricks-broker.ts",
+        "infra/llm/operation-context.ts",
+        "infra/persistence/connection.ts",
+        "infra/persistence/db/sync-tool-approvals.ts",
+        "infra/persistence/evidence/signers/kms-stub.ts",
+        "infra/persistence/memory/vectors.ts",
+        "infra/queue/channels/teams.ts",
+        "infra/sandbox/backend.ts",
+        "infra/sandbox/index.ts",
+      ]),
+      timerAllowlist: new Set(["api/proposer/state/scheduler.ts"]),
       skipTestFilesForLayers: false,
       allowedRootFiles: new Set(["index.ts"]),
       allowedExtraDirs: new Set(),
@@ -215,14 +229,58 @@ export function createPackageConfigs(root) {
         "api",
         "application",
       ],
-      stateAllowlist: new Set(),
-      timerAllowlist: new Set(),
+      stateAllowlist: new Set([
+        "app/workspace/layout/persistence.ts",
+        "lib/popover-dismiss.ts",
+        "state/store.ts",
+        "widgets/bridge/transform-draft.ts",
+        "widgets/env-sync/exec-store.ts",
+      ]),
+      timerAllowlist: new Set(["app/workspace/layout/persistence.ts"]),
       skipTestFilesForLayers: true,
       allowedRootFiles: new Set(["types.ts", "vite-env.d.ts"]),
       allowedExtraDirs: new Set(),
       /** UI-only: treat root types.ts as shared façade (no layer). */
       rootFacades: new Set(["types.ts"]),
     },
+  }
+}
+
+/** @param {string} root */
+export function createLeverageDebt(root) {
+  return {
+    /** @type {{ pkg: string, key: string, note: string, used?: boolean }[]} */
+    cycleAllowlist: CYCLE_ALLOWLIST.map((e) => ({ ...e })),
+    /** @type {{ surface: string, note: string, used?: boolean }[]} */
+    brandAllowlist: [
+      {
+        surface: "mymi",
+        note: "Rename api/mymi → domain noun (warehouse/connector); branded path is ops debt",
+      },
+    ],
+    /** @type {{ file: string, note: string, used?: boolean }[]} */
+    presentationAllowlist: [
+      {
+        file: "packages/ui/src/widgets/AgentChat.tsx",
+        note: "TOOL_LABELS → move to @mia/shared-types presentation helper",
+      },
+      {
+        file: "packages/ui/src/widgets/TermChat.tsx",
+        note: "TOOL_LABELS / TOOL_PAST_TENSE → shared-types",
+      },
+    ],
+    /** @type {{ file: string, note: string, used?: boolean }[]} */
+    tenantBranchAllowlist: [
+      {
+        file: "server/infra/persistence/db/entity-registry.ts",
+        note: "DEFAULT_TENANT_ID dual-read inheritance — move to data policy",
+      },
+      {
+        file: "server/infra/persistence/db/freeze-windows.ts",
+        note: "DEFAULT_TENANT_ID registry refresh — move to data policy",
+      },
+    ],
+    root,
   }
 }
 

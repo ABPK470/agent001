@@ -46,15 +46,7 @@ export function lintForbiddenTrees(pkg) {
         )
         return
       }
-      if (parts[0] === "api" && parts[1] === "agents") {
-        fail(
-          file,
-          0,
-          "capability-ownership",
-          `doctrine forbids api/agents/ — agent profiles erased; runs use resolved systemPrompt only.`,
-        )
-        return
-      }
+      // api/agents and other erased surfaces: enforced by seams registry (seam-erased)
     }
   }
 }

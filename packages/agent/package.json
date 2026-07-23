@@ -4,16 +4,7 @@
   "description": "A real AI agent with tools — LLM decides what to do, calls tools, observes results, repeats until done.",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts",
-    "./domain": "./src/domain/index.ts",
-    "./ports": "./src/ports/index.ts",
-    "./core": "./src/core/index.ts",
-    "./runtime": "./src/runtime/index.ts",
-    "./tools": "./src/tools/index.ts",
-    "./memory": "./src/memory/index.ts",
-    "./llm": "./src/llm/index.ts",
-    "./internal": "./src/internal/index.ts",
-    "./core/policy": "./src/core/policy.ts"
+    ".": "./src/index.ts"
   },
   "engines": {
     "node": ">=20"

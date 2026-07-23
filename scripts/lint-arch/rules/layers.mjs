@@ -26,8 +26,6 @@ function matchAllow(pkg, fromRel, toRel) {
 
 /**
  * Build relative import graph + enforce layer matrix.
- * Side-effect imports (`import "./init"`) are included.
- *
  * @returns {Map<string, { to: string, line: number }[]>}
  */
 export function lintLayerImports(pkg, files, options, host) {
@@ -50,7 +48,6 @@ export function lintLayerImports(pkg, files, options, host) {
       if (toRel.startsWith("..")) continue
       if (toRel === "types.ts" || toRel.startsWith("types.")) continue
 
-      // Value-graph only for cycles — `import type` is erased and commonly cyclic via barrels.
       if (!isTypeOnly) {
         if (!graph.has(fromRel)) graph.set(fromRel, [])
         graph.get(fromRel).push({ to: toRel, line })
@@ -78,13 +75,10 @@ export function lintLayerImports(pkg, files, options, host) {
 }
 
 /**
- * Detect cycles in the relative import graph (intra-layer included).
- *
- * Default: report as deferred debt (visible warnings) — real, but must not
- * freeze velocity while barrels are burned down. Set LINT_ARCH_STRICT_CYCLES=1
- * to fail hard (CI burn-down / local enforcement).
+ * Detect cycles — fail hard unless cycle key is in shrinking cycleAllowlist.
+ * @param {{ key: string, note: string, used?: boolean }[]} cycleAllowlist
  */
-export function lintImportCycles(pkg, graph) {
+export function lintImportCycles(pkg, graph, cycleAllowlist = []) {
   const WHITE = 0
   const GRAY = 1
   const BLACK = 2
@@ -93,9 +87,6 @@ export function lintImportCycles(pkg, graph) {
   /** @type {string[]} */
   const stack = []
   const reported = new Set()
-  /** @type {{ file: string, line: number, cycle: string[] }[]} */
-  const deferred = []
-  const strict = process.env.LINT_ARCH_STRICT_CYCLES === "1"
 
   function dfs(node) {
     color.set(node, GRAY)
@@ -108,11 +99,17 @@ export function lintImportCycles(pkg, graph) {
         const key = cycle.slice(0, -1).sort().join("→")
         if (!reported.has(key)) {
           reported.add(key)
-          const detail = `Circular import: ${cycle.join(" → ")}. Break the cycle (extract shared types to a leaf module; never import a sibling via its barrel index).`
-          if (strict) {
-            fail(join(pkg.src, node), line, `${pkg.name}-import-cycle`, detail)
+          const debt = cycleAllowlist.find((a) => a.key === key)
+          if (debt) {
+            debt.used = true
           } else {
-            deferred.push({ file: join(pkg.src, node), line, cycle })
+            fail(
+              join(pkg.src, node),
+              line,
+              `${pkg.name}-import-cycle`,
+              `Circular import: ${cycle.join(" → ")}. Break the cycle (extract shared leaf module; never import sibling via barrel). ` +
+                `To defer known debt, add key "${key}" to cycleAllowlist (must shrink).`,
+            )
           }
         }
       } else if (c === WHITE && graph.has(to)) {
@@ -128,7 +125,6 @@ export function lintImportCycles(pkg, graph) {
   for (const node of graph.keys()) {
     if ((color.get(node) ?? WHITE) === WHITE) dfs(node)
   }
-  return deferred
 }
 
 /** Fail if any debt allowlist entry was never matched. */
@@ -141,6 +137,18 @@ export function lintStaleAllowlists(pkg) {
       `${pkg.name}-stale-allowlist`,
       `Unused layer debt allowlist entry (${a.from ?? a.fromPrefix ?? "?"} → ${a.toPrefix ?? "?"}): ${a.note}. ` +
         `Remove it — allowlists must shrink.`,
+    )
+  }
+}
+
+export function lintStaleCycleAllowlist(cycleAllowlist, pkgName) {
+  for (const a of cycleAllowlist) {
+    if (a.used) continue
+    fail(
+      "lint-arch",
+      0,
+      `${pkgName}-stale-cycle-allowlist`,
+      `Unused cycle allowlist key "${a.key}": ${a.note}. Remove it — allowlists must shrink.`,
     )
   }
 }

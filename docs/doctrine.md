@@ -102,8 +102,10 @@ usage/admin labels with no single owner. That is shotgun surgery, not layering.
 AgentEditor) was erased. Do not resurrect it. Specialization is planner
 `subagent_task` + spawn kernel, not prompt-profile rows.
 
-`lint:arch` bans resurrecting `api/agents/`, `listAgents` / `createAgent` /
-`selectedAgentId` in UI, and `resolveAgent` / `createDelegateTools` in agent.
+`lint:arch` enforces capability ownership via the **seams registry**
+(`scripts/lint-arch/seams.mjs`): erased seams carry resurrection fingerprints;
+active API surfaces must be registered. Do not grow one-off identifier bans in
+rule files — add or erase a seam row.
 
 ---
 
@@ -195,6 +197,26 @@ internal →  (helpers; no layer ownership)
 (domain type-imports of tools/core; core value-imports of `runtime/delegate`
 validation). Unused entries fail — allowlists must shrink; do not grow them casually.
 
+### Internal Leverage (machine-enforced)
+
+These three claims are **closed doctrine edges**, not slogans. Lint cannot prove
+traffic curves; it enforces the structural proxies that keep leverage true.
+
+| Claim | Meaning | Enforcement |
+| ----- | ------- | ----------- |
+| **Architectural elasticity** | Core/domain contracts stay free of HTTP, React, DB drivers; packages import only public `exports` | `elasticity-framework`, `elasticity-exports`, `elasticity-deep-import`, `elasticity-resolved-inputs`; import cycles fail unless in shrinking `cycle-debt.mjs` |
+| **Deterministic evolution** | One owner per capability; one dialect per concept; additive seams | `scripts/lint-arch/seams.mjs` registry (`seam-unregistered`, `seam-erased`, `seam-owner-unique`); dialect classes (`dialect-presentation-labels`, `dialect-spawn-kernel`, `dialect-wire-events`) |
+| **Sub-linear ops** | Tenant/customer variance is data, not code forks | `ops-tenant-identity-fork`, `ops-branded-surface`; ambient module state linted on all packages |
+
+**Seams registry (SSOT):** every `api/<surface>/` must be an **active** seam.
+Erased capabilities are **rows** (`status: "erased"` + fingerprints) — the runner
+is general; agent-profiles is one erased seam, not a special-case ban list in
+`product.mjs`. Adding a capability = add a seam (additive). Erasing one = flip
+status + fingerprints.
+
+**Dialect classes:** presentation labels (tool/wire), spawn kernel, wire-events
+each have exactly one home path. A second home fails.
+
 ### `lint:arch` (how doctrine stays true)
 
 `scripts/lint-arch.mjs` is the asymmetric enforcement engine — not a regex police
@@ -205,10 +227,11 @@ server / sync / ui.
 | Edge | How |
 | ---- | --- |
 | Layer matrix + side-effect imports | AST import/export declarations |
-| Import cycles (incl. intra-layer) | Value-import graph; deferred by default, fail with `LINT_ARCH_STRICT_CYCLES=1` |
+| Import cycles (incl. intra-layer) | Value-import graph; fail unless shrinking cycle allowlist |
 | Flat control flow | AST function nesting + listener registration |
-| Module `let` / timers / ALS | AST statements only (never strings/comments) |
-| Capability ownership | Banned identifiers (`resolveAgent`, agent CRUD, …) |
+| Module `let` / timers / ALS | AST statements (all packages); ALS ban on agent |
+| Seams / erased capabilities | Registry in `scripts/lint-arch/seams.mjs` |
+| Dialect uniqueness | Concept-class owners in seams registry |
 | Event catalog coverage | Every `TraceEntry.kind` / `EventType` has a descriptor |
 | Stale debt allowlists | Unused allowlist entries fail |
 
@@ -267,13 +290,12 @@ http      →  api, infra, boot, ports, internal
 api       →  infra, adapters, ports, boot, internal
 adapters  →  infra, ports, internal
 infra     →  internal, ports
-ports     →  ports, internal     (not api / infra impl*)
+ports     →  ports, internal     (not api / infra impl)
 cli       →  boot, infra, api, internal, adapters
 internal  →  internal
 ```
 
-\* One debt allowlist remains: `ports/orchestration.ts` → `infra/queue/` concrete
-types. Shrink it; do not grow casually.
+Layer allowlists for server are empty — do not reintroduce ports→infra debt casually.
 
 ### `api/` surfaces
 
@@ -289,7 +311,8 @@ types. Shrink it; do not grow casually.
   classification, clarification / data blocks). Resolves run inputs here /
   in run start — not in the UI.
 - **`api/tools/`** — tool catalog listing (`GET /api/tools`). Not agent CRUD.
-- **Forbidden:** `api/agents/` (erased; do not resurrect).
+- **Forbidden:** `api/agents/` (erased seam `agent-profiles` in
+  `scripts/lint-arch/seams.mjs` — do not resurrect).
 
 ### Forbidden server names
 
