@@ -4,7 +4,6 @@ import { resetEffectSeq } from "../../../infra/effects/index.js"
 import { broadcast, broadcastTrace, broadcastTraceLoose } from "../../../infra/events/broadcaster.js"
 import { retrieveContext } from "../../../infra/persistence/memory.js"
 import { EMPTY_MEMORY_PER_TIER } from "../../../infra/persistence/memory/tier-context.js"
-import { RunPriority } from "../../../infra/queue/run-queue.js"
 import { AuditActor } from "../../../internal/enums/audit.js"
 import { BusProtocol } from "../../../internal/enums/bus.js"
 import { TraceEventKind } from "../../../internal/enums/trace.js"
@@ -124,7 +123,7 @@ export async function resolveExecutionTools(ctx: ToolResolutionContext): Promise
 }
 
 function buildDelegateContext(ctx: DelegateRuntimeContext, governedTools: Tool[]): DelegateContext {
-  const { request, signal, reportChildUsage, llm, queue, messaging, services, tracing } = ctx
+  const { request, signal, reportChildUsage, llm, messaging, services, tracing } = ctx
   const maxDelegationDepth = Number(process.env["DELEGATION_MAX_DEPTH"]) || 3
   const lastStatusIter = new Map<string, number>()
 
@@ -153,7 +152,11 @@ function buildDelegateContext(ctx: DelegateRuntimeContext, governedTools: Tool[]
         })
       } catch (err: unknown) { console.error("[mia]", err) }
     },
-    acquireSlot: (childRunId: string) => queue.acquire(childRunId, RunPriority.High, signal),
+    // Do NOT take global RunQueue slots for children. The parent already holds
+    // one slot for the whole user run; child acquires competed with that and
+    // forced serial subagents (parent + 1 child) whenever the global budget
+    // was tight. Pipeline maxParallel is the concurrency control for fan-out.
+    acquireSlot: undefined,
     onChildTrace: (entry) => {
       tracing.boundSaveTrace(request.runId, entry)
       if (entry.kind === TraceEventKind.DelegationStart) {

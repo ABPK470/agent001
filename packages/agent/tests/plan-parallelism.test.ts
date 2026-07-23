@@ -139,6 +139,51 @@ describe("preparePlanParallelism", () => {
     expect(plan.edges).toEqual([])
   })
 
+  it("fans out evidence peers that require write_file + query_mssql", () => {
+    const plan: Plan = {
+      reason: "evidence fan-out with writes",
+      confidence: 0.9,
+      requiresSynthesis: true,
+      steps: [
+        makeStep("inspect_a", {
+          targets: ["tmp/a/evidence_summary.json"],
+          effectClass: "filesystem_write",
+        }),
+        makeStep("inspect_b", {
+          targets: ["tmp/b/evidence_summary.json"],
+          sources: ["tmp/a/evidence_summary.json"],
+          effectClass: "filesystem_write",
+          dependsOn: ["inspect_a"],
+        }),
+        makeStep("inspect_c", {
+          targets: ["tmp/c/evidence_summary.json"],
+          sources: ["tmp/b/evidence_summary.json"],
+          effectClass: "filesystem_write",
+          dependsOn: ["inspect_b"],
+        }),
+      ],
+      edges: [
+        { from: "inspect_a", to: "inspect_b" },
+        { from: "inspect_b", to: "inspect_c" },
+      ],
+    }
+    for (const step of plan.steps) {
+      ;(step as SubagentTaskStep).requiredToolCapabilities = [
+        "query_mssql",
+        "search_catalog",
+        "write_file",
+        "read_file",
+      ]
+    }
+
+    const result = preparePlanParallelism(plan)
+    expect(result.marked).toBe(3)
+    expect(result.prunedEdges).toBe(2)
+    expect(result.strippedSources).toBe(2)
+    expect(plan.edges).toEqual([])
+    expect([...buildGraph(plan).inDegree.values()].every((deg) => deg === 0)).toBe(true)
+  })
+
   it("strips investigation↔investigation evidence handoffs (edges + sources)", () => {
     const plan: Plan = {
       reason: "readonly evidence chain",

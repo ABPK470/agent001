@@ -64,41 +64,57 @@ function declaredTools(step: SubagentTaskStep): string[] {
   return [...step.requiredToolCapabilities, ...step.executionContext.allowedTools]
 }
 
+function isInvestigationTool(name: string): boolean {
+  return (
+    READ_ONLY_TOOL_NAMES.has(name) ||
+    name === "think" ||
+    name === "note" ||
+    name === "ask_user"
+  )
+}
+
+function hasInvestigationTool(tools: readonly string[]): boolean {
+  return tools.some(isInvestigationTool)
+}
+
 /**
  * Investigation / evidence peers — safe to fan out when there is no
  * justified deliverable handoff between them.
+ *
+ * Evidence writers often list `write_file` (to persist tmp/*.json notes).
+ * That must NOT force a width-1 DAG — only a pure synthesis writer
+ * (writeish tools, no catalog/SQL/read tools) stays serial on upstream notes.
  */
 export function isInvestigationParallelCandidate(step: SubagentTaskStep): boolean {
   if (isBlueprintStep(step)) return false
 
-  // Required write/shell tools → not a fan-out investigation peer.
-  // "Write the client answer" must still wait on analyze notes even when the
-  // deliverable is a .md/.json evidence path. Loose allowedTools may still
-  // list write_file for catalog probes — only *required* counts here.
   const required = step.requiredToolCapabilities
-  if (required.some((name) => WRITEISH_TOOL_NAMES.has(name))) return false
-
-  if (step.executionContext.effectClass === "readonly") return true
-
+  const tools = required.length > 0 ? required : declaredTools(step)
   const targets = step.executionContext.targetArtifacts
-  if (targets.length > 0 && targets.every((artifact) => isEvidenceArtifact(artifact))) {
-    return true
+  const evidenceOnly =
+    targets.length > 0 && targets.every((artifact) => isEvidenceArtifact(artifact))
+
+  // Pure synthesis writer (e.g. write client_answer.md from upstream notes)
+  // — not a fan-out peer; keep the handoff edge.
+  if (
+    evidenceOnly &&
+    tools.some((name) => WRITEISH_TOOL_NAMES.has(name)) &&
+    !hasInvestigationTool(tools)
+  ) {
+    return false
   }
 
+  if (evidenceOnly) return true
+  if (step.executionContext.effectClass === "readonly") return true
+
+  // Required write/shell on non-evidence deliverables → not a fan-out peer.
+  if (required.some((name) => WRITEISH_TOOL_NAMES.has(name))) return false
+
   // No file outputs: treat as investigation unless tools are writeish.
-  // Ignore loose allowedTools noise (plans often list write_file even for
-  // catalog-only probes) — prefer requiredToolCapabilities when present.
   if (targets.length === 0) {
-    const tools = required.length > 0 ? required : declaredTools(step)
     if (tools.length === 0) return true
     if (tools.some((name) => WRITEISH_TOOL_NAMES.has(name))) return false
-    return tools.every(
-      (name) =>
-        READ_ONLY_TOOL_NAMES.has(name) ||
-        name === "think" ||
-        name === "note" ||
-        name === "ask_user",
-    )
+    return tools.every(isInvestigationTool)
   }
 
   return false
