@@ -8,7 +8,7 @@ import {
   loadPlan,
   previewSync,
   PUBLISH_REQUIRED_CODE,
-  type ExecuteProgress,
+  type SyncExecuteResult,
 } from "@mia/sync"
 import type { FastifyInstance, FastifyReply } from "fastify"
 import { cancelOperation } from "../../../infra/operations/cancel-registry.js"
@@ -29,16 +29,16 @@ export type PreviewExecuteDeps = {
   auditSync: (
     planId: string,
     actor: string,
-    actorUpn: string,
+    actorUpn: string | null,
     action: string,
     detail: Record<string, unknown>,
   ) => void
-  syncExecuteAuditAction: (result: { outcome: string; success?: boolean; skipped?: boolean; error?: string }) => string
+  syncExecuteAuditAction: (result: SyncExecuteResult) => string
   syncExecuteAuditDetail: (
     planDetail: Record<string, unknown>,
-    result: { outcome: string; success?: boolean; skipped?: boolean; error?: string },
+    result: SyncExecuteResult,
   ) => Record<string, unknown>
-  replySyncPolicyError: (reply: FastifyReply, error: unknown) => { error: string; code?: string } | null
+  replySyncPolicyError: (reply: FastifyReply, error: unknown) => Record<string, unknown> | null
 }
 
 export function registerPreviewExecuteRoutes(
@@ -223,10 +223,4 @@ export function registerPreviewExecuteRoutes(
     }
     return { cancelled: true, planId }
   })
-
-  void EventType
-  void broadcast
-  void isSyncHttpApprovalRequiredError
-  void isSyncHttpPolicyDeniedError
-  void ExecuteProgress
 }

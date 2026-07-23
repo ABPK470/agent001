@@ -4,25 +4,25 @@ overview: A sequenced program to make docs/doctrine.md true in the code — not 
 todos:
   - id: phase1-composition-root
     content: "Phase 1: Extract run shell from api/runs → server runtime/; UI store owns startRun"
-    status: in_progress
+    status: completed
   - id: phase2-resolved-inputs
     content: "Phase 2: Tenant/vocab/readyIds resolved at shell; ban folklore in core/domain"
-    status: pending
+    status: completed
   - id: phase3-named-outcomes
     content: "Phase 3: Named outcomes for choose-path + sync execute; fix Tier-1 vocabulary"
-    status: pending
+    status: completed
   - id: phase4-ports
     content: "Phase 4: Core↔tools ports; persistence/Http/Db ports; drop getPool/fetch from spines"
-    status: pending
+    status: completed
   - id: phase5-http-decode
     content: "Phase 5: Real decode at HTTP door; split god sync routes; warehouse service"
-    status: pending
+    status: completed
   - id: phase6-dialects-policy
     content: "Phase 6: Collapse UI dialects; one HTTP+tool policy rail; delete ghost delegate"
-    status: pending
+    status: completed
   - id: first-slice
     content: "First delivery: runtime extract + KnownVocabulary into assess + named choose-path + lint harden"
-    status: pending
+    status: completed
 isProject: false
 ---
 
