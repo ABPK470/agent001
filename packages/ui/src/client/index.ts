@@ -260,19 +260,22 @@ async function json<T>(path: string, opts?: RequestInit): Promise<T> {
         msg = record.error
       }
     }
-    const err = new Error(msg) as Error & { stderr?: string[]; code?: string; status?: number }
+    const err = new Error(msg) as Error & {
+      stderr?: string[]
+      code?: string
+      status?: number
+      approvalId?: string
+      policyName?: string
+      toolName?: string
+    }
     err.status = res.status
-    if (body && typeof body === "object" && typeof (body as { code?: unknown }).code === "string") {
-      err.code = (body as { code: string }).code
-    }
-    if (body && typeof body === "object" && typeof (body as { approvalId?: unknown }).approvalId === "string") {
-      ;(err as Error & { approvalId?: string }).approvalId = (body as { approvalId: string }).approvalId
-    }
-    if (body && typeof body === "object" && typeof (body as { policyName?: unknown }).policyName === "string") {
-      ;(err as Error & { policyName?: string }).policyName = (body as { policyName: string }).policyName
-    }
-    if (body && typeof body === "object" && Array.isArray((body as { stderr?: unknown }).stderr)) {
-      err.stderr = (body as { stderr: string[] }).stderr
+    if (body && typeof body === "object") {
+      const record = body as Record<string, unknown>
+      if (typeof record.code === "string") err.code = record.code
+      if (typeof record.approvalId === "string") err.approvalId = record.approvalId
+      if (typeof record.policyName === "string") err.policyName = record.policyName
+      if (typeof record.toolName === "string") err.toolName = record.toolName
+      if (Array.isArray(record.stderr)) err.stderr = record.stderr as string[]
     }
     throw err
   }

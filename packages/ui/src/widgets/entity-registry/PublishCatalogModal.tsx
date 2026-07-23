@@ -1,12 +1,14 @@
 /**
  * Publish Catalog tip → sync runtime — confirmation with live tip-vs-published diff.
  * Diff SoT is publish-preview (live tip), not catalog version-history snapshots.
+ * Failures use the shared modal toast + formatApiError path (same as other registry modals).
  */
 
 import { CheckCircle2, Loader2, Rocket, XCircle } from "lucide-react"
 import type { JSX } from "react"
 import { useEffect, useState } from "react"
 import { api } from "../../client/index"
+import { asApiError } from "../../lib/api-error"
 import type {
   PublishSyncDefinitionsResponse,
   SyncDefinitionAdminItem,
@@ -18,6 +20,7 @@ import {
 } from "../platform/CatalogDiffSections"
 import { ACTION_BTN, FIELD_LABEL, PANEL, TEXT_BTN } from "./chrome"
 import { ModalShell } from "./ModalShell"
+import { ModalToastStack, useModalToasts } from "./ModalToastStack"
 import { MODAL_TALL_HEIGHT } from "./modal-overlay"
 
 type PublishPhase = "idle" | "publishing" | "done"
@@ -79,11 +82,12 @@ export function PublishCatalogModal({
   onClose: () => void
   onPublished?: (result: PublishSyncDefinitionsResponse) => void
 }): JSX.Element {
+  const { toasts, notifyApiError, dismissToast, clearToasts } = useModalToasts()
   const [phase, setPhase] = useState<PublishPhase>("idle")
   const [result, setResult] = useState<PublishSyncDefinitionsResponse | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [compileNotes, setCompileNotes] = useState<string[] | null>(null)
   const [diffBusy, setDiffBusy] = useState(false)
-  const [diffError, setDiffError] = useState<string | null>(null)
+  const [diffFailed, setDiffFailed] = useState(false)
   const [sections, setSections] = useState<CatalogDiffSection[]>([])
   const [changeCount, setChangeCount] = useState(0)
   const [previewNeedsPublish, setPreviewNeedsPublish] = useState(false)
@@ -99,7 +103,7 @@ export function PublishCatalogModal({
     if (phase !== "idle") return
     let cancelled = false
     setDiffBusy(true)
-    setDiffError(null)
+    setDiffFailed(false)
     setOpenEntryKey(null)
     void api.getSyncPublishPreview().then(
       (preview) => {
@@ -113,39 +117,31 @@ export function PublishCatalogModal({
       },
       (e: unknown) => {
         if (cancelled) return
-        setDiffError(e instanceof Error ? e.message : String(e))
+        setDiffFailed(true)
         setSections([])
         setDiffBusy(false)
+        notifyApiError(e)
       },
     ).catch((err: unknown) => { console.error("[mia]", err) })
     return () => {
       cancelled = true
     }
-  }, [phase])
+  }, [phase, notifyApiError])
 
   async function confirmPublish(): Promise<void> {
     setPhase("publishing")
-    setError(null)
+    setCompileNotes(null)
+    clearToasts()
     try {
       const res = await api.publishSyncDefinitions()
       setResult(res)
       setPhase("done")
       onPublished?.(res)
     } catch (e) {
-      const apiError = e as Error & { stderr?: string[] }
-      setError(apiError.message)
-      if (apiError.stderr?.length) {
-        setResult({
-          publishedAt: "",
-          publishedVersion: "",
-          definitionCount: 0,
-          publishedStorage: "sqlite",
-          publishedBundlePath: "",
-          stdout: [],
-          stderr: apiError.stderr,
-        })
-      }
-      setPhase("done")
+      const apiError = asApiError(e)
+      notifyApiError(e)
+      if (apiError.stderr?.length) setCompileNotes(apiError.stderr)
+      setPhase("idle")
     }
   }
 
@@ -157,8 +153,7 @@ export function PublishCatalogModal({
   const title =
     phase === "idle" ? "Publish catalog"
       : phase === "publishing" ? "Publishing…"
-        : error ? "Publish failed"
-          : "Publish complete"
+        : "Publish complete"
 
   const compileSections = publishStatus?.dirtyCompileSections ?? []
   const operationalOnly = Boolean(publishStatus?.operationalCatalogAhead)
@@ -186,8 +181,7 @@ export function PublishCatalogModal({
   const headerIcon =
     phase === "idle" ? <Rocket size={20} className="text-text-muted" />
       : phase === "publishing" ? <Loader2 size={20} className="animate-spin text-text-muted" />
-        : error ? <XCircle size={20} className="text-error" />
-          : <CheckCircle2 size={20} className="text-success" />
+        : <CheckCircle2 size={20} className="text-success" />
 
   const footer =
     phase === "idle" ? (
@@ -202,6 +196,7 @@ export function PublishCatalogModal({
           <button
             type="button"
             className={`${ACTION_BTN} min-w-[7rem]`}
+            disabled={diffBusy}
             onClick={() => void confirmPublish().catch((err: unknown) => { console.error("[mia]", err) })}
           >
             <Rocket size={14} /> Publish
@@ -223,96 +218,101 @@ export function PublishCatalogModal({
       widthClass={PUBLISH_MODAL_PANEL}
       footer={footer}
     >
-      {phase === "idle" && (
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <div className="flex shrink-0 flex-wrap items-start gap-x-8 gap-y-3 border-b border-border-subtle px-6 py-3">
-            <MetaCell label="Tip" value={tipLabel} />
-            <MetaCell label="Published" value={publishedLabel} />
-            <MetaCell label="Changes" value={String(changeCount)} />
-            <MetaCell label="Entities" value={`${unpublished.length} / ${entityCount}`} />
-            <MetaCell label="Tip sections" value={tipSectionsLabel} mono={false} grow />
+      <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+        <ModalToastStack toasts={toasts} onDismiss={dismissToast} />
+
+        {phase === "idle" && (
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <div className="flex shrink-0 flex-wrap items-start gap-x-8 gap-y-3 border-b border-border-subtle px-6 py-3">
+              <MetaCell label="Tip" value={tipLabel} />
+              <MetaCell label="Published" value={publishedLabel} />
+              <MetaCell label="Changes" value={String(changeCount)} />
+              <MetaCell label="Entities" value={`${unpublished.length} / ${entityCount}`} />
+              <MetaCell label="Tip sections" value={tipSectionsLabel} mono={false} grow />
+            </div>
+            {(stampDrift || operationalOnly) && (
+              <div className="shrink-0 space-y-1 border-b border-warning/30 bg-warning/10 px-6 py-2 text-xs leading-relaxed text-warning">
+                {stampDrift && (
+                  <p>
+                    Tip stamp is ahead of publish, but live tip content matches the published
+                    snapshot. Publish reconciles the stamp (v{publishedVersion} → v{tipVersion}).
+                  </p>
+                )}
+                {operationalOnly && (
+                  <p>
+                    Environment tip updates are live at preview/execute — not listed in the diff
+                    below.
+                  </p>
+                )}
+              </div>
+            )}
+
+            {compileNotes && compileNotes.length > 0 && (
+              <div className="shrink-0 border-b border-error/20 bg-error/5 px-6 py-2">
+                <p className="field-label mb-1.5 text-error">Publish blocked</p>
+                <ul className="space-y-1 font-mono text-xs leading-snug text-text-muted">
+                  {compileNotes.map((line) => (
+                    <li key={line}>{line}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {diffBusy ? (
+              <div className="flex flex-1 items-center justify-center gap-2 px-6 py-10 text-sm text-text-muted">
+                <Loader2 size={16} className="animate-spin" />
+                Loading tip vs published diff…
+              </div>
+            ) : diffFailed ? (
+              <div className="flex flex-1 flex-col items-center justify-center gap-2 px-6 py-10 text-center">
+                <XCircle size={20} className="text-text-muted" />
+                <p className="text-sm text-text-muted">Couldn’t load the publish preview.</p>
+              </div>
+            ) : (
+              <CatalogDiffSections
+                sections={sections}
+                openEntryKey={openEntryKey}
+                onToggleEntry={setOpenEntryKey}
+                changesOnly
+                fill
+                emptyMessage={
+                  stampDrift
+                    ? "No live compile delta — Publish only advances the published catalog stamp to the active tip."
+                    : "No compile-relevant tip changes vs the last publish. Publish still recompiles the full bundle."
+                }
+              />
+            )}
           </div>
-          {(stampDrift || operationalOnly) && (
-            <div className="shrink-0 space-y-1 border-b border-warning/30 bg-warning/10 px-6 py-2 text-xs leading-relaxed text-warning">
-              {stampDrift && (
-                <p>
-                  Tip stamp is ahead of publish, but live tip content matches the published
-                  snapshot. Publish reconciles the stamp (v{publishedVersion} → v{tipVersion}).
-                </p>
-              )}
-              {operationalOnly && (
-                <p>
-                  Environment tip updates are live at preview/execute — not listed in the diff
-                  below.
-                </p>
-              )}
-            </div>
-          )}
+        )}
 
-          {diffBusy ? (
-            <div className="flex flex-1 items-center justify-center gap-2 px-6 py-10 text-sm text-text-muted">
-              <Loader2 size={16} className="animate-spin" />
-              Loading tip vs published diff…
-            </div>
-          ) : diffError ? (
-            <p className="px-6 py-6 text-sm text-error">{diffError}</p>
-          ) : (
-            <CatalogDiffSections
-              sections={sections}
-              openEntryKey={openEntryKey}
-              onToggleEntry={setOpenEntryKey}
-              changesOnly
-              fill
-              emptyMessage={
-                stampDrift
-                  ? "No live compile delta — Publish only advances the published catalog stamp to the active tip."
-                  : "No compile-relevant tip changes vs the last publish. Publish still recompiles the full bundle."
-              }
-            />
-          )}
-        </div>
-      )}
+        {phase === "publishing" && (
+          <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 py-10 text-center">
+            <Loader2 size={22} className="animate-spin text-text-muted" />
+            <p className="text-sm text-text-muted">Composing Catalog tip into the sync runtime…</p>
+          </div>
+        )}
 
-      {phase === "publishing" && (
-        <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 py-10 text-center">
-          <Loader2 size={22} className="animate-spin text-text-muted" />
-          <p className="text-sm text-text-muted">Composing Catalog tip into the sync runtime…</p>
-        </div>
-      )}
-
-      {phase === "done" && (
-        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-6 py-4">
-          {error ? (
-            <p className="text-sm leading-relaxed text-error">{error}</p>
-          ) : result ? (
+        {phase === "done" && result && (
+          <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-6 py-4">
             <p className="text-sm leading-relaxed text-text-muted">
               Published sync bundle ·{" "}
               <span className="font-semibold text-text">{result.definitionCount}</span>{" "}
               definition{result.definitionCount === 1 ? "" : "s"}.
             </p>
-          ) : null}
 
-          {result && result.stderr.length > 0 && (
-            <div className={`${PANEL} max-h-40 overflow-y-auto px-3 py-2`}>
-              <p className="field-label mb-1.5">
-                {result.stderr.some((line) => line.startsWith("Refusing to publish"))
-                  ? "Errors"
-                  : "Warnings"}
-              </p>
-              <ul className="space-y-1 font-mono text-sm leading-snug text-text-muted">
-                {result.stderr.map((line) => (
-                  <li
-                    key={line}
-                    className={line.startsWith("Refusing to publish") ? "text-error" : undefined}
-                  >
-                    {line}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </div>
-      )}
+            {result.stderr.length > 0 && (
+              <div className={`${PANEL} max-h-40 overflow-y-auto px-3 py-2`}>
+                <p className="field-label mb-1.5">Warnings</p>
+                <ul className="space-y-1 font-mono text-sm leading-snug text-text-muted">
+                  {result.stderr.map((line) => (
+                    <li key={line}>{line}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </ModalShell>
   )
 }

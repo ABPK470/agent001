@@ -150,6 +150,27 @@ describe("deploy/policies/defaults.json", () => {
     expect(devDml.error?.message).toMatch(/hosted_default_deny/)
   })
 
+  it("allows sync_publish and sync_preview by default", async () => {
+    const ev = buildHostedEvaluator()
+    expect(loadPolicyDefaults(REPO_ROOT).rules.map((r) => r.name)).toContain("hosted_allow_sync_publish")
+
+    const publish = await evaluate(
+      ev,
+      makeStep("sync_publish", { action: "publish_definitions" }),
+      hostedCtx({ role: "admin" }),
+    )
+    expect(publish.error).toBeUndefined()
+    expect(publish.approval).toBeNull()
+
+    const preview = await evaluate(
+      ev,
+      makeStep("sync_preview", { source: "dev", target: "dev" }),
+      hostedCtx(),
+    )
+    expect(preview.error).toBeUndefined()
+    expect(preview.approval).toBeNull()
+  })
+
   it("allows sync_execute on DEV, denies UAT, requires approval on PROD", async () => {
     const ev = buildHostedEvaluator()
     const preview = await evaluate(

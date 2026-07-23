@@ -166,6 +166,16 @@
       }
     },
     {
+      "name": "hosted_allow_sync_publish",
+      "effect": "allow",
+      "condition": "selectors",
+      "parameters": {
+        "priority": 10,
+        "reason": "catalog publish is an admin Entity Registry action and allowed by default in hosted mode",
+        "selectors": { "tool": "sync_publish" }
+      }
+    },
+    {
       "name": "hosted_allow_sync_execute_dev",
       "effect": "allow",
       "condition": "selectors",

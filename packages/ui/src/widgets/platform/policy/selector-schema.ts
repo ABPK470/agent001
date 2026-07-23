@@ -111,7 +111,7 @@ export const SELECTOR_KEYS: ReadonlyArray<SelectorKeyMeta> = Object.freeze([
     label:       "Tool",
     description: "Tool name. Supports a single trailing wildcard, e.g. \"mssql_*\" matches every mssql_* tool.",
     type:        "tool",
-    examples:    ["read_file", "run_command", "mssql_*", "sync_execute", "fetch_url"],
+    examples:    ["read_file", "run_command", "mssql_*", "sync_publish", "sync_execute", "fetch_url"],
     placeholder: "tool name or prefix*",
   },
   {

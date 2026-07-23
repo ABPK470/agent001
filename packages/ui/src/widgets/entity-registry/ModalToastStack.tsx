@@ -5,6 +5,7 @@ import {
   type Toast,
   type ToastKind,
 } from "../../components/ToastStack"
+import { formatApiError } from "../../lib/api-error"
 
 const AUTO_DISMISS_MS = 15_000
 
@@ -14,6 +15,8 @@ export function useModalToasts(autoDismissMs = AUTO_DISMISS_MS): {
   toasts: ModalToast[]
   /** Default kind is `err` — pass `ok` / `info` for non-error feedback. */
   pushToast: (message: string, kind?: ToastKind) => void
+  /** Format any thrown/API failure through the shared copy path, then toast as err. */
+  notifyApiError: (error: unknown) => void
   dismissToast: (id: string) => void
   clearToasts: () => void
 } {
@@ -28,9 +31,15 @@ export function useModalToasts(autoDismissMs = AUTO_DISMISS_MS): {
     [push],
   )
 
+  const notifyApiError = useCallback(
+    (error: unknown) => push(formatApiError(error), "err"),
+    [push],
+  )
+
   return {
     toasts,
     pushToast,
+    notifyApiError,
     dismissToast,
     clearToasts,
   }

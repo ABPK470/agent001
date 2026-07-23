@@ -430,6 +430,8 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
         })
         return result
       } catch (error) {
+        const policyBody = replySyncPolicyError(reply, error)
+        if (policyBody) return policyBody
         reply.code(400)
         return {
           error: error instanceof Error ? error.message : String(error),
