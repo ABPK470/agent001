@@ -386,7 +386,7 @@ export const TRACE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     instanceKey: (p) => `step:${str(p.stepName, "step")}`,
     summary: (p) => {
       const status = str(p.status, "done")
-      const ok = status === "pass" || status === "success"
+      const ok = status === "completed" || status === "pass" || status === "success"
       return ok ? "done" : truncate(str(p.error, status), 48)
     },
   },

@@ -9,6 +9,7 @@
 import type { TraceEntry } from "@mia/shared-types"
 import { buildOutline, TRACE_VIEW_SPEC } from "./build-outline"
 import { atomsFromTrace } from "./normalize"
+import { isPlannerStepSuccessStatus } from "./planner-step-status"
 import type { OutlineNode } from "./types"
 
 type LlmRequest = Extract<TraceEntry, { kind: "llm-request" }>
@@ -492,7 +493,7 @@ function phaseFromEntry(entry: TraceEntry, index: number): PhaseUpdate | null {
         ],
       }
     case "planner-step-end": {
-      const ok = entry.status === "pass" || entry.status === "success"
+      const ok = isPlannerStepSuccessStatus(entry.status)
       const details: TracePhaseDetail[] = [
         detailEvent(
           `step-end-${index}`,

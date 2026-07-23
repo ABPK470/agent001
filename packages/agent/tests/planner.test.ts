@@ -4364,6 +4364,125 @@ describe("Pipeline: executePipeline", () => {
     expect(calls).toEqual(["first", "second"])
   })
 
+  it("starts the next ready step when a parallel slot frees (not after the whole wave)", async () => {
+    type Gate = { resolve: () => void; promise: Promise<void> }
+    function makeGate(): Gate {
+      let resolve!: () => void
+      const promise = new Promise<void>((r) => {
+        resolve = r
+      })
+      return { resolve, promise }
+    }
+
+    const slow = makeGate()
+    const started: string[] = []
+    let slowFinished = false
+    let writeStartedBeforeSlowFinished = false
+
+    const plan = makePlan({
+      steps: [
+        { name: "det-a", stepType: "deterministic_tool", tool: "echo", args: { text: "a" } },
+        { name: "det-b", stepType: "deterministic_tool", tool: "echo", args: { text: "b" } },
+        { name: "det-c", stepType: "deterministic_tool", tool: "echo", args: { text: "c" } },
+        makeSubagentStep("slow-analyze", {
+          name: "slow-analyze",
+          canRunParallel: true,
+          acceptanceCriteria: [],
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["write_file"],
+            requiredSourceArtifacts: [],
+            targetArtifacts: ["tmp/analyze.md"],
+            effectClass: "filesystem_write",
+            verificationMode: "none",
+            artifactRelations: []
+          }
+        }),
+        makeSubagentStep("write-answer", {
+          name: "write-answer",
+          canRunParallel: true,
+          acceptanceCriteria: [],
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["write_file"],
+            requiredSourceArtifacts: [],
+            targetArtifacts: ["tmp/answer.md"],
+            effectClass: "filesystem_write",
+            verificationMode: "none",
+            artifactRelations: []
+          }
+        })
+      ],
+      edges: []
+    })
+
+    const echo: Tool = {
+      name: "echo",
+      description: "Echo",
+      parameters: { type: "object", properties: { text: { type: "string" } } },
+      async execute(args) {
+        started.push(`echo:${String(args.text)}`)
+        return `done: ${String(args.text)}`
+      }
+    }
+
+    const resultPromise = executePipeline(
+      plan,
+      [echo],
+      async (step) => {
+        started.push(step.name)
+        if (step.name === "slow-analyze") {
+          await slow.promise
+          slowFinished = true
+        } else if (step.name === "write-answer") {
+          writeStartedBeforeSlowFinished = !slowFinished
+        }
+        const path = step.name === "slow-analyze" ? "tmp/analyze.md" : "tmp/answer.md"
+        return {
+          output: `${step.name} done`,
+          toolCalls: [
+            {
+              name: "write_file",
+              args: { path, content: "ok" },
+              result: `Successfully wrote to ${path}`,
+              isError: false
+            },
+            {
+              name: "read_file",
+              args: { path },
+              result: "ok",
+              isError: false
+            }
+          ]
+        }
+      },
+      { maxParallel: 4 }
+    )
+
+    // First wave takes 4 slots; fast det tools free a slot for write-answer
+    // while slow-analyze is still gated.
+    await vi.waitFor(() => {
+      expect(started).toEqual(
+        expect.arrayContaining(["echo:a", "echo:b", "echo:c", "slow-analyze"])
+      )
+    })
+    await vi.waitFor(() => {
+      expect(started).toContain("write-answer")
+    })
+    expect(writeStartedBeforeSlowFinished).toBe(true)
+    expect(slowFinished).toBe(false)
+
+    slow.resolve()
+    const result = await resultPromise
+    expect(result.status).toBe("completed")
+    expect(started).toContain("write-answer")
+    expect(slowFinished).toBe(true)
+  })
+
   it("recovers write_file EISDIR as directory scaffold", async () => {
     const commands: string[] = []
     const writeFileTool: Tool = {

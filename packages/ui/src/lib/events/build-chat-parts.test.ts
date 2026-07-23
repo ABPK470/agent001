@@ -236,6 +236,38 @@ describe("buildResponseParts — TermChat projection", () => {
     }
   })
 
+  it("treats pipeline completed status as success (not needs work)", () => {
+    const parts = buildResponseParts(
+      [
+        {
+          kind: "planner-step-start",
+          stepName: "catalog_discovery",
+          stepType: "deterministic_tool",
+        },
+        {
+          kind: "planner-step-end",
+          stepName: "catalog_discovery",
+          status: "completed",
+          durationMs: 42,
+        },
+      ],
+      "running",
+      "",
+      null,
+      null,
+      null,
+      "run-1",
+    )
+
+    const step = parts.find((p) => p.kind === "step-block")
+    expect(step?.kind).toBe("step-block")
+    if (step?.kind === "step-block") {
+      expect(step.status).toBe("done")
+      expect(step.detail).not.toBe("needs work")
+      expect(step.detail).toMatch(/42|ms|s/)
+    }
+  })
+
   it("keeps Check first line to the step name; issues stay in collapsed body", () => {
     const parts = buildResponseParts(
       [

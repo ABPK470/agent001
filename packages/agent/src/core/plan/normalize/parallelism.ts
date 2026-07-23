@@ -4,7 +4,7 @@
  * First principles (hard rules):
  * 1. Real artifact handoffs serialize. If B lists A's target in
  *    requiredSourceArtifacts, A→B stays. Parent/downstream never starts
- *    until upstream completes (pipeline inDegree + Promise.allSettled).
+ *    until upstream completes (pipeline inDegree + slot-based scheduling).
  * 2. Blueprint gates serialize. Anything depending on BLUEPRINT.md waits.
  * 3. Shared write targets are rejected at plan validate (`shared_target_artifact`);
  *    children are also write-scoped to their own targetArtifacts.
@@ -14,6 +14,8 @@
  *    canRunParallel:false even when targets are distinct).
  *
  * Never prune an edge when a real handoff or shared write target is declared.
+ * The executor fills free slots as soon as any in-flight peer settles — it does
+ * not wait for an entire wave before starting the next ready step.
  */
 
 import { READ_ONLY_TOOL_NAMES } from "../../../domain/types/agent-constants.js"

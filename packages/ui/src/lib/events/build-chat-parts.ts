@@ -13,6 +13,7 @@ import {
 import type { TraceEntry } from "@mia/shared-types"
 import { RunStatus } from "../../enums"
 import { formatMs } from "../util"
+import { isPlannerStepSuccessStatus, plannerStepEndDetail } from "./planner-step-status"
 import type { ViewSpec } from "./types"
 
 const POLISHED_FAILURE_MARKER = "\u2063pfm:\u2063"
@@ -849,14 +850,16 @@ export function buildResponseParts(
       }
       case "planner-step-end": {
         const activityId = runningSteps.get(entry.stepName) ?? `step-${entry.stepName}-${index}`
-        const ok = entry.status === "pass" || entry.status === "success"
-        const detail = ok
-          ? entry.durationMs
-            ? formatMs(entry.durationMs)
-            : undefined
-          : entry.error || "needs work"
+        const ok = isPlannerStepSuccessStatus(entry.status)
+        const detail = plannerStepEndDetail({
+          status: entry.status,
+          error: entry.error,
+          durationMs: entry.durationMs,
+          formatMs,
+        })
         // Process gaps (verify fail → repair) are normal agent work — settle
         // as done chrome with the reason in detail, never alarm-red "error".
+        // Pipeline success is "completed"; older traces may use pass/success.
         parts = parts.map((part) => {
           if (part.kind !== "step-block" || part.id !== activityId) return part
           return {
