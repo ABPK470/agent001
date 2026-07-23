@@ -294,11 +294,10 @@ second model-callable “parallel delegate” dialect.
 
 Human discipline does not scale. **`npm run lint:arch`** encodes these edges.
 
-**Runners are general** (uniform rule ids, no product `if` branches).  
-**Registries hold instance data** (seams, dialects, policy tokens, debt allowlists).
-
-Adding a capability, dialect, brand token, or catalog = add a **row** in
-`scripts/lint-arch/registry/` — never a new special-case in `rules/`.
+**Owned identities.** Any `*Id` painted across multiple packages must be
+registered under exactly one owning seam (`registry/identities.mjs`). An
+unregistered cross-package identity is the shotgun-surgery failure class —
+lint fails it. Erased capabilities forbid resurrecting their identity names.
 
 Allowlists are explicit, bounded, and must shrink. Unused entries fail.
 

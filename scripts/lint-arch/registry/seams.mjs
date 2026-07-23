@@ -66,6 +66,7 @@ export const SEAMS = [
       { id: "selectedAgentId", packages: ["ui"] },
       { id: "AgentEditor", packages: ["ui"] },
       { id: "AgentDefinition", packages: ["ui"] },
+      { id: "agentId", packages: ["agent", "ui", "server", "sync"] },
     ],
   },
   {

@@ -50,6 +50,7 @@ import {
   lintErasedSeams,
   lintRegisteredApiSurfaces,
 } from "./lint-arch/rules/seams.mjs"
+import { lintOwnedIdentities } from "./lint-arch/rules/identities.mjs"
 import { lintForbiddenTrees, lintTopLevel } from "./lint-arch/rules/trees.mjs"
 
 const ROOT = resolve(fileURLToPath(import.meta.url), "../..")
@@ -103,6 +104,10 @@ const RUNNERS = new Map([
     },
   ],
   [
+    "owned-identities",
+    () => lintOwnedIdentities(PACKAGES, DEBT.unownedIdentityAllowlist ?? []),
+  ],
+  [
     "dialects",
     () =>
       lintDialects(ROOT, {
@@ -122,6 +127,7 @@ const RUNNERS = new Map([
       lintStaleDebtList(DEBT.trustAllowlist, "stale-debt", "trust")
       lintStaleDebtList(DEBT.enumForkAllowlist, "stale-debt", "enum-fork")
       lintStaleDebtList(DEBT.jargonAllowlist, "stale-debt", "jargon")
+      lintStaleDebtList(DEBT.unownedIdentityAllowlist ?? [], "stale-debt", "unowned-identity")
     },
   ],
 ])

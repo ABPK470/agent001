@@ -37,6 +37,7 @@ export const PACKAGE_EXTRA_RULES = {
 /** Global rules after all packages. */
 export const GLOBAL_RULES = [
   "seams",
+  "owned-identities",
   "dialects",
   "catalog-coverage",
   "resolved-inputs",
@@ -296,6 +297,8 @@ export function createLeverageDebt(root) {
       },
     ],
     brandTokens: [...BRAND_TOKENS],
+    /** @type {{ name: string, note: string, used?: boolean }[]} */
+    unownedIdentityAllowlist: [],
     /** @type {{ file: string, note: string, used?: boolean }[]} */
     presentationAllowlist: [
       {
