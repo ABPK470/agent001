@@ -4751,6 +4751,23 @@ textarea.input {
   color: var(--text-secondary);
 }
 
+/* Shell mode toggle — quiet kbd next to chat/workspace icons */
+.shell-mode-kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.1rem 0.3rem;
+  border-radius: 0.25rem;
+  border: 1px solid color-mix(in srgb, var(--border, currentColor) 80%, transparent);
+  background: color-mix(in srgb, var(--text, currentColor) 4%, transparent);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.625rem;
+  font-weight: 600;
+  line-height: 1.15;
+  color: var(--text-faint, var(--text-muted));
+  pointer-events: none;
+}
+
 /* Shared command row — palette */
 .composer-cmd-row {
   display: grid;

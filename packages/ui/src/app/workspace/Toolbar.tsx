@@ -10,6 +10,7 @@ import { fullIndexFromRemainingSlot } from "../../lib/view-tab-dnd"
 import { SessionMenu } from "../SessionMenu"
 import { CHAT_BRAND_LOGO_SIZE } from "../brand"
 import type { AppShellMode } from "../types"
+import { shellModeToggleHint } from "../types"
 import { useStore } from "../../state/store"
 import { useLayoutStore } from "../../state/layout-store"
 import { Logo } from "../../components/Logo"
@@ -241,11 +242,14 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
         <button
           type="button"
           onClick={() => onModeChange("chat")}
-          title="Chat"
-          aria-label="Open chat"
-          className={ICON_BTN}
+          title={`Chat (${shellModeToggleHint()})`}
+          aria-label={`Open chat (${shellModeToggleHint()})`}
+          className={`${ICON_BTN} !w-auto gap-1.5 px-2.5`}
         >
           <MessageSquare size={15} />
+          <kbd className="shell-mode-kbd" aria-hidden>
+            {shellModeToggleHint()}
+          </kbd>
         </button>
         {me && <SessionMenu me={me} onSignOut={onSignOut} />}
       </div>

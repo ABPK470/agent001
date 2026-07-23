@@ -9,10 +9,11 @@
  * 3. Shared write targets are rejected at plan validate (`shared_target_artifact`);
  *    children are also write-scoped to their own targetArtifacts.
  * 4. Thematic dependsOn chains (same topic, no file handoff) are noise —
- *    those edges are pruned so independent investigation can run together.
+ *    those edges are pruned so independent peers can run together — including
+ *    codegen siblings after a blueprint gate (LLM often chains A→B→C→D with
+ *    canRunParallel:false even when targets are distinct).
  *
- * Never prune an edge solely because both ends are "readonly" if a real
- * handoff is declared — that would let a consumer race its producer.
+ * Never prune an edge when a real handoff or shared write target is declared.
  */
 
 import { READ_ONLY_TOOL_NAMES } from "../../../domain/types/agent-constants.js"
@@ -127,7 +128,11 @@ function shareWriteTarget(from: SubagentTaskStep, to: SubagentTaskStep): boolean
  * - blueprint → *
  * - real requiredSourceArtifacts handoffs
  * - shared targetArtifact ownership (must not rewrite the same file concurrently)
- * - any edge that is not between investigation / canRunParallel peers
+ *
+ * Everything else without a real handoff is noise — including codegen
+ * A→B thematic chains with canRunParallel:false. Those kept the DAG at
+ * width-1 despite executionMode=parallel (one subagent, then Check, then
+ * the next alone).
  */
 export function pruneSpuriousSerialEdges(plan: Plan): number {
   const byName = new Map(
@@ -164,16 +169,8 @@ export function pruneSpuriousSerialEdges(plan: Plan): number {
       continue
     }
 
-    // (4) Thematic chain between investigation peers — drop.
-    const bothInvestigation =
-      isInvestigationParallelCandidate(from) && isInvestigationParallelCandidate(to)
-    if (bothInvestigation || (from.canRunParallel && to.canRunParallel)) {
-      pruned++
-      continue
-    }
-
-    // (5) Anything else (codegen chains without declared sources, etc.) — keep.
-    kept.push(edge)
+    // (4) Thematic / undeclared chain — drop so peers can fan out.
+    pruned++
   }
 
   if (pruned === 0) return 0

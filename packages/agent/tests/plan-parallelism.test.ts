@@ -252,4 +252,65 @@ describe("preparePlanParallelism", () => {
       { from: "generate_blueprint", to: "build_b" }
     ])
   })
+
+  it("prunes thematic codegen chains even when canRunParallel is false", () => {
+    const plan: Plan = {
+      reason: "four writers",
+      confidence: 0.9,
+      requiresSynthesis: false,
+      steps: [
+        makeStep("generate_blueprint", {
+          targets: ["tmp/BLUEPRINT.md"],
+          effectClass: "filesystem_write",
+        }),
+        makeStep("layer_a", {
+          targets: ["tmp/a.js"],
+          sources: ["tmp/BLUEPRINT.md"],
+          dependsOn: ["generate_blueprint"],
+          effectClass: "filesystem_write",
+        }),
+        makeStep("layer_b", {
+          targets: ["tmp/b.js"],
+          sources: ["tmp/BLUEPRINT.md"],
+          dependsOn: ["layer_a"],
+          effectClass: "filesystem_write",
+        }),
+        makeStep("layer_c", {
+          targets: ["tmp/c.js"],
+          sources: ["tmp/BLUEPRINT.md"],
+          dependsOn: ["layer_b"],
+          effectClass: "filesystem_write",
+        }),
+        makeStep("layer_d", {
+          targets: ["tmp/d.js"],
+          sources: ["tmp/BLUEPRINT.md"],
+          dependsOn: ["layer_c"],
+          effectClass: "filesystem_write",
+        }),
+      ],
+      edges: [
+        { from: "generate_blueprint", to: "layer_a" },
+        { from: "generate_blueprint", to: "layer_b" },
+        { from: "generate_blueprint", to: "layer_c" },
+        { from: "generate_blueprint", to: "layer_d" },
+        { from: "layer_a", to: "layer_b" },
+        { from: "layer_b", to: "layer_c" },
+        { from: "layer_c", to: "layer_d" },
+      ],
+    }
+
+    preparePlanParallelism(plan)
+    expect(plan.edges).toEqual([
+      { from: "generate_blueprint", to: "layer_a" },
+      { from: "generate_blueprint", to: "layer_b" },
+      { from: "generate_blueprint", to: "layer_c" },
+      { from: "generate_blueprint", to: "layer_d" },
+    ])
+    const graph = buildGraph(plan)
+    expect(graph.inDegree.get("generate_blueprint")).toBe(0)
+    expect(graph.inDegree.get("layer_a")).toBe(1)
+    expect(graph.inDegree.get("layer_b")).toBe(1)
+    expect(graph.inDegree.get("layer_c")).toBe(1)
+    expect(graph.inDegree.get("layer_d")).toBe(1)
+  })
 })

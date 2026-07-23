@@ -21,7 +21,7 @@ import { useMe } from "../hooks/useMe"
 import { usePlatformHealth } from "../hooks/usePlatformHealth"
 import { useServerReachable } from "../hooks/useServerReachable"
 import type { AppShellMode } from "./types"
-import { resolveChatVariant } from "./types"
+import { resolveChatVariant, isShellModeToggleEvent } from "./types"
 import { useStore } from "../state/store"
 import { useLayoutStore } from "../state/layout-store"
 import type { AuditEntry, LogEntry, Step, WidgetType } from "../types"
@@ -67,6 +67,8 @@ export function App() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [usageOpen, setUsageOpen] = useState(false)
   const [shellMode, setShellMode] = useState<AppShellMode>("chat")
+  const shellModeRef = useRef<AppShellMode>(shellMode)
+  shellModeRef.current = shellMode
   const [shellVisible, setShellVisible] = useState(true)
   const shellTimerRef = useRef<number | null>(null)
   // Becomes true when the login overlay starts its final fade so the home
@@ -163,6 +165,18 @@ export function App() {
       return current
     })
   }, [])
+
+  // ⌘\ / Ctrl+\ — toggle chat ↔ workspace from either shell.
+  useEffect(() => {
+    if (phase !== AppPhase.Shell) return
+    function onKeyDown(event: KeyboardEvent) {
+      if (!isShellModeToggleEvent(event)) return
+      event.preventDefault()
+      transitionShellMode(shellModeRef.current === "chat" ? "workspace" : "chat")
+    }
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+  }, [phase, transitionShellMode])
 
   // Reset reveal flag each time we return to login so the next login
   // starts with the chat content hidden. Also clear the shared ASCII
