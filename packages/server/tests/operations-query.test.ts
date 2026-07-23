@@ -70,7 +70,6 @@ describe("listOperations sync bucketing", () => {
       completed_at: null,
       goal: "run sync",
       step_count: 1,
-      agent_id: "copilot",
       error: null
     })
 
@@ -503,7 +502,6 @@ describe("listOperations sync bucketing", () => {
       completed_at: "2026-05-27T14:56:38.000Z",
       goal: "sync contract",
       step_count: 1,
-      agent_id: "copilot",
       error: null
     })
     getSyncRun.mockReturnValue(undefined)
@@ -668,7 +666,6 @@ describe("listOperations sync bucketing", () => {
       completed_at: "2026-07-13T09:00:01.000Z",
       goal: "test",
       step_count: 0,
-      agent_id: "copilot",
       error: null,
     })
     getSyncRun.mockReturnValue({

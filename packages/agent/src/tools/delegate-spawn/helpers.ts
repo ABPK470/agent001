@@ -1,14 +1,6 @@
 import type { VerificationAttempt } from "../../core/plan.js"
 import { uniqueStrings } from "../delegate-paths.js"
 
-export interface ChildSpec {
-  goal: string
-  agentId?: string
-  instructions?: string
-  tools?: string[]
-  maxIterations?: number
-}
-
 export function buildVerificationAttempts(
   toolCalls: readonly { name: string; args: Record<string, unknown>; result: string; isError: boolean }[]
 ): VerificationAttempt[] {

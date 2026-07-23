@@ -21,7 +21,7 @@ Lives here:
 - `LogEntry`, `AuditEntry`, `Notification`
 - `WorkspaceDiff`, `WorkspaceDiffApplyResult`
 - `SyncRecipe`, `SyncPlan`, `SyncEnvironment`, `SyncExecuteProgress`
-- `AgentDefinition`, `ToolInfo`, `PolicyRule`
+- `ToolInfo`, `PolicyRule`
 - `RollbackResult`, `RollbackPreview`
 - Layout and dashboard view-config shapes (`Widget`, `WidgetType`,
   `ViewConfig`, `LayoutItem`, `SavedLayout`)

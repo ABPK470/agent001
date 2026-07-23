@@ -9,7 +9,6 @@ import type { ReactNode } from "react"
 const KEY_ORDER: string[] = [
   "runId",
   "threadId",
-  "agentId",
   "user",
   "displayName",
   "status",
@@ -31,7 +30,6 @@ const KEY_ORDER: string[] = [
 const LABEL_OVERRIDES: Record<string, string> = {
   runId: "Run",
   threadId: "Thread",
-  agentId: "Agent",
   displayName: "Display name",
   promptTokens: "Prompt tokens",
   completionTokens: "Completion tokens",

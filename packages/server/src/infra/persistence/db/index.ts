@@ -112,17 +112,11 @@ export {
 } from "./config.js"
 
 export {
-  deleteAgentDefinition,
-  getAgentDefinition,
   getLlmConfig,
-  listAgentDefinitions,
-  resolveAgentSystemPrompt,
-  saveAgentDefinition,
   saveLlmConfig,
-  type DbAgentDefinition,
   type DbLlmConfig,
   type LlmProvider
-} from "./agents.js"
+} from "./llm-config.js"
 
 export {
   getNotification,

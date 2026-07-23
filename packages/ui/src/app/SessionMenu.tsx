@@ -6,14 +6,12 @@ import {
   Activity,
   ArrowRightLeft,
   BookOpen,
-  Brain,
   LogOut,
   Scale,
   Shield,
 } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { AboutModal } from "../widgets/platform/AboutModal"
-import { AgentEditor } from "../widgets/platform/AgentEditor"
 import { AuditModal } from "../widgets/platform/AuditModal"
 import { UsageModal } from "../widgets/platform/UsageModal"
 import type { Me } from "../hooks/useMe"
@@ -45,7 +43,6 @@ function menuItemClass(destructive = false): string {
 
 export function SessionMenu({ me, onSignOut, chromeVariant = "default" }: Props) {
   const [open, setOpen] = useState(false)
-  const [agentOpen, setAgentOpen] = useState(false)
   const setPolicyEditorOpen = useStore((s) => s.setPolicyEditorOpen)
   const [usageOpen, setUsageOpen] = useState(false)
   const [auditOpen, setAuditOpen] = useState(false)
@@ -149,18 +146,6 @@ export function SessionMenu({ me, onSignOut, chromeVariant = "default" }: Props)
                     >
                       <ArrowRightLeft size={15} className="shrink-0 text-text-muted" />
                       Bridge
-                    </button>
-                    <button
-                      type="button"
-                      role="menuitem"
-                      className={menuItemClass()}
-                      onClick={() => {
-                        setAgentOpen(true)
-                        close()
-                      }}
-                    >
-                      <Brain size={15} className="shrink-0 text-text-muted" />
-                      Agents
                     </button>
                     <button
                       type="button"
@@ -280,7 +265,6 @@ export function SessionMenu({ me, onSignOut, chromeVariant = "default" }: Props)
         )}
       </div>
 
-      {agentOpen && <AgentEditor onClose={() => setAgentOpen(false)} />}
       {usageOpen && <UsageModal onClose={() => setUsageOpen(false)} />}
       {auditOpen && <AuditModal onClose={() => setAuditOpen(false)} />}
       {connectorsOpen && <ConnectorsModal onClose={() => setConnectorsOpen(false)} />}

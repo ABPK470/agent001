@@ -14,7 +14,7 @@ import type { Tool } from "../../types.js"
 import { createBudgetState, maybeExtendBudget } from "../circuit-breaker.js"
 import type { DelegateFn } from "../pipeline/index.js"
 import { executePipeline } from "../pipeline/index.js"
-import type { PipelineResult, RepairPlan, VerifierDecision } from "../types.js"
+import type { ExecutionEnvelope, PipelineResult, RepairPlan, VerifierDecision } from "../types.js"
 import type { PlannerDecision } from "../types.js"
 import { buildIssueIdentity, buildRepairPlan } from "../verification-model/index.js"
 import { verify } from "../verifier/index.js"
@@ -28,6 +28,24 @@ import { runPlannerSetup } from "./setup.js"
 import { buildPipelineCallbacks, emitRetryTraces, emitVerificationTraces } from "./traces.js"
 import type { PlannerContext, PlannerResult } from "./types.js"
 
+/**
+ * Widen a step's envelope tool allowlist to every tool the parent has
+ * available before delegating. Used for `parent_guided` mode: economics
+ * declined parallel fanout, but spawning a child per subagent step is still
+ * cheaper than folding the work into the parent's own loop — as long as the
+ * child isn't blocked by an over-tight per-step allowlist.
+ */
+function withFullToolAccess(delegateFn: DelegateFn, tools: readonly Tool[]): DelegateFn {
+  const allToolNames = tools.map((t) => t.name)
+  return (step, envelope) => {
+    const widened: ExecutionEnvelope = {
+      ...envelope,
+      allowedTools: [...new Set([...envelope.allowedTools, ...allToolNames])]
+    }
+    return delegateFn(step, widened)
+  }
+}
+
 export async function executePlannerPath(
   goal: string,
   ctx: PlannerContext,
@@ -40,7 +58,15 @@ export async function executePlannerPath(
 
   const setupOutcome = await runPlannerSetup(goal, ctx, options.decision)
   if (!setupOutcome.ready) return setupOutcome.result
-  const { plan, runtimeModel, decision, banditTrajectory } = setupOutcome.context
+  const { plan, runtimeModel, decision, banditTrajectory, executionMode } = setupOutcome.context
+
+  // Tier 1 execution mode from the delegation gate — parallel fanout when
+  // economics approve it, otherwise one child at a time. `parent_guided`
+  // additionally widens each step's tool allowlist to the full parent tool
+  // set so spawning a child adds less friction than a tight per-step scope.
+  const maxParallel = executionMode === "parallel_children" ? 4 : 1
+  const effectiveDelegateFn =
+    executionMode === "parent_guided" ? withFullToolAccess(delegateFn, ctx.tools) : delegateFn
 
   let pipelineResult: PipelineResult | undefined
   let verifierDecision: VerifierDecision | undefined
@@ -67,8 +93,8 @@ export async function executePlannerPath(
     })
 
     const callbacks = buildPipelineCallbacks(ctx, attempt)
-    pipelineResult = await executePipeline(plan, ctx.tools as Tool[], delegateFn, {
-      maxParallel: 4,
+    pipelineResult = await executePipeline(plan, ctx.tools as Tool[], effectiveDelegateFn, {
+      maxParallel,
       workspaceRoot: ctx.workspaceRoot,
       priorResults: retryOpts.priorResults,
       repairPlan: retryOpts.repairPlan,

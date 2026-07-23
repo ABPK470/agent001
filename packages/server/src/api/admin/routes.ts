@@ -74,7 +74,6 @@ function mapAuditRow(row: db.DbAuditWithRun) {
           status: row.run_status,
           upn: row.run_upn,
           displayName: row.run_display_name,
-          agentId: row.run_agent_id,
         }
       : null,
   }

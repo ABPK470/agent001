@@ -340,7 +340,6 @@ export function UsageModal({ onClose }: { onClose: () => void }) {
                   {
                     runId: row.runId,
                     threadId: row.threadId,
-                    agentId: row.agentId,
                     displayName: row.displayName,
                     status: row.status,
                     model: row.model,

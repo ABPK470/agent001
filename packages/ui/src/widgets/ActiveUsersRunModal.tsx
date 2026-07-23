@@ -156,7 +156,6 @@ export function ActiveUsersRunModal({
                 <DetailField label="Model" value={model} mono />
                 {run?.upn != null && <DetailField label="Owner UPN" value={run.upn} mono />}
                 {run?.displayName != null && <DetailField label="Owner" value={run.displayName} />}
-                {run?.agentId != null && <DetailField label="Agent" value={run.agentId} mono />}
                 {run?.threadId != null && <DetailField label="Thread" value={run.threadId} mono span={2} />}
               </DetailGrid>
             </DetailSection>

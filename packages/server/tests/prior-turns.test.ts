@@ -74,8 +74,8 @@ function insertRun(r: InsertRun): void {
   const createdAt = completedAt ?? new Date(Date.now() + (r.completedMinutesAgo ?? 0) * 60_000).toISOString()
   db.prepare(
     `
-    INSERT INTO runs (id, goal, status, answer, step_count, error, parent_run_id, agent_id, created_at, completed_at, thread_id, upn, display_name)
-    VALUES (@id, @goal, @status, @answer, 1, NULL, @parent_run_id, NULL, @created_at, @completed_at, @thread_id, @upn, @display_name)
+    INSERT INTO runs (id, goal, status, answer, step_count, error, parent_run_id, created_at, completed_at, thread_id, upn, display_name)
+    VALUES (@id, @goal, @status, @answer, 1, NULL, @parent_run_id, @created_at, @completed_at, @thread_id, @upn, @display_name)
   `
   ).run({
     display_name: upn ?? "anon",

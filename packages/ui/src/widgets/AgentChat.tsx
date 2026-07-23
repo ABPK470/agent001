@@ -3,10 +3,9 @@
  *
  * The primary interaction widget: type a goal, agent executes, see the answer.
  * Supports voice input via Web Speech API (any language).
- * Includes agent picker to select which configured agent to use.
  */
 
-import { AlertCircle, Brain, CheckCircle2, ChevronDown, ChevronRight, Clock, FolderOpen, Loader2, MessageSquare, Mic, MicOff, Paperclip, Send, ShieldAlert, Square, User, X, XCircle } from "lucide-react"
+import { AlertCircle, CheckCircle2, ChevronDown, ChevronRight, Clock, FolderOpen, Loader2, MessageSquare, Mic, MicOff, Paperclip, Send, ShieldAlert, Square, User, X, XCircle } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { api } from "../client/index"
 import { AskUserPrompt } from "../components/AskUserPrompt"
@@ -26,7 +25,7 @@ import { useSlashCommandInput } from "./chat/useSlashCommandInput"
 import { ChatComposerShell } from "./chat/ChatComposerShell"
 import { useCommandConsole } from "./chat/useCommandConsole"
 import { useStore } from "../state/store"
-import type { AgentDefinition, TraceEntry, WorkspaceDiff } from "../types"
+import type { TraceEntry, WorkspaceDiff } from "../types"
 import { formatMs } from "../lib/util"
 import {
   formatFailureAnswerBody,
@@ -206,21 +205,16 @@ function WorkspaceChangesCard({
 export function AgentChat() {
   const [sending, setSending] = useState(false)
   const [listening, setListening] = useState(false)
-  const [agents, setAgents] = useState<AgentDefinition[]>([])
-  const [pickerOpen, setPickerOpen] = useState(false)
   const [attachments, setAttachments] = useState<{ id: string; name: string; sizeBytes: number }[]>([])
   const cmdConsole = useCommandConsole()
   const runs = useStore((s) => s.runs)
   const activeRunId = useStore((s) => s.activeRunId)
   const setActiveRun = useStore((s) => s.setActiveRun)
-  const selectedAgentId = useStore((s) => s.selectedAgentId)
-  const setSelectedAgent = useStore((s) => s.setSelectedAgent)
   const pendingInput = useStore((s) => s.pendingInput)
   const clearPendingInput = useStore((s) => s.clearPendingInput)
   const dismissedWorkspaceDiffRunIds = useStore((s) => s.dismissedWorkspaceDiffRunIds)
   const dismissWorkspaceDiff = useStore((s) => s.dismissWorkspaceDiff)
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null)
-  const pickerRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const rootRef = useRef<HTMLDivElement>(null)
@@ -293,8 +287,6 @@ export function AgentChat() {
     onCollapse: collapseComposer,
     hasResult,
   })
-
-  const selectedAgent = agents.find((a) => a.id === selectedAgentId) ?? agents.find((a) => a.id === "default") ?? agents[0]
 
   const {
     scrollHostRef: scrollContainerRef,
@@ -404,22 +396,6 @@ export function AgentChat() {
     if (pendingInput?.runId === runId) clearPendingInput()
   }
 
-  // Load agents on mount
-  useEffect(() => {
-    api.listAgents().then(setAgents).catch(() => {})
-  }, [])
-
-  // Close picker on outside click
-  useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) {
-        setPickerOpen(false)
-      }
-    }
-    if (pickerOpen) document.addEventListener("mousedown", handleClick)
-    return () => document.removeEventListener("mousedown", handleClick)
-  }, [pickerOpen])
-
   // Cleanup recognition on unmount
   useEffect(() => {
     return () => { recognitionRef.current?.abort() }
@@ -451,15 +427,13 @@ export function AgentChat() {
     setAttachments([])
     if (textareaRef.current) textareaRef.current.style.height = "auto"
     try {
-      const agentId = selectedAgent?.id
       const threadId = useStore.getState().activeThreadId
       if (!threadId) throw new Error("No thread selected")
-      const { runId } = await api.startRun(goal, agentId, attachmentIds, threadId)
+      const { runId } = await api.startRun(goal, attachmentIds, threadId)
       useStore.getState().beginOptimisticRun({
         id: runId,
         goal,
         threadId,
-        agentId: agentId ?? null,
       })
       setScrollToRunId(runId)
       requestAnimationFrame(() => scrollToBottom("instant", { stick: true }))
@@ -1276,55 +1250,8 @@ export function AgentChat() {
           </div>
           </ChatScrollProvider>
 
-          {/* Agent picker + Input */}
+          {/* Input */}
           <div className="shrink-0 space-y-2">
-              {/* Agent picker */}
-              {agents.length > 1 && (
-                  <div className="relative" ref={pickerRef}>
-                      <button
-                          className="flex items-center gap-1.5 text-sm text-text-muted hover:text-text-secondary transition-colors"
-                          onClick={() => setPickerOpen(!pickerOpen)}
-                      >
-                          <Brain size={12} className="text-accent" />
-                          <span className="truncate max-w-[140px]">
-                              {selectedAgent?.name ?? "Select agent"}
-                          </span>
-                          <ChevronDown size={12} />
-                      </button>
-
-                      {pickerOpen && (
-                          <div className="absolute bottom-full left-0 mb-1 w-56 bg-surface border border-border-subtle rounded-lg shadow-xl z-10 overflow-hidden">
-                              {agents.map((agent) => (
-                                  <button
-                                      key={agent.id}
-                                      className={`flex items-center gap-2 w-full px-3 py-2 text-left text-sm transition-colors ${
-                                          agent.id === selectedAgent?.id
-                                              ? "bg-accent/10 text-accent"
-                                              : "text-text-secondary hover:bg-overlay-2 hover:text-text"
-                                      }`}
-                                      onClick={() => {
-                                          setSelectedAgent(agent.id);
-                                          setPickerOpen(false);
-                                      }}
-                                  >
-                                      <Brain size={13} className="shrink-0" />
-                                      <div className="min-w-0">
-                                          <div className="truncate">
-                                              {agent.name}
-                                          </div>
-                                          {agent.description && (
-                                              <div className="text-sm text-text-muted truncate">
-                                                  {agent.description}
-                                              </div>
-                                          )}
-                                      </div>
-                                  </button>
-                              ))}
-                          </div>
-                      )}
-                  </div>
-              )}
-
               {/* Attachment chips */}
               {!slashOnlyMode && attachments.length > 0 && (
                   <div className="flex flex-wrap gap-1.5">

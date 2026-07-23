@@ -31,7 +31,6 @@ export type ExecuteRunRequestDto = {
   goal: string
   tools: ExecutableTool[]
   systemPrompt: string | undefined
-  agentId: string | null
   resume?: ResumeState
   priority: RunPriority
 }

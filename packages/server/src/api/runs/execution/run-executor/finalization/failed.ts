@@ -69,7 +69,6 @@ export async function finalizeFailedRun(
       goal: request.goal,
       answer: null,
       status: RunStatus.Failed,
-      agentId: request.agentId,
       tools: [...new Set(env.state.run.steps.map((step) => step.action))],
       stepCount: env.state.run.steps.length,
       error: errMsg,

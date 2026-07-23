@@ -68,23 +68,6 @@ export function buildRecoveryHints(
 // ============================================================================
 
 function inferRoundRecoveryHint(roundCalls: readonly ToolCallRecord[]): RecoveryHint | undefined {
-  // Detect delegation results that indicate the child needs decomposition
-  const delegationNeedsDecomposition = roundCalls.find((call) => {
-    if (call.name !== "delegate" && call.name !== "delegate_parallel") return false
-    if (!call.result.includes("Agent stopped after")) return false
-    return true
-  })
-  if (delegationNeedsDecomposition) {
-    return {
-      key: "delegation-child-exhausted-budget",
-      message:
-        "A delegated child agent exhausted its iteration budget without completing the task. " +
-        "The objective was too large for a single child. Split it into smaller, more focused " +
-        "delegate calls, each with a narrower scope and clear acceptance criteria. " +
-        "Do not retry the same combined task — decompose it."
-    }
-  }
-
   // Detect all-fail rounds
   const allFailed = roundCalls.length > 0 && roundCalls.every((c) => didToolCallFail(c.isError, c.result))
   if (allFailed && roundCalls.length >= 2) {

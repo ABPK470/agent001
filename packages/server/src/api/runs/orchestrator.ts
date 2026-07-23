@@ -135,7 +135,6 @@ export class AgentOrchestrator {
     const runId = randomUUID()
     const controller = new AbortController()
     const services = createEngineServices()
-    const agentId = config?.agentId ?? null
     // When the caller didn't supply an explicit tool list, build per-run
     // tools from boot deps + the orchestrator's workspace. This is the
     // pre-run host used only to size the registry; the actual execute-time
@@ -170,7 +169,6 @@ export class AgentOrchestrator {
     this.activeRuns.set(runId, {
       id: runId,
       goal,
-      agentId,
       controller,
       services,
       traceSeq: 0,
@@ -196,7 +194,6 @@ export class AgentOrchestrator {
       step_count: 0,
       error: null,
       parent_run_id: null,
-      agent_id: agentId,
       created_at: new Date().toISOString(),
       completed_at: null,
       thread_id: threadId,
@@ -211,7 +208,7 @@ export class AgentOrchestrator {
 
     broadcast({
       type: EventType.RunQueued,
-      data: { runId, goal, agentId, queueStats: this.queue.stats() }
+      data: { runId, goal, queueStats: this.queue.stats() }
     })
     saveTrace(this.activeRuns, runId, { kind: TrajectoryEventKind.Goal, text: goal })
 
@@ -220,7 +217,6 @@ export class AgentOrchestrator {
       goal,
       tools,
       systemPrompt: config?.systemPrompt,
-      agentId,
       services,
       controller,
       bus,
@@ -246,7 +242,6 @@ export class AgentOrchestrator {
           step_count: existing?.step_count ?? 0,
           error: message,
           parent_run_id: existing?.parent_run_id ?? null,
-          agent_id: agentId,
           created_at: existing?.created_at ?? new Date().toISOString(),
           completed_at: new Date().toISOString(),
           thread_id: existing?.thread_id ?? threadId,
@@ -333,7 +328,6 @@ export class AgentOrchestrator {
     this.activeRuns.set(newRunId, {
       id: newRunId,
       goal: originalRun.goal,
-      agentId: originalRun.agent_id ?? null,
       controller,
       services,
       traceSeq: 0,
@@ -357,7 +351,6 @@ export class AgentOrchestrator {
       step_count: 0,
       error: null,
       parent_run_id: runId,
-      agent_id: originalRun.agent_id ?? null,
       created_at: new Date().toISOString(),
       completed_at: null,
       thread_id: originalRun.thread_id ?? null,
@@ -382,13 +375,8 @@ export class AgentOrchestrator {
     const messages = JSON.parse(checkpoint.messages) as Message[]
     const iteration = checkpoint.iteration
     let tools = this.buildBootTools()
-    let systemPrompt: string | undefined
-    if (originalRun.agent_id) {
-      const agentDef = db.getAgentDefinition(originalRun.agent_id)
-      if (agentDef) systemPrompt = db.resolveAgentSystemPrompt(agentDef)
-    }
-    // Visitor allowlist on resume too — safety net even if agentDef requests
-    // tools the visitor isn't allowed to use.
+    // Visitor allowlist on resume too — safety net even if the original run
+    // used a broader toolset than the visitor is now allowed.
     if (resumeSession && !resumeSession.isAdmin) {
       tools = filterToolsForVisitor(tools)
     }
@@ -397,8 +385,7 @@ export class AgentOrchestrator {
       runId: newRunId,
       goal: originalRun.goal,
       tools,
-      systemPrompt,
-      agentId: originalRun.agent_id ?? null,
+      systemPrompt: undefined,
       services,
       controller,
       bus,
@@ -546,14 +533,13 @@ export class AgentOrchestrator {
     goal: string
     tools: Tool[]
     systemPrompt: string | undefined
-    agentId: string | null
     services: ReturnType<typeof createEngineServices>
     controller: AbortController
     bus: AgentBus
     priority: RunPriority
     resume?: { messages: Message[]; iteration: number; parentRunId: string }
   }): ExecuteRunCommand {
-    const { runId, goal, tools, systemPrompt, agentId, services, controller, bus, priority, resume } = args
+    const { runId, goal, tools, systemPrompt, services, controller, bus, priority, resume } = args
 
     return {
       request: {
@@ -561,7 +547,6 @@ export class AgentOrchestrator {
         goal,
         tools,
         systemPrompt,
-        agentId,
         resume,
         priority
       },

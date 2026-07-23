@@ -174,7 +174,6 @@ export function ingestRunTurns(run: {
   goal: string
   answer: string | null
   status: string
-  agentId: string | null
   tools: string[]
   stepCount: number
   error?: string | null

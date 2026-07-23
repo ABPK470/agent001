@@ -1,10 +1,13 @@
 import { BanditArmId, DelegationTraceKind } from "../../../domain/index.js"
 /**
- * Step 3b of planner setup — delegation decision gate.
+ * Step 3b of planner setup — delegation gate.
  *
- * Decides whether child-agent delegation economics justify running the
- * planner pipeline. When economics decline, the caller falls back to the
- * direct tool loop — declining subagent fan-out is not a fatal planner error.
+ * Decides HOW a validated plan's subagent steps execute
+ * (`PlanExecutionMode`), never WHETHER the plan survives. A plan that
+ * reaches this gate has already passed generation + validation (Tier 0);
+ * declining delegation economics here changes execution shape — it does
+ * NOT discard the plan back to the direct loop. Only a true safety /
+ * hard-block finding stops execution.
  *
  * @module
  */
@@ -16,7 +19,7 @@ import {
   type DelegationSubagentStepProfile
 } from "../../../core/delegate-decision/index.js"
 import type { DelegationBanditTuner, DelegationTrajectoryRecord } from "../../../runtime/delegate.js"
-import type { Plan, PlanStep } from "../types.js"
+import type { Plan, PlanExecutionMode, PlanStep } from "../types.js"
 import { buildPlannerFailurePayload } from "./helpers.js"
 import type { PlannerContext, PlannerResult } from "./types.js"
 
@@ -28,7 +31,7 @@ const EFFECT_CLASS_MAP: Record<string, "read_only" | "write" | "mixed"> = {
   mixed: "mixed"
 }
 
-/** True safety blocks — never fall back to direct loop. */
+/** True safety blocks — execution never starts. */
 const DELEGATION_FATAL_REASONS = new Set<DelegationDecisionReason>([
   "safety_risk_high",
   "hard_blocked_task_class"
@@ -36,7 +39,21 @@ const DELEGATION_FATAL_REASONS = new Set<DelegationDecisionReason>([
 
 export type DelegationGateOutcome =
   | { readonly blocked: true; readonly result: PlannerResult }
-  | { readonly blocked: false; readonly banditTrajectory: DelegationTrajectoryRecord | undefined }
+  | {
+      readonly blocked: false
+      readonly mode: PlanExecutionMode
+      readonly banditTrajectory: DelegationTrajectoryRecord | undefined
+    }
+
+/**
+ * Does this plan's subagent work justify spawning a child even when
+ * parallel-fanout economics decline? True when at least one step carries a
+ * real contract (explicit tool capabilities or acceptance criteria) rather
+ * than being a thin placeholder step.
+ */
+function hasUsefulSubagentContracts(profiles: readonly DelegationSubagentStepProfile[]): boolean {
+  return profiles.some((p) => p.requiredToolCapabilities.length > 0 || p.acceptanceCriteria.length > 0)
+}
 
 export function runDelegationGate(
   plan: Plan,
@@ -58,8 +75,12 @@ export function runDelegationGate(
     effectClass: EFFECT_CLASS_MAP[s.executionContext.effectClass] ?? "mixed"
   }))
 
+  // No subagent work at all — pipeline runs its deterministic_tool steps
+  // only. Mode is moot (nothing to fan out), but parallel_children is the
+  // harmless default since executePipeline's parallelism only matters when
+  // subagent steps exist.
   if (subagentProfiles.length === 0) {
-    return { blocked: false, banditTrajectory: undefined }
+    return { blocked: false, mode: "parallel_children", banditTrajectory: undefined }
   }
 
   let banditArmId: BanditArmId | undefined
@@ -98,10 +119,28 @@ export function runDelegationGate(
     })
   }
 
+  const isFatal = !delegationDecision.shouldDelegate && DELEGATION_FATAL_REASONS.has(delegationDecision.reason)
+
+  const mode: PlanExecutionMode = isFatal
+    ? "stop"
+    : delegationDecision.shouldDelegate
+      ? "parallel_children"
+      : hasUsefulSubagentContracts(subagentProfiles)
+        ? "serial_children"
+        : "parent_guided"
+
+  const traceReason =
+    mode === "serial_children"
+      ? `economics_serial: ${delegationDecision.reason}`
+      : mode === "parent_guided"
+        ? `economics_parent_guided: ${delegationDecision.reason}`
+        : delegationDecision.reason
+
   ctx.onTrace?.({
     kind: DelegationTraceKind.PlannerDecision,
     shouldDelegate: delegationDecision.shouldDelegate,
-    reason: delegationDecision.reason,
+    reason: traceReason,
+    executionMode: mode,
     utilityScore: delegationDecision.utilityScore,
     safetyRisk: delegationDecision.safetyRisk,
     confidence: delegationDecision.confidence,
@@ -110,43 +149,30 @@ export function runDelegationGate(
     banditThresholdAdjustment
   })
 
-  if (!delegationDecision.shouldDelegate) {
+  if (mode === "stop") {
     const reason = `Delegation declined: ${delegationDecision.reason} (utility=${delegationDecision.utilityScore.toFixed(2)}, safety=${delegationDecision.safetyRisk.toFixed(2)})`
-
-    if (DELEGATION_FATAL_REASONS.has(delegationDecision.reason)) {
-      return {
-        blocked: true,
-        result: {
-          handled: true,
-          answer: buildPlannerFailurePayload({
-            stage: "delegation",
-            reason,
-            diagnostics: [
-              {
-                utilityScore: delegationDecision.utilityScore,
-                safetyRisk: delegationDecision.safetyRisk,
-                reason: delegationDecision.reason
-              }
-            ],
-            score: decision.score,
-            plannerReason: decision.reason
-          }),
-          plan,
-          skipReason: reason
-        }
-      }
-    }
-
-    // Economics declined child delegation — parent direct loop can still answer.
     return {
       blocked: true,
       result: {
-        handled: false,
+        handled: true,
+        answer: buildPlannerFailurePayload({
+          stage: "delegation",
+          reason,
+          diagnostics: [
+            {
+              utilityScore: delegationDecision.utilityScore,
+              safetyRisk: delegationDecision.safetyRisk,
+              reason: delegationDecision.reason
+            }
+          ],
+          score: decision.score,
+          plannerReason: decision.reason
+        }),
         plan,
         skipReason: reason
       }
     }
   }
 
-  return { blocked: false, banditTrajectory }
+  return { blocked: false, mode, banditTrajectory }
 }

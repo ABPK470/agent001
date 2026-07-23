@@ -48,8 +48,8 @@ function seedThreadAndRuns(runIds: string[]): void {
   for (const runId of runIds) {
     testDb
       .prepare(
-        `INSERT OR REPLACE INTO runs (id, goal, status, answer, step_count, error, parent_run_id, agent_id, created_at, completed_at, thread_id, upn, display_name)
-         VALUES (?, 'goal', 'completed', NULL, 1, NULL, NULL, NULL, datetime('now'), datetime('now'), ?, ?, ?)`
+        `INSERT OR REPLACE INTO runs (id, goal, status, answer, step_count, error, parent_run_id, created_at, completed_at, thread_id, upn, display_name)
+         VALUES (?, 'goal', 'completed', NULL, 1, NULL, NULL, datetime('now'), datetime('now'), ?, ?, ?)`
       )
       .run(runId, THREAD_ID, UPN, UPN)
   }

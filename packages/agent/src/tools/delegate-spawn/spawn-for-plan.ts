@@ -2,9 +2,6 @@ import { readFile as fsReadFile } from "node:fs/promises"
 import { resolve as pathResolve } from "node:path"
 import { detectPlaceholderPatterns } from "../../core/govern-tools.js"
 import type { DelegateResult, ExecutionEnvelope, SubagentTaskStep } from "../../core/plan.js"
-import { Agent } from "../../runtime/agent.js"
-import { LLMCallPhase } from "../../domain/enums/llm.js"
-import { DelegationSpanEventKind, DelegationTraceKind } from "../../domain/enums/planner-trace.js"
 import type { Tool } from "../../domain/types/agent-types.js"
 import {
   canonicalizeEnvelope,
@@ -13,15 +10,15 @@ import {
 } from "../delegate-paths.js"
 import { CHILD_SYSTEM_PROMPT, type DelegateContext } from "../delegate/index.js"
 import { buildPlanChildGoal } from "./build-goal.js"
-import { buildChildExecutionResult } from "./helpers.js"
+import { spawnChild, type ChildContract } from "./spawn.js"
 
 /**
  * Spawn a child agent for a planner-generated subagent_task step.
  *
- * Unlike ad-hoc delegation, this uses the ExecutionEnvelope to:
- *   - Build a rich prompt with objective, acceptance criteria, and context
- *   - Scope the child's tool access to requiredToolCapabilities
- *   - Pass workspace and artifact constraints
+ * Thin adapter over the shared spawn kernel: builds a `ChildContract` from
+ * the plan step + execution envelope (rich goal prompt, scoped tools,
+ * adaptive iteration budget, write-scope wrapping, completion validator),
+ * then hands it to `spawnChild`.
  */
 export async function spawnChildForPlan(
   ctx: DelegateContext,
@@ -48,16 +45,13 @@ export async function spawnChildForPlan(
   }
 
   if (allowedToolNames.size > 0) {
-    childTools = ctx.availableTools.filter(
-      (t) => allowedToolNames.has(t.name) && t.name !== "delegate" && t.name !== "delegate_parallel"
-    )
+    childTools = ctx.availableTools.filter((t) => allowedToolNames.has(t.name))
   } else {
-    childTools = ctx.availableTools.filter((t) => t.name !== "delegate" && t.name !== "delegate_parallel")
+    childTools = [...ctx.availableTools]
   }
 
   // Per-child run id — used to attribute bus messages and queue slots
-  // to the actual publisher rather than the parent. See spawn-child.ts
-  // for the same pattern.
+  // to the actual publisher rather than the parent.
   const childRunId = `plan-${step.name}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
   const childAgentName = `Planner:${step.name}`
 
@@ -80,32 +74,6 @@ export async function spawnChildForPlan(
 
   const budgetMetrics = computePlannerChildBudgetMetrics(step, normalizedEnvelope)
   const maxIter = budgetMetrics.computedMaxIterations
-
-  ctx.onChildTrace?.({
-    kind: DelegationTraceKind.PlannerStart,
-    goal: step.objective,
-    stepName: step.name,
-    depth: ctx.depth + 1,
-    tools: childTools.map((t) => t.name),
-    budget: budgetMetrics,
-    envelope: {
-      workspaceRoot: normalizedEnvelope.workspaceRoot,
-      effectClass: normalizedEnvelope.effectClass,
-      verificationMode: normalizedEnvelope.verificationMode,
-      targetArtifacts: normalizedEnvelope.targetArtifacts,
-      upstreamAcceptedArtifacts: normalizedEnvelope.upstreamAcceptedArtifacts,
-      unresolvedDependencyBlockers: normalizedEnvelope.unresolvedDependencyBlockers,
-      repairContext: normalizedEnvelope.repairContext
-    }
-  })
-
-  let releaseSlot: (() => void) | undefined
-  if (ctx.acquireSlot) {
-    // Reuse the same childRunId we generated above so queue + bus see one entity.
-    releaseSlot = await ctx.acquireSlot(childRunId)
-  }
-
-  let pendingPlannerLlmEvents: Record<string, unknown>[] = []
 
   // Build completion validator for code quality gate
   const targetArtifacts = normalizedEnvelope.targetArtifacts
@@ -149,7 +117,11 @@ export async function spawnChildForPlan(
         }
       : undefined
 
-  const child = new Agent(ctx.llm, childTools, {
+  const contract: ChildContract = {
+    goal,
+    childRunId,
+    childAgentName,
+    tools: childTools,
     maxIterations: maxIter,
     // If the parent resolved system prompt is available (contains DB knowledge, schema context,
     // tool rules, memory etc.) prepend it so the child is not "blind" — otherwise it has no
@@ -157,121 +129,24 @@ export async function spawnChildForPlan(
     systemPrompt: ctx.parentSystemPrompt
       ? `${ctx.parentSystemPrompt}\n\n---\n\n${CHILD_SYSTEM_PROMPT}`
       : CHILD_SYSTEM_PROMPT,
-    verbose: false,
-    signal: ctx.signal,
-    deferRecoveryHintsUntilCompletionAttempt: true,
     completionValidator,
-    onThinking: (_content, _toolCalls, iteration) => {
-      ctx.onChildTrace?.({
-        kind: DelegationTraceKind.PlannerIteration,
-        stepName: step.name,
-        depth: ctx.depth + 1,
-        iteration: iteration + 1,
-        maxIterations: maxIter,
-        toolNames: _toolCalls.map((c) => c.name),
-        content: _content ? _content.slice(0, 200) : null,
-      })
-      for (const ev of pendingPlannerLlmEvents) ctx.onChildTrace?.(ev)
-      pendingPlannerLlmEvents = []
-      ctx.onChildUsage?.(child.usage, child.llmCalls)
-      // Phase B.3: notify the orchestrator on every iteration so it can
-      // auto-publish a Status to the bus on this child's behalf.
-      ctx.onChildIteration?.({
-        childRunId,
-        childAgentName,
-        iteration: iteration + 1,
-        maxIterations: maxIter,
-        content: _content ? _content.slice(0, 200) : null,
-        toolNames: _toolCalls.map((c) => c.name)
-      })
-    },
-    onStep: () => {
-      ctx.onChildUsage?.(child.usage, child.llmCalls)
-    },
-    onNudge: (data) => {
-      ctx.onChildTrace?.({
-        kind: DelegationSpanEventKind.Nudge,
-        tag: `[${step.name}] ${data.tag}`,
-        message: data.message,
-        iteration: data.iteration
-      })
-    },
-    onLlmCall: (data) => {
-      if (data.phase === LLMCallPhase.Request) {
-        pendingPlannerLlmEvents.push({
-          kind: DelegationSpanEventKind.LlmRequest,
-          iteration: data.iteration,
-          messageCount: data.messages.length,
-          toolCount: data.tools.length,
-          messages: data.messages.map((m) => ({
-            role: m.role,
-            content: m.content,
-            toolCalls:
-              m.toolCalls?.map((tc) => ({ id: tc.id, name: tc.name, arguments: tc.arguments })) ?? [],
-            toolCallId: m.toolCallId ?? null
-          }))
-        })
-      } else {
-        pendingPlannerLlmEvents.push({
-          kind: DelegationSpanEventKind.LlmResponse,
-          iteration: data.iteration,
-          durationMs: data.durationMs,
-          content: data.response.content,
-          toolCalls:
-            data.response.toolCalls?.map((tc) => ({
-              id: tc.id,
-              name: tc.name,
-              arguments: tc.arguments
-            })) ?? [],
-          usage: data.response.usage ?? null
-        })
+    deferRecoveryHintsUntilCompletionAttempt: true,
+    trace: {
+      kind: "planner",
+      stepName: step.name,
+      goal: step.objective,
+      budget: budgetMetrics,
+      envelope: {
+        workspaceRoot: normalizedEnvelope.workspaceRoot,
+        effectClass: normalizedEnvelope.effectClass,
+        verificationMode: normalizedEnvelope.verificationMode,
+        targetArtifacts: normalizedEnvelope.targetArtifacts,
+        upstreamAcceptedArtifacts: normalizedEnvelope.upstreamAcceptedArtifacts,
+        unresolvedDependencyBlockers: normalizedEnvelope.unresolvedDependencyBlockers,
+        repairContext: normalizedEnvelope.repairContext
       }
     }
-  })
-
-  try {
-    const answer = await child.run(goal)
-    const hitLimit = answer.startsWith("Agent stopped after")
-
-    ctx.onChildUsage?.(child.usage, child.llmCalls)
-    ctx.onChildTrace?.({
-      kind: DelegationTraceKind.PlannerEnd,
-      stepName: step.name,
-      depth: ctx.depth + 1,
-      status: hitLimit ? "error" : "done",
-      answer: answer.slice(0, 500)
-    })
-
-    if (hitLimit) {
-      const execution = buildChildExecutionResult(answer, child.allToolCalls)
-      return {
-        output: `⚠ DELEGATION INCOMPLETE — child agent for step "${step.name}" used all ${maxIter} iterations without finishing.\nChild's last output: ${answer}`,
-        toolCalls: child.allToolCalls,
-        execution
-      }
-    }
-
-    return {
-      output: answer,
-      toolCalls: child.allToolCalls,
-      execution: buildChildExecutionResult(answer, child.allToolCalls)
-    }
-  } catch (err) {
-    const errMsg = err instanceof Error ? err.message : String(err)
-    ctx.onChildTrace?.({
-      kind: DelegationTraceKind.PlannerEnd,
-      stepName: step.name,
-      depth: ctx.depth + 1,
-      status: "error",
-      error: errMsg
-    })
-    const output = `Delegation failed: ${errMsg}`
-    return {
-      output,
-      toolCalls: child.allToolCalls,
-      execution: buildChildExecutionResult(output, child.allToolCalls)
-    }
-  } finally {
-    releaseSlot?.()
   }
+
+  return spawnChild(ctx, contract)
 }

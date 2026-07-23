@@ -3,7 +3,6 @@
  */
 
 import type {
-    AgentDefinition,
     EntityRegistryDraftSuggestion,
     EntityRegistryTableSuggestion,
     Notification,
@@ -61,7 +60,6 @@ export interface UsageItem {
   displayName: string | null
   goal: string | null
   status: string | null
-  agentId: string | null
   threadId: string | null
   threadTitle: string | null
 }
@@ -123,7 +121,6 @@ export interface AdminAuditItem {
     status: string | null
     upn: string | null
     displayName: string | null
-    agentId: string | null
   } | null
 }
 
@@ -313,7 +310,6 @@ export const api = {
   getRun: (id: string) => json<RunDetail>(`/api/runs/${id}`),
   startRun: (
     goal: string,
-    agentId: string | undefined,
     attachmentIds: string[] | undefined,
     threadId: string
   ) =>
@@ -322,7 +318,6 @@ export const api = {
       body: JSON.stringify({
         goal,
         threadId,
-        ...(agentId ? { agentId } : {}),
         ...(attachmentIds && attachmentIds.length > 0 ? { attachmentIds } : {}),
       }),
     }),
@@ -781,24 +776,6 @@ export const api = {
 
   // Tools
   listTools: () => json<ToolInfo[]>("/api/tools"),
-
-  // Agents
-  listAgents: () => json<AgentDefinition[]>("/api/agents"),
-  getAgent: (id: string) => json<AgentDefinition>(`/api/agents/${encodeURIComponent(id)}`),
-  createAgent: (agent: { name: string; description?: string; systemPrompt: string; tools: string[] }) =>
-    json<AgentDefinition>("/api/agents", {
-      method: "POST",
-      body: JSON.stringify(agent),
-    }),
-  updateAgent: (id: string, agent: Partial<{ name: string; description: string; systemPrompt: string; tools: string[] }>) =>
-    json<AgentDefinition>(`/api/agents/${encodeURIComponent(id)}`, {
-      method: "PUT",
-      body: JSON.stringify(agent),
-    }),
-  deleteAgent: (id: string) =>
-    json<{ ok: boolean }>(`/api/agents/${encodeURIComponent(id)}`, {
-      method: "DELETE",
-    }),
 
   // Notifications
   listNotifications: (limit = 50) => json<Notification[]>(`/api/notifications?limit=${limit}`),

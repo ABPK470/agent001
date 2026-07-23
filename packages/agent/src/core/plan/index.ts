@@ -62,6 +62,7 @@ export type {
   Plan,
   PlanDiagnostic,
   PlanEdge,
+  PlanExecutionMode,
   PlannerDecision,
   PlannerRoute,
   PlanStep,

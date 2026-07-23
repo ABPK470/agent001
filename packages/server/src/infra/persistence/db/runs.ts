@@ -20,7 +20,6 @@ export interface DbRun {
   step_count: number
   error: string | null
   parent_run_id: string | null
-  agent_id: string | null
   created_at: string
   completed_at: string | null
   thread_id?: string | null
@@ -38,8 +37,8 @@ export interface DbRun {
 // updates the row in place and does not fire cascade deletes.
 const upsertRun = () =>
   getDb().prepare(`
-  INSERT INTO runs (id, goal, status, answer, step_count, error, parent_run_id, agent_id, created_at, completed_at, thread_id, upn, display_name)
-  VALUES (@id, @goal, @status, @answer, @step_count, @error, @parent_run_id, @agent_id, @created_at, @completed_at, @thread_id, @upn, @display_name)
+  INSERT INTO runs (id, goal, status, answer, step_count, error, parent_run_id, created_at, completed_at, thread_id, upn, display_name)
+  VALUES (@id, @goal, @status, @answer, @step_count, @error, @parent_run_id, @created_at, @completed_at, @thread_id, @upn, @display_name)
   ON CONFLICT(id) DO UPDATE SET
     goal          = excluded.goal,
     status        = excluded.status,
@@ -47,7 +46,6 @@ const upsertRun = () =>
     step_count    = excluded.step_count,
     error         = excluded.error,
     parent_run_id = excluded.parent_run_id,
-    agent_id      = excluded.agent_id,
     created_at    = excluded.created_at,
     completed_at  = excluded.completed_at,
     thread_id     = excluded.thread_id,
@@ -124,7 +122,6 @@ export function dbRunToWire(row: DbRun, extras: RunWireExtras): Run {
     stepCount: row.step_count,
     error: row.error,
     parentRunId: row.parent_run_id,
-    agentId: row.agent_id ?? null,
     createdAt: row.created_at,
     completedAt: row.completed_at,
     totalTokens: extras.totalTokens,
@@ -338,7 +335,6 @@ export interface DbAuditWithRun extends DbAudit {
   run_status: string | null
   run_upn: string | null
   run_display_name: string | null
-  run_agent_id: string | null
   thread_id: string | null
   thread_title: string | null
 }
@@ -416,7 +412,7 @@ const AUDIT_LIST_SELECT = `
   SELECT
     a.id, a.run_id, a.scope_type, a.scope_id, a.actor, a.action, a.detail, a.timestamp,
     r.goal AS run_goal, r.status AS run_status, r.upn AS run_upn,
-    r.display_name AS run_display_name, r.agent_id AS run_agent_id,
+    r.display_name AS run_display_name,
     r.thread_id AS thread_id, t.title AS thread_title
   ${AUDIT_LIST_FROM}
 `
@@ -628,7 +624,6 @@ export interface DbTokenUsageWithRun extends DbTokenUsage {
   run_status: string | null
   run_upn: string | null
   run_display_name: string | null
-  run_agent_id: string | null
   thread_id: string | null
   thread_title: string | null
 }
@@ -680,7 +675,7 @@ const TOKEN_USAGE_LIST_SELECT = `
   SELECT
     t.run_id, t.prompt_tokens, t.completion_tokens, t.total_tokens, t.llm_calls, t.model, t.created_at,
     r.goal AS run_goal, r.status AS run_status, r.upn AS run_upn,
-    r.display_name AS run_display_name, r.agent_id AS run_agent_id,
+    r.display_name AS run_display_name,
     r.thread_id AS thread_id, th.title AS thread_title
   ${TOKEN_USAGE_LIST_FROM}
 `

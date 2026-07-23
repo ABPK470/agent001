@@ -191,7 +191,7 @@ export async function runPlannerSetup(
 
   const gate = runDelegationGate(plan, goal, decision, ctx, banditTuner)
   if (gate.blocked) return { ready: false, result: gate.result }
-  const banditTrajectory = gate.banditTrajectory
+  const { banditTrajectory, mode: executionMode } = gate
 
   return {
     ready: true,
@@ -199,7 +199,8 @@ export async function runPlannerSetup(
       plan,
       runtimeModel,
       decision,
-      banditTrajectory
+      banditTrajectory,
+      executionMode
     }
   }
 }

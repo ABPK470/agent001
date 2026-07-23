@@ -23,8 +23,7 @@ function turn(over: Partial<TurnInputs> & Pick<TurnInputs, "goal" | "threadId" |
     goal: over.goal,
     answer: over.answer ?? salientAnswer(over.goal),
     threadId: over.threadId,
-    upn: over.upn,
-    agentId: over.agentId ?? null
+    upn: over.upn
   }
 }
 
@@ -57,8 +56,8 @@ describe("Layer C — C2: working memory respects WORKING_SESSION_WINDOW_H cutof
       .run(ALICE_THREAD, ALICE)
     fixture.db
       .prepare(
-        `INSERT INTO runs (id, goal, status, answer, step_count, error, parent_run_id, agent_id, created_at, completed_at, thread_id, upn, display_name)
-         VALUES ('run-old-c2', 'old', 'completed', NULL, 1, NULL, NULL, NULL, ?, ?, ?, ?, ?)`
+        `INSERT INTO runs (id, goal, status, answer, step_count, error, parent_run_id, created_at, completed_at, thread_id, upn, display_name)
+         VALUES ('run-old-c2', 'old', 'completed', NULL, 1, NULL, NULL, ?, ?, ?, ?, ?)`
       )
       .run(oldStamp, oldStamp, ALICE_THREAD, ALICE, ALICE)
     fixture.db

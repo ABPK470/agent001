@@ -83,7 +83,6 @@ describe("tool approval end-to-end", () => {
             goal: "fetch report",
             tools: [],
             systemPrompt: undefined,
-            agentId: null,
             priority: "normal",
           },
           runtime: {} as never,

@@ -12,7 +12,6 @@ import { resolve } from "node:path"
 import { registerConnectorRoutes } from "../api/connectors/handlers/connectors.js"
 import { registerBridgeRoutes } from "../api/connectors/handlers/bridge.js"
 import { registerAdminRoutes } from "../api/admin/routes.js"
-import { registerAgentRoutes } from "../api/agents/routes.js"
 import { registerApprovalRoutes } from "../api/approvals/routes.js"
 import { registerAttachmentRoutes } from "../api/attachments/routes.js"
 import { registerAuthRoutes, registerIdentity } from "../api/auth/index.js"
@@ -40,6 +39,7 @@ import {
 } from "../api/sync/index.js"
 import { registerThreadRoutes } from "../api/threads/index.js"
 import { registerToolCacheRoutes } from "../api/tool-cache/routes.js"
+import { registerToolRoutes } from "../api/tools/routes.js"
 import { registerUsageRoutes } from "../api/usage/routes.js"
 import { registerWebhookRoutes } from "../api/webhooks/routes.js"
 import { addSseClient, broadcast, toBroadcastData } from "../infra/events/broadcaster.js"
@@ -220,7 +220,7 @@ export async function buildApp(opts: BuildAppOptions) {
 
   registerRunRoutes(app, orchestrator)
   registerThreadRoutes(app, orchestrator)
-  registerAgentRoutes(app, orchestrator)
+  registerToolRoutes(app)
   registerLayoutRoutes(app)
   registerPolicyRoutes(app)
   registerPlatformRoutes(app, {

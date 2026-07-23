@@ -2,7 +2,13 @@
  * Planner routing — first principles.
  *
  *   direct  — agent tool loop handles the goal (default)
- *   planner — structured decomposition + child agents
+ *   planner — a structured plan will be generated AND KEPT. This is the
+ *     Tier 0 structural decision only ("does this goal need a plan?") —
+ *     it does not decide whether child subagents run in parallel, serial,
+ *     or parent-guided mode. That is a separate Tier 1 decision made after
+ *     the plan is generated and validated (see `runDelegationGate` in
+ *     `orchestrator/setup-delegation.ts`), and it never un-plans a goal
+ *     that reached here — it only changes execution shape.
  *
  * Planner runs only when the task genuinely needs coordinated multi-step
  * work. Everything else uses the direct loop.

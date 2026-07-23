@@ -1274,7 +1274,6 @@ function persistRun(opts: {
     step_count: opts.stepCount,
     error: null,
     parent_run_id: null,
-    agent_id: "default",
     created_at: iso(opts.createdOffset),
     completed_at: iso(opts.completedOffset),
     thread_id: opts.threadId,

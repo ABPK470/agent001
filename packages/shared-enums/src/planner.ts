@@ -34,10 +34,22 @@ export const PLANNER_STEP_PHASE_VALUES: ReadonlyArray<PlannerStepPhase> = Object
 export const isPlannerStepPhase = (value: unknown): value is PlannerStepPhase =>
   typeof value === "string" && (PLANNER_STEP_PHASE_VALUES as readonly string[]).includes(value)
 
-/** Source attribution for a direct-loop fallback decision. */
+/**
+ * Source attribution for a direct-loop fallback decision.
+ *
+ * `PlannerDeclined` — Tier 0 (`assessPlannerDecision`) routed to `direct`
+ *   before any plan existed. This is the ONLY source used when planning
+ *   is skipped outright (including `enablePlanner: false`).
+ * `PlannerUnhandled` — defensive backstop: `executePlannerPath` returned
+ *   `handled: false` after Tier 0 already chose `planner`. Should not
+ *   happen in practice — Tier 1 (`runDelegationGate`) never discards a
+ *   validated plan back to the direct loop on economics; it only changes
+ *   `PlanExecutionMode`. NEVER used for economics declines.
+ */
 export const DirectLoopFallbackSource = {
   PlannerDeclined: "planner_declined",
   PlannerVerifierLowComplexity: "planner_verifier_low_complexity",
+  PlannerUnhandled: "planner_unhandled",
 } as const
 
 export type DirectLoopFallbackSource = (typeof DirectLoopFallbackSource)[keyof typeof DirectLoopFallbackSource]

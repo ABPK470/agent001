@@ -259,8 +259,9 @@ run auto-resumes from the last checkpoint on the next start.
 
 ## Tools
 
-Tools are registered in `packages/server/src/api/runs/tooling/registry.ts`. Each agent
-whitelist picks a subset; the live catalog (names + descriptions) is always:
+Tools are registered in `packages/server/src/api/runs/tooling/registry.ts`. Every run
+gets the full set (visitor sessions get a safe subset — no shell, no headless
+browser); the live catalog (names + descriptions) is always:
 
 ```bash
 curl http://localhost:3102/api/tools
@@ -365,7 +366,7 @@ curl -X POST http://localhost:3102/api/policies \
 
 | Area | Representative endpoints |
 |---|---|
-| **Agents** | `GET/POST /api/agents`, `POST /api/agents/:id/runs`, `GET /api/tools` |
+| **Tools** | `GET /api/tools` |
 | **Runs** | `GET/POST /api/runs`, `GET /api/runs/:id`, `POST /api/runs/:id/{cancel,resume,rerun,respond,kill-tool}`, `GET /api/runs/:id/trace` |
 | **Workspace diff** | `GET /api/runs/:id/workspace-diff`, `POST /api/runs/:id/workspace-diff/apply` |
 | **Config** | `GET/PUT /api/llm`, `GET/POST/DELETE /api/policies`, `GET /api/usage`, `GET/PUT /api/workspace` |

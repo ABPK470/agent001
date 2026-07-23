@@ -24,7 +24,7 @@ export type ModalOverlayOptions = {
   zIndexClass?: string
 }
 
-/** Full overlay class string for bespoke modals (AgentEditor, ExecModal, …). */
+/** Full overlay class string for bespoke modals (ExecModal, …). */
 export function modalOverlayClass(
   intent: ModalOverlayIntent,
   options?: ModalOverlayOptions,

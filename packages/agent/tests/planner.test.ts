@@ -257,7 +257,7 @@ describe("Planner delegation gate", () => {
     edges: []
   }
 
-  it("falls back to the direct loop when delegation economics decline", () => {
+  it("keeps the plan and picks serial_children when delegation economics decline", () => {
     const spy = vi.spyOn(delegationDecision, "assessDelegationDecision").mockReturnValue({
       shouldDelegate: false,
       reason: "score_below_threshold",
@@ -283,11 +283,77 @@ describe("Planner delegation gate", () => {
         undefined
       )
 
-      expect(gate.blocked).toBe(true)
-      if (!gate.blocked) throw new Error("expected blocked gate")
-      expect(gate.result.handled).toBe(false)
-      expect(gate.result.skipReason).toContain("score_below_threshold")
-      expect(gate.result.answer).toBeUndefined()
+      // Economics decline never discards a validated plan — it only picks
+      // an execution mode. This plan's subagent step has real tool-capability
+      // + acceptance-criteria contracts, so it still spawns children (serially).
+      expect(gate.blocked).toBe(false)
+      if (gate.blocked) throw new Error("expected non-blocked gate")
+      expect(gate.mode).toBe("serial_children")
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
+  it("picks parent_guided when delegation economics decline and steps carry no real contract", () => {
+    const thinPlan: Plan = {
+      reason: "test plan",
+      confidence: 0.8,
+      requiresSynthesis: false,
+      steps: [
+        {
+          name: "thin_step",
+          stepType: "subagent_task",
+          objective: "Do a small thing",
+          inputContract: "Goal only",
+          acceptanceCriteria: [],
+          requiredToolCapabilities: [],
+          contextRequirements: [],
+          maxBudgetHint: "5 iterations",
+          canRunParallel: false,
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: [],
+            requiredSourceArtifacts: [],
+            targetArtifacts: [],
+            effectClass: "readonly",
+            verificationMode: "none",
+            artifactRelations: []
+          }
+        }
+      ],
+      edges: []
+    }
+
+    const spy = vi.spyOn(delegationDecision, "assessDelegationDecision").mockReturnValue({
+      shouldDelegate: false,
+      reason: "score_below_threshold",
+      threshold: 0.2,
+      utilityScore: 0.1,
+      decompositionBenefit: 0.05,
+      coordinationOverhead: 0.1,
+      latencyCostRisk: 0.1,
+      safetyRisk: 0.05,
+      confidence: 0.3,
+      hardBlockedTaskClass: null,
+      hardBlockedTaskClassSource: null,
+      hardBlockedTaskClassSignal: null,
+      diagnostics: {}
+    })
+
+    try {
+      const gate = runDelegationGate(
+        thinPlan,
+        "do a small thing",
+        { route: "planner", score: 4, reason: "multi_step+tool_diversity" },
+        {},
+        undefined
+      )
+
+      expect(gate.blocked).toBe(false)
+      if (gate.blocked) throw new Error("expected non-blocked gate")
+      expect(gate.mode).toBe("parent_guided")
     } finally {
       spy.mockRestore()
     }

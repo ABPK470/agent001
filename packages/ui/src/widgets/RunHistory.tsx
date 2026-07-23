@@ -7,11 +7,11 @@
  */
 
 import { GitBranch, Play, RotateCcw, Square, Undo2 } from "lucide-react"
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react"
+import { useMemo, useRef, useState, type KeyboardEvent } from "react"
 import { api } from "../client/index"
 import { EmptyState } from "../components/EmptyState"
 import { useStore } from "../state/store"
-import type { AgentDefinition, Run } from "../types"
+import type { Run } from "../types"
 import {
   canCancelRun,
   canResumeRun,
@@ -30,7 +30,6 @@ function sortRunsNewestFirst(runs: Run[]): Run[] {
 function RunHistoryRow({
   run,
   selected,
-  agentLabel,
   rolledBack,
   onSelect,
   onCancel,
@@ -40,7 +39,6 @@ function RunHistoryRow({
 }: {
   run: Run
   selected: boolean
-  agentLabel: string | null
   rolledBack: boolean
   onSelect: () => void
   onCancel: () => void
@@ -85,9 +83,6 @@ function RunHistoryRow({
             <span className="run-history-row__goal" title={run.goal}>{run.goal}</span>
           </div>
           <div className="run-history-row__meta">
-            {agentLabel && (
-              <span className="run-history-row__agent">{agentLabel}</span>
-            )}
             <span>{timeAgo(run.createdAt)}</span>
             <span className="run-history-row__meta-steps">{run.stepCount} steps</span>
             {run.totalTokens > 0 && (
@@ -171,18 +166,7 @@ export function RunHistory() {
   const setActiveRun = useStore((s) => s.setActiveRun)
   const upsertRun = useStore((s) => s.upsertRun)
   const activeThreadId = useStore((s) => s.activeThreadId)
-  const [agents, setAgents] = useState<AgentDefinition[]>([])
   const [rolledBackIds, setRolledBackIds] = useState<Set<string>>(() => new Set())
-
-  useEffect(() => {
-    api.listAgents().then(setAgents).catch(() => {})
-  }, [])
-
-  const agentById = useMemo(() => {
-    const map = new Map<string, string>()
-    for (const agent of agents) map.set(agent.id, agent.name)
-    return map
-  }, [agents])
 
   const threadRuns = useMemo(() => {
     if (!activeThreadId) return []
@@ -247,7 +231,6 @@ export function RunHistory() {
             key={run.id}
             run={run}
             selected={run.id === activeRunId}
-            agentLabel={run.agentId ? (agentById.get(run.agentId) ?? null) : null}
             rolledBack={rolledBackIds.has(run.id)}
             onSelect={() => selectRun(run.id)}
             onCancel={() => cancelRun(run.id)}

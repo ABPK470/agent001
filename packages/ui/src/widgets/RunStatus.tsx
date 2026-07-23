@@ -19,7 +19,7 @@ import {
 } from "../lib/run-actions"
 import { fmtTokens, statusColor, timeAgo } from "../lib/util"
 import { useStore } from "../state/store"
-import type { AgentDefinition, RollbackPreview, TraceEntry, WorkspaceDiff } from "../types"
+import type { RollbackPreview, TraceEntry, WorkspaceDiff } from "../types"
 import { WIDGET_ICONS } from "./widget-icons"
 
 type PlannerDecisionTrace = Extract<TraceEntry, { kind: "planner-decision" }>
@@ -36,11 +36,6 @@ export function RunStatus() {
   const setActiveRun = useStore((s) => s.setActiveRun)
   const { toasts, dismissToast, notifyError, notify, notifyInfo } = useWidgetToasts()
 
-  const [agents, setAgents] = useState<AgentDefinition[]>([])
-  useEffect(() => {
-    api.listAgents().then(setAgents).catch(() => {})
-  }, [])
-
   const [rollbackPreview, setRollbackPreview] = useState<RollbackPreview | null>(null)
   const [rollbackLoading, setRollbackLoading] = useState(false)
   const [rollbackResult, setRollbackResult] = useState<string | null>(null)
@@ -52,7 +47,6 @@ export function RunStatus() {
   const autoLoadedKeyRef = useRef<string | null>(null)
 
   const run = runs.find((r) => r.id === activeRunId)
-  const agentName = run?.agentId ? agents.find((a) => a.id === run.agentId)?.name : null
 
   const rootRef = useRef<HTMLDivElement>(null)
   const { width: rootWidth } = useContainerSize(rootRef)
@@ -299,12 +293,6 @@ export function RunStatus() {
       )}
 
       <div className={`grid gap-x-4 gap-y-2.5 text-sm ${compact ? "grid-cols-1" : "grid-cols-2"}`}>
-        {agentName && (
-          <div>
-            <span className="text-[13px] text-text-muted">Agent</span>
-            <div className="text-[13px] text-accent">{agentName}</div>
-          </div>
-        )}
         <div>
           <span className="text-[13px] text-text-muted">Run ID</span>
           <div className="font-mono text-[13px] text-text-secondary">{run.id.slice(0, 8)}</div>

@@ -59,7 +59,6 @@ export async function finalizeCompletedRun(
       goal: request.goal,
       answer: taskInternallyFailed ? null : answer,
       status: taskInternallyFailed ? RunStatus.Failed : RunStatus.Completed,
-      agentId: request.agentId,
       tools: [...new Set(env.state.run.steps.map((step) => step.action))],
       stepCount: env.state.run.steps.length,
       error: taskInternallyFailed ? answer.slice(0, 200) : undefined,

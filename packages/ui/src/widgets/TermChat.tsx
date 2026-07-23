@@ -63,7 +63,7 @@ import { ChatComposerShell } from "./chat/ChatComposerShell"
 import { useCommandConsole } from "./chat/useCommandConsole"
 import type { CommandConsoleState } from "./chat/useCommandConsole"
 import { useStore, type GeneratedAttachment } from "../state/store"
-import type { AgentDefinition, TraceEntry, WorkspaceDiff } from "../types"
+import type { TraceEntry, WorkspaceDiff } from "../types"
 import {
   computeGoalStuck,
   goalPinLayout,
@@ -1875,7 +1875,6 @@ export function TermChat({
   heroRevealProgress?: number
 } = {}) {
   const [sending, setSending] = useState(false)
-  const [agents, setAgents] = useState<AgentDefinition[]>([])
   const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([])
   const [dragOver, setDragOver] = useState(false)
   const { toasts, dismissToast, notify, notifyError } = useWidgetToasts()
@@ -1887,7 +1886,6 @@ export function TermChat({
   const activeRunId = useStore((s) => s.activeRunId)
   const setActiveRun = useStore((s) => s.setActiveRun)
   const upsertRun = useStore((s) => s.upsertRun)
-  const selectedAgentId = useStore((s) => s.selectedAgentId)
   const pendingInput = useStore((s) => s.pendingInput)
   const clearPendingInput = useStore((s) => s.clearPendingInput)
 
@@ -1992,11 +1990,6 @@ export function TermChat({
     autosizeTextarea(el)
   }, [autosizeTextarea])
 
-  // Load agents
-  useEffect(() => {
-    api.listAgents().then(setAgents).catch(() => { /* ignore */ })
-  }, [])
-
   // Auto-grow textarea as the user types. Uses useLayoutEffect so the
   // height is committed before the browser paints — no visible jump.
   useLayoutEffect(() => {
@@ -2009,8 +2002,6 @@ export function TermChat({
     },
     [setDraft, slashOnlyMode],
   )
-
-  const selectedAgent = agents.find((a) => a.id === selectedAgentId) ?? agents.find((a) => a.id === "default") ?? agents[0]
 
   const send = useCallback(async () => {
     const goal = input.trim()
@@ -2037,7 +2028,6 @@ export function TermChat({
       }
       const { runId } = await api.startRun(
         effectiveGoal,
-        selectedAgent?.id,
         attachmentIds.length > 0 ? attachmentIds : undefined,
         threadId
       )
@@ -2045,7 +2035,6 @@ export function TermChat({
         id: runId,
         goal: effectiveGoal,
         threadId,
-        agentId: selectedAgent?.id ?? null,
       })
       useStore.getState().revealThreadTitleFromGoal(threadId, effectiveGoal)
       setScrollToRunId(runId)
@@ -2065,7 +2054,7 @@ export function TermChat({
     } finally {
       setSending(false)
     }
-  }, [input, sending, slashOnlyMode, selectedAgent, setActiveRun, pendingAttachments, scrollToBottom, continuityThreadId, mode, tryDispatchSlash, clearDraft, setDraft, notifyError])
+  }, [input, sending, slashOnlyMode, setActiveRun, pendingAttachments, scrollToBottom, continuityThreadId, mode, tryDispatchSlash, clearDraft, setDraft, notifyError])
 
   const cancel = useCallback(async () => {
     if (!scopedActiveRunId) return

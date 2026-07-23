@@ -27,7 +27,6 @@ export function saveTrace(
 export function persistRun(
   run: { id: string; status: RunStatus; steps: unknown[]; createdAt: Date; completedAt: Date | null },
   goal: string,
-  agentId: string | null,
   parentRunId?: string,
   answer?: string,
   error?: string
@@ -40,7 +39,6 @@ export function persistRun(
     step_count: run.steps.length,
     error: error ?? null,
     parent_run_id: parentRunId ?? null,
-    agent_id: agentId,
     created_at: run.createdAt.toISOString(),
     completed_at: run.completedAt?.toISOString() ?? null
   })

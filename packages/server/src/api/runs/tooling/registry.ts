@@ -19,7 +19,6 @@ import {
   bindRecordTableVerdictTool,
   createAppendFileTool,
   createAskUserTool,
-  createDelegateTools,
   createDiscoverRelationshipsTool,
   createExportQueryToFileTool,
   createFetchUrlTool,
@@ -67,7 +66,6 @@ import {
   thinkTool,
   writeFileToolMetadata,
   type AgentHost,
-  type DelegateContext,
   type ExecutableTool,
   type GovernToolOptions,
   type RunContext,
@@ -157,63 +155,6 @@ const CATALOG_ONLY_TOOLS: readonly ToolMetadata[] = [
   recordTableVerdictToolMetadata
 ]
 
-const DELEGATE_TOOL_CATALOG: readonly ToolMetadata[] = [
-  {
-    name: "delegate",
-    description:
-      "Delegate a focused sub-task to a child agent with its own iteration loop and tool set. " +
-      "Use when work is separable and easier to verify as an independent unit.",
-    parameters: {
-      type: "object",
-      properties: {
-        goal: { type: "string", description: "Clear, specific goal for the child agent." },
-        agentId: { type: "string", description: "Optional ID of a named agent definition to use." },
-        instructions: {
-          type: "string",
-          description: "Optional system-level instructions for the child."
-        },
-        tools: {
-          type: "array",
-          items: { type: "string" },
-          description: "Optional subset of tool names."
-        },
-        maxIterations: { type: "number", description: "Optional iteration cap for the child agent." }
-      },
-      required: ["goal"]
-    }
-  },
-  {
-    name: "delegate_parallel",
-    description:
-      "Delegate multiple independent sub-tasks to child agents that run in parallel, then collect every result together.",
-    parameters: {
-      type: "object",
-      properties: {
-        tasks: {
-          type: "array",
-          description: "Array of child-agent tasks to run in parallel.",
-          items: {
-            type: "object",
-            properties: {
-              goal: { type: "string", description: "Specific goal for this child agent." },
-              agentId: { type: "string", description: "Optional agent definition ID." },
-              instructions: { type: "string", description: "Optional child instructions." },
-              tools: {
-                type: "array",
-                items: { type: "string" },
-                description: "Optional tool subset."
-              },
-              maxIterations: { type: "number", description: "Optional iteration cap." }
-            },
-            required: ["goal"]
-          }
-        }
-      },
-      required: ["tasks"]
-    }
-  }
-]
-
 const BUS_TOOL_CATALOG: readonly ToolMetadata[] = [
   {
     name: "send_message",
@@ -279,14 +220,13 @@ export function getToolMap(host: AgentHost, run?: RunContext): ReadonlyMap<strin
 
 /**
  * Build the catalog list used by `listAvailableTools()` and the agents
- * route — every static tool plus the delegate/bus families.
+ * route — every static tool plus the bus family.
  */
 function listRuntimeCatalogTools(): ToolMetadata[] {
   const catalog = new Map<string, ToolMetadata>()
 
   for (const tool of STATIC_TOOL_BINDERS.map((entry) => entry.metadata)) catalog.set(tool.name, tool)
   for (const tool of CATALOG_ONLY_TOOLS) catalog.set(tool.name, tool)
-  for (const tool of DELEGATE_TOOL_CATALOG) catalog.set(tool.name, tool)
   for (const tool of BUS_TOOL_CATALOG) catalog.set(tool.name, tool)
 
   return [...catalog.values()].sort((a, b) => a.name.localeCompare(b.name))
@@ -414,16 +354,14 @@ export function listVisitorToolNames(): string[] {
 // ── Per-run tool registry ────────────────────────────────────────
 // Static tools (above) are stateless. A second class of tools must be
 // constructed fresh per run because they close over run-scoped state:
-// delegation (parent run-id, depth, child usage tracking), inter-agent
-// bus (run-id + agent name), and ask_user (the pending-input resolver
-// tied to this run's controller). Each per-run category is declared
-// here as a factory and assembled by `composePerRunTools`.
+// inter-agent bus (run-id + agent name) and ask_user (the pending-input
+// resolver tied to this run's controller). Each per-run category is
+// declared here as a factory and assembled by `composePerRunTools`.
 
 export interface PerRunToolContext {
   runId: string
   agentName: string
   busTools: ExecutableTool[]
-  delegateCtx: DelegateContext
   /**
    * Wraps a tool with run-scoped governance. The caller binds services,
    * state, and the abort signal at construction; the factory only chooses
@@ -451,9 +389,6 @@ export type PerRunToolFactory = (ctx: PerRunToolContext) => ExecutableTool[]
  * scoped tools means appending here, not editing run-executor.
  */
 export const PER_RUN_FACTORIES: PerRunToolFactory[] = [
-  // delegate / delegate_parallel — needs full DelegateContext (LLM, parent
-  // tools, depth, child trace/usage hooks, queue slot acquirer).
-  (ctx) => createDelegateTools(ctx.delegateCtx),
   // bus tools (send_message, check_messages, etc.) — needs the run-id and
   // the agent's display name so messages are attributed correctly.
   (ctx) => ctx.busTools,

@@ -38,7 +38,6 @@ function mapUsageRow(row: db.DbTokenUsageWithRun) {
     displayName: row.run_display_name,
     goal: row.run_goal,
     status: row.run_status,
-    agentId: row.run_agent_id,
     threadId: row.thread_id,
     threadTitle: row.thread_title,
   }

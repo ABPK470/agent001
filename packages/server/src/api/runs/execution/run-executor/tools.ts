@@ -4,7 +4,6 @@ import { resetEffectSeq } from "../../../../infra/effects/index.js"
 import { broadcast, broadcastTrace, broadcastTraceLoose } from "../../../../infra/events/broadcaster.js"
 import { retrieveContext } from "../../../../infra/persistence/memory.js"
 import { EMPTY_MEMORY_PER_TIER } from "../../../../infra/persistence/memory/tier-context.js"
-import * as db from "../../../../infra/persistence/sqlite.js"
 import { RunPriority } from "../../../../infra/queue/run-queue.js"
 import { AuditActor } from "../../../../internal/enums/audit.js"
 import { BusProtocol } from "../../../../internal/enums/bus.js"
@@ -125,20 +124,7 @@ export async function resolveExecutionTools(ctx: ToolResolutionContext): Promise
 }
 
 function buildDelegateContext(ctx: DelegateRuntimeContext, governedTools: Tool[]): DelegateContext {
-  const {
-    request,
-    signal,
-    runContext,
-    perRunHost,
-    state,
-    reportChildUsage,
-    llm,
-    queue,
-    messaging,
-    services,
-    tracing
-  } = ctx
-  const governanceServices = createGovernanceServices(services)
+  const { request, signal, reportChildUsage, llm, queue, messaging, services, tracing } = ctx
   const maxDelegationDepth = Number(process.env["DELEGATION_MAX_DEPTH"]) || 3
   const lastStatusIter = new Map<string, number>()
 
@@ -170,19 +156,6 @@ function buildDelegateContext(ctx: DelegateRuntimeContext, governedTools: Tool[]
       }
     },
     acquireSlot: (childRunId: string) => queue.acquire(childRunId, RunPriority.High, signal),
-    resolveAgent: (agentId) => {
-      const def = db.getAgentDefinition(agentId)
-      if (!def) return null
-      const agentTools = getAllTools(perRunHost, runContext).map((tool) =>
-        governTool(tool, governanceServices, state, { signal })
-      )
-      return {
-        id: def.id,
-        name: def.name,
-        systemPrompt: db.resolveAgentSystemPrompt(def),
-        tools: agentTools
-      }
-    },
     onChildTrace: (entry) => {
       tracing.boundSaveTrace(request.runId, entry)
       if (entry.kind === TrajectoryEventKind.DelegationStart) {
@@ -241,20 +214,15 @@ function buildDelegateContext(ctx: DelegateRuntimeContext, governedTools: Tool[]
 
 function composeExecutionTools(
   ctx: DelegateRuntimeContext,
-  delegateCtx: DelegateContext,
   governedTools: Tool[]
 ): import("@mia/agent").ExecutableTool[] {
   const { request, signal, activeRun, state, tracing, interaction, messaging, services } = ctx
   const governanceServices = createGovernanceServices(services)
-  const agentName = request.agentId
-    ? (db.getAgentDefinition(request.agentId)?.name ?? "Agent")
-    : "Universal Agent"
 
   const allToolsBase = composePerRunTools(governedTools, {
     runId: request.runId,
-    agentName,
-    busTools: messaging.createChildTools(request.runId, agentName),
-    delegateCtx,
+    agentName: "Universal Agent",
+    busTools: messaging.createChildTools(request.runId, "Universal Agent"),
     govern: (tool, opts) =>
       governTool(tool, governanceServices, state, {
         signal,
@@ -353,7 +321,7 @@ export function createDelegateContext(
   governedTools: Tool[]
 ): DelegateToolsBundle {
   const delegateCtx = buildDelegateContext(ctx, governedTools)
-  const allTools = composeExecutionTools(ctx, delegateCtx, governedTools)
+  const allTools = composeExecutionTools(ctx, governedTools)
 
   return { allTools, delegateCtx }
 }

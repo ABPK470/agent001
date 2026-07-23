@@ -48,19 +48,6 @@ describe("buildRecoveryHints smoke", () => {
     expect(hints.some((h) => h.key === "round-all-tools-failed")).toBe(true)
   })
 
-  it("emits delegation-exhausted hint when child agent ran out of budget", () => {
-    const hints = buildRecoveryHints(
-      [
-        call({
-          name: "delegate",
-          result: "Agent stopped after 30 iterations without completing the task."
-        })
-      ],
-      new Set()
-    )
-    expect(hints.some((h) => h.key === "delegation-child-exhausted-budget")).toBe(true)
-  })
-
   it("respects the emittedHints dedup set", () => {
     const emitted = new Set<string>(["enoent:open"])
     const hints = buildRecoveryHints(

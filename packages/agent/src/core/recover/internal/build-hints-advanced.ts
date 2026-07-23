@@ -37,13 +37,12 @@ export interface RecoveryHint {
 /**
  * Infer an advanced recovery hint from a tool call result.
  * Covers: test runners, compilers, package managers, shell syntax,
- * heredoc issues, grep/glob patterns, delegation, and browser checks.
+ * heredoc issues, grep/glob patterns, and browser checks.
  *
  * Called after common hints have been checked.
  */
 export function inferAdvancedRecoveryHint(call: ToolCallRecord): RecoveryHint | undefined {
   const result = call.result
-  const resultLower = result.toLowerCase()
   const parsedResult = parseToolResultObject(result)
   const failureText = extractToolFailureText(call)
   const failureTextLower = failureText.toLowerCase()
@@ -56,8 +55,7 @@ export function inferAdvancedRecoveryHint(call: ToolCallRecord): RecoveryHint | 
     tryJsonEscapedLiteralHint(failureText) ??
     tryCompilerDiagnosticHint(call, failureText) ??
     tryShellSyntaxHint(call, failureTextLower) ??
-    tryShellBuiltinHint(failureText) ??
-    tryDelegationHint(call, resultLower)
+    tryShellBuiltinHint(failureText)
   )
 }
 
@@ -172,27 +170,4 @@ function tryShellBuiltinHint(failureText: string): RecoveryHint | undefined {
       "If it's a project-local tool, try `npx ${missingCommand}` or `npm exec -- ${missingCommand}`. " +
       "Otherwise install it first."
   }
-}
-
-function tryDelegationHint(call: ToolCallRecord, resultLower: string): RecoveryHint | undefined {
-  if (call.name !== "delegate" && call.name !== "delegate_parallel") return undefined
-  if (resultLower.includes("delegation failed")) {
-    return {
-      key: "delegation-failed",
-      message:
-        "A delegated child task failed. Read the failure reason carefully. " +
-        "Check if the goal was clear enough and had all necessary context. " +
-        "Retry with a more specific goal, or do the task directly if it's simple enough."
-    }
-  }
-  if (resultLower.includes("agent stopped after") && resultLower.includes("iteration")) {
-    return {
-      key: "delegation-budget-exhausted",
-      message:
-        "The child agent exhausted its iteration budget. The task was too large. " +
-        "Increase the child budget when the work is a single cohesive owned implementation, or split only along real ownership boundaries when the task mixes unrelated concerns. " +
-        "Do NOT micro-split solely to chase a tiny iteration count."
-    }
-  }
-  return undefined
 }

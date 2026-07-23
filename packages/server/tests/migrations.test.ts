@@ -50,6 +50,10 @@ describe("runMigrations", () => {
     expect(
       testDb.prepare("SELECT name FROM sqlite_master WHERE name='sync_catalog_versions'").get(),
     ).toBeTruthy()
+
+    // Multi-agent CRUD erasure (migration 3): agent_configs dropped, runs.agent_id gone.
+    expect(testDb.prepare("SELECT name FROM sqlite_master WHERE name='agent_configs'").get()).toBeFalsy()
+    expect(runsCols.some((c) => c.name === "agent_id")).toBe(false)
   })
 
   it("is idempotent across repeated runs", () => {
@@ -66,7 +70,6 @@ describe("runMigrations", () => {
   it("_migrate runs migrations and seeds", () => {
     _migrate(testDb)
 
-    expect(testDb.prepare("SELECT id FROM agent_configs WHERE id='default'").get()).toBeTruthy()
     expect(testDb.prepare("SELECT name FROM sqlite_master WHERE name='notifications'").get()).toBeTruthy()
   })
 })

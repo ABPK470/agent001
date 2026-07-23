@@ -43,12 +43,18 @@ export interface PlannerRoutingContext {
  * Attempt planner routing. Returns a final answer when the planner fully
  * handles the goal; otherwise the caller continues in the direct tool loop.
  *
- * Two-tier model:
- *   Tier 0 (assessPlannerDecision) — cheap goal-class routing: data queries,
- *     edits, and dialogue skip planner entirely.
- *   Tier 1 (runDelegationGate, post-plan) — structural economics on the
- *     generated plan: should child subagents run? Declining here falls back
- *     to the direct loop; it is not a fatal error.
+ * Two-tier model — these decide DIFFERENT questions:
+ *   Tier 0 (assessPlannerDecision) — structure only: does this goal need a
+ *     plan at all? Cheap goal-class routing; data queries, edits, and
+ *     dialogue skip planner entirely and stay on the direct loop.
+ *   Tier 1 (runDelegationGate, post-plan, inside executePlannerPath) —
+ *     execution mode only: given a validated plan, how do its subagent
+ *     steps run (parallel / serial / parent-guided)? A plan that reaches
+ *     Tier 1 is ALWAYS kept and executed — economics never discard it
+ *     back to the direct loop.
+ *
+ * `DirectLoopFallback` traces therefore only ever fire here for Tier 0
+ * (`route=direct` or planner disabled) — never for Tier 1 economics.
  */
 export async function attemptPlannerRouting(ctx: PlannerRoutingContext): Promise<PlannerRoutingResult> {
   const { goal, config } = ctx
@@ -85,13 +91,18 @@ export async function attemptPlannerRouting(ctx: PlannerRoutingContext): Promise
     return { finalAnswer: answer }
   }
 
+  // Defensive backstop only — `runPlannerSetup` returns `handled: false` here
+  // solely when Tier 0 already said `shouldPlan: false`, which the `route
+  // === "direct"` branch above already short-circuits. Should not happen in
+  // practice; if it does, this is NOT an economics decline (those keep the
+  // plan and pick a PlanExecutionMode instead — see setup-delegation.ts).
   if (config.verbose && result.skipReason) {
     log.logError(`Planner skipped: ${result.skipReason}`)
   }
 
   config.onPlannerTrace?.({
     kind: PlannerTraceKind.DirectLoopFallback,
-    source: "planner_declined",
+    source: "planner_unhandled",
     reason: result.skipReason ?? "Planner declined — continuing in the direct tool loop."
   })
 

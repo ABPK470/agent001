@@ -28,7 +28,6 @@ export type { RunPriority } from "./queue.js"
 export interface ActiveRun {
   id: string
   goal: string
-  agentId: string | null
   controller: AbortController
   services: EngineServices
   traceSeq: number
@@ -57,7 +56,6 @@ export interface ActiveRun {
 
 /** Per-run agent configuration — which tools and prompt to use. */
 export interface AgentRunConfig {
-  agentId?: string
   tools?: import("@mia/agent").Tool[]
   systemPrompt?: string
   /**

@@ -120,7 +120,6 @@ export interface Run {
   stepCount: number
   error: string | null
   parentRunId: string | null
-  agentId: string | null
   threadId?: string | null
   createdAt: string
   completedAt: string | null
@@ -262,7 +261,7 @@ export type TraceEntry =
   | { kind: "answer"; text: string }
   | { kind: "error"; text: string }
   | { kind: "usage"; iterationTokens: number; totalTokens: number; promptTokens: number; completionTokens: number; llmCalls: number }
-  | { kind: "delegation-start"; goal: string; depth: number; tools: string[]; agentId?: string; agentName?: string }
+  | { kind: "delegation-start"; goal: string; depth: number; tools: string[]; agentName?: string }
   | { kind: "delegation-iteration"; depth: number; iteration: number; maxIterations: number }
   | { kind: "delegation-end"; depth: number; status: DelegationEndStatus; answer?: string; error?: string }
   | { kind: "delegation-parallel-start"; depth: number; taskCount: number; goals: string[] }
@@ -1680,18 +1679,6 @@ export interface FreezeWindowSaveRequest {
 export interface FreezeWindowListResponse {
   tenantId: string
   items:    FreezeWindow[]
-}
-
-// ── Agent Definitions ────────────────────────────────────────────
-
-export interface AgentDefinition {
-  id: string
-  name: string
-  description: string
-  systemPrompt: string
-  tools: string[]
-  createdAt: string
-  updatedAt: string
 }
 
 export interface ToolInfo {

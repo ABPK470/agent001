@@ -24,8 +24,7 @@ function turn(over: Partial<TurnInputs> & Pick<TurnInputs, "goal" | "threadId" |
     goal: over.goal,
     answer: over.answer ?? salientAnswer(over.goal),
     threadId: over.threadId,
-    upn: over.upn,
-    agentId: over.agentId ?? null
+    upn: over.upn
   }
 }
 

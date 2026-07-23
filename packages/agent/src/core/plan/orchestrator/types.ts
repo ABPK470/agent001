@@ -7,6 +7,7 @@ import type { LLMClient, Message, Tool } from "../../types.js"
 import type {
   PipelineResult,
   Plan,
+  PlanExecutionMode,
   PlannerDecision,
   PlannerRuntimeModel,
   VerifierDecision
@@ -54,4 +55,6 @@ export interface PlannerSetupContext {
   readonly runtimeModel: PlannerRuntimeModel
   readonly decision: PlannerDecision
   readonly banditTrajectory: import("../../../runtime/delegate.js").DelegationTrajectoryRecord | undefined
+  /** Tier 1 decision from `runDelegationGate` — how the plan's subagent steps execute. */
+  readonly executionMode: PlanExecutionMode
 }

@@ -63,7 +63,6 @@ function ingestSubstantiveRun(
     goal: opts.goal,
     answer: "Top products by revenue are in publish.Revenue for April 2025.",
     status: RunStatus.Completed,
-    agentId: null,
     tools: ["search_catalog", "explore_mssql_schema", "profile_data", "query_mssql"],
     stepCount: TOOL_TRACE.length,
     trace: [...TOOL_TRACE],

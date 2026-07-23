@@ -59,7 +59,7 @@ export function createRunPersistence(
     runtime.registry.appendTrace(runId, entry)
 
   const persistCurrentRun = (answer?: string, error?: string): void => {
-    persistRun(state.run, request.goal, request.agentId, request.resume?.parentRunId, answer, error)
+    persistRun(state.run, request.goal, request.resume?.parentRunId, answer, error)
   }
 
   const saveCurrentRun = async (): Promise<void> => {
@@ -84,7 +84,6 @@ export function createRunPersistence(
       detail: {
         goal: request.goal,
         tools: request.tools.map((tool) => tool.name),
-        agentId: request.agentId,
         profile: runWorkspace.profile,
         workspaceMode: runWorkspace.isolated ? "isolated" : "shared",
         workspaceRoot: runWorkspace.executionRoot

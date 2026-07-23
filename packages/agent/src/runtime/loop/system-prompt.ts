@@ -106,7 +106,7 @@ function loadPrompt(name: string): string {
 /**
  * Default agent system prompt — used as:
  *   1. Fallback in Agent constructor (direct / test usage)
- *   2. Anchor when no agentId is passed to the orchestrator (raw runs)
+ *   2. Anchor when no custom system prompt is passed to the orchestrator (raw runs)
  *   3. Seeded into the "Universal Agent" DB record at startup
  */
 export const DEFAULT_SYSTEM_PROMPT = loadPrompt("default-system.md")

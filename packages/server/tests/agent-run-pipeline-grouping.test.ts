@@ -21,7 +21,6 @@ describe("agent-run pipeline telemetry grouping", () => {
       completed_at: "2026-05-27T15:00:00.000Z",
       goal: "list top clients",
       step_count: 1,
-      agent_id: "copilot",
       error: null
     })
   })

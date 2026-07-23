@@ -24,9 +24,7 @@ export const DisclosureCategory = {
   /** Memory tier names, internal ids, retention rules. */
   Memory: "memory",
   /** DB schema names, storage paths, env-var names. */
-  Infrastructure: "infrastructure",
-  /** Agent definition ids, internal agent descriptions, tool whitelists. */
-  AgentDefinitions: "agent_configs"
+  Infrastructure: "infrastructure"
 } as const
 
 export type DisclosureCategory = (typeof DisclosureCategory)[keyof typeof DisclosureCategory]
@@ -44,7 +42,5 @@ export const DISCLOSURE_CATEGORY_DESCRIPTIONS: Readonly<Record<DisclosureCategor
     "policy rule names, governance rule wiring, audit log internal structure",
   [DisclosureCategory.Memory]: "memory tier names, internal ids, retention rules, consolidation cadence",
   [DisclosureCategory.Infrastructure]:
-    "database schema, storage paths, environment variable names, deployment topology",
-  [DisclosureCategory.AgentDefinitions]:
-    "internal agent ids, system prompts of named agents, per-agent tool whitelists"
+    "database schema, storage paths, environment variable names, deployment topology"
 }

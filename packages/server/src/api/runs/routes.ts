@@ -170,7 +170,7 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
     } satisfies RunDetail
   })
 
-  app.post<{ Body: { goal: string; agentId?: string; attachmentIds?: string[]; threadId?: string } }>(
+  app.post<{ Body: { goal: string; attachmentIds?: string[]; threadId?: string } }>(
     "/api/runs",
     async (req, reply) => {
       try {
@@ -179,7 +179,7 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
         reply.code(401)
         return { error: "Authentication required" }
       }
-      const { goal, agentId, attachmentIds, threadId } = req.body
+      const { goal, attachmentIds, threadId } = req.body
       if (!goal || typeof goal !== "string") {
         reply.code(400)
         return { error: "goal is required" }
@@ -208,26 +208,6 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
       }
 
       try {
-        if (agentId) {
-          const agent = db.getAgentDefinition(agentId)
-          if (!agent) {
-            reply.code(400)
-            return { error: `Agent not found: ${agentId}` }
-          }
-          const runId = orchestrator.startRun(
-            goal,
-            {
-              agentId: agent.id,
-              systemPrompt: db.resolveAgentSystemPrompt(agent),
-              attachmentIds: resolvedAttachmentIds,
-              threadId
-            },
-            req.session!
-          )
-          reply.code(201)
-          return { runId, agentId: agent.id, attachmentIds: resolvedAttachmentIds }
-        }
-
         const runId = orchestrator.startRun(
           goal,
           { attachmentIds: resolvedAttachmentIds, threadId },
@@ -326,24 +306,6 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
     if (!original || !canAccessRun(req.session, original)) {
       reply.code(404)
       return { error: "Run not found" }
-    }
-    if (original.agent_id) {
-      const agent = db.getAgentDefinition(original.agent_id)
-      if (!agent) {
-        reply.code(400)
-        return { error: `Agent definition not found: ${original.agent_id}` }
-      }
-      const runId = orchestrator.startRun(
-        original.goal,
-        {
-          agentId: agent.id,
-          systemPrompt: db.resolveAgentSystemPrompt(agent),
-          threadId: original.thread_id ?? undefined
-        },
-        req.session ?? null
-      )
-      reply.code(201)
-      return { runId, agentId: agent.id }
     }
     const runId = orchestrator.startRun(
       original.goal,

@@ -56,8 +56,8 @@ function seedRun(runId: string, threadId: string, upn: string, goal = "goal"): v
     .run(threadId, upn)
   testDb
     .prepare(
-      `INSERT OR REPLACE INTO runs (id, goal, status, answer, step_count, error, parent_run_id, agent_id, created_at, completed_at, thread_id, upn, display_name)
-       VALUES (?, ?, 'completed', NULL, 1, NULL, NULL, NULL, datetime('now'), datetime('now'), ?, ?, ?)`
+      `INSERT OR REPLACE INTO runs (id, goal, status, answer, step_count, error, parent_run_id, created_at, completed_at, thread_id, upn, display_name)
+       VALUES (?, ?, 'completed', NULL, 1, NULL, NULL, datetime('now'), datetime('now'), ?, ?, ?)`
     )
     .run(runId, goal, threadId, upn, upn)
 }
@@ -192,7 +192,6 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
       goal: "list customer revenue tenant-alphaonlytokenxyz",
       answer: "Revenue is in publish.Revenue for tenant alpha.",
       status: "completed",
-      agentId: null,
       tools: ["search_catalog", "query_mssql"],
       stepCount: 2,
       trace,
@@ -203,7 +202,6 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
       goal: "list customer revenue tenant-bravoonlytokenxyz",
       answer: "Revenue is in publish.Revenue for tenant bravo.",
       status: "completed",
-      agentId: null,
       tools: ["search_catalog", "query_mssql"],
       stepCount: 2,
       trace,
@@ -298,7 +296,6 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
       goal: "compute monthly KPI report",
       answer: "Bob's correct answer",
       status: "completed",
-      agentId: null,
       tools: ["mssql"],
       stepCount: 3,
       trace: [],
@@ -309,7 +306,6 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
       goal: "compute monthly KPI report",
       answer: null,
       status: "failed",
-      agentId: null,
       tools: ["mssql"],
       stepCount: 1,
       error: "boom",
@@ -427,7 +423,6 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
         "and write the release tag. Update the changelog after each completed step. " +
         "Refactor any failed scripts and migrate the data on success.",
       status: "completed",
-      agentId: null,
       tools: ["read_file"],
       stepCount: 4,
       trace: [],
@@ -463,7 +458,6 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
         "after the rebuilding-now-will-take-roundtrip-marker step. " +
         "This refactor reclaims about 12 percent of the heap on success.",
       status: "completed",
-      agentId: null,
       tools: ["mssql"],
       stepCount: 2,
       trace: [],
@@ -498,7 +492,6 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
         "execute the migration, write the announcement, and update the dashboard. " +
         "Refactor any failed steps until success is completed.",
       status: "completed",
-      agentId: null,
       tools: ["fs"],
       stepCount: 3,
       trace: [],
@@ -534,7 +527,6 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
         "configure monitoring, refactor failed checks, migrate the data on success " +
         "alpha-followup-roundtrip-marker.",
       status: "completed",
-      agentId: null,
       tools: ["mssql"],
       stepCount: 2,
       trace: [],
@@ -549,7 +541,6 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
         "configure monitoring, refactor failed checks, migrate the data on success " +
         "bravo-followup-roundtrip-marker.",
       status: "completed",
-      agentId: null,
       tools: ["mssql"],
       stepCount: 2,
       trace: [],

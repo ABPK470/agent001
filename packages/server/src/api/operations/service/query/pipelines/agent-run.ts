@@ -35,7 +35,7 @@ export function buildAgentRunPipeline(runId: string, events: OperationEvent[]): 
     id: runId,
     kind: OperationKind.AgentRun,
     title: goal.length > 100 ? goal.slice(0, 97) + "…" : goal,
-    subtitle: run ? `${run.step_count} steps · ${run.agent_id ?? "agent"}` : undefined,
+    subtitle: run ? `${run.step_count} steps` : undefined,
     status,
     startedAt,
     endedAt,

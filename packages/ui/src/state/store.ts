@@ -232,10 +232,6 @@ interface AppState {
   connected: boolean
   setConnected: (v: boolean) => void
 
-  // Agent selection
-  selectedAgentId: string | null
-  setSelectedAgent: (id: string | null) => void
-
   // Runs
   runs: Run[]
   activeRunId: string | null
@@ -247,7 +243,6 @@ interface AppState {
     id: string
     goal: string
     threadId: string
-    agentId?: string | null
   }) => void
 
   // Threads (home chat workspaces)
@@ -633,10 +628,6 @@ export const useStore = create<AppState>()(
       connected: false,
       setConnected: (connected) => set({ connected }),
 
-      // Agent selection
-      selectedAgentId: null,
-      setSelectedAgent: (selectedAgentId) => set({ selectedAgentId }),
-
       // Runs
       runs: [],
       activeRunId: null,
@@ -774,7 +765,6 @@ export const useStore = create<AppState>()(
           error: null,
           pendingWorkspaceChanges: 0,
           parentRunId: null,
-          agentId: input.agentId ?? null,
           createdAt: now,
           completedAt: null,
           totalTokens: 0,
@@ -1204,7 +1194,6 @@ export const useStore = create<AppState>()(
               error: null,
               pendingWorkspaceChanges: 0,
               parentRunId: (data["resumedFrom"] as string) ?? null,
-              agentId: (data["agentId"] as string) ?? null,
               createdAt: timestamp,
               completedAt: null,
               totalTokens: 0,
@@ -1742,7 +1731,6 @@ export const useStore = create<AppState>()(
               goal: data["goal"] as string,
               depth: data["depth"] as number,
               tools: (data["tools"] as string[]) ?? [],
-              agentId: data["agentId"] as string | undefined,
               agentName: data["agentName"] as string | undefined,
             }
             store.addTrace(traceEntry)
@@ -1939,7 +1927,6 @@ export const useStore = create<AppState>()(
         }
       },
       partialize: (state) => ({
-        selectedAgentId: state.selectedAgentId,
         activeThreadId: state.activeThreadId,
         threadSidebarCollapsed: state.threadSidebarCollapsed,
         envSyncForm: { ...state.envSyncForm, entityId: "", planId: null },
