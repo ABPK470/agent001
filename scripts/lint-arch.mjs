@@ -1,24 +1,31 @@
 /**
- * lint-arch — asymmetric leverage engine for docs/doctrine.md.
+ * lint-arch — doctrine enforcement engine.
  *
- * Enforces Internal + External Leverage via TypeScript AST, seams registry,
- * and closed invariants — not one-off historical bans.
+ * Uniform dispatch: package rules from config, global rules after.
+ * Product-specific names live ONLY in registry/ + debt data — never in runners.
  *
- * Run: `npm run lint:arch`  (node scripts/lint-arch.mjs)
+ * Run: `npm run lint:arch`
  */
 
 import { existsSync } from "node:fs"
 import { resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 
-import { createLeverageDebt, createPackageConfigs } from "./lint-arch/config.mjs"
+import {
+  createLeverageDebt,
+  createPackageConfigs,
+  GLOBAL_RULES,
+  PACKAGE_EXTRA_RULES,
+  PACKAGE_RULES,
+} from "./lint-arch/config.mjs"
 import { walk } from "./lint-arch/fs-walk.mjs"
 import { printReport } from "./lint-arch/report.mjs"
 import { loadCompilerOptions } from "./lint-arch/ts-context.mjs"
+import { FORBIDDEN_CONSTRUCTORS } from "./lint-arch/registry/policy.mjs"
 import {
   lintFlatControlFlow,
   lintModuleState,
-  lintNoAsyncLocalStorage,
+  lintNoForbiddenConstructors,
 } from "./lint-arch/rules/code-shape.mjs"
 import {
   lintFrameworkDenylist,
@@ -37,12 +44,11 @@ import {
   lintStaleCycleAllowlist,
 } from "./lint-arch/rules/layers.mjs"
 import { lintStaleDebtList, lintTenantIdentityForks } from "./lint-arch/rules/ops.mjs"
-import { lintEventCatalogCoverage, lintUiPlatformCheckbox } from "./lint-arch/rules/product.mjs"
+import { lintCatalogCoverage, lintJsxAttrBans } from "./lint-arch/rules/catalog.mjs"
 import {
-  lintDialectHomes,
+  lintDialects,
   lintErasedSeams,
   lintRegisteredApiSurfaces,
-  lintWireKindDialect,
 } from "./lint-arch/rules/seams.mjs"
 import { lintForbiddenTrees, lintTopLevel } from "./lint-arch/rules/trees.mjs"
 
@@ -50,69 +56,97 @@ const ROOT = resolve(fileURLToPath(import.meta.url), "../..")
 const PACKAGES = createPackageConfigs(ROOT)
 const DEBT = createLeverageDebt(ROOT)
 
-function lintPackage(pkg) {
-  if (!existsSync(pkg.src)) return { fileCount: 0 }
-  lintForbiddenTrees(pkg)
-  lintTopLevel(pkg)
+/** @type {Map<string, (ctx: object) => void>} */
+const RUNNERS = new Map([
+  ["forbidden-trees", ({ pkg }) => lintForbiddenTrees(pkg)],
+  ["top-level", ({ pkg }) => lintTopLevel(pkg)],
+  [
+    "layers",
+    ({ pkg, files, options, host }) => {
+      const graph = lintLayerImports(pkg, files, options, host)
+      pkg._importGraph = graph
+    },
+  ],
+  [
+    "cycles",
+    ({ pkg }) => {
+      const pkgCycles = DEBT.cycleAllowlist.filter((a) => a.pkg === pkg.name)
+      lintImportCycles(pkg, pkg._importGraph ?? new Map(), pkgCycles)
+      lintStaleAllowlists(pkg)
+    },
+  ],
+  ["module-state", ({ pkg, files }) => lintModuleState(pkg, files)],
+  ["flat-control-flow", ({ files }) => lintFlatControlFlow(files)],
+  ["framework-deny", ({ pkg, files }) => lintFrameworkDenylist(pkg, files)],
+  ["export-surface", ({ pkg, files }) => lintPackageExportSurface(ROOT, pkg.name, files)],
+  ["silent-failure", ({ pkg, files }) => lintSilentFailure(pkg, files, DEBT.silentFailureAllowlist)],
+  ["trust", ({ pkg, files }) => lintTrustHygiene(pkg, files, DEBT.trustAllowlist)],
+  [
+    "forbidden-constructors",
+    ({ pkg, files }) => lintNoForbiddenConstructors(pkg, files, FORBIDDEN_CONSTRUCTORS),
+  ],
+  [
+    "identity-forks",
+    ({ pkg, files }) => lintTenantIdentityForks(pkg, files, DEBT.tenantBranchAllowlist),
+  ],
+  ["jsx-attr-ban", ({ pkg, files }) => lintJsxAttrBans(pkg, files)],
+  [
+    "domain-surface",
+    ({ pkg, files }) =>
+      lintDomainSurface(ROOT, pkg, files, DEBT.enumForkAllowlist, DEBT.jargonAllowlist),
+  ],
+  [
+    "seams",
+    () => {
+      lintRegisteredApiSurfaces(ROOT, DEBT.brandAllowlist, DEBT.brandTokens)
+      lintErasedSeams(ROOT, PACKAGES)
+    },
+  ],
+  [
+    "dialects",
+    () =>
+      lintDialects(ROOT, {
+        presentationAllowlist: DEBT.presentationAllowlist,
+      }),
+  ],
+  ["catalog-coverage", () => lintCatalogCoverage(ROOT)],
+  ["resolved-inputs", () => lintResolvedInputBoundary(PACKAGES)],
+  [
+    "stale-debt",
+    () => {
+      lintStaleCycleAllowlist(DEBT.cycleAllowlist, "leverage")
+      lintStaleDebtList(DEBT.brandAllowlist, "stale-debt", "brand")
+      lintStaleDebtList(DEBT.presentationAllowlist, "stale-debt", "presentation")
+      lintStaleDebtList(DEBT.tenantBranchAllowlist, "stale-debt", "identity-fork")
+      lintStaleDebtList(DEBT.silentFailureAllowlist, "stale-debt", "silent-failure")
+      lintStaleDebtList(DEBT.trustAllowlist, "stale-debt", "trust")
+      lintStaleDebtList(DEBT.enumForkAllowlist, "stale-debt", "enum-fork")
+      lintStaleDebtList(DEBT.jargonAllowlist, "stale-debt", "jargon")
+    },
+  ],
+])
 
-  const { options, host } = loadCompilerOptions(pkg.tsconfig)
-  const files = walk(pkg.src)
-
-  const graph = lintLayerImports(pkg, files, options, host)
-  const pkgCycles = DEBT.cycleAllowlist.filter((a) => a.pkg === pkg.name)
-  lintImportCycles(pkg, graph, pkgCycles)
-  lintStaleAllowlists(pkg)
-
-  lintModuleState(pkg, files)
-  if (pkg.name === "agent") {
-    lintNoAsyncLocalStorage(files)
-  }
-
-  lintFlatControlFlow(files)
-  lintFrameworkDenylist(pkg, files)
-  lintPackageExportSurface(ROOT, pkg.name, files)
-  lintSilentFailure(pkg, files, DEBT.silentFailureAllowlist)
-  lintTrustHygiene(pkg, files, DEBT.trustAllowlist)
-
-  if (pkg.name === "server") {
-    lintTenantIdentityForks(pkg, files, DEBT.tenantBranchAllowlist)
-  }
-
-  if (pkg.name === "ui") {
-    lintUiPlatformCheckbox(pkg, files)
-    lintWireKindDialect(ROOT, pkg, files)
-    lintDomainSurface(
-      ROOT,
-      pkg,
-      files,
-      DEBT.enumForkAllowlist,
-      DEBT.jargonAllowlist,
-    )
-  }
-
-  return { fileCount: files.length }
+function runRule(name, ctx) {
+  const fn = RUNNERS.get(name)
+  if (!fn) throw new Error(`lint-arch: unknown rule "${name}"`)
+  fn(ctx)
 }
 
 const counts = {}
-for (const key of ["agent", "server", "sync", "ui"]) {
-  counts[key] = lintPackage(PACKAGES[key]).fileCount
+for (const pkg of Object.values(PACKAGES)) {
+  if (!existsSync(pkg.src)) {
+    counts[pkg.name] = 0
+    continue
+  }
+  const { options, host } = loadCompilerOptions(pkg.tsconfig)
+  const files = walk(pkg.src)
+  const rules = [...PACKAGE_RULES, ...(PACKAGE_EXTRA_RULES[pkg.name] ?? [])]
+  const ctx = { pkg, files, options, host }
+  for (const rule of rules) runRule(rule, ctx)
+  counts[pkg.name] = files.length
 }
 
-lintStaleCycleAllowlist(DEBT.cycleAllowlist, "leverage")
-
-lintRegisteredApiSurfaces(ROOT, DEBT.brandAllowlist)
-lintErasedSeams(ROOT, PACKAGES)
-lintDialectHomes(ROOT, DEBT.presentationAllowlist)
-lintResolvedInputBoundary(PACKAGES.agent, PACKAGES.sync)
-lintEventCatalogCoverage(ROOT)
-
-lintStaleDebtList(DEBT.brandAllowlist, "stale-brand-allowlist", "brand surface")
-lintStaleDebtList(DEBT.presentationAllowlist, "stale-presentation-allowlist", "presentation")
-lintStaleDebtList(DEBT.tenantBranchAllowlist, "stale-tenant-branch-allowlist", "tenant-branch")
-lintStaleDebtList(DEBT.silentFailureAllowlist, "stale-silent-failure-allowlist", "silent-failure")
-lintStaleDebtList(DEBT.trustAllowlist, "stale-trust-allowlist", "trust")
-lintStaleDebtList(DEBT.enumForkAllowlist, "stale-enum-fork-allowlist", "enum-fork")
-lintStaleDebtList(DEBT.jargonAllowlist, "stale-jargon-allowlist", "jargon")
+for (const rule of GLOBAL_RULES) runRule(rule, {})
 
 const debtCount =
   PACKAGES.agent.layerAllowlist.length +
@@ -128,12 +162,10 @@ const debtCount =
   DEBT.enumForkAllowlist.length +
   DEBT.jargonAllowlist.length
 
-if (printReport(ROOT)) {
-  process.exit(1)
-}
+if (printReport(ROOT)) process.exit(1)
 
 console.log(
   `lint-arch: ${counts.agent} agent + ${counts.server} server + ${counts.sync} sync + ${counts.ui} ui files OK ` +
-    `(AST + seams + external leverage; ${debtCount} debt allowlist entries).`,
+    `(general runners + registry data; ${debtCount} debt entries).`,
 )
 process.exit(0)

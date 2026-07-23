@@ -11,6 +11,37 @@ import {
   SILENT_FAILURE_ALLOWLIST,
   TRUST_ALLOWLIST,
 } from "./external-debt.mjs"
+import { BRAND_TOKENS } from "./registry/policy.mjs"
+
+/** Rules every package runs (order matters only within dependencies). */
+export const PACKAGE_RULES = [
+  "forbidden-trees",
+  "top-level",
+  "layers",
+  "cycles",
+  "module-state",
+  "flat-control-flow",
+  "framework-deny",
+  "export-surface",
+  "silent-failure",
+  "trust",
+  "forbidden-constructors",
+]
+
+/** Extra per-package rules (data — not if-branches in the entrypoint). */
+export const PACKAGE_EXTRA_RULES = {
+  server: ["identity-forks"],
+  ui: ["jsx-attr-ban", "domain-surface"],
+}
+
+/** Global rules after all packages. */
+export const GLOBAL_RULES = [
+  "seams",
+  "dialects",
+  "catalog-coverage",
+  "resolved-inputs",
+  "stale-debt",
+]
 
 /** @param {string} root */
 export function createPackageConfigs(root) {
@@ -261,9 +292,10 @@ export function createLeverageDebt(root) {
     brandAllowlist: [
       {
         surface: "mymi",
-        note: "Rename api/mymi → domain noun (warehouse/connector); branded path is ops debt",
+        note: "Branded api surface — rename to domain noun; shrinking debt",
       },
     ],
+    brandTokens: [...BRAND_TOKENS],
     /** @type {{ file: string, note: string, used?: boolean }[]} */
     presentationAllowlist: [
       {

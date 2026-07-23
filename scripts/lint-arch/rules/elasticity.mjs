@@ -1,18 +1,20 @@
 /**
- * Architectural elasticity — core/domain isolated from transport/storage/UI;
- * package public surfaces only.
+ * Architectural elasticity — general runners; package lists from policy.
  */
 
 import { existsSync, readFileSync } from "node:fs"
 import { join } from "node:path"
-import { FRAMEWORK_DENYLIST } from "../seams.mjs"
+import {
+  BOUNDED_PACKAGES,
+  CORE_PACKAGES,
+  FRAMEWORK_DENYLIST,
+  PLATFORM_NPM,
+  PURE_LAYERS,
+} from "../registry/policy.mjs"
 import { fail } from "../report.mjs"
 import { walk } from "../fs-walk.mjs"
 import { collectModuleSpecifiers, parseSourceFile, relToPkg } from "../ts-context.mjs"
 
-const PURE_LAYERS = new Set(["core", "domain"])
-
-/** Ban framework/transport/DB driver value imports from core|domain. */
 export function lintFrameworkDenylist(pkg, files) {
   for (const file of files) {
     const rel = relToPkg(pkg.src, file)
@@ -33,54 +35,36 @@ export function lintFrameworkDenylist(pkg, files) {
           file,
           line,
           "elasticity-framework",
-          `${pkg.name} ${layer}/ must not value-import "${specifier}" — keep domain/core free of HTTP, React, and DB drivers. Use ports + adapters.`,
+          `${pkg.name} ${layer}/ must not value-import "${specifier}" — keep pure layers free of transport/UI/DB drivers.`,
         )
       }
     }
   }
 }
 
-/**
- * Enforce package import surface: only keys listed in package.json exports
- * (plus bare package name). Filesystem deep paths always forbidden.
- */
 export function lintPackageExportSurface(root, pkgLabel, files) {
-  const specs = [
-    { name: "@mia/agent", pkgJson: join(root, "packages/agent/package.json") },
-    { name: "@mia/sync", pkgJson: join(root, "packages/sync/package.json") },
-    { name: "@mia/server", pkgJson: join(root, "packages/server/package.json") },
-  ]
-
   /** @type {Map<string, Set<string>>} */
   const allowed = new Map()
-  for (const { name, pkgJson } of specs) {
-    if (!existsSync(pkgJson)) {
-      allowed.set(name, new Set(["."]))
-      continue
-    }
-    const json = JSON.parse(readFileSync(pkgJson, "utf8"))
-    const exportsMap = json.exports
+  for (const { npm, dir } of BOUNDED_PACKAGES) {
+    const pkgJson = join(root, dir, "package.json")
     const keys = new Set(["."])
-    if (exportsMap && typeof exportsMap === "object" && !Array.isArray(exportsMap)) {
-      for (const k of Object.keys(exportsMap)) keys.add(k)
+    if (existsSync(pkgJson)) {
+      const json = JSON.parse(readFileSync(pkgJson, "utf8"))
+      if (json.exports && typeof json.exports === "object") {
+        for (const k of Object.keys(json.exports)) keys.add(k)
+      }
     }
-    allowed.set(name, keys)
+    allowed.set(npm, keys)
   }
 
   for (const file of files) {
     const sf = parseSourceFile(file)
     for (const { specifier, line } of collectModuleSpecifiers(sf)) {
-      if (/packages\/agent\/src\//.test(specifier) || specifier.startsWith("@mia/agent/src/")) {
-        fail(file, line, "elasticity-deep-import", `${pkgLabel} must not import packages/agent/src/**`)
-        continue
-      }
-      if (/packages\/sync\/src\//.test(specifier) || specifier.startsWith("@mia/sync/src/")) {
-        fail(file, line, "elasticity-deep-import", `${pkgLabel} must not import packages/sync/src/**`)
-        continue
-      }
-      if (/packages\/server\/src\//.test(specifier) || specifier.startsWith("@mia/server/src/")) {
-        fail(file, line, "elasticity-deep-import", `${pkgLabel} must not import packages/server/src/**`)
-        continue
+      for (const { npm, dir } of BOUNDED_PACKAGES) {
+        const deepFs = new RegExp(`${dir.replace(/\//g, "\\/")}\\/src\\/`)
+        if (deepFs.test(specifier) || specifier.startsWith(`${npm}/src/`)) {
+          fail(file, line, "elasticity-deep-import", `${pkgLabel} must not import ${dir}/src/**`)
+        }
       }
 
       for (const [pkgName, keys] of allowed) {
@@ -92,8 +76,7 @@ export function lintPackageExportSurface(root, pkgLabel, files) {
             file,
             line,
             "elasticity-exports",
-            `${pkgLabel} imports "${specifier}" but ${pkgName} package.json exports does not list "${sub}". ` +
-              `Import "${pkgName}" or an exported subpath only.`,
+            `${pkgLabel} imports "${specifier}" but ${pkgName} exports does not list "${sub}"`,
           )
         }
       }
@@ -101,19 +84,19 @@ export function lintPackageExportSurface(root, pkgLabel, files) {
   }
 }
 
-/** Cores must not import server (resolved inputs at composition root). */
-export function lintResolvedInputBoundary(agentPkg, syncPkg) {
-  for (const pkg of [agentPkg, syncPkg]) {
+export function lintResolvedInputBoundary(packages) {
+  for (const name of CORE_PACKAGES) {
+    const pkg = packages[name]
     if (!pkg || !existsSync(pkg.src)) continue
     for (const file of walk(pkg.src)) {
       const sf = parseSourceFile(file)
       for (const { specifier, line } of collectModuleSpecifiers(sf)) {
-        if (specifier.includes("packages/server/") || specifier.startsWith("@mia/server")) {
+        if (specifier.includes("packages/server/") || specifier.startsWith(PLATFORM_NPM)) {
           fail(
             file,
             line,
             "elasticity-resolved-inputs",
-            `${pkg.name} must not import server — composition root resolves inputs; cores stay free of platform folklore.`,
+            `${pkg.name} must not import platform shell — composition root resolves inputs`,
           )
         }
       }

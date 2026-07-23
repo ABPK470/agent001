@@ -3,7 +3,7 @@ import { join, relative } from "node:path"
 import { fail } from "../report.mjs"
 import { walk } from "../fs-walk.mjs"
 
-/** @param {import('./config.mjs').createPackageConfigs extends Function ? any : never} pkg */
+/** Forbidden path prefixes from pkg.forbiddenTrees + optional nest-dir bans. */
 export function lintForbiddenTrees(pkg) {
   for (const tree of pkg.forbiddenTrees) {
     const abs = join(pkg.src, tree)
@@ -11,13 +11,13 @@ export function lintForbiddenTrees(pkg) {
       fail(
         abs,
         0,
-        `${pkg.name}-forbidden-tree`,
-        `doctrine forbids packages/${pkg.name}/src/${tree}/ — see docs/doctrine.md`,
+        "forbidden-tree",
+        `Forbidden tree packages/${pkg.name}/src/${tree}/ — see package config + docs/doctrine.md`,
       )
     }
   }
 
-  if (pkg.name === "server" && pkg.forbidApiNestDirs) {
+  if (pkg.forbidApiNestDirs?.length) {
     const apiRoot = join(pkg.src, "api")
     if (!existsSync(apiRoot)) return
     for (const file of walk(apiRoot)) {
@@ -27,26 +27,12 @@ export function lintForbiddenTrees(pkg) {
           fail(
             file,
             0,
-            "server-forbidden-tree",
-            `doctrine forbids api/**/${nest}/ — use service/ | types/ | state/ | handlers/`,
+            "forbidden-tree",
+            `Forbidden nest api/**/${nest}/ — use service/ | types/ | state/ | handlers/`,
           )
           return
         }
       }
-      if (parts.includes("hosting")) {
-        fail(file, 0, "server-forbidden-tree", `doctrine forbids hosting/ — use api/runs/prompting/`)
-        return
-      }
-      if (parts.includes("deploy")) {
-        fail(
-          file,
-          0,
-          "server-forbidden-tree",
-          `doctrine forbids api/**/deploy/ — use api/platform/; keep "deploy" in filenames only`,
-        )
-        return
-      }
-      // api/agents and other erased surfaces: enforced by seams registry (seam-erased)
     }
   }
 }
@@ -61,14 +47,14 @@ export function lintTopLevel(pkg) {
     if (st.isFile()) {
       if (pkg.allowedRootFiles.has(name)) continue
       if (name.endsWith(".md") || name.endsWith(".css")) continue
-      fail(abs, 0, `${pkg.name}-top-level`, `unexpected file at ${pkg.name} src root: ${name}`)
+      fail(abs, 0, "top-level", `unexpected file at ${pkg.name} src root: ${name}`)
       continue
     }
     if (!allowedHeads.has(name)) {
       fail(
         abs,
         0,
-        `${pkg.name}-top-level`,
+        "top-level",
         `unknown ${pkg.name} top-level "${name}". Allowed: ${[...allowedHeads].join(", ")}`,
       )
     }

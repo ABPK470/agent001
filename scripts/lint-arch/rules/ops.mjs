@@ -3,17 +3,13 @@
  */
 
 import ts from "typescript"
+import { IDENTITY_NAMES } from "../registry/policy.mjs"
 import { fail } from "../report.mjs"
 import { isTestFile } from "../fs-walk.mjs"
 import { lineOf, parseSourceFile, relToPkg } from "../ts-context.mjs"
 
-const IDENTITY_NAMES = new Set(["tenantId", "orgId", "customerId", "tenant"])
-
 /**
- * Fail when tenant/org identity is compared to a string literal or DEFAULT_* 
- * outside allowlisted persistence adapters.
- *
- * @param {{ file: string, note: string, used?: boolean }[]} tenantBranchAllowlist
+ * Fail when configured identity names are compared to literals / DEFAULT_*.
  */
 export function lintTenantIdentityForks(pkg, files, tenantBranchAllowlist) {
   for (const file of files) {
@@ -40,9 +36,9 @@ export function lintTenantIdentityForks(pkg, files, tenantBranchAllowlist) {
           fail(
             file,
             lineOf(sf, node),
-            "ops-tenant-identity-fork",
-            `Tenant/org identity compared to a literal or DEFAULT_* — that forks code per tenant. ` +
-              `Put variance in tenant config / catalog / publish data, or allowlist this persistence adapter (must shrink). See docs/doctrine.md`,
+            "identity-literal-fork",
+            `Identity compared to a literal or DEFAULT_* — that forks code per tenant. ` +
+              `Put variance in config/catalog data, or allowlist this adapter (must shrink).`,
           )
         }
       }

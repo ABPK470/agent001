@@ -6,6 +6,10 @@ import { existsSync } from "node:fs"
 import { join, relative } from "node:path"
 import ts from "typescript"
 import {
+  DOMAIN_SURFACE_PREFIXES,
+  SHARED_ENUMS_DIR,
+} from "../registry/policy.mjs"
+import {
   SURFACE_JARGON_PATTERNS,
   TRUST_DANGEROUS_SINKS,
   TRUST_PURE_LAYERS,
@@ -15,7 +19,7 @@ import { isTestFile, walk } from "../fs-walk.mjs"
 import { lineOf, parseSourceFile, relToPkg } from "../ts-context.mjs"
 
 function loadSharedEnumNames(root) {
-  const dir = join(root, "packages/shared-enums/src")
+  const dir = join(root, SHARED_ENUMS_DIR)
   /** @type {Set<string>} */
   const names = new Set()
   if (!existsSync(dir)) return names
@@ -45,7 +49,7 @@ export function lintDomainSurface(root, uiPkg, files, enumForkAllowlist, jargonA
     if (!/\.(tsx?|jsx?)$/.test(file)) continue
     const rel = relToPkg(uiPkg.src, file)
     if (isTestFile(rel)) continue
-    const inSurface = rel.startsWith("widgets/") || rel.startsWith("state/") || rel.startsWith("app/")
+    const inSurface = DOMAIN_SURFACE_PREFIXES.some((p) => rel.startsWith(p))
     if (!inSurface) continue
 
     const sf = parseSourceFile(file)

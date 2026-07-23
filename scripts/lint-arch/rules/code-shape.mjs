@@ -94,20 +94,25 @@ export function lintModuleState(pkg, files) {
   }
 }
 
-export function lintNoAsyncLocalStorage(files) {
+export function lintNoForbiddenConstructors(pkg, files, constructors) {
+  const banned = new Set(
+    constructors.filter((c) => c.packages.includes(pkg.name)).map((c) => c.name),
+  )
+  if (banned.size === 0) return
+
   for (const file of files) {
     const sf = parseSourceFile(file)
     const visit = (node) => {
       if (
         ts.isNewExpression(node) &&
         ts.isIdentifier(node.expression) &&
-        node.expression.text === "AsyncLocalStorage"
+        banned.has(node.expression.text)
       ) {
         fail(
           file,
           lineOf(sf, node),
-          "no-async-local-storage",
-          `AsyncLocalStorage is forbidden for DI — pass host/context as parameters`,
+          "forbidden-constructor",
+          `${node.expression.text} is forbidden here — pass dependencies as parameters (no ambient DI)`,
         )
       }
       ts.forEachChild(node, visit)
@@ -201,25 +206,7 @@ function functionRegistersListener(fnNode) {
 }
 
 export function lintDeepPackageImports(pkgLabel, files) {
-  for (const file of files) {
-    const sf = parseSourceFile(file)
-    for (const { specifier, line } of collectModuleSpecifiers(sf)) {
-      if (/packages\/agent\/src\//.test(specifier) || specifier.startsWith("@mia/agent/src/")) {
-        fail(
-          file,
-          line,
-          "no-deep-agent-import",
-          `${pkgLabel} must import "@mia/agent", not packages/agent/src/**`,
-        )
-      }
-      if (/packages\/sync\/src\//.test(specifier) || specifier.startsWith("@mia/sync/src/")) {
-        fail(
-          file,
-          line,
-          "no-deep-sync-import",
-          `${pkgLabel} must import "@mia/sync", not packages/sync/src/**`,
-        )
-      }
-    }
-  }
+  // superseded by lintPackageExportSurface — kept no-op for safety
+  void pkgLabel
+  void files
 }

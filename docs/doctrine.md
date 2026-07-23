@@ -1,476 +1,317 @@
 # Doctrine
 
-> **Shell owns state. Core is stateless. Dependencies are always parameters.**
-> **Every product capability has one owner. Cores receive resolved inputs — never platform folklore.**
+> **Shell owns state. Core is stateless. Dependencies are always parameters.**  
+> **Every capability has one owner. Cores receive resolved inputs — never platform folklore.**
 
-This document is the structural and product-ownership contract for the monorepo.
-`.cursor/rules/first-principles.mdc` is the thinking / quality bar; this file is
-where those ideas become enforceable edges. **Talk is cheap:** change this
-document and `scripts/lint-arch/` together. Run `npm run lint:arch` (also
-first under `npm run lint`) before merging.
+This is the monorepo’s **contract**: what must stay true about architecture,
+behavior, and evolution.  
+`.cursor/rules/first-principles.mdc` is the thinking bar.  
+`scripts/lint-arch/` is the machine that enforces the edges.  
+**Talk is cheap:** change the contract and the lint together. Run
+`npm run lint:arch` before merging.
+
+Doctrine states **invariants**. It does not catalog past mistakes, product
+anecdotes, or one-off solutions. Those live as data in the lint registries
+(seams, dialects, allowlists) — general mechanisms, not prose special cases.
 
 ---
 
-## First principles (applied here)
+## 1. What “great” means here
 
-Optimize for **predictability**, **cohesion**, and **low cognitive load**. The
-codebase must stay **coherent, cohesive, and uniform** — one thought process
-everywhere.
+The system is an **asymmetric leverage engine**: complex domain operations
+become obvious, deterministic, frictionless capabilities.
 
-1. **Name the real problem** before folders or patterns. Write the real path
-   first; abstract only after data and control flow are clear.
-2. **One clear concept per place** — if a new engineer has to guess, the design
-   is wrong. Edge cases fall out of a correct shape, not special-case sprawl.
-3. Prefer the **smallest structure that still scales**; add layers only when
-   the edge is real.
-4. **Composition roots wire; cores stay pure.** Explicit parameters and ports
-   over ambient DI, deep reference spaghetti, or indirection that hides flow.
-5. **Same dialect for the same class of problem** — match neighbors or the
-   change is wrong. No leftover shims, dual spawn paths, or parallel label maps.
+### External leverage (what users feel)
+
+| Claim | Invariant |
+| ----- | --------- |
+| **Zero cognitive overhead** | The surface maps 1:1 to domain concepts. No leaks of transport, storage, or implementation folklore into what people see or type. |
+| **Mechanical sympathy** | The system feels durable and forgiving. Transient failure is handled with named recovery — never silent swallow. Intent and durable state are not lost. |
+| **Uncompromising trust** | Correctness, security, and integrity are non-negotiable. Type escapes and dangerous sinks are not “features to add later.” |
+
+### Internal leverage (what builders feel)
+
+| Claim | Invariant |
+| ----- | --------- |
+| **Sub-linear ops** | Doubling tenants, traffic, or data must not multiply code paths. Operational variance is **data** (config, catalog, publish, deploy) — not `if (customer)` dialects. |
+| **Architectural elasticity** | Core contracts are isolated from transport, storage, and UI. You can change HTTP, DB, or React without rewriting domain rules. |
+| **Deterministic evolution** | New capability is **additive**: register a seam / extend an owner. Never a parallel stack that multiplies change cost. |
+
+---
+
+## 2. First principles (how to think)
+
+1. **Name the real problem** before folders or patterns. Write the real path;
+   abstract only after data and control flow are clear.
+2. **One clear concept per place.** If a new engineer must guess, the design is
+   wrong. Edge cases fall out of a correct shape — not special-case sprawl.
+3. **Smallest structure that still scales.** Add layers only when the edge is real.
+4. **Composition roots wire; cores stay pure.** Explicit parameters and ports.
+   No ambient DI that hides flow.
+5. **Same dialect for the same class of problem.** Match neighbors or the
+   change is wrong.
 6. **Named outcomes over silent fallbacks.** Declining a mode is not
    “fall through and hope.”
-7. **Flat control flow** (UI and Node) — peer handlers, explicit state; no
-   nested listener registration on hot paths. See first-principles.mdc;
-   enforced by `lint:arch` (`flat-control-flow`).
+7. **Flat control flow** (UI and Node): peer handlers, explicit state; no nested
+   listener registration on hot paths.
 
-Quality is respect: reliable, quiet, fast to fix, small in claim. If two designs
-work, pick the clearer, more uniform, cheaper-to-change one — then **lint it**.
+Quality is respect: predictable, cohesive, cheap to change, honest about cost.
+If two designs work, pick the clearer uniform one — then **lint it**.
 
 ---
 
-## Two kinds of architecture (both required)
+## 3. Two lenses (both required)
 
-| Lens | Question it answers | Failure mode |
-| ---- | ------------------- | ------------ |
-| **Structural layers** | Where may this *file* live and import? | God packages, cyclic deps |
-| **Product seams** | Who *owns* this capability, and what do others see? | Shotgun surgery (`agentId` in 15 places) |
+| Lens | Question | Failure |
+| ---- | -------- | ------- |
+| **Structural layers** | Where may this *file* live and import? | God packages, cycles, framework leaks into domain |
+| **Product seams** | Who *owns* this capability, and what do others see? | Shotgun surgery — the same optional identity painted through every layer |
 
-Layering without ownership is how a thin feature (create-agents) leaked across
-UI → client → API → DB → orchestrator → traces → tools. **Keep the layers.
-Require a seam.**
+Layering without ownership is unfinished architecture. **Keep layers. Require a seam.**
 
 ```text
-Structural (keep)              Product seam (require)
-─────────────────              ──────────────────────
-UI → client → API              Feature X owned HERE (api/<surface> or nowhere)
-       ↓                       Others never thread X’s private IDs
-   composition root  ──resolves──► RunInputs { systemPrompt, tools, … }
-       ↓
-   @mia/agent / @mia/sync      Cores never heard of X
+UI → client → API (owner)
+              ↓
+     composition root  ──resolves──► values the core needs
+              ↓
+          execution core          (never heard of the owner’s private IDs)
 ```
 
 ---
 
-## Capability ownership (product seams)
+## 4. Capability ownership (seams)
 
-**Rule.** Every product capability has **exactly one owner**. Deleting or
-changing it should be obvious: owner module + its public HTTP (if any) +
-migration (if any) + UI entry that called it. If you must grep the monorepo for
-the same optional field name to remove a feature, the owner failed.
+**Law.** Every product capability has **exactly one owner**.  
+Changing or deleting it touches: owner + its public surface (if any) + migration
+(if any) + the UI entry that called it. If you must grep the monorepo for the
+same optional field to remove a feature, the owner failed.
 
-| Capability class | Owner | What others see |
-| ---------------- | ----- | --------------- |
-| Run lifecycle | `api/runs/` + orchestrator | `runId`, `threadId`, goal, status |
-| System prompt for a run | composition root (`api/runs` / prompting) | Resolved `systemPrompt` string only |
-| Planner / children | `@mia/agent` plan + spawn kernel | Plan steps, `PlanExecutionMode`, traces |
-| Sync definitions | `api/sync/` + `@mia/sync` | Published defs / invoke APIs |
-| Policies | `api/policies/` | Allow / deny / approval on tools & sync |
-| Wire events | `@mia/shared-enums` + event catalog | `EventType` / `TraceEntry.kind` once |
+**Resolved inputs (hard).** Execution cores receive **values** already decided
+by the composition root (prompts, tool lists, budgets, ports). They do **not**
+resolve platform identity, CRUD profiles, or UI picker state.
 
-### Resolved run inputs (hard)
+**Anti-pattern.** Optional identity fields threaded store → client → routes →
+persistence → runtime → tools with no single owner. That is leakage, not layering.
 
-`@mia/agent` receives **resolved** inputs for a run:
+**Evolution.**
 
-- `systemPrompt` (file-managed default today)
-- governed tool list
-- budgets, signals, host ports
-
-It does **not** receive or resolve:
-
-- CRUD “agent profile” IDs
-- `resolveAgent(agentId)` / named tool whitelists from DB rows
-- UI picker state
-
-**UI / client** start a run with goal + thread (+ attachments). They do **not**
-pass platform profile IDs into the agent loop.
-
-**Anti-pattern (forbidden):** optional identity fields (`agentId`, …) painted
-through store → client → routes → SQLite → ActiveRun → delegate tools →
-usage/admin labels with no single owner. That is shotgun surgery, not layering.
-
-**Historical lesson:** multi-agent CRUD (`agent_configs`, `/api/agents`,
-AgentEditor) was erased. Do not resurrect it. Specialization is planner
-`subagent_task` + spawn kernel, not prompt-profile rows.
-
-`lint:arch` enforces capability ownership via the **seams registry**
-(`scripts/lint-arch/seams.mjs`): erased seams carry resurrection fingerprints;
-active API surfaces must be registered. Do not grow one-off identifier bans in
-rule files — add or erase a seam row.
+- **Add** a capability → register an active seam (owner + public surface).
+- **Erase** a capability → mark the seam erased with resurrection fingerprints.
+- The mechanism is general. Specific seams are **registry data**, not doctrine
+  paragraphs.
 
 ---
 
-## Agent runtime model (planner + children)
+## 5. Dialects (one concept class → one home)
 
-### Vocabulary (do not conflate)
+A **dialect** is how a concept class is expressed in code (vocabulary,
+presentation, spawn, wire events, …).
 
-| Term | Meaning |
-| ---- | ------- |
-| **Tool** | Something an agent *calls* (`query_mssql`, `read_file`, …) |
-| **Plan step** | Something the *plan schedules* |
-| **`deterministic_tool`** | Step that invokes one named tool with fixed args |
-| **`subagent_task`** | Step that spawns a **child agent loop** for an objective |
-| **`PlanExecutionMode`** | *How* `subagent_task` steps run: `parallel` \| `serial` \| `guided` \| `stop` |
+**Law.** Each concept class has exactly one home. A second home is multiplicative
+evolution — forbidden.
 
-A step is **not** a tool. Modes are **not** tools.
+Examples of concept classes (not an exhaustive product list):
 
-### Two orthogonal axes
+| Class | Meaning |
+| ----- | ------- |
+| Wire vocabulary | Event / trace identity exists once; UI projects it, does not reinvent it |
+| Presentation labels | Tool/event labels for humans live in the shared presentation SoT |
+| Spawn / fan-out | One kernel for child execution; planning owns *when* and *how many* |
+| Policy | One governance context for mutations (tools and HTTP) |
 
-```text
-Tier 0 — Structure (cheap, before plan LLM)     assessPlannerDecision
-  direct   → parent tool loop; no plan
-  planner  → generate and KEEP a plan
-
-Tier 1 — Execution mode (after valid plan)      runDelegationGate
-  parallel → fan out subagent_task (maxParallel N)
-  serial   → one child at a time; normal envelopes / tool allowlists
-  guided   → serial + child’s tools widened to full parent set (thin steps)
-  stop     → safety / hard-block; fail closed
-```
-
-**Never** after a valid plan: soft-decline economics → discard plan → silent
-direct-loop fallback. Economics only changes **shape**. Traces must distinguish
-`assess` direct from `economics_serial` / `economics_guided` (not one vague
-`planner_declined` for both).
-
-Tier 0 cannot answer Tier 1: fan-out economics needs plan shape (step count,
-deps, parallel fraction). Folding full economics into assess is wrong.
-
-### One spawn kernel
-
-- **One** child execution path: `tools/delegate-spawn/spawn.ts` (`ChildContract`).
-- Planner adapter (`spawn-for-plan`) builds the contract from envelope + step.
-- **No** parent mid-loop `delegate` / `delegate_parallel` tools — those were a
-  weaker ungated bypass and a second dialect.
-- Parallelism for children is the **pipeline DAG** + `PlanExecutionMode`, not
-  a model-callable parallel tool.
-- Parent ↔ child communication: return `DelegateResult` + pipeline
-  verify/repair (primary). Optional bus is coordination/UI, not the core contract.
+Adding a dialect class is additive config in the lint. Duplicating an existing
+class in a new folder is a doctrine violation.
 
 ---
 
-## Monorepo rules
+## 6. Monorepo shape (functional core / imperative shell)
 
-This is functional-core / imperative-shell, applied twice:
+Applied twice:
 
-1. **Monorepo** — `@mia/server` (and the UI) are the platform shell; `@mia/agent`
-   and `@mia/sync` are execution cores with no HTTP/SQLite ownership.
-2. **Inside `@mia/agent`** — `runtime/` is the package shell; `core/` is pure
-   decisions; `domain/` is vocabulary only.
+1. **Monorepo** — platform shell (server + UI) owns process, HTTP, persistence,
+   auth. Execution packages (`agent`, `sync`) are reusable cores: no HTTP/DB
+   ownership; I/O only via ports / host parameters.
+2. **Inside an execution package** — `runtime/` (or equivalent shell) owns
+   loop/host state; `core/` is pure decision; `domain/` is vocabulary only.
 
 | Rule | Meaning |
 | ---- | ------- |
-| Server is composition root | Boot, Fastify, SQLite, SSE, auth, queues live in `@mia/server` |
-| Agent / sync stay reusable | No ambient request context; I/O arrives via ports or host params |
-| Public barrels only | Outside a package, import `@mia/agent` / `@mia/sync` — never `packages/*/src/**` |
-| Ports name the I/O shape | `*Sink`, `*Store`, `*Reader`, `*Client` (see `ARCHITECTURE.md`) |
-| Policies govern mutations | Allow / deny / require approval for agent tools and HTTP Sync share one `buildPolicyContext` (always default-deny). Admin edits Policies; admin does not bypass them. Factory seed is `deploy/policies/defaults.json` (boot insert-if-missing only); DB/UI is SoT afterward. Platform → Reset factory policy defaults re-reads that JSON on purpose — never silent refresh on boot. `AGENT_HOSTED_MODE` is workspace isolation only. |
+| Shell is composition root | Boot, transport, storage, queues, SSE live in the shell |
+| Cores stay reusable | No ambient request context; thread deps as parameters |
+| Public surface only | Import the package — never deep into another package’s `src/**` |
+| Ports name I/O | Contracts describe sinks/stores/readers/clients; adapters implement |
+| Policy governs mutation | Allow / deny / approve — default deny; admin edits policy, does not bypass it |
+| Ops variance is data | Tenant/customer knobs live in config/catalog/publish — not code forks |
 
-Do **not** collapse packages to make deletes “one folder.” Collapse **leaked
-fields** into an owner + resolved inputs instead.
+Do not collapse packages to make deletes “one folder.” Collapse **leaked
+fields** into an owner + resolved inputs.
 
 ---
 
-## `@mia/agent` layers
+## 7. Layers (semantics)
 
-```text
-runtime  →  core, domain, ports, tools, llm, memory, internal
-core     →  domain, ports, tools, internal     (not runtime*)
-ports    →  domain, internal
-tools    →  domain, core, runtime, ports, internal
-llm      →  domain
-memory   →  domain
-domain   →  (self only)*
-internal →  (helpers; no layer ownership)
-```
+Each package declares a **layer matrix** (enforced by lint). Doctrine defines
+what layers *mean* — matrices live with the package config.
 
-\* Transitional allowlists live in `scripts/lint-arch/config.mjs` for known debt
-(domain type-imports of tools/core; core value-imports of `runtime/delegate`
-validation). Unused entries fail — allowlists must shrink; do not grow them casually.
-
-### External Leverage (machine-enforced)
-
-User-facing product quality — same rule as Internal Leverage: **closed
-invariants**, not slogans. Lint cannot prove “feels instant”; it enforces the
-structural proxies that keep external leverage from rotting.
-
-| Claim | Meaning | Enforcement |
-| ----- | ------- | ----------- |
-| **Zero cognitive overhead** | Domain surface maps 1:1 to shared vocabulary; no platform jargon in UI | `surface-enum-fork`, `surface-jargon`; wire-events dialect; seams erase folklore IDs |
-| **Mechanical sympathy** | Failures are named and observed — never silently swallowed | `sympathy-silent-failure` (empty `catch` / `.catch(() => {})`) |
-| **Uncompromising trust** | Correctness escapes and dangerous sinks are forbidden in pure layers | `trust-as-any`, `trust-ts-escape`, `trust-dangerous-sink` (`eval` / `Function` / `dangerouslySetInnerHTML`) |
-
-Config: `scripts/lint-arch/external.mjs` + shrinking debt in
-`scripts/lint-arch/external-debt.mjs`. Adding a new jargon pattern or sink is
-**config**, not a new special-case rule.
-
-### Internal Leverage (machine-enforced)
-
-These three claims are **closed doctrine edges**, not slogans. Lint cannot prove
-traffic curves; it enforces the structural proxies that keep leverage true.
-
-| Claim | Meaning | Enforcement |
-| ----- | ------- | ----------- |
-| **Architectural elasticity** | Core/domain contracts stay free of HTTP, React, DB drivers; packages import only public `exports` | `elasticity-framework`, `elasticity-exports`, `elasticity-deep-import`, `elasticity-resolved-inputs`; import cycles fail unless in shrinking `cycle-debt.mjs` |
-| **Deterministic evolution** | One owner per capability; one dialect per concept; additive seams | `scripts/lint-arch/seams.mjs` registry (`seam-unregistered`, `seam-erased`, `seam-owner-unique`); dialect classes (`dialect-presentation-labels`, `dialect-spawn-kernel`, `dialect-wire-events`) |
-| **Sub-linear ops** | Tenant/customer variance is data, not code forks | `ops-tenant-identity-fork`, `ops-branded-surface`; ambient module state linted on all packages |
-
-**Seams registry (SSOT):** every `api/<surface>/` must be an **active** seam.
-Erased capabilities are **rows** (`status: "erased"` + fingerprints) — the runner
-is general; agent-profiles is one erased seam, not a special-case ban list in
-`product.mjs`. Adding a capability = add a seam (additive). Erasing one = flip
-status + fingerprints.
-
-**Dialect classes:** presentation labels (tool/wire), spawn kernel, wire-events
-each have exactly one home path. A second home fails.
-
-### `lint:arch` (how doctrine stays true)
-
-`scripts/lint-arch.mjs` is the asymmetric enforcement engine — not a regex police
-officer. It parses TypeScript via the compiler API, resolves modules with
-`ts.resolveModuleName`, and applies one package config schema across agent /
-server / sync / ui.
-
-| Edge | How |
-| ---- | --- |
-| Layer matrix + side-effect imports | AST import/export declarations |
-| Import cycles (incl. intra-layer) | Value-import graph; fail unless shrinking cycle allowlist |
-| Flat control flow | AST function nesting + listener registration |
-| Module `let` / timers / ALS | AST statements (all packages); ALS ban on agent |
-| Seams / erased capabilities | Registry in `scripts/lint-arch/seams.mjs` |
-| Dialect uniqueness | Concept-class owners in seams registry |
-| Domain surface / silent failure / trust | External Leverage (`scripts/lint-arch/external.mjs`) |
-| Event catalog coverage | Every `TraceEntry.kind` / `EventType` has a descriptor |
-| Stale debt allowlists | Unused allowlist entries fail |
-
-Change this document and `scripts/lint-arch/` together.
-
-### What each layer is for
+### Execution package (agent / sync pattern)
 
 | Layer | Owns | Must not |
 | ----- | ---- | -------- |
-| `domain/` | Enums, types, tenant config shapes | Services, I/O, loop drivers, `domain/services/` |
-| `core/` | Pure decisions (plan, choose-path, clarify, doctrine, policy, govern, recover, delegate-decision) | Mutable loop/host state; side effects except injected ports |
-| `runtime/` | Host, run context, run-a-goal spine, loop drivers | Dumping ground for pure policy (put that in `core/`) |
-| `ports/` | Host contracts + I/O-backed services (`AuditService`, `Learner`, memory adapters) | Agent loop control flow |
-| `tools/` | Executable tools bound to host + run context; **one** spawn kernel under `delegate-spawn/` | Owning the run story; a second ad-hoc delegate tool dialect |
-| `llm/` / `memory/` | Model adapters / context budgeting | Cross-cutting orchestration |
-| `internal/` | Logger, JSON, path helpers | Business decisions |
+| **domain** | Types, enums, config shapes | I/O, services, loop drivers |
+| **core** | Pure decisions | Mutable host/run state; side effects except via injected ports |
+| **runtime** | Host, run context, loop spine | Dumping ground for pure policy (that belongs in core) |
+| **ports** | I/O contracts (+ thin port-backed services where doctrine allows) | Owning the run story |
+| **tools** | Executable capabilities bound to host + context | A second dialect for the same concept class |
+| **adapters** (sync) | External system bindings | Business policy |
+| **internal** | Helpers with no layer ownership | Business decisions |
 
-### Naming (mature)
+**Elasticity:** `domain` / `core` must not value-import HTTP frameworks, UI
+libraries, or DB drivers. Those belong at the shell / adapters boundary.
 
-Use `domain/`, `ports/`, `core/`, `runtime/`, `internal/`.
-Do **not** resurrect `application/`, `concepts/`, `contracts/`, or `decisions/`.
-Do **not** use numeric filename prefixes (`01-…`); order lives in
-`runtime/run-a-goal/run-goal.ts`.
+### Platform shell (server pattern)
 
-### Outcomes, not silent fallbacks
+| Layer | Owns |
+| ----- | ---- |
+| **boot** | Process life |
+| **http** | Transport composition |
+| **infra** | Long-lived I/O (db, events, queue, sandbox, …) |
+| **adapters** | Implementations of execution-package ports |
+| **api** | Product HTTP surfaces — **one capability per surface** |
+| **ports** | Server-owned contracts |
+| **cli** / **internal** | Operator entry / helpers |
 
-Branches return **named outcomes**. Unhandled outcomes throw with full route
-context (`UnhandledStepOutcomeError`). Recovery and retries are first-class
-named paths — “no fallbacks” means no silent defaulting, not “no recovery”.
+API surfaces are thin. Domain nouns for folders — not customer brand names.
+Operator control plane is a capability (platform), not a synonym for `infra/`.
 
----
+### UI pattern
 
-## `@mia/server` layers
+| Layer | Owns | Must not |
+| ----- | ---- | -------- |
+| **boot** / **app** | Chrome and shell layout | Business policy |
+| **client** | Transport to the API | Domain presentation maps |
+| **state** | Composition root for client state | Wire-kind presentation switches |
+| **widgets** | Product surfaces | Reinventing wire vocabulary or tool labels |
+| **components** | Presentation-only | Importing `state/` or owning wire dialects |
+| **lib** | Pure helpers (including event projection) | Store coupling |
+| **theme** / **enums** / **hooks** | As named | Crossing into ownership they don’t have |
 
-Server is the composition root. Do **not** copy agent’s `domain/core/runtime`
-everywhere. Use shell vocabulary:
-
-```text
-packages/server/src/
-├── index.ts       # thin: setup CLI | startServer()
-├── boot/          # process spine
-├── http/          # Fastify composition
-├── infra/         # long-lived I/O: db, events, queue, sandbox…
-├── adapters/      # concrete @mia/agent + @mia/sync port implementations
-├── api/           # product HTTP surfaces (capability owners)
-├── ports/         # server-owned contracts
-├── cli/
-└── internal/      # server-only helpers
-```
-
-### Dependency direction
-
-```text
-boot      →  infra, adapters, api, ports, http, internal
-http      →  api, infra, boot, ports, internal
-api       →  infra, adapters, ports, boot, internal
-adapters  →  infra, ports, internal
-infra     →  internal, ports
-ports     →  ports, internal     (not api / infra impl)
-cli       →  boot, infra, api, internal, adapters
-internal  →  internal
-```
-
-Layer allowlists for server are empty — do not reintroduce ports→infra debt casually.
-
-### `api/` surfaces
-
-- Thin surface = `routes.ts` only. No empty Nest-style scaffolds.
-- **One capability per `api/<surface>`** — that folder is the owner (see
-  Capability ownership).
-- **`api/platform`** — operator control plane (health, about, catalog versions,
-  artifact import/export). HTTP under `/api/platform/*`.
-  Not `infra/` (technical capabilities). Not `deploy/` as a folder name
-  (`deploy` is a business word — filenames/routes only).
-- **`api/runs/prompting/`** — pure server decisions that build what the model
-  sees and which tool families load (system messages, prompt gating, goal
-  classification, clarification / data blocks). Resolves run inputs here /
-  in run start — not in the UI.
-- **`api/tools/`** — tool catalog listing (`GET /api/tools`). Not agent CRUD.
-- **Forbidden:** `api/agents/` (erased seam `agent-profiles` in
-  `scripts/lint-arch/seams.mjs` — do not resurrect).
-
-### Forbidden server names
-
-| Forbidden | Use instead |
-| --------- | ----------- |
-| `bootstrap/`, `app/`, `features/`, top-level `platform/`, `shared/` | `boot/`, `http/`, `api/`, `infra/`, `internal/` |
-| `api/deploy/` | `api/platform/` |
-| `api/agents/` | (deleted — one system prompt, planner children) |
-| `api/runs/core/`, `**/hosting/` | `api/runs/prompting/` |
-| top-level `crypto/` | `infra/` or `adapters/` |
-
-### Prose spines
-
-1. `boot/start-server.ts` — process life  
-2. `api/runs/orchestrator.ts` + `execution/` — run life  
+UI starts work with **domain intent** (e.g. goal + thread), not platform profile
+IDs. Mode and route labels are **projections** of shared vocabulary.
 
 ---
 
-## Where state may live
+## 8. Control flow and state
 
-Allowed:
+### Flat control flow
 
-- Fastify app and other long-lived server objects
-- SQLite / adapter instances
-- `AgentHost` (boot) and `RunContext` (per-run)
-- Host-attached caches (`host.catalog`, …)
-- Per-call locals and closures
-- **Documented ambient:** agent `domain/tenant` (`getTenantConfig` /
-  `setTenantConfig` / `resetTenantConfig`) — process-wide business knobs
+Execution flows downward. Peer `onX` / `handleX` / `processX` handlers. Multi-step
+interaction state lives in an **explicit object or ref** (or parameters), not
+nested closures that register listeners on hot paths.
 
-Forbidden:
+Composition roots wire listeners **once**. Do not allocate nested handlers inside
+request / pointer / message paths. (Trivial one-shot `setTimeout` for logging is
+not ceremony.)
 
-- Module-level `let` / `var` outside lint allowlists
-- Exported `getGlobal*` / `setGlobal*` / `resetGlobal*`
-- New `AsyncLocalStorage` for hidden dependency injection
-- Module-load `setInterval` / `setTimeout` outside allowlists
-- Deep imports into `packages/*/src/**` outside public barrels
+### Where state may live
 
----
+**Allowed:** process / app objects at the composition root; persistence;
+per-run host/context; host-attached caches; locals; **documented** ambient
+business knobs (tenant config pattern — process-wide, loaded at boot).
 
-## When you add a file
-
-**In `@mia/agent`:** pick the agent layer table (types → `domain/types`, pure
-decision → `core/<cluster>`, stateful driver → `runtime/`, I/O → `ports/services`).
-
-**In `@mia/server`:** pick shell layer (`boot` / `http` / `infra` / `adapters` /
-`api/<surface>` / `ports` / `internal`). For run prompt assembly use
-`api/runs/prompting/`. Ask: **which capability owns this?** If none, you are
-about to leak.
-
-Then:
-
-1. Import only allowed layers.
-2. Thread dependencies as parameters (or inject via ports / host).
-3. Run `npm run lint:arch` before opening a PR.
-
-If the file does not fit cleanly, the doctrine is wrong for that case — update
-this doc and the lint together, do not sneak around the lint.
+**Forbidden:** undeclared module `let`/`var`; exported `getGlobal*` / `setGlobal*`
+DI; `AsyncLocalStorage` as hidden DI; module-load repeating timers without a
+clear lifecycle; undeclared ambient mutable “state objects.”
 
 ---
 
-## `@mia/ui` layers
+## 9. Outcomes, failure, and trust
 
-```text
-packages/ui/src/
-├── boot/         # app chrome / CSS entry
-├── app/          # shell layout
-├── client/       # REST + SSE client
-├── state/        # zustand composition root
-├── widgets/      # product surfaces (Trace, Pipelines, TermChat, …)
-├── components/   # presentation-only (no store)
-├── hooks/
-├── lib/          # pure helpers (incl. lib/events projection)
-├── theme/
-└── enums/
-```
+### Named outcomes
 
-| Layer | May import | Must not |
-| ----- | ---------- | -------- |
-| `components/` | `hooks`, `lib`, `theme`, `enums`, `components` | `state/`, `widgets/` |
-| `lib/` | `enums`, `lib` | `state/`, `widgets/`, `components/` |
-| `widgets/` | `client`, `state`, `app`, `components`, `hooks`, `lib`, … | reinvent wire→label maps |
+Branches return **named outcomes**. Unhandled outcomes fail closed with context.
+Recovery and retries are first-class named paths. “No silent fallbacks” means
+no quiet defaulting that discards a valid decision — not “no recovery.”
 
-Flat control flow applies (peer handlers + explicit state; no nested listener
-registration on hot paths). See `.cursor/rules/first-principles.mdc`.
+### Mechanical sympathy
 
-UI starts runs with **goal + thread (+ attachments)** only. No agent-profile
-picker; no `selectedAgentId`. Planner route / subagent mode are **trace
-projections** (catalog + `lib/events`), not local folklore maps.
+Empty `catch` / `.catch(() => {})` are forbidden unless cataloged as shrinking
+debt. Forgiving systems **name** failure and preserve intent; they do not
+erase it.
+
+### Trust
+
+In pure decision layers: no `as any`, no `@ts-ignore` / `@ts-nocheck` as
+policy. Dangerous sinks (`eval`, `Function`, unchecked HTML injection) are
+forbidden unless explicitly allowlisted with review. Integrity is not optional.
 
 ---
 
-## Event catalog & outline projection
+## 10. Observability (first-class)
 
-Wire identity exists once (`EventType`, `TraceEntry`). Presentation must not be
-reinvented per widget — same dialect as `tool-call-presentation`
-(“never branch on tool names in UI”).
+Every meaningful execution step leaves an auditable, deterministic record.
 
-**Three layers — one thought process:**
+**Law.** Wire identity exists **once** (shared enums + catalog). Presentation is
+projection — never a second vocabulary in widgets.
 
-1. **Catalog (semantic only)** — `packages/shared-types/src/event-catalog.ts`.
-   Every `TraceEntry.kind` and high-traffic `EventType` gets one descriptor:
-   `family`, `label`, `severity`, `summary`, optional `instanceKey` (merge
-   identity for the same entity, e.g. `step:frontend_layer` — **not** parent/child).
-   No hierarchy, sticky, or scope-vs-leaf — those are view-local.
-2. **Projection (pure)** — `packages/ui/src/lib/events/`.
-   `EventAtom[]` → `buildOutline` / `buildFlatLog` driven by a **ViewSpec**:
-   nest rules, `roleByFamily` / `roleByType` (`scope` | `leaf` | `omit`),
-   `stickyFamilies` / `stickyTypes`, fold defaults. No React.
-3. **Shell (one UI)** — `packages/ui/src/components/outline/`.
-   Renders any outline; sticky = **pin overlay** (Cursor/VS Code dialect via
-   `lib/events/pin.ts`), never `position: sticky` on rounded card chrome.
+Three layers, one thought:
 
-Widgets supply a ViewSpec + leaf body renderers (Sent JSON, SQL, tool args).
-They do **not** own `switch (entry.kind)` / parallel `TRACE_KIND_LABELS` maps
-for labels or outline roles.
+1. **Catalog** — semantic descriptors for every wire kind / event type  
+   (`family`, `label`, `severity`, `summary`, optional instance key). No view
+   hierarchy here.
+2. **Projection** — pure functions: atoms → outline / log / chat parts, driven
+   by a view spec.
+3. **Shell** — one UI that renders projections; widgets supply view specs and
+   leaf bodies, not parallel kind→label maps.
 
-TermChat `buildResponseParts` lives in `lib/events/build-chat-parts.ts`
-(kind switches allowed there). Widgets render `ResponsePart[]` only.
-Exhaustive catalog coverage is enforced by `lint:arch` (every `TraceEntry.kind`
-and every `EventType` has a descriptor).
-
-Adding a new BE event = enum member + one catalog row. Trace / Pipelines /
-Event Stream / TermChat pick it up without new widget switches.
-
-`PlanExecutionMode` lives in `@mia/shared-enums`. UI labels for
-`planner-delegation-decision` come from the catalog / projections
-(`parallel` / `serial` / `guided` / `stop` — “Subagent mode”), not ad-hoc
-“will delegate / skip” copy.
-
-`npm run lint:arch` bans widget-level kind switches for catalogued wire kinds
-outside `lib/events/` and the catalog.
+Adding a backend event = enum member + catalog row. Surfaces pick it up without
+new widget switches.
 
 ---
 
-## Change cost checklist
+## 11. Agent execution model (domain vocabulary)
 
-Before merging a capability add/remove:
+Do not conflate:
 
-1. **Owner named?** One `api/<surface>` or agent module — not “a field everywhere.”
-2. **Resolved inputs?** Core sees values, not optional platform IDs.
-3. **One dialect?** No second spawn path, second label map, or silent fallback.
-4. **Named outcomes?** Assess vs economics vs stop are distinguishable in traces.
-5. **Lint green?** `npm run lint:arch` — and doctrine updated if you needed a new edge.
+| Term | Meaning |
+| ---- | ------- |
+| **Tool** | Something a loop *calls* |
+| **Plan step** | Something a plan *schedules* |
+| **Deterministic tool step** | Invoke one named tool with fixed args |
+| **Subagent task step** | Spawn a **child agent loop** for an objective |
+| **Execution mode** | *How* subagent steps run (fan-out / serial / guided / stop) |
+
+Structure (whether to plan) and execution mode (how children run) are
+**orthogonal**. Economics may change **shape** after a valid plan; it must not
+silently discard the plan into an ungated direct loop. Traces must distinguish
+assess outcomes from economics outcomes.
+
+Child execution has **one** spawn kernel. Fan-out is plan DAG + mode — not a
+second model-callable “parallel delegate” dialect.
+
+---
+
+## 12. Enforcement
+
+Human discipline does not scale. **`npm run lint:arch`** encodes these edges.
+
+**Runners are general** (uniform rule ids, no product `if` branches).  
+**Registries hold instance data** (seams, dialects, policy tokens, debt allowlists).
+
+Adding a capability, dialect, brand token, or catalog = add a **row** in
+`scripts/lint-arch/registry/` — never a new special-case in `rules/`.
+
+Allowlists are explicit, bounded, and must shrink. Unused entries fail.
+
+---
+
+## 13. Change checklist
+
+Before merging a capability add or remove:
+
+1. **Owner named?** One seam — not a field everywhere.  
+2. **Resolved inputs?** Core sees values, not optional platform IDs.  
+3. **One dialect?** No second home for the same concept class.  
+4. **Named outcomes?** Decisions are distinguishable in traces and code.  
+5. **Variance is data?** No new tenant/customer code fork.  
+6. **Lint green?** `npm run lint:arch` — and this contract updated only if a
+   *new universal edge* appeared (not because of a one-off fix).
