@@ -1,11 +1,18 @@
 /**
- * Parallel plans must actually fan out. The LLM often stamps
- * canRunParallel:false and chains every step with dependsOn/edges even when
- * steps only share a theme (e.g. three independent catalog inspections).
- * ExecutionMode "parallel" then still runs maxParallel=4 against a width-1 DAG.
+ * Parallel plans must actually fan out — without regressing correctness.
  *
- * Fix: mark safe investigation peers as parallelizable, then drop edges that
- * are not justified by a real artifact handoff (requiredSourceArtifacts).
+ * First principles (hard rules):
+ * 1. Real artifact handoffs serialize. If B lists A's target in
+ *    requiredSourceArtifacts, A→B stays. Parent/downstream never starts
+ *    until upstream completes (pipeline inDegree + Promise.allSettled).
+ * 2. Blueprint gates serialize. Anything depending on BLUEPRINT.md waits.
+ * 3. Shared write targets are rejected at plan validate (`shared_target_artifact`);
+ *    children are also write-scoped to their own targetArtifacts.
+ * 4. Thematic dependsOn chains (same topic, no file handoff) are noise —
+ *    those edges are pruned so independent investigation can run together.
+ *
+ * Never prune an edge solely because both ends are "readonly" if a real
+ * handoff is declared — that would let a consumer race its producer.
  */
 
 import { READ_ONLY_TOOL_NAMES } from "../../../domain/types/agent-constants.js"
@@ -47,18 +54,12 @@ function readsOwnedUpstream(step: SubagentTaskStep, owners: ReadonlyMap<string, 
 }
 
 function declaredTools(step: SubagentTaskStep): string[] {
-  return [
-    ...step.requiredToolCapabilities,
-    ...step.executionContext.allowedTools,
-  ]
+  return [...step.requiredToolCapabilities, ...step.executionContext.allowedTools]
 }
 
 /**
- * Investigation / evidence peers — safe to fan out.
- *
- * LLM default effectClass is often filesystem_write even for catalog-only
- * steps, and targetArtifacts are often empty. Those must still parallelize
- * or the UI shows one subagent at a time despite executionMode=parallel.
+ * Investigation / evidence peers — safe to fan out when there is no
+ * justified artifact edge between them.
  */
 export function isInvestigationParallelCandidate(step: SubagentTaskStep): boolean {
   if (isBlueprintStep(step)) return false
@@ -99,6 +100,7 @@ export function markSafeStepsParallelizable(plan: Plan): number {
   for (const step of subagents) {
     if (step.canRunParallel) continue
     if (!isInvestigationParallelCandidate(step)) continue
+    // Consumer of another step's artifact must wait — do not mark parallel.
     if (readsOwnedUpstream(step, owners)) continue
     ;(step as { canRunParallel: boolean }).canRunParallel = true
     marked++
@@ -113,11 +115,19 @@ function edgeJustifiedByArtifacts(from: SubagentTaskStep, to: SubagentTaskStep):
   )
 }
 
+function shareWriteTarget(from: SubagentTaskStep, to: SubagentTaskStep): boolean {
+  const fromArts = new Set(from.executionContext.targetArtifacts.map(normalizeSpecPath))
+  return to.executionContext.targetArtifacts.some((artifact) =>
+    fromArts.has(normalizeSpecPath(artifact)),
+  )
+}
+
 /**
- * Drop A→B edges when both steps are investigation peers and B does not
- * read A's artifacts. Keeps blueprint → implement edges and true data handoffs.
- *
- * Pure readonly→readonly chains never justify serialization (no file handoff).
+ * Drop thematic A→B edges only. Keep:
+ * - blueprint → *
+ * - real requiredSourceArtifacts handoffs
+ * - shared targetArtifact ownership (must not rewrite the same file concurrently)
+ * - any edge that is not between investigation / canRunParallel peers
  */
 export function pruneSpuriousSerialEdges(plan: Plan): number {
   const byName = new Map(
@@ -135,24 +145,26 @@ export function pruneSpuriousSerialEdges(plan: Plan): number {
       kept.push(edge)
       continue
     }
+
+    // (1) Blueprint gate — always serialize.
     if (isBlueprintStep(from)) {
       kept.push(edge)
       continue
     }
 
-    const bothReadonly =
-      from.executionContext.effectClass === "readonly" &&
-      to.executionContext.effectClass === "readonly"
-    if (bothReadonly) {
-      pruned++
-      continue
-    }
-
+    // (2) Real handoff — consumer waits for producer.
     if (edgeJustifiedByArtifacts(from, to)) {
       kept.push(edge)
       continue
     }
 
+    // (3) Same write target — never concurrent (belt + validate error).
+    if (shareWriteTarget(from, to)) {
+      kept.push(edge)
+      continue
+    }
+
+    // (4) Thematic chain between investigation peers — drop.
     const bothInvestigation =
       isInvestigationParallelCandidate(from) && isInvestigationParallelCandidate(to)
     if (bothInvestigation || (from.canRunParallel && to.canRunParallel)) {
@@ -160,6 +172,7 @@ export function pruneSpuriousSerialEdges(plan: Plan): number {
       continue
     }
 
+    // (5) Anything else (codegen chains without declared sources, etc.) — keep.
     kept.push(edge)
   }
 
@@ -178,7 +191,7 @@ export function pruneSpuriousSerialEdges(plan: Plan): number {
   return pruned
 }
 
-/** Prepare a plan so parallel executionMode can actually fan out. */
+/** Prepare a plan so parallel executionMode can actually fan out safely. */
 export function preparePlanParallelism(plan: Plan): { marked: number; prunedEdges: number } {
   const marked = markSafeStepsParallelizable(plan)
   const prunedEdges = pruneSpuriousSerialEdges(plan)

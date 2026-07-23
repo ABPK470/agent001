@@ -115,9 +115,33 @@ describe("preparePlanParallelism", () => {
     expect([...graph.inDegree.values()].every((deg) => deg === 0)).toBe(true)
   })
 
-  it("prunes pure readonly chains even when fake requiredSourceArtifacts invent a handoff", () => {
+  it("prunes thematic readonly chains with no artifact handoff", () => {
     const plan: Plan = {
       reason: "readonly chain",
+      confidence: 0.9,
+      requiresSynthesis: true,
+      steps: [
+        makeStep("a", {
+          targets: ["tmp/a.json"],
+          effectClass: "readonly",
+        }),
+        makeStep("b", {
+          targets: ["tmp/b.json"],
+          effectClass: "readonly",
+          dependsOn: ["a"],
+        }),
+      ],
+      edges: [{ from: "a", to: "b" }],
+    }
+
+    const result = preparePlanParallelism(plan)
+    expect(result.prunedEdges).toBe(1)
+    expect(plan.edges).toEqual([])
+  })
+
+  it("keeps readonly→readonly when B declares a real requiredSourceArtifacts handoff", () => {
+    const plan: Plan = {
+      reason: "readonly handoff",
       confidence: 0.9,
       requiresSynthesis: true,
       steps: [
@@ -135,9 +159,34 @@ describe("preparePlanParallelism", () => {
       edges: [{ from: "a", to: "b" }],
     }
 
-    const result = preparePlanParallelism(plan)
-    expect(result.prunedEdges).toBe(1)
-    expect(plan.edges).toEqual([])
+    preparePlanParallelism(plan)
+    expect(plan.edges).toEqual([{ from: "a", to: "b" }])
+    expect(buildGraph(plan).inDegree.get("b")).toBe(1)
+  })
+
+  it("keeps shared write-target edges so peers cannot crush the same file", () => {
+    const plan: Plan = {
+      reason: "shared target",
+      confidence: 0.9,
+      requiresSynthesis: true,
+      steps: [
+        makeStep("writer_a", {
+          targets: ["tmp/shared.json"],
+          canRunParallel: true,
+          effectClass: "filesystem_write",
+        }),
+        makeStep("writer_b", {
+          targets: ["tmp/shared.json"],
+          canRunParallel: true,
+          dependsOn: ["writer_a"],
+          effectClass: "filesystem_write",
+        }),
+      ],
+      edges: [{ from: "writer_a", to: "writer_b" }],
+    }
+
+    preparePlanParallelism(plan)
+    expect(plan.edges).toEqual([{ from: "writer_a", to: "writer_b" }])
   })
 
   it("keeps real artifact handoff edges", () => {
