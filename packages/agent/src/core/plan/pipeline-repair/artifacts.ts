@@ -237,9 +237,20 @@ export function buildIssueRepairActions(step: SubagentTaskStep, feedback: readon
     }
 
     if (/VERIFICATION MODALITY GAP/i.test(cleanIssue)) {
-      actions.push(
-        "Produce artifacts that are straightforward to verify deterministically: valid syntax, explicit entrypoints, and concrete file outputs"
-      )
+      const evidenceOnly =
+        step.executionContext.targetArtifacts.length > 0 &&
+        step.executionContext.targetArtifacts.every((artifact) =>
+          /\.(?:md|markdown|txt|rst|adoc|json|ya?ml|csv|tsv|xml)$/i.test(artifact)
+        )
+      if (evidenceOnly || step.executionContext.verificationMode === "none") {
+        actions.push(
+          "This is an evidence/investigation step — do NOT invent runtime tests or entrypoints. Write the required evidence files, then read them back with read_file to prove the content is present."
+        )
+      } else {
+        actions.push(
+          "Produce artifacts that are straightforward to verify deterministically: valid syntax, explicit entrypoints, and concrete file outputs"
+        )
+      }
       continue
     }
   }

@@ -44,6 +44,25 @@ export async function spawnChildForPlan(
     }
   }
 
+  // Readonly investigation steps must still read prior evidence and call
+  // data tools. Without this, a sloppy allowlist leaves the child blind
+  // even though the inherited system prompt describes those tools.
+  if (allowedToolNames.size > 0 && normalizedEnvelope.effectClass === "readonly") {
+    for (const essential of [
+      "read_file",
+      "list_directory",
+      "think",
+      "search_catalog",
+      "query_mssql",
+      "inspect_definition",
+      "note"
+    ]) {
+      if (ctx.availableTools.some((t) => t.name === essential)) {
+        allowedToolNames.add(essential)
+      }
+    }
+  }
+
   if (allowedToolNames.size > 0) {
     childTools = ctx.availableTools.filter((t) => allowedToolNames.has(t.name))
   } else {

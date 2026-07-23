@@ -26,7 +26,8 @@ export function buildRepairStep(
   acceptedArtifacts: ReadonlySet<string>,
   toolMap: Map<string, Tool>,
   plan: Plan,
-  opts?: PipelineExecutorOptions
+  opts?: PipelineExecutorOptions,
+  runnableArtifacts: ReadonlySet<string> = acceptedArtifacts
 ): SubagentTaskStep {
   const typedFeedback = summarizeRepairTask(repairTask)
   const primaryFeedback = typedFeedback.primary.filter((issue) => !isGibberishIssue(issue))
@@ -59,7 +60,9 @@ export function buildRepairStep(
   const hasReplaceInFile = toolMap.has("replace_in_file")
   const docsOnlyTargets =
     sa.executionContext.targetArtifacts.length > 0 &&
-    sa.executionContext.targetArtifacts.every((artifact) => /\.(?:md|markdown|txt|rst|adoc)$/i.test(artifact))
+    sa.executionContext.targetArtifacts.every((artifact) =>
+      /\.(?:md|markdown|txt|rst|adoc|json|ya?ml|csv|tsv|xml)$/i.test(artifact)
+    )
   const blueprintRetryGuidance =
     docsOnlyTargets || /blueprint/i.test(sa.name)
       ? `\n\n⚠️ BLUEPRINT/DOCUMENT RETRY GUIDANCE:\n- Do NOT mutate the document to add fake runtime-verification, test-plan, or execution-history sections.\n- Verification for this step is deterministic artifact inspection: write the document, then use read_file on the written artifact and confirm the required contracts are present.\n- Fix only the missing architectural depth: signatures, shared data, dependencies, algorithmic contracts, and edge cases.\n- Do NOT claim runtime behavior for a documentation-only step.${buildBlueprintRetryGuidance(sa, plan, primaryFeedback)}`
@@ -70,7 +73,8 @@ export function buildRepairStep(
     name,
     runtimeModel,
     repairTask,
-    acceptedArtifacts
+    acceptedArtifacts,
+    runnableArtifacts
   )
   return {
     ...sa,

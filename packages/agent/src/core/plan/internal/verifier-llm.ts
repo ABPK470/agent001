@@ -10,6 +10,7 @@ import { DelegationSpanEventKind, VerifierOutcome } from "../../../domain/index.
 
 import { MessageRole } from "../../../domain/enums/message.js"
 import type { LLMClient, Message, Tool } from "../../types.js"
+import { isEvidenceArtifact } from "../blueprint-contract/index.js"
 import type {
   PipelineResult,
   Plan,
@@ -38,8 +39,8 @@ export function detectVerificationModalityGaps(
 ): string[] {
   const issues: string[] = []
   const artifacts = step.executionContext.targetArtifacts
-  const docsOnlyArtifacts =
-    artifacts.length > 0 && artifacts.every((a) => /\.(?:md|markdown|txt|rst|adoc)$/i.test(a))
+  const evidenceOnlyArtifacts =
+    artifacts.length > 0 && artifacts.every((a) => isEvidenceArtifact(a))
   const hasHtml = artifacts.some((a) => /\.html?$/i.test(a))
   const hasCode = artifacts.some((a) =>
     /\.(?:js|jsx|ts|tsx|py|rb|java|cs|go|rs|c|cpp|swift|kt|php)$/i.test(a)
@@ -51,10 +52,18 @@ export function detectVerificationModalityGaps(
   const IO_RUNTIME_RE =
     /\b(?:api|request|response|endpoint|fetch|http|rpc|query|database|sql|persist|sync|connect|auth|login|permission)\b/i
 
+  // Investigation / evidence steps write JSON+MD with verificationMode none.
+  // Words like "query" / "database" in criteria describe the investigation
+  // work already done via tools — not a missing npm test / browser probe.
+  const investigationEvidence =
+    evidenceOnlyArtifacts ||
+    (step.executionContext.verificationMode === "none" &&
+      (step.executionContext.effectClass === "readonly" || evidenceOnlyArtifacts))
+
   const requiresArtifactReview = artifacts.length > 0
   const requiresSyntax = hasCode
   const requiresRuntime =
-    !docsOnlyArtifacts &&
+    !investigationEvidence &&
     (hasHtml || INTERACTION_RUNTIME_RE.test(criteriaText) || IO_RUNTIME_RE.test(criteriaText))
 
   if (requiresArtifactReview && !executedModalities.has("artifact-review")) {

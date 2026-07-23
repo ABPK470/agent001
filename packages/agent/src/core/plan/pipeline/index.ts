@@ -21,6 +21,7 @@ import { injectPriorContext } from "../internal/pipeline-context.js"
 import {
   applyPostExecutionReconciliation,
   collectAcceptedArtifacts,
+  collectRunnableUpstreamArtifacts,
   getRepairTaskForStep,
   getUnresolvedAcceptanceBlockers
 } from "../internal/pipeline-repair.js"
@@ -123,12 +124,19 @@ export async function executePipeline(
     }
 
     const acceptedArtifacts = collectAcceptedArtifacts(opts?.priorResults, stepResults)
+    const runnableArtifacts = collectRunnableUpstreamArtifacts(opts?.priorResults, stepResults)
 
     const ready: string[] = []
     for (const [name, deg] of inDegree) {
       if (deg === 0 && !completed.has(name) && !failed.has(name) && !stepResults.has(name)) {
         const repairTask = getRepairTaskForStep(opts?.repairPlan, name)
-        const blockers = getUnresolvedAcceptanceBlockers(name, runtimeModel, repairTask, acceptedArtifacts)
+        const blockers = getUnresolvedAcceptanceBlockers(
+          name,
+          runtimeModel,
+          repairTask,
+          acceptedArtifacts,
+          runnableArtifacts
+        )
         if (blockers.length === 0) {
           ready.push(name)
         }
@@ -143,7 +151,8 @@ export async function executePipeline(
             step.name,
             runtimeModel,
             repairTask,
-            acceptedArtifacts
+            acceptedArtifacts,
+            runnableArtifacts
           )
           stepResults.set(step.name, {
             name: step.name,
@@ -182,7 +191,8 @@ export async function executePipeline(
           acceptedArtifacts,
           toolMap,
           plan,
-          opts
+          opts,
+          runnableArtifacts
         )
       }
 

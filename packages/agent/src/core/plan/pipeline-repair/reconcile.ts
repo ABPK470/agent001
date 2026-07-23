@@ -36,6 +36,44 @@ export function collectAcceptedArtifacts(
   return accepted
 }
 
+/**
+ * Artifacts safe for same-pass DAG handoffs: completed steps that either
+ * already passed verify (`accepted`) or finished execution and await verify
+ * (`pending_verification`). Without this, dependents wait forever because
+ * verify only runs AFTER the full pipeline pass.
+ */
+export function collectRunnableUpstreamArtifacts(
+  priorResults: ReadonlyMap<string, PipelineStepResult> | undefined,
+  stepResults: ReadonlyMap<string, PipelineStepResult>
+): Set<string> {
+  const runnable = new Set<string>()
+  const append = (result: PipelineStepResult | undefined) => {
+    if (!result || result.status !== "completed") return
+    if (
+      result.acceptanceState !== "accepted" &&
+      result.acceptanceState !== "pending_verification"
+    ) {
+      return
+    }
+    for (const artifact of result.producedArtifacts ?? []) runnable.add(artifact)
+    for (const artifact of result.modifiedArtifacts ?? []) runnable.add(artifact)
+  }
+  if (priorResults) {
+    for (const result of priorResults.values()) append(result)
+  }
+  for (const result of stepResults.values()) append(result)
+  return runnable
+}
+
+function artifactSatisfied(required: string, available: ReadonlySet<string>): boolean {
+  if (available.has(required)) return true
+  const requiredBase = required.split("/").pop() ?? required
+  for (const candidate of available) {
+    if ((candidate.split("/").pop() ?? candidate) === requiredBase) return true
+  }
+  return false
+}
+
 export function getRepairTaskForStep(
   repairPlan: RepairPlan | undefined,
   stepName: string
@@ -47,26 +85,37 @@ export function getUnresolvedAcceptanceBlockers(
   stepName: string,
   runtimeModel: PlannerRuntimeModel,
   repairTask: RepairTask | undefined,
-  acceptedArtifacts: ReadonlySet<string>
+  acceptedArtifacts: ReadonlySet<string>,
+  runnableArtifacts: ReadonlySet<string> = acceptedArtifacts
 ): string[] {
-  const requiredAcceptedArtifacts = new Set<string>(repairTask?.requiredAcceptedArtifacts ?? [])
+  // Repair payloads may demand verifier-accepted inputs (post-verify epoch).
+  const repairRequired = new Set<string>(repairTask?.requiredAcceptedArtifacts ?? [])
+  // Normal DAG read deps only need upstream to have produced the file this epoch.
+  const handoffRequired = new Set<string>()
   const acceptedDependencySteps = runtimeModel.stepAcceptedDependencies.get(stepName) ?? []
 
   for (const dependencyStepName of acceptedDependencySteps) {
     const dependencyArtifacts = [...runtimeModel.ownershipGraph.values()]
       .filter((artifact) => artifact.ownerStepName === dependencyStepName)
       .map((artifact) => artifact.artifactPath)
-    for (const artifact of dependencyArtifacts) requiredAcceptedArtifacts.add(artifact)
+    for (const artifact of dependencyArtifacts) handoffRequired.add(artifact)
   }
 
-  return [...requiredAcceptedArtifacts].filter((artifact) => {
-    if (acceptedArtifacts.has(artifact)) return false
-    const artBase = artifact.split("/").pop() ?? artifact
-    for (const accepted of acceptedArtifacts) {
-      if ((accepted.split("/").pop() ?? accepted) === artBase) return false
+  const missing: string[] = []
+  for (const artifact of repairRequired) {
+    if (!artifactSatisfied(artifact, acceptedArtifacts)) missing.push(artifact)
+  }
+  for (const artifact of handoffRequired) {
+    if (repairRequired.has(artifact)) continue
+    if (
+      artifactSatisfied(artifact, runnableArtifacts) ||
+      artifactSatisfied(artifact, acceptedArtifacts)
+    ) {
+      continue
     }
-    return true
-  })
+    missing.push(artifact)
+  }
+  return missing
 }
 
 export function buildAutonomousRepairBlock(step: SubagentTaskStep, feedback: readonly string[]): string {

@@ -7,6 +7,7 @@
 
 import { detectPlaceholderPatterns } from "../../govern-tools.js"
 import type { Tool } from "../../types.js"
+import { isEvidenceArtifact } from "../blueprint-contract/index.js"
 import type { SubagentTaskStep } from "../types.js"
 import {
   detectCodeCorruption,
@@ -148,9 +149,14 @@ export function probeCriteriaProof(
     /\b(?:all (?:rules?|cases?|scenarios?|constraints?|edge cases?)|full(?:y)? (?:implement|support|enforce|cover|valid|correct)|complete(?:ly)? (?:implement|correct|valid|enforce|cover)|every (?:rule|case|scenario|constraint|branch|path)|algorithmic contract|criterion[- ]by[- ]criterion|exhaustive(?:ly)?|provably correct|all (?:valid|invalid) (?:moves?|inputs?|states?|transitions?)|specification[- ]complete)\b/i
   const docsOnlyArtifacts =
     sa.executionContext.targetArtifacts.length > 0 &&
-    sa.executionContext.targetArtifacts.every((artifact) => /\.(?:md|markdown|txt|rst|adoc)$/i.test(artifact))
+    sa.executionContext.targetArtifacts.every((artifact) => isEvidenceArtifact(artifact))
 
-  if (!docsOnlyArtifacts && !executedModalities.has("runtime")) {
+  const investigationEvidence =
+    docsOnlyArtifacts ||
+    (sa.executionContext.verificationMode === "none" &&
+      (sa.executionContext.effectClass === "readonly" || docsOnlyArtifacts))
+
+  if (!investigationEvidence && !executedModalities.has("runtime")) {
     const runtimeCriteria = sa.acceptanceCriteria.filter((c) => runtimeCriterionRe.test(c))
     if (runtimeCriteria.length > 0) {
       issues.push(

@@ -31,6 +31,14 @@ export function isImplementationArtifact(path: string): boolean {
   return isCodeLikeArtifact(path) || /\.(?:html?|css|scss|sass|less)$/i.test(path)
 }
 
+/**
+ * True when an artifact is investigation/docs evidence — not executable code.
+ * These must not be graded as runtime/codegen contracts.
+ */
+export function isEvidenceArtifact(path: string): boolean {
+  return /\.(?:md|markdown|txt|rst|adoc|json|ya?ml|csv|tsv|xml)$/i.test(path)
+}
+
 function isBlueprintLikeStep(step: SubagentTaskStep): boolean {
   return (
     /blueprint/i.test(step.name) ||
