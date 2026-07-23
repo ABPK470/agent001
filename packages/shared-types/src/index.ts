@@ -1529,6 +1529,8 @@ export interface SyncMetadataCatalogAction {
   id: string
   label: string
   builtIn: boolean
+  /** True when a built-in tip no longer matches deploy/sync/artifacts/sync-metadata.json. */
+  divergedFromShipped: boolean
   definition: SyncFlowKindDefinition
 }
 
@@ -1541,12 +1543,16 @@ export interface SyncMetadataCatalogFlow {
   description: string
   steps: AuthoredSyncFlowStep[]
   builtIn: boolean
+  /** True when a built-in tip no longer matches deploy/sync/artifacts/sync-metadata.json. */
+  divergedFromShipped: boolean
 }
 
 export interface SyncMetadataCatalogValueSource {
   id: string
   label: string
   builtIn: boolean
+  /** True when a built-in tip no longer matches deploy/sync/artifacts/sync-metadata.json. */
+  divergedFromShipped: boolean
   definition: import("./custom-value-source.js").CustomValueSourceDefinition
 }
 

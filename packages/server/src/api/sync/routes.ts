@@ -52,7 +52,17 @@ import {
   SYNC_POLICY_DENIED_CODE,
 } from "./service/sync-http-policy.js"
 
-function replySyncPolicyError(reply: FastifyReply, error: unknown): Record<string, unknown> | null {
+function replySyncPolicyError(
+  reply: FastifyReply,
+  error: unknown,
+): {
+  error: string
+  code: string
+  policyName?: string
+  toolName?: string
+  approvalId?: string
+  args?: Record<string, unknown>
+} | null {
   if (isSyncHttpPolicyDeniedError(error)) {
     reply.code(403)
     return {
@@ -394,7 +404,11 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
     async (
       req,
       reply
-    ): Promise<PublishSyncDefinitionsResponse | { error: string; stdout?: string[]; stderr?: string[] }> => {
+    ): Promise<
+      | PublishSyncDefinitionsResponse
+      | { error: string; stdout?: string[]; stderr?: string[] }
+      | { error: string; code: string; policyName?: string; toolName?: string; approvalId?: string; args?: Record<string, unknown> }
+    > => {
       if (!req.session?.isAdmin) {
         reply.code(403)
         return { error: "admin only" }
@@ -700,7 +714,7 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
       .map(mapSyncRunRow)
   })
 
-  registerSyncMetadataRoutes(app)
+  registerSyncMetadataRoutes(app, projectRoot)
 }
 
 function setupSse(reply: FastifyReply): void {

@@ -21,6 +21,10 @@ import {
   buildFlowCatalogFromSyncMetadataDoc,
   prepareFlowStepsForStorage,
 } from "../../../infra/persistence/sync-flow-steps.js"
+import {
+  annotateCatalogShippedDrift,
+  loadShippedSyncMetadata,
+} from "../service/catalog-shipped-drift.js"
 
 const TENANT = "_default"
 
@@ -28,8 +32,8 @@ function afterCatalogMutation(reason: string, actor: string): void {
   recordSyncCatalogChange({ reason, actor })
 }
 
-function mapCatalog() {
-  return {
+function mapCatalog(projectRoot: string) {
+  const tip = {
     actions: db.listSyncActions(TENANT).map((row) => ({
       id: row.id,
       label: row.label,
@@ -50,6 +54,7 @@ function mapCatalog() {
       definition: db.mapValueSourceDefinition(row),
     })),
   }
+  return annotateCatalogShippedDrift(tip, loadShippedSyncMetadata(projectRoot))
 }
 
 function customValueSourceCatalogFromDb(): Record<string, CustomValueSourceDefinition> {
@@ -98,13 +103,13 @@ function flowCatalogFromDb() {
   })
 }
 
-export function registerSyncMetadataRoutes(app: FastifyInstance): void {
+export function registerSyncMetadataRoutes(app: FastifyInstance, projectRoot: string): void {
   app.get("/api/sync-metadata", async (req, reply) => {
     if (!req.session?.isAdmin) {
       reply.code(403)
       return { error: "admin only" }
     }
-    return mapCatalog()
+    return mapCatalog(projectRoot)
   })
 
   app.post<{
@@ -134,7 +139,7 @@ export function registerSyncMetadataRoutes(app: FastifyInstance): void {
       definition_json: definition ? JSON.stringify(definition) : undefined,
     })
     afterCatalogMutation(`sync-metadata:action:${id}`, req.session.upn)
-    return mapCatalog()
+    return mapCatalog(projectRoot)
   })
 
   app.delete<{ Params: { id: string } }>("/api/sync-metadata/actions/:id", async (req, reply) => {
@@ -143,7 +148,7 @@ export function registerSyncMetadataRoutes(app: FastifyInstance): void {
       return reply.code(400).send({ error: "cannot delete built-in or missing action" })
     }
     afterCatalogMutation(`sync-metadata:action:delete:${req.params.id}`, req.session.upn)
-    return mapCatalog()
+    return mapCatalog(projectRoot)
   })
 
   app.post<{
@@ -175,7 +180,7 @@ export function registerSyncMetadataRoutes(app: FastifyInstance): void {
       definition_json: JSON.stringify(definition),
     })
     afterCatalogMutation(`sync-metadata:value-source:${id}`, req.session.upn)
-    return mapCatalog()
+    return mapCatalog(projectRoot)
   })
 
   app.delete<{ Params: { id: string } }>("/api/sync-metadata/value-sources/:id", async (req, reply) => {
@@ -184,7 +189,7 @@ export function registerSyncMetadataRoutes(app: FastifyInstance): void {
       return reply.code(400).send({ error: "cannot delete built-in or missing value source" })
     }
     afterCatalogMutation(`sync-metadata:value-source:delete:${req.params.id}`, req.session.upn)
-    return mapCatalog()
+    return mapCatalog(projectRoot)
   })
 
   app.post<{
@@ -218,7 +223,7 @@ export function registerSyncMetadataRoutes(app: FastifyInstance): void {
       updated_by: req.session.upn,
     })
     afterCatalogMutation(`sync-metadata:flow:${id}`, req.session.upn)
-    return mapCatalog()
+    return mapCatalog(projectRoot)
   })
 
   app.delete<{ Params: { id: string } }>("/api/sync-metadata/flows/:id", async (req, reply) => {
@@ -227,6 +232,6 @@ export function registerSyncMetadataRoutes(app: FastifyInstance): void {
       return reply.code(400).send({ error: "cannot delete built-in or missing flow" })
     }
     afterCatalogMutation(`sync-metadata:flow:delete:${req.params.id}`, req.session.upn)
-    return mapCatalog()
+    return mapCatalog(projectRoot)
   })
 }

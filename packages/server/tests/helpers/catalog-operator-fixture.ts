@@ -133,7 +133,7 @@ export async function buildSyncMetadataApp(
   app.addHook("onRequest", async (req) => {
     ;(req as unknown as { session: CurrentSession }).session = fixture.adminSession
   })
-  registerSyncMetadataRoutes(app)
+  registerSyncMetadataRoutes(app, fixture.projectRoot)
   await app.ready()
   return app
 }

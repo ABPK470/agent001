@@ -177,6 +177,7 @@ export function SyncMetadataModal({
   const [formOpen, setFormOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editingBuiltIn, setEditingBuiltIn] = useState(false)
+  const [editingDivergedFromShipped, setEditingDivergedFromShipped] = useState(false)
   const [formId, setFormId] = useState("")
   const [formLabel, setFormLabel] = useState("")
   const [formDescription, setFormDescription] = useState("")
@@ -409,6 +410,7 @@ export function SyncMetadataModal({
     setFormMode("create")
     setEditingId(null)
     setEditingBuiltIn(false)
+    setEditingDivergedFromShipped(false)
     const snapshot = emptyFormSnapshot()
     applyFormSnapshot(snapshot)
     setFormBaselineFrom(snapshot)
@@ -421,6 +423,7 @@ export function SyncMetadataModal({
     setFormMode("create")
     setEditingId(null)
     setEditingBuiltIn(false)
+    setEditingDivergedFromShipped(false)
     const snapshot = emptyFormSnapshot()
     applyFormSnapshot(snapshot)
     setFormBaselineFrom(snapshot)
@@ -429,7 +432,7 @@ export function SyncMetadataModal({
   }
 
   function startEdit(
-    item: { id: string; label: string; builtIn: boolean },
+    item: { id: string; label: string; builtIn: boolean; divergedFromShipped?: boolean },
     extra?: {
       description?: string
       steps?: AuthoredSyncFlowStep[]
@@ -441,6 +444,7 @@ export function SyncMetadataModal({
     setFormMode("edit")
     setEditingId(item.id)
     setEditingBuiltIn(item.builtIn)
+    setEditingDivergedFromShipped(Boolean(item.divergedFromShipped))
     const snapshot: FormSnapshot = {
       formId: item.id,
       formLabel: item.label,
@@ -871,7 +875,13 @@ export function SyncMetadataModal({
                 query={listQuery}
                 onQueryChange={setListQuery}
                 searchPlaceholder="Search flows…"
-                items={catalog.flows.map((p) => ({ id: p.id, label: p.label, hint: `${p.steps.length} steps`, builtIn: p.builtIn }))}
+                items={catalog.flows.map((p) => ({
+                  id: p.id,
+                  label: p.label,
+                  hint: `${p.steps.length} steps`,
+                  builtIn: p.builtIn,
+                  divergedFromShipped: p.divergedFromShipped,
+                }))}
                 selectedId={formOpen && formMode === "edit" ? editingId : null}
                 onSelect={(id) => {
                   const p = catalog.flows.find((x) => x.id === id)
@@ -902,6 +912,7 @@ export function SyncMetadataModal({
                   tag: HANDLER_TYPE_TAG[k.definition.handler.type] ?? k.definition.handler.type,
                   hint: k.definition.summary.trim() !== k.label.trim() ? k.definition.summary : undefined,
                   builtIn: k.builtIn,
+                  divergedFromShipped: k.divergedFromShipped,
                 }))}
                 selectedId={formOpen && formMode === "edit" ? editingId : null}
                 onSelect={(id) => {
@@ -984,6 +995,17 @@ export function SyncMetadataModal({
                     Unsaved
                   </span>
                 )}
+                {editingBuiltIn && (
+                  <span className="rounded-full bg-overlay-2 px-2 py-0.5 text-xs text-text-muted">Built-in</span>
+                )}
+                {editingBuiltIn && editingDivergedFromShipped && (
+                  <span
+                    className="rounded-full bg-amber-400/10 px-2 py-0.5 text-xs font-medium text-amber-400/90"
+                    title="This built-in no longer matches deploy/sync/artifacts/sync-metadata.json. Database tip is still the source of truth."
+                  >
+                    Modified
+                  </span>
+                )}
               </div>
               {formMode === "edit" && editingId && tab !== "flows" && (
                 <p className={`${META_TEXT} mt-1 font-mono`}>{editingId}</p>
@@ -996,6 +1018,13 @@ export function SyncMetadataModal({
             </div>
 
             <div className={CONFIG_SPLIT_FORM_SCROLL_CLASS}>
+            {formMode === "edit" && editingBuiltIn && editingDivergedFromShipped && (
+              <p className={`mb-4 ${HELP_TEXT}`}>
+                Modified from shipped defaults — tip in the database differs from{" "}
+                <code className="font-mono text-text">deploy/sync/artifacts/sync-metadata.json</code>.
+                The database remains the source of truth until you restore from artifacts.
+              </p>
+            )}
             {formMode === "edit" && editingBuiltIn && tab === "valueSources" && (
               <p className={`mb-4 ${HELP_TEXT}`}>
                 Built-in value source — resolution kind and SQL are locked. You can still update the name and description.
@@ -1317,7 +1346,15 @@ function CatalogList({
   onQueryChange,
   searchPlaceholder = "Filter…",
 }: {
-  items: Array<{ id: string; label: string; hint?: string; tag?: string; builtIn: boolean; deletable?: boolean }>
+  items: Array<{
+    id: string
+    label: string
+    hint?: string
+    tag?: string
+    builtIn: boolean
+    divergedFromShipped?: boolean
+    deletable?: boolean
+  }>
   selectedId: string | null
   onSelect: (id: string) => void
   onDelete?: (id: string) => void
@@ -1386,6 +1423,14 @@ function CatalogList({
                   {item.tag && (
                     <span className="shrink-0 rounded-md bg-accent/15 px-2 py-0.5 text-[11px] font-semibold text-accent">
                       {item.tag}
+                    </span>
+                  )}
+                  {item.builtIn && item.divergedFromShipped && (
+                    <span
+                      className="shrink-0 rounded-full bg-amber-400/10 px-2 py-0.5 text-[11px] font-medium text-amber-400/90"
+                      title="Differs from shipped sync-metadata.json"
+                    >
+                      Modified
                     </span>
                   )}
                   {item.builtIn && <span className={`shrink-0 ${META_TEXT} text-text-faint`}>Built-in</span>}

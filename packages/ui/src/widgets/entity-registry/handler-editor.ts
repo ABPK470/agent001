@@ -91,8 +91,9 @@ export function sourcesCatalogListItems(
     label: string
     definition: CustomValueSourceDefinition
     builtIn: boolean
+    divergedFromShipped?: boolean
   }>,
-): Array<{ id: string; label: string; hint?: string; builtIn: boolean }> {
+): Array<{ id: string; label: string; hint?: string; builtIn: boolean; divergedFromShipped?: boolean }> {
   return sources
     .map((entry) => ({
       id: entry.id,
@@ -105,6 +106,7 @@ export function sourcesCatalogListItems(
       ),
       hint: `${catalogResolverFamilyLabel(entry.definition.resolver)} · ${entry.id}`,
       builtIn: entry.builtIn,
+      divergedFromShipped: entry.divergedFromShipped,
     }))
     .sort((a, b) => a.label.localeCompare(b.label))
 }

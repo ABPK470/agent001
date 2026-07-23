@@ -38,7 +38,17 @@ export type PreviewExecuteDeps = {
     planDetail: Record<string, unknown>,
     result: SyncExecuteResult,
   ) => Record<string, unknown>
-  replySyncPolicyError: (reply: FastifyReply, error: unknown) => Record<string, unknown> | null
+  replySyncPolicyError: (
+    reply: FastifyReply,
+    error: unknown,
+  ) => {
+    error: string
+    code: string
+    policyName?: string
+    toolName?: string
+    approvalId?: string
+    args?: Record<string, unknown>
+  } | null
 }
 
 export function registerPreviewExecuteRoutes(
