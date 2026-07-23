@@ -78,6 +78,68 @@ describe("preparePlanParallelism", () => {
     expect(graph.inDegree.get("inspect_c")).toBe(0)
   })
 
+  it("fans out empty-target catalog steps even when LLM defaults effectClass to filesystem_write", () => {
+    const plan: Plan = {
+      reason: "catalog fan-out",
+      confidence: 0.9,
+      requiresSynthesis: true,
+      steps: [
+        makeStep("probe_revenue", {
+          targets: [],
+          effectClass: "filesystem_write",
+          dependsOn: undefined,
+        }),
+        makeStep("probe_balances", {
+          targets: [],
+          effectClass: "filesystem_write",
+          dependsOn: ["probe_revenue"],
+        }),
+        makeStep("probe_clients", {
+          targets: [],
+          effectClass: "filesystem_write",
+          dependsOn: ["probe_balances"],
+        }),
+      ],
+      edges: [
+        { from: "probe_revenue", to: "probe_balances" },
+        { from: "probe_balances", to: "probe_clients" },
+      ],
+    }
+
+    const result = preparePlanParallelism(plan)
+    expect(result.marked).toBe(3)
+    expect(result.prunedEdges).toBe(2)
+    expect(plan.edges).toEqual([])
+
+    const graph = buildGraph(plan)
+    expect([...graph.inDegree.values()].every((deg) => deg === 0)).toBe(true)
+  })
+
+  it("prunes pure readonly chains even when fake requiredSourceArtifacts invent a handoff", () => {
+    const plan: Plan = {
+      reason: "readonly chain",
+      confidence: 0.9,
+      requiresSynthesis: true,
+      steps: [
+        makeStep("a", {
+          targets: ["tmp/a.json"],
+          effectClass: "readonly",
+        }),
+        makeStep("b", {
+          targets: ["tmp/b.json"],
+          sources: ["tmp/a.json"],
+          effectClass: "readonly",
+          dependsOn: ["a"],
+        }),
+      ],
+      edges: [{ from: "a", to: "b" }],
+    }
+
+    const result = preparePlanParallelism(plan)
+    expect(result.prunedEdges).toBe(1)
+    expect(plan.edges).toEqual([])
+  })
+
   it("keeps real artifact handoff edges", () => {
     const plan: Plan = {
       reason: "handoff",
