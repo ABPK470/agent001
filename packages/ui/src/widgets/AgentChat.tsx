@@ -70,7 +70,9 @@ function WorkspaceChangesCard({
 }) {
   const [diff, setDiff] = useState<WorkspaceDiff | null>(null)
   const [applying, setApplying] = useState(false)
+  const [downloading, setDownloading] = useState(false)
   const [applied, setApplied] = useState(false)
+  const [downloaded, setDownloaded] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const upsertRun = useStore((s) => s.upsertRun)
 
@@ -79,6 +81,10 @@ function WorkspaceChangesCard({
       .then(setDiff)
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load changes"))
   }, [runId])
+
+  const downloadablePaths = diff
+    ? [...diff.added, ...diff.modified]
+    : []
 
   async function handleApply() {
     setApplying(true)
@@ -93,11 +99,65 @@ function WorkspaceChangesCard({
     }
   }
 
-  if (applied) {
+  async function handleSaveLocally() {
+    if (downloadablePaths.length === 0) return
+    setDownloading(true)
+    setError(null)
+    try {
+      await api.downloadRunWorkspaceFiles(runId, downloadablePaths)
+      setDownloaded(true)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Download failed")
+    } finally {
+      setDownloading(false)
+    }
+  }
+
+  if (applied && !downloaded) {
     return (
       <div className="flex items-center gap-2 px-3 py-2 rounded-xl border border-success/30 bg-success/5 text-base text-success">
         <CheckCircle2 size={14} className="shrink-0" />
         <span>Changes saved to workspace</span>
+      </div>
+    )
+  }
+
+  if (downloaded && !applied) {
+    return (
+      <div
+        className="rounded-xl border border-success/40 bg-success/5 overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center gap-2 px-3 py-2 text-base text-success">
+          <CheckCircle2 size={14} className="shrink-0" />
+          <span className="flex-1">Saved to your computer</span>
+          <button
+            type="button"
+            className="px-2.5 py-1 rounded-lg border border-border text-sm text-text-muted hover:text-text transition-colors"
+            onClick={onDismiss}
+          >
+            Dismiss
+          </button>
+        </div>
+        <div className="px-3 pb-3">
+          <button
+            type="button"
+            className="w-full px-3 py-1.5 rounded-lg border border-border text-base text-text-muted hover:text-text hover:border-border-strong transition-colors disabled:opacity-40"
+            onClick={() => void handleApply()}
+            disabled={applying || !diff}
+          >
+            {applying ? "Saving…" : "Also save to workspace"}
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  if (downloaded && applied) {
+    return (
+      <div className="flex items-center gap-2 px-3 py-2 rounded-xl border border-success/30 bg-success/5 text-base text-success">
+        <CheckCircle2 size={14} className="shrink-0" />
+        <span>Saved locally · workspace updated</span>
       </div>
     )
   }
@@ -110,7 +170,6 @@ function WorkspaceChangesCard({
       className="rounded-xl border border-success/40 bg-success/5 overflow-hidden"
       onClick={(e) => e.stopPropagation()}
     >
-      {/* Header */}
       <div className="flex items-center gap-2 px-3 pt-3 pb-2">
         <span className="relative flex shrink-0 h-2 w-2">
           <span className="relative inline-flex rounded-full h-2 w-2 bg-success" />
@@ -123,7 +182,6 @@ function WorkspaceChangesCard({
         </span>
       </div>
 
-      {/* File list */}
       {diff && (
         <div className="px-3 pb-2 space-y-0.5 max-h-40 overflow-y-auto">
           {diff.sourceRoot && (
@@ -159,16 +217,27 @@ function WorkspaceChangesCard({
         <p className="px-3 pb-2 text-xs text-error">{error}</p>
       )}
 
-      {/* Action buttons */}
       <div className="px-3 pb-3 flex gap-2">
         <button
+          type="button"
           className="flex-1 px-3 py-1.5 rounded-lg bg-success hover:bg-success/80 text-text text-base font-medium transition-colors disabled:opacity-40"
-          onClick={handleApply}
-          disabled={applying || !diff}
+          onClick={() => void handleSaveLocally()}
+          disabled={downloading || applying || downloadablePaths.length === 0}
+          title="Download to your computer — you choose where to save"
+        >
+          {downloading ? "Saving…" : "Save locally"}
+        </button>
+        <button
+          type="button"
+          className="flex-1 px-3 py-1.5 rounded-lg border border-border text-base text-text-muted hover:text-text hover:border-border-strong transition-colors disabled:opacity-40"
+          onClick={() => void handleApply()}
+          disabled={applying || downloading || !diff}
+          title="Merge into the project workspace"
         >
           {applying ? "Saving…" : "Save to workspace"}
         </button>
         <button
+          type="button"
           className="px-3 py-1.5 rounded-lg border border-border text-base text-text-muted hover:text-text hover:border-border-strong transition-colors"
           onClick={onDismiss}
         >

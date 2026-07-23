@@ -127,6 +127,37 @@ export function RunStatus() {
     }
   }, [run, upsertRun, notify, notifyError])
 
+  const handleDownloadWorkspaceFiles = useCallback(async () => {
+    if (!run || !workspaceDiff || workspaceBusyRef.current) return
+    const paths = [...workspaceDiff.added, ...workspaceDiff.modified]
+    if (paths.length === 0) {
+      notifyError("No downloadable files in this diff")
+      return
+    }
+    workspaceBusyRef.current = true
+    setWorkspaceLoading(true)
+    setWorkspaceResult(null)
+    try {
+      const result = await api.downloadRunWorkspaceFiles(run.id, paths)
+      setWorkspaceResult(
+        result.count === 1
+          ? "Saved file to your computer"
+          : `Saved ${result.count} files to your computer`,
+      )
+      notify(
+        result.count === 1
+          ? "Saved to your computer"
+          : `Saved ${result.count} files to your computer`,
+      )
+    } catch (e) {
+      setWorkspaceResult("Failed to download files")
+      notifyError(e instanceof Error ? e.message : "Failed to download files")
+    } finally {
+      workspaceBusyRef.current = false
+      setWorkspaceLoading(false)
+    }
+  }, [run, workspaceDiff, notify, notifyError])
+
   const handleRollbackPreview = useCallback(async () => {
     if (!run) return
     setRollbackLoading(true)
@@ -539,14 +570,25 @@ export function RunStatus() {
               {workspaceLoading ? "Loading…" : "Refresh"}
             </button>
             {pendingWorkspace > 0 && (
-              <button
-                type="button"
-                className="rounded-lg bg-success/10 px-3 py-1.5 text-[13px] text-success transition-colors hover:bg-success/20"
-                onClick={() => void handleApplyWorkspaceDiff().catch((err: unknown) => { console.error("[mia]", err) })}
-                disabled={workspaceLoading}
-              >
-                Apply changes
-              </button>
+              <>
+                <button
+                  type="button"
+                  className="rounded-lg bg-accent/10 px-3 py-1.5 text-[13px] text-accent transition-colors hover:bg-accent/20"
+                  onClick={() => void handleDownloadWorkspaceFiles().catch((err: unknown) => { console.error("[mia]", err) })}
+                  disabled={workspaceLoading}
+                  title="Download to your computer — you choose where to save"
+                >
+                  Save locally
+                </button>
+                <button
+                  type="button"
+                  className="rounded-lg bg-success/10 px-3 py-1.5 text-[13px] text-success transition-colors hover:bg-success/20"
+                  onClick={() => void handleApplyWorkspaceDiff().catch((err: unknown) => { console.error("[mia]", err) })}
+                  disabled={workspaceLoading}
+                >
+                  Save to workspace
+                </button>
+              </>
             )}
           </div>
           {workspaceResult && (

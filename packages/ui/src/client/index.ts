@@ -374,6 +374,16 @@ export const api = {
     json<{ runId: string; files: Array<{ path: string; sizeBytes: number }> }>(
       `/api/runs/${encodeURIComponent(id)}/artifacts`,
     ),
+  /** Stream one sandbox file to the user's machine (save dialog). */
+  downloadRunArtifact: (id: string, relativePath: string) =>
+    import("../lib/run-artifact-download.js").then(({ downloadRunArtifactFile }) =>
+      downloadRunArtifactFile(id, relativePath),
+    ),
+  /** Download all added/modified files from a workspace diff. */
+  downloadRunWorkspaceFiles: (id: string, paths: string[]) =>
+    import("../lib/run-artifact-download.js").then(({ downloadWorkspaceDiffFiles }) =>
+      downloadWorkspaceDiffFiles(id, paths),
+    ),
   flagRunFeedback: (id: string, useful: boolean, note?: string) =>
     json<{ ok: boolean }>(`/api/runs/${encodeURIComponent(id)}/feedback`, {
       method: "POST",

@@ -1203,13 +1203,19 @@ function WorkspaceDiffCard({ runId, onNotify, onNotifyError }: {
 }) {
   const [diff, setDiff] = useState<WorkspaceDiff | null>(null)
   const [applying, setApplying] = useState(false)
+  const [downloading, setDownloading] = useState(false)
   const [applied, setApplied] = useState(false)
+  const [downloaded, setDownloaded] = useState(false)
   const [open, setOpen] = useState(false)
   const upsertRun = useStore((s) => s.upsertRun)
 
   useEffect(() => {
     api.getRunWorkspaceDiff(runId).then(setDiff).catch((err: unknown) => { console.error("[mia]", err) })
   }, [runId])
+
+  const downloadablePaths = diff
+    ? [...diff.added, ...diff.modified]
+    : []
 
   async function apply() {
     setApplying(true)
@@ -1224,14 +1230,41 @@ function WorkspaceDiffCard({ runId, onNotify, onNotifyError }: {
     }
   }
 
+  async function saveLocally() {
+    if (downloadablePaths.length === 0) return
+    setDownloading(true)
+    try {
+      const result = await api.downloadRunWorkspaceFiles(runId, downloadablePaths)
+      onNotify?.(
+        result.count === 1
+          ? "Saved to your computer"
+          : `Saved ${result.count} files to your computer`,
+      )
+      setDownloaded(true)
+    } catch (err) {
+      onNotifyError?.(err instanceof Error ? err.message : "Download failed")
+    } finally {
+      setDownloading(false)
+    }
+  }
+
   const total = diff?.total ?? 0
   const hasPathContext = Boolean(diff?.executionRoot || diff?.sourceRoot)
 
-  if (applied) {
+  if (applied && !downloaded) {
     return (
       <div className="flex items-center gap-1.5 text-[15px] text-text-faint font-mono">
         <Check size={10} className="text-text-faint" />
         <span>saved to workspace</span>
+      </div>
+    )
+  }
+
+  if (downloaded && applied) {
+    return (
+      <div className="flex items-center gap-1.5 text-[15px] text-text-faint font-mono">
+        <Check size={10} className="text-text-faint" />
+        <span>saved locally · workspace updated</span>
       </div>
     )
   }
@@ -1290,11 +1323,22 @@ function WorkspaceDiffCard({ runId, onNotify, onNotifyError }: {
 
       <div className="px-3 pb-2 flex gap-2 border-t border-border-subtle">
         <button
+          type="button"
           className="flex-1 mt-2 px-3 py-1.5 rounded-lg border border-border bg-transparent hover:bg-overlay-hover text-[15px] text-text-muted hover:text-text-secondary transition-colors disabled:opacity-30"
-          onClick={apply}
-          disabled={applying || !diff}
+          onClick={() => void saveLocally()}
+          disabled={downloading || applying || downloadablePaths.length === 0}
+          title="Download to your computer — you choose where to save"
         >
-          {applying ? "Saving…" : "Save to workspace"}
+          {downloading ? "Saving…" : downloaded ? "Saved locally" : "Save locally"}
+        </button>
+        <button
+          type="button"
+          className="flex-1 mt-2 px-3 py-1.5 rounded-lg border border-border bg-transparent hover:bg-overlay-hover text-[15px] text-text-muted hover:text-text-secondary transition-colors disabled:opacity-30"
+          onClick={() => void apply()}
+          disabled={applying || downloading || !diff || applied}
+          title="Merge into the project workspace"
+        >
+          {applying ? "Saving…" : applied ? "Saved to workspace" : "Save to workspace"}
         </button>
       </div>
     </div>
