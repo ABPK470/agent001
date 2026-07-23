@@ -14,7 +14,8 @@ describe("chatTranscriptLayout", () => {
       expect(scrollClass).not.toContain(forbidden)
     }
     expect(scrollClass).toBe(HOME_TRANSCRIPT_SCROLL_CLASS)
-    expect(scrollClass).toContain("overflow-x-auto")
+    expect(scrollClass).toContain("overflow-x-hidden")
+    expect(scrollClass).not.toContain("overflow-x-auto")
   })
 
   it("compact markdown tables use inset border shell (not ring)", () => {

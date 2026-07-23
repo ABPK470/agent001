@@ -18,9 +18,12 @@ export const FORBIDDEN_HOME_TRANSCRIPT_SCROLL_MASK_CLASSES = [
 export const HOME_TRANSCRIPT_COLUMN_SHELL_CLASS =
   `relative flex min-h-0 flex-1 flex-col min-w-0 ${HOME_CHAT_COLUMN_CLASS}`
 
-/** Vertical scroll + horizontal scroll for wide markdown tables. */
+/**
+ * Vertical scroll only. Wide tables/code scroll inside their own chrome
+ * (SmartAnswer wrappers) — never widen the whole transcript.
+ */
 export const HOME_TRANSCRIPT_SCROLL_CLASS =
-  "relative h-full min-h-0 overflow-y-auto overflow-x-auto min-w-0"
+  "relative h-full min-h-0 overflow-y-auto overflow-x-hidden min-w-0"
 
 export const HOME_TRANSCRIPT_FADE_TOP_CLASS = "chathome-transcript-fade chathome-transcript-fade--top"
 export const HOME_TRANSCRIPT_FADE_BOTTOM_CLASS = "chathome-transcript-fade chathome-transcript-fade--bottom"

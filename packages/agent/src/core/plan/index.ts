@@ -22,7 +22,11 @@ export type { PlanGenerationContext, PlanGenerationResult } from "./generate/ind
 export { inferForcedOutputDirectoryFromGoal } from "./normalize/index.js"
 export { executePlannerPath } from "./orchestrator/index.js"
 export type { PlannerContext, PlannerResult } from "./orchestrator/index.js"
-export { synthesizeAnswer } from "./synthesize.js"
+export {
+  isToolTelemetryDump,
+  isUserFacingNarrative,
+  synthesizeAnswer
+} from "./synthesize.js"
 export { executePipeline } from "./pipeline/index.js"
 export type { DelegateFn, DelegateResult, PipelineExecutorOptions, ToolExecFn } from "./pipeline/index.js"
 export { validatePlan } from "./validate/index.js"

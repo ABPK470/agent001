@@ -497,7 +497,7 @@ export function SmartAnswer({
 
         if (b.type === "paragraph") {
           return (
-            <p key={bi} className={`whitespace-pre-wrap ${wrapClass}`}>
+            <p key={bi} className={`min-w-0 whitespace-pre-wrap break-words [overflow-wrap:anywhere] ${wrapClass}`}>
               <InlineText text={b.lines.join("\n")} />
               {printing ? <StreamingCaret compact={compact} /> : null}
             </p>
