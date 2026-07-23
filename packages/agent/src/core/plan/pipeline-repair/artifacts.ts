@@ -105,7 +105,11 @@ export function buildIssueRepairActions(step: SubagentTaskStep, feedback: readon
       )
       if (match) {
         const artifactPath = match[1].trim()
-        if (/\.(?:html?|css|scss|sass|less|md|markdown|txt|rst|adoc)$/i.test(artifactPath)) {
+        if (
+          /\.(?:html?|css|scss|sass|less|md|markdown|txt|rst|adoc|json|ya?ml|csv|tsv|xml)$/i.test(
+            artifactPath
+          )
+        ) {
           actions.push(
             `Do NOT implement runtime functions in ${artifactPath}; reconcile the contract and wiring so ${artifactPath} only carries structure/presentation responsibilities and the missing functions are owned by executable source artifacts.`
           )

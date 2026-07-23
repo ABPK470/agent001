@@ -6,6 +6,7 @@
  */
 
 import { normalizeSpecPath, uniqueStrings } from "../blueprint-contract/index.js"
+import { isCodeLikeArtifact } from "../blueprint-contract/index.js"
 import type { Plan, SubagentTaskStep } from "../types.js"
 import { type BlueprintFunctionSpec, type BlueprintSpec } from "./core.js"
 
@@ -24,12 +25,6 @@ export function collectPlannedBlueprintArtifacts(plan: Plan): string[] {
       .flatMap((step) => step.executionContext.targetArtifacts)
       .map(normalizeSpecPath)
       .filter((artifact) => !/(?:^|\/)BLUEPRINT\.md$/i.test(artifact))
-  )
-}
-
-function isCodeLikeBlueprintArtifact(path: string): boolean {
-  return /\.(?:js|jsx|ts|tsx|mjs|cjs|mts|cts|py|go|rs|java|kt|kts|cs|php|rb|swift|scala|sh|bash|zsh|ps1)$/i.test(
-    path
   )
 }
 
@@ -101,7 +96,7 @@ export function buildBlueprintFunctionContractIssues(
       )
     }
 
-    if (weakFunctions.length > 0 && isCodeLikeBlueprintArtifact(contractFile.declaredPath)) {
+    if (weakFunctions.length > 0 && isCodeLikeArtifact(contractFile.declaredPath)) {
       issues.push(
         `BLUEPRINT FUNCTION CONTRACT WEAK: ${contractFile.declaredPath} contains underspecified machine contract signatures (${weakFunctions.map((fn) => fn.signature).join(", ")})`
       )

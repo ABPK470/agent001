@@ -5,7 +5,12 @@
  */
 
 import type { Tool } from "../../types.js"
-import { normalizeBasename, normalizeSpecPath, uniqueStrings } from "../blueprint-contract/index.js"
+import {
+  isCodeLikeArtifact,
+  normalizeBasename,
+  normalizeSpecPath,
+  uniqueStrings
+} from "../blueprint-contract/index.js"
 import type { PipelineStepResult, Plan, SubagentTaskStep } from "../types.js"
 import { escapeRegExp } from "../verifier-helpers/index.js"
 import {
@@ -201,7 +206,9 @@ export async function buildStepSpecEvidence(
       )
     }
 
-    if (content && functionEvidence.missing.length > 0) {
+    // Evidence/docs (.json, .md, …) cannot host runtime functions — demanding
+    // them invents unsatisfiable contracts and deadlocks repair.
+    if (content && functionEvidence.missing.length > 0 && isCodeLikeArtifact(artifact)) {
       structuralIssues.push(
         `SPEC FUNCTION MISMATCH: ${artifact} is missing blueprint functions ${functionEvidence.missing.join(", ")} from ${matchedSpec.declaredPath}`
       )

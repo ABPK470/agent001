@@ -8,7 +8,7 @@ import { EffectClass, StepRole, VerificationMode } from "../../../domain/index.j
  * @module
  */
 
-import { buildBlueprintSeedTemplate, getPlannedBlueprintArtifacts } from "../blueprint-contract/index.js"
+import { buildBlueprintSeedTemplate, getPlannedBlueprintArtifacts, planNeedsCodegenBlueprint } from "../blueprint-contract/index.js"
 import { inferOutputDir } from "../normalize/index.js"
 import type { Plan, PlanEdge, PlanStep, SubagentTaskStep } from "../types.js"
 
@@ -25,6 +25,11 @@ export function isBlueprintLikeStep(step: PlanStep): step is SubagentTaskStep {
 
 export function injectBlueprintStep(plan: Plan, workspaceRoot: string, forcedOutputDir: string | null): void {
   const subagentSteps = plan.steps.filter((s): s is SubagentTaskStep => s.stepType === "subagent_task")
+
+  // Type B investigation / evidence plans write JSON+MD — NOT multi-file
+  // codegen. Injecting BLUEPRINT.md there forces fake function contracts on
+  // data files and deadlocks the pipeline on SPEC FUNCTION MISMATCH.
+  if (!planNeedsCodegenBlueprint(plan)) return
 
   const stepsWithArtifacts = subagentSteps.filter((s) => s.executionContext.targetArtifacts.length > 0)
   if (stepsWithArtifacts.length < 2) return
@@ -172,6 +177,9 @@ export function strengthenExistingBlueprintSteps(
   const blueprintSteps = plan.steps.filter(isBlueprintLikeStep)
   if (blueprintSteps.length === 0) return
 
+  // Investigation plans must not be force-wired to wait on BLUEPRINT.md.
+  const wireCodegenConsumers = planNeedsCodegenBlueprint(plan)
+
   const outputDir = forcedOutputDir ?? inferOutputDir(blueprintSteps) ?? "tmp"
   const blueprintPath =
     blueprintSteps[0].executionContext.targetArtifacts.find((artifact) =>
@@ -204,6 +212,7 @@ export function strengthenExistingBlueprintSteps(
         `- The declared file structure MUST match the planned targetArtifacts exactly; do NOT rename paths or invent extra modules.\n` +
         `- Include a \`blueprint-contract\` JSON block with \`version: 1\`, per-file \`functions\` arrays, and a top-level \`sharedTypes\` array; this block is the machine-readable source of truth. Use empty arrays when needed, never omit the fields.\n` +
         `- For code files, each machine-contract function entry should include at least \`name\` plus a concrete \`signature\` (or equivalent \`parameters\` + \`returnType\`) and should match the prose file contract.\n` +
+        `- For non-code evidence files (.json/.md), keep \`functions\` as an empty array — do NOT invent runtime APIs for data documents.\n` +
         `- For sharedTypes, provide a concrete definition/shape and, when practical, list the exact \`usedBy\` artifact paths that consume the type.\n` +
         `- Do NOT add fake runtime-verification sections, test plans, or execution-history prose.\n` +
         `- Verification for a blueprint step is satisfied by writing the document and then re-reading BLUEPRINT.md with read_file to confirm the contract is present.\n` +
@@ -233,6 +242,8 @@ export function strengthenExistingBlueprintSteps(
     ;(step.executionContext as unknown as { verificationMode: VerificationMode }).verificationMode =
       VerificationMode.None
   }
+
+  if (!wireCodegenConsumers) return
 
   for (const step of plan.steps) {
     if (step.stepType !== "subagent_task") continue

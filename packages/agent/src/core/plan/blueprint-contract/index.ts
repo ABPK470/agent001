@@ -12,6 +12,25 @@ export type {
 export { normalizeBasename, normalizeSpecPath, uniqueStrings } from "./normalize.js"
 export { parseBlueprintContractBlock } from "./parse.js"
 
+/**
+ * True when an artifact is executable/source code that can host function
+ * contracts. JSON/MD evidence files are NOT code — inventing functions for
+ * them creates unsatisfiable SPEC FUNCTION MISMATCH loops.
+ */
+export function isCodeLikeArtifact(path: string): boolean {
+  return /\.(?:js|jsx|ts|tsx|mjs|cjs|mts|cts|py|go|rs|java|kt|kts|cs|php|rb|swift|scala|sh|bash|zsh|ps1)$/i.test(
+    path
+  )
+}
+
+/**
+ * True when an artifact is a multi-file build deliverable (code or browser
+ * presentation). Investigation evidence (.json/.md/.csv/…) is not.
+ */
+export function isImplementationArtifact(path: string): boolean {
+  return isCodeLikeArtifact(path) || /\.(?:html?|css|scss|sass|less)$/i.test(path)
+}
+
 function isBlueprintLikeStep(step: SubagentTaskStep): boolean {
   return (
     /blueprint/i.test(step.name) ||
@@ -32,6 +51,15 @@ function collectPlannedBlueprintArtifacts(plan: Plan): string[] {
 
 export function getPlannedBlueprintArtifacts(plan: Plan): string[] {
   return collectPlannedBlueprintArtifacts(plan)
+}
+
+/** Planned build deliverables that justify a multi-file codegen blueprint. */
+export function getPlannedImplementationArtifacts(plan: Plan): string[] {
+  return getPlannedBlueprintArtifacts(plan).filter(isImplementationArtifact)
+}
+
+export function planNeedsCodegenBlueprint(plan: Plan): boolean {
+  return getPlannedImplementationArtifacts(plan).length >= 2
 }
 
 export function buildBlueprintSeedTemplate(
