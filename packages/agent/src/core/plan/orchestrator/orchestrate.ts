@@ -30,7 +30,7 @@ import type { PlannerContext, PlannerResult } from "./types.js"
 
 /**
  * Widen a step's envelope tool allowlist to every tool the parent has
- * available before delegating. Used for `parent_guided` mode: economics
+ * available before delegating. Used for `guided` mode: economics
  * declined parallel fanout, but spawning a child per subagent step is still
  * cheaper than folding the work into the parent's own loop — as long as the
  * child isn't blocked by an over-tight per-step allowlist.
@@ -60,13 +60,12 @@ export async function executePlannerPath(
   if (!setupOutcome.ready) return setupOutcome.result
   const { plan, runtimeModel, decision, banditTrajectory, executionMode } = setupOutcome.context
 
-  // Tier 1 execution mode from the delegation gate — parallel fanout when
-  // economics approve it, otherwise one child at a time. `parent_guided`
-  // additionally widens each step's tool allowlist to the full parent tool
-  // set so spawning a child adds less friction than a tight per-step scope.
-  const maxParallel = executionMode === "parallel_children" ? 4 : 1
+  // Tier 1 — how subagent_task steps run: parallel fan-out when economics
+  // approve it, otherwise one child at a time. `guided` additionally widens
+  // each step's tool allowlist to the full parent tool set.
+  const maxParallel = executionMode === "parallel" ? 4 : 1
   const effectiveDelegateFn =
-    executionMode === "parent_guided" ? withFullToolAccess(delegateFn, ctx.tools) : delegateFn
+    executionMode === "guided" ? withFullToolAccess(delegateFn, ctx.tools) : delegateFn
 
   let pipelineResult: PipelineResult | undefined
   let verifierDecision: VerifierDecision | undefined

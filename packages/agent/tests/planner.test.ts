@@ -257,7 +257,7 @@ describe("Planner delegation gate", () => {
     edges: []
   }
 
-  it("keeps the plan and picks serial_children when delegation economics decline", () => {
+  it("keeps the plan and picks serial when delegation economics decline", () => {
     const spy = vi.spyOn(delegationDecision, "assessDelegationDecision").mockReturnValue({
       shouldDelegate: false,
       reason: "score_below_threshold",
@@ -288,13 +288,13 @@ describe("Planner delegation gate", () => {
       // + acceptance-criteria contracts, so it still spawns children (serially).
       expect(gate.blocked).toBe(false)
       if (gate.blocked) throw new Error("expected non-blocked gate")
-      expect(gate.mode).toBe("serial_children")
+      expect(gate.mode).toBe("serial")
     } finally {
       spy.mockRestore()
     }
   })
 
-  it("picks parent_guided when delegation economics decline and steps carry no real contract", () => {
+  it("picks guided when delegation economics decline and steps carry no real contract", () => {
     const thinPlan: Plan = {
       reason: "test plan",
       confidence: 0.8,
@@ -353,7 +353,7 @@ describe("Planner delegation gate", () => {
 
       expect(gate.blocked).toBe(false)
       if (gate.blocked) throw new Error("expected non-blocked gate")
-      expect(gate.mode).toBe("parent_guided")
+      expect(gate.mode).toBe("guided")
     } finally {
       spy.mockRestore()
     }

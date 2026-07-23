@@ -76,11 +76,11 @@ export function runDelegationGate(
   }))
 
   // No subagent work at all — pipeline runs its deterministic_tool steps
-  // only. Mode is moot (nothing to fan out), but parallel_children is the
-  // harmless default since executePipeline's parallelism only matters when
-  // subagent steps exist.
+  // only. Mode is moot (nothing to fan out), but parallel is the harmless
+  // default since executePipeline's parallelism only matters when
+  // subagent_task steps exist.
   if (subagentProfiles.length === 0) {
-    return { blocked: false, mode: "parallel_children", banditTrajectory: undefined }
+    return { blocked: false, mode: "parallel", banditTrajectory: undefined }
   }
 
   let banditArmId: BanditArmId | undefined
@@ -124,16 +124,16 @@ export function runDelegationGate(
   const mode: PlanExecutionMode = isFatal
     ? "stop"
     : delegationDecision.shouldDelegate
-      ? "parallel_children"
+      ? "parallel"
       : hasUsefulSubagentContracts(subagentProfiles)
-        ? "serial_children"
-        : "parent_guided"
+        ? "serial"
+        : "guided"
 
   const traceReason =
-    mode === "serial_children"
+    mode === "serial"
       ? `economics_serial: ${delegationDecision.reason}`
-      : mode === "parent_guided"
-        ? `economics_parent_guided: ${delegationDecision.reason}`
+      : mode === "guided"
+        ? `economics_guided: ${delegationDecision.reason}`
         : delegationDecision.reason
 
   ctx.onTrace?.({
