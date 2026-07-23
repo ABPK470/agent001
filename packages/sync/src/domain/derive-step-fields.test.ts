@@ -19,7 +19,6 @@ describe("derive-step-fields", () => {
       },
       stepFields: { "object-name": true },
       failureMode: "warning",
-      entityTypes: ["any"],
     })
     expect(def.stepFields).toEqual({})
   })

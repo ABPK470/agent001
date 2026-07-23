@@ -180,7 +180,6 @@ export const DEFAULT_STEP_TYPE_DEFINITION: SyncFlowKindDefinition = {
   },
   stepFields: {},
   failureMode: "warning",
-  entityTypes: ["any"],
 }
 
 export function CustomValueSourceDefinitionEditor({

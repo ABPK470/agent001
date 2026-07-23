@@ -29,7 +29,6 @@ export function defaultCustomKindDefinition(id: string, label: string): SyncFlow
     },
     stepFields: {},
     failureMode: "warning",
-    entityTypes: ["any"],
   }, id)
 }
 

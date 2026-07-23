@@ -35,7 +35,6 @@ export function buildMinimalTestFlowCatalog() {
           handler: { type: "metadata_sync", connection: "target" },
           stepFields: {},
           failureMode: "fatal",
-          entityTypes: ["any"],
         }),
       },
     ],

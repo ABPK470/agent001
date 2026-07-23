@@ -1503,7 +1503,7 @@
             "phase": "preTransaction",
             "kind": "auditCheck",
             "title": "Audit check (before sync)",
-            "description": "Source uspAuditRunCheck — decide whether metadata sync should run.",
+            "description": "Source uspAuditRunCheck \u2014 decide whether metadata sync should run.",
             "auditObjectType": "Contract"
           },
           {
@@ -1791,10 +1791,7 @@
             "type": "metadata_sync",
             "connection": "target"
           },
-          "failureMode": "fatal",
-          "entityTypes": [
-            "any"
-          ]
+          "failureMode": "fatal"
         }
       },
       {
@@ -1839,12 +1836,6 @@
             ]
           },
           "failureMode": "fatal",
-          "entityTypes": [
-            "content",
-            "contract",
-            "dataset",
-            "rule"
-          ],
           "publishedOutputs": [
             "action",
             "id",
@@ -1895,9 +1886,6 @@
             ]
           },
           "failureMode": "warning",
-          "entityTypes": [
-            "contract"
-          ],
           "createsDatasetLayer": true,
           "publishedOutputs": [
             "ContractName",
@@ -1957,9 +1945,6 @@
           },
           "failureMode": "warning",
           "skipWhenDatasetLayerFailed": true,
-          "entityTypes": [
-            "contract"
-          ],
           "publishedOutputs": [
             "contractName",
             "isDebug",
@@ -2011,9 +1996,6 @@
             ]
           },
           "failureMode": "warning",
-          "entityTypes": [
-            "contract"
-          ],
           "createsDatasetLayer": true,
           "publishedOutputs": [
             "ContractName",
@@ -2065,9 +2047,6 @@
             ]
           },
           "failureMode": "warning",
-          "entityTypes": [
-            "contract"
-          ],
           "createsDatasetLayer": true,
           "publishedOutputs": [
             "ContractName",
@@ -2119,9 +2098,6 @@
             ]
           },
           "failureMode": "warning",
-          "entityTypes": [
-            "contract"
-          ],
           "createsDatasetLayer": true,
           "publishedOutputs": [
             "ContractName",
@@ -2173,9 +2149,6 @@
             ]
           },
           "failureMode": "warning",
-          "entityTypes": [
-            "contract"
-          ],
           "createsDatasetLayer": true,
           "publishedOutputs": [
             "ContractName",
@@ -2214,9 +2187,6 @@
           },
           "failureMode": "warning",
           "skipWhenDatasetLayerFailed": true,
-          "entityTypes": [
-            "contract"
-          ],
           "publishedOutputs": [
             "contractName",
             "isDebug"
@@ -2259,9 +2229,6 @@
           },
           "failureMode": "warning",
           "skipWhenDatasetLayerFailed": true,
-          "entityTypes": [
-            "contract"
-          ],
           "publishedOutputs": [
             "contractName",
             "isDebug",
@@ -2305,9 +2272,6 @@
           },
           "failureMode": "warning",
           "skipWhenDatasetLayerFailed": true,
-          "entityTypes": [
-            "contract"
-          ],
           "publishedOutputs": [
             "action",
             "contractName",
@@ -2350,9 +2314,6 @@
             ]
           },
           "failureMode": "warning",
-          "entityTypes": [
-            "contract"
-          ],
           "publishedOutputs": [
             "action",
             "contractName",
@@ -2381,9 +2342,6 @@
             ]
           },
           "failureMode": "warning",
-          "entityTypes": [
-            "contract"
-          ],
           "publishedOutputs": [
             "contractId"
           ]
@@ -2415,10 +2373,6 @@
             ]
           },
           "failureMode": "warning",
-          "entityTypes": [
-            "dataset",
-            "rule"
-          ],
           "publishedOutputs": [
             "datasetId",
             "userFullName"
@@ -2468,12 +2422,6 @@
           },
           "failureMode": "warning",
           "skipWhenDatasetLayerFailed": true,
-          "entityTypes": [
-            "content",
-            "contract",
-            "dataset",
-            "rule"
-          ],
           "publishedOutputs": [
             "action",
             "id",
@@ -2510,10 +2458,6 @@
             ]
           },
           "failureMode": "warning",
-          "entityTypes": [
-            "content",
-            "rule"
-          ],
           "publishedOutputs": [
             "id",
             "objectName"
@@ -2533,10 +2477,7 @@
             "httpMethod": "GET",
             "httpPath": "/api/meta/refresh"
           },
-          "failureMode": "warning",
-          "entityTypes": [
-            "gateMetadata"
-          ]
+          "failureMode": "warning"
         }
       },
       {
@@ -2558,10 +2499,6 @@
             ]
           },
           "failureMode": "warning",
-          "entityTypes": [
-            "contract",
-            "pipelineActivity"
-          ],
           "publishedOutputs": [
             "pipelineId"
           ]
@@ -2590,10 +2527,6 @@
             ]
           },
           "failureMode": "warning",
-          "entityTypes": [
-            "gateMetadata",
-            "pipelineActivity"
-          ],
           "publishedOutputs": [
             "name"
           ]
@@ -2629,9 +2562,6 @@
             ]
           },
           "failureMode": "warning",
-          "entityTypes": [
-            "rule"
-          ],
           "publishedOutputs": [
             "ruleId",
             "userFullName"
@@ -2680,12 +2610,6 @@
             ]
           },
           "failureMode": "warning",
-          "entityTypes": [
-            "content",
-            "contract",
-            "dataset",
-            "rule"
-          ],
           "publishedOutputs": [
             "action",
             "id",
@@ -2722,9 +2646,6 @@
             ]
           },
           "failureMode": "fatal",
-          "entityTypes": [
-            "contract"
-          ],
           "publishedOutputs": [
             "contractId",
             "isLocked"
@@ -2759,9 +2680,6 @@
             ]
           },
           "failureMode": "warning",
-          "entityTypes": [
-            "contract"
-          ],
           "publishedOutputs": [
             "contractId",
             "isLocked"
@@ -2774,7 +2692,7 @@
         "id": "planEntityId",
         "label": "Plan entity id",
         "definition": {
-          "description": "Numeric id of the entity being synced (contractId, datasetId, ruleId, …). Same for every step in the run.",
+          "description": "Numeric id of the entity being synced (contractId, datasetId, ruleId, \u2026). Same for every step in the run.",
           "resolver": {
             "kind": "planEntityId"
           }
@@ -2876,7 +2794,7 @@
   },
   "strategies": {
     "version": 1,
-    "_comment": "Shipped SCD2 strategy presets — seed SQLite on boot; operators may fork or edit from Entity Registry → Strategies. Export from DB to refresh this file after review.",
+    "_comment": "Shipped SCD2 strategy presets \u2014 seed SQLite on boot; operators may fork or edit from Entity Registry \u2192 Strategies. Export from DB to refresh this file after review.",
     "strategies": [
       {
         "id": "mymi-scd2",
@@ -2910,7 +2828,7 @@
       {
         "id": "generic-scd2",
         "displayName": "Generic validity-range SCD2",
-        "description": "validFrom/validTo stamping only — no extra audit columns.",
+        "description": "validFrom/validTo stamping only \u2014 no extra audit columns.",
         "excludeFromDiff": [
           "validFrom",
           "validTo"
@@ -2936,7 +2854,7 @@
       {
         "id": "none",
         "displayName": "None (row replace)",
-        "description": "No SCD2 stamping — full row replace semantics.",
+        "description": "No SCD2 stamping \u2014 full row replace semantics.",
         "excludeFromDiff": [],
         "onInsert": {},
         "onUpdate": {},
@@ -3080,7 +2998,7 @@
             "phase": "preTransaction",
             "kind": "auditCheck",
             "title": "Audit check (before sync)",
-            "description": "Source uspAuditRunCheck — decide whether metadata sync should run.",
+            "description": "Source uspAuditRunCheck \u2014 decide whether metadata sync should run.",
             "auditObjectType": "Contract"
           },
           {

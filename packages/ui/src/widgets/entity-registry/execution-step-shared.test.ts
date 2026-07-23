@@ -30,7 +30,6 @@ describe("execution-step-shared", () => {
           handler: { type: "metadata_sync" as const, connection: "target" as const },
           stepFields: {},
           failureMode: "fatal" as const,
-          entityTypes: ["any" as const],
         },
       ],
     ])
@@ -61,7 +60,6 @@ describe("execution-step-shared", () => {
           },
           stepFields: {},
           failureMode: "fatal" as const,
-          entityTypes: ["any" as const],
         },
       ],
     ])
@@ -94,7 +92,6 @@ describe("execution-step-shared", () => {
           },
           stepFields: {},
           failureMode: "fatal" as const,
-          entityTypes: ["any" as const],
         },
       ],
     ])

@@ -112,7 +112,6 @@ describe("buildFlowCatalog", () => {
           },
           stepFields: {},
           failureMode: "warning",
-          entityTypes: ["any"],
         }),
       },
     ])

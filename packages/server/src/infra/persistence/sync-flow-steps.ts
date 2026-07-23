@@ -70,9 +70,7 @@ export function validateFlowStepsForCatalog(
   } catch (error) {
     return error instanceof FlowStepsValidationError ? error.message : String(error)
   }
-  const validation = validateAuthoredSyncFlow(steps, asEntityId("contract"), flowCatalog, {
-    skipEntityTypeCheck: true,
-  })
+  const validation = validateAuthoredSyncFlow(steps, asEntityId("contract"), flowCatalog)
   if (validation.errors.length === 0) return null
   return validation.errors.map((issue) => issue.message).join("; ")
 }

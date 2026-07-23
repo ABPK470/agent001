@@ -13,7 +13,6 @@ import type {
 import {
   handlerInputSlots,
   isStepBoundHandlerSlot,
-  kindAllowsEntityType,
   lookupCustomValueSource,
   METADATA_SYNC_KIND_ID,
   readStepFieldValue,
@@ -134,9 +133,8 @@ function validateStepBindings(
 
 export function validateAuthoredSyncFlow(
   steps: readonly AuthoredSyncFlowStep[],
-  entityId: EntityId,
+  _entityId: EntityId,
   catalog: FlowCatalog,
-  options?: { skipEntityTypeCheck?: boolean },
 ): SyncFlowValidationResult {
   const errors: SyncFlowValidationIssue[] = []
   const warnings: SyncFlowValidationIssue[] = []
@@ -166,13 +164,6 @@ export function validateAuthoredSyncFlow(
     if (!kindDef) {
       errors.push({ stepId: asStepId(step.id), kind: step.kind, message: `Unknown step kind "${step.kind}".` })
       continue
-    }
-    if (!options?.skipEntityTypeCheck && !kindAllowsEntityType(kindDef.entityTypes, entityId)) {
-      errors.push({
-        stepId: asStepId(step.id),
-        kind: step.kind,
-        message: `Kind "${step.kind}" is not allowed for entity type "${entityId}".`,
-      })
     }
     if (!isExecutableKind(kindDef)) {
       errors.push({

@@ -30,7 +30,6 @@ describe("normalizeAuthoredSyncFlowStep", () => {
             },
             stepFields: {},
             failureMode: "fatal",
-            entityTypes: ["contract"],
           }
         },
       },
@@ -65,7 +64,6 @@ describe("normalizeAuthoredSyncFlowStep", () => {
             },
             stepFields: {},
             failureMode: "warning",
-            entityTypes: ["any"],
           }
         },
       },
@@ -98,7 +96,6 @@ describe("normalizeAuthoredSyncFlowStep", () => {
             },
             stepFields: {},
             failureMode: "warning",
-            entityTypes: ["any"],
           }
         },
       },

@@ -22,7 +22,6 @@ import type {
     VerifierMode,
     VerifierOutcome,
 } from "@mia/shared-enums"
-import type { SyncFlowKindEntityType } from "./kind-entity-types.js"
 import type { SyncPlanMovement, SyncPlanTableStats } from "./sync-plan.js"
 import type { PlatformImportGateResult } from "./import-gate.js"
 
@@ -1509,11 +1508,6 @@ export interface SyncFlowKindDefinition {
   publishedOutputs?: readonly string[]
   /** Skip when contract dataset layer failed (from kind definition in run catalog). */
   skipWhenDatasetLayerFailed?: boolean
-  /**
-   * Entity types that may use this action in a published flow.
-   * Missing / empty treated as ["any"]. Edited in Configuration → Actions.
-   */
-  entityTypes?: SyncFlowKindEntityType[]
 }
 
 /** Phase + kind definitions referenced by a compiled execution contract. */
@@ -1849,14 +1843,6 @@ export {
   normalizeKindDefinition,
   requiredFlowStepFieldKeys,
 } from "./derive-step-fields.js"
-export {
-  SYNC_FLOW_KIND_ENTITY_TYPES,
-  SYNC_FLOW_KIND_SCOPED_ENTITY_TYPES,
-  isSyncFlowKindEntityType,
-  kindAllowsEntityType,
-  normalizeSyncFlowKindEntityTypes,
-} from "./kind-entity-types.js"
-export type { SyncFlowKindEntityType } from "./kind-entity-types.js"
 export {
   defaultAuditObjectType,
   defaultObjectName,

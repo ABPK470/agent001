@@ -21,17 +21,13 @@ import {
   idToCatalogDescription,
   idToCatalogLabel,
   isStepBoundHandlerSlot,
-  kindAllowsEntityType,
   METADATA_SYNC_KIND_ID,
-  normalizeSyncFlowKindEntityTypes,
-  SYNC_FLOW_KIND_SCOPED_ENTITY_TYPES,
   validateCatalogId,
   validateTargetSqlQuery,
   validateValueSource,
   valueSourceCatalogId,
 } from "../../types"
 import { ConfirmModal } from "../sync-admin/chrome"
-import { ActionEntityTypesField } from "./ActionEntityTypesField"
 import {
   CustomValueSourceDefinitionEditor,
   DEFAULT_CUSTOM_VALUE_SOURCE_DEFINITION,
@@ -602,7 +598,6 @@ export function SyncMetadataModal({
           definition: {
             ...formStepTypeDefinition,
             summary: formStepTypeDefinition.summary || label,
-            entityTypes: normalizeSyncFlowKindEntityTypes(formStepTypeDefinition.entityTypes ?? ["any"]),
           },
         })
       } else if (tab === "valueSources") {
@@ -669,24 +664,6 @@ export function SyncMetadataModal({
     () => formSteps.filter((step) => step.kind === METADATA_SYNC_KIND_ID).length,
     [formSteps],
   )
-
-  /** When the flow key matches a known entity type, flag actions that Publish would refuse. */
-  const entityApplicabilityWarnings = useMemo(() => {
-    const entityId = formId.trim()
-    if (!(SYNC_FLOW_KIND_SCOPED_ENTITY_TYPES as readonly string[]).includes(entityId)) {
-      return [] as string[]
-    }
-    const warnings: string[] = []
-    for (const step of formSteps) {
-      const kindDef = stepTypeCatalogLookup?.get(step.kind)
-      if (!kindDef) continue
-      if (kindAllowsEntityType(kindDef.entityTypes, entityId)) continue
-      warnings.push(
-        `Step "${step.id}" uses action "${step.kind}", which is not allowed for entity type "${entityId}".`,
-      )
-    }
-    return warnings
-  }, [formId, formSteps, stepTypeCatalogLookup])
 
   const headerDescription = VIEW_DESCRIPTIONS[catalogView]
 
@@ -1085,11 +1062,6 @@ export function SyncMetadataModal({
                         Include exactly one metadata sync step (found {metadataStepCount}).
                       </p>
                     )}
-                    {entityApplicabilityWarnings.map((warning) => (
-                      <p key={warning} className={`${HELP_TEXT} text-error`}>
-                        {warning} Widen Allowed entity types on that action, or remove the step.
-                      </p>
-                    ))}
                     <FormSurfaceExecutionSteps
                       executionSteps={formSteps}
                       onExecutionSteps={setFormSteps}
@@ -1145,18 +1117,6 @@ export function SyncMetadataModal({
               </FormSectionCard>
               {tab === "actions" && (
                 <>
-                  <FormSectionCard
-                    title="Allowed entity types"
-                    description="Publish only allows this action on the entity types selected here."
-                  >
-                    <ActionEntityTypesField
-                      value={formStepTypeDefinition.entityTypes}
-                      onChange={(entityTypes) => {
-                        setDescTouched(true)
-                        setFormStepTypeDefinition((current) => ({ ...current, entityTypes }))
-                      }}
-                    />
-                  </FormSectionCard>
                   <FormSectionCard
                     title="Handler wiring"
                     description="How each parameter is supplied: fixed resolver, NULL: field, literal, earlier step output, or chosen on each flow step."

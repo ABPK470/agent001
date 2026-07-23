@@ -240,9 +240,6 @@
                 "connection": "target"
               },
               "failureMode": "fatal",
-              "entityTypes": [
-                "any"
-              ],
               "stepFields": {}
             },
             "handleDependencies": {
@@ -270,10 +267,6 @@
                 ]
               },
               "failureMode": "warning",
-              "entityTypes": [
-                "content",
-                "rule"
-              ],
               "publishedOutputs": [
                 "id",
                 "objectName"
@@ -290,7 +283,7 @@
               }
             },
             "planEntityId": {
-              "description": "Numeric id of the entity being synced (contractId, datasetId, ruleId, …). Same for every step in the run.",
+              "description": "Numeric id of the entity being synced (contractId, datasetId, ruleId, \u2026). Same for every step in the run.",
               "resolver": {
                 "kind": "planEntityId"
               }
@@ -778,7 +771,7 @@
             "phase": "preTransaction",
             "kind": "auditCheck",
             "title": "Audit check (before sync)",
-            "description": "Source uspAuditRunCheck — decide whether metadata sync should run.",
+            "description": "Source uspAuditRunCheck \u2014 decide whether metadata sync should run.",
             "auditObjectType": "Contract",
             "bindings": {}
           },
@@ -1018,12 +1011,6 @@
                 ]
               },
               "failureMode": "fatal",
-              "entityTypes": [
-                "content",
-                "contract",
-                "dataset",
-                "rule"
-              ],
               "publishedOutputs": [
                 "action",
                 "id",
@@ -1057,9 +1044,6 @@
                 ]
               },
               "failureMode": "fatal",
-              "entityTypes": [
-                "contract"
-              ],
               "publishedOutputs": [
                 "contractId",
                 "isLocked"
@@ -1074,9 +1058,6 @@
                 "connection": "target"
               },
               "failureMode": "fatal",
-              "entityTypes": [
-                "any"
-              ],
               "stepFields": {}
             },
             "pipelineRegister": {
@@ -1095,10 +1076,6 @@
                 ]
               },
               "failureMode": "warning",
-              "entityTypes": [
-                "contract",
-                "pipelineActivity"
-              ],
               "publishedOutputs": [
                 "pipelineId"
               ],
@@ -1122,9 +1099,6 @@
                 ]
               },
               "failureMode": "warning",
-              "entityTypes": [
-                "contract"
-              ],
               "publishedOutputs": [
                 "contractId"
               ],
@@ -1155,9 +1129,6 @@
                 ]
               },
               "failureMode": "warning",
-              "entityTypes": [
-                "contract"
-              ],
               "publishedOutputs": [
                 "contractId",
                 "isLocked"
@@ -1196,9 +1167,6 @@
                 ]
               },
               "failureMode": "warning",
-              "entityTypes": [
-                "contract"
-              ],
               "publishedOutputs": [
                 "action",
                 "contractName",
@@ -1245,9 +1213,6 @@
                 ]
               },
               "failureMode": "warning",
-              "entityTypes": [
-                "contract"
-              ],
               "createsDatasetLayer": true,
               "publishedOutputs": [
                 "ContractName",
@@ -1296,9 +1261,6 @@
                 ]
               },
               "failureMode": "warning",
-              "entityTypes": [
-                "contract"
-              ],
               "createsDatasetLayer": true,
               "publishedOutputs": [
                 "ContractName",
@@ -1347,9 +1309,6 @@
                 ]
               },
               "failureMode": "warning",
-              "entityTypes": [
-                "contract"
-              ],
               "createsDatasetLayer": true,
               "publishedOutputs": [
                 "ContractName",
@@ -1398,9 +1357,6 @@
                 ]
               },
               "failureMode": "warning",
-              "entityTypes": [
-                "contract"
-              ],
               "createsDatasetLayer": true,
               "publishedOutputs": [
                 "ContractName",
@@ -1449,9 +1405,6 @@
                 ]
               },
               "failureMode": "warning",
-              "entityTypes": [
-                "contract"
-              ],
               "createsDatasetLayer": true,
               "publishedOutputs": [
                 "ContractName",
@@ -1508,9 +1461,6 @@
               },
               "failureMode": "warning",
               "skipWhenDatasetLayerFailed": true,
-              "entityTypes": [
-                "contract"
-              ],
               "publishedOutputs": [
                 "contractName",
                 "isDebug",
@@ -1546,9 +1496,6 @@
               },
               "failureMode": "warning",
               "skipWhenDatasetLayerFailed": true,
-              "entityTypes": [
-                "contract"
-              ],
               "publishedOutputs": [
                 "contractName",
                 "isDebug"
@@ -1588,9 +1535,6 @@
               },
               "failureMode": "warning",
               "skipWhenDatasetLayerFailed": true,
-              "entityTypes": [
-                "contract"
-              ],
               "publishedOutputs": [
                 "contractName",
                 "isDebug",
@@ -1631,9 +1575,6 @@
               },
               "failureMode": "warning",
               "skipWhenDatasetLayerFailed": true,
-              "entityTypes": [
-                "contract"
-              ],
               "publishedOutputs": [
                 "action",
                 "contractName",
@@ -1680,12 +1621,6 @@
                 ]
               },
               "failureMode": "warning",
-              "entityTypes": [
-                "content",
-                "contract",
-                "dataset",
-                "rule"
-              ],
               "publishedOutputs": [
                 "action",
                 "id",
@@ -1734,12 +1669,6 @@
               },
               "failureMode": "warning",
               "skipWhenDatasetLayerFailed": true,
-              "entityTypes": [
-                "content",
-                "contract",
-                "dataset",
-                "rule"
-              ],
               "publishedOutputs": [
                 "action",
                 "id",
@@ -1776,7 +1705,7 @@
               }
             },
             "planEntityId": {
-              "description": "Numeric id of the entity being synced (contractId, datasetId, ruleId, …). Same for every step in the run.",
+              "description": "Numeric id of the entity being synced (contractId, datasetId, ruleId, \u2026). Same for every step in the run.",
               "resolver": {
                 "kind": "planEntityId"
               }
@@ -2258,9 +2187,6 @@
                 "connection": "target"
               },
               "failureMode": "fatal",
-              "entityTypes": [
-                "any"
-              ],
               "stepFields": {}
             },
             "datasetDeploy": {
@@ -2286,10 +2212,6 @@
                 ]
               },
               "failureMode": "warning",
-              "entityTypes": [
-                "dataset",
-                "rule"
-              ],
               "publishedOutputs": [
                 "datasetId",
                 "userFullName"
@@ -2335,12 +2257,6 @@
                 ]
               },
               "failureMode": "warning",
-              "entityTypes": [
-                "content",
-                "contract",
-                "dataset",
-                "rule"
-              ],
               "publishedOutputs": [
                 "action",
                 "id",
@@ -2365,7 +2281,7 @@
               }
             },
             "planEntityId": {
-              "description": "Numeric id of the entity being synced (contractId, datasetId, ruleId, …). Same for every step in the run.",
+              "description": "Numeric id of the entity being synced (contractId, datasetId, ruleId, \u2026). Same for every step in the run.",
               "resolver": {
                 "kind": "planEntityId"
               }
@@ -2689,9 +2605,6 @@
                 "connection": "target"
               },
               "failureMode": "fatal",
-              "entityTypes": [
-                "any"
-              ],
               "stepFields": {}
             },
             "metaRefresh": {
@@ -2705,9 +2618,6 @@
                 "httpPath": "/api/meta/refresh"
               },
               "failureMode": "warning",
-              "entityTypes": [
-                "gateMetadata"
-              ],
               "stepFields": {}
             },
             "pipelineStart": {
@@ -2730,10 +2640,6 @@
                 ]
               },
               "failureMode": "warning",
-              "entityTypes": [
-                "gateMetadata",
-                "pipelineActivity"
-              ],
               "publishedOutputs": [
                 "name"
               ],
@@ -2941,9 +2847,6 @@
                 "connection": "target"
               },
               "failureMode": "fatal",
-              "entityTypes": [
-                "any"
-              ],
               "stepFields": {}
             },
             "pipelineRegister": {
@@ -2962,10 +2865,6 @@
                 ]
               },
               "failureMode": "warning",
-              "entityTypes": [
-                "contract",
-                "pipelineActivity"
-              ],
               "publishedOutputs": [
                 "pipelineId"
               ],
@@ -2974,7 +2873,7 @@
           },
           "customValueSources": {
             "planEntityId": {
-              "description": "Numeric id of the entity being synced (contractId, datasetId, ruleId, …). Same for every step in the run.",
+              "description": "Numeric id of the entity being synced (contractId, datasetId, ruleId, \u2026). Same for every step in the run.",
               "resolver": {
                 "kind": "planEntityId"
               }
@@ -3437,9 +3336,6 @@
                 "connection": "target"
               },
               "failureMode": "fatal",
-              "entityTypes": [
-                "any"
-              ],
               "stepFields": {}
             },
             "datasetDeploy": {
@@ -3465,10 +3361,6 @@
                 ]
               },
               "failureMode": "warning",
-              "entityTypes": [
-                "dataset",
-                "rule"
-              ],
               "publishedOutputs": [
                 "datasetId",
                 "userFullName"
@@ -3502,9 +3394,6 @@
                 ]
               },
               "failureMode": "warning",
-              "entityTypes": [
-                "rule"
-              ],
               "publishedOutputs": [
                 "ruleId",
                 "userFullName"
@@ -3550,12 +3439,6 @@
                 ]
               },
               "failureMode": "warning",
-              "entityTypes": [
-                "content",
-                "contract",
-                "dataset",
-                "rule"
-              ],
               "publishedOutputs": [
                 "action",
                 "id",
@@ -3604,12 +3487,6 @@
               },
               "failureMode": "warning",
               "skipWhenDatasetLayerFailed": true,
-              "entityTypes": [
-                "content",
-                "contract",
-                "dataset",
-                "rule"
-              ],
               "publishedOutputs": [
                 "action",
                 "id",
@@ -3634,7 +3511,7 @@
               }
             },
             "planEntityId": {
-              "description": "Numeric id of the entity being synced (contractId, datasetId, ruleId, …). Same for every step in the run.",
+              "description": "Numeric id of the entity being synced (contractId, datasetId, ruleId, \u2026). Same for every step in the run.",
               "resolver": {
                 "kind": "planEntityId"
               }

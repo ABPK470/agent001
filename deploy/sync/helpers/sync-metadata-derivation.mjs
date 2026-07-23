@@ -109,8 +109,7 @@ const METADATA_SYNC_STEP_TYPE = {
     description:
       "Runs the core metadata sync in one target transaction: FK NOCHECK, MERGE/DELETE from the compiled change set, re-enable FKs, commit.",
     handler: { type: "metadata_sync", connection: "target" },
-    failureMode: "fatal",
-    entityTypes: ["any"]
+    failureMode: "fatal"
   }
 }
 
@@ -330,7 +329,6 @@ export function buildSyncMetadataFromPipelines(pipelines, options = {}) {
     })),
     flows
   }
-  enrichStepTypeEntityTypesFromFlows(metadata)
   for (const action of metadata.actions ?? []) {
     action.definition = migrateKindDefinition(action.definition, action.id)
   }
@@ -338,30 +336,6 @@ export function buildSyncMetadataFromPipelines(pipelines, options = {}) {
     flow.steps = (flow.steps ?? []).map((step) => migrateFlowStep(step))
   }
   return metadata
-}
-
-/** Union entity ids from flow usage into each step type's entityTypes (unless already `any`). */
-export function enrichStepTypeEntityTypesFromFlows(syncMetadata) {
-  const usage = new Map()
-  for (const [entityId, flow] of Object.entries(syncMetadata.flows ?? {})) {
-    if (entityId === "metadataOnly") continue
-    for (const step of flow.steps ?? []) {
-      if (!step?.kind) continue
-      if (!usage.has(step.kind)) usage.set(step.kind, new Set())
-      usage.get(step.kind).add(entityId)
-    }
-  }
-
-  for (const action of syncMetadata.actions ?? []) {
-    const usedBy = usage.get(action.id)
-    if (!usedBy?.size) continue
-    const definition = action.definition ?? {}
-    const existing = new Set(definition.entityTypes ?? [])
-    if (existing.has("any")) continue
-    for (const entityId of usedBy) existing.add(entityId)
-    definition.entityTypes = [...existing].sort()
-    action.definition = definition
-  }
 }
 
 /** Flow-template catalog view — same shape as legacy flow-templates.json for loaders. */

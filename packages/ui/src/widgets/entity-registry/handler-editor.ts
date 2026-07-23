@@ -16,7 +16,6 @@ import {
   isStepBoundHandlerSlot,
   isSyncStepFieldKey,
   normalizeKindDefinition,
-  normalizeSyncFlowKindEntityTypes,
   stepFieldKeysFromHandler,
   valueSourceCatalogId,
 } from "../../types"
@@ -398,11 +397,10 @@ export function formatHttpCallPreview(
 }
 
 export function showsSkipWhenDatasetLayerFailed(
-  def: Pick<SyncFlowKindDefinition, "handler" | "skipWhenDatasetLayerFailed" | "entityTypes" | "createsDatasetLayer">,
+  def: Pick<SyncFlowKindDefinition, "handler" | "skipWhenDatasetLayerFailed" | "createsDatasetLayer">,
   options?: { editable?: boolean },
 ): boolean {
   if (def.skipWhenDatasetLayerFailed) return true
-  if (!def.entityTypes?.includes("contract")) return false
   if (options?.editable === false) return false
   return def.handler.type === "mssql_procedure" && !infersCreatesDatasetLayer(def)
 }
@@ -412,12 +410,6 @@ export function handlerBehaviorRows(def: SyncFlowKindDefinition): Array<{ label:
   const failure =
     def.failureMode === "fatal" ? "Fatal — stops run" : "Warning — logs and continues"
   rows.push({ label: "Failure mode", value: failure })
-
-  const allowed = normalizeSyncFlowKindEntityTypes(def.entityTypes ?? ["any"])
-  rows.push({
-    label: "Allowed entities",
-    value: allowed.includes("any") ? "Any entity type" : allowed.join(", "),
-  })
 
   if (infersCreatesDatasetLayer(def)) {
     rows.push({ label: "Dataset layer", value: "Creates contract dataset layer" })
