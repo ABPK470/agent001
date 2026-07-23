@@ -1,6 +1,6 @@
 import { getCatalog, getTenantConfig, PolicyRole, resolveEffectiveMssqlConnection, resolveGoalDataAnchors, seedMssqlVerifiedTables, type AgentHost, type RunContext, type Tool } from "@mia/agent"
 import { broadcastTrace } from "../../../infra/events/broadcaster.js"
-import { TrajectoryEventKind } from "../../../internal/enums/trajectory.js"
+import { TraceEventKind } from "../../../internal/enums/trace.js"
 import { loadCandidateVerdicts, loadKnownObjects } from "../../prompting/data-blocks/known-objects.js"
 import { loadPriorResults } from "../../prompting/data-blocks/prior-results-block.js"
 import { loadPriorTurns } from "../../prompting/data-blocks/prior-turns.js"
@@ -111,7 +111,7 @@ export async function buildExecutionSystemMessages(
     onClarificationTrace: (event) => {
       if (event.kind === "detected") {
         envBase.boundSaveTrace(request.runId, {
-          kind: TrajectoryEventKind.ClarificationDetected,
+          kind: TraceEventKind.ClarificationDetected,
           findingId: event.finding.id,
           ambiguityKind: event.finding.kind,
           severity: event.finding.severity,
@@ -121,7 +121,7 @@ export async function buildExecutionSystemMessages(
         } as Record<string, unknown>)
       } else {
         envBase.boundSaveTrace(request.runId, {
-          kind: TrajectoryEventKind.ClarificationLlmPlannerInvoked,
+          kind: TraceEventKind.ClarificationLlmPlannerInvoked,
           findingsCount: event.findingsCount
         } as Record<string, unknown>)
       }
@@ -143,15 +143,15 @@ export async function buildExecutionSystemMessages(
 
   const effectivePrompt = systemMessages.map((message) => message.content).join("\n\n")
   envBase.boundSaveTrace(request.runId, {
-    kind: TrajectoryEventKind.SystemPrompt,
+    kind: TraceEventKind.SystemPrompt,
     text: effectivePrompt || "(no system prompt)"
   })
   broadcastTrace(request.runId, envBase.debugSeqRef.value++, {
-    kind: TrajectoryEventKind.SystemPrompt,
+    kind: TraceEventKind.SystemPrompt,
     text: effectivePrompt || "(no system prompt)"
   })
   const toolsResolvedEntry = {
-    kind: TrajectoryEventKind.ToolsResolved,
+    kind: TraceEventKind.ToolsResolved,
     tools: envBase.allTools.map((tool) => ({
       name: tool.name,
       description: tool.description,

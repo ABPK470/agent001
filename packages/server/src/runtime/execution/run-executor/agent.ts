@@ -15,7 +15,7 @@ import {
 } from "@mia/agent"
 import { broadcast, broadcastTrace } from "../../../infra/events/broadcaster.js"
 import * as db from "../../../infra/persistence/sqlite.js"
-import { TrajectoryEventKind } from "../../../internal/enums/trajectory.js"
+import { TraceEventKind } from "../../../internal/enums/trace.js"
 import { handlePlannerTrace } from "../../prompting/coordination/planner-events.js"
 import { consumeMatchingToolGrant } from "../../service/run-tool-approval.js"
 import { writeRunCheckpoint } from "./checkpoint-writer.js"
@@ -178,7 +178,7 @@ export function createRunAgent(command: ExecuteRunCommand, env: ExecutionEnviron
     onLlmCall: (data) => {
       if (data.phase === "request") {
         const entry = {
-          kind: TrajectoryEventKind.LlmRequest,
+          kind: TraceEventKind.LlmRequest,
           iteration: data.iteration,
           messageCount: data.messages.length,
           toolCount: data.tools.length,
@@ -200,7 +200,7 @@ export function createRunAgent(command: ExecuteRunCommand, env: ExecutionEnviron
       }
 
       const entry = {
-        kind: TrajectoryEventKind.LlmResponse,
+        kind: TraceEventKind.LlmResponse,
         iteration: data.iteration,
         durationMs: data.durationMs,
         content: data.response.content,
@@ -215,18 +215,18 @@ export function createRunAgent(command: ExecuteRunCommand, env: ExecutionEnviron
       broadcastTrace(request.runId, env.debugSeqRef.value++, entry)
     },
     onThinking: (content, _toolCalls, iteration) => {
-      const iterEntry = { kind: TrajectoryEventKind.Iteration, current: iteration + 1, max: 30 }
+      const iterEntry = { kind: TraceEventKind.Iteration, current: iteration + 1, max: 30 }
       env.boundSaveTrace(request.runId, iterEntry)
       broadcastTrace(request.runId, env.debugSeqRef.value++, iterEntry)
       if (content) {
-        env.boundSaveTrace(request.runId, { kind: TrajectoryEventKind.Thinking, text: content })
+        env.boundSaveTrace(request.runId, { kind: TraceEventKind.Thinking, text: content })
         broadcast({ type: EventType.AgentThinking, data: { runId: request.runId, content, iteration } })
       }
       const currentAgent = agent
       const iterationTokens = currentAgent.usage.totalTokens - env.progress.prevTotalTokens
       env.progress.prevTotalTokens = currentAgent.usage.totalTokens
       const usageEntry = {
-        kind: TrajectoryEventKind.Usage,
+        kind: TraceEventKind.Usage,
         iterationTokens,
         totalTokens: currentAgent.usage.totalTokens,
         promptTokens: currentAgent.usage.promptTokens,

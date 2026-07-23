@@ -7,7 +7,7 @@ import { EMPTY_MEMORY_PER_TIER } from "../../../infra/persistence/memory/tier-co
 import { RunPriority } from "../../../infra/queue/run-queue.js"
 import { AuditActor } from "../../../internal/enums/audit.js"
 import { BusProtocol } from "../../../internal/enums/bus.js"
-import { TrajectoryEventKind } from "../../../internal/enums/trajectory.js"
+import { TraceEventKind } from "../../../internal/enums/trace.js"
 import { decideSections, filterToolsByGoal } from "../../prompting/decide-sections.js"
 import { composePerRunTools, getAllTools } from "../../tooling/registry.js"
 import { resolveAskUserPresentation } from "../ask-user-options.js"
@@ -104,7 +104,7 @@ export async function resolveExecutionTools(ctx: ToolResolutionContext): Promise
       `[tools] run=${request.runId} dropped ${toolFilter.dropped.length} DB/sync tools for non-DB goal (kept ${toolFilter.tools.length}): ${toolFilter.dropped.join(", ")}`
     )
     const filteredEntry = {
-      kind: TrajectoryEventKind.ToolsFiltered,
+      kind: TraceEventKind.ToolsFiltered,
       dropped: toolFilter.dropped,
       kept: toolFilter.tools.length,
       dbScore: toolDecision.dbScore ?? 0,
@@ -156,7 +156,7 @@ function buildDelegateContext(ctx: DelegateRuntimeContext, governedTools: Tool[]
     acquireSlot: (childRunId: string) => queue.acquire(childRunId, RunPriority.High, signal),
     onChildTrace: (entry) => {
       tracing.boundSaveTrace(request.runId, entry)
-      if (entry.kind === TrajectoryEventKind.DelegationStart) {
+      if (entry.kind === TraceEventKind.DelegationStart) {
         broadcast({ type: EventType.DelegationStarted, data: { runId: request.runId, ...entry } })
         services.auditLog
           .log({
@@ -172,7 +172,7 @@ function buildDelegateContext(ctx: DelegateRuntimeContext, governedTools: Tool[]
             }
           })
           .catch((err: unknown) => { console.error("[mia]", err) })
-      } else if (entry.kind === TrajectoryEventKind.DelegationEnd) {
+      } else if (entry.kind === TraceEventKind.DelegationEnd) {
         broadcast({ type: EventType.DelegationEnded, data: { runId: request.runId, ...entry } })
         services.auditLog
           .log({
@@ -188,11 +188,11 @@ function buildDelegateContext(ctx: DelegateRuntimeContext, governedTools: Tool[]
             }
           })
           .catch((err: unknown) => { console.error("[mia]", err) })
-      } else if (entry.kind === TrajectoryEventKind.DelegationIteration) {
+      } else if (entry.kind === TraceEventKind.DelegationIteration) {
         broadcast({ type: EventType.DelegationIteration, data: { runId: request.runId, ...entry } })
-      } else if (entry.kind === TrajectoryEventKind.DelegationParallelStart) {
+      } else if (entry.kind === TraceEventKind.DelegationParallelStart) {
         broadcast({ type: EventType.DelegationParallelStarted, data: { runId: request.runId, ...entry } })
-      } else if (entry.kind === TrajectoryEventKind.DelegationParallelEnd) {
+      } else if (entry.kind === TraceEventKind.DelegationParallelEnd) {
         broadcast({ type: EventType.DelegationParallelEnded, data: { runId: request.runId, ...entry } })
       } else if (entry.kind === "thinking") {
         broadcast({
@@ -230,7 +230,7 @@ function composeExecutionTools(
       const match = interaction.clarifications.matchQuestion(request.runId, question)
       const presentation = resolveAskUserPresentation(question, options, match)
       tracing.boundSaveTrace(request.runId, {
-        kind: TrajectoryEventKind.UserInputRequest,
+        kind: TraceEventKind.UserInputRequest,
         question: presentation.question,
         options: presentation.options,
         sensitive

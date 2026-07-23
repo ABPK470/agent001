@@ -5,7 +5,7 @@ import { consolidate, ingestRunTurns } from "../../../../infra/persistence/memor
 import { isInternalFailureAnswer } from "../../../../infra/persistence/memory/episodic-quality.js"
 import * as db from "../../../../infra/persistence/sqlite.js"
 import { NotificationActionType } from "../../../../internal/enums/notifications.js"
-import { TrajectoryEventKind } from "../../../../internal/enums/trajectory.js"
+import { TraceEventKind } from "../../../../internal/enums/trace.js"
 import { buildRunCapabilityActions } from "../../../run-capability-actions.js"
 import { persistAuditLog, persistTokenUsage } from "../../persistence.js"
 import { buildPersistedToolTrace } from "../support.js"
@@ -38,7 +38,7 @@ export async function finalizeCompletedRun(
   await persistAuditLog(sideEffects.auditLog, request.runId)
   persistTokenUsage(request.runId, agent)
 
-  env.boundSaveTrace(request.runId, { kind: TrajectoryEventKind.Answer, text: answer })
+  env.boundSaveTrace(request.runId, { kind: TraceEventKind.Answer, text: answer })
   await runtime.workspaceStore.captureOutputDiff(
     request.runId,
     env.boundSaveTrace,

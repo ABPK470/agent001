@@ -3,7 +3,7 @@ import { EventType } from "@mia/agent"
 import { presentToolCall, serializeToolCallArgs } from "@mia/shared-types"
 import { broadcast, toBroadcastData } from "../../../infra/events/broadcaster.js"
 import * as db from "../../../infra/persistence/sqlite.js"
-import { TrajectoryEventKind } from "../../../internal/enums/trajectory.js"
+import { TraceEventKind } from "../../../internal/enums/trace.js"
 
 type EventWiringServices = {
   eventBus: {
@@ -107,7 +107,7 @@ export function wireEventBroadcasting(
         // text and only shows the input — leaving every tool row in the
         // expanded view without an output panel.
         saveTrace(runId, {
-          kind: TrajectoryEventKind.ToolCall,
+          kind: TraceEventKind.ToolCall,
           invocationId: stepId,
           tool: toolName,
           argsSummary,
@@ -118,11 +118,11 @@ export function wireEventBroadcasting(
         const output = (data["output"] as Record<string, unknown>) ?? {}
         const result =
           (output["result"] as string) ?? (Object.keys(output).length > 0 ? JSON.stringify(output) : "done")
-        saveTrace(runId, { kind: TrajectoryEventKind.ToolResult, invocationId: stepId, text: result })
+        saveTrace(runId, { kind: TraceEventKind.ToolResult, invocationId: stepId, text: result })
       } else if (eventType === EventType.StepFailed) {
         const stepId = getStepId(event)
         saveTrace(runId, {
-          kind: TrajectoryEventKind.ToolError,
+          kind: TraceEventKind.ToolError,
           invocationId: stepId,
           text: (data["error"] as string) ?? "unknown error"
         })

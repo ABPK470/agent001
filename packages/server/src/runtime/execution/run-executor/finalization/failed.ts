@@ -4,7 +4,7 @@ import { broadcast } from "../../../../infra/events/broadcaster.js"
 import { ingestRunTurns } from "../../../../infra/persistence/memory.js"
 import * as db from "../../../../infra/persistence/sqlite.js"
 import { NotificationActionType } from "../../../../internal/enums/notifications.js"
-import { TrajectoryEventKind } from "../../../../internal/enums/trajectory.js"
+import { TraceEventKind } from "../../../../internal/enums/trace.js"
 import { buildRunCapabilityActions } from "../../../run-capability-actions.js"
 import { persistAuditLog, persistTokenUsage } from "../../persistence.js"
 import { writeRunCheckpoint } from "../checkpoint-writer.js"
@@ -56,7 +56,7 @@ export async function finalizeFailedRun(
   env.persistCurrentRun(undefined, errMsg)
   await persistAuditLog(sideEffects.auditLog, request.runId)
   persistTokenUsage(request.runId, agent)
-  env.boundSaveTrace(request.runId, { kind: TrajectoryEventKind.Error, text: errMsg })
+  env.boundSaveTrace(request.runId, { kind: TraceEventKind.Error, text: errMsg })
   await runtime.workspaceStore.captureOutputDiff(
     request.runId,
     env.boundSaveTrace,

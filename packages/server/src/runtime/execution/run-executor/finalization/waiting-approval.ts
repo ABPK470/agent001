@@ -3,7 +3,7 @@ import { RunStatus } from "@mia/shared-enums"
 import { broadcast } from "../../../../infra/events/broadcaster.js"
 import * as db from "../../../../infra/persistence/sqlite.js"
 import { NotificationActionType } from "../../../../internal/enums/notifications.js"
-import { TrajectoryEventKind } from "../../../../internal/enums/trajectory.js"
+import { TraceEventKind } from "../../../../internal/enums/trace.js"
 import { createNotification, persistAuditLog, persistTokenUsage } from "../../persistence.js"
 import { writeRunCheckpoint } from "../checkpoint-writer.js"
 import type { ExecuteRunCommand, ExecutionEnvironment } from "../types.js"
@@ -48,7 +48,7 @@ export async function finalizeWaitingForApprovalRun(
   await persistAuditLog(sideEffects.auditLog, request.runId)
   persistTokenUsage(request.runId, agent)
   env.boundSaveTrace(request.runId, {
-    kind: TrajectoryEventKind.Error,
+    kind: TraceEventKind.Error,
     text: error.message,
   })
 

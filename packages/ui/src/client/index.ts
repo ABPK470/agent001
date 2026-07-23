@@ -791,40 +791,6 @@ export const api = {
       body: JSON.stringify({ action, data }),
     }),
 
-  // Trajectory
-  getTrajectory: (runId: string) =>
-    json<{ runId: string; events: Array<{ seq: number; event: Record<string, unknown>; timestamp: string }> }>(
-      `/api/trajectory/${encodeURIComponent(runId)}`,
-    ),
-  replayTrajectory: (runId: string, mutations?: Array<Record<string, unknown>>) =>
-    json<{
-      valid: boolean
-      violations: Array<{ seq: number; from: string; to: string; message: string }>
-      scorecard: Record<string, unknown>
-      eventCount: number
-    }>(`/api/trajectory/${encodeURIComponent(runId)}/replay`, {
-      method: "POST",
-      body: JSON.stringify({ mutations }),
-    }),
-  compareTrajectories: (runIdA: string, runIdB: string) =>
-    json<{
-      sameGoal: boolean
-      goalSimilarity: number
-      toolOverlap: number
-      toolCallDelta: number
-      iterationDelta: number
-      errorRateDelta: number
-      moreEfficient: "a" | "b" | "equal"
-      outcomeA: "answer" | "error" | "incomplete"
-      outcomeB: "answer" | "error" | "incomplete"
-      summary: string
-    }>("/api/trajectory/compare", {
-      method: "POST",
-      body: JSON.stringify({ runIdA, runIdB }),
-    }),
-  getTrajectorySummary: (runId: string) =>
-    json<{ summary: string }>(`/api/trajectory/${encodeURIComponent(runId)}/summary`),
-
   // Mymi DB explorer
   mymiListDatabases: () =>
     json<Array<{ name: string; server: string; database: string }>>("/api/warehouse/databases"),

@@ -28,7 +28,7 @@ import type {
   NotificationOpts,
   OrchestratorConfig
 } from "../ports/orchestration.js"
-import { TrajectoryEventKind } from "../internal/enums/trajectory.js"
+import { TraceEventKind } from "../internal/enums/trace.js"
 import type { CurrentSession } from "../api/auth/state/context.js"
 import { ClarificationsRegistry } from "./execution/clarifications-registry.js"
 import { persistLearnedTermFromResolution } from "./execution/clarifications-learned.js"
@@ -211,7 +211,7 @@ export class AgentOrchestrator {
       type: EventType.RunQueued,
       data: { runId, goal, queueStats: this.queue.stats() }
     })
-    saveTrace(this.activeRuns, runId, { kind: TrajectoryEventKind.Goal, text: goal })
+    saveTrace(this.activeRuns, runId, { kind: TraceEventKind.Goal, text: goal })
 
     const command = this.buildRunCommand({
       runId,
@@ -371,7 +371,7 @@ export class AgentOrchestrator {
       type: EventType.RunQueued,
       data: { runId: newRunId, goal: originalRun.goal, resumedFrom: runId }
     })
-    saveTrace(this.activeRuns, newRunId, { kind: TrajectoryEventKind.Goal, text: originalRun.goal })
+    saveTrace(this.activeRuns, newRunId, { kind: TraceEventKind.Goal, text: originalRun.goal })
 
     const messages = parseBoundaryJson(checkpoint.messages) as Message[]
     const iteration = checkpoint.iteration
@@ -432,12 +432,12 @@ export class AgentOrchestrator {
         this.bootHostDeps
       )
       saveTrace(this.activeRuns, runId, {
-        kind: TrajectoryEventKind.ClarificationResolved,
+        kind: TraceEventKind.ClarificationResolved,
         findingId: resolvedClarification.findingId,
         subject: resolvedClarification.subject
       } as unknown as Record<string, unknown>)
     }
-    saveTrace(this.activeRuns, runId, { kind: TrajectoryEventKind.UserInputResponse, text: response })
+    saveTrace(this.activeRuns, runId, { kind: TraceEventKind.UserInputResponse, text: response })
     broadcast({ type: EventType.UserInputResponse, data: { runId } })
     return true
   }

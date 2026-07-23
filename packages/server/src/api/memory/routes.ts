@@ -1,5 +1,5 @@
 /**
- * Memory, trajectory, and effects transport routes.
+ * Memory and effects transport routes.
  */
 
 import type { FastifyInstance } from "fastify"
@@ -22,13 +22,6 @@ import {
   type MemoryTier
 } from "../../infra/persistence/memory.js"
 import type { AgentOrchestrator } from "../../runtime/orchestrator.js"
-import {
-  compareTrajectories,
-  loadTrajectory,
-  replay,
-  summarizeTrajectory,
-  type Mutation
-} from "../../runtime/trajectory/index.js"
 
 export function registerMemoryRoutes(app: FastifyInstance, _orchestrator: AgentOrchestrator): void {
   const tenantScope = (req: { session: { isAdmin: boolean; upn: string } }): string | undefined =>
@@ -128,33 +121,6 @@ export function registerMemoryRoutes(app: FastifyInstance, _orchestrator: AgentO
     }
     clearAllMemories()
     return { ok: true }
-  })
-
-  app.get<{ Params: { runId: string } }>("/api/trajectory/:runId", async (req) =>
-    loadTrajectory(req.params.runId)
-  )
-  app.get<{ Params: { runId: string } }>("/api/trajectory/:runId/summary", async (req) => ({
-    summary: summarizeTrajectory(req.params.runId)
-  }))
-  app.post<{ Params: { runId: string }; Body: { mutations?: Mutation[] } }>(
-    "/api/trajectory/:runId/replay",
-    async (req) => {
-      const result = replay(req.params.runId, req.body.mutations)
-      return {
-        valid: result.valid,
-        violations: result.violations,
-        scorecard: result.scorecard,
-        eventCount: result.trajectory.events.length
-      }
-    }
-  )
-  app.post<{ Body: { runIdA: string; runIdB: string } }>("/api/trajectory/compare", async (req, reply) => {
-    const { runIdA, runIdB } = req.body
-    if (!runIdA || !runIdB) {
-      reply.code(400)
-      return { error: "runIdA and runIdB are required" }
-    }
-    return compareTrajectories(runIdA, runIdB)
   })
 
   app.get<{ Params: { runId: string } }>("/api/effects/:runId", async (req) =>
