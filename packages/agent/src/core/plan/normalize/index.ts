@@ -11,6 +11,11 @@ import type { Plan, PlanDiagnostic, SubagentTaskStep } from "../types.js"
 import { normalizeOutputDirToken, normalizePlanOutputDirectory } from "./helpers.js"
 
 export { mostFrequent, normalizeOutputDirToken, normalizePlanOutputDirectory, uniqueList } from "./helpers.js"
+export {
+  markSafeStepsParallelizable,
+  preparePlanParallelism,
+  pruneSpuriousSerialEdges
+} from "./parallelism.js"
 
 // ============================================================================
 // Warning injection

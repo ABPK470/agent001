@@ -16,6 +16,7 @@ import {
   injectVisualStyleContracts,
   injectWarningsIntoSteps,
   normalizePlanOutputDirectory,
+  preparePlanParallelism,
   remediateValidationErrors
 } from "../normalize/index.js"
 import { compilePlannerRuntime } from "../runtime-model.js"
@@ -170,6 +171,24 @@ export async function runPlannerSetup(
   injectVisualStyleContracts(plan)
   injectBlueprintStep(plan, ctx.workspaceRoot, forcedOutputDir)
   strengthenExistingBlueprintSteps(plan, ctx.workspaceRoot, forcedOutputDir)
+
+  // Parallel mode is useless if the DAG is a single chain. Mark safe peers and
+  // drop dependsOn/edges that are not real artifact handoffs.
+  const parallelPrep = preparePlanParallelism(plan)
+  if (parallelPrep.marked > 0 || parallelPrep.prunedEdges > 0) {
+    ctx.onTrace?.({
+      kind: PlannerTraceKind.ValidationWarnings,
+      warningCount: 1,
+      diagnostics: [
+        {
+          severity: DiagnosticSeverity.Warning,
+          code: "parallelism_normalized",
+          message: `Parallelism normalized: marked ${parallelPrep.marked} step(s) parallelizable, pruned ${parallelPrep.prunedEdges} spurious serial edge(s)`
+        }
+      ]
+    })
+  }
+
   const runtimeModel = compilePlannerRuntime(plan)
 
   ctx.onTrace?.({
