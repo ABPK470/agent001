@@ -23,7 +23,9 @@ import {
 } from "../../../infra/persistence/sync-flow-steps.js"
 import {
   annotateCatalogShippedDrift,
+  buildShippedDriftDiff,
   loadShippedSyncMetadata,
+  type ShippedDriftKind,
 } from "../service/catalog-shipped-drift.js"
 
 const TENANT = "_default"
@@ -111,6 +113,67 @@ export function registerSyncMetadataRoutes(app: FastifyInstance, projectRoot: st
     }
     return mapCatalog(projectRoot)
   })
+
+  app.get<{ Params: { kind: string; id: string } }>(
+    "/api/sync-metadata/shipped-diff/:kind/:id",
+    async (req, reply) => {
+      if (!req.session?.isAdmin) {
+        reply.code(403)
+        return { error: "admin only" }
+      }
+      const kind = req.params.kind as ShippedDriftKind
+      if (kind !== "flows" && kind !== "actions" && kind !== "valueSources") {
+        reply.code(400)
+        return { error: "kind must be flows, actions, or valueSources" }
+      }
+      const id = req.params.id
+      const metadata = loadShippedSyncMetadata(projectRoot)
+
+      if (kind === "flows") {
+        const row = db.getSyncFlow(TENANT, id)
+        if (!row || row.built_in !== 1) {
+          reply.code(404)
+          return { error: "built-in flow not found" }
+        }
+        return buildShippedDriftDiff({
+          kind,
+          id,
+          tip: {
+            label: row.label,
+            description: row.description,
+            steps: db.parseFlowSteps(row.steps_json),
+          },
+          metadata,
+        })
+      }
+
+      if (kind === "actions") {
+        const row = db.listSyncActions(TENANT).find((entry) => entry.id === id)
+        if (!row || row.built_in !== 1) {
+          reply.code(404)
+          return { error: "built-in action not found" }
+        }
+        return buildShippedDriftDiff({
+          kind,
+          id,
+          tip: { label: row.label, definition: db.mapKindDefinition(row) },
+          metadata,
+        })
+      }
+
+      const row = db.listSyncValueSources(TENANT).find((entry) => entry.id === id)
+      if (!row || row.built_in !== 1) {
+        reply.code(404)
+        return { error: "built-in value source not found" }
+      }
+      return buildShippedDriftDiff({
+        kind,
+        id,
+        tip: { label: row.label, definition: db.mapValueSourceDefinition(row) },
+        metadata,
+      })
+    },
+  )
 
   app.post<{
     Body: { id: string; label: string; definition?: SyncFlowKindDefinition }

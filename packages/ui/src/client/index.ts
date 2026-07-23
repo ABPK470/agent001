@@ -615,6 +615,15 @@ export const api = {
     json<import("../types").SyncMetadataCatalogResponse>(`/api/sync-metadata/flows/${encodeURIComponent(id)}`, {
       method: "DELETE",
     }),
+  getSyncMetadataShippedDiff: (kind: "flows" | "actions" | "valueSources", id: string) =>
+    json<{
+      kind: "flows" | "actions" | "valueSources"
+      id: string
+      label: string
+      shippedJson: string | null
+      tipJson: string
+      diverged: boolean
+    }>(`/api/sync-metadata/shipped-diff/${encodeURIComponent(kind)}/${encodeURIComponent(id)}`),
 
   // Data management
   resetData: () => json<{ ok: boolean }>("/api/data", { method: "DELETE" }),

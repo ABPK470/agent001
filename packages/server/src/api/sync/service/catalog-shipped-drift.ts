@@ -2,7 +2,8 @@
  * Tip-vs-shipped drift for built-in sync catalog rows.
  *
  * DB tip remains SoT. This only answers: "does this built-in still match
- * deploy/sync/artifacts/sync-metadata.json?" so the Configuration UI can tag it.
+ * deploy/sync/artifacts/sync-metadata.json?" so the Configuration UI can tag it,
+ * and builds a stable JSON pair for the Modified diff viewer.
  */
 
 import type {
@@ -25,9 +26,27 @@ import {
   prepareFlowStepsForStorage,
 } from "../../../infra/persistence/sync-flow-steps.js"
 
+export type ShippedDriftKind = "flows" | "actions" | "valueSources"
+
+export interface ShippedDriftDiff {
+  kind: ShippedDriftKind
+  id: string
+  label: string
+  /** Pretty JSON of shipped artifact side (null if missing from artifact). */
+  shippedJson: string | null
+  /** Pretty JSON of current DB tip. */
+  tipJson: string
+  diverged: boolean
+}
+
 /** Stable JSON for structural equality (sorted object keys). */
 export function stableJson(value: unknown): string {
   return JSON.stringify(canonicalize(value))
+}
+
+/** Pretty, key-sorted JSON for line diffs in the UI. */
+export function prettyStableJson(value: unknown): string {
+  return JSON.stringify(canonicalize(value), null, 2)
 }
 
 function canonicalize(input: unknown): unknown {
@@ -49,11 +68,59 @@ function flowCatalogFromArtifact(metadata: SyncMetadataArtifact) {
   })
 }
 
+function preparedFlowSteps(
+  steps: readonly AuthoredSyncFlowStep[],
+  metadata: SyncMetadataArtifact,
+): AuthoredSyncFlowStep[] {
+  return prepareFlowStepsForStorage([...steps], flowCatalogFromArtifact(metadata))
+}
+
 function preparedFlowStepsJson(
   steps: readonly AuthoredSyncFlowStep[],
   metadata: SyncMetadataArtifact,
 ): string {
-  return stableJson(prepareFlowStepsForStorage([...steps], flowCatalogFromArtifact(metadata)))
+  return stableJson(preparedFlowSteps(steps, metadata))
+}
+
+function flowSnapshot(
+  id: string,
+  flow: { label: string; description?: string; steps: AuthoredSyncFlowStep[] },
+  metadata: SyncMetadataArtifact,
+): unknown {
+  let steps: AuthoredSyncFlowStep[]
+  try {
+    steps = preparedFlowSteps(flow.steps, metadata)
+  } catch {
+    steps = [...flow.steps]
+  }
+  return {
+    id,
+    label: flow.label,
+    description: flow.description ?? "",
+    steps,
+  }
+}
+
+function actionSnapshot(
+  id: string,
+  action: { label: string; definition: SyncFlowKindDefinition },
+): unknown {
+  return {
+    id,
+    label: action.label,
+    definition: normalizeKindDefinition(action.definition, id),
+  }
+}
+
+function valueSourceSnapshot(
+  id: string,
+  source: { label: string; definition: CustomValueSourceDefinition },
+): unknown {
+  return {
+    id,
+    label: source.label,
+    definition: parseCustomValueSourceDefinition(source.definition, id),
+  }
 }
 
 export function builtInFlowDivergedFromShipped(input: {
@@ -161,5 +228,60 @@ export function annotateCatalogShippedDrift<
           })
         : false,
     })),
+  }
+}
+
+export function buildShippedDriftDiff(input: {
+  kind: ShippedDriftKind
+  id: string
+  tip:
+    | { label: string; description: string; steps: AuthoredSyncFlowStep[] }
+    | { label: string; definition: SyncFlowKindDefinition }
+    | { label: string; definition: CustomValueSourceDefinition }
+  metadata: SyncMetadataArtifact
+}): ShippedDriftDiff {
+  const { kind, id, tip, metadata } = input
+
+  if (kind === "flows") {
+    const flowTip = tip as { label: string; description: string; steps: AuthoredSyncFlowStep[] }
+    const shipped = metadata.flows[id]
+    const tipJson = prettyStableJson(flowSnapshot(id, flowTip, metadata))
+    const shippedJson = shipped ? prettyStableJson(flowSnapshot(id, shipped, metadata)) : null
+    return {
+      kind,
+      id,
+      label: flowTip.label,
+      shippedJson,
+      tipJson,
+      diverged: builtInFlowDivergedFromShipped({ tip: flowTip, shipped, metadata }),
+    }
+  }
+
+  if (kind === "actions") {
+    const actionTip = tip as { label: string; definition: SyncFlowKindDefinition }
+    const shipped = metadata.actions.find((row) => row.id === id)
+    const tipJson = prettyStableJson(actionSnapshot(id, actionTip))
+    const shippedJson = shipped ? prettyStableJson(actionSnapshot(id, shipped)) : null
+    return {
+      kind,
+      id,
+      label: actionTip.label,
+      shippedJson,
+      tipJson,
+      diverged: builtInActionDivergedFromShipped({ id, tip: actionTip, shipped }),
+    }
+  }
+
+  const sourceTip = tip as { label: string; definition: CustomValueSourceDefinition }
+  const shipped = (metadata.valueSources ?? []).find((row) => row.id === id)
+  const tipJson = prettyStableJson(valueSourceSnapshot(id, sourceTip))
+  const shippedJson = shipped ? prettyStableJson(valueSourceSnapshot(id, shipped)) : null
+  return {
+    kind,
+    id,
+    label: sourceTip.label,
+    shippedJson,
+    tipJson,
+    diverged: builtInValueSourceDivergedFromShipped({ id, tip: sourceTip, shipped }),
   }
 }

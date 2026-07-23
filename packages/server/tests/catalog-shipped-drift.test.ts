@@ -4,6 +4,7 @@ import type { SyncMetadataArtifact } from "@mia/sync"
 
 import {
   annotateCatalogShippedDrift,
+  buildShippedDriftDiff,
   builtInActionDivergedFromShipped,
   builtInFlowDivergedFromShipped,
   builtInValueSourceDivergedFromShipped,
@@ -158,5 +159,21 @@ describe("catalog-shipped-drift", () => {
     expect(annotated.actions.find((a) => a.id === "customAction")?.divergedFromShipped).toBe(false)
     expect(annotated.flows[0]?.divergedFromShipped).toBe(true)
     expect(annotated.valueSources[0]?.divergedFromShipped).toBe(false)
+  })
+
+  it("buildShippedDriftDiff returns tip vs shipped JSON for a modified flow", () => {
+    const diff = buildShippedDriftDiff({
+      kind: "flows",
+      id: "contract",
+      tip: {
+        label: "Contract edited",
+        description: "Contract flow",
+        steps: [{ id: "meta", kind: "metadataSync" }],
+      },
+      metadata,
+    })
+    expect(diff.diverged).toBe(true)
+    expect(diff.shippedJson).toContain('"label": "Contract"')
+    expect(diff.tipJson).toContain('"label": "Contract edited"')
   })
 })

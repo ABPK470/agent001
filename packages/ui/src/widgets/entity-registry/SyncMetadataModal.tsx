@@ -28,6 +28,7 @@ import {
   valueSourceCatalogId,
 } from "../../types"
 import { ConfirmModal } from "../sync-admin/chrome"
+import { ShippedDriftDiffModal, type ShippedDriftDiffKind } from "./ShippedDriftDiffModal"
 import {
   CustomValueSourceDefinitionEditor,
   DEFAULT_CUSTOM_VALUE_SOURCE_DEFINITION,
@@ -178,6 +179,10 @@ export function SyncMetadataModal({
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editingBuiltIn, setEditingBuiltIn] = useState(false)
   const [editingDivergedFromShipped, setEditingDivergedFromShipped] = useState(false)
+  const [shippedDiffTarget, setShippedDiffTarget] = useState<{
+    kind: ShippedDriftDiffKind
+    id: string
+  } | null>(null)
   const [formId, setFormId] = useState("")
   const [formLabel, setFormLabel] = useState("")
   const [formDescription, setFormDescription] = useState("")
@@ -887,6 +892,7 @@ export function SyncMetadataModal({
                   const p = catalog.flows.find((x) => x.id === id)
                   if (p) startEdit(p, { description: p.description, steps: p.steps })
                 }}
+                onShowModifiedDiff={(id) => setShippedDiffTarget({ kind: "flows", id })}
                 onDelete={(id) => void removeEntry(id).catch((err: unknown) => { console.error("[mia]", err) })}
               />
             )}
@@ -898,6 +904,7 @@ export function SyncMetadataModal({
                 items={sourcesListItems}
                 selectedId={formOpen && formMode === "edit" ? editingId : null}
                 onSelect={(id) => selectSourcesItem(id)}
+                onShowModifiedDiff={(id) => setShippedDiffTarget({ kind: "valueSources", id })}
                 onDelete={(id) => void removeEntry(id).catch((err: unknown) => { console.error("[mia]", err) })}
               />
             )}
@@ -919,6 +926,7 @@ export function SyncMetadataModal({
                   const k = catalog.actions.find((x) => x.id === id)
                   if (k) startEdit(k, { stepTypeDefinition: k.definition })
                 }}
+                onShowModifiedDiff={(id) => setShippedDiffTarget({ kind: "actions", id })}
                 onDelete={(id) => void removeEntry(id).catch((err: unknown) => { console.error("[mia]", err) })}
               />
             )}
@@ -999,12 +1007,19 @@ export function SyncMetadataModal({
                   <span className="rounded-full bg-overlay-2 px-2 py-0.5 text-xs text-text-muted">Built-in</span>
                 )}
                 {editingBuiltIn && editingDivergedFromShipped && (
-                  <span
-                    className="rounded-full bg-amber-400/10 px-2 py-0.5 text-xs font-medium text-amber-400/90"
-                    title="This built-in no longer matches deploy/sync/artifacts/sync-metadata.json. Database tip is still the source of truth."
+                  <button
+                    type="button"
+                    className="rounded-full bg-amber-400/10 px-2 py-0.5 text-xs font-medium text-amber-400/90 hover:bg-amber-400/20"
+                    title="Show tip vs shipped diff"
+                    onClick={() => {
+                      if (!editingId) return
+                      const kind: ShippedDriftDiffKind =
+                        tab === "flows" ? "flows" : tab === "actions" ? "actions" : "valueSources"
+                      setShippedDiffTarget({ kind, id: editingId })
+                    }}
                   >
                     Modified
-                  </span>
+                  </button>
                 )}
               </div>
               {formMode === "edit" && editingId && tab !== "flows" && (
@@ -1333,6 +1348,15 @@ export function SyncMetadataModal({
         <p className="p-5 text-sm leading-relaxed text-text-muted">{saveConfirmBody}</p>
       </ModalShell>
     )}
+
+    {shippedDiffTarget && (
+      <ShippedDriftDiffModal
+        kind={shippedDiffTarget.kind}
+        id={shippedDiffTarget.id}
+        stackLevel={stackLevel + 1}
+        onClose={() => setShippedDiffTarget(null)}
+      />
+    )}
     </>
   )
 }
@@ -1342,6 +1366,7 @@ function CatalogList({
   selectedId,
   onSelect,
   onDelete,
+  onShowModifiedDiff,
   query,
   onQueryChange,
   searchPlaceholder = "Filter…",
@@ -1358,6 +1383,7 @@ function CatalogList({
   selectedId: string | null
   onSelect: (id: string) => void
   onDelete?: (id: string) => void
+  onShowModifiedDiff?: (id: string) => void
   query: string
   onQueryChange: (query: string) => void
   searchPlaceholder?: string
@@ -1426,12 +1452,17 @@ function CatalogList({
                     </span>
                   )}
                   {item.builtIn && item.divergedFromShipped && (
-                    <span
-                      className="shrink-0 rounded-full bg-amber-400/10 px-2 py-0.5 text-[11px] font-medium text-amber-400/90"
-                      title="Differs from shipped sync-metadata.json"
+                    <button
+                      type="button"
+                      className="shrink-0 rounded-full bg-amber-400/10 px-2 py-0.5 text-[11px] font-medium text-amber-400/90 hover:bg-amber-400/20"
+                      title="Show tip vs shipped diff"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onShowModifiedDiff?.(item.id)
+                      }}
                     >
                       Modified
-                    </span>
+                    </button>
                   )}
                   {item.builtIn && <span className={`shrink-0 ${META_TEXT} text-text-faint`}>Built-in</span>}
                   {(item.deletable ?? !item.builtIn) && onDelete && (
