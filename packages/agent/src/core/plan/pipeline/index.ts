@@ -123,8 +123,12 @@ export async function executePipeline(
       return buildResult(stepResults, plan.steps.length, PipelineStatus.Failed, "Pipeline aborted")
     }
 
-    const acceptedArtifacts = collectAcceptedArtifacts(opts?.priorResults, stepResults)
-    const runnableArtifacts = collectRunnableUpstreamArtifacts(opts?.priorResults, stepResults)
+    const acceptedArtifacts = collectAcceptedArtifacts(opts?.priorResults, stepResults, runtimeModel)
+    const runnableArtifacts = collectRunnableUpstreamArtifacts(
+      opts?.priorResults,
+      stepResults,
+      runtimeModel
+    )
 
     const ready: string[] = []
     for (const [name, deg] of inDegree) {

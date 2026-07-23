@@ -97,5 +97,18 @@ describe("blueprint codegen gate", () => {
     const discovery = plan.steps.find((s) => s.name === "catalog_discovery") as SubagentTaskStep
     expect(discovery.dependsOn ?? []).not.toContain("generate_blueprint")
     expect(discovery.executionContext.requiredSourceArtifacts).not.toContain("tmp/BLUEPRINT.md")
+
+    const blueprint = plan.steps.find((s) => s.name === "generate_blueprint") as SubagentTaskStep
+    expect(blueprint.objective).not.toContain("BLUEPRINT DEPTH REQUIREMENTS")
+  })
+
+  it("does not inject a blueprint for static HTML+CSS only", () => {
+    const plan = makePlan([
+      makeStep("build_markup", ["tmp/index.html"]),
+      makeStep("build_styles", ["tmp/styles.css"])
+    ])
+    expect(planNeedsCodegenBlueprint(plan)).toBe(false)
+    injectBlueprintStep(plan, ".", "tmp")
+    expect(plan.steps.some((s) => s.name === "generate_blueprint")).toBe(false)
   })
 })

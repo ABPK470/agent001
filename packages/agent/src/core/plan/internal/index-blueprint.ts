@@ -177,8 +177,9 @@ export function strengthenExistingBlueprintSteps(
   const blueprintSteps = plan.steps.filter(isBlueprintLikeStep)
   if (blueprintSteps.length === 0) return
 
-  // Investigation plans must not be force-wired to wait on BLUEPRINT.md.
-  const wireCodegenConsumers = planNeedsCodegenBlueprint(plan)
+  // Investigation / static-doc plans: do not force codegen depth onto an
+  // incidental blueprint step the planner invented.
+  if (!planNeedsCodegenBlueprint(plan)) return
 
   const outputDir = forcedOutputDir ?? inferOutputDir(blueprintSteps) ?? "tmp"
   const blueprintPath =
@@ -242,8 +243,6 @@ export function strengthenExistingBlueprintSteps(
     ;(step.executionContext as unknown as { verificationMode: VerificationMode }).verificationMode =
       VerificationMode.None
   }
-
-  if (!wireCodegenConsumers) return
 
   for (const step of plan.steps) {
     if (step.stepType !== "subagent_task") continue

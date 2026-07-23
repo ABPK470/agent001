@@ -65,6 +65,72 @@ function makeStep(name: string, opts: {
 }
 
 describe("same-pass upstream handoff", () => {
+  it("credits owned targets when producedArtifacts is empty", () => {
+    const discover = makeStep("discover", {
+      targets: ["tmp/client_offer_grounding/schema_discovery.json"]
+    })
+    const inspect = makeStep("inspect", {
+      targets: ["tmp/client_offer_grounding/revenue_definition_analysis.json"],
+      sources: ["tmp/client_offer_grounding/schema_discovery.json"]
+    })
+    const plan: Plan = {
+      reason: "type-b investigation",
+      confidence: 0.9,
+      requiresSynthesis: true,
+      steps: [discover, inspect],
+      edges: [{ from: "discover", to: "inspect" }]
+    }
+    const runtimeModel = compilePlannerRuntime(plan)
+    const stepResults = new Map<string, PipelineStepResult>([
+      [
+        "discover",
+        {
+          name: "discover",
+          status: "completed",
+          executionState: "executed",
+          acceptanceState: "pending_verification",
+          durationMs: 1,
+          producedArtifacts: [],
+          modifiedArtifacts: []
+        }
+      ]
+    ])
+
+    const runnable = collectRunnableUpstreamArtifacts(undefined, stepResults, runtimeModel)
+    expect(runnable.has("tmp/client_offer_grounding/schema_discovery.json")).toBe(true)
+    expect(
+      getUnresolvedAcceptanceBlockers(
+        "inspect",
+        runtimeModel,
+        undefined,
+        new Set(),
+        runnable
+      )
+    ).toEqual([])
+  })
+
+  it("does not let basename collisions false-satisfy handoffs", () => {
+    const runtimeModel = compilePlannerRuntime({
+      reason: "t",
+      confidence: 1,
+      requiresSynthesis: false,
+      steps: [
+        makeStep("discover_a", { targets: ["tmp/a/index.json"] }),
+        makeStep("discover_b", { targets: ["tmp/b/index.json"] }),
+        makeStep("inspect", {
+          targets: ["tmp/out.json"],
+          sources: ["tmp/a/index.json"]
+        })
+      ],
+      edges: []
+    })
+    // Wrong sibling produced — must NOT unblock the consumer of tmp/a/index.json.
+    const wrongOnly = new Set(["tmp/b/index.json"])
+    expect(
+      getUnresolvedAcceptanceBlockers("inspect", runtimeModel, undefined, wrongOnly, wrongOnly)
+    ).toEqual(["tmp/a/index.json"])
+  })
+
   it("treats pending_verification producers as runnable for dependents", () => {
     const discover = makeStep("discover", {
       targets: ["tmp/client_offer_grounding/schema_discovery.json"]
@@ -96,8 +162,8 @@ describe("same-pass upstream handoff", () => {
       ]
     ])
 
-    const accepted = collectAcceptedArtifacts(undefined, stepResults)
-    const runnable = collectRunnableUpstreamArtifacts(undefined, stepResults)
+    const accepted = collectAcceptedArtifacts(undefined, stepResults, runtimeModel)
+    const runnable = collectRunnableUpstreamArtifacts(undefined, stepResults, runtimeModel)
     expect(accepted.size).toBe(0)
     expect(runnable.has("tmp/client_offer_grounding/schema_discovery.json")).toBe(true)
 

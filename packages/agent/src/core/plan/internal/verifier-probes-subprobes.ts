@@ -7,7 +7,7 @@
 
 import { detectPlaceholderPatterns } from "../../govern-tools.js"
 import type { Tool } from "../../types.js"
-import { isEvidenceArtifact } from "../blueprint-contract/index.js"
+import { isCodeLikeArtifact, isEvidenceArtifact } from "../blueprint-contract/index.js"
 import type { SubagentTaskStep } from "../types.js"
 import {
   detectCodeCorruption,
@@ -151,10 +151,13 @@ export function probeCriteriaProof(
     sa.executionContext.targetArtifacts.length > 0 &&
     sa.executionContext.targetArtifacts.every((artifact) => isEvidenceArtifact(artifact))
 
+  const hasCode = sa.executionContext.targetArtifacts.some((artifact) => isCodeLikeArtifact(artifact))
+  const noRuntimeProbeExpected = sa.executionContext.verificationMode === "none" && !hasCode
+
   const investigationEvidence =
     docsOnlyArtifacts ||
-    (sa.executionContext.verificationMode === "none" &&
-      (sa.executionContext.effectClass === "readonly" || docsOnlyArtifacts))
+    noRuntimeProbeExpected ||
+    (sa.executionContext.verificationMode === "none" && sa.executionContext.effectClass === "readonly")
 
   if (!investigationEvidence && !executedModalities.has("runtime")) {
     const runtimeCriteria = sa.acceptanceCriteria.filter((c) => runtimeCriterionRe.test(c))

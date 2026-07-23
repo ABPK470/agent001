@@ -61,13 +61,23 @@ export function getPlannedBlueprintArtifacts(plan: Plan): string[] {
   return collectPlannedBlueprintArtifacts(plan)
 }
 
-/** Planned build deliverables that justify a multi-file codegen blueprint. */
+/** Planned build deliverables that participate in multi-file codegen. */
 export function getPlannedImplementationArtifacts(plan: Plan): string[] {
   return getPlannedBlueprintArtifacts(plan).filter(isImplementationArtifact)
 }
 
+export function getPlannedCodeArtifacts(plan: Plan): string[] {
+  return getPlannedBlueprintArtifacts(plan).filter(isCodeLikeArtifact)
+}
+
+/**
+ * Codegen blueprint is for multi-module *code* (or HTML+script apps).
+ * Pure static HTML/CSS or JSON/MD evidence plans must not get one.
+ */
 export function planNeedsCodegenBlueprint(plan: Plan): boolean {
-  return getPlannedImplementationArtifacts(plan).length >= 2
+  const implementation = getPlannedImplementationArtifacts(plan)
+  const code = getPlannedCodeArtifacts(plan)
+  return code.length >= 2 || (code.length >= 1 && implementation.length >= 2)
 }
 
 export function buildBlueprintSeedTemplate(

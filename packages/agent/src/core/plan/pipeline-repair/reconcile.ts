@@ -13,6 +13,7 @@ import type {
   RepairTask,
   SubagentTaskStep
 } from "../types.js"
+import { normalizeSpecPath } from "../blueprint-contract/index.js"
 import { buildIssueRepairActions, buildLanguageRepairGuidance, detectArtifactFamilies } from "./artifacts.js"
 
 // ============================================================================
@@ -21,18 +22,22 @@ import { buildIssueRepairActions, buildLanguageRepairGuidance, detectArtifactFam
 
 export function collectAcceptedArtifacts(
   priorResults: ReadonlyMap<string, PipelineStepResult> | undefined,
-  stepResults: ReadonlyMap<string, PipelineStepResult>
+  stepResults: ReadonlyMap<string, PipelineStepResult>,
+  runtimeModel?: PlannerRuntimeModel
 ): Set<string> {
   const accepted = new Set<string>()
-  const append = (result: PipelineStepResult | undefined) => {
+  const append = (stepName: string, result: PipelineStepResult | undefined) => {
     if (!result || result.acceptanceState !== "accepted") return
     for (const artifact of result.producedArtifacts ?? []) accepted.add(artifact)
     for (const artifact of result.modifiedArtifacts ?? []) accepted.add(artifact)
+    // Child may succeed without re-writing files already on disk — still credit
+    // owned targets so dependents are not deadlocked on empty produced lists.
+    appendOwnedTargets(accepted, stepName, runtimeModel)
   }
   if (priorResults) {
-    for (const result of priorResults.values()) append(result)
+    for (const [name, result] of priorResults) append(name, result)
   }
-  for (const result of stepResults.values()) append(result)
+  for (const [name, result] of stepResults) append(name, result)
   return accepted
 }
 
@@ -44,10 +49,11 @@ export function collectAcceptedArtifacts(
  */
 export function collectRunnableUpstreamArtifacts(
   priorResults: ReadonlyMap<string, PipelineStepResult> | undefined,
-  stepResults: ReadonlyMap<string, PipelineStepResult>
+  stepResults: ReadonlyMap<string, PipelineStepResult>,
+  runtimeModel?: PlannerRuntimeModel
 ): Set<string> {
   const runnable = new Set<string>()
-  const append = (result: PipelineStepResult | undefined) => {
+  const append = (stepName: string, result: PipelineStepResult | undefined) => {
     if (!result || result.status !== "completed") return
     if (
       result.acceptanceState !== "accepted" &&
@@ -57,19 +63,31 @@ export function collectRunnableUpstreamArtifacts(
     }
     for (const artifact of result.producedArtifacts ?? []) runnable.add(artifact)
     for (const artifact of result.modifiedArtifacts ?? []) runnable.add(artifact)
+    appendOwnedTargets(runnable, stepName, runtimeModel)
   }
   if (priorResults) {
-    for (const result of priorResults.values()) append(result)
+    for (const [name, result] of priorResults) append(name, result)
   }
-  for (const result of stepResults.values()) append(result)
+  for (const [name, result] of stepResults) append(name, result)
   return runnable
 }
 
+function appendOwnedTargets(
+  into: Set<string>,
+  stepName: string,
+  runtimeModel: PlannerRuntimeModel | undefined
+): void {
+  if (!runtimeModel) return
+  for (const ownership of runtimeModel.ownershipGraph.values()) {
+    if (ownership.ownerStepName === stepName) into.add(ownership.artifactPath)
+  }
+}
+
 function artifactSatisfied(required: string, available: ReadonlySet<string>): boolean {
-  if (available.has(required)) return true
-  const requiredBase = required.split("/").pop() ?? required
+  const normalizedRequired = normalizeSpecPath(required)
+  if (available.has(required) || available.has(normalizedRequired)) return true
   for (const candidate of available) {
-    if ((candidate.split("/").pop() ?? candidate) === requiredBase) return true
+    if (normalizeSpecPath(candidate) === normalizedRequired) return true
   }
   return false
 }

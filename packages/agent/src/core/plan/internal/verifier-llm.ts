@@ -10,7 +10,7 @@ import { DelegationSpanEventKind, VerifierOutcome } from "../../../domain/index.
 
 import { MessageRole } from "../../../domain/enums/message.js"
 import type { LLMClient, Message, Tool } from "../../types.js"
-import { isEvidenceArtifact } from "../blueprint-contract/index.js"
+import { isCodeLikeArtifact, isEvidenceArtifact } from "../blueprint-contract/index.js"
 import type {
   PipelineResult,
   Plan,
@@ -42,9 +42,7 @@ export function detectVerificationModalityGaps(
   const evidenceOnlyArtifacts =
     artifacts.length > 0 && artifacts.every((a) => isEvidenceArtifact(a))
   const hasHtml = artifacts.some((a) => /\.html?$/i.test(a))
-  const hasCode = artifacts.some((a) =>
-    /\.(?:js|jsx|ts|tsx|py|rb|java|cs|go|rs|c|cpp|swift|kt|php)$/i.test(a)
-  )
+  const hasCode = artifacts.some((a) => isCodeLikeArtifact(a))
 
   const criteriaText = [step.objective, ...step.acceptanceCriteria].join(" ").toLowerCase()
   const INTERACTION_RUNTIME_RE =
@@ -52,13 +50,16 @@ export function detectVerificationModalityGaps(
   const IO_RUNTIME_RE =
     /\b(?:api|request|response|endpoint|fetch|http|rpc|query|database|sql|persist|sync|connect|auth|login|permission)\b/i
 
-  // Investigation / evidence steps write JSON+MD with verificationMode none.
-  // Words like "query" / "database" in criteria describe the investigation
-  // work already done via tools — not a missing npm test / browser probe.
+  // Investigation / evidence / static presentation with verificationMode none
+  // must not be graded as needing npm test / browser runtime probes.
+  const noRuntimeProbeExpected =
+    step.executionContext.verificationMode === "none" && !hasCode
+
   const investigationEvidence =
     evidenceOnlyArtifacts ||
+    noRuntimeProbeExpected ||
     (step.executionContext.verificationMode === "none" &&
-      (step.executionContext.effectClass === "readonly" || evidenceOnlyArtifacts))
+      step.executionContext.effectClass === "readonly")
 
   const requiresArtifactReview = artifacts.length > 0
   const requiresSyntax = hasCode
