@@ -975,7 +975,7 @@ function ProgressPill({ part }: { part: ResponseProgressPart }) {
 
 /**
  * Orchestrator verification beat — not agent prose.
- * First line always shows WHAT needs work; expand only for extra notes.
+ * Visible: Check · needs work · {step}. Expand for issue text.
  */
 function CheckBlock({ part }: { part: ResponseProgressPart }) {
   const { preserveToggle } = useChatScroll()

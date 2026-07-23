@@ -229,8 +229,54 @@ describe("buildResponseParts — TermChat projection", () => {
     if (check?.kind === "progress") {
       expect(check.label).toBe("Check · needs work")
       expect(check.status).toBe("done")
-      expect(check.detail).toContain("missing brand-tokens")
+      expect(check.detail).toBe("frontend layer")
+      expect(check.body).toContain("missing brand-tokens")
+      expect(check.detail).not.toContain("missing brand-tokens")
       expect(check.label).not.toMatch(/failed/i)
+    }
+  })
+
+  it("keeps Check first line to the step name; issues stay in collapsed body", () => {
+    const parts = buildResponseParts(
+      [
+        {
+          kind: "planner-verification",
+          overall: "fail",
+          confidence: 0.4,
+          steps: [
+            {
+              stepName: "catalog_and_schema_discovery",
+              outcome: "fail",
+              issues: ["Waiting on accepted upstream artifacts: tmp/BLUEPRINT.md"],
+            },
+            {
+              stepName: "inspect_revenue_definition_and_dependencies",
+              outcome: "fail",
+              issues: [
+                "Waiting on accepted upstream artifacts: tmp/client_offer_grounding/schema_discovery.json, tmp/BLUEPRINT.md",
+              ],
+            },
+          ],
+        },
+      ],
+      "running",
+      "",
+      null,
+      null,
+      null,
+      "run-1",
+    )
+
+    const check = parts.find(
+      (p) => p.kind === "progress" && p.id.startsWith("verification-"),
+    )
+    expect(check?.kind).toBe("progress")
+    if (check?.kind === "progress") {
+      expect(check.label).toBe("Check · needs work")
+      expect(check.detail).toBe("catalog and schema discovery")
+      expect(check.detail).not.toMatch(/Waiting|BLUEPRINT/i)
+      expect(check.body).toContain("Waiting on accepted upstream artifacts: tmp/BLUEPRINT.md")
+      expect(check.body).toContain("inspect revenue definition and dependencies")
     }
   })
 

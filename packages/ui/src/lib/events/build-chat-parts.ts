@@ -56,11 +56,10 @@ export interface ResponseProgressPart {
   id: string
   label: string
   status: "running" | "done" | "error"
-  /** Short first-line meta (e.g. what needs work). Always visible. */
+  /** Short first-line meta (e.g. step name). Always visible. */
   detail?: string
   /**
-   * Longer process notes — collapsed by default for verification checks.
-   * Everyday readers see label + detail; expand for the rest.
+   * Issue / waiting notes — collapsed by default. Expand to read.
    */
   body?: string
   shimmer?: boolean
@@ -965,27 +964,24 @@ export function buildResponseParts(
       case "planner-verification": {
         parts = settlePrimaryActivities(parts, "verification")
         const failed = entry.steps.filter((s) => s.outcome !== "pass")
-        const whatLines = failed.map((s) =>
-          s.issues.length > 0
-            ? `${humanizeStepName(s.stepName)}: ${s.issues[0]}`
-            : humanizeStepName(s.stepName),
-        )
-        // First line = WHAT needs work (always visible). Body = fuller notes
-        // (extra issues / steps) — collapsed so everyday readers aren't bothered.
+        // Visible line: which step needs work. Issue text stays collapsed —
+        // readers expand only when they want the waiting/mismatch details.
         const verifyWhat =
           entry.overall === "pass"
             ? undefined
-            : whatLines[0] || entry.overall
-        const extraNotes = failed.flatMap((s) =>
-          s.issues.length > 1
-            ? s.issues.slice(1).map((issue) => `${humanizeStepName(s.stepName)}: ${issue}`)
-            : [],
-        )
-        const moreSteps = whatLines.slice(1)
+            : failed[0]
+              ? humanizeStepName(failed[0].stepName)
+              : entry.overall
         const verifyBody =
           entry.overall === "pass"
             ? undefined
-            : [...moreSteps, ...extraNotes].join("\n") || undefined
+            : failed
+                .flatMap((s) => {
+                  const name = humanizeStepName(s.stepName)
+                  if (s.issues.length === 0) return []
+                  return s.issues.map((issue) => `${name}: ${issue}`)
+                })
+                .join("\n") || undefined
         // Pass and "found gaps" are both settled checks — never alarm-red.
         parts = setActivityPart(
           parts,
