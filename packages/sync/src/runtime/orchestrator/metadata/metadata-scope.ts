@@ -8,8 +8,8 @@
  * @module
  */
 
-import type { SyncPlan, SyncPlanTable } from "../plan-store.js"
-import { hasChangeSetWork, hasUpsertWork } from "./plan-table.js"
+import type { SyncPlan, SyncPlanTable } from "../../plan-store.js"
+import { hasChangeSetWork, hasUpsertWork } from "../plan-table.js"
 
 function tableResult(plan: SyncPlan, name: string): SyncPlanTable | undefined {
   return plan.tables.find((t) => t.table === name)

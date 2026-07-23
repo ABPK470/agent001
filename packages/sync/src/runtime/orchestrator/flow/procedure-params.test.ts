@@ -2,12 +2,12 @@ import type { ConnectionPool } from "mssql"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { SyncFlowKindDefinition } from "@mia/shared-types"
-import { trackedExecute, trackedQuery } from "./db-helpers.js"
+import { trackedExecute, trackedQuery } from "../db/db-helpers.js"
 import { executeMssqlProcedure } from "./procedure-params.js"
-import { testFlowStepRunContext } from "../../test-support/value-source-context.js"
+import { testFlowStepRunContext } from "../../../test-support/value-source-context.js"
 
-vi.mock("./db-helpers.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("./db-helpers.js")>()
+vi.mock("../db/db-helpers.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../db/db-helpers.js")>()
   return {
     ...actual,
     trackedExecute: vi.fn(),

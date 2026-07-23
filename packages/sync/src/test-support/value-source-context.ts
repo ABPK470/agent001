@@ -1,8 +1,8 @@
 import type { ConnectionPool } from "mssql"
 import { vi } from "vitest"
 
-import type { FlowStepRunContext } from "../runtime/orchestrator/flow-step-executor.js"
-import { StepOutputRegistry } from "../runtime/orchestrator/step-output-registry.js"
+import type { FlowStepRunContext } from "../runtime/orchestrator/flow/flow-step-executor.js"
+import { StepOutputRegistry } from "../runtime/orchestrator/flow/step-output-registry.js"
 import { TEST_VALUE_SOURCE_CATALOG } from "./value-source-catalog.js"
 
 export function testFlowStepRunContext(

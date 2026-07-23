@@ -3,7 +3,7 @@ import {
   formatSyncScopeResolution,
   resolveSyncScope
 } from "./sync-scope-resolution.js"
-import type { PublishedSyncDefinition } from "./published-definitions.js"
+import type { PublishedSyncDefinition } from "@mia/shared-types"
 
 function stubDefinition(
   id: string,

@@ -4,7 +4,7 @@ import type { ConnectionPool } from "mssql"
 
 import { runHttpFlowStep } from "./http-flow-step.js"
 import { StepOutputRegistry } from "./step-output-registry.js"
-import { TEST_VALUE_SOURCE_CATALOG } from "../../test-support/value-source-catalog.js"
+import { TEST_VALUE_SOURCE_CATALOG } from "../../../test-support/value-source-catalog.js"
 
 describe("runHttpFlowStep", () => {
   it("resolves httpBody via value sources — same path as any HTTP step type", async () => {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { withPermissionDefaults } from "../environments.js"
+import { withPermissionDefaults } from "../eligibility/environments.js"
 import { assertEnvOperationAllowed } from "./env-operations.js"
 
 describe("assertEnvOperationAllowed", () => {

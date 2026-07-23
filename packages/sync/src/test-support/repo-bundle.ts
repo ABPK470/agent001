@@ -10,9 +10,9 @@ import { existsSync, readFileSync } from "node:fs"
 import { join, resolve } from "node:path"
 
 import { createDbPublishedSyncDefinitionRegistry } from "../runtime/db-published-definition-registry.js"
-import { ALWAYS_PUBLISH_READY } from "../domain/publish-readiness.js"
-import type { PublishedSyncDefinitionBundle } from "../domain/published-definitions.js"
-import { withPermissionDefaults } from "../domain/environments.js"
+import { ALWAYS_PUBLISH_READY } from "../ports/publish-readiness.js"
+import type { PublishedSyncDefinitionBundle } from "../runtime/published-definitions.js"
+import { withPermissionDefaults } from "../core/eligibility/environments.js"
 import type { SyncRuntimeHost } from "../ports/host.js"
 
 /** Monorepo root (`agent001/`). */

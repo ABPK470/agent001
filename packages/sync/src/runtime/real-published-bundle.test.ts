@@ -14,8 +14,8 @@ import {
   REPO_ROOT,
   requirePublishedBundle
 } from "../test-support/repo-bundle.js"
-import { selectDefinitionTables } from "./definition-selection.js"
-import { asEntityId } from "./types/branded-ids.js"
+import { selectDefinitionTables } from "../core/scope/definition-selection.js"
+import { asEntityId } from "../domain/types/branded-ids.js"
 import { getPublishedSyncDefinition, loadPublishedSyncDefinitionBundle } from "./published-definitions.js"
 
 describe("real published bundle (read-only)", () => {

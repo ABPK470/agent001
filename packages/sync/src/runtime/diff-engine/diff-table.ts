@@ -5,10 +5,10 @@
 import type { AuthoredSyncDefinitionTable } from "@mia/shared-types"
 import { movementFromChangeSet } from "@mia/shared-types"
 
-import { buildChangeSet } from "../../domain/diff-engine/change-set.js"
+import { buildChangeSet } from "../../core/diff-engine/change-set.js"
 import type { SyncPlanGraph, SyncPlanTable, SyncPlanTableStats } from "../../domain/plan.js"
 import { SyncPlanChangeType } from "../../domain/enums.js"
-import { instantiatePredicate, instantiatePredicateWithTree } from "../../domain/predicate.js"
+import { instantiatePredicate, instantiatePredicateWithTree } from "../../core/scope/predicate.js"
 import type { PkHashRow } from "../../domain/diff-engine/types.js"
 import type { DiffOptions } from "../../domain/diff-engine/types.js"
 import { DEFAULT_OPTS } from "../../domain/diff-engine/types.js"

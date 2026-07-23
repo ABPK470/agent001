@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { assertAuditGateAllowsProceed } from "./contract-deploy.js"
+import { assertAuditGateAllowsProceed } from "./flow/contract-deploy.js"
 import { AuditGateSkippedError } from "./types.js"
 
 describe("assertAuditGateAllowsProceed", () => {

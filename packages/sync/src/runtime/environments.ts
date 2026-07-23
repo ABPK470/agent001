@@ -7,14 +7,16 @@ import { resolve } from "node:path"
 
 import { getMssqlConfig } from "../adapters/mssql/connection.js"
 import {
-  assertNoRemovedSyncEnvironmentFields,
-  replaceEnvironments,
-  withPermissionDefaults,
   type LoadSyncEnvironmentsResult,
   type SyncEnvironment,
 } from "../domain/environments.js"
+import {
+  assertNoRemovedSyncEnvironmentFields,
+  withPermissionDefaults,
+} from "../core/eligibility/environments.js"
+import { replaceEnvironments } from "./environments-registry.js"
 import { EnvRole } from "../domain/enums.js"
-import { normalizeServiceUrls } from "../domain/env-service-urls.js"
+import { normalizeServiceUrls } from "../core/eligibility/env-service-urls.js"
 import type { MssqlAccessHost, SyncEnvironmentRegistryHost } from "../ports/index.js"
 
 interface SyncEnvironmentsConfigFile {

@@ -8,16 +8,16 @@
  */
 
 import sqlMod from "mssql"
-import { EventType, SyncProgressKind, type SyncRuntimeHost } from "../../ports/index.js"
-import { emitSyncEvent as emit, type SyncTelemetryContext } from "../events.js"
-import { type SyncPlan, type SyncPlanTable } from "../plan-store.js"
-import { applyDeletes, applyInsertsUpdates } from "./apply.js"
-import { movementFromChangeSet } from "./plan-table.js"
-import { maybeArchive } from "./archive.js"
-import { qtable, trackedQuery } from "./db-helpers.js"
+import { EventType, SyncProgressKind, type SyncRuntimeHost } from "../../../ports/index.js"
+import { emitSyncEvent as emit, type SyncTelemetryContext } from "../../events.js"
+import { type SyncPlan, type SyncPlanTable } from "../../plan-store.js"
+import { applyDeletes, applyInsertsUpdates } from "../apply.js"
+import { movementFromChangeSet } from "../plan-table.js"
+import { maybeArchive } from "../archive.js"
+import { qtable, trackedQuery } from "../db/db-helpers.js"
 import { constraintRelaxationTables, dataMovementTables } from "./metadata-scope.js"
-import { SyncExecuteError, toSyncExecuteError, type ExecuteProgress } from "./types.js"
-import { deleteRows, upsertRows } from "./plan-table.js"
+import { SyncExecuteError, toSyncExecuteError, type ExecuteProgress } from "../types.js"
+import { deleteRows, upsertRows } from "../plan-table.js"
 
 export interface RunMetadataSyncInput {
   host: SyncRuntimeHost

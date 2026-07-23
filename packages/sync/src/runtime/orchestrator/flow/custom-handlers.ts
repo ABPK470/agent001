@@ -8,13 +8,13 @@ import sqlMod from "mssql"
 
 import type { SyncFlowKindDefinition } from "@mia/shared-types"
 import { handlerInputSlots, substituteInputTokens } from "@mia/shared-types"
-import { assertEnvOperationAllowed } from "../../domain/governance/env-operations.js"
-import { getEnvironment } from "../../domain/environments.js"
+import { assertEnvOperationAllowed } from "../../../core/governance/env-operations.js"
+import { getEnvironment } from "../../environments-registry.js"
 import type { FlowStepRunContext, FlowStepRunResult } from "./flow-step-executor.js"
-import type { SyncExecutionContractStep } from "../plan-store.js"
+import type { SyncExecutionContractStep } from "../../plan-store.js"
 import { resolveHandlerInputs } from "./handler-inputs.js"
 import { mergeHandlerResultOutputs, mergeShellCommandOutputs } from "./step-output-registry.js"
-import { trackedQuery } from "./db-helpers.js"
+import { trackedQuery } from "../db/db-helpers.js"
 
 const execFileAsync = promisify(execFile)
 
@@ -106,7 +106,7 @@ export async function runShellOnHost(
   opts: {
     label: string
     timeoutMs?: number
-    telemetryContext?: import("../events.js").SyncTelemetryContext
+    telemetryContext?: import("../../events.js").SyncTelemetryContext
     host: FlowStepRunContext["host"]
   },
 ): Promise<{ stdout: string; stderr: string }> {

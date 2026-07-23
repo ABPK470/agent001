@@ -1,14 +1,14 @@
 import type { ConnectionPool } from "mssql"
 
-import type { FlowCatalog } from "../../domain/flow-catalog.js"
-import { createsDatasetLayer } from "../../domain/flow-kind-dataset-layer.js"
+import type { FlowCatalog } from "../../../core/flow/flow-catalog.js"
+import { createsDatasetLayer } from "../../../core/flow/flow-kind-dataset-layer.js"
 import { assertPublishedOutputsPresent } from "@mia/shared-types"
-import { EventType, SyncDeployStepStatus, SyncProgressKind, type SyncRuntimeHost } from "../../ports/index.js"
-import { emitSyncEvent as emit, type SyncTelemetryContext } from "../events.js"
-import { type SyncExecutionContractStep, type SyncPlan } from "../plan-store.js"
-import { createContractNameResolver, runCatalogFlowStep } from "./flow-step-executor.js"
-import { StepOutputRegistry } from "./step-output-registry.js"
-import { isAuditGateSkippedError, type ExecuteProgress } from "./types.js"
+import { EventType, SyncDeployStepStatus, SyncProgressKind, type SyncRuntimeHost } from "../../../ports/index.js"
+import { emitSyncEvent as emit, type SyncTelemetryContext } from "../../events.js"
+import { type SyncExecutionContractStep, type SyncPlan } from "../../plan-store.js"
+import { createContractNameResolver, runCatalogFlowStep } from "../flow/flow-step-executor.js"
+import { StepOutputRegistry } from "../flow/step-output-registry.js"
+import { isAuditGateSkippedError, type ExecuteProgress } from "../types.js"
 
 export interface StepWarning {
   step: string

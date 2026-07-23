@@ -195,7 +195,7 @@ export function createPackageConfigs(root) {
       },
       layerAllowlist: [],
       forbiddenTrees: ["application"],
-      stateAllowlist: new Set(["domain/governance/freeze-windows.ts"]),
+      stateAllowlist: new Set(["runtime/governance/freeze-windows.ts"]),
       timerAllowlist: new Set(),
       skipTestFilesForLayers: true,
       allowedRootFiles: new Set(["index.ts"]),

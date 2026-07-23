@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-import { EventType } from "../../domain/enums.js"
-import { applyDeletes, applyInsertsUpdates } from "./apply.js"
-import { maybeArchive } from "./archive.js"
-import { trackedQuery } from "./db-helpers.js"
+import { EventType } from "../../../domain/enums.js"
+import { applyDeletes, applyInsertsUpdates } from "../apply.js"
+import { maybeArchive } from "../archive.js"
+import { trackedQuery } from "../db/db-helpers.js"
 import { runMetadataSync } from "./metadata-sync.js"
 
 const txBegin = vi.fn(async () => {})

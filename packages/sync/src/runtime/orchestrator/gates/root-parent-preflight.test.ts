@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import type { SyncPlan } from "../plan-store.js"
-import { trackedQuery } from "./db-helpers.js"
+import type { SyncPlan } from "../../plan-store.js"
+import { trackedQuery } from "../db/db-helpers.js"
 import {
   entityIdMatches,
   evaluateRootParentPreflight,

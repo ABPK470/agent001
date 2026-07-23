@@ -20,10 +20,10 @@
  */
 
 import sqlMod, { type ConnectionPool, type IProcedureResult, type IRecordSet } from "mssql"
-import type { SyncRuntimeHost } from "../../ports/index.js"
-import type { SyncTelemetryContext } from "../events.js"
-import { formatMssqlExecLog, trackedExecute, trackedQuery } from "./db-helpers.js"
-import { AuditGateSkippedError } from "./types.js"
+import type { SyncRuntimeHost } from "../../../ports/index.js"
+import type { SyncTelemetryContext } from "../../events.js"
+import { formatMssqlExecLog, trackedExecute, trackedQuery } from "../db/db-helpers.js"
+import { AuditGateSkippedError } from "../types.js"
 
 // ────────────────────────────────────────────────────────────
 // Configuration

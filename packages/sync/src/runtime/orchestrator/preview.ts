@@ -12,22 +12,23 @@ import {
 } from "@mia/shared-types"
 import { randomUUID } from "node:crypto"
 import { resolvePreviewTableConcurrency } from "../../adapters/mssql/pool-concurrency.js"
-import { requirePublishedFlowCatalog } from "../../domain/flow-catalog.js"
+import { requirePublishedFlowCatalog } from "../../core/flow/flow-catalog.js"
 import { detectCatalogDrift, fetchTableColumnNamesMap } from "../../runtime/catalog-drift.js"
-import { selectDefinitionTables, type SyncEntityId } from "../../domain/definition-selection.js"
-import { materializeDefinitionTablesForSchema } from "../../domain/entity-registry/materialize-scd2-for-schema.js"
-import { coerceSyncEntityId } from "../../domain/entity-instance-ref.js"
+import { selectDefinitionTables, type SyncEntityId } from "../../core/scope/definition-selection.js"
+import { materializeDefinitionTablesForSchema } from "../../core/entity-registry/materialize-scd2-for-schema.js"
+import { coerceSyncEntityId } from "../../core/scope/entity-instance-ref.js"
 import { buildDependencyGraph, diffTable } from "../diff-engine/index.js"
-import { assertSupportedSyncDirection, getEnvironment } from "../../domain/environments.js"
+import { assertSupportedSyncDirection } from "../../core/eligibility/environments.js"
+import { getEnvironment } from "../environments-registry.js"
 import {
   assertEnvConnectorReady,
-} from "../../domain/sync-env-eligibility.js"
+} from "../../core/eligibility/sync-env-eligibility.js"
 import { readyMssqlConnectorIds } from "../connector-readiness.js"
-import { evaluateFreezeWindows } from "../../domain/governance/freeze-windows.js"
+import { evaluateFreezeWindows } from "../../runtime/governance/freeze-windows.js"
 import { asEntityId, type PlanId } from "../../domain/types/branded-ids.js"
-import { getPublishedSyncDefinition } from "../../domain/published-definitions.js"
-import { assertPublishedContractCurrent } from "../../domain/publish-readiness.js"
-import { instantiatePredicate, instantiatePredicateWithTree } from "../../domain/predicate.js"
+import { getPublishedSyncDefinition } from "../../runtime/published-definitions.js"
+import { assertPublishedContractCurrent } from "../../core/publish/assert-published-contract.js"
+import { instantiatePredicate, instantiatePredicateWithTree } from "../../core/scope/predicate.js"
 import { EventType, SyncOperationType, type SyncRuntimeHost } from "../../ports/index.js"
 import { emitSyncEvent as emit, type SyncTelemetryContext } from "../events.js"
 import {
@@ -37,10 +38,10 @@ import {
   type SyncPlanTable,
   type SyncPlanTotals
 } from "../plan-store.js"
-import { emptyChangeSet } from "../../domain/diff-engine/change-set.js"
+import { emptyChangeSet } from "../../core/diff-engine/change-set.js"
 import { fetchPkColumns } from "./apply.js"
-import { mapWithConcurrency, projectRoot } from "./db-helpers.js"
-import { evaluateRootParentPreflight } from "./root-parent-preflight.js"
+import { mapWithConcurrency, projectRoot } from "./db/db-helpers.js"
+import { evaluateRootParentPreflight } from "./gates/root-parent-preflight.js"
 import { expandTreeIds, fetchEntityDisplayName } from "./search.js"
 
 export interface PreviewInput {

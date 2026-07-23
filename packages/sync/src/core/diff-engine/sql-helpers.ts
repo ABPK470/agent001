@@ -7,7 +7,7 @@
  * @module
  */
 
-import type { HashColumn, PkHashRow } from "./types.js"
+import type { HashColumn, PkHashRow } from "../../domain/diff-engine/types.js"
 
 /** Bracket-quote a `schema.table` identifier → `[schema].[table]`. */
 export function qtable(name: string): string {

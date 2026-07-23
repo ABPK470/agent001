@@ -1,7 +1,7 @@
 /**
  * Publish-time validation for authored sync flow steps.
  */
-import { asStepId, type EntityId, type StepId } from "./types/branded-ids.js"
+import { asStepId, type EntityId, type StepId } from "../../domain/types/branded-ids.js"
 
 
 import type {

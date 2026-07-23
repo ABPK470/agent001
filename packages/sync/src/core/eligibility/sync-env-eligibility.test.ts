@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { withPermissionDefaults } from "./environments.js"
+import { withPermissionDefaults } from "../../core/eligibility/environments.js"
 import {
   isSyncDirectionAllowed,
   isSyncEnvSelectableAsSource,

@@ -10,11 +10,11 @@
  */
 
 import type sql from "mssql"
-import { getPool } from "../../adapters/mssql/connection.js"
-import { withPoolSlot } from "../../adapters/mssql/pool-gate.js"
-import type { MssqlAccessHost, SyncEnvironmentRegistryHost, SyncEventHost, SyncProjectRootHost } from "../../ports/host.js"
-import type { SyncTelemetryContext } from "../events.js"
-import { emitSyncSqlEvent } from "../events.js"
+import { getPool } from "../../../adapters/mssql/connection.js"
+import { withPoolSlot } from "../../../adapters/mssql/pool-gate.js"
+import type { MssqlAccessHost, SyncEnvironmentRegistryHost, SyncEventHost, SyncProjectRootHost } from "../../../ports/host.js"
+import type { SyncTelemetryContext } from "../../events.js"
+import { emitSyncSqlEvent } from "../../events.js"
 
 /**
  * @deprecated Use {@link resolvePreviewTableConcurrency} — kept for tests that import the constant.

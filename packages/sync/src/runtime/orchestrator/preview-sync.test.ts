@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-import { emptyChangeSet } from "../../domain/diff-engine/change-set.js"
+import { emptyChangeSet } from "../../core/diff-engine/change-set.js"
 import { ENTITY_SPECS } from "../../test-support/entity-fixtures.js"
 import { createSyncTestProject, drainTempSyncProjects } from "../../test-support/sync-test-host.js"
 
@@ -38,8 +38,8 @@ vi.mock("../../runtime/catalog-drift.js", async (importOriginal) => {
   }
 })
 
-vi.mock("./root-parent-preflight.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("./root-parent-preflight.js")>()
+vi.mock("./gates/root-parent-preflight.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./gates/root-parent-preflight.js")>()
   return {
     ...actual,
     evaluateRootParentPreflight: (...args: unknown[]) => evaluateRootParentMock(...args)

@@ -1,6 +1,5 @@
 import sql from "mssql"
 import type { MssqlAccessHost, MssqlEntry, SyncEnvironmentRegistryHost } from "../../ports/host.js"
-import { getEnvironment } from "../../domain/environments.js"
 
 export type { MssqlEntry }
 
@@ -34,7 +33,11 @@ export async function getPool(
   if (!pools) {
     throw new Error("MSSQL pool provider not configured — pass mssqlPools to configureAgent().")
   }
-  const env = getEnvironment(host, name)
+  const env = host.sync.environments.items.get(name)
+  if (!env) {
+    const available = Array.from(host.sync.environments.items.keys()).join(", ") || "none"
+    throw new Error(`Unknown environment "${name}". Available: ${available}.`)
+  }
   if (!env.connectorId) {
     throw new Error(`Environment "${name}" has no connectorId — cannot resolve MSSQL pool.`)
   }

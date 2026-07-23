@@ -10,8 +10,8 @@
  * Sync environments are the only From/To options. Connectors are shared plumbing.
  */
 
-import { EnvRole } from "./enums.js"
-import type { SyncEnvironment } from "./environments.js"
+import { EnvRole } from "../../domain/enums.js"
+import type { SyncEnvironment } from "../../domain/environments.js"
 
 /** Enabled MSSQL connector ids — resolved at the composition root. */
 export type SyncConnectorReadyIds = ReadonlySet<string>

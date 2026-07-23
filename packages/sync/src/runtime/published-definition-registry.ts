@@ -5,8 +5,8 @@
 import { existsSync, readFileSync, statSync } from "node:fs"
 import { resolve } from "node:path"
 
-import type { PublishedSyncDefinitionRegistry } from "../domain/published-definition-registry.js"
-import type { PublishedSyncDefinitionBundle } from "../domain/published-definitions.js"
+import type { PublishedSyncDefinitionRegistry } from "../ports/published-definition-registry.js"
+import type { PublishedSyncDefinitionBundle } from "@mia/shared-types"
 
 interface PublishedDefinitionCacheState {
   bundle: PublishedSyncDefinitionBundle | null

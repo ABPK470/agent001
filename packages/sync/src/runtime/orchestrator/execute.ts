@@ -11,15 +11,16 @@
  * @module
  */
 
-import { flowCatalogFromSnapshot } from "../../domain/flow-catalog.js"
+import { flowCatalogFromSnapshot } from "../../core/flow/flow-catalog.js"
 import { detectCatalogDrift } from "../../runtime/catalog-drift.js"
-import { assertSupportedSyncDirection, getEnvironment } from "../../domain/environments.js"
+import { assertSupportedSyncDirection } from "../../core/eligibility/environments.js"
+import { getEnvironment } from "../environments-registry.js"
 import {
   assertEnvConnectorReady,
-} from "../../domain/sync-env-eligibility.js"
+} from "../../core/eligibility/sync-env-eligibility.js"
 import { readyMssqlConnectorIds } from "../connector-readiness.js"
-import { evaluateFreezeWindows } from "../../domain/governance/freeze-windows.js"
-import { assertPublishedContractCurrent } from "../../domain/publish-readiness.js"
+import { evaluateFreezeWindows } from "../../runtime/governance/freeze-windows.js"
+import { assertPublishedContractCurrent } from "../../core/publish/assert-published-contract.js"
 import { getPool } from "../../adapters/mssql/connection.js"
 import {
   EventType,
@@ -32,16 +33,16 @@ import { loadPlan, planTooOldToExecute, type SyncPlan } from "../plan-store.js"
 import { getSyncRunSink } from "../run-sink.js"
 import { fetchPkColumns } from "./apply.js"
 import { probeTriggers } from "./archive.js"
-import { scheduleFlowSteps } from "./flow-scheduler.js"
-import { runMetadataSync } from "./metadata-sync.js"
-import { dataMovementTables } from "./metadata-scope.js"
+import { scheduleFlowSteps } from "./flow/flow-scheduler.js"
+import { runMetadataSync } from "./metadata/metadata-sync.js"
+import { dataMovementTables } from "./metadata/metadata-scope.js"
 import { validatePlan } from "./plan-table.js"
 import {
   evaluateRootParentPreflight,
   formatRootParentExecuteRefusal
-} from "./root-parent-preflight.js"
-import { runPostMetadataPipeline } from "./post-metadata-pipeline.js"
-import { setContractLockOnSource } from "./contract-deploy.js"
+} from "./gates/root-parent-preflight.js"
+import { runPostMetadataPipeline } from "./metadata/post-metadata-pipeline.js"
+import { setContractLockOnSource } from "./flow/contract-deploy.js"
 import { toSyncExecuteError, throwIfAborted, isAuditGateSkippedError, type ExecuteOptions, type ExecuteProgress, type SyncExecuteResult } from "./types.js"
 export type { ExecuteOptions, ExecuteProgress, SyncExecuteResult } from "./types.js"
 

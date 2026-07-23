@@ -10,11 +10,11 @@ alwaysApply: false
 
 | Kind of code | Put it in |
 | --- | --- |
-| Types, enums, pure parse/validate, pure SQL string helpers | `domain/` |
-| Pure proposer / ranking / annotation | `core/` |
-| Preview/execute, plan store, disk loaders, MSSQL query runners | `runtime/` |
-| Host / sink / tool / pool contracts | `ports/` |
-| Agent-facing `create*Tool` factories | `tools/` |
+| Types, enums, shapes, branded ids | `domain/` |
+| Pure decisions (validate, compile, eligibility, intent, registry logic) | `core/` |
+| Preview/execute spine, plan store, disk/DB loaders, host façades, MSSQL runners | `runtime/` |
+| Host / sink / tool / pool / registry contracts | `ports/` |
+| Agent-facing `create*Tool` factories (one capability per folder) | `tools/` |
 | Thin MSSQL pool helpers | `adapters/` |
 | Test hosts / fixtures | `test-support/` |
 
@@ -27,7 +27,7 @@ alwaysApply: false
 - `runtime` → `core`, `domain`, `ports`, `adapters`, `internal`, `tools`
 - Outside the package: import `@mia/sync` only
 
-**State:** Runtime / SyncHost owns state. Documented ambient exception: freeze-window registry in `domain/governance/freeze-windows.ts`.
+**State:** Runtime / SyncHost owns state. Freeze-window registry is installed at the composition root (`runtime/governance/freeze-windows`); core evaluates with an explicit registry parameter.
 
 **Dependency:** Sync must not depend on `@mia/agent` (structural tool/host compatibility only).
 

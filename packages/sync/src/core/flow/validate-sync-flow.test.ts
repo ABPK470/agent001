@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest"
 
-import { asEntityId } from "./types/branded-ids.js"
+import { asEntityId } from "../../domain/types/branded-ids.js"
 import { buildFlowCatalog } from "./flow-catalog.js"
-import { loadDeployFlowCatalogForTests } from "../test-support/test-flow-catalog.js"
+import { loadDeployFlowCatalogForTests } from "../../test-support/test-flow-catalog.js"
 import { validateAuthoredSyncFlow } from "./validate-sync-flow.js"
 
 describe("validateAuthoredSyncFlow", () => {

@@ -10,13 +10,13 @@ import { type Transaction } from "mssql"
 import type { Scd2TablePolicy } from "@mia/shared-types"
 import {
   materializeScd2PolicyForSchema,
-} from "../../domain/entity-registry/scd2-policy.js"
-import { buildBatchWhere } from "../../domain/diff-engine/sql-helpers.js"
+} from "../../core/entity-registry/scd2-policy.js"
+import { buildBatchWhere } from "../../core/diff-engine/sql-helpers.js"
 import type { SyncRuntimeHost } from "../../ports/index.js"
 import type { SyncTelemetryContext } from "../events.js"
 import { type SyncPlan, type SyncPlanTable } from "../plan-store.js"
 import { deleteRows, changeRowsAsPkHash, upsertRows } from "./plan-table.js"
-import { qtable, sqlLiteral, trackedQuery } from "./db-helpers.js"
+import { qtable, sqlLiteral, trackedQuery } from "./db/db-helpers.js"
 
 const CHANGE_SET_FETCH_BATCH = 200
 

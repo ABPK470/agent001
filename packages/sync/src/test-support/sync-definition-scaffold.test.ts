@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest"
 import {
   scaffoldSyncDefinition,
   selectEntityDefinition
-} from "../domain/sync-definition-scaffold.js"
+} from "../core/compile/sync-definition-scaffold.js"
 import { loadEntityDefinitionsFromDocument } from "../runtime/load-entity-definitions.js"
 import { loadSyncDefinitionFlowTemplateCatalog } from "../runtime/load-flow-templates.js"
 

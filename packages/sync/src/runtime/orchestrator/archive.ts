@@ -18,7 +18,7 @@ import { tableHasTriggers } from "../../runtime/catalog-drift.js"
 import { EventType, type SyncRuntimeHost } from "../../ports/index.js"
 import { emitSyncEvent as emit, type SyncTelemetryContext } from "../events.js"
 import { type SyncPlan } from "../plan-store.js"
-import { trackedQuery } from "./db-helpers.js"
+import { trackedQuery } from "./db/db-helpers.js"
 
 /**
  * Batch-probe target triggers for data-movement tables in one query.

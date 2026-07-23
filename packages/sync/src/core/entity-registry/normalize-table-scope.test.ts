@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest"
 
-import { asFlowId, asStrategyId, asTenantId } from "../types/branded-ids.js"
+import { asFlowId, asStrategyId, asTenantId } from "../../domain/types/branded-ids.js"
 import { compileFkPathPredicate, normalizeEntityDefinition } from "./normalize-table-scope.js"
 import { projectTablePredicate } from "./project-predicate.js"
-import type { EntityTable } from "./types.js"
+import type { EntityTable } from "../../domain/entity-registry/types.js"
 
 describe("normalize-table-scope", () => {
   it("compiles legacy fkPath to sql predicate", () => {

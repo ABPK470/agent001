@@ -4,7 +4,7 @@
  * Legacy `fkPath` scopes compile to `sql` predicates on import/save.
  */
 
-import type { EntityDefinition, EntityTable, EntityTableScope } from "./types.js"
+import type { EntityDefinition, EntityTable, EntityTableScope } from "../../domain/entity-registry/types.js"
 import { renumberEntityTablesExecutionOrder } from "./order.js"
 
 export interface FkPathHop {

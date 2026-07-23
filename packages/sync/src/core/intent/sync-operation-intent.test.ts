@@ -3,8 +3,8 @@ import {
   buildEntityTypeAliasMap,
   parseSyncOperationIntent,
 } from "./sync-operation-intent.js"
-import type { PublishedSyncDefinition } from "./published-definitions.js"
-import { withPermissionDefaults } from "./environments.js"
+import type { PublishedSyncDefinition } from "@mia/shared-types"
+import { withPermissionDefaults } from "../eligibility/environments.js"
 
 function stubDefinition(id: string, displayName: string): PublishedSyncDefinition {
   return {

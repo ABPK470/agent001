@@ -2,10 +2,10 @@
  * SCD2 strategy resolution + override merging.
  */
 
-import { asStrategyId } from "../types/branded-ids.js"
+import { asStrategyId } from "../../domain/types/branded-ids.js"
 
 import { normalizeScd2Override, normalizeScd2Strategy } from "./scd2-policy.js"
-import type { EffectiveScd2, EntityTable, Scd2Override, Scd2Strategy } from "./types.js"
+import type { EffectiveScd2, EntityTable, Scd2Override, Scd2Strategy } from "../../domain/entity-registry/types.js"
 
 export function resolveEffectiveScd2(args: {
   strategy: Scd2Strategy

@@ -7,9 +7,9 @@ This document describes how cross-environment metadata synchronization works in 
 | Area | Path |
 |------|------|
 | Sync package | `packages/sync/` |
-| Orchestrator (preview / execute) | `packages/sync/src/service/shell/orchestrator/` |
+| Orchestrator (preview / execute) | `packages/sync/src/runtime/orchestrator/` |
 | Domain (recipes, diff, environments) | `packages/sync/src/domain/` |
-| Agent tools | `packages/sync/src/service/shell/tools.ts` |
+| Agent tools | `packages/sync/src/tools/` |
 | Server REST routes | `packages/server/src/api/sync/routes.ts` |
 | Definition publish / compile | `packages/server/src/api/sync/service/definitions.ts` |
 | Published runtime bundle | `sync-definitions/published/definitions.bundle.json` |
@@ -104,7 +104,7 @@ Preview is always required before execute. The agent and UI enforce **preview-fi
 └───────────────────────────────┬─────────────────────────────────────────┘
                                 │
 ┌───────────────────────────────▼─────────────────────────────────────────┐
-│  Application shell (`packages/sync/src/service/shell/`)             │
+│  Application shell (`packages/sync/src/runtime/`)             │
 │  • previewSync()  → diff all recipe tables → SyncPlan → savePlan()    │
 │  • executeSync()  → preflight → metadata tx → post-metadata pipeline  │
 │  • searchEntities(), expandTreeIds(), fetchEntityDisplayName()          │
@@ -365,7 +365,7 @@ Environments with `defaultAccessMode: read_only` restrict DML/DDL via sync orche
 
 **Entry points:**
 
-- `previewSync(input)` — `packages/sync/src/service/shell/orchestrator/preview.ts`
+- `previewSync(input)` — `packages/sync/src/runtime/orchestrator/preview.ts`
 - Agent tool `sync_preview` — `tools.ts`
 - REST `POST /api/sync/preview` — `routes.ts`
 
@@ -418,7 +418,7 @@ Table diffs run with concurrency **4** (`PREVIEW_TABLE_CONCURRENCY`). Higher val
 
 ## 9. The SyncPlan artifact
 
-**Type:** `SyncPlan` (`packages/sync/src/service/shell/plan-store.ts`)
+**Type:** `SyncPlan` (`packages/sync/src/runtime/plan-store.ts`)
 
 ### Core fields
 
@@ -539,7 +539,7 @@ The selection is frozen in `recipeSnapshot.enabledOptionalTables` on the plan.
 
 **Entry points:**
 
-- `executeSync(planId, opts)` — `packages/sync/src/service/shell/orchestrator/execute.ts`
+- `executeSync(planId, opts)` — `packages/sync/src/runtime/orchestrator/execute.ts`
 - Agent tool `sync_execute` (requires `confirm: true`)
 - REST `POST /api/sync/execute/:planId`
 - SSE progress: `GET /api/sync/execute/:planId/stream`
@@ -655,7 +655,7 @@ Missing service URL (ETL/Agent/Gate) → post-metadata step warning, same partia
 
 ## 14. Metadata sync transaction
 
-**Function:** `runMetadataSync()` — `packages/sync/src/service/shell/orchestrator/metadata-sync.ts`
+**Function:** `runMetadataSync()` — `packages/sync/src/runtime/orchestrator/metadata-sync.ts`
 
 This is the **only** execute phase wrapped in `new sqlMod.Transaction(tgtPool)`.
 
@@ -680,7 +680,7 @@ This is the **only** execute phase wrapped in `new sqlMod.Transaction(tgtPool)`.
 
 ### Apply implementation
 
-**Module:** `packages/sync/src/service/shell/orchestrator/apply.ts`
+**Module:** `packages/sync/src/runtime/orchestrator/apply.ts`
 
 - Reads changed rows from **source** using the same scope predicates as preview.
 - Writes to **target** through `tx.request()` (participates in the transaction).
@@ -690,7 +690,7 @@ This is the **only** execute phase wrapped in `new sqlMod.Transaction(tgtPool)`.
 
 ## 15. Post-metadata pipeline
 
-**Function:** `runPostMetadataPipeline()` — `packages/sync/src/service/shell/orchestrator/post-metadata-pipeline.ts`
+**Function:** `runPostMetadataPipeline()` — `packages/sync/src/runtime/orchestrator/post-metadata-pipeline.ts`
 
 Runs **after** `metadataSync` commits. Each step is isolated: success or failure of one step does not roll back previous steps (including committed metadata).
 
@@ -740,7 +740,7 @@ Some steps need a related id (`resolveStepSubjectId`):
 
 ### Contract deploy module
 
-**Module:** `packages/sync/src/service/shell/orchestrator/contract-deploy.ts`
+**Module:** `packages/sync/src/runtime/orchestrator/contract-deploy.ts`
 
 Thin typed wrapper around target worker procs (no linked-server hop). Proc names are configurable via `ContractProcConfig` / `DEFAULT_PROCS` for non-standard targets.
 
@@ -908,7 +908,7 @@ Name resolution: `search_sync_entities` with `mode=id` or auto-detect numeric id
 
 ## 17. Agent tools and chat integration
 
-**Factory:** `packages/sync/src/service/shell/tools.ts`  
+**Factory:** `packages/sync/src/tools/`  
 **Registration:** `packages/server/src/api/runs/tooling/registry.ts`
 
 | Tool | Purpose |
@@ -1006,7 +1006,7 @@ HTTP Sync RequireApproval returns `409 approval_required` with an `approvalId`. 
 
 ### Events
 
-**Emitter:** `emitSyncEvent()` — `packages/sync/src/service/shell/events.ts`  
+**Emitter:** `emitSyncEvent()` — `packages/sync/src/runtime/events.ts`  
 **Server sink:** `packages/server/src/boot/sync.ts` → SSE broadcast
 
 Key event types (`@mia/shared-enums`):
@@ -1016,7 +1016,7 @@ Key event types (`@mia/shared-enums`):
 
 ### Plan persistence
 
-**Store:** `packages/sync/src/service/shell/plan-store.ts`
+**Store:** `packages/sync/src/runtime/plan-store.ts`
 
 - In-memory cache
 - Disk: `~/.mia/sync-plans/{planId}.json` (or under `MIA_DATA_DIR`)
@@ -1024,7 +1024,7 @@ Key event types (`@mia/shared-enums`):
 
 ### Run history
 
-**Sink:** `packages/sync/src/service/shell/run-sink.ts`  
+**Sink:** `packages/sync/src/runtime/run-sink.ts`  
 **Bridge:** `configureSyncRunSink()` — records start/finish, actor, totals, errors.
 
 ### Audit

@@ -5,8 +5,8 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-import { trackedQuery } from "./db-helpers.js"
-import { evaluateRootParentPreflight } from "./root-parent-preflight.js"
+import { trackedQuery } from "./db/db-helpers.js"
+import { evaluateRootParentPreflight } from "./gates/root-parent-preflight.js"
 import {
   buildEntityPlan,
   changeSetRow,

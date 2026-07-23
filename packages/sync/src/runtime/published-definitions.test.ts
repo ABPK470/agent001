@@ -5,14 +5,14 @@ import { join, resolve } from "node:path"
 import { afterEach, describe, expect, it } from "vitest"
 
 import type { SyncRuntimeHost } from "../ports/host.js"
-import { ALWAYS_PUBLISH_READY } from "./publish-readiness.js"
-import { createPublishedSyncDefinitionRegistry } from "../runtime/published-definition-registry.js"
+import { ALWAYS_PUBLISH_READY } from "../ports/publish-readiness.js"
+import { createPublishedSyncDefinitionRegistry } from "./published-definition-registry.js"
 import { createRepoBundleHost } from "../test-support/repo-bundle.js"
-import { asEntityId } from "./types/branded-ids.js"
+import { asEntityId } from "../domain/types/branded-ids.js"
 import {
   getPublishedSyncDefinitionForHost,
   loadPublishedSyncDefinitionBundle
-} from "./published-definitions.js"
+} from "../runtime/published-definitions.js"
 
 /** File-registry host for unit tests of the on-disk bundle loader. */
 function createFileBundleHost(projectRoot: string): SyncRuntimeHost {

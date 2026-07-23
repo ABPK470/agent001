@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { SyncPlan } from "../plan-store.js"
 import { asPlanId } from "../../domain/types/branded-ids.js"
-import { withPermissionDefaults } from "../../domain/environments.js"
+import { withPermissionDefaults } from "../../core/eligibility/environments.js"
 import {
   buildEntityPlan,
   contractChildUpsertWithoutParent,
@@ -37,8 +37,8 @@ vi.mock("../../runtime/catalog-drift.js", () => ({
   detectCatalogDrift: (...args: unknown[]) => detectCatalogDriftMock(...args)
 }))
 
-vi.mock("./root-parent-preflight.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("./root-parent-preflight.js")>()
+vi.mock("./gates/root-parent-preflight.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./gates/root-parent-preflight.js")>()
   return {
     ...actual,
     evaluateRootParentPreflight: (...args: unknown[]) => evaluateRootParentMock(...args)

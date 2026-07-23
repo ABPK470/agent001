@@ -4,9 +4,10 @@
 
 import type { AuthoredSyncDefinitionTable, PublishedSyncDefinition } from "@mia/shared-types"
 
-import { DiscoverySource } from "./enums.js"
+import { DiscoverySource } from "../../domain/enums.js"
+import type { SyncEntityId } from "../../domain/definition-selection.js"
 
-export type SyncEntityId = string
+export type { SyncEntityId }
 
 export interface ActiveDefinitionTableSelection {
   tables: AuthoredSyncDefinitionTable[]

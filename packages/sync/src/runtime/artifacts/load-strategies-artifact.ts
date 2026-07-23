@@ -8,7 +8,7 @@ import { existsSync, readFileSync } from "node:fs"
 import { resolve } from "node:path"
 
 import type { Scd2Strategy } from "../../domain/entity-registry/types.js"
-import { validateScd2Strategy } from "../../domain/entity-registry/validate.js"
+import { validateScd2Strategy } from "../../core/entity-registry/validate.js"
 
 export const DEFAULT_STRATEGIES_ARTIFACT_PATH = "deploy/sync/artifacts/strategies.json"
 

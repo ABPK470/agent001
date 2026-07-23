@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest"
 
 import {
-  ALWAYS_PUBLISH_READY,
-  assertPublishedContractCurrent,
   isSyncPublishRequiredError,
   PUBLISH_REQUIRED_CODE,
   SyncPublishRequiredError,
-} from "./publish-readiness.js"
+} from "../../domain/publish-readiness.js"
+import { ALWAYS_PUBLISH_READY } from "../../ports/publish-readiness.js"
+import { assertPublishedContractCurrent } from "./assert-published-contract.js"
 
 describe("publish-readiness", () => {
   it("ALWAYS_PUBLISH_READY never blocks", () => {

@@ -1,4 +1,4 @@
-import type { EntityDefinition, EntityTable } from "./types.js"
+import type { EntityDefinition, EntityTable } from "../../domain/entity-registry/types.js"
 
 export interface EntityTableOrderEdge {
   parent: string

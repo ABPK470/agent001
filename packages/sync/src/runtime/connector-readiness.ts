@@ -5,7 +5,7 @@
  */
 
 import type { MssqlAccessHost } from "../ports/host.js"
-import type { SyncConnectorReadyIds } from "../domain/sync-env-eligibility.js"
+import type { SyncConnectorReadyIds } from "../core/eligibility/sync-env-eligibility.js"
 
 /** Enabled MSSQL connector ids (live). */
 export function readyMssqlConnectorIds(host: MssqlAccessHost): SyncConnectorReadyIds {

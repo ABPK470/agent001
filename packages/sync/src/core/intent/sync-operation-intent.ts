@@ -6,14 +6,10 @@
  * registries — not hardcoded lists.
  */
 
-import { getEnvironments, type SyncEnvironment } from "./environments.js"
-import {
-  listPublishedSyncDefinitions,
-  type PublishedSyncDefinition
-} from "./published-definitions.js"
-import type { SyncEnvironmentRegistryHost, SyncProjectRootHost } from "../ports/index.js"
-import { parseEntityInstanceRef } from "./entity-instance-ref.js"
-import { splitIdentifierTokens } from "./operational-vocabulary.js"
+import type { SyncEnvironment } from "../../domain/environments.js"
+import type { PublishedSyncDefinition } from "@mia/shared-types"
+import { parseEntityInstanceRef } from "../scope/entity-instance-ref.js"
+import { splitIdentifierTokens } from "../vocabulary/operational-vocabulary.js"
 
 export interface SyncOperationIntent {
   readonly entityType: string
@@ -178,17 +174,6 @@ export function parseSyncOperationIntent(
   }
 }
 
-export function parseSyncOperationIntentForHost(
-  goal: string,
-  host: SyncProjectRootHost & SyncEnvironmentRegistryHost
-): SyncOperationIntent | null {
-  const root = host.sync?.project?.dbProjectRoot
-  if (!root) return null
-  const definitions = listPublishedSyncDefinitions(host, root)
-  const environments = getEnvironments(host)
-  if (definitions.length === 0 || environments.length === 0) return null
-  return parseSyncOperationIntent(goal, definitions, environments)
-}
 
 export function formatSyncOperationIntentBlock(intent: SyncOperationIntent): string {
   const lines = [

@@ -4,12 +4,12 @@ import { describe, expect, it, vi } from "vitest"
 import {
   runContractAuditGateOnSource,
   setContractLockOnSource
-} from "./contract-deploy.js"
+} from "./flow/contract-deploy.js"
 
 const trackedExecute = vi.fn()
 
-vi.mock("./db-helpers.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("./db-helpers.js")>()
+vi.mock("./db/db-helpers.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./db/db-helpers.js")>()
   return {
     ...actual,
     trackedExecute: (...args: unknown[]) => trackedExecute(...args),

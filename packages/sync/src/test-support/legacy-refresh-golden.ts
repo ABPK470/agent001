@@ -18,15 +18,15 @@ import type { Scd2Strategy } from "../domain/entity-registry/types.js"
 import {
   compilePublishedSyncDefinition,
   type SyncDefinitionConfigInput,
-} from "../domain/compile-sync-definition.js"
-import { buildFlowCatalog, type FlowCatalog } from "../domain/flow-catalog.js"
+} from "../core/compile/compile-sync-definition.js"
+import { buildFlowCatalog, type FlowCatalog } from "../core/flow/flow-catalog.js"
 import type { EntityDefinition } from "../domain/entity-registry/types.js"
 import { asEntityId, asFlowId } from "../domain/types/branded-ids.js"
 import {
   defaultSyncDefinitionFlowTemplateId,
   getSyncDefinitionFlowTemplateSteps,
   type SyncDefinitionFlowTemplateCatalog,
-} from "../domain/sync-definition-flow-templates.js"
+} from "../core/flow/sync-definition-flow-templates.js"
 import { loadSyncDefinitionFlowTemplateCatalog } from "../runtime/load-flow-templates.js"
 
 export const LEGACY_REFRESH_SEED_CREATED_AT = "2026-01-01T00:00:00.000Z"

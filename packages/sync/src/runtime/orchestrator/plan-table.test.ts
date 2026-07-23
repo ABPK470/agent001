@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
-import { buildChangeSet } from "../../domain/diff-engine/change-set.js"
+import { buildChangeSet } from "../../core/diff-engine/change-set.js"
 import type { SyncPlan, SyncPlanTable } from "../plan-store.js"
-import { constraintRelaxationTables, dataMovementTables } from "./metadata-scope.js"
+import { constraintRelaxationTables, dataMovementTables } from "./metadata/metadata-scope.js"
 import { hasChangeSetWork, upsertRows, validatePlan } from "./plan-table.js"
 
 describe("plan-table changeSet", () => {

@@ -6,7 +6,7 @@
 
 import type { AuthoredSyncDefinitionTable } from "@mia/shared-types"
 import type { SyncPlanConflict } from "../../domain/plan.js"
-import { formatScalar, qtable, quoteValue } from "../../domain/diff-engine/sql-helpers.js"
+import { formatScalar, qtable, quoteValue } from "../../core/diff-engine/sql-helpers.js"
 import type { PkHashRow } from "../../domain/diff-engine/types.js"
 import type { SyncRuntimeHost } from "../../ports/index.js"
 import { runQueryWithRetry } from "./sql-query.js"

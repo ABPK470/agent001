@@ -5,7 +5,7 @@
  */
 
 import type { SyncPlanChangeRow, SyncPlanChangeSet } from "../../domain/plan.js"
-import type { PkHashRow } from "./types.js"
+import type { PkHashRow } from "../../domain/diff-engine/types.js"
 
 export function emptyChangeSet(): SyncPlanChangeSet {
   return { insert: [], update: [], delete: [] }

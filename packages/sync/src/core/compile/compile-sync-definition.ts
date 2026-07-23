@@ -4,26 +4,26 @@
  * Entity registry + admin config → authored or published definition.
  * All paths (scaffold, publish, runtime) share one metadata builder.
  */
-import { asEntityId, type EntityId, type StrategyId } from "./types/branded-ids.js"
+import { asEntityId, type EntityId, type StrategyId } from "../../domain/types/branded-ids.js"
 
 
 import type { AuthoredSyncDefinition, AuthoredSyncFlowStep, PublishedSyncDefinition } from "@mia/shared-types"
 
-import { normalizeEntityDefinition } from "./entity-registry/normalize-table-scope.js"
-import { orderEntityTables } from "./entity-registry/order.js"
-import { projectTablePredicate } from "./entity-registry/project-predicate.js"
-import { toScd2TablePolicy } from "./entity-registry/scd2-policy.js"
-import { resolveEffectiveScd2 } from "./entity-registry/strategy-resolver.js"
-import type { EntityDefinition, Scd2Strategy } from "./entity-registry/types.js"
-import type { FlowCatalog } from "./flow-catalog.js"
-import { normalizeAuthoredSyncFlowSteps } from "./normalize-flow-step.js"
+import { normalizeEntityDefinition } from "../entity-registry/normalize-table-scope.js"
+import { orderEntityTables } from "../entity-registry/order.js"
+import { projectTablePredicate } from "../entity-registry/project-predicate.js"
+import { toScd2TablePolicy } from "../entity-registry/scd2-policy.js"
+import { resolveEffectiveScd2 } from "../entity-registry/strategy-resolver.js"
+import type { EntityDefinition, Scd2Strategy } from "../../domain/entity-registry/types.js"
+import type { FlowCatalog } from "../flow/flow-catalog.js"
+import { normalizeAuthoredSyncFlowSteps } from "../flow/normalize-flow-step.js"
 import {
   defaultSyncDefinitionFlowTemplateId,
   getSyncDefinitionFlowTemplateSteps,
   hasSyncDefinitionFlowTemplate,
   type SyncDefinitionFlowTemplateCatalog,
-} from "./sync-definition-flow-templates.js"
-import { resolveFlowSteps } from "./resolve-flow-steps.js"
+} from "../flow/sync-definition-flow-templates.js"
+import { resolveFlowSteps } from "../flow/resolve-flow-steps.js"
 
 /** Ephemeral Publish compose input — not a Catalog tip row / SQLite table. */
 export interface SyncDefinitionConfigInput {

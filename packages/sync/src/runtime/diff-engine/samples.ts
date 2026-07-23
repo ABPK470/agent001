@@ -10,7 +10,7 @@
  */
 
 import type { SyncPlanRowSample } from "../../domain/plan.js"
-import { buildBatchWhere, qtable } from "../../domain/diff-engine/sql-helpers.js"
+import { buildBatchWhere, qtable } from "../../core/diff-engine/sql-helpers.js"
 import type { PkHashRow } from "../../domain/diff-engine/types.js"
 import type { SyncRuntimeHost } from "../../ports/index.js"
 import { runQueryWithRetry } from "./sql-query.js"

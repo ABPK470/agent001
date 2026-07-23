@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import type { SyncPlan, SyncPlanTable } from "../plan-store.js"
+import type { SyncPlan, SyncPlanTable } from "../../plan-store.js"
 import { constraintRelaxationTables, dataMovementTables } from "./metadata-scope.js"
 
 function row(

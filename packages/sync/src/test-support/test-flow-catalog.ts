@@ -1,7 +1,7 @@
 import { resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 
-import { buildFlowCatalog } from "../domain/flow-catalog.js"
+import { buildFlowCatalog } from "../core/flow/flow-catalog.js"
 import { loadSyncMetadataArtifact } from "../runtime/artifacts/load-sync-metadata-artifact.js"
 
 const repoRoot = resolve(fileURLToPath(new URL(".", import.meta.url)), "../../../..")

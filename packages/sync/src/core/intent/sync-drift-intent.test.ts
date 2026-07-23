@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 import { parseSyncDriftIntent } from "./sync-drift-intent.js"
-import type { PublishedSyncDefinition } from "./published-definitions.js"
-import { withPermissionDefaults } from "./environments.js"
+import type { PublishedSyncDefinition } from "@mia/shared-types"
+import { withPermissionDefaults } from "../eligibility/environments.js"
 
 function stubDefinition(id: string, displayName: string): PublishedSyncDefinition {
   return {

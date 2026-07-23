@@ -10,7 +10,7 @@
  * into excludeFromDiff + onInsert/onUpdate.
  */
 
-import type { Scd2Override, Scd2Strategy } from "./types.js"
+import type { Scd2Override, Scd2Strategy } from "../../domain/entity-registry/types.js"
 
 export type Scd2IdentityHandling = "none" | "setIdentityInsertOn" | "omit-identity-column"
 

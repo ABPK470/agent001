@@ -1,12 +1,12 @@
 /**
  * Suggest entity registry draft fields from root table name + optional schema catalog.
  */
-import { asEntityId, type EntityId } from "../types/branded-ids.js"
+import { asEntityId, type EntityId } from "../../domain/types/branded-ids.js"
 
 
 import { scopeFromAuthoredPredicate } from "./from-authored-sync.js"
 import { orderEntityTablesDetailed } from "./order.js"
-import type { EntityDefinition, EntityTable, EntityTableScope } from "./types.js"
+import type { EntityDefinition, EntityTable, EntityTableScope } from "../../domain/entity-registry/types.js"
 
 const ALLOWED_SCHEMAS = new Set(["core", "coreArchive", "gate", "gateArchive", "master"])
 

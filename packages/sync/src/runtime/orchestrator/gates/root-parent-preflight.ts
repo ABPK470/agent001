@@ -8,10 +8,10 @@
  * Derived only from the frozen execution contract — no hardcoded tables.
  */
 
-import type { SyncRuntimeHost } from "../../ports/index.js"
-import type { SyncPlan } from "../plan-store.js"
-import { hasUpsertWork } from "./plan-table.js"
-import { qtable, trackedQuery } from "./db-helpers.js"
+import type { SyncRuntimeHost } from "../../../ports/index.js"
+import type { SyncPlan } from "../../plan-store.js"
+import { hasUpsertWork } from "../plan-table.js"
+import { qtable, trackedQuery } from "../db/db-helpers.js"
 
 export interface RootParentPreflightResult {
   ready: boolean

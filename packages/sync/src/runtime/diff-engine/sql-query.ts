@@ -5,7 +5,7 @@
 import type sql from "mssql"
 import { getPool } from "../../adapters/mssql/connection.js"
 import { withPoolSlot } from "../../adapters/mssql/pool-gate.js"
-import { isTransientMssqlError } from "../../domain/diff-engine/sql-helpers.js"
+import { isTransientMssqlError } from "../../core/diff-engine/sql-helpers.js"
 import { EventType } from "../../domain/enums.js"
 import type { SyncTelemetryContext } from "../../ports/events.js"
 import type { MssqlAccessHost, SyncEnvironmentRegistryHost, SyncEventHost } from "../../ports/host.js"

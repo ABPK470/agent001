@@ -2,8 +2,8 @@ import type { MssqlConfig, MssqlConnectionPool } from "../internal/mssql-types.j
 import type { SyncPlan } from "../domain/plan.js"
 import type { ToolControlDirective, ToolOutcomeSeverity } from "../domain/enums.js"
 import type { SyncEnvironment } from "../domain/environments.js"
-import type { PublishedSyncDefinitionRegistry } from "../domain/published-definition-registry.js"
-import type { SyncPublishReadinessPort } from "../domain/publish-readiness.js"
+import type { PublishedSyncDefinitionRegistry } from "./published-definition-registry.js"
+import type { SyncPublishReadinessPort } from "./publish-readiness.js"
 import type { SyncEventSink } from "./events.js"
 import type { SyncRunSink } from "./run-sink.js"
 

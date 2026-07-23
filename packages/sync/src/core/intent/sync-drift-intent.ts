@@ -5,16 +5,14 @@
  * against published definitions (no hardcoded entity vocabulary).
  */
 
-import { getEnvironments, type SyncEnvironment } from "./environments.js"
-import type { PublishedSyncDefinition } from "./published-definitions.js"
-import { listPublishedSyncDefinitions } from "./published-definitions.js"
-import type { SyncEnvironmentRegistryHost, SyncProjectRootHost } from "../ports/index.js"
+import type { SyncEnvironment } from "../../domain/environments.js"
+import type { PublishedSyncDefinition } from "@mia/shared-types"
 import {
   formatSyncScopeResolution,
   resolveSyncScope,
   type SyncScopeMatch,
   type SyncScopeResolution
-} from "./sync-scope-resolution.js"
+} from "../scope/sync-scope-resolution.js"
 
 export interface SyncDriftIntent {
   readonly source: string
@@ -136,17 +134,6 @@ export function parseSyncDriftIntent(
   }
 }
 
-export function parseSyncDriftIntentForHost(
-  goal: string,
-  host: SyncProjectRootHost & SyncEnvironmentRegistryHost
-): SyncDriftIntent | null {
-  const root = host.sync?.project?.dbProjectRoot
-  if (!root) return null
-  const definitions = listPublishedSyncDefinitions(host, root)
-  const environments = getEnvironments(host)
-  if (environments.length < 2) return null
-  return parseSyncDriftIntent(goal, definitions, environments)
-}
 
 export function formatSyncDriftIntentBlock(intent: SyncDriftIntent): string {
   const lines = [

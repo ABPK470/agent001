@@ -5,7 +5,7 @@
 import type { SyncHandlerInput } from "@mia/shared-types"
 import { isLiteralValueSource, resolveSlotValueSource } from "@mia/shared-types"
 
-import type { SyncExecutionContractStep } from "../plan-store.js"
+import type { SyncExecutionContractStep } from "../../plan-store.js"
 import type { FlowStepRunContext } from "./flow-step-executor.js"
 import { resolveValueSource } from "./value-source-resolver.js"
 

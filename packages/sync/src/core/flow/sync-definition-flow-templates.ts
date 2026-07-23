@@ -1,4 +1,4 @@
-import type { EntityId } from "./types/branded-ids.js"
+import type { EntityId } from "../../domain/types/branded-ids.js"
 import type {
   AuthoredSyncDefinition,
   EntityRegistrySyncFlowTemplateId,

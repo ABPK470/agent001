@@ -5,8 +5,8 @@
  * names are indexed at runtime. No hardcoded entity vocabulary.
  */
 
-import type { PublishedSyncDefinition } from "./published-definitions.js"
-import { splitIdentifierTokens } from "./operational-vocabulary.js"
+import type { PublishedSyncDefinition } from "@mia/shared-types"
+import { splitIdentifierTokens } from "../vocabulary/operational-vocabulary.js"
 
 export interface SyncScopeMatch {
   readonly entityType: string

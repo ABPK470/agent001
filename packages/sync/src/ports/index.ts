@@ -38,3 +38,6 @@ export type {
   ToolResultEnvelope
 } from "./host.js"
 export type { SyncRunFinishInput, SyncRunSink, SyncRunStartInput } from "./run-sink.js"
+export type { PublishedSyncDefinitionRegistry } from "./published-definition-registry.js"
+export type { SyncPublishReadinessPort } from "./publish-readiness.js"
+export { ALWAYS_PUBLISH_READY } from "./publish-readiness.js"

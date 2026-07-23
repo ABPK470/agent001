@@ -40,7 +40,7 @@ import {
   type ValidationWarning,
   isValidId,
   RESERVED_ENTITY_IDS
-} from "./types.js"
+} from "../../domain/entity-registry/types.js"
 
 // ── Public entrypoints ───────────────────────────────────────────
 

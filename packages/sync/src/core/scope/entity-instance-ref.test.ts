@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest"
 
 import { coerceSyncEntityId, parseEntityInstanceRef } from "./entity-instance-ref.js"
-import { parseSyncOperationIntent } from "./sync-operation-intent.js"
-import type { PublishedSyncDefinition } from "./published-definitions.js"
-import { withPermissionDefaults } from "./environments.js"
+import { parseSyncOperationIntent } from "../intent/sync-operation-intent.js"
+import type { PublishedSyncDefinition } from "@mia/shared-types"
+import { withPermissionDefaults } from "../eligibility/environments.js"
 
 function stubDefinition(id: string, displayName: string): PublishedSyncDefinition {
   return {

@@ -6,7 +6,7 @@
  * these artifacts so the Entity Registry widget is populated before any
  * operator import.
  */
-import { asFlowId, asStrategyId, asTenantId, type FlowId } from "../types/branded-ids.js"
+import { asFlowId, asStrategyId, asTenantId, type FlowId } from "../../domain/types/branded-ids.js"
 
 
 import type { AuthoredSyncDefinition, AuthoredSyncDefinitionTable } from "@mia/shared-types"
@@ -16,7 +16,7 @@ import {
   resolveReviewPlaceholderPredicate,
 } from "./resolve-scope-predicate.js"
 
-import type { EntityDefinition, EntityTable, EntityTableScope } from "./types.js"
+import type { EntityDefinition, EntityTable, EntityTableScope } from "../../domain/entity-registry/types.js"
 import { renumberEntityTablesExecutionOrder } from "./order.js"
 
 const BOOTSTRAP_ACTOR = "system"

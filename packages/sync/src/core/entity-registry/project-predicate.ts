@@ -5,7 +5,7 @@
  * emit identical predicates for the same EntityDefinition input.
  */
 
-import type { EntityDefinition, EntityTable } from "./types.js"
+import type { EntityDefinition, EntityTable } from "../../domain/entity-registry/types.js"
 
 export function projectTablePredicate(entity: EntityDefinition, table: EntityTable): string {
   const scope = table.scope

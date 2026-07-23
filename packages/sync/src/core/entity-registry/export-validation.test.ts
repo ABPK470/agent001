@@ -7,8 +7,8 @@ import {
   validateAuthoredExportRoundTrip,
   validateEntityExportable,
 } from "./export-validation.js"
-import { asFlowId, asStrategyId, asTenantId } from "../types/branded-ids.js"
-import type { EntityDefinition } from "./types.js"
+import { asFlowId, asStrategyId, asTenantId } from "../../domain/types/branded-ids.js"
+import type { EntityDefinition } from "../../domain/entity-registry/types.js"
 
 function minimalEntity(overrides: Partial<EntityDefinition> = {}): EntityDefinition {
   return {

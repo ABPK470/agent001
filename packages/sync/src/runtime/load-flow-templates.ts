@@ -9,7 +9,7 @@ import {
   DEFAULT_SYNC_DEFINITION_FLOW_TEMPLATES_PATH,
   parseFlowTemplateCatalog,
   type SyncDefinitionFlowTemplateCatalog,
-} from "../domain/sync-definition-flow-templates.js"
+} from "../core/flow/sync-definition-flow-templates.js"
 import {
   DEFAULT_SYNC_METADATA_PATH,
   loadSyncMetadataArtifact,

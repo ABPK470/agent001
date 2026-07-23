@@ -9,7 +9,7 @@
  * Step order in the flow array is the authority. No separate "phase" catalog.
  */
 
-import type { SyncExecutionContractStep } from "../plan-store.js"
+import type { SyncExecutionContractStep } from "../../plan-store.js"
 import { METADATA_SYNC_KIND_ID } from "@mia/shared-types"
 
 export interface ScheduledFlow {

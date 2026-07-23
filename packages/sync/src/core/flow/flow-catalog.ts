@@ -11,7 +11,7 @@ import {
   parseCustomValueSourceDefinition,
 } from "@mia/shared-types"
 
-import { parseKindDefinition, parsePhaseDefinition } from "./catalog-definition-parse.js"
+import { parseKindDefinition, parsePhaseDefinition } from "../compile/catalog-definition-parse.js"
 
 export interface FlowCatalogRowPhase {
   id: string

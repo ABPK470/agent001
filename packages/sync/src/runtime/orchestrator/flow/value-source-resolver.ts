@@ -14,12 +14,12 @@ import {
   valueSourceCatalogId,
 } from "@mia/shared-types"
 
-import type { SyncRuntimeHost } from "../../ports/index.js"
-import type { SyncTelemetryContext } from "../events.js"
-import type { SyncPlan } from "../plan-store.js"
+import type { SyncRuntimeHost } from "../../../ports/index.js"
+import type { SyncTelemetryContext } from "../../events.js"
+import type { SyncPlan } from "../../plan-store.js"
 import type { StepOutputRegistry } from "./step-output-registry.js"
-import { trackedQuery } from "./db-helpers.js"
-import type { SyncExecutionContractStep } from "../plan-store.js"
+import { trackedQuery } from "../db/db-helpers.js"
+import type { SyncExecutionContractStep } from "../../plan-store.js"
 
 export interface ValueSourceResolveContext {
   host: SyncRuntimeHost

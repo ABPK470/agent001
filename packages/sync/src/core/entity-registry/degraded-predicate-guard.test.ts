@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest"
 
-import { asFlowId, asStrategyId, asTenantId } from "../types/branded-ids.js"
+import { asFlowId, asStrategyId, asTenantId } from "../../domain/types/branded-ids.js"
 
-import type { EntityDefinition } from "./types.js"
+import type { EntityDefinition } from "../../domain/entity-registry/types.js"
 import {
   hasUnresolvedLegacyPipelineNote,
   isDegradedLegacyFallbackPredicate,

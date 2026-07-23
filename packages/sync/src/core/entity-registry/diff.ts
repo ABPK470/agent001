@@ -8,7 +8,7 @@
  * Pure function. No catalog calls.
  */
 
-import type { EntityDefinition, EntityDefinitionChange, EntityTable } from "./types.js"
+import type { EntityDefinition, EntityDefinitionChange, EntityTable } from "../../domain/entity-registry/types.js"
 
 export function diffEntityDefinitions(
   prev: EntityDefinition | null,

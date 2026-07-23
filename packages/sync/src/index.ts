@@ -31,3 +31,6 @@ export type {
   ToolResultEnvelope
 } from "./ports/host.js"
 export type { SyncRunFinishInput, SyncRunSink, SyncRunStartInput } from "./ports/run-sink.js"
+export type { PublishedSyncDefinitionRegistry } from "./ports/published-definition-registry.js"
+export type { SyncPublishReadinessPort } from "./ports/publish-readiness.js"
+export { ALWAYS_PUBLISH_READY } from "./ports/publish-readiness.js"

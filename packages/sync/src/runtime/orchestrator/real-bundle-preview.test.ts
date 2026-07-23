@@ -5,10 +5,10 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-import { isPublishedSyncEntityType } from "../../domain/published-definitions.js"
+import { isPublishedSyncEntityType } from "../../runtime/published-definitions.js"
 import { asEntityId } from "../../domain/types/branded-ids.js"
-import { getPublishedSyncDefinition } from "../../domain/published-definitions.js"
-import { selectDefinitionTables } from "../../domain/definition-selection.js"
+import { getPublishedSyncDefinition } from "../../runtime/published-definitions.js"
+import { selectDefinitionTables } from "../../core/scope/definition-selection.js"
 import { REPO_ROOT, createRepoBundleHost } from "../../test-support/repo-bundle.js"
 import { previewSync } from "./preview.js"
 
@@ -45,8 +45,8 @@ vi.mock("../../runtime/catalog-drift.js", async (importOriginal) => {
   }
 })
 
-vi.mock("./root-parent-preflight.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("./root-parent-preflight.js")>()
+vi.mock("./gates/root-parent-preflight.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./gates/root-parent-preflight.js")>()
   return {
     ...actual,
     evaluateRootParentPreflight: (...args: unknown[]) => evaluateRootParentMock(...args),

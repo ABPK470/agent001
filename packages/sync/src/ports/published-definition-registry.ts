@@ -1,8 +1,9 @@
-import type { PublishedSyncDefinitionBundle } from "./published-definitions.js"
+import type { PublishedSyncDefinitionBundle } from "@mia/shared-types"
 
 /**
  * Host-owned registry for loading the published sync definition bundle.
- * Implementation (disk + cache) lives in `runtime/published-definition-registry.ts`.
+ * Implementations: `runtime/published-definition-registry.ts` (disk),
+ * `runtime/db-published-definition-registry.ts` (DB).
  */
 export interface PublishedSyncDefinitionRegistry {
   loadBundle(projectRoot: string, relPath: string): PublishedSyncDefinitionBundle

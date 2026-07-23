@@ -6,15 +6,15 @@ import sqlMod from "mssql"
 import { randomUUID } from "node:crypto"
 import type { PublishedSyncDefinition } from "@mia/shared-types"
 
-import { parseEntityInstanceRef, coerceSyncEntityId } from "../../domain/entity-instance-ref.js"
-import type { SyncEntityId } from "../../domain/definition-selection.js"
+import { parseEntityInstanceRef, coerceSyncEntityId } from "../../core/scope/entity-instance-ref.js"
+import type { SyncEntityId } from "../../core/scope/definition-selection.js"
 import { SyncOperationType } from "../../domain/enums.js"
 import { asEntityId } from "../../domain/types/branded-ids.js"
-import { getPublishedSyncDefinition } from "../../domain/published-definitions.js"
+import { getPublishedSyncDefinition } from "../../runtime/published-definitions.js"
 import type { SyncTelemetryContext } from "../../ports/events.js"
 import { getPool } from "../../adapters/mssql/connection.js"
 import type { SyncRuntimeHost } from "../../ports/index.js"
-import { projectRoot, qtable, trackedLoggedQuery, trackedQuery } from "./db-helpers.js"
+import { projectRoot, qtable, trackedLoggedQuery, trackedQuery } from "./db/db-helpers.js"
 
 export interface EntitySearchResult {
   id: string | number

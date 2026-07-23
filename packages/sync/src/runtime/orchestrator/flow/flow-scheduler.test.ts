@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import type { SyncExecutionContractStep } from "../plan-store.js"
+import type { SyncExecutionContractStep } from "../../plan-store.js"
 import { scheduleFlowSteps } from "./flow-scheduler.js"
 
 function step(

@@ -1,18 +1,18 @@
 import type { ConnectionPool } from "mssql"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-import { PostMetadataActionKind } from "../../domain/enums.js"
-import { loadDeployFlowCatalogForTests } from "../../test-support/test-flow-catalog.js"
-import { createPublishedSyncDefinitionRegistry } from "../published-definition-registry.js"
-import { ALWAYS_PUBLISH_READY } from "../../domain/publish-readiness.js"
-import type { SyncRuntimeHost } from "../../ports/host.js"
-import type { SyncExecutionContractStep, SyncPlan } from "../plan-store.js"
-import { asPlanId } from "../../domain/types/branded-ids.js"
-import { trackedExecute, trackedQuery } from "./db-helpers.js"
+import { PostMetadataActionKind } from "../../../domain/enums.js"
+import { loadDeployFlowCatalogForTests } from "../../../test-support/test-flow-catalog.js"
+import { createPublishedSyncDefinitionRegistry } from "../../published-definition-registry.js"
+import { ALWAYS_PUBLISH_READY } from "../../../ports/publish-readiness.js"
+import type { SyncRuntimeHost } from "../../../ports/host.js"
+import type { SyncExecutionContractStep, SyncPlan } from "../../plan-store.js"
+import { asPlanId } from "../../../domain/types/branded-ids.js"
+import { trackedExecute, trackedQuery } from "../db/db-helpers.js"
 import { runPostMetadataPipeline } from "./post-metadata-pipeline.js"
 
-vi.mock("./db-helpers.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("./db-helpers.js")>()
+vi.mock("../db/db-helpers.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../db/db-helpers.js")>()
   return {
     ...actual,
     trackedExecute: vi.fn(),

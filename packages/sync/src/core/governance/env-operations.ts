@@ -5,7 +5,7 @@
  * environment's `allowedOperations` list (from sync-environments.json).
  */
 
-import type { EnvOperation, SyncEnvironment } from "../environments.js"
+import type { EnvOperation, SyncEnvironment } from "../../domain/environments.js"
 
 export function assertEnvOperationAllowed(env: SyncEnvironment, operation: EnvOperation): void {
   if (env.allowedOperations.includes(operation)) return

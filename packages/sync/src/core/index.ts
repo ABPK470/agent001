@@ -1,5 +1,30 @@
 /**
- * Sync core — pure decisions (proposer, and other pure clusters).
+ * Sync core — pure decisions (proposer + sync decision clusters).
  */
 
 export * from "./proposer/index.js"
+export * from "./entity-registry/index.js"
+export * from "./diff-engine/index.js"
+export * from "./compile/compile-sync-definition.js"
+export * from "./compile/catalog-definition-parse.js"
+export * from "./compile/sync-definition-scaffold.js"
+export * from "./flow/validate-sync-flow.js"
+export * from "./flow/normalize-flow-step.js"
+export * from "./flow/resolve-flow-steps.js"
+export * from "./flow/flow-kind-dataset-layer.js"
+export * from "./flow/sync-definition-flow-templates.js"
+export * from "./flow/flow-catalog.js"
+export * from "./eligibility/sync-env-eligibility.js"
+export * from "./eligibility/env-service-urls.js"
+export * from "./eligibility/environments.js"
+export * from "./governance/env-operations.js"
+// Pure freeze evaluate (registry as param) — public boot wrapper is runtime/governance
+export { evaluateFreezeWindows as evaluateFreezeWindowsWithRegistry } from "./governance/freeze-windows.js"
+export * from "./intent/sync-operation-intent.js"
+export * from "./intent/sync-drift-intent.js"
+export * from "./scope/sync-scope-resolution.js"
+export * from "./scope/entity-instance-ref.js"
+export * from "./scope/definition-selection.js"
+export * from "./scope/predicate.js"
+export * from "./vocabulary/operational-vocabulary.js"
+export * from "./publish/assert-published-contract.js"

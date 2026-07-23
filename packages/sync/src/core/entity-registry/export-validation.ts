@@ -10,7 +10,7 @@ import {
   isDegradedLegacyFallbackPredicate,
   looksIncompleteScopePredicate,
 } from "./resolve-scope-predicate.js"
-import type { EntityDefinition, ValidationError, ValidationResult, ValidationWarning } from "./types.js"
+import type { EntityDefinition, ValidationError, ValidationResult, ValidationWarning } from "../../domain/entity-registry/types.js"
 import { validateEntityDefinition } from "./validate.js"
 
 /** Structural validation every export path must pass before serializing. */

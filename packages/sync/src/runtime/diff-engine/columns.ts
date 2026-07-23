@@ -4,7 +4,7 @@
  * @module
  */
 
-import { hashExpr, qtable } from "../../domain/diff-engine/sql-helpers.js"
+import { hashExpr, qtable } from "../../core/diff-engine/sql-helpers.js"
 import {
   DETERMINISTIC_SESSION_PREFIX,
   type HashColumn,

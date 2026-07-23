@@ -1,4 +1,4 @@
-import type { SyncEnvironment } from "./environments.js"
+import type { SyncEnvironment } from "../../domain/environments.js"
 
 const LEGACY_SERVICE_KEYS: Record<string, keyof SyncEnvironment> = {
   agent: "agentServiceBaseUrl",

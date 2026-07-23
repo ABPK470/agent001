@@ -3,15 +3,15 @@ import { relative, resolve } from "node:path"
 import type { AuthoredSyncDefinition, EntityRegistrySyncFlowTemplateId } from "@mia/shared-types"
 import { parseAllDocuments } from "yaml"
 
-import { asEntityId } from "./types/branded-ids.js"
+import { asEntityId } from "../../domain/types/branded-ids.js"
 
 import { compileAuthoredSyncDefinition } from "./compile-sync-definition.js"
-import type { EntityDefinition } from "./entity-registry/types.js"
+import type { EntityDefinition } from "../../domain/entity-registry/types.js"
 import {
   defaultSyncDefinitionFlowTemplateId,
   hasSyncDefinitionFlowTemplate,
   type SyncDefinitionFlowTemplateCatalog
-} from "./sync-definition-flow-templates.js"
+} from "../flow/sync-definition-flow-templates.js"
 
 export interface SyncDefinitionScaffoldOptions {
   projectRoot?: string

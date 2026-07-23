@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 
 import type { SyncRuntimeHost } from "../ports/host.js"
-import { ALWAYS_PUBLISH_READY } from "../domain/publish-readiness.js"
+import { ALWAYS_PUBLISH_READY } from "../ports/publish-readiness.js"
 import { createPublishedSyncDefinitionRegistry } from "./published-definition-registry.js"
 
 const queryMock = vi.fn()
