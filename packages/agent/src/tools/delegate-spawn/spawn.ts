@@ -21,6 +21,7 @@ import { DelegationSpanEventKind, DelegationTraceKind } from "../../domain/enums
 import type { Tool } from "../../domain/types/agent-types.js"
 import type { DelegateContext } from "../delegate/index.js"
 import { buildChildExecutionResult } from "./helpers.js"
+import { runWithPlannerStep } from "./planner-step-scope.js"
 
 /**
  * Everything the kernel needs to run one child agent to completion.
@@ -161,7 +162,9 @@ export async function spawnChild(ctx: DelegateContext, contract: ChildContract):
   })
 
   try {
-    const answer = await child.run(contract.goal)
+    const answer = await (trace.stepName
+      ? runWithPlannerStep(trace.stepName, () => child.run(contract.goal))
+      : child.run(contract.goal))
     const hitLimit = answer.startsWith("Agent stopped after")
 
     ctx.onChildUsage?.(child.usage, child.llmCalls)

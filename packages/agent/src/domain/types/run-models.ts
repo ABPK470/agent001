@@ -25,6 +25,8 @@ export interface Step {
   error: string | null
   startedAt: Date | null
   completedAt: Date | null
+  /** Planner subagent step that owns this tool call (parallel fan-out). */
+  plannerStepName?: string
 }
 
 const STEP_TRANSITIONS: Record<string, Set<string>> = {

@@ -915,12 +915,25 @@ export function buildResponseParts(
         break
       }
       case "planner-delegation-iteration": {
-        // Keep the goal on the step header; tools already nest underneath.
-        const activityId = runningSteps.get(entry.stepName) ?? openStepId
+        // Per-subagent live beat — tagged with stepName (safe under parallel).
+        const activityId = runningSteps.get(entry.stepName)
         if (!activityId) break
+        const liveTools = Array.isArray(entry.toolNames) ? entry.toolNames.filter(Boolean) : []
+        const liveDetail =
+          liveTools.length > 0
+            ? liveTools
+                .slice(0, 3)
+                .map((name) => String(name).replace(/_/g, " "))
+                .join(" · ")
+            : undefined
         parts = parts.map((part) =>
           part.kind === "step-block" && part.id === activityId
-            ? { ...part, status: "running" as const, hasRunning: true }
+            ? {
+                ...part,
+                status: "running" as const,
+                hasRunning: true,
+                ...(liveDetail ? { detail: liveDetail } : {}),
+              }
             : part,
         )
         break
@@ -1086,10 +1099,13 @@ export function buildResponseParts(
             status: "running",
           },
         }
-        if (openStepId) {
-          // Nest under the active plan step — not as a flat peer of "Plan".
+        // Prefer planner stepName (parallel-safe). Fall back to openStepId
+        // for serial parent tools that never got a step stamp.
+        const nestStepId =
+          (entry.stepName ? runningSteps.get(entry.stepName) : undefined) ?? openStepId
+        if (nestStepId) {
           parts = parts.map((part) =>
-            part.kind === "step-block" && part.id === openStepId
+            part.kind === "step-block" && part.id === nestStepId
               ? {
                   ...part,
                   tools: [...part.tools, toolPart],

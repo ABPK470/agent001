@@ -128,6 +128,31 @@ describe("liveActivityVerb / deriveActiveMilestoneLabel", () => {
       ]),
     ).toBe("Working")
   })
+
+  it("names parallel fan-out when several subagents are running", () => {
+    expect(
+      deriveActiveMilestoneLabel([
+        {
+          kind: "step-block",
+          id: "a",
+          title: "Subagent · Frontend",
+          hasRunning: true,
+          subagent: true,
+          tools: [],
+          status: "running",
+        },
+        {
+          kind: "step-block",
+          id: "b",
+          title: "Subagent · Api",
+          hasRunning: true,
+          subagent: true,
+          tools: [],
+          status: "running",
+        },
+      ]),
+    ).toBe("2 subagents")
+  })
 })
 
 describe("summarizeHistory / summarizeRunError / bytes", () => {

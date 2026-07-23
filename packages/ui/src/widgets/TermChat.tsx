@@ -860,7 +860,7 @@ function StepBlock({
         ) : null}
         <span>{part.title}</span>
         {part.detail ? (
-          <span className="text-[15px] text-text-faint font-normal">{part.detail}</span>
+          <span className="text-[15px] text-text-faint font-normal"> · {part.detail}</span>
         ) : null}
       </button>
       {open && hasTools && (
@@ -1537,7 +1537,10 @@ function RunMessageImpl({
       void lastToolHasRunning
       items.push(
         <div key="active-shimmer" className="py-1.5 pr-2">
-          <span className="activity-shimmer-tight text-[15px] leading-6 font-normal inline-block text-text-muted">
+          <span
+            className="activity-shimmer-tight text-[15px] leading-6 font-normal inline-block"
+            style={{ "--sa": "var(--color-text-muted)", "--sd": "var(--color-text-faint)" } as React.CSSProperties}
+          >
             {milestoneLabel}
           </span>
         </div>,

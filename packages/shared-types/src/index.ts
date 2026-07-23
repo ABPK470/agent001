@@ -254,7 +254,7 @@ export type TraceEntry =
   | { kind: "goal"; text: string }
   | { kind: "iteration"; current: number; max: number }
   | { kind: "thinking"; text: string }
-  | { kind: "tool-call"; invocationId: string; toolCallId?: string | null; tool: string; argsSummary: string; argsFormatted: string }
+  | { kind: "tool-call"; invocationId: string; toolCallId?: string | null; tool: string; argsSummary: string; argsFormatted: string; stepName?: string }
   | { kind: "tool-result"; invocationId?: string; toolCallId?: string | null; text: string }
   | { kind: "tool-error"; invocationId?: string; toolCallId?: string | null; text: string }
   | { kind: "answer"; text: string }

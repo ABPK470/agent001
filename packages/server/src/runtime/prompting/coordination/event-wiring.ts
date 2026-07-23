@@ -24,6 +24,7 @@ type RunLike = {
     input: Record<string, unknown>
     output: Record<string, unknown>
     error: string | null
+    plannerStepName?: string
   }>
 }
 
@@ -90,6 +91,7 @@ export function wireEventBroadcasting(
           data["input"] = step.input
           data["output"] = step.output
           data["error"] = step.error
+          if (step.plannerStepName) data["stepName"] = step.plannerStepName
         }
       }
 
@@ -111,7 +113,10 @@ export function wireEventBroadcasting(
           invocationId: stepId,
           tool: toolName,
           argsSummary,
-          argsFormatted
+          argsFormatted,
+          ...(typeof data["stepName"] === "string" && data["stepName"]
+            ? { stepName: data["stepName"] }
+            : {}),
         })
       } else if (eventType === EventType.StepCompleted) {
         const stepId = getStepId(event)

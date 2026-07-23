@@ -93,6 +93,14 @@ export function deriveActiveMilestoneLabel(parts: ResponsePart[]): string {
     return liveActivityVerb(lastRunningTool.row.tool)
   }
 
+  const runningSubagents = parts.filter(
+    (part): part is Extract<ResponsePart, { kind: "step-block" }> =>
+      part.kind === "step-block" && part.hasRunning && Boolean(part.subagent),
+  )
+  if (runningSubagents.length > 1) {
+    return `${runningSubagents.length} subagents`
+  }
+
   for (let i = parts.length - 1; i >= 0; i--) {
     const part = parts[i]!
     if (part.kind === "iteration-block" && part.hasRunning) {

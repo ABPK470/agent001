@@ -17,6 +17,7 @@ import {
   MemoryExecutionRecordRepository,
   MemoryRunRepository
 } from "../../ports/services/index.js"
+import { currentPlannerStepName } from "../../tools/delegate-spawn/planner-step-scope.js"
 
 // ── Engine infrastructure ────────────────────────────────────────
 
@@ -69,6 +70,7 @@ export interface RunState {
 
 export function createToolStep(toolName: string, args: Record<string, unknown>, state: RunState): Step {
   const order = state.stepCounter++
+  const plannerStepName = currentPlannerStepName() ?? undefined
   return {
     id: randomUUID(),
     definitionId: asDefinitionId(`tool-${toolName}-${order}`),
@@ -82,6 +84,7 @@ export function createToolStep(toolName: string, args: Record<string, unknown>, 
     output: {},
     error: null,
     startedAt: null,
-    completedAt: null
+    completedAt: null,
+    ...(plannerStepName ? { plannerStepName } : {}),
   }
 }

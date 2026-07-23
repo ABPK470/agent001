@@ -310,4 +310,94 @@ describe("buildResponseParts — TermChat projection", () => {
       expect(plan.detail).toBeUndefined()
     }
   })
+
+  it("nests parallel subagent tools by stepName (not last openStepId)", () => {
+    const parts = buildResponseParts(
+      [
+        {
+          kind: "planner-plan-generated",
+          stepCount: 2,
+          steps: [
+            { name: "frontend_layer", type: "subagent_task" },
+            { name: "api_layer", type: "subagent_task" },
+          ],
+        },
+        {
+          kind: "planner-delegation-decision",
+          shouldDelegate: true,
+          executionMode: "parallel",
+          reason: "independent",
+        },
+        {
+          kind: "planner-step-start",
+          stepName: "frontend_layer",
+          stepType: "subagent_task",
+        },
+        {
+          kind: "planner-step-start",
+          stepName: "api_layer",
+          stepType: "subagent_task",
+        },
+        {
+          kind: "planner-delegation-start",
+          stepName: "frontend_layer",
+          depth: 1,
+          goal: "Build the UI",
+          tools: ["write_file"],
+        },
+        {
+          kind: "planner-delegation-start",
+          stepName: "api_layer",
+          depth: 1,
+          goal: "Build the API",
+          tools: ["write_file"],
+        },
+        {
+          kind: "tool-call",
+          invocationId: "inv-fe",
+          tool: "write_file",
+          argsSummary: "ui.tsx",
+          argsFormatted: JSON.stringify({ path: "ui.tsx" }),
+          stepName: "frontend_layer",
+        },
+        {
+          kind: "tool-call",
+          invocationId: "inv-api",
+          tool: "write_file",
+          argsSummary: "api.ts",
+          argsFormatted: JSON.stringify({ path: "api.ts" }),
+          stepName: "api_layer",
+        },
+        {
+          kind: "planner-delegation-iteration",
+          stepName: "frontend_layer",
+          depth: 1,
+          iteration: 1,
+          maxIterations: 20,
+          toolNames: ["write_file"],
+          content: null,
+        },
+      ],
+      "running",
+      "",
+      null,
+      null,
+      null,
+      "run-1",
+    )
+
+    const steps = parts.filter((p) => p.kind === "step-block")
+    expect(steps).toHaveLength(2)
+    const fe = steps.find((p) => p.kind === "step-block" && p.title.includes("frontend"))
+    const api = steps.find((p) => p.kind === "step-block" && p.title.includes("api"))
+    expect(fe?.kind).toBe("step-block")
+    expect(api?.kind).toBe("step-block")
+    if (fe?.kind === "step-block" && api?.kind === "step-block") {
+      expect(fe.tools.map((t) => t.id)).toEqual(["inv-fe"])
+      expect(api.tools.map((t) => t.id)).toEqual(["inv-api"])
+      expect(fe.hasRunning).toBe(true)
+      expect(api.hasRunning).toBe(true)
+      expect(fe.detail).toContain("write file")
+    }
+  })
 })

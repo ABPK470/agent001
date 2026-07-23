@@ -17,6 +17,9 @@ export function traceEntryFromStepStarted(
     tool: toolName,
     argsSummary,
     argsFormatted,
+    ...(typeof data["stepName"] === "string" && data["stepName"]
+      ? { stepName: data["stepName"] }
+      : {}),
   }
 }
 
