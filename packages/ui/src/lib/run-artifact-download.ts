@@ -1,12 +1,7 @@
 /**
- * Save run sandbox files onto the user's machine.
- *
- * 1. Folder picker (File System Access) — user chooses destination, files written there.
- * 2. Else save-file picker for a zip (or single file).
- * 3. Else one zip via `<a download>` (fixed to actually land in Downloads).
- *
- * Multi-file `<a download>` loops were blocked by Chromium and also revoked
- * blob URLs immediately — toasts claimed success while Downloads stayed empty.
+ * Save run sandbox files the same way as /trace: one browser download.
+ * Multi-file diffs become a single zip. No folder picker (broken on many
+ * localhost/browser setups with "system files" / origin errors).
  */
 
 import { zipSync } from "fflate"
@@ -22,13 +17,12 @@ export function runArtifactDownloadPath(runId: string, relativePath: string): st
   return `/api/runs/${encodeURIComponent(runId)}/artifacts/${encoded}`
 }
 
-export type WorkspaceSaveMode = "folder" | "file" | "downloads"
+export type WorkspaceSaveMode = "downloads"
 
 export interface WorkspaceSaveResult {
   count: number
   bytes: number
   mode: WorkspaceSaveMode
-  /** Directory or file name when the picker path succeeded. */
   folderName?: string
 }
 
@@ -83,67 +77,7 @@ export async function downloadRunArtifactFile(
   return { filename, bytes: blob.size }
 }
 
-function canPickDirectory(): boolean {
-  return typeof window !== "undefined" && typeof window.showDirectoryPicker === "function"
-}
-
-function canPickSaveFile(): boolean {
-  return typeof window !== "undefined" && typeof window.showSaveFilePicker === "function"
-}
-
-async function ensureNestedDirectory(
-  root: FileSystemDirectoryHandle,
-  parts: readonly string[],
-): Promise<FileSystemDirectoryHandle> {
-  let dir = root
-  for (const part of parts) {
-    dir = await dir.getDirectoryHandle(part, { create: true })
-  }
-  return dir
-}
-
-async function writeRelativeFile(
-  root: FileSystemDirectoryHandle,
-  relativePath: string,
-  blob: Blob,
-): Promise<void> {
-  const parts = relativePath.replace(/^\/+/, "").split("/").filter(Boolean)
-  const filename = parts.pop()
-  if (!filename) throw new Error(`Invalid artifact path: ${relativePath}`)
-  const dir = parts.length > 0 ? await ensureNestedDirectory(root, parts) : root
-  const file = await dir.getFileHandle(filename, { create: true })
-  const writable = await file.createWritable()
-  try {
-    await writable.write(blob)
-  } finally {
-    await writable.close()
-  }
-}
-
-async function writeBlobWithSavePicker(blob: Blob, suggestedName: string): Promise<string> {
-  const pick = window.showSaveFilePicker
-  if (!pick) throw new Error("Save file picker unavailable")
-  const handle = await pick({
-    suggestedName,
-    excludeAcceptAllOption: false,
-  })
-  const writable = await handle.createWritable()
-  try {
-    await writable.write(blob)
-  } finally {
-    await writable.close()
-  }
-  return handle.name
-}
-
-function isUserCancel(err: unknown): boolean {
-  return (
-    (err instanceof DOMException && (err.name === "AbortError" || err.name === "NotAllowedError")) ||
-    (err instanceof Error && (err.name === "AbortError" || err.name === "NotAllowedError"))
-  )
-}
-
-/** User cancelled the folder/file picker — not a failure toast. */
+/** Kept for call-site cancel handling — unused now that there is no picker. */
 export class WorkspaceSaveCancelled extends Error {
   constructor() {
     super("Save cancelled")
@@ -151,19 +85,9 @@ export class WorkspaceSaveCancelled extends Error {
   }
 }
 
-function zipArtifactFiles(
-  files: Array<{ path: string; bytes: Uint8Array }>,
-): Uint8Array {
-  const tree: Record<string, Uint8Array> = {}
-  for (const file of files) {
-    const key = file.path.replace(/^\/+/, "")
-    tree[key] = file.bytes
-  }
-  return zipSync(tree, { level: 1 })
-}
-
 /**
- * Let the user choose where files go. Never claim success without a real write.
+ * Download sandbox files like /trace: one save into the browser Downloads
+ * folder (or the browser's default download destination).
  */
 export async function downloadWorkspaceDiffFiles(
   runId: string,
@@ -173,97 +97,32 @@ export async function downloadWorkspaceDiffFiles(
     return { count: 0, bytes: 0, mode: "downloads" }
   }
 
-  // ── 1. Folder picker: write the relative tree where the user points ──
-  if (canPickDirectory()) {
-    const pickDirectory = window.showDirectoryPicker
-    if (!pickDirectory) throw new Error("Directory picker unavailable")
-    let root: FileSystemDirectoryHandle
-    try {
-      root = await pickDirectory({
-        id: "mia-run-artifacts",
-        mode: "readwrite",
-        startIn: "downloads",
-      })
-    } catch (err) {
-      if (isUserCancel(err)) throw new WorkspaceSaveCancelled()
-      throw err
-    }
-
-    let bytes = 0
-    for (const path of paths) {
-      const { blob } = await fetchArtifactBlob(runId, path)
-      await writeRelativeFile(root, path, blob)
-      bytes += blob.size
-    }
-    return {
-      count: paths.length,
-      bytes,
-      mode: "folder",
-      folderName: root.name,
-    }
+  if (paths.length === 1) {
+    const only = paths[0]!
+    const { blob, filename } = await fetchArtifactBlob(runId, only)
+    downloadBlob(blob, filename)
+    return { count: 1, bytes: blob.size, mode: "downloads", folderName: filename }
   }
 
-  // Fetch once — used for zip / single-file save.
-  const fetched: Array<{ path: string; blob: Blob; bytes: Uint8Array }> = []
+  const tree: Record<string, Uint8Array> = {}
+  let bytes = 0
   for (const path of paths) {
     const { blob } = await fetchArtifactBlob(runId, path)
-    fetched.push({
-      path,
-      blob,
-      bytes: new Uint8Array(await blob.arrayBuffer()),
-    })
+    const key = path.replace(/^\/+/, "")
+    tree[key] = new Uint8Array(await blob.arrayBuffer())
+    bytes += blob.size
   }
-  const totalBytes = fetched.reduce((sum, f) => sum + f.blob.size, 0)
-
-  // ── 2. Save-file picker: one file or one zip at a chosen path ──
-  if (canPickSaveFile()) {
-    try {
-      if (fetched.length === 1) {
-        const only = fetched[0]!
-        const name = only.path.split("/").pop() || "file"
-        const savedAs = await writeBlobWithSavePicker(only.blob, name)
-        return { count: 1, bytes: totalBytes, mode: "file", folderName: savedAs }
-      }
-      const zipName = `mia-run-${runId.slice(0, 8)}-files.zip`
-      const zipped = zipArtifactFiles(fetched.map((f) => ({ path: f.path, bytes: f.bytes })))
-      const savedAs = await writeBlobWithSavePicker(
-        new Blob([new Uint8Array(zipped)], { type: "application/zip" }),
-        zipName,
-      )
-      return { count: fetched.length, bytes: totalBytes, mode: "file", folderName: savedAs }
-    } catch (err) {
-      if (isUserCancel(err)) throw new WorkspaceSaveCancelled()
-      throw err
-    }
-  }
-
-  // ── 3. Legacy: one zip via <a download> (multi a.download is blocked) ──
-  if (fetched.length === 1) {
-    const only = fetched[0]!
-    const name = only.path.split("/").pop() || "file"
-    downloadBlob(only.blob, name)
-    return { count: 1, bytes: totalBytes, mode: "downloads", folderName: name }
-  }
+  const zipped = zipSync(tree, { level: 1 })
   const zipName = `mia-run-${runId.slice(0, 8)}-files.zip`
-  const zipped = zipArtifactFiles(fetched.map((f) => ({ path: f.path, bytes: f.bytes })))
   downloadBlob(new Blob([new Uint8Array(zipped)], { type: "application/zip" }), zipName)
-  return { count: fetched.length, bytes: totalBytes, mode: "downloads", folderName: zipName }
+  return { count: paths.length, bytes, mode: "downloads", folderName: zipName }
 }
 
 export function formatWorkspaceSaveMessage(result: WorkspaceSaveResult): string {
   if (result.count === 0) return "Nothing to save"
-  if (result.mode === "folder") {
-    const where = result.folderName ? `“${result.folderName}”` : "the folder you chose"
-    return result.count === 1
-      ? `Saved 1 file to ${where}`
-      : `Saved ${result.count} files to ${where}`
-  }
-  if (result.mode === "file") {
-    const name = result.folderName ? `“${result.folderName}”` : "the location you chose"
-    return result.count === 1 ? `Saved to ${name}` : `Saved ${result.count} files as ${name}`
-  }
   const name = result.folderName ? ` (${result.folderName})` : ""
-  return result.count === 1
-    ? `Saved 1 file to your Downloads folder${name}`
-    : `Saved ${result.count} files as a zip to your Downloads folder${name}`
+  if (result.count === 1) {
+    return `Downloaded 1 file${name} — check your browser Downloads`
+  }
+  return `Downloaded ${result.count} files as a zip${name} — check your browser Downloads`
 }

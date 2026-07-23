@@ -307,6 +307,46 @@
         "priority": 10,
         "selectors": { "tool": "search_catalog" }
       }
+    },
+    {
+      "name": "hosted_allow_export_query_to_file",
+      "effect": "allow",
+      "condition": "selectors",
+      "parameters": {
+        "priority": 10,
+        "reason": "read-only query export to sandbox is allowed across environments",
+        "selectors": { "tool": "export_query_to_file", "dbOperation": "query_read" }
+      }
+    },
+    {
+      "name": "hosted_allow_inspect_definition",
+      "effect": "allow",
+      "condition": "selectors",
+      "parameters": {
+        "priority": 10,
+        "reason": "T-SQL definition / dependency reads are allowed across environments",
+        "selectors": { "tool": "inspect_definition" }
+      }
+    },
+    {
+      "name": "hosted_allow_profile_data",
+      "effect": "allow",
+      "condition": "selectors",
+      "parameters": {
+        "priority": 10,
+        "reason": "read-only data profiling is allowed across environments",
+        "selectors": { "tool": "profile_data" }
+      }
+    },
+    {
+      "name": "hosted_allow_discover_relationships",
+      "effect": "allow",
+      "condition": "selectors",
+      "parameters": {
+        "priority": 10,
+        "reason": "read-only relationship discovery is allowed across environments",
+        "selectors": { "tool": "discover_relationships" }
+      }
     }
   ]
 }

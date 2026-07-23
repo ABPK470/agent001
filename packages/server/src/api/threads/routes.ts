@@ -7,6 +7,7 @@ import { parseBoundaryJson } from "../../internal/parse-json.js"
 import type { Run, Thread } from "@mia/shared-types"
 import {
   formatThreadExportText,
+  stripCodeFromTraceEntry,
   threadExportFilename,
 } from "@mia/shared-types"
 import type { FastifyInstance } from "fastify"
@@ -109,12 +110,15 @@ export function registerThreadRoutes(app: FastifyInstance, orchestrator: AgentOr
   })
 
   /** User download — full thread trace as .txt */
-  app.get<{ Params: { id: string } }>("/api/threads/:id/export/trace", async (req, reply) => {
+  app.get<{ Params: { id: string }; Querystring: { omitCode?: string } }>(
+    "/api/threads/:id/export/trace",
+    async (req, reply) => {
     const thread = db.getThread(req.params.id)
     if (!thread || !canAccessThread(req.session, thread)) {
       reply.code(404)
       return { error: "Thread not found" }
     }
+    const omitCode = req.query.omitCode === "1" || req.query.omitCode === "true"
     const runRows = db.listRunsWithUsageForThread(thread.id)
     const runs = runRows.map((run) => {
       const entries = db.getTraceEntries(run.id).map((entry) => parseBoundaryJson(entry.data) as Record<string, unknown>)
@@ -130,33 +134,43 @@ export function registerThreadRoutes(app: FastifyInstance, orchestrator: AgentOr
         entries,
       }
     })
-    const text = formatThreadExportText(runs, { threadId: thread.id, title: thread.title })
+    const text = formatThreadExportText(runs, { threadId: thread.id, title: thread.title }, { omitCode })
     return sendUserDownload(reply, {
-      filename: threadExportFilename(thread.id, "txt"),
+      filename: threadExportFilename(thread.id, "txt", { omitCode }),
       contentType: "text/plain; charset=utf-8",
       body: text,
     })
   })
 
   /** User download — full thread trace as .json */
-  app.get<{ Params: { id: string } }>("/api/threads/:id/export/trace.json", async (req, reply) => {
+  app.get<{ Params: { id: string }; Querystring: { omitCode?: string } }>(
+    "/api/threads/:id/export/trace.json",
+    async (req, reply) => {
     const thread = db.getThread(req.params.id)
     if (!thread || !canAccessThread(req.session, thread)) {
       reply.code(404)
       return { error: "Thread not found" }
     }
+    const omitCode = req.query.omitCode === "1" || req.query.omitCode === "true"
     const runRows = db.listRunsWithUsageForThread(thread.id)
     const runs = runRows.map((run) => ({
       runId: run.id,
       goal: run.goal,
       status: run.status,
       createdAt: run.created_at,
-      entries: db.getTraceEntries(run.id).map((entry) => parseBoundaryJson(entry.data)),
+      entries: db.getTraceEntries(run.id).map((entry) => {
+        const parsed = parseBoundaryJson(entry.data) as Record<string, unknown>
+        return omitCode ? stripCodeFromTraceEntry(parsed) : parsed
+      }),
     }))
     return sendUserDownload(reply, {
-      filename: threadExportFilename(thread.id, "json"),
+      filename: threadExportFilename(thread.id, "json", { omitCode }),
       contentType: "application/json; charset=utf-8",
-      body: JSON.stringify({ threadId: thread.id, title: thread.title, runs }, null, 2),
+      body: JSON.stringify(
+        { threadId: thread.id, title: thread.title, omitCode: omitCode || undefined, runs },
+        null,
+        2,
+      ),
     })
   })
 }

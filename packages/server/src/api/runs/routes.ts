@@ -11,6 +11,7 @@ import {
   resolveTablesForExport,
   serializeAnswerTableCsv,
   serializeAnswerTablesJson,
+  stripCodeFromTraceEntry,
   tableExportFilename,
   traceExportFilename,
 } from "@mia/shared-types"
@@ -372,40 +373,61 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
   })
 
   /** User download — trace as .txt (streamed to browser, not saved on server). */
-  app.get<{ Params: { id: string } }>("/api/runs/:id/export/trace", async (req, reply) => {
+  app.get<{ Params: { id: string }; Querystring: { omitCode?: string } }>(
+    "/api/runs/:id/export/trace",
+    async (req, reply) => {
     const run = db.getRun(req.params.id)
     if (!run || !canAccessRun(req.session, run)) {
       reply.code(404)
       return { error: "Run not found" }
     }
+    const omitCode = req.query.omitCode === "1" || req.query.omitCode === "true"
     const entries = db.getTraceEntries(req.params.id).map((entry) => parseBoundaryJson(entry.data) as Record<string, unknown>)
     const usage = db.getTokenUsage(req.params.id)
-    const text = formatTraceExportText(entries, {
-      runId: req.params.id,
-      goal: run.goal,
-      status: run.status,
-      totalTokens: usage?.total_tokens ?? null,
-      llmCalls: usage?.llm_calls ?? null,
-    })
+    const text = formatTraceExportText(
+      entries,
+      {
+        runId: req.params.id,
+        goal: run.goal,
+        status: run.status,
+        totalTokens: usage?.total_tokens ?? null,
+        llmCalls: usage?.llm_calls ?? null,
+      },
+      { omitCode },
+    )
     return sendUserDownload(reply, {
-      filename: traceExportFilename(req.params.id, "txt"),
+      filename: traceExportFilename(req.params.id, "txt", { omitCode }),
       contentType: "text/plain; charset=utf-8",
       body: text,
     })
   })
 
   /** User download — trace as .json */
-  app.get<{ Params: { id: string } }>("/api/runs/:id/export/trace.json", async (req, reply) => {
+  app.get<{ Params: { id: string }; Querystring: { omitCode?: string } }>(
+    "/api/runs/:id/export/trace.json",
+    async (req, reply) => {
     const run = db.getRun(req.params.id)
     if (!run || !canAccessRun(req.session, run)) {
       reply.code(404)
       return { error: "Run not found" }
     }
+    const omitCode = req.query.omitCode === "1" || req.query.omitCode === "true"
     const entries = db.getTraceEntries(req.params.id).map((entry) => parseBoundaryJson(entry.data))
+    const body = omitCode
+      ? JSON.stringify(
+          {
+            runId: req.params.id,
+            omitCode: true,
+            entries: entries.map((entry) => stripCodeFromTraceEntry(entry as Record<string, unknown>)),
+          },
+          null,
+          2,
+        )
+      : JSON.stringify({ runId: req.params.id, entries }, null, 2)
     return sendUserDownload(reply, {
-      filename: traceExportFilename(req.params.id, "json"),
+      filename: traceExportFilename(req.params.id, "json", { omitCode }),
       contentType: "application/json; charset=utf-8",
-      body: JSON.stringify({ runId: req.params.id, entries }, null, 2),
+      body,
     })
   })
 

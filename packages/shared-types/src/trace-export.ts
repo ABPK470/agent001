@@ -11,18 +11,44 @@ export interface TraceExportRunMeta {
   llmCalls?: number | null
 }
 
+export interface TraceExportFormatOptions {
+  /** Strip SQL / code payloads (tool args bodies, fenced code, long SQL). */
+  omitCode?: boolean
+}
+
 function indentBlock(text: string, prefix: string): string {
   return String(text ?? "").replace(/\n/g, `\n${prefix}`)
+}
+
+const CODE_FENCE_RE = /```[\s\S]*?```/g
+const LONG_SQL_RE =
+  /\b(?:SELECT|WITH|INSERT|UPDATE|DELETE|MERGE|CREATE|ALTER|DROP|EXEC(?:UTE)?)\b[\s\S]{80,}/gi
+
+/** Remove fenced code and long SQL blobs; keep short prose. */
+export function stripCodeFromTraceText(text: string): string {
+  let out = String(text ?? "")
+  out = out.replace(CODE_FENCE_RE, "[code omitted]")
+  out = out.replace(LONG_SQL_RE, (match) => `${match.slice(0, 60).trim()}… [sql omitted]`)
+  return out
+}
+
+function formatToolResultBody(text: string, omitCode: boolean): string {
+  if (!omitCode) return text
+  const stripped = stripCodeFromTraceText(text)
+  if (stripped.length > 1_200) return `${stripped.slice(0, 1_200)}… [truncated]`
+  return stripped
 }
 
 /** Format trace JSON entries as a human-readable agent-loop transcript. */
 export function formatTraceExportText(
   entries: ReadonlyArray<Record<string, unknown>>,
   meta: TraceExportRunMeta,
+  options: TraceExportFormatOptions = {},
 ): string {
+  const omitCode = options.omitCode === true
   const lines: string[] = []
   const ts = new Date().toISOString().slice(0, 19).replace("T", " ")
-  lines.push(`agent-loop trace  run=${meta.runId}  exported=${ts}`)
+  lines.push(`agent-loop trace  run=${meta.runId}  exported=${ts}${omitCode ? "  mode=no-code" : ""}`)
   if (meta.goal) lines.push(`goal: ${meta.goal}`)
   lines.push(
     `status: ${meta.status ?? "unknown"}  tokens: ${meta.totalTokens ?? "?"}  llm_calls: ${meta.llmCalls ?? "?"}`,
@@ -38,7 +64,11 @@ export function formatTraceExportText(
         lines.push(`GOAL  ${e["text"] ?? ""}`)
         break
       case "system-prompt":
-        lines.push(`SYSTEM PROMPT\n${p}${indentBlock(String(e["text"] ?? ""), p)}`)
+        if (omitCode) {
+          lines.push(`SYSTEM PROMPT  [omitted — --no-code]`)
+        } else {
+          lines.push(`SYSTEM PROMPT\n${p}${indentBlock(String(e["text"] ?? ""), p)}`)
+        }
         break
       case "tools-resolved": {
         const tools = (e["tools"] as Array<{ name?: string }> | undefined) ?? []
@@ -49,21 +79,36 @@ export function formatTraceExportText(
         lines.push(`ITERATION ${e["current"]}/${e["max"]}`)
         break
       case "thinking":
-        lines.push(`THINKING\n${p}${indentBlock(String(e["text"] ?? ""), p)}`)
-        break
-      case "tool-call":
         lines.push(
-          `TOOL CALL  ${e["tool"]}  ${e["argsSummary"] ?? ""}\n${p}${indentBlock(String(e["argsFormatted"] ?? ""), p)}`,
+          `THINKING\n${p}${indentBlock(formatToolResultBody(String(e["text"] ?? ""), omitCode), p)}`,
         )
         break
+      case "tool-call": {
+        const tool = e["tool"]
+        const summary = e["argsSummary"] ?? ""
+        if (omitCode) {
+          lines.push(`TOOL CALL  ${tool}  ${summary}`)
+        } else {
+          lines.push(
+            `TOOL CALL  ${tool}  ${summary}\n${p}${indentBlock(String(e["argsFormatted"] ?? ""), p)}`,
+          )
+        }
+        break
+      }
       case "tool-result":
-        lines.push(`TOOL RESULT\n${p}${indentBlock(String(e["text"] ?? ""), p)}`)
+        lines.push(
+          `TOOL RESULT\n${p}${indentBlock(formatToolResultBody(String(e["text"] ?? ""), omitCode), p)}`,
+        )
         break
       case "tool-error":
-        lines.push(`TOOL ERROR\n${p}${indentBlock(String(e["text"] ?? ""), p)}`)
+        lines.push(
+          `TOOL ERROR\n${p}${indentBlock(formatToolResultBody(String(e["text"] ?? ""), omitCode), p)}`,
+        )
         break
       case "answer":
-        lines.push(`ANSWER\n${p}${indentBlock(String(e["text"] ?? ""), p)}`)
+        lines.push(
+          `ANSWER\n${p}${indentBlock(formatToolResultBody(String(e["text"] ?? ""), omitCode), p)}`,
+        )
         break
       case "error":
         lines.push(`ERROR\n${p}${indentBlock(String(e["text"] ?? ""), p)}`)
@@ -140,9 +185,35 @@ export function formatTraceExportText(
   return lines.join("\n")
 }
 
-export function traceExportFilename(runId: string, ext: "txt" | "json"): string {
+/** Remove heavy code/SQL fields from a raw trace JSON entry. */
+export function stripCodeFromTraceEntry(entry: Record<string, unknown>): Record<string, unknown> {
+  const kind = String(entry["kind"] ?? "")
+  const next: Record<string, unknown> = { ...entry }
+  if (kind === "system-prompt") {
+    next["text"] = "[omitted — --no-code]"
+    return next
+  }
+  if (kind === "tool-call") {
+    delete next["argsFormatted"]
+    if (typeof next["argsSummary"] !== "string") next["argsSummary"] = ""
+    return next
+  }
+  if (kind === "tool-result" || kind === "tool-error" || kind === "thinking" || kind === "answer") {
+    if (typeof next["text"] === "string") {
+      next["text"] = stripCodeFromTraceText(next["text"])
+    }
+  }
+  return next
+}
+
+export function traceExportFilename(
+  runId: string,
+  ext: "txt" | "json",
+  options: TraceExportFormatOptions = {},
+): string {
   const dateTag = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19)
-  return `agent-loop-${dateTag}-${runId.slice(0, 8)}.${ext}`
+  const tag = options.omitCode ? "-nocode" : ""
+  return `agent-loop-${dateTag}-${runId.slice(0, 8)}${tag}.${ext}`
 }
 
 export interface TraceExportThreadMeta {
@@ -154,10 +225,13 @@ export interface TraceExportThreadMeta {
 export function formatThreadExportText(
   runs: ReadonlyArray<{ meta: TraceExportRunMeta; entries: ReadonlyArray<Record<string, unknown>> }>,
   threadMeta: TraceExportThreadMeta,
+  options: TraceExportFormatOptions = {},
 ): string {
   const lines: string[] = []
   const ts = new Date().toISOString().slice(0, 19).replace("T", " ")
-  lines.push(`thread trace  thread=${threadMeta.threadId}  exported=${ts}`)
+  lines.push(
+    `thread trace  thread=${threadMeta.threadId}  exported=${ts}${options.omitCode ? "  mode=no-code" : ""}`,
+  )
   if (threadMeta.title) lines.push(`title: ${threadMeta.title}`)
   lines.push(`runs: ${runs.length}`)
   lines.push("=".repeat(72))
@@ -165,7 +239,7 @@ export function formatThreadExportText(
 
   for (const run of runs) {
     lines.push(`=== RUN ${run.meta.runId} ===`)
-    const body = formatTraceExportText(run.entries, run.meta)
+    const body = formatTraceExportText(run.entries, run.meta, options)
     lines.push(body)
     lines.push("")
   }
@@ -174,7 +248,12 @@ export function formatThreadExportText(
   return lines.join("\n")
 }
 
-export function threadExportFilename(threadId: string, ext: "txt" | "json"): string {
+export function threadExportFilename(
+  threadId: string,
+  ext: "txt" | "json",
+  options: TraceExportFormatOptions = {},
+): string {
   const dateTag = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19)
-  return `thread-${dateTag}-${threadId.slice(0, 8)}.${ext}`
+  const tag = options.omitCode ? "-nocode" : ""
+  return `thread-${dateTag}-${threadId.slice(0, 8)}${tag}.${ext}`
 }

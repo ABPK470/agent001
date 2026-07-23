@@ -127,7 +127,10 @@ export function extractToolFacts(step: Step, ctx?: HostedPolicyContext): ToolFac
     step.action.startsWith("mssql_") ||
     step.action === "query_mssql" ||
     step.action === "explore_mssql_schema" ||
-    step.action === "export_query_to_file"
+    step.action === "export_query_to_file" ||
+    step.action === "inspect_definition" ||
+    step.action === "profile_data" ||
+    step.action === "discover_relationships"
   ) {
     // Accept several aliases. `connection` is the existing tool param
     // name today (e.g. `query_mssql({ connection: "prod", ... })`); we
@@ -211,7 +214,15 @@ function classifyDbOperation(toolName: string, sql: string): PolicyDbOperation {
   if (toolName === "sync_execute" || toolName.endsWith("_sync_execute")) return PolicyDbOperation.SyncExecute
   if (MSSQL_DDL_RE.test(sql)) return PolicyDbOperation.Ddl
   if (MSSQL_DML_RE.test(sql)) return PolicyDbOperation.Dml
-  if (MSSQL_READ_RE.test(sql) || toolName === "explore_mssql_schema") return PolicyDbOperation.QueryRead
+  if (
+    MSSQL_READ_RE.test(sql) ||
+    toolName === "explore_mssql_schema" ||
+    toolName === "inspect_definition" ||
+    toolName === "profile_data" ||
+    toolName === "discover_relationships"
+  ) {
+    return PolicyDbOperation.QueryRead
+  }
   // Conservative fallback: treat unknown SQL as DML so it cannot bypass
   // a UAT/PROD read-only policy by failing classification.
   return sql.length > 0 ? PolicyDbOperation.Dml : PolicyDbOperation.QueryRead

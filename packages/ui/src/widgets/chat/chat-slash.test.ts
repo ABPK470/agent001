@@ -6,6 +6,7 @@ import {
   matchChatSlash,
   parseSlashInput,
   parseTraceExportFormat,
+  parseTraceExportOptions,
   type ChatCommandContext,
   type ChatSlashCommand,
 } from "./commands.js"
@@ -74,6 +75,15 @@ describe("slash parse / match", () => {
     expect(parseTraceExportFormat("--json")).toBe("json")
     expect(parseTraceExportFormat("--txt")).toBe("txt")
     expect(parseTraceExportFormat("")).toBe("txt")
+  })
+
+  it("parses /trace --no-code", () => {
+    expect(parseTraceExportOptions("--no-code")).toEqual({ format: "txt", omitCode: true })
+    expect(parseTraceExportOptions("--json --no-code")).toEqual({
+      format: "json",
+      omitCode: true,
+    })
+    expect(parseTraceExportOptions("--txt")).toEqual({ format: "txt", omitCode: false })
   })
 
   it("while busy, only allows slash input", () => {

@@ -111,6 +111,32 @@ describe("deploy/policies/defaults.json", () => {
     expect(denied.error?.message).toMatch(/privileged|destructive/)
   })
 
+  it("allows MSSQL read tools including inspect_definition", async () => {
+    const ev = buildHostedEvaluator()
+    for (const action of [
+      "query_mssql",
+      "explore_mssql_schema",
+      "inspect_definition",
+      "profile_data",
+      "discover_relationships",
+      "export_query_to_file",
+    ] as const) {
+      const result = await evaluate(
+        ev,
+        makeStep(action, {
+          connection: "prod",
+          ...(action === "query_mssql" || action === "export_query_to_file"
+            ? { query: "SELECT TOP 5 * FROM publish.Revenue" }
+            : action === "inspect_definition"
+              ? { depends_on: "publish.Revenue" }
+              : {}),
+        }),
+        hostedCtx(),
+      )
+      expect(result.error, action).toBeUndefined()
+    }
+  })
+
   it("allows MSSQL reads on UAT and PROD but blocks UAT/PROD DML", async () => {
     const ev = buildHostedEvaluator()
     const uatRead = await evaluate(

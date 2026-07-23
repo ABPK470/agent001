@@ -1863,10 +1863,16 @@ export {
 export {
   formatTraceExportText,
   formatThreadExportText,
+  stripCodeFromTraceEntry,
+  stripCodeFromTraceText,
   threadExportFilename,
   traceExportFilename,
 } from "./trace-export.js"
-export type { TraceExportRunMeta, TraceExportThreadMeta } from "./trace-export.js"
+export type {
+  TraceExportFormatOptions,
+  TraceExportRunMeta,
+  TraceExportThreadMeta,
+} from "./trace-export.js"
 export {
   extractAnswerTables,
   isTableExportFormat,

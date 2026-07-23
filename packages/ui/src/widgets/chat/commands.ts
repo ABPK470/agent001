@@ -9,6 +9,12 @@ import { canResumeRun, canRollbackRun } from "@mia/shared-types"
 
 export type TraceExportFormat = "txt" | "json"
 
+export interface TraceExportOptions {
+  format: TraceExportFormat
+  /** Strip SQL / code payloads from the exported trace. */
+  omitCode: boolean
+}
+
 export interface ChatCommandContext {
   busy: boolean
   activeThreadId: string | null
@@ -61,10 +67,19 @@ export function matchChatSlash(
 }
 
 export function parseTraceExportFormat(args: string): TraceExportFormat {
+  return parseTraceExportOptions(args).format
+}
+
+/** Parse `/trace` flags: `--txt` | `--json`, and optional `--no-code`. */
+export function parseTraceExportOptions(args: string): TraceExportOptions {
   const lower = args.toLowerCase()
-  if (lower.includes("--json")) return "json"
-  if (lower.includes("--txt")) return "txt"
-  return "txt"
+  const format: TraceExportFormat = lower.includes("--json")
+    ? "json"
+    : lower.includes("--txt")
+      ? "txt"
+      : "txt"
+  const omitCode = /(?:^|\s)--no-code(?:\s|$)/.test(lower)
+  return { format, omitCode }
 }
 
 /** While a run is active, goal input accepts only slash commands. */
@@ -105,8 +120,8 @@ function unavailableReasonFor(cmd: ChatSlashCommand): string {
 }
 
 function defineChatSlashCommands(deps: {
-  downloadLastRunTrace: (format: TraceExportFormat) => Promise<void>
-  downloadThreadTrace: (format: TraceExportFormat) => Promise<void>
+  downloadLastRunTrace: (options: TraceExportOptions) => Promise<void>
+  downloadThreadTrace: (options: TraceExportOptions) => Promise<void>
   listArtifacts: () => Promise<void>
   cancelRun: () => Promise<void>
   rerunRun: () => Promise<void>
@@ -135,18 +150,18 @@ function defineChatSlashCommands(deps: {
     {
       id: "trace-thread",
       label: "Export entire thread trace",
-      hint: "--txt or --json",
+      hint: "--txt | --json | --no-code",
       slash: "trace-thread",
       when: (c) => !!c.activeThreadId,
-      run: (args) => deps.downloadThreadTrace(parseTraceExportFormat(args)),
+      run: (args) => deps.downloadThreadTrace(parseTraceExportOptions(args)),
     },
     {
       id: "trace",
       label: "Export last run trace in this thread",
-      hint: "--txt or --json",
+      hint: "--txt | --json | --no-code",
       slash: "trace",
       when: (c) => !!c.lastRunId,
-      run: (args) => deps.downloadLastRunTrace(parseTraceExportFormat(args)),
+      run: (args) => deps.downloadLastRunTrace(parseTraceExportOptions(args)),
     },
     {
       id: "export",
@@ -219,8 +234,8 @@ function defineChatSlashCommands(deps: {
 
 export function buildChatSlashCatalog(deps: {
   ctx: ChatCommandContext
-  downloadLastRunTrace: (format: TraceExportFormat) => Promise<void>
-  downloadThreadTrace: (format: TraceExportFormat) => Promise<void>
+  downloadLastRunTrace: (options: TraceExportOptions) => Promise<void>
+  downloadThreadTrace: (options: TraceExportOptions) => Promise<void>
   listArtifacts: () => Promise<void>
   cancelRun: () => Promise<void>
   rerunRun: () => Promise<void>

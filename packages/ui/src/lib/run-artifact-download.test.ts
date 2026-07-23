@@ -16,29 +16,18 @@ describe("runArtifactDownloadPath", () => {
 })
 
 describe("formatWorkspaceSaveMessage", () => {
-  it("names the chosen folder when the picker path succeeded", () => {
+  it("points at browser Downloads for a single file", () => {
     expect(
       formatWorkspaceSaveMessage({
-        count: 4,
+        count: 1,
         bytes: 100,
-        mode: "folder",
-        folderName: "Desktop",
+        mode: "downloads",
+        folderName: "report.html",
       }),
-    ).toBe('Saved 4 files to “Desktop”')
+    ).toBe("Downloaded 1 file (report.html) — check your browser Downloads")
   })
 
-  it("names a zip save from the file picker", () => {
-    expect(
-      formatWorkspaceSaveMessage({
-        count: 4,
-        bytes: 100,
-        mode: "file",
-        folderName: "mia-run-abc12345-files.zip",
-      }),
-    ).toBe('Saved 4 files as “mia-run-abc12345-files.zip”')
-  })
-
-  it("admits Downloads fallback when pickers are unavailable", () => {
+  it("points at browser Downloads for a multi-file zip", () => {
     expect(
       formatWorkspaceSaveMessage({
         count: 4,
@@ -46,6 +35,12 @@ describe("formatWorkspaceSaveMessage", () => {
         mode: "downloads",
         folderName: "mia-run-abc.zip",
       }),
-    ).toBe("Saved 4 files as a zip to your Downloads folder (mia-run-abc.zip)")
+    ).toBe("Downloaded 4 files as a zip (mia-run-abc.zip) — check your browser Downloads")
+  })
+
+  it("handles empty path lists", () => {
+    expect(formatWorkspaceSaveMessage({ count: 0, bytes: 0, mode: "downloads" })).toBe(
+      "Nothing to save",
+    )
   })
 })

@@ -10,7 +10,7 @@ import {
   dispatchChatSlashInput,
   type ChatCommandContext,
   type ChatSlashCatalogEntry,
-  type TraceExportFormat,
+  type TraceExportOptions,
 } from "./commands"
 import type { CommandConsoleApi } from "./commandConsoleModel"
 
@@ -84,15 +84,16 @@ export function useChatSlashActions(opts: ChatSlashActionsOptions) {
   )
 
   const downloadLastRunTrace = useCallback(
-    async (format: TraceExportFormat) => {
+    async (options: TraceExportOptions) => {
       if (!lastRunId) throw new Error("No run in this thread to export")
+      const qs = options.omitCode ? "?omitCode=1" : ""
       const path =
-        format === "json"
-          ? `/api/runs/${encodeURIComponent(lastRunId)}/export/trace.json`
-          : `/api/runs/${encodeURIComponent(lastRunId)}/export/trace`
+        options.format === "json"
+          ? `/api/runs/${encodeURIComponent(lastRunId)}/export/trace.json${qs}`
+          : `/api/runs/${encodeURIComponent(lastRunId)}/export/trace${qs}`
       const { filename, bytes } = await downloadAuthenticated(
         path,
-        traceExportFilename(lastRunId, format),
+        traceExportFilename(lastRunId, options.format, { omitCode: options.omitCode }),
       )
       consoleRef.current.logSuccess(`Exported ${filename} (${bytes.toLocaleString()} bytes)`)
     },
@@ -100,15 +101,16 @@ export function useChatSlashActions(opts: ChatSlashActionsOptions) {
   )
 
   const downloadThreadTrace = useCallback(
-    async (format: TraceExportFormat) => {
+    async (options: TraceExportOptions) => {
       if (!activeThreadId) throw new Error("No active thread")
+      const qs = options.omitCode ? "?omitCode=1" : ""
       const path =
-        format === "json"
-          ? `/api/threads/${encodeURIComponent(activeThreadId)}/export/trace.json`
-          : `/api/threads/${encodeURIComponent(activeThreadId)}/export/trace`
+        options.format === "json"
+          ? `/api/threads/${encodeURIComponent(activeThreadId)}/export/trace.json${qs}`
+          : `/api/threads/${encodeURIComponent(activeThreadId)}/export/trace${qs}`
       const { filename, bytes } = await downloadAuthenticated(
         path,
-        threadExportFilename(activeThreadId, format),
+        threadExportFilename(activeThreadId, options.format, { omitCode: options.omitCode }),
       )
       consoleRef.current.logSuccess(`Exported ${filename} (${bytes.toLocaleString()} bytes)`)
     },
