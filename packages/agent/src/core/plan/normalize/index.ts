@@ -14,6 +14,7 @@ export { mostFrequent, normalizeOutputDirToken, normalizePlanOutputDirectory, un
 export {
   markSafeStepsParallelizable,
   preparePlanParallelism,
+  pruneSpuriousInvestigationSources,
   pruneSpuriousSerialEdges
 } from "./parallelism.js"
 

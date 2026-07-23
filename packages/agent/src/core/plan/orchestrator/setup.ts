@@ -175,7 +175,11 @@ export async function runPlannerSetup(
   // Parallel mode is useless if the DAG is a single chain. Mark safe peers and
   // drop dependsOn/edges that are not real artifact handoffs.
   const parallelPrep = preparePlanParallelism(plan)
-  if (parallelPrep.marked > 0 || parallelPrep.prunedEdges > 0) {
+  if (
+    parallelPrep.marked > 0 ||
+    parallelPrep.prunedEdges > 0 ||
+    parallelPrep.strippedSources > 0
+  ) {
     ctx.onTrace?.({
       kind: PlannerTraceKind.ValidationWarnings,
       warningCount: 1,
@@ -183,7 +187,7 @@ export async function runPlannerSetup(
         {
           severity: DiagnosticSeverity.Warning,
           code: "parallelism_normalized",
-          message: `Parallelism normalized: marked ${parallelPrep.marked} step(s) parallelizable, pruned ${parallelPrep.prunedEdges} spurious serial edge(s)`
+          message: `Parallelism normalized: marked ${parallelPrep.marked} step(s) parallelizable, pruned ${parallelPrep.prunedEdges} spurious serial edge(s), stripped ${parallelPrep.strippedSources} investigation evidence source(s)`
         }
       ]
     })

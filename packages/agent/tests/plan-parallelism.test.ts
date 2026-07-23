@@ -139,9 +139,9 @@ describe("preparePlanParallelism", () => {
     expect(plan.edges).toEqual([])
   })
 
-  it("keeps readonly→readonly when B declares a real requiredSourceArtifacts handoff", () => {
+  it("strips investigation↔investigation evidence handoffs (edges + sources)", () => {
     const plan: Plan = {
-      reason: "readonly handoff",
+      reason: "readonly evidence chain",
       confidence: 0.9,
       requiresSynthesis: true,
       steps: [
@@ -159,9 +159,44 @@ describe("preparePlanParallelism", () => {
       edges: [{ from: "a", to: "b" }],
     }
 
+    const result = preparePlanParallelism(plan)
+    expect(result.strippedSources).toBe(1)
+    expect(result.prunedEdges).toBe(1)
+    expect(plan.edges).toEqual([])
+    expect(plan.steps[1]?.stepType === "subagent_task" &&
+      (plan.steps[1] as SubagentTaskStep).executionContext.requiredSourceArtifacts).toEqual([])
+    expect(buildGraph(plan).inDegree.get("b")).toBe(0)
+  })
+
+  it("keeps evidence→write-answer handoff (required write_file is not investigation)", () => {
+    const plan: Plan = {
+      reason: "analyze then write answer",
+      confidence: 0.9,
+      requiresSynthesis: true,
+      steps: [
+        makeStep("analyze", {
+          targets: ["tmp/grounding.json"],
+          effectClass: "readonly",
+        }),
+        makeStep("write_answer", {
+          targets: ["tmp/client_answer.md"],
+          sources: ["tmp/grounding.json"],
+          dependsOn: ["analyze"],
+          effectClass: "filesystem_write",
+          canRunParallel: false,
+        }),
+      ],
+      edges: [{ from: "analyze", to: "write_answer" }],
+    }
+    const write = plan.steps[1] as SubagentTaskStep
+    ;(write as { requiredToolCapabilities: string[] }).requiredToolCapabilities = [
+      "write_file",
+    ]
+
     preparePlanParallelism(plan)
-    expect(plan.edges).toEqual([{ from: "a", to: "b" }])
-    expect(buildGraph(plan).inDegree.get("b")).toBe(1)
+    expect(plan.edges).toEqual([{ from: "analyze", to: "write_answer" }])
+    expect(write.executionContext.requiredSourceArtifacts).toEqual(["tmp/grounding.json"])
+    expect(buildGraph(plan).inDegree.get("write_answer")).toBe(1)
   })
 
   it("keeps shared write-target edges so peers cannot crush the same file", () => {
@@ -189,7 +224,7 @@ describe("preparePlanParallelism", () => {
     expect(plan.edges).toEqual([{ from: "writer_a", to: "writer_b" }])
   })
 
-  it("keeps real artifact handoff edges", () => {
+  it("keeps real deliverable handoff edges (code consumer)", () => {
     const plan: Plan = {
       reason: "handoff",
       confidence: 0.9,
@@ -199,19 +234,24 @@ describe("preparePlanParallelism", () => {
           targets: ["tmp/schema.json"],
           effectClass: "filesystem_write"
         }),
-        makeStep("analyze", {
-          targets: ["tmp/analysis.json"],
+        makeStep("implement", {
+          targets: ["src/report.ts"],
           sources: ["tmp/schema.json"],
           dependsOn: ["discover"],
-          effectClass: "filesystem_write"
+          effectClass: "filesystem_write",
+          canRunParallel: false,
         })
       ],
-      edges: [{ from: "discover", to: "analyze" }]
+      edges: [{ from: "discover", to: "implement" }]
     }
+    const implement = plan.steps[1] as SubagentTaskStep
+    ;(implement as { requiredToolCapabilities: string[] }).requiredToolCapabilities = [
+      "write_file",
+    ]
 
-    // discover is evidence write → parallelizable; analyze reads upstream → not marked
     preparePlanParallelism(plan)
-    expect(plan.edges).toEqual([{ from: "discover", to: "analyze" }])
+    expect(plan.edges).toEqual([{ from: "discover", to: "implement" }])
+    expect(implement.executionContext.requiredSourceArtifacts).toEqual(["tmp/schema.json"])
   })
 
   it("keeps blueprint edges even when peers are parallelizable", () => {

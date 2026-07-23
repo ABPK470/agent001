@@ -2,18 +2,22 @@
  * Parallel plans must actually fan out — without regressing correctness.
  *
  * First principles (hard rules):
- * 1. Real artifact handoffs serialize. If B lists A's target in
- *    requiredSourceArtifacts, A→B stays. Parent/downstream never starts
- *    until upstream completes (pipeline inDegree + slot-based scheduling).
+ * 1. Real deliverable handoffs serialize. If a non-investigation consumer lists
+ *    an upstream target in requiredSourceArtifacts, A→B stays (and acceptance
+ *    blockers still gate readiness).
  * 2. Blueprint gates serialize. Anything depending on BLUEPRINT.md waits.
  * 3. Shared write targets are rejected at plan validate (`shared_target_artifact`);
  *    children are also write-scoped to their own targetArtifacts.
- * 4. Thematic dependsOn chains (same topic, no file handoff) are noise —
- *    those edges are pruned so independent peers can run together — including
- *    codegen siblings after a blueprint gate (LLM often chains A→B→C→D with
- *    canRunParallel:false even when targets are distinct).
+ * 4. Thematic dependsOn chains (same topic, no real deliverable handoff) are
+ *    noise — edges are pruned so independent peers can run together.
+ * 5. Investigation/evidence peers that only "hand off" each other's notes
+ *    (tmp/*.json, *.md evidence) are also noise. Each peer can re-query the
+ *    DB. Those edges AND the matching requiredSourceArtifacts are stripped —
+ *    otherwise prune edges alone still leaves acceptance blockers width-1.
  *
- * Never prune an edge when a real handoff or shared write target is declared.
+ * "Plan · Parallel" means maxParallel>1 for ready steps — not that the DAG
+ * is wide. This normalize pass is what makes the DAG honest.
+ *
  * The executor fills free slots as soon as any in-flight peer settles — it does
  * not wait for an entire wave before starting the next ready step.
  */
@@ -62,10 +66,18 @@ function declaredTools(step: SubagentTaskStep): string[] {
 
 /**
  * Investigation / evidence peers — safe to fan out when there is no
- * justified artifact edge between them.
+ * justified deliverable handoff between them.
  */
 export function isInvestigationParallelCandidate(step: SubagentTaskStep): boolean {
   if (isBlueprintStep(step)) return false
+
+  // Required write/shell tools → not a fan-out investigation peer.
+  // "Write the client answer" must still wait on analyze notes even when the
+  // deliverable is a .md/.json evidence path. Loose allowedTools may still
+  // list write_file for catalog probes — only *required* counts here.
+  const required = step.requiredToolCapabilities
+  if (required.some((name) => WRITEISH_TOOL_NAMES.has(name))) return false
+
   if (step.executionContext.effectClass === "readonly") return true
 
   const targets = step.executionContext.targetArtifacts
@@ -73,11 +85,10 @@ export function isInvestigationParallelCandidate(step: SubagentTaskStep): boolea
     return true
   }
 
-  // No file outputs: treat as investigation unless a write/shell tool is
-  // *required*. Ignore loose allowedTools noise (plans often list write_file
-  // even for catalog-only probes).
+  // No file outputs: treat as investigation unless tools are writeish.
+  // Ignore loose allowedTools noise (plans often list write_file even for
+  // catalog-only probes) — prefer requiredToolCapabilities when present.
   if (targets.length === 0) {
-    const required = step.requiredToolCapabilities
     const tools = required.length > 0 ? required : declaredTools(step)
     if (tools.length === 0) return true
     if (tools.some((name) => WRITEISH_TOOL_NAMES.has(name))) return false
@@ -93,25 +104,29 @@ export function isInvestigationParallelCandidate(step: SubagentTaskStep): boolea
   return false
 }
 
-/** Mark independent investigation/evidence steps as canRunParallel. */
-export function markSafeStepsParallelizable(plan: Plan): number {
-  const subagents = plan.steps.filter(
-    (step): step is SubagentTaskStep => step.stepType === "subagent_task",
-  )
-  const owners = artifactOwnerMap(subagents)
-  let marked = 0
-  for (const step of subagents) {
-    if (step.canRunParallel) continue
-    if (!isInvestigationParallelCandidate(step)) continue
-    // Consumer of another step's artifact must wait — do not mark parallel.
-    if (readsOwnedUpstream(step, owners)) continue
-    ;(step as { canRunParallel: boolean }).canRunParallel = true
-    marked++
+/**
+ * Evidence notes between two investigation peers — not a deliverable handoff.
+ * Keeping these serializes Type B plans even after thematic edges are pruned
+ * (acceptance blockers still wait on the upstream step).
+ */
+function isInvestigationEvidenceHandoff(from: SubagentTaskStep, to: SubagentTaskStep): boolean {
+  if (!isInvestigationParallelCandidate(from) || !isInvestigationParallelCandidate(to)) {
+    return false
   }
-  return marked
+  const fromArts = from.executionContext.targetArtifacts
+  if (fromArts.length === 0) return false
+  if (!fromArts.every((artifact) => isEvidenceArtifact(artifact))) return false
+
+  const fromSet = new Set(fromArts.map(normalizeSpecPath))
+  const linked = to.executionContext.requiredSourceArtifacts.filter((artifact) =>
+    fromSet.has(normalizeSpecPath(artifact)),
+  )
+  if (linked.length === 0) return false
+  return linked.every((artifact) => isEvidenceArtifact(artifact))
 }
 
 function edgeJustifiedByArtifacts(from: SubagentTaskStep, to: SubagentTaskStep): boolean {
+  if (isInvestigationEvidenceHandoff(from, to)) return false
   const fromArts = new Set(from.executionContext.targetArtifacts.map(normalizeSpecPath))
   return to.executionContext.requiredSourceArtifacts.some((artifact) =>
     fromArts.has(normalizeSpecPath(artifact)),
@@ -126,9 +141,62 @@ function shareWriteTarget(from: SubagentTaskStep, to: SubagentTaskStep): boolean
 }
 
 /**
+ * Drop investigation↔investigation evidence sources so acceptance blockers
+ * match pruned edges. Leave sources that feed a non-investigation consumer
+ * (e.g. analyze notes → write client answer).
+ */
+export function pruneSpuriousInvestigationSources(plan: Plan): number {
+  const subagents = plan.steps.filter(
+    (step): step is SubagentTaskStep => step.stepType === "subagent_task",
+  )
+  const byName = new Map(subagents.map((step) => [step.name, step] as const))
+  const owners = artifactOwnerMap(subagents)
+  let stripped = 0
+
+  for (const step of subagents) {
+    if (!isInvestigationParallelCandidate(step)) continue
+    if (step.executionContext.requiredSourceArtifacts.length === 0) continue
+
+    const next = step.executionContext.requiredSourceArtifacts.filter((artifact) => {
+      const ownerName = owners.get(normalizeSpecPath(artifact))
+      if (!ownerName || ownerName === step.name) return true
+      const owner = byName.get(ownerName)
+      if (!owner) return true
+      if (!isInvestigationEvidenceHandoff(owner, step)) return true
+      stripped++
+      return false
+    })
+
+    if (next.length !== step.executionContext.requiredSourceArtifacts.length) {
+      ;(step.executionContext as { requiredSourceArtifacts: string[] }).requiredSourceArtifacts = next
+    }
+  }
+
+  return stripped
+}
+
+/** Mark independent investigation/evidence steps as canRunParallel. */
+export function markSafeStepsParallelizable(plan: Plan): number {
+  const subagents = plan.steps.filter(
+    (step): step is SubagentTaskStep => step.stepType === "subagent_task",
+  )
+  const owners = artifactOwnerMap(subagents)
+  let marked = 0
+  for (const step of subagents) {
+    if (step.canRunParallel) continue
+    if (!isInvestigationParallelCandidate(step)) continue
+    // Consumer of a real (non-investigation-evidence) upstream artifact must wait.
+    if (readsOwnedUpstream(step, owners)) continue
+    ;(step as { canRunParallel: boolean }).canRunParallel = true
+    marked++
+  }
+  return marked
+}
+
+/**
  * Drop thematic A→B edges only. Keep:
  * - blueprint → *
- * - real requiredSourceArtifacts handoffs
+ * - real deliverable handoffs (not investigation evidence notes)
  * - shared targetArtifact ownership (must not rewrite the same file concurrently)
  *
  * Everything else without a real handoff is noise — including codegen
@@ -159,7 +227,7 @@ export function pruneSpuriousSerialEdges(plan: Plan): number {
       continue
     }
 
-    // (2) Real handoff — consumer waits for producer.
+    // (2) Real deliverable handoff — consumer waits for producer.
     if (edgeJustifiedByArtifacts(from, to)) {
       kept.push(edge)
       continue
@@ -171,7 +239,7 @@ export function pruneSpuriousSerialEdges(plan: Plan): number {
       continue
     }
 
-    // (4) Thematic / undeclared chain — drop so peers can fan out.
+    // (4) Thematic / investigation-evidence chain — drop so peers can fan out.
     pruned++
   }
 
@@ -191,8 +259,15 @@ export function pruneSpuriousSerialEdges(plan: Plan): number {
 }
 
 /** Prepare a plan so parallel executionMode can actually fan out safely. */
-export function preparePlanParallelism(plan: Plan): { marked: number; prunedEdges: number } {
+export function preparePlanParallelism(plan: Plan): {
+  marked: number
+  prunedEdges: number
+  strippedSources: number
+} {
+  // Strip investigation evidence sources first so mark/prune see a clean graph
+  // and compilePlannerRuntime acceptance deps do not re-serialize peers.
+  const strippedSources = pruneSpuriousInvestigationSources(plan)
   const marked = markSafeStepsParallelizable(plan)
   const prunedEdges = pruneSpuriousSerialEdges(plan)
-  return { marked, prunedEdges }
+  return { marked, prunedEdges, strippedSources }
 }
