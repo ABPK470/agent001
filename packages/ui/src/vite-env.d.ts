@@ -4,7 +4,7 @@ interface ImportMetaEnv {
   readonly VITE_HOME_SHELL?: "legacy" | "thread"
 }
 
-/** File System Access API — folder picker for "Save locally". */
+/** File System Access API — folder / save pickers for "Save locally". */
 interface FileSystemCreateWritableOptions {
   keepExistingData?: boolean
 }
@@ -16,6 +16,7 @@ interface FileSystemWritableFileStream extends WritableStream {
 
 interface FileSystemFileHandle extends FileSystemHandle {
   kind: "file"
+  readonly name: string
   createWritable(options?: FileSystemCreateWritableOptions): Promise<FileSystemWritableFileStream>
 }
 
@@ -35,6 +36,16 @@ interface DirectoryPickerOptions {
   startIn?: "desktop" | "documents" | "downloads" | "music" | "pictures" | "videos"
 }
 
+interface SaveFilePickerOptions {
+  suggestedName?: string
+  excludeAcceptAllOption?: boolean
+  types?: Array<{
+    description?: string
+    accept: Record<string, string[]>
+  }>
+}
+
 interface Window {
   showDirectoryPicker?: (options?: DirectoryPickerOptions) => Promise<FileSystemDirectoryHandle>
+  showSaveFilePicker?: (options?: SaveFilePickerOptions) => Promise<FileSystemFileHandle>
 }

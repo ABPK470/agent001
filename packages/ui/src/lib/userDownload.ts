@@ -1,7 +1,7 @@
 /**
- * Browser save for Export — every export reaches the user as a save dialog.
- * Remote-hosted MI:A never writes export files to the server filesystem for
- * the user; artifacts are streamed with Content-Disposition: attachment.
+ * Browser save helpers — blob download must actually reach the user's disk.
+ * Chromium silently ignores `<a download>` when the node is not in the DOM
+ * or the object URL is revoked before the download starts.
  */
 
 export function downloadBlob(blob: Blob, filename: string): void {
@@ -9,8 +9,16 @@ export function downloadBlob(blob: Blob, filename: string): void {
   const anchor = document.createElement("a")
   anchor.href = url
   anchor.download = filename
+  anchor.rel = "noopener"
+  anchor.style.display = "none"
+  document.body.appendChild(anchor)
   anchor.click()
-  URL.revokeObjectURL(url)
+  // Revoke after the browser has started the download — immediate revoke
+  // cancels the transfer and leaves Downloads empty while callers toast success.
+  window.setTimeout(() => {
+    anchor.remove()
+    URL.revokeObjectURL(url)
+  }, 2_000)
 }
 
 function filenameFromContentDisposition(header: string | null): string | null {
@@ -42,7 +50,9 @@ export async function downloadAuthenticated(
     try {
       const body = (await res.json()) as { error?: string }
       if (body.error) detail = body.error
-    } catch (err: unknown) { console.error("[mia]", err) }
+    } catch (err: unknown) {
+      console.error("[mia]", err)
+    }
     throw new Error(detail || `Download failed (${res.status})`)
   }
   const blob = await res.blob()

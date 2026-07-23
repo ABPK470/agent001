@@ -27,13 +27,25 @@ describe("formatWorkspaceSaveMessage", () => {
     ).toBe('Saved 4 files to “Desktop”')
   })
 
-  it("admits Downloads fallback when the picker is unavailable", () => {
+  it("names a zip save from the file picker", () => {
+    expect(
+      formatWorkspaceSaveMessage({
+        count: 4,
+        bytes: 100,
+        mode: "file",
+        folderName: "mia-run-abc12345-files.zip",
+      }),
+    ).toBe('Saved 4 files as “mia-run-abc12345-files.zip”')
+  })
+
+  it("admits Downloads fallback when pickers are unavailable", () => {
     expect(
       formatWorkspaceSaveMessage({
         count: 4,
         bytes: 100,
         mode: "downloads",
+        folderName: "mia-run-abc.zip",
       }),
-    ).toBe("Saved 4 files to your Downloads folder")
+    ).toBe("Saved 4 files as a zip to your Downloads folder (mia-run-abc.zip)")
   })
 })
