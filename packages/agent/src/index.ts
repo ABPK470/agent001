@@ -111,6 +111,7 @@ export {
   GENERIC_FAILURE_PREFIX,
   PLATFORM_UNCONFIGURED_PREFIX,
   POLISHED_FAILURE_MARKER,
+  classifyUserFacingFailure,
   detectInternalFailure,
   detectPlatformUnconfigured,
   fillRunReference,
@@ -124,7 +125,9 @@ export {
   synthesizeGenericFailureAnswer,
   type InternalFailureHit,
   type PlatformUnconfiguredHit,
-  type PolishFailureInput
+  type PolishFailureInput,
+  type UserFacingFailure,
+  type UserFacingFailureKind
 } from "./core/plan.js"
 
 // ── Tools, LLM, memory ──────────────────────────────────────────────

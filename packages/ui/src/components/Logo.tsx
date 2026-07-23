@@ -13,6 +13,8 @@
 interface Props {
   size?: number
   online?: boolean
+  /** Continuous spin — subagent / in-progress work affordance. */
+  working?: boolean
   className?: string
 }
 
@@ -23,8 +25,13 @@ const BLOCK_WIDTH = 10
 const BLOCK_HEIGHT = 12
 const BLOCK_GAP = 8
 
-export function Logo({ size = 32, online = false, className }: Props) {
+export function Logo({ size = 32, online = false, working = false, className }: Props) {
   const width = Math.round((size * VIEWBOX_WIDTH) / VIEWBOX_HEIGHT)
+  const modeClass = working
+    ? "mia-colon-logo--working"
+    : online
+      ? "mia-colon-logo--online"
+      : "mia-colon-logo--offline"
 
   return (
     <svg
@@ -32,9 +39,9 @@ export function Logo({ size = 32, online = false, className }: Props) {
       viewBox={`0 0 ${VIEWBOX_WIDTH} ${VIEWBOX_HEIGHT}`}
       width={width}
       height={size}
-      aria-label={online ? "MI:A — online" : "MI:A — offline"}
+      aria-label={working ? "MI:A — working" : online ? "MI:A — online" : "MI:A — offline"}
       role="img"
-      className={`mia-colon-logo ${online ? "mia-colon-logo--online" : "mia-colon-logo--offline"}${className ? ` ${className}` : ""}`}
+      className={`mia-colon-logo ${modeClass}${className ? ` ${className}` : ""}`}
       style={{ flexShrink: 0, display: "block" }}
     >
       <rect

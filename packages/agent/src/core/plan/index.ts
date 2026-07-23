@@ -47,6 +47,7 @@ export { isLLMGibberish } from "./verifier-helpers/index.js"
 // Platform-error helpers and failure polishing (used by server + lib.ts barrel).
 export * from "./platform-errors.js"
 export * from "./polish-failure.js"
+export * from "./user-facing-failure.js"
 
 // Re-export all types
 export type {

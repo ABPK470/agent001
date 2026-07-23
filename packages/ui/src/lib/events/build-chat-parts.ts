@@ -110,7 +110,10 @@ export interface ResponseStepBlockPart {
   id: string
   title: string
   status: "running" | "done" | "error"
+  /** Short header beat (truncated in the row). */
   detail?: string
+  /** Full error / note — expandable under the row (not truncated). */
+  body?: string
   /** True when this step is a repair re-run (tools under it are the fix). */
   repair?: boolean
   /** True when the planner ran this step as a subagent_task. */
@@ -869,6 +872,8 @@ export function buildResponseParts(
           durationMs: entry.durationMs,
           formatMs,
         })
+        const errorBody =
+          !ok && entry.error && entry.error.trim().length > 0 ? entry.error.trim() : undefined
         // Process gaps (verify fail → repair) are normal agent work — settle
         // as done chrome with the reason in detail, never alarm-red "error".
         // Pipeline success is "completed"; older traces may use pass/success.
@@ -878,14 +883,20 @@ export function buildResponseParts(
           if (part.kind !== "step-block" || part.id !== activityId) return part
           const toolLabel =
             ok && part.tools.length > 0 ? stepToolsDetail(part.tools) : undefined
-          const detail =
-            toolLabel && endDetail
+          const shortFail =
+            errorBody && errorBody.length > 72
+              ? `${errorBody.slice(0, 71)}…`
+              : errorBody
+          const detail = ok
+            ? toolLabel && endDetail
               ? `${toolLabel} · ${endDetail}`
               : (toolLabel ?? endDetail)
+            : shortFail || endDetail
           return {
             ...part,
             status: "done" as const,
             detail,
+            body: errorBody ?? part.body,
             hasRunning: part.tools.some((t) => t.row.status === "running"),
           }
         })
@@ -974,11 +985,20 @@ export function buildResponseParts(
         parts = parts.map((part) => {
           if (part.kind !== "step-block" || part.id !== activityId) return part
           if (part.status === "done") return part
+          const failed = entry.status !== "done"
+          const fullError = failed ? (entry.error ?? "").trim() : ""
+          const shortDetail =
+            failed && fullError
+              ? fullError.length > 72
+                ? `${fullError.slice(0, 71)}…`
+                : fullError
+              : part.detail
           return {
             ...part,
-            // Delegation gaps are process — settle neutrally; detail keeps the reason.
+            // Delegation gaps are process — settle neutrally; full error in body.
             status: "done" as const,
-            detail: entry.status === "done" ? part.detail : (entry.error ?? part.detail),
+            detail: failed ? shortDetail : part.detail,
+            body: fullError || part.body,
             hasRunning: part.tools.some((t) => t.row.status === "running"),
           }
         })

@@ -33,6 +33,8 @@ import { isSyncSqlEventType } from "./sync/trace/sync-sql-trace"
 import { WIDGET_ICONS } from "./widget-icons"
 import {
   LOG_TOOLBAR_ICON_BTN,
+  WIDGET_LOG_SHELL_CLASS,
+  WIDGET_LOG_STACK_CLASS,
   WidgetToolbarCount,
   WidgetToolbarSearch,
 } from "./widget-toolbar"
@@ -296,9 +298,10 @@ export function LiveLogs() {
   }
 
   return (
-    <div ref={rootRef} className="h-full min-h-0 overflow-hidden flex flex-col text-text">
+    <div ref={rootRef} className={WIDGET_LOG_SHELL_CLASS}>
+      <div className={WIDGET_LOG_STACK_CLASS}>
       {/* Sync History dialect: one Filters sheet (time + type), same choice grid. */}
-      <div className="widget-toolbar shrink-0 m-3 mb-0">
+      <div className="widget-toolbar shrink-0">
         <div className="flex items-center gap-2 min-w-0">
           <div className="min-w-0 flex-1">
             <WidgetToolbarSearch
@@ -443,7 +446,7 @@ export function LiveLogs() {
       )}
 
       {error && (
-        <div className="px-3 py-2 text-sm text-error bg-error-soft rounded border border-error/20">
+        <div className="py-2 text-sm text-error bg-error-soft rounded border border-error/20">
           {error}
         </div>
       )}
@@ -456,12 +459,12 @@ export function LiveLogs() {
         <div ref={topSentinelRef} />
 
         {loadingOlder && (
-          <div className="px-3 py-2 text-sm text-text-muted text-center">Loading older events…</div>
+          <div className="py-2 text-sm text-text-muted text-center">Loading older events…</div>
         )}
         {!loadingOlder && hasMore && (
           <button
             type="button"
-            className="px-3 py-2 text-sm text-accent hover:text-accent-hover"
+            className="py-2 text-sm text-accent hover:text-accent-hover"
             onClick={() => loadOlder()}
           >
             Load older events
@@ -487,7 +490,7 @@ export function LiveLogs() {
         ))}
 
         {filtered.length === 0 && searchOnly.length > 0 && (
-          <div className="px-3 py-2 text-sm text-text-muted bg-elevated/30 border-t border-border-subtle">
+          <div className="py-2 text-sm text-text-muted bg-elevated/30 border-t border-border-subtle">
             Search matches outside the loaded window ({searchOnly.length})
           </div>
         )}
@@ -515,6 +518,7 @@ export function LiveLogs() {
           <ArrowDown size={14} /> Jump to latest
         </button>
       )}
+      </div>
     </div>
   )
 }
@@ -557,7 +561,7 @@ function LogRow({
   return (
     <div>
       <div
-        className={`flex items-baseline gap-2.5 py-1 px-3 ${
+        className={`flex items-baseline gap-2.5 py-1 ${
           log.error ? "bg-error-soft" : "hover:bg-overlay-1"
         } ${hasData ? "cursor-pointer" : ""}`}
         onClick={() => hasData && setExpanded((e) => !e)}

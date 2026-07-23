@@ -32,6 +32,8 @@ import type {
 import { IconButton, TOOLBAR_ICON } from "../entity-registry/IconButton"
 import { ToolbarMenu, ToolbarMenuItem } from "../entity-registry/ToolbarMenu"
 import {
+  WIDGET_LOG_INSET_CLASS,
+  WIDGET_LOG_STACK_CLASS,
   WidgetToolbar,
   WidgetToolbarLeading,
   WidgetToolbarSearchSlot,
@@ -551,7 +553,7 @@ export function EnvSync() {
   const showPublishSetupHint = entityPublishRequired || (definitions.length === 0 && envs.length >= 2)
 
   return (
-    <div ref={rootRef} className="relative flex h-full flex-col overflow-hidden text-text pb-1">
+    <div ref={rootRef} className="relative flex h-full flex-col overflow-hidden text-text">
       <SetupHintStrip open={showPublishSetupHint} icon={Rocket}>
           {definitions.length === 0 ? (
             <>
@@ -566,7 +568,8 @@ export function EnvSync() {
             </>
           )}
         </SetupHintStrip>
-      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden pt-3">
+      <div className={`flex min-h-0 flex-1 flex-col overflow-hidden ${WIDGET_LOG_INSET_CLASS} text-text`}>
+      <div className={WIDGET_LOG_STACK_CLASS}>
       <WidgetToolbar compact={compact} className="env-sync-toolbar overflow-visible z-20">
         <WidgetToolbarLeading>
           <label className="env-sync-field">
@@ -872,6 +875,7 @@ export function EnvSync() {
         />
       )}
       <ToastStack toasts={toasts} onDismiss={dismissToast} />
+      </div>
       </div>
     </div>
   )

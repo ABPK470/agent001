@@ -1,5 +1,6 @@
 import {
   Agent,
+  classifyUserFacingFailure,
   detectInternalFailure,
   EventType,
   fillRunReference,
@@ -329,17 +330,25 @@ export async function normalizeRunAnswer(
   console.error(
     `[run-executor] Internal failure for run ${request.runId} (${internalFailure.kind}): ${internalFailure.summary}`
   )
+  const classified = classifyUserFacingFailure(internalFailure)
   const polished = await polishFailureForUser(
     runtime.interaction.llm,
     {
       goal: request.goal,
       operatorSummary: internalFailure.summary,
-      failureKind: mapFailureKindForPolish(internalFailure.kind),
+      failureKind:
+        classified.kind === "rate_limited"
+          ? "rate_limited"
+          : mapFailureKindForPolish(internalFailure.kind),
+      userReason: classified.userReason,
       runRef: request.runId
     },
     { signal: runtime.controller.signal }
   )
   return polished
     ? markPolishedFailure(polished)
-    : fillRunReference(synthesizeGenericFailureAnswer(), asRunId(request.runId))
+    : fillRunReference(
+        synthesizeGenericFailureAnswer(classified.userReason),
+        asRunId(request.runId)
+      )
 }

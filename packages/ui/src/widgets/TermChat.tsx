@@ -32,7 +32,12 @@ import {
   formatToolInputDisplay,
 } from "../components/tool-code-display"
 import { ScrollToLatestButton } from "../components/ScrollToLatestButton"
+import { Logo } from "../components/Logo"
 import { SmartAnswer } from "../components/SmartAnswer"
+import {
+  formatFailureAnswerBody,
+  isUserSafeFailureAnswer,
+} from "./agentchat/failureAnswer"
 import { STICKY_GOAL_HOME_TOP, StickyUserGoal } from "../components/StickyUserGoal"
 import { TypewriterAnswer } from "../components/TypewriterAnswer"
 import { RunStatus } from "../enums"
@@ -827,6 +832,9 @@ function StepBlock({
   const [open, setOpen] = useState(part.hasRunning || keepOpen)
   const userToggledRef = useRef(false)
   const buttonRef = useRef<HTMLButtonElement>(null)
+  const working = Boolean(part.subagent && (part.hasRunning || part.status === "running"))
+  const [showLogo, setShowLogo] = useState(working)
+  const [logoExiting, setLogoExiting] = useState(false)
 
   useEffect(() => {
     if (userToggledRef.current) return
@@ -834,9 +842,25 @@ function StepBlock({
     else if (!keepOpen && part.status !== "running") setOpen(false)
   }, [part.hasRunning, part.status, keepOpen])
 
+  useEffect(() => {
+    if (working) {
+      setLogoExiting(false)
+      setShowLogo(true)
+      return
+    }
+    setLogoExiting(true)
+    const t = window.setTimeout(() => {
+      setShowLogo(false)
+      setLogoExiting(false)
+    }, 280)
+    return () => window.clearTimeout(t)
+  }, [working])
+
   const hasTools = part.tools.length > 0
-  const showBody = open && (hasTools || part.hasRunning)
-  const canToggle = hasTools
+  const errorBody = part.body?.trim() || ""
+  const hasErrorBody = errorBody.length > 0
+  const showBody = open && (hasTools || part.hasRunning || hasErrorBody)
+  const canToggle = hasTools || hasErrorBody
   const Chevron = open ? ChevronDown : ChevronRight
   // Step gaps are process detail — same muted chrome as successful steps.
   const labelClass =
@@ -861,12 +885,25 @@ function StepBlock({
           canToggle ? "transition-colors hover:text-text-secondary" : "cursor-default",
         ].join(" ")}
       >
+        {/* Working logo sits in front of the chevron; fades out when the step settles. */}
+        {showLogo ? (
+          <span
+            className="inline-flex h-3 w-3 shrink-0 items-center justify-center"
+            aria-hidden
+          >
+            <Logo
+              size={11}
+              working={!logoExiting}
+              className={logoExiting ? "mia-colon-logo--working-exit" : undefined}
+            />
+          </span>
+        ) : null}
         {/* Always reserve the chevron column so the title does not jump
             when the first nested tool arrives and the control appears. */}
         <span className="inline-flex h-3 w-3 shrink-0 items-center justify-center">
           {canToggle ? (
             <Chevron size={12} strokeWidth={1.5} className="text-text-faint" />
-          ) : part.hasRunning ? (
+          ) : part.hasRunning && !part.subagent ? (
             <span className="block h-1.5 w-1.5 rounded-full bg-text-faint/70" aria-hidden />
           ) : null}
         </span>
@@ -879,13 +916,18 @@ function StepBlock({
       </button>
       {showBody ? (
         <div className="mt-0.5 ml-[0.35rem] pl-3 border-l border-border-subtle min-w-0">
+          {hasErrorBody && open ? (
+            <div className="py-0.5 text-[15px] leading-6 text-text-faint whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+              {errorBody}
+            </div>
+          ) : null}
           {hasTools ? (
             <IterationToolList
               tools={part.tools}
               syncByInvocation={syncByInvocation}
               stickToBottom={part.hasRunning && isLiveRun}
             />
-          ) : (
+          ) : part.hasRunning && !hasErrorBody ? (
             <div className="py-0.5 text-[15px] leading-6 text-text-faint">
               <span
                 className="activity-shimmer-tight"
@@ -899,7 +941,7 @@ function StepBlock({
                 Starting…
               </span>
             </div>
-          )}
+          ) : null}
         </div>
       ) : null}
     </div>
@@ -1654,6 +1696,23 @@ function RunMessageImpl({
       }
 
       if (part.kind === "markdown") {
+        if (!part.streaming && isUserSafeFailureAnswer(part.text)) {
+          const { body, ref } = formatFailureAnswerBody(part.text)
+          items.push(
+            <div
+              key={part.id}
+              className="py-1.5 pr-2 min-w-0 text-[15px] leading-6 text-text-muted space-y-1.5"
+            >
+              <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{body}</p>
+              {ref ? (
+                <p className="text-text-faint font-mono text-[13px] break-all">
+                  Reference: {ref}
+                </p>
+              ) : null}
+            </div>,
+          )
+          return
+        }
         items.push(
           <TypewriterAnswer
             key={part.id}

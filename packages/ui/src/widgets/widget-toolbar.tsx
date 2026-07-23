@@ -4,6 +4,10 @@
  * Layout (wide):  [ leading filters ] [ search ············ ] [ trailing ]
  * Layout (compact): row1 = leading full width
  *                   row2 = search flex + trailing
+ *
+ * Chrome (all three flush widgets):
+ *   shell = top + left/right inset; stack = toolbar→body gap.
+ *   Do not put margin on the toolbar itself — the shell owns the inset.
  */
 
 import { Loader2, Search, X } from "lucide-react"
@@ -11,6 +15,17 @@ import type { JSX, ReactNode } from "react"
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { placeAnchoredPanelForElements } from "../lib/anchored-panel"
+
+/** Shared top/side/bottom inset (12px) — Event Stream, Pipelines, Sync. */
+export const WIDGET_LOG_INSET_CLASS = "pt-3 px-3 pb-1"
+
+/** Full-height shell for flush log widgets. */
+export const WIDGET_LOG_SHELL_CLASS =
+  `flex h-full min-h-0 flex-col overflow-hidden ${WIDGET_LOG_INSET_CLASS} text-text`
+
+/** Column under the shell: toolbar then body with a shared gap. */
+export const WIDGET_LOG_STACK_CLASS =
+  "flex min-h-0 flex-1 flex-col gap-3 overflow-hidden"
 
 /** @deprecated use WidgetToolbarChip classes via widget-toolbar__chip */
 export const LOG_TOOLBAR_CHIP = "widget-toolbar__chip"

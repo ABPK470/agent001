@@ -29,7 +29,10 @@ export interface PolishFailureInput {
     | "platform_unconfigured" // operator config missing
     | "capability_missing" // tool / feature isn't implemented
     | "verification_failed" // agent tried but couldn't satisfy criteria
+    | "rate_limited" // provider / Databricks quota
     | "internal" // catch-all
+  /** Optional plain-language reason already classified for the user. */
+  readonly userReason?: string
   /** Run reference the user can forward to an admin. */
   readonly runRef: string
 }
@@ -39,7 +42,8 @@ const SYSTEM_PROMPT = [
   "Write a short, kind, plain-language reply (1–3 sentences) acknowledging what they asked and explaining we can't help with it.",
   "",
   "STRICT RULES:",
-  "- Do NOT reveal technical details, code, JSON, env var names, file paths, tool names, error codes, or stack traces.",
+  "- Do NOT reveal SQL, JSON, env var names, file paths, stack traces, HTTP status codes, or raw API payloads.",
+  "- You MAY state the plain-language reason given below (rate limit, checks not met, etc.) — that is for the user.",
   "- Do NOT claim that anyone has been notified, alerted, paged, or that the team is investigating.",
   "- Do NOT promise it will be fixed soon or give an ETA.",
   "- Do NOT apologise more than once.",
@@ -55,14 +59,20 @@ function buildUserPrompt(input: PolishFailureInput): string {
     capability_missing:
       "This specific capability is not implemented yet — there is no tool that can perform what was asked. Politely say it's not something the assistant can do right now.",
     verification_failed:
-      "The assistant attempted the work but couldn't produce a result that meets the requirements. Acknowledge the attempt and that it didn't pan out.",
-    internal: "An internal problem prevented completion. Keep it generic."
+      "The assistant attempted the work but couldn't satisfy the final checks. Say what kind of problem that is in plain language (from the user reason), and that repair attempts were exhausted.",
+    rate_limited:
+      "The AI model service temporarily refused more requests (rate / quota limit). Tell the user clearly and ask them to retry shortly.",
+    internal: "An internal problem prevented completion. Prefer the user reason sentence if provided."
   }[input.failureKind]
 
   return [
     `User asked: """${input.goal.slice(0, 600)}"""`,
     "",
-    `Operator-only context (do NOT quote, paraphrase, or hint at this in your reply): ${input.operatorSummary.slice(0, 400)}`,
+    `User-safe reason (you MAY rephrase this; do not invent a different cause): ${
+      input.userReason?.slice(0, 280) ?? "(none — keep generic)"
+    }`,
+    "",
+    `Operator-only context (do NOT quote technical bits): ${input.operatorSummary.slice(0, 400)}`,
     "",
     `Situation: ${reasonGuidance}`,
     "",
@@ -93,6 +103,9 @@ export function mapFailureKindForPolish(internalKind: string): PolishFailureInpu
   if (internalKind.startsWith("platform_unconfigured")) return "platform_unconfigured"
   if (internalKind.startsWith("planner_failure:validation")) return "capability_missing" // unknown_tool, etc.
   if (internalKind.startsWith("planner_failure")) return "internal"
+  if (internalKind === "provider_rate_limited" || internalKind === "rate_limited") {
+    return "rate_limited"
+  }
   if (internalKind === "task_failed") return "verification_failed"
   return "internal"
 }

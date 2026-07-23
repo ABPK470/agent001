@@ -127,12 +127,18 @@ export function markPolishedFailure(text: string): string {
   return `${POLISHED_FAILURE_MARKER}${text}`
 }
 
-/** Build the opaque generic-failure answer with a placeholder for run reference. */
-export function synthesizeGenericFailureAnswer(): string {
+/**
+ * Build the user-safe failure answer with a placeholder for run reference.
+ * `userReason` is a plain-language sentence (no SQL/stack traces) — users
+ * deserve to know what kind of thing went wrong, not only a run id.
+ */
+export function synthesizeGenericFailureAnswer(userReason?: string): string {
+  const reason =
+    userReason?.trim() || "Something went wrong while processing this request."
   return [
     GENERIC_FAILURE_PREFIX,
     "",
-    `Something went wrong while processing this request.`,
+    reason,
     "",
     `Please share this reference with an admin so they can investigate: ${RUN_REF_PLACEHOLDER}`
   ].join("\n")

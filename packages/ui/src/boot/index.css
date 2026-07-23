@@ -3968,6 +3968,26 @@ textarea.input {
   animation: mia-colon-live-shuffle-bottom 6.5s linear infinite;
 }
 
+/* Subagent step in-progress — continuous gentle spin (not the online pulse). */
+@keyframes mia-colon-working-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.mia-colon-logo--working {
+  color: var(--logo-mark-live);
+  opacity: 0.85;
+  animation: mia-colon-working-spin 1.05s linear infinite;
+  transition: opacity 280ms ease, transform 280ms ease;
+}
+
+.mia-colon-logo--working-exit {
+  animation: none;
+  opacity: 0;
+  transform: scale(0.7) rotate(0deg);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .mia-colon-logo--online {
     animation: none;
@@ -3975,6 +3995,11 @@ textarea.input {
 
   .mia-colon-logo--online .mia-colon-logo-dot {
     animation: none;
+  }
+
+  .mia-colon-logo--working {
+    animation: none;
+    opacity: 0.7;
   }
 }
 

@@ -268,6 +268,48 @@ describe("buildResponseParts — TermChat projection", () => {
     }
   })
 
+  it("puts full delegation error in expandable body (header stays short)", () => {
+    const longError =
+      "Delegation failed: Databricks API error 429: request limit exceeded — please retry after the quota window resets for workspace abc-123"
+    const parts = buildResponseParts(
+      [
+        {
+          kind: "planner-step-start",
+          stepName: "analyze_revenue",
+          stepType: "subagent_task",
+        },
+        {
+          kind: "planner-delegation-start",
+          stepName: "analyze_revenue",
+          goal: "Ground revenue",
+          depth: 1,
+          tools: ["query_mssql"],
+        },
+        {
+          kind: "planner-delegation-end",
+          stepName: "analyze_revenue",
+          depth: 1,
+          status: "failed",
+          error: longError,
+        },
+      ],
+      "running",
+      "",
+      null,
+      null,
+      null,
+      "run-1",
+    )
+
+    const step = parts.find((p) => p.kind === "step-block")
+    expect(step?.kind).toBe("step-block")
+    if (step?.kind === "step-block") {
+      expect(step.body).toBe(longError)
+      expect(step.detail?.endsWith("…") || (step.detail?.length ?? 0) <= 72).toBe(true)
+      expect(step.detail).not.toEqual(longError)
+    }
+  })
+
   it("nests deterministic tool I/O under the step (chevron + args/output)", () => {
     const parts = buildResponseParts(
       [
