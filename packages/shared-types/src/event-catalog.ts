@@ -417,9 +417,16 @@ export const TRACE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
   "planner-delegation-decision": {
     id: "planner-delegation-decision",
     family: "delegation",
-    label: "Delegation",
+    label: "Subagent mode",
     severity: "info",
-    summary: (p) => str(p.reason, p.shouldDelegate ? "delegate" : "skip"),
+    summary: (p) => {
+      const mode = str(p.executionMode)
+      if (mode === "parallel") return "parallel subagents"
+      if (mode === "serial") return "serial subagents"
+      if (mode === "guided") return "guided subagents"
+      if (mode === "stop") return "blocked"
+      return str(p.reason, p.shouldDelegate ? "parallel" : "serial")
+    },
   },
   "planner-verification": {
     id: "planner-verification",

@@ -757,6 +757,31 @@ export function buildResponseParts(
         parts = setActivityPart(parts, activityId, label, "running", undefined, true)
         break
       }
+      case "planner-delegation-decision": {
+        const mode = entry.executionMode
+        const modeLabel =
+          mode === "parallel"
+            ? "Parallel subagents"
+            : mode === "serial"
+              ? "Serial subagents"
+              : mode === "guided"
+                ? "Guided subagents"
+                : mode === "stop"
+                  ? "Subagents blocked"
+                  : entry.shouldDelegate
+                    ? "Parallel subagents"
+                    : "Serial subagents"
+        parts = settlePrimaryActivities(parts, "plan")
+        parts = setActivityPart(
+          parts,
+          "plan",
+          "Plan",
+          mode === "stop" ? "error" : "done",
+          modeLabel,
+          true,
+        )
+        break
+      }
       case "planner-generating":
         parts = settlePrimaryActivities(parts, "plan")
         parts = setActivityPart(parts, "plan", eventLabel("planner-generating"), "running", "Generating plan...", true)

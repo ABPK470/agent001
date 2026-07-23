@@ -419,8 +419,18 @@ export type TraceEntry =
   }
   | { kind: "planner-retry"; attempt: number; reason: string; skippedSteps?: number; retrySteps?: number; rerunOrder?: string[] }
   | { kind: "planner-retry-skipped"; reason: string }
-  // Delegation decision gate (safety, economics, hard-block)
-  | { kind: "planner-delegation-decision"; shouldDelegate: boolean; reason: string; utilityScore: number; safetyRisk: number; confidence: number; hardBlockedTaskClass: string | null }
+  // Delegation decision gate (safety, economics → execution mode)
+  | {
+    kind: "planner-delegation-decision"
+    shouldDelegate: boolean
+    reason: string
+    utilityScore: number
+    safetyRisk: number
+    confidence: number
+    hardBlockedTaskClass: string | null
+    /** Tier 1 mode for `subagent_task` steps: parallel | serial | guided | stop */
+    executionMode?: "parallel" | "serial" | "guided" | "stop"
+  }
   // Pipeline budget extension (planner/circuit-breaker)
   | { kind: "planner-budget-extended"; completedSteps: number; effectiveBudget: number; extensions: number }
   // Escalation graph

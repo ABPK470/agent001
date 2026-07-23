@@ -18,7 +18,6 @@ import {
     FilePlus,
     FileSearch,
     FolderOpen,
-    GitFork,
     Globe,
     MessageSquare,
     Network,
@@ -66,8 +65,6 @@ const TOOL_ICONS: Record<string, typeof Shield> = {
   profile_data: Database,
   inspect_definition: FileSearch,
   search_catalog: Search,
-  delegate: GitFork,
-  delegate_parallel: GitFork,
 }
 
 function getToolIcon(name: string): typeof Shield {

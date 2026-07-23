@@ -577,17 +577,30 @@ function phaseFromEntry(entry: TraceEntry, index: number): PhaseUpdate | null {
           ),
         ],
       }
-    case "planner-delegation-decision":
+    case "planner-delegation-decision": {
+      const mode = entry.executionMode
+      const modeLabel =
+        mode === "parallel"
+          ? "Parallel subagents"
+          : mode === "serial"
+            ? "Serial subagents"
+            : mode === "guided"
+              ? "Guided subagents"
+              : mode === "stop"
+                ? "Blocked"
+                : entry.shouldDelegate
+                  ? "Parallel subagents"
+                  : "Serial subagents"
       return {
         family: "plan",
-        title: "Plan",
-        summary: entry.shouldDelegate ? "will delegate" : "no delegation",
-        status: "done",
+        title: "Subagent mode",
+        summary: modeLabel.toLowerCase(),
+        status: mode === "stop" ? "error" : "done",
         details: [
           detailEvent(
             `del-dec-${index}`,
             [
-              entry.shouldDelegate ? "Delegate" : "Skip delegation",
+              modeLabel,
               entry.reason,
               `utility ${entry.utilityScore.toFixed(2)}`,
               `safety ${entry.safetyRisk.toFixed(2)}`,
@@ -595,6 +608,7 @@ function phaseFromEntry(entry: TraceEntry, index: number): PhaseUpdate | null {
           ),
         ],
       }
+    }
     case "planner-verification": {
       const details: TracePhaseDetail[] = entry.steps.map((s, si) =>
         detailEvent(

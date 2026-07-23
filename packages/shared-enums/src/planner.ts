@@ -20,6 +20,39 @@ export const PLANNER_ROUTE_VALUES: ReadonlyArray<PlannerRoute> = Object.values(P
 export const isPlannerRoute = (value: unknown): value is PlannerRoute =>
   typeof value === "string" && (PLANNER_ROUTE_VALUES as readonly string[]).includes(value)
 
+/**
+ * Tier 1 — how a validated plan's `subagent_task` steps execute.
+ * Emitted on `planner-delegation-decision` as `executionMode`.
+ */
+export const PlanExecutionMode = {
+  Parallel: "parallel",
+  Serial: "serial",
+  Guided: "guided",
+  Stop: "stop",
+} as const
+
+export type PlanExecutionMode = (typeof PlanExecutionMode)[keyof typeof PlanExecutionMode]
+
+export const PLAN_EXECUTION_MODE_VALUES: ReadonlyArray<PlanExecutionMode> =
+  Object.values(PlanExecutionMode)
+
+export const isPlanExecutionMode = (value: unknown): value is PlanExecutionMode =>
+  typeof value === "string" && (PLAN_EXECUTION_MODE_VALUES as readonly string[]).includes(value)
+
+/** Short UI label for a plan execution mode. */
+export function planExecutionModeLabel(mode: PlanExecutionMode): string {
+  switch (mode) {
+    case "parallel":
+      return "Parallel subagents"
+    case "serial":
+      return "Serial subagents"
+    case "guided":
+      return "Guided subagents"
+    case "stop":
+      return "Blocked"
+  }
+}
+
 /** Phase of a single planner-step lifecycle transition. */
 export const PlannerStepPhase = {
   Execution: "execution",

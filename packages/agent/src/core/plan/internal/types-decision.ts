@@ -22,7 +22,10 @@
  * @module
  */
 
-export type PlannerRoute = "direct" | "planner"
+export type { PlanExecutionMode, PlannerRoute } from "@mia/shared-enums"
+export { PlanExecutionMode as PlanExecutionModeValues } from "@mia/shared-enums"
+
+import type { PlannerRoute } from "@mia/shared-enums"
 
 export interface PlannerDecision {
   readonly route: PlannerRoute
@@ -30,15 +33,3 @@ export interface PlannerDecision {
   readonly shouldPlan: boolean
   readonly score: number
 }
-
-/**
- * Tier 1 — how a validated plan's `subagent_task` steps execute.
- *
- *   parallel — economics ok; fan out up to the pipeline parallelism cap
- *   serial   — economics declined fan-out; still spawn children, one at a time,
- *              with normal per-step envelopes
- *   guided   — economics declined and steps look thin; still spawn serially,
- *              but with the parent's full tool set (looser allowlist)
- *   stop     — safety / hard-block; execution never starts
- */
-export type PlanExecutionMode = "parallel" | "serial" | "guided" | "stop"

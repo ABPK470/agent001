@@ -769,6 +769,7 @@ function buildKitchenSink(): TraceEntry[] {
       safetyRisk: 0.1,
       confidence: 0.8,
       hardBlockedTaskClass: null,
+      executionMode: "parallel",
     },
     { kind: "planner-pipeline-start", attempt: 1, verifierRound: 0, maxRetries: 2 },
     { kind: "planner-step-start", stepName: "blueprint_site", stepType: "subagent_task" },

@@ -239,6 +239,24 @@ export function RunStatus() {
   const latestPlannerDecision = [...trace].reverse().find(
     (entry): entry is PlannerDecisionTrace => entry.kind === "planner-decision",
   )
+  type SubagentModeTrace = Extract<TraceEntry, { kind: "planner-delegation-decision" }>
+  const latestSubagentMode = [...trace].reverse().find(
+    (entry): entry is SubagentModeTrace => entry.kind === "planner-delegation-decision",
+  )
+  const subagentModeLabel =
+    latestSubagentMode?.executionMode === "parallel"
+      ? "Parallel"
+      : latestSubagentMode?.executionMode === "serial"
+        ? "Serial"
+        : latestSubagentMode?.executionMode === "guided"
+          ? "Guided"
+          : latestSubagentMode?.executionMode === "stop"
+            ? "Blocked"
+            : latestSubagentMode
+              ? latestSubagentMode.shouldDelegate
+                ? "Parallel"
+                : "Serial"
+              : null
 
   return (
     <div ref={rootRef} className="relative flex h-full flex-col gap-3 overflow-y-auto">
@@ -363,6 +381,19 @@ export function RunStatus() {
             </div>
           </div>
           <div className="mt-2 text-[13px] text-text-secondary">{latestPlannerDecision.reason}</div>
+          {subagentModeLabel && latestPlannerDecision.shouldPlan && (
+            <div className="mt-2 flex items-center justify-between gap-3 border-t border-success/15 pt-2">
+              <div>
+                <div className="text-[13px] uppercase tracking-wide text-text-muted">Subagent mode</div>
+                <div className="mt-0.5 text-sm text-text-secondary">{subagentModeLabel}</div>
+              </div>
+              {latestSubagentMode && (
+                <div className="text-[12px] text-text-muted">
+                  utility {latestSubagentMode.utilityScore.toFixed(2)}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
