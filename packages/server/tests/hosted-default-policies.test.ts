@@ -308,6 +308,24 @@ describe("deploy/policies/defaults.json", () => {
     expect(prod.error).toBeUndefined()
   })
 
+  it("allows agent sync_execute (planId+confirm only) when plan target resolves to DEV", async () => {
+    const ev = buildHostedEvaluator()
+    const missingTarget = await evaluate(
+      ev,
+      makeStep("sync_execute", { planId: "p1", confirm: true }),
+      hostedCtx(),
+    )
+    expect(missingTarget.error?.message).toMatch(/hosted_default_deny/)
+
+    const fromPlan = await evaluate(
+      ev,
+      makeStep("sync_execute", { planId: "p1", confirm: true }),
+      hostedCtx({ resolveSyncPlanTarget: () => "dev" }),
+    )
+    expect(fromPlan.error).toBeUndefined()
+    expect(fromPlan.approval).toBeNull()
+  })
+
   it("requires approval for outbound fetch", async () => {
     const ev = buildHostedEvaluator()
     const fetch = await evaluate(ev, makeStep("fetch_url", { url: "https://example.com" }), hostedCtx())

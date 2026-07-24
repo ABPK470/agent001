@@ -46,4 +46,12 @@ export interface HostedPolicyContext {
     toolName: string
     args: Record<string, unknown>
   }>
+  /**
+   * Resolve `sync_execute` write target from a stored plan when the tool
+   * args omit `target` (agent schema is planId + confirm only). HTTP Sync
+   * passes target explicitly; agent path must load it from the plan or
+   * env-scoped allow/deny rules never match and fall through to
+   * hosted_default_deny.
+   */
+  readonly resolveSyncPlanTarget?: (planId: string) => string | undefined
 }

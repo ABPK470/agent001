@@ -161,6 +161,8 @@ export function extractToolFacts(step: Step, ctx?: HostedPolicyContext): ToolFac
   // Sync tools — target environment + operation (preview vs execute).
   // Agent tools and HTTP Sync both synthesize steps with these action
   // names; `target` is the Sync env name used as the write destination.
+  // `sync_execute` args are planId+confirm only — resolve target from the
+  // plan when the shell provides resolveSyncPlanTarget (same as HTTP).
   if (
     step.action === "sync_preview" ||
     step.action === "sync_execute" ||
@@ -172,6 +174,14 @@ export function extractToolFacts(step: Step, ctx?: HostedPolicyContext): ToolFac
     step.action === "list_sync_definitions"
   ) {
     facts.dbEnvironment = extractDbEnvironment(input, ctx)
+    if (
+      !facts.dbEnvironment &&
+      step.action === "sync_execute" &&
+      typeof input["planId"] === "string" &&
+      ctx?.resolveSyncPlanTarget
+    ) {
+      facts.dbEnvironment = normalizeDbEnvironment(ctx.resolveSyncPlanTarget(input["planId"]))
+    }
     facts.dbOperation = classifyDbOperation(step.action, "")
   }
 
@@ -195,17 +205,23 @@ function extractDbEnvironment(
     input["target"],
   ]
   for (const raw of candidates) {
-    if (typeof raw !== "string") continue
-    const key = raw.toLowerCase()
-    if (
-      key === PolicyDbEnvironment.Dev ||
-      key === PolicyDbEnvironment.Uat ||
-      key === PolicyDbEnvironment.Prod
-    ) {
-      return key
-    }
+    const key = normalizeDbEnvironment(raw)
+    if (key) return key
   }
   return ctx?.defaultDbEnvironment
+}
+
+function normalizeDbEnvironment(raw: unknown): PolicyDbEnvironment | undefined {
+  if (typeof raw !== "string") return undefined
+  const key = raw.toLowerCase()
+  if (
+    key === PolicyDbEnvironment.Dev ||
+    key === PolicyDbEnvironment.Uat ||
+    key === PolicyDbEnvironment.Prod
+  ) {
+    return key
+  }
+  return undefined
 }
 
 function classifyPath(raw: string, sandboxRoot: string | null): PolicyScope {
