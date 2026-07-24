@@ -1,9 +1,9 @@
-import { LayoutGrid, LogOut } from "lucide-react"
+import { LogOut } from "lucide-react"
 import type { Me } from "../hooks/useMe"
 import { ChatChromeButton } from "./ChatChrome"
 import { SessionMenu } from "./SessionMenu"
 import { ViewingAsControl } from "./ViewingAsControl"
-import { shellModeToggleHint, type AppShellMode } from "./types"
+import type { AppShellMode } from "./types"
 
 interface Props {
   onModeChange: (mode: AppShellMode) => void
@@ -12,19 +12,16 @@ interface Props {
 }
 
 export function ChatShellActions({ onModeChange, onSignOut, me }: Props) {
-  const shortcut = shellModeToggleHint()
   return (
     <div className="relative z-10 flex shrink-0 items-center gap-2">
       <ViewingAsControl chromeVariant="chat" />
-      <ChatChromeButton
-        onClick={() => onModeChange("workspace")}
-        title={`Workspace (${shortcut})`}
-        aria-label={`Open workspace (${shortcut})`}
-      >
-        <LayoutGrid size={17} />
-      </ChatChromeButton>
       {me ? (
-        <SessionMenu me={me} onSignOut={onSignOut} chromeVariant="chat" />
+        <SessionMenu
+          me={me}
+          onSignOut={onSignOut}
+          chromeVariant="chat"
+          onOpenWorkspace={() => onModeChange("workspace")}
+        />
       ) : (
         <ChatChromeButton onClick={onSignOut} title="Sign out" aria-label="Sign out">
           <LogOut size={16} />

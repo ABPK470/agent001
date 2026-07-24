@@ -6,7 +6,9 @@ import {
   Activity,
   ArrowRightLeft,
   BookOpen,
+  LayoutGrid,
   LogOut,
+  MessageSquare,
   Scale,
   Shield,
 } from "lucide-react"
@@ -24,12 +26,17 @@ import { AsciiMicroField } from "./AsciiMicroField"
 import { CHAT_CHROME_BTN } from "./ChatChrome"
 import { SessionMenuIcon } from "./SessionMenuIcon"
 import { SessionThemeSwitch } from "./SessionThemeSwitch"
+import { shellModeToggleHint } from "./types"
 
 interface Props {
   me: Me
   onSignOut: () => void
   /** Chat shell: plain frosted control like workspace — no admin ASCII texture. */
   chromeVariant?: "default" | "chat"
+  /** Chat → workspace (header icon removed; ⌘\ / Ctrl\ still works in App). */
+  onOpenWorkspace?: () => void
+  /** Workspace → chat (header icon removed; shortcut still works in App). */
+  onOpenChat?: () => void
 }
 
 function menuItemClass(destructive = false): string {
@@ -41,7 +48,13 @@ function menuItemClass(destructive = false): string {
   ].join(" ")
 }
 
-export function SessionMenu({ me, onSignOut, chromeVariant = "default" }: Props) {
+export function SessionMenu({
+  me,
+  onSignOut,
+  chromeVariant = "default",
+  onOpenWorkspace,
+  onOpenChat,
+}: Props) {
   const [open, setOpen] = useState(false)
   const setPolicyEditorOpen = useStore((s) => s.setPolicyEditorOpen)
   const [usageOpen, setUsageOpen] = useState(false)
@@ -55,7 +68,7 @@ export function SessionMenu({ me, onSignOut, chromeVariant = "default" }: Props)
   const subtitle = accountSubtitle(me)
   const role = accountRoleLabel(me)
   const showAdminSection = me.isAdmin
-  const hasMenuActions = showAdminSection
+  const shellShortcut = onOpenWorkspace || onOpenChat ? shellModeToggleHint() : null
 
   useEffect(() => {
     if (!open) return
@@ -70,13 +83,47 @@ export function SessionMenu({ me, onSignOut, chromeVariant = "default" }: Props)
 
   const close = () => setOpen(false)
 
+  const shellSwitchItem = onOpenWorkspace ? (
+    <button
+      type="button"
+      role="menuitem"
+      className={menuItemClass()}
+      onClick={() => {
+        onOpenWorkspace()
+        close()
+      }}
+    >
+      <LayoutGrid size={15} className="shrink-0 text-text-muted" />
+      <span className="min-w-0 flex-1">Workspace</span>
+      {shellShortcut && (
+        <span className="shrink-0 font-mono text-[11px] text-text-faint">{shellShortcut}</span>
+      )}
+    </button>
+  ) : onOpenChat ? (
+    <button
+      type="button"
+      role="menuitem"
+      className={menuItemClass()}
+      onClick={() => {
+        onOpenChat()
+        close()
+      }}
+    >
+      <MessageSquare size={15} className="shrink-0 text-text-muted" />
+      <span className="min-w-0 flex-1">Chat</span>
+      {shellShortcut && (
+        <span className="shrink-0 font-mono text-[11px] text-text-faint">{shellShortcut}</span>
+      )}
+    </button>
+  ) : null
+
   const triggerClass =
     chromeVariant === "chat"
       ? CHAT_CHROME_BTN
       : [
           "session-menu-trigger",
           me.isAdmin ? "session-menu-trigger--admin" : "",
-          // Same chrome as Toolbar MessageSquare / NotificationPanel icons.
+          // Same chrome as Toolbar NotificationPanel icons.
           "flex h-9 w-9 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-overlay-hover hover:text-text",
         ]
           .filter(Boolean)
@@ -123,10 +170,16 @@ export function SessionMenu({ me, onSignOut, chromeVariant = "default" }: Props)
                   <p className="mt-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-text-faint">{role}</p>
                 </div>
 
-                {hasMenuActions && <div className="session-menu-divider" />}
+                {shellSwitchItem && (
+                  <>
+                    <div className="session-menu-divider" />
+                    {shellSwitchItem}
+                  </>
+                )}
 
                 {showAdminSection && (
                   <>
+                    <div className="session-menu-divider" />
                     <p className="px-4 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-text-faint">
                       Administration
                     </p>
@@ -193,7 +246,7 @@ export function SessionMenu({ me, onSignOut, chromeVariant = "default" }: Props)
                   </>
                 )}
 
-                {hasMenuActions && <div className="session-menu-divider" />}
+                <div className="session-menu-divider" />
                 <SessionThemeSwitch />
 
                 <div className="session-menu-divider" />
@@ -239,6 +292,13 @@ export function SessionMenu({ me, onSignOut, chromeVariant = "default" }: Props)
                     </p>
                   )}
                 </div>
+
+                {shellSwitchItem && (
+                  <>
+                    {shellSwitchItem}
+                    <div className="session-menu-divider" />
+                  </>
+                )}
 
                 <SessionThemeSwitch compact />
 

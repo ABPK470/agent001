@@ -84,13 +84,14 @@
   --color-datatype-real: var(--dt-real);
   --color-datatype-bin: var(--dt-bin);
 
-  /* Visualization palette — same in both themes */
+  /* Visualization palette — same in both themes (charts / markdown diagrams) */
   --color-viz-deep: #342F57;
   --color-viz-mid: #584770;
   --color-viz-plum: #825776;
   --color-viz-rose: #D17877;
   --color-viz-peach: #F49D6C;
   --color-viz-coral: #EA6248;
+  --color-viz-sky: #6CB4EE; /* chart sky — C.cyan / CHART_PALETTE[1] */
 
   --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", "Cascadia Code", monospace;
@@ -154,6 +155,10 @@
   --error-soft: rgba(248, 113, 113, 0.14);
   --info: #60a5fa;
   --info-soft: rgba(96, 165, 250, 0.14);
+
+  /* Viewing as — brand accent (same ink as live logo mark). */
+  --viewing-as: var(--accent);
+  --viewing-as-soft: var(--accent-soft);
 
   --scrim: rgba(0, 0, 0, 0.72);
   --scrim-strong: rgba(0, 0, 0, 0.90);
@@ -226,6 +231,10 @@
   --error-soft: rgba(185, 28, 28, 0.10);
   --info: #1d4ed8;
   --info-soft: rgba(29, 78, 216, 0.10);
+
+  /* Viewing as — deep bright blue (readable on cream). */
+  --viewing-as: #3B45FF;
+  --viewing-as-soft: rgba(59, 69, 255, 0.14);
 
   --scrim: rgba(0, 0, 0, 0.48);
   --scrim-strong: rgba(0, 0, 0, 0.78);
@@ -7427,9 +7436,25 @@ textarea.input {
   pointer-events: none;
 }
 
-/* Quiet accent when Viewing as another user (must know). */
-.app-shell-view--viewing-as {
-  box-shadow: inset 0 0 0 2px color-mix(in srgb, #d97706 55%, transparent);
+/*
+ * Viewing as someone else — header identity lock (solid fill).
+ * No viewport frame; the control is the must-know signal.
+ */
+.viewing-as-trigger--other {
+  color: #fff;
+  background: var(--viewing-as);
+  transition: filter 120ms ease, background-color 120ms ease;
+}
+.viewing-as-trigger--other:hover {
+  color: #fff;
+  filter: brightness(1.08);
+}
+.viewing-as-back-to-me {
+  color: var(--viewing-as);
+  background: var(--viewing-as-soft);
+}
+.viewing-as-back-to-me:hover {
+  background: color-mix(in srgb, var(--viewing-as) 22%, transparent);
 }
 
 @media (prefers-reduced-motion: reduce) {

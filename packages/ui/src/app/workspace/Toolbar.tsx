@@ -2,7 +2,7 @@
  * Toolbar — workspace shell: views, widgets, ops controls.
  */
 
-import { ChevronDown, GripVertical, LayoutGrid, MessageSquare, Plus, X } from "lucide-react"
+import { ChevronDown, GripVertical, LayoutGrid, Plus, X } from "lucide-react"
 import { Fragment, useEffect, useRef, useState } from "react"
 import type { Me } from "../../hooks/useMe"
 import { useViewTabReorder } from "../../hooks/useViewTabReorder"
@@ -11,7 +11,6 @@ import { SessionMenu } from "../SessionMenu"
 import { ViewingAsControl } from "../ViewingAsControl"
 import { CHAT_BRAND_LOGO_SIZE } from "../brand"
 import type { AppShellMode } from "../types"
-import { shellModeToggleHint } from "../types"
 import { useStore } from "../../state/store"
 import { useLayoutStore } from "../../state/layout-store"
 import { Logo } from "../../components/Logo"
@@ -24,9 +23,6 @@ interface Props {
   onModeChange: (mode: AppShellMode) => void
   me?: Me | null
 }
-
-const ICON_BTN =
-  "flex items-center justify-center w-9 h-9 rounded-lg text-text-muted hover:text-text hover:bg-overlay-hover transition-colors"
 
 export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
   const connected = useStore((s) => s.connected)
@@ -241,16 +237,13 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
         )}
         <NotificationPanel />
         <ViewingAsControl />
-        <button
-          type="button"
-          onClick={() => onModeChange("chat")}
-          title={`Chat (${shellModeToggleHint()})`}
-          aria-label={`Open chat (${shellModeToggleHint()})`}
-          className={ICON_BTN}
-        >
-          <MessageSquare size={15} />
-        </button>
-        {me && <SessionMenu me={me} onSignOut={onSignOut} />}
+        {me && (
+          <SessionMenu
+            me={me}
+            onSignOut={onSignOut}
+            onOpenChat={() => onModeChange("chat")}
+          />
+        )}
       </div>
     </header>
   )

@@ -660,7 +660,7 @@ export function App() {
       <ApprovalRequiredModal />
       {policyEditorOpen && !popOut && <PolicyEditor onClose={() => setPolicyEditorOpen(false)} />}
       <div
-        className={`app-shell-view flex flex-col h-screen min-h-[100dvh] ${shellVisible ? "" : "app-shell-view--fading"} ${isViewingAsOther ? "app-shell-view--viewing-as" : ""}`}
+        className={`app-shell-view flex flex-col h-screen min-h-[100dvh] ${shellVisible ? "" : "app-shell-view--fading"}`}
       >
         {me && (
           <PlatformHealthBanner
