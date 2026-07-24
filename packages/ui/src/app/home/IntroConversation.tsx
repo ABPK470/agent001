@@ -586,7 +586,7 @@ export function IntroConversation({
           <IntroBrandWordmark
             onBrandReady={() => brandReadyRef.current?.resolve()}
             beginReveal={brandRevealReady}
-            beginResolve={!heroComposition}
+            beginResolve={userEngaged || !heroComposition}
             serverReachable={serverReachable}
           />
         </div>
@@ -734,7 +734,6 @@ export function IntroConversation({
                             type={showAsPassword ? "password" : "text"}
                             value={draft}
                             onChange={(e) => {
-                              if (e.target.value.length > 0) engageBrandResolve()
                               setDraft(e.target.value)
                               if (error) setError(null)
                             }}

@@ -3956,27 +3956,6 @@ textarea.input {
   animation: mia-colon-live-rotate 6.5s linear infinite;
 }
 
-/* Keep hero optical scale while the live idle loop runs. */
-@keyframes mia-colon-live-rotate-hero {
-  0%, 36% {
-    transform: scale(1.55) rotate(0deg);
-  }
-  36% {
-    animation-timing-function: cubic-bezier(0.62, 0, 0.25, 1);
-  }
-  42% {
-    transform: scale(1.55) rotate(90deg);
-    animation-timing-function: cubic-bezier(0.62, 0, 0.25, 1);
-  }
-  54%, 72%, 100% {
-    transform: scale(1.55) rotate(360deg);
-  }
-}
-
-.intro3-root--hero .mia-colon-logo--online.intro3-wm-mark {
-  animation-name: mia-colon-live-rotate-hero;
-}
-
 .mia-colon-logo--online .mia-colon-logo-dot--top {
   animation: mia-colon-live-shuffle-top 6.5s linear infinite;
 }
@@ -6932,26 +6911,39 @@ textarea.input {
 .intro3-brand-sequence {
   display: inline-flex;
   align-items: center;
-  gap: 0.04em;
+  gap: 0.14em;
   flex-shrink: 0;
   white-space: nowrap;
   font-family: var(--font-mono);
   font-weight: 700;
-  font-size: 28px;
+  font-size: 20px;
   letter-spacing: 0.072em;
   color: var(--text);
   line-height: 1;
   --wm-colon-w: 0.95em;
-  /* Flat size handoff — linear, not a camera ease. */
-  transition: font-size 220ms linear;
 }
 
-.intro3-root:not(.intro3-root--hero) .intro3-brand-sequence {
+/*
+ * Hold hero letter size until MI:A is gone (--live).
+ * Colon optical size is NOT font-size — see .intro3-wm-colon-anchor scale.
+ */
+.intro3-root--hero .intro3-brand-sequence,
+.intro3-brand-sequence--pinching,
+.intro3-brand-sequence--open:not(.intro3-brand-sequence--live),
+.intro3-brand-sequence--resolving {
+  font-size: 28px;
+}
+/* Snap font once letters are gone — do not tween em box with colon scale. */
+.intro3-brand-sequence--live {
   font-size: 20px;
+  transition: none;
 }
 
 @media (min-width: 640px) {
-  .intro3-root--hero .intro3-brand-sequence {
+  .intro3-root--hero .intro3-brand-sequence,
+  .intro3-brand-sequence--pinching,
+  .intro3-brand-sequence--open:not(.intro3-brand-sequence--live),
+  .intro3-brand-sequence--resolving {
     font-size: 32px;
   }
 }
@@ -6963,9 +6955,41 @@ textarea.input {
   justify-content: center;
   flex-shrink: 0;
   vertical-align: middle;
-  min-width: var(--wm-colon-w, 0.95em);
-  min-height: var(--wm-colon-w, 0.95em);
+  /* Fixed px box (logo is 17×~13) — never em, or font-size fights scale. */
+  width: 13px;
+  height: 17px;
+  min-width: 13px;
+  min-height: 17px;
   overflow: visible;
+  transform: scale(1);
+  transform-origin: center center;
+  transition:
+    transform 320ms cubic-bezier(0.37, 0, 0.63, 1),
+    margin-inline 320ms cubic-bezier(0.37, 0, 0.63, 1);
+  margin-inline: 0;
+}
+
+/*
+ * Scale overflows layout — pad margin only while MI/A are present.
+ * On resolve, margin + letter width clear first; --live only scales in place.
+ */
+.intro3-root--hero .intro3-wm-colon-anchor,
+.intro3-brand-sequence--pinching .intro3-wm-colon-anchor,
+.intro3-brand-sequence--open:not(.intro3-brand-sequence--live):not(.intro3-brand-sequence--resolving) .intro3-wm-colon-anchor {
+  transform: scale(1.55);
+  margin-inline: 5px;
+}
+.intro3-brand-sequence--resolving .intro3-wm-colon-anchor {
+  /* Still large; layout already settling to solo : — no later sideways jump. */
+  transform: scale(1.55);
+  margin-inline: 0;
+  transition:
+    transform 320ms cubic-bezier(0.37, 0, 0.63, 1),
+    margin-inline 200ms linear;
+}
+.intro3-brand-sequence--live .intro3-wm-colon-anchor {
+  transform: scale(1);
+  margin-inline: 0;
 }
 
 .intro3-wm-slot {
@@ -7027,7 +7051,7 @@ textarea.input {
   width: 0.7em;
   opacity: 1;
 }
-.intro3-brand-sequence--open:not(.intro3-brand-sequence--pinching):not(.intro3-brand-sequence--resolving) .intro3-wm-clay {
+.intro3-brand-sequence--open:not(.intro3-brand-sequence--pinching):not(.intro3-brand-sequence--resolving):not(.intro3-brand-sequence--live) .intro3-wm-clay {
   opacity: 1;
   background: transparent;
   color: inherit;
@@ -7056,22 +7080,40 @@ textarea.input {
 }
 
 /*
- * Resolve — flat 2D: letters dissolve on the plane (no width squash / pullback).
- * Width snaps after the fade so layout collapses without reading as mass.
+ * Resolve — fade MI:A and collapse their width while colon stays large.
+ * Then --live only scales : down in its final spot (no resize-then-slide).
  */
-.intro3-brand-sequence--resolving .intro3-wm-slot {
+.intro3-brand-sequence--resolving.intro3-brand-sequence--open .intro3-wm-slot,
+.intro3-brand-sequence--resolving.intro3-brand-sequence--open .intro3-wm-slot--pre,
+.intro3-brand-sequence--resolving.intro3-brand-sequence--open .intro3-wm-slot--post {
   opacity: 0;
-  transition: opacity 160ms linear;
-  transition-delay: 0ms;
+  width: 0;
+  overflow: hidden;
+  pointer-events: none;
+  transition:
+    opacity 160ms linear,
+    width 200ms cubic-bezier(0.37, 0, 0.63, 1);
 }
-.intro3-brand-sequence--resolving .intro3-wm-clay {
+.intro3-brand-sequence--resolving.intro3-brand-sequence--open .intro3-wm-clay {
   opacity: 0;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
   background: transparent;
-  transition: opacity 160ms linear;
+  transition: opacity 160ms linear, color 160ms linear;
 }
-.intro3-brand-sequence--live .intro3-wm-slot {
+
+.intro3-brand-sequence--live.intro3-brand-sequence--open .intro3-wm-slot--pre,
+.intro3-brand-sequence--live.intro3-brand-sequence--open .intro3-wm-slot--post {
   width: 0;
   opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+  transition: none;
+}
+.intro3-brand-sequence--live .intro3-wm-clay {
+  opacity: 0;
+  color: transparent;
+  visibility: hidden;
   transition: none;
 }
 
@@ -7130,10 +7172,6 @@ textarea.input {
   }
 }
 
-.intro3-root--hero .intro3-brand-sequence .intro3-wm-mark--pinching.intro3-wm-mark--in {
-  transform: scale(1.55);
-}
-
 .intro3-wm-slot--colon {
   width: var(--wm-colon-w, 0.95em);
   text-align: center;
@@ -7154,22 +7192,14 @@ textarea.input {
 }
 
 
-/* Colon: forever bitmap size; hero uses a larger scale. Leave-hero is flat (linear). */
+/* Colon mark — no transform transition (live rotate/pinch owns transform). */
 .intro3-brand-sequence .intro3-wm-mark,
 .intro3-brand-sequence .mia-colon-logo {
-  transform: scale(1);
   transform-origin: center center;
   transition:
-    transform 220ms linear,
     opacity 160ms linear,
     filter 160ms linear,
     color 280ms linear;
-}
-
-.intro3-root--hero .intro3-brand-sequence .intro3-wm-mark--in,
-.intro3-root--hero .intro3-brand-sequence .mia-colon-logo.intro3-wm-mark--in {
-  /* ~26px optical from 17px forever mark — matches hero letters. */
-  transform: scale(1.55);
 }
 
 .intro3-wm-mark {
@@ -7202,6 +7232,7 @@ textarea.input {
   }
   100% {
     opacity: 1;
+    transform: none;
     filter: none;
   }
 }
@@ -7218,12 +7249,12 @@ textarea.input {
   }
   55% {
     opacity: 1;
-    transform: scale(1.62);
+    transform: scale(1.08);
     filter: blur(0);
   }
   100% {
     opacity: 1;
-    transform: scale(1.55);
+    transform: none;
     filter: none;
   }
 }

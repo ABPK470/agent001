@@ -76,7 +76,7 @@ export function App() {
   const [chatHomeHeroStage, setChatHomeHeroStage] = useState<"hidden" | "pill" | "copy">("hidden")
   const [chatHomeHeroRevealProgress, setChatHomeHeroRevealProgress] = useState(0)
   /** Hold app content a beat after the morph signal so it doesn’t beat the pill. */
-  const SHELL_REVEAL_LAG_MS = 500
+  const SHELL_REVEAL_LAG_MS = 0
   const shellRevealTimersRef = useRef<number[]>([])
   function clearShellRevealTimers() {
     for (const id of shellRevealTimersRef.current) window.clearTimeout(id)

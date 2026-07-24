@@ -15,8 +15,8 @@ const HOLD_BEFORE_PINCH_MS = 200
 /** Meet + shed/carve — keep in sync with clay + pinch-shed CSS. */
 const PINCH_MS = 1200
 const HOLD_AFTER_CARVE_MS = 160
-/** Flat dissolve of MI:A, then snap to live : — no squash / pullback. */
-const RESOLVE_MS = 180
+/** Fade + collapse MI:A, then scale : in place — matches CSS resolve. */
+const RESOLVE_MS = 220
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => window.setTimeout(r, ms))
@@ -209,11 +209,14 @@ export function IntroBrandWordmark({
     phase === "pinch"
     || phase === "open"
     || phase === "resolve"
+    || phase === "live"
 
-  const colonLive =
+  /** Purple mark while MI:A is up; idle rotate only when letters are gone. */
+  const colonAccent =
     phase === "open"
     || phase === "resolve"
     || phase === "live"
+  const colonOnline = phase === "live"
 
   const sequenceClass = [
     "intro3-brand-sequence",
@@ -228,7 +231,7 @@ export function IntroBrandWordmark({
     "toolbar-brand-logo",
     phase !== "boot" ? "intro3-wm-mark--in" : "",
     colonHandoff ? "intro3-wm-mark--handoff" : "",
-    colonLive ? "intro3-wm-mark--purple" : "",
+    colonAccent ? "intro3-wm-mark--purple" : "",
     phase === "live" ? "intro3-wm-mark--solo" : "",
     phase === "pinch" ? "intro3-wm-mark--pinching mia-colon-logo--pinch-shed" : "",
   ].filter(Boolean).join(" ")
@@ -239,7 +242,7 @@ export function IntroBrandWordmark({
       <span className="intro3-wm-colon-anchor intro3-wm-colon-anchor--locked">
         <Logo
           size={CHAT_BRAND_LOGO_SIZE}
-          online={colonLive}
+          online={colonOnline}
           className={markClassName}
         />
       </span>
