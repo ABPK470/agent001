@@ -3833,17 +3833,18 @@ textarea.input {
 }
 
 /*
- * Forge — pinch, hold while mass sheds to letter seats, end open for rotate.
- * Timing: intro3-forge-* = 720ms.
+ * Intro — ONE pinch that sheds mass:
+ * dots : → . (hold) → open to : while full-height off-white blobs leave.
+ * Duration locked to intro3-brand-sequence--pinching (DEBUG ×8 → 4800ms).
  */
-@keyframes mia-colon-pinch-forge-top {
+@keyframes mia-colon-pinch-shed-top {
   0% {
     transform: translateY(0);
   }
-  28% {
+  7% {
     transform: translateY(20px);
   }
-  72% {
+  70% {
     transform: translateY(20px);
   }
   100% {
@@ -3851,14 +3852,14 @@ textarea.input {
   }
 }
 
-@keyframes mia-colon-pinch-forge-bottom {
+@keyframes mia-colon-pinch-shed-bottom {
   0% {
     transform: translateY(0);
   }
-  28% {
+  7% {
     transform: translateY(-20px);
   }
-  72% {
+  70% {
     transform: translateY(-20px);
   }
   100% {
@@ -3866,25 +3867,12 @@ textarea.input {
   }
 }
 
-@keyframes mia-colon-pinch-forge-glow {
-  0%, 100% {
-    filter: none;
-  }
-  28%, 72% {
-    filter: drop-shadow(0 0 8px color-mix(in srgb, var(--text) 28%, transparent));
-  }
+.mia-colon-logo--pinch-shed .mia-colon-logo-dot--top {
+  animation: mia-colon-pinch-shed-top 4800ms cubic-bezier(0.4, 0, 0.2, 1) both;
 }
 
-.mia-colon-logo--pinch-forge {
-  animation: mia-colon-pinch-forge-glow 720ms cubic-bezier(0.4, 0, 0.2, 1) both;
-}
-
-.mia-colon-logo--pinch-forge .mia-colon-logo-dot--top {
-  animation: mia-colon-pinch-forge-top 720ms cubic-bezier(0.4, 0, 0.2, 1) both;
-}
-
-.mia-colon-logo--pinch-forge .mia-colon-logo-dot--bottom {
-  animation: mia-colon-pinch-forge-bottom 720ms cubic-bezier(0.4, 0, 0.2, 1) both;
+.mia-colon-logo--pinch-shed .mia-colon-logo-dot--bottom {
+  animation: mia-colon-pinch-shed-bottom 4800ms cubic-bezier(0.4, 0, 0.2, 1) both;
 }
 
 @keyframes mia-colon-rotate-once {
@@ -3929,7 +3917,7 @@ textarea.input {
 }
 
 .mia-colon-logo--rotate-resolve {
-  animation: mia-colon-rotate-once 1s linear forwards;
+  animation: mia-colon-rotate-once 8s linear forwards;
 }
 
 .intro3-root--hero .mia-colon-logo--rotate-resolve {
@@ -3968,12 +3956,42 @@ textarea.input {
   animation: mia-colon-live-rotate 6.5s linear infinite;
 }
 
+/* Keep hero optical scale while the live idle loop runs. */
+@keyframes mia-colon-live-rotate-hero {
+  0%, 36% {
+    transform: scale(1.55) rotate(0deg);
+  }
+  36% {
+    animation-timing-function: cubic-bezier(0.62, 0, 0.25, 1);
+  }
+  42% {
+    transform: scale(1.55) rotate(90deg);
+    animation-timing-function: cubic-bezier(0.62, 0, 0.25, 1);
+  }
+  54%, 72%, 100% {
+    transform: scale(1.55) rotate(360deg);
+  }
+}
+
+.intro3-root--hero .mia-colon-logo--online.intro3-wm-mark {
+  animation-name: mia-colon-live-rotate-hero;
+}
+
 .mia-colon-logo--online .mia-colon-logo-dot--top {
   animation: mia-colon-live-shuffle-top 6.5s linear infinite;
 }
 
 .mia-colon-logo--online .mia-colon-logo-dot--bottom {
   animation: mia-colon-live-shuffle-bottom 6.5s linear infinite;
+}
+
+/* TEMP DEBUG ×8 — intro idle loop only */
+.intro3-brand-sequence .mia-colon-logo--online {
+  animation-duration: 52s;
+}
+.intro3-brand-sequence .mia-colon-logo--online .mia-colon-logo-dot--top,
+.intro3-brand-sequence .mia-colon-logo--online .mia-colon-logo-dot--bottom {
+  animation-duration: 52s;
 }
 
 /* Subagent step in-progress — continuous gentle spin (not the online pulse). */
@@ -6919,7 +6937,7 @@ textarea.input {
   min-height: 2.5rem;
 }
 
-/* ── Login brand sequence — pinch shed → letters → rotate ── */
+/* ── Login brand sequence — one pinch sheds off-white blobs → rotate → live ── */
 .intro3-brand-sequence {
   display: inline-flex;
   align-items: center;
@@ -6971,7 +6989,7 @@ textarea.input {
   flex-shrink: 0;
   opacity: 0;
   transition:
-    width 720ms cubic-bezier(0.4, 0, 0.2, 1),
+    width 680ms cubic-bezier(0.4, 0, 0.2, 1),
     opacity 200ms ease;
 }
 
@@ -6984,28 +7002,27 @@ textarea.input {
 }
 
 /*
- * Colon matter — two side sheds from the mark centerline.
- * Left → MI. Right → A. Pure X motion; one continuous ease.
+ * Shed mass — FULL colon height (same as the : mark), off-white.
+ * These are the clay blobs that become MI and A — never tiny flakes, never purple.
  */
 .intro3-wm-ejecta {
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 0.4em;
-  height: 0.72em;
-  margin-left: -0.2em;
-  margin-top: -0.36em;
-  border-radius: 0.14em;
-  background: currentColor;
+  /* Match brand row / colon optical height — full letter box. */
+  width: 0.55em;
+  height: 1em;
+  margin-left: -0.275em;
+  margin-top: -0.5em;
+  border-radius: 0.18em;
+  background: var(--text);
   opacity: 0;
   pointer-events: none;
-  z-index: 2;
+  z-index: 3;
   transform-origin: center center;
-  will-change: transform, opacity, width, border-radius;
-  color: var(--logo-mark-idle);
-}
-.intro3-brand-sequence--resolving .intro3-wm-ejecta {
-  color: var(--logo-mark-live);
+  will-change: transform, opacity, width;
+  /* Never inherit accent/purple from the mark. */
+  color: var(--text);
 }
 
 .intro3-wm-letter {
@@ -7021,11 +7038,7 @@ textarea.input {
   will-change: opacity;
 }
 
-/* Closed — letters hidden; ejecta wait dormant on the mark. */
-.intro3-brand-sequence--closed .intro3-wm-letter {
-  opacity: 0;
-}
-
+.intro3-brand-sequence--closed .intro3-wm-letter,
 .intro3-brand-sequence--closed .intro3-wm-ejecta {
   opacity: 0;
 }
@@ -7035,125 +7048,160 @@ textarea.input {
   width: 0.7em;
   opacity: 1;
 }
-.intro3-brand-sequence--open:not(.intro3-brand-sequence--forging):not(.intro3-brand-sequence--resolving) .intro3-wm-letter {
+.intro3-brand-sequence--open:not(.intro3-brand-sequence--pinching):not(.intro3-brand-sequence--resolving) .intro3-wm-letter {
   opacity: 1;
 }
-.intro3-brand-sequence--open:not(.intro3-brand-sequence--forging):not(.intro3-brand-sequence--resolving) .intro3-wm-ejecta {
+.intro3-brand-sequence--open:not(.intro3-brand-sequence--pinching):not(.intro3-brand-sequence--resolving) .intro3-wm-ejecta {
   opacity: 0;
   pointer-events: none;
 }
 
 /*
- * Forge (720ms) — after pinch (~28%), mass moves to letter seats;
- * letters lock while colon is still pinched. Unpinch/rotate are later phases.
+ * ONE pinch (DEBUG ×8 → 4800ms):
+ * ~7% (~320ms) dots meet fast; then full-height off-white blobs shed;
+ * letters lock; dots open by the end. ONE pinch only.
  */
-.intro3-brand-sequence--forging .intro3-wm-slot {
+.intro3-brand-sequence--pinching .intro3-wm-slot {
   width: 0.7em;
   opacity: 1;
-  transition-duration: 420ms;
-  transition-delay: 180ms; /* open seats as shed begins */
+  transition-duration: 2400ms;
+  transition-delay: 600ms;
 }
 
-.intro3-brand-sequence--forging .intro3-wm-ejecta--left {
-  animation: intro3-forge-ejecta-left 720ms cubic-bezier(0.4, 0, 0.2, 1) both;
+.intro3-brand-sequence--pinching .intro3-wm-ejecta--left {
+  animation: intro3-pinch-blob-left 4800ms cubic-bezier(0.4, 0, 0.2, 1) both;
 }
-.intro3-brand-sequence--forging .intro3-wm-ejecta--right {
-  animation: intro3-forge-ejecta-right 720ms cubic-bezier(0.4, 0, 0.2, 1) both;
-}
-
-.intro3-brand-sequence--forging .intro3-wm-letter {
-  animation: intro3-forge-letter-in 720ms cubic-bezier(0.4, 0, 0.2, 1) both;
+.intro3-brand-sequence--pinching .intro3-wm-ejecta--right {
+  animation: intro3-pinch-blob-right 4800ms cubic-bezier(0.4, 0, 0.2, 1) both;
 }
 
-/* Resolve — letters retract only (rotate already happened on open). */
+.intro3-brand-sequence--pinching .intro3-wm-letter {
+  animation: intro3-pinch-letter-in 4800ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+/* Resolve — letters retract; colon stays live. */
 .intro3-brand-sequence--resolving .intro3-wm-slot {
   width: 0;
   opacity: 1;
   transition:
-    width 520ms cubic-bezier(0.4, 0, 0.2, 1),
-    opacity 200ms ease;
+    width 4160ms cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 1600ms ease;
   transition-delay: 0ms;
 }
 
 .intro3-brand-sequence--resolving .intro3-wm-ejecta--left {
-  animation: intro3-resolve-ejecta-left 520ms cubic-bezier(0.4, 0, 0.2, 1) both;
+  animation: intro3-resolve-blob-left 4160ms cubic-bezier(0.4, 0, 0.2, 1) both;
 }
 .intro3-brand-sequence--resolving .intro3-wm-ejecta--right {
-  animation: intro3-resolve-ejecta-right 520ms cubic-bezier(0.4, 0, 0.2, 1) both;
+  animation: intro3-resolve-blob-right 4160ms cubic-bezier(0.4, 0, 0.2, 1) both;
 }
 
 .intro3-brand-sequence--resolving .intro3-wm-letter {
-  animation: intro3-resolve-letter-out 520ms cubic-bezier(0.4, 0, 0.2, 1) both;
+  animation: intro3-resolve-letter-out 4160ms cubic-bezier(0.4, 0, 0.2, 1) both;
 }
 
-/* Pinch meets ~28%; mass travels 28→58%; letters lock 50→68%; still pinched. */
-@keyframes intro3-forge-ejecta-left {
-  0%, 26% {
+/* Height stays 1em (= colon / letter height) the whole way — only width grows. */
+@keyframes intro3-pinch-blob-left {
+  0%, 6% {
     opacity: 0;
-    width: 0.4em;
-    margin-left: -0.2em;
-    border-radius: 0.14em;
+    width: 0.55em;
+    height: 1em;
+    margin-left: -0.275em;
+    margin-top: -0.5em;
+    background: var(--text);
     transform: translateX(0);
   }
-  32% {
+  9% {
     opacity: 1;
-    width: 0.42em;
-    margin-left: -0.21em;
-    border-radius: 0.14em;
+    width: 0.55em;
+    height: 1em;
+    margin-left: -0.275em;
+    margin-top: -0.5em;
+    background: var(--text);
     transform: translateX(0);
   }
-  58% {
+  45% {
     opacity: 1;
-    width: 1.35em;
-    margin-left: -0.68em;
-    border-radius: 0.1em;
+    width: 1.45em;
+    height: 1em;
+    margin-left: -0.725em;
+    margin-top: -0.5em;
+    background: var(--text);
     transform: translateX(-1.35em);
   }
+  65% {
+    opacity: 0.9;
+    width: 1.5em;
+    height: 1em;
+    margin-left: -0.75em;
+    margin-top: -0.5em;
+    background: var(--text);
+    transform: translateX(-1.45em);
+  }
   78%, 100% {
     opacity: 0;
-    width: 1.4em;
-    margin-left: -0.7em;
-    border-radius: 0.08em;
-    transform: translateX(-1.4em);
+    width: 1.5em;
+    height: 1em;
+    margin-left: -0.75em;
+    margin-top: -0.5em;
+    background: var(--text);
+    transform: translateX(-1.5em);
   }
 }
 
-@keyframes intro3-forge-ejecta-right {
-  0%, 26% {
+@keyframes intro3-pinch-blob-right {
+  0%, 6% {
     opacity: 0;
-    width: 0.4em;
-    margin-left: -0.2em;
-    border-radius: 0.14em;
+    width: 0.55em;
+    height: 1em;
+    margin-left: -0.275em;
+    margin-top: -0.5em;
+    background: var(--text);
     transform: translateX(0);
   }
-  32% {
+  9% {
     opacity: 1;
-    width: 0.42em;
-    margin-left: -0.21em;
-    border-radius: 0.14em;
+    width: 0.55em;
+    height: 1em;
+    margin-left: -0.275em;
+    margin-top: -0.5em;
+    background: var(--text);
     transform: translateX(0);
   }
-  58% {
+  45% {
     opacity: 1;
-    width: 0.72em;
-    margin-left: -0.36em;
-    border-radius: 0.1em;
-    transform: translateX(1.05em);
-  }
-  78%, 100% {
-    opacity: 0;
-    width: 0.75em;
-    margin-left: -0.38em;
-    border-radius: 0.08em;
+    width: 0.85em;
+    height: 1em;
+    margin-left: -0.425em;
+    margin-top: -0.5em;
+    background: var(--text);
     transform: translateX(1.1em);
   }
+  65% {
+    opacity: 0.9;
+    width: 0.9em;
+    height: 1em;
+    margin-left: -0.45em;
+    margin-top: -0.5em;
+    background: var(--text);
+    transform: translateX(1.15em);
+  }
+  78%, 100% {
+    opacity: 0;
+    width: 0.9em;
+    height: 1em;
+    margin-left: -0.45em;
+    margin-top: -0.5em;
+    background: var(--text);
+    transform: translateX(1.2em);
+  }
 }
 
-@keyframes intro3-forge-letter-in {
-  0%, 48% {
+@keyframes intro3-pinch-letter-in {
+  0%, 40% {
     opacity: 0;
   }
-  68%, 100% {
+  58%, 100% {
     opacity: 1;
   }
 }
@@ -7167,55 +7215,67 @@ textarea.input {
   }
 }
 
-@keyframes intro3-resolve-ejecta-left {
+@keyframes intro3-resolve-blob-left {
   0% {
     opacity: 0;
-    width: 1.4em;
-    margin-left: -0.7em;
-    border-radius: 0.08em;
-    transform: translateX(-1.4em);
+    width: 1.5em;
+    height: 1em;
+    margin-left: -0.75em;
+    margin-top: -0.5em;
+    background: var(--text);
+    transform: translateX(-1.5em);
   }
   18% {
     opacity: 1;
-    width: 1.35em;
-    margin-left: -0.68em;
-    border-radius: 0.1em;
+    width: 1.45em;
+    height: 1em;
+    margin-left: -0.725em;
+    margin-top: -0.5em;
+    background: var(--text);
     transform: translateX(-1.35em);
   }
-  70%, 100% {
+  75%, 100% {
     opacity: 0;
-    width: 0.4em;
-    margin-left: -0.2em;
-    border-radius: 0.14em;
+    width: 0.55em;
+    height: 1em;
+    margin-left: -0.275em;
+    margin-top: -0.5em;
+    background: var(--text);
     transform: translateX(0);
   }
 }
 
-@keyframes intro3-resolve-ejecta-right {
+@keyframes intro3-resolve-blob-right {
   0% {
     opacity: 0;
-    width: 0.75em;
-    margin-left: -0.38em;
-    border-radius: 0.08em;
-    transform: translateX(1.1em);
+    width: 0.9em;
+    height: 1em;
+    margin-left: -0.45em;
+    margin-top: -0.5em;
+    background: var(--text);
+    transform: translateX(1.2em);
   }
   18% {
     opacity: 1;
-    width: 0.72em;
-    margin-left: -0.36em;
-    border-radius: 0.1em;
-    transform: translateX(1.05em);
+    width: 0.85em;
+    height: 1em;
+    margin-left: -0.425em;
+    margin-top: -0.5em;
+    background: var(--text);
+    transform: translateX(1.1em);
   }
-  70%, 100% {
+  75%, 100% {
     opacity: 0;
-    width: 0.4em;
-    margin-left: -0.2em;
-    border-radius: 0.14em;
+    width: 0.55em;
+    height: 1em;
+    margin-left: -0.275em;
+    margin-top: -0.5em;
+    background: var(--text);
     transform: translateX(0);
   }
 }
 
-.intro3-root--hero .intro3-brand-sequence .intro3-wm-mark--forging.intro3-wm-mark--in {
+.intro3-root--hero .intro3-brand-sequence .intro3-wm-mark--pinching.intro3-wm-mark--in {
   transform: scale(1.55);
 }
 
@@ -7271,7 +7331,7 @@ textarea.input {
 }
 
 .intro3-wm-mark--handoff {
-  animation: intro3-wm-mark-handoff 480ms cubic-bezier(0.2, 0.85, 0.25, 1) both;
+  animation: intro3-wm-mark-handoff 3360ms cubic-bezier(0.2, 0.85, 0.25, 1) both;
 }
 
 @keyframes intro3-wm-mark-handoff {

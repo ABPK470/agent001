@@ -1,25 +1,30 @@
 /**
- * Intro brand — sequential:
- * show : → pinch → shed mass to letter seats → letters lock → rotate :
- * → rest MI:A → (resolve) letters retract to live :
+ * Intro brand — one pinch that sheds mass:
+ * show : → pinch (: → .) sheds full-colon-height off-white blobs into MI / A
+ * → colon opens → rotate → live idle until input
+ *
+ * TEMP: DEBUG_SLOWDOWN=8 for land/shed/rotate. Pinch gesture stays 1× meet.
  */
 
 import { useEffect, useRef, useState } from "react"
 import { CHAT_BRAND_LOGO_SIZE } from "../../brand"
 import { Logo } from "../../../components/Logo"
 
-const REVEAL_DELAY_MS = 180
-const COLON_LAND_MS = 420
-const HOLD_BEFORE_FORGE_MS = 180
-/** Pinch + shed mass into letter positions. */
-const FORGE_MS = 720
-/** One rotate after letters are up. */
-const ROTATE_MS = 1000
-const HOLD_AFTER_ROTATE_MS = 200
-/** Letters retract when leaving hero — no second pinch/rotate. */
-const RESOLVE_MS = 520
-const LIVE_PAUSE_MS = 100
-const RESOLVE_DELAY_MS = 40
+/** Temporary inspection factor — restore to 1 when done. */
+const DEBUG_SLOWDOWN = 8
+
+const REVEAL_DELAY_MS = 180 * DEBUG_SLOWDOWN
+const COLON_LAND_MS = 420 * DEBUG_SLOWDOWN
+const HOLD_BEFORE_PINCH_MS = 180 * DEBUG_SLOWDOWN
+/** Pinch meet is real-time; shed+open slowed for inspection. */
+const PINCH_MEET_MS = 320
+const PINCH_SHED_MS = 560 * DEBUG_SLOWDOWN
+const PINCH_MS = PINCH_MEET_MS + PINCH_SHED_MS
+const ROTATE_MS = 1000 * DEBUG_SLOWDOWN
+const HOLD_AFTER_ROTATE_MS = 120 * DEBUG_SLOWDOWN
+const RESOLVE_MS = 520 * DEBUG_SLOWDOWN
+const LIVE_PAUSE_MS = 80 * DEBUG_SLOWDOWN
+const RESOLVE_DELAY_MS = 40 * DEBUG_SLOWDOWN
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => window.setTimeout(r, ms))
@@ -28,7 +33,7 @@ function sleep(ms: number): Promise<void> {
 type BrandPhase =
   | "boot"
   | "colon"
-  | "forge"
+  | "pinch"
   | "rotate"
   | "open"
   | "resolve"
@@ -57,7 +62,7 @@ function BrandLetter({
   )
 }
 
-/** Header brand: : pinch-shed → letters → rotate → live : */
+/** Header brand: one pinch sheds MI:A → rotate → live : */
 export function IntroBrandWordmark({
   onBrandReady,
   onBrandLive,
@@ -114,10 +119,11 @@ export function IntroBrandWordmark({
       setColonHandoff(true)
       await sleep(COLON_LAND_MS)
       if (cancelled) return
-      await sleep(HOLD_BEFORE_FORGE_MS)
+      await sleep(HOLD_BEFORE_PINCH_MS)
       if (cancelled) return
-      setPhase("forge")
-      await sleep(FORGE_MS)
+      // One pinch: : → . sheds full off-white blobs → letters → opens to :
+      setPhase("pinch")
+      await sleep(PINCH_MS)
       if (cancelled) return
       setPhase("rotate")
       await sleep(ROTATE_MS)
@@ -168,16 +174,21 @@ export function IntroBrandWordmark({
     )
   }
 
-  const lettersOpen =
-    phase === "forge"
+  const lettersSeated =
+    phase === "pinch"
     || phase === "rotate"
     || phase === "open"
     || phase === "resolve"
 
+  const colonLive =
+    phase === "open"
+    || phase === "resolve"
+    || phase === "live"
+
   const sequenceClass = [
     "intro3-brand-sequence",
-    lettersOpen ? "intro3-brand-sequence--open" : "intro3-brand-sequence--closed",
-    phase === "forge" ? "intro3-brand-sequence--forging" : "",
+    lettersSeated ? "intro3-brand-sequence--open" : "intro3-brand-sequence--closed",
+    phase === "pinch" ? "intro3-brand-sequence--pinching" : "",
     phase === "rotate" ? "intro3-brand-sequence--rotating" : "",
     phase === "resolve" ? "intro3-brand-sequence--resolving" : "",
     phase === "live" ? "intro3-brand-sequence--live" : "",
@@ -188,11 +199,9 @@ export function IntroBrandWordmark({
     "toolbar-brand-logo",
     phase !== "boot" ? "intro3-wm-mark--in" : "",
     colonHandoff ? "intro3-wm-mark--handoff" : "",
-    phase === "live" || phase === "resolve" || phase === "rotate" || phase === "open"
-      ? "intro3-wm-mark--purple"
-      : "",
+    colonLive || phase === "rotate" ? "intro3-wm-mark--purple" : "",
     phase === "live" ? "intro3-wm-mark--solo" : "",
-    phase === "forge" ? "intro3-wm-mark--forging mia-colon-logo--pinch-forge" : "",
+    phase === "pinch" ? "intro3-wm-mark--pinching mia-colon-logo--pinch-shed" : "",
     phase === "rotate" ? "intro3-wm-mark--rotating mia-colon-logo--rotate-resolve" : "",
   ].filter(Boolean).join(" ")
 
@@ -205,7 +214,7 @@ export function IntroBrandWordmark({
         <span className="intro3-wm-ejecta intro3-wm-ejecta--right" aria-hidden="true" />
         <Logo
           size={CHAT_BRAND_LOGO_SIZE}
-          online={phase === "live"}
+          online={colonLive}
           className={markClassName}
         />
       </span>
