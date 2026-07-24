@@ -135,6 +135,7 @@ function buildBridgeDataTool(host: AgentHost): ExecutableTool {
         relaxConstraints: writeSpec.kind === "sql" ? Boolean(writeSpec.relaxConstraints) : false,
         writeMode: writeSpec.kind === "sql" ? writeSpec.mode : null,
         via: "agent" as const,
+        actorUpn: host.sync.runs.actorUpn,
       }
       emitBridge(host, EventType.BridgeRunStarted, base)
       let lastProgressAt = 0

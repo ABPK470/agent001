@@ -1,8 +1,10 @@
 /**
  * Apply optional query filters (kind, status, free-text search) after pipelines are built.
+ * Non-admins are scoped to pipelines they own (actorUpn / run.upn / sync actor_upn).
  */
 
 import { OperationKind } from "../../../../internal/enums/operations.js"
+import * as db from "../../../../infra/persistence/sqlite.js"
 import type { ListOperationsOpts, OperationPipeline } from "./types.js"
 
 function matchesKindFilter(pipeline: OperationPipeline, kind: string): boolean {
@@ -23,6 +25,45 @@ function matchesKindFilter(pipeline: OperationPipeline, kind: string): boolean {
     )
   }
   return pipeline.kind === kind
+}
+
+function sameUpn(a: string | null | undefined, b: string | null | undefined): boolean {
+  const left = a?.trim().toLowerCase()
+  const right = b?.trim().toLowerCase()
+  return Boolean(left && right && left === right)
+}
+
+/** Resolve owner for scoping — prefer stamped actorUpn, else persistence lookup. */
+export function pipelineOwnerUpn(pipeline: OperationPipeline): string | null {
+  if (pipeline.actorUpn?.trim()) return pipeline.actorUpn.trim()
+
+  if (pipeline.kind === OperationKind.AgentRun) {
+    return db.getRun(pipeline.id)?.upn?.trim() || null
+  }
+
+  if (
+    pipeline.kind === OperationKind.SyncRun ||
+    pipeline.kind === OperationKind.SyncPreview ||
+    pipeline.kind === OperationKind.SyncExecute
+  ) {
+    const planId = pipeline.planId ?? pipeline.id
+    return db.getSyncRun(planId)?.actor_upn?.trim() || null
+  }
+
+  // Bridge / proposer / unknown without stamp — fail closed for non-admins.
+  return null
+}
+
+export function scopeOperationsToViewer(
+  operations: OperationPipeline[],
+  opts: Pick<ListOperationsOpts, "viewerUpn" | "isAdmin">,
+): OperationPipeline[] {
+  if (opts.isAdmin === true) return operations
+  // No viewer context (unit tests / internal callers) — leave unscoped.
+  if (opts.isAdmin === undefined && opts.viewerUpn === undefined) return operations
+  const viewer = opts.viewerUpn?.trim()
+  if (!viewer) return []
+  return operations.filter((p) => sameUpn(pipelineOwnerUpn(p), viewer))
 }
 
 export function excludeSystemPipelines(operations: OperationPipeline[]): OperationPipeline[] {
@@ -59,5 +100,5 @@ export function filterOperations(
     )
   }
 
-  return filtered
+  return scopeOperationsToViewer(filtered, opts)
 }

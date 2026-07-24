@@ -71,6 +71,7 @@ function buildSyncRunFromParts(
     id: planId,
     planId,
     kind: OperationKind.SyncRun,
+    actorUpn: meta?.actor_upn ?? preview?.actorUpn ?? execute?.actorUpn ?? null,
     title: primary.title.replace(/^(Preview|Execute) /, "Sync "),
     subtitle: primary.subtitle,
     status,

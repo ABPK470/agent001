@@ -522,7 +522,7 @@ export const VISITOR_WIDGETS: ReadonlySet<WidgetType> = new Set([
   "live-logs",
   "operation-log",
   "mymi-db",
-  "run-history",
+  "run-status",
 ])
 
 /** Nested H/V split tree for workspace tiling (source of truth when present). */

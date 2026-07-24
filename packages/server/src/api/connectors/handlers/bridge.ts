@@ -89,6 +89,7 @@ export function registerBridgeRoutes(app: FastifyInstance, host: AgentHost): voi
       limit: body.limit ?? null,
       hasTransform: Boolean(body.transform),
       via: "ui" as const,
+      actorUpn: req.session?.upn ?? null,
     }
     emitBridge(host, EventType.BridgePreviewStarted, base)
     try {
@@ -155,6 +156,7 @@ export function registerBridgeRoutes(app: FastifyInstance, host: AgentHost): voi
       relaxConstraints: writeSpec.kind === "sql" ? Boolean(writeSpec.relaxConstraints) : false,
       writeMode: writeSpec.kind === "sql" ? writeSpec.mode : "mode" in writeSpec ? writeSpec.mode : null,
       via: "ui" as const,
+      actorUpn: req.session?.upn ?? null,
     }
     emitBridge(host, EventType.BridgeRunStarted, base)
     const throttle = createBridgeProgressThrottle()

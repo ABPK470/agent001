@@ -34,6 +34,7 @@ export function buildAgentRunPipeline(runId: string, events: OperationEvent[]): 
   return {
     id: runId,
     kind: OperationKind.AgentRun,
+    actorUpn: run?.upn ?? null,
     title: goal.length > 100 ? goal.slice(0, 97) + "…" : goal,
     subtitle: run ? `${run.step_count} steps` : undefined,
     status,

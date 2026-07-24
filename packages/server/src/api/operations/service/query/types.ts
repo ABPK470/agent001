@@ -34,6 +34,8 @@ export interface OperationPipeline {
   kind: OperationKind
   /** Sync plan id when kind is sync-preview, sync-execute, or sync-run. */
   planId?: string
+  /** Owner UPN when known — used to scope Pipelines for non-admins. */
+  actorUpn?: string | null
   title: string
   subtitle?: string
   status: OperationStatus
@@ -57,6 +59,9 @@ export interface ListOperationsOpts {
   planId?: string
   /** When set, return the full audit tree for one agent run (no pagination). */
   runId?: string
+  /** Logged-in viewer — non-admins only see their own pipelines. */
+  viewerUpn?: string
+  isAdmin?: boolean
 }
 
 export interface ListOperationsResult {

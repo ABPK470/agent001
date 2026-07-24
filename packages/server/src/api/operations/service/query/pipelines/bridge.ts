@@ -74,6 +74,7 @@ export function buildBridgePipeline(
   return {
     id: `${moveId}:${kind === OperationKind.BridgeRun ? "run" : "preview"}`,
     kind,
+    actorUpn: strField(started?.data ?? {}, "actorUpn"),
     title,
     subtitle: subtitleParts.join(" · "),
     status,

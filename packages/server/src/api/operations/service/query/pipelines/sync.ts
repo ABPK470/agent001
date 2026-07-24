@@ -87,6 +87,7 @@ export function buildSyncPipeline(
     id: `${planId}:${kind === OperationKind.SyncExecute ? "execute" : "preview"}`,
     planId,
     kind,
+    actorUpn: meta?.actor_upn ?? null,
     title: `${kind === OperationKind.SyncExecute ? "Execute" : "Preview"} ${entityTypeLabel} — ${entityName}`,
     subtitle: subtitleParts.filter(Boolean).join(" · ") || planId.slice(0, 8),
     status,

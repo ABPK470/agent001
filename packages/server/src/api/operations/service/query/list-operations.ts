@@ -8,7 +8,7 @@ import {
   buildOperationsFromEvents,
   mapDbEventsChronological
 } from "./build-operations-from-events.js"
-import { excludeSystemPipelines, filterOperations } from "./filter.js"
+import { excludeSystemPipelines, filterOperations, scopeOperationsToViewer } from "./filter.js"
 import { listOperationsForPlan } from "./list-operations-for-plan.js"
 import { listOperationsForRun } from "./list-operations-for-run.js"
 import type { ListOperationsOpts, ListOperationsResult } from "./types.js"
@@ -22,8 +22,9 @@ export const OPERATIONS_HEAD_EVENT_LIMIT = 1000
 export function listOperations(opts: ListOperationsOpts = {}): ListOperationsResult {
   if (opts.planId) {
     const { operation, scannedEvents } = listOperationsForPlan(opts.planId)
+    const scoped = scopeOperationsToViewer(operation ? [operation] : [], opts)
     return {
-      operations: operation ? [operation] : [],
+      operations: scoped,
       scannedEvents,
       oldestTimestamp: null,
       hasMore: false,
@@ -33,8 +34,9 @@ export function listOperations(opts: ListOperationsOpts = {}): ListOperationsRes
 
   if (opts.runId) {
     const { operation, scannedEvents } = listOperationsForRun(opts.runId)
+    const scoped = scopeOperationsToViewer(operation ? [operation] : [], opts)
     return {
-      operations: operation ? [operation] : [],
+      operations: scoped,
       scannedEvents,
       oldestTimestamp: null,
       hasMore: false,

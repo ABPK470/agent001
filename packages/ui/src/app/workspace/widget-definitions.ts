@@ -38,7 +38,7 @@ const CATALOG_META: Array<{
   { type: "debug-inspector", label: "Trace", desc: "Agent loop outline — context, plan phases, LLM calls, and between-call work" },
   { type: "active-users", label: "Active Users", desc: "Who's online, what they're running" },
   { type: "mymi-db", label: "Mymi DB", desc: "Browse MyMI DB schemas, tables, views, and preview data" },
-  { type: "run-history", label: "Run History", desc: "Browse past agent runs" },
+  { type: "run-history", label: "Run History", desc: "Browse past agent runs", catalogVisible: false },
   { type: "run-status", label: "Run Status", desc: "Current run status, progress, and metadata" },
   { type: "step-timeline", label: "Step Timeline", desc: "Visual timeline of tool calls and steps" },
   { type: "sync-admin", label: "Sync Operations", desc: "Proposals, runs, evidence, approvals, connections, schedules, notify routes" },

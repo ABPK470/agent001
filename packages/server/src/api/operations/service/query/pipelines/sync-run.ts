@@ -118,6 +118,7 @@ export function buildSyncRunPipeline(planId: string, events: OperationEvent[]): 
     id: planId,
     planId,
     kind: OperationKind.SyncRun,
+    actorUpn: meta?.actor_upn ?? null,
     title,
     subtitle: titleSource?.subtitle ?? planId.slice(0, 8),
     status,

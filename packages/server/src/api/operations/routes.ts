@@ -13,9 +13,17 @@ import {
   OPERATIONS_HEAD_EVENT_LIMIT,
   OPERATIONS_PAGE_EVENT_LIMIT
 } from "./service/query/index.js"
+import type { ListOperationsOpts } from "./service/query/types.js"
 
 /** Debounce SSE snapshots so bursty event streams do not rebuild the log continuously. */
 const OPERATIONS_STREAM_DEBOUNCE_MS = 1500
+
+function viewerScope(req: { session?: { upn?: string; isAdmin?: boolean } }): Pick<ListOperationsOpts, "viewerUpn" | "isAdmin"> {
+  return {
+    viewerUpn: req.session?.upn,
+    isAdmin: !!req.session?.isAdmin,
+  }
+}
 
 export function registerOperationRoutes(app: FastifyInstance): void {
   app.get<{
@@ -37,16 +45,27 @@ export function registerOperationRoutes(app: FastifyInstance): void {
       kind: req.query.kind,
       status: req.query.status,
       planId: req.query.planId,
-      runId: req.query.runId
+      runId: req.query.runId,
+      ...viewerScope(req),
     })
   })
 
-  app.get<{ Params: { planId: string } }>("/api/operations/plan/:planId", async (req) => {
-    return listOperations({ planId: req.params.planId })
+  app.get<{ Params: { planId: string } }>("/api/operations/plan/:planId", async (req, reply) => {
+    const result = listOperations({ planId: req.params.planId, ...viewerScope(req) })
+    if (!req.session?.isAdmin && result.operations.length === 0) {
+      reply.code(403)
+      return { error: "forbidden" }
+    }
+    return result
   })
 
-  app.get<{ Params: { runId: string } }>("/api/operations/run/:runId", async (req) => {
-    return listOperations({ runId: req.params.runId })
+  app.get<{ Params: { runId: string } }>("/api/operations/run/:runId", async (req, reply) => {
+    const result = listOperations({ runId: req.params.runId, ...viewerScope(req) })
+    if (!req.session?.isAdmin && result.operations.length === 0) {
+      reply.code(403)
+      return { error: "forbidden" }
+    }
+    return result
   })
 
   app.get<{
@@ -61,7 +80,8 @@ export function registerOperationRoutes(app: FastifyInstance): void {
 
     const streamFilters = {
       kind: req.query.kind,
-      search: req.query.search
+      search: req.query.search,
+      ...viewerScope(req),
     }
 
     const send = (data: unknown): boolean => {
@@ -85,7 +105,9 @@ export function registerOperationRoutes(app: FastifyInstance): void {
       const snapshot = listOperations({
         limit: OPERATIONS_HEAD_EVENT_LIMIT,
         kind: streamFilters.kind,
-        search: streamFilters.search
+        search: streamFilters.search,
+        viewerUpn: streamFilters.viewerUpn,
+        isAdmin: streamFilters.isAdmin,
       })
       if (!send({ ...snapshot, live: true })) unsubscribe()
     }
