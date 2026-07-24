@@ -255,13 +255,12 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
     return { runId: newRunId }
   })
 
-  app.get("/api/runs/tool-approvals/pending", personal.read,
-    async (req, reply) => {
+  app.get("/api/runs/tool-approvals/pending", personal.read, async (req, reply) => {
     try {
-      const { listPendingToolApprovalsForSession } = await import(
+      const { listPendingToolApprovalsForViewingAs } = await import(
         "../../runtime/service/run-tool-approval.js"
       )
-      return listPendingToolApprovalsForSession(req.session ?? null)
+      return listPendingToolApprovalsForViewingAs(viewingAsOf(req))
     } catch (error) {
       reply.code(error instanceof Error && error.message.includes("Authentication") ? 401 : 400)
       return { error: error instanceof Error ? error.message : "Failed to list pending approvals" }
@@ -274,7 +273,7 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
     async (req, reply) => {
       try {
         const { approveRunToolStep } = await import("../../runtime/service/run-tool-approval.js")
-        return approveRunToolStep(orchestrator, req.params.id, req.session ?? null)
+        return approveRunToolStep(orchestrator, req.params.id, viewingAsOf(req))
       } catch (error) {
         reply.code(error instanceof Error && error.message.includes("Authentication") ? 401 : 400)
         return { error: error instanceof Error ? error.message : "Approval failed" }
@@ -291,7 +290,7 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
         return denyRunToolStep(
           orchestrator,
           req.params.id,
-          req.session ?? null,
+          viewingAsOf(req),
           req.body?.reason
         )
       } catch (error) {
@@ -593,15 +592,10 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
     return { ok: true, runId: req.params.id, applied }
   })
 
-  app.get("/api/runs/active", personal.read,
-    async (req) => {
-    const { viewingAsUpn } = viewingAsOf(req)
+  app.get("/api/runs/active", personal.read, async (req) => {
+    const viewingAs = viewingAsOf(req)
     const ids = orchestrator.getActiveRunIds()
-    const visible = ids.filter((id) => {
-      const run = db.getRun(id)
-      if (!run?.upn) return false
-      return run.upn.toLowerCase() === viewingAsUpn.toLowerCase()
-    })
+    const visible = ids.filter((id) => canAccessRun(viewingAs, db.getRun(id)))
     return { runIds: visible }
   })
 

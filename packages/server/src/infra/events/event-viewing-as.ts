@@ -1,17 +1,15 @@
 /**
  * Personal event visibility under Viewing as.
  *
- * Include when ownership is unknown (system / platform noise) or matches
- * viewingAsUpn. Exclude when ownership is known and differs.
+ * One dialect for live SSE fanout and historical `/api/events` list/search.
+ * Include when ownership is unknown or matches viewingAsUpn; exclude when
+ * ownership is known and differs.
  */
 
-import { getRun, getSyncRun } from "../../../infra/persistence/sqlite.js"
+import { getRun, getSyncRun } from "../persistence/sqlite.js"
+import { sameUpn } from "../../internal/upn.js"
 
-function sameUpn(a: string, b: string): boolean {
-  return a.trim().toLowerCase() === b.trim().toLowerCase()
-}
-
-function ownerFromEventData(data: Record<string, unknown>): string | null {
+export function ownerFromEventData(data: Record<string, unknown>): string | null {
   for (const key of ["actorUpn", "upn", "userUpn"] as const) {
     const value = data[key]
     if (typeof value === "string" && value.trim()) return value.trim()

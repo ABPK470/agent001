@@ -14,7 +14,7 @@ import {
   OPERATIONS_PAGE_EVENT_LIMIT
 } from "./service/query/index.js"
 import { personal, viewingAsOf } from "../auth/service/viewing-as.js"
-import { eventMatchesViewingAs } from "../auth/service/event-viewing-as.js"
+import { eventMatchesViewingAs } from "../../infra/events/event-viewing-as.js"
 
 /** Debounce SSE snapshots so bursty event streams do not rebuild the log continuously. */
 const OPERATIONS_STREAM_DEBOUNCE_MS = 1500
@@ -22,7 +22,7 @@ const OPERATIONS_STREAM_DEBOUNCE_MS = 1500
 type OperationsStreamFilters = {
   kind: string | undefined
   search: string | undefined
-  viewerUpn: string
+  viewingAsUpn: string
 }
 
 function writeOperationsSse(reply: FastifyReply, data: unknown): boolean {
@@ -39,7 +39,7 @@ function pushOperationsHeadSnapshot(reply: FastifyReply, filters: OperationsStre
     limit: OPERATIONS_HEAD_EVENT_LIMIT,
     kind: filters.kind,
     search: filters.search,
-    viewerUpn: filters.viewerUpn,
+    viewingAsUpn: filters.viewingAsUpn,
   })
   return writeOperationsSse(reply, { ...snapshot, live: true })
 }
@@ -66,13 +66,13 @@ export function registerOperationRoutes(app: FastifyInstance): void {
       status: req.query.status,
       planId: req.query.planId,
       runId: req.query.runId,
-      viewerUpn: viewingAsUpn,
+      viewingAsUpn,
     })
   })
 
   app.get<{ Params: { planId: string } }>("/api/operations/plan/:planId", personal.read, async (req, reply) => {
     const { viewingAsUpn } = viewingAsOf(req)
-    const result = listOperations({ planId: req.params.planId, viewerUpn: viewingAsUpn })
+    const result = listOperations({ planId: req.params.planId, viewingAsUpn })
     if (result.operations.length === 0) {
       reply.code(403)
       return { error: "forbidden" }
@@ -82,7 +82,7 @@ export function registerOperationRoutes(app: FastifyInstance): void {
 
   app.get<{ Params: { runId: string } }>("/api/operations/run/:runId", personal.read, async (req, reply) => {
     const { viewingAsUpn } = viewingAsOf(req)
-    const result = listOperations({ runId: req.params.runId, viewerUpn: viewingAsUpn })
+    const result = listOperations({ runId: req.params.runId, viewingAsUpn })
     if (result.operations.length === 0) {
       reply.code(403)
       return { error: "forbidden" }
@@ -97,7 +97,7 @@ export function registerOperationRoutes(app: FastifyInstance): void {
     const filters: OperationsStreamFilters = {
       kind: req.query.kind,
       search: req.query.search,
-      viewerUpn: viewingAsUpn,
+      viewingAsUpn,
     }
 
     reply.raw.writeHead(200, {

@@ -128,11 +128,13 @@ One owned concept in the platform shell. Same words in UI, code, and docs.
 
 **Owner (server):** auth composition root — `registerViewingAs` + `personal.read` / `personal.write` preHandlers. Resolve once onto `req.viewingAs`. Handlers only call `viewingAsOf(req)` (or ignore Viewing as for Me-only writes). They never call `resolveViewingAs` and never re-check the header.
 
-**Owner (UI):** app chrome (`viewingAsUpn` / Viewing as control). Widgets may read `isViewingAsOther` for quiet chrome (disable Personal writes). Not widgets as scope owners. Not agent/sync cores. Do not pass `userId` into widgets.
+**Visibility dialect (one):** `sameUpn` (`internal/upn`) + `canAccessOwned` / `canAccessRun` / `canAccessThread` for owned rows; `eventMatchesViewingAs` (`infra/events`) for live SSE and historical events. No per-surface UPN compares. No `viewerUpn` synonym.
 
-**Transport:** `X-Viewing-As` on fetch; `?viewingAs=` for EventSource (cannot set headers). Omit when Me.
+**Owner (UI):** chrome store (`lib/viewing-as`, including `attachViewingAsQuery`) + fetch headers in `client`. App runs one Personal scope transition on Me / Viewing as change. Widgets may read `isViewingAsOther` for quiet chrome only. Do not pass `userId` into widgets.
 
-**Laws:** Personal routes **declare** `personal.read` or `personal.write` at registration. Lists/gets/SSE filter to Viewing as UPN. Personal writes only when Me (`personal.write`). Platform routes omit those preHandlers and never read Viewing as. Admin keeps their own dashboard layout when Viewing as someone else.
+**Transport:** `X-Viewing-As` on fetch; `?viewingAs=` via `attachViewingAsQuery` for EventSource. Omit when Me.
+
+**Laws:** Personal routes **declare** `personal.read` or `personal.write` at registration. Lists/gets/SSE filter to Viewing as UPN. Personal writes only when Me (`personal.write`). Platform routes omit those preHandlers and never read Viewing as (e.g. Sync Admin `/api/sync/runs` is admin-only; Env Sync uses `/api/sync/history`). Admin keeps their own dashboard layout when Viewing as someone else.
 
 **Do not call it** workspace subject, inspect, fleet, impersonation, or context switcher.
 

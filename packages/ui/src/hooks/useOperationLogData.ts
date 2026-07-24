@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import type { OperationPipeline, OperationsResponse } from "../client/index"
 import { api } from "../client/index"
+import { attachViewingAsQuery } from "../lib/viewing-as"
 import { useViewingAs } from "./useViewingAs"
 
 /** Must match server OPERATIONS_PAGE_EVENT_LIMIT. */
@@ -53,16 +54,14 @@ function serverSearchParam(search: string): string | undefined {
   return trimmed.length >= 2 ? trimmed : undefined
 }
 
-function operationsStreamUrl(kindView: OperationLogKindView, search: string, viewingAsUpn: string | null): string {
+function operationsStreamUrl(kindView: OperationLogKindView, search: string): string {
   const params = new URLSearchParams()
   const kind = serverKindParam(kindView)
   const q = serverSearchParam(search)
   if (kind) params.set("kind", kind)
   if (q) params.set("search", q)
-  // EventSource cannot set X-Viewing-As — query param matches server resolveViewingAs.
-  if (viewingAsUpn) params.set("viewingAs", viewingAsUpn)
   const qs = params.toString()
-  return `/api/operations/stream${qs ? `?${qs}` : ""}`
+  return attachViewingAsQuery(`/api/operations/stream${qs ? `?${qs}` : ""}`)
 }
 
 function isOperationsSnapshot(data: unknown): data is OperationsResponse {
@@ -146,7 +145,7 @@ export function useOperationLogData(opts: {
 
   useEffect(() => {
     const es = new EventSource(
-      operationsStreamUrl(kindView, debouncedSearch.current, viewingAsUpn),
+      operationsStreamUrl(kindView, debouncedSearch.current),
       { withCredentials: true },
     )
     es.onmessage = (event) => {

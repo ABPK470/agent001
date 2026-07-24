@@ -11,7 +11,10 @@
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify"
 import { findUserByUpn } from "../../../infra/persistence/db/users.js"
+import { sameUpn } from "../../../internal/upn.js"
 import type { CurrentSession } from "../../../ports/session.js"
+
+export { sameUpn } from "../../../internal/upn.js"
 
 export const VIEWING_AS_HEADER = "x-viewing-as"
 
@@ -40,10 +43,6 @@ declare module "fastify" {
      */
     viewingAs: ViewingAs | undefined
   }
-}
-
-function sameUpn(a: string, b: string): boolean {
-  return a.trim().toLowerCase() === b.trim().toLowerCase()
 }
 
 function headerViewingAs(req: FastifyRequest): string | undefined {
@@ -96,9 +95,7 @@ export function canAccessOwned(
   viewingAs: ViewingAs,
   ownerUpn: string | null | undefined,
 ): boolean {
-  const owner = ownerUpn?.trim()
-  if (!owner) return false
-  return sameUpn(owner, viewingAs.viewingAsUpn)
+  return sameUpn(ownerUpn, viewingAs.viewingAsUpn)
 }
 
 export function canMutatePersonal(viewingAs: ViewingAs): boolean {

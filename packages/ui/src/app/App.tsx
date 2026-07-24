@@ -47,6 +47,97 @@ function getPopOutWidget(): { type: WidgetType; runId: string | null } | null {
   return { type, runId: params.get("runId") }
 }
 
+/** Clear Personal client state when Viewing as / session identity changes. */
+function clearPersonalClientState(): void {
+  const store = useStore.getState()
+  store.setActiveThreadId(null)
+  store.setActiveRun(null)
+  store.setRuns([])
+  store.setSteps([])
+  store.setLogs([])
+  store.setAudit([])
+  store.setTrace([])
+}
+
+function hydratePersonalNotifications(
+  setNotifications: (items: Awaited<ReturnType<typeof api.listNotifications>>) => void,
+): void {
+  const hydrate = useStore.getState().hydratePendingToolApproval
+  api.listNotifications(50).then((items) => {
+    setNotifications(items)
+    const pendingNote = items.find((n) => n.type === "approval.required" && !n.read)
+      ?? items.find((n) => n.type === "approval.required")
+    if (!pendingNote?.runId) return
+    const approveAction = pendingNote.actions.find((a) => a.action === "approve-run-step")
+    const toolMatch = pendingNote.message.match(/^Tool "([^"]+)"/)
+    hydrate({
+      approvalId: (approveAction?.data?.approvalId as string | undefined) ?? null,
+      runId: pendingNote.runId,
+      stepId: pendingNote.stepId ?? "",
+      toolName: toolMatch?.[1] ?? "unknown",
+      reason: pendingNote.message.replace(/^Tool "[^"]+" needs approval: /, "") || pendingNote.message,
+      notificationId: pendingNote.id,
+    })
+  }).catch((err: unknown) => { console.error("[mia]", err) })
+
+  api.listPendingToolApprovals().then((approvals) => {
+    const pending = approvals.find((a) => a.status === "pending")
+    if (!pending) return
+    const state = useStore.getState()
+    if (state.pendingToolApproval?.approvalId) return
+    hydrate({
+      approvalId: pending.id,
+      runId: pending.runId,
+      stepId: pending.stepId,
+      toolName: pending.toolName,
+      reason: pending.reason,
+      policyName: pending.policyName,
+      args: pending.args,
+      notificationId: state.pendingToolApproval?.notificationId ?? null,
+    })
+  }).catch((err: unknown) => { console.error("[mia]", err) })
+}
+
+function hydratePersonalLatestRun(
+  setRuns: (runs: Awaited<ReturnType<typeof api.listRuns>>) => void,
+  setActiveRun: (id: string) => void,
+): void {
+  if (useStore.getState().activeRunId) return
+  const pickLatest = (rows: Array<{ id: string; createdAt: string }>) => {
+    if (rows.length === 0) return
+    const latest = [...rows].sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    )[0]
+    if (latest) setActiveRun(latest.id)
+  }
+  const cached = useStore.getState().runs
+  if (cached.length > 0) {
+    pickLatest(cached)
+    return
+  }
+  const threadId = useStore.getState().activeThreadId
+  if (!threadId) return
+  api.listRuns({ threadId }).then((runs) => {
+    setRuns(runs)
+    if (!useStore.getState().activeRunId) pickLatest(runs)
+  }).catch((err: unknown) => { console.error("[mia]", err) })
+}
+
+/** Env Sync form restore from Personal history (Me only — writes disabled when Viewing as other). */
+function restorePersonalEnvSyncForm(): void {
+  const current = useStore.getState().envSyncForm
+  if (current.source && current.target) return
+  api.syncHistory({ page: 1, pageSize: 1, sort: "started_desc" }).then((page) => {
+    const latest = page.items[0]
+    if (!latest) return
+    useStore.getState().setEnvSyncForm({
+      source: latest.source,
+      target: latest.target,
+      entityType: latest.entityType,
+    })
+  }).catch((err: unknown) => { console.error("[mia]", err) })
+}
+
 export function App() {
   const setConnected = useStore((s) => s.setConnected)
   const connected = useStore((s) => s.connected)
@@ -162,19 +253,6 @@ export function App() {
     if (me.isAdmin) restoreViewingAs(me.upn)
   }, [me?.upn, me?.isAdmin])
 
-  // Reset Personal client state when Viewing as changes (avoid bleeding threads/runs).
-  useEffect(() => {
-    if (!me?.upn) return
-    const store = useStore.getState()
-    store.setActiveThreadId(null)
-    store.setActiveRun(null)
-    store.setRuns([])
-    store.setSteps([])
-    store.setLogs([])
-    store.setAudit([])
-    store.setTrace([])
-  }, [me?.upn, viewingAsUpn])
-
   useEffect(() => () => {
     if (shellTimerRef.current) window.clearTimeout(shellTimerRef.current)
   }, [])
@@ -220,13 +298,15 @@ export function App() {
     }
   }, [phase])
 
-  // Connect event stream — main window uses SSE, popouts use BroadcastChannel relay.
-  //
-  // Identity is bound to the SSE connection at the moment the EventSource is
-  // opened (the server stamps req.session.upn onto the client). Logout/login
-  // mints a new sid + may swap upn, so we re-create the stream on every
-  // identity transition. The single-input dep [me?.upn] covers all cases
-  // because every login/logout cycle changes either upn or null↔upn.
+  // Personal scope transition — one clear + rehydrate when Me / Viewing as changes.
+  useEffect(() => {
+    if (!me?.upn) return
+    clearPersonalClientState()
+    void bootstrapThreads().catch((err: unknown) => { console.error("[mia]", err) })
+    hydratePersonalNotifications(setNotifications)
+  }, [me?.upn, viewingAsUpn, bootstrapThreads, setNotifications])
+
+  // SSE transport rekeys with Personal scope (EventSource stamps Viewing as at open).
   useEffect(() => {
     const stream = popOut
       ? createPopoutEventRelay(handleEvent, setConnected)
@@ -234,96 +314,15 @@ export function App() {
     return () => stream.close()
   }, [handleEvent, setConnected, popOut, me?.upn, viewingAsUpn])
 
-  // Load threads + active thread runs on login / Viewing as change.
-  useEffect(() => {
-    if (!me) return
-    void bootstrapThreads().catch((err: unknown) => { console.error("[mia]", err) })
-  }, [me?.upn, viewingAsUpn, bootstrapThreads])
-
-  // Auto-select latest run only when a run-scoped widget is visible and
-  // nothing is selected yet.
+  // Widget-gated Personal followers (same scope key; do not re-clear).
   useEffect(() => {
     if (!me || !shouldHydrateSelectedRun) return
-    if (useStore.getState().activeRunId) return
-    const pickLatest = (rows: Array<{ id: string; createdAt: string }>) => {
-      if (rows.length === 0) return
-      const latest = [...rows].sort(
-        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-      )[0]
-      if (latest) setActiveRun(latest.id)
-    }
-    const cached = useStore.getState().runs
-    if (cached.length > 0) {
-      pickLatest(cached)
-      return
-    }
-    const threadId = useStore.getState().activeThreadId
-    if (!threadId) return
-    api.listRuns({ threadId }).then((runs) => {
-      setRuns(runs)
-      if (!useStore.getState().activeRunId) pickLatest(runs)
-    }).catch((err: unknown) => { console.error("[mia]", err) })
+    hydratePersonalLatestRun(setRuns, setActiveRun)
   }, [me?.upn, viewingAsUpn, shouldHydrateSelectedRun, setRuns, setActiveRun])
 
-  // Reload notifications on identity change so each user only sees their own.
-  // Hydrate pending approval for the bell — never open the modal and never mark
-  // dismissed (that poisoned live SSE opens after setApprovalModalOpen(false)).
   useEffect(() => {
-    if (!me) return
-    const hydrate = useStore.getState().hydratePendingToolApproval
-    api.listNotifications(50).then((items) => {
-      setNotifications(items)
-      const pendingNote = items.find((n) => n.type === "approval.required" && !n.read)
-        ?? items.find((n) => n.type === "approval.required")
-      if (!pendingNote?.runId) return
-      const approveAction = pendingNote.actions.find((a) => a.action === "approve-run-step")
-      const toolMatch = pendingNote.message.match(/^Tool "([^"]+)"/)
-      hydrate({
-        approvalId: (approveAction?.data?.approvalId as string | undefined) ?? null,
-        runId: pendingNote.runId,
-        stepId: pendingNote.stepId ?? "",
-        toolName: toolMatch?.[1] ?? "unknown",
-        reason: pendingNote.message.replace(/^Tool "[^"]+" needs approval: /, "") || pendingNote.message,
-        notificationId: pendingNote.id,
-      })
-    }).catch((err: unknown) => { console.error("[mia]", err) })
-    api.listPendingToolApprovals().then((approvals) => {
-      const pending = approvals.find((a) => a.status === "pending")
-      if (!pending) return
-      const state = useStore.getState()
-      if (state.pendingToolApproval?.approvalId) return
-      hydrate({
-        approvalId: pending.id,
-        runId: pending.runId,
-        stepId: pending.stepId,
-        toolName: pending.toolName,
-        reason: pending.reason,
-        policyName: pending.policyName,
-        args: pending.args,
-        notificationId: state.pendingToolApproval?.notificationId ?? null,
-      })
-    }).catch((err: unknown) => { console.error("[mia]", err) })
-  }, [me?.upn, viewingAsUpn, setNotifications])
-
-  // Restore the EnvSync widget operator context from the Viewing as user's
-  // most recent manual sync run (env pair + entity type). Plans are hydrated only by
-  // explicit preview/history/agent actions — not on widget visibility.
-  useEffect(() => {
-    if (!me) return
-    if (!shouldRestoreSyncState) return
-    if (isViewingAsOther) return
-    const current = useStore.getState().envSyncForm
-    if (current.source && current.target) return
-    api.syncRuns(1).then((rows) => {
-      const latest = rows[0]
-      if (!latest) return
-      if (latest.actorUpn !== me.upn) return
-      useStore.getState().setEnvSyncForm({
-        source: latest.source,
-        target: latest.target,
-        entityType: latest.entityType,
-      })
-    }).catch((err: unknown) => { console.error("[mia]", err) })
+    if (!me || !shouldRestoreSyncState || isViewingAsOther) return
+    restorePersonalEnvSyncForm()
   }, [me?.upn, viewingAsUpn, isViewingAsOther, shouldRestoreSyncState])
 
   // Event Stream (live-logs) loads its own history via useEventStreamData —

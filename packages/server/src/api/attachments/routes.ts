@@ -1,8 +1,8 @@
 /**
- * Attachment transport routes.
+ * Attachment transport — Personal. Scope from personal.read / personal.write.
  */
 
-import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify"
+import type { FastifyInstance } from "fastify"
 import { Buffer } from "node:buffer"
 import {
   auditAttachmentDeleted,
@@ -16,6 +16,7 @@ import {
   type AttachmentRow
 } from "../../infra/persistence/attachments.js"
 import { AttachmentScope, isAttachmentScope } from "../../internal/enums/attachments.js"
+import { canAccessOwned, personal, viewingAsOf } from "../auth/service/viewing-as.js"
 
 /** Accept legacy `session` uploads during API transition. */
 function normalizeAttachmentScope(scope: unknown): AttachmentScope | null {
@@ -57,27 +58,12 @@ function publicView(row: AttachmentRow): Record<string, unknown> {
   }
 }
 
-function requireSession(req: FastifyRequest, reply: FastifyReply): boolean {
-  if (!req.session) {
-    reply.code(401)
-    reply.send({ error: "authentication required" })
-    return false
-  }
-  return true
-}
-
-function canViewAttachment(req: FastifyRequest, row: AttachmentRow): boolean {
-  if (!req.session) return false
-  if (req.session.isAdmin) return true
-  return !!(row.owner_upn && row.owner_upn === req.session.upn)
-}
-
 export function registerAttachmentRoutes(app: FastifyInstance): void {
   app.post<{ Body: UploadBody }>(
     "/api/attachments",
-    { bodyLimit: MAX_UPLOAD_BYTES + 64 * 1024 },
+    { ...personal.write, bodyLimit: MAX_UPLOAD_BYTES + 64 * 1024 },
     async (req, reply) => {
-      if (!requireSession(req, reply)) return
+      const { session } = viewingAsOf(req)
       const body = req.body
       if (!body || typeof body.name !== "string" || typeof body.contentBase64 !== "string") {
         reply.code(400)
@@ -110,7 +96,7 @@ export function registerAttachmentRoutes(app: FastifyInstance): void {
           mediaType: body.mediaType || "application/octet-stream",
           scope,
           runId: body.runId ?? null,
-          ownerUpn: req.session!.upn,
+          ownerUpn: session.upn,
           purposeTag: body.purposeTag ?? null,
           goalSnapshot: body.goalSnapshot ?? null,
           tags: body.tags
@@ -134,43 +120,34 @@ export function registerAttachmentRoutes(app: FastifyInstance): void {
 
   app.get<{ Querystring: { scope?: AttachmentScope; runId?: string; q?: string } }>(
     "/api/attachments",
-    async (req, reply) => {
-      if (!requireSession(req, reply)) return
-      const session = req.session!
-      const filter = {
+    personal.read,
+    async (req) => {
+      const { viewingAsUpn } = viewingAsOf(req)
+      return listAttachments({
         scope: req.query.scope,
         runId: req.query.runId,
         q: req.query.q,
-        ...(session.isAdmin ? {} : { ownerUpn: session.upn ?? undefined })
-      }
-      return listAttachments(filter).map(publicView)
+        ownerUpn: viewingAsUpn,
+      }).map(publicView)
     }
   )
 
-  app.get<{ Params: { id: string } }>("/api/attachments/:id", async (req, reply) => {
-    if (!requireSession(req, reply)) return
+  app.get<{ Params: { id: string } }>("/api/attachments/:id", personal.read, async (req, reply) => {
+    const viewingAs = viewingAsOf(req)
     const row = getAttachment(req.params.id)
-    if (!row) {
+    if (!row || !canAccessOwned(viewingAs, row.owner_upn)) {
       reply.code(404)
       return { error: "attachment not found" }
-    }
-    if (!canViewAttachment(req, row)) {
-      reply.code(403)
-      return { error: "forbidden" }
     }
     return publicView(row)
   })
 
-  app.get<{ Params: { id: string } }>("/api/attachments/:id/content", async (req, reply) => {
-    if (!requireSession(req, reply)) return
+  app.get<{ Params: { id: string } }>("/api/attachments/:id/content", personal.read, async (req, reply) => {
+    const viewingAs = viewingAsOf(req)
     const row = getAttachment(req.params.id)
-    if (!row) {
+    if (!row || !canAccessOwned(viewingAs, row.owner_upn)) {
       reply.code(404)
       return { error: "attachment not found" }
-    }
-    if (!canViewAttachment(req, row)) {
-      reply.code(403)
-      return { error: "forbidden" }
     }
     const bytes = await readAttachmentBlob(row.storage_uri)
     reply.header("content-type", row.media_type || "application/octet-stream")
@@ -180,16 +157,12 @@ export function registerAttachmentRoutes(app: FastifyInstance): void {
     return reply.send(bytes)
   })
 
-  app.delete<{ Params: { id: string } }>("/api/attachments/:id", async (req, reply) => {
-    if (!requireSession(req, reply)) return
+  app.delete<{ Params: { id: string } }>("/api/attachments/:id", personal.write, async (req, reply) => {
+    const viewingAs = viewingAsOf(req)
     const row = getAttachment(req.params.id)
-    if (!row) {
+    if (!row || !canAccessOwned(viewingAs, row.owner_upn)) {
       reply.code(404)
       return { error: "attachment not found" }
-    }
-    if (!canViewAttachment(req, row)) {
-      reply.code(403)
-      return { error: "forbidden" }
     }
     softDeleteAttachment(row.id)
     auditAttachmentDeleted({ id: row.id, ownerUpn: row.owner_upn, reason: "user" })

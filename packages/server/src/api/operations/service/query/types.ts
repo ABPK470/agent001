@@ -60,7 +60,7 @@ export interface ListOperationsOpts {
   /** When set, return the full audit tree for one agent run (no pagination). */
   runId?: string
   /** Viewing as UPN — Personal pipelines are filtered to this owner. */
-  viewerUpn?: string
+  viewingAsUpn?: string
 }
 
 export interface ListOperationsResult {

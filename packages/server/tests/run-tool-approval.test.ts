@@ -10,6 +10,11 @@ import { seedRun, seedUser } from "./_fk-helpers.js"
 
 const UPN = "alice@example.com"
 
+
+function viewingAs(s: CurrentSession = session()): import("../src/api/auth/service/viewing-as.js").ViewingAs {
+  return { viewingAsUpn: s.upn, isMe: true, session: s }
+}
+
 function session(): CurrentSession {
   return {
     sid: "sid-1",
@@ -63,11 +68,12 @@ describe("run tool approval application", () => {
     const orchestrator = { resumeRun, cancelRun: vi.fn() } as unknown as import("../src/runtime/orchestrator.js").AgentOrchestrator
 
     try {
-      const { approveRunToolStep } = await import("../src/api/runs/service/run-tool-approval.js")
-      const result = approveRunToolStep(orchestrator, approval.id, session())
+      const { approveRunToolStep } = await import("../src/runtime/service/run-tool-approval.js")
+      const va = viewingAs()
+      const result = approveRunToolStep(orchestrator, approval.id, va)
 
       expect(result).toEqual({ ok: true, runId: "run-1", resumedRunId: "run-1-resumed" })
-      expect(resumeRun).toHaveBeenCalledWith("run-1", session())
+      expect(resumeRun).toHaveBeenCalledWith("run-1", va.session)
 
       const resolved = events.find((e) => e.type === "approval.resolved")
       expect(resolved?.data).toMatchObject({
@@ -103,8 +109,8 @@ describe("run tool approval application", () => {
     const orchestrator = { resumeRun: vi.fn(), cancelRun } as unknown as import("../src/runtime/orchestrator.js").AgentOrchestrator
 
     try {
-      const { denyRunToolStep } = await import("../src/api/runs/service/run-tool-approval.js")
-      const result = denyRunToolStep(orchestrator, approval.id, session(), "operator denied")
+      const { denyRunToolStep } = await import("../src/runtime/service/run-tool-approval.js")
+      const result = denyRunToolStep(orchestrator, approval.id, viewingAs(), "operator denied")
 
       expect(result).toEqual({ ok: true, runId: "run-1" })
       expect(cancelRun).toHaveBeenCalledWith("run-1")
@@ -119,7 +125,7 @@ describe("run tool approval application", () => {
     }
   })
 
-  it("listPendingToolApprovalsForSession scopes to waiting runs for the user", async () => {
+  it("listPendingToolApprovalsForViewingAs scopes to waiting runs for the user", async () => {
     await setupDb()
     seedUser(testDb, "bob@example.com")
     seedRun(testDb, "run-wait", { upn: UPN, status: "waiting_for_approval" })
@@ -152,8 +158,8 @@ describe("run tool approval application", () => {
       policyName: "p",
     })
 
-    const { listPendingToolApprovalsForSession } = await import("../src/api/runs/service/run-tool-approval.js")
-    const pending = listPendingToolApprovalsForSession(session())
+    const { listPendingToolApprovalsForViewingAs } = await import("../src/runtime/service/run-tool-approval.js")
+    const pending = listPendingToolApprovalsForViewingAs(viewingAs())
     expect(pending).toHaveLength(1)
     expect(pending[0]?.id).toBe(mine.id)
   })
@@ -174,7 +180,7 @@ describe("run tool approval application", () => {
     })
     markRunToolApprovalApproved(approval.id, UPN)
 
-    const { consumeMatchingToolGrant } = await import("../src/api/runs/service/run-tool-approval.js")
+    const { consumeMatchingToolGrant } = await import("../src/runtime/service/run-tool-approval.js")
     consumeMatchingToolGrant("run-1", null, "write_file", { path: "/tmp/a.txt", content: "hi" })
     expect(getRunToolApproval(approval.id)?.status).toBe("consumed")
   })

@@ -698,14 +698,14 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
     }
   })
 
-  app.get<{ Querystring: { limit?: string } }>("/api/sync/runs", async (req) => {
-    const isAdmin = !!req.session.isAdmin
-    const viewerUpn = req.session.upn
+  /** Platform — Sync Admin fleet list. Env Sync Personal history uses /api/sync/history. */
+  app.get<{ Querystring: { limit?: string } }>("/api/sync/runs", async (req, reply) => {
+    if (!req.session?.isAdmin) {
+      reply.code(403)
+      return { error: "forbidden" }
+    }
     const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 25))
-    return db
-      .listSyncRuns(limit)
-      .filter((row) => isAdmin || (viewerUpn && row.actor_upn === viewerUpn))
-      .map(mapSyncRunRow)
+    return db.listSyncRuns(limit).map(mapSyncRunRow)
   })
 
   registerSyncMetadataRoutes(app, projectRoot)

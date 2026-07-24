@@ -50,6 +50,14 @@ export function getViewingAsUpn(): string | null {
   return store.target?.upn ?? null
 }
 
+/** EventSource cannot set headers — attach ?viewingAs= (omit when Me). */
+export function attachViewingAsQuery(url: string): string {
+  const viewingAs = getViewingAsUpn()
+  if (!viewingAs) return url
+  const sep = url.includes("?") ? "&" : "?"
+  return `${url}${sep}viewingAs=${encodeURIComponent(viewingAs)}`
+}
+
 export function getViewingAsTarget(): ViewingAsTarget | null {
   return store.target
 }

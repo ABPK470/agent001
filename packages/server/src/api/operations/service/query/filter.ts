@@ -4,6 +4,7 @@
  */
 
 import { OperationKind } from "../../../../internal/enums/operations.js"
+import { sameUpn } from "../../../../internal/upn.js"
 import * as db from "../../../../infra/persistence/sqlite.js"
 import type { ListOperationsOpts, OperationPipeline } from "./types.js"
 
@@ -27,12 +28,6 @@ function matchesKindFilter(pipeline: OperationPipeline, kind: string): boolean {
   return pipeline.kind === kind
 }
 
-function sameUpn(a: string | null | undefined, b: string | null | undefined): boolean {
-  const left = a?.trim().toLowerCase()
-  const right = b?.trim().toLowerCase()
-  return Boolean(left && right && left === right)
-}
-
 /** Resolve owner for scoping — prefer stamped actorUpn, else persistence lookup. */
 export function pipelineOwnerUpn(pipeline: OperationPipeline): string | null {
   if (pipeline.actorUpn?.trim()) return pipeline.actorUpn.trim()
@@ -54,15 +49,15 @@ export function pipelineOwnerUpn(pipeline: OperationPipeline): string | null {
   return null
 }
 
-export function scopeOperationsToViewer(
+export function scopeOperationsToViewingAs(
   operations: OperationPipeline[],
-  opts: Pick<ListOperationsOpts, "viewerUpn">,
+  opts: Pick<ListOperationsOpts, "viewingAsUpn">,
 ): OperationPipeline[] {
-  // No viewer context (unit tests / internal callers) — leave unscoped.
-  if (opts.viewerUpn === undefined) return operations
-  const viewer = opts.viewerUpn.trim()
-  if (!viewer) return []
-  return operations.filter((p) => sameUpn(pipelineOwnerUpn(p), viewer))
+  // No Viewing as context (unit tests / internal callers) — leave unscoped.
+  if (opts.viewingAsUpn === undefined) return operations
+  const viewingAsUpn = opts.viewingAsUpn.trim()
+  if (!viewingAsUpn) return []
+  return operations.filter((p) => sameUpn(pipelineOwnerUpn(p), viewingAsUpn))
 }
 
 export function excludeSystemPipelines(operations: OperationPipeline[]): OperationPipeline[] {
@@ -99,5 +94,5 @@ export function filterOperations(
     )
   }
 
-  return scopeOperationsToViewer(filtered, opts)
+  return scopeOperationsToViewingAs(filtered, opts)
 }

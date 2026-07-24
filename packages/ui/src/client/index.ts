@@ -3,7 +3,8 @@
  */
 
 import { parseBoundaryJson } from "../lib/parse-json.js"
-import { getViewingAsUpn } from "../lib/viewing-as"
+import { attachViewingAsQuery, getViewingAsUpn } from "../lib/viewing-as"
+export { attachViewingAsQuery } from "../lib/viewing-as"
 
 import type {
     EntityRegistryDraftSuggestion,
@@ -241,13 +242,6 @@ function withViewingAsHeaders(headers: Record<string, string>): Record<string, s
   const viewingAs = getViewingAsUpn()
   if (viewingAs) headers["X-Viewing-As"] = viewingAs
   return headers
-}
-
-function withViewingAsQuery(url: string): string {
-  const viewingAs = getViewingAsUpn()
-  if (!viewingAs) return url
-  const sep = url.includes("?") ? "&" : "?"
-  return `${url}${sep}viewingAs=${encodeURIComponent(viewingAs)}`
 }
 
 // ── REST API ─────────────────────────────────────────────────────
@@ -1001,7 +995,7 @@ export const api = {
       error: string | null
       createdAt: string
     }>(`/api/events/sql/${id}`, { signal: opts?.signal }),
-  /** Recent sync execution runs — used to restore the EnvSync widget on cold start. */
+  /** Platform — Sync Admin fleet list (admin-only). Env Sync uses syncHistory. */
   syncRuns: (limit = 25) =>
     json<Array<SyncRunSummary & { planAvailable?: boolean }>>(`/api/sync/runs?limit=${limit}`),
 
@@ -1673,7 +1667,7 @@ export function createEventStream(
   onStatus: (connected: boolean) => void,
 ): { close: () => void } {
   const base = `${window.location.origin}${import.meta.env.BASE_URL.replace(/\/$/, "")}/api/events/stream`
-  const url = withViewingAsQuery(base)
+  const url = attachViewingAsQuery(base)
 
   let es: EventSource | null = null
   let alive = true

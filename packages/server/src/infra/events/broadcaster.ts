@@ -7,9 +7,9 @@
  *
  * Every `broadcast()` call:
  *   1. Stamps a timestamp + serialises once.
- *   2. Resolves the originating run's owner (`runId` field on the event)
- *      and fans out only to clients whose Viewing as UPN owns the run.
- *      Non-run-scoped events go to every connected client.
+ *   2. Fans out with `eventMatchesViewingAs` — same Personal visibility
+ *      dialect as historical `/api/events` (unknown owner → all; known
+ *      mismatch → drop).
  *   3. Persists to the `event_log` SQLite table (skipping high-frequency
  *      `answer.chunk` events) so disconnected clients can replay history
  *      and webhook drains have a durable source.
@@ -30,7 +30,8 @@ import { EventType } from "@mia/shared-enums"
 import type { SseEvent, TraceEntry } from "@mia/shared-types"
 import { createHmac } from "node:crypto"
 import { registerSseBroadcastSink } from "./emit.js"
-import { getRun, listWebhookDrains, saveEvent } from "../persistence/sqlite.js"
+import { eventMatchesViewingAs } from "./event-viewing-as.js"
+import { listWebhookDrains, saveEvent } from "../persistence/sqlite.js"
 
 export type { SseEvent }
 
@@ -57,8 +58,6 @@ export class EventBroadcaster {
   private readonly sseClients = new Map<symbol, { sink: SseSink; identity: WsClientIdentity }>()
   /** Internal subscribers — notified after every broadcast() call. */
   private readonly subscribers = new Set<(event: SseEvent) => void>()
-  /** Tiny LRU of runId → owner. Cleared after this many entries. */
-  private readonly ownerCache = new Map<string, { upn: string | null }>()
 
   /**
    * Register an SSE client. Returns a disposer that the route handler must
@@ -92,25 +91,12 @@ export class EventBroadcaster {
     const json = JSON.stringify(msg)
     const sseFrame = `data: ${json}\n\n`
 
-    // Resolve run owner once if this event is run-scoped, then send only to
-    // clients Viewing as that owner. Events without a runId go to all.
-    const runId = typeof msg.data["runId"] === "string" ? (msg.data["runId"] as string) : null
-    const owner = runId ? this.resolveOwner(runId) : null
-
-    const allowed = (identity: WsClientIdentity): boolean => {
-      if (!owner) return true
-      if (!owner.upn) return false
-      const viewingAs = identity.viewingAsUpn ?? identity.upn
-      if (!viewingAs) return false
-      return viewingAs.toLowerCase() === owner.upn.toLowerCase()
-    }
-
     for (const [, { sink, identity }] of this.sseClients) {
-      if (allowed(identity)) {
-        try {
-          sink.write(sseFrame)
-        } catch (err: unknown) { console.error("[mia]", err) }
-      }
+      const viewingAs = identity.viewingAsUpn ?? identity.upn
+      if (!viewingAs || !eventMatchesViewingAs(msg.data, viewingAs)) continue
+      try {
+        sink.write(sseFrame)
+      } catch (err: unknown) { console.error("[mia]", err) }
     }
 
     // Persist to event_log (skip high-frequency ephemeral events to keep
@@ -143,18 +129,6 @@ export class EventBroadcaster {
   subscribe(fn: (event: SseEvent) => void): () => void {
     this.subscribers.add(fn)
     return () => this.subscribers.delete(fn)
-  }
-
-  /** Look up which session/upn owns a runId. Cached for perf. */
-  private resolveOwner(runId: string): { upn: string | null } | null {
-    const hit = this.ownerCache.get(runId)
-    if (hit) return hit
-    const run = getRun(runId)
-    if (!run) return null
-    const owner = { upn: run.upn ?? null }
-    if (this.ownerCache.size > 1024) this.ownerCache.clear()
-    this.ownerCache.set(runId, owner)
-    return owner
   }
 
   clientCount(): number {

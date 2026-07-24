@@ -158,7 +158,7 @@ export function registerNotificationRoutes(app: FastifyInstance, orchestrator: A
             return { error: "approvalId required" }
           }
           const { approveRunToolStep } = await import("../../runtime/service/run-tool-approval.js")
-          return approveRunToolStep(orchestrator, approvalId, req.session ?? null)
+          return approveRunToolStep(orchestrator, approvalId, viewingAs)
         }
         case "deny-run-step": {
           const approvalId = data?.approvalId as string | undefined
@@ -167,7 +167,7 @@ export function registerNotificationRoutes(app: FastifyInstance, orchestrator: A
             return { error: "approvalId required" }
           }
           const { denyRunToolStep } = await import("../../runtime/service/run-tool-approval.js")
-          return denyRunToolStep(orchestrator, approvalId, req.session ?? null)
+          return denyRunToolStep(orchestrator, approvalId, viewingAs)
         }
         default:
           return { ok: true }

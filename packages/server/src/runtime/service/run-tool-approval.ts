@@ -2,7 +2,6 @@ import { EventType } from "@mia/agent"
 import { stripRuntimeToolArgs } from "@mia/shared-types"
 
 import { canAccessRun, requireSessionUpn } from "../../api/auth/service/access.js"
-import type { CurrentSession } from "../../api/auth/state/context.js"
 import type { ViewingAs } from "../../api/auth/service/viewing-as.js"
 import { broadcast } from "../../infra/events/broadcaster.js"
 import * as db from "../../infra/persistence/sqlite.js"
@@ -12,16 +11,10 @@ function stableArgsKey(args: Record<string, unknown>): string {
   return JSON.stringify(stripRuntimeToolArgs(args))
 }
 
-function viewingAsMe(session: CurrentSession): ViewingAs {
-  return { viewingAsUpn: session.upn, isMe: true, session }
-}
-
 function assertCanActOnApproval(
-  session: CurrentSession | null | undefined,
+  viewingAs: ViewingAs,
   approval: db.RunToolApprovalRecord
 ): void {
-  const actor = requireSessionUpn(session)
-  const viewingAs = viewingAsMe({ ...session!, upn: actor })
   const run = db.getRun(approval.runId)
   if (!run || !canAccessRun(viewingAs, run)) {
     throw new Error("Run not found")
@@ -34,16 +27,16 @@ function assertCanActOnApproval(
 export function approveRunToolStep(
   orchestrator: AgentOrchestrator,
   approvalId: string,
-  session: CurrentSession | null
+  viewingAs: ViewingAs,
 ): { ok: true; runId: string; resumedRunId: string | null } {
-  const actor = requireSessionUpn(session)
+  const actor = requireSessionUpn(viewingAs.session)
   const approval =
     db.getRunToolApproval(approvalId) ??
     (() => {
       throw new Error("Approval not found")
     })()
 
-  assertCanActOnApproval(session, approval)
+  assertCanActOnApproval(viewingAs, approval)
   const updated = db.markRunToolApprovalApproved(approvalId, actor)
   if (!updated || updated.status !== "approved") {
     throw new Error("Approval could not be granted")
@@ -67,24 +60,24 @@ export function approveRunToolStep(
     },
   })
 
-  const resumedRunId = orchestrator.resumeRun(approval.runId, session)
+  const resumedRunId = orchestrator.resumeRun(approval.runId, viewingAs.session)
   return { ok: true, runId: approval.runId, resumedRunId }
 }
 
 export function denyRunToolStep(
   orchestrator: AgentOrchestrator,
   approvalId: string,
-  session: CurrentSession | null,
+  viewingAs: ViewingAs,
   reason?: string
 ): { ok: true; runId: string } {
-  const actor = requireSessionUpn(session)
+  const actor = requireSessionUpn(viewingAs.session)
   const approval =
     db.getRunToolApproval(approvalId) ??
     (() => {
       throw new Error("Approval not found")
     })()
 
-  assertCanActOnApproval(session, approval)
+  assertCanActOnApproval(viewingAs, approval)
   const updated = db.markRunToolApprovalDenied(approvalId, actor)
   if (!updated || updated.status !== "denied") {
     throw new Error("Approval could not be denied")
@@ -120,11 +113,12 @@ export function denyRunToolStep(
   return { ok: true, runId: approval.runId }
 }
 
-export function listPendingToolApprovalsForSession(
-  session: CurrentSession | null
+/** Pending approvals for Viewing as owner's waiting runs. */
+export function listPendingToolApprovalsForViewingAs(
+  viewingAs: ViewingAs,
 ): db.RunToolApprovalRecord[] {
-  const actor = requireSessionUpn(session)
-  const runs = db.listRunsWithUsageForUser({ upn: actor }, 200)
+  requireSessionUpn(viewingAs.session)
+  const runs = db.listRunsWithUsageForUser({ upn: viewingAs.viewingAsUpn }, 200)
   const runIds = runs
     .filter((run) => run.status === "waiting_for_approval")
     .map((run) => run.id)

@@ -7,8 +7,8 @@ import { parseBoundaryJson } from "../../internal/parse-json.js"
 import type { FastifyInstance } from "fastify"
 import { randomUUID } from "node:crypto"
 import * as db from "../../infra/persistence/sqlite.js"
-import { personal, viewingAsOf } from "../auth/service/viewing-as.js"
-import { eventMatchesViewingAs } from "../auth/service/event-viewing-as.js"
+import { canAccessOwned, personal, viewingAsOf } from "../auth/service/viewing-as.js"
+import { eventMatchesViewingAs } from "../../infra/events/event-viewing-as.js"
 
 export function registerEventRoutes(app: FastifyInstance): void {
   app.get<{
@@ -181,7 +181,8 @@ export function registerEventRoutes(app: FastifyInstance): void {
     return { ok: true }
   })
 
-  app.get<{ Params: { id: string } }>("/api/events/sql/:id", async (req, reply) => {
+  app.get<{ Params: { id: string } }>("/api/events/sql/:id", personal.read, async (req, reply) => {
+    const viewingAs = viewingAsOf(req)
     const id = Number(req.params.id)
     if (!Number.isFinite(id) || id <= 0) {
       reply.code(400)
@@ -191,6 +192,16 @@ export function registerEventRoutes(app: FastifyInstance): void {
     if (!row) {
       reply.code(404)
       return { error: "sql log not found" }
+    }
+    const planId = row.plan_id
+    if (!planId) {
+      reply.code(403)
+      return { error: "forbidden" }
+    }
+    const syncRun = db.getSyncRun(planId)
+    if (!canAccessOwned(viewingAs, syncRun?.actor_upn)) {
+      reply.code(403)
+      return { error: "forbidden" }
     }
     return {
       id: row.id,
