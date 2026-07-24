@@ -15,6 +15,7 @@ import { registerAdminRoutes } from "../api/admin/routes.js"
 import { registerApprovalRoutes } from "../api/approvals/routes.js"
 import { registerAttachmentRoutes } from "../api/attachments/routes.js"
 import { registerAuthRoutes, registerIdentity } from "../api/auth/index.js"
+import { tryResolveViewingAs } from "../api/auth/service/viewing-as.js"
 import { registerEventRoutes } from "../api/events/routes.js"
 import { registerEvidenceRoutes } from "../api/evidence/routes.js"
 import { registerLayoutRoutes } from "../api/layouts/routes.js"
@@ -168,6 +169,16 @@ export async function buildApp(opts: BuildAppOptions) {
   // (works through HTTP-only reverse proxies that drop Upgrade frames) and
   // browsers handle reconnect automatically via EventSource.
   app.get("/api/events/stream", (req, reply) => {
+    // registerIdentity's onRequest already resolved a real users-backed
+    // session (cookie or SSO). /api/events/stream is not on the bypass list,
+    // so a missing req.session here means the identity hook is broken — fail loud.
+    // EventSource cannot set headers — resolveViewingAs also reads ?viewingAs=
+    const viewingAsResult = tryResolveViewingAs(req)
+    if (!viewingAsResult.ok) {
+      reply.code(viewingAsResult.status)
+      return reply.send({ error: viewingAsResult.error })
+    }
+
     reply.raw.writeHead(200, {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache, no-transform",
@@ -177,13 +188,11 @@ export async function buildApp(opts: BuildAppOptions) {
     // Disable Nagle's algorithm so each SSE frame is sent immediately
     // instead of being coalesced with subsequent writes into one TCP packet.
     reply.raw.socket?.setNoDelay(true)
-    // registerIdentity's onRequest already resolved a real users-backed
-    // session (cookie or SSO). /api/events/stream is not on the bypass list,
-    // so a missing req.session here means the identity hook is broken — fail loud.
     const dispose = addSseClient(reply.raw, {
       upn: req.session.upn,
       sid: req.session.sid,
-      isAdmin: req.session.isAdmin
+      isAdmin: req.session.isAdmin,
+      viewingAsUpn: viewingAsResult.viewingAs.viewingAsUpn,
     })
 
     // ── Liveness ────────────────────────────────────────────────

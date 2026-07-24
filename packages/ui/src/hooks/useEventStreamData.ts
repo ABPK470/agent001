@@ -11,6 +11,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { api } from "../client/index"
 import { formatLogEntry, useStore } from "../state/store"
 import type { LogEntry } from "../types"
+import { useViewingAs } from "./useViewingAs"
 
 /** Wire types omitted from the stream (owned by Trace / Pipelines). */
 export const EVENT_STREAM_EXCLUDE_TYPES = ["debug.trace"] as const
@@ -154,6 +155,7 @@ export function useEventStreamData(opts: {
   paused: boolean
 }): UseEventStreamDataResult {
   const { paused } = opts
+  const { viewingAsUpn } = useViewingAs()
   const [window, setWindow] = useState<EventStreamWindow>({ range: "live" })
   const [entries, setEntries] = useState<LogEntry[]>([])
   const [loading, setLoading] = useState(true)
@@ -233,7 +235,7 @@ export function useEventStreamData(opts: {
 
   useEffect(() => {
     reload(window)
-  }, [window, reload])
+  }, [window, reload, viewingAsUpn])
 
   const setQuickRange = useCallback((range: EventStreamRange) => {
     setWindow({ range, from: undefined, to: undefined })

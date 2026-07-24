@@ -7,6 +7,8 @@ import { parseBoundaryJson } from "../../internal/parse-json.js"
 import type { FastifyInstance } from "fastify"
 import { randomUUID } from "node:crypto"
 import * as db from "../../infra/persistence/sqlite.js"
+import { tryResolveViewingAs } from "../auth/service/viewing-as.js"
+import { eventMatchesViewingAs } from "../auth/service/event-viewing-as.js"
 
 export function registerEventRoutes(app: FastifyInstance): void {
   app.get<{
@@ -19,9 +21,15 @@ export function registerEventRoutes(app: FastifyInstance): void {
       types?: string
       exclude_types?: string
     }
-  }>("/api/events", async (req) => {
+  }>("/api/events", async (req, reply) => {
+    const resolved = tryResolveViewingAs(req)
+    if (!resolved.ok) {
+      reply.code(resolved.status)
+      return { error: resolved.error }
+    }
     // Event Stream: cursor pages of surface events (exclude debug.trace by default
     // from the client). Cap keeps a single page cheap; scroll loads older.
+    // Over-fetch then filter to Viewing as so pages still fill reasonably.
     const limit = Math.min(Number(req.query.limit) || 200, 2000)
     const types = req.query.types
       ? req.query.types
@@ -42,8 +50,8 @@ export function registerEventRoutes(app: FastifyInstance): void {
       ? req.query.until
       : undefined
 
-    const events = db.listEvents({
-      limit,
+    const rows = db.listEvents({
+      limit: Math.min(limit * 3, 6000),
       before: req.query.before,
       after: req.query.after,
       since,
@@ -52,17 +60,22 @@ export function registerEventRoutes(app: FastifyInstance): void {
       excludeTypes
     })
 
-    // Newest-first from DB; oldestTimestamp is the cursor for the next older page.
-    const oldestTimestamp = events.length > 0 ? events[events.length - 1]!.created_at : null
-    const newestTimestamp = events.length > 0 ? events[0]!.created_at : null
-
-    return {
-      events: events.map((event) => ({
+    const events = rows
+      .map((event) => ({
         id: event.id,
         type: event.type,
         data: parseBoundaryJson(event.data) as Record<string, unknown>,
         timestamp: event.created_at
-      })),
+      }))
+      .filter((event) => eventMatchesViewingAs(event.data, resolved.viewingAs.viewingAsUpn))
+      .slice(0, limit)
+
+    // Newest-first from DB; oldestTimestamp is the cursor for the next older page.
+    const oldestTimestamp = events.length > 0 ? events[events.length - 1]!.timestamp : null
+    const newestTimestamp = events.length > 0 ? events[0]!.timestamp : null
+
+    return {
+      events,
       count: events.length,
       oldestTimestamp,
       newestTimestamp,

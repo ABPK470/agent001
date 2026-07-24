@@ -3,6 +3,7 @@
  */
 
 import { parseBoundaryJson } from "../lib/parse-json.js"
+import { getViewingAsUpn } from "../app/viewing-as"
 
 import type {
     EntityRegistryDraftSuggestion,
@@ -235,11 +236,26 @@ export interface SyncHistoryPage {
 
 const BASE = ""
 
+/** Attach Viewing as for Personal requests (omit when Me). */
+function withViewingAsHeaders(headers: Record<string, string>): Record<string, string> {
+  const viewingAs = getViewingAsUpn()
+  if (viewingAs) headers["X-Viewing-As"] = viewingAs
+  return headers
+}
+
+function withViewingAsQuery(url: string): string {
+  const viewingAs = getViewingAsUpn()
+  if (!viewingAs) return url
+  const sep = url.includes("?") ? "&" : "?"
+  return `${url}${sep}viewingAs=${encodeURIComponent(viewingAs)}`
+}
+
 // ── REST API ─────────────────────────────────────────────────────
 
 async function json<T>(path: string, opts?: RequestInit): Promise<T> {
   const headers: Record<string, string> = { ...opts?.headers as Record<string, string> }
   if (opts?.body) headers["Content-Type"] = "application/json"
+  withViewingAsHeaders(headers)
   // credentials: include — sends the session cookie cross-port (UI on 5173, server on 3102 in dev).
   const signal = opts?.signal ?? AbortSignal.timeout(60_000)
   const res = await fetch(`${BASE}${path}`, { ...opts, headers, credentials: "include", signal })
@@ -774,6 +790,16 @@ export const api = {
       `/api/admin/users/${encodeURIComponent(identifier)}/admin`,
       { method: "PATCH", body: JSON.stringify({ isAdmin }) },
     ),
+  adminUsers: () =>
+    json<{
+      users: Array<{
+        upn: string | null
+        displayName: string | null
+        isAdmin: boolean
+        online: boolean
+      }>
+      summary: Record<string, number>
+    }>("/api/admin/users"),
 
   // Workspace
   getWorkspace: () => json<{ path: string }>("/api/workspace"),
@@ -1646,7 +1672,8 @@ export function createEventStream(
   onEvent: (event: SseEvent) => void,
   onStatus: (connected: boolean) => void,
 ): { close: () => void } {
-  const url = `${window.location.origin}${import.meta.env.BASE_URL.replace(/\/$/, "")}/api/events/stream`
+  const base = `${window.location.origin}${import.meta.env.BASE_URL.replace(/\/$/, "")}/api/events/stream`
+  const url = withViewingAsQuery(base)
 
   let es: EventSource | null = null
   let alive = true

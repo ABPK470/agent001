@@ -1,7 +1,7 @@
 import { parseBoundaryJson } from "../../internal/parse-json.js"
 
 /**
- * Operation log transport routes.
+ * Operation log transport routes (Personal — follows Viewing as).
  */
 
 import type { FastifyInstance } from "fastify"
@@ -14,15 +14,22 @@ import {
   OPERATIONS_PAGE_EVENT_LIMIT
 } from "./service/query/index.js"
 import type { ListOperationsOpts } from "./service/query/types.js"
+import { tryResolveViewingAs } from "../auth/service/viewing-as.js"
+import { eventMatchesViewingAs } from "../auth/service/event-viewing-as.js"
 
 /** Debounce SSE snapshots so bursty event streams do not rebuild the log continuously. */
 const OPERATIONS_STREAM_DEBOUNCE_MS = 1500
 
-function viewerScope(req: { session?: { upn?: string; isAdmin?: boolean } }): Pick<ListOperationsOpts, "viewerUpn" | "isAdmin"> {
-  return {
-    viewerUpn: req.session?.upn,
-    isAdmin: !!req.session?.isAdmin,
-  }
+function viewerScope(req: Parameters<typeof tryResolveViewingAs>[0]): Pick<ListOperationsOpts, "viewerUpn"> | { error: string; status: number } {
+  const resolved = tryResolveViewingAs(req)
+  if (!resolved.ok) return { error: resolved.error, status: resolved.status }
+  return { viewerUpn: resolved.viewingAs.viewingAsUpn }
+}
+
+function isScopeError(
+  scope: Pick<ListOperationsOpts, "viewerUpn"> | { error: string; status: number },
+): scope is { error: string; status: number } {
+  return "error" in scope
 }
 
 export function registerOperationRoutes(app: FastifyInstance): void {
@@ -36,7 +43,12 @@ export function registerOperationRoutes(app: FastifyInstance): void {
       planId?: string
       runId?: string
     }
-  }>("/api/operations", async (req) => {
+  }>("/api/operations", async (req, reply) => {
+    const scope = viewerScope(req)
+    if (isScopeError(scope)) {
+      reply.code(scope.status)
+      return { error: scope.error }
+    }
     const limit = Math.min(Number(req.query.limit) || OPERATIONS_PAGE_EVENT_LIMIT, 10_000)
     return listOperations({
       limit,
@@ -46,13 +58,18 @@ export function registerOperationRoutes(app: FastifyInstance): void {
       status: req.query.status,
       planId: req.query.planId,
       runId: req.query.runId,
-      ...viewerScope(req),
+      ...scope,
     })
   })
 
   app.get<{ Params: { planId: string } }>("/api/operations/plan/:planId", async (req, reply) => {
-    const result = listOperations({ planId: req.params.planId, ...viewerScope(req) })
-    if (!req.session?.isAdmin && result.operations.length === 0) {
+    const scope = viewerScope(req)
+    if (isScopeError(scope)) {
+      reply.code(scope.status)
+      return { error: scope.error }
+    }
+    const result = listOperations({ planId: req.params.planId, ...scope })
+    if (result.operations.length === 0) {
       reply.code(403)
       return { error: "forbidden" }
     }
@@ -60,8 +77,13 @@ export function registerOperationRoutes(app: FastifyInstance): void {
   })
 
   app.get<{ Params: { runId: string } }>("/api/operations/run/:runId", async (req, reply) => {
-    const result = listOperations({ runId: req.params.runId, ...viewerScope(req) })
-    if (!req.session?.isAdmin && result.operations.length === 0) {
+    const scope = viewerScope(req)
+    if (isScopeError(scope)) {
+      reply.code(scope.status)
+      return { error: scope.error }
+    }
+    const result = listOperations({ runId: req.params.runId, ...scope })
+    if (result.operations.length === 0) {
       reply.code(403)
       return { error: "forbidden" }
     }
@@ -69,8 +91,15 @@ export function registerOperationRoutes(app: FastifyInstance): void {
   })
 
   app.get<{
-    Querystring: { kind?: string; search?: string }
+    Querystring: { kind?: string; search?: string; viewingAs?: string }
   }>("/api/operations/stream", (req, reply) => {
+    const scope = viewerScope(req)
+    if (isScopeError(scope)) {
+      reply.code(scope.status)
+      reply.send({ error: scope.error })
+      return
+    }
+
     reply.raw.writeHead(200, {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache, no-transform",
@@ -81,7 +110,7 @@ export function registerOperationRoutes(app: FastifyInstance): void {
     const streamFilters = {
       kind: req.query.kind,
       search: req.query.search,
-      ...viewerScope(req),
+      viewerUpn: scope.viewerUpn,
     }
 
     const send = (data: unknown): boolean => {
@@ -107,7 +136,6 @@ export function registerOperationRoutes(app: FastifyInstance): void {
         kind: streamFilters.kind,
         search: streamFilters.search,
         viewerUpn: streamFilters.viewerUpn,
-        isAdmin: streamFilters.isAdmin,
       })
       if (!send({ ...snapshot, live: true })) unsubscribe()
     }
@@ -145,7 +173,12 @@ export function registerOperationRoutes(app: FastifyInstance): void {
       since?: string
       until?: string
     }
-  }>("/api/events/search", async (req) => {
+  }>("/api/events/search", async (req, reply) => {
+    const scope = viewerScope(req)
+    if (isScopeError(scope)) {
+      reply.code(scope.status)
+      return { error: scope.error }
+    }
     const q = (req.query.q ?? "").trim()
     const types = req.query.type ? req.query.type.split(",") : undefined
     const typePatterns = req.query.type_patterns ? req.query.type_patterns.split(",") : undefined
@@ -176,12 +209,14 @@ export function registerOperationRoutes(app: FastifyInstance): void {
       since,
       until,
     })
-    const events = rows.map((row) => ({
-      id: row.id,
-      type: row.type,
-      data: parseBoundaryJson(row.data) as Record<string, unknown>,
-      timestamp: row.created_at
-    }))
+    const events = rows
+      .map((row) => ({
+        id: row.id,
+        type: row.type,
+        data: parseBoundaryJson(row.data) as Record<string, unknown>,
+        timestamp: row.created_at
+      }))
+      .filter((event) => eventMatchesViewingAs(event.data, scope.viewerUpn!))
     return { events, count: events.length }
   })
 }

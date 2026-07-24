@@ -5,6 +5,8 @@ import { EmptyState } from "../components/EmptyState"
 import { AppPhase } from "../enums"
 import { useIsMobile } from "../hooks/useIsMobile"
 import { useMe } from "../hooks/useMe"
+import { useViewingAs } from "../hooks/useViewingAs"
+import { restoreViewingAs } from "./viewing-as"
 import { usePlatformHealth } from "../hooks/usePlatformHealth"
 import { useServerReachable } from "../hooks/useServerReachable"
 import { useLayoutStore } from "../state/layout-store"
@@ -87,6 +89,7 @@ export function App() {
     shellRevealTimersRef.current.push(id)
   }
   const { me, loading: meLoading, refresh: refreshMe, logout } = useMe()
+  const { viewingAsUpn, isViewingAsOther } = useViewingAs()
   const { health: platformHealth, refresh: refreshPlatformHealth } = usePlatformHealth(!!me)
   const { reachable: serverReachable } = useServerReachable(true)
   const bootstrapThreads = useStore((s) => s.bootstrapThreads)
@@ -156,7 +159,21 @@ export function App() {
     if (!me?.upn) return
     setShellVisible(true)
     setShellMode("chat")
-  }, [me?.upn])
+    if (me.isAdmin) restoreViewingAs(me.upn)
+  }, [me?.upn, me?.isAdmin])
+
+  // Reset Personal client state when Viewing as changes (avoid bleeding threads/runs).
+  useEffect(() => {
+    if (!me?.upn) return
+    const store = useStore.getState()
+    store.setActiveThreadId(null)
+    store.setActiveRun(null)
+    store.setRuns([])
+    store.setSteps([])
+    store.setLogs([])
+    store.setAudit([])
+    store.setTrace([])
+  }, [me?.upn, viewingAsUpn])
 
   useEffect(() => () => {
     if (shellTimerRef.current) window.clearTimeout(shellTimerRef.current)
@@ -215,13 +232,13 @@ export function App() {
       ? createPopoutEventRelay(handleEvent, setConnected)
       : createEventStream(handleEvent, setConnected)
     return () => stream.close()
-  }, [handleEvent, setConnected, popOut, me?.upn])
+  }, [handleEvent, setConnected, popOut, me?.upn, viewingAsUpn])
 
-  // Load threads + active thread runs on login. Thread-scoped — not global listRuns.
+  // Load threads + active thread runs on login / Viewing as change.
   useEffect(() => {
     if (!me) return
     void bootstrapThreads().catch((err: unknown) => { console.error("[mia]", err) })
-  }, [me?.upn, bootstrapThreads])
+  }, [me?.upn, viewingAsUpn, bootstrapThreads])
 
   // Auto-select latest run only when a run-scoped widget is visible and
   // nothing is selected yet.
@@ -246,7 +263,7 @@ export function App() {
       setRuns(runs)
       if (!useStore.getState().activeRunId) pickLatest(runs)
     }).catch((err: unknown) => { console.error("[mia]", err) })
-  }, [me?.upn, shouldHydrateSelectedRun, setRuns, setActiveRun])
+  }, [me?.upn, viewingAsUpn, shouldHydrateSelectedRun, setRuns, setActiveRun])
 
   // Reload notifications on identity change so each user only sees their own.
   // Hydrate pending approval for the bell — never open the modal and never mark
@@ -286,14 +303,15 @@ export function App() {
         notificationId: state.pendingToolApproval?.notificationId ?? null,
       })
     }).catch((err: unknown) => { console.error("[mia]", err) })
-  }, [me?.upn, setNotifications])
+  }, [me?.upn, viewingAsUpn, setNotifications])
 
-  // Restore the EnvSync widget operator context from the user's most recent
-  // manual sync run (env pair + entity type). Plans are hydrated only by
+  // Restore the EnvSync widget operator context from the Viewing as user's
+  // most recent manual sync run (env pair + entity type). Plans are hydrated only by
   // explicit preview/history/agent actions — not on widget visibility.
   useEffect(() => {
     if (!me) return
     if (!shouldRestoreSyncState) return
+    if (isViewingAsOther) return
     const current = useStore.getState().envSyncForm
     if (current.source && current.target) return
     api.syncRuns(1).then((rows) => {
@@ -306,7 +324,7 @@ export function App() {
         entityType: latest.entityType,
       })
     }).catch((err: unknown) => { console.error("[mia]", err) })
-  }, [me?.upn, shouldRestoreSyncState])
+  }, [me?.upn, viewingAsUpn, isViewingAsOther, shouldRestoreSyncState])
 
   // Event Stream (live-logs) loads its own history via useEventStreamData —
   // no App-level hydrate. Live rows still arrive through SSE → store.addLog.
@@ -549,12 +567,14 @@ export function App() {
                     >
                       <LayoutGrid size={15} /> Workspace
                     </button>
+                    {me?.isAdmin && (
                     <button
                       className="flex items-center gap-2.5 w-full px-4 py-3 text-sm text-text-secondary active:bg-overlay-2"
                       onClick={() => { setPolicyEditorOpen(true); setMobileMenuOpen(false) }}
                     >
                       <Shield size={15} /> Policies
                     </button>
+                    )}
                   </div>
                 </>
               )}
@@ -641,7 +661,7 @@ export function App() {
       <ApprovalRequiredModal />
       {policyEditorOpen && !popOut && <PolicyEditor onClose={() => setPolicyEditorOpen(false)} />}
       <div
-        className={`app-shell-view flex flex-col h-screen min-h-[100dvh] ${shellVisible ? "" : "app-shell-view--fading"}`}
+        className={`app-shell-view flex flex-col h-screen min-h-[100dvh] ${shellVisible ? "" : "app-shell-view--fading"} ${isViewingAsOther ? "app-shell-view--viewing-as" : ""}`}
       >
         {me && (
           <PlatformHealthBanner

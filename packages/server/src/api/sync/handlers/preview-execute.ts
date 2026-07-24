@@ -25,6 +25,7 @@ import {
   SYNC_EXECUTE_OPERATION,
 } from "../state/execute-session.js"
 import { assertSyncHttpPolicy } from "../service/sync-http-policy.js"
+import { tryResolveViewingAs, requirePersonalWrite, ViewingAsError } from "../../auth/service/viewing-as.js"
 
 export type PreviewExecuteDeps = {
   auditSync: (
@@ -60,6 +61,20 @@ export function registerPreviewExecuteRoutes(
   const { auditSync, syncExecuteAuditAction, syncExecuteAuditDetail, replySyncPolicyError } = deps
 
   app.post("/api/sync/preview", async (req, reply) => {
+    const resolved = tryResolveViewingAs(req)
+    if (!resolved.ok) {
+      reply.code(resolved.status)
+      return { error: resolved.error }
+    }
+    try {
+      requirePersonalWrite(resolved.viewingAs)
+    } catch (err) {
+      if (err instanceof ViewingAsError) {
+        reply.code(err.status)
+        return { error: err.message }
+      }
+      throw err
+    }
     const actor = req.session.upn
     const actorUpn = req.session.upn
     const decoded = decodePreviewBody(req.body)
@@ -143,6 +158,20 @@ export function registerPreviewExecuteRoutes(
   })
 
   app.post<{ Params: { planId: string } }>("/api/sync/execute/:planId", async (req, reply) => {
+    const resolved = tryResolveViewingAs(req)
+    if (!resolved.ok) {
+      reply.code(resolved.status)
+      return { error: resolved.error }
+    }
+    try {
+      requirePersonalWrite(resolved.viewingAs)
+    } catch (err) {
+      if (err instanceof ViewingAsError) {
+        reply.code(err.status)
+        return { error: err.message }
+      }
+      throw err
+    }
     const actor = req.session.upn
     const actorUpn = req.session.upn
     rebuildLiveSyncEnvironments(host)
@@ -222,6 +251,20 @@ export function registerPreviewExecuteRoutes(
   })
 
   app.post<{ Params: { planId: string } }>("/api/sync/execute/:planId/cancel", async (req, reply) => {
+    const resolved = tryResolveViewingAs(req)
+    if (!resolved.ok) {
+      reply.code(resolved.status)
+      return { error: resolved.error }
+    }
+    try {
+      requirePersonalWrite(resolved.viewingAs)
+    } catch (err) {
+      if (err instanceof ViewingAsError) {
+        reply.code(err.status)
+        return { error: err.message }
+      }
+      throw err
+    }
     const planId = req.params.planId
     const cancelled = cancelOperation(SYNC_EXECUTE_OPERATION, planId)
     if (!cancelled) {

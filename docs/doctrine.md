@@ -115,6 +115,27 @@ Duplicating an existing class in a new folder is a doctrine violation.
 
 ---
 
+## 5b. Viewing as (Personal vs Platform)
+
+One owned concept in the platform shell. Same words in UI, code, and docs.
+
+| Term | Meaning |
+| --- | --- |
+| **Viewing as** | Whose **Personal** data the app shows. **Me** or another user’s display name. |
+| **Me** | Viewing as the signed-in session (`session.upn`). Default. |
+| **Personal** | Work product (threads, runs, Env Sync history, pipelines, live logs). Follows Viewing as. |
+| **Platform** | Shared deploy truth (policies, entity registry, connectors, Sync Admin, Usage, Audit, Active Users). Ignores Viewing as. |
+
+**Owner:** auth composition root (`resolveViewingAs`) + app chrome (`viewingAsUpn`). Not widgets. Not agent/sync cores.
+
+**Transport:** `X-Viewing-As` on fetch; `?viewingAs=` for EventSource (cannot set headers). Omit when Me.
+
+**Laws:** Personal lists/gets/SSE filter to Viewing as UPN. Personal writes only when Me. Platform routes ignore the header. Do not pass `userId` into widgets. Admin keeps their own dashboard layout when Viewing as someone else.
+
+**Do not call it** workspace subject, inspect, fleet, impersonation, or context switcher.
+
+---
+
 ## 6. Monorepo shape (functional core / imperative shell)
 
 Applied twice:

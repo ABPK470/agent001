@@ -42,6 +42,7 @@ import { STICKY_GOAL_HOME_TOP, StickyUserGoal } from "../components/StickyUserGo
 import { TypewriterAnswer } from "../components/TypewriterAnswer"
 import { RunStatus } from "../enums"
 import { useMe } from "../hooks/useMe"
+import { useViewingAs } from "../hooks/useViewingAs"
 import { ToastStack, useWidgetToasts } from "../components/useWidgetToasts"
 import { useStickToBottomScroll } from "../hooks/useStickToBottomScroll"
 import { CHAT_SCROLL_HOST_ATTR, isNearBottom } from "../lib/chatScroll"
@@ -1903,6 +1904,7 @@ function TermChatInputBar({
   className = "w-[90%]",
   variant = "default",
   heroRevealProgress = 1,
+  personalReadOnly = false,
 }: {
   input: string
   isRunning: boolean
@@ -1921,19 +1923,22 @@ function TermChatInputBar({
   onRemoveAttachment: (id: string) => void
   className?: string
   variant?: "default" | "hero"
+  personalReadOnly?: boolean
   heroRevealProgress?: number
 }) {
   const slashInput = input.trimStart().startsWith("/")
-  const attachDisabled = slashOnlyMode || !!pendingInput
-  const goalPlaceholder = pendingInput
+  const attachDisabled = personalReadOnly || slashOnlyMode || !!pendingInput
+  const goalPlaceholder = personalReadOnly
+    ? "Viewing as another user — read-only"
+    : pendingInput
     ? "Respond in the prompt above ↑"
     : slashOnlyMode
       ? "Type /cancel, /trace, /status…"
       : "Enter your goal or press / for commands"
-  const canSend = slashOnlyMode
+  const canSend = !personalReadOnly && (slashOnlyMode
     ? slashInput && input.trim().length > 1 && !sending
-    : (Boolean(input.trim()) || attachments.length > 0) && !sending
-  const showStop = isRunning && !slashInput && !pendingInput
+    : (Boolean(input.trim()) || attachments.length > 0) && !sending)
+  const showStop = !personalReadOnly && isRunning && !slashInput && !pendingInput
   const collapseComposer = useCallback(() => {
     commandConsole.clear()
     onChange("")
@@ -2108,6 +2113,7 @@ export function TermChat({
   const cmdConsole = useCommandConsole()
 
   const { me } = useMe()
+  const { isViewingAsOther } = useViewingAs()
 
   const runs = useStore((s) => s.runs)
   const activeRunId = useStore((s) => s.activeRunId)
@@ -2253,6 +2259,10 @@ export function TermChat({
   )
 
   const send = useCallback(async () => {
+    if (isViewingAsOther) {
+      notifyError("Viewing as another user is read-only")
+      return
+    }
     const goal = input.trim()
     if (!goal && pendingAttachments.length === 0) return
     if (sending) return
@@ -2298,14 +2308,19 @@ export function TermChat({
     } finally {
       setSending(false)
     }
-  }, [input, sending, slashOnlyMode, setActiveRun, pendingAttachments, scrollToBottom, continuityThreadId, mode, tryDispatchSlash, clearDraft, setDraft, notifyError])
+  }, [input, sending, slashOnlyMode, setActiveRun, pendingAttachments, scrollToBottom, continuityThreadId, mode, tryDispatchSlash, clearDraft, setDraft, notifyError, isViewingAsOther])
 
   const cancel = useCallback(async () => {
+    if (isViewingAsOther) return
     if (!scopedActiveRunId) return
     try { await api.cancelRun(scopedActiveRunId) } catch (err: unknown) { console.error("[mia]", err) }
-  }, [scopedActiveRunId])
+  }, [scopedActiveRunId, isViewingAsOther])
 
   const uploadFiles = useCallback(async (files: File[]) => {
+    if (isViewingAsOther) {
+      notifyError("Viewing as another user is read-only")
+      return
+    }
     if (files.length === 0) return
     for (const file of files) {
       if (file.size > ATTACH_MAX_BYTES) {
@@ -2724,6 +2739,7 @@ export function TermChat({
                         onKeyDown={onKey}
                         onCancel={cancel}
                         onSend={send}
+                        personalReadOnly={isViewingAsOther}
                         onAttach={openFilePicker}
                         onRemoveAttachment={removeAttachment}
                         className={isHomeMode ? "w-full" : "w-full max-w-[860px]"}
@@ -2793,6 +2809,7 @@ export function TermChat({
                   onKeyDown={onKey}
                   onCancel={cancel}
                   onSend={send}
+                  personalReadOnly={isViewingAsOther}
                   onAttach={openFilePicker}
                   onRemoveAttachment={removeAttachment}
                   className="w-full"
@@ -2868,6 +2885,7 @@ export function TermChat({
               onKeyDown={onKey}
               onCancel={cancel}
               onSend={send}
+              personalReadOnly={isViewingAsOther}
               onAttach={openFilePicker}
               onRemoveAttachment={removeAttachment}
               className="w-full"

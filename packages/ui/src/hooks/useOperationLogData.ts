@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import type { OperationPipeline, OperationsResponse } from "../client/index"
 import { api } from "../client/index"
+import { useViewingAs } from "./useViewingAs"
 
 /** Must match server OPERATIONS_PAGE_EVENT_LIMIT. */
 export const OPERATIONS_PAGE_EVENT_LIMIT = 2000
@@ -52,12 +53,14 @@ function serverSearchParam(search: string): string | undefined {
   return trimmed.length >= 2 ? trimmed : undefined
 }
 
-function operationsStreamUrl(kindView: OperationLogKindView, search: string): string {
+function operationsStreamUrl(kindView: OperationLogKindView, search: string, viewingAsUpn: string | null): string {
   const params = new URLSearchParams()
   const kind = serverKindParam(kindView)
   const q = serverSearchParam(search)
   if (kind) params.set("kind", kind)
   if (q) params.set("search", q)
+  // EventSource cannot set X-Viewing-As — query param matches server resolveViewingAs.
+  if (viewingAsUpn) params.set("viewingAs", viewingAsUpn)
   const qs = params.toString()
   return `/api/operations/stream${qs ? `?${qs}` : ""}`
 }
@@ -84,6 +87,7 @@ export function useOperationLogData(opts: {
   search: string
 }): UseOperationLogDataResult {
   const { kindView, search } = opts
+  const { viewingAsUpn } = useViewingAs()
 
   const [pipelines, setPipelines] = useState<OperationPipeline[]>([])
   const [loading, setLoading] = useState(true)
@@ -138,12 +142,13 @@ export function useOperationLogData(opts: {
       .finally(() => {
         if (gen === listGeneration.current) setLoading(false)
       }).catch((err: unknown) => { console.error("[mia]", err) })
-  }, [kindView, searchQuery, fetchListPage])
+  }, [kindView, searchQuery, fetchListPage, viewingAsUpn])
 
   useEffect(() => {
-    const es = new EventSource(operationsStreamUrl(kindView, debouncedSearch.current), {
-      withCredentials: true,
-    })
+    const es = new EventSource(
+      operationsStreamUrl(kindView, debouncedSearch.current, viewingAsUpn),
+      { withCredentials: true },
+    )
     es.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data as string) as unknown
@@ -157,7 +162,7 @@ export function useOperationLogData(opts: {
       } catch (err: unknown) { console.error("[mia]", err) }
     }
     return () => es.close()
-  }, [kindView, searchQuery])
+  }, [kindView, searchQuery, viewingAsUpn])
 
   useEffect(() => {
     const onVisible = (): void => {

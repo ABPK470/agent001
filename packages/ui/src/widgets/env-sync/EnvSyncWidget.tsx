@@ -20,6 +20,7 @@ import { Listbox, type ListboxOption } from "../../components/Listbox"
 import { SetupHintStrip } from "../../components/SetupHintStrip"
 import { ToastStack, useWidgetToasts } from "../../components/useWidgetToasts"
 import { useContainerSize } from "../../hooks/useContainerSize"
+import { useViewingAs } from "../../hooks/useViewingAs"
 import { countSyncEnvSseEvents } from "../../lib/sync-env-sse"
 import { useStore } from "../../state/store"
 import type {
@@ -70,6 +71,7 @@ import {
 
 export function EnvSync() {
   const { toasts, dismissToast, notifyError } = useWidgetToasts()
+  const { isViewingAsOther } = useViewingAs()
   const [envs, setEnvs] = useState<SyncEnvironment[]>([])
   const [definitions, setDefinitions] = useState<PublishedSyncDefinition[]>([])
   const [modal, setModal] = useState<ModalKind>(null)
@@ -447,9 +449,13 @@ export function EnvSync() {
                 ? "Pick an entity from search"
                 : `Enter ${searchMode === "name" ? (definition?.labelColumn ?? "name") : (definition?.idColumn ?? "id")}`
               : null
-  const canPreview = !blocker && !previewing
+  const canPreview = !isViewingAsOther && !blocker && !previewing
 
   async function onPreview() {
+    if (isViewingAsOther) {
+      notifyError("Viewing as another user is read-only")
+      return
+    }
     if (!canPreview) return
     setPreviewing(true)
     discardStaleWorkflow()

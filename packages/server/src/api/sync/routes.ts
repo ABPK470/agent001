@@ -41,6 +41,7 @@ import {
 import { rebuildLiveSyncEnvironments } from "./state/live-environments.js"
 import { registerSyncMetadataRoutes } from "./handlers/sync-metadata-routes.js"
 import { registerPreviewExecuteRoutes } from "./handlers/preview-execute.js"
+import { canAccessOwned, tryResolveViewingAs } from "../auth/service/viewing-as.js"
 import {
   runRegisteredSyncExecute,
   SYNC_EXECUTE_OPERATION,
@@ -172,16 +173,15 @@ function parseSyncHistoryQuery(
     to?: string
     sort?: string
   },
-  viewerUpn: string | undefined,
-  isAdmin: boolean
+  /** Personal Env Sync history is always scoped to Viewing as. */
+  viewingAsUpn: string,
 ): db.ListSyncRunsPaginatedInput {
   const page = Math.max(1, Number(query.page) || 1)
   const pageSize = Math.min(100, Math.max(1, Number(query.pageSize) || 25))
-  const actorUpn = isAdmin ? query.actorUpn?.trim() || undefined : viewerUpn
   return {
     page,
     pageSize,
-    actorUpn,
+    actorUpn: viewingAsUpn,
     search: query.q?.trim() || undefined,
     status: parseSyncHistoryStatuses(query.status),
     entityType: query.entityType?.trim() || undefined,
@@ -609,10 +609,13 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
       to?: string
       sort?: string
     }
-  }>("/api/sync/history", async (req) => {
-    const isAdmin = !!req.session.isAdmin
-    const viewerUpn = req.session.upn
-    const filters = parseSyncHistoryQuery(req.query, viewerUpn, isAdmin)
+  }>("/api/sync/history", async (req, reply) => {
+    const resolved = tryResolveViewingAs(req)
+    if (!resolved.ok) {
+      reply.code(resolved.status)
+      return { error: resolved.error }
+    }
+    const filters = parseSyncHistoryQuery(req.query, resolved.viewingAs.viewingAsUpn)
     const total = db.countSyncRuns(filters)
     const rows = db.listSyncRunsPaginated(filters)
     const totalPages = total === 0 ? 0 : Math.ceil(total / filters.pageSize)
@@ -626,14 +629,17 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
   })
 
   app.get<{ Params: { planId: string } }>("/api/sync/history/:planId", async (req, reply) => {
-    const isAdmin = !!req.session.isAdmin
-    const viewerUpn = req.session.upn
+    const resolved = tryResolveViewingAs(req)
+    if (!resolved.ok) {
+      reply.code(resolved.status)
+      return { error: resolved.error }
+    }
     const row = db.getSyncRun(req.params.planId)
     if (!row) {
       reply.code(404)
       return { error: `Sync run ${req.params.planId} not found` }
     }
-    if (!isAdmin && viewerUpn && row.actor_upn !== viewerUpn) {
+    if (!canAccessOwned(resolved.viewingAs, row.actor_upn)) {
       reply.code(403)
       return { error: "forbidden" }
     }
@@ -663,14 +669,17 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
     Params: { planId: string }
     Querystring: { limit?: string; offset?: string }
   }>("/api/sync/history/:planId/sql-trace", async (req, reply) => {
-    const isAdmin = !!req.session.isAdmin
-    const viewerUpn = req.session.upn
+    const resolved = tryResolveViewingAs(req)
+    if (!resolved.ok) {
+      reply.code(resolved.status)
+      return { error: resolved.error }
+    }
     const row = db.getSyncRun(req.params.planId)
     if (!row) {
       reply.code(404)
       return { error: `Sync run ${req.params.planId} not found` }
     }
-    if (!isAdmin && viewerUpn && row.actor_upn !== viewerUpn) {
+    if (!canAccessOwned(resolved.viewingAs, row.actor_upn)) {
       reply.code(403)
       return { error: "forbidden" }
     }

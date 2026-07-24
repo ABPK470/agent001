@@ -3,6 +3,7 @@ import { stripRuntimeToolArgs } from "@mia/shared-types"
 
 import { canAccessRun, requireSessionUpn } from "../../api/auth/service/access.js"
 import type { CurrentSession } from "../../api/auth/state/context.js"
+import type { ViewingAs } from "../../api/auth/service/viewing-as.js"
 import { broadcast } from "../../infra/events/broadcaster.js"
 import * as db from "../../infra/persistence/sqlite.js"
 import type { AgentOrchestrator } from "../orchestrator.js"
@@ -11,12 +12,18 @@ function stableArgsKey(args: Record<string, unknown>): string {
   return JSON.stringify(stripRuntimeToolArgs(args))
 }
 
+function viewingAsMe(session: CurrentSession): ViewingAs {
+  return { viewingAsUpn: session.upn, isMe: true, session }
+}
+
 function assertCanActOnApproval(
   session: CurrentSession | null | undefined,
   approval: db.RunToolApprovalRecord
 ): void {
+  const actor = requireSessionUpn(session)
+  const viewingAs = viewingAsMe({ ...session!, upn: actor })
   const run = db.getRun(approval.runId)
-  if (!run || !canAccessRun(session, run)) {
+  if (!run || !canAccessRun(viewingAs, run)) {
     throw new Error("Run not found")
   }
   if (approval.status !== "pending") {

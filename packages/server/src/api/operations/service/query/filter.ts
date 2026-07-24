@@ -1,6 +1,6 @@
 /**
  * Apply optional query filters (kind, status, free-text search) after pipelines are built.
- * Non-admins are scoped to pipelines they own (actorUpn / run.upn / sync actor_upn).
+ * Personal scope: pipelines owned by Viewing as (actorUpn / run.upn / sync actor_upn).
  */
 
 import { OperationKind } from "../../../../internal/enums/operations.js"
@@ -50,18 +50,17 @@ export function pipelineOwnerUpn(pipeline: OperationPipeline): string | null {
     return db.getSyncRun(planId)?.actor_upn?.trim() || null
   }
 
-  // Bridge / proposer / unknown without stamp — fail closed for non-admins.
+  // Bridge / proposer / unknown without stamp — fail closed.
   return null
 }
 
 export function scopeOperationsToViewer(
   operations: OperationPipeline[],
-  opts: Pick<ListOperationsOpts, "viewerUpn" | "isAdmin">,
+  opts: Pick<ListOperationsOpts, "viewerUpn">,
 ): OperationPipeline[] {
-  if (opts.isAdmin === true) return operations
   // No viewer context (unit tests / internal callers) — leave unscoped.
-  if (opts.isAdmin === undefined && opts.viewerUpn === undefined) return operations
-  const viewer = opts.viewerUpn?.trim()
+  if (opts.viewerUpn === undefined) return operations
+  const viewer = opts.viewerUpn.trim()
   if (!viewer) return []
   return operations.filter((p) => sameUpn(pipelineOwnerUpn(p), viewer))
 }

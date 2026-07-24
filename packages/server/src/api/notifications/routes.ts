@@ -13,28 +13,34 @@ import type { FastifyInstance } from "fastify"
 import * as db from "../../infra/persistence/sqlite.js"
 import { canAccessRun } from "../auth/service/access.js"
 import {
+  canMutatePersonal,
+  tryResolveViewingAs,
+  type ViewingAs,
+} from "../auth/service/viewing-as.js"
+import {
   filterNotificationActionsForCapabilities,
   runCapabilityFlags,
 } from "../../runtime/run-capability-actions.js"
 import type { AgentOrchestrator } from "../../runtime/orchestrator.js"
 
 function canSee(
-  session: { isAdmin?: boolean; upn?: string | null; sid?: string } | undefined,
+  viewingAs: ViewingAs,
   notification: { run_id: string | null }
 ): boolean {
-  if (session?.isAdmin) return true
   if (!notification.run_id) return true
   const run = db.getRun(notification.run_id)
-  return canAccessRun(session as never, run ?? null)
+  return canAccessRun(viewingAs, run ?? null)
 }
 
 export function registerNotificationRoutes(app: FastifyInstance, orchestrator: AgentOrchestrator): void {
-  app.get<{ Querystring: { limit?: string } }>("/api/notifications", async (req) => {
+  app.get<{ Querystring: { limit?: string } }>("/api/notifications", async (req, reply) => {
+    const resolved = tryResolveViewingAs(req)
+    if (!resolved.ok) {
+      reply.code(resolved.status)
+      return { error: resolved.error }
+    }
     const limit = Math.min(Number(req.query.limit) || 50, 200)
-    const session = req.session
-    const notifications = session?.isAdmin
-      ? db.listNotifications(limit)
-      : db.listNotificationsForUser(session!.upn, limit)
+    const notifications = db.listNotificationsForUser(resolved.viewingAs.viewingAsUpn, limit)
     return notifications.map((notification) => {
       const actions = parseBoundaryJson(notification.actions) as NotificationAction[]
       return {
@@ -51,18 +57,29 @@ export function registerNotificationRoutes(app: FastifyInstance, orchestrator: A
     })
   })
 
-  app.get("/api/notifications/unread-count", async (req) => {
-    const session = req.session
+  app.get("/api/notifications/unread-count", async (req, reply) => {
+    const resolved = tryResolveViewingAs(req)
+    if (!resolved.ok) {
+      reply.code(resolved.status)
+      return { error: resolved.error }
+    }
     return {
-      count: session?.isAdmin
-        ? db.getUnreadNotificationCount()
-        : db.getUnreadNotificationCountForUser(session!.upn)
+      count: db.getUnreadNotificationCountForUser(resolved.viewingAs.viewingAsUpn)
     }
   })
 
   app.post<{ Params: { id: string } }>("/api/notifications/:id/read", async (req, reply) => {
+    const resolved = tryResolveViewingAs(req)
+    if (!resolved.ok) {
+      reply.code(resolved.status)
+      return { error: resolved.error }
+    }
+    if (!canMutatePersonal(resolved.viewingAs)) {
+      reply.code(403)
+      return { error: "Viewing as another user is read-only for Personal data" }
+    }
     const notification = db.getNotification(req.params.id)
-    if (!notification || !canSee(req.session, notification)) {
+    if (!notification || !canSee(resolved.viewingAs, notification)) {
       reply.code(404)
       return { error: "Not found" }
     }
@@ -70,23 +87,36 @@ export function registerNotificationRoutes(app: FastifyInstance, orchestrator: A
     return { ok: true }
   })
 
-  app.post("/api/notifications/read-all", async (req) => {
-    const session = req.session
-    if (session?.isAdmin) {
-      db.markAllNotificationsRead()
-    } else {
-      const notifications = db.listNotificationsForUser(session!.upn, 10_000)
-      for (const notification of notifications)
-        if (notification.read === 0) db.markNotificationRead(notification.id)
+  app.post("/api/notifications/read-all", async (req, reply) => {
+    const resolved = tryResolveViewingAs(req)
+    if (!resolved.ok) {
+      reply.code(resolved.status)
+      return { error: resolved.error }
     }
+    if (!canMutatePersonal(resolved.viewingAs)) {
+      reply.code(403)
+      return { error: "Viewing as another user is read-only for Personal data" }
+    }
+    const notifications = db.listNotificationsForUser(resolved.viewingAs.viewingAsUpn, 10_000)
+    for (const notification of notifications)
+      if (notification.read === 0) db.markNotificationRead(notification.id)
     return { ok: true }
   })
 
   app.post<{ Params: { id: string }; Body: { action: string; data?: Record<string, unknown> } }>(
     "/api/notifications/:id/action",
     async (req, reply) => {
+      const resolved = tryResolveViewingAs(req)
+      if (!resolved.ok) {
+        reply.code(resolved.status)
+        return { error: resolved.error }
+      }
+      if (!canMutatePersonal(resolved.viewingAs)) {
+        reply.code(403)
+        return { error: "Viewing as another user is read-only for Personal data" }
+      }
       const notification = db.getNotification(req.params.id)
-      if (!notification || !canSee(req.session, notification)) {
+      if (!notification || !canSee(resolved.viewingAs, notification)) {
         reply.code(404)
         return { error: "Not found" }
       }

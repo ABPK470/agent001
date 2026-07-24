@@ -1,7 +1,7 @@
 import { parseBoundaryJson } from "../../internal/parse-json.js"
 
 /**
- * Thread transport routes — named conversation workspaces.
+ * Thread transport routes — named conversation workspaces (Personal).
  */
 
 import type { Run, Thread } from "@mia/shared-types"
@@ -14,6 +14,10 @@ import type { FastifyInstance } from "fastify"
 import * as db from "../../infra/persistence/sqlite.js"
 import { sendUserDownload } from "../../internal/http/attachment-response.js"
 import { canAccessThread } from "../auth/service/thread-access.js"
+import {
+  canMutatePersonal,
+  tryResolveViewingAs,
+} from "../auth/service/viewing-as.js"
 import type { AgentOrchestrator } from "../../runtime/orchestrator.js"
 
 function mapRuns(rows: db.DbRunWithUsage[], orchestrator: AgentOrchestrator): Run[] {
@@ -34,24 +38,28 @@ function mapRuns(rows: db.DbRunWithUsage[], orchestrator: AgentOrchestrator): Ru
 
 export function registerThreadRoutes(app: FastifyInstance, orchestrator: AgentOrchestrator): void {
   app.get("/api/threads", async (req, reply) => {
-    const upn = req.session?.upn
-    if (!upn) {
-      reply.code(401)
-      return { error: "Unauthorized" }
+    const resolved = tryResolveViewingAs(req)
+    if (!resolved.ok) {
+      reply.code(resolved.status)
+      return { error: resolved.error }
     }
     const includeArchived = (req.query as { includeArchived?: string }).includeArchived === "1"
-    const rows = db.listThreadsForUser(upn, { includeArchived })
+    const rows = db.listThreadsForUser(resolved.viewingAs.viewingAsUpn, { includeArchived })
     return rows.map((row): Thread => db.dbThreadToWire(row))
   })
 
   app.post<{ Body: { title?: string } }>("/api/threads", async (req, reply) => {
-    const upn = req.session?.upn
-    if (!upn) {
-      reply.code(401)
-      return { error: "Unauthorized" }
+    const resolved = tryResolveViewingAs(req)
+    if (!resolved.ok) {
+      reply.code(resolved.status)
+      return { error: resolved.error }
+    }
+    if (!canMutatePersonal(resolved.viewingAs)) {
+      reply.code(403)
+      return { error: "Viewing as another user is read-only for Personal data" }
     }
     const title = typeof req.body?.title === "string" ? req.body.title : undefined
-    const thread = db.createThread(upn, title)
+    const thread = db.createThread(resolved.viewingAs.session.upn, title)
     reply.code(201)
     return db.dbThreadToWire({ ...thread, run_count: 0 })
   })
@@ -60,8 +68,17 @@ export function registerThreadRoutes(app: FastifyInstance, orchestrator: AgentOr
     Params: { id: string }
     Body: { title?: string; pinned?: boolean; archived?: boolean }
   }>("/api/threads/:id", async (req, reply) => {
+    const resolved = tryResolveViewingAs(req)
+    if (!resolved.ok) {
+      reply.code(resolved.status)
+      return { error: resolved.error }
+    }
+    if (!canMutatePersonal(resolved.viewingAs)) {
+      reply.code(403)
+      return { error: "Viewing as another user is read-only for Personal data" }
+    }
     const thread = db.getThread(req.params.id)
-    if (!thread || !canAccessThread(req.session, thread)) {
+    if (!thread || !canAccessThread(resolved.viewingAs, thread)) {
       reply.code(404)
       return { error: "Thread not found" }
     }
@@ -82,8 +99,13 @@ export function registerThreadRoutes(app: FastifyInstance, orchestrator: AgentOr
   })
 
   app.get<{ Params: { id: string } }>("/api/threads/:id/runs", async (req, reply) => {
+    const resolved = tryResolveViewingAs(req)
+    if (!resolved.ok) {
+      reply.code(resolved.status)
+      return { error: resolved.error }
+    }
     const thread = db.getThread(req.params.id)
-    if (!thread || !canAccessThread(req.session, thread)) {
+    if (!thread || !canAccessThread(resolved.viewingAs, thread)) {
       reply.code(404)
       return { error: "Thread not found" }
     }
@@ -91,17 +113,21 @@ export function registerThreadRoutes(app: FastifyInstance, orchestrator: AgentOr
   })
 
   app.delete<{ Params: { id: string } }>("/api/threads/:id", async (req, reply) => {
-    const upn = req.session?.upn
-    if (!upn) {
-      reply.code(401)
-      return { error: "Unauthorized" }
+    const resolved = tryResolveViewingAs(req)
+    if (!resolved.ok) {
+      reply.code(resolved.status)
+      return { error: resolved.error }
+    }
+    if (!canMutatePersonal(resolved.viewingAs)) {
+      reply.code(403)
+      return { error: "Viewing as another user is read-only for Personal data" }
     }
     const thread = db.getThread(req.params.id)
-    if (!thread || !canAccessThread(req.session, thread)) {
+    if (!thread || !canAccessThread(resolved.viewingAs, thread)) {
       reply.code(404)
       return { error: "Thread not found" }
     }
-    const result = orchestrator.purgeThread(thread.id, upn)
+    const result = orchestrator.purgeThread(thread.id, resolved.viewingAs.session.upn)
     if (!result) {
       reply.code(404)
       return { error: "Thread not found" }
@@ -113,8 +139,13 @@ export function registerThreadRoutes(app: FastifyInstance, orchestrator: AgentOr
   app.get<{ Params: { id: string }; Querystring: { omitCode?: string } }>(
     "/api/threads/:id/export/trace",
     async (req, reply) => {
+    const resolved = tryResolveViewingAs(req)
+    if (!resolved.ok) {
+      reply.code(resolved.status)
+      return { error: resolved.error }
+    }
     const thread = db.getThread(req.params.id)
-    if (!thread || !canAccessThread(req.session, thread)) {
+    if (!thread || !canAccessThread(resolved.viewingAs, thread)) {
       reply.code(404)
       return { error: "Thread not found" }
     }
@@ -146,8 +177,13 @@ export function registerThreadRoutes(app: FastifyInstance, orchestrator: AgentOr
   app.get<{ Params: { id: string }; Querystring: { omitCode?: string } }>(
     "/api/threads/:id/export/trace.json",
     async (req, reply) => {
+    const resolved = tryResolveViewingAs(req)
+    if (!resolved.ok) {
+      reply.code(resolved.status)
+      return { error: resolved.error }
+    }
     const thread = db.getThread(req.params.id)
-    if (!thread || !canAccessThread(req.session, thread)) {
+    if (!thread || !canAccessThread(resolved.viewingAs, thread)) {
       reply.code(404)
       return { error: "Thread not found" }
     }

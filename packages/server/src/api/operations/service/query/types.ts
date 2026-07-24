@@ -59,9 +59,8 @@ export interface ListOperationsOpts {
   planId?: string
   /** When set, return the full audit tree for one agent run (no pagination). */
   runId?: string
-  /** Logged-in viewer — non-admins only see their own pipelines. */
+  /** Viewing as UPN — Personal pipelines are filtered to this owner. */
   viewerUpn?: string
-  isAdmin?: boolean
 }
 
 export interface ListOperationsResult {

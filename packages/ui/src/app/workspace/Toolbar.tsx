@@ -8,6 +8,7 @@ import type { Me } from "../../hooks/useMe"
 import { useViewTabReorder } from "../../hooks/useViewTabReorder"
 import { fullIndexFromRemainingSlot } from "../../lib/view-tab-dnd"
 import { SessionMenu } from "../SessionMenu"
+import { ViewingAsControl } from "../ViewingAsControl"
 import { CHAT_BRAND_LOGO_SIZE } from "../brand"
 import type { AppShellMode } from "../types"
 import { shellModeToggleHint } from "../types"
@@ -239,6 +240,7 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
           </>
         )}
         <NotificationPanel />
+        <ViewingAsControl />
         <button
           type="button"
           onClick={() => onModeChange("chat")}

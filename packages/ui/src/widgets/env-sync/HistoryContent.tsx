@@ -21,7 +21,6 @@ import {
 } from "../../components/FilterSheet"
 import { Listbox, type ListboxOption } from "../../components/Listbox"
 import { SearchablePick } from "../../components/SearchablePick"
-import { useMe } from "../../hooks/useMe"
 import { useStore } from "../../state/store"
 import type { SyncPlan } from "../../types"
 import { timeAgo } from "../../lib/util"
@@ -138,8 +137,6 @@ export function HistoryContent({
   onOpen?: (planId: string) => void
   onNotifyError?: (message: string) => void
 }) {
-  const { me } = useMe()
-  const isAdmin = me?.isAdmin ?? false
   const [page, setPage] = useState(1)
   const [filters, setFilters] = useState<HistoryFilters>(DEFAULT_FILTERS)
   const [searchDraft, setSearchDraft] = useState("")
@@ -420,9 +417,9 @@ export function HistoryContent({
             value={filters.actorUpn ?? ""}
             options={[]}
             onChange={(actorUpn) => patchFilters({ actorUpn: actorUpn || undefined })}
-            placeholder={isAdmin ? "UPN" : "Yours"}
+            placeholder="Viewing as"
             ariaLabel="User"
-            disabled={!isAdmin}
+            disabled
             size="sm"
           />
         </FilterField>

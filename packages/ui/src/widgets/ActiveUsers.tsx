@@ -24,6 +24,7 @@ import { api } from "../client/index"
 import { EmptyState } from "../components/EmptyState"
 import { useContainerSize } from "../hooks/useContainerSize"
 import { ToastStack, useWidgetToasts } from "../components/useWidgetToasts"
+import { useViewingAs } from "../hooks/useViewingAs"
 import { useStore } from "../state/store"
 import { ActiveUsersRunModal, type RunPreview } from "./ActiveUsersRunModal"
 import { WIDGET_ICONS } from "./widget-icons"
@@ -145,6 +146,7 @@ function sortUsers(users: UserRow[], key: SortKey, dir: SortDir): UserRow[] {
 
 export function ActiveUsers(): ReactNode {
   const { toasts, dismissToast, notifyError } = useWidgetToasts()
+  const { viewingAsUpn, setViewingAs, clearViewingAs, isMe } = useViewingAs()
   const [users, setUsers] = useState<UserRow[]>([])
   const [summary, setSummary] = useState<UserSummary | null>(null)
   const [activeRuns, setActiveRuns] = useState<ActiveRunRow[]>([])
@@ -442,6 +444,18 @@ export function ActiveUsers(): ReactNode {
                         onPageChange={(offset) => void loadHistory(u.identifier, offset).catch((err: unknown) => { console.error("[mia]", err) })}
                         onCollapse={() => toggle(u.identifier)}
                         onRunClick={(runId, preview) => setRunModal({ runId, preview })}
+                        viewingAsUpn={viewingAsUpn}
+                        onViewingAs={() => {
+                          if (!u.upn) return
+                          if (!isMe && viewingAsUpn?.toLowerCase() === u.upn.toLowerCase()) {
+                            clearViewingAs()
+                            return
+                          }
+                          setViewingAs({
+                            upn: u.upn,
+                            displayName: u.displayName?.trim() || u.upn,
+                          })
+                        }}
                       />
                     </div>
                   )}
@@ -537,6 +551,18 @@ export function ActiveUsers(): ReactNode {
                             onPageChange={(offset) => void loadHistory(u.identifier, offset).catch((err: unknown) => { console.error("[mia]", err) })}
                             onCollapse={() => toggle(u.identifier)}
                             onRunClick={(runId, preview) => setRunModal({ runId, preview })}
+                            viewingAsUpn={viewingAsUpn}
+                            onViewingAs={() => {
+                              if (!u.upn) return
+                              if (!isMe && viewingAsUpn?.toLowerCase() === u.upn.toLowerCase()) {
+                                clearViewingAs()
+                                return
+                              }
+                              setViewingAs({
+                                upn: u.upn,
+                                displayName: u.displayName?.trim() || u.upn,
+                              })
+                            }}
                           />
                         </td>
                       </tr>
@@ -927,7 +953,7 @@ type RunSortKey = "started" | "duration" | "steps" | "tokens" | "llmCalls" | "mo
 /** Run-history table needs ~this many CSS px; below → stacked cards. */
 const AU_RUN_TABLE_MIN_WIDTH_PX = 720
 
-function UserDetail({ user, liveRuns, history, stack, adminBusy, onToggleAdmin, onPageChange, onCollapse, onRunClick }: {
+function UserDetail({ user, liveRuns, history, stack, adminBusy, onToggleAdmin, onPageChange, onCollapse, onRunClick, viewingAsUpn, onViewingAs }: {
   user: UserRow; liveRuns: ActiveRunRow[]
   history: HistoryState | undefined
   stack: boolean
@@ -936,6 +962,8 @@ function UserDetail({ user, liveRuns, history, stack, adminBusy, onToggleAdmin, 
   onPageChange: (offset: number) => void
   onCollapse: () => void
   onRunClick: (runId: string, preview?: RunPreview) => void
+  viewingAsUpn: string | null
+  onViewingAs: () => void
 }) {
   const detailRef = useRef<HTMLDivElement>(null)
   const { width: detailWidth } = useContainerSize(detailRef)
@@ -1067,7 +1095,25 @@ function UserDetail({ user, liveRuns, history, stack, adminBusy, onToggleAdmin, 
           </div>
         ) : null}
         {user.upn ? (
-          <div className="mt-3 flex justify-end">
+          <div className="mt-3 flex flex-wrap justify-end gap-2">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                onViewingAs()
+              }}
+              className={[
+                "rounded-md border px-3 py-1.5 text-sm transition-colors",
+                viewingAsUpn && viewingAsUpn.toLowerCase() === user.upn.toLowerCase()
+                  ? "border-amber-500/40 bg-amber-500/10 text-amber-200"
+                  : "border-border-subtle text-text-muted hover:bg-overlay-2 hover:text-text",
+              ].join(" ")}
+              title="Viewing as this user — Personal widgets show their data"
+            >
+              {viewingAsUpn && viewingAsUpn.toLowerCase() === user.upn.toLowerCase()
+                ? "Viewing as · back to Me"
+                : "Viewing as"}
+            </button>
             <button
               type="button"
               disabled={adminBusy}

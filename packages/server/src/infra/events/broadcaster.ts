@@ -8,7 +8,7 @@
  * Every `broadcast()` call:
  *   1. Stamps a timestamp + serialises once.
  *   2. Resolves the originating run's owner (`runId` field on the event)
- *      and fans out only to clients that own the run or are admin.
+ *      and fans out only to clients whose Viewing as UPN owns the run.
  *      Non-run-scoped events go to every connected client.
  *   3. Persists to the `event_log` SQLite table (skipping high-frequency
  *      `answer.chunk` events) so disconnected clients can replay history
@@ -36,9 +36,12 @@ export type { SseEvent }
 
 /** Identity attached to a connected SSE client. */
 export interface WsClientIdentity {
+  /** Signed-in session UPN. */
   upn: string | null
   sid: string
   isAdmin: boolean
+  /** Personal data owner for this connection (Viewing as). Defaults to upn. */
+  viewingAsUpn: string | null
 }
 
 /** Minimal SSE sink — Node.js raw response stream. */
@@ -90,14 +93,16 @@ export class EventBroadcaster {
     const sseFrame = `data: ${json}\n\n`
 
     // Resolve run owner once if this event is run-scoped, then send only to
-    // clients that are admin OR own that run. Events without a runId go to all.
+    // clients Viewing as that owner. Events without a runId go to all.
     const runId = typeof msg.data["runId"] === "string" ? (msg.data["runId"] as string) : null
     const owner = runId ? this.resolveOwner(runId) : null
 
     const allowed = (identity: WsClientIdentity): boolean => {
       if (!owner) return true
-      if (!owner.upn || !identity.upn) return false
-      return identity.upn.toLowerCase() === owner.upn.toLowerCase()
+      if (!owner.upn) return false
+      const viewingAs = identity.viewingAsUpn ?? identity.upn
+      if (!viewingAs) return false
+      return viewingAs.toLowerCase() === owner.upn.toLowerCase()
     }
 
     for (const [, { sink, identity }] of this.sseClients) {

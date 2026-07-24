@@ -27,7 +27,11 @@ export interface ProposerRouteDeps {
 }
 
 export function registerProposerRoutes(app: FastifyInstance, deps: ProposerRouteDeps): void {
-  app.get<{ Querystring: { tenant?: string; limit?: string } }>("/api/proposer/runs", async (req) => {
+  app.get<{ Querystring: { tenant?: string; limit?: string } }>("/api/proposer/runs", async (req, reply) => {
+    if (!req.session?.isAdmin) {
+      reply.code(403)
+      return { error: "admin only" }
+    }
     const tenantId = resolveTenant(req)
     const limit = Math.min(500, Math.max(1, Number(req.query.limit) || 50))
     return db.listProposerRuns(tenantId, limit)
@@ -112,7 +116,11 @@ export function registerProposerRoutes(app: FastifyInstance, deps: ProposerRoute
       target?: string
       limit?: string
     }
-  }>("/api/proposer/proposals", async (req) => {
+  }>("/api/proposer/proposals", async (req, reply) => {
+    if (!req.session?.isAdmin) {
+      reply.code(403)
+      return { error: "admin only" }
+    }
     const tenantId = resolveTenant(req)
     const rows = db.listProposals({
       tenantId,
@@ -126,6 +134,10 @@ export function registerProposerRoutes(app: FastifyInstance, deps: ProposerRoute
   })
 
   app.get<{ Params: { id: string } }>("/api/proposer/proposals/:id", async (req, reply) => {
+    if (!req.session?.isAdmin) {
+      reply.code(403)
+      return { error: "admin only" }
+    }
     const row = db.getProposal(req.params.id)
     if (!row) {
       reply.code(404)
@@ -144,6 +156,10 @@ export function registerProposerRoutes(app: FastifyInstance, deps: ProposerRoute
       supersededBy?: string
     }
   }>("/api/proposer/proposals/:id/status", async (req, reply) => {
+    if (!req.session?.isAdmin) {
+      reply.code(403)
+      return { error: "admin only" }
+    }
     try {
       const before = db.getProposal(req.params.id)
       if (!before) {
@@ -170,9 +186,13 @@ export function registerProposerRoutes(app: FastifyInstance, deps: ProposerRoute
     }
   })
 
-  app.get<{ Querystring: { tenant?: string } }>("/api/proposer/schedules", async (req) =>
-    listSchedules(resolveTenant(req))
-  )
+  app.get<{ Querystring: { tenant?: string } }>("/api/proposer/schedules", async (req, reply) => {
+    if (!req.session?.isAdmin) {
+      reply.code(403)
+      return { error: "admin only" }
+    }
+    return listSchedules(resolveTenant(req))
+  })
   app.post<{ Body: { source: string; target: string; cron: string; enabled?: boolean } }>(
     "/api/proposer/schedules",
     async (req, reply) => {
