@@ -75,7 +75,7 @@ export function PlanView({ plan, expanded, setExpanded, exec }: {
               {totals.insert > 0 && <span style={{ color: DIFF.ins }}><span className="text-lg font-semibold">{totals.insert}</span> <span className="text-xs">ins</span></span>}
               {totals.update > 0 && <span style={{ color: DIFF.upd }}><span className="text-lg font-semibold">{totals.update}</span> <span className="text-xs">upd</span></span>}
               {totals.delete > 0 && <span style={{ color: DIFF.del }}><span className="text-lg font-semibold">{totals.delete}</span> <span className="text-xs">del</span></span>}
-              {hasConflicts && <span className="text-warning font-semibold">{totals.conflicts} conflict{totals.conflicts === 1 ? "" : "s"}</span>}
+              {hasConflicts && <span className="text-warning"><span className="text-lg font-semibold">{totals.conflicts}</span> <span className="text-xs">cnf</span></span>}
               {totals.unchanged > 0 && <span className="text-text-muted"><span className="text-lg font-semibold">{totals.unchanged}</span> <span className="text-xs">eq</span></span>}
             </div>
             <span className="text-text-muted/30">·</span>
@@ -322,7 +322,7 @@ function PlanCollapsibleSections({
             <span className="text-xs text-text-muted/50 ml-1">({notes.length})</span>
           </button>
           {notesOpen && (
-            <div className="px-4 pb-2.5 space-y-1 max-h-36 overflow-y-auto text-xs text-text-muted/80 leading-relaxed">
+            <div className="px-4 pb-3 space-y-1 max-h-48 overflow-y-auto font-mono text-sm text-text-muted leading-relaxed">
               {notes.map((note, index) => (
                 <div key={index} className="break-all">{note}</div>
               ))}

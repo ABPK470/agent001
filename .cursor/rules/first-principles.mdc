@@ -33,10 +33,7 @@ When two designs work, pick the one that is more reliable, quieter, faster to fi
 6. Follow [docs/doctrine.md](docs/doctrine.md) and package layer rules. Doctrine
    covers **structural layers** (where files import) **and product seams**
    (who owns a capability; cores get resolved inputs — never leaked `*Id`
-   folklore). **Talk is cheap:** update doctrine and `lint:arch` together.
-   Run `npm run lint:arch` (also first under `npm run lint`) before merging —
-   drifted structure must not land. Human discipline fails at scale; the lint
-   is the doctrine.
+   folklore).
 
 ## How code must read
 
@@ -97,4 +94,4 @@ function handleRequest(req) {
 
 ## Hallmark
 
-Quality is respect: reliability, fast recovery without ceremony, quiet restraint, clear purpose, and human-owned words in front of people. Simplicity is the quality bar of high thought — predictable, cohesive, cheap to change, honest about cost. If two designs work, pick the one that is clearer, more uniform, quieter, easier to follow tomorrow, and still honest about execution cost — then **enforce it with `lint:arch`** so the next change cannot drift.
+Quality is respect: reliability, fast recovery without ceremony, quiet restraint, clear purpose, and human-owned words in front of people. Simplicity is the quality bar of high thought — predictable, cohesive, cheap to change, honest about cost. If two designs work, pick the one that is clearer, more uniform, quieter, easier to follow tomorrow, and still honest about execution cost.

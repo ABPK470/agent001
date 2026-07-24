@@ -3,10 +3,7 @@
 > **Shell owns state. Core is stateless. Dependencies are always parameters.**  
 > **Every capability has one owner. Cores receive resolved inputs — never platform folklore.**
 
-This is the monorepo contract: what must stay true about architecture and
-evolution. It states **invariants**. Past mistakes, product anecdotes, and
-one-off fixes are not doctrine — they live as registry data in the arch lint,
-not as prose special cases.
+The monorepo contract: invariants for architecture and evolution.
 
 ---
 
@@ -49,8 +46,7 @@ frictionless capabilities.
 7. **Flat control flow** (UI and Node): peer handlers, explicit state; no nested
    listener registration on hot paths.
 
-When two designs work, pick the clearer, more uniform, quieter one — then keep
-the edges enforceable.
+When two designs work, pick the clearer, more uniform, quieter one.
 
 ---
 
@@ -87,11 +83,13 @@ platform identity, CRUD profiles, or UI picker state.
 **Anti-pattern.** Optional identity fields threaded store → client → routes →
 persistence → runtime → tools with no single owner. That is leakage, not layering.
 
+**Owned identities.** A cross-package `*Id` has exactly one owning capability.
+Erasing a capability removes its identities — they must not reappear as folklore.
+
 **Evolution.**
 
-- **Add** a capability → register an active seam (owner + public surface).
-- **Erase** a capability → mark the seam erased with resurrection fingerprints.
-- Specific seams are **registry data**, not doctrine paragraphs.
+- **Add** a capability → one owner + its public surface.
+- **Erase** a capability → remove the owner and surface; do not leave identity folklore behind.
 
 ---
 
@@ -312,18 +310,3 @@ assess outcomes from economics outcomes.
 
 Child execution has **one** spawn kernel. Fan-out is plan DAG + mode — not a
 second model-callable “parallel delegate” dialect.
-
----
-
-## 12. Enforcement
-
-Structural edges, seams, dialects, identities, and flat control flow are
-encoded in `scripts/lint-arch/` and enforced by `npm run lint:arch`.
-
-**Owned identities.** Any `*Id` painted across multiple packages must be
-registered under exactly one owning seam. An unregistered cross-package
-identity is the shotgun-surgery failure class. Erased capabilities forbid
-resurrecting their identity names.
-
-**No soft-ignore debt.** Allowlists that encode unfinished cleanup must stay
-empty; unused entries also fail. Fix the code — do not grow the list.
