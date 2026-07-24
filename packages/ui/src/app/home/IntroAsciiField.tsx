@@ -38,6 +38,8 @@ const UPDATE_FRACTION = 0.020       // ~2% of cells repaint per frame
 const NOISE_T_PER_SEC = 0.32        // how fast the noise field drifts
 const INK_OPACITY = 0.18            // applied to var(--text), works in both themes
 const BOOST_INK_OPACITY = 0.34
+/** Viewing as someone else — denser field in Viewing as ink (light blue / dark accent). */
+const VIEWING_AS_INK_OPACITY = 0.62
 
 /** Login cursor field — soft falloff + sparse “pop” cells (2D → depth). */
 const POINTER_RADIUS_PX = 158
@@ -173,48 +175,27 @@ function vnoise(x: number, y: number, t: number): number {
   return Math.max(0, Math.min(0.999, base + band))
 }
 
-const ADMIN_CORNER_REACH_X = 380
-const ADMIN_CORNER_REACH_Y = 220
-const ADMIN_CORNER_INK_OPACITY = 0.92
-
-/** Soft organic purple wash from the top-right — not a hard rectangle. */
-function adminCornerAccentMix(
-  c: number,
-  r: number,
-  width: number,
-  t: number,
-): number {
-  const px = c * CHAR_W + CHAR_W * 0.5
-  const py = r * LINE_H + LINE_H * 0.5
-  const dx = Math.max(0, width - px) / ADMIN_CORNER_REACH_X
-  const dy = Math.max(0, py) / ADMIN_CORNER_REACH_Y
-  const dist = Math.hypot(dx, dy)
-  const edge = vnoise(c * 0.78 + 21, r * 0.71 + 9, t * 0.14)
-  const warp = (edge - 0.48) * 0.26
-  const warped = dist + warp
-  return 1 - smoothstep(0.42, 1.02, warped)
-}
-
 export function IntroAsciiField({
   onReady,
   boost = false,
   renderTarget,
   surface = "default",
-  adminAccentCorner = false,
+  /** Full-field Viewing as ink — stronger than ambient home texture. */
+  viewingAsField = false,
 }: {
   onReady?: () => void
   boost?: boolean
   renderTarget?: IntroAsciiRenderTarget
   surface?: IntroAsciiSurface
-  adminAccentCorner?: boolean
+  viewingAsField?: boolean
 } = {}): JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const onReadyRef = useRef(onReady)
   const renderTargetRef = useRef(renderTarget)
-  const adminAccentCornerRef = useRef(adminAccentCorner)
+  const viewingAsFieldRef = useRef(viewingAsField)
   onReadyRef.current = onReady
   renderTargetRef.current = renderTarget
-  adminAccentCornerRef.current = adminAccentCorner
+  viewingAsFieldRef.current = viewingAsField
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -230,8 +211,9 @@ export function IntroAsciiField({
     // morph so the user reads it as the existing ASCII becoming denser
     // and more active around the pill, not as a new layer.
     const isLoginSurface = surface === "login"
-    const palettePow = boost ? 1.0 : 2.0
-    const updateFraction = boost ? 0.10 : UPDATE_FRACTION
+    // Viewing as: denser glyphs + stronger Viewing as ink (see resolveInk).
+    const palettePow = boost ? 1.0 : viewingAsField ? 1.05 : 2.0
+    const updateFraction = boost ? 0.10 : viewingAsField ? 0.055 : UPDATE_FRACTION
     // In boost mode the field is mounted fresh per entering, so let
     // it materialize per-cell like the bg field does on first load.
     // Faster duration + pure-jitter ordering (no center bias) so the
@@ -243,15 +225,20 @@ export function IntroAsciiField({
     const revealLeadInMs = boost ? 0 : isLoginSurface ? 80 : 0
     const revealSoftEdgeMs = isLoginSurface ? 180 : REVEAL_SOFT_EDGE_MS
 
-    let ink = readInk(boost ? BOOST_INK_OPACITY : INK_OPACITY)
-    let accentInk = readCssColorInk(
-      "--accent",
-      ADMIN_CORNER_INK_OPACITY,
-      `rgba(123, 111, 199, ${ADMIN_CORNER_INK_OPACITY})`,
-    )
+    function resolveInk(): string {
+      if (viewingAsFieldRef.current) {
+        return readCssColorInk(
+          "--viewing-as",
+          VIEWING_AS_INK_OPACITY,
+          `rgba(59, 69, 255, ${VIEWING_AS_INK_OPACITY})`,
+        )
+      }
+      return readInk(boost ? BOOST_INK_OPACITY : INK_OPACITY)
+    }
+
+    let ink = resolveInk()
     let surfaceW = 0
     let surfaceH = 0
-    let currentT = 0
     let cols = 0
     let rows = 0
     let cells = new Uint8Array(0)   // last-painted palette index per cell
@@ -314,27 +301,15 @@ export function IntroAsciiField({
         }
       }
 
-      const accentMix =
-        adminAccentCornerRef.current && surface === "home"
-          ? adminCornerAccentMix(c, r, surfaceW, currentT)
-          : 0
-
       if (lifted) {
         ctx!.globalAlpha = Math.min(1, drawAlpha * 0.22)
         ctx!.fillStyle = ink
         ctx!.fillText(ch, drawX + 1.1, drawY + 1.6)
       }
 
-      if (accentMix > 0.001) {
-        ctx!.globalAlpha = Math.min(1, drawAlpha * accentMix)
-        ctx!.fillStyle = accentInk
-        ctx!.fillText(ch, drawX, drawY)
-      }
-      if (accentMix < 0.999) {
-        ctx!.globalAlpha = Math.min(1, drawAlpha * (1 - accentMix))
-        ctx!.fillStyle = ink
-        ctx!.fillText(ch, drawX, drawY)
-      }
+      ctx!.globalAlpha = Math.min(1, drawAlpha)
+      ctx!.fillStyle = ink
+      ctx!.fillText(ch, drawX, drawY)
       ctx!.globalAlpha = 1
     }
 
@@ -406,7 +381,6 @@ export function IntroAsciiField({
 
 
     function repaintAll(t: number) {
-      currentT = t
       ctx!.clearRect(0, 0, canvas!.width / dpr, canvas!.height / dpr)
       ctx!.fillStyle = ink
       for (let r = 0; r < rows; r++) {
@@ -490,7 +464,6 @@ export function IntroAsciiField({
       lastFrame = now
 
       const t = (now - startTs) / 1000 * NOISE_T_PER_SEC
-      currentT = t
 
       if (pointerLive) {
         const targetGain = pointerActive ? 1 : 0
@@ -635,13 +608,7 @@ export function IntroAsciiField({
     }
 
     function onThemeChange() {
-      ink = readInk(boost ? BOOST_INK_OPACITY : INK_OPACITY)
-      accentInk = readCssColorInk(
-        "--accent",
-        ADMIN_CORNER_INK_OPACITY,
-        accentInk,
-      )
-      const t = (performance.now() - startTs) / 1000 * NOISE_T_PER_SEC
+      ink = resolveInk()
       // Re-ink only cells that have already been revealed so the wave
       // stays intact even if the user toggles theme mid-roll.
       ctx!.fillStyle = ink
@@ -654,8 +621,6 @@ export function IntroAsciiField({
           paintCellAt(c, r, ch, cellAlpha(c, r, performance.now()))
         }
       }
-      // Suppress unused-variable warning — t reserved for future use.
-      void t
     }
 
     // Share startTs across every IntroAsciiField mount on the page so
@@ -712,7 +677,7 @@ export function IntroAsciiField({
       sysMql?.removeEventListener?.("change", onThemeChange)
       if (rafId) cancelAnimationFrame(rafId)
     }
-  }, [adminAccentCorner, boost, surface])
+  }, [boost, surface, viewingAsField])
 
   return <canvas ref={canvasRef} className="intro3-ascii-field" aria-hidden="true" />
 }

@@ -1,19 +1,19 @@
 import { PanelLeft } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
 import { IntroAsciiField } from "../../app/home/IntroAsciiField"
-import { useStore } from "../../state/store"
-import { TermChat } from "../../widgets/TermChat"
 import { ChatBrand } from "../../app/ChatBrand"
 import { ChatChromeButton } from "../../app/ChatChrome"
 import { ChatShellActions } from "../../app/ChatShellActions"
-import type { Me } from "../../hooks/useMe"
 import type { AppShellMode } from "../../app/types"
+import type { Me } from "../../hooks/useMe"
+import { useViewingAs } from "../../hooks/useViewingAs"
+import { useStore } from "../../state/store"
+import { TermChat } from "../../widgets/TermChat"
 import { ThreadRailCollapseButton, ThreadRailNewButton, ThreadSidebar } from "./ThreadSidebar"
 import { useThreadRailLayout } from "./useThreadRailLayout"
 
 interface Props {
   connected: boolean
-  isAdmin?: boolean
   me?: Me | null
   onModeChange: (mode: AppShellMode) => void
   onSignOut: () => void
@@ -25,7 +25,6 @@ interface Props {
 
 export function ThreadHomePage({
   connected,
-  isAdmin = false,
   me,
   onModeChange,
   onSignOut,
@@ -34,6 +33,7 @@ export function ThreadHomePage({
   heroStage,
   heroRevealProgress = 1,
 }: Props): React.ReactElement {
+  const { isViewingAsOther } = useViewingAs()
   const threads = useStore((s) => s.threads)
   const activeThreadId = useStore((s) => s.activeThreadId)
   const collapsed = useStore((s) => s.threadSidebarCollapsed)
@@ -130,7 +130,7 @@ export function ThreadHomePage({
       className={`chathome chathome--threads ${chromeRevealed ? "chathome--chrome-revealed" : ""} ${stateClass} relative flex h-screen flex-col overflow-hidden text-text`}
     >
       <div className="chathome-frame pointer-events-none absolute inset-0 overflow-hidden">
-        <IntroAsciiField surface="home" adminAccentCorner={isAdmin} />
+        <IntroAsciiField surface="home" viewingAsField={isViewingAsOther} />
       </div>
 
       <div className="chathome-content relative z-10 flex h-full min-h-0 flex-col">

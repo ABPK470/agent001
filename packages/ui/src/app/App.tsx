@@ -500,7 +500,6 @@ export function App() {
     const chatVariant = resolveChatVariant()
     const chatProps = {
       connected: connected && serverReachable,
-      isAdmin: me?.isAdmin ?? false,
       me,
       onModeChange: transitionShellMode,
       onSignOut: handleSwitchUser,
