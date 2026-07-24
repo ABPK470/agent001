@@ -67,15 +67,9 @@ describe("extractToolFacts — sync tools", () => {
     expect(facts.dbOperation).toBe("sync_execute")
   })
 
-  it("resolves sync_execute target from the plan when args omit target", () => {
-    const facts = extractToolFacts(makeStep("sync_execute", { planId: "p1", confirm: true }), {
-      runId: "r1" as never,
-      runMode: "hosted",
-      role: "hosted_user",
-      sandboxRoot: null,
-      resolveSyncPlanTarget: (planId) => (planId === "p1" ? "dev" : undefined),
-    })
-    expect(facts.dbEnvironment).toBe("dev")
+  it("does not invent dbEnvironment from planId alone — composition must attach target", () => {
+    const facts = extractToolFacts(makeStep("sync_execute", { planId: "p1", confirm: true }))
+    expect(facts.dbEnvironment).toBeUndefined()
     expect(facts.dbOperation).toBe("sync_execute")
   })
 })

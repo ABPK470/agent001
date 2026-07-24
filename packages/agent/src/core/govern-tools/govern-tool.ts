@@ -40,6 +40,11 @@ export interface GovernToolOptions {
   signal?: AbortSignal
   /** Per-run policy facts for selector evaluation. */
   policyContext?: HostedPolicyContext | null
+  /**
+   * Attach durable facts onto args before policy (and onto the step input).
+   * Tool execute still receives the original caller args.
+   */
+  policyArgs?: (toolName: string, args: Record<string, unknown>) => Record<string, unknown>
 }
 
 // ── Wrap a tool with governance ──────────────────────────────────
@@ -60,7 +65,8 @@ export function governTool(
 
     async execute(args: Record<string, unknown>): Promise<string> {
       const persistedArgs = stripRuntimeToolArgs(args)
-      const step = createToolStep(tool.name, persistedArgs, state)
+      const stepArgs = options?.policyArgs?.(tool.name, persistedArgs) ?? persistedArgs
+      const step = createToolStep(tool.name, stepArgs, state)
       state.run.steps.push(step)
 
       // 1. Policy check — can this tool run?
@@ -88,7 +94,7 @@ export function governTool(
             asRunId(state.run.id),
             asStepId(step.id),
             tool.name,
-            persistedArgs,
+            stepArgs,
             policyResult,
             policyName
           )
@@ -120,7 +126,7 @@ export function governTool(
         action: "tool.invoked",
         resourceType: "AgentRun",
         resourceId: state.run.id,
-        detail: { tool: tool.name, args: persistedArgs, stepId: step.id }
+        detail: { tool: tool.name, args: stepArgs, stepId: step.id }
       })
 
       // 4. Execute the tool — with timeout + abort + retry on transient errors

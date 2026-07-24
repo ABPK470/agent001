@@ -16,7 +16,8 @@ import {
   PUBLISH_REQUIRED_CODE,
   searchEntities,
   type EntityType,
-  type ExecuteProgress
+  type ExecuteProgress,
+  withSyncExecutePolicyArgs,
 } from "@mia/sync"
 import type { FastifyInstance, FastifyReply } from "fastify"
 import { broadcast } from "../../infra/events/broadcaster.js"
@@ -499,14 +500,10 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
       await assertSyncHttpPolicy({
         session: req.session,
         toolName: "sync_execute",
-        args: {
-          planId: req.params.planId,
-          confirm: true,
-          source: plan?.source,
-          target: plan?.target,
-          entityType: plan?.entity.type,
-          entityId: plan?.entity.id,
-        },
+        args: withSyncExecutePolicyArgs(
+          { planId: req.params.planId, confirm: true },
+          plan,
+        ),
       })
     } catch (error) {
       const policyBody = replySyncPolicyError(reply, error)

@@ -4,6 +4,7 @@
 
 export * from "./orchestrator/index.js"
 export * from "./plan-store.js"
+export * from "./sync-execute-policy-args.js"
 export * from "./sync-diff-scan.js"
 export * from "./preview-dashboard.js"
 export * from "./events.js"

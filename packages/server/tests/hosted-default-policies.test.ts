@@ -308,7 +308,7 @@ describe("deploy/policies/defaults.json", () => {
     expect(prod.error).toBeUndefined()
   })
 
-  it("allows agent sync_execute (planId+confirm only) when plan target resolves to DEV", async () => {
+  it("allows sync_execute when composition attaches plan target (agent schema is planId+confirm)", async () => {
     const ev = buildHostedEvaluator()
     const missingTarget = await evaluate(
       ev,
@@ -317,11 +317,12 @@ describe("deploy/policies/defaults.json", () => {
     )
     expect(missingTarget.error?.message).toMatch(/hosted_default_deny/)
 
-    const fromPlan = await evaluate(
-      ev,
-      makeStep("sync_execute", { planId: "p1", confirm: true }),
-      hostedCtx({ resolveSyncPlanTarget: () => "dev" }),
+    const { withSyncExecutePolicyArgs } = await import("@mia/sync")
+    const enriched = withSyncExecutePolicyArgs(
+      { planId: "p1", confirm: true },
+      { source: "uat", target: "dev", entity: { type: "contract", id: 1, displayName: null } },
     )
+    const fromPlan = await evaluate(ev, makeStep("sync_execute", enriched), hostedCtx())
     expect(fromPlan.error).toBeUndefined()
     expect(fromPlan.approval).toBeNull()
   })

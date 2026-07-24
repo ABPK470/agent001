@@ -6,7 +6,6 @@ import {
   type AgentHost,
   type HostedPolicyContext
 } from "@mia/agent"
-import { loadPlan } from "@mia/sync"
 import { bootHostDepsToConfigureAgentOptions } from "../../../adapters/agent/boot-host-deps.js"
 import { createServerAttachmentService } from "../../../infra/persistence/attachments.js"
 import {
@@ -48,10 +47,7 @@ function createPolicyContext(
   runId: string,
   activeRun: ActiveRunRecord | undefined,
   runWorkspace: RunWorkspace,
-  opts?: {
-    parentRunId?: string | null
-    resolveSyncPlanTarget?: HostedPolicyContext["resolveSyncPlanTarget"]
-  }
+  opts?: { parentRunId?: string | null }
 ): HostedPolicyContext {
   const grantRunIds = [runId, opts?.parentRunId].filter((id): id is string => !!id)
   const toolApprovalGrants = db.listApprovedToolGrantsForRuns(grantRunIds).map((grant) => ({
@@ -67,7 +63,6 @@ function createPolicyContext(
     sandboxRoot: runWorkspace.executionRoot,
     actorUpn: activeRun?.ownerUpn ?? null,
     toolApprovalGrants: toolApprovalGrants.length > 0 ? toolApprovalGrants : undefined,
-    resolveSyncPlanTarget: opts?.resolveSyncPlanTarget,
   })
 }
 
@@ -78,14 +73,10 @@ export function createPerRunHost(
 ): PerRunHostBundle {
   const { request, runtime } = command
   const runContext = createRunContextForExecution(activeRun, request.runId, runtime.controller)
-  const bootOptions = bootHostDepsToConfigureAgentOptions(runtime.bootHostDeps)
-  const syncBoot = runtime.bootHostDeps.sync
   const policyCtx = createPolicyContext(request.runId, activeRun, runWorkspace, {
     parentRunId: request.resume?.parentRunId ?? null,
-    resolveSyncPlanTarget: syncBoot
-      ? (planId) => loadPlan({ sync: syncBoot }, planId)?.target
-      : undefined,
   })
+  const bootOptions = bootHostDepsToConfigureAgentOptions(runtime.bootHostDeps)
   const perRunHost: AgentHost = configureAgent({
     ...bootOptions,
     sync: {

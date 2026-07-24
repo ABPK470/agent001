@@ -1,5 +1,6 @@
 import { EventType, governTool, type DelegateContext, type EngineServices, type Tool } from "@mia/agent"
 import { readToolEntityId } from "@mia/shared-types"
+import { loadPlan, withSyncExecutePolicyArgs } from "@mia/sync"
 import { resetEffectSeq } from "../../../infra/effects/index.js"
 import { broadcast, broadcastTrace, broadcastTraceLoose } from "../../../infra/events/broadcaster.js"
 import { retrieveContext } from "../../../infra/persistence/memory.js"
@@ -52,10 +53,17 @@ export async function resolveExecutionTools(ctx: ToolResolutionContext): Promise
   const { request, signal, activeRun, runWorkspace, perRunHost, runContext, state, policyCtx, services, tracing } =
     ctx
   const governanceServices = createGovernanceServices(services)
+  const syncExecutePolicyArgs = (toolName: string, args: Record<string, unknown>) => {
+    if (toolName !== "sync_execute") return args
+    const planId = args["planId"]
+    if (typeof planId !== "string") return args
+    return withSyncExecutePolicyArgs(args, loadPlan(perRunHost, planId))
+  }
   const governRuntimeTool = (tool: Tool) =>
     governTool(tool, governanceServices, state, {
       signal,
       policyContext: policyCtx,
+      policyArgs: syncExecutePolicyArgs,
       ...(tool.name === "query_mssql" || tool.name === "explore_mssql_schema"
         ? { timeoutMs: MSSQL_TOOL_TIMEOUT_MS }
         : SYNC_LONG_RUNNING_TOOLS.has(tool.name)

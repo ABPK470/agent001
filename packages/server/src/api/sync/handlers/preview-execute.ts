@@ -9,6 +9,7 @@ import {
   previewSync,
   PUBLISH_REQUIRED_CODE,
   type SyncExecuteResult,
+  withSyncExecutePolicyArgs,
 } from "@mia/sync"
 import type { FastifyInstance, FastifyReply } from "fastify"
 import { cancelOperation } from "../../../infra/operations/cancel-registry.js"
@@ -153,14 +154,10 @@ export function registerPreviewExecuteRoutes(
       await assertSyncHttpPolicy({
         session: req.session,
         toolName: "sync_execute",
-        args: {
-          planId: req.params.planId,
-          confirm: true,
-          source: plan?.source,
-          target: plan?.target,
-          entityType: plan?.entity.type,
-          entityId: plan?.entity.id,
-        },
+        args: withSyncExecutePolicyArgs(
+          { planId: req.params.planId, confirm: true },
+          plan,
+        ),
       })
       const result = await runRegisteredSyncExecute({
         host,

@@ -24,7 +24,6 @@ export function buildPolicyContext(input: {
   sandboxRoot?: string | null
   parentRunId?: string | null
   toolApprovalGrants?: HostedPolicyContext["toolApprovalGrants"]
-  resolveSyncPlanTarget?: HostedPolicyContext["resolveSyncPlanTarget"]
 }): HostedPolicyContext {
   return {
     runId: asRunId(input.runId),
@@ -36,6 +35,5 @@ export function buildPolicyContext(input: {
     actorUpn: input.actorUpn ?? null,
     sessionId: input.sessionId ?? null,
     toolApprovalGrants: input.toolApprovalGrants,
-    resolveSyncPlanTarget: input.resolveSyncPlanTarget,
   }
 }
