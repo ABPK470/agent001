@@ -7,7 +7,8 @@ import { isDatabricksConfigured } from "../../infra/llm/databricks-broker.js"
 import { resolveServerDataDir } from "../../infra/persistence/server-data-dir.js"
 import { isLlmProvider } from "../../internal/enums/llm.js"
 
-import { databricksAuthMode, hasMssqlConfigured, readEnvState, suggestDataDir } from "./env-context.js"
+import { databricksAuthMode, hasMssqlConfigured, hasMssqlSeedFile, readEnvState, suggestDataDir } from "./env-context.js"
+import { countEnabledMssqlConnectors } from "../../adapters/connectors/live-connectors.js"
 import type { SetupCheck, SetupLayout, SetupReport } from "./types.js"
 
 function ok(id: string, label: string, message: string): SetupCheck {
@@ -206,12 +207,26 @@ export function runSetupChecks(layout: SetupLayout): SetupReport {
       : error("port", "HTTP port", `Invalid PORT="${portRaw}"`, "Use 1–65535."),
   )
 
-  if (hasMssqlConfigured(env)) {
+  if (hasMssqlConfigured()) {
+    checks.push(
+      ok("mssql", "MSSQL", `${countEnabledMssqlConnectors()} enabled connector(s) in SQLite`),
+    )
+    checks.push(
+      isPublishedSyncBundlePresent(layout.projectRoot)
+        ? ok("published-sync-definitions", "Published SyncDefinitions", "SQLite sync_definitions")
+        : warn(
+            "published-sync-definitions",
+            "Published SyncDefinitions",
+            "Not published yet — normal before first server start",
+            "After first start: Entity Registry → ⚙ → Publish (required for sync preview/execute).",
+          ),
+    )
+  } else if (hasMssqlSeedFile(layout.projectRoot)) {
     checks.push(
       ok(
         "mssql",
         "MSSQL",
-        env.get("MSSQL_DATABASES") ? "MSSQL_DATABASES configured" : `host ${env.get("MSSQL_HOST") || env.get("MSSQL_SERVER")}`,
+        "deploy/connectors/connectors.json present — will seed on first boot",
       ),
     )
     checks.push(
@@ -224,26 +239,20 @@ export function runSetupChecks(layout: SetupLayout): SetupReport {
             "After first start: Entity Registry → ⚙ → Publish (required for sync preview/execute).",
           ),
     )
-    const knowledge = env.get("MSSQL_KNOWLEDGE_FILE")
-    if (knowledge && !existsSync(resolve(layout.projectRoot, knowledge))) {
-      checks.push(
-        warn("mssql-knowledge", "MSSQL knowledge file", `Not found: ${knowledge}`),
-      )
-    }
-    const tenantConfig = env.get("MIA_TENANT_CONFIG")
-    if (tenantConfig && !existsSync(resolve(layout.projectRoot, tenantConfig))) {
-      checks.push(
-        warn("tenant-config", "Tenant config", `Not found: ${tenantConfig}`),
-      )
-    }
   } else {
     checks.push(
       warn(
         "mssql",
         "MSSQL",
-        "Not in .env — chat works; sync and schema catalog need MSSQL_*",
+        "Not configured — chat works; sync and schema catalog need a SQL Server connector",
+        "Add one from the platform menu → Connectors after first boot, or ship deploy/connectors/connectors.json.",
       ),
     )
+  }
+
+  const tenantConfig = env.get("MIA_TENANT_CONFIG")
+  if (tenantConfig && !existsSync(resolve(layout.projectRoot, tenantConfig))) {
+    checks.push(warn("tenant-config", "Tenant config", `Not found: ${tenantConfig}`))
   }
 
   return { layout, checks }

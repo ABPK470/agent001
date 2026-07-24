@@ -71,53 +71,41 @@ export function parsePipelineIds(rawValue) {
     .filter((value) => Number.isInteger(value))
 }
 
-export function parseMssqlConfigs() {
-  const databasesJson = process.env["MSSQL_DATABASES"]
-  if (databasesJson) {
-    const raw = JSON.parse(databasesJson)
-    if (!Array.isArray(raw) || raw.length === 0) {
-      throw new Error("MSSQL_DATABASES must be a non-empty JSON array.")
-    }
-    return raw.map((entry) => ({
-      name: entry.name,
-      config: {
-        server: entry.host,
-        port: entry.port ?? 1433,
-        user: entry.user ?? "sa",
-        password: entry.password ?? "",
-        database: entry.database ?? "master",
-        domain: entry.domain,
-        options: {
-          encrypt: entry.encrypt !== false,
-          trustServerCertificate: entry.trustServerCertificate !== false
-        }
-      }
-    }))
-  }
-
-  const server = process.env["MSSQL_HOST"] || process.env["MSSQL_SERVER"]
-  if (!server) {
+export function parseMssqlConfigs(projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..")) {
+  const seedPath = resolve(projectRoot, "deploy/connectors/connectors.json")
+  if (!existsSync(seedPath)) {
     throw new Error(
-      "MSSQL not configured. Set MSSQL_DATABASES or MSSQL_HOST/MSSQL_SERVER, or use --evidence-file."
+      `No ${seedPath} — add mssql connectors there (see connectors.example.json), or use --evidence-file.`,
     )
   }
-  return [
-    {
-      name: "default",
+  const parsed = JSON.parse(readFileSync(seedPath, "utf-8"))
+  if (parsed.version !== 1 || !Array.isArray(parsed.connectors)) {
+    throw new Error(`${seedPath} must be version 1 with a connectors array.`)
+  }
+  const mssql = parsed.connectors.filter(
+    (entry) => entry && entry.kind === "mssql" && entry.enabled !== false,
+  )
+  if (mssql.length === 0) {
+    throw new Error(`${seedPath} has no enabled mssql connectors.`)
+  }
+  return mssql.map((entry) => {
+    const cfg = entry.config ?? {}
+    return {
+      name: entry.name || entry.id,
       config: {
-        server,
-        port: Number(process.env["MSSQL_PORT"] ?? 1433),
-        user: process.env["MSSQL_USER"] ?? "sa",
-        password: process.env["MSSQL_PASSWORD"] ?? "",
-        database: process.env["MSSQL_DATABASE"] ?? "master",
-        domain: process.env["MSSQL_DOMAIN"] || undefined,
+        server: cfg.host,
+        port: cfg.port ?? 1433,
+        user: cfg.user ?? "sa",
+        password: cfg.password ?? "",
+        database: cfg.database ?? "master",
+        domain: cfg.domain || undefined,
         options: {
-          encrypt: process.env["MSSQL_ENCRYPT"] !== "false",
-          trustServerCertificate: process.env["MSSQL_TRUST_CERT"] !== "false"
-        }
-      }
+          encrypt: cfg.encrypt !== false,
+          trustServerCertificate: cfg.trustServerCertificate !== false,
+        },
+      },
     }
-  ]
+  })
 }
 
 export async function connectMssql(connectionName) {

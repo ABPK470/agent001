@@ -13,7 +13,7 @@ import * as db from "../../../infra/persistence/sqlite.js"
 
 export interface PersistedSyncEnvironmentLoad {
   environments: SyncEnvironment[]
-  source: "db" | "file" | "mssql" | "none"
+  source: "db" | "file" | "connections" | "none"
   seeded: boolean
   summary: string
 }

@@ -6,9 +6,7 @@ import { beforeEach, afterEach, describe, expect, it } from "vitest"
 
 import { _migrate } from "../../infra/persistence/connection.js"
 import * as db from "../../infra/persistence/sqlite.js"
-import { loadPersistedConnectors } from "../../adapters/connectors/live-connectors.js"
 import { mssqlConfigsFromConnectors } from "../../adapters/connectors/mssql-from-connectors.js"
-import type { ConfigureMssqlConnection } from "@mia/agent"
 
 let projectRoot: string
 
@@ -21,42 +19,63 @@ afterEach(() => {
   rmSync(projectRoot, { recursive: true, force: true })
 })
 
-describe("mssqlConfigsFromConnectors (Phase 2 source of truth)", () => {
-  it("round-trips boot connections through the connectors DB preserving every field + knowledge", () => {
+function saveMssqlConnector(
+  id: string,
+  config: Record<string, string | number | boolean | null>,
+  enabled = true,
+): void {
+  const now = new Date().toISOString()
+  db.saveConnector({
+    id,
+    kind: "mssql",
+    body_json: JSON.stringify({
+      id,
+      kind: "mssql",
+      name: id,
+      displayName: id,
+      config,
+      enabled,
+      createdAt: now,
+      updatedAt: now,
+      updatedBy: null,
+    }),
+    enabled: enabled ? 1 : 0,
+    created_at: now,
+    updated_at: now,
+    updated_by: null,
+  })
+}
+
+describe("mssqlConfigsFromConnectors", () => {
+  it("builds live mssql configs from persisted connectors preserving every field + knowledge", () => {
     const knowledgePath = "./knowledge.md"
     writeFileSync(join(projectRoot, "knowledge.md"), "# Knowledge\nSchema guidance for dev.")
-    const dev: ConfigureMssqlConnection = {
-      name: "dev",
-      server: "db-dev",
+    saveMssqlConnector("dev", {
+      host: "db-dev",
       port: 1433,
+      database: "mymi_dev",
       user: "sa",
       password: "pw",
-      database: "mymi_dev",
       domain: "corp",
-      options: { encrypt: true, trustServerCertificate: true },
+      encrypt: true,
+      trustServerCertificate: true,
       knowledgePath,
-      knowledge: null,
-    }
-    const prod: ConfigureMssqlConnection = {
-      name: "prod",
-      server: "db-prod",
+    })
+    saveMssqlConnector("prod", {
+      host: "db-prod",
       port: 1433,
+      database: "mymi_prod",
       user: "sa",
       password: "pw2",
-      database: "mymi_prod",
-      options: { encrypt: true, trustServerCertificate: false },
+      encrypt: true,
+      trustServerCertificate: false,
       knowledgePath: null,
-      knowledge: null,
-    }
+    })
 
-    // 1. Seed the connectors DB from the legacy boot connections (one-time bridge).
-    const seeded = loadPersistedConnectors(projectRoot, [dev, prod])
-    expect(seeded.source).toBe("mssql")
-    expect(seeded.connectors.map((c) => c.name)).toEqual(["dev", "prod"])
-    expect(seeded.connectors[0]!.config["knowledgePath"]).toBe(knowledgePath)
-
-    // 2. Flip the source: build the LIVE mssql configs from the persisted connectors.
-    const configs = mssqlConfigsFromConnectors(seeded.connectors, projectRoot)
+    const configs = mssqlConfigsFromConnectors(
+      db.listConnectors().map((r) => JSON.parse(r.body_json)),
+      projectRoot,
+    )
 
     expect(configs.map((c) => c.name)).toEqual(["dev", "prod"])
     const gotDev = configs[0]!
@@ -78,26 +97,8 @@ describe("mssqlConfigsFromConnectors (Phase 2 source of truth)", () => {
   })
 
   it("skips disabled connectors and non-mssql kinds", () => {
+    saveMssqlConnector("off", { host: "db-off", database: "mymi", user: "sa", password: "x" }, false)
     const now = new Date().toISOString()
-    db.saveConnector({
-      id: "off",
-      kind: "mssql",
-      body_json: JSON.stringify({
-        id: "off",
-        kind: "mssql",
-        name: "off",
-        displayName: "Off",
-        config: { host: "db-off", database: "mymi", user: "sa", password: "x" },
-        enabled: false,
-        createdAt: now,
-        updatedAt: now,
-        updatedBy: null,
-      }),
-      enabled: 0,
-      created_at: now,
-      updated_at: now,
-      updated_by: null,
-    })
     db.saveConnector({
       id: "pg",
       kind: "postgres",
@@ -126,26 +127,7 @@ describe("mssqlConfigsFromConnectors (Phase 2 source of truth)", () => {
   })
 
   it("falls back to schema defaults for missing optional fields", () => {
-    const now = new Date().toISOString()
-    db.saveConnector({
-      id: "minimal",
-      kind: "mssql",
-      body_json: JSON.stringify({
-        id: "minimal",
-        kind: "mssql",
-        name: "minimal",
-        displayName: "Minimal",
-        config: { host: "db-min", database: "mymi" },
-        enabled: true,
-        createdAt: now,
-        updatedAt: now,
-        updatedBy: null,
-      }),
-      enabled: 1,
-      created_at: now,
-      updated_at: now,
-      updated_by: null,
-    })
+    saveMssqlConnector("minimal", { host: "db-min", database: "mymi" })
 
     const [got] = mssqlConfigsFromConnectors(
       db.listConnectors().map((r) => JSON.parse(r.body_json)),

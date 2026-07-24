@@ -1,21 +1,18 @@
 /**
- * Connectors → MSSQL boot configs (Phase 2 source of truth).
+ * Connectors → MSSQL boot configs.
  *
- * `host.mssql.databases` is no longer built from `.env`; it is built from the
- * persisted `mssql`-kind connectors. This helper maps each enabled mssql
- * connector back to the `ConfigureMssqlConnection` shape the agent host
- * expects, reading the optional knowledge file from the connector's
- * `knowledgePath`.
+ * `host.mssql.databases` is built from persisted enabled `mssql`-kind connectors.
+ * This helper maps each connector to the `ConfigureMssqlConnection` shape the
+ * agent host expects, reading the optional knowledge file from `knowledgePath`.
  *
  * Connection *names* are preserved verbatim (the connector `name` is the
- * registry key sync environments resolve against), so flipping the source
- * does not change sync resolution.
+ * registry key sync environments resolve against).
  */
 
 import type { ConfigureMssqlConnection } from "@mia/agent"
 import type { Connector } from "@mia/shared-types"
 
-import { readKnowledgeFile } from "../../infra/mssql/setup.js"
+import { readKnowledgeFile } from "../../infra/mssql/knowledge.js"
 
 function asString(value: unknown): string | null {
   return typeof value === "string" && value !== "" ? value : null

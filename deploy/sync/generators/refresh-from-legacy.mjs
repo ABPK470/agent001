@@ -2,7 +2,7 @@
 /**
  * Rebuild deploy/sync artifacts from legacy MyMI pipelines.
  *
- * Live MSSQL (repo dev or deployed host with .env MSSQL_*):
+ * Live MSSQL (repo dev — reads deploy/connectors/connectors.json):
  *   node deploy/sync/generators/refresh-from-legacy.mjs --connection uat --force
  *
  * Offline (no MSSQL — metadata + fixtures only; skips entity JSON):

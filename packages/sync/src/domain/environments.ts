@@ -99,7 +99,7 @@ export interface SyncEnvironment {
 export interface LoadSyncEnvironmentsResult {
   environments: SyncEnvironment[]
   summary: string
-  source: "file" | "mssql" | "none"
+  source: "file" | "connections" | "none"
 }
 
 /** Legacy fields removed from SyncEnvironment — rejected on API/config ingest. */

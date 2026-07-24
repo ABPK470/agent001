@@ -9,7 +9,7 @@ Not per user. Not multi-tenant inside one process.
 | File | Consumer | Purpose |
 |------|----------|---------|
 | `tenant.json` | mia **code** | Warehouse conventions the catalog cannot infer |
-| `mymi-knowledge.md` | the **LLM** | Prose schema guide (separate file, `MSSQL_KNOWLEDGE_FILE`) |
+| `mymi-knowledge.md` | the **LLM** | Prose schema guide (per-connector `knowledgePath`) |
 | `definitions.bundle.json` | mia **code** + sync runtime | Published sync entity types — **not** created by setup or first boot |
 
 ## Boot

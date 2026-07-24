@@ -10,8 +10,8 @@ version: "3.9"
 #    docker compose --profile dev up
 #
 #  The "mssql-dev" service is for LOCAL DEVELOPMENT AND TESTING ONLY.
-#  It is NOT the production database.  Point the app at real databases
-#  via MSSQL_DATABASES (JSON) or MSSQL_HOST in your production .env.
+#  Point the app at databases via platform menu → Connectors, or ship
+#  deploy/connectors/connectors.json for first-boot seed.
 # ══════════════════════════════════════════════════════════════════════
 
 services:
@@ -24,25 +24,21 @@ services:
       - HOST=0.0.0.0
       - MIA_DATA_DIR=/data
       - AGENT_WORKSPACE=/workspace
-      # Production databases: override MSSQL_DATABASES in your .env with JSON
-      # e.g. MSSQL_DATABASES=[{"name":"analytics","host":"sql.example.com","port":1433,...}]
-      # For local dev (--profile dev), point at the mssql-dev container instead:
-      - MSSQL_HOST=${MSSQL_HOST:-}
-      - MSSQL_PORT=${MSSQL_PORT:-1433}
-      - MSSQL_USER=${MSSQL_USER:-sa}
-      - MSSQL_PASSWORD=${MSSQL_PASSWORD:-}
-      - MSSQL_DATABASE=${MSSQL_DATABASE:-master}
-      - MSSQL_DATABASES=${MSSQL_DATABASES:-}
-      - MSSQL_ENCRYPT=true
-      - MSSQL_TRUST_CERT=true
+      - LLM_PROVIDER=${LLM_PROVIDER:-copilot-chat}
+      # Optional: pin which named mssql connector the agent uses by default
+      - MSSQL_DEFAULT_CONNECTION=${MSSQL_DEFAULT_CONNECTION:-}
     volumes:
       - app-data:/data
       - workspace:/workspace
+      # Mount connectors seed (or edit Connectors in the UI after first login)
+      - ./deploy/connectors:/app/deploy/connectors:ro
     restart: unless-stopped
 
   # ── DEV-ONLY: local SQL Server ────────────────────────────────────
   # Started only when you run:  docker compose --profile dev up
   # Do NOT wire this to production workloads.
+  # After it is healthy, add a connector in the UI (host: mssql-dev, port 1433)
+  # or put the same in deploy/connectors/connectors.json.
   mssql-dev:
     profiles: [dev]
     image: mcr.microsoft.com/azure-sql-edge:latest

@@ -7,9 +7,8 @@
  * fields its create/edit form renders and the server validates against.
  *
  * Storage: SQLite `connectors` table (plaintext body_json, admin-only API).
- * Seeding: `deploy/connectors/connectors.json` if present; else synthesise
- * one `mssql` connector per MSSQL connection registered at boot (the
- * migration bridge that lets the DB become the source of truth).
+ * First-boot seed (when the table is empty): `deploy/connectors/connectors.json`
+ * if present. Otherwise operators add connectors from the platform menu.
  */
 
 export type ConnectorKindId =

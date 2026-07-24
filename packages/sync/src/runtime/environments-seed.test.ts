@@ -46,10 +46,10 @@ describe("loadSyncEnvironments seed", () => {
     ])
   })
 
-  it("sets connectorId from connection name on mssql fallback", () => {
+  it("sets connectorId from connection name on connections fallback", () => {
     const root = mkdtempSync(join(tmpdir(), "mia-env-fb-"))
     const loaded = loadSyncEnvironments(root, [{ name: "lab" }])
-    expect(loaded.source).toBe("mssql")
+    expect(loaded.source).toBe("connections")
     expect(loaded.environments[0]?.connectorId).toBe("lab")
   })
 })

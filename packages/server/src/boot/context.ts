@@ -1,7 +1,6 @@
 import { configureAgent, type AgentHost } from "@mia/agent"
 import { configurePlanStore, createDbPublishedSyncDefinitionRegistry } from "@mia/sync"
 import { seedDefaultPoliciesIfMissing } from "../api/policies/service/policy-seeder.js"
-import { setupMssql } from "../infra/mssql/setup.js"
 import { listFreezeWindowDefinitionsForTenant } from "../infra/persistence/index.js"
 import type { BootHostDeps } from "../ports/orchestration.js"
 import {
@@ -42,8 +41,8 @@ function logSyncEnvironments(syncEnvironments: ServerContext["syncEnvironments"]
     console.log(
       `ABI environments seeded from deploy/sync/sync-environments.json: ${syncEnvironments.summary}`
     )
-  } else if (syncEnvironments.source === "mssql") {
-    console.log(`ABI environments seeded from MSSQL_DATABASES: ${syncEnvironments.summary}`)
+  } else if (syncEnvironments.source === "connections") {
+    console.log(`ABI environments seeded from connector names: ${syncEnvironments.summary}`)
   }
 }
 
@@ -51,14 +50,11 @@ export async function createServerContext(): Promise<ServerContext> {
   const workspace = createServerWorkspaceRef(resolveServerWorkspace())
   const sandbox = await configureSandbox(() => workspace.get())
 
-  // Legacy `.env` MSSQL vars are consulted only as a one-time seed bridge so
-  // existing deployments populate the connectors DB on first boot. The live
-  // source of truth for `host.mssql.databases` is the persisted connectors DB.
-  const legacyMssqlSetup = setupMssql(projectRoot)
-  const connectors = loadPersistedConnectors(projectRoot, legacyMssqlSetup.configs)
+  // Connectors DB is the source of truth for SQL Server (and other) connections.
+  // Empty DB seeds once from deploy/connectors/connectors.json when present.
+  const connectors = loadPersistedConnectors(projectRoot)
   const mssqlConfigs = mssqlConfigsFromConnectors(connectors.connectors, projectRoot)
-  const mssqlDefaultConnectionName =
-    process.env["MSSQL_DEFAULT_CONNECTION"] ?? legacyMssqlSetup.defaultConnectionName ?? null
+  const mssqlDefaultConnectionName = process.env["MSSQL_DEFAULT_CONNECTION"] ?? null
 
   const syncEnvironments = loadBootSyncEnvironments(projectRoot, mssqlConfigs)
   const syncEventSink = createSyncEventSink()
@@ -104,14 +100,12 @@ export async function createServerContext(): Promise<ServerContext> {
       : "not configured"
 
   logSyncEnvironments(syncEnvironments)
-  if (connectors.seeded) {
-    if (connectors.source === "file") {
-      console.log(`Connectors seeded from deploy/connectors/connectors.json: ${connectors.summary}`)
-    } else if (connectors.source === "mssql") {
-      console.log(`Connectors seeded from MSSQL_DATABASES: ${connectors.summary}`)
-    }
-  } else {
+  if (connectors.seeded && connectors.source === "file") {
+    console.log(`Connectors seeded from deploy/connectors/connectors.json: ${connectors.summary}`)
+  } else if (connectors.source === "db") {
     console.log(`Connectors (from persisted DB): ${connectors.summary}`)
+  } else {
+    console.log("Connectors: none — add from platform menu → Connectors")
   }
   console.log(`MSSQL databases (from connectors): ${mssqlSummary}`)
   seedDefaultPoliciesIfMissing(projectRoot)

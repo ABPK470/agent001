@@ -9,11 +9,12 @@ import {
   DEFAULT_DATABRICKS_MODEL,
 } from "../../infra/llm/registry.js"
 import {
-  databricksAuthMode,
   hasMssqlConfigured,
+  hasMssqlSeedFile,
   promptDefaultForKey,
   readEnvState,
   suggestDataDir,
+  databricksAuthMode,
 } from "./env-context.js"
 import { applyEnvToProcess, mergeEnvFile } from "./env-file.js"
 import {
@@ -147,44 +148,6 @@ async function collectLlm(
   return updates
 }
 
-async function collectMssqlIfNeeded(
-  rl: ReturnType<typeof createInterface>,
-  env: ReturnType<typeof readEnvState>,
-  force: boolean,
-): Promise<Updates> {
-  if (hasMssqlConfigured(env) && !force) {
-    console.log("MSSQL: using existing configuration (Connectors DB / .env seed).")
-    return {}
-  }
-
-  console.log(
-    "Tip: MSSQL connections are managed from the platform menu → Connectors after first boot. " +
-      "The prompts below write a one-time .env seed (legacy bridge) you can remove once connectors are persisted.",
-  )
-  const configure = force
-    ? await askYesNo(rl, "Seed MSSQL into .env now?", hasMssqlConfigured(env))
-    : await askYesNo(rl, "Add an MSSQL .env seed now?", false)
-  if (!configure) return {}
-
-  const updates: Updates = {}
-  const host = await ask(rl, "MSSQL_HOST", env.get("MSSQL_HOST"))
-  if (host) updates.MSSQL_HOST = host
-  const port = await ask(rl, "MSSQL_PORT", env.get("MSSQL_PORT"), "1433")
-  if (port) updates.MSSQL_PORT = port
-  const database = await ask(rl, "MSSQL_DATABASE", env.get("MSSQL_DATABASE"))
-  if (database) updates.MSSQL_DATABASE = database
-  const domain = await ask(rl, "MSSQL_DOMAIN", env.get("MSSQL_DOMAIN"))
-  if (domain) updates.MSSQL_DOMAIN = domain
-  const knowledge = await ask(
-    rl,
-    "MSSQL_KNOWLEDGE_FILE",
-    env.get("MSSQL_KNOWLEDGE_FILE"),
-    "./deploy/mssql/mymi-knowledge.md",
-  )
-  if (knowledge) updates.MSSQL_KNOWLEDGE_FILE = knowledge
-  return updates
-}
-
 async function promptForBlockingGaps(
   rl: ReturnType<typeof createInterface>,
   layout: SetupLayout,
@@ -243,9 +206,15 @@ export async function runSetupWizard(opts?: { force?: boolean }): Promise<number
     console.log(formatSetupReport(report))
     console.log("")
     console.log(formatLlmBootNote())
-    if (hasMssqlConfigured(readEnvState(layout.envPath))) {
+    if (hasMssqlConfigured() || hasMssqlSeedFile(layout.projectRoot)) {
       console.log("")
       console.log(formatSyncBootNote())
+    } else {
+      console.log("")
+      console.log(
+        "SQL Server: optional. After first boot, add connectors from the platform menu → Connectors,",
+      )
+      console.log("or ship deploy/connectors/connectors.json for first-boot seed.")
     }
     console.log("")
     console.log("Setup complete — nothing to change. Start with npm run dev or npm start.")
@@ -271,7 +240,6 @@ export async function runSetupWizard(opts?: { force?: boolean }): Promise<number
       updates = {
         ...(await collectCore(rl, layout, env)),
         ...(await collectLlm(rl, env)),
-        ...(await collectMssqlIfNeeded(rl, env, true)),
       }
       if (!layout.packaged) {
         const workspace = await ask(rl, "AGENT_WORKSPACE", env.get("AGENT_WORKSPACE"), layout.projectRoot)
@@ -304,9 +272,15 @@ export async function runSetupWizard(opts?: { force?: boolean }): Promise<number
   console.log(formatSetupReport(report))
   console.log("")
   console.log(formatLlmBootNote())
-  if (hasMssqlConfigured(readEnvState(layout.envPath))) {
+  if (hasMssqlConfigured() || hasMssqlSeedFile(layout.projectRoot)) {
     console.log("")
     console.log(formatSyncBootNote())
+  } else {
+    console.log("")
+    console.log(
+      "SQL Server: optional. After first boot, add connectors from the platform menu → Connectors,",
+    )
+    console.log("or ship deploy/connectors/connectors.json for first-boot seed.")
   }
   console.log("")
 

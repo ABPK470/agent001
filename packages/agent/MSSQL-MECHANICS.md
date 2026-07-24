@@ -22,11 +22,12 @@ The agent does **not** load every row or memorize every table name up front. It 
 
 ## 2. Step 0 — boot: wire the server
 
-At startup (`setupMssql` → `setMssqlConfigs`):
+At startup the server loads persisted connectors (SQLite), seeding once from
+`deploy/connectors/connectors.json` when the table is empty:
 
-1. Read `MSSQL_DATABASES` (multi-env JSON) or `MSSQL_HOST` (single `default` connection).
-2. Optionally load a **knowledge file** per connection (`MSSQL_KNOWLEDGE_FILE` / `knowledgePath`).
-3. Register named pools on `host.mssql.databases` (lazy connect on first query).
+1. Build named MSSQL configs from enabled `mssql` connectors (`mssqlConfigsFromConnectors`).
+2. Optionally load a **knowledge file** per connector (`knowledgePath` in connector config).
+3. Register named pools on `host.mssql.databases` (lazy connect on first query; live pools re-read the connectors DB).
 
 Then `buildLlmAndCatalog` runs for each connection:
 

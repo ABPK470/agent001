@@ -117,14 +117,18 @@ describe("setup checks", () => {
     expect(report.checks.find((c) => c.id === "cookie-secret")?.severity).toBe("error")
   })
 
-  it("warns when MSSQL is configured but sync bundle is not published yet", () => {
+  it("warns when connectors seed exists but sync bundle is not published yet", () => {
     writeFileSync(
       join(tempRoot, ".env"),
-      "MIA_DATA_DIR=/tmp/mia-test-data\nLLM_PROVIDER=copilot-chat\nMSSQL_HOST=db.example\n",
+      "MIA_DATA_DIR=/tmp/mia-test-data\nLLM_PROVIDER=copilot-chat\n",
     )
     process.env.MIA_DATA_DIR = "/tmp/mia-test-data"
     process.env.LLM_PROVIDER = "copilot-chat"
-    process.env.MSSQL_HOST = "db.example"
+    mkdirSync(resolve(tempRoot, "deploy/connectors"), { recursive: true })
+    writeFileSync(
+      resolve(tempRoot, "deploy/connectors/connectors.json"),
+      JSON.stringify({ version: 1, connectors: [] }),
+    )
 
     const report = runSetupChecks(makeLayout(tempRoot))
     expect(report.checks.find((c) => c.id === "published-sync-definitions")?.severity).toBe("warn")

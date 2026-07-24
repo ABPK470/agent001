@@ -3,28 +3,18 @@ import { parseBoundaryJson } from "../../internal/parse-json.js"
 /**
  * Connector seed + reload — mirrors `sync/state/live-environments.ts`.
  *
- * Loading priority (only consulted when the `connectors` table is empty):
- *   1. `deploy/connectors/connectors.json` if present — explicit operator
- *      seed (the source of truth, exportable/importable like the
- *      sync-environments seed file).
- *   2. Else synthesise one `mssql` connector per MSSQL connection registered
- *      at boot from `.env` — the one-time migration bridge so existing
- *      deployments populate the DB without hand-writing the seed file. After
- *      this first boot the `.env` vars are no longer read.
+ * When the `connectors` table is empty, seed from
+ * `deploy/connectors/connectors.json` if present. Otherwise leave empty —
+ * operators add connections from the platform menu → Connectors.
  *
- * Phase 2 wiring: `host.mssql.databases` is built from the persisted
- * `mssql`-kind connectors via `mssqlConfigsFromConnectors` (see
- * `mssql-from-connectors.ts`). Sync still resolves environments by name
- * against `host.mssql.databases`; connector `name` is preserved verbatim as
- * the registry key, so flipping the source does not change resolution.
+ * Live `host.mssql.databases` is built from persisted `mssql`-kind connectors
+ * via `mssqlConfigsFromConnectors`.
  */
 
 import { existsSync, readFileSync } from "node:fs"
 import { resolve } from "node:path"
 import Database from "better-sqlite3"
-import type { ConfigureMssqlConnection } from "@mia/agent"
 import {
-  toConnectorId,
   withConnectorConfigDefaults,
   type Connector,
   type ConnectorKindId,
@@ -37,7 +27,7 @@ const DEFAULT_SEED_PATH = "deploy/connectors/connectors.json"
 
 export interface PersistedConnectorLoad {
   connectors: Connector[]
-  source: "db" | "file" | "mssql" | "none"
+  source: "db" | "file" | "none"
   seeded: boolean
   summary: string
 }
@@ -88,40 +78,6 @@ function renderSummary(connectors: Connector[]): string {
   return connectors.map((c) => `${c.id}[${c.kind}]`).join(", ")
 }
 
-function mssqlConfigFromConnection(
-  conn: ConfigureMssqlConnection,
-): Record<string, string | number | boolean | null> {
-  return {
-    host: conn.server ?? null,
-    port: conn.port ?? null,
-    database: conn.database ?? null,
-    user: conn.user ?? null,
-    password: conn.password ?? "",
-    domain: conn.domain ?? null,
-    encrypt: conn.options?.encrypt ?? true,
-    trustServerCertificate: conn.options?.trustServerCertificate ?? true,
-    knowledgePath: conn.knowledgePath ?? null,
-  }
-}
-
-function synthesiseFromMssql(connections: readonly ConfigureMssqlConnection[]): Connector[] {
-  const now = new Date().toISOString()
-  return connections.map((conn) => {
-    const id = toConnectorId(conn.name) || "default"
-    return {
-      id,
-      kind: "mssql" as ConnectorKindId,
-      name: conn.name,
-      displayName: conn.name,
-      config: withConnectorConfigDefaults("mssql", mssqlConfigFromConnection(conn)),
-      enabled: true,
-      createdAt: now,
-      updatedAt: now,
-      updatedBy: null,
-    }
-  })
-}
-
 function loadFromSeedFile(projectRoot: string, relPath: string): Connector[] {
   const configPath = resolve(projectRoot, relPath)
   if (!existsSync(configPath)) return []
@@ -144,7 +100,6 @@ function loadFromSeedFile(projectRoot: string, relPath: string): Connector[] {
 
 export function loadPersistedConnectors(
   projectRoot: string,
-  connections: readonly ConfigureMssqlConnection[],
   relPath = DEFAULT_SEED_PATH,
 ): PersistedConnectorLoad {
   const persistedRows = db.listConnectors()
@@ -153,13 +108,16 @@ export function loadPersistedConnectors(
     return { connectors, source: "db", seeded: false, summary: renderSummary(connectors) }
   }
 
-  const fromFile = loadFromSeedFile(projectRoot, relPath)
-  const connectors = fromFile.length > 0 ? fromFile : synthesiseFromMssql(connections)
+  const connectors = loadFromSeedFile(projectRoot, relPath)
   for (const connector of connectors) {
     db.saveConnector(serialiseConnector(connector, null))
   }
-  const source = fromFile.length > 0 ? "file" : connectors.length > 0 ? "mssql" : "none"
-  return { connectors, source, seeded: true, summary: renderSummary(connectors) }
+  return {
+    connectors,
+    source: connectors.length > 0 ? "file" : "none",
+    seeded: true,
+    summary: renderSummary(connectors),
+  }
 }
 
 /**
@@ -180,7 +138,9 @@ export function linkSyncEnvironmentConnectorIds(): void {
       if (typeof body.name === "string" && body.name.trim() !== "") {
         connectorByKey.set(body.name.toLowerCase(), row.id)
       }
-    } catch (err: unknown) { console.error("[mia]", err) }
+    } catch (err: unknown) {
+      console.error("[mia]", err)
+    }
   }
 
   const now = new Date().toISOString()
@@ -210,7 +170,7 @@ export function linkSyncEnvironmentConnectorIds(): void {
  *
  * Opens the SQLite file read-only (no migrations, no seeding) so pre-boot CLI
  * tools — the setup wizard/checks — can ask "is MSSQL configured?" against the
- * new source of truth without side effects. Returns 0 when the file or table
+ * source of truth without side effects. Returns 0 when the file or table
  * is absent (e.g. before first boot).
  */
 export function countEnabledMssqlConnectors(): number {

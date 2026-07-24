@@ -16,7 +16,7 @@
     "./infra/effects": "./src/infra/effects/index.ts",
     "./infra/events": "./src/infra/events/broadcaster.ts",
     "./infra/llm": "./src/infra/llm/index.ts",
-    "./infra/mssql": "./src/infra/mssql/setup.ts",
+    "./infra/mssql": "./src/infra/mssql/knowledge.ts",
     "./infra/persistence": "./src/infra/persistence/index.ts",
     "./infra/sandbox": "./src/infra/sandbox/index.ts",
     "./ports": "./src/ports/index.ts",

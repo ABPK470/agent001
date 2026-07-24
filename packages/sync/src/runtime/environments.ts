@@ -93,7 +93,7 @@ export function loadSyncEnvironments(
   return {
     environments,
     summary: environments.map((env) => `${env.name}[${env.defaultAccessMode}]`).join(", "),
-    source: environments.length ? "mssql" : "none"
+    source: environments.length ? "connections" : "none"
   }
 }
 
@@ -110,8 +110,8 @@ export async function setupEnvironments(
   replaceEnvironments(host, loaded.environments)
   if (loaded.source === "file") {
     console.log(`ABI environments (from ${relPath}): ${loaded.summary}`)
-  } else if (loaded.source === "mssql") {
-    console.log(`ABI environments (auto from MSSQL_DATABASES): ${loaded.summary}`)
+  } else if (loaded.source === "connections") {
+    console.log(`ABI environments (auto from connector names): ${loaded.summary}`)
   }
   return loaded.environments.map((env) => `${env.name}[${env.role}]`).join(", ")
 }

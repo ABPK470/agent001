@@ -1,24 +1,16 @@
 import Database from "better-sqlite3"
-import { beforeEach, describe, expect, it } from "vitest"
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
+import { afterEach, beforeEach, describe, expect, it } from "vitest"
 
 import { _migrate } from "../../infra/persistence/connection.js"
 import * as db from "../../infra/persistence/sqlite.js"
 import { loadPersistedConnectors } from "../../adapters/connectors/live-connectors.js"
-import type { ConfigureMssqlConnection } from "@mia/agent"
 
 beforeEach(() => {
   _migrate(new Database(":memory:"))
 })
-
-const mssqlDev: ConfigureMssqlConnection = {
-  name: "dev",
-  server: "db-dev",
-  port: 1433,
-  user: "sa",
-  password: "pw",
-  database: "mymi_dev",
-  options: { encrypt: true, trustServerCertificate: true },
-}
 
 describe("connector persistence", () => {
   it("round-trips a connector through save / get / list / delete", () => {
@@ -54,20 +46,70 @@ describe("connector persistence", () => {
 })
 
 describe("loadPersistedConnectors seeding", () => {
-  it("synthesises one mssql connector per boot connection when the table is empty", () => {
-    const result = loadPersistedConnectors("/nonexistent-project-root", [mssqlDev])
-    expect(result.source).toBe("mssql")
+  let projectRoot: string
+
+  beforeEach(() => {
+    projectRoot = mkdtempSync(join(tmpdir(), "mia-conn-seed-"))
+  })
+
+  afterEach(() => {
+    rmSync(projectRoot, { recursive: true, force: true })
+  })
+
+  it("seeds from deploy/connectors/connectors.json when the table is empty", () => {
+    mkdirSync(join(projectRoot, "deploy", "connectors"), { recursive: true })
+    writeFileSync(
+      join(projectRoot, "deploy", "connectors", "connectors.json"),
+      JSON.stringify({
+        version: 1,
+        connectors: [
+          {
+            id: "dev",
+            kind: "mssql",
+            name: "dev",
+            displayName: "Development",
+            enabled: true,
+            config: { host: "db-dev", database: "mymi", user: "sa", password: "pw" },
+          },
+        ],
+      }),
+    )
+
+    const result = loadPersistedConnectors(projectRoot)
+    expect(result.source).toBe("file")
     expect(result.seeded).toBe(true)
     expect(result.connectors.map((c) => c.id)).toEqual(["dev"])
     expect(result.connectors[0]!.kind).toBe("mssql")
     expect(result.connectors[0]!.config["host"]).toBe("db-dev")
-    // persisted to the table
     expect(db.countConnectors()).toBe(1)
   })
 
+  it("leaves the table empty when no seed file exists", () => {
+    const result = loadPersistedConnectors(projectRoot)
+    expect(result.source).toBe("none")
+    expect(result.seeded).toBe(true)
+    expect(result.connectors).toEqual([])
+    expect(db.countConnectors()).toBe(0)
+  })
+
   it("reads from the db (no re-seed) once rows exist", () => {
-    loadPersistedConnectors("/nonexistent-project-root", [mssqlDev])
-    const second = loadPersistedConnectors("/nonexistent-project-root", [mssqlDev])
+    mkdirSync(join(projectRoot, "deploy", "connectors"), { recursive: true })
+    writeFileSync(
+      join(projectRoot, "deploy", "connectors", "connectors.json"),
+      JSON.stringify({
+        version: 1,
+        connectors: [
+          {
+            id: "dev",
+            kind: "mssql",
+            name: "dev",
+            config: { host: "db-dev", database: "mymi" },
+          },
+        ],
+      }),
+    )
+    loadPersistedConnectors(projectRoot)
+    const second = loadPersistedConnectors(projectRoot)
     expect(second.source).toBe("db")
     expect(second.seeded).toBe(false)
     expect(db.countConnectors()).toBe(1)

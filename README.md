@@ -18,6 +18,7 @@ packages/
 ├── agent/         # The brain: LLM + tools + loop, routing, delegation, recovery, governance
 ├── server/        # The body: composition root, HTTP API, queue, SQLite, SSE, sandbox
 ├── sync/          # MSSQL data reconciliation (diff rows + propose + preview + execute)
+├── connectors/    # Cross-system data movement (Bridge) + connector specs
 ├── shared-enums/  # Wire-format enums shared across agent / server / ui
 ├── shared-types/  # Wire-format DTOs shared across agent / server / ui
 ├── ui/            # React dashboard: chat, live trace, audit, policies, sync, usage
@@ -28,6 +29,7 @@ One sentence per package:
 - **`@mia/agent`** — reusable, server-agnostic execution machinery. No HTTP, no database.
 - **`@mia/server`** — the only place that knows about HTTP, SQLite, Docker, and config. It wires concrete adapters into the agent and exposes the REST + SSE API.
 - **`@mia/sync`** — an independent MSSQL data-reconciliation engine (SQL Server only). Depends on nothing from the agent.
+- **`@mia/connectors`** — connector specs and Bridge movement; server persists live connectors in SQLite.
 - **`@mia/shared-enums` / `@mia/shared-types`** — the contract layer every package agrees on.
 - **`@mia/ui`** — React dashboard SPA over the REST + SSE API.
 
@@ -46,9 +48,9 @@ npm run dev                   # server :3102 · dashboard :5179
 
 `better-sqlite3` is a native addon — after `git pull`, run `npm install` on each machine (do not copy `node_modules`). If bindings fail: `rm -rf node_modules && npm install`.
 
-`npm run setup` reads your existing `.env` and only asks for what is missing. If everything is already set (Databricks host, MSSQL, `MIA_DATA_DIR`, `LLM_PROVIDER`, …), it prints **Setup complete** and exits. Use `npm run setup -- --check` to validate without prompts.
+`npm run setup` reads your existing `.env` and only asks for what is **required and missing** (`MIA_DATA_DIR`, `LLM_PROVIDER`, Databricks creds when applicable, production cookie secret, …). MSSQL is **not** required for setup to complete. Use `npm run setup -- --check` to validate without prompts, or `--force` to re-walk optional prompts.
 
-**LLM per machine:** set `LLM_PROVIDER` in `.env` (`copilot-chat` or `databricks`). On each boot the server copies that into SQLite `llm_config` (fresh DB defaults to databricks until `.env` overrides it).
+**LLM per machine:** set `LLM_PROVIDER` in `.env` (`copilot-chat` or `databricks`). On each boot the server copies that into SQLite `llm_config`.
 
 Open [http://localhost:5179](http://localhost:5179).
 
@@ -63,29 +65,30 @@ Open [http://localhost:5179](http://localhost:5179).
 | `npm run package` | Build + assemble `release/` folder for hosted deploy |
 | `npm run lint:arch` | Architecture / doctrine boundary checks (also runs first in `npm run lint`) |
 
-### Minimum `.env` for a laptop (no corp MSSQL)
+### Minimum `.env` for a laptop (no SQL Server)
 
 ```bash
-PORT=3102
-LLM_PROVIDER=copilot-chat      # or databricks / local — see LLM providers below
+MIA_DATA_DIR=/Users/you/.mia   # required — setup writes this; pick any writable path
+LLM_PROVIDER=copilot-chat      # or databricks — see LLM providers below
+# PORT=3102                    # optional (default 3102)
 ```
 
-On first server start, entity definitions are seeded automatically from `deploy/sync/artifacts/` when the registry is empty. MSSQL is optional for local chat and policy work.
+On first server start, entity definitions are seeded automatically from `deploy/sync/artifacts/` when the registry is empty. Chat and policy work do **not** need SQL Server.
 
-**Sync requires a separate publish step** — `definitions.bundle.json` is not created by setup or first boot. After the server starts once: **Entity Registry → ⚙ → Publish**. Until then, sync preview/execute is disabled (platform health banner explains). Publish reloads agent vocabulary without a restart.
+**SQL Server** (schema catalog, sync, MSSQL tools) is configured in the UI after first boot: **platform menu → Connectors**. For greenfield installs you can also ship `deploy/connectors/connectors.json` (see `connectors.example.json`) — used once when the connectors DB is empty. See [Corp / SQL Server](#corp--sql-server-connectors).
+
+**Sync requires a separate publish step** — Publish writes SyncDefinitions into SQLite (`sync_definitions`); it is not created by setup or first boot. After the server starts once: **Entity Registry → ⚙ → Publish**. Until then, sync preview/execute is disabled (platform health banner explains). Publish reloads agent vocabulary without a restart.
 
 ### Server runtime data (one directory)
 
-**Run `npm run setup` before the first start** — it writes `MIA_DATA_DIR` and other essentials into `.env`, then validates the layout.
-
-If you prefer manual config, set `MIA_DATA_DIR` in `.env` before `npm run dev` or `npm start`. Without it, the server falls back to `~/.mia/` (macOS/Linux: `/Users/you/.mia`, Windows: `C:\Users\you\.mia`) — fine for a quick trial, **wrong for production**.
+**Run `npm run setup` before the first start** — it writes `MIA_DATA_DIR` and other essentials into `.env`, then validates the layout. Pre-flight **blocks** start if `MIA_DATA_DIR` is missing from `.env` (even though the runtime helper would otherwise fall back to `~/.mia`).
 
 Everything server-local and not in git lives under that directory:
 
 | File / folder | Purpose |
 |---|---|
-| `mia.db` | SQLite — entities, sync catalog, **sync run history + plan snapshots**, policies, users |
-| `catalog-cache.json` | MSSQL schema graph for agent tools (not sync artifacts) |
+| `mia.db` | SQLite — entities, connectors, sync catalog, **published SyncDefinitions**, sync run history + plan snapshots, policies, users |
+| `catalog-cache.json` | MSSQL schema graph for agent tools (not sync artifacts; per-connection variants may exist) |
 | `sync-plans/` | On-disk cache of preview plans (24h); see sync plan persistence below |
 | `evidence/` | Signed reconciliation evidence blobs |
 | `attachments/` | Uploaded file bytes |
@@ -103,9 +106,11 @@ Nothing under this tree is in git.
 | `MIA_DATA_DIR` in `.env` + writable | yes |
 | `LLM_PROVIDER` in `.env` | yes |
 | Databricks creds when `LLM_PROVIDER=databricks` | yes |
+| Factory policy defaults (`deploy/policies/defaults.json`) | yes |
+| Writable `AGENT_WORKSPACE` (defaults to project root) | yes |
 | `MIA_COOKIE_SECRET` (≥16 chars) | yes when `NODE_ENV=production` |
 | UI bundle (`dist/ui`) | yes in packaged release |
-| MSSQL configured | warn only (optional) |
+| MSSQL / Connectors | warn only (optional) |
 
 `npm run setup` / `npm run setup -- --check` use the same rules. `MIA_SKIP_SETUP=1` for CI only.
 
@@ -134,19 +139,22 @@ On macOS if compile fails: `xcode-select --install`, then `npm run rebuild:nativ
 
 The **1 hour** limit applies only to **execute** (`planTooOldToExecute`): you must re-preview before applying stale row diffs. It does **not** delete history — executed and preview-only runs remain in `mia.db` with `plan_json` for later inspection.
 
-### Corp / hosted install (real MSSQL)
+### Corp / SQL Server (Connectors)
+
+**Source of truth:** SQL Server connections live in SQLite as **connectors**, managed from **platform menu → Connectors** (create / enable / disable / delete; exportable/importable). Live pools re-read that DB.
+
+**First-boot seed (optional):** ship `deploy/connectors/connectors.json` (see `connectors.example.json`). Used only when the connectors DB is empty. Otherwise leave it unset and add connectors in the UI after login.
+
+Optional still in `.env`:
 
 ```bash
-MSSQL_HOST=...                 # or MSSQL_DATABASES=[{...}] for multi-env
-MSSQL_DATABASE=mymi
-# optional: MSSQL_DOMAIN, MSSQL_USER, MSSQL_PASSWORD
-MSSQL_KNOWLEDGE_FILE=./deploy/mssql/mymi-knowledge.md
 MIA_TENANT_CONFIG=./deploy/tenant.json   # agent routing + SQL knobs — see packages/agent/config/TENANT-CONFIG.md
+# MSSQL_DEFAULT_CONNECTION=dev           # pin default agent connection name (optional)
 ```
 
-Restart the server after changing MSSQL env vars. On boot, the server builds a schema catalog cache at `~/.mia/catalog-cache.json` (or under `MIA_DATA_DIR` when set) when MSSQL is reachable — used by agent tools and Entity Registry “Suggest from schema”. **Shipped artifacts / Entity Registry publish do not build this cache** — use Policies → Platform → Rebuild schema catalog.
+When a connector is reachable, build / refresh the schema catalog under `MIA_DATA_DIR` (`catalog-cache.json` or per-connection files) via **Policies → Platform → Rebuild schema catalog**. Used by agent tools and Entity Registry “Suggest from schema”. **Shipped artifacts / Entity Registry publish do not build this cache.**
 
-**Catalog vs entities:** the catalog cache holds table/FK metadata only. Entity definitions live in SQLite (boot-seeded from artifacts, or imported/edited in Entity Registry). **Publish** (Entity Registry → ⚙ → Publish) writes the runtime bundle at `sync-definitions/published/definitions.bundle.json` — required before sync preview/execute.
+**Catalog vs entities:** the catalog cache holds table/FK metadata only. Entity definitions live in SQLite (boot-seeded from artifacts, or imported/edited in Entity Registry). **Publish** (Entity Registry → ⚙ → Publish) writes SyncDefinitions into SQLite — required before sync preview/execute. A legacy `sync-definitions/published/definitions.bundle.json` is imported once on upgrade if the DB has never been published; Publish itself does not write that file.
 
 Optional one-shot admin instead of first-register-wins:
 
@@ -159,18 +167,19 @@ MIA_BOOTSTRAP_ADMIN_DISPLAY_NAME=Admin
 ## First login checklist (admin)
 
 1. **Register or log in** at the welcome screen. The **first local account** becomes admin automatically (`users.is_admin`). Later accounts are non-admin until promoted in **Active Users** (expand a user → Grant admin / Revoke admin).
-2. **Platform readiness** (admins): if sync is not ready, a banner explains what is missing — usually publish from Entity Registry, or MSSQL + catalog when targeting SQL Server.
-3. **Policies** (widget or modal): LLM provider/model, tool policies, permissions, sync environments (`deploy/sync/sync-environments.json` is the seed — edit in UI after boot). Factory policy rules seed from `deploy/policies/defaults.json` (insert-if-missing on boot). **Policies → Platform**: **Use shipped artifacts** / **Refresh from database**, **Reset factory policy defaults**, schema catalog rebuild.
-4. **Entity registry**: review entities, table scopes, **⚙ → Sync metadata → Flows** (ordered step types — not a separate phase catalog), then **⚙ → Publish** when you change definitions.
-5. **Env sync** widget: confirm environments appear and a test preview works against MSSQL.
+2. **Connectors** (if you need SQL Server): platform menu → **Connectors** — add or verify `mssql` connections. Then **Policies → Platform → Rebuild schema catalog** when the database is reachable.
+3. **Platform readiness** (admins): if sync is not ready, a banner explains what is missing — usually publish from Entity Registry, or a connector + catalog when targeting SQL Server.
+4. **Policies** (widget or modal): LLM provider/model, tool policies, permissions, sync environments (seeded then edited in UI). Factory policy rules seed from `deploy/policies/defaults.json` (insert-if-missing on boot). **Policies → Platform**: **Use shipped artifacts** / **Refresh from database**, **Reset factory policy defaults**, schema catalog rebuild.
+5. **Entity registry**: review entities, table scopes, **⚙ → Sync metadata → Flows** (ordered step types — not a separate phase catalog), then **⚙ → Publish** when you change definitions.
+6. **Env sync** widget: confirm environments appear and a test preview works against SQL Server.
 
 See [deploy/sync/ENTITY-REGISTRY.md](deploy/sync/ENTITY-REGISTRY.md) for entity vs flow vs publish workflow.
 
 ## Regenerating deploy artifacts
 
-**On a deployed server (recommended):** Policies → Platform → **Refresh from database** (requires MSSQL in `.env`). This regenerates `deploy/sync/artifacts/` from live MyMI and imports into SQLite.
+**On a deployed server (recommended):** Policies → Platform → **Refresh from database** (requires a reachable MSSQL connector). This regenerates `deploy/sync/artifacts/` from live MyMI and imports into SQLite.
 
-**Use shipped artifacts** loads the bundled release files without touching MSSQL.
+**Use shipped artifacts** loads the bundled release files without touching SQL Server.
 
 **CLI (repo dev):** run from repo root with MSSQL reachable:
 
@@ -198,15 +207,15 @@ On the **target server** (no monorepo, no `npm run dev`):
 cd release
 npm install              # native/runtime deps only (better-sqlite3, mssql, …)
 cp .env.example .env     # optional seed — wizard will merge into it
-npm run setup            # required first time — data dir, LLM, optional MSSQL
+npm run setup            # required first time — data dir, LLM
 npm start                # serves dashboard + API on PORT (default 3102)
 ```
 
-Copy the whole `release/` folder plus your `.env`. Runtime needs **Node ≥ 20** and the copied `deploy/` + `sync-definitions/` trees (generators are optional on the host — only needed to refresh artifacts from MyMI).
+Copy the whole `release/` folder plus your `.env`. Runtime needs **Node ≥ 20** and the copied `deploy/` tree (including `deploy/connectors/` when you seed connectors from file). Generators are optional on the host — only needed to refresh artifacts from MyMI. Add SQL Server via Connectors after first login (or ship a connectors seed — see above).
 
 **Do not use `npm run dev` on a remote server** — that starts Vite dev servers and the monorepo watcher. Production is **`npm start`** (bundled `dist/server.js` + static UI).
 
-Dev loop without packaging (repo checkout on the server): `npm run build && MIA_PACKAGE_ROOT=1 node dist/server.js` from repo root (still uses `deploy/` and `sync-definitions/` beside `dist/`).
+Dev loop without packaging (repo checkout on the server): `npm run build && MIA_PACKAGE_ROOT=1 node dist/server.js` from repo root (still uses `deploy/` beside `dist/`).
 
 ## Entity validation — when predicates are checked
 
@@ -214,7 +223,7 @@ Dev loop without packaging (repo checkout on the server): `npm run build && MIA_
 |---|---|---|
 | **Save entity** | Entity Registry → Edit modal → Save | `POST /api/entity-registry/entities` → `validateEntityDefinition()` (scopes, tables, SCD2 refs) + cross-ref checks. Failures return **422** in the UI. |
 | **Import YAML/JSON** | Entity Registry import | Same validator before write (dry-run available). |
-| **Publish** | Entity Registry **⚙ → Publish** | `publishSyncDefinitionsFromDb()` re-validates every entity; invalid definitions are **skipped** with errors in the response. Writes `sync-definitions/published/definitions.bundle.json`. |
+| **Publish** | Entity Registry **⚙ → Publish** | `publishSyncDefinitionsFromDb()` re-validates every entity; invalid definitions are **skipped** with errors in the response. Writes SyncDefinitions into SQLite and reloads agent vocabulary. |
 | **Boot seed** | Server start | Seeds empty entity registry (`entity_active` + `entity_versions`) from deploy artifacts; runs `validateEntityDefinition()` per entity. |
 
 The edit modal only checks **form basics** client-side (root table, id column, reason, etc.). **Scope predicates** (`{id}` / `{ids}`, no unsafe SQL, no review placeholders) are enforced on **server save** and again on **publish**.
@@ -225,10 +234,10 @@ Example scope kinds: **rootPk** (`tableId = {id}`) or **sql** (e.g. `gate.jsonSc
 
 | Provider | Auth | `LLM_MODEL` means | Default |
 |---|---|---|---|
-| **Databricks** (default) | `DATABRICKS_*` in `.env` | Serving endpoint name | `databricks-gpt-5-4` |
 | **Copilot Chat** | Device Flow — no env creds | Model id | `gpt-5.4` |
+| **Databricks** | `DATABRICKS_*` in `.env` | Serving endpoint name | `databricks-gpt-5-4` |
 
-Set `LLM_PROVIDER` and optionally `LLM_MODEL` in `.env` — copied into SQLite on every boot.
+Set `LLM_PROVIDER` (`copilot-chat` \| `databricks`) and optionally `LLM_MODEL` in `.env` — copied into SQLite on every boot.
 You can also change provider/endpoint at runtime from the UI (Policies → Model).
 
 ## How it works
@@ -284,7 +293,7 @@ curl http://localhost:3102/api/tools
 
 ### MSSQL & schema catalog
 
-Requires MSSQL env vars and a built schema catalog (`~/.mia/catalog-cache.json` by default, or under `MIA_DATA_DIR`).
+Requires at least one enabled `mssql` connector (Connectors UI) and a built schema catalog under `MIA_DATA_DIR`.
 
 | Tool | Description |
 |---|---|
@@ -346,7 +355,7 @@ Admin status is the `users.is_admin` column. The first registered local user is 
 
 | Env var | Default | Purpose |
 |---|---|---|
-| `MIA_SESSION_SECRET` | dev-only fallback | HMAC key for the session cookie. **Required in production.** |
+| `MIA_COOKIE_SECRET` | dev-only fallback | HMAC key for the session cookie. **Required in production** (≥16 chars). |
 | `MIA_ALLOW_LOCAL_REGISTRATION` | `1` outside prod / `0` in prod | Toggles `POST /api/auth/register`. |
 | `MIA_BOOTSTRAP_ADMIN_USERNAME` / `_PASSWORD` / `_DISPLAY_NAME` | unset | When set together, provisions exactly one admin on first boot if the `users` table is empty. |
 

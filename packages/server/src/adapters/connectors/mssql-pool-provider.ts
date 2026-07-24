@@ -16,7 +16,7 @@ import type { MssqlConnectorPool, MssqlPoolProvider } from "@mia/agent"
 import type { Connector, ConnectorKindId } from "@mia/shared-types"
 import sql from "mssql"
 import * as db from "../../infra/persistence/sqlite.js"
-import { readKnowledgeFile } from "../../infra/mssql/setup.js"
+import { readKnowledgeFile } from "../../infra/mssql/knowledge.js"
 
 function asString(value: unknown): string | null {
   return typeof value === "string" && value !== "" ? value : null

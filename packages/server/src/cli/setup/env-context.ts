@@ -1,5 +1,6 @@
 import { homedir, platform } from "node:os"
-import { join } from "node:path"
+import { existsSync } from "node:fs"
+import { join, resolve } from "node:path"
 
 import { isDatabricksConfigured } from "../../infra/llm/databricks-broker.js"
 import { isLlmProvider } from "../../internal/enums/llm.js"
@@ -37,15 +38,16 @@ export function suggestDataDir(layout: SetupLayout): string {
   return join(homedir(), ".mia")
 }
 
-/**
- * MSSQL is "configured" when either:
- *   - the connectors DB (the source of truth) has an enabled `mssql` connector, or
- *   - the legacy `.env` vars (MSSQL_HOST / MSSQL_SERVER / MSSQL_DATABASES) are set
- *     (one-time seed bridge for existing deployments).
- */
-export function hasMssqlConfigured(env: EnvState): boolean {
-  if (countEnabledMssqlConnectors() > 0) return true
-  return Boolean(env.get("MSSQL_HOST") || env.get("MSSQL_SERVER") || env.get("MSSQL_DATABASES"))
+const CONNECTORS_SEED_PATH = "deploy/connectors/connectors.json"
+
+/** True when SQLite already has an enabled mssql connector. */
+export function hasMssqlConfigured(): boolean {
+  return countEnabledMssqlConnectors() > 0
+}
+
+/** True when a connectors seed file will populate the DB on first boot. */
+export function hasMssqlSeedFile(projectRoot: string): boolean {
+  return existsSync(resolve(projectRoot, CONNECTORS_SEED_PATH))
 }
 
 export function databricksAuthMode(env: EnvState): "m2m" | "pat" | null {
