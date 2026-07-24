@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { coerceSyncEntityId, parseEntityInstanceRef } from "./entity-instance-ref.js"
+import { coerceSyncEntityId, isUnresolvedEntityName, parseEntityInstanceRef, pickUniqueEntitySearchHit } from "./entity-instance-ref.js"
 import { parseSyncOperationIntent } from "../intent/sync-operation-intent.js"
 import type { PublishedSyncDefinition } from "@mia/shared-types"
 import { withPermissionDefaults } from "../eligibility/environments.js"
@@ -64,6 +64,35 @@ describe("coerceSyncEntityId", () => {
     expect(coerceSyncEntityId(12334)).toBe(12334)
     expect(coerceSyncEntityId("12334")).toBe(12334)
     expect(coerceSyncEntityId("acrstest (#12334)")).toBe(12334)
+  })
+})
+
+describe("isUnresolvedEntityName / pickUniqueEntitySearchHit", () => {
+  it("treats display names as unresolved and numeric ids as resolved", () => {
+    expect(isUnresolvedEntityName("ACSRawTest")).toBe(true)
+    expect(isUnresolvedEntityName("acrstest (#12334)")).toBe(false)
+    expect(isUnresolvedEntityName(12334)).toBe(false)
+  })
+
+  it("picks exact label when fuzzy search returns several", () => {
+    const hits = [
+      { id: 1, name: "ACSRaw" },
+      { id: 2, name: "ACSRawTest" },
+      { id: 3, name: "ACSRawTest2" },
+    ]
+    expect(pickUniqueEntitySearchHit("ACSRawTest", hits)).toEqual({
+      ok: true,
+      hit: { id: 2, name: "ACSRawTest" },
+    })
+  })
+
+  it("reports ambiguity when several exact-insensitive or fuzzy-only matches remain", () => {
+    expect(
+      pickUniqueEntitySearchHit("foo", [
+        { id: 1, name: "foobar" },
+        { id: 2, name: "food" },
+      ]).ok,
+    ).toBe(false)
   })
 })
 

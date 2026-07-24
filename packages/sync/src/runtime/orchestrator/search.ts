@@ -6,7 +6,7 @@ import sqlMod from "mssql"
 import { randomUUID } from "node:crypto"
 import type { PublishedSyncDefinition } from "@mia/shared-types"
 
-import { parseEntityInstanceRef, coerceSyncEntityId } from "../../core/scope/entity-instance-ref.js"
+import { parseEntityInstanceRef, coerceSyncEntityId, isUnresolvedEntityName, pickUniqueEntitySearchHit } from "../../core/scope/entity-instance-ref.js"
 import type { SyncEntityId } from "../../core/scope/definition-selection.js"
 import { SyncOperationType } from "../../domain/enums.js"
 import { asEntityId } from "../../domain/types/branded-ids.js"
@@ -202,6 +202,73 @@ export async function searchEntities(
     id: row.id as string | number,
     name: (row.name as string | null) ?? null
   }))
+}
+
+export interface ResolvedSyncEntityInstance {
+  id: string | number
+  displayName: string | null
+  resolvedFrom: "id" | "name"
+}
+
+/**
+ * One seam for preview / tools / HTTP: accept numeric id **or** display name,
+ * always return the root-table primary key before any int-scoped SQL.
+ *
+ * Matches Env Sync UI: search → commit id → preview. Agents may skip search
+ * and pass the name straight into sync_preview; this closes that gap.
+ */
+export async function resolveSyncEntityInstanceId(args: {
+  host: SyncRuntimeHost
+  entityType: SyncEntityId
+  source: string
+  entityId: string | number
+}): Promise<ResolvedSyncEntityInstance> {
+  const coerced = coerceSyncEntityId(args.entityId)
+
+  if (!isUnresolvedEntityName(coerced)) {
+    const id =
+      typeof coerced === "number"
+        ? coerced
+        : /^\d+$/.test(String(coerced).trim())
+          ? Number(String(coerced).trim())
+          : coerced
+    return { id, displayName: null, resolvedFrom: "id" }
+  }
+
+  const query = String(coerced).trim()
+  const hits = await searchEntities(args.host, args.entityType, args.source, query, 25, "name")
+  const picked = pickUniqueEntitySearchHit(query, hits)
+
+  if (!picked.ok && picked.reason === "none") {
+    throw new Error(
+      `No ${args.entityType} named "${query}" found on ${args.source}. ` +
+        `Use a numeric id, or search_sync_entities to find the instance.`,
+    )
+  }
+  if (!picked.ok) {
+    const sample = picked.hits
+      .slice(0, 5)
+      .map((h) => `${h.name ?? "?"} (#${h.id})`)
+      .join(", ")
+    throw new Error(
+      `Ambiguous ${args.entityType} name "${query}" on ${args.source} — ` +
+        `${picked.hits.length} matches (e.g. ${sample}). Pass the numeric id.`,
+    )
+  }
+
+  const rawId = picked.hit.id
+  const id =
+    typeof rawId === "number"
+      ? rawId
+      : /^\d+$/.test(String(rawId).trim())
+        ? Number(String(rawId).trim())
+        : rawId
+
+  return {
+    id,
+    displayName: picked.hit.name,
+    resolvedFrom: "name",
+  }
 }
 
 export async function fetchEntityDisplayName(

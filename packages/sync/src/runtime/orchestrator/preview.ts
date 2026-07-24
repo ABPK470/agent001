@@ -16,7 +16,6 @@ import { requirePublishedFlowCatalog } from "../../core/flow/flow-catalog.js"
 import { detectCatalogDrift, fetchTableColumnNamesMap } from "../../runtime/catalog-drift.js"
 import { selectDefinitionTables, type SyncEntityId } from "../../core/scope/definition-selection.js"
 import { materializeDefinitionTablesForSchema } from "../../core/entity-registry/materialize-scd2-for-schema.js"
-import { coerceSyncEntityId } from "../../core/scope/entity-instance-ref.js"
 import { buildDependencyGraph, diffTable } from "../diff-engine/index.js"
 import { applyPlanConflictProbes } from "../diff-engine/plan-conflict-probes.js"
 import { assertSupportedSyncDirection } from "../../core/eligibility/environments.js"
@@ -43,7 +42,7 @@ import { emptyChangeSet } from "../../core/diff-engine/change-set.js"
 import { fetchPkColumns } from "./apply.js"
 import { mapWithConcurrency, projectRoot } from "./db/db-helpers.js"
 import { evaluateRootParentPreflight } from "./gates/root-parent-preflight.js"
-import { expandTreeIds, fetchEntityDisplayName } from "./search.js"
+import { expandTreeIds, fetchEntityDisplayName, resolveSyncEntityInstanceId } from "./search.js"
 
 export interface PreviewInput {
   host: SyncRuntimeHost
@@ -60,9 +59,16 @@ export interface PreviewInput {
 }
 
 export async function previewSync(input: PreviewInput): Promise<SyncPlan> {
+  // Name or id in → numeric (or typed) PK out before any int-scoped SQL.
+  const resolved = await resolveSyncEntityInstanceId({
+    host: input.host,
+    entityType: input.entityType,
+    source: input.source,
+    entityId: input.entityId,
+  })
   const normalized: PreviewInput = {
     ...input,
-    entityId: coerceSyncEntityId(input.entityId)
+    entityId: resolved.id,
   }
   // Same gate for HTTP widget and agent tools — published contract only.
   assertPublishedContractCurrent(normalized.host.sync.project.publishReadiness, normalized.entityType)

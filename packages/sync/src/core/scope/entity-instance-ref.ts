@@ -64,3 +64,33 @@ export function coerceSyncEntityId(raw: string | number): string | number {
   const bare = raw.trim()
   return /^\d+$/.test(bare) ? Number(bare) : bare
 }
+
+/** True when the value is still a display name (not a resolved primary key). */
+export function isUnresolvedEntityName(entityId: string | number): boolean {
+  const coerced = coerceSyncEntityId(entityId)
+  if (typeof coerced === "number") return false
+  return !/^\d+$/.test(String(coerced).trim())
+}
+
+export type EntitySearchHit = { id: string | number; name: string | null }
+
+/**
+ * Prefer exact label match; otherwise unique fuzzy hit.
+ * Returns null when none; throws only via caller messaging for ambiguity.
+ */
+export function pickUniqueEntitySearchHit(
+  query: string,
+  hits: readonly EntitySearchHit[],
+):
+  | { ok: true; hit: EntitySearchHit }
+  | { ok: false; reason: "none" }
+  | { ok: false; reason: "ambiguous"; hits: EntitySearchHit[] } {
+  const needle = query.trim().toLowerCase()
+  if (!needle || hits.length === 0) return { ok: false, reason: "none" }
+
+  const exact = hits.filter((h) => (h.name ?? "").trim().toLowerCase() === needle)
+  const candidates = exact.length > 0 ? exact : [...hits]
+  if (candidates.length === 0) return { ok: false, reason: "none" }
+  if (candidates.length > 1) return { ok: false, reason: "ambiguous", hits: candidates }
+  return { ok: true, hit: candidates[0]! }
+}

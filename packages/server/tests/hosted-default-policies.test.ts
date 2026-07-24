@@ -176,6 +176,83 @@ describe("deploy/policies/defaults.json", () => {
     expect(devDml.error?.message).toMatch(/hosted_default_deny/)
   })
 
+  it("every visitor tool is allow or require_approval — never silent hosted_default_deny", async () => {
+    const { listVisitorToolNames } = await import("../src/runtime/tooling/registry.js")
+    const ev = buildHostedEvaluator()
+    const sandboxPath = "sandbox://work/a.txt"
+    const samples: Record<string, Record<string, unknown>> = {
+      read_file: { path: sandboxPath },
+      write_file: { path: sandboxPath, content: "x" },
+      append_file: { path: sandboxPath, content: "x" },
+      replace_in_file: { path: sandboxPath, old_string: "a", new_string: "b" },
+      list_directory: { path: "sandbox://" },
+      search_files: { pattern: "foo" },
+      think: {},
+      note: { subject: "x", body: "y" },
+      record_table_verdict: { table: "core.T", role: "fact" },
+      fetch_url: { url: "https://example.com" },
+      ask_user: { prompt: "ok?" },
+      search_catalog: { q: "x" },
+      query_mssql: { connection: "dev", query: "SELECT 1" },
+      explore_mssql_schema: { connection: "dev" },
+      export_query_to_file: { connection: "dev", query: "SELECT 1" },
+      discover_relationships: { connection: "dev" },
+      profile_data: { connection: "dev", table: "core.T" },
+      inspect_definition: { connection: "dev", depends_on: "core.T" },
+      list_environments: {},
+      list_sync_definitions: {},
+      resolve_sync_scope: { q: "contract" },
+      search_sync_entities: { entityType: "contract", source: "uat", q: "x" },
+      sync_preview: { entityType: "contract", entityId: 1, source: "uat", target: "dev" },
+      sync_execute: { planId: "p1", target: "dev", confirm: true },
+      compare_catalogs: { source: "uat", target: "dev" },
+      sync_diff_scan: { source: "uat", target: "dev", entityType: "contract" },
+      list_attachments: {},
+      read_attachment: { id: "a1" },
+      import_attachment: { id: "a1" },
+      promote_attachment: { id: "a1" },
+    }
+
+    const missingSample: string[] = []
+    const denied: string[] = []
+    for (const tool of listVisitorToolNames()) {
+      const input = samples[tool]
+      if (!input) {
+        missingSample.push(tool)
+        continue
+      }
+      const result = await evaluate(ev, makeStep(tool, input), hostedCtx())
+      if (result.error?.message?.includes("hosted_default_deny")) {
+        denied.push(tool)
+      }
+    }
+    expect(missingSample, "add a benign sample input for each visitor tool").toEqual([])
+    expect(denied, "visitor tools must be covered by factory allow/require_approval").toEqual([])
+  })
+
+  it("allows sync discovery tools needed for UAT→DEV chat sync", async () => {
+    const ev = buildHostedEvaluator()
+    for (const action of [
+      "list_environments",
+      "list_sync_definitions",
+      "resolve_sync_scope",
+      "search_sync_entities",
+      "compare_catalogs",
+      "sync_diff_scan",
+      "sync_preview",
+    ] as const) {
+      const result = await evaluate(ev, makeStep(action, { source: "uat", target: "dev" }), hostedCtx())
+      expect(result.error, action).toBeUndefined()
+    }
+
+    const execute = await evaluate(
+      ev,
+      makeStep("sync_execute", { planId: "p1", target: "dev", confirm: true }),
+      hostedCtx(),
+    )
+    expect(execute.error).toBeUndefined()
+  })
+
   it("allows sync_publish and sync_preview by default", async () => {
     const ev = buildHostedEvaluator()
     expect(loadPolicyDefaults(REPO_ROOT).rules.map((r) => r.name)).toContain("hosted_allow_sync_publish")

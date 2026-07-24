@@ -23,6 +23,26 @@
       }
     },
     {
+      "name": "hosted_allow_sandbox_append",
+      "effect": "allow",
+      "condition": "selectors",
+      "parameters": {
+        "priority": 10,
+        "reason": "sandbox append is allowed for hosted runs",
+        "selectors": { "tool": "append_file", "scope": "sandbox" }
+      }
+    },
+    {
+      "name": "hosted_allow_sandbox_replace",
+      "effect": "allow",
+      "condition": "selectors",
+      "parameters": {
+        "priority": 10,
+        "reason": "sandbox replace_in_file is allowed for hosted runs",
+        "selectors": { "tool": "replace_in_file", "scope": "sandbox" }
+      }
+    },
+    {
       "name": "hosted_allow_sandbox_listing",
       "effect": "allow",
       "condition": "selectors",
@@ -30,6 +50,16 @@
         "priority": 10,
         "reason": "sandbox listing is allowed for hosted runs",
         "selectors": { "tool": "list_directory", "scope": "sandbox" }
+      }
+    },
+    {
+      "name": "hosted_allow_sandbox_search_files",
+      "effect": "allow",
+      "condition": "selectors",
+      "parameters": {
+        "priority": 10,
+        "reason": "sandbox file search is allowed for hosted runs",
+        "selectors": { "tool": "search_files", "scope": "sandbox" }
       }
     },
     {
@@ -53,6 +83,26 @@
       }
     },
     {
+      "name": "hosted_deny_workspace_append",
+      "effect": "deny",
+      "condition": "selectors",
+      "parameters": {
+        "priority": 60,
+        "reason": "hosted users may not append into the application workspace",
+        "selectors": { "tool": "append_file", "scope": "app_workspace" }
+      }
+    },
+    {
+      "name": "hosted_deny_workspace_replace",
+      "effect": "deny",
+      "condition": "selectors",
+      "parameters": {
+        "priority": 60,
+        "reason": "hosted users may not replace_in_file in the application workspace",
+        "selectors": { "tool": "replace_in_file", "scope": "app_workspace" }
+      }
+    },
+    {
       "name": "hosted_deny_workspace_listing",
       "effect": "deny",
       "condition": "selectors",
@@ -60,6 +110,16 @@
         "priority": 60,
         "reason": "hosted users may not list the application workspace (disclosure: internals)",
         "selectors": { "tool": "list_directory", "scope": "app_workspace" }
+      }
+    },
+    {
+      "name": "hosted_deny_workspace_search_files",
+      "effect": "deny",
+      "condition": "selectors",
+      "parameters": {
+        "priority": 60,
+        "reason": "hosted users may not search the application workspace",
+        "selectors": { "tool": "search_files", "scope": "app_workspace" }
       }
     },
     {
@@ -255,12 +315,69 @@
       }
     },
     {
+      "name": "hosted_allow_note",
+      "effect": "allow",
+      "condition": "selectors",
+      "parameters": {
+        "priority": 10,
+        "reason": "durable mid-run notes are allowed in hosted mode",
+        "selectors": { "tool": "note" }
+      }
+    },
+    {
+      "name": "hosted_allow_record_table_verdict",
+      "effect": "allow",
+      "condition": "selectors",
+      "parameters": {
+        "priority": 10,
+        "reason": "catalog table role verdicts are allowed in hosted mode",
+        "selectors": { "tool": "record_table_verdict" }
+      }
+    },
+    {
       "name": "hosted_allow_ask_user",
       "effect": "allow",
       "condition": "selectors",
       "parameters": {
         "priority": 10,
         "selectors": { "tool": "ask_user" }
+      }
+    },
+    {
+      "name": "hosted_allow_list_attachments",
+      "effect": "allow",
+      "condition": "selectors",
+      "parameters": {
+        "priority": 10,
+        "reason": "thread attachments are part of the hosted chat surface",
+        "selectors": { "tool": "list_attachments" }
+      }
+    },
+    {
+      "name": "hosted_allow_read_attachment",
+      "effect": "allow",
+      "condition": "selectors",
+      "parameters": {
+        "priority": 10,
+        "selectors": { "tool": "read_attachment" }
+      }
+    },
+    {
+      "name": "hosted_allow_import_attachment",
+      "effect": "allow",
+      "condition": "selectors",
+      "parameters": {
+        "priority": 10,
+        "selectors": { "tool": "import_attachment" }
+      }
+    },
+    {
+      "name": "hosted_allow_promote_attachment",
+      "effect": "allow",
+      "condition": "selectors",
+      "parameters": {
+        "priority": 10,
+        "selectors": { "tool": "promote_attachment" }
       }
     },
     {
@@ -297,6 +414,26 @@
       "parameters": {
         "priority": 10,
         "selectors": { "tool": "sync_diff_scan" }
+      }
+    },
+    {
+      "name": "hosted_allow_search_sync_entities",
+      "effect": "allow",
+      "condition": "selectors",
+      "parameters": {
+        "priority": 10,
+        "reason": "resolve sync instances by name or id before preview (UAT→DEV and other allowed directions)",
+        "selectors": { "tool": "search_sync_entities" }
+      }
+    },
+    {
+      "name": "hosted_allow_compare_catalogs",
+      "effect": "allow",
+      "condition": "selectors",
+      "parameters": {
+        "priority": 10,
+        "reason": "catalog drift compare is read-only and part of the sync discovery path",
+        "selectors": { "tool": "compare_catalogs" }
       }
     },
     {

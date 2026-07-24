@@ -14,9 +14,11 @@ export { executeSync } from "./execute.js"
 export { previewSync, type PreviewInput } from "./preview.js"
 export {
   resolveSyncEntitySearch,
+  resolveSyncEntityInstanceId,
   searchEntities,
   type EntitySearchMode,
-  type EntitySearchResult
+  type EntitySearchResult,
+  type ResolvedSyncEntityInstance,
 } from "./search.js"
 export type { ExecuteOptions, ExecuteProgress, SyncExecuteResult } from "./types.js"
 export {

@@ -101,12 +101,23 @@ export function extractToolFacts(step: Step, ctx?: HostedPolicyContext): ToolFac
   const facts: ToolFacts = { tool: step.action }
   const input = step.input as Record<string, unknown>
 
-  // File tools — path is the contained input.
-  if (step.action === "read_file" || step.action === "write_file" || step.action === "list_directory") {
+  // File tools — path is the contained input. Same classification for every
+  // path-scoped FS tool so sandbox allows / workspace denies stay aligned.
+  if (
+    step.action === "read_file" ||
+    step.action === "write_file" ||
+    step.action === "append_file" ||
+    step.action === "replace_in_file" ||
+    step.action === "list_directory" ||
+    step.action === "search_files"
+  ) {
     const raw = typeof input["path"] === "string" ? (input["path"] as string) : undefined
     if (raw) {
       facts.path = raw
       facts.scope = classifyPath(raw, ctx?.sandboxRoot ?? null)
+    } else if (step.action === "search_files" && ctx?.sandboxRoot) {
+      // Default search root is the run sandbox in hosted mode.
+      facts.scope = PolicyScope.Sandbox
     }
   }
 
@@ -154,7 +165,11 @@ export function extractToolFacts(step: Step, ctx?: HostedPolicyContext): ToolFac
     step.action === "sync_preview" ||
     step.action === "sync_execute" ||
     step.action === "sync_diff_scan" ||
-    step.action === "resolve_sync_scope"
+    step.action === "resolve_sync_scope" ||
+    step.action === "search_sync_entities" ||
+    step.action === "compare_catalogs" ||
+    step.action === "list_environments" ||
+    step.action === "list_sync_definitions"
   ) {
     facts.dbEnvironment = extractDbEnvironment(input, ctx)
     facts.dbOperation = classifyDbOperation(step.action, "")
@@ -210,7 +225,16 @@ function classifyPath(raw: string, sandboxRoot: string | null): PolicyScope {
 
 function classifyDbOperation(toolName: string, sql: string): PolicyDbOperation {
   if (toolName === "sync_preview" || toolName.endsWith("_sync_preview")) return PolicyDbOperation.SyncPreview
-  if (toolName === "sync_diff_scan" || toolName === "resolve_sync_scope") return PolicyDbOperation.SyncPreview
+  if (
+    toolName === "sync_diff_scan" ||
+    toolName === "resolve_sync_scope" ||
+    toolName === "search_sync_entities" ||
+    toolName === "compare_catalogs" ||
+    toolName === "list_environments" ||
+    toolName === "list_sync_definitions"
+  ) {
+    return PolicyDbOperation.SyncPreview
+  }
   if (toolName === "sync_execute" || toolName.endsWith("_sync_execute")) return PolicyDbOperation.SyncExecute
   if (MSSQL_DDL_RE.test(sql)) return PolicyDbOperation.Ddl
   if (MSSQL_DML_RE.test(sql)) return PolicyDbOperation.Dml
