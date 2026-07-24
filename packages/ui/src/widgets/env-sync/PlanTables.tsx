@@ -388,7 +388,14 @@ function Detail({ row }: { row: SyncPlanTable }) {
       {(row.conflicts ?? []).length > 0 && (
         <div className="border border-warning/40 rounded overflow-hidden">
           <div className="px-3 py-1.5 bg-warning/5 border-b border-warning/20 flex justify-between items-center">
-            <span className="text-warning font-medium">scope misattribution — blocks execute</span>
+            <span className="text-warning font-medium">
+              {row.conflicts.some((c) => c.kind === "inbound_reference") &&
+              row.conflicts.every((c) => c.kind === "inbound_reference")
+                ? "inbound references — blocks execute"
+                : row.conflicts.some((c) => c.kind === "inbound_reference")
+                  ? "conflicts — blocks execute"
+                  : "scope misattribution — blocks execute"}
+            </span>
             <span className="font-mono tabular-nums text-text-muted">{row.conflicts.length.toLocaleString()} conflict(s)</span>
           </div>
           <div className="px-3 py-2 space-y-1.5 font-mono leading-relaxed text-text">

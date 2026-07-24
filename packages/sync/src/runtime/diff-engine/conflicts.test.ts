@@ -68,6 +68,7 @@ describe("detectScopeMisattribution", () => {
     )
     expect(conflicts).toHaveLength(1)
     expect(conflicts[0]?.pk).toBe("9")
+    expect(conflicts[0]?.kind).toBe("scope_misattribution")
     expect(conflicts[0]?.actualScope.contractId).toBe(200)
     expect(conflicts[0]?.summary).toContain("pipelineId=9")
     expect(runQueryMock.mock.calls[0]?.[2]).toContain("[core].[Pipeline]")

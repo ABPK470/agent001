@@ -73,18 +73,23 @@ export interface SyncPlanChangeSet {
 }
 
 /**
- * A row whose PK exists on target but is associated with a different parent
- * scope than the source expects. e.g. source has `activityId=999` under
- * `pipelineId=123`, but on target `activityId=999` lives under `pipelineId=456`.
+ * Plan-level blocker that must not become changeSet ownership.
+ *
+ * - `scope_misattribution` — insert PK exists on target under a different parent
+ * - `inbound_reference` — delete PK still referenced by a row outside this plan's scope
  */
+export type SyncPlanConflictKind = "scope_misattribution" | "inbound_reference"
+
 export interface SyncPlanConflict {
+  /** Omitted on legacy plans — treat as scope_misattribution. */
+  kind?: SyncPlanConflictKind
   /** Composite-aware PK identifier used to match between source/target. */
   pk: string
-  /** Source-side scope value(s) — "what the user thinks this row belongs to". */
+  /** Context for the planned action (expected parent / delete intent). */
   expectedScope: Record<string, unknown>
-  /** Target-side scope value(s) — "where it actually lives now on target". */
+  /** Why the action is blocked (actual parent / referencing row). */
   actualScope: Record<string, unknown>
-  /** Human-readable summary, e.g. "activityId=999 belongs to pipelineId=456 on target, expected pipelineId=123". */
+  /** Human-readable summary for UI / agent. */
   summary: string
 }
 
@@ -106,9 +111,8 @@ export interface SyncPlanTable {
     delete: SyncPlanRowSample[]
   }
   /**
-   * Scope-misattribution conflicts — populated when a row classified as
-   * INSERT (PK absent in target scope) actually exists on target under a
-   * different parent. Always blocks execute when non-empty.
+   * Blockers that must not be claimed as changeSet work.
+   * Non-empty always refuses execute (scope misattribution and inbound refs).
    */
   conflicts: SyncPlanConflict[]
   /** Warnings specific to this table (e.g. row cap exceeded, missing PK). */

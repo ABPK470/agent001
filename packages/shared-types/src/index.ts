@@ -630,7 +630,11 @@ export {
   tableMovementTotal
 } from "./sync-plan.js"
 
+export type SyncPlanConflictKind = "scope_misattribution" | "inbound_reference"
+
 export interface SyncPlanConflict {
+  /** Omitted on legacy plans — treat as scope_misattribution. */
+  kind?: SyncPlanConflictKind
   pk: unknown
   expectedScope: unknown
   actualScope: unknown
@@ -673,7 +677,7 @@ export interface SyncPlanTable {
     update: SyncPlanRowSample[]
     delete: SyncPlanRowSample[]
   }
-  /** Scope-misattribution rows; length is the conflict count. Blocks execute when non-empty. */
+  /** Blockers (scope misattribution / inbound refs). Blocks execute when non-empty. */
   conflicts: SyncPlanConflict[]
   warnings: string[]
   diffDurationMs: number

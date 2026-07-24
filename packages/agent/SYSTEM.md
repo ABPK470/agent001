@@ -1,137 +1,93 @@
 # Agent System
 
-This document describes the current public shape of `@mia/agent` after the
-zero-ambient-state refactor and the `@mia/sync` extraction.
+`@mia/agent` is the execution core: the model-plus-tools loop, planning,
+recovery, delegation, governance, and most tool implementations. It does not
+own HTTP, product persistence, or sync/connectors engines — those arrive
+through ports and the host.
 
-## What `@mia/agent` owns
+---
 
-`@mia/agent` is the execution core:
+## Rule
 
-- the agent loop
-- planner, recovery, delegation, and governance logic
-- tool contracts and most tool implementations
-- the frozen boot host created by `configureAgent(...)`
+> Runtime owns state. Core is stateless. Dependencies are always parameters.
 
-It does **not** own server runtime state, request-local ambient context, or the
-sync subsystem implementation anymore.
+- Long-lived capabilities live on **`AgentHost`**
+- Per-run facts live on **`RunContext`**
+- Pure decisions live in **`core/`**
+- The documented ambient exception is **`TenantConfig`** (business knobs loaded
+  once at boot)
 
-## The rule
-
-The package follows one doctrine:
-
-> Runtime owns state; core is stateless; dependencies are always parameters.
-
-In practice that means:
-
-- no ambient runtime lookups (except documented `domain/tenant` getters)
-- no exported module-level `setXxx(...)` mutators for boot wiring
-- no new `AsyncLocalStorage` for passing hidden dependencies
-- long-lived state belongs on `AgentHost` or on explicit runtime objects
-- the run story lives in `runtime/run-a-goal/run-goal.ts`
-
-## Boot shape
-
-The server constructs one host at boot:
-
-```ts
-const host = configureAgent({
-  mssqlDatabases,
-  mssqlDefaultConnection,
-  catalogInstances,
-  catalogDefaultCachePath,
-  browserContextReader,
-  browserCredentialReader,
-  browserHandoffStore,
-  attachmentStore,
-  shellClient,
-  browserClient
-})
-```
-
-That host is then threaded into the orchestrator, tool factories, and other
-boot-time wiring. Dependencies are visible at the call site instead of being
-looked up ambiently later.
+---
 
 ## Package boundaries
 
-The system-level split is now:
+| Package | Role relative to agent |
+| --- | --- |
+| `@mia/server` | Shell — builds the host, adapters, orchestrator, API |
+| `@mia/agent` | Execution loop, tools, memory, LLM clients |
+| `@mia/sync` | Sibling — metadata preview/execute; agent calls sync tools, does not own sync |
+| `@mia/connectors` | Sibling — Bridge data movement; agent calls through `ConnectorPort` |
+| `shared-*` | Wire contracts |
 
-- `@mia/server` is the shell: Fastify, SQLite, SSE, auth, channels, scheduling
-- `@mia/agent` is the core orchestration package
-- `@mia/sync` is a sibling package for sync preview/execute, environments,
-  recipes, plan storage, and sync tools
+Import `@mia/agent` only through its public barrel. Sync- and connectors-owned
+APIs come from those packages, not re-exported folklore.
 
-`@mia/agent` no longer re-exports sync-owned APIs; sync callers should bind to
-`@mia/sync` directly.
+---
 
-## Main clusters in `src/`
+## Layers
 
-### `runtime/`
+| Layer | Owns |
+| --- | --- |
+| `domain/` | Enums, types, tenant / published-sync vocabulary |
+| `core/` | Pure decisions — plan, choose-path, clarify, doctrine, policy, govern-tools, recover, delegate gates, goal intent |
+| `runtime/` | `configureAgent` / `AgentHost` / `RunContext`, goal loop, delegation drivers |
+| `ports/` | Host contracts; audit / learner / memory adapter shapes |
+| `tools/` | Executable capabilities (filesystem, shell, MSSQL, catalog, Bridge, human-in-the-loop, delegation, …) |
+| `memory/` | Compaction, tiers, prompt budget |
+| `llm/` | Model clients |
+| `internal/` | Package helpers |
 
-Stateful drivers: host, run context, `run-a-goal` loop, delegation drivers.
+---
 
-### `core/`
+## Host and run context
 
-Pure decisions: plan, choose-path, clarify, doctrine, govern-tools, recover,
-delegate-decision.
+**`AgentHost`** (once per process) holds process-lifetime capabilities: workspace,
+MSSQL, filesystem, shell, user input, attachments, catalog, sync façade,
+connectors, tenant identity. Unwired capabilities are null.
 
-### `domain/`
+**`RunContext`** (once per run) holds abort signal, memory writer, tool trace,
+policy context, and sync-op context. Threaded into every tool handler.
 
-Enums, types, and tenant config — vocabulary only (no services).
+Tools are constructed with host + context already bound. Lookup is a map of
+name → tool built at construction — not ambient registration.
 
-### `memory/`
+---
 
-Token budgeting, truncation, and compaction.
+## How a goal runs
 
-### `ports/`
+1. Prepare messages (goal + system blocks).
+2. Choose path — direct answer vs tool loop (named outcomes).
+3. Tool loop — ask model → decide next action → run tools → recover / stuck
+   checks → repeat until finish.
+4. Finish — answer plus usage.
 
-Host contracts plus I/O-backed services (`AuditService`, `Learner`, memory
-adapters) that the server and tools satisfy.
+Every branch returns a named outcome. Unhandled outcomes fail closed with
+route state.
 
-### `tools/`
+---
 
-Most tool implementations still live here. Tools are built with explicit host
-dependencies rather than ambient setters.
+## Public surface
 
-### `llm/`
+Consumers import from `@mia/agent`: `configureAgent`, `Agent`, tool and model
+contracts, curated domain/runtime helpers. Deep imports into `src/**` are not
+supported.
 
-Model adapters implementing the `LLMClient` contract.
-
-## Public API
-
-The main public barrel is `src/index.ts`.
-
-Key exports:
-
-- `configureAgent`
-- `Agent`
-- tool and model contracts from `types.ts`
-- curated cluster barrels
-
-Consumers should import agent-owned APIs from `@mia/agent` and sync-owned APIs
-from `@mia/sync`, not from deep source paths.
-
-## What changed in the refactor
-
-The old ambient runtime pattern is gone from the active path:
-
-- sync moved out to `@mia/sync`
-- sync SQL telemetry now uses an explicit context object instead of ALS
-- server sync wiring now uses `configureSyncEventSink`, `configureSyncRunSink`,
-  and `replaceEnvironments`
-- the doctrine lint in `scripts/lint-arch.mjs` now treats doctrine violations
-  as errors for new code paths and scans `packages/sync/src` too
+---
 
 ## Reading order
 
-If you are new to the package, read in this order:
-
-1. `docs/doctrine.md` (repo root)
-2. `src/index.ts`
-3. `src/runtime/` (`agent.ts`, `run-a-goal/`)
-4. `src/runtime/loop/`
-5. `src/domain/types/`
-6. `src/core/plan/` and `src/core/recover/`
-
-That path gives the shortest route from the public entry point to the execution
-core.
+1. [docs/doctrine.md](../../docs/doctrine.md)
+2. [ARCHITECTURE.md](../../ARCHITECTURE.md)
+3. Package public barrel (`src/index.ts`)
+4. `runtime/` (host + run-a-goal)
+5. `core/plan/` and `core/recover/`

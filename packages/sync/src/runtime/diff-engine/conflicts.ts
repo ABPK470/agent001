@@ -86,6 +86,7 @@ export async function detectScopeMisattribution(
     const pkValue = row.pk
     const actualScopeValue = row.scope
     conflicts.push({
+      kind: "scope_misattribution",
       pk: String(pkValue ?? "∅"),
       expectedScope,
       actualScope: { [scopeCol]: actualScopeValue },

@@ -1,4 +1,0 @@
-
-> mia@0.1.0 lint:arch
-> node scripts/lint-arch.mjs
-

@@ -153,24 +153,36 @@ export async function executeSync(
     }
   }
 
-  // Hard refusal on scope-misattribution conflicts. Inserting a row whose PK
-  // already exists on target (under a different parent) would PK-violate and
-  // roll back the whole transaction. Refusing here gives the operator an
-  // actionable error pointing at the offending rows.
+  // Hard refusal on plan conflicts (scope misattribution + inbound delete blockers).
   throwIfAborted(signal)
-  onProgress({ type: SyncProgressKind.Step, step: "scope-check", message: "Checking scope conflicts…" })
+  onProgress({ type: SyncProgressKind.Step, step: "scope-check", message: "Checking plan conflicts…" })
   const conflictedTables = plan.tables.filter((t) => t.conflicts.length > 0)
   if (conflictedTables.length > 0) {
     const total = conflictedTables.reduce((a, t) => a + t.conflicts.length, 0)
     const sampleLines = conflictedTables
       .flatMap((t) => t.conflicts.slice(0, 3).map((c) => `  • ${t.table}: ${c.summary}`))
       .slice(0, 10)
+    const hasInbound = conflictedTables.some((t) =>
+      t.conflicts.some((c) => c.kind === "inbound_reference")
+    )
+    const hasScope = conflictedTables.some((t) =>
+      t.conflicts.some((c) => c.kind !== "inbound_reference")
+    )
+    const headline =
+      hasInbound && hasScope
+        ? "Plan conflicts"
+        : hasInbound
+          ? "Inbound reference blockers"
+          : "Scope misattribution"
+    const guidance = hasInbound
+      ? `\nFix owning metadata for the referencing rows (do not expect this plan to delete them), then re-preview.`
+      : `\nFix the target metadata (re-attach these rows to the correct parent) and re-preview.`
     return refuseExecute(
       planId,
-      `Scope misattribution — refusing to execute. ${total} row(s) across ` +
-        `${conflictedTables.length} table(s) exist on target under a different parent than source expects:\n` +
+      `${headline} — refusing to execute. ${total} conflict(s) across ` +
+        `${conflictedTables.length} table(s):\n` +
         sampleLines.join("\n") +
-        `\nFix the target metadata (re-attach these rows to the correct parent) and re-preview.`
+        guidance
     )
   }
 

@@ -2,255 +2,176 @@
 
 How `@mia/sync` compares two SQL Server databases and decides what to change.
 
-**Scope:** MSSQL only. Two separate connection pools — one per environment (e.g. `dev`, `uat`, `prod`). No linked servers. Source and target are queried independently; comparison happens in application code.
+**Scope:** MSSQL only. Separate connection pools per environment. No linked
+servers. Source and target are queried independently; comparison happens in
+the application.
 
-**Deep dive:** [SYNC-PREVIEW-EXECUTE.md](./SYNC-PREVIEW-EXECUTE.md) — orchestration, log labels, plan persistence, execute transaction.  
-**Terms:** [SYNC-MODEL.md](./SYNC-MODEL.md) — glossary.
+**Companions:** [SYNC-PREVIEW-EXECUTE.md](./SYNC-PREVIEW-EXECUTE.md) ·
+[SYNC-MODEL.md](./SYNC-MODEL.md)
 
 ---
 
 ## 1. What is being synced
 
-A sync always targets **one entity instance** in **one direction** (source → target).
+A sync always targets **one entity instance** in **one direction**
+(source → target).
 
-An **entity** (contract, dataset, rule, pipeline activity, gate metadata, content, …) is defined by a **published sync definition**, which includes:
+The published sync definition supplies:
 
-- A list of tables (`core.Contract`, `core.Pipeline`, …)
-- A **scope predicate** per table — restricts which rows belong to this entity instance
-- Execution order (FK dependencies) and optional post-metadata flow steps
+- Which tables participate
+- A **scope predicate** per table (which rows belong to this instance)
+- Execution order (FK dependencies)
+- Optional post-metadata flow steps
 
-Published definitions live in `sync-definitions/published/definitions.bundle.json`. Preview/execute read them directly. Optional tables are filtered via `selectDefinitionTables()`.
-
-**Preview never scans whole databases.** For each recipe table it only reads rows matching that table’s instantiated predicate (e.g. `contractId = 2545`, or an `EXISTS (…)` closure for child tables). The **same diff pipeline** runs for every entity type; only the table list, predicates, and flow template differ.
+**Preview never scans whole databases.** For each table it only considers rows
+matching that table’s instantiated predicate. The **same diff pipeline** runs
+for every entity type; only tables, predicates, and flow differ.
 
 ---
 
-## 2. Unified preview pipeline (all entities)
+## 2. Pipeline
 
-The following applies identically to **contract**, **dataset**, **rule**, and every other published definition. Entity-specific behavior is limited to *which tables* and *which `WHERE` clauses* — not *how* comparison works.
+```text
+PREVIEW (read-only on source + target)
+  0. Load published definition · instantiate scope predicates
+  1. Catalog drift — schemas must match for recipe tables
+  2. Discover primary-key columns per table (source)
+  3. Per table (parallel):
+       a. Choose hash input columns (exclude identity, computed, SCD/audit meta)
+       b. Fingerprint scoped rows on source
+       c. Fingerprint scoped rows on target
+       d. Classify in memory by PK (insert / update / delete / unchanged)
+       e. Probe scope conflicts on insert candidates
+       f. Build changeSet (PK lists) + samples for UI
+  4. Assemble SyncPlan · persist
 
+EXECUTE (writes target)
+  Apply plan.tables[].changeSet only — no re-diff, no scope-wide SELECT *
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│ PREVIEW (read-only on source + target)                                   │
-├─────────────────────────────────────────────────────────────────────────┤
-│ 0. Load published definition + instantiate scope predicates per table   │
-│ 1. Catalog drift — schemas must match for recipe tables                  │
-│ 2. fetchPkColumns — PK column names per table (sys.indexes, source)      │
-│ 3. Per table (parallel): diffTable()                                     │
-│    a. fetchTableColumns — which columns feed the content hash            │
-│    b. fetchPkHash(source) — (pk, rowHash) for every row IN SCOPE        │
-│    c. fetchPkHash(target) — same query shape on target                   │
-│    d. Classify in Node — in-memory full-outer-join on PK (no SQL JOIN)  │
-│    e. Optional: scope-conflict probe, UI sample SELECTs                    │
-│    f. buildChangeSet — insert/update/delete PK lists → plan              │
-│ 4. Assemble SyncPlan, savePlan                                           │
-└─────────────────────────────────────────────────────────────────────────┘
-                                    ↓
-┌─────────────────────────────────────────────────────────────────────────┐
-│ EXECUTE (writes target only)                                             │
-│ Apply plan.tables[].changeSet only — no re-diff, no scope-wide SELECT *    │
-└─────────────────────────────────────────────────────────────────────────┘
-```
-
-**Live Logs labels** map to these steps: `fetchPkColumns`, `fetchTableColumns`, `fetchPkHash` (twice per table — source and target share the same label), `detectScopeMisattribution`, `fetchSamples`, etc. See [SYNC-PREVIEW-EXECUTE.md §3](./SYNC-PREVIEW-EXECUTE.md).
 
 ---
 
 ## 3. Which rows are compared?
 
-For **one table** in **one preview**, the row set is:
+For one table in one preview:
 
-> All rows on that table where the table’s **scope predicate** is true, evaluated separately on source and on target.
+> All rows where the table’s **scope predicate** is true, evaluated separately
+> on source and on target.
 
-The predicate comes from the published definition template with `{id}` (and sometimes `{ids}`) replaced by the entity instance you picked in the UI.
+The predicate comes from the published definition with `{id}` (and sometimes
+`{ids}`) replaced by the chosen entity instance. Hierarchical entities expand
+`{ids}` via a tree walk on source.
 
-| Entity | Table example | Predicate shape (simplified) |
-|--------|---------------|------------------------------|
-| Contract | `core.Contract` | `contractId = 2545` |
-| Contract | `core.Pipeline` | `contractId = 2545` |
-| Contract | `core.Activity` | `EXISTS (… pipeline for this contract …)` |
-| Dataset | `core.Dataset` | `datasetId = 792` |
-| Rule | `core.Rule` | `inputDatasetId = …` |
-
-So when we say “join rows by PK”, we mean: **within that scoped row set on source and that scoped row set on target**, pair up rows that share the same primary key value(s). Rows outside the predicate are invisible to this preview.
+Rows outside the predicate are invisible to this preview.
 
 ---
 
-## 4. Why primary key metadata comes first (`fetchPkColumns`)
+## 4. Why primary keys come first
 
-Before any hash query runs, preview discovers **which column(s) form the primary key** for each recipe table (query against `sys.indexes` on **source**).
+PK columns are discovered before any hash query because:
 
-PK metadata is required because:
+1. **Identity** — each compared row is addressed by its PK
+2. **Matching** — source and target rows pair only when PK values match
+3. **changeSet** — execute applies MERGE / DELETE for explicit PK lists
 
-1. **Identity** — Each compared row is addressed by its PK. The hash query `SELECT`s PK columns plus `rowHash`. Composite PKs become a single string key in code (e.g. `"1|42"` from `contractId` + `lineNo`).
-2. **Matching** — Classification pairs source rows to target rows **only** when PK values match. Without PK names, the engine cannot build `pk` / `pkValues` or the `changeSet` entries execute uses in `WHERE pk IN (…)`.
-3. **changeSet** — Execute applies `MERGE` / `DELETE` for explicit PK lists from preview. No PK → table is skipped with a warning.
-
-PK columns are **not** included in the content hash (identity columns are excluded from `hashColumns`). PK is the **join key**; hash is the **equality test for payload**.
-
----
-
-## 5. Step 0 — catalog check (schema)
-
-Before comparing data, the engine checks that source and target **schemas match** for the tables in the recipe.
-
-It reads `INFORMATION_SCHEMA.COLUMNS` on both sides and reports:
-
-- table missing on source or target
-- column missing on target
-- column type mismatch
-
-If catalog is incompatible, preview warns and execute refuses. Row diff is meaningless when columns differ.
+PK is the join key. Hash is the equality test for business payload. Identity
+and SCD/audit meta columns are excluded from the hash.
 
 ---
 
-## 6. Step 1 — discover hash input columns (`fetchTableColumns`)
+## 5. Catalog check
 
-For each recipe table, the engine reads `sys.columns` on the **source** and builds the column set used for the fingerprint:
-
-| Included in hash | Excluded |
-|---|---|
-| Regular data columns | **Primary key (identity)** — used only for matching, not hashed |
-| | Computed columns |
-| | `validFrom`, `validTo`, `isLocked`, `syncDate`, `deployDate` |
-
-This mirrors legacy `uspSyncObjectTran`: compare business payload, not SCD/audit metadata.
+Before comparing data, source and target schemas are checked for recipe tables
+(table presence, columns, types). Incompatible catalog → preview warning;
+execute refuses. Row diff is meaningless when columns differ.
 
 ---
 
-## 7. Step 2 — row fingerprint (`fetchPkHash`, twice per table)
+## 6. Row fingerprint
 
-For each table, **source** and **target** each run one query of the same shape (in parallel):
-
-```sql
-SELECT [pkCol1], [pkCol2], …,
-       HASHBYTES('SHA2_256', ISNULL(CONCAT_WS('|', <canonical col1>, <canonical col2>, …), '')) AS rowHash
-FROM [schema].[table]
-WHERE <scope predicate for this entity>
-```
-
-**Output per row:** `{ pk, rowHash, pkValues }` where `pk` is a string built from PK column values (composite keys joined with `|`).
-
-**Not** a join between source and target in SQL. Each side returns a flat list of scoped rows. Comparison happens next in Node.
-
-### Canonical values (why hashes are stable)
-
-Each column type is converted to a fixed string form before hashing (ISO dates, full-precision floats, hex for binary, etc.). Session options (`LANGUAGE us_english`, `DATEFORMAT ymd`, …) are set on every query so two servers with different defaults still produce the same hash for the same data. NULLs flow through `CONCAT_WS` consistently on both sides.
+For each table, source and target each produce a list of `{ pk, rowHash }` for
+scoped rows. Values are canonicalized so two servers with different session
+defaults still agree. Comparison is **not** a SQL join across environments.
 
 ---
 
-## 8. Step 3 — classify in Node (in-memory join, not SQL)
+## 7. Classification (in memory)
 
-After both `fetchPkHash` calls return, `diffTable()` in `diff-engine/index.ts` builds two maps:
+Logical full outer join on primary key:
 
-```typescript
-srcByPk = Map<pkString, { pk, rowHash, pkValues }>  // from source
-tgtByPk = Map<pkString, { pk, rowHash, pkValues }>  // from target
-```
-
-Classification is the **logical equivalent of a full outer join on PK**, implemented as two loops in TypeScript — **no** `JOIN` between source and target databases and **no** linked server.
-
-```
-For each pk in source map:
-  if pk not in target map     → INSERT   (on source only)
-  if pk in both, same hash    → UNCHANGED
-  if pk in both, different hash → UPDATE
-
-For each pk in target map:
-  if pk not in source map     → DELETE   (on target only)
-```
-
-| In source map? | In target map? | `rowHash` equal? | Bucket |
-|----------------|----------------|------------------|--------|
+| In source? | In target? | Hash equal? | Bucket |
+| --- | --- | --- | --- |
 | yes | no | — | **insert** |
-| yes | yes | yes | **unchanged** (count only; not in changeSet) |
+| yes | yes | yes | **unchanged** |
 | yes | yes | no | **update** |
 | no | yes | — | **delete** |
 
-**ID locates the row; hash decides if the payload changed.** Column-by-column diff is not done in app code — inequality of hash implies UPDATE.
+**ID locates the row; hash decides if the payload changed.** Column-by-column
+diff is not performed in application code.
 
-### Optional: scope misattribution (`conflicts`)
+### Conflicts (block execute — not changeSet ownership)
 
-The scoped diff can label a row **insert** (PK absent in target *within the predicate*). A separate probe asks: does that PK exist on target **anywhere** under a different parent? If yes → `conflicts` (blocks execute). See [SYNC-PREVIEW-EXECUTE.md §3.4 Phase E](./SYNC-PREVIEW-EXECUTE.md).
+Two probes look **outside** scoped changeSet work and write `conflicts`:
 
-### Output: `changeSet`
+| Kind | When |
+| --- | --- |
+| **Scope misattribution** | Insert PK already exists on target under a different parent |
+| **Inbound reference** | Delete PK still referenced by a row this plan does not own (e.g. Right-side mapping columns) |
 
-```typescript
-changeSet: {
-  insert: [{ pk: "99", values: { pipelineId: 99, contractId: 2545 } }],
-  update: […],
-  delete: […]
+Inbound hits whose referencing row is already in this plan’s `changeSet.delete`
+are ignored (reverseOrder will remove them). Remaining hits demote those deletes
+out of `changeSet` and block execute until the owning metadata is fixed.
+
+### changeSet
+
+```text
+changeSet = {
+  insert: [ { pk, values }, … ],
+  update: [ … ],
+  delete: [ … ]
 }
 ```
 
-Built by `buildChangeSet()`. **Execute reads only these PK lists** — see §10.
+Execute reads **only** these PK lists. Samples and unchanged counts are
+preview/UI decoration.
 
 ---
 
-## 9. Step 4 — preview output (`SyncPlan`)
+## 8. Execute (apply)
 
-`previewSync` runs the diff for every recipe table (in parallel), then stores a **SyncPlan**:
+Execute applies the saved changeSet on the target:
 
-- per table: **`changeSet`** — full PK lists per insert/update/delete bucket (execute authority)
-- **`stats`** — preview-only `unchanged` / `lowConfidence` (not in `changeSet`)
-- **samples** — UI decoration only; execute ignores
-- scope predicate (frozen at preview), warnings (row cap, scope conflicts, …)
+- **INSERT / UPDATE** — read those PKs from source, MERGE into target
+- **DELETE** — delete those PKs on target
+- Meta columns (`validFrom`, `validTo`, …) are set explicitly, not copied
 
-Movement counts (`insert` / `update` / `delete`) are **never stored** on the table — derive with `movementOfTable(table)` or aggregate via `computePlanTotals(plan.tables)`. `plan.totals` is written at preview time and checked by `validatePlan`.
+Two independent scopes:
 
-The plan is an immutable contract for execute. TTL ~1 hour. `savePlan` and `executeSync` both call `validatePlan` (changeSet present; totals match derived counts).
+| Concern | Meaning |
+| --- | --- |
+| **Data movement** | Tables with changeSet insert/update PKs get MERGE |
+| **Constraint relaxation** | Ancestors through deepest changeSet op may get FK NOCHECK/CHECK |
 
-**Details:** [SYNC-PREVIEW-EXECUTE.md §3–5](./SYNC-PREVIEW-EXECUTE.md).
-
----
-
-## 10. Step 5 — execute
-
-`executeSync` applies the saved plan's **changeSet** on the target — no re-diff, no scope-wide reads:
-
-- **INSERT / UPDATE:** `SELECT *` from source **only for changeSet PKs**, stage in temp table, **MERGE** into target
-- **DELETE:** `DELETE` on target **only for changeSet delete PKs**
-- Meta columns (`validFrom`, `validTo`, …) are not copied — set explicitly like legacy `uspSyncObjectTran`
-
-**Table participation** (two independent rules):
-
-| Rule | Function | Meaning |
-|------|----------|---------|
-| Data movement | `dataMovementTables` | Tables with changeSet insert/update PKs get MERGE |
-| FK relaxation | `constraintRelaxationTables` | Ancestors through deepest changeSet op get NOCHECK/CHECK |
-
-Safety gates before apply: catalog drift, `validatePlan`, freeze windows.
-
-All metadata writes run in one transaction (`runMetadataSync`).
-
-**Details:** [SYNC-PREVIEW-EXECUTE.md §6](./SYNC-PREVIEW-EXECUTE.md).
+All metadata writes for the entity run in **one** target transaction. Safety
+gates (catalog, conflicts, plan validation, freeze windows) run before apply.
 
 ---
 
-## 11. Mental model
+## 9. Mental model
 
-```
-SyncPlan     = envelope (entity, envs, executionContract, tables[], warnings)
-changeSet    = per-table execute instructions (insert/update/delete PK lists)
-movement     = derived from changeSet lengths (movementOfTable / computePlanTotals)
-stats        = preview-only unchanged / lowConfidence
-conflicts    = scope misattribution array; length blocks execute
-Preview      = diff → SyncPlan
-Execute      = apply changeSet on target (O(changes) I/O)
+```text
+SyncPlan   = envelope (entity, envs, executionContract, tables[], warnings)
+changeSet  = per-table execute instructions (insert/update/delete PK lists)
+movement   = derived from changeSet lengths
+stats      = preview-only unchanged / lowConfidence
+conflicts  = scope misattribution; length blocks execute
+Preview    = diff → SyncPlan
+Execute    = apply changeSet on target (I/O proportional to changes)
 ```
 
 **Preview computes once; execute reads `changeSet` only.**
 
-**Not** a generic replication engine. **Not** timestamp-based. **Not** log shipping.
+Not generic replication. Not timestamp-based. Not log shipping.
 
-It is deterministic, scoped, PK-keyed, hash-based reconciliation of ABI metadata rows between two SQL Server instances.
-
-### Quick answers
-
-| Question | Answer |
-|----------|--------|
-| Which rows? | Rows matching each table’s **scope predicate** for the chosen entity instance, on source and on target separately. |
-| What is “join by PK”? | **In-memory** pairing of those two lists by primary key string — not a SQL `JOIN` across servers. |
-| Why `fetchPkColumns` first? | PK columns name the join key and populate `changeSet` for execute. |
-| Why two `fetchPkHash` per table? | One query on **source**, one on **target** (same label in logs). |
-| Same for dataset as contract? | **Yes** — same pipeline; definition supplies tables + predicates + flow only. |
+Deterministic, scoped, PK-keyed, hash-based reconciliation of ABI metadata
+rows between two SQL Server instances.

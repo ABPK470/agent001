@@ -1,414 +1,242 @@
 # Architecture
 
-This is a TypeScript monorepo. Every package shares one design rule and one
-naming taxonomy. Read this section first — the rest of the document is just that
-rule applied package by package.
-
----
-
-## 1. The one rule
+TypeScript monorepo. One design rule:
 
 > **Shell owns state. Core is stateless. Dependencies are always parameters.**
 
-This is _functional-core / imperative-shell_, applied fractally — at the
-monorepo level and again inside every package.
+That rule shapes the monorepo split (platform shell vs reusable execution
+packages) and, inside `agent` / `sync`, the `domain` / `core` / `runtime`
+layers. Other packages follow the same rule without copying that folder
+shape: `server` and `ui` are shell dialects; `connectors` is an engine +
+adapters; `shared-*` are flat contracts.
 
-What it means in practice:
+---
 
-- **Core** is pure functions. If a function needs something, that something is
-  in its signature. No module-level mutable state, no globals, no ambient
-  lookups, no singletons reached through the back door.
-- **Shell** is the small set of long-lived, stateful objects built once at boot
-  (the HTTP server, the SQLite connection, the event broadcaster, the run
-  queue, the sandbox manager, the agent host). Shell owns identity, lifecycle,
-  and I/O.
-- **Everything flows downward through parameters.** Boot-time state lives on
-  explicit host objects; per-operation data is passed in or captured in a
-  closure. There is no `AsyncLocalStorage` carrying
-  request state.
+## 1. What the rule means
 
-`scripts/lint-arch.mjs` (`npm run lint:arch`) enforces this: agent + sync layer
-import direction, server shell folders, forbidden resurrected trees
-(`application/`, `domain/services/`, …), module-level mutable state outside
-allowlists, exported `getGlobal*` / `setGlobal*`, `new AsyncLocalStorage`, and
-deep imports into `packages/agent/src/**` or `packages/sync/src/**`.
+- **Core** — pure functions. Anything needed is in the signature. No module-level
+  mutable state, no ambient lookups, no hidden singletons.
+- **Shell** — long-lived objects built once at composition (HTTP, SQLite, queues,
+  sandboxes, hosts). Shell owns identity, lifecycle, and I/O.
+- **Parameters** — boot state on explicit host objects; per-operation data
+  passed in. Request identity is resolved at the HTTP boundary and threaded
+  down — never ambient request context.
 
-The full rationale lives in [docs/doctrine.md](docs/doctrine.md); the migration
-history is in [P&A_refactor.md](P&A_refactor.md).
+Ports name I/O contracts. Adapters implement them. Execution packages never
+import the platform shell.
 
-## 2. The port taxonomy
+See [docs/doctrine.md](docs/doctrine.md) for the full contract.
 
-When a type crosses a package boundary (or a test needs to fake it), it becomes
-a **port** — an interface with no implementation. There are exactly four
-shapes, named by their communication pattern:
+---
 
-| Suffix | Shape | Examples |
-|---|---|---|
-| `*Sink` | Fire-and-forget event push, no return | `SyncEventSink`, `SseSink` |
-| `*Store` | Read **and** write the same entity | `AttachmentStore`, `HandoffStore`, `ToolKnowledgeStore` |
-| `*Reader` | Read-only lookup (including asking a human) | `CredentialReader`, `UserInputReader`, `TableVerdictsReader` |
-| `*Client` | Wraps an external system we consume | `ShellClient` |
-
-The **agent** package _declares_ these ports. The **server** package _provides_
-the concrete implementations (adapters). The agent never imports the server.
-
-## 3. The system shape
+## 2. System shape
 
 ```text
         user
           │
           ▼
-   @mia/ui                          (React SPA, REST + SSE)
+         ui                             React SPA · REST + SSE
           │
           ▼
-      @mia/server                   (composition root: HTTP, SQLite, queue, sandbox)
-        │        │
-        ▼        ▼
-   @mia/agent   @mia/sync           (pure execution machinery · MSSQL data reconciliation)
-        │        │
-        └────┬───┘
-             ▼
-   @mia/shared-types · @mia/shared-enums   (the contracts everyone agrees on)
+      @mia/server                       composition root · HTTP · SQLite · queue · sandbox
+        │        │           │
+        ▼        ▼           ▼
+   @mia/agent  @mia/sync  @mia/connectors
+   execution   MSSQL      cross-system
+   loop        metadata   data movement
+   + tools     reconcile  (Bridge)
+        │        │           │
+        └────────┴─────┬─────┘
+                       ▼
+        @mia/shared-types · @mia/shared-enums
 ```
 
-Dependency direction is strict and one-way:
+**Dependency direction (one-way):**
 
-- `ui` → `shared-types` / `shared-enums` (and the server over HTTP)
-- `server` → `agent`, `sync`, `shared-*`
-- `agent` → `shared-*` + `@mia/sync` (sync host vocabulary / tools)
-- `sync` → `shared-*` + `mssql` (**no** dependency on `@mia/agent`; tool shapes are structural)
+| Package | May depend on |
+| --- | --- |
+| `ui` | `shared-types`, `shared-enums` (server only over HTTP) |
+| `@mia/server` | `agent`, `sync`, `connectors`, `shared-*` |
+| `@mia/agent` | `shared-*`, `@mia/sync` |
+| `@mia/sync` | `shared-*`, `mssql` — **not** `@mia/agent` |
+| `@mia/connectors` | `shared-types` — **not** agent / sync / server |
+| `shared-types` | `shared-enums` |
+| `shared-enums` | — |
 
-`@mia/server` is the only package that knows about infrastructure. Everything
-below it is reusable and testable in isolation.
+`@mia/server` is the only package that owns infrastructure. Everything below it
+is reusable and testable in isolation.
 
 ---
 
-## 4. `@mia/agent` — the execution engine
+## 3. Ports
 
-The brain. Given a goal, a set of tools, and an LLM client, it runs the
-LLM-plus-tools loop and returns an answer. It knows nothing about HTTP or
-databases — all I/O arrives through ports.
+When a type crosses a package boundary (or a test must fake it), it is a
+**port** — a contract with no implementation. Names follow communication shape:
 
-### Folder structure
+| Suffix | Shape | Examples |
+| --- | --- | --- |
+| `*Sink` | Fire-and-forget event push | `SyncEventSink` |
+| `*Store` | Read and write the same entity | `AttachmentStore` |
+| `*Reader` | Read-only lookup | `CredentialReader`, `UserInputReader` |
+| `*Client` | External system we consume | `ShellClient` |
+| `*Port` / `*Provider` / `*Registry` | Named capability or lookup surface | `ConnectorPort`, `MssqlPoolProvider`, `PublishedSyncDefinitionRegistry` |
 
-```
-packages/agent/src/
-├── index.ts          # Public barrel — the entire supported surface
-├── domain/           # Enums + types (+ tenant config); vocabulary only
-├── core/             # Pure decisions (plan, choose-path, clarify, doctrine, policy, govern, recover)
-├── runtime/          # Stateful drivers (host, run-a-goal loop, delegate)
-├── ports/            # Host contracts + AuditService / Learner / memory adapters
-├── tools/            # Executable tools (database/, files/, shell-command/, …)
-├── memory/           # Context compaction, memory tiers, token budgeting
-├── llm/              # LLM client implementations
-└── internal/         # Logger, JSON, path helpers
-```
-
-### How a run executes
-
-`Agent` → `runtime/run-a-goal/run-goal.ts` drives the loop as named steps:
-
-1. **Prepare messages** — goal + system blocks.
-2. **Try planner path** (`core/choose-path`) — outcomes: `answered` | `use_tool_loop`.
-3. **Tool loop** — prepare iteration → ask model → decide next action →
-   finish check or run tools → after tools (stuck / recover) → repeat.
-4. **Finish** — return the answer plus token usage.
-
-Every branch returns a named outcome; unhandled outcomes throw with full route state.
-
-Tools are **not** globally registered. They are passed to the `Agent`
-constructor as an array of `ExecutableTool`s already bound to their host and
-run context. Tool lookup is a plain `Map<name, tool>` built at construction.
-
-### Boot host vs. per-run context — the two state objects
-
-Most stateful runtime data lives on exactly two objects, passed by parameter:
-
-- **`AgentHost`** — built once per process by `configureAgent({...})`. Holds
-  process-lifetime capabilities: MSSQL connection registry, filesystem sandbox
-  root, shell mode + client, browser sessions, attachment/credential/handoff
-  ports, catalog caches, sync host, and a small **`tenant` identity slot**
-  (`id`, `displayName`, `featureFlags`). A `null` field means "this capability
-  is not wired" (e.g. a CLI with no browser).
-- **`RunContext`** — built once per run by `makeRunContext({...})`. Holds
-  per-run facts: the abort signal, the memory writer, the active tool-trace, the
-  policy context, the current sync-op context. Threaded into every tool handler.
-
-**`TenantConfig`** (business knobs: `mirrorSchema`, routing keywords, SQL
-validator thresholds) is separate from `AgentHost.tenant`. It is loaded once at
-server boot from `MIA_TENANT_CONFIG` → `tenant.json` and read via
-`getTenantConfig()` across agent and server code. See
-`packages/agent/config/TENANT-CONFIG.md`.
-
-Tool handlers receive `AgentHost` + `RunContext` by argument. `TenantConfig` is
-the main intentional process-wide singleton besides the boot host itself.
-
-### What lives in `core/` (pure)
-
-| Cluster | Responsibility |
-|---|---|
-| `plan/` | Decompose a goal into a verifiable artifact graph; generate, execute, and verify plans |
-| `choose-path/` | Decide _direct vs. planner_ |
-| `govern-tools/` | Tool-quality and execution-policy checks run before each call |
-| `recover/` | Retry policy, circuit-breaker, recovery hints |
-| `clarify/` | Detect unresolved ambiguity in the goal |
-| `doctrine/` | Executable MSSQL query rules |
-| `policy/` | Selector matching + `RulePolicyEvaluator` (pure) |
-| `delegate-decision/` | Pure gate: should this work be delegated? |
-
-### What lives in `runtime/` (stateful)
-
-| Cluster | Responsibility |
-|---|---|
-| `run-a-goal/` | `Agent` + prose spine (`run-goal.ts` + `steps/`) |
-| `loop/` | Iteration mechanics: tool execution, completion guards, post-round |
-| `host/` | `configureAgent()` / `makeRunContext()` |
-| `delegate/` | Validates and routes work to child agents (drivers) |
-
-### Supporting subsystems
-
-- **`tools/`** — filesystem, shell, MSSQL (query/profile/inspect/relationships),
-  web/catalog search, delegation, sync wrappers, attachments, and
-  human-in-the-loop (`ask_user`, `note`, `recall`).
-- **`memory/`** — multi-turn compaction (summarize older turns), working /
-  episodic / semantic tiers, and a prompt budget that prioritizes sections to
-  fit the model's context window.
-- **`llm/`** — pluggable clients (OpenAI API, OpenAI-compatible forwarder for
-  local models, native Databricks), each handling streaming, tool calls, and
-  token accounting.
-- **`ports/ports.ts`** — every external contract the agent depends on, named by
-  the four-suffix taxonomy above.
+Execution packages **declare** ports. The server **provides** adapters. Agent
+never imports server.
 
 ---
 
-## 5. `@mia/server` — the composition root
+## 4. `@mia/agent` — execution engine
 
-The body. It is the only package that touches HTTP, SQLite, Docker, and process
-config. It builds the agent host once, wires every concrete adapter, persists
-state, and exposes the REST + SSE API.
+Given a goal, tools, and an LLM client, runs the model-plus-tools loop and
+returns an answer. No HTTP or database ownership — all I/O arrives through
+ports and the host.
 
-### Folder structure
+| Layer | Owns |
+| --- | --- |
+| `domain/` | Enums, types, tenant vocabulary |
+| `core/` | Pure decisions — plan, path choice, clarify, doctrine, policy, govern, recover, delegate gates |
+| `runtime/` | Host, run context, goal loop, delegation drivers |
+| `ports/` | Host contracts and I/O-backed service shapes |
+| `tools/` | Executable capabilities bound to host + run context |
+| `memory/` | Compaction, tiers, prompt budget |
+| `llm/` | Model clients |
+| `internal/` | Package helpers |
 
-```
-packages/server/src/
-├── index.ts          # thin process entry → boot/start-server
-├── boot/             # process spine
-├── http/             # Fastify composition
-├── infra/            # db, events, queue, sandbox, effects, MSSQL, …
-├── adapters/         # concrete @mia/agent + @mia/sync port implementations
-├── api/              # product HTTP surfaces (runs, sync, platform, auth, …)
-├── ports/            # server-owned contracts
-├── cli/              # standalone CLI entry points
-└── internal/         # server-only helpers / enum façades
-```
+**Two state objects:**
 
-Dependency rules and forbidden folders are in
-[docs/doctrine.md](docs/doctrine.md) and enforced by `npm run lint:arch`.
-Operator control plane = `api/platform`; run prompt assembly =
-`api/runs/prompting`.
+- **`AgentHost`** — process lifetime: workspace, MSSQL, filesystem, shell,
+  attachments, catalog, sync façade, connectors, tenant identity. Built once by
+  `configureAgent`. A null capability means “not wired.”
+- **`RunContext`** — per run: abort signal, memory, trace, policy, sync-op
+  context. Threaded into every tool handler.
 
-### The boot sequence (`index.ts`)
+**`TenantConfig`** (business knobs: mirror schema, routing vocabulary, SQL
+thresholds) is separate from `AgentHost.tenant`. Loaded once at server boot;
+the documented ambient getter is intentional and narrow.
 
-Startup is deterministic and observable — each step logs. In order: load `.env`
-→ open SQLite, run pending migrations, and seed defaults → resolve the agent workspace → configure the Docker sandbox (falling
-back to host execution if Docker is absent) → set up MSSQL connections → load
-sync environments → **build the boot `AgentHost` via `configureAgent(...)`**
-(wiring sync sinks, catalog registry, shell/browser adapters) → seed default
-policies → build the LLM client and schema catalogs → start the proposer
-scheduler → wire the notification dispatcher → construct the
-`AgentOrchestrator` → initialise the message queue and channel routers → build
-the Fastify app and register all feature routes → open the SSE endpoint →
-recover stale runs from prior crashes → listen on `:3102` → register graceful
-shutdown.
+Tools are constructed with host + context already bound — not ambient
+registration. Public surface: `@mia/agent` barrel only.
 
-### The `api/` surface convention
-
-Each folder under `api/` is a product HTTP surface. Thin surfaces are a single
-`routes.ts`. Fat surfaces use only these folders when needed:
-
-`service/` · `types/` · `state/` · `handlers/` · `adapters/` · (`runs/prompting/`)
-
-Never Nest names (`runtime/` / `core/`, `domain/`, `runtime/`, `transport/`).
-See [docs/doctrine.md](docs/doctrine.md). Surfaces include `runs`, `sync`,
-`platform` (operator control plane), `auth`, `notifications`, `policies`, …
-
-### The `runs` surface — how a run actually runs
-
-`AgentOrchestrator` (`api/runs/orchestrator.ts`) owns the run lifecycle:
-
-1. **`startRun()`** — allocate a run id, build and role-filter the tool set,
-   load policy rules, persist a run row, broadcast `RunQueued`, and enqueue the
-   work on the `RunQueue`.
-2. **`executeRun()`** — the queue worker calls
-   `prepareExecutionEnvironment()`, which assembles everything a run needs:
-   a per-run workspace, execution state and persistence, event wiring, a
-   **per-run `AgentHost`**, policy-governed tools, a delegate context, and the
-   system prompt. It then constructs the run's `Agent` and calls `agent.run()`.
-3. **Streaming** — every step and tool call is broadcast over SSE and written
-   to the trace tables in real time.
-4. **Resume / cancel / kill** — runs checkpoint, so `resumeRun()` rebuilds the
-   environment and continues from the last checkpoint; `cancelRun()` aborts the
-   controller; a single tool call can be killed via its registered abort signal.
-
-### The `infra/` layer
-
-| Subsystem | Responsibility |
-|---|---|
-| `persistence/` | The SQLite layer (better-sqlite3, WAL): all tables, queries, numbered migrations (`persistence/migrations/`), attachments, memory, evidence. |
-| `events/` | The `EventBroadcaster` — the single SSE transport. Per-client identity, run-ownership filtering, event-log persistence, webhook drains, heartbeats. |
-| `queue/` | The `RunQueue` (priority, slot-limited parallelism) and the `AgentBus` (persistence-backed inter-run message buffer). |
-| `sandbox/` | Docker-based isolated shell and browser execution, with a host fallback when Docker is unavailable. |
-| `llm/` | The LLM adapter registry (`copilot-chat`, `databricks`) and the completion adapter the proposer uses. |
-| `mssql/` | Parses `MSSQL_DATABASES`, builds a pooled connection and schema catalog per database. |
-| `effects/` | Transactional tracking of run side-effects with rollback. |
-
-### Adapters — providing the agent's ports
-
-The server implements every port the agent declares and injects the
-implementations through `configureAgent()` and `createPerRunHost()`. For
-example: `ShellClient` delegates to the sandbox; `AttachmentStore`
-wraps the attachment repository; the sync sinks broadcast over SSE and persist
-plan previews.
-
-### Identity & persistence model
-
-Persistence is a single SQLite database (default `~/.mia/mia.db`, override with
-`MIA_DATA_DIR`), migrated automatically on boot. All other server-local runtime
-data (catalog cache, sync plans, evidence, attachments) lives under the same
-directory. Identity is two tables —
-`users` (keyed by `upn`) and `sessions` (keyed by `sid`). Identity is resolved
-at the HTTP boundary, decorated onto `req.session`, and **passed explicitly**
-downstream — never read from an ambient store. Admin is the `users.is_admin`
-column; non-admin sessions receive a safe, reduced tool set.
+Detail: [packages/agent/SYSTEM.md](packages/agent/SYSTEM.md).
 
 ---
 
-## 6. `@mia/sync` — the MSSQL data-reconciliation engine
+## 5. `@mia/server` — composition root
 
-An independent engine that reconciles **data between two Microsoft SQL Server
-databases**: it computes a deterministic plan to make a target database's rows
-match a source's, then applies it. It is **MSSQL-specific by design** — the
-diff algorithm is hand-written T-SQL (`HASHBYTES`, `CONCAT_WS`,
-`INFORMATION_SCHEMA`, `MERGE`, SQL Server `CONVERT` style codes) and runtime
-code passes the `mssql` driver's own `ConnectionPool` type directly, so there
-is no SQL-dialect abstraction to swap. "SQL" here means SQL Server, not
-"any RDBMS." It has **no dependency on `@mia/agent`** — tool/host shapes are
-structural; the server wires both packages.
+Owns HTTP, SQLite, Docker sandbox, process config, auth, queues, SSE, and
+product API surfaces. Builds the agent host once, wires every adapter, and
+exposes REST + SSE.
 
-### Folder structure
+| Layer | Owns |
+| --- | --- |
+| `boot/` | Process life |
+| `http/` | Fastify composition |
+| `infra/` | Persistence, events, queue, sandbox, LLM adapters, MSSQL, effects |
+| `adapters/` | Implementations of agent / sync / connectors ports |
+| `runtime/` | Run orchestration, prompt assembly, tooling registry, workspace / execution |
+| `api/` | Product HTTP surfaces — one capability per surface |
+| `ports/` | Server-owned contracts |
+| `cli/` / `internal/` | Operator entry / helpers |
 
-```
-packages/sync/src/
-├── index.ts          # Public API barrel
-├── domain/           # Types + pure helpers (no fs / pools / emit)
-│   ├── diff-engine/  # Pure SQL string helpers + change-set math
-│   ├── entity-registry/, governance/, environments types, …
-├── core/             # Pure proposer: rank & annotate conflicts
-├── runtime/          # Preview, execute, plan store, loaders, diff I/O
-├── ports/            # Host, sinks, tool contracts, pool provider
-├── tools/            # Agent-facing create*Tool factories
-├── adapters/         # Thin MSSQL pool helpers
-├── internal/
-└── test-support/
-```
+API surfaces include runs, sync, connectors, platform, auth, policies,
+notifications, proposer, approvals, evidence, operations, warehouse, and
+related control surfaces. Domain nouns for folders — not customer brand names.
 
-Same dialect as `@mia/agent`. Enforce with `npm run lint:arch`. Details in
-[docs/doctrine.md](docs/doctrine.md).
+**Runs.** The orchestrator allocates a run, filters tools by role and policy,
+persists the run row, enqueues work, builds a per-run host and agent, and
+streams steps over SSE. Runs checkpoint; resume rebuilds environment and
+continues; cancel / kill abort registered signals.
 
-### The flow
+**Identity.** SQLite (`users` / `sessions`). Session resolved at the HTTP
+boundary and passed explicitly downstream. Admin is a column, not a bypass of
+policy.
 
-1. **Preview** (`runtime/orchestrator/preview.ts`) — for each table,
-   `runtime/diff-engine` computes a row-level `HASHBYTES('SHA2_256', …)` over
-   canonicalized column values on both source and target, classifying every row
-   as INSERT / UPDATE / DELETE. Determinism is enforced with fixed session
-   settings and explicit casting; volatile columns (`validFrom`, `validTo`,
-   identity PKs, …) are excluded. The result is a `SyncPlan`.
-2. **Propose** (`core/proposer/`) — pure ranking and annotation
-   passes score and enrich conflicts with resolution metadata.
-3. **Execute** (`runtime/orchestrator/execute.ts`) — applies the plan
-   (MERGE for upserts, controlled DELETE loops), toggles FK constraints,
-   probes triggers and emits archive records, and streams per-table progress.
-4. **Safety rails** — drift revalidation before execution, freeze-window
-   governance that blocks operations during maintenance windows, and catalog
-   drift policies.
-
-The agent reaches this engine through tools such as `compare_catalogs`,
-`sync_preview`, and `sync_execute` — factories in `tools/index.ts`.
+**Persistence.** One SQLite database (default under `MIA_DATA_DIR` /
+`~/.mia`). Migrations on boot. Plans, evidence, attachments, and caches live
+under the same data directory.
 
 ---
 
-## 7. `@mia/shared-enums` & `@mia/shared-types` — the contracts
+## 6. `@mia/sync` — MSSQL metadata reconciliation
 
-Every value that crosses an HTTP, SSE, or WebSocket boundary is defined exactly
-once here, so the agent, server, and both UIs cannot drift apart.
+Reconciles **ABI metadata** between two Microsoft SQL Server environments:
+scoped, deterministic preview of row changes, then execute against a frozen
+plan. MSSQL-specific by design. No dependency on `@mia/agent` — tool and host
+shapes are structural; the server wires both.
 
-- **`shared-enums`** — the wire enums: run/step status, event types, planner
-  trace kinds, delegation outcomes, sync statuses, policy sources. Each is an
-  `as const` object plus a derived union plus a runtime list plus a narrow
-  guard. Wire values are immutable; renaming one is a breaking change by
-  construction.
-- **`shared-types`** — the DTOs: `Run`, `RunDetail`, `Step`, `TraceEntry` (a
-  discriminated union of every trace event), `WorkspaceDiff`, the full `Sync*`
-  family, the `SavedLayout` / widget types, and the `SseEvent` union. All enum
-  references come from `shared-enums`, so a rename propagates automatically.
+| Layer | Owns |
+| --- | --- |
+| `domain/` | Vocabulary, plan shapes, governance types, branded ids |
+| `core/` | Pure compile, eligibility, flow/action model, intent, proposer, publish rules |
+| `runtime/` | Preview, execute, plan store, loaders, diff I/O, events |
+| `ports/` | Host, sinks, registries, pool provider |
+| `tools/` | Agent-facing sync tools |
+| `adapters/` | MSSQL pools, HTTP |
 
----
+**Authority chain:** Catalog (authoring in SQLite) → Publish → published
+SyncDefinitions → Preview (SyncPlan + changeSet) → Execute (apply changeSet,
+then post-metadata flow). Preview is read-only; execute writes the target.
 
-## 8. `@mia/ui` — the front end
-
-A React 18 + Vite single-page app over the backend contract (REST for commands,
-a single SSE stream for live updates). State is Zustand; the SSE client
-deduplicates across browser tabs via `BroadcastChannel` and auto-reconnects.
-
-| | `@mia/ui` (dashboard) |
-|---|---|
-| Surface | Draggable grid of widgets: chat, live trace, audit, policies, sync, usage |
-| Stack | React + Tailwind + Zustand + force-graph / three.js + react-grid-layout |
-| Dev port | `5179` |
-| Backend | REST + `/api/events/stream` SSE; Vite proxies `/api` and `/ws` to `:3102` |
-
-It is a thin client: all orchestration, governance, and persistence live in
-the server. The UI only renders state and issues commands.
-
-### Folder structure
-
-```
-packages/ui/src/
-├── boot/          # main.tsx, global CSS
-├── app/           # App composition, home/, workspace/, session/brand helpers
-├── client/        # REST + SSE transport
-├── state/         # Zustand + SSE reducers
-├── widgets/       # product vertical slices
-├── components/    # presentation-only shared UI
-├── hooks/, lib/, theme/, enums/
-└── types.ts
-```
-
-Same “one job per folder” rule as the rest of the monorepo — FE-native names
-(`boot` / `app` / `client` / `state` / `widgets` / `components`), not agent
-`domain/core/runtime`. Enforce with `npm run lint:arch`. Details in
-[docs/doctrine.md](docs/doctrine.md).
+Detail: [sync-system.md](sync-system.md),
+[packages/sync/SYNC-MODEL.md](packages/sync/SYNC-MODEL.md),
+[packages/sync/SYNC-MECHANICS.md](packages/sync/SYNC-MECHANICS.md),
+[packages/sync/SYNC-PREVIEW-EXECUTE.md](packages/sync/SYNC-PREVIEW-EXECUTE.md).
 
 ---
 
-## 9. Where state is allowed to live
+## 7. `@mia/connectors` — Bridge
 
-By doctrine, state exists in only a few sanctioned places:
+Cross-system data movement engine: read / transform / write across adapters
+(MSSQL, Postgres, Oracle, Databricks, Denodo, Hive, HTTP, WebHDFS, object
+storage, Aqueduct, and related formats). No HTTP or product persistence of its
+own. Server owns connector config and pools; agent reaches it through a
+`ConnectorPort` and the Bridge tool; UI exposes a Bridge surface.
 
-- the Fastify app and other long-lived shell objects,
-- the SQLite connection and other adapter instances,
-- the `AgentHost` (boot) and `RunContext` (per-run),
-- explicit caches attached to the host (e.g. `host.sync.plans`,
-  `host.catalog`),
-- and per-call local variables and closures.
+---
 
-State is **never** hidden behind an ambient runtime lookup. If you are adding a
-new dependency, thread it as a parameter — that is the whole architecture in one
-instruction.
+## 8. Contracts — `shared-enums` & `shared-types`
 
-### Shortest orientation path
+Every value that crosses HTTP, SSE, or package boundaries is defined once.
 
-1. [docs/doctrine.md](docs/doctrine.md) — the rule, in full.
-2. [packages/agent/src/index.ts](packages/agent/src/index.ts) — the agent's public surface.
-3. [packages/server/src/index.ts](packages/server/src/index.ts) — the boot sequence.
-4. [packages/sync/src/index.ts](packages/sync/src/index.ts) — the reconciliation surface.
+- **`shared-enums`** — wire enums (run/step status, events, planner/trace kinds,
+  sync, policy sources, error codes, …). `as const` + union + list + guard.
+  Renaming a wire value is a breaking change.
+- **`shared-types`** — DTOs and shared shapes: runs/traces, SyncPlan and
+  changeSet, connectors specs, sync flow / value-source vocabulary, event
+  catalog and presentation labels, SSE payloads.
+
+---
+
+## 9. `ui` — front end
+
+React SPA over the backend contract: REST for commands, one SSE stream for
+live updates. Zustand for client state; SSE deduplicated across tabs via
+BroadcastChannel.
+
+| Layer | Owns |
+| --- | --- |
+| `boot/` / `app/` | Entry and chrome |
+| `client/` | Transport |
+| `state/` | Client composition root |
+| `widgets/` | Product surfaces (chat, runs, sync, registry, Bridge, …) |
+| `components/` | Presentation-only shared UI |
+| `lib/` | Pure helpers (including event projection) |
+| `theme/` / `enums/` / `hooks/` | As named |
+
+Thin client: orchestration, governance, and persistence live on the server.
+UI issues commands and projects shared vocabulary — it does not invent wire
+kinds or tool labels.
+
+---
+
+## 10. Where state may live
+
+**Allowed:** composition-root objects; persistence; `AgentHost` / `RunContext`
+(and sync host façades); host-attached caches; locals; documented ambient
+business knobs loaded at boot (`TenantConfig`).
+
+**Forbidden:** undeclared module mutable state; ambient DI (`getGlobal*` /
+`setGlobal*`); hidden request context as the dependency bus.
+
+New dependencies are parameters. That is the architecture in one instruction.

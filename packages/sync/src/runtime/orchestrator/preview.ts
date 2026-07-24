@@ -18,6 +18,7 @@ import { selectDefinitionTables, type SyncEntityId } from "../../core/scope/defi
 import { materializeDefinitionTablesForSchema } from "../../core/entity-registry/materialize-scd2-for-schema.js"
 import { coerceSyncEntityId } from "../../core/scope/entity-instance-ref.js"
 import { buildDependencyGraph, diffTable } from "../diff-engine/index.js"
+import { applyInboundDeleteBlockers } from "../diff-engine/inbound-delete-blockers.js"
 import { assertSupportedSyncDirection } from "../../core/eligibility/environments.js"
 import { getEnvironment } from "../environments-registry.js"
 import {
@@ -213,7 +214,7 @@ async function previewSyncInner(
       input.target
     )
     const tableTotal = schemaGroundedTables.length
-    const tableResults: SyncPlanTable[] = await mapWithConcurrency(
+    const tableResultsRaw: SyncPlanTable[] = await mapWithConcurrency(
       schemaGroundedTables.map((t, tableIndex) => ({ t, tableIndex })),
       tableConcurrency,
       async ({ t, tableIndex }) => {
@@ -275,6 +276,14 @@ async function previewSyncInner(
           } as SyncPlanTable
         }
       }
+    )
+
+    // Out-of-scope inbound FK refs that would block deletes → conflicts, not changeSet.
+    const tableResults = await applyInboundDeleteBlockers(
+      input.host,
+      input.target,
+      tableResultsRaw,
+      telemetryContext
     )
 
     const totals: SyncPlanTotals = computePlanTotals(tableResults)

@@ -80,12 +80,13 @@ function buildSyncPreviewTool(host: SyncRuntimeHost): Tool {
         // ── Conflict details — include ALL rows so the LLM can show them ──
         const conflictedTables = plan.tables.filter((t) => t.conflicts.length > 0)
         if (conflictedTables.length > 0) {
-          lines.push(`SCOPE CONFLICTS — execute is BLOCKED until resolved:`)
+          lines.push(`CONFLICTS — execute is BLOCKED until resolved:`)
           for (const t of conflictedTables) {
             lines.push(`  Table: ${t.table} (${t.conflicts.length} conflict(s))`)
             for (const c of t.conflicts) {
+              const kind = c.kind ?? "scope_misattribution"
               lines.push(
-                `    • pk=${c.pk} | expected=${JSON.stringify(c.expectedScope)} | actual=${JSON.stringify(c.actualScope)} | ${c.summary}`
+                `    • [${kind}] pk=${c.pk} | expected=${JSON.stringify(c.expectedScope)} | actual=${JSON.stringify(c.actualScope)} | ${c.summary}`
               )
             }
           }

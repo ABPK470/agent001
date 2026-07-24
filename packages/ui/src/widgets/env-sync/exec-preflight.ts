@@ -33,7 +33,7 @@ export function buildExecPreflightChecks(plan: SyncPlan): ExecPreflightCheck[] {
     },
     {
       id: "conflicts",
-      label: "No scope conflicts",
+      label: "No plan conflicts",
       passed: conflictCount === 0,
       detail: conflictCount > 0 ? `${conflictCount} conflict(s) in plan` : null
     },
