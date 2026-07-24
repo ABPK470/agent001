@@ -33,7 +33,9 @@ When two designs work, pick the one that is more reliable, quieter, faster to fi
 6. Follow [docs/doctrine.md](docs/doctrine.md) and package layer rules. Doctrine
    covers **structural layers** (where files import) **and product seams**
    (who owns a capability; cores get resolved inputs — never leaked `*Id`
-   folklore).
+   folklore). **Talk is cheap:** update doctrine and `lint:arch` together.
+   Package sources are ESM — bare `require()` is a `lint:arch` failure
+   (`esm-only`); `tsc` alone will not catch it.
 
 ## How code must read
 

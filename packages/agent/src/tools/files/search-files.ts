@@ -10,6 +10,7 @@
  * Output is capped to prevent memory issues on large codebases.
  */
 
+import { statSync } from "node:fs"
 import { readdir, readFile, stat } from "node:fs/promises"
 import { basename, extname, resolve } from "node:path"
 import type { AgentHost } from "../../runtime/runtime.js"
@@ -107,12 +108,9 @@ export function computeAutoDetectedExcludeDirs(basePath: string): string[] {
   const dirs: string[] = []
   const knownAgentDirs = ["packages", "deploy", "scripts", "bin", "docs"]
   for (const dir of knownAgentDirs) {
-    try {
-      const stats = require("node:fs").statSync(resolve(basePath, dir))
-      if (stats.isDirectory()) {
-        dirs.push(dir)
-      }
-    } catch (err: unknown) { console.error("[mia]", err) }
+    const full = resolve(basePath, dir)
+    const stats = statSync(full, { throwIfNoEntry: false })
+    if (stats?.isDirectory()) dirs.push(dir)
   }
   return dirs
 }

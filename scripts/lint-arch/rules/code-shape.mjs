@@ -205,6 +205,57 @@ function functionRegistersListener(fnNode) {
   return found
 }
 
+/**
+ * ESM-only dialect: packages are `"type": "module"`. Bare `require(...)`
+ * still typechecks via `@types/node` but throws at runtime — ban it in AST
+ * (never matches strings / comments). Prefer `import`. `createRequire` is
+ * allowed only when the package allowlists the file.
+ */
+export function lintEsmOnly(pkg, files) {
+  const allow = pkg.cjsRequireAllowlist ?? new Set()
+
+  for (const file of files) {
+    if (!/\.(tsx?|jsx?)$/.test(file)) continue
+    const rel = relToPkg(pkg.src, file)
+    if (allow.has(rel)) continue
+    if (rel.startsWith("test-support/")) continue
+
+    const sf = parseSourceFile(file)
+    const visit = (node) => {
+      if (ts.isCallExpression(node) && callCalleeIsRequire(node.expression)) {
+        fail(
+          file,
+          lineOf(sf, node),
+          "esm-only",
+          `CommonJS require() in an ESM package — use import (TypeScript types require; Node does not provide it at runtime)`,
+        )
+      }
+      if (
+        ts.isImportEqualsDeclaration(node) &&
+        ts.isExternalModuleReference(node.moduleReference)
+      ) {
+        fail(
+          file,
+          lineOf(sf, node),
+          "esm-only",
+          `import = require(...) is CommonJS — use ESM import`,
+        )
+      }
+      ts.forEachChild(node, visit)
+    }
+    visit(sf)
+  }
+}
+
+/** @param {ts.Expression} expr */
+function callCalleeIsRequire(expr) {
+  let cur = expr
+  while (ts.isPropertyAccessExpression(cur) || ts.isElementAccessExpression(cur)) {
+    cur = cur.expression
+  }
+  return ts.isIdentifier(cur) && cur.text === "require"
+}
+
 export function lintDeepPackageImports(pkgLabel, files) {
   // superseded by lintPackageExportSurface — kept no-op for safety
   void pkgLabel

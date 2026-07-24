@@ -45,6 +45,9 @@ frictionless capabilities.
    “fall through and hope.”
 7. **Flat control flow** (UI and Node): peer handlers, explicit state; no nested
    listener registration on hot paths.
+8. **ESM only** in package sources (`"type": "module"`). Bare `require(...)` /
+   `import x = require(...)` are forbidden — they typecheck via `@types/node`
+   but throw at runtime. Use `import`.
 
 When two designs work, pick the clearer, more uniform, quieter one.
 
@@ -221,7 +224,9 @@ business knobs loaded at boot (tenant config pattern).
 
 **Forbidden:** undeclared module `let`/`var`; exported `getGlobal*` /
 `setGlobal*` DI; undeclared ambient mutable “state objects”; module-load
-repeating timers without a clear lifecycle.
+repeating timers without a clear lifecycle; CommonJS `require(...)` /
+`import = require(...)` in ESM packages (use `import`; `createRequire` only
+via package `cjsRequireAllowlist` when a native CJS-only dependency forces it).
 
 ---
 

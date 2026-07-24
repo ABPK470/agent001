@@ -24,6 +24,7 @@ import { loadCompilerOptions } from "./lint-arch/ts-context.mjs"
 import { FORBIDDEN_CONSTRUCTORS } from "./lint-arch/registry/policy.mjs"
 import { FAILURE_CLASSES } from "./lint-arch/registry/failure-classes.mjs"
 import {
+  lintEsmOnly,
   lintFlatControlFlow,
   lintModuleState,
   lintNoForbiddenConstructors,
@@ -98,6 +99,7 @@ const RUNNERS = new Map([
   ],
   ["module-state", ({ pkg, files }) => lintModuleState(pkg, files)],
   ["flat-control-flow", ({ files }) => lintFlatControlFlow(files)],
+  ["esm-only", ({ pkg, files }) => lintEsmOnly(pkg, files)],
   ["scoped-lifecycle", ({ pkg, files }) => lintScopedLifecycle(pkg, files)],
   ["cancellation-flow", ({ pkg, files }) => lintCancellationFlow(pkg, files)],
   ["resource-cleanup", ({ pkg, files }) => lintResourceCleanup(pkg, files)],
