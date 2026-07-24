@@ -105,7 +105,8 @@ function StreamingAnswerBody({
 
   const hasBlockContent = blocks.length > 0
   const hasProseTail = glyphTail.length > 0
-  // Charts/KPIs/dashboards (open fence) and pipe-tables share one pending shell.
+  // Charts/KPIs/dashboards (open fence) and pipe-tables share one pending *path*
+  // (hold until complete → settle). Table chrome is a grid skeleton, not the chart blob.
   const pendingLang =
     layout.remainderKind === "fenced"
       ? (layout.fencedLang ?? "chart")

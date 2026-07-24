@@ -6840,6 +6840,55 @@ textarea.input {
   animation: stream-pending-shimmer 1.6s ease-in-out infinite;
 }
 
+/* Table pending — spreadsheet grid, not a chart stage blob. */
+.stream-pending-table__row {
+  display: grid;
+  grid-template-columns: 1.15fr 1fr 0.85fr 1.05fr;
+  gap: 0.55rem;
+  align-items: center;
+  padding: 0.42rem 0.2rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-subtle) 85%, transparent);
+}
+
+.stream-pending-table__row--head {
+  padding-top: 0.2rem;
+  padding-bottom: 0.5rem;
+  margin-bottom: 0.1rem;
+  border-bottom-color: color-mix(in srgb, var(--border-subtle) 100%, transparent);
+}
+
+.stream-pending-table__row--head .stream-pending-table__cell {
+  height: 0.55rem;
+  opacity: 0.85;
+}
+
+.stream-pending-table__row:last-child {
+  border-bottom: none;
+}
+
+.stream-pending-table__cell {
+  height: 0.5rem;
+  border-radius: 2px;
+  background:
+    linear-gradient(
+      110deg,
+      color-mix(in srgb, var(--overlay-2) 50%, transparent) 0%,
+      color-mix(in srgb, var(--overlay-3) 65%, transparent) 45%,
+      color-mix(in srgb, var(--overlay-2) 50%, transparent) 90%
+    );
+  background-size: 200% 100%;
+  animation: stream-pending-shimmer 1.6s ease-in-out infinite;
+}
+
+.stream-pending-table__row:nth-child(odd) .stream-pending-table__cell {
+  opacity: 0.72;
+}
+
+.stream-pending-table__cell:nth-child(1) { width: 88%; }
+.stream-pending-table__cell:nth-child(2) { width: 72%; }
+.stream-pending-table__cell:nth-child(3) { width: 58%; }
+.stream-pending-table__cell:nth-child(4) { width: 80%; }
+
 @keyframes stream-pending-shimmer {
   0% { background-position: 100% 0; }
   100% { background-position: -100% 0; }
@@ -6847,7 +6896,8 @@ textarea.input {
 
 @media (prefers-reduced-motion: reduce) {
   .word-stream-cue,
-  .stream-pending-shell__skeleton {
+  .stream-pending-shell__skeleton,
+  .stream-pending-table__cell {
     animation: none;
   }
 

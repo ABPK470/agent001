@@ -338,6 +338,12 @@ interface AppState {
   approvalModalOpen: boolean
   approvalModalDismissed: boolean
   setPendingToolApproval: (pending: PendingToolApproval | null) => void
+  /**
+   * Silent restore on identity hydrate (notifications / pending list).
+   * Restores bell actions without opening the modal and without marking
+   * dismissed — `setApprovalModalOpen(false)` would poison later live SSE.
+   */
+  hydratePendingToolApproval: (pending: PendingToolApproval | null) => void
   clearPendingToolApproval: () => void
   setApprovalModalOpen: (open: boolean) => void
   upsertPendingToolApproval: (patch: Partial<PendingToolApproval> & { runId: string; stepId: string }) => void
@@ -1073,6 +1079,41 @@ export const useStore = create<AppState>()(
         approvalModalOpen: pending !== null && !!pending.approvalId,
         approvalModalDismissed: false,
       }),
+      hydratePendingToolApproval: (pending) => set((s) => {
+        // Live SSE already owns the decision surface — only fill gaps.
+        if (s.approvalModalOpen) {
+          if (!pending || !s.pendingToolApproval) return {}
+          return {
+            pendingToolApproval: {
+              ...s.pendingToolApproval,
+              notificationId: pending.notificationId ?? s.pendingToolApproval.notificationId,
+              policyName: s.pendingToolApproval.policyName ?? pending.policyName,
+              args: s.pendingToolApproval.args ?? pending.args,
+            },
+          }
+        }
+        if (
+          pending
+          && s.pendingToolApproval
+          && s.pendingToolApproval.runId === pending.runId
+          && s.pendingToolApproval.stepId === pending.stepId
+          && s.pendingToolApproval.approvalId
+        ) {
+          return {
+            pendingToolApproval: {
+              ...s.pendingToolApproval,
+              notificationId: pending.notificationId ?? s.pendingToolApproval.notificationId,
+              policyName: s.pendingToolApproval.policyName ?? pending.policyName,
+              args: s.pendingToolApproval.args ?? pending.args,
+            },
+          }
+        }
+        return {
+          pendingToolApproval: pending,
+          approvalModalOpen: false,
+          approvalModalDismissed: false,
+        }
+      }),
       clearPendingToolApproval: () => set({
         pendingToolApproval: null,
         approvalModalOpen: false,
@@ -1085,7 +1126,11 @@ export const useStore = create<AppState>()(
       upsertPendingToolApproval: (patch) => set((s) => {
         const existing = s.pendingToolApproval
         const same = existing && existing.runId === patch.runId && existing.stepId === patch.stepId
-        const gotAuthoritativeId = !!patch.approvalId && !(same && existing.approvalId)
+        // First time this run+step learns its approvalId.
+        const gotAuthoritativeId = !!patch.approvalId && !(same && existing?.approvalId)
+        // Only "Decide later" after the modal was actionable blocks re-open.
+        const dismissedAfterSeeingModal =
+          s.approvalModalDismissed && same && !!existing?.approvalId
         return {
           pendingToolApproval: {
             approvalId: patch.approvalId ?? (same ? existing.approvalId : null),
@@ -1098,10 +1143,15 @@ export const useStore = create<AppState>()(
             notificationId: patch.notificationId ?? (same ? existing.notificationId : null),
           },
           approvalModalOpen: gotAuthoritativeId
-            ? !s.approvalModalDismissed
+            ? !dismissedAfterSeeingModal
             : same
               ? s.approvalModalOpen
               : false,
+          approvalModalDismissed: !same
+            ? false
+            : gotAuthoritativeId && !dismissedAfterSeeingModal
+              ? false
+              : s.approvalModalDismissed,
         }
       }),
 

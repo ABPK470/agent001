@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import { parseAnswerBlocks } from "./answer-parser"
 import {
   STRUCTURED_PENDING_CHART_HEIGHT,
+  STRUCTURED_PENDING_TABLE_HEIGHT,
   estimateTablePendingHeight,
   pendingShellMinHeight,
 } from "./StreamingBlocks"
@@ -11,13 +12,13 @@ import {
 } from "./TypewriterAnswer"
 
 describe("pendingShellMinHeight", () => {
-  it("reserves a fixed table stage (same as charts) so live rows do not ratchet height", () => {
+  it("reserves a fixed table stage so live rows do not ratchet height", () => {
     const short = "| Name | Amt |\n| --- | --- |\n| Ada | 1 |"
     const tall =
       "| Name | Amt |\n| --- | --- |\n| Ada | 1 |\n| Bea | 2 |\n| Cai | 3 |\n| Dee | 4 |"
-    expect(pendingShellMinHeight("table", short)).toBe(STRUCTURED_PENDING_CHART_HEIGHT)
-    expect(pendingShellMinHeight("table", tall)).toBe(STRUCTURED_PENDING_CHART_HEIGHT)
-    expect(estimateTablePendingHeight(short)).toBe(STRUCTURED_PENDING_CHART_HEIGHT)
+    expect(pendingShellMinHeight("table", short)).toBe(STRUCTURED_PENDING_TABLE_HEIGHT)
+    expect(pendingShellMinHeight("table", tall)).toBe(STRUCTURED_PENDING_TABLE_HEIGHT)
+    expect(estimateTablePendingHeight(short)).toBe(STRUCTURED_PENDING_TABLE_HEIGHT)
   })
 
   it("keeps chart / kpi / dashboard footprints", () => {

@@ -251,9 +251,9 @@ export const COMPACT_TABLE_WRAPPER_CLASS =
 /**
  * Compact markdown table — shared by SmartAnswer and the live stream shell.
  *
- * Layout: full-width bordered table. Copy/CSV/JSON overlay the header's
- * top-right (no permanent gutter) and stay pinned to the visible box so
- * horizontal table scroll never hides them past the edge.
+ * Layout: full-width bordered table. Reads as a dense data grid (header band,
+ * hairline columns, subtle zebra) — not chart/dashboard stage chrome.
+ * Copy/CSV/JSON overlay the header's top-right (no permanent gutter).
  *
  * Settle is whole-block (stream-diagram-enter on the parent) — never row drip.
  */
@@ -292,15 +292,15 @@ export function CompactTable({
           When natural width exceeds the wrapper, the outer `overflow-x-auto`
           kicks in and the user can scroll horizontally to see every column.
         */}
-        <table className="w-auto min-w-full text-[15px] leading-6 border-collapse">
+        <table className="w-auto min-w-full text-[13.5px] leading-5 border-collapse font-mono">
           <thead>
-            <tr>
+            <tr className="bg-overlay-2/60">
               {headers.map((h, hi) => (
                 <th
                   key={hi}
                   className={[
-                    "text-left font-bold text-text-secondary text-[15px] px-3 py-1.5 border-b border-border-subtle whitespace-nowrap",
-                    hi < headers.length - 1 ? "border-r border-border-subtle" : "",
+                    "text-left font-semibold text-text-secondary tracking-tight px-2.5 py-1.5 border-b border-border-subtle whitespace-nowrap",
+                    hi < headers.length - 1 ? "border-r border-border-subtle/80" : "",
                   ].join(" ")}
                 >
                   <InlineText text={h} />
@@ -308,15 +308,18 @@ export function CompactTable({
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-border-subtle">
+          <tbody>
             {rows.map((row, ri) => (
-              <tr key={ri}>
+              <tr
+                key={ri}
+                className={ri % 2 === 1 ? "bg-overlay-2/25" : undefined}
+              >
                 {row.map((cell, ci) => (
                   <td
                     key={ci}
                     className={[
-                      "px-3 py-1.5 align-top text-text-secondary",
-                      ci < row.length - 1 ? "border-r border-border-subtle" : "",
+                      "px-2.5 py-1 align-top text-text-secondary",
+                      ci < row.length - 1 ? "border-r border-border-subtle/70" : "",
                     ].join(" ")}
                   >
                     <InlineText text={cell} />

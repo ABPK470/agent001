@@ -62,7 +62,7 @@ describe("store approval events", () => {
     })
   })
 
-  it("merges approvalId on duplicate approval.required for same run+step", () => {
+  it("opens modal when approvalId arrives even if dismiss happened before id was known", () => {
     const { handleEvent } = useStore.getState()
     handleEvent({
       type: "approval.required",
@@ -74,6 +74,7 @@ describe("store approval events", () => {
         reason: "network",
       },
     })
+    // Dismiss while still waiting for the authoritative id (e.g. hydrate poison).
     useStore.getState().setApprovalModalOpen(false)
 
     handleEvent({
@@ -90,7 +91,72 @@ describe("store approval events", () => {
 
     const state = useStore.getState()
     expect(state.pendingToolApproval?.approvalId).toBe("appr-final")
+    expect(state.approvalModalOpen).toBe(true)
+    expect(state.approvalModalDismissed).toBe(false)
+  })
+
+  it("does not reopen after Decide later once the modal was actionable", () => {
+    const { handleEvent } = useStore.getState()
+    handleEvent({
+      type: "approval.required",
+      timestamp: new Date().toISOString(),
+      data: {
+        runId: "run-1",
+        stepId: "step-1",
+        toolName: "fetch_url",
+        reason: "network",
+        approvalId: "appr-1",
+      },
+    })
+    expect(useStore.getState().approvalModalOpen).toBe(true)
+    useStore.getState().setApprovalModalOpen(false)
+
+    handleEvent({
+      type: "approval.required",
+      timestamp: new Date().toISOString(),
+      data: {
+        runId: "run-1",
+        stepId: "step-1",
+        toolName: "fetch_url",
+        reason: "network",
+        approvalId: "appr-1",
+      },
+    })
+
+    expect(useStore.getState().approvalModalOpen).toBe(false)
+  })
+
+  it("hydratePendingToolApproval restores quietly without poisoning dismissed", () => {
+    useStore.getState().hydratePendingToolApproval({
+      approvalId: "appr-hydrated",
+      runId: "run-1",
+      stepId: "step-1",
+      toolName: "fetch_url",
+      reason: "network",
+      notificationId: "note-1",
+    })
+
+    let state = useStore.getState()
     expect(state.approvalModalOpen).toBe(false)
+    expect(state.approvalModalDismissed).toBe(false)
+    expect(state.pendingToolApproval?.approvalId).toBe("appr-hydrated")
+
+    // A different live approval must still be able to open the modal.
+    useStore.getState().handleEvent({
+      type: "approval.required",
+      timestamp: new Date().toISOString(),
+      data: {
+        runId: "run-2",
+        stepId: "step-9",
+        toolName: "sync_execute",
+        reason: "prod write",
+        approvalId: "appr-live",
+      },
+    })
+
+    state = useStore.getState()
+    expect(state.approvalModalOpen).toBe(true)
+    expect(state.pendingToolApproval?.approvalId).toBe("appr-live")
   })
 
   it("approval.resolved clears pending modal state", () => {

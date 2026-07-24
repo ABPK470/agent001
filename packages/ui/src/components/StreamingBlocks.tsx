@@ -1,18 +1,21 @@
-import { isDiagramLang, tryInferDiagramKind } from "./InlineDiagram"
+import type { JSX } from "react"
+import { isDiagramLang, tryInferDiagramKind } from "./inlineDiagram"
 
 /**
  * Quiet pending shell for incomplete structured answer blocks
  * (pipe-tables and ``` chart / KPI / dashboard fences).
  *
- * No shimmering labels — just a soft skeleton placeholder until the whole
- * block is ready, then SmartAnswer paints it in one shot. Tables and charts
- * share the same chrome family so the reserved stage feels identical.
+ * Charts keep a soft stage blob. Tables use a fixed-height grid skeleton so
+ * the reserved stage reads as a spreadsheet, not a chart — same hold-until-
+ * complete + settle behaviour, different chrome.
  */
 
-/** Chart / dashboard footprint — tables aim at the same visual stage. */
+/** Chart / dashboard footprint. */
 export const STRUCTURED_PENDING_CHART_HEIGHT = 264
 export const STRUCTURED_PENDING_DASHBOARD_HEIGHT = 288
 export const STRUCTURED_PENDING_KPI_HEIGHT = 120
+/** Table stage — same fixed-height contract as charts (no grow-per-row shake). */
+export const STRUCTURED_PENDING_TABLE_HEIGHT = 200
 
 /**
  * Reserved height for an in-flight pipe-table.
@@ -21,7 +24,7 @@ export const STRUCTURED_PENDING_KPI_HEIGHT = 120
  */
 export function estimateTablePendingHeight(_remainder: string): number {
   void _remainder
-  return STRUCTURED_PENDING_CHART_HEIGHT
+  return STRUCTURED_PENDING_TABLE_HEIGHT
 }
 
 export function pendingShellMinHeight(lang: string, remainder = ""): number {
@@ -56,6 +59,27 @@ function pendingAriaLabel(lang: string): string {
   return "Loading"
 }
 
+function TablePendingSkeleton(): JSX.Element {
+  const rows = [0, 1, 2, 3, 4]
+  const cols = [0, 1, 2, 3]
+  return (
+    <div className="stream-pending-table flex-1 flex flex-col min-h-0" aria-hidden="true">
+      <div className="stream-pending-table__row stream-pending-table__row--head">
+        {cols.map((c) => (
+          <div key={c} className="stream-pending-table__cell" />
+        ))}
+      </div>
+      {rows.map((r) => (
+        <div key={r} className="stream-pending-table__row">
+          {cols.map((c) => (
+            <div key={c} className="stream-pending-table__cell" />
+          ))}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 /** Pending chrome for open fences and for pipe-tables (lang="table"). */
 export function StructuredPendingBlock({
   lang,
@@ -66,14 +90,22 @@ export function StructuredPendingBlock({
   remainder?: string
 }) {
   const minHeight = pendingShellMinHeight(lang, remainder)
+  const isTable = lang.toLowerCase().trim() === "table"
   return (
     <div
-      className="stream-pending-shell rounded-lg border border-border-subtle px-3 py-2.5 flex flex-col my-1.5"
+      className={[
+        "stream-pending-shell rounded-lg border border-border-subtle flex flex-col my-1.5",
+        isTable ? "px-2 py-1.5" : "px-3 py-2.5",
+      ].join(" ")}
       style={{ minHeight }}
       role="status"
       aria-label={pendingAriaLabel(lang)}
     >
-      <div className="stream-pending-shell__skeleton flex-1" aria-hidden="true" />
+      {isTable ? (
+        <TablePendingSkeleton />
+      ) : (
+        <div className="stream-pending-shell__skeleton flex-1" aria-hidden="true" />
+      )}
     </div>
   )
 }

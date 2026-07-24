@@ -56,7 +56,6 @@ export function App() {
   const setAudit = useStore((s) => s.setAudit)
   const setTrace = useStore((s) => s.setTrace)
   const setNotifications = useStore((s) => s.setNotifications)
-  const setPendingToolApproval = useStore((s) => s.setPendingToolApproval)
   const policyEditorOpen = useStore((s) => s.policyEditorOpen)
   const setPolicyEditorOpen = useStore((s) => s.setPolicyEditorOpen)
   const views = useLayoutStore((s) => s.views)
@@ -238,8 +237,11 @@ export function App() {
   }, [me?.upn, shouldHydrateSelectedRun, setRuns, setActiveRun])
 
   // Reload notifications on identity change so each user only sees their own.
+  // Hydrate pending approval for the bell — never open the modal and never mark
+  // dismissed (that poisoned live SSE opens after setApprovalModalOpen(false)).
   useEffect(() => {
     if (!me) return
+    const hydrate = useStore.getState().hydratePendingToolApproval
     api.listNotifications(50).then((items) => {
       setNotifications(items)
       const pendingNote = items.find((n) => n.type === "approval.required" && !n.read)
@@ -247,7 +249,7 @@ export function App() {
       if (!pendingNote?.runId) return
       const approveAction = pendingNote.actions.find((a) => a.action === "approve-run-step")
       const toolMatch = pendingNote.message.match(/^Tool "([^"]+)"/)
-      setPendingToolApproval({
+      hydrate({
         approvalId: (approveAction?.data?.approvalId as string | undefined) ?? null,
         runId: pendingNote.runId,
         stepId: pendingNote.stepId ?? "",
@@ -255,14 +257,13 @@ export function App() {
         reason: pendingNote.message.replace(/^Tool "[^"]+" needs approval: /, "") || pendingNote.message,
         notificationId: pendingNote.id,
       })
-      useStore.getState().setApprovalModalOpen(false)
     }).catch((err: unknown) => { console.error("[mia]", err) })
     api.listPendingToolApprovals().then((approvals) => {
       const pending = approvals.find((a) => a.status === "pending")
       if (!pending) return
       const state = useStore.getState()
       if (state.pendingToolApproval?.approvalId) return
-      setPendingToolApproval({
+      hydrate({
         approvalId: pending.id,
         runId: pending.runId,
         stepId: pending.stepId,
@@ -272,9 +273,8 @@ export function App() {
         args: pending.args,
         notificationId: state.pendingToolApproval?.notificationId ?? null,
       })
-      useStore.getState().setApprovalModalOpen(false)
     }).catch((err: unknown) => { console.error("[mia]", err) })
-  }, [me?.upn, setNotifications, setPendingToolApproval])
+  }, [me?.upn, setNotifications])
 
   // Restore the EnvSync widget operator context from the user's most recent
   // manual sync run (env pair + entity type). Plans are hydrated only by
