@@ -33,6 +33,7 @@ import {
   isUserSafeFailureAnswer,
 } from "./agentchat/failureAnswer"
 import { formatToolArgs, formatToolOutput, getToolDetail } from "./agentchat/toolFormat"
+import { collapseResumeRunChains } from "./termchat/collapseResumeChains"
 
 // Web Speech API types
 interface SpeechRecognitionEvent extends Event {
@@ -569,14 +570,16 @@ export function AgentChat() {
     setListening(true)
   }, [listening])
 
-  // Show recent runs as "conversation" (newest first regardless of store order).
-  const recentRuns = useMemo(
-    () =>
-      [...runs]
-        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-        .slice(0, 20),
-    [runs],
-  )
+  // Show recent runs as "conversation" (oldest → newest under the input).
+  // Collapse approval-resume chains so approve does not invent repeated goal bubbles.
+  const recentRuns = useMemo(() => {
+    const chronological = collapseResumeRunChains(
+      [...runs].sort(
+        (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+      ),
+    )
+    return chronological.slice(-20)
+  }, [runs])
 
   useEffect(() => {
     if (recentRuns.length === 0) return
@@ -621,7 +624,7 @@ export function AgentChat() {
                       </div>
                   )}
 
-                  {[...recentRuns].reverse().map((run) => (
+                  {recentRuns.map((run) => (
                       <div key={run.id} className="space-y-2 rounded-lg p-2 relative">
                           <StickyUserGoal align="end" className="mb-3">
                               <div className="flex items-start gap-2 max-w-[95%]">

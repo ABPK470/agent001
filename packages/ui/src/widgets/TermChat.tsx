@@ -91,6 +91,7 @@ import {
 } from "./termchat/parallelFanOut"
 import { ChatFoldBody } from "./termchat/ChatFoldBody"
 import { shouldAutoOpenWorkChip } from "./termchat/workChipFold"
+import { collapseResumeRunChains, resumeChainIds } from "./termchat/collapseResumeChains"
 
 // Local cap mirrors the Fastify route limit. Larger files get a friendly
 // inline error instead of round-tripping for a 413.
@@ -2396,13 +2397,16 @@ export function TermChat({
 
   // Build message list: each "run" is a (user msg, assistant response) pair.
   // Always oldest → newest so the input bar sits under the most recent turn.
+  // Approval resumes spawn child runs with the same goal — collapse those
+  // chains so history is not goal → cancelled → fake "yes" × N.
   const threadRunsChronological = useMemo(() => {
     const scoped = continuityThreadId
       ? runs.filter((r) => r.threadId === continuityThreadId)
       : runs
-    return [...scoped].sort(
+    const sorted = [...scoped].sort(
       (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
     )
+    return collapseResumeRunChains(sorted)
   }, [runs, continuityThreadId])
 
   // Transcript is always oldest → newest. Selecting a run (Threads widget)
@@ -2438,21 +2442,25 @@ export function TermChat({
 
   const hydrateRunTrace = useCallback(async (runId: string) => {
     if (runId === scopedActiveRunId) return
-    const run = runs.find((r) => r.id === runId)
-    if (!run || isRunActiveStatus(run.status)) return
-    if ((run.trace?.length ?? 0) > 0) return
-    if (traceHydratingRef.current.has(runId)) return
+    const chain = resumeChainIds(runId, runs)
+    for (const id of chain) {
+      if (id === scopedActiveRunId) continue
+      const run = runs.find((r) => r.id === id)
+      if (!run || isRunActiveStatus(run.status)) continue
+      if ((run.trace?.length ?? 0) > 0) continue
+      if (traceHydratingRef.current.has(id)) continue
 
-    traceHydratingRef.current.add(runId)
-    try {
-      const rawTrace = await api.getRunTrace(runId)
-      upsertRun({
-        id: runId,
-        trace: rawTrace as TraceEntry[],
-        streamingAnswer: "",
-      })
-    } finally {
-      traceHydratingRef.current.delete(runId)
+      traceHydratingRef.current.add(id)
+      try {
+        const rawTrace = await api.getRunTrace(id)
+        upsertRun({
+          id,
+          trace: rawTrace as TraceEntry[],
+          streamingAnswer: "",
+        })
+      } finally {
+        traceHydratingRef.current.delete(id)
+      }
     }
   }, [scopedActiveRunId, runs, upsertRun])
 
