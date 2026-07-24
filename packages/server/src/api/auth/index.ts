@@ -1,5 +1,6 @@
 export * from "./service/access.js"
 export * from "./service/users.js"
+export * from "./service/viewing-as.js"
 export * from "./routes.js"
 export * from "./state/context.js"
 export * from "./state/identity.js"

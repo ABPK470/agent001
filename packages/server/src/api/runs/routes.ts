@@ -1,7 +1,7 @@
 import { parseBoundaryJson } from "../../internal/parse-json.js"
 
 /**
- * Run transport routes.
+ * Run transport — Personal. Scope from personal.read / personal.write.
  */
 
 import { EventType } from "@mia/agent"
@@ -24,11 +24,7 @@ import { sendUserDownload } from "../../internal/http/attachment-response.js"
 import { MemoryValidationAction } from "../../internal/enums/memory.js"
 import { AuthRequiredError, canAccessRun } from "../auth/service/access.js"
 import { canAccessThread } from "../auth/service/thread-access.js"
-import {
-  canMutatePersonal,
-  tryResolveViewingAs,
-  type ViewingAs,
-} from "../auth/service/viewing-as.js"
+import { personal, viewingAsOf } from "../auth/service/viewing-as.js"
 import { ContinuityError } from "../../runtime/continuity.js"
 import type { AgentOrchestrator } from "../../runtime/orchestrator.js"
 import { listRunArtifactFiles, openRunArtifactStream } from "./run-artifacts.js"
@@ -42,23 +38,10 @@ function withRunCapabilities(run: Run): Run {
 }
 
 
-function resolvePersonal(req: Parameters<typeof tryResolveViewingAs>[0], reply: { code: (n: number) => unknown }): ViewingAs | { error: string } {
-  const resolved = tryResolveViewingAs(req)
-  if (!resolved.ok) {
-    reply.code(resolved.status)
-    return { error: resolved.error }
-  }
-  return resolved.viewingAs
-}
-
-function isViewingAs(value: ViewingAs | { error: string }): value is ViewingAs {
-  return !("error" in value)
-}
-
 export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrchestrator): void {
-  app.get<{ Querystring: { threadId?: string } }>("/api/runs", async (req, reply) => {
-    const viewingAs = resolvePersonal(req, reply)
-    if (!isViewingAs(viewingAs)) return viewingAs
+  app.get<{ Querystring: { threadId?: string } }>("/api/runs", personal.read,
+    async (req, reply) => {
+    const viewingAs = viewingAsOf(req)
     const threadId = req.query.threadId
     if (threadId) {
       const thread = db.getThread(threadId)
@@ -97,9 +80,9 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
     })
   })
 
-  app.get<{ Params: { id: string } }>("/api/runs/:id", async (req, reply) => {
-    const viewingAs = resolvePersonal(req, reply)
-    if (!isViewingAs(viewingAs)) return viewingAs
+  app.get<{ Params: { id: string } }>("/api/runs/:id", personal.read,
+    async (req, reply) => {
+    const viewingAs = viewingAsOf(req)
     const run = db.getRun(req.params.id)
     if (!run || !canAccessRun(viewingAs, run)) {
       reply.code(404)
@@ -188,13 +171,8 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
 
   app.post<{ Body: { goal: string; attachmentIds?: string[]; threadId?: string } }>(
     "/api/runs",
+    personal.write,
     async (req, reply) => {
-      const viewingAs = resolvePersonal(req, reply)
-      if (!isViewingAs(viewingAs)) return viewingAs
-      if (!canMutatePersonal(viewingAs)) {
-        reply.code(403)
-        return { error: "Viewing as another user is read-only for Personal data" }
-      }
       const { goal, attachmentIds, threadId } = req.body
       if (!goal || typeof goal !== "string") {
         reply.code(400)
@@ -244,13 +222,9 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
     }
   )
 
-  app.post<{ Params: { id: string } }>("/api/runs/:id/cancel", async (req, reply) => {
-    const viewingAs = resolvePersonal(req, reply)
-    if (!isViewingAs(viewingAs)) return viewingAs
-    if (!canMutatePersonal(viewingAs)) {
-      reply.code(403)
-      return { error: "Viewing as another user is read-only for Personal data" }
-    }
+  app.post<{ Params: { id: string } }>("/api/runs/:id/cancel", personal.write,
+    async (req, reply) => {
+    const viewingAs = viewingAsOf(req)
     const run = db.getRun(req.params.id)
     if (!run || !canAccessRun(viewingAs, run)) {
       reply.code(404)
@@ -264,13 +238,9 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
     return { ok: true }
   })
 
-  app.post<{ Params: { id: string } }>("/api/runs/:id/resume", async (req, reply) => {
-    const viewingAs = resolvePersonal(req, reply)
-    if (!isViewingAs(viewingAs)) return viewingAs
-    if (!canMutatePersonal(viewingAs)) {
-      reply.code(403)
-      return { error: "Viewing as another user is read-only for Personal data" }
-    }
+  app.post<{ Params: { id: string } }>("/api/runs/:id/resume", personal.write,
+    async (req, reply) => {
+    const viewingAs = viewingAsOf(req)
     const run = db.getRun(req.params.id)
     if (!run || !canAccessRun(viewingAs, run)) {
       reply.code(404)
@@ -285,7 +255,8 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
     return { runId: newRunId }
   })
 
-  app.get("/api/runs/tool-approvals/pending", async (req, reply) => {
+  app.get("/api/runs/tool-approvals/pending", personal.read,
+    async (req, reply) => {
     try {
       const { listPendingToolApprovalsForSession } = await import(
         "../../runtime/service/run-tool-approval.js"
@@ -299,6 +270,7 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
 
   app.post<{ Params: { id: string } }>(
     "/api/runs/tool-approvals/:id/approve",
+    personal.write,
     async (req, reply) => {
       try {
         const { approveRunToolStep } = await import("../../runtime/service/run-tool-approval.js")
@@ -312,6 +284,7 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
 
   app.post<{ Params: { id: string }; Body: { reason?: string } }>(
     "/api/runs/tool-approvals/:id/deny",
+    personal.write,
     async (req, reply) => {
       try {
         const { denyRunToolStep } = await import("../../runtime/service/run-tool-approval.js")
@@ -328,13 +301,9 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
     }
   )
 
-  app.post<{ Params: { id: string } }>("/api/runs/:id/rerun", async (req, reply) => {
-    const viewingAs = resolvePersonal(req, reply)
-    if (!isViewingAs(viewingAs)) return viewingAs
-    if (!canMutatePersonal(viewingAs)) {
-      reply.code(403)
-      return { error: "Viewing as another user is read-only for Personal data" }
-    }
+  app.post<{ Params: { id: string } }>("/api/runs/:id/rerun", personal.write,
+    async (req, reply) => {
+    const viewingAs = viewingAsOf(req)
     const original = db.getRun(req.params.id)
     if (!original || !canAccessRun(viewingAs, original)) {
       reply.code(404)
@@ -351,13 +320,9 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
 
   app.post<{ Params: { id: string }; Body: { response: string } }>(
     "/api/runs/:id/respond",
+    personal.write,
     async (req, reply) => {
-    const viewingAs = resolvePersonal(req, reply)
-    if (!isViewingAs(viewingAs)) return viewingAs
-    if (!canMutatePersonal(viewingAs)) {
-      reply.code(403)
-      return { error: "Viewing as another user is read-only for Personal data" }
-    }
+      const viewingAs = viewingAsOf(req)
       const run = db.getRun(req.params.id)
       if (!run || !canAccessRun(viewingAs, run)) {
         reply.code(404)
@@ -379,13 +344,9 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
 
   app.post<{ Params: { id: string }; Body: { toolCallId: string; message: string } }>(
     "/api/runs/:id/kill-tool",
+    personal.write,
     async (req, reply) => {
-    const viewingAs = resolvePersonal(req, reply)
-    if (!isViewingAs(viewingAs)) return viewingAs
-    if (!canMutatePersonal(viewingAs)) {
-      reply.code(403)
-      return { error: "Viewing as another user is read-only for Personal data" }
-    }
+      const viewingAs = viewingAsOf(req)
       const run = db.getRun(req.params.id)
       if (!run || !canAccessRun(viewingAs, run)) {
         reply.code(404)
@@ -405,9 +366,9 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
     }
   )
 
-  app.get<{ Params: { id: string } }>("/api/runs/:id/trace", async (req, reply) => {
-    const viewingAs = resolvePersonal(req, reply)
-    if (!isViewingAs(viewingAs)) return viewingAs
+  app.get<{ Params: { id: string } }>("/api/runs/:id/trace", personal.read,
+    async (req, reply) => {
+    const viewingAs = viewingAsOf(req)
     const run = db.getRun(req.params.id)
     if (!run || !canAccessRun(viewingAs, run)) {
       reply.code(404)
@@ -419,9 +380,9 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
   /** User download — trace as .txt (streamed to browser, not saved on server). */
   app.get<{ Params: { id: string }; Querystring: { omitCode?: string } }>(
     "/api/runs/:id/export/trace",
+    personal.read,
     async (req, reply) => {
-    const viewingAs = resolvePersonal(req, reply)
-    if (!isViewingAs(viewingAs)) return viewingAs
+    const viewingAs = viewingAsOf(req)
     const run = db.getRun(req.params.id)
     if (!run || !canAccessRun(viewingAs, run)) {
       reply.code(404)
@@ -451,9 +412,9 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
   /** User download — trace as .json */
   app.get<{ Params: { id: string }; Querystring: { omitCode?: string } }>(
     "/api/runs/:id/export/trace.json",
+    personal.read,
     async (req, reply) => {
-    const viewingAs = resolvePersonal(req, reply)
-    if (!isViewingAs(viewingAs)) return viewingAs
+    const viewingAs = viewingAsOf(req)
     const run = db.getRun(req.params.id)
     if (!run || !canAccessRun(viewingAs, run)) {
       reply.code(404)
@@ -486,13 +447,9 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
    */
   app.post<{ Params: { id: string }; Body: TableExportRequest }>(
     "/api/runs/:id/export/tables",
+    personal.write,
     async (req, reply) => {
-    const viewingAs = resolvePersonal(req, reply)
-    if (!isViewingAs(viewingAs)) return viewingAs
-    if (!canMutatePersonal(viewingAs)) {
-      reply.code(403)
-      return { error: "Viewing as another user is read-only for Personal data" }
-    }
+      const viewingAs = viewingAsOf(req)
       const run = db.getRun(req.params.id)
       if (!run || !canAccessRun(viewingAs, run)) {
         reply.code(404)
@@ -530,9 +487,9 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
   )
 
   /** List files in the run sandbox the user may download. */
-  app.get<{ Params: { id: string } }>("/api/runs/:id/artifacts", async (req, reply) => {
-    const viewingAs = resolvePersonal(req, reply)
-    if (!isViewingAs(viewingAs)) return viewingAs
+  app.get<{ Params: { id: string } }>("/api/runs/:id/artifacts", personal.read,
+    async (req, reply) => {
+    const viewingAs = viewingAsOf(req)
     const run = db.getRun(req.params.id)
     if (!run || !canAccessRun(viewingAs, run)) {
       reply.code(404)
@@ -547,9 +504,9 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
   })
 
   /** User download — single sandbox file (path after /artifacts/). */
-  app.get<{ Params: { id: string; "*": string } }>("/api/runs/:id/artifacts/*", async (req, reply) => {
-    const viewingAs = resolvePersonal(req, reply)
-    if (!isViewingAs(viewingAs)) return viewingAs
+  app.get<{ Params: { id: string; "*": string } }>("/api/runs/:id/artifacts/*", personal.read,
+    async (req, reply) => {
+    const viewingAs = viewingAsOf(req)
     const run = db.getRun(req.params.id)
     if (!run || !canAccessRun(viewingAs, run)) {
       reply.code(404)
@@ -574,13 +531,9 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
 
   app.post<{ Params: { id: string }; Body: { useful: boolean; note?: string } }>(
     "/api/runs/:id/feedback",
+    personal.write,
     async (req, reply) => {
-    const viewingAs = resolvePersonal(req, reply)
-    if (!isViewingAs(viewingAs)) return viewingAs
-    if (!canMutatePersonal(viewingAs)) {
-      reply.code(403)
-      return { error: "Viewing as another user is read-only for Personal data" }
-    }
+      const viewingAs = viewingAsOf(req)
       const run = db.getRun(req.params.id)
       if (!run || !canAccessRun(viewingAs, run)) {
         reply.code(404)
@@ -598,9 +551,9 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
     }
   )
 
-  app.get<{ Params: { id: string } }>("/api/runs/:id/workspace-diff", async (req, reply) => {
-    const viewingAs = resolvePersonal(req, reply)
-    if (!isViewingAs(viewingAs)) return viewingAs
+  app.get<{ Params: { id: string } }>("/api/runs/:id/workspace-diff", personal.read,
+    async (req, reply) => {
+    const viewingAs = viewingAsOf(req)
     const run = db.getRun(req.params.id)
     if (!run || !canAccessRun(viewingAs, run)) {
       reply.code(404)
@@ -624,13 +577,9 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
     }
   })
 
-  app.post<{ Params: { id: string } }>("/api/runs/:id/workspace-diff/apply", async (req, reply) => {
-    const viewingAs = resolvePersonal(req, reply)
-    if (!isViewingAs(viewingAs)) return viewingAs
-    if (!canMutatePersonal(viewingAs)) {
-      reply.code(403)
-      return { error: "Viewing as another user is read-only for Personal data" }
-    }
+  app.post<{ Params: { id: string } }>("/api/runs/:id/workspace-diff/apply", personal.write,
+    async (req, reply) => {
+    const viewingAs = viewingAsOf(req)
     const run = db.getRun(req.params.id)
     if (!run || !canAccessRun(viewingAs, run)) {
       reply.code(404)
@@ -644,12 +593,14 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
     return { ok: true, runId: req.params.id, applied }
   })
 
-  app.get("/api/runs/active", async (req) => {
+  app.get("/api/runs/active", personal.read,
+    async (req) => {
+    const { viewingAsUpn } = viewingAsOf(req)
     const ids = orchestrator.getActiveRunIds()
     const visible = ids.filter((id) => {
       const run = db.getRun(id)
-      if (!req.session || !run) return false
-      return !!run.upn && run.upn.toLowerCase() === req.session.upn.toLowerCase()
+      if (!run?.upn) return false
+      return run.upn.toLowerCase() === viewingAsUpn.toLowerCase()
     })
     return { runIds: visible }
   })

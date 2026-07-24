@@ -269,6 +269,7 @@ export function createPackageConfigs(root) {
       stateAllowlist: new Set([
         "app/workspace/layout/persistence.ts",
         "lib/popover-dismiss.ts",
+        "lib/viewing-as.ts",
         "state/store.ts",
         "widgets/bridge/transform-draft.ts",
         "widgets/env-sync/exec-store.ts",

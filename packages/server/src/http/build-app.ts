@@ -14,8 +14,8 @@ import { registerBridgeRoutes } from "../api/connectors/handlers/bridge.js"
 import { registerAdminRoutes } from "../api/admin/routes.js"
 import { registerApprovalRoutes } from "../api/approvals/routes.js"
 import { registerAttachmentRoutes } from "../api/attachments/routes.js"
-import { registerAuthRoutes, registerIdentity } from "../api/auth/index.js"
-import { tryResolveViewingAs } from "../api/auth/service/viewing-as.js"
+import { registerAuthRoutes, registerIdentity, registerViewingAs } from "../api/auth/index.js"
+import { personal, viewingAsOf } from "../api/auth/service/viewing-as.js"
 import { registerEventRoutes } from "../api/events/routes.js"
 import { registerEvidenceRoutes } from "../api/evidence/routes.js"
 import { registerLayoutRoutes } from "../api/layouts/routes.js"
@@ -99,6 +99,7 @@ export async function buildApp(opts: BuildAppOptions) {
   // Session facts stay on req.session and are passed explicitly downstream —
   // nothing is stored in AsyncLocalStorage.
   await registerIdentity(app)
+  registerViewingAs(app)
   // Local register / login / config under /api/auth/* (same bypass prefix).
   await registerAuthRoutes(app)
 
@@ -168,16 +169,9 @@ export async function buildApp(opts: BuildAppOptions) {
   // removed in favour of one transport. SSE is also more proxy-friendly
   // (works through HTTP-only reverse proxies that drop Upgrade frames) and
   // browsers handle reconnect automatically via EventSource.
-  app.get("/api/events/stream", (req, reply) => {
-    // registerIdentity's onRequest already resolved a real users-backed
-    // session (cookie or SSO). /api/events/stream is not on the bypass list,
-    // so a missing req.session here means the identity hook is broken — fail loud.
-    // EventSource cannot set headers — resolveViewingAs also reads ?viewingAs=
-    const viewingAsResult = tryResolveViewingAs(req)
-    if (!viewingAsResult.ok) {
-      reply.code(viewingAsResult.status)
-      return reply.send({ error: viewingAsResult.error })
-    }
+  // Personal SSE — Viewing as from ?viewingAs= (EventSource cannot set headers).
+  app.get("/api/events/stream", personal.read, (req, reply) => {
+    const { viewingAsUpn } = viewingAsOf(req)
 
     reply.raw.writeHead(200, {
       "Content-Type": "text/event-stream",
@@ -192,7 +186,7 @@ export async function buildApp(opts: BuildAppOptions) {
       upn: req.session.upn,
       sid: req.session.sid,
       isAdmin: req.session.isAdmin,
-      viewingAsUpn: viewingAsResult.viewingAs.viewingAsUpn,
+      viewingAsUpn,
     })
 
     // ── Liveness ────────────────────────────────────────────────

@@ -1,11 +1,15 @@
 /**
- * Viewing as — whose Personal data this request may see.
+ * Viewing as — shell-owned Personal scope.
  *
- * Me = session.upn. Admins may send X-Viewing-As (or ?viewingAs= for EventSource)
- * to read another user’s Personal data. Platform routes ignore this helper.
+ * Composition root for “whose Personal data may this request see?”.
+ * Personal routes declare `personal.read` / `personal.write` preHandlers.
+ * Handlers consume `viewingAsOf(req)` — they never resolve the header.
+ * Platform routes never register these preHandlers and never read Viewing as.
+ *
+ * Transport: X-Viewing-As on fetch; ?viewingAs= for EventSource (no custom headers).
  */
 
-import type { FastifyRequest } from "fastify"
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify"
 import { findUserByUpn } from "../../../infra/persistence/db/users.js"
 import type { CurrentSession } from "../../../ports/session.js"
 
@@ -20,11 +24,21 @@ export type ViewingAs = {
 }
 
 export class ViewingAsError extends Error {
-  readonly status: 401 | 403
-  constructor(status: 401 | 403, message: string) {
+  readonly statusCode: 401 | 403
+  constructor(statusCode: 401 | 403, message: string) {
     super(message)
     this.name = "ViewingAsError"
-    this.status = status
+    this.statusCode = statusCode
+  }
+}
+
+declare module "fastify" {
+  interface FastifyRequest {
+    /**
+     * Set only by personal.read / personal.write preHandlers.
+     * Platform routes leave this undefined — do not read it there.
+     */
+    viewingAs: ViewingAs | undefined
   }
 }
 
@@ -47,8 +61,8 @@ function queryViewingAs(req: FastifyRequest): string | undefined {
 }
 
 /**
- * Resolve Viewing as for a Personal request.
- * EventSource cannot set headers — `?viewingAs=` is accepted with the same rules.
+ * Pure resolve — owned by this module and its tests.
+ * Routes declare `personal.read` / `personal.write`; handlers use `viewingAsOf`.
  */
 export function resolveViewingAs(req: FastifyRequest): ViewingAs {
   const session = req.session
@@ -87,7 +101,6 @@ export function canAccessOwned(
   return sameUpn(owner, viewingAs.viewingAsUpn)
 }
 
-/** Personal writes only when Viewing as Me. */
 export function canMutatePersonal(viewingAs: ViewingAs): boolean {
   return viewingAs.isMe
 }
@@ -98,17 +111,33 @@ export function requirePersonalWrite(viewingAs: ViewingAs): void {
   }
 }
 
-export type ViewingAsResult =
-  | { ok: true; viewingAs: ViewingAs }
-  | { ok: false; status: 401 | 403; error: string }
-
-export function tryResolveViewingAs(req: FastifyRequest): ViewingAsResult {
-  try {
-    return { ok: true, viewingAs: resolveViewingAs(req) }
-  } catch (err) {
-    if (err instanceof ViewingAsError) {
-      return { ok: false, status: err.status, error: err.message }
-    }
-    throw err
+/** Handler accessor — Personal preHandler must have run. */
+export function viewingAsOf(req: FastifyRequest): ViewingAs {
+  const viewingAs = req.viewingAs
+  if (!viewingAs) {
+    throw new Error("Personal route missing personal.read / personal.write preHandler")
   }
+  return viewingAs
+}
+
+/** Personal GET / list / stream — resolve Viewing as onto the request. */
+export async function personalRead(req: FastifyRequest, _reply: FastifyReply): Promise<void> {
+  req.viewingAs = resolveViewingAs(req)
+}
+
+/** Personal POST / PATCH / DELETE — resolve Viewing as and require Me. */
+export async function personalWrite(req: FastifyRequest, _reply: FastifyReply): Promise<void> {
+  req.viewingAs = resolveViewingAs(req)
+  requirePersonalWrite(req.viewingAs)
+}
+
+/** Route option bundles — declare Personal class at registration. */
+export const personal = {
+  read: { preHandler: personalRead },
+  write: { preHandler: personalWrite },
+} as const
+
+/** Decorate request; call once from HTTP composition root after identity. */
+export function registerViewingAs(app: FastifyInstance): void {
+  app.decorateRequest("viewingAs", undefined)
 }

@@ -1,7 +1,7 @@
 import { parseBoundaryJson } from "../../internal/parse-json.js"
 
 /**
- * Notification transport routes.
+ * Notification transport — Personal. Scope from personal.read / personal.write.
  */
 
 import {
@@ -12,11 +12,7 @@ import {
 import type { FastifyInstance } from "fastify"
 import * as db from "../../infra/persistence/sqlite.js"
 import { canAccessRun } from "../auth/service/access.js"
-import {
-  canMutatePersonal,
-  tryResolveViewingAs,
-  type ViewingAs,
-} from "../auth/service/viewing-as.js"
+import { personal, viewingAsOf, type ViewingAs } from "../auth/service/viewing-as.js"
 import {
   filterNotificationActionsForCapabilities,
   runCapabilityFlags,
@@ -33,14 +29,10 @@ function canSee(
 }
 
 export function registerNotificationRoutes(app: FastifyInstance, orchestrator: AgentOrchestrator): void {
-  app.get<{ Querystring: { limit?: string } }>("/api/notifications", async (req, reply) => {
-    const resolved = tryResolveViewingAs(req)
-    if (!resolved.ok) {
-      reply.code(resolved.status)
-      return { error: resolved.error }
-    }
+  app.get<{ Querystring: { limit?: string } }>("/api/notifications", personal.read, async (req) => {
+    const { viewingAsUpn } = viewingAsOf(req)
     const limit = Math.min(Number(req.query.limit) || 50, 200)
-    const notifications = db.listNotificationsForUser(resolved.viewingAs.viewingAsUpn, limit)
+    const notifications = db.listNotificationsForUser(viewingAsUpn, limit)
     return notifications.map((notification) => {
       const actions = parseBoundaryJson(notification.actions) as NotificationAction[]
       return {
@@ -57,29 +49,15 @@ export function registerNotificationRoutes(app: FastifyInstance, orchestrator: A
     })
   })
 
-  app.get("/api/notifications/unread-count", async (req, reply) => {
-    const resolved = tryResolveViewingAs(req)
-    if (!resolved.ok) {
-      reply.code(resolved.status)
-      return { error: resolved.error }
-    }
-    return {
-      count: db.getUnreadNotificationCountForUser(resolved.viewingAs.viewingAsUpn)
-    }
+  app.get("/api/notifications/unread-count", personal.read, async (req) => {
+    const { viewingAsUpn } = viewingAsOf(req)
+    return { count: db.getUnreadNotificationCountForUser(viewingAsUpn) }
   })
 
-  app.post<{ Params: { id: string } }>("/api/notifications/:id/read", async (req, reply) => {
-    const resolved = tryResolveViewingAs(req)
-    if (!resolved.ok) {
-      reply.code(resolved.status)
-      return { error: resolved.error }
-    }
-    if (!canMutatePersonal(resolved.viewingAs)) {
-      reply.code(403)
-      return { error: "Viewing as another user is read-only for Personal data" }
-    }
+  app.post<{ Params: { id: string } }>("/api/notifications/:id/read", personal.write, async (req, reply) => {
+    const viewingAs = viewingAsOf(req)
     const notification = db.getNotification(req.params.id)
-    if (!notification || !canSee(resolved.viewingAs, notification)) {
+    if (!notification || !canSee(viewingAs, notification)) {
       reply.code(404)
       return { error: "Not found" }
     }
@@ -87,17 +65,9 @@ export function registerNotificationRoutes(app: FastifyInstance, orchestrator: A
     return { ok: true }
   })
 
-  app.post("/api/notifications/read-all", async (req, reply) => {
-    const resolved = tryResolveViewingAs(req)
-    if (!resolved.ok) {
-      reply.code(resolved.status)
-      return { error: resolved.error }
-    }
-    if (!canMutatePersonal(resolved.viewingAs)) {
-      reply.code(403)
-      return { error: "Viewing as another user is read-only for Personal data" }
-    }
-    const notifications = db.listNotificationsForUser(resolved.viewingAs.viewingAsUpn, 10_000)
+  app.post("/api/notifications/read-all", personal.write, async (req) => {
+    const { viewingAsUpn } = viewingAsOf(req)
+    const notifications = db.listNotificationsForUser(viewingAsUpn, 10_000)
     for (const notification of notifications)
       if (notification.read === 0) db.markNotificationRead(notification.id)
     return { ok: true }
@@ -105,18 +75,11 @@ export function registerNotificationRoutes(app: FastifyInstance, orchestrator: A
 
   app.post<{ Params: { id: string }; Body: { action: string; data?: Record<string, unknown> } }>(
     "/api/notifications/:id/action",
+    personal.write,
     async (req, reply) => {
-      const resolved = tryResolveViewingAs(req)
-      if (!resolved.ok) {
-        reply.code(resolved.status)
-        return { error: resolved.error }
-      }
-      if (!canMutatePersonal(resolved.viewingAs)) {
-        reply.code(403)
-        return { error: "Viewing as another user is read-only for Personal data" }
-      }
+      const viewingAs = viewingAsOf(req)
       const notification = db.getNotification(req.params.id)
-      if (!notification || !canSee(resolved.viewingAs, notification)) {
+      if (!notification || !canSee(viewingAs, notification)) {
         reply.code(404)
         return { error: "Not found" }
       }

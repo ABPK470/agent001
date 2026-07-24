@@ -3,7 +3,7 @@
  */
 
 import { parseBoundaryJson } from "../lib/parse-json.js"
-import { getViewingAsUpn } from "../app/viewing-as"
+import { getViewingAsUpn } from "../lib/viewing-as"
 
 import type {
     EntityRegistryDraftSuggestion,

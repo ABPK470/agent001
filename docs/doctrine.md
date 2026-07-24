@@ -126,11 +126,13 @@ One owned concept in the platform shell. Same words in UI, code, and docs.
 | **Personal** | Work product (threads, runs, Env Sync history, pipelines, live logs). Follows Viewing as. |
 | **Platform** | Shared deploy truth (policies, entity registry, connectors, Sync Admin, Usage, Audit, Active Users). Ignores Viewing as. |
 
-**Owner:** auth composition root (`resolveViewingAs`) + app chrome (`viewingAsUpn`). Not widgets. Not agent/sync cores.
+**Owner (server):** auth composition root — `registerViewingAs` + `personal.read` / `personal.write` preHandlers. Resolve once onto `req.viewingAs`. Handlers only call `viewingAsOf(req)` (or ignore Viewing as for Me-only writes). They never call `resolveViewingAs` and never re-check the header.
+
+**Owner (UI):** app chrome (`viewingAsUpn` / Viewing as control). Widgets may read `isViewingAsOther` for quiet chrome (disable Personal writes). Not widgets as scope owners. Not agent/sync cores. Do not pass `userId` into widgets.
 
 **Transport:** `X-Viewing-As` on fetch; `?viewingAs=` for EventSource (cannot set headers). Omit when Me.
 
-**Laws:** Personal lists/gets/SSE filter to Viewing as UPN. Personal writes only when Me. Platform routes ignore the header. Do not pass `userId` into widgets. Admin keeps their own dashboard layout when Viewing as someone else.
+**Laws:** Personal routes **declare** `personal.read` or `personal.write` at registration. Lists/gets/SSE filter to Viewing as UPN. Personal writes only when Me (`personal.write`). Platform routes omit those preHandlers and never read Viewing as. Admin keeps their own dashboard layout when Viewing as someone else.
 
 **Do not call it** workspace subject, inspect, fleet, impersonation, or context switcher.
 

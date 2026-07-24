@@ -23,7 +23,7 @@ export function ViewingAsControl(): ReactNode {
     if (!open || !canViewAs) return
     let cancelled = false
     setLoading(true)
-    void api.adminUsers()
+    api.adminUsers()
       .then((res) => {
         if (cancelled) return
         setUsers(
@@ -35,7 +35,8 @@ export function ViewingAsControl(): ReactNode {
             })),
         )
       })
-      .catch(() => {
+      .catch((err: unknown) => {
+        console.warn("[mia] Viewing as user list failed", err)
         if (!cancelled) setUsers([])
       })
       .finally(() => {

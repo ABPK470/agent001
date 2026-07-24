@@ -1,10 +1,10 @@
 import { parseBoundaryJson } from "../../internal/parse-json.js"
 
 /**
- * Operation log transport routes (Personal — follows Viewing as).
+ * Operation log transport — Personal. Scope from personal.read.
  */
 
-import type { FastifyInstance } from "fastify"
+import type { FastifyInstance, FastifyReply } from "fastify"
 import { subscribeToEvents } from "../../infra/events/broadcaster.js"
 import { searchEvents } from "../../infra/persistence/events.js"
 import { isOperationLogEvent } from "./service/query/operation-log-events.js"
@@ -13,23 +13,35 @@ import {
   OPERATIONS_HEAD_EVENT_LIMIT,
   OPERATIONS_PAGE_EVENT_LIMIT
 } from "./service/query/index.js"
-import type { ListOperationsOpts } from "./service/query/types.js"
-import { tryResolveViewingAs } from "../auth/service/viewing-as.js"
+import { personal, viewingAsOf } from "../auth/service/viewing-as.js"
 import { eventMatchesViewingAs } from "../auth/service/event-viewing-as.js"
 
 /** Debounce SSE snapshots so bursty event streams do not rebuild the log continuously. */
 const OPERATIONS_STREAM_DEBOUNCE_MS = 1500
 
-function viewerScope(req: Parameters<typeof tryResolveViewingAs>[0]): Pick<ListOperationsOpts, "viewerUpn"> | { error: string; status: number } {
-  const resolved = tryResolveViewingAs(req)
-  if (!resolved.ok) return { error: resolved.error, status: resolved.status }
-  return { viewerUpn: resolved.viewingAs.viewingAsUpn }
+type OperationsStreamFilters = {
+  kind: string | undefined
+  search: string | undefined
+  viewerUpn: string
 }
 
-function isScopeError(
-  scope: Pick<ListOperationsOpts, "viewerUpn"> | { error: string; status: number },
-): scope is { error: string; status: number } {
-  return "error" in scope
+function writeOperationsSse(reply: FastifyReply, data: unknown): boolean {
+  try {
+    reply.raw.write(`data: ${JSON.stringify(data)}\n\n`)
+    return true
+  } catch {
+    return false
+  }
+}
+
+function pushOperationsHeadSnapshot(reply: FastifyReply, filters: OperationsStreamFilters): boolean {
+  const snapshot = listOperations({
+    limit: OPERATIONS_HEAD_EVENT_LIMIT,
+    kind: filters.kind,
+    search: filters.search,
+    viewerUpn: filters.viewerUpn,
+  })
+  return writeOperationsSse(reply, { ...snapshot, live: true })
 }
 
 export function registerOperationRoutes(app: FastifyInstance): void {
@@ -43,12 +55,8 @@ export function registerOperationRoutes(app: FastifyInstance): void {
       planId?: string
       runId?: string
     }
-  }>("/api/operations", async (req, reply) => {
-    const scope = viewerScope(req)
-    if (isScopeError(scope)) {
-      reply.code(scope.status)
-      return { error: scope.error }
-    }
+  }>("/api/operations", personal.read, async (req) => {
+    const { viewingAsUpn } = viewingAsOf(req)
     const limit = Math.min(Number(req.query.limit) || OPERATIONS_PAGE_EVENT_LIMIT, 10_000)
     return listOperations({
       limit,
@@ -58,17 +66,13 @@ export function registerOperationRoutes(app: FastifyInstance): void {
       status: req.query.status,
       planId: req.query.planId,
       runId: req.query.runId,
-      ...scope,
+      viewerUpn: viewingAsUpn,
     })
   })
 
-  app.get<{ Params: { planId: string } }>("/api/operations/plan/:planId", async (req, reply) => {
-    const scope = viewerScope(req)
-    if (isScopeError(scope)) {
-      reply.code(scope.status)
-      return { error: scope.error }
-    }
-    const result = listOperations({ planId: req.params.planId, ...scope })
+  app.get<{ Params: { planId: string } }>("/api/operations/plan/:planId", personal.read, async (req, reply) => {
+    const { viewingAsUpn } = viewingAsOf(req)
+    const result = listOperations({ planId: req.params.planId, viewerUpn: viewingAsUpn })
     if (result.operations.length === 0) {
       reply.code(403)
       return { error: "forbidden" }
@@ -76,13 +80,9 @@ export function registerOperationRoutes(app: FastifyInstance): void {
     return result
   })
 
-  app.get<{ Params: { runId: string } }>("/api/operations/run/:runId", async (req, reply) => {
-    const scope = viewerScope(req)
-    if (isScopeError(scope)) {
-      reply.code(scope.status)
-      return { error: scope.error }
-    }
-    const result = listOperations({ runId: req.params.runId, ...scope })
+  app.get<{ Params: { runId: string } }>("/api/operations/run/:runId", personal.read, async (req, reply) => {
+    const { viewingAsUpn } = viewingAsOf(req)
+    const result = listOperations({ runId: req.params.runId, viewerUpn: viewingAsUpn })
     if (result.operations.length === 0) {
       reply.code(403)
       return { error: "forbidden" }
@@ -92,12 +92,12 @@ export function registerOperationRoutes(app: FastifyInstance): void {
 
   app.get<{
     Querystring: { kind?: string; search?: string; viewingAs?: string }
-  }>("/api/operations/stream", (req, reply) => {
-    const scope = viewerScope(req)
-    if (isScopeError(scope)) {
-      reply.code(scope.status)
-      reply.send({ error: scope.error })
-      return
+  }>("/api/operations/stream", personal.read, (req, reply) => {
+    const { viewingAsUpn } = viewingAsOf(req)
+    const filters: OperationsStreamFilters = {
+      kind: req.query.kind,
+      search: req.query.search,
+      viewerUpn: viewingAsUpn,
     }
 
     reply.raw.writeHead(200, {
@@ -107,22 +107,6 @@ export function registerOperationRoutes(app: FastifyInstance): void {
       "X-Accel-Buffering": "no"
     })
 
-    const streamFilters = {
-      kind: req.query.kind,
-      search: req.query.search,
-      viewerUpn: scope.viewerUpn,
-    }
-
-    const send = (data: unknown): boolean => {
-      try {
-        reply.raw.write(`data: ${JSON.stringify(data)}\n\n`)
-        return true
-      } catch {
-        return false
-      }
-    }
-
-    // Connected comment only — the client loads via REST; SSE pushes debounced head snapshots.
     try {
       reply.raw.write(`: connected\n\n`)
     } catch {
@@ -130,20 +114,15 @@ export function registerOperationRoutes(app: FastifyInstance): void {
     }
 
     let debounce: ReturnType<typeof setTimeout> | null = null
-    const pushHeadSnapshot = (): void => {
-      const snapshot = listOperations({
-        limit: OPERATIONS_HEAD_EVENT_LIMIT,
-        kind: streamFilters.kind,
-        search: streamFilters.search,
-        viewerUpn: streamFilters.viewerUpn,
-      })
-      if (!send({ ...snapshot, live: true })) unsubscribe()
-    }
-
     const unsubscribe = subscribeToEvents((event) => {
       if (!isOperationLogEvent(event.type)) return
       if (debounce) clearTimeout(debounce)
-      debounce = setTimeout(pushHeadSnapshot, OPERATIONS_STREAM_DEBOUNCE_MS)
+      debounce = setTimeout(() => {
+        if (!pushOperationsHeadSnapshot(reply, filters)) {
+          unsubscribe()
+          if (debounce) clearTimeout(debounce)
+        }
+      }, OPERATIONS_STREAM_DEBOUNCE_MS)
     })
 
     const heartbeat = setInterval(() => {
@@ -152,6 +131,7 @@ export function registerOperationRoutes(app: FastifyInstance): void {
       } catch {
         clearInterval(heartbeat)
         unsubscribe()
+        if (debounce) clearTimeout(debounce)
       }
     }, 25_000)
 
@@ -173,12 +153,8 @@ export function registerOperationRoutes(app: FastifyInstance): void {
       since?: string
       until?: string
     }
-  }>("/api/events/search", async (req, reply) => {
-    const scope = viewerScope(req)
-    if (isScopeError(scope)) {
-      reply.code(scope.status)
-      return { error: scope.error }
-    }
+  }>("/api/events/search", personal.read, async (req) => {
+    const { viewingAsUpn } = viewingAsOf(req)
     const q = (req.query.q ?? "").trim()
     const types = req.query.type ? req.query.type.split(",") : undefined
     const typePatterns = req.query.type_patterns ? req.query.type_patterns.split(",") : undefined
@@ -216,7 +192,7 @@ export function registerOperationRoutes(app: FastifyInstance): void {
         data: parseBoundaryJson(row.data) as Record<string, unknown>,
         timestamp: row.created_at
       }))
-      .filter((event) => eventMatchesViewingAs(event.data, scope.viewerUpn!))
+      .filter((event) => eventMatchesViewingAs(event.data, viewingAsUpn))
     return { events, count: events.length }
   })
 }

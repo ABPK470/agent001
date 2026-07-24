@@ -137,6 +137,44 @@ export function lintResolvedInputFolklore(packages) {
   }
 }
 
+/**
+ * Viewing as is shell-owned (doctrine §5b).
+ * resolveViewingAs lives only in auth/service/viewing-as.ts (+ tests).
+ * Handlers consume viewingAsOf after personal.read / personal.write.
+ */
+export function lintViewingAsShellOwnership(packages) {
+  const pkg = packages.server
+  if (!pkg || !existsSync(pkg.src)) return
+  const ownerRel = "api/auth/service/viewing-as.ts"
+  for (const file of walk(pkg.src)) {
+    const rel = relToPkg(pkg.src, file).replace(/\\/g, "/")
+    if (rel === ownerRel) continue
+    if (rel.endsWith(".test.ts")) continue
+    const sf = parseSourceFile(file)
+    const visit = (node) => {
+      if (ts.isIdentifier(node) && node.text === "resolveViewingAs") {
+        // Allow type-only / import of the name only in owner; elsewhere any use is a leak.
+        fail(
+          file,
+          lineOf(sf, node),
+          "viewing-as-shell",
+          `resolveViewingAs is owned by api/auth/service/viewing-as.ts — declare personal.read / personal.write and use viewingAsOf(req). See docs/doctrine.md §5b.`,
+        )
+      }
+      if (ts.isIdentifier(node) && node.text === "tryResolveViewingAs") {
+        fail(
+          file,
+          lineOf(sf, node),
+          "viewing-as-shell",
+          `tryResolveViewingAs is erased — declare personal.read / personal.write and use viewingAsOf(req). See docs/doctrine.md §5b.`,
+        )
+      }
+      ts.forEachChild(node, visit)
+    }
+    visit(sf)
+  }
+}
+
 /** api/ must not import runtime/execution internals (type-only from runtime root is OK). */
 export function lintServerApiRuntimeBoundary(packages) {
   const pkg = packages.server

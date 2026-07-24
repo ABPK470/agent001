@@ -41,7 +41,7 @@ import {
 import { rebuildLiveSyncEnvironments } from "./state/live-environments.js"
 import { registerSyncMetadataRoutes } from "./handlers/sync-metadata-routes.js"
 import { registerPreviewExecuteRoutes } from "./handlers/preview-execute.js"
-import { canAccessOwned, tryResolveViewingAs } from "../auth/service/viewing-as.js"
+import { canAccessOwned, personal, viewingAsOf } from "../auth/service/viewing-as.js"
 import {
   runRegisteredSyncExecute,
   SYNC_EXECUTE_OPERATION,
@@ -609,13 +609,9 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
       to?: string
       sort?: string
     }
-  }>("/api/sync/history", async (req, reply) => {
-    const resolved = tryResolveViewingAs(req)
-    if (!resolved.ok) {
-      reply.code(resolved.status)
-      return { error: resolved.error }
-    }
-    const filters = parseSyncHistoryQuery(req.query, resolved.viewingAs.viewingAsUpn)
+  }>("/api/sync/history", personal.read, async (req) => {
+    const { viewingAsUpn } = viewingAsOf(req)
+    const filters = parseSyncHistoryQuery(req.query, viewingAsUpn)
     const total = db.countSyncRuns(filters)
     const rows = db.listSyncRunsPaginated(filters)
     const totalPages = total === 0 ? 0 : Math.ceil(total / filters.pageSize)
@@ -628,18 +624,14 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
     }
   })
 
-  app.get<{ Params: { planId: string } }>("/api/sync/history/:planId", async (req, reply) => {
-    const resolved = tryResolveViewingAs(req)
-    if (!resolved.ok) {
-      reply.code(resolved.status)
-      return { error: resolved.error }
-    }
+  app.get<{ Params: { planId: string } }>("/api/sync/history/:planId", personal.read, async (req, reply) => {
+    const viewingAs = viewingAsOf(req)
     const row = db.getSyncRun(req.params.planId)
     if (!row) {
       reply.code(404)
       return { error: `Sync run ${req.params.planId} not found` }
     }
-    if (!canAccessOwned(resolved.viewingAs, row.actor_upn)) {
+    if (!canAccessOwned(viewingAs, row.actor_upn)) {
       reply.code(403)
       return { error: "forbidden" }
     }
@@ -668,18 +660,14 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
   app.get<{
     Params: { planId: string }
     Querystring: { limit?: string; offset?: string }
-  }>("/api/sync/history/:planId/sql-trace", async (req, reply) => {
-    const resolved = tryResolveViewingAs(req)
-    if (!resolved.ok) {
-      reply.code(resolved.status)
-      return { error: resolved.error }
-    }
+  }>("/api/sync/history/:planId/sql-trace", personal.read, async (req, reply) => {
+    const viewingAs = viewingAsOf(req)
     const row = db.getSyncRun(req.params.planId)
     if (!row) {
       reply.code(404)
       return { error: `Sync run ${req.params.planId} not found` }
     }
-    if (!canAccessOwned(resolved.viewingAs, row.actor_upn)) {
+    if (!canAccessOwned(viewingAs, row.actor_upn)) {
       reply.code(403)
       return { error: "forbidden" }
     }

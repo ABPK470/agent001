@@ -150,8 +150,9 @@ continues; cancel / kill abort registered signals.
 
 **Identity.** SQLite (`users` / `sessions`). Session resolved at the HTTP
 boundary and passed explicitly downstream. Admin is a column, not a bypass of
-policy. **Viewing as** (admin-only) selects whose Personal data the shell
-shows; Platform surfaces ignore it. See `docs/doctrine.md` §5b.
+policy. **Viewing as** (admin-only) is shell-owned: Personal routes declare
+`personal.read` / `personal.write`; handlers consume `viewingAsOf(req)`.
+Platform surfaces omit those preHandlers. See `docs/doctrine.md` §5b.
 
 **Persistence.** One SQLite database (default under `MIA_DATA_DIR` /
 `~/.mia`). Migrations on boot. Plans, evidence, attachments, and caches live

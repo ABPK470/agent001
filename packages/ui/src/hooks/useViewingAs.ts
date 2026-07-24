@@ -6,7 +6,7 @@ import {
   setViewingAs,
   subscribeViewingAs,
   type ViewingAsTarget,
-} from "../app/viewing-as"
+} from "../lib/viewing-as"
 import { useMe } from "./useMe"
 
 function subscribe(onStoreChange: () => void): () => void {

@@ -1,13 +1,13 @@
 import { parseBoundaryJson } from "../../internal/parse-json.js"
 
 /**
- * Event stream transport routes.
+ * Event transport — /api/events is Personal; webhook drains are Platform.
  */
 
 import type { FastifyInstance } from "fastify"
 import { randomUUID } from "node:crypto"
 import * as db from "../../infra/persistence/sqlite.js"
-import { tryResolveViewingAs } from "../auth/service/viewing-as.js"
+import { personal, viewingAsOf } from "../auth/service/viewing-as.js"
 import { eventMatchesViewingAs } from "../auth/service/event-viewing-as.js"
 
 export function registerEventRoutes(app: FastifyInstance): void {
@@ -21,12 +21,8 @@ export function registerEventRoutes(app: FastifyInstance): void {
       types?: string
       exclude_types?: string
     }
-  }>("/api/events", async (req, reply) => {
-    const resolved = tryResolveViewingAs(req)
-    if (!resolved.ok) {
-      reply.code(resolved.status)
-      return { error: resolved.error }
-    }
+  }>("/api/events", personal.read, async (req) => {
+    const { viewingAsUpn } = viewingAsOf(req)
     // Event Stream: cursor pages of surface events (exclude debug.trace by default
     // from the client). Cap keeps a single page cheap; scroll loads older.
     // Over-fetch then filter to Viewing as so pages still fill reasonably.
@@ -67,7 +63,7 @@ export function registerEventRoutes(app: FastifyInstance): void {
         data: parseBoundaryJson(event.data) as Record<string, unknown>,
         timestamp: event.created_at
       }))
-      .filter((event) => eventMatchesViewingAs(event.data, resolved.viewingAs.viewingAsUpn))
+      .filter((event) => eventMatchesViewingAs(event.data, viewingAsUpn))
       .slice(0, limit)
 
     // Newest-first from DB; oldestTimestamp is the cursor for the next older page.

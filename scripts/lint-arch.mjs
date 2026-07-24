@@ -35,6 +35,7 @@ import {
   lintResolvedInputBoundary,
   lintResolvedInputFolklore,
   lintServerApiRuntimeBoundary,
+  lintViewingAsShellOwnership,
 } from "./lint-arch/rules/elasticity.mjs"
 import {
   lintDomainSurface,
@@ -156,6 +157,7 @@ const RUNNERS = new Map([
     lintResolvedInputBoundary(PACKAGES)
     lintResolvedInputFolklore(PACKAGES)
     lintServerApiRuntimeBoundary(PACKAGES)
+    lintViewingAsShellOwnership(PACKAGES)
   }],
   [
     "stale-debt",
