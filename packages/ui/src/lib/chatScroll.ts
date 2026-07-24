@@ -59,6 +59,9 @@ export function parkScrollOnScope(
  *
  * If the user had scrolled *into* the body (header above the viewport),
  * collapse parks on the header instead of leaving scrollTop in the hole.
+ *
+ * Samples for ~280ms so CSS height folds (0fr→1fr) settle without drifting
+ * the header mid-transition.
  */
 export function preserveScrollAnchor(
   button: HTMLElement | null,
@@ -93,9 +96,10 @@ export function preserveScrollAnchor(
     const delta = afterTop - beforeTop
     if (delta !== 0) scrollHost.scrollTop += delta
   }
-  // First frame: React commit. Second: sticky / nest layout settled.
-  requestAnimationFrame(() => {
+  const deadline = performance.now() + 280
+  function tick() {
     adjust()
-    requestAnimationFrame(adjust)
-  })
+    if (performance.now() < deadline) requestAnimationFrame(tick)
+  }
+  requestAnimationFrame(tick)
 }

@@ -89,6 +89,8 @@ import {
   isParallelSubagentFanOut,
   scrollStepToHostTop,
 } from "./termchat/parallelFanOut"
+import { ChatFoldBody } from "./termchat/ChatFoldBody"
+import { shouldAutoOpenWorkChip } from "./termchat/workChipFold"
 
 // Local cap mirrors the Fastify route limit. Larger files get a friendly
 // inline error instead of round-tripping for a 413.
@@ -704,9 +706,8 @@ function ToolPill({
 }
 
 // One agent-loop iteration's worth of tool calls, encapsulated under a
-// single collapsible header. Default-collapsed once the iteration is
-// done so the thread stays scannable; auto-expanded while the
-// iteration is still running so the user sees live activity.
+// single collapsible header. Only the latest work chip stays open (until
+// prose/answer lands); previous chips ease shut via ChatFoldBody.
 function IterationBlock({
   part,
   syncByInvocation,
@@ -721,19 +722,13 @@ function IterationBlock({
   hasNarrativeAfter?: boolean
 }) {
   const { preserveToggle } = useChatScroll()
-  const [open, setOpen] = useState(false)
+  const shouldStayOpen = shouldAutoOpenWorkChip(isLastIteration, hasNarrativeAfter)
+  const [open, setOpen] = useState(shouldStayOpen)
   const userToggledRef = useRef(false)
-  // Live or completed: keep the newest tool block open until a real
-  // assistant prose/answer lands after it. Planner status used to fake
-  // narratives that collapsed tools and looked like the answer.
   useEffect(() => {
     if (userToggledRef.current) return
-    if (isLastIteration && !hasNarrativeAfter) {
-      setOpen(true)
-    } else if (hasNarrativeAfter) {
-      setOpen(false)
-    }
-  }, [isLastIteration, hasNarrativeAfter, part.hasRunning])
+    setOpen(shouldStayOpen)
+  }, [shouldStayOpen])
 
   const buttonRef = useRef<HTMLButtonElement>(null)
   const errored = part.tools.some((p) => p.row.status === "error")
@@ -759,11 +754,12 @@ function IterationBlock({
         <Chevron size={12} strokeWidth={1.5} className="text-text-faint shrink-0" />
         <span>{part.summary}</span>
       </button>
-      {open && (
-        <div className="mt-0.5 pl-4 border-l border-border-subtle ml-[5px]">
-          <IterationToolList tools={part.tools} syncByInvocation={syncByInvocation} stickToBottom={part.hasRunning && isLiveRun} />
-        </div>
-      )}
+      <ChatFoldBody
+        open={open}
+        className="mt-0.5 pl-4 border-l border-border-subtle ml-[5px]"
+      >
+        <IterationToolList tools={part.tools} syncByInvocation={syncByInvocation} stickToBottom={part.hasRunning && isLiveRun} />
+      </ChatFoldBody>
     </div>
   )
 }
@@ -877,7 +873,7 @@ function StepBlock({
   const hasTools = part.tools.length > 0
   const errorBody = part.body?.trim() || ""
   const hasErrorBody = errorBody.length > 0
-  const showBody = open && (hasTools || part.hasRunning || hasErrorBody)
+  const hasBodyContent = hasTools || part.hasRunning || hasErrorBody
   const canToggle = hasTools || hasErrorBody
   const Chevron = open ? ChevronDown : ChevronRight
   // Step gaps are process detail — same muted chrome as successful steps.
@@ -932,9 +928,12 @@ function StepBlock({
           </span>
         ) : null}
       </button>
-      {showBody ? (
-        <div className="mt-0.5 ml-[0.35rem] pl-3 border-l border-border-subtle min-w-0">
-          {hasErrorBody && open ? (
+      {hasBodyContent ? (
+        <ChatFoldBody
+          open={open}
+          className="mt-0.5 ml-[0.35rem] pl-3 border-l border-border-subtle min-w-0"
+        >
+          {hasErrorBody ? (
             <div className="py-0.5 text-[15px] leading-6 text-text-faint whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
               {errorBody}
             </div>
@@ -960,7 +959,7 @@ function StepBlock({
               </span>
             </div>
           ) : null}
-        </div>
+        </ChatFoldBody>
       ) : null}
     </div>
   )
