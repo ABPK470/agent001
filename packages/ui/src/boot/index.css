@@ -3868,11 +3868,11 @@ textarea.input {
 }
 
 .mia-colon-logo--pinch-shed .mia-colon-logo-dot--top {
-  animation: mia-colon-pinch-shed-top 880ms cubic-bezier(0.4, 0, 0.2, 1) both;
+  animation: mia-colon-pinch-shed-top 1200ms cubic-bezier(0.4, 0, 0.2, 1) both;
 }
 
 .mia-colon-logo--pinch-shed .mia-colon-logo-dot--bottom {
-  animation: mia-colon-pinch-shed-bottom 880ms cubic-bezier(0.4, 0, 0.2, 1) both;
+  animation: mia-colon-pinch-shed-bottom 1200ms cubic-bezier(0.4, 0, 0.2, 1) both;
 }
 
 @keyframes mia-colon-rotate-once {
@@ -6928,7 +6928,7 @@ textarea.input {
   min-height: 2.5rem;
 }
 
-/* ── Login brand sequence — one pinch sheds off-white blobs → rotate → live ── */
+/* ── Login brand sequence — : lands → shed/carve MI:A → input ── */
 .intro3-brand-sequence {
   display: inline-flex;
   align-items: center;
@@ -6942,8 +6942,8 @@ textarea.input {
   color: var(--text);
   line-height: 1;
   --wm-colon-w: 0.95em;
-  /* Same settle curve as greeting / colon mark — one chat-size handoff. */
-  transition: font-size 520ms cubic-bezier(0.37, 0, 0.63, 1);
+  /* Flat size handoff — linear, not a camera ease. */
+  transition: font-size 220ms linear;
 }
 
 .intro3-root:not(.intro3-root--hero) .intro3-brand-sequence {
@@ -6993,205 +6993,140 @@ textarea.input {
 }
 
 /*
- * Shed mass — FULL colon height (same as the : mark), off-white.
- * These are the clay blobs that become MI and A — never tiny flakes, never purple.
+ * Two off-white rectangles (MI left, A right). Letters already in the mass.
+ * Carve: replace off-white fill with --bg — what remains is the letters.
  */
-.intro3-wm-ejecta {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  /* Match brand row / colon optical height — full letter box. */
-  width: 0.55em;
+.intro3-wm-clay {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   height: 1em;
-  margin-left: -0.275em;
-  margin-top: -0.5em;
-  border-radius: 0.18em;
-  background: var(--text);
-  opacity: 0;
-  pointer-events: none;
-  z-index: 3;
-  transform-origin: center center;
-  will-change: transform, opacity, width;
-  /* Never inherit accent/purple from the mark. */
-  color: var(--text);
-}
-
-.intro3-wm-letter {
-  position: relative;
-  z-index: 1;
-  display: inline-block;
+  padding: 0 0.06em;
+  border-radius: 0;
   font: inherit;
   font-weight: inherit;
   letter-spacing: inherit;
   line-height: 1;
-  color: inherit;
+  white-space: nowrap;
+  background: var(--text);
+  color: var(--text);
   opacity: 0;
-  will-change: opacity;
+  transform-origin: center center;
 }
 
-.intro3-brand-sequence--closed .intro3-wm-letter,
-.intro3-brand-sequence--closed .intro3-wm-ejecta {
+.intro3-brand-sequence--closed .intro3-wm-clay {
   opacity: 0;
 }
 
-/* Open resting MI:A */
-.intro3-brand-sequence--open .intro3-wm-slot {
+/* Resting MI:A — plate gone, letters as brand ink. */
+.intro3-brand-sequence--open .intro3-wm-slot--pre {
+  width: 1.35em;
+  opacity: 1;
+}
+.intro3-brand-sequence--open .intro3-wm-slot--post {
   width: 0.7em;
   opacity: 1;
 }
-.intro3-brand-sequence--open:not(.intro3-brand-sequence--pinching):not(.intro3-brand-sequence--resolving) .intro3-wm-letter {
+.intro3-brand-sequence--open:not(.intro3-brand-sequence--pinching):not(.intro3-brand-sequence--resolving) .intro3-wm-clay {
   opacity: 1;
-}
-.intro3-brand-sequence--open:not(.intro3-brand-sequence--pinching):not(.intro3-brand-sequence--resolving) .intro3-wm-ejecta {
-  opacity: 0;
-  pointer-events: none;
+  background: transparent;
+  color: inherit;
+  transform: none;
 }
 
-/*
- * ONE pinch (880ms):
- * ~36% (~320ms) dots meet; then full-height off-white blobs shed;
- * letters lock; dots open by the end. ONE pinch only.
- */
-.intro3-brand-sequence--pinching .intro3-wm-slot {
+/* Pinch: seat the two rectangles, then cut (off-white → --bg). */
+.intro3-brand-sequence--pinching .intro3-wm-slot--pre {
+  width: 1.35em;
+  opacity: 1;
+  transition-duration: 420ms;
+  transition-delay: 280ms;
+}
+.intro3-brand-sequence--pinching .intro3-wm-slot--post {
   width: 0.7em;
   opacity: 1;
   transition-duration: 420ms;
   transition-delay: 280ms;
 }
 
-.intro3-brand-sequence--pinching .intro3-wm-ejecta--left {
-  animation: intro3-pinch-blob-left 880ms cubic-bezier(0.4, 0, 0.2, 1) both;
+.intro3-brand-sequence--pinching .intro3-wm-slot--pre .intro3-wm-clay {
+  animation: intro3-clay-pre 1200ms cubic-bezier(0.4, 0, 0.2, 1) both;
 }
-.intro3-brand-sequence--pinching .intro3-wm-ejecta--right {
-  animation: intro3-pinch-blob-right 880ms cubic-bezier(0.4, 0, 0.2, 1) both;
-}
-
-.intro3-brand-sequence--pinching .intro3-wm-letter {
-  animation: intro3-pinch-letter-in 880ms cubic-bezier(0.4, 0, 0.2, 1) both;
+.intro3-brand-sequence--pinching .intro3-wm-slot--post .intro3-wm-clay {
+  animation: intro3-clay-post 1200ms cubic-bezier(0.4, 0, 0.2, 1) both;
 }
 
-/* Resolve — quick fade/collapse of MI:A only. No reverse blobs. */
+/*
+ * Resolve — flat 2D: letters dissolve on the plane (no width squash / pullback).
+ * Width snaps after the fade so layout collapses without reading as mass.
+ */
 .intro3-brand-sequence--resolving .intro3-wm-slot {
-  width: 0;
   opacity: 0;
-  transition:
-    width 280ms cubic-bezier(0.4, 0, 0.2, 1),
-    opacity 180ms ease;
+  transition: opacity 160ms linear;
   transition-delay: 0ms;
 }
-
-.intro3-brand-sequence--resolving .intro3-wm-ejecta {
-  display: none;
-}
-
-.intro3-brand-sequence--resolving .intro3-wm-letter {
+.intro3-brand-sequence--resolving .intro3-wm-clay {
   opacity: 0;
-  transition: opacity 160ms ease;
+  background: transparent;
+  transition: opacity 160ms linear;
+}
+.intro3-brand-sequence--live .intro3-wm-slot {
+  width: 0;
+  opacity: 0;
+  transition: none;
 }
 
-/* Height stays 1em (= colon / letter height) the whole way — only width grows. */
-@keyframes intro3-pinch-blob-left {
-  0%, 32% {
+@keyframes intro3-clay-pre {
+  0%, 30% {
     opacity: 0;
-    width: 0.55em;
-    height: 1em;
-    margin-left: -0.275em;
-    margin-top: -0.5em;
     background: var(--text);
-    transform: translateX(0);
-  }
-  38% {
-    opacity: 1;
-    width: 0.55em;
-    height: 1em;
-    margin-left: -0.275em;
-    margin-top: -0.5em;
-    background: var(--text);
-    transform: translateX(0);
-  }
-  58% {
-    opacity: 1;
-    width: 1.45em;
-    height: 1em;
-    margin-left: -0.725em;
-    margin-top: -0.5em;
-    background: var(--text);
-    transform: translateX(-1.35em);
-  }
-  72% {
-    opacity: 0.9;
-    width: 1.5em;
-    height: 1em;
-    margin-left: -0.75em;
-    margin-top: -0.5em;
-    background: var(--text);
-    transform: translateX(-1.45em);
-  }
-  88%, 100% {
-    opacity: 0;
-    width: 1.5em;
-    height: 1em;
-    margin-left: -0.75em;
-    margin-top: -0.5em;
-    background: var(--text);
-    transform: translateX(-1.5em);
-  }
-}
-
-@keyframes intro3-pinch-blob-right {
-  0%, 32% {
-    opacity: 0;
-    width: 0.55em;
-    height: 1em;
-    margin-left: -0.275em;
-    margin-top: -0.5em;
-    background: var(--text);
-    transform: translateX(0);
-  }
-  38% {
-    opacity: 1;
-    width: 0.55em;
-    height: 1em;
-    margin-left: -0.275em;
-    margin-top: -0.5em;
-    background: var(--text);
-    transform: translateX(0);
-  }
-  58% {
-    opacity: 1;
-    width: 0.85em;
-    height: 1em;
-    margin-left: -0.425em;
-    margin-top: -0.5em;
-    background: var(--text);
+    color: var(--text);
     transform: translateX(1.1em);
   }
-  72% {
-    opacity: 0.9;
-    width: 0.9em;
-    height: 1em;
-    margin-left: -0.45em;
-    margin-top: -0.5em;
+  38% {
+    opacity: 1;
     background: var(--text);
-    transform: translateX(1.15em);
+    color: var(--text);
+    transform: translateX(1.1em);
   }
-  88%, 100% {
-    opacity: 0;
-    width: 0.9em;
-    height: 1em;
-    margin-left: -0.45em;
-    margin-top: -0.5em;
+  58% {
+    opacity: 1;
     background: var(--text);
-    transform: translateX(1.2em);
+    color: var(--text);
+    transform: none;
+  }
+  /* Cut: off-white → page bg; letters remain. */
+  68%, 100% {
+    opacity: 1;
+    background: var(--bg);
+    color: var(--text);
+    transform: none;
   }
 }
 
-@keyframes intro3-pinch-letter-in {
-  0%, 48% {
+@keyframes intro3-clay-post {
+  0%, 30% {
     opacity: 0;
+    background: var(--text);
+    color: var(--text);
+    transform: translateX(-1.1em);
+  }
+  38% {
+    opacity: 1;
+    background: var(--text);
+    color: var(--text);
+    transform: translateX(-1.1em);
+  }
+  58% {
+    opacity: 1;
+    background: var(--text);
+    color: var(--text);
+    transform: none;
   }
   68%, 100% {
     opacity: 1;
+    background: var(--bg);
+    color: var(--text);
+    transform: none;
   }
 }
 
@@ -7205,30 +7140,30 @@ textarea.input {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .intro3-wm-ejecta,
-  .intro3-wm-letter,
+  .intro3-wm-clay,
   .intro3-wm-slot {
     animation: none !important;
     transition: none !important;
   }
-  .intro3-brand-sequence--open .intro3-wm-letter {
+  .intro3-brand-sequence--open .intro3-wm-clay {
     opacity: 1;
-  }
-  .intro3-brand-sequence--open .intro3-wm-ejecta {
-    opacity: 0;
+    background: transparent;
+    color: inherit;
+    transform: none;
   }
 }
 
-/* Colon: forever bitmap size; scale up in hero, ease down with chat settle. */
+
+/* Colon: forever bitmap size; hero uses a larger scale. Leave-hero is flat (linear). */
 .intro3-brand-sequence .intro3-wm-mark,
 .intro3-brand-sequence .mia-colon-logo {
   transform: scale(1);
   transform-origin: center center;
   transition:
-    transform 520ms cubic-bezier(0.37, 0, 0.63, 1),
-    opacity 420ms cubic-bezier(0.2, 0.85, 0.25, 1),
-    filter 420ms cubic-bezier(0.2, 0.85, 0.25, 1),
-    color 480ms ease;
+    transform 220ms linear,
+    opacity 160ms linear,
+    filter 160ms linear,
+    color 280ms linear;
 }
 
 .intro3-root--hero .intro3-brand-sequence .intro3-wm-mark--in,
@@ -7251,7 +7186,7 @@ textarea.input {
 }
 
 .intro3-wm-mark--handoff {
-  animation: intro3-wm-mark-handoff 3360ms cubic-bezier(0.2, 0.85, 0.25, 1) both;
+  animation: intro3-wm-mark-handoff 520ms cubic-bezier(0.2, 0.85, 0.25, 1) both;
 }
 
 @keyframes intro3-wm-mark-handoff {

@@ -158,7 +158,7 @@ export function IntroConversation({
   // arrives, then the input pill, then the header : brand unfolds.
   const [msgs, setMsgs] = useState<Msg[]>([])
   const [inputReady, setInputReady] = useState(false)
-  /** True once greeting + pill have landed — gates the : brand reveal. */
+  /** True once greeting has landed — gates the : / MI:A reveal (input waits for full MI:A). */
   const [brandRevealReady, setBrandRevealReady] = useState(false)
   const [userEngaged, setUserEngaged] = useState(false)
   const userEngagedRef = useRef(false)
@@ -168,7 +168,7 @@ export function IntroConversation({
     setUserEngaged(true)
   }
   const autoplayPhaseRef = useRef<"idle" | "username" | "password" | "done">("idle")
-  // Resolved when the header brand finishes its opening pinch/shed/rotate.
+  // Resolved when the header brand finishes its opening shed/carve (MI:A seated).
   const brandReadyRef = useRef<{ promise: Promise<void>; resolve: () => void } | null>(null)
   if (!brandReadyRef.current) {
     let resolve: () => void = () => {}
@@ -186,6 +186,8 @@ export function IntroConversation({
   const inputRef  = useRef<HTMLInputElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const { reachable: serverReachable } = useServerReachable(true)
+  const serverReachableRef = useRef(serverReachable)
+  useEffect(() => { serverReachableRef.current = serverReachable }, [serverReachable])
 
   useEffect(() => {
     const t = document.title
@@ -193,7 +195,7 @@ export function IntroConversation({
     return () => { document.title = t }
   }, [])
 
-  // Opening: ASCII → greeting → pill land → then : brand may begin.
+  // Opening: ASCII → greeting → wait server → : land → shed/carve MI:A → input (last).
   useEffect(() => {
     let cancelled = false
     const reduced =
@@ -201,29 +203,51 @@ export function IntroConversation({
       && (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false)
     const hold = (ms: number) =>
       new Promise<void>((r) => window.setTimeout(r, reduced ? Math.min(ms, 80) : ms))
+    const waitUntilServer = async (maxMs: number) => {
+      const start = Date.now()
+      while (!serverReachableRef.current && Date.now() - start < maxMs) {
+        await hold(40)
+        if (cancelled) return
+      }
+    }
     const run = async () => {
       await asciiReadyRef.current!.promise
       if (cancelled) return
       await hold(420)
       if (cancelled) return
-      // Quiet open: greeting lands before the header brand.
       await botReply("who am I talking to?", "Loading", reduced ? 80 : 180, {
         quiet: true,
         streamSpeedMs: INTRO_GREETING_SPEED_MS,
       })
       if (cancelled) return
-      await hold(380)
+      await hold(220)
+      if (cancelled) return
+      // Health starts false — do not start MI:A (or unlock input) until probed up.
+      await waitUntilServer(8_000)
+      if (cancelled) return
+      if (!serverReachableRef.current) {
+        // Offline: no MI:A — input may appear without the brand sequence.
+        setInputReady(true)
+        return
+      }
+      // Fresh latch — only the seated MI:A callback may resolve this.
+      {
+        let resolveMia = () => {}
+        const miaDone = new Promise<void>((r) => { resolveMia = r })
+        brandReadyRef.current = { promise: miaDone, resolve: resolveMia }
+      }
+      setBrandRevealReady(true)
+      await brandReadyRef.current.promise
+      if (cancelled) return
+      await hold(reduced ? 40 : 120)
       if (cancelled) return
       setInputReady(true)
-      // Wait for the pill’s opacity/transform land before revealing :.
-      await hold(reduced ? 80 : 560)
-      if (cancelled) return
-      setBrandRevealReady(true)
     }
     void run().catch((err: unknown) => { console.error("[mia]", err) })
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
 
   useEffect(() => {
     if (!inputReady || userEngaged) return
@@ -562,7 +586,7 @@ export function IntroConversation({
           <IntroBrandWordmark
             onBrandReady={() => brandReadyRef.current?.resolve()}
             beginReveal={brandRevealReady}
-            beginResolve={inputReady && !heroComposition}
+            beginResolve={!heroComposition}
             serverReachable={serverReachable}
           />
         </div>

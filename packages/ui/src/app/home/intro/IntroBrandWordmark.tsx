@@ -1,32 +1,22 @@
 /**
- * Intro brand — one pinch that sheds mass:
- * show : → pinch (: → .) sheds full-colon-height off-white blobs into MI / A
- * → colon opens → rotate → live idle until input
- * → on input: quick MI:A remove + downsize (no reverse blobs)
- *
- * TEMP: only the : appearance is slowed (DEBUG_SLOWDOWN). Everything after is 1×.
+ * Intro brand — : lands → pinch sheds two off-white rectangles → carve letters.
+ * No rotate. When MI:A is seated, parent may show the input pill.
+ * On send name: colon only — abort in-flight MI:A, never continue it.
  */
 
 import { useEffect, useRef, useState } from "react"
 import { CHAT_BRAND_LOGO_SIZE } from "../../brand"
 import { Logo } from "../../../components/Logo"
 
-/** Temporary — only slows the : land. Restore to 1 when done inspecting. */
-const DEBUG_SLOWDOWN = 8
-
-const REVEAL_DELAY_MS = 180
-/** Only this beat stays slow. */
-const COLON_LAND_MS = 420 * DEBUG_SLOWDOWN
-const HOLD_BEFORE_PINCH_MS = 180
-const PINCH_MEET_MS = 320
-const PINCH_SHED_MS = 560
-const PINCH_MS = PINCH_MEET_MS + PINCH_SHED_MS
-const ROTATE_MS = 1000
-const HOLD_AFTER_ROTATE_MS = 120
-/** Quick collapse of MI:A + downsize — no reverse blobs. */
-const RESOLVE_MS = 280
-const LIVE_PAUSE_MS = 40
-const RESOLVE_DELAY_MS = 0
+const REVEAL_DELAY_MS = 80
+/** : land — keep in sync with `.intro3-wm-mark--handoff` duration. */
+const COLON_LAND_MS = 520
+const HOLD_BEFORE_PINCH_MS = 200
+/** Meet + shed/carve — keep in sync with clay + pinch-shed CSS. */
+const PINCH_MS = 1200
+const HOLD_AFTER_CARVE_MS = 160
+/** Flat dissolve of MI:A, then snap to live : — no squash / pullback. */
+const RESOLVE_MS = 180
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => window.setTimeout(r, ms))
@@ -36,35 +26,36 @@ type BrandPhase =
   | "boot"
   | "colon"
   | "pinch"
-  | "rotate"
   | "open"
   | "resolve"
   | "live"
 
-function BrandLetter({
-  ch,
+function lettersVisibleIn(phase: BrandPhase): boolean {
+  return phase === "pinch" || phase === "open"
+}
+
+/** Off-white rectangle holding letters already; carve replaces clay with --bg. */
+function BrandMass({
+  text,
   side,
-  index,
 }: {
-  ch: string
+  text: string
   side: "pre" | "post"
-  index: number
 }) {
   return (
     <span
       className={[
         "intro3-wm-slot",
         side === "pre" ? "intro3-wm-slot--pre" : "intro3-wm-slot--post",
-        `intro3-wm-slot--i${index}`,
       ].join(" ")}
       aria-hidden="true"
     >
-      <span className="intro3-wm-letter">{ch}</span>
+      <span className="intro3-wm-clay">{text}</span>
     </span>
   )
 }
 
-/** Header brand: one pinch sheds MI:A → rotate → live : */
+/** Header brand: : → shed/carve MI:A → open (input after). Send → colon only. */
 export function IntroBrandWordmark({
   onBrandReady,
   onBrandLive,
@@ -74,29 +65,43 @@ export function IntroBrandWordmark({
 }: {
   onBrandReady?: () => void
   onBrandLive?: () => void
-  /** Greeting + pill have landed — start the : appearance. */
+  /** Greeting has landed — start the : appearance. */
   beginReveal: boolean
+  /** Name sent (left hero) — colon only; never continue MI:A. */
   beginResolve: boolean
   serverReachable: boolean
 }) {
   const [phase, setPhase] = useState<BrandPhase>("boot")
   const [colonHandoff, setColonHandoff] = useState(false)
-  const [brandReady, setBrandReady] = useState(false)
-  const brandReadyRef = useRef(false)
+  const phaseRef = useRef<BrandPhase>("boot")
+  const skipMiaRef = useRef(false)
   const revealStartedRef = useRef(false)
   const resolveStartedRef = useRef(false)
+  const brandReadyRef = useRef(false)
   const onBrandReadyRef = useRef(onBrandReady)
   const onBrandLiveRef = useRef(onBrandLive)
   useEffect(() => { onBrandReadyRef.current = onBrandReady }, [onBrandReady])
   useEffect(() => { onBrandLiveRef.current = onBrandLive }, [onBrandLive])
+  useEffect(() => { phaseRef.current = phase }, [phase])
 
-  useEffect(() => {
-    if (serverReachable) return
+  function markBrandReady() {
     if (brandReadyRef.current) return
     brandReadyRef.current = true
-    setBrandReady(true)
     onBrandReadyRef.current?.()
-  }, [serverReachable])
+  }
+
+  function goColonOnly(from: BrandPhase) {
+    setColonHandoff(false)
+    if (lettersVisibleIn(from)) {
+      setPhase("resolve")
+      window.setTimeout(() => {
+        setPhase("live")
+      }, RESOLVE_MS)
+    } else {
+      setPhase("live")
+    }
+    markBrandReady()
+  }
 
   useEffect(() => {
     if (phase !== "live") return
@@ -109,72 +114,86 @@ export function IntroBrandWordmark({
     return () => window.clearTimeout(t)
   }, [colonHandoff])
 
+  // Name sent: MI:A off the table — colon only, abort any in-flight reveal.
+  useEffect(() => {
+    if (!serverReachable || !beginResolve) return
+    if (resolveStartedRef.current) return
+    resolveStartedRef.current = true
+    skipMiaRef.current = true
+    goColonOnly(phaseRef.current)
+  }, [beginResolve, serverReachable])
+
   useEffect(() => {
     if (!serverReachable || !beginReveal) return
     if (revealStartedRef.current) return
     revealStartedRef.current = true
+    // Parent installs a fresh ready latch when reveal begins — allow fire again.
+    brandReadyRef.current = false
+
+    // Name already sent before : was due — colon only, never MI:A.
+    if (skipMiaRef.current) {
+      setPhase("live")
+      markBrandReady()
+      return
+    }
+
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches
     if (reduced) {
-      setPhase("open")
-      brandReadyRef.current = true
-      setBrandReady(true)
-      onBrandReadyRef.current?.()
+      setPhase(skipMiaRef.current ? "live" : "open")
+      markBrandReady()
       return
     }
 
     let cancelled = false
+    const aborted = () => cancelled || skipMiaRef.current
+
     const run = async () => {
       await sleep(REVEAL_DELAY_MS)
-      if (cancelled) return
+      if (aborted()) {
+        goColonOnly(phaseRef.current)
+        return
+      }
+      // 1) Logo lands fully.
       setPhase("colon")
       setColonHandoff(true)
       await sleep(COLON_LAND_MS)
-      if (cancelled) return
+      if (aborted()) {
+        goColonOnly(phaseRef.current)
+        return
+      }
       await sleep(HOLD_BEFORE_PINCH_MS)
-      if (cancelled) return
-      // One pinch: : → . sheds full off-white blobs → letters → opens to :
+      if (aborted()) {
+        goColonOnly(phaseRef.current)
+        return
+      }
+      // 2) Shed mass + carve letters (no rotation after).
       setPhase("pinch")
+      if (aborted()) {
+        goColonOnly(phaseRef.current)
+        return
+      }
       await sleep(PINCH_MS)
-      if (cancelled) return
-      setPhase("rotate")
-      await sleep(ROTATE_MS)
-      if (cancelled) return
+      if (aborted()) {
+        goColonOnly(phaseRef.current)
+        return
+      }
+      // 3) MI:A seated — unlock input.
       setPhase("open")
-      await sleep(HOLD_AFTER_ROTATE_MS)
-      if (cancelled) return
-      brandReadyRef.current = true
-      setBrandReady(true)
-      onBrandReadyRef.current?.()
+      if (aborted()) {
+        goColonOnly(phaseRef.current)
+        return
+      }
+      await sleep(HOLD_AFTER_CARVE_MS)
+      if (aborted()) {
+        goColonOnly(phaseRef.current)
+        return
+      }
+      markBrandReady()
     }
 
     void run().catch((err: unknown) => { console.error("[mia]", err) })
     return () => { cancelled = true }
   }, [beginReveal, serverReachable])
-
-  useEffect(() => {
-    if (!serverReachable) return
-    if (!beginResolve || !brandReady || resolveStartedRef.current) return
-    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches
-    if (reduced) {
-      setPhase("live")
-      return
-    }
-
-    resolveStartedRef.current = true
-    let cancelled = false
-    const run = async () => {
-      await sleep(RESOLVE_DELAY_MS)
-      if (cancelled) return
-      setPhase("resolve")
-      await sleep(RESOLVE_MS)
-      if (cancelled) return
-      setPhase("live")
-      await sleep(LIVE_PAUSE_MS)
-    }
-
-    void run().catch((err: unknown) => { console.error("[mia]", err) })
-    return () => { cancelled = true }
-  }, [beginResolve, serverReachable, brandReady])
 
   if (!serverReachable) {
     return (
@@ -188,7 +207,6 @@ export function IntroBrandWordmark({
 
   const lettersSeated =
     phase === "pinch"
-    || phase === "rotate"
     || phase === "open"
     || phase === "resolve"
 
@@ -201,7 +219,6 @@ export function IntroBrandWordmark({
     "intro3-brand-sequence",
     lettersSeated ? "intro3-brand-sequence--open" : "intro3-brand-sequence--closed",
     phase === "pinch" ? "intro3-brand-sequence--pinching" : "",
-    phase === "rotate" ? "intro3-brand-sequence--rotating" : "",
     phase === "resolve" ? "intro3-brand-sequence--resolving" : "",
     phase === "live" ? "intro3-brand-sequence--live" : "",
   ].filter(Boolean).join(" ")
@@ -211,26 +228,22 @@ export function IntroBrandWordmark({
     "toolbar-brand-logo",
     phase !== "boot" ? "intro3-wm-mark--in" : "",
     colonHandoff ? "intro3-wm-mark--handoff" : "",
-    colonLive || phase === "rotate" ? "intro3-wm-mark--purple" : "",
+    colonLive ? "intro3-wm-mark--purple" : "",
     phase === "live" ? "intro3-wm-mark--solo" : "",
     phase === "pinch" ? "intro3-wm-mark--pinching mia-colon-logo--pinch-shed" : "",
-    phase === "rotate" ? "intro3-wm-mark--rotating mia-colon-logo--rotate-resolve" : "",
   ].filter(Boolean).join(" ")
 
   return (
-    <span className={sequenceClass} aria-label="MI:A">
-      <BrandLetter ch="M" side="pre" index={1} />
-      <BrandLetter ch="I" side="pre" index={0} />
+    <span className={sequenceClass} aria-label={phase === "live" ? ":" : "MI:A"}>
+      <BrandMass text="MI" side="pre" />
       <span className="intro3-wm-colon-anchor intro3-wm-colon-anchor--locked">
-        <span className="intro3-wm-ejecta intro3-wm-ejecta--left" aria-hidden="true" />
-        <span className="intro3-wm-ejecta intro3-wm-ejecta--right" aria-hidden="true" />
         <Logo
           size={CHAT_BRAND_LOGO_SIZE}
           online={colonLive}
           className={markClassName}
         />
       </span>
-      <BrandLetter ch="A" side="post" index={0} />
+      <BrandMass text="A" side="post" />
     </span>
   )
 }
