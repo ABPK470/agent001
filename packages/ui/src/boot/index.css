@@ -4003,16 +4003,9 @@ textarea.input {
   }
 }
 
-/* Session menu — admin: soft ASCII texture inside the same icon button chrome. */
-.session-menu-trigger {
-  position: relative;
-  isolation: isolate;
-  overflow: hidden;
-}
-
-.session-menu-trigger--admin {
-  /* Keep glyph field clipped to the same rounded hit target as peers. */
-  overflow: hidden;
+/* Toolbar chrome after the logo — glyph field when Viewing as someone else. */
+.toolbar-chrome-glyphs {
+  background: transparent;
 }
 
 .session-menu-panel {
@@ -4027,9 +4020,9 @@ textarea.input {
 
 .session-ascii-micro {
   z-index: 0;
-  opacity: 0.9;
-  /* Quiet bloom — same token as live mark, not a loud frame. */
-  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--logo-mark-live-shadow) 55%, transparent));
+  opacity: 1;
+  /* Quiet bloom — same token as Viewing as control. */
+  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--viewing-as) 55%, transparent));
 }
 
 /* ── Workspace tiling (split-tree projected to absolute panes) ─── */

@@ -100,7 +100,7 @@ export function ViewingAsControl({
       : "viewing-as-trigger--other flex h-9 max-w-[18rem] shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-[13px]"
 
   return (
-    <div ref={rootRef} className="relative">
+    <div ref={rootRef} className="relative z-[1]">
       <button
         type="button"
         className={triggerClass}

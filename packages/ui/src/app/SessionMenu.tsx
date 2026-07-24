@@ -22,7 +22,6 @@ import { ConnectorsModal } from "../widgets/connectors/ConnectorsModal"
 import { CONNECTOR_ICON } from "../widgets/connectors/kind-icon"
 import { BridgeModal } from "../widgets/bridge/BridgeModal"
 import { accountDisplayName, accountRoleLabel, accountSubtitle } from "./account"
-import { AsciiMicroField } from "./AsciiMicroField"
 import { CHAT_CHROME_BTN } from "./ChatChrome"
 import { SessionMenuIcon } from "./SessionMenuIcon"
 import { SessionThemeSwitch } from "./SessionThemeSwitch"
@@ -120,20 +119,11 @@ export function SessionMenu({
   const triggerClass =
     chromeVariant === "chat"
       ? CHAT_CHROME_BTN
-      : [
-          "session-menu-trigger",
-          me.isAdmin ? "session-menu-trigger--admin" : "",
-          // Same chrome as Toolbar NotificationPanel icons.
-          "flex h-9 w-9 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-overlay-hover hover:text-text",
-        ]
-          .filter(Boolean)
-          .join(" ")
-
-  const showAsciiAccent = me.isAdmin && chromeVariant !== "chat"
+      : "relative z-[1] flex h-9 w-9 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-overlay-hover hover:text-text"
 
   return (
     <>
-      <div className="relative" ref={menuRef}>
+      <div className="relative z-[1]" ref={menuRef}>
         <button
           type="button"
           className={triggerClass}
@@ -143,12 +133,7 @@ export function SessionMenu({
           aria-expanded={open}
           aria-haspopup="menu"
         >
-          {showAsciiAccent && (
-            <AsciiMicroField paused={open} inkOpacity={0.5} clearCenter={{ w: 16, h: 16 }} />
-          )}
-          <span className="relative z-[1] flex items-center justify-center text-current">
-            <SessionMenuIcon />
-          </span>
+          <SessionMenuIcon />
         </button>
 
         {open && (

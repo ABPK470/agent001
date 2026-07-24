@@ -7,6 +7,8 @@ import { Fragment, useEffect, useRef, useState } from "react"
 import type { Me } from "../../hooks/useMe"
 import { useViewTabReorder } from "../../hooks/useViewTabReorder"
 import { fullIndexFromRemainingSlot } from "../../lib/view-tab-dnd"
+import { useViewingAs } from "../../hooks/useViewingAs"
+import { AsciiMicroField } from "../AsciiMicroField"
 import { SessionMenu } from "../SessionMenu"
 import { ViewingAsControl } from "../ViewingAsControl"
 import { CHAT_BRAND_LOGO_SIZE } from "../brand"
@@ -26,6 +28,9 @@ interface Props {
 
 export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
   const connected = useStore((s) => s.connected)
+  const { canViewAs, isViewingAsOther } = useViewingAs()
+  /** Glyph field across chrome after the logo — only when Viewing as someone else. */
+  const chromeGlyphs = canViewAs && isViewingAsOther
   const views = useLayoutStore((s) => s.views)
   const activeViewId = useLayoutStore((s) => s.activeViewId)
   const setActiveView = useLayoutStore((s) => s.setActiveView)
@@ -100,8 +105,23 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
       </div>
 
       <div
+        className={[
+          "relative flex min-w-0 flex-1 items-center gap-2 sm:gap-4",
+          chromeGlyphs ? "toolbar-chrome-glyphs" : "",
+        ].join(" ")}
+      >
+        {chromeGlyphs && (
+          <div
+            className="toolbar-chrome-glyphs__field pointer-events-none absolute inset-0 overflow-hidden rounded-lg"
+            aria-hidden
+          >
+            <AsciiMicroField inkOpacity={0.85} cutoutRootClosest=".toolbar-chrome-glyphs" />
+          </div>
+        )}
+
+      <div
         ref={tabsRef}
-        className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto scrollbar-none"
+        className="relative z-[1] flex min-w-0 flex-1 items-center gap-1 overflow-x-auto scrollbar-none"
       >
         {views.map((view, index) => {
           const isDragging = draggingId === view.id
@@ -185,7 +205,7 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
       </div>
 
       {tabsOverflow && (
-        <div className="relative shrink-0" ref={moreRef}>
+        <div className="relative z-[1] shrink-0" ref={moreRef}>
           <button
             type="button"
             className="flex items-center gap-1 h-9 px-2 text-[13px] text-text-muted hover:text-text hover:bg-overlay-hover rounded-lg transition-colors"
@@ -220,7 +240,7 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
         </div>
       )}
 
-      <div className="flex shrink-0 items-center gap-1">
+      <div className="relative z-[1] flex shrink-0 items-center gap-1">
         {onAddWidget && (
           <>
             <button
@@ -244,6 +264,7 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
             onOpenChat={() => onModeChange("chat")}
           />
         )}
+      </div>
       </div>
     </header>
   )

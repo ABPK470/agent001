@@ -250,16 +250,16 @@ export function NotificationPanel() {
   }, [markAllRead])
 
   return (
-    <div className="relative" ref={panelRef}>
+    <div className="relative z-[1]" ref={panelRef}>
       <button
-        className="relative flex items-center justify-center w-9 h-9 rounded-lg text-text-muted hover:text-text hover:bg-overlay-3 transition-colors"
+        className="flex h-9 w-9 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-overlay-3 hover:text-text"
         onClick={() => setOpen((v) => !v)}
         title="Notifications"
       >
         <Bell size={15} />
         {unreadCount > 0 && (
           <span
-            className="absolute -top-0.5 -right-0.5 flex items-center justify-center min-w-[18px] h-[18px] text-[10px] font-bold rounded-full px-1 bg-accent text-text-on-accent"
+            className="absolute -top-0.5 -right-0.5 z-[2] flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-accent px-1 text-[10px] font-bold text-text-on-accent"
           >
             {unreadCount > 99 ? "99+" : unreadCount}
           </span>
