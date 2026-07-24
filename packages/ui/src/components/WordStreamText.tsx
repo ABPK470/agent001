@@ -1,19 +1,53 @@
 /**
- * Live streaming prose — word cadence, no glyph scramble.
+ * Live streaming prose — sentence cadence, no glyph/char/word drip.
  *
  * Callers only pass plain prose (markdown-shaped tails are held elsewhere).
- * New words appear at a calm reading pace; SSE bursts buffer behind this drip.
+ * Completed sentences appear as units; an unfinished trailing clause flushes
+ * after a short idle so the transcript never looks stuck mid-thought.
  */
 
 import { useEffect, useRef, useState } from "react"
 
-/** Calm reading pace — roughly conversational. */
-const WORDS_PER_SECOND = 5
-const CATCHUP_WORDS_PER_SECOND = 12
-/** Catch up when the buffer is more than this many characters ahead. */
-const CATCHUP_BEHIND_CHARS = 64
+/** Wait this long after the last SSE growth before showing an unfinished clause. */
+const TRAILING_FLUSH_MS = 160
+/** When the buffer races ahead, flush unfinished remainder without waiting. */
+const CATCHUP_BEHIND_CHARS = 120
 
-/** Advance `from` past the next `wordCount` words (and their trailing whitespace). */
+/**
+ * End index of the last completed sentence in `text` at or after `from`.
+ * Sentence ends: `.` `!` `?` `…` (optionally followed by quotes/parens),
+ * then whitespace or end-of-string. Also treats `\n\n` as a boundary.
+ * Returns `from` when nothing complete is available yet.
+ */
+export function endOfLastCompleteSentence(text: string, from = 0): number {
+  const start = Math.max(0, from)
+  let last = start
+  let i = start
+  while (i < text.length) {
+    if (text[i] === "\n" && text[i + 1] === "\n") {
+      let j = i + 2
+      while (j < text.length && /\s/.test(text[j]!)) j++
+      last = j
+      i = j
+      continue
+    }
+    const ch = text[i]!
+    if (ch === "." || ch === "!" || ch === "?" || ch === "…") {
+      let j = i + 1
+      while (j < text.length && /["')\]]/.test(text[j]!)) j++
+      if (j >= text.length || /\s/.test(text[j]!)) {
+        while (j < text.length && /\s/.test(text[j]!)) j++
+        last = j
+        i = j
+        continue
+      }
+    }
+    i++
+  }
+  return last
+}
+
+/** @deprecated Prefer endOfLastCompleteSentence — word drip removed. */
 export function advanceByWords(text: string, from: number, wordCount: number): number {
   let i = Math.max(0, from)
   for (let w = 0; w < wordCount && i < text.length; w++) {
@@ -34,64 +68,65 @@ export function WordStreamText({
 }) {
   const [shown, setShown] = useState(0)
   const shownRef = useRef(0)
-  const targetRef = useRef(text)
-  const rafRef = useRef<number | null>(null)
-  const lastTickRef = useRef<number | null>(null)
+  const textRef = useRef(text)
+  const flushTimerRef = useRef<number | null>(null)
 
-  targetRef.current = text
+  textRef.current = text
+
+  function commit(next: number): void {
+    const capped = Math.min(Math.max(next, shownRef.current), textRef.current.length)
+    if (capped === shownRef.current) return
+    shownRef.current = capped
+    setShown(capped)
+  }
+
+  function clearFlushTimer(): void {
+    if (flushTimerRef.current !== null) {
+      window.clearTimeout(flushTimerRef.current)
+      flushTimerRef.current = null
+    }
+  }
 
   useEffect(() => {
     if (text.length < shownRef.current) {
       shownRef.current = 0
       setShown(0)
     }
-  }, [text])
 
-  useEffect(() => {
-    let cancelled = false
-
-    const step = (now: number) => {
-      if (cancelled) return
-      const target = targetRef.current.length
-      const cur = shownRef.current
-      if (cur >= target) {
-        lastTickRef.current = null
-        rafRef.current = null
-        return
-      }
-
-      const last = lastTickRef.current ?? now
-      const dt = Math.min(now - last, 50)
-      lastTickRef.current = now
-      const behind = target - cur
-      const wps = behind > CATCHUP_BEHIND_CHARS ? CATCHUP_WORDS_PER_SECOND : WORDS_PER_SECOND
-      const words = Math.max(1, Math.ceil((wps * dt) / 1000))
-      const next = advanceByWords(targetRef.current, cur, words)
-      shownRef.current = next
-      setShown(next)
-      rafRef.current = requestAnimationFrame(step)
+    const complete = endOfLastCompleteSentence(text, 0)
+    if (complete > shownRef.current) {
+      commit(complete)
     }
 
-    rafRef.current = requestAnimationFrame(step)
+    clearFlushTimer()
+    const remainder = text.length - shownRef.current
+    if (remainder <= 0) return
+
+    if (remainder > CATCHUP_BEHIND_CHARS || complete >= text.length) {
+      commit(text.length)
+      return
+    }
+
+    // Unfinished clause — show after a brief idle (reads as a thought unit).
+    flushTimerRef.current = window.setTimeout(() => {
+      flushTimerRef.current = null
+      commit(textRef.current.length)
+    }, TRAILING_FLUSH_MS)
+
     return () => {
-      cancelled = true
-      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current)
-      rafRef.current = null
-      lastTickRef.current = null
+      clearFlushTimer()
     }
   }, [text])
+
+  useEffect(() => () => {
+    clearFlushTimer()
+  }, [])
 
   if (!text || shown <= 0) return null
 
-  const visible = text.slice(0, shown)
-  const catchingUp = text.length - shown > CATCHUP_BEHIND_CHARS
-
   return (
     <span className={["word-stream-text", className].filter(Boolean).join(" ")}>
-      {visible}
-      {!catchingUp && shown < text.length ? (
-        <span className="word-stream-cue" aria-hidden="true" />
-      ) : null}
+      {text.slice(0, shown)}
     </span>
   )
 }
