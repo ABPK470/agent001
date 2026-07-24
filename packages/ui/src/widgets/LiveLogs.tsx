@@ -5,7 +5,7 @@
  *   - One Filters sheet: quick range + From/Until + type + severity (Sync History dialect)
  *   - Scroll up → older pages within the range
  *   - SSE appends in Live; fixed ranges show "N new → Jump to live"
- *   - Search / type filters apply to the loaded buffer; deep search hits event_log
+ *   - Search / type filters apply within the selected time window only
  */
 
 import { ArrowDown, ChevronRight, Filter, Pause, Play, Radio, SlidersHorizontal } from "lucide-react"
@@ -25,6 +25,8 @@ import { JsonViewer } from "../components/JsonViewer"
 import { useContainerSize } from "../hooks/useContainerSize"
 import {
   type EventStreamRange,
+  logInWindow,
+  resolveWindowBounds,
   useEventStreamData,
 } from "../hooks/useEventStreamData"
 import { formatLogEntry } from "../state/store"
@@ -137,14 +139,21 @@ export function LiveLogs() {
   const compact = rootWidth > 0 && rootWidth < 860
   const tiny = rootWidth > 0 && rootWidth < 480
 
-  // Deep search when the loaded window has no hits (same catalog formatting).
+  // Deep search within the selected time window when the loaded page has no hits.
   const [searchHits, setSearchHits] = useState<LogEntry[]>([])
   const [searching, setSearching] = useState(false)
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  const windowBounds = useMemo(() => resolveWindowBounds(timeWindow), [timeWindow])
+
   const filtered = useMemo(
-    () => entries.filter((l) => logMatchesFilters(l, typeFilters, errorsOnly, searchText)),
-    [entries, typeFilters, errorsOnly, searchText],
+    () =>
+      entries.filter(
+        (l) =>
+          logInWindow(l.timestamp, windowBounds) &&
+          logMatchesFilters(l, typeFilters, errorsOnly, searchText),
+      ),
+    [entries, windowBounds, typeFilters, errorsOnly, searchText],
   )
 
   const searchActive = searchText.trim().length >= 2 || typeFilters.size > 0 || errorsOnly
@@ -164,10 +173,13 @@ export function LiveLogs() {
         .searchEvents(q.length >= 2 ? q : "", {
           type_patterns: errorsOnly ? ["%.failed", "%error%"] : typePatterns,
           limit: 300,
+          since: windowBounds.since,
+          until: windowBounds.until,
         })
         .then((res) => {
           const mapped: LogEntry[] = []
           for (const event of res.events) {
+            if (!logInWindow(event.timestamp, windowBounds)) continue
             const entry = formatLogEntry(event.type, event.data ?? {}, event.timestamp)
             if (entry) mapped.push(entry)
           }
@@ -180,17 +192,18 @@ export function LiveLogs() {
     return () => {
       if (searchTimer.current) clearTimeout(searchTimer.current)
     }
-  }, [searchActive, searchText, typeFilters, errorsOnly, filtered.length])
+  }, [searchActive, searchText, typeFilters, errorsOnly, filtered.length, windowBounds])
 
   const searchOnly = useMemo(() => {
     if (filtered.length > 0 || searchHits.length === 0) return []
     const liveKeys = new Set(entries.map((l) => `${l.eventName}\0${l.timestamp}\0${l.message}`))
     return searchHits.filter(
       (l) =>
+        logInWindow(l.timestamp, windowBounds) &&
         !liveKeys.has(`${l.eventName}\0${l.timestamp}\0${l.message}`) &&
         logMatchesFilters(l, typeFilters, errorsOnly, searchText),
     )
-  }, [filtered.length, searchHits, entries, typeFilters, errorsOnly, searchText])
+  }, [filtered.length, searchHits, entries, windowBounds, typeFilters, errorsOnly, searchText])
 
   useEffect(() => {
     if (autoScroll && !paused && followLive) {
@@ -491,7 +504,7 @@ export function LiveLogs() {
 
         {filtered.length === 0 && searchOnly.length > 0 && (
           <div className="py-2 text-sm text-text-muted bg-elevated/30 border-t border-border-subtle">
-            Search matches outside the loaded window ({searchOnly.length})
+            More matches in this range beyond the loaded page ({searchOnly.length})
           </div>
         )}
 

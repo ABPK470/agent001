@@ -120,12 +120,28 @@ export function registerOperationRoutes(app: FastifyInstance): void {
       limit?: string
       before?: string
       after?: string
+      since?: string
+      until?: string
     }
   }>("/api/events/search", async (req) => {
     const q = (req.query.q ?? "").trim()
     const types = req.query.type ? req.query.type.split(",") : undefined
     const typePatterns = req.query.type_patterns ? req.query.type_patterns.split(",") : undefined
-    if (q.length < 2 && !types?.length && !typePatterns?.length && !req.query.after && !req.query.before) {
+    const since = typeof req.query.since === "string" && req.query.since.length > 0
+      ? req.query.since
+      : undefined
+    const until = typeof req.query.until === "string" && req.query.until.length > 0
+      ? req.query.until
+      : undefined
+    if (
+      q.length < 2 &&
+      !types?.length &&
+      !typePatterns?.length &&
+      !req.query.after &&
+      !req.query.before &&
+      !since &&
+      !until
+    ) {
       return { events: [], count: 0 }
     }
     const limit = Math.min(Number(req.query.limit) || 200, 1000)
@@ -134,7 +150,9 @@ export function registerOperationRoutes(app: FastifyInstance): void {
       types,
       type_patterns: typePatterns,
       before: req.query.before,
-      after: req.query.after
+      after: req.query.after,
+      since,
+      until,
     })
     const events = rows.map((row) => ({
       id: row.id,

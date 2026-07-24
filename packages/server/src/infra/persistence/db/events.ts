@@ -81,6 +81,10 @@ export function searchEvents(
     type_patterns?: string[]
     before?: string
     after?: string
+    /** Inclusive lower bound (ISO) — same dialect as listEvents. */
+    since?: string
+    /** Inclusive upper bound (ISO). */
+    until?: string
   }
 ): DbEvent[] {
   const limit = Math.min(opts?.limit ?? 200, 1000)
@@ -103,6 +107,14 @@ export function searchEvents(
   if (opts?.after) {
     conditions.push("created_at > ?")
     params.push(opts.after)
+  }
+  if (opts?.since) {
+    conditions.push("created_at >= ?")
+    params.push(opts.since)
+  }
+  if (opts?.until) {
+    conditions.push("created_at <= ?")
+    params.push(opts.until)
   }
   if (opts?.types?.length) {
     conditions.push(`type IN (${opts.types.map(() => "?").join(",")})`)

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import {
   EVENT_STREAM_LIVE_LOOKBACK_MS,
   endOfLocalDay,
+  logInWindow,
   mergeLogEntries,
   resolveWindowBounds,
   sinceForRange,
@@ -32,6 +33,20 @@ describe("useEventStreamData helpers", () => {
     expect(b.followLive).toBe(false)
     expect(b.since).toBe(startOfLocalDay("2026-07-01"))
     expect(b.until).toBe(endOfLocalDay("2026-07-02"))
+  })
+
+  it("resolveWindowBounds Until-only is that local day (not live lookback)", () => {
+    const b = resolveWindowBounds({ range: "live", to: "2026-07-01" })
+    expect(b.followLive).toBe(false)
+    expect(b.since).toBe(startOfLocalDay("2026-07-01"))
+    expect(b.until).toBe(endOfLocalDay("2026-07-01"))
+  })
+
+  it("logInWindow respects since/until", () => {
+    const bounds = { since: "2026-07-01T00:00:00.000Z", until: "2026-07-01T23:59:59.999Z" }
+    expect(logInWindow("2026-07-01T12:00:00.000Z", bounds)).toBe(true)
+    expect(logInWindow("2026-07-02T00:00:00.000Z", bounds)).toBe(false)
+    expect(logInWindow("2026-06-30T23:59:59.000Z", bounds)).toBe(false)
   })
 
   it("mergeLogEntries dedupes and sorts ascending", () => {

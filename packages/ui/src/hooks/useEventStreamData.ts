@@ -66,9 +66,26 @@ export function resolveWindowBounds(window: EventStreamWindow): {
 } {
   const hasCustom = Boolean(window.from || window.to)
   if (hasCustom) {
+    // Strict calendar scope: From alone is open-ended forward; Until alone is
+    // that local day; both close the range. Never fall back to the quick-range
+    // lookback when a custom date is set — that leaked "latest" rows outside
+    // the picked day.
+    if (window.from && window.to) {
+      return {
+        since: startOfLocalDay(window.from),
+        until: endOfLocalDay(window.to),
+        followLive: false,
+      }
+    }
+    if (window.from) {
+      return {
+        since: startOfLocalDay(window.from),
+        followLive: false,
+      }
+    }
     return {
-      since: window.from ? startOfLocalDay(window.from) : sinceForRange(window.range),
-      until: window.to ? endOfLocalDay(window.to) : undefined,
+      since: startOfLocalDay(window.to!),
+      until: endOfLocalDay(window.to!),
       followLive: false,
     }
   }
@@ -76,6 +93,16 @@ export function resolveWindowBounds(window: EventStreamWindow): {
     since: sinceForRange(window.range),
     followLive: window.range === "live",
   }
+}
+
+/** True when a log timestamp falls inside an Event Stream window. */
+export function logInWindow(
+  timestamp: string,
+  bounds: { since: string; until?: string },
+): boolean {
+  if (timestamp < bounds.since) return false
+  if (bounds.until && timestamp > bounds.until) return false
+  return true
 }
 
 function logDedupeKey(log: LogEntry): string {

@@ -1034,6 +1034,8 @@ export const api = {
       limit?: number
       before?: string
       after?: string
+      since?: string
+      until?: string
     } = {},
   ) => {
     const p = new URLSearchParams()
@@ -1043,6 +1045,8 @@ export const api = {
     if (opts.limit) p.set("limit", String(opts.limit))
     if (opts.before) p.set("before", opts.before)
     if (opts.after) p.set("after", opts.after)
+    if (opts.since) p.set("since", opts.since)
+    if (opts.until) p.set("until", opts.until)
     return json<{ events: Array<{ id: number; type: string; data: Record<string, unknown>; timestamp: string }>; count: number }>(
       `/api/events/search?${p.toString()}`,
     )
