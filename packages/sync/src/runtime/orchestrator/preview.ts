@@ -18,7 +18,7 @@ import { selectDefinitionTables, type SyncEntityId } from "../../core/scope/defi
 import { materializeDefinitionTablesForSchema } from "../../core/entity-registry/materialize-scd2-for-schema.js"
 import { coerceSyncEntityId } from "../../core/scope/entity-instance-ref.js"
 import { buildDependencyGraph, diffTable } from "../diff-engine/index.js"
-import { applyInboundDeleteBlockers } from "../diff-engine/inbound-delete-blockers.js"
+import { applyPlanConflictProbes } from "../diff-engine/plan-conflict-probes.js"
 import { assertSupportedSyncDirection } from "../../core/eligibility/environments.js"
 import { getEnvironment } from "../environments-registry.js"
 import {
@@ -278,17 +278,21 @@ async function previewSyncInner(
       }
     )
 
-    // Out-of-scope inbound FK refs that would block deletes → conflicts, not changeSet.
-    const tableResults = await applyInboundDeleteBlockers(
+    // Post-diff conflict probes (inbound delete blockers, missing parents).
+    const probed = await applyPlanConflictProbes(
       input.host,
       input.target,
       tableResultsRaw,
       telemetryContext
     )
+    const tableResults = probed.tables
 
     const totals: SyncPlanTotals = computePlanTotals(tableResults)
 
-    const warnings: string[] = [...governanceWarnings.map((warning) => `[governance] ${warning}`)]
+    const warnings: string[] = [
+      ...governanceWarnings.map((warning) => `[governance] ${warning}`),
+      ...probed.probeWarnings
+    ]
     for (const d of definition.metadata.discrepancies) warnings.push(`[${d.kind}] ${d.table}: ${d.note}`)
     for (const issue of catalogPreflight.issues) warnings.push(`[drift] ${issue}`)
     const activeNames = new Set(activeTables.map((table) => table.name))

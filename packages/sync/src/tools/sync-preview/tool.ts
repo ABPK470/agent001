@@ -3,7 +3,7 @@
  */
 
 import type { ExecutableTool, Tool, ToolMetadata } from "../../ports/host.js"
-import { movementOfTable, tableMovementTotal } from "@mia/shared-types"
+import { movementOfTable, normalizeSyncPlanConflictKind, tableMovementTotal } from "@mia/shared-types"
 import { previewSync } from "../../runtime/orchestrator/index.js"
 import {
   formatSyncToolError,
@@ -84,7 +84,7 @@ function buildSyncPreviewTool(host: SyncRuntimeHost): Tool {
           for (const t of conflictedTables) {
             lines.push(`  Table: ${t.table} (${t.conflicts.length} conflict(s))`)
             for (const c of t.conflicts) {
-              const kind = c.kind ?? "scope_misattribution"
+              const kind = normalizeSyncPlanConflictKind(c.kind)
               lines.push(
                 `    • [${kind}] pk=${c.pk} | expected=${JSON.stringify(c.expectedScope)} | actual=${JSON.stringify(c.actualScope)} | ${c.summary}`
               )

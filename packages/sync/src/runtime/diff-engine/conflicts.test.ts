@@ -14,7 +14,7 @@ describe("detectScopeMisattribution", () => {
   })
 
   it("returns empty when there are no insert candidates", async () => {
-    const conflicts = await detectScopeMisattribution(
+    const result = await detectScopeMisattribution(
       {} as never,
       "UAT",
       { name: "core.Pipeline", scopeColumn: "contractId", predicate: "contractId = {id}" },
@@ -23,12 +23,12 @@ describe("detectScopeMisattribution", () => {
       [],
       5
     )
-    expect(conflicts).toEqual([])
+    expect(result).toEqual({ conflicts: [], warnings: [] })
     expect(runQueryMock).not.toHaveBeenCalled()
   })
 
   it("skips root tables where scope column equals PK", async () => {
-    const conflicts = await detectScopeMisattribution(
+    const result = await detectScopeMisattribution(
       {} as never,
       "UAT",
       { name: "core.Contract", scopeColumn: "contractId", predicate: "contractId = {id}" },
@@ -37,11 +37,11 @@ describe("detectScopeMisattribution", () => {
       [{ pk: "1", rowHash: "a", pkValues: { contractId: 1 } }],
       5
     )
-    expect(conflicts).toEqual([])
+    expect(result.conflicts).toEqual([])
   })
 
   it("skips tables without scopeColumn", async () => {
-    const conflicts = await detectScopeMisattribution(
+    const result = await detectScopeMisattribution(
       {} as never,
       "UAT",
       { name: "core.Step", scopeColumn: null, predicate: "x" },
@@ -50,14 +50,14 @@ describe("detectScopeMisattribution", () => {
       [{ pk: "1", rowHash: "a", pkValues: { stepId: 1 } }],
       5
     )
-    expect(conflicts).toEqual([])
+    expect(result.conflicts).toEqual([])
   })
 
   it("flags rows that exist on target under a different parent scope", async () => {
     runQueryMock.mockResolvedValue({
       recordset: [{ pk: 9, scope: 200 }]
     })
-    const conflicts = await detectScopeMisattribution(
+    const { conflicts } = await detectScopeMisattribution(
       {} as never,
       "UAT",
       { name: "core.Pipeline", scopeColumn: "contractId", predicate: "contractId = {id}" },
@@ -75,9 +75,9 @@ describe("detectScopeMisattribution", () => {
     expect(runQueryMock.mock.calls[0]?.[3]).toContain("detectScopeMisattribution")
   })
 
-  it("returns empty when probe query fails", async () => {
+  it("surfaces probe failure as a warning instead of silent empty", async () => {
     runQueryMock.mockRejectedValue(new Error("permission denied"))
-    const conflicts = await detectScopeMisattribution(
+    const result = await detectScopeMisattribution(
       {} as never,
       "UAT",
       { name: "core.Activity", scopeColumn: "pipelineId", predicate: "pipelineId IN (...)" },
@@ -86,6 +86,8 @@ describe("detectScopeMisattribution", () => {
       [{ pk: "1", rowHash: "a", pkValues: { activityId: 1 } }],
       5
     )
-    expect(conflicts).toEqual([])
+    expect(result.conflicts).toEqual([])
+    expect(result.warnings[0]).toContain("[conflict-probe] scope-misattribution failed")
+    expect(result.warnings[0]).toContain("permission denied")
   })
 })

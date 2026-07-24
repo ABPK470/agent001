@@ -74,11 +74,10 @@ export interface SyncPlanChangeSet {
 
 /**
  * Plan-level blocker that must not become changeSet ownership.
- *
- * - `scope_misattribution` — insert PK exists on target under a different parent
- * - `inbound_reference` — delete PK still referenced by a row outside this plan's scope
+ * Kind vocabulary + labels: `@mia/shared-types` (`sync-plan-conflicts`).
  */
-export type SyncPlanConflictKind = "scope_misattribution" | "inbound_reference"
+import type { SyncPlanConflictKind } from "@mia/shared-types"
+export type { SyncPlanConflictKind }
 
 export interface SyncPlanConflict {
   /** Omitted on legacy plans — treat as scope_misattribution. */

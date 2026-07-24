@@ -630,7 +630,17 @@ export {
   tableMovementTotal
 } from "./sync-plan.js"
 
-export type SyncPlanConflictKind = "scope_misattribution" | "inbound_reference"
+import type { SyncPlanConflictKind } from "./sync-plan-conflicts.js"
+export type { SyncPlanConflictKind, SyncPlanConflictLabels } from "./sync-plan-conflicts.js"
+export {
+  DEFAULT_SYNC_PLAN_CONFLICT_KIND,
+  SYNC_PLAN_CONFLICT_KINDS,
+  SYNC_PLAN_CONFLICT_LABELS,
+  normalizeSyncPlanConflictKind,
+  syncPlanConflictBannerLabel,
+  syncPlanConflictExecuteHeadline,
+  syncPlanConflictKindsOf
+} from "./sync-plan-conflicts.js"
 
 export interface SyncPlanConflict {
   /** Omitted on legacy plans — treat as scope_misattribution. */

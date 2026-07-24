@@ -2,7 +2,7 @@ import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Clock, GitBranc
 import { useMemo, useState } from "react"
 
 import type { SyncPlan, SyncPlanTable } from "../../types"
-import { movementOfTable, tableMovementTotal } from "../../types"
+import { movementOfTable, tableMovementTotal, syncPlanConflictBannerLabel } from "../../types"
 import { timeAgo } from "../../lib/util"
 import { ModalShell } from "./chrome"
 import { DIFF } from "./constants"
@@ -423,12 +423,7 @@ function Detail({ row }: { row: SyncPlanTable }) {
         <div className="border border-warning/40 rounded overflow-hidden">
           <div className="px-3 py-1.5 bg-warning/5 border-b border-warning/20 flex justify-between items-center">
             <span className="text-warning font-medium">
-              {row.conflicts.some((c) => c.kind === "inbound_reference") &&
-              row.conflicts.every((c) => c.kind === "inbound_reference")
-                ? "inbound references — blocks execute"
-                : row.conflicts.some((c) => c.kind === "inbound_reference")
-                  ? "conflicts — blocks execute"
-                  : "scope misattribution — blocks execute"}
+              {syncPlanConflictBannerLabel(row.conflicts)}
             </span>
             <span className="font-mono tabular-nums text-text-muted">{row.conflicts.length.toLocaleString()} conflict(s)</span>
           </div>

@@ -95,7 +95,7 @@ Immutable contract for execute. JSON-serializable.
 | `changeSet` | Insert / update / delete PK lists — **execute authority** |
 | `stats` | Unchanged / lowConfidence — preview only |
 | `samples` | UI decoration — execute ignores |
-| `conflicts` | Scope misattribution / inbound delete blockers — length blocks execute |
+| `conflicts` | Scope / inbound / missing-parent blockers — length blocks execute |
 
 **Contract:** Execute applies exactly the rows in `changeSet`. Plans without a
 valid changeSet cannot execute — re-preview.

@@ -103,7 +103,7 @@ export async function diffTable(
   }
 
   // 4b. Scope-misattribution detection.
-  const conflicts = await detectScopeMisattribution(
+  const scopeProbe = await detectScopeMisattribution(
     host,
     targetConn,
     table,
@@ -113,6 +113,8 @@ export async function diffTable(
     o.sampleSize,
     o.telemetryContext
   )
+  const conflicts = scopeProbe.conflicts
+  warnings.push(...scopeProbe.warnings)
 
   // Demote conflicting rows OUT of the insert bucket — they can't be inserted.
   if (conflicts.length > 0) {

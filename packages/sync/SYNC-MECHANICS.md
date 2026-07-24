@@ -111,16 +111,18 @@ diff is not performed in application code.
 
 ### Conflicts (block execute — not changeSet ownership)
 
-Two probes look **outside** scoped changeSet work and write `conflicts`:
+Probes look **outside** scoped changeSet work and write `conflicts`:
 
 | Kind | When |
 | --- | --- |
-| **Scope misattribution** | Insert PK already exists on target under a different parent |
-| **Inbound reference** | Delete PK still referenced by a row this plan does not own (e.g. Right-side mapping columns) |
+| **Scope misattribution** | Insert PK already exists on target under a different parent (during table diff) |
+| **Inbound reference** | Delete PK still referenced by a row this plan does not own |
+| **Missing parent** | Insert FK points at a parent missing on target and not inserted by this plan |
 
-Inbound hits whose referencing row is already in this plan’s `changeSet.delete`
-are ignored (reverseOrder will remove them). Remaining hits demote those deletes
-out of `changeSet` and block execute until the owning metadata is fixed.
+Post-diff probes share one seam (`applyPlanConflictProbes`). Hits covered by this
+plan’s sibling changeSet work are ignored. Remaining hits demote those rows out
+of `changeSet` and block execute. Probe I/O failures become `[conflict-probe]`
+plan warnings — never a silent clean preview.
 
 ### changeSet
 
