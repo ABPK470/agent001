@@ -64,23 +64,23 @@ describe("transcriptOverflows", () => {
 describe("shouldShowRunMinimap", () => {
   const screen = 800
 
-  it("hides with three or fewer runs even when content is huge", () => {
-    expect(shouldShowRunMinimap(3, screen, screen * 20)).toBe(false)
+  it("hides with fewer than 3 runs even when content is huge", () => {
     expect(shouldShowRunMinimap(2, screen, screen * 20)).toBe(false)
+    expect(shouldShowRunMinimap(1, screen, screen * 20)).toBe(false)
   })
 
-  it("hides when runs are short — not enough to get lost", () => {
-    // 4 runs, each ~1 screen → average under 2 screens
-    expect(shouldShowRunMinimap(4, screen, screen * 4)).toBe(false)
+  it("hides when the thread is still under two screens", () => {
+    // 3 runs, ~1.5 screens total — not enough scroll depth
+    expect(shouldShowRunMinimap(3, screen, screen * 1.5)).toBe(false)
   })
 
-  it("shows when more than 3 runs and average run exceeds 2 screens", () => {
-    // 4 runs × >2 screens each
-    expect(shouldShowRunMinimap(4, screen, screen * 8 + 1)).toBe(true)
+  it("shows with at least 3 runs and multi-screen transcript", () => {
+    expect(shouldShowRunMinimap(3, screen, screen * 2 + 1)).toBe(true)
+    expect(shouldShowRunMinimap(4, screen, screen * 3)).toBe(true)
   })
 
   it("hides when content still fits the viewport", () => {
-    expect(shouldShowRunMinimap(4, screen, screen)).toBe(false)
+    expect(shouldShowRunMinimap(3, screen, screen)).toBe(false)
   })
 })
 

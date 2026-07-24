@@ -38,16 +38,16 @@ export function transcriptOverflows(clientHeight: number, contentHeight: number)
   return contentHeight > clientHeight + 8
 }
 
-/** Hide the strip until there are enough runs to get lost among. */
-export const RUN_NAV_MIN_RUNS = 4
+/** Hide the strip until there are enough runs to jump between. */
+export const RUN_NAV_MIN_RUNS = 3
 
-/** Average run must span more than this many viewports of I/O. */
-export const RUN_NAV_MIN_SCREENS_PER_RUN = 2
+/** Thread transcript must span more than this many viewports (scrollable depth). */
+export const RUN_NAV_MIN_TOTAL_SCREENS = 2
 
 /**
  * Right-gutter run minimap — only when navigation earns its chrome.
- * More than 3 runs, and enough content per run (~2+ screens) that scrolling
- * alone is easy to get lost in. Short threads stay clean.
+ * At least 3 runs, and a multi-screen transcript (trace / system output) so
+ * scrolling alone is easy to get lost in. Short threads stay clean.
  */
 export function shouldShowRunMinimap(
   runCount: number,
@@ -57,8 +57,7 @@ export function shouldShowRunMinimap(
   if (runCount < RUN_NAV_MIN_RUNS) return false
   if (clientHeight <= 0) return false
   if (!transcriptOverflows(clientHeight, contentHeight)) return false
-  const avgRunHeight = contentHeight / runCount
-  return avgRunHeight > RUN_NAV_MIN_SCREENS_PER_RUN * clientHeight
+  return contentHeight > RUN_NAV_MIN_TOTAL_SCREENS * clientHeight
 }
 
 export function barTrackHeight(slotCount: number): number {
