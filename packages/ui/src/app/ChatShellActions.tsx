@@ -15,7 +15,7 @@ export function ChatShellActions({ onModeChange, onSignOut, me }: Props) {
   const shortcut = shellModeToggleHint()
   return (
     <div className="relative z-10 flex shrink-0 items-center gap-2">
-      <ViewingAsControl />
+      <ViewingAsControl chromeVariant="chat" />
       <ChatChromeButton
         onClick={() => onModeChange("workspace")}
         title={`Workspace (${shortcut})`}

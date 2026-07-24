@@ -6,6 +6,7 @@ import { ChevronDown, Eye } from "lucide-react"
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { api } from "../client/index"
 import { useViewingAs } from "../hooks/useViewingAs"
+import { CHAT_CHROME_BTN } from "./ChatChrome"
 
 type UserOption = {
   upn: string
@@ -18,7 +19,12 @@ function matchesUserFilter(user: UserOption, query: string): boolean {
   return user.displayName.toLowerCase().includes(q) || user.upn.toLowerCase().includes(q)
 }
 
-export function ViewingAsControl(): ReactNode {
+export function ViewingAsControl({
+  chromeVariant = "default",
+}: {
+  /** Match chat shell frosted buttons when in chat header. */
+  chromeVariant?: "default" | "chat"
+} = {}): ReactNode {
   const { canViewAs, isMe, displayName, setViewingAs, clearViewingAs } = useViewingAs()
   const [open, setOpen] = useState(false)
   const [users, setUsers] = useState<UserOption[]>([])
@@ -84,25 +90,34 @@ export function ViewingAsControl(): ReactNode {
 
   const label = isMe ? "Me" : (displayName ?? "…")
 
-  return (
-    <div ref={rootRef} className="relative">
-      <button
-        type="button"
-        className={[
+  const triggerClass =
+    chromeVariant === "chat"
+      ? [
+          CHAT_CHROME_BTN,
+          "w-auto max-w-[16rem] gap-1.5 px-3 text-[13px]",
+          isMe ? "" : "bg-amber-500/15 text-amber-200 hover:bg-amber-500/20 hover:text-amber-100",
+        ].filter(Boolean).join(" ")
+      : [
           "flex h-9 max-w-[16rem] shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-[13px] transition-colors",
           isMe
             ? "text-text-muted hover:bg-overlay-hover hover:text-text"
             : "bg-amber-500/10 text-amber-200 hover:bg-amber-500/15",
-        ].join(" ")}
+        ].join(" ")
+
+  return (
+    <div ref={rootRef} className="relative">
+      <button
+        type="button"
+        className={triggerClass}
         aria-label={`Viewing as ${label}`}
         title={`Viewing as: ${label}`}
         onClick={() => setOpen((v) => !v)}
       >
         <Eye size={15} strokeWidth={2} className="shrink-0" />
         <span className="truncate">
-          Viewing as: <span className="font-medium text-text">{label}</span>
+          Viewing as: <span className={`font-medium ${isMe ? "text-text" : ""}`}>{label}</span>
         </span>
-        <ChevronDown size={14} strokeWidth={2} className="shrink-0 text-text-muted" />
+        <ChevronDown size={14} strokeWidth={2} className="shrink-0 opacity-70" />
       </button>
 
       {open && (
