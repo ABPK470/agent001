@@ -7070,25 +7070,23 @@ textarea.input {
   animation: intro3-pinch-letter-in 880ms cubic-bezier(0.4, 0, 0.2, 1) both;
 }
 
-/* Resolve — letters retract; colon stays live (regular speed). */
+/* Resolve — quick fade/collapse of MI:A only. No reverse blobs. */
 .intro3-brand-sequence--resolving .intro3-wm-slot {
   width: 0;
-  opacity: 1;
+  opacity: 0;
   transition:
-    width 520ms cubic-bezier(0.4, 0, 0.2, 1),
-    opacity 200ms ease;
+    width 280ms cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 180ms ease;
   transition-delay: 0ms;
 }
 
-.intro3-brand-sequence--resolving .intro3-wm-ejecta--left {
-  animation: intro3-resolve-blob-left 520ms cubic-bezier(0.4, 0, 0.2, 1) both;
-}
-.intro3-brand-sequence--resolving .intro3-wm-ejecta--right {
-  animation: intro3-resolve-blob-right 520ms cubic-bezier(0.4, 0, 0.2, 1) both;
+.intro3-brand-sequence--resolving .intro3-wm-ejecta {
+  display: none;
 }
 
 .intro3-brand-sequence--resolving .intro3-wm-letter {
-  animation: intro3-resolve-letter-out 520ms cubic-bezier(0.4, 0, 0.2, 1) both;
+  opacity: 0;
+  transition: opacity 160ms ease;
 }
 
 /* Height stays 1em (= colon / letter height) the whole way — only width grows. */
@@ -7194,75 +7192,6 @@ textarea.input {
   }
   68%, 100% {
     opacity: 1;
-  }
-}
-
-@keyframes intro3-resolve-letter-out {
-  0% {
-    opacity: 1;
-  }
-  55%, 100% {
-    opacity: 0;
-  }
-}
-
-@keyframes intro3-resolve-blob-left {
-  0% {
-    opacity: 0;
-    width: 1.5em;
-    height: 1em;
-    margin-left: -0.75em;
-    margin-top: -0.5em;
-    background: var(--text);
-    transform: translateX(-1.5em);
-  }
-  18% {
-    opacity: 1;
-    width: 1.45em;
-    height: 1em;
-    margin-left: -0.725em;
-    margin-top: -0.5em;
-    background: var(--text);
-    transform: translateX(-1.35em);
-  }
-  75%, 100% {
-    opacity: 0;
-    width: 0.55em;
-    height: 1em;
-    margin-left: -0.275em;
-    margin-top: -0.5em;
-    background: var(--text);
-    transform: translateX(0);
-  }
-}
-
-@keyframes intro3-resolve-blob-right {
-  0% {
-    opacity: 0;
-    width: 0.9em;
-    height: 1em;
-    margin-left: -0.45em;
-    margin-top: -0.5em;
-    background: var(--text);
-    transform: translateX(1.2em);
-  }
-  18% {
-    opacity: 1;
-    width: 0.85em;
-    height: 1em;
-    margin-left: -0.425em;
-    margin-top: -0.5em;
-    background: var(--text);
-    transform: translateX(1.1em);
-  }
-  75%, 100% {
-    opacity: 0;
-    width: 0.55em;
-    height: 1em;
-    margin-left: -0.275em;
-    margin-top: -0.5em;
-    background: var(--text);
-    transform: translateX(0);
   }
 }
 

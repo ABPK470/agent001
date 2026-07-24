@@ -2,6 +2,7 @@
  * Intro brand — one pinch that sheds mass:
  * show : → pinch (: → .) sheds full-colon-height off-white blobs into MI / A
  * → colon opens → rotate → live idle until input
+ * → on input: quick MI:A remove + downsize (no reverse blobs)
  *
  * TEMP: only the : appearance is slowed (DEBUG_SLOWDOWN). Everything after is 1×.
  */
@@ -22,9 +23,10 @@ const PINCH_SHED_MS = 560
 const PINCH_MS = PINCH_MEET_MS + PINCH_SHED_MS
 const ROTATE_MS = 1000
 const HOLD_AFTER_ROTATE_MS = 120
-const RESOLVE_MS = 520
-const LIVE_PAUSE_MS = 80
-const RESOLVE_DELAY_MS = 40
+/** Quick collapse of MI:A + downsize — no reverse blobs. */
+const RESOLVE_MS = 280
+const LIVE_PAUSE_MS = 40
+const RESOLVE_DELAY_MS = 0
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => window.setTimeout(r, ms))
@@ -66,17 +68,22 @@ function BrandLetter({
 export function IntroBrandWordmark({
   onBrandReady,
   onBrandLive,
+  beginReveal,
   beginResolve,
   serverReachable,
 }: {
   onBrandReady?: () => void
   onBrandLive?: () => void
+  /** Greeting + pill have landed — start the : appearance. */
+  beginReveal: boolean
   beginResolve: boolean
   serverReachable: boolean
 }) {
   const [phase, setPhase] = useState<BrandPhase>("boot")
   const [colonHandoff, setColonHandoff] = useState(false)
+  const [brandReady, setBrandReady] = useState(false)
   const brandReadyRef = useRef(false)
+  const revealStartedRef = useRef(false)
   const resolveStartedRef = useRef(false)
   const onBrandReadyRef = useRef(onBrandReady)
   const onBrandLiveRef = useRef(onBrandLive)
@@ -87,6 +94,7 @@ export function IntroBrandWordmark({
     if (serverReachable) return
     if (brandReadyRef.current) return
     brandReadyRef.current = true
+    setBrandReady(true)
     onBrandReadyRef.current?.()
   }, [serverReachable])
 
@@ -102,11 +110,14 @@ export function IntroBrandWordmark({
   }, [colonHandoff])
 
   useEffect(() => {
-    if (!serverReachable) return
+    if (!serverReachable || !beginReveal) return
+    if (revealStartedRef.current) return
+    revealStartedRef.current = true
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches
     if (reduced) {
       setPhase("open")
       brandReadyRef.current = true
+      setBrandReady(true)
       onBrandReadyRef.current?.()
       return
     }
@@ -132,16 +143,17 @@ export function IntroBrandWordmark({
       await sleep(HOLD_AFTER_ROTATE_MS)
       if (cancelled) return
       brandReadyRef.current = true
+      setBrandReady(true)
       onBrandReadyRef.current?.()
     }
 
     void run().catch((err: unknown) => { console.error("[mia]", err) })
     return () => { cancelled = true }
-  }, [serverReachable])
+  }, [beginReveal, serverReachable])
 
   useEffect(() => {
     if (!serverReachable) return
-    if (!beginResolve || !brandReadyRef.current || resolveStartedRef.current) return
+    if (!beginResolve || !brandReady || resolveStartedRef.current) return
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches
     if (reduced) {
       setPhase("live")
@@ -162,7 +174,7 @@ export function IntroBrandWordmark({
 
     void run().catch((err: unknown) => { console.error("[mia]", err) })
     return () => { cancelled = true }
-  }, [beginResolve, serverReachable])
+  }, [beginResolve, serverReachable, brandReady])
 
   if (!serverReachable) {
     return (

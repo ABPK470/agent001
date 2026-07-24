@@ -154,11 +154,12 @@ export function IntroConversation({
   const [error, setError]           = useState<string | null>(null)
   const [botTyping, setBotTyping]   = useState(false)
   const [shimmerLabel, setShimmerLabel] = useState<string>("Loading")
-  // The first bot message is not seeded — it's spoken (shimmer + stream)
-  // only after the MI:A wordmark finishes decoding so the screen unfolds
-  // in sequence: wordmark → bot greeting → input bar.
+  // The first bot message is not seeded — spoken after the ASCII field
+  // arrives, then the input pill, then the header : brand unfolds.
   const [msgs, setMsgs] = useState<Msg[]>([])
   const [inputReady, setInputReady] = useState(false)
+  /** True once greeting + pill have landed — gates the : brand reveal. */
+  const [brandRevealReady, setBrandRevealReady] = useState(false)
   const [userEngaged, setUserEngaged] = useState(false)
   const userEngagedRef = useRef(false)
   const engageBrandResolve = () => {
@@ -167,7 +168,7 @@ export function IntroConversation({
     setUserEngaged(true)
   }
   const autoplayPhaseRef = useRef<"idle" | "username" | "password" | "done">("idle")
-  // Resolved when the header brand finishes MI: + pinch-spawn-A (opening beat only).
+  // Resolved when the header brand finishes its opening pinch/shed/rotate.
   const brandReadyRef = useRef<{ promise: Promise<void>; resolve: () => void } | null>(null)
   if (!brandReadyRef.current) {
     let resolve: () => void = () => {}
@@ -175,8 +176,7 @@ export function IntroConversation({
     brandReadyRef.current = { promise, resolve }
   }
   // Resolved when the ambient ASCII field finishes rolling out from left
-  // to right. We hold the opening "who am I talking to?" until then so
-  // the screen reads as: wordmark → field arrives → bot greets.
+  // to right. Greeting waits for that so the field is present first.
   const asciiReadyRef = useRef<{ promise: Promise<void>; resolve: () => void } | null>(null)
   if (!asciiReadyRef.current) {
     let resolve: () => void = () => {}
@@ -193,9 +193,7 @@ export function IntroConversation({
     return () => { document.title = t }
   }, [])
 
-  // Opening: brand + ASCII → hold → display greeting → hold → pill.
-  // Brand resolve still waits for typing (or idle) so header motion never
-  // fights reading the opening question.
+  // Opening: ASCII → greeting → pill land → then : brand may begin.
   useEffect(() => {
     let cancelled = false
     const reduced =
@@ -204,14 +202,11 @@ export function IntroConversation({
     const hold = (ms: number) =>
       new Promise<void>((r) => window.setTimeout(r, reduced ? Math.min(ms, 80) : ms))
     const run = async () => {
-      await Promise.all([
-        brandReadyRef.current!.promise,
-        asciiReadyRef.current!.promise,
-      ])
+      await asciiReadyRef.current!.promise
       if (cancelled) return
       await hold(420)
       if (cancelled) return
-      // Quiet open: no tiny misplaced "Loading" shimmer — greeting lands directly.
+      // Quiet open: greeting lands before the header brand.
       await botReply("who am I talking to?", "Loading", reduced ? 80 : 180, {
         quiet: true,
         streamSpeedMs: INTRO_GREETING_SPEED_MS,
@@ -220,6 +215,10 @@ export function IntroConversation({
       await hold(380)
       if (cancelled) return
       setInputReady(true)
+      // Wait for the pill’s opacity/transform land before revealing :.
+      await hold(reduced ? 80 : 560)
+      if (cancelled) return
+      setBrandRevealReady(true)
     }
     void run().catch((err: unknown) => { console.error("[mia]", err) })
     return () => { cancelled = true }
@@ -562,6 +561,7 @@ export function IntroConversation({
         <div className="toolbar-brand intro3-brand-slot flex h-9 shrink-0 items-center text-text">
           <IntroBrandWordmark
             onBrandReady={() => brandReadyRef.current?.resolve()}
+            beginReveal={brandRevealReady}
             beginResolve={inputReady && !heroComposition}
             serverReachable={serverReachable}
           />
