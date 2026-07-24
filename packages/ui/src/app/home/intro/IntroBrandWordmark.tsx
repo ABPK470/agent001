@@ -3,28 +3,28 @@
  * show : → pinch (: → .) sheds full-colon-height off-white blobs into MI / A
  * → colon opens → rotate → live idle until input
  *
- * TEMP: DEBUG_SLOWDOWN=8 for land/shed/rotate. Pinch gesture stays 1× meet.
+ * TEMP: only the : appearance is slowed (DEBUG_SLOWDOWN). Everything after is 1×.
  */
 
 import { useEffect, useRef, useState } from "react"
 import { CHAT_BRAND_LOGO_SIZE } from "../../brand"
 import { Logo } from "../../../components/Logo"
 
-/** Temporary inspection factor — restore to 1 when done. */
+/** Temporary — only slows the : land. Restore to 1 when done inspecting. */
 const DEBUG_SLOWDOWN = 8
 
-const REVEAL_DELAY_MS = 180 * DEBUG_SLOWDOWN
+const REVEAL_DELAY_MS = 180
+/** Only this beat stays slow. */
 const COLON_LAND_MS = 420 * DEBUG_SLOWDOWN
-const HOLD_BEFORE_PINCH_MS = 180 * DEBUG_SLOWDOWN
-/** Pinch meet is real-time; shed+open slowed for inspection. */
+const HOLD_BEFORE_PINCH_MS = 180
 const PINCH_MEET_MS = 320
-const PINCH_SHED_MS = 560 * DEBUG_SLOWDOWN
+const PINCH_SHED_MS = 560
 const PINCH_MS = PINCH_MEET_MS + PINCH_SHED_MS
-const ROTATE_MS = 1000 * DEBUG_SLOWDOWN
-const HOLD_AFTER_ROTATE_MS = 120 * DEBUG_SLOWDOWN
-const RESOLVE_MS = 520 * DEBUG_SLOWDOWN
-const LIVE_PAUSE_MS = 80 * DEBUG_SLOWDOWN
-const RESOLVE_DELAY_MS = 40 * DEBUG_SLOWDOWN
+const ROTATE_MS = 1000
+const HOLD_AFTER_ROTATE_MS = 120
+const RESOLVE_MS = 520
+const LIVE_PAUSE_MS = 80
+const RESOLVE_DELAY_MS = 40
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => window.setTimeout(r, ms))
