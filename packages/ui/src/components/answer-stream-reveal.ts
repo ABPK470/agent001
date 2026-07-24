@@ -58,13 +58,11 @@ export function getLiveStreamingRenderParts(text: string): {
     layout.committed && extraCommitted
       ? `${layout.committed}\n${extraCommitted}`
       : layout.committed || extraCommitted
-  let blocks = committedAll ? parseAnswerBlocks(committedAll) : []
-
-  // Belt-and-suspenders with chart fences: while a pipe-table is still open,
-  // never paint table blocks (even if a partial commit slipped through).
-  if (layout.remainderKind === "table") {
-    blocks = blocks.filter((b) => b.type !== "table")
-  }
+  // Keep every committed block. An open trailing table stays in `remainder`
+  // (never painted as CompactTable). Filtering all tables here used to yank
+  // earlier finished tables off-screen whenever a later table started — the
+  // main text+table shake in live answers.
+  const blocks = committedAll ? parseAnswerBlocks(committedAll) : []
 
   return { blocks, glyphTail, layout }
 }

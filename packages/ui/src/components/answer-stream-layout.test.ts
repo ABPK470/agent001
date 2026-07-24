@@ -105,6 +105,28 @@ describe("getLiveStreamingRenderParts", () => {
     expect(layout.remainderKind).toBe("table")
   })
 
+  it("keeps an earlier committed table while a later table is still open", () => {
+    const text =
+      "| A | B |\n| --- | --- |\n| 1 | 2 |\n\nNotes here.\n\n| C | D |\n| --- | --- |\n| 3 | 4 |"
+    const { blocks, layout } = getLiveStreamingRenderParts(text)
+    expect(layout.remainderKind).toBe("table")
+    expect(layout.remainder).toContain("| C | D |")
+    const tables = blocks.filter((b) => b.type === "table")
+    expect(tables).toHaveLength(1)
+    expect(tables[0]).toMatchObject({
+      type: "table",
+      headers: ["A", "B"],
+    })
+    expect(blocks.some((b) => b.type === "paragraph")).toBe(true)
+  })
+
+  it("keeps table1 when only a blank line separates it from an open table2", () => {
+    const text = "| A | B |\n| --- | --- |\n| 1 | 2 |\n\n| C | D |\n| --- | --- |\n| 3"
+    const { blocks, layout } = getLiveStreamingRenderParts(text)
+    expect(layout.remainderKind).toBe("table")
+    expect(blocks.filter((b) => b.type === "table")).toHaveLength(1)
+  })
+
   it("ASCII-streams plain prose tails only", () => {
     const { glyphTail } = getLiveStreamingRenderParts("Hello there, this is still arriv")
     expect(glyphTail).toBe("Hello there, this is still arriv")

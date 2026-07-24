@@ -15,17 +15,13 @@ export const STRUCTURED_PENDING_DASHBOARD_HEIGHT = 288
 export const STRUCTURED_PENDING_KPI_HEIGHT = 120
 
 /**
- * Estimate reserved height for an in-flight pipe-table from its remainder.
- * Floors near a real CompactTable so settle does not jump from a stub shell.
+ * Reserved height for an in-flight pipe-table.
+ * Fixed like charts — growing with each pipe line ratcheted stick-to-bottom
+ * and shook the transcript. Settle is one controlled jump to CompactTable.
  */
-export function estimateTablePendingHeight(remainder: string): number {
-  const pipeLines = remainder
-    .split("\n")
-    .filter((line) => line.trimStart().startsWith("|"))
-  // header + separator + rows → visual band roughly header + data rows
-  const visualRows = Math.max(pipeLines.length, 4)
-  const raw = 52 + visualRows * 36
-  return Math.min(STRUCTURED_PENDING_CHART_HEIGHT, Math.max(168, raw))
+export function estimateTablePendingHeight(_remainder: string): number {
+  void _remainder
+  return STRUCTURED_PENDING_CHART_HEIGHT
 }
 
 export function pendingShellMinHeight(lang: string, remainder = ""): number {

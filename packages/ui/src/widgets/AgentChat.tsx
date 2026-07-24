@@ -346,7 +346,6 @@ export function AgentChat() {
     pauseAutoScroll,
     resumeAutoFollow,
     showJumpButton,
-    stickIfFollowing,
   } = useStickToBottomScroll({
     resetKey: scrollToRunId,
     initialScroll: "none",
@@ -590,10 +589,7 @@ export function AgentChat() {
     })
   }, [recentRuns.length, isRunning, streamingAnswer, scrollToBottom])
 
-  useEffect(() => {
-    if (!isRunning && !streamingAnswer) return
-    stickIfFollowing()
-  }, [streamingAnswer, trace.length, isRunning, stickIfFollowing])
+  // Live growth: ResizeObserver only. Per-token / per-trace stick shakes the viewport.
 
   const jumpToLatest = useCallback(() => {
     resumeAutoFollow()

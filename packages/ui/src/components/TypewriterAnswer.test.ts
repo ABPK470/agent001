@@ -11,12 +11,13 @@ import {
 } from "./TypewriterAnswer"
 
 describe("pendingShellMinHeight", () => {
-  it("sizes table shells like a real CompactTable stage (not a stub)", () => {
-    const remainder = "| Name | Amt |\n| --- | --- |\n| Ada | 1 |\n| Bea | 2 |"
-    const height = pendingShellMinHeight("table", remainder)
-    expect(height).toBeGreaterThanOrEqual(168)
-    expect(height).toBe(estimateTablePendingHeight(remainder))
-    expect(height).toBeLessThanOrEqual(STRUCTURED_PENDING_CHART_HEIGHT)
+  it("reserves a fixed table stage (same as charts) so live rows do not ratchet height", () => {
+    const short = "| Name | Amt |\n| --- | --- |\n| Ada | 1 |"
+    const tall =
+      "| Name | Amt |\n| --- | --- |\n| Ada | 1 |\n| Bea | 2 |\n| Cai | 3 |\n| Dee | 4 |"
+    expect(pendingShellMinHeight("table", short)).toBe(STRUCTURED_PENDING_CHART_HEIGHT)
+    expect(pendingShellMinHeight("table", tall)).toBe(STRUCTURED_PENDING_CHART_HEIGHT)
+    expect(estimateTablePendingHeight(short)).toBe(STRUCTURED_PENDING_CHART_HEIGHT)
   })
 
   it("keeps chart / kpi / dashboard footprints", () => {
