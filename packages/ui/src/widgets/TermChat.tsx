@@ -724,11 +724,11 @@ function IterationBlock({
   const { preserveToggle } = useChatScroll()
   const shouldStayOpen = shouldAutoOpenWorkChip(isLastIteration, hasNarrativeAfter)
   const [open, setOpen] = useState(shouldStayOpen)
-  const userToggledRef = useRef(false)
+  const [userToggled, setUserToggled] = useState(false)
   useEffect(() => {
-    if (userToggledRef.current) return
+    if (userToggled) return
     setOpen(shouldStayOpen)
-  }, [shouldStayOpen])
+  }, [shouldStayOpen, userToggled])
 
   const buttonRef = useRef<HTMLButtonElement>(null)
   const errored = part.tools.some((p) => p.row.status === "error")
@@ -739,6 +739,9 @@ function IterationBlock({
   // X / Updated Y" rows alternating with white assistant text.
   const headerToneClass = errored ? "text-text-faint" : "text-text-faint"
   const Chevron = open ? ChevronDown : ChevronRight
+  // Live auto open/close must be instant — height animation fights host
+  // stick-to-bottom and shakes the transcript. Animate only after a user toggle.
+  const animateFold = userToggled || !isLiveRun
 
   return (
     <div className="py-1.5">
@@ -746,7 +749,7 @@ function IterationBlock({
         ref={buttonRef}
         type="button"
         onClick={() => preserveToggle(buttonRef.current, () => {
-          userToggledRef.current = true
+          setUserToggled(true)
           setOpen((v) => !v)
         })}
         className={`inline-flex max-w-full items-center gap-1.5 py-0.5 text-left text-[15px] leading-6 transition-colors hover:text-text-secondary ${headerToneClass}`}
@@ -756,6 +759,7 @@ function IterationBlock({
       </button>
       <ChatFoldBody
         open={open}
+        animated={animateFold}
         className="mt-0.5 pl-4 border-l border-border-subtle ml-[5px]"
       >
         <IterationToolList tools={part.tools} syncByInvocation={syncByInvocation} stickToBottom={part.hasRunning && isLiveRun} />
@@ -844,17 +848,17 @@ function StepBlock({
 }) {
   const { preserveToggle } = useChatScroll()
   const [open, setOpen] = useState(part.hasRunning || keepOpen)
-  const userToggledRef = useRef(false)
+  const [userToggled, setUserToggled] = useState(false)
   const buttonRef = useRef<HTMLButtonElement>(null)
   const working = Boolean(part.subagent && (part.hasRunning || part.status === "running"))
   const [showLogo, setShowLogo] = useState(working)
   const [logoExiting, setLogoExiting] = useState(false)
 
   useEffect(() => {
-    if (userToggledRef.current) return
+    if (userToggled) return
     if (part.hasRunning || keepOpen) setOpen(true)
     else if (!keepOpen && part.status !== "running") setOpen(false)
-  }, [part.hasRunning, part.status, keepOpen])
+  }, [part.hasRunning, part.status, keepOpen, userToggled])
 
   useEffect(() => {
     if (working) {
@@ -876,6 +880,7 @@ function StepBlock({
   const hasBodyContent = hasTools || part.hasRunning || hasErrorBody
   const canToggle = hasTools || hasErrorBody
   const Chevron = open ? ChevronDown : ChevronRight
+  const animateFold = userToggled || !isLiveRun
   // Step gaps are process detail — same muted chrome as successful steps.
   const labelClass =
     part.status === "running" || part.hasRunning ? "text-text-muted" : "text-text-faint"
@@ -889,7 +894,7 @@ function StepBlock({
         onClick={() => {
           if (!canToggle) return
           preserveToggle(buttonRef.current, () => {
-            userToggledRef.current = true
+            setUserToggled(true)
             setOpen((v) => !v)
           })
         }}
@@ -931,6 +936,7 @@ function StepBlock({
       {hasBodyContent ? (
         <ChatFoldBody
           open={open}
+          animated={animateFold}
           className="mt-0.5 ml-[0.35rem] pl-3 border-l border-border-subtle min-w-0"
         >
           {hasErrorBody ? (
@@ -2172,7 +2178,6 @@ export function TermChat({
     resumeAutoFollow,
     engageFollowIfNearBottom,
     showJumpButton,
-    stickIfFollowing,
   } = useStickToBottomScroll({
     resetKey: scrollToRunId,
     initialScroll: "none",
@@ -2524,13 +2529,9 @@ export function TermChat({
     })
   }, [scopedActiveRunId, latestDisplayRunId, scopedActiveRun?.trace?.length, isRunning, streamingAnswer, scrollToBottom])
 
-  // Follow live output when the trace grows. Answer-token height is already
-  // handled by useStickToBottomScroll's ResizeObserver — sticking again on
-  // every streamingAnswer chunk double-scrolled and read as shake.
-  useEffect(() => {
-    if (!isRunning) return
-    stickIfFollowing()
-  }, [scopedActiveRun?.trace?.length, isRunning, stickIfFollowing])
+  // Live growth is followed by useStickToBottomScroll's ResizeObserver only.
+  // Sticking again on every trace.length change double-scrolled with RO and
+  // shook the transcript (same class of bug as sticking on every answer token).
 
   const jumpToLatest = useCallback(() => {
     resumeAutoFollow()

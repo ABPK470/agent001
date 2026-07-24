@@ -107,8 +107,11 @@ export function useStickToBottomScroll(options: UseStickToBottomScrollOptions = 
     if (Date.now() < suspendFollowUntilRef.current) return
     if (!shouldStickRef.current || userEngagedRef.current) return
     if (!followWhenRef.current) return
+    const maxTop = Math.max(0, host.scrollHeight - host.clientHeight)
+    // Skip no-op writes — repeated scrollTop assigns during growth read as shake.
+    if (Math.abs(host.scrollTop - maxTop) < 1) return
     programmaticScrollRef.current = true
-    scrollHostToBottom(host)
+    host.scrollTop = maxTop
     onScrollPosition?.(host.scrollTop, host)
     requestAnimationFrame(() => {
       programmaticScrollRef.current = false
@@ -171,6 +174,7 @@ export function useStickToBottomScroll(options: UseStickToBottomScrollOptions = 
     if (!host || !inner) return
 
     let resizeRaf = 0
+    let trailingStick = 0
     const observer = new ResizeObserver(() => {
       if (!hasInitializedRef.current) return
       cancelAnimationFrame(resizeRaf)
@@ -179,13 +183,27 @@ export function useStickToBottomScroll(options: UseStickToBottomScrollOptions = 
         // Track shrink so a later grow (e.g. after markdown reflow) still follows.
         if (height < lastContentHeightRef.current) {
           lastContentHeightRef.current = height
+          // Keep pinned to the new bottom after a collapse so the next grow
+          // doesn't start from a clamped scrollTop past max (visible jerk).
+          if (shouldStickRef.current && followWhenRef.current && !userEngagedRef.current) {
+            const maxTop = Math.max(0, host.scrollHeight - host.clientHeight)
+            if (host.scrollTop > maxTop) host.scrollTop = maxTop
+          }
           return
         }
         if (height === lastContentHeightRef.current) return
         lastContentHeightRef.current = height
 
         const now = performance.now()
-        if (now - lastStickAtRef.current < 48) return
+        if (now - lastStickAtRef.current < 48) {
+          // Trailing stick so the last growth frame in a burst still lands.
+          window.clearTimeout(trailingStick)
+          trailingStick = window.setTimeout(() => {
+            lastStickAtRef.current = performance.now()
+            stickIfFollowing()
+          }, 48)
+          return
+        }
         lastStickAtRef.current = now
         stickIfFollowing()
       })
@@ -194,6 +212,7 @@ export function useStickToBottomScroll(options: UseStickToBottomScrollOptions = 
     observer.observe(inner)
     return () => {
       cancelAnimationFrame(resizeRaf)
+      window.clearTimeout(trailingStick)
       observer.disconnect()
     }
   }, [stickIfFollowing])
