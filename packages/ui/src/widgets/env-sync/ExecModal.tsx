@@ -100,7 +100,7 @@ export function ExecModal({ exec, plan, execPlanId, tgtEnv, onConfirm, onCancel,
             : "Sync Failed"
 
   const headerIcon = isIdle ? <Ship size={20} className="text-accent" />
-    : isRunning ? <Loader2 size={20} className="animate-spin text-accent" />
+    : isRunning ? <Loader2 size={20} className="animate-spin text-info" />
       : cancelled ? <XCircle size={20} className="text-text-muted" />
         : skipped ? <CheckCircle2 size={20} className="text-warning" />
           : success ? <CheckCircle2 size={20} style={{ color: DIFF.ins }} />
@@ -317,7 +317,7 @@ export function ExecModal({ exec, plan, execPlanId, tgtEnv, onConfirm, onCancel,
                 )}
                 {currentStep && (
                   <p className="mt-2.5 text-xs font-mono text-text truncate" title={currentStep}>
-                    {isRunning && <span className="text-accent/70">▸ </span>}
+                    {isRunning && <span className="text-info/70">▸ </span>}
                     {currentStep}
                   </p>
                 )}
@@ -339,8 +339,8 @@ export function ExecModal({ exec, plan, execPlanId, tgtEnv, onConfirm, onCancel,
                     const short = tableName.split(".").pop() ?? tableName
                     return (
                       <span key={tableName} className="flex items-center gap-1.5">
-                        {status === "running" && <Loader2 size={11} className="animate-spin text-accent shrink-0" />}
-                        {status === "applying" && <Loader2 size={11} className="animate-spin text-warning shrink-0" />}
+                        {status === "running" && <Loader2 size={11} className="animate-spin text-info shrink-0" />}
+                        {status === "applying" && <Loader2 size={11} className="animate-spin text-info shrink-0" />}
                         {status === "done" && <CheckCircle2 size={11} style={{ color: DIFF.ins }} className="shrink-0" />}
                         {status === "failed" && <XCircle size={11} style={{ color: DIFF.del }} className="shrink-0" />}
                         {status === "cancelled" && <XCircle size={11} className="shrink-0 text-text-muted/50" />}
@@ -349,8 +349,8 @@ export function ExecModal({ exec, plan, execPlanId, tgtEnv, onConfirm, onCancel,
                           className={`${
                             status === "done"
                               ? "text-text-muted/40"
-                              : status === "applying"
-                                ? "text-warning/90"
+                              : status === "running" || status === "applying"
+                                ? "text-info/90"
                                 : status === "failed"
                                   ? ""
                                   : "text-text"
@@ -395,7 +395,7 @@ export function ExecModal({ exec, plan, execPlanId, tgtEnv, onConfirm, onCancel,
                   detailIsSkipped
                     ? "text-warning/90"
                     : isInTxn
-                      ? "text-warning/80"
+                      ? "text-info/80"
                     : isDeploy && event.deployStatus === "skipped"
                     ? "text-text-muted/60"
                     : isDeploy
