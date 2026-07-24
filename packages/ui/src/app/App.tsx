@@ -1,32 +1,32 @@
 import { Activity, LayoutGrid, MessageSquare, MoreVertical, Shield, X } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { api, createEventStream, createPopoutEventRelay } from "../client/index"
-import { Canvas, type CanvasHandle } from "./workspace/Canvas"
-import { ChatHomePage } from "./home/ChatHomePage"
 import { EmptyState } from "../components/EmptyState"
-import { MobileNav } from "./workspace/MobileNav"
-import { ApprovalRequiredModal } from "../widgets/platform/ApprovalRequiredModal"
-import { PolicyEditor } from "../widgets/platform/PolicyEditor"
-import { Toolbar } from "./workspace/Toolbar"
-import { UsageModal } from "../widgets/platform/UsageModal"
-import { PlatformHealthBanner } from "../widgets/platform/PlatformHealthBanner"
-import { WelcomeFlow } from "./home/WelcomeFlow"
-import { WidgetCatalog } from "./workspace/WidgetCatalog"
-import { WidgetModal } from "./workspace/WidgetModal"
-import { flushDashboardSave, restoreDashboardState, startDashboardSync } from "./dashboard-sync"
 import { AppPhase } from "../enums"
-import { ThreadHomePage } from "../widgets/threads/ThreadHomePage"
 import { useIsMobile } from "../hooks/useIsMobile"
 import { useMe } from "../hooks/useMe"
 import { usePlatformHealth } from "../hooks/usePlatformHealth"
 import { useServerReachable } from "../hooks/useServerReachable"
-import type { AppShellMode } from "./types"
-import { resolveChatVariant, isShellModeToggleEvent } from "./types"
-import { useStore } from "../state/store"
 import { useLayoutStore } from "../state/layout-store"
+import { useStore } from "../state/store"
 import type { AuditEntry, LogEntry, Step, WidgetType } from "../types"
-import { getWidgetDefinition, widgetComponent } from "./workspace/widget-definitions"
 import { widgetRegistry } from "../widgets"
+import { ApprovalRequiredModal } from "../widgets/platform/ApprovalRequiredModal"
+import { PlatformHealthBanner } from "../widgets/platform/PlatformHealthBanner"
+import { PolicyEditor } from "../widgets/platform/PolicyEditor"
+import { UsageModal } from "../widgets/platform/UsageModal"
+import { ThreadHomePage } from "../widgets/threads/ThreadHomePage"
+import { flushDashboardSave, restoreDashboardState, startDashboardSync } from "./dashboard-sync"
+import { ChatHomePage } from "./home/ChatHomePage"
+import { WelcomeFlow } from "./home/WelcomeFlow"
+import type { AppShellMode } from "./types"
+import { isShellModeToggleEvent, resolveChatVariant } from "./types"
+import { Canvas, type CanvasHandle } from "./workspace/Canvas"
+import { MobileNav } from "./workspace/MobileNav"
+import { Toolbar } from "./workspace/Toolbar"
+import { getWidgetDefinition, widgetComponent } from "./workspace/widget-definitions"
+import { WidgetCatalog } from "./workspace/WidgetCatalog"
+import { WidgetModal } from "./workspace/WidgetModal"
 
 const SHELL_TRANSITION_MS = 280
 
@@ -75,6 +75,17 @@ export function App() {
   const [shellRevealing, setShellRevealing] = useState(false)
   const [chatHomeHeroStage, setChatHomeHeroStage] = useState<"hidden" | "pill" | "copy">("hidden")
   const [chatHomeHeroRevealProgress, setChatHomeHeroRevealProgress] = useState(0)
+  /** Hold app content a beat after the morph signal so it doesn’t beat the pill. */
+  const SHELL_REVEAL_LAG_MS = 500
+  const shellRevealTimersRef = useRef<number[]>([])
+  function clearShellRevealTimers() {
+    for (const id of shellRevealTimersRef.current) window.clearTimeout(id)
+    shellRevealTimersRef.current = []
+  }
+  function lagShellReveal(fn: () => void) {
+    const id = window.setTimeout(fn, SHELL_REVEAL_LAG_MS)
+    shellRevealTimersRef.current.push(id)
+  }
   const { me, loading: meLoading, refresh: refreshMe, logout } = useMe()
   const { health: platformHealth, refresh: refreshPlatformHealth } = usePlatformHealth(!!me)
   const { reachable: serverReachable } = useServerReachable(true)
@@ -184,6 +195,7 @@ export function App() {
   // long-settled timestamp and the field would pop in fully populated.
   useEffect(() => {
     if (phase === AppPhase.Login) {
+      clearShellRevealTimers()
       setShellRevealing(false)
       setChatHomeHeroStage("hidden")
       setChatHomeHeroRevealProgress(0)
@@ -423,13 +435,15 @@ export function App() {
           setChatHomeHeroRevealProgress(1)
           setPhase(AppPhase.Shell)
         }}
-        onFading={() => setShellRevealing(true)}
+        onFading={() => lagShellReveal(() => setShellRevealing(true))}
         onEnteringStart={() => {
           setChatHomeHeroStage("pill")
           setChatHomeHeroRevealProgress(0)
         }}
-        onEntered={() => setChatHomeHeroStage("copy")}
-        onPillRevealProgress={setChatHomeHeroRevealProgress}
+        onEntered={() => lagShellReveal(() => setChatHomeHeroStage("copy"))}
+        onPillRevealProgress={(progress) => {
+          lagShellReveal(() => setChatHomeHeroRevealProgress(progress))
+        }}
       />
     ) : phase === AppPhase.Outro ? (
       <WelcomeFlow
