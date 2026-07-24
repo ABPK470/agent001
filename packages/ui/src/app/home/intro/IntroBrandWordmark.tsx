@@ -1,89 +1,63 @@
-import { useEffect, useRef, useState, type CSSProperties } from "react"
-import {
-  CHAT_BRAND_LOGO_SIZE,
-  INTRO_COLON_EMBEDDED_SIZE,
-} from "../../brand"
-import { ASCII_FIELD_SCRAMBLE_GLYPHS } from "../../../lib/ascii-noise"
+/**
+ * Intro brand — sequential:
+ * show : → pinch → shed mass to letter seats → letters lock → rotate :
+ * → rest MI:A → (resolve) letters retract to live :
+ */
+
+import { useEffect, useRef, useState } from "react"
+import { CHAT_BRAND_LOGO_SIZE } from "../../brand"
 import { Logo } from "../../../components/Logo"
 
-const COLON_EMBEDDED_SCALE = INTRO_COLON_EMBEDDED_SIZE / CHAT_BRAND_LOGO_SIZE
-
-/**
- * Lone colon after letters leave. Stays at embedded optical size until
- * `settle` (same beat as the purple tint), then eases to the forever mark.
- */
-function SettlingColonMark({
-  online,
-  className,
-  settle,
-}: {
-  online: boolean
-  className: string
-  settle: boolean
-}) {
-  return (
-    <span
-      className={`intro3-wm-mark-settle${settle ? " intro3-wm-mark-settle--done" : ""}`}
-      style={{ "--wm-colon-settle-from": String(COLON_EMBEDDED_SCALE) } as CSSProperties}
-    >
-      <Logo size={CHAT_BRAND_LOGO_SIZE} online={online} className={className} />
-    </span>
-  )
-}
-
-const WM_REVEAL_DELAY_MS = 220
-const BRAND_COLON_INTRO_MS = 320
-const BRAND_PINCH_CLOSE_MS = 390
-const WM_LETTER_SNAP_MS = 85
-const WM_SCRAMBLE_TICK_MS = 35
-const WM_LETTER_STAGGER_MS = 32
-const BRAND_PINCH_PAUSE_MS = 760
-const BRAND_ROTATE_DUR_MS = 1200
-const BRAND_RESOLVE_DELAY_MS = 280
-const BRAND_LIVE_PAUSE_MS = 380
-const BRAND_PRE_ROTATE_PAUSE_MS = 340
-const RETRACT_SCRAMBLE_MS = 85
-const RETRACT_COLLAPSE_MS = 240
-const BRAND_A_RETRACT_DELAY_MS = 100
-
-function wmRandomGlyph(seed: number): string {
-  const i = Math.abs((seed * 9301 + 49297) % ASCII_FIELD_SCRAMBLE_GLYPHS.length)
-  return ASCII_FIELD_SCRAMBLE_GLYPHS[i]!
-}
+const REVEAL_DELAY_MS = 180
+const COLON_LAND_MS = 420
+const HOLD_BEFORE_FORGE_MS = 180
+/** Pinch + shed mass into letter positions. */
+const FORGE_MS = 720
+/** One rotate after letters are up. */
+const ROTATE_MS = 1000
+const HOLD_AFTER_ROTATE_MS = 200
+/** Letters retract when leaving hero — no second pinch/rotate. */
+const RESOLVE_MS = 520
+const LIVE_PAUSE_MS = 100
+const RESOLVE_DELAY_MS = 40
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => window.setTimeout(r, ms))
 }
 
-type BrandLetterState = "hidden" | "locked" | "scrambling" | "retracting" | "retracted"
-interface BrandLetter { state: BrandLetterState; glyph: string }
+type BrandPhase =
+  | "boot"
+  | "colon"
+  | "forge"
+  | "rotate"
+  | "open"
+  | "resolve"
+  | "live"
 
-function BrandLetterSlot({
-  cell,
-  fromPinch = false,
-  snapFrom,
+function BrandLetter({
+  ch,
+  side,
+  index,
 }: {
-  cell: BrandLetter
-  fromPinch?: boolean
-  snapFrom?: "left" | "right"
+  ch: string
+  side: "pre" | "post"
+  index: number
 }) {
-  if (cell.state === "retracted") return null
-  const collapsing = cell.state === "retracting" && cell.glyph === ""
-  const snapping = cell.state === "scrambling"
   return (
     <span
-      className={`intro3-wm-slot${snapping && snapFrom ? ` intro3-wm-slot--snap-${snapFrom}` : ""}${fromPinch ? " intro3-wm-slot--from-pinch" : ""}${collapsing ? " intro3-wm-slot--collapse" : ""}${cell.state === "retracting" ? " intro3-wm-slot--retracting" : ""}${cell.state === "hidden" ? " intro3-wm-slot--hidden" : ""}`}
+      className={[
+        "intro3-wm-slot",
+        side === "pre" ? "intro3-wm-slot--pre" : "intro3-wm-slot--post",
+        `intro3-wm-slot--i${index}`,
+      ].join(" ")}
+      aria-hidden="true"
     >
-      <span
-        className={`intro3-wm-letter${snapping || (cell.state === "retracting" && cell.glyph) ? " intro3-wm-scramble" : ""}${cell.state === "locked" ? " intro3-wm-letter--locked" : ""}`}
-      >
-        {cell.state === "hidden" || collapsing ? "\u00A0" : cell.glyph}
-      </span>
+      <span className="intro3-wm-letter">{ch}</span>
     </span>
   )
 }
 
-/** Header brand: : → pinch MI…A → optional resolve → live loop */
+/** Header brand: : pinch-shed → letters → rotate → live : */
 export function IntroBrandWordmark({
   onBrandReady,
   onBrandLive,
@@ -95,22 +69,10 @@ export function IntroBrandWordmark({
   beginResolve: boolean
   serverReachable: boolean
 }) {
-  const [miCells, setMiCells] = useState<BrandLetter[]>([
-    { state: "hidden", glyph: "" },
-    { state: "hidden", glyph: "" },
-  ])
-  const [aCell, setACell] = useState<BrandLetter>({ state: "hidden", glyph: "" })
+  const [phase, setPhase] = useState<BrandPhase>("boot")
   const [colonHandoff, setColonHandoff] = useState(false)
-  const [markShown, setMarkShown] = useState(false)
-  const [pinchIntro, setPinchIntro] = useState(false)
-  const [pinchForge, setPinchForge] = useState(false)
-  const [rotateResolve, setRotateResolve] = useState(false)
-  const [markPurple, setMarkPurple] = useState(false)
-  const [markLive, setMarkLive] = useState(false)
-  const [aVisible, setAVisible] = useState(false)
   const brandReadyRef = useRef(false)
   const resolveStartedRef = useRef(false)
-  const pinchIntroStartedRef = useRef(false)
   const onBrandReadyRef = useRef(onBrandReady)
   const onBrandLiveRef = useRef(onBrandLive)
   useEffect(() => { onBrandReadyRef.current = onBrandReady }, [onBrandReady])
@@ -124,117 +86,21 @@ export function IntroBrandWordmark({
   }, [serverReachable])
 
   useEffect(() => {
-    if (!markLive) return
+    if (phase !== "live") return
     onBrandLiveRef.current?.()
-  }, [markLive])
+  }, [phase])
 
   useEffect(() => {
     if (!colonHandoff) return
-    const t = window.setTimeout(() => setColonHandoff(false), 220)
+    const t = window.setTimeout(() => setColonHandoff(false), COLON_LAND_MS)
     return () => window.clearTimeout(t)
   }, [colonHandoff])
-
-  const introduceColon = async () => {
-    setMarkShown(true)
-    setColonHandoff(true)
-    await sleep(BRAND_COLON_INTRO_MS)
-  }
-
-  const pinchCreateMiA = async () => {
-    setPinchIntro(true)
-    await sleep(BRAND_PINCH_CLOSE_MS)
-    setAVisible(true)
-    await snapMiA()
-    setPinchIntro(false)
-  }
-
-  const snapLetter = async (
-    apply: (cell: BrandLetter) => void,
-    target: string,
-    seed: number,
-    delayMs: number,
-  ) => {
-    if (delayMs > 0) await sleep(delayMs)
-    apply({ state: "scrambling", glyph: wmRandomGlyph(seed) })
-    const startedAt = performance.now()
-    while (performance.now() - startedAt < WM_LETTER_SNAP_MS) {
-      apply({ state: "scrambling", glyph: wmRandomGlyph(Math.floor(performance.now()) + seed) })
-      await sleep(WM_SCRAMBLE_TICK_MS)
-    }
-    apply({ state: "locked", glyph: target })
-  }
-
-  const snapMiA = async () => {
-    await Promise.all([
-      snapLetter(
-        (cell) => {
-          setMiCells((prev) => {
-            const next = prev.slice()
-            next[0] = cell
-            return next
-          })
-        },
-        "M",
-        3,
-        0,
-      ),
-      snapLetter(
-        (cell) => {
-          setMiCells((prev) => {
-            const next = prev.slice()
-            next[1] = cell
-            return next
-          })
-        },
-        "I",
-        7,
-        WM_LETTER_STAGGER_MS,
-      ),
-      snapLetter((cell) => setACell(cell), "A", 11, WM_LETTER_STAGGER_MS * 2),
-    ])
-  }
-
-  const retractMiTogether = async () => {
-    const startedAt = performance.now()
-    while (performance.now() - startedAt < RETRACT_SCRAMBLE_MS) {
-      setMiCells((prev) =>
-        prev.map((cell, i) => ({
-          ...cell,
-          state: "retracting" as const,
-          glyph: wmRandomGlyph(Math.floor(performance.now()) + i * 11),
-        })),
-      )
-      await sleep(WM_SCRAMBLE_TICK_MS)
-    }
-    setMiCells((prev) =>
-      prev.map((cell) => ({ ...cell, state: "retracting" as const, glyph: "" })),
-    )
-    await sleep(RETRACT_COLLAPSE_MS)
-    setMiCells((prev) =>
-      prev.map(() => ({ state: "retracted" as const, glyph: "" })),
-    )
-  }
-
-  const retractA = async () => {
-    const startedAt = performance.now()
-    while (performance.now() - startedAt < RETRACT_SCRAMBLE_MS) {
-      const g = wmRandomGlyph(Math.floor(performance.now()) + 17)
-      setACell({ state: "retracting", glyph: g })
-      await sleep(WM_SCRAMBLE_TICK_MS)
-    }
-    setACell({ state: "retracting", glyph: "" })
-    await sleep(RETRACT_COLLAPSE_MS)
-    setACell({ state: "retracted", glyph: "" })
-  }
 
   useEffect(() => {
     if (!serverReachable) return
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches
     if (reduced) {
-      setMiCells(["M", "I"].map((ch) => ({ state: "locked", glyph: ch })))
-      setMarkShown(true)
-      setACell({ state: "locked", glyph: "A" })
-      setAVisible(true)
+      setPhase("open")
       brandReadyRef.current = true
       onBrandReadyRef.current?.()
       return
@@ -242,15 +108,22 @@ export function IntroBrandWordmark({
 
     let cancelled = false
     const run = async () => {
-      await sleep(WM_REVEAL_DELAY_MS)
+      await sleep(REVEAL_DELAY_MS)
       if (cancelled) return
-      await introduceColon()
+      setPhase("colon")
+      setColonHandoff(true)
+      await sleep(COLON_LAND_MS)
       if (cancelled) return
-      if (pinchIntroStartedRef.current) return
-      pinchIntroStartedRef.current = true
-      await pinchCreateMiA()
+      await sleep(HOLD_BEFORE_FORGE_MS)
       if (cancelled) return
-      await sleep(BRAND_PINCH_PAUSE_MS)
+      setPhase("forge")
+      await sleep(FORGE_MS)
+      if (cancelled) return
+      setPhase("rotate")
+      await sleep(ROTATE_MS)
+      if (cancelled) return
+      setPhase("open")
+      await sleep(HOLD_AFTER_ROTATE_MS)
       if (cancelled) return
       brandReadyRef.current = true
       onBrandReadyRef.current?.()
@@ -265,37 +138,20 @@ export function IntroBrandWordmark({
     if (!beginResolve || !brandReadyRef.current || resolveStartedRef.current) return
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches
     if (reduced) {
-      setMiCells((prev) => prev.map(() => ({ state: "retracted", glyph: "" })))
-      setMarkPurple(true)
-      setAVisible(false)
-      setMarkLive(true)
+      setPhase("live")
       return
     }
 
     resolveStartedRef.current = true
     let cancelled = false
-
     const run = async () => {
-      await sleep(BRAND_RESOLVE_DELAY_MS)
+      await sleep(RESOLVE_DELAY_MS)
       if (cancelled) return
-      await retractMiTogether()
+      setPhase("resolve")
+      await sleep(RESOLVE_MS)
       if (cancelled) return
-      await sleep(BRAND_A_RETRACT_DELAY_MS)
-      if (cancelled) return
-      await retractA()
-      if (cancelled) return
-      setAVisible(false)
-      await sleep(BRAND_PRE_ROTATE_PAUSE_MS)
-      if (cancelled) return
-      setRotateResolve(true)
-      await sleep(BRAND_ROTATE_DUR_MS)
-      if (cancelled) return
-      setRotateResolve(false)
-      setMarkPurple(true)
-      await sleep(BRAND_LIVE_PAUSE_MS)
-      if (cancelled) return
-      setPinchForge(false)
-      setMarkLive(true)
+      setPhase("live")
+      await sleep(LIVE_PAUSE_MS)
     }
 
     void run().catch((err: unknown) => { console.error("[mia]", err) })
@@ -312,52 +168,48 @@ export function IntroBrandWordmark({
     )
   }
 
-  const markAnimClass =
-    markLive
-      ? ""
-      : `${pinchIntro ? " mia-colon-logo--pinch-intro" : ""}${pinchForge ? " mia-colon-logo--pinch-forge" : ""}${rotateResolve ? " mia-colon-logo--rotate-resolve" : ""}`.trim()
+  const lettersOpen =
+    phase === "forge"
+    || phase === "rotate"
+    || phase === "open"
+    || phase === "resolve"
 
-  // Letters gone → settle to the forever mark size (same as home / toolbar).
-  const markSolo = miCells.every((c) => c.state === "retracted") && !aVisible
-
-  const soloMarkClassName = [
-    "toolbar-brand-logo",
-    "intro3-wm-mark--solo",
-    markPurple && !markLive ? "intro3-wm-mark--purple" : "",
-    markAnimClass,
+  const sequenceClass = [
+    "intro3-brand-sequence",
+    lettersOpen ? "intro3-brand-sequence--open" : "intro3-brand-sequence--closed",
+    phase === "forge" ? "intro3-brand-sequence--forging" : "",
+    phase === "rotate" ? "intro3-brand-sequence--rotating" : "",
+    phase === "resolve" ? "intro3-brand-sequence--resolving" : "",
+    phase === "live" ? "intro3-brand-sequence--live" : "",
   ].filter(Boolean).join(" ")
-
-  if (markSolo || markLive) {
-    return (
-      <SettlingColonMark
-        online={markLive}
-        settle={markPurple || markLive}
-        className={markLive ? "toolbar-brand-logo intro3-wm-mark--solo" : soloMarkClassName}
-      />
-    )
-  }
 
   const markClassName = [
     "intro3-wm-mark",
     "toolbar-brand-logo",
-    markShown ? "intro3-wm-mark--in" : "",
+    phase !== "boot" ? "intro3-wm-mark--in" : "",
     colonHandoff ? "intro3-wm-mark--handoff" : "",
-    markPurple && !rotateResolve ? "intro3-wm-mark--purple" : "",
-    markAnimClass,
+    phase === "live" || phase === "resolve" || phase === "rotate" || phase === "open"
+      ? "intro3-wm-mark--purple"
+      : "",
+    phase === "live" ? "intro3-wm-mark--solo" : "",
+    phase === "forge" ? "intro3-wm-mark--forging mia-colon-logo--pinch-forge" : "",
+    phase === "rotate" ? "intro3-wm-mark--rotating mia-colon-logo--rotate-resolve" : "",
   ].filter(Boolean).join(" ")
 
   return (
-    <span className="intro3-brand-sequence" aria-label="MI:A">
-      <BrandLetterSlot cell={miCells[0]!} snapFrom="left" />
-      <BrandLetterSlot cell={miCells[1]!} snapFrom="left" />
+    <span className={sequenceClass} aria-label="MI:A">
+      <BrandLetter ch="M" side="pre" index={1} />
+      <BrandLetter ch="I" side="pre" index={0} />
       <span className="intro3-wm-colon-anchor intro3-wm-colon-anchor--locked">
+        <span className="intro3-wm-ejecta intro3-wm-ejecta--left" aria-hidden="true" />
+        <span className="intro3-wm-ejecta intro3-wm-ejecta--right" aria-hidden="true" />
         <Logo
-          size={INTRO_COLON_EMBEDDED_SIZE}
-          online={markLive}
+          size={CHAT_BRAND_LOGO_SIZE}
+          online={phase === "live"}
           className={markClassName}
         />
       </span>
-      {aVisible ? <BrandLetterSlot cell={aCell} snapFrom="right" /> : null}
+      <BrandLetter ch="A" side="post" index={0} />
     </span>
   )
 }

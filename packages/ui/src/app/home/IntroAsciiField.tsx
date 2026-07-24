@@ -12,7 +12,9 @@
  * what makes it read like a Codex-style ambient field rather than TV
  * static.
  *
- * Pointer-events:none, respects prefers-reduced-motion, DPR-aware.
+ * Pointer-events:none on the canvas. Login surface tracks the window
+ * pointer for a soft densify + sparse lift (2D→depth), with gentle
+ * parallax. Respects prefers-reduced-motion / touch.
  */
 
 import { useEffect, useRef } from "react"
@@ -36,6 +38,13 @@ const UPDATE_FRACTION = 0.020       // ~2% of cells repaint per frame
 const NOISE_T_PER_SEC = 0.32        // how fast the noise field drifts
 const INK_OPACITY = 0.18            // applied to var(--text), works in both themes
 const BOOST_INK_OPACITY = 0.34
+
+/** Login cursor field — soft falloff + sparse “pop” cells (2D → depth). */
+const POINTER_RADIUS_PX = 158
+const POINTER_PARALLAX_MAX = 5.5
+const POINTER_SMOOTH = 0.14
+const POP_HASH_THRESHOLD = 0.87
+const POP_MIN_FALLOFF = 0.32
 
 // Roll-out animation — non-directional "materialize". Every cell has
 // its own stable reveal time computed from a per-cell hash blended
@@ -241,6 +250,7 @@ export function IntroAsciiField({
       `rgba(123, 111, 199, ${ADMIN_CORNER_INK_OPACITY})`,
     )
     let surfaceW = 0
+    let surfaceH = 0
     let currentT = 0
     let cols = 0
     let rows = 0
@@ -252,6 +262,14 @@ export function IntroAsciiField({
     let lastFrame = 0
     let startTs = 0
     let forceFullRepaint = false
+    // Login cursor field — raw pointer + smoothed follow (depth + densify).
+    const pointerLive = isLoginSurface && !boost && !reduced
+    let pointerRawX = -1
+    let pointerRawY = -1
+    let pointerActive = false
+    let pointerSmoothX = 0
+    let pointerSmoothY = 0
+    let pointerGain = 0
     const stageState = {
       mode: renderTargetRef.current?.mode,
       stage: renderTargetRef.current?.stage,
@@ -264,27 +282,60 @@ export function IntroAsciiField({
     // instances line up exactly.
     const revealStartTs = performance.now()
 
+    function pointerFalloff(cx: number, cy: number): number {
+      if (!pointerLive || pointerGain < 0.02) return 0
+      const dist = Math.hypot(cx - pointerSmoothX, cy - pointerSmoothY)
+      return (1 - smoothstep(0, POINTER_RADIUS_PX, dist)) * pointerGain
+    }
+
     function paintCellAt(c: number, r: number, ch: string, alpha = 1) {
       const x = c * CHAR_W
       const y = r * LINE_H
-      ctx!.clearRect(x, y, CHAR_W, LINE_H)
-      if (ch !== " " && alpha > 0.001) {
-        const accentMix =
-          adminAccentCornerRef.current && surface === "home"
-            ? adminCornerAccentMix(c, r, surfaceW, currentT)
-            : 0
-        if (accentMix > 0.001) {
-          ctx!.globalAlpha = alpha * accentMix
-          ctx!.fillStyle = accentInk
-          ctx!.fillText(ch, x, y)
+      ctx!.clearRect(x - 2, y - 2, CHAR_W + 6, LINE_H + 6)
+      if (ch === " " || alpha <= 0.001) return
+
+      const cellCx = x + CHAR_W * 0.5
+      const cellCy = y + LINE_H * 0.5
+      const falloff = pointerFalloff(cellCx, cellCy)
+      let drawX = x
+      let drawY = y
+      let drawAlpha = alpha
+      let lifted = false
+
+      if (falloff > 0.04) {
+        drawAlpha = Math.min(1.35, alpha * (1 + falloff * 1.35))
+        const popRoll = hash2(c + 11, r + 29)
+        if (popRoll > POP_HASH_THRESHOLD && falloff > POP_MIN_FALLOFF) {
+          lifted = true
+          const awayX = (cellCx - pointerSmoothX) / POINTER_RADIUS_PX
+          const awayY = (cellCy - pointerSmoothY) / POINTER_RADIUS_PX
+          drawX = x - awayX * 2.8 * falloff
+          drawY = y - awayY * 2.8 * falloff - 1.6 * falloff
         }
-        if (accentMix < 0.999) {
-          ctx!.globalAlpha = alpha * (1 - accentMix)
-          ctx!.fillStyle = ink
-          ctx!.fillText(ch, x, y)
-        }
-        ctx!.globalAlpha = 1
       }
+
+      const accentMix =
+        adminAccentCornerRef.current && surface === "home"
+          ? adminCornerAccentMix(c, r, surfaceW, currentT)
+          : 0
+
+      if (lifted) {
+        ctx!.globalAlpha = Math.min(1, drawAlpha * 0.22)
+        ctx!.fillStyle = ink
+        ctx!.fillText(ch, drawX + 1.1, drawY + 1.6)
+      }
+
+      if (accentMix > 0.001) {
+        ctx!.globalAlpha = Math.min(1, drawAlpha * accentMix)
+        ctx!.fillStyle = accentInk
+        ctx!.fillText(ch, drawX, drawY)
+      }
+      if (accentMix < 0.999) {
+        ctx!.globalAlpha = Math.min(1, drawAlpha * (1 - accentMix))
+        ctx!.fillStyle = ink
+        ctx!.fillText(ch, drawX, drawY)
+      }
+      ctx!.globalAlpha = 1
     }
 
     function cellAlpha(c: number, r: number, now: number): number {
@@ -399,6 +450,7 @@ export function IntroAsciiField({
       const h = surface.height
       if (w <= 0 || h <= 0) return
       surfaceW = w
+      surfaceH = h
       canvas!.width = Math.floor(w * dpr)
       canvas!.height = Math.floor(h * dpr)
       canvas!.style.width = w + "px"
@@ -439,6 +491,30 @@ export function IntroAsciiField({
 
       const t = (now - startTs) / 1000 * NOISE_T_PER_SEC
       currentT = t
+
+      if (pointerLive) {
+        const targetGain = pointerActive ? 1 : 0
+        pointerGain += (targetGain - pointerGain) * POINTER_SMOOTH
+        if (pointerActive) {
+          if (pointerSmoothX === 0 && pointerSmoothY === 0 && pointerRawX >= 0) {
+            pointerSmoothX = pointerRawX
+            pointerSmoothY = pointerRawY
+          } else {
+            pointerSmoothX += (pointerRawX - pointerSmoothX) * POINTER_SMOOTH
+            pointerSmoothY += (pointerRawY - pointerSmoothY) * POINTER_SMOOTH
+          }
+        }
+        if (surfaceW > 0 && surfaceH > 0 && pointerGain > 0.01) {
+          const nx = pointerSmoothX / surfaceW - 0.5
+          const ny = pointerSmoothY / surfaceH - 0.5
+          const ox = -nx * POINTER_PARALLAX_MAX * pointerGain
+          const oy = -ny * POINTER_PARALLAX_MAX * pointerGain
+          canvas!.style.transform = `translate3d(${ox.toFixed(2)}px, ${oy.toFixed(2)}px, 0)`
+        } else {
+          canvas!.style.transform = ""
+        }
+      }
+
       if (forceFullRepaint) {
         forceFullRepaint = false
         repaintAll(t)
@@ -513,9 +589,13 @@ export function IntroAsciiField({
           : (Math.random() * cols) | 0
         const idx = r * cols + c
         if (!painted[idx]) continue
-        const v = surfaceNoise(surface, c, r, cols, rows, t)
+        let v = surfaceNoise(surface, c, r, cols, rows, t)
+        if (pointerLive && pointerGain > 0.05) {
+          const falloff = pointerFalloff(c * CHAR_W + CHAR_W * 0.5, r * LINE_H + LINE_H * 0.5)
+          if (falloff > 0.05) v = Math.min(0.999, v + falloff * 0.28)
+        }
         const palIdx = Math.min(PALETTE.length - 1, Math.floor(Math.pow(v, palettePow) * PALETTE.length))
-        if (palIdx === cells[idx]) continue
+        if (palIdx === cells[idx] && !(pointerLive && pointerGain > 0.05)) continue
         cells[idx] = palIdx
         paintCellAt(c, r, PALETTE[palIdx]!, cellAlpha(c, r, now))
 
@@ -525,6 +605,30 @@ export function IntroAsciiField({
           cells[mirrorIdx] = palIdx
           if (painted[mirrorIdx]) {
             paintCellAt(mirrorC, r, PALETTE[palIdx]!, cellAlpha(mirrorC, r, now))
+          }
+        }
+      }
+
+      // Cursor neighborhood — refresh a ring so lift/densify tracks smoothly.
+      if (pointerLive && pointerGain > 0.04 && revealed) {
+        const c0 = Math.floor(pointerSmoothX / CHAR_W)
+        const r0 = Math.floor(pointerSmoothY / LINE_H)
+        const radC = Math.ceil(POINTER_RADIUS_PX / CHAR_W) + 1
+        const radR = Math.ceil(POINTER_RADIUS_PX / LINE_H) + 1
+        for (let dr = -radR; dr <= radR; dr++) {
+          for (let dc = -radC; dc <= radC; dc++) {
+            if ((dc * dc + dr * dr) % 3 !== 0) continue // sparse walk — cheap
+            const c = c0 + dc
+            const r = r0 + dr
+            if (c < 0 || r < 0 || c >= cols || r >= rows) continue
+            const idx = r * cols + c
+            if (!painted[idx]) continue
+            let v = surfaceNoise(surface, c, r, cols, rows, t)
+            const falloff = pointerFalloff(c * CHAR_W + CHAR_W * 0.5, r * LINE_H + LINE_H * 0.5)
+            if (falloff > 0.05) v = Math.min(0.999, v + falloff * 0.32)
+            const palIdx = Math.min(PALETTE.length - 1, Math.floor(Math.pow(v, palettePow) * PALETTE.length))
+            cells[idx] = palIdx
+            paintCellAt(c, r, PALETTE[palIdx]!, cellAlpha(c, r, now))
           }
         }
       }
@@ -565,6 +669,22 @@ export function IntroAsciiField({
     startTs = window.__miaIntroAsciiStartTs
     const onResize = () => resize(false)
     window.addEventListener("resize", onResize)
+
+    function onPointerMove(e: PointerEvent) {
+      if (e.pointerType === "touch") return
+      pointerRawX = e.clientX
+      pointerRawY = e.clientY
+      pointerActive = true
+    }
+    function onPointerLeave() {
+      pointerActive = false
+    }
+    if (pointerLive) {
+      window.addEventListener("pointermove", onPointerMove, { passive: true })
+      window.addEventListener("blur", onPointerLeave)
+      document.addEventListener("pointerleave", onPointerLeave)
+    }
+
     const parentObserver = canvas.parentElement instanceof HTMLElement
       ? new ResizeObserver(() => resize(false))
       : null
@@ -581,6 +701,12 @@ export function IntroAsciiField({
 
     return () => {
       window.removeEventListener("resize", onResize)
+      if (pointerLive) {
+        window.removeEventListener("pointermove", onPointerMove)
+        window.removeEventListener("blur", onPointerLeave)
+        document.removeEventListener("pointerleave", onPointerLeave)
+        canvas!.style.transform = ""
+      }
       parentObserver?.disconnect()
       themeObserver.disconnect()
       sysMql?.removeEventListener?.("change", onThemeChange)

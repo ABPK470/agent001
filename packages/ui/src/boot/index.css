@@ -3832,76 +3832,59 @@ textarea.input {
   animation: mia-colon-pinch-close-bottom 390ms cubic-bezier(0.62, 0, 0.25, 1) forwards;
 }
 
+/*
+ * Forge — pinch, hold while mass sheds to letter seats, end open for rotate.
+ * Timing: intro3-forge-* = 720ms.
+ */
 @keyframes mia-colon-pinch-forge-top {
   0% {
     transform: translateY(0);
-    opacity: 1;
-    animation-timing-function: cubic-bezier(0.62, 0, 0.25, 1);
   }
-  42% {
+  28% {
     transform: translateY(20px);
-    opacity: 1;
   }
-  50% {
-    transform: translateY(20px) scale(0.94);
-    opacity: 1;
-  }
-  74% {
-    transform: translateY(13px) translateX(2px) scale(0.15);
-    opacity: 0;
+  72% {
+    transform: translateY(20px);
   }
   100% {
     transform: translateY(0);
-    opacity: 1;
   }
 }
 
 @keyframes mia-colon-pinch-forge-bottom {
   0% {
     transform: translateY(0);
-    opacity: 1;
-    animation-timing-function: cubic-bezier(0.62, 0, 0.25, 1);
   }
-  42% {
+  28% {
     transform: translateY(-20px);
-    opacity: 1;
   }
-  50% {
-    transform: translateY(-20px) scale(0.94);
-    opacity: 1;
-  }
-  74% {
-    transform: translateY(-13px) translateX(2px) scale(0.15);
-    opacity: 0;
+  72% {
+    transform: translateY(-20px);
   }
   100% {
     transform: translateY(0);
-    opacity: 1;
   }
 }
 
 @keyframes mia-colon-pinch-forge-glow {
-  0%, 44% {
+  0%, 100% {
     filter: none;
   }
-  52% {
-    filter: drop-shadow(0 0 8px color-mix(in srgb, var(--text) 32%, transparent));
-  }
-  80%, 100% {
-    filter: none;
+  28%, 72% {
+    filter: drop-shadow(0 0 8px color-mix(in srgb, var(--text) 28%, transparent));
   }
 }
 
 .mia-colon-logo--pinch-forge {
-  animation: mia-colon-pinch-forge-glow 540ms linear forwards;
+  animation: mia-colon-pinch-forge-glow 720ms cubic-bezier(0.4, 0, 0.2, 1) both;
 }
 
 .mia-colon-logo--pinch-forge .mia-colon-logo-dot--top {
-  animation: mia-colon-pinch-forge-top 540ms linear forwards;
+  animation: mia-colon-pinch-forge-top 720ms cubic-bezier(0.4, 0, 0.2, 1) both;
 }
 
 .mia-colon-logo--pinch-forge .mia-colon-logo-dot--bottom {
-  animation: mia-colon-pinch-forge-bottom 540ms linear forwards;
+  animation: mia-colon-pinch-forge-bottom 720ms cubic-bezier(0.4, 0, 0.2, 1) both;
 }
 
 @keyframes mia-colon-rotate-once {
@@ -3924,8 +3907,33 @@ textarea.input {
   }
 }
 
+/* Hero mark is scaled — bake scale into the spin so it doesn’t pop. */
+@keyframes mia-colon-rotate-once-hero {
+  0% {
+    transform: scale(1.55) rotate(0deg);
+    color: var(--logo-mark-idle);
+    filter: none;
+    animation-timing-function: cubic-bezier(0.62, 0, 0.25, 1);
+  }
+  42% {
+    transform: scale(1.55) rotate(90deg);
+    color: var(--logo-mark-live);
+    filter: drop-shadow(0 0 6px var(--logo-mark-live-shadow));
+    animation-timing-function: cubic-bezier(0.62, 0, 0.25, 1);
+  }
+  100% {
+    transform: scale(1.55) rotate(360deg);
+    color: var(--logo-mark-live);
+    filter: drop-shadow(0 0 6px var(--logo-mark-live-shadow));
+  }
+}
+
 .mia-colon-logo--rotate-resolve {
-  animation: mia-colon-rotate-once 1.2s linear forwards;
+  animation: mia-colon-rotate-once 1s linear forwards;
+}
+
+.intro3-root--hero .mia-colon-logo--rotate-resolve {
+  animation-name: mia-colon-rotate-once-hero;
 }
 
 /* Keyframes own colour/filter — intro mark transition must not fight the spin. */
@@ -4497,6 +4505,7 @@ textarea.input {
   pointer-events: none;
   opacity: 0.72;
   transition: opacity 300ms cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: transform;
 }
 .intro3-root--entering .intro3-ascii-field {
   /* Withdraw the full-page field during the morph so the local pill
@@ -6888,13 +6897,29 @@ textarea.input {
 /* ── Header (h-14, mirrors Toolbar position & sizing) ───────────────── */
 .intro3-header {
   background: transparent;
-  transition: background-color 700ms cubic-bezier(0.4, 0, 0.2, 1) 220ms;
+  transition:
+    background-color 700ms cubic-bezier(0.4, 0, 0.2, 1) 220ms,
+    height 520ms cubic-bezier(0.37, 0, 0.63, 1);
 }
 .intro3-root--entering .intro3-header {
   background: transparent;
 }
 
-/* ── Login brand sequence — MI: → pinch spawns A → retract → live : ── */
+/* Hero beat — give the larger MI:A + colon room so the mark isn't clipped. */
+.intro3-root--hero .intro3-header {
+  height: 3.75rem;
+}
+@media (min-width: 640px) {
+  .intro3-root--hero .intro3-header {
+    height: 4.25rem;
+  }
+}
+.intro3-root--hero .intro3-brand-slot {
+  height: auto;
+  min-height: 2.5rem;
+}
+
+/* ── Login brand sequence — pinch shed → letters → rotate ── */
 .intro3-brand-sequence {
   display: inline-flex;
   align-items: center;
@@ -6903,37 +6928,395 @@ textarea.input {
   white-space: nowrap;
   font-family: var(--font-mono);
   font-weight: 700;
-  font-size: 20px;
+  font-size: 28px;
   letter-spacing: 0.072em;
   color: var(--text);
   line-height: 1;
-  /* Embedded colon slot — hair under the forever mark while MI…A shows. */
-  --wm-colon-w: 0.62em;
+  --wm-colon-w: 0.95em;
+  /* Same settle curve as greeting / colon mark — one chat-size handoff. */
+  transition: font-size 520ms cubic-bezier(0.37, 0, 0.63, 1);
 }
 
-/* Embedded → forever size, locked to the purple tint beat — long soft ease. */
-.intro3-wm-mark-settle {
-  display: inline-flex;
-  align-items: center;
-  transform: scale(var(--wm-colon-settle-from, 0.94));
-  transform-origin: left center;
-  transition: transform 1100ms cubic-bezier(0.37, 0, 0.63, 1);
+.intro3-root:not(.intro3-root--hero) .intro3-brand-sequence {
+  font-size: 20px;
 }
-.intro3-wm-mark-settle--done {
-  transform: scale(1);
-}
-.intro3-wm-mark-settle .mia-colon-logo {
-  transition:
-    color 1100ms cubic-bezier(0.37, 0, 0.63, 1),
-    filter 1100ms cubic-bezier(0.37, 0, 0.63, 1);
+
+@media (min-width: 640px) {
+  .intro3-root--hero .intro3-brand-sequence {
+    font-size: 32px;
+  }
 }
 
 .intro3-wm-colon-anchor {
   position: relative;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   flex-shrink: 0;
   vertical-align: middle;
+  min-width: var(--wm-colon-w, 0.95em);
+  min-height: var(--wm-colon-w, 0.95em);
+  overflow: visible;
+}
+
+.intro3-wm-slot {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 0;
+  height: 1em;
+  overflow: visible;
+  vertical-align: middle;
+  flex-shrink: 0;
+  opacity: 0;
+  transition:
+    width 720ms cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 200ms ease;
+}
+
+.intro3-wm-slot--pre {
+  transform-origin: right center;
+}
+
+.intro3-wm-slot--post {
+  transform-origin: left center;
+}
+
+/*
+ * Colon matter — two side sheds from the mark centerline.
+ * Left → MI. Right → A. Pure X motion; one continuous ease.
+ */
+.intro3-wm-ejecta {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 0.4em;
+  height: 0.72em;
+  margin-left: -0.2em;
+  margin-top: -0.36em;
+  border-radius: 0.14em;
+  background: currentColor;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 2;
+  transform-origin: center center;
+  will-change: transform, opacity, width, border-radius;
+  color: var(--logo-mark-idle);
+}
+.intro3-brand-sequence--resolving .intro3-wm-ejecta {
+  color: var(--logo-mark-live);
+}
+
+.intro3-wm-letter {
+  position: relative;
+  z-index: 1;
+  display: inline-block;
+  font: inherit;
+  font-weight: inherit;
+  letter-spacing: inherit;
+  line-height: 1;
+  color: inherit;
+  opacity: 0;
+  will-change: opacity;
+}
+
+/* Closed — letters hidden; ejecta wait dormant on the mark. */
+.intro3-brand-sequence--closed .intro3-wm-letter {
+  opacity: 0;
+}
+
+.intro3-brand-sequence--closed .intro3-wm-ejecta {
+  opacity: 0;
+}
+
+/* Open resting MI:A */
+.intro3-brand-sequence--open .intro3-wm-slot {
+  width: 0.7em;
+  opacity: 1;
+}
+.intro3-brand-sequence--open:not(.intro3-brand-sequence--forging):not(.intro3-brand-sequence--resolving) .intro3-wm-letter {
+  opacity: 1;
+}
+.intro3-brand-sequence--open:not(.intro3-brand-sequence--forging):not(.intro3-brand-sequence--resolving) .intro3-wm-ejecta {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/*
+ * Forge (720ms) — after pinch (~28%), mass moves to letter seats;
+ * letters lock while colon is still pinched. Unpinch/rotate are later phases.
+ */
+.intro3-brand-sequence--forging .intro3-wm-slot {
+  width: 0.7em;
+  opacity: 1;
+  transition-duration: 420ms;
+  transition-delay: 180ms; /* open seats as shed begins */
+}
+
+.intro3-brand-sequence--forging .intro3-wm-ejecta--left {
+  animation: intro3-forge-ejecta-left 720ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+.intro3-brand-sequence--forging .intro3-wm-ejecta--right {
+  animation: intro3-forge-ejecta-right 720ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+.intro3-brand-sequence--forging .intro3-wm-letter {
+  animation: intro3-forge-letter-in 720ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+/* Resolve — letters retract only (rotate already happened on open). */
+.intro3-brand-sequence--resolving .intro3-wm-slot {
+  width: 0;
+  opacity: 1;
+  transition:
+    width 520ms cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 200ms ease;
+  transition-delay: 0ms;
+}
+
+.intro3-brand-sequence--resolving .intro3-wm-ejecta--left {
+  animation: intro3-resolve-ejecta-left 520ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+.intro3-brand-sequence--resolving .intro3-wm-ejecta--right {
+  animation: intro3-resolve-ejecta-right 520ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+.intro3-brand-sequence--resolving .intro3-wm-letter {
+  animation: intro3-resolve-letter-out 520ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+/* Pinch meets ~28%; mass travels 28→58%; letters lock 50→68%; still pinched. */
+@keyframes intro3-forge-ejecta-left {
+  0%, 26% {
+    opacity: 0;
+    width: 0.4em;
+    margin-left: -0.2em;
+    border-radius: 0.14em;
+    transform: translateX(0);
+  }
+  32% {
+    opacity: 1;
+    width: 0.42em;
+    margin-left: -0.21em;
+    border-radius: 0.14em;
+    transform: translateX(0);
+  }
+  58% {
+    opacity: 1;
+    width: 1.35em;
+    margin-left: -0.68em;
+    border-radius: 0.1em;
+    transform: translateX(-1.35em);
+  }
+  78%, 100% {
+    opacity: 0;
+    width: 1.4em;
+    margin-left: -0.7em;
+    border-radius: 0.08em;
+    transform: translateX(-1.4em);
+  }
+}
+
+@keyframes intro3-forge-ejecta-right {
+  0%, 26% {
+    opacity: 0;
+    width: 0.4em;
+    margin-left: -0.2em;
+    border-radius: 0.14em;
+    transform: translateX(0);
+  }
+  32% {
+    opacity: 1;
+    width: 0.42em;
+    margin-left: -0.21em;
+    border-radius: 0.14em;
+    transform: translateX(0);
+  }
+  58% {
+    opacity: 1;
+    width: 0.72em;
+    margin-left: -0.36em;
+    border-radius: 0.1em;
+    transform: translateX(1.05em);
+  }
+  78%, 100% {
+    opacity: 0;
+    width: 0.75em;
+    margin-left: -0.38em;
+    border-radius: 0.08em;
+    transform: translateX(1.1em);
+  }
+}
+
+@keyframes intro3-forge-letter-in {
+  0%, 48% {
+    opacity: 0;
+  }
+  68%, 100% {
+    opacity: 1;
+  }
+}
+
+@keyframes intro3-resolve-letter-out {
+  0% {
+    opacity: 1;
+  }
+  55%, 100% {
+    opacity: 0;
+  }
+}
+
+@keyframes intro3-resolve-ejecta-left {
+  0% {
+    opacity: 0;
+    width: 1.4em;
+    margin-left: -0.7em;
+    border-radius: 0.08em;
+    transform: translateX(-1.4em);
+  }
+  18% {
+    opacity: 1;
+    width: 1.35em;
+    margin-left: -0.68em;
+    border-radius: 0.1em;
+    transform: translateX(-1.35em);
+  }
+  70%, 100% {
+    opacity: 0;
+    width: 0.4em;
+    margin-left: -0.2em;
+    border-radius: 0.14em;
+    transform: translateX(0);
+  }
+}
+
+@keyframes intro3-resolve-ejecta-right {
+  0% {
+    opacity: 0;
+    width: 0.75em;
+    margin-left: -0.38em;
+    border-radius: 0.08em;
+    transform: translateX(1.1em);
+  }
+  18% {
+    opacity: 1;
+    width: 0.72em;
+    margin-left: -0.36em;
+    border-radius: 0.1em;
+    transform: translateX(1.05em);
+  }
+  70%, 100% {
+    opacity: 0;
+    width: 0.4em;
+    margin-left: -0.2em;
+    border-radius: 0.14em;
+    transform: translateX(0);
+  }
+}
+
+.intro3-root--hero .intro3-brand-sequence .intro3-wm-mark--forging.intro3-wm-mark--in {
+  transform: scale(1.55);
+}
+
+.intro3-wm-slot--colon {
+  width: var(--wm-colon-w, 0.95em);
+  text-align: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .intro3-wm-ejecta,
+  .intro3-wm-letter,
+  .intro3-wm-slot {
+    animation: none !important;
+    transition: none !important;
+  }
+  .intro3-brand-sequence--open .intro3-wm-letter {
+    opacity: 1;
+  }
+  .intro3-brand-sequence--open .intro3-wm-ejecta {
+    opacity: 0;
+  }
+}
+
+/* Colon: forever bitmap size; scale up in hero, ease down with chat settle. */
+.intro3-brand-sequence .intro3-wm-mark,
+.intro3-brand-sequence .mia-colon-logo {
+  transform: scale(1);
+  transform-origin: center center;
+  transition:
+    transform 520ms cubic-bezier(0.37, 0, 0.63, 1),
+    opacity 420ms cubic-bezier(0.2, 0.85, 0.25, 1),
+    filter 420ms cubic-bezier(0.2, 0.85, 0.25, 1),
+    color 480ms ease;
+}
+
+.intro3-root--hero .intro3-brand-sequence .intro3-wm-mark--in,
+.intro3-root--hero .intro3-brand-sequence .mia-colon-logo.intro3-wm-mark--in {
+  /* ~26px optical from 17px forever mark — matches hero letters. */
+  transform: scale(1.55);
+}
+
+.intro3-wm-mark {
+  flex-shrink: 0;
+  opacity: 0;
+  filter: blur(4px);
+  margin-inline: 0;
+  color: var(--logo-mark-idle);
+}
+
+.intro3-wm-mark--in {
+  opacity: 1;
+  filter: none;
+}
+
+.intro3-wm-mark--handoff {
+  animation: intro3-wm-mark-handoff 480ms cubic-bezier(0.2, 0.85, 0.25, 1) both;
+}
+
+@keyframes intro3-wm-mark-handoff {
+  0% {
+    opacity: 0;
+    transform: scale(0.42);
+    filter: blur(5px);
+  }
+  55% {
+    opacity: 1;
+    transform: scale(1.12);
+    filter: blur(0);
+  }
+  100% {
+    opacity: 1;
+    filter: none;
+  }
+}
+
+.intro3-root--hero .intro3-wm-mark--handoff {
+  animation-name: intro3-wm-mark-handoff-hero;
+}
+
+@keyframes intro3-wm-mark-handoff-hero {
+  0% {
+    opacity: 0;
+    transform: scale(0.55);
+    filter: blur(5px);
+  }
+  55% {
+    opacity: 1;
+    transform: scale(1.62);
+    filter: blur(0);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1.55);
+    filter: none;
+  }
+}
+
+/* Slot snap / pinch (letters only). Colon never remounts. */
+.intro3-wm-mark-settle {
+  display: inline-flex;
+  align-items: center;
 }
 
 .intro3-wm-colon-anchor:not(.intro3-wm-colon-anchor--locked) .intro3-wm-mark {
@@ -6947,37 +7330,6 @@ textarea.input {
   display: flex;
   align-items: center;
   justify-content: center;
-}
-
-.intro3-wm-slot {
-  display: inline-block;
-  width: 0.7em;
-  overflow: hidden;
-  vertical-align: middle;
-  flex-shrink: 0;
-  transition:
-    width 240ms cubic-bezier(0.4, 0, 0.2, 1),
-    opacity 200ms ease;
-}
-
-.intro3-wm-slot--collapse {
-  width: 0;
-  opacity: 0;
-}
-
-.intro3-wm-slot--colon {
-  width: var(--wm-colon-w, 0.65em);
-  text-align: center;
-}
-
-.intro3-wm-slot--colon .intro3-wm-letter {
-  width: 100%;
-}
-
-.intro3-wm-slot--hidden {
-  width: 0;
-  opacity: 0;
-  overflow: hidden;
 }
 
 .intro3-wm-slot--emerge {
@@ -7043,7 +7395,7 @@ textarea.input {
 @keyframes intro3-wm-a-from-pinch {
   0% {
     opacity: 0;
-    transform: translateX(calc(-1 * (var(--wm-colon-w, 0.65em) + 0.04em))) scale(0.08);
+    transform: translateX(calc(-1 * (var(--wm-colon-w, 0.95em) + 0.04em))) scale(0.08);
     filter: blur(5px);
   }
   58% {
@@ -7052,42 +7404,6 @@ textarea.input {
     filter: blur(0);
   }
   100% {
-    opacity: 1;
-    transform: none;
-    filter: none;
-  }
-}
-
-.intro3-wm-mark {
-  flex-shrink: 0;
-  opacity: 0;
-  filter: blur(3px);
-  margin-inline: 0;
-  color: var(--logo-mark-idle);
-  transform-origin: center center;
-  transition:
-    opacity 340ms ease,
-    filter 340ms ease,
-    color 480ms ease;
-}
-
-.intro3-wm-mark--in {
-  opacity: 1;
-  filter: none;
-}
-
-/* Text ":" handoff → SVG logo at lock — same beat, no pop. */
-.intro3-wm-mark--handoff {
-  animation: intro3-wm-mark-handoff 220ms cubic-bezier(0.2, 0.85, 0.25, 1) both;
-}
-
-@keyframes intro3-wm-mark-handoff {
-  from {
-    opacity: 0.82;
-    transform: scale(0.9);
-    filter: blur(2px);
-  }
-  to {
     opacity: 1;
     transform: none;
     filter: none;
@@ -7171,23 +7487,6 @@ textarea.input {
     transition-duration: 0ms;
   }
 }
-.intro3-wm-letter {
-  display: inline-block;
-  width: 0.7em;
-  text-align: center;
-  color: var(--text);
-}
-
-.intro3-wm-scramble {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
-    "Liberation Mono", "Courier New", monospace;
-  color: var(--text-muted);
-  opacity: 0.95;
-}
-
-.intro3-wm-letter--locked {
-  color: var(--text);
-}
 
 /* ── Stage (Canvas-equivalent) ──────────────────────────────────────── */
 /* Staggered transition-delays cascade the reveal so it feels continuous
@@ -7209,6 +7508,79 @@ textarea.input {
 
 .intro3-mode-chat.intro3-root--entering .intro3-stage {
   padding: 0;
+}
+
+/* Hero composition — one optical scene: greeting + pill bonded, not orphan dock. */
+.intro3-stage--hero {
+  justify-content: center;
+}
+
+.intro3-stage--hero .intro3-scroll-area {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  overflow: hidden;
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+
+.intro3-stage--hero .intro3-scroll-inner {
+  padding-top: 0;
+  padding-bottom: 0;
+  /* Slightly above true center — Poolside optical weight. */
+  transform: translateY(-6vh);
+}
+
+.intro3-stage--hero .intro3-input-pad {
+  /* Pull the answer surface onto the same axis as the question. */
+  padding-top: 0.25rem;
+  padding-bottom: max(1.5rem, 10vh);
+  margin-top: -0.5rem;
+}
+
+.intro3-stage--hero .intro3-activity-slot {
+  min-height: 0;
+  padding-top: 0.25rem;
+  padding-bottom: 0.25rem;
+}
+
+.intro3-stage--hero .intro3-activity-slot:not(:empty) {
+  min-height: 1.75rem;
+}
+
+/* Opening bot line — display scale, then settle to chat. */
+.intro3-bot-line {
+  transition:
+    font-size 480ms cubic-bezier(0.37, 0, 0.63, 1),
+    line-height 480ms cubic-bezier(0.37, 0, 0.63, 1),
+    letter-spacing 480ms cubic-bezier(0.37, 0, 0.63, 1);
+}
+
+.intro3-bot-line--hero {
+  font-size: clamp(1.75rem, 3.6vw, 2.125rem);
+  line-height: 1.22;
+  letter-spacing: -0.035em;
+  font-weight: 500;
+}
+
+.intro3-bot-line--chat,
+.intro3-bot-line--settled {
+  font-size: 15px;
+  line-height: 1.625;
+  letter-spacing: normal;
+  font-weight: 500;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .intro3-brand-sequence,
+  .intro3-bot-line,
+  .intro3-input-pad {
+    transition: none !important;
+  }
+
+  .intro3-stage--hero .intro3-scroll-inner {
+    transform: none;
+  }
 }
 
 /* ── Widget shell (WidgetFrame-equivalent) ──────────────────────────── */
@@ -7345,11 +7717,11 @@ textarea.input {
 /* ── Input bar — docked like TermChat home (column + gutter in markup). ── */
 .intro3-input-pad {
   opacity: 0;
-  transform: translateY(8px);
+  transform: translateY(14px);
   pointer-events: none;
   transition:
-    opacity   260ms cubic-bezier(0.2, 0.8, 0.2, 1),
-    transform 320ms cubic-bezier(0.2, 0.8, 0.2, 1);
+    opacity   520ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 560ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 .intro3-input-pad--visible {
   opacity: 1;

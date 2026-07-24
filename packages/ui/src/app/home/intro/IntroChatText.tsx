@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState } from "react"
 import { ASCII_SCRAMBLE_GLYPHS } from "../IntroAsciiField"
 
-const SETTLE_MS = 140
+const DEFAULT_SETTLE_MS = 70
 const SETTLE_TICK_MS = 40
+/** Opening greeting — calm, quick; no long glyph drip. */
+export const INTRO_GREETING_SPEED_MS = 11
+export const INTRO_GREETING_SETTLE_MS = 55
 
 function clamp01(n: number): number {
   return Math.max(0, Math.min(1, n))
@@ -23,11 +26,16 @@ function scrambleGlyph(i: number, salt: number): string {
 export function StreamingText({
   text,
   onDone,
-  speedMs = 22,
+  speedMs = 14,
+  settleMs = DEFAULT_SETTLE_MS,
+  scramble = true,
 }: {
   text: string
   onDone?: () => void
   speedMs?: number
+  settleMs?: number
+  /** When false, chars land plain (prefer for the opening greeting). */
+  scramble?: boolean
 }) {
   const [n, setN] = useState(0)
   const [tick, setTick] = useState(0)
@@ -47,21 +55,22 @@ export function StreamingText({
     return () => window.clearTimeout(t)
   }, [n, text, speedMs])
   useEffect(() => {
+    if (!scramble) return
     const now = performance.now()
     const stillScrambling = revealedAtRef.current
       .slice(0, n)
-      .some((ts) => ts && now - ts < SETTLE_MS)
+      .some((ts) => ts && now - ts < settleMs)
     if (!stillScrambling) return
     const id = window.setInterval(() => setTick((v) => v + 1), SETTLE_TICK_MS)
     return () => window.clearInterval(id)
-  }, [n, tick])
+  }, [n, tick, scramble, settleMs])
   const now = performance.now()
   return (
     <>
       {text.slice(0, n).split("").map((ch, i) => {
         const at = revealedAtRef.current[i]
-        const age = at ? now - at : SETTLE_MS
-        if (age < SETTLE_MS && ch !== " " && ch !== "\n") {
+        const age = at ? now - at : settleMs
+        if (scramble && age < settleMs && ch !== " " && ch !== "\n") {
           return <span key={i} className="intro3-crystal-cell">{scrambleGlyph(i, tick)}</span>
         }
         return <span key={i}>{ch}</span>
@@ -111,28 +120,5 @@ export function RollbackText({
         return <span key={i}>{ch}</span>
       })}
     </span>
-  )
-}
-
-/** Activity shimmer — label continuously coalescing from the field. */
-export function CrystalText({ text }: { text: string }) {
-  const [tick, setTick] = useState(0)
-  useEffect(() => {
-    const id = window.setInterval(() => setTick((v) => v + 1), 110)
-    return () => window.clearInterval(id)
-  }, [])
-  const scrambleSet = new Set<number>()
-  const slots = Math.max(1, Math.floor(text.length * 0.18))
-  for (let i = 0; i < slots; i++) {
-    const idx = ((tick + i * 3) % text.length + text.length) % text.length
-    scrambleSet.add(idx)
-  }
-  return (
-    <>
-      {text.split("").map((ch, i) => {
-        if (ch === " " || !scrambleSet.has(i)) return <span key={i}>{ch}</span>
-        return <span key={i} className="intro3-crystal-cell">{scrambleGlyph(i, tick)}</span>
-      })}
-    </>
   )
 }

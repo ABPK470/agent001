@@ -8,7 +8,12 @@ import {
 } from "../chatLayout.js"
 import { IntroAsciiField, type IntroAsciiRenderTarget } from "./IntroAsciiField"
 import { IntroBrandWordmark } from "./intro/IntroBrandWordmark"
-import { CrystalText, RollbackText, StreamingText } from "./intro/IntroChatText"
+import {
+  INTRO_GREETING_SETTLE_MS,
+  INTRO_GREETING_SPEED_MS,
+  RollbackText,
+  StreamingText,
+} from "./intro/IntroChatText"
 
 interface Msg { role: "bot" | "user"; text: string; streamed?: boolean }
 
@@ -188,18 +193,31 @@ export function IntroConversation({
     return () => { document.title = t }
   }, [])
 
-  // Opening: brand + ASCII in parallel → bot greeting → input. Brand resolve
-  // waits until the user types (or idle fallback) so header motion never
-  // competes with reading "who am I talking to?".
+  // Opening: brand + ASCII → hold → display greeting → hold → pill.
+  // Brand resolve still waits for typing (or idle) so header motion never
+  // fights reading the opening question.
   useEffect(() => {
     let cancelled = false
+    const reduced =
+      typeof window !== "undefined"
+      && (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false)
+    const hold = (ms: number) =>
+      new Promise<void>((r) => window.setTimeout(r, reduced ? Math.min(ms, 80) : ms))
     const run = async () => {
       await Promise.all([
         brandReadyRef.current!.promise,
         asciiReadyRef.current!.promise,
       ])
       if (cancelled) return
-      await botReply("who am I talking to?", "Loading", 600)
+      await hold(420)
+      if (cancelled) return
+      // Quiet open: no tiny misplaced "Loading" shimmer — greeting lands directly.
+      await botReply("who am I talking to?", "Loading", reduced ? 80 : 180, {
+        quiet: true,
+        streamSpeedMs: INTRO_GREETING_SPEED_MS,
+      })
+      if (cancelled) return
+      await hold(380)
       if (cancelled) return
       setInputReady(true)
     }
@@ -230,16 +248,26 @@ export function IntroConversation({
     setMsgs((prev) => [...prev, { role, text }])
   }
 
-  async function botReply(text: string, shimmer: string, delay = 650): Promise<void> {
-    setShimmerLabel(shimmer)
-    setBotTyping(true)
-    await new Promise((r) => window.setTimeout(r, delay))
-    setBotTyping(false)
-    // Tiny gap so the shimmer is fully gone before the streaming bubble
-    // appears — avoids the visual collision the user flagged.
-    await new Promise((r) => window.setTimeout(r, 120))
+  async function botReply(
+    text: string,
+    shimmer: string,
+    delay = 650,
+    opts?: { quiet?: boolean; streamSpeedMs?: number },
+  ): Promise<void> {
+    const quiet = opts?.quiet === true
+    const streamSpeedMs = opts?.streamSpeedMs ?? 14
+    if (!quiet) {
+      setShimmerLabel(shimmer)
+      setBotTyping(true)
+      await new Promise((r) => window.setTimeout(r, delay))
+      setBotTyping(false)
+      // Tiny gap so the shimmer is fully gone before the reply lands.
+      await new Promise((r) => window.setTimeout(r, 80))
+    } else if (delay > 0) {
+      await new Promise((r) => window.setTimeout(r, delay))
+    }
     push("bot", text)
-    const streamDuration = Math.max(220, text.length * 22 + 80)
+    const streamDuration = Math.max(160, text.length * streamSpeedMs + 40)
     await new Promise<void>((r) => window.setTimeout(r, streamDuration))
   }
 
@@ -347,6 +375,11 @@ export function IntroConversation({
 
   const inputDisabled = submitting || entering || botTyping
   const canSend = draft.trim().length > 0 && !inputDisabled
+  /** Opening beat: brand + display greeting + input as one centered scene. */
+  const heroComposition =
+    !entering
+    && step === "username"
+    && !msgs.some((m) => m.role === "user")
 
   // Login pill — First rect for FLIP. Destination is `morphTarget`
   // (Last). Travel is the continuous thread from landing → home.
@@ -492,7 +525,11 @@ export function IntroConversation({
 
   return (
     <div
-      className={`intro3-root intro3-mode-${morphMode}${entering ? " intro3-root--entering" : ""}`}
+      className={[
+        `intro3-root intro3-mode-${morphMode}`,
+        entering ? "intro3-root--entering" : "",
+        heroComposition ? "intro3-root--hero" : "",
+      ].filter(Boolean).join(" ")}
       style={rootStyle}
       aria-label="mia-entry conversation"
     >
@@ -522,10 +559,10 @@ export function IntroConversation({
       ) : null}
 
       <header className="intro3-header relative flex h-12 shrink-0 items-center justify-between px-4 sm:h-14 sm:px-6 select-none">
-        <div className="toolbar-brand flex h-9 shrink-0 items-center text-text">
+        <div className="toolbar-brand intro3-brand-slot flex h-9 shrink-0 items-center text-text">
           <IntroBrandWordmark
             onBrandReady={() => brandReadyRef.current?.resolve()}
-            beginResolve={inputReady && userEngaged}
+            beginResolve={inputReady && !heroComposition}
             serverReachable={serverReachable}
           />
         </div>
@@ -547,8 +584,13 @@ export function IntroConversation({
         </div>
       </header>
 
-      {/* Main chat column — 1:1 with ChatHomePage → TermChat home layout. */}
-      <main className="intro3-stage flex min-h-0 flex-1 flex-col">
+      {/* Main chat column — hero: one optical scene; after handle: TermChat dock. */}
+      <main
+        className={[
+          "intro3-stage flex min-h-0 flex-1 flex-col",
+          heroComposition ? "intro3-stage--hero" : "",
+        ].filter(Boolean).join(" ")}
+      >
         <div className="relative flex h-full min-h-0 flex-col bg-transparent font-sans text-text">
           <div
             ref={scrollRef}
@@ -557,6 +599,7 @@ export function IntroConversation({
             <div className={`intro3-scroll-inner relative ${HOME_CHAT_COLUMN_CLASS} space-y-6`}>
               {msgs.map((m, i) => {
                 const isLast = i === msgs.length - 1
+                const isOpeningGreeting = i === 0 && m.role === "bot"
                 // Last line rolls back first — reverse of how the chat was written.
                 const rollbackLag = msgs.length <= 1
                   ? 0
@@ -569,7 +612,12 @@ export function IntroConversation({
                     span={0.42}
                   />
                 ) : isLast && m.role === "bot" ? (
-                  <StreamingText text={m.text} />
+                  <StreamingText
+                    text={m.text}
+                    speedMs={isOpeningGreeting ? INTRO_GREETING_SPEED_MS : 14}
+                    settleMs={isOpeningGreeting ? INTRO_GREETING_SETTLE_MS : 70}
+                    scramble
+                  />
                 ) : (
                   m.text
                 )
@@ -586,15 +634,26 @@ export function IntroConversation({
                   )
                 }
                 return (
-                  <div key={i} className="text-[15px] font-medium leading-relaxed text-text">
+                  <div
+                    key={i}
+                    className={[
+                      "intro3-bot-line font-medium text-text",
+                      isOpeningGreeting && heroComposition
+                        ? "intro3-bot-line--hero"
+                        : "intro3-bot-line--chat",
+                      isOpeningGreeting && !heroComposition
+                        ? "intro3-bot-line--settled"
+                        : "",
+                    ].filter(Boolean).join(" ")}
+                  >
                     {body}
                   </div>
                 )
               })}
               <div className="intro3-activity-slot py-1.5 pr-2">
                 {botTyping ? (
-                  <span className="activity-shimmer-tight inline-block text-[13px] font-medium leading-6 text-text-muted">
-                    <CrystalText text={shimmerLabel} />
+                  <span className="activity-shimmer-tight inline-block text-[15px] leading-6 font-normal text-text-muted">
+                    {shimmerLabel}
                   </span>
                 ) : null}
               </div>
@@ -609,10 +668,10 @@ export function IntroConversation({
                 ref={loginPillRef}
                 data-intro-target="termchat-input"
                 onSubmit={handleSubmit}
-                className="intro3-input chathome-chrome-pill mx-auto w-full rounded-[24px] border border-border bg-elevated px-5 py-4 ring-1 ring-overlay-1 transition-colors focus-within:border-border-strong focus-within:ring-overlay-2 dark:bg-overlay-2"
+                className="intro3-input chathome-chrome-pill mx-auto w-full rounded-2xl border border-border bg-elevated px-4 py-3 ring-1 ring-overlay-1 transition-colors focus-within:border-border-strong focus-within:ring-overlay-2 dark:bg-overlay-2"
                 style={pillTravelStyle}
               >
-                  <div className="flex flex-col gap-3">
+                  <div className="flex items-center gap-3">
                     {/* Slash-command suggester. When the user starts a
                         line with `/` we (a) flip the field to plain
                         text (so it's no longer dot-masked) and (b)
@@ -636,7 +695,7 @@ export function IntroConversation({
                         }
                       }
                       return (
-                        <div className="relative flex-1 min-w-0">
+                        <div className="relative min-w-0 flex-1">
                           {ghostRest && (
                             <div
                               aria-hidden="true"
@@ -675,17 +734,15 @@ export function IntroConversation({
                         </div>
                       )
                     })()}
-                    <div className="flex items-center justify-end gap-3 pt-1.5">
-                      <button
-                        type="submit"
-                        disabled={!canSend}
-                        className="shrink-0 flex items-center justify-center w-10 h-10 bg-overlay-2 hover:bg-overlay-hover text-text-muted hover:text-text rounded-xl transition-colors disabled:opacity-30"
-                        title="Send"
-                        aria-label="Send"
-                      >
-                        <ArrowUp size={18} />
-                      </button>
-                    </div>
+                    <button
+                      type="submit"
+                      disabled={!canSend}
+                      className="shrink-0 flex items-center justify-center w-9 h-9 bg-overlay-2 hover:bg-overlay-hover text-text-muted hover:text-text rounded-xl transition-colors disabled:opacity-30"
+                      title="Send"
+                      aria-label="Send"
+                    >
+                      <ArrowUp size={17} />
+                    </button>
                   </div>
                 </form>
             </div>

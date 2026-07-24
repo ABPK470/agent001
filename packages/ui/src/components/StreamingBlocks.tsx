@@ -1,5 +1,5 @@
 import type { JSX } from "react"
-import { isDiagramLang, tryInferDiagramKind } from "./inlineDiagram"
+import { isDiagramLang, tryInferDiagramKind } from "./InlineDiagram"
 
 /**
  * Quiet pending shell for incomplete structured answer blocks
