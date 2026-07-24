@@ -3830,8 +3830,7 @@ textarea.input {
 /*
  * Intro — ONE pinch that sheds mass:
  * dots : → . (hold) → open to : while mass carves.
- * Duration locked to PINCH_MS (1200ms × DEBUG_SLOWDOWN). Clay shares this beat.
- * TEMP DEBUG_SLOWDOWN=5 — restore durations to 1200ms when inspecting is done.
+ * Duration locked to PINCH_MS (1200ms). Clay shares this beat.
  */
 @keyframes mia-colon-pinch-shed-top {
   0% {
@@ -3864,11 +3863,11 @@ textarea.input {
 }
 
 .mia-colon-logo--pinch-shed .mia-colon-logo-dot--top {
-  animation: mia-colon-pinch-shed-top 6000ms cubic-bezier(0.4, 0, 0.2, 1) both;
+  animation: mia-colon-pinch-shed-top 1200ms cubic-bezier(0.4, 0, 0.2, 1) both;
 }
 
 .mia-colon-logo--pinch-shed .mia-colon-logo-dot--bottom {
-  animation: mia-colon-pinch-shed-bottom 6000ms cubic-bezier(0.4, 0, 0.2, 1) both;
+  animation: mia-colon-pinch-shed-bottom 1200ms cubic-bezier(0.4, 0, 0.2, 1) both;
 }
 
 @keyframes mia-colon-rotate-once {
@@ -6975,14 +6974,13 @@ textarea.input {
   transform: scale(1.55);
   margin-inline: 5px;
 }
-/* TEMP DEBUG_SLOWDOWN=5 — restore 320ms / 200ms when done. */
 .intro3-brand-sequence--resolving .intro3-wm-colon-anchor {
   /* Still large; layout already settling to solo : — no later sideways jump. */
   transform: scale(1.55);
   margin-inline: 0;
   transition:
-    transform 1600ms cubic-bezier(0.37, 0, 0.63, 1),
-    margin-inline 1000ms linear;
+    transform 320ms cubic-bezier(0.37, 0, 0.63, 1),
+    margin-inline 200ms linear;
 }
 .intro3-brand-sequence--live .intro3-wm-colon-anchor {
   transform: scale(1);
@@ -7075,41 +7073,38 @@ textarea.input {
 }
 
 /*
- * Pinch (base 1200ms × DEBUG_SLOWDOWN=5):
- *   0–36%   colon pinch closes
- *  36–48%   MI grows left from colon
- *  48–58%   A grows right from colon
- *  58–68%   hold solid mass
- *  68–88%   sculpt-carve → letter-shaped mass → brand ink
- *  88–100%  colon reopen
- * TEMP — restore delays/durations ÷5 when done.
+ * Pinch (1200ms) — mass sheds WITH the pinch, not after:
+ *   0–36%   colon closes + MI grows left from colon
+ *   8–40%   A grows right (slight stagger)
+ *  40–58%   hold solid mass while colon held
+ *  58–78%   sculpt-carve → letter-shaped mass → brand ink
+ *  70–100%  colon reopen
  */
 .intro3-brand-sequence--pinching .intro3-wm-slot--pre {
   width: 1.35em;
   opacity: 1;
-  transition-duration: 720ms;   /* 144ms × 5 */
-  transition-delay: 2160ms;     /* 432ms × 5 — 36% */
+  transition-duration: 420ms;
+  transition-delay: 0ms;
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
 }
 .intro3-brand-sequence--pinching .intro3-wm-slot--post {
   width: 0.7em;
   opacity: 1;
-  transition-duration: 600ms;   /* 120ms × 5 */
-  transition-delay: 2880ms;     /* 576ms × 5 — 48% */
+  transition-duration: 400ms;
+  transition-delay: 96ms; /* ~8% — right after MI starts */
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .intro3-brand-sequence--pinching .intro3-wm-slot--pre .intro3-wm-clay,
 .intro3-brand-sequence--pinching .intro3-wm-slot--post .intro3-wm-clay {
   opacity: 1;
-  animation: intro3-sculpt-carve 6000ms both;
+  animation: intro3-sculpt-carve 1200ms both;
 }
 
 /*
  * Resolve — fade MI:A and collapse their width while colon stays large.
  * Then --live only scales : down in its final spot (no resize-then-slide).
  */
-/* TEMP DEBUG_SLOWDOWN=5 — restore 160ms / 200ms when done. */
 .intro3-brand-sequence--resolving.intro3-brand-sequence--open .intro3-wm-slot,
 .intro3-brand-sequence--resolving.intro3-brand-sequence--open .intro3-wm-slot--pre,
 .intro3-brand-sequence--resolving.intro3-brand-sequence--open .intro3-wm-slot--post {
@@ -7118,12 +7113,12 @@ textarea.input {
   overflow: hidden;
   pointer-events: none;
   transition:
-    opacity 800ms linear,
-    width 1000ms cubic-bezier(0.37, 0, 0.63, 1);
+    opacity 160ms linear,
+    width 200ms cubic-bezier(0.37, 0, 0.63, 1);
 }
 .intro3-brand-sequence--resolving.intro3-brand-sequence--open .intro3-wm-clay {
   opacity: 0;
-  transition: opacity 800ms linear;
+  transition: opacity 160ms linear;
 }
 
 .intro3-brand-sequence--live.intro3-brand-sequence--open .intro3-wm-slot--pre,
@@ -7146,7 +7141,8 @@ textarea.input {
  *   solid mass → letter-shaped remaining mass → seated brand ink
  */
 @keyframes intro3-sculpt-carve {
-  0%, 68% {
+  /* Solid through pinch + short hold — mass is already shedding via slot width. */
+  0%, 55% {
     background-color: var(--text);
     color: var(--text);
     -webkit-text-fill-color: var(--text);
@@ -7155,7 +7151,7 @@ textarea.input {
     animation-timing-function: steps(1, end);
   }
   /* Cut: only letter-shaped clay remains (same material). */
-  74%, 84% {
+  62%, 78% {
     background-color: var(--text);
     color: transparent;
     -webkit-text-fill-color: transparent;
@@ -7164,7 +7160,7 @@ textarea.input {
     animation-timing-function: steps(1, end);
   }
   /* Seat as normal brand letters. */
-  90%, 100% {
+  86%, 100% {
     background-color: transparent;
     color: var(--text);
     -webkit-text-fill-color: var(--text);
@@ -7218,9 +7214,8 @@ textarea.input {
   filter: none;
 }
 
-/* TEMP DEBUG_SLOWDOWN=5 — restore 520ms when done. */
 .intro3-wm-mark--handoff {
-  animation: intro3-wm-mark-handoff 2600ms cubic-bezier(0.2, 0.85, 0.25, 1) both;
+  animation: intro3-wm-mark-handoff 520ms cubic-bezier(0.2, 0.85, 0.25, 1) both;
 }
 
 @keyframes intro3-wm-mark-handoff {
@@ -7465,15 +7460,20 @@ textarea.input {
   padding: 0;
 }
 
-/* Hero composition — one optical scene: greeting + pill bonded, not orphan dock. */
+/*
+ * Hero composition — greeting + pill as one scene.
+ * Vertical place via padding (tweenable) — not flex-center — so leave-hero
+ * settles cleanly with the type size instead of jumping.
+ */
 .intro3-stage--hero {
-  justify-content: center;
+  justify-content: flex-start;
 }
 
 .intro3-stage--hero .intro3-scroll-area {
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: flex-start;
+  padding-top: max(2.5rem, 18vh);
   overflow: hidden;
   -webkit-mask-image: none;
   mask-image: none;
@@ -7482,8 +7482,6 @@ textarea.input {
 .intro3-stage--hero .intro3-scroll-inner {
   padding-top: 0;
   padding-bottom: 0;
-  /* Slightly above true center — Poolside optical weight. */
-  transform: translateY(-6vh);
 }
 
 .intro3-stage--hero .intro3-input-pad {
@@ -7503,12 +7501,12 @@ textarea.input {
   min-height: 1.75rem;
 }
 
-/* Opening bot line — display scale, then settle to chat. */
+/* Opening bot line — hero display size, quiet settle to chat on name submit. */
 .intro3-bot-line {
   transition:
-    font-size 480ms cubic-bezier(0.37, 0, 0.63, 1),
-    line-height 480ms cubic-bezier(0.37, 0, 0.63, 1),
-    letter-spacing 480ms cubic-bezier(0.37, 0, 0.63, 1);
+    font-size 420ms cubic-bezier(0.37, 0, 0.63, 1),
+    line-height 420ms cubic-bezier(0.37, 0, 0.63, 1),
+    letter-spacing 420ms cubic-bezier(0.37, 0, 0.63, 1);
 }
 
 .intro3-bot-line--hero {
@@ -7529,12 +7527,9 @@ textarea.input {
 @media (prefers-reduced-motion: reduce) {
   .intro3-brand-sequence,
   .intro3-bot-line,
-  .intro3-input-pad {
+  .intro3-input-pad,
+  .intro3-scroll-area {
     transition: none !important;
-  }
-
-  .intro3-stage--hero .intro3-scroll-inner {
-    transform: none;
   }
 }
 
@@ -7621,6 +7616,7 @@ textarea.input {
 
 /* Login: text-only top fade when scrolling (no colored scrim on ASCII). */
 .intro3-scroll-area {
+  transition: padding-top 420ms cubic-bezier(0.37, 0, 0.63, 1);
   -webkit-mask-image: linear-gradient(
     to bottom,
     transparent 0,
@@ -7676,7 +7672,10 @@ textarea.input {
   pointer-events: none;
   transition:
     opacity   520ms cubic-bezier(0.2, 0.8, 0.2, 1),
-    transform 560ms cubic-bezier(0.2, 0.8, 0.2, 1);
+    transform 560ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    padding-top 420ms cubic-bezier(0.37, 0, 0.63, 1),
+    padding-bottom 420ms cubic-bezier(0.37, 0, 0.63, 1),
+    margin-top 420ms cubic-bezier(0.37, 0, 0.63, 1);
 }
 .intro3-input-pad--visible {
   opacity: 1;

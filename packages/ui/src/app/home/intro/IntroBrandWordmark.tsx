@@ -8,18 +8,15 @@ import { useEffect, useRef, useState } from "react"
 import { CHAT_BRAND_LOGO_SIZE } from "../../brand"
 import { Logo } from "../../../components/Logo"
 
-/** TEMP inspect — whole MI:A sequence. Restore to 1 when done. */
-const DEBUG_SLOWDOWN = 5
-
-const REVEAL_DELAY_MS = 80 * DEBUG_SLOWDOWN
+const REVEAL_DELAY_MS = 80
 /** : land — keep in sync with `.intro3-wm-mark--handoff` duration. */
-const COLON_LAND_MS = 520 * DEBUG_SLOWDOWN
-const HOLD_BEFORE_PINCH_MS = 200 * DEBUG_SLOWDOWN
+const COLON_LAND_MS = 520
+const HOLD_BEFORE_PINCH_MS = 200
 /** Meet + shed/carve — keep in sync with clay + pinch-shed CSS. */
-const PINCH_MS = 1200 * DEBUG_SLOWDOWN
-const HOLD_AFTER_CARVE_MS = 160 * DEBUG_SLOWDOWN
+const PINCH_MS = 1200
+const HOLD_AFTER_CARVE_MS = 160
 /** Fade + collapse MI:A, then scale : in place — matches CSS resolve. */
-const RESOLVE_MS = 220 * DEBUG_SLOWDOWN
+const RESOLVE_MS = 220
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => window.setTimeout(r, ms))
