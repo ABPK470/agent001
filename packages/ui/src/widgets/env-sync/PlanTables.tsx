@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Clock, GitBranch, Loader2, XCircle } from "lucide-react"
+import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Clock, GitBranch, Info, Loader2, XCircle } from "lucide-react"
 import { useMemo, useState } from "react"
 
 import type { SyncPlan, SyncPlanTable } from "../../types"
@@ -9,6 +9,7 @@ import { DIFF } from "./constants"
 import { formatPlanEntityLabel } from "./workflow"
 import { buildExecTableStatus, type ExecTableStatus } from "./exec-status"
 import { planHasMetadataChanges } from "./exec-preflight"
+import { isQuietPlanNote, partitionPlanNotices } from "./plan-notices"
 import { PlanPublishedBundleModal } from "./PlanPublishedBundleModal"
 import { PlanSampleRowModal } from "./PlanSampleRowModal"
 import { formatCellPreview, type SampleRowDetail } from "./plan-table-values"
@@ -33,7 +34,8 @@ export function PlanView({ plan, expanded, setExpanded, exec }: {
 
   const execStatus = useMemo(() => buildExecTableStatus(exec), [exec])
 
-  const warnings = [...plan.preflight.issues, ...plan.warnings]
+  const notices = [...plan.preflight.issues, ...plan.warnings]
+  const { notes, alerts } = partitionPlanNotices(notices)
   const flowSteps = plan.executionContract.flow.steps ?? []
   const definitionId = plan.executionContract.definitionId
   const pinnedVersion = plan.executionContract.definitionPublishedVersion
@@ -88,8 +90,8 @@ export function PlanView({ plan, expanded, setExpanded, exec }: {
         </div>
       </div>
 
-      {(warnings.length > 0 || flowSteps.length > 0) && (
-        <PlanCollapsibleSections warnings={warnings} flowSteps={flowSteps} />
+      {(alerts.length > 0 || notes.length > 0 || flowSteps.length > 0) && (
+        <PlanCollapsibleSections alerts={alerts} notes={notes} flowSteps={flowSteps} />
       )}
 
       <div className="rounded-lg overflow-hidden flex-1 min-h-0 flex flex-col">
@@ -274,32 +276,55 @@ export function net(table: SyncPlanTable): number {
 }
 
 function PlanCollapsibleSections({
-  warnings,
+  alerts,
+  notes,
   flowSteps,
 }: {
-  warnings: string[]
+  alerts: string[]
+  notes: string[]
   flowSteps: SyncPlan["executionContract"]["flow"]["steps"]
 }) {
-  const [warningsOpen, setWarningsOpen] = useState(warnings.length > 0)
+  const [alertsOpen, setAlertsOpen] = useState(alerts.length > 0)
+  const [notesOpen, setNotesOpen] = useState(false)
   const [flowOpen, setFlowOpen] = useState(false)
 
   return (
     <div className="rounded-lg border border-border-subtle overflow-hidden shrink-0 divide-y divide-border-subtle">
-      {warnings.length > 0 && (
+      {alerts.length > 0 && (
         <div>
           <button
-            onClick={() => setWarningsOpen((open) => !open)}
+            onClick={() => setAlertsOpen((open) => !open)}
             className="w-full flex items-center gap-2 px-4 py-2.5 hover:bg-elevated/30 transition-colors text-left"
           >
-            {warningsOpen ? <ChevronDown size={13} className="text-text-muted shrink-0" /> : <ChevronRight size={13} className="text-text-muted shrink-0" />}
+            {alertsOpen ? <ChevronDown size={13} className="text-text-muted shrink-0" /> : <ChevronRight size={13} className="text-text-muted shrink-0" />}
             <AlertTriangle size={14} className="text-warning shrink-0" />
             <span className="text-sm font-medium text-text">Warnings</span>
-            <span className="text-xs text-text-muted ml-1">({warnings.length})</span>
+            <span className="text-xs text-text-muted ml-1">({alerts.length})</span>
           </button>
-          {warningsOpen && (
+          {alertsOpen && (
             <div className="px-4 pb-3 space-y-1 max-h-48 overflow-y-auto font-mono text-sm text-warning">
-              {warnings.map((warning, index) => (
+              {alerts.map((warning, index) => (
                 <div key={index} className="leading-relaxed break-all">{warning}</div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+      {notes.length > 0 && (
+        <div>
+          <button
+            onClick={() => setNotesOpen((open) => !open)}
+            className="w-full flex items-center gap-2 px-4 py-2 hover:bg-elevated/20 transition-colors text-left"
+          >
+            {notesOpen ? <ChevronDown size={13} className="text-text-muted/50 shrink-0" /> : <ChevronRight size={13} className="text-text-muted/50 shrink-0" />}
+            <Info size={13} className="text-text-muted/60 shrink-0" />
+            <span className="text-sm text-text-muted">Notes</span>
+            <span className="text-xs text-text-muted/50 ml-1">({notes.length})</span>
+          </button>
+          {notesOpen && (
+            <div className="px-4 pb-2.5 space-y-1 max-h-36 overflow-y-auto text-xs text-text-muted/80 leading-relaxed">
+              {notes.map((note, index) => (
+                <div key={index} className="break-all">{note}</div>
               ))}
             </div>
           )}
@@ -380,11 +405,20 @@ function Detail({ row }: { row: SyncPlanTable }) {
         <span className="text-text-muted/50">scope</span>
         <span className="break-all">{row.scopePredicate}</span>
       </div>
-      {row.warnings.length > 0 && row.warnings.map((warning, index) => (
-        <div key={index} className="flex items-start gap-1.5 text-warning font-mono">
-          <AlertTriangle size={13} className="mt-0.5 shrink-0" />{warning}
-        </div>
-      ))}
+      {row.warnings.length > 0 && row.warnings.map((warning, index) => {
+        const quiet = isQuietPlanNote(warning)
+        return (
+          <div
+            key={index}
+            className={`flex items-start gap-1.5 ${quiet ? "text-text-muted/80 text-xs" : "text-warning font-mono"}`}
+          >
+            {quiet
+              ? <Info size={12} className="mt-0.5 shrink-0 text-text-muted/60" />
+              : <AlertTriangle size={13} className="mt-0.5 shrink-0" />}
+            {warning}
+          </div>
+        )
+      })}
       {(row.conflicts ?? []).length > 0 && (
         <div className="border border-warning/40 rounded overflow-hidden">
           <div className="px-3 py-1.5 bg-warning/5 border-b border-warning/20 flex justify-between items-center">
