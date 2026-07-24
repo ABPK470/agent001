@@ -1,6 +1,6 @@
 /**
- * Intro brand — : lands → pinch sheds two off-white rectangles → carve letters.
- * No rotate. When MI:A is seated, parent may show the input pill.
+ * Intro brand — : lands → pinch → mass grows from colon (MI left, then A right)
+ * → sculpt-carve (cut mass to letter shapes) → letters seated. No rotate.
  * On send name: colon only — abort in-flight MI:A, never continue it.
  */
 
@@ -8,15 +8,18 @@ import { useEffect, useRef, useState } from "react"
 import { CHAT_BRAND_LOGO_SIZE } from "../../brand"
 import { Logo } from "../../../components/Logo"
 
-const REVEAL_DELAY_MS = 80
+/** TEMP inspect — whole MI:A sequence. Restore to 1 when done. */
+const DEBUG_SLOWDOWN = 5
+
+const REVEAL_DELAY_MS = 80 * DEBUG_SLOWDOWN
 /** : land — keep in sync with `.intro3-wm-mark--handoff` duration. */
-const COLON_LAND_MS = 520
-const HOLD_BEFORE_PINCH_MS = 200
+const COLON_LAND_MS = 520 * DEBUG_SLOWDOWN
+const HOLD_BEFORE_PINCH_MS = 200 * DEBUG_SLOWDOWN
 /** Meet + shed/carve — keep in sync with clay + pinch-shed CSS. */
-const PINCH_MS = 1200
-const HOLD_AFTER_CARVE_MS = 160
+const PINCH_MS = 1200 * DEBUG_SLOWDOWN
+const HOLD_AFTER_CARVE_MS = 160 * DEBUG_SLOWDOWN
 /** Fade + collapse MI:A, then scale : in place — matches CSS resolve. */
-const RESOLVE_MS = 220
+const RESOLVE_MS = 220 * DEBUG_SLOWDOWN
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => window.setTimeout(r, ms))
@@ -34,7 +37,10 @@ function lettersVisibleIn(phase: BrandPhase): boolean {
   return phase === "pinch" || phase === "open"
 }
 
-/** Off-white rectangle holding letters already; carve replaces clay with --bg. */
+/**
+ * Mass grows from the colon edge (slot width) — never slides across `:`.
+ * Clay is solid fill; carve cuts that fill down to the letter shapes (sculpture).
+ */
 function BrandMass({
   text,
   side,

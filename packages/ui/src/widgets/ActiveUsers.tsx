@@ -2,7 +2,7 @@
  * ActiveUsers — admin observability: who's using mia and what happened.
  *
  * Features:
- *   - Summary stat strip (online / users / runs / tokens)
+ *   - Summary KPI cards (Usage-style: online / users / runs / tokens)
  *   - Main user table: sortable columns, text filter, all available data
  *   - Expandable per-user run history with pagination (offset/limit)
  *   - Server-side pagination for run history (supports 1000s of runs)
@@ -19,6 +19,7 @@
  */
 
 import type { ReactNode } from "react"
+import { Activity, CircleDot, Play, Users, Zap } from "lucide-react"
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { api } from "../client/index"
 import { EmptyState } from "../components/EmptyState"
@@ -385,15 +386,25 @@ export function ActiveUsers(): ReactNode {
         tiny ? "active-users-widget--tiny" : "",
       ].filter(Boolean).join(" ")}
     >
-      {/* Stat strip */}
+      {/* KPI cards — same dialect as Usage modal */}
       {summary && (
-        <div className="shrink-0 border-b border-border-subtle">
-          <div className="au-stat-grid divide-x divide-border-subtle">
-            <Stat label="Online"         value={String(summary.online)}        accent={summary.online > 0 ? "emerald" : undefined} />
-            <Stat label="Users (7d)"     value={String(summary.users)} />
-            <Stat label="Runs in flight" value={String(summary.runsInFlight)}  accent={summary.runsInFlight > 0 ? "blue" : undefined} />
-            <Stat label="Runs (24h)"     value={String(summary.runs24h)} />
-            <Stat label="Tokens (24h)"   value={formatCompact(summary.tokens24h)} />
+        <div className="shrink-0 border-b border-border-subtle px-4 py-3">
+          <div className="au-stat-grid">
+            <StatCard
+              icon={<CircleDot size={15} className={summary.online > 0 ? "text-success" : undefined} />}
+              label="Online"
+              value={String(summary.online)}
+              valueClassName={summary.online > 0 ? "text-success" : undefined}
+            />
+            <StatCard icon={<Users size={15} />} label="Users (7d)" value={String(summary.users)} />
+            <StatCard
+              icon={<Activity size={15} className={summary.runsInFlight > 0 ? "text-info" : undefined} />}
+              label="Runs in flight"
+              value={String(summary.runsInFlight)}
+              valueClassName={summary.runsInFlight > 0 ? "text-info" : undefined}
+            />
+            <StatCard icon={<Play size={15} />} label="Runs (24h)" value={String(summary.runs24h)} />
+            <StatCard icon={<Zap size={15} />} label="Tokens (24h)" value={formatCompact(summary.tokens24h)} />
           </div>
         </div>
       )}
@@ -926,22 +937,27 @@ function SortTh({ k, current, dir, onClick, label, className }: {
   )
 }
 
-function Stat({ label, value, accent }: { label: string; value: string; accent?: "emerald" | "blue" }) {
-  const dot =
-    accent === "emerald" ? "bg-success"
-    : accent === "blue"  ? "bg-info"
-    : null
-  const valueColor =
-    accent === "emerald" ? "text-success"
-    : accent === "blue"  ? "text-info"
-    : "text-text"
+function StatCard({
+  icon,
+  label,
+  value,
+  hint,
+  valueClassName,
+}: {
+  icon: ReactNode
+  label: string
+  value: string
+  hint?: string
+  valueClassName?: string
+}) {
   return (
-    <div className="px-4 py-3 flex flex-col gap-0.5">
-      <div className="flex items-center gap-1.5">
-        {dot && <span className={`inline-block w-1.5 h-1.5 rounded-full ${dot} ${accent === "emerald" ? "animate-pulse" : ""}`} />}
-        <span className={`au-stat-value tabular-nums ${valueColor}`}>{value}</span>
+    <div className="flex flex-col gap-1.5 rounded-xl border border-border-subtle bg-overlay-2 px-4 py-3 min-w-0">
+      <div className="flex items-center gap-1.5 text-[12px] font-medium text-text-muted">
+        {icon}
+        {label}
       </div>
-      <div className="au-label tracking-wider">{label}</div>
+      <div className={`text-xl font-semibold tabular-nums text-text ${valueClassName ?? ""}`}>{value}</div>
+      {hint ? <div className="text-[12px] text-text-faint">{hint}</div> : null}
     </div>
   )
 }

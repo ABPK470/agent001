@@ -256,7 +256,7 @@ export function NotificationPanel() {
         onClick={() => setOpen((v) => !v)}
         title="Notifications"
       >
-        <Bell size={18} />
+        <Bell size={15} />
         {unreadCount > 0 && (
           <span
             className="absolute -top-0.5 -right-0.5 flex items-center justify-center min-w-[18px] h-[18px] text-[10px] font-bold rounded-full px-1 bg-accent text-text-on-accent"

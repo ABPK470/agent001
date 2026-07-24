@@ -2991,6 +2991,7 @@ textarea.input {
 .active-users-widget .au-stat-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
 }
 
 @container active-users (min-width: 520px) {
@@ -3146,12 +3147,6 @@ textarea.input {
   text-transform: uppercase;
   color: var(--color-text-muted);
   font-weight: 500;
-  line-height: 1;
-}
-
-.active-users-widget .au-stat-value {
-  font-size: 1.125rem;
-  font-weight: 600;
   line-height: 1;
 }
 
@@ -3834,8 +3829,9 @@ textarea.input {
 
 /*
  * Intro — ONE pinch that sheds mass:
- * dots : → . (hold) → open to : while full-height off-white blobs leave.
- * Duration locked to PINCH_MS (880ms).
+ * dots : → . (hold) → open to : while mass carves.
+ * Duration locked to PINCH_MS (1200ms × DEBUG_SLOWDOWN). Clay shares this beat.
+ * TEMP DEBUG_SLOWDOWN=5 — restore durations to 1200ms when inspecting is done.
  */
 @keyframes mia-colon-pinch-shed-top {
   0% {
@@ -3868,11 +3864,11 @@ textarea.input {
 }
 
 .mia-colon-logo--pinch-shed .mia-colon-logo-dot--top {
-  animation: mia-colon-pinch-shed-top 1200ms cubic-bezier(0.4, 0, 0.2, 1) both;
+  animation: mia-colon-pinch-shed-top 6000ms cubic-bezier(0.4, 0, 0.2, 1) both;
 }
 
 .mia-colon-logo--pinch-shed .mia-colon-logo-dot--bottom {
-  animation: mia-colon-pinch-shed-bottom 1200ms cubic-bezier(0.4, 0, 0.2, 1) both;
+  animation: mia-colon-pinch-shed-bottom 6000ms cubic-bezier(0.4, 0, 0.2, 1) both;
 }
 
 @keyframes mia-colon-rotate-once {
@@ -6979,27 +6975,31 @@ textarea.input {
   transform: scale(1.55);
   margin-inline: 5px;
 }
+/* TEMP DEBUG_SLOWDOWN=5 — restore 320ms / 200ms when done. */
 .intro3-brand-sequence--resolving .intro3-wm-colon-anchor {
   /* Still large; layout already settling to solo : — no later sideways jump. */
   transform: scale(1.55);
   margin-inline: 0;
   transition:
-    transform 320ms cubic-bezier(0.37, 0, 0.63, 1),
-    margin-inline 200ms linear;
+    transform 1600ms cubic-bezier(0.37, 0, 0.63, 1),
+    margin-inline 1000ms linear;
 }
 .intro3-brand-sequence--live .intro3-wm-colon-anchor {
   transform: scale(1);
   margin-inline: 0;
 }
 
+/*
+ * Slots grow FROM the colon (pre → left, post → right).
+ * overflow:hidden so mass never crosses `:`.
+ */
 .intro3-wm-slot {
   position: relative;
   display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  align-items: stretch;
   width: 0;
   height: 1em;
-  overflow: visible;
+  overflow: hidden;
   vertical-align: middle;
   flex-shrink: 0;
   opacity: 0;
@@ -7009,22 +7009,27 @@ textarea.input {
 }
 
 .intro3-wm-slot--pre {
+  justify-content: flex-end;
   transform-origin: right center;
 }
 
 .intro3-wm-slot--post {
+  justify-content: flex-start;
   transform-origin: left center;
 }
 
 /*
- * Two off-white rectangles (MI left, A right). Letters already in the mass.
- * Carve: replace off-white fill with --bg — what remains is the letters.
+ * Clay = solid mass. Growth = slot clips full-size clay from the colon.
+ * Carve = cut the rectangle down to letter shapes (sculpture), not a
+ * whole-plate dither/fade.
  */
 .intro3-wm-clay {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   height: 1em;
+  flex-shrink: 0;
   padding: 0 0.06em;
   border-radius: 0;
   font: inherit;
@@ -7032,17 +7037,26 @@ textarea.input {
   letter-spacing: inherit;
   line-height: 1;
   white-space: nowrap;
-  background: var(--text);
-  color: var(--text);
+  box-sizing: border-box;
   opacity: 0;
-  transform-origin: center center;
+  background-color: var(--text);
+  color: var(--text);
+  -webkit-text-fill-color: var(--text);
+}
+
+.intro3-wm-slot--pre .intro3-wm-clay {
+  width: 1.35em;
+}
+
+.intro3-wm-slot--post .intro3-wm-clay {
+  width: 0.7em;
 }
 
 .intro3-brand-sequence--closed .intro3-wm-clay {
   opacity: 0;
 }
 
-/* Resting MI:A — plate gone, letters as brand ink. */
+/* Resting MI:A — brand ink, no mass plate. */
 .intro3-brand-sequence--open .intro3-wm-slot--pre {
   width: 1.35em;
   opacity: 1;
@@ -7053,36 +7067,49 @@ textarea.input {
 }
 .intro3-brand-sequence--open:not(.intro3-brand-sequence--pinching):not(.intro3-brand-sequence--resolving):not(.intro3-brand-sequence--live) .intro3-wm-clay {
   opacity: 1;
-  background: transparent;
-  color: inherit;
-  transform: none;
+  background-color: transparent;
+  color: var(--text);
+  -webkit-text-fill-color: var(--text);
+  -webkit-background-clip: border-box;
+  background-clip: border-box;
 }
 
-/* Pinch: seat the two rectangles, then cut (off-white → --bg). */
+/*
+ * Pinch (base 1200ms × DEBUG_SLOWDOWN=5):
+ *   0–36%   colon pinch closes
+ *  36–48%   MI grows left from colon
+ *  48–58%   A grows right from colon
+ *  58–68%   hold solid mass
+ *  68–88%   sculpt-carve → letter-shaped mass → brand ink
+ *  88–100%  colon reopen
+ * TEMP — restore delays/durations ÷5 when done.
+ */
 .intro3-brand-sequence--pinching .intro3-wm-slot--pre {
   width: 1.35em;
   opacity: 1;
-  transition-duration: 420ms;
-  transition-delay: 280ms;
+  transition-duration: 720ms;   /* 144ms × 5 */
+  transition-delay: 2160ms;     /* 432ms × 5 — 36% */
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
 }
 .intro3-brand-sequence--pinching .intro3-wm-slot--post {
   width: 0.7em;
   opacity: 1;
-  transition-duration: 420ms;
-  transition-delay: 280ms;
+  transition-duration: 600ms;   /* 120ms × 5 */
+  transition-delay: 2880ms;     /* 576ms × 5 — 48% */
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.intro3-brand-sequence--pinching .intro3-wm-slot--pre .intro3-wm-clay {
-  animation: intro3-clay-pre 1200ms cubic-bezier(0.4, 0, 0.2, 1) both;
-}
+.intro3-brand-sequence--pinching .intro3-wm-slot--pre .intro3-wm-clay,
 .intro3-brand-sequence--pinching .intro3-wm-slot--post .intro3-wm-clay {
-  animation: intro3-clay-post 1200ms cubic-bezier(0.4, 0, 0.2, 1) both;
+  opacity: 1;
+  animation: intro3-sculpt-carve 6000ms both;
 }
 
 /*
  * Resolve — fade MI:A and collapse their width while colon stays large.
  * Then --live only scales : down in its final spot (no resize-then-slide).
  */
+/* TEMP DEBUG_SLOWDOWN=5 — restore 160ms / 200ms when done. */
 .intro3-brand-sequence--resolving.intro3-brand-sequence--open .intro3-wm-slot,
 .intro3-brand-sequence--resolving.intro3-brand-sequence--open .intro3-wm-slot--pre,
 .intro3-brand-sequence--resolving.intro3-brand-sequence--open .intro3-wm-slot--post {
@@ -7091,15 +7118,12 @@ textarea.input {
   overflow: hidden;
   pointer-events: none;
   transition:
-    opacity 160ms linear,
-    width 200ms cubic-bezier(0.37, 0, 0.63, 1);
+    opacity 800ms linear,
+    width 1000ms cubic-bezier(0.37, 0, 0.63, 1);
 }
 .intro3-brand-sequence--resolving.intro3-brand-sequence--open .intro3-wm-clay {
   opacity: 0;
-  color: transparent;
-  -webkit-text-fill-color: transparent;
-  background: transparent;
-  transition: opacity 160ms linear, color 160ms linear;
+  transition: opacity 800ms linear;
 }
 
 .intro3-brand-sequence--live.intro3-brand-sequence--open .intro3-wm-slot--pre,
@@ -7112,63 +7136,40 @@ textarea.input {
 }
 .intro3-brand-sequence--live .intro3-wm-clay {
   opacity: 0;
-  color: transparent;
   visibility: hidden;
   transition: none;
 }
 
-@keyframes intro3-clay-pre {
-  0%, 30% {
-    opacity: 0;
-    background: var(--text);
+/*
+ * Sculpt carve — cut the solid rectangle DOWN TO the letter shapes.
+ * steps(1) = hard cut, not a soft lerp across the whole plate.
+ *   solid mass → letter-shaped remaining mass → seated brand ink
+ */
+@keyframes intro3-sculpt-carve {
+  0%, 68% {
+    background-color: var(--text);
     color: var(--text);
-    transform: translateX(1.1em);
+    -webkit-text-fill-color: var(--text);
+    -webkit-background-clip: border-box;
+    background-clip: border-box;
+    animation-timing-function: steps(1, end);
   }
-  38% {
-    opacity: 1;
-    background: var(--text);
-    color: var(--text);
-    transform: translateX(1.1em);
+  /* Cut: only letter-shaped clay remains (same material). */
+  74%, 84% {
+    background-color: var(--text);
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+    -webkit-background-clip: text;
+    background-clip: text;
+    animation-timing-function: steps(1, end);
   }
-  58% {
-    opacity: 1;
-    background: var(--text);
+  /* Seat as normal brand letters. */
+  90%, 100% {
+    background-color: transparent;
     color: var(--text);
-    transform: none;
-  }
-  /* Cut: off-white → page bg; letters remain. */
-  68%, 100% {
-    opacity: 1;
-    background: var(--bg);
-    color: var(--text);
-    transform: none;
-  }
-}
-
-@keyframes intro3-clay-post {
-  0%, 30% {
-    opacity: 0;
-    background: var(--text);
-    color: var(--text);
-    transform: translateX(-1.1em);
-  }
-  38% {
-    opacity: 1;
-    background: var(--text);
-    color: var(--text);
-    transform: translateX(-1.1em);
-  }
-  58% {
-    opacity: 1;
-    background: var(--text);
-    color: var(--text);
-    transform: none;
-  }
-  68%, 100% {
-    opacity: 1;
-    background: var(--bg);
-    color: var(--text);
-    transform: none;
+    -webkit-text-fill-color: var(--text);
+    -webkit-background-clip: border-box;
+    background-clip: border-box;
   }
 }
 
@@ -7185,9 +7186,11 @@ textarea.input {
   }
   .intro3-brand-sequence--open .intro3-wm-clay {
     opacity: 1;
-    background: transparent;
-    color: inherit;
-    transform: none;
+    background-color: transparent;
+    color: var(--text);
+    -webkit-text-fill-color: var(--text);
+    -webkit-background-clip: border-box;
+    background-clip: border-box;
   }
 }
 
@@ -7215,8 +7218,9 @@ textarea.input {
   filter: none;
 }
 
+/* TEMP DEBUG_SLOWDOWN=5 — restore 520ms when done. */
 .intro3-wm-mark--handoff {
-  animation: intro3-wm-mark-handoff 520ms cubic-bezier(0.2, 0.85, 0.25, 1) both;
+  animation: intro3-wm-mark-handoff 2600ms cubic-bezier(0.2, 0.85, 0.25, 1) both;
 }
 
 @keyframes intro3-wm-mark-handoff {
