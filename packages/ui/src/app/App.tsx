@@ -272,7 +272,7 @@ export function App() {
     })
   }, [])
 
-  // ⌘\ / Ctrl+\ — toggle chat ↔ workspace from either shell.
+  // ⌘⌥ / Ctrl+Alt — toggle chat ↔ workspace from either shell.
   useEffect(() => {
     if (phase !== AppPhase.Shell) return
     function onKeyDown(event: KeyboardEvent) {

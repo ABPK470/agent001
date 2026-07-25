@@ -1,5 +1,6 @@
 /**
  * SessionMenu — identity + session actions behind a single burger control.
+ * Admin and operator share one header shape (name · role · theme).
  */
 
 import {
@@ -30,9 +31,9 @@ import { shellModeToggleHint } from "./types"
 interface Props {
   me: Me
   onSignOut: () => void
-  /** Chat shell: plain frosted control like workspace — no admin ASCII texture. */
+  /** Chat shell: plain frosted control like workspace. */
   chromeVariant?: "default" | "chat"
-  /** Chat → workspace (header icon removed; ⌘\ / Ctrl\ still works in App). */
+  /** Chat → workspace (header icon removed; ⌘⌥ / Ctrl+Alt still works in App). */
   onOpenWorkspace?: () => void
   /** Workspace → chat (header icon removed; shortcut still works in App). */
   onOpenChat?: () => void
@@ -45,6 +46,19 @@ function menuItemClass(destructive = false): string {
       ? "text-error hover:bg-error/10"
       : "text-text-secondary hover:bg-overlay-hover hover:text-text",
   ].join(" ")
+}
+
+/** ⌘ / ⌥ read small in mono — keep symbol weight matched. */
+function ShellShortcutHint({ hint }: { hint: string }) {
+  if (hint === "⌘⌥") {
+    return (
+      <span className="inline-flex shrink-0 items-center gap-px text-text-faint" aria-label={hint}>
+        <span className="text-[13px] font-medium leading-none tracking-tight">⌘</span>
+        <span className="text-[13px] font-medium leading-none tracking-tight">⌥</span>
+      </span>
+    )
+  }
+  return <span className="shrink-0 font-mono text-[11px] text-text-faint">{hint}</span>
 }
 
 export function SessionMenu({
@@ -66,7 +80,6 @@ export function SessionMenu({
   const displayName = accountDisplayName(me)
   const subtitle = accountSubtitle(me)
   const role = accountRoleLabel(me)
-  const showAdminSection = me.isAdmin
   const shellShortcut = onOpenWorkspace || onOpenChat ? shellModeToggleHint() : null
 
   useEffect(() => {
@@ -94,9 +107,7 @@ export function SessionMenu({
     >
       <LayoutGrid size={15} className="shrink-0 text-text-muted" />
       <span className="min-w-0 flex-1">Workspace</span>
-      {shellShortcut && (
-        <span className="shrink-0 font-mono text-[11px] text-text-faint">{shellShortcut}</span>
-      )}
+      {shellShortcut && <ShellShortcutHint hint={shellShortcut} />}
     </button>
   ) : onOpenChat ? (
     <button
@@ -110,9 +121,7 @@ export function SessionMenu({
     >
       <MessageSquare size={15} className="shrink-0 text-text-muted" />
       <span className="min-w-0 flex-1">Chat</span>
-      {shellShortcut && (
-        <span className="shrink-0 font-mono text-[11px] text-text-faint">{shellShortcut}</span>
-      )}
+      {shellShortcut && <ShellShortcutHint hint={shellShortcut} />}
     </button>
   ) : null
 
@@ -139,180 +148,126 @@ export function SessionMenu({
         {open && (
           <div
             role="menu"
-            className={`session-menu-panel absolute right-0 top-full z-50 mt-1.5 overflow-hidden rounded-xl border border-border bg-panel-2 shadow-xl shadow-black/40 ${
-              me.isAdmin ? "w-[17rem] py-1" : "w-[15.5rem] py-1.5"
-            }`}
+            className="session-menu-panel absolute right-0 top-full z-50 mt-1.5 w-[16.5rem] overflow-hidden rounded-xl border border-border bg-panel-2 py-1 shadow-xl shadow-black/40"
           >
-            {me.isAdmin ? (
-              <>
-                <div className="px-4 py-3.5">
-                  <p className="truncate text-[15px] font-semibold leading-snug text-text">{displayName}</p>
-                  {subtitle && (
-                    <p className="mt-1 truncate font-mono text-[11px] leading-snug text-text-muted" title={me.upn}>
-                      {subtitle}
-                    </p>
-                  )}
-                  <p className="mt-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-text-faint">{role}</p>
-                </div>
-
-                {shellSwitchItem && (
-                  <>
-                    <div className="session-menu-divider" />
-                    {shellSwitchItem}
-                  </>
-                )}
-
-                {showAdminSection && (
-                  <>
-                    <div className="session-menu-divider" />
-                    <p className="px-4 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-text-faint">
-                      Administration
-                    </p>
-                    <button
-                      type="button"
-                      role="menuitem"
-                      className={menuItemClass()}
-                      onClick={() => {
-                        setConnectorsOpen(true)
-                        close()
-                      }}
-                    >
-                      <CONNECTOR_ICON size={15} className="shrink-0 text-text-muted" />
-                      Connectors
-                    </button>
-                    <button
-                      type="button"
-                      role="menuitem"
-                      className={menuItemClass()}
-                      onClick={() => {
-                        setBridgeOpen(true)
-                        close()
-                      }}
-                    >
-                      <ArrowRightLeft size={15} className="shrink-0 text-text-muted" />
-                      Bridge
-                    </button>
-                    <button
-                      type="button"
-                      role="menuitem"
-                      className={menuItemClass()}
-                      onClick={() => {
-                        setUsageOpen(true)
-                        close()
-                      }}
-                    >
-                      <Activity size={15} className="shrink-0 text-text-muted" />
-                      Usage
-                    </button>
-                    <button
-                      type="button"
-                      role="menuitem"
-                      className={menuItemClass()}
-                      onClick={() => {
-                        setPolicyEditorOpen(true)
-                        close()
-                      }}
-                    >
-                      <Shield size={15} className="shrink-0 text-text-muted" />
-                      Policies
-                    </button>
-                    <button
-                      type="button"
-                      role="menuitem"
-                      className={menuItemClass()}
-                      onClick={() => {
-                        setAuditOpen(true)
-                        close()
-                      }}
-                    >
-                      <Scale size={15} className="shrink-0 text-text-muted" />
-                      Audit
-                    </button>
-                  </>
-                )}
-
-                <div className="session-menu-divider" />
-                <SessionThemeSwitch />
-
-                <div className="session-menu-divider" />
-                <button
-                  type="button"
-                  role="menuitem"
-                  className={menuItemClass()}
-                  onClick={() => {
-                    setAboutOpen(true)
-                    close()
-                  }}
-                >
-                  <BookOpen size={15} className="shrink-0 text-text-muted" />
-                  About
-                </button>
-
-                <div className="session-menu-divider" />
-                <button
-                  type="button"
-                  role="menuitem"
-                  className={menuItemClass(true)}
-                  onClick={() => {
-                    onSignOut()
-                    close()
-                  }}
-                >
-                  <LogOut size={15} className="shrink-0" />
-                  Sign out
-                </button>
-              </>
-            ) : (
-              <>
-                <div className="px-3.5 pb-2 pt-2.5">
-                  <div className="flex min-w-0 items-baseline justify-between gap-2">
-                    <p className="truncate text-[14px] font-semibold leading-snug text-text">{displayName}</p>
-                    <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.12em] text-text-faint">
-                      {role}
-                    </span>
-                  </div>
+            <div className="px-3.5 pb-2.5 pt-2.5">
+              <div className="flex min-w-0 items-start justify-between gap-2.5">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[14px] font-semibold leading-snug text-text">{displayName}</p>
+                  <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-text-faint">
+                    {role}
+                  </p>
                   {subtitle && (
                     <p className="mt-0.5 truncate font-mono text-[11px] leading-snug text-text-muted" title={me.upn}>
                       {subtitle}
                     </p>
                   )}
                 </div>
+                <SessionThemeSwitch className="mt-0.5" />
+              </div>
+            </div>
 
-                {shellSwitchItem && (
-                  <>
-                    {shellSwitchItem}
-                    <div className="session-menu-divider" />
-                  </>
-                )}
+            {shellSwitchItem && (
+              <>
+                <div className="session-menu-divider" />
+                {shellSwitchItem}
+              </>
+            )}
 
-                <SessionThemeSwitch compact />
-
+            {me.isAdmin && (
+              <>
+                <div className="session-menu-divider" />
+                <p className="px-4 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-text-faint">
+                  Administration
+                </p>
                 <button
                   type="button"
                   role="menuitem"
                   className={menuItemClass()}
                   onClick={() => {
-                    setAboutOpen(true)
+                    setConnectorsOpen(true)
                     close()
                   }}
                 >
-                  <BookOpen size={15} className="shrink-0 text-text-muted" />
-                  About
+                  <CONNECTOR_ICON size={15} className="shrink-0 text-text-muted" />
+                  Connectors
                 </button>
                 <button
                   type="button"
                   role="menuitem"
-                  className={menuItemClass(true)}
+                  className={menuItemClass()}
                   onClick={() => {
-                    onSignOut()
+                    setBridgeOpen(true)
                     close()
                   }}
                 >
-                  <LogOut size={15} className="shrink-0" />
-                  Sign out
+                  <ArrowRightLeft size={15} className="shrink-0 text-text-muted" />
+                  Bridge
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className={menuItemClass()}
+                  onClick={() => {
+                    setUsageOpen(true)
+                    close()
+                  }}
+                >
+                  <Activity size={15} className="shrink-0 text-text-muted" />
+                  Usage
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className={menuItemClass()}
+                  onClick={() => {
+                    setPolicyEditorOpen(true)
+                    close()
+                  }}
+                >
+                  <Shield size={15} className="shrink-0 text-text-muted" />
+                  Policies
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className={menuItemClass()}
+                  onClick={() => {
+                    setAuditOpen(true)
+                    close()
+                  }}
+                >
+                  <Scale size={15} className="shrink-0 text-text-muted" />
+                  Audit
                 </button>
               </>
             )}
+
+            <div className="session-menu-divider" />
+            <button
+              type="button"
+              role="menuitem"
+              className={menuItemClass()}
+              onClick={() => {
+                setAboutOpen(true)
+                close()
+              }}
+            >
+              <BookOpen size={15} className="shrink-0 text-text-muted" />
+              About
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className={menuItemClass(true)}
+              onClick={() => {
+                onSignOut()
+                close()
+              }}
+            >
+              <LogOut size={15} className="shrink-0" />
+              Sign out
+            </button>
           </div>
         )}
       </div>

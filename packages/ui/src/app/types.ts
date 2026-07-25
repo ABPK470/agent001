@@ -11,12 +11,11 @@ export const APP_SHELL_MODES: ReadonlyArray<AppShellMode> = ["chat", "workspace"
 
 /**
  * Toggle chat ↔ workspace. Same binding in both shells.
- * Mod = ⌘ on macOS, Ctrl elsewhere.
+ * Mac: ⌘⌥  ·  elsewhere: Ctrl+Alt
+ * Fires on Option/Alt keydown while Mod is held.
  */
-export const SHELL_MODE_TOGGLE_CODE = "Backslash" as const
-
 export function shellModeToggleHint(modKey: "⌘" | "Ctrl" = detectModHint()): string {
-  return `${modKey}\\`
+  return modKey === "⌘" ? "⌘⌥" : "Ctrl+Alt"
 }
 
 function detectModHint(): "⌘" | "Ctrl" {
@@ -25,9 +24,9 @@ function detectModHint(): "⌘" | "Ctrl" {
 }
 
 export function isShellModeToggleEvent(event: KeyboardEvent): boolean {
-  if (event.code !== SHELL_MODE_TOGGLE_CODE) return false
-  if (event.altKey || event.shiftKey) return false
-  return event.metaKey || event.ctrlKey
+  if (event.shiftKey) return false
+  if (!(event.metaKey || event.ctrlKey)) return false
+  return event.code === "AltLeft" || event.code === "AltRight" || event.key === "Alt"
 }
 
 /** Which chat surface to mount inside the chat shell. */

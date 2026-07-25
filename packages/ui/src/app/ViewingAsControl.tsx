@@ -1,11 +1,12 @@
 /**
- * Header control: Viewing as Me | {name}
- * When not Me, this control is the sole “must know” identity lock (no window frame).
+ * Header control: quiet Me ▾ | solid Viewing as {name}.
+ * When not Me, this control is the sole “must know” identity lock.
  */
 
-import { ChevronDown, Eye, Undo2 } from "lucide-react"
+import { ChevronDown, InspectionPanel, Undo2 } from "lucide-react"
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { api } from "../client/index"
+import { useMe } from "../hooks/useMe"
 import { useViewingAs } from "../hooks/useViewingAs"
 import { CHAT_CHROME_BTN } from "./ChatChrome"
 
@@ -26,6 +27,7 @@ export function ViewingAsControl({
   /** Match chat shell frosted buttons when in chat header. */
   chromeVariant?: "default" | "chat"
 } = {}): ReactNode {
+  const { me } = useMe()
   const { canViewAs, isMe, displayName, setViewingAs, clearViewingAs } = useViewingAs()
   const [open, setOpen] = useState(false)
   const [users, setUsers] = useState<UserOption[]>([])
@@ -33,6 +35,7 @@ export function ViewingAsControl({
   const [filter, setFilter] = useState("")
   const rootRef = useRef<HTMLDivElement>(null)
   const filterRef = useRef<HTMLInputElement>(null)
+  const selfUpn = me?.upn?.trim().toLowerCase() ?? ""
 
   useEffect(() => {
     if (!open || !canViewAs) return
@@ -47,7 +50,9 @@ export function ViewingAsControl({
             .map((row) => ({
               upn: row.upn!.trim(),
               displayName: (row.displayName?.trim() || row.upn!.trim()),
-            })),
+            }))
+            // Signed-in admin is Me — pick via Back to Me / Me, not the list.
+            .filter((row) => !selfUpn || row.upn.toLowerCase() !== selfUpn),
         )
       })
       .catch((err: unknown) => {
@@ -60,7 +65,7 @@ export function ViewingAsControl({
     return () => {
       cancelled = true
     }
-  }, [open, canViewAs])
+  }, [open, canViewAs, selfUpn])
 
   useEffect(() => {
     if (!open) {
@@ -104,15 +109,13 @@ export function ViewingAsControl({
       <button
         type="button"
         className={triggerClass}
-        aria-label={isMe ? "Viewing as Me" : `Viewing as ${label} — not your account`}
-        title={isMe ? "Viewing as: Me" : `Viewing as ${label}`}
+        aria-label={isMe ? "View as — currently Me" : `Viewing as ${label} — not your account`}
+        title={isMe ? "View as someone else" : `Viewing as ${label}`}
         onClick={() => setOpen((v) => !v)}
       >
-        <Eye size={15} strokeWidth={2} className="shrink-0" />
+        <InspectionPanel size={15} strokeWidth={2} className="shrink-0" />
         {isMe ? (
-          <span className="truncate">
-            Viewing as: <span className="font-medium text-text">Me</span>
-          </span>
+          <span className="truncate font-medium text-text">Me</span>
         ) : (
           <span className="flex min-w-0 items-baseline gap-1.5">
             <span className="shrink-0 opacity-80">Viewing as</span>
