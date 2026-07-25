@@ -6930,31 +6930,29 @@ textarea.input {
 
 /* ── Login brand sequence — : lands → shed/carve MI:A → input ── */
 /*
- * Coder-style lockup mechanics: wide-set word, flat cap = colon height,
- * tight even tracking. Our mark is the purple colon (their terminal square).
- * Glyph grid 50×28 / 30×28 — short word still reads horizontal.
+ * Cap height = colon. Extended glyphs (48×32 / 28×32) — longer word lockup.
+ * Stems stay open so stretch doesn’t read bulky.
  */
 .intro3-brand-sequence {
   display: inline-flex;
   align-items: center;
-  gap: 0.12em;
+  gap: 4px;
   flex-shrink: 0;
   white-space: nowrap;
   color: var(--text);
   line-height: 1;
-  font-size: var(--wm-letter-h);
   --wm-letter-h: 17px;
-  --wm-mi-w: calc(var(--wm-letter-h) * 50 / 28);
-  --wm-a-w: calc(var(--wm-letter-h) * 30 / 28);
+  --wm-mi-w: calc(var(--wm-letter-h) * 48 / 32);
+  --wm-a-w: calc(var(--wm-letter-h) * 28 / 32);
 }
 
-/* Seated — a step above Coder’s site mark; still a quiet header lockup. */
+/* Seated MI:A — prior seated × 1.05. */
 .intro3-root--hero .intro3-brand-sequence,
 .intro3-brand-sequence--pinching,
 .intro3-brand-sequence--open:not(.intro3-brand-sequence--live),
 .intro3-brand-sequence--resolving {
-  --wm-letter-h: 24px;
-  gap: 0.14em;
+  --wm-letter-h: 21px; /* 20 × 1.05 */
+  gap: 4px;
 }
 .intro3-brand-sequence--live {
   --wm-letter-h: 17px;
@@ -6967,8 +6965,8 @@ textarea.input {
   .intro3-brand-sequence--pinching,
   .intro3-brand-sequence--open:not(.intro3-brand-sequence--live),
   .intro3-brand-sequence--resolving {
-    --wm-letter-h: 26px;
-    gap: 0.14em;
+    --wm-letter-h: 24px; /* 23 × 1.05 */
+    gap: 5px;
   }
 }
 
@@ -7003,8 +7001,7 @@ textarea.input {
 .intro3-brand-sequence--pinching .intro3-wm-colon-anchor,
 .intro3-brand-sequence--open:not(.intro3-brand-sequence--live):not(.intro3-brand-sequence--resolving) .intro3-wm-colon-anchor {
   transform: scale(calc(var(--wm-letter-h) / 17px));
-  /* Tracking matches letter gap — colon is a glyph in the word, not an island. */
-  margin-inline: 0;
+  margin-inline: 1px;
 }
 .intro3-brand-sequence--resolving .intro3-wm-colon-anchor {
   /* Still at lockup size; layout already settling to solo : — no later sideways jump. */
