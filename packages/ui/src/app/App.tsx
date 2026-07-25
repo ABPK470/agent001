@@ -20,6 +20,7 @@ import { UsageModal } from "../widgets/platform/UsageModal"
 import { ThreadHomePage } from "../widgets/threads/ThreadHomePage"
 import { flushDashboardSave, restoreDashboardState, startDashboardSync } from "./dashboard-sync"
 import { ChatHomePage } from "./home/ChatHomePage"
+import { IntroAsciiField } from "./home/IntroAsciiField"
 import { WelcomeFlow } from "./home/WelcomeFlow"
 import type { AppShellMode } from "./types"
 import { isShellModeToggleEvent, resolveChatVariant } from "./types"
@@ -519,7 +520,7 @@ export function App() {
     shellBody = (
       <div className="flex flex-col h-[100dvh] bg-base">
         {/* Compact header */}
-        <header className="flex items-center gap-3 px-4 h-12 bg-surface shrink-0 select-none">
+        <header className="relative z-20 flex h-12 shrink-0 select-none items-center gap-3 bg-surface px-4">
           <div className="shrink-0 min-w-0">
             <span className="text-sm font-semibold text-text tracking-wide">
               MI<span className="text-accent">:A</span>
@@ -581,44 +582,51 @@ export function App() {
         </header>
 
         {/* Widget area — full remaining space */}
-        <main className="flex-1 overflow-y-auto show-scrollbar">
-          {tiles.length === 0 ? (
-            <EmptyState
-              icon={LayoutGrid}
-              message="No widgets in this view yet"
-              action={(
-                <button
-                  type="button"
-                  className="px-6 py-3 text-sm text-text-secondary border border-border rounded-xl active:bg-overlay-2"
-                  onClick={() => setMobileCatalogOpen(true)}
-                >
-                  Add Widget
-                </button>
-              )}
-            />
-          ) : (
-            <div className="flex flex-col gap-3 p-2 pb-4">
-              {tiles.map((tile) => {
-                const Widget = widgetComponent(tile.type)
-                const definition = getWidgetDefinition(tile.type)
-                return (
-                  <section
-                    key={tile.id}
-                    className="min-h-[50dvh] bg-surface rounded-xl overflow-hidden flex flex-col"
-                  >
-                    <div className="px-3 h-8 flex items-center shrink-0 border-b border-border-subtle">
-                      <span className="text-xs font-medium text-text-muted uppercase tracking-wider">
-                        {definition.label}
-                      </span>
-                    </div>
-                    <div className={`flex-1 min-h-0 overflow-hidden ${definition.chrome === "flush" ? "" : "p-3"}`}>
-                      <Widget />
-                    </div>
-                  </section>
-                )
-              })}
+        <main className="relative flex-1 overflow-y-auto show-scrollbar">
+          {isViewingAsOther && (
+            <div className="workspace-stage-glyphs pointer-events-none overflow-hidden" aria-hidden>
+              <IntroAsciiField surface="home" viewingAsField />
             </div>
           )}
+          <div className="relative">
+            {tiles.length === 0 ? (
+              <EmptyState
+                icon={LayoutGrid}
+                message="No widgets in this view yet"
+                action={(
+                  <button
+                    type="button"
+                    className="px-6 py-3 text-sm text-text-secondary border border-border rounded-xl active:bg-overlay-2"
+                    onClick={() => setMobileCatalogOpen(true)}
+                  >
+                    Add Widget
+                  </button>
+                )}
+              />
+            ) : (
+              <div className="flex flex-col gap-3 p-2 pb-4">
+                {tiles.map((tile) => {
+                  const Widget = widgetComponent(tile.type)
+                  const definition = getWidgetDefinition(tile.type)
+                  return (
+                    <section
+                      key={tile.id}
+                      className="min-h-[50dvh] bg-surface rounded-xl overflow-hidden flex flex-col"
+                    >
+                      <div className="px-3 h-8 flex items-center shrink-0 border-b border-border-subtle">
+                        <span className="text-xs font-medium text-text-muted uppercase tracking-wider">
+                          {definition.label}
+                        </span>
+                      </div>
+                      <div className={`flex-1 min-h-0 overflow-hidden ${definition.chrome === "flush" ? "" : "p-3"}`}>
+                        <Widget />
+                      </div>
+                    </section>
+                  )
+                })}
+              </div>
+            )}
+          </div>
         </main>
 
         {/* Bottom navigation — always visible so the user can switch

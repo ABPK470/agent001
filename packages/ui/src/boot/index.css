@@ -977,10 +977,14 @@ textarea.input {
   letter-spacing: 0.06em;
 }
 
+/*
+ * From / To / Entity — size to the selected label (chevron never overlaps).
+ * Search column absorbs leftover space (flex grow + min-width floor).
+ */
 .env-sync-env-select {
-  width: 5.75rem;
-  min-width: 5.75rem;
-  max-width: 5.75rem;
+  width: max-content;
+  min-width: 4.75rem;
+  max-width: none;
   flex-shrink: 0;
 }
 
@@ -989,10 +993,23 @@ textarea.input {
 }
 
 .env-sync-entity-select {
-  width: 10.5rem;
-  min-width: 10.5rem;
-  max-width: 10.5rem;
+  width: max-content;
+  min-width: 6.5rem;
+  max-width: none;
   flex-shrink: 0;
+}
+
+/* Wide banner: keep full words; don’t let flex truncate the trigger label. */
+.env-sync-toolbar:not(.widget-toolbar--compact) .env-sync-env-select > .min-w-0.flex-1,
+.env-sync-toolbar:not(.widget-toolbar--compact) .env-sync-entity-select > .min-w-0.flex-1 {
+  flex: 0 0 auto;
+  min-width: max-content;
+}
+
+.env-sync-toolbar:not(.widget-toolbar--compact) .env-sync-env-select .truncate,
+.env-sync-toolbar:not(.widget-toolbar--compact) .env-sync-entity-select .truncate {
+  overflow: visible;
+  text-overflow: clip;
 }
 
 .env-sync-toolbar-divider {
@@ -1007,7 +1024,7 @@ textarea.input {
 .env-sync-search-wrap {
   position: relative;
   flex: 1 1 auto;
-  min-width: 0;
+  min-width: 6rem;
   height: var(--env-sync-control-h);
   overflow: visible;
 }
@@ -1087,9 +1104,9 @@ textarea.input {
   }
 
   .env-sync-entity-select {
-    width: 9rem;
-    min-width: 9rem;
-    max-width: 9rem;
+    width: max-content;
+    min-width: 6rem;
+    max-width: none;
   }
 }
 
@@ -1107,15 +1124,15 @@ textarea.input {
   }
 
   .env-sync-entity-select {
-    width: 7rem;
-    min-width: 7rem;
-    max-width: 7rem;
+    width: max-content;
+    min-width: 5.5rem;
+    max-width: none;
   }
 
   .env-sync-env-select {
-    width: 5rem;
-    min-width: 5rem;
-    max-width: 5rem;
+    width: max-content;
+    min-width: 4.5rem;
+    max-width: none;
   }
 }
 
@@ -4003,9 +4020,23 @@ textarea.input {
   }
 }
 
-/* Toolbar chrome after the logo — glyph field when Viewing as someone else. */
-.toolbar-chrome-glyphs {
-  background: transparent;
+/*
+ * Workspace stage — Viewing as glyph field (below clean toolbar chrome).
+ * Slight top bleed sits under the toolbar; toolbar keeps z-20 + solid bg so
+ * tabs/menus stay readable and above the field. Extra pad frames tiles so
+ * the field reads in gutters without covering chrome.
+ */
+.workspace-stage-glyphs {
+  position: absolute;
+  z-index: 0;
+  top: -10px;
+  right: 0;
+  bottom: 0;
+  left: 0;
+}
+
+.workspace-stage-glyphs-pad {
+  padding: 0.5rem;
 }
 
 .session-menu-panel {
@@ -4016,13 +4047,6 @@ textarea.input {
   height: 1px;
   margin: 0.25rem 0;
   background: var(--border-subtle);
-}
-
-.session-ascii-micro {
-  z-index: 0;
-  opacity: 1;
-  /* Quiet bloom — same token as Viewing as control. */
-  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--viewing-as) 55%, transparent));
 }
 
 /* ── Workspace tiling (split-tree projected to absolute panes) ─── */

@@ -7,8 +7,6 @@ import { Fragment, useEffect, useRef, useState } from "react"
 import type { Me } from "../../hooks/useMe"
 import { useViewTabReorder } from "../../hooks/useViewTabReorder"
 import { fullIndexFromRemainingSlot } from "../../lib/view-tab-dnd"
-import { useViewingAs } from "../../hooks/useViewingAs"
-import { AsciiMicroField } from "../AsciiMicroField"
 import { SessionMenu } from "../SessionMenu"
 import { ViewingAsControl } from "../ViewingAsControl"
 import { CHAT_BRAND_LOGO_SIZE } from "../brand"
@@ -28,9 +26,6 @@ interface Props {
 
 export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
   const connected = useStore((s) => s.connected)
-  const { canViewAs, isViewingAsOther } = useViewingAs()
-  /** Glyph field across chrome after the logo — only when Viewing as someone else. */
-  const chromeGlyphs = canViewAs && isViewingAsOther
   const views = useLayoutStore((s) => s.views)
   const activeViewId = useLayoutStore((s) => s.activeViewId)
   const setActiveView = useLayoutStore((s) => s.setActiveView)
@@ -99,29 +94,14 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
     : null
 
   return (
-    <header className="toolbar-shell flex h-14 shrink-0 select-none items-center gap-2 px-4 sm:gap-4 sm:px-6 bg-canvas">
+    <header className="toolbar-shell relative z-20 flex h-14 shrink-0 select-none items-center gap-2 bg-canvas px-4 sm:gap-4 sm:px-6">
       <div className="toolbar-brand flex h-9 shrink-0 items-center">
         <Logo size={CHAT_BRAND_LOGO_SIZE} online={connected} className="toolbar-brand-logo" />
       </div>
 
       <div
-        className={[
-          "relative flex min-w-0 flex-1 items-center gap-2 sm:gap-4",
-          chromeGlyphs ? "toolbar-chrome-glyphs" : "",
-        ].join(" ")}
-      >
-        {chromeGlyphs && (
-          <div
-            className="toolbar-chrome-glyphs__field pointer-events-none absolute inset-0 overflow-hidden rounded-lg"
-            aria-hidden
-          >
-            <AsciiMicroField inkOpacity={0.85} cutoutRootClosest=".toolbar-chrome-glyphs" />
-          </div>
-        )}
-
-      <div
         ref={tabsRef}
-        className="relative z-[1] flex min-w-0 flex-1 items-center gap-1 overflow-x-auto scrollbar-none"
+        className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto scrollbar-none"
       >
         {views.map((view, index) => {
           const isDragging = draggingId === view.id
@@ -205,10 +185,10 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
       </div>
 
       {tabsOverflow && (
-        <div className="relative z-[1] shrink-0" ref={moreRef}>
+        <div className="relative shrink-0" ref={moreRef}>
           <button
             type="button"
-            className="flex items-center gap-1 h-9 px-2 text-[13px] text-text-muted hover:text-text hover:bg-overlay-hover rounded-lg transition-colors"
+            className="flex h-9 items-center gap-1 rounded-lg px-2 text-[13px] text-text-muted transition-colors hover:bg-overlay-hover hover:text-text"
             onClick={() => setMoreOpen((value) => !value)}
             title="All views"
           >
@@ -216,15 +196,15 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
             <ChevronDown size={14} />
           </button>
           {moreOpen && (
-            <div className="absolute right-0 top-full mt-1.5 w-56 max-h-[60vh] overflow-y-auto bg-panel-2 border border-border rounded-xl shadow-xl shadow-black/40 py-1.5 z-50">
+            <div className="absolute right-0 top-full z-50 mt-1.5 max-h-[60vh] w-56 overflow-y-auto rounded-xl border border-border bg-panel-2 py-1.5 shadow-xl shadow-black/40">
               {views.map((view) => (
                 <button
                   key={view.id}
                   type="button"
-                  className={`flex items-center justify-between w-full px-4 py-2.5 text-sm transition-colors ${
+                  className={`flex w-full items-center justify-between px-4 py-2.5 text-sm transition-colors ${
                     view.id === activeViewId
-                      ? "text-text font-semibold bg-overlay-hover"
-                      : "text-text-secondary hover:text-text hover:bg-overlay-hover"
+                      ? "bg-overlay-hover font-semibold text-text"
+                      : "text-text-secondary hover:bg-overlay-hover hover:text-text"
                   }`}
                   onClick={() => {
                     setActiveView(view.id)
@@ -232,7 +212,7 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
                   }}
                 >
                   <span className="truncate">{view.name}</span>
-                  {view.id === activeViewId && <span className="text-accent text-xs">●</span>}
+                  {view.id === activeViewId && <span className="text-xs text-accent">●</span>}
                 </button>
               ))}
             </div>
@@ -240,7 +220,7 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
         </div>
       )}
 
-      <div className="relative z-[1] flex shrink-0 items-center gap-1">
+      <div className="flex shrink-0 items-center gap-1">
         {onAddWidget && (
           <>
             <button
@@ -264,7 +244,6 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
             onOpenChat={() => onModeChange("chat")}
           />
         )}
-      </div>
       </div>
     </header>
   )

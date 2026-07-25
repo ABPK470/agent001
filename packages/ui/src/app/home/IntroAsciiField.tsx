@@ -39,7 +39,7 @@ const NOISE_T_PER_SEC = 0.32        // how fast the noise field drifts
 const INK_OPACITY = 0.18            // applied to var(--text), works in both themes
 const BOOST_INK_OPACITY = 0.34
 /** Viewing as someone else — denser field in Viewing as ink (light blue / dark accent). */
-const VIEWING_AS_INK_OPACITY = 0.62
+const VIEWING_AS_INK_OPACITY = 0.78
 
 /** Login cursor field — soft falloff + sparse “pop” cells (2D → depth). */
 const POINTER_RADIUS_PX = 158
