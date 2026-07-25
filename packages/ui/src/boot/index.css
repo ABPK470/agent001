@@ -3919,19 +3919,19 @@ textarea.input {
 /* Hero mark is scaled — bake scale into the spin so it doesn’t pop. */
 @keyframes mia-colon-rotate-once-hero {
   0% {
-    transform: scale(1.55) rotate(0deg);
+    transform: scale(1.18) rotate(0deg);
     color: var(--logo-mark-idle);
     filter: none;
     animation-timing-function: cubic-bezier(0.62, 0, 0.25, 1);
   }
   42% {
-    transform: scale(1.55) rotate(90deg);
+    transform: scale(1.18) rotate(90deg);
     color: var(--logo-mark-live);
     filter: drop-shadow(0 0 6px var(--logo-mark-live-shadow));
     animation-timing-function: cubic-bezier(0.62, 0, 0.25, 1);
   }
   100% {
-    transform: scale(1.55) rotate(360deg);
+    transform: scale(1.18) rotate(360deg);
     color: var(--logo-mark-live);
     filter: drop-shadow(0 0 6px var(--logo-mark-live-shadow));
   }
@@ -6929,34 +6929,36 @@ textarea.input {
 }
 
 /* ── Login brand sequence — : lands → shed/carve MI:A → input ── */
+/*
+ * Coder-style lockup mechanics: wide-set word, flat cap = colon height,
+ * tight even tracking. Our mark is the purple colon (their terminal square).
+ * Glyph grid 50×28 / 30×28 — short word still reads horizontal.
+ */
 .intro3-brand-sequence {
   display: inline-flex;
   align-items: center;
-  gap: 0.14em;
+  gap: 0.12em;
   flex-shrink: 0;
   white-space: nowrap;
-  font-family: var(--font-mono);
-  font-weight: 700;
-  font-size: 20px;
-  letter-spacing: 0.072em;
   color: var(--text);
   line-height: 1;
-  --wm-colon-w: 0.95em;
+  font-size: var(--wm-letter-h);
+  --wm-letter-h: 17px;
+  --wm-mi-w: calc(var(--wm-letter-h) * 50 / 28);
+  --wm-a-w: calc(var(--wm-letter-h) * 30 / 28);
 }
 
-/*
- * Hold hero letter size until MI:A is gone (--live).
- * Colon optical size is NOT font-size — see .intro3-wm-colon-anchor scale.
- */
+/* Seated — a step above Coder’s site mark; still a quiet header lockup. */
 .intro3-root--hero .intro3-brand-sequence,
 .intro3-brand-sequence--pinching,
 .intro3-brand-sequence--open:not(.intro3-brand-sequence--live),
 .intro3-brand-sequence--resolving {
-  font-size: 28px;
+  --wm-letter-h: 24px;
+  gap: 0.14em;
 }
-/* Snap font once letters are gone — do not tween em box with colon scale. */
 .intro3-brand-sequence--live {
-  font-size: 20px;
+  --wm-letter-h: 17px;
+  gap: 0;
   transition: none;
 }
 
@@ -6965,7 +6967,8 @@ textarea.input {
   .intro3-brand-sequence--pinching,
   .intro3-brand-sequence--open:not(.intro3-brand-sequence--live),
   .intro3-brand-sequence--resolving {
-    font-size: 32px;
+    --wm-letter-h: 26px;
+    gap: 0.14em;
   }
 }
 
@@ -6992,17 +6995,20 @@ textarea.input {
 
 /*
  * Scale overflows layout — pad margin only while MI/A are present.
+ * Keep colon near letter height (tight lockup, not three islands).
  * On resolve, margin + letter width clear first; --live only scales in place.
  */
+/* Colon scale ≈ letter-h / 17 so cap heights match (20/17≈1.18, 22/17≈1.29). */
 .intro3-root--hero .intro3-wm-colon-anchor,
 .intro3-brand-sequence--pinching .intro3-wm-colon-anchor,
 .intro3-brand-sequence--open:not(.intro3-brand-sequence--live):not(.intro3-brand-sequence--resolving) .intro3-wm-colon-anchor {
-  transform: scale(1.55);
-  margin-inline: 5px;
+  transform: scale(calc(var(--wm-letter-h) / 17px));
+  /* Tracking matches letter gap — colon is a glyph in the word, not an island. */
+  margin-inline: 0;
 }
 .intro3-brand-sequence--resolving .intro3-wm-colon-anchor {
-  /* Still large; layout already settling to solo : — no later sideways jump. */
-  transform: scale(1.55);
+  /* Still at lockup size; layout already settling to solo : — no later sideways jump. */
+  transform: scale(calc(var(--wm-letter-h) / 17px));
   margin-inline: 0;
   transition:
     transform 320ms cubic-bezier(0.37, 0, 0.63, 1),
@@ -7022,7 +7028,7 @@ textarea.input {
   display: inline-flex;
   align-items: stretch;
   width: 0;
-  height: 1em;
+  height: var(--wm-letter-h);
   overflow: hidden;
   vertical-align: middle;
   flex-shrink: 0;
@@ -7043,59 +7049,89 @@ textarea.input {
 }
 
 /*
- * Clay = solid mass. Growth = slot clips full-size clay from the colon.
- * Carve = cut the rectangle down to letter shapes (sculpture), not a
- * whole-plate dither/fade.
+ * Clay = solid mass plate + custom SVG glyph.
+ * Growth = slot clips from the colon; carve = plate off → letter shapes.
  */
 .intro3-wm-clay {
   position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  height: 1em;
+  height: var(--wm-letter-h);
   flex-shrink: 0;
-  padding: 0 0.06em;
-  border-radius: 0;
-  font: inherit;
-  font-weight: inherit;
-  letter-spacing: inherit;
+  padding: 0;
+  border-radius: 2px;
   line-height: 1;
   white-space: nowrap;
   box-sizing: border-box;
   opacity: 0;
-  background-color: var(--text);
   color: var(--text);
-  -webkit-text-fill-color: var(--text);
+  background-color: transparent;
+}
+
+.intro3-wm-clay-plate {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: inherit;
+  background-color: var(--text);
+  pointer-events: none;
+}
+
+.intro3-wm-clay-glyph {
+  position: relative;
+  z-index: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: var(--wm-letter-h);
+  color: var(--text);
+  opacity: 0;
+}
+
+.intro3-wm-letter {
+  display: block;
+  flex-shrink: 0;
+  overflow: visible;
+}
+.intro3-wm-letter--mi {
+  width: var(--wm-mi-w);
+  height: var(--wm-letter-h);
+}
+.intro3-wm-letter--a {
+  width: var(--wm-a-w);
+  height: var(--wm-letter-h);
 }
 
 .intro3-wm-slot--pre .intro3-wm-clay {
-  width: 1.35em;
+  width: var(--wm-mi-w);
 }
 
 .intro3-wm-slot--post .intro3-wm-clay {
-  width: 0.7em;
+  width: var(--wm-a-w);
 }
 
 .intro3-brand-sequence--closed .intro3-wm-clay {
   opacity: 0;
 }
 
-/* Resting MI:A — brand ink, no mass plate. */
+/* Resting MI:A — SVG brand ink, no mass plate. */
 .intro3-brand-sequence--open .intro3-wm-slot--pre {
-  width: 1.35em;
+  width: var(--wm-mi-w);
   opacity: 1;
 }
 .intro3-brand-sequence--open .intro3-wm-slot--post {
-  width: 0.7em;
+  width: var(--wm-a-w);
   opacity: 1;
 }
 .intro3-brand-sequence--open:not(.intro3-brand-sequence--pinching):not(.intro3-brand-sequence--resolving):not(.intro3-brand-sequence--live) .intro3-wm-clay {
   opacity: 1;
-  background-color: transparent;
-  color: var(--text);
-  -webkit-text-fill-color: var(--text);
-  -webkit-background-clip: border-box;
-  background-clip: border-box;
+}
+.intro3-brand-sequence--open:not(.intro3-brand-sequence--pinching):not(.intro3-brand-sequence--resolving):not(.intro3-brand-sequence--live) .intro3-wm-clay-plate {
+  opacity: 0;
+}
+.intro3-brand-sequence--open:not(.intro3-brand-sequence--pinching):not(.intro3-brand-sequence--resolving):not(.intro3-brand-sequence--live) .intro3-wm-clay-glyph {
+  opacity: 1;
 }
 
 /*
@@ -7107,24 +7143,28 @@ textarea.input {
  *  70–100%  colon reopen
  */
 .intro3-brand-sequence--pinching .intro3-wm-slot--pre {
-  width: 1.35em;
+  width: var(--wm-mi-w);
   opacity: 1;
   transition-duration: 420ms;
   transition-delay: 0ms;
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
 }
 .intro3-brand-sequence--pinching .intro3-wm-slot--post {
-  width: 0.7em;
+  width: var(--wm-a-w);
   opacity: 1;
   transition-duration: 400ms;
   transition-delay: 96ms; /* ~8% — right after MI starts */
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.intro3-brand-sequence--pinching .intro3-wm-slot--pre .intro3-wm-clay,
-.intro3-brand-sequence--pinching .intro3-wm-slot--post .intro3-wm-clay {
+.intro3-brand-sequence--pinching .intro3-wm-clay {
   opacity: 1;
-  animation: intro3-sculpt-carve 1200ms both;
+}
+.intro3-brand-sequence--pinching .intro3-wm-clay-plate {
+  animation: intro3-sculpt-carve-plate 1200ms both;
+}
+.intro3-brand-sequence--pinching .intro3-wm-clay-glyph {
+  animation: intro3-sculpt-carve-glyph 1200ms both;
 }
 
 /*
@@ -7166,32 +7206,24 @@ textarea.input {
  * steps(1) = hard cut, not a soft lerp across the whole plate.
  *   solid mass → letter-shaped remaining mass → seated brand ink
  */
-@keyframes intro3-sculpt-carve {
-  /* Solid through pinch + short hold — mass is already shedding via slot width. */
+/* Plate off / glyph on — sculpture cut for SVG letterforms. */
+@keyframes intro3-sculpt-carve-plate {
   0%, 55% {
-    background-color: var(--text);
-    color: var(--text);
-    -webkit-text-fill-color: var(--text);
-    -webkit-background-clip: border-box;
-    background-clip: border-box;
+    opacity: 1;
     animation-timing-function: steps(1, end);
   }
-  /* Cut: only letter-shaped clay remains (same material). */
-  62%, 78% {
-    background-color: var(--text);
-    color: transparent;
-    -webkit-text-fill-color: transparent;
-    -webkit-background-clip: text;
-    background-clip: text;
+  62%, 100% {
+    opacity: 0;
+  }
+}
+
+@keyframes intro3-sculpt-carve-glyph {
+  0%, 55% {
+    opacity: 0;
     animation-timing-function: steps(1, end);
   }
-  /* Seat as normal brand letters. */
-  86%, 100% {
-    background-color: transparent;
-    color: var(--text);
-    -webkit-text-fill-color: var(--text);
-    -webkit-background-clip: border-box;
-    background-clip: border-box;
+  62%, 100% {
+    opacity: 1;
   }
 }
 
@@ -7202,17 +7234,20 @@ textarea.input {
 
 @media (prefers-reduced-motion: reduce) {
   .intro3-wm-clay,
+  .intro3-wm-clay-plate,
+  .intro3-wm-clay-glyph,
   .intro3-wm-slot {
     animation: none !important;
     transition: none !important;
   }
   .intro3-brand-sequence--open .intro3-wm-clay {
     opacity: 1;
-    background-color: transparent;
-    color: var(--text);
-    -webkit-text-fill-color: var(--text);
-    -webkit-background-clip: border-box;
-    background-clip: border-box;
+  }
+  .intro3-brand-sequence--open .intro3-wm-clay-plate {
+    opacity: 0;
+  }
+  .intro3-brand-sequence--open .intro3-wm-clay-glyph {
+    opacity: 1;
   }
 }
 

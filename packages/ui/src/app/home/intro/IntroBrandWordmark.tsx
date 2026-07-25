@@ -4,9 +4,10 @@
  * On send name: colon only — abort in-flight MI:A, never continue it.
  */
 
-import { useEffect, useRef, useState } from "react"
-import { CHAT_BRAND_LOGO_SIZE } from "../../brand"
+import { useEffect, useRef, useState, type ReactNode } from "react"
+import { BrandLetterA, BrandLetterMi } from "../../../components/BrandLetters"
 import { Logo } from "../../../components/Logo"
+import { CHAT_BRAND_LOGO_SIZE } from "../../brand"
 
 const REVEAL_DELAY_MS = 80
 /** : land — keep in sync with `.intro3-wm-mark--handoff` duration. */
@@ -36,14 +37,14 @@ function lettersVisibleIn(phase: BrandPhase): boolean {
 
 /**
  * Mass grows from the colon edge (slot width) — never slides across `:`.
- * Clay is solid fill; carve cuts that fill down to the letter shapes (sculpture).
+ * Clay plate + custom SVG letters; carve reveals letter shapes (sculpture).
  */
 function BrandMass({
-  text,
   side,
+  letter,
 }: {
-  text: string
   side: "pre" | "post"
+  letter: ReactNode
 }) {
   return (
     <span
@@ -53,7 +54,10 @@ function BrandMass({
       ].join(" ")}
       aria-hidden="true"
     >
-      <span className="intro3-wm-clay">{text}</span>
+      <span className="intro3-wm-clay">
+        <span className="intro3-wm-clay-plate" />
+        <span className="intro3-wm-clay-glyph">{letter}</span>
+      </span>
     </span>
   )
 }
@@ -241,7 +245,7 @@ export function IntroBrandWordmark({
 
   return (
     <span className={sequenceClass} aria-label={phase === "live" ? ":" : "MI:A"}>
-      <BrandMass text="MI" side="pre" />
+      <BrandMass side="pre" letter={<BrandLetterMi />} />
       <span className="intro3-wm-colon-anchor intro3-wm-colon-anchor--locked">
         <Logo
           size={CHAT_BRAND_LOGO_SIZE}
@@ -249,7 +253,7 @@ export function IntroBrandWordmark({
           className={markClassName}
         />
       </span>
-      <BrandMass text="A" side="post" />
+      <BrandMass side="post" letter={<BrandLetterA />} />
     </span>
   )
 }

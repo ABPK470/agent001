@@ -2,9 +2,8 @@
 export const CHAT_BRAND_LOGO_SIZE = 17
 
 /**
- * Landing wordmark colon while MI…A letters are visible — sized to the
- * hero mono letters (~0.9em of 28–32px). After letters retract it eases
- * down to CHAT_BRAND_LOGO_SIZE and stays there.
+ * Legacy embed size — lockup now matches CHAT_BRAND_LOGO_SIZE via CSS
+ * `--wm-letter-h` + colon scale. Kept for any residual imports.
  */
 export const INTRO_COLON_EMBEDDED_SIZE = 26
 
