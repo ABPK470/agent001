@@ -3,6 +3,9 @@
  *
  * - REST: initial load, filter changes, infinite scroll (before cursor).
  * - SSE: debounced head snapshots pushed by the server (no client refetch loop).
+ *
+ * Viewing as must not storm the server: one scope change → one in-flight list
+ * (abort prior), and infinite scroll never auto-chains while loading.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react"
@@ -96,6 +99,8 @@ export function useOperationLogData(opts: {
   const [error, setError] = useState<string | null>(null)
 
   const listGeneration = useRef(0)
+  const abortRef = useRef<AbortController | null>(null)
+  const loadingMoreRef = useRef(false)
   const debouncedSearch = useRef(search)
   const [searchQuery, setSearchQuery] = useState(search)
 
@@ -108,25 +113,32 @@ export function useOperationLogData(opts: {
   }, [search])
 
   const fetchListPage = useCallback(
-    async (before?: string) => {
+    async (before: string | undefined, signal: AbortSignal) => {
       return api.operations({
         limit: OPERATIONS_PAGE_EVENT_LIMIT,
         before,
         kind: serverKindParam(kindView),
         search: serverSearchParam(debouncedSearch.current),
+        signal,
       })
     },
     [kindView],
   )
 
   useEffect(() => {
+    abortRef.current?.abort()
+    const ac = new AbortController()
+    abortRef.current = ac
     const gen = ++listGeneration.current
+    loadingMoreRef.current = false
     setLoading(true)
+    setLoadingMore(false)
     setError(null)
     setCursorBefore(null)
     setHasMore(false)
+    setPipelines([])
 
-    void fetchListPage()
+    void fetchListPage(undefined, ac.signal)
       .then((res) => {
         if (gen !== listGeneration.current) return
         setPipelines(res.operations)
@@ -135,12 +147,19 @@ export function useOperationLogData(opts: {
       })
       .catch((err: unknown) => {
         if (gen !== listGeneration.current) return
+        if (err instanceof DOMException && err.name === "AbortError") return
+        if (err instanceof Error && err.name === "AbortError") return
         setPipelines([])
         setError(err instanceof Error ? err.message : "Failed to load operations")
       })
       .finally(() => {
         if (gen === listGeneration.current) setLoading(false)
-      }).catch((err: unknown) => { console.error("[mia]", err) })
+      })
+      .catch((err: unknown) => { console.error("[mia]", err) })
+
+    return () => {
+      ac.abort()
+    }
   }, [kindView, searchQuery, fetchListPage, viewingAsUpn])
 
   useEffect(() => {
@@ -166,7 +185,8 @@ export function useOperationLogData(opts: {
   useEffect(() => {
     const onVisible = (): void => {
       if (document.visibilityState !== "visible") return
-      void fetchListPage()
+      const ac = new AbortController()
+      void fetchListPage(undefined, ac.signal)
         .then((res) => {
           setPipelines((prev) =>
             mergeHeadRefresh(prev, res.operations, res.oldestTimestamp),
@@ -174,24 +194,48 @@ export function useOperationLogData(opts: {
           setCursorBefore((before) => before ?? res.oldestTimestamp)
           setHasMore((more) => more || res.hasMore)
         })
-        .catch((err: unknown) => { console.error("[mia]", err) })
+        .catch((err: unknown) => {
+          if (err instanceof DOMException && err.name === "AbortError") return
+          console.error("[mia]", err)
+        })
     }
     document.addEventListener("visibilitychange", onVisible)
     return () => document.removeEventListener("visibilitychange", onVisible)
   }, [fetchListPage])
 
   const loadMore = useCallback(() => {
-    if (loadingMore || !hasMore || !cursorBefore) return
+    if (loadingMoreRef.current || loadingMore || !hasMore || !cursorBefore) return
+    if (loading) return
+    const gen = listGeneration.current
+    const ac = new AbortController()
+    loadingMoreRef.current = true
     setLoadingMore(true)
-    void fetchListPage(cursorBefore)
+    void fetchListPage(cursorBefore, ac.signal)
       .then((res) => {
-        setPipelines((prev) => mergeOperationPipelines(prev, res.operations))
+        if (gen !== listGeneration.current) return
+        let grew = false
+        setPipelines((prev) => {
+          const merged = mergeOperationPipelines(prev, res.operations)
+          grew = merged.length > prev.length
+          return merged
+        })
         setCursorBefore(res.oldestTimestamp)
-        setHasMore(res.hasMore)
+        // Empty productive page: stop infinite-scroll chaining (server fill
+        // should make this rare; this is the client backstop).
+        setHasMore(grew || res.operations.length > 0 ? res.hasMore : false)
+      })
+      .catch((err: unknown) => {
+        if (err instanceof DOMException && err.name === "AbortError") return
+        console.error("[mia]", err)
+      })
+      .finally(() => {
+        if (gen === listGeneration.current) {
+          loadingMoreRef.current = false
+          setLoadingMore(false)
+        }
       })
       .catch((err: unknown) => { console.error("[mia]", err) })
-      .finally(() => setLoadingMore(false)).catch((err: unknown) => { console.error("[mia]", err) })
-  }, [loadingMore, hasMore, cursorBefore, fetchListPage])
+  }, [loading, loadingMore, hasMore, cursorBefore, fetchListPage])
 
   return {
     pipelines,

@@ -1086,6 +1086,7 @@ export const api = {
     status?: string
     planId?: string
     runId?: string
+    signal?: AbortSignal
   } = {}) => {
     const params = new URLSearchParams()
     if (opts.limit != null) params.set("limit", String(opts.limit))
@@ -1096,7 +1097,9 @@ export const api = {
     if (opts.planId) params.set("planId", opts.planId)
     if (opts.runId) params.set("runId", opts.runId)
     const qs = params.toString()
-    return json<OperationsResponse>(`/api/operations${qs ? `?${qs}` : ""}`)
+    return json<OperationsResponse>(`/api/operations${qs ? `?${qs}` : ""}`, {
+      signal: opts.signal,
+    })
   },
 
   /** Full audit tree for one sync plan (no event window cap). */

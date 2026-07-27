@@ -415,7 +415,7 @@ export function OperationLog() {
   const searchPending = serverSearchActive && loading
 
   useEffect(() => {
-    if (!hasMore) return
+    if (!hasMore || loading || loadingMore) return
     const root = scrollRef.current
     const target = sentinelRef.current
     if (!root || !target) return
@@ -427,7 +427,7 @@ export function OperationLog() {
     )
     obs.observe(target)
     return () => obs.disconnect()
-  }, [hasMore, loadMore, filtered.length])
+  }, [hasMore, loadMore, loading, loadingMore, filtered.length])
 
   const emptyMessage = useMemo(() => {
     if (error) return error

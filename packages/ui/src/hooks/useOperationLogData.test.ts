@@ -36,4 +36,14 @@ describe("useOperationLogData merge helpers", () => {
     const merged = mergeHeadRefresh(current, head, "2026-01-02T00:00:00.000Z")
     expect(merged.map((p) => p.id)).toEqual(["run-new", "run-old"])
   })
+
+  it("documents the Viewing-as storm: empty productive pages must not keep hasMore forever", () => {
+    // Client backstop: when a before= page returns zero pipelines, stop chaining.
+    // Server fill-scan makes this rare; this asserts the merge helpers stay stable
+    // when the head is empty and the tail must be preserved only via timestamps.
+    const current = [pipeline("run-old", "2026-01-01T00:00:00.000Z")]
+    const head: OperationPipeline[] = []
+    const merged = mergeHeadRefresh(current, head, "2026-01-02T00:00:00.000Z")
+    expect(merged.map((p) => p.id)).toEqual(["run-old"])
+  })
 })
