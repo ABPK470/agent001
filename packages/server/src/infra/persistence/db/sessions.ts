@@ -127,6 +127,10 @@ export interface UserStatsRow {
  * Per-user activity aggregates. With anonymous sessions removed, every
  * row in `sessions` has a real `upn` and JOINs into `users` — the heavy
  * "group by sid for no-UPN sessions" CTE the v18 query needed is gone.
+ *
+ * Joins use lower(upn): users/sessions are canonical-lowercased, but older
+ * runs may still carry mixed-case UPNs — exact `=` dropped tokens/LLM calls
+ * for those users while run counts looked fine when both sides matched.
  */
 export function listUsersWithStats(opts?: {
   sinceSeconds?: number
@@ -145,40 +149,43 @@ export function listUsersWithStats(opts?: {
         COUNT(s.sid)           AS session_count,
         MIN(s.created_at)      AS first_seen_at,
         MAX(s.last_seen_at)    AS last_seen_at,
-        (SELECT s2.ip         FROM sessions s2 WHERE s2.upn = u.upn ORDER BY s2.last_seen_at DESC LIMIT 1) AS last_ip,
-        (SELECT s2.user_agent FROM sessions s2 WHERE s2.upn = u.upn ORDER BY s2.last_seen_at DESC LIMIT 1) AS last_user_agent
+        (SELECT s2.ip         FROM sessions s2 WHERE lower(s2.upn) = lower(u.upn) ORDER BY s2.last_seen_at DESC LIMIT 1) AS last_ip,
+        (SELECT s2.user_agent FROM sessions s2 WHERE lower(s2.upn) = lower(u.upn) ORDER BY s2.last_seen_at DESC LIMIT 1) AS last_user_agent
       FROM users u
-      LEFT JOIN sessions s ON s.upn = u.upn AND s.last_seen_at >= datetime('now', ?)
+      LEFT JOIN sessions s ON lower(s.upn) = lower(u.upn) AND s.last_seen_at >= datetime('now', ?)
       GROUP BY u.upn
     ),
     run_totals AS (
       SELECT
-        upn AS upn,
+        lower(upn) AS upn,
         COUNT(*) AS total_runs,
         SUM(CASE WHEN created_at >= datetime('now', ?) THEN 1 ELSE 0 END) AS runs_24h,
-        SUM(CASE WHEN created_at >= datetime('now', ?) AND status IN ('error','failed','timeout') THEN 1 ELSE 0 END) AS runs_failed_24h,
+        SUM(CASE WHEN created_at >= datetime('now', ?) AND status IN ('failed','crashed','timeout','error') THEN 1 ELSE 0 END) AS runs_failed_24h,
         MAX(created_at) AS last_run_at
       FROM runs
-      GROUP BY upn
+      WHERE upn IS NOT NULL AND trim(upn) != ''
+      GROUP BY lower(upn)
     ),
     token_totals AS (
       SELECT
-        r.upn AS upn,
+        lower(r.upn) AS upn,
         SUM(t.total_tokens) AS total_tokens_24h,
         SUM(t.llm_calls)    AS total_llm_calls_24h
       FROM runs r
       JOIN token_usage t ON t.run_id = r.id
-      WHERE r.created_at >= datetime('now', ?)
-      GROUP BY r.upn
+      WHERE r.upn IS NOT NULL AND trim(r.upn) != ''
+        AND r.created_at >= datetime('now', ?)
+      GROUP BY lower(r.upn)
     ),
     last_models AS (
       SELECT upn, model FROM (
         SELECT
-          r.upn AS upn,
+          lower(r.upn) AS upn,
           t.model,
-          ROW_NUMBER() OVER (PARTITION BY r.upn ORDER BY t.created_at DESC) AS rn
+          ROW_NUMBER() OVER (PARTITION BY lower(r.upn) ORDER BY t.created_at DESC) AS rn
         FROM runs r
         JOIN token_usage t ON t.run_id = r.id
+        WHERE r.upn IS NOT NULL AND trim(r.upn) != ''
       ) WHERE rn = 1
     )
     SELECT
@@ -198,9 +205,9 @@ export function listUsersWithStats(opts?: {
       rt.last_run_at,
       lm.model AS last_model
     FROM grouped_sessions g
-    LEFT JOIN run_totals   rt ON rt.upn = g.upn
-    LEFT JOIN token_totals tt ON tt.upn = g.upn
-    LEFT JOIN last_models  lm ON lm.upn = g.upn
+    LEFT JOIN run_totals   rt ON rt.upn = lower(g.upn)
+    LEFT JOIN token_totals tt ON tt.upn = lower(g.upn)
+    LEFT JOIN last_models  lm ON lm.upn = lower(g.upn)
     ORDER BY g.last_seen_at DESC
   `
     )
@@ -274,9 +281,10 @@ export function listUserHistory(
 ): { runs: UserHistoryRunRow[]; total: number } {
   // v19: identifier is always a UPN (anonymous "sid:..." identifiers are gone).
   // We strip the legacy "sid:" prefix defensively so older client links keep working.
-  const upn = identifier.startsWith("sid:") ? identifier.slice(4) : identifier
+  // Match case-insensitively — users are lowercased; legacy runs may not be.
+  const upn = (identifier.startsWith("sid:") ? identifier.slice(4) : identifier).trim().toLowerCase()
   const total = (
-    getDb().prepare("SELECT COUNT(*) AS cnt FROM runs WHERE upn = ?").get(upn) as { cnt: number }
+    getDb().prepare("SELECT COUNT(*) AS cnt FROM runs WHERE lower(upn) = ?").get(upn) as { cnt: number }
   ).cnt
   const rows = getDb()
     .prepare(
@@ -286,7 +294,7 @@ export function listUserHistory(
       t.total_tokens, t.llm_calls, t.model
     FROM runs r
     LEFT JOIN token_usage t ON t.run_id = r.id
-    WHERE r.upn = ?
+    WHERE lower(r.upn) = ?
     ORDER BY r.created_at DESC
     LIMIT ? OFFSET ?
   `

@@ -41,31 +41,40 @@ export async function executeWithKillManager(
   }
 
   if (killPromise) {
-    const raceResult = await Promise.race([
-      executeToolWithTimeout(call.name, call.arguments, runExecute, {
-        toolCallTimeoutMs: 0,
-        maxRetries: 1,
-        signal: config.signal
-      }).then((r) => ({ kind: "exec" as const, value: r })),
-      killPromise.then((msg: string) => ({ kind: "kill" as const, value: msg }))
-    ])
-    killManager!.unregister(asToolCallId(call.id))
+    try {
+      const raceResult = await Promise.race([
+        executeToolWithTimeout(call.name, call.arguments, runExecute, {
+          toolCallTimeoutMs: 0,
+          maxRetries: 1,
+          signal: config.signal
+        }).then((r) => ({ kind: "exec" as const, value: r })),
+        killPromise.then((msg: string) => ({ kind: "kill" as const, value: msg }))
+      ])
+      // Success or kill — both are terminal for the kill slot.
+      killManager!.unregister(asToolCallId(call.id))
 
-    if (raceResult.kind === "kill") {
-      return {
-        result: {
-          result: "",
-          isError: true,
-          timedOut: false,
-          retryCount: 0,
-          toolFailed: false,
-          durationMs: 0
-        },
-        killed: true,
-        killMessage: raceResult.value
+      if (raceResult.kind === "kill") {
+        return {
+          result: {
+            result: "",
+            isError: true,
+            timedOut: false,
+            retryCount: 0,
+            toolFailed: false,
+            durationMs: 0
+          },
+          killed: true,
+          killMessage: raceResult.value
+        }
       }
+      return { result: raceResult.value, killed: false, killMessage: "" }
+    } catch (err) {
+      // ApprovalRequiredError (and other throws) reject the race before unregister.
+      // Clear kill state without broadcasting tool_call.completed — Pipelines would
+      // otherwise treat a parked tool as success, or leave it "running" forever.
+      killManager!.unregister(asToolCallId(call.id), { completed: false })
+      throw err
     }
-    return { result: raceResult.value, killed: false, killMessage: "" }
   }
 
   const result = await executeToolWithTimeout(call.name, call.arguments, runExecute, {

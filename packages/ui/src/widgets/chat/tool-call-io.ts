@@ -8,7 +8,7 @@ import type { OperationActivity, OperationEvent } from "../../client/index"
 export interface ToolIoDetails {
   tool: string
   stepId?: string
-  status: "running" | "success" | "failed"
+  status: "running" | "success" | "failed" | "skipped"
   argsSummary?: string
   inputFormatted?: string
   input?: Record<string, unknown>
@@ -69,7 +69,13 @@ export function coerceToolIoFromActivity(activity: OperationActivity): ToolIoDet
   // Require a real args/output hint — bare duration is not enough (lifecycle rows).
   if (!activity.summary) return null
   const status: ToolIoDetails["status"] =
-    activity.status === "failed" ? "failed" : activity.status === "running" ? "running" : "success"
+    activity.status === "failed"
+      ? "failed"
+      : activity.status === "running"
+        ? "running"
+        : activity.status === "skipped" || activity.status === "cancelled"
+          ? "skipped"
+          : "success"
   return {
     tool: activity.name,
     status,
@@ -169,6 +175,7 @@ export function formatToolIoMeta(io: ToolIoDetails): string {
   if (io.argsSummary) parts.push(io.argsSummary)
   if (io.durationMs != null) parts.push(`${io.durationMs}ms`)
   if (io.status === "failed" && io.error) parts.push("failed")
+  if (io.status === "skipped") parts.push(io.error ? "awaiting approval" : "skipped")
   return parts.join(" · ")
 }
 

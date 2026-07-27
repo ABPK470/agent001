@@ -247,8 +247,12 @@ export interface ToolKillManager {
    * when/if the tool call is killed.  Never resolves otherwise.
    */
   register(toolCallId: ToolCallId, toolName: string): Promise<string>
-  /** Unregister when done (tool completed or killed). */
-  unregister(toolCallId: ToolCallId): void
+  /**
+   * Unregister when the tool finishes, is killed, or is abandoned (e.g. parked
+   * for approval). Pass `{ completed: false }` to clear kill state without
+   * broadcasting `tool_call.completed` — approval parks must not look successful.
+   */
+  unregister(toolCallId: ToolCallId, opts?: { completed?: boolean }): void
   /**
    * Optional. If provided, the agent calls `wrap(toolCallId, () => tool.execute(args))`
    * so the orchestrator can install AsyncLocalStorage scopes (e.g. per-tool-call

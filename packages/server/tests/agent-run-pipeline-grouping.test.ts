@@ -264,4 +264,47 @@ describe("agent-run pipeline telemetry grouping", () => {
     const debugTrace = operation!.activities.find((a) => a.name === "Debug trace")!
     expect(debugTrace.status).toBe(OperationStatus.Failed)
   })
+
+  it("parks orphan tool_call.executing as skipped when approval.required arrives (not running)", async () => {
+    getRun.mockReturnValue({
+      status: "waiting_for_approval",
+      completed_at: null,
+      goal: "fetch url",
+      step_count: 0,
+      error: null,
+    })
+    listEventsForRunId.mockReturnValue([
+      { type: EventType.RunStarted, created_at: "2026-05-27T14:55:00.000Z", data: JSON.stringify({ runId: "run-1", goal: "fetch url" }) },
+      {
+        type: EventType.ToolCallExecuting,
+        created_at: "2026-05-27T14:55:01.000Z",
+        data: JSON.stringify({ runId: "run-1", toolCallId: "tc-1", toolName: "fetch_url" }),
+      },
+      {
+        type: EventType.ApprovalRequired,
+        created_at: "2026-05-27T14:55:02.000Z",
+        data: JSON.stringify({
+          runId: "run-1",
+          stepId: "step-1",
+          toolName: "fetch_url",
+          reason: "External HTTP requires approval",
+          policyName: "http",
+          args: { url: "https://example.com" },
+        }),
+      },
+    ])
+
+    const { listOperationsForRun } = await import("../src/api/operations/service/query/index.ts")
+    const { operation } = listOperationsForRun("run-1")
+    expect(operation!.status).toBe(OperationStatus.Skipped)
+    const fetch = operation!.activities.find((a) => a.name === "fetch_url")!
+    expect(fetch).toBeTruthy()
+    expect(fetch.status).toBe(OperationStatus.Skipped)
+    expect(fetch.status).not.toBe(OperationStatus.Running)
+    const toolIo = fetch.details?.["toolIo"] as { status?: string; error?: string; input?: { url?: string } }
+    expect(toolIo.status).toBe("skipped")
+    expect(toolIo.error).toContain("approval")
+    expect(toolIo.input?.url).toBe("https://example.com")
+    expect(operation!.activities.some((a) => a.status === OperationStatus.Running)).toBe(false)
+  })
 })

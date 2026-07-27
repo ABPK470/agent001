@@ -39,8 +39,10 @@ export function ToolIoBlock({
           <CodeBlock code={io.outputText} lang="text" maxHeight={maxHeight} />
         </div>
       )}
-      {io.error && (
-        <div className="px-2.5 py-1.5 text-error text-xs border-t border-border-subtle">{io.error}</div>
+      {io.error && (io.status === "failed" || io.status === "skipped") && (
+        <div className={`px-2.5 py-1.5 text-xs border-t border-border-subtle ${io.status === "skipped" ? "text-warning" : "text-error"}`}>
+          {io.error}
+        </div>
       )}
     </div>
   )
@@ -87,6 +89,11 @@ function ToolCallModalBody({
         {io.status === "failed" && io.error && (
           <div className="rounded-md border border-error/30 bg-error-soft px-3 py-2 text-sm break-all text-error">
             {io.error}
+          </div>
+        )}
+        {io.status === "skipped" && (
+          <div className="rounded-md border border-warning/30 bg-warning-soft px-3 py-2 text-sm break-all text-warning">
+            {io.error ?? "Awaiting approval — tool did not run."}
           </div>
         )}
         {io.status === "running" && (

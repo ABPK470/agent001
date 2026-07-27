@@ -3028,7 +3028,13 @@ textarea.input {
 
 @container active-users (min-width: 860px) {
   .active-users-widget .au-stat-grid {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@container active-users (min-width: 1100px) {
+  .active-users-widget .au-stat-grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
   }
 }
 
@@ -3183,9 +3189,9 @@ textarea.input {
   min-width: 0;
 }
 
-/* Table: only used when container is wide enough; vertical scroll */
+/* Table: prefer vertical scroll; allow horizontal if columns still overflow */
 .active-users-widget--table .au-body-scroll {
-  overflow-x: hidden;
+  overflow-x: auto;
   overflow-y: auto;
   scrollbar-gutter: stable;
   min-width: 0;

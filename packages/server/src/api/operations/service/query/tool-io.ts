@@ -10,7 +10,7 @@ import { numField, strField } from "./utils.js"
 export interface ToolIoDetails {
   tool: string
   stepId?: string
-  status: "running" | "success" | "failed"
+  status: "running" | "success" | "failed" | "skipped"
   argsSummary?: string
   inputFormatted?: string
   input?: Record<string, unknown>
@@ -48,6 +48,7 @@ export function buildToolIoSummary(io: ToolIoDetails): string | undefined {
     parts.push(truncateSummary(io.outputText, 80))
   }
   if (io.status === "failed" && io.error) parts.push(truncateSummary(io.error, 80))
+  if (io.status === "skipped" && io.error) parts.push(truncateSummary(io.error, 80))
   if (io.durationMs != null) parts.push(`${(io.durationMs / 1000).toFixed(1)}s`)
   return parts.length > 0 ? parts.join(" · ") : undefined
 }

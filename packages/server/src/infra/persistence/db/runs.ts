@@ -73,7 +73,7 @@ export function saveRun(run: DbRun): void {
   upsertRun().run({
     ...run,
     thread_id: run.thread_id ?? existing?.thread_id ?? null,
-    upn: run.upn ?? existing?.upn ?? null,
+    upn: (run.upn ?? existing?.upn ?? null)?.trim().toLowerCase() || null,
     display_name: run.display_name ?? existing?.display_name ?? null
   })
 }

@@ -19,7 +19,7 @@
  */
 
 import type { ReactNode } from "react"
-import { Activity, CircleDot, Play, Users, Zap } from "lucide-react"
+import { Activity, CircleDot, Cpu, Play, Users, Zap } from "lucide-react"
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { api } from "../client/index"
 import { EmptyState } from "../components/EmptyState"
@@ -64,7 +64,12 @@ interface UserRow {
 }
 
 interface UserSummary {
-  users: number; online: number; runsInFlight: number; runs24h: number; tokens24h: number
+  users: number
+  online: number
+  runsInFlight: number
+  runs24h: number
+  tokens24h: number
+  llmCalls24h: number
 }
 
 interface ActiveRunRow {
@@ -88,11 +93,13 @@ const PAGE_SIZE = 50
 /**
  * Layout rules (container width, not viewport):
  * 1. Never crush a 13-column table into a narrow panel.
- * 2. Never clip columns behind overflow — that is not responsiveness.
+ * 2. Prefer stack over clipping — table only when wide enough; table body
+ *    may still scroll horizontally as a safety net (scrollbar-gutter).
  * 3. Stack (cards) is the default. Table only when every column fits
- *    comfortably with no horizontal scroll.
+ *    comfortably without relying on horizontal scroll.
  */
-const AU_TABLE_MIN_WIDTH_PX = 1200
+/** Wide enough that all 13 columns fit without horizontal scroll in practice. */
+const AU_TABLE_MIN_WIDTH_PX = 1400
 const AU_TABLE_COL_SPAN = 13
 
 const SORT_LABELS: Record<SortKey, string> = {
@@ -405,6 +412,11 @@ export function ActiveUsers(): ReactNode {
             />
             <StatCard icon={<Play size={15} />} label="Runs (24h)" value={String(summary.runs24h)} />
             <StatCard icon={<Zap size={15} />} label="Tokens (24h)" value={formatCompact(summary.tokens24h)} />
+            <StatCard
+              icon={<Cpu size={15} />}
+              label="LLM Calls (24h)"
+              value={String(summary.llmCalls24h ?? 0)}
+            />
           </div>
         </div>
       )}

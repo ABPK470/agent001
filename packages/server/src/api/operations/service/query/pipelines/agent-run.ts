@@ -9,7 +9,7 @@ import * as db from "../../../../../infra/persistence/sqlite.js"
 import type { OperationActivity, OperationEvent, OperationPipeline } from "../types.js"
 import { buildToolIoFromStepEvents, buildToolIoSummary, resolveStepToolName } from "../tool-io.js"
 import { durationOf, inferPipelineStatus, numField, strField } from "../utils.js"
-import { presentToolCall } from "@mia/shared-types"
+import { presentToolCall, serializeToolCallArgs } from "@mia/shared-types"
 
 export function buildAgentRunPipeline(runId: string, events: OperationEvent[]): OperationPipeline {
   const run = db.getRun(runId)
@@ -22,11 +22,13 @@ export function buildAgentRunPipeline(runId: string, events: OperationEvent[]): 
         ? OperationStatus.Failed
         : run?.status === RunStatus.Cancelled
           ? OperationStatus.Cancelled
-          : run?.status === RunStatus.Running ||
-              run?.status === RunStatus.Planning ||
-              run?.status === RunStatus.Pending
-            ? OperationStatus.Running
-            : inferPipelineStatus(events)
+          : run?.status === RunStatus.WaitingForApproval
+            ? OperationStatus.Skipped
+            : run?.status === RunStatus.Running ||
+                run?.status === RunStatus.Planning ||
+                run?.status === RunStatus.Pending
+              ? OperationStatus.Running
+              : inferPipelineStatus(events)
   const endedAt = run?.completed_at ?? (status !== OperationStatus.Running ? lastEv.timestamp : null)
   const goal = run?.goal ?? strField(lastEv.data, "goal") ?? `run ${runId.slice(0, 8)}`
   const activities = groupAgentRunActivities(events, status)
@@ -149,9 +151,16 @@ function groupAgentRunActivities(
   }
 
   /** When step.* never arrived (window gap / persist miss), promote buffered
-   *  tool_call.* into a named tool row instead of opaque "Tool call" telemetry. */
-  const flushPendingToolCalls = (): void => {
-    if (pendingToolCalls.length === 0) return
+   *  tool_call.* into a named tool row instead of opaque "Tool call" telemetry.
+   *  `parked` closes orphans that never got completed/killed (policy approval). */
+  const flushPendingToolCalls = (parked?: {
+    reason: string
+    toolName?: string
+    event: OperationEvent
+    /** When no buffered tool_call.* existed, synthesize a row from approval alone. */
+    createIfEmpty?: boolean
+  }): void => {
+    if (pendingToolCalls.length === 0 && !parked) return
     closeTelemetryGroup()
     const byCallId = new Map<string, OperationEvent[]>()
     for (const ev of pendingToolCalls) {
@@ -162,20 +171,30 @@ function groupAgentRunActivities(
     }
     pendingToolCalls = []
 
+    const parkReason = parked?.reason
+    const parkTool = parked?.toolName
+
     for (const evs of byCallId.values()) {
-      const toolName = evs
-        .map((e) => strField(e.data, "toolName"))
-        .find((n): n is string => typeof n === "string" && n.length > 0)
+      const toolName =
+        evs
+          .map((e) => strField(e.data, "toolName"))
+          .find((n): n is string => typeof n === "string" && n.length > 0) ??
+        (parkTool && evs.some((e) => e.type === EventType.ToolCallExecuting) ? parkTool : undefined)
       if (!toolName) {
         for (const ev of evs) appendTelemetryEvent(ev.type, ev)
         continue
       }
       const startedAt = evs[0]!.timestamp
-      const endedAt = evs[evs.length - 1]!.timestamp
+      const endedAt = parked?.event.timestamp ?? evs[evs.length - 1]!.timestamp
       const killed = evs.some((e) => e.type === EventType.ToolCallKilled)
       const finished = evs.some(
         (e) => e.type === EventType.ToolCallCompleted || e.type === EventType.ToolCallKilled
       )
+      const matchesPark = !parkTool || toolName === parkTool
+      const awaitingApproval = Boolean(parkReason) && matchesPark && !finished && !killed
+      const allEvents =
+        awaitingApproval && parked ? [...evs, parked.event] : evs
+      const approvalIo = awaitingApproval && parked ? toolIoInputFromApproval(parked.event) : {}
       const act: OperationActivity = {
         id: `step-synth:${activities.length}`,
         name: toolName,
@@ -183,21 +202,84 @@ function groupAgentRunActivities(
           ? OperationStatus.Failed
           : finished
             ? OperationStatus.Success
-            : OperationStatus.Running,
+            : awaitingApproval
+              ? OperationStatus.Skipped
+              : OperationStatus.Running,
         startedAt,
-        endedAt: finished ? endedAt : null,
-        durationMs: finished ? durationOf(startedAt, endedAt) : null,
+        endedAt: finished || killed || awaitingApproval ? endedAt : null,
+        durationMs:
+          finished || killed || awaitingApproval ? durationOf(startedAt, endedAt) : null,
+        ...(awaitingApproval ? { error: parkReason, summary: parkReason } : {}),
         details: {
           toolIo: {
             tool: toolName,
-            status: killed ? "failed" : finished ? "success" : "running",
-            durationMs: finished ? durationOf(startedAt, endedAt) : null
+            status: killed
+              ? "failed"
+              : finished
+                ? "success"
+                : awaitingApproval
+                  ? "skipped"
+                  : "running",
+            durationMs:
+              finished || killed || awaitingApproval ? durationOf(startedAt, endedAt) : null,
+            ...(awaitingApproval ? { error: parkReason } : {}),
+            ...approvalIo
           }
         },
-        events: evs
+        events: allEvents
       }
       activities.push(act)
       lastStepActivity = act
+    }
+
+    // Approval for a tool that never got tool_call.executing (or was already
+    // flushed) — still surface a parked row from the approval payload.
+    if (parked?.createIfEmpty && byCallId.size === 0 && parkTool) {
+      const ts = parked.event.timestamp
+      const act: OperationActivity = {
+        id: `step-synth:${activities.length}`,
+        name: parkTool,
+        status: OperationStatus.Skipped,
+        startedAt: ts,
+        endedAt: ts,
+        durationMs: 0,
+        error: parkReason,
+        summary: parkReason,
+        details: {
+          toolIo: {
+            tool: parkTool,
+            status: "skipped",
+            error: parkReason,
+            durationMs: 0,
+            ...toolIoInputFromApproval(parked.event)
+          }
+        },
+        events: [parked.event]
+      }
+      activities.push(act)
+      lastStepActivity = act
+    }
+  }
+
+  const parkOpenStepForApproval = (ev: OperationEvent, reason: string): void => {
+    const step = openSteps.pop()
+    if (!step) return
+    step.events.push(ev)
+    step.endedAt = ev.timestamp
+    step.durationMs = durationOf(step.startedAt, ev.timestamp)
+    step.status = OperationStatus.Skipped
+    step.error = reason
+    step.summary = reason
+    const tool = strField(ev.data, "toolName") ?? step.name
+    step.details = {
+      ...(step.details ?? {}),
+      toolIo: {
+        tool,
+        status: "skipped",
+        error: reason,
+        durationMs: step.durationMs,
+        ...toolIoInputFromApproval(ev)
+      }
     }
   }
 
@@ -281,6 +363,35 @@ function groupAgentRunActivities(
           OperationStatus.Cancelled,
           ev,
           strField(ev.data, "reason") ?? undefined
+        )
+      )
+      continue
+    }
+
+    // Policy gate parked the tool before step.* completed — close the orphan
+    // tool_call.executing (and any open step) as skipped, not running forever.
+    if (t === EventType.ApprovalRequired) {
+      closeTelemetryGroup()
+      const reason =
+        strField(ev.data, "reason") ??
+        strField(ev.data, "policyName") ??
+        "Awaiting approval"
+      const toolName = strField(ev.data, "toolName") ?? undefined
+      const hadOpenSteps = openSteps.length > 0
+      while (openSteps.length > 0) parkOpenStepForApproval(ev, reason)
+      flushPendingToolCalls({
+        reason,
+        toolName,
+        event: ev,
+        createIfEmpty: !hadOpenSteps
+      })
+      activities.push(
+        instantActivity(
+          `approval:${activities.length}`,
+          "approval required",
+          OperationStatus.Skipped,
+          ev,
+          reason
         )
       )
       continue
@@ -431,15 +542,48 @@ function groupAgentRunActivities(
 
   flushPendingToolCalls()
   const lastTs = events[events.length - 1]?.timestamp ?? new Date().toISOString()
-  if (pipelineStatus === OperationStatus.Failed || pipelineStatus === OperationStatus.Cancelled) {
-    closeAllOpenSteps(lastTs, true)
-    for (const act of openAgentSyncExecute.values()) {
+  if (
+    pipelineStatus === OperationStatus.Failed ||
+    pipelineStatus === OperationStatus.Cancelled ||
+    pipelineStatus === OperationStatus.Skipped
+  ) {
+    const terminal =
+      pipelineStatus === OperationStatus.Cancelled
+        ? OperationStatus.Cancelled
+        : pipelineStatus === OperationStatus.Skipped
+          ? OperationStatus.Skipped
+          : OperationStatus.Failed
+    const terminalError =
+      pipelineStatus === OperationStatus.Cancelled
+        ? "Cancelled"
+        : pipelineStatus === OperationStatus.Skipped
+          ? "Awaiting approval"
+          : undefined
+    closeAllOpenSteps(lastTs, terminal === OperationStatus.Failed, terminalError)
+    for (const [planId, act] of openAgentSyncExecute) {
       act.status = OperationStatus.Failed
       act.endedAt = lastTs
       act.durationMs = durationOf(act.startedAt, lastTs)
       act.error = act.error ?? "Agent run ended before sync execute completed"
+      openAgentSyncExecute.delete(planId)
     }
-    openAgentSyncExecute.clear()
+    // Synth tool rows from orphan tool_call.executing stay "running" unless closed here.
+    for (const act of activities) {
+      if (act.status !== OperationStatus.Running) continue
+      act.status = terminal
+      act.endedAt = lastTs
+      act.durationMs = durationOf(act.startedAt, lastTs)
+      if (terminalError && !act.error) act.error = terminalError
+      const toolIo = act.details?.["toolIo"]
+      if (toolIo && typeof toolIo === "object" && !Array.isArray(toolIo)) {
+        const io = toolIo as Record<string, unknown>
+        if (io["status"] === "running") {
+          io["status"] = terminal === OperationStatus.Skipped ? "skipped" : "failed"
+          if (terminalError && typeof io["error"] !== "string") io["error"] = terminalError
+          io["durationMs"] = act.durationMs
+        }
+      }
+    }
   }
 
   // Finalize telemetry groups: compute each group's summary and terminal
@@ -482,5 +626,23 @@ function instantActivity(
     ...(summary ? { summary } : {}),
     ...(error ? { error } : {}),
     events: [ev]
+  }
+}
+
+function toolIoInputFromApproval(ev: OperationEvent): {
+  input?: Record<string, unknown>
+  inputFormatted?: string
+  argsSummary?: string
+} {
+  const args = ev.data["args"]
+  if (!args || typeof args !== "object" || Array.isArray(args)) return {}
+  const input = args as Record<string, unknown>
+  if (Object.keys(input).length === 0) return {}
+  const tool = strField(ev.data, "toolName") ?? "tool"
+  const presentation = presentToolCall(tool, input)
+  return {
+    input,
+    inputFormatted: serializeToolCallArgs(input),
+    ...(presentation.summary ? { argsSummary: presentation.summary } : {})
   }
 }

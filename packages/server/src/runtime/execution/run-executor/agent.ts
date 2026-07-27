@@ -46,12 +46,13 @@ function createKillManager(
         })
       })
     },
-    unregister: (toolCallId: string) => {
+    unregister: (toolCallId: string, opts?: { completed?: boolean }) => {
       const toolName = callToolNames.get(toolCallId)
       callSignals.delete(toolCallId)
       callToolNames.delete(toolCallId)
       runtime.interaction.clearPendingKill(`${request.runId}:${toolCallId}`)
       env.runContext.signal = runtime.controller.signal
+      if (opts?.completed === false) return
       broadcast({
         type: EventType.ToolCallCompleted,
         data: { runId: request.runId, toolCallId, ...(toolName ? { toolName } : {}) }

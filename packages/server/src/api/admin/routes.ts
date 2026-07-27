@@ -206,9 +206,9 @@ export function registerAdminRoutes(app: FastifyInstance, orchestrator: AgentOrc
       const rows = getDb()
         .prepare(
           `
-				SELECT upn, COUNT(*) AS n
+				SELECT lower(upn) AS upn, COUNT(*) AS n
 				FROM runs WHERE id IN (${placeholders})
-				GROUP BY upn
+				GROUP BY lower(upn)
 			`
         )
         .all(...activeIds) as Array<{ upn: string; n: number }>
@@ -216,13 +216,17 @@ export function registerAdminRoutes(app: FastifyInstance, orchestrator: AgentOrc
     }
 
     return {
-      users: users.map((user) => ({ ...user, activeRuns: activeByUpn.get(user.upn) ?? 0 })),
+      users: users.map((user) => ({
+        ...user,
+        activeRuns: activeByUpn.get(user.upn.toLowerCase()) ?? 0,
+      })),
       summary: {
         users: users.length,
         online: users.filter((user) => user.online).length,
         runsInFlight: activeIds.length,
         runs24h: users.reduce((acc, user) => acc + user.runs24h, 0),
-        tokens24h: users.reduce((acc, user) => acc + user.totalTokens24h, 0)
+        tokens24h: users.reduce((acc, user) => acc + user.totalTokens24h, 0),
+        llmCalls24h: users.reduce((acc, user) => acc + user.totalLlmCalls24h, 0),
       }
     }
   })
