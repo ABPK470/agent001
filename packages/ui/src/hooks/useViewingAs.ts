@@ -3,6 +3,7 @@ import {
   clearViewingAs,
   getViewingAsTarget,
   isViewingAsMe,
+  isViewingAsOther,
   setViewingAs,
   subscribeViewingAs,
   type ViewingAsTarget,
@@ -21,6 +22,7 @@ export function useViewingAs() {
   const { me } = useMe()
   const target = useSyncExternalStore(subscribe, getSnapshot, () => null)
   const isMe = isViewingAsMe()
+  const viewingOther = isViewingAsOther()
 
   return {
     /** null when Viewing as Me */
@@ -28,7 +30,7 @@ export function useViewingAs() {
     displayName: target?.displayName ?? null,
     isMe,
     /** Quiet accent / disable Personal writes when not Me */
-    isViewingAsOther: !isMe,
+    isViewingAsOther: viewingOther,
     setViewingAs: (next: ViewingAsTarget | null) => setViewingAs(next, me?.upn),
     clearViewingAs: () => clearViewingAs(me?.upn),
     /** Admins only — operators always Me */

@@ -22,6 +22,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react"
+import { resetViewingAsMemory } from "../lib/viewing-as"
 
 export interface Me {
   upn: string
@@ -68,6 +69,8 @@ export function useMe(): {
         signal: AbortSignal.timeout(60_000),
       })
     } catch (err: unknown) { console.error("[mia]", err) }
+    // Clear Viewing as memory before me=null so chat cannot keep a stale Other.
+    resetViewingAsMemory()
     setMe(null)
   }, [])
 

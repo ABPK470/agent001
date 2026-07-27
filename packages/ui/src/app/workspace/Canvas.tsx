@@ -20,8 +20,8 @@ export interface CanvasHandle {
 export const Canvas = forwardRef<CanvasHandle>(function Canvas(_props, ref) {
   const views = useLayoutStore((s) => s.views)
   const activeViewId = useLayoutStore((s) => s.activeViewId)
-  const { canViewAs, isViewingAsOther } = useViewingAs()
-  const stageGlyphs = canViewAs && isViewingAsOther
+  const { isViewingAsOther } = useViewingAs()
+  const stageGlyphs = isViewingAsOther
   const [catalogOpen, setCatalogOpen] = useState(false)
 
   useImperativeHandle(ref, () => ({ openCatalog: () => setCatalogOpen(true) }), [])

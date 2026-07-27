@@ -6,7 +6,7 @@ import { AppPhase } from "../enums"
 import { useIsMobile } from "../hooks/useIsMobile"
 import { useMe } from "../hooks/useMe"
 import { useViewingAs } from "../hooks/useViewingAs"
-import { restoreViewingAs } from "../lib/viewing-as"
+import { resetViewingAsMemory, syncViewingAsForSession } from "../lib/viewing-as"
 import { usePlatformHealth } from "../hooks/usePlatformHealth"
 import { useServerReachable } from "../hooks/useServerReachable"
 import { useLayoutStore } from "../state/layout-store"
@@ -248,10 +248,13 @@ export function App() {
   }, [])
 
   useEffect(() => {
-    if (!me?.upn) return
+    if (!me?.upn) {
+      resetViewingAsMemory()
+      return
+    }
     setShellVisible(true)
     setShellMode("chat")
-    if (me.isAdmin) restoreViewingAs(me.upn)
+    syncViewingAsForSession({ upn: me.upn, isAdmin: me.isAdmin })
   }, [me?.upn, me?.isAdmin])
 
   useEffect(() => () => {
