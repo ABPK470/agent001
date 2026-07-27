@@ -47,6 +47,7 @@ export {
   markRunCancelled,
   markRunCrashed,
   normaliseUnknownRunStatuses,
+  runHasResumeChild,
   saveAdminAudit,
   saveAudit,
   saveCheckpoint,

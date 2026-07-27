@@ -1,9 +1,10 @@
 /**
- * Collapse approval-resume run chains into one chat turn.
+ * Collapse approval-resume run chains into one chat / threads row.
  *
  * Approve parks the parent and spawns a child with the same goal + parentRunId.
- * Without collapsing, TermChat shows: goal → "Waiting for approval" →
+ * Without collapsing, TermChat and Threads show: goal → "Waiting for approval" →
  * "Run cancelled." → fake new user bubble (often "yes") — once per approval.
+ * Pipelines collapses the same chain server-side (merge-agent-run-resume).
  */
 
 import type { Run, TraceEntry } from "@mia/shared-types"

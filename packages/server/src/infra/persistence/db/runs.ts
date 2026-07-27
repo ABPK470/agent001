@@ -82,6 +82,14 @@ export function getRun(id: string): DbRun | undefined {
   return getDb().prepare("SELECT * FROM runs WHERE id = ?").get(id) as DbRun | undefined
 }
 
+/** True when approve/resume already spawned a child that supersedes this run. */
+export function runHasResumeChild(runId: string): boolean {
+  const row = getDb()
+    .prepare("SELECT 1 AS ok FROM runs WHERE parent_run_id = ? LIMIT 1")
+    .get(runId) as { ok: number } | undefined
+  return Boolean(row)
+}
+
 export function listRuns(limit = 100, offset = 0): DbRun[] {
   return getDb()
     .prepare("SELECT * FROM runs ORDER BY created_at DESC LIMIT ? OFFSET ?")

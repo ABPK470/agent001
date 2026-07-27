@@ -15,12 +15,18 @@ import { statusDot } from "../../theme/tokens"
 import { WIDGET_ICONS } from "../../widgets/widget-icons"
 import { DeleteThreadModal } from "./DeleteThreadModal"
 import { ThreadRowMenu } from "./ThreadRowMenu"
+import { collapseResumeRunChains } from "../termchat/collapseResumeChains"
 
 /** Threads widget: newest runs at the top, oldest at the bottom. */
 function sortRunsNewestFirst(runs: readonly Run[]): Run[] {
   return [...runs].sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
   )
+}
+
+/** One row per user goal — approval-resume parents are superseded, not separate runs. */
+function displayRunsForThread(runs: readonly Run[]): Run[] {
+  return sortRunsNewestFirst(collapseResumeRunChains(runs))
 }
 
 function RunRow({
@@ -108,7 +114,8 @@ function WidgetThreadBlock({
   const [titleTooltipOpen, setTitleTooltipOpen] = useState(false)
   const [titleTooltipAnchor, setTitleTooltipAnchor] = useState<DOMRect | null>(null)
   const displayTitle = thread.title || "New thread"
-  const runCount = thread.runCount ?? runs?.length ?? 0
+  // Prefer loaded (collapsed) runs so approval chains don't inflate the badge.
+  const runCount = runs ? runs.length : (thread.runCount ?? 0)
   const emptyRuns = expanded && !loading && (runs?.length ?? 0) === 0
 
   function closeTitleTooltip() {
@@ -264,7 +271,7 @@ export function ThreadRunsPanel(): React.ReactElement {
   const activeThreadRuns = useMemo(
     () =>
       activeThreadId
-        ? sortRunsNewestFirst(storeRuns.filter((r) => r.threadId === activeThreadId))
+        ? displayRunsForThread(storeRuns.filter((r) => r.threadId === activeThreadId))
         : [],
     [storeRuns, activeThreadId],
   )
@@ -292,7 +299,7 @@ export function ThreadRunsPanel(): React.ReactElement {
     if (alreadyLoaded) return
     setLoadingId(threadId)
     try {
-      const runs = sortRunsNewestFirst(await api.listThreadRuns(threadId))
+      const runs = displayRunsForThread(await api.listThreadRuns(threadId))
       setRunsByThread((prev) => ({ ...prev, [threadId]: runs }))
     } catch {
       setRunsByThread((prev) => ({ ...prev, [threadId]: [] }))
@@ -362,7 +369,7 @@ export function ThreadRunsPanel(): React.ReactElement {
             runs={
               thread.id === activeThreadId
                 ? activeThreadRuns
-                : sortRunsNewestFirst(
+                : displayRunsForThread(
                     (runsByThread[thread.id] ?? []).filter((r) => r.threadId === thread.id),
                   )
             }
