@@ -20,6 +20,7 @@ import { sliceBlockForReveal } from "./answer-stream-reveal"
 import { DataTable } from "./DataTable"
 import { TableExportActions } from "./TableExportActions"
 import type { ChatTableExportSource } from "../lib/chat-table-export"
+import { isChatTableExportDisabled } from "./chat-table-export-gate"
 import { InlineDiagram, isDiagramLang, tryInferDiagramKind } from "./InlineDiagram"
 import { StructuredPendingBlock } from "./StreamingBlocks"
 
@@ -609,7 +610,7 @@ export function SmartAnswer({
           const tableData = tryConvertOrderedListToTable(b.items)
           if (tableData) {
             const localSource: ChatTableExportSource = { kind: "local", title: "List table" }
-            const listTableEntering = printing || settling
+            const listTableEntering = printing
             return (
               <div key={bi} className={`${wrapClass} ${structuredEnter}`}>
                 {compact ? (
@@ -617,7 +618,10 @@ export function SmartAnswer({
                     headers={tableData.headers}
                     rows={tableData.rows}
                     exportSource={localSource}
-                    exportDisabled={!exportSettled || listTableEntering}
+                    exportDisabled={isChatTableExportDisabled({
+                      exportSettled,
+                      tablePrinting: listTableEntering,
+                    })}
                   />
                 ) : (
                   <DataTable
@@ -626,7 +630,10 @@ export function SmartAnswer({
                     renderCell={(v) => <InlineText text={v} />}
                     renderHeader={(v) => <InlineText text={v} />}
                     exportSource={localSource}
-                    exportDisabled={!exportSettled || listTableEntering}
+                    exportDisabled={isChatTableExportDisabled({
+                      exportSettled,
+                      tablePrinting: listTableEntering,
+                    })}
                   />
                 )}
               </div>
@@ -649,11 +656,17 @@ export function SmartAnswer({
         }
 
         if (b.type === "table") {
-          const tableEntering = (printing && reveal?.partial?.kind === "table") || settling
+          // Settle animation keeps enterBlockIndices forever (class stays; CSS
+          // fill-mode). That must not grey out Copy/CSV/JSON after the stream.
+          const tableEntering = Boolean(printing && reveal?.partial?.kind === "table")
           const tableIndex = markdownTableIndex(blocks, bi)
           const exportSource: ChatTableExportSource | undefined = exportRunId
             ? { kind: "run", runId: exportRunId, tableIndex }
             : { kind: "local", title: `Table ${tableIndex + 1}` }
+          const exportDisabled = isChatTableExportDisabled({
+            exportSettled,
+            tablePrinting: tableEntering,
+          })
           return (
             <div key={bi} className={`${wrapClass} ${structuredEnter}`}>
               {compact ? (
@@ -661,7 +674,7 @@ export function SmartAnswer({
                   headers={b.headers}
                   rows={b.rows}
                   exportSource={exportSource}
-                  exportDisabled={!exportSettled || tableEntering}
+                  exportDisabled={exportDisabled}
                 />
               ) : (
                 <DataTable
@@ -670,7 +683,7 @@ export function SmartAnswer({
                   renderCell={(v) => <InlineText text={v} />}
                   renderHeader={(v) => <InlineText text={v} />}
                   exportSource={exportSource}
-                  exportDisabled={!exportSettled || tableEntering}
+                  exportDisabled={exportDisabled}
                 />
               )}
             </div>
