@@ -13,6 +13,7 @@
 
 import { Search, X } from "lucide-react"
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
+import { VirtualList } from "../../components/VirtualList"
 import { fmtTokens, formatMs } from "../../lib/util"
 import { parkScrollOnScope, offsetInScrollHost } from "../../lib/chatScroll"
 import { SegmentToggle } from "../entity-registry/SegmentToggle"
@@ -21,6 +22,7 @@ import {
   searchCall,
   type TraceCallSearchHit,
   type TraceDag,
+  type TraceSpineEntry,
 } from "./build-trace-dag"
 import { emptyOpen, seedLatest, type FoldMode, type OpenState } from "./open-state"
 import { callReceivedSummary, callSentSummary, formatCharCount } from "./trace-format"
@@ -73,6 +75,7 @@ export function TraceDag({
   function refreshPinStack() {
     const el = scrollRef.current
     if (!el) return
+    // VirtualList only mounts the window — pin from those nodes; offscreen scopes are skipped.
     const ids = computeTracePinnedScopeIds(el)
     const stackH = ids.length * TRACE_STICKY_ROW_H
     el.style.setProperty("--trace-pin-stack-h", `${stackH}px`)
@@ -331,6 +334,71 @@ export function TraceDag({
     }
     return bits.join(" · ") || "empty"
   }, [dag.preamble])
+
+  /** Spine rows shown in the virtual list (filter hides non-matching work/calls). */
+  const spineItems = useMemo((): TraceSpineEntry[] => {
+    if (!query || !callHits) return dag.spine
+    return dag.spine.filter((entry) => {
+      if (entry.kind === "phase") return true
+      if (entry.kind === "work") return callHits.has(entry.work.afterCallIndex)
+      return callHits.has(entry.callIndex)
+    })
+  }, [dag.spine, query, callHits])
+
+  function estimateSpineSize(index: number): number {
+    const entry = spineItems[index]
+    if (!entry) return 48
+    if (entry.kind === "phase") {
+      return openState.phases.has(entry.phase.id) ? 280 : 40
+    }
+    if (entry.kind === "work") {
+      return openState.work.has(entry.work.id) ? 200 : 40
+    }
+    return openState.calls.has(entry.callIndex) ? 240 : 48
+  }
+
+  function spineItemKey(_index: number, entry: TraceSpineEntry): string {
+    if (entry.kind === "phase") return entry.phase.id
+    if (entry.kind === "work") return entry.work.id
+    return `call:${entry.callIndex}`
+  }
+
+  function spineIndexForScope(scopeId: string): number {
+    if (scopeId.startsWith("phase-")) {
+      return spineItems.findIndex((e) => e.kind === "phase" && e.phase.id === scopeId)
+    }
+    if (scopeId.startsWith("work-")) {
+      const top = spineItems.findIndex((e) => e.kind === "work" && e.work.id === scopeId)
+      if (top >= 0) return top
+      return spineItems.findIndex(
+        (e) =>
+          e.kind === "phase" &&
+          e.phase.children?.some((c) => c.kind === "work" && c.work.id === scopeId),
+      )
+    }
+    const callMatch =
+      /^call:(\d+)$/.exec(scopeId) ??
+      /^sent:(\d+)$/.exec(scopeId) ??
+      /^received:(\d+)$/.exec(scopeId) ??
+      /^message:(\d+):/.exec(scopeId)
+    if (callMatch) {
+      const callIndex = Number(callMatch[1])
+      const top = spineItems.findIndex((e) => e.kind === "call" && e.callIndex === callIndex)
+      if (top >= 0) return top
+      return spineItems.findIndex(
+        (e) =>
+          e.kind === "phase" &&
+          e.phase.children?.some((c) => c.kind === "call" && c.callIndex === callIndex),
+      )
+    }
+    return -1
+  }
+
+  function estimateSpineOffset(index: number): number {
+    let top = 0
+    for (let i = 0; i < index; i++) top += estimateSpineSize(i)
+    return top
+  }
 
   const pinRows = useMemo((): PinRow[] => {
     const rows: PinRow[] = []
@@ -669,10 +737,40 @@ export function TraceDag({
     requestAnimationFrame(() => {
       const host = scrollRef.current
       if (!host) return
-      const el = host.querySelector<HTMLElement>(
+      let el = host.querySelector<HTMLElement>(
         `[data-trace-scope="${CSS.escape(scopeId)}"]`,
       )
-      if (!el) return
+      if (!el) {
+        // Offscreen virtual row — park near estimate so the scope mounts, then settle.
+        const index = spineIndexForScope(scopeId)
+        if (index >= 0) {
+          const stackH = pinnedIds.length * TRACE_STICKY_ROW_H
+          host.scrollTop = Math.max(0, estimateSpineOffset(index) - stackH - 2)
+        }
+        requestAnimationFrame(() => {
+          const mounted = scrollRef.current
+          if (!mounted) {
+            suppressFollowRef.current = false
+            return
+          }
+          el = mounted.querySelector<HTMLElement>(
+            `[data-trace-scope="${CSS.escape(scopeId)}"]`,
+          )
+          if (!el) {
+            suppressFollowRef.current = false
+            refreshPinStack()
+            return
+          }
+          const top = layoutOffsetInScroll(mounted, el)
+          const stackH = pinnedIds.length * TRACE_STICKY_ROW_H
+          mounted.scrollTop = Math.max(0, top - stackH - 2)
+          requestAnimationFrame(() => {
+            suppressFollowRef.current = false
+            refreshPinStack()
+          })
+        })
+        return
+      }
       const top = layoutOffsetInScroll(host, el)
       const stackH = pinnedIds.length * TRACE_STICKY_ROW_H
       host.scrollTop = Math.max(0, top - stackH - 2)
@@ -685,6 +783,94 @@ export function TraceDag({
 
   function onSearchChange(value: string) {
     setSearch(value)
+  }
+
+  function renderSpineItem({ item: entry }: { item: TraceSpineEntry }) {
+    // .trace-flow gap does not apply to absolutely positioned virtual rows.
+    const gapClass = "pb-[0.55rem]"
+    if (entry.kind === "phase") {
+      const nested =
+        entry.phase.children && entry.phase.children.length > 0
+          ? entry.phase.children.map((child) => {
+              if (child.kind === "work") {
+                if (
+                  query &&
+                  callHits &&
+                  !callHits.has(child.work.afterCallIndex)
+                ) {
+                  return null
+                }
+                return (
+                  <WorkOutline
+                    key={child.work.id}
+                    work={child.work}
+                    open={openState.work.has(child.work.id)}
+                    openState={openState}
+                    onToggle={() => onToggleWork(child.work.id)}
+                    onToggleTool={onToggleTool}
+                    nested
+                  />
+                )
+              }
+              const call = dag.calls[child.callIndex]
+              if (!call) return null
+              if (query && callHits && !callHits.has(call.index)) return null
+              return (
+                <CallOutline
+                  key={`llm-${call.iteration}-${call.index}`}
+                  call={call}
+                  openState={openState}
+                  searchHit={callHits?.get(call.index) ?? null}
+                  onToggleCall={onToggleCall}
+                  onToggleSent={onToggleSent}
+                  onToggleReceived={onToggleReceived}
+                  onToggleMessage={onToggleMessage}
+                  onToggleTool={onToggleTool}
+                  nested
+                />
+              )
+            })
+          : null
+      return (
+        <div className={gapClass}>
+          <PhaseOutline
+            phase={entry.phase}
+            open={openState.phases.has(entry.phase.id)}
+            onToggle={() => onTogglePhase(entry.phase.id)}
+            nested={nested}
+          />
+        </div>
+      )
+    }
+    if (entry.kind === "work") {
+      return (
+        <div className={gapClass}>
+          <WorkOutline
+            work={entry.work}
+            open={openState.work.has(entry.work.id)}
+            openState={openState}
+            onToggle={() => onToggleWork(entry.work.id)}
+            onToggleTool={onToggleTool}
+          />
+        </div>
+      )
+    }
+    const call = dag.calls[entry.callIndex]
+    if (!call) return null
+    return (
+      <div className={gapClass}>
+        <CallOutline
+          call={call}
+          openState={openState}
+          searchHit={callHits?.get(call.index) ?? null}
+          onToggleCall={onToggleCall}
+          onToggleSent={onToggleSent}
+          onToggleReceived={onToggleReceived}
+          onToggleMessage={onToggleMessage}
+          onToggleTool={onToggleTool}
+        />
+      </div>
+    )
   }
 
   const searchStatus =
@@ -815,92 +1001,14 @@ export function TraceDag({
                     onToggleTools={onToggleContextTools}
                     query={query}
                   />
-                  {dag.spine.map((entry) => {
-                    if (entry.kind === "phase") {
-                      const nested =
-                        entry.phase.children && entry.phase.children.length > 0
-                          ? entry.phase.children.map((child) => {
-                              if (child.kind === "work") {
-                                if (
-                                  query &&
-                                  callHits &&
-                                  !callHits.has(child.work.afterCallIndex)
-                                ) {
-                                  return null
-                                }
-                                return (
-                                  <WorkOutline
-                                    key={child.work.id}
-                                    work={child.work}
-                                    open={openState.work.has(child.work.id)}
-                                    openState={openState}
-                                    onToggle={() => onToggleWork(child.work.id)}
-                                    onToggleTool={onToggleTool}
-                                    nested
-                                  />
-                                )
-                              }
-                              const call = dag.calls[child.callIndex]
-                              if (!call) return null
-                              if (query && callHits && !callHits.has(call.index)) return null
-                              return (
-                                <CallOutline
-                                  key={`llm-${call.iteration}-${call.index}`}
-                                  call={call}
-                                  openState={openState}
-                                  searchHit={callHits?.get(call.index) ?? null}
-                                  onToggleCall={onToggleCall}
-                                  onToggleSent={onToggleSent}
-                                  onToggleReceived={onToggleReceived}
-                                  onToggleMessage={onToggleMessage}
-                                  onToggleTool={onToggleTool}
-                                  nested
-                                />
-                              )
-                            })
-                          : null
-                      return (
-                        <PhaseOutline
-                          key={entry.phase.id}
-                          phase={entry.phase}
-                          open={openState.phases.has(entry.phase.id)}
-                          onToggle={() => onTogglePhase(entry.phase.id)}
-                          nested={nested}
-                        />
-                      )
-                    }
-                    if (entry.kind === "work") {
-                      if (query && callHits && !callHits.has(entry.work.afterCallIndex)) {
-                        return null
-                      }
-                      return (
-                        <WorkOutline
-                          key={entry.work.id}
-                          work={entry.work}
-                          open={openState.work.has(entry.work.id)}
-                          openState={openState}
-                          onToggle={() => onToggleWork(entry.work.id)}
-                          onToggleTool={onToggleTool}
-                        />
-                      )
-                    }
-                    const call = dag.calls[entry.callIndex]
-                    if (!call) return null
-                    if (query && callHits && !callHits.has(call.index)) return null
-                    return (
-                      <CallOutline
-                        key={`llm-${call.iteration}-${call.index}`}
-                        call={call}
-                        openState={openState}
-                        searchHit={callHits?.get(call.index) ?? null}
-                        onToggleCall={onToggleCall}
-                        onToggleSent={onToggleSent}
-                        onToggleReceived={onToggleReceived}
-                        onToggleMessage={onToggleMessage}
-                        onToggleTool={onToggleTool}
-                      />
-                    )
-                  })}
+                  <VirtualList
+                    items={spineItems}
+                    scrollRef={scrollRef}
+                    estimateSize={estimateSpineSize}
+                    getItemKey={spineItemKey}
+                    overscan={6}
+                    renderItem={renderSpineItem}
+                  />
                 </div>
               )}
             </div>

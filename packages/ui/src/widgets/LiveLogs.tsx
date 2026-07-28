@@ -13,6 +13,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { api } from "../client/index"
 import { DateField } from "../components/DateField"
 import { EmptyState } from "../components/EmptyState"
+import { VirtualList } from "../components/VirtualList"
 import {
   ActiveFilterChips,
   FilterChoiceGrid,
@@ -514,15 +515,22 @@ export function LiveLogs() {
           <EmptyState icon={WIDGET_ICONS["live-logs"]} message="No events in this time range." />
         )}
 
-        {displayRows.map((log, i) => (
-          <LogRow
-            key={`${log.timestamp}|${log.eventName ?? ""}|${i}`}
-            log={log}
-            setTypeFilters={setTypeFilters}
-            compact={compact}
-            tiny={tiny}
+        {displayRows.length > 0 && (
+          <VirtualList
+            items={displayRows}
+            scrollRef={containerRef}
+            estimateSize={() => (compact ? 28 : 36)}
+            getItemKey={(i, log) => `${log.timestamp}|${log.eventName ?? ""}|${i}`}
+            renderItem={({ item: log }) => (
+              <LogRow
+                log={log}
+                setTypeFilters={setTypeFilters}
+                compact={compact}
+                tiny={tiny}
+              />
+            )}
           />
-        ))}
+        )}
 
         {filtered.length === 0 && searchOnly.length > 0 && (
           <div className="py-2 text-sm text-text-muted bg-elevated/30 border-t border-border-subtle">

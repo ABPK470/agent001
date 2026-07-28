@@ -32,6 +32,7 @@ import {
   formatToolInputDisplay,
 } from "../components/tool-code-display"
 import { ScrollToLatestButton } from "../components/ScrollToLatestButton"
+import { VirtualList } from "../components/VirtualList"
 import { Logo } from "../components/Logo"
 import { SmartAnswer } from "../components/SmartAnswer"
 import {
@@ -98,6 +99,8 @@ import { collapseResumeRunChains, resumeChainIds } from "./termchat/collapseResu
 // inline error instead of round-tripping for a 413.
 const ATTACH_MAX_BYTES = 32 * 1024 * 1024
 const USER_GOAL_COLLAPSE_LINES = 3
+/** VirtualList estimate for chat turns (measureElement refines). */
+const TERMCHAT_TURN_ESTIMATE_PX = 160
 
 function isUserGoalOverflowing(node: HTMLDivElement): boolean {
   const prevDisplay = node.style.display
@@ -376,7 +379,7 @@ function ChatTurn({
     <div
       ref={turnRef}
       data-run-id={run.id}
-      className={`relative ${isHomeMode ? "mb-8" : "mb-10"}`}
+      className={`relative ${isHomeMode ? "pb-8" : "pb-10"}`}
     >
       <div ref={sentinelRef} data-run-goal-anchor className="h-px w-full shrink-0" aria-hidden />
       {/* flex + gap (not margin): home and widget share one rhythm; sticky
@@ -2480,9 +2483,11 @@ export function TermChat({
   }, [scopedActiveRunId, runs, upsertRun])
 
   // Hydrate completed run traces when their turn scrolls into view (not all at once).
+  // VirtualList only mounts a window — re-observe on scroll so newly rendered roots attach.
   useEffect(() => {
     const host = scrollHostRef.current
     if (!host || displayRuns.length === 0) return
+    const root = host
 
     const observer = new IntersectionObserver(
       (entries) => {
@@ -2496,12 +2501,21 @@ export function TermChat({
           void hydrateRunTrace(runId).catch((err: unknown) => { console.error("[mia]", err) })
         }
       },
-      { root: host, rootMargin: "240px 0px", threshold: 0 },
+      { root, rootMargin: "240px 0px", threshold: 0 },
     )
 
-    const turns = host.querySelectorAll<HTMLElement>("[data-run-id]")
-    for (const turn of turns) observer.observe(turn)
-    return () => observer.disconnect()
+    function observeMountedTurns() {
+      for (const turn of root.querySelectorAll<HTMLElement>("[data-run-id]")) {
+        observer.observe(turn)
+      }
+    }
+
+    observeMountedTurns()
+    root.addEventListener("scroll", observeMountedTurns, { passive: true })
+    return () => {
+      observer.disconnect()
+      root.removeEventListener("scroll", observeMountedTurns)
+    }
   }, [displayRuns, scopedActiveRunId, runs, hydrateRunTrace, scrollHostRef])
 
   useEffect(() => {
@@ -2569,16 +2583,23 @@ export function TermChat({
   const jumpToRun = useCallback((runId: string) => {
     suspendAutoFollow()
     void hydrateRunTrace(runId).catch((err: unknown) => { console.error("[mia]", err) })
+    const host = scrollHostRef.current
+    // Virtual window may not have mounted this turn yet — park near the estimate first.
+    if (host) {
+      const index = displayRuns.findIndex((r) => r.id === runId)
+      if (index >= 0) {
+        host.scrollTop = Math.max(0, index * TERMCHAT_TURN_ESTIMATE_PX - 48)
+      }
+    }
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
-        const host = scrollHostRef.current
         const el =
           host?.querySelector<HTMLElement>(`[data-run-id="${runId}"] [data-run-goal-anchor]`)
           ?? host?.querySelector<HTMLElement>(`[data-run-id="${runId}"]`)
         el?.scrollIntoView({ behavior: "auto", block: "start" })
       })
     })
-  }, [suspendAutoFollow, scrollHostRef, hydrateRunTrace])
+  }, [suspendAutoFollow, scrollHostRef, hydrateRunTrace, displayRuns])
 
   // Threads widget sets activeRunId without moving DOM order. Scroll to that
   // turn instead of reordering the transcript.
@@ -2601,6 +2622,26 @@ export function TermChat({
     })),
     [threadRunsChronological],
   )
+
+  function renderDisplayRun({ item: run }: { item: (typeof displayRuns)[number] }) {
+    return (
+      <ChatTurn
+        run={run}
+        isActive={run.id === scopedActiveRunId}
+        isHomeMode={isHomeMode}
+        pinProfile={pinProfile}
+        me={me}
+        unpinned={unpinnedGoalRunIds.has(run.id)}
+        onUnpin={unpinGoal}
+        onClearUnpin={clearUnpinnedGoal}
+        pendingInput={pendingInput}
+        onRespond={handleRespond}
+        onNotify={notify}
+        onNotifyError={notifyError}
+        onParallelFanOutChange={handleParallelFanOutChange}
+      />
+    )
+  }
 
   return (
     <div
@@ -2701,7 +2742,7 @@ export function TermChat({
               className={
                 showEmptyState
                   ? "min-h-full flex flex-col justify-center pb-[10vh]"
-                  : "relative space-y-6"
+                  : "relative"
               }
               style={{ overflowAnchor: "none" }}
             >
@@ -2751,24 +2792,16 @@ export function TermChat({
                 </div>
               )}
 
-              {!showEmptyState && displayRuns.map((run) => (
-                <ChatTurn
-                  key={run.id}
-                  run={run}
-                  isActive={run.id === scopedActiveRunId}
-                  isHomeMode={isHomeMode}
-                  pinProfile={pinProfile}
-                  me={me}
-                  unpinned={unpinnedGoalRunIds.has(run.id)}
-                  onUnpin={unpinGoal}
-                  onClearUnpin={clearUnpinnedGoal}
-                  pendingInput={pendingInput}
-                  onRespond={handleRespond}
-                  onNotify={notify}
-                  onNotifyError={notifyError}
-                  onParallelFanOutChange={handleParallelFanOutChange}
+              {!showEmptyState && (
+                <VirtualList
+                  items={displayRuns}
+                  scrollRef={scrollHostRef}
+                  estimateSize={() => TERMCHAT_TURN_ESTIMATE_PX}
+                  getItemKey={(_i, run) => run.id}
+                  overscan={6}
+                  renderItem={renderDisplayRun}
                 />
-              ))}
+              )}
             </div>
           </div>
           {transcriptFadeBottom && (
@@ -2825,7 +2858,7 @@ export function TermChat({
         ref={scrollHostRef}
         {...{ [CHAT_SCROLL_HOST_ATTR]: "" }}
         onScroll={onTranscriptScrollWithRail}
-        className={`relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden ${WIDGET_CHAT_COLUMN_CLASS} space-y-8 sm:space-y-10`}
+        className={`relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden ${WIDGET_CHAT_COLUMN_CLASS}`}
         style={{ overflowAnchor: "none" }}
       >
         <div
@@ -2833,24 +2866,14 @@ export function TermChat({
           className={`relative ${WIDGET_CHAT_COLUMN_CLASS}`}
           style={{ overflowAnchor: "none" }}
         >
-          {displayRuns.map((run) => (
-            <ChatTurn
-              key={run.id}
-              run={run}
-              isActive={run.id === scopedActiveRunId}
-              isHomeMode={isHomeMode}
-              pinProfile={pinProfile}
-              me={me}
-              unpinned={unpinnedGoalRunIds.has(run.id)}
-              onUnpin={unpinGoal}
-              onClearUnpin={clearUnpinnedGoal}
-              pendingInput={pendingInput}
-              onRespond={handleRespond}
-              onNotify={notify}
-              onNotifyError={notifyError}
-              onParallelFanOutChange={handleParallelFanOutChange}
-            />
-          ))}
+          <VirtualList
+            items={displayRuns}
+            scrollRef={scrollHostRef}
+            estimateSize={() => TERMCHAT_TURN_ESTIMATE_PX}
+            getItemKey={(_i, run) => run.id}
+            overscan={6}
+            renderItem={renderDisplayRun}
+          />
         </div>
       </div>
       )}

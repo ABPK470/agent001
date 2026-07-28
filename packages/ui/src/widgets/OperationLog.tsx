@@ -6,16 +6,18 @@
 
 import { describeDebugTracePayload, eventLabel } from "@mia/shared-types"
 import { Brain, ChevronRight, Database, GitCompareArrows, Loader2, Settings, Shuffle, Square, Wrench } from "lucide-react"
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react"
 import type { OperationActivity, OperationEvent, OperationPipeline } from "../client/index"
 import { api, OperationKind, OperationStatus } from "../client/index"
 import { CodeBlock } from "../components/CodeBlock"
+import { VirtualList } from "../components/VirtualList"
 import { DecisionLogPanel, isSyncDecisionLogDetails } from "./pipelines/DecisionLogPanel"
 import { EmptyState } from "../components/EmptyState"
 import { JsonViewer } from "../components/JsonViewer"
 import { ToolIoBlock } from "./chat/ToolCallModal"
 import { useContainerSize } from "../hooks/useContainerSize"
 import { useOperationLogData, type OperationLogKindView } from "../hooks/useOperationLogData"
+import { flattenOperationRows } from "../lib/operation-flat-rows"
 import {
   OperationLogModalsProvider,
   useOpLogOpenSqlTrace,
@@ -474,6 +476,7 @@ export function OperationLog() {
 
         {filtered.length > 0 && (
           <OperationPipelineList
+            scrollRef={scrollRef}
             pipelines={filtered}
             compact={compact}
             expanded={expanded}
@@ -520,6 +523,7 @@ export function OperationPipelineList({
   onCancelPipeline,
   cancellingId,
   linear = false,
+  scrollRef,
 }: {
   pipelines: OperationPipeline[]
   compact: boolean
@@ -534,59 +538,111 @@ export function OperationPipelineList({
   onCancelPipeline?: (pipeline: OperationPipeline) => void
   cancellingId?: string | null
   linear?: boolean
+  /** When set, list virtualizes inside this scroll parent. */
+  scrollRef?: RefObject<HTMLElement | null>
 }) {
-  const byDay = useMemo(() => {
-    const groups: Array<{ label: string; items: OperationPipeline[] }> = []
-    let cur: { label: string; items: OperationPipeline[] } | null = null
-    for (const p of pipelines) {
-      const label = dayLabel(p.startedAt)
-      if (!cur || cur.label !== label) { cur = { label, items: [] }; groups.push(cur) }
-      cur.items.push(p)
-    }
-    return groups
-  }, [pipelines])
+  const rows = useMemo(
+    () => flattenOperationRows(pipelines, collapsedDays, dayLabel),
+    [pipelines, collapsedDays],
+  )
 
-  return <>
-    {byDay.map(group => {
-      const collapsed = collapsedDays.has(group.label)
-      return (
-        <div key={group.label} className={linear ? "mb-4" : "mb-3"}>
-          <button
-            className={`sticky top-0 z-10 w-full flex items-center gap-1.5 px-2 py-1 mb-1 text-left ${
-              linear
-                ? "text-sm font-medium uppercase tracking-wider text-text-muted bg-surface/95 backdrop-blur-sm"
-                : "text-sm uppercase tracking-wider text-text-muted/50 bg-surface/80 backdrop-blur-sm hover:text-text-muted/80"
-            } transition-colors`}
-            onClick={() => toggleDay(group.label)}
-          >
-            <ChevronRight size={10} className={`shrink-0 transition-transform ${collapsed ? "" : "rotate-90"}`} />
-            {group.label}
-            <span className="ml-1 text-text-muted/30 normal-case tracking-normal">{group.items.length}</span>
-          </button>
-          {!collapsed && (
-            <div className={linear ? "space-y-0" : "space-y-1"}>
-              {group.items.map(p => (
-                <PipelineRow
-                  key={p.id}
-                  linear={linear}
-                  pipeline={p}
-                  expanded={expanded.has(p.id)}
-                  onToggle={() => togglePipeline(p.id)}
-                  actExpanded={actExpanded}
-                  toggleActivity={toggleActivity}
-                  evExpanded={evExpanded}
-                  toggleEvent={toggleEvent}
-                  compact={compact}
-                  onCancel={onCancelPipeline}
-                  cancelling={cancellingId === p.id}
-                />
-              ))}
+  if (!scrollRef) {
+    // Non-virtual fallback (embedded / tests) — still uses flat model for parity.
+    return (
+      <>
+        {rows.map((row) => {
+          if (row.type === "day") {
+            const collapsed = collapsedDays.has(row.label)
+            return (
+              <div key={row.key} className={linear ? "mb-4" : "mb-3"}>
+                <button
+                  className={`sticky top-0 z-10 w-full flex items-center gap-1.5 px-2 py-1 mb-1 text-left ${
+                    linear
+                      ? "text-sm font-medium uppercase tracking-wider text-text-muted bg-surface/95 backdrop-blur-sm"
+                      : "text-sm uppercase tracking-wider text-text-muted/50 bg-surface/80 backdrop-blur-sm hover:text-text-muted/80"
+                  } transition-colors`}
+                  onClick={() => toggleDay(row.label)}
+                >
+                  <ChevronRight size={10} className={`shrink-0 transition-transform ${collapsed ? "" : "rotate-90"}`} />
+                  {row.label}
+                  <span className="ml-1 text-text-muted/30 normal-case tracking-normal">{row.count}</span>
+                </button>
+              </div>
+            )
+          }
+          return (
+            <div key={row.key} className={linear ? "mb-0" : "mb-1"}>
+              <PipelineRow
+                linear={linear}
+                pipeline={row.pipeline}
+                expanded={expanded.has(row.pipeline.id)}
+                onToggle={() => togglePipeline(row.pipeline.id)}
+                actExpanded={actExpanded}
+                toggleActivity={toggleActivity}
+                evExpanded={evExpanded}
+                toggleEvent={toggleEvent}
+                compact={compact}
+                onCancel={onCancelPipeline}
+                cancelling={cancellingId === row.pipeline.id}
+              />
             </div>
-          )}
-        </div>
-      )
-    })}
-  </>
+          )
+        })}
+      </>
+    )
+  }
+
+  return (
+    <VirtualList
+      items={rows}
+      scrollRef={scrollRef}
+      estimateSize={(index) => {
+        const row = rows[index]
+        if (!row) return 48
+        if (row.type === "day") return 32
+        return expanded.has(row.pipeline.id) ? 220 : compact ? 44 : 56
+      }}
+      getItemKey={(_i, item) => item.key}
+      renderItem={({ item }) => {
+        if (item.type === "day") {
+          const collapsed = collapsedDays.has(item.label)
+          return (
+            <div className={linear ? "mb-4" : "mb-3"}>
+              <button
+                className={`sticky top-0 z-10 w-full flex items-center gap-1.5 px-2 py-1 mb-1 text-left ${
+                  linear
+                    ? "text-sm font-medium uppercase tracking-wider text-text-muted bg-surface/95 backdrop-blur-sm"
+                    : "text-sm uppercase tracking-wider text-text-muted/50 bg-surface/80 backdrop-blur-sm hover:text-text-muted/80"
+                } transition-colors`}
+                onClick={() => toggleDay(item.label)}
+              >
+                <ChevronRight size={10} className={`shrink-0 transition-transform ${collapsed ? "" : "rotate-90"}`} />
+                {item.label}
+                <span className="ml-1 text-text-muted/30 normal-case tracking-normal">{item.count}</span>
+              </button>
+            </div>
+          )
+        }
+        return (
+          <div className={linear ? "" : "pb-1"}>
+            <PipelineRow
+              linear={linear}
+              pipeline={item.pipeline}
+              expanded={expanded.has(item.pipeline.id)}
+              onToggle={() => togglePipeline(item.pipeline.id)}
+              actExpanded={actExpanded}
+              toggleActivity={toggleActivity}
+              evExpanded={evExpanded}
+              toggleEvent={toggleEvent}
+              compact={compact}
+              onCancel={onCancelPipeline}
+              cancelling={cancellingId === item.pipeline.id}
+            />
+          </div>
+        )
+      }}
+    />
+  )
 }
 
 // ── Pipeline row ─────────────────────────────────────────────────

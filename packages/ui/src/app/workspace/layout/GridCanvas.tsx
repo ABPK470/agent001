@@ -18,6 +18,7 @@ import { DropZoneOverlay } from "./DropZoneOverlay"
 import { entranceClassName } from "./motion"
 import { paintTilesForCanvas } from "./paint-tiles"
 import { useGridInteraction, type ResizeEdge } from "./useGridInteraction"
+import { TilePaintProvider } from "../tile-paint"
 
 const RESIZE_EDGES: ResizeEdge[] = ["n", "s", "e", "w", "ne", "nw", "se", "sw"]
 
@@ -104,7 +105,9 @@ const GridTilePane = memo(function GridTilePane({
         maximized={maximized}
         onDragPointerDown={onDragPointerDown}
       >
-        <Widget />
+        <TilePaintProvider soloHidden={soloHidden}>
+          <Widget />
+        </TilePaintProvider>
       </WidgetShell>
 
       {!locked && !soloHidden && RESIZE_EDGES.map((edge) => (
