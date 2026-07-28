@@ -11,7 +11,6 @@
 import { useVirtualizer } from "@tanstack/react-virtual"
 import {
   forwardRef,
-  useEffect,
   useImperativeHandle,
   useRef,
   type CSSProperties,
@@ -92,9 +91,11 @@ function VirtualListInner<T>(
 
   const virtualItems = virtualizer.getVirtualItems()
 
-  useEffect(() => {
-    virtualizer.measure()
-  }, [items.length, virtualizer])
+  // Do NOT call virtualizer.measure() when items.length changes — that clears
+  // TanStack's itemSizeCache and collapses every row back to estimateSize
+  // (chat turns ~160px). Absolute rows then overlap and totalSize stops growing
+  // until remount. Keys (getItemKey) keep measured sizes across appends;
+  // measureElement + ResizeObserver refine live growth.
 
   const content = (
     <div
