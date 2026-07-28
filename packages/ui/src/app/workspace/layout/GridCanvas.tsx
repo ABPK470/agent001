@@ -16,6 +16,7 @@ import { WidgetShell } from "../WidgetShell"
 import { widgetComponent } from "../widget-definitions"
 import { DropZoneOverlay } from "./DropZoneOverlay"
 import { entranceClassName } from "./motion"
+import { paintTilesForCanvas } from "./paint-tiles"
 import { useGridInteraction, type ResizeEdge } from "./useGridInteraction"
 
 const RESIZE_EDGES: ResizeEdge[] = ["n", "s", "e", "w", "ne", "nw", "se", "sw"]
@@ -38,6 +39,7 @@ interface GridTilePaneProps {
   isEntering: boolean
   isFocused: boolean
   maximized: boolean
+  soloHidden: boolean
   onFocus: () => void
   onBlur: () => void
   onTransitionEnd: () => void
@@ -56,6 +58,7 @@ const GridTilePane = memo(function GridTilePane({
   isEntering,
   isFocused,
   maximized,
+  soloHidden,
   onFocus,
   onBlur,
   onTransitionEnd,
@@ -69,12 +72,20 @@ const GridTilePane = memo(function GridTilePane({
   return (
     <div
       data-tile-id={tile.id}
-      tabIndex={0}
+      tabIndex={soloHidden ? -1 : 0}
+      aria-hidden={soloHidden || undefined}
+      ref={(el) => {
+        if (!el) return
+        if (soloHidden) el.setAttribute("inert", "")
+        else el.removeAttribute("inert")
+      }}
       className={`workspace-tile ${isDragging ? "workspace-tile-dragging" : ""} ${
         isResizing ? "workspace-tile-resizing" : ""
       } ${entranceClassName(isEntering)} ${
-        isFocused ? "workspace-tile-focused" : ""
-      } ${locked ? "workspace-tile-locked" : ""}`}
+        isFocused && !soloHidden ? "workspace-tile-focused" : ""
+      } ${locked ? "workspace-tile-locked" : ""} ${
+        maximized ? "workspace-tile-solo" : ""
+      } ${soloHidden ? "workspace-tile-solo-hidden" : ""}`}
       style={{
         left: pixels.left,
         top: pixels.top,
@@ -96,7 +107,7 @@ const GridTilePane = memo(function GridTilePane({
         <Widget />
       </WidgetShell>
 
-      {!locked && RESIZE_EDGES.map((edge) => (
+      {!locked && !soloHidden && RESIZE_EDGES.map((edge) => (
         <button
           key={edge}
           type="button"
@@ -238,7 +249,6 @@ export function GridCanvas({ viewId, tiles, split }: Props) {
     return () => window.removeEventListener("keydown", onKeyDown)
   }, [focusedTileId, tiles, commitSplit, viewId, maxRows, soloTileId, split])
 
-  const soloTile = soloTileId ? tiles.find((tile) => tile.id === soloTileId) : null
   // Paint from split × measured rows — never trust a stale tile cache that
   // was projected for a different row budget (e.g. late dashboard restore).
   const projectedTiles = useMemo(
@@ -246,9 +256,16 @@ export function GridCanvas({ viewId, tiles, split }: Props) {
     [split, tiles, maxRows],
   )
   // Drag keeps committed geometry (static). Resize still uses live layoutPreview.
-  const visibleTiles = soloTile
-    ? [{ ...soloTile, x: 0, y: 0, w: COLS, h: maxRows }]
-    : (interactionMode === "resize" ? (layoutPreview ?? projectedTiles) : projectedTiles)
+  // Solo maximize keeps every tile mounted — paintTilesForCanvas only changes
+  // display rect + hide flags (never filters siblings out of the tree).
+  const baseTiles =
+    !soloTileId && interactionMode === "resize"
+      ? (layoutPreview ?? projectedTiles)
+      : projectedTiles
+  const paintedTiles = useMemo(
+    () => paintTilesForCanvas(baseTiles, soloTileId, maxRows),
+    [baseTiles, soloTileId, maxRows],
+  )
 
   const interacting = !soloTileId && !!draggingId
   const dragSource = draggingId ? tiles.find((tile) => tile.id === draggingId) : null
@@ -265,31 +282,31 @@ export function GridCanvas({ viewId, tiles, split }: Props) {
     >
       {cw > 0 && (
         <div data-workspace-grid className="relative h-full w-full">
-          {visibleTiles.map((tile) => {
-            const source = tiles.find((t) => t.id === tile.id) ?? tile
-            const isActive = !soloTileId && draggingId === tile.id
+          {paintedTiles.map(({ tile: painted, display, solo, soloHidden }) => {
+            const source = tiles.find((t) => t.id === painted.id) ?? painted
+            const isActive = !soloTileId && draggingId === painted.id
             const isDragging = isActive && interactionMode === "drag"
             const isResizing = isActive && interactionMode === "resize"
-            const isEntering = enteringTileIds.includes(tile.id)
-            const maximized = soloTileId === tile.id
+            const isEntering = enteringTileIds.includes(painted.id)
 
             return (
               <GridTilePane
-                key={tile.id}
+                key={painted.id}
                 viewId={viewId}
                 tile={source}
-                display={tile}
+                display={display}
                 cw={cw}
                 rowPx={rowPx}
                 isDragging={isDragging}
                 isResizing={isResizing}
                 isEntering={isEntering}
-                isFocused={focusedTileId === tile.id}
-                maximized={maximized}
-                onFocus={() => setFocusedTile(tile.id)}
+                isFocused={focusedTileId === painted.id}
+                maximized={solo}
+                soloHidden={soloHidden}
+                onFocus={() => setFocusedTile(painted.id)}
                 onBlur={() => setFocusedTile(null)}
                 onTransitionEnd={() => {
-                  if (isEntering) clearEntering(tile.id)
+                  if (isEntering) clearEntering(painted.id)
                 }}
                 onDragPointerDown={(event) => onPointerDownDrag(source, event)}
                 onResizePointerDown={(edge) => onPointerDownResize(source, edge)}
@@ -303,7 +320,7 @@ export function GridCanvas({ viewId, tiles, split }: Props) {
               widgetType={dragSource?.type ?? null}
               colWidth={cw}
               rowPx={rowPx}
-            />
+              />
           )}
         </div>
       )}

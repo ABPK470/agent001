@@ -94,8 +94,8 @@ interface LayoutState {
   focusedTileId: string | null
   enteringTileIds: string[]
   /**
-   * Exclusive maximize: this tile fills the canvas; siblings keep their
-   * tree geometry and are not painted until restore.
+   * Exclusive maximize: this tile fills the canvas. Siblings stay mounted at
+   * their tree geometry and are paint-hidden until restore (no remount).
    */
   soloTileId: string | null
   /** Latest measured viewport row budget for the active canvas. */

@@ -4073,6 +4073,20 @@ textarea.input {
   will-change: left, top, width, height;
 }
 
+/* Solo maximize: one tile overlays the canvas; siblings stay mounted. */
+.workspace-tile-solo {
+  z-index: 40;
+  /* Instant fill — remount was the lag; do not add a 260ms geometry tween on top. */
+  transition: box-shadow 160ms ease;
+}
+
+.workspace-tile-solo-hidden {
+  visibility: hidden;
+  pointer-events: none;
+  z-index: 0;
+  transition: none;
+}
+
 /*
  * Resize: drive geometry every pointer frame with no CSS lag (buttery divider).
  * Drag: layout stays frozen — only the destination ghost moves.
