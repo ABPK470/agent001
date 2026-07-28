@@ -4,7 +4,17 @@
  */
 
 import { Check, ChevronDown, Search } from "lucide-react"
-import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type JSX } from "react"
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type JSX,
+  type ReactNode,
+} from "react"
 import { createPortal } from "react-dom"
 import { placeAnchoredPanel } from "../lib/anchored-panel"
 import { popoverZIndex } from "../lib/modal-stack"
@@ -20,6 +30,8 @@ export interface ListboxOption<T extends string> {
   hint?: string | null
   /** Inline color dot rendered before the label (any CSS color). */
   dot?: string | null
+  /** Leading mark (brand icon, etc.) — trigger + menu. */
+  icon?: ReactNode
   disabled?: boolean
 }
 
@@ -111,6 +123,7 @@ export function Listbox<T extends string>({
   const matched = options.find((o) => o.value === value) ?? null
   const selected = blankIsPlaceholder && value === "" ? null : matched
   const showDots = options.some((o) => o.dot)
+  const showIcons = options.some((o) => o.icon != null)
   const filteredOptions = useMemo(() => filterListboxOptions(options, query), [options, query])
 
   const updatePopPos = useCallback(() => {
@@ -261,12 +274,14 @@ export function Listbox<T extends string>({
           sizeCls, variantCls, className,
         ].join(" ")}
       >
-        {selected?.dot && (
+        {selected?.icon != null ? (
+          <span className="flex shrink-0 items-center">{selected.icon}</span>
+        ) : selected?.dot ? (
           <span
             className="w-2 h-2 rounded-full shrink-0"
             style={{ background: selected.dot }}
           />
-        )}
+        ) : null}
         <span className="flex-1 min-w-0 flex flex-col items-start">
           {caption && (
             <span className="text-xs uppercase tracking-wider text-text-muted leading-none mb-1">{caption}</span>
@@ -350,11 +365,15 @@ export function Listbox<T extends string>({
                         isSel && !isActive ? "bg-overlay-1" : "",
                       ].join(" ")}
                     >
-                      {showDots
-                        ? o.dot
-                          ? <span className="mt-1.5 w-2 h-2 rounded-full shrink-0" style={{ background: o.dot }} />
-                          : <span className="mt-1.5 w-2 h-2 shrink-0" />
-                        : null}
+                      {showIcons
+                        ? o.icon != null
+                          ? <span className="mt-0.5 flex shrink-0 items-center">{o.icon}</span>
+                          : <span className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+                        : showDots
+                          ? o.dot
+                            ? <span className="mt-1.5 w-2 h-2 rounded-full shrink-0" style={{ background: o.dot }} />
+                            : <span className="mt-1.5 w-2 h-2 shrink-0" />
+                          : null}
                       <span className="flex-1 min-w-0">
                         <span className="block text-sm leading-snug">{o.label}</span>
                         {o.hint && (

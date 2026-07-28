@@ -9,6 +9,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { api } from "../../../client/index"
 import { Listbox, type ListboxOption } from "../../../components/Listbox"
 import type { ConnectorAdmin, SyncEnvironmentAdmin } from "../../../types"
+import { ConnectorKindMark } from "../../connectors/ConnectorKindMark"
 import { FormFieldGroup, FormSectionCard } from "../form-section"
 import { HELP_TEXT } from "../chrome"
 import { EnvColorPicker } from "./EnvColorPicker"
@@ -30,6 +31,7 @@ export function SyncEnvironmentForm({
   readOnly = false,
   stackLevel = 1,
   peerEnvironments = [],
+  connectors: connectorsProp,
 }: {
   value: EnvironmentFormSnapshot
   onChange: (next: EnvironmentFormSnapshot) => void
@@ -37,18 +39,23 @@ export function SyncEnvironmentForm({
   readOnly?: boolean
   stackLevel?: number
   peerEnvironments?: Array<{ name: string; displayName: string }>
+  /** When provided (Configuration modal), skip a second connectors fetch. */
+  connectors?: ConnectorAdmin[]
 }): JSX.Element {
   const valueRef = useRef(value)
   valueRef.current = value
 
-  const [connectors, setConnectors] = useState<ConnectorAdmin[]>([])
+  const [fetchedConnectors, setFetchedConnectors] = useState<ConnectorAdmin[]>([])
   useEffect(() => {
+    if (connectorsProp) return
     let alive = true
     void api.listConnectors().then((rows) => {
-      if (alive) setConnectors([...rows].sort((a, b) => a.id.localeCompare(b.id)))
+      if (alive) setFetchedConnectors([...rows].sort((a, b) => a.id.localeCompare(b.id)))
     }).catch((err: unknown) => { console.error("[mia]", err) })
     return () => { alive = false }
-  }, [])
+  }, [connectorsProp])
+
+  const connectors = connectorsProp ?? fetchedConnectors
 
   const connectorOptions: ListboxOption<string>[] = useMemo(() => {
     const none: ListboxOption<string> = { value: "", label: "None", hint: "No linked connector" }
@@ -65,6 +72,7 @@ export function SyncEnvironmentForm({
         label: c.displayName,
         hint,
         disabled: !selectable,
+        icon: <ConnectorKindMark kind={c.kind} size={14} title={c.displayName} />,
       }
     })
     return [none, ...opts]

@@ -9,6 +9,7 @@ import { EmptyState } from "../../components/EmptyState"
 import { SetupHintStrip } from "../../components/SetupHintStrip"
 import type {
   AuthoredSyncFlowStep,
+  ConnectorAdmin,
   CustomValueSourceDefinition,
   SyncEnvironmentAdmin,
   SyncFlowKindDefinition,
@@ -46,6 +47,7 @@ import {
 import { ModalShell } from "./ModalShell"
 import { ModalToastStack, useModalToasts } from "./ModalToastStack"
 import { HANDLER_TYPE_TAG } from "./param-binding-ui"
+import { ConnectorKindMark } from "../connectors/ConnectorKindMark"
 import { SyncEnvironmentForm } from "./sync-environments/SyncEnvironmentForm"
 import {
   CONFIG_SPLIT_FORM_CLASS,
@@ -211,6 +213,22 @@ export function SyncMetadataModal({
     (message) => pushToast(message),
     catalogView === "environments",
   )
+
+  const [connectors, setConnectors] = useState<ConnectorAdmin[]>([])
+  useEffect(() => {
+    if (catalogView !== "environments") return
+    let alive = true
+    void api.listConnectors().then((rows) => {
+      if (alive) setConnectors([...rows].sort((a, b) => a.id.localeCompare(b.id)))
+    }).catch((err: unknown) => { console.error("[mia]", err) })
+    return () => { alive = false }
+  }, [catalogView])
+
+  const connectorsById = useMemo(() => {
+    const map = new Map<string, ConnectorAdmin>()
+    for (const connector of connectors) map.set(connector.id, connector)
+    return map
+  }, [connectors])
 
   const currentFormSnapshot = useMemo(
     (): FormSnapshot => ({
@@ -863,10 +881,17 @@ export function SyncMetadataModal({
                 query={listQuery}
                 onQueryChange={setListQuery}
                 searchPlaceholder="Search environments…"
-                items={environments.catalogItems.map((item) => ({
-                  ...item,
-                  deletable: !item.builtIn || environments.builtinEditUnlocked,
-                }))}
+                items={environments.catalogItems.map((item) => {
+                  const env = environments.items.find((entry) => entry.name === item.id)
+                  const connector = env?.connectorId ? connectorsById.get(env.connectorId) : undefined
+                  return {
+                    ...item,
+                    deletable: !item.builtIn || environments.builtinEditUnlocked,
+                    icon: connector
+                      ? <ConnectorKindMark kind={connector.kind} size={14} title={connector.displayName} />
+                      : undefined,
+                  }
+                })}
                 selectedId={environmentFormOpen && environmentFormMode === "edit" ? environmentEditingId : null}
                 onSelect={(id) => {
                   const item = environments.items.find((entry) => entry.name === id)
@@ -968,6 +993,7 @@ export function SyncMetadataModal({
                     mode={environmentFormMode}
                     readOnly={environmentFormReadOnly}
                     stackLevel={stackLevel + 1}
+                    connectors={connectors}
                     peerEnvironments={environments.items.map((item) => ({
                       name: item.name,
                       displayName: item.displayName,
@@ -1379,6 +1405,7 @@ function CatalogList({
     builtIn: boolean
     divergedFromShipped?: boolean
     deletable?: boolean
+    icon?: JSX.Element
   }>
   selectedId: string | null
   onSelect: (id: string) => void
@@ -1441,7 +1468,10 @@ function CatalogList({
                 ].join(" ")}
               >
                 <button type="button" onClick={() => onSelect(item.id)} className="flex min-w-0 flex-1 flex-col items-start gap-1 text-left">
-                  <span className="min-w-0 truncate font-medium text-text">{item.label}</span>
+                  <span className="flex min-w-0 items-center gap-1.5">
+                    {item.icon}
+                    <span className="min-w-0 truncate font-medium text-text">{item.label}</span>
+                  </span>
                   <span className={`font-mono ${META_TEXT}`}>{item.id}</span>
                   {item.hint && <span className={`line-clamp-2 leading-snug text-text-faint ${META_TEXT}`}>{item.hint}</span>}
                 </button>

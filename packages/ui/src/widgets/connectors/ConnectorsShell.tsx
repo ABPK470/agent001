@@ -70,6 +70,7 @@ function kindOptions(current: ConnectorKindId): ListboxOption<ConnectorKindId>[]
     label: kind.displayName,
     hint: kind.enabled ? null : "Planned",
     disabled: !kind.enabled && kind.id !== current,
+    icon: <ConnectorKindMark kind={kind.id} size={14} title={kind.displayName} />,
   }))
 }
 
