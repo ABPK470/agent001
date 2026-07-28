@@ -23,6 +23,7 @@ import {
 } from "../lib/workspace-view"
 import type { ViewConfig, WidgetType } from "../types"
 import { randomId } from "../lib/util"
+import { clearEventStreamPrefs } from "../lib/event-stream-prefs"
 
 export { WIDGET_DEFAULTS }
 
@@ -195,7 +196,9 @@ export const useLayoutStore = create<LayoutState>()(
         }
       }),
 
-      removeWidget: (viewId, tileId) => set((s) => ({
+      removeWidget: (viewId, tileId) => {
+        clearEventStreamPrefs(tileId)
+        set((s) => ({
         views: s.views.map((view) => {
           if (view.id !== viewId) return view
           const tiles = view.tiles.filter((tile) => tile.id !== tileId)
@@ -205,7 +208,8 @@ export const useLayoutStore = create<LayoutState>()(
         focusedTileId: s.focusedTileId === tileId ? null : s.focusedTileId,
         enteringTileIds: s.enteringTileIds.filter((id) => id !== tileId),
         soloTileId: s.soloTileId === tileId ? null : s.soloTileId,
-      })),
+      }))
+      },
 
       commitSplit: (viewId, split) => set((s) => {
         if (s.soloTileId) return s

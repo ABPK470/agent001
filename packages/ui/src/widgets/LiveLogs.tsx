@@ -29,6 +29,7 @@ import {
   resolveWindowBounds,
   useEventStreamData,
 } from "../hooks/useEventStreamData"
+import { useWidgetInstance } from "../app/workspace/widget-instance"
 import { formatLogEntry } from "../state/store"
 import type { LogEntry } from "../types"
 import { isSyncSqlEventType } from "./sync/trace/sync-sql-trace"
@@ -40,9 +41,14 @@ import {
   WidgetToolbarCount,
   WidgetToolbarSearch,
 } from "./widget-toolbar"
+import {
+  EVENT_TYPES,
+  type EventStreamEventType,
+  readEventStreamPrefs,
+  writeEventStreamPrefs,
+} from "../lib/event-stream-prefs"
 
-const EVENT_TYPES = ["run", "step", "sync", "bridge", "agent", "api", "system"] as const
-type EventType = (typeof EVENT_TYPES)[number]
+type EventType = EventStreamEventType
 
 const TYPE_OPTIONS = EVENT_TYPES.map((value) => ({ value, label: value }))
 
@@ -106,11 +112,17 @@ const MSG_COLOR: Record<string, string> = {
 }
 
 export function LiveLogs() {
+  const instance = useWidgetInstance()
+  const tileId = instance?.widgetId ?? null
+  const initialPrefs = useMemo(() => readEventStreamPrefs(tileId), [tileId])
+
   const [paused, setPaused] = useState(false)
   const [autoScroll, setAutoScroll] = useState(true)
-  const [typeFilters, setTypeFilters] = useState<Set<EventType>>(new Set())
-  const [errorsOnly, setErrorsOnly] = useState(false)
-  const [searchText, setSearchText] = useState("")
+  const [typeFilters, setTypeFilters] = useState<Set<EventType>>(
+    () => new Set(initialPrefs.typeFilters),
+  )
+  const [errorsOnly, setErrorsOnly] = useState(() => initialPrefs.errorsOnly)
+  const [searchText, setSearchText] = useState(() => initialPrefs.searchText)
   const [filtersOpen, setFiltersOpen] = useState(false)
 
   const {
@@ -128,7 +140,17 @@ export function LiveLogs() {
     setToDate,
     clearCustomDates,
     followLive,
-  } = useEventStreamData({ paused })
+  } = useEventStreamData({ paused, initialWindow: initialPrefs.window })
+
+  // Persist lens across view switches (unmount). Pause/sheet open stay ephemeral.
+  useEffect(() => {
+    writeEventStreamPrefs(tileId, {
+      typeFilters: [...typeFilters],
+      errorsOnly,
+      searchText,
+      window: timeWindow,
+    })
+  }, [tileId, typeFilters, errorsOnly, searchText, timeWindow])
 
   const bottomRef = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)

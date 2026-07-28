@@ -111,7 +111,7 @@ const SORT_LABELS: Record<SortKey, string> = {
   runs24h: "Runs 24h",
   failed24h: "Failed 24h",
   tokens24h: "Tokens 24h",
-  llmCalls24h: "LLM Calls",
+  llmCalls24h: "LLM Calls 24h",
   lastModel: "Model",
   firstSeen: "First Seen",
   lastSeen: "Last Seen",
@@ -505,7 +505,7 @@ export function ActiveUsers(): ReactNode {
                 <SortTh k="runs24h" current={sortKey} dir={sortDir} onClick={onSort} className="text-right" label="Runs 24h" />
                 <SortTh k="failed24h" current={sortKey} dir={sortDir} onClick={onSort} className="text-right" label="Failed 24h" />
                 <SortTh k="tokens24h" current={sortKey} dir={sortDir} onClick={onSort} className="text-right" label="Tokens 24h" />
-                <SortTh k="llmCalls24h" current={sortKey} dir={sortDir} onClick={onSort} className="text-right" label="LLM Calls" />
+                <SortTh k="llmCalls24h" current={sortKey} dir={sortDir} onClick={onSort} className="text-right" label="LLM Calls 24h" />
                 <SortTh k="lastModel" current={sortKey} dir={sortDir} onClick={onSort} label="Model" />
                 <SortTh k="firstSeen" current={sortKey} dir={sortDir} onClick={onSort} label="First Seen" />
                 <SortTh k="lastSeen" current={sortKey} dir={sortDir} onClick={onSort} label="Last Seen" />
@@ -917,7 +917,7 @@ function UserCardRow({
         <CardMetric label="Runs 24h" value={user.runs24h} />
         <CardMetric label="Failed 24h" value={user.runsFailed24h} danger={user.runsFailed24h > 0} />
         <CardMetric label="Tokens 24h" value={user.totalTokens24h > 0 ? formatCompact(user.totalTokens24h) : "0"} />
-        <CardMetric label="LLM Calls" value={user.totalLlmCalls24h} />
+        <CardMetric label="LLM Calls 24h" value={user.totalLlmCalls24h} />
         <CardMetric label="Model" value={user.lastModel ?? "—"} />
         <CardMetric label="First Seen" value={formatRelative(user.firstSeenAt)} />
         <CardMetric label="Last Seen" value={formatRelative(user.lastSeenAt)} />

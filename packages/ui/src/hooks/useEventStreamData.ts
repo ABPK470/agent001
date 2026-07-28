@@ -9,9 +9,15 @@
 
 import { useCallback, useEffect, useRef, useState } from "react"
 import { api } from "../client/index"
+import {
+  type EventStreamRange,
+  type EventStreamWindow,
+} from "../lib/event-stream-prefs"
 import { formatLogEntry, useStore } from "../state/store"
 import type { LogEntry } from "../types"
 import { useViewingAs } from "./useViewingAs"
+
+export type { EventStreamRange, EventStreamWindow }
 
 /** Wire types omitted from the stream (owned by Trace / Pipelines). */
 export const EVENT_STREAM_EXCLUDE_TYPES = ["debug.trace"] as const
@@ -26,8 +32,6 @@ export const EVENT_STREAM_MAX_BUFFER = 5000
  * Live Tail default lookback: open → last hour of history, then follow.
  */
 export const EVENT_STREAM_LIVE_LOOKBACK_MS = 60 * 60 * 1000
-
-export type EventStreamRange = "live" | "15m" | "1h" | "6h" | "24h"
 
 const RANGE_MS: Record<Exclude<EventStreamRange, "live">, number> = {
   "15m": 15 * 60 * 1000,
@@ -50,14 +54,6 @@ export function startOfLocalDay(isoDate: string): string {
 export function endOfLocalDay(isoDate: string): string {
   const [y, m, d] = isoDate.split("-").map(Number)
   return new Date(y!, m! - 1, d!, 23, 59, 59, 999).toISOString()
-}
-
-export type EventStreamWindow = {
-  range: EventStreamRange
-  /** YYYY-MM-DD from DateField */
-  from?: string
-  /** YYYY-MM-DD from DateField */
-  to?: string
 }
 
 export function resolveWindowBounds(window: EventStreamWindow): {
@@ -153,10 +149,14 @@ export interface UseEventStreamDataResult {
 
 export function useEventStreamData(opts: {
   paused: boolean
+  /** Restored time window when remounting (e.g. after view switch). */
+  initialWindow?: EventStreamWindow
 }): UseEventStreamDataResult {
-  const { paused } = opts
+  const { paused, initialWindow } = opts
   const { viewingAsUpn } = useViewingAs()
-  const [window, setWindow] = useState<EventStreamWindow>({ range: "live" })
+  const [window, setWindow] = useState<EventStreamWindow>(
+    () => initialWindow ?? { range: "live" },
+  )
   const [entries, setEntries] = useState<LogEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [loadingOlder, setLoadingOlder] = useState(false)

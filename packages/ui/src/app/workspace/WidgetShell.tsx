@@ -14,6 +14,7 @@ import { useLayoutStore } from "../../state/layout-store"
 import type { WidgetType } from "../../types"
 import type { EdgePin } from "../../lib/grid-math"
 import { getWidgetDefinition } from "./widget-definitions"
+import { WidgetInstanceProvider } from "./widget-instance"
 
 type ShellMode = "tile" | "modal" | "popout"
 
@@ -118,6 +119,7 @@ export function WidgetShell({
   const showDragHandle = mode === "tile" && !pinned && !maximized
 
   return (
+    <WidgetInstanceProvider value={{ widgetId, viewId, type }}>
     <SetupHintChromeProvider>
       <div className="workspace-shell flex flex-col h-full rounded-xl overflow-hidden bg-panel">
         {showChrome && (
@@ -145,6 +147,7 @@ export function WidgetShell({
         </div>
       </div>
     </SetupHintChromeProvider>
+    </WidgetInstanceProvider>
   )
 }
 
