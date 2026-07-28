@@ -1,6 +1,6 @@
 /**
- * Intro brand — : lands → pinch → mass grows from colon (MI left, then A right)
- * → sculpt-carve (cut mass to letter shapes) → letters seated. No rotate.
+ * Intro brand — : lands at platform spot → pinch → MI width pushes `:` right
+ * while mass sheds colon→left; A sheds colon→right → carve → seated.
  * On send name: colon only — abort in-flight MI:A, never continue it.
  */
 

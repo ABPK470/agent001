@@ -6954,6 +6954,7 @@ textarea.input {
 /* Hero beat — give the larger MI:A + colon room so the mark isn't clipped. */
 .intro3-root--hero .intro3-header {
   height: 3.75rem;
+  overflow: visible;
 }
 @media (min-width: 640px) {
   .intro3-root--hero .intro3-header {
@@ -6963,6 +6964,7 @@ textarea.input {
 .intro3-root--hero .intro3-brand-slot {
   height: auto;
   min-height: 2.5rem;
+  overflow: visible;
 }
 
 /* ── Login brand sequence — : lands → shed/carve MI:A → input ── */
@@ -7084,8 +7086,13 @@ textarea.input {
 }
 
 /*
- * Slots grow FROM the colon (pre → left, post → right).
- * overflow:hidden so mass never crosses `:`.
+ * Slots grow FROM the colon outward (MI ← `:` → A).
+ *
+ * Layout width pushes `:` right from the platform spot (creates MI room).
+ * Clay scaleX from the colon edge fills that room — MI origin right
+ * (grows left), A origin left (grows right). Width leads scale slightly
+ * so empty space appears first and mass extrudes from `:`, not from the
+ * left edge of the slot.
  */
 .intro3-wm-slot {
   position: relative;
@@ -7104,17 +7111,15 @@ textarea.input {
 
 .intro3-wm-slot--pre {
   justify-content: flex-end;
-  transform-origin: right center;
 }
 
 .intro3-wm-slot--post {
   justify-content: flex-start;
-  transform-origin: left center;
 }
 
 /*
  * Clay = solid mass plate + custom SVG glyph.
- * Growth = slot clips from the colon; carve = plate off → letter shapes.
+ * Growth = scaleX from colon; carve = plate off → letter shapes.
  */
 .intro3-wm-clay {
   position: relative;
@@ -7131,6 +7136,8 @@ textarea.input {
   opacity: 0;
   color: var(--text);
   background-color: transparent;
+  transform: scaleX(0);
+  transition: transform 680ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .intro3-wm-clay-plate {
@@ -7168,15 +7175,30 @@ textarea.input {
 }
 
 .intro3-wm-slot--pre .intro3-wm-clay {
+  /* Full MI; scale from colon (right) → expands left into the slot. */
+  position: absolute;
+  right: 0;
+  top: 0;
   width: var(--wm-mi-w);
+  height: 100%;
+  transform-origin: right center;
+  transform-box: border-box;
 }
 
 .intro3-wm-slot--post .intro3-wm-clay {
+  /* Full A; scale from colon (left) → expands right into the slot. */
+  position: absolute;
+  left: 0;
+  top: 0;
   width: var(--wm-a-w);
+  height: 100%;
+  transform-origin: left center;
+  transform-box: border-box;
 }
 
 .intro3-brand-sequence--closed .intro3-wm-clay {
   opacity: 0;
+  transform: scaleX(0);
 }
 
 /* Resting MI:A — SVG brand ink, no mass plate. */
@@ -7190,6 +7212,8 @@ textarea.input {
 }
 .intro3-brand-sequence--open:not(.intro3-brand-sequence--pinching):not(.intro3-brand-sequence--resolving):not(.intro3-brand-sequence--resolve-shift):not(.intro3-brand-sequence--live) .intro3-wm-clay {
   opacity: 1;
+  transform: scaleX(1);
+  transition: none;
 }
 .intro3-brand-sequence--open:not(.intro3-brand-sequence--pinching):not(.intro3-brand-sequence--resolving):not(.intro3-brand-sequence--resolve-shift):not(.intro3-brand-sequence--live) .intro3-wm-clay-plate {
   opacity: 0;
@@ -7208,20 +7232,32 @@ textarea.input {
 .intro3-brand-sequence--pinching .intro3-wm-slot--pre {
   width: var(--wm-mi-w);
   opacity: 1;
-  transition-duration: 280ms;
+  /* Width leads — `:` moves right first, then mass fills colon → left. */
+  transition-duration: 220ms;
   transition-delay: 0ms;
   transition-timing-function: cubic-bezier(0.33, 1, 0.4, 1);
 }
 .intro3-brand-sequence--pinching .intro3-wm-slot--post {
   width: var(--wm-a-w);
   opacity: 1;
-  transition-duration: 260ms;
+  transition-duration: 200ms;
   transition-delay: 48ms;
   transition-timing-function: cubic-bezier(0.33, 1, 0.4, 1);
 }
 
 .intro3-brand-sequence--pinching .intro3-wm-clay {
   opacity: 1;
+  transform: scaleX(1);
+}
+.intro3-brand-sequence--pinching .intro3-wm-slot--pre .intro3-wm-clay {
+  transition-duration: 280ms;
+  transition-delay: 36ms;
+  transition-timing-function: cubic-bezier(0.33, 1, 0.4, 1);
+}
+.intro3-brand-sequence--pinching .intro3-wm-slot--post .intro3-wm-clay {
+  transition-duration: 260ms;
+  transition-delay: 72ms;
+  transition-timing-function: cubic-bezier(0.33, 1, 0.4, 1);
 }
 .intro3-brand-sequence--pinching .intro3-wm-clay-plate {
   animation: intro3-sculpt-carve-plate 1000ms both;
@@ -7264,6 +7300,7 @@ textarea.input {
 }
 .intro3-brand-sequence--resolve-shift.intro3-brand-sequence--open .intro3-wm-clay {
   opacity: 0;
+  transform: scaleX(0);
   transition: none;
 }
 
@@ -7279,6 +7316,7 @@ textarea.input {
 .intro3-brand-sequence--live .intro3-wm-clay {
   opacity: 0;
   visibility: hidden;
+  transform: scaleX(0);
   transition: none;
 }
 
@@ -7321,6 +7359,7 @@ textarea.input {
   }
   .intro3-brand-sequence--open .intro3-wm-clay {
     opacity: 1;
+    transform: scaleX(1);
   }
   .intro3-brand-sequence--open .intro3-wm-clay-plate {
     opacity: 0;
