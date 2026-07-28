@@ -5386,8 +5386,8 @@ textarea.input {
   --thread-rail-inset-x: 1rem;
   --thread-rail-inset-bottom: 1rem;
   --thread-rail-expanded-width: 15rem;
-  --thread-rail-duration: 240ms;
-  --thread-rail-ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --thread-rail-duration: 340ms;
+  --thread-rail-ease: cubic-bezier(0.22, 1, 0.36, 1);
   --thread-rail-motion: var(--thread-rail-duration) var(--thread-rail-ease);
 }
 
@@ -5421,18 +5421,19 @@ textarea.input {
 
 .chathome-thread-chrome-rail {
   min-width: 0;
-  transition:
-    width var(--thread-rail-motion) 0ms,
-    max-width var(--thread-rail-motion) 0ms;
 }
 
-.chathome-thread-shell--rail-open .chathome-thread-chrome-rail {
+/* Overlay desktop: keep rail chrome width open or collapsed — logo never shifts. */
+.chathome-thread-shell--rail-open .chathome-thread-chrome-rail,
+.chathome-thread-shell--rail-collapsed:not(.chathome-thread-shell--rail-offstage) .chathome-thread-chrome-rail {
   width: var(--thread-rail-expanded-width);
   max-width: var(--thread-rail-expanded-width);
   flex-shrink: 0;
-  transition:
-    width var(--thread-rail-motion) var(--thread-rail-duration),
-    max-width var(--thread-rail-motion) var(--thread-rail-duration);
+}
+
+.chathome-thread-shell--rail-offstage .chathome-thread-chrome-rail {
+  width: auto;
+  max-width: none;
 }
 
 .chathome-thread-body {
@@ -5445,45 +5446,55 @@ textarea.input {
   overflow: hidden;
 }
 
-.chathome-thread-shell--rail-collapsed .chathome-thread-chrome-rail,
-.chathome-thread-shell--rail-offstage .chathome-thread-chrome-rail {
-  width: auto;
-  max-width: none;
-}
-
 .thread-rail-chrome-actions {
-  gap: 0.125rem;
+  gap: 0.5rem;
+  transition:
+    opacity var(--thread-rail-motion),
+    transform var(--thread-rail-motion);
 }
 
-.thread-rail-collapse-btn {
+.thread-rail-chrome-actions--open {
+  opacity: 1;
+  transform: translateX(0);
+  pointer-events: auto;
+}
+
+.thread-rail-chrome-actions--closed {
+  opacity: 0;
+  transform: translateX(-0.35rem);
+  pointer-events: none;
+}
+
+/* Hover swaps rest ↔ affordance icon (expand / collapse). */
+.thread-rail-icon-swap {
   position: relative;
 }
 
-.thread-rail-collapse-icon--hover {
+.thread-rail-icon-swap__hover {
   display: none;
 }
 
-.thread-rail-collapse-btn:hover .thread-rail-collapse-icon--rest,
-.thread-rail-collapse-btn:focus-visible .thread-rail-collapse-icon--rest {
+.thread-rail-icon-swap:hover .thread-rail-icon-swap__rest,
+.thread-rail-icon-swap:focus-visible .thread-rail-icon-swap__rest {
   display: none;
 }
 
-.thread-rail-collapse-btn:hover .thread-rail-collapse-icon--hover,
-.thread-rail-collapse-btn:focus-visible .thread-rail-collapse-icon--hover {
+.thread-rail-icon-swap:hover .thread-rail-icon-swap__hover,
+.thread-rail-icon-swap:focus-visible .thread-rail-icon-swap__hover {
   display: block;
 }
 
 /* Login landing: keep one TermChat instance full-width; fade thread chrome in
    after the intro overlay dissolves instead of swapping the whole chat tree. */
 .chathome--threads:not(.chathome--chrome-revealed) .thread-rail,
-.chathome--threads:not(.chathome--chrome-revealed) .thread-rail-collapsed-trigger,
+.chathome--threads:not(.chathome--chrome-revealed) .thread-rail-expand-btn,
 .chathome--threads:not(.chathome--chrome-revealed) .chathome-threads-header-btn {
   opacity: 0;
   pointer-events: none;
 }
 
 .chathome--threads .thread-rail,
-.chathome--threads .thread-rail-collapsed-trigger,
+.chathome--threads .thread-rail-expand-btn,
 .chathome--threads .chathome-threads-header-btn,
 .chathome--threads .chathome-thread-chrome-rail {
   transition: opacity 420ms cubic-bezier(0.4, 0, 0.2, 1) 60ms;
@@ -5491,7 +5502,7 @@ textarea.input {
 
 @media (prefers-reduced-motion: reduce) {
   .chathome--threads .thread-rail,
-  .chathome--threads .thread-rail-collapsed-trigger,
+  .chathome--threads .thread-rail-expand-btn,
   .chathome--threads .chathome-threads-header-btn,
   .chathome--threads .chathome-thread-chrome-rail {
     transition-duration: 0ms;
@@ -5520,7 +5531,7 @@ textarea.input {
   visibility: hidden;
   pointer-events: none;
   transition:
-    opacity var(--thread-rail-motion) 0ms,
+    opacity var(--thread-rail-duration) var(--thread-rail-ease),
     visibility 0s linear var(--thread-rail-duration);
 }
 
@@ -5529,8 +5540,8 @@ textarea.input {
   visibility: visible;
   pointer-events: none;
   transition:
-    opacity var(--thread-rail-motion) var(--thread-rail-duration),
-    visibility 0s linear var(--thread-rail-duration);
+    opacity var(--thread-rail-duration) var(--thread-rail-ease),
+    visibility 0s linear 0ms;
 }
 
 .thread-rail--overlay .thread-rail-inner {
@@ -5548,18 +5559,15 @@ textarea.input {
   border-radius: 0;
   background: transparent;
   opacity: 0;
-  transform: translateX(-0.65rem);
+  transform: translateX(-0.5rem);
   transition:
-    opacity var(--thread-rail-motion) 0ms,
-    transform var(--thread-rail-motion) 0ms;
+    opacity var(--thread-rail-duration) var(--thread-rail-ease),
+    transform var(--thread-rail-duration) var(--thread-rail-ease);
 }
 
 .thread-rail--overlay--open .thread-rail-inner--overlay {
   opacity: 1;
   transform: translateX(0);
-  transition:
-    opacity var(--thread-rail-motion) var(--thread-rail-duration),
-    transform var(--thread-rail-motion) var(--thread-rail-duration);
 }
 
 @media (min-width: 1024px) {
@@ -5623,7 +5631,7 @@ textarea.input {
 @media (prefers-reduced-motion: reduce) {
   .thread-rail,
   .thread-rail-inner,
-  .thread-rail-collapsed-trigger,
+  .thread-rail-expand-btn,
   .thread-rail--overlay,
   .thread-rail-inner--overlay,
   .chathome-thread-chrome-rail {
@@ -5700,39 +5708,6 @@ textarea.input {
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
-}
-
-.thread-rail-new,
-.thread-rail-toggle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.35rem;
-  min-height: 2.5rem;
-  color: var(--text-muted);
-  border-radius: 0.5rem;
-  transition: color 160ms ease, background-color 160ms ease;
-}
-
-.thread-rail-new {
-  padding: 0 0.55rem;
-  font-size: 13px;
-  line-height: 1.25;
-  font-weight: 500;
-}
-
-.thread-rail-toggle {
-  width: 2.5rem;
-  padding: 0;
-  color: var(--text-muted);
-}
-
-.thread-rail-new:hover,
-.thread-rail-toggle:hover,
-.thread-rail-new:focus-visible,
-.thread-rail-toggle:focus-visible {
-  color: var(--text);
-  background: color-mix(in srgb, var(--panel) 38%, transparent);
 }
 
 .thread-rail-inner--overlay .thread-rail-item-row {
@@ -6474,46 +6449,6 @@ textarea.input {
 
 .thread-rail-rename-input:focus {
   border-color: var(--border);
-}
-
-/* Weightless — ink on canvas, no panel chrome (distinct from expanded sidebar) */
-.thread-rail-collapsed-trigger {
-  position: fixed;
-  left: var(--thread-rail-inset-x);
-  bottom: calc(var(--thread-rail-inset-bottom) + env(safe-area-inset-bottom, 0px));
-  z-index: 25;
-  align-items: center;
-  gap: 0.5rem;
-  margin: 0;
-  min-height: 2.5rem;
-  padding: 0 0.5rem 0 0.15rem;
-  font-size: 15px;
-  line-height: 1.25;
-  font-weight: 500;
-  letter-spacing: -0.01em;
-  color: var(--text-muted);
-  background: transparent;
-  border: none;
-  box-shadow: none;
-  opacity: 0;
-  pointer-events: none;
-  transition:
-    opacity var(--thread-rail-motion) 0ms,
-    color 160ms ease;
-}
-
-.thread-rail-collapsed-trigger--visible {
-  opacity: 0.88;
-  pointer-events: auto;
-  transition:
-    opacity var(--thread-rail-motion) var(--thread-rail-duration),
-    color 160ms ease;
-}
-
-.thread-rail-collapsed-trigger:hover,
-.thread-rail-collapsed-trigger:focus-visible {
-  color: var(--text);
-  opacity: 1;
 }
 
 .thread-rail-stage {

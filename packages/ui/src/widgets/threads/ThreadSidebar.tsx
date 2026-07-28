@@ -1,6 +1,8 @@
-import { MoreVertical, PanelLeft, PanelLeftClose, Pencil, Pin, Plus, Trash2 } from "lucide-react"
+import { MoreVertical, PanelLeft, PanelLeftClose, PanelLeftOpen, Pencil, Pin, Plus, Trash2 } from "lucide-react"
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
+import { ChatBrand } from "../../app/ChatBrand"
+import { ChatChromeButton } from "../../app/ChatChrome"
 import { api } from "../../client/index"
 import { TruncationHint, isTextTruncated } from "../../components/TruncationHint"
 import { placeAnchoredPanelForElements } from "../../lib/anchored-panel"
@@ -18,7 +20,6 @@ interface Props {
   collapsed: boolean
   railFits: boolean
   overlayRailEnabled?: boolean
-  onToggleCollapsed: () => void
   onSelect: (threadId: string) => void
   onNewThread: () => void
   drawerOpen?: boolean
@@ -371,7 +372,6 @@ export function ThreadSidebar({
   collapsed,
   railFits,
   overlayRailEnabled = railFits,
-  onToggleCollapsed,
   onSelect,
   onNewThread,
   drawerOpen = false,
@@ -382,7 +382,6 @@ export function ThreadSidebar({
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
 
-  const railLabel = collapsed ? "Show threads" : "Hide threads"
   const railExpanded = drawerOpen || !collapsed
 
   const confirmDelete = async () => {
@@ -433,22 +432,6 @@ export function ThreadSidebar({
         </aside>
       )}
 
-      {overlayRailEnabled && !drawerOpen && (
-        <button
-          type="button"
-          onClick={onToggleCollapsed}
-          className={`thread-rail-collapsed-trigger hidden xl:inline-flex ${
-            collapsed ? "thread-rail-collapsed-trigger--visible" : ""
-          }`}
-          title={railLabel}
-          aria-label={railLabel}
-          aria-expanded={false}
-        >
-          <PanelLeft size={17} strokeWidth={1.75} />
-          <span>Threads</span>
-        </button>
-      )}
-
       {pendingDelete && (
         <DeleteThreadModal
           thread={pendingDelete}
@@ -467,17 +450,70 @@ export function ThreadSidebar({
   )
 }
 
-export function ThreadRailNewButton({ onClick }: { onClick: () => void }) {
+/**
+ * Desktop rail brand slot — same h-10 w-10 mark box open or collapsed.
+ * Collapsed: that box is the hit target; hover → expand icon + frosted chrome bg.
+ */
+export function ThreadRailBrandExpand({
+  connected,
+  collapsed,
+  onExpand,
+}: {
+  connected: boolean
+  collapsed: boolean
+  onExpand: () => void
+}) {
+  const mark = (
+    <span className="flex items-center justify-center transition-opacity duration-200 group-hover:opacity-0 group-focus-visible:opacity-0">
+      <ChatBrand connected={connected} />
+    </span>
+  )
+
+  if (!collapsed) {
+    return (
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center">
+        <ChatBrand connected={connected} />
+      </div>
+    )
+  }
+
   return (
     <button
       type="button"
+      onClick={onExpand}
+      className={[
+        "thread-rail-brand-expand thread-rail-expand-btn group relative",
+        /* Same chip geometry as ChatChromeButton — hit target hugs the logo. */
+        "flex h-10 w-10 shrink-0 items-center justify-center rounded-lg",
+        "bg-transparent text-text-muted backdrop-blur transition-colors",
+        /* Hover: same frosted fill as other chrome icons (bg-panel/72). */
+        "hover:bg-panel/72 hover:text-text",
+        "focus-visible:bg-panel/72 focus-visible:text-text focus-visible:outline-none",
+      ].join(" ")}
+      title="Show threads"
+      aria-label="Show threads"
+      aria-expanded={false}
+    >
+      {mark}
+      <PanelLeftOpen
+        size={17}
+        strokeWidth={1.75}
+        className="pointer-events-none absolute block shrink-0 opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-visible:opacity-100"
+        aria-hidden
+      />
+    </button>
+  )
+}
+
+export function ThreadRailNewButton({ onClick }: { onClick: () => void }) {
+  return (
+    <ChatChromeButton
       onClick={onClick}
-      className="thread-rail-toggle"
       title="New thread"
       aria-label="New thread"
     >
-      <Plus size={17} strokeWidth={2} />
-    </button>
+      <Plus size={17} strokeWidth={2} className="block shrink-0" aria-hidden />
+    </ChatChromeButton>
   )
 }
 
@@ -489,16 +525,15 @@ export function ThreadRailCollapseButton({
   title: string
 }) {
   return (
-    <button
-      type="button"
+    <ChatChromeButton
       onClick={onClick}
-      className="thread-rail-toggle thread-rail-collapse-btn hidden lg:inline-flex"
+      className="thread-rail-icon-swap hidden lg:inline-flex"
       title={title}
       aria-label={title}
       aria-expanded
     >
-      <PanelLeft size={17} strokeWidth={1.75} className="thread-rail-collapse-icon thread-rail-collapse-icon--rest" />
-      <PanelLeftClose size={17} strokeWidth={1.75} className="thread-rail-collapse-icon thread-rail-collapse-icon--hover" />
-    </button>
+      <PanelLeft size={17} strokeWidth={1.75} className="thread-rail-icon-swap__rest block shrink-0" aria-hidden />
+      <PanelLeftClose size={17} strokeWidth={1.75} className="thread-rail-icon-swap__hover block shrink-0" aria-hidden />
+    </ChatChromeButton>
   )
 }

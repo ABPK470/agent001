@@ -9,7 +9,7 @@ import type { Me } from "../../hooks/useMe"
 import { useViewingAs } from "../../hooks/useViewingAs"
 import { useStore } from "../../state/store"
 import { TermChat } from "../../widgets/TermChat"
-import { ThreadRailCollapseButton, ThreadRailNewButton, ThreadSidebar } from "./ThreadSidebar"
+import { ThreadRailBrandExpand, ThreadRailCollapseButton, ThreadRailNewButton, ThreadSidebar } from "./ThreadSidebar"
 import { useThreadRailLayout } from "./useThreadRailLayout"
 
 interface Props {
@@ -92,7 +92,6 @@ export function ThreadHomePage({
   }, [createNewThread, beginThreadTitleShell, collapsed, railFits, threadsDrawerOpen])
 
   const railOpen = overlayRailEnabled && !collapsed
-  const showHeaderBrand = collapsed || preferThreadsModal
   const showHeaderThreadsButton = preferThreadsModal
 
   useEffect(() => {
@@ -137,12 +136,25 @@ export function ThreadHomePage({
         <div className={shellRailClass}>
           <header className="chathome-thread-chrome relative flex h-12 shrink-0 items-center gap-3 px-4 sm:h-14 sm:px-6">
             <div className="chathome-thread-chrome-rail flex min-w-0 items-center gap-1">
-              {showHeaderBrand ? (
-                <ChatBrand connected={connected} />
-              ) : (
+              {overlayRailEnabled ? (
                 <>
-                  <ChatBrand connected={connected} className="min-w-0 flex-1" />
-                  <div className="thread-rail-chrome-actions flex shrink-0 items-center">
+                  <div className="flex min-w-0 flex-1 items-center">
+                    <ThreadRailBrandExpand
+                      connected={connected}
+                      collapsed={!railOpen}
+                      onExpand={() => setThreadSidebarCollapsed(false)}
+                    />
+                  </div>
+                  <div
+                    className={[
+                      "thread-rail-chrome-actions flex shrink-0 items-center",
+                      railOpen
+                        ? "thread-rail-chrome-actions--open"
+                        : "thread-rail-chrome-actions--closed",
+                    ].join(" ")}
+                    aria-hidden={!railOpen}
+                    inert={!railOpen ? true : undefined}
+                  >
                     <ThreadRailNewButton onClick={() => void handleNewThread().catch((err: unknown) => { console.error("[mia]", err) })} />
                     <ThreadRailCollapseButton
                       onClick={() => setThreadSidebarCollapsed(true)}
@@ -150,6 +162,8 @@ export function ThreadHomePage({
                     />
                   </div>
                 </>
+              ) : (
+                <ChatBrand connected={connected} />
               )}
             </div>
 
@@ -181,7 +195,6 @@ export function ThreadHomePage({
               collapsed={collapsed}
               railFits={railFits}
               overlayRailEnabled={overlayRailEnabled}
-              onToggleCollapsed={() => setThreadSidebarCollapsed(!collapsed)}
               onSelect={selectThread}
               onNewThread={handleNewThread}
               drawerOpen={threadsDrawerOpen}

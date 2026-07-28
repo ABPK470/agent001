@@ -75,7 +75,7 @@ export function IntroBrandWordmark({
 }: {
   onBrandReady?: () => void
   onBrandLive?: () => void
-  /** Greeting has landed — start the : appearance. */
+  /** ASCII field ready — start the : appearance. */
   beginReveal: boolean
   /** Name sent (left hero) — colon only; never continue MI:A. */
   beginResolve: boolean

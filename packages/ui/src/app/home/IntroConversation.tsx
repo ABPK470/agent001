@@ -2,9 +2,9 @@ import { ArrowUp, LayoutGrid, LogOut } from "lucide-react"
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import { useServerReachable } from "../../hooks/useServerReachable"
 import {
-    HOME_CHAT_COLUMN_CLASS,
-    HOME_CHAT_GUTTER_X_CLASS,
-    HOME_CHAT_INPUT_DOCK_CLASS,
+  HOME_CHAT_COLUMN_CLASS,
+  HOME_CHAT_GUTTER_X_CLASS,
+  HOME_CHAT_INPUT_DOCK_CLASS,
 } from "../chatLayout.js"
 import { IntroAsciiField, type IntroAsciiRenderTarget } from "./IntroAsciiField"
 import { IntroBrandWordmark } from "./intro/IntroBrandWordmark"
@@ -59,7 +59,7 @@ const BRAND_RESOLVE_IDLE_FALLBACK_MS = 10_000
  * Conversational login surface — the intro3-derived design that now
  * powers the real login flow.
  *
- * The screen opens already mid-chat: the bot has asked "who am I
+ * The screen opens on the MI:A brand, then the bot asks "who am I
  * talking to?". You answer. Bot: "prove it." You answer. Bot:
  * "come in." — and the same chat surface morphs into the platform's
  * default term-chat widget.
@@ -71,8 +71,8 @@ const BRAND_RESOLVE_IDLE_FALLBACK_MS = 10_000
  *   - On enter, transcript rolls back through ASCII (reverse of how it
  *     crystallised), while the input bar FLIPs to the home TermChat pill.
  *   - Header brand (MI: → pinch spawns A → retract on first keystroke → live :)
- *     runs beside the intro — ASCII field, bot greeting, input pill, login
- *     morph. Resolve is user-paced so it never fights the opening question.
+ *     leads the intro — then bot greeting, input pill, login morph.
+ *     Resolve is user-paced so it never fights the opening question.
  *   - Bubble shapes, fonts, paddings, the bg-panel widget shell, the
  *     drag-handle label and controls are 1:1 with WidgetFrame +
  *     TermChat populated state.
@@ -154,11 +154,10 @@ export function IntroConversation({
   const [error, setError]           = useState<string | null>(null)
   const [botTyping, setBotTyping]   = useState(false)
   const [shimmerLabel, setShimmerLabel] = useState<string>("Loading")
-  // The first bot message is not seeded — spoken after the ASCII field
-  // arrives, then the input pill, then the header : brand unfolds.
+  // The first bot message is not seeded — spoken after MI:A seats.
   const [msgs, setMsgs] = useState<Msg[]>([])
   const [inputReady, setInputReady] = useState(false)
-  /** True once greeting has landed — gates the : / MI:A reveal (input waits for full MI:A). */
+  /** Gates the : / MI:A reveal — first beat after ASCII (input waits for greeting). */
   const [brandRevealReady, setBrandRevealReady] = useState(false)
   const [userEngaged, setUserEngaged] = useState(false)
   const userEngagedRef = useRef(false)
@@ -195,7 +194,7 @@ export function IntroConversation({
     return () => { document.title = t }
   }, [])
 
-  // Opening: ASCII → greeting → wait server → : land → shed/carve MI:A → input (last).
+  // Opening: ASCII → wait server → : land → shed/carve MI:A → greeting → input.
   useEffect(() => {
     let cancelled = false
     const reduced =
@@ -215,31 +214,28 @@ export function IntroConversation({
       if (cancelled) return
       await hold(420)
       if (cancelled) return
+      // Health starts false — do not start MI:A until probed up.
+      await waitUntilServer(8_000)
+      if (cancelled) return
+      if (serverReachableRef.current) {
+        // Fresh latch — only the seated MI:A callback may resolve this.
+        {
+          let resolveMia = () => {}
+          const miaDone = new Promise<void>((r) => { resolveMia = r })
+          brandReadyRef.current = { promise: miaDone, resolve: resolveMia }
+        }
+        setBrandRevealReady(true)
+        await brandReadyRef.current.promise
+        if (cancelled) return
+        await hold(reduced ? 40 : 160)
+        if (cancelled) return
+      }
       await botReply("who am I talking to?", "Loading", reduced ? 80 : 180, {
         quiet: true,
         streamSpeedMs: INTRO_GREETING_SPEED_MS,
       })
       if (cancelled) return
       await hold(220)
-      if (cancelled) return
-      // Health starts false — do not start MI:A (or unlock input) until probed up.
-      await waitUntilServer(8_000)
-      if (cancelled) return
-      if (!serverReachableRef.current) {
-        // Offline: no MI:A — input may appear without the brand sequence.
-        setInputReady(true)
-        return
-      }
-      // Fresh latch — only the seated MI:A callback may resolve this.
-      {
-        let resolveMia = () => {}
-        const miaDone = new Promise<void>((r) => { resolveMia = r })
-        brandReadyRef.current = { promise: miaDone, resolve: resolveMia }
-      }
-      setBrandRevealReady(true)
-      await brandReadyRef.current.promise
-      if (cancelled) return
-      await hold(reduced ? 40 : 120)
       if (cancelled) return
       setInputReady(true)
     }
@@ -743,7 +739,7 @@ export function IntroConversation({
                                 ? ""
                                 : step === "password"
                                   ? "password  —  type / for shortcuts"
-                                  : "your handle"
+                                  : ""
                             }
                             autoCapitalize="none"
                             autoCorrect="off"

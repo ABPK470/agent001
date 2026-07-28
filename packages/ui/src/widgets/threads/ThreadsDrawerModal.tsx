@@ -2,6 +2,7 @@ import { PanelLeft, Plus, X } from "lucide-react"
 import type { ReactNode } from "react"
 import { useEffect } from "react"
 import { createPortal } from "react-dom"
+import { ChatChromeButton } from "../../app/ChatChrome"
 import { modalOverlayClass, MODAL_SURFACE_CLASS } from "../../widgets/entity-registry/modal-overlay"
 
 export function ThreadsDrawerModal({
@@ -44,25 +45,21 @@ export function ThreadsDrawerModal({
             <PanelLeft size={18} strokeWidth={1.75} className="shrink-0 text-text-muted" />
             <h2 className="truncate text-base font-semibold text-text">Threads</h2>
           </div>
-          <div className="flex shrink-0 items-center gap-0.5">
-            <button
-              type="button"
+          <div className="flex shrink-0 items-center gap-2">
+            <ChatChromeButton
               onClick={onNewThread}
-              className="thread-rail-toggle"
               title="New thread"
               aria-label="New thread"
             >
-              <Plus size={17} strokeWidth={2} />
-            </button>
-            <button
-              type="button"
+              <Plus size={17} strokeWidth={2} className="block shrink-0" aria-hidden />
+            </ChatChromeButton>
+            <ChatChromeButton
               onClick={onClose}
-              className="thread-rail-toggle"
               title="Close"
               aria-label="Close threads"
             >
-              <X size={17} strokeWidth={1.75} />
-            </button>
+              <X size={17} strokeWidth={1.75} className="block shrink-0" aria-hidden />
+            </ChatChromeButton>
           </div>
         </div>
         <div className="thread-rail-modal-body min-h-0 flex-1 overflow-hidden px-2 pb-2 pt-1 sm:px-3 sm:pb-3">
