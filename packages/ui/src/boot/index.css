@@ -4076,15 +4076,22 @@ textarea.input {
 /* Solo maximize: one tile overlays the canvas; siblings stay mounted. */
 .workspace-tile-solo {
   z-index: 40;
-  /* Instant fill — remount was the lag; do not add a 260ms geometry tween on top. */
-  transition: box-shadow 160ms ease;
+  /* Inherit left/top/width/height ease from .workspace-tile (same as restore).
+     Instant fill was only needed when maximize remounted cold widgets. */
 }
 
 .workspace-tile-solo-hidden {
+  /* Snap under the expanding solo — geometry morph is the signal. */
   visibility: hidden;
   pointer-events: none;
   z-index: 0;
   transition: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workspace-tile {
+    transition: none;
+  }
 }
 
 /*
