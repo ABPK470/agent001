@@ -3862,17 +3862,18 @@ textarea.input {
 /*
  * Intro — ONE pinch that sheds mass:
  * dots : → . (hold) → open to : while mass carves.
- * Duration locked to PINCH_MS (1200ms). Clay shares this beat.
+ * % of each dot’s fill-box so travel scales with mark size — same relative
+ * geometry whether the colon is lockup-tall or platform 17px.
  */
 @keyframes mia-colon-pinch-shed-top {
   0% {
     transform: translateY(0);
   }
   36% {
-    transform: translateY(20px);
+    transform: translateY(65%);
   }
   70% {
-    transform: translateY(20px);
+    transform: translateY(65%);
   }
   100% {
     transform: translateY(0);
@@ -3884,10 +3885,10 @@ textarea.input {
     transform: translateY(0);
   }
   36% {
-    transform: translateY(-20px);
+    transform: translateY(-65%);
   }
   70% {
-    transform: translateY(-20px);
+    transform: translateY(-65%);
   }
   100% {
     transform: translateY(0);
@@ -7016,9 +7017,9 @@ textarea.input {
   flex-shrink: 0;
   vertical-align: middle;
   /*
-   * Layout box = visual box (no transform scale). Scaling via transform left the
-   * flex line at 17px while the mark painted taller — when --live snapped
-   * letter-h / scale, the colon jumped up into the true center.
+   * One Logo geometry always. Size via layout box (not transform scale) so
+   * lockup-tall and platform-small are the same mark — only the box changes.
+   * Platform rest size = toolbar (13×17).
    */
   width: 13px;
   height: 17px;
@@ -7032,15 +7033,16 @@ textarea.input {
     margin-inline 280ms cubic-bezier(0.37, 0, 0.63, 1);
 }
 
-/* Logo fills the anchor — size follows width/height, not a second scale. */
+/* Same SVG fills the box at every stage — no phase-specific colon drawing. */
 .intro3-wm-colon-anchor .mia-colon-logo {
   width: 100%;
   height: 100%;
+  display: block;
 }
 
 /*
- * Lockup — anchor grows to letter cap height. Margin only while MI/A present.
- * On resolve, margin + letter width clear first; --live eases box → 17px.
+ * Lockup / shed / seated / resolve beats 1–2 — colon matches letter cap height.
+ * Same proportions as stage 1; only the box is larger.
  */
 .intro3-root--hero .intro3-wm-colon-anchor,
 .intro3-brand-sequence--pinching .intro3-wm-colon-anchor,
@@ -7050,21 +7052,20 @@ textarea.input {
   margin-inline: 1px;
 }
 .intro3-brand-sequence--resolving .intro3-wm-colon-anchor {
-  /* Beat 1 — letters fade; colon stays lockup size and in place. */
   width: calc(var(--wm-letter-h) * 24 / 32);
   height: var(--wm-letter-h);
   margin-inline: 1px;
   transition: none;
 }
 .intro3-brand-sequence--resolve-shift .intro3-wm-colon-anchor {
-  /* Beat 2 — slots + gap collapse; colon already at final XY (lockup size). */
+  /* Still lockup-tall; XY already final (gap/margin cleared with slots). */
   width: calc(var(--wm-letter-h) * 24 / 32);
   height: var(--wm-letter-h);
   margin-inline: 0;
   transition: margin-inline 280ms cubic-bezier(0.37, 0, 0.63, 1);
 }
 .intro3-brand-sequence--live .intro3-wm-colon-anchor {
-  /* Beat 3 — ease layout box down to platform mark (no transform jump). */
+  /* Letters gone — ease the same mark down to platform size. */
   width: 13px;
   height: 17px;
   margin-inline: 0;
@@ -7222,10 +7223,10 @@ textarea.input {
 }
 
 /*
- * Resolve — three beats (never resize : while it is still sliding):
- *   1) --resolving      fade MI:A; slots keep size so colon stays put
- *   2) --resolve-shift  collapse slots + gap; colon at final XY (still lockup size)
- *   3) --live           ease colon layout box → platform 17px
+ * Resolve — three beats (one Logo; box size only changes on --live):
+ *   1) --resolving      fade MI:A; colon stays lockup-tall in place
+ *   2) --resolve-shift  collapse slots + gap; colon still lockup-tall at final XY
+ *   3) --live           ease same mark → platform 17px
  */
 .intro3-brand-sequence--resolving.intro3-brand-sequence--open .intro3-wm-slot,
 .intro3-brand-sequence--resolving.intro3-brand-sequence--open .intro3-wm-slot--pre,
@@ -7245,7 +7246,6 @@ textarea.input {
 .intro3-brand-sequence--resolve-shift.intro3-brand-sequence--open .intro3-wm-slot--post {
   opacity: 0;
   width: 0;
-  /* Drop slot height so the flex line is the colon box alone (no later re-center). */
   height: 0;
   overflow: hidden;
   pointer-events: none;

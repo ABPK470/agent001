@@ -1,9 +1,9 @@
-/** Shared MI:A mark height — chat home, workspace toolbar, and settled landing colon. */
+/** Shared MI:A mark height — chat home, workspace toolbar, settled intro colon. */
 export const CHAT_BRAND_LOGO_SIZE = 17
 
 /**
- * Legacy embed size — lockup now matches CHAT_BRAND_LOGO_SIZE via CSS
- * `--wm-letter-h` + colon scale. Kept for any residual imports.
+ * Legacy embed size. Intro lockup sizes the same Logo via CSS box
+ * (`--wm-letter-h`); settle eases that box back to CHAT_BRAND_LOGO_SIZE.
  */
 export const INTRO_COLON_EMBEDDED_SIZE = 26
 
