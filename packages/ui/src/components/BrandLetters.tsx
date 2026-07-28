@@ -1,21 +1,25 @@
 /**
- * Geometric MI / A for the login brand lockup.
+ * Geometric MI / A — login brand lockup.
  *
- * Cap height matches Logo colon. Same stroke+rect geometry as the seated mark —
- * props/a11y/config only; do not “soften” the tip/valley without an explicit ask.
+ * One material with Logo colon: bar weight, rx, solid `currentColor`.
+ * Stems = rounded rects. Diagonals = constant-weight strokes with round
+ * joins (same optical weight, soft tips/valleys). No thin triangle
+ * silhouettes, no painted background cutouts.
  */
 
-import { memo, type CSSProperties, type SVGProps } from "react"
+import { memo, useId, type CSSProperties, type SVGProps } from "react"
 
 /** Lockup metrics — shared by intro CSS (`--wm-mi-w` / `--wm-a-w` ratios). */
 export const BRAND_LETTER_CONFIG = {
+  /** Matches Logo colon block corner radius. */
   rx: 2.5,
-  bar: 7.25,
+  /** Stem / diagonal weight — slightly under colon block (10) for open counters. */
+  bar: 7,
   height: 32,
-  miWidth: 48,
-  aWidth: 28,
-  /** Inner M stem span (before the I gap). */
-  mInnerWidth: 34,
+  miWidth: 50,
+  /** Wider than tall so the A counter stays readable at lockup size. */
+  aWidth: 34,
+  mInnerWidth: 36,
 } as const
 
 /** @deprecated Prefer `BRAND_LETTER_CONFIG.rx` */
@@ -48,10 +52,7 @@ function brandAria(title: string | undefined): {
   return { "aria-hidden": true }
 }
 
-function brandBoxStyle(
-  size: number | string | undefined,
-  style: CSSProperties | undefined,
-): CSSProperties {
+function brandBoxStyle(style: CSSProperties | undefined): CSSProperties {
   return {
     display: "block",
     flexShrink: 0,
@@ -60,7 +61,11 @@ function brandBoxStyle(
   }
 }
 
-/** Geometric “MI”. */
+function fmt(n: number): string {
+  return (Math.round(n * 100) / 100).toFixed(2)
+}
+
+/** Geometric “MI” — rounded stems + stroke valley (round join). */
 export const BrandLetterMi = memo(function BrandLetterMi({
   className,
   title,
@@ -69,9 +74,11 @@ export const BrandLetterMi = memo(function BrandLetterMi({
   ...rest
 }: BrandLetterProps) {
   const { bar: b, rx, height: h, miWidth: viewW, mInnerWidth: mW } = BRAND_LETTER_CONFIG
+  const half = b / 2
   const mid = mW / 2
   const iX = viewW - b
-  const valley = h * 0.7
+  // Valley seats into stem faces; soft U at the floor.
+  const valley = `M ${fmt(half)} ${fmt(half)} L ${fmt(mid)} ${fmt(h * 0.78)} L ${fmt(mW - half)} ${fmt(half)}`
 
   return (
     <svg
@@ -82,7 +89,7 @@ export const BrandLetterMi = memo(function BrandLetterMi({
       preserveAspectRatio="xMidYMid meet"
       shapeRendering="geometricPrecision"
       className={className}
-      style={brandBoxStyle(size, style)}
+      style={brandBoxStyle(style)}
       {...brandAria(title)}
       {...rest}
     >
@@ -90,19 +97,22 @@ export const BrandLetterMi = memo(function BrandLetterMi({
       <rect x={0} y={0} width={b} height={h} rx={rx} fill="currentColor" />
       <rect x={mW - b} y={0} width={b} height={h} rx={rx} fill="currentColor" />
       <path
+        d={valley}
         fill="none"
         stroke="currentColor"
         strokeWidth={b}
-        strokeLinecap="round"
+        strokeLinecap="butt"
         strokeLinejoin="round"
-        d={`M ${b * 0.4} ${b * 0.4} L ${mid} ${valley} L ${mW - b * 0.4} ${b * 0.4}`}
       />
       <rect x={iX} y={0} width={b} height={h} rx={rx} fill="currentColor" />
     </svg>
   )
 })
 
-/** Geometric “A”. */
+/**
+ * Geometric “A” — same bar weight as MI.
+ * Chevron stroke (round tip) + rounded crossbar; clip → flat feet like stems.
+ */
 export const BrandLetterA = memo(function BrandLetterA({
   className,
   title,
@@ -110,8 +120,27 @@ export const BrandLetterA = memo(function BrandLetterA({
   style,
   ...rest
 }: BrandLetterProps) {
+  const clipId = useId().replace(/:/g, "")
   const { bar: b, rx, height: h, aWidth: w } = BRAND_LETTER_CONFIG
+  const half = b / 2
   const mid = w / 2
+  const tipY = half
+  // Extend past baseline; clipPath slices a clean horizontal foot.
+  const footY = h + half
+  const footL = half * 0.55
+  const footR = w - half * 0.55
+
+  const barTop = h * 0.56
+  const barH = b * 0.8
+  const barMidY = barTop + barH / 2
+  const t = (barMidY - tipY) / (h - tipY)
+  const legCxL = mid + (footL - mid) * t
+  const legCxR = mid + (footR - mid) * t
+  const overlap = half * 0.5
+  const barX = legCxL - overlap
+  const barW = legCxR - legCxL + overlap * 2
+
+  const chevron = `M ${fmt(footL)} ${fmt(footY)} L ${fmt(mid)} ${fmt(tipY)} L ${fmt(footR)} ${fmt(footY)}`
 
   return (
     <svg
@@ -122,27 +151,36 @@ export const BrandLetterA = memo(function BrandLetterA({
       preserveAspectRatio="xMidYMid meet"
       shapeRendering="geometricPrecision"
       className={className}
-      style={brandBoxStyle(size, style)}
+      style={brandBoxStyle(style)}
       {...brandAria(title)}
       {...rest}
     >
       {title ? <title>{title}</title> : null}
-      <path
-        fill="none"
-        stroke="currentColor"
-        strokeWidth={b}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d={`M ${b * 0.3} ${h - b * 0.3} L ${mid} ${b * 0.35} L ${w - b * 0.3} ${h - b * 0.3}`}
-      />
-      <rect
-        x={b * 0.7}
-        y={h * 0.5}
-        width={w - b * 1.4}
-        height={b * 0.85}
-        rx={rx}
-        fill="currentColor"
-      />
+      <defs>
+        <clipPath id={clipId}>
+          <rect x={0} y={0} width={w} height={h} />
+        </clipPath>
+      </defs>
+      <g clipPath={`url(#${clipId})`}>
+        <path
+          d={chevron}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={b}
+          strokeLinecap="butt"
+          strokeLinejoin="round"
+        />
+        {/* Tip disc — same round terminal mass as MI stem caps */}
+        <circle cx={mid} cy={tipY} r={half} fill="currentColor" />
+        <rect
+          x={barX}
+          y={barTop}
+          width={barW}
+          height={barH}
+          rx={rx}
+          fill="currentColor"
+        />
+      </g>
     </svg>
   )
 })

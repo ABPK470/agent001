@@ -6957,7 +6957,7 @@ textarea.input {
 
 /* ── Login brand sequence — : lands → shed/carve MI:A → input ── */
 /*
- * Cap height = colon. Extended glyphs (48×32 / 28×32) — longer word lockup.
+ * Cap height = colon. Extended glyphs (50×32 / 34×32) — longer word lockup.
  * Stems stay open so stretch doesn’t read bulky.
  */
 .intro3-brand-sequence {
@@ -6969,8 +6969,8 @@ textarea.input {
   color: var(--text);
   line-height: 1;
   --wm-letter-h: 17px;
-  --wm-mi-w: calc(var(--wm-letter-h) * 48 / 32);
-  --wm-a-w: calc(var(--wm-letter-h) * 28 / 32);
+  --wm-mi-w: calc(var(--wm-letter-h) * 50 / 32);
+  --wm-a-w: calc(var(--wm-letter-h) * 34 / 32);
 }
 
 /* Seated MI:A — prior seated × 1.05. */
