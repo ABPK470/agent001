@@ -8,12 +8,15 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { api } from "../client/index"
 import { useMe } from "../hooks/useMe"
 import { useViewingAs } from "../hooks/useViewingAs"
-import { CHAT_CHROME_BTN } from "./ChatChrome"
+import { CHAT_CHROME_PILL } from "./ChatChrome"
 
 type UserOption = {
   upn: string
   displayName: string
 }
+
+/** Lucide marks in header pills — block so they center on the text midline, not the baseline. */
+const HEADER_ICON = "block shrink-0"
 
 function matchesUserFilter(user: UserOption, query: string): boolean {
   if (!query) return true
@@ -96,13 +99,14 @@ export function ViewingAsControl({
 
   const label = isMe ? "Me" : (displayName ?? "…")
 
+  // Pill (not square chrome): icon + label share one midline via items-center + leading-none.
   const triggerClass = isMe
     ? chromeVariant === "chat"
-      ? `${CHAT_CHROME_BTN} w-auto max-w-[16rem] gap-1.5 px-3 text-[13px]`
-      : "flex h-9 max-w-[16rem] shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-[13px] text-text-muted transition-colors hover:bg-overlay-hover hover:text-text"
+      ? CHAT_CHROME_PILL
+      : "flex h-9 max-w-[16rem] shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-[13px] leading-none text-text-muted transition-colors hover:bg-overlay-hover hover:text-text"
     : chromeVariant === "chat"
-      ? "viewing-as-trigger--other flex h-10 max-w-[18rem] w-auto shrink-0 items-center gap-1.5 rounded-lg px-3 text-[13px]"
-      : "viewing-as-trigger--other flex h-9 max-w-[18rem] shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-[13px]"
+      ? "viewing-as-trigger--other flex h-10 max-w-[18rem] w-auto shrink-0 items-center gap-1.5 rounded-lg px-3 text-[13px] leading-none"
+      : "viewing-as-trigger--other flex h-9 max-w-[18rem] shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-[13px] leading-none"
 
   return (
     <div ref={rootRef} className="relative z-[1]">
@@ -113,16 +117,16 @@ export function ViewingAsControl({
         title={isMe ? "View as someone else" : `Viewing as ${label}`}
         onClick={() => setOpen((v) => !v)}
       >
-        <InspectionPanel size={15} strokeWidth={2} className="shrink-0" />
+        <InspectionPanel size={15} strokeWidth={2} className={HEADER_ICON} aria-hidden />
         {isMe ? (
-          <span className="truncate font-medium text-text">Me</span>
+          <span className="truncate font-medium leading-none text-text">Me</span>
         ) : (
-          <span className="flex min-w-0 items-baseline gap-1.5">
+          <span className="flex min-w-0 items-center gap-1.5 leading-none">
             <span className="shrink-0 opacity-80">Viewing as</span>
             <span className="truncate font-semibold tracking-tight">{label}</span>
           </span>
         )}
-        <ChevronDown size={14} strokeWidth={2} className="shrink-0 opacity-70" />
+        <ChevronDown size={14} strokeWidth={2} className={`${HEADER_ICON} opacity-70`} aria-hidden />
       </button>
 
       {open && (
@@ -131,13 +135,13 @@ export function ViewingAsControl({
             <div className="shrink-0 border-b border-border p-2">
               <button
                 type="button"
-                className="viewing-as-back-to-me flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium"
+                className="viewing-as-back-to-me flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium leading-none"
                 onClick={() => {
                   clearViewingAs()
                   setOpen(false)
                 }}
               >
-                <Undo2 size={15} className="shrink-0" />
+                <Undo2 size={15} className={HEADER_ICON} aria-hidden />
                 Back to Me
               </button>
             </div>
@@ -158,7 +162,7 @@ export function ViewingAsControl({
               <>
                 <button
                   type="button"
-                  className="flex w-full items-center bg-overlay-2 px-3 py-2 text-left text-sm text-text"
+                  className="flex w-full items-center bg-overlay-2 px-3 py-2 text-left text-sm leading-none text-text"
                   onClick={() => {
                     clearViewingAs()
                     setOpen(false)

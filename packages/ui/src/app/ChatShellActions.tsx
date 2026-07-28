@@ -24,7 +24,7 @@ export function ChatShellActions({ onModeChange, onSignOut, me }: Props) {
         />
       ) : (
         <ChatChromeButton onClick={onSignOut} title="Sign out" aria-label="Sign out">
-          <LogOut size={16} />
+          <LogOut size={16} className="block shrink-0" aria-hidden />
         </ChatChromeButton>
       )}
     </div>

@@ -225,12 +225,12 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
           <>
             <button
               type="button"
-              className="flex h-9 shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-[13px] text-text-muted transition-colors hover:bg-overlay-hover hover:text-text"
+              className="flex h-9 shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-[13px] leading-none text-text-muted transition-colors hover:bg-overlay-hover hover:text-text"
               onClick={onAddWidget}
               title="Add widget to this view"
             >
-              <LayoutGrid size={15} />
-              <span className="hidden sm:inline">Widget</span>
+              <LayoutGrid size={15} className="block shrink-0" aria-hidden />
+              <span className="hidden leading-none sm:inline">Widget</span>
             </button>
             <div className="toolbar-shell-divider mx-1.5" aria-hidden />
           </>
