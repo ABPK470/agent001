@@ -651,14 +651,16 @@ export function App() {
     )
   } else {
     shellBody = (
-      <div className="flex flex-col h-screen bg-base">
+      <div className="workspace-chrome flex h-full min-h-0 flex-col">
         <Toolbar
           onAddWidget={() => canvasRef.current?.openCatalog()}
           onSignOut={handleSwitchUser}
           onModeChange={transitionShellMode}
           me={me}
         />
-        <Canvas ref={canvasRef} />
+        <div className="workspace-stage relative flex min-h-0 flex-1 flex-col">
+          <Canvas ref={canvasRef} />
+        </div>
         <WidgetModal />
       </div>
     )

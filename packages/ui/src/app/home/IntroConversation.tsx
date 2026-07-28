@@ -2,6 +2,7 @@ import { ArrowUp, LayoutGrid, LogOut } from "lucide-react"
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import { useServerReachable } from "../../hooks/useServerReachable"
 import {
+  CHAT_INPUT_PILL_CLASS,
   HOME_CHAT_COLUMN_CLASS,
   HOME_CHAT_GUTTER_X_CLASS,
   HOME_CHAT_INPUT_DOCK_CLASS,
@@ -688,7 +689,7 @@ export function IntroConversation({
                 ref={loginPillRef}
                 data-intro-target="termchat-input"
                 onSubmit={handleSubmit}
-                className="intro3-input chathome-chrome-pill mx-auto w-full rounded-2xl border border-border bg-elevated px-4 py-3 ring-1 ring-overlay-1 transition-colors focus-within:border-border-strong focus-within:ring-overlay-2 dark:bg-overlay-2"
+                className={`intro3-input ${CHAT_INPUT_PILL_CLASS} mx-auto w-full rounded-2xl px-4 py-3`}
                 style={pillTravelStyle}
               >
                   <div className="flex items-center gap-3">

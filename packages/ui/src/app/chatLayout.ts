@@ -16,6 +16,13 @@ export const HOME_CHAT_GUTTER_X_CLASS = "px-6"
 export const HOME_CHAT_INPUT_DOCK_CLASS = "relative shrink-0 px-6 pb-4 pt-2"
 
 /**
+ * Shared composer chrome — login intro + TermChat.
+ * Fill/border owned by `.chathome-chrome-pill` CSS (light = chat `--panel`).
+ */
+export const CHAT_INPUT_PILL_CLASS =
+  "chathome-chrome-pill border border-border ring-1 ring-overlay-1 transition-colors focus-within:border-border-strong focus-within:ring-overlay-2 dark:bg-overlay-2"
+
+/**
  * User goal row in the transcript — full width of the sticky row (capped).
  * The pin appendage shares this cap: text is limited to
  * `USER_GOAL_TEXT_MAX_CLASS` so the left pin slot is reserved *outside*

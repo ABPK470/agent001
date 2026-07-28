@@ -52,6 +52,7 @@ import {
   HOME_CHAT_COLUMN_CLASS,
   HOME_CHAT_GUTTER_X_CLASS,
   HOME_CHAT_INPUT_DOCK_CLASS,
+  CHAT_INPUT_PILL_CLASS,
   USER_GOAL_COLUMN_CLASS,
   USER_GOAL_TO_RESPONSE_GAP_CLASS,
 } from "../app/chatLayout.js"
@@ -1981,7 +1982,7 @@ function TermChatInputBar({
   return (
       <div
           data-intro-target="termchat-input"
-          className={`chathome-chrome-pill ${palette || hasResult ? "chathome-chrome-pill--composer-open" : "overflow-hidden"} ${className} mx-auto bg-elevated dark:bg-overlay-2 border border-border ring-1 ring-overlay-1 focus-within:border-border-strong focus-within:ring-overlay-2 transition-colors ${isHero ? "rounded-[24px] px-5 py-4" : "rounded-2xl px-4 py-3"}`}
+          className={`${CHAT_INPUT_PILL_CLASS} ${palette || hasResult ? "chathome-chrome-pill--composer-open" : "overflow-hidden"} ${className} mx-auto ${isHero ? "rounded-[24px] px-5 py-4" : "rounded-2xl px-4 py-3"}`}
           style={heroStyle}
       >
           <ChatComposerShell

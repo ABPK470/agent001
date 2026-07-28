@@ -32,14 +32,14 @@ export const Canvas = forwardRef<CanvasHandle>(function Canvas(_props, ref) {
   const { tiles, split } = activeView
 
   return (
-    <div className="relative flex-1 overflow-hidden">
+    <div className="relative flex h-full min-h-0 flex-1 flex-col overflow-hidden">
       {stageGlyphs && (
         <div className="workspace-stage-glyphs pointer-events-none overflow-hidden" aria-hidden>
           <IntroAsciiField surface="home" viewingAsField />
         </div>
       )}
 
-      <div className={["relative h-full min-h-0", stageGlyphs ? "workspace-stage-glyphs-pad" : ""].filter(Boolean).join(" ")}>
+      <div className={["relative min-h-0 flex-1", stageGlyphs ? "workspace-stage-glyphs-pad" : ""].filter(Boolean).join(" ")}>
         {tiles.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center gap-5 p-2">
             <LayoutGrid size={48} className="text-text-faint" strokeWidth={1.5} />

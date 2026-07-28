@@ -4226,15 +4226,183 @@ textarea.input {
   opacity: 0.78;
 }
 
+/* ── Workspace attached tabs (Poolside elevated plane) ─────────────
+ * App chrome (.workspace-chrome) sits on --canvas. Active tab +
+ * .workspace-stage share --workspace-plane (panel-2 / white) with a
+ * clear outer shadow. Concave corners join tab → sheet (no seam).
+ * Do not reuse widget `.workspace-shell` here.
+ */
+.workspace-chrome {
+  --workspace-plane: var(--panel-2);
+  --workspace-chrome: var(--canvas);
+  --tab-scoop: 10px;
+  background: var(--workspace-chrome);
+  padding: 0 0.75rem 0.75rem;
+  box-sizing: border-box;
+}
+
+.workspace-stage {
+  position: relative;
+  z-index: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+  background: var(--workspace-plane);
+  /* No top stroke — active tab owns that edge (avoids the hairline step). */
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  border-top: 0;
+  border-radius: 0.85rem;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.05),
+    0 10px 32px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+}
+
+:root[data-theme="dark"] .workspace-stage {
+  border-color: color-mix(in srgb, var(--border) 80%, transparent);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.35),
+    0 12px 36px rgba(0, 0, 0, 0.45);
+}
+
+.toolbar-shell {
+  position: relative;
+  z-index: 1;
+  background: transparent;
+  margin-bottom: 0;
+}
+
+.view-tab-strip {
+  min-height: 2.25rem;
+  /* Room for scoops so overflow-x does not clip the flares. */
+  padding-inline: var(--tab-scoop);
+  margin-inline: calc(-1 * var(--tab-scoop));
+}
+
+.view-tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex-shrink: 0;
+  height: 2.25rem;
+  padding: 0 0.75rem 0 0.5rem;
+  font-size: 13px;
+  line-height: 1.25;
+  border-radius: 0.7rem 0.7rem 0 0;
+  cursor: grab;
+  user-select: none;
+  transition:
+    background-color 140ms ease,
+    color 140ms ease,
+    opacity 140ms ease;
+}
+
+.view-tab:active {
+  cursor: grabbing;
+}
+
+.view-tab--inactive {
+  color: var(--text-muted);
+  background: transparent;
+}
+
+.view-tab--inactive:hover {
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--workspace-plane) 38%, transparent);
+}
+
+.view-tab--active {
+  z-index: 2;
+  color: var(--text);
+  font-weight: 600;
+  background: var(--workspace-plane);
+  /* Overlap the stage fill so tab + plane read as one sheet. */
+  margin-bottom: -1px;
+  padding-bottom: 1px;
+}
+
+/*
+ * Concave corners (CSS-Tricks round-out): chrome square + diagonal
+ * plane-colored shadow covers the tab’s square corner so the scoop
+ * meets the stage baseline without a step.
+ */
+.view-tab--active::before,
+.view-tab--active::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  width: var(--tab-scoop);
+  height: var(--tab-scoop);
+  background: var(--workspace-chrome);
+  pointer-events: none;
+}
+
+.view-tab--active::before {
+  left: calc(-1 * var(--tab-scoop));
+  border-bottom-right-radius: var(--tab-scoop);
+  box-shadow: 2px 2px 0 0 var(--workspace-plane);
+}
+
+.view-tab--active::after {
+  right: calc(-1 * var(--tab-scoop));
+  border-bottom-left-radius: var(--tab-scoop);
+  box-shadow: -2px 2px 0 0 var(--workspace-plane);
+}
+
+.view-tab__grip {
+  color: var(--text-faint);
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.view-tab:hover .view-tab__grip,
+.view-tab:focus-within .view-tab__grip {
+  opacity: 0.7;
+}
+
+.view-tab__label {
+  max-width: 10rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.view-tab__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 0.125rem;
+  padding: 0;
+  border: none;
+  border-radius: 0.25rem;
+  color: var(--text-muted);
+  background: transparent;
+  opacity: 0;
+  transition: opacity 120ms ease, color 120ms ease, background-color 120ms ease;
+}
+
+.view-tab:hover .view-tab__close,
+.view-tab:focus-within .view-tab__close {
+  opacity: 0.6;
+}
+
+.view-tab__close:hover {
+  opacity: 1 !important;
+  color: var(--text);
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+}
+
 /* Dark: slightly lifted. Light keeps the quieter panel wash. */
 .view-tab-drop-ghost {
   color: var(--color-text);
-  background: color-mix(in srgb, var(--color-panel-2) 90%, var(--color-text) 7%);
+  background: color-mix(in srgb, var(--workspace-plane) 92%, var(--color-text) 5%);
   border: 1px dashed color-mix(in srgb, var(--color-border-strong) 70%, var(--color-text) 18%);
+  opacity: 0.95;
 }
 
 :root[data-theme="light"] .view-tab-drop-ghost {
-  background: color-mix(in srgb, var(--color-panel) 70%, transparent);
+  background: color-mix(in srgb, var(--workspace-plane) 90%, transparent);
   border: 1px dashed color-mix(in srgb, var(--color-border) 85%, transparent);
 }
 
@@ -4701,17 +4869,18 @@ textarea.input {
   );
 }
 
-/* Chathome chrome pills — input bar + expanded thread sidebar (not collapsed pill). */
+/* Chathome chrome pills — input bar (+ expanded thread sidebar chrome).
+ * Light: same fill as chat stage (--panel), edge from border — not a white card. */
 :root[data-theme="light"] .chathome-chrome-pill {
-  background-color: var(--panel-2);
-  border-color: rgba(30, 25, 20, 0.07);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  background-color: var(--panel);
+  border-color: rgba(30, 25, 20, 0.16);
+  box-shadow: none;
   --tw-ring-color: transparent;
 }
 
 :root[data-theme="light"] .chathome-chrome-pill:focus-within {
-  border-color: rgba(30, 25, 20, 0.14);
-  --tw-ring-color: rgba(30, 25, 20, 0.04);
+  border-color: rgba(30, 25, 20, 0.26);
+  --tw-ring-color: rgba(30, 25, 20, 0.06);
 }
 
 /* ── Chat composer (collapsed pill · expands on `/` or command output) ─ */

@@ -1,5 +1,8 @@
 /**
- * Toolbar — workspace shell: views, widgets, ops controls.
+ * Toolbar — workspace chrome: views, widgets, ops controls.
+ *
+ * View tabs are Poolside-style: active tab shares the elevated canvas plane
+ * (`.workspace-stage`); logo stays left of the strip.
  */
 
 import { ChevronDown, GripVertical, LayoutGrid, Plus, X } from "lucide-react"
@@ -94,17 +97,18 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
     : null
 
   return (
-    <header className="toolbar-shell relative z-20 flex h-14 shrink-0 select-none items-center gap-2 bg-canvas px-4 sm:gap-4 sm:px-6">
-      <div className="toolbar-brand flex h-9 shrink-0 items-center">
+    <header className="toolbar-shell relative z-20 flex shrink-0 select-none items-end gap-2 px-1 pt-2 sm:gap-3">
+      <div className="toolbar-brand mb-1.5 flex h-9 shrink-0 items-center self-center">
         <Logo size={CHAT_BRAND_LOGO_SIZE} online={connected} className="toolbar-brand-logo" />
       </div>
 
       <div
         ref={tabsRef}
-        className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto scrollbar-none"
+        className="view-tab-strip flex min-w-0 flex-1 items-end gap-0.5 overflow-x-auto scrollbar-none"
       >
         {views.map((view, index) => {
           const isDragging = draggingId === view.id
+          const isActive = view.id === activeViewId
 
           return (
             <Fragment key={view.id}>
@@ -115,10 +119,8 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
                 data-view-id={view.id}
                 {...(isDragging ? { "data-view-dragging": "" } : {})}
                 className={[
-                  "group relative flex h-9 shrink-0 cursor-grab items-center gap-1 rounded-lg px-2.5 text-[13px] transition-[opacity,background-color] active:cursor-grabbing",
-                  view.id === activeViewId
-                    ? "font-semibold text-text"
-                    : "text-text-muted hover:text-text-secondary",
+                  "view-tab group",
+                  isActive ? "view-tab--active" : "view-tab--inactive",
                   draggingId && !isDragging ? "view-tab-peer-dim" : "",
                   isDragging ? "view-tab-dragging" : "",
                 ].join(" ")}
@@ -132,12 +134,12 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
               >
                 <GripVertical
                   size={12}
-                  className="relative z-[2] shrink-0 text-text-faint opacity-0 transition-opacity group-hover:opacity-70"
+                  className="view-tab__grip relative z-[2] shrink-0"
                   aria-hidden
                 />
                 {editing === view.id ? (
                   <input
-                    className="bg-transparent border-none outline-none text-[13px] text-text w-24"
+                    className="relative z-[2] w-24 border-none bg-transparent text-[13px] text-text outline-none"
                     value={editName}
                     onChange={(e) => setEditName(e.target.value)}
                     onBlur={() => handleRename(view.id)}
@@ -150,12 +152,12 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
                     onPointerDown={(e) => e.stopPropagation()}
                   />
                 ) : (
-                  <span className="relative z-[2] whitespace-nowrap">{view.name}</span>
+                  <span className="view-tab__label relative z-[2] whitespace-nowrap">{view.name}</span>
                 )}
                 {views.length > 1 && (
                   <button
                     type="button"
-                    className="relative z-[2] ml-0.5 text-text-muted opacity-0 group-hover:opacity-60 hover:!opacity-100"
+                    className="view-tab__close relative z-[2]"
                     onClick={(e) => {
                       e.stopPropagation()
                       removeView(view.id)
@@ -176,7 +178,7 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
 
         <button
           type="button"
-          className="ml-1 flex h-7 w-7 shrink-0 items-center justify-center rounded text-text-muted transition-colors hover:text-text"
+          className="view-tab-add mb-1 ml-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-overlay-hover hover:text-text"
           onClick={() => addView(`View ${views.length + 1}`)}
           title="Add view"
         >
@@ -185,7 +187,7 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
       </div>
 
       {tabsOverflow && (
-        <div className="relative shrink-0" ref={moreRef}>
+        <div className="relative mb-1.5 shrink-0 self-center" ref={moreRef}>
           <button
             type="button"
             className="flex h-9 items-center gap-1 rounded-lg px-2 text-[13px] text-text-muted transition-colors hover:bg-overlay-hover hover:text-text"
@@ -220,7 +222,7 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
         </div>
       )}
 
-      <div className="flex shrink-0 items-center gap-1">
+      <div className="mb-1.5 flex shrink-0 items-center gap-1 self-center">
         {onAddWidget && (
           <>
             <button
