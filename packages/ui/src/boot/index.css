@@ -6977,7 +6977,8 @@ textarea.input {
 .intro3-root--hero .intro3-brand-sequence,
 .intro3-brand-sequence--pinching,
 .intro3-brand-sequence--open:not(.intro3-brand-sequence--live),
-.intro3-brand-sequence--resolving {
+.intro3-brand-sequence--resolving,
+.intro3-brand-sequence--resolve-shift {
   --wm-letter-h: 21px; /* 20 × 1.05 */
   gap: 4px;
 }
@@ -6991,7 +6992,8 @@ textarea.input {
   .intro3-root--hero .intro3-brand-sequence,
   .intro3-brand-sequence--pinching,
   .intro3-brand-sequence--open:not(.intro3-brand-sequence--live),
-  .intro3-brand-sequence--resolving {
+  .intro3-brand-sequence--resolving,
+  .intro3-brand-sequence--resolve-shift {
     --wm-letter-h: 24px; /* 23 × 1.05 */
     gap: 5px;
   }
@@ -7026,21 +7028,27 @@ textarea.input {
 /* Colon scale ≈ letter-h / 17 so cap heights match (20/17≈1.18, 22/17≈1.29). */
 .intro3-root--hero .intro3-wm-colon-anchor,
 .intro3-brand-sequence--pinching .intro3-wm-colon-anchor,
-.intro3-brand-sequence--open:not(.intro3-brand-sequence--live):not(.intro3-brand-sequence--resolving) .intro3-wm-colon-anchor {
+.intro3-brand-sequence--open:not(.intro3-brand-sequence--live):not(.intro3-brand-sequence--resolving):not(.intro3-brand-sequence--resolve-shift) .intro3-wm-colon-anchor {
   transform: scale(calc(var(--wm-letter-h) / 17px));
   margin-inline: 1px;
 }
 .intro3-brand-sequence--resolving .intro3-wm-colon-anchor {
-  /* Still at lockup size; layout already settling to solo : — no later sideways jump. */
+  /* Beat 1 — letters fade; colon stays lockup size and in place. */
+  transform: scale(calc(var(--wm-letter-h) / 17px));
+  margin-inline: 1px;
+  transition: none;
+}
+.intro3-brand-sequence--resolve-shift .intro3-wm-colon-anchor {
+  /* Beat 2 — slots collapse; colon slides into solo spot, still lockup size. */
   transform: scale(calc(var(--wm-letter-h) / 17px));
   margin-inline: 0;
-  transition:
-    transform 320ms cubic-bezier(0.37, 0, 0.63, 1),
-    margin-inline 200ms linear;
+  transition: margin-inline 280ms cubic-bezier(0.37, 0, 0.63, 1);
 }
 .intro3-brand-sequence--live .intro3-wm-colon-anchor {
+  /* Beat 3 — only now ease into the platform colon shape. */
   transform: scale(1);
   margin-inline: 0;
+  transition: transform 420ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 /*
@@ -7148,13 +7156,13 @@ textarea.input {
   width: var(--wm-a-w);
   opacity: 1;
 }
-.intro3-brand-sequence--open:not(.intro3-brand-sequence--pinching):not(.intro3-brand-sequence--resolving):not(.intro3-brand-sequence--live) .intro3-wm-clay {
+.intro3-brand-sequence--open:not(.intro3-brand-sequence--pinching):not(.intro3-brand-sequence--resolving):not(.intro3-brand-sequence--resolve-shift):not(.intro3-brand-sequence--live) .intro3-wm-clay {
   opacity: 1;
 }
-.intro3-brand-sequence--open:not(.intro3-brand-sequence--pinching):not(.intro3-brand-sequence--resolving):not(.intro3-brand-sequence--live) .intro3-wm-clay-plate {
+.intro3-brand-sequence--open:not(.intro3-brand-sequence--pinching):not(.intro3-brand-sequence--resolving):not(.intro3-brand-sequence--resolve-shift):not(.intro3-brand-sequence--live) .intro3-wm-clay-plate {
   opacity: 0;
 }
-.intro3-brand-sequence--open:not(.intro3-brand-sequence--pinching):not(.intro3-brand-sequence--resolving):not(.intro3-brand-sequence--live) .intro3-wm-clay-glyph {
+.intro3-brand-sequence--open:not(.intro3-brand-sequence--pinching):not(.intro3-brand-sequence--resolving):not(.intro3-brand-sequence--resolve-shift):not(.intro3-brand-sequence--live) .intro3-wm-clay-glyph {
   opacity: 1;
 }
 
@@ -7192,23 +7200,38 @@ textarea.input {
 }
 
 /*
- * Resolve — fade MI:A and collapse their width while colon stays large.
- * Then --live only scales : down in its final spot (no resize-then-slide).
+ * Resolve — three beats (never resize : while it is still sliding):
+ *   1) --resolving      fade MI:A; slots keep width so colon stays put
+ *   2) --resolve-shift  collapse slots; colon moves into solo position (still lockup size)
+ *   3) --live           ease colon scale → platform mark
  */
 .intro3-brand-sequence--resolving.intro3-brand-sequence--open .intro3-wm-slot,
 .intro3-brand-sequence--resolving.intro3-brand-sequence--open .intro3-wm-slot--pre,
 .intro3-brand-sequence--resolving.intro3-brand-sequence--open .intro3-wm-slot--post {
   opacity: 0;
+  /* Keep width — colon must not slide while letters are still fading. */
+  pointer-events: none;
+  transition: opacity 180ms linear;
+}
+.intro3-brand-sequence--resolving.intro3-brand-sequence--open .intro3-wm-clay {
+  opacity: 0;
+  transition: opacity 180ms linear;
+}
+
+.intro3-brand-sequence--resolve-shift.intro3-brand-sequence--open .intro3-wm-slot,
+.intro3-brand-sequence--resolve-shift.intro3-brand-sequence--open .intro3-wm-slot--pre,
+.intro3-brand-sequence--resolve-shift.intro3-brand-sequence--open .intro3-wm-slot--post {
+  opacity: 0;
   width: 0;
   overflow: hidden;
   pointer-events: none;
   transition:
-    opacity 160ms linear,
-    width 200ms cubic-bezier(0.37, 0, 0.63, 1);
+    width 280ms cubic-bezier(0.37, 0, 0.63, 1),
+    opacity 80ms linear;
 }
-.intro3-brand-sequence--resolving.intro3-brand-sequence--open .intro3-wm-clay {
+.intro3-brand-sequence--resolve-shift.intro3-brand-sequence--open .intro3-wm-clay {
   opacity: 0;
-  transition: opacity 160ms linear;
+  transition: none;
 }
 
 .intro3-brand-sequence--live.intro3-brand-sequence--open .intro3-wm-slot--pre,

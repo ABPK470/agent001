@@ -16,8 +16,10 @@ const HOLD_BEFORE_PINCH_MS = 200
 /** Meet + shed/carve — keep in sync with clay + pinch-shed CSS. */
 const PINCH_MS = 1200
 const HOLD_AFTER_CARVE_MS = 160
-/** Fade + collapse MI:A, then scale : in place — matches CSS resolve. */
-const RESOLVE_MS = 220
+/** Resolve beat 1 — fade MI:A only (slots keep width so : does not slide yet). */
+const RESOLVE_FADE_MS = 180
+/** Resolve beat 2 — collapse letter slots; colon moves into solo spot. */
+const RESOLVE_SHIFT_MS = 280
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => window.setTimeout(r, ms))
@@ -29,6 +31,7 @@ type BrandPhase =
   | "pinch"
   | "open"
   | "resolve"
+  | "resolveShift"
   | "live"
 
 function lettersVisibleIn(phase: BrandPhase): boolean {
@@ -99,15 +102,38 @@ export function IntroBrandWordmark({
 
   function goColonOnly(from: BrandPhase) {
     setColonHandoff(false)
-    if (lettersVisibleIn(from)) {
-      setPhase("resolve")
+    if (from === "live") {
+      markBrandReady()
+      return
+    }
+    // Never showed MI:A — jump straight to platform colon.
+    if (from === "boot" || from === "colon") {
+      setPhase("live")
+      markBrandReady()
+      return
+    }
+    if (from === "resolveShift") {
+      setPhase("live")
+      markBrandReady()
+      return
+    }
+    if (from === "resolve") {
+      setPhase("resolveShift")
       window.setTimeout(() => {
         setPhase("live")
-      }, RESOLVE_MS)
-    } else {
-      setPhase("live")
+        markBrandReady()
+      }, RESOLVE_SHIFT_MS)
+      return
     }
-    markBrandReady()
+    // pinch | open — sequenced resolve.
+    setPhase("resolve")
+    window.setTimeout(() => {
+      setPhase("resolveShift")
+      window.setTimeout(() => {
+        setPhase("live")
+        markBrandReady()
+      }, RESOLVE_SHIFT_MS)
+    }, RESOLVE_FADE_MS)
   }
 
   useEffect(() => {
@@ -216,12 +242,14 @@ export function IntroBrandWordmark({
     phase === "pinch"
     || phase === "open"
     || phase === "resolve"
+    || phase === "resolveShift"
     || phase === "live"
 
   /** Purple mark while MI:A is up; idle rotate only when letters are gone. */
   const colonAccent =
     phase === "open"
     || phase === "resolve"
+    || phase === "resolveShift"
     || phase === "live"
   const colonOnline = phase === "live"
 
@@ -230,6 +258,7 @@ export function IntroBrandWordmark({
     lettersSeated ? "intro3-brand-sequence--open" : "intro3-brand-sequence--closed",
     phase === "pinch" ? "intro3-brand-sequence--pinching" : "",
     phase === "resolve" ? "intro3-brand-sequence--resolving" : "",
+    phase === "resolveShift" ? "intro3-brand-sequence--resolve-shift" : "",
     phase === "live" ? "intro3-brand-sequence--live" : "",
   ].filter(Boolean).join(" ")
 
