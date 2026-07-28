@@ -12,8 +12,8 @@ import { memo, useId, type CSSProperties, type SVGProps } from "react"
 /** Lockup metrics — shared by intro CSS (`--wm-mi-w` / `--wm-a-w` ratios). */
 export const BRAND_LETTER_CONFIG = {
   /** Matches Logo colon block corner radius. */
-  rx: 2.5,
-  /** Stem / diagonal weight — slightly under colon block (10) for open counters. */
+  rx: 3,
+  /** Stem / diagonal weight — slightly under colon block (9) for open counters. */
   bar: 7,
   height: 32,
   miWidth: 50,

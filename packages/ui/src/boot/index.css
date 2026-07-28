@@ -6971,16 +6971,22 @@ textarea.input {
   --wm-letter-h: 17px;
   --wm-mi-w: calc(var(--wm-letter-h) * 50 / 32);
   --wm-a-w: calc(var(--wm-letter-h) * 34 / 32);
+  /* Gap must ease with slot collapse — a snap on --live jumps the colon. */
+  transition: gap 280ms cubic-bezier(0.37, 0, 0.63, 1);
 }
 
 /* Seated MI:A — prior seated × 1.05. */
 .intro3-root--hero .intro3-brand-sequence,
 .intro3-brand-sequence--pinching,
-.intro3-brand-sequence--open:not(.intro3-brand-sequence--live),
-.intro3-brand-sequence--resolving,
-.intro3-brand-sequence--resolve-shift {
+.intro3-brand-sequence--open:not(.intro3-brand-sequence--live):not(.intro3-brand-sequence--resolve-shift),
+.intro3-brand-sequence--resolving {
   --wm-letter-h: 21px; /* 20 × 1.05 */
   gap: 4px;
+}
+/* Beat 2 — slots + gap collapse together so solo colon already sits at rest. */
+.intro3-brand-sequence--resolve-shift {
+  --wm-letter-h: 21px;
+  gap: 0;
 }
 .intro3-brand-sequence--live {
   --wm-letter-h: 17px;
@@ -6991,11 +6997,14 @@ textarea.input {
 @media (min-width: 640px) {
   .intro3-root--hero .intro3-brand-sequence,
   .intro3-brand-sequence--pinching,
-  .intro3-brand-sequence--open:not(.intro3-brand-sequence--live),
-  .intro3-brand-sequence--resolving,
-  .intro3-brand-sequence--resolve-shift {
+  .intro3-brand-sequence--open:not(.intro3-brand-sequence--live):not(.intro3-brand-sequence--resolve-shift),
+  .intro3-brand-sequence--resolving {
     --wm-letter-h: 24px; /* 23 × 1.05 */
     gap: 5px;
+  }
+  .intro3-brand-sequence--resolve-shift {
+    --wm-letter-h: 24px;
+    gap: 0;
   }
 }
 
@@ -7039,7 +7048,8 @@ textarea.input {
   transition: none;
 }
 .intro3-brand-sequence--resolve-shift .intro3-wm-colon-anchor {
-  /* Beat 2 — slots collapse; colon slides into solo spot, still lockup size. */
+  /* Beat 2 — slots + gap collapse; colon slides into solo spot, still lockup size.
+   * Final layout here must match --live (gap 0, margin 0) so scale-down doesn’t jump. */
   transform: scale(calc(var(--wm-letter-h) / 17px));
   margin-inline: 0;
   transition: margin-inline 280ms cubic-bezier(0.37, 0, 0.63, 1);

@@ -20,10 +20,13 @@ interface Props {
 
 const VIEWBOX_WIDTH = 24
 const VIEWBOX_HEIGHT = 32
-const BLOCK_X = 7
-const BLOCK_WIDTH = 10
-const BLOCK_HEIGHT = 12
-const BLOCK_GAP = 8
+/** Centered in the 24-wide grid. */
+const BLOCK_X = 7.5
+/** Tall rounded lozenges — rectangular, not square pills. */
+const BLOCK_WIDTH = 9
+const BLOCK_HEIGHT = 13
+const BLOCK_GAP = 6
+const BLOCK_RX = 3
 
 export function Logo({ size = 32, online = false, working = false, className }: Props) {
   const width = Math.round((size * VIEWBOX_WIDTH) / VIEWBOX_HEIGHT)
@@ -50,7 +53,7 @@ export function Logo({ size = 32, online = false, working = false, className }: 
         y={0}
         width={BLOCK_WIDTH}
         height={BLOCK_HEIGHT}
-        rx={2.5}
+        rx={BLOCK_RX}
       />
       <rect
         className="mia-colon-logo-dot mia-colon-logo-dot--bottom"
@@ -58,7 +61,7 @@ export function Logo({ size = 32, online = false, working = false, className }: 
         y={BLOCK_HEIGHT + BLOCK_GAP}
         width={BLOCK_WIDTH}
         height={BLOCK_HEIGHT}
-        rx={2.5}
+        rx={BLOCK_RX}
       />
     </svg>
   )
