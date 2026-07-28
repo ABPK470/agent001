@@ -4233,15 +4233,18 @@ textarea.input {
   opacity: 0.88;
 }
 
-/* ── Workspace attached tabs (Poolside elevated plane) ─────────────
- * Chrome on --canvas. Active tab + stage share a lighter plane (--panel-2).
- * No frame border — separation is soft elevation only. Scoops join tab→sheet.
- * Do not reuse widget `.workspace-shell` here.
+/* ── Workspace attached tabs ───────────────────────────────────────
+ * Same base fill (--canvas). One continuous border frames active tab +
+ * stage. Concave scoops join tab → content (Poolside). Stage keeps
+ * rounded corners like the widgets. Do not reuse widget `.workspace-shell`.
  */
 .workspace-chrome {
-  --workspace-plane: var(--panel-2);
+  --workspace-plane: var(--canvas);
   --workspace-chrome: var(--canvas);
+  --workspace-border: var(--border);
   --tab-scoop: 10px;
+  --tab-radius: 0.7rem;
+  --stage-radius: 0.85rem;
   background: var(--workspace-chrome);
   padding: 0 0.75rem 0.75rem;
   box-sizing: border-box;
@@ -4255,17 +4258,9 @@ textarea.input {
   min-height: 0;
   flex: 1;
   background: var(--workspace-plane);
-  border-radius: 0.85rem;
-  box-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.04),
-    0 8px 28px rgba(0, 0, 0, 0.06);
+  border: 1px solid var(--workspace-border);
+  border-radius: var(--stage-radius);
   overflow: hidden;
-}
-
-:root[data-theme="dark"] .workspace-stage {
-  box-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.35),
-    0 12px 36px rgba(0, 0, 0, 0.45);
 }
 
 .toolbar-shell {
@@ -4279,6 +4274,7 @@ textarea.input {
   position: relative;
   z-index: 1;
   min-height: 2.25rem;
+  /* Room for scoops so overflow does not clip the flares. */
   padding-inline: var(--tab-scoop);
   margin-inline: calc(-1 * var(--tab-scoop));
 }
@@ -4293,11 +4289,10 @@ textarea.input {
   padding: 0 0.75rem 0 0.5rem;
   font-size: 13px;
   line-height: 1.25;
-  border-radius: 0.7rem 0.7rem 0 0;
+  border-radius: var(--tab-radius) var(--tab-radius) 0 0;
   cursor: grab;
   user-select: none;
   transition:
-    background-color 140ms ease,
     color 140ms ease,
     opacity 140ms ease;
 }
@@ -4313,7 +4308,7 @@ textarea.input {
 
 .view-tab--inactive:hover {
   color: var(--text-secondary);
-  background: color-mix(in srgb, var(--workspace-plane) 38%, transparent);
+  background: color-mix(in srgb, var(--text) 5%, transparent);
 }
 
 .view-tab--active {
@@ -4321,9 +4316,19 @@ textarea.input {
   color: var(--text);
   font-weight: 600;
   background: var(--workspace-plane);
+  border: 1px solid var(--workspace-border);
+  border-bottom: none;
+  /* Overlap the stage top stroke; paint over it so the tab opens into content. */
+  margin-bottom: -1px;
+  padding-bottom: 1px;
+  box-shadow: 0 1px 0 0 var(--workspace-plane);
 }
 
-/* Concave corners — no stroke; chrome cutout + plane fill. */
+/*
+ * Concave corners (Poolside): chrome scoop + diagonal plane shadow covers
+ * the tab’s square corner. Scoop borders carry the frame into the stage
+ * top edge — never a closed bottom on the tab.
+ */
 .view-tab--active::before,
 .view-tab--active::after {
   content: "";
@@ -4332,24 +4337,27 @@ textarea.input {
   width: var(--tab-scoop);
   height: var(--tab-scoop);
   background: var(--workspace-chrome);
+  border-style: solid;
+  border-color: var(--workspace-border);
   pointer-events: none;
   z-index: 0;
 }
 
 .view-tab--active::before {
   left: calc(-1 * var(--tab-scoop));
+  border-width: 0 1px 1px 0;
   border-bottom-right-radius: var(--tab-scoop);
   box-shadow: 2px 2px 0 0 var(--workspace-plane);
 }
 
 .view-tab--active::after {
   right: calc(-1 * var(--tab-scoop));
+  border-width: 0 0 1px 1px;
   border-bottom-left-radius: var(--tab-scoop);
   box-shadow: -2px 2px 0 0 var(--workspace-plane);
 }
 
-/* Floating drag preview — the real tab shape, sliding on the strip (Chrome).
- * Same silhouette as .view-tab--active (top radii + scoops). Not a pill/card. */
+/* Floating drag preview — same attached-tab silhouette. */
 .view-tab-strip[data-reordering] {
   overflow: visible;
 }
@@ -4361,9 +4369,10 @@ textarea.input {
   z-index: 5;
   height: 2.25rem;
   margin: 0;
+  padding-bottom: 0;
   pointer-events: none;
   cursor: grabbing;
-  border-radius: 0.7rem 0.7rem 0 0;
+  border-radius: var(--tab-radius) var(--tab-radius) 0 0;
   box-shadow: none;
 }
 
@@ -4371,6 +4380,8 @@ textarea.input {
   color: var(--text);
   font-weight: 600;
   background: var(--workspace-plane);
+  border: 1px solid var(--workspace-border);
+  border-bottom: none;
 }
 
 .view-tab--float.view-tab--inactive::before,
@@ -4381,18 +4392,22 @@ textarea.input {
   width: var(--tab-scoop);
   height: var(--tab-scoop);
   background: var(--workspace-chrome);
+  border-style: solid;
+  border-color: var(--workspace-border);
   pointer-events: none;
   z-index: 0;
 }
 
 .view-tab--float.view-tab--inactive::before {
   left: calc(-1 * var(--tab-scoop));
+  border-width: 0 1px 1px 0;
   border-bottom-right-radius: var(--tab-scoop);
   box-shadow: 2px 2px 0 0 var(--workspace-plane);
 }
 
 .view-tab--float.view-tab--inactive::after {
   right: calc(-1 * var(--tab-scoop));
+  border-width: 0 0 1px 1px;
   border-bottom-left-radius: var(--tab-scoop);
   box-shadow: -2px 2px 0 0 var(--workspace-plane);
 }
