@@ -44,4 +44,29 @@ describe("beginOptimisticRun", () => {
     expect(active?.id).toBe("run-live")
     expect(active?.status).toBe(RunStatus.Pending)
   })
+
+  it("appends a second goal on the same thread and selects it (chat transcript source)", () => {
+    useStore.getState().beginOptimisticRun({
+      id: "run-1",
+      goal: "First",
+      threadId: "thread-1",
+    })
+    useStore.getState().upsertRun({
+      id: "run-1",
+      status: RunStatus.Completed,
+      completedAt: new Date().toISOString(),
+    })
+
+    useStore.getState().beginOptimisticRun({
+      id: "run-2",
+      goal: "Second goal",
+      threadId: "thread-1",
+    })
+
+    const state = useStore.getState()
+    expect(state.activeRunId).toBe("run-2")
+    const threadRuns = state.runs.filter((r) => r.threadId === "thread-1")
+    expect(threadRuns.map((r) => r.id)).toEqual(expect.arrayContaining(["run-1", "run-2"]))
+    expect(threadRuns.find((r) => r.id === "run-2")?.goal).toBe("Second goal")
+  })
 })

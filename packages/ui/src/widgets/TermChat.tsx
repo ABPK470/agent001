@@ -94,6 +94,7 @@ import {
 import { ChatFoldBody } from "./termchat/ChatFoldBody"
 import { shouldAutoOpenWorkChip } from "./termchat/workChipFold"
 import { collapseResumeRunChains, resumeChainIds } from "./termchat/collapseResumeChains"
+import { planRevealRunInTranscript } from "./termchat/revealRunInTranscript"
 
 // Local cap mirrors the Fastify route limit. Larger files get a friendly
 // inline error instead of round-tripping for a 413.
@@ -2296,7 +2297,9 @@ export function TermChat({
       )
       useStore.getState().revealThreadTitleFromGoal(threadId, effectiveGoal)
       setScrollToRunId(runId)
-      requestAnimationFrame(() => scrollToBottom("instant", { stick: true }))
+      // Reveal is effect-driven (scrollToRunId + displayRuns) so VirtualList
+      // scrollToIndex runs after the new turn is in displayRuns — not here
+      // with a stale closure that only scrollHeights.
       // Only clear chips after a successful start so the user doesn't
       // lose context if the request failed mid-flight.
       setPendingAttachments([])
@@ -2312,7 +2315,7 @@ export function TermChat({
     } finally {
       setSending(false)
     }
-  }, [input, sending, slashOnlyMode, setActiveRun, pendingAttachments, scrollToBottom, continuityThreadId, mode, tryDispatchSlash, clearDraft, setDraft, notifyError, isViewingAsOther])
+  }, [input, sending, slashOnlyMode, setActiveRun, pendingAttachments, continuityThreadId, mode, tryDispatchSlash, clearDraft, setDraft, notifyError, isViewingAsOther])
 
   const cancel = useCallback(async () => {
     if (isViewingAsOther) return
@@ -2457,6 +2460,7 @@ export function TermChat({
   const didSelectLatestRef = useRef(false)
   const didInitialAnchorRef = useRef(false)
   const hadActiveTraceRef = useRef(false)
+  const revealedScrollToRunIdRef = useRef<string | null>(null)
   const traceHydratingRef = useRef(new Set<string>())
 
   const hydrateRunTrace = useCallback(async (runId: string) => {
@@ -2523,6 +2527,7 @@ export function TermChat({
     didSelectLatestRef.current = false
     didInitialAnchorRef.current = false
     hadActiveTraceRef.current = false
+    revealedScrollToRunIdRef.current = null
   }, [me?.upn, mode, activeThreadId])
 
   // Same path as AgentChat: setActiveRun loads full trace + steps into the store.
@@ -2550,6 +2555,24 @@ export function TermChat({
     })
   }, [displayRuns.length, isRunning, streamingAnswer, scrollToBottom])
 
+  // New goal / slash resume: VirtualList must scrollToIndex the turn. scrollHeight
+  // stick alone leaves the latest turn unmounted after a tall prior run.
+  useEffect(() => {
+    if (!scrollToRunId) return
+    if (revealedScrollToRunIdRef.current === scrollToRunId) return
+    const plan = planRevealRunInTranscript(displayRuns, scrollToRunId)
+    if (!plan) return
+    revealedScrollToRunIdRef.current = scrollToRunId
+    resumeAutoFollow()
+    virtualListRef.current?.scrollToIndex(plan.index, { align: plan.align, behavior: "auto" })
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        virtualListRef.current?.scrollToIndex(plan.index, { align: plan.align, behavior: "auto" })
+        scrollToBottom("instant", { stick: true })
+      })
+    })
+  }, [scrollToRunId, displayRuns, resumeAutoFollow, scrollToBottom])
+
   // Re-settle once when the active run's trace first arrives from setActiveRun.
   useEffect(() => {
     if (!scopedActiveRunId || scopedActiveRunId !== latestDisplayRunId) {
@@ -2573,13 +2596,19 @@ export function TermChat({
 
   const jumpToLatest = useCallback(() => {
     resumeAutoFollow()
-    if (latestDisplayRunId) setActiveRun(latestDisplayRunId)
+    if (latestDisplayRunId) {
+      setActiveRun(latestDisplayRunId)
+      const plan = planRevealRunInTranscript(displayRuns, latestDisplayRunId)
+      if (plan) {
+        virtualListRef.current?.scrollToIndex(plan.index, { align: plan.align, behavior: "auto" })
+      }
+    }
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         scrollToBottom("instant", { stick: isRunning || Boolean(streamingAnswer) })
       })
     })
-  }, [latestDisplayRunId, setActiveRun, scrollToBottom, isRunning, streamingAnswer, resumeAutoFollow])
+  }, [latestDisplayRunId, setActiveRun, scrollToBottom, isRunning, streamingAnswer, resumeAutoFollow, displayRuns])
 
   const jumpToRun = useCallback((runId: string) => {
     suspendAutoFollow()
