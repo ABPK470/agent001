@@ -171,6 +171,10 @@ export function collectRunNavMarkers(
 /**
  * Which run the user is reading — walk transcript order (top→bottom) and take
  * the last run whose turn has reached the reading line in the scroll host.
+ *
+ * Under VirtualList, only a window of turns is mounted. Prefer live DOM when
+ * present; otherwise map scroll depth onto the full run index list so the
+ * minimap still points at the right place (including latest / last N runs).
  */
 export function pickNavRunInView(
   host: HTMLElement,
@@ -184,14 +188,22 @@ export function pickNavRunInView(
   const lineY = hostRect.top + Math.min(96, Math.max(56, hostRect.height * 0.16))
 
   let activeId = transcriptRunIds[0]!
+  let sawMounted = false
   for (const id of transcriptRunIds) {
     const turn = content.querySelector<HTMLElement>(`[data-run-id="${id}"]`)
     if (!turn) continue
+    sawMounted = true
     if (turn.getBoundingClientRect().top <= lineY) {
       activeId = id
     }
   }
-  return activeId
+  if (sawMounted) return activeId
+
+  const maxScroll = Math.max(0, host.scrollHeight - host.clientHeight)
+  if (maxScroll <= 0) return transcriptRunIds[0]!
+  const t = Math.max(0, Math.min(1, host.scrollTop / maxScroll))
+  const idx = Math.round(t * (transcriptRunIds.length - 1))
+  return transcriptRunIds[idx]!
 }
 
 /** @deprecated scroll-fraction picker — use pickNavRunInView for live scroll sync */

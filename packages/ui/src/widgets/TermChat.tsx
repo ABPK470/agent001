@@ -32,7 +32,7 @@ import {
   formatToolInputDisplay,
 } from "../components/tool-code-display"
 import { ScrollToLatestButton } from "../components/ScrollToLatestButton"
-import { VirtualList } from "../components/VirtualList"
+import { VirtualList, type VirtualListHandle } from "../components/VirtualList"
 import { Logo } from "../components/Logo"
 import { SmartAnswer } from "../components/SmartAnswer"
 import {
@@ -2128,6 +2128,7 @@ export function TermChat({
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const runRailScrollSyncRef = useRef<(() => void) | null>(null)
+  const virtualListRef = useRef<VirtualListHandle>(null)
   const [scrollToRunId, setScrollToRunId] = useState<string | null>(null)
   const [transcriptFadeTop, setTranscriptFadeTop] = useState(false)
   const [transcriptFadeBottom, setTranscriptFadeBottom] = useState(false)
@@ -2583,21 +2584,23 @@ export function TermChat({
   const jumpToRun = useCallback((runId: string) => {
     suspendAutoFollow()
     void hydrateRunTrace(runId).catch((err: unknown) => { console.error("[mia]", err) })
-    const host = scrollHostRef.current
-    // Virtual window may not have mounted this turn yet — park near the estimate first.
-    if (host) {
-      const index = displayRuns.findIndex((r) => r.id === runId)
-      if (index >= 0) {
-        host.scrollTop = Math.max(0, index * TERMCHAT_TURN_ESTIMATE_PX - 48)
-      }
+    const index = displayRuns.findIndex((r) => r.id === runId)
+    if (index < 0) return
+
+    // VirtualList only mounts a window — scrollToIndex brings the turn into
+    // the DOM; estimate+querySelector alone missed late runs (tall turns).
+    virtualListRef.current?.scrollToIndex(index, { align: "start", behavior: "auto" })
+
+    const settle = (): void => {
+      virtualListRef.current?.scrollToIndex(index, { align: "start", behavior: "auto" })
+      const host = scrollHostRef.current
+      const el =
+        host?.querySelector<HTMLElement>(`[data-run-id="${runId}"] [data-run-goal-anchor]`)
+        ?? host?.querySelector<HTMLElement>(`[data-run-id="${runId}"]`)
+      el?.scrollIntoView({ behavior: "auto", block: "start" })
     }
     requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        const el =
-          host?.querySelector<HTMLElement>(`[data-run-id="${runId}"] [data-run-goal-anchor]`)
-          ?? host?.querySelector<HTMLElement>(`[data-run-id="${runId}"]`)
-        el?.scrollIntoView({ behavior: "auto", block: "start" })
-      })
+      requestAnimationFrame(settle)
     })
   }, [suspendAutoFollow, scrollHostRef, hydrateRunTrace, displayRuns])
 
@@ -2794,6 +2797,7 @@ export function TermChat({
 
               {!showEmptyState && (
                 <VirtualList
+                  ref={virtualListRef}
                   items={displayRuns}
                   scrollRef={scrollHostRef}
                   estimateSize={() => TERMCHAT_TURN_ESTIMATE_PX}
@@ -2867,6 +2871,7 @@ export function TermChat({
           style={{ overflowAnchor: "none" }}
         >
           <VirtualList
+            ref={virtualListRef}
             items={displayRuns}
             scrollRef={scrollHostRef}
             estimateSize={() => TERMCHAT_TURN_ESTIMATE_PX}

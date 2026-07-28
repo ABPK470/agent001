@@ -5,12 +5,28 @@
 
 import { useVirtualizer } from "@tanstack/react-virtual"
 import {
+  forwardRef,
   useEffect,
+  useImperativeHandle,
   useRef,
   type CSSProperties,
+  type ForwardedRef,
+  type ReactElement,
   type ReactNode,
+  type Ref,
   type RefObject,
 } from "react"
+
+export interface VirtualListHandle {
+  /** Scroll so `index` enters the window (uses measured offsets when known). */
+  scrollToIndex: (
+    index: number,
+    options?: {
+      align?: "start" | "center" | "end" | "auto"
+      behavior?: "auto" | "smooth"
+    },
+  ) => void
+}
 
 export interface VirtualListProps<T> {
   items: readonly T[]
@@ -27,17 +43,20 @@ export interface VirtualListProps<T> {
   footer?: ReactNode
 }
 
-export function VirtualList<T>({
-  items,
-  estimateSize,
-  scrollRef: externalScrollRef,
-  className,
-  style,
-  overscan = 8,
-  getItemKey,
-  renderItem,
-  footer,
-}: VirtualListProps<T>) {
+function VirtualListInner<T>(
+  {
+    items,
+    estimateSize,
+    scrollRef: externalScrollRef,
+    className,
+    style,
+    overscan = 8,
+    getItemKey,
+    renderItem,
+    footer,
+  }: VirtualListProps<T>,
+  ref: ForwardedRef<VirtualListHandle>,
+) {
   const internalRef = useRef<HTMLDivElement>(null)
   const parentRef = (externalScrollRef ?? internalRef) as RefObject<HTMLElement | null>
   const ownsScroller = !externalScrollRef
@@ -51,6 +70,20 @@ export function VirtualList<T>({
       ? (index) => getItemKey(index, items[index]!)
       : undefined,
   })
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      scrollToIndex(index, options) {
+        if (index < 0 || index >= items.length) return
+        virtualizer.scrollToIndex(index, {
+          align: options?.align ?? "start",
+          behavior: options?.behavior ?? "auto",
+        })
+      },
+    }),
+    [virtualizer, items.length],
+  )
 
   const virtualItems = virtualizer.getVirtualItems()
 
@@ -108,3 +141,8 @@ export function VirtualList<T>({
     </div>
   )
 }
+
+/** Generic forwardRef wrapper — call sites keep the same JSX props. */
+export const VirtualList = forwardRef(VirtualListInner) as <T>(
+  props: VirtualListProps<T> & { ref?: Ref<VirtualListHandle> },
+) => ReactElement

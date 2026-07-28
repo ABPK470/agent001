@@ -105,6 +105,25 @@ describe("pickNavRunInView", () => {
     expect(pickNavRunInView(...mockTranscript(ids, offsets, 1200))).toBe("r2")
     expect(pickNavRunInView(...mockTranscript(ids, offsets, 1600))).toBe("r3")
   })
+
+  it("falls back to scroll-fraction index when no turns are mounted", () => {
+    const host = {
+      scrollTop: 0,
+      scrollHeight: 5000,
+      clientHeight: 600,
+      getBoundingClientRect: () => mockRect(100, 600),
+    } as HTMLElement
+    const content = {
+      querySelector: () => null,
+    } as unknown as HTMLElement
+    const many = Array.from({ length: 25 }, (_, i) => `r${i}`)
+
+    expect(pickNavRunInView(host, content, many)).toBe("r0")
+    host.scrollTop = 4400 // near bottom of 4400 maxScroll
+    expect(pickNavRunInView(host, content, many)).toBe("r24")
+    host.scrollTop = 2200
+    expect(pickNavRunInView(host, content, many)).toBe("r12")
+  })
 })
 
 describe("pickNavRunIdForScrollFraction", () => {
