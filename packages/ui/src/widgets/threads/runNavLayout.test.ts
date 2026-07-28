@@ -5,6 +5,7 @@ import {
   collectRunNavMarkers,
   hasRoomForRunMinimap,
   layoutRunNavBars,
+  measureMinimapViewportHeight,
   navBarIndexForRun,
   pickNavRunIdForScrollFraction,
   pickNavRunInView,
@@ -219,5 +220,27 @@ describe("hasRoomForRunMinimap", () => {
     expect(hasRoomForRunMinimap(1400)).toBe(true)
     expect(hasRoomForRunMinimap(1000)).toBe(false)
     expect(rightGutterPx(1400)).toBe(220)
+  })
+})
+
+describe("measureMinimapViewportHeight", () => {
+  it("returns host height when the composer is collapsed", () => {
+    const host = {
+      clientHeight: 800,
+      closest: () => null,
+    } as unknown as HTMLElement
+    expect(measureMinimapViewportHeight(host)).toBe(800)
+  })
+
+  it("adds the expanded composer height back so `/` does not trip the rail", () => {
+    const expand = { offsetHeight: 200, className: "chat-composer__expand" }
+    const shell = {
+      querySelector: (sel: string) => (sel === ".chat-composer__expand" ? expand : null),
+    }
+    const host = {
+      clientHeight: 600,
+      closest: () => shell,
+    } as unknown as HTMLElement
+    expect(measureMinimapViewportHeight(host)).toBe(800)
   })
 })

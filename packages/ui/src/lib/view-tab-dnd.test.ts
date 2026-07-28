@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest"
 import {
+  addButtonSlidePx,
+  clampFloatLeft,
   fullIndexFromRemainingSlot,
   markDragMoved,
+  peerSlidePx,
   remainingSlotFromPointer,
   resolveViewTabDrop,
   syntheticPeerRects,
@@ -44,11 +47,33 @@ describe("view-tab-dnd", () => {
     expect(fullIndexFromRemainingSlot(1, 3)).toBe(4)
   })
 
+  it("slides peers at or after the insert slot", () => {
+    expect(peerSlidePx(0, 1, 100, 4)).toBe(0)
+    expect(peerSlidePx(1, 1, 100, 4)).toBe(104)
+    expect(peerSlidePx(2, 1, 100, 4)).toBe(104)
+    expect(peerSlidePx(0, 0, 100, 4)).toBe(104)
+    expect(peerSlidePx(2, 3, 100, 4)).toBe(0)
+  })
+
+  it("keeps the add button after the visual tab row while dragging", () => {
+    expect(addButtonSlidePx(100, 4)).toBe(104)
+    expect(addButtonSlidePx(80, 2)).toBe(82)
+  })
+
+  it("clamps the float so it cannot pass the add button", () => {
+    expect(clampFloatLeft(50, 10, 200)).toBe(50)
+    expect(clampFloatLeft(5, 10, 200)).toBe(10)
+    expect(clampFloatLeft(250, 10, 200)).toBe(200)
+  })
+
   it("builds synthetic peer rects that ignore a live ghost", () => {
     const rects = syntheticPeerRects({
       originLeft: 100,
+      originTop: 20,
       gapPx: 4,
       peerWidths: [80, 90],
+      maxFloatLeftPx: 200,
+      minFloatLeftPx: 10,
     })
     expect(rects).toEqual([
       { left: 100, width: 80 },
@@ -56,18 +81,27 @@ describe("view-tab-dnd", () => {
     ])
     expect(remainingSlotFromPointer({
       originLeft: 100,
+      originTop: 20,
       gapPx: 4,
       peerWidths: [80, 90],
+      maxFloatLeftPx: 200,
+      minFloatLeftPx: 10,
     }, 120)).toBe(0)
     expect(remainingSlotFromPointer({
       originLeft: 100,
+      originTop: 20,
       gapPx: 4,
       peerWidths: [80, 90],
+      maxFloatLeftPx: 200,
+      minFloatLeftPx: 10,
     }, 200)).toBe(1)
     expect(remainingSlotFromPointer({
       originLeft: 100,
+      originTop: 20,
       gapPx: 4,
       peerWidths: [80, 90],
+      maxFloatLeftPx: 200,
+      minFloatLeftPx: 10,
     }, 300)).toBe(2)
   })
 
@@ -79,6 +113,8 @@ describe("view-tab-dnd", () => {
       pointerId: 1,
       hasMoved: false,
       widthPx: 96,
+      grabOffsetX: 20,
+      floatTop: 40,
       peerStrip: null,
     }
     expect(markDragMoved(drag, 14, 10)).toBe(false)
@@ -94,6 +130,8 @@ describe("view-tab-dnd", () => {
       pointerId: 1,
       hasMoved: true,
       widthPx: 96,
+      grabOffsetX: 20,
+      floatTop: 40,
       peerStrip: null,
     }
     expect(resolveViewTabDrop(drag, 2, 0)).toEqual({
@@ -111,6 +149,8 @@ describe("view-tab-dnd", () => {
       pointerId: 1,
       hasMoved: false,
       widthPx: 96,
+      grabOffsetX: 20,
+      floatTop: 40,
       peerStrip: null,
     }
     expect(resolveViewTabDrop(drag, 1, 0)).toEqual({

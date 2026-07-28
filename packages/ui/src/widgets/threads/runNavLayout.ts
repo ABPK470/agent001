@@ -257,14 +257,20 @@ export function activeBarIndexForRun(
 }
 
 export function chatChromeDockTop(host: HTMLElement): number {
-  const chrome = host.closest(".chathome-thread-body")?.querySelector<HTMLElement>(".chathome-thread-chrome")
-  const inputDock = host.closest(".termchat-home-shell")?.querySelector<HTMLElement>(".termchat-input-dock")
-
-  const chromeRect = chrome?.getBoundingClientRect()
+  // Center on the transcript viewport. Do not use the input dock top — when the
+  // slash palette expands in-flow it moves the dock and falsely shifts the rail.
   const hostRect = host.getBoundingClientRect()
-  const dockRect = inputDock?.getBoundingClientRect()
+  return hostRect.top + hostRect.height / 2
+}
 
-  const topBound = chromeRect?.bottom ?? hostRect.top
-  const bottomBound = dockRect?.top ?? hostRect.bottom
-  return topBound + (bottomBound - topBound) / 2
+/**
+ * Viewport height for minimap eligibility. When the composer palette expands
+ * it steals flex space from the transcript; add that height back so opening
+ * `/` does not suddenly trip the multi-screen threshold.
+ */
+export function measureMinimapViewportHeight(host: HTMLElement): number {
+  const shell = host.closest(".termchat-home-shell")
+  const expand = shell?.querySelector<HTMLElement>(".chat-composer__expand")
+  if (!expand) return host.clientHeight
+  return host.clientHeight + expand.offsetHeight
 }

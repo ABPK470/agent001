@@ -2,14 +2,15 @@
  * Toolbar — workspace chrome: views, widgets, ops controls.
  *
  * View tabs are Poolside-style: active tab shares the elevated canvas plane
- * (`.workspace-stage`); logo stays left of the strip.
+ * (`.workspace-stage`); logo stays left of the strip. Reorder is Chrome-like
+ * (floating tab + sliding peers).
  */
 
 import { ChevronDown, GripVertical, LayoutGrid, Plus, X } from "lucide-react"
-import { Fragment, useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import type { Me } from "../../hooks/useMe"
 import { useViewTabReorder } from "../../hooks/useViewTabReorder"
-import { fullIndexFromRemainingSlot } from "../../lib/view-tab-dnd"
+import { peerSlidePx, addButtonSlidePx } from "../../lib/view-tab-dnd"
 import { SessionMenu } from "../SessionMenu"
 import { ViewingAsControl } from "../ViewingAsControl"
 import { CHAT_BRAND_LOGO_SIZE } from "../brand"
@@ -18,7 +19,7 @@ import { useStore } from "../../state/store"
 import { useLayoutStore } from "../../state/layout-store"
 import { Logo } from "../../components/Logo"
 import { NotificationPanel } from "../../widgets/platform/NotificationPanel"
-import { ViewTabDropMarker } from "./ViewTabDropMarker"
+import { ViewTabDragFloat } from "./ViewTabDragFloat"
 
 interface Props {
   onAddWidget?: () => void
@@ -45,6 +46,8 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
     draggingId,
     dropSlot,
     dragWidthPx,
+    gapPx,
+    float,
     onTabPointerDown,
     onTabPointerMove,
     onTabPointerUp,
@@ -90,11 +93,7 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
     setEditing(null)
   }
 
-  const dragView = draggingId ? views.find((v) => v.id === draggingId) : null
-  const fromIndex = dragView ? views.findIndex((v) => v.id === dragView.id) : -1
-  const ghostAt = dropSlot != null && fromIndex >= 0
-    ? fullIndexFromRemainingSlot(fromIndex, dropSlot)
-    : null
+  let peerIndex = 0
 
   return (
     <header className="toolbar-shell relative z-20 flex shrink-0 select-none items-end gap-2 px-1 pt-2 sm:gap-3">
@@ -105,85 +104,95 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
       <div
         ref={tabsRef}
         className="view-tab-strip flex min-w-0 flex-1 items-end gap-0.5 overflow-x-auto scrollbar-none"
+        {...(draggingId ? { "data-reordering": "" } : {})}
       >
-        {views.map((view, index) => {
+        {views.map((view) => {
           const isDragging = draggingId === view.id
           const isActive = view.id === activeViewId
+          const slide = !isDragging && draggingId && dropSlot != null
+            ? peerSlidePx(peerIndex, dropSlot, dragWidthPx, gapPx)
+            : 0
+          if (!isDragging) peerIndex += 1
 
           return (
-            <Fragment key={view.id}>
-              {ghostAt === index && dragView && (
-                <ViewTabDropMarker name={dragView.name} widthPx={dragWidthPx} />
-              )}
-              <div
-                data-view-id={view.id}
-                {...(isDragging ? { "data-view-dragging": "" } : {})}
-                className={[
-                  "view-tab group",
-                  isActive ? "view-tab--active" : "view-tab--inactive",
-                  draggingId && !isDragging ? "view-tab-peer-dim" : "",
-                  isDragging ? "view-tab-dragging" : "",
-                ].join(" ")}
-                onPointerDown={(event) => onTabPointerDown(view.id, event)}
-                onPointerMove={onTabPointerMove}
-                onPointerUp={onTabPointerUp}
-                onPointerCancel={onTabPointerCancel}
-                onLostPointerCapture={onTabLostPointerCapture}
-                onDoubleClick={() => handleDoubleClick(view.id, view.name)}
-                title="Click to open · drag to reorder"
-              >
-                <GripVertical
-                  size={12}
-                  className="view-tab__grip relative z-[2] shrink-0"
-                  aria-hidden
+            <div
+              key={view.id}
+              data-view-id={view.id}
+              {...(isDragging ? { "data-view-dragging": "" } : {})}
+              className={[
+                "view-tab group",
+                isActive ? "view-tab--active" : "view-tab--inactive",
+                draggingId && !isDragging ? "view-tab-peer-dim" : "",
+                isDragging ? "view-tab-dragging" : "",
+              ].join(" ")}
+              style={
+                draggingId && !isDragging
+                  ? { transform: `translateX(${slide}px)` }
+                  : undefined
+              }
+              onPointerDown={(event) => onTabPointerDown(view.id, event)}
+              onPointerMove={onTabPointerMove}
+              onPointerUp={onTabPointerUp}
+              onPointerCancel={onTabPointerCancel}
+              onLostPointerCapture={onTabLostPointerCapture}
+              onDoubleClick={() => handleDoubleClick(view.id, view.name)}
+              title="Click to open · drag to reorder"
+            >
+              <GripVertical
+                size={12}
+                className="view-tab__grip relative z-[2] shrink-0"
+                aria-hidden
+              />
+              {editing === view.id ? (
+                <input
+                  className="relative z-[2] w-24 border-none bg-transparent text-[13px] text-text outline-none"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  onBlur={() => handleRename(view.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleRename(view.id)
+                    if (e.key === "Escape") setEditing(null)
+                  }}
+                  autoFocus
+                  onClick={(e) => e.stopPropagation()}
+                  onPointerDown={(e) => e.stopPropagation()}
                 />
-                {editing === view.id ? (
-                  <input
-                    className="relative z-[2] w-24 border-none bg-transparent text-[13px] text-text outline-none"
-                    value={editName}
-                    onChange={(e) => setEditName(e.target.value)}
-                    onBlur={() => handleRename(view.id)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") handleRename(view.id)
-                      if (e.key === "Escape") setEditing(null)
-                    }}
-                    autoFocus
-                    onClick={(e) => e.stopPropagation()}
-                    onPointerDown={(e) => e.stopPropagation()}
-                  />
-                ) : (
-                  <span className="view-tab__label relative z-[2] whitespace-nowrap">{view.name}</span>
-                )}
-                {views.length > 1 && (
-                  <button
-                    type="button"
-                    className="view-tab__close relative z-[2]"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      removeView(view.id)
-                    }}
-                    onPointerDown={(e) => e.stopPropagation()}
-                    title="Close view"
-                  >
-                    <X size={14} />
-                  </button>
-                )}
-              </div>
-            </Fragment>
+              ) : (
+                <span className="view-tab__label relative z-[2] whitespace-nowrap">{view.name}</span>
+              )}
+              {views.length > 1 && (
+                <button
+                  type="button"
+                  className="view-tab__close relative z-[2]"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    removeView(view.id)
+                  }}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  title="Close view"
+                >
+                  <X size={14} />
+                </button>
+              )}
+            </div>
           )
         })}
-        {ghostAt === views.length && dragView && (
-          <ViewTabDropMarker name={dragView.name} widthPx={dragWidthPx} />
-        )}
 
         <button
           type="button"
           className="view-tab-add mb-1 ml-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-overlay-hover hover:text-text"
+          style={
+            draggingId
+              ? { transform: `translateX(${addButtonSlidePx(dragWidthPx, gapPx)}px)` }
+              : undefined
+          }
           onClick={() => addView(`View ${views.length + 1}`)}
           title="Add view"
         >
           <Plus size={16} />
         </button>
+
+        {float && <ViewTabDragFloat float={float} />}
       </div>
 
       {tabsOverflow && (

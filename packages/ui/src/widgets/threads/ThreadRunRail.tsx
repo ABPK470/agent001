@@ -17,6 +17,7 @@ import {
   collectRunNavMarkers,
   hasRoomForRunMinimap,
   layoutRunNavBars,
+  measureMinimapViewportHeight,
   pickNavRunInView,
   runLabel,
   shouldShowRunMinimap,
@@ -127,7 +128,7 @@ export function ThreadRunRail({
     }
 
     const contentHeight = content.scrollHeight
-    const clientHeight = host.clientHeight
+    const clientHeight = measureMinimapViewportHeight(host)
     const dockTop = chatChromeDockTop(host)
     const markerInputs = collectRunNavMarkers(content, host, transcriptRunIds)
 
