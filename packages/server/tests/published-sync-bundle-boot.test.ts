@@ -23,7 +23,7 @@ describe("published sync vocabulary boot", () => {
     tempRoot = mkdtempSync(join(tmpdir(), "mia-bundle-boot-"))
     testDb = new Database(":memory:")
     testDb.pragma("foreign_keys = ON")
-    const { _setDb, _migrate } = await import("../src/infra/persistence/db/index.js")
+    const { _setDb, _migrate } = await import("../src/infra/persistence/adapters/sqlite/index.js")
     _setDb(testDb)
     _migrate(testDb)
     resetPublishedSyncEntityIds()
@@ -49,7 +49,7 @@ describe("published sync vocabulary boot", () => {
   })
 
   it("loads vocabulary from SQLite sync_definitions rows", async () => {
-    const { replaceSyncDefinitions } = await import("../src/infra/persistence/db/index.js")
+    const { replaceSyncDefinitions } = await import("../src/infra/persistence/adapters/sqlite/db/index.js")
     replaceSyncDefinitions("_default", {
       publishedAt: "2026-01-01T00:00:00.000Z",
       publishedVersion: "v1",
@@ -84,7 +84,7 @@ describe("published sync vocabulary boot", () => {
     expect(importLegacyPublishedBundleFileIfNeeded(tempRoot)).toBe(true)
 
     const { listSyncDefinitions, getSyncPublishMeta } =
-      await import("../src/infra/persistence/db/index.js")
+      await import("../src/infra/persistence/adapters/sqlite/db/index.js")
     expect(getSyncPublishMeta()?.published_version).toBe("legacy-v1")
     expect(listSyncDefinitions().map((row) => row.entity_id)).toEqual(["contract", "rule"])
 
@@ -94,7 +94,7 @@ describe("published sync vocabulary boot", () => {
   })
 
   it("reloadPublishedSyncVocabulary updates in-process ids from SQLite", async () => {
-    const { replaceSyncDefinitions } = await import("../src/infra/persistence/db/index.js")
+    const { replaceSyncDefinitions } = await import("../src/infra/persistence/adapters/sqlite/db/index.js")
     replaceSyncDefinitions("_default", {
       publishedAt: "2026-01-03T00:00:00.000Z",
       publishedVersion: "v2",

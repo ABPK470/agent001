@@ -5,7 +5,7 @@
 
 import Database from "better-sqlite3"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
-import { _migrate, _setDb, listUserHistory, listUsersWithStats, saveRun, saveTokenUsage } from "../src/infra/persistence/db/index.js"
+import { _migrate, _setDb, listUserHistory, listUsersWithStats, saveRun, saveTokenUsage } from "../src/infra/persistence/adapters/sqlite/index.js"
 import { seedSession, seedUser } from "./_fk-helpers.js"
 
 const CANONICAL = "alice@example.com"

@@ -5,7 +5,7 @@ import {
   FlowStepsValidationError,
   parseStoredFlowStepsJson,
 } from "../src/infra/persistence/sync-flow-steps.js"
-import { parseFlowSteps } from "../src/infra/persistence/db/sync-run-catalog.js"
+import { parseFlowSteps } from "../src/infra/persistence/adapters/sqlite/db/sync-run-catalog.js"
 
 describe("flow step catalog ids", () => {
   it("accepts canonical camelCase step kinds", () => {

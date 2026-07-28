@@ -62,6 +62,8 @@ export { summarizeCachedPayload } from "./tool-knowledge-summarizer.js"
 export {
   fingerprintFromCatalogTable,
   fingerprintsEqual,
+  listRecentToolKnowledge,
+  listToolKnowledgeByQnames,
   lookupToolKnowledge,
   pruneToolKnowledge,
   renderCachedHeader,
@@ -73,6 +75,7 @@ export type {
   CachedTool,
   ToolKnowledgeFingerprint,
   ToolKnowledgeHit,
+  ToolKnowledgeListRow,
   LookupOptions as ToolKnowledgeLookupOptions,
   ToolKnowledgeMiss,
   PruneOptions as ToolKnowledgePruneOptions,

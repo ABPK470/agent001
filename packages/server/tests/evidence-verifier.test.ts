@@ -15,8 +15,8 @@ import {
   verifyEvidence,
   type EnvelopeHeader,
   type EvidenceEnvelope
-} from "../src/infra/persistence/evidence/index.js"
-import { buildHmacSigner } from "../src/infra/persistence/evidence/signers/hmac.js"
+} from "../src/infra/persistence/adapters/sqlite/evidence/index.js"
+import { buildHmacSigner } from "../src/infra/persistence/adapters/sqlite/evidence/signers/hmac.js"
 
 const SECRET = "z".repeat(48)
 

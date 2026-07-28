@@ -3,9 +3,10 @@
  */
 
 import { getDb } from "../connection.js"
-import { LlmProvider } from "../../../internal/enums/llm.js"
+import { LlmProvider } from "../../../../../internal/enums/llm.js"
 
 export { LlmProvider }
+export { applyLlmEnvOverride } from "../llm-env-bootstrap.js"
 
 export interface DbLlmConfig {
   provider: LlmProvider

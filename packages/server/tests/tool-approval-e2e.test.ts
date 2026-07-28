@@ -41,7 +41,7 @@ afterEach(() => {
 })
 
 async function setupDb(): Promise<void> {
-  const { _setDb, _migrate } = await import("../src/infra/persistence/db/index.js")
+  const { _setDb, _migrate } = await import("../src/infra/persistence/adapters/sqlite/index.js")
   _setDb(testDb)
   _migrate(testDb)
   seedUser(testDb, UPN)
@@ -57,7 +57,7 @@ describe("tool approval end-to-end", () => {
     const { finalizeWaitingForApprovalRun } = await import(
       "../src/runtime/execution/run-executor/finalization/waiting-approval.js"
     )
-    const { listNotifications, getRun } = await import("../src/infra/persistence/db/index.js")
+    const { listNotifications, getRun } = await import("../src/infra/persistence/adapters/sqlite/db/index.js")
 
     const events: { type: string; data: Record<string, unknown> }[] = []
     const unsub = subscribeToEvents((e) => events.push({ type: e.type, data: e.data as Record<string, unknown> }))
@@ -169,7 +169,7 @@ describe("tool approval end-to-end", () => {
     await setupDb()
     seedRun(testDb, "run-deny", { upn: UPN, status: "waiting_for_approval" })
 
-    const { upsertPendingRunToolApproval } = await import("../src/infra/persistence/db/index.js")
+    const { upsertPendingRunToolApproval } = await import("../src/infra/persistence/adapters/sqlite/db/index.js")
     const { subscribeToEvents } = await import("../src/infra/events/broadcaster.js")
     const { registerRunRoutes } = await import("../src/api/runs/routes.js")
 

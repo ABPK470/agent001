@@ -156,3 +156,9 @@ export function loadPublishedBundleFromDb(
     definitions,
   }
 }
+
+export function clearSyncDefinitionsAndPublishMeta(): void {
+  const db = getDb()
+  db.exec(`DELETE FROM sync_definitions`)
+  db.exec(`DELETE FROM sync_publish_meta`)
+}

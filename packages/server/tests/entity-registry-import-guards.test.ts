@@ -22,7 +22,7 @@ import {
 } from "../src/api/platform/service/import-deploy-artifacts.js"
 import { buildDeployCatalogSnapshot } from "../src/api/platform/service/export-deploy-artifacts.js"
 import { formatEntityJson } from "../src/api/sync/types/entity-yaml.js"
-import * as db from "../src/infra/persistence/db/index.js"
+import * as db from "../src/infra/persistence/adapters/sqlite/db/index.js"
 import {
   setupCatalogOperatorFixture,
   teardownCatalogOperatorFixture,

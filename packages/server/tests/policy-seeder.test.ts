@@ -7,7 +7,7 @@ import { dirname, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import { beforeEach, describe, expect, it } from "vitest"
 
-import { _migrate } from "../src/infra/persistence/connection.js"
+import { _migrate } from "../src/infra/persistence/adapters/sqlite/connection.js"
 import * as db from "../src/infra/persistence/sqlite.js"
 import {
   resetFactoryPolicyDefaults,

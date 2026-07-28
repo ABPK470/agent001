@@ -8,7 +8,7 @@ import { EntityExportValidationError } from "../src/api/sync/service/assert-enti
 import { buildDeployCatalogSnapshot } from "../src/api/platform/service/export-deploy-artifacts.js"
 import { validateDeployCatalogSnapshot } from "../src/api/platform/service/import-deploy-artifacts.js"
 import { formatEntityJson, parseEntitiesJson } from "../src/api/sync/types/entity-yaml.js"
-import * as db from "../src/infra/persistence/db/index.js"
+import * as db from "../src/infra/persistence/adapters/sqlite/db/index.js"
 import {
   buildEntityRegistryApp,
   setupCatalogOperatorFixture,

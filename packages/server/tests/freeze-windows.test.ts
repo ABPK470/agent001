@@ -38,12 +38,12 @@ afterEach(() => {
 })
 
 async function setup() {
-  const { _setDb, _migrate } = await import("../src/infra/persistence/db/index.js")
+  const { _setDb, _migrate } = await import("../src/infra/persistence/adapters/sqlite/index.js")
   _setDb(testDb)
   _migrate(testDb)
   return {
-    defs: await import("../src/infra/persistence/db/entity-registry.js"),
-    freezes: await import("../src/infra/persistence/db/freeze-windows.js")
+    defs: await import("../src/infra/persistence/adapters/sqlite/db/entity-registry.js"),
+    freezes: await import("../src/infra/persistence/adapters/sqlite/db/freeze-windows.js")
   }
 }
 

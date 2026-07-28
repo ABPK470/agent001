@@ -17,6 +17,11 @@ import type { Connector, ConnectorKindId } from "@mia/shared-types"
 import sql from "mssql"
 import * as db from "../../infra/persistence/sqlite.js"
 import { readKnowledgeFile } from "../../infra/mssql/knowledge.js"
+import {
+  agentBudgetLimit,
+  getConnectionBudget,
+  syncBudgetLimit,
+} from "../../ports/connection-budget.js"
 
 function asString(value: unknown): string | null {
   return typeof value === "string" && value !== "" ? value : null
@@ -232,5 +237,29 @@ export function createMssqlPoolProvider(projectRoot: string): MssqlPoolProvider 
       }
       cache.delete(connectorId)
     },
+    async runWithAgentBudget<T>(connectorKey: string, fn: () => Promise<T>): Promise<T> {
+      const poolMax = poolMaxForKey(connectorKey, projectRoot)
+      const limit = agentBudgetLimit(poolMax)
+      return getConnectionBudget().withSlot(connectorKey, "agent-query", limit, fn)
+    },
+    async runWithSyncBudget<T>(connectorKey: string, fn: () => Promise<T>): Promise<T> {
+      const poolMax = poolMaxForKey(connectorKey, projectRoot)
+      const limit = syncBudgetLimit(poolMax)
+      return getConnectionBudget().withSlot(connectorKey, "sync-work", limit, fn)
+    },
   }
+}
+
+function poolMaxForKey(connectorKey: string, projectRoot: string): number {
+  const byId = getConnectorLive(connectorKey)
+  if (byId && byId.kind === "mssql" && byId.enabled) {
+    return buildConfig(byId, projectRoot).config.pool?.max ?? 20
+  }
+  const list = listEnabledMssql()
+  const lower = connectorKey.toLowerCase()
+  const byName =
+    list.find((c) => c.name.toLowerCase() === lower) ??
+    (connectorKey === "default" && list.length > 0 ? list[0] : undefined)
+  if (byName) return buildConfig(byName, projectRoot).config.pool?.max ?? 20
+  return 20
 }

@@ -4,8 +4,8 @@
  */
 
 import "../boot/load-env.js"
-import { getDbPath, openDatabase } from "../infra/persistence/connection.js"
-import { listMigrations } from "../infra/persistence/migrations/index.js"
+import { getDbPath, openDatabase } from "../infra/persistence/adapters/sqlite/index.js"
+import { listMigrations } from "../infra/persistence/adapters/sqlite/migrations/index.js"
 
 const db = openDatabase()
 const rows = listMigrations(db)

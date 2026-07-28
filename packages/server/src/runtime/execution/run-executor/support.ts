@@ -52,8 +52,14 @@ export function buildPersistedToolTrace(
 
 export async function acquireRunSlot(command: ExecuteRunCommand): Promise<(() => void) | null> {
   const { request, runtime } = command
+  const upn = runtime.registry.getActiveRun(request.runId)?.ownerUpn ?? null
   try {
-    return await runtime.queue.acquire(request.runId, request.priority, runtime.controller.signal)
+    return await runtime.queue.acquire(
+      request.runId,
+      request.priority,
+      runtime.controller.signal,
+      upn
+    )
   } catch {
     runtime.registry.removeActiveRun(request.runId)
     return null

@@ -4,7 +4,7 @@
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 
-import * as db from "../src/infra/persistence/db/index.js"
+import * as db from "../src/infra/persistence/adapters/sqlite/db/index.js"
 import {
   buildEntityRegistryApp,
   setupCatalogOperatorFixture,

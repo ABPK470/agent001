@@ -8,12 +8,12 @@ import { readFile } from "node:fs/promises"
 import { resolve } from "node:path"
 import type { Signer } from "../../infra/persistence/evidence.js"
 import {
+  getEvidenceById,
   getEvidenceByPlan,
   listEvidence,
   verifyEvidence,
   type EvidenceIndexRow
 } from "../../infra/persistence/evidence.js"
-import { getDb } from "../../infra/persistence/sqlite.js"
 
 const DEFAULT_TENANT_ID = "_default"
 
@@ -97,8 +97,5 @@ export function registerEvidenceRoutes(app: FastifyInstance, deps: EvidenceRoute
 }
 
 function lookupEvidenceById(id: string): EvidenceIndexRow | null {
-  return (
-    (getDb().prepare(`SELECT * FROM sync_evidence_log WHERE id = ?`).get(id) as EvidenceIndexRow | undefined) ??
-    null
-  )
+  return getEvidenceById(id)
 }

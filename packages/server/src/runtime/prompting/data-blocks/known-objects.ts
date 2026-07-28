@@ -15,19 +15,17 @@
  * block is empty (caller will skip injection).
  */
 
-import type Database from "better-sqlite3"
 import {
+  listRecentToolKnowledge,
   listTableVerdicts,
+  listToolKnowledgeByQnames,
   summarizeCachedPayload,
   type CachedTool,
   type TableVerdictRole
 } from "../../../infra/persistence/memory.js"
-import { getDb } from "../../../infra/persistence/sqlite.js"
 import type { PriorTurn } from "./prior-turns.js"
 
 export interface LoadKnownObjectsOptions {
-  /** Optional db override (tests). Defaults to the shared server db. */
-  db?: Database.Database
   goal: string
   priorTurns: readonly PriorTurn[]
   limit?: number
@@ -98,31 +96,7 @@ export function loadKnownObjects(opts: LoadKnownObjectsOptions): KnownObjectRow[
     if (t.answer) for (const q of extractQnames(t.answer)) candidates.add(q)
   }
 
-  const db = opts.db ?? getDb()
-  type Row = {
-    qname: string
-    tool: string
-    mode: string
-    bytes: number
-    created_at: number
-    payload_text: string
-  }
-
-  let rows: Row[] = []
-  if (candidates.size > 0) {
-    const placeholders = [...candidates].map(() => "?").join(",")
-    rows = db
-      .prepare(
-        `
-      SELECT qname, tool, mode, bytes, created_at, payload_text
-      FROM tool_knowledge_cache
-      WHERE qname IN (${placeholders}) AND lower(connection) = lower(?)
-      ORDER BY created_at DESC
-      LIMIT ?
-    `
-      )
-      .all(...candidates, connection, limit) as Row[]
-  }
+  let rows = listToolKnowledgeByQnames([...candidates], connection, limit)
 
   // Track which rows came from the goal-mention path vs the fallback
   // top-up: only goal rows get the heavy summarizer treatment so the
@@ -138,17 +112,7 @@ export function loadKnownObjects(opts: LoadKnownObjectsOptions): KnownObjectRow[
   const FALLBACK_TOPUP = Math.max(1, Math.min(5, limit - rows.length))
   if (FALLBACK_TOPUP > 0) {
     const seenQnames = new Set(rows.map((r) => r.qname))
-    const extra = db
-      .prepare(
-        `
-      SELECT qname, tool, mode, bytes, created_at, payload_text
-      FROM tool_knowledge_cache
-      WHERE lower(connection) = lower(?)
-      ORDER BY created_at DESC
-      LIMIT ?
-    `
-      )
-      .all(connection, FALLBACK_TOPUP * 2) as Row[]
+    const extra = listRecentToolKnowledge(connection, FALLBACK_TOPUP * 2)
     for (const r of extra) {
       if (seenQnames.has(r.qname)) continue
       rows.push(r)

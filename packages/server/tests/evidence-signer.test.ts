@@ -3,14 +3,14 @@
  */
 
 import { describe, expect, it } from "vitest"
-import type { EnvelopeHeader } from "../src/infra/persistence/evidence/envelope.js"
+import type { EnvelopeHeader } from "../src/infra/persistence/adapters/sqlite/evidence/envelope.js"
 import {
   buildEnvelope,
   envelopeBodyBytes,
   envelopeBodyHash,
   recomputeHashChain
-} from "../src/infra/persistence/evidence/index.js"
-import { buildHmacSigner } from "../src/infra/persistence/evidence/signers/hmac.js"
+} from "../src/infra/persistence/adapters/sqlite/evidence/index.js"
+import { buildHmacSigner } from "../src/infra/persistence/adapters/sqlite/evidence/signers/hmac.js"
 
 function header(): EnvelopeHeader {
   return {

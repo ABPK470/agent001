@@ -15,7 +15,7 @@
  * Payloads stay small and serialisable — file bytes never appear here.
  */
 
-import { broadcast } from "../../events/broadcaster.js"
+import { broadcast } from "../../../../events/broadcaster.js"
 import type { AttachmentRow } from "./repo.js"
 import { EventType } from "@mia/agent"
 

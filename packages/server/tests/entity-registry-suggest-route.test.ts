@@ -24,7 +24,7 @@ function adminSession(): CurrentSession {
 }
 
 async function buildApp(session: CurrentSession): Promise<FastifyInstance> {
-  const { _setDb, _migrate } = await import("../src/infra/persistence/db/index.js")
+  const { _setDb, _migrate } = await import("../src/infra/persistence/adapters/sqlite/index.js")
   const { registerEntityRegistryRoutes } = await import("../src/api/sync/index.js")
   const { seedUser, seedSession } = await import("./_fk-helpers.js")
 

@@ -131,6 +131,13 @@ export function getEvidenceByPlan(planId: string): EvidenceIndexRow | null {
   )
 }
 
+export function getEvidenceById(id: string): EvidenceIndexRow | null {
+  return (
+    (getDb().prepare(`SELECT * FROM sync_evidence_log WHERE id = ?`).get(id) as EvidenceIndexRow | undefined) ??
+    null
+  )
+}
+
 export function listEvidence(tenantId: string, limit = 100): EvidenceIndexRow[] {
   return getDb()
     .prepare(`SELECT * FROM sync_evidence_log WHERE tenant_id = ? ORDER BY created_at DESC LIMIT ?`)

@@ -1,9 +1,9 @@
 import { EventType } from "@mia/agent"
 import { randomUUID } from "node:crypto"
 import { readFile, stat } from "node:fs/promises"
+import { insertEffect as insertEffectRow } from "../persistence/sqlite.js"
 import { EffectKind, EffectStatus } from "../../internal/enums/effects.js"
 import { broadcast } from "../events/broadcaster.js"
-import { getDb } from "../persistence/sqlite.js"
 import { captureSnapshot, hashContent } from "./snapshots.js"
 import type { Effect } from "./types.js"
 
@@ -46,21 +46,19 @@ export class EffectTracker {
       createdAt: now
     }
 
-    getDb()
-      .prepare(
-        `
-      INSERT INTO effects (id, run_id, seq, kind, tool, target, pre_hash, post_hash, status, metadata, created_at)
-      VALUES (@id, @run_id, @seq, @kind, @tool, @target, @pre_hash, @post_hash, @status, @metadata, @created_at)
-    `
-      )
-      .run({
-        ...effect,
-        run_id: effect.runId,
-        pre_hash: effect.preHash,
-        post_hash: effect.postHash,
-        metadata: JSON.stringify(effect.metadata),
-        created_at: effect.createdAt
-      })
+    insertEffectRow({
+      id: effect.id,
+      runId: effect.runId,
+      seq: effect.seq,
+      kind: effect.kind,
+      tool: effect.tool,
+      target: effect.target,
+      preHash: effect.preHash,
+      postHash: effect.postHash,
+      status: effect.status,
+      metadata: JSON.stringify(effect.metadata),
+      createdAt: effect.createdAt
+    })
 
     broadcast({
       type: EventType.EffectRecorded,

@@ -45,21 +45,11 @@ export function registerApprovalRoutes(app: FastifyInstance): void {
     "/api/approvals",
     async (req) => {
       const tenantId = resolveTenant(req)
-      const where: string[] = ["tenant_id = ?"]
-      const args: unknown[] = [tenantId]
-      if (req.query.state) {
-        where.push("state = ?")
-        args.push(req.query.state)
-      }
-      if (req.query.proposalId) {
-        where.push("proposal_id = ?")
-        args.push(req.query.proposalId)
-      }
-      const sql = `SELECT * FROM sync_approvals WHERE ${where.join(" AND ")} ORDER BY requested_at DESC LIMIT 500`
-      return db
-        .getDb()
-        .prepare(sql)
-        .all(...args)
+      return db.listApprovals({
+        tenantId,
+        state: req.query.state,
+        proposalId: req.query.proposalId
+      })
     }
   )
 

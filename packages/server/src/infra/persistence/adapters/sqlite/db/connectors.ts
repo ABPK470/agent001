@@ -7,7 +7,9 @@
  * return the raw row; masking happens in the transport layer.
  */
 
-import { getDb } from "../connection.js"
+import Database from "better-sqlite3"
+import { existsSync } from "node:fs"
+import { getDb, getDbPath } from "../connection.js"
 
 export interface DbConnector {
   id: string
@@ -47,4 +49,26 @@ export function deleteConnector(id: string): void {
 export function countConnectors(): number {
   const row = getDb().prepare("SELECT COUNT(*) AS count FROM connectors").get() as { count: number }
   return row.count
+}
+
+/**
+ * Count enabled `mssql` connectors without booting the persistence layer.
+ * Opens the SQLite file read-only (no migrations). Returns 0 when absent.
+ */
+export function countEnabledMssqlConnectorsReadonly(): number {
+  const path = getDbPath()
+  if (!existsSync(path)) return 0
+  try {
+    const conn = new Database(path, { readonly: true })
+    try {
+      const row = conn
+        .prepare("SELECT COUNT(*) AS count FROM connectors WHERE kind = 'mssql' AND enabled = 1")
+        .get() as { count: number } | undefined
+      return row?.count ?? 0
+    } finally {
+      conn.close()
+    }
+  } catch {
+    return 0
+  }
 }

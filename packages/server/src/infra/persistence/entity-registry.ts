@@ -1,1 +1,1 @@
-export * from "./db/entity-registry.js"
+export * from "./adapters/sqlite/db/entity-registry.js"

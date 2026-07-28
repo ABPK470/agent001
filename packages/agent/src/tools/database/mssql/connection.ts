@@ -156,6 +156,29 @@ export async function getPool(
   return { pool: entry.pool, entry }
 }
 
+/**
+ * Run agent MSSQL work under the shared connection budget when the host
+ * provides `pools.runWithAgentBudget` (production). Same dialect as sync's
+ * `withPoolSlot` — predictable waits instead of connection-closed cascades.
+ */
+export async function withMssqlPool<T>(
+  host: AgentHost,
+  name: string | undefined,
+  fn: (ctx: { pool: sql.ConnectionPool; entry: DatabaseEntry }) => Promise<T>,
+): Promise<T> {
+  const connectionName = name ?? "default"
+  const resolvedName = resolveMssqlConnectionName(host, connectionName)
+  const budget = host.mssql.pools?.runWithAgentBudget
+  if (budget) {
+    return budget(resolvedName, async () => {
+      const result = await getPool(host, connectionName)
+      return fn(result)
+    })
+  }
+  const result = await getPool(host, connectionName)
+  return fn(result)
+}
+
 /** Close all connection pools (called on shutdown). */
 export async function closeMssqlPool(host: AgentHost): Promise<void> {
   for (const entry of host.mssql.databases.values()) {

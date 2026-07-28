@@ -1,8 +1,8 @@
 import { EventType } from "@mia/agent"
 import { createHash, randomUUID } from "node:crypto"
 import { readFile, stat } from "node:fs/promises"
+import { insertFileSnapshot } from "../persistence/sqlite.js"
 import { broadcast } from "../events/broadcaster.js"
-import { getDb } from "../persistence/sqlite.js"
 import type { Effect, FileSnapshot } from "./types.js"
 
 // ── Hashing utility (also used by tracker and rollback) ──────────
@@ -44,21 +44,16 @@ export async function captureSnapshot(
     createdAt: now
   }
 
-  getDb()
-    .prepare(
-      `
-    INSERT INTO file_snapshots (id, effect_id, run_id, file_path, content, hash, file_mode, created_at)
-    VALUES (@id, @effect_id, @run_id, @file_path, @content, @hash, @file_mode, @created_at)
-  `
-    )
-    .run({
-      ...snapshot,
-      effect_id: snapshot.effectId,
-      run_id: snapshot.runId,
-      file_path: snapshot.filePath,
-      file_mode: fileMode,
-      created_at: snapshot.createdAt
-    })
+  insertFileSnapshot({
+    id: snapshot.id,
+    effectId: snapshot.effectId,
+    runId: snapshot.runId,
+    filePath: snapshot.filePath,
+    content: snapshot.content,
+    hash: snapshot.hash,
+    fileMode,
+    createdAt: snapshot.createdAt
+  })
 
   broadcast({
     type: EventType.SnapshotCaptured,

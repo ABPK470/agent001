@@ -13,8 +13,7 @@
  */
 
 import { truncateAtBoundary } from "../../../infra/persistence/memory.js"
-import type { DbRun } from "../../../infra/persistence/sqlite.js"
-import { getDb } from "../../../infra/persistence/sqlite.js"
+import { listPriorTurnRows } from "../../../infra/persistence/sqlite.js"
 
 /** Maximum chars retained per prior-turn answer. Keeps the anchor inside
  *  the prompt budget while preserving small result tables and the
@@ -50,26 +49,12 @@ export function loadPriorTurns(opts: LoadPriorTurnsOptions): PriorTurn[] {
   const limit = opts.limit ?? 3
   if (!opts.upn || !opts.threadId || limit <= 0) return []
 
-  const rows = getDb()
-    .prepare(
-      `
-      SELECT id, goal, status, answer, created_at, completed_at, parent_run_id, upn
-      FROM runs
-      WHERE thread_id = @threadId
-        AND upn = @upn
-        AND parent_run_id IS NULL
-        AND status IN ('completed', 'failed')
-        AND (@excludeRunId IS NULL OR id != @excludeRunId)
-      ORDER BY COALESCE(completed_at, created_at) DESC
-      LIMIT @limit
-    `
-    )
-    .all({
-      threadId: opts.threadId,
-      excludeRunId: opts.excludeRunId ?? null,
-      upn: opts.upn,
-      limit
-    }) as Pick<DbRun, "id" | "goal" | "status" | "answer" | "created_at" | "completed_at">[]
+  const rows = listPriorTurnRows({
+    threadId: opts.threadId,
+    upn: opts.upn,
+    excludeRunId: opts.excludeRunId ?? null,
+    limit
+  })
 
   return rows.map((row) => ({
     runId: row.id,

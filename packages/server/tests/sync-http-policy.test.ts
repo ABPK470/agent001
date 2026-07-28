@@ -46,7 +46,7 @@ vi.mock("../src/infra/persistence/sqlite.js", () => ({
   listPolicyRules: (...args: unknown[]) => listPolicyRules(...args),
 }))
 
-vi.mock("../src/infra/persistence/db/sync-tool-approvals.js", () => ({
+vi.mock("../src/infra/persistence/adapters/sqlite/db/sync-tool-approvals.js", () => ({
   listApprovedSyncToolGrants: (...args: unknown[]) => listApprovedSyncToolGrants(...args),
   upsertPendingSyncToolApproval: (...args: unknown[]) => upsertPendingSyncToolApproval(...(args as [never])),
   consumeSyncToolApprovalGrant: (...args: unknown[]) => consumeSyncToolApprovalGrant(...args),

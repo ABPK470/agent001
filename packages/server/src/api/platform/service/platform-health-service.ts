@@ -9,7 +9,6 @@ import {
 
 import { seedEntityRegistryIfEmpty } from "../../sync/index.js"
 import * as db from "../../../infra/persistence/sqlite.js"
-import { getDb } from "../../../infra/persistence/connection.js"
 
 export interface PlatformHealth {
   ready: boolean
@@ -168,11 +167,8 @@ export async function rebuildPlatformCatalog(
 
 /** Wipe entity registry + published bundle, then re-seed entities from deploy artifacts. */
 export function factoryResetSyncPlatform(projectRoot: string): { seeded: number; entityIds: string[] } {
-  const database = getDb()
   db.wipeEntityRegistry()
-
-  database.exec(`DELETE FROM sync_definitions`)
-  database.exec(`DELETE FROM sync_publish_meta`)
+  db.clearSyncDefinitionsAndPublishMeta()
 
   const seed = seedEntityRegistryIfEmpty(projectRoot)
   return { seeded: seed.seeded, entityIds: seed.entityIds }

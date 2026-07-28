@@ -65,9 +65,9 @@ function ctx(over: Partial<HostedPolicyContext> = {}): HostedPolicyContext {
 
 describe("hosted-mode end-to-end happy path", () => {
   it("upload → list → read → import → produce → promote, with audit", async () => {
-    const { _setDb, _migrate } = await import("../src/infra/persistence/db/index.js")
+    const { _setDb, _migrate } = await import("../src/infra/persistence/adapters/sqlite/index.js")
     const { createServerAttachmentService, uploadAttachment, getAttachment, listAttachments } =
-      await import("../src/infra/persistence/attachments/index.js")
+      await import("../src/infra/persistence/adapters/sqlite/attachments/index.js")
     const { subscribeToEvents } = await import("../src/infra/events/broadcaster.js")
     _setDb(testDb)
     _migrate(testDb)

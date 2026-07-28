@@ -48,7 +48,7 @@ function createHost(root: string): AgentHost {
 }
 
 async function buildApp(session: CurrentSession): Promise<{ app: FastifyInstance; host: AgentHost }> {
-  const { _setDb, _migrate } = await import("../src/infra/persistence/db/index.js")
+  const { _setDb, _migrate } = await import("../src/infra/persistence/adapters/sqlite/index.js")
   const { registerSyncRoutes } = await import("../src/api/sync/routes.js")
   const { seedSyncMetadataIfEmpty } = await import("../src/api/sync/service/seed-sync-metadata.js")
   const { seedUser, seedSession } = await import("./_fk-helpers.js")
@@ -162,7 +162,7 @@ afterEach(() => {
 describe("sync routes", () => {
   it("publishes DB-authored definitions and exposes them immediately via runtime definitions", async () => {
     const { app } = await buildApp(adminSession())
-    const { saveEntityDefinition } = await import("../src/infra/persistence/db/index.js")
+    const { saveEntityDefinition } = await import("../src/infra/persistence/adapters/sqlite/db/index.js")
 
     const entityDefinition: EntityDefinition = {
       tenantId: "_default",
@@ -228,7 +228,7 @@ describe("sync routes", () => {
     expect(publishBody.publishedBundlePath).toBe("sqlite:sync_definitions")
 
     const { loadPublishedBundleFromDb, listSyncDefinitions } =
-      await import("../src/infra/persistence/db/index.js")
+      await import("../src/infra/persistence/adapters/sqlite/db/index.js")
     const rows = listSyncDefinitions()
     expect(rows.map((row) => row.entity_id)).toEqual(["pipelineActivity"])
     const publishedBundle = loadPublishedBundleFromDb()
@@ -267,7 +267,7 @@ describe("sync routes", () => {
 
   it("GET /api/sync/history supports search and status filters", async () => {
     const { app } = await buildApp(adminSession())
-    const { recordSyncRunPreview } = await import("../src/infra/persistence/db/sync-runs.js")
+    const { recordSyncRunPreview } = await import("../src/infra/persistence/adapters/sqlite/db/sync-runs.js")
     const { seedUser } = await import("./_fk-helpers.js")
 
     seedUser(testDb, "admin@example.com", { displayName: "Admin User", isAdmin: true })

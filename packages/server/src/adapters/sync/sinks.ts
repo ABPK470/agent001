@@ -1,7 +1,7 @@
 import type { AgentHost } from "@mia/agent"
 import { syncPlanActorUpn } from "../../infra/persistence/sync-plan-actor.js"
 import { broadcast } from "../../infra/events/broadcaster.js"
-import { enrichSyncSqlEventData } from "../../infra/persistence/db/sync-sql-log.js"
+import { enrichSyncSqlEventData } from "../../infra/persistence/adapters/sqlite/db/sync-sql-log.js"
 import {
   getSyncRunPlanJson,
   recordSyncRunFinish,

@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url"
 
 import type { AgentHost } from "@mia/agent"
 import type { CurrentSession } from "../../src/api/auth/index.js"
-import * as db from "../../src/infra/persistence/db/index.js"
+import * as db from "../../src/infra/persistence/adapters/sqlite/db/index.js"
 
 export const TENANT = "_default"
 
@@ -53,7 +53,7 @@ export async function setupCatalogOperatorFixture(): Promise<CatalogOperatorFixt
   const dataDir = mkdtempSync(join(tmpdir(), "catalog-operator-"))
   process.env["MIA_DATA_DIR"] = dataDir
   const testDb = new Database(":memory:")
-  const { _setDb, _migrate } = await import("../../src/infra/persistence/db/index.js")
+  const { _setDb, _migrate } = await import("../../src/infra/persistence/adapters/sqlite/index.js")
   _setDb(testDb)
   _migrate(testDb)
 

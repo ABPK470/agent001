@@ -15,7 +15,7 @@ import {
   defaultExportParentDir,
   writeDeployCatalogSnapshot,
 } from "../api/platform/service/export-deploy-artifacts.js"
-import { openDatabase } from "../infra/persistence/connection.js"
+import { openDatabase } from "../infra/persistence/adapters/sqlite/index.js"
 
 main()
 

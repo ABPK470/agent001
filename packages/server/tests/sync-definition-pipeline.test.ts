@@ -143,7 +143,7 @@ afterEach(() => {
 
 describe("sync definition pipeline (e2e)", () => {
   it("artifact seed -> entity registry -> publish preserves the contract DatasetMappingColumn predicate", async () => {
-    const { _setDb, _migrate } = await import("../src/infra/persistence/db/index.js")
+    const { _setDb, _migrate } = await import("../src/infra/persistence/adapters/sqlite/index.js")
     const { seedEntityRegistryIfEmpty } =
       await import("../src/api/sync/service/seed-entity-registry.js")
     const { publishSyncDefinitionsFromDb } = await import("../src/api/sync/service/definitions.js")
@@ -174,7 +174,7 @@ describe("sync definition pipeline (e2e)", () => {
     const published = publishSyncDefinitionsFromDb(projectRoot)
     expect(published.publishedStorage).toBe("sqlite")
 
-    const { loadPublishedBundleFromDb } = await import("../src/infra/persistence/db/index.js")
+    const { loadPublishedBundleFromDb } = await import("../src/infra/persistence/adapters/sqlite/db/index.js")
     const bundle = loadPublishedBundleFromDb()
     expect(bundle).toBeTruthy()
 
@@ -190,7 +190,7 @@ describe("sync definition pipeline (e2e)", () => {
   })
 
   it("publish preserves multi-hop sql predicates matching scaffold output", async () => {
-    const { _setDb, _migrate, saveEntityDefinition } = await import("../src/infra/persistence/db/index.js")
+    const { _setDb, _migrate, saveEntityDefinition } = await import("../src/infra/persistence/adapters/sqlite/index.js")
     const { publishSyncDefinitionsFromDb } = await import("../src/api/sync/service/definitions.js")
 
     _setDb(testDb)
@@ -208,7 +208,7 @@ describe("sync definition pipeline (e2e)", () => {
     publishSyncDefinitionsFromDb(projectRoot)
     publishSyncDefinitionsFromDb(projectRoot)
 
-    const { loadPublishedBundleFromDb } = await import("../src/infra/persistence/db/index.js")
+    const { loadPublishedBundleFromDb } = await import("../src/infra/persistence/adapters/sqlite/db/index.js")
     const bundle = loadPublishedBundleFromDb()
     expect(bundle).toBeTruthy()
 
@@ -222,7 +222,7 @@ describe("sync definition pipeline (e2e)", () => {
   })
 
   it("published custom entity is loadable at runtime with predicates intact", async () => {
-    const { _setDb, _migrate, saveEntityDefinition } = await import("../src/infra/persistence/db/index.js")
+    const { _setDb, _migrate, saveEntityDefinition } = await import("../src/infra/persistence/adapters/sqlite/index.js")
     const { publishSyncDefinitionsFromDb } = await import("../src/api/sync/service/definitions.js")
     const { listPublishedSyncDefinitions } = await import("@mia/sync")
 
@@ -246,7 +246,7 @@ describe("sync definition pipeline (e2e)", () => {
 
   it("compilePublishedSyncDefinition matches server publish output for same entity", async () => {
     const { _setDb, _migrate, saveEntityDefinition } =
-      await import("../src/infra/persistence/db/index.js")
+      await import("../src/infra/persistence/adapters/sqlite/index.js")
     const {
       publishSyncDefinitionsFromDb,
       loadAuthoringFlowCatalog,
@@ -265,7 +265,7 @@ describe("sync definition pipeline (e2e)", () => {
       compilePublishedSyncDefinition,
       syncDefinitionConfigFromEntity,
     } = await import("@mia/sync")
-    const db = await import("../src/infra/persistence/db/index.js")
+    const db = await import("../src/infra/persistence/adapters/sqlite/db/index.js")
     // Must use the same authoring catalog as publish: DB presets strip `phase`
     // from stored steps, so snapForSteps only freezes kinds (phases stay {}).
     // File-template catalogs still carry phase and would diverge.
@@ -290,7 +290,7 @@ describe("sync definition pipeline (e2e)", () => {
     publishSyncDefinitionsFromDb(projectRoot)
     publishSyncDefinitionsFromDb(projectRoot)
 
-    const { loadPublishedBundleFromDb } = await import("../src/infra/persistence/db/index.js")
+    const { loadPublishedBundleFromDb } = await import("../src/infra/persistence/adapters/sqlite/db/index.js")
     const bundle = loadPublishedBundleFromDb()
     expect(bundle).toBeTruthy()
 

@@ -7,8 +7,9 @@
  */
 
 import { isSyncRunStatus, SYNC_RUN_STATUSES, SyncRunStatus } from "@mia/shared-enums"
-import { requireSyncRunActorUpn } from "../sync-plan-actor.js"
+import { requireSyncRunActorUpn } from "../../../sync-plan-actor.js"
 import { getDb } from "../connection.js"
+import { rememberPlanOwner } from "../../../../../ports/run-owner-index.js"
 
 export interface SyncRunRow {
   plan_id: string
@@ -108,6 +109,7 @@ export function recordSyncRunStart(i: RecordSyncRunStartInput): void {
       JSON.stringify(i.previewTotals),
       SyncRunStatus.Started
     )
+  rememberPlanOwner(i.planId, actorUpn)
 }
 
 export interface RecordSyncRunFinishInput {

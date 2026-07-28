@@ -96,7 +96,7 @@ afterEach(() => {
 })
 
 async function seedAndPublish(): Promise<Record<string, unknown>> {
-  const { _setDb, _migrate } = await import("../src/infra/persistence/db/index.js")
+  const { _setDb, _migrate } = await import("../src/infra/persistence/adapters/sqlite/index.js")
   const { seedSyncMetadataIfEmpty } = await import(
     "../src/api/sync/service/seed-sync-metadata.js"
   )
@@ -107,7 +107,7 @@ async function seedAndPublish(): Promise<Record<string, unknown>> {
   seedSyncMetadataIfEmpty(projectRoot)
   publishSyncDefinitionsFromDb(projectRoot)
 
-  const { loadPublishedBundleFromDb } = await import("../src/infra/persistence/db/index.js")
+  const { loadPublishedBundleFromDb } = await import("../src/infra/persistence/adapters/sqlite/db/index.js")
   const bundle = loadPublishedBundleFromDb()
   if (!bundle) throw new Error("expected SyncDefinitions in SQLite after publish")
   return bundle as unknown as Record<string, unknown>
@@ -170,7 +170,7 @@ describe("deploy artifact publish parity", () => {
   })
 
   it("repairs degraded SQLite entities from deploy artifacts on boot", async () => {
-    const { _setDb, _migrate } = await import("../src/infra/persistence/db/index.js")
+    const { _setDb, _migrate } = await import("../src/infra/persistence/adapters/sqlite/index.js")
     const { repairBundledEntityDefinitionsFromArtifacts } = await import(
       "../src/api/sync/service/seed-entity-registry.js"
     )
@@ -212,7 +212,7 @@ describe("deploy artifact publish parity", () => {
     const repaired = repairBundledEntityDefinitionsFromArtifacts(projectRoot)
     expect(repaired).toContain("content")
 
-    const restored = (await import("../src/infra/persistence/db/index.js")).getEntityDefinition(
+    const restored = (await import("../src/infra/persistence/adapters/sqlite/db/index.js")).getEntityDefinition(
       "_default",
       "content",
     )

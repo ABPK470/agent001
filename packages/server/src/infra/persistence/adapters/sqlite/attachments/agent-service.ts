@@ -13,7 +13,7 @@ import { basename, dirname, extname, isAbsolute, normalize, resolve, sep } from 
 import { getAttachment, listAttachments, recordAttachmentImport, type AttachmentRow } from "./repo.js"
 import { uploadAttachment } from "./service.js"
 import { readAttachmentBlob } from "./storage.js"
-import { AttachmentImportMode, AttachmentScope, AttachmentSource } from "../../../internal/enums/attachments.js"
+import { AttachmentImportMode, AttachmentScope, AttachmentSource } from "../../../../../internal/enums/attachments.js"
 import { auditAttachmentImported, auditAttachmentPromoted } from "./audit.js"
 
 const TEXT_MEDIA_PREFIXES = ["text/"]

@@ -1,1 +1,1 @@
-export * from "./db/events.js"
+export * from "./adapters/sqlite/db/events.js"

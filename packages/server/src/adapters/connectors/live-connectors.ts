@@ -13,7 +13,6 @@ import { parseBoundaryJson } from "../../internal/parse-json.js"
 
 import { existsSync, readFileSync } from "node:fs"
 import { resolve } from "node:path"
-import Database from "better-sqlite3"
 import {
   withConnectorConfigDefaults,
   type Connector,
@@ -21,7 +20,7 @@ import {
 } from "@mia/shared-types"
 
 import * as db from "../../infra/persistence/sqlite.js"
-import { getDbPath } from "../../infra/persistence/connection.js"
+import { countEnabledMssqlConnectorsReadonly } from "../../infra/persistence/adapters/sqlite/db/connectors.js"
 
 const DEFAULT_SEED_PATH = "deploy/connectors/connectors.json"
 
@@ -174,19 +173,5 @@ export function linkSyncEnvironmentConnectorIds(): void {
  * is absent (e.g. before first boot).
  */
 export function countEnabledMssqlConnectors(): number {
-  const path = getDbPath()
-  if (!existsSync(path)) return 0
-  try {
-    const conn = new Database(path, { readonly: true })
-    try {
-      const row = conn
-        .prepare("SELECT COUNT(*) AS count FROM connectors WHERE kind = 'mssql' AND enabled = 1")
-        .get() as { count: number } | undefined
-      return row?.count ?? 0
-    } finally {
-      conn.close()
-    }
-  } catch {
-    return 0
-  }
+  return countEnabledMssqlConnectorsReadonly()
 }

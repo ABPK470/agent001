@@ -38,7 +38,7 @@ afterEach(async () => {
 })
 
 async function buildApp(orchestrator: import("../src/runtime/orchestrator.js").AgentOrchestrator) {
-  const { _setDb, _migrate, upsertPendingRunToolApproval } = await import("../src/infra/persistence/db/index.js")
+  const { _setDb, _migrate, upsertPendingRunToolApproval } = await import("../src/infra/persistence/adapters/sqlite/index.js")
   const { registerRunRoutes } = await import("../src/api/runs/routes.js")
   const { registerNotificationRoutes } = await import("../src/api/notifications/routes.js")
 
@@ -141,7 +141,7 @@ describe("run tool approval routes", () => {
       policyName: "approve_fetch",
     })
 
-    const { saveNotification } = await import("../src/infra/persistence/db/index.js")
+    const { saveNotification } = await import("../src/infra/persistence/adapters/sqlite/db/index.js")
     saveNotification({
       id: "note-1",
       type: "approval.required",

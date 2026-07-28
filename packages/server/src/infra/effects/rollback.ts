@@ -3,7 +3,8 @@ import { chmod, mkdir, readFile, unlink, writeFile } from "node:fs/promises"
 import { dirname } from "node:path"
 import { RollbackActionType } from "../../internal/enums/effects.js"
 import { broadcast } from "../events/broadcaster.js"
-import { getDb } from "../persistence/sqlite.js"
+import { getFileSnapshotByEffectId, markEffectCompensated } from "../persistence/sqlite.js"
+import { saveAudit } from "../persistence/sqlite.js"
 import { getRunEffects } from "./queries.js"
 import { hashContent } from "./snapshots.js"
 import type { RollbackPreview, RollbackResult } from "./types.js"
@@ -20,7 +21,7 @@ async function safeFileHash(filePath: string): Promise<string | null> {
 }
 
 function markCompensated(effectId: string): void {
-  getDb().prepare("UPDATE effects SET status = 'compensated' WHERE id = ?").run(effectId)
+  markEffectCompensated(effectId)
 }
 
 // ── Rollback / Compensation ──────────────────────────────────────
@@ -70,9 +71,7 @@ export async function rollbackRun(runId: string): Promise<RollbackResult> {
       continue
     }
 
-    const snapshot = getDb()
-      .prepare("SELECT * FROM file_snapshots WHERE effect_id = ? LIMIT 1")
-      .get(effect.id) as Record<string, unknown> | undefined
+    const snapshot = getFileSnapshotByEffectId(effect.id)
 
     try {
       if (effect.kind === "create") {
@@ -96,10 +95,10 @@ export async function rollbackRun(runId: string): Promise<RollbackResult> {
           result.skipped++
         }
       } else if (effect.kind === "modify") {
-        const snapshotContent = (snapshot?.content as string | null) ?? null
+        const snapshotContent = snapshot?.content ?? null
         if (snapshotContent !== null) {
           await writeFile(effect.target, snapshotContent, "utf-8")
-          const fileMode = snapshot?.file_mode as number | null
+          const fileMode = snapshot?.file_mode
           if (fileMode != null) {
             await chmod(effect.target, fileMode & 0o7777)
           }
@@ -123,11 +122,11 @@ export async function rollbackRun(runId: string): Promise<RollbackResult> {
         })
       } else if (effect.kind === "delete") {
         if (snapshot) {
-          const snapshotContent = snapshot.content as string | null
+          const snapshotContent = snapshot.content
           if (snapshotContent !== null) {
             await mkdir(dirname(effect.target), { recursive: true })
             await writeFile(effect.target, snapshotContent, "utf-8")
-            const fileMode = snapshot.file_mode as number | null
+            const fileMode = snapshot.file_mode
             if (fileMode != null) {
               await chmod(effect.target, fileMode & 0o7777)
             }
@@ -175,22 +174,19 @@ export async function rollbackRun(runId: string): Promise<RollbackResult> {
   })
 
   try {
-    getDb()
-      .prepare(
-        `INSERT INTO audit_log (run_id, actor, action, detail, timestamp)
-         VALUES (?, 'operator', 'rollback.executed', ?, ?)`
-      )
-      .run(
-        runId,
-        JSON.stringify({
-          total: result.total,
-          compensated: result.compensated,
-          skipped: result.skipped,
-          failed: result.failed.length,
-          targets: compensatedTargets
-        }),
-        new Date().toISOString()
-      )
+    saveAudit({
+      run_id: runId,
+      actor: "operator",
+      action: "rollback.executed",
+      detail: JSON.stringify({
+        total: result.total,
+        compensated: result.compensated,
+        skipped: result.skipped,
+        failed: result.failed.length,
+        targets: compensatedTargets
+      }),
+      timestamp: new Date().toISOString()
+    })
   } catch (err: unknown) { console.error("[mia]", err) }
 
   return result
@@ -218,9 +214,7 @@ export async function previewRollback(runId: string): Promise<RollbackPreview> {
       continue
     }
 
-    const snapshot = getDb()
-      .prepare("SELECT * FROM file_snapshots WHERE effect_id = ? LIMIT 1")
-      .get(effect.id) as Record<string, unknown> | undefined
+    const snapshot = getFileSnapshotByEffectId(effect.id)
 
     if (effect.kind === "create") {
       const currentHash = await safeFileHash(effect.target)
@@ -269,7 +263,7 @@ export async function previewRollback(runId: string): Promise<RollbackPreview> {
         })
       }
     } else if (effect.kind === "delete") {
-      if (!snapshot || (snapshot.content as string | null) === null) {
+      if (!snapshot || snapshot.content === null) {
         preview.wouldSkip.push({
           effectId: effect.id,
           target: effect.target,

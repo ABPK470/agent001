@@ -15,10 +15,11 @@
  */
 
 import { DatabricksClient, type LLMClient } from "@mia/agent"
-import type { DbLlmConfig } from "../persistence/db/llm-config.js"
+import type { DbLlmConfig } from "../persistence/adapters/sqlite/db/llm-config.js"
 import { CopilotChatClient } from "./copilot-chat.js"
 import { getDatabricksHost, getDatabricksToken, isDatabricksConfigured } from "./databricks-broker.js"
 import { DEFAULT_COPILOT_MODEL, DEFAULT_DATABRICKS_MODEL } from "./provider-defaults.js"
+import { wrapLlmClient } from "../../ports/llm-throttle.js"
 
 export {
   DEFAULT_COPILOT_MODEL,
@@ -34,12 +35,14 @@ export {
 export function buildLlmClient(cfg: DbLlmConfig): LLMClient {
   const { provider, model, api_key, base_url } = cfg
 
+  let client: LLMClient
   switch (provider) {
     case "copilot-chat":
-      return new CopilotChatClient({
+      client = new CopilotChatClient({
         token: api_key || undefined,
         model: model || DEFAULT_COPILOT_MODEL
       })
+      break
 
     case "databricks":
       if (!isDatabricksConfigured()) {
@@ -47,13 +50,15 @@ export function buildLlmClient(cfg: DbLlmConfig): LLMClient {
           "Databricks provider selected but DATABRICKS_HOST / DATABRICKS_CLIENT_ID / DATABRICKS_CLIENT_SECRET are not set in .env"
         )
       }
-      return new DatabricksClient({
+      client = new DatabricksClient({
         host: base_url || getDatabricksHost(),
         endpoint: model || DEFAULT_DATABRICKS_MODEL,
         getToken: getDatabricksToken
       })
+      break
 
     default:
       throw new Error(`Unknown LLM provider: ${provider}. Allowed: copilot-chat, databricks.`)
   }
+  return wrapLlmClient(client)
 }

@@ -5,6 +5,7 @@
 import { isRunStatus, RUN_STATUSES, RunStatus } from "@mia/agent"
 import type { Run } from "@mia/shared-types"
 import { getDb } from "../connection.js"
+import { rememberRunOwner } from "../../../../../ports/run-owner-index.js"
 
 // ── Run queries ──────────────────────────────────────────────────
 
@@ -76,6 +77,8 @@ export function saveRun(run: DbRun): void {
     upn: (run.upn ?? existing?.upn ?? null)?.trim().toLowerCase() || null,
     display_name: run.display_name ?? existing?.display_name ?? null
   })
+  const storedUpn = (run.upn ?? existing?.upn ?? null)?.trim().toLowerCase() || null
+  rememberRunOwner(run.id, storedUpn)
 }
 
 export function getRun(id: string): DbRun | undefined {
@@ -856,4 +859,80 @@ export function getUsageTotalsForUser(upn: string): UsageTotals {
     )
     .get(upn) as { run_count: number; completed_runs: number; failed_runs: number }
   return { ...tokens, ...runStats }
+}
+
+export interface RunSummaryRow {
+  id: string
+  goal: string
+  status: string
+  step_count: number
+  created_at: string
+  upn: string | null
+  display_name: string | null
+}
+
+export function listRunSummariesByIds(ids: readonly string[]): RunSummaryRow[] {
+  if (ids.length === 0) return []
+  const placeholders = ids.map(() => "?").join(",")
+  return getDb()
+    .prepare(
+      `
+      SELECT id, goal, status, step_count, created_at, upn, display_name
+      FROM runs
+      WHERE id IN (${placeholders})
+      ORDER BY created_at DESC
+    `
+    )
+    .all(...ids) as RunSummaryRow[]
+}
+
+export function countActiveRunsByUpn(ids: readonly string[]): Array<{ upn: string; n: number }> {
+  if (ids.length === 0) return []
+  const placeholders = ids.map(() => "?").join(",")
+  return getDb()
+    .prepare(
+      `
+      SELECT lower(upn) AS upn, COUNT(*) AS n
+      FROM runs WHERE id IN (${placeholders})
+      GROUP BY lower(upn)
+    `
+    )
+    .all(...ids) as Array<{ upn: string; n: number }>
+}
+
+export interface PriorTurnRow {
+  id: string
+  goal: string
+  status: string
+  answer: string | null
+  created_at: string
+  completed_at: string | null
+}
+
+export function listPriorTurnRows(input: {
+  threadId: string
+  upn: string
+  excludeRunId?: string | null
+  limit: number
+}): PriorTurnRow[] {
+  return getDb()
+    .prepare(
+      `
+      SELECT id, goal, status, answer, created_at, completed_at
+      FROM runs
+      WHERE thread_id = @threadId
+        AND upn = @upn
+        AND parent_run_id IS NULL
+        AND status IN ('completed', 'failed')
+        AND (@excludeRunId IS NULL OR id != @excludeRunId)
+      ORDER BY COALESCE(completed_at, created_at) DESC
+      LIMIT @limit
+    `
+    )
+    .all({
+      threadId: input.threadId,
+      excludeRunId: input.excludeRunId ?? null,
+      upn: input.upn,
+      limit: input.limit
+    }) as PriorTurnRow[]
 }

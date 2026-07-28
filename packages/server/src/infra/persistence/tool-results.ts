@@ -1,1 +1,1 @@
-export * from "./db/tool-results.js"
+export * from "./adapters/sqlite/db/tool-results.js"

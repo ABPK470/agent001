@@ -135,7 +135,7 @@ export function deleteThreadAndRuns(threadId: string, upn: string): { deletedRun
       const placeholders = runIds.map(() => "?").join(",")
       db.prepare(`DELETE FROM memory_entries WHERE run_id IN (${placeholders})`).run(...runIds)
       for (const runId of runIds) {
-        db.prepare(`DELETE FROM event_log WHERE json_extract(data, '$.runId') = ?`).run(runId)
+        db.prepare(`DELETE FROM event_log WHERE run_id = ?`).run(runId)
       }
       db.prepare(`DELETE FROM runs WHERE thread_id = ? AND upn = ?`).run(threadId, upn.toLowerCase())
     }

@@ -5,6 +5,10 @@
  * diffs × src/tgt queries) connections get recycled while still in use and
  * surface as "Connection is closed". We bound concurrent in-flight work per
  * named connection to stay inside a safe budget derived from pool.max.
+ *
+ * When the platform shell wires `pools.runWithSyncBudget`, sync and agent
+ * share one ConnectionBudget dialect (sync-work vs agent-query). Otherwise
+ * this module keeps a local gate with the same limit formula.
  */
 
 import type { MssqlAccessHost, SyncEnvironmentRegistryHost } from "../../ports/host.js"
@@ -48,6 +52,8 @@ function gateFor(host: PoolGateHost, connection: string): GateState {
   if (!gate) {
     gate = { limit: poolGateLimit(host, connection), active: 0, queue: [] }
     perHost.set(connection, gate)
+  } else {
+    gate.limit = poolGateLimit(host, connection)
   }
   return gate
 }
@@ -71,12 +77,21 @@ function release(gate: GateState): void {
   if (next) next()
 }
 
+function connectorKeyFor(host: PoolGateHost, connection: string): string {
+  const env = host.sync.environments.items.get(connection)
+  return env?.connectorId ?? connection
+}
+
 /** Run one pool-backed operation while holding a gate slot on `connection`. */
 export async function withPoolSlot<T>(
   host: PoolGateHost,
   connection: string,
   fn: () => Promise<T>
 ): Promise<T> {
+  const budget = host.mssql.pools?.runWithSyncBudget
+  if (budget) {
+    return budget(connectorKeyFor(host, connection), fn)
+  }
   const gate = gateFor(host, connection)
   await acquire(gate)
   try {

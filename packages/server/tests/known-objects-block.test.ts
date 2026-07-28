@@ -29,7 +29,7 @@ beforeEach(async () => {
   testDb = new Database(":memory:")
   testDb.pragma("journal_mode = WAL")
   testDb.pragma("foreign_keys = OFF")
-  const { _setDb, _migrate } = await import("../src/infra/persistence/db/index.js")
+  const { _setDb, _migrate } = await import("../src/infra/persistence/adapters/sqlite/index.js")
   _setDb(testDb)
   _migrate(testDb)
 })
@@ -63,7 +63,6 @@ describe("loadKnownObjects — qname extraction", () => {
     // the LLM still sees previously-touched objects.
     seed([{ qname: "publish.balances", tool: "profile_data", mode: "fast", bytes: 100, ageMs: 1000 }])
     const out = loadKnownObjects({
-      db: testDb,
       goal: "what's the weather today?",
       priorTurns: emptyTurns
     })
@@ -73,7 +72,6 @@ describe("loadKnownObjects — qname extraction", () => {
 
   it("returns [] when no candidates AND cache is completely empty", () => {
     const out = loadKnownObjects({
-      db: testDb,
       goal: "profile publish.Balances please",
       priorTurns: emptyTurns
     })
@@ -83,7 +81,6 @@ describe("loadKnownObjects — qname extraction", () => {
   it("returns a hit for a qname mentioned in the goal", () => {
     seed([{ qname: "publish.balances", tool: "profile_data", mode: "fast", bytes: 1234, ageMs: 3_600_000 }])
     const out = loadKnownObjects({
-      db: testDb,
       goal: "Plot publish.Balances by month",
       priorTurns: emptyTurns
     })
@@ -113,7 +110,7 @@ describe("loadKnownObjects — qname extraction", () => {
         ranAt: "2025-01-01"
       }
     ]
-    const out = loadKnownObjects({ db: testDb, goal: "follow up", priorTurns })
+    const out = loadKnownObjects({ goal: "follow up", priorTurns })
     const qnames = out.map((r) => r.qname).sort()
     expect(qnames).toEqual(["dim.date", "publish.balances"])
   })
@@ -136,7 +133,6 @@ describe("loadKnownObjects — qname extraction", () => {
       }
     ])
     const out = loadKnownObjects({
-      db: testDb,
       goal: "Re-profile publish.Balances",
       priorTurns: emptyTurns
     })
@@ -166,7 +162,7 @@ describe("loadKnownObjects — qname extraction", () => {
         payload: profilePayload
       }
     ])
-    const out = loadKnownObjects({ db: testDb, goal: "show me publish.Balances", priorTurns: emptyTurns })
+    const out = loadKnownObjects({ goal: "show me publish.Balances", priorTurns: emptyTurns })
     expect(out).toHaveLength(1)
     expect(out[0]!.priority).toBe("goal")
     expect(out[0]!.summary).toContain("rows=1,000")
@@ -185,7 +181,7 @@ describe("loadKnownObjects — qname extraction", () => {
         payload: "Profile (FAST mode) for publish.balances:\n  Type: TABLE"
       }
     ])
-    const out = loadKnownObjects({ db: testDb, goal: "what is happening today", priorTurns: emptyTurns })
+    const out = loadKnownObjects({ goal: "what is happening today", priorTurns: emptyTurns })
     expect(out).toHaveLength(1)
     expect(out[0]!.priority).toBe("fallback")
     expect(out[0]!.summary).toBe("")

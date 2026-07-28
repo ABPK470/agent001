@@ -1,4 +1,4 @@
-import { getDb } from "../sqlite.js"
+import { getDb } from "../connection.js"
 import { rowToEntry } from "./schema.js"
 import { WORKING_SESSION_WINDOW_H } from "./scoring.js"
 import type { Memory, MemoryTier } from "./types.js"

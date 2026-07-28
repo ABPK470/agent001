@@ -6,7 +6,7 @@ import type { ExecutableTool, Tool, ToolMetadata } from "../../../domain/types/a
 import { fingerprintForQname, persistToCache, tryServeFromCache } from "../../_tool-cache.js"
 import type { CatalogGraph } from "../../catalog/graph/index.js"
 import { getCatalog } from "../../catalog/store.js"
-import { getPool } from "./connection.js"
+import { withMssqlPool } from "./connection.js"
 import { resolveToolConnectionArg } from "./resolve-connection.js"
 import { detectDimJoinNullRot, renderDimJoinNullBanner } from "./dim-join-quality.js"
 import { decorateMssqlError, enrichInvalidColumnError } from "./error-hints.js"
@@ -92,14 +92,6 @@ function buildQueryMssqlTool(host: AgentHost, run?: RunContext): Tool {
       const accessor = catalogAccessorFor(host, connectionName)
       const toolTrace = readToolTraceContext(args)
 
-      let pool: sql.ConnectionPool
-      try {
-        const result = await getPool(host, connectionName)
-        pool = result.pool
-      } catch (err) {
-        return `Error: ${err instanceof Error ? err.message : String(err)}`
-      }
-
       // Validate before executing (auto-normalizes alias bracketing).
       // Policy governs DML — no connector write latch.
       const validation = validateQueryDetailed(query, {
@@ -129,6 +121,7 @@ function buildQueryMssqlTool(host: AgentHost, run?: RunContext): Tool {
       query = validation.preparedQuery ?? query
 
       try {
+        return await withMssqlPool(host, connectionName, async ({ pool }) => {
         // Optional database switch
         const db = args.database ? String(args.database).trim() : null
         if (db) {
@@ -192,8 +185,12 @@ function buildQueryMssqlTool(host: AgentHost, run?: RunContext): Tool {
         } finally {
           killSignal?.removeEventListener("abort", onKill)
         }
+        })
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err)
+        if (msg.includes("not configured") || msg.startsWith("MSSQL connection")) {
+          return `Error: ${msg}`
+        }
         emitMssqlQualityTrace(
           {
             toolMode: "query",
@@ -263,15 +260,8 @@ function buildSchemaMssqlTool(host: AgentHost, run?: RunContext): Tool {
         return `Error: ${err instanceof Error ? err.message : String(err)}`
       }
 
-      let pool: sql.ConnectionPool
       try {
-        const result = await getPool(host, connectionName)
-        pool = result.pool
-      } catch (err) {
-        return `Error: ${err instanceof Error ? err.message : String(err)}`
-      }
-
-      try {
+        return await withMssqlPool(host, connectionName, async ({ pool }) => {
         const request = pool.request()
         const killSignal = run?.signal ?? null
 
@@ -514,8 +504,12 @@ function buildSchemaMssqlTool(host: AgentHost, run?: RunContext): Tool {
         } finally {
           killSignal?.removeEventListener("abort", onKill)
         }
+        })
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err)
+        if (msg.includes("not configured") || msg.startsWith("MSSQL connection")) {
+          return `Error: ${msg}`
+        }
         return `SQL Error: ${decorateMssqlError(msg)}`
       }
     }

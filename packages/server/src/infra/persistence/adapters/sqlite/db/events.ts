@@ -1,204 +1,21 @@
 /**
  * Unified event log & webhook drain persistence.
+ * Event durability lives on EventStore; this module keeps webhook drains
+ * and re-exports the store helpers for existing callers.
  */
 
 import { getDb } from "../connection.js"
 
-export interface DbEvent {
-  id: number
-  type: string
-  data: string
-  created_at: string
-}
-
-export function saveEvent(type: string, data: Record<string, unknown>, timestamp: string): void {
-  getDb()
-    .prepare(
-      `
-    INSERT INTO event_log (type, data, created_at)
-    VALUES (?, ?, ?)
-  `
-    )
-    .run(type, JSON.stringify(data), timestamp)
-}
-
-export function listEvents(opts?: {
-  limit?: number
-  before?: string
-  after?: string
-  /** Inclusive lower bound (ISO). Event Stream time ranges use this. */
-  since?: string
-  /** Inclusive upper bound (ISO). Custom From/Until windows use this. */
-  until?: string
-  types?: string[]
-  /** Drop these types before applying LIMIT (Event Stream skips debug.trace spam). */
-  excludeTypes?: string[]
-}): DbEvent[] {
-  const limit = opts?.limit ?? 200
-  const conditions: string[] = []
-  const params: unknown[] = []
-
-  if (opts?.before) {
-    conditions.push("created_at < ?")
-    params.push(opts.before)
-  }
-  if (opts?.after) {
-    conditions.push("created_at > ?")
-    params.push(opts.after)
-  }
-  if (opts?.since) {
-    conditions.push("created_at >= ?")
-    params.push(opts.since)
-  }
-  if (opts?.until) {
-    conditions.push("created_at <= ?")
-    params.push(opts.until)
-  }
-  if (opts?.types && opts.types.length > 0) {
-    conditions.push(`type IN (${opts.types.map(() => "?").join(",")})`)
-    params.push(...opts.types)
-  }
-  if (opts?.excludeTypes && opts.excludeTypes.length > 0) {
-    conditions.push(`type NOT IN (${opts.excludeTypes.map(() => "?").join(",")})`)
-    params.push(...opts.excludeTypes)
-  }
-
-  const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : ""
-  params.push(limit)
-
-  return getDb()
-    .prepare(`SELECT * FROM event_log ${where} ORDER BY created_at DESC LIMIT ?`)
-    .all(...params) as DbEvent[]
-}
-
-/** Full-text search across event_log data JSON. Used by the DB-fallback
- *  search in LiveLogs widget when in-memory buffer has no matches. */
-export function searchEvents(
-  q: string,
-  opts?: {
-    limit?: number
-    types?: string[]
-    type_patterns?: string[]
-    before?: string
-    after?: string
-    /** Inclusive lower bound (ISO) — same dialect as listEvents. */
-    since?: string
-    /** Inclusive upper bound (ISO). */
-    until?: string
-  }
-): DbEvent[] {
-  const limit = Math.min(opts?.limit ?? 200, 1000)
-  const conditions: string[] = []
-  const params: unknown[] = []
-
-  // Free-text: each word (≥2 chars) must appear in type OR data JSON.
-  // e.g. "preview started" matches type sync.preview.started.
-  if (q.length >= 2) {
-    const words = q.split(/\s+/).filter((w) => w.length >= 2)
-    for (const word of words) {
-      conditions.push("(data LIKE ? OR type LIKE ?)")
-      params.push(`%${word}%`, `%${word}%`)
-    }
-  }
-  if (opts?.before) {
-    conditions.push("created_at < ?")
-    params.push(opts.before)
-  }
-  if (opts?.after) {
-    conditions.push("created_at > ?")
-    params.push(opts.after)
-  }
-  if (opts?.since) {
-    conditions.push("created_at >= ?")
-    params.push(opts.since)
-  }
-  if (opts?.until) {
-    conditions.push("created_at <= ?")
-    params.push(opts.until)
-  }
-  if (opts?.types?.length) {
-    conditions.push(`type IN (${opts.types.map(() => "?").join(",")})`)
-    params.push(...opts.types)
-  }
-  // type_patterns: OR'd LIKE filters on the type column. Used by err:1 to
-  // find events like sync.execute.step.failed / run.failed / agent.error.
-  if (opts?.type_patterns?.length) {
-    const pats = opts.type_patterns.map(() => "type LIKE ?")
-    conditions.push(`(${pats.join(" OR ")})`)
-    params.push(...opts.type_patterns.map((p) => `%${p}%`))
-  }
-
-  if (!conditions.length) return []
-  params.push(limit)
-  return getDb()
-    .prepare(`SELECT * FROM event_log WHERE ${conditions.join(" AND ")} ORDER BY created_at DESC LIMIT ?`)
-    .all(...params) as DbEvent[]
-}
-
-/** All sync events for a plan (chronological). Used by plan-scoped operation audit. */
-export function listEventsForPlanId(planId: string, opts?: { limit?: number }): DbEvent[] {
-  const limit = Math.min(opts?.limit ?? 20_000, 50_000)
-  const db = getDb()
-
-  const primary = db
-    .prepare(
-      `
-    SELECT * FROM event_log
-    WHERE type LIKE 'sync.%'
-      AND (
-        json_extract(data, '$.planId') = ?
-        OR json_extract(data, '$.opId') = ?
-      )
-    ORDER BY created_at ASC
-    LIMIT ?
-  `
-    )
-    .all(planId, planId, limit) as DbEvent[]
-
-  const previewIds = new Set<string>()
-  for (const row of primary) {
-    try {
-      const data = JSON.parse(row.data) as Record<string, unknown>
-      for (const key of ["previewId", "opId"] as const) {
-        const id = data[key]
-        if (typeof id === "string" && id.length > 0 && id !== planId) previewIds.add(id)
-      }
-    } catch (err: unknown) { console.error("[mia]", err) }
-  }
-
-  if (previewIds.size === 0) return primary
-
-  const placeholders = [...previewIds].map(() => "?").join(",")
-  const correlated = db
-    .prepare(
-      `
-    SELECT * FROM event_log
-    WHERE type LIKE 'sync.%'
-      AND json_extract(data, '$.opId') IN (${placeholders})
-    ORDER BY created_at ASC
-  `
-    )
-    .all(...previewIds) as DbEvent[]
-
-  const byId = new Map<number, DbEvent>()
-  for (const row of [...primary, ...correlated]) byId.set(row.id, row)
-  return [...byId.values()].sort((a, b) => a.created_at.localeCompare(b.created_at))
-}
-
-/** All events carrying a runId (chronological). Used by run-scoped operation audit. */
-export function listEventsForRunId(runId: string, opts?: { limit?: number }): DbEvent[] {
-  const limit = Math.min(opts?.limit ?? 20_000, 50_000)
-  return getDb()
-    .prepare(
-      `
-    SELECT * FROM event_log
-    WHERE json_extract(data, '$.runId') = ?
-    ORDER BY created_at ASC
-    LIMIT ?
-  `
-    )
-    .all(runId, limit) as DbEvent[]
-}
+export type { StoredEvent as DbEvent } from "../../../../../ports/event-store.js"
+export {
+  flushEventStore,
+  getEventStore,
+  listEvents,
+  listEventsForPlanId,
+  listEventsForRunId,
+  saveEvent,
+  searchEvents,
+} from "./event-store.js"
 
 export interface DbWebhookDrain {
   id: string
@@ -215,7 +32,9 @@ export function listWebhookDrains(): DbWebhookDrain[] {
 }
 
 export function getWebhookDrain(id: string): DbWebhookDrain | undefined {
-  return getDb().prepare("SELECT * FROM webhook_drain_configs WHERE id = ?").get(id) as DbWebhookDrain | undefined
+  return getDb().prepare("SELECT * FROM webhook_drain_configs WHERE id = ?").get(id) as
+    | DbWebhookDrain
+    | undefined
 }
 
 export function saveWebhookDrain(drain: DbWebhookDrain): void {
@@ -224,7 +43,7 @@ export function saveWebhookDrain(drain: DbWebhookDrain): void {
       `
     INSERT OR REPLACE INTO webhook_drain_configs (id, url, secret, event_filters, enabled, created_at, updated_at)
     VALUES (@id, @url, @secret, @event_filters, @enabled, @created_at, @updated_at)
-  `
+  `,
     )
     .run(drain)
 }

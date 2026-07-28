@@ -1,4 +1,8 @@
-export { _migrate, _setDb, getDb, getDbPath, openDatabase } from "../connection.js"
+/**
+ * SQLite repository barrel (no connection / getDb).
+ * Connection hooks: `adapters/sqlite/connection.js` or `adapters/sqlite/index.js`.
+ * Public callers: `infra/persistence/sqlite.js`.
+ */
 
 export {
   findReplyTo,
@@ -41,6 +45,9 @@ export {
   listRunsWithUsage,
   listRunsWithUsageForThread,
   listRunsWithUsageForUser,
+  listPriorTurnRows,
+  listRunSummariesByIds,
+  countActiveRunsByUpn,
   listTokenUsage,
   listTokenUsageFilterOptions,
   listTokenUsagePaginated,
@@ -70,6 +77,8 @@ export {
   type DbTraceEntry,
   type ListAuditLogPaginatedInput,
   type ListTokenUsagePaginatedInput,
+  type PriorTurnRow,
+  type RunSummaryRow,
   type RunWireExtras,
   type TokenUsageFilters,
   type TokenUsageSort,
@@ -113,6 +122,7 @@ export {
 } from "./config.js"
 
 export {
+  applyLlmEnvOverride,
   getLlmConfig,
   saveLlmConfig,
   type DbLlmConfig,
@@ -135,6 +145,7 @@ export { listApiRequests, saveApiRequest, type DbApiRequest } from "./api-reques
 
 export {
   countConnectors,
+  countEnabledMssqlConnectorsReadonly,
   deleteConnector,
   getConnector,
   listConnectors,
@@ -144,6 +155,8 @@ export {
 
 export {
   deleteWebhookDrain,
+  flushEventStore,
+  getEventStore,
   getWebhookDrain,
   listEvents,
   listEventsForPlanId,
@@ -247,6 +260,7 @@ export {
   grantApproval,
   issueApprovalToken,
   listApprovalPolicies,
+  listApprovals,
   deleteApprovalPolicy,
   rejectApproval,
   upsertApprovalPolicy,
@@ -320,6 +334,7 @@ export {
   loadPublishedBundleFromDb,
   replaceSyncDefinitions,
   saveSyncPublishMeta,
+  clearSyncDefinitionsAndPublishMeta,
   type DbSyncDefinitionRow,
   type DbSyncPublishMeta,
   type PublishedBundleFromDb,
@@ -374,3 +389,76 @@ export {
   type DbUser,
   type InsertUserInput
 } from "./users.js"
+
+export {
+  appendNotificationLog,
+  deleteNotificationRouteRow,
+  getNotificationRouteRow,
+  listEnabledRoutesForEvent,
+  listNotificationLogRows,
+  listNotificationRouteRows,
+  markNotificationLogAttempt,
+  markNotificationLogSent,
+  upsertNotificationRouteRow,
+  type NotificationLogRow,
+  type NotificationRouteRow
+} from "./notification-routes.js"
+
+export {
+  advanceProposerSchedule,
+  deleteProposerSchedule,
+  getProposerSchedule,
+  listEnabledProposerSchedules,
+  listProposerSchedules,
+  upsertProposerSchedule,
+  type ProposerScheduleRow
+} from "./proposer-schedules.js"
+
+export {
+  countApprovalsByState,
+  countEvidenceEnvelopes,
+  countNotificationLogByStatusChannel,
+  countOpenProposalsByTenantRisk,
+  countProposerRunsByStatus,
+  countProposalsByStatus as countProposalsByStatusMetrics
+} from "./proposer-metrics.js"
+
+export {
+  getFileSnapshotByEffectId,
+  getLatestFileSnapshot,
+  insertEffect,
+  insertFileSnapshot,
+  listEffectsByRun,
+  listEffectsByTarget,
+  listFileSnapshotsByRun,
+  markEffectCompensated,
+  type EffectRow,
+  type FileSnapshotRow
+} from "./effects.js"
+
+export {
+  deleteChannelConfigRow,
+  findConversationByChannelAndSender,
+  getChannelConfigRow,
+  getConversationRow,
+  getConversationRowByRunId,
+  getDeliveryStatsRows,
+  insertDeliveryAttemptRow,
+  insertOutboundMessageRow,
+  listChannelConfigRows,
+  listConversationRows,
+  listDeliveryAttemptRows,
+  listOutboundMessageRows,
+  listPendingOutboundMessageRows,
+  updateConversationActiveRun,
+  updateConversationThreadId,
+  updateOutboundMessageAttempts,
+  updateOutboundMessageStatus,
+  upsertChannelConfigRow,
+  upsertConversationRow,
+  type DbChannelConfigRow,
+  type DbConversationRow,
+  type DbDeliveryAttemptRow,
+  type DbDeliveryStatsRow,
+  type DbOutboundMessageRow
+} from "./channels.js"

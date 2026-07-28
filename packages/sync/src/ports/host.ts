@@ -24,6 +24,8 @@ export interface MssqlPoolProvider {
   configOf(connectorId: string): MssqlConfig | undefined
   list(): readonly { id: string; name: string }[]
   invalidate(connectorId: string): void
+  /** Optional shared budget for sync-work leases (wired by the platform shell). */
+  runWithSyncBudget?<T>(connectorKey: string, fn: () => Promise<T>): Promise<T>
 }
 
 export interface ToolResultArtifactState {

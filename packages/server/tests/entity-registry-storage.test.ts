@@ -1,6 +1,6 @@
 /**
  * Tests for the entity registry persistence layer
- * (packages/server/src/infra/persistence/db/entity-registry.ts).
+ * (packages/server/src/infra/persistence/adapters/sqlite/db/entity-registry.ts).
  *
  * Covers:
  *   - bundled SCD2 strategies are seeded on migrate
@@ -45,10 +45,10 @@ afterEach(() => {
 })
 
 async function setup() {
-  const { _setDb, _migrate } = await import("../src/infra/persistence/db/index.js")
+  const { _setDb, _migrate } = await import("../src/infra/persistence/adapters/sqlite/index.js")
   _setDb(testDb)
   _migrate(testDb)
-  return import("../src/infra/persistence/db/entity-registry.js")
+  return import("../src/infra/persistence/adapters/sqlite/db/entity-registry.js")
 }
 
 function validDef(overrides: Partial<EntityDefinition> = {}): EntityDefinition {
@@ -110,7 +110,7 @@ describe("entity registry seed", () => {
   })
 
   it("seed is idempotent across repeated _migrate calls", async () => {
-    const { _migrate } = await import("../src/infra/persistence/db/index.js")
+    const { _migrate } = await import("../src/infra/persistence/adapters/sqlite/index.js")
     _migrate(testDb)
     _migrate(testDb)
     _migrate(testDb)

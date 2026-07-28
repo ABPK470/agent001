@@ -140,6 +140,32 @@ One owned concept in the platform shell. Same words in UI, code, and docs.
 
 ---
 
+## 5c. Platform store vs domain connectors
+
+**Platform store** is the server’s product durability: users, sessions, threads,
+runs, events, policies, entity registry, sync definitions/runs, approvals,
+memory, notifications, channels, effects. Owned by server persistence ports +
+repository functions. Today there is **one** adapter:
+`packages/server/src/infra/persistence/adapters/sqlite/**`.
+
+**Domain connectors** are separate: warehouse MSSQL pools, Bridge, and other
+execution I/O. They never share the platform SQLite handle and must not be mixed
+into the platform store.
+
+**Laws**
+
+- Callers use repository functions (via `infra/persistence/sqlite.js` / public
+  persistence barrels) or named ports — never `getDb()` / `better-sqlite3`
+  outside `adapters/sqlite/**`.
+- `getDb` is not re-exported from public barrels. Tests and boot may import
+  connection hooks from `adapters/sqlite/index.js`.
+- Scale ports sit beside the store, not inside SQL call sites: **EventStore**
+  (durable event_log), **ResourceScheduler** / run queue, **ConnectionBudget**
+  (MSSQL pool caps), **LlmThrottle**, **PlatformStore** (transactions over
+  repository work).
+
+---
+
 ## 6. Monorepo shape (functional core / imperative shell)
 
 Applied twice:

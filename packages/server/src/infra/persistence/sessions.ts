@@ -1,1 +1,1 @@
-export * from "./db/sessions.js"
+export * from "./adapters/sqlite/db/sessions.js"

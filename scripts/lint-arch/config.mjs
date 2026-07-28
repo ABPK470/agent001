@@ -38,6 +38,7 @@ export const PACKAGE_RULES = [
   "data-sanitization",
   "trust",
   "forbidden-constructors",
+  "platform-store",
 ]
 
 /** Extra per-package rules (data — not if-branches in the entrypoint). */
@@ -159,10 +160,10 @@ export function createPackageConfigs(root) {
         "boot/shutdown.ts",
         "infra/llm/databricks-broker.ts",
         "infra/llm/operation-context.ts",
-        "infra/persistence/connection.ts",
-        "infra/persistence/db/sync-tool-approvals.ts",
-        "infra/persistence/evidence/signers/kms-stub.ts",
-        "infra/persistence/memory/vectors.ts",
+        "infra/persistence/adapters/sqlite/connection.ts",
+        "infra/persistence/adapters/sqlite/db/sync-tool-approvals.ts",
+        "infra/persistence/adapters/sqlite/evidence/signers/kms-stub.ts",
+        "infra/persistence/adapters/sqlite/memory/vectors.ts",
         "infra/queue/channels/teams.ts",
         "infra/sandbox/backend.ts",
         "infra/sandbox/index.ts",

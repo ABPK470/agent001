@@ -62,7 +62,7 @@ describe("registry JSON format routes", () => {
     dataDir = mkdtempSync(join(tmpdir(), "registry-json-route-test-"))
     process.env["MIA_DATA_DIR"] = dataDir
     testDb = new Database(":memory:")
-    const { _setDb, _migrate } = await import("../src/infra/persistence/db/index.js")
+    const { _setDb, _migrate } = await import("../src/infra/persistence/adapters/sqlite/index.js")
     _setDb(testDb)
     _migrate(testDb)
   })

@@ -944,10 +944,16 @@ const BASELINE_SQL = `
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       type TEXT NOT NULL,
       data TEXT NOT NULL,
-      created_at TEXT NOT NULL
+      created_at TEXT NOT NULL,
+      actor_upn TEXT,
+      run_id TEXT,
+      plan_id TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_event_log_time ON event_log(created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_event_log_type ON event_log(type);
+    CREATE INDEX IF NOT EXISTS idx_event_log_actor_upn ON event_log(actor_upn);
+    CREATE INDEX IF NOT EXISTS idx_event_log_run_id ON event_log(run_id);
+    CREATE INDEX IF NOT EXISTS idx_event_log_plan_id ON event_log(plan_id);
 
     CREATE TABLE IF NOT EXISTS webhook_drain_configs (
       id TEXT PRIMARY KEY,

@@ -10,19 +10,29 @@ export { RunPriority }
 
 export interface QueueStats {
   concurrency: number
+  /** Per-UPN in-flight cap (fairness). */
+  maxPerUpn?: number
   active: number
   queued: number
   totalProcessed: number
   totalDropped: number
-  entries: Array<{ runId: string; priority: RunPriority; waitingMs: number }>
+  /** Optional per-UPN active/waiting counts for operators. */
+  byUpn?: Record<string, { active: number; waiting: number }>
+  entries: Array<{
+    runId: string
+    priority: RunPriority
+    waitingMs: number
+    upn?: string | null
+  }>
 }
 
-/** Scheduling port for agent runs (concurrency + priority). */
+/** Scheduling port for agent runs (concurrency + priority + optional UPN fairness). */
 export interface RunQueuePort {
   acquire(
     runId: string,
     priority?: RunPriority,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    upn?: string | null
   ): Promise<() => void>
   remove(runId: string): boolean
   stats(): QueueStats

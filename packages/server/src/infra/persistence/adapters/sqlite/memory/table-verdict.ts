@@ -27,7 +27,7 @@
  */
 
 import { randomUUID } from "node:crypto"
-import { getDb } from "../sqlite.js"
+import { getDb } from "../connection.js"
 import { MemoryRole, MemorySource, MemoryTier } from "./types.js"
 
 // ── Public types ─────────────────────────────────────────────────

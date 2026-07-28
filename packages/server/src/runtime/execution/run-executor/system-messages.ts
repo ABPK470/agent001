@@ -5,7 +5,7 @@ import { loadCandidateVerdicts, loadKnownObjects } from "../../prompting/data-bl
 import { loadPriorResults } from "../../prompting/data-blocks/prior-results-block.js"
 import { loadPriorTurns } from "../../prompting/data-blocks/prior-turns.js"
 import { buildSystemMessages } from "../../prompting/system-messages/index.js"
-import type { MemoryPerTier } from "../../../infra/persistence/memory/tier-context.js"
+import type { MemoryPerTier } from "../../../infra/persistence/adapters/sqlite/memory/tier-context.js"
 import type {
   ActiveRunRecord,
   ExecuteRunRequestDto,

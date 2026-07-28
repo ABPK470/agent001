@@ -16,7 +16,7 @@ import { createHash } from "node:crypto"
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 
-import { resolveServerDataDir } from "../server-data-dir.js"
+import { resolveServerDataDir } from "../../../server-data-dir.js"
 
 export function getAttachmentRoot(): string {
   return join(resolveServerDataDir(), "attachments")

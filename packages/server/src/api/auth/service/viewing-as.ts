@@ -10,7 +10,7 @@
  */
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify"
-import { findUserByUpn } from "../../../infra/persistence/db/users.js"
+import { findUserByUpn } from "../../../infra/persistence/adapters/sqlite/db/users.js"
 import { sameUpn } from "../../../internal/upn.js"
 import type { CurrentSession } from "../../../ports/session.js"
 

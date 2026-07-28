@@ -39,7 +39,7 @@ afterEach(() => {
 })
 
 async function bootstrap(): Promise<{ rootRunId: string }> {
-  const { _setDb, _migrate } = await import("../src/infra/persistence/db/index.js")
+  const { _setDb, _migrate } = await import("../src/infra/persistence/adapters/sqlite/index.js")
   _migrate(testDb)
   _setDb(testDb)
   const rootRunId = "00000000-0000-0000-0000-000000000001"

@@ -21,7 +21,7 @@ import {
   syncToolArgsKey,
   upsertPendingSyncToolApproval,
   type SyncToolApprovalRecord,
-} from "../../../infra/persistence/db/sync-tool-approvals.js"
+} from "../../../infra/persistence/adapters/sqlite/db/sync-tool-approvals.js"
 import {
   buildPolicyContext,
   policyRoleFromAdmin,

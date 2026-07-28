@@ -1,14 +1,14 @@
 /**
- * Post-open database maintenance — run once at server boot after {@link openDatabase}.
+ * Post-open database maintenance — run once at server boot after openDatabase.
  *
  * Hygiene only (status normalisation, retention pruning). Auth bootstrap is separate
  * in start-server because it is an application concern, not persistence internals.
  */
 
 import { pruneExpiredAttachments } from "./attachments.js"
-import { getDbPath } from "./connection.js"
-import { normaliseUnknownRunStatuses } from "./db/runs.js"
-import { pruneOldData } from "./db/lifecycle.js"
+import { getDbPath } from "./adapters/sqlite/index.js"
+import { normaliseUnknownRunStatuses } from "./adapters/sqlite/db/runs.js"
+import { pruneOldData } from "./adapters/sqlite/db/lifecycle.js"
 import { prune as pruneMemory } from "./memory.js"
 
 export function runDatabaseMaintenance(): void {

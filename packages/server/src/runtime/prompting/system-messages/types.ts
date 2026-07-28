@@ -5,7 +5,7 @@
 
 import type { LLMClient, Tool } from "@mia/agent"
 import type { DbToolResult } from "../../../infra/persistence/sqlite.js"
-import type { MemoryPerTier } from "../../../infra/persistence/memory/tier-context.js"
+import type { MemoryPerTier } from "../../../infra/persistence/adapters/sqlite/memory/tier-context.js"
 import type { ClarificationsPort } from "../../../ports/clarifications.js"
 import type { RunWorkspaceContext } from "../../workspace/index.js"
 import type { CandidateVerdictRow, KnownObjectRow } from "../data-blocks/known-objects.js"

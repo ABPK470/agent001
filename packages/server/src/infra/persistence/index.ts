@@ -1,10 +1,10 @@
 /**
  * Durable-state adapter door for the server package.
  *
- * Connection lifecycle: {@link openDatabase} at boot → domain code uses {@link getDb}.
+ * Open the DB at boot via `adapters/sqlite` (`openDatabase`). Product code uses
+ * repository functions from `./sqlite.js` — never `getDb` / better-sqlite3.
  */
 
-export { getDb, getDbPath, openDatabase, _migrate, _setDb } from "./connection.js"
 export { runDatabaseMaintenance } from "./startup.js"
 export * from "./attachments.js"
 export * from "./evidence.js"

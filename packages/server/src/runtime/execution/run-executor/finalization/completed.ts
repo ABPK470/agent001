@@ -2,7 +2,7 @@ import { asRunId, completeRunPure, EventType, runCompleted, type Agent } from "@
 import { RunStatus } from "@mia/shared-enums"
 import { broadcast } from "../../../../infra/events/broadcaster.js"
 import { consolidate, ingestRunTurns } from "../../../../infra/persistence/memory.js"
-import { isInternalFailureAnswer } from "../../../../infra/persistence/memory/episodic-quality.js"
+import { isInternalFailureAnswer } from "../../../../infra/persistence/adapters/sqlite/memory/episodic-quality.js"
 import * as db from "../../../../infra/persistence/sqlite.js"
 import { NotificationActionType } from "../../../../internal/enums/notifications.js"
 import { TraceEventKind } from "../../../../internal/enums/trace.js"

@@ -10,7 +10,7 @@
  * Freshness = catalog fingerprint match AND age < TTL(tool, mode).
  */
 
-import { getDb } from "../sqlite.js"
+import { getDb } from "../connection.js"
 
 export type CachedTool =
   | "profile_data"
@@ -224,6 +224,49 @@ export interface PruneOptions {
   /** Drop rows older than this age (ms). */
   maxAgeMs: number
   now?: number
+}
+
+export interface ToolKnowledgeListRow {
+  qname: string
+  tool: string
+  mode: string
+  bytes: number
+  created_at: number
+  payload_text: string
+}
+
+export function listToolKnowledgeByQnames(
+  qnames: readonly string[],
+  connection: string,
+  limit: number
+): ToolKnowledgeListRow[] {
+  if (qnames.length === 0) return []
+  const placeholders = qnames.map(() => "?").join(",")
+  return getDb()
+    .prepare(
+      `
+      SELECT qname, tool, mode, bytes, created_at, payload_text
+      FROM tool_knowledge_cache
+      WHERE qname IN (${placeholders}) AND lower(connection) = lower(?)
+      ORDER BY created_at DESC
+      LIMIT ?
+    `
+    )
+    .all(...qnames, connection, limit) as ToolKnowledgeListRow[]
+}
+
+export function listRecentToolKnowledge(connection: string, limit: number): ToolKnowledgeListRow[] {
+  return getDb()
+    .prepare(
+      `
+      SELECT qname, tool, mode, bytes, created_at, payload_text
+      FROM tool_knowledge_cache
+      WHERE lower(connection) = lower(?)
+      ORDER BY created_at DESC
+      LIMIT ?
+    `
+    )
+    .all(connection, limit) as ToolKnowledgeListRow[]
 }
 
 export function pruneToolKnowledge(opts: PruneOptions): number {

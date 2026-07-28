@@ -28,7 +28,7 @@ beforeEach(async () => {
   db = new Database(":memory:")
   db.pragma("journal_mode = WAL")
   db.pragma("foreign_keys = ON")
-  const { _setDb, _migrate } = await import("../src/infra/persistence/db/index.js")
+  const { _setDb, _migrate } = await import("../src/infra/persistence/adapters/sqlite/index.js")
   _setDb(db)
   _migrate(db)
   const { seedUser } = await import("./_fk-helpers.js")
@@ -49,7 +49,7 @@ afterEach(() => {
 async function buildApp(session: CurrentSession | null) {
   const { registerThreadRoutes } = await import("../src/api/threads/routes.js")
   const { registerRunRoutes } = await import("../src/api/runs/routes.js")
-  const { deleteThreadAndRuns } = await import("../src/infra/persistence/db/threads.js")
+  const { deleteThreadAndRuns } = await import("../src/infra/persistence/adapters/sqlite/db/threads.js")
   const startRun = vi.fn(() => "run-new")
   const app = Fastify({ logger: false })
   app.addHook("onRequest", async (req) => {

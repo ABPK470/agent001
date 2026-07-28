@@ -68,7 +68,7 @@ afterEach(() => {
 describe("native seed ≡ G2 logical catalog", () => {
   it("boot seed matches frozen G2 entities and flowId bindings", async () => {
     const { _setDb, _migrate, listEntityDefinitions } = await import(
-      "../src/infra/persistence/db/index.js"
+      "../src/infra/persistence/adapters/sqlite/index.js"
     )
     const { seedEntityRegistryIfEmpty } = await import("../src/api/sync/service/seed-entity-registry.js")
     const { seedSyncMetadataIfEmpty } = await import("../src/api/sync/service/seed-sync-metadata.js")
@@ -97,7 +97,7 @@ describe("native seed ≡ G2 logical catalog", () => {
 
   it("Publish from native seeds matches frozen G3 process JSON (DB dialect)", async () => {
     const { _setDb, _migrate, loadPublishedBundleFromDb } = await import(
-      "../src/infra/persistence/db/index.js"
+      "../src/infra/persistence/adapters/sqlite/index.js"
     )
     const { seedEntityRegistryIfEmpty } = await import("../src/api/sync/service/seed-entity-registry.js")
     const { seedSyncMetadataIfEmpty } = await import("../src/api/sync/service/seed-sync-metadata.js")

@@ -18,7 +18,7 @@ import { defaultSyncDefinitionFlowTemplateId, hasSyncDefinitionFlowTemplate, wit
 import { validateCatalogId } from "@mia/shared-types"
 
 import * as db from "../../../infra/persistence/sqlite.js"
-import { getDb } from "../../../infra/persistence/sqlite.js"
+import { getPlatformStore } from "../../../infra/persistence/adapters/sqlite/platform-store.js"
 import {
   buildFlowCatalogFromSyncMetadataDoc,
   FlowStepsValidationError,
@@ -559,7 +559,7 @@ export function applyDeployCatalogSnapshot(args: {
   const tenantId = args.snapshot.tenantId || DEFAULT_TENANT
   const projectRoot = args.projectRoot
 
-  getDb().transaction(() => {
+  getPlatformStore().transaction(() => {
     applyEnvironments(args.snapshot.environments as EnvironmentsDoc)
     applySyncMetadata(tenantId, args.snapshot.syncMetadata as SyncMetadataDoc)
     applyStrategies(tenantId, args.snapshot.strategies as StrategiesDoc, args.actor)
@@ -573,7 +573,7 @@ export function applyDeployCatalogSnapshot(args: {
         args.actor,
       )
     }
-  })()
+  })
 
   return { ...preview, dryRun: false, applied: true }
 }

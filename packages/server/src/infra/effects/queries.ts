@@ -1,64 +1,56 @@
-import { getDb } from "../persistence/sqlite.js"
+import {
+  getLatestFileSnapshot as getLatestFileSnapshotRow,
+  listEffectsByRun,
+  listEffectsByTarget,
+  listFileSnapshotsByRun,
+  type EffectRow,
+  type FileSnapshotRow
+} from "../persistence/sqlite.js"
 import type { Effect, EffectKind, EffectStatus, FileSnapshot } from "./types.js"
 
-// ── Row mappers (module-private) ─────────────────────────────────
-
-function rowToEffect(row: Record<string, unknown>): Effect {
+function rowToEffect(row: EffectRow): Effect {
   return {
-    id: row.id as string,
-    runId: row.run_id as string,
-    seq: row.seq as number,
+    id: row.id,
+    runId: row.run_id,
+    seq: row.seq,
     kind: row.kind as EffectKind,
-    tool: row.tool as string,
-    target: row.target as string,
-    preHash: (row.pre_hash as string) ?? null,
-    postHash: (row.post_hash as string) ?? null,
+    tool: row.tool,
+    target: row.target,
+    preHash: row.pre_hash,
+    postHash: row.post_hash,
     status: row.status as EffectStatus,
-    metadata: JSON.parse((row.metadata as string) ?? "{}"),
-    createdAt: row.created_at as string
+    metadata: JSON.parse(row.metadata ?? "{}"),
+    createdAt: row.created_at
   }
 }
 
-function rowToSnapshot(row: Record<string, unknown>): FileSnapshot {
+function rowToSnapshot(row: FileSnapshotRow): FileSnapshot {
   return {
-    id: row.id as string,
-    effectId: row.effect_id as string,
-    runId: row.run_id as string,
-    filePath: row.file_path as string,
-    content: (row.content as string) ?? null,
-    hash: (row.hash as string) ?? null,
-    createdAt: row.created_at as string
+    id: row.id,
+    effectId: row.effect_id,
+    runId: row.run_id,
+    filePath: row.file_path,
+    content: row.content,
+    hash: row.hash,
+    createdAt: row.created_at
   }
 }
-
-// ── Queries ──────────────────────────────────────────────────────
 
 export function getRunEffects(runId: string): Effect[] {
-  const rows = getDb().prepare("SELECT * FROM effects WHERE run_id = ? ORDER BY seq").all(runId) as Array<
-    Record<string, unknown>
-  >
-  return rows.map(rowToEffect)
+  return listEffectsByRun(runId).map(rowToEffect)
 }
 
 export function getFileHistory(filePath: string): Effect[] {
-  const rows = getDb()
-    .prepare("SELECT * FROM effects WHERE target = ? ORDER BY created_at")
-    .all(filePath) as Array<Record<string, unknown>>
-  return rows.map(rowToEffect)
+  return listEffectsByTarget(filePath).map(rowToEffect)
 }
 
 export function getLatestSnapshot(filePath: string): FileSnapshot | null {
-  const row = getDb()
-    .prepare("SELECT * FROM file_snapshots WHERE file_path = ? ORDER BY created_at DESC LIMIT 1")
-    .get(filePath) as Record<string, unknown> | undefined
+  const row = getLatestFileSnapshotRow(filePath)
   return row ? rowToSnapshot(row) : null
 }
 
 export function getRunSnapshots(runId: string): FileSnapshot[] {
-  const rows = getDb()
-    .prepare("SELECT * FROM file_snapshots WHERE run_id = ? ORDER BY created_at")
-    .all(runId) as Array<Record<string, unknown>>
-  return rows.map(rowToSnapshot)
+  return listFileSnapshotsByRun(runId).map(rowToSnapshot)
 }
 
 export function getEffectStats(runId: string): {

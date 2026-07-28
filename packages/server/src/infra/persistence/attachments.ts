@@ -1,1 +1,1 @@
-export * from "./attachments/index.js"
+export * from "./adapters/sqlite/attachments/index.js"

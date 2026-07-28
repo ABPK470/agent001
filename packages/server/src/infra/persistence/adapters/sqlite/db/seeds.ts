@@ -10,7 +10,7 @@ import { fileURLToPath } from "node:url"
 import type Database from "better-sqlite3"
 
 const DEFAULT_TENANT = "_default"
-const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../../..")
+const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../../../../..")
 
 function seedScd2StrategiesFromArtifact(db: Database.Database, projectRoot: string): void {
   const artifact = loadStrategiesArtifact(resolve(projectRoot))

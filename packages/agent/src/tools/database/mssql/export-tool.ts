@@ -24,7 +24,7 @@ import type { ExecutableTool, ToolMetadata } from "../../../domain/types/agent-t
 import { EXPORT_FORMATS, ExportFormat, isExportFormat } from "../../../domain/enums/tools.js"
 import { safePathResolvedWith } from "../../files/filesystem-security.js"
 import { getCatalog } from "../../catalog/index.js"
-import { getPool } from "./connection.js"
+import { withMssqlPool } from "./connection.js"
 import { resolveToolConnectionArg } from "./resolve-connection.js"
 import { decorateMssqlError, enrichInvalidColumnError } from "./error-hints.js"
 import { emitMssqlQualityTrace } from "./trace.js"
@@ -244,13 +244,8 @@ async function executeExportQueryToFile(
   const toolTrace = readToolTraceContext(args)
   const accessor = () => getCatalog(opts.host, connectionName)
 
-  let pool: sql.ConnectionPool
   try {
-    const result = await getPool(opts.host, connectionName)
-    pool = result.pool
-  } catch (err) {
-    return `Error: ${err instanceof Error ? err.message : String(err)}`
-  }
+    return await withMssqlPool(opts.host, connectionName, async ({ pool }) => {
 
   // Tool-level read-only: export is SELECT/WITH/#temp only (not a connector latch).
   const validation = validateQueryDetailed(query, {
@@ -453,6 +448,11 @@ async function executeExportQueryToFile(
     return `SQL Error: ${decorateMssqlError(enriched)}`
   } finally {
     killSignal?.removeEventListener("abort", onKill)
+  }
+    })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    return `Error: ${msg}`
   }
 }
 

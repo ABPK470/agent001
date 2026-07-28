@@ -9,7 +9,7 @@ import type { AgentHost } from "@mia/agent"
 import { ALWAYS_PUBLISH_READY, createDbPublishedSyncDefinitionRegistry } from "@mia/sync"
 import type { CurrentSession } from "../src/api/auth/index.js"
 import { loadPublishedBundleFromSqlite } from "../src/boot/published-sync-bundle.js"
-import * as db from "../src/infra/persistence/db/index.js"
+import * as db from "../src/infra/persistence/adapters/sqlite/db/index.js"
 
 let testDb: Database.Database
 let dataDir: string
@@ -62,7 +62,7 @@ async function seedLiveEnvironments(root: string, host: AgentHost): Promise<void
 }
 
 async function buildApp(session: CurrentSession): Promise<{ app: FastifyInstance; host: AgentHost }> {
-  const { _setDb, _migrate } = await import("../src/infra/persistence/db/index.js")
+  const { _setDb, _migrate } = await import("../src/infra/persistence/adapters/sqlite/index.js")
   const { registerSyncEnvironmentRoutes } = await import("../src/api/sync/index.js")
   const { seedUser, seedSession } = await import("./_fk-helpers.js")
 

@@ -6,9 +6,9 @@ import {
   MemorySource,
   MemoryTier,
   EpisodicAnswerKind
-} from "../../../internal/enums/memory.js"
-import { broadcast } from "../../events/broadcaster.js"
-import { getDb } from "../sqlite.js"
+} from "../../../../../internal/enums/memory.js"
+import { broadcast } from "../../../../events/broadcaster.js"
+import { getDb } from "../connection.js"
 import { stampProvenance } from "./provenance.js"
 import { computeSalience, isDuplicate, SALIENCE_THRESHOLD, truncateAtBoundary } from "./scoring.js"
 import { classifyEpisodicRun } from "./episodic-quality.js"

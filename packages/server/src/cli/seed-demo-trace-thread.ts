@@ -19,7 +19,7 @@ import {
   saveRun,
   saveTraceEntry,
   touchThread,
-} from "../infra/persistence/db/index.js"
+} from "../infra/persistence/adapters/sqlite/index.js"
 
 const args = process.argv.slice(2)
 const upnArg = args.find((a) => a.startsWith("--upn="))?.slice(6)

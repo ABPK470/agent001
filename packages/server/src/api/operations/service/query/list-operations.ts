@@ -9,7 +9,7 @@
  */
 
 import * as db from "../../../../infra/persistence/sqlite.js"
-import type { DbEvent } from "../../../../infra/persistence/db/events.js"
+import type { DbEvent } from "../../../../infra/persistence/adapters/sqlite/db/events.js"
 import {
   buildOperationsFromEvents,
   mapDbEventsChronological

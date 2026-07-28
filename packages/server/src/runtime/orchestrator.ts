@@ -209,7 +209,7 @@ export class AgentOrchestrator {
 
     broadcast({
       type: EventType.RunQueued,
-      data: { runId, goal, queueStats: this.queue.stats() }
+      data: { runId, goal, queueStats: this.queue.stats(), actorUpn: upn }
     })
     saveTrace(this.activeRuns, runId, { kind: TraceEventKind.Goal, text: goal })
 

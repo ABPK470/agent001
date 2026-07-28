@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { EMPTY_MEMORY_PER_TIER } from "../src/infra/persistence/memory/tier-context.js"
+import { EMPTY_MEMORY_PER_TIER } from "../src/infra/persistence/adapters/sqlite/memory/tier-context.js"
 import { buildMemorySections } from "../src/runtime/prompting/system-messages/memory-sections.js"
 import type { BuildContext } from "../src/runtime/prompting/system-messages/types.js"
 

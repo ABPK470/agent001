@@ -16,7 +16,7 @@
  * @module
  */
 
-import { getDb } from "../sqlite.js"
+import { getDb } from "../connection.js"
 
 export interface ResolvedTermInput {
   /** Lowercase business noun the user was asked about ("clients"). */

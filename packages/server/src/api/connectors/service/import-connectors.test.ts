@@ -1,6 +1,6 @@
 import Database from "better-sqlite3"
 import { beforeEach, describe, expect, it } from "vitest"
-import { _migrate } from "../../../infra/persistence/connection.js"
+import { _migrate } from "../../../infra/persistence/adapters/sqlite/connection.js"
 import * as db from "../../../infra/persistence/sqlite.js"
 import { importConnectors, planConnectorsImport } from "./import-connectors.js"
 

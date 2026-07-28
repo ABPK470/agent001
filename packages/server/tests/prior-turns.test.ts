@@ -24,7 +24,7 @@ beforeEach(async () => {
   db = new Database(":memory:")
   db.pragma("journal_mode = WAL")
   db.pragma("foreign_keys = ON")
-  const { _setDb, _migrate } = await import("../src/infra/persistence/db/index.js")
+  const { _setDb, _migrate } = await import("../src/infra/persistence/adapters/sqlite/index.js")
   _setDb(db)
   _migrate(db)
 })

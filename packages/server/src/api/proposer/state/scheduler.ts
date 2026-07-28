@@ -19,18 +19,18 @@
 
 import type { AgentHost } from "@mia/agent"
 import type { LlmCompletionPort } from "@mia/sync"
-import { getDb } from "../../../infra/persistence/sqlite.js"
+import {
+  advanceProposerSchedule,
+  deleteProposerSchedule,
+  getProposerSchedule,
+  listEnabledProposerSchedules,
+  listProposerSchedules,
+  upsertProposerSchedule,
+  type ProposerScheduleRow
+} from "../../../infra/persistence/sqlite.js"
 import { runProposer } from "../service/runner.js"
 
-export interface ProposerScheduleRow {
-  tenant_id: string
-  source: string
-  target: string
-  cron: string
-  enabled: number
-  last_run_at: string | null
-  next_run_at: string | null
-}
+export type { ProposerScheduleRow }
 
 export interface SchedulerOptions {
   /** Server boot-host (shared mssql Map). Required when scheduled passes will hit the DB. */
@@ -175,9 +175,7 @@ function resolveLlm(
 // ── schedule persistence ───────────────────────────────────────
 
 export function listDueSchedules(now: Date): ProposerScheduleRow[] {
-  const all = getDb()
-    .prepare(`SELECT * FROM proposer_schedule_configs WHERE enabled = 1`)
-    .all() as ProposerScheduleRow[]
+  const all = listEnabledProposerSchedules()
   return all.filter((s) => isDue(s, now))
 }
 
@@ -194,15 +192,13 @@ function isDue(s: ProposerScheduleRow, now: Date): boolean {
 function persistScheduleAdvance(s: ProposerScheduleRow): void {
   const now = new Date()
   const next = nextCronMatch(s.cron, new Date(now.getTime() + 60_000))
-  getDb()
-    .prepare(
-      `
-    UPDATE proposer_schedule_configs
-       SET last_run_at = ?, next_run_at = ?
-     WHERE tenant_id = ? AND source = ? AND target = ?
-  `
-    )
-    .run(now.toISOString(), next ? next.toISOString() : null, s.tenant_id, s.source, s.target)
+  advanceProposerSchedule(
+    s.tenant_id,
+    s.source,
+    s.target,
+    now.toISOString(),
+    next ? next.toISOString() : null
+  )
 }
 
 export interface UpsertScheduleInput {
@@ -216,35 +212,26 @@ export interface UpsertScheduleInput {
 
 export function upsertSchedule(i: UpsertScheduleInput): ProposerScheduleRow {
   const next = nextCronMatch(i.cron, new Date())
-  getDb()
-    .prepare(
-      `
-    INSERT INTO proposer_schedule_configs (tenant_id, source, target, cron, enabled, next_run_at, updated_at, updated_by)
-    VALUES (?, ?, ?, ?, ?, ?, datetime('now'), ?)
-    ON CONFLICT(tenant_id, source, target) DO UPDATE SET
-      cron        = excluded.cron,
-      enabled     = excluded.enabled,
-      next_run_at = excluded.next_run_at,
-      updated_at  = excluded.updated_at,
-      updated_by  = excluded.updated_by
-  `
-    )
-    .run(i.tenantId, i.source, i.target, i.cron, i.enabled ? 1 : 0, next ? next.toISOString() : null, i.actor)
-  return getDb()
-    .prepare(`SELECT * FROM proposer_schedule_configs WHERE tenant_id = ? AND source = ? AND target = ?`)
-    .get(i.tenantId, i.source, i.target) as ProposerScheduleRow
+  upsertProposerSchedule({
+    tenantId: i.tenantId,
+    source: i.source,
+    target: i.target,
+    cron: i.cron,
+    enabled: i.enabled ? 1 : 0,
+    nextRunAt: next ? next.toISOString() : null,
+    updatedBy: i.actor
+  })
+  const row = getProposerSchedule(i.tenantId, i.source, i.target)
+  if (!row) throw new Error(`proposer schedule ${i.tenantId}|${i.source}|${i.target} missing after upsert`)
+  return row
 }
 
 export function listSchedules(tenantId: string): ProposerScheduleRow[] {
-  return getDb()
-    .prepare(`SELECT * FROM proposer_schedule_configs WHERE tenant_id = ? ORDER BY source, target`)
-    .all(tenantId) as ProposerScheduleRow[]
+  return listProposerSchedules(tenantId)
 }
 
 export function deleteSchedule(tenantId: string, source: string, target: string): void {
-  getDb()
-    .prepare(`DELETE FROM proposer_schedule_configs WHERE tenant_id = ? AND source = ? AND target = ?`)
-    .run(tenantId, source, target)
+  deleteProposerSchedule(tenantId, source, target)
 }
 
 // ── cron parsing (minimal but real) ────────────────────────────

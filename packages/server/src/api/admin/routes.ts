@@ -6,9 +6,8 @@ import { parseBoundaryJson } from "../../internal/parse-json.js"
 
 import type { FastifyInstance } from "fastify"
 import { listSessions, listUserHistory, listUsersWithStats } from "../../infra/persistence/sessions.js"
-import { setUserAdmin } from "../../infra/persistence/db/users.js"
 import * as db from "../../infra/persistence/sqlite.js"
-import { getDb } from "../../infra/persistence/sqlite.js"
+import { setUserAdmin } from "../../infra/persistence/sqlite.js"
 import type { AgentOrchestrator } from "../../runtime/orchestrator.js"
 
 function parseAuditScopeType(raw: string | undefined): db.AuditScopeType | undefined {
@@ -157,25 +156,7 @@ export function registerAdminRoutes(app: FastifyInstance, orchestrator: AgentOrc
     }
     const activeIds = orchestrator.getActiveRunIds()
     if (activeIds.length === 0) return { runs: [] }
-    const placeholders = activeIds.map(() => "?").join(",")
-    const rows = getDb()
-      .prepare(
-        `
-				SELECT id, goal, status, step_count, created_at, upn, display_name
-				FROM runs
-				WHERE id IN (${placeholders})
-				ORDER BY created_at DESC
-			`
-      )
-      .all(...activeIds) as Array<{
-      id: string
-      goal: string
-      status: string
-      step_count: number
-      created_at: string
-      upn: string
-      display_name: string
-    }>
+    const rows = db.listRunSummariesByIds(activeIds)
     return {
       runs: rows.map((row) => ({
         runId: row.id,
@@ -202,17 +183,7 @@ export function registerAdminRoutes(app: FastifyInstance, orchestrator: AgentOrc
     const activeIds = orchestrator.getActiveRunIds()
     let activeByUpn = new Map<string, number>()
     if (activeIds.length > 0) {
-      const placeholders = activeIds.map(() => "?").join(",")
-      const rows = getDb()
-        .prepare(
-          `
-				SELECT lower(upn) AS upn, COUNT(*) AS n
-				FROM runs WHERE id IN (${placeholders})
-				GROUP BY lower(upn)
-			`
-        )
-        .all(...activeIds) as Array<{ upn: string; n: number }>
-      activeByUpn = new Map(rows.map((row) => [row.upn, row.n]))
+      activeByUpn = new Map(db.countActiveRunsByUpn(activeIds).map((row) => [row.upn, row.n]))
     }
 
     return {

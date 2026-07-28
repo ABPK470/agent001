@@ -1,5 +1,5 @@
-import { MemoryTier } from "../../../internal/enums/memory.js"
-import { getDb } from "../sqlite.js"
+import { MemoryTier } from "../../../../../internal/enums/memory.js"
+import { getDb } from "../connection.js"
 import type { MemoryEntry } from "./types.js"
 
 // ── Vector embeddings (Ollama) ───────────────────────────────────

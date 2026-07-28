@@ -15,10 +15,10 @@
 import Database from "better-sqlite3"
 import { mkdirSync } from "node:fs"
 import { initMemoryFts } from "./memory/schema.js"
-import { applyLlmEnvOverride } from "../llm/env-override.js"
+import { applyLlmEnvOverride } from "./llm-env-bootstrap.js"
 import { runMigrations } from "./migrations/index.js"
 import { runSeeds } from "./db/seeds.js"
-import { resolveDbPath, resolveServerDataDir } from "./server-data-dir.js"
+import { resolveDbPath, resolveServerDataDir } from "../../server-data-dir.js"
 
 const DATA_DIR = resolveServerDataDir()
 const DB_PATH = resolveDbPath()

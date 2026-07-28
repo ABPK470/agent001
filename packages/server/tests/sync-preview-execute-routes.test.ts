@@ -64,7 +64,7 @@ function createHost(root: string): AgentHost {
 }
 
 async function buildApp(session: CurrentSession): Promise<{ app: FastifyInstance; host: AgentHost }> {
-  const { _setDb, _migrate } = await import("../src/infra/persistence/db/index.js")
+  const { _setDb, _migrate } = await import("../src/infra/persistence/adapters/sqlite/index.js")
   const { registerSyncRoutes } = await import("../src/api/sync/routes.js")
   const { seedUser, seedSession } = await import("./_fk-helpers.js")
 

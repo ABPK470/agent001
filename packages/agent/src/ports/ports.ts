@@ -174,6 +174,13 @@ export interface MssqlPoolProvider {
   list(): readonly { id: string; name: string }[]
   /** Drop the cached pool for a connector (e.g. after config change). */
   invalidate(connectorId: string): void
+  /**
+   * Run agent-query work under the shared connection budget for this connector.
+   * Optional — hosts without a budget skip gating (tests / legacy maps).
+   */
+  runWithAgentBudget?<T>(connectorKey: string, fn: () => Promise<T>): Promise<T>
+  /** Sync-work leases on the same ConnectionBudget dialect. */
+  runWithSyncBudget?<T>(connectorKey: string, fn: () => Promise<T>): Promise<T>
 }
 
 // ── Sync ports (recipe reader; sinks live in sync/ for now) ──────

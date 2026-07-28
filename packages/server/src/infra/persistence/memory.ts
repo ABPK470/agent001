@@ -1,1 +1,1 @@
-export * from "./memory/index.js"
+export * from "./adapters/sqlite/memory/index.js"

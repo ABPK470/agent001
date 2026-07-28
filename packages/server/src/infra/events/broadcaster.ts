@@ -30,8 +30,10 @@ import { EventType } from "@mia/shared-enums"
 import type { SseEvent, TraceEntry } from "@mia/shared-types"
 import { createHmac } from "node:crypto"
 import { registerSseBroadcastSink } from "./emit.js"
-import { eventMatchesViewingAs } from "./event-viewing-as.js"
-import { listWebhookDrains, saveEvent } from "../persistence/sqlite.js"
+import { eventMatchesViewingAsLive } from "./event-viewing-as.js"
+import { enrichEventDataWithOwner } from "../../ports/run-owner-index.js"
+import { toDurableEvent } from "../../ports/event-store.js"
+import { getEventStore, listWebhookDrains } from "../persistence/sqlite.js"
 
 export type { SseEvent }
 
@@ -84,8 +86,10 @@ export class EventBroadcaster {
   }
 
   broadcast(event: Omit<SseEvent, "timestamp">): void {
+    const data = enrichEventDataWithOwner(event.data ?? {})
     const msg: SseEvent = {
       ...event,
+      data,
       timestamp: new Date().toISOString()
     }
     const json = JSON.stringify(msg)
@@ -93,22 +97,19 @@ export class EventBroadcaster {
 
     for (const [, { sink, identity }] of this.sseClients) {
       const viewingAs = identity.viewingAsUpn ?? identity.upn
-      if (!viewingAs || !eventMatchesViewingAs(msg.data, viewingAs)) continue
+      if (!viewingAs || !eventMatchesViewingAsLive(msg.data, viewingAs)) continue
       try {
         sink.write(sseFrame)
       } catch (err: unknown) { console.error("[mia]", err) }
     }
 
-    // Persist to event_log (skip high-frequency ephemeral events to keep
-    // the table compact and avoid blocking between SSE writes).
+    // Persist off the SSE stack (EventStore queues + batched flush).
     if (
       msg.type !== EventType.AnswerChunk &&
       msg.type !== EventType.StreamReset &&
       msg.type !== EventType.SessionPresenceTick
     ) {
-      try {
-        saveEvent(msg.type, msg.data, msg.timestamp)
-      } catch (err: unknown) { console.error("[mia]", err) }
+      getEventStore().append(toDurableEvent(msg.type, msg.data, msg.timestamp))
     }
 
     // Push to webhook drains (fire-and-forget, async)

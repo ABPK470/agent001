@@ -12,7 +12,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import { compileAuthoredSyncDefinition, loadSyncDefinitionFlowTemplateCatalog } from "@mia/sync"
 
 import { syncDefinitionConfigFromEntity } from "@mia/sync"
-import * as db from "../src/infra/persistence/db/index.js"
+import * as db from "../src/infra/persistence/adapters/sqlite/db/index.js"
 
 let testDb: Database.Database
 let dataDir: string
@@ -43,7 +43,7 @@ async function setupDb(): Promise<void> {
   dataDir = mkdtempSync(join(tmpdir(), "authored-compile-test-"))
   process.env["MIA_DATA_DIR"] = dataDir
   testDb = new Database(":memory:")
-  const { _setDb, _migrate } = await import("../src/infra/persistence/db/index.js")
+  const { _setDb, _migrate } = await import("../src/infra/persistence/adapters/sqlite/index.js")
   _setDb(testDb)
   _migrate(testDb)
 

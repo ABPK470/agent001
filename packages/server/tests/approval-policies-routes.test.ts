@@ -37,7 +37,7 @@ function seedConnection(name: string): void {
 }
 
 async function buildApp(session: CurrentSession): Promise<FastifyInstance> {
-  const { _setDb, _migrate } = await import("../src/infra/persistence/db/index.js")
+  const { _setDb, _migrate } = await import("../src/infra/persistence/adapters/sqlite/index.js")
   const { registerApprovalRoutes } = await import("../src/api/approvals/routes.js")
   _setDb(testDb)
   _migrate(testDb)

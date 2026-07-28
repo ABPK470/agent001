@@ -4,7 +4,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { beforeEach, afterEach, describe, expect, it } from "vitest"
 
-import { _migrate } from "../../infra/persistence/connection.js"
+import { _migrate } from "../../infra/persistence/adapters/sqlite/connection.js"
 import * as db from "../../infra/persistence/sqlite.js"
 import { mssqlConfigsFromConnectors } from "../../adapters/connectors/mssql-from-connectors.js"
 

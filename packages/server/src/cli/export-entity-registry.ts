@@ -7,7 +7,7 @@
 
 import { resolve } from "node:path"
 
-import { openDatabase } from "../infra/persistence/connection.js"
+import { openDatabase } from "../infra/persistence/adapters/sqlite/index.js"
 import {
   defaultExportParentDir,
   writeEntityRegistrySnapshot,

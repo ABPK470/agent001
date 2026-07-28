@@ -25,7 +25,7 @@ let dataDir: string
 const ORIGINAL_DATA_DIR = process.env["MIA_DATA_DIR"]
 
 async function buildApp(session: CurrentSession): Promise<FastifyInstance> {
-  const { _setDb, _migrate } = await import("../src/infra/persistence/db/index.js")
+  const { _setDb, _migrate } = await import("../src/infra/persistence/adapters/sqlite/index.js")
   const { registerLayoutRoutes } = await import("../src/api/layouts/routes.js")
   _setDb(testDb)
   _migrate(testDb)
@@ -97,7 +97,7 @@ describe("layouts (v19) — per-upn persistence across logout/login", () => {
       payload: { views: SAMPLE_VIEWS, activeViewId: "main" }
     })
 
-    const { getLayout } = await import("../src/infra/persistence/db/config.js")
+    const { getLayout } = await import("../src/infra/persistence/adapters/sqlite/db/config.js")
     const expectedKey = `dashboard:${upn.toLowerCase()}`
     const row = getLayout(expectedKey)
     expect(row, `PUT must write to id='${expectedKey}'`).toBeDefined()

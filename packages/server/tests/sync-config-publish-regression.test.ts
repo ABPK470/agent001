@@ -26,7 +26,7 @@ import {
   listSyncCatalogVersions,
   recordSyncCatalogChange,
 } from "../src/api/platform/service/sync-catalog-versioning.js"
-import * as db from "../src/infra/persistence/db/index.js"
+import * as db from "../src/infra/persistence/adapters/sqlite/db/index.js"
 import {
   appendFlowMarkerStep,
   bootstrapPublishedCatalog,

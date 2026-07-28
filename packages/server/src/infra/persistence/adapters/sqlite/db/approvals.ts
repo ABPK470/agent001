@@ -191,6 +191,28 @@ export function getApproval(id: string): ApprovalRow | null {
   )
 }
 
+export function listApprovals(filter: {
+  tenantId: string
+  state?: string
+  proposalId?: string
+  limit?: number
+}): ApprovalRow[] {
+  const where: string[] = ["tenant_id = ?"]
+  const args: unknown[] = [filter.tenantId]
+  if (filter.state) {
+    where.push("state = ?")
+    args.push(filter.state)
+  }
+  if (filter.proposalId) {
+    where.push("proposal_id = ?")
+    args.push(filter.proposalId)
+  }
+  const sql = `SELECT * FROM sync_approvals WHERE ${where.join(" AND ")} ORDER BY requested_at DESC LIMIT ?`
+  return getDb()
+    .prepare(sql)
+    .all(...args, filter.limit ?? 500) as ApprovalRow[]
+}
+
 export function findActiveApprovalForProposal(proposalId: string): ApprovalRow | null {
   return (
     (getDb()

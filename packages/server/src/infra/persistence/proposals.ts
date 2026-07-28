@@ -1,1 +1,1 @@
-export * from "./db/proposals.js"
+export * from "./adapters/sqlite/db/proposals.js"

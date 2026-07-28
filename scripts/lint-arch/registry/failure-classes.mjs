@@ -38,6 +38,7 @@ export const FAILURE_CLASSES = [
   { id: 22, name: "raw-json-parse-sink", rule: "schema-at-boundary" },
   { id: 23, name: "opaque-primitive-smell", rule: "branded-types" },
   { id: 24, name: "leaky-abstraction-leak", rule: "leak-free-ports" },
+  { id: 32, name: "platform-store-leak", rule: "platform-store" },
 
   // ── 7. Determinism & Observability ──────────────────────────────
   { id: 25, name: "unseeded-entropy", rule: "deterministic-execution" },

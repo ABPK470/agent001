@@ -9,6 +9,7 @@ import type Database from "better-sqlite3"
 import { runBaselineMigration } from "./0001_baseline.js"
 import { runSyncToolApprovalsMigration } from "./0002_sync_tool_approvals.js"
 import { runDropAgentConfigsMigration } from "./0003_drop_agent_configs.js"
+import { runEventLogColumnsMigration } from "./0004_event_log_columns.js"
 
 export interface Migration {
   version: number
@@ -20,6 +21,7 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 1, name: "baseline", up: runBaselineMigration },
   { version: 2, name: "sync_tool_approvals", up: runSyncToolApprovalsMigration },
   { version: 3, name: "drop_agent_configs", up: runDropAgentConfigsMigration },
+  { version: 4, name: "event_log_columns", up: runEventLogColumnsMigration },
 ]
 
 export function runMigrations(db: Database.Database): void {

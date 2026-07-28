@@ -49,7 +49,7 @@ describe("getPlatformHealth catalog", () => {
     process.env.LLM_PROVIDER = "copilot-chat"
 
     testDb = new Database(":memory:")
-    const { _setDb, _migrate } = await import("../src/infra/persistence/connection.js")
+    const { _setDb, _migrate } = await import("../src/infra/persistence/adapters/sqlite/connection.js")
     _setDb(testDb)
     _migrate(testDb)
   })
@@ -58,7 +58,7 @@ describe("getPlatformHealth catalog", () => {
     if (originalDataDir === undefined) delete process.env.MIA_DATA_DIR
     else process.env.MIA_DATA_DIR = originalDataDir
     testDb.close()
-    const { _setDb } = await import("../src/infra/persistence/connection.js")
+    const { _setDb } = await import("../src/infra/persistence/adapters/sqlite/connection.js")
     _setDb(null as unknown as Database.Database)
     rmSync(dataDir, { recursive: true, force: true })
     rmSync(projectRoot, { recursive: true, force: true })

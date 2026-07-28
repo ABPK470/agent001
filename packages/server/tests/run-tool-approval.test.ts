@@ -40,7 +40,7 @@ afterEach(() => {
 })
 
 async function setupDb(): Promise<void> {
-  const { _setDb, _migrate } = await import("../src/infra/persistence/db/index.js")
+  const { _setDb, _migrate } = await import("../src/infra/persistence/adapters/sqlite/index.js")
   _setDb(testDb)
   _migrate(testDb)
   seedUser(testDb, UPN)
@@ -50,7 +50,7 @@ describe("run tool approval application", () => {
   it("approveRunToolStep grants approval, broadcasts resolved, resumes run", async () => {
     await setupDb()
     seedRun(testDb, "run-1", { upn: UPN, status: "waiting_for_approval" })
-    const { upsertPendingRunToolApproval } = await import("../src/infra/persistence/db/index.js")
+    const { upsertPendingRunToolApproval } = await import("../src/infra/persistence/adapters/sqlite/db/index.js")
     const approval = upsertPendingRunToolApproval({
       runId: "run-1",
       stepId: "step-1",
@@ -91,7 +91,7 @@ describe("run tool approval application", () => {
   it("denyRunToolStep cancels run and broadcasts resolved + run.cancelled", async () => {
     await setupDb()
     seedRun(testDb, "run-1", { upn: UPN, status: "waiting_for_approval" })
-    const { upsertPendingRunToolApproval } = await import("../src/infra/persistence/db/index.js")
+    const { upsertPendingRunToolApproval } = await import("../src/infra/persistence/adapters/sqlite/db/index.js")
     const approval = upsertPendingRunToolApproval({
       runId: "run-1",
       stepId: "step-1",
@@ -132,7 +132,7 @@ describe("run tool approval application", () => {
     seedRun(testDb, "run-done", { upn: UPN, status: "completed" })
     seedRun(testDb, "run-other", { upn: "bob@example.com", status: "waiting_for_approval" })
 
-    const { upsertPendingRunToolApproval } = await import("../src/infra/persistence/db/index.js")
+    const { upsertPendingRunToolApproval } = await import("../src/infra/persistence/adapters/sqlite/db/index.js")
     const mine = upsertPendingRunToolApproval({
       runId: "run-wait",
       stepId: "step-1",
@@ -168,7 +168,7 @@ describe("run tool approval application", () => {
     await setupDb()
     seedRun(testDb, "run-1", { upn: UPN, status: "running" })
     const { upsertPendingRunToolApproval, markRunToolApprovalApproved, getRunToolApproval } =
-      await import("../src/infra/persistence/db/index.js")
+      await import("../src/infra/persistence/adapters/sqlite/db/index.js")
 
     const approval = upsertPendingRunToolApproval({
       runId: "run-1",

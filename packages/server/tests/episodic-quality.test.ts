@@ -1,7 +1,7 @@
 import { RunStatus } from "@mia/agent"
 import { describe, expect, it } from "vitest"
 import { EpisodicAnswerKind } from "../src/internal/enums/memory.js"
-import { classifyEpisodicRun } from "../src/infra/persistence/memory/episodic-quality.js"
+import { classifyEpisodicRun } from "../src/infra/persistence/adapters/sqlite/memory/episodic-quality.js"
 
 describe("classifyEpisodicRun", () => {
   it("marks substantive warehouse runs as shortcut-eligible", () => {

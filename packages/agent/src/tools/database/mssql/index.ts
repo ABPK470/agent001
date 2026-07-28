@@ -3,6 +3,7 @@ export {
   getDefaultMssqlConnectionName,
   getMssqlConfig,
   getPool,
+  withMssqlPool,
   setDefaultMssqlConnection,
   setMssqlConfig,
   setMssqlConfigs

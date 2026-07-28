@@ -73,9 +73,9 @@ describe("mergeAgentRunResumePipelines", () => {
         const seen = new Set<string>()
         while (cur && !seen.has(cur)) {
           seen.add(cur)
-          const p = parents[cur]
-          if (!p) break
-          cur = p
+          const parentId: string | null = parents[cur] ?? null
+          if (!parentId) break
+          cur = parentId
           startedAt = "2026-01-01T00:00:00.000Z"
           title = "Weather in Prague"
         }
