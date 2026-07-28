@@ -13,8 +13,8 @@ const REVEAL_DELAY_MS = 80
 /** : land — keep in sync with `.intro3-wm-mark--handoff` duration. */
 const COLON_LAND_MS = 520
 const HOLD_BEFORE_PINCH_MS = 200
-/** Meet + shed/carve — keep in sync with clay + pinch-shed CSS. */
-const PINCH_MS = 1200
+/** Meet + shed/carve — keep in sync with clay + pinch-shed CSS (1000ms). */
+const PINCH_MS = 1000
 const HOLD_AFTER_CARVE_MS = 160
 /** Resolve beat 1 — fade MI:A only (slots keep width so : does not slide yet). */
 const RESOLVE_FADE_MS = 180
