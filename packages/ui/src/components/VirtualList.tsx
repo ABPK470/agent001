@@ -1,6 +1,11 @@
 /**
  * Single virtualization dialect for unbounded widget lists.
  * Widgets import this — never @tanstack/react-virtual directly.
+ *
+ * Rows use `top` offsets — never `transform`. A transform on the row
+ * creates a containing block and breaks CSS `position: sticky` inside
+ * (chat user-goal pins, pipeline sticky headers). Absolute + top still
+ * virtualizes; sticky sticks to the scroll host as designed.
  */
 
 import { useVirtualizer } from "@tanstack/react-virtual"
@@ -103,10 +108,9 @@ function VirtualListInner<T>(
           ref={virtualizer.measureElement}
           style={{
             position: "absolute",
-            top: 0,
+            top: virtualRow.start,
             left: 0,
             width: "100%",
-            transform: `translateY(${virtualRow.start}px)`,
           }}
         >
           {renderItem({ item: items[virtualRow.index]!, index: virtualRow.index })}

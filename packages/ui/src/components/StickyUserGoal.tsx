@@ -8,6 +8,9 @@ export const STICKY_GOAL_HOME_OFFSET_PX = 14
 /**
  * Pins a user goal bubble while scrolling through that turn's output.
  * Use `topClass` to sit below the home-chat top fade (see STICKY_GOAL_HOME_TOP).
+ *
+ * Requires a sticky-safe scroll tree: VirtualList rows must not use
+ * `transform` (that would contain sticky inside the row — see VirtualList).
  */
 export const StickyUserGoal = forwardRef(function StickyUserGoal({
   align = "end",
