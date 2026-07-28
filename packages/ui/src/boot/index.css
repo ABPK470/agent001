@@ -5447,7 +5447,7 @@ textarea.input {
 }
 
 .thread-rail-chrome-actions {
-  gap: 0.5rem;
+  gap: 0.25rem;
   transition:
     opacity var(--thread-rail-motion),
     transform var(--thread-rail-motion);

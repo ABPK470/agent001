@@ -134,17 +134,16 @@ export function ThreadHomePage({
 
       <div className="chathome-content relative z-10 flex h-full min-h-0 flex-col">
         <div className={shellRailClass}>
-          <header className="chathome-thread-chrome relative flex h-12 shrink-0 items-center gap-3 px-4 sm:h-14 sm:px-6">
+          <header className="chathome-thread-chrome relative flex h-14 shrink-0 select-none items-center gap-2 px-4 sm:gap-4 sm:px-6">
             <div className="chathome-thread-chrome-rail flex min-w-0 items-center gap-1">
               {overlayRailEnabled ? (
                 <>
-                  <div className="flex min-w-0 flex-1 items-center">
-                    <ThreadRailBrandExpand
-                      connected={connected}
-                      collapsed={!railOpen}
-                      onExpand={() => setThreadSidebarCollapsed(false)}
-                    />
-                  </div>
+                  <ThreadRailBrandExpand
+                    connected={connected}
+                    collapsed={!railOpen}
+                    onExpand={() => setThreadSidebarCollapsed(false)}
+                  />
+                  <div className="min-w-0 flex-1" aria-hidden />
                   <div
                     className={[
                       "thread-rail-chrome-actions flex shrink-0 items-center",
@@ -169,7 +168,7 @@ export function ThreadHomePage({
 
             <div className="min-w-0 flex-1" />
 
-            <div className="flex shrink-0 items-center gap-2">
+            <div className="flex shrink-0 items-center gap-1">
               {showHeaderThreadsButton && (
                 <ChatChromeButton
                   onClick={handleOpenThreads}
@@ -177,7 +176,7 @@ export function ThreadHomePage({
                   aria-label="Threads"
                   className="chathome-threads-header-btn"
                 >
-                  <PanelLeft size={17} strokeWidth={1.75} />
+                  <PanelLeft size={15} strokeWidth={1.75} className="block shrink-0" aria-hidden />
                 </ChatChromeButton>
               )}
               <ChatShellActions

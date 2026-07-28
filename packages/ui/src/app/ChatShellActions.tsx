@@ -13,7 +13,7 @@ interface Props {
 
 export function ChatShellActions({ onModeChange, onSignOut, me }: Props) {
   return (
-    <div className="relative z-10 flex shrink-0 items-center gap-2">
+    <div className="flex shrink-0 items-center gap-1">
       <ViewingAsControl chromeVariant="chat" />
       {me ? (
         <SessionMenu
@@ -24,7 +24,7 @@ export function ChatShellActions({ onModeChange, onSignOut, me }: Props) {
         />
       ) : (
         <ChatChromeButton onClick={onSignOut} title="Sign out" aria-label="Sign out">
-          <LogOut size={16} className="block shrink-0" aria-hidden />
+          <LogOut size={15} className="block shrink-0" aria-hidden />
         </ChatChromeButton>
       )}
     </div>

@@ -2,7 +2,9 @@ import { MoreVertical, PanelLeft, PanelLeftClose, PanelLeftOpen, Pencil, Pin, Pl
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { ChatBrand } from "../../app/ChatBrand"
+import { CHAT_BRAND_LOGO_SIZE } from "../../app/brand"
 import { ChatChromeButton } from "../../app/ChatChrome"
+import { Logo } from "../../components/Logo"
 import { api } from "../../client/index"
 import { TruncationHint, isTextTruncated } from "../../components/TruncationHint"
 import { placeAnchoredPanelForElements } from "../../lib/anchored-panel"
@@ -451,8 +453,8 @@ export function ThreadSidebar({
 }
 
 /**
- * Desktop rail brand slot — same h-10 w-10 mark box open or collapsed.
- * Collapsed: that box is the hit target; hover → expand icon + frosted chrome bg.
+ * Desktop rail brand — same mark box as workspace Toolbar (`toolbar-brand` + Logo).
+ * Collapsed: hover reveals frosted expand chip; at rest nothing sits over the logo.
  */
 export function ThreadRailBrandExpand({
   connected,
@@ -463,18 +465,8 @@ export function ThreadRailBrandExpand({
   collapsed: boolean
   onExpand: () => void
 }) {
-  const mark = (
-    <span className="flex items-center justify-center transition-opacity duration-200 group-hover:opacity-0 group-focus-visible:opacity-0">
-      <ChatBrand connected={connected} />
-    </span>
-  )
-
   if (!collapsed) {
-    return (
-      <div className="flex h-10 w-10 shrink-0 items-center justify-center">
-        <ChatBrand connected={connected} />
-      </div>
-    )
+    return <ChatBrand connected={connected} />
   }
 
   return (
@@ -482,25 +474,32 @@ export function ThreadRailBrandExpand({
       type="button"
       onClick={onExpand}
       className={[
-        "thread-rail-brand-expand thread-rail-expand-btn group relative",
-        /* Same chip geometry as ChatChromeButton — hit target hugs the logo. */
-        "flex h-10 w-10 shrink-0 items-center justify-center rounded-lg",
-        "bg-transparent text-text-muted backdrop-blur transition-colors",
-        /* Hover: same frosted fill as other chrome icons (bg-panel/72). */
-        "hover:bg-panel/72 hover:text-text",
-        "focus-visible:bg-panel/72 focus-visible:text-text focus-visible:outline-none",
+        "thread-rail-brand-expand thread-rail-expand-btn toolbar-brand group relative",
+        "flex h-9 shrink-0 items-center bg-transparent p-0 text-text",
+        "focus-visible:outline-none",
       ].join(" ")}
       title="Show threads"
       aria-label="Show threads"
       aria-expanded={false}
     >
-      {mark}
-      <PanelLeftOpen
-        size={17}
-        strokeWidth={1.75}
-        className="pointer-events-none absolute block shrink-0 opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-visible:opacity-100"
-        aria-hidden
+      <Logo
+        size={CHAT_BRAND_LOGO_SIZE}
+        online={connected}
+        className="toolbar-brand-logo relative z-[1] transition-opacity duration-200 group-hover:opacity-0 group-focus-visible:opacity-0"
       />
+      {/* Whole chip opacity-0 at rest — no leftover blur/plate over the logo. */}
+      <span
+        className={[
+          "pointer-events-none absolute left-1/2 top-1/2 z-0 flex h-9 w-9",
+          "-translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-lg",
+          "bg-panel/72 text-text-muted backdrop-blur",
+          "opacity-0 transition-opacity duration-200",
+          "group-hover:opacity-100 group-focus-visible:opacity-100",
+        ].join(" ")}
+        aria-hidden
+      >
+        <PanelLeftOpen size={15} strokeWidth={1.75} className="block shrink-0" />
+      </span>
     </button>
   )
 }
@@ -512,7 +511,7 @@ export function ThreadRailNewButton({ onClick }: { onClick: () => void }) {
       title="New thread"
       aria-label="New thread"
     >
-      <Plus size={17} strokeWidth={2} className="block shrink-0" aria-hidden />
+      <Plus size={15} strokeWidth={2} className="block shrink-0" aria-hidden />
     </ChatChromeButton>
   )
 }
@@ -532,8 +531,8 @@ export function ThreadRailCollapseButton({
       aria-label={title}
       aria-expanded
     >
-      <PanelLeft size={17} strokeWidth={1.75} className="thread-rail-icon-swap__rest block shrink-0" aria-hidden />
-      <PanelLeftClose size={17} strokeWidth={1.75} className="thread-rail-icon-swap__hover block shrink-0" aria-hidden />
+      <PanelLeft size={15} strokeWidth={1.75} className="thread-rail-icon-swap__rest block shrink-0" aria-hidden />
+      <PanelLeftClose size={15} strokeWidth={1.75} className="thread-rail-icon-swap__hover block shrink-0" aria-hidden />
     </ChatChromeButton>
   )
 }

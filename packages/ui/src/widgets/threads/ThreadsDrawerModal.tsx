@@ -45,20 +45,20 @@ export function ThreadsDrawerModal({
             <PanelLeft size={18} strokeWidth={1.75} className="shrink-0 text-text-muted" />
             <h2 className="truncate text-base font-semibold text-text">Threads</h2>
           </div>
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex shrink-0 items-center gap-1">
             <ChatChromeButton
               onClick={onNewThread}
               title="New thread"
               aria-label="New thread"
             >
-              <Plus size={17} strokeWidth={2} className="block shrink-0" aria-hidden />
+              <Plus size={15} strokeWidth={2} className="block shrink-0" aria-hidden />
             </ChatChromeButton>
             <ChatChromeButton
               onClick={onClose}
               title="Close"
               aria-label="Close threads"
             >
-              <X size={17} strokeWidth={1.75} className="block shrink-0" aria-hidden />
+              <X size={15} strokeWidth={1.75} className="block shrink-0" aria-hidden />
             </ChatChromeButton>
           </div>
         </div>

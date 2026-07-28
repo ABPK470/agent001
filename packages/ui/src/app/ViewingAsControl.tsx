@@ -105,7 +105,7 @@ export function ViewingAsControl({
       ? CHAT_CHROME_PILL
       : "flex h-9 max-w-[16rem] shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-[13px] leading-none text-text-muted transition-colors hover:bg-overlay-hover hover:text-text"
     : chromeVariant === "chat"
-      ? "viewing-as-trigger--other flex h-10 max-w-[18rem] w-auto shrink-0 items-center gap-1.5 rounded-lg px-3 text-[13px] leading-none"
+      ? "viewing-as-trigger--other flex h-9 max-w-[18rem] w-auto shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-[13px] leading-none"
       : "viewing-as-trigger--other flex h-9 max-w-[18rem] shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-[13px] leading-none"
 
   return (
