@@ -274,7 +274,10 @@ export function IntroBrandWordmark({
 
   return (
     <span className={sequenceClass} aria-label={phase === "live" ? ":" : "MI:A"}>
-      <BrandMass side="pre" letter={<BrandLetterMi />} />
+      <BrandMass
+        side="pre"
+        letter={<BrandLetterMi className="intro3-wm-letter intro3-wm-letter--mi" />}
+      />
       <span className="intro3-wm-colon-anchor intro3-wm-colon-anchor--locked">
         <Logo
           size={CHAT_BRAND_LOGO_SIZE}
@@ -282,7 +285,10 @@ export function IntroBrandWordmark({
           className={markClassName}
         />
       </span>
-      <BrandMass side="post" letter={<BrandLetterA />} />
+      <BrandMass
+        side="post"
+        letter={<BrandLetterA className="intro3-wm-letter intro3-wm-letter--a" />}
+      />
     </span>
   )
 }
