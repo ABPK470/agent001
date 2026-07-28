@@ -7015,50 +7015,62 @@ textarea.input {
   justify-content: center;
   flex-shrink: 0;
   vertical-align: middle;
-  /* Fixed px box (logo is 17×~13) — never em, or font-size fights scale. */
+  /*
+   * Layout box = visual box (no transform scale). Scaling via transform left the
+   * flex line at 17px while the mark painted taller — when --live snapped
+   * letter-h / scale, the colon jumped up into the true center.
+   */
   width: 13px;
   height: 17px;
-  min-width: 13px;
-  min-height: 17px;
+  min-width: 0;
+  min-height: 0;
   overflow: visible;
-  transform: scale(1);
-  transform-origin: center center;
-  transition:
-    transform 320ms cubic-bezier(0.37, 0, 0.63, 1),
-    margin-inline 320ms cubic-bezier(0.37, 0, 0.63, 1);
   margin-inline: 0;
+  transition:
+    width 420ms cubic-bezier(0.22, 1, 0.36, 1),
+    height 420ms cubic-bezier(0.22, 1, 0.36, 1),
+    margin-inline 280ms cubic-bezier(0.37, 0, 0.63, 1);
+}
+
+/* Logo fills the anchor — size follows width/height, not a second scale. */
+.intro3-wm-colon-anchor .mia-colon-logo {
+  width: 100%;
+  height: 100%;
 }
 
 /*
- * Scale overflows layout — pad margin only while MI/A are present.
- * Keep colon near letter height (tight lockup, not three islands).
- * On resolve, margin + letter width clear first; --live only scales in place.
+ * Lockup — anchor grows to letter cap height. Margin only while MI/A present.
+ * On resolve, margin + letter width clear first; --live eases box → 17px.
  */
-/* Colon scale ≈ letter-h / 17 so cap heights match (20/17≈1.18, 22/17≈1.29). */
 .intro3-root--hero .intro3-wm-colon-anchor,
 .intro3-brand-sequence--pinching .intro3-wm-colon-anchor,
 .intro3-brand-sequence--open:not(.intro3-brand-sequence--live):not(.intro3-brand-sequence--resolving):not(.intro3-brand-sequence--resolve-shift) .intro3-wm-colon-anchor {
-  transform: scale(calc(var(--wm-letter-h) / 17px));
+  width: calc(var(--wm-letter-h) * 24 / 32);
+  height: var(--wm-letter-h);
   margin-inline: 1px;
 }
 .intro3-brand-sequence--resolving .intro3-wm-colon-anchor {
   /* Beat 1 — letters fade; colon stays lockup size and in place. */
-  transform: scale(calc(var(--wm-letter-h) / 17px));
+  width: calc(var(--wm-letter-h) * 24 / 32);
+  height: var(--wm-letter-h);
   margin-inline: 1px;
   transition: none;
 }
 .intro3-brand-sequence--resolve-shift .intro3-wm-colon-anchor {
-  /* Beat 2 — slots + gap collapse; colon slides into solo spot, still lockup size.
-   * Final layout here must match --live (gap 0, margin 0) so scale-down doesn’t jump. */
-  transform: scale(calc(var(--wm-letter-h) / 17px));
+  /* Beat 2 — slots + gap collapse; colon already at final XY (lockup size). */
+  width: calc(var(--wm-letter-h) * 24 / 32);
+  height: var(--wm-letter-h);
   margin-inline: 0;
   transition: margin-inline 280ms cubic-bezier(0.37, 0, 0.63, 1);
 }
 .intro3-brand-sequence--live .intro3-wm-colon-anchor {
-  /* Beat 3 — only now ease into the platform colon shape. */
-  transform: scale(1);
+  /* Beat 3 — ease layout box down to platform mark (no transform jump). */
+  width: 13px;
+  height: 17px;
   margin-inline: 0;
-  transition: transform 420ms cubic-bezier(0.22, 1, 0.36, 1);
+  transition:
+    width 420ms cubic-bezier(0.22, 1, 0.36, 1),
+    height 420ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 /*
@@ -7211,15 +7223,15 @@ textarea.input {
 
 /*
  * Resolve — three beats (never resize : while it is still sliding):
- *   1) --resolving      fade MI:A; slots keep width so colon stays put
- *   2) --resolve-shift  collapse slots; colon moves into solo position (still lockup size)
- *   3) --live           ease colon scale → platform mark
+ *   1) --resolving      fade MI:A; slots keep size so colon stays put
+ *   2) --resolve-shift  collapse slots + gap; colon at final XY (still lockup size)
+ *   3) --live           ease colon layout box → platform 17px
  */
 .intro3-brand-sequence--resolving.intro3-brand-sequence--open .intro3-wm-slot,
 .intro3-brand-sequence--resolving.intro3-brand-sequence--open .intro3-wm-slot--pre,
 .intro3-brand-sequence--resolving.intro3-brand-sequence--open .intro3-wm-slot--post {
   opacity: 0;
-  /* Keep width — colon must not slide while letters are still fading. */
+  /* Keep width + height — colon must not slide/jump while letters are still fading. */
   pointer-events: none;
   transition: opacity 180ms linear;
 }
@@ -7233,10 +7245,13 @@ textarea.input {
 .intro3-brand-sequence--resolve-shift.intro3-brand-sequence--open .intro3-wm-slot--post {
   opacity: 0;
   width: 0;
+  /* Drop slot height so the flex line is the colon box alone (no later re-center). */
+  height: 0;
   overflow: hidden;
   pointer-events: none;
   transition:
     width 280ms cubic-bezier(0.37, 0, 0.63, 1),
+    height 280ms cubic-bezier(0.37, 0, 0.63, 1),
     opacity 80ms linear;
 }
 .intro3-brand-sequence--resolve-shift.intro3-brand-sequence--open .intro3-wm-clay {
@@ -7247,6 +7262,7 @@ textarea.input {
 .intro3-brand-sequence--live.intro3-brand-sequence--open .intro3-wm-slot--pre,
 .intro3-brand-sequence--live.intro3-brand-sequence--open .intro3-wm-slot--post {
   width: 0;
+  height: 0;
   opacity: 0;
   overflow: hidden;
   pointer-events: none;
