@@ -1,5 +1,5 @@
 /**
- * Chrome-like drag preview — same chrome as a resting tab (grip + label + close)
+ * Drag preview — same chrome as a resting view chip (grip + label + close)
  * so the label does not jump left inside the measured width.
  */
 

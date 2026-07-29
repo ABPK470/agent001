@@ -89,10 +89,9 @@ function withProjected(
 }
 
 /**
- * Workspace sheet surface.
- * - `default` — active tab + stage match the top bar (current).
- * - `contrast` — active tab + stage share one plane distinct from the bar;
- *   widgets match that plane and are outlined by border only.
+ * Workspace sheet surface (R&D).
+ * - `default` — white paper lifted on the canvas (`panel-2` + soft shadow).
+ * - `contrast` — warmer flat sheet (`panel`), stronger edge, no lift shadow.
  */
 export type WorkspaceSurface = "default" | "contrast"
 
@@ -111,8 +110,7 @@ interface LayoutState {
   /** Active tab / stage / widget surface treatment. */
   workspaceSurface: WorkspaceSurface
   /**
-   * When true, active tab nail + stage content share a lifted fill —
-   * independent of `workspaceSurface`. Does not change widgets or borders.
+   * R&D: stronger selected view segment on the rail track.
    */
   activeTabLift: boolean
 

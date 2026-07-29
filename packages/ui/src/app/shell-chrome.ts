@@ -2,10 +2,10 @@
  * Shell chrome — one top-bar geometry for chat and workspace.
  *
  * Modes must not diverge: same header height, horizontal inset, gap, and
- * brand row. Workspace only adds a sheet gutter *below* that shared band.
+ * brand row. Workspace puts this band on the paper sheet as its top rail.
  */
 
-/** Control row (brand, tab labels, actions) — Tailwind `h-9`. */
+/** Control row (brand, view chips, actions) — Tailwind `h-9`. */
 export const SHELL_CHROME_ROW_H = "2.25rem"
 
 /** Shared header band — Tailwind `h-14`. */
@@ -26,7 +26,7 @@ export const SHELL_CHROME_GAP_SM = "1rem"
 export const SHELL_CHROME_HEADER_CLASS =
   "shell-chrome-header relative z-20 flex shrink-0 select-none"
 
-/** Workspace: same band + sheet gutter below for attached tabs. */
+/** Workspace: same band tokens as chat, seated on the paper sheet rail. */
 export const SHELL_CHROME_HEADER_WORKSPACE_CLASS =
   `${SHELL_CHROME_HEADER_CLASS} shell-chrome-header--workspace toolbar-shell`
 

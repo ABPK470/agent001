@@ -1,10 +1,9 @@
 /**
- * Toolbar — workspace chrome: views, widgets, ops controls.
+ * Toolbar — top rail of the workspace paper sheet.
  *
- * View tabs are Poolside-style: active tab shares the stage plane
- * (`.workspace-stage`); logo stays left of the strip. Reorder is Chrome-like
- * (floating tab + shared peer translate for one insert hole).
- * Sheet toggle switches default (plane = bar) vs contrast (plane lifts off bar).
+ * Brand + views + ops share one header band (same geometry tokens as chat).
+ * The rail sits on the sheet — not floating above a separate card.
+ * Sheet / Tab toggles are R&D surface knobs only.
  */
 
 import { Bookmark, ChevronDown, GripVertical, LayoutGrid, PanelTop, Plus, X } from "lucide-react"
@@ -105,10 +104,6 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
 
   return (
     <header className={SHELL_CHROME_HEADER_WORKSPACE_CLASS}>
-      {/*
-        Shared shell-chrome band (same as chat). Sheet gutter is header
-        padding-bottom; active tab fill bridges into the stage.
-      */}
       <ChatBrand connected={connected} />
 
       <div
@@ -204,7 +199,7 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
 
         <button
           type="button"
-          className="view-tab-add ml-0.5 flex h-9 w-7 shrink-0 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-overlay-hover hover:text-text"
+          className="view-tab-add ml-0.5 flex shrink-0 items-center justify-center text-text-muted transition-colors hover:bg-overlay-hover hover:text-text"
           onClick={() => addView(`View ${views.length + 1}`)}
           title="Add view"
         >
@@ -275,8 +270,8 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
               }
               title={
                 workspaceSurface === "contrast"
-                  ? "Default surface: tab and stage match the top bar"
-                  : "Contrast sheet: selected tab and stage share one surface; widgets match with border only"
+                  ? "Default sheet: white paper lifted on the page"
+                  : "Contrast sheet: warmer flat paper, stronger edge"
               }
             >
               <PanelTop size={15} className="block shrink-0" aria-hidden />
@@ -293,8 +288,8 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
               onClick={() => setActiveTabLift(!activeTabLift)}
               title={
                 activeTabLift
-                  ? "Active tab and stage match the sheet plane"
-                  : "Lift active tab: tab and stage share a color distinct from the top bar and widgets"
+                  ? "Selected view uses the default segment"
+                  : "Lift selected view segment (stronger chip)"
               }
             >
               <Bookmark size={15} className="block shrink-0" aria-hidden />

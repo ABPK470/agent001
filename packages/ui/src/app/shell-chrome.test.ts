@@ -37,6 +37,7 @@ describe("shell chrome SOT", () => {
   it("workspace header extends the shared class (does not replace it)", () => {
     expect(SHELL_CHROME_HEADER_WORKSPACE_CLASS).toContain(SHELL_CHROME_HEADER_CLASS)
     expect(SHELL_CHROME_HEADER_WORKSPACE_CLASS).toContain("shell-chrome-header--workspace")
+    expect(SHELL_CHROME_HEADER_WORKSPACE_CLASS).toContain("toolbar-shell")
     expect(SHELL_CHROME_HEADER_CHAT_CLASS).toBe(SHELL_CHROME_HEADER_CLASS)
   })
 
@@ -65,8 +66,12 @@ describe("shell chrome SOT", () => {
     expect(css).toContain(`--shell-chrome-pad-x: ${SHELL_CHROME_PAD_X}`)
     expect(css).toContain(`--shell-chrome-pad-x-sm: ${SHELL_CHROME_PAD_X_SM}`)
     expect(css).toMatch(/\.shell-chrome-header\s*\{/)
-    expect(css).toMatch(/\.shell-chrome-header--workspace\s*\{/)
-    // Workspace chrome inset must track the shared pad token.
-    expect(css).toContain("padding: 0 var(--shell-chrome-pad-x)")
+    // Workspace page inset tracks the shared pad token.
+    expect(css).toContain("padding: 0.625rem var(--shell-chrome-pad-x) 0.75rem")
+    // One paper sheet (rail + stage) — no attached-tab silhouette / orphan gap.
+    expect(css).toContain(".workspace-sheet")
+    expect(css).not.toContain("workspace-sheet-outline")
+    expect(css).not.toContain("--toolbar-stage-gap")
+    expect(css).not.toContain("--stage-gap:")
   })
 })

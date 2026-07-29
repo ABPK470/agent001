@@ -4246,7 +4246,7 @@ textarea.input {
 
 /* ── Shell chrome (chat + workspace — one geometry) ─────────────────
  * Tokens + .shell-chrome-header are the SOT for top-bar position.
- * Workspace only adds --workspace gutter below that shared band.
+ * Workspace uses the *same* band; the stage sheet sits below with a gap.
  */
 :root,
 :root[data-theme="dark"],
@@ -4274,47 +4274,35 @@ textarea.input {
   }
 }
 
-/*
- * Workspace: same content band as chat (height − padding-bottom = header-h),
- * plus sheet gutter below for the active-tab bridge.
- */
-.shell-chrome-header--workspace {
-  height: calc(var(--shell-chrome-header-h) + var(--toolbar-stage-gap, 0.5rem));
-  padding-bottom: var(--toolbar-stage-gap, 0.5rem);
-}
-
-/* ── Workspace attached tabs ───────────────────────────────────────
- * Top bar controls sit in the shared shell-chrome band. Below that, a
- * chrome gutter (--toolbar-stage-gap) separates the bar from the stage.
- * The active tab's own box is taller so its fill bridges the gutter.
- *
- * Nested radii: widget radius = stage radius − pad.
+/* ── Workspace: one paper instrument on the page ────────────────────
+ * Composition (quiet tool — gestalt continuity, clear figure/ground):
+ *   canvas page → ONE rounded sheet (rail + stage) → widgets
+ * Views sit in the sheet’s top rail. Never orphaned above a second card.
  */
 .workspace-chrome {
   position: relative;
-  --workspace-plane: var(--canvas);
   --workspace-chrome: var(--canvas);
+  --workspace-sheet: var(--panel-2);
   --workspace-border: var(--border);
-  /* Widget fill/stroke — overridden in --contrast so tiles match the plane. */
+  --workspace-sheet-shadow:
+    0 1px 2px color-mix(in srgb, var(--canvas) 55%, transparent),
+    0 8px 28px color-mix(in srgb, var(--canvas) 45%, transparent);
+  --workspace-rail-line: color-mix(in srgb, var(--border) 70%, transparent);
   --workspace-widget-bg: var(--panel);
-  --workspace-widget-border: transparent;
-  /* Stage + active tab — defaults to plane; --tab-lift paints both alone. */
-  --workspace-stage: var(--workspace-plane);
-  --workspace-tab-active: var(--workspace-plane);
+  --workspace-widget-border: var(--border-subtle);
+  /* Segmented track behind views — recessed on the sheet. */
+  --workspace-view-track: color-mix(in srgb, var(--canvas) 55%, var(--panel) 45%);
+  --workspace-tab-active: var(--panel-2);
+  --workspace-tab-active-shadow: 0 1px 2px color-mix(in srgb, var(--text) 8%, transparent);
   --tab-row-height: var(--shell-chrome-row-h);
-  --tab-radius: 0.7rem;
-  --stage-radius: 1rem;
-  --stage-pad: 0.5rem;
-  --widget-radius: calc(var(--stage-radius) - var(--stage-pad));
-  /* Chrome gutter between the control row and the stage frame. */
-  --toolbar-stage-gap: 0.5rem;
-  /* Scoop flares past the tab box; gap must clear them so hover fills
-   * on neighbors never cross the active stroke. */
-  --tab-scoop: 10px;
-  --tab-gap: calc(var(--tab-scoop) + 6px);
+  --view-chip-radius: 0.45rem;
+  --view-track-radius: 0.55rem;
+  --stage-radius: 0.875rem;
+  --stage-pad: 0.75rem;
+  --widget-radius: calc(var(--stage-radius) - var(--stage-pad) + 0.125rem);
+  --tab-gap: 0.125rem;
   background: var(--workspace-chrome);
-  /* Horizontal inset matches shell-chrome-header pad tokens. */
-  padding: 0 var(--shell-chrome-pad-x) 0.75rem;
+  padding: 0.625rem var(--shell-chrome-pad-x) 0.75rem;
   box-sizing: border-box;
 }
 
@@ -4325,44 +4313,41 @@ textarea.input {
 }
 
 /*
- * Contrast sheet: selected tab + stage lift off the top bar as one plane;
- * widgets share that plane and are drawn with a border only.
+ * R&D — Sheet: warmer paper body (less lift); widgets share the sheet.
  */
 .workspace-chrome--contrast {
-  --workspace-plane: var(--panel);
-  --workspace-widget-bg: var(--workspace-plane);
+  --workspace-sheet: var(--panel);
+  --workspace-border: var(--border-strong);
+  --workspace-sheet-shadow: none;
+  --workspace-view-track: color-mix(in srgb, var(--text) 6%, transparent);
+  --workspace-tab-active: var(--panel-2);
+  --workspace-widget-bg: var(--panel);
   --workspace-widget-border: var(--border);
 }
 
 /*
- * Active-tab lift: selected tab nail + whole stage content share one fill —
- * not widgets, not borders. panel-2 sits above both canvas (bar) and panel
- * (widgets).
+ * R&D — Tab: stronger selected segment (raised chip on the track).
  */
 .workspace-chrome--tab-lift {
   --workspace-tab-active: var(--panel-2);
-  --workspace-stage: var(--panel-2);
+  --workspace-tab-active-shadow:
+    0 1px 3px color-mix(in srgb, var(--text) 12%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--border) 50%, transparent);
 }
 
-.workspace-sheet-fill {
-  position: absolute;
-  inset: 0;
-  /* Under stage/toolbar so scoops show; never over widget content. */
-  z-index: 0;
-  width: 100%;
-  height: 100%;
-  overflow: visible;
-  pointer-events: none;
-}
-
-.workspace-sheet-outline {
-  position: absolute;
-  inset: 0;
-  z-index: 4;
-  width: 100%;
-  height: 100%;
-  overflow: visible;
-  pointer-events: none;
+/* One continuous paper — rail and stage share this surface. */
+.workspace-sheet {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+  background: var(--workspace-sheet);
+  border: 1px solid var(--workspace-border);
+  border-radius: var(--stage-radius);
+  box-shadow: var(--workspace-sheet-shadow);
+  overflow: hidden;
 }
 
 .workspace-stage {
@@ -4372,9 +4357,7 @@ textarea.input {
   flex-direction: column;
   min-height: 0;
   flex: 1;
-  background: var(--workspace-stage);
-  border: none;
-  border-radius: var(--stage-radius);
+  background: transparent;
   overflow: hidden;
 }
 
@@ -4393,22 +4376,30 @@ textarea.input {
   position: relative;
   z-index: 2;
   background: transparent;
-  margin-bottom: -1px;
+  border-bottom: 1px solid var(--workspace-rail-line);
 }
 
-/* Header already inset by .workspace-chrome — don't double the pad. */
-.workspace-chrome > .shell-chrome-header {
-  padding-inline: 0;
+.workspace-sheet > .shell-chrome-header {
+  padding-inline: 0.75rem;
 }
 
+@media (min-width: 640px) {
+  .workspace-sheet > .shell-chrome-header {
+    padding-inline: 1rem;
+  }
+}
+
+/* ── View rail (segmented control on the sheet) ───────────────────── */
 .view-tab-strip {
   position: relative;
   z-index: 1;
-  /* Label band only — gutter is header padding-bottom + taller active tab. */
   height: var(--tab-row-height);
   min-height: var(--tab-row-height);
   align-items: center;
   gap: var(--tab-gap);
+  padding: 0.2rem;
+  border-radius: var(--view-track-radius);
+  background: var(--workspace-view-track);
 }
 
 .view-tab {
@@ -4416,20 +4407,23 @@ textarea.input {
   display: inline-flex;
   align-items: center;
   align-self: center;
-  gap: 0.25rem;
+  gap: 0.35rem;
   flex-shrink: 0;
-  height: var(--tab-row-height);
-  padding: 0 0.75rem 0 0.5rem;
+  height: 1.75rem;
+  padding: 0 0.6rem 0 0.4rem;
   font-size: 13px;
   line-height: 1;
+  letter-spacing: 0.005em;
   cursor: pointer;
   user-select: none;
   box-sizing: border-box;
+  border-radius: var(--view-chip-radius);
+  border: 1px solid transparent;
   transition:
     color 140ms ease,
-    opacity 140ms ease,
     background-color 140ms ease,
-    border-radius 140ms ease;
+    border-color 140ms ease,
+    box-shadow 140ms ease;
 }
 
 .view-tab:active {
@@ -4440,68 +4434,47 @@ textarea.input {
   z-index: 0;
   color: var(--text-muted);
   background: transparent;
-  /* Match toolbar buttons (rounded-lg), not a full capsule. */
-  border-radius: 0.5rem;
+  font-weight: 500;
 }
 
 .view-tab--inactive:hover {
-  color: var(--text-secondary);
-  background: color-mix(in srgb, var(--text) 6%, transparent);
+  color: var(--text);
+  background: color-mix(in srgb, var(--text) 5%, transparent);
 }
 
 .view-tab--active {
-  z-index: 3;
+  z-index: 1;
   color: var(--text);
   font-weight: 600;
   background: var(--workspace-tab-active);
-  border: none;
-  border-radius: var(--tab-radius) var(--tab-radius) 0 0;
-  /*
-   * Taller box spans the chrome gutter (header padding-bottom). border-box +
-   * padding-bottom keeps the label band at --tab-row-height, centered with brand.
-   */
-  height: calc(var(--tab-row-height) + var(--toolbar-stage-gap) + 1px);
-  padding-bottom: calc(var(--toolbar-stage-gap) + 1px);
-  margin-bottom: calc(-1 * var(--toolbar-stage-gap) - 1px);
-  align-self: flex-start;
-  overflow: visible;
+  box-shadow: var(--workspace-tab-active-shadow);
 }
 
-/* Floating drag preview — fill only; sheet SVG draws the same stroke as rest. */
 .view-tab--float {
   position: absolute;
-  top: 0;
+  top: 50%;
   bottom: auto;
   z-index: 5;
-  height: var(--tab-row-height);
+  height: 1.75rem;
   margin: 0;
+  transform: translateY(-50%);
   pointer-events: none;
   cursor: grabbing;
-  border: none;
-  border-radius: var(--tab-radius) var(--tab-radius) 0 0;
-  box-shadow: none;
-  background: var(--workspace-plane);
-  overflow: visible;
+  box-shadow:
+    0 4px 16px color-mix(in srgb, var(--canvas) 40%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--border) 45%, transparent);
 }
 
 .view-tab--float.view-tab--active {
   color: var(--text);
   font-weight: 600;
   background: var(--workspace-tab-active);
-  height: calc(var(--tab-row-height) + var(--toolbar-stage-gap) + 1px);
-  padding-bottom: calc(var(--toolbar-stage-gap) + 1px);
-  margin-bottom: calc(-1 * var(--toolbar-stage-gap) - 1px);
 }
 
 .view-tab--float.view-tab--inactive {
   color: var(--text);
   font-weight: 600;
-  /* Inactive drag is detached from the sheet — own stroke, button radius. */
-  border: 1px solid var(--workspace-border);
-  border-radius: 0.5rem;
-  height: var(--tab-row-height);
-  padding-bottom: 0;
-  margin-bottom: 0;
+  background: var(--panel-2);
 }
 
 .view-tab__grip {
@@ -4527,11 +4500,6 @@ textarea.input {
   line-height: 1;
 }
 
-/*
- * Close on every tab (Chrome/VS Code). Hidden + non-interactive until the tab
- * is hovered/focused — an invisible X must never steal a click meant to select.
- * Extra margin from the label keeps the hit targets clearly separated.
- */
 .view-tab__close {
   display: inline-flex;
   align-items: center;
@@ -4539,7 +4507,7 @@ textarea.input {
   flex-shrink: 0;
   width: 1.25rem;
   height: 1.25rem;
-  margin-left: 0.5rem;
+  margin-left: 0.35rem;
   padding: 0;
   border: none;
   border-radius: 0.35rem;
@@ -4552,7 +4520,7 @@ textarea.input {
 }
 
 .view-tab--active .view-tab__close {
-  opacity: 0.45;
+  opacity: 0.4;
   pointer-events: auto;
 }
 
@@ -4566,6 +4534,12 @@ textarea.input {
   opacity: 1 !important;
   color: var(--text);
   background: color-mix(in srgb, var(--text) 8%, transparent);
+}
+
+.view-tab-add {
+  height: 1.75rem !important;
+  width: 1.75rem !important;
+  border-radius: var(--view-chip-radius) !important;
 }
 
 
