@@ -121,7 +121,7 @@ export function WidgetShell({
   return (
     <WidgetInstanceProvider value={{ widgetId, viewId, type }}>
     <SetupHintChromeProvider>
-      <div className="workspace-shell flex flex-col h-full overflow-hidden bg-panel">
+      <div className="workspace-shell flex h-full flex-col overflow-hidden">
         {showChrome && (
           <WidgetShellHeader
             label={definition.label}

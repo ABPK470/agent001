@@ -1,12 +1,13 @@
 /**
  * Toolbar — workspace chrome: views, widgets, ops controls.
  *
- * View tabs are Poolside-style: active tab shares the elevated canvas plane
+ * View tabs are Poolside-style: active tab shares the stage plane
  * (`.workspace-stage`); logo stays left of the strip. Reorder is Chrome-like
  * (floating tab + shared peer translate for one insert hole).
+ * Sheet toggle switches default (plane = bar) vs contrast (plane lifts off bar).
  */
 
-import { ChevronDown, GripVertical, LayoutGrid, Plus, X } from "lucide-react"
+import { Bookmark, ChevronDown, GripVertical, LayoutGrid, PanelTop, Plus, X } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import type { Me } from "../../hooks/useMe"
 import { useViewTabReorder } from "../../hooks/useViewTabReorder"
@@ -36,6 +37,10 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
   const addView = useLayoutStore((s) => s.addView)
   const removeView = useLayoutStore((s) => s.removeView)
   const renameView = useLayoutStore((s) => s.renameView)
+  const workspaceSurface = useLayoutStore((s) => s.workspaceSurface)
+  const setWorkspaceSurface = useLayoutStore((s) => s.setWorkspaceSurface)
+  const activeTabLift = useLayoutStore((s) => s.activeTabLift)
+  const setActiveTabLift = useLayoutStore((s) => s.setActiveTabLift)
   const [editing, setEditing] = useState<string | null>(null)
   const [editName, setEditName] = useState("")
   const tabsRef = useRef<HTMLDivElement>(null)
@@ -244,6 +249,44 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
             >
               <LayoutGrid size={15} className="block shrink-0" aria-hidden />
               <span className="hidden leading-none sm:inline">Widget</span>
+            </button>
+            <button
+              type="button"
+              aria-pressed={workspaceSurface === "contrast"}
+              className={`flex h-9 shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-[13px] leading-none transition-colors ${
+                workspaceSurface === "contrast"
+                  ? "bg-overlay-2 text-text"
+                  : "text-text-muted hover:bg-overlay-hover hover:text-text"
+              }`}
+              onClick={() =>
+                setWorkspaceSurface(workspaceSurface === "contrast" ? "default" : "contrast")
+              }
+              title={
+                workspaceSurface === "contrast"
+                  ? "Default surface: tab and stage match the top bar"
+                  : "Contrast sheet: selected tab and stage share one surface; widgets match with border only"
+              }
+            >
+              <PanelTop size={15} className="block shrink-0" aria-hidden />
+              <span className="hidden leading-none sm:inline">Sheet</span>
+            </button>
+            <button
+              type="button"
+              aria-pressed={activeTabLift}
+              className={`flex h-9 shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-[13px] leading-none transition-colors ${
+                activeTabLift
+                  ? "bg-overlay-2 text-text"
+                  : "text-text-muted hover:bg-overlay-hover hover:text-text"
+              }`}
+              onClick={() => setActiveTabLift(!activeTabLift)}
+              title={
+                activeTabLift
+                  ? "Active tab and stage match the sheet plane"
+                  : "Lift active tab: tab and stage share a color distinct from the top bar and widgets"
+              }
+            >
+              <Bookmark size={15} className="block shrink-0" aria-hidden />
+              <span className="hidden leading-none sm:inline">Tab</span>
             </button>
             <div className="toolbar-shell-divider mx-1.5" aria-hidden />
           </>

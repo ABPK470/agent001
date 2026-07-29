@@ -4161,6 +4161,11 @@ textarea.input {
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border) 55%, transparent);
 }
 
+.workspace-chrome--contrast .workspace-tile-focused .workspace-shell {
+  border-color: var(--border-strong);
+  box-shadow: none;
+}
+
 .workspace-tile-locked .workspace-resize-handle {
   display: none;
 }
@@ -4260,6 +4265,12 @@ textarea.input {
   --workspace-plane: var(--canvas);
   --workspace-chrome: var(--canvas);
   --workspace-border: var(--border);
+  /* Widget fill/stroke — overridden in --contrast so tiles match the plane. */
+  --workspace-widget-bg: var(--panel);
+  --workspace-widget-border: transparent;
+  /* Stage + active tab — defaults to plane; --tab-lift paints both alone. */
+  --workspace-stage: var(--workspace-plane);
+  --workspace-tab-active: var(--workspace-plane);
   --tab-radius: 0.7rem;
   --stage-radius: 1rem;
   --stage-pad: 0.5rem;
@@ -4271,6 +4282,26 @@ textarea.input {
   background: var(--workspace-chrome);
   padding: 0 0.75rem 0.75rem;
   box-sizing: border-box;
+}
+
+/*
+ * Contrast sheet: selected tab + stage lift off the top bar as one plane;
+ * widgets share that plane and are drawn with a border only.
+ */
+.workspace-chrome--contrast {
+  --workspace-plane: var(--panel);
+  --workspace-widget-bg: var(--workspace-plane);
+  --workspace-widget-border: var(--border);
+}
+
+/*
+ * Active-tab lift: selected tab nail + whole stage content share one fill —
+ * not widgets, not borders. panel-2 sits above both canvas (bar) and panel
+ * (widgets).
+ */
+.workspace-chrome--tab-lift {
+  --workspace-tab-active: var(--panel-2);
+  --workspace-stage: var(--panel-2);
 }
 
 .workspace-sheet-outline {
@@ -4290,7 +4321,7 @@ textarea.input {
   flex-direction: column;
   min-height: 0;
   flex: 1;
-  background: var(--workspace-plane);
+  background: var(--workspace-stage);
   border: none;
   border-radius: var(--stage-radius);
   overflow: hidden;
@@ -4302,6 +4333,9 @@ textarea.input {
 
 .workspace-shell {
   border-radius: var(--widget-radius, 0.5rem);
+  background: var(--workspace-widget-bg, var(--panel));
+  border: 1px solid var(--workspace-widget-border, transparent);
+  box-sizing: border-box;
 }
 
 .toolbar-shell {
@@ -4356,7 +4390,7 @@ textarea.input {
   z-index: 3;
   color: var(--text);
   font-weight: 600;
-  background: var(--workspace-plane);
+  background: var(--workspace-tab-active);
   border: none;
   /* Overlap the stage so fill is continuous under the shared SVG stroke. */
   margin-bottom: -1px;
@@ -4384,6 +4418,7 @@ textarea.input {
 .view-tab--float.view-tab--active {
   color: var(--text);
   font-weight: 600;
+  background: var(--workspace-tab-active);
 }
 
 .view-tab--float.view-tab--inactive {
