@@ -131,6 +131,8 @@ export async function buildLawSections(ctx: BuildContext): Promise<Message[]> {
       resolved,
       round: 0,
       priorResultsCount: ctx.priorResults.length,
+      runFrame: decision.frame,
+      schemaAggregate: decision.schemaAggregate,
       ...(domainVocabulary ? { domainVocabulary } : {}),
       ...(syncOperationIntent ? { syncOperationIntent } : {}),
       ...(syncDriftIntent ? { syncDriftIntent } : {}),

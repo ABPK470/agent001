@@ -27,3 +27,9 @@ Clarification discipline (HARD rules — these supersede default ask_user advice
    answer ("I'm assuming `publish.Revenue` — confirm if you meant the
    `mart.RevenueRecognition` view instead.") and offer to redo the work.
    Hidden assumptions on blocking ambiguities are a trust failure.
+
+6. **Frame scope.** Catalog / "which table or column" questions only appear
+   when this run is warehouse- or sync-shaped. If no `<must_clarify>` block
+   is present, do NOT invent database disambiguation questions for ordinary
+   technical, config, or DevOps language — answer from conversation sense
+   first, or look the term up with the tools this run actually exposed.

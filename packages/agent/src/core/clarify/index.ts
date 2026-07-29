@@ -23,9 +23,11 @@ import { timeRangeDetector } from "./detectors/time-range.js"
 import { writeConfirmationDetector } from "./detectors/write-confirmation.js"
 import { isClarificationExemptGoal } from "../goal-intent.js"
 import type { AmbiguityFinding, ClarifyContext, Detector, ResolvedClarification } from "./types.js"
+import { filterFindingsForRunFrame } from "./types.js"
 
 export {
   CLARIFY_BLOCK_BUDGET_BYTES,
+  filterFindingsForRunFrame,
   filterFindingsForSyncIntent,
   makeFindingId,
   slugSubject
@@ -48,6 +50,7 @@ export type {
   AmbiguitySeverity,
   AmbiguitySource,
   ClarifyContext,
+  ClarifyRunFrame,
   Detector,
   ResolvedClarification
 } from "./types.js"
@@ -87,7 +90,8 @@ export const CLARIFY_DETECTORS: readonly Detector[] = [
  */
 export function detectAmbiguities(ctx: ClarifyContext): AmbiguityFinding[] {
   if (isClarificationExemptGoal(ctx.goal, { messages: ctx.messages })) return []
-  return runDetectors(ctx, CLARIFY_DETECTORS)
+  const raw = runDetectors(ctx, CLARIFY_DETECTORS)
+  return filterFindingsForRunFrame(raw, ctx)
 }
 
 /**

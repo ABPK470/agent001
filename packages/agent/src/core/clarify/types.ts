@@ -56,6 +56,13 @@ export type AmbiguitySeverity = "block" | "warn"
  */
 export type AmbiguitySource = "detector" | "llm-planner"
 
+/**
+ * Run frame from server goal classification. Catalog clarifiers only run on
+ * `data_query` / `sync`. When omitted (unit tests), detectors keep legacy
+ * behaviour (catalog findings allowed whenever a catalog is present).
+ */
+export type ClarifyRunFrame = "general" | "data_query" | "sync" | "ops_config"
+
 export interface AmbiguityFinding {
   /**
    * Stable across rounds. Format: `<kind>:<subject-slug>` — the orchestrator
@@ -124,6 +131,16 @@ export interface ClarifyContext {
   /** 1-based round number (matches orchestrator round counter). */
   readonly round: number
   /**
+   * Task frame from goal classification. When `general` or `ops_config`,
+   * catalog BLOCK clarifiers are stripped after detection.
+   */
+  readonly runFrame?: ClarifyRunFrame
+  /**
+   * Goal asks about tables/views as a schema-level set. Suppresses
+   * schema-match on schema names and the tokens "tables" / "views".
+   */
+  readonly schemaAggregate?: boolean
+  /**
    * Last tool call's textual result, if any. Used by `empty-result` and
    * `write-confirmation` detectors. Absent on round 1.
    */
@@ -188,6 +205,57 @@ export function filterFindingsForSyncIntent(
     if (intent.reservedTokens.has(subject)) return false
     return !subject.split(/\s+/).some((t) => intent.reservedTokens.has(t.toLowerCase()))
   })
+}
+
+/** Catalog-shaped clarify kinds — only valid under data_query / sync frames. */
+const CATALOG_CLARIFY_KINDS: ReadonlySet<AmbiguityKind> = new Set([
+  "schema-match",
+  "term-undefined",
+  "canonical-ambiguity",
+  "metric-undefined",
+  "grain-undefined",
+  "empty-result"
+])
+
+/**
+ * Strip catalog clarifiers when the run frame is not data/sync.
+ * When `runFrame` is omitted (unit tests), keep findings unchanged.
+ */
+export function filterFindingsForRunFrame(
+  findings: readonly AmbiguityFinding[],
+  ctx: Pick<ClarifyContext, "runFrame" | "schemaAggregate" | "catalog" | "goal">
+): AmbiguityFinding[] {
+  const frame = ctx.runFrame
+  if (frame === "general" || frame === "ops_config") {
+    return findings.filter((f) => !CATALOG_CLARIFY_KINDS.has(f.kind))
+  }
+
+  if (!ctx.schemaAggregate) return [...findings]
+
+  const schemaNames = new Set<string>()
+  if (ctx.catalog) {
+    for (const table of ctx.catalog.tables.values()) {
+      schemaNames.add(table.schema.toLowerCase())
+    }
+  }
+
+  return findings.filter((f) => {
+    if (f.kind !== "schema-match") return true
+    const subject = f.subject.toLowerCase()
+    if (subject === "tables" || subject === "views" || subject === "table" || subject === "view") {
+      return false
+    }
+    if (schemaNames.has(subject)) return false
+    // "core" in "core schema tables" even when catalog is cold
+    if (/\b\w+\s+schema\s+tables?\b/i.test(ctx.goal) && new RegExp(`\\b${escapeRe(subject)}\\s+schema\\b`, "i").test(ctx.goal)) {
+      return false
+    }
+    return true
+  })
+}
+
+function escapeRe(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 }
 
 export interface Detector {

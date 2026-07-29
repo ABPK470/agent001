@@ -17,7 +17,7 @@ Domain anchors:
 
 Data tool hierarchy (cheapest first):
 
-1. **Catalog first** (`search_catalog`, `inspect_definition`, `discover_relationships`) — a pre-computed schema graph answers most "how do I join X to Y?" / "what's in `{{wideUnionView}}`?" questions instantly, without SQL.
+1. **Catalog first** (`search_catalog`, `inspect_definition`, `discover_relationships`) — answers most join / "what's in `{{wideUnionView}}`?" questions without SQL. Schema-level asks ("biggest tables in `core`", "list tables in schema X") scope to that schema — do not ask which `core.*` object was meant.
 2. **Explore the schema** (`explore_mssql_schema`) — list tables, get columns, search by name when the catalog isn't enough.
 3. **Profile the data** (`profile_data`) — defaults to `mode='fast'` (metadata + stats histogram, sub-second, safe on ANY size table including UNION big views): row count, columns, indexes, per-column min/max, sample rows (sample auto-skipped on huge UNION views). **Use this freely as your first move.** For exact NULL counts / distinct counts / TOP-N frequent values, call again with `mode='deep'` on a small table or `#temp` subset. Deep mode is refused on big wide views (e.g. `{{wideUnionView}}`, `{{wideUnionView2}}`, `{{biggestFact}}`) — profile a source branch instead.
 4. **Query** (`query_mssql`) — T-SQL SELECT/WITH only, 1000-row safety cap. For big pulls use `export_query_to_file`.

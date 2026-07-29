@@ -10,16 +10,18 @@ import {
   SYNC_CAPABILITY_TOOL_NAMES,
   _resetGoalClassificationCache
 } from "./goal-classification.js"
-import type { GoalClassification } from "./goal-classification.js"
+import type { GoalClassification, RunFrame } from "./goal-classification.js"
 
 export {
   classifyGoal,
   DATA_CAPABILITY_TOOL_NAMES,
   DB_DISCOVERY_TOOL_NAMES,
+  SCHEMA_AGGREGATE_RE,
   scoreDbLikelihood,
   SYNC_CAPABILITY_TOOL_NAMES,
   type DbScoreResult,
   type GoalClassification,
+  type RunFrame,
   type SyncIntentSignals
 } from "./goal-classification.js"
 
@@ -30,6 +32,10 @@ const CHART_RE =
   /\b(chart|charts|graph|graphs|graphed|plot|plots|plotted|visuali[sz]e|visuali[sz]ation|dashboard|kpi|kpis|trend(s)?|distribution|breakdown|histogram|heatmap|relationship\s+map|diagram|figure|render)\b/i
 
 export interface SectionDecision {
+  /** Explicit run frame — clarifiers and tools follow this. */
+  frame: RunFrame
+  /** Schema-level table/view ask — suppress object schema-match clarify. */
+  schemaAggregate: boolean
   includeAbiSync: boolean
   includeMssqlGuidance: boolean
   includeBigTableEtl: boolean
@@ -43,6 +49,7 @@ export interface SectionDecision {
   /** Mirrors `classifyGoal().syncIntent` — when true, sync tools must be kept. */
   syncIntent?: boolean
   triggers?: GoalClassification["triggers"]
+  evidence?: string[]
 }
 
 export function decideSections(opts: {
@@ -55,20 +62,24 @@ export function decideSections(opts: {
   const c = classifyGoal(goal, derived || undefined)
   const isVisual = CHART_RE.test(goal)
   const hasMemory = !!(opts.memory && (opts.memory.working || opts.memory.episodic || opts.memory.semantic))
+  const dataFrame = c.frame === "data_query" || c.frame === "sync"
 
   return {
+    frame: c.frame,
+    schemaAggregate: c.schemaAggregate,
     includeAbiSync: c.syncIntent,
-    includeMssqlGuidance: c.isDbLike,
-    includeMssqlKnowledge: c.isDbLike,
+    includeMssqlGuidance: dataFrame,
+    includeMssqlKnowledge: dataFrame,
     mssqlKnowledgeMode: c.dbScore >= 4 || c.syncIntent ? "full" : "header",
-    includeMssqlCatalog: c.isDbLike,
-    includeBigTableEtl: c.isDbLike,
+    includeMssqlCatalog: dataFrame,
+    includeBigTableEtl: dataFrame,
     includeChartCatalogue: isVisual,
     includeMemoryGuidance: hasMemory,
-    includeDataPersona: c.isDbLike || isVisual || c.syncIntent,
+    includeDataPersona: dataFrame,
     dbScore: c.dbScore,
     syncIntent: c.syncIntent,
-    triggers: c.triggers
+    triggers: c.triggers,
+    evidence: c.evidence
   }
 }
 
@@ -86,8 +97,8 @@ export function filterToolsByGoal<T extends { name: string }>(
   tools: T[],
   decision: SectionDecision
 ): ToolFilterResult<T> {
-  const keepDbTools = decision.syncIntent || (decision.dbScore ?? 0) >= 2
-  if (!keepDbTools) {
+  // Frame is authoritative: general / ops_config never keep data tools.
+  if (decision.frame === "general" || decision.frame === "ops_config") {
     const dropped: string[] = []
     const kept = tools.filter((t) => {
       if (DB_DISCOVERY_TOOL_NAMES.has(t.name) || SYNC_CAPABILITY_TOOL_NAMES.has(t.name)) {
@@ -99,10 +110,11 @@ export function filterToolsByGoal<T extends { name: string }>(
     return { tools: kept, dropped, passThrough: false }
   }
 
-  if (decision.syncIntent) {
+  if (decision.syncIntent || decision.frame === "sync") {
     return { tools, dropped: [], passThrough: true }
   }
 
+  // data_query: keep MSSQL discovery, drop sync capability tools.
   const dropped: string[] = []
   const kept = tools.filter((t) => {
     if (SYNC_CAPABILITY_TOOL_NAMES.has(t.name)) {

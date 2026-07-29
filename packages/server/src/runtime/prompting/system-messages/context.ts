@@ -34,6 +34,7 @@ export function logSectionDecision(ctx: BuildContext): void {
   // eslint-disable-next-line no-console
   console.log(
     `[sections] run=${ctx.runId} goal="${goalPreview}" ` +
+      `frame=${ctx.decision.frame} ` +
       `dbScore=${ctx.decision.dbScore ?? 0} ` +
       `persona=${ctx.decision.includeDataPersona ? 1 : 0} ` +
       `sync=${ctx.decision.includeAbiSync ? 1 : 0} ` +
@@ -43,6 +44,7 @@ export function logSectionDecision(ctx: BuildContext): void {
       `mssqlCat=${ctx.decision.includeMssqlCatalog ? 1 : 0} ` +
       `mssqlGuide=${ctx.decision.includeMssqlGuidance ? 1 : 0} ` +
       `memGuide=${ctx.decision.includeMemoryGuidance ? 1 : 0} ` +
+      `schemaAgg=${ctx.decision.schemaAggregate ? 1 : 0} ` +
       `priorTurns=${ctx.priorTurns.length} ` +
       `knownObjects=${ctx.knownObjects.length} ` +
       `knownVerdicts=${ctx.knownVerdicts.length} ` +

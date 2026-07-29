@@ -52,8 +52,11 @@ import { goalTokens } from "./stopwords.js"
  *
  * 1.6.0: catalog-ranked candidates — dim/publish tables surface before archive;
  * canonical entity resolution suppresses domain nouns with a known dim table.
+ *
+ * 1.7.0: schema-aggregate guard — "tables in core" / "biggest core schema
+ * tables" does not BLOCK on the schema token or the word "tables".
  */
-const VERSION = "1.6.0"
+const VERSION = "1.7.0"
 
 /**
  * Tokens already disambiguated by a qualified reference the user wrote
@@ -148,6 +151,20 @@ export const schemaMatchDetector: Detector = {
     // and that resolves against the live catalog (with mirrorSchema
     // fallback) consumes BOTH halves — the user disambiguated themselves.
     const consumed = disambiguatedTokens(ctx.goal, ctx.catalog, ctx.tenant.mirrorSchema)
+    if (ctx.schemaAggregate) {
+      consumed.add("tables")
+      consumed.add("table")
+      consumed.add("views")
+      consumed.add("view")
+      for (const table of ctx.catalog.tables.values()) {
+        consumed.add(table.schema.toLowerCase())
+      }
+      // Also consume "<name> schema" head tokens from the goal itself.
+      for (const m of ctx.goal.matchAll(/\b([A-Za-z_][\w]*)\s+schema\b/gi)) {
+        const tok = m[1]?.toLowerCase()
+        if (tok) consumed.add(tok)
+      }
+    }
     const anchors = resolveGoalDataAnchors(ctx.goal, ctx.catalog, ctx.tenant.mirrorSchema)
     const domainKeywords = ctx.tenant.domainKeywords
     const out = []

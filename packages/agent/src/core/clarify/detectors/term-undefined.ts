@@ -18,7 +18,7 @@ import { isCanonicallyGroundedEntity } from "../entity-canonical.js"
 import { mergeReservedTokens } from "./reserved-tokens.js"
 import { isStopword } from "./stopwords.js"
 
-const VERSION = "1.0.0"
+const VERSION = "1.1.0"
 
 /**
  * Matches a capitalised noun-phrase: one capitalised word optionally
@@ -119,7 +119,8 @@ export const termUndefinedDetector: Detector = {
         severity: "block" as const,
         subject: phrase,
         reasoning: `"${phrase}" is not a table, view, column, schema, or configured domain term in this database. The agent has no grounding for what it refers to.`,
-        suggestedQuestion: `I don't recognise "${phrase}" in this database. Could you point me at a table or column that captures it, or describe what it means in terms I can look up?`,
+        // Only emitted under data_query/sync frames (see filterFindingsForRunFrame).
+        suggestedQuestion: `I don't recognise "${phrase}" as a known object in this database. Which table or column captures it, or what does it mean in warehouse terms I can look up?`,
         source: "detector" as const
       })
     }
