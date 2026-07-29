@@ -172,7 +172,7 @@ export function GridCanvas({ viewId, tiles, split }: Props) {
   const setViewportRows = useLayoutStore((s) => s.setViewportRows)
   const viewportRows = useLayoutStore((s) => s.viewportRows)
 
-  // contentRect already excludes the host's `p-1` padding — do not subtract again
+  // contentRect already excludes the host's pad — do not subtract again
   // or the grid is 8px short and left-aligned tiles leave the slack on the right.
   const metrics = useMemo(() => {
     if (containerWidth <= 0 || containerHeight <= 0) {
@@ -277,7 +277,7 @@ export function GridCanvas({ viewId, tiles, split }: Props) {
     <div
       ref={containerRef}
       className={[
-        "relative h-full w-full overflow-hidden p-1",
+        "workspace-canvas-pad relative h-full w-full overflow-hidden",
         interacting ? "workspace-canvas-interacting" : "",
         interacting && interactionMode === "resize" ? "workspace-canvas-resizing" : "",
         interacting && interactionMode === "drag" ? "workspace-canvas-dragging" : "",

@@ -1,108 +1,58 @@
 import { describe, expect, it } from "vitest"
 import {
-  addButtonSlidePx,
   clampFloatLeft,
-  fullIndexFromRemainingSlot,
+  dropSlotFromFloatCoverage,
   markDragMoved,
-  peerSlidePx,
-  remainingSlotFromPointer,
+  overlapWidthPx,
   resolveViewTabDrop,
-  syntheticPeerRects,
-  tabIndexFromClientX,
-  tabInsertSlotFromClientX,
   toIndexFromRemainingSlot,
   type ViewTabDragState,
 } from "./view-tab-dnd"
 
 describe("view-tab-dnd", () => {
-  it("maps pointer X to tab index by midpoint", () => {
-    const rects = [
+  it("keeps the current slot until a peer is half covered", () => {
+    const peers = [
       { left: 0, width: 100 },
-      { left: 100, width: 100 },
-      { left: 200, width: 100 },
+      { left: 220, width: 100 },
     ]
-    expect(tabIndexFromClientX(rects, 40)).toBe(0)
-    expect(tabIndexFromClientX(rects, 140)).toBe(1)
-    expect(tabIndexFromClientX(rects, 280)).toBe(2)
+    // Float in the home gap — stay at 1.
+    expect(dropSlotFromFloatCoverage(peers, 110, 100, 1)).toBe(1)
+    // ~20% of left peer — stay.
+    expect(dropSlotFromFloatCoverage(peers, 90, 100, 1)).toBe(1)
+    // ≥50% of left peer → hole moves before it.
+    expect(dropSlotFromFloatCoverage(peers, 0, 80, 1)).toBe(0)
+    // ~20% of right peer — stay.
+    expect(dropSlotFromFloatCoverage(peers, 140, 100, 1)).toBe(1)
+    // ≥50% of right peer → hole moves after it.
+    expect(dropSlotFromFloatCoverage(peers, 170, 100, 1)).toBe(2)
   })
 
-  it("maps pointer X to insertion slots including after last", () => {
-    const rects = [
-      { left: 0, width: 100 },
-      { left: 100, width: 100 },
-      { left: 200, width: 100 },
+  it("can jump several tabs away when a distant peer is half covered", () => {
+    const peers = [
+      { left: 0, width: 80 },
+      { left: 100, width: 80 },
+      { left: 300, width: 80 },
+      { left: 400, width: 80 },
     ]
-    expect(tabInsertSlotFromClientX(rects, 40)).toBe(0)
-    expect(tabInsertSlotFromClientX(rects, 160)).toBe(2)
-    expect(tabInsertSlotFromClientX(rects, 280)).toBe(3)
+    expect(dropSlotFromFloatCoverage(peers, 400, 80, 2)).toBe(4)
+    expect(dropSlotFromFloatCoverage(peers, 0, 80, 2)).toBe(0)
+    expect(dropSlotFromFloatCoverage(peers, 200, 80, 2)).toBe(2)
   })
 
-  it("remaining slots map to reorder toIndex and full-list ghost index", () => {
-    // Drag index 1 out of [A,B,C,D] → peers [A,C,D]; home remaining slot = 1.
+  it("measures overlap widths", () => {
+    expect(overlapWidthPx(0, 100, 50, 100)).toBe(50)
+    expect(overlapWidthPx(0, 40, 50, 100)).toBe(0)
+  })
+
+  it("maps remaining slots to reorder toIndex", () => {
     expect(toIndexFromRemainingSlot(0)).toBe(0)
     expect(toIndexFromRemainingSlot(2)).toBe(2)
-    expect(fullIndexFromRemainingSlot(1, 0)).toBe(0)
-    expect(fullIndexFromRemainingSlot(1, 1)).toBe(1)
-    expect(fullIndexFromRemainingSlot(1, 2)).toBe(3)
-    expect(fullIndexFromRemainingSlot(1, 3)).toBe(4)
-  })
-
-  it("slides peers at or after the insert slot", () => {
-    expect(peerSlidePx(0, 1, 100, 4)).toBe(0)
-    expect(peerSlidePx(1, 1, 100, 4)).toBe(104)
-    expect(peerSlidePx(2, 1, 100, 4)).toBe(104)
-    expect(peerSlidePx(0, 0, 100, 4)).toBe(104)
-    expect(peerSlidePx(2, 3, 100, 4)).toBe(0)
-  })
-
-  it("keeps the add button after the visual tab row while dragging", () => {
-    expect(addButtonSlidePx(100, 4)).toBe(104)
-    expect(addButtonSlidePx(80, 2)).toBe(82)
   })
 
   it("clamps the float so it cannot pass the add button", () => {
     expect(clampFloatLeft(50, 10, 200)).toBe(50)
     expect(clampFloatLeft(5, 10, 200)).toBe(10)
     expect(clampFloatLeft(250, 10, 200)).toBe(200)
-  })
-
-  it("builds synthetic peer rects that ignore a live ghost", () => {
-    const rects = syntheticPeerRects({
-      originLeft: 100,
-      originTop: 20,
-      gapPx: 4,
-      peerWidths: [80, 90],
-      maxFloatLeftPx: 200,
-      minFloatLeftPx: 10,
-    })
-    expect(rects).toEqual([
-      { left: 100, width: 80 },
-      { left: 184, width: 90 },
-    ])
-    expect(remainingSlotFromPointer({
-      originLeft: 100,
-      originTop: 20,
-      gapPx: 4,
-      peerWidths: [80, 90],
-      maxFloatLeftPx: 200,
-      minFloatLeftPx: 10,
-    }, 120)).toBe(0)
-    expect(remainingSlotFromPointer({
-      originLeft: 100,
-      originTop: 20,
-      gapPx: 4,
-      peerWidths: [80, 90],
-      maxFloatLeftPx: 200,
-      minFloatLeftPx: 10,
-    }, 200)).toBe(1)
-    expect(remainingSlotFromPointer({
-      originLeft: 100,
-      originTop: 20,
-      gapPx: 4,
-      peerWidths: [80, 90],
-      maxFloatLeftPx: 200,
-      minFloatLeftPx: 10,
-    }, 300)).toBe(2)
   })
 
   it("marks movement past threshold", () => {
@@ -115,6 +65,7 @@ describe("view-tab-dnd", () => {
       widthPx: 96,
       grabOffsetX: 20,
       floatTop: 40,
+      homeSlot: 0,
       peerStrip: null,
     }
     expect(markDragMoved(drag, 14, 10)).toBe(false)
@@ -132,6 +83,7 @@ describe("view-tab-dnd", () => {
       widthPx: 96,
       grabOffsetX: 20,
       floatTop: 40,
+      homeSlot: 0,
       peerStrip: null,
     }
     expect(resolveViewTabDrop(drag, 2, 0)).toEqual({
@@ -151,6 +103,7 @@ describe("view-tab-dnd", () => {
       widthPx: 96,
       grabOffsetX: 20,
       floatTop: 40,
+      homeSlot: 1,
       peerStrip: null,
     }
     expect(resolveViewTabDrop(drag, 1, 0)).toEqual({

@@ -1,7 +1,9 @@
 /**
- * Chrome-like drag preview — the tab itself sliding on the strip, not a card.
+ * Chrome-like drag preview — same chrome as a resting tab (grip + label + close)
+ * so the label does not jump left inside the measured width.
  */
 
+import { GripVertical, X } from "lucide-react"
 import type { JSX } from "react"
 import type { ViewTabFloat } from "../../hooks/useViewTabReorder"
 
@@ -22,7 +24,16 @@ export function ViewTabDragFloat({ float }: Props): JSX.Element {
       }}
       aria-hidden
     >
-      <span className="view-tab__label relative z-[2] truncate">{float.name}</span>
+      <GripVertical
+        size={12}
+        className="view-tab__grip relative z-[2] shrink-0"
+      />
+      <span className="view-tab__label relative z-[2] whitespace-nowrap">{float.name}</span>
+      {float.showClose ? (
+        <span className="view-tab__close relative z-[2]">
+          <X size={14} />
+        </span>
+      ) : null}
     </div>
   )
 }

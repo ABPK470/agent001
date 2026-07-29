@@ -27,6 +27,7 @@ import { isShellModeToggleEvent, resolveChatVariant } from "./types"
 import { Canvas, type CanvasHandle } from "./workspace/Canvas"
 import { MobileNav } from "./workspace/MobileNav"
 import { Toolbar } from "./workspace/Toolbar"
+import { WorkspaceSheetOutline } from "./workspace/WorkspaceSheetOutline"
 import { getWidgetDefinition, widgetComponent } from "./workspace/widget-definitions"
 import { WidgetCatalog } from "./workspace/WidgetCatalog"
 import { WidgetModal } from "./workspace/WidgetModal"
@@ -661,6 +662,7 @@ export function App() {
         <div className="workspace-stage relative flex min-h-0 flex-1 flex-col">
           <Canvas ref={canvasRef} />
         </div>
+        <WorkspaceSheetOutline />
         <WidgetModal />
       </div>
     )

@@ -1,10 +1,12 @@
 /**
  * Pure view-tab reorder math — no React, no DOM event wiring.
- * UI handlers stay flat peers; they call into this module.
  *
- * While dragging, hit-testing uses a frozen peer strip (captured at drag
- * start) so midpoints stay stable. Peers slide with translateX to open the
- * insert gap (Chrome-like); a floating tab follows the pointer.
+ * Model (seamless grab):
+ * 1. Source leaves flex flow (capture host only). An in-flow placeholder of the
+ *    same width sits at `dropSlot` — peers do not pack/translate on grab.
+ * 2. Drop slot updates when the float covers ≥ half of a peer’s width; then
+ *    insert before/after that peer from float center vs peer center.
+ * 3. Until any peer is half-covered, the slot stays put (no jitter on grab).
  */
 
 export interface ViewTabDragState {
@@ -13,28 +15,24 @@ export interface ViewTabDragState {
   startY: number
   pointerId: number
   hasMoved: boolean
-  /** Tab width captured before the source collapses (float + gap sizing). */
+  /** Tab width captured before the source leaves flow (placeholder sizing). */
   widthPx: number
   /** Pointer offset from the tab’s left edge (keeps float under the grab). */
   grabOffsetX: number
   /** Tab top in client coordinates — float locks to this Y (not strip top). */
   floatTop: number
-  /** Frozen peer geometry for jitter-free hit-testing while peers slide. */
+  /** Remaining-list insert slot at drag start (home gap). */
+  homeSlot: number
+  /** Frozen strip bounds for float clamping. */
   peerStrip: PeerStripMetrics | null
 }
 
 export interface PeerStripMetrics {
-  /** Content-box left of the tab strip (client coordinates). */
-  originLeft: number
-  /** Top of the tab strip (client coordinates) — float Y lock. */
-  originTop: number
   /** Flex gap between tabs (px). */
   gapPx: number
-  /** Peer widths in order, source excluded. */
-  peerWidths: readonly number[]
   /**
    * Max strip-local left for the drag float so it cannot pass the `+`
-   * (captured before source collapse).
+   * (captured before source leaves flow).
    */
   maxFloatLeftPx: number
   /** Min strip-local left (content start / padding). */
@@ -50,50 +48,51 @@ export function clampFloatLeft(left: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, left))
 }
 
-/** Which tab index a pointer X maps to (midpoint rule). */
-export function tabIndexFromClientX(
-  tabRects: ReadonlyArray<{ left: number; width: number }>,
-  clientX: number,
+/** Horizontal overlap of [a0, a0+aW) with [b0, b0+bW). */
+export function overlapWidthPx(
+  aLeft: number,
+  aWidth: number,
+  bLeft: number,
+  bWidth: number,
 ): number {
-  const slot = tabInsertSlotFromClientX(tabRects, clientX)
-  if (tabRects.length === 0) return 0
-  return Math.min(slot, tabRects.length - 1)
+  const left = Math.max(aLeft, bLeft)
+  const right = Math.min(aLeft + aWidth, bLeft + bWidth)
+  return Math.max(0, right - left)
 }
 
 /**
- * Insertion slot 0..n — gap before tab `i`, or `n` after the last tab.
- * Midpoint rule: left half of a tab → insert before it.
+ * Insert slot from float coverage of live peers (remaining list order).
+ * A peer only counts once the float covers ≥ half of its width. Then the
+ * insert hole moves to the far side of that peer (left peers → before them,
+ * right peers → after them). If nothing is half-covered, keep `currentSlot`.
  */
-export function tabInsertSlotFromClientX(
-  tabRects: ReadonlyArray<{ left: number; width: number }>,
-  clientX: number,
+export function dropSlotFromFloatCoverage(
+  peerRects: ReadonlyArray<{ left: number; width: number }>,
+  floatLeft: number,
+  floatWidth: number,
+  currentSlot: number,
 ): number {
-  if (tabRects.length === 0) return 0
-  for (let i = 0; i < tabRects.length; i++) {
-    const rect = tabRects[i]!
-    if (clientX < rect.left + rect.width / 2) return i
+  if (peerRects.length === 0) return 0
+
+  let bestIndex = -1
+  let bestCovered = 0
+  for (let i = 0; i < peerRects.length; i++) {
+    const peer = peerRects[i]!
+    if (peer.width <= 0) continue
+    const covered = overlapWidthPx(floatLeft, floatWidth, peer.left, peer.width)
+    if (covered < peer.width / 2) continue
+    if (covered > bestCovered) {
+      bestCovered = covered
+      bestIndex = i
+    }
   }
-  return tabRects.length
-}
+  if (bestIndex < 0) {
+    return Math.max(0, Math.min(currentSlot, peerRects.length))
+  }
 
-/** Lay out peer rects from frozen strip metrics (ignores live transforms). */
-export function syntheticPeerRects(
-  strip: PeerStripMetrics,
-): Array<{ left: number; width: number }> {
-  let left = strip.originLeft
-  return strip.peerWidths.map((width) => {
-    const rect = { left, width }
-    left += width + strip.gapPx
-    return rect
-  })
-}
-
-export function remainingSlotFromPointer(
-  strip: PeerStripMetrics | null,
-  clientX: number,
-): number {
-  if (!strip) return 0
-  return tabInsertSlotFromClientX(syntheticPeerRects(strip), clientX)
+  // Move the hole to the far side of the covered peer (relative to the hole).
+  if (bestIndex < currentSlot) return bestIndex
+  return bestIndex + 1
 }
 
 /**
@@ -106,41 +105,8 @@ export function toIndexFromRemainingSlot(remainingSlot: number): number {
 }
 
 /**
- * Map a remaining-based insert slot onto an index in the full views array
- * (where the collapsed source still occupies its original index).
- */
-export function fullIndexFromRemainingSlot(fromIndex: number, remainingSlot: number): number {
-  if (fromIndex < 0) return Math.max(0, remainingSlot)
-  if (remainingSlot <= fromIndex) return remainingSlot
-  return remainingSlot + 1
-}
-
-/**
- * Chrome-like peer slide: remaining peer at index `peerIndex` shifts right
- * when the insert gap opens at or before it.
- */
-export function peerSlidePx(
-  peerIndex: number,
-  dropSlot: number,
-  dragWidthPx: number,
-  gapPx: number,
-): number {
-  if (peerIndex < dropSlot) return 0
-  return dragWidthPx + gapPx
-}
-
-/**
- * Keep the trailing `+` button at the end of the visual tab row while
- * dragging. Source collapse pulls it left in layout; this restores it so the
- * open gap never sits under / past the add control.
- */
-export function addButtonSlidePx(dragWidthPx: number, gapPx: number): number {
-  return dragWidthPx + gapPx
-}
-
-/**
- * Capture peer strip metrics before the source collapses.
- * Live DOM midpoints must not be used after peers start sliding.
+ * Capture strip bounds before the source leaves flow.
+ * Peer hit-testing uses live rects while dragging (placeholder keeps layout).
  */
 export function capturePeerStrip(
   container: HTMLElement | null,
@@ -148,23 +114,15 @@ export function capturePeerStrip(
   dragWidthPx: number,
 ): PeerStripMetrics | null {
   if (!container) return null
-  const tabs = [...container.querySelectorAll<HTMLElement>("[data-view-id]")]
-  const peers = tabs.filter((el) => el.dataset.viewId !== dragViewId)
   const styles = getComputedStyle(container)
   const gapPx = parseFloat(styles.columnGap || styles.gap || "4") || 4
   const padLeft = parseFloat(styles.paddingLeft || "0") || 0
-  const rect = container.getBoundingClientRect()
   const addBtn = container.querySelector<HTMLElement>(".view-tab-add")
-  // Before collapse: `+` is still after the full tab row. Float right edge
-  // must not cross its left edge (tabs cannot pass the add control).
   const maxFloatLeftPx = addBtn
     ? Math.max(padLeft, addBtn.offsetLeft - dragWidthPx)
     : padLeft
   return {
-    originLeft: rect.left + padLeft,
-    originTop: rect.top,
     gapPx,
-    peerWidths: peers.map((el) => el.offsetWidth),
     maxFloatLeftPx,
     minFloatLeftPx: padLeft,
   }

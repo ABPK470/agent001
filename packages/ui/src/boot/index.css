@@ -4180,6 +4180,7 @@ textarea.input {
 
 /* Destination ghost — looks like the panel shell at the post-drop rect. */
 .workspace-drop-ghost {
+  border-radius: var(--widget-radius, 0.5rem);
   transition:
     left 160ms cubic-bezier(0.22, 1, 0.36, 1),
     top 160ms cubic-bezier(0.22, 1, 0.36, 1),
@@ -4190,7 +4191,7 @@ textarea.input {
 
 .workspace-drop-ghost__shell {
   height: 100%;
-  border-radius: 0.75rem;
+  border-radius: var(--widget-radius, 0.5rem);
   background: color-mix(in srgb, var(--color-panel) 88%, transparent);
   border: 1px solid color-mix(in srgb, var(--color-border) 80%, transparent);
   box-shadow:
@@ -4206,9 +4207,10 @@ textarea.input {
 }
 
 /*
- * View-tab reorder (Chrome-like): source collapses out of flow (kept mounted
- * for pointer capture). Peers slide via transform; a fixed float follows the
- * pointer. No bordered drop ghost.
+ * View-tab reorder (Chrome-like): source leaves flow (capture host only).
+ * An in-flow placeholder of the same width holds the insert hole — peers do
+ * not pack or translate on grab, so the strip stays still until the float
+ * covers half of a neighbor.
  */
 .view-tab-dragging {
   position: absolute;
@@ -4220,13 +4222,13 @@ textarea.input {
   opacity: 0;
   overflow: hidden;
   border: none;
-  pointer-events: none;
+  /* Keep pointer events — capture is on this node; none would abort the drag. */
 }
 
-.view-tab-strip[data-reordering] .view-tab:not(.view-tab-dragging),
-.view-tab-strip[data-reordering] .view-tab-add {
-  transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
-  will-change: transform;
+.view-tab-slot {
+  flex-shrink: 0;
+  height: 2.25rem;
+  pointer-events: none;
 }
 
 .view-tab-peer-dim {
@@ -4234,20 +4236,38 @@ textarea.input {
 }
 
 /* ── Workspace attached tabs ───────────────────────────────────────
- * Same base fill (--canvas). One continuous border frames active tab +
- * stage. Concave scoops join tab → content (Poolside). Stage keeps
- * rounded corners like the widgets. Do not reuse widget `.workspace-shell`.
+ * Same base fill (--canvas). ONE SVG stroke (.workspace-sheet-outline)
+ * draws stage + active tab (scoops included). Never pair a tab outline
+ * with a separate stage top line — they cannot meet.
+ *
+ * Nested radii: widget radius = stage radius − pad.
  */
 .workspace-chrome {
+  position: relative;
   --workspace-plane: var(--canvas);
   --workspace-chrome: var(--canvas);
   --workspace-border: var(--border);
-  --tab-scoop: 10px;
   --tab-radius: 0.7rem;
-  --stage-radius: 0.85rem;
+  --stage-radius: 1rem;
+  --stage-pad: 0.5rem;
+  --widget-radius: calc(var(--stage-radius) - var(--stage-pad));
+  /* Scoop flares past the tab box; gap must clear them so hover fills
+   * on neighbors never cross the active stroke. */
+  --tab-scoop: 10px;
+  --tab-gap: calc(var(--tab-scoop) + 6px);
   background: var(--workspace-chrome);
   padding: 0 0.75rem 0.75rem;
   box-sizing: border-box;
+}
+
+.workspace-sheet-outline {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
 }
 
 .workspace-stage {
@@ -4258,9 +4278,17 @@ textarea.input {
   min-height: 0;
   flex: 1;
   background: var(--workspace-plane);
-  border: 1px solid var(--workspace-border);
+  border: none;
   border-radius: var(--stage-radius);
   overflow: hidden;
+}
+
+.workspace-canvas-pad {
+  padding: var(--stage-pad);
+}
+
+.workspace-shell {
+  border-radius: var(--widget-radius, 0.5rem);
 }
 
 .toolbar-shell {
@@ -4274,9 +4302,7 @@ textarea.input {
   position: relative;
   z-index: 1;
   min-height: 2.25rem;
-  /* Room for scoops so overflow does not clip the flares. */
-  padding-inline: var(--tab-scoop);
-  margin-inline: calc(-1 * var(--tab-scoop));
+  gap: var(--tab-gap);
 }
 
 .view-tab {
@@ -4294,7 +4320,8 @@ textarea.input {
   user-select: none;
   transition:
     color 140ms ease,
-    opacity 140ms ease;
+    opacity 140ms ease,
+    background-color 140ms ease;
 }
 
 .view-tab:active {
@@ -4302,6 +4329,7 @@ textarea.input {
 }
 
 .view-tab--inactive {
+  z-index: 0;
   color: var(--text-muted);
   background: transparent;
 }
@@ -4312,52 +4340,17 @@ textarea.input {
 }
 
 .view-tab--active {
-  z-index: 2;
+  z-index: 3;
   color: var(--text);
   font-weight: 600;
   background: var(--workspace-plane);
-  border: 1px solid var(--workspace-border);
-  border-bottom: none;
-  /* Overlap the stage top stroke; paint over it so the tab opens into content. */
+  border: none;
+  /* Overlap the stage so fill is continuous under the shared SVG stroke. */
   margin-bottom: -1px;
   padding-bottom: 1px;
-  box-shadow: 0 1px 0 0 var(--workspace-plane);
 }
 
-/*
- * Concave corners (Poolside): chrome scoop + diagonal plane shadow covers
- * the tab’s square corner. Scoop borders carry the frame into the stage
- * top edge — never a closed bottom on the tab.
- */
-.view-tab--active::before,
-.view-tab--active::after {
-  content: "";
-  position: absolute;
-  bottom: 0;
-  width: var(--tab-scoop);
-  height: var(--tab-scoop);
-  background: var(--workspace-chrome);
-  border-style: solid;
-  border-color: var(--workspace-border);
-  pointer-events: none;
-  z-index: 0;
-}
-
-.view-tab--active::before {
-  left: calc(-1 * var(--tab-scoop));
-  border-width: 0 1px 1px 0;
-  border-bottom-right-radius: var(--tab-scoop);
-  box-shadow: 2px 2px 0 0 var(--workspace-plane);
-}
-
-.view-tab--active::after {
-  right: calc(-1 * var(--tab-scoop));
-  border-width: 0 0 1px 1px;
-  border-bottom-left-radius: var(--tab-scoop);
-  box-shadow: -2px 2px 0 0 var(--workspace-plane);
-}
-
-/* Floating drag preview — same attached-tab silhouette. */
+/* Floating drag preview — fill only; sheet SVG draws the same stroke as rest. */
 .view-tab-strip[data-reordering] {
   overflow: visible;
 }
@@ -4369,47 +4362,29 @@ textarea.input {
   z-index: 5;
   height: 2.25rem;
   margin: 0;
-  padding-bottom: 0;
+  padding-bottom: 1px;
+  margin-bottom: -1px;
   pointer-events: none;
   cursor: grabbing;
+  border: none;
   border-radius: var(--tab-radius) var(--tab-radius) 0 0;
   box-shadow: none;
+  background: var(--workspace-plane);
+}
+
+.view-tab--float.view-tab--active {
+  color: var(--text);
+  font-weight: 600;
 }
 
 .view-tab--float.view-tab--inactive {
   color: var(--text);
   font-weight: 600;
-  background: var(--workspace-plane);
+  /* Inactive drag is detached from the sheet — own stroke, no scoops. */
   border: 1px solid var(--workspace-border);
   border-bottom: none;
-}
-
-.view-tab--float.view-tab--inactive::before,
-.view-tab--float.view-tab--inactive::after {
-  content: "";
-  position: absolute;
-  bottom: 0;
-  width: var(--tab-scoop);
-  height: var(--tab-scoop);
-  background: var(--workspace-chrome);
-  border-style: solid;
-  border-color: var(--workspace-border);
-  pointer-events: none;
-  z-index: 0;
-}
-
-.view-tab--float.view-tab--inactive::before {
-  left: calc(-1 * var(--tab-scoop));
-  border-width: 0 1px 1px 0;
-  border-bottom-right-radius: var(--tab-scoop);
-  box-shadow: 2px 2px 0 0 var(--workspace-plane);
-}
-
-.view-tab--float.view-tab--inactive::after {
-  right: calc(-1 * var(--tab-scoop));
-  border-width: 0 0 1px 1px;
-  border-bottom-left-radius: var(--tab-scoop);
-  box-shadow: -2px 2px 0 0 var(--workspace-plane);
+  padding-bottom: 0;
+  margin-bottom: 0;
 }
 
 .view-tab__grip {
@@ -6417,7 +6392,12 @@ textarea.input {
 }
 
 .thread-nav-runs {
-  padding: 0.08rem 0 0.3rem 1.55rem;
+  --thread-tree-gutter: 1.55rem;
+  /* Align stem under the chevron column center (chevron width 1.65rem). */
+  --thread-tree-x: 0.82rem;
+  --thread-tree-line: color-mix(in srgb, var(--border) 70%, var(--text-faint));
+  position: relative;
+  padding: 0.08rem 0 0.3rem var(--thread-tree-gutter);
   opacity: 0;
   transform: translateY(-4px);
   transition:
@@ -6467,6 +6447,7 @@ textarea.input {
 }
 
 .thread-nav-run {
+  position: relative;
   display: grid;
   grid-template-columns: auto 1fr auto;
   align-items: center;
@@ -6477,6 +6458,31 @@ textarea.input {
   text-align: left;
   color: var(--text-muted);
   transition: background-color 160ms ease, color 160ms ease;
+}
+
+/* Elbow from the vertical stem (under the thread chevron) into this run. */
+.thread-nav-run::before {
+  content: "";
+  position: absolute;
+  left: calc(var(--thread-tree-x) - var(--thread-tree-gutter));
+  top: 0;
+  width: calc(var(--thread-tree-gutter) - var(--thread-tree-x));
+  height: 50%;
+  border-left: 1px solid var(--thread-tree-line);
+  border-bottom: 1px solid var(--thread-tree-line);
+  border-bottom-left-radius: 0.45rem;
+  pointer-events: none;
+}
+
+/* Continue the stem below non-last runs so siblings share one trunk. */
+.thread-nav-run:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  left: calc(var(--thread-tree-x) - var(--thread-tree-gutter));
+  top: 50%;
+  bottom: 0;
+  border-left: 1px solid var(--thread-tree-line);
+  pointer-events: none;
 }
 
 .thread-nav-run:hover {

@@ -30,7 +30,7 @@ export function DropZoneOverlay({
 
   return (
     <div
-      className="workspace-drop-ghost pointer-events-none absolute z-30 overflow-hidden rounded-xl"
+      className="workspace-drop-ghost pointer-events-none absolute z-30 overflow-hidden"
       style={{
         left: rect.left,
         top: rect.top,
