@@ -21,17 +21,15 @@ export const TOOLBAR_DIVIDER = "h-4 w-px shrink-0 bg-overlay-3"
 export const TAB_PILL =
   "rounded-md px-2.5 py-1.5 text-sm font-medium transition-colors"
 
-/** Selected / idle fills for `TAB_PILL` (section tabs + multi-select filter tabs). */
-export const TAB_PILL_ACTIVE = "bg-accent/15 text-accent"
-export const TAB_PILL_IDLE = "text-text-muted hover:bg-elevated hover:text-text"
+/**
+ * Selected / idle — global selection dialect (`lib/selection.ts`).
+ * Accent is never used for “selected.”
+ */
+export { SELECT_ACTIVE as TAB_PILL_ACTIVE, SELECT_IDLE as TAB_PILL_IDLE, SELECT_TRACK as TAB_SEGMENT_TRACK } from "../../lib/selection"
 
 /** Sticky subheader inside a scrolling panel — export + view toggle. */
 export const TAB_PANEL_HEADER =
   "sticky top-0 z-10 flex shrink-0 items-center justify-end gap-2 overflow-x-auto border-b border-border-subtle bg-canvas px-3 py-2"
-
-/** Shared track for segment toggles and toolbar listboxes. */
-export const TAB_SEGMENT_TRACK =
-  "inline-flex items-center gap-0.5 rounded-lg border border-border-subtle bg-canvas p-1"
 
 export const TOOLBAR_TRACK_DIVIDER = "mx-0.5 h-6 w-px shrink-0 self-center bg-border-subtle"
 

@@ -5,31 +5,32 @@
 import { forwardRef } from "react"
 import type { ButtonHTMLAttributes, ReactNode } from "react"
 
+import { SELECT_ACTIVE, SELECT_FOCUS, SELECT_IDLE } from "../../lib/selection"
 import { ICON_BTN, ICON_BTN_PRIMARY } from "./chrome"
 
 /** Lucide props for w-9 toolbar buttons. */
 export const TOOLBAR_ICON = { size: 16, strokeWidth: 1.75 } as const
 
 const ICON_BTN_ACTIVE =
-  `${ICON_BTN} bg-elevated text-text`
+  `${ICON_BTN} ${SELECT_ACTIVE}`
 
 const ICON_BTN_TRACK_BASE =
-  "flex items-center justify-center w-9 h-9 shrink-0 rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 disabled:opacity-40 disabled:cursor-not-allowed"
+  `flex items-center justify-center w-9 h-9 shrink-0 rounded-md ${SELECT_FOCUS} disabled:opacity-40 disabled:cursor-not-allowed`
 
 const ICON_BTN_TRACK =
-  `${ICON_BTN_TRACK_BASE} text-text-muted hover:bg-elevated/60 hover:text-text`
+  `${ICON_BTN_TRACK_BASE} ${SELECT_IDLE}`
 
 const ICON_BTN_TRACK_ACTIVE =
-  `${ICON_BTN_TRACK_BASE} bg-elevated text-text shadow-sm`
+  `${ICON_BTN_TRACK_BASE} ${SELECT_ACTIVE}`
 
 const ICON_BTN_GROUP_BASE =
-  "flex items-center justify-center shrink-0 w-9 h-full min-h-0 rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 disabled:opacity-40 disabled:cursor-not-allowed"
+  `flex items-center justify-center shrink-0 w-9 h-full min-h-0 rounded-md ${SELECT_FOCUS} disabled:opacity-40 disabled:cursor-not-allowed`
 
 const ICON_BTN_GROUP =
-  `${ICON_BTN_GROUP_BASE} text-text-muted hover:bg-elevated/60 hover:text-text`
+  `${ICON_BTN_GROUP_BASE} ${SELECT_IDLE}`
 
 const ICON_BTN_GROUP_ACTIVE =
-  `${ICON_BTN_GROUP_BASE} bg-elevated text-text`
+  `${ICON_BTN_GROUP_BASE} ${SELECT_ACTIVE}`
 
 export type IconButtonVariant = "default" | "primary" | "track" | "group"
 

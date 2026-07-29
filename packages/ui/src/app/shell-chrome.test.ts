@@ -66,8 +66,8 @@ describe("shell chrome SOT", () => {
     expect(css).toContain(`--shell-chrome-pad-x: ${SHELL_CHROME_PAD_X}`)
     expect(css).toContain(`--shell-chrome-pad-x-sm: ${SHELL_CHROME_PAD_X_SM}`)
     expect(css).toMatch(/\.shell-chrome-header\s*\{/)
-    // Workspace page inset tracks the shared pad token.
-    expect(css).toContain("padding: 0.625rem var(--shell-chrome-pad-x) 0.75rem")
+    // Workspace page inset tracks the shared pad token + breathe margin.
+    expect(css).toContain("padding: 0.75rem var(--shell-chrome-pad-x) 0.875rem")
     // One paper sheet (rail + stage) — no attached-tab silhouette / orphan gap.
     expect(css).toContain(".workspace-sheet")
     expect(css).not.toContain("workspace-sheet-outline")

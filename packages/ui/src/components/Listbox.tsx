@@ -361,7 +361,7 @@ export function Listbox<T extends string>({
                       className={[
                         "listbox-popover__option w-full flex items-start gap-2 px-3 py-2 text-left transition-colors",
                         o.disabled ? "opacity-40 cursor-not-allowed" : "cursor-pointer",
-                        isActive && !o.disabled ? "bg-accent/15 text-text" : "text-text",
+                        isActive && !o.disabled ? "bg-[var(--select-fill)] text-text" : "text-text",
                         isSel && !isActive ? "bg-overlay-1" : "",
                       ].join(" ")}
                     >

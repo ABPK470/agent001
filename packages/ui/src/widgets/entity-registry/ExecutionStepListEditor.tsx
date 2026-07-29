@@ -131,7 +131,7 @@ export const ExecutionStepListEditor = forwardRef<
                       className={[
                         "mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-xs font-semibold tabular-nums",
                         expanded
-                          ? "bg-accent/15 text-accent"
+                          ? "bg-[var(--select-fill)] text-text"
                           : "bg-elevated text-text-muted",
                       ].join(" ")}
                     >

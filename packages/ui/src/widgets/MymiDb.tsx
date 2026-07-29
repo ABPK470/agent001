@@ -395,8 +395,8 @@ export function MymiDb() {
               className={[
                 "px-2 py-1 rounded text-xs transition-colors",
                 topMode === key
-                  ? "bg-accent/20 text-accent font-medium"
-                  : "text-text-muted hover:text-text hover:bg-elevated",
+                  ? "bg-[var(--select-fill)] text-text font-medium"
+                  : "text-text-muted hover:text-text hover:bg-[var(--hover-fill)]",
               ].join(" ")}
             >
               {label}
@@ -519,7 +519,7 @@ export function MymiDb() {
                     onClick={() => setActiveSchema(s.name)}
                     className={[
                       "relative w-full text-left px-2 py-2 flex flex-col transition-colors overflow-hidden",
-                      activeSchema === s.name ? "bg-accent/15" : "hover:bg-elevated/40",
+                      activeSchema === s.name ? "bg-[var(--select-fill)]" : "hover:bg-[var(--hover-fill)]",
                     ].join(" ")}
                   >
                     {/* size fill */}
@@ -583,7 +583,7 @@ export function MymiDb() {
                     className={[
                       "text-[11px] px-1.5 rounded transition-colors",
                       objectSort === "rows"
-                        ? "bg-accent/20 text-accent"
+                        ? "bg-[var(--select-fill)] text-text"
                         : "text-text-muted hover:text-text",
                     ].join(" ")}
                     onClick={() => setObjectSort((s) => s === "rows" ? "name" : "rows")}
@@ -613,7 +613,7 @@ export function MymiDb() {
                     onClick={() => selectObject(activeSchema!, obj)}
                     className={[
                       "relative w-full overflow-hidden text-left px-2 py-1.5 flex items-center gap-1.5 transition-colors",
-                      isActive ? "bg-accent/15" : "hover:bg-elevated/40",
+                      isActive ? "bg-[var(--select-fill)]" : "hover:bg-[var(--hover-fill)]",
                     ].join(" ")}
                   >
                     <SizeBar value={obj.rowCount} max={maxObjRows} />
@@ -623,7 +623,7 @@ export function MymiDb() {
                         : <Table2 size={11} className="shrink-0 text-text-muted" />}
                       <span className={[
                         "truncate text-xs font-mono",
-                        isActive ? "text-accent font-semibold" : "text-text",
+                        isActive ? "text-text font-semibold" : "text-text",
                       ].join(" ")}>{obj.name}</span>
                       <span className="ml-auto text-[11px] text-text-muted shrink-0">
                         {obj.type === "table" ? fmtRows(obj.rowCount) : <span className="opacity-50">view</span>}
@@ -831,7 +831,7 @@ export function MymiDb() {
                             <button
                               onClick={() => setRelViewMode("visual")}
                               className={`flex items-center gap-1 px-2 py-0.5 rounded text-[11px] transition-colors ${
-                                relViewMode === "visual" ? "bg-accent/20 text-accent" : "text-text-muted hover:text-text"
+                                relViewMode === "visual" ? "bg-[var(--select-fill)] text-text" : "text-text-muted hover:text-text"
                               }`}
                             >
                               <Network size={11} /> Visual
@@ -839,7 +839,7 @@ export function MymiDb() {
                             <button
                               onClick={() => setRelViewMode("list")}
                               className={`flex items-center gap-1 px-2 py-0.5 rounded text-[11px] transition-colors ${
-                                relViewMode === "list" ? "bg-accent/20 text-accent" : "text-text-muted hover:text-text"
+                                relViewMode === "list" ? "bg-[var(--select-fill)] text-text" : "text-text-muted hover:text-text"
                               }`}
                             >
                               <LayoutList size={11} /> List
@@ -1316,7 +1316,7 @@ function DataModelView({ db, onNotifyError }: { db?: string; onNotifyError?: (me
               key={m}
               onClick={() => setViewMode(m)}
               className={["px-2.5 py-0.5 capitalize transition-colors",
-                viewMode === m ? "bg-accent/20 text-accent" : "text-text-muted hover:bg-elevated"].join(" ")}
+                viewMode === m ? "bg-[var(--select-fill)] text-text" : "text-text-muted hover:bg-[var(--hover-fill)]"].join(" ")}
             >
               {m}
             </button>
@@ -1338,7 +1338,7 @@ function DataModelView({ db, onNotifyError }: { db?: string; onNotifyError?: (me
             key={s}
             onClick={() => toggleSchemaFilter(s)}
             className={["px-1.5 py-0.5 rounded font-mono shrink-0 transition-colors",
-              schemaFilter.has(s) ? "bg-accent/20 text-accent" : "text-text-muted hover:bg-elevated"].join(" ")}
+              schemaFilter.has(s) ? "bg-[var(--select-fill)] text-text" : "text-text-muted hover:bg-[var(--hover-fill)]"].join(" ")}
           >
             {s}
           </button>
@@ -1353,9 +1353,9 @@ function DataModelView({ db, onNotifyError }: { db?: string; onNotifyError?: (me
             key={c}
             onClick={() => toggleCatFilter(c)}
             className={["px-1.5 py-0.5 rounded shrink-0 transition-colors",
-              catFilter.has(c) ? "bg-accent/20 text-accent" : "text-text-muted hover:bg-elevated"].join(" ")}
+              catFilter.has(c) ? "bg-[var(--select-fill)] text-text" : "text-text-muted hover:bg-[var(--hover-fill)]"].join(" ")}
           >
-            <span className={catFilter.has(c) ? "text-accent" : (SCHEMA_CATEGORY_COLORS[c] ?? "")}>{c}</span>
+            <span className={catFilter.has(c) ? "text-text" : (SCHEMA_CATEGORY_COLORS[c] ?? "")}>{c}</span>
           </button>
         ))}
         {catFilter.size > 0 && (
@@ -1717,7 +1717,7 @@ function DataModelVisual({
         {(["schema", "table"] as const).map((lv) => (
           <button key={lv} onClick={() => setViewLevel(lv)}
             className={["px-2 py-0.5 rounded text-[11px] transition-colors capitalize",
-              viewLevel === lv ? "bg-accent/20 text-accent" : "text-text-muted hover:bg-elevated"].join(" ")}>
+              viewLevel === lv ? "bg-[var(--select-fill)] text-text" : "text-text-muted hover:bg-[var(--hover-fill)]"].join(" ")}>
             {lv === "schema" ? "Schemas" : "Tables"}
           </button>
         ))}

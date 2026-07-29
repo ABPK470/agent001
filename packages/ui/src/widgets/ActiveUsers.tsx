@@ -697,8 +697,8 @@ function ActiveUsersFilterBar({
                   onClick={() => setStatusFilter(s)}
                   className={`px-2 py-1 rounded-md transition-colors ${
                     statusFilter === s
-                      ? "bg-accent/15 text-accent"
-                      : "text-text-muted hover:text-text hover:bg-overlay-2"
+                      ? "bg-[var(--select-fill)] text-text font-medium"
+                      : "text-text-muted hover:text-text hover:bg-[var(--hover-fill)]"
                   }`}
                 >
                   {s}
@@ -722,8 +722,8 @@ function ActiveUsersFilterBar({
                   onClick={() => setLastSeenRange(r)}
                   className={`px-2 py-1 rounded-md transition-colors ${
                     lastSeenRange === r
-                      ? "bg-accent/15 text-accent"
-                      : "text-text-muted hover:text-text hover:bg-overlay-2"
+                      ? "bg-[var(--select-fill)] text-text font-medium"
+                      : "text-text-muted hover:text-text hover:bg-[var(--hover-fill)]"
                   }`}
                 >
                   {RANGE_LABELS[r]}

@@ -9,10 +9,10 @@ import {
   setupHintHeaderClass,
   useSetupHintChromeTone,
 } from "../../components/SetupHintStrip"
-import { useStore } from "../../state/store"
-import { useLayoutStore } from "../../state/layout-store"
-import type { WidgetType } from "../../types"
 import type { EdgePin } from "../../lib/grid-math"
+import { useLayoutStore } from "../../state/layout-store"
+import { useStore } from "../../state/store"
+import type { WidgetType } from "../../types"
 import { getWidgetDefinition } from "./widget-definitions"
 import { WidgetInstanceProvider } from "./widget-instance"
 
@@ -194,8 +194,20 @@ function WidgetShellHeader({
           <GripVertical size={16} />
         </span>
       )}
-      <span className="text-xs font-medium text-text-muted uppercase tracking-wider truncate min-w-0 flex-1">
+      <span
+        className={[
+          "uppercase tracking-wider truncate min-w-0 flex-1",
+          maximized
+            ? "text-[13px] font-semibold text-text"
+            : "text-xs font-medium text-text-muted",
+        ].join(" ")}
+      >
         {label}
+        {/* {maximized && (
+          <span className="ml-1.5 normal-case tracking-normal font-medium text-text-faint">
+            Expanded
+          </span>
+        )} */}
         {pinned && !maximized && (
           <span className="ml-1.5 normal-case tracking-normal text-text-faint">(pinned)</span>
         )}

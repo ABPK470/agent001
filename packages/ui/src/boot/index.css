@@ -124,6 +124,10 @@
   --overlay-3: rgba(255, 255, 255, 0.08);
   --overlay-hover: rgba(255, 255, 255, 0.06);
 
+  /* Selection dialect — same language as light (ink wash, not accent). */
+  --select-fill: color-mix(in srgb, var(--text) 10%, transparent);
+  --hover-fill: color-mix(in srgb, var(--text) 6%, transparent);
+
   --border-subtle: rgba(255, 255, 255, 0.06);
   --border: #27272a;
   --border-strong: #3f3f46;
@@ -198,6 +202,10 @@
   --overlay-2: rgba(0, 0, 0, 0.05);
   --overlay-3: rgba(0, 0, 0, 0.08);
   --overlay-hover: rgba(0, 0, 0, 0.05);
+
+  /* Selection dialect — one fill language for active / selected / hover. */
+  --select-fill: color-mix(in srgb, var(--text) 8%, transparent);
+  --hover-fill: color-mix(in srgb, var(--text) 5%, transparent);
 
   --border-subtle: rgba(0, 0, 0, 0.08);
   --border: rgba(0, 0, 0, 0.14);
@@ -540,20 +548,11 @@ body {
 
 .entity-rail-item-wrap:hover .entity-rail-item-row,
 .entity-rail-item-wrap--menu-open .entity-rail-item-row {
-  background: var(--color-overlay-2);
+  background: var(--hover-fill);
 }
 
 .entity-rail-item-wrap--active .entity-rail-item-row {
-  background: color-mix(in srgb, var(--color-accent) 11%, var(--color-overlay-2));
-}
-
-:root[data-theme="light"] .entity-rail-item-wrap:hover .entity-rail-item-row,
-:root[data-theme="light"] .entity-rail-item-wrap--menu-open .entity-rail-item-row {
-  background: rgba(30, 25, 20, 0.045);
-}
-
-:root[data-theme="light"] .entity-rail-item-wrap--active .entity-rail-item-row {
-  background: color-mix(in srgb, var(--color-accent) 9%, rgba(30, 25, 20, 0.055));
+  background: var(--select-fill);
 }
 
 .entity-rail-item {
@@ -3422,13 +3421,13 @@ textarea.input {
 }
 
 .widget-toolbar__chip--idle:hover {
-  color: var(--color-text-secondary);
-  background: color-mix(in srgb, var(--color-elevated) 40%, transparent);
+  color: var(--color-text);
+  background: var(--hover-fill);
 }
 
 .widget-toolbar__chip--active {
-  background: color-mix(in srgb, var(--color-accent) 15%, transparent);
-  color: var(--color-accent);
+  background: var(--select-fill);
+  color: var(--color-text);
   font-weight: 500;
 }
 
@@ -4090,6 +4089,11 @@ textarea.input {
      Instant fill was only needed when maximize remounted cold widgets. */
 }
 
+/* Maximized shell — title reads as the place you are, not a muted chrome label. */
+.workspace-tile-solo .workspace-shell {
+  border-color: color-mix(in srgb, var(--border) 80%, transparent);
+}
+
 .workspace-tile-solo-hidden {
   /* Snap under the expanding solo — geometry morph is the signal. */
   visibility: hidden;
@@ -4223,14 +4227,12 @@ textarea.input {
 }
 
 /* While reordering: peers are not interactive — no hover flash under the float. */
-.view-tab-strip[data-reordering] .view-tab:not(.view-tab-dragging),
-.view-tab-strip[data-reordering] .view-tab-add {
+.view-tab-strip[data-reordering] .view-tab:not(.view-tab-dragging) {
   pointer-events: none;
   transition: none;
 }
 
-.view-tab-strip[data-reordering][data-reorder-animate] .view-tab:not(.view-tab-dragging),
-.view-tab-strip[data-reordering][data-reorder-animate] .view-tab-add {
+.view-tab-strip[data-reordering][data-reorder-animate] .view-tab:not(.view-tab-dragging) {
   transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
@@ -4275,34 +4277,34 @@ textarea.input {
 }
 
 /* ── Workspace: one paper instrument on the page ────────────────────
- * Composition (quiet tool — gestalt continuity, clear figure/ground):
- *   canvas page → ONE rounded sheet (rail + stage) → widgets
- * Views sit in the sheet’s top rail. Never orphaned above a second card.
+ * Theme-aware resting (mirror what already works in light):
+ *   Light → deeper warm page → warm sheet; widgets dissolve (hairline).
+ *   Dark  → pure deep canvas → panel sheet (one step); same dissolve.
+ *           Avoid muddy mid-grays (page∩sheet). panel-2 lift is R&D only.
+ * Soft widget corners (not concentric-squeezed to ~4px).
  */
 .workspace-chrome {
   position: relative;
   --workspace-chrome: var(--canvas);
-  --workspace-sheet: var(--panel-2);
-  --workspace-border: var(--border);
+  --workspace-sheet: var(--panel);
+  --workspace-border: color-mix(in srgb, var(--border) 55%, transparent);
   --workspace-sheet-shadow:
-    0 1px 2px color-mix(in srgb, var(--canvas) 55%, transparent),
-    0 8px 28px color-mix(in srgb, var(--canvas) 45%, transparent);
-  --workspace-rail-line: color-mix(in srgb, var(--border) 70%, transparent);
+    0 1px 1px color-mix(in srgb, var(--text) 4%, transparent),
+    0 10px 32px color-mix(in srgb, var(--text) 7%, transparent);
+  --workspace-rail-line: color-mix(in srgb, var(--border) 45%, transparent);
   --workspace-widget-bg: var(--panel);
   --workspace-widget-border: var(--border-subtle);
-  /* Segmented track behind views — recessed on the sheet. */
-  --workspace-view-track: color-mix(in srgb, var(--canvas) 55%, var(--panel) 45%);
-  --workspace-tab-active: var(--panel-2);
-  --workspace-tab-active-shadow: 0 1px 2px color-mix(in srgb, var(--text) 8%, transparent);
+  --workspace-tab-active: var(--select-fill);
+  --workspace-tab-active-shadow: none;
   --tab-row-height: var(--shell-chrome-row-h);
-  --view-chip-radius: 0.45rem;
-  --view-track-radius: 0.55rem;
-  --stage-radius: 0.875rem;
-  --stage-pad: 0.75rem;
-  --widget-radius: calc(var(--stage-radius) - var(--stage-pad) + 0.125rem);
+  --view-chip-radius: 0.5rem;
+  --stage-radius: 1rem;
+  --stage-pad: 0.625rem;
+  /* Soft tiles — floor at 0.75rem so pad never sharpens them to a chip. */
+  --widget-radius: 0.75rem;
   --tab-gap: 0.125rem;
   background: var(--workspace-chrome);
-  padding: 0.625rem var(--shell-chrome-pad-x) 0.75rem;
+  padding: 0.75rem var(--shell-chrome-pad-x) 0.875rem;
   box-sizing: border-box;
 }
 
@@ -4312,27 +4314,45 @@ textarea.input {
   }
 }
 
-/*
- * R&D — Sheet: warmer paper body (less lift); widgets share the sheet.
- */
-.workspace-chrome--contrast {
+:root[data-theme="light"] .workspace-chrome {
+  /* Deeper warm page — sheet stays panel (same family as light resting). */
+  --workspace-chrome: color-mix(in srgb, var(--canvas) 82%, #b9a890 18%);
+}
+
+:root[data-theme="dark"] .workspace-chrome {
+  /* Pure canvas page — no text-mix mud. Sheet = panel (one clean step up). */
+  --workspace-chrome: var(--canvas);
   --workspace-sheet: var(--panel);
-  --workspace-border: var(--border-strong);
-  --workspace-sheet-shadow: none;
-  --workspace-view-track: color-mix(in srgb, var(--text) 6%, transparent);
-  --workspace-tab-active: var(--panel-2);
   --workspace-widget-bg: var(--panel);
-  --workspace-widget-border: var(--border);
+  --workspace-widget-border: var(--border-subtle);
+  --workspace-border: color-mix(in srgb, var(--border) 70%, transparent);
+  --workspace-sheet-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.04),
+    0 12px 40px rgba(0, 0, 0, 0.55);
 }
 
 /*
- * R&D — Tab: stronger selected segment (raised chip on the track).
+ * R&D — Sheet toggle: invert from theme resting (compare only).
+ * Light ON → white lift. Dark ON → stronger panel-2 lift.
  */
-.workspace-chrome--tab-lift {
-  --workspace-tab-active: var(--panel-2);
-  --workspace-tab-active-shadow:
-    0 1px 3px color-mix(in srgb, var(--text) 12%, transparent),
-    0 0 0 1px color-mix(in srgb, var(--border) 50%, transparent);
+:root[data-theme="light"] .workspace-chrome--contrast {
+  --workspace-sheet: var(--panel-2);
+  --workspace-border: var(--border);
+  --workspace-sheet-shadow:
+    0 1px 2px color-mix(in srgb, var(--text) 5%, transparent),
+    0 12px 36px color-mix(in srgb, var(--text) 9%, transparent);
+  --workspace-widget-bg: var(--panel);
+  --workspace-widget-border: var(--border-subtle);
+}
+
+:root[data-theme="dark"] .workspace-chrome--contrast {
+  --workspace-sheet: var(--panel-2);
+  --workspace-widget-bg: var(--panel);
+  --workspace-widget-border: var(--border-subtle);
+  --workspace-border: var(--border);
+  --workspace-sheet-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.06),
+    0 14px 44px rgba(0, 0, 0, 0.6);
 }
 
 /* One continuous paper — rail and stage share this surface. */
@@ -4389,17 +4409,42 @@ textarea.input {
   }
 }
 
-/* ── View rail (segmented control on the sheet) ───────────────────── */
+/* ── View cluster: content-sized so + hugs the last chip ─────────── */
+.view-tab-cluster {
+  display: flex;
+  min-width: 0;
+  max-width: 100%;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+/* ── View strip (flat — selection dialect, no recessed trough) ────── */
 .view-tab-strip {
   position: relative;
   z-index: 1;
+  /* Grow 0 / shrink 1 — never expands and orphans the + on the rail edge. */
+  flex: 0 1 auto;
+  min-width: 0;
   height: var(--tab-row-height);
   min-height: var(--tab-row-height);
   align-items: center;
   gap: var(--tab-gap);
-  padding: 0.2rem;
-  border-radius: var(--view-track-radius);
-  background: var(--workspace-view-track);
+}
+
+/* Overflow: soft trailing fade instead of a hard mid-chip cut. */
+.view-tab-strip--overflow {
+  -webkit-mask-image: linear-gradient(
+    to right,
+    #000 0%,
+    #000 calc(100% - 1.75rem),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to right,
+    #000 0%,
+    #000 calc(100% - 1.75rem),
+    transparent 100%
+  );
 }
 
 .view-tab {
@@ -4409,11 +4454,12 @@ textarea.input {
   align-self: center;
   gap: 0.35rem;
   flex-shrink: 0;
-  height: 1.75rem;
-  padding: 0 0.6rem 0 0.4rem;
+  /* Same optical mass as right-rail controls (h-9 / shell row). */
+  height: var(--shell-chrome-row-h);
+  padding: 0 0.75rem 0 0.5rem;
   font-size: 13px;
   line-height: 1;
-  letter-spacing: 0.005em;
+  letter-spacing: 0.01em;
   cursor: pointer;
   user-select: none;
   box-sizing: border-box;
@@ -4439,7 +4485,7 @@ textarea.input {
 
 .view-tab--inactive:hover {
   color: var(--text);
-  background: color-mix(in srgb, var(--text) 5%, transparent);
+  background: var(--hover-fill);
 }
 
 .view-tab--active {
@@ -4455,14 +4501,14 @@ textarea.input {
   top: 50%;
   bottom: auto;
   z-index: 5;
-  height: 1.75rem;
+  height: var(--shell-chrome-row-h);
   margin: 0;
   transform: translateY(-50%);
   pointer-events: none;
   cursor: grabbing;
   box-shadow:
-    0 4px 16px color-mix(in srgb, var(--canvas) 40%, transparent),
-    0 0 0 1px color-mix(in srgb, var(--border) 45%, transparent);
+    0 4px 16px color-mix(in srgb, var(--text) 12%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--border) 40%, transparent);
 }
 
 .view-tab--float.view-tab--active {
@@ -4474,7 +4520,7 @@ textarea.input {
 .view-tab--float.view-tab--inactive {
   color: var(--text);
   font-weight: 600;
-  background: var(--panel-2);
+  background: var(--panel);
 }
 
 .view-tab__grip {
@@ -4537,8 +4583,8 @@ textarea.input {
 }
 
 .view-tab-add {
-  height: 1.75rem !important;
-  width: 1.75rem !important;
+  height: var(--shell-chrome-row-h) !important;
+  width: var(--shell-chrome-row-h) !important;
   border-radius: var(--view-chip-radius) !important;
 }
 
@@ -4647,12 +4693,27 @@ textarea.input {
   translate: 0 -1px;
 }
 
+/* Inside the ops tray only — stage | session. */
 .toolbar-shell-divider {
   width: 1px;
   height: 1.25rem;
   flex-shrink: 0;
+  align-self: center;
+  margin-inline: 0.15rem;
   border-radius: 999px;
   background: color-mix(in srgb, var(--text-faint) 32%, var(--border) 68%);
+}
+
+/* Right chrome: one quiet tray — surface is the seam vs the view strip. */
+.toolbar-ops-tray {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.15rem;
+  height: var(--shell-chrome-row-h);
+  padding-inline: 0.2rem;
+  border-radius: var(--view-chip-radius);
+  background: var(--overlay-2);
 }
 
 /* ── Mobile ────────────────────────────────────────────────────── */
@@ -5189,11 +5250,11 @@ textarea.input {
 
 .composer-cmd-row--interactive:hover:not(:disabled),
 .composer-cmd-row--active {
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  background: var(--select-fill);
 }
 
 .composer-cmd-row--active .composer-cmd-row__name {
-  color: var(--accent);
+  color: var(--text);
 }
 
 .composer-cmd-row--disabled {
@@ -6055,15 +6116,12 @@ textarea.input {
 }
 
 .thread-rail-item-wrap:hover .thread-rail-item-row,
-.thread-rail-item-wrap--menu-open .thread-rail-item-row,
-.thread-rail-item-wrap--active .thread-rail-item-row {
-  background: var(--overlay-2);
+.thread-rail-item-wrap--menu-open .thread-rail-item-row {
+  background: var(--hover-fill);
 }
 
-:root[data-theme="light"] .thread-rail-item-wrap:hover .thread-rail-item-row,
-:root[data-theme="light"] .thread-rail-item-wrap--menu-open .thread-rail-item-row,
-:root[data-theme="light"] .thread-rail-item-wrap--active .thread-rail-item-row {
-  background: rgba(30, 25, 20, 0.045);
+.thread-rail-item-wrap--active .thread-rail-item-row {
+  background: var(--select-fill);
 }
 
 .thread-rail-item {
@@ -6300,11 +6358,7 @@ textarea.input {
 }
 
 .thread-nav-thread--active > .thread-nav-thread-row {
-  background: var(--overlay-2);
-}
-
-:root[data-theme="light"] .thread-nav-thread--active > .thread-nav-thread-row {
-  background: rgba(30, 25, 20, 0.045);
+  background: var(--select-fill);
 }
 
 .thread-nav-thread-row {
@@ -6616,7 +6670,7 @@ textarea.input {
 }
 
 .thread-nav-run--active {
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  background: var(--select-fill);
   color: var(--text);
 }
 
@@ -7033,7 +7087,7 @@ textarea.input {
 }
 
 .thread-run-rail-capsule-item--active {
-  background: var(--overlay-2);
+  background: var(--select-fill);
   color: var(--text);
 }
 

@@ -124,7 +124,7 @@ export function DefinitionContent({ definition }: { definition: PublishedSyncDef
                   {table.userControllable ? (
                     <button
                       onClick={() => toggleOptionalTable(table.name)}
-                      className={`min-w-[3.5rem] rounded px-2 py-1 text-xs font-mono transition-colors ${enabledOptional.has(table.name) ? "bg-accent/15 text-accent hover:bg-accent/20" : "bg-overlay-2 text-text-muted hover:text-text hover:bg-overlay-3"}`}
+                      className={`min-w-[3.5rem] rounded px-2 py-1 text-xs font-mono transition-colors ${enabledOptional.has(table.name) ? "bg-[var(--select-fill)] text-text hover:bg-[var(--hover-fill)]" : "bg-overlay-2 text-text-muted hover:text-text hover:bg-overlay-3"}`}
                     >
                       {enabledOptional.has(table.name) ? "on" : "off"}
                     </button>

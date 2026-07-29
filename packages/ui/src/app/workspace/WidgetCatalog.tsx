@@ -69,7 +69,7 @@ export function WidgetCatalog({ onClose }: Props) {
               onClick={() => { if (isAllowed) handleToggle(item.type) }}
             >
               <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
-                isActive && isAllowed ? "bg-accent/15" : "bg-overlay-2"
+                isActive && isAllowed ? "bg-[var(--select-fill)]" : "bg-overlay-2"
               }`}>
                 <Icon size={18} className={isActive && isAllowed ? "text-accent" : "text-text-muted"} />
               </div>

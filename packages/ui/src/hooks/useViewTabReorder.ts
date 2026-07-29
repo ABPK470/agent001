@@ -20,6 +20,7 @@ import {
   visualPeerRectsClient,
   type ViewTabDragState,
 } from "../lib/view-tab-dnd"
+import { globalReorderIndex } from "../lib/view-tab-overflow"
 import { useLayoutStore } from "../state/layout-store"
 
 export type ViewTabFloat = {
@@ -139,8 +140,13 @@ export function useViewTabReorder(
     const slot = drag.hasMoved && drag.peerStrip
       ? slotFromFloat(drag, clientX)
       : drag.homeSlot
-    const toIndex = toIndexFromRemainingSlot(slot)
-    const fromIndex = useLayoutStore.getState().views.findIndex((view) => view.id === drag.viewId)
+    const stripIds = [...(tabsRef.current?.querySelectorAll<HTMLElement>("[data-view-id]") ?? [])]
+      .map((el) => el.dataset.viewId)
+      .filter((id): id is string => !!id)
+    const toStripIndex = toIndexFromRemainingSlot(slot)
+    const allIds = useLayoutStore.getState().views.map((view) => view.id)
+    const toIndex = globalReorderIndex(allIds, stripIds, drag.viewId, toStripIndex)
+    const fromIndex = allIds.indexOf(drag.viewId)
     const action = resolveViewTabDrop(drag, toIndex, fromIndex)
 
     clearDragSession()
@@ -221,9 +227,11 @@ export function useViewTabReorder(
       })
     }
 
-    const fromIndex = views.findIndex((view) => view.id === viewId)
+    const stripIds = [...(tabsRef.current?.querySelectorAll<HTMLElement>("[data-view-id]") ?? [])]
+      .map((el) => el.dataset.viewId)
+      .filter((id): id is string => !!id)
+    const home = Math.max(0, stripIds.indexOf(viewId))
     const rect = target.getBoundingClientRect()
-    const home = Math.max(0, fromIndex)
     dropSlotRef.current = home
     dragRef.current = {
       viewId,

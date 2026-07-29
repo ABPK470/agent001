@@ -288,7 +288,7 @@ export function WidgetToolbarFilterMenuItem({
       aria-checked={active}
       onClick={onClick}
       className={`flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-[13px] transition-colors ${
-        active ? "bg-accent/10 text-accent font-medium" : "text-text-muted hover:bg-overlay-2 hover:text-text"
+        active ? "bg-[var(--select-fill)] text-text font-medium" : "text-text-muted hover:bg-[var(--hover-fill)] hover:text-text"
       }`}
     >
       <span>{label}</span>

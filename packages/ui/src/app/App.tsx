@@ -155,7 +155,6 @@ export function App() {
   const views = useLayoutStore((s) => s.views)
   const activeViewId = useLayoutStore((s) => s.activeViewId)
   const workspaceSurface = useLayoutStore((s) => s.workspaceSurface)
-  const activeTabLift = useLayoutStore((s) => s.activeTabLift)
   const canvasRef = useRef<CanvasHandle>(null)
   const isMobile = useIsMobile()
   const [mobileCatalogOpen, setMobileCatalogOpen] = useState(false)
@@ -657,7 +656,6 @@ export function App() {
         className={[
           "workspace-chrome flex h-full min-h-0 flex-col",
           workspaceSurface === "contrast" ? "workspace-chrome--contrast" : "",
-          activeTabLift ? "workspace-chrome--tab-lift" : "",
         ]
           .filter(Boolean)
           .join(" ")}

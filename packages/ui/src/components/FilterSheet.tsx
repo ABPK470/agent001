@@ -160,9 +160,10 @@ export function FilterField({
 const FILTER_CHOICE_BTN =
   "rounded-md border px-2 py-1.5 text-xs font-medium transition-colors"
 
-const FILTER_CHOICE_ON = "border-accent/40 bg-accent/15 text-accent"
+const FILTER_CHOICE_ON =
+  "border-border bg-[var(--select-fill)] text-text"
 const FILTER_CHOICE_OFF =
-  "border-border-subtle bg-base text-text-muted hover:border-border hover:text-text"
+  "border-border-subtle bg-base text-text-muted hover:border-border hover:bg-[var(--hover-fill)] hover:text-text"
 
 /**
  * Choice grid — same look as Event Stream “Quick range” / Sync History toggles.

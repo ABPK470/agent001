@@ -89,9 +89,9 @@ function withProjected(
 }
 
 /**
- * Workspace sheet surface (R&D).
- * - `default` — white paper lifted on the canvas (`panel-2` + soft shadow).
- * - `contrast` — warmer flat sheet (`panel`), stronger edge, no lift shadow.
+ * Workspace sheet surface (R&D invert from theme resting).
+ * Resting: light = warm unified paper; dark = canvas page + panel sheet.
+ * `contrast` = stronger lift (light white / dark panel-2) for compare only.
  */
 export type WorkspaceSurface = "default" | "contrast"
 
@@ -109,10 +109,6 @@ interface LayoutState {
   viewportRows: number
   /** Active tab / stage / widget surface treatment. */
   workspaceSurface: WorkspaceSurface
-  /**
-   * R&D: stronger selected view segment on the rail track.
-   */
-  activeTabLift: boolean
 
   setActiveView: (id: string) => void
   addView: (name: string) => string
@@ -121,7 +117,6 @@ interface LayoutState {
   /** Move a view tab to a new index in the tab strip. */
   reorderViews: (viewId: string, toIndex: number) => void
   setWorkspaceSurface: (surface: WorkspaceSurface) => void
-  setActiveTabLift: (lift: boolean) => void
 
   addWidget: (viewId: string, type: WidgetType) => void
   removeWidget: (viewId: string, tileId: string) => void
@@ -147,12 +142,10 @@ export const useLayoutStore = create<LayoutState>()(
       soloTileId: null,
       viewportRows: 24,
       workspaceSurface: "default",
-      activeTabLift: false,
 
       setActiveView: (id) => set({ activeViewId: id, soloTileId: null }),
 
       setWorkspaceSurface: (surface) => set({ workspaceSurface: surface }),
-      setActiveTabLift: (lift) => set({ activeTabLift: lift }),
 
       addView: (name) => {
         const id = randomId()
@@ -305,13 +298,11 @@ export const useLayoutStore = create<LayoutState>()(
           : currentState.views
         const workspaceSurface =
           persisted.workspaceSurface === "contrast" ? "contrast" : "default"
-        const activeTabLift = persisted.activeTabLift === true
         return {
           ...currentState,
           ...persisted,
           views,
           workspaceSurface,
-          activeTabLift,
           focusedTileId: null,
           enteringTileIds: [],
           soloTileId: null,
@@ -322,7 +313,6 @@ export const useLayoutStore = create<LayoutState>()(
         views: state.views,
         activeViewId: state.activeViewId,
         workspaceSurface: state.workspaceSurface,
-        activeTabLift: state.activeTabLift,
       }),
     },
   ),

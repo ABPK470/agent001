@@ -1,9 +1,9 @@
 /**
- * Segmented toggle — unified track, no per-segment borders on hover.
+ * Segmented toggle — exclusive choices on a flat track (selection dialect).
  */
 
 import type { JSX, ReactNode } from "react"
-import { TAB_SEGMENT_TRACK } from "./chrome"
+import { SELECT_ACTIVE, SELECT_FOCUS, SELECT_IDLE, SELECT_TRACK } from "../../lib/selection"
 
 export interface SegmentToggleOption<T extends string> {
   value: T
@@ -27,7 +27,7 @@ export function SegmentToggle<T extends string>({
   trailing,
 }: SegmentToggleProps<T>): JSX.Element {
   return (
-    <div className={TAB_SEGMENT_TRACK} role="group" aria-label={ariaLabel}>
+    <div className={SELECT_TRACK} role="group" aria-label={ariaLabel}>
       {options.map((option) => {
         const active = option.value === value
         return (
@@ -38,11 +38,9 @@ export function SegmentToggle<T extends string>({
             aria-checked={active}
             onClick={() => onChange(option.value)}
             className={[
-              "rounded-md px-3.5 py-2 text-sm font-medium leading-none transition-colors",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40",
-              active
-                ? "bg-elevated text-text shadow-sm"
-                : "text-text-muted hover:bg-elevated/60 hover:text-text",
+              "rounded-md px-3.5 py-2 text-sm leading-none",
+              SELECT_FOCUS,
+              active ? SELECT_ACTIVE : SELECT_IDLE,
             ].join(" ")}
           >
             {option.label}

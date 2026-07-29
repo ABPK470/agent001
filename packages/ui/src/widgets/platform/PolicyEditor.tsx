@@ -310,8 +310,8 @@ export function PolicyEditor({ onClose }: Props) {
               key={t.id}
               className={`px-4 py-2 text-sm rounded-lg transition-colors whitespace-nowrap ${
                 tab === t.id
-                  ? "bg-accent/15 text-accent font-medium"
-                  : "text-text-muted hover:text-text hover:bg-overlay-2"
+                  ? "bg-[var(--select-fill)] text-text font-medium"
+                  : "text-text-muted hover:text-text hover:bg-[var(--hover-fill)]"
               }`}
               onClick={() => setTab(t.id)}
             >
@@ -426,8 +426,8 @@ export function PolicyEditor({ onClose }: Props) {
                       }}
                       className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors border ${
                         llmProvider === p
-                          ? "bg-accent/20 text-accent border-accent/30"
-                          : "bg-overlay-2 text-text-muted border-border-subtle hover:text-text hover:bg-overlay-3"
+                          ? "bg-[var(--select-fill)] text-text border-border"
+                          : "bg-overlay-2 text-text-muted border-border-subtle hover:text-text hover:bg-[var(--hover-fill)]"
                       }`}
                     >
                       {p === "copilot-chat" ? "Copilot Chat" : "Databricks"}

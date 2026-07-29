@@ -129,6 +129,7 @@ export function peerSlidePx(
 
 /**
  * Capture strip bounds for float clamping (source stays in flow).
+ * `+` is pinned outside the scroll strip — clamp to the last chip edge.
  */
 export function capturePeerStrip(
   container: HTMLElement | null,
@@ -139,10 +140,12 @@ export function capturePeerStrip(
   const styles = getComputedStyle(container)
   const gapPx = parseFloat(styles.columnGap || styles.gap || "4") || 4
   const padLeft = parseFloat(styles.paddingLeft || "0") || 0
-  const addBtn = container.querySelector<HTMLElement>(".view-tab-add")
-  const maxFloatLeftPx = addBtn
-    ? Math.max(padLeft, addBtn.offsetLeft - dragWidthPx)
+  const tabs = [...container.querySelectorAll<HTMLElement>("[data-view-id]")]
+  const last = tabs[tabs.length - 1]
+  const contentRight = last
+    ? last.offsetLeft + last.offsetWidth
     : padLeft
+  const maxFloatLeftPx = Math.max(padLeft, contentRight - dragWidthPx)
   return {
     gapPx,
     maxFloatLeftPx,
