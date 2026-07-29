@@ -18,6 +18,10 @@ import {
   type Tool
 } from "@mia/agent"
 import { arch, homedir, platform } from "node:os"
+import {
+  renderKnowledgeSelection,
+  type KnowledgePackSelection
+} from "../../../infra/mssql/knowledge-packs.js"
 
 // ── Environment detection ────────────────────────────────────────
 
@@ -48,27 +52,6 @@ export function buildEnvironmentContext(opts?: { isAdmin?: boolean }): string {
 }
 
 /**
- * Extract a compact header from a per-connection knowledge body.
- *
- * Used when `mssqlKnowledgeMode === "header"`: keeps the agent oriented
- * (it learns the schema namespaces exist, sees the lead-in paragraph)
- * without paying for the full 5-15 KB prose body on borderline goals.
- *
- * Heuristic: take the first non-blank paragraph (up to the first blank
- * line), then a one-line tail telling the agent how to discover more.
- * Capped at ~700 bytes either way.
- */
-function extractKnowledgeHeader(body: string): string {
-  const HEADER_BYTE_CAP = 700
-  const firstPara = body.split(/\n\s*\n/, 1)[0]?.trim() ?? ""
-  const truncated =
-    firstPara.length > HEADER_BYTE_CAP
-      ? firstPara.slice(0, HEADER_BYTE_CAP).replace(/\s+\S*$/, "") + "\u2026"
-      : firstPara
-  return `${truncated}\n[full knowledge body omitted — call search_catalog / inspect_definition / explore_mssql_schema for specifics]`
-}
-
-/**
  * Build capability context for tools that need ambient awareness in the prompt.
  * Tool definitions alone tell the LLM *how* to call a tool, but not *when* or *why*.
  * This injects discoverable capability summaries so the LLM knows what resources exist.
@@ -90,16 +73,18 @@ export interface BuildToolContextOptions {
   /** Include the MSSQL knowledge body (large — typically the biggest single win). */
   includeMssqlKnowledge?: boolean
   /**
-   * Granularity for the knowledge body when `includeMssqlKnowledge` is true.
-   *  - "full"   — full per-connection knowledge file (default).
-   *  - "header" — first paragraph + namespace summary + discovery-tools hint
-   *               (~600B). Used for borderline DB-intent goals.
+   * Which curated pack(s) to inject. Required when knowledge is on —
+   * there is no parallel "mode" knob.
    */
-  mssqlKnowledgeMode?: "full" | "header"
+  mssqlKnowledgePack?: KnowledgePackSelection
   /** Include the live schema-catalog summary (medium). */
   includeMssqlCatalog?: boolean
-  /** Include the verbose "RULES / EFFICIENCY ANALYSIS" guidance (large). */
+  /** Include dialect / tool-order / export guidance. */
   includeMssqlGuidance?: boolean
+  /**
+   * Skip SCALE CONTEXT bullets when big-table ETL already covers them.
+   */
+  omitMssqlScaleGuidance?: boolean
 }
 
 /**
@@ -180,9 +165,10 @@ function catalogExamples(host?: AgentHost): CatalogExamples {
 
 export function buildToolContext(tools: Tool[], opts?: BuildToolContextOptions): string {
   const includeMssqlKnowledge = opts?.includeMssqlKnowledge ?? true
-  const mssqlKnowledgeMode = opts?.mssqlKnowledgeMode ?? "full"
+  const mssqlKnowledgePack: KnowledgePackSelection = opts?.mssqlKnowledgePack ?? "both"
   const includeMssqlCatalog = opts?.includeMssqlCatalog ?? true
   const includeMssqlGuidance = opts?.includeMssqlGuidance ?? true
+  const omitMssqlScaleGuidance = opts?.omitMssqlScaleGuidance ?? false
 
   // Catalog-derived example placeholders so guidance text never names a
   // customer-specific table. All placeholders fall back to generic shape
@@ -228,40 +214,39 @@ export function buildToolContext(tools: Tool[], opts?: BuildToolContextOptions):
       )
     }
 
-    // Inject database knowledge (schema descriptions, business context)
-    // loaded from knowledgePath files at startup. Multiple connections
-    // typically point at the same `knowledgePath` (uat + prod usually
-    // describe the same database family), so we content-hash and emit
-    // each unique body exactly once with a header listing every env
-    // it covers. This is the single biggest per-call token win — see
-    // /memories/session/plan.md (Phase 1).
-    //
-    // `mssqlKnowledgeMode` (set by decideSections from the goal score)
-    // chooses full body vs header-only. Header mode keeps the agent
-    // oriented (it learns the schema namespaces exist) without paying
-    // 5-15 KB per call for goals that only marginally touch the DB.
-    if (includeMssqlKnowledge && cfgs.some((c) => c.knowledge)) {
-      const groups = new Map<string, string[]>() // body → [env names]
+    // Inject selected knowledge pack(s). Multiple connections often share
+    // the same body — dedupe by rendered content, label env groups.
+    if (includeMssqlKnowledge && mssqlKnowledgePack !== "none" && cfgs.some((c) => c.knowledge)) {
+      const groups = new Map<string, string[]>() // rendered body → [env names]
       for (const c of cfgs) {
         if (!c.knowledge) continue
-        const arr = groups.get(c.knowledge) ?? []
+        const rendered = renderKnowledgeSelection(c.knowledge, mssqlKnowledgePack)
+        if (!rendered) continue
+        const arr = groups.get(rendered) ?? []
         arr.push(c.name)
-        groups.set(c.knowledge, arr)
+        groups.set(rendered, arr)
       }
       const knowledgeBlocks: string[] = []
-      for (const [body, envs] of groups) {
-        const renderedBody = mssqlKnowledgeMode === "header" ? extractKnowledgeHeader(body) : body
+      for (const [renderedBody, envs] of groups) {
         knowledgeBlocks.push(
           cfgs.length === 1 || (groups.size === 1 && envs.length === cfgs.length)
             ? renderedBody
             : `[${envs.join(", ")}]\n${renderedBody}`
         )
       }
-      const header =
-        mssqlKnowledgeMode === "header"
-          ? "DATABASE KNOWLEDGE (header only — goal looks marginally DB-shaped; full body omitted for prompt economy. Call search_catalog / explore_mssql_schema / inspect_definition for details):"
-          : "DATABASE KNOWLEDGE — use this to understand the database structure and write accurate queries:"
-      sections.push("", header, ...knowledgeBlocks)
+      if (knowledgeBlocks.length > 0) {
+        const packLabel =
+          mssqlKnowledgePack === "header"
+            ? "header"
+            : mssqlKnowledgePack === "both"
+              ? "meta+mart"
+              : mssqlKnowledgePack
+        const header =
+          mssqlKnowledgePack === "header"
+            ? "DATABASE KNOWLEDGE (header only — pack selection is orientation-only; call search_catalog / explore_mssql_schema / inspect_definition for details):"
+            : `DATABASE KNOWLEDGE [${packLabel}] — use this to understand the relevant schemas and write accurate queries:`
+        sections.push("", header, ...knowledgeBlocks)
+      }
     }
 
     // Inject live catalog summary if available
@@ -273,14 +258,23 @@ export function buildToolContext(tools: Tool[], opts?: BuildToolContextOptions):
     }
 
     if (includeMssqlGuidance) {
+      if (!omitMssqlScaleGuidance) {
+        sections.push(
+          "",
+          "SCALE CONTEXT:",
+          `  • ~${ex.dbSizeHint} database. ALWAYS use TOP + date filter on large fact/archive tables.`,
+          "  • NEVER SELECT * or COUNT(*) without a WHERE clause on large tables.",
+          ex.mirrorAdvice,
+          ex.dimensionAdvice,
+          "  • Multi-large-object joins: see the BIG-TABLE / MICRO-ETL section above for the canonical #temp staging pattern. Single-shot multi-join SELECTs against billion-row tables time out."
+        )
+      } else {
+        sections.push(
+          "",
+          "SCALE: follow BIG-TABLE / MICRO-ETL above for #temp staging on large joins; always TOP + date filters on fact/archive."
+        )
+      }
       sections.push(
-        "",
-        "SCALE CONTEXT:",
-        `  • ~${ex.dbSizeHint} database. ALWAYS use TOP + date filter on large fact/archive tables.`,
-        "  • NEVER SELECT * or COUNT(*) without a WHERE clause on large tables.",
-        ex.mirrorAdvice,
-        ex.dimensionAdvice,
-        "  • Multi-large-object joins: see the BIG-TABLE / MICRO-ETL section above for the canonical #temp staging pattern. Single-shot multi-join SELECTs against billion-row tables time out.",
         "",
         "T-SQL DIALECT:",
         "  • Target is Microsoft SQL Server. NOT supported: QUALIFY, LIMIT, ILIKE, ::, DATE_TRUNC, INTERVAL, EXTRACT, backticks.",

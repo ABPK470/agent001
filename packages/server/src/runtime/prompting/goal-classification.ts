@@ -38,6 +38,7 @@
  */
 
 import { defaultCatalogAccessor, getPublishedSyncEntityIds, getTenantConfig, listSchemas } from "@mia/agent"
+import type { KnowledgePackSelection } from "../../infra/mssql/knowledge-packs.js"
 import {
   DB_INTENT_GOAL_CLASSES,
   extractGoalClasses
@@ -242,6 +243,11 @@ export interface SyncIntentSignals {
 export interface GoalClassification {
   /** Explicit task frame — source of truth for tools / persona / clarifiers. */
   frame: RunFrame
+  /**
+   * Which curated knowledge pack(s) to inject. `none` outside data/sync;
+   * `header` for weak data scores; `meta` / `mart` / `both` for full bodies.
+   */
+  knowledgePack: KnowledgePackSelection
   dbScore: number
   syncIntent: boolean
   /** True when frame is data_query (or sync, which also keeps data tools). */
@@ -267,6 +273,8 @@ export interface GoalClassification {
     opsConfig: boolean
     schemaAggregate: boolean
     anaphora: boolean
+    metaDomain: boolean
+    martDomain: boolean
   }
   syncSignals: SyncIntentSignals
 }
@@ -293,6 +301,47 @@ function isSchemaAggregateGoal(goal: string, dyn: DynamicGateRegexes): boolean {
   if (/\b\w+\s+schema\s+tables?\b/i.test(goal)) return true
   if (dyn.knownSchemaRe && dyn.knownSchemaRe.test(goal) && /\btables?\b/i.test(goal)) return true
   return false
+}
+
+/**
+ * Platform / ETL metadata domain (core, gate, pipelines, contracts, …).
+ * Deliberately excludes bare "log" (too common in English).
+ */
+const META_DOMAIN_RE =
+  /\b(?:core|gate|corearchive|gatearchive|agent)\b|\b(?:pipeline(?:s)?|activit(?:y|ies)|contract(?:s)?|dataset(?:s)?|rule(?:s)?|linked\s*service|workflow|metadata|vDataset|vPipeline|vRule|etl\s+(?:job|run|pipeline|platform))\b|\bschema\s+(?:core|gate|agent|etl|map|log)\b|\b(?:core|gate|agent|etl|map)\s+schema\b/i
+
+/**
+ * Business mart / BI domain (publish, dim, fact, revenue, balances, …).
+ */
+const MART_DOMAIN_RE =
+  /\b(?:publish|persistedview|persisted\s*view|dim|fact|ext)\b|\b(?:revenue|revenues|balance|balances|rwa|impairment|pnl|sales\s+credits?|merchant|financial\s+disclosure|pkClient|pkMonth|pkProduct)\b/i
+
+function resolveKnowledgePack(opts: {
+  frame: RunFrame
+  dbScore: number
+  syncIntent: boolean
+  bi: boolean
+  metaDomain: boolean
+  martDomain: boolean
+  schemaAggregate: boolean
+}): KnowledgePackSelection {
+  if (opts.frame === "general" || opts.frame === "ops_config") return "none"
+  // Sync is platform metadata reconciliation — never ship mart playbooks by default.
+  if (opts.frame === "sync" || opts.syncIntent) {
+    return opts.martDomain ? "both" : "meta"
+  }
+
+  const meta = opts.metaDomain || opts.schemaAggregate
+  // "biggest/largest" alone must not force mart when the ask is schema-aggregate metadata.
+  const mart = opts.martDomain || (opts.bi && !opts.schemaAggregate)
+
+  if (meta && !mart) return "meta"
+  if (mart && !meta) return "mart"
+  if (meta && mart) return "both"
+
+  // Ambiguous data_query (SQL without clear domain): header when weak, both when strong.
+  if (opts.dbScore < 4) return "header"
+  return "both"
 }
 
 /**
@@ -420,8 +469,25 @@ export function classifyGoal(goal: string, context?: string): GoalClassification
   const isDbLike = frame === "data_query" || frame === "sync"
   const keepDataTools = isDbLike
 
+  const metaDomain = META_DOMAIN_RE.test(goal)
+  const martDomain = MART_DOMAIN_RE.test(goal)
+  if (metaDomain) evidence.push("meta-domain")
+  if (martDomain) evidence.push("mart-domain")
+
+  const knowledgePack = resolveKnowledgePack({
+    frame,
+    dbScore,
+    syncIntent,
+    bi,
+    metaDomain,
+    martDomain,
+    schemaAggregate
+  })
+  if (knowledgePack !== "none") evidence.push(`knowledge:${knowledgePack}`)
+
   return {
     frame,
+    knowledgePack,
     dbScore,
     syncIntent,
     isDbLike,
@@ -439,7 +505,9 @@ export function classifyGoal(goal: string, context?: string): GoalClassification
       priorDataToolCall: continuityBoost,
       opsConfig,
       schemaAggregate,
-      anaphora
+      anaphora,
+      metaDomain,
+      martDomain
     },
     syncSignals
   }

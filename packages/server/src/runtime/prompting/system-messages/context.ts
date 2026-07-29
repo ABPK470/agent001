@@ -35,12 +35,13 @@ export function logSectionDecision(ctx: BuildContext): void {
   console.log(
     `[sections] run=${ctx.runId} goal="${goalPreview}" ` +
       `frame=${ctx.decision.frame} ` +
+      `pack=${ctx.decision.knowledgePack} ` +
       `dbScore=${ctx.decision.dbScore ?? 0} ` +
       `persona=${ctx.decision.includeDataPersona ? 1 : 0} ` +
       `sync=${ctx.decision.includeAbiSync ? 1 : 0} ` +
       `chart=${ctx.decision.includeChartCatalogue ? 1 : 0} ` +
       `etl=${ctx.decision.includeBigTableEtl ? 1 : 0} ` +
-      `mssqlKnow=${ctx.decision.includeMssqlKnowledge ? ctx.decision.mssqlKnowledgeMode : "off"} ` +
+      `mssqlKnow=${ctx.decision.includeMssqlKnowledge ? ctx.decision.knowledgePack : "off"} ` +
       `mssqlCat=${ctx.decision.includeMssqlCatalog ? 1 : 0} ` +
       `mssqlGuide=${ctx.decision.includeMssqlGuidance ? 1 : 0} ` +
       `memGuide=${ctx.decision.includeMemoryGuidance ? 1 : 0} ` +

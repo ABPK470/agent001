@@ -11,6 +11,7 @@ import {
   _resetGoalClassificationCache
 } from "./goal-classification.js"
 import type { GoalClassification, RunFrame } from "./goal-classification.js"
+import type { KnowledgePackSelection } from "../../infra/mssql/knowledge-packs.js"
 
 export {
   classifyGoal,
@@ -25,6 +26,8 @@ export {
   type SyncIntentSignals
 } from "./goal-classification.js"
 
+export type { KnowledgePackSelection }
+
 /** @deprecated Use `_resetGoalClassificationCache`. */
 export const _resetDecideSectionsCache = _resetGoalClassificationCache
 
@@ -36,11 +39,17 @@ export interface SectionDecision {
   frame: RunFrame
   /** Schema-level table/view ask — suppress object schema-match clarify. */
   schemaAggregate: boolean
+  /** Which curated knowledge pack(s) to inject. Sole knowledge-selection knob. */
+  knowledgePack: KnowledgePackSelection
   includeAbiSync: boolean
   includeMssqlGuidance: boolean
+  /**
+   * When true with big-table ETL already injected, builder omits the duplicate
+   * SCALE CONTEXT bullets (ETL section owns that).
+   */
+  omitMssqlScaleGuidance: boolean
   includeBigTableEtl: boolean
   includeMssqlKnowledge: boolean
-  mssqlKnowledgeMode: "full" | "header"
   includeMssqlCatalog: boolean
   includeChartCatalogue: boolean
   includeMemoryGuidance: boolean
@@ -63,16 +72,22 @@ export function decideSections(opts: {
   const isVisual = CHART_RE.test(goal)
   const hasMemory = !!(opts.memory && (opts.memory.working || opts.memory.episodic || opts.memory.semantic))
   const dataFrame = c.frame === "data_query" || c.frame === "sync"
+  const knowledgePack = c.knowledgePack
+  const includeKnowledge = knowledgePack !== "none"
+  // Micro-ETL playbook is mart/scale work — skip on pure metadata / sync-meta.
+  const includeBigTableEtl =
+    knowledgePack === "mart" || knowledgePack === "both" || knowledgePack === "header"
 
   return {
     frame: c.frame,
     schemaAggregate: c.schemaAggregate,
+    knowledgePack,
     includeAbiSync: c.syncIntent,
     includeMssqlGuidance: dataFrame,
-    includeMssqlKnowledge: dataFrame,
-    mssqlKnowledgeMode: c.dbScore >= 4 || c.syncIntent ? "full" : "header",
+    omitMssqlScaleGuidance: includeBigTableEtl,
+    includeMssqlKnowledge: includeKnowledge,
     includeMssqlCatalog: dataFrame,
-    includeBigTableEtl: dataFrame,
+    includeBigTableEtl,
     includeChartCatalogue: isVisual,
     includeMemoryGuidance: hasMemory,
     includeDataPersona: dataFrame,

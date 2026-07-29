@@ -1,6 +1,7 @@
 /**
  * Domain knowledge sections injected when the goal is data_query / sync framed.
- * Skipped for general and ops_config frames to save tokens (persona, ABI sync, charts, ETL).
+ * Skipped for general and ops_config. Big-table ETL only when the knowledge
+ * pack is mart/both/header (not pure metadata).
  */
 
 import {

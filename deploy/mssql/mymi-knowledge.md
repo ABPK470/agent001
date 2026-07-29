@@ -1,3 +1,4 @@
+<!-- mia-pack:shared -->
 ## Tool Orchestration — How to Approach DB Questions
 
 **Before reaching for database tools, understand what the user is asking.**
@@ -36,6 +37,11 @@ Do not guess. Do not assume. Look it up first.
 
 ---
 
+For large-table / multi-join work: follow the BIG-TABLE / MICRO-ETL system section when present — do not reinvent staging patterns here.
+
+<!-- /mia-pack:shared -->
+
+<!-- mia-pack:meta -->
 ## Part 1: Metadata Schemas (ETL Platform Application Data)
 
 These schemas store the configuration, orchestration, and operational state of the ETL platform
@@ -104,6 +110,23 @@ Data quality audit views that validate data loads:
 
 ---
 
+## Metadata query guidance
+
+**ETL / pipeline / platform questions** (what ran, definitions, rules, contracts):
+- Run history: `agent.vPipelineRun`, `agent.vPipelineLatestRun`.
+- Activity details: `agent.ActivityRun` / `agent.vPipelineRunContract`.
+- Execution logs: `log.Detail`, `log.vDatasync`.
+- Pipeline/dataset/rule definitions: `core.vDataset`, `core.Pipeline`, `core.Activity`, `core.vRule`.
+- Data quality: `audit.*`; column docs: `gate.vMetaTable` / `gate.vMetaView`.
+- Metadata history: `coreArchive.*` / `gateArchive.*`.
+
+**Metadata ↔ runtime:** `core` defines WHAT (pipelines, datasets, rules); `agent` tracks WHEN it ran. JOIN on shared IDs (pipelineId, activityId, datasetId).
+
+Prefer `v*` views when available. Always confirm columns with `explore_mssql_schema` / `search_catalog` before querying.
+
+<!-- /mia-pack:meta -->
+
+<!-- mia-pack:mart -->
 ## Part 2: DWH / Data Mart Schemas (Business Intelligence Data)
 
 These schemas contain the actual business data — financial transactions, balances, client hierarchies,
@@ -226,7 +249,6 @@ See "SCD Type 2 / Soft-Delete Pattern (isDeleted column)" section below.
 
 ## SCD Type 2 / Soft-Delete Pattern (isDeleted column)
 
-`isDeleted` is an application-level flag set by the ETL pipeline — **not** a columnstore tombstone.
 For SQL Server internals (tombstones, index health, wait stats, etc.) use `search_catalog(sys='keyword')`.
 
 This DWH uses **SCD Type 2** (Slowly Changing Dimension) logic platform-wide. Every `dim.*`
@@ -241,21 +263,6 @@ table and many `publish.*` tables/views carry a standard set of ETL-managed life
 | `checkSum` | varbinary/bigint | Hash of source columns — used to detect changes. |
 | `changedBy` | varchar | Pipeline run ID or user who last modified the record. |
 
-**To find ALL tables with an `isDeleted` column:**
-```
-search_catalog(column='isDeleted')
-```
-
-Confirmed on key dim tables:
-- `dim.Client` (~26M rows), `dim.Book` (~19K rows), `dim.CostCentre` (~79K rows)
-- All `publish.Client*` views, `publish.BookManage`, `publish.CostCentre*`
-
-```sql
--- Find logically-deleted clients
-SELECT TOP 10 pkClient, Name, validFrom, validTo
-FROM dim.Client WITH (NOLOCK)
-WHERE isDeleted = 1
-```
 
 ---
 
@@ -354,299 +361,6 @@ Use `search_catalog(column='revenue')` to find ALL tables with a given column, t
 
 ---
 
-## Scale & Efficiency Reference
-
-This database is approximately **2TB** of data across hundreds of schemas and tables.
-Always treat it as a high-scale system — unfiltered queries on large tables will time out or cause load spikes.
-
-### Largest tables (row counts at last observation)
-
-| Table | Rows | Notes |
-|---|---|---|
-| `fact.UnoTranspose` | ~2.4 billion | Transactional data pivot — NEVER scan without filters |
-| `fact.IMEXCommissionsDealBalance` | ~1.6 billion | Fee/commission data — always date-filter |
-| `ext.GhanaDailyAccountsAll` | ~1 billion | External Hadoop load |
-| `ext.BotswanaDailyAccountsAll` | ~856 million | External Hadoop load |
-| `fact.AfricaFlexDailyBalances` | ~823 million | Daily balances — use date ranges |
-| `fact.FinancialDisclosureDaily` | ~570 million | Regulatory disclosure |
-| `fact.FinancialDisclosureDailySAP` | ~272 million | SAP variant |
-| `fact.BackdatedTransactions` | ~367 million | Backdated adjustments |
-| `fact.CounterpartyStructures` | ~305 million | Counterparty risk |
-| `fact.ACMAccountFacilityMapping` | ~199 million | Credit facilities |
-| `fact.AfricaFrontArena` | ~156 million | Markets trading |
-| `dim.Account` | ~51 million | Always filter before joining |
-| `dim.Client` | ~26 million | Central client master — heavy join target |
-| `agent.ActivityRun` | ~5.5 million | ETL activity execution records |
-| `agent.ActivityRunArchive` | ~4.4 million | Historical activity runs |
-| `log.Detail` | ~74 million | Granular ETL execution logs |
-
-### Query efficiency rules
-
-- **Always date-filter**: Every query on `fact.*`, `ext.*`, `archive.*` MUST have a date WHERE clause.
-- **Use TOP for exploration**: Start every investigation with `SELECT TOP 10` — never `SELECT *` cold.
-- **Prefer persistedViews**: `persistedView.publish.X` is pre-materialized. Use it instead of `publish.X` when available for the same result at a fraction of the I/O.
-- **Avoid SELECT ***: On any table with 1M+ rows, specify only the columns you need.
-- **Date dimension**: Use `dim.Date` for all temporal filtering. Verified columns: `Year` (smallint), `MonthNo` (smallint), `QuarterNo` (smallint), `pkDate` (int PK), `pkMonth` (int). Never use `calYear`, `calMonth`, `calYearMonth` — those columns do NOT exist. Filter using `WHERE Year = 2025`, not `WHERE calYear = 2025`.
-- **dim.Client and dim.Account**: These are the most-joined tables in the system. Both are very large. Filter on primary key values (`pkClient`, `pkAccount`) rather than scanning.
-
-### ⚠️ CRITICAL: Never probe views with ORDER BY or unfiltered queries
-
-`publish.*` views are NOT tables — they are T-SQL view definitions that UNION together 10–60 underlying
-fact tables at runtime. Every query against a `publish.*` view re-executes the entire view.
-
-**NEVER do this — it will time out (minutes) or never complete:**
-```sql
-SELECT TOP 5 pkMonth FROM publish.Revenue ORDER BY pkMonth         -- FULL SCAN of 59 unioned fact tables
-SELECT TOP 5 * FROM publish.Revenue                                 -- same — forces full materialization
-SELECT MIN(pkMonth), MAX(pkMonth) FROM publish.Revenue              -- same issue
-SELECT DISTINCT pkMonth FROM publish.Revenue                        -- extremely slow
-```
-
-**Why it's slow:** `SELECT TOP N ... ORDER BY` on a view forces SQL Server to evaluate the entire view
-(all 59+ UNION branches across multiple 100M+ row fact tables) to find the globally sorted top-N.
-There is no index SQL Server can use on the result of a view with UNIONs.
-
-### ✅ How to discover date ranges on publish.* views efficiently
-
-The `pkMonth` key is sourced from `dim.Date.pkDate` (or a `CalendarCode` lookup). To find what period
-data is available WITHOUT querying the view:
-
-```sql
--- Option 1: Query dim.Date directly — find all months that exist
--- VERIFIED column names: Year (smallint), MonthNo (smallint), Period (varchar), pkDate (int), pkMonth (int)
-SELECT DISTINCT pkMonth, Year, MonthNo, Period FROM dim.Date
-WHERE Year = 2025
-ORDER BY pkMonth
-
--- Option 2: Check the underlying fact table (much faster than the view)
--- publish.Revenue is built from fact tables. Use inspect_definition(depends_on='publish.Revenue')
--- to find which base fact tables feed it, then query those directly with TOP 1 + date filter.
--- Example with a single source:
-SELECT TOP 1 pkMonth FROM fact.PNLRevenueMTD WITH (NOLOCK) ORDER BY pkMonth DESC
-
--- Option 3: For the Revenue view specifically, check the month dimension:
-SELECT pkMonth, Year, MonthNo, Period
-FROM dim.Date WITH (NOLOCK)
-WHERE Year = 2025
-ORDER BY pkMonth
-```
-
-### ✅ How to query large publish.* views efficiently
-
-When querying `publish.Revenue` or similar large views, ALWAYS anchor with a filter that matches
-an indexed column on the underlying base tables:
-
-```sql
--- CORRECT: pkMonth filter pushes predicate into the view — each source table can use its index
--- ALWAYS look up the pkMonth range from dim.Date first (see pattern below) — never hardcode values
-SELECT pkClient, SUM(RevenueZARMTD) AS revenue
-FROM publish.Revenue WITH (NOLOCK)
-WHERE pkMonth BETWEEN @pkMonthFrom AND @pkMonthTo   -- resolve from dim.Date first!
-GROUP BY pkClient
-
--- CONDITIONAL: use a persisted publish mirror ONLY if that exact mirror exists.
--- Do NOT assume `persistedView.[publish.Revenue]` exists in every environment.
--- If no one-to-one persisted publish mirror exists, do NOT blindly substitute
--- `persistedView.[fact.Revenue]` and expect the same performance shape.
-
--- FALLBACK FOR publish.Revenue: aggregate inside each source branch first,
--- then UNION the small grouped results, then take TOP N clients.
--- This matches the actual lineage shape of publish.Revenue in this repo:
--- 59 source-mapping views under one UNION ALL.
-```
-
-### ✅ When no `persistedView.[publish.Revenue]` mirror exists
-
-`publish.Revenue` in this repo is documented as a `UNION ALL` over 59 source-mapping views.
-When there is no one-to-one persisted publish mirror, the best-performing pattern for enterprise
-top-N client discovery is usually:
-
-1. Resolve `pkMonth` from `dim.Date`
-2. Aggregate by `pkClient` inside each revenue branch with the `pkMonth` predicate applied
-3. `UNION ALL` those branch-local aggregates
-4. Group again by `pkClient` and take `TOP N`
-5. Only then fetch detail rows for those clients from `publish.Revenue`
-
-Example skeleton:
-
-```sql
-SET NOCOUNT ON;
-
-SELECT MIN(pkMonth) AS pkMonthFrom, MAX(pkMonth) AS pkMonthTo
-INTO #range_a3f91c08
-FROM dim.Date WITH (NOLOCK)
-WHERE [Year] = 2025;
-
-SELECT TOP 5
-      x.pkClient,
-      SUM(x.RevenueZAR) AS RevenueZAR
-INTO #topClients_a3f91c08
-FROM (
-      SELECT pkClient, SUM(RevenueZARMTD) AS RevenueZAR
-      FROM publish.MappingTransactionalBankingRules WITH (NOLOCK)
-      WHERE pkMonth BETWEEN (SELECT pkMonthFrom FROM #range_a3f91c08)
-                                 AND (SELECT pkMonthTo   FROM #range_a3f91c08)
-         AND pkClient IS NOT NULL
-      GROUP BY pkClient
-
-      UNION ALL
-
-      SELECT pkClient, SUM(RevenueZARMTD) AS RevenueZAR
-      FROM publish.MappingUNOTranspose WITH (NOLOCK)
-      WHERE pkMonth BETWEEN (SELECT pkMonthFrom FROM #range_a3f91c08)
-                                 AND (SELECT pkMonthTo   FROM #range_a3f91c08)
-         AND pkClient IS NOT NULL
-      GROUP BY pkClient
-
-      -- repeat for the required revenue branches
-) x
-GROUP BY x.pkClient
-ORDER BY SUM(x.RevenueZAR) DESC, x.pkClient;
-
-SELECT
-      r.pkClient,
-      r.pkProduct,
-      r.pkAccount,
-      r.pkMonth,
-      r.RevenueZARMTD
-INTO #revLines_a3f91c08
-FROM publish.Revenue r WITH (NOLOCK)
-JOIN #range_a3f91c08 rg
-   ON r.pkMonth BETWEEN rg.pkMonthFrom AND rg.pkMonthTo
-WHERE r.pkClient IN (SELECT pkClient FROM #topClients_a3f91c08);
-
-DROP TABLE #revLines_a3f91c08;
-DROP TABLE #topClients_a3f91c08;
-DROP TABLE #range_a3f91c08;
-```
-
-Why this helps:
-- it shrinks rows inside each branch before the global `UNION ALL`
-- it avoids asking SQL Server to sort or aggregate the fully-expanded 59-branch union first
-- it delays large dim joins until the client set is already tiny
-
-### ✅ pkMonth lookup pattern
-
-`pkMonth` in `publish.Revenue` corresponds to `pkMonth` in `dim.Date` (NOT `pkDate` — these are different columns).
-**Always resolve the pkMonth range before querying Revenue:**
-
-```sql
--- Step 1: Resolve pkMonth values for the target period
--- dim.Date column names: Year (smallint), MonthNo (smallint), pkDate (int), pkMonth (int)
-SELECT MIN(pkMonth) AS pkMonthFrom, MAX(pkMonth) AS pkMonthTo
-FROM dim.Date WITH (NOLOCK)
-WHERE Year = 2025
-
--- Step 2: Use those values as filters in publish.Revenue
-SELECT TOP 20 pkClient, SUM(RevenueZARMTD) AS totalRevenue
-FROM publish.Revenue WITH (NOLOCK)
-WHERE pkMonth BETWEEN @pkMonthFrom AND @pkMonthTo
-GROUP BY pkClient
-ORDER BY totalRevenue DESC
-
--- Step 3: Look up client names (join to dim.Client on pkClient)
--- dim.Client column: Name (client display name)
-SELECT Name FROM dim.Client WITH (NOLOCK) WHERE pkClient = @pkClient
-
--- Step 4: Look up top product per client
--- dim.Product column: Name (product display name); join key: pkProduct
-SELECT TOP 1 p.Name AS ProductName, SUM(r.RevenueZARMTD) AS ProductRevenue
-FROM publish.Revenue r WITH (NOLOCK)
-JOIN dim.Product p WITH (NOLOCK) ON r.pkProduct = p.pkProduct
-WHERE r.pkClient = @pkClient AND r.pkMonth BETWEEN @pkMonthFrom AND @pkMonthTo
-GROUP BY p.Name
-ORDER BY ProductRevenue DESC
-```
-
-### Key discovery rule: use catalog metadata, not view queries, for exploration
-
-Before querying a large view:
-1. `inspect_definition(depends_on='publish.Revenue')` — see source tables / dependency map
-2. Query `dim.Date` to resolve any `pkDate/pkMonth` values for your time period  
-3. Only then query the view, WITH a predicate on `pkMonth`/`pkDate` that uses the resolved range
-4. Add `WITH (NOLOCK)` for analytical read-only queries — avoids lock contention on live systems
-
-### publish vs persistedView vs fact+dim
-
-```
-Business question
-  └── publish.X (view — pre-joined fact+dim, business-ready)
-        └── persistedView.publish.X (materialized — same as publish.X but stored)
-              └── fact.X + dim.Y (base tables — flexible but requires manual joins)
-```
-
-**For reporting**: always start at `persistedView.publish.*` if it exists; fall back to `publish.*`, then `fact+dim`.
-**For raw data / custom joins**: go to `fact` + `dim` directly.
-
-### View layer architecture
-
-The platform has 4 view layers stacked on top of base tables:
-1. **`core.*` views** (`vDataset`, `vRule`, etc.) — metadata/config pre-joins
-2. **`publish.*` views** (246+) — business-ready star-schema joins; what BI tools query
-3. **`persistedView.publish.*`** (292) — SQL Server indexed views materializing `publish.*`
-4. **`audit.*` views** (9) — data quality monitors
-
-When diagnosing slow ETL or long pipeline runs, the problem is often in **`publish.*` view definitions**:
-- Duplicate JOINs to the same table (e.g., joining `dim.Client` twice)
-- Joining through `publish.*` views inside other `publish.*` views (N-level view nesting)
-- Joining `fact.*` tables without adequate WHERE predicates — they get full scans
-
-Use `inspect_definition(object='publish.ViewName')` to read the T-SQL and detect these patterns.
-Use `inspect_definition(depends_on='publish.ViewName')` to trace the full view chain.
-Use `inspect_definition(search='TableName')` to find every view that joins a specific table.
-
-### Correct workflow for finding top-N largest publish views and their duplicate joins
-
-The catalog pre-computes view rankings at startup using `sys.sql_expression_dependencies` —
-a catalog metadata DMV that runs in milliseconds. There is no need to write a runtime SQL query.
-
-**Step 1 — `search_catalog(stats=true)`**
-
-Returns two sections:
-- "Largest tables" — physical tables. The `publish.*` entries there (`ZambiaDailyAccountsAll`,
-  `MappingAfricaEMDWDailyBalances`, `AfricaFlexDailyBalances`, etc.) are physical tables —
-  `inspect_definition` on them returns "No definition found". **Ignore this list for view analysis.**
-- "Largest publish VIEWS (by sum of source table rows)" — real publish VIEWs with T-SQL
-  definitions, ranked by the total rows of the physical tables they reference.
-
-**Step 2 — for each view in "Largest publish VIEWS", call in PARALLEL:**
-```
-inspect_definition(object='publish.ViewName')
-```
-→ check "TABLE/VIEW REFERENCES IN FROM/JOIN CLAUSES"
-→ any table name listed more than once = confirmed duplicate join
-
-**Notes:**
-- `publish.Revenue` and `publish.Balances` are UNION-ALL aggregations — always return
-  "No duplicate table references" — correct, skip them.
-- The customer-reported issue (joining `publish.Client_Base` twice) will appear in one of the
-  large publish views returned by Step 1.
-
-### ETL pipeline performance analysis
-
-When a pipeline is slow, trace it through three layers:
-1. **What ran?** → `agent.vPipelineRun`, `agent.vPipelineLatestRun` — get duration and status
-2. **Which activity was slow?** → `agent.ActivityRun` — find the step with the longest elapsed time
-3. **What query did it run?** → `core.Rule`, `core.vRule` — read the rule definition for that activity
-4. **Why was it slow?** → `inspect_definition(object='...')` on any view the rule references
-
-Common performance causes found this way:
-- Redundant JOIN to the same dimension (e.g., `client_base` twice in one SELECT)
-- A `publish` view calling another `publish` view that itself calls a 500M-row fact table without filters
-- Missing indexes on join columns in large `fact` tables
-- `SELECT *` inside a view definition causing over-fetch
-
-### etl schema (368 tables)
-These mapping tables (`mapping_*`) are generated dynamically per pipeline run. They are typically small
-(lookup tables for a single transformation run) but there are hundreds of them. When debugging a rule, 
-the relevant mapping table can be found via:
-```sql
-SELECT * FROM INFORMATION_SCHEMA.TABLES 
-WHERE TABLE_SCHEMA = 'etl' AND TABLE_NAME LIKE '%TargetTableName%'
-ORDER BY TABLE_NAME
-```
-
----
 
 ## Part 4: Critical View Lineage
 
@@ -682,3 +396,4 @@ per source, and narrative descriptions. These always overwrite the auto-discover
 - Cross-sell analysis (products used vs. not used, compared to peer clients)
 - Understanding what `inspect_definition(object=…)` will reveal when drilling deeper
 
+<!-- /mia-pack:mart -->

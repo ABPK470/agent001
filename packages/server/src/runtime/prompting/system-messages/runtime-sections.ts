@@ -15,9 +15,10 @@ export async function buildRuntimeSections(ctx: BuildContext): Promise<Message[]
   const toolCtx = buildToolContext(opts.allTools, {
     ...(opts.host ? { host: opts.host } : {}),
     includeMssqlKnowledge: decision.includeMssqlKnowledge,
-    mssqlKnowledgeMode: decision.mssqlKnowledgeMode,
+    mssqlKnowledgePack: decision.knowledgePack,
     includeMssqlCatalog: decision.includeMssqlCatalog,
-    includeMssqlGuidance: decision.includeMssqlGuidance
+    includeMssqlGuidance: decision.includeMssqlGuidance,
+    omitMssqlScaleGuidance: decision.omitMssqlScaleGuidance
   })
   if (toolCtx) {
     messages.push({

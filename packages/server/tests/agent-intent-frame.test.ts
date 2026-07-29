@@ -91,14 +91,17 @@ describe("golden frames — reported failures", () => {
     expectDataTools(goal, false, context)
   })
 
-  it("biggest core schema tables is data_query with schemaAggregate", () => {
+  it("biggest core schema tables is data_query with schemaAggregate and meta pack", () => {
     const goal = "what are the biggest core schema tables in dev"
     const c = classifyGoal(goal)
     expect(c.frame).toBe("data_query")
     expect(c.schemaAggregate).toBe(true)
+    expect(c.knowledgePack).toBe("meta")
     expectDataTools(goal, true)
     const d = decideSections({ goal, memory: emptyTier() })
     expect(d.schemaAggregate).toBe(true)
+    expect(d.knowledgePack).toBe("meta")
+    expect(d.includeBigTableEtl).toBe(false)
     expect(d.includeDataPersona).toBe(true)
   })
 })
