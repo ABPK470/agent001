@@ -4207,32 +4207,45 @@ textarea.input {
 }
 
 /*
- * View-tab reorder (Chrome-like): source leaves flow (capture host only).
- * An in-flow placeholder of the same width holds the insert hole — peers do
- * not pack or translate on grab, so the strip stays still until the float
- * covers half of a neighbor.
+ * View-tab reorder (Chrome-like): source stays in flow (invisible seat).
+ * Only tabs between home and drop translate — grab never reflows the strip.
+ * Later slot changes ease via [data-reorder-animate]. Scroll locked in JS.
  */
 .view-tab-dragging {
-  position: absolute;
-  width: 0 !important;
-  min-width: 0 !important;
-  height: 0 !important;
-  padding: 0 !important;
-  margin: 0 !important;
   opacity: 0;
-  overflow: hidden;
-  border: none;
   /* Keep pointer events — capture is on this node; none would abort the drag. */
-}
-
-.view-tab-slot {
-  flex-shrink: 0;
-  height: 2.25rem;
-  pointer-events: none;
 }
 
 .view-tab-peer-dim {
   opacity: 0.88;
+}
+
+.view-tab-strip[data-reordering] {
+  /* Do not change overflow vs resting — that shifts layout / scroll. */
+  touch-action: none;
+  overscroll-behavior: none;
+}
+
+/* While reordering: peers are not interactive — no hover flash under the float. */
+.view-tab-strip[data-reordering] .view-tab:not(.view-tab-dragging),
+.view-tab-strip[data-reordering] .view-tab-add {
+  pointer-events: none;
+  transition: none;
+}
+
+.view-tab-strip[data-reordering][data-reorder-animate] .view-tab:not(.view-tab-dragging),
+.view-tab-strip[data-reordering][data-reorder-animate] .view-tab-add {
+  transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.view-tab-strip[data-reordering] .view-tab--inactive:hover {
+  color: var(--text-muted);
+  background: transparent;
+}
+
+.view-tab-strip[data-reordering] .view-tab__grip,
+.view-tab-strip[data-reordering] .view-tab__close {
+  opacity: 0 !important;
 }
 
 /* ── Workspace attached tabs ───────────────────────────────────────
@@ -4351,10 +4364,6 @@ textarea.input {
 }
 
 /* Floating drag preview — fill only; sheet SVG draws the same stroke as rest. */
-.view-tab-strip[data-reordering] {
-  overflow: visible;
-}
-
 .view-tab--float {
   position: absolute;
   top: auto;

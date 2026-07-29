@@ -2,21 +2,22 @@
  * Flat peer handlers for view-tab drag reorder (Chrome-like).
  * Transient drag state lives in a ref — no nested listener allocations.
  *
- * Grab is seamless: an in-flow placeholder keeps the hole; peers never pack
- * or translate on drag start. Drop slot follows 50% float coverage of peers.
- * Once dragging, window owns move/up so remounting the capture host cannot
- * abort the gesture.
+ * Grab: source stays in flow (invisible) + float; strip layout does not move.
+ * Slot moves: only intervening peers ease via translate. Coverage ≥50%.
+ * Window owns move/up after threshold. Strip scroll is locked while dragging.
  */
 
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from "react"
+import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from "react"
 import { flushSync } from "react-dom"
 import {
   capturePeerStrip,
   clampFloatLeft,
   dropSlotFromFloatCoverage,
   markDragMoved,
+  peerLayoutRectsClient,
   resolveViewTabDrop,
   toIndexFromRemainingSlot,
+  visualPeerRectsClient,
   type ViewTabDragState,
 } from "../lib/view-tab-dnd"
 import { useLayoutStore } from "../state/layout-store"
@@ -37,17 +38,48 @@ export function useViewTabReorder(
 ) {
   const dragRef = useRef<ViewTabDragState | null>(null)
   const dropSlotRef = useRef(0)
+  const animateArmRef = useRef(0)
+  const peerLayoutRef = useRef<ReturnType<typeof peerLayoutRectsClient>>([])
   const [draggingId, setDraggingId] = useState<string | null>(null)
-  /** Remaining-list insert slot while dragging (including home). */
+  const [homeSlot, setHomeSlot] = useState(0)
   const [dropSlot, setDropSlot] = useState<number | null>(null)
   const [dragWidthPx, setDragWidthPx] = useState(96)
+  const [gapPx, setGapPx] = useState(2)
   const [float, setFloat] = useState<ViewTabFloat | null>(null)
+  /** After grab settle — ease peer translates on later slot changes. */
+  const [slideAnimated, setSlideAnimated] = useState(false)
+  /**
+   * True from tab pointer-down until session clear — suppresses scrollIntoView
+   * so select-on-grab / slight drag cannot shift the strip or `+`.
+   */
+  const [pointerSession, setPointerSession] = useState(false)
+
+  function clearAnimateArm(): void {
+    if (animateArmRef.current) {
+      cancelAnimationFrame(animateArmRef.current)
+      animateArmRef.current = 0
+    }
+  }
 
   function clearDragSession(): void {
+    clearAnimateArm()
     dragRef.current = null
+    peerLayoutRef.current = []
+    setSlideAnimated(false)
+    setPointerSession(false)
     setDraggingId(null)
     setDropSlot(null)
     setFloat(null)
+  }
+
+  function armSlideAnimation(): void {
+    clearAnimateArm()
+    animateArmRef.current = requestAnimationFrame(() => {
+      animateArmRef.current = requestAnimationFrame(() => {
+        animateArmRef.current = 0
+        if (dragRef.current?.hasMoved) setSlideAnimated(true)
+      })
+    })
   }
 
   function floatLeftFromPointer(drag: ViewTabDragState, clientX: number): number {
@@ -73,25 +105,25 @@ export function useViewTabReorder(
     }
   }
 
-  function livePeerRects(): Array<{ left: number; width: number }> {
-    const strip = tabsRef.current
-    if (!strip) return []
-    return [...strip.querySelectorAll<HTMLElement>("[data-view-id]:not([data-view-dragging])")].map(
-      (el) => {
-        const box = el.getBoundingClientRect()
-        return { left: box.left, width: box.width }
-      },
-    )
-  }
-
   function slotFromFloat(drag: ViewTabDragState, clientX: number): number {
     const strip = tabsRef.current
     const stripLeft = strip?.getBoundingClientRect().left ?? 0
     const scrollLeft = strip?.scrollLeft ?? 0
     const left = floatLeftFromPointer(drag, clientX)
     const floatClientLeft = left + stripLeft - scrollLeft
+    const gap = drag.peerStrip?.gapPx ?? 2
+    const layout = peerLayoutRef.current.length > 0
+      ? peerLayoutRef.current
+      : peerLayoutRectsClient(strip)
+    const peers = visualPeerRectsClient(
+      layout,
+      drag.homeSlot,
+      dropSlotRef.current,
+      drag.widthPx,
+      gap,
+    )
     const slot = dropSlotFromFloatCoverage(
-      livePeerRects(),
+      peers,
       floatClientLeft,
       drag.widthPx,
       dropSlotRef.current,
@@ -125,11 +157,18 @@ export function useViewTabReorder(
     setFloat(floatFromPointer(drag, clientX))
   }
 
-  // Window owns the gesture after threshold so strip remounts cannot abort it.
+  // Freeze peer layout once the invisible source is marked (transform-free).
+  useLayoutEffect(() => {
+    if (!draggingId) return
+    peerLayoutRef.current = peerLayoutRectsClient(tabsRef.current)
+  }, [draggingId])
+
+  // Window owns the gesture after threshold so remounts cannot abort it.
   useEffect(() => {
     if (!draggingId) return
 
     function onWindowPointerMove(event: PointerEvent) {
+      event.preventDefault()
       tickDrag(event.clientX)
     }
 
@@ -141,7 +180,7 @@ export function useViewTabReorder(
       clearDragSession()
     }
 
-    window.addEventListener("pointermove", onWindowPointerMove)
+    window.addEventListener("pointermove", onWindowPointerMove, { passive: false })
     window.addEventListener("pointerup", onWindowPointerUp)
     window.addEventListener("pointercancel", onWindowPointerCancel)
     return () => {
@@ -151,12 +190,29 @@ export function useViewTabReorder(
     }
   }, [draggingId])
 
+  // Freeze strip scroll while dragging — float near edges must not shift the bar.
+  useEffect(() => {
+    if (!draggingId) return
+    const strip = tabsRef.current
+    if (!strip) return
+    const lockLeft = strip.scrollLeft
+    const lockTop = strip.scrollTop
+    function onScroll() {
+      strip.scrollLeft = lockLeft
+      strip.scrollTop = lockTop
+    }
+    strip.addEventListener("scroll", onScroll)
+    return () => strip.removeEventListener("scroll", onScroll)
+  }, [draggingId])
+
   function onTabPointerDown(viewId: string, event: ReactPointerEvent<HTMLDivElement>) {
     if (editingId === viewId || event.button !== 0) return
     if ((event.target as HTMLElement).closest("button, input")) return
 
     const target = event.currentTarget
     target.setPointerCapture(event.pointerId)
+    event.preventDefault()
+    setPointerSession(true)
 
     const { activeViewId, setActiveView, views } = useLayoutStore.getState()
     if (activeViewId !== viewId) {
@@ -167,8 +223,8 @@ export function useViewTabReorder(
 
     const fromIndex = views.findIndex((view) => view.id === viewId)
     const rect = target.getBoundingClientRect()
-    const homeSlot = Math.max(0, fromIndex)
-    dropSlotRef.current = homeSlot
+    const home = Math.max(0, fromIndex)
+    dropSlotRef.current = home
     dragRef.current = {
       viewId,
       startX: event.clientX,
@@ -178,7 +234,7 @@ export function useViewTabReorder(
       widthPx: target.offsetWidth,
       grabOffsetX: event.clientX - rect.left,
       floatTop: rect.top,
-      homeSlot,
+      homeSlot: home,
       peerStrip: null,
     }
   }
@@ -190,18 +246,22 @@ export function useViewTabReorder(
     const moved = markDragMoved(drag, event.clientX, event.clientY)
     if (!moved) return
 
+    event.preventDefault()
     drag.peerStrip = capturePeerStrip(tabsRef.current, drag.viewId, drag.widthPx)
+    setSlideAnimated(false)
     setDragWidthPx(drag.widthPx)
+    setGapPx(drag.peerStrip?.gapPx ?? 2)
+    setHomeSlot(drag.homeSlot)
     dropSlotRef.current = drag.homeSlot
     setDropSlot(drag.homeSlot)
     setFloat(floatFromPointer(drag, event.clientX))
     setDraggingId(drag.viewId)
+    armSlideAnimation()
   }
 
   function onTabPointerUp(event: ReactPointerEvent<HTMLDivElement>) {
     const drag = dragRef.current
     if (!drag) return
-    // Pre-threshold click — activate already happened on down; just clear.
     if (!drag.hasMoved) {
       clearDragSession()
       try {
@@ -209,7 +269,6 @@ export function useViewTabReorder(
       } catch (err: unknown) { console.error("[mia]", err) }
       return
     }
-    // Active drag finishes via window pointerup.
   }
 
   function onTabPointerCancel(): void {
@@ -219,17 +278,19 @@ export function useViewTabReorder(
   }
 
   function onTabLostPointerCapture(): void {
-    // After threshold, window listeners own the gesture — ignore capture loss
-    // from remounting the strip around the placeholder.
     if (!dragRef.current || dragRef.current.hasMoved) return
     clearDragSession()
   }
 
   return {
     draggingId,
+    homeSlot,
     dropSlot,
     dragWidthPx,
+    gapPx,
     float,
+    slideAnimated,
+    pointerSession,
     onTabPointerDown,
     onTabPointerMove,
     onTabPointerUp,

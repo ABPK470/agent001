@@ -4,8 +4,10 @@ import {
   dropSlotFromFloatCoverage,
   markDragMoved,
   overlapWidthPx,
+  peerSlidePx,
   resolveViewTabDrop,
   toIndexFromRemainingSlot,
+  visualPeerRectsClient,
   type ViewTabDragState,
 } from "./view-tab-dnd"
 
@@ -15,15 +17,10 @@ describe("view-tab-dnd", () => {
       { left: 0, width: 100 },
       { left: 220, width: 100 },
     ]
-    // Float in the home gap — stay at 1.
     expect(dropSlotFromFloatCoverage(peers, 110, 100, 1)).toBe(1)
-    // ~20% of left peer — stay.
     expect(dropSlotFromFloatCoverage(peers, 90, 100, 1)).toBe(1)
-    // ≥50% of left peer → hole moves before it.
     expect(dropSlotFromFloatCoverage(peers, 0, 80, 1)).toBe(0)
-    // ~20% of right peer — stay.
     expect(dropSlotFromFloatCoverage(peers, 140, 100, 1)).toBe(1)
-    // ≥50% of right peer → hole moves after it.
     expect(dropSlotFromFloatCoverage(peers, 170, 100, 1)).toBe(2)
   })
 
@@ -37,6 +34,42 @@ describe("view-tab-dnd", () => {
     expect(dropSlotFromFloatCoverage(peers, 400, 80, 2)).toBe(4)
     expect(dropSlotFromFloatCoverage(peers, 0, 80, 2)).toBe(0)
     expect(dropSlotFromFloatCoverage(peers, 200, 80, 2)).toBe(2)
+  })
+
+  it("keeps every peer still at the home slot (grab must not reflow)", () => {
+    expect(peerSlidePx(0, 1, 1, 100, 4)).toBe(0)
+    expect(peerSlidePx(2, 1, 1, 100, 4)).toBe(0)
+    expect(peerSlidePx(3, 1, 1, 100, 4)).toBe(0)
+  })
+
+  it("displaces only tabs between home and drop", () => {
+    // Moving right: home 1 → drop 3 — peers 2 and 3 shift left
+    expect(peerSlidePx(0, 1, 3, 100, 4)).toBe(0)
+    expect(peerSlidePx(2, 1, 3, 100, 4)).toBe(-104)
+    expect(peerSlidePx(3, 1, 3, 100, 4)).toBe(-104)
+    expect(peerSlidePx(4, 1, 3, 100, 4)).toBe(0)
+    // Moving left: home 3 → drop 1 — peers 1 and 2 shift right
+    expect(peerSlidePx(0, 3, 1, 100, 4)).toBe(0)
+    expect(peerSlidePx(1, 3, 1, 100, 4)).toBe(104)
+    expect(peerSlidePx(2, 3, 1, 100, 4)).toBe(104)
+    expect(peerSlidePx(4, 3, 1, 100, 4)).toBe(0)
+  })
+
+  it("builds visual peer rects from resting layout + displacement", () => {
+    const layout = [
+      { left: 0, width: 80, fullIndex: 0 },
+      { left: 200, width: 80, fullIndex: 2 },
+    ]
+    // home 1, drop 1 — no motion
+    expect(visualPeerRectsClient(layout, 1, 1, 80, 20)).toEqual([
+      { left: 0, width: 80 },
+      { left: 200, width: 80 },
+    ])
+    // home 1, drop 2 — peer at fullIndex 2 shifts left
+    expect(visualPeerRectsClient(layout, 1, 2, 80, 20)).toEqual([
+      { left: 0, width: 80 },
+      { left: 100, width: 80 },
+    ])
   })
 
   it("measures overlap widths", () => {

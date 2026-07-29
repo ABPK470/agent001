@@ -1,12 +1,10 @@
 /**
  * Pure view-tab reorder math — no React, no DOM event wiring.
  *
- * Model (seamless grab):
- * 1. Source leaves flex flow (capture host only). An in-flow placeholder of the
- *    same width sits at `dropSlot` — peers do not pack/translate on grab.
- * 2. Drop slot updates when the float covers ≥ half of a peer’s width; then
- *    insert before/after that peer from float center vs peer center.
- * 3. Until any peer is half-covered, the slot stays put (no jitter on grab).
+ * Visual model (Chrome-like, layout-stable):
+ * 1. Source stays in flex flow (invisible) — grab never reflows the strip.
+ * 2. Only tabs between home and drop translate by ±(width + gap).
+ * 3. Drop slot from float coverage (≥ half a peer’s width).
  */
 
 export interface ViewTabDragState {
@@ -15,13 +13,13 @@ export interface ViewTabDragState {
   startY: number
   pointerId: number
   hasMoved: boolean
-  /** Tab width captured before the source leaves flow (placeholder sizing). */
+  /** Tab width at grab (source keeps this seat in layout). */
   widthPx: number
   /** Pointer offset from the tab’s left edge (keeps float under the grab). */
   grabOffsetX: number
   /** Tab top in client coordinates — float locks to this Y (not strip top). */
   floatTop: number
-  /** Remaining-list insert slot at drag start (home gap). */
+  /** Full-list index of the dragged tab (home seat). */
   homeSlot: number
   /** Frozen strip bounds for float clamping. */
   peerStrip: PeerStripMetrics | null
@@ -31,12 +29,18 @@ export interface PeerStripMetrics {
   /** Flex gap between tabs (px). */
   gapPx: number
   /**
-   * Max strip-local left for the drag float so it cannot pass the `+`
-   * (captured before source leaves flow).
+   * Max strip-local left for the drag float so it cannot pass the `+`.
    */
   maxFloatLeftPx: number
   /** Min strip-local left (content start / padding). */
   minFloatLeftPx: number
+}
+
+export type PeerLayoutRect = {
+  left: number
+  width: number
+  /** Index in the full views list (DOM order). */
+  fullIndex: number
 }
 
 export type ViewTabDropAction =
@@ -61,10 +65,10 @@ export function overlapWidthPx(
 }
 
 /**
- * Insert slot from float coverage of live peers (remaining list order).
+ * Insert slot from float coverage of peers (remaining list order — source omitted).
  * A peer only counts once the float covers ≥ half of its width. Then the
- * insert hole moves to the far side of that peer (left peers → before them,
- * right peers → after them). If nothing is half-covered, keep `currentSlot`.
+ * insert hole moves to the far side of that peer. If nothing is half-covered,
+ * keep `currentSlot`.
  */
 export function dropSlotFromFloatCoverage(
   peerRects: ReadonlyArray<{ left: number; width: number }>,
@@ -90,27 +94,45 @@ export function dropSlotFromFloatCoverage(
     return Math.max(0, Math.min(currentSlot, peerRects.length))
   }
 
-  // Move the hole to the far side of the covered peer (relative to the hole).
   if (bestIndex < currentSlot) return bestIndex
   return bestIndex + 1
 }
 
 /**
  * Remaining-based insert slot → `reorderViews` toIndex.
- * Peers are the list with the dragged tab removed; inserting at `slot`
- * is exactly the final index of the moved tab.
+ * With source still seated at `homeSlot`, this equals the final full-list index.
  */
 export function toIndexFromRemainingSlot(remainingSlot: number): number {
   return Math.max(0, remainingSlot)
 }
 
 /**
- * Capture strip bounds before the source leaves flow.
- * Peer hit-testing uses live rects while dragging (placeholder keeps layout).
+ * Displace only tabs between home and drop. At home, every peer slide is 0 —
+ * grab does not move the strip. `peerIndex` / slots are full-list indices.
+ */
+export function peerSlidePx(
+  peerIndex: number,
+  homeSlot: number,
+  dropSlot: number,
+  dragWidthPx: number,
+  gapPx: number,
+): number {
+  const delta = dragWidthPx + gapPx
+  if (dropSlot === homeSlot) return 0
+  if (homeSlot < dropSlot) {
+    if (peerIndex > homeSlot && peerIndex <= dropSlot) return -delta
+    return 0
+  }
+  if (peerIndex >= dropSlot && peerIndex < homeSlot) return delta
+  return 0
+}
+
+/**
+ * Capture strip bounds for float clamping (source stays in flow).
  */
 export function capturePeerStrip(
   container: HTMLElement | null,
-  dragViewId: string,
+  _dragViewId: string,
   dragWidthPx: number,
 ): PeerStripMetrics | null {
   if (!container) return null
@@ -126,6 +148,41 @@ export function capturePeerStrip(
     maxFloatLeftPx,
     minFloatLeftPx: padLeft,
   }
+}
+
+/**
+ * Non-dragging peer layout in client X (ignores CSS transforms — use offsetLeft).
+ */
+export function peerLayoutRectsClient(container: HTMLElement | null): PeerLayoutRect[] {
+  if (!container) return []
+  const stripLeft = container.getBoundingClientRect().left
+  const scrollLeft = container.scrollLeft
+  const tabs = [...container.querySelectorAll<HTMLElement>("[data-view-id]")]
+  const out: PeerLayoutRect[] = []
+  for (let i = 0; i < tabs.length; i++) {
+    const el = tabs[i]!
+    if (el.hasAttribute("data-view-dragging")) continue
+    out.push({
+      left: stripLeft + el.offsetLeft - scrollLeft,
+      width: el.offsetWidth,
+      fullIndex: i,
+    })
+  }
+  return out
+}
+
+/** Visual peer rects = resting layout + home→drop displacement. */
+export function visualPeerRectsClient(
+  layout: ReadonlyArray<PeerLayoutRect>,
+  homeSlot: number,
+  dropSlot: number,
+  dragWidthPx: number,
+  gapPx: number,
+): Array<{ left: number; width: number }> {
+  return layout.map((peer) => ({
+    left: peer.left + peerSlidePx(peer.fullIndex, homeSlot, dropSlot, dragWidthPx, gapPx),
+    width: peer.width,
+  }))
 }
 
 /** Distance before a press becomes a reorder drag (keeps clicks as activate). */
