@@ -12,13 +12,13 @@ import { useEffect, useRef, useState } from "react"
 import type { Me } from "../../hooks/useMe"
 import { useViewTabReorder } from "../../hooks/useViewTabReorder"
 import { peerSlidePx } from "../../lib/view-tab-dnd"
+import { ChatBrand } from "../ChatBrand"
 import { SessionMenu } from "../SessionMenu"
 import { ViewingAsControl } from "../ViewingAsControl"
-import { CHAT_BRAND_LOGO_SIZE } from "../brand"
+import { SHELL_CHROME_HEADER_WORKSPACE_CLASS } from "../shell-chrome"
 import type { AppShellMode } from "../types"
 import { useStore } from "../../state/store"
 import { useLayoutStore } from "../../state/layout-store"
-import { Logo } from "../../components/Logo"
 import { NotificationPanel } from "../../widgets/platform/NotificationPanel"
 import { ViewTabDragFloat } from "./ViewTabDragFloat"
 
@@ -104,15 +104,12 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
   }
 
   return (
-    <header className="toolbar-shell relative z-20 flex shrink-0 select-none items-start gap-2 px-1 pt-2 sm:gap-3">
+    <header className={SHELL_CHROME_HEADER_WORKSPACE_CLASS}>
       {/*
-        One baseline: logo, tab labels, and actions share the tab-row band.
-        The strip is taller by --toolbar-stage-gap; only the active tab fill
-        spans that gutter down to the stage (overflow-safe — no ::after bridge).
+        Shared shell-chrome band (same as chat). Sheet gutter is header
+        padding-bottom; active tab fill bridges into the stage.
       */}
-      <div className="toolbar-brand flex h-9 shrink-0 items-center">
-        <Logo size={CHAT_BRAND_LOGO_SIZE} online={connected} className="toolbar-brand-logo" />
-      </div>
+      <ChatBrand connected={connected} />
 
       <div
         ref={tabsRef}
@@ -153,7 +150,17 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
               onPointerCancel={onTabPointerCancel}
               onLostPointerCapture={onTabLostPointerCapture}
               onDoubleClick={() => handleDoubleClick(view.id, view.name)}
-              title="Click to open · drag to reorder"
+              onAuxClick={(event) => {
+                if (event.button !== 1 || views.length <= 1) return
+                event.preventDefault()
+                event.stopPropagation()
+                removeView(view.id)
+              }}
+              title={
+                views.length > 1
+                  ? "Click to open · middle-click to close · drag the grip to reorder"
+                  : "Click to open · drag the grip to reorder"
+              }
             >
               <GripVertical
                 size={12}
@@ -188,7 +195,7 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
                   onPointerDown={(e) => e.stopPropagation()}
                   title="Close view"
                 >
-                  <X size={14} />
+                  <X size={12} />
                 </button>
               )}
             </div>

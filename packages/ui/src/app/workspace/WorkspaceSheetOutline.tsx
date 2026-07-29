@@ -1,6 +1,7 @@
 /**
- * Single SVG stroke for stage + active tab — never a tab outline fighting
- * a separate stage top line.
+ * Sheet silhouette: fill + stroke share one path (stage + active tab + scoops).
+ * Fill sits under the stage so scoop pockets match the stroke exactly —
+ * CSS tab/stage rects alone leave chrome wedges in the scoops.
  *
  * While reordering, the bump follows the active tab (or the active drag float)
  * every frame so the silhouette matches rest state.
@@ -54,19 +55,19 @@ function findSheetTab(host: HTMLElement): HTMLElement | null {
 }
 
 export function WorkspaceSheetOutline(): JSX.Element {
-  const svgRef = useRef<SVGSVGElement>(null)
+  const fillRef = useRef<SVGSVGElement>(null)
   const [outline, setOutline] = useState<OutlineState>(EMPTY)
   const activeViewId = useLayoutStore((s) => s.activeViewId)
   const views = useLayoutStore((s) => s.views)
 
   useLayoutEffect(() => {
-    const chrome = svgRef.current?.closest<HTMLElement>(".workspace-chrome")
+    const chrome = fillRef.current?.closest<HTMLElement>(".workspace-chrome")
     if (!chrome) return
 
     let rafId = 0
 
     function measure() {
-      const host = svgRef.current?.closest<HTMLElement>(".workspace-chrome")
+      const host = fillRef.current?.closest<HTMLElement>(".workspace-chrome")
       if (!host) return
       const stage = host.querySelector<HTMLElement>(".workspace-stage")
       if (!stage) {
@@ -143,24 +144,39 @@ export function WorkspaceSheetOutline(): JSX.Element {
     }
   }, [activeViewId, views])
 
+  const viewBox = outline.w > 0 ? `0 0 ${outline.w} ${outline.h}` : undefined
+
   return (
-    <svg
-      ref={svgRef}
-      className="workspace-sheet-outline"
-      width={outline.w || "100%"}
-      height={outline.h || "100%"}
-      viewBox={outline.w > 0 ? `0 0 ${outline.w} ${outline.h}` : undefined}
-      aria-hidden
-    >
-      {outline.d ? (
-        <path
-          d={outline.d}
-          fill="none"
-          stroke="var(--workspace-border)"
-          strokeWidth={1}
-          vectorEffect="non-scaling-stroke"
-        />
-      ) : null}
-    </svg>
+    <>
+      <svg
+        ref={fillRef}
+        className="workspace-sheet-fill"
+        width={outline.w || "100%"}
+        height={outline.h || "100%"}
+        viewBox={viewBox}
+        aria-hidden
+      >
+        {outline.d ? (
+          <path d={outline.d} fill="var(--workspace-stage)" stroke="none" />
+        ) : null}
+      </svg>
+      <svg
+        className="workspace-sheet-outline"
+        width={outline.w || "100%"}
+        height={outline.h || "100%"}
+        viewBox={viewBox}
+        aria-hidden
+      >
+        {outline.d ? (
+          <path
+            d={outline.d}
+            fill="none"
+            stroke="var(--workspace-border)"
+            strokeWidth={1}
+            vectorEffect="non-scaling-stroke"
+          />
+        ) : null}
+      </svg>
+    </>
   )
 }

@@ -3,6 +3,7 @@ import type { Me } from "../../hooks/useMe"
 import { useViewingAs } from "../../hooks/useViewingAs"
 import { ChatBrand } from "../ChatBrand"
 import { ChatShellActions } from "../ChatShellActions"
+import { SHELL_CHROME_HEADER_CHAT_CLASS } from "../shell-chrome"
 import type { AppShellMode } from "../types"
 import { TermChat } from "../../widgets/TermChat"
 import { IntroAsciiField } from "./IntroAsciiField"
@@ -43,7 +44,7 @@ export function ChatHomePage({
       </div>
 
       <div className="chathome-content relative z-10 flex h-full min-h-0 flex-col">
-        <header className="relative z-20 flex h-14 shrink-0 select-none items-center gap-2 px-4 sm:gap-4 sm:px-6">
+        <header className={SHELL_CHROME_HEADER_CHAT_CLASS}>
           <ChatBrand connected={connected} />
           <div className="min-w-0 flex-1" />
           <ChatShellActions

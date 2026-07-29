@@ -30,8 +30,8 @@ export function ViewTabDragFloat({ float }: Props): JSX.Element {
       />
       <span className="view-tab__label relative z-[2] whitespace-nowrap">{float.name}</span>
       {float.showClose ? (
-        <span className="view-tab__close relative z-[2]">
-          <X size={14} />
+        <span className="view-tab__close relative z-[2]" style={{ pointerEvents: "none", opacity: 0.45 }}>
+          <X size={12} />
         </span>
       ) : null}
     </div>

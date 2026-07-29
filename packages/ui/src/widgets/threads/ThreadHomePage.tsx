@@ -4,6 +4,7 @@ import { IntroAsciiField } from "../../app/home/IntroAsciiField"
 import { ChatBrand } from "../../app/ChatBrand"
 import { ChatChromeButton } from "../../app/ChatChrome"
 import { ChatShellActions } from "../../app/ChatShellActions"
+import { SHELL_CHROME_HEADER_CHAT_CLASS } from "../../app/shell-chrome"
 import type { AppShellMode } from "../../app/types"
 import type { Me } from "../../hooks/useMe"
 import { useViewingAs } from "../../hooks/useViewingAs"
@@ -134,7 +135,7 @@ export function ThreadHomePage({
 
       <div className="chathome-content relative z-10 flex h-full min-h-0 flex-col">
         <div className={shellRailClass}>
-          <header className="chathome-thread-chrome relative flex h-14 shrink-0 select-none items-center gap-2 px-4 sm:gap-4 sm:px-6">
+          <header className={`chathome-thread-chrome ${SHELL_CHROME_HEADER_CHAT_CLASS}`}>
             <div className="chathome-thread-chrome-rail flex min-w-0 items-center gap-1">
               {overlayRailEnabled ? (
                 <>

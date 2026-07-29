@@ -4152,17 +4152,8 @@ textarea.input {
   outline: none;
 }
 
-/* Soft focus cue — never a full colored frame. */
+/* Soft focus — no painted frame; resize handles still reveal on focus. */
 .workspace-tile-focused {
-  box-shadow: none;
-}
-
-.workspace-tile-focused .workspace-shell {
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border) 55%, transparent);
-}
-
-.workspace-chrome--contrast .workspace-tile-focused .workspace-shell {
-  border-color: var(--border-strong);
   box-shadow: none;
 }
 
@@ -4253,11 +4244,49 @@ textarea.input {
   opacity: 0 !important;
 }
 
+/* ── Shell chrome (chat + workspace — one geometry) ─────────────────
+ * Tokens + .shell-chrome-header are the SOT for top-bar position.
+ * Workspace only adds --workspace gutter below that shared band.
+ */
+:root,
+:root[data-theme="dark"],
+:root[data-theme="light"] {
+  --shell-chrome-row-h: 2.25rem;
+  --shell-chrome-header-h: 3.5rem;
+  --shell-chrome-pad-x: 1rem;
+  --shell-chrome-pad-x-sm: 1.5rem;
+  --shell-chrome-gap: 0.5rem;
+  --shell-chrome-gap-sm: 1rem;
+}
+
+.shell-chrome-header {
+  box-sizing: border-box;
+  height: var(--shell-chrome-header-h);
+  align-items: center;
+  gap: var(--shell-chrome-gap);
+  padding-inline: var(--shell-chrome-pad-x);
+}
+
+@media (min-width: 640px) {
+  .shell-chrome-header {
+    gap: var(--shell-chrome-gap-sm);
+    padding-inline: var(--shell-chrome-pad-x-sm);
+  }
+}
+
+/*
+ * Workspace: same content band as chat (height − padding-bottom = header-h),
+ * plus sheet gutter below for the active-tab bridge.
+ */
+.shell-chrome-header--workspace {
+  height: calc(var(--shell-chrome-header-h) + var(--toolbar-stage-gap, 0.5rem));
+  padding-bottom: var(--toolbar-stage-gap, 0.5rem);
+}
+
 /* ── Workspace attached tabs ───────────────────────────────────────
- * Top bar controls sit in a tab-row band. Below that, a chrome gutter
- * (--toolbar-stage-gap) separates the bar from the stage frame. The
- * active tab's own box is taller so its fill bridges the gutter —
- * never a ::after (strip overflow-x would clip it).
+ * Top bar controls sit in the shared shell-chrome band. Below that, a
+ * chrome gutter (--toolbar-stage-gap) separates the bar from the stage.
+ * The active tab's own box is taller so its fill bridges the gutter.
  *
  * Nested radii: widget radius = stage radius − pad.
  */
@@ -4272,7 +4301,7 @@ textarea.input {
   /* Stage + active tab — defaults to plane; --tab-lift paints both alone. */
   --workspace-stage: var(--workspace-plane);
   --workspace-tab-active: var(--workspace-plane);
-  --tab-row-height: 2.25rem;
+  --tab-row-height: var(--shell-chrome-row-h);
   --tab-radius: 0.7rem;
   --stage-radius: 1rem;
   --stage-pad: 0.5rem;
@@ -4284,8 +4313,15 @@ textarea.input {
   --tab-scoop: 10px;
   --tab-gap: calc(var(--tab-scoop) + 6px);
   background: var(--workspace-chrome);
-  padding: 0 0.75rem 0.75rem;
+  /* Horizontal inset matches shell-chrome-header pad tokens. */
+  padding: 0 var(--shell-chrome-pad-x) 0.75rem;
   box-sizing: border-box;
+}
+
+@media (min-width: 640px) {
+  .workspace-chrome {
+    padding-inline: var(--shell-chrome-pad-x-sm);
+  }
 }
 
 /*
@@ -4308,6 +4344,17 @@ textarea.input {
   --workspace-stage: var(--panel-2);
 }
 
+.workspace-sheet-fill {
+  position: absolute;
+  inset: 0;
+  /* Under stage/toolbar so scoops show; never over widget content. */
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
 .workspace-sheet-outline {
   position: absolute;
   inset: 0;
@@ -4320,7 +4367,7 @@ textarea.input {
 
 .workspace-stage {
   position: relative;
-  z-index: 0;
+  z-index: 1;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -4344,19 +4391,23 @@ textarea.input {
 
 .toolbar-shell {
   position: relative;
-  z-index: 1;
+  z-index: 2;
   background: transparent;
-  /* Seam overlap with stage; gutter lives inside the taller active tab. */
   margin-bottom: -1px;
+}
+
+/* Header already inset by .workspace-chrome — don't double the pad. */
+.workspace-chrome > .shell-chrome-header {
+  padding-inline: 0;
 }
 
 .view-tab-strip {
   position: relative;
   z-index: 1;
-  /* Row + gutter: inactive nails sit on top; active fill spans the rest. */
-  height: calc(var(--tab-row-height) + var(--toolbar-stage-gap));
-  min-height: calc(var(--tab-row-height) + var(--toolbar-stage-gap));
-  align-items: flex-start;
+  /* Label band only — gutter is header padding-bottom + taller active tab. */
+  height: var(--tab-row-height);
+  min-height: var(--tab-row-height);
+  align-items: center;
   gap: var(--tab-gap);
 }
 
@@ -4364,36 +4415,38 @@ textarea.input {
   position: relative;
   display: inline-flex;
   align-items: center;
-  align-self: flex-start;
+  align-self: center;
   gap: 0.25rem;
   flex-shrink: 0;
   height: var(--tab-row-height);
   padding: 0 0.75rem 0 0.5rem;
   font-size: 13px;
-  line-height: 1.25;
-  border-radius: var(--tab-radius) var(--tab-radius) 0 0;
-  cursor: grab;
+  line-height: 1;
+  cursor: pointer;
   user-select: none;
   box-sizing: border-box;
   transition:
     color 140ms ease,
     opacity 140ms ease,
-    background-color 140ms ease;
+    background-color 140ms ease,
+    border-radius 140ms ease;
 }
 
 .view-tab:active {
-  cursor: grabbing;
+  cursor: pointer;
 }
 
 .view-tab--inactive {
   z-index: 0;
   color: var(--text-muted);
   background: transparent;
+  /* Match toolbar buttons (rounded-lg), not a full capsule. */
+  border-radius: 0.5rem;
 }
 
 .view-tab--inactive:hover {
   color: var(--text-secondary);
-  background: color-mix(in srgb, var(--text) 5%, transparent);
+  background: color-mix(in srgb, var(--text) 6%, transparent);
 }
 
 .view-tab--active {
@@ -4402,13 +4455,16 @@ textarea.input {
   font-weight: 600;
   background: var(--workspace-tab-active);
   border: none;
+  border-radius: var(--tab-radius) var(--tab-radius) 0 0;
   /*
-   * Taller box spans the chrome gutter. border-box + padding-bottom keeps
-   * the label band at --tab-row-height so it stays centered with logo/actions.
+   * Taller box spans the chrome gutter (header padding-bottom). border-box +
+   * padding-bottom keeps the label band at --tab-row-height, centered with brand.
    */
   height: calc(var(--tab-row-height) + var(--toolbar-stage-gap) + 1px);
   padding-bottom: calc(var(--toolbar-stage-gap) + 1px);
-  margin-bottom: -1px;
+  margin-bottom: calc(-1 * var(--toolbar-stage-gap) - 1px);
+  align-self: flex-start;
+  overflow: visible;
 }
 
 /* Floating drag preview — fill only; sheet SVG draws the same stroke as rest. */
@@ -4425,6 +4481,7 @@ textarea.input {
   border-radius: var(--tab-radius) var(--tab-radius) 0 0;
   box-shadow: none;
   background: var(--workspace-plane);
+  overflow: visible;
 }
 
 .view-tab--float.view-tab--active {
@@ -4433,15 +4490,15 @@ textarea.input {
   background: var(--workspace-tab-active);
   height: calc(var(--tab-row-height) + var(--toolbar-stage-gap) + 1px);
   padding-bottom: calc(var(--toolbar-stage-gap) + 1px);
-  margin-bottom: -1px;
+  margin-bottom: calc(-1 * var(--toolbar-stage-gap) - 1px);
 }
 
 .view-tab--float.view-tab--inactive {
   color: var(--text);
   font-weight: 600;
-  /* Inactive drag is detached from the sheet — own stroke, no scoops. */
+  /* Inactive drag is detached from the sheet — own stroke, button radius. */
   border: 1px solid var(--workspace-border);
-  border-bottom: none;
+  border-radius: 0.5rem;
   height: var(--tab-row-height);
   padding-bottom: 0;
   margin-bottom: 0;
@@ -4450,7 +4507,12 @@ textarea.input {
 .view-tab__grip {
   color: var(--text-faint);
   opacity: 0;
+  cursor: grab;
   transition: opacity 120ms ease;
+}
+
+.view-tab__grip:active {
+  cursor: grabbing;
 }
 
 .view-tab:hover .view-tab__grip,
@@ -4462,25 +4524,42 @@ textarea.input {
   max-width: 10rem;
   overflow: hidden;
   text-overflow: ellipsis;
+  line-height: 1;
 }
 
+/*
+ * Close on every tab (Chrome/VS Code). Hidden + non-interactive until the tab
+ * is hovered/focused — an invisible X must never steal a click meant to select.
+ * Extra margin from the label keeps the hit targets clearly separated.
+ */
 .view-tab__close {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  margin-left: 0.125rem;
+  flex-shrink: 0;
+  width: 1.25rem;
+  height: 1.25rem;
+  margin-left: 0.5rem;
   padding: 0;
   border: none;
-  border-radius: 0.25rem;
+  border-radius: 0.35rem;
   color: var(--text-muted);
   background: transparent;
   opacity: 0;
+  pointer-events: none;
+  cursor: pointer;
   transition: opacity 120ms ease, color 120ms ease, background-color 120ms ease;
+}
+
+.view-tab--active .view-tab__close {
+  opacity: 0.45;
+  pointer-events: auto;
 }
 
 .view-tab:hover .view-tab__close,
 .view-tab:focus-within .view-tab__close {
-  opacity: 0.6;
+  opacity: 0.7;
+  pointer-events: auto;
 }
 
 .view-tab__close:hover {
@@ -4577,9 +4656,21 @@ textarea.input {
   -webkit-user-select: text !important;
 }
 
+.toolbar-brand {
+  display: flex;
+  height: var(--shell-chrome-row-h, 2.25rem);
+  flex-shrink: 0;
+  align-items: center;
+}
+
 .toolbar-brand-logo {
   display: block;
-  margin-top: -0.5px;
+  /*
+   * Optical vertical align with 13px caps / toolbar icons. The colon mark is
+   * taller than the cap-height; geometric centering reads low next to text.
+   * Same nudge in chat and workspace (one class).
+   */
+  translate: 0 -1px;
 }
 
 .toolbar-shell-divider {
