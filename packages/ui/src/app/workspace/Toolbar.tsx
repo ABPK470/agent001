@@ -104,14 +104,19 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
   }
 
   return (
-    <header className="toolbar-shell relative z-20 flex shrink-0 select-none items-end gap-2 px-1 pt-2 sm:gap-3">
-      <div className="toolbar-brand mb-1.5 flex h-9 shrink-0 items-center self-center">
+    <header className="toolbar-shell relative z-20 flex shrink-0 select-none items-start gap-2 px-1 pt-2 sm:gap-3">
+      {/*
+        One baseline: logo, tab labels, and actions share the tab-row band.
+        The strip is taller by --toolbar-stage-gap; only the active tab fill
+        spans that gutter down to the stage (overflow-safe — no ::after bridge).
+      */}
+      <div className="toolbar-brand flex h-9 shrink-0 items-center">
         <Logo size={CHAT_BRAND_LOGO_SIZE} online={connected} className="toolbar-brand-logo" />
       </div>
 
       <div
         ref={tabsRef}
-        className="view-tab-strip flex min-w-0 flex-1 items-end overflow-x-auto scrollbar-none"
+        className="view-tab-strip flex min-w-0 flex-1 overflow-x-auto scrollbar-none"
         {...(draggingId
           ? {
               "data-reordering": "",
@@ -192,7 +197,7 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
 
         <button
           type="button"
-          className="view-tab-add mb-1 ml-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-overlay-hover hover:text-text"
+          className="view-tab-add ml-0.5 flex h-9 w-7 shrink-0 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-overlay-hover hover:text-text"
           onClick={() => addView(`View ${views.length + 1}`)}
           title="Add view"
         >
@@ -203,7 +208,7 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
       </div>
 
       {tabsOverflow && (
-        <div className="relative mb-1.5 shrink-0 self-center" ref={moreRef}>
+        <div className="relative shrink-0" ref={moreRef}>
           <button
             type="button"
             className="flex h-9 items-center gap-1 rounded-lg px-2 text-[13px] text-text-muted transition-colors hover:bg-overlay-hover hover:text-text"
@@ -238,7 +243,7 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
         </div>
       )}
 
-      <div className="mb-1.5 flex shrink-0 items-center gap-1 self-center">
+      <div className="flex h-9 shrink-0 items-center gap-1">
         {onAddWidget && (
           <>
             <button

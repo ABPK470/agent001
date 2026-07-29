@@ -4254,9 +4254,10 @@ textarea.input {
 }
 
 /* ── Workspace attached tabs ───────────────────────────────────────
- * Same base fill (--canvas). ONE SVG stroke (.workspace-sheet-outline)
- * draws stage + active tab (scoops included). Never pair a tab outline
- * with a separate stage top line — they cannot meet.
+ * Top bar controls sit in a tab-row band. Below that, a chrome gutter
+ * (--toolbar-stage-gap) separates the bar from the stage frame. The
+ * active tab's own box is taller so its fill bridges the gutter —
+ * never a ::after (strip overflow-x would clip it).
  *
  * Nested radii: widget radius = stage radius − pad.
  */
@@ -4271,10 +4272,13 @@ textarea.input {
   /* Stage + active tab — defaults to plane; --tab-lift paints both alone. */
   --workspace-stage: var(--workspace-plane);
   --workspace-tab-active: var(--workspace-plane);
+  --tab-row-height: 2.25rem;
   --tab-radius: 0.7rem;
   --stage-radius: 1rem;
   --stage-pad: 0.5rem;
   --widget-radius: calc(var(--stage-radius) - var(--stage-pad));
+  /* Chrome gutter between the control row and the stage frame. */
+  --toolbar-stage-gap: 0.5rem;
   /* Scoop flares past the tab box; gap must clear them so hover fills
    * on neighbors never cross the active stroke. */
   --tab-scoop: 10px;
@@ -4342,13 +4346,17 @@ textarea.input {
   position: relative;
   z-index: 1;
   background: transparent;
+  /* Seam overlap with stage; gutter lives inside the taller active tab. */
   margin-bottom: -1px;
 }
 
 .view-tab-strip {
   position: relative;
   z-index: 1;
-  min-height: 2.25rem;
+  /* Row + gutter: inactive nails sit on top; active fill spans the rest. */
+  height: calc(var(--tab-row-height) + var(--toolbar-stage-gap));
+  min-height: calc(var(--tab-row-height) + var(--toolbar-stage-gap));
+  align-items: flex-start;
   gap: var(--tab-gap);
 }
 
@@ -4356,15 +4364,17 @@ textarea.input {
   position: relative;
   display: inline-flex;
   align-items: center;
+  align-self: flex-start;
   gap: 0.25rem;
   flex-shrink: 0;
-  height: 2.25rem;
+  height: var(--tab-row-height);
   padding: 0 0.75rem 0 0.5rem;
   font-size: 13px;
   line-height: 1.25;
   border-radius: var(--tab-radius) var(--tab-radius) 0 0;
   cursor: grab;
   user-select: none;
+  box-sizing: border-box;
   transition:
     color 140ms ease,
     opacity 140ms ease,
@@ -4392,21 +4402,23 @@ textarea.input {
   font-weight: 600;
   background: var(--workspace-tab-active);
   border: none;
-  /* Overlap the stage so fill is continuous under the shared SVG stroke. */
+  /*
+   * Taller box spans the chrome gutter. border-box + padding-bottom keeps
+   * the label band at --tab-row-height so it stays centered with logo/actions.
+   */
+  height: calc(var(--tab-row-height) + var(--toolbar-stage-gap) + 1px);
+  padding-bottom: calc(var(--toolbar-stage-gap) + 1px);
   margin-bottom: -1px;
-  padding-bottom: 1px;
 }
 
 /* Floating drag preview — fill only; sheet SVG draws the same stroke as rest. */
 .view-tab--float {
   position: absolute;
-  top: auto;
-  bottom: 0;
+  top: 0;
+  bottom: auto;
   z-index: 5;
-  height: 2.25rem;
+  height: var(--tab-row-height);
   margin: 0;
-  padding-bottom: 1px;
-  margin-bottom: -1px;
   pointer-events: none;
   cursor: grabbing;
   border: none;
@@ -4419,6 +4431,9 @@ textarea.input {
   color: var(--text);
   font-weight: 600;
   background: var(--workspace-tab-active);
+  height: calc(var(--tab-row-height) + var(--toolbar-stage-gap) + 1px);
+  padding-bottom: calc(var(--toolbar-stage-gap) + 1px);
+  margin-bottom: -1px;
 }
 
 .view-tab--float.view-tab--inactive {
@@ -4427,6 +4442,7 @@ textarea.input {
   /* Inactive drag is detached from the sheet — own stroke, no scoops. */
   border: 1px solid var(--workspace-border);
   border-bottom: none;
+  height: var(--tab-row-height);
   padding-bottom: 0;
   margin-bottom: 0;
 }
