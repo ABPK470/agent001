@@ -923,19 +923,17 @@ export function TraceDag({
               ]}
               onChange={onFoldModeChange}
               ariaLabel="Expand or collapse all trace scopes"
-              trailing={
-                <TraceExportMenu
-                  target={
-                    runId
-                      ? { kind: "run", runId }
-                      : threadId
-                        ? { kind: "thread", threadId }
-                        : null
-                  }
-                  onExported={onExportMessage}
-                  onError={onExportError}
-                />
+            />
+            <TraceExportMenu
+              target={
+                runId
+                  ? { kind: "run", runId }
+                  : threadId
+                    ? { kind: "thread", threadId }
+                    : null
               }
+              onExported={onExportMessage}
+              onError={onExportError}
             />
           </div>
         </div>

@@ -39,7 +39,7 @@ export {
 
 /** Sticky subheader inside a scrolling panel — export + view toggle. */
 export const TAB_PANEL_HEADER =
-  "sticky top-0 z-10 flex shrink-0 items-center justify-end gap-2 overflow-x-auto border-b border-border-subtle bg-canvas px-3 py-2"
+  "sticky top-0 z-10 flex shrink-0 items-center justify-end gap-2 overflow-x-auto border-b border-border-subtle bg-inherit px-3 py-2"
 
 export const TOOLBAR_TRACK_DIVIDER = "mx-0.5 h-6 w-px shrink-0 self-center bg-border-subtle"
 
@@ -47,9 +47,12 @@ export const TOOLBAR_TRACK_DIVIDER = "mx-0.5 h-6 w-px shrink-0 self-center bg-bo
 export const PANEL =
   "overflow-hidden rounded-lg border border-border-subtle"
 
-/** Sidebar + detail pane — single rounded shell inside the widget. */
+/**
+ * Admin split shell — flush with the workspace tile (no nested canvas card).
+ * Rail / detail separate with a hairline only; tile owns the surface paint.
+ */
 export const WIDGET_ENVELOPE =
-  "flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border-subtle bg-canvas"
+  "flex min-h-0 flex-1 flex-col overflow-hidden"
 export const TAB_SHELL = "flex h-full min-h-0 flex-col overflow-hidden"
 
 /** Same height and horizontal inset as the main tab toolbar row (`TOOLBAR_ROW`). */

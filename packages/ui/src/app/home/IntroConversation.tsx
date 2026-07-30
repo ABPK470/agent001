@@ -75,7 +75,7 @@ const BRAND_RESOLVE_IDLE_FALLBACK_MS = 10_000
  *     leads the intro — then bot greeting, input pill, login morph.
  *     Resolve is user-paced so it never fights the opening question.
  *   - Bubble shapes, fonts, paddings, the bg-panel widget shell, the
- *     drag-handle label and controls are 1:1 with WidgetFrame +
+ *     drag-handle label and controls are 1:1 with WidgetShell +
  *     TermChat populated state.
  */
 export type IntroMorphMode = "empty" | "chat" | "nochat"

@@ -81,14 +81,8 @@ export function EntityOverview({
       )}
 
       <TabBody>
-        <div className={`${PANEL} flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-elevated/20`}>
+        <div className={`${PANEL} flex h-full min-h-0 flex-1 flex-col overflow-hidden`}>
           <TabPanelHeader>
-            <EntityJsonExportMenu
-              exportBusy={exportBusy}
-              onCopyRegistryJson={() => void copyRegistryJson().catch((err: unknown) => { console.error("[mia]", err) })}
-              onDownloadRegistryJson={() => void downloadRegistryJson().catch((err: unknown) => { console.error("[mia]", err) })}
-              onImportRegistryJson={isAdmin ? () => setImportOpen(true) : undefined}
-            />
             <SegmentToggle
               value={view}
               options={[
@@ -97,6 +91,12 @@ export function EntityOverview({
               ]}
               onChange={setView}
               ariaLabel="Catalog entity view"
+            />
+            <EntityJsonExportMenu
+              exportBusy={exportBusy}
+              onCopyRegistryJson={() => void copyRegistryJson().catch((err: unknown) => { console.error("[mia]", err) })}
+              onDownloadRegistryJson={() => void downloadRegistryJson().catch((err: unknown) => { console.error("[mia]", err) })}
+              onImportRegistryJson={isAdmin ? () => setImportOpen(true) : undefined}
             />
           </TabPanelHeader>
 

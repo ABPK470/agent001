@@ -211,7 +211,7 @@ export function ConnectorsShell(): JSX.Element {
 
   return (
     <>
-      <div className="connectors flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-panel p-3">
+      <div className="connectors flex h-full min-h-0 flex-1 flex-col overflow-hidden">
         <div className={WIDGET_ENVELOPE}>
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
             <ModalToastStack toasts={toasts} onDismiss={dismissToast} />

@@ -1,3 +1,11 @@
+/**
+ * GridCanvas — absolute tiles on the stage.
+ *
+ * Stage pad is applied in JS (not CSS padding) so solo maximize can fill the
+ * stage edge-to-edge by animating geometry only — container size stays fixed,
+ * no ResizeObserver mid-morph, no negative-bleed clipping.
+ */
+
 import { memo, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react"
 import {
   COLS,
@@ -22,6 +30,17 @@ import { TilePaintProvider } from "../tile-paint"
 
 const RESIZE_EDGES: ResizeEdge[] = ["n", "s", "e", "w", "ne", "nw", "se", "sw"]
 
+/** Match `.workspace-chrome { --stage-pad: 0.625rem }`. */
+function readStagePadPx(from: HTMLElement): number {
+  const host = from.closest(".workspace-chrome") ?? from
+  const probe = document.createElement("div")
+  probe.style.cssText = "position:absolute;visibility:hidden;pointer-events:none;padding:var(--stage-pad)"
+  host.appendChild(probe)
+  const px = Number.parseFloat(getComputedStyle(probe).paddingLeft)
+  probe.remove()
+  return Number.isFinite(px) ? px : 10
+}
+
 interface Props {
   viewId: string
   tiles: LayoutTile[]
@@ -35,6 +54,9 @@ interface GridTilePaneProps {
   display: LayoutTile
   cw: number
   rowPx: number
+  stagePadPx: number
+  canvasWidth: number
+  canvasHeight: number
   isDragging: boolean
   isResizing: boolean
   isEntering: boolean
@@ -54,6 +76,9 @@ const GridTilePane = memo(function GridTilePane({
   display,
   cw,
   rowPx,
+  stagePadPx,
+  canvasWidth,
+  canvasHeight,
   isDragging,
   isResizing,
   isEntering,
@@ -69,6 +94,15 @@ const GridTilePane = memo(function GridTilePane({
   const pixels = rectToPixels(display, cw, rowPx)
   const Widget = widgetComponent(tile.type)
   const locked = !!(tile.pinned || maximized)
+
+  const style = maximized
+    ? { left: 0, top: 0, width: canvasWidth, height: canvasHeight }
+    : {
+        left: stagePadPx + pixels.left,
+        top: stagePadPx + pixels.top,
+        width: pixels.width,
+        height: pixels.height,
+      }
 
   return (
     <div
@@ -87,12 +121,7 @@ const GridTilePane = memo(function GridTilePane({
       } ${locked ? "workspace-tile-locked" : ""} ${
         maximized ? "workspace-tile-solo" : ""
       } ${soloHidden ? "workspace-tile-solo-hidden" : ""}`}
-      style={{
-        left: pixels.left,
-        top: pixels.top,
-        width: pixels.width,
-        height: pixels.height,
-      }}
+      style={style}
       onFocus={onFocus}
       onBlur={onBlur}
       onTransitionEnd={onTransitionEnd}
@@ -163,6 +192,7 @@ export function GridCanvas({ viewId, tiles, split }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [containerWidth, setContainerWidth] = useState(0)
   const [containerHeight, setContainerHeight] = useState(0)
+  const [stagePadPx, setStagePadPx] = useState(10)
   const enteringTileIds = useLayoutStore((s) => s.enteringTileIds)
   const clearEntering = useLayoutStore((s) => s.clearEntering)
   const setFocusedTile = useLayoutStore((s) => s.setFocusedTile)
@@ -172,14 +202,15 @@ export function GridCanvas({ viewId, tiles, split }: Props) {
   const setViewportRows = useLayoutStore((s) => s.setViewportRows)
   const viewportRows = useLayoutStore((s) => s.viewportRows)
 
-  // contentRect already excludes the host's pad — do not subtract again
-  // or the grid is 8px short and left-aligned tiles leave the slack on the right.
+  const layoutWidth = Math.max(0, containerWidth - stagePadPx * 2)
+  const layoutHeight = Math.max(0, containerHeight - stagePadPx * 2)
+
   const metrics = useMemo(() => {
-    if (containerWidth <= 0 || containerHeight <= 0) {
+    if (layoutWidth <= 0 || layoutHeight <= 0) {
       return { rows: viewportRows, colW: 0, rowPx: 32 }
     }
-    return viewportGridMetrics(containerWidth, containerHeight)
-  }, [containerWidth, containerHeight, viewportRows])
+    return viewportGridMetrics(layoutWidth, layoutHeight)
+  }, [layoutWidth, layoutHeight, viewportRows])
 
   const maxRows = metrics.rows
   const cw = metrics.colW
@@ -196,15 +227,17 @@ export function GridCanvas({ viewId, tiles, split }: Props) {
     viewId,
     tiles,
     split,
-    containerWidth,
+    containerWidth: layoutWidth,
     maxRows,
     rowPx,
     canvasRef: containerRef,
+    stagePadPx,
   })
 
   useEffect(() => {
     const el = containerRef.current
     if (!el) return
+    setStagePadPx(readStagePadPx(el))
     const observer = new ResizeObserver((entries) => {
       for (const entry of entries) {
         setContainerWidth(entry.contentRect.width)
@@ -252,15 +285,10 @@ export function GridCanvas({ viewId, tiles, split }: Props) {
     return () => window.removeEventListener("keydown", onKeyDown)
   }, [focusedTileId, tiles, commitSplit, viewId, maxRows, soloTileId, split])
 
-  // Paint from split × measured rows — never trust a stale tile cache that
-  // was projected for a different row budget (e.g. late dashboard restore).
   const projectedTiles = useMemo(
     () => projectTiles(split, tiles, COLS, maxRows),
     [split, tiles, maxRows],
   )
-  // Drag keeps committed geometry (static). Resize still uses live layoutPreview.
-  // Solo maximize keeps every tile mounted — paintTilesForCanvas only changes
-  // display rect + hide flags (never filters siblings out of the tree).
   const baseTiles =
     !soloTileId && interactionMode === "resize"
       ? (layoutPreview ?? projectedTiles)
@@ -300,6 +328,9 @@ export function GridCanvas({ viewId, tiles, split }: Props) {
                 display={display}
                 cw={cw}
                 rowPx={rowPx}
+                stagePadPx={stagePadPx}
+                canvasWidth={containerWidth}
+                canvasHeight={containerHeight}
                 isDragging={isDragging}
                 isResizing={isResizing}
                 isEntering={isEntering}
@@ -323,7 +354,8 @@ export function GridCanvas({ viewId, tiles, split }: Props) {
               widgetType={dragSource?.type ?? null}
               colWidth={cw}
               rowPx={rowPx}
-              />
+              stagePadPx={stagePadPx}
+            />
           )}
         </div>
       )}

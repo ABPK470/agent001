@@ -1,5 +1,5 @@
 /**
- * WidgetCatalog — modal for adding widgets to the canvas.
+ * WidgetCatalog — modal for adding product surfaces to the active layout.
  */
 
 import { LayoutDashboard } from "lucide-react"
@@ -39,8 +39,8 @@ export function WidgetCatalog({ onClose }: Props) {
 
   return (
     <ModalShell
-      title="Widgets"
-      subtitle="Add or remove panels on your workspace canvas."
+      title="Add to layout"
+      subtitle="Pick surfaces for this layout."
       icon={<LayoutDashboard size={20} className="text-text-muted" />}
       onClose={onClose}
       widthClass={modalViewerPanelClass(isMobile)}

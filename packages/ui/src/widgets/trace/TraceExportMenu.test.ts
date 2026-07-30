@@ -4,13 +4,13 @@ import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 
 describe("TraceExportMenu wiring", () => {
-  it("TraceDag places download inside the fold segment track (trailing)", () => {
+  it("TraceDag places download as a peer after the fold segment (not trailing)", () => {
     const dagPath = join(dirname(fileURLToPath(import.meta.url)), "TraceDag.tsx")
     const src = readFileSync(dagPath, "utf8")
-    expect(src).toMatch(/<SegmentToggle[\s\S]*trailing=\{[\s\S]*<TraceExportMenu/)
-    expect(src).not.toMatch(
-      /trace-toolbar__actions">\s*<TraceExportMenu/,
+    expect(src).toMatch(
+      /ariaLabel="Expand or collapse all trace scopes"\s*\/>\s*<TraceExportMenu/,
     )
+    expect(src).not.toMatch(/trailing=\{[\s\S]*?<TraceExportMenu/)
   })
 
   it("export menu covers txt/json and no-code variants", () => {

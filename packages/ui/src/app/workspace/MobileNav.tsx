@@ -1,13 +1,9 @@
 /**
- * MobileNav — bottom navigation bar for switching VIEWS on mobile.
+ * MobileNav — bottom navigation bar for switching layouts on mobile.
  *
- * Shows one tab per view (CHAT, SYNC, USERS, …) so the full set of
- * configured views is reachable from a narrow viewport. The strip
- * scrolls horizontally when there are too many to fit. A trailing
- * "Add" button creates a new view.
- *
- * Intra-view widget switching (when a view holds more than one
- * widget) is handled by an in-canvas pager, not by this nav.
+ * Shows one tab per layout so the full set is reachable from a narrow
+ * viewport. The strip scrolls horizontally when there are too many to fit.
+ * A trailing "Add" button creates a new layout.
  */
 
 import { LayoutDashboard, Plus } from "lucide-react"

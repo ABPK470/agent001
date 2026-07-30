@@ -335,7 +335,7 @@ export function MymiDb() {
   return (
     <div ref={rootRef} className="relative flex flex-col h-full overflow-hidden text-text">
 
-      {/* ── Header (toolbar — title comes from WidgetFrame) ───────── */}
+      {/* ── Header (toolbar — title comes from WidgetShell) ───────── */}
       <div className="flex items-center gap-2 px-3 py-2 border-b border-border shrink-0 bg-surface">
         {/* DB selector */}
         {databases.length > 1 && (() => {

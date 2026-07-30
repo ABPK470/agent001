@@ -1,15 +1,15 @@
 /**
  * Toolbar — top rail of the workspace paper sheet.
  *
- * Left: views cluster (chips · + · More) — content-sized, + hugs the last chip.
+ * Left: layout cluster (chips · + · More) — content-sized, + hugs the last chip.
  * Right: ops tray (stage · session) on a quiet fill — one hairline inside.
  *
- * Many views: strip scrolls inside the cluster; + / More stay pinned to it.
- * Sheet toggle is an R&D surface knob only.
+ * Many layouts: strip scrolls inside the cluster; + / More stay pinned to it.
+ * Sheet toggle is an R&D surface knob — invert sheet↔tile lift (compare).
  */
 
 import { ChevronDown, GripVertical, LayoutGrid, Minimize2, PanelTop, Plus, X } from "lucide-react"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState, type KeyboardEvent } from "react"
 import type { Me } from "../../hooks/useMe"
 import { useViewTabReorder } from "../../hooks/useViewTabReorder"
 import { peerSlidePx } from "../../lib/view-tab-dnd"
@@ -104,9 +104,41 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
     setEditName(name)
   }
 
+  function layoutFallbackName(id: string): string {
+    return `Layout ${id.slice(0, 4)}`
+  }
+
   function handleRename(id: string) {
-    if (editName.trim()) {
-      renameView(id, editName.trim())
+    const trimmed = editName.trim()
+    if (trimmed) {
+      renameView(id, trimmed)
+      setEditing(null)
+      return
+    }
+    const existing = views.find((view) => view.id === id)?.name.trim()
+    if (existing) {
+      setEditing(null)
+      return
+    }
+    renameView(id, layoutFallbackName(id))
+    setEditing(null)
+  }
+
+  function handleAddLayout() {
+    const id = addView("")
+    setEditing(id)
+    setEditName("")
+  }
+
+  function handleRenameKeyDown(id: string, event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key === "Enter") {
+      handleRename(id)
+      return
+    }
+    if (event.key !== "Escape") return
+    const existing = views.find((view) => view.id === id)?.name.trim()
+    if (!existing && !editName.trim()) {
+      renameView(id, layoutFallbackName(id))
     }
     setEditing(null)
   }
@@ -126,7 +158,7 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
       <div
         className="flex min-w-0 flex-1 items-center"
         role="navigation"
-        aria-label="Views"
+        aria-label="Layouts"
       >
         <div className="view-tab-cluster">
         <div
@@ -190,20 +222,21 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
                 />
                 {editing === view.id ? (
                   <input
-                    className="relative z-[2] w-24 border-none bg-transparent text-[13px] text-text outline-none"
+                    className="relative z-[2] w-28 border-none bg-transparent text-[13px] text-text outline-none placeholder:text-text-faint"
                     value={editName}
+                    placeholder="Name this layout"
+                    aria-label="Layout name"
                     onChange={(e) => setEditName(e.target.value)}
                     onBlur={() => handleRename(view.id)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") handleRename(view.id)
-                      if (e.key === "Escape") setEditing(null)
-                    }}
+                    onKeyDown={(e) => handleRenameKeyDown(view.id, e)}
                     autoFocus
                     onClick={(e) => e.stopPropagation()}
                     onPointerDown={(e) => e.stopPropagation()}
                   />
                 ) : (
-                  <span className="view-tab__label relative z-[2] whitespace-nowrap">{view.name}</span>
+                  <span className="view-tab__label relative z-[2] whitespace-nowrap">
+                    {view.name || "Untitled"}
+                  </span>
                 )}
                 {views.length > 1 && (
                   <button
@@ -214,7 +247,7 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
                       removeView(view.id)
                     }}
                     onPointerDown={(e) => e.stopPropagation()}
-                    title="Close view"
+                    title="Close layout"
                   >
                     <X size={12} />
                   </button>
@@ -233,8 +266,9 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
             "view-tab-add flex shrink-0 items-center justify-center text-text-muted transition-colors hover:bg-overlay-hover hover:text-text",
             draggingId ? "pointer-events-none opacity-50" : "",
           ].filter(Boolean).join(" ")}
-          onClick={() => addView(`View ${views.length + 1}`)}
-          title="Add view"
+          onClick={handleAddLayout}
+          title="Add layout"
+          aria-label="Add layout"
         >
           <Plus size={16} />
         </button>
@@ -245,7 +279,7 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
               type="button"
               className="flex h-9 shrink-0 items-center gap-1 rounded-lg px-2.5 text-[13px] leading-none text-text-muted transition-colors hover:bg-overlay-hover hover:text-text"
               onClick={() => setMoreOpen((value) => !value)}
-              title="All views"
+              title="All layouts"
               aria-expanded={moreOpen}
             >
               <span className="hidden leading-none sm:inline">More</span>
@@ -284,20 +318,17 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
       <div className="toolbar-ops-tray">
         {stageOpen && (
           <>
-            <div className="flex h-9 shrink-0 items-center gap-0.5" aria-label="View tools">
+            <div className="flex h-9 shrink-0 items-center gap-0.5" aria-label="Layout tools">
               {soloLabel && soloTileId && (
                 <button
                   type="button"
                   className="flex h-9 max-w-[14rem] shrink-0 items-center gap-1.5 rounded-lg bg-[var(--select-fill)] px-2.5 text-[13px] leading-none text-text transition-colors hover:bg-[var(--hover-fill)]"
                   onClick={() => toggleTileMaximized(activeViewId, soloTileId)}
-                  title={`Restore ${soloLabel} to the view`}
+                  title={`Restore ${soloLabel}`}
                   aria-label={`Restore ${soloLabel}`}
                 >
                   <Minimize2 size={15} className="block shrink-0" aria-hidden />
                   <span className="min-w-0 truncate font-medium leading-none">{soloLabel}</span>
-                  <span className="hidden shrink-0 text-[11px] leading-none text-text-faint sm:inline">
-                    Expanded
-                  </span>
                 </button>
               )}
               {onAddWidget && (
@@ -306,10 +337,11 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
                     type="button"
                     className="flex h-9 shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-[13px] leading-none text-text-muted transition-colors hover:bg-overlay-hover hover:text-text"
                     onClick={onAddWidget}
-                    title="Add widget to this view"
+                    title="Add surfaces to this layout"
+                    aria-label="Add surfaces to this layout"
                   >
                     <LayoutGrid size={15} className="block shrink-0" aria-hidden />
-                    <span className="hidden leading-none sm:inline">Widget</span>
+                    <span className="hidden leading-none sm:inline">Add</span>
                   </button>
                   <button
                     type="button"
@@ -324,8 +356,8 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
                     }
                     title={
                       workspaceSurface === "contrast"
-                        ? "Resting sheet for this theme"
-                        : "Alternate sheet plane (R&D compare)"
+                        ? "Resting surfaces (tiles lifted)"
+                        : "Invert sheet ↔ tile lift (compare)"
                     }
                   >
                     <PanelTop size={15} className="block shrink-0" aria-hidden />

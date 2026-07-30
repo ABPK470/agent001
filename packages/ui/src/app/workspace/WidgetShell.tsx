@@ -1,5 +1,5 @@
 /**
- * WidgetShell — container chrome for dashboard tiles, modals, and pop-outs.
+ * WidgetShell — container chrome for layout tiles, modals, and pop-outs.
  */
 
 import { ExternalLink, GripVertical, Maximize2, Minimize2, Pin, PinOff, X } from "lucide-react"
@@ -181,7 +181,7 @@ function WidgetShellHeader({
 
   return (
     <div
-      className={`widget-drag-handle group flex items-center gap-1.5 px-2.5 h-9 shrink-0 select-none ${hintWash} ${
+      className={`widget-drag-handle group flex h-9 shrink-0 select-none items-center gap-1.5 border-b border-border-subtle px-2.5 ${hintWash} ${
         showDragHandle ? "cursor-grab active:cursor-grabbing" : "cursor-default"
       }`}
       onPointerDown={showDragHandle ? onDragPointerDown : undefined}
@@ -196,23 +196,18 @@ function WidgetShellHeader({
       )}
       <span
         className={[
-          "uppercase tracking-wider truncate min-w-0 flex-1",
+          "truncate min-w-0 flex-1 tracking-normal",
           maximized
-            ? "text-[13px] font-semibold text-text"
-            : "text-xs font-medium text-text-muted",
+            ? "text-[14px] font-semibold text-text"
+            : "text-[13px] font-medium text-text-muted",
         ].join(" ")}
       >
         {label}
-        {/* {maximized && (
-          <span className="ml-1.5 normal-case tracking-normal font-medium text-text-faint">
-            Expanded
-          </span>
-        )} */}
         {pinned && !maximized && (
-          <span className="ml-1.5 normal-case tracking-normal text-text-faint">(pinned)</span>
+          <span className="ml-1.5 font-normal text-text-faint">(pinned)</span>
         )}
         {edgePin && !maximized && !pinned && (
-          <span className="ml-1.5 normal-case tracking-normal text-text-faint">
+          <span className="ml-1.5 font-normal text-text-faint">
             ({EDGE_PIN_LABEL[edgePin]})
           </span>
         )}
@@ -229,7 +224,7 @@ function WidgetShellHeader({
               className="flex items-center justify-center w-8 h-8 text-text-muted hover:text-text rounded-lg transition-colors"
               onClick={onTogglePin}
               title={pinned ? "Unpin" : "Pin"}
-              aria-label={pinned ? "Unpin widget" : "Pin widget"}
+              aria-label={pinned ? "Unpin" : "Pin"}
             >
               {pinned ? <PinOff size={16} /> : <Pin size={16} />}
             </button>
@@ -238,7 +233,7 @@ function WidgetShellHeader({
               className="flex items-center justify-center w-8 h-8 text-text-muted hover:text-text rounded-lg transition-colors"
               onClick={onToggleMaximize}
               title={maximized ? "Restore" : "Maximize"}
-              aria-label={maximized ? "Restore widget" : "Maximize widget"}
+              aria-label={maximized ? "Restore" : "Maximize"}
             >
               {maximized ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
             </button>
@@ -247,7 +242,7 @@ function WidgetShellHeader({
               className="flex items-center justify-center w-8 h-8 text-text-muted hover:text-text rounded-lg transition-colors"
               onClick={onPopOut}
               title="Pop out"
-              aria-label="Pop out widget"
+              aria-label="Pop out"
             >
               <ExternalLink size={16} />
             </button>
@@ -258,7 +253,7 @@ function WidgetShellHeader({
           className="flex items-center justify-center w-8 h-8 text-text-muted hover:text-error rounded-lg transition-colors"
           onClick={onClose}
           title="Close"
-          aria-label="Close widget"
+          aria-label="Close"
         >
           <X size={16} />
         </button>

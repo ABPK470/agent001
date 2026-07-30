@@ -1,5 +1,5 @@
 /**
- * Per-tile identity for dashboard widgets (survive remount across view switches).
+ * Per-tile identity for layout surfaces (survive remount across layout switches).
  */
 
 import { createContext, useContext } from "react"

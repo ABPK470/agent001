@@ -34,6 +34,8 @@ interface Options {
   rowPx?: number
   /** Canvas host used for drop hit-testing (grid inner surface). */
   canvasRef: RefObject<HTMLElement | null>
+  /** JS stage gutter — tiles sit inset; hit-tests subtract this. */
+  stagePadPx?: number
 }
 
 interface DragSession {
@@ -126,12 +128,13 @@ function resolveDrop(
   cw: number,
   rowPx: number,
   rows: number,
+  stagePadPx: number,
 ): DropResolve | null {
   if (!canvasEl || cw <= 0) return null
   const host = (canvasEl.querySelector("[data-workspace-grid]") as HTMLElement | null) ?? canvasEl
   const bounds = host.getBoundingClientRect()
-  const localX = clientX - bounds.left
-  const localY = clientY - bounds.top
+  const localX = clientX - bounds.left - stagePadPx
+  const localY = clientY - bounds.top - stagePadPx
 
   const origin = tiles.find((tile) => tile.id === dragId)
   if (!origin) return null
@@ -193,6 +196,7 @@ export function useGridInteraction({
   maxRows,
   rowPx = ROW_PX,
   canvasRef,
+  stagePadPx = 0,
 }: Options) {
   const commitSplit = useLayoutStore((s) => s.commitSplit)
   const soloTileId = useLayoutStore((s) => s.soloTileId)
@@ -243,6 +247,7 @@ export function useGridInteraction({
           cw,
           rowPx,
           rows,
+          stagePadPx,
         )
         setDropPreview(drop?.preview ?? null)
         return
@@ -288,6 +293,7 @@ export function useGridInteraction({
           cw,
           rowPx,
           rows,
+          stagePadPx,
         )
         if (drop) commitSplit(viewId, drop.split)
         clearSession()
@@ -313,7 +319,7 @@ export function useGridInteraction({
         moveRafRef.current = null
       }
     }
-  }, [canvasRef, clearSession, commitSplit, cw, rowPx, rows, viewId])
+  }, [canvasRef, clearSession, commitSplit, cw, rowPx, rows, stagePadPx, viewId])
 
   const onPointerDownDrag = useCallback((tile: LayoutTile, event: React.PointerEvent) => {
     if (cw <= 0 || tile.pinned || interactionsLocked || !splitRef.current) return

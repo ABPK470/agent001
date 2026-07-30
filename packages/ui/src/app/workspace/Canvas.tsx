@@ -1,8 +1,8 @@
 /**
- * Canvas — the blank canvas where widgets live.
+ * Canvas — blank stage where layout surfaces live.
  *
- * Nested H/V split tree projected onto an absolute grid. Renders widgets for
- * the active view and shows an add-widget prompt when empty.
+ * Nested H/V split tree projected onto an absolute grid. Renders surfaces for
+ * the active layout and shows an add prompt when empty.
  */
 
 import { LayoutGrid, Plus } from "lucide-react"
@@ -20,8 +20,11 @@ export interface CanvasHandle {
 export const Canvas = forwardRef<CanvasHandle>(function Canvas(_props, ref) {
   const views = useLayoutStore((s) => s.views)
   const activeViewId = useLayoutStore((s) => s.activeViewId)
+  const soloTileId = useLayoutStore((s) => s.soloTileId)
   const { isViewingAsOther } = useViewingAs()
-  const stageGlyphs = isViewingAsOther
+  // Glyph field is a quiet Viewing-as cue behind the stage — never under solo.
+  // No layout pad: gutters come from GridCanvas JS inset (solo can fill the stage).
+  const stageGlyphs = isViewingAsOther && !soloTileId
   const [catalogOpen, setCatalogOpen] = useState(false)
 
   useImperativeHandle(ref, () => ({ openCatalog: () => setCatalogOpen(true) }), [])
@@ -39,13 +42,15 @@ export const Canvas = forwardRef<CanvasHandle>(function Canvas(_props, ref) {
         </div>
       )}
 
-      <div className={["relative min-h-0 flex-1", stageGlyphs ? "workspace-stage-glyphs-pad" : ""].filter(Boolean).join(" ")}>
+      <div className="relative min-h-0 flex-1">
         {tiles.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center gap-5 p-2">
             <LayoutGrid size={48} className="text-text-faint" strokeWidth={1.5} />
             <div className="text-center">
-              <p className="mb-1 text-base text-text-secondary">Your canvas is empty</p>
-              <p className="text-sm text-text-muted">Add widgets to build your dashboard</p>
+              <p className="mb-1 text-base text-text-secondary">This layout is empty</p>
+              <p className="text-sm text-text-muted max-w-sm">
+                Add surfaces to this layout.
+              </p>
             </div>
             <button
               type="button"
@@ -53,7 +58,7 @@ export const Canvas = forwardRef<CanvasHandle>(function Canvas(_props, ref) {
               onClick={() => setCatalogOpen(true)}
             >
               <Plus size={16} />
-              Add Widget
+              Add to layout
             </button>
           </div>
         ) : (

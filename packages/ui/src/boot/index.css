@@ -189,42 +189,40 @@
 :root[data-theme="light"] {
   color-scheme: light;
 
-  /* Warm off-white / paper aesthetic per design reference.
-     Palette lifted one step lighter (2026-05): canvas takes what used to
-     be --panel; each surface shifts up so the whole app reads lighter
-     while preserving contrast relationships between layers. */
-  --canvas: #f6f2ea;
-  --panel: #fbf8f1;
-  --panel-2: #ffffff;
-  --panel-3: #ffffff;
+  /* Warm paper — page is the lightest (Coder-like). Sheet steps down
+     slightly; tiles lift warm-white. No muddy darker mat around the app. */
+  --canvas: #faf8f5;
+  --panel: #f3efe9;
+  --panel-2: #fcfaf7;
+  --panel-3: #fcfaf7;
 
-  --overlay-1: rgba(0, 0, 0, 0.025);
-  --overlay-2: rgba(0, 0, 0, 0.05);
-  --overlay-3: rgba(0, 0, 0, 0.08);
-  --overlay-hover: rgba(0, 0, 0, 0.05);
+  --overlay-1: rgba(40, 30, 20, 0.03);
+  --overlay-2: rgba(40, 30, 20, 0.05);
+  --overlay-3: rgba(40, 30, 20, 0.08);
+  --overlay-hover: rgba(40, 30, 20, 0.05);
 
   /* Selection dialect — one fill language for active / selected / hover. */
   --select-fill: color-mix(in srgb, var(--text) 8%, transparent);
   --hover-fill: color-mix(in srgb, var(--text) 5%, transparent);
 
-  --border-subtle: rgba(0, 0, 0, 0.08);
-  --border: rgba(0, 0, 0, 0.14);
-  --border-strong: rgba(0, 0, 0, 0.22);
-  --border-focus: rgba(0, 0, 0, 0.32);
+  --border-subtle: rgba(40, 30, 20, 0.08);
+  --border: rgba(40, 30, 20, 0.12);
+  --border-strong: rgba(40, 30, 20, 0.20);
+  --border-focus: rgba(40, 30, 20, 0.30);
 
-  --text: #0e0e10;
-  --text-secondary: #2a2a2e;
-  --text-muted: #5a5a62;
-  --text-faint: #8a8a92;
+  --text: #1a1a1a;
+  --text-secondary: #2e2a26;
+  --text-muted: #5c564e;
+  --text-faint: #8a837a;
   --text-on-accent: #ffffff;
 
-  /* Accent darkened for AA contrast on warm light bg */
+  /* Accent — purple sparingly on warm paper */
   --accent: #5D4FB0;
   --accent-hover: #4a3e94;
   --accent-soft: rgba(93, 79, 176, 0.14);
-  --hero-pill-shadow: 0 30px 86px rgba(79, 86, 104, 0.14), 0 12px 30px rgba(79, 86, 104, 0.08);
-  --hero-spotlight-core: rgba(120, 126, 140, 0.14);
-  --hero-spotlight-mid: rgba(120, 126, 140, 0.06);
+  --hero-pill-shadow: 0 30px 86px rgba(60, 50, 30, 0.12), 0 12px 30px rgba(60, 50, 30, 0.06);
+  --hero-spotlight-core: rgba(90, 78, 64, 0.10);
+  --hero-spotlight-mid: rgba(90, 78, 64, 0.04);
 
   /* Live colon mark — same ink as accent ASCII (admin burger, home corner). */
   --logo-mark-idle: var(--text);
@@ -240,14 +238,14 @@
   --info: #1d4ed8;
   --info-soft: rgba(29, 78, 216, 0.10);
 
-  /* Viewing as — deep bright blue (readable on cream). */
+  /* Viewing as — deep bright blue (readable on warm paper). */
   --viewing-as: #3B45FF;
   --viewing-as-soft: rgba(59, 69, 255, 0.14);
 
   --scrim: rgba(0, 0, 0, 0.48);
   --scrim-strong: rgba(0, 0, 0, 0.78);
   --scrim-focus: rgba(0, 0, 0, 0.42);
-  --bubble-user: #efeae0;
+  --bubble-user: #efeae4;
   --shadow-bubble: 0 2px 8px rgba(60, 50, 30, 0.06);
 
   --dt-int: #1d4ed8;
@@ -258,10 +256,10 @@
   --dt-bin: #be185d;
 
   /* Shimmer dark-on-light */
-  --sa: #18181b;
-  --sd: #c0bbac;
+  --sa: #1a1a1a;
+  --sd: #c8c0b4;
 
-  --bg: #f6f2ea;
+  --bg: #faf8f5;
 }
 
 /* ── Base ──────────────────────────────────────────────────────── */
@@ -472,7 +470,8 @@ body {
 }
 
 .entity-rail {
-  background: color-mix(in srgb, var(--color-canvas) 40%, var(--color-panel));
+  /* Hairline only — no third surface color inside the tile. */
+  background: transparent;
 }
 
 .entity-rail-header {
@@ -1740,12 +1739,6 @@ textarea.input {
   align-items: center;
   gap: 0.4rem;
   margin-left: auto;
-}
-
-/* Fold + download share one segment track — keep text segments compact */
-.trace-toolbar__actions [role="group"] > button[role="radio"] {
-  padding-block: 0.4rem;
-  padding-inline: 0.75rem;
 }
 
 .trace-toolbtn {
@@ -4097,17 +4090,27 @@ textarea.input {
      Instant fill was only needed when maximize remounted cold widgets. */
 }
 
-/* Maximized shell — title reads as the place you are, not a muted chrome label. */
+/* Solo keeps the product surface — only the card frame goes away. */
 .workspace-tile-solo .workspace-shell {
-  border-color: color-mix(in srgb, var(--border) 80%, transparent);
+  border-color: transparent;
+  border-radius: 0;
+  background: var(--workspace-widget-bg, var(--workspace-sheet, var(--panel)));
 }
 
+/*
+ * Solo-hidden siblings stay mounted (no remount lag) but must not paint.
+ * TermChat forces visibility:visible on empty-state nodes — those escape a
+ * parent visibility:hidden, so pin the whole subtree.
+ */
 .workspace-tile-solo-hidden {
-  /* Snap under the expanding solo — geometry morph is the signal. */
-  visibility: hidden;
   pointer-events: none;
   z-index: 0;
   transition: none;
+}
+
+.workspace-tile-solo-hidden,
+.workspace-tile-solo-hidden * {
+  visibility: hidden !important;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -4285,11 +4288,10 @@ textarea.input {
 }
 
 /* ── Workspace: one paper instrument on the page ────────────────────
- * Theme-aware resting (mirror what already works in light):
- *   Light → deeper warm page → warm sheet; widgets dissolve (hairline).
- *   Dark  → pure deep canvas → panel sheet (one step); same dissolve.
- *           Avoid muddy mid-grays (page∩sheet). panel-2 lift is R&D only.
- * Soft widget corners (not concentric-squeezed to ~4px).
+ * Three clear steps (not dissolve):
+ *   page → sheet (layout chrome + gutters) → tiles (product surfaces)
+ * Soft tile corners at rest; solo keeps the tile surface, sheds the card frame.
+ * Sheet toggle (contrast) inverts sheet↔tile lift for compare.
  */
 .workspace-chrome {
   position: relative;
@@ -4299,8 +4301,9 @@ textarea.input {
   --workspace-sheet-shadow:
     0 1px 1px color-mix(in srgb, var(--text) 4%, transparent),
     0 10px 32px color-mix(in srgb, var(--text) 7%, transparent);
-  --workspace-rail-line: color-mix(in srgb, var(--border) 45%, transparent);
-  --workspace-widget-bg: var(--panel);
+  --workspace-rail-line: color-mix(in srgb, var(--border) 65%, transparent);
+  /* Tiles lift above the sheet so multi-surface layouts don't blend. */
+  --workspace-widget-bg: var(--panel-2);
   --workspace-widget-border: var(--border-subtle);
   --workspace-tab-active: var(--select-fill);
   --workspace-tab-active-shadow: none;
@@ -4312,36 +4315,33 @@ textarea.input {
   --widget-radius: 0.75rem;
   --tab-gap: 0.125rem;
   background: var(--workspace-chrome);
-  padding: 0.75rem var(--shell-chrome-pad-x) 0.875rem;
+  /* Quiet page breathe — enough for radius/shadow, not a landscape mat. */
+  padding: 0.5rem;
   box-sizing: border-box;
 }
 
-@media (min-width: 640px) {
-  .workspace-chrome {
-    padding-inline: var(--shell-chrome-pad-x-sm);
-  }
-}
-
 :root[data-theme="light"] .workspace-chrome {
-  /* Deeper warm page — sheet stays panel (same family as light resting). */
-  --workspace-chrome: color-mix(in srgb, var(--canvas) 82%, #b9a890 18%);
+  /* Warm page ≈ warm tile — use a real hairline so flush surfaces don't dissolve. */
+  --workspace-widget-border: var(--border);
+  --workspace-rail-line: var(--border);
 }
 
 :root[data-theme="dark"] .workspace-chrome {
-  /* Pure canvas page — no text-mix mud. Sheet = panel (one clean step up). */
+  /* Page → sheet (panel) → tiles (panel-2). Clear steps, no muddy mid. */
   --workspace-chrome: var(--canvas);
   --workspace-sheet: var(--panel);
-  --workspace-widget-bg: var(--panel);
-  --workspace-widget-border: var(--border-subtle);
+  --workspace-widget-bg: var(--panel-2);
+  --workspace-widget-border: color-mix(in srgb, var(--border) 75%, transparent);
   --workspace-border: color-mix(in srgb, var(--border) 70%, transparent);
+  --workspace-rail-line: color-mix(in srgb, var(--border) 80%, transparent);
   --workspace-sheet-shadow:
     0 1px 0 rgba(255, 255, 255, 0.04),
     0 12px 40px rgba(0, 0, 0, 0.55);
 }
 
 /*
- * R&D — Sheet toggle: invert from theme resting (compare only).
- * Light ON → white lift. Dark ON → stronger panel-2 lift.
+ * Sheet toggle — invert sheet↔tile relationship (compare only).
+ * Light ON → warm-white sheet, paper tiles. Dark ON → panel-2 sheet, panel tiles.
  */
 :root[data-theme="light"] .workspace-chrome--contrast {
   --workspace-sheet: var(--panel-2);
@@ -4350,20 +4350,22 @@ textarea.input {
     0 1px 2px color-mix(in srgb, var(--text) 5%, transparent),
     0 12px 36px color-mix(in srgb, var(--text) 9%, transparent);
   --workspace-widget-bg: var(--panel);
-  --workspace-widget-border: var(--border-subtle);
+  --workspace-widget-border: color-mix(in srgb, var(--border) 55%, transparent);
+  --workspace-rail-line: color-mix(in srgb, var(--border) 55%, transparent);
 }
 
 :root[data-theme="dark"] .workspace-chrome--contrast {
   --workspace-sheet: var(--panel-2);
   --workspace-widget-bg: var(--panel);
-  --workspace-widget-border: var(--border-subtle);
+  --workspace-widget-border: color-mix(in srgb, var(--border) 70%, transparent);
   --workspace-border: var(--border);
+  --workspace-rail-line: color-mix(in srgb, var(--border) 70%, transparent);
   --workspace-sheet-shadow:
     0 1px 0 rgba(255, 255, 255, 0.06),
     0 14px 44px rgba(0, 0, 0, 0.6);
 }
 
-/* One continuous paper — rail and stage share this surface. */
+/* One paper — rail (layouts) + stage (surfaces). Rail rule separates them. */
 .workspace-sheet {
   position: relative;
   z-index: 1;
@@ -4385,12 +4387,15 @@ textarea.input {
   flex-direction: column;
   min-height: 0;
   flex: 1;
+  /* Gutters read as sheet paper between lifted tiles. */
   background: transparent;
   overflow: hidden;
 }
 
 .workspace-canvas-pad {
-  padding: var(--stage-pad);
+  /* Gutter is applied in JS so solo maximize can fill the stage edge-to-edge
+     without changing container size mid-morph. */
+  padding: 0;
 }
 
 .workspace-shell {
@@ -4398,6 +4403,11 @@ textarea.input {
   background: var(--workspace-widget-bg, var(--panel));
   border: 1px solid var(--workspace-widget-border, transparent);
   box-sizing: border-box;
+}
+
+.workspace-tile-focused .workspace-shell,
+.workspace-tile-dragging .workspace-shell {
+  border-color: var(--border);
 }
 
 .toolbar-shell {
@@ -8074,7 +8084,7 @@ textarea.input {
   }
 }
 
-/* ── Widget shell (WidgetFrame-equivalent) ──────────────────────────── */
+/* ── Widget shell (WidgetShell-equivalent for intro morph) ───────── */
 .intro3-widget {
   background: transparent;
   border-radius: 0;
@@ -8126,7 +8136,7 @@ textarea.input {
     opacity 360ms ease 420ms;
 }
 .intro3-root--entering .intro3-handle {
-  height: 2rem;               /* matches WidgetFrame h-8 */
+  height: 2rem;               /* matches WidgetShell header */
   opacity: 1;
 }
 

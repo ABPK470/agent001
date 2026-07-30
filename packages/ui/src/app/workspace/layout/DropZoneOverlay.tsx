@@ -16,6 +16,7 @@ interface Props {
   widgetType: WidgetType | null
   colWidth: number
   rowPx?: number
+  stagePadPx?: number
 }
 
 export function DropZoneOverlay({
@@ -23,6 +24,7 @@ export function DropZoneOverlay({
   widgetType,
   colWidth: cw,
   rowPx = ROW_PX,
+  stagePadPx = 0,
 }: Props): JSX.Element | null {
   if (!preview || cw <= 0 || !widgetType) return null
   const rect = rectToPixels(preview.rect, cw, rowPx)
@@ -32,8 +34,8 @@ export function DropZoneOverlay({
     <div
       className="workspace-drop-ghost pointer-events-none absolute z-30 overflow-hidden"
       style={{
-        left: rect.left,
-        top: rect.top,
+        left: stagePadPx + rect.left,
+        top: stagePadPx + rect.top,
         width: rect.width,
         height: rect.height,
       }}
@@ -42,7 +44,7 @@ export function DropZoneOverlay({
       <div className="workspace-drop-ghost__shell flex h-full flex-col">
         <div className="flex h-9 shrink-0 items-center gap-1.5 px-2.5">
           <GripVertical size={16} className="shrink-0 text-text-faint" aria-hidden />
-          <span className="min-w-0 flex-1 truncate text-xs font-medium uppercase tracking-wider text-text-muted">
+          <span className="min-w-0 flex-1 truncate text-[13px] font-medium tracking-normal text-text-muted">
             {label}
           </span>
         </div>

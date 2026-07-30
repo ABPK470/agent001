@@ -2,7 +2,7 @@
  * Top-level application shells — two modes, one product.
  *
  *   chat      — focused conversation (threads, minimal chrome)
- *   workspace — widget canvas (dashboards, ops, full visibility)
+ *   workspace — named layouts and product surfaces (ops, full visibility)
  */
 
 export type AppShellMode = "workspace" | "chat"

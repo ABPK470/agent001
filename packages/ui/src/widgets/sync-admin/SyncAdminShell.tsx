@@ -52,7 +52,7 @@ export function SyncAdminShell({
 
   return (
     <ConsoleProvider>
-      <div className="sync-admin flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-panel p-3">
+      <div className="sync-admin flex h-full min-h-0 flex-1 flex-col overflow-hidden">
         <div className={WIDGET_ENVELOPE}>
           <div className="entity-registry-shell grid min-h-0 flex-1 overflow-hidden">
             <aside className="entity-rail flex min-h-0 flex-col border-r border-border-subtle" aria-label="Sections">

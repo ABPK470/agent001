@@ -1,6 +1,6 @@
 /**
  * Trace toolbar download menu — same export paths as `/trace` slash commands.
- * Lives inside the Expanded/Collapsed segment track (group chrome).
+ * Peer of the Expanded/Collapsed toggle — bordered icon chrome, not inside the track.
  */
 
 import { Download, FileJson, FileText } from "lucide-react"
@@ -8,7 +8,6 @@ import { useState, type JSX } from "react"
 import { threadExportFilename, traceExportFilename } from "@mia/shared-types"
 import { downloadAuthenticated } from "../../lib/userDownload"
 import { ToolbarMenu, ToolbarMenuItem } from "../entity-registry/ToolbarMenu"
-import { ToolbarTrackDivider } from "../entity-registry/ToolbarTrack"
 
 export type TraceExportTarget =
   | { kind: "run"; runId: string }
@@ -68,41 +67,37 @@ export function TraceExportMenu({
   }
 
   return (
-    <>
-      <ToolbarTrackDivider />
-      <ToolbarMenu
-        title="Download trace"
-        ariaLabel="Download trace"
-        trigger={<Download size={15} strokeWidth={1.75} />}
-        minWidthClass="min-w-[14rem]"
-        variant="group"
-      >
-        <ToolbarMenuItem
-          icon={<FileText size={14} />}
-          label="Text (.txt)"
-          onClick={() => void run("txt", false)}
-          disabled={busy}
-        />
-        <ToolbarMenuItem
-          icon={<FileJson size={14} />}
-          label="JSON (.json)"
-          onClick={() => void run("json", false)}
-          disabled={busy}
-        />
-        <div className="my-1 border-t border-border-subtle" role="separator" />
-        <ToolbarMenuItem
-          icon={<FileText size={14} />}
-          label="Text · no code"
-          onClick={() => void run("txt", true)}
-          disabled={busy}
-        />
-        <ToolbarMenuItem
-          icon={<FileJson size={14} />}
-          label="JSON · no code"
-          onClick={() => void run("json", true)}
-          disabled={busy}
-        />
-      </ToolbarMenu>
-    </>
+    <ToolbarMenu
+      title="Download trace"
+      ariaLabel="Download trace"
+      trigger={<Download size={16} strokeWidth={1.75} />}
+      minWidthClass="min-w-[14rem]"
+    >
+      <ToolbarMenuItem
+        icon={<FileText size={14} />}
+        label="Text (.txt)"
+        onClick={() => void run("txt", false)}
+        disabled={busy}
+      />
+      <ToolbarMenuItem
+        icon={<FileJson size={14} />}
+        label="JSON (.json)"
+        onClick={() => void run("json", false)}
+        disabled={busy}
+      />
+      <div className="my-1 border-t border-border-subtle" role="separator" />
+      <ToolbarMenuItem
+        icon={<FileText size={14} />}
+        label="Text · no code"
+        onClick={() => void run("txt", true)}
+        disabled={busy}
+      />
+      <ToolbarMenuItem
+        icon={<FileJson size={14} />}
+        label="JSON · no code"
+        onClick={() => void run("json", true)}
+        disabled={busy}
+      />
+    </ToolbarMenu>
   )
 }

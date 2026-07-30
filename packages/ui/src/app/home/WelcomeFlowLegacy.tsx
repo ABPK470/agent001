@@ -81,10 +81,10 @@ function WaveCanvas({ visible }: { visible: boolean }) {
     const canvas = ref.current!
     const ctx = canvas.getContext("2d")!    // Read theme once per mount so wave/particle/flash colors stay
     // legible on both the dark canvas (#09090b) and the warm light
-    // canvas (#efeae0). On light we use a soft warm-grey ink instead
+    // canvas (#faf8f5). On light we use a soft warm-grey ink instead
     // of white, which would otherwise be invisible.
     const isLight = document.documentElement.getAttribute("data-theme") === "light"
-    const WAVE_STROKE = isLight ? "rgba(60,50,30,0.18)" : "rgba(255,255,255,0.18)"
+    const WAVE_STROKE = isLight ? "rgba(60,50,30,0.16)" : "rgba(255,255,255,0.18)"
     const PARTICLE_COLORS = isLight
       ? ["80,70,50", "110,95,70", "140,125,95", "93,79,176"]
       : ["255,255,255", "190,190,190", "150,150,150", "210,190,255"]

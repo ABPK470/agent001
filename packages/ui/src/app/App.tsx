@@ -154,6 +154,7 @@ export function App() {
   const setPolicyEditorOpen = useStore((s) => s.setPolicyEditorOpen)
   const views = useLayoutStore((s) => s.views)
   const activeViewId = useLayoutStore((s) => s.activeViewId)
+  const soloTileId = useLayoutStore((s) => s.soloTileId)
   const workspaceSurface = useLayoutStore((s) => s.workspaceSurface)
   const canvasRef = useRef<CanvasHandle>(null)
   const isMobile = useIsMobile()
@@ -531,7 +532,7 @@ export function App() {
             </span>
           </div>
           <div className="flex-1 min-w-0 text-center px-2">
-            <span className="block max-w-full truncate text-xs text-text-muted uppercase tracking-wider whitespace-nowrap">
+            <span className="block max-w-full truncate text-[13px] font-medium text-text-muted tracking-normal whitespace-nowrap">
               {currentView?.name ?? "Workspace"}
             </span>
           </div>
@@ -587,7 +588,7 @@ export function App() {
 
         {/* Widget area — full remaining space */}
         <main className="relative flex-1 overflow-y-auto show-scrollbar">
-          {isViewingAsOther && (
+          {isViewingAsOther && !soloTileId && (
             <div className="workspace-stage-glyphs pointer-events-none overflow-hidden" aria-hidden>
               <IntroAsciiField surface="home" viewingAsField />
             </div>
@@ -596,14 +597,14 @@ export function App() {
             {tiles.length === 0 ? (
               <EmptyState
                 icon={LayoutGrid}
-                message="No widgets in this view yet"
+                message="This layout is empty"
                 action={(
                   <button
                     type="button"
                     className="px-6 py-3 text-sm text-text-secondary border border-border rounded-xl active:bg-overlay-2"
                     onClick={() => setMobileCatalogOpen(true)}
                   >
-                    Add Widget
+                    Add to layout
                   </button>
                 )}
               />
@@ -618,7 +619,7 @@ export function App() {
                       className="min-h-[50dvh] bg-surface rounded-xl overflow-hidden flex flex-col"
                     >
                       <div className="px-3 h-8 flex items-center shrink-0 border-b border-border-subtle">
-                        <span className="text-xs font-medium text-text-muted uppercase tracking-wider">
+                        <span className="text-xs font-medium text-text-muted tracking-normal">
                           {definition.label}
                         </span>
                       </div>
@@ -640,8 +641,9 @@ export function App() {
           activeViewId={activeViewId}
           onSelectView={(id) => useLayoutStore.getState().setActiveView(id)}
           onAdd={() => {
-            const newId = useLayoutStore.getState().addView(`View ${views.length + 1}`)
-            useLayoutStore.getState().setActiveView(newId)
+            const id = useLayoutStore.getState().addView("")
+            const short = id.slice(0, 4)
+            useLayoutStore.getState().renameView(id, `Layout ${short}`)
             setMobileCatalogOpen(true)
           }}
         />
