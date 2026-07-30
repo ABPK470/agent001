@@ -35,7 +35,7 @@ import {
   TEXT_BTN_PRIMARY,
   WIDGET_ENVELOPE,
 } from "../entity-registry/chrome"
-import { LIST_ROW_ACTIVE, SELECT_ACTIVE } from "../../lib/selection"
+import { LIST_ROW_ACTIVE, LIST_ROW_IDLE, SELECT_ACTIVE } from "../../lib/selection"
 import { FormFieldGroup, FormSectionCard } from "../entity-registry/form-section"
 import { ModalShell } from "../entity-registry/ModalShell"
 import { ModalToastStack, useModalToasts } from "../entity-registry/ModalToastStack"
@@ -483,7 +483,7 @@ function ConnectorList({
                   className={[
                     "flex items-center gap-2 px-3 py-2 text-sm",
                     index < items.length - 1 ? "border-b border-border/20" : "",
-                    selectedId === item.id ? LIST_ROW_ACTIVE : "",
+                    selectedId === item.id ? LIST_ROW_ACTIVE : LIST_ROW_IDLE,
                   ].join(" ")}
                 >
                   <button type="button" onClick={() => onSelect(item.id)} className="flex min-w-0 flex-1 flex-col items-start gap-1 text-left">
@@ -614,7 +614,7 @@ function ConnectorForm({
 }): JSX.Element {
   const kind = getConnectorKind(form.kind) ?? CONNECTOR_KINDS[0]!
   return (
-    <div className="space-y-3">
+    <div>
       <FormSectionCard
         title="Identity"
         description="Pick a connector kind, then name the instance."

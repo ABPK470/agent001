@@ -5,7 +5,7 @@
 import { Check, ChevronDown, Minus, X } from "lucide-react"
 import { useMemo, useState, type JSX } from "react"
 import type { EntityRegistryTable } from "../../types"
-import { PANEL } from "./chrome"
+import { LIST_FLUSH } from "./chrome"
 import { DetailField, DetailGrid } from "./DetailField"
 import { scopeSummary, sortedTables, tableSourceLabel } from "./entity-overview-helpers"
 
@@ -141,7 +141,7 @@ export function EntityTablesExplorer({
   }
 
   return (
-    <ol className={PANEL}>
+    <ol className={LIST_FLUSH}>
       {sorted.map((table, index) => (
         <EntityTableRow
           key={`${table.name}-${table.executionOrder}-${index}`}

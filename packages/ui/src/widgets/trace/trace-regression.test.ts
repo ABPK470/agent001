@@ -426,11 +426,9 @@ describe("Trace CSS contract — pin indent + work-note divider", () => {
     )
   })
 
-  it("pin rows form one continuous card header (flush stack, not separate pills)", () => {
+  it("pin rows form one continuous header (flush stack, not separate pills)", () => {
     expect(css).toMatch(/\.trace-pin__stack\s*\{[^}]*gap:\s*0/s)
-    expect(css).toMatch(
-      /\.trace-pin__stack\s*\{[^}]*border-radius:\s*0\.5rem\s+0\.5rem\s+0\s+0/s,
-    )
+    expect(css).toMatch(/\.trace-pin__stack\s*\{[^}]*border-radius:\s*0/s)
     expect(css).toMatch(
       /\.trace-card\.is-open:has\(\[data-trace-pinned\]\)\s*\{[^}]*border-top:\s*none/s,
     )

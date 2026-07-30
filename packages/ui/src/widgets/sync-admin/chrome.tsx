@@ -96,8 +96,8 @@ export function ModalBtnPrimary({
       className={[
         "inline-flex h-9 items-center justify-center gap-1.5 px-4 text-sm rounded-lg disabled:opacity-40",
         danger
-          ? "bg-error text-text hover:bg-error/90"
-          : "bg-accent hover:bg-accent-hover text-text",
+          ? "border border-error text-error bg-transparent hover:border-border-strong hover:text-text"
+          : "bg-accent hover:bg-accent-hover text-text-on-accent border border-accent",
         className,
       ].join(" ")}
       {...props}

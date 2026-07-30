@@ -66,9 +66,8 @@ describe("shell chrome SOT", () => {
     expect(css).toContain(`--shell-chrome-pad-x: ${SHELL_CHROME_PAD_X}`)
     expect(css).toContain(`--shell-chrome-pad-x-sm: ${SHELL_CHROME_PAD_X_SM}`)
     expect(css).toMatch(/\.shell-chrome-header\s*\{/)
-    // Workspace page frame — minimal breathe (sheet owns the viewport).
-    expect(css).toContain("padding: 0.375rem")
-    // One paper sheet (rail + stage) — no attached-tab silhouette / orphan gap.
+    // Workspace is full-bleed — sheet owns the window (no page gutter).
+    expect(css).toMatch(/\.workspace-chrome\s*\{[^}]*padding:\s*0;/s)
     expect(css).toContain(".workspace-sheet")
     expect(css).not.toContain("workspace-sheet-outline")
     expect(css).not.toContain("--toolbar-stage-gap")

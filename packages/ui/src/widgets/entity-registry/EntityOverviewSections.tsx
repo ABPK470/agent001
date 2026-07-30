@@ -6,7 +6,7 @@ import { useEffect, useState } from "react"
 import type { JSX } from "react"
 import { api } from "../../client/index"
 import type { EntityRegistryDefinition, SyncDefinitionAdminItem } from "../../types"
-import { PANEL } from "./chrome"
+import { LIST_FLUSH } from "./chrome"
 import { buildEntityOverviewSections, type EntityOverviewSectionId } from "./entity-overview-helpers"
 import { EntitySectionModal } from "./EntitySectionModal"
 import { ChevronRight } from "lucide-react"
@@ -38,13 +38,13 @@ export function EntityOverviewSections({ def }: EntityOverviewSectionsProps): JS
 
   return (
     <>
-      <ol className={PANEL}>
+      <ol className={LIST_FLUSH}>
         {sections.map((section) => (
           <li key={section.id} className="border-b border-border-subtle last:border-b-0">
             <button
               type="button"
               onClick={() => setOpenSection(section.id)}
-              className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-elevated/50"
+              className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:text-text"
             >
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-xs font-medium text-text">

@@ -60,15 +60,15 @@ export function AdminBrowseToolbar({
       <button
         type="button"
         onClick={onToggleFilters}
-        className={`relative flex h-9 w-9 items-center justify-center rounded-lg border border-border-subtle text-text-muted transition-colors hover:bg-[var(--hover-fill)] hover:text-text ${
-          filtersOpen || activeFilterCount > 0 ? "bg-[var(--select-fill)] text-text" : ""
+        className={`mia-control relative flex h-9 w-9 items-center justify-center ${
+          filtersOpen || activeFilterCount > 0 ? "border-border-strong text-text" : ""
         }`}
         title={activeFilterCount > 0 ? `Filters (${activeFilterCount} active)` : "Filters"}
         aria-pressed={filtersOpen}
       >
         <SlidersHorizontal size={15} />
         {activeFilterCount > 0 && (
-          <span className="absolute -right-0.5 -top-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-accent px-0.5 text-[9px] font-mono font-medium leading-none text-text-on-accent">
+          <span className="absolute -right-0.5 -top-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-text px-0.5 text-[9px] font-mono font-medium leading-none text-text-on-accent">
             {activeFilterCount}
           </span>
         )}
@@ -76,7 +76,7 @@ export function AdminBrowseToolbar({
       <button
         type="button"
         onClick={onRefresh}
-        className="flex h-9 w-9 items-center justify-center rounded-lg border border-border-subtle text-text-muted transition-colors hover:bg-[var(--hover-fill)] hover:text-text"
+        className="mia-control flex h-9 w-9 items-center justify-center"
         title="Refresh"
       >
         <RefreshCw size={15} className={loading ? "animate-spin" : undefined} />

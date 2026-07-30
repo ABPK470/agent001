@@ -221,7 +221,7 @@ function WidgetShellHeader({
           <>
             <button
               type="button"
-              className="flex items-center justify-center w-8 h-8 text-text-muted hover:text-text rounded-lg transition-colors"
+              className="widget-shell-icon"
               onClick={onTogglePin}
               title={pinned ? "Unpin" : "Pin"}
               aria-label={pinned ? "Unpin" : "Pin"}
@@ -230,7 +230,7 @@ function WidgetShellHeader({
             </button>
             <button
               type="button"
-              className="flex items-center justify-center w-8 h-8 text-text-muted hover:text-text rounded-lg transition-colors"
+              className="widget-shell-icon"
               onClick={onToggleMaximize}
               title={maximized ? "Restore" : "Maximize"}
               aria-label={maximized ? "Restore" : "Maximize"}
@@ -239,7 +239,7 @@ function WidgetShellHeader({
             </button>
             <button
               type="button"
-              className="flex items-center justify-center w-8 h-8 text-text-muted hover:text-text rounded-lg transition-colors"
+              className="widget-shell-icon"
               onClick={onPopOut}
               title="Pop out"
               aria-label="Pop out"
@@ -250,7 +250,7 @@ function WidgetShellHeader({
         )}
         <button
           type="button"
-          className="flex items-center justify-center w-8 h-8 text-text-muted hover:text-error rounded-lg transition-colors"
+          className="widget-shell-icon widget-shell-icon--danger"
           onClick={onClose}
           title="Close"
           aria-label="Close"

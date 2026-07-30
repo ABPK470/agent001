@@ -1,11 +1,8 @@
 /**
  * Toolbar — top rail of the workspace paper sheet.
  *
- * Left: layout cluster (chips · + · More) — content-sized, + hugs the last chip.
- * Right: ops tray (stage · session) on a quiet fill — one hairline inside.
- *
- * Many layouts: strip scrolls inside the cluster; + / More stay pinned to it.
- * Sheet toggle is an R&D surface knob — invert sheet↔tile lift (compare).
+ * One bright bar: layouts (left) | ops (right), full-height divider between.
+ * Sheet toggle is an R&D surface knob — invert sheet↔ops lift (compare).
  */
 
 import { ChevronDown, GripVertical, LayoutGrid, Minimize2, PanelTop, Plus, X } from "lucide-react"
@@ -154,9 +151,9 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
     <header className={SHELL_CHROME_HEADER_WORKSPACE_CLASS}>
       <ChatBrand connected={connected} />
 
-      {/* Views — navigate the paper (+ hugs last chip; not pinned to the rail edge) */}
+      {/* Layouts — chips + · More; + hugs the last chip. */}
       <div
-        className="flex min-w-0 flex-1 items-center"
+        className="toolbar-views"
         role="navigation"
         aria-label="Layouts"
       >
@@ -263,7 +260,7 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
         <button
           type="button"
           className={[
-            "view-tab-add flex shrink-0 items-center justify-center text-text-muted transition-colors hover:bg-overlay-hover hover:text-text",
+            "view-tab-add flex shrink-0 items-center justify-center text-text-muted transition-colors hover:text-text",
             draggingId ? "pointer-events-none opacity-50" : "",
           ].filter(Boolean).join(" ")}
           onClick={handleAddLayout}
@@ -274,10 +271,10 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
         </button>
 
         {tabsOverflow && (
-          <div className="relative shrink-0" ref={moreRef}>
+          <div className="relative flex shrink-0 items-center self-center" ref={moreRef}>
             <button
               type="button"
-              className="flex h-9 shrink-0 items-center gap-1 rounded-lg px-2.5 text-[13px] leading-none text-text-muted transition-colors hover:bg-overlay-hover hover:text-text"
+              className="toolbar-ops-btn shrink-0 px-2.5"
               onClick={() => setMoreOpen((value) => !value)}
               title="All layouts"
               aria-expanded={moreOpen}
@@ -314,15 +311,15 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
         </div>
       </div>
 
-      {/* Ops — stage + session on one quiet tray (surface is the seam, not a rule). */}
+      {/* Ops — outlined controls; full-height rule separates from layouts. */}
       <div className="toolbar-ops-tray">
         {stageOpen && (
           <>
-            <div className="flex h-9 shrink-0 items-center gap-0.5" aria-label="Layout tools">
+            <div className="flex h-9 shrink-0 items-center gap-1.5" aria-label="Layout tools">
               {soloLabel && soloTileId && (
                 <button
                   type="button"
-                  className="flex h-9 max-w-[14rem] shrink-0 items-center gap-1.5 rounded-lg bg-[var(--select-fill)] px-2.5 text-[13px] leading-none text-text transition-colors hover:bg-[var(--hover-fill)]"
+                  className="toolbar-ops-btn toolbar-ops-btn--active max-w-[14rem] shrink-0 px-2.5"
                   onClick={() => toggleTileMaximized(activeViewId, soloTileId)}
                   title={`Restore ${soloLabel}`}
                   aria-label={`Restore ${soloLabel}`}
@@ -335,7 +332,7 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
                 <>
                   <button
                     type="button"
-                    className="flex h-9 shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-[13px] leading-none text-text-muted transition-colors hover:bg-overlay-hover hover:text-text"
+                    className="toolbar-ops-btn shrink-0 px-2.5"
                     onClick={onAddWidget}
                     title="Add surfaces to this layout"
                     aria-label="Add surfaces to this layout"
@@ -346,11 +343,7 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
                   <button
                     type="button"
                     aria-pressed={workspaceSurface === "contrast"}
-                    className={`flex h-9 shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-[13px] leading-none transition-colors ${
-                      workspaceSurface === "contrast"
-                        ? "bg-[var(--select-fill)] text-text"
-                        : "text-text-muted hover:bg-overlay-hover hover:text-text"
-                    }`}
+                    className="toolbar-ops-btn shrink-0 px-2.5"
                     onClick={() =>
                       setWorkspaceSurface(workspaceSurface === "contrast" ? "default" : "contrast")
                     }
@@ -370,7 +363,7 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
           </>
         )}
 
-        <div className="flex h-9 shrink-0 items-center gap-0.5" aria-label="Session">
+        <div className="flex h-9 shrink-0 items-center gap-1.5" aria-label="Session">
           <NotificationPanel />
           <ViewingAsControl />
           {me && (

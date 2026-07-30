@@ -16,11 +16,18 @@ export const HOME_CHAT_GUTTER_X_CLASS = "px-6"
 export const HOME_CHAT_INPUT_DOCK_CLASS = "relative shrink-0 px-6 pb-4 pt-2"
 
 /**
- * Shared composer chrome — login intro + TermChat.
+ * Shared composer chrome — login intro + TermChat home.
  * Fill/border owned by `.chathome-chrome-pill` CSS (light = chat `--panel`).
+ * One perimeter only — no extra ring (rings read as a second frame).
  */
 export const CHAT_INPUT_PILL_CLASS =
-  "chathome-chrome-pill border border-border ring-1 ring-overlay-1 transition-colors focus-within:border-border-strong focus-within:ring-overlay-2 dark:bg-overlay-2"
+  "chathome-chrome-pill border border-border transition-colors focus-within:border-border-strong"
+
+/**
+ * Widget tile already owns the surface — composer sits flush inside, no second frame.
+ */
+export const CHAT_INPUT_WIDGET_CLASS =
+  "border-0 bg-transparent shadow-none ring-0 focus-within:border-0"
 
 /**
  * User goal row in the transcript — full width of the sticky row (capped).

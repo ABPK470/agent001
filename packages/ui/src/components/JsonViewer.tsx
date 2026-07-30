@@ -14,6 +14,11 @@ export interface JsonViewerProps {
   copyable?: boolean
   /** Optional label shown in the toolbar (e.g. "payload"). */
   label?: string
+  /**
+   * Nested inside a parent that already owns the surface perimeter.
+   * Drops the outer frame — toolbar divider + body only.
+   */
+  embedded?: boolean
 }
 
 function formatScalarDisplay(value: unknown): string {
@@ -150,6 +155,7 @@ export function JsonViewer({
   className = "",
   copyable = true,
   label,
+  embedded = false,
 }: JsonViewerProps) {
   const [copied, setCopied] = useState(false)
   const text = useMemo(() => serialize(value), [value])
@@ -175,12 +181,15 @@ export function JsonViewer({
 
   return (
     <div
-      className={`rounded border border-border-subtle bg-base/80 overflow-hidden ${className}`}
+      className={[
+        embedded ? "mia-code-block--embedded overflow-hidden" : "mia-surface overflow-hidden",
+        className,
+      ].filter(Boolean).join(" ")}
     >
       {(copyable || label) && (
-        <div className="flex items-center justify-between gap-2 px-2 py-1 border-b border-border-subtle/80 bg-overlay-1/60">
+        <div className="mia-surface__chrome flex items-center justify-between gap-2 px-2 py-1">
           {label ? (
-            <span className="text-[10px] uppercase tracking-wide text-text-muted/70 font-mono">
+            <span className="text-[10px] uppercase tracking-wide text-text-muted font-mono">
               {label}
             </span>
           ) : (
@@ -190,10 +199,10 @@ export function JsonViewer({
             <button
               type="button"
               onClick={copy}
-              className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-mono text-text-muted hover:text-text hover:bg-overlay-2 rounded transition-colors ml-auto"
+              className="mia-code-block__copy ml-auto"
               title="Copy JSON"
             >
-              {copied ? <Check size={10} className="text-success" /> : <Copy size={10} />}
+              {copied ? <Check size={10} /> : <Copy size={10} />}
               {copied ? "Copied" : "Copy"}
             </button>
           )}

@@ -17,6 +17,7 @@ import { VirtualList } from "../../components/VirtualList"
 import { fmtTokens, formatMs } from "../../lib/util"
 import { parkScrollOnScope, offsetInScrollHost } from "../../lib/chatScroll"
 import { SegmentToggle } from "../entity-registry/SegmentToggle"
+import { WIDGET_LOG_SHELL_CLASS, WIDGET_LOG_STACK_CLASS } from "../widget-toolbar"
 import {
   messagePreview,
   searchCall,
@@ -879,7 +880,8 @@ export function TraceDag({
       : null
 
   return (
-    <div className="trace-dag flex flex-col h-full min-h-0">
+    <div className={`trace-dag ${WIDGET_LOG_SHELL_CLASS}`}>
+      <div className={WIDGET_LOG_STACK_CLASS}>
       <div className="trace-toolbar shrink-0">
         <div className="trace-toolbar__row">
           <div className="trace-toolbar__meta">
@@ -1012,6 +1014,7 @@ export function TraceDag({
             </div>
           </div>
         )}
+      </div>
       </div>
     </div>
   )

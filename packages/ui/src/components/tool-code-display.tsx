@@ -103,12 +103,8 @@ export function ToolResultTable({
     const display = text.replace(/\\n/g, "\n")
     return (
       <pre
-        className="code-pre px-3 py-2.5 overflow-auto rounded-lg"
-        style={{
-          background: C.base,
-          maxHeight,
-          border: `1px solid ${C.border}`,
-        }}
+        className="mia-code-block code-pre mia-code-block__body overflow-auto"
+        style={{ maxHeight }}
       >
         {display}
       </pre>

@@ -15,6 +15,7 @@ import { statusDot } from "../../theme/tokens"
 import { WIDGET_ICONS } from "../../widgets/widget-icons"
 import { DeleteThreadModal } from "./DeleteThreadModal"
 import { ThreadRowMenu } from "./ThreadRowMenu"
+import { sortThreadsByPinThenUpdatedAt } from "../../lib/thread-order"
 import { collapseResumeRunChains } from "../termchat/collapseResumeChains"
 
 /** Threads widget: newest runs at the top, oldest at the bottom. */
@@ -259,7 +260,11 @@ function WidgetThreadBlock({
 }
 
 export function ThreadRunsPanel(): React.ReactElement {
-  const threads = useStore((s) => s.threads)
+  const threadsRaw = useStore((s) => s.threads)
+  const threads = useMemo(
+    () => sortThreadsByPinThenUpdatedAt(threadsRaw),
+    [threadsRaw],
+  )
   const activeThreadId = useStore((s) => s.activeThreadId)
   const storeRuns = useStore((s) => s.runs)
   const activeRunId = useStore((s) => s.activeRunId)

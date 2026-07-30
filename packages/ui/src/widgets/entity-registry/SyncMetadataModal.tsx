@@ -37,7 +37,7 @@ import {
   StepTypeDefinitionEditor,
 } from "./CatalogDefinitionEditor"
 import { FORM_HEADING, HELP_TEXT, ICON_BTN, ICON_BTN_PRIMARY, META_TEXT, PANEL, TAB_PILL, TAB_PILL_ACTIVE, TAB_PILL_IDLE, TEXT_BTN, TEXT_BTN_PRIMARY } from "./chrome"
-import { LIST_ROW_ACTIVE, SELECT_ACTIVE } from "../../lib/selection"
+import { LIST_ROW_ACTIVE, LIST_ROW_IDLE, SELECT_ACTIVE } from "../../lib/selection"
 import { FormSurfaceExecutionSteps } from "./EntityEditSurfaces"
 import { buildStepTypeCatalogLookup } from "./execution-step-shared"
 import { FormFieldGroup, FormSectionCard } from "./form-section"
@@ -1078,7 +1078,7 @@ export function SyncMetadataModal({
               </p>
             )}
 
-            <div className="space-y-3">
+            <div>
               {tab === "flows" ? (
                 <>
                   <FormSectionCard
@@ -1465,7 +1465,7 @@ function CatalogList({
                 className={[
                   "flex items-center gap-2 px-3 py-2 text-sm",
                   index < filtered.length - 1 ? "border-b border-border/20" : "",
-                  selectedId === item.id ? LIST_ROW_ACTIVE : "",
+                  selectedId === item.id ? LIST_ROW_ACTIVE : LIST_ROW_IDLE,
                 ].join(" ")}
               >
                 <button type="button" onClick={() => onSelect(item.id)} className="flex min-w-0 flex-1 flex-col items-start gap-1 text-left">

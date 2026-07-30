@@ -19,13 +19,13 @@ export function SqlTraceBlock({
   const [modalOpen, setModalOpen] = useState(false)
 
   return (
-    <div className={`rounded-md border border-border-subtle overflow-hidden ${compact ? "" : ""}`}>
-      <div className="flex items-start justify-between gap-2 px-2.5 py-1.5 border-b border-border-subtle bg-elevated/30">
+    <div className={`mia-surface overflow-hidden ${compact ? "" : ""}`}>
+      <div className="mia-surface__chrome flex items-start justify-between gap-2 px-2.5 py-1.5">
         <span className="font-mono text-text min-w-0 break-all whitespace-pre-wrap">{formatSqlTraceMeta(fields)}</span>
         {(fields.sqlLogId != null || fields.sql.trim()) && (
           <button
             type="button"
-            className="shrink-0 inline-flex items-center gap-1 text-accent hover:text-accent-hover"
+            className="mia-control shrink-0 inline-flex items-center gap-1"
             onClick={() => setModalOpen(true)}
           >
             <Maximize2 size={12} />
@@ -34,7 +34,7 @@ export function SqlTraceBlock({
         )}
       </div>
       {fields.sql.trim() && (
-        <CodeBlock code={fields.sql} lang="sql" maxHeight={maxHeight} />
+        <CodeBlock code={fields.sql} lang="sql" maxHeight={maxHeight} embedded />
       )}
       {fields.error && (
         <div className="px-2.5 py-1 text-error border-t border-border-subtle break-all whitespace-pre-wrap">{fields.error}</div>

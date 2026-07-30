@@ -1,6 +1,6 @@
 /**
- * Drag preview — same chrome as a resting view chip (grip + label + close)
- * so the label does not jump left inside the measured width.
+ * Drag preview — same underline rail chrome as resting tabs
+ * (grip + label + close), so width/label do not jump while dragging.
  */
 
 import { GripVertical, X } from "lucide-react"

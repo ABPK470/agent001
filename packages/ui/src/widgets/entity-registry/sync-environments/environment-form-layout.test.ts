@@ -78,7 +78,9 @@ describe("environment-form-layout", () => {
     expect(src).toContain("aria-label={label}")
     // The field chrome must not nest interactive Listbox triggers in <label>.
     expect(src).not.toMatch(/<label\b[^>]*className="flex min-w-0 flex-col/)
-    expect(src).not.toContain("overflow-hidden rounded-lg border border-border-subtle bg-elevated/50")
-    expect(src).toContain("overflow-x-clip rounded-lg border border-border-subtle bg-elevated/50")
+    // Modal owns the surface — sections/fields must not nest mia-surface cards.
+    expect(src).not.toMatch(/className=\{?\[["']mia-surface|className="[^"]*mia-surface/)
+    expect(src).toContain("mia-form-section")
+    expect(src).toContain('className="min-w-0"')
   })
 })

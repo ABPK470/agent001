@@ -56,6 +56,7 @@ function chromeForType(type: WidgetType): WidgetChrome {
     || type === "env-sync"
     || type === "live-logs"
     || type === "operation-log"
+    || type === "debug-inspector"
     || type === "sync-admin"
     || type === "bridge"
     || type.startsWith("sync-")

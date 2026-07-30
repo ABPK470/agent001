@@ -53,6 +53,7 @@ import {
   HOME_CHAT_GUTTER_X_CLASS,
   HOME_CHAT_INPUT_DOCK_CLASS,
   CHAT_INPUT_PILL_CLASS,
+  CHAT_INPUT_WIDGET_CLASS,
   USER_GOAL_COLUMN_CLASS,
   USER_GOAL_TO_RESPONSE_GAP_CLASS,
 } from "../app/chatLayout.js"
@@ -196,11 +197,11 @@ function UserGoalBubble({
   onUnpin?: () => void
 }): React.ReactElement {
   const shellClass =
-    "overflow-hidden rounded-2xl border border-border-subtle bg-panel-2 text-[15px] leading-relaxed text-text dark:bg-bubble-user"
+    "overflow-hidden rounded-2xl border border-border-subtle bg-bubble-user text-[15px] leading-relaxed text-text shadow-[var(--shadow-bubble)]"
   const shellStyle = { boxShadow: "var(--shadow-bubble)" }
   const bodyClass = "min-w-0 px-5 py-3"
   const appendageClass =
-    `flex shrink-0 items-center justify-center self-stretch ${userGoalPinSlotClass()} border-r border-border-subtle/70 bg-panel text-text-muted transition-colors hover:bg-panel-2 hover:text-text dark:border-white/8 dark:bg-black/10 dark:hover:bg-bubble-user dark:hover:text-text`
+    `flex shrink-0 items-center justify-center self-stretch ${userGoalPinSlotClass()} border-r border-border-subtle/70 bg-soft text-text-muted transition-colors hover:bg-panel-2 hover:text-text dark:border-white/8 dark:bg-black/10 dark:hover:bg-bubble-user dark:hover:text-text`
 
   // Unpinned: pill caps at column − pin slot (ml-auto), so the left gutter
   // stays outside the pill. Pinned: pin fills that gutter; text does not move.
@@ -588,14 +589,17 @@ function ToolSyncProgressBody({ part }: { part: ResponseSyncProgressPart }) {
       </p>
       {part.detail && <p className={lineClass}>{part.detail}</p>}
       {part.sql?.preview && (
-        <div className="rounded-md border border-border-subtle overflow-hidden">
-          <div className={`px-2.5 py-1 border-b border-border-subtle ${lineClass}`}>
-            {part.sql.label} · {part.sql.connection}
-            {part.sql.rowCount != null ? ` · ${part.sql.rowCount} rows` : ""}
-            {part.sql.durationMs != null ? ` · ${part.sql.durationMs}ms` : ""}
-          </div>
-          <CodeBlock code={part.sql.preview} lang="sql" maxHeight={120} />
-        </div>
+        <CodeBlock
+          code={part.sql.preview}
+          lang="sql"
+          maxHeight={120}
+          label={[
+            part.sql.label,
+            part.sql.connection,
+            part.sql.rowCount != null ? `${part.sql.rowCount} rows` : null,
+            part.sql.durationMs != null ? `${part.sql.durationMs}ms` : null,
+          ].filter(Boolean).join(" · ")}
+        />
       )}
       {resultLine ? (
         <p className={["text-[15px] leading-5 font-mono", part.status === "error" ? "text-error" : "text-text-secondary"].join(" ")}>
@@ -687,25 +691,43 @@ function ToolPill({
       </div>
       {showSyncProgress && syncProgress ? <ToolSyncProgressBody part={syncProgress} /> : null}
       {expanded && (hasInput || hasOutput) && (
-        <div className="ml-[14px] mt-1 pl-3 space-y-2">
-          {hasInput && row.argsFormatted && (
-            <div className="rounded-md border border-border-subtle overflow-hidden">
-              {extractedInput ? (
-                <CodeBlock code={extractedInput.code} lang={extractedInput.lang} maxHeight={176} />
-              ) : (
+        <div className="ml-[14px] mt-1 pl-3 space-y-1.5">
+          {/*
+           * CodeBlock owns the only perimeter for code.
+           * Plain status/args text is not a second framed card.
+           */}
+          {hasInput && row.argsFormatted ? (
+            extractedInput ? (
+              <CodeBlock
+                code={extractedInput.code}
+                lang={extractedInput.lang}
+                maxHeight={176}
+              />
+            ) : (
+              <div className="mia-surface overflow-hidden">
                 <ScrollMaskedDetails text={displayInput} maxHeight={176} />
-              )}
-            </div>
-          )}
-          {hasOutput && row.details && (
-            <div className={`rounded-md border overflow-hidden ${isError ? "border-error/40 bg-error-soft/30" : "border-border-subtle bg-overlay-1"}`}>
-              {extractedOutput ? (
-                <CodeBlock code={extractedOutput.code} lang={extractedOutput.lang} maxHeight={176} />
-              ) : (
-                <ScrollMaskedDetails text={row.details} maxHeight={176} />
-              )}
-            </div>
-          )}
+              </div>
+            )
+          ) : null}
+          {hasOutput && row.details ? (
+            extractedOutput ? (
+              <CodeBlock
+                code={extractedOutput.code}
+                lang={extractedOutput.lang}
+                maxHeight={176}
+                className={isError ? "mia-surface--danger" : undefined}
+              />
+            ) : (
+              <p
+                className={[
+                  "code-pre px-0.5 text-[15px] leading-5 whitespace-pre-wrap break-words",
+                  isError ? "text-error" : "text-text-muted",
+                ].join(" ")}
+              >
+                {row.details}
+              </p>
+            )
+          ) : null}
         </div>
       )}
     </div>
@@ -1908,6 +1930,7 @@ function TermChatInputBar({
   onRemoveAttachment,
   className = "w-[90%]",
   variant = "default",
+  chrome = "pill",
   heroRevealProgress = 1,
   personalReadOnly = false,
 }: {
@@ -1928,6 +1951,8 @@ function TermChatInputBar({
   onRemoveAttachment: (id: string) => void
   className?: string
   variant?: "default" | "hero"
+  /** `flush` = tile already owns the surface (widget mode). */
+  chrome?: "pill" | "flush"
   personalReadOnly?: boolean
   heroRevealProgress?: number
 }) {
@@ -1964,6 +1989,7 @@ function TermChatInputBar({
     onKeyDown(e)
   }
   const isHero = variant === "hero"
+  const chromeClass = chrome === "flush" ? CHAT_INPUT_WIDGET_CLASS : CHAT_INPUT_PILL_CLASS
   // heroRevealProgress is already the post-arrival handoff (0 until the
   // traveling pill has reached Last). Do not re-gate on wall-clock.
   const reveal = clamp01(heroRevealProgress)
@@ -1982,7 +2008,7 @@ function TermChatInputBar({
   return (
       <div
           data-intro-target="termchat-input"
-          className={`${CHAT_INPUT_PILL_CLASS} ${palette || hasResult ? "chathome-chrome-pill--composer-open" : "overflow-hidden"} ${className} mx-auto ${isHero ? "rounded-[24px] px-5 py-4" : "rounded-2xl px-4 py-3"}`}
+          className={`${chromeClass} ${palette || hasResult ? "chathome-chrome-pill--composer-open" : "overflow-hidden"} ${className} mx-auto ${isHero ? "rounded-[24px] px-5 py-4" : chrome === "flush" ? "rounded-none px-3 py-2.5" : "rounded-2xl px-4 py-3"}`}
           style={heroStyle}
       >
           <ChatComposerShell
@@ -2881,6 +2907,7 @@ export function TermChat({
                   onRemoveAttachment={removeAttachment}
                   className="w-full"
                   variant="default"
+                  chrome="flush"
                   heroRevealProgress={heroRevealProgress}
                 />
               </div>
@@ -2948,6 +2975,7 @@ export function TermChat({
               onRemoveAttachment={removeAttachment}
               className="w-full"
               variant={isHomeMode && showEmptyState ? "hero" : "default"}
+              chrome={isHomeMode ? "pill" : "flush"}
               heroRevealProgress={heroRevealProgress}
             />
           </div>

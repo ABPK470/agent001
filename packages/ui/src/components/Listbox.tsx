@@ -269,7 +269,7 @@ export function Listbox<T extends string>({
         onClick={togglePopover}
         className={[
           "group flex w-full min-w-0 items-center gap-2 rounded-md transition-colors text-left text-text overflow-hidden",
-          "focus:outline-none focus:ring-2 focus:ring-accent/40",
+          "focus:outline-none focus:ring-2 focus:ring-border-strong",
           "disabled:opacity-40 disabled:cursor-not-allowed",
           sizeCls, variantCls, className,
         ].join(" ")}

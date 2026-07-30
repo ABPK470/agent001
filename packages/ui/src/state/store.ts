@@ -28,6 +28,7 @@ import {
   traceEntryFromStepStarted,
 } from "../lib/sse-run-trace.js"
 import { isDefaultThreadTitle, threadTitleFromGoal } from "../lib/thread-title.js"
+import { sortThreadsByPinThenUpdatedAt } from "../lib/thread-order.js"
 import { RunStatus } from "../enums"
 import type {
   AuditEntry,
@@ -805,18 +806,15 @@ export const useStore = create<AppState>()(
       threadsPanelOpenNonce: 0,
       threadTitleShellId: null as string | null,
       threadTitleReveal: null as { threadId: string; text: string } | null,
-      setThreads: (threads) => set({ threads }),
+      setThreads: (threads) => set({ threads: sortThreadsByPinThenUpdatedAt(threads) }),
       upsertThread: (thread) =>
         set((s) => {
           const index = s.threads.findIndex((t) => t.id === thread.id)
-          if (index < 0) return { threads: [thread, ...s.threads] }
-          const next = [...s.threads]
-          next[index] = { ...next[index], ...thread }
-          next.sort((a, b) => {
-            if (Boolean(a.pinned) !== Boolean(b.pinned)) return a.pinned ? -1 : 1
-            return b.updatedAt.localeCompare(a.updatedAt)
-          })
-          return { threads: next }
+          const next =
+            index < 0
+              ? [thread, ...s.threads]
+              : s.threads.map((t, i) => (i === index ? { ...t, ...thread } : t))
+          return { threads: sortThreadsByPinThenUpdatedAt(next) }
         }),
       setActiveThreadId: (activeThreadId) => set({ activeThreadId }),
       setThreadSidebarCollapsed: (threadSidebarCollapsed) => set({ threadSidebarCollapsed }),
@@ -871,7 +869,9 @@ export const useStore = create<AppState>()(
       },
       createNewThread: async () => {
         const thread = await api.createThread()
-        set((s) => ({ threads: [thread, ...s.threads] }))
+        set((s) => ({
+          threads: sortThreadsByPinThenUpdatedAt([thread, ...s.threads]),
+        }))
         await get().selectThread(thread.id)
         return thread.id
       },
@@ -939,7 +939,9 @@ export const useStore = create<AppState>()(
       },
       deleteThread: async (threadId) => {
         await api.deleteThread(threadId)
-        const remaining = get().threads.filter((t) => t.id !== threadId)
+        const remaining = sortThreadsByPinThenUpdatedAt(
+          get().threads.filter((t) => t.id !== threadId),
+        )
         const wasActive = get().activeThreadId === threadId
         if (!wasActive) {
           set({ threads: remaining })

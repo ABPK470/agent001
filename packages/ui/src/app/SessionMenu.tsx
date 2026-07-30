@@ -135,7 +135,7 @@ export function SessionMenu({
   const triggerClass =
     chromeVariant === "chat"
       ? CHAT_CHROME_BTN
-      : "relative z-[1] flex h-9 w-9 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-overlay-hover hover:text-text"
+      : "relative z-[1] flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-transparent text-text-muted transition-colors hover:border-border-strong hover:bg-[var(--select-fill)] hover:text-text"
 
   return (
     <>

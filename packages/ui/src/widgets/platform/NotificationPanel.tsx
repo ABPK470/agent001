@@ -252,7 +252,7 @@ export function NotificationPanel() {
   return (
     <div className="relative z-[1]" ref={panelRef}>
       <button
-        className="flex h-9 w-9 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-overlay-3 hover:text-text"
+        className="flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-transparent text-text-muted transition-colors hover:border-border-strong hover:bg-[var(--select-fill)] hover:text-text"
         onClick={() => setOpen((v) => !v)}
         title="Notifications"
       >

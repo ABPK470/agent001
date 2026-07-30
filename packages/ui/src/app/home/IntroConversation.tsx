@@ -646,7 +646,7 @@ export function IntroConversation({
                   return (
                     <div key={i} className="flex justify-end">
                       <div
-                        className="intro3-bubble-user w-fit max-w-[82%] overflow-hidden rounded-2xl border border-border-subtle bg-panel-2 px-5 py-3 text-[15px] leading-relaxed text-text dark:bg-bubble-user"
+                        className="intro3-bubble-user w-fit max-w-[82%] overflow-hidden rounded-2xl border border-border-subtle bg-bubble-user px-5 py-3 text-[15px] leading-relaxed text-text shadow-[var(--shadow-bubble)]"
                         style={{ boxShadow: "var(--shadow-bubble)" }}
                       >
                         {body}

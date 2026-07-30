@@ -357,7 +357,6 @@ export function OperationLog() {
   const { width } = useContainerSize(rootRef)
   const compact = width > 0 && width < 860
   const tiny = width > 0 && width < 480
-  const [statusesOpen, setStatusesOpen] = useState(false)
   const [cancellingId, setCancellingId] = useState<string | null>(null)
 
   const {
@@ -455,8 +454,6 @@ export function OperationLog() {
         searchPending={searchPending}
         compact={compact}
         tiny={tiny}
-        statusesOpen={statusesOpen}
-        setStatusesOpen={setStatusesOpen}
         filteredCount={filtered.length}
         totalCount={pipelines.length}
       />
@@ -489,6 +486,7 @@ export function OperationLog() {
             toggleDay={toggleDay}
             onCancelPipeline={cancelPipeline}
             cancellingId={cancellingId}
+            linear
           />
         )}
 

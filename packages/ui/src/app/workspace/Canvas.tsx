@@ -54,10 +54,10 @@ export const Canvas = forwardRef<CanvasHandle>(function Canvas(_props, ref) {
             </div>
             <button
               type="button"
-              className="flex items-center gap-2 rounded-xl border border-border px-6 py-2.5 text-sm text-text-secondary transition-colors hover:border-text-secondary/25 hover:text-text"
+              className="toolbar-ops-btn shrink-0 px-4"
               onClick={() => setCatalogOpen(true)}
             >
-              <Plus size={16} />
+              <Plus size={15} className="block shrink-0" aria-hidden />
               Add to layout
             </button>
           </div>

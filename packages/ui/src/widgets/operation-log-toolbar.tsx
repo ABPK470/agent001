@@ -12,6 +12,7 @@ import {
   LogWidgetToolbarFilters,
   LogWidgetToolbarSearch,
   LogWidgetToolbarTail,
+  WidgetToolbarFilterMenu,
 } from "./widget-toolbar"
 
 const ALL_STATUSES: OperationStatus[] = ["running", "success", "failed", "cancelled", "skipped"]
@@ -50,8 +51,6 @@ export function OperationLogToolbar({
   searchPending,
   compact,
   tiny,
-  statusesOpen,
-  setStatusesOpen,
   filteredCount,
   totalCount,
 }: {
@@ -65,8 +64,6 @@ export function OperationLogToolbar({
   searchPending: boolean
   compact: boolean
   tiny: boolean
-  statusesOpen: boolean
-  setStatusesOpen: (v: boolean | ((prev: boolean) => boolean)) => void
   filteredCount: number
   totalCount: number
 }) {
@@ -113,58 +110,52 @@ export function OperationLogToolbar({
             )}
           </>
         ) : (
-          <div className="relative shrink-0">
-            <button
-              type="button"
-              onClick={() => setStatusesOpen((v) => !v)}
-              className={`${LOG_TOOLBAR_CHIP} ${
-                statuses.size > 0 ? LOG_TOOLBAR_CHIP_ACTIVE : LOG_TOOLBAR_CHIP_IDLE
-              }`}
-            >
-              <Filter size={13} />
-              {statuses.size === 0 ? "status" : `${statuses.size} status`}
-            </button>
-            {statusesOpen && (
+          <WidgetToolbarFilterMenu
+            active={statuses.size > 0}
+            ariaLabel="Filter by status"
+            label={
               <>
-                <div className="fixed inset-0 z-40" onClick={() => setStatusesOpen(false)} />
-                <div className="absolute left-0 top-full z-50 mt-1 min-w-[168px] rounded-md border border-border bg-elevated py-1 shadow-2xl">
-                  {ALL_STATUSES.map((s) => {
-                    const on = statuses.has(s)
-                    return (
-                      <button
-                        key={s}
-                        type="button"
-                        onClick={() => toggleStatus(s)}
-                        aria-pressed={on}
-                        className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm capitalize transition-colors ${
-                          on
-                            ? statusFilterActiveClass(s)
-                            : "text-text-muted hover:bg-overlay-2 hover:text-text"
-                        }`}
-                      >
-                        <Check
-                          size={14}
-                          className={`shrink-0 ${on ? "opacity-100" : "opacity-0"}`}
-                          aria-hidden
-                        />
-                        {s}
-                      </button>
-                    )
-                  })}
-                  {statuses.size > 0 && (
-                    <button
-                      type="button"
-                      onClick={clearStatuses}
-                      className="flex w-full items-center gap-2 border-t border-border-subtle px-3 py-2 text-sm text-text-muted hover:bg-overlay-2 hover:text-text"
-                    >
-                      <X size={14} />
-                      Clear filters
-                    </button>
-                  )}
-                </div>
+                <Filter size={13} />
+                {statuses.size === 0 ? "status" : `${statuses.size} status`}
               </>
+            }
+          >
+            {ALL_STATUSES.map((s) => {
+              const on = statuses.has(s)
+              return (
+                <button
+                  key={s}
+                  type="button"
+                  role="menuitemcheckbox"
+                  aria-checked={on}
+                  onClick={() => toggleStatus(s)}
+                  className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm capitalize transition-colors ${
+                    on
+                      ? statusFilterActiveClass(s)
+                      : "text-text-muted hover:bg-[var(--select-fill)] hover:text-text"
+                  }`}
+                >
+                  <Check
+                    size={14}
+                    className={`shrink-0 ${on ? "opacity-100" : "opacity-0"}`}
+                    aria-hidden
+                  />
+                  {s}
+                </button>
+              )
+            })}
+            {statuses.size > 0 && (
+              <button
+                type="button"
+                role="menuitem"
+                onClick={clearStatuses}
+                className="flex w-full items-center gap-2 border-t border-border-subtle px-3 py-2 text-sm text-text-muted hover:bg-[var(--select-fill)] hover:text-text"
+              >
+                <X size={14} />
+                Clear filters
+              </button>
             )}
-          </div>
+          </WidgetToolbarFilterMenu>
         )}
       </LogWidgetToolbarFilters>
 

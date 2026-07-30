@@ -2,7 +2,17 @@ import type { JSX, ReactNode } from "react"
 
 import { FIELD_LABEL, META_TEXT } from "./chrome"
 
-export const FORM_SECTION_HEADER = "border-b border-border-subtle bg-accent/5 px-3 py-2.5"
+/**
+ * Form section / field chrome — Strategy, Sync metadata, Connectors, Freeze
+ * windows, Routes, Schedules, Policy, … (~40 modal surfaces).
+ *
+ * Dialect: the modal (or tile) owns the one surface. Sections are titled
+ * blocks separated by hairlines (see `.mia-form-section` in index.css). Field
+ * groups are label + control — never a nested `mia-surface` around either.
+ */
+
+/** @deprecated Header is flush now; kept for any stray imports. */
+export const FORM_SECTION_HEADER = "mb-3"
 
 export function FormFieldGroup({
   label,
@@ -17,11 +27,7 @@ export function FormFieldGroup({
   // wrapping them in <label> is invalid HTML and has blown modal flex layouts
   // when sibling controls (e.g. Restricted checklist) mount beside a Listbox.
   return (
-    <div
-      className="min-w-0 rounded-md border border-border-subtle/70 bg-base/40 p-2.5"
-      role="group"
-      aria-label={label}
-    >
+    <div className="min-w-0" role="group" aria-label={label}>
       <div className="flex min-w-0 flex-col gap-1.5">
         <span className={FIELD_LABEL}>{label}</span>
         <div className="min-w-0">{children}</div>
@@ -45,17 +51,15 @@ export function FormSectionCard({
   return (
     <section
       className={[
-        // Clip corner radius only — do not create a nested scrollport that can
-        // swallow focus-scroll when expanding sections (Restricted checklist).
-        "overflow-x-clip rounded-lg border border-border-subtle bg-elevated/50",
-        emphasized ? "shadow-sm ring-1 ring-inset ring-accent/10" : "",
-      ].join(" ")}
+        "mia-form-section overflow-x-clip",
+        emphasized ? "mia-form-section--emphasized" : "",
+      ].filter(Boolean).join(" ")}
     >
-      <header className={FORM_SECTION_HEADER}>
+      <header className="mb-3">
         <h4 className="text-sm font-semibold text-text">{title}</h4>
         {description ? <p className={`mt-0.5 ${META_TEXT}`}>{description}</p> : null}
       </header>
-      <div className="min-w-0 space-y-3 p-3 [&>*]:shrink-0">{children}</div>
+      <div className="min-w-0 space-y-3 [&>*]:shrink-0">{children}</div>
     </section>
   )
 }

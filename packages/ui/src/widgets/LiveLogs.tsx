@@ -382,7 +382,7 @@ export function LiveLogs() {
             >
               {paused ? <Play size={15} /> : <Pause size={15} />}
               {paused && pendingLiveCount > 0 && (
-                <span className="absolute -top-1.5 -right-1.5 text-xs font-bold bg-error text-text rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-0.5">
+                <span className="absolute -top-1.5 -right-1.5 text-xs font-bold bg-error-soft text-error border border-error/35 rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-0.5">
                   {pendingLiveCount > 99 ? "99+" : pendingLiveCount}
                 </span>
               )}

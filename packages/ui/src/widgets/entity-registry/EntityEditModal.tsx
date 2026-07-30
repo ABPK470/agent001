@@ -12,7 +12,7 @@ import type {
 } from "../../types"
 import { ImportImpactPanel } from "../platform/ImportImpactPanel"
 import { FIELD_LABEL, ICON_BTN, PANEL, SECTION_TITLE, TEXT_BTN, TEXT_BTN_PRIMARY } from "./chrome"
-import { LIST_ROW_ACTIVE } from "../../lib/selection"
+import { LIST_ROW_ACTIVE, LIST_ROW_IDLE } from "../../lib/selection"
 import {
   applySourcePreviewToForm,
   buildEntityEditSections,
@@ -514,7 +514,7 @@ export function EntityEditModal({ mode, initial, reservedEntityIds = [], onClose
                     key={item.id}
                     className={[
                       "border-b border-border-subtle last:border-b-0",
-                      section === item.id ? LIST_ROW_ACTIVE : "",
+                      section === item.id ? LIST_ROW_ACTIVE : LIST_ROW_IDLE,
                     ].join(" ")}
                   >
                     <button

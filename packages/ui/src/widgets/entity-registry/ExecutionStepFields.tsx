@@ -134,7 +134,7 @@ export function ExecutionStepFields({
   }
 
   return (
-    <div className="space-y-3">
+    <div>
       <FormSectionCard
         title="Action"
         description="Catalog action executed when this step runs."

@@ -20,14 +20,15 @@ export const CONFIG_SPLIT_FORM_CLASS =
 
 /** Scroll host for SyncEnvironmentForm — sole vertical scroller in the editor. */
 export const CONFIG_SPLIT_FORM_SCROLL_CLASS =
-  "min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain bg-base/20 p-5"
+  "min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain p-5"
 
-/** SyncEnvironmentForm root — content-sized; scroll lives on the parent pane. */
-export const ENV_FORM_ROOT_CLASS = "h-auto w-full min-w-0 space-y-3"
+/** SyncEnvironmentForm root — content-sized; scroll lives on the parent pane.
+ * No space-y: `.mia-form-section` siblings own their rhythm. */
+export const ENV_FORM_ROOT_CLASS = "h-auto w-full min-w-0"
 
 /** Restricted-policy peer picker — compact block, never flex-grow into the pane. */
 export const ENV_POLICY_ALLOWED_CLASS =
-  "w-full min-w-0 shrink-0 space-y-2 rounded-lg border border-border-subtle bg-base/20 p-3"
+  "w-full min-w-0 shrink-0 space-y-2 rounded-lg border border-border-subtle p-3"
 
 /** Unconstrained split-grid pattern that must not return (regression guard). */
 export const FORBIDDEN_CONFIG_SPLIT_GRID_PATTERN =

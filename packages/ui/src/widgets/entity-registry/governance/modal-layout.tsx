@@ -6,7 +6,7 @@ import { Inbox, MousePointer2, Search, X, type LucideIcon } from "lucide-react"
 import type { JSX, ReactNode } from "react"
 
 import { EmptyState } from "../../../components/EmptyState"
-import { LIST_ROW_ACTIVE } from "../../../lib/selection"
+import { LIST_ROW_ACTIVE, LIST_ROW_IDLE } from "../../../lib/selection"
 import { FORM_HEADING, META_TEXT, PANEL } from "../chrome"
 
 export { FormFieldGroup, FormSectionCard } from "../form-section"
@@ -52,10 +52,11 @@ export function AdminModalCanvas({
 }): JSX.Element {
   const narrow = width !== "full"
   return (
-    <div className="min-h-0 flex-1 overflow-auto bg-base/20">
+    <div className="min-h-0 flex-1 overflow-auto">
       <div
         className={[
-          "w-full space-y-3 p-5",
+          // Sections own their rhythm via `.mia-form-section + .mia-form-section`
+          "w-full p-5",
           narrow ? `mx-auto ${CANVAS_MAX_W[width]}` : "",
         ].join(" ")}
       >
@@ -117,8 +118,8 @@ export function AdminModalEditorHeader({
 
 export function AdminModalEditorBody({ children }: { children: ReactNode }): JSX.Element {
   return (
-    <div className="min-h-0 flex-1 overflow-auto bg-base/20 p-5">
-      <div className="space-y-3">{children}</div>
+    <div className="min-h-0 flex-1 overflow-auto p-5">
+      <div>{children}</div>
     </div>
   )
 }
@@ -216,7 +217,7 @@ export function AdminRailList({
                 className={[
                   "flex items-center gap-2 px-3 py-2 text-sm",
                   index < filtered.length - 1 ? "border-b border-border/20" : "",
-                  selectedId === item.id ? LIST_ROW_ACTIVE : "",
+                  selectedId === item.id ? LIST_ROW_ACTIVE : LIST_ROW_IDLE,
                 ].join(" ")}
               >
                 <button

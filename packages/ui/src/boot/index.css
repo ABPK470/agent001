@@ -11,7 +11,7 @@
    automatically when `data-theme` changes on <html>.
 
    Naming buckets:
-     • Surfaces   canvas | panel | panel-2 | panel-3   (low → high)
+     • Surfaces   canvas | panel | panel-2 | panel-3 | soft   (low → high + soft inset)
      • Overlays   overlay-1 | -2 | -3 | -hover         (subtle → strong)
      • Borders    border-subtle | border | border-strong | border-focus
      • Text       text | text-secondary | text-muted | text-faint
@@ -31,6 +31,7 @@
   --color-panel: var(--panel);
   --color-panel-2: var(--panel-2);
   --color-panel-3: var(--panel-3);
+  --color-soft: var(--soft);
   /* Legacy surface aliases */
   --color-base: var(--canvas);
   --color-surface: var(--panel);
@@ -118,6 +119,7 @@
   --panel: #121214;
   --panel-2: #1c1c1f;
   --panel-3: #27272a;
+  --soft: #1c1c1f;
 
   --overlay-1: rgba(255, 255, 255, 0.025);
   --overlay-2: rgba(255, 255, 255, 0.05);
@@ -189,77 +191,323 @@
 :root[data-theme="light"] {
   color-scheme: light;
 
-  /* Production light — cool zinc paper, crisp white lift.
-     Easy on the eye, clear steps, no warm cream / marketing wash. */
-  --canvas: #f0f1f3;
-  --panel: #f7f8fa;
-  --panel-2: #ffffff;
-  --panel-3: #ffffff;
+  /*
+   * Two-ink light — off-white field + black structure.
+   * No grey plates. Darker borders carry hierarchy / orientation.
+   * Status hues stay only where meaning requires (FAILED, live, …).
+   */
+  --paper: #f3f1ec;
+  --ink: #0a0a0a;
 
-  --overlay-1: rgba(15, 18, 28, 0.03);
-  --overlay-2: rgba(15, 18, 28, 0.05);
-  --overlay-3: rgba(15, 18, 28, 0.08);
-  --overlay-hover: rgba(15, 18, 28, 0.055);
+  --canvas: var(--paper);
+  --panel: var(--paper);
+  --panel-2: var(--paper);
+  --panel-3: var(--paper);
+  --soft: var(--paper);
+  --bg: var(--paper);
 
-  /* Selection dialect — one fill language for active / selected / hover. */
-  --select-fill: color-mix(in srgb, var(--text) 7%, transparent);
-  --hover-fill: color-mix(in srgb, var(--text) 4.5%, transparent);
+  /* No grey washes — hover/select are border or weight, not mud. */
+  --overlay-1: transparent;
+  --overlay-2: transparent;
+  --overlay-3: transparent;
+  --overlay-hover: transparent;
+  --select-fill: transparent;
+  --hover-fill: transparent;
 
-  --border-subtle: rgba(15, 18, 28, 0.08);
-  --border: rgba(15, 18, 28, 0.12);
-  --border-strong: rgba(15, 18, 28, 0.20);
-  --border-focus: rgba(15, 18, 28, 0.32);
+  /* Opaque mixes — rgba fringes read as doubled hairlines on rounded corners. */
+  --border-subtle: color-mix(in srgb, var(--ink) 22%, var(--paper));
+  --border: color-mix(in srgb, var(--ink) 34%, var(--paper));
+  --border-strong: color-mix(in srgb, var(--ink) 55%, var(--paper));
+  --border-focus: color-mix(in srgb, var(--ink) 78%, var(--paper));
 
-  --text: #111113;
-  --text-secondary: #3f3f46;
-  --text-muted: #71717a;
-  --text-faint: #a1a1aa;
-  --text-on-accent: #ffffff;
+  --text: var(--ink);
+  --text-secondary: var(--ink);
+  --text-muted: rgba(10, 10, 10, 0.58);
+  --text-faint: rgba(10, 10, 10, 0.40);
+  --text-on-accent: var(--paper);
 
-  /* Accent — purple sparingly on cool paper */
-  --accent: #5D4FB0;
-  --accent-hover: #4a3e94;
-  --accent-soft: rgba(93, 79, 176, 0.12);
-  --hero-pill-shadow: 0 30px 86px rgba(15, 18, 28, 0.10), 0 12px 30px rgba(15, 18, 28, 0.05);
-  --hero-spotlight-core: rgba(40, 48, 64, 0.08);
-  --hero-spotlight-mid: rgba(40, 48, 64, 0.035);
+  /* Brand / links — ink (not a third decorative hue). */
+  --accent: var(--ink);
+  --accent-hover: var(--ink);
+  --accent-soft: rgba(10, 10, 10, 0.08);
+  --hero-pill-shadow: none;
+  --hero-spotlight-core: transparent;
+  --hero-spotlight-mid: transparent;
 
-  /* Live colon mark — same ink as accent ASCII (admin burger, home corner). */
-  --logo-mark-idle: var(--text);
-  --logo-mark-live: var(--accent);
-  --logo-mark-live-shadow: var(--accent-soft);
+  --logo-mark-idle: var(--ink);
+  --logo-mark-live: var(--ink);
+  --logo-mark-live-shadow: transparent;
 
-  --success: #15803d;
-  --success-soft: rgba(21, 128, 61, 0.12);
-  --warning: #b45309;
-  --warning-soft: rgba(180, 83, 9, 0.12);
-  --error: #b91c1c;
-  --error-soft: rgba(185, 28, 28, 0.10);
-  --info: #1d4ed8;
-  --info-soft: rgba(29, 78, 216, 0.10);
+  /* Status — meaning only; soft = transparent (border/text carry it). */
+  --success: #14532d;
+  --success-soft: transparent;
+  --warning: #7c4a12;
+  --warning-soft: transparent;
+  --error: #7f1d1d;
+  --error-soft: transparent;
+  --info: var(--ink);
+  --info-soft: transparent;
 
-  /* Viewing as — deep bright blue (readable on cool paper). */
-  --viewing-as: #3B45FF;
-  --viewing-as-soft: rgba(59, 69, 255, 0.12);
+  --viewing-as: var(--ink);
+  --viewing-as-soft: transparent;
 
   --scrim: rgba(0, 0, 0, 0.48);
   --scrim-strong: rgba(0, 0, 0, 0.78);
   --scrim-focus: rgba(0, 0, 0, 0.42);
-  --bubble-user: #e8eaee;
-  --shadow-bubble: 0 2px 8px rgba(15, 18, 28, 0.06);
 
-  --dt-int: #1d4ed8;
-  --dt-string: #6d28d9;
-  --dt-date: #b45309;
-  --dt-bool: #be123c;
-  --dt-real: #047857;
-  --dt-bin: #be185d;
+  --bubble-user: var(--paper);
+  --shadow-bubble: none;
 
-  /* Shimmer dark-on-light */
-  --sa: #18181b;
-  --sd: #c4c6cc;
+  --dt-int: var(--ink);
+  --dt-string: var(--ink);
+  --dt-date: var(--ink);
+  --dt-bool: var(--ink);
+  --dt-real: var(--ink);
+  --dt-bin: var(--ink);
 
-  --bg: #f0f1f3;
+  --sa: var(--ink);
+  --sd: rgba(10, 10, 10, 0.18);
+}
+
+
+/* ── Surface / divider / control dialect ───────────────────────────
+ * Surface  — one perimeter (“this is a thing”)
+ * Divider  — hairline inside a surface (never a second frame)
+ * Control  — interactive: idle border → hover/focus border-strong
+ * Never nest surface-in-surface.
+ */
+
+/* Form sections inside a modal/tile — titled blocks, not nested cards.
+ * Parent stacks should not also apply space-y between these (double rhythm). */
+.mia-form-section + .mia-form-section {
+  margin-top: 1.25rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.mia-form-section--emphasized {
+  position: relative;
+  padding-left: 0.75rem;
+}
+
+.mia-form-section--emphasized::before {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 2px;
+  background: var(--color-text);
+}
+
+.mia-surface,
+.mia-code-block {
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background: transparent;
+  box-shadow: none;
+  outline: none;
+}
+
+.mia-surface--danger,
+.mia-code-block.mia-surface--danger {
+  border-color: color-mix(in srgb, var(--error) 45%, var(--border));
+}
+
+.mia-code-block--embedded {
+  border: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+.mia-surface__chrome,
+.mia-code-block__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.mia-code-block__toolbar {
+  padding: 0.25rem 0.75rem;
+}
+
+.mia-code-block__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  line-height: 1.25rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.mia-code-block__label--custom {
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+.mia-code-block__copy {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.125rem 0.375rem;
+  border: 1px solid transparent;
+  border-radius: 0.25rem;
+  font-size: 0.75rem;
+  line-height: 1.25rem;
+  color: var(--text-faint);
+  background: transparent;
+  cursor: pointer;
+  transition: color 120ms ease, border-color 120ms ease;
+}
+
+.mia-code-block__copy:hover {
+  color: var(--text);
+  border-color: var(--border);
+}
+
+.mia-code-block__copy[data-copied] {
+  color: var(--success);
+}
+
+.mia-code-block__body {
+  margin: 0;
+  padding: 0.625rem 0.75rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* Control — bordered interactive chrome (icon buttons, quiet actions). */
+.mia-control {
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background: transparent;
+  color: var(--text-muted);
+  transition: color 120ms ease, border-color 120ms ease;
+}
+
+.mia-control:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.mia-control:focus-visible {
+  outline: none;
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--border-strong) 55%, transparent);
+}
+
+/* Widget title-bar icons — ink only, never a boxed frame. */
+.widget-shell-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border: none;
+  border-radius: 0.375rem;
+  background: transparent;
+  color: var(--text-muted);
+  transition: color 120ms ease;
+}
+
+.widget-shell-icon:hover:not(:disabled) {
+  color: var(--text);
+}
+
+.widget-shell-icon:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--border-strong) 55%, transparent);
+}
+
+.widget-shell-icon--danger:hover:not(:disabled) {
+  color: var(--error);
+}
+
+/* ── Light two-ink: widgets use borders, not grey plates ─────────── */
+:root[data-theme="light"] .trace-dag {
+  --bg: var(--paper);
+}
+
+:root[data-theme="light"] .trace-scope,
+:root[data-theme="light"] .trace-scope.is-soft,
+:root[data-theme="light"] .trace-scope:hover,
+:root[data-theme="light"] .trace-scope.is-soft:hover,
+:root[data-theme="light"] .trace-scope.is-soft.is-open,
+:root[data-theme="light"] .trace-card.is-open > .trace-scope,
+:root[data-theme="light"] .trace-pin__stack > .trace-scope,
+:root[data-theme="light"] .trace-toolbtn:hover,
+:root[data-theme="light"] .trace-copy:hover,
+:root[data-theme="light"] .trace-row__btn:hover {
+  background: transparent;
+}
+
+/* Light Trace rows share the flat list dialect — no per-row frames. */
+:root[data-theme="light"] .trace-card:not(.is-open) > .trace-scope,
+:root[data-theme="light"] .trace-card.is-open > .trace-scope {
+  border: none;
+  border-radius: 0;
+}
+
+:root[data-theme="light"] .trace-scope:hover,
+:root[data-theme="light"] .trace-card:not(.is-open) > .trace-scope:hover {
+  border-color: transparent;
+}
+
+:root[data-theme="light"] .trace-toolbtn[aria-pressed="true"],
+:root[data-theme="light"] .trace-toolbtn.is-active {
+  background: var(--ink);
+  color: var(--paper);
+  border-color: var(--ink);
+}
+
+:root[data-theme="light"] .chathome-chrome-pill {
+  background-color: var(--paper);
+  border-color: var(--border);
+  box-shadow: none;
+}
+
+:root[data-theme="light"] .chathome-chrome-pill:focus-within {
+  border-color: var(--border-strong);
+  --tw-ring-color: transparent;
+}
+
+:root[data-theme="light"] .btn-danger {
+  background: transparent;
+  border-color: var(--error);
+  color: var(--error);
+}
+
+:root[data-theme="light"] .btn-danger:hover:not(:disabled) {
+  background: transparent;
+  border-color: var(--ink);
+  color: var(--ink);
+}
+
+:root[data-theme="light"] .viewing-as-trigger--other {
+  color: var(--paper);
+  background: var(--ink);
+}
+
+:root[data-theme="light"] .viewing-as-trigger--other:hover {
+  color: var(--paper);
+  filter: none;
+  opacity: 0.88;
+}
+
+:root[data-theme="light"] .viewing-as-back-to-me {
+  color: var(--ink);
+  background: transparent;
+  border: 1px solid var(--border);
 }
 
 /* ── Base ──────────────────────────────────────────────────────── */
@@ -314,6 +562,28 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
+/*
+ * Destructive primary — soft fill + brick ink (light and dark).
+ * Prefer this over solid `bg-error` slabs on warm paper.
+ */
+.btn-danger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  border: 1px solid color-mix(in srgb, var(--error) 35%, transparent);
+  border-radius: 0.5rem;
+  background: var(--error-soft);
+  color: var(--error);
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+.btn-danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--error) 15%, transparent);
+}
+.btn-danger:disabled {
+  opacity: 0.5;
+}
+
 /* ── Mobile safe area (notch / home indicator) ─────────────────── */
 
 .safe-area-bottom {
@@ -326,18 +596,22 @@ body {
  */
 .input {
   width: 100%;
-  background: var(--color-panel-2);
+  background: transparent;
   color: var(--color-text);
-  border: 1px solid var(--color-border-subtle);
-  border-radius: 4px;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
   padding: 0.5rem 0.625rem;
   font-size: 0.875rem;
   line-height: 1.45;
   outline: none;
-  transition: border-color 120ms;
+  transition: border-color 120ms ease;
+}
+.input:hover:not(:disabled):not(:focus) {
+  border-color: var(--border-strong);
 }
 .input:focus {
-  border-color: var(--color-accent);
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--border-strong) 55%, transparent);
 }
 .input::placeholder {
   color: var(--color-text-faint);
@@ -347,8 +621,8 @@ body {
   cursor: not-allowed;
 }
 .modal-surface .input {
-  background: var(--color-panel);
-  border-color: var(--color-border);
+  background: transparent;
+  border-color: var(--border);
 }
 
 /* Uppercase form field caption — smaller than body, never competes with values */
@@ -541,17 +815,28 @@ body {
   align-items: center;
   min-width: 0;
   padding: 0.3rem 0.35rem 0.3rem 0.65rem;
-  border-radius: 0.65rem;
-  transition: background-color 160ms ease;
+  border-radius: 0;
+  background: transparent;
+  transition: color 160ms ease;
 }
 
 .entity-rail-item-wrap:hover .entity-rail-item-row,
 .entity-rail-item-wrap--menu-open .entity-rail-item-row {
-  background: var(--hover-fill);
+  background: transparent;
 }
 
 .entity-rail-item-wrap--active .entity-rail-item-row {
-  background: var(--select-fill);
+  background: transparent;
+}
+
+.entity-rail-item-wrap--active .entity-rail-item-row::before {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  inset-block: 0;
+  left: 0;
+  width: 2px;
+  background: var(--ink, var(--color-text));
 }
 
 .entity-rail-item {
@@ -567,6 +852,10 @@ body {
 .entity-rail-item-wrap--active .entity-rail-item {
   padding-right: 1.65rem;
   color: var(--color-text);
+}
+
+.entity-rail-item-wrap--active .entity-rail-item {
+  font-weight: 600;
 }
 
 .entity-rail-item-title {
@@ -1706,11 +1995,12 @@ textarea.input {
   display: flex;
   flex-direction: column;
   /* Three equal bands: metrics/fold → identity → filter */
-  gap: 1rem;
-  padding: 0.6rem 0.5rem 0.75rem;
+  gap: 0.75rem;
+  padding: 0 0 0.75rem;
   margin: 0;
   background: transparent;
-  border-bottom: none;
+  /* Same strip dialect as .widget-toolbar (Event Stream / Pipelines). */
+  border-bottom: 1px solid var(--border-subtle);
   position: relative;
   z-index: 8;
 }
@@ -1775,11 +2065,11 @@ textarea.input {
   max-width: 100%;
   padding: 0.2rem 0.45rem;
   border-radius: 0.3rem;
-  border: 1px solid var(--border-subtle, var(--color-border-subtle));
+  border: 1px solid var(--border, var(--color-border));
   font-size: 0.875rem;
   line-height: 1.35;
   color: var(--text-muted, var(--color-text-muted));
-  background: color-mix(in srgb, var(--text, var(--color-text)) 2.5%, transparent);
+  background: transparent;
 }
 
 .trace-id__label {
@@ -1899,7 +2189,7 @@ textarea.input {
 .trace-flow {
   display: flex;
   flex-direction: column;
-  gap: 0.55rem;
+  gap: 0;
   min-width: 0;
   max-width: 100%;
   padding-top: 0;
@@ -1928,9 +2218,9 @@ textarea.input {
   flex-direction: column;
   gap: 0;
   background: var(--bg);
-  border: 1px solid var(--border, var(--color-border));
-  border-radius: 0.5rem 0.5rem 0 0;
-  border-bottom: none;
+  border: none;
+  border-radius: 0;
+  border-bottom: 1px solid var(--border-subtle, var(--color-border-subtle));
   overflow: hidden;
   box-shadow: none;
 }
@@ -1997,12 +2287,13 @@ textarea.input {
   min-width: 0;
 }
 
+/* Flat outline rows — tile owns the surface; no nested cards. */
 .trace-card {
-  border: 1px solid var(--border, var(--color-border));
-  border-radius: 0.5rem;
+  border: none;
+  border-radius: 0;
   /* visible so More/Less sticky can pin against .trace-scroll */
   overflow: visible;
-  background: var(--bg);
+  background: transparent;
   box-sizing: border-box;
   min-width: 0;
   max-width: 100%;
@@ -2016,13 +2307,12 @@ textarea.input {
 }
 
 .trace-card.is-open > .trace-scope {
-  border-radius: 0.5rem 0.5rem 0 0;
+  border-radius: 0;
 }
 
 /*
- * When this card's header (or a nested scope) is pinned above the scrollport,
- * drop the card's top chrome so the pin stack + body read as one continuous
- * open card (no double top border / floating pill over the body).
+ * Sticky pin stack replaces the in-flow header — keep the open row flush
+ * (no leftover top frame under the pin overlay).
  */
 .trace-card.is-open:has([data-trace-pinned]) {
   border-top: none;
@@ -2186,13 +2476,15 @@ textarea.input {
 }
 
 .trace-card.is-open > .trace-scope {
-  border-bottom: 1px solid var(--border, var(--color-border));
-  background: color-mix(in srgb, var(--text, var(--color-text)) 5%, var(--bg));
+  border: none;
+  border-bottom: 1px solid var(--border-subtle, var(--color-border-subtle));
+  background: transparent;
 }
 
 .trace-card:not(.is-open) > .trace-scope {
-  border: 1px solid var(--border, var(--color-border));
-  border-radius: 0.5rem;
+  border: none;
+  border-bottom: 1px solid var(--border-subtle, var(--color-border-subtle));
+  border-radius: 0;
 }
 
 .trace-card.is-nested {
@@ -3238,7 +3530,10 @@ textarea.input {
   word-break: break-word;
 }
 
-/* ── Widget toolbar — Event Stream, Pipelines, Manual Sync ───── */
+/* ── Widget toolbar — Event Stream, Pipelines, Manual Sync ─────
+ * Tile owns the surface. Toolbar is a divider strip + controls —
+ * never a second framed card inside the shell.
+ */
 .widget-toolbar {
   --wt-control-h: 2rem;
   --wt-gap: 0.5rem;
@@ -3246,10 +3541,12 @@ textarea.input {
   --wt-pad-y: 0.5rem;
   position: relative;
   z-index: 5;
-  border-radius: 0.5rem;
-  border: 1px solid var(--color-border-subtle);
-  background: var(--color-overlay-1);
-  padding: var(--wt-pad-y) var(--wt-pad-x);
+  border: none;
+  border-radius: 0;
+  border-bottom: 1px solid var(--border-subtle);
+  background: transparent;
+  /* Horizontal inset lives on the log shell — toolbar is a strip, not a card. */
+  padding: var(--wt-pad-y) 0;
 }
 
 .widget-toolbar__grid {
@@ -3311,26 +3608,31 @@ textarea.input {
   height: 100%;
   box-sizing: border-box;
   padding: 0 1.75rem 0 2rem;
-  border: 1px solid var(--color-border-subtle);
+  border: 1px solid var(--border);
   border-radius: 0.375rem;
-  background: var(--color-base);
+  background: transparent;
   font-size: 0.8125rem;
   line-height: 1.25;
   color: var(--color-text);
   outline: none;
-  transition: border-color 120ms;
+  transition: border-color 120ms ease;
 }
 
 .widget-toolbar__search-input::placeholder {
   color: color-mix(in srgb, var(--color-text-muted) 55%, transparent);
 }
 
+.widget-toolbar__search-input:hover:not(:disabled):not(:focus) {
+  border-color: var(--border-strong);
+}
+
 .widget-toolbar__search-input:focus {
-  border-color: var(--color-accent);
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--border-strong) 55%, transparent);
 }
 
 .widget-toolbar__search-input--committed {
-  border-color: color-mix(in srgb, var(--color-accent) 45%, var(--color-border-subtle));
+  border-color: var(--border-strong);
 }
 
 .widget-toolbar__search-spinner {
@@ -3418,13 +3720,16 @@ textarea.input {
 
 .widget-toolbar__chip--idle:hover {
   color: var(--color-text);
-  background: var(--hover-fill);
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--border);
 }
 
 .widget-toolbar__chip--active {
-  background: var(--select-fill);
-  color: var(--color-text);
-  font-weight: 500;
+  /* SELECT_* dialect — ink fill, same as Overview|JSON segments */
+  background: var(--color-text);
+  color: var(--color-text-on-accent);
+  font-weight: 600;
+  box-shadow: none;
 }
 
 .widget-toolbar__divider {
@@ -4291,91 +4596,90 @@ textarea.input {
 }
 
 /* ── Workspace: one paper instrument on the page ────────────────────
- * Three clear steps (not dissolve):
- *   page → sheet (layout chrome + gutters) → tiles (product surfaces)
+ * Full-bleed sheet — no page frame around the instrument.
+ * Separation: warm paper → white tiles (real lift + ink borders).
  * Soft tile corners at rest; solo keeps the tile surface, sheds the card frame.
- * Sheet toggle (contrast) inverts sheet↔tile lift for compare.
+ * Sheet toggle (contrast) inverts sheet↔ops / tile lift for compare.
  */
 .workspace-chrome {
   position: relative;
-  --workspace-chrome: var(--canvas);
+  --workspace-chrome: var(--panel);
   --workspace-sheet: var(--panel);
-  --workspace-border: color-mix(in srgb, var(--border) 55%, transparent);
-  --workspace-sheet-shadow:
-    0 1px 0 color-mix(in srgb, var(--text) 4%, transparent),
-    0 8px 24px color-mix(in srgb, var(--text) 5%, transparent);
+  --workspace-border: transparent;
+  --workspace-sheet-shadow: none;
   --workspace-rail-line: color-mix(in srgb, var(--border) 65%, transparent);
-  /* Tiles lift above the sheet so multi-surface layouts don't blend. */
-  --workspace-widget-bg: var(--panel-2);
+  /* Tiles share sheet paper — borders separate; ops strip alone stays bright. */
+  --workspace-widget-bg: var(--panel);
   --workspace-widget-border: var(--border-subtle);
+  /* Right ops band — solid lift vs sheet (not a soft floating pill). */
+  --workspace-ops-bg: var(--panel-2);
   --workspace-tab-active: var(--select-fill);
   --workspace-tab-active-shadow: none;
   --tab-row-height: var(--shell-chrome-row-h);
   --view-chip-radius: 0.375rem;
-  --stage-radius: 0.75rem;
+  --stage-radius: 0;
   --stage-pad: 0.5rem;
   /* Instrument tiles — tighter than soft marketing cards. */
   --widget-radius: 0.5rem;
   --tab-gap: 0.125rem;
-  background: var(--workspace-chrome);
-  /* Quiet page breathe — sheet owns the instrument; pad only for radius/shadow. */
-  padding: 0.375rem;
+  background: var(--workspace-sheet);
+  /* Sheet owns the window — no outer page gutter / hairline frame. */
+  padding: 0;
   box-sizing: border-box;
 }
 
 :root[data-theme="light"] .workspace-chrome {
-  /* Cool grey page → light sheet → white tiles. Crisp steps, readable hairlines. */
-  --workspace-chrome: var(--canvas);
+  /* Paper field throughout; structure from ink borders only. */
+  --workspace-chrome: var(--panel);
   --workspace-sheet: var(--panel);
-  --workspace-widget-bg: var(--panel-2);
+  --workspace-widget-bg: var(--panel);
   --workspace-widget-border: var(--border);
+  --workspace-ops-bg: var(--panel);
   --workspace-rail-line: var(--border);
-  --workspace-border: var(--border);
-  --workspace-sheet-shadow:
-    0 1px 0 rgba(15, 18, 28, 0.04),
-    0 10px 28px rgba(15, 18, 28, 0.06);
+  --workspace-border: transparent;
+  --workspace-sheet-shadow: none;
+  --stage-pad: 0.55rem;
 }
 
 :root[data-theme="dark"] .workspace-chrome {
-  /* Page → sheet (panel) → tiles (panel-2). Clear steps, no muddy mid. */
-  --workspace-chrome: var(--canvas);
+  /* Sheet fills the window → tiles lift one step. */
+  --workspace-chrome: var(--panel);
   --workspace-sheet: var(--panel);
   --workspace-widget-bg: var(--panel-2);
   --workspace-widget-border: color-mix(in srgb, var(--border) 75%, transparent);
-  --workspace-border: color-mix(in srgb, var(--border) 70%, transparent);
+  --workspace-ops-bg: var(--panel-2);
+  --workspace-border: transparent;
   --workspace-rail-line: color-mix(in srgb, var(--border) 80%, transparent);
-  --workspace-sheet-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.04),
-    0 12px 40px rgba(0, 0, 0, 0.55);
+  --workspace-sheet-shadow: none;
 }
 
 /*
- * Sheet toggle — invert sheet↔tile relationship (compare only).
- * Light ON → white sheet, zinc tiles. Dark ON → panel-2 sheet, panel tiles.
+ * Sheet toggle — invert sheet↔ops / compare only.
+ * Light ON → white sheet, warm tiles + warm ops. Dark ON → panel-2 sheet, panel tiles.
  */
 :root[data-theme="light"] .workspace-chrome--contrast {
   --workspace-sheet: var(--panel-2);
-  --workspace-border: var(--border);
-  --workspace-sheet-shadow:
-    0 1px 2px color-mix(in srgb, var(--text) 5%, transparent),
-    0 12px 36px color-mix(in srgb, var(--text) 9%, transparent);
+  --workspace-chrome: var(--panel-2);
+  --workspace-border: transparent;
+  --workspace-sheet-shadow: none;
   --workspace-widget-bg: var(--panel);
+  --workspace-ops-bg: var(--panel);
   --workspace-widget-border: color-mix(in srgb, var(--border) 55%, transparent);
   --workspace-rail-line: color-mix(in srgb, var(--border) 55%, transparent);
 }
 
 :root[data-theme="dark"] .workspace-chrome--contrast {
   --workspace-sheet: var(--panel-2);
+  --workspace-chrome: var(--panel-2);
   --workspace-widget-bg: var(--panel);
+  --workspace-ops-bg: var(--panel);
   --workspace-widget-border: color-mix(in srgb, var(--border) 70%, transparent);
-  --workspace-border: var(--border);
+  --workspace-border: transparent;
   --workspace-rail-line: color-mix(in srgb, var(--border) 70%, transparent);
-  --workspace-sheet-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.06),
-    0 14px 44px rgba(0, 0, 0, 0.6);
+  --workspace-sheet-shadow: none;
 }
 
-/* One paper — rail (layouts) + stage (surfaces). Rail rule separates them. */
+/* Full-bleed paper — rail (layouts) + stage (surfaces). Rail rule separates them. */
 .workspace-sheet {
   position: relative;
   z-index: 1;
@@ -4384,9 +4688,9 @@ textarea.input {
   min-height: 0;
   flex: 1;
   background: var(--workspace-sheet);
-  border: 1px solid var(--workspace-border);
-  border-radius: var(--stage-radius);
-  box-shadow: var(--workspace-sheet-shadow);
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
   overflow: hidden;
 }
 
@@ -4423,18 +4727,32 @@ textarea.input {
 .toolbar-shell {
   position: relative;
   z-index: 2;
-  background: transparent;
-  border-bottom: 1px solid var(--workspace-rail-line);
+  /* Paper bar — same field as sheet / widgets. Ops strip is the bright exception. */
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
 }
 
 .workspace-sheet > .shell-chrome-header {
-  padding-inline: 0.75rem;
+  /* Ops strip owns the right edge — no paper gutter in the corner. */
+  padding-left: 0.75rem;
+  padding-right: 0;
+  gap: 0.75rem;
 }
 
 @media (min-width: 640px) {
   .workspace-sheet > .shell-chrome-header {
-    padding-inline: 1rem;
+    padding-left: 1rem;
+    gap: 1rem;
   }
+}
+
+/* Layouts cluster — flat on the bar; tabs stretch so active underline hits the rail. */
+.toolbar-views {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-self: stretch;
+  align-items: stretch;
 }
 
 /* ── View cluster: content-sized so + hugs the last chip ─────────── */
@@ -4442,20 +4760,22 @@ textarea.input {
   display: flex;
   min-width: 0;
   max-width: 100%;
-  align-items: center;
+  align-items: stretch;
+  align-self: stretch;
   gap: 0.25rem;
 }
 
-/* ── View strip (flat — selection dialect, no recessed trough) ────── */
+/* ── View strip — underline selection (no pill fill) ─────────────── */
 .view-tab-strip {
   position: relative;
   z-index: 1;
   /* Grow 0 / shrink 1 — never expands and orphans the + on the rail edge. */
   flex: 0 1 auto;
   min-width: 0;
-  height: var(--tab-row-height);
-  min-height: var(--tab-row-height);
-  align-items: center;
+  align-self: stretch;
+  height: auto;
+  min-height: 0;
+  align-items: stretch;
   gap: var(--tab-gap);
 }
 
@@ -4479,11 +4799,12 @@ textarea.input {
   position: relative;
   display: inline-flex;
   align-items: center;
-  align-self: center;
+  align-self: stretch;
   gap: 0.35rem;
   flex-shrink: 0;
-  /* Same optical mass as right-rail controls (h-9 / shell row). */
-  height: var(--shell-chrome-row-h);
+  /* Stretch to header bottom so the active underline sits on the rail. */
+  height: auto;
+  min-height: var(--shell-chrome-row-h);
   padding: 0 0.75rem 0 0.5rem;
   font-size: 13px;
   line-height: 1;
@@ -4491,13 +4812,14 @@ textarea.input {
   cursor: pointer;
   user-select: none;
   box-sizing: border-box;
-  border-radius: var(--view-chip-radius);
-  border: 1px solid transparent;
+  border-radius: 0;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
   transition:
     color 140ms ease,
-    background-color 140ms ease,
     border-color 140ms ease,
-    box-shadow 140ms ease;
+    background-color 140ms ease;
 }
 
 .view-tab:active {
@@ -4513,42 +4835,55 @@ textarea.input {
 
 .view-tab--inactive:hover {
   color: var(--text);
-  background: var(--hover-fill);
+  background: transparent;
+  border-bottom-color: color-mix(in srgb, var(--text) 28%, transparent);
 }
 
 .view-tab--active {
   z-index: 1;
   color: var(--text);
   font-weight: 600;
-  background: var(--workspace-tab-active);
-  box-shadow: var(--workspace-tab-active-shadow);
+  background: transparent;
+  box-shadow: none;
+  border-bottom-color: var(--text);
 }
 
 .view-tab--float {
   position: absolute;
-  top: 50%;
-  bottom: auto;
+  top: 0;
+  bottom: 0;
   z-index: 5;
-  height: var(--shell-chrome-row-h);
+  height: auto;
+  min-height: 0;
   margin: 0;
-  transform: translateY(-50%);
+  transform: none;
   pointer-events: none;
   cursor: grabbing;
-  box-shadow:
-    0 4px 16px color-mix(in srgb, var(--text) 12%, transparent),
-    0 0 0 1px color-mix(in srgb, var(--border) 40%, transparent);
+  /* Same underline dialect as the rail — not a floating pill chip. */
+  border-radius: 0;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: var(--panel);
+  box-shadow: none;
 }
 
 .view-tab--float.view-tab--active {
   color: var(--text);
   font-weight: 600;
-  background: var(--workspace-tab-active);
+  background: var(--panel);
+  border-bottom-color: var(--text);
 }
 
 .view-tab--float.view-tab--inactive {
   color: var(--text);
   font-weight: 600;
   background: var(--panel);
+  border-bottom-color: color-mix(in srgb, var(--text) 28%, transparent);
+}
+
+.view-tab--float .view-tab__grip {
+  opacity: 0.7;
+  cursor: grabbing;
 }
 
 .view-tab__grip {
@@ -4611,9 +4946,18 @@ textarea.input {
 }
 
 .view-tab-add {
-  height: var(--shell-chrome-row-h) !important;
+  height: auto !important;
+  min-height: var(--shell-chrome-row-h) !important;
   width: var(--shell-chrome-row-h) !important;
-  border-radius: var(--view-chip-radius) !important;
+  align-self: stretch !important;
+  border-radius: 0 !important;
+  border-bottom: 2px solid transparent !important;
+}
+
+.view-tab-add:hover {
+  color: var(--text) !important;
+  background: transparent !important;
+  border-bottom-color: color-mix(in srgb, var(--text) 28%, transparent) !important;
 }
 
 
@@ -4721,7 +5065,13 @@ textarea.input {
   translate: 0 -1px;
 }
 
-/* Inside the ops tray only — stage | session. */
+/* Lockup MI:A — colon shares letter box height; do not apply toolbar nudge. */
+.intro3-brand-sequence .toolbar-brand-logo,
+.intro3-wm-colon-anchor .mia-colon-logo {
+  translate: none;
+}
+
+/* Inside the ops cluster only — stage | session. */
 .toolbar-shell-divider {
   width: 1px;
   height: 1.25rem;
@@ -4732,16 +5082,77 @@ textarea.input {
   background: color-mix(in srgb, var(--text-faint) 32%, var(--border) 68%);
 }
 
-/* Right chrome: one quiet tray — surface is the seam vs the view strip. */
+/*
+ * Ops — bright white strip (only exception to paper). Full-height rule vs layouts.
+ * Controls stay outlined.
+ */
 .toolbar-ops-tray {
   display: flex;
   flex-shrink: 0;
+  align-self: stretch;
   align-items: center;
-  gap: 0.15rem;
+  gap: 0.35rem;
+  box-sizing: border-box;
+  padding-left: 0.85rem;
+  /* Match left header inset so controls breathe; white fill goes edge-to-edge. */
+  padding-right: 0.75rem;
+  border-radius: 0;
+  background: var(--workspace-ops-bg);
+  border: none;
+  border-left: 1px solid var(--border);
+}
+
+@media (min-width: 640px) {
+  .toolbar-ops-tray {
+    padding-right: 1rem;
+  }
+}
+
+.toolbar-ops-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
   height: var(--shell-chrome-row-h);
-  padding-inline: 0.2rem;
+  box-sizing: border-box;
+  border: 1px solid var(--border);
   border-radius: var(--view-chip-radius);
-  background: var(--overlay-2);
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1;
+  transition: color 120ms ease, background-color 120ms ease, border-color 120ms ease;
+}
+
+.toolbar-ops-btn:hover {
+  color: var(--text);
+  background: transparent;
+  border-color: var(--border-strong);
+}
+
+.toolbar-ops-btn[aria-pressed="true"],
+.toolbar-ops-btn--active {
+  color: var(--text);
+  background: transparent;
+  border-color: var(--border-strong);
+  box-shadow: inset 0 0 0 1px var(--text);
+}
+
+/* Session triggers live in nested wrappers — same outline dialect. */
+.toolbar-ops-tray .relative > button:not(.viewing-as-trigger--other) {
+  border: 1px solid var(--border);
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-secondary);
+  border-radius: var(--view-chip-radius);
+  transition: color 120ms ease, background-color 120ms ease, border-color 120ms ease;
+}
+
+.toolbar-ops-tray .relative > button:not(.viewing-as-trigger--other):hover {
+  color: var(--text);
+  background: transparent;
+  border-color: var(--border-strong);
 }
 
 /* ── Mobile ────────────────────────────────────────────────────── */
@@ -5018,6 +5429,7 @@ textarea.input {
   --chathome-scroll-fade-edge: 1.125rem;
 }
 :root[data-theme="light"] .chathome {
+  /* Warm paper field; white pills + soft tool fills sit on top. */
   background: var(--panel);
   --chathome-scroll-fade: var(--panel);
 }
@@ -5108,17 +5520,17 @@ textarea.input {
 }
 
 /* Chathome chrome pills — input bar (+ expanded thread sidebar chrome).
- * Light: same fill as chat stage (--panel), edge from border — not a white card. */
+ * Light: white lift on warm paper — clear edge, not a soft twin of the field. */
 :root[data-theme="light"] .chathome-chrome-pill {
-  background-color: var(--panel);
-  border-color: rgba(30, 25, 20, 0.16);
-  box-shadow: none;
+  background-color: var(--panel-2);
+  border-color: rgba(20, 18, 16, 0.20);
+  box-shadow: 0 1px 2px rgba(20, 18, 16, 0.04), 0 4px 14px rgba(20, 18, 16, 0.05);
   --tw-ring-color: transparent;
 }
 
 :root[data-theme="light"] .chathome-chrome-pill:focus-within {
-  border-color: rgba(30, 25, 20, 0.26);
-  --tw-ring-color: rgba(30, 25, 20, 0.06);
+  border-color: rgba(20, 18, 16, 0.34);
+  --tw-ring-color: rgba(20, 18, 16, 0.08);
 }
 
 /* ── Chat composer (collapsed pill · expands on `/` or command output) ─ */

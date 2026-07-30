@@ -61,23 +61,29 @@ export function WidgetCatalog({ onClose }: Props) {
               title={isAllowed ? undefined : "Available to admins only"}
               className={`relative flex items-center gap-3.5 rounded-xl text-left p-4 transition-colors border ${
                 !isAllowed
-                  ? "border-border-subtle bg-overlay-1 opacity-45 cursor-not-allowed"
+                  ? "border-border text-text-faint opacity-45 cursor-not-allowed"
                   : isActive
-                    ? "border-border-subtle bg-[var(--select-fill)] cursor-pointer"
-                    : "border-border-subtle bg-overlay-1 hover:bg-[var(--hover-fill)] cursor-pointer"
+                    ? "border-border-strong bg-panel cursor-pointer shadow-[inset_0_0_0_1px_var(--text)]"
+                    : "border-border bg-panel text-text-muted hover:border-border-strong hover:text-text cursor-pointer"
               }`}
               onClick={() => { if (isAllowed) handleToggle(item.type) }}
             >
-              <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
-                isActive && isAllowed ? "bg-[var(--select-fill)]" : "bg-overlay-2"
+              <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 border ${
+                isActive && isAllowed
+                  ? "border-border-strong text-text"
+                  : "border-border text-text-muted"
               }`}>
-                <Icon size={18} className={isActive && isAllowed ? "text-text" : "text-text-muted"} />
+                <Icon size={18} className="block shrink-0" />
               </div>
               <div className="flex-1 min-w-0">
-                <span className={`text-sm font-medium block ${isActive && isAllowed ? "text-text" : "text-text"}`}>
+                <span className={`text-sm font-medium block ${
+                  isActive && isAllowed ? "text-text" : "text-text-secondary"
+                }`}>
                   {item.label}
                 </span>
-                <span className="text-[13px] text-text-muted leading-snug block mt-0.5">
+                <span className={`text-[13px] leading-snug block mt-0.5 ${
+                  isActive && isAllowed ? "text-text-secondary" : "text-text-muted"
+                }`}>
                   {item.desc}
                 </span>
               </div>

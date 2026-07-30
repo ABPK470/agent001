@@ -368,13 +368,13 @@ function CompactCodeBlock({ lang, text }: { lang: string; text: string }) {
     }).catch((err: unknown) => { console.error("[mia]", err) })
   }, [text])
   return (
-    <div className="group relative my-1.5 w-full min-w-0 rounded-md border border-border-subtle overflow-hidden">
+    <div className="mia-code-block group relative my-1.5 w-full min-w-0">
       {showLang && (
-        <div className="px-3 pt-1.5 text-[10.5px] font-mono uppercase tracking-[0.08em] text-text-muted">
-          {lang}
+        <div className="mia-code-block__toolbar">
+          <span className="mia-code-block__label">{lang}</span>
         </div>
       )}
-      <pre className="px-3 py-2 text-[15px] leading-relaxed font-mono text-text-muted overflow-x-auto whitespace-pre">
+      <pre className="mia-code-block__body text-[15px] leading-relaxed font-mono text-text-muted overflow-x-auto whitespace-pre">
         {text}
       </pre>
       <button
@@ -384,7 +384,7 @@ function CompactCodeBlock({ lang, text }: { lang: string; text: string }) {
         aria-label={copied ? "Copied" : "Copy code"}
         className={[
           "absolute top-1.5 right-1.5 inline-flex items-center justify-center w-7 h-7 rounded-md",
-          "text-text-muted hover:text-text hover:bg-overlay-3",
+          "mia-control",
           "transition-opacity duration-150",
           copied ? "opacity-100" : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100",
         ].join(" ")}
@@ -554,20 +554,20 @@ export function SmartAnswer({
             }
           }
           return (
-            <div key={bi} className={[compact ? "" : "rounded-lg overflow-hidden border border-border-subtle", wrapClass].join(" ")}>
+            <div key={bi} className={wrapClass}>
               {compact ? (
                 <CompactCodeBlock lang={b.lang} text={b.text} />
               ) : (
-                <>
+                <div className="mia-code-block">
                   {b.lang && (
-                    <div className="px-3 py-1 text-base text-text-muted font-mono border-b border-border-subtle tracking-wide">
-                      {b.lang}
+                    <div className="mia-code-block__toolbar">
+                      <span className="mia-code-block__label">{b.lang}</span>
                     </div>
                   )}
-                  <pre className="px-3 py-2.5 text-base font-mono text-text-secondary overflow-x-auto leading-relaxed">
+                  <pre className="mia-code-block__body text-base font-mono text-text-secondary overflow-x-auto leading-relaxed">
                     {b.text}
                   </pre>
-                </>
+                </div>
               )}
             </div>
           )

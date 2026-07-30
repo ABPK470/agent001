@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest"
 import {
+  CHAT_INPUT_PILL_CLASS,
+  CHAT_INPUT_WIDGET_CLASS,
   HOME_CHAT_COLUMN_CLASS,
   HOME_CHAT_GUTTER_X_CLASS,
   HOME_CHAT_INPUT_DOCK_CLASS,
@@ -31,5 +33,11 @@ describe("chatLayout — home + TermChat alignment", () => {
     expect(HOME_CHAT_GUTTER_X_CLASS).toBe("px-6")
     expect(HOME_CHAT_INPUT_DOCK_CLASS).toContain("px-6")
     expect(HOME_CHAT_INPUT_DOCK_CLASS).toContain("pb-4")
+  })
+
+  it("home composer is a pill; widget composer is flush (tile owns the surface)", () => {
+    expect(CHAT_INPUT_PILL_CLASS).toContain("border border-border")
+    expect(CHAT_INPUT_PILL_CLASS).not.toContain("ring-")
+    expect(CHAT_INPUT_WIDGET_CLASS).toContain("border-0")
   })
 })

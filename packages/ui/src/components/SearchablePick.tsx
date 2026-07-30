@@ -155,8 +155,8 @@ export function SearchablePick({
         aria-haspopup="listbox"
         aria-expanded={open}
         className={[
-          "listbox-control group flex w-full min-w-0 items-center gap-2 rounded-md border border-border bg-base text-left text-text transition-colors",
-          "hover:bg-elevated hover:border-border-focus focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/40",
+          "listbox-control group flex w-full min-w-0 items-center gap-2 rounded-md border border-border bg-transparent text-left text-text transition-colors",
+          "hover:border-border-strong focus-within:border-border-focus focus-within:ring-2 focus-within:ring-border-strong",
           disabled ? "cursor-not-allowed opacity-40" : "",
           sizeCls,
           className,

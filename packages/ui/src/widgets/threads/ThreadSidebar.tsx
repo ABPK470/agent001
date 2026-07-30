@@ -8,6 +8,7 @@ import { Logo } from "../../components/Logo"
 import { api } from "../../client/index"
 import { TruncationHint, isTextTruncated } from "../../components/TruncationHint"
 import { placeAnchoredPanelForElements } from "../../lib/anchored-panel"
+import { sortThreadsByPinThenUpdatedAt } from "../../lib/thread-order"
 import { useStore } from "../../state/store"
 import type { Thread } from "../../types"
 
@@ -349,9 +350,10 @@ function ThreadRailList({
   drawerClose?: () => void
   sidebarExpanded?: boolean
 }) {
+  const ordered = sortThreadsByPinThenUpdatedAt(threads)
   return (
     <div className="thread-rail-list min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
-      {threads.map((thread) => (
+      {ordered.map((thread) => (
         <ThreadRailItem
           key={thread.id}
           thread={thread}
@@ -492,13 +494,13 @@ export function ThreadRailBrandExpand({
         className={[
           "pointer-events-none absolute left-1/2 top-1/2 z-0 flex h-9 w-9",
           "-translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-lg",
-          "bg-panel/72 text-text-muted backdrop-blur",
+          "border border-border bg-panel text-text",
           "opacity-0 transition-opacity duration-200",
           "group-hover:opacity-100 group-focus-visible:opacity-100",
         ].join(" ")}
         aria-hidden
       >
-        <PanelLeftOpen size={15} strokeWidth={1.75} className="block shrink-0" />
+        <PanelLeftOpen size={15} strokeWidth={2.25} className="block shrink-0" />
       </span>
     </button>
   )

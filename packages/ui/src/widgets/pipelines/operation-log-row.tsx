@@ -70,32 +70,32 @@ export function statusTextClass(status: OperationStatus): string {
 export function statusSoftBgClass(status: OperationStatus): string {
   switch (status) {
     case "success":
-      return "bg-success-soft"
+      return "border border-success/50 bg-transparent"
     case "failed":
-      return "bg-error-soft"
+      return "border border-error/50 bg-transparent"
     case "skipped":
-      return "bg-warning-soft"
+      return "border border-warning/50 bg-transparent"
     case "running":
-      return "bg-info-soft"
+      return "border border-border-strong bg-transparent"
     default:
-      return "bg-overlay-2"
+      return "border border-border bg-transparent"
   }
 }
 
 export function statusFilterActiveClass(status: OperationStatus): string {
   switch (status) {
     case "success":
-      return "ring-1 ring-inset ring-success/50 bg-success-soft text-success font-medium"
+      return "ring-1 ring-inset ring-success text-success font-medium bg-transparent"
     case "failed":
-      return "ring-1 ring-inset ring-error/50 bg-error-soft text-error font-medium"
+      return "ring-1 ring-inset ring-error text-error font-medium bg-transparent"
     case "skipped":
-      return "ring-1 ring-inset ring-warning/50 bg-warning-soft text-warning font-medium"
+      return "ring-1 ring-inset ring-warning text-warning font-medium bg-transparent"
     case "running":
-      return "ring-1 ring-inset ring-info/50 bg-info-soft text-info font-medium"
+      return "ring-1 ring-inset ring-border-strong text-text font-medium bg-transparent"
     case "cancelled":
-      return "ring-1 ring-inset ring-border-strong bg-panel-3 text-text-secondary font-medium"
+      return "ring-1 ring-inset ring-border-strong text-text font-medium bg-transparent"
     default:
-      return "ring-1 ring-inset ring-border bg-overlay-2 text-text-muted font-medium"
+      return "ring-1 ring-inset ring-border text-text-muted font-medium bg-transparent"
   }
 }
 export const OP_LOG_MUTED = "text-text-muted"

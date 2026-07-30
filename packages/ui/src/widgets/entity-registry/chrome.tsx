@@ -3,9 +3,9 @@ export const RAIL_WIDTH = "12.5rem"
 
 export const RAIL_GRID = `grid-cols-[${RAIL_WIDTH}_1fr]` as const
 
-/** Quiet bordered icon control — hover wash, never accent fill. */
+/** Quiet bordered icon control — hover strengthens the frame, never a grey wash. */
 export const ICON_BTN =
-  "flex items-center justify-center w-9 h-9 shrink-0 rounded-lg border border-border-subtle text-text-muted transition-colors hover:bg-[var(--hover-fill)] hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 disabled:opacity-40 disabled:cursor-not-allowed"
+  "mia-control flex items-center justify-center w-9 h-9 shrink-0 text-text-muted focus-visible:outline-none disabled:opacity-40 disabled:cursor-not-allowed"
 
 /**
  * @deprecated Solid accent icon squares broke the dialect (purple next to grey +).
@@ -43,9 +43,16 @@ export const TAB_PANEL_HEADER =
 
 export const TOOLBAR_TRACK_DIVIDER = "mx-0.5 h-6 w-px shrink-0 self-center bg-border-subtle"
 
-/** Bordered content shell — rounded corners on the container, not on icon buttons. */
-export const PANEL =
-  "overflow-hidden rounded-lg border border-border-subtle"
+/**
+ * Bordered content shell — for floating surfaces (modals, popovers).
+ * Never nest inside a tile that already owns `mia-surface` / widget shell.
+ */
+export const PANEL = "mia-surface overflow-hidden"
+
+/**
+ * Flush list inside a tile/tab — tile owns the frame; rows use hairline dividers.
+ */
+export const LIST_FLUSH = "overflow-hidden"
 
 /**
  * Admin split shell — flush with the workspace tile (no nested canvas card).
@@ -92,7 +99,7 @@ export const ACTION_BTN =
   "inline-flex items-center justify-center gap-2 rounded-lg bg-accent px-3 py-2 text-sm font-medium text-text-on-accent transition-colors hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed"
 
 export const TEXT_BTN =
-  "inline-flex items-center gap-1.5 rounded-lg border border-border-subtle px-2.5 py-1.5 text-sm font-medium text-text-muted transition-colors hover:bg-[var(--hover-fill)] hover:text-text disabled:opacity-40"
+  "mia-control inline-flex items-center gap-1.5 px-2.5 py-1.5 text-sm font-medium disabled:opacity-40"
 
 export const TEXT_BTN_PRIMARY =
   "inline-flex items-center gap-1.5 rounded-lg bg-accent px-2.5 py-1.5 text-sm font-medium text-text-on-accent transition-colors hover:bg-accent-hover disabled:opacity-40"

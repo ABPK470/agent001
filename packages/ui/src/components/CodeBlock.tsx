@@ -1,14 +1,10 @@
 /**
- * CodeBlock — formatted code display with language badge, copy button,
- * and basic SQL keyword highlighting.
- *
- * Keep this module lean: tool-trace helpers live in tool-code-display.tsx so
- * importing CodeBlock does not pull DataTable / JsonViewer / shared-types.
+ * CodeBlock — one surface for code: perimeter + toolbar divider + body.
+ * Never nest inside another bordered frame — pass this as the surface.
  */
 
 import { Check, Copy } from "lucide-react"
 import { useMemo, useState } from "react"
-import { CODE_THEME } from "./code-theme"
 import { SqlHighlight } from "./SqlHighlight"
 import { SQL_HIGHLIGHT_MAX_CHARS } from "./sql-highlight"
 
@@ -39,13 +35,31 @@ export function CodeBlock({
   code,
   lang = "text",
   maxHeight = 256,
+  toolbar = true,
+  embedded = false,
+  label: labelProp,
+  className,
 }: {
   code: string
   lang?: string
   maxHeight?: number
+  /** Language badge + Copy row. Set false when the parent supplies chrome. */
+  toolbar?: boolean
+  /**
+   * Nested inside a parent that already owns the surface perimeter.
+   * Drops border/radius — only toolbar divider + body remain.
+   */
+  embedded?: boolean
+  /** Override the toolbar label (e.g. sync meta). Skips lang uppercasing. */
+  label?: string
+  className?: string
 }) {
   const [copied, setCopied] = useState(false)
-  const label = LANG_LABEL[lang] ?? lang.toUpperCase()
+  const langLabel = LANG_LABEL[lang] ?? lang.toUpperCase()
+  const label = labelProp ?? (langLabel || "code")
+  const labelClass = labelProp
+    ? "mia-code-block__label mia-code-block__label--custom"
+    : "mia-code-block__label"
   const highlightSql = lang === "sql" && code.length <= SQL_HIGHLIGHT_MAX_CHARS
   const body = useMemo(
     () => (highlightSql ? <SqlHighlight code={code} /> : code),
@@ -59,32 +73,29 @@ export function CodeBlock({
   }
 
   return (
-    <div className="rounded-lg overflow-hidden" style={{ border: `1px solid ${CODE_THEME.border}` }}>
-      <div
-        className="flex items-center justify-between px-3 py-1"
-        style={{ borderBottom: `1px solid ${CODE_THEME.border}` }}
-      >
-        <span
-          className="text-xs font-mono uppercase tracking-widest"
-          style={{ color: CODE_THEME.dim }}
-        >
-          {label || "code"}
-        </span>
-        <button
-          type="button"
-          className="flex items-center gap-1 px-1.5 py-0.5 rounded text-xs cursor-pointer transition-colors hover:bg-overlay-2"
-          style={{ color: copied ? CODE_THEME.success : CODE_THEME.dim }}
-          onClick={copy}
-          title="Copy to clipboard"
-        >
-          {copied ? <Check size={12} /> : <Copy size={12} />}
-          <span>{copied ? "Copied" : "Copy"}</span>
-        </button>
-      </div>
-      <pre
-        className="code-pre px-3 py-2.5 overflow-auto whitespace-pre-wrap break-all"
-        style={{ maxHeight }}
-      >
+    <div
+      className={[
+        "mia-code-block",
+        embedded ? "mia-code-block--embedded" : null,
+        className,
+      ].filter(Boolean).join(" ")}
+    >
+      {toolbar ? (
+        <div className="mia-code-block__toolbar">
+          <span className={labelClass}>{label}</span>
+          <button
+            type="button"
+            className="mia-code-block__copy"
+            data-copied={copied || undefined}
+            onClick={copy}
+            title="Copy to clipboard"
+          >
+            {copied ? <Check size={12} /> : <Copy size={12} />}
+            <span>{copied ? "Copied" : "Copy"}</span>
+          </button>
+        </div>
+      ) : null}
+      <pre className="mia-code-block__body code-pre" style={{ maxHeight }}>
         {body}
       </pre>
     </div>

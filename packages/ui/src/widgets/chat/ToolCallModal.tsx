@@ -23,21 +23,21 @@ export function ToolIoBlock({
   maxHeight?: number
 }) {
   return (
-    <div className={`rounded-md border border-border-subtle overflow-hidden ${compact ? "text-xs" : "text-sm"}`}>
-      <div className="px-2.5 py-1.5 border-b border-border-subtle bg-elevated/30 font-mono text-text-muted text-xs">
+    <div className={`mia-surface overflow-hidden ${compact ? "text-xs" : "text-sm"}`}>
+      <div className="mia-surface__chrome px-2.5 py-1.5 font-mono text-text-muted text-xs">
         {formatToolIoMeta(io)}
       </div>
       {io.inputFormatted && (
-        <div className="border-b border-border-subtle">
-          <div className="px-2.5 py-1 text-[10px] uppercase tracking-wide text-text-muted/60">Input</div>
-          <CodeBlock code={io.inputFormatted} lang="json" maxHeight={maxHeight} />
-        </div>
+        <CodeBlock code={io.inputFormatted} lang="json" maxHeight={maxHeight} embedded />
       )}
       {io.outputText && io.status === "success" && (
-        <div className="border-b border-border-subtle">
-          <div className="px-2.5 py-1 text-[10px] uppercase tracking-wide text-text-muted/60">Output</div>
-          <CodeBlock code={io.outputText} lang="text" maxHeight={maxHeight} />
-        </div>
+        <CodeBlock
+          code={io.outputText}
+          lang="text"
+          maxHeight={maxHeight}
+          embedded
+          className="border-t border-border-subtle"
+        />
       )}
       {io.error && (io.status === "failed" || io.status === "skipped") && (
         <div className={`px-2.5 py-1.5 text-xs border-t border-border-subtle ${io.status === "skipped" ? "text-warning" : "text-error"}`}>
