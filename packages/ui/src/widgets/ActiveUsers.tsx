@@ -1054,7 +1054,7 @@ function UserDetail({ user, liveRuns, history, stack, adminBusy, onToggleAdmin, 
     const active = runSort === k
     return (
       <th
-        className={`py-2 px-3 au-label font-semibold cursor-pointer select-none whitespace-nowrap transition-colors bg-canvas ${active ? "text-text" : "text-text-muted/50 hover:text-text-muted"} ${right ? "text-right" : "text-left"}`}
+        className={`py-2 px-3 au-label font-semibold cursor-pointer select-none whitespace-nowrap transition-colors bg-[var(--workspace-widget-bg,var(--panel-2))] ${active ? "text-text" : "text-text-muted/50 hover:text-text-muted"} ${right ? "text-right" : "text-left"}`}
         onClick={() => onRunSort(k)}
       >
         {label}
@@ -1302,17 +1302,17 @@ function UserDetail({ user, liveRuns, history, stack, adminBusy, onToggleAdmin, 
           ) : (
             <div className="au-run-table-wrap min-w-0">
               <table className="w-full border-collapse">
-                <thead className="sticky top-0 z-[16] bg-canvas">
-                  <tr className="bg-canvas">
-                    <th className="py-2 px-3 w-6 bg-canvas" onClick={() => onRunSort("status")} />
-                    <th className="py-2 px-3 text-left au-label font-semibold text-text-muted/50 cursor-default bg-canvas">Run</th>
+                <thead className="sticky top-0 z-[16] bg-[var(--workspace-widget-bg,var(--panel-2))]">
+                  <tr className="bg-[var(--workspace-widget-bg,var(--panel-2))]">
+                    <th className="py-2 px-3 w-6 bg-[var(--workspace-widget-bg,var(--panel-2))]" onClick={() => onRunSort("status")} />
+                    <th className="py-2 px-3 text-left au-label font-semibold text-text-muted/50 cursor-default bg-[var(--workspace-widget-bg,var(--panel-2))]">Run</th>
                     <RSortTh k="started"  label="Started" />
                     <RSortTh k="duration" label="Duration" right />
                     <RSortTh k="steps"    label="Steps" right />
                     <RSortTh k="tokens"   label="Tokens" right />
                     <RSortTh k="llmCalls" label="LLM Calls" right />
                     <RSortTh k="model"    label="Model" />
-                    <th className="py-2 px-3 text-left au-label font-semibold text-text-muted/50 cursor-default bg-canvas">Goal</th>
+                    <th className="py-2 px-3 text-left au-label font-semibold text-text-muted/50 cursor-default bg-[var(--workspace-widget-bg,var(--panel-2))]">Goal</th>
                   </tr>
                 </thead>
                 <tbody>

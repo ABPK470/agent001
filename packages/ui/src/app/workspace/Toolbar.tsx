@@ -259,7 +259,7 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
           {float && <ViewTabDragFloat float={float} />}
         </div>
 
-        {/* Pinned — never scrolls away with the view chips. */}
+        {/* Pinned — new blank layout; surfaces come from Add (catalog modal). */}
         <button
           type="button"
           className={[

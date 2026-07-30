@@ -189,40 +189,40 @@
 :root[data-theme="light"] {
   color-scheme: light;
 
-  /* Warm paper — page is the lightest (Coder-like). Sheet steps down
-     slightly; tiles lift warm-white. No muddy darker mat around the app. */
-  --canvas: #faf8f5;
-  --panel: #f3efe9;
-  --panel-2: #fcfaf7;
-  --panel-3: #fcfaf7;
+  /* Production light — cool zinc paper, crisp white lift.
+     Easy on the eye, clear steps, no warm cream / marketing wash. */
+  --canvas: #f0f1f3;
+  --panel: #f7f8fa;
+  --panel-2: #ffffff;
+  --panel-3: #ffffff;
 
-  --overlay-1: rgba(40, 30, 20, 0.03);
-  --overlay-2: rgba(40, 30, 20, 0.05);
-  --overlay-3: rgba(40, 30, 20, 0.08);
-  --overlay-hover: rgba(40, 30, 20, 0.05);
+  --overlay-1: rgba(15, 18, 28, 0.03);
+  --overlay-2: rgba(15, 18, 28, 0.05);
+  --overlay-3: rgba(15, 18, 28, 0.08);
+  --overlay-hover: rgba(15, 18, 28, 0.055);
 
   /* Selection dialect — one fill language for active / selected / hover. */
-  --select-fill: color-mix(in srgb, var(--text) 8%, transparent);
-  --hover-fill: color-mix(in srgb, var(--text) 5%, transparent);
+  --select-fill: color-mix(in srgb, var(--text) 7%, transparent);
+  --hover-fill: color-mix(in srgb, var(--text) 4.5%, transparent);
 
-  --border-subtle: rgba(40, 30, 20, 0.08);
-  --border: rgba(40, 30, 20, 0.12);
-  --border-strong: rgba(40, 30, 20, 0.20);
-  --border-focus: rgba(40, 30, 20, 0.30);
+  --border-subtle: rgba(15, 18, 28, 0.08);
+  --border: rgba(15, 18, 28, 0.12);
+  --border-strong: rgba(15, 18, 28, 0.20);
+  --border-focus: rgba(15, 18, 28, 0.32);
 
-  --text: #1a1a1a;
-  --text-secondary: #2e2a26;
-  --text-muted: #5c564e;
-  --text-faint: #8a837a;
+  --text: #111113;
+  --text-secondary: #3f3f46;
+  --text-muted: #71717a;
+  --text-faint: #a1a1aa;
   --text-on-accent: #ffffff;
 
-  /* Accent — purple sparingly on warm paper */
+  /* Accent — purple sparingly on cool paper */
   --accent: #5D4FB0;
   --accent-hover: #4a3e94;
-  --accent-soft: rgba(93, 79, 176, 0.14);
-  --hero-pill-shadow: 0 30px 86px rgba(60, 50, 30, 0.12), 0 12px 30px rgba(60, 50, 30, 0.06);
-  --hero-spotlight-core: rgba(90, 78, 64, 0.10);
-  --hero-spotlight-mid: rgba(90, 78, 64, 0.04);
+  --accent-soft: rgba(93, 79, 176, 0.12);
+  --hero-pill-shadow: 0 30px 86px rgba(15, 18, 28, 0.10), 0 12px 30px rgba(15, 18, 28, 0.05);
+  --hero-spotlight-core: rgba(40, 48, 64, 0.08);
+  --hero-spotlight-mid: rgba(40, 48, 64, 0.035);
 
   /* Live colon mark — same ink as accent ASCII (admin burger, home corner). */
   --logo-mark-idle: var(--text);
@@ -238,15 +238,15 @@
   --info: #1d4ed8;
   --info-soft: rgba(29, 78, 216, 0.10);
 
-  /* Viewing as — deep bright blue (readable on warm paper). */
+  /* Viewing as — deep bright blue (readable on cool paper). */
   --viewing-as: #3B45FF;
-  --viewing-as-soft: rgba(59, 69, 255, 0.14);
+  --viewing-as-soft: rgba(59, 69, 255, 0.12);
 
   --scrim: rgba(0, 0, 0, 0.48);
   --scrim-strong: rgba(0, 0, 0, 0.78);
   --scrim-focus: rgba(0, 0, 0, 0.42);
-  --bubble-user: #efeae4;
-  --shadow-bubble: 0 2px 8px rgba(60, 50, 30, 0.06);
+  --bubble-user: #e8eaee;
+  --shadow-bubble: 0 2px 8px rgba(15, 18, 28, 0.06);
 
   --dt-int: #1d4ed8;
   --dt-string: #6d28d9;
@@ -256,10 +256,10 @@
   --dt-bin: #be185d;
 
   /* Shimmer dark-on-light */
-  --sa: #1a1a1a;
-  --sd: #c8c0b4;
+  --sa: #18181b;
+  --sd: #c4c6cc;
 
-  --bg: #faf8f5;
+  --bg: #f0f1f3;
 }
 
 /* ── Base ──────────────────────────────────────────────────────── */
@@ -600,7 +600,7 @@ body {
   position: sticky;
   top: 0;
   z-index: 1;
-  background: var(--color-canvas);
+  background: var(--workspace-widget-bg, var(--panel-2));
 }
 
 .entity-rail-group__label {
@@ -1697,6 +1697,9 @@ textarea.input {
   line-height: 1.5;
   color: var(--text, var(--color-text));
   min-height: 0;
+  /* Legacy Trace rules paint on --bg. Remap to the workspace tile so
+     cards/rows don't sit in page/canvas wash inside panel-2. */
+  --bg: var(--workspace-widget-bg, var(--panel-2));
 }
 
 .trace-toolbar {
@@ -4299,8 +4302,8 @@ textarea.input {
   --workspace-sheet: var(--panel);
   --workspace-border: color-mix(in srgb, var(--border) 55%, transparent);
   --workspace-sheet-shadow:
-    0 1px 1px color-mix(in srgb, var(--text) 4%, transparent),
-    0 10px 32px color-mix(in srgb, var(--text) 7%, transparent);
+    0 1px 0 color-mix(in srgb, var(--text) 4%, transparent),
+    0 8px 24px color-mix(in srgb, var(--text) 5%, transparent);
   --workspace-rail-line: color-mix(in srgb, var(--border) 65%, transparent);
   /* Tiles lift above the sheet so multi-surface layouts don't blend. */
   --workspace-widget-bg: var(--panel-2);
@@ -4308,22 +4311,29 @@ textarea.input {
   --workspace-tab-active: var(--select-fill);
   --workspace-tab-active-shadow: none;
   --tab-row-height: var(--shell-chrome-row-h);
-  --view-chip-radius: 0.5rem;
-  --stage-radius: 1rem;
-  --stage-pad: 0.625rem;
-  /* Soft tiles — floor at 0.75rem so pad never sharpens them to a chip. */
-  --widget-radius: 0.75rem;
+  --view-chip-radius: 0.375rem;
+  --stage-radius: 0.75rem;
+  --stage-pad: 0.5rem;
+  /* Instrument tiles — tighter than soft marketing cards. */
+  --widget-radius: 0.5rem;
   --tab-gap: 0.125rem;
   background: var(--workspace-chrome);
-  /* Quiet page breathe — enough for radius/shadow, not a landscape mat. */
-  padding: 0.5rem;
+  /* Quiet page breathe — sheet owns the instrument; pad only for radius/shadow. */
+  padding: 0.375rem;
   box-sizing: border-box;
 }
 
 :root[data-theme="light"] .workspace-chrome {
-  /* Warm page ≈ warm tile — use a real hairline so flush surfaces don't dissolve. */
+  /* Cool grey page → light sheet → white tiles. Crisp steps, readable hairlines. */
+  --workspace-chrome: var(--canvas);
+  --workspace-sheet: var(--panel);
+  --workspace-widget-bg: var(--panel-2);
   --workspace-widget-border: var(--border);
   --workspace-rail-line: var(--border);
+  --workspace-border: var(--border);
+  --workspace-sheet-shadow:
+    0 1px 0 rgba(15, 18, 28, 0.04),
+    0 10px 28px rgba(15, 18, 28, 0.06);
 }
 
 :root[data-theme="dark"] .workspace-chrome {
@@ -4341,7 +4351,7 @@ textarea.input {
 
 /*
  * Sheet toggle — invert sheet↔tile relationship (compare only).
- * Light ON → warm-white sheet, paper tiles. Dark ON → panel-2 sheet, panel tiles.
+ * Light ON → white sheet, zinc tiles. Dark ON → panel-2 sheet, panel tiles.
  */
 :root[data-theme="light"] .workspace-chrome--contrast {
   --workspace-sheet: var(--panel-2);
@@ -6811,22 +6821,22 @@ textarea.input {
 :root[data-theme="light"] .truncation-hint,
 :root[data-theme="light"] .thread-rail-title-tooltip {
   background: #fff;
-  border-color: rgba(30, 25, 20, 0.08);
-  box-shadow: 0 8px 22px rgba(30, 25, 20, 0.08);
+  border-color: rgba(15, 18, 28, 0.10);
+  box-shadow: 0 8px 22px rgba(15, 18, 28, 0.08);
 }
 
 :root[data-theme="light"] .truncation-hint::before,
 :root[data-theme="light"] .thread-rail-title-tooltip::before {
   background: #fff;
-  border-left-color: rgba(30, 25, 20, 0.08);
-  border-bottom-color: rgba(30, 25, 20, 0.08);
+  border-left-color: rgba(15, 18, 28, 0.10);
+  border-bottom-color: rgba(15, 18, 28, 0.10);
 }
 
 :root[data-theme="light"] .truncation-hint--left::before {
   border-left-color: transparent;
   border-bottom-color: transparent;
-  border-right-color: rgba(30, 25, 20, 0.08);
-  border-top-color: rgba(30, 25, 20, 0.08);
+  border-right-color: rgba(15, 18, 28, 0.10);
+  border-top-color: rgba(15, 18, 28, 0.10);
 }
 
 @keyframes truncation-hint-in {

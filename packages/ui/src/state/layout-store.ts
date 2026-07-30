@@ -90,7 +90,7 @@ function withProjected(
 
 /**
  * Workspace sheet surface (R&D invert from theme resting).
- * Resting: light = warm unified paper; dark = canvas page + panel sheet.
+ * Resting: light = cool zinc paper + white tiles; dark = canvas page + panel sheet.
  * `contrast` = stronger lift (light white / dark panel-2) for compare only.
  */
 export type WorkspaceSurface = "default" | "contrast"

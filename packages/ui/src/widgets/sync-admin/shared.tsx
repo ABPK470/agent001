@@ -8,7 +8,6 @@ import { LabeledCheckbox } from "../../components/Checkbox"
 import { EmptyState } from "../../components/EmptyState"
 import {
   META_TEXT,
-  PANEL,
   TAB_BODY,
   TAB_BODY_INNER,
   TOOLBAR_ROW,
@@ -160,7 +159,7 @@ export function ItemShell({
         {detailToolbar}
         <div className={TAB_BODY}>
           <div className={TAB_BODY_INNER}>
-            <div className={`${PANEL} flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden`}>
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
               <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto p-3">
                 {detail}
               </div>

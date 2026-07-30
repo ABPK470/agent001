@@ -6,12 +6,12 @@ import type { JSX } from "react"
 import { useEffect, useState } from "react"
 import { api } from "../../client/index"
 import type { EntityRegistryDefinition } from "../../types"
-import { PANEL, TAB_ERROR } from "./chrome"
+import { TAB_ERROR } from "./chrome"
 import { EntityJsonExportMenu } from "./EntityJsonExportMenu"
 import { EntityOverviewSections } from "./EntityOverviewSections"
 import { EntityRegistryJsonImportGate } from "./EntityRegistryJsonImportGate"
 import { SegmentToggle } from "./SegmentToggle"
-import { TabBody, TabPanelHeader, TabShell } from "./TabChrome"
+import { TabPanelHeader, TabShell } from "./TabChrome"
 
 export type EntityOverviewView = "overview" | "json"
 
@@ -80,8 +80,7 @@ export function EntityOverview({
         />
       )}
 
-      <TabBody>
-        <div className={`${PANEL} flex h-full min-h-0 flex-1 flex-col overflow-hidden`}>
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           <TabPanelHeader>
             <SegmentToggle
               value={view}
@@ -100,7 +99,7 @@ export function EntityOverview({
             />
           </TabPanelHeader>
 
-          <div className="min-h-0 flex-1 overflow-auto p-3">
+          <div className="min-h-0 flex-1 overflow-auto px-3 py-3">
             {view === "overview" ? (
               <EntityOverviewSections def={def} />
             ) : (
@@ -110,7 +109,6 @@ export function EntityOverview({
             )}
           </div>
         </div>
-      </TabBody>
     </TabShell>
   )
 }
