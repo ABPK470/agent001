@@ -10,7 +10,7 @@ import { useInitialCatalogSelection } from "../../../hooks/useInitialCatalogSele
 import { useLiveReload } from "../../../hooks/useLiveReload"
 import { useMe } from "../../../hooks/useMe"
 import type { EntityRegistryDefinition, EntityRegistryStrategy, EntityRegistryStrategyHistoryEntry } from "../../../types"
-import { PANEL, ICON_BTN_PRIMARY } from "../chrome"
+import { PANEL, ICON_BTN } from "../chrome"
 import {
   AdminModalEditor,
   AdminModalEditorBody,
@@ -152,7 +152,7 @@ export function StrategiesModal({
                   <button
                     type="button"
                     onClick={() => setEditor({ mode: "create", seed: blankCustomStrategy() })}
-                    className={ICON_BTN_PRIMARY}
+                    className={ICON_BTN}
                     title="New custom strategy"
                     aria-label="New custom strategy"
                   >

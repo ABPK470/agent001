@@ -36,7 +36,6 @@ import type { LogEntry } from "../types"
 import { isSyncSqlEventType } from "./sync/trace/sync-sql-trace"
 import { WIDGET_ICONS } from "./widget-icons"
 import {
-  LOG_TOOLBAR_ICON_BTN,
   WIDGET_LOG_SHELL_CLASS,
   WIDGET_LOG_STACK_CLASS,
   WidgetToolbarCount,
@@ -355,14 +354,14 @@ export function LiveLogs() {
               type="button"
               onClick={() => setFiltersOpen((o) => !o)}
               className={`widget-toolbar__icon-btn relative ${
-                filtersOpen || filtersActive ? "text-accent" : ""
+                filtersOpen || filtersActive ? "widget-toolbar__icon-btn--active" : ""
               }`}
               title={
                 filtersActive
                   ? `Filters (${activeFilterCount} active)`
                   : "Filters"
               }
-              aria-pressed={filtersOpen}
+              aria-pressed={filtersOpen || filtersActive}
             >
               <SlidersHorizontal size={14} />
               {filtersActive && (
@@ -375,9 +374,10 @@ export function LiveLogs() {
             <button
               type="button"
               title={paused ? `Resume (${pendingLiveCount} buffered)` : "Pause live append"}
-              className={`${LOG_TOOLBAR_ICON_BTN} relative ${
-                paused ? "bg-error/15 text-error" : "text-text-muted/60 hover:text-text hover:bg-elevated/40"
+              className={`widget-toolbar__icon-btn relative ${
+                paused ? "bg-error/15 text-error hover:bg-error/20" : ""
               }`}
+              aria-pressed={paused}
               onClick={() => setPaused((p) => !p)}
             >
               {paused ? <Play size={15} /> : <Pause size={15} />}

@@ -132,7 +132,6 @@ export function TransformMap({
           )}
           <IconButton
             label="Add column"
-            variant="primary"
             onClick={() => {
               setColumnsOpen(true)
               setColumns([...draft.columns, newColumnDraft()])

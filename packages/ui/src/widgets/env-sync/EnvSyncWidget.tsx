@@ -775,7 +775,7 @@ export function EnvSync() {
               <IconButton
                 className="env-sync-control-btn"
                 label={exec.kind === "running" ? "Execution in progress — click to view" : exec.kind === "done" && exec.success ? "Sync completed" : "Sync failed — click to view"}
-                variant={exec.kind === "running" ? "primary" : "default"}
+                active={exec.kind === "running"}
                 onClick={() => setExecModalOpen(true)}
               >
                 {exec.kind === "running" && <Loader2 {...TOOLBAR_ICON} className="animate-spin" />}
@@ -787,7 +787,6 @@ export function EnvSync() {
             <IconButton
               className="env-sync-control-btn"
               label={blocker ?? (hasPlan && !execActive ? "Re-run preview" : "Preview")}
-              variant={hasPlan && !execActive ? "default" : "primary"}
               onClick={() => void onPreview().catch((err: unknown) => { console.error("[mia]", err) })}
               disabled={!canPreview}
             >
@@ -805,7 +804,6 @@ export function EnvSync() {
                         : !hasMetadataChanges ? "Run full flow — metadata already in sync"
                           : "Execute sync"
                 }
-                variant="primary"
                 onClick={() => setExecModalOpen(true)}
                 disabled={expired || hasConflicts || preflightBlocked || searchLoading}
               >

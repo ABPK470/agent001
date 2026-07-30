@@ -60,8 +60,8 @@ export function AdminBrowseToolbar({
       <button
         type="button"
         onClick={onToggleFilters}
-        className={`relative flex h-9 w-9 items-center justify-center rounded-lg border border-border-subtle text-text-muted transition-colors hover:bg-overlay-hover hover:text-text ${
-          filtersOpen || activeFilterCount > 0 ? "text-accent" : ""
+        className={`relative flex h-9 w-9 items-center justify-center rounded-lg border border-border-subtle text-text-muted transition-colors hover:bg-[var(--hover-fill)] hover:text-text ${
+          filtersOpen || activeFilterCount > 0 ? "bg-[var(--select-fill)] text-text" : ""
         }`}
         title={activeFilterCount > 0 ? `Filters (${activeFilterCount} active)` : "Filters"}
         aria-pressed={filtersOpen}
@@ -76,7 +76,7 @@ export function AdminBrowseToolbar({
       <button
         type="button"
         onClick={onRefresh}
-        className="flex h-9 w-9 items-center justify-center rounded-lg border border-border-subtle text-text-muted transition-colors hover:bg-overlay-hover hover:text-text"
+        className="flex h-9 w-9 items-center justify-center rounded-lg border border-border-subtle text-text-muted transition-colors hover:bg-[var(--hover-fill)] hover:text-text"
         title="Refresh"
       >
         <RefreshCw size={15} className={loading ? "animate-spin" : undefined} />

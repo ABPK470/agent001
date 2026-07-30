@@ -15,7 +15,7 @@ import {
   ModalShell,
 } from "./chrome"
 import { useConsole } from "./console-context"
-import { ICON_BTN, ICON_BTN_PRIMARY, PANEL, TAB_PILL } from "./design"
+import { ICON_BTN, PANEL, TAB_PILL } from "./design"
 import {
   AdminModalEditor,
   AdminModalEditorBody,
@@ -252,7 +252,7 @@ export function PolicyRulesModal({ isAdmin, onClose }: { isAdmin: boolean; onClo
                       type="button"
                       onClick={() => void save().catch((err: unknown) => { console.error("[mia]", err) })}
                       disabled={busy}
-                      className={ICON_BTN_PRIMARY}
+                      className={ICON_BTN}
                       title="Save"
                       aria-label="Save"
                     >

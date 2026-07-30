@@ -6,6 +6,7 @@ import { Inbox, MousePointer2, Search, X, type LucideIcon } from "lucide-react"
 import type { JSX, ReactNode } from "react"
 
 import { EmptyState } from "../../../components/EmptyState"
+import { LIST_ROW_ACTIVE } from "../../../lib/selection"
 import { FORM_HEADING, META_TEXT, PANEL } from "../chrome"
 
 export { FormFieldGroup, FormSectionCard } from "../form-section"
@@ -215,7 +216,7 @@ export function AdminRailList({
                 className={[
                   "flex items-center gap-2 px-3 py-2 text-sm",
                   index < filtered.length - 1 ? "border-b border-border/20" : "",
-                  selectedId === item.id ? "bg-elevated" : "",
+                  selectedId === item.id ? LIST_ROW_ACTIVE : "",
                 ].join(" ")}
               >
                 <button

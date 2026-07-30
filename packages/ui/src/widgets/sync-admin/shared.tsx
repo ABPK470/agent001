@@ -519,7 +519,7 @@ export function ToolbarPrimary({
   children: ReactNode
 }): JSX.Element {
   return (
-    <IconButton label={label} variant="primary" onClick={onClick} disabled={disabled}>
+    <IconButton label={label} onClick={onClick} disabled={disabled}>
       {children}
     </IconButton>
   )

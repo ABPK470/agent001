@@ -6,7 +6,7 @@ import { forwardRef } from "react"
 import type { ButtonHTMLAttributes, ReactNode } from "react"
 
 import { SELECT_ACTIVE, SELECT_FOCUS, SELECT_IDLE } from "../../lib/selection"
-import { ICON_BTN, ICON_BTN_PRIMARY } from "./chrome"
+import { ICON_BTN } from "./chrome"
 
 /** Lucide props for w-9 toolbar buttons. */
 export const TOOLBAR_ICON = { size: 16, strokeWidth: 1.75 } as const
@@ -41,10 +41,12 @@ export function iconButtonClass({
   variant?: IconButtonVariant
   active?: boolean
 } = {}): string {
-  if (variant === "primary") return ICON_BTN_PRIMARY
+  // primary = quiet bordered (same as default). Accent fill is for labeled CTAs only.
+  if (variant === "primary" || variant === "default") {
+    return active ? ICON_BTN_ACTIVE : ICON_BTN
+  }
   if (variant === "track") return active ? ICON_BTN_TRACK_ACTIVE : ICON_BTN_TRACK
   if (variant === "group") return active ? ICON_BTN_GROUP_ACTIVE : ICON_BTN_GROUP
-  if (active) return ICON_BTN_ACTIVE
   return ICON_BTN
 }
 

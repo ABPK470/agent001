@@ -63,18 +63,18 @@ export function WidgetCatalog({ onClose }: Props) {
                 !isAllowed
                   ? "border-border-subtle bg-overlay-1 opacity-45 cursor-not-allowed"
                   : isActive
-                    ? "border-accent/25 bg-accent/[0.08] cursor-pointer"
-                    : "border-border-subtle bg-overlay-1 hover:bg-overlay-2 cursor-pointer"
+                    ? "border-border-subtle bg-[var(--select-fill)] cursor-pointer"
+                    : "border-border-subtle bg-overlay-1 hover:bg-[var(--hover-fill)] cursor-pointer"
               }`}
               onClick={() => { if (isAllowed) handleToggle(item.type) }}
             >
               <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
                 isActive && isAllowed ? "bg-[var(--select-fill)]" : "bg-overlay-2"
               }`}>
-                <Icon size={18} className={isActive && isAllowed ? "text-accent" : "text-text-muted"} />
+                <Icon size={18} className={isActive && isAllowed ? "text-text" : "text-text-muted"} />
               </div>
               <div className="flex-1 min-w-0">
-                <span className={`text-sm font-medium block ${isActive && isAllowed ? "text-accent" : "text-text"}`}>
+                <span className={`text-sm font-medium block ${isActive && isAllowed ? "text-text" : "text-text"}`}>
                   {item.label}
                 </span>
                 <span className="text-[13px] text-text-muted leading-snug block mt-0.5">

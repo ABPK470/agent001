@@ -567,14 +567,14 @@ function HistorySearchBar({
           type="button"
           onClick={onToggleFilters}
           className={`widget-toolbar__icon-btn relative ${
-            filtersOpen || activeFilterCount > 0 ? "text-accent" : ""
+            filtersOpen || activeFilterCount > 0 ? "widget-toolbar__icon-btn--active" : ""
           }`}
           title={
             activeFilterCount > 0
               ? `Filters (${activeFilterCount} active)`
               : "Filters"
           }
-          aria-pressed={filtersOpen}
+          aria-pressed={filtersOpen || activeFilterCount > 0}
         >
           <SlidersHorizontal size={14} />
           {activeFilterCount > 0 && (

@@ -12,7 +12,7 @@ import { useLiveReload } from "../../../hooks/useLiveReload"
 import { useMe } from "../../../hooks/useMe"
 import type { FreezeWindow } from "../../../types"
 import { DetailField, DetailGrid } from "../DetailField"
-import { ICON_BTN_PRIMARY } from "../chrome"
+import { ICON_BTN } from "../chrome"
 import { ConfirmModal, GovernanceIconAction } from "../governance/modal-chrome"
 import {
   AdminModalEditor,
@@ -123,7 +123,7 @@ export function FreezeWindowsModal({
                   <button
                     type="button"
                     onClick={() => setEditing(blankFreezeWindowEditState())}
-                    className={ICON_BTN_PRIMARY}
+                    className={ICON_BTN}
                     title="New freeze window"
                     aria-label="New freeze window"
                   >
