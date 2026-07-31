@@ -132,12 +132,12 @@ function isDuplicatePipelineMessage(pipelineError: string | undefined, text: str
 
 // ── Helpers ──────────────────────────────────────────────────────
 
-/** Sticky day caps — quieter than list body (`--review-group-size`). */
+/** Sticky day caps — quieter type + shared `--section-cap-bg` seal. */
 const DAY_GROUP_BTN =
-  "review-group-label sticky top-0 z-10 w-full flex items-center gap-1.5 px-2 py-1 text-left transition-colors"
-const DAY_GROUP_BTN_LINEAR = `${DAY_GROUP_BTN} bg-surface/95 backdrop-blur-sm`
+  "review-group-label review-group-cap sticky top-0 z-10 w-full flex items-center gap-1.5 px-2 py-1 text-left transition-colors"
+const DAY_GROUP_BTN_LINEAR = DAY_GROUP_BTN
 const DAY_GROUP_BTN_NESTED =
-  `${DAY_GROUP_BTN} text-text-muted/50 bg-surface/80 backdrop-blur-sm hover:text-text-muted/80`
+  `${DAY_GROUP_BTN} text-text-muted/50 hover:text-text-muted/80`
 
 /**
  * Day-cap row wrap. Virtual rows are absolute — margin on a prior pipeline

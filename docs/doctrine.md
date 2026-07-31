@@ -262,7 +262,9 @@ second `pl-*` before the tree). Seams earn their keep: toolbar closes
 controls; meta uses space (no second chrome rule); open outline headers
 drop under-lines (elbows own descent); collapsed peers keep a quiet
 hairline. One meta size (`--review-meta-size`), one day/section cap
-(`.review-group-label` / `--review-group-size` — quieter than body), one
+(`.review-group-label` / `--review-group-size` — quieter than body;
+sticky fill via `.review-group-cap` / `--section-cap-bg` — light = paper,
+dark = lifted wash on the tile, never a sunk `--panel` plate), one
 chevron (13px, rotate-90), one control height (`--control-h` for search /
 segments / icon buttons), one JSON/payload surface. Pipelines has no toolbar
 expand/collapse — row chevrons own that. Trace sticky pin stays.

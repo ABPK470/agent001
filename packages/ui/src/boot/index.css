@@ -126,6 +126,17 @@
   --overlay-3: rgba(255, 255, 255, 0.08);
   --overlay-hover: rgba(255, 255, 255, 0.06);
 
+  /*
+   * Sticky day / section caps (Pipelines TODAY, entity rail groups, …).
+   * Lift on the tile — never sink to --panel under a --panel-2 widget
+   * (that reads as a muddy dark plate). Light overrides to flat paper.
+   */
+  --section-cap-bg: color-mix(
+    in srgb,
+    var(--text) 8%,
+    var(--workspace-widget-bg, var(--panel-2))
+  );
+
   /* Selection dialect — same language as light (ink wash, not accent). */
   --select-fill: color-mix(in srgb, var(--text) 10%, transparent);
   --hover-fill: color-mix(in srgb, var(--text) 6%, transparent);
@@ -216,6 +227,9 @@
   --overlay-hover: color-mix(in srgb, var(--ink) 9%, var(--paper));
   --hover-fill: color-mix(in srgb, var(--ink) 9%, var(--paper));
   --select-fill: color-mix(in srgb, var(--ink) 14%, var(--paper));
+
+  /* Flat paper seal — hierarchy from type / borders, not a grey plate. */
+  --section-cap-bg: var(--workspace-widget-bg, var(--paper));
 
   /* Opaque mixes — rgba fringes read as doubled hairlines on rounded corners. */
   --border-subtle: color-mix(in srgb, var(--ink) 22%, var(--paper));
@@ -1050,7 +1064,7 @@ body {
   position: sticky;
   top: 0;
   z-index: 1;
-  background: var(--workspace-widget-bg, var(--panel-2));
+  background: var(--section-cap-bg);
 }
 
 .entity-rail-group__label {
@@ -1432,6 +1446,15 @@ textarea.input {
   text-transform: uppercase;
   line-height: 1.25;
   color: var(--text-muted);
+}
+
+/*
+ * Opaque sticky fill for day/section caps — uses --section-cap-bg.
+ * Dark: lifted wash on the tile. Light: same paper as the field.
+ * Never bg-surface / backdrop-blur (those sink under widget paper).
+ */
+.review-group-cap {
+  background: var(--section-cap-bg);
 }
 
 .review-meta {

@@ -458,10 +458,26 @@ describe("widget log chrome — shared content dialect", () => {
     )
     expect(ops).toContain("review-group-label")
     expect(ops).toMatch(
-      /const DAY_GROUP_BTN\s*=\s*\n?\s*"review-group-label[^"]*"/,
+      /const DAY_GROUP_BTN\s*=\s*\n?\s*"review-group-label review-group-cap[^"]*"/,
     )
     expect(ops).not.toMatch(/const DAY_GROUP_BTN[\s\S]{0,200}text-sm/)
+    expect(ops).not.toMatch(/DAY_GROUP_BTN[\s\S]{0,280}bg-surface/)
+    expect(ops).not.toMatch(/DAY_GROUP_BTN[\s\S]{0,280}backdrop-blur/)
     expect(sheet).toContain("review-group-label")
+  })
+
+  it("sticky section caps use --section-cap-bg (dark lift / light paper)", () => {
+    const css = read(cssPath)
+    expect(css).toContain("--section-cap-bg")
+    expect(css).toMatch(
+      /\.review-group-cap\s*\{[^}]*background:\s*var\(--section-cap-bg\)/s,
+    )
+    expect(css).toMatch(
+      /:root\[data-theme="light"\][^{]*\{[^}]*--section-cap-bg:\s*var\(--workspace-widget-bg,\s*var\(--paper\)\)/s,
+    )
+    expect(css).toMatch(
+      /\.entity-rail-group__header\s*\{[^}]*background:\s*var\(--section-cap-bg\)/s,
+    )
   })
 
   it("day groups open air above later caps (virtual rows are absolute)", () => {
