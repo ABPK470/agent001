@@ -375,24 +375,31 @@
   flex-shrink: 0;
   align-items: center;
   gap: 0.25rem;
+  margin-left: auto;
   padding: 0.125rem 0.375rem;
-  border: 1px solid transparent;
+  border: none;
   border-radius: 0.25rem;
   font-size: 0.75rem;
   line-height: 1.25rem;
   color: var(--text-faint);
   background: transparent;
   cursor: pointer;
-  transition: color 120ms ease, border-color 120ms ease;
+  transition: color 120ms ease, background 120ms ease;
 }
 
 .mia-code-block__copy:hover {
   color: var(--text);
-  border-color: var(--border);
+  background: var(--hover-fill);
 }
 
 .mia-code-block__copy[data-copied] {
   color: var(--success);
+}
+
+/* Chat answer fences — word only, never an icon plate. */
+.mia-code-block__copy--quiet {
+  padding-inline: 0.25rem;
+  letter-spacing: 0.02em;
 }
 
 .mia-code-block__body {
