@@ -4,7 +4,13 @@ import { createListAdaptersTool, createBridgeDataTool } from "../src/tools/bridg
 import type { ConnectorInfo, MoveSummary } from "@mia/shared-types"
 
 function hostWith(port: AgentHost["connectors"]["port"]["value"]): AgentHost {
-  return { connectors: { port: { value: port } } } as unknown as AgentHost
+  return {
+    connectors: {
+      port: { value: port },
+      events: { sink: () => {} },
+      operations: { value: null },
+    },
+  } as unknown as AgentHost
 }
 
 const adapters: ConnectorInfo[] = [

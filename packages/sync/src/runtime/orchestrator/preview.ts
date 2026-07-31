@@ -25,7 +25,7 @@ import {
 } from "../../core/eligibility/sync-env-eligibility.js"
 import { readyMssqlConnectorIds } from "../connector-readiness.js"
 import { evaluateFreezeWindows } from "../../runtime/governance/freeze-windows.js"
-import { asEntityId, type PlanId } from "../../domain/types/branded-ids.js"
+import { asEntityId, asPlanId, type PlanId } from "../../domain/types/branded-ids.js"
 import { getPublishedSyncDefinition } from "../../runtime/published-definitions.js"
 import { assertPublishedContractCurrent } from "../../core/publish/assert-published-contract.js"
 import { instantiatePredicate, instantiatePredicateWithTree } from "../../core/scope/predicate.js"
@@ -56,6 +56,10 @@ export interface PreviewInput {
   enabledOptionalTables?: string[]
   /** Optional identity of the previewing user for governance explainability. */
   userUpn?: string | null
+  /** Optional AbortSignal — Pipelines Stop / HTTP cancel. */
+  signal?: AbortSignal
+  /** Optional pre-allocated plan id (cancel registry keys on it). */
+  planId?: string
 }
 
 export async function previewSync(input: PreviewInput): Promise<SyncPlan> {
@@ -73,7 +77,7 @@ export async function previewSync(input: PreviewInput): Promise<SyncPlan> {
   // Same gate for HTTP widget and agent tools — published contract only.
   assertPublishedContractCurrent(normalized.host.sync.project.publishReadiness, normalized.entityType)
   const previewId = randomUUID()
-  const planId = allocPlanId()
+  const planId = normalized.planId ? asPlanId(normalized.planId) : allocPlanId()
   const t0 = Date.now()
   emit(normalized.host, EventType.SyncPreviewStarted, {
     previewId,
@@ -224,6 +228,11 @@ async function previewSyncInner(
       schemaGroundedTables.map((t, tableIndex) => ({ t, tableIndex })),
       tableConcurrency,
       async ({ t, tableIndex }) => {
+        if (input.signal?.aborted) {
+          throw input.signal.reason instanceof Error
+            ? input.signal.reason
+            : new Error("Cancelled by user")
+        }
         const tableT0 = Date.now()
         const predicate = expandedIds
           ? instantiatePredicateWithTree(t.predicate, entityId, expandedIds)
@@ -260,6 +269,7 @@ async function previewSyncInner(
           })
           return r
         } catch (e: unknown) {
+          if (input.signal?.aborted) throw e
           const errMsg = e instanceof Error ? e.message : String(e)
           console.error(`[sync.preview] diffTable(${t.name}) failed after retries:`, e)
           emit(input.host, EventType.SyncPreviewTableFailed, {
@@ -281,7 +291,8 @@ async function previewSyncInner(
             diffDurationMs: Date.now() - tableT0
           } as SyncPlanTable
         }
-      }
+      },
+      input.signal,
     )
 
     // Post-diff conflict probes (inbound delete blockers, missing parents).
@@ -559,17 +570,35 @@ async function previewSyncInner(
 
     return plan
   } catch (e) {
-    const errMsg = e instanceof Error ? e.message : String(e)
-    emit(input.host, EventType.SyncPreviewFailed, {
-      previewId,
-      planId,
-      entityType: input.entityType,
-      entityId: input.entityId,
-      source: input.source,
-      target: input.target,
-      error: errMsg,
-      durationMs: Date.now() - t0
-    })
-    throw e
+    const cancelled = Boolean(input.signal?.aborted)
+    const errMsg = cancelled
+      ? "Cancelled by user"
+      : e instanceof Error
+        ? e.message
+        : String(e)
+    if (cancelled) {
+      emit(input.host, EventType.SyncPreviewCancelled, {
+        previewId,
+        planId,
+        entityType: input.entityType,
+        entityId: input.entityId,
+        source: input.source,
+        target: input.target,
+        error: errMsg,
+        durationMs: Date.now() - t0
+      })
+    } else {
+      emit(input.host, EventType.SyncPreviewFailed, {
+        previewId,
+        planId,
+        entityType: input.entityType,
+        entityId: input.entityId,
+        source: input.source,
+        target: input.target,
+        error: errMsg,
+        durationMs: Date.now() - t0
+      })
+    }
+    throw cancelled ? new Error(errMsg) : e
   }
 }

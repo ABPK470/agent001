@@ -6,7 +6,6 @@ import type { AgentHost } from "@mia/agent"
 import {
   isSyncPublishRequiredError,
   loadPlan,
-  previewSync,
   PUBLISH_REQUIRED_CODE,
   type SyncExecuteResult,
   withSyncExecutePolicyArgs,
@@ -24,6 +23,10 @@ import {
   runRegisteredSyncExecute,
   SYNC_EXECUTE_OPERATION,
 } from "../state/execute-session.js"
+import {
+  runRegisteredSyncPreview,
+  SYNC_PREVIEW_OPERATION,
+} from "../state/preview-session.js"
 import { assertSyncHttpPolicy } from "../service/sync-http-policy.js"
 import { personal } from "../../auth/service/viewing-as.js"
 
@@ -83,7 +86,7 @@ export function registerPreviewExecuteRoutes(
           enabledOptionalTables: body.enabledOptionalTables ?? [],
         },
       })
-      const plan = await previewSync({
+      const plan = await runRegisteredSyncPreview({
         host,
         entityType: body.entityType,
         entityId: body.entityId,
@@ -228,6 +231,16 @@ export function registerPreviewExecuteRoutes(
     if (!cancelled) {
       reply.code(404)
       return { error: "No active execute to cancel" }
+    }
+    return { cancelled: true, planId }
+  })
+
+  app.post<{ Params: { planId: string } }>("/api/sync/preview/:planId/cancel", personal.write, async (req, reply) => {
+    const planId = req.params.planId
+    const cancelled = cancelOperation(SYNC_PREVIEW_OPERATION, planId)
+    if (!cancelled) {
+      reply.code(404)
+      return { error: "No active preview to cancel" }
     }
     return { cancelled: true, planId }
   })

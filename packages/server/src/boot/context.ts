@@ -24,6 +24,10 @@ import { loadPersistedConnectors } from "../adapters/connectors/live-connectors.
 import { mssqlConfigsFromConnectors } from "../adapters/connectors/mssql-from-connectors.js"
 import { createMssqlPoolProvider } from "../adapters/connectors/mssql-pool-provider.js"
 import { buildMovementPort } from "../adapters/connectors/movement-port.js"
+import {
+  registerOperation,
+  unregisterOperation,
+} from "../infra/operations/cancel-registry.js"
 
 export interface ServerContext {
   readonly projectRoot: string
@@ -93,6 +97,10 @@ export async function createServerContext(): Promise<ServerContext> {
   // runtime create/enable/disable/delete is reflected without a restart.
   bootHost.connectors.port.value = buildMovementPort(bootHost)
   bootHost.connectors.events.sink = createBridgeEventSink()
+  bootHost.connectors.operations.value = {
+    register: registerOperation,
+    unregister: unregisterOperation,
+  }
 
   const mssqlSummary =
     mssqlConfigs.length > 0
@@ -149,6 +157,7 @@ export function buildBootHostDeps(ctx: ServerContext): BootHostDeps {
     connectors: {
       port: bootHost.connectors.port,
       events: bootHost.connectors.events,
+      operations: bootHost.connectors.operations,
     }
   }
 }

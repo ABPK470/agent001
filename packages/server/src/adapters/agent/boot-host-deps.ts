@@ -32,6 +32,7 @@ export function bootHostDepsToConfigureAgentOptions(
       ? {
           connectors: bootHostDeps.connectors.port.value,
           bridgeEventSink: bootHostDeps.connectors.events.sink,
+          connectorOperationsSlot: bootHostDeps.connectors.operations,
         }
       : {})
   }

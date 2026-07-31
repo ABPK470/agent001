@@ -119,6 +119,8 @@ export interface BootConnectorsState {
   port: { value: import("@mia/agent").AgentHost["connectors"]["port"]["value"] }
   /** Shared Bridge event sink → SSE + event_log. */
   events: { sink: import("@mia/agent").AgentHost["connectors"]["events"]["sink"] }
+  /** Shared cancel registry for bridge moves started by tools or HTTP. */
+  operations: { value: import("@mia/agent").AgentHost["connectors"]["operations"]["value"] }
 }
 
 /**

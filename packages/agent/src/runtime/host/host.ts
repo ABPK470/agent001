@@ -153,7 +153,7 @@ export interface ConnectorPort {
   /** Read up to `limit` rows from the source, apply the transform, return them (no write). */
   previewMove(
     source: { connectorId: string; spec: ReadSpec },
-    options?: { transform?: Transform; limit?: number },
+    options?: { transform?: Transform; limit?: number; signal?: AbortSignal },
   ): Promise<{ rows: Record<string, unknown>[]; truncated: boolean }>
   /** Schema-qualified table names for SQL target pickers (mssql/postgres/…). */
   listTables(connectorId: string): Promise<string[]>
@@ -166,11 +166,19 @@ export type BridgeEventSink = (event: {
   data: Record<string, unknown>
 }) => void
 
+/** Optional cancel registry — server wires to in-process AbortControllers. */
+export interface ConnectorOperationRegistry {
+  register(kind: string, id: string, label: string): AbortSignal
+  unregister(kind: string, id: string): void
+}
+
 export interface ConnectorsHost {
   /** Late-bound: the server fills this after `configureAgent`. */
   readonly port: { value: ConnectorPort | null }
   /** Mutable sink — server swaps in broadcast; CLI/tests leave the noop. */
   readonly events: { sink: BridgeEventSink }
+  /** Mutable cancel registry — server fills; CLI/tests leave null. */
+  readonly operations: { value: ConnectorOperationRegistry | null }
 }
 
 /**

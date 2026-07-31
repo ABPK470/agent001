@@ -108,6 +108,7 @@ export const EventType = {
   SyncPreviewStarted: "sync.preview.started",
   SyncPreviewCompleted: "sync.preview.completed",
   SyncPreviewFailed: "sync.preview.failed",
+  SyncPreviewCancelled: "sync.preview.cancelled",
   SyncPreviewTableStart: "sync.preview.table.start",
   SyncPreviewTableDone: "sync.preview.table.done",
   SyncPreviewTableFailed: "sync.preview.table.failed",
@@ -232,11 +233,13 @@ export const EventType = {
   BridgePreviewStarted: "bridge.preview.started",
   BridgePreviewCompleted: "bridge.preview.completed",
   BridgePreviewFailed: "bridge.preview.failed",
+  BridgePreviewCancelled: "bridge.preview.cancelled",
   BridgeRunStarted: "bridge.run.started",
   /** Throttled mid-move progress (rows pulled toward the target). */
   BridgeRunProgress: "bridge.run.progress",
   BridgeRunCompleted: "bridge.run.completed",
   BridgeRunFailed: "bridge.run.failed",
+  BridgeRunCancelled: "bridge.run.cancelled",
 } as const
 
 export type EventType = (typeof EventType)[keyof typeof EventType]
@@ -353,6 +356,9 @@ const CANCELLATION_EVENTS: ReadonlySet<EventType> = new Set([
   EventType.AgentCancelled,
   EventType.SyncProposerRunCancelled,
   EventType.SyncExecuteCancelled,
+  EventType.SyncPreviewCancelled,
+  EventType.BridgePreviewCancelled,
+  EventType.BridgeRunCancelled,
 ])
 
 const SUB_STEP_FAILURE_EVENTS: ReadonlySet<EventType> = new Set([

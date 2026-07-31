@@ -263,6 +263,21 @@ function groupSyncPreviewActivities(events: OperationEvent[]): OperationActivity
       })
       continue
     }
+    if (t === EventType.SyncPreviewCancelled) {
+      const error = strField(ev.data, "error") ?? "Cancelled by user"
+      failOpenTables(ev.timestamp, error)
+      activities.push({
+        id: "preview-cancelled",
+        name: "cancelled",
+        status: OperationStatus.Cancelled,
+        startedAt: ev.timestamp,
+        endedAt: ev.timestamp,
+        durationMs: numField(ev.data, "durationMs"),
+        error,
+        events: [ev]
+      })
+      continue
+    }
 
     if (t === EventType.SyncPreviewTableStart && table) {
       const act: OperationActivity = {

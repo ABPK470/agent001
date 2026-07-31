@@ -334,6 +334,11 @@ export function syncPlanIdFromPipeline(pipeline: OperationPipeline): string {
   return pipeline.planId ?? pipeline.id.replace(/:(preview|execute)$/, "")
 }
 
+/** Bridge pipeline id is `${moveId}:preview|run`. */
+export function bridgeMoveIdFromPipeline(pipeline: OperationPipeline): string {
+  return pipeline.id.replace(/:(preview|run)$/, "")
+}
+
 // ── Debug trace (agent telemetry) — labels from event catalog ─────
 
 function describeDebugTraceEntry(ev: OperationEvent): { label: string; summary: string } {
@@ -414,11 +419,22 @@ export function OperationLog() {
         await api.cancelRun(pipeline.id)
       } else if (pipeline.kind === OperationKind.ProposerRun) {
         await api.cancelProposerRun(pipeline.id)
-      } else if (
-        pipeline.kind === OperationKind.SyncRun ||
-        pipeline.kind === OperationKind.SyncExecute
-      ) {
+      } else if (pipeline.kind === OperationKind.SyncPreview) {
+        await api.cancelSyncPreview(syncPlanIdFromPipeline(pipeline))
+      } else if (pipeline.kind === OperationKind.SyncExecute) {
         await api.cancelSyncExecute(syncPlanIdFromPipeline(pipeline))
+      } else if (pipeline.kind === OperationKind.SyncRun) {
+        const planId = syncPlanIdFromPipeline(pipeline)
+        try {
+          await api.cancelSyncExecute(planId)
+        } catch {
+          await api.cancelSyncPreview(planId)
+        }
+      } else if (
+        pipeline.kind === OperationKind.BridgePreview ||
+        pipeline.kind === OperationKind.BridgeRun
+      ) {
+        await api.cancelBridgeMove(bridgeMoveIdFromPipeline(pipeline))
       }
     } catch (err: unknown) { console.error("[mia]", err) } finally {
       setCancellingId(null)
@@ -691,10 +707,7 @@ function PipelineRow({ pipeline, expanded, onToggle, actExpanded, toggleActivity
   const canCancel =
     pipeline.status === "running" &&
     onCancel &&
-    (pipeline.kind === OperationKind.AgentRun ||
-      pipeline.kind === OperationKind.ProposerRun ||
-      pipeline.kind === OperationKind.SyncRun ||
-      pipeline.kind === OperationKind.SyncExecute)
+    pipeline.kind !== OperationKind.System
   const formattedSubtitle = pipeline.subtitle
     ? formatPipelineSubtitle(pipeline.subtitle)
     : null

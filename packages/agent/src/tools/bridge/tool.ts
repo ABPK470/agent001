@@ -16,7 +16,7 @@ import {
   type Transform,
   type WriteSpec,
 } from "@mia/shared-types"
-import type { AgentHost } from "../../runtime/runtime.js"
+import type { AgentHost, RunContext } from "../../runtime/runtime.js"
 import type { ExecutableTool, ToolMetadata } from "../../domain/types/agent-types.js"
 
 function emitBridge(
@@ -46,7 +46,31 @@ function errorsPreview(
   }))
 }
 
-function buildBridgeDataTool(host: AgentHost): ExecutableTool {
+function mergeAbortSignals(
+  ...signals: Array<AbortSignal | null | undefined>
+): AbortSignal | undefined {
+  const active = signals.filter((s): s is AbortSignal => Boolean(s))
+  if (active.length === 0) return undefined
+  if (active.length === 1) return active[0]
+  if (typeof AbortSignal.any === "function") return AbortSignal.any(active)
+  const controller = new AbortController()
+  for (const signal of active) {
+    if (signal.aborted) {
+      controller.abort(signal.reason)
+      return controller.signal
+    }
+    signal.addEventListener("abort", () => controller.abort(signal.reason), { once: true })
+  }
+  return controller.signal
+}
+
+function isCancelled(error: unknown, signal?: AbortSignal): boolean {
+  if (signal?.aborted) return true
+  const msg = error instanceof Error ? error.message : String(error)
+  return /cancel/i.test(msg)
+}
+
+function buildBridgeDataTool(host: AgentHost, run?: RunContext): ExecutableTool {
   return {
     name: "bridge_data",
     description:
@@ -135,9 +159,15 @@ function buildBridgeDataTool(host: AgentHost): ExecutableTool {
         relaxConstraints: writeSpec.kind === "sql" ? Boolean(writeSpec.relaxConstraints) : false,
         writeMode: writeSpec.kind === "sql" ? writeSpec.mode : null,
         via: "agent" as const,
-        actorUpn: host.sync.runs.actorUpn,
+        actorUpn: host.sync?.runs?.actorUpn ?? null,
       }
       emitBridge(host, EventType.BridgeRunStarted, base)
+      const registered = host.connectors.operations.value?.register(
+        "bridge.run",
+        moveId,
+        `Bridge move ${moveId.slice(0, 8)}`,
+      )
+      const signal = mergeAbortSignals(run?.signal, registered)
       let lastProgressAt = 0
       let lastProgressRows = 0
       try {
@@ -146,6 +176,7 @@ function buildBridgeDataTool(host: AgentHost): ExecutableTool {
           { connectorId: target.connectorId, spec: target.spec, stopOnError: target.stopOnError },
           {
             ...(transform ? { transform } : {}),
+            ...(signal ? { signal } : {}),
             onProgress: ({ rowsRead, rowsWritten }) => {
               const now = Date.now()
               if (now - lastProgressAt < 750 && rowsRead - lastProgressRows < 500) return
@@ -186,12 +217,22 @@ function buildBridgeDataTool(host: AgentHost): ExecutableTool {
         return formatSummary(summary)
       } catch (e) {
         const error = e instanceof Error ? e.message : String(e)
+        if (isCancelled(e, signal)) {
+          emitBridge(host, EventType.BridgeRunCancelled, {
+            ...base,
+            error: "Cancelled by user",
+            durationMs: Date.now() - t0,
+          })
+          return "bridge_data cancelled"
+        }
         emitBridge(host, EventType.BridgeRunFailed, {
           ...base,
           error,
           durationMs: Date.now() - t0,
         })
         return `bridge_data failed: ${error}`
+      } finally {
+        host.connectors.operations.value?.unregister("bridge.run", moveId)
       }
     },
   }
@@ -216,6 +257,7 @@ export const bridgeDataToolMetadata: ToolMetadata = (() => {
   return { name: t.name, description: t.description, parameters: t.parameters }
 })()
 
-export function createBridgeDataTool(host: AgentHost): ExecutableTool {
-  return buildBridgeDataTool(host)
+export function createBridgeDataTool(host: AgentHost, run?: RunContext): ExecutableTool {
+  return buildBridgeDataTool(host, run)
 }
+

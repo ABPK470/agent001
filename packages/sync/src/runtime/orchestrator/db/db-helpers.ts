@@ -60,12 +60,16 @@ export function sqlLiteral(v: unknown): string {
 export async function mapWithConcurrency<T, R>(
   items: T[],
   limit: number,
-  fn: (item: T, index: number) => Promise<R>
+  fn: (item: T, index: number) => Promise<R>,
+  signal?: AbortSignal,
 ): Promise<R[]> {
   const results = new Array<R>(items.length)
   let next = 0
   async function worker(): Promise<void> {
     while (true) {
+      if (signal?.aborted) {
+        throw signal.reason instanceof Error ? signal.reason : new Error("Operation cancelled")
+      }
       const i = next++
       if (i >= items.length) return
       results[i] = await fn(items[i]!, i)

@@ -23,13 +23,26 @@ function anonSession(): CurrentSession {
 
 interface MockPort {
   listAdapters: () => ConnectorInfo[]
-  moveData: (s: { connectorId: string }, t: { connectorId: string }, o: { transform?: unknown }) => Promise<MoveSummary>
-  previewMove: (s: { connectorId: string }, o: { transform?: unknown; limit?: number }) => Promise<{ rows: Record<string, unknown>[]; truncated: boolean }>
+  moveData: (
+    s: { connectorId: string },
+    t: { connectorId: string },
+    o?: { transform?: unknown; signal?: AbortSignal },
+  ) => Promise<MoveSummary>
+  previewMove: (
+    s: { connectorId: string },
+    o?: { transform?: unknown; limit?: number; signal?: AbortSignal },
+  ) => Promise<{ rows: Record<string, unknown>[]; truncated: boolean }>
   listTables: (connectorId: string) => Promise<string[]>
 }
 
 function hostWith(port: MockPort | null): AgentHost {
-  return { connectors: { port: { value: port } } } as unknown as AgentHost
+  return {
+    connectors: {
+      port: { value: port },
+      events: { sink: () => {} },
+      operations: { value: null },
+    },
+  } as unknown as AgentHost
 }
 
 async function buildApp(session: CurrentSession, port: MockPort | null): Promise<FastifyInstance> {
@@ -210,6 +223,66 @@ describe("bridge routes", () => {
     })
     expect(res.statusCode).toBe(400)
     expect(res.json()).toMatchObject({ error: "boom" })
+    await app.close()
+  })
+
+  it("cancels an in-flight move via /api/bridge/:moveId/cancel", async () => {
+    let seenSignal: AbortSignal | undefined
+    const app = await buildApp(adminSession(), {
+      listAdapters: () => adapters,
+      moveData: async (_s, _t, o) => {
+        seenSignal = o?.signal
+        await new Promise<void>((_resolve, reject) => {
+          const signal = o?.signal
+          if (!signal) {
+            reject(new Error("expected AbortSignal"))
+            return
+          }
+          if (signal.aborted) {
+            reject(signal.reason instanceof Error ? signal.reason : new Error("Cancelled by user"))
+            return
+          }
+          signal.addEventListener(
+            "abort",
+            () => reject(signal.reason instanceof Error ? signal.reason : new Error("Cancelled by user")),
+            { once: true },
+          )
+        })
+        return { status: "completed", rowsRead: 0, rowsWritten: 0, errors: [], failedAtRow: null }
+      },
+      previewMove: async () => ({ rows: [], truncated: false }),
+      listTables: async () => [],
+    })
+
+    const runPromise = app.inject({
+      method: "POST",
+      url: "/api/bridge/run",
+      payload: {
+        source: { connectorId: "pg-src", spec: { kind: "sql", sql: "SELECT 1" } },
+        target: { connectorId: "ms-tgt", spec: { kind: "sql", table: "t", mode: "append" } },
+      },
+    })
+
+    for (let i = 0; i < 50 && !seenSignal; i++) {
+      await new Promise((r) => setTimeout(r, 10))
+    }
+    expect(seenSignal).toBeTruthy()
+
+    const { listActiveOperations } = await import("../src/infra/operations/cancel-registry.js")
+    const active = listActiveOperations("bridge.run")
+    expect(active.length).toBe(1)
+    const moveId = active[0]!.id
+
+    const cancel = await app.inject({
+      method: "POST",
+      url: `/api/bridge/${moveId}/cancel`,
+    })
+    expect(cancel.statusCode).toBe(200)
+    expect(cancel.json()).toMatchObject({ cancelled: true, moveId })
+
+    const run = await runPromise
+    expect(run.statusCode).toBe(499)
+    expect(run.json()).toMatchObject({ cancelled: true, moveId })
     await app.close()
   })
 

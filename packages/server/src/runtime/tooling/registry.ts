@@ -134,7 +134,7 @@ const STATIC_TOOL_BINDERS: readonly StaticToolBinder[] = [
   { metadata: searchCatalogTool, bind: (host, run) => createSearchCatalogTool(host, run) },
   // ── Connector bridge (host-bound) ──
   { metadata: listAdaptersToolMetadata, bind: (host) => createListAdaptersTool(host) },
-  { metadata: bridgeDataToolMetadata, bind: (host) => createBridgeDataTool(host) },
+  { metadata: bridgeDataToolMetadata, bind: (host, run) => createBridgeDataTool(host, run) },
   // ── ABI environment sync ──
   { metadata: compareCatalogsTool, bind: (host) => createCompareCatalogsTool(host) },
   { metadata: listSyncDefinitionsTool, bind: (host) => createListSyncDefinitionsTool(host) },

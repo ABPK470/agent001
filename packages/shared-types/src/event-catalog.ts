@@ -1087,6 +1087,13 @@ export const SSE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     severity: "error",
     summary: () => "failed",
   },
+  "sync.preview.cancelled": {
+    id: "sync.preview.cancelled",
+    family: "sync",
+    label: "Cancelled",
+    severity: "warn",
+    summary: () => "cancelled",
+  },
   "sync.preview.table.done": {
     id: "sync.preview.table.done",
     family: "sync",
@@ -1710,6 +1717,13 @@ export const SSE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     severity: "error",
     summary: () => "failed",
   },
+  "bridge.preview.cancelled": {
+    id: "bridge.preview.cancelled",
+    family: "sync",
+    label: "Cancelled",
+    severity: "warn",
+    summary: () => "cancelled",
+  },
   "bridge.run.started": {
     id: "bridge.run.started",
     family: "sync",
@@ -1737,6 +1751,13 @@ export const SSE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     label: "Failed",
     severity: "error",
     summary: () => "failed",
+  },
+  "bridge.run.cancelled": {
+    id: "bridge.run.cancelled",
+    family: "sync",
+    label: "Cancelled",
+    severity: "warn",
+    summary: () => "cancelled",
   },
 }
 

@@ -927,6 +927,16 @@ export const api = {
       `/api/sync/execute/${encodeURIComponent(planId)}/cancel`,
       { method: "POST" },
     ),
+  cancelSyncPreview: (planId: string) =>
+    json<{ cancelled: boolean; planId: string }>(
+      `/api/sync/preview/${encodeURIComponent(planId)}/cancel`,
+      { method: "POST" },
+    ),
+  cancelBridgeMove: (moveId: string) =>
+    json<{ cancelled: boolean; moveId: string }>(
+      `/api/bridge/${encodeURIComponent(moveId)}/cancel`,
+      { method: "POST" },
+    ),
   syncHistory: (params: SyncHistoryParams = {}) => {
     const sp = new URLSearchParams()
     sp.set("page", String(params.page ?? 1))

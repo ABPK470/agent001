@@ -2,6 +2,9 @@
  * Bridge transport routes — admin-only preview + run over the
  * connector-adapter engine. Emits bridge.* lifecycle (+ progress) events into
  * the platform event bus (Event Stream + Pipelines), same path as sync.
+ *
+ * Long-running preview/run register AbortControllers so Pipelines Stop is a
+ * true cancel (same dialect as sync execute / proposer).
  */
 
 import { randomUUID } from "node:crypto"
@@ -15,7 +18,15 @@ import {
   type WriteSpec,
 } from "@mia/shared-types"
 import type { FastifyInstance } from "fastify"
+import {
+  cancelOperation,
+  registerOperation,
+  unregisterOperation,
+} from "../../../infra/operations/cancel-registry.js"
 import { createBridgeProgressThrottle, errorsPreview } from "./bridge-telemetry.js"
+
+export const BRIDGE_PREVIEW_OPERATION = "bridge.preview" as const
+export const BRIDGE_RUN_OPERATION = "bridge.run" as const
 
 interface PreviewBody {
   source: { connectorId: string; spec: ReadSpec }
@@ -48,6 +59,12 @@ function adapters(host: AgentHost) {
 function connectorMeta(host: AgentHost, connectorId: string): { name: string; kind: string } {
   const hit = adapters(host).find((c) => c.id === connectorId)
   return { name: hit?.displayName ?? connectorId, kind: hit?.kind ?? "?" }
+}
+
+function isCancelled(error: unknown, signal: AbortSignal): boolean {
+  if (signal.aborted) return true
+  const msg = error instanceof Error ? error.message : String(error)
+  return /cancel/i.test(msg)
 }
 
 export function registerBridgeRoutes(app: FastifyInstance, host: AgentHost): void {
@@ -92,10 +109,15 @@ export function registerBridgeRoutes(app: FastifyInstance, host: AgentHost): voi
       actorUpn: req.session?.upn ?? null,
     }
     emitBridge(host, EventType.BridgePreviewStarted, base)
+    const signal = registerOperation(
+      BRIDGE_PREVIEW_OPERATION,
+      moveId,
+      `Bridge preview ${moveId.slice(0, 8)}`,
+    )
     try {
       const result = await port.previewMove(
         { connectorId: body.source.connectorId, spec: body.source.spec },
-        { transform: body.transform, limit: body.limit },
+        { transform: body.transform, limit: body.limit, signal },
       )
       emitBridge(host, EventType.BridgePreviewCompleted, {
         ...base,
@@ -106,6 +128,15 @@ export function registerBridgeRoutes(app: FastifyInstance, host: AgentHost): voi
       return { rows: result.rows, truncated: result.truncated }
     } catch (e) {
       const error = e instanceof Error ? e.message : String(e)
+      if (isCancelled(e, signal)) {
+        emitBridge(host, EventType.BridgePreviewCancelled, {
+          ...base,
+          error: "Cancelled by user",
+          durationMs: Date.now() - t0,
+        })
+        reply.code(499)
+        return { error: "Cancelled by user", cancelled: true, moveId }
+      }
       emitBridge(host, EventType.BridgePreviewFailed, {
         ...base,
         error,
@@ -113,6 +144,8 @@ export function registerBridgeRoutes(app: FastifyInstance, host: AgentHost): voi
       })
       reply.code(400)
       return { error }
+    } finally {
+      unregisterOperation(BRIDGE_PREVIEW_OPERATION, moveId)
     }
   })
 
@@ -159,6 +192,11 @@ export function registerBridgeRoutes(app: FastifyInstance, host: AgentHost): voi
       actorUpn: req.session?.upn ?? null,
     }
     emitBridge(host, EventType.BridgeRunStarted, base)
+    const signal = registerOperation(
+      BRIDGE_RUN_OPERATION,
+      moveId,
+      `Bridge move ${moveId.slice(0, 8)}`,
+    )
     const throttle = createBridgeProgressThrottle()
     try {
       const summary = await port.moveData(
@@ -170,6 +208,7 @@ export function registerBridgeRoutes(app: FastifyInstance, host: AgentHost): voi
         },
         {
           ...(body.transform ? { transform: body.transform } : {}),
+          signal,
           onProgress: ({ rowsRead, rowsWritten }) => {
             throttle(rowsRead, () => {
               emitBridge(host, EventType.BridgeRunProgress, {
@@ -208,6 +247,15 @@ export function registerBridgeRoutes(app: FastifyInstance, host: AgentHost): voi
       return summary
     } catch (e) {
       const error = e instanceof Error ? e.message : String(e)
+      if (isCancelled(e, signal)) {
+        emitBridge(host, EventType.BridgeRunCancelled, {
+          ...base,
+          error: "Cancelled by user",
+          durationMs: Date.now() - t0,
+        })
+        reply.code(499)
+        return { error: "Cancelled by user", cancelled: true, moveId }
+      }
       emitBridge(host, EventType.BridgeRunFailed, {
         ...base,
         error,
@@ -215,7 +263,25 @@ export function registerBridgeRoutes(app: FastifyInstance, host: AgentHost): voi
       })
       reply.code(400)
       return { error }
+    } finally {
+      unregisterOperation(BRIDGE_RUN_OPERATION, moveId)
     }
+  })
+
+  app.post<{ Params: { moveId: string } }>("/api/bridge/:moveId/cancel", async (req, reply) => {
+    if (!req.session?.isAdmin) {
+      reply.code(403)
+      return { error: "admin only" }
+    }
+    const moveId = req.params.moveId
+    const cancelled =
+      cancelOperation(BRIDGE_RUN_OPERATION, moveId) ||
+      cancelOperation(BRIDGE_PREVIEW_OPERATION, moveId)
+    if (!cancelled) {
+      reply.code(404)
+      return { error: "No active bridge move to cancel" }
+    }
+    return { cancelled: true, moveId }
   })
 
   app.get<{ Params: { id: string } }>("/api/bridge/connectors/:id/tables", async (req, reply) => {

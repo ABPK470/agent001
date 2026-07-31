@@ -44,7 +44,12 @@ export function buildBridgePipeline(
   const failed = events.find(
     (e) => e.type === EventType.BridgePreviewFailed || e.type === EventType.BridgeRunFailed,
   )
+  const cancelled = events.find(
+    (e) =>
+      e.type === EventType.BridgePreviewCancelled || e.type === EventType.BridgeRunCancelled,
+  )
   const error =
+    strField(cancelled?.data ?? {}, "error") ??
     strField(failed?.data ?? {}, "error") ??
     (strField(completed?.data ?? {}, "status") === "partial"
       ? `partial — ${numField(completed!.data, "errorCount") ?? "?"} error(s)`
@@ -141,7 +146,9 @@ function buildBridgeActivities(
   if (kind === OperationKind.BridgePreview) {
     const terminal = events.find(
       (e) =>
-        e.type === EventType.BridgePreviewCompleted || e.type === EventType.BridgePreviewFailed,
+        e.type === EventType.BridgePreviewCompleted ||
+        e.type === EventType.BridgePreviewFailed ||
+        e.type === EventType.BridgePreviewCancelled,
     )
     const workEvents = events.filter((e) => e.type !== EventType.BridgePreviewStarted)
     const rowCount = terminal ? numField(terminal.data, "rowCount") : null
@@ -150,7 +157,9 @@ function buildBridgeActivities(
       durationOf(startedAt, endedAt)
     const truncated = terminal?.data["truncated"] === true
     let summary: string | undefined
-    if (rowCount != null) {
+    if (pipelineStatus === OperationStatus.Cancelled) {
+      summary = "Cancelled"
+    } else if (rowCount != null) {
       summary = `${rowCount} row${rowCount === 1 ? "" : "s"} previewed${truncated ? " (truncated)" : ""}`
       if (durationMs != null) summary += ` · ${formatMs(durationMs)}`
     } else if (pipelineStatus === OperationStatus.Running) {
@@ -168,7 +177,8 @@ function buildBridgeActivities(
         durationMs: durationOf(startedAt, endedAt),
         summary,
         error:
-          pipelineStatus === OperationStatus.Failed
+          pipelineStatus === OperationStatus.Failed ||
+          pipelineStatus === OperationStatus.Cancelled
             ? strField(terminal?.data ?? {}, "error") ?? undefined
             : undefined,
         events: workEvents,
@@ -179,7 +189,10 @@ function buildBridgeActivities(
   // Bridge run — transfer activity folds progress + terminal.
   const progressEvents = events.filter((e) => e.type === EventType.BridgeRunProgress)
   const terminal = events.find(
-    (e) => e.type === EventType.BridgeRunCompleted || e.type === EventType.BridgeRunFailed,
+    (e) =>
+      e.type === EventType.BridgeRunCompleted ||
+      e.type === EventType.BridgeRunFailed ||
+      e.type === EventType.BridgeRunCancelled,
   )
   const lastProgress = progressEvents[progressEvents.length - 1]
   const rowsRead =
@@ -196,7 +209,9 @@ function buildBridgeActivities(
   const statusLabel = strField(terminal?.data ?? {}, "status")
 
   let summary: string | undefined
-  if (rowsRead != null && rowsWritten != null) {
+  if (pipelineStatus === OperationStatus.Cancelled) {
+    summary = "Cancelled"
+  } else if (rowsRead != null && rowsWritten != null) {
     summary = `read ${rowsRead} · wrote ${rowsWritten}`
     if (errorCount != null && errorCount > 0) summary += ` · ${errorCount} error(s)`
     if (statusLabel && statusLabel !== "ok" && statusLabel !== "completed") {
@@ -230,7 +245,8 @@ function buildBridgeActivities(
       summary,
       details: Object.keys(transferDetails).length > 0 ? transferDetails : undefined,
       error:
-        pipelineStatus === OperationStatus.Failed
+        pipelineStatus === OperationStatus.Failed ||
+        pipelineStatus === OperationStatus.Cancelled
           ? strField(terminal?.data ?? {}, "error") ?? undefined
           : undefined,
       events: workEvents,

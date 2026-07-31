@@ -94,6 +94,8 @@ export interface ConfigureAgentOptions {
   connectors?: AgentHost["connectors"]["port"]["value"]
   /** Bridge event sink (SSE + event_log). Server wires broadcast; CLI/tests omit. */
   bridgeEventSink?: AgentHost["connectors"]["events"]["sink"]
+  /** Shared cancel registry slot — same object as HTTP bridge routes. */
+  connectorOperationsSlot?: AgentHost["connectors"]["operations"]
 }
 
 /**
@@ -175,6 +177,7 @@ export function configureAgent(options: ConfigureAgentOptions = {}): AgentHost {
     connectors: Object.freeze({
       port: { value: options.connectors ?? null },
       events: { sink: options.bridgeEventSink ?? NOOP_BRIDGE_EVENT_SINK },
+      operations: options.connectorOperationsSlot ?? { value: null },
     })
   })
 }
