@@ -21,6 +21,7 @@ import { ModalShell } from "../entity-registry/ModalShell"
 import { activePublishBadge } from "./catalog-publish-badge"
 import {
   WidgetToolbar,
+  WidgetToolbarLeading,
   WidgetToolbarSearch,
   WidgetToolbarTrailing,
 } from "../widget-toolbar"
@@ -181,7 +182,9 @@ export function CatalogVersionsModal({
         size="focus"
       >
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <WidgetToolbar className="shrink-0 border-b border-border/40 !rounded-none !border-x-0 !border-t-0 !bg-transparent px-3 py-1.5">
+          {/* Same px-6 as ModalShell header / list body — not widget-shell px-3. */}
+          <WidgetToolbar className="px-6 py-3">
+            <WidgetToolbarLeading>{null}</WidgetToolbarLeading>
             <WidgetToolbarSearch
               value={searchDraft}
               onChange={setSearchDraft}
@@ -228,10 +231,12 @@ export function CatalogVersionsModal({
             </WidgetToolbarTrailing>
           </WidgetToolbar>
 
-          <ActiveFilterChips
-            chips={activeChips}
-            onClear={hasActiveFilters ? clearFilters : undefined}
-          />
+          <div className="px-6">
+            <ActiveFilterChips
+              chips={activeChips}
+              onClear={hasActiveFilters ? clearFilters : undefined}
+            />
+          </div>
 
           <FilterSheet
             open={filtersOpen}
@@ -299,7 +304,7 @@ export function CatalogVersionsModal({
             </FilterField>
           </FilterSheet>
 
-          <div className="flex min-h-0 flex-1 flex-col gap-2 px-6 pb-4 pt-3">
+          <div className="flex min-h-0 flex-1 flex-col gap-3 px-6 pb-4 pt-3">
             {err && <p className="text-sm text-error">{err}</p>}
             <p className="shrink-0 text-xs text-text-faint">
               Sync bundle last published:{" "}
