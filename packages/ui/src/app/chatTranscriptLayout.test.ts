@@ -33,16 +33,18 @@ describe("chatTranscriptLayout", () => {
     expect(COMPACT_TABLE_WRAPPER_CLASS).not.toContain("flex-1")
   })
 
-  it("markdown fences in answers use quiet text Copy (no icon plate)", () => {
+  it("markdown fences in answers reuse the same CodeBlock as tool output", () => {
     const src = readFileSync(join(here, "../components/SmartAnswer.tsx"), "utf8")
     const css = readFileSync(join(here, "../boot/index.css"), "utf8")
+    const code = readFileSync(join(here, "../components/CodeBlock.tsx"), "utf8")
     const compactFn = src.match(/function CompactCodeBlock[\s\S]*?\n\}/)?.[0] ?? ""
     expect(compactFn).toContain("<CodeBlock")
-    expect(compactFn).toContain('copyTone="quiet"')
+    expect(compactFn).not.toContain("copyTone")
     expect(compactFn).not.toContain("mia-control")
-    expect(compactFn).not.toContain("absolute top-")
+    expect(code).not.toContain("copyTone")
+    expect(code).toMatch(/Copy size=\{12\}/)
     expect(css).toMatch(/\.mia-code-block__copy\s*\{[^}]*border:\s*none/s)
-    expect(css).toContain("mia-code-block__copy--quiet")
+    expect(css).not.toContain("mia-code-block__copy--quiet")
     expect(css).not.toMatch(
       /\.mia-code-block__copy:hover\s*\{[^}]*border-color:/s,
     )

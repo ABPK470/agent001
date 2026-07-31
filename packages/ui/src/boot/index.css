@@ -396,12 +396,6 @@
   color: var(--success);
 }
 
-/* Chat answer fences — word only, never an icon plate. */
-.mia-code-block__copy--quiet {
-  padding-inline: 0.25rem;
-  letter-spacing: 0.02em;
-}
-
 .mia-code-block__body {
   margin: 0;
   padding: 0.625rem 0.75rem;

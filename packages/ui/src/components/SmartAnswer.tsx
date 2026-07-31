@@ -333,9 +333,7 @@ export function CompactTable({
 }
 
 /**
- * Markdown fences in chat answers — same `CodeBlock` surface as tools, but
- * quiet text Copy (no icon plate / hairline frame). That chrome belongs to
- * tool I/O, not prettyfied answer SQL.
+ * Markdown fences in chat answers — same CodeBlock as tool / sync output.
  */
 function CompactCodeBlock({ lang, text }: { lang: string; text: string }) {
   return (
@@ -343,7 +341,6 @@ function CompactCodeBlock({ lang, text }: { lang: string; text: string }) {
       code={text}
       lang={lang || "text"}
       maxHeight={320}
-      copyTone="quiet"
       className="my-1.5 w-full min-w-0"
     />
   )

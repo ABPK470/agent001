@@ -1,6 +1,7 @@
 /**
  * CodeBlock — one surface for code: perimeter + toolbar divider + body.
  * Never nest inside another bordered frame — pass this as the surface.
+ * Chat answer fences and tool/sync output share this chrome (icon + Copy).
  */
 
 import { Check, Copy } from "lucide-react"
@@ -38,8 +39,6 @@ export function CodeBlock({
   toolbar = true,
   embedded = false,
   label: labelProp,
-  /** `quiet` = text-only Copy (chat answer fences). Default keeps icon+label for tools. */
-  copyTone = "labeled",
   className,
 }: {
   code: string
@@ -54,7 +53,6 @@ export function CodeBlock({
   embedded?: boolean
   /** Override the toolbar label (e.g. sync meta). Skips lang uppercasing. */
   label?: string
-  copyTone?: "labeled" | "quiet"
   className?: string
 }) {
   const [copied, setCopied] = useState(false)
@@ -68,7 +66,6 @@ export function CodeBlock({
     () => (highlightSql ? <SqlHighlight code={code} /> : code),
     [code, highlightSql],
   )
-  const quiet = copyTone === "quiet"
 
   function copy() {
     navigator.clipboard.writeText(code).catch((err: unknown) => { console.error("[mia]", err) })
@@ -89,12 +86,12 @@ export function CodeBlock({
           <span className={labelClass}>{label}</span>
           <button
             type="button"
-            className={quiet ? "mia-code-block__copy mia-code-block__copy--quiet" : "mia-code-block__copy"}
+            className="mia-code-block__copy"
             data-copied={copied || undefined}
             onClick={copy}
             title="Copy to clipboard"
           >
-            {quiet ? null : (copied ? <Check size={12} /> : <Copy size={12} />)}
+            {copied ? <Check size={12} /> : <Copy size={12} />}
             <span>{copied ? "Copied" : "Copy"}</span>
           </button>
         </div>
