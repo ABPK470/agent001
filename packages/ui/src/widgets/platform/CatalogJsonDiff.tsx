@@ -70,7 +70,7 @@ export function CatalogJsonDiff({
     <div className="space-y-2">
       <pre
         className={[
-          "overflow-auto show-scrollbar rounded-md border border-border-subtle bg-base/50 font-mono text-[11px] leading-relaxed",
+          "mia-diff overflow-auto show-scrollbar rounded-md border border-border-subtle bg-diff-surface font-mono text-[11px] leading-relaxed text-text",
           className ?? "max-h-80",
         ].join(" ")}
       >
@@ -129,9 +129,9 @@ function DiffLine({
   }
   const tone =
     row.kind === "added"
-      ? "bg-success-soft text-success"
+      ? "bg-diff-add-soft text-diff-add"
       : row.kind === "removed"
-        ? "bg-error-soft text-error"
+        ? "bg-diff-del-soft text-diff-del"
         : "text-text"
   const marker = row.kind === "added" ? "+" : row.kind === "removed" ? "-" : " "
   return (

@@ -17,6 +17,7 @@
      • Text       text | text-secondary | text-muted | text-faint
      • Accent     accent | accent-hover | accent-soft
      • Status     success | warning | error | info  (each has -soft)
+     • Diff       diff-surface | diff-add | diff-del (+ softs) — content change panes only
      • Chrome     scrim | scrim-strong | scrim-focus | bubble-user
      • Datatype   datatype-int|string|date|bool|real|bin  (MymiDb)
      • Viz        viz-deep|mid|plum|rose|peach|coral     (unchanged)
@@ -70,6 +71,13 @@
   --color-error-soft: var(--error-soft);
   --color-info: var(--info);
   --color-info-soft: var(--info-soft);
+
+  /* Diff panes — exception to ink status (JSON / content change views) */
+  --color-diff-surface: var(--diff-surface);
+  --color-diff-add: var(--diff-add);
+  --color-diff-add-soft: var(--diff-add-soft);
+  --color-diff-del: var(--diff-del);
+  --color-diff-del-soft: var(--diff-del-soft);
 
   /* Chrome */
   --color-scrim: var(--scrim);
@@ -175,6 +183,13 @@
   --info: #60a5fa;
   --info-soft: rgba(96, 165, 250, 0.14);
 
+  /* Diff panes — clear add/remove chroma (aliases status on dark). */
+  --diff-surface: var(--panel-2);
+  --diff-add: var(--success);
+  --diff-add-soft: var(--success-soft);
+  --diff-del: var(--error);
+  --diff-del-soft: var(--error-soft);
+
   /* Viewing as — brand accent (same ink as live logo mark). */
   --viewing-as: var(--accent);
   --viewing-as-soft: var(--accent-soft);
@@ -210,6 +225,7 @@
    * Brand accent = same purple as dark (logo live, Viewing as, links).
    * Status + syntax on light = ink only (no traffic chroma). States differ by
    * label, weight, border style, and mark shape — soft washes are overlay.
+   * Diff panes (`--diff-*`) are the chroma exception — see tokens below.
    */
   --paper: #f3f1ec;
   --ink: #0a0a0a;
@@ -271,6 +287,17 @@
   --error-soft: var(--overlay-2);
   --info: var(--ink);
   --info-soft: var(--overlay-2);
+
+  /*
+   * Diff exception — JSON / content change panes only.
+   * Surface = workspace field / top bar (#f6f4f1), not widget --paper.
+   * Add/remove = unmistakable green / red; unchanged = ink text.
+   */
+  --diff-surface: #f6f4f1;
+  --diff-add: #15803d;
+  --diff-add-soft: color-mix(in srgb, var(--diff-add) 14%, var(--diff-surface));
+  --diff-del: #b91c1c;
+  --diff-del-soft: color-mix(in srgb, var(--diff-del) 14%, var(--diff-surface));
 
   --viewing-as: var(--accent);
   --viewing-as-soft: var(--accent-soft);

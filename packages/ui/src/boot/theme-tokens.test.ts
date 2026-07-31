@@ -58,6 +58,19 @@ describe("light theme color system", () => {
     expect(block).toMatch(/--hover-fill:\s*var\(--overlay-1\)/)
   })
 
+  it("diff panes keep clear green/red on sheet wash (not ink, not widget paper)", () => {
+    const block = lightThemeBlock()
+    expect(block).toMatch(/--diff-surface:\s*#f6f4f1/)
+    expect(block).toMatch(/--diff-add:\s*#15803d/)
+    expect(block).toMatch(/--diff-del:\s*#b91c1c/)
+    expect(block).not.toMatch(/--diff-add:\s*var\(--ink\)/)
+    expect(block).not.toMatch(/--diff-del:\s*var\(--ink\)/)
+    const src = readFileSync(join(here, "../widgets/platform/CatalogJsonDiff.tsx"), "utf8")
+    expect(src).toContain("bg-diff-surface")
+    expect(src).toContain("text-diff-add")
+    expect(src).toContain("text-diff-del")
+  })
+
   it("JsonViewer uses datatype tokens (not status success/error for scalars)", () => {
     const src = readFileSync(join(here, "../components/JsonViewer.tsx"), "utf8")
     expect(src).toContain("text-datatype-string")

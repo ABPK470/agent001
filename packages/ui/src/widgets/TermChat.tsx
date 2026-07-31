@@ -1470,19 +1470,19 @@ function WorkspaceDiffCard({ runId, onNotify, onNotifyError }: {
         <div className="px-3 pb-2 space-y-0.5 border-t border-border-subtle">
           {diff.added.map((f) => (
             <div key={f} className="flex items-center gap-1.5 text-[15px] font-mono">
-              <span className="text-success shrink-0">+</span>
+              <span className="text-diff-add shrink-0">+</span>
               <span className="text-text-muted truncate">{f}</span>
             </div>
           ))}
           {diff.modified.map((f) => (
             <div key={f} className="flex items-center gap-1.5 text-[15px] font-mono">
-              <span className="text-warning shrink-0">~</span>
+              <span className="text-diff-add shrink-0">~</span>
               <span className="text-text-muted truncate">{f}</span>
             </div>
           ))}
           {diff.deleted.map((f) => (
             <div key={f} className="flex items-center gap-1.5 text-[15px] font-mono">
-              <span className="text-error shrink-0">−</span>
+              <span className="text-diff-del shrink-0">−</span>
               <span className="text-text-faint truncate line-through">{f}</span>
             </div>
           ))}

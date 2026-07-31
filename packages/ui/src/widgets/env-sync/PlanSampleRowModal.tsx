@@ -60,7 +60,11 @@ function DiffSummaryBar({ kind, changed, unchanged, columnCount }: {
                 <span
                   key={column}
                   className="rounded border px-2 py-0.5 text-xs font-mono"
-                  style={{ color: DIFF.upd, borderColor: "color-mix(in srgb, var(--color-viz-peach) 35%, transparent)", backgroundColor: "color-mix(in srgb, var(--color-viz-peach) 10%, transparent)" }}
+                  style={{
+                    color: DIFF.upd,
+                    borderColor: "color-mix(in srgb, var(--color-diff-add) 35%, transparent)",
+                    backgroundColor: "color-mix(in srgb, var(--color-diff-add) 10%, var(--color-diff-surface))",
+                  }}
                 >
                   {column}
                 </span>
@@ -155,8 +159,8 @@ function DiffFieldBlock({ column, oldValue, newValue }: {
   }, [oldValue, newValue])
 
   return (
-    <article className="rounded-lg border border-border/50 overflow-hidden bg-surface/30">
-      <header className="flex items-center justify-between gap-3 px-3 py-2 border-b border-border/30 bg-elevated/70">
+    <article className="mia-diff rounded-lg border border-border/50 overflow-hidden bg-diff-surface">
+      <header className="flex items-center justify-between gap-3 px-3 py-2 border-b border-border/30 bg-overlay-1">
         <span className="font-mono text-sm font-medium text-text">{column}</span>
         <span className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: DIFF.upd }}>modified</span>
       </header>
@@ -188,11 +192,11 @@ function DiffValuePanel({ label, icon, segments, tone, plainText }: {
   const isRemoved = tone === "removed"
   const accent = isRemoved ? DIFF.del : DIFF.upd
   const panelBg = isRemoved
-    ? "color-mix(in srgb, var(--color-viz-coral) 6%, var(--color-surface))"
-    : "color-mix(in srgb, var(--color-viz-peach) 8%, var(--color-surface))"
+    ? "var(--color-diff-del-soft)"
+    : "var(--color-diff-add-soft)"
   const borderAccent = isRemoved
-    ? "color-mix(in srgb, var(--color-viz-coral) 40%, transparent)"
-    : "color-mix(in srgb, var(--color-viz-peach) 40%, transparent)"
+    ? "color-mix(in srgb, var(--color-diff-del) 40%, transparent)"
+    : "color-mix(in srgb, var(--color-diff-add) 40%, transparent)"
 
   return (
     <div
@@ -207,7 +211,7 @@ function DiffValuePanel({ label, icon, segments, tone, plainText }: {
         <span>{label}</span>
       </div>
       <pre
-        className="m-0 p-3 text-sm font-mono whitespace-pre-wrap break-all text-text min-w-0"
+        className="m-0 p-3 text-sm font-mono whitespace-pre-wrap break-all min-w-0"
         style={{ color: isRemoved ? DIFF.oldRow : DIFF.upd }}
       >
         {segments
@@ -235,7 +239,7 @@ function DiffHighlightedText({ segments, variant }: {
               className="rounded-sm px-0.5 line-through decoration-1"
               style={{
                 color: DIFF.del,
-                backgroundColor: "color-mix(in srgb, var(--color-viz-coral) 28%, transparent)",
+                backgroundColor: "var(--color-diff-del-soft)",
               }}
             >
               {segment.text}
@@ -249,7 +253,7 @@ function DiffHighlightedText({ segments, variant }: {
               className="rounded-sm px-0.5 font-semibold"
               style={{
                 color: DIFF.upd,
-                backgroundColor: "color-mix(in srgb, var(--color-viz-peach) 32%, transparent)",
+                backgroundColor: "var(--color-diff-add-soft)",
               }}
             >
               {segment.text}
@@ -284,7 +288,7 @@ function InsertDeleteRowDiff({ kind, sample, columns }: {
       {columns.map((column) => (
         <article
           key={column}
-          className="rounded-lg border overflow-hidden"
+          className="mia-diff rounded-lg border overflow-hidden bg-diff-surface"
           style={{ borderColor: `color-mix(in srgb, ${color} 30%, transparent)` }}
         >
           <header
@@ -292,7 +296,7 @@ function InsertDeleteRowDiff({ kind, sample, columns }: {
             style={{
               color,
               borderColor: `color-mix(in srgb, ${color} 25%, transparent)`,
-              backgroundColor: `color-mix(in srgb, ${color} 8%, transparent)`,
+              backgroundColor: kind === "insert" ? "var(--color-diff-add-soft)" : "var(--color-diff-del-soft)",
             }}
           >
             {column}

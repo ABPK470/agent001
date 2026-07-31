@@ -159,10 +159,10 @@ function DiffEntryCard({
 }): JSX.Element {
   const tone =
     entry.kind === "create"
-      ? "text-success"
+      ? "text-diff-add"
       : entry.kind === "delete"
-        ? "text-error"
-        : "text-warning"
+        ? "text-diff-del"
+        : "text-text-muted"
   const label =
     entry.kind === "create" ? "Added" : entry.kind === "delete" ? "Removed" : "Changed"
 

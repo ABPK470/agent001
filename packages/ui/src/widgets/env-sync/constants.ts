@@ -34,10 +34,10 @@ export function dot(c: string): string {
 }
 
 export const DIFF = {
-  ins:    "var(--color-accent)",
-  upd:    "var(--color-viz-peach)",
-  del:    "var(--color-viz-coral)",
+  ins:    "var(--color-diff-add)",
+  upd:    "var(--color-diff-add)",
+  del:    "var(--color-diff-del)",
   eqDim:  "var(--color-text-muted)",
-  oldRow: "var(--color-text-muted)",
-  newRow: "var(--color-accent)",
+  oldRow: "var(--color-diff-del)",
+  newRow: "var(--color-diff-add)",
 } as const

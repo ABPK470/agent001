@@ -75,9 +75,9 @@ export function ShippedDriftDiffModal({
     >
       <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden px-5 py-4">
         <p className={`${META_TEXT} text-text-muted`}>
-          <span className="text-error">− shipped</span>
+          <span className="text-diff-del">− shipped</span>
           {" · "}
-          <span className="text-success">+ database tip</span>
+          <span className="text-diff-add">+ database tip</span>
           {" · "}
           Database tip remains the source of truth.
         </p>
