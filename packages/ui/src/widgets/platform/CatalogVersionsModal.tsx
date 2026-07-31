@@ -330,7 +330,9 @@ export function CatalogVersionsModal({
                 {filtered.map((entry) => (
                   <li
                     key={entry.version}
-                    className={`flex items-center gap-3 rounded-lg border px-3 py-2.5 text-sm ${entry.isActive ? "border-accent/40 bg-accent/5" : "border-border-subtle"}`}
+                    className={`flex items-center gap-3 rounded-lg border border-border px-3 py-2.5 text-sm transition-colors ${
+                      entry.isActive ? "bg-[var(--select-fill)]" : "hover:bg-[var(--hover-fill)]"
+                    }`}
                   >
                     <button
                       type="button"

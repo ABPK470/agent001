@@ -6,7 +6,8 @@ import { useMe } from "../../hooks/useMe"
 import { timeAgo } from "../../lib/util"
 import { ModalBtnSecondary, PromptModal } from "./chrome"
 import { useConsole } from "./console-context"
-import { TAB_PILL, TAB_PILL_ACTIVE, TAB_PILL_IDLE, META_TEXT } from "./design"
+import { CONTROL_IDLE, CONTROL_PRESSED } from "../../lib/selection"
+import { META_TEXT } from "./design"
 import { PolicyRulesModal } from "./PolicyRulesModal"
 import { DetailField, DetailGrid } from "../entity-registry/DetailField"
 import {
@@ -109,7 +110,10 @@ export function ApprovalsPanel(): JSX.Element {
                       key={entry.value}
                       type="button"
                       onClick={() => setFilter(entry.value)}
-                      className={[TAB_PILL, filter === entry.value ? TAB_PILL_ACTIVE : TAB_PILL_IDLE].join(" ")}
+                      className={[
+                        "rounded-md px-2.5 py-1.5 text-sm",
+                        filter === entry.value ? CONTROL_PRESSED : CONTROL_IDLE,
+                      ].join(" ")}
                     >
                       {entry.label}
                     </button>

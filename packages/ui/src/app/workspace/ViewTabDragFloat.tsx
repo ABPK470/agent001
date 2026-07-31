@@ -1,5 +1,5 @@
 /**
- * Drag preview — same underline rail chrome as resting tabs
+ * Drag preview — same shade rail chrome as resting tabs
  * (grip + label + close), so width/label do not jump while dragging.
  */
 

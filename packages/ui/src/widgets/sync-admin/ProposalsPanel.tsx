@@ -16,7 +16,7 @@ import { DetailField, DetailGrid } from "../entity-registry/DetailField"
 import { DetailActionBtn, PromptModal } from "./chrome"
 import { useConsole } from "./console-context"
 import { approvalRequired, normalizeApprovalPolicyRow, resolveApprovalPolicy, type ApprovalPolicyRow } from "./approval-policy"
-import { TAB_PILL, TAB_PILL_ACTIVE, TAB_PILL_IDLE } from "./design"
+import { CONTROL_IDLE, CONTROL_PRESSED } from "../../lib/selection"
 import { RunProposerModal } from "./RunProposerModal"
 import {
   ActiveOperationBanner,
@@ -187,7 +187,10 @@ export function ProposalsPanel(): JSX.Element {
                       key={t.value}
                       type="button"
                       onClick={() => setStatusFilter(t.value)}
-                      className={[TAB_PILL, statusFilter === t.value ? TAB_PILL_ACTIVE : TAB_PILL_IDLE].join(" ")}
+                      className={[
+                        "rounded-md px-2.5 py-1.5 text-sm",
+                        statusFilter === t.value ? CONTROL_PRESSED : CONTROL_IDLE,
+                      ].join(" ")}
                     >
                       {t.label}
                     </button>

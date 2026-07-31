@@ -27,8 +27,8 @@ export function MobileNav({ views, activeViewId, onSelectView, onAdd }: Props) {
               key={view.id}
               className={`shrink-0 min-w-[64px] flex flex-col items-center justify-center gap-0.5 px-3 py-2 min-h-[56px] transition-colors ${
                 isActive
-                  ? "text-accent"
-                  : "text-text-muted active:text-text-secondary"
+                  ? "text-text font-medium bg-[var(--select-fill)]"
+                  : "text-text-muted hover:bg-[var(--hover-fill)] hover:text-text active:bg-[var(--hover-fill)]"
               }`}
               onClick={() => onSelectView(view.id)}
             >

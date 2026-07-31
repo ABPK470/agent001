@@ -32,8 +32,8 @@ export function EnvColorPicker({
               onClick={() => onChange(token)}
               className={[
                 "h-7 w-7 rounded-full transition-shadow",
-                active ? "ring-2 ring-accent ring-offset-2 ring-offset-base" : "ring-1 ring-border-subtle",
-                disabled ? "cursor-not-allowed opacity-50" : "hover:ring-accent/60",
+                active ? "ring-2 ring-text ring-offset-2 ring-offset-base" : "ring-1 ring-border-subtle",
+                disabled ? "cursor-not-allowed opacity-50" : "hover:ring-border-strong",
               ].join(" ")}
               style={{ background: envColorDot(token) }}
               title={token}

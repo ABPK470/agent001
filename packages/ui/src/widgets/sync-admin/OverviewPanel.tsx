@@ -228,12 +228,12 @@ function StatusCard({
   accent?: "info" | "warning" | "danger"
 }): JSX.Element {
   const border =
-    accent === "danger" ? "border-error/30 hover:border-error/50"
-    : accent === "warning" ? "border-warning/30 hover:border-warning/50"
-    : accent === "info" ? "border-info/30 hover:border-info/50"
-    : "border-border-subtle hover:border-accent/40"
+    accent === "danger" ? "border-error/30"
+    : accent === "warning" ? "border-warning/30"
+    : accent === "info" ? "border-info/30"
+    : "border-border"
 
-  const className = `group flex flex-col items-start gap-1 rounded-lg border bg-elevated/20 p-4 text-left transition hover:bg-elevated/50 ${border}`
+  const className = `group flex flex-col items-start gap-1 rounded-lg border p-4 text-left transition-colors hover:bg-[var(--hover-fill)] ${border}`
 
   if (!onClick) {
     return (

@@ -109,11 +109,11 @@ export function EvidencePanel({ tabsToolbar }: { tabsToolbar?: ReactNode }): JSX
               <DetailField label="Hash" value={`${chosen.content_hash.slice(0, 24)}…`} mono span={2} />
             </DetailGrid>
             <div className="mt-4 flex flex-wrap gap-2 border-t border-border-subtle pt-3">
-              <a href={api.evidenceEnvelopeUrl(chosen.id)} download className="inline-flex items-center gap-1 rounded-lg border border-border-subtle px-2.5 py-1.5 text-xs hover:bg-elevated">
+              <a href={api.evidenceEnvelopeUrl(chosen.id)} download className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs text-text-muted transition-colors hover:bg-[var(--hover-fill)] hover:text-text">
                 <Download size={12} /> envelope.json
               </a>
               {chosen.pdf_path && (
-                <a href={api.evidencePdfUrl(chosen.id)} download className="inline-flex items-center gap-1 rounded-lg border border-border-subtle px-2.5 py-1.5 text-xs hover:bg-elevated">
+                <a href={api.evidencePdfUrl(chosen.id)} download className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs text-text-muted transition-colors hover:bg-[var(--hover-fill)] hover:text-text">
                   <Download size={12} /> evidence.pdf
                 </a>
               )}

@@ -118,7 +118,7 @@ function UpdateRowDiff({ sample, changed, unchanged }: {
           <button
             type="button"
             onClick={() => setShowUnchanged(!showUnchanged)}
-            className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm text-text-muted hover:bg-elevated/40 transition-colors"
+            className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm text-text-muted rounded-[var(--list-row-radius)] transition-colors hover:bg-[var(--hover-fill)]"
           >
             {showUnchanged
               ? <ChevronDown size={14} className="shrink-0" />

@@ -695,7 +695,7 @@ function PipelineRow({ pipeline, expanded, onToggle, actExpanded, toggleActivity
         <div className="flex items-center gap-1 pr-1">
           <button
             type="button"
-            className="min-w-0 flex-1 flex items-center gap-2 py-2 pr-3 hover:bg-elevated/50 transition-colors text-left"
+            className="min-w-0 flex-1 flex items-center gap-2 py-2 pr-3 rounded-[var(--list-row-radius)] hover:bg-[var(--hover-fill)] transition-colors text-left"
             onClick={onToggle}
           >
             <span className="review-chevron-slot">
@@ -777,7 +777,7 @@ function PipelineRow({ pipeline, expanded, onToggle, actExpanded, toggleActivity
     <LogGroup>
       <div className="flex items-center gap-1 pr-1">
       <button
-        className="min-w-0 flex-1 flex items-center gap-2 py-2 pr-3 hover:bg-overlay-2/80 transition-colors text-left"
+        className="min-w-0 flex-1 flex items-center gap-2 py-2 pr-3 rounded-[var(--list-row-radius)] hover:bg-[var(--hover-fill)] transition-colors text-left"
         onClick={onToggle}
       >
         <span className="review-chevron-slot">

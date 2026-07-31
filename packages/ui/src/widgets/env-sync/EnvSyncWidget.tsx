@@ -688,7 +688,7 @@ export function EnvSync() {
                             e.preventDefault()
                             pickSearchHit(hit)
                           }}
-                          className="w-full text-left px-3 py-1.5 text-sm hover:bg-surface transition-colors flex items-center gap-3"
+                          className="w-full text-left px-3 py-1.5 text-sm rounded-[var(--list-row-radius)] transition-colors hover:bg-[var(--hover-fill)] flex items-center gap-3"
                         >
                           <span className="text-text-muted font-mono text-sm shrink-0">{String(hit.id)}</span>
                           <span className="truncate">{hit.name ?? "—"}</span>

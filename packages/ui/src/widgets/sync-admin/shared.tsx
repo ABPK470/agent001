@@ -272,7 +272,7 @@ export function SectionRow({
       <button
         type="button"
         onClick={onClick}
-        className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-elevated/50"
+        className="flex w-full items-center gap-3 px-3 py-2.5 text-left rounded-[var(--list-row-radius)] transition-colors hover:bg-[var(--hover-fill)]"
       >
         <span className="min-w-0 flex-1">
           <span className="block truncate text-xs font-medium text-text">{title}</span>
@@ -335,7 +335,7 @@ export function ActiveOperationBanner({
             type="button"
             onClick={onCancel}
             disabled={cancelBusy}
-            className="shrink-0 rounded-md border border-border-subtle px-2.5 py-1 text-sm text-text-muted transition-colors hover:bg-overlay-2 hover:text-text disabled:opacity-40"
+            className="shrink-0 rounded-md border border-border px-2.5 py-1 text-sm text-text-muted transition-colors hover:bg-[var(--hover-fill)] hover:text-text disabled:opacity-40"
           >
             {cancelBusy ? <Loader2 size={14} className="animate-spin" /> : cancelLabel}
           </button>

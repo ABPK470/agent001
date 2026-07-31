@@ -603,9 +603,15 @@ function LogRow({
   return (
     <div>
       <div
-        className={`flex items-baseline gap-2.5 py-1 ${
-          log.error ? "bg-error-soft" : "hover:bg-overlay-1"
-        } ${hasData ? "cursor-pointer" : ""}`}
+        className={[
+          "flex items-baseline gap-2.5 py-1 rounded-[var(--list-row-radius)] transition-colors",
+          log.error
+            ? "bg-error-soft"
+            : expanded && hasData
+              ? "bg-[var(--select-fill)]"
+              : "hover:bg-[var(--hover-fill)]",
+          hasData ? "cursor-pointer" : "",
+        ].join(" ")}
         onClick={() => hasData && setExpanded((e) => !e)}
       >
         <span

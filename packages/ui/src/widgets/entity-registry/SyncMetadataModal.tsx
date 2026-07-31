@@ -37,7 +37,7 @@ import {
   StepTypeDefinitionEditor,
 } from "./CatalogDefinitionEditor"
 import { FORM_HEADING, HELP_TEXT, ICON_BTN, ICON_BTN_PRIMARY, META_TEXT, PANEL, TAB_PILL, TAB_PILL_ACTIVE, TAB_PILL_IDLE, TEXT_BTN, TEXT_BTN_PRIMARY } from "./chrome"
-import { LIST_ROW_ACTIVE, LIST_ROW_IDLE, SELECT_ACTIVE } from "../../lib/selection"
+import { CONTROL_PRESSED, LIST_ROW_ACTIVE, LIST_ROW_IDLE } from "../../lib/selection"
 import { FormSurfaceExecutionSteps } from "./EntityEditSurfaces"
 import { buildStepTypeCatalogLookup } from "./execution-step-shared"
 import { FormFieldGroup, FormSectionCard } from "./form-section"
@@ -820,7 +820,7 @@ export function SyncMetadataModal({
                       || !environmentForm.name.trim()
                       || environmentFormReadOnly
                     }
-                    className={[ICON_BTN_PRIMARY, isEnvironmentFormDirty ? SELECT_ACTIVE : ""].filter(Boolean).join(" ")}
+                    className={[ICON_BTN_PRIMARY, isEnvironmentFormDirty ? CONTROL_PRESSED : ""].filter(Boolean).join(" ")}
                     title={isEnvironmentFormDirty ? "Save unsaved changes" : "Save"}
                     aria-label="Save"
                   >
@@ -858,7 +858,7 @@ export function SyncMetadataModal({
                 type="button"
                 onClick={requestSave}
                 disabled={busy || !formOpen || !formId.trim() || !formLabel.trim()}
-                className={[ICON_BTN_PRIMARY, isFormDirty ? SELECT_ACTIVE : ""].filter(Boolean).join(" ")}
+                className={[ICON_BTN_PRIMARY, isFormDirty ? CONTROL_PRESSED : ""].filter(Boolean).join(" ")}
                 title={isFormDirty ? "Save unsaved changes" : "Save"}
                 aria-label="Save"
               >

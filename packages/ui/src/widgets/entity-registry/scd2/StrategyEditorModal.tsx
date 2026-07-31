@@ -9,7 +9,7 @@ import { api } from "../../../client/index"
 import { Listbox, type ListboxOption } from "../../../components/Listbox"
 import type { EntityRegistryStrategy } from "../../../types"
 import { Err } from "../../env-sync/chrome"
-import { TAB_PILL, TAB_PILL_ACTIVE, TAB_PILL_IDLE } from "../chrome"
+import { PLACE_TAB_ACTIVE, PLACE_TAB_IDLE } from "../../../lib/selection"
 import { ModalBtnPrimary, ModalBtnSecondary } from "../governance/modal-chrome"
 import {
   AdminModalCanvas,
@@ -339,9 +339,8 @@ function TabPill({
       aria-selected={active}
       onClick={onClick}
       className={[
-        TAB_PILL,
-        "inline-flex items-center gap-1.5",
-        active ? TAB_PILL_ACTIVE : TAB_PILL_IDLE,
+        "inline-flex items-center gap-1.5 px-2.5 py-1.5 text-sm",
+        active ? PLACE_TAB_ACTIVE : PLACE_TAB_IDLE,
       ].join(" ")}
     >
       {icon} {children}

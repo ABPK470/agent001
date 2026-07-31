@@ -129,10 +129,10 @@ export const ExecutionStepListEditor = forwardRef<
                   >
                     <span
                       className={[
-                        "mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-xs font-semibold tabular-nums",
+                        "mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-xs font-semibold tabular-nums border",
                         expanded
-                          ? "bg-[var(--select-fill)] text-text"
-                          : "bg-elevated text-text-muted",
+                          ? "border-border-strong text-text"
+                          : "border-transparent text-text-muted",
                       ].join(" ")}
                     >
                       {index + 1}

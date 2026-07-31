@@ -59,19 +59,19 @@ export function WidgetCatalog({ onClose }: Props) {
               key={item.type}
               disabled={!isAllowed}
               title={isAllowed ? undefined : "Available to admins only"}
-              className={`relative flex items-center gap-3.5 rounded-xl text-left p-4 transition-colors border ${
+              className={`relative flex items-center gap-3.5 rounded-xl text-left p-4 transition-colors border border-border ${
                 !isAllowed
-                  ? "border-border text-text-faint opacity-45 cursor-not-allowed"
+                  ? "text-text-faint opacity-45 cursor-not-allowed bg-panel"
                   : isActive
-                    ? "border-border-strong bg-panel cursor-pointer shadow-[inset_0_0_0_1px_var(--text)]"
-                    : "border-border bg-panel text-text-muted hover:border-border-strong hover:text-text cursor-pointer"
+                    ? "bg-[var(--select-fill)] text-text cursor-pointer"
+                    : "bg-panel text-text-muted hover:bg-[var(--hover-fill)] hover:text-text cursor-pointer"
               }`}
               onClick={() => { if (isAllowed) handleToggle(item.type) }}
             >
-              <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 border ${
+              <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 border border-border ${
                 isActive && isAllowed
-                  ? "border-border-strong text-text"
-                  : "border-border text-text-muted"
+                  ? "text-text bg-[var(--hover-fill)]"
+                  : "text-text-muted"
               }`}>
                 <Icon size={18} className="block shrink-0" />
               </div>

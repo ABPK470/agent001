@@ -695,10 +695,10 @@ function ActiveUsersFilterBar({
                   key={s}
                   type="button"
                   onClick={() => setStatusFilter(s)}
-                  className={`px-2 py-1 rounded-md transition-colors ${
+                  className={`px-2 py-1 rounded-md text-xs transition-colors ${
                     statusFilter === s
-                      ? "bg-[var(--select-fill)] text-text font-medium"
-                      : "text-text-muted hover:text-text hover:bg-[var(--hover-fill)]"
+                      ? "bg-transparent text-text font-semibold border border-text"
+                      : "border border-transparent text-text-muted hover:border-border hover:text-text"
                   }`}
                 >
                   {s}
@@ -720,10 +720,10 @@ function ActiveUsersFilterBar({
                   key={r}
                   type="button"
                   onClick={() => setLastSeenRange(r)}
-                  className={`px-2 py-1 rounded-md transition-colors ${
+                  className={`px-2 py-1 rounded-md text-xs transition-colors ${
                     lastSeenRange === r
-                      ? "bg-[var(--select-fill)] text-text font-medium"
-                      : "text-text-muted hover:text-text hover:bg-[var(--hover-fill)]"
+                      ? "bg-transparent text-text font-semibold border border-text"
+                      : "border border-transparent text-text-muted hover:border-border hover:text-text"
                   }`}
                 >
                   {RANGE_LABELS[r]}

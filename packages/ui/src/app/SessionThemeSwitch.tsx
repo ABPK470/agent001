@@ -1,6 +1,7 @@
 import { Monitor, Moon, Sun } from "lucide-react"
 import type { ThemeMode } from "../hooks/useTheme"
 import { useTheme } from "../hooks/useTheme"
+import { SELECT_ACTIVE, SELECT_IDLE, SELECT_TRACK } from "../lib/selection"
 
 const MODES: ThemeMode[] = ["light", "dark", "system"]
 
@@ -10,13 +11,13 @@ function modeIcon(mode: ThemeMode) {
   return Monitor
 }
 
-/** Compact icon-only theme control for the session header row. */
+/** Compact icon-only theme control for the session header row — MODE segment. */
 export function SessionThemeSwitch({ className = "" }: { className?: string } = {}) {
   const { mode, setTheme } = useTheme()
 
   return (
     <div
-      className={["inline-flex shrink-0 gap-0.5 p-0.5", className].filter(Boolean).join(" ")}
+      className={[SELECT_TRACK, "h-8", className].filter(Boolean).join(" ")}
       role="group"
       aria-label="Theme"
     >
@@ -32,10 +33,8 @@ export function SessionThemeSwitch({ className = "" }: { className?: string } = 
             aria-label={option}
             title={option}
             className={[
-              "flex h-7 w-7 items-center justify-center rounded-md transition-colors",
-              active
-                ? "bg-overlay-2 text-text"
-                : "text-text-muted hover:bg-overlay-hover hover:text-text-secondary",
+              "control-segment__btn flex h-full w-7 items-center justify-center rounded-md transition-colors",
+              active ? SELECT_ACTIVE : SELECT_IDLE,
             ].join(" ")}
           >
             <Icon size={13} strokeWidth={2} />

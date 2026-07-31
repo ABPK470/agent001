@@ -18,6 +18,7 @@ import { createPortal } from "react-dom"
 import { placeAnchoredPanel } from "../lib/anchored-panel"
 import { popoverZIndex } from "../lib/modal-stack"
 import { dismissOpenPopovers } from "../lib/popover-dismiss"
+import { CONTROL_IDLE, CONTROL_PRESSED } from "../lib/selection"
 
 /**
  * Clicks inside nested portaled pickers (DateField / Listbox use `.listbox-popover`)
@@ -157,16 +158,16 @@ export function FilterField({
   )
 }
 
-const FILTER_CHOICE_BTN =
-  "rounded-md border px-2 py-1.5 text-xs font-medium transition-colors"
-
-const FILTER_CHOICE_ON =
-  "border-border bg-[var(--select-fill)] text-text"
-const FILTER_CHOICE_OFF =
-  "border-border-subtle bg-base text-text-muted hover:border-border hover:bg-[var(--hover-fill)] hover:text-text"
+/**
+ * Filter choice chip — CONTROL dialect (keep the frame).
+ * Never SELECT_* alone: transparent borders read as plain text on paper.
+ */
+const FILTER_CHOICE_BTN = "rounded-md px-2 py-1.5 text-xs font-medium"
+const FILTER_CHOICE_ON = CONTROL_PRESSED
+const FILTER_CHOICE_OFF = CONTROL_IDLE
 
 /**
- * Choice grid — same look as Event Stream “Quick range” / Sync History toggles.
+ * Choice grid — Event Stream Quick range / Type / Severity, Sync History, Pipelines.
  * `multi` = checkbox chips; `single` = radio (one value, or none when cleared).
  */
 export function FilterChoiceGrid<T extends string>({

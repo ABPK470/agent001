@@ -14,7 +14,7 @@ import { readFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { describe, expect, it } from "vitest"
-import { SELECT_TRACK } from "../lib/selection"
+import { CONTROL_IDLE, CONTROL_PRESSED, SELECT_TRACK } from "../lib/selection"
 import {
   WIDGET_LOG_INSET_CLASS,
   WIDGET_LOG_SHELL_CLASS,
@@ -108,13 +108,55 @@ describe("widget log chrome — control height & search", () => {
     expect(selection).toContain("h-[var(--control-h)]")
   })
 
-  it("toolbar icon badges are readable and trailing pad absorbs corner hang", () => {
+  it("FilterSheet choices keep a visible CONTROL frame — never bare SELECT_*", () => {
+    const sheet = read(join(here, "../components/FilterSheet.tsx"))
+    expect(sheet).toContain("CONTROL_PRESSED")
+    expect(sheet).toContain("CONTROL_IDLE")
+    expect(sheet).not.toMatch(/FILTER_CHOICE_ON\s*=\s*SELECT_ACTIVE/)
+    expect(sheet).not.toMatch(/FILTER_CHOICE_OFF\s*=\s*SELECT_IDLE/)
+    expect(CONTROL_IDLE).toContain("border-border")
+    expect(CONTROL_PRESSED).toContain("border-border")
+    expect(CONTROL_PRESSED).toContain("bg-[var(--select-fill)]")
+  })
+
+  it("Trace / Pipelines / Event Stream row hover — rounded wash, not sharp overlay", () => {
+    const css = read(cssPath)
+    const opsRow = read(nestPath)
+    const live = read(livePath)
+
+    expect(css).toMatch(/\.trace-scope:hover\s*\{[^}]*background:\s*var\(--hover-fill\)/s)
+    expect(css).toMatch(
+      /\.trace-scope\[data-trace-kind="call"\]:hover\s*\{[^}]*background:\s*var\(--hover-fill\)/s,
+    )
+    // Light idle flats beat bare `:hover` — hover fill must be restated.
+    expect(css).toMatch(
+      /:root\[data-theme="light"\] \.trace-scope:hover[\s\S]*?background:\s*var\(--hover-fill\)/,
+    )
+    expect(opsRow).toContain("hover:bg-[var(--hover-fill)]")
+    expect(opsRow).toContain("rounded-[var(--list-row-radius)]")
+    expect(opsRow).not.toContain("hover:bg-elevated/50")
+    expect(opsRow).not.toContain("hover:bg-overlay-2/80")
+    expect(live).toContain("rounded-[var(--list-row-radius)]")
+    expect(live).toContain("hover:bg-[var(--hover-fill)]")
+    expect(live).not.toContain("hover:bg-overlay-1")
+  })
+
+  it("toolbar icon badges are solid full pills with clear numbers", () => {
     const css = read(cssPath)
     const live = read(livePath)
 
     expect(css).toContain(".widget-toolbar__icon-badge")
+    expect(css).toMatch(/\.widget-toolbar__icon-badge\s*\{[^}]*border-radius:\s*9999px/s)
+    expect(css).toMatch(/\.widget-toolbar__icon-badge\s*\{[^}]*background:\s*var\(--text\)/s)
+    expect(css).toMatch(/\.widget-toolbar__icon-badge\s*\{[^}]*font-weight:\s*700/s)
     expect(css).toMatch(
-      /\.widget-toolbar__icon-badge\s*\{[^}]*min-width:\s*1\.125rem[^}]*font-size:\s*0\.6875rem/s,
+      /\.widget-toolbar__icon-badge--pending\s*\{[^}]*background:\s*var\(--error\)/s,
+    )
+    expect(css).toMatch(
+      /\.widget-toolbar__icon-badge--pending\s*\{[^}]*color:\s*var\(--text-on-accent/s,
+    )
+    expect(css).not.toMatch(
+      /\.widget-toolbar__icon-badge--pending\s*\{[^}]*box-shadow:\s*inset/s,
     )
     expect(css).toMatch(
       /\.widget-toolbar__trailing\s*\{[^}]*padding-right:\s*0\.4rem/s,

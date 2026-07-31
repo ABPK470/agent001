@@ -108,7 +108,7 @@ export function DeleteThreadModal({
             type="button"
             onClick={handleConfirm}
             disabled={busy}
-            className="flex-1 h-9 text-sm rounded-lg border border-error text-error bg-transparent hover:border-border-strong hover:text-text flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50"
+            className="flex-1 h-9 text-sm rounded-lg border border-error text-error bg-transparent hover:bg-[var(--hover-fill)] hover:text-text flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50"
           >
             {busy ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
             {busy ? "Deleting…" : "Delete"}

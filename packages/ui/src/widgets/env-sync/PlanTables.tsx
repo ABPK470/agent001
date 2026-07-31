@@ -60,7 +60,7 @@ export function PlanView({ plan, expanded, setExpanded, exec }: {
             </div>
             <button
               onClick={() => setBundleOpen(true)}
-              className="shrink-0 rounded border border-border-subtle bg-overlay-1 px-2.5 py-1.5 text-left hover:bg-elevated/40 transition-colors max-w-[14rem]"
+              className="shrink-0 rounded-md border border-border px-2.5 py-1.5 text-left max-w-[14rem] text-text-muted transition-colors hover:bg-[var(--hover-fill)] hover:text-text"
               title="View published bundle entry on disk"
             >
               <span className="block text-[10px] uppercase tracking-wide text-text-muted">Published bundle</span>
@@ -228,10 +228,14 @@ function PlanTableSummaryRow({
       disabled={!interactive}
       onClick={onToggle ?? onOpen}
       className={[
-        "w-full text-left flex items-center gap-2 transition-colors",
+        "w-full text-left flex items-center gap-2 rounded-[var(--list-row-radius)] transition-colors",
         compact ? "px-3" : "px-4",
         py,
-        interactive ? "hover:bg-elevated/30 cursor-pointer group" : "cursor-default",
+        !interactive
+          ? "cursor-default"
+          : open
+            ? "bg-[var(--select-fill)] cursor-pointer group"
+            : "hover:bg-[var(--hover-fill)] cursor-pointer group",
       ].join(" ")}
     >
       {onToggle ? (
@@ -294,7 +298,7 @@ function PlanCollapsibleSections({
         <div>
           <button
             onClick={() => setAlertsOpen((open) => !open)}
-            className="w-full flex items-center gap-2 px-4 py-2.5 hover:bg-elevated/30 transition-colors text-left"
+            className="w-full flex items-center gap-2 px-4 py-2.5 transition-colors text-left hover:bg-[var(--hover-fill)]"
           >
             {alertsOpen ? <ChevronDown size={13} className="text-text-muted shrink-0" /> : <ChevronRight size={13} className="text-text-muted shrink-0" />}
             <AlertTriangle size={14} className="text-warning shrink-0" />
@@ -314,7 +318,7 @@ function PlanCollapsibleSections({
         <div>
           <button
             onClick={() => setNotesOpen((open) => !open)}
-            className="w-full flex items-center gap-2 px-4 py-2 hover:bg-elevated/20 transition-colors text-left"
+            className="w-full flex items-center gap-2 px-4 py-2 transition-colors text-left hover:bg-[var(--hover-fill)]"
           >
             {notesOpen ? <ChevronDown size={13} className="text-text-muted/50 shrink-0" /> : <ChevronRight size={13} className="text-text-muted/50 shrink-0" />}
             <Info size={13} className="text-text-muted/60 shrink-0" />
@@ -334,7 +338,7 @@ function PlanCollapsibleSections({
         <div>
           <button
             onClick={() => setFlowOpen((open) => !open)}
-            className="w-full flex items-center gap-2 px-4 py-2.5 hover:bg-elevated/30 transition-colors text-left"
+            className="w-full flex items-center gap-2 px-4 py-2.5 transition-colors text-left hover:bg-[var(--hover-fill)]"
           >
             {flowOpen ? <ChevronDown size={13} className="text-text-muted shrink-0" /> : <ChevronRight size={13} className="text-text-muted shrink-0" />}
             <GitBranch size={14} className="text-text-muted/70 shrink-0" />
@@ -538,7 +542,7 @@ function SampleTbl({ kind, samples, table }: {
               return (
                 <tr
                   key={index}
-                  className="border-b border-border/20 cursor-pointer hover:bg-elevated/20 transition-colors"
+                  className="border-b border-border/20 cursor-pointer transition-colors hover:bg-[var(--hover-fill)]"
                   onClick={openRow}
                   title="View full row"
                 >
@@ -568,7 +572,7 @@ function SampleTbl({ kind, samples, table }: {
             return (
               <tr
                 key={index}
-                className="cursor-pointer hover:bg-elevated/20 transition-colors"
+                className="cursor-pointer transition-colors hover:bg-[var(--hover-fill)]"
                 onClick={openRow}
                 title="View full row"
               >

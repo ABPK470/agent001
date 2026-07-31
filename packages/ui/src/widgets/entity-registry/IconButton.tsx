@@ -1,18 +1,26 @@
 /**
  * Unified toolbar icon button — shared by Entity Registry, Sync Admin, Env Sync.
+ *
+ * default/primary active = CONTROL pressed (border + ink), never SELECT fill.
+ * track/group active = MODE fill — only when inside a real SELECT_TRACK.
  */
 
 import { forwardRef } from "react"
 import type { ButtonHTMLAttributes, ReactNode } from "react"
 
-import { SELECT_ACTIVE, SELECT_FOCUS, SELECT_IDLE } from "../../lib/selection"
+import {
+  CONTROL_PRESSED,
+  SELECT_ACTIVE,
+  SELECT_FOCUS,
+  SELECT_IDLE,
+} from "../../lib/selection"
 import { ICON_BTN } from "./chrome"
 
 /** Lucide props for w-9 toolbar buttons. */
 export const TOOLBAR_ICON = { size: 16, strokeWidth: 1.75 } as const
 
 const ICON_BTN_ACTIVE =
-  `${ICON_BTN} ${SELECT_ACTIVE}`
+  `${ICON_BTN} ${CONTROL_PRESSED}`
 
 const ICON_BTN_TRACK_BASE =
   `flex items-center justify-center w-9 h-9 shrink-0 rounded-md ${SELECT_FOCUS} disabled:opacity-40 disabled:cursor-not-allowed`

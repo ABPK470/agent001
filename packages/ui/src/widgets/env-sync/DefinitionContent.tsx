@@ -1,6 +1,7 @@
 import { AlertTriangle, BookOpen, CheckCircle2, Database, Key, ShieldAlert, ShieldCheck, Ship } from "lucide-react"
 
 import { EmptyState } from "../../components/EmptyState"
+import { CONTROL_IDLE, CONTROL_PRESSED } from "../../lib/selection"
 import { useStore } from "../../state/store"
 import type { PublishedSyncDefinition } from "../../types"
 import { DIFF, normalizeOptionalTableSelection } from "./constants"
@@ -102,7 +103,7 @@ export function DefinitionContent({ definition }: { definition: PublishedSyncDef
             {definition.metadata.tables.map((table, index) => (
               <div
                 key={table.name}
-                className={`grid grid-cols-[2rem_1fr_auto_auto_auto_auto] gap-2 px-3 py-2 items-center text-sm ${index < definition.metadata.tables.length - 1 ? "border-b border-border/20" : ""} hover:bg-elevated/20 transition-colors`}
+                className={`grid grid-cols-[2rem_1fr_auto_auto_auto_auto] gap-2 px-3 py-2 items-center text-sm rounded-[var(--list-row-radius)] transition-colors hover:bg-[var(--hover-fill)] ${index < definition.metadata.tables.length - 1 ? "border-b border-border/20" : ""}`}
                 title={table.predicate}
               >
                 <span className="font-mono text-text-muted/40 text-right tabular-nums text-xs">{index + 1}</span>
@@ -124,7 +125,7 @@ export function DefinitionContent({ definition }: { definition: PublishedSyncDef
                   {table.userControllable ? (
                     <button
                       onClick={() => toggleOptionalTable(table.name)}
-                      className={`min-w-[3.5rem] rounded px-2 py-1 text-xs font-mono transition-colors ${enabledOptional.has(table.name) ? "bg-[var(--select-fill)] text-text hover:bg-[var(--hover-fill)]" : "bg-overlay-2 text-text-muted hover:text-text hover:bg-overlay-3"}`}
+                      className={`min-w-[3.5rem] rounded-md px-2 py-1 text-xs font-mono ${enabledOptional.has(table.name) ? CONTROL_PRESSED : CONTROL_IDLE}`}
                     >
                       {enabledOptional.has(table.name) ? "on" : "off"}
                     </button>

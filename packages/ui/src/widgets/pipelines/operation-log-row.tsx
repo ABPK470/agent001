@@ -255,11 +255,11 @@ export function OpLogRow({
 }) {
   // pl-0 — chevron slot centers on --review-tree-x; nested LogNest stays flush.
   const rowClass = linear
-    ? "flex items-center gap-2 py-2 pr-2 text-left text-text transition-colors hover:bg-elevated/50"
+    ? "flex items-center gap-2 py-2 pr-2 text-left text-text rounded-[var(--list-row-radius)] transition-colors hover:bg-[var(--hover-fill)]"
     : [
-        "flex items-center gap-2 py-1.5 pr-2.5 text-left text-text transition-colors hover:bg-overlay-2/80",
+        "flex items-center gap-2 py-1.5 pr-2.5 text-left text-text rounded-[var(--list-row-radius)] transition-colors hover:bg-[var(--hover-fill)]",
         isLast ? "" : "border-b border-border-subtle",
-        expanded && expandable ? "bg-overlay-1/50" : "",
+        expanded && expandable ? "bg-[var(--select-fill)]" : "",
       ].join(" ")
 
   const cells = (

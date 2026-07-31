@@ -2,7 +2,7 @@
  * Toolbar — top rail of the workspace paper sheet.
  *
  * One bright bar: layouts (left) | ops (right), full-height divider between.
- * Active sheet = underline / ink weight (selection dialect — never accent fill).
+ * Active sheet = shade fill + weight (selection dialect — never underline / accent).
  * Ops controls = bordered quiet chrome (same family as .mia-control).
  * Sheet toggle is an R&D surface knob — invert sheet↔ops lift (compare).
  */
@@ -292,8 +292,8 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
                     type="button"
                     className={`flex w-full items-center justify-between px-4 py-2.5 text-sm transition-colors ${
                       view.id === activeViewId
-                        ? "bg-[var(--select-fill)] font-semibold text-text"
-                        : "text-text-secondary hover:bg-[var(--hover-fill)] hover:text-text"
+                        ? "font-semibold text-text bg-[var(--select-fill)]"
+                        : "text-text-secondary hover:text-text hover:bg-[var(--hover-fill)]"
                     }`}
                     onClick={() => {
                       setActiveView(view.id)

@@ -22,16 +22,18 @@ export const TOOLBAR_ROW =
 /** Vertical rule between toolbar control groups. */
 export const TOOLBAR_DIVIDER = "h-4 w-px shrink-0 bg-overlay-3"
 
+/** Place-tab chrome — shade peers; pair with PLACE_TAB_* (never underline). */
 export const TAB_PILL =
-  "rounded-md px-2.5 py-1.5 text-sm font-medium transition-colors"
+  "px-2.5 py-1.5 text-sm transition-colors"
 
 /**
- * Selected / idle — global selection dialect (`lib/selection.ts`).
+ * Place / mode / list — global dialect (`lib/selection.ts`).
+ * TAB_PILL_* = PLACE (where). Mode chips use SELECT_* / SegmentToggle directly.
  * Accent is never used for “selected.”
  */
 export {
-  SELECT_ACTIVE as TAB_PILL_ACTIVE,
-  SELECT_IDLE as TAB_PILL_IDLE,
+  PLACE_TAB_ACTIVE as TAB_PILL_ACTIVE,
+  PLACE_TAB_IDLE as TAB_PILL_IDLE,
   SELECT_TRACK as TAB_SEGMENT_TRACK,
   LIST_ROW_ACTIVE,
   LIST_ROW_IDLE,

@@ -74,7 +74,7 @@ export function ModalBtnSecondary({
         "inline-flex h-9 items-center justify-center gap-1.5 px-4 text-sm border rounded-lg disabled:opacity-40",
         danger
           ? "border-error/30 text-error hover:bg-error/10"
-          : "border-border-subtle text-text-muted hover:bg-overlay-2 hover:text-text",
+          : "border-border text-text-muted hover:bg-[var(--hover-fill)] hover:text-text",
         className,
       ].join(" ")}
       {...props}
@@ -96,7 +96,7 @@ export function ModalBtnPrimary({
       className={[
         "inline-flex h-9 items-center justify-center gap-1.5 px-4 text-sm rounded-lg disabled:opacity-40",
         danger
-          ? "border border-error text-error bg-transparent hover:border-border-strong hover:text-text"
+          ? "border border-error text-error bg-transparent hover:bg-[var(--hover-fill)] hover:text-text"
           : "bg-accent hover:bg-accent-hover text-text-on-accent border border-accent",
         className,
       ].join(" ")}

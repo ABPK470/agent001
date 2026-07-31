@@ -129,6 +129,8 @@
   /* Selection dialect — same language as light (ink wash, not accent). */
   --select-fill: color-mix(in srgb, var(--text) 10%, transparent);
   --hover-fill: color-mix(in srgb, var(--text) 6%, transparent);
+  /* List / rail hover+place wash — Threads SOT; Trace / Event Stream / rails match. */
+  --list-row-radius: 0.65rem;
 
   --border-subtle: rgba(255, 255, 255, 0.06);
   --border: #27272a;
@@ -206,13 +208,13 @@
   --soft: var(--paper);
   --bg: var(--paper);
 
-  /* No grey washes — hover/select are border or weight, not mud. */
-  --overlay-1: transparent;
-  --overlay-2: transparent;
-  --overlay-3: transparent;
-  --overlay-hover: transparent;
-  --select-fill: transparent;
-  --hover-fill: transparent;
+  /* Quiet ink washes — strong enough to register on paper in 300ms. */
+  --overlay-1: color-mix(in srgb, var(--ink) 4%, var(--paper));
+  --overlay-2: color-mix(in srgb, var(--ink) 7%, var(--paper));
+  --overlay-3: color-mix(in srgb, var(--ink) 10%, var(--paper));
+  --overlay-hover: color-mix(in srgb, var(--ink) 9%, var(--paper));
+  --hover-fill: color-mix(in srgb, var(--ink) 9%, var(--paper));
+  --select-fill: color-mix(in srgb, var(--ink) 14%, var(--paper));
 
   /* Opaque mixes — rgba fringes read as doubled hairlines on rounded corners. */
   --border-subtle: color-mix(in srgb, var(--ink) 22%, var(--paper));
@@ -222,8 +224,9 @@
 
   --text: var(--ink);
   --text-secondary: var(--ink);
-  --text-muted: rgba(10, 10, 10, 0.58);
-  --text-faint: rgba(10, 10, 10, 0.40);
+  /* Readable idle — too faint and hover/place can’t register in 300ms. */
+  --text-muted: rgba(10, 10, 10, 0.66);
+  --text-faint: rgba(10, 10, 10, 0.48);
   --text-on-accent: var(--paper);
 
   /* Brand / links — ink (not a third decorative hue). */
@@ -396,8 +399,10 @@
 }
 
 .mia-control:hover:not(:disabled) {
-  border-color: var(--border-strong);
+  /* Keep the frame — hover signal is the fill, not a louder border. */
+  border-color: var(--border);
   color: var(--text);
+  background: var(--hover-fill);
 }
 
 .mia-control:focus-visible {
@@ -438,18 +443,29 @@
   --bg: var(--paper);
 }
 
+/* Idle Trace rows stay flat on paper. */
 :root[data-theme="light"] .trace-scope,
 :root[data-theme="light"] .trace-scope.is-soft,
-:root[data-theme="light"] .trace-scope:hover,
-:root[data-theme="light"] .trace-scope.is-soft:hover,
 :root[data-theme="light"] .trace-scope.is-soft.is-open,
 :root[data-theme="light"] .trace-card.is-open > .trace-scope,
 :root[data-theme="light"] .trace-pin__stack > .trace-scope,
-:root[data-theme="light"] .trace-pin__stack,
-:root[data-theme="light"] .trace-toolbtn:hover,
-:root[data-theme="light"] .trace-copy:hover,
-:root[data-theme="light"] .trace-row__btn:hover {
+:root[data-theme="light"] .trace-pin__stack {
   background: transparent;
+}
+
+/*
+ * Light idle rules above beat `.trace-scope:hover` on specificity — restate
+ * hover fill here so Trace matches Threads / Pipelines list wash.
+ */
+:root[data-theme="light"] .trace-scope:hover,
+:root[data-theme="light"] .trace-scope.is-soft:hover,
+:root[data-theme="light"] .trace-scope.is-soft.is-open:hover,
+:root[data-theme="light"] .trace-card.is-open > .trace-scope:hover,
+:root[data-theme="light"] .trace-card:not(.is-open) > .trace-scope:hover,
+:root[data-theme="light"] .trace-scope[data-trace-kind="call"]:hover,
+:root[data-theme="light"] .trace-msg__btn:hover,
+:root[data-theme="light"] .trace-row__btn:hover {
+  background: var(--hover-fill);
 }
 
 :root[data-theme="light"] .trace-pin {
@@ -469,7 +485,6 @@
 :root[data-theme="light"] .trace-card:not(.is-open) > .trace-scope,
 :root[data-theme="light"] .trace-card.is-open > .trace-scope {
   border: none;
-  border-radius: 0;
 }
 
 :root[data-theme="light"] .trace-scope:hover,
@@ -829,28 +844,18 @@ body {
   align-items: center;
   min-width: 0;
   padding: 0.3rem 0.35rem 0.3rem 0.65rem;
-  border-radius: 0;
+  border-radius: var(--list-row-radius);
   background: transparent;
-  transition: color 160ms ease;
+  transition: color 160ms ease, background-color 160ms ease;
 }
 
 .entity-rail-item-wrap:hover .entity-rail-item-row,
 .entity-rail-item-wrap--menu-open .entity-rail-item-row {
-  background: transparent;
+  background: var(--hover-fill);
 }
 
 .entity-rail-item-wrap--active .entity-rail-item-row {
-  background: transparent;
-}
-
-.entity-rail-item-wrap--active .entity-rail-item-row::before {
-  content: "";
-  pointer-events: none;
-  position: absolute;
-  inset-block: 0;
-  left: 0;
-  width: 2px;
-  background: var(--ink, var(--color-text));
+  background: var(--select-fill);
 }
 
 .entity-rail-item {
@@ -1630,7 +1635,7 @@ textarea.input {
 
 .env-sync-toolbar .env-sync-mode-toggle:hover {
   color: var(--color-text);
-  background: var(--color-elevated);
+  background: var(--hover-fill);
 }
 
 .env-sync-toolbar .env-sync-search-input {
@@ -1926,7 +1931,7 @@ textarea.input {
 
 .trace-toolbtn:hover {
   color: var(--text, var(--color-text));
-  background: color-mix(in srgb, var(--text, var(--color-text)) 4%, transparent);
+  background: var(--hover-fill);
 }
 
 .trace-toolbar__ids {
@@ -1992,7 +1997,7 @@ textarea.input {
 
 .trace-copy:hover {
   color: var(--text, var(--color-text));
-  background: color-mix(in srgb, var(--text, var(--color-text)) 5%, transparent);
+  background: var(--hover-fill);
 }
 
 .trace-search {
@@ -2122,7 +2127,7 @@ textarea.input {
 
 .trace-pin__stack > .trace-scope {
   border: none;
-  border-radius: 0;
+  border-radius: var(--list-row-radius);
   border-bottom: 1px solid var(--border-subtle, var(--color-border-subtle));
   width: 100%;
   cursor: default;
@@ -2202,10 +2207,6 @@ textarea.input {
   border: none;
   background: transparent;
   overflow: visible;
-}
-
-.trace-card.is-open > .trace-scope {
-  border-radius: 0;
 }
 
 /*
@@ -2366,7 +2367,7 @@ textarea.input {
   text-align: left;
   background: color-mix(in srgb, var(--text, var(--color-text)) 4%, var(--bg));
   border: none;
-  border-radius: 0;
+  border-radius: var(--list-row-radius);
   color: var(--text, var(--color-text));
   font-size: 0.9375rem;
   box-sizing: border-box;
@@ -2389,7 +2390,6 @@ textarea.input {
 .trace-card:not(.is-open) > .trace-scope {
   border: none;
   border-bottom: 1px solid var(--border-subtle, var(--color-border-subtle));
-  border-radius: 0;
 }
 
 .trace-card.is-nested {
@@ -2441,9 +2441,9 @@ textarea.input {
   font: inherit;
 }
 
-/* Two-ink: scopes are labels on paper — never grey plates */
+/* Hover fills the row — cursor alone is not a signal. */
 .trace-scope:hover {
-  background: transparent;
+  background: var(--hover-fill);
 }
 
 /* Soft = Sent / Received / Context / Prompt / Tools */
@@ -2458,10 +2458,18 @@ textarea.input {
   border-top: 1px solid var(--border-subtle, var(--color-border-subtle));
 }
 
-.trace-scope.is-soft:hover,
+.trace-scope.is-soft:hover {
+  background: var(--hover-fill);
+  color: var(--text, var(--color-text));
+}
+
 .trace-scope.is-soft.is-open {
   background: transparent;
   color: var(--text, var(--color-text));
+}
+
+.trace-scope.is-soft.is-open:hover {
+  background: var(--hover-fill);
 }
 
 .trace-scope__chev {
@@ -2483,7 +2491,7 @@ textarea.input {
 }
 
 .trace-scope[data-trace-kind="call"]:hover {
-  background: transparent;
+  background: var(--hover-fill);
 }
 
 .trace-scope[data-trace-kind="call"] .trace-scope__lead {
@@ -2719,7 +2727,7 @@ textarea.input {
 }
 
 .trace-row__btn:hover {
-  background: color-mix(in srgb, var(--text, var(--color-text)) 3.5%, transparent);
+  background: var(--hover-fill);
   color: var(--text, var(--color-text));
 }
 
@@ -2758,7 +2766,7 @@ textarea.input {
 }
 
 .trace-msg__btn:hover {
-  background: color-mix(in srgb, var(--text, var(--color-text)) 3.5%, transparent);
+  background: var(--hover-fill);
   color: var(--text, var(--color-text));
 }
 
@@ -3795,14 +3803,13 @@ textarea.input {
 
 .widget-toolbar__chip--idle:hover {
   color: var(--color-text);
-  background: transparent;
-  box-shadow: inset 0 0 0 1px var(--border);
+  background: var(--hover-fill);
 }
 
 .widget-toolbar__chip--active {
-  /* SELECT_* dialect — ink fill, same as Overview|JSON segments */
-  background: var(--color-text);
-  color: var(--color-text-on-accent);
+  /* MODE — quiet shade + weight (never screaming outline). */
+  background: var(--select-fill);
+  color: var(--color-text);
   font-weight: 600;
   box-shadow: none;
 }
@@ -3837,10 +3844,12 @@ textarea.input {
   background: var(--hover-fill);
 }
 
+/* CONTROL pressed — shade fill. Never inverted pill / border scream. */
 .widget-toolbar__icon-btn[aria-pressed="true"],
 .widget-toolbar__icon-btn--active {
   color: var(--text);
   background: var(--select-fill);
+  box-shadow: none;
 }
 
 /*
@@ -3870,10 +3879,11 @@ textarea.input {
   color: var(--text-on-accent, var(--color-text-on-accent));
 }
 
+/* Same solid pill geometry as the default badge — only the hue carries meaning. */
 .widget-toolbar__icon-badge--pending {
-  background: var(--error-soft, color-mix(in srgb, var(--error) 22%, var(--panel)));
-  color: var(--error);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--error) 35%, transparent);
+  background: var(--error);
+  color: var(--text-on-accent, #fff);
+  box-shadow: none;
 }
 
 /* Manual sync — search column with mode toggle + input */
@@ -4866,7 +4876,7 @@ textarea.input {
   }
 }
 
-/* Layouts cluster — flat on the bar; tabs stretch so active underline hits the rail. */
+/* Layouts cluster — flat on the bar; tabs stretch; active = shade fill. */
 .toolbar-views {
   display: flex;
   min-width: 0;
@@ -4885,7 +4895,7 @@ textarea.input {
   gap: 0.25rem;
 }
 
-/* ── View strip — underline selection (no pill fill) ─────────────── */
+/* ── View strip — shade selection (no underline) ─────────────────── */
 .view-tab-strip {
   position: relative;
   z-index: 1;
@@ -4916,29 +4926,27 @@ textarea.input {
 }
 
 .view-tab {
+  /* Same control height/radius as bordered ops (Add / Sheet) — header is taller. */
   position: relative;
   display: inline-flex;
   align-items: center;
-  align-self: stretch;
+  align-self: center;
   gap: 0.35rem;
   flex-shrink: 0;
-  /* Stretch to header bottom so the active underline sits on the rail. */
-  height: auto;
+  height: var(--shell-chrome-row-h);
   min-height: var(--shell-chrome-row-h);
-  padding: 0 0.75rem 0 0.5rem;
+  padding: 0 0.7rem 0 0.45rem;
   font-size: 13px;
   line-height: 1;
   letter-spacing: 0.01em;
   cursor: pointer;
   user-select: none;
   box-sizing: border-box;
-  border-radius: 0;
+  border-radius: var(--view-chip-radius);
   border: none;
-  border-bottom: 2px solid transparent;
   background: transparent;
   transition:
     color 140ms ease,
-    border-color 140ms ease,
     background-color 140ms ease;
 }
 
@@ -4955,50 +4963,49 @@ textarea.input {
 
 .view-tab--inactive:hover {
   color: var(--text);
-  background: transparent;
-  border-bottom-color: color-mix(in srgb, var(--text) 28%, transparent);
+  background: var(--hover-fill);
 }
 
+/* Place among sheets — quiet grey pill, inset in the bar. */
 .view-tab--active {
   z-index: 1;
   color: var(--text);
   font-weight: 600;
-  background: transparent;
+  background: var(--select-fill);
   box-shadow: none;
-  border-bottom-color: var(--text);
+}
+
+.view-tab--active:hover {
+  background: var(--select-fill);
 }
 
 .view-tab--float {
   position: absolute;
-  top: 0;
-  bottom: 0;
+  top: 50%;
+  bottom: auto;
   z-index: 5;
-  height: auto;
-  min-height: 0;
+  height: var(--shell-chrome-row-h);
+  min-height: var(--shell-chrome-row-h);
   margin: 0;
-  transform: none;
+  transform: translateY(-50%);
   pointer-events: none;
   cursor: grabbing;
-  /* Same underline dialect as the rail — not a floating pill chip. */
-  border-radius: 0;
+  border-radius: var(--view-chip-radius);
   border: none;
-  border-bottom: 2px solid transparent;
-  background: var(--panel);
+  background: var(--select-fill);
   box-shadow: none;
 }
 
 .view-tab--float.view-tab--active {
   color: var(--text);
   font-weight: 600;
-  background: var(--panel);
-  border-bottom-color: var(--text);
+  background: var(--select-fill);
 }
 
 .view-tab--float.view-tab--inactive {
   color: var(--text);
   font-weight: 600;
-  background: var(--panel);
-  border-bottom-color: color-mix(in srgb, var(--text) 28%, transparent);
+  background: var(--hover-fill);
 }
 
 .view-tab--float .view-tab__grip {
@@ -5066,18 +5073,17 @@ textarea.input {
 }
 
 .view-tab-add {
-  height: auto !important;
+  height: var(--shell-chrome-row-h) !important;
   min-height: var(--shell-chrome-row-h) !important;
   width: var(--shell-chrome-row-h) !important;
-  align-self: stretch !important;
-  border-radius: 0 !important;
-  border-bottom: 2px solid transparent !important;
+  align-self: center !important;
+  border-radius: var(--view-chip-radius) !important;
+  border: none !important;
 }
 
 .view-tab-add:hover {
   color: var(--text) !important;
-  background: transparent !important;
-  border-bottom-color: color-mix(in srgb, var(--text) 28%, transparent) !important;
+  background: var(--hover-fill) !important;
 }
 
 
@@ -5247,16 +5253,18 @@ textarea.input {
 
 .toolbar-ops-btn:hover {
   color: var(--text);
-  background: transparent;
-  border-color: var(--border-strong);
+  background: var(--hover-fill);
+  border-color: var(--border);
 }
 
+/* CONTROL pressed — keep frame, fill bg. */
 .toolbar-ops-btn[aria-pressed="true"],
 .toolbar-ops-btn--active {
   color: var(--text);
-  background: transparent;
-  border-color: var(--border-strong);
-  box-shadow: inset 0 0 0 1px var(--text);
+  background: var(--select-fill);
+  border-color: var(--border);
+  box-shadow: none;
+  font-weight: 600;
 }
 
 /* Session triggers live in nested wrappers — same outline dialect. */
@@ -5271,8 +5279,8 @@ textarea.input {
 
 .toolbar-ops-tray .relative > button:not(.viewing-as-trigger--other):hover {
   color: var(--text);
-  background: transparent;
-  border-color: var(--border-strong);
+  background: var(--hover-fill);
+  border-color: var(--border);
 }
 
 /* ── Mobile ────────────────────────────────────────────────────── */
@@ -6671,7 +6679,7 @@ textarea.input {
   align-items: center;
   min-width: 0;
   padding: 0.28rem 0.35rem 0.28rem 0.65rem;
-  border-radius: 0.65rem;
+  border-radius: var(--list-row-radius);
   transition: background-color 160ms ease;
 }
 
@@ -6680,8 +6688,19 @@ textarea.input {
   background: var(--hover-fill);
 }
 
+/* PLACE among peers — shade + weight. Never a left-rule tick. */
 .thread-rail-item-wrap--active .thread-rail-item-row {
   background: var(--select-fill);
+}
+
+.thread-rail-item-wrap--active .thread-rail-item {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.thread-rail-item-wrap:hover .thread-rail-item,
+.thread-rail-item-wrap--menu-open .thread-rail-item {
+  color: var(--text);
 }
 
 .thread-rail-item {
@@ -6914,10 +6933,15 @@ textarea.input {
 
 .thread-nav-thread {
   margin-bottom: 0.12rem;
-  border-radius: 0.65rem;
+  border-radius: var(--list-row-radius);
+}
+
+.thread-nav-thread:hover:not(.thread-nav-thread--active) > .thread-nav-thread-row {
+  background: var(--hover-fill);
 }
 
 .thread-nav-thread--active > .thread-nav-thread-row {
+  position: relative;
   background: var(--select-fill);
 }
 
@@ -6928,7 +6952,9 @@ textarea.input {
   min-width: 0;
   min-height: 2.35rem;
   padding: 0.12rem 0.2rem 0.12rem 0;
-  border-radius: 0.65rem;
+  border-radius: var(--list-row-radius);
+  position: relative;
+  transition: background-color 160ms ease;
 }
 
 .thread-nav-thread-body {
@@ -7224,13 +7250,15 @@ textarea.input {
 }
 
 .thread-nav-run:hover {
-  background: var(--overlay-1);
+  background: var(--hover-fill);
   color: var(--text);
 }
 
 .thread-nav-run--active {
+  position: relative;
   background: var(--select-fill);
   color: var(--text);
+  font-weight: 600;
 }
 
 .thread-nav-run-dot {
@@ -7642,13 +7670,15 @@ textarea.input {
 
 .thread-run-rail-capsule-item:hover,
 .thread-run-rail-capsule-item:focus-visible {
-  background: var(--overlay-2);
+  background: var(--hover-fill);
   color: var(--text);
 }
 
 .thread-run-rail-capsule-item--active {
+  position: relative;
   background: var(--select-fill);
   color: var(--text);
+  font-weight: 600;
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -229,16 +229,26 @@ capability (`platform`), not a synonym for `infra/`.
 
 ### UI
 
-**Visual / interaction dialect (locked):** two-ink (paper + ink). Accent is
-CTA/brand only — never “selected.” Selection = ink fill or left rule + weight
-(`packages/ui/src/lib/selection.ts`). Surfaces own one perimeter; insides use
-dividers and controls — never nested grey plates. Top bar, tiles, modals, and
-filter sheets share that language. Review widgets (Event Stream, Pipelines,
-Trace) share one `WidgetToolbar` strip: leading | search | trailing
-(expand/collapse + filter/export sit in trailing — never leading chip rows).
-Filter *choices* may differ per widget; filter chrome, search seam, icon
-buttons, and chips must not. Content dialect is shared with Threads
-hierarchy: one curved tree via `components/ReviewTree.tsx`
+**Visual / interaction dialect (locked):** two-ink (paper + ink). Accent /
+labeled CTA may use solid ink fill — never “selected.” Orient in ~300ms with
+three signals only (`packages/ui/src/lib/selection.ts`): **place** = quiet `--select-fill` (layout sheets = inset pill with air in the
+chrome row; section tabs = rounded shade); list rows same wash with
+`--list-row-radius` (Threads / Trace / Event Stream / rails) — never
+underline ticks or left-rule bars;
+**mode** = `--select-fill` shade + weight (`SELECT_*` inside a framed track —
+never inverted pills or screaming outline frames; never bare on filter chips);
+**control** = keep the frame, fill `--hover-fill` / `--select-fill` on
+hover/press (FilterSheet choice grids, free-floating filter nav — never
+border-only hover, never transparent-border “plain text” idle).
+Tree elbows are hierarchy only — never selection. Dirty / menu-open / Sheet
+are controls, not mode. Surfaces own one perimeter; insides use dividers and
+controls — never nested grey plates. Top bar, tiles, modals, and filter sheets
+share that language. Review widgets (Event Stream, Pipelines, Trace) share one
+`WidgetToolbar` strip: leading | search | trailing (expand/collapse +
+filter/export sit in trailing — never leading chip rows). Filter *choices*
+may differ per widget; filter chrome, search seam, icon buttons, and chips
+must not. Content dialect is shared with Threads hierarchy: one curved tree
+via `components/ReviewTree.tsx`
 (`.review-tree` / `.review-tree__item` — same geometry as Threads runs) for
 list nesting only — never inside `JsonViewer` (use `.review-branch-pad`).
 Prose under a soft scope (Prompt / reply) uses `.trace-scope-payload` (label

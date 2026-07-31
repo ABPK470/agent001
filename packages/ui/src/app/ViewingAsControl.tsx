@@ -103,7 +103,7 @@ export function ViewingAsControl({
   const triggerClass = isMe
     ? chromeVariant === "chat"
       ? CHAT_CHROME_PILL
-      : "flex h-9 max-w-[16rem] shrink-0 items-center gap-1.5 rounded-lg border border-border bg-transparent px-2.5 text-[13px] leading-none text-text-muted transition-colors hover:border-border-strong hover:text-text"
+      : "flex h-9 max-w-[16rem] shrink-0 items-center gap-1.5 rounded-lg border border-border bg-transparent px-2.5 text-[13px] leading-none text-text-muted transition-colors hover:bg-[var(--hover-fill)] hover:text-text"
     : chromeVariant === "chat"
       ? "viewing-as-trigger--other flex h-9 max-w-[18rem] w-auto shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-[13px] leading-none"
       : "viewing-as-trigger--other flex h-9 max-w-[18rem] shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-[13px] leading-none"

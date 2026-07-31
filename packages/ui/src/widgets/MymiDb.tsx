@@ -395,8 +395,8 @@ export function MymiDb() {
               className={[
                 "px-2 py-1 rounded text-xs transition-colors",
                 topMode === key
-                  ? "bg-[var(--select-fill)] text-text font-medium"
-                  : "text-text-muted hover:text-text hover:bg-[var(--hover-fill)]",
+                  ? "bg-transparent text-text font-semibold border border-text"
+                  : "border border-transparent text-text-muted hover:border-border hover:text-text",
               ].join(" ")}
             >
               {label}
@@ -518,21 +518,23 @@ export function MymiDb() {
                     key={s.name}
                     onClick={() => setActiveSchema(s.name)}
                     className={[
-                      "relative w-full text-left px-2 py-2 flex flex-col transition-colors overflow-hidden",
-                      activeSchema === s.name ? "bg-[var(--select-fill)]" : "hover:bg-[var(--hover-fill)]",
+                      "relative w-full text-left px-2 py-2 flex flex-col rounded-[var(--list-row-radius)] transition-colors overflow-hidden",
+                      activeSchema === s.name
+                        ? "text-text font-medium bg-[var(--select-fill)]"
+                        : "text-text-muted hover:text-text hover:bg-[var(--hover-fill)]",
                     ].join(" ")}
                   >
                     {/* size fill */}
-                    <div className="absolute left-0 bottom-0 h-0.5 bg-accent/30 transition-all"
+                    <div className="absolute left-0 bottom-0 h-0.5 bg-text/20 transition-all"
                       style={{ width: `${rowPct}%` }} />
                     <div className="flex items-center gap-1">
                       <ChevronRight size={11} className={[
                         "shrink-0 transition-transform text-text-muted",
-                        activeSchema === s.name ? "rotate-90 text-accent" : "",
+                        activeSchema === s.name ? "rotate-90 text-text" : "",
                       ].join(" ")} />
                       <span className={[
                         "text-sm font-mono font-medium truncate",
-                        activeSchema === s.name ? "text-accent" : "text-text",
+                        activeSchema === s.name ? "text-text" : "text-text",
                       ].join(" ")}>{s.name}</span>
                     </div>
                     <div className="flex items-center gap-1.5 mt-0.5 pl-4 text-[11px] text-text-muted">
@@ -583,8 +585,8 @@ export function MymiDb() {
                     className={[
                       "text-[11px] px-1.5 rounded transition-colors",
                       objectSort === "rows"
-                        ? "bg-[var(--select-fill)] text-text"
-                        : "text-text-muted hover:text-text",
+                        ? "bg-transparent text-text font-semibold border border-text"
+                        : "border border-transparent text-text-muted hover:border-border hover:text-text",
                     ].join(" ")}
                     onClick={() => setObjectSort((s) => s === "rows" ? "name" : "rows")}
                     title="Sort by row count"
@@ -612,8 +614,10 @@ export function MymiDb() {
                     key={obj.name}
                     onClick={() => selectObject(activeSchema!, obj)}
                     className={[
-                      "relative w-full overflow-hidden text-left px-2 py-1.5 flex items-center gap-1.5 transition-colors",
-                      isActive ? "bg-[var(--select-fill)]" : "hover:bg-[var(--hover-fill)]",
+                      "relative w-full overflow-hidden text-left px-2 py-1.5 flex items-center gap-1.5 rounded-[var(--list-row-radius)] transition-colors",
+                      isActive
+                        ? "text-text font-medium bg-[var(--select-fill)]"
+                        : "text-text-muted hover:text-text hover:bg-[var(--hover-fill)]",
                     ].join(" ")}
                   >
                     <SizeBar value={obj.rowCount} max={maxObjRows} />
@@ -672,10 +676,10 @@ export function MymiDb() {
                         key={key}
                         onClick={() => setActiveTab(key)}
                         className={[
-                          "flex items-center gap-1.5 px-3 py-1 text-xs border-b-2 transition-colors",
+                          "flex items-center gap-1.5 px-3 py-1 text-xs rounded-md border border-transparent transition-colors",
                           activeTab === key
-                            ? "border-accent text-accent"
-                            : "border-transparent text-text-muted hover:text-text",
+                            ? "bg-[var(--select-fill)] text-text font-semibold"
+                            : "text-text-muted hover:text-text hover:bg-[var(--hover-fill)]",
                         ].join(" ")}
                       >
                         <Icon size={11} />
@@ -831,7 +835,9 @@ export function MymiDb() {
                             <button
                               onClick={() => setRelViewMode("visual")}
                               className={`flex items-center gap-1 px-2 py-0.5 rounded text-[11px] transition-colors ${
-                                relViewMode === "visual" ? "bg-[var(--select-fill)] text-text" : "text-text-muted hover:text-text"
+                                relViewMode === "visual"
+                                  ? "bg-transparent text-text font-semibold border border-text"
+                                  : "border border-transparent text-text-muted hover:border-border hover:text-text"
                               }`}
                             >
                               <Network size={11} /> Visual
@@ -839,7 +845,9 @@ export function MymiDb() {
                             <button
                               onClick={() => setRelViewMode("list")}
                               className={`flex items-center gap-1 px-2 py-0.5 rounded text-[11px] transition-colors ${
-                                relViewMode === "list" ? "bg-[var(--select-fill)] text-text" : "text-text-muted hover:text-text"
+                                relViewMode === "list"
+                                  ? "bg-transparent text-text font-semibold border border-text"
+                                  : "border border-transparent text-text-muted hover:border-border hover:text-text"
                               }`}
                             >
                               <LayoutList size={11} /> List
@@ -1316,7 +1324,9 @@ function DataModelView({ db, onNotifyError }: { db?: string; onNotifyError?: (me
               key={m}
               onClick={() => setViewMode(m)}
               className={["px-2.5 py-0.5 capitalize transition-colors",
-                viewMode === m ? "bg-[var(--select-fill)] text-text" : "text-text-muted hover:bg-[var(--hover-fill)]"].join(" ")}
+                viewMode === m
+                  ? "bg-transparent text-text font-semibold border border-text"
+                  : "text-text-muted hover:text-text"].join(" ")}
             >
               {m}
             </button>
@@ -1338,7 +1348,9 @@ function DataModelView({ db, onNotifyError }: { db?: string; onNotifyError?: (me
             key={s}
             onClick={() => toggleSchemaFilter(s)}
             className={["px-1.5 py-0.5 rounded font-mono shrink-0 transition-colors",
-              schemaFilter.has(s) ? "bg-[var(--select-fill)] text-text" : "text-text-muted hover:bg-[var(--hover-fill)]"].join(" ")}
+              schemaFilter.has(s)
+                ? "bg-transparent text-text font-semibold border border-text"
+                : "border border-transparent text-text-muted hover:border-border hover:text-text"].join(" ")}
           >
             {s}
           </button>
@@ -1353,7 +1365,9 @@ function DataModelView({ db, onNotifyError }: { db?: string; onNotifyError?: (me
             key={c}
             onClick={() => toggleCatFilter(c)}
             className={["px-1.5 py-0.5 rounded shrink-0 transition-colors",
-              catFilter.has(c) ? "bg-[var(--select-fill)] text-text" : "text-text-muted hover:bg-[var(--hover-fill)]"].join(" ")}
+              catFilter.has(c)
+                ? "bg-transparent text-text font-semibold border border-text"
+                : "border border-transparent text-text-muted hover:border-border hover:text-text"].join(" ")}
           >
             <span className={catFilter.has(c) ? "text-text" : (SCHEMA_CATEGORY_COLORS[c] ?? "")}>{c}</span>
           </button>
@@ -1717,7 +1731,9 @@ function DataModelVisual({
         {(["schema", "table"] as const).map((lv) => (
           <button key={lv} onClick={() => setViewLevel(lv)}
             className={["px-2 py-0.5 rounded text-[11px] transition-colors capitalize",
-              viewLevel === lv ? "bg-[var(--select-fill)] text-text" : "text-text-muted hover:bg-[var(--hover-fill)]"].join(" ")}>
+              viewLevel === lv
+                ? "bg-transparent text-text font-semibold border border-text"
+                : "border border-transparent text-text-muted hover:border-border hover:text-text"].join(" ")}>
             {lv === "schema" ? "Schemas" : "Tables"}
           </button>
         ))}

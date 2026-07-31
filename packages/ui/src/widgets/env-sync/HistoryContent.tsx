@@ -701,7 +701,10 @@ function HistoryRunRow({
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
-        className="w-full text-left px-3 py-1.5 flex items-center gap-2 hover:bg-elevated/30 transition-colors text-sm"
+        className={[
+          "w-full text-left px-3 py-1.5 flex items-center gap-2 rounded-[var(--list-row-radius)] transition-colors text-sm",
+          open ? "bg-[var(--select-fill)]" : "hover:bg-[var(--hover-fill)]",
+        ].join(" ")}
       >
         {open ? (
           <ChevronDown size={13} className="text-text-muted shrink-0" />
@@ -875,7 +878,7 @@ function HistoryRunDetail({
                     const jsonKey = `${key}:json`
                     return (
                       <div key={key}>
-                        <div className="flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-elevated/30 transition-colors">
+                        <div className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-[var(--list-row-radius)] transition-colors hover:bg-[var(--hover-fill)]">
                           <span className="font-medium shrink-0" style={tone ? { color: tone } : undefined}>
                             {formatAuditAction(entry.event.action)}
                           </span>
@@ -919,7 +922,7 @@ function HistoryRunDetail({
                     item.rowCount != null ? `${item.rowCount} rows` : null,
                   ].filter(Boolean).join(" · ")
                   return (
-                    <div key={key} className="flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-elevated/30 transition-colors">
+                    <div key={key} className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-[var(--list-row-radius)] transition-colors hover:bg-[var(--hover-fill)]">
                       <span className="font-medium text-text shrink-0">SQL · {item.label}</span>
                       <span className="text-text-muted truncate min-w-0 flex-1">{detail}</span>
                       <span className="text-text-muted font-mono tabular-nums shrink-0">

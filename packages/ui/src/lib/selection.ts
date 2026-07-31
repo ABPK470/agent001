@@ -1,51 +1,63 @@
 /**
  * Product interaction dialect — one language for the whole UI.
  *
- * This is a product (web is only the interface). Simple means mature:
- * few concepts, zero ambiguity, sophisticated restraint.
+ * Two-ink: paper + ink. Quiet ink washes for hover/place — never left-rule ticks.
  *
- * Two-ink: paper + ink. Structure is border and type weight — not grey plates.
+ * Orient in ~300ms — three questions, three signals (never share a look):
+ *   1. Where am I?   PLACE_* / LIST_ROW_*  — shade + weight (never underline ticks)
+ *   2. What mode?    SELECT_*              — shade fill + weight (never inverted black pill)
+ *   3. What can I press? CONTROL_*         — keep the frame; hover/press fills the bg
  *
- * Accent  — brand / primary CTA only (Publish, Create, confirm).
- *           Never selected state, never nav active, never list highlight.
- * Selected — SELECT_* (ink fill chips/segments) or LIST_ROW_* (weight + left rule).
- * Hover    — stronger ink/border or text weight. Never grey wash / --hover-fill.
- * Focus    — ring on border-strong; must not look like selected.
+ * Hover signal is background wash — never “slightly stronger border” alone
+ * (that’s invisible on light paper).
  *
- * Border jobs (never mix):
- * - Surface  — one perimeter (tile, modal shell, floating panel, mia-surface)
- * - Divider  — hairline inside a surface (.mia-form-section, list rows, toolbar strip)
- * - Control  — idle border → hover border-strong; dense chrome = ghost (no idle box)
+ * Tree elbows (ReviewTree / thread-nav-run::before) are hierarchy connectors —
+ * never reuse that geometry for “selected.”
  *
- * Top bar: sheet names are quiet nav; active sheet = underline/weight (ink family).
- * Review widgets (Event Stream, Pipelines, Trace): one WidgetToolbar —
- *   leading | search | trailing — optional band 2 for chips/meta.
- *
- * Roles:
- * - SELECT_*   → exclusive chips / segments
- * - LIST_ROW_* → rows inside a list or rail
- * - CONTROL_*  → icon buttons / quiet actions (pair with .mia-control or ghost)
+ * Accent / labeled CTA may use solid ink fill — never “selected.”
  */
-
-/** Selected / active choice — ink on paper (or paper on ink for filled). */
-export const SELECT_ACTIVE =
-  "bg-text text-text-on-accent font-medium border border-text"
-
-/** Idle choice — frame only until hover. */
-export const SELECT_IDLE =
-  "border border-transparent text-text-muted transition-colors hover:border-border hover:text-text"
 
 /**
- * List / rail row — selected.
- * No perimeter border: rows already live in a list (often inside a PANEL).
- * Signal is weight + ink, plus a left rule so active is unambiguous.
+ * Place tab — where inside a surface (Overview | Tables).
+ * Quiet shade + weight. Layout sheets use inset `.view-tab` pills in CSS.
+ * Never underline.
+ */
+export const PLACE_TAB_ACTIVE =
+  "rounded-md bg-[var(--select-fill)] text-text font-semibold border border-transparent"
+
+/** Place tab — idle peer; hover fills the cell. */
+export const PLACE_TAB_IDLE =
+  "rounded-md bg-transparent text-text-muted font-medium border border-transparent transition-colors hover:text-text hover:bg-[var(--hover-fill)]"
+
+/**
+ * Mode choice — quiet select-fill + weight.
+ * Only inside SELECT_TRACK (or an equivalent framed group).
+ * Never use alone for filter chips — transparent border reads as plain text;
+ * those are CONTROL_* (keep the frame).
+ * Never inverted black pill; never a screaming ink outline frame.
+ */
+export const SELECT_ACTIVE =
+  "bg-[var(--select-fill)] text-text font-semibold border border-transparent"
+
+/**
+ * Idle mode choice — muted. Hover fills the cell (keep border slot stable;
+ * do not “highlight” by thickening the border).
+ * Paired with SELECT_TRACK — not for free-floating filter toggles.
+ */
+export const SELECT_IDLE =
+  "border border-transparent text-text-muted transition-colors hover:text-text hover:bg-[var(--hover-fill)]"
+
+/**
+ * List / rail row — selected place among peers.
+ * Quiet select-fill + semibold. Radius matches Threads (`--list-row-radius`).
+ * Never a left-rule tick.
  */
 export const LIST_ROW_ACTIVE =
-  "relative text-text font-medium before:pointer-events-none before:absolute before:inset-y-0 before:left-0 before:w-0.5 before:bg-text"
+  "rounded-[var(--list-row-radius)] text-text font-semibold bg-[var(--select-fill)]"
 
-/** List / rail row — idle. */
+/** List / rail row — idle; hover fills a readable shade. */
 export const LIST_ROW_IDLE =
-  "text-text-muted transition-colors hover:text-text"
+  "rounded-[var(--list-row-radius)] text-text-muted transition-colors hover:text-text hover:bg-[var(--hover-fill)]"
 
 /**
  * Grouping for exclusive choices (Overview|JSON, Expanded|Collapsed).
@@ -59,13 +71,20 @@ export const SELECT_FOCUS =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong"
 
 /**
- * Quiet chrome control (pin / filter / icon square).
- * Prefer the `.mia-control` CSS class; this string is for Tailwind-only sites.
- * Never use transparent `--hover-fill` / `--select-fill` as the hover signal.
+ * Quiet chrome control (pin / filter choice / icon square).
+ * Prefer `.mia-control`. Hover keeps the frame and fills the bg.
+ * FilterSheet choice grids and free-floating filter nav use this — not SELECT_*.
  */
 export const CONTROL_IDLE =
-  "border border-border text-text-muted transition-colors hover:border-border-strong hover:text-text"
+  "border border-border text-text-muted transition-colors hover:text-text hover:bg-[var(--hover-fill)]"
 
-/** Ghost chrome in a dense toolbar — border appears on hover only. */
+/** Ghost chrome in a dense toolbar — shade fills the hit target on hover. */
 export const CONTROL_GHOST =
-  "border border-transparent text-text-muted transition-colors hover:border-border hover:text-text"
+  "border border-transparent text-text-muted transition-colors hover:text-text hover:bg-[var(--hover-fill)]"
+
+/**
+ * Control pressed / on / dirty / menu-open.
+ * Keep the frame; fill the bg. No border thickening as the signal.
+ */
+export const CONTROL_PRESSED =
+  "border border-border text-text font-medium bg-[var(--select-fill)]"

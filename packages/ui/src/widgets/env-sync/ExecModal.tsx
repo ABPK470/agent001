@@ -145,7 +145,7 @@ export function ExecModal({ exec, plan, execPlanId, tgtEnv, onConfirm, onCancel,
           <button
             type="button"
             onClick={handleHeaderClose}
-            className="text-text-muted hover:text-text p-1.5 rounded-lg hover:bg-overlay-3 transition-colors shrink-0"
+            className="text-text-muted hover:text-text p-1.5 rounded-lg transition-colors hover:bg-[var(--hover-fill)] shrink-0"
             title={isRunning ? "Cancel and close" : "Close"}
           >
             <X size={18} />
@@ -242,7 +242,7 @@ export function ExecModal({ exec, plan, execPlanId, tgtEnv, onConfirm, onCancel,
             </div>
 
             <div className="shrink-0 border-t border-border-subtle px-4 sm:px-5 py-4 flex gap-2">
-              <button type="button" onClick={onClose} className="flex-1 h-9 text-sm text-text-muted hover:text-text rounded-lg border border-border-subtle hover:bg-elevated transition-colors">
+              <button type="button" onClick={onClose} className="flex-1 h-9 text-sm text-text-muted hover:text-text rounded-lg border border-border transition-colors hover:bg-[var(--hover-fill)]">
                 Cancel
               </button>
               <button type="button" onClick={onConfirm} disabled={preflightBlocked} className="flex-1 h-9 text-sm text-text bg-accent hover:bg-accent-hover rounded-lg flex items-center justify-center gap-1.5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
@@ -457,7 +457,7 @@ export function ExecModal({ exec, plan, execPlanId, tgtEnv, onConfirm, onCancel,
                   </button>
                 )}
                 {(isDone || !isRunning) && (
-                  <button type="button" onClick={onClose} className="h-8 px-4 text-sm text-text-muted hover:text-text rounded-lg border border-border-subtle hover:bg-elevated transition-colors">
+                  <button type="button" onClick={onClose} className="h-8 px-4 text-sm text-text-muted hover:text-text rounded-lg border border-border transition-colors hover:bg-[var(--hover-fill)]">
                     Close
                   </button>
                 )}
