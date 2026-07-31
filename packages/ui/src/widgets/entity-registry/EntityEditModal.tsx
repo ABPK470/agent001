@@ -614,13 +614,13 @@ export function EntityEditModal({ mode, initial, reservedEntityIds = [], onClose
                     </div>
                   </div>
                   {sourceError && (
-                    <div className="flex shrink-0 items-center gap-2 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-300">
+                    <div className="flex shrink-0 items-center gap-2 rounded-lg border border-error/30 bg-error-soft px-3 py-2 text-sm text-error">
                       <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
                       {sourceError}
                     </div>
                   )}
                   {!sourceError && form.sourceBody.trim() && !sourceSyncBusy && (
-                    <p className="shrink-0 text-sm text-emerald-400/90">JSON is valid and synced with the structured sections.</p>
+                    <p className="shrink-0 text-sm text-success">JSON is valid and synced with the structured sections.</p>
                   )}
                   <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border-subtle bg-base/40">
                     <EntityJsonSurface

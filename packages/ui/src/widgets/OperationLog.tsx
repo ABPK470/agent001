@@ -104,14 +104,14 @@ const KIND_META: Record<
     },
 };
 
-/** Message box in expanded rows — matches the row's terminal status, not always error-red. */
+/** Message box — border weight/style + label, not traffic chroma (light = ink). */
 const STATUS_MESSAGE_BOX: Record<OperationStatus, string> = {
-  running:   "bg-info-soft border-info/30 text-info",
-  success:   "bg-success-soft border-success/30 text-success",
-  failed:    "bg-error-soft border-error/30 text-error",
-  cancelled: "bg-overlay-2 border-border-subtle text-text-muted",
-  skipped:   "bg-warning-soft border-warning/30 text-warning",
-  unknown:   "bg-overlay-2 border-border-subtle text-text-muted",
+  running:   "bg-overlay-1 border border-border-strong text-text",
+  success:   "bg-overlay-1 border border-border-subtle text-text-muted",
+  failed:    "bg-overlay-2 border-2 border-text text-text",
+  cancelled: "bg-overlay-2 border border-border-subtle text-text-muted",
+  skipped:   "bg-transparent border border-dashed border-border-strong text-text-faint",
+  unknown:   "bg-overlay-2 border border-border-subtle text-text-muted",
 }
 
 const LOG_ROW_ACTION =

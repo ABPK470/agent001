@@ -601,10 +601,10 @@ function SummaryStage({ summary }: { summary: MoveSummary }): JSX.Element {
   const Icon = WIDGET_ICONS.bridge
   const tone =
     summary.status === "completed"
-      ? "text-emerald-500"
+      ? "text-success"
       : summary.status === "partial"
-        ? "text-amber-500"
-        : "text-rose-500"
+        ? "text-warning"
+        : "text-error"
   // Match Pipelines body (`text-sm`) — EmptyState's detail is xs; results need readable type.
   return (
     <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-6 py-12 text-center">

@@ -229,20 +229,27 @@ capability (`platform`), not a synonym for `infra/`.
 
 ### UI
 
-**Visual / interaction dialect (locked):** two-ink (paper + ink). Accent /
-labeled CTA may use solid ink fill — never “selected.” Orient in ~300ms with
-three signals only (`packages/ui/src/lib/selection.ts`): **place** = quiet `--select-fill` (layout sheets = inset pill with air in the
+**Visual / interaction dialect (locked):** structure is two-ink (paper + ink
+borders / select-fill). **Brand accent** is the shared purple (`--accent`,
+same family in light and dark) for logo live mark, Viewing as, and brand
+links — never for “selected.” **Go-to** (`CONTROL_READY` /
+`.mia-control--ready`) = solid **ink** fill for the one next step (Preview →
+Execute, Save when dirty, Publish when armed) — navigates the eye without
+becoming “selected.” On **light**, status + syntax tokens
+(`--success|warning|error|info`, `--dt-*`) resolve to **ink**; soft washes are
+`--overlay-2` (never transparent). Meaning for success / failed / skipped /
+running comes from **label, border weight/style, and mark shape** (filled /
+ring / dashed / spin) — not traffic chroma on warm paper. Dark keeps meaning
+hues. Orient in ~300ms with
+three signals only (`packages/ui/src/lib/selection.ts`): **place** = quiet `--select-fill` aliased to `--overlay-2` on light (same wash as Active Users KPI interiors; layout sheets = inset pill with air in the
 chrome row; section tabs = rounded shade); list rows same wash with
 `--list-row-radius` (Threads / Trace / Event Stream / rails) — never
-underline ticks or left-rule bars;
+underline ticks or left-rule bars; light `--hover-fill` = `--overlay-1`;
 **mode** = `--select-fill` shade + weight (`SELECT_*` inside a framed track —
 never inverted pills or screaming outline frames; never bare on filter chips);
 **control** = keep the frame, fill `--hover-fill` / `--select-fill` on
 hover/press (FilterSheet choice grids, free-floating filter nav — never
 border-only hover, never transparent-border “plain text” idle).
-**go-to** (`CONTROL_READY` / `.mia-control--ready`) = solid ink fill for the
-one next step in a flow (Preview → Execute, Save when dirty, Publish when
-armed) — navigates the eye without becoming “selected.”
 Tree elbows are hierarchy only — never selection. Dirty / menu-open / Sheet
 are controls, not mode. Surfaces own one perimeter; insides use dividers and
 controls — never nested grey plates. Top bar, tiles, modals, and filter sheets

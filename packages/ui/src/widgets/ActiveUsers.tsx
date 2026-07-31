@@ -871,14 +871,18 @@ function UserStatusDot({ user, liveCount }: { user: UserRow; liveCount: number }
   if (liveCount > 0) {
     return (
       <span
-        className="inline-block w-2 h-2 rounded-full bg-info animate-pulse"
+        className="inline-block w-2 h-2 rounded-full border-[1.5px] border-text-muted bg-transparent animate-pulse"
         title={`${liveCount} running`}
       />
     )
   }
   return (
     <span
-      className={`inline-block w-2 h-2 rounded-full ${user.online ? "bg-success" : "bg-text-muted/40"}`}
+      className={`inline-block w-2 h-2 rounded-full ${
+        user.online
+          ? "border-[1.5px] border-text bg-transparent"
+          : "bg-text-muted/40"
+      }`}
       title={user.online ? "online" : "offline"}
     />
   )
@@ -1144,9 +1148,11 @@ function UserDetail({ user, liveRuns, history, stack, adminBusy, onToggleAdmin, 
         title="Collapse user details"
       >
         <span className={`inline-block w-2 h-2 rounded-full shrink-0 ${
-          liveRuns.length > 0 ? "bg-info animate-pulse"
-          : user.online ? "bg-success"
-          : "bg-text-muted/40"
+          liveRuns.length > 0
+            ? "border-[1.5px] border-text-muted bg-transparent animate-pulse"
+            : user.online
+              ? "border-[1.5px] border-text bg-transparent"
+              : "bg-text-muted/40"
         }`} />
         <span className="font-medium text-text truncate">
           {user.displayName ?? <span className="text-text-muted">—</span>}
@@ -1282,10 +1288,10 @@ function UserDetail({ user, liveRuns, history, stack, adminBusy, onToggleAdmin, 
                 onClick={(e) => { e.stopPropagation(); setRunStatus(s) }}
                 className={`px-2 py-0.5 rounded-md transition-colors ${
                   runStatus === s
-                    ? s === "failed"    ? "bg-error-soft text-error"
-                    : s === "succeeded" ? "bg-success-soft text-success"
-                    : s === "running"   ? "bg-info-soft text-info"
-                    : "bg-overlay-3 text-text"
+                    ? s === "failed"    ? "bg-overlay-2 border-2 border-text text-text font-semibold"
+                    : s === "succeeded" ? "bg-overlay-1 border border-border-subtle text-text-muted font-medium"
+                    : s === "running"   ? "bg-overlay-1 border border-border-strong text-text font-medium"
+                    : "bg-overlay-3 text-text font-medium"
                     : "text-text-muted/50 hover:text-text-muted"
                 }`}
               >{s}</button>
@@ -1503,13 +1509,29 @@ function CopyBtn({ value, label }: { value: string; label?: string }) {
   )
 }
 
+/** Mark shape — filled / ring / pulse / faint (hue collapses to ink on light). */
 function StatusDot({ status }: { status: string }) {
-  const color =
-    status === "succeeded" || status === "completed" ? "bg-success"
-    : status === "running" || status === "pending" || status === "planning" ? "bg-info animate-pulse"
-    : status === "error" || status === "failed" || status === "timeout" ? "bg-error"
-    : "bg-text-muted/40"
-  return <span className={`inline-block w-2 h-2 rounded-full ${color}`} title={status} />
+  const s = status.toLowerCase()
+  if (s === "running" || s === "pending" || s === "planning") {
+    return (
+      <span
+        className="inline-block w-2 h-2 rounded-full border-[1.5px] border-text bg-transparent animate-pulse"
+        title={status}
+      />
+    )
+  }
+  if (s === "error" || s === "failed" || s === "timeout") {
+    return <span className="inline-block w-2 h-2 rounded-full bg-text" title={status} />
+  }
+  if (s === "succeeded" || s === "completed") {
+    return (
+      <span
+        className="inline-block w-2 h-2 rounded-full border-[1.5px] border-text bg-transparent"
+        title={status}
+      />
+    )
+  }
+  return <span className="inline-block w-2 h-2 rounded-full bg-text-muted/40" title={status} />
 }
 
 // ── Formatters ──────────────────────────────────────────────────

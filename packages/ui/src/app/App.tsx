@@ -536,7 +536,12 @@ export function App() {
           </div>
           <div className="shrink-0 flex items-center gap-3">
             <div
-              className={`w-2 h-2 rounded-full shrink-0 ${connected && serverReachable ? "bg-success" : "bg-error"}`}
+              className={`w-2 h-2 rounded-full shrink-0 ${
+                connected && serverReachable
+                  ? "border-[1.5px] border-text bg-transparent"
+                  : "bg-text"
+              }`}
+              title={connected && serverReachable ? "Connected" : "Disconnected"}
             />
             <div className="relative">
               <button

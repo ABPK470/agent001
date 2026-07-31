@@ -73,7 +73,7 @@ describe("Active Users sticky context banner", () => {
     expect(src).not.toContain("text-amber-200")
     expect(css).toMatch(/\.au-btn-viewing-as\s*\{[^}]*color:\s*var\(--viewing-as\)/s)
     expect(css).toMatch(
-      /:root\[data-theme="light"\]\s+\.au-btn-viewing-as\s*\{[^}]*color:\s*var\(--ink\)/s,
+      /:root\[data-theme="light"\]\s+\.au-btn-viewing-as\s*\{[^}]*color:\s*var\(--viewing-as\)/s,
     )
   })
 })

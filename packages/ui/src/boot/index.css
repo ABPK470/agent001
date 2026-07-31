@@ -206,9 +206,10 @@
   color-scheme: light;
 
   /*
-   * Two-ink light — off-white field + black structure.
-   * No grey plates. Darker borders carry hierarchy / orientation.
-   * Status hues stay only where meaning requires (FAILED, live, …).
+   * Structure = two-ink (paper + ink borders / select-fill / go-to).
+   * Brand accent = same purple as dark (logo live, Viewing as, links).
+   * Status + syntax on light = ink only (no traffic chroma). States differ by
+   * label, weight, border style, and mark shape — soft washes are overlay.
    */
   --paper: #f3f1ec;
   --ink: #0a0a0a;
@@ -225,8 +226,9 @@
   --overlay-2: color-mix(in srgb, var(--ink) 7%, var(--paper));
   --overlay-3: color-mix(in srgb, var(--ink) 10%, var(--paper));
   --overlay-hover: color-mix(in srgb, var(--ink) 9%, var(--paper));
-  --hover-fill: color-mix(in srgb, var(--ink) 9%, var(--paper));
-  --select-fill: color-mix(in srgb, var(--ink) 14%, var(--paper));
+  /* Same wash as Active Users KPI (`bg-overlay-2`) — never a darker slate pill. */
+  --hover-fill: var(--overlay-1);
+  --select-fill: var(--overlay-2);
 
   /* Flat paper seal — hierarchy from type / borders, not a grey plate. */
   --section-cap-bg: var(--workspace-widget-bg, var(--paper));
@@ -244,30 +246,34 @@
   --text-faint: rgba(10, 10, 10, 0.48);
   --text-on-accent: var(--paper);
 
-  /* Brand / links — ink (not a third decorative hue). */
-  --accent: var(--ink);
-  --accent-hover: var(--ink);
-  --accent-soft: rgba(10, 10, 10, 0.08);
+  /* Brand — same purple family as dark (go-to CTAs stay solid ink). */
+  --accent: #7B6FC7;
+  --accent-hover: #5F5499;
+  --accent-soft: color-mix(in srgb, var(--accent) 14%, var(--paper));
   --hero-pill-shadow: none;
   --hero-spotlight-core: transparent;
   --hero-spotlight-mid: transparent;
 
+  /* Logo — idle ink, live accent (same split as dark). */
   --logo-mark-idle: var(--ink);
-  --logo-mark-live: var(--ink);
-  --logo-mark-live-shadow: transparent;
+  --logo-mark-live: var(--accent);
+  --logo-mark-live-shadow: var(--accent-soft);
 
-  /* Status — meaning only; soft = transparent (border/text carry it). */
-  --success: #14532d;
-  --success-soft: transparent;
-  --warning: #7c4a12;
-  --warning-soft: transparent;
-  --error: #7f1d1d;
-  --error-soft: transparent;
+  /*
+   * Status + syntax — ink only on light paper. Meaning from labels / borders /
+   * mark shapes (see StatusDot, LogStatusLabel). Soft = KPI-matched overlay.
+   */
+  --success: var(--ink);
+  --success-soft: var(--overlay-2);
+  --warning: var(--ink);
+  --warning-soft: var(--overlay-2);
+  --error: var(--ink);
+  --error-soft: var(--overlay-2);
   --info: var(--ink);
-  --info-soft: transparent;
+  --info-soft: var(--overlay-2);
 
-  --viewing-as: var(--ink);
-  --viewing-as-soft: transparent;
+  --viewing-as: var(--accent);
+  --viewing-as-soft: var(--accent-soft);
 
   --scrim: rgba(0, 0, 0, 0.48);
   --scrim-strong: rgba(0, 0, 0, 0.78);
@@ -562,7 +568,7 @@
 
 :root[data-theme="light"] .viewing-as-trigger--other {
   color: var(--paper);
-  background: var(--ink);
+  background: var(--viewing-as);
 }
 
 :root[data-theme="light"] .viewing-as-trigger--other:hover {
@@ -572,9 +578,9 @@
 }
 
 :root[data-theme="light"] .viewing-as-back-to-me {
-  color: var(--ink);
-  background: transparent;
-  border: 1px solid var(--border);
+  color: var(--viewing-as);
+  background: var(--viewing-as-soft);
+  border: 1px solid color-mix(in srgb, var(--viewing-as) 35%, var(--border));
 }
 
 /*
@@ -608,7 +614,7 @@ button.mia-chip-dirty:hover {
   background: color-mix(in srgb, var(--warning) 18%, var(--paper));
 }
 
-/* Active Users — Viewing as chip (theme ink; never dark-only amber-200). */
+/* Active Users — Viewing as chip (theme --viewing-as; never dark-only amber). */
 .au-btn-viewing-as {
   border-color: color-mix(in srgb, var(--viewing-as) 45%, transparent);
   background: var(--viewing-as-soft);
@@ -616,13 +622,13 @@ button.mia-chip-dirty:hover {
 }
 
 :root[data-theme="light"] .au-btn-viewing-as {
-  border-color: var(--border);
-  background: color-mix(in srgb, var(--ink) 8%, transparent);
-  color: var(--ink);
+  border-color: color-mix(in srgb, var(--viewing-as) 40%, var(--border));
+  background: var(--viewing-as-soft);
+  color: var(--viewing-as);
 }
 
 :root[data-theme="light"] .au-btn-viewing-as:hover {
-  background: color-mix(in srgb, var(--ink) 12%, transparent);
+  background: color-mix(in srgb, var(--viewing-as) 20%, var(--paper));
 }
 
 /* ── Base ──────────────────────────────────────────────────────── */
@@ -2777,6 +2783,25 @@ textarea.input {
 
 .trace-scope[data-trace-kind="work"] .trace-scope__lead {
   color: var(--info, var(--color-info, #5b9fd4));
+}
+
+/*
+ * Light: Trace leads stay ink (status/syntax tokens are ink). Kind meaning from
+ * weight / letter-spacing already on leads — never traffic chroma on paper.
+ * Tools keep brand accent (category, not success/fail).
+ */
+:root[data-theme="light"] .trace-scope[data-trace-kind="sent"] .trace-scope__lead,
+:root[data-theme="light"] .trace-scope[data-trace-kind="received"] .trace-scope__lead,
+:root[data-theme="light"] .trace-scope[data-trace-kind="prompt"] .trace-scope__lead,
+:root[data-theme="light"] .trace-scope[data-trace-kind="work"] .trace-scope__lead {
+  color: var(--ink);
+}
+
+:root[data-theme="light"] .trace-work-note.is-error .trace-work-note__label,
+:root[data-theme="light"] .trace-row.is-error .font-mono,
+:root[data-theme="light"] .trace-row__detail.is-error {
+  color: var(--ink);
+  font-weight: 600;
 }
 
 .trace-work-note {
@@ -5077,11 +5102,11 @@ textarea.input {
    * One cool field for sheet / top bar / ops. Widgets + modals keep --paper.
    * Dark mode untouched.
    */
-  --workspace-chrome: #f5f4f4;
-  --workspace-sheet: #f5f4f4;
+  --workspace-chrome: #f6f4f1;
+  --workspace-sheet: #f6f4f1;
   --workspace-widget-bg: var(--paper);
   --workspace-widget-border: var(--border);
-  --workspace-ops-bg: #f5f4f4;
+  --workspace-ops-bg: #f6f4f1;
   --workspace-rail-line: var(--border);
   --workspace-border: transparent;
   --workspace-sheet-shadow: none;
@@ -5106,12 +5131,12 @@ textarea.input {
  */
 :root[data-theme="light"] .workspace-chrome--contrast {
   /* Compare — tiles stay on paper; chrome field unchanged at rest colors. */
-  --workspace-sheet: #f5f4f4;
-  --workspace-chrome: #f5f4f4;
+  --workspace-sheet: #f6f4f1;
+  --workspace-chrome: #f6f4f1;
   --workspace-border: transparent;
   --workspace-sheet-shadow: none;
   --workspace-widget-bg: var(--paper);
-  --workspace-ops-bg: #f5f4f4;
+  --workspace-ops-bg: #f6f4f1;
   --workspace-widget-border: color-mix(in srgb, var(--border) 55%, transparent);
   --workspace-rail-line: color-mix(in srgb, var(--border) 55%, transparent);
 }
@@ -5180,7 +5205,7 @@ textarea.input {
 .toolbar-shell {
   position: relative;
   z-index: 2;
-  /* Views bar — workspace chrome token (light: #f5f4f4); widgets stay on --paper. */
+  /* Views bar — workspace chrome token (light: #f6f4f1); widgets stay on --paper. */
   background: var(--workspace-chrome, var(--panel));
   border-bottom: 1px solid var(--border);
 }
@@ -7591,6 +7616,44 @@ textarea.input {
   height: 0.42rem;
   border-radius: 999px;
   flex-shrink: 0;
+  box-sizing: border-box;
+}
+
+/* Shape dialect — filled fail, ring ok, pulse live, dashed skip (ink on light). */
+.thread-nav-run-dot--ok {
+  background: transparent;
+  border: 1.5px solid var(--text);
+}
+
+.thread-nav-run-dot--fail {
+  background: var(--text);
+  border: none;
+}
+
+.thread-nav-run-dot--live {
+  background: transparent;
+  border: 1.5px solid var(--text-muted);
+  animation: mia-dot-pulse 1.4s ease-in-out infinite;
+}
+
+.thread-nav-run-dot--skip {
+  background: transparent;
+  border: 1px dashed var(--text-muted);
+}
+
+.thread-nav-run-dot--muted {
+  background: color-mix(in srgb, var(--text-muted) 40%, transparent);
+  border: none;
+}
+
+@keyframes mia-dot-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
 }
 
 .thread-nav-run-goal {

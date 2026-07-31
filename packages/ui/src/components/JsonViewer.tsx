@@ -58,9 +58,9 @@ function previewObject(value: Record<string, unknown>): string {
 
 function JsonPrimitive({ name, value }: { name?: string; value: unknown }) {
   let valueClass = "text-text-muted"
-  if (typeof value === "string") valueClass = "text-success"
-  else if (typeof value === "number") valueClass = "text-warning"
-  else if (typeof value === "boolean") valueClass = "text-info"
+  if (typeof value === "string") valueClass = "text-datatype-string"
+  else if (typeof value === "number") valueClass = "text-datatype-int"
+  else if (typeof value === "boolean") valueClass = "text-datatype-bool"
   else if (value === null) valueClass = "text-text-muted/60 italic"
 
   return (

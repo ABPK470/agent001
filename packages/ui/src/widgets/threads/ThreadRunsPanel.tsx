@@ -12,7 +12,7 @@ import { RunStatus } from "../../enums"
 import { useStore } from "../../state/store"
 import type { Run, Thread } from "../../types"
 import { timeAgo } from "../../lib/util"
-import { statusDot } from "../../theme/tokens"
+import { statusDotKind } from "../../theme/tokens"
 import { WIDGET_ICONS } from "../../widgets/widget-icons"
 import { DeleteThreadModal } from "./DeleteThreadModal"
 import { ThreadRowMenu } from "./ThreadRowMenu"
@@ -87,8 +87,7 @@ function RunRow({
       onBlur={onGoalLeave}
     >
       <span
-        className="thread-nav-run-dot"
-        style={{ background: statusDot(run.status) }}
+        className={`thread-nav-run-dot thread-nav-run-dot--${statusDotKind(run.status)}`}
         aria-hidden
       />
       <span ref={goalRef} className="thread-nav-run-goal">

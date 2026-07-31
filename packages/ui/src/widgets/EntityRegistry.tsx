@@ -357,7 +357,7 @@ export function EntityRegistry(): JSX.Element {
               <button type="button" onClick={() => setRetireCandidate(null)} disabled={busy} className="rounded border border-border-subtle px-3 py-1.5 text-xs text-text-muted">
                 Cancel
               </button>
-              <button type="button" onClick={() => void doRetire().catch((err: unknown) => { console.error("[mia]", err) })} disabled={busy} className="rounded bg-rose-500 px-3 py-1.5 text-xs text-white">
+              <button type="button" onClick={() => void doRetire().catch((err: unknown) => { console.error("[mia]", err) })} disabled={busy} className="rounded bg-error px-3 py-1.5 text-xs text-text-on-accent">
                 <Trash2 className="h-3 w-3 inline" /> Delete
               </button>
             </div>

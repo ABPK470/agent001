@@ -77,13 +77,13 @@ describe("shell chrome SOT", () => {
   it("light workspace chrome only — cool field/bar; widgets keep --paper", () => {
     const css = readFileSync(resolve(here, "../boot/index.css"), "utf8")
     expect(css).toMatch(
-      /:root\[data-theme="light"\]\s+\.workspace-chrome\s*\{[^}]*--workspace-sheet:\s*#f5f4f4/s,
+      /:root\[data-theme="light"\]\s+\.workspace-chrome\s*\{[^}]*--workspace-sheet:\s*#f6f4f1/s,
     )
     expect(css).toMatch(
-      /:root\[data-theme="light"\]\s+\.workspace-chrome\s*\{[^}]*--workspace-chrome:\s*#f5f4f4/s,
+      /:root\[data-theme="light"\]\s+\.workspace-chrome\s*\{[^}]*--workspace-chrome:\s*#f6f4f1/s,
     )
     expect(css).toMatch(
-      /:root\[data-theme="light"\]\s+\.workspace-chrome\s*\{[^}]*--workspace-ops-bg:\s*#f5f4f4/s,
+      /:root\[data-theme="light"\]\s+\.workspace-chrome\s*\{[^}]*--workspace-ops-bg:\s*#f6f4f1/s,
     )
     expect(css).toMatch(
       /:root\[data-theme="light"\]\s+\.workspace-chrome\s*\{[^}]*--workspace-widget-bg:\s*var\(--paper\)/s,

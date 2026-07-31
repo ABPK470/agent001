@@ -24,17 +24,41 @@ export const C = {
   cyan: "#6CB4EE",
 } as const
 
-export function statusDot(status: string): string {
+/** Status mark kind — shape, not hue (light collapses status tokens to ink). */
+export type StatusDotKind = "ok" | "fail" | "live" | "skip" | "muted"
+
+export function statusDotKind(status: string): StatusDotKind {
   switch (status) {
     case "completed":
-      return C.success
+    case "succeeded":
+    case "success":
+      return "ok"
     case "failed":
-      return C.error
+    case "error":
+    case "timeout":
+      return "fail"
     case "running":
     case "pending":
     case "planning":
-      return C.accent
+      return "live"
     case "cancelled":
+    case "skipped":
+      return "skip"
+    default:
+      return "muted"
+  }
+}
+
+/** @deprecated Prefer `statusDotKind` + mark shapes; color collapses to ink on light. */
+export function statusDot(status: string): string {
+  switch (statusDotKind(status)) {
+    case "ok":
+      return C.success
+    case "fail":
+      return C.error
+    case "live":
+      return C.accent
+    case "skip":
       return C.warning
     default:
       return C.muted

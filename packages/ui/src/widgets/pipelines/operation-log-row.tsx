@@ -6,15 +6,6 @@ import { ReviewTree, ReviewTreeItem } from "../../components/ReviewTree"
 export const OP_LOG = "text-sm leading-snug"
 export const OP_LOG_MONO = `${OP_LOG} font-mono`
 
-const STATUS_COLOR: Record<OperationStatus, string> = {
-  running: "var(--color-info)",
-  success: "var(--color-success)",
-  failed: "var(--color-error)",
-  cancelled: "var(--color-text-muted)",
-  skipped: "var(--color-warning)",
-  unknown: "var(--color-text-muted)",
-}
-
 export function fmtDuration(ms: number | null): string {
   if (ms == null) return "—"
   if (ms < 1000) return `${ms}ms`
@@ -51,16 +42,17 @@ export function formatPipelineSubtitle(subtitle: string): string {
   )
 }
 
+/** Ink-first: light collapses hue to ink; meaning from weight + border dialect. */
 export function statusTextClass(status: OperationStatus): string {
   switch (status) {
     case "success":
-      return "text-success"
+      return "text-text-muted"
     case "failed":
-      return "text-error"
+      return "text-text"
     case "skipped":
-      return "text-warning"
+      return "text-text-faint"
     case "running":
-      return "text-info"
+      return "text-text"
     case "cancelled":
       return "text-text-muted"
     default:
@@ -68,16 +60,20 @@ export function statusTextClass(status: OperationStatus): string {
   }
 }
 
+/**
+ * Status chrome without traffic chroma — label + border weight/style carry meaning
+ * (success quiet, failed heavy, skipped dashed, running strong).
+ */
 export function statusSoftBgClass(status: OperationStatus): string {
   switch (status) {
     case "success":
-      return "border border-success/50 bg-transparent"
+      return "border border-border-subtle bg-transparent"
     case "failed":
-      return "border border-error/50 bg-transparent"
+      return "border-2 border-text bg-overlay-2"
     case "skipped":
-      return "border border-warning/50 bg-transparent"
+      return "border border-dashed border-border-strong bg-transparent"
     case "running":
-      return "border border-border-strong bg-transparent"
+      return "border border-border-strong bg-overlay-1"
     default:
       return "border border-border bg-transparent"
   }
@@ -86,11 +82,11 @@ export function statusSoftBgClass(status: OperationStatus): string {
 export function statusFilterActiveClass(status: OperationStatus): string {
   switch (status) {
     case "success":
-      return "ring-1 ring-inset ring-success text-success font-medium bg-transparent"
+      return "ring-1 ring-inset ring-border-subtle text-text-muted font-medium bg-transparent"
     case "failed":
-      return "ring-1 ring-inset ring-error text-error font-medium bg-transparent"
+      return "ring-2 ring-inset ring-text text-text font-semibold bg-transparent"
     case "skipped":
-      return "ring-1 ring-inset ring-warning text-warning font-medium bg-transparent"
+      return "border border-dashed border-border-strong text-text-faint font-medium bg-transparent"
     case "running":
       return "ring-1 ring-inset ring-border-strong text-text font-medium bg-transparent"
     case "cancelled":
@@ -103,8 +99,7 @@ export const OP_LOG_MUTED = "text-text-muted"
 /** Description / summary after the middle dot — one step lighter than the label. */
 export const OP_LOG_DESC = "text-text-faint"
 
-/** Colored status badge — soft background + status-colored text (pipeline / parent rows).
- *  Slightly smaller than body `text-sm` so the label doesn’t dominate the row. */
+/** Status badge — uppercase label + border dialect (not traffic chroma). */
 export function LogStatusLabel({
   status,
 }: {
@@ -122,17 +117,31 @@ export function LogStatusLabel({
   )
 }
 
+/** Mark shape carries meaning when hue collapses to ink (filled / ring / dashed / spin). */
 export function StatusDot({ status }: { status: OperationStatus }) {
-  const color = STATUS_COLOR[status]
   if (status === "running") {
-    return <Loader2 size={11} className="shrink-0 animate-spin" style={{ color }} />
+    return <Loader2 size={11} className="shrink-0 animate-spin text-text-muted" aria-hidden />
   }
-  return (
-    <span
-      className="w-[7px] h-[7px] rounded-full shrink-0"
-      style={{ background: color }}
-    />
-  )
+  if (status === "failed") {
+    return <span className="w-[7px] h-[7px] rounded-full shrink-0 bg-text" aria-hidden />
+  }
+  if (status === "success") {
+    return (
+      <span
+        className="w-[7px] h-[7px] rounded-full shrink-0 border-[1.5px] border-text bg-transparent"
+        aria-hidden
+      />
+    )
+  }
+  if (status === "skipped") {
+    return (
+      <span
+        className="w-[7px] h-[7px] rounded-full shrink-0 border border-dashed border-text-muted bg-transparent"
+        aria-hidden
+      />
+    )
+  }
+  return <span className="w-[7px] h-[7px] rounded-full shrink-0 bg-text-muted/40" aria-hidden />
 }
 
 /**
