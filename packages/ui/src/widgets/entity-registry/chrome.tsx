@@ -7,6 +7,10 @@ export const RAIL_GRID = `grid-cols-[${RAIL_WIDTH}_1fr]` as const
 export const ICON_BTN =
   "mia-control flex items-center justify-center w-9 h-9 shrink-0 text-text-muted focus-visible:outline-none disabled:opacity-40 disabled:cursor-not-allowed"
 
+/** Unsaved / Modified — theme `--warning` chip (see `.mia-chip-dirty`). */
+export const CHIP_DIRTY = "mia-chip-dirty px-2 py-0.5 text-xs"
+export const CHIP_DIRTY_SM = "mia-chip-dirty px-2 py-0.5 text-[11px]"
+
 /**
  * @deprecated Solid accent icon squares broke the dialect (purple next to grey +).
  * Alias of ICON_BTN — labeled CTAs use TEXT_BTN_PRIMARY / ACTION_BTN.

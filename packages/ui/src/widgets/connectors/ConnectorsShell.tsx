@@ -328,7 +328,7 @@ export function ConnectorsShell(): JSX.Element {
                           {form.displayName.trim() || form.name.trim() || "New connector"}
                         </h3>
                         {isDirty && (
-                          <span className="rounded-full bg-amber-400/10 px-2 py-0.5 text-xs font-medium text-amber-400/90">Unsaved</span>
+                          <span className="mia-chip-dirty px-2 py-0.5 text-xs">Unsaved</span>
                         )}
                       </div>
                       {formMode === "edit" && editingId && (

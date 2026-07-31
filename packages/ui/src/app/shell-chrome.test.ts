@@ -7,15 +7,15 @@ import { dirname, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import { describe, expect, it } from "vitest"
 import {
-  SHELL_CHROME_GAP,
-  SHELL_CHROME_GAP_SM,
-  SHELL_CHROME_HEADER_CHAT_CLASS,
-  SHELL_CHROME_HEADER_CLASS,
-  SHELL_CHROME_HEADER_H,
-  SHELL_CHROME_HEADER_WORKSPACE_CLASS,
-  SHELL_CHROME_PAD_X,
-  SHELL_CHROME_PAD_X_SM,
-  SHELL_CHROME_ROW_H,
+    SHELL_CHROME_GAP,
+    SHELL_CHROME_GAP_SM,
+    SHELL_CHROME_HEADER_CHAT_CLASS,
+    SHELL_CHROME_HEADER_CLASS,
+    SHELL_CHROME_HEADER_H,
+    SHELL_CHROME_HEADER_WORKSPACE_CLASS,
+    SHELL_CHROME_PAD_X,
+    SHELL_CHROME_PAD_X_SM,
+    SHELL_CHROME_ROW_H,
 } from "./shell-chrome"
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -72,5 +72,28 @@ describe("shell chrome SOT", () => {
     expect(css).not.toContain("workspace-sheet-outline")
     expect(css).not.toContain("--toolbar-stage-gap")
     expect(css).not.toContain("--stage-gap:")
+  })
+
+  it("light workspace chrome only — cool field/bar; widgets keep --paper", () => {
+    const css = readFileSync(resolve(here, "../boot/index.css"), "utf8")
+    expect(css).toMatch(
+      /:root\[data-theme="light"\]\s+\.workspace-chrome\s*\{[^}]*--workspace-sheet:\s*#f5f4f4/s,
+    )
+    expect(css).toMatch(
+      /:root\[data-theme="light"\]\s+\.workspace-chrome\s*\{[^}]*--workspace-chrome:\s*#f5f4f4/s,
+    )
+    expect(css).toMatch(
+      /:root\[data-theme="light"\]\s+\.workspace-chrome\s*\{[^}]*--workspace-ops-bg:\s*#f5f4f4/s,
+    )
+    expect(css).toMatch(
+      /:root\[data-theme="light"\]\s+\.workspace-chrome\s*\{[^}]*--workspace-widget-bg:\s*var\(--paper\)/s,
+    )
+    // Paper itself stays warm — widgets / modals unchanged.
+    expect(css).toMatch(
+      /:root\[data-theme="light"\]\s*\{[^}]*--paper:\s*#f3f1ec/s,
+    )
+    expect(css).toMatch(
+      /\.toolbar-shell\s*\{[^}]*background:\s*var\(--workspace-chrome,\s*var\(--panel\)\)/s,
+    )
   })
 })

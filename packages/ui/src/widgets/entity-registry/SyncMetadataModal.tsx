@@ -36,7 +36,7 @@ import {
   DEFAULT_STEP_TYPE_DEFINITION,
   StepTypeDefinitionEditor,
 } from "./CatalogDefinitionEditor"
-import { FORM_HEADING, HELP_TEXT, ICON_BTN, ICON_BTN_PRIMARY, META_TEXT, PANEL, TAB_PILL, TAB_PILL_ACTIVE, TAB_PILL_IDLE, TEXT_BTN, TEXT_BTN_PRIMARY } from "./chrome"
+import { FORM_HEADING, HELP_TEXT, CHIP_DIRTY, CHIP_DIRTY_SM, ICON_BTN, ICON_BTN_PRIMARY, META_TEXT, PANEL, TAB_PILL, TAB_PILL_ACTIVE, TAB_PILL_IDLE, TEXT_BTN, TEXT_BTN_PRIMARY } from "./chrome"
 import { CONTROL_READY, LIST_ROW_ACTIVE, LIST_ROW_IDLE } from "../../lib/selection"
 import { FormSurfaceExecutionSteps } from "./EntityEditSurfaces"
 import { buildStepTypeCatalogLookup } from "./execution-step-shared"
@@ -972,7 +972,7 @@ export function SyncMetadataModal({
                       {environmentForm.displayName.trim() || environmentForm.name.trim() || "New environment"}
                     </h3>
                     {isEnvironmentFormDirty && (
-                      <span className="rounded-full bg-amber-400/10 px-2 py-0.5 text-xs font-medium text-amber-400/90">
+                      <span className={CHIP_DIRTY}>
                         Unsaved
                       </span>
                     )}
@@ -1026,7 +1026,7 @@ export function SyncMetadataModal({
               <div className="mt-1 flex flex-wrap items-center gap-2">
                 <h3 className={FORM_HEADING}>{formPanelTitle(formMode, tab, editingId, formLabel, formLabel)}</h3>
                 {isFormDirty && (
-                  <span className="rounded-full bg-amber-400/10 px-2 py-0.5 text-xs font-medium text-amber-400/90">
+                  <span className={CHIP_DIRTY}>
                     Unsaved
                   </span>
                 )}
@@ -1036,7 +1036,7 @@ export function SyncMetadataModal({
                 {editingBuiltIn && editingDivergedFromShipped && (
                   <button
                     type="button"
-                    className="rounded-full bg-amber-400/10 px-2 py-0.5 text-xs font-medium text-amber-400/90 hover:bg-amber-400/20"
+                    className={CHIP_DIRTY}
                     title="Show tip vs shipped diff"
                     onClick={() => {
                       if (!editingId) return
@@ -1485,7 +1485,7 @@ function CatalogList({
                   {item.builtIn && item.divergedFromShipped && (
                     <button
                       type="button"
-                      className="shrink-0 rounded-full bg-amber-400/10 px-2 py-0.5 text-[11px] font-medium text-amber-400/90 hover:bg-amber-400/20"
+                      className={`shrink-0 ${CHIP_DIRTY_SM}`}
                       title="Show tip vs shipped diff"
                       onClick={(e) => {
                         e.stopPropagation()

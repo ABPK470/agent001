@@ -67,4 +67,13 @@ describe("Active Users sticky context banner", () => {
     expect(src).toMatch(/WidgetToolbarCount[\s\S]*compact/)
     expect(css).toContain("browse-count--compact")
   })
+
+  it("Viewing as chip uses theme tokens (not dark-only amber text)", () => {
+    expect(src).toContain("au-btn-viewing-as")
+    expect(src).not.toContain("text-amber-200")
+    expect(css).toMatch(/\.au-btn-viewing-as\s*\{[^}]*color:\s*var\(--viewing-as\)/s)
+    expect(css).toMatch(
+      /:root\[data-theme="light"\]\s+\.au-btn-viewing-as\s*\{[^}]*color:\s*var\(--ink\)/s,
+    )
+  })
 })

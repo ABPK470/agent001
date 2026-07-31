@@ -273,7 +273,7 @@
   --scrim-strong: rgba(0, 0, 0, 0.78);
   --scrim-focus: rgba(0, 0, 0, 0.42);
 
-  --bubble-user: var(--paper);
+  --bubble-user: #f6f4f1;
   --shadow-bubble: none;
 
   --dt-int: var(--ink);
@@ -575,6 +575,54 @@
   color: var(--ink);
   background: transparent;
   border: 1px solid var(--border);
+}
+
+/*
+ * Dirty / unsaved / modified chips — theme --warning (never raw amber-400).
+ * Light: readable brown ink + quiet wash. Dark: amber ink on soft fill.
+ */
+.mia-chip-dirty {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 9999px;
+  border: 1px solid color-mix(in srgb, var(--warning) 38%, transparent);
+  background: color-mix(in srgb, var(--warning) 16%, transparent);
+  color: var(--warning);
+  font-weight: 500;
+  line-height: 1.25;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+button.mia-chip-dirty:hover {
+  background: color-mix(in srgb, var(--warning) 24%, transparent);
+  border-color: color-mix(in srgb, var(--warning) 50%, transparent);
+}
+
+:root[data-theme="light"] .mia-chip-dirty {
+  border-color: color-mix(in srgb, var(--warning) 45%, var(--border));
+  background: color-mix(in srgb, var(--warning) 12%, var(--paper));
+  color: var(--warning);
+}
+
+:root[data-theme="light"] button.mia-chip-dirty:hover {
+  background: color-mix(in srgb, var(--warning) 18%, var(--paper));
+}
+
+/* Active Users — Viewing as chip (theme ink; never dark-only amber-200). */
+.au-btn-viewing-as {
+  border-color: color-mix(in srgb, var(--viewing-as) 45%, transparent);
+  background: var(--viewing-as-soft);
+  color: var(--viewing-as);
+}
+
+:root[data-theme="light"] .au-btn-viewing-as {
+  border-color: var(--border);
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  color: var(--ink);
+}
+
+:root[data-theme="light"] .au-btn-viewing-as:hover {
+  background: color-mix(in srgb, var(--ink) 12%, transparent);
 }
 
 /* ── Base ──────────────────────────────────────────────────────── */
@@ -5025,12 +5073,15 @@ textarea.input {
 }
 
 :root[data-theme="light"] .workspace-chrome {
-  /* Paper field throughout; structure from ink borders only. */
-  --workspace-chrome: var(--panel);
-  --workspace-sheet: var(--panel);
-  --workspace-widget-bg: var(--panel);
+  /*
+   * One cool field for sheet / top bar / ops. Widgets + modals keep --paper.
+   * Dark mode untouched.
+   */
+  --workspace-chrome: #f5f4f4;
+  --workspace-sheet: #f5f4f4;
+  --workspace-widget-bg: var(--paper);
   --workspace-widget-border: var(--border);
-  --workspace-ops-bg: var(--panel);
+  --workspace-ops-bg: #f5f4f4;
   --workspace-rail-line: var(--border);
   --workspace-border: transparent;
   --workspace-sheet-shadow: none;
@@ -5054,12 +5105,13 @@ textarea.input {
  * Light ON → white sheet, warm tiles + warm ops. Dark ON → panel-2 sheet, panel tiles.
  */
 :root[data-theme="light"] .workspace-chrome--contrast {
-  --workspace-sheet: var(--panel-2);
-  --workspace-chrome: var(--panel-2);
+  /* Compare — tiles stay on paper; chrome field unchanged at rest colors. */
+  --workspace-sheet: #f5f4f4;
+  --workspace-chrome: #f5f4f4;
   --workspace-border: transparent;
   --workspace-sheet-shadow: none;
-  --workspace-widget-bg: var(--panel);
-  --workspace-ops-bg: var(--panel);
+  --workspace-widget-bg: var(--paper);
+  --workspace-ops-bg: #f5f4f4;
   --workspace-widget-border: color-mix(in srgb, var(--border) 55%, transparent);
   --workspace-rail-line: color-mix(in srgb, var(--border) 55%, transparent);
 }
@@ -5128,8 +5180,8 @@ textarea.input {
 .toolbar-shell {
   position: relative;
   z-index: 2;
-  /* Paper bar — same field as sheet / widgets. Ops strip is the bright exception. */
-  background: var(--panel);
+  /* Views bar — workspace chrome token (light: #f5f4f4); widgets stay on --paper. */
+  background: var(--workspace-chrome, var(--panel));
   border-bottom: 1px solid var(--border);
 }
 

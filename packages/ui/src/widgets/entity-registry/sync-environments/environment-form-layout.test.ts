@@ -60,6 +60,21 @@ describe("environment-form-layout", () => {
     expect(src).not.toMatch(FORBIDDEN_CONFIG_SPLIT_GRID_PATTERN)
   })
 
+  it("Unsaved / Modified chips use theme warning (not raw amber-400)", () => {
+    const src = readModal()
+    const css = readFileSync(join(here, "../../../boot/index.css"), "utf8")
+    const chrome = readFileSync(join(here, "..", "chrome.tsx"), "utf8")
+    expect(chrome).toContain("CHIP_DIRTY")
+    expect(chrome).toContain("mia-chip-dirty")
+    expect(src).toContain("CHIP_DIRTY")
+    expect(src).not.toContain("bg-amber-400")
+    expect(src).not.toContain("text-amber-400")
+    expect(css).toMatch(/\.mia-chip-dirty\s*\{[^}]*color:\s*var\(--warning\)/s)
+    expect(css).toMatch(
+      /:root\[data-theme="light"\]\s+\.mia-chip-dirty\s*\{[^}]*color:\s*var\(--warning\)/s,
+    )
+  })
+
   it("SyncEnvironmentForm and SyncPolicySection keep full-width block layout", () => {
     const form = readSibling("SyncEnvironmentForm.tsx")
     const policy = readSibling("SyncPolicySection.tsx")

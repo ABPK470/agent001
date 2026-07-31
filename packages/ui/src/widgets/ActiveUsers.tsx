@@ -1201,7 +1201,7 @@ function UserDetail({ user, liveRuns, history, stack, adminBusy, onToggleAdmin, 
               className={[
                 "rounded-md border px-3 py-1.5 text-sm transition-colors",
                 viewingAsUpn && viewingAsUpn.toLowerCase() === user.upn.toLowerCase()
-                  ? "border-amber-500/40 bg-amber-500/10 text-amber-200"
+                  ? "au-btn-viewing-as"
                   : "border-border-subtle text-text-muted hover:bg-overlay-2 hover:text-text",
               ].join(" ")}
               title="Viewing as this user — Personal widgets show their data"
@@ -1345,10 +1345,7 @@ function UserDetail({ user, liveRuns, history, stack, adminBusy, onToggleAdmin, 
                     <span className="shrink-0 pt-1"><StatusDot status={h.status} /></span>
                     <span className="min-w-0 flex-1">
                       <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-text-muted">
-                        <span
-                          className="font-mono select-text"
-                          onClick={(e) => e.stopPropagation()}
-                        >
+                        <span className="font-mono">
                           {h.runId.slice(0, 8)}
                           <CopyBtn value={h.runId} label="run ID" />
                         </span>
@@ -1409,10 +1406,7 @@ function UserDetail({ user, liveRuns, history, stack, adminBusy, onToggleAdmin, 
                       }}
                     >
                       <td className="py-2 px-3"><StatusDot status={h.status} /></td>
-                      <td
-                        className="py-2 px-3 font-mono text-text-muted/70 select-text"
-                        onClick={(e) => e.stopPropagation()}
-                      >
+                      <td className="py-2 px-3 font-mono text-text-muted/70">
                         {h.runId.slice(0, 8)}<CopyBtn value={h.runId} label="run ID" />
                       </td>
                       <td className="py-2 px-3 text-text-muted/70 whitespace-nowrap" title={h.createdAt}>{formatRelative(h.createdAt)}</td>
@@ -1421,7 +1415,7 @@ function UserDetail({ user, liveRuns, history, stack, adminBusy, onToggleAdmin, 
                       <td className="py-2 px-3 text-right tabular-nums text-text-muted/70">{h.totalTokens != null ? formatCompact(h.totalTokens) : <span className="text-text-muted/30">—</span>}</td>
                       <td className="py-2 px-3 text-right tabular-nums text-text-muted/70">{h.llmCalls ?? <span className="text-text-muted/30">—</span>}</td>
                       <td className="py-2 px-3 text-text-muted/70 whitespace-nowrap">{h.model ?? <span className="text-text-muted/30">—</span>}</td>
-                      <td className="py-2 px-3 max-w-[320px] select-text cursor-text" onClick={(e) => e.stopPropagation()}>
+                      <td className="py-2 px-3 max-w-[320px]">
                         <span className="block truncate" title={h.error ? `${h.goal}\n\nError: ${h.error}` : h.goal}>
                           {h.error && <span className="text-error/90 mr-1.5" title={h.error}>⚠</span>}
                           <span className={h.error ? "text-text-muted/70" : "text-text"}>{h.goal}</span>
