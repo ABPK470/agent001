@@ -494,7 +494,7 @@ export function ThreadRailBrandExpand({
         className={[
           "pointer-events-none absolute left-1/2 top-1/2 z-0 flex h-9 w-9",
           "-translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-lg",
-          "border border-border bg-panel text-text",
+          "bg-panel text-text",
           "opacity-0 transition-opacity duration-200",
           "group-hover:opacity-100 group-focus-visible:opacity-100",
         ].join(" ")}
