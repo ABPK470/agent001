@@ -1,8 +1,10 @@
 /**
- * Search field for modal bodies — icon + input without overlap.
+ * Search field for modal browse strips — same height as Listbox sm / mia-control
+ * (`--control-h` / h-9). Icon + input without overlap.
  */
 
 import { Search, X } from "lucide-react"
+import type { JSX } from "react"
 
 export function ModalSearchField({
   value,
@@ -14,9 +16,9 @@ export function ModalSearchField({
   onChange: (value: string) => void
   placeholder?: string
   "aria-label"?: string
-}) {
+}): JSX.Element {
   return (
-    <div className="input flex shrink-0 items-center gap-2 py-0 pl-2.5 pr-2">
+    <div className="modal-search-field input flex shrink-0 items-center gap-2 pl-2.5 pr-1.5">
       <Search className="h-3.5 w-3.5 shrink-0 text-text-faint" aria-hidden />
       <input
         type="search"
@@ -24,7 +26,7 @@ export function ModalSearchField({
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         aria-label={ariaLabel}
-        className="min-w-0 flex-1 border-0 bg-transparent py-2 text-sm outline-none focus:ring-0"
+        className="min-h-0 min-w-0 flex-1 border-0 bg-transparent py-0 text-sm leading-none outline-none focus:ring-0"
       />
       {value ? (
         <button
@@ -35,9 +37,7 @@ export function ModalSearchField({
         >
           <X className="h-3.5 w-3.5" />
         </button>
-      ) : (
-        <span className="h-6 w-6 shrink-0" aria-hidden />
-      )}
+      ) : null}
     </div>
   )
 }

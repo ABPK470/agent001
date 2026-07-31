@@ -672,6 +672,14 @@ body {
   opacity: 0.6;
   cursor: not-allowed;
 }
+
+/* Modal browse strip search — lock to platform control height (Listbox sm / mia-control). */
+.modal-search-field.input {
+  height: var(--control-h);
+  box-sizing: border-box;
+  padding-top: 0;
+  padding-bottom: 0;
+}
 .modal-surface .input {
   background: transparent;
   border-color: var(--border);

@@ -16,15 +16,10 @@ import {
   type ActiveFilterChipModel,
 } from "../../components/FilterSheet"
 import { Listbox, type ListboxOption } from "../../components/Listbox"
+import { ModalSearchField } from "../../components/ModalSearchField"
 import { useLiveReload } from "../../hooks/useLiveReload"
 import { ModalShell } from "../entity-registry/ModalShell"
 import { activePublishBadge } from "./catalog-publish-badge"
-import {
-  WidgetToolbar,
-  WidgetToolbarLeading,
-  WidgetToolbarSearch,
-  WidgetToolbarTrailing,
-} from "../widget-toolbar"
 import { CatalogRollbackGate } from "./CatalogRollbackGate"
 import { CatalogVersionDetailModal } from "./CatalogVersionDetailModal"
 import {
@@ -182,61 +177,68 @@ export function CatalogVersionsModal({
         size="focus"
       >
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          {/* Same px-6 as ModalShell header / list body — not widget-shell px-3. */}
-          <WidgetToolbar className="px-6 py-3">
-            <WidgetToolbarLeading>{null}</WidgetToolbarLeading>
-            <WidgetToolbarSearch
-              value={searchDraft}
-              onChange={setSearchDraft}
-              placeholder="Search versions…"
-              onClear={() => setSearchDraft("")}
-            />
-            <WidgetToolbarTrailing>
-              <div className="w-[7.5rem] shrink-0">
-                <Listbox
-                  value={filters.sort}
-                  options={CATALOG_VERSION_SORT_OPTIONS as ListboxOption<CatalogVersionSort>[]}
-                  onChange={(sort) => setFilters((current) => ({ ...current, sort }))}
-                  size="sm"
-                  className="w-full listbox-control"
-                  ariaLabel="Sort"
-                />
-              </div>
-              <span className="widget-toolbar__count hidden sm:inline-flex">
-                <span className="widget-toolbar__count-filtered">{filtered.length}</span>
-                <span className="widget-toolbar__count-sep">/</span>
-                <span className="widget-toolbar__count-total">{versions.length}</span>
-              </span>
-              <button
-                ref={filterBtnRef}
-                type="button"
-                onClick={() => setFiltersOpen((value) => !value)}
-                className={`widget-toolbar__icon-btn relative ${
-                  filtersOpen || activeFilterCount > 0 ? "widget-toolbar__icon-btn--active" : ""
-                }`}
-                title={
-                  activeFilterCount > 0
-                    ? `Filters (${activeFilterCount} active)`
-                    : "Filters"
-                }
-                aria-pressed={filtersOpen || activeFilterCount > 0}
-              >
-                <SlidersHorizontal size={14} />
-                {activeFilterCount > 0 && (
-                  <span className="absolute -top-0.5 -right-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-accent px-0.5 text-[9px] font-mono font-medium leading-none text-text-on-accent">
-                    {activeFilterCount}
-                  </span>
-                )}
-              </button>
-            </WidgetToolbarTrailing>
-          </WidgetToolbar>
-
-          <div className="px-6">
-            <ActiveFilterChips
-              chips={activeChips}
-              onClear={hasActiveFilters ? clearFilters : undefined}
-            />
+          {/*
+           * Modal browse strip — same dialect as Audit / Usage (px-6).
+           * Do not use WidgetToolbar here: that strip assumes a widget shell
+           * owns horizontal inset, so padding utilities fight its CSS and the
+           * search row drifts off the list column.
+           */}
+          <div className="flex shrink-0 items-center gap-2 border-b border-border-subtle px-6 py-3">
+            <div className="min-w-0 flex-1">
+              <ModalSearchField
+                value={searchDraft}
+                onChange={setSearchDraft}
+                placeholder="Search versions…"
+                aria-label="Search versions"
+              />
+            </div>
+            <div className="w-[7.5rem] shrink-0">
+              <Listbox
+                value={filters.sort}
+                options={CATALOG_VERSION_SORT_OPTIONS as ListboxOption<CatalogVersionSort>[]}
+                onChange={(sort) => setFilters((current) => ({ ...current, sort }))}
+                size="sm"
+                className="w-full listbox-control"
+                ariaLabel="Sort"
+              />
+            </div>
+            <span
+              className="hidden shrink-0 tabular-nums text-xs text-text-muted sm:inline"
+              aria-label={`${filtered.length} of ${versions.length} shown`}
+            >
+              {filtered.length}/{versions.length}
+            </span>
+            <button
+              ref={filterBtnRef}
+              type="button"
+              onClick={() => setFiltersOpen((value) => !value)}
+              className={`mia-control relative flex h-9 w-9 items-center justify-center ${
+                filtersOpen || activeFilterCount > 0 ? "border-border-strong text-text" : ""
+              }`}
+              title={
+                activeFilterCount > 0
+                  ? `Filters (${activeFilterCount} active)`
+                  : "Filters"
+              }
+              aria-pressed={filtersOpen || activeFilterCount > 0}
+            >
+              <SlidersHorizontal size={15} />
+              {activeFilterCount > 0 && (
+                <span className="absolute -right-0.5 -top-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-text px-0.5 text-[9px] font-mono font-medium leading-none text-text-on-accent">
+                  {activeFilterCount}
+                </span>
+              )}
+            </button>
           </div>
+
+          {activeChips.length > 0 && (
+            <div className="px-6">
+              <ActiveFilterChips
+                chips={activeChips}
+                onClear={hasActiveFilters ? clearFilters : undefined}
+              />
+            </div>
+          )}
 
           <FilterSheet
             open={filtersOpen}
@@ -304,7 +306,7 @@ export function CatalogVersionsModal({
             </FilterField>
           </FilterSheet>
 
-          <div className="flex min-h-0 flex-1 flex-col gap-3 px-6 pb-4 pt-3">
+          <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden px-6 pb-4 pt-3">
             {err && <p className="text-sm text-error">{err}</p>}
             <p className="shrink-0 text-xs text-text-faint">
               Sync bundle last published:{" "}
