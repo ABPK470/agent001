@@ -171,7 +171,8 @@
   --scrim: rgba(0, 0, 0, 0.72);
   --scrim-strong: rgba(0, 0, 0, 0.90);
   --scrim-focus: rgba(0, 0, 0, 0.58);
-  --bubble-user: #3f3f46;
+  /* User pills — zinc-600 (was #3f3f46 / zinc-700 — muddy on canvas). */
+  --bubble-user: #52525b;
   --shadow-bubble: 0 6px 20px rgba(0, 0, 0, 0.22);
 
   --dt-int: #93c5fd;
@@ -3005,6 +3006,17 @@ textarea.input {
 
 .trace-phase-step__deps {
   opacity: 0.9;
+}
+
+/* Sibling Raw toggles — stable gap so open/close does not invent spacing. */
+.trace-phase-section:has(> .trace-phase-json) {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.trace-phase-section:has(> .trace-phase-json) > .trace-phase-section__label {
+  margin-bottom: 0;
 }
 
 .trace-phase-json {

@@ -12,16 +12,16 @@ import { useEffect, useRef, useState, type KeyboardEvent } from "react"
 import type { Me } from "../../hooks/useMe"
 import { useViewTabReorder } from "../../hooks/useViewTabReorder"
 import { peerSlidePx } from "../../lib/view-tab-dnd"
+import { useLayoutStore } from "../../state/layout-store"
+import { useStore } from "../../state/store"
+import { NotificationPanel } from "../../widgets/platform/NotificationPanel"
 import { ChatBrand } from "../ChatBrand"
 import { SessionMenu } from "../SessionMenu"
 import { ViewingAsControl } from "../ViewingAsControl"
 import { SHELL_CHROME_HEADER_WORKSPACE_CLASS } from "../shell-chrome"
 import type { AppShellMode } from "../types"
-import { useStore } from "../../state/store"
-import { useLayoutStore } from "../../state/layout-store"
-import { NotificationPanel } from "../../widgets/platform/NotificationPanel"
-import { getWidgetDefinition } from "./widget-definitions"
 import { ViewTabDragFloat } from "./ViewTabDragFloat"
+import { getWidgetDefinition } from "./widget-definitions"
 
 interface Props {
   onAddWidget?: () => void
@@ -356,7 +356,7 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
                     }
                   >
                     <PanelTop size={15} className="block shrink-0" aria-hidden />
-                    <span className="hidden leading-none sm:inline">Sheet</span>
+                    {/* <span className="hidden leading-none sm:inline"></span> */}
                   </button>
                 </>
               )}

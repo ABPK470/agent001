@@ -8,9 +8,8 @@
  *   Children → Call / Work nested under a step (subagent body)
  */
 
-import { Children, useRef, useState, type ReactNode } from "react"
+import { Children, useState, type ReactNode } from "react"
 import { JsonViewer } from "../../components/JsonViewer"
-import { preserveScrollAnchor } from "../../lib/chatScroll"
 import { ScopeRow } from "./TraceScope"
 import type { TracePhaseDetail, TracePhaseNode } from "./build-trace-dag"
 
@@ -66,8 +65,21 @@ function PhaseSteps({ steps }: { steps: Extract<TracePhaseDetail, { kind: "step"
 }
 
 function PhaseJson({ blocks }: { blocks: Extract<TracePhaseDetail, { kind: "json" }>[] }) {
-  const [openId, setOpenId] = useState<string | null>(null)
+  // Independent opens — exclusive openId closed the sibling panel on every
+  // toggle, so VirtualList remasured a double height delta and the whole
+  // scrollport flinched. Mid-body Raw toggles also must not use
+  // preserveScrollAnchor (header-park + 280ms loop fights TanStack resize).
+  const [openIds, setOpenIds] = useState(() => new Set<string>())
   if (blocks.length === 0) return null
+
+  function toggleJson(id: string) {
+    setOpenIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
 
   return (
     <section className="trace-phase-section">
@@ -76,8 +88,8 @@ function PhaseJson({ blocks }: { blocks: Extract<TracePhaseDetail, { kind: "json
         <PhaseJsonBlock
           key={block.id}
           block={block}
-          open={openId === block.id}
-          onToggle={() => setOpenId(openId === block.id ? null : block.id)}
+          open={openIds.has(block.id)}
+          onToggle={() => toggleJson(block.id)}
         />
       ))}
     </section>
@@ -93,20 +105,13 @@ function PhaseJsonBlock({
   open: boolean
   onToggle: () => void
 }) {
-  const buttonRef = useRef<HTMLButtonElement>(null)
-
-  function onClick() {
-    preserveScrollAnchor(buttonRef.current, onToggle)
-  }
-
   return (
     <div className="trace-phase-json">
       <button
-        ref={buttonRef}
         type="button"
         className="trace-phase-json__toggle"
         aria-expanded={open}
-        onClick={onClick}
+        onClick={onToggle}
       >
         {open ? "Hide" : "Show"} {block.label}
       </button>

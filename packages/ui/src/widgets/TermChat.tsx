@@ -1951,7 +1951,7 @@ function TermChatInputBar({
   onRemoveAttachment: (id: string) => void
   className?: string
   variant?: "default" | "hero"
-  /** `flush` = tile already owns the surface (widget mode). */
+  /** `flush` = docked inside a tile that already owns the surface. Empty centered composers stay `pill`. */
   chrome?: "pill" | "flush"
   personalReadOnly?: boolean
   heroRevealProgress?: number
@@ -2907,7 +2907,7 @@ export function TermChat({
                   onRemoveAttachment={removeAttachment}
                   className="w-full"
                   variant="default"
-                  chrome="flush"
+                  chrome="pill"
                   heroRevealProgress={heroRevealProgress}
                 />
               </div>
