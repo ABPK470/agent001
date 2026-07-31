@@ -87,8 +87,11 @@ export function TraceDag({
     // Cache layouts from the virtual window so headers above the viewport still pin.
     const ids = computeTracePinnedScopeIds(el, pinLayoutCacheRef.current)
     const stackH = ids.length * TRACE_STICKY_ROW_H
-    // Insets the scrollport below the pin band (CSS top) — content never sits under pins.
-    el.style.setProperty("--trace-pin-stack-h", `${stackH}px`)
+    // Only touch the inset when height changes — rewriting the same px still
+    // resizes the absolute scrollport and makes folds feel like a reload.
+    if (el.style.getPropertyValue("--trace-pin-stack-h") !== `${stackH}px`) {
+      el.style.setProperty("--trace-pin-stack-h", `${stackH}px`)
+    }
     // Replace in-flow headers; no scroll-padding — pins are outside the scrollport.
     syncPinnedInFlow(el, ids, TRACE_STICKY_ROW_H, { reserveScrollPadding: false })
     if (samePinnedIds(pinnedIdsRef.current, ids)) return
@@ -189,10 +192,10 @@ export function TraceDag({
   }, [query, callHits])
 
   useEffect(() => {
-    // Expand/collapse shifts absolute tops — drop stale cache and relearn.
-    // Do not clear on call/spine append: ancestors above the virtual window
-    // must keep their last known tops so pins still stick while following.
-    pinLayoutCacheRef.current.clear()
+    // Fold only show/hides a body — refresh pins from mounted scopes.
+    // Never clear the layout cache here: wiping it drops unmounted ancestors
+    // above the virtual window, pin-band height flickers, and the whole
+    // scrollport jumps as if the outline reloaded.
     schedulePinRefresh()
   }, [
     openState.calls,

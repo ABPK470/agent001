@@ -67,8 +67,8 @@ function PhaseSteps({ steps }: { steps: Extract<TracePhaseDetail, { kind: "step"
 function PhaseJson({ blocks }: { blocks: Extract<TracePhaseDetail, { kind: "json" }>[] }) {
   // Independent opens — exclusive openId closed the sibling panel on every
   // toggle, so VirtualList remasured a double height delta and the whole
-  // scrollport flinched. Mid-body Raw toggles also must not use
-  // preserveScrollAnchor (header-park + 280ms loop fights TanStack resize).
+  // scrollport flinched. Mid-body Raw toggles must not use
+  // preserveScrollAnchor (header-park fights TanStack resize).
   const [openIds, setOpenIds] = useState(() => new Set<string>())
   if (blocks.length === 0) return null
 

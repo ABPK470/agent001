@@ -454,4 +454,10 @@ describe("widget log chrome — shared content dialect", () => {
     expect(ops).not.toMatch(/const DAY_GROUP_BTN[\s\S]{0,200}text-sm/)
     expect(sheet).toContain("review-group-label")
   })
+
+  it("day groups open air above later caps (virtual rows are absolute)", () => {
+    const ops = read(opsPath)
+    expect(ops).toContain("dayGroupWrapClass")
+    expect(ops).toMatch(/isFirst \? "pb-1" : "pt-3\.5 pb-1"/)
+  })
 })

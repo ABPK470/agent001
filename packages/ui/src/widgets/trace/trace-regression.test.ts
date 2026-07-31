@@ -403,6 +403,26 @@ describe("Trace CSS contract — pin indent + work-note divider", () => {
     expect(src).not.toContain("pinBandScrollDelta")
   })
 
+  it("fold refreshes pins without wiping the layout cache (no reload jump)", () => {
+    const dagPath = join(dirname(fileURLToPath(import.meta.url)), "TraceDag.tsx")
+    const src = readFileSync(dagPath, "utf8")
+    // Cache clear belongs on run change only — not on every expand/collapse.
+    expect(src).toContain("pinLayoutCacheRef.current.clear()")
+    expect(src).toMatch(
+      /pinLayoutCacheRef\.current\.clear\(\)\s*\n\s*setPinnedIds\(\[\]\)\s*\n\s*\}, \[runId\]\)/,
+    )
+    expect(src).not.toMatch(
+      /pinLayoutCacheRef\.current\.clear\(\)\s*\n\s*schedulePinRefresh\(\)/,
+    )
+    const scrollPath = join(
+      dirname(fileURLToPath(import.meta.url)),
+      "../../lib/chatScroll.ts",
+    )
+    const scrollSrc = readFileSync(scrollPath, "utf8")
+    expect(scrollSrc).not.toMatch(/performance\.now\(\)\s*\+\s*280/)
+    expect(scrollSrc).toMatch(/frames\s*<\s*3/)
+  })
+
   it("Trace pin math uses external band (stackInScroll: false)", () => {
     const pinPath = join(dirname(fileURLToPath(import.meta.url)), "trace-pin.ts")
     expect(readFileSync(pinPath, "utf8")).toMatch(

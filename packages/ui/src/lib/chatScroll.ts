@@ -63,8 +63,8 @@ export function parkScrollOnScope(
  * If the user had scrolled *into* the body (header above the viewport),
  * collapse parks on the header instead of leaving scrollTop in the hole.
  *
- * Samples for ~280ms so CSS height folds (0fr→1fr) settle without drifting
- * the header mid-transition.
+ * Settle in a few frames (commit → measure → pin inset). A long rAF loop
+ * fights VirtualList resize correction and feels like the outline reloads.
  */
 export function preserveScrollAnchor(
   button: HTMLElement | null,
@@ -98,10 +98,11 @@ export function preserveScrollAnchor(
     const delta = afterTop - beforeTop
     if (delta !== 0) scrollHost.scrollTop += delta
   }
-  const deadline = performance.now() + 280
+  let frames = 0
   function tick() {
     adjust()
-    if (performance.now() < deadline) requestAnimationFrame(tick)
+    frames += 1
+    if (frames < 3) requestAnimationFrame(tick)
   }
   requestAnimationFrame(tick)
 }

@@ -134,10 +134,19 @@ function isDuplicatePipelineMessage(pipelineError: string | undefined, text: str
 
 /** Sticky day caps — quieter than list body (`--review-group-size`). */
 const DAY_GROUP_BTN =
-  "review-group-label sticky top-0 z-10 w-full flex items-center gap-1.5 px-2 py-1 mb-1 text-left transition-colors"
+  "review-group-label sticky top-0 z-10 w-full flex items-center gap-1.5 px-2 py-1 text-left transition-colors"
 const DAY_GROUP_BTN_LINEAR = `${DAY_GROUP_BTN} bg-surface/95 backdrop-blur-sm`
 const DAY_GROUP_BTN_NESTED =
   `${DAY_GROUP_BTN} text-text-muted/50 bg-surface/80 backdrop-blur-sm hover:text-text-muted/80`
+
+/**
+ * Day-cap row wrap. Virtual rows are absolute — margin on a prior pipeline
+ * does not open air before the next day. Put group separation as padding-top
+ * on every day after the first; keep a short pad under the cap before items.
+ */
+function dayGroupWrapClass(isFirst: boolean): string {
+  return isFirst ? "pb-1" : "pt-3.5 pb-1"
+}
 
 function dayLabel(iso: string): string {
   const d = new Date(iso)
@@ -573,11 +582,11 @@ export function OperationPipelineList({
     // Non-virtual fallback (embedded / tests) — still uses flat model for parity.
     return (
       <>
-        {rows.map((row) => {
+        {rows.map((row, index) => {
           if (row.type === "day") {
             const collapsed = collapsedDays.has(row.label)
             return (
-              <div key={row.key} className={linear ? "mb-4" : "mb-3"}>
+              <div key={row.key} className={dayGroupWrapClass(index === 0)}>
                 <button
                   type="button"
                   className={linear ? DAY_GROUP_BTN_LINEAR : DAY_GROUP_BTN_NESTED}
@@ -619,15 +628,15 @@ export function OperationPipelineList({
       estimateSize={(index) => {
         const row = rows[index]
         if (!row) return 48
-        if (row.type === "day") return 32
+        if (row.type === "day") return index === 0 ? 28 : 42
         return expanded.has(row.pipeline.id) ? 220 : compact ? 44 : 56
       }}
       getItemKey={(_i, item) => item.key}
-      renderItem={({ item }) => {
+      renderItem={({ item, index }) => {
         if (item.type === "day") {
           const collapsed = collapsedDays.has(item.label)
           return (
-            <div className={linear ? "mb-4" : "mb-3"}>
+            <div className={dayGroupWrapClass(index === 0)}>
               <button
                 type="button"
                 className={linear ? DAY_GROUP_BTN_LINEAR : DAY_GROUP_BTN_NESTED}
