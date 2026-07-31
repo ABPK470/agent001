@@ -67,4 +67,29 @@ describe("placeAnchoredPanel", () => {
     })
     expect(result.top).toBe(8)
   })
+
+  it("short panel near the bottom stays by the trigger — tall guess flips the wrong way", () => {
+    // Pipelines filter sheet (~200px): room below is enough for the real height
+    // but not for a 420px Event-Stream-sized guess → wrong flip / “opens elsewhere”.
+    const trigger = triggerAt({ top: 500, height: 32 })
+    const viewport = { width: 1000, height: 800 }
+
+    const bloated = placeAnchoredPanel({
+      trigger,
+      panel: { width: 280, height: 420 },
+      align: "end",
+      viewport,
+    })
+    expect(bloated.placement).toBe("above")
+    expect(bloated.top).toBe(500 - 4 - 420)
+
+    const measured = placeAnchoredPanel({
+      trigger,
+      panel: { width: 280, height: 200 },
+      align: "end",
+      viewport,
+    })
+    expect(measured.placement).toBe("below")
+    expect(measured.top).toBe(500 + 32 + 4)
+  })
 })

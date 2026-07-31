@@ -141,6 +141,15 @@ describe("widget log chrome — control height & search", () => {
     expect(CONTROL_PRESSED).toContain("bg-[var(--select-fill)]")
   })
 
+  it("FilterSheet places after measuring the mounted panel (short Pipelines sheet)", () => {
+    const sheet = read(join(here, "../components/FilterSheet.tsx"))
+    // Old bug: ?? 420 with no panel mount → short sheets flip to viewport top.
+    expect(sheet).not.toMatch(/\?\?\s*420/)
+    expect(sheet).toContain("ResizeObserver")
+    expect(sheet).toContain("visibility: pos ? \"visible\" : \"hidden\"")
+    expect(sheet).toContain("SHEET_HEIGHT_ESTIMATE")
+  })
+
   it("Trace / Pipelines / Event Stream row hover — rounded wash, not sharp overlay", () => {
     const css = read(cssPath)
     const opsRow = read(nestPath)

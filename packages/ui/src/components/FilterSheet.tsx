@@ -1,6 +1,10 @@
 /**
  * Filter sheet — labeled form in a popover (not a grid of mystery dropdowns).
  * Pair with ActiveFilterChips for what’s currently applied.
+ *
+ * Placement measures the real panel after mount. A tall height guess wrongly
+ * flips short sheets (Pipelines) to the viewport top when space below the
+ * trigger is tight — Event Stream’s taller sheet masked the same bug.
  */
 
 import { X } from "lucide-react"
@@ -28,6 +32,11 @@ function isNestedPickerTarget(target: EventTarget | null): boolean {
   return target instanceof Element && target.closest(".listbox-popover") != null
 }
 
+const SHEET_WIDTH_MIN = 280
+const SHEET_WIDTH_MAX = 360
+/** First-paint guess only — real height comes from the mounted panel. */
+const SHEET_HEIGHT_ESTIMATE = 240
+
 export function FilterSheet({
   open,
   onClose,
@@ -54,11 +63,14 @@ export function FilterSheet({
     onClose()
   }, [onClose])
 
-  const updatePos = useCallback(() => {
+  const updatePos = useCallback((): void => {
     const anchor = anchorRef.current
     if (!anchor) return
     const r = anchor.getBoundingClientRect()
-    const width = Math.min(360, Math.max(280, window.innerWidth - 32))
+    const width = Math.min(SHEET_WIDTH_MAX, Math.max(SHEET_WIDTH_MIN, window.innerWidth - 32))
+    const measured = panelRef.current?.offsetHeight
+    const height =
+      measured != null && measured > 0 ? measured : SHEET_HEIGHT_ESTIMATE
     const placed = placeAnchoredPanel({
       trigger: {
         left: r.left,
@@ -68,7 +80,7 @@ export function FilterSheet({
         width: r.width,
         height: r.height,
       },
-      panel: { width, height: panelRef.current?.offsetHeight ?? 420 },
+      panel: { width, height },
       align: "end",
       viewport: { width: window.innerWidth, height: window.innerHeight },
     })
@@ -80,8 +92,22 @@ export function FilterSheet({
       setPos(null)
       return
     }
+    // Mount first (visibility:hidden), measure, then place — same dialect as
+    // WidgetToolbarFilterMenu. Never place with a tall fixed guess alone.
     updatePos()
-  }, [open, updatePos, children])
+    const raf = requestAnimationFrame(updatePos)
+    const panel = panelRef.current
+    const ro = panel ? new ResizeObserver(updatePos) : null
+    if (panel) ro?.observe(panel)
+    window.addEventListener("resize", updatePos)
+    window.addEventListener("scroll", updatePos, true)
+    return () => {
+      cancelAnimationFrame(raf)
+      ro?.disconnect()
+      window.removeEventListener("resize", updatePos)
+      window.removeEventListener("scroll", updatePos, true)
+    }
+  }, [open, updatePos, children, footer])
 
   useEffect(() => {
     if (!open) return
@@ -97,17 +123,13 @@ export function FilterSheet({
     }
     document.addEventListener("mousedown", onDoc)
     document.addEventListener("keydown", onKey)
-    window.addEventListener("resize", updatePos)
-    window.addEventListener("scroll", updatePos, true)
     return () => {
       document.removeEventListener("mousedown", onDoc)
       document.removeEventListener("keydown", onKey)
-      window.removeEventListener("resize", updatePos)
-      window.removeEventListener("scroll", updatePos, true)
     }
-  }, [open, close, updatePos, anchorRef])
+  }, [open, close, anchorRef])
 
-  if (!open || !pos) return null
+  if (!open) return null
 
   return createPortal(
     <div
@@ -116,10 +138,11 @@ export function FilterSheet({
       aria-label={title}
       className="listbox-popover fixed flex max-h-[min(70vh,32rem)] flex-col overflow-hidden rounded-lg border border-border-subtle shadow-lg"
       style={{
-        top: pos.top,
-        left: pos.left,
-        width: pos.width,
+        top: pos?.top ?? 0,
+        left: pos?.left ?? 0,
+        width: pos?.width ?? SHEET_WIDTH_MIN,
         zIndex: popoverZIndex(),
+        visibility: pos ? "visible" : "hidden",
       }}
     >
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border-subtle px-3 py-2">
