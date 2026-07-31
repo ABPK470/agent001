@@ -680,6 +680,117 @@ body {
   padding-top: 0;
   padding-bottom: 0;
 }
+
+/* ── Browse strip — modals (Catalog versions, Sync History, Audit, …) ─
+ * Same control height as widget-toolbar. Count digit slots stay reserved
+ * so trailing icons never jump when the tally grows.
+ */
+.browse-strip {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border-subtle);
+  padding: 0.75rem 1.5rem; /* py-3 px-6 — matches ModalShell header */
+}
+
+.browse-strip__search {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.browse-strip__trailing {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  flex-shrink: 0;
+}
+
+/* Sort / listbox triggers in the strip — same height as search + icons. */
+.browse-strip .listbox-control[aria-haspopup="listbox"],
+.browse-strip .listbox-control[aria-haspopup="dialog"] {
+  height: var(--control-h);
+  box-sizing: border-box;
+}
+
+.browse-count {
+  --browse-count-slots: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  height: var(--control-h);
+  padding: 0 0.125rem;
+  font-size: 0.75rem;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* One number (5) — tight slot; no empty left columns pretending to be a gap. */
+.browse-count--single:not(.browse-count--compact) {
+  min-width: calc(var(--browse-count-slots) * 1ch + 0.25rem);
+}
+
+/* Filtered/total (3/12) — two digit columns + sep. */
+.browse-count--split:not(.browse-count--compact) {
+  display: inline-grid;
+  grid-template-columns:
+    minmax(calc(var(--browse-count-slots) * 1ch), auto)
+    auto
+    minmax(calc(var(--browse-count-slots) * 1ch), auto);
+  column-gap: 0;
+}
+
+.browse-count--compact {
+  min-width: 0;
+  padding: 0;
+  justify-content: flex-start;
+  grid-template-columns: none;
+}
+
+.browse-count__filtered {
+  text-align: right;
+}
+
+.browse-count__sep {
+  color: color-mix(in srgb, var(--color-text-muted) 40%, transparent);
+  padding: 0 0.0625rem;
+}
+
+.browse-count__total {
+  text-align: left;
+}
+
+.browse-count--single .browse-count__total {
+  text-align: end;
+  width: 100%;
+}
+
+.browse-count--text:not(.browse-count--compact) {
+  min-width: calc(var(--browse-count-slots, 4) * 0.55ch + 1.25rem);
+}
+
+.browse-icon-btn__badge {
+  position: absolute;
+  top: -0.125rem;
+  right: -0.125rem;
+  z-index: 1;
+  display: flex;
+  min-width: 0.875rem;
+  height: 0.875rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  background: var(--text);
+  padding: 0 0.125rem;
+  font-family: ui-monospace, monospace;
+  font-size: 9px;
+  font-weight: 500;
+  line-height: 1;
+  color: var(--text-on-accent);
+}
 .modal-surface .input {
   background: transparent;
   border-color: var(--border);
@@ -3516,6 +3627,33 @@ textarea.input {
 }
 
 /*
+ * Expanded user nest — framed well under the open row so runs cannot be
+ * mistaken for the next user in the list (hierarchy must stay readable).
+ * No overflow:hidden — sticky header/runs still pin against .au-body-scroll.
+ */
+.active-users-widget .au-detail-nest {
+  /* Inset + bottom air so the next user reads as a peer, not another run. */
+  margin: 0.35rem 0.75rem 1rem;
+  border: 1px solid var(--border-subtle);
+  border-bottom-color: var(--border);
+  border-radius: 0.5rem;
+  background: var(--au-sticky-fill, var(--workspace-widget-bg, var(--panel-2)));
+  /* Left rail = “nested under this user”. */
+  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--accent) 50%, transparent);
+}
+
+.active-users-widget .au-detail-row > td {
+  padding: 0;
+  border-bottom: none;
+  background: transparent;
+}
+
+/* Next user after an open nest — resume the main list, not the run thead. */
+.active-users-widget .au-detail-row + tr > td {
+  border-top: 1px solid var(--border-subtle);
+}
+
+/*
  * Expanded-user sticky stack — opaque fills, 1px upward seal so scrolled
  * row text cannot peek through a subpixel gap under the users thead.
  */
@@ -3863,48 +4001,7 @@ textarea.input {
   overflow: visible;
 }
 
-.widget-toolbar__count {
-  display: inline-grid;
-  grid-template-columns: auto auto auto;
-  align-items: center;
-  justify-content: end;
-  min-width: 4.75rem;
-  height: var(--wt-control-h);
-  padding: 0 0.125rem;
-  font-size: 0.75rem;
-  line-height: 1;
-  font-variant-numeric: tabular-nums;
-  color: var(--color-text-muted);
-  white-space: nowrap;
-}
-
-/* Icon + count: no reserved digit columns / end-justify gap. */
-.widget-toolbar__count--compact {
-  min-width: 0;
-  justify-content: start;
-  padding: 0;
-}
-
-.widget-toolbar__count--compact .widget-toolbar__count-filtered,
-.widget-toolbar__count--compact .widget-toolbar__count-total {
-  min-width: 0;
-  text-align: start;
-}
-
-.widget-toolbar__count-filtered {
-  text-align: right;
-  min-width: 1.75rem;
-}
-
-.widget-toolbar__count-sep {
-  color: color-mix(in srgb, var(--color-text-muted) 40%, transparent);
-  padding: 0 0.0625rem;
-}
-
-.widget-toolbar__count-total {
-  text-align: left;
-  min-width: 1.75rem;
-}
+/* Count lives on `.browse-count` (BrowseCount / WidgetToolbarCount). */
 
 .widget-toolbar__chip {
   display: inline-flex;

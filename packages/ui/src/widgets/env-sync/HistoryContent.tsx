@@ -11,6 +11,14 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react"
 
 import { api, type SyncHistoryParams, type SyncHistoryPage, type SyncRunStatus } from "../../client/index"
+import {
+  BrowseCount,
+  BrowseIconButton,
+  BrowseSearchField,
+  BrowseStrip,
+  BrowseStripSearch,
+  BrowseStripTrailing,
+} from "../../components/BrowseStrip"
 import { DateField } from "../../components/DateField"
 import {
   ActiveFilterChips,
@@ -24,11 +32,6 @@ import { SearchablePick } from "../../components/SearchablePick"
 import { useStore } from "../../state/store"
 import type { SyncPlan } from "../../types"
 import { timeAgo } from "../../lib/util"
-import {
-  WidgetToolbar,
-  WidgetToolbarSearch,
-  WidgetToolbarTrailing,
-} from "../widget-toolbar"
 import { EmptyHistory, Loading } from "./chrome"
 import { DIFF, ENTITY_TYPES, dot } from "./constants"
 import { formatPlanEntityLabel } from "./workflow"
@@ -351,7 +354,14 @@ export function HistoryContent({
         onPageChange={(nextPage) => reload(nextPage)}
       />
 
-      <ActiveFilterChips chips={activeChips} onClear={hasActiveFilters ? clearFilters : undefined} />
+      {activeChips.length > 0 && (
+        <div className="px-6">
+          <ActiveFilterChips
+            chips={activeChips}
+            onClear={hasActiveFilters ? clearFilters : undefined}
+          />
+        </div>
+      )}
 
       <FilterSheet
         open={filtersOpen}
@@ -451,7 +461,7 @@ export function HistoryContent({
         </div>
       </FilterSheet>
 
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 pb-4 pt-3">
         {items.length === 0 ? (
           <EmptyHistory
             message={hasActiveFilters ? "No runs match your filters" : "No sync history yet"}
@@ -511,14 +521,16 @@ function HistorySearchBar({
   onPageChange: (page: number) => void
 }) {
   return (
-    <WidgetToolbar className="shrink-0 border-b border-border/40 !rounded-none !border-x-0 !border-t-0 !bg-transparent px-3 py-1.5">
-      <WidgetToolbarSearch
-        value={searchDraft}
-        onChange={onSearchChange}
-        placeholder="Search history…"
-        onClear={() => onSearchChange("")}
-      />
-      <WidgetToolbarTrailing>
+    <BrowseStrip>
+      <BrowseStripSearch>
+        <BrowseSearchField
+          value={searchDraft}
+          onChange={onSearchChange}
+          placeholder="Search history…"
+          aria-label="Search history"
+        />
+      </BrowseStripSearch>
+      <BrowseStripTrailing>
         <div className="w-[7.5rem] shrink-0">
           <Listbox
             value={sort}
@@ -529,46 +541,36 @@ function HistorySearchBar({
             ariaLabel="Sort"
           />
         </div>
-        <span className="widget-toolbar__count hidden sm:inline-flex">
-          <span className="widget-toolbar__count-filtered">
-            {total === 0 ? "No runs" : `${rangeStart}–${rangeEnd}`}
-          </span>
-          {total > 0 && (
-            <>
-              <span className="widget-toolbar__count-sep">/</span>
-              <span className="widget-toolbar__count-total">{total}</span>
-            </>
-          )}
-        </span>
-        <button
-          type="button"
+        <BrowseCount
+          filtered={total}
+          total={total}
+          text={total === 0 ? "No runs" : `${rangeStart}–${rangeEnd}/${total}`}
+        />
+        <BrowseIconButton
           disabled={page <= 1 || loading}
           onClick={() => onPageChange(page - 1)}
-          className="widget-toolbar__icon-btn disabled:opacity-30"
           title="Previous page"
+          className="disabled:opacity-30"
         >
-          <ChevronLeft size={14} />
-        </button>
-        <span className="font-mono text-sm tabular-nums text-text-muted">
+          <ChevronLeft size={15} />
+        </BrowseIconButton>
+        <span className="min-w-[2.5rem] text-center font-mono text-xs tabular-nums text-text-muted">
           {page}
           {totalPages > 0 ? `/${totalPages}` : ""}
         </span>
-        <button
-          type="button"
+        <BrowseIconButton
           disabled={page >= totalPages || loading}
           onClick={() => onPageChange(page + 1)}
-          className="widget-toolbar__icon-btn disabled:opacity-30"
           title="Next page"
+          className="disabled:opacity-30"
         >
-          <ChevronRight size={14} />
-        </button>
-        <button
-          ref={filterBtnRef}
-          type="button"
+          <ChevronRight size={15} />
+        </BrowseIconButton>
+        <BrowseIconButton
+          buttonRef={filterBtnRef}
+          active={filtersOpen || activeFilterCount > 0}
+          badge={activeFilterCount > 0 ? activeFilterCount : null}
           onClick={onToggleFilters}
-          className={`widget-toolbar__icon-btn ${
-            filtersOpen || activeFilterCount > 0 ? "widget-toolbar__icon-btn--active" : ""
-          }`}
           title={
             activeFilterCount > 0
               ? `Filters (${activeFilterCount} active)`
@@ -576,15 +578,10 @@ function HistorySearchBar({
           }
           aria-pressed={filtersOpen || activeFilterCount > 0}
         >
-          <SlidersHorizontal size={14} />
-          {activeFilterCount > 0 && (
-            <span className="widget-toolbar__icon-badge" aria-hidden>
-              {activeFilterCount > 9 ? "9+" : activeFilterCount}
-            </span>
-          )}
-        </button>
-      </WidgetToolbarTrailing>
-    </WidgetToolbar>
+          <SlidersHorizontal size={15} />
+        </BrowseIconButton>
+      </BrowseStripTrailing>
+    </BrowseStrip>
   )
 }
 

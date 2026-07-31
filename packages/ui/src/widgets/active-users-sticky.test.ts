@@ -55,8 +55,16 @@ describe("Active Users sticky context banner", () => {
     )
   })
 
+  it("frames expanded detail in a nest so following users are not read as runs", () => {
+    expect(src).toContain("au-detail-nest")
+    expect(css).toMatch(/\.active-users-widget\s+\.au-detail-nest\s*\{/s)
+    expect(css).not.toMatch(
+      /\.active-users-widget\s+\.au-detail-nest\s*\{[^}]*overflow:\s*hidden/s,
+    )
+  })
+
   it("users count beside icon uses compact toolbar count (no min-width gap)", () => {
     expect(src).toMatch(/WidgetToolbarCount[\s\S]*compact/)
-    expect(css).toContain("widget-toolbar__count--compact")
+    expect(css).toContain("browse-count--compact")
   })
 })

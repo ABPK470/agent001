@@ -11,6 +11,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { useTilePaint } from "../../app/workspace/tile-paint"
 import { VirtualList } from "../../components/VirtualList"
+import { BrowseCount } from "../../components/BrowseStrip"
 import { fmtTokens, formatMs } from "../../lib/util"
 import {
   offsetInScrollHost,
@@ -1019,9 +1020,7 @@ export function TraceDag({
         />
         <WidgetToolbarTrailing>
           {searchStatus ? (
-            <span className="widget-toolbar__count text-text-muted" aria-live="polite">
-              {searchStatus}
-            </span>
+            <BrowseCount filtered={0} total={0} text={searchStatus} />
           ) : null}
           <SegmentToggle
             value={openState.foldMode}

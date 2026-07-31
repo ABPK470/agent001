@@ -17,6 +17,7 @@ import type { JSX, ReactNode } from "react"
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { placeAnchoredPanelForElements } from "../lib/anchored-panel"
+import { BrowseCount } from "../components/BrowseStrip"
 
 /** Shared top/side/bottom inset (12px) — Event Stream, Pipelines, Sync. */
 export const WIDGET_LOG_INSET_CLASS = "pt-3 px-3 pb-1"
@@ -129,7 +130,7 @@ export function WidgetToolbarCount({
   filtered,
   total,
   hidden,
-  /** Drop grid min-widths — sit flush next to an icon. */
+  /** Drop digit reserves — sit flush next to an icon. */
   compact,
 }: {
   filtered: number
@@ -137,22 +138,13 @@ export function WidgetToolbarCount({
   hidden?: boolean
   compact?: boolean
 }): JSX.Element | null {
-  if (hidden) return null
   return (
-    <span
-      className={`widget-toolbar__count${compact ? " widget-toolbar__count--compact" : ""}`}
-      aria-label={`${filtered} of ${total} shown`}
-    >
-      {filtered !== total ? (
-        <>
-          <span className="widget-toolbar__count-filtered">{filtered}</span>
-          <span className="widget-toolbar__count-sep">/</span>
-          <span className="widget-toolbar__count-total">{total}</span>
-        </>
-      ) : (
-        <span className="widget-toolbar__count-total">{total}</span>
-      )}
-    </span>
+    <BrowseCount
+      filtered={filtered}
+      total={total}
+      hidden={hidden}
+      compact={compact}
+    />
   )
 }
 

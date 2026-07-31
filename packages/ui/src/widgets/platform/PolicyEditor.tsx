@@ -31,6 +31,7 @@ import {
 } from "lucide-react"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { api } from "../../client/index"
+import { Listbox, type ListboxOption } from "../../components/Listbox"
 import type { PolicyRule, ToolInfo } from "../../types"
 import { SelectorRulesTab } from "./policy/SelectorRulesTab"
 import { modalOverlayClass, MODAL_ADMIN_PANEL, MODAL_SURFACE_CLASS } from "../entity-registry/modal-overlay"
@@ -320,14 +321,44 @@ export function PolicyEditor({ onClose }: Props) {
           ))}
         </div>
 
-        {/* Tab subtitle / context — explains what THIS tab governs vs the others. */}
+        {/* Tab subtitle — short, one job per tab. */}
         <div className="px-7 pt-3.5 pb-2.5 shrink-0">
-          <p className="text-sm text-text-muted leading-relaxed">
-            {tab === "tools"    && <><strong className="text-text">Tool Permissions</strong> — coarse-grained on/off for every tool, regardless of arguments. Sets simple <code className="font-mono">action:&lt;tool&gt;</code> rules. For nuanced control (per-environment, per-command, per-path) use <em>Selector Rules</em>.</>}
-            {tab === "rules"    && <><strong className="text-text">Selector Rules</strong> — the full policy engine. Each rule matches on a conjunction of selectors: <code className="font-mono">role</code>, <code className="font-mono">runMode</code>, <code className="font-mono">tool</code>, <code className="font-mono">path</code>, <code className="font-mono">command</code>, <code className="font-mono">network</code>, <code className="font-mono">scope</code>, <code className="font-mono">dbEnvironment</code>, and <code className="font-mono">dbOperation</code>. When several rules match, highest priority wins; equal priority breaks as deny &gt; require_approval &gt; allow. Includes baseline hosted defaults and per-env-derived rules; you can override or augment any of them.</>}
-            {tab === "model"    && <><strong className="text-text">Model</strong> — LLM provider, model, credentials. Active on the next run.</>}
-            {tab === "platform" && <><strong className="text-text">Platform</strong> — MSSQL schema catalog (core agent infrastructure) and deploy/sync artifact import. Schema catalog is separate from Entity Registry publish.</>}
-            {tab === "security" && <><strong className="text-text">Security</strong> — built-in protections (shell blocklist, SSRF guards, SQL engine invariants). The Workspace path here is the <em>developer-mode</em> root used when <code className="font-mono">AGENT_HOSTED_MODE</code> is off; in hosted mode each run gets its own isolated sandbox and this field is ignored.</>}
+          <p className="text-sm text-text-muted leading-snug">
+            {tab === "tools" && (
+              <>
+                <strong className="text-text">Tool Permissions</strong>
+                {" — "}
+                Allow, deny, or require approval per tool. For path/env/command rules, use Selector Rules.
+              </>
+            )}
+            {tab === "rules" && (
+              <>
+                <strong className="text-text">Selector Rules</strong>
+                {" — "}
+                Match on role, tool, path, command, env, and more. Highest priority wins; ties prefer deny over approval over allow.
+              </>
+            )}
+            {tab === "model" && (
+              <>
+                <strong className="text-text">Model</strong>
+                {" — "}
+                LLM provider, model, and credentials. Takes effect on the next run.
+              </>
+            )}
+            {tab === "platform" && (
+              <>
+                <strong className="text-text">Platform</strong>
+                {" — "}
+                Schema catalog for exploration tools, and sync artifact deploy.
+              </>
+            )}
+            {tab === "security" && (
+              <>
+                <strong className="text-text">Security</strong>
+                {" — "}
+                Built-in guards (shell, SSRF, SQL). Workspace path applies in developer mode only.
+              </>
+            )}
           </p>
         </div>
 
@@ -346,8 +377,7 @@ export function PolicyEditor({ onClose }: Props) {
             /* ── Tool Permissions tab ──────────────────────── */
             <div className="space-y-2">
               <div className="mb-4 px-3 py-2 rounded-lg bg-overlay-2/50 border border-border-subtle text-sm text-text-muted">
-                Each tool is <span className="text-success font-medium">allowed by default</span>.
-                Selecting a state here writes an <code className="font-mono">action:&lt;tool&gt;</code> rule into Selector Rules.
+                Tools are <span className="text-success font-medium">allowed</span> unless you set a rule here.
               </div>
               {tools.map((tool) => {
                 const rule = toolRuleMap.get(tool.name)
@@ -396,7 +426,7 @@ export function PolicyEditor({ onClose }: Props) {
             /* ── Model tab ────────────────────────────────── */
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <p className="text-sm text-text-muted">Configure the LLM provider and model used by the agent.</p>
+                <p className="text-sm text-text-muted">LLM provider and model for the agent.</p>
                 {llmActiveProvider && (
                   <span className="flex items-center gap-1.5 text-sm text-text-muted bg-overlay-2 border border-border-subtle rounded-full px-3 py-1">
                     <span className="w-1.5 h-1.5 rounded-full bg-success inline-block" />
@@ -411,8 +441,8 @@ export function PolicyEditor({ onClose }: Props) {
                   <Cpu size={15} className="text-text-muted" />
                   <span className="text-sm font-semibold text-text">Provider</span>
                 </div>
-                <p className="text-sm text-text-muted leading-relaxed mb-3">
-                  Choose the LLM backend. Switching provider updates the model and URL defaults below.
+                <p className="text-sm text-text-muted leading-snug mb-3">
+                  Choose the LLM backend. Defaults update when you switch.
                 </p>
                 <div className="flex gap-2 flex-wrap">
                   {(["copilot-chat", "databricks"] as const).map((p) => (
@@ -504,7 +534,7 @@ export function PolicyEditor({ onClose }: Props) {
             /* ── Security tab ─────────────────────────────── */
             <div className="space-y-4">
               <p className="text-sm text-text-muted">
-                Built-in security protections. These are always active and cannot be disabled.
+                Always-on protections. These cannot be turned off here.
               </p>
 
               {/* Workspace */}
@@ -513,13 +543,11 @@ export function PolicyEditor({ onClose }: Props) {
                   <FolderOpen size={15} className="text-text-muted" />
                   <span className="text-sm font-semibold text-text">Workspace (developer mode)</span>
                 </div>
-                <p className="text-sm text-text-muted leading-relaxed mb-2">
-                  Root for <code className="font-mono text-text">read_file</code>, <code className="font-mono text-text">write_file</code>,
-                  <code className="font-mono text-text"> run_command</code> and friends when the server is running in
-                  <strong className="text-text"> developer mode</strong> (<code className="font-mono">AGENT_HOSTED_MODE</code> unset). Every run shares this directory.
+                <p className="text-sm text-text-muted leading-snug mb-2">
+                  File and shell tools use this folder in developer mode.
                 </p>
-                <p className="text-sm text-warning/90 leading-relaxed mb-3">
-                  ⚠ In <strong>hosted mode</strong> this field is ignored — each run gets its own isolated sandbox under <code className="font-mono">runWorkspaceRoot</code>, and the agent cannot reach this path.
+                <p className="text-sm text-warning/90 leading-snug mb-3">
+                  Hosted mode ignores this — each run uses its own sandbox.
                 </p>
                 <div className="flex gap-2">
                   <input
@@ -602,10 +630,8 @@ export function PolicyEditor({ onClose }: Props) {
                   <Shield size={15} className="text-text-muted" />
                   <span className="text-sm font-semibold text-text">Policy Enforcement</span>
                 </div>
-                <p className="text-sm text-text-muted leading-relaxed">
-                  All policy rules are evaluated <strong>before every tool call</strong>.
-                  Denied actions throw an error immediately. "Require Approval" blocks
-                  the agent until approved. Rules apply to all new runs.
+                <p className="text-sm text-text-muted leading-snug">
+                  Checked before every tool call. Deny fails immediately; require approval waits for an operator.
                 </p>
               </div>
 
@@ -622,10 +648,8 @@ export function PolicyEditor({ onClose }: Props) {
                 </button>
                 {sqlGuardExpanded && (
                   <div className="mt-3 space-y-2.5">
-                    <p className="text-sm text-text-muted leading-relaxed">
-                      SQL safety rails live in the tool layer (dangerous ops, <code className="font-mono">#temp</code> discipline).
-                      They are <strong>not</strong> stored in the policy DB. Real-table DML/DDL still require matching
-                      policy (and approval when configured).
+                    <p className="text-sm text-text-muted leading-snug">
+                      Hard blocks in the SQL tools (not policy DB). DML/DDL still need a matching policy rule.
                     </p>
                     <ul className="text-sm text-text-secondary leading-relaxed space-y-1.5 pl-1">
                       <li><span className="text-error font-medium">✗ Always blocked</span> — <code className="font-mono">EXEC</code>, <code className="font-mono">xp_*</code>, <code className="font-mono">OPENROWSET</code>, <code className="font-mono">BULK INSERT</code>, <code className="font-mono">DBCC</code>, global <code className="font-mono">##temp</code>.</li>
@@ -644,9 +668,8 @@ export function PolicyEditor({ onClose }: Props) {
                   <Trash2 size={15} className="text-error" />
                   <span className="text-sm font-semibold text-text">Restore Defaults</span>
                 </div>
-                <p className="text-sm text-text-muted leading-relaxed mb-3">
-                  Delete all runs, logs, audit entries, trace history, checkpoints, and token usage.
-                  <strong> Policies and dashboard layout will be preserved.</strong>
+                <p className="text-sm text-text-muted leading-snug mb-3">
+                  Clears runs, logs, audit, traces, and usage. Policies and layout stay.
                 </p>
                 {!confirmReset ? (
                   <button
@@ -694,10 +717,8 @@ export function PolicyEditor({ onClose }: Props) {
                   <Database size={15} className="text-accent" />
                   <span className="text-sm font-semibold text-text">MSSQL schema catalog</span>
                 </div>
-                <p className="text-sm text-text-muted leading-relaxed mb-3">
-                  Introspected table/FK metadata cached on disk for <code className="font-mono text-text">search_catalog</code>,
-                  schema exploration tools, and Entity Registry “Suggest from schema”. Built from live MSSQL — not from shipped
-                  sync artifacts or Entity Registry publish.
+                <p className="text-sm text-text-muted leading-snug mb-3">
+                  Live MSSQL table/FK cache for catalog search and schema tools. Not from sync publish.
                 </p>
                 {platformHealth && (
                   <div className="text-sm text-text-secondary space-y-1 mb-3">
@@ -753,10 +774,8 @@ export function PolicyEditor({ onClose }: Props) {
                   <Database size={15} className="text-text-muted" />
                   <span className="text-sm font-semibold text-text">Deploy sync artifacts</span>
                 </div>
-                <p className="text-sm text-text-muted leading-relaxed mb-3">
-                  Import entity definitions and sync step catalog into SQLite from bundled release files or by
-                  regenerating from live MyMI/MSSQL. After import, <strong>publish from Entity Registry</strong> before
-                  running sync — this does not build the schema catalog above.
+                <p className="text-sm text-text-muted leading-snug mb-3">
+                  Load entity definitions and sync steps into SQLite. Publish from Entity Registry before syncing.
                 </p>
                 <div className="flex flex-wrap items-center gap-2">
                   <button
@@ -781,15 +800,18 @@ export function PolicyEditor({ onClose }: Props) {
                     {artifactsRefreshing === "shipped" ? "Loading…" : "Use shipped artifacts"}
                   </button>
                   {platformHealth?.mssql.configured && platformHealth.mssql.connections.length > 1 && (
-                    <select
-                      value={mssqlConnection}
-                      onChange={(e) => setMssqlConnection(e.target.value)}
-                      className="rounded-lg border border-border bg-surface px-2 py-2 text-sm text-text"
-                    >
-                      {platformHealth.mssql.connections.map((c) => (
-                        <option key={c} value={c}>{c}</option>
-                      ))}
-                    </select>
+                    <div className="w-[7.5rem] shrink-0">
+                      <Listbox
+                        value={mssqlConnection || platformHealth.mssql.connections[0] || ""}
+                        options={platformHealth.mssql.connections.map(
+                          (c): ListboxOption<string> => ({ value: c, label: c }),
+                        )}
+                        onChange={setMssqlConnection}
+                        size="sm"
+                        className="w-full listbox-control"
+                        ariaLabel="MSSQL connection"
+                      />
+                    </div>
                   )}
                   <button
                     type="button"
@@ -829,12 +851,8 @@ export function PolicyEditor({ onClose }: Props) {
                   <Shield size={15} className="text-accent" />
                   <span className="text-sm font-semibold text-text">Factory policy defaults</span>
                 </div>
-                <p className="text-sm text-text-muted leading-relaxed mb-3">
-                  Boot seeds missing rules from{" "}
-                  <code className="font-mono text-text">deploy/policies/defaults.json</code> only —
-                  never overwrites the DB. This action re-reads that file on purpose and replaces every
-                  factory-named row (including ones you edited under the same name). Operator rules with
-                  other names stay. Sync entities and publish state are untouched.
+                <p className="text-sm text-text-muted leading-snug mb-3">
+                  Re-apply factory rules from deploy defaults. Your custom-named rules stay.
                 </p>
                 {policyDefaultsResetMessage && (
                   <p className="text-sm text-text-muted mb-3">{policyDefaultsResetMessage}</p>
@@ -911,10 +929,8 @@ export function PolicyEditor({ onClose }: Props) {
                   <Trash2 size={15} className="text-error" />
                   <span className="text-sm font-semibold text-text">Factory Reset Platform</span>
                 </div>
-                <p className="text-sm text-text-muted leading-relaxed mb-3">
-                  Wipe entity definitions, sync configs, and the published bundle, then re-seed from deploy artifacts.
-                  <strong> Publish again from Entity Registry before sync is operational.</strong>
-                  Policies, dashboard layout, and run history are preserved.
+                <p className="text-sm text-text-muted leading-snug mb-3">
+                  Wipe sync entities and the published bundle, then re-seed from deploy. Publish again before syncing.
                 </p>
                 {!confirmFactoryReset ? (
                   <button

@@ -6,6 +6,14 @@ import { History, Loader2, RotateCcw, SlidersHorizontal } from "lucide-react"
 import type { JSX } from "react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { api } from "../../client/index"
+import {
+  BrowseCount,
+  BrowseIconButton,
+  BrowseSearchField,
+  BrowseStrip,
+  BrowseStripSearch,
+  BrowseStripTrailing,
+} from "../../components/BrowseStrip"
 import { DateField } from "../../components/DateField"
 import { EmptyState } from "../../components/EmptyState"
 import {
@@ -16,7 +24,6 @@ import {
   type ActiveFilterChipModel,
 } from "../../components/FilterSheet"
 import { Listbox, type ListboxOption } from "../../components/Listbox"
-import { ModalSearchField } from "../../components/ModalSearchField"
 import { useLiveReload } from "../../hooks/useLiveReload"
 import { ModalShell } from "../entity-registry/ModalShell"
 import { activePublishBadge } from "./catalog-publish-badge"
@@ -177,59 +184,46 @@ export function CatalogVersionsModal({
         size="focus"
       >
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          {/*
-           * Modal browse strip — same dialect as Audit / Usage (px-6).
-           * Do not use WidgetToolbar here: that strip assumes a widget shell
-           * owns horizontal inset, so padding utilities fight its CSS and the
-           * search row drifts off the list column.
-           */}
-          <div className="flex shrink-0 items-center gap-2 border-b border-border-subtle px-6 py-3">
-            <div className="min-w-0 flex-1">
-              <ModalSearchField
+          <BrowseStrip>
+            <BrowseStripSearch>
+              <BrowseSearchField
                 value={searchDraft}
                 onChange={setSearchDraft}
                 placeholder="Search versions…"
                 aria-label="Search versions"
               />
-            </div>
-            <div className="w-[7.5rem] shrink-0">
-              <Listbox
-                value={filters.sort}
-                options={CATALOG_VERSION_SORT_OPTIONS as ListboxOption<CatalogVersionSort>[]}
-                onChange={(sort) => setFilters((current) => ({ ...current, sort }))}
-                size="sm"
-                className="w-full listbox-control"
-                ariaLabel="Sort"
+            </BrowseStripSearch>
+            <BrowseStripTrailing>
+              <div className="w-[7.5rem] shrink-0">
+                <Listbox
+                  value={filters.sort}
+                  options={CATALOG_VERSION_SORT_OPTIONS as ListboxOption<CatalogVersionSort>[]}
+                  onChange={(sort) => setFilters((current) => ({ ...current, sort }))}
+                  size="sm"
+                  className="w-full listbox-control"
+                  ariaLabel="Sort"
+                />
+              </div>
+              <BrowseCount
+                filtered={filtered.length}
+                total={versions.length}
               />
-            </div>
-            <span
-              className="hidden shrink-0 tabular-nums text-xs text-text-muted sm:inline"
-              aria-label={`${filtered.length} of ${versions.length} shown`}
-            >
-              {filtered.length}/{versions.length}
-            </span>
-            <button
-              ref={filterBtnRef}
-              type="button"
-              onClick={() => setFiltersOpen((value) => !value)}
-              className={`mia-control relative flex h-9 w-9 items-center justify-center ${
-                filtersOpen || activeFilterCount > 0 ? "border-border-strong text-text" : ""
-              }`}
-              title={
-                activeFilterCount > 0
-                  ? `Filters (${activeFilterCount} active)`
-                  : "Filters"
-              }
-              aria-pressed={filtersOpen || activeFilterCount > 0}
-            >
-              <SlidersHorizontal size={15} />
-              {activeFilterCount > 0 && (
-                <span className="absolute -right-0.5 -top-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-text px-0.5 text-[9px] font-mono font-medium leading-none text-text-on-accent">
-                  {activeFilterCount}
-                </span>
-              )}
-            </button>
-          </div>
+              <BrowseIconButton
+                buttonRef={filterBtnRef}
+                active={filtersOpen || activeFilterCount > 0}
+                badge={activeFilterCount > 0 ? activeFilterCount : null}
+                onClick={() => setFiltersOpen((value) => !value)}
+                title={
+                  activeFilterCount > 0
+                    ? `Filters (${activeFilterCount} active)`
+                    : "Filters"
+                }
+                aria-pressed={filtersOpen || activeFilterCount > 0}
+              >
+                <SlidersHorizontal size={15} />
+              </BrowseIconButton>
+            </BrowseStripTrailing>
+          </BrowseStrip>
 
           {activeChips.length > 0 && (
             <div className="px-6">

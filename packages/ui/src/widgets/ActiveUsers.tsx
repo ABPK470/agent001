@@ -466,7 +466,7 @@ export function ActiveUsers(): ReactNode {
                     onToggle={() => toggle(u.identifier)}
                   />
                   {isOpen && (
-                    <div className="bg-overlay-1 border-b border-border-subtle min-w-0">
+                    <div className="au-detail-nest min-w-0">
                       <UserDetail
                         user={u}
                         liveRuns={live}
@@ -572,31 +572,33 @@ export function ActiveUsers(): ReactNode {
                       <td className="py-2 px-2 text-text-muted w-8">{isOpen ? "▾" : "▸"}</td>
                     </tr>
                     {isOpen && (
-                      <tr className="bg-overlay-1">
+                      <tr className="au-detail-row">
                         <td colSpan={AU_TABLE_COL_SPAN} className="w-0 min-w-0 p-0 align-top">
-                          <UserDetail
-                            user={u}
-                            liveRuns={live}
-                            history={hist}
-                            stack={false}
-                            adminBusy={adminBusy === u.identifier}
-                            onToggleAdmin={(next) => void toggleAdmin(u, next).catch((err: unknown) => { console.error("[mia]", err) })}
-                            onPageChange={(offset) => void loadHistory(u.identifier, offset).catch((err: unknown) => { console.error("[mia]", err) })}
-                            onCollapse={() => toggle(u.identifier)}
-                            onRunClick={(runId, preview) => setRunModal({ runId, preview })}
-                            viewingAsUpn={viewingAsUpn}
-                            onViewingAs={() => {
-                              if (!u.upn) return
-                              if (!isMe && viewingAsUpn?.toLowerCase() === u.upn.toLowerCase()) {
-                                clearViewingAs()
-                                return
-                              }
-                              setViewingAs({
-                                upn: u.upn,
-                                displayName: u.displayName?.trim() || u.upn,
-                              })
-                            }}
-                          />
+                          <div className="au-detail-nest">
+                            <UserDetail
+                              user={u}
+                              liveRuns={live}
+                              history={hist}
+                              stack={false}
+                              adminBusy={adminBusy === u.identifier}
+                              onToggleAdmin={(next) => void toggleAdmin(u, next).catch((err: unknown) => { console.error("[mia]", err) })}
+                              onPageChange={(offset) => void loadHistory(u.identifier, offset).catch((err: unknown) => { console.error("[mia]", err) })}
+                              onCollapse={() => toggle(u.identifier)}
+                              onRunClick={(runId, preview) => setRunModal({ runId, preview })}
+                              viewingAsUpn={viewingAsUpn}
+                              onViewingAs={() => {
+                                if (!u.upn) return
+                                if (!isMe && viewingAsUpn?.toLowerCase() === u.upn.toLowerCase()) {
+                                  clearViewingAs()
+                                  return
+                                }
+                                setViewingAs({
+                                  upn: u.upn,
+                                  displayName: u.displayName?.trim() || u.upn,
+                                })
+                              }}
+                            />
+                          </div>
                         </td>
                       </tr>
                     )}
@@ -1132,7 +1134,7 @@ function UserDetail({ user, liveRuns, history, stack, adminBusy, onToggleAdmin, 
   }
 
   return (
-    <div ref={detailRef} className="au-detail-panel min-w-0 border-t border-border-subtle bg-overlay-1">
+    <div ref={detailRef} className="au-detail-panel min-w-0">
 
       {/* Sticky context banner — stays under users thead while history scrolls */}
       <button

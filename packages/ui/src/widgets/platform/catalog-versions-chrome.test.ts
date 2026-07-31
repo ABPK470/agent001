@@ -1,6 +1,5 @@
 /**
- * Configuration versions modal — browse strip must match ModalShell body (px-6).
- * WidgetToolbar is wrong here: it assumes a widget shell owns horizontal inset.
+ * Configuration versions modal — BrowseStrip dialect (px-6 + stable count).
  */
 
 import { readFileSync } from "node:fs"
@@ -14,13 +13,11 @@ const search = readFileSync(join(here, "../../components/ModalSearchField.tsx"),
 const css = readFileSync(join(here, "../../boot/index.css"), "utf8")
 
 describe("CatalogVersionsModal chrome", () => {
-  it("uses Audit-style modal browse strip — not WidgetToolbar", () => {
+  it("uses BrowseStrip — not WidgetToolbar", () => {
     expect(src).not.toMatch(/from ["'].*widget-toolbar["']/)
-    expect(src).toContain("ModalSearchField")
-    expect(src).toMatch(
-      /flex shrink-0 items-center gap-2 border-b border-border-subtle px-6 py-3/,
-    )
-    expect(src).toMatch(/flex min-h-0 flex-1 flex-col gap-3[^"]*px-6/)
+    expect(src).toContain("BrowseStrip")
+    expect(src).toContain("BrowseSearchField")
+    expect(src).toContain("BrowseCount")
   })
 })
 

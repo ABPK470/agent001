@@ -1,11 +1,17 @@
 /**
  * Shared chrome for admin browse modals (Audit, Usage).
- * Same toolbar / filter field / pagination so the two stay visually twins.
+ * Same BrowseStrip dialect as Catalog versions / Sync History.
  */
 
 import { ChevronLeft, ChevronRight, RefreshCw, SlidersHorizontal } from "lucide-react"
 import type { ReactNode } from "react"
-import { ModalSearchField } from "../../components/ModalSearchField"
+import {
+  BrowseIconButton,
+  BrowseSearchField,
+  BrowseStrip,
+  BrowseStripSearch,
+  BrowseStripTrailing,
+} from "../../components/BrowseStrip"
 
 export function AdminBrowseFilterField({
   label,
@@ -48,41 +54,31 @@ export function AdminBrowseToolbar({
   trailing?: ReactNode
 }) {
   return (
-    <div className="flex shrink-0 items-center gap-2 border-b border-border-subtle px-6 py-3">
-      <div className="min-w-0 flex-1">
-        <ModalSearchField
+    <BrowseStrip>
+      <BrowseStripSearch>
+        <BrowseSearchField
           value={search}
           onChange={onSearchChange}
           placeholder={searchPlaceholder}
           aria-label={searchAriaLabel}
         />
-      </div>
-      <button
-        type="button"
-        onClick={onToggleFilters}
-        className={`mia-control relative flex h-9 w-9 items-center justify-center ${
-          filtersOpen || activeFilterCount > 0 ? "border-border-strong text-text" : ""
-        }`}
-        title={activeFilterCount > 0 ? `Filters (${activeFilterCount} active)` : "Filters"}
-        aria-pressed={filtersOpen}
-      >
-        <SlidersHorizontal size={15} />
-        {activeFilterCount > 0 && (
-          <span className="absolute -right-0.5 -top-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-text px-0.5 text-[9px] font-mono font-medium leading-none text-text-on-accent">
-            {activeFilterCount}
-          </span>
-        )}
-      </button>
-      <button
-        type="button"
-        onClick={onRefresh}
-        className="mia-control flex h-9 w-9 items-center justify-center"
-        title="Refresh"
-      >
-        <RefreshCw size={15} className={loading ? "animate-spin" : undefined} />
-      </button>
-      {trailing}
-    </div>
+      </BrowseStripSearch>
+      <BrowseStripTrailing>
+        <BrowseIconButton
+          active={filtersOpen || activeFilterCount > 0}
+          badge={activeFilterCount > 0 ? activeFilterCount : null}
+          onClick={onToggleFilters}
+          title={activeFilterCount > 0 ? `Filters (${activeFilterCount} active)` : "Filters"}
+          aria-pressed={filtersOpen}
+        >
+          <SlidersHorizontal size={15} />
+        </BrowseIconButton>
+        <BrowseIconButton onClick={onRefresh} title="Refresh">
+          <RefreshCw size={15} className={loading ? "animate-spin" : undefined} />
+        </BrowseIconButton>
+        {trailing}
+      </BrowseStripTrailing>
+    </BrowseStrip>
   )
 }
 
