@@ -420,7 +420,19 @@ describe("Trace CSS contract — pin indent + work-note divider", () => {
   it("pin stack honors data-trace-depth (messages under Sent)", () => {
     expect(css).toContain('.trace-pin__stack > .trace-scope[data-trace-depth="1"]')
     expect(css).toContain('.trace-pin__stack > .trace-scope[data-trace-depth="2"]')
-    expect(css).toContain('.trace-pin__stack > .trace-scope[data-trace-depth="3"]')
+    expect(css).toContain('.trace-pin__stack > .trace-scope[data-trace-kind="message"][data-trace-depth="3"]')
+  })
+
+  it("pin depth-0 matches in-flow scope (Plan/PIPELINE same column — no +0.35rem)", () => {
+    expect(css).toMatch(
+      /\.trace-pin__stack\s*>\s*\.trace-scope\s*\{[^}]*padding:\s*0\s+0\.55rem\s+0\s+0/s,
+    )
+    expect(css).not.toMatch(
+      /\.trace-pin__stack\s*>\s*\.trace-scope\s*\{[^}]*padding-left:\s*0\.35rem/s,
+    )
+    expect(css).not.toMatch(
+      /\.trace-pin__stack\s*>\s*\.trace-scope\[data-trace-depth="1"\]\s*\{[^}]*padding-left:\s*1\.1rem/s,
+    )
   })
 
   it("pin message indent matches review-tree gutters (messages under Sent)", () => {
@@ -429,6 +441,9 @@ describe("Trace CSS contract — pin indent + work-note divider", () => {
     )
     expect(css).toMatch(
       /\.trace-pin__stack\s*>\s*\.trace-scope\[data-trace-kind="sent"\]\s*,\s*\n\s*\.trace-pin__stack\s*>\s*\.trace-scope\[data-trace-kind="received"\]\s*\{[^}]*padding-left:\s*var\(--review-tree-gutter\)/s,
+    )
+    expect(css).toMatch(
+      /\.trace-pin__stack\s*>\s*\.trace-scope\[data-trace-depth="1"\]\s*\{[^}]*padding-left:\s*var\(--review-tree-gutter\)/s,
     )
   })
 

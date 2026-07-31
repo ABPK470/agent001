@@ -2127,8 +2127,8 @@ textarea.input {
   width: 100%;
   cursor: default;
   background: transparent;
-  /* Depth 0 — hug the label like in-flow roots */
-  padding-left: 0.35rem;
+  /* Match in-flow .trace-scope — pad-left 0 (frame already has 0.35rem). */
+  padding: 0 0.55rem 0 0;
 }
 
 .trace-pin__stack > .trace-scope:last-child {
@@ -2136,28 +2136,17 @@ textarea.input {
 }
 
 /*
- * Pin indent must match in-flow chrome, not abstract depth steps.
- * Sent/Received sit in a stick-block (margin + header pad).
- * Messages sit in that block's scope-body (margin + body pad).
- * Using ScopeRow depth steps alone left pinned User left of in-flow Agent.
+ * Pin indent = ReviewTree gutters (same as in-flow nest), never the old
+ * 1.1 / 1.85 abstract steps (those put pinned Plan right of in-flow PIPELINE).
  */
 .trace-pin__stack > .trace-scope[data-trace-depth="1"] {
-  padding-left: 1.1rem;
+  padding-left: var(--review-tree-gutter);
 }
 
 .trace-pin__stack > .trace-scope[data-trace-depth="2"] {
-  padding-left: 1.85rem;
+  padding-left: calc(var(--review-tree-gutter) * 2);
 }
 
-.trace-pin__stack > .trace-scope[data-trace-depth="3"] {
-  padding-left: 2.6rem;
-}
-
-.trace-pin__stack > .trace-scope[data-trace-depth="4"] {
-  padding-left: 3.35rem;
-}
-
-/* Pin clones match ReviewTree gutters (Context → Prompt/Tools; Call → Sent…). */
 .trace-pin__stack > .trace-scope[data-trace-kind="prompt"],
 .trace-pin__stack > .trace-scope[data-trace-kind="tools"],
 .trace-pin__stack > .trace-scope[data-trace-kind="sent"],
@@ -2179,6 +2168,11 @@ textarea.input {
 
 .trace-pin__stack > .trace-scope[data-trace-kind="message"][data-trace-depth="3"] {
   padding-left: calc(var(--review-tree-gutter) * 3);
+}
+
+.trace-pin__stack > .trace-scope[data-trace-kind="call"][data-trace-depth="1"],
+.trace-pin__stack > .trace-scope[data-trace-kind="work"][data-trace-depth="1"] {
+  padding-left: var(--review-tree-gutter);
 }
 
 .trace-pin__stack > .trace-scope .trace-scope__lead {
