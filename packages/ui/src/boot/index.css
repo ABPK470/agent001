@@ -3357,6 +3357,18 @@ textarea.input {
   container-type: inline-size;
   container-name: active-users;
   min-width: 0;
+  /*
+   * Sticky stack when a user is expanded (operator always sees who):
+   *   table thead → detail banner → run-history thead
+   * Stack layout has no table thead (offset 0).
+   */
+  --au-sticky-thead-h: 0px;
+  --au-sticky-banner-h: 2.625rem;
+}
+
+.active-users-widget--table {
+  /* Matches SortTh row (~py-2 + au-label). */
+  --au-sticky-thead-h: 2.125rem;
 }
 
 .active-users-widget .au-stat-grid {
@@ -3381,76 +3393,6 @@ textarea.input {
   .active-users-widget .au-stat-grid {
     grid-template-columns: repeat(6, minmax(0, 1fr));
   }
-}
-
-/* Filter bar — always wraps; compact grid under ~860px (JS class or container) */
-.active-users-widget .au-filter-bar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem;
-  min-width: 0;
-}
-
-.active-users-widget .au-filter-search {
-  flex: 1 1 12rem;
-  min-width: 0;
-}
-
-.active-users-widget .au-filter-controls {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem;
-  min-width: 0;
-}
-
-.active-users-widget .au-filter-count {
-  margin-left: auto;
-}
-
-.active-users-widget--compact .au-filter-bar,
-.active-users-widget--stack .au-filter-bar {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  grid-template-areas:
-    "search count"
-    "filters filters";
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.active-users-widget--compact .au-filter-search,
-.active-users-widget--stack .au-filter-search {
-  grid-area: search;
-  width: 100%;
-  flex: none;
-}
-
-.active-users-widget--compact .au-filter-count,
-.active-users-widget--stack .au-filter-count {
-  grid-area: count;
-  margin-left: 0;
-}
-
-.active-users-widget--compact .au-filter-controls,
-.active-users-widget--stack .au-filter-controls {
-  grid-area: filters;
-}
-
-/* Wide table mode: keep filter as a single wrapping row */
-.active-users-widget--table:not(.active-users-widget--compact) .au-filter-bar {
-  display: flex;
-  flex-wrap: wrap;
-}
-
-.active-users-widget--table:not(.active-users-widget--compact) .au-filter-search {
-  flex: 1 1 12rem;
-  width: auto;
-}
-
-.active-users-widget--table:not(.active-users-widget--compact) .au-filter-count {
-  margin-left: auto;
 }
 
 .active-users-widget .au-user-list {
@@ -3552,17 +3494,34 @@ textarea.input {
 
 .active-users-widget .au-run-table-wrap {
   min-width: 0;
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
+  /* No overflow here — it would become the sticky scrollport and the
+   * run thead could not stick under the user banner in .au-body-scroll. */
 }
 
 .active-users-widget .au-detail-panel {
-  contain: layout style;
+  /* No layout containment — it breaks position:sticky vs .au-body-scroll. */
   min-width: 0;
 }
 
+/*
+ * Expanded-user context banner — sticks under the users thead (table) or
+ * at the scrollport top (stack). Operator always sees name/UPN while
+ * scrolling long run history.
+ */
 .active-users-widget .au-detail-header {
+  position: sticky;
+  top: var(--au-sticky-thead-h);
+  z-index: 18;
   cursor: pointer;
+  background: var(--workspace-widget-bg, var(--panel-2));
+  backdrop-filter: blur(6px);
+}
+
+/* Run-history columns stick under the context banner. */
+.active-users-widget .au-run-thead {
+  position: sticky;
+  top: calc(var(--au-sticky-thead-h) + var(--au-sticky-banner-h));
+  z-index: 16;
 }
 
 .active-users-widget .au-detail-kv {

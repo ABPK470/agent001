@@ -19,10 +19,17 @@
  */
 
 import type { ReactNode } from "react"
-import { Activity, CircleDot, Cpu, Play, Users, Zap } from "lucide-react"
+import { Activity, CircleDot, Cpu, Play, SlidersHorizontal, Users, Zap } from "lucide-react"
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { api } from "../client/index"
 import { EmptyState } from "../components/EmptyState"
+import {
+  ActiveFilterChips,
+  FilterChoiceGrid,
+  FilterField,
+  FilterSheet,
+  type ActiveFilterChipModel,
+} from "../components/FilterSheet"
 import { useContainerSize } from "../hooks/useContainerSize"
 import { ToastStack, useWidgetToasts } from "../components/useWidgetToasts"
 import { useViewingAs } from "../hooks/useViewingAs"
@@ -30,8 +37,11 @@ import { useStore } from "../state/store"
 import { ActiveUsersRunModal, type RunPreview } from "./ActiveUsersRunModal"
 import { WIDGET_ICONS } from "./widget-icons"
 import {
-  WidgetToolbarFilterMenu,
-  WidgetToolbarFilterMenuItem,
+  WidgetToolbar,
+  WidgetToolbarCount,
+  WidgetToolbarLeading,
+  WidgetToolbarSearch,
+  WidgetToolbarTrailing,
 } from "./widget-toolbar"
 import {
   isActiveRunStepEvent,
@@ -430,8 +440,8 @@ export function ActiveUsers(): ReactNode {
         setFailedOnly={setFailedOnly}
         lastSeenRange={lastSeenRange}
         setLastSeenRange={setLastSeenRange}
-        userCount={filteredSorted.length}
-        compact={compact}
+        filteredCount={filteredSorted.length}
+        totalCount={users.length}
         tiny={tiny}
         useStack={useStack}
         sortKey={sortKey}
@@ -621,22 +631,39 @@ export function ActiveUsers(): ReactNode {
   )
 }
 
-// ── Filter bar ─────────────────────────────────────────────────
+// ── Filter bar (Event Stream / Pipelines dialect) ───────────────
 
-const STATUS_LABELS: Record<"all" | "online" | "running" | "offline", string> = {
-  all: "all",
-  online: "online",
-  running: "running",
-  offline: "offline",
+type StatusFilter = "all" | "online" | "running" | "offline"
+type LastSeenRange = "all" | "1h" | "24h" | "7d"
+
+const STATUS_OPTIONS: readonly { value: Exclude<StatusFilter, "all">; label: string }[] = [
+  { value: "online", label: "Online" },
+  { value: "running", label: "Running" },
+  { value: "offline", label: "Offline" },
+]
+
+const LAST_SEEN_OPTIONS: readonly { value: Exclude<LastSeenRange, "all">; label: string }[] = [
+  { value: "1h", label: "1h" },
+  { value: "24h", label: "24h" },
+  { value: "7d", label: "7d" },
+]
+
+const STATUS_CHIP: Record<Exclude<StatusFilter, "all">, string> = {
+  online: "Online",
+  running: "Running",
+  offline: "Offline",
 }
 
-const RANGE_LABELS: Record<"all" | "1h" | "24h" | "7d", string> = {
-  all: "any time",
-  "1h": "last 1h",
-  "24h": "last 24h",
-  "7d": "last 7d",
+const RANGE_CHIP: Record<Exclude<LastSeenRange, "all">, string> = {
+  "1h": "1h",
+  "24h": "24h",
+  "7d": "7d",
 }
 
+/**
+ * Same review dialect as Event Stream / Pipelines:
+ *   search | count · Filters sheet (labeled choice grids) · active chips
+ */
 function ActiveUsersFilterBar({
   filter,
   setFilter,
@@ -646,8 +673,8 @@ function ActiveUsersFilterBar({
   setFailedOnly,
   lastSeenRange,
   setLastSeenRange,
-  userCount,
-  compact,
+  filteredCount,
+  totalCount,
   tiny,
   useStack,
   sortKey,
@@ -656,144 +683,182 @@ function ActiveUsersFilterBar({
 }: {
   filter: string
   setFilter: (value: string) => void
-  statusFilter: "all" | "online" | "running" | "offline"
-  setStatusFilter: (value: "all" | "online" | "running" | "offline") => void
+  statusFilter: StatusFilter
+  setStatusFilter: (value: StatusFilter) => void
   failedOnly: boolean
-  setFailedOnly: (value: boolean | ((prev: boolean) => boolean)) => void
-  lastSeenRange: "all" | "1h" | "24h" | "7d"
-  setLastSeenRange: (value: "all" | "1h" | "24h" | "7d") => void
-  userCount: number
-  compact: boolean
+  setFailedOnly: (value: boolean) => void
+  lastSeenRange: LastSeenRange
+  setLastSeenRange: (value: LastSeenRange) => void
+  filteredCount: number
+  totalCount: number
   tiny: boolean
   useStack: boolean
   sortKey: SortKey
   sortDir: SortDir
   onSort: (key: SortKey) => void
 }) {
-  const statusLabel = statusFilter === "all" ? "status" : STATUS_LABELS[statusFilter]
-  const rangeLabel = tiny
-    ? (lastSeenRange === "all" ? "time" : lastSeenRange)
-    : (lastSeenRange === "all" ? "any time" : RANGE_LABELS[lastSeenRange])
-  const sortLabel = `${SORT_LABELS[sortKey]} ${sortDir === "asc" ? "↑" : "↓"}`
+  const [filtersOpen, setFiltersOpen] = useState(false)
+  const filterBtnRef = useRef<HTMLButtonElement>(null)
+
+  const filtersActive =
+    statusFilter !== "all" || failedOnly || lastSeenRange !== "all"
+  const activeFilterCount =
+    (statusFilter !== "all" ? 1 : 0) +
+    (failedOnly ? 1 : 0) +
+    (lastSeenRange !== "all" ? 1 : 0)
+
+  const activeChips = useMemo((): ActiveFilterChipModel[] => {
+    const chips: ActiveFilterChipModel[] = []
+    if (statusFilter !== "all") {
+      chips.push({
+        id: "status",
+        label: "Status",
+        value: STATUS_CHIP[statusFilter],
+        onRemove: () => setStatusFilter("all"),
+      })
+    }
+    if (failedOnly) {
+      chips.push({
+        id: "failed",
+        label: "Failed",
+        value: "only",
+        onRemove: () => setFailedOnly(false),
+      })
+    }
+    if (lastSeenRange !== "all") {
+      chips.push({
+        id: "last-seen",
+        label: "Last seen",
+        value: RANGE_CHIP[lastSeenRange],
+        onRemove: () => setLastSeenRange("all"),
+      })
+    }
+    return chips
+  }, [statusFilter, failedOnly, lastSeenRange, setStatusFilter, setFailedOnly, setLastSeenRange])
+
+  function clearAllFilters(): void {
+    setStatusFilter("all")
+    setFailedOnly(false)
+    setLastSeenRange("all")
+  }
+
+  const sortOptions = useMemo(
+    () =>
+      (Object.keys(SORT_LABELS) as SortKey[]).map((key) => ({
+        value: key,
+        label: SORT_LABELS[key],
+      })),
+    [],
+  )
 
   return (
-    <div className="au-filter-bar shrink-0 border-b border-border-subtle px-3 py-2">
-      <input
-        className="au-filter-search bg-transparent text-text placeholder:text-text-muted/50 outline-none border border-border-subtle rounded-md px-2.5 py-1.5 focus:border-accent/50"
-        placeholder="Filter by name, UPN, IP, model…"
-        value={filter}
-        onChange={(e) => setFilter(e.target.value)}
-        spellCheck={false}
+    <>
+      <WidgetToolbar>
+        <WidgetToolbarLeading>{null}</WidgetToolbarLeading>
+        <WidgetToolbarSearch
+          value={filter}
+          onChange={setFilter}
+          placeholder="Filter by name, UPN, IP, model…"
+          onClear={() => setFilter("")}
+        />
+        <WidgetToolbarTrailing>
+          {!tiny && (
+            <span className="inline-flex items-center gap-1.5 text-text-muted">
+              <Users size={15} strokeWidth={1.75} aria-hidden />
+              <WidgetToolbarCount
+                filtered={filteredCount}
+                total={totalCount}
+              />
+            </span>
+          )}
+          <button
+            ref={filterBtnRef}
+            type="button"
+            onClick={() => setFiltersOpen((o) => !o)}
+            className={`widget-toolbar__icon-btn ${
+              filtersOpen || filtersActive ? "widget-toolbar__icon-btn--active" : ""
+            }`}
+            title={
+              filtersActive
+                ? `Filters (${activeFilterCount} active)`
+                : "Filters"
+            }
+            aria-pressed={filtersOpen || filtersActive}
+          >
+            <SlidersHorizontal size={14} strokeWidth={1.75} />
+            {filtersActive && (
+              <span className="widget-toolbar__icon-badge" aria-hidden>
+                {activeFilterCount > 9 ? "9+" : activeFilterCount}
+              </span>
+            )}
+          </button>
+        </WidgetToolbarTrailing>
+      </WidgetToolbar>
+
+      <ActiveFilterChips
+        chips={activeChips}
+        onClear={activeFilterCount > 0 ? clearAllFilters : undefined}
       />
 
-      <div className="au-filter-controls">
-        {!compact ? (
-          <>
-            <div className="au-filter-inline flex items-center gap-0.5 shrink-0">
-              {(["all", "online", "running", "offline"] as const).map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  onClick={() => setStatusFilter(s)}
-                  className={`px-2 py-1 rounded-md text-xs transition-colors ${
-                    statusFilter === s
-                      ? "bg-transparent text-text font-semibold border border-text"
-                      : "border border-transparent text-text-muted hover:border-border hover:text-text"
-                  }`}
-                >
-                  {s}
-                </button>
-              ))}
-            </div>
+      <FilterSheet
+        open={filtersOpen}
+        onClose={() => setFiltersOpen(false)}
+        anchorRef={filterBtnRef}
+        footer={
+          filtersActive ? (
             <button
               type="button"
-              onClick={() => setFailedOnly((v) => !v)}
-              className={`px-2 py-1 rounded-md transition-colors shrink-0 ${
-                failedOnly ? "bg-error-soft text-error" : "text-text-muted hover:text-text hover:bg-overlay-2"
-              }`}
+              onClick={clearAllFilters}
+              className="text-sm font-medium text-text-muted hover:text-text"
             >
-              failed only
+              Clear all
             </button>
-            <div className="au-filter-inline flex items-center gap-0.5 shrink-0">
-              {(["all", "1h", "24h", "7d"] as const).map((r) => (
-                <button
-                  key={r}
-                  type="button"
-                  onClick={() => setLastSeenRange(r)}
-                  className={`px-2 py-1 rounded-md text-xs transition-colors ${
-                    lastSeenRange === r
-                      ? "bg-transparent text-text font-semibold border border-text"
-                      : "border border-transparent text-text-muted hover:border-border hover:text-text"
-                  }`}
-                >
-                  {RANGE_LABELS[r]}
-                </button>
-              ))}
-            </div>
-          </>
-        ) : (
-          <>
-            <WidgetToolbarFilterMenu
-              label={statusLabel}
-              active={statusFilter !== "all"}
-              ariaLabel="Filter by status"
-            >
-              {(["all", "online", "running", "offline"] as const).map((s) => (
-                <WidgetToolbarFilterMenuItem
-                  key={s}
-                  label={STATUS_LABELS[s]}
-                  active={statusFilter === s}
-                  onClick={() => setStatusFilter(s)}
-                />
-              ))}
-            </WidgetToolbarFilterMenu>
-            <button
-              type="button"
-              onClick={() => setFailedOnly((v) => !v)}
-              className={`px-2 py-1 rounded-md text-sm transition-colors shrink-0 ${
-                failedOnly ? "bg-error-soft text-error" : "text-text-muted hover:text-text hover:bg-overlay-2"
-              }`}
-            >
-              {tiny ? "failed" : "failed only"}
-            </button>
-            <WidgetToolbarFilterMenu
-              label={rangeLabel}
-              active={lastSeenRange !== "all"}
-              ariaLabel="Filter by last seen"
-            >
-              {(["all", "1h", "24h", "7d"] as const).map((r) => (
-                <WidgetToolbarFilterMenuItem
-                  key={r}
-                  label={RANGE_LABELS[r]}
-                  active={lastSeenRange === r}
-                  onClick={() => setLastSeenRange(r)}
-                />
-              ))}
-            </WidgetToolbarFilterMenu>
-          </>
-        )}
+          ) : null
+        }
+      >
+        <FilterField label="Status">
+          <FilterChoiceGrid
+            options={STATUS_OPTIONS}
+            values={statusFilter === "all" ? [] : [statusFilter]}
+            onChange={(values) => setStatusFilter(values[0] ?? "all")}
+            columns={3}
+            mode="single"
+          />
+        </FilterField>
+        <FilterField label="Activity">
+          <FilterChoiceGrid
+            options={[{ value: "failed", label: "Failed only" }]}
+            values={failedOnly ? ["failed"] : []}
+            onChange={(values) => setFailedOnly(values.includes("failed"))}
+            columns={3}
+            mode="multi"
+          />
+        </FilterField>
+        <FilterField label="Last seen">
+          <FilterChoiceGrid
+            options={LAST_SEEN_OPTIONS}
+            values={lastSeenRange === "all" ? [] : [lastSeenRange]}
+            onChange={(values) => setLastSeenRange(values[0] ?? "all")}
+            columns={3}
+            mode="single"
+          />
+        </FilterField>
         {useStack && (
-          <WidgetToolbarFilterMenu
-            label={sortLabel}
-            active
-            ariaLabel="Sort users"
-          >
-            {(Object.keys(SORT_LABELS) as SortKey[]).map((k) => (
-              <WidgetToolbarFilterMenuItem
-                key={k}
-                label={SORT_LABELS[k]}
-                active={sortKey === k}
-                onClick={() => onSort(k)}
-              />
-            ))}
-          </WidgetToolbarFilterMenu>
+          <FilterField label={`Sort ${sortDir === "asc" ? "↑" : "↓"}`}>
+            <FilterChoiceGrid
+              options={sortOptions}
+              values={[sortKey]}
+              onChange={(values) => {
+                const next = values[0]
+                if (next) onSort(next)
+              }}
+              columns={2}
+              mode="single"
+            />
+          </FilterField>
         )}
-      </div>
-
-      <span className="au-filter-count au-label tabular-nums shrink-0">
-        {userCount} {userCount === 1 ? "user" : "users"}
-      </span>
-    </div>
+      </FilterSheet>
+    </>
   )
 }
 
@@ -1068,10 +1133,10 @@ function UserDetail({ user, liveRuns, history, stack, adminBusy, onToggleAdmin, 
   return (
     <div ref={detailRef} className="au-detail-panel min-w-0 border-t border-border-subtle bg-overlay-1">
 
-      {/* Collapse handle — sits flush under the parent row */}
+      {/* Sticky context banner — stays under users thead while history scrolls */}
       <button
         type="button"
-        className="au-detail-header flex w-full items-center gap-2.5 px-4 py-2.5 text-left bg-overlay-2/80 hover:bg-overlay-2 border-b border-border-subtle transition-colors"
+        className="au-detail-header flex w-full items-center gap-2.5 px-4 py-2.5 text-left hover:bg-overlay-2 border-b border-border-subtle transition-colors"
         onClick={onCollapse}
         title="Collapse user details"
       >
@@ -1302,7 +1367,7 @@ function UserDetail({ user, liveRuns, history, stack, adminBusy, onToggleAdmin, 
           ) : (
             <div className="au-run-table-wrap min-w-0">
               <table className="w-full border-collapse">
-                <thead className="sticky top-0 z-[16] bg-[var(--workspace-widget-bg,var(--panel-2))]">
+                <thead className="au-run-thead bg-[var(--workspace-widget-bg,var(--panel-2))]">
                   <tr className="bg-[var(--workspace-widget-bg,var(--panel-2))]">
                     <th className="py-2 px-3 w-6 bg-[var(--workspace-widget-bg,var(--panel-2))]" onClick={() => onRunSort("status")} />
                     <th className="py-2 px-3 text-left au-label font-semibold text-text-muted/50 cursor-default bg-[var(--workspace-widget-bg,var(--panel-2))]">Run</th>
