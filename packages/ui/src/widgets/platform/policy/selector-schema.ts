@@ -38,24 +38,24 @@ export const EFFECT_META: ReadonlyArray<EffectMeta> = Object.freeze([
     label:       "Allow",
     description: "Permit the action without prompting.",
     icon:        ShieldCheck,
-    color:       "text-success",
-    bg:          "bg-success/10",
+    color:       "text-policy-allow",
+    bg:          "bg-policy-allow-soft",
   },
   {
     value:       "require_approval",
     label:       "Require approval",
     description: "Pause and ask the operator before running. Used for risky-but-legitimate actions.",
     icon:        AlertTriangle,
-    color:       "text-warning",
-    bg:          "bg-warning/10",
+    color:       "text-policy-approval",
+    bg:          "bg-policy-approval-soft",
   },
   {
     value:       "deny",
     label:       "Deny",
     description: "Block the action outright. Agent receives a policy-denied error.",
     icon:        ShieldX,
-    color:       "text-error",
-    bg:          "bg-error/10",
+    color:       "text-policy-deny",
+    bg:          "bg-policy-deny-soft",
   },
 ])
 
@@ -259,7 +259,7 @@ export interface PriorityBand {
 
 export const PRIORITY_BANDS: ReadonlyArray<PriorityBand> = Object.freeze([
   { min:   0, max:  10, label: "Baseline allow",    description: "Default permissive baselines.",                color: "text-text-muted" },
-  { min:  11, max:  40, label: "Per-env allow",     description: "Per-environment allow extensions.",            color: "text-success" },
+  { min:  11, max:  40, label: "Per-env allow",     description: "Per-environment allow extensions.",            color: "text-policy-allow" },
   { min:  41, max:  60, label: "Per-env approval",  description: "Per-environment approval requirements.",       color: "text-warning" },
   { min:  61, max:  85, label: "Deny",              description: "Hosted-default and per-env denies.",           color: "text-error" },
   { min:  86, max: 999, label: "Operator override", description: "Operator rules that beat all built-ins.",      color: "text-accent" },

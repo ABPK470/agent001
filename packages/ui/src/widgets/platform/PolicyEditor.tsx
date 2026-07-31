@@ -43,9 +43,9 @@ interface Props {
 type Effect = "allow" | "deny" | "require_approval"
 
 const EFFECTS: { value: Effect; label: string; icon: typeof ShieldCheck; color: string }[] = [
-  { value: "allow", label: "Allow", icon: ShieldCheck, color: "text-success" },
-  { value: "deny", label: "Deny", icon: ShieldX, color: "text-error" },
-  { value: "require_approval", label: "Require Approval", icon: AlertTriangle, color: "text-warning" },
+  { value: "allow", label: "Allow", icon: ShieldCheck, color: "text-policy-allow" },
+  { value: "deny", label: "Deny", icon: ShieldX, color: "text-policy-deny" },
+  { value: "require_approval", label: "Require Approval", icon: AlertTriangle, color: "text-policy-approval" },
 ]
 
 /** Icon mapping for known tools — falls back to Shield for unknown tools. */
@@ -377,7 +377,7 @@ export function PolicyEditor({ onClose }: Props) {
             /* ── Tool Permissions tab ──────────────────────── */
             <div className="space-y-2">
               <div className="mb-4 px-3 py-2 rounded-lg bg-overlay-2/50 border border-border-subtle text-sm text-text-muted">
-                Tools are <span className="text-success font-medium">allowed</span> unless you set a rule here.
+                Tools are <span className="text-policy-allow font-medium">allowed</span> unless you set a rule here.
               </div>
               {tools.map((tool) => {
                 const rule = toolRuleMap.get(tool.name)
@@ -394,7 +394,7 @@ export function PolicyEditor({ onClose }: Props) {
                       <div className="flex items-center gap-2.5">
                         <span className="text-sm font-semibold text-text font-mono">{tool.name}</span>
                         {!currentEffect && (
-                          <span className="text-xs uppercase font-semibold tracking-wider text-success">allowed</span>
+                          <span className="text-xs uppercase font-semibold tracking-wider text-policy-allow">allowed</span>
                         )}
                         {effectStyle && (
                           <span className={`text-xs uppercase font-semibold tracking-wider ${effectStyle.color}`}>
@@ -995,9 +995,9 @@ export function PolicyEditor({ onClose }: Props) {
 
 function EffectSegmented({ value, onChange }: { value: Effect | null; onChange: (v: Effect | "none") => void }) {
   const OPTIONS: { v: Effect | "none"; label: string; cls: string }[] = [
-    { v: "none",             label: "Allowed",  cls: "text-success" },
-    { v: "require_approval", label: "Approval", cls: "text-warning" },
-    { v: "deny",             label: "Denied",   cls: "text-error" },
+    { v: "none",             label: "Allowed",  cls: "text-policy-allow" },
+    { v: "require_approval", label: "Approval", cls: "text-policy-approval" },
+    { v: "deny",             label: "Denied",   cls: "text-policy-deny" },
   ]
   const current = value ?? "none"
   return (

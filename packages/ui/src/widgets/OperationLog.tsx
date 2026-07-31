@@ -104,13 +104,13 @@ const KIND_META: Record<
     },
 };
 
-/** Message box — border weight/style + label, not traffic chroma (light = ink). */
+/** Message box — quiet wash + hairline; failed is stronger wash, not an ink frame. */
 const STATUS_MESSAGE_BOX: Record<OperationStatus, string> = {
-  running:   "bg-overlay-1 border border-border-strong text-text",
+  running:   "bg-overlay-1 border border-border text-text",
   success:   "bg-overlay-1 border border-border-subtle text-text-muted",
-  failed:    "bg-overlay-2 border-2 border-text text-text",
+  failed:    "bg-overlay-2 border border-border-strong text-text",
   cancelled: "bg-overlay-2 border border-border-subtle text-text-muted",
-  skipped:   "bg-transparent border border-dashed border-border-strong text-text-faint",
+  skipped:   "bg-transparent border border-dashed border-border text-text-faint",
   unknown:   "bg-overlay-2 border border-border-subtle text-text-muted",
 }
 

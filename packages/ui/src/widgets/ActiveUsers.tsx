@@ -1288,9 +1288,9 @@ function UserDetail({ user, liveRuns, history, stack, adminBusy, onToggleAdmin, 
                 onClick={(e) => { e.stopPropagation(); setRunStatus(s) }}
                 className={`px-2 py-0.5 rounded-md transition-colors ${
                   runStatus === s
-                    ? s === "failed"    ? "bg-overlay-2 border-2 border-text text-text font-semibold"
+                    ? s === "failed"    ? "bg-overlay-2 border border-border-strong text-text font-semibold"
                     : s === "succeeded" ? "bg-overlay-1 border border-border-subtle text-text-muted font-medium"
-                    : s === "running"   ? "bg-overlay-1 border border-border-strong text-text font-medium"
+                    : s === "running"   ? "bg-overlay-1 border border-border text-text font-medium"
                     : "bg-overlay-3 text-text font-medium"
                     : "text-text-muted/50 hover:text-text-muted"
                 }`}

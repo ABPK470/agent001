@@ -18,6 +18,7 @@
      • Accent     accent | accent-hover | accent-soft
      • Status     success | warning | error | info  (each has -soft)
      • Diff       diff-surface | diff-add | diff-del (+ softs) — content change panes only
+     • Policy     policy-allow | policy-deny | policy-approval (+ softs) — effect meaning
      • Chrome     scrim | scrim-strong | scrim-focus | bubble-user
      • Datatype   datatype-int|string|date|bool|real|bin  (MymiDb)
      • Viz        viz-deep|mid|plum|rose|peach|coral     (unchanged)
@@ -78,6 +79,14 @@
   --color-diff-add-soft: var(--diff-add-soft);
   --color-diff-del: var(--diff-del);
   --color-diff-del-soft: var(--diff-del-soft);
+
+  /* Policy effects — allow / deny / approval must read in ~300ms */
+  --color-policy-allow: var(--policy-allow);
+  --color-policy-allow-soft: var(--policy-allow-soft);
+  --color-policy-deny: var(--policy-deny);
+  --color-policy-deny-soft: var(--policy-deny-soft);
+  --color-policy-approval: var(--policy-approval);
+  --color-policy-approval-soft: var(--policy-approval-soft);
 
   /* Chrome */
   --color-scrim: var(--scrim);
@@ -190,6 +199,14 @@
   --diff-del: var(--error);
   --diff-del-soft: var(--error-soft);
 
+  /* Policy effects — same chroma family as status on dark. */
+  --policy-allow: var(--success);
+  --policy-allow-soft: var(--success-soft);
+  --policy-deny: var(--error);
+  --policy-deny-soft: var(--error-soft);
+  --policy-approval: var(--warning);
+  --policy-approval-soft: var(--warning-soft);
+
   /* Viewing as — brand accent (same ink as live logo mark). */
   --viewing-as: var(--accent);
   --viewing-as-soft: var(--accent-soft);
@@ -298,6 +315,17 @@
   --diff-add-soft: color-mix(in srgb, var(--diff-add) 14%, var(--diff-surface));
   --diff-del: #b91c1c;
   --diff-del-soft: color-mix(in srgb, var(--diff-del) 14%, var(--diff-surface));
+
+  /*
+   * Policy effect exception — allow / deny / approval must be obvious on paper
+   * (not ink status). Same chroma honesty as diff panes.
+   */
+  --policy-allow: #15803d;
+  --policy-allow-soft: color-mix(in srgb, var(--policy-allow) 12%, var(--paper));
+  --policy-deny: #b91c1c;
+  --policy-deny-soft: color-mix(in srgb, var(--policy-deny) 12%, var(--paper));
+  --policy-approval: #a16207;
+  --policy-approval-soft: color-mix(in srgb, var(--policy-approval) 12%, var(--paper));
 
   --viewing-as: var(--accent);
   --viewing-as-soft: var(--accent-soft);

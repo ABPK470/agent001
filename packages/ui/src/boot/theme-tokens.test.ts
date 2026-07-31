@@ -71,6 +71,18 @@ describe("light theme color system", () => {
     expect(src).toContain("text-diff-del")
   })
 
+  it("policy effects keep clear allow/deny/approval chroma on light", () => {
+    const block = lightThemeBlock()
+    expect(block).toMatch(/--policy-allow:\s*#15803d/)
+    expect(block).toMatch(/--policy-deny:\s*#b91c1c/)
+    expect(block).toMatch(/--policy-approval:\s*#a16207/)
+    expect(block).not.toMatch(/--policy-allow:\s*var\(--ink\)/)
+    const schema = readFileSync(join(here, "../widgets/platform/policy/selector-schema.ts"), "utf8")
+    expect(schema).toContain("text-policy-allow")
+    expect(schema).toContain("text-policy-deny")
+    expect(schema).toContain("text-policy-approval")
+  })
+
   it("JsonViewer uses datatype tokens (not status success/error for scalars)", () => {
     const src = readFileSync(join(here, "../components/JsonViewer.tsx"), "utf8")
     expect(src).toContain("text-datatype-string")

@@ -61,21 +61,22 @@ export function statusTextClass(status: OperationStatus): string {
 }
 
 /**
- * Status chrome without traffic chroma — label + border weight/style carry meaning
- * (success quiet, failed heavy, skipped dashed, running strong).
+ * Status chrome without traffic chroma — label + quiet border dialect
+ * (success subtle, failed stronger wash, skipped dashed, running strong).
+ * Never border-2 / full-ink frames — too loud on paper and dark.
  */
 export function statusSoftBgClass(status: OperationStatus): string {
   switch (status) {
     case "success":
       return "border border-border-subtle bg-transparent"
     case "failed":
-      return "border-2 border-text bg-overlay-2"
+      return "border border-border-strong bg-overlay-2"
     case "skipped":
-      return "border border-dashed border-border-strong bg-transparent"
+      return "border border-dashed border-border bg-transparent"
     case "running":
-      return "border border-border-strong bg-overlay-1"
+      return "border border-border bg-overlay-1"
     default:
-      return "border border-border bg-transparent"
+      return "border border-border-subtle bg-transparent"
   }
 }
 
@@ -84,15 +85,15 @@ export function statusFilterActiveClass(status: OperationStatus): string {
     case "success":
       return "ring-1 ring-inset ring-border-subtle text-text-muted font-medium bg-transparent"
     case "failed":
-      return "ring-2 ring-inset ring-text text-text font-semibold bg-transparent"
+      return "ring-1 ring-inset ring-border-strong text-text font-semibold bg-overlay-2"
     case "skipped":
-      return "border border-dashed border-border-strong text-text-faint font-medium bg-transparent"
+      return "border border-dashed border-border text-text-faint font-medium bg-transparent"
     case "running":
       return "ring-1 ring-inset ring-border-strong text-text font-medium bg-transparent"
     case "cancelled":
-      return "ring-1 ring-inset ring-border-strong text-text font-medium bg-transparent"
+      return "ring-1 ring-inset ring-border text-text font-medium bg-transparent"
     default:
-      return "ring-1 ring-inset ring-border text-text-muted font-medium bg-transparent"
+      return "ring-1 ring-inset ring-border-subtle text-text-muted font-medium bg-transparent"
   }
 }
 export const OP_LOG_MUTED = "text-text-muted"

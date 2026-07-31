@@ -243,8 +243,10 @@ ring / dashed / spin) — not traffic chroma on warm paper. **Exception —
 diffs:** content change panes (`CatalogJsonDiff`, env-sync sample/row diffs,
 workspace file change markers) use dedicated `--diff-*` tokens: pane surface
 =`#f6f4f1` (same as workspace field / top bar, not widget `--paper`); added =
-clear green, removed = clear red, unchanged = ink text. Dark keeps meaning
-hues (diff tokens alias status). Orient in ~300ms with
+clear green, removed = clear red, unchanged = ink text. **Exception —
+policy effects:** allow / deny / require-approval use `--policy-*` chroma so
+the three outcomes read in ~300ms (not ink status). Dark keeps meaning
+hues (diff/policy tokens alias status). Orient in ~300ms with
 three signals only (`packages/ui/src/lib/selection.ts`): **place** = quiet `--select-fill` aliased to `--overlay-2` on light (same wash as Active Users KPI interiors; layout sheets = inset pill with air in the
 chrome row; section tabs = rounded shade); list rows same wash with
 `--list-row-radius` (Threads / Trace / Event Stream / rails) — never

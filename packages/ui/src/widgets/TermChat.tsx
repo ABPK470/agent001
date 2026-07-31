@@ -54,6 +54,7 @@ import {
   HOME_CHAT_INPUT_DOCK_CLASS,
   CHAT_INPUT_PILL_CLASS,
   CHAT_INPUT_WIDGET_CLASS,
+  WIDGET_CHAT_INPUT_DOCK_CLASS,
   USER_GOAL_COLUMN_CLASS,
   USER_GOAL_TO_RESPONSE_GAP_CLASS,
 } from "../app/chatLayout.js"
@@ -2953,7 +2954,7 @@ export function TermChat({
 
       {!showEmptyState && (
         <div className={`termchat-input-dock termchat-input-dock--composer ${
-          isHomeMode ? HOME_CHAT_INPUT_DOCK_CLASS : "px-3 pb-3 pt-1 sm:px-5 sm:pb-4"
+          isHomeMode ? HOME_CHAT_INPUT_DOCK_CLASS : WIDGET_CHAT_INPUT_DOCK_CLASS
         }`}>
           <div className={`relative z-20 ${isHomeMode ? HOME_CHAT_COLUMN_CLASS : WIDGET_CHAT_COLUMN_CLASS}`}>
             <TermChatInputBar
@@ -2975,7 +2976,7 @@ export function TermChat({
               onRemoveAttachment={removeAttachment}
               className="w-full"
               variant={isHomeMode && showEmptyState ? "hero" : "default"}
-              chrome={isHomeMode ? "pill" : "flush"}
+              chrome="pill"
               heroRevealProgress={heroRevealProgress}
             />
           </div>

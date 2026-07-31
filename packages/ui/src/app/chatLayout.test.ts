@@ -11,6 +11,7 @@ import {
   USER_GOAL_PIN_SLOT_CLASS,
   USER_GOAL_TEXT_MAX_CLASS,
   USER_GOAL_TO_RESPONSE_GAP_CLASS,
+  WIDGET_CHAT_INPUT_DOCK_CLASS,
   homeChatColumnWidthPx,
 } from "./chatLayout.js"
 
@@ -35,9 +36,11 @@ describe("chatLayout — home + TermChat alignment", () => {
     expect(HOME_CHAT_INPUT_DOCK_CLASS).toContain("pb-4")
   })
 
-  it("home composer is a pill; widget composer is flush (tile owns the surface)", () => {
+  it("home and widget composers share the bordered pill", () => {
     expect(CHAT_INPUT_PILL_CLASS).toContain("border border-border")
     expect(CHAT_INPUT_PILL_CLASS).not.toContain("ring-")
-    expect(CHAT_INPUT_WIDGET_CLASS).toContain("border-0")
+    expect(CHAT_INPUT_PILL_CLASS).toContain("chathome-chrome-pill")
+    expect(WIDGET_CHAT_INPUT_DOCK_CLASS).toContain("px-3")
+    expect(WIDGET_CHAT_INPUT_DOCK_CLASS).not.toContain("border-t")
   })
 })

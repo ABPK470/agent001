@@ -24,10 +24,15 @@ export const CHAT_INPUT_PILL_CLASS =
   "chathome-chrome-pill border border-border transition-colors focus-within:border-border-strong"
 
 /**
- * Widget tile already owns the surface — composer sits flush inside, no second frame.
+ * Widget tile already owns the surface — composer sits flush inside.
+ * Dock still needs a top hairline so transcript and input don't merge.
  */
 export const CHAT_INPUT_WIDGET_CLASS =
   "border-0 bg-transparent shadow-none ring-0 focus-within:border-0"
+
+/** Widget input dock — gutters around the same bordered pill as home chat. */
+export const WIDGET_CHAT_INPUT_DOCK_CLASS =
+  "px-3 pb-3 pt-2 sm:px-5 sm:pb-4"
 
 /**
  * User goal row in the transcript — full width of the sticky row (capped).
