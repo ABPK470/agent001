@@ -11,12 +11,12 @@
  *   - Plain paragraphs → whitespace-preserved text
  */
 
-import { Check, Copy } from "lucide-react"
 import React from "react"
 import type { AnswerBlock } from "./answer-parser"
 import { parseAnswerBlocks } from "./answer-parser"
 import type { StreamRevealState } from "./answer-stream-reveal"
 import { sliceBlockForReveal } from "./answer-stream-reveal"
+import { CodeBlock } from "./CodeBlock"
 import { DataTable } from "./DataTable"
 import { TableExportActions } from "./TableExportActions"
 import type { ChatTableExportSource } from "../lib/chat-table-export"
@@ -332,68 +332,19 @@ export function CompactTable({
   )
 }
 
-// Lightweight code block — soft tinted panel, no heavy borders or header
-// bar unless lang is meaningful. Reads as a distinct snippet against the
-// chat background while staying visually quiet. Hovering reveals a copy
-// button in the top-right corner.
-//
-// Use inset `border` (not `ring`) — same rule as CompactTable. TermChat's
-// transcript host is `overflow-x-hidden`; rings paint outside the box and
-// the right edge gets clipped (left often survives thanks to `pl-1`).
+/**
+ * Markdown fences in chat answers — same surface as tool/sync SQL
+ * (`CodeBlock`: lang label + Copy in the toolbar). Never a second dialect
+ * with a floating bordered icon over the corner.
+ */
 function CompactCodeBlock({ lang, text }: { lang: string; text: string }) {
-  const showLang = Boolean(lang) && lang.toLowerCase() !== "text"
-  // `copied` drives visibility (the button stays pinned visible during the
-  // success window). `showCheck` lags slightly so the Check icon remains
-  // displayed throughout the fade-out — without this, releasing hover at the
-  // moment the timer fires causes a one-frame flash of the Copy icon as it
-  // fades out.
-  const [copied, setCopied] = React.useState(false)
-  const [showCheck, setShowCheck] = React.useState(false)
-  const timersRef = React.useRef<number[]>([])
-  React.useEffect(() => () => {
-    timersRef.current.forEach((id) => window.clearTimeout(id))
-  }, [])
-  const handleCopy = React.useCallback((e: React.MouseEvent) => {
-    e.stopPropagation()
-    void navigator.clipboard.writeText(text).then(() => {
-      timersRef.current.forEach((id) => window.clearTimeout(id))
-      timersRef.current = []
-      setCopied(true)
-      setShowCheck(true)
-      // Keep the Check pinned + visible for the success window.
-      timersRef.current.push(window.setTimeout(() => setCopied(false), 1400))
-      // Hold the Check icon a little longer than the opacity transition so
-      // the icon never swaps mid-fade.
-      timersRef.current.push(window.setTimeout(() => setShowCheck(false), 1400 + 250))
-    }).catch((err: unknown) => { console.error("[mia]", err) })
-  }, [text])
   return (
-    <div className="mia-code-block group relative my-1.5 w-full min-w-0">
-      {showLang && (
-        <div className="mia-code-block__toolbar">
-          <span className="mia-code-block__label">{lang}</span>
-        </div>
-      )}
-      <pre className="mia-code-block__body text-[15px] leading-relaxed font-mono text-text-muted overflow-x-auto whitespace-pre">
-        {text}
-      </pre>
-      <button
-        type="button"
-        onClick={handleCopy}
-        title={copied ? "Copied" : "Copy code"}
-        aria-label={copied ? "Copied" : "Copy code"}
-        className={[
-          "absolute top-1.5 right-1.5 inline-flex items-center justify-center w-7 h-7 rounded-md",
-          "mia-control",
-          "transition-opacity duration-150",
-          copied ? "opacity-100" : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100",
-        ].join(" ")}
-      >
-        {showCheck
-          ? <Check size={14} className="text-success" />
-          : <Copy size={14} />}
-      </button>
-    </div>
+    <CodeBlock
+      code={text}
+      lang={lang || "text"}
+      maxHeight={320}
+      className="my-1.5 w-full min-w-0"
+    />
   )
 }
 
@@ -555,20 +506,7 @@ export function SmartAnswer({
           }
           return (
             <div key={bi} className={wrapClass}>
-              {compact ? (
-                <CompactCodeBlock lang={b.lang} text={b.text} />
-              ) : (
-                <div className="mia-code-block">
-                  {b.lang && (
-                    <div className="mia-code-block__toolbar">
-                      <span className="mia-code-block__label">{b.lang}</span>
-                    </div>
-                  )}
-                  <pre className="mia-code-block__body text-base font-mono text-text-secondary overflow-x-auto leading-relaxed">
-                    {b.text}
-                  </pre>
-                </div>
-              )}
+              <CompactCodeBlock lang={b.lang} text={b.text} />
             </div>
           )
         }
