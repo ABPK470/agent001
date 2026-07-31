@@ -132,6 +132,13 @@ function isDuplicatePipelineMessage(pipelineError: string | undefined, text: str
 
 // ── Helpers ──────────────────────────────────────────────────────
 
+/** Sticky day caps — quieter than list body (`--review-group-size`). */
+const DAY_GROUP_BTN =
+  "review-group-label sticky top-0 z-10 w-full flex items-center gap-1.5 px-2 py-1 mb-1 text-left transition-colors"
+const DAY_GROUP_BTN_LINEAR = `${DAY_GROUP_BTN} bg-surface/95 backdrop-blur-sm`
+const DAY_GROUP_BTN_NESTED =
+  `${DAY_GROUP_BTN} text-text-muted/50 bg-surface/80 backdrop-blur-sm hover:text-text-muted/80`
+
 function dayLabel(iso: string): string {
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return "Unknown"
@@ -572,11 +579,8 @@ export function OperationPipelineList({
             return (
               <div key={row.key} className={linear ? "mb-4" : "mb-3"}>
                 <button
-                  className={`sticky top-0 z-10 w-full flex items-center gap-1.5 px-2 py-1 mb-1 text-left ${
-                    linear
-                      ? "text-sm font-medium uppercase tracking-wider text-text-muted bg-surface/95 backdrop-blur-sm"
-                      : "text-sm uppercase tracking-wider text-text-muted/50 bg-surface/80 backdrop-blur-sm hover:text-text-muted/80"
-                  } transition-colors`}
+                  type="button"
+                  className={linear ? DAY_GROUP_BTN_LINEAR : DAY_GROUP_BTN_NESTED}
                   onClick={() => toggleDay(row.label)}
                 >
                   <ChevronRight size={10} className={`shrink-0 transition-transform ${collapsed ? "" : "rotate-90"}`} />
@@ -625,11 +629,8 @@ export function OperationPipelineList({
           return (
             <div className={linear ? "mb-4" : "mb-3"}>
               <button
-                className={`sticky top-0 z-10 w-full flex items-center gap-1.5 px-2 py-1 mb-1 text-left ${
-                  linear
-                    ? "text-sm font-medium uppercase tracking-wider text-text-muted bg-surface/95 backdrop-blur-sm"
-                    : "text-sm uppercase tracking-wider text-text-muted/50 bg-surface/80 backdrop-blur-sm hover:text-text-muted/80"
-                } transition-colors`}
+                type="button"
+                className={linear ? DAY_GROUP_BTN_LINEAR : DAY_GROUP_BTN_NESTED}
                 onClick={() => toggleDay(item.label)}
               >
                 <ChevronRight size={10} className={`shrink-0 transition-transform ${collapsed ? "" : "rotate-90"}`} />

@@ -165,27 +165,32 @@ describe("widget log chrome — control height & search", () => {
     )
   })
 
-  it("toolbar icon badges are solid full pills with clear numbers", () => {
+  it("toolbar icon badges are one ink/paper pill — theme-responsive, not error-red", () => {
     const css = read(cssPath)
     const live = read(livePath)
 
     expect(css).toContain(".widget-toolbar__icon-badge")
     expect(css).toMatch(/\.widget-toolbar__icon-badge\s*\{[^}]*border-radius:\s*9999px/s)
     expect(css).toMatch(/\.widget-toolbar__icon-badge\s*\{[^}]*background:\s*var\(--text\)/s)
+    expect(css).toMatch(/\.widget-toolbar__icon-badge\s*\{[^}]*color:\s*var\(--bg\)/s)
     expect(css).toMatch(/\.widget-toolbar__icon-badge\s*\{[^}]*font-weight:\s*700/s)
     expect(css).toMatch(
-      /\.widget-toolbar__icon-badge--pending\s*\{[^}]*background:\s*var\(--error\)/s,
+      /\.widget-toolbar__icon-badge--pending\s*\{[^}]*background:\s*var\(--text\)/s,
     )
     expect(css).toMatch(
-      /\.widget-toolbar__icon-badge--pending\s*\{[^}]*color:\s*var\(--text-on-accent/s,
+      /\.widget-toolbar__icon-badge--pending\s*\{[^}]*color:\s*var\(--bg\)/s,
     )
     expect(css).not.toMatch(
-      /\.widget-toolbar__icon-badge--pending\s*\{[^}]*box-shadow:\s*inset/s,
+      /\.widget-toolbar__icon-badge(?:--pending)?\s*\{[^}]*background:\s*var\(--error\)/s,
+    )
+    expect(css).not.toMatch(
+      /\.widget-toolbar__icon-badge\s*\{[^}]*color:\s*var\(--text-on-accent/s,
     )
     expect(css).toMatch(
       /\.widget-toolbar__trailing\s*\{[^}]*padding-right:\s*0\.4rem/s,
     )
-    expect(live).toContain("widget-toolbar__icon-badge--pending")
+    expect(live).toContain("widget-toolbar__icon-badge")
+    expect(live).not.toContain("widget-toolbar__icon-badge--pending")
     expect(live).not.toMatch(/-top-1\.5|-right-1\.5/)
   })
 
@@ -402,5 +407,22 @@ describe("widget log chrome — shared content dialect", () => {
     expect(nest).toContain("ReviewTreeItem")
     expect(call).toContain("ReviewTree")
     expect(call).toContain("ReviewTreeItem")
+  })
+
+  it("day / section caps use shared review-group-size — quieter than list body", () => {
+    const css = read(cssPath)
+    const ops = read(opsPath)
+    const sheet = read(join(here, "../components/FilterSheet.tsx"))
+
+    expect(css).toMatch(/--review-group-size:\s*0\.6875rem/)
+    expect(css).toMatch(
+      /\.review-group-label\s*\{[^}]*font-size:\s*var\(--review-group-size\)/s,
+    )
+    expect(ops).toContain("review-group-label")
+    expect(ops).toMatch(
+      /const DAY_GROUP_BTN\s*=\s*\n?\s*"review-group-label[^"]*"/,
+    )
+    expect(ops).not.toMatch(/const DAY_GROUP_BTN[\s\S]{0,200}text-sm/)
+    expect(sheet).toContain("review-group-label")
   })
 })

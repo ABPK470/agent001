@@ -1252,6 +1252,8 @@ textarea.input {
 :root {
   --review-body-size: 0.875rem;
   --review-meta-size: 0.875rem;
+  /* Day / section caps — quieter than body so the list stays the hero. */
+  --review-group-size: 0.6875rem;
   --review-tree-line: color-mix(in srgb, var(--border) 70%, var(--text-faint));
   /*
    * Curved nest geometry (Threads / Trace / Pipelines / Event Stream).
@@ -1278,6 +1280,16 @@ textarea.input {
   justify-content: center;
   width: var(--review-chevron-slot);
   flex-shrink: 0;
+}
+
+/* Sticky day / section caps (Pipelines YESTERDAY, FilterSheet field labels). */
+.review-group-label {
+  font-size: var(--review-group-size);
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  line-height: 1.25;
+  color: var(--text-muted);
 }
 
 .review-meta {
@@ -3882,15 +3894,15 @@ textarea.input {
   font-family: var(--font-mono, ui-monospace, monospace);
   line-height: 1;
   pointer-events: none;
+  /* Ink on paper — inverts with theme (never fixed white on --text). */
   background: var(--text);
-  color: var(--text-on-accent, var(--color-text-on-accent));
+  color: var(--bg);
 }
 
-/* Same solid pill geometry as the default badge — only the hue carries meaning. */
+/* Alias — same ink pill as default (counts are not status hues). */
 .widget-toolbar__icon-badge--pending {
-  background: var(--error);
-  color: var(--text-on-accent, #fff);
-  box-shadow: none;
+  background: var(--text);
+  color: var(--bg);
 }
 
 /* Manual sync — search column with mode toggle + input */

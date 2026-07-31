@@ -382,7 +382,7 @@ export function LiveLogs() {
           >
             {paused ? <Play size={15} /> : <Pause size={15} />}
             {paused && pendingLiveCount > 0 && (
-              <span className="widget-toolbar__icon-badge widget-toolbar__icon-badge--pending" aria-hidden>
+              <span className="widget-toolbar__icon-badge" aria-hidden>
                 {pendingLiveCount > 99 ? "99+" : pendingLiveCount}
               </span>
             )}

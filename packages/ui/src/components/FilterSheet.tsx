@@ -152,7 +152,7 @@ export function FilterField({
 }): JSX.Element {
   return (
     <div className="space-y-1.5">
-      <div className="text-[11px] font-medium uppercase tracking-wide text-text-muted">{label}</div>
+      <div className="review-group-label">{label}</div>
       {children}
     </div>
   )
