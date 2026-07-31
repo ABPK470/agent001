@@ -18,6 +18,7 @@ import { DeleteThreadModal } from "./DeleteThreadModal"
 import { ThreadRowMenu } from "./ThreadRowMenu"
 import { sortThreadsByPinThenUpdatedAt } from "../../lib/thread-order"
 import { collapseResumeRunChains } from "../termchat/collapseResumeChains"
+import { threadDisplayRunCount } from "./thread-run-count"
 
 /** Threads widget: newest runs at the top, oldest at the bottom. */
 function sortRunsNewestFirst(runs: readonly Run[]): Run[] {
@@ -29,6 +30,24 @@ function sortRunsNewestFirst(runs: readonly Run[]): Run[] {
 /** One row per user goal — approval-resume parents are superseded, not separate runs. */
 function displayRunsForThread(runs: readonly Run[]): Run[] {
   return sortRunsNewestFirst(collapseResumeRunChains(runs))
+}
+
+/** undefined = not loaded — do not substitute []. */
+function loadedRunsForThread(
+  threadId: string,
+  activeThreadId: string | null,
+  activeThreadRuns: Run[],
+  runsByThread: Record<string, Run[]>,
+): Run[] | undefined {
+  if (threadId === activeThreadId) {
+    if (runsByThread[threadId] !== undefined || activeThreadRuns.length > 0) {
+      return activeThreadRuns
+    }
+    return undefined
+  }
+  const cached = runsByThread[threadId]
+  if (cached === undefined) return undefined
+  return displayRunsForThread(cached.filter((r) => r.threadId === threadId))
 }
 
 function RunRow({
@@ -98,6 +117,7 @@ function WidgetThreadBlock({
   thread: Thread
   active: boolean
   expanded: boolean
+  /** undefined until fetched — never pass a placeholder []. */
   runs: Run[] | undefined
   loading: boolean
   activeRunId: string | null
@@ -116,9 +136,9 @@ function WidgetThreadBlock({
   const [titleTooltipOpen, setTitleTooltipOpen] = useState(false)
   const [titleTooltipAnchor, setTitleTooltipAnchor] = useState<DOMRect | null>(null)
   const displayTitle = thread.title || "New thread"
-  // Prefer loaded (collapsed) runs so approval chains don't inflate the badge.
-  const runCount = runs ? runs.length : (thread.runCount ?? 0)
-  const emptyRuns = expanded && !loading && (runs?.length ?? 0) === 0
+  // Loaded display list wins; until then server runCount (not a fake empty []).
+  const runCount = threadDisplayRunCount(thread.runCount, runs)
+  const emptyRuns = expanded && !loading && runs !== undefined && runs.length === 0
 
   function closeTitleTooltip() {
     setTitleTooltipOpen(false)
@@ -293,6 +313,8 @@ export function ThreadRunsPanel(): React.ReactElement {
     if (activeThreadId) setExpandedId(activeThreadId)
   }, [activeThreadId])
 
+  const upsertThread = useStore((s) => s.upsertThread)
+
   const loadRuns = useCallback(async (threadId: string) => {
     let alreadyLoaded = false
     setRunsByThread((prev) => {
@@ -307,12 +329,17 @@ export function ThreadRunsPanel(): React.ReactElement {
     try {
       const runs = displayRunsForThread(await api.listThreadRuns(threadId))
       setRunsByThread((prev) => ({ ...prev, [threadId]: runs }))
+      // Keep list badge aligned with display rows (collapsed chains).
+      const existing = useStore.getState().threads.find((t) => t.id === threadId)
+      if (existing && existing.runCount !== runs.length) {
+        upsertThread({ ...existing, runCount: runs.length })
+      }
     } catch {
       setRunsByThread((prev) => ({ ...prev, [threadId]: [] }))
     } finally {
       setLoadingId((id) => (id === threadId ? null : id))
     }
-  }, [])
+  }, [upsertThread])
 
   useEffect(() => {
     if (expandedId) void loadRuns(expandedId).catch((err: unknown) => { console.error("[mia]", err) })
@@ -320,8 +347,14 @@ export function ThreadRunsPanel(): React.ReactElement {
 
   useEffect(() => {
     if (!activeThreadId) return
+    // Do not stamp [] as "loaded" before selectThread hydrates — that hid runCount.
+    if (activeThreadRuns.length === 0) return
     setRunsByThread((prev) => ({ ...prev, [activeThreadId]: activeThreadRuns }))
-  }, [activeThreadId, activeThreadRuns])
+    const existing = useStore.getState().threads.find((t) => t.id === activeThreadId)
+    if (existing && existing.runCount !== activeThreadRuns.length) {
+      upsertThread({ ...existing, runCount: activeThreadRuns.length })
+    }
+  }, [activeThreadId, activeThreadRuns, upsertThread])
 
   const handleToggle = (threadId: string) => {
     setExpandedId((prev) => (prev === threadId ? null : threadId))
@@ -372,13 +405,12 @@ export function ThreadRunsPanel(): React.ReactElement {
             thread={thread}
             active={thread.id === activeThreadId}
             expanded={expandedId === thread.id}
-            runs={
-              thread.id === activeThreadId
-                ? activeThreadRuns
-                : displayRunsForThread(
-                    (runsByThread[thread.id] ?? []).filter((r) => r.threadId === thread.id),
-                  )
-            }
+            runs={loadedRunsForThread(
+              thread.id,
+              activeThreadId,
+              activeThreadRuns,
+              runsByThread,
+            )}
             loading={loadingId === thread.id}
             activeRunId={activeRunId}
             onToggle={() => handleToggle(thread.id)}
