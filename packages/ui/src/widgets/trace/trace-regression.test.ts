@@ -386,6 +386,62 @@ describe("pin layout cache — fold must clear stale open entries", () => {
     expect(cache.get("call:0")?.open).toBe(true)
     expect(cache.get("sent:0")?.open).toBe(true)
   })
+
+  it("does not pin Call/SENT ghosts while focus is on Pipeline + Subagent", () => {
+    // Real bug (screenshot): scrolled past Call 7 into Pipeline body; VirtualList
+    // unmounted Call/SENT but cache kept them with stale tops → pinned Call+SENT
+    // while the user was only at Pipeline (no nesting in view).
+    const cache = new Map<string, TraceScopeLayout>([
+      ["call:7", { id: "call:7", top: 100, height: H, depth: 0, open: true }],
+      ["sent:7", { id: "sent:7", top: 140, height: H, depth: 1, open: true }],
+      [
+        "phase-pipeline",
+        { id: "phase-pipeline", top: 800, height: H, depth: 0, open: true },
+      ],
+      [
+        "phase-subagent",
+        { id: "phase-subagent", top: 1400, height: H, depth: 0, open: true },
+      ],
+    ])
+    const { host } = mockTraceHost(
+      [
+        { id: "phase-pipeline", kind: "phase", depth: 0, top: 800 },
+        { id: "phase-subagent", kind: "phase", depth: 0, top: 1400 },
+      ],
+      900,
+    )
+    const pinned = computeTracePinnedScopeIds(host, cache)
+    expect(pinned).toEqual(["phase-pipeline"])
+    expect(pinned).not.toContain("call:7")
+    expect(pinned).not.toContain("sent:7")
+    expect(cache.has("call:7")).toBe(false)
+    expect(cache.has("sent:7")).toBe(false)
+    expect(cache.has("phase-pipeline")).toBe(true)
+  })
+
+  it("keeps Pipeline as ancestor when only a nested Call under it is mounted", () => {
+    const cache = new Map<string, TraceScopeLayout>([
+      [
+        "phase-pipeline",
+        { id: "phase-pipeline", top: 0, height: H, depth: 0, open: true },
+      ],
+      ["call:7", { id: "call:7", top: 400, height: H, depth: 1, open: true }],
+      ["sent:7", { id: "sent:7", top: 440, height: H, depth: 2, open: true }],
+    ])
+    const { host } = mockTraceHost(
+      [
+        { id: "call:7", kind: "call", depth: 1, top: 400 },
+        { id: "sent:7", kind: "sent", depth: 2, top: 440 },
+      ],
+      500,
+    )
+    expect(computeTracePinnedScopeIds(host, cache)).toEqual([
+      "phase-pipeline",
+      "call:7",
+      "sent:7",
+    ])
+    expect(cache.has("phase-pipeline")).toBe(true)
+  })
 })
 
 describe("syncPinnedInFlow — replace contract", () => {
@@ -569,12 +625,22 @@ describe("Trace CSS contract — pin indent + work-note divider", () => {
     )
   })
 
-  it("pin rows form one continuous header (no top/side hairline frame)", () => {
+  it("pin band is Cursor sticky paper (no card chrome / select-fill stacks)", () => {
     expect(css).toMatch(/\.trace-pin__stack\s*\{[^}]*gap:\s*0/s)
     expect(css).toMatch(/\.trace-pin__stack\s*\{[^}]*border-radius:\s*0(?:\s|;|})/s)
     expect(css).toMatch(/\.trace-pin__stack\s*\{[^}]*border:\s*none/s)
     expect(css).toMatch(
-      /\.trace-pin__stack\s*>\s*\.trace-scope\s*\{[^}]*border-radius:\s*0(?:\s|;|})/s,
+      /\.trace-pin__stack\s*\{[^}]*border-bottom:\s*1px\s+solid/s,
+    )
+    expect(css).toMatch(
+      /\.trace-pin__stack\s*>\s*\.trace-scope\s*\{[^}]*background:\s*transparent/s,
+    )
+    // Soft open pins must not regain select-fill (SENT grey / Call paper split).
+    expect(css).toMatch(
+      /\.trace-pin__stack\s*>\s*\.trace-scope\.is-soft\.is-open\s*,[\s\S]*?background:\s*transparent/s,
+    )
+    expect(css).not.toMatch(
+      /\.trace-pin__stack\s*>\s*\.trace-scope\s*\{[^}]*background:\s*var\(--select-fill\)/s,
     )
     expect(css).toMatch(
       /\.trace-card\.is-open:has\(\[data-trace-pinned\]\)\s*\{[^}]*border-top:\s*none/s,

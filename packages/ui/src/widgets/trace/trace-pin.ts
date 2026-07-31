@@ -30,7 +30,7 @@ export {
  * Trace reserved-band pin math — focus line is the scrollport top.
  * Pins live in a sibling band above `.trace-scroll` (Cursor / VS Code dialect)
  * so content never paints under the stack. Band height changes are
- * compensated in TraceDag via `pinBandScrollDelta`.
+ * compensated in TraceDag via `stabilizePinBandScrollTop`.
  */
 export const TRACE_PIN_OPTS = { stackInScroll: false } as const
 
@@ -50,7 +50,12 @@ export type TraceScopeLayout = {
  * the overlay kept pinning Context/Prompt with nothing expanded.
  *
  * Children of a collapsed parent leave the DOM; drop them from the cache so
- * they cannot pin as orphans. VirtualList-unmounted *open* ancestors stay.
+ * they cannot pin as orphans.
+ *
+ * VirtualList-unmounted rows stay only when they are *ancestors of a mounted
+ * scope* (Cursor sticky-scroll dialect). Peer ghosts (Call 7 / SENT after you
+ * have scrolled on to Pipeline + Subagent) must not linger — stale tops +
+ * end=∞ kept pinning them while the focus line was elsewhere.
  */
 export function syncTracePinLayoutCache(
   scrollEl: HTMLElement,
@@ -59,6 +64,7 @@ export function syncTracePinLayoutCache(
   const nodes = [
     ...scrollEl.querySelectorAll<HTMLElement>("[data-outline-scope], [data-trace-scope]"),
   ]
+  const mountedIds = new Set<string>()
   for (const el of nodes) {
     const id = el.dataset.outlineScope ?? el.dataset.traceScope
     if (!id) continue
@@ -69,6 +75,7 @@ export function syncTracePinLayoutCache(
       continue
     }
     const open = el.getAttribute("aria-expanded") !== "false"
+    mountedIds.add(id)
     layoutCache.set(id, {
       id,
       top: layoutOffsetInScroll(scrollEl, el),
@@ -82,26 +89,61 @@ export function syncTracePinLayoutCache(
   }
 
   const closed = [...layoutCache.values()].filter((e) => e.open === false)
-  if (closed.length === 0) return
+  if (closed.length > 0) {
+    const ordered = [...layoutCache.values()].sort(
+      (a, b) => a.top - b.top || a.depth - b.depth,
+    )
+    const endById = new Map(withScopeEnds(ordered).map((e) => [e.id, e.end]))
+    for (const parent of closed) {
+      const end = endById.get(parent.id) ?? Number.POSITIVE_INFINITY
+      for (const [id, e] of [...layoutCache.entries()]) {
+        if (id === parent.id) continue
+        if (e.depth > parent.depth && e.top >= parent.top && e.top < end) {
+          layoutCache.delete(id)
+        }
+      }
+    }
+  }
 
+  pruneTracePinLayoutCacheToMountedLineage(layoutCache, mountedIds)
+}
+
+/**
+ * Cursor sticky-scroll: keep only mounted scopes + their enclosing ancestors.
+ * Drop peer / cousin ghosts left by VirtualList unmount (wrong Call/SENT pins).
+ */
+export function pruneTracePinLayoutCacheToMountedLineage(
+  layoutCache: Map<string, TraceScopeLayout>,
+  mountedIds: ReadonlySet<string>,
+): void {
+  if (layoutCache.size === 0) return
+  if (mountedIds.size === 0) {
+    layoutCache.clear()
+    return
+  }
   const ordered = [...layoutCache.values()].sort(
     (a, b) => a.top - b.top || a.depth - b.depth,
   )
-  const endById = new Map(withScopeEnds(ordered).map((e) => [e.id, e.end]))
-  for (const parent of closed) {
-    const end = endById.get(parent.id) ?? Number.POSITIVE_INFINITY
-    for (const [id, e] of [...layoutCache.entries()]) {
-      if (id === parent.id) continue
-      if (e.depth > parent.depth && e.top >= parent.top && e.top < end) {
-        layoutCache.delete(id)
+  const ranged = withScopeEnds(ordered)
+  const keep = new Set<string>(mountedIds)
+  for (const m of ranged) {
+    if (!mountedIds.has(m.id)) continue
+    for (const a of ranged) {
+      if (a.id === m.id) continue
+      if (a.open === false) continue
+      if (a.depth < m.depth && a.top <= m.top && m.top < a.end) {
+        keep.add(a.id)
       }
     }
+  }
+  for (const id of [...layoutCache.keys()]) {
+    if (!keep.has(id)) layoutCache.delete(id)
   }
 }
 
 /**
  * Pin from mounted scopes, merging into `layoutCache` so VirtualList-unmounted
- * headers above the window still stick (otherwise we scroll past and never pin).
+ * *ancestors* above the window still stick. Peer ghosts are pruned each pass.
  */
 export function computeTracePinnedScopeIds(
   scrollEl: HTMLElement,

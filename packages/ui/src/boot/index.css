@@ -480,14 +480,23 @@
 
 :root[data-theme="light"] .trace-card.is-open > .trace-scope,
 :root[data-theme="light"] .trace-scope.is-soft.is-open,
-:root[data-theme="light"] .trace-pin__stack > .trace-scope,
 :root[data-theme="light"] .trace-card.is-open > .trace-scope:hover,
 :root[data-theme="light"] .trace-scope.is-soft.is-open:hover {
   background: var(--select-fill);
 }
 
-:root[data-theme="light"] .trace-pin {
+/* Sticky band stays paper — not select-fill stacks (incl. soft open rows). */
+:root[data-theme="light"] .trace-pin,
+:root[data-theme="light"] .trace-pin__stack {
   background: var(--paper);
+}
+
+:root[data-theme="light"] .trace-pin__stack > .trace-scope,
+:root[data-theme="light"] .trace-pin__stack > .trace-scope.is-open,
+:root[data-theme="light"] .trace-pin__stack > .trace-scope.is-soft,
+:root[data-theme="light"] .trace-pin__stack > .trace-scope.is-soft.is-open,
+:root[data-theme="light"] .trace-pin__stack > .trace-scope.is-soft.is-open:hover {
+  background: transparent;
 }
 
 /* Copy/More rail must stay opaque while content scrolls under it */
@@ -2128,11 +2137,9 @@ textarea.input {
 }
 
 /*
- * Reserved pin band (sibling above .trace-scroll). Real height = stack
- * rows; never height:0 / absolute overlay (that covered body content).
- *
- * Visual model: one continuous open-card header block (not separate pills).
- * Rows stack flush; the band's bottom edge meets the scrolling card body.
+ * Reserved pin band (sibling above .trace-scroll) — Cursor / VS Code sticky
+ * scroll: paper strip, one bottom seam under the stack, no card chrome.
+ * Real height = stack rows (content never paints under pins).
  */
 .trace-pin {
   flex-shrink: 0;
@@ -2140,10 +2147,11 @@ textarea.input {
   z-index: 50;
   height: auto;
   margin: 0;
+  /* Match .trace-scroll horizontal pad so sticky aligns with in-flow rows. */
   padding: 0 0.35rem;
   overflow: visible;
   pointer-events: none;
-  background: transparent;
+  background: var(--bg, var(--paper));
 }
 
 .trace-pin__stack {
@@ -2152,9 +2160,10 @@ textarea.input {
   flex-direction: column;
   gap: 0;
   background: var(--bg, var(--paper));
-  /* No top/side hairline frame — flush sticky band into the scroll body. */
   border: none;
   border-radius: 0;
+  /* Single underline under the whole sticky block (Cursor dialect). */
+  border-bottom: 1px solid var(--border-subtle, var(--color-border-subtle));
   overflow: hidden;
   box-shadow: none;
 }
@@ -2162,14 +2171,24 @@ textarea.input {
 .trace-pin__stack > .trace-scope {
   border: none;
   border-radius: 0;
-  /* Soft seam between stacked ancestors only — never a card outline. */
-  border-bottom: 1px solid var(--border-subtle, var(--color-border-subtle));
+  border-bottom: none;
   width: 100%;
   cursor: default;
-  /* Sticky open header — same place wash as in-flow open scope. */
-  background: var(--select-fill);
-  /* Match in-flow .trace-scope — pad-left 0 (frame already has 0.35rem). */
+  /* Same paper as the scrollport — not select-fill “selected cards”. */
+  background: transparent;
   padding: 0 0.55rem 0 0;
+}
+
+/*
+ * Beat later `.trace-scope.is-soft.is-open { select-fill }` — that rule made
+ * soft pins (SENT/USER/Context) grey while Call/Phase pins stayed paper.
+ */
+.trace-pin__stack > .trace-scope.is-open,
+.trace-pin__stack > .trace-scope.is-soft,
+.trace-pin__stack > .trace-scope.is-soft.is-open,
+.trace-pin__stack > .trace-scope.is-soft.is-open:hover {
+  background: transparent;
+  color: var(--text, var(--color-text));
 }
 
 .trace-pin__stack > .trace-scope:last-child {
