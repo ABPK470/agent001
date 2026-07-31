@@ -141,6 +141,30 @@ describe("widget log chrome — control height & search", () => {
     expect(live).not.toContain("hover:bg-overlay-1")
   })
 
+  it("expanded / open rows stay select-fill — Event Stream / Pipelines / Trace / Threads", () => {
+    const css = read(cssPath)
+    const opsRow = read(nestPath)
+    const ops = read(opsPath)
+    const live = read(livePath)
+
+    expect(live).toContain('bg-[var(--select-fill)]')
+    expect(opsRow).toContain('bg-[var(--select-fill)]')
+    expect(ops).toMatch(/expanded \? "bg-\[var\(--select-fill\)\]"/)
+    expect(css).toMatch(
+      /\.trace-card\.is-open\s*>\s*\.trace-scope\s*\{[^}]*background:\s*var\(--select-fill\)/s,
+    )
+    expect(css).toMatch(
+      /\.trace-scope\.is-soft\.is-open\s*\{[^}]*background:\s*var\(--select-fill\)/s,
+    )
+    expect(css).toMatch(
+      /\.thread-nav-thread--expanded\s*>\s*\.thread-nav-thread-row\s*\{[^}]*background:\s*var\(--select-fill\)/s,
+    )
+    // Light open must not collapse to transparent idle.
+    expect(css).toMatch(
+      /:root\[data-theme="light"\][\s\S]*?\.trace-card\.is-open\s*>\s*\.trace-scope[\s\S]*?background:\s*var\(--select-fill\)/,
+    )
+  })
+
   it("toolbar icon badges are solid full pills with clear numbers", () => {
     const css = read(cssPath)
     const live = read(livePath)
@@ -313,6 +337,10 @@ describe("widget log chrome — Trace meta & scope payload", () => {
     // Collapsed peers keep a quiet hairline for scanability.
     expect(css).toMatch(
       /\.trace-card:not\(\.is-open\)\s*>\s*\.trace-scope\s*\{[^}]*border-bottom:\s*1px solid/s,
+    )
+    // Sticky pin: no hard rule into the scrollport (open stays flush).
+    expect(css).toMatch(
+      /\.trace-pin__stack\s*\{[^}]*border-bottom:\s*none/s,
     )
     // Toolbar still closes the control band.
     expect(css).toMatch(

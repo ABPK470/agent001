@@ -254,12 +254,16 @@ export function OpLogRow({
   treeItem?: boolean
 }) {
   // pl-0 — chevron slot centers on --review-tree-x; nested LogNest stays flush.
+  const activeFill = expanded && expandable
   const rowClass = linear
-    ? "flex items-center gap-2 py-2 pr-2 text-left text-text rounded-[var(--list-row-radius)] transition-colors hover:bg-[var(--hover-fill)]"
+    ? [
+        "flex items-center gap-2 py-2 pr-2 text-left text-text rounded-[var(--list-row-radius)] transition-colors",
+        activeFill ? "bg-[var(--select-fill)]" : "hover:bg-[var(--hover-fill)]",
+      ].join(" ")
     : [
-        "flex items-center gap-2 py-1.5 pr-2.5 text-left text-text rounded-[var(--list-row-radius)] transition-colors hover:bg-[var(--hover-fill)]",
+        "flex items-center gap-2 py-1.5 pr-2.5 text-left text-text rounded-[var(--list-row-radius)] transition-colors",
         isLast ? "" : "border-b border-border-subtle",
-        expanded && expandable ? "bg-[var(--select-fill)]" : "",
+        activeFill ? "bg-[var(--select-fill)]" : "hover:bg-[var(--hover-fill)]",
       ].join(" ")
 
   const cells = (

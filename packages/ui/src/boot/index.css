@@ -443,24 +443,20 @@
   --bg: var(--paper);
 }
 
-/* Idle Trace rows stay flat on paper. */
+/* Idle Trace rows stay flat on paper (open/expanded keep select-fill below). */
 :root[data-theme="light"] .trace-scope,
 :root[data-theme="light"] .trace-scope.is-soft,
-:root[data-theme="light"] .trace-scope.is-soft.is-open,
-:root[data-theme="light"] .trace-card.is-open > .trace-scope,
-:root[data-theme="light"] .trace-pin__stack > .trace-scope,
-:root[data-theme="light"] .trace-pin__stack {
+:root[data-theme="light"] .trace-pin__stack,
+:root[data-theme="light"] .trace-scope[data-trace-kind="call"] {
   background: transparent;
 }
 
 /*
- * Light idle rules above beat `.trace-scope:hover` on specificity — restate
- * hover fill here so Trace matches Threads / Pipelines list wash.
+ * Light idle rules above beat bare `:hover` / open fills — restate so Trace
+ * matches Event Stream / Pipelines (hover wash; open stays select-fill).
  */
 :root[data-theme="light"] .trace-scope:hover,
 :root[data-theme="light"] .trace-scope.is-soft:hover,
-:root[data-theme="light"] .trace-scope.is-soft.is-open:hover,
-:root[data-theme="light"] .trace-card.is-open > .trace-scope:hover,
 :root[data-theme="light"] .trace-card:not(.is-open) > .trace-scope:hover,
 :root[data-theme="light"] .trace-scope[data-trace-kind="call"]:hover,
 :root[data-theme="light"] .trace-msg__btn:hover,
@@ -468,12 +464,16 @@
   background: var(--hover-fill);
 }
 
-:root[data-theme="light"] .trace-pin {
-  background: var(--paper);
+:root[data-theme="light"] .trace-card.is-open > .trace-scope,
+:root[data-theme="light"] .trace-scope.is-soft.is-open,
+:root[data-theme="light"] .trace-pin__stack > .trace-scope,
+:root[data-theme="light"] .trace-card.is-open > .trace-scope:hover,
+:root[data-theme="light"] .trace-scope.is-soft.is-open:hover {
+  background: var(--select-fill);
 }
 
-:root[data-theme="light"] .trace-pin__stack {
-  border-bottom-color: var(--border);
+:root[data-theme="light"] .trace-pin {
+  background: var(--paper);
 }
 
 /* Copy/More rail must stay opaque while content scrolls under it */
@@ -2119,8 +2119,8 @@ textarea.input {
   background: transparent;
   border: none;
   border-radius: 0;
-  /* One seam into the scrollport — not a framed card */
-  border-bottom: 1px solid var(--border, var(--color-border));
+  /* No seam under the pin into the scrollport — open headers stay flush. */
+  border-bottom: none;
   overflow: hidden;
   box-shadow: none;
 }
@@ -2131,7 +2131,8 @@ textarea.input {
   border-bottom: 1px solid var(--border-subtle, var(--color-border-subtle));
   width: 100%;
   cursor: default;
-  background: transparent;
+  /* Sticky open header — same place wash as in-flow open scope. */
+  background: var(--select-fill);
   /* Match in-flow .trace-scope — pad-left 0 (frame already has 0.35rem). */
   padding: 0 0.55rem 0 0;
 }
@@ -2381,10 +2382,11 @@ textarea.input {
  * - Open headers drop the under-line — ReviewTree elbows already own descent.
  *   (A full rule under CONTEXT + another under every peer = striped paper.)
  */
+/* Open header stays active (Event Stream / Pipelines expanded dialect). */
 .trace-card.is-open > .trace-scope {
   border: none;
   border-bottom: none;
-  background: transparent;
+  background: var(--select-fill);
 }
 
 .trace-card:not(.is-open) > .trace-scope {
@@ -2446,6 +2448,11 @@ textarea.input {
   background: var(--hover-fill);
 }
 
+/* Open stays select-fill on hover (do not drop back to hover-fill). */
+.trace-card.is-open > .trace-scope:hover {
+  background: var(--select-fill);
+}
+
 /* Soft = Sent / Received / Context / Prompt / Tools */
 .trace-scope.is-soft {
   font-size: 0.875rem;
@@ -2464,12 +2471,12 @@ textarea.input {
 }
 
 .trace-scope.is-soft.is-open {
-  background: transparent;
+  background: var(--select-fill);
   color: var(--text, var(--color-text));
 }
 
 .trace-scope.is-soft.is-open:hover {
-  background: var(--hover-fill);
+  background: var(--select-fill);
 }
 
 .trace-scope__chev {
@@ -6936,11 +6943,13 @@ textarea.input {
   border-radius: var(--list-row-radius);
 }
 
-.thread-nav-thread:hover:not(.thread-nav-thread--active) > .thread-nav-thread-row {
+.thread-nav-thread:hover:not(.thread-nav-thread--active):not(.thread-nav-thread--expanded) > .thread-nav-thread-row {
   background: var(--hover-fill);
 }
 
-.thread-nav-thread--active > .thread-nav-thread-row {
+/* Selected or expanded — same place wash as Event Stream open rows. */
+.thread-nav-thread--active > .thread-nav-thread-row,
+.thread-nav-thread--expanded > .thread-nav-thread-row {
   position: relative;
   background: var(--select-fill);
 }
