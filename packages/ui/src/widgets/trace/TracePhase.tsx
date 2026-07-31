@@ -158,13 +158,15 @@ export function PhaseOutline({
       {open && expandable && (
         <div className="trace-card__body">
           {hasDetails && (
-            <div className="trace-scope-body trace-phase-body">
+            /* Label column (align TIMELINE/RAW with SUBAGENT lead) — not peer gutter. */
+            <div className="trace-scope-payload trace-phase-body">
               <PhaseEvents events={events} />
               <PhaseSteps steps={steps} />
               <PhaseJson blocks={json} />
             </div>
           )}
           {hasNested && (
+            /* Peers under the phase — flush nest, stem under chevron (unchanged). */
             <div className="trace-phase-nested review-tree">
               {Children.map(nested, (child) =>
                 child ? <div className="review-tree__item">{child}</div> : null,

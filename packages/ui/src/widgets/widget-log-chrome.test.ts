@@ -1,7 +1,20 @@
+/**
+ * Regression — review-family chrome + nest dialect
+ * (Event Stream / Pipelines / Trace / Threads).
+ *
+ * Contracts locked here:
+ * - One toolbar: leading | search | trailing; search fills & shrinks first
+ * - One control height (--control-h) for search / segments / icon buttons
+ * - One curved tree: flush nest, stem under .review-chevron-slot center
+ * - Prompt prose = .trace-scope-payload (not nested-peer gutter)
+ * - Pipelines LogNest lives inside OpLogRow (sibling nest breaks the stem)
+ */
+
 import { readFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { describe, expect, it } from "vitest"
+import { SELECT_TRACK } from "../lib/selection"
 import {
   WIDGET_LOG_INSET_CLASS,
   WIDGET_LOG_SHELL_CLASS,
@@ -9,8 +22,27 @@ import {
 } from "./widget-toolbar"
 
 const here = dirname(fileURLToPath(import.meta.url))
+const cssPath = join(here, "../boot/index.css")
+const selectionPath = join(here, "../lib/selection.ts")
+const toolbarPath = join(here, "widget-toolbar.tsx")
+const livePath = join(here, "LiveLogs.tsx")
+const opsPath = join(here, "OperationLog.tsx")
+const opsToolbarPath = join(here, "operation-log-toolbar.tsx")
+const nestPath = join(here, "pipelines/operation-log-row.tsx")
+const traceDagPath = join(here, "trace/TraceDag.tsx")
+const traceCallPath = join(here, "trace/TraceCall.tsx")
+const traceCtxPath = join(here, "trace/TraceContext.tsx")
+const traceExportPath = join(here, "trace/TraceExportMenu.tsx")
+const segmentPath = join(here, "entity-registry/SegmentToggle.tsx")
+const reviewTreePath = join(here, "../components/ReviewTree.tsx")
+const jsonPath = join(here, "../components/JsonViewer.tsx")
+const threadsPath = join(here, "threads/ThreadRunsPanel.tsx")
 
-describe("widget log chrome (Event Stream / Pipelines / Trace)", () => {
+function read(path: string): string {
+  return readFileSync(path, "utf8")
+}
+
+describe("widget log chrome — shell", () => {
   it("shares the same inset and toolbar→body gap", () => {
     expect(WIDGET_LOG_INSET_CLASS).toContain("pt-3")
     expect(WIDGET_LOG_INSET_CLASS).toContain("px-3")
@@ -20,9 +52,9 @@ describe("widget log chrome (Event Stream / Pipelines / Trace)", () => {
   })
 
   it("review widgets mount WidgetToolbar (not freestyle header columns)", () => {
-    const live = readFileSync(join(here, "LiveLogs.tsx"), "utf8")
-    const ops = readFileSync(join(here, "operation-log-toolbar.tsx"), "utf8")
-    const trace = readFileSync(join(here, "trace/TraceDag.tsx"), "utf8")
+    const live = read(livePath)
+    const ops = read(opsToolbarPath)
+    const trace = read(traceDagPath)
 
     expect(live).toContain("WidgetToolbar")
     expect(live).toContain("WidgetToolbarSearch")
@@ -41,57 +73,229 @@ describe("widget log chrome (Event Stream / Pipelines / Trace)", () => {
     expect(trace).not.toContain("trace-search")
     expect(trace).not.toContain('className="trace-toolbar')
   })
+})
 
-  it("shares curved review-tree elbows / meta / JsonViewer dialect", () => {
-    const css = readFileSync(join(here, "../boot/index.css"), "utf8")
-    const live = readFileSync(join(here, "LiveLogs.tsx"), "utf8")
-    const ops = readFileSync(join(here, "OperationLog.tsx"), "utf8")
-    const nest = readFileSync(join(here, "pipelines/operation-log-row.tsx"), "utf8")
-    const json = readFileSync(join(here, "../components/JsonViewer.tsx"), "utf8")
-    const call = readFileSync(join(here, "trace/TraceCall.tsx"), "utf8")
+describe("widget log chrome — control height & search", () => {
+  it("defines one platform control height and wires toolbar search to it", () => {
+    const css = read(cssPath)
+    expect(css).toMatch(/--control-h:\s*2\.25rem/)
+    expect(css).toMatch(/--wt-control-h:\s*var\(--control-h\)/)
+    expect(css).toMatch(
+      /\.widget-toolbar__search-wrap\s*\{[^}]*height:\s*var\(--wt-control-h\)/s,
+    )
+    expect(css).toMatch(
+      /\.widget-toolbar__icon-btn\s*\{[^}]*height:\s*var\(--wt-control-h\)/s,
+    )
+    expect(css).toMatch(
+      /\.widget-toolbar__chip\s*\{[^}]*height:\s*var\(--wt-control-h\)/s,
+    )
+  })
 
-    expect(css).toContain("--review-meta-size")
+  it("SegmentToggle / SELECT_TRACK share --control-h with search", () => {
+    expect(SELECT_TRACK).toContain("control-segment")
+    expect(SELECT_TRACK).toContain("h-[var(--control-h)]")
+    expect(SELECT_TRACK).toContain("items-stretch")
+
+    const css = read(cssPath)
+    expect(css).toMatch(/\.control-segment\s*\{[^}]*height:\s*var\(--control-h\)/s)
+    expect(css).toContain(".control-segment__btn")
+
+    const segment = read(segmentPath)
+    expect(segment).toContain("control-segment__btn")
+    expect(segment).not.toMatch(/py-2 text-sm/)
+
+    const selection = read(selectionPath)
+    expect(selection).toContain("h-[var(--control-h)]")
+  })
+
+  it("search is first to yield; narrow toolbar stacks so trailing cannot overlap", () => {
+    const css = read(cssPath)
+    expect(css).toContain("container-name: widget-toolbar")
+    expect(css).toContain("container-type: inline-size")
+    expect(css).toMatch(
+      /\.widget-toolbar__search\s*\{[^}]*min-width:\s*6\.5rem/s,
+    )
+    expect(css).toMatch(
+      /@container widget-toolbar \(max-width: 36rem\)\s*\{[^}]*grid-template-areas:[\s\S]*?"search"[\s\S]*?"trailing"/s,
+    )
+    expect(css).toContain(".widget-toolbar__leading:empty")
+  })
+
+  it("toolbar search / filter / export icons are 14px", () => {
+    const toolbar = read(toolbarPath)
+    expect(toolbar).toMatch(/Search size=\{14\}/)
+    expect(toolbar).toMatch(/X size=\{14\}/)
+    expect(toolbar).toMatch(/Loader2 size=\{14\}/)
+
+    const live = read(livePath)
+    const ops = read(opsToolbarPath)
+    const exportMenu = read(traceExportPath)
+    expect(live).toMatch(/SlidersHorizontal size=\{14\}/)
+    expect(ops).toMatch(/SlidersHorizontal size=\{14\}/)
+    expect(exportMenu).toMatch(/Download size=\{14\}/)
+    expect(exportMenu).not.toMatch(/Download size=\{16\}/)
+  })
+})
+
+describe("widget log chrome — curved nest geometry", () => {
+  it("chevron slot width is 2× stem-x (stem under chevron center)", () => {
+    const css = read(cssPath)
+    expect(css).toContain("--review-tree-x:")
+    expect(css).toMatch(
+      /--review-chevron-slot:\s*calc\(var\(--review-tree-x\)\s*\*\s*2\)/,
+    )
+    expect(css).toMatch(
+      /\.review-chevron-slot\s*\{[^}]*width:\s*var\(--review-chevron-slot\)/s,
+    )
+    expect(css).toMatch(
+      /\.thread-nav-chevron\s*\{[^}]*width:\s*var\(--review-chevron-slot\)/s,
+    )
+    expect(css).toMatch(
+      /\.trace-scope__chevslot\s*\{[^}]*width:\s*var\(--review-chevron-slot\)/s,
+    )
+  })
+
+  it("Event Stream / Pipelines / Threads use the shared chevron slot", () => {
+    const live = read(livePath)
+    const nest = read(nestPath)
+    const ops = read(opsPath)
+    const threads = read(threadsPath)
+
+    expect(live).toContain("review-chevron-slot")
+    expect(nest).toContain("review-chevron-slot")
+    expect(ops).toContain("review-chevron-slot")
+    expect(threads).toContain("thread-nav-chevron")
+    expect(threads).toMatch(/ChevronRight size=\{13\}/)
+  })
+
+  it("nests stay flush — no second pl-* before ReviewTree (stem under first letter)", () => {
+    const live = read(livePath)
+    const nest = read(nestPath)
+    const foundation = read(reviewTreePath)
+
+    expect(live).not.toMatch(/pl-3[\s\S]{0,40}review-tree/)
+    expect(nest).not.toContain("pl-3 min-w-0")
+    expect(nest).toMatch(/return <ReviewTree className="pb-1">/)
+    expect(foundation).toContain("Nest flush with the parent row")
+    expect(foundation).toContain("review-chevron-slot")
+  })
+
+  it("Pipelines activity LogNest is inside OpLogRow (sibling nest gaps the stem)", () => {
+    const ops = read(opsPath)
+    expect(ops).toMatch(/<OpLogRow[\s\S]*?<LogNest[\s\S]*?<\/OpLogRow>/)
+    expect(ops).not.toMatch(/<\/OpLogRow>\s*\{expanded && \(\s*<LogNest/)
+    expect(ops).toContain("Nest MUST live inside OpLogRow")
+  })
+
+  it("elbow CSS stays on direct ReviewTreeItem children only", () => {
+    const css = read(cssPath)
+    expect(css).toContain(".review-tree > .review-tree__item::before")
+    expect(css).toContain(".review-tree > .review-tree__item:not(:last-child)::after")
+    expect(css).toContain("border-bottom-left-radius: var(--review-tree-radius)")
     expect(css).toContain("--review-tree-line")
     expect(css).toContain("--review-tree-radius")
-    expect(css).toContain(".review-tree > .review-tree__item::before")
-    expect(css).toContain("border-bottom-left-radius: var(--review-tree-radius)")
-    expect(css).toContain("font-size: var(--review-meta-size)")
-    expect(css).toContain(".trace-scope-payload")
-    expect(css).toContain("--review-chevron-slot")
-    expect(css).toContain("--control-h")
-    expect(css).toContain("container-name: widget-toolbar")
-    expect(css).toContain(".review-chevron-slot")
 
-    expect(live).toContain("review-tree")
-    expect(live).toContain("review-tree__item")
-    expect(live).toContain("review-chevron-slot")
+    const foundation = read(reviewTreePath)
+    expect(foundation).toContain("Only *direct* ReviewTreeItem children")
+    expect(foundation).toContain("never as a peer of that item")
+  })
+
+  it("Trace nest stays Threads-model: no in-flow depth pads, no gutter full-bleed", () => {
+    const css = read(cssPath)
+    const rows = read(join(here, "trace/TraceRows.tsx"))
+    // Retired — compounded with ReviewTree and drifted Call/Sent.
+    expect(css).not.toMatch(
+      /^\.trace-scope\[data-trace-depth="1"\]\s*\{[^}]*padding-left:\s*1\.1rem/m,
+    )
+    // Full-bleed into gutter zig-zags stems — must stay gone.
+    expect(css).not.toContain("Chevron-on-stem")
+    expect(css).not.toMatch(
+      /\.trace-dag \.review-tree > \.review-tree__item > \.trace-card[\s\S]{0,80}margin-left:\s*calc\(0px - var\(--review-tree-gutter\)\)/s,
+    )
+    expect(css).toContain("never full-bleed into the gutter")
+    // Tool defs reserve the chevron column so elbows don’t kiss names.
+    expect(rows).toMatch(/trace-ctx-item__head[\s\S]*review-chevron-slot/)
+    // Pin stack still owns stepped indent for sticky clones.
+    expect(css).toContain('.trace-pin__stack > .trace-scope[data-trace-depth="1"]')
+  })
+
+  it("JsonViewer never grows its own review-tree elbows", () => {
+    const json = read(jsonPath)
+    expect(json).toContain("mia-code-block__label")
+    expect(json).not.toContain("review-tree")
+  })
+})
+
+describe("widget log chrome — Trace meta & scope payload", () => {
+  it("meta band is one type flow; id middots stay glued (no orphan ·)", () => {
+    const css = read(cssPath)
+    const dag = read(traceDagPath)
+
+    expect(css).toContain(".widget-review-meta__id-group")
+    expect(css).toMatch(
+      /\.widget-review-meta__id-group\s*\{[^}]*white-space:\s*nowrap/s,
+    )
+    expect(css).not.toContain(".widget-review-meta__sep")
+
+    expect(dag).toContain("widget-review-meta")
+    expect(dag).toContain("widget-review-meta__id-group")
+    expect(dag).toContain('tone="meta"')
+    expect(dag).not.toContain("widget-review-meta__sep")
+  })
+
+  it("Prompt / Received / phase sections use trace-scope-payload (label column, not peer gutter)", () => {
+    const css = read(cssPath)
+    const ctx = read(traceCtxPath)
+    const call = read(traceCallPath)
+    const phase = read(join(here, "trace/TracePhase.tsx"))
+
+    expect(css).toContain(".trace-scope-payload")
+    expect(css).toMatch(
+      /\.trace-scope-payload\s*\{[^}]*padding:[^;]*var\(--review-chevron-slot\)/s,
+    )
+    expect(css).toContain(".trace-scope-payload.trace-phase-body")
+    expect(css).toContain(".trace-spine-gap")
+
+    expect(ctx).toContain("trace-scope-payload")
+    expect(ctx).not.toMatch(/review-branch-pad[\s\S]{0,40}systemPrompt/)
+    expect(call).toContain("trace-scope-payload")
+    expect(call).not.toMatch(
+      /receivedOpen && \([\s\S]*?review-branch-pad trace-branch__content/,
+    )
+    // TIMELINE/RAW under Subagent — same lead column as SUBAGENT (not tree gutter).
+    expect(phase).toContain("trace-scope-payload trace-phase-body")
+    expect(phase).not.toContain("trace-scope-body trace-phase-body")
+    expect(phase).toContain("trace-phase-nested review-tree")
+  })
+
+  it("Call outline still nests messages under Sent via ReviewTree", () => {
+    const call = read(traceCallPath)
+    expect(call).toContain("ReviewTree")
+    expect(call).toContain("ReviewTreeItem")
+    expect(call).toMatch(/sentOpen[\s\S]*ReviewTree[\s\S]*PromptMessageRow/)
+  })
+})
+
+describe("widget log chrome — shared content dialect", () => {
+  it("shares meta size, JsonViewer, and review-tree across review widgets", () => {
+    const css = read(cssPath)
+    const live = read(livePath)
+    const ops = read(opsPath)
+    const nest = read(nestPath)
+    const call = read(traceCallPath)
+
+    expect(css).toContain("--review-meta-size")
+    expect(css).toContain("font-size: var(--review-meta-size)")
+
     expect(live).toContain("review-meta")
     expect(live).toContain("JsonViewer")
     expect(live).not.toContain("border-l-2")
-    // Nest flush — no pl-3 before review-tree (stem under content letters).
-    expect(live).not.toMatch(/pl-3[\s\S]{0,40}review-tree/)
 
     expect(ops).toContain("JsonViewer")
     expect(ops).not.toContain("CodeBlock")
-    // Activity nest is OpLogRow children — sibling LogNest breaks the stem.
-    expect(ops).toMatch(/<OpLogRow[\s\S]*?<LogNest[\s\S]*?<\/OpLogRow>/)
-    expect(ops).not.toMatch(/<\/OpLogRow>\s*\{expanded && \(\s*<LogNest/)
     expect(nest).toContain("ReviewTree")
     expect(nest).toContain("ReviewTreeItem")
-    expect(nest).toContain("parent OpLogRow")
-    expect(nest).toContain("review-chevron-slot")
-    expect(nest).not.toContain("pl-3 min-w-0")
     expect(call).toContain("ReviewTree")
     expect(call).toContain("ReviewTreeItem")
-    expect(json).toContain("mia-code-block__label")
-    // JSON keeps a plain indent rail — curved elbows are for list hierarchy only.
-    expect(json).not.toContain("review-tree")
-
-    const foundation = readFileSync(join(here, "../components/ReviewTree.tsx"), "utf8")
-    expect(foundation).toContain("ReviewTree")
-    expect(foundation).toContain("ReviewTreeItem")
-    expect(foundation).toContain("Only *direct* ReviewTreeItem children")
-    expect(foundation).toContain("never as a peer of that item")
-    expect(foundation).toContain("review-chevron-slot")
   })
 })

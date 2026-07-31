@@ -147,9 +147,9 @@ export function CallOutline({
                     </p>
                   )}
                 </div>
-                {hasTools && (
+                {hasTools ? (
                   <>
-                    <div className="review-branch-pad">
+                    <div className="trace-scope-payload trace-scope-payload--caption">
                       <div className="trace-branch__caption is-tools">
                         Tool calls
                         <span className="trace-branch__caption-hint">
@@ -169,7 +169,7 @@ export function CallOutline({
                       ))}
                     </ReviewTree>
                   </>
-                )}
+                ) : null}
               </div>
             )}
           </ReviewTreeItem>

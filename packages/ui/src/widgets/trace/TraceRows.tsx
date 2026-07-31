@@ -258,55 +258,61 @@ export function ToolDef({
 
   return (
     <div className="trace-ctx-item">
-      <div className="trace-ctx-item__name font-mono">{tool.name}</div>
-      {tool.description ? (
-        <pre className="trace-body-muted">{descText}</pre>
-      ) : (
-        <span className="trace-empty">No description</span>
-      )}
-      {(descLong || tool.parameters) && (
-        <div className="trace-ctx-item__foot">
-          {descLong && (
-            <button
-              ref={descBtnRef}
-              type="button"
-              className="trace-copy"
-              onClick={onToggleDesc}
-              aria-expanded={descOpen}
-              aria-label={descOpen ? "Show less description" : "Show more description"}
-              title={descOpen ? "Show less description" : "Show more description"}
-            >
-              {descOpen ? (
-                <ListChevronsDownUp size={14} strokeWidth={1.75} />
-              ) : (
-                <ListChevronsUpDown size={14} strokeWidth={1.75} />
-              )}
-              <span>{descOpen ? "Less" : "More"}</span>
-            </button>
+      <div className="trace-ctx-item__head">
+        {/* Spacer — same column as ScopeRow chevrons; elbow lands before the name. */}
+        <span className="review-chevron-slot" aria-hidden />
+        <div className="trace-ctx-item__main">
+          <div className="trace-ctx-item__name font-mono">{tool.name}</div>
+          {tool.description ? (
+            <pre className="trace-body-muted">{descText}</pre>
+          ) : (
+            <span className="trace-empty">No description</span>
           )}
-          {tool.parameters && (
-            <button
-              ref={schemaBtnRef}
-              type="button"
-              className="trace-copy"
-              onClick={onToggleSchema}
-              aria-expanded={showSchema}
-              aria-label={showSchema ? "Hide schema" : "Show schema"}
-              title={showSchema ? "Hide schema" : "Show schema"}
-            >
-              <span>{showSchema ? "Hide schema" : "Schema"}</span>
-            </button>
+          {(descLong || tool.parameters) && (
+            <div className="trace-ctx-item__foot">
+              {descLong && (
+                <button
+                  ref={descBtnRef}
+                  type="button"
+                  className="trace-copy"
+                  onClick={onToggleDesc}
+                  aria-expanded={descOpen}
+                  aria-label={descOpen ? "Show less description" : "Show more description"}
+                  title={descOpen ? "Show less description" : "Show more description"}
+                >
+                  {descOpen ? (
+                    <ListChevronsDownUp size={14} strokeWidth={1.75} />
+                  ) : (
+                    <ListChevronsUpDown size={14} strokeWidth={1.75} />
+                  )}
+                  <span>{descOpen ? "Less" : "More"}</span>
+                </button>
+              )}
+              {tool.parameters && (
+                <button
+                  ref={schemaBtnRef}
+                  type="button"
+                  className="trace-copy"
+                  onClick={onToggleSchema}
+                  aria-expanded={showSchema}
+                  aria-label={showSchema ? "Hide schema" : "Show schema"}
+                  title={showSchema ? "Hide schema" : "Show schema"}
+                >
+                  <span>{showSchema ? "Hide schema" : "Schema"}</span>
+                </button>
+              )}
+            </div>
+          )}
+          {showSchema && tool.parameters && (
+            <JsonViewer
+              value={tool.parameters}
+              defaultExpandDepth={1}
+              maxHeight={220}
+              className="trace-json"
+            />
           )}
         </div>
-      )}
-      {showSchema && tool.parameters && (
-        <JsonViewer
-          value={tool.parameters}
-          defaultExpandDepth={1}
-          maxHeight={220}
-          className="trace-json"
-        />
-      )}
+      </div>
     </div>
   )
 }

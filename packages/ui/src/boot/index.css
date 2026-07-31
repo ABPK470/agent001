@@ -2198,6 +2198,12 @@ textarea.input {
   overflow-anchor: none;
 }
 
+/* Peer spacing between spine cards (Context / Plan / Subagent / Call…).
+ * Hairline on the scope already separates; keep this quiet — not a second band. */
+.trace-spine-gap {
+  padding-bottom: 0.35rem;
+}
+
 .trace-card:not(.is-open) {
   border: none;
   background: transparent;
@@ -2568,28 +2574,14 @@ textarea.input {
   min-width: auto;
 }
 
-/* Code-like offsets — nested scopes indent like editor sticky scroll */
-.trace-scope[data-trace-depth="1"] {
-  padding-left: 1.1rem;
-}
-
-.trace-scope[data-trace-depth="2"] {
-  padding-left: 1.85rem;
-}
-
-.trace-scope[data-trace-depth="3"] {
-  padding-left: 2.6rem;
-}
-
-.trace-scope[data-trace-depth="4"] {
-  padding-left: 3.35rem;
-}
-
-/* In-flow messages/tools already sit inside an indented scope body */
-.trace-scope-body .trace-scope[data-trace-depth="2"],
-.trace-scope-body .trace-scope[data-trace-depth="3"] {
-  padding-left: 0.35rem;
-}
+/*
+ * In-flow depth padding RETIRED — ReviewTree owns nest geometry.
+ * Pin clones keep stepped indent under `.trace-pin__stack` only.
+ *
+ * Threads model (hard): nest flush with parent row; stem under parent chevron;
+ * elbow into the child *content box*. Child chevron/label live in that box —
+ * never full-bleed into the gutter (that zig-zags stems and eats tool names).
+ */
 
 /*
  * Branch under a scope header — left gutter comes only from .review-tree.
@@ -2621,6 +2613,11 @@ textarea.input {
   min-width: 0;
   /* chevron slot + gap → lead text column (scope pad-left is 0) */
   padding: 0.15rem 0.55rem 0.4rem calc(var(--review-chevron-slot) + 0.35rem);
+}
+
+.trace-scope-payload--caption {
+  padding-top: 0.25rem;
+  padding-bottom: 0.1rem;
 }
 
 .trace-branch__caption {
@@ -2791,9 +2788,9 @@ textarea.input {
   color: var(--text, var(--color-text));
 }
 
-/* Message body sits under the speaker, past the chevron column */
+/* Message body — same lead column as speaker (chevron slot + gap). */
 .trace-msg__body {
-  padding: 0.15rem 0 0.45rem calc(13px + 0.4rem);
+  padding: 0.15rem 0 0.45rem calc(var(--review-chevron-slot) + 0.35rem);
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
@@ -2845,21 +2842,31 @@ textarea.input {
   gap: 0.35rem;
 }
 
-/* Phase body — timeline / steps / raw, not a flat dump */
+/*
+ * Phase body — Timeline / Steps / Raw under Plan·Pipeline·Subagent.
+ * Paired with .trace-scope-payload so section labels share the scope lead
+ * column (T under S). Nested Call/Work stay on .trace-phase-nested.review-tree.
+ */
+.trace-scope-payload.trace-phase-body {
+  gap: 0.65rem;
+  padding-top: 0.2rem;
+  padding-bottom: 0.3rem;
+}
+
 .trace-phase-body {
   display: flex;
   flex-direction: column;
-  gap: 0.85rem;
-  padding-top: 0.35rem;
+  gap: 0.65rem;
+  padding-top: 0.2rem;
 }
 
 .trace-phase-nested {
   display: flex;
   flex-direction: column;
   gap: 0.15rem;
-  /* Curved tree gutter from .review-tree; hairline under phase header. */
-  padding-top: 0.35rem;
-  padding-bottom: 0.45rem;
+  /* Curved tree gutter from .review-tree; hairline under phase sections. */
+  padding-top: 0.3rem;
+  padding-bottom: 0.25rem;
   border-top: 1px solid var(--border-subtle, var(--color-border-subtle));
   min-width: 0;
 }
@@ -2890,12 +2897,12 @@ textarea.input {
 }
 
 .trace-phase-event {
-  padding: 0.25rem 0.45rem;
-  border-radius: 0.3rem;
+  padding: 0.2rem 0;
+  border-radius: 0;
   font-size: 0.875rem;
   line-height: 1.4;
   color: var(--text-secondary, var(--color-text-muted));
-  background: color-mix(in srgb, var(--text, var(--color-text)) 2.5%, transparent);
+  background: transparent;
 }
 
 .trace-phase-event.is-warn {
@@ -3172,10 +3179,27 @@ textarea.input {
 }
 
 .trace-ctx-item {
-  padding: 0.45rem 0;
+  padding: 0.35rem 0;
   display: flex;
   flex-direction: column;
   gap: 0.2rem;
+  min-width: 0;
+}
+
+/* Match ScopeRow: empty chevron slot so the elbow doesn’t kiss the name. */
+.trace-ctx-item__head {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.trace-ctx-item__main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+  flex: 1;
 }
 
 /* Peers already have ReviewTree elbows — no double hairline between tools */

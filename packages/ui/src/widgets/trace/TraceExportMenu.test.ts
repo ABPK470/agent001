@@ -22,4 +22,11 @@ describe("TraceExportMenu wiring", () => {
     expect(src).toContain('run("json", true)')
     expect(src).toContain("omitCode=1")
   })
+
+  it("download trigger icon matches toolbar control size (14px)", () => {
+    const menuPath = join(dirname(fileURLToPath(import.meta.url)), "TraceExportMenu.tsx")
+    const src = readFileSync(menuPath, "utf8")
+    expect(src).toMatch(/Download size=\{14\}/)
+    expect(src).not.toMatch(/Download size=\{16\}/)
+  })
 })

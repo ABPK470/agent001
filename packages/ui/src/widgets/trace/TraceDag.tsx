@@ -804,8 +804,8 @@ export function TraceDag({
   }
 
   function renderSpineItem({ item: entry }: { item: TraceSpineEntry }) {
-    // .trace-flow gap does not apply to absolutely positioned virtual rows.
-    const gapClass = "pb-[0.55rem]"
+    // Virtual rows — peer rhythm between Context / Plan / Pipeline / Call…
+    const gapClass = "trace-spine-gap"
     if (entry.kind === "phase") {
       const nested =
         entry.phase.children && entry.phase.children.length > 0
