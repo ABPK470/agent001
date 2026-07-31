@@ -2083,9 +2083,10 @@ textarea.input {
 /*
  * ── Trace scroll frame + pin chrome ──────────────────────────────
  *
- * Frame owns size. Pin band occupies the top; scroll fills the remainder
- * (top: --trace-pin-stack-h). Content never paints under the pin.
- * Pins stay a frame sibling (not inside overflow — would scroll away).
+ * Cursor / VS Code sticky-scroll: reserved pin band *above* the scrollport
+ * (flex sibling). Content never paints under the pins. Band height deltas
+ * are compensated in TraceDag (pinBandScrollDelta). Pins stay a frame
+ * sibling (not inside overflow — would scroll away).
  */
 .trace-body {
   min-height: 0;
@@ -2096,19 +2097,17 @@ textarea.input {
   flex: 1 1 0;
   min-height: 0;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .trace-dag .trace-scroll {
-  /*
-   * Scrollport fills the frame always (inset: 0). Pin stack is an overlay —
-   * never change `top` with pin count. That resize was the whole-outline
-   * flinch on every fold (recording: brief jump to earlier spine, then snap).
-   */
-  position: absolute;
-  inset: 0;
+  position: relative;
+  flex: 1 1 0;
+  min-height: 0;
   padding: 0 0.35rem 1.25rem;
   --trace-row-h: 34px;
-  /* Published for pin chrome height + scroll-padding — not for scroll `top`. */
+  /* Band is outside this scroller — no in-scroll overlay clearance. */
   --trace-pin-stack-h: 0px;
   /*
    * Set BOTH axes. overflow-y alone computes overflow-x to auto and
@@ -2129,22 +2128,22 @@ textarea.input {
 }
 
 /*
- * Pin chrome — absolute overlay on .trace-scroll-frame (sibling of scroll).
- * VS Code sticky-scroll: body may pass underneath; scroll-padding keeps
- * park/focus clear of the stack. Geometry of the scrollport never moves.
+ * Reserved pin band (sibling above .trace-scroll). Real height = stack
+ * rows; never height:0 / absolute overlay (that covered body content).
+ *
+ * Visual model: one continuous open-card header block (not separate pills).
+ * Rows stack flush; the band's bottom edge meets the scrolling card body.
  */
 .trace-pin {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
+  flex-shrink: 0;
+  position: relative;
   z-index: 50;
+  height: auto;
   margin: 0;
   padding: 0 0.35rem;
   overflow: visible;
   pointer-events: none;
-  /* Same paper as the scrollport — never a floating plate */
-  background: var(--bg, var(--paper));
+  background: transparent;
 }
 
 .trace-pin__stack {
@@ -2152,18 +2151,18 @@ textarea.input {
   display: flex;
   flex-direction: column;
   gap: 0;
-  background: transparent;
+  background: var(--bg, var(--paper));
+  /* No top/side hairline frame — flush sticky band into the scroll body. */
   border: none;
   border-radius: 0;
-  /* No seam under the pin into the scrollport — open headers stay flush. */
-  border-bottom: none;
   overflow: hidden;
   box-shadow: none;
 }
 
 .trace-pin__stack > .trace-scope {
   border: none;
-  border-radius: var(--list-row-radius);
+  border-radius: 0;
+  /* Soft seam between stacked ancestors only — never a card outline. */
   border-bottom: 1px solid var(--border-subtle, var(--color-border-subtle));
   width: 100%;
   cursor: default;
@@ -4618,16 +4617,21 @@ textarea.input {
 /*
  * Maximize/restore: snap left/top/width/height (no layout thrash on heavy
  * Trace). Motion is FLIP `transform` on .workspace-tile-solo-flipping.
+ * The flipping tile must NOT inherit transition:none — that killed the ease.
  */
-.workspace-canvas-geometry-snap .workspace-tile {
+.workspace-canvas-geometry-snap .workspace-tile:not(.workspace-tile-solo-flipping) {
   transition: none !important;
 }
 
 /* Solo maximize: one tile overlays the canvas; siblings stay mounted. */
-.workspace-tile-solo {
+.workspace-tile-solo:not(.workspace-tile-solo-flipping) {
   z-index: 40;
   /* Never ease solo geometry — window resize must stay one-shot too. */
   transition: none;
+}
+
+.workspace-tile-solo.workspace-tile-solo-flipping {
+  z-index: 40;
 }
 
 /* Compositor-only maximize/restore ease (same 260ms curve as before). */
@@ -4635,6 +4639,12 @@ textarea.input {
   z-index: 40;
   will-change: transform;
   pointer-events: none;
+  transition: transform 260ms var(--workspace-ease, cubic-bezier(0.22, 1, 0.36, 1)) !important;
+}
+
+/* First FLIP frame — hold invert with no ease, then drop this class. */
+.workspace-tile-solo-flipping.is-solo-flip-arming {
+  transition: none !important;
 }
 
 /* Solo keeps the product surface — only the card frame goes away. */

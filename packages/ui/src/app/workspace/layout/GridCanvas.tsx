@@ -58,9 +58,8 @@ type SoloFlipPlay = {
 
 function clearSoloFlipStyles(tile: HTMLElement, canvas: HTMLElement) {
   tile.style.transform = ""
-  tile.style.transition = ""
   tile.style.transformOrigin = ""
-  tile.classList.remove("workspace-tile-solo-flipping")
+  tile.classList.remove("workspace-tile-solo-flipping", "is-solo-flip-arming")
   canvas.classList.remove("workspace-canvas-geometry-snap")
 }
 
@@ -80,8 +79,10 @@ function onSoloFlipTransitionEnd(play: SoloFlipPlay, event: TransitionEvent) {
 }
 
 function beginSoloFlipEase(play: SoloFlipPlay) {
-  play.tile.style.transition =
-    `transform ${SOLO_FLIP_MS}ms var(--workspace-ease, cubic-bezier(0.22, 1, 0.36, 1))`
+  // Drop arming — CSS `.workspace-tile-solo-flipping` owns the 260ms ease.
+  play.tile.classList.remove("is-solo-flip-arming")
+  // Force style flush so the next transform change actually transitions.
+  void play.tile.offsetWidth
   play.tile.style.transform = "translate(0px, 0px) scale(1)"
   play.tile.addEventListener("transitionend", play.onTransitionEnd)
   play.safetyTimer = window.setTimeout(() => finishSoloFlip(play), SOLO_FLIP_MS + 120)
@@ -93,9 +94,18 @@ function playSoloFlip(canvas: HTMLElement, tile: HTMLElement, from: {
   width: number
   height: number
 }): () => void {
+  /*
+   * Snap geometry BEFORE measuring `to`. On restore the tile loses
+   * `.workspace-tile-solo` (transition: none) in the same commit as the
+   * small rect — so width/height 260ms transitions arm and
+   * getBoundingClientRect still reads the full solo size. Invert looks
+   * like a no-op and restore snaps. Maximize is fine because solo keeps
+   * transition: none through the commit.
+   */
+  canvas.classList.add("workspace-canvas-geometry-snap")
+  void tile.offsetWidth
   const to = readTileRectInCanvas(tile, canvas)
   const invert = soloFlipInvertTransform(from, to)
-  canvas.classList.add("workspace-canvas-geometry-snap")
   if (!invert || prefersReducedMotion()) {
     const outer = requestAnimationFrame(() => {
       requestAnimationFrame(() => {
@@ -118,10 +128,9 @@ function playSoloFlip(canvas: HTMLElement, tile: HTMLElement, from: {
   }
 
   tile.style.transformOrigin = "0 0"
-  tile.style.transition = "none"
+  tile.classList.add("workspace-tile-solo-flipping", "is-solo-flip-arming")
   tile.style.transform =
     `translate(${invert.dx}px, ${invert.dy}px) scale(${invert.sx}, ${invert.sy})`
-  tile.classList.add("workspace-tile-solo-flipping")
 
   play.playRaf = requestAnimationFrame(() => {
     play.playRaf = requestAnimationFrame(() => beginSoloFlipEase(play))
@@ -129,7 +138,6 @@ function playSoloFlip(canvas: HTMLElement, tile: HTMLElement, from: {
 
   return () => finishSoloFlip(play)
 }
-
 const RESIZE_EDGES: ResizeEdge[] = ["n", "s", "e", "w", "ne", "nw", "se", "sw"]
 
 /** Match `.workspace-chrome { --stage-pad: 0.625rem }`. */

@@ -26,7 +26,7 @@ describe("withScopeEnds", () => {
   })
 })
 
-describe("computePinnedFromEntries — structural ancestor chain only", () => {
+describe("computePinnedFromEntries — overlay (stackInScroll default)", () => {
   const tree = [
     { id: "context", top: 0, depth: 0 },
     { id: "prompt", top: 40, depth: 1 },
@@ -68,7 +68,6 @@ describe("computePinnedFromEntries — structural ancestor chain only", () => {
       { id: "sent:0", top: 100, depth: 1 },
       { id: "received:0", top: 200, depth: 1 },
     ]
-    // Sent header top is 100; sticks once top + rowH clears the slot (≥).
     expect(computePinnedFromEntries(spaced, 99)).toEqual(["call:0"])
     expect(computePinnedFromEntries(spaced, 100)).toEqual([
       "call:0",
@@ -77,20 +76,14 @@ describe("computePinnedFromEntries — structural ancestor chain only", () => {
   })
 
   it("yields a peer pin before the next header is covered", () => {
-    // Context must release when Plan's header reaches the pin slot —
-    // otherwise opaque Context covers "Plan" and Timeline looks nested under it.
     const peers = [
       { id: "context", top: 0, depth: 0 },
       { id: "phase-plan", top: 400, depth: 0 },
       { id: "call:0", top: 800, depth: 0 },
     ]
-    // Plan header at the bottom of a 1-line pin stack — Context already yielded
     expect(computePinnedFromEntries(peers, 400 - H)).toEqual([])
-    // Still inside Context body — Context pinned, Plan not yet at the slot
     expect(computePinnedFromEntries(peers, 300)).toEqual(["context"])
-    // Plan header has reached the pin zone — Context yields (no cover)
     expect(computePinnedFromEntries(peers, 400 - H + 1)).toEqual([])
-    // Plan fully past its own header — Plan pins (≥ clear)
     expect(computePinnedFromEntries(peers, 400 + H)).toEqual(["phase-plan"])
   })
 
@@ -117,7 +110,6 @@ describe("computePinnedFromEntries — structural ancestor chain only", () => {
       "sent:0",
       "message:0:m:0",
     ])
-    // Peer yield: System releases; User takes the leaf slot (same depth)
     expect(computePinnedFromEntries(msgs, 400 + H)).toEqual([
       "call:0",
       "sent:0",
@@ -126,16 +118,9 @@ describe("computePinnedFromEntries — structural ancestor chain only", () => {
   })
 })
 
-describe("TRACE_PIN_OPTS — overlay (default pin path)", () => {
-  it("matches default computePinnedFromEntries (stackInScroll: true)", () => {
-    expect(TRACE_PIN_OPTS).toEqual({ stackInScroll: true })
-    const tree = [
-      { id: "call:0", top: 0, depth: 0 },
-      { id: "sent:0", top: 100, depth: 1 },
-    ]
-    expect(computePinnedFromEntries(tree, 100 + H, H, 4, TRACE_PIN_OPTS)).toEqual(
-      computePinnedFromEntries(tree, 100 + H),
-    )
+describe("TRACE_PIN_OPTS — reserved band (Trace path)", () => {
+  it("uses stackInScroll: false (pins make space outside the scrollport)", () => {
+    expect(TRACE_PIN_OPTS).toEqual({ stackInScroll: false })
   })
 })
 
@@ -162,7 +147,6 @@ describe("computePinnedFromEntries — reserved band (stackInScroll: false)", ()
     ]
     expect(computePinnedFromEntries(peers, 300, H, 4, band)).toEqual(["context"])
     expect(computePinnedFromEntries(peers, 399, H, 4, band)).toEqual(["context"])
-    // Next peer top hits scrollTop → yield Context, pin Phase.
     expect(computePinnedFromEntries(peers, 400, H, 4, band)).toEqual([
       "phase-plan",
     ])
@@ -185,7 +169,6 @@ describe("computePinnedFromEntries — reserved band (stackInScroll: false)", ()
     const msgs = [
       { id: "call:0", top: 0, depth: 0, height: H },
       { id: "sent:0", top: 40, depth: 1, height: H },
-      // Agent-like message row — shorter than ScopeRow / TRACE_STICKY_ROW_H
       { id: "message:0:m:0", top: 80, depth: 2, height: 22 },
     ]
     expect(computePinnedFromEntries(msgs, 79, H, 4, band)).toEqual([
@@ -204,7 +187,6 @@ describe("computePinnedFromEntries — reserved band (stackInScroll: false)", ()
       { id: "call:0", top: 0, depth: 0, open: false as const },
       { id: "call:1", top: 100, depth: 0 },
     ]
-    // Scrolled to the next call header — must not pin the collapsed prior call.
     expect(computePinnedFromEntries(tree, 100, H, 4, band)).toEqual(["call:1"])
   })
 })

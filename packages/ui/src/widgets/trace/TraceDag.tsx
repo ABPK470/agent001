@@ -1,13 +1,11 @@
 /**
  * Trace outline shell — toolbar + chronological cards.
  *
- * Sticky scroll geometry (first principles):
- *   .trace-scroll-frame  — fixed-size relative shell (flex child)
- *     .trace-pin         — absolute OVERLAY at top (does not resize scroll)
- *     .trace-scroll      — absolute inset:0 (only this scrolls; geometry fixed)
- *
- * Never put pins inside the overflow node (they scroll away). Never inset
- * scroll `top` by pin count — that made every fold flinch the whole outline.
+ * Sticky scroll = Cursor / VS Code dialect: a reserved pin band *above* the
+ * scrollport clones the ancestor chain. Content never scrolls under the pins.
+ * Band height changes are compensated with `pinBandScrollDelta` so peer
+ * handoff does not cancel wheel scroll. Pins stay a frame sibling (never
+ * inside the overflow node — they would scroll away).
  */
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
@@ -46,10 +44,13 @@ import {
   type OpenState,
 } from "./open-state"
 import { callReceivedSummary, callSentSummary, formatCharCount } from "./trace-format"
+import { stabilizePinBandScrollTop } from "./pin-band-scroll"
 import {
   TRACE_PIN_OPTS,
   TRACE_STICKY_ROW_H,
+  TRACE_STICKY_MAX,
   callIndexForTool,
+  computePinnedFromEntries,
   computeTracePinnedScopeIds,
   expandPathForScope,
   layoutOffsetInScroll,
@@ -106,16 +107,35 @@ export function TraceDag({
     if (el.closest(".workspace-canvas-geometry-snap")) return
     // Cache layouts from the virtual window so headers above the viewport still pin.
     const ids = computeTracePinnedScopeIds(el, pinLayoutCacheRef.current)
-    const stackH = ids.length * TRACE_STICKY_ROW_H
-    // Overlay height only — never move scrollport `top`.
-    if (el.style.getPropertyValue("--trace-pin-stack-h") !== `${stackH}px`) {
-      el.style.setProperty("--trace-pin-stack-h", `${stackH}px`)
-    }
-    // scroll-padding keeps park/focus clear of the overlay; does not shift paint.
-    syncPinnedInFlow(el, ids, TRACE_STICKY_ROW_H, { reserveScrollPadding: true })
+    // Band is outside the scrollport — no in-scroll overlay clearance.
+    el.style.setProperty("--trace-pin-stack-h", "0px")
+    syncPinnedInFlow(el, ids, TRACE_STICKY_ROW_H, { reserveScrollPadding: false })
     if (samePinnedIds(pinnedIdsRef.current, ids)) return
+    const prevCount = pinnedIdsRef.current.length
+    const layoutCache = pinLayoutCacheRef.current
+    const nextScroll = stabilizePinBandScrollTop(
+      el.scrollTop,
+      prevCount,
+      ids,
+      (scrollTop) => {
+        const entries = [...layoutCache.values()].sort(
+          (a, b) => a.top - b.top || a.depth - b.depth,
+        )
+        return computePinnedFromEntries(
+          entries,
+          scrollTop,
+          TRACE_STICKY_ROW_H,
+          TRACE_STICKY_MAX,
+          TRACE_PIN_OPTS,
+        )
+      },
+      TRACE_STICKY_ROW_H,
+    )
     pinnedIdsRef.current = ids
     setPinnedIds(ids)
+    // Only move scrollTop when compensation keeps the same pin set —
+    // otherwise SENT/RECEIVED peer handoff oscillates every frame.
+    if (nextScroll !== el.scrollTop) el.scrollTop = nextScroll
   }
 
   /** Coalesce scroll + ResizeObserver into one pin pass per frame (no flicker storms). */
@@ -823,10 +843,10 @@ export function TraceDag({
       )
       if (!el) {
         // Offscreen virtual row — park near estimate so the scope mounts, then settle.
+        // Reserved band is outside the scrollport — no stack offset.
         const index = spineIndexForScope(scopeId)
         if (index >= 0) {
-          const stackH = pinnedIds.length * TRACE_STICKY_ROW_H
-          host.scrollTop = Math.max(0, estimateSpineOffset(index) - stackH - 2)
+          host.scrollTop = Math.max(0, estimateSpineOffset(index) - 2)
         }
         requestAnimationFrame(() => {
           const mounted = scrollRef.current
@@ -843,8 +863,7 @@ export function TraceDag({
             return
           }
           const top = layoutOffsetInScroll(mounted, el)
-          const stackH = pinnedIds.length * TRACE_STICKY_ROW_H
-          mounted.scrollTop = Math.max(0, top - stackH - 2)
+          mounted.scrollTop = Math.max(0, top - 2)
           requestAnimationFrame(() => {
             suppressFollowRef.current = false
             refreshPinStack()
@@ -853,8 +872,7 @@ export function TraceDag({
         return
       }
       const top = layoutOffsetInScroll(host, el)
-      const stackH = pinnedIds.length * TRACE_STICKY_ROW_H
-      host.scrollTop = Math.max(0, top - stackH - 2)
+      host.scrollTop = Math.max(0, top - 2)
       requestAnimationFrame(() => {
         suppressFollowRef.current = false
         refreshPinStack()

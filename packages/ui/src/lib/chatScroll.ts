@@ -107,7 +107,7 @@ export function preserveScrollAnchor(
 }
 
 /**
- * When the Trace pin band grows/shrinks, `.trace-scroll` `top` moves.
+ * Reserved-band pins: `.trace-scroll` `top` moves with stack height.
  * Shift scrollTop by the same delta so document content stays put on screen.
  */
 export function compensatePinBandInset(

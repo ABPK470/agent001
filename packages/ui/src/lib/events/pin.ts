@@ -1,12 +1,9 @@
 /**
  * Cursor / VS Code sticky-scroll pin algorithm for outline shells.
  *
- * In-flow headers stay in document flow. A pin overlay clones the ancestor
- * chain of the focus line (ViewSpec stickyFamilies / stickyTypes).
- *
- * Trace geometry: pins are absolute on a fixed-size frame; the scroll host
- * fills that frame. Pins must not be children of the overflow node (they
- * scroll away) and must not be a flex band that resizes the scrollport.
+ * In-flow headers stay in document flow. A pin band (Trace) or overlay
+ * (OutlineTree) clones the ancestor chain of the focus line
+ * (ViewSpec stickyFamilies / stickyTypes).
  *
  * Stick rule: pin after the header's own bottom has cleared the focus line
  * (`top + height <= focus`, height measured per element) while focus is still
@@ -15,9 +12,13 @@
  * shorter than ScopeRow, and a fixed rowH leaves a dead zone where the label
  * has scrolled away but is not yet pinned.
  *
- * `stackInScroll` (default / Trace overlay): focus line steps down by one
- * row per already-pinned ancestor. `stackInScroll: false` is a reserved
- * external band — focus is always scrollTop (no overlay cover).
+ * `stackInScroll` (Outline overlay): focus line steps down by one row per
+ * already-pinned ancestor — pins eat into the scrollport.
+ * `stackInScroll: false` (Trace reserved band): focus line is always the
+ * scrollport top — pins live outside and make space; TraceDag compensates
+ * scrollTop when band height changes so wheel scroll is not cancelled at
+ * peer handoff. Stick when the header *top* reaches that line (Cursor:
+ * right as we pass it).
  */
 
 export const OUTLINE_STICKY_ROW_H = 34
@@ -114,8 +115,8 @@ export type PinEntry = {
 
 export type PinComputeOpts = {
   /**
-   * When true (default overlay), each pinned row shifts the focus line down
-   * inside the scrollport. When false (legacy external band), focus is always scrollTop.
+   * When true (Outline overlay), each pinned row shifts the focus line down
+   * inside the scrollport. When false (Trace band), focus is always scrollTop.
    */
   stackInScroll?: boolean
 }
@@ -152,18 +153,16 @@ export function computePinnedFromEntries(
     const threshold = stackInScroll
       ? scrollTop + pinned.length * rowH
       : scrollTop
-    // Overlay (stackInScroll): stick once this header's *own* bottom has
-    // cleared the focus line — measured height, so short message rows do not
-    // leave a dead zone.
-    // External band: stick as soon as the header *top* reaches the scrollport
-    // top — "right as we pass it." Waiting for full clear + VirtualList
-    // unmount often meant the scope never pinned at all.
     const headerH = e.height ?? rowH
+    // Overlay: stick once this header's *own* bottom has cleared the focus
+    // line — measured height, so short message rows do not leave a dead zone.
+    // Reserved band: stick as soon as the header *top* reaches the scrollport
+    // top — Cursor "right as we pass it." Band makes space; no cover.
     const pastHeader = stackInScroll
       ? e.top + headerH <= threshold + 0.5
       : e.top <= threshold + 0.5
-    // …and yield when the next same-or-shallower header reaches the focus
-    // line (overlay: +rowH so peers are not covered under the stack).
+    // Yield when the next same-or-shallower header reaches the focus line
+    // (overlay: +rowH so peers are not covered under the stack).
     const yieldPad = stackInScroll ? rowH : 0
     const nextHeaderClear = e.end > threshold + yieldPad + 0.5
     if (pastHeader && nextHeaderClear) {

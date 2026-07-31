@@ -24,11 +24,26 @@ describe("maximize / restore geometry + FLIP", () => {
     expect(canvas).toContain("soloFlipInvertTransform")
     expect(shell).toContain("captureSoloFlipFrom")
     expect(SOLO_FLIP_MS).toBe(260)
+    // Restore: snap + flush before readTileRect — else mid-transition
+    // getBoundingClientRect still looks like solo and FLIP no-ops.
+    const playFn = canvas.slice(canvas.indexOf("function playSoloFlip"))
+    const snapAt = playFn.indexOf('classList.add("workspace-canvas-geometry-snap")')
+    const flushAt = playFn.indexOf("offsetWidth", snapAt)
+    const toAt = playFn.indexOf("readTileRectInCanvas", snapAt)
+    expect(snapAt).toBeGreaterThanOrEqual(0)
+    expect(flushAt).toBeGreaterThan(snapAt)
+    expect(toAt).toBeGreaterThan(flushAt)
+    // Snap must not apply to the flipping tile (that killed the ease).
     expect(css).toMatch(
-      /\.workspace-canvas-geometry-snap\s+\.workspace-tile\s*\{[^}]*transition:\s*none\s*!important/s,
+      /\.workspace-canvas-geometry-snap\s+\.workspace-tile:not\(\.workspace-tile-solo-flipping\)\s*\{[^}]*transition:\s*none\s*!important/s,
     )
-    expect(css).toMatch(/\.workspace-tile-solo\s*\{[^}]*transition:\s*none/s)
-    expect(css).toMatch(/\.workspace-tile-solo-flipping\s*\{[^}]*will-change:\s*transform/s)
+    expect(css).toMatch(
+      /\.workspace-tile-solo:not\(\.workspace-tile-solo-flipping\)\s*\{[^}]*transition:\s*none/s,
+    )
+    expect(css).toMatch(
+      /\.workspace-tile-solo-flipping\s*\{[^}]*transition:\s*transform\s+260ms/s,
+    )
+    expect(css).toContain("is-solo-flip-arming")
   })
 
   it("solo-hidden uses content-visibility (not visibility hammer on *)", () => {

@@ -27,11 +27,12 @@ export {
 } from "../../lib/events/pin"
 
 /**
- * Pin band overlays the scrollport (frame sibling). Focus steps down by one
- * row per pinned ancestor — body may pass under the stack; scroll-padding
- * keeps park/focus clear. Never resize scroll `top` by pin count (fold flinch).
+ * Trace reserved-band pin math — focus line is the scrollport top.
+ * Pins live in a sibling band above `.trace-scroll` (Cursor / VS Code dialect)
+ * so content never paints under the stack. Band height changes are
+ * compensated in TraceDag via `pinBandScrollDelta`.
  */
-export const TRACE_PIN_OPTS = { stackInScroll: true } as const
+export const TRACE_PIN_OPTS = { stackInScroll: false } as const
 
 export type TraceScopeLayout = {
   id: string
