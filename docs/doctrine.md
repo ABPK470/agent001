@@ -240,6 +240,9 @@ never inverted pills or screaming outline frames; never bare on filter chips);
 **control** = keep the frame, fill `--hover-fill` / `--select-fill` on
 hover/press (FilterSheet choice grids, free-floating filter nav — never
 border-only hover, never transparent-border “plain text” idle).
+**go-to** (`CONTROL_READY` / `.mia-control--ready`) = solid ink fill for the
+one next step in a flow (Preview → Execute, Save when dirty, Publish when
+armed) — navigates the eye without becoming “selected.”
 Tree elbows are hierarchy only — never selection. Dirty / menu-open / Sheet
 are controls, not mode. Surfaces own one perimeter; insides use dividers and
 controls — never nested grey plates. Top bar, tiles, modals, and filter sheets

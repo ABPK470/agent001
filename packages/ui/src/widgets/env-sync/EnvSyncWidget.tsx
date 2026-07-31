@@ -552,6 +552,16 @@ export function EnvSync() {
   const execActive = exec.kind !== "idle"
   const execForDisplayPlan = displayPlan != null && (execPlanId === displayPlan.planId || exec.kind === "running")
   const previewActive = isPreviewInProgress(previewing, previewProgress)
+  const canExecute =
+    hasPlan &&
+    !execActive &&
+    !expired &&
+    !hasConflicts &&
+    !preflightBlocked &&
+    !searchLoading
+  // One go-to at a time: Execute when armed; else Preview when it is the next step.
+  const executeReady = canExecute
+  const previewReady = canPreview && !executeReady && !execActive && !previewActive
 
   const catalogPublishArmed = Boolean(
     publishStatus?.catalogNeedsPublish || (publishStatus?.unpublishedEntityCount ?? 0) > 0,
@@ -789,6 +799,7 @@ export function EnvSync() {
               label={blocker ?? (hasPlan && !execActive ? "Re-run preview" : "Preview")}
               onClick={() => void onPreview().catch((err: unknown) => { console.error("[mia]", err) })}
               disabled={!canPreview}
+              ready={previewReady}
             >
               {previewing ? <Loader2 {...TOOLBAR_ICON} className="animate-spin" /> : hasPlan && !execActive ? <RefreshCw {...TOOLBAR_ICON} /> : <Eye {...TOOLBAR_ICON} />}
             </IconButton>
@@ -806,6 +817,7 @@ export function EnvSync() {
                 }
                 onClick={() => setExecModalOpen(true)}
                 disabled={expired || hasConflicts || preflightBlocked || searchLoading}
+                ready={executeReady}
               >
                 <Ship {...TOOLBAR_ICON} />
               </IconButton>

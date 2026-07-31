@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest"
 import {
   CONTROL_IDLE,
   CONTROL_PRESSED,
+  CONTROL_READY,
   LIST_ROW_ACTIVE,
   LIST_ROW_IDLE,
   PLACE_TAB_ACTIVE,
@@ -58,6 +59,16 @@ describe("selection dialect — place / mode / control", () => {
   it("controls keep the frame and fill bg on hover/press", () => {
     expect(CONTROL_IDLE).toContain("hover:bg-[var(--hover-fill)]")
     expect(CONTROL_PRESSED).toContain("bg-[var(--select-fill)]")
+  })
+
+  it("go-to CONTROL_READY is ink fill — not select-fill mode", () => {
+    expect(CONTROL_READY).toBe("mia-control--ready")
+    expect(CONTROL_READY).not.toContain("select-fill")
+    expect(css).toMatch(
+      /\.mia-control\.mia-control--ready\s*,\s*\n\s*\.mia-control\.mia-control--ready:hover:not\(:disabled\)\s*\{[^}]*background:\s*var\(--text\)/s,
+    )
+    expect(iconButtonClass({ ready: true })).toContain("mia-control--ready")
+    expect(iconButtonClass({ ready: true, active: true })).toContain("mia-control--ready")
   })
 
   it("IconButton active is shaded", () => {

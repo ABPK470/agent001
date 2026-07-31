@@ -412,6 +412,19 @@
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--border-strong) 55%, transparent);
 }
 
+/* Next-step / go-to — ink fill. Beats hover wash so the CTA stays the signal. */
+.mia-control.mia-control--ready,
+.mia-control.mia-control--ready:hover:not(:disabled) {
+  border-color: var(--text);
+  background: var(--text);
+  color: var(--bg);
+}
+
+.mia-control.mia-control--ready:focus-visible {
+  border-color: var(--text);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--text) 28%, transparent);
+}
+
 /* Widget title-bar icons — ink only, never a boxed frame. */
 .widget-shell-icon {
   display: inline-flex;

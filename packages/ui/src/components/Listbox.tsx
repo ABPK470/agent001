@@ -1,6 +1,11 @@
 /**
  * Listbox — minimal, accessible, theme-aware dropdown with filter.
  * Replaces native <select> for a consistent platform feel.
+ *
+ * Open geometry (first principles): position is computed in the same turn as
+ * open=true so the portal never mounts at a null/wrong spot, then refine once
+ * from the measured panel in layout. Focus uses preventScroll so ancestors
+ * do not jump and re-trigger placement.
  */
 
 import { Check, ChevronDown, Search } from "lucide-react"
@@ -61,6 +66,14 @@ export interface ListboxProps<T extends string> {
 const SEARCH_ROW_HEIGHT = 40
 const OPTION_ROW_HEIGHT = 44
 
+type PopPos = {
+  top: number
+  left: number
+  minWidth: number
+  maxWidth: number
+  placement: "below" | "above"
+}
+
 function measurePopoverWidth(
   triggerWidth: number,
   left: number,
@@ -91,6 +104,53 @@ function filterListboxOptions<T extends string>(
   )
 }
 
+function samePopPos(a: PopPos | null, b: PopPos): boolean {
+  return Boolean(
+    a &&
+      a.top === b.top &&
+      a.left === b.left &&
+      a.minWidth === b.minWidth &&
+      a.maxWidth === b.maxWidth &&
+      a.placement === b.placement,
+  )
+}
+
+function placeFromTrigger(
+  btn: HTMLButtonElement,
+  options: ListboxOption<string>[],
+  filteredCount: number,
+  panelEl: HTMLElement | null,
+): PopPos {
+  const r = btn.getBoundingClientRect()
+  const { minWidth, maxWidth } = measurePopoverWidth(r.width, r.left, options)
+  const panelWidth = Math.min(maxWidth, Math.max(minWidth, r.width))
+  const listHeight = Math.min(filteredCount * OPTION_ROW_HEIGHT + 8, 288)
+  const estimatedHeight = SEARCH_ROW_HEIGHT + listHeight
+  const panelHeight = panelEl
+    ? panelEl.getBoundingClientRect().height || estimatedHeight
+    : estimatedHeight
+  const placed = placeAnchoredPanel({
+    trigger: {
+      left: r.left,
+      top: r.top,
+      right: r.right,
+      bottom: r.bottom,
+      width: r.width,
+      height: r.height,
+    },
+    panel: { width: panelWidth, height: panelHeight },
+    align: "start",
+    viewport: { width: window.innerWidth, height: window.innerHeight },
+  })
+  return {
+    top: placed.top,
+    left: placed.left,
+    minWidth,
+    maxWidth,
+    placement: placed.placement,
+  }
+}
+
 export function Listbox<T extends string>({
   value,
   options,
@@ -112,13 +172,7 @@ export function Listbox<T extends string>({
   const btnRef = useRef<HTMLButtonElement>(null)
   const popRef = useRef<HTMLDivElement>(null)
   const searchRef = useRef<HTMLInputElement>(null)
-  const [popPos, setPopPos] = useState<{
-    top: number
-    left: number
-    minWidth: number
-    maxWidth: number
-    placement: "below" | "above"
-  } | null>(null)
+  const [popPos, setPopPos] = useState<PopPos | null>(null)
 
   const matched = options.find((o) => o.value === value) ?? null
   const selected = blankIsPlaceholder && value === "" ? null : matched
@@ -126,46 +180,32 @@ export function Listbox<T extends string>({
   const showIcons = options.some((o) => o.icon != null)
   const filteredOptions = useMemo(() => filterListboxOptions(options, query), [options, query])
 
-  const updatePopPos = useCallback(() => {
+  const applyPopPos = useCallback((next: PopPos) => {
+    setPopPos((prev) => (samePopPos(prev, next) ? prev : next))
+  }, [])
+
+  const reposition = useCallback((panelEl: HTMLElement | null = popRef.current) => {
     const btn = btnRef.current
     if (!btn) return
-    const r = btn.getBoundingClientRect()
-    const { minWidth, maxWidth } = measurePopoverWidth(r.width, r.left, options)
-    const listHeight = Math.min(filteredOptions.length * OPTION_ROW_HEIGHT + 8, 288)
-    const estimatedHeight = SEARCH_ROW_HEIGHT + listHeight
-    const placed = placeAnchoredPanel({
-      trigger: {
-        left: r.left,
-        top: r.top,
-        right: r.right,
-        bottom: r.bottom,
-        width: r.width,
-        height: r.height,
-      },
-      panel: { width: Math.min(maxWidth, Math.max(minWidth, r.width)), height: estimatedHeight },
-      align: "start",
-      viewport: { width: window.innerWidth, height: window.innerHeight },
-    })
-
-    setPopPos({
-      top: placed.top,
-      left: placed.left,
-      minWidth,
-      maxWidth,
-      placement: placed.placement,
-    })
-  }, [filteredOptions.length, options])
+    applyPopPos(placeFromTrigger(btn, options, filteredOptions.length, panelEl))
+  }, [applyPopPos, filteredOptions.length, options])
 
   const closePopover = useCallback((): void => {
     setOpen(false)
+    setPopPos(null)
     setQuery("")
     releasePopoverOpen(instanceId)
   }, [instanceId])
 
   const openPopover = useCallback((): void => {
+    const btn = btnRef.current
+    if (!btn) return
     claimPopoverOpen(instanceId)
+    // Same turn as open — portal paints with a real position (no null flash).
+    setPopPos(placeFromTrigger(btn, options, filterListboxOptions(options, "").length, null))
     setOpen(true)
-  }, [instanceId])
+    setQuery("")
+  }, [instanceId, options])
 
   useEffect(() => registerPopoverInstance(instanceId, closePopover), [instanceId, closePopover])
 
@@ -179,7 +219,7 @@ export function Listbox<T extends string>({
     if (option.disabled) return
     onChange(option.value)
     closePopover()
-    btnRef.current?.focus()
+    btnRef.current?.focus({ preventScroll: true })
   }
 
   // Close after outside click (click, not mousedown — avoids racing option selection in modals).
@@ -194,39 +234,35 @@ export function Listbox<T extends string>({
     return () => document.removeEventListener("click", handle)
   }, [open, closePopover])
 
-  // Position the popup beneath the trigger; keep aligned while scrolling inside modals.
+  // Refine from measured panel once per open / filter change — layout only.
   useLayoutEffect(() => {
-    if (!open) {
-      setPopPos(null)
-      return
-    }
-    updatePopPos()
-    requestAnimationFrame(() => searchRef.current?.focus())
-  }, [open, updatePopPos])
+    if (!open) return
+    reposition(popRef.current)
+    searchRef.current?.focus({ preventScroll: true })
+  }, [open, filteredOptions.length, reposition])
 
   useEffect(() => {
     if (!open) return
-    updatePopPos()
     const idx = filteredOptions.findIndex((o) => o.value === value)
     setActiveIdx(idx >= 0 ? idx : filteredOptions.length > 0 ? 0 : -1)
-  }, [open, query, value, filteredOptions, updatePopPos])
+  }, [open, query, value, filteredOptions])
 
   useEffect(() => {
     if (!open) return
-    const onReposition = () => updatePopPos()
+    const onReposition = () => reposition(popRef.current)
     window.addEventListener("resize", onReposition)
     window.addEventListener("scroll", onReposition, true)
     return () => {
       window.removeEventListener("resize", onReposition)
       window.removeEventListener("scroll", onReposition, true)
     }
-  }, [open, updatePopPos])
+  }, [open, reposition])
 
   function onPopoverKeyDown(e: React.KeyboardEvent): void {
     if (e.key === "Escape") {
       e.preventDefault()
       closePopover()
-      btnRef.current?.focus()
+      btnRef.current?.focus({ preventScroll: true })
       return
     }
     if (filteredOptions.length === 0) return
@@ -292,7 +328,7 @@ export function Listbox<T extends string>({
         </span>
         <ChevronDown
           size={14}
-          className={`text-text-muted shrink-0 transition-transform ${open ? "rotate-180" : ""}`}
+          className={`text-text-muted shrink-0 ${open ? "rotate-180" : ""}`}
         />
       </button>
 

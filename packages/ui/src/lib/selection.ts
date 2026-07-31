@@ -83,8 +83,16 @@ export const CONTROL_GHOST =
   "border border-transparent text-text-muted transition-colors hover:text-text hover:bg-[var(--hover-fill)]"
 
 /**
- * Control pressed / on / dirty / menu-open.
+ * Control pressed / on / menu-open.
  * Keep the frame; fill the bg. No border thickening as the signal.
+ * Dirty-with-nowhere-to-go stays here; the *next* action uses CONTROL_READY.
  */
 export const CONTROL_PRESSED =
   "border border-border text-text font-medium bg-[var(--select-fill)]"
+
+/**
+ * Next-step / go-to control — navigate the eye in a multi-step flow.
+ * Solid ink fill (labeled CTA family). Never SELECT_*; never share a look
+ * with pressed/place. Pair with `.mia-control` via `mia-control--ready`.
+ */
+export const CONTROL_READY = "mia-control--ready"

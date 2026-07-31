@@ -27,7 +27,7 @@ import { EntityEditModal } from "./entity-registry/EntityEditModal"
 import { EntityHistoryModal } from "./entity-registry/EntityHistoryModal"
 import { EntityList } from "./entity-registry/EntityList"
 import { EntityRailHeader } from "./entity-registry/EntityRailHeader"
-import { WIDGET_ENVELOPE } from "./entity-registry/chrome"
+import { ACTION_BTN, WIDGET_ENVELOPE } from "./entity-registry/chrome"
 import { ModalShell } from "./entity-registry/ModalShell"
 import { PublishCatalogModal } from "./entity-registry/PublishCatalogModal"
 import { SyncMetadataModal } from "./entity-registry/SyncMetadataModal"
@@ -227,7 +227,11 @@ export function EntityRegistry(): JSX.Element {
                     type="button"
                     disabled={busy || !publishEnabled}
                     onClick={openPublish}
-                    className="flex w-full items-center justify-center gap-2 rounded-lg border border-border-subtle bg-elevated/40 px-3 py-2 text-sm font-medium text-text hover:bg-elevated disabled:cursor-not-allowed disabled:opacity-40"
+                    className={
+                      publishEnabled
+                        ? `${ACTION_BTN} w-full`
+                        : "flex w-full items-center justify-center gap-2 rounded-lg border border-border-subtle bg-elevated/40 px-3 py-2 text-sm font-medium text-text disabled:cursor-not-allowed disabled:opacity-40"
+                    }
                     title={
                       !publishEnabled
                         ? publishStatus?.operationalCatalogAhead
@@ -244,10 +248,10 @@ export function EntityRegistry(): JSX.Element {
                           : `Publish ${publishPendingCount} entit${publishPendingCount === 1 ? "y" : "ies"}`
                     }
                   >
-                    <Rocket size={14} className="text-accent" />
+                    <Rocket size={14} className={publishEnabled ? undefined : "text-accent"} />
                     <span>Publish</span>
                     {publishEnabled && (
-                      <span className="rounded-md bg-accent/15 px-1.5 py-0.5 font-mono text-xs tabular-nums text-accent">
+                      <span className="rounded-md bg-[var(--bg)]/20 px-1.5 py-0.5 font-mono text-xs tabular-nums">
                         {publishPendingCount > 0 ? publishPendingCount : "!"}
                       </span>
                     )}

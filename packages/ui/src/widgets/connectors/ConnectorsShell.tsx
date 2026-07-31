@@ -35,7 +35,7 @@ import {
   TEXT_BTN_PRIMARY,
   WIDGET_ENVELOPE,
 } from "../entity-registry/chrome"
-import { CONTROL_PRESSED, LIST_ROW_ACTIVE, LIST_ROW_IDLE } from "../../lib/selection"
+import { CONTROL_READY, LIST_ROW_ACTIVE, LIST_ROW_IDLE } from "../../lib/selection"
 import { FormFieldGroup, FormSectionCard } from "../entity-registry/form-section"
 import { ModalShell } from "../entity-registry/ModalShell"
 import { ModalToastStack, useModalToasts } from "../entity-registry/ModalToastStack"
@@ -283,7 +283,7 @@ export function ConnectorsShell(): JSX.Element {
                       kindDisabled
                     }
                     tabIndex={view === "connectors" ? undefined : -1}
-                    className={[ICON_BTN_PRIMARY, isDirty ? CONTROL_PRESSED : ""].filter(Boolean).join(" ")}
+                    className={[ICON_BTN_PRIMARY, isDirty ? CONTROL_READY : ""].filter(Boolean).join(" ")}
                     title={isDirty ? "Save unsaved changes" : "Save"}
                     aria-label="Save"
                   >

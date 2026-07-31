@@ -65,7 +65,7 @@ export function ShippedDriftDiffModal({
       subtitle={`${label} · tip vs shipped sync-metadata.json`}
       icon={<GitCompareArrows size={20} className="text-text-muted" />}
       onClose={onClose}
-      size="detail"
+      size="default"
       stackLevel={stackLevel}
       footer={(
         <button type="button" className={`${ACTION_BTN} w-full`} onClick={onClose}>
@@ -93,14 +93,19 @@ export function ShippedDriftDiffModal({
             <p className="text-sm text-text-muted">
               No matching entry in shipped artifacts — tip-only built-in.
             </p>
-            <CatalogJsonDiff beforeJson={null} afterJson={tipJson} changesOnly className="max-h-[min(28rem,50vh)]" />
+            <CatalogJsonDiff
+              beforeJson={null}
+              afterJson={tipJson}
+              changesOnly
+              className="max-h-[min(48rem,70vh)]"
+            />
           </div>
         ) : (
           <CatalogJsonDiff
             beforeJson={shippedJson}
             afterJson={tipJson}
             changesOnly
-            className="max-h-[min(28rem,50vh)]"
+            className="max-h-[min(48rem,70vh)]"
           />
         )}
       </div>
