@@ -18,8 +18,8 @@
  * step events, so the table does not flash while an agent is working.
  */
 
-import type { ReactNode } from "react"
 import { Activity, CircleDot, Cpu, Play, SlidersHorizontal, Users, Zap } from "lucide-react"
+import type { ReactNode } from "react"
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { api } from "../client/index"
 import { EmptyState } from "../components/EmptyState"
@@ -30,10 +30,16 @@ import {
   FilterSheet,
   type ActiveFilterChipModel,
 } from "../components/FilterSheet"
-import { useContainerSize } from "../hooks/useContainerSize"
 import { ToastStack, useWidgetToasts } from "../components/useWidgetToasts"
+import { useContainerSize } from "../hooks/useContainerSize"
 import { useViewingAs } from "../hooks/useViewingAs"
 import { useStore } from "../state/store"
+import {
+  isActiveRunStepEvent,
+  isHistoryRefreshEvent,
+  isSummaryRefreshEvent,
+  useAdminSseEvents,
+} from "./active-users-sse"
 import { ActiveUsersRunModal, type RunPreview } from "./ActiveUsersRunModal"
 import { WIDGET_ICONS } from "./widget-icons"
 import {
@@ -43,12 +49,6 @@ import {
   WidgetToolbarSearch,
   WidgetToolbarTrailing,
 } from "./widget-toolbar"
-import {
-  isActiveRunStepEvent,
-  isHistoryRefreshEvent,
-  isSummaryRefreshEvent,
-  useAdminSseEvents,
-} from "./active-users-sse"
 
 // ── Types ──────────────────────────────────────────────────────
 
@@ -764,7 +764,7 @@ function ActiveUsersFilterBar({
         <WidgetToolbarTrailing>
           {!tiny && (
             <span className="inline-flex items-center gap-1.5 text-text-muted">
-              <Users size={15} strokeWidth={1.75} aria-hidden />
+              {/* <Users size={15} strokeWidth={1.75} aria-hidden /> */}
               <WidgetToolbarCount
                 filtered={filteredCount}
                 total={totalCount}
