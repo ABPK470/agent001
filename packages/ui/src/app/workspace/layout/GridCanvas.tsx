@@ -2,8 +2,9 @@
  * GridCanvas — absolute tiles on the stage.
  *
  * Stage pad is applied in JS (not CSS padding) so solo maximize can fill the
- * stage edge-to-edge by animating geometry only — container size stays fixed,
- * no ResizeObserver mid-morph, no negative-bleed clipping.
+ * stage edge-to-edge — container size stays fixed, no ResizeObserver mid-morph,
+ * no negative-bleed clipping. Solo toggle snaps tile geometry (no width/height
+ * ease) so expanded Trace/Chat trees are not reflowed for 260ms.
  */
 
 import { memo, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react"
@@ -251,6 +252,29 @@ export function GridCanvas({ viewId, tiles, split }: Props) {
   useEffect(() => {
     if (maxRows > 0) setViewportRows(maxRows)
   }, [maxRows, setViewportRows])
+
+  /** Maximize/restore: snap geometry for two frames (no 260ms W/H thrash). */
+  const soloSnapBootRef = useRef(true)
+  useEffect(() => {
+    if (soloSnapBootRef.current) {
+      soloSnapBootRef.current = false
+      return
+    }
+    const el = containerRef.current
+    if (!el) return
+    el.classList.add("workspace-canvas-geometry-snap")
+    let innerRaf = 0
+    const outerRaf = requestAnimationFrame(() => {
+      innerRaf = requestAnimationFrame(() => {
+        el.classList.remove("workspace-canvas-geometry-snap")
+      })
+    })
+    return () => {
+      cancelAnimationFrame(outerRaf)
+      cancelAnimationFrame(innerRaf)
+      el.classList.remove("workspace-canvas-geometry-snap")
+    }
+  }, [soloTileId])
 
   useEffect(() => {
     for (const tileId of enteringTileIds) {

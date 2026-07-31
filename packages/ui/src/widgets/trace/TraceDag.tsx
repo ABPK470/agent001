@@ -11,12 +11,16 @@
  */
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
+import { useTilePaint } from "../../app/workspace/tile-paint"
 import { VirtualList } from "../../components/VirtualList"
 import { fmtTokens, formatMs } from "../../lib/util"
 import {
   offsetInScrollHost,
   parkScrollOnScope,
 } from "../../lib/chatScroll"
+
+/** Spine overscan — expanded cards are huge; 24 mounted a wall of DOM. */
+export const TRACE_SPINE_OVERSCAN = 6
 import { SegmentToggle } from "../entity-registry/SegmentToggle"
 import {
   WIDGET_LOG_SHELL_CLASS,
@@ -77,6 +81,7 @@ export function TraceDag({
   onExportMessage?: (message: string) => void
   onExportError?: (message: string) => void
 }) {
+  const { soloHidden } = useTilePaint()
   const [search, setSearch] = useState("")
   const [openState, setOpenState] = useState<OpenState>(() => emptyOpen())
   const [pinnedIds, setPinnedIds] = useState<string[]>([])
@@ -84,16 +89,21 @@ export function TraceDag({
   const pinnedIdsRef = useRef<string[]>([])
   const pinLayoutCacheRef = useRef(new Map<string, TraceScopeLayout>())
   const pinRafRef = useRef(0)
+  const pinSizeRef = useRef({ w: 0, h: 0 })
   const seededRef = useRef(false)
   const searchSeedRef = useRef("")
   const suppressFollowRef = useRef(false)
+  const soloHiddenRef = useRef(soloHidden)
+  soloHiddenRef.current = soloHidden
 
   const query = search.trim()
   const { stats } = dag
 
   function refreshPinStack() {
     const el = scrollRef.current
-    if (!el) return
+    if (!el || soloHiddenRef.current) return
+    // Skip mid maximize/restore snap — one pass after geometry settles.
+    if (el.closest(".workspace-canvas-geometry-snap")) return
     // Cache layouts from the virtual window so headers above the viewport still pin.
     const ids = computeTracePinnedScopeIds(el, pinLayoutCacheRef.current)
     const stackH = ids.length * TRACE_STICKY_ROW_H
@@ -110,6 +120,7 @@ export function TraceDag({
 
   /** Coalesce scroll + ResizeObserver into one pin pass per frame (no flicker storms). */
   function schedulePinRefresh() {
+    if (soloHiddenRef.current) return
     if (pinRafRef.current) return
     pinRafRef.current = requestAnimationFrame(() => {
       pinRafRef.current = 0
@@ -205,8 +216,10 @@ export function TraceDag({
     // Never clear the layout cache here: wiping it drops unmounted ancestors
     // above the virtual window, pin-band height flickers, and the whole
     // scrollport jumps as if the outline reloaded.
+    if (soloHidden) return
     schedulePinRefresh()
   }, [
+    soloHidden,
     openState.calls,
     openState.sent,
     openState.received,
@@ -227,10 +240,26 @@ export function TraceDag({
     }
     el.addEventListener("scroll", onScroll, { passive: true })
     const ro = new ResizeObserver(() => {
+      if (soloHiddenRef.current) return
+      const host = scrollRef.current
+      if (!host) return
+      const w = host.clientWidth
+      const h = host.clientHeight
+      // Ignore sub-threshold noise; real maximize/restore is a hard size jump.
+      if (
+        Math.abs(w - pinSizeRef.current.w) < 1 &&
+        Math.abs(h - pinSizeRef.current.h) < 1
+      ) {
+        return
+      }
+      pinSizeRef.current = { w, h }
       schedulePinRefresh()
     })
     ro.observe(el)
-    const raf = requestAnimationFrame(() => refreshPinStack())
+    pinSizeRef.current = { w: el.clientWidth, h: el.clientHeight }
+    const raf = requestAnimationFrame(() => {
+      if (!soloHiddenRef.current) refreshPinStack()
+    })
     return () => {
       el.removeEventListener("scroll", onScroll)
       ro.disconnect()
@@ -239,6 +268,12 @@ export function TraceDag({
       pinRafRef.current = 0
     }
   }, [dag.calls.length, dag.spine.length])
+
+  // After solo-hide ends (or maximize snap clears), one pin pass.
+  useEffect(() => {
+    if (soloHidden) return
+    schedulePinRefresh()
+  }, [soloHidden])
 
   useEffect(() => {
     const el = scrollRef.current
@@ -1055,7 +1090,7 @@ export function TraceDag({
                     scrollRef={scrollRef}
                     estimateSize={estimateSpineSize}
                     getItemKey={spineItemKey}
-                    overscan={24}
+                    overscan={TRACE_SPINE_OVERSCAN}
                     adjustScrollOnResize={false}
                     renderItem={renderSpineItem}
                   />

@@ -1,0 +1,66 @@
+/**
+ * Maximize/restore performance contracts — snap geometry, cheap solo-hide,
+ * Trace overscan. Expanded Trace lag was 260ms W/H ease + measure storms.
+ */
+
+import { readFileSync } from "node:fs"
+import { dirname, join } from "node:path"
+import { fileURLToPath } from "node:url"
+import { describe, expect, it } from "vitest"
+import { TRACE_SPINE_OVERSCAN } from "../../../widgets/trace/TraceDag.js"
+
+const here = dirname(fileURLToPath(import.meta.url))
+
+describe("maximize / restore geometry snap", () => {
+  const css = readFileSync(join(here, "../../../boot/index.css"), "utf8")
+  const canvas = readFileSync(join(here, "GridCanvas.tsx"), "utf8")
+
+  it("GridCanvas adds workspace-canvas-geometry-snap on soloTileId change", () => {
+    expect(canvas).toContain("workspace-canvas-geometry-snap")
+    expect(canvas).toContain("[soloTileId]")
+    expect(canvas).toMatch(/classList\.add\(\s*"workspace-canvas-geometry-snap"\s*\)/)
+    expect(canvas).toMatch(/requestAnimationFrame[\s\S]*requestAnimationFrame/)
+  })
+
+  it("CSS disables tile transitions under geometry-snap and solo", () => {
+    expect(css).toMatch(
+      /\.workspace-canvas-geometry-snap\s+\.workspace-tile\s*\{[^}]*transition:\s*none\s*!important/s,
+    )
+    expect(css).toMatch(/\.workspace-tile-solo\s*\{[^}]*transition:\s*none/s)
+  })
+
+  it("solo-hidden uses content-visibility (not visibility hammer on *)", () => {
+    expect(css).toMatch(
+      /\.workspace-tile-solo-hidden\s*\{[^}]*content-visibility:\s*hidden/s,
+    )
+    expect(css).toMatch(/\.workspace-tile-solo-hidden\s*\{[^}]*contain:\s*strict/s)
+    expect(css).not.toMatch(
+      /\.workspace-tile-solo-hidden\s*,\s*\n?\s*\.workspace-tile-solo-hidden\s+\*\s*\{[^}]*visibility:\s*hidden/s,
+    )
+  })
+})
+
+describe("Trace maximize calm", () => {
+  const dag = readFileSync(join(here, "../../../widgets/trace/TraceDag.tsx"), "utf8")
+  const inspector = readFileSync(join(here, "../../../widgets/DebugInspector.tsx"), "utf8")
+
+  it("spine overscan stays small for expanded cards", () => {
+    expect(TRACE_SPINE_OVERSCAN).toBe(6)
+    expect(dag).toContain("overscan={TRACE_SPINE_OVERSCAN}")
+    expect(dag).not.toMatch(/overscan=\{24\}/)
+  })
+
+  it("pin resize skips unchanged size and solo-hidden / geometry-snap", () => {
+    expect(dag).toContain("pinSizeRef")
+    expect(dag).toContain("soloHiddenRef")
+    expect(dag).toContain("workspace-canvas-geometry-snap")
+    expect(dag).toContain("useTilePaint")
+  })
+
+  it("DebugInspector freezes DAG rebuild while solo-hidden", () => {
+    expect(inspector).toContain("useTilePaint")
+    expect(inspector).toContain("soloHidden")
+    expect(inspector).toContain("frozenDagRef")
+    expect(inspector).toMatch(/if\s*\(\s*soloHidden\s*&&\s*frozenDagRef\.current\s*\)/)
+  })
+})

@@ -2,15 +2,17 @@
  * Trace widget shell — store → hybrid DAG view.
  */
 
-import { useMemo } from "react"
+import { useMemo, useRef } from "react"
+import { useTilePaint } from "../app/workspace/tile-paint"
 import { EmptyState } from "../components/EmptyState"
 import { ToastStack, useWidgetToasts } from "../components/useWidgetToasts"
 import { useStore } from "../state/store"
 import { WIDGET_ICONS } from "./widget-icons"
-import { buildTraceDag } from "./trace/build-trace-dag"
+import { buildTraceDag, type TraceDag as TraceDagModel } from "./trace/build-trace-dag"
 import { TraceDag } from "./trace/TraceDag"
 
 export function DebugInspector() {
+  const { soloHidden } = useTilePaint()
   const trace = useStore((s) => s.trace)
   const activeRunId = useStore((s) => s.activeRunId)
   const activeThreadId = useStore((s) => {
@@ -19,7 +21,14 @@ export function DebugInspector() {
   })
   const { toasts, dismissToast, notify, notifyError } = useWidgetToasts()
 
-  const dag = useMemo(() => buildTraceDag(trace), [trace])
+  // Solo-hidden: keep last DAG — do not rebuild while covered by maximize.
+  const frozenDagRef = useRef<TraceDagModel | null>(null)
+  const dag = useMemo(() => {
+    if (soloHidden && frozenDagRef.current) return frozenDagRef.current
+    const next = buildTraceDag(trace)
+    frozenDagRef.current = next
+    return next
+  }, [trace, soloHidden])
 
   let emptySlot = null
   if (!activeRunId) {

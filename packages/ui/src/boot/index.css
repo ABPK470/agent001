@@ -4615,11 +4615,19 @@ textarea.input {
   will-change: left, top, width, height;
 }
 
+/*
+ * Maximize/restore snaps tile geometry (GridCanvas adds this for two frames).
+ * Animating width/height across expanded Trace/Chat DOM is main-thread thrash.
+ */
+.workspace-canvas-geometry-snap .workspace-tile {
+  transition: none !important;
+}
+
 /* Solo maximize: one tile overlays the canvas; siblings stay mounted. */
 .workspace-tile-solo {
   z-index: 40;
-  /* Inherit left/top/width/height ease from .workspace-tile (same as restore).
-     Instant fill was only needed when maximize remounted cold widgets. */
+  /* Never ease solo geometry — window resize must stay one-shot too. */
+  transition: none;
 }
 
 /* Solo keeps the product surface — only the card frame goes away. */
@@ -4630,19 +4638,15 @@ textarea.input {
 }
 
 /*
- * Solo-hidden siblings stay mounted (no remount lag) but must not paint.
- * TermChat forces visibility:visible on empty-state nodes — those escape a
- * parent visibility:hidden, so pin the whole subtree.
+ * Solo-hidden siblings stay mounted (no remount lag) but skip paint/layout.
+ * content-visibility beats visibility:hidden on * (TermChat forced visible escapes).
  */
 .workspace-tile-solo-hidden {
   pointer-events: none;
   z-index: 0;
-  transition: none;
-}
-
-.workspace-tile-solo-hidden,
-.workspace-tile-solo-hidden * {
-  visibility: hidden !important;
+  transition: none !important;
+  content-visibility: hidden;
+  contain: strict;
 }
 
 @media (prefers-reduced-motion: reduce) {

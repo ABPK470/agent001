@@ -5,7 +5,7 @@
 import { createContext, useContext, type ReactNode } from "react"
 
 export interface TilePaintValue {
-  /** Sibling under maximize — keep streams warm; freeze list projections. */
+  /** Sibling under maximize — keep streams warm; freeze Trace / list projections. */
   soloHidden: boolean
 }
 
