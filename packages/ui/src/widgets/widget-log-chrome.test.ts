@@ -87,7 +87,29 @@ describe("widget log chrome — control height & search", () => {
       /\.widget-toolbar__icon-btn\s*\{[^}]*height:\s*var\(--wt-control-h\)/s,
     )
     expect(css).toMatch(
+      /\.widget-toolbar__icon-btn\s*\{[^}]*border:\s*1px solid var\(--border\)/s,
+    )
+    expect(css).toMatch(
       /\.widget-toolbar__chip\s*\{[^}]*height:\s*var\(--wt-control-h\)/s,
+    )
+  })
+
+  it("Sync search / mode-toggle share CONTROL frame with Event Stream search", () => {
+    const css = read(cssPath)
+    expect(css).toMatch(
+      /\.env-sync-toolbar \.env-sync-search-input\s*\{[^}]*border:\s*1px solid var\(--border\)/s,
+    )
+    expect(css).toMatch(
+      /\.env-sync-toolbar \.env-sync-search-input\s*\{[^}]*background:\s*transparent/s,
+    )
+    expect(css).toMatch(
+      /\.env-sync-toolbar \.env-sync-mode-toggle\s*\{[^}]*border:\s*1px solid var\(--border\)/s,
+    )
+    expect(css).toMatch(
+      /\.env-sync-toolbar \.env-sync-mode-toggle\s*\{[^}]*background:\s*transparent/s,
+    )
+    expect(css).not.toMatch(
+      /\.env-sync-toolbar \.env-sync-search-input\s*\{[^}]*background:\s*var\(--color-base\)/s,
     )
   })
 
@@ -192,6 +214,10 @@ describe("widget log chrome — control height & search", () => {
     expect(live).toContain("widget-toolbar__icon-badge")
     expect(live).not.toContain("widget-toolbar__icon-badge--pending")
     expect(live).not.toMatch(/-top-1\.5|-right-1\.5/)
+    const opsToolbar = read(opsToolbarPath)
+    expect(opsToolbar).toContain("widget-toolbar__icon-badge")
+    expect(opsToolbar).not.toMatch(/bg-text.*text-text-on-accent|text-text-on-accent.*bg-text/)
+    expect(opsToolbar).not.toMatch(/-top-0\.5|-right-0\.5/)
   })
 
   it("search is first to yield; narrow toolbar stacks so trailing cannot overlap", () => {
@@ -313,20 +339,23 @@ describe("widget log chrome — curved nest geometry", () => {
 })
 
 describe("widget log chrome — Trace meta & scope payload", () => {
-  it("meta band is one type flow; id middots stay glued (no orphan ·)", () => {
+  it("meta band spaces stats — numbers weighty, no middot soup", () => {
     const css = read(cssPath)
     const dag = read(traceDagPath)
 
-    expect(css).toContain(".widget-review-meta__id-group")
+    expect(css).toMatch(/\.widget-review-meta\s*\{[^}]*display:\s*flex/s)
+    expect(css).toMatch(/\.widget-review-meta\s*\{[^}]*gap:/s)
+    expect(css).toContain(".widget-review-meta__stat-value")
     expect(css).toMatch(
-      /\.widget-review-meta__id-group\s*\{[^}]*white-space:\s*nowrap/s,
+      /\.widget-review-meta__stat-value\s*\{[^}]*font-weight:\s*600/s,
     )
-    expect(css).not.toContain(".widget-review-meta__sep")
+    expect(css).toContain(".widget-review-meta__id-group")
 
-    expect(dag).toContain("widget-review-meta")
-    expect(dag).toContain("widget-review-meta__id-group")
+    expect(dag).toContain("widget-review-meta__stat")
+    expect(dag).toContain("widget-review-meta__stat-value")
     expect(dag).toContain('tone="meta"')
-    expect(dag).not.toContain("widget-review-meta__sep")
+    expect(dag).not.toMatch(/metaParts\.join\(" · "\)/)
+    expect(dag).not.toMatch(/widget-review-meta[\s\S]{0,400}" · "/)
   })
 
   it("Trace seams earn their keep — no striped chrome / open-header rules", () => {

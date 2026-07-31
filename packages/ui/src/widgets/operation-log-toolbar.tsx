@@ -119,7 +119,7 @@ export function OperationLogToolbar({
             ref={filterBtnRef}
             type="button"
             onClick={() => setFiltersOpen((o) => !o)}
-            className={`widget-toolbar__icon-btn relative ${
+            className={`widget-toolbar__icon-btn ${
               filtersOpen || filtersActive ? "widget-toolbar__icon-btn--active" : ""
             }`}
             title={
@@ -131,7 +131,7 @@ export function OperationLogToolbar({
           >
             <SlidersHorizontal size={14} strokeWidth={1.75} />
             {filtersActive && (
-              <span className="absolute -top-0.5 -right-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-text px-0.5 text-[9px] font-mono font-medium leading-none text-text-on-accent">
+              <span className="widget-toolbar__icon-badge" aria-hidden>
                 {activeFilterCount > 9 ? "9+" : activeFilterCount}
               </span>
             )}

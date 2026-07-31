@@ -896,15 +896,34 @@ export function TraceDag({
       ? `${callHits?.size ?? 0} of ${dag.calls.length} calls`
       : null
 
-  const metaParts: string[] = []
-  if (stats.callCount > 0) metaParts.push(`${stats.callCount} call${stats.callCount === 1 ? "" : "s"}`)
-  if (stats.toolRunCount > 0) metaParts.push(`${stats.toolRunCount} tool${stats.toolRunCount === 1 ? "" : "s"}`)
-  if (stats.phaseCount > 0) metaParts.push(`${stats.phaseCount} phase${stats.phaseCount === 1 ? "" : "s"}`)
-  if (stats.totalDuration > 0) metaParts.push(formatMs(stats.totalDuration))
-  if (stats.promptTokens > 0 || stats.completionTokens > 0) {
-    metaParts.push(`${fmtTokens(stats.promptTokens)} in · ${fmtTokens(stats.completionTokens)} out`)
+  type MetaStat = { value: string; label?: string }
+  const metaStats: MetaStat[] = []
+  if (stats.callCount > 0) {
+    metaStats.push({
+      value: String(stats.callCount),
+      label: stats.callCount === 1 ? "call" : "calls",
+    })
   }
-  const showMetaBand = metaParts.length > 0 || Boolean(runId || threadId)
+  if (stats.toolRunCount > 0) {
+    metaStats.push({
+      value: String(stats.toolRunCount),
+      label: stats.toolRunCount === 1 ? "tool" : "tools",
+    })
+  }
+  if (stats.phaseCount > 0) {
+    metaStats.push({
+      value: String(stats.phaseCount),
+      label: stats.phaseCount === 1 ? "phase" : "phases",
+    })
+  }
+  if (stats.totalDuration > 0) {
+    metaStats.push({ value: formatMs(stats.totalDuration) })
+  }
+  if (stats.promptTokens > 0 || stats.completionTokens > 0) {
+    metaStats.push({ value: fmtTokens(stats.promptTokens), label: "in" })
+    metaStats.push({ value: fmtTokens(stats.completionTokens), label: "out" })
+  }
+  const showMetaBand = metaStats.length > 0 || Boolean(runId || threadId)
 
   return (
     <div className={`trace-dag ${WIDGET_LOG_SHELL_CLASS}`}>
@@ -948,20 +967,25 @@ export function TraceDag({
 
       {showMetaBand && (
         <div className="widget-review-meta">
-          {metaParts.length === 0 ? (
-            <span>No agent loop yet</span>
+          {metaStats.length === 0 ? (
+            <span className="widget-review-meta__empty">No agent loop yet</span>
           ) : (
-            <span>{metaParts.join(" · ")}</span>
+            metaStats.map((stat) => (
+              <span key={`${stat.value}:${stat.label ?? ""}`} className="widget-review-meta__stat">
+                <span className="widget-review-meta__stat-value">{stat.value}</span>
+                {stat.label ? (
+                  <span className="widget-review-meta__stat-label">{stat.label}</span>
+                ) : null}
+              </span>
+            ))
           )}
           {runId ? (
             <span className="widget-review-meta__id-group">
-              {metaParts.length > 0 ? " · " : null}
               <IdChip label="run" value={runId} tone="meta" />
             </span>
           ) : null}
           {threadId ? (
             <span className="widget-review-meta__id-group">
-              {metaParts.length > 0 || runId ? " · " : null}
               <IdChip label="thread" value={threadId} tone="meta" />
             </span>
           ) : null}

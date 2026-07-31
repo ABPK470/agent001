@@ -679,7 +679,7 @@ export function EnvSync() {
                     ].join(" ")}
                   />
                   {searchOpen && searchResults.length > 0 && (
-                    <div className="absolute top-full left-0 mt-1 w-full max-w-[24rem] max-h-[min(280px,50vh)] overflow-y-auto bg-elevated border border-border rounded shadow-lg z-[100]">
+                    <div className="listbox-popover absolute top-full left-0 mt-1 w-full max-w-[24rem] max-h-[min(280px,50vh)] overflow-y-auto rounded-md z-[100]">
                       {searchResults.map((hit) => (
                         <button
                           key={String(hit.id)}
@@ -688,7 +688,7 @@ export function EnvSync() {
                             e.preventDefault()
                             pickSearchHit(hit)
                           }}
-                          className="w-full text-left px-3 py-1.5 text-sm rounded-[var(--list-row-radius)] transition-colors hover:bg-[var(--hover-fill)] flex items-center gap-3"
+                          className="listbox-popover__option w-full text-left px-3 py-1.5 text-sm rounded-[var(--list-row-radius)] transition-colors hover:bg-[var(--hover-fill)] flex items-center gap-3"
                         >
                           <span className="text-text-muted font-mono text-sm shrink-0">{String(hit.id)}</span>
                           <span className="truncate">{hit.name ?? "—"}</span>
@@ -697,7 +697,7 @@ export function EnvSync() {
                     </div>
                   )}
                   {!searchOpen && !searchLoading && searchErr && (
-                    <div className="absolute top-full left-0 mt-1 w-64 bg-elevated border border-border rounded shadow-lg z-[100] px-3 py-2 text-xs text-text-muted">
+                    <div className="listbox-popover absolute top-full left-0 mt-1 w-64 rounded-md z-[100] px-3 py-2 text-xs text-text-muted">
                       {searchErr}
                     </div>
                   )}
@@ -744,25 +744,25 @@ export function EnvSync() {
               <IconButton
                 className="env-sync-control-btn"
                 label="Definition"
-                variant="group"
                 active={modal === "definition"}
                 onClick={() => setModal("definition")}
               >
                 <BookOpen {...TOOLBAR_ICON} />
               </IconButton>
-              <span className="env-sync-toolbar-icon-sep" aria-hidden />
-              <div className="relative h-full shrink-0">
+              <div className="relative shrink-0">
                 <IconButton
                   className="env-sync-control-btn"
                   label="History"
-                  variant="group"
                   active={modal === "history"}
                   onClick={() => { setModal("history"); setHasNewAgentSync(false) }}
                 >
                   <History {...TOOLBAR_ICON} />
                 </IconButton>
                 {hasNewAgentSync && (
-                  <span className="pointer-events-none absolute top-1 right-1 h-2 w-2 rounded-full bg-accent" />
+                  <span
+                    className="pointer-events-none absolute top-0 right-0 h-2 w-2 translate-x-1/4 -translate-y-1/4 rounded-full bg-[var(--text)]"
+                    aria-hidden
+                  />
                 )}
               </div>
             </div>
@@ -795,7 +795,7 @@ export function EnvSync() {
 
             {hasPlan && !execActive ? (
               <IconButton
-                className="env-sync-control-btn shadow-[0_0_0_2px_var(--color-accent)]/20 ring-1 ring-accent/40"
+                className="env-sync-control-btn"
                 label={
                   searchLoading ? "Search in progress…"
                     : expired ? "Plan expired — re-preview"

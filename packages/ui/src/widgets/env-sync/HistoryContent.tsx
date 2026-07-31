@@ -566,7 +566,7 @@ function HistorySearchBar({
           ref={filterBtnRef}
           type="button"
           onClick={onToggleFilters}
-          className={`widget-toolbar__icon-btn relative ${
+          className={`widget-toolbar__icon-btn ${
             filtersOpen || activeFilterCount > 0 ? "widget-toolbar__icon-btn--active" : ""
           }`}
           title={
@@ -578,8 +578,8 @@ function HistorySearchBar({
         >
           <SlidersHorizontal size={14} />
           {activeFilterCount > 0 && (
-            <span className="absolute -top-0.5 -right-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-accent px-0.5 text-[9px] font-mono font-medium leading-none text-text-on-accent">
-              {activeFilterCount}
+            <span className="widget-toolbar__icon-badge" aria-hidden>
+              {activeFilterCount > 9 ? "9+" : activeFilterCount}
             </span>
           )}
         </button>
