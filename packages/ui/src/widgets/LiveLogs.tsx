@@ -354,7 +354,7 @@ export function LiveLogs() {
             ref={filterBtnRef}
             type="button"
             onClick={() => setFiltersOpen((o) => !o)}
-            className={`widget-toolbar__icon-btn relative ${
+            className={`widget-toolbar__icon-btn ${
               filtersOpen || filtersActive ? "widget-toolbar__icon-btn--active" : ""
             }`}
             title={
@@ -366,7 +366,7 @@ export function LiveLogs() {
           >
             <SlidersHorizontal size={14} strokeWidth={1.75} />
             {filtersActive && (
-              <span className="absolute -top-0.5 -right-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-text px-0.5 text-[9px] font-mono font-medium leading-none text-text-on-accent">
+              <span className="widget-toolbar__icon-badge" aria-hidden>
                 {activeFilterCount > 9 ? "9+" : activeFilterCount}
               </span>
             )}
@@ -374,7 +374,7 @@ export function LiveLogs() {
           <button
             type="button"
             title={paused ? `Resume (${pendingLiveCount} buffered)` : "Pause live append"}
-            className={`widget-toolbar__icon-btn relative ${
+            className={`widget-toolbar__icon-btn ${
               paused ? "text-error" : ""
             }`}
             aria-pressed={paused}
@@ -382,7 +382,7 @@ export function LiveLogs() {
           >
             {paused ? <Play size={15} /> : <Pause size={15} />}
             {paused && pendingLiveCount > 0 && (
-              <span className="absolute -top-1.5 -right-1.5 text-xs font-bold bg-error-soft text-error border border-error/35 rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-0.5">
+              <span className="widget-toolbar__icon-badge widget-toolbar__icon-badge--pending" aria-hidden>
                 {pendingLiveCount > 99 ? "99+" : pendingLiveCount}
               </span>
             )}

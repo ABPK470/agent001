@@ -108,6 +108,21 @@ describe("widget log chrome — control height & search", () => {
     expect(selection).toContain("h-[var(--control-h)]")
   })
 
+  it("toolbar icon badges are readable and trailing pad absorbs corner hang", () => {
+    const css = read(cssPath)
+    const live = read(livePath)
+
+    expect(css).toContain(".widget-toolbar__icon-badge")
+    expect(css).toMatch(
+      /\.widget-toolbar__icon-badge\s*\{[^}]*min-width:\s*1\.125rem[^}]*font-size:\s*0\.6875rem/s,
+    )
+    expect(css).toMatch(
+      /\.widget-toolbar__trailing\s*\{[^}]*padding-right:\s*0\.4rem/s,
+    )
+    expect(live).toContain("widget-toolbar__icon-badge--pending")
+    expect(live).not.toMatch(/-top-1\.5|-right-1\.5/)
+  })
+
   it("search is first to yield; narrow toolbar stacks so trailing cannot overlap", () => {
     const css = read(cssPath)
     expect(css).toContain("container-name: widget-toolbar")
@@ -241,6 +256,26 @@ describe("widget log chrome — Trace meta & scope payload", () => {
     expect(dag).toContain("widget-review-meta__id-group")
     expect(dag).toContain('tone="meta"')
     expect(dag).not.toContain("widget-review-meta__sep")
+  })
+
+  it("Trace seams earn their keep — no striped chrome / open-header rules", () => {
+    const css = read(cssPath)
+    // Meta: space, not a second full rule after the toolbar.
+    expect(css).toMatch(
+      /\.widget-review-meta\s*\{[^}]*border-bottom:\s*none/s,
+    )
+    // Open outline header: elbows own descent (no under-line).
+    expect(css).toMatch(
+      /\.trace-card\.is-open\s*>\s*\.trace-scope\s*\{[^}]*border-bottom:\s*none/s,
+    )
+    // Collapsed peers keep a quiet hairline for scanability.
+    expect(css).toMatch(
+      /\.trace-card:not\(\.is-open\)\s*>\s*\.trace-scope\s*\{[^}]*border-bottom:\s*1px solid/s,
+    )
+    // Toolbar still closes the control band.
+    expect(css).toMatch(
+      /\.widget-toolbar\s*\{[^}]*border-bottom:\s*1px solid/s,
+    )
   })
 
   it("Prompt / Received / phase sections use trace-scope-payload (label column, not peer gutter)", () => {

@@ -245,9 +245,12 @@ Prose under a soft scope (Prompt / reply) uses `.trace-scope-payload` (label
 column) — never the nested-peer gutter. Direct `ReviewTreeItem` children
 only; bare siblings / sibling nests break the stem. Nest flush with the
 parent row — stem under `.review-chevron-slot` / `--review-tree-x` (never a
-second `pl-*` before the tree). One meta size (`--review-meta-size`), one
-chevron (13px, rotate-90), one control height (`--control-h` for search /
-segments / icon buttons), one JSON/payload surface. Pipelines has no toolbar
+second `pl-*` before the tree). Seams earn their keep: toolbar closes
+controls; meta uses space (no second chrome rule); open outline headers
+drop under-lines (elbows own descent); collapsed peers keep a quiet
+hairline. One meta size (`--review-meta-size`), one chevron (13px,
+rotate-90), one control height (`--control-h` for search / segments / icon
+buttons), one JSON/payload surface. Pipelines has no toolbar
 expand/collapse — row chevrons own that. Trace sticky pin stays.
 
 | Layer | Owns | Must not |
