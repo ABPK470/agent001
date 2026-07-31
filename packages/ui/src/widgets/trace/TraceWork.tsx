@@ -46,20 +46,21 @@ export function WorkOutline({
       />
       {open && expandable && (
         <div className="trace-card__body">
-          <div className="trace-scope-body">
+          <div className="trace-branch review-tree">
             {work.tools.map((tool) => (
-              <ToolRow
-                key={tool.id}
-                tool={tool}
-                open={openState.tools.has(tool.id)}
-                onToggle={() => onToggleTool(tool.id)}
-              />
+              <div key={tool.id} className="review-tree__item">
+                <ToolRow
+                  tool={tool}
+                  open={openState.tools.has(tool.id)}
+                  onToggle={() => onToggleTool(tool.id)}
+                />
+              </div>
             ))}
             {work.sqlQuality.length > 0 && (
-              <div className="trace-sql-block">
-                <div className="trace-next__label is-sql">
+              <div className="review-tree__item">
+                <div className="trace-branch__caption is-sql">
                   SQL check
-                  <span className="trace-next__hint">validation · not in the prompt</span>
+                  <span className="trace-branch__caption-hint">validation · not in the prompt</span>
                 </div>
                 {work.sqlQuality.map((entry, i) => (
                   <SqlQualityRow key={`${entry.toolCallId}-${i}`} entry={entry} />
@@ -69,7 +70,7 @@ export function WorkOutline({
             {work.notes.map((note) => (
               <div
                 key={note.id}
-                className={`trace-work-note${note.tone === "error" ? " is-error" : ""}`}
+                className={`review-tree__item trace-work-note${note.tone === "error" ? " is-error" : ""}`}
               >
                 <div className="trace-work-note__label">{note.label}</div>
                 <ExpandableText text={note.text} className="trace-body-muted" />

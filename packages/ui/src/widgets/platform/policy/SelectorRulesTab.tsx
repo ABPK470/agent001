@@ -846,8 +846,8 @@ function Section({
   return (
     <div>
       <div className="flex items-baseline gap-2.5 mb-2 flex-wrap">
-        <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-accent/15 text-accent text-xs font-semibold shrink-0">
-          {number}
+        <span className="review-meta shrink-0 tabular-nums font-medium text-text-muted">
+          {number}.
         </span>
         <h4 className="text-base font-semibold text-text">{label}</h4>
         {hint && <span className="text-sm text-text-muted">— {hint}</span>}

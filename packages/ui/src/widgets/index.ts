@@ -5,7 +5,6 @@
 import type { ComponentType } from "react"
 import type { WidgetType } from "../types"
 import { ActiveUsers } from "./ActiveUsers"
-import { AgentChat } from "./AgentChat"
 import { Bridge } from "./bridge/Bridge"
 import { DebugInspector } from "./DebugInspector"
 import { EntityRegistry } from "./EntityRegistry"
@@ -13,9 +12,7 @@ import { EnvSync } from "./EnvSync"
 import { LiveLogs } from "./LiveLogs"
 import { MymiDb } from "./MymiDb"
 import { OperationLog } from "./OperationLog"
-import { RunHistory } from "./RunHistory"
 import { RunStatus } from "./RunStatus"
-import { StepTimeline } from "./StepTimeline"
 import { SyncAdmin } from "./SyncAdmin"
 import { SyncApprovals } from "./SyncApprovals"
 import { SyncEvidence } from "./SyncEvidence"
@@ -25,12 +22,9 @@ import { ThreadNav } from "./ThreadNav"
 
 export const widgetRegistry: Record<WidgetType, ComponentType> = {
   "thread-nav": ThreadNav,
-  "agent-chat": AgentChat,
   "term-chat": TermChat,
   "run-status": RunStatus,
   "live-logs": LiveLogs,
-  "step-timeline": StepTimeline,
-  "run-history": RunHistory,
   "debug-inspector": DebugInspector,
   "mymi-db": MymiDb,
   "active-users": ActiveUsers,
@@ -39,7 +33,7 @@ export const widgetRegistry: Record<WidgetType, ComponentType> = {
   "entity-registry": EntityRegistry,
   "sync-proposals": SyncProposals,
   "sync-approvals": SyncApprovals,
-  "sync-evidence":  SyncEvidence,
-  "sync-admin":     SyncAdmin,
+  "sync-evidence": SyncEvidence,
+  "sync-admin": SyncAdmin,
   "bridge": Bridge,
 }

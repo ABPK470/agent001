@@ -193,7 +193,7 @@ describe("split-tree", () => {
         kind: "split",
         dir: "h",
         ratio: 0.4,
-        a: leafNode("run-history"),
+        a: leafNode("live-logs"),
         b: leafNode("chat"),
       },
     }
@@ -201,13 +201,13 @@ describe("split-tree", () => {
     const before = layoutLeaves(tree, canvasBounds(COLS, rows))
     const threadsBefore = before.find((l) => l.tileId === "threads")!.rect
     const chatBefore = before.find((l) => l.tileId === "chat")!.rect
-    const runBefore = before.find((l) => l.tileId === "run-history")!.rect
+    const runBefore = before.find((l) => l.tileId === "live-logs")!.rect
 
     const swapped = swapLeaves(tree, "chat", "threads")!
     const after = layoutLeaves(swapped, canvasBounds(COLS, rows))
     const threadsAfter = after.find((l) => l.tileId === "threads")!.rect
     const chatAfter = after.find((l) => l.tileId === "chat")!.rect
-    const runAfter = after.find((l) => l.tileId === "run-history")!.rect
+    const runAfter = after.find((l) => l.tileId === "live-logs")!.rect
 
     expect(chatAfter).toEqual(threadsBefore)
     expect(threadsAfter).toEqual(chatBefore)
@@ -225,20 +225,20 @@ describe("split-tree", () => {
         kind: "split",
         dir: "h",
         ratio: 0.4,
-        a: leafNode("run-history"),
+        a: leafNode("live-logs"),
         b: leafNode("chat"),
       },
     }
     const rows = 12
     const before = layoutLeaves(tree, canvasBounds(COLS, rows))
     const threadsBefore = before.find((l) => l.tileId === "threads")!.rect
-    const runBefore = before.find((l) => l.tileId === "run-history")!.rect
+    const runBefore = before.find((l) => l.tileId === "live-logs")!.rect
 
     const docked = reparentLeaf(tree, "chat", "threads", "w")!
     const after = layoutLeaves(docked, canvasBounds(COLS, rows))
     const chat = after.find((l) => l.tileId === "chat")!.rect
     const threads = after.find((l) => l.tileId === "threads")!.rect
-    const run = after.find((l) => l.tileId === "run-history")!.rect
+    const run = after.find((l) => l.tileId === "live-logs")!.rect
 
     // Chat and Threads share the former Threads column; Run History takes full right height.
     expect(chat.y).toBe(0)

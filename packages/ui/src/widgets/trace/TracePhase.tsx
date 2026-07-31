@@ -8,7 +8,7 @@
  *   Children → Call / Work nested under a step (subagent body)
  */
 
-import { useRef, useState, type ReactNode } from "react"
+import { Children, useRef, useState, type ReactNode } from "react"
 import { JsonViewer } from "../../components/JsonViewer"
 import { preserveScrollAnchor } from "../../lib/chatScroll"
 import { ScopeRow } from "./TraceScope"
@@ -164,7 +164,13 @@ export function PhaseOutline({
               <PhaseJson blocks={json} />
             </div>
           )}
-          {hasNested && <div className="trace-phase-nested">{nested}</div>}
+          {hasNested && (
+            <div className="trace-phase-nested review-tree">
+              {Children.map(nested, (child) =>
+                child ? <div className="review-tree__item">{child}</div> : null,
+              )}
+            </div>
+          )}
         </div>
       )}
     </article>

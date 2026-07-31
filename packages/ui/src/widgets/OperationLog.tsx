@@ -9,11 +9,11 @@ import { Brain, ChevronRight, Database, GitCompareArrows, Loader2, Settings, Shu
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react"
 import type { OperationActivity, OperationEvent, OperationPipeline } from "../client/index"
 import { api, OperationKind, OperationStatus } from "../client/index"
-import { CodeBlock } from "../components/CodeBlock"
 import { VirtualList } from "../components/VirtualList"
 import { DecisionLogPanel, isSyncDecisionLogDetails } from "./pipelines/DecisionLogPanel"
 import { EmptyState } from "../components/EmptyState"
 import { JsonViewer } from "../components/JsonViewer"
+import { ReviewTreeItem } from "../components/ReviewTree"
 import { ToolIoBlock } from "./chat/ToolCallModal"
 import { useContainerSize } from "../hooks/useContainerSize"
 import { useOperationLogData, type OperationLogKindView } from "../hooks/useOperationLogData"
@@ -55,7 +55,10 @@ import {
   readToolIoFromEvent,
   stripToolIoForInlineDisplay,
 } from "./chat/tool-call-io"
-import { OperationLogToolbar } from "./operation-log-toolbar"
+import {
+  OperationLogToolbar,
+  type PipelineKindFilter,
+} from "./operation-log-toolbar"
 
 // ── Visuals ──────────────────────────────────────────────────────
 
@@ -128,21 +131,6 @@ function isDuplicatePipelineMessage(pipelineError: string | undefined, text: str
 }
 
 // ── Helpers ──────────────────────────────────────────────────────
-
-const JSON_DISPLAY_MAX_CHARS = 48_000
-
-function safeJsonForDisplay(value: unknown, maxChars = JSON_DISPLAY_MAX_CHARS): string {
-  try {
-    const text = JSON.stringify(value, null, 2)
-    if (text.length <= maxChars) return text
-    const omitted = text.length - maxChars
-    return `${text.slice(0, maxChars)}\n\n/* … ${omitted.toLocaleString()} more chars */`
-  } catch {
-    return "[could not serialize result data]"
-  }
-}
-
-// ── Component ────────────────────────────────────────────────────
 
 function dayLabel(iso: string): string {
   const d = new Date(iso)
@@ -343,8 +331,41 @@ function formatEventLabel(ev: OperationEvent): string {
   return ev.type
 }
 
+function pipelineMatchesKinds(
+  pipeline: OperationPipeline,
+  kinds: Set<PipelineKindFilter>,
+): boolean {
+  if (kinds.size === 0) return true
+  if (kinds.has("agent") && pipeline.kind === OperationKind.AgentRun) return true
+  if (
+    kinds.has("sync") &&
+    (pipeline.kind === OperationKind.SyncRun ||
+      pipeline.kind === OperationKind.SyncPreview ||
+      pipeline.kind === OperationKind.SyncExecute ||
+      pipeline.kind === OperationKind.ProposerRun)
+  ) {
+    return true
+  }
+  if (
+    kinds.has("bridge") &&
+    (pipeline.kind === OperationKind.BridgePreview ||
+      pipeline.kind === OperationKind.BridgeRun)
+  ) {
+    return true
+  }
+  return false
+}
+
+function kindViewFromKinds(kinds: Set<PipelineKindFilter>): OperationLogKindView {
+  if (kinds.size === 1) {
+    const only = [...kinds][0]
+    if (only) return only
+  }
+  return "all"
+}
+
 export function OperationLog() {
-  const [kindView, setKindView] = useState<OperationLogKindView>("all")
+  const [kinds, setKinds] = useState<Set<PipelineKindFilter>>(new Set())
   const [statuses, setStatuses] = useState<Set<OperationStatus>>(new Set())
   const [search, setSearch] = useState("")
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
@@ -359,6 +380,7 @@ export function OperationLog() {
   const tiny = width > 0 && width < 480
   const [cancellingId, setCancellingId] = useState<string | null>(null)
 
+  const kindView = kindViewFromKinds(kinds)
   const {
     pipelines,
     loading,
@@ -388,9 +410,6 @@ export function OperationLog() {
   }, [])
 
   // ── Toggle helpers ────────────────────────────────────────────
-  const toggleStatus = useCallback((s: OperationStatus) => {
-    setStatuses(prev => { const n = new Set(prev); n.has(s) ? n.delete(s) : n.add(s); return n })
-  }, [])
   const togglePipeline = useCallback((id: string) => {
     setExpanded(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
   }, [])
@@ -408,10 +427,11 @@ export function OperationLog() {
   const serverSearchActive = needle.length >= 2
 
   const filtered = useMemo(() => pipelines.filter((p) => {
+    if (!pipelineMatchesKinds(p, kinds)) return false
     if (statuses.size > 0 && !statuses.has(p.status)) return false
     if (!serverSearchActive && needle && !matchesPipeline(p, needle)) return false
     return true
-  }), [pipelines, statuses, needle, serverSearchActive])
+  }), [pipelines, kinds, statuses, needle, serverSearchActive])
 
   const searchPending = serverSearchActive && loading
 
@@ -433,10 +453,10 @@ export function OperationLog() {
   const emptyMessage = useMemo(() => {
     if (error) return error
     if (pipelines.length === 0) return "No operations recorded yet."
-    if (statuses.size > 0) return "No operations match the selected statuses."
+    if (kinds.size > 0 || statuses.size > 0) return "No operations match the selected filters."
     if (needle) return "No operations match your search."
     return "No operations recorded yet."
-  }, [error, pipelines.length, statuses.size, needle])
+  }, [error, pipelines.length, kinds.size, statuses.size, needle])
 
   return (
     <OperationLogModalsProvider>
@@ -444,15 +464,13 @@ export function OperationLog() {
       <div className={WIDGET_LOG_STACK_CLASS}>
 
       <OperationLogToolbar
-        kindView={kindView}
-        setKindView={setKindView}
+        kinds={kinds}
+        setKinds={setKinds}
         statuses={statuses}
-        toggleStatus={toggleStatus}
-        clearStatuses={() => setStatuses(new Set())}
+        setStatuses={setStatuses}
         search={search}
         setSearch={setSearch}
         searchPending={searchPending}
-        compact={compact}
         tiny={tiny}
         filteredCount={filtered.length}
         totalCount={pipelines.length}
@@ -677,14 +695,17 @@ function PipelineRow({ pipeline, expanded, onToggle, actExpanded, toggleActivity
         <div className="flex items-center gap-1 pr-1">
           <button
             type="button"
-            className="min-w-0 flex-1 flex items-center gap-2.5 px-3 py-2 hover:bg-elevated/50 transition-colors text-left"
+            className="min-w-0 flex-1 flex items-center gap-2 py-2 pr-3 hover:bg-elevated/50 transition-colors text-left"
             onClick={onToggle}
           >
-            <ChevronRight
-              size={14}
-              className={`shrink-0 text-text-muted transition-transform ${expanded ? "rotate-90" : ""}`}
-            />
-            <Icon size={15} className="shrink-0" style={{ color: km.color }} />
+            <span className="review-chevron-slot">
+              <ChevronRight
+                size={13}
+                strokeWidth={1.75}
+                className={`text-text-muted transition-transform ${expanded ? "rotate-90" : ""}`}
+              />
+            </span>
+            <Icon size={14} strokeWidth={1.75} className="shrink-0" style={{ color: km.color }} />
             <LogStatusLabel status={pipeline.status} />
             <span className={`min-w-0 flex-1 truncate ${OP_LOG} ${OP_LOG_MUTED}`}>
               <span className="font-medium">{pipeline.title}</span>
@@ -714,12 +735,16 @@ function PipelineRow({ pipeline, expanded, onToggle, actExpanded, toggleActivity
         {expanded && (
           <LogNest linear>
             {pipeline.error && (
-              <div className="px-3 py-2">
-                <StatusMessage status={pipeline.status}>{pipeline.error}</StatusMessage>
-              </div>
+              <ReviewTreeItem>
+                <div className="py-2 pr-3">
+                  <StatusMessage status={pipeline.status}>{pipeline.error}</StatusMessage>
+                </div>
+              </ReviewTreeItem>
             )}
             {pipeline.activities.length === 0 && (
-              <div className="px-3 py-2 text-sm text-text-muted">No activities recorded.</div>
+              <ReviewTreeItem>
+                <div className="py-2 pr-3 text-sm text-text-muted">No activities recorded.</div>
+              </ReviewTreeItem>
             )}
             {pipeline.activities.map((a, idx) => {
               const key = pipelineActivityKey(pipeline.id, a.id)
@@ -752,11 +777,17 @@ function PipelineRow({ pipeline, expanded, onToggle, actExpanded, toggleActivity
     <LogGroup>
       <div className="flex items-center gap-1 pr-1">
       <button
-        className="min-w-0 flex-1 flex items-center gap-2 px-3 py-2 hover:bg-overlay-2/80 transition-colors text-left"
+        className="min-w-0 flex-1 flex items-center gap-2 py-2 pr-3 hover:bg-overlay-2/80 transition-colors text-left"
         onClick={onToggle}
       >
-        <ChevronRight size={14} className={`shrink-0 text-text-muted transition-transform ${expanded ? "rotate-90" : ""}`} />
-        <Icon size={14} className="shrink-0" style={{ color: km.color }} />
+        <span className="review-chevron-slot">
+          <ChevronRight
+            size={13}
+            strokeWidth={1.75}
+            className={`text-text-muted transition-transform ${expanded ? "rotate-90" : ""}`}
+          />
+        </span>
+        <Icon size={14} strokeWidth={1.75} className="shrink-0" style={{ color: km.color }} />
         <LogStatusLabel status={pipeline.status} />
         <span className={`min-w-0 flex-1 ${OP_LOG} ${OP_LOG_MUTED}`}>
           <span className="font-medium">{pipeline.title}</span>
@@ -786,12 +817,16 @@ function PipelineRow({ pipeline, expanded, onToggle, actExpanded, toggleActivity
       {expanded && (
         <LogNest root>
           {pipeline.error && (
-            <div className="px-2.5 py-1.5">
-              <StatusMessage status={pipeline.status}>{pipeline.error}</StatusMessage>
-            </div>
+            <ReviewTreeItem>
+              <div className="py-1.5 pr-2">
+                <StatusMessage status={pipeline.status}>{pipeline.error}</StatusMessage>
+              </div>
+            </ReviewTreeItem>
           )}
           {pipeline.activities.length === 0 && (
-            <div className="px-2.5 py-2 text-sm text-text-muted">No activities recorded.</div>
+            <ReviewTreeItem>
+              <div className="py-2 pr-2 text-sm text-text-muted">No activities recorded.</div>
+            </ReviewTreeItem>
           )}
           {pipeline.activities.map((a, idx) => {
             const key = pipelineActivityKey(pipeline.id, a.id)
@@ -892,11 +927,6 @@ function FlowStepSqlRow({
   const openSqlTrace = useOpLogOpenSqlTrace()
   const trace = describeSqlEvent(ev)
   const expandable = resultData != null && Object.keys(resultData).length > 0
-  const resultJson = useMemo(
-    () => (expanded && resultData ? safeJsonForDisplay(resultData) : null),
-    [expanded, resultData],
-  )
-
   return (
     <OpLogRow
       linear={linear}
@@ -925,11 +955,11 @@ function FlowStepSqlRow({
         ) : undefined
       }
     >
-      {resultJson && (
-        <div className={`px-3 py-2 ${linear ? "bg-elevated/30" : "bg-base/30 border-t border-border-subtle"}`}>
-          <CodeBlock code={resultJson} lang="json" maxHeight={480} />
-        </div>
-      )}
+      {expanded && resultData ? (
+        <div className="review-branch-pad py-2 pr-2">
+            <JsonViewer value={resultData} label="result" defaultExpandDepth={2} maxHeight={480} />
+          </div>
+      ) : null}
     </OpLogRow>
   )
 }
@@ -979,9 +1009,9 @@ function FlowStepHttpRow({
       timestamp={ev.timestamp}
     >
       {expanded && (
-        <div className={`px-2.5 py-1.5 ${linear ? "bg-elevated/30" : "bg-base/30 border-t border-border-subtle"}`}>
-          <JsonViewer value={detail} label="http" defaultExpandDepth={2} maxHeight={360} />
-        </div>
+        <div className="review-branch-pad py-1.5 pr-2">
+            <JsonViewer value={detail} label="http" defaultExpandDepth={2} maxHeight={360} />
+          </div>
       )}
     </OpLogRow>
   )
@@ -1081,34 +1111,38 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, pipel
     </button>
   ) : undefined
 
-  const rowBody = (
-    <>
-      <OpLogRow
-        linear={linear}
-        // Depth 0: collapsed rows rely on the panel’s divide-y; when expanded,
-        // draw a rule under the activity so the first child isn’t flush to it.
-        isLast={
-          depth === 0 && !linear
-            ? !hasExpandedContent
-            : isLast && !hasExpandedContent
-        }
-        depth={depth}
-        status={status}
-        expanded={expanded}
-        expandable
-        onToggle={onToggle}
-        label={<span className={`${OP_LOG_MONO} ${OP_LOG_MUTED}`}>{renderedName}</span>}
-        meta={renderedSummary && !isResultRow ? renderedSummary : undefined}
-        durationMs={activity.durationMs}
-        timestamp={activity.startedAt}
-        actions={rowActions}
-      />
-      {expanded && (
+  // Nest MUST live inside OpLogRow (ReviewTreeItem). A sibling LogNest breaks
+  // the parent stem — gap between Configured → Preview (and every peer after
+  // an expanded activity).
+  return (
+    <OpLogRow
+      linear={linear}
+      // Depth 0: collapsed rows rely on the panel’s divide-y; when expanded,
+      // draw a rule under the activity so the first child isn’t flush to it.
+      isLast={
+        depth === 0 && !linear
+          ? !hasExpandedContent
+          : isLast && !hasExpandedContent
+      }
+      depth={depth}
+      status={status}
+      expanded={expanded}
+      expandable
+      onToggle={onToggle}
+      label={<span className={`${OP_LOG_MONO} ${OP_LOG_MUTED}`}>{renderedName}</span>}
+      meta={renderedSummary && !isResultRow ? renderedSummary : undefined}
+      durationMs={activity.durationMs}
+      timestamp={activity.startedAt}
+      actions={rowActions}
+    >
+      {expanded ? (
         <LogNest linear={linear}>
           {statusMessage && !isDuplicatePipelineMessage(pipelineError, statusMessage) && (
-            <div className="px-2.5 py-1.5">
-              <StatusMessage status={status}>{statusMessage}</StatusMessage>
-            </div>
+            <ReviewTreeItem>
+              <div className="py-1.5 pr-2">
+                <StatusMessage status={status}>{statusMessage}</StatusMessage>
+              </div>
+            </ReviewTreeItem>
           )}
           {isFlowStep && sqlEvents.map((ev, idx) => {
             const key = `${pipelineId}|${activity.id}|sql:${idx}`
@@ -1141,36 +1175,45 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, pipel
             )
           })}
           {isResultRow && activity.events[0] && (
-            <div className="px-2.5 py-1.5">
-              <CodeBlock
-                code={safeJsonForDisplay(activity.events[0].data)}
-                lang="json"
-                maxHeight={480}
-              />
-            </div>
+            <ReviewTreeItem>
+              <div className="py-1.5 pr-2">
+                <JsonViewer
+                  value={activity.events[0].data}
+                  label="result"
+                  defaultExpandDepth={2}
+                  maxHeight={480}
+                />
+              </div>
+            </ReviewTreeItem>
           )}
           {isAgentToolStep && toolIo && (
-            <div className="px-2.5 py-1.5">
-              <ToolIoBlock io={toolIo} compact maxHeight={320} />
-            </div>
+            <ReviewTreeItem>
+              <div className="px-2.5 py-1.5">
+                <ToolIoBlock io={toolIo} compact maxHeight={320} />
+              </div>
+            </ReviewTreeItem>
           )}
           {!isResultRow && !isAgentToolStep && activity.events.length === 0 && activity.details && !statusMessage && (
-            <div className="px-0 py-0">
+            <>
               {toolIo && (
-                <div className="px-2.5 py-1.5">
-                  <ToolIoBlock io={toolIo} compact maxHeight={280} />
-                </div>
+                <ReviewTreeItem>
+                  <div className="px-2.5 py-1.5">
+                    <ToolIoBlock io={toolIo} compact maxHeight={280} />
+                  </div>
+                </ReviewTreeItem>
               )}
               {activity.details && Object.keys(activity.details).length > 0 && !toolIo && (
                 isSyncDecisionLogDetails(activity.details) ? (
                   <DecisionLogPanel decisions={activity.details.decisions} linear={linear} depth={depth + 1} />
                 ) : (
-                  <div className="px-2.5 py-1.5">
-                    <JsonViewer value={activity.details} label="details" defaultExpandDepth={2} maxHeight={280} />
-                  </div>
+                  <ReviewTreeItem>
+                    <div className="py-1.5 pr-2">
+                      <JsonViewer value={activity.details} label="details" defaultExpandDepth={2} maxHeight={280} />
+                    </div>
+                  </ReviewTreeItem>
                 )
               )}
-            </div>
+            </>
           )}
           {hasChildren && !isResultRow && activity.children!.map((child, idx) => {
             const childKey = pipelineActivityKey(pipelineId, child.id)
@@ -1225,17 +1268,9 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, pipel
             )
           })}
         </LogNest>
-      )}
-    </>
+      ) : null}
+    </OpLogRow>
   )
-
-  // Depth-0 activities live inside LogNest’s inset panel (divide-y) — one wrapper
-  // per activity so header + nested events stay a single divide unit (no card chrome).
-  if (depth === 0 && !linear) {
-    return <div className="min-w-0 last:pb-0.5">{rowBody}</div>
-  }
-
-  return rowBody
 }
 
 // ── Event row ────────────────────────────────────────────────────
@@ -1329,7 +1364,7 @@ function EventRow({ ev, expanded, onToggle, linear, isLast, depth = 0 }: {
         }
       >
         {hasData && !isSql && (
-          <div className={`px-2.5 py-1.5 ${linear ? "bg-elevated/30" : "bg-base/30 border-t border-border-subtle"}`}>
+          <div className="review-branch-pad py-1.5 pr-2">
             <JsonViewer value={displayData} label="event" defaultExpandDepth={3} maxHeight={360} />
           </div>
         )}

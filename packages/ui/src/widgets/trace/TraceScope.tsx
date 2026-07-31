@@ -5,7 +5,7 @@
  * (sibling over .trace-scroll) — click label to jump, chevron to fold.
  */
 
-import { ChevronDown, ChevronRight } from "lucide-react"
+import { ChevronRight } from "lucide-react"
 import { useRef, type ReactNode } from "react"
 import { preserveScrollAnchor } from "../../lib/chatScroll"
 import type { TraceScopeKind } from "./trace-pin"
@@ -35,11 +35,10 @@ function ScopeChevron({ open, expandable }: { open: boolean; expandable: boolean
   return (
     <span className="trace-scope__chevslot" aria-hidden>
       {expandable ? (
-        open ? (
-          <ChevronDown size={14} className="trace-scope__chev" />
-        ) : (
-          <ChevronRight size={14} className="trace-scope__chev" />
-        )
+        <ChevronRight
+          size={13}
+          className={`trace-scope__chev transition-transform ${open ? "rotate-90" : ""}`}
+        />
       ) : null}
     </span>
   )
@@ -177,11 +176,10 @@ export function PinOverlay({
                   aria-label={row.open ? "Collapse" : "Expand"}
                   aria-expanded={row.open}
                 >
-                  {row.open ? (
-                    <ChevronDown size={14} className="trace-scope__chev" />
-                  ) : (
-                    <ChevronRight size={14} className="trace-scope__chev" />
-                  )}
+                  <ChevronRight
+                    size={13}
+                    className={`trace-scope__chev transition-transform ${row.open ? "rotate-90" : ""}`}
+                  />
                 </button>
               ) : (
                 <span className="trace-scope__chevslot" aria-hidden />

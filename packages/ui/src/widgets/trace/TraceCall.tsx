@@ -1,8 +1,15 @@
 /**
- * One LLM call as a bordered card: Call → Sent → Received (reply + proposed tools).
- * Tool execution and SQL validation live on the Work card that follows.
+ * One LLM call — nested outline (Threads elbows):
+ *
+ *   Call
+ *   ├─ Sent
+ *   │   ├─ System / User / …   (messages, one level deeper)
+ *   └─ Received
+ *       ├─ reply / waiting note
+ *       └─ proposed tools
  */
 
+import { ReviewTree, ReviewTreeItem } from "../../components/ReviewTree"
 import { fmtTokens, formatMs } from "../../lib/util"
 import type { TraceCallNode, TraceCallSearchHit } from "./build-trace-dag"
 import type { OpenState } from "./open-state"
@@ -38,6 +45,7 @@ export function CallOutline({
   const sentOpen = openState.sent.has(call.index)
   const receivedOpen = openState.received.has(call.index)
   const usage = call.usage
+  const hasTools = call.toolBranches.length > 0
 
   return (
     <article className={`trace-card${callOpen ? " is-open" : ""}${nested ? " is-nested" : ""}`}>
@@ -70,8 +78,8 @@ export function CallOutline({
       />
 
       {callOpen && (
-        <div className="trace-card__body trace-nest">
-          <div className="trace-stick-block">
+        <ReviewTree className="trace-card__body">
+          <ReviewTreeItem>
             <ScopeRow
               scopeId={`sent:${call.index}`}
               kind="sent"
@@ -84,29 +92,32 @@ export function CallOutline({
               soft
             />
             {sentOpen && (
-              <div className="trace-scope-body">
+              <ReviewTree className="trace-branch">
                 {call.messages.length === 0 ? (
-                  <span className="trace-empty">No messages recorded</span>
+                  <ReviewTreeItem>
+                    <span className="trace-empty">No messages recorded</span>
+                  </ReviewTreeItem>
                 ) : (
                   call.messages.map((msg, mi) => {
                     const key = `${call.index}:m:${mi}`
                     return (
-                      <PromptMessageRow
-                        key={key}
-                        scopeId={`message:${key}`}
-                        depth={traceScopeDepth("message", nested)}
-                        msg={msg}
-                        open={openState.messages.has(key)}
-                        onToggle={() => onToggleMessage(key)}
-                      />
+                      <ReviewTreeItem key={key}>
+                        <PromptMessageRow
+                          scopeId={`message:${key}`}
+                          depth={traceScopeDepth("message", nested)}
+                          msg={msg}
+                          open={openState.messages.has(key)}
+                          onToggle={() => onToggleMessage(key)}
+                        />
+                      </ReviewTreeItem>
                     )
                   })
                 )}
-              </div>
+              </ReviewTree>
             )}
-          </div>
+          </ReviewTreeItem>
 
-          <div className="trace-stick-block">
+          <ReviewTreeItem>
             <ScopeRow
               scopeId={`received:${call.index}`}
               kind="received"
@@ -119,45 +130,50 @@ export function CallOutline({
               soft
             />
             {receivedOpen && (
-              <div className="trace-scope-body">
-                {call.waiting && <span className="trace-empty">Waiting for reply…</span>}
-                {!call.waiting && call.content && (
-                  <ExpandableText text={call.content} className="trace-body-reply" />
-                )}
-                {!call.waiting &&
-                  call.toolBranches.length === 0 &&
-                  !call.content && (
+              <div className="trace-branch">
+                <div className="trace-scope-payload">
+                  {call.waiting && <span className="trace-empty">Waiting for reply…</span>}
+                  {!call.waiting && call.content && (
+                    <ExpandableText text={call.content} className="trace-body-reply" />
+                  )}
+                  {!call.waiting && !hasTools && !call.content && (
                     <span className="trace-empty is-error">
                       Empty reply — no text and no tool calls
                     </span>
                   )}
-                {call.askedUser && (
-                  <p className="trace-note">
-                    Waiting on human — answer lands on the next call as User answer.
-                  </p>
-                )}
-                {call.toolBranches.length > 0 && (
-                  <div className="trace-next">
-                    <div className="trace-next__label is-next">
-                      Tool calls
-                      <span className="trace-next__hint">
-                        proposed · run in Work below
-                      </span>
+                  {call.askedUser && (
+                    <p className="trace-note">
+                      Waiting on human — answer lands on the next call as User answer.
+                    </p>
+                  )}
+                </div>
+                {hasTools && (
+                  <>
+                    <div className="review-branch-pad">
+                      <div className="trace-branch__caption is-tools">
+                        Tool calls
+                        <span className="trace-branch__caption-hint">
+                          proposed · run in Work below
+                        </span>
+                      </div>
                     </div>
-                    {call.toolBranches.map((tc) => (
-                      <ToolRow
-                        key={tc.id}
-                        tool={tc}
-                        open={openState.tools.has(tc.id)}
-                        onToggle={() => onToggleTool(tc.id)}
-                      />
-                    ))}
-                  </div>
+                    <ReviewTree>
+                      {call.toolBranches.map((tc) => (
+                        <ReviewTreeItem key={tc.id}>
+                          <ToolRow
+                            tool={tc}
+                            open={openState.tools.has(tc.id)}
+                            onToggle={() => onToggleTool(tc.id)}
+                          />
+                        </ReviewTreeItem>
+                      ))}
+                    </ReviewTree>
+                  </>
                 )}
               </div>
             )}
-          </div>
-        </div>
+          </ReviewTreeItem>
+        </ReviewTree>
       )}
     </article>
   )

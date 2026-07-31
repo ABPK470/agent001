@@ -1,5 +1,11 @@
 /**
  * Widget definitions — single registry for canvas chrome and catalog.
+ *
+ * Sheet compositions (product language):
+ * - Agent loop: Threads + Chat + Trace (+ Run Status)
+ * - Ops review: Event Stream + Pipelines (+ Trace)
+ * - Solo ops: Entity Registry | Sync | Bridge | Sync Operations | Active Users
+ * - Quiet: Mymi DB (catalog browser; not a daily driver)
  */
 
 import type { ComponentType } from "react"
@@ -28,21 +34,66 @@ const CATALOG_META: Array<{
   desc: string
   catalogVisible?: boolean
 }> = [
-  { type: "thread-nav", label: "Threads", desc: "Select the active thread and run for chat widgets" },
-  { type: "term-chat", label: "MI:A Chat", desc: "Send goals to the agent and see responses" },
-  { type: "live-logs", label: "Event Stream", desc: "Real-time SSE event stream" },
-  { type: "env-sync", label: "Sync", desc: "Pick source, target, entity, preview and execute changes" },
-  { type: "entity-registry", label: "Entity Registry", desc: "Browse, edit, and version entity definitions for the sync platform" },
-  { type: "operation-log", label: "Pipelines", desc: "Pipeline monitor — agent runs, sync, Bridge" },
-  { type: "bridge", label: "Bridge", desc: "Move rows between connectors through a declarative transform" },
-  { type: "debug-inspector", label: "Trace", desc: "Agent loop outline — context, plan phases, LLM calls, and between-call work" },
-  { type: "active-users", label: "Active Users", desc: "Who's online, what they're running" },
-  { type: "mymi-db", label: "Mymi DB", desc: "Browse MyMI DB schemas, tables, views, and preview data" },
-  { type: "run-history", label: "Run History", desc: "Browse past agent runs", catalogVisible: false },
-  { type: "run-status", label: "Run Status", desc: "Current run status, progress, and metadata" },
-  { type: "step-timeline", label: "Step Timeline", desc: "Visual timeline of tool calls and steps" },
-  { type: "sync-admin", label: "Sync Operations", desc: "Proposals, runs, evidence, approvals, connections, schedules, notify routes" },
-  { type: "agent-chat", label: "Agent Chat", desc: "Older version of agent chat" },
+  {
+    type: "thread-nav",
+    label: "Threads",
+    desc: "Select thread and run — drives Chat, Trace, and Run Status",
+  },
+  {
+    type: "term-chat",
+    label: "MI:A Chat",
+    desc: "Send goals to the agent and see responses for the selected run",
+  },
+  {
+    type: "run-status",
+    label: "Run Status",
+    desc: "Summary of the selected run — progress, tokens, and metadata",
+  },
+  {
+    type: "debug-inspector",
+    label: "Trace",
+    desc: "Agent loop for the selected run — context, phases, calls, and work",
+  },
+  {
+    type: "live-logs",
+    label: "Event Stream",
+    desc: "Platform event stream — live SSE across agents, sync, and system",
+  },
+  {
+    type: "operation-log",
+    label: "Pipelines",
+    desc: "Platform operations — agent runs, sync, and Bridge at a glance",
+  },
+  {
+    type: "env-sync",
+    label: "Sync",
+    desc: "Manual sync — pick source, target, entity, preview and execute",
+  },
+  {
+    type: "entity-registry",
+    label: "Entity Registry",
+    desc: "Configure entities — browse, edit, and version sync definitions",
+  },
+  {
+    type: "bridge",
+    label: "Bridge",
+    desc: "Move rows between connectors through a declarative transform",
+  },
+  {
+    type: "sync-admin",
+    label: "Sync Operations",
+    desc: "Proposals, runs, evidence, approvals, connections, schedules, notify",
+  },
+  {
+    type: "active-users",
+    label: "Active Users",
+    desc: "Who is online and what they are running",
+  },
+  {
+    type: "mymi-db",
+    label: "Mymi DB",
+    desc: "Browse schemas, tables, and relationships (optional catalog view)",
+  },
   { type: "sync-proposals", label: "Sync Proposals", desc: "Review sync proposals", catalogVisible: false },
   { type: "sync-approvals", label: "Sync Approvals", desc: "Approve sync changes", catalogVisible: false },
   { type: "sync-evidence", label: "Sync Evidence", desc: "Sync evidence records", catalogVisible: false },
@@ -50,7 +101,6 @@ const CATALOG_META: Array<{
 
 function chromeForType(type: WidgetType): WidgetChrome {
   if (type === "term-chat" || type === "thread-nav") return "transparent"
-  // Flush: SetupHintStrip / full-bleed chrome sit under the title bar (no pad gap).
   if (
     type === "entity-registry"
     || type === "env-sync"

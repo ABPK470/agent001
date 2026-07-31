@@ -1238,7 +1238,7 @@ function UserDetail({ user, liveRuns, history, stack, adminBusy, onToggleAdmin, 
         )}
         {history && !history.loading && history.rows.length === 0 && !history.error && (
           <EmptyState
-            icon={WIDGET_ICONS["run-history"]}
+            icon={WIDGET_ICONS["run-status"]}
             message="No runs yet."
             className="py-6"
           />

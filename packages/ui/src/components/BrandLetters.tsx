@@ -7,7 +7,7 @@
  * silhouettes, no painted background cutouts.
  */
 
-import { memo, type CSSProperties, type SVGProps } from "react"
+import { memo, useId, type CSSProperties, type SVGProps } from "react"
 
 /** Lockup metrics — shared by intro CSS (`--wm-mi-w` / `--wm-a-w` ratios). */
 export const BRAND_LETTER_CONFIG = {
@@ -111,7 +111,7 @@ export const BrandLetterMi = memo(function BrandLetterMi({
 
 /**
  * Geometric “A” — same bar weight as MI.
- * Chevron stroke with round caps/joins so feet match stem terminals.
+ * Chevron stroke (round tip) + rounded crossbar; clip → flat feet like stems.
  */
 export const BrandLetterA = memo(function BrandLetterA({
   className,
@@ -120,19 +120,20 @@ export const BrandLetterA = memo(function BrandLetterA({
   style,
   ...rest
 }: BrandLetterProps) {
+  const clipId = useId().replace(/:/g, "")
   const { bar: b, rx, height: h, aWidth: w } = BRAND_LETTER_CONFIG
   const half = b / 2
   const mid = w / 2
   const tipY = half
-  // Cap centers sit half a bar above the baseline so round feet land on y=h.
-  const footY = h - half
+  // Extend past baseline; clipPath slices a clean horizontal foot.
+  const footY = h + half
   const footL = half * 0.55
   const footR = w - half * 0.55
 
   const barTop = h * 0.56
   const barH = b * 0.8
   const barMidY = barTop + barH / 2
-  const t = (barMidY - tipY) / (footY - tipY)
+  const t = (barMidY - tipY) / (h - tipY)
   const legCxL = mid + (footL - mid) * t
   const legCxR = mid + (footR - mid) * t
   const overlap = half * 0.5
@@ -155,22 +156,31 @@ export const BrandLetterA = memo(function BrandLetterA({
       {...rest}
     >
       {title ? <title>{title}</title> : null}
-      <path
-        d={chevron}
-        fill="none"
-        stroke="currentColor"
-        strokeWidth={b}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <rect
-        x={barX}
-        y={barTop}
-        width={barW}
-        height={barH}
-        rx={rx}
-        fill="currentColor"
-      />
+      <defs>
+        <clipPath id={clipId}>
+          <rect x={0} y={0} width={w} height={h} />
+        </clipPath>
+      </defs>
+      <g clipPath={`url(#${clipId})`}>
+        <path
+          d={chevron}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={b}
+          strokeLinecap="butt"
+          strokeLinejoin="round"
+        />
+        {/* Tip disc — same round terminal mass as MI stem caps */}
+        <circle cx={mid} cy={tipY} r={half} fill="currentColor" />
+        <rect
+          x={barX}
+          y={barTop}
+          width={barW}
+          height={barH}
+          rx={rx}
+          fill="currentColor"
+        />
+      </g>
     </svg>
   )
 })

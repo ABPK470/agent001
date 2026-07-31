@@ -1,5 +1,6 @@
 /**
- * Thread + run navigator — shared by the Threads widget.
+ * Threads widget — selection filter for Chat, Trace, and Run Status.
+ * Picks activeThreadId + activeRunId; does not browse platform ops.
  */
 
 import { ChevronRight, Plus } from "lucide-react"

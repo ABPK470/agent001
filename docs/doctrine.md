@@ -229,6 +229,27 @@ capability (`platform`), not a synonym for `infra/`.
 
 ### UI
 
+**Visual / interaction dialect (locked):** two-ink (paper + ink). Accent is
+CTA/brand only — never “selected.” Selection = ink fill or left rule + weight
+(`packages/ui/src/lib/selection.ts`). Surfaces own one perimeter; insides use
+dividers and controls — never nested grey plates. Top bar, tiles, modals, and
+filter sheets share that language. Review widgets (Event Stream, Pipelines,
+Trace) share one `WidgetToolbar` strip: leading | search | trailing
+(expand/collapse + filter/export sit in trailing — never leading chip rows).
+Filter *choices* may differ per widget; filter chrome, search seam, icon
+buttons, and chips must not. Content dialect is shared with Threads
+hierarchy: one curved tree via `components/ReviewTree.tsx`
+(`.review-tree` / `.review-tree__item` — same geometry as Threads runs) for
+list nesting only — never inside `JsonViewer` (use `.review-branch-pad`).
+Prose under a soft scope (Prompt / reply) uses `.trace-scope-payload` (label
+column) — never the nested-peer gutter. Direct `ReviewTreeItem` children
+only; bare siblings / sibling nests break the stem. Nest flush with the
+parent row — stem under `.review-chevron-slot` / `--review-tree-x` (never a
+second `pl-*` before the tree). One meta size (`--review-meta-size`), one
+chevron (13px, rotate-90), one control height (`--control-h` for search /
+segments / icon buttons), one JSON/payload surface. Pipelines has no toolbar
+expand/collapse — row chevrons own that. Trace sticky pin stays.
+
 | Layer | Owns | Must not |
 | --- | --- | --- |
 | **boot** / **app** | Chrome and shell layout | Business policy |

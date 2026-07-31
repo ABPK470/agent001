@@ -128,17 +128,14 @@ describe("computePinnedFromEntries — structural ancestor chain only", () => {
 describe("computePinnedFromEntries — reserved band (stackInScroll: false)", () => {
   const band = { stackInScroll: false as const }
 
-  it("does not pin a child until its header fully clears the scrollport top", () => {
+  it("pins a child as soon as its header top reaches the scrollport top", () => {
     const spaced = [
       { id: "call:0", top: 0, depth: 0 },
       { id: "sent:0", top: 100, depth: 1 },
       { id: "received:0", top: 200, depth: 1 },
     ]
-    // Band waits for full clear; pins at ≥ top + rowH (not strict-past).
-    expect(computePinnedFromEntries(spaced, 100 + H - 1, H, 4, band)).toEqual([
-      "call:0",
-    ])
-    expect(computePinnedFromEntries(spaced, 100 + H, H, 4, band)).toEqual([
+    expect(computePinnedFromEntries(spaced, 99, H, 4, band)).toEqual(["call:0"])
+    expect(computePinnedFromEntries(spaced, 100, H, 4, band)).toEqual([
       "call:0",
       "sent:0",
     ])
@@ -149,13 +146,10 @@ describe("computePinnedFromEntries — reserved band (stackInScroll: false)", ()
       { id: "context", top: 0, depth: 0 },
       { id: "phase-plan", top: 400, depth: 0 },
     ]
-    // Overlay yields at 400-H+1; band still holds Context through that point.
     expect(computePinnedFromEntries(peers, 300, H, 4, band)).toEqual(["context"])
-    expect(computePinnedFromEntries(peers, 400 - H + 1, H, 4, band)).toEqual([
-      "context",
-    ])
-    expect(computePinnedFromEntries(peers, 400, H, 4, band)).toEqual([])
-    expect(computePinnedFromEntries(peers, 400 + H, H, 4, band)).toEqual([
+    expect(computePinnedFromEntries(peers, 399, H, 4, band)).toEqual(["context"])
+    // Next peer top hits scrollTop → yield Context, pin Phase.
+    expect(computePinnedFromEntries(peers, 400, H, 4, band)).toEqual([
       "phase-plan",
     ])
   })
@@ -173,19 +167,18 @@ describe("computePinnedFromEntries — reserved band (stackInScroll: false)", ()
     ])
   })
 
-  it("pins a short message header as soon as its own bottom clears (not fixed rowH)", () => {
+  it("pins a short message header as soon as its top reaches the scrollport", () => {
     const msgs = [
       { id: "call:0", top: 0, depth: 0, height: H },
       { id: "sent:0", top: 40, depth: 1, height: H },
       // Agent-like message row — shorter than ScopeRow / TRACE_STICKY_ROW_H
       { id: "message:0:m:0", top: 80, depth: 2, height: 22 },
     ]
-    // Fixed-rowH stick would still wait until 80+34; real height clears at 102.
-    expect(computePinnedFromEntries(msgs, 80 + 22 - 1, H, 4, band)).toEqual([
+    expect(computePinnedFromEntries(msgs, 79, H, 4, band)).toEqual([
       "call:0",
       "sent:0",
     ])
-    expect(computePinnedFromEntries(msgs, 80 + 22, H, 4, band)).toEqual([
+    expect(computePinnedFromEntries(msgs, 80, H, 4, band)).toEqual([
       "call:0",
       "sent:0",
       "message:0:m:0",
@@ -197,9 +190,8 @@ describe("computePinnedFromEntries — reserved band (stackInScroll: false)", ()
       { id: "call:0", top: 0, depth: 0, open: false as const },
       { id: "call:1", top: 100, depth: 0 },
     ]
-    // Scrolled past the collapsed call header — must not pin it.
-    expect(computePinnedFromEntries(tree, 100, H, 4, band)).toEqual([])
-    expect(computePinnedFromEntries(tree, 100 + H, H, 4, band)).toEqual(["call:1"])
+    // Scrolled to the next call header — must not pin the collapsed prior call.
+    expect(computePinnedFromEntries(tree, 100, H, 4, band)).toEqual(["call:1"])
   })
 })
 

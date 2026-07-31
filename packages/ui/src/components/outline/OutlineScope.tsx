@@ -3,7 +3,7 @@
  * Pin overlay clones the same chrome.
  */
 
-import { ChevronDown, ChevronRight } from "lucide-react"
+import { ChevronRight } from "lucide-react"
 import { useRef, type ReactNode } from "react"
 import { preserveScrollAnchor } from "../../lib/chatScroll"
 
@@ -32,11 +32,10 @@ function ScopeChevron({ open, expandable }: { open: boolean; expandable: boolean
   return (
     <span className="outline-scope__chevslot" aria-hidden>
       {expandable ? (
-        open ? (
-          <ChevronDown size={14} className="outline-scope__chev" />
-        ) : (
-          <ChevronRight size={14} className="outline-scope__chev" />
-        )
+        <ChevronRight
+          size={13}
+          className={`outline-scope__chev transition-transform ${open ? "rotate-90" : ""}`}
+        />
       ) : null}
     </span>
   )

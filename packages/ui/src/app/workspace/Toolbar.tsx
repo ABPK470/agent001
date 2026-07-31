@@ -2,6 +2,8 @@
  * Toolbar — top rail of the workspace paper sheet.
  *
  * One bright bar: layouts (left) | ops (right), full-height divider between.
+ * Active sheet = underline / ink weight (selection dialect — never accent fill).
+ * Ops controls = bordered quiet chrome (same family as .mia-control).
  * Sheet toggle is an R&D surface knob — invert sheet↔ops lift (compare).
  */
 

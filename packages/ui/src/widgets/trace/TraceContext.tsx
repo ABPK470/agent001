@@ -1,7 +1,10 @@
 /**
- * Shared Context card — Prompt / Tools in sibling blocks.
+ * Context outline — Prompt / Tools as ReviewTree peers under Context.
+ * Prompt prose uses trace-scope-payload (label column) — never the nested
+ * peer gutter (that is for Tools children with elbows).
  */
 
+import { ReviewTree, ReviewTreeItem } from "../../components/ReviewTree"
 import type { TraceDag } from "./build-trace-dag"
 import { formatCharCount } from "./trace-format"
 import { ExpandableText } from "./TraceExpandable"
@@ -60,9 +63,9 @@ export function PreambleOutline({
         soft
       />
       {open && (
-        <div className="trace-card__body trace-nest">
+        <ReviewTree className="trace-card__body">
           {preamble.systemPrompt && promptMatches && (
-            <div className="trace-stick-block">
+            <ReviewTreeItem>
               <ScopeRow
                 scopeId="prompt"
                 kind="prompt"
@@ -74,7 +77,7 @@ export function PreambleOutline({
                 soft
               />
               {contextPromptOpen && (
-                <div className="trace-scope-body">
+                <div className="trace-scope-payload">
                   <ExpandableText
                     text={preamble.systemPrompt}
                     className="trace-body-muted"
@@ -83,10 +86,10 @@ export function PreambleOutline({
                   />
                 </div>
               )}
-            </div>
+            </ReviewTreeItem>
           )}
           {tools.length > 0 && (
-            <div className="trace-stick-block">
+            <ReviewTreeItem>
               <ScopeRow
                 scopeId="tools"
                 kind="tools"
@@ -102,15 +105,17 @@ export function PreambleOutline({
                 soft
               />
               {contextToolsOpen && (
-                <div className="trace-scope-body">
+                <ReviewTree className="trace-branch">
                   {tools.map((t) => (
-                    <ToolDef key={t.name} tool={t} />
+                    <ReviewTreeItem key={t.name}>
+                      <ToolDef tool={t} />
+                    </ReviewTreeItem>
                   ))}
-                </div>
+                </ReviewTree>
               )}
-            </div>
+            </ReviewTreeItem>
           )}
-        </div>
+        </ReviewTree>
       )}
     </article>
   )

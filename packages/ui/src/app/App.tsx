@@ -202,11 +202,9 @@ export function App() {
     return new Set<WidgetType>((currentView?.tiles ?? []).map((tile) => tile.type))
   }, [currentView, popOut])
   const shouldHydrateSelectedRun = visibleWidgetTypes.has("run-status")
-    || visibleWidgetTypes.has("run-history")
-    || visibleWidgetTypes.has("step-timeline")
     || visibleWidgetTypes.has("debug-inspector")
     || visibleWidgetTypes.has("term-chat")
-    || visibleWidgetTypes.has("agent-chat")
+    || visibleWidgetTypes.has("thread-nav")
   const shouldRestoreSyncState = visibleWidgetTypes.has("env-sync")
   // Phase state machine — v19 simplified.
   //   Loading   — initial whoami fetch in flight; blank screen

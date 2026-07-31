@@ -35,17 +35,20 @@ export function offsetInScrollHost(scrollHost: HTMLElement, el: HTMLElement): nu
 
 /**
  * After collapsing a long body, park the viewport on that scope's header.
- * Pass the live pinned set so the header parks below the in-scroll pin stack.
+ * Trace pins sit outside the scrollport — park on the header with no stack offset.
+ * Pass `stackInScroll: true` only for overlays that paint inside the scroll host.
  */
 export function parkScrollOnScope(
   scrollHost: HTMLElement,
   scopeEl: HTMLElement,
   rowH: number,
   pinnedIds: (host: HTMLElement) => string[],
+  opts: { stackInScroll?: boolean } = {},
 ): void {
+  const stackInScroll = opts.stackInScroll === true
   scrollHost.scrollTop = Math.max(0, offsetInScrollHost(scrollHost, scopeEl) - 2)
   for (let i = 0; i < 4; i++) {
-    const stackH = pinnedIds(scrollHost).length * rowH
+    const stackH = stackInScroll ? pinnedIds(scrollHost).length * rowH : 0
     const top = offsetInScrollHost(scrollHost, scopeEl)
     const next = Math.max(0, top - stackH - 2)
     if (Math.abs(next - scrollHost.scrollTop) < 1) break
@@ -84,11 +87,10 @@ export function preserveScrollAnchor(
   function adjust() {
     if (!scrollHost || !anchor.isConnected) return
     if (scrolledIntoBody) {
-      const stackH =
-        Number.parseFloat(scrollHost.style.getPropertyValue("--trace-pin-stack-h")) || 0
+      // Trace pin band is outside the scrollport — do not subtract stack height.
       scrollHost.scrollTop = Math.max(
         0,
-        offsetInScrollHost(scrollHost, anchor) - stackH - 2,
+        offsetInScrollHost(scrollHost, anchor) - 2,
       )
       return
     }

@@ -131,7 +131,7 @@ describe("smart drag swap", () => {
   it("resolveOverlaps separates stacked tiles", () => {
     const tiles: LayoutTile[] = [
       { id: "a", type: "term-chat", x: 0, y: 0, w: 12, h: 16, minW: 2, minH: 2 },
-      { id: "b", type: "run-history", x: 6, y: 0, w: 6, h: 8, minW: 2, minH: 2 },
+      { id: "b", type: "live-logs", x: 6, y: 0, w: 6, h: 8, minW: 2, minH: 2 },
     ]
     const next = resolveOverlaps(tiles, 16)
     const a = next.find((t) => t.id === "a")!
@@ -142,7 +142,7 @@ describe("smart drag swap", () => {
   it("resolveOverlaps keeps a locked tile expanding westward into its neighbor", () => {
     const tiles: LayoutTile[] = [
       { id: "left", type: "term-chat", x: 0, y: 0, w: 6, h: 16, minW: 2, minH: 2 },
-      { id: "right", type: "run-history", x: 4, y: 0, w: 8, h: 16, minW: 2, minH: 2 },
+      { id: "right", type: "live-logs", x: 4, y: 0, w: 8, h: 16, minW: 2, minH: 2 },
     ]
     const next = resolveOverlaps(tiles, 16, new Set(["right"]))
     const left = next.find((t) => t.id === "left")!
@@ -155,7 +155,7 @@ describe("smart drag swap", () => {
   it("resolveOverlaps keeps a locked tile expanding eastward into its neighbor", () => {
     const tiles: LayoutTile[] = [
       { id: "left", type: "term-chat", x: 0, y: 0, w: 8, h: 16, minW: 2, minH: 2 },
-      { id: "right", type: "run-history", x: 6, y: 0, w: 6, h: 16, minW: 2, minH: 2 },
+      { id: "right", type: "live-logs", x: 6, y: 0, w: 6, h: 16, minW: 2, minH: 2 },
     ]
     const next = resolveOverlaps(tiles, 16, new Set(["left"]))
     const left = next.find((t) => t.id === "left")!
@@ -168,7 +168,7 @@ describe("smart drag swap", () => {
   it("reclaimSpace expands remaining tiles after one is removed", () => {
     const remaining: LayoutTile[] = [
       { id: "a", type: "term-chat", x: 0, y: 0, w: 4, h: 8, minW: 2, minH: 2 },
-      { id: "b", type: "run-history", x: 4, y: 0, w: 4, h: 8, minW: 2, minH: 2 },
+      { id: "b", type: "live-logs", x: 4, y: 0, w: 4, h: 8, minW: 2, minH: 2 },
     ]
     const next = reclaimSpace(remaining, 16)
     const covered = next.reduce((sum, tile) => sum + tile.w * tile.h, 0)
@@ -501,7 +501,7 @@ describe("workspace view wire migrate", () => {
       widgets: [
         { id: "a", type: "term-chat" as const },
         { id: "b", type: "run-status" as const },
-        { id: "c", type: "run-history" as const },
+        { id: "c", type: "live-logs" as const },
       ],
       layouts: {
         lg: [
@@ -521,13 +521,13 @@ describe("workspace view wire migrate", () => {
     const legacy = {
       id: "default",
       name: "Main",
-      widgets: [{ id: "b", type: "run-history" as const }],
+      widgets: [{ id: "b", type: "live-logs" as const }],
       layouts: { lg: [] },
     }
     const migrated = viewFromWire(legacy, 24)
     expect(migrated.tiles[0]).toMatchObject({
       id: "b",
-      type: "run-history",
+      type: "live-logs",
       x: 0,
       y: 0,
       w: COLS,

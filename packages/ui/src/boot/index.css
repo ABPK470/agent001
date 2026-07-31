@@ -445,10 +445,24 @@
 :root[data-theme="light"] .trace-scope.is-soft.is-open,
 :root[data-theme="light"] .trace-card.is-open > .trace-scope,
 :root[data-theme="light"] .trace-pin__stack > .trace-scope,
+:root[data-theme="light"] .trace-pin__stack,
 :root[data-theme="light"] .trace-toolbtn:hover,
 :root[data-theme="light"] .trace-copy:hover,
 :root[data-theme="light"] .trace-row__btn:hover {
   background: transparent;
+}
+
+:root[data-theme="light"] .trace-pin {
+  background: var(--paper);
+}
+
+:root[data-theme="light"] .trace-pin__stack {
+  border-bottom-color: var(--border);
+}
+
+/* Copy/More rail must stay opaque while content scrolls under it */
+:root[data-theme="light"] .trace-expand__sticky {
+  background: var(--paper);
 }
 
 /* Light Trace rows share the flat list dialect — no per-row frames. */
@@ -1226,6 +1240,104 @@ textarea.input {
   min-height: 0;
 }
 
+/*
+ * Review content dialect — Threads, Trace, Event Stream, Pipelines.
+ * Filters differ per widget; hierarchy uses one curved tree (elbow + stem).
+ */
+:root {
+  --review-body-size: 0.875rem;
+  --review-meta-size: 0.875rem;
+  --review-tree-line: color-mix(in srgb, var(--border) 70%, var(--text-faint));
+  /*
+   * Curved nest geometry (Threads / Trace / Pipelines / Event Stream).
+   * First principle: nest is flush with the parent row’s left edge; stem sits
+   * at the parent chevron center. Chevron slot width = 2 × stem-x.
+   * Never add a second pl-* before ReviewTree — that parks the stem under
+   * the first letter of the content (Event Stream bug).
+   */
+  --review-tree-gutter: 1.55rem;
+  --review-tree-x: 0.82rem;
+  --review-chevron-slot: calc(var(--review-tree-x) * 2);
+  --review-tree-radius: 0.45rem;
+  /* Elbow lands at header-row center (not 50% of expanded block). */
+  --review-tree-mid: 1.05rem;
+  /* Toolbar / search / segment / icon buttons — one height platform-wide. */
+  --control-h: 2.25rem;
+  --control-icon: 14px;
+}
+
+/* Chevron column — center aligns with --review-tree-x when nest is flush. */
+.review-chevron-slot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--review-chevron-slot);
+  flex-shrink: 0;
+}
+
+.review-meta {
+  font-size: var(--review-meta-size);
+  line-height: 1.3;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/**
+ * Curved nest — same language as Threads runs.
+ *   .review-tree           → gutter + stem column
+ *   .review-tree__item     → elbow into this row; stem continues if not last
+ */
+.review-tree {
+  position: relative;
+  padding-left: var(--review-tree-gutter);
+  min-width: 0;
+}
+
+.review-tree > .review-tree__item {
+  position: relative;
+  min-width: 0;
+}
+
+.review-tree > .review-tree__item::before {
+  content: "";
+  position: absolute;
+  left: calc(var(--review-tree-x) - var(--review-tree-gutter));
+  top: 0;
+  width: calc(var(--review-tree-gutter) - var(--review-tree-x));
+  height: var(--review-tree-mid);
+  border-left: 1px solid var(--review-tree-line);
+  border-bottom: 1px solid var(--review-tree-line);
+  border-bottom-left-radius: var(--review-tree-radius);
+  pointer-events: none;
+}
+
+.review-tree > .review-tree__item:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  left: calc(var(--review-tree-x) - var(--review-tree-gutter));
+  top: var(--review-tree-mid);
+  bottom: 0;
+  border-left: 1px solid var(--review-tree-line);
+  pointer-events: none;
+}
+
+/* Indent under a tree item without starting a new elbow column.
+ * Use for JSON / structured payloads that sit *beside* a stem.
+ * Do NOT use for prose under a soft scope (Prompt / Received) — that is
+ * `.trace-scope-payload` (label column, not nested-peer gutter). */
+.review-branch-pad {
+  padding-left: var(--review-tree-gutter);
+  min-width: 0;
+}
+
+/* @deprecated alias — prefer .review-tree / ReviewTree */
+.review-nest {
+  position: relative;
+  padding-left: var(--review-tree-gutter);
+  min-width: 0;
+}
+
 /* ── Form panel headings (shared class + entity-registry tokens) ─ */
 .form-panel-heading {
   font-size: 1rem;
@@ -1747,239 +1859,6 @@ textarea.input {
   }
 }
 
-/* ── Run History widget — layout follows container, not viewport ─ */
-.run-history-widget {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  min-width: 0;
-  min-height: 0;
-  container-type: inline-size;
-  container-name: run-history;
-}
-
-.run-history-list {
-  flex: 1 1 auto;
-  min-height: 0;
-  min-width: 0;
-  overflow-x: hidden;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 0.125rem;
-}
-
-.run-history-row {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 0.5rem;
-  min-width: 0;
-  padding: 0.5rem 0.625rem;
-  border-radius: 0.5rem;
-  cursor: pointer;
-  transition: background-color 120ms ease;
-}
-
-.run-history-row:hover,
-.run-history-row:focus-visible {
-  background: color-mix(in srgb, var(--panel-2) 40%, transparent);
-  outline: none;
-}
-
-.run-history-row--selected {
-  background: var(--panel-2);
-}
-
-.run-history-row--selected:hover,
-.run-history-row--selected:focus-visible {
-  background: var(--panel-2);
-}
-
-.run-history-row__main {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.625rem;
-  min-width: 0;
-  flex: 1 1 auto;
-}
-
-.run-history-row__dot {
-  width: 0.625rem;
-  height: 0.625rem;
-  margin-top: 0.35rem;
-  border-radius: 9999px;
-  flex-shrink: 0;
-  box-shadow: 0 0 0 2px var(--border);
-}
-
-.run-history-row__body {
-  min-width: 0;
-  flex: 1 1 auto;
-}
-
-.run-history-row__title {
-  display: flex;
-  align-items: baseline;
-  min-width: 0;
-}
-
-.run-history-row__goal {
-  min-width: 0;
-  flex: 1 1 auto;
-  /* Match Threads widget (.thread-nav-thread-title / .thread-nav-run-goal) */
-  font-size: 15px;
-  line-height: 1.45;
-  font-weight: 400;
-  letter-spacing: -0.01em;
-  color: var(--text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* Status sits with action icons — vertically centered to the row, not the title. */
-.run-history-row__trail {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  flex-shrink: 0;
-  align-self: flex-end;
-}
-
-.run-history-row__status {
-  flex-shrink: 0;
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 1;
-  text-transform: lowercase;
-  letter-spacing: 0.01em;
-}
-
-.run-history-row__meta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.25rem 0.5rem;
-  margin-top: 0.2rem;
-  /* Match Threads meta (.thread-nav-thread-meta / .thread-nav-run-meta) */
-  font-size: 11px;
-  line-height: 1.3;
-  color: var(--text-faint);
-  font-variant-numeric: tabular-nums;
-  min-width: 0;
-}
-
-.run-history-row__agent {
-  color: var(--accent);
-  font-size: 11px;
-}
-
-.run-history-row__resumed {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.2rem;
-  color: var(--accent);
-}
-
-/* Hide denser meta until the container can hold it */
-.run-history-row__meta-steps,
-.run-history-row__meta-tokens {
-  display: none;
-}
-
-.run-history-row__actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.375rem;
-  flex-shrink: 0;
-  opacity: 1;
-  transition: opacity 120ms ease;
-}
-
-.run-history-action {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0.375rem;
-  border-radius: 0.375rem;
-  color: color-mix(in srgb, var(--accent) 80%, transparent);
-  box-shadow: inset 0 0 0 1px var(--border);
-  transition: color 120ms ease, background-color 120ms ease, box-shadow 120ms ease;
-}
-
-.run-history-action:hover {
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent);
-}
-
-.run-history-action--danger {
-  color: color-mix(in srgb, var(--error) 80%, transparent);
-}
-
-.run-history-action--danger:hover {
-  color: var(--error);
-  background: color-mix(in srgb, var(--error) 10%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--error) 30%, transparent);
-}
-
-.run-history-action--warning {
-  color: color-mix(in srgb, var(--warning) 80%, transparent);
-}
-
-.run-history-action--warning:hover {
-  color: var(--warning);
-  background: color-mix(in srgb, var(--warning) 10%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--warning) 30%, transparent);
-}
-
-@container run-history (min-width: 22rem) {
-  .run-history-row__meta-steps {
-    display: inline;
-  }
-}
-
-@container run-history (min-width: 28rem) {
-  .run-history-row__meta-tokens {
-    display: inline;
-  }
-
-  .run-history-row {
-    flex-direction: row;
-    align-items: center;
-    gap: 0.75rem;
-    min-height: 2.75rem;
-  }
-
-  .run-history-row__main {
-    align-items: center;
-  }
-
-  .run-history-row__dot {
-    margin-top: 0;
-  }
-
-  .run-history-row__trail {
-    align-self: center;
-  }
-}
-
-/* Wide: trail (status + actions) appears on hover/focus so the row stays calm */
-@container run-history (min-width: 36rem) {
-  .run-history-row__actions {
-    opacity: 0;
-    pointer-events: none;
-  }
-
-  .run-history-row:hover .run-history-row__actions,
-  .run-history-row:focus-within .run-history-row__actions {
-    opacity: 1;
-    pointer-events: auto;
-  }
-}
-
 /* ── Trace outline (sticky scopes) ────────────────────────────── */
 .trace-dag {
   font-size: 0.9375rem;
@@ -2101,6 +1980,16 @@ textarea.input {
   cursor: pointer;
 }
 
+.trace-copy--icon {
+  padding: 0.1rem;
+  opacity: 0.55;
+}
+
+.trace-copy--icon:hover,
+.trace-copy--icon:focus-visible {
+  opacity: 1;
+}
+
 .trace-copy:hover {
   color: var(--text, var(--color-text));
   background: color-mix(in srgb, var(--text, var(--color-text)) 5%, transparent);
@@ -2155,9 +2044,9 @@ textarea.input {
 /*
  * ── Trace scroll frame + pin chrome ──────────────────────────────
  *
- * Frame owns size. Scroll fills the frame. Pins are a sibling overlay on
- * the frame — not inside overflow (would scroll away) and not a flex
- * band above the scroller (would resize clientHeight / flicker).
+ * Frame owns size. Pin band occupies the top; scroll fills the remainder
+ * (top: --trace-pin-stack-h). Content never paints under the pin.
+ * Pins stay a frame sibling (not inside overflow — would scroll away).
  */
 .trace-body {
   min-height: 0;
@@ -2172,10 +2061,13 @@ textarea.input {
 
 .trace-dag .trace-scroll {
   position: absolute;
-  inset: 0;
+  top: var(--trace-pin-stack-h, 0px);
+  left: 0;
+  right: 0;
+  bottom: 0;
   padding: 0 0.35rem 1.25rem;
   --trace-row-h: 34px;
-  /* Updated by refreshPinStack — Expand sticky rail + park/anchor math. */
+  /* Updated by refreshPinStack — pin band height; scroll starts below it. */
   --trace-pin-stack-h: 0px;
   /*
    * Set BOTH axes. overflow-y alone computes overflow-x to auto and
@@ -2197,7 +2089,8 @@ textarea.input {
 
 /*
  * Pin chrome — absolute on .trace-scroll-frame (sibling of .trace-scroll).
- * Stays glued to the visible top while content scrolls underneath.
+ * Occupies [0, --trace-pin-stack-h); scrollport starts below so body text
+ * is never covered.
  */
 .trace-pin {
   position: absolute;
@@ -2209,7 +2102,8 @@ textarea.input {
   padding: 0 0.35rem;
   overflow: visible;
   pointer-events: none;
-  background: transparent;
+  /* Same paper as the scrollport — never a floating plate */
+  background: var(--bg, var(--paper));
 }
 
 .trace-pin__stack {
@@ -2217,10 +2111,11 @@ textarea.input {
   display: flex;
   flex-direction: column;
   gap: 0;
-  background: var(--bg);
+  background: transparent;
   border: none;
   border-radius: 0;
-  border-bottom: 1px solid var(--border-subtle, var(--color-border-subtle));
+  /* One seam into the scrollport — not a framed card */
+  border-bottom: 1px solid var(--border, var(--color-border));
   overflow: hidden;
   box-shadow: none;
 }
@@ -2228,17 +2123,16 @@ textarea.input {
 .trace-pin__stack > .trace-scope {
   border: none;
   border-radius: 0;
-  border-bottom: 1px solid var(--border, var(--color-border));
+  border-bottom: 1px solid var(--border-subtle, var(--color-border-subtle));
   width: 100%;
   cursor: default;
-  background: color-mix(in srgb, var(--text, var(--color-text)) 4%, var(--bg));
+  background: transparent;
   /* Depth 0 — hug the label like in-flow roots */
   padding-left: 0.35rem;
 }
 
 .trace-pin__stack > .trace-scope:last-child {
-  /* Seam between pin stack and the card body in the scrollport */
-  border-bottom: 1px solid var(--border, var(--color-border));
+  border-bottom: none;
 }
 
 /*
@@ -2263,24 +2157,28 @@ textarea.input {
   padding-left: 3.35rem;
 }
 
-/* Stick-block peers — override depth steps with real nest geometry */
+/* Pin clones match ReviewTree gutters (Context → Prompt/Tools; Call → Sent…). */
+.trace-pin__stack > .trace-scope[data-trace-kind="prompt"],
+.trace-pin__stack > .trace-scope[data-trace-kind="tools"],
 .trace-pin__stack > .trace-scope[data-trace-kind="sent"],
 .trace-pin__stack > .trace-scope[data-trace-kind="received"] {
-  padding-left: calc(0.85rem + 0.55rem);
+  padding-left: var(--review-tree-gutter);
 }
 
 .trace-pin__stack > .trace-scope[data-trace-kind="message"] {
-  padding-left: calc(0.85rem + 1.35rem);
+  padding-left: calc(var(--review-tree-gutter) * 2);
 }
 
-/* Nested call under a phase: phase-nested horizontal pad + stick-block nest */
+/* Nested call under a phase: phase nest + call nest */
 .trace-pin__stack > .trace-scope[data-trace-kind="sent"][data-trace-depth="2"],
-.trace-pin__stack > .trace-scope[data-trace-kind="received"][data-trace-depth="2"] {
-  padding-left: calc(0.55rem + 0.85rem + 0.55rem);
+.trace-pin__stack > .trace-scope[data-trace-kind="received"][data-trace-depth="2"],
+.trace-pin__stack > .trace-scope[data-trace-kind="prompt"][data-trace-depth="2"],
+.trace-pin__stack > .trace-scope[data-trace-kind="tools"][data-trace-depth="2"] {
+  padding-left: calc(var(--review-tree-gutter) * 2);
 }
 
 .trace-pin__stack > .trace-scope[data-trace-kind="message"][data-trace-depth="3"] {
-  padding-left: calc(0.55rem + 0.85rem + 1.35rem);
+  padding-left: calc(var(--review-tree-gutter) * 3);
 }
 
 .trace-pin__stack > .trace-scope .trace-scope__lead {
@@ -2463,7 +2361,8 @@ textarea.input {
   min-height: var(--trace-row-h, 34px);
   height: var(--trace-row-h, 34px);
   margin: 0;
-  padding: 0 0.55rem 0 0.35rem;
+  /* pad-left 0 — chevron slot centers on --review-tree-x (flush nest). */
+  padding: 0 0.55rem 0 0;
   text-align: left;
   background: color-mix(in srgb, var(--text, var(--color-text)) 4%, var(--bg));
   border: none;
@@ -2496,7 +2395,7 @@ textarea.input {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  width: 1.5rem;
+  width: var(--review-chevron-slot);
   height: 100%;
   padding: 0;
   color: var(--text-muted, var(--color-text-muted));
@@ -2536,14 +2435,15 @@ textarea.input {
   font: inherit;
 }
 
+/* Two-ink: scopes are labels on paper — never grey plates */
 .trace-scope:hover {
-  background: color-mix(in srgb, var(--text, var(--color-text)) 6.5%, var(--bg));
+  background: transparent;
 }
 
 /* Soft = Sent / Received / Context / Prompt / Tools */
 .trace-scope.is-soft {
   font-size: 0.875rem;
-  background: color-mix(in srgb, var(--text, var(--color-text)) 3.5%, var(--bg));
+  background: transparent;
   color: var(--text-secondary, var(--text-muted, var(--color-text-muted)));
 }
 
@@ -2554,7 +2454,7 @@ textarea.input {
 
 .trace-scope.is-soft:hover,
 .trace-scope.is-soft.is-open {
-  background: color-mix(in srgb, var(--text, var(--color-text)) 4%, var(--bg));
+  background: transparent;
   color: var(--text, var(--color-text));
 }
 
@@ -2573,15 +2473,16 @@ textarea.input {
 }
 
 .trace-scope[data-trace-kind="call"] {
-  background: color-mix(in srgb, var(--accent, var(--color-accent)) 7%, var(--bg));
+  background: transparent;
 }
 
 .trace-scope[data-trace-kind="call"]:hover {
-  background: color-mix(in srgb, var(--accent, var(--color-accent)) 11%, var(--bg));
+  background: transparent;
 }
 
 .trace-scope[data-trace-kind="call"] .trace-scope__lead {
-  color: var(--accent, var(--color-accent));
+  color: var(--text, var(--color-text));
+  font-weight: 650;
 }
 
 .trace-scope[data-trace-kind="sent"] .trace-scope__lead {
@@ -2690,22 +2591,66 @@ textarea.input {
   padding-left: 0.35rem;
 }
 
-/* Nest guide — stick-blocks are the real children (Prompt/Tools, Sent/Received). */
-.trace-nest > .trace-stick-block {
-  margin-left: 0.85rem;
-  border-left: 1px solid var(--border-subtle, var(--color-border-subtle));
+/*
+ * Branch under a scope header — left gutter comes only from .review-tree.
+ * Never override that with a tiny padding (it flattened System/User onto Sent).
+ */
+.trace-branch {
   min-width: 0;
+  padding-top: 0.1rem;
+  padding-bottom: 0.35rem;
 }
 
-.trace-nest > .trace-stick-block > .trace-scope {
-  padding-left: 0.55rem;
+.trace-branch__content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+  padding: 0.25rem 0.5rem 0.4rem 0;
 }
 
-.trace-nest > .trace-stick-block > .trace-scope-body,
-.trace-nest > .trace-scope-body {
-  margin-left: 0;
-  padding-left: 1.35rem;
+/*
+ * Prose under a soft scope (Prompt / Received reply).
+ * Align with the scope *label* (chevron slot + gap) — never
+ * `--review-tree-gutter`, which is the nested-peer column (Tools / messages).
+ */
+.trace-scope-payload {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
   min-width: 0;
+  /* chevron slot + gap → lead text column (scope pad-left is 0) */
+  padding: 0.15rem 0.55rem 0.4rem calc(var(--review-chevron-slot) + 0.35rem);
+}
+
+.trace-branch__caption {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.55rem;
+  padding: 0.2rem 0 0.15rem;
+  font-size: 0.75rem;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-faint, var(--color-text-muted));
+}
+
+.trace-branch__caption-hint {
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--text-muted, var(--color-text-muted));
+  opacity: 0.85;
+}
+
+.trace-branch__caption.is-tools {
+  color: var(--warning, var(--color-warning, #c4a35a));
+}
+
+.trace-branch__caption.is-sql {
+  color: var(--info, var(--color-info, #5b9fd4));
 }
 
 .trace-scope.is-soft .trace-scope__lead {
@@ -2740,18 +2685,28 @@ textarea.input {
   align-items: center;
   gap: 0.55rem;
   flex-shrink: 0;
-  font-size: 0.9375rem;
+  font-size: var(--review-meta-size);
   font-variant-numeric: tabular-nums;
-  color: var(--text-muted, var(--color-text-muted));
+  color: var(--text-faint, var(--color-text-muted));
 }
 
-.trace-scope-body {
-  padding: 0.35rem 0.55rem 0.55rem 2.2rem;
+.trace-scope-body:not(.review-tree) {
+  padding: 0.35rem 0.55rem 0.55rem var(--review-tree-gutter);
   display: flex;
   flex-direction: column;
   gap: 0.15rem;
   border-bottom: 1px solid var(--border-subtle, var(--color-border-subtle));
-  background: var(--bg);
+  background: transparent;
+}
+
+/* Scope body that is also a review-tree: tree owns left pad */
+.trace-scope-body.review-tree {
+  display: flex;
+  flex-direction: column;
+  padding: 0.15rem 0.5rem 0.4rem 0;
+  border-bottom: 1px solid var(--border-subtle, var(--color-border-subtle));
+  background: transparent;
+  gap: 0;
 }
 
 .trace-row__btn {
@@ -2836,8 +2791,9 @@ textarea.input {
   color: var(--text, var(--color-text));
 }
 
+/* Message body sits under the speaker, past the chevron column */
 .trace-msg__body {
-  padding: 0.2rem 0 0.5rem 1.85rem;
+  padding: 0.15rem 0 0.45rem calc(13px + 0.4rem);
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
@@ -2900,9 +2856,10 @@ textarea.input {
 .trace-phase-nested {
   display: flex;
   flex-direction: column;
-  gap: 0.45rem;
-  /* Inset so nested cards keep full rounded corners inside the parent */
-  padding: 0.45rem 0.55rem 0.7rem;
+  gap: 0.15rem;
+  /* Curved tree gutter from .review-tree; hairline under phase header. */
+  padding-top: 0.35rem;
+  padding-bottom: 0.45rem;
   border-top: 1px solid var(--border-subtle, var(--color-border-subtle));
   min-width: 0;
 }
@@ -2971,19 +2928,16 @@ textarea.input {
   background: color-mix(in srgb, var(--text, var(--color-text)) 1.5%, var(--bg));
 }
 
+/* Plain index — never a circled badge (same rule as policy / review chrome). */
 .trace-phase-step__idx {
   flex-shrink: 0;
-  width: 1.25rem;
-  height: 1.25rem;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 999px;
-  font-size: 0.6875rem;
-  font-weight: 650;
-  color: var(--text-muted, var(--color-text-muted));
-  background: color-mix(in srgb, var(--text, var(--color-text)) 6%, transparent);
-  margin-top: 0.1rem;
+  min-width: 1.1rem;
+  margin-top: 0.15rem;
+  font-size: var(--review-meta-size);
+  font-weight: 550;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-faint, var(--color-text-muted));
+  text-align: right;
 }
 
 .trace-phase-step__body {
@@ -3083,8 +3037,8 @@ textarea.input {
 
 .trace-expand__sticky {
   position: sticky;
-  /* Sit just under the pin stack when present */
-  top: calc(var(--trace-pin-stack-h, 0px) + 0.35rem);
+  /* Pin band is outside the scrollport — stick to the scroll top. */
+  top: 0.35rem;
   z-index: 4;
   display: flex;
   flex-direction: column;
@@ -3224,10 +3178,10 @@ textarea.input {
   gap: 0.2rem;
 }
 
-.trace-ctx-item + .trace-ctx-item {
-  border-top: 1px solid var(--border-subtle, var(--color-border-subtle));
-  margin-top: 0.15rem;
-  padding-top: 0.55rem;
+/* Peers already have ReviewTree elbows — no double hairline between tools */
+.review-tree > .review-tree__item .trace-ctx-item {
+  border-top: none;
+  margin-top: 0;
 }
 
 .trace-ctx-item__name {
@@ -3530,12 +3484,54 @@ textarea.input {
   word-break: break-word;
 }
 
-/* ── Widget toolbar — Event Stream, Pipelines, Manual Sync ─────
+/* Review band 2 — Trace meta/ids (peer of ActiveFilterChips).
+ * One quiet flow — middots stay glued to the following id (no orphan ·). */
+.widget-review-meta {
+  display: block;
+  min-width: 0;
+  padding: 0.15rem 0 0.55rem;
+  border-bottom: 1px solid var(--border-subtle, var(--color-border));
+  font-size: var(--review-meta-size);
+  font-weight: 500;
+  line-height: 1.45;
+  color: var(--color-text-muted);
+}
+
+.widget-review-meta__id-group {
+  display: inline;
+  white-space: nowrap;
+}
+
+.widget-review-meta__id {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.3rem;
+  min-width: 0;
+  max-width: 100%;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+  color: inherit;
+  vertical-align: baseline;
+}
+
+.widget-review-meta__id-label {
+  flex-shrink: 0;
+  font-weight: 500;
+  opacity: 0.75;
+}
+
+.widget-review-meta__id-value {
+  min-width: 0;
+  color: var(--text-secondary, var(--color-text-muted));
+}
+
+/* ── Widget toolbar — Event Stream, Pipelines, Trace ─────
  * Tile owns the surface. Toolbar is a divider strip + controls —
  * never a second framed card inside the shell.
  */
 .widget-toolbar {
-  --wt-control-h: 2rem;
+  --wt-control-h: var(--control-h);
   --wt-gap: 0.5rem;
   --wt-pad-x: 0.75rem;
   --wt-pad-y: 0.5rem;
@@ -3547,6 +3543,8 @@ textarea.input {
   background: transparent;
   /* Horizontal inset lives on the log shell — toolbar is a strip, not a card. */
   padding: var(--wt-pad-y) 0;
+  container-type: inline-size;
+  container-name: widget-toolbar;
 }
 
 .widget-toolbar__grid {
@@ -3563,6 +3561,34 @@ textarea.input {
   grid-template-areas:
     "leading leading"
     "search trailing";
+}
+
+/* Empty leading (Trace / Event / Pipelines) — don’t reserve a dead row. */
+.widget-toolbar__leading:empty {
+  display: none;
+}
+
+/*
+ * Search yields first; trailing never overlaps search.
+ * Narrow: stack search above trailing so Expanded/Collapsed can’t fight the field.
+ */
+@container widget-toolbar (max-width: 36rem) {
+  .widget-toolbar__grid {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "leading"
+      "search"
+      "trailing";
+  }
+
+  .widget-toolbar__leading:empty {
+    display: none;
+  }
+
+  .widget-toolbar__trailing {
+    justify-content: flex-end;
+    flex-wrap: wrap;
+  }
 }
 
 .widget-toolbar__leading {
@@ -3582,7 +3608,8 @@ textarea.input {
 
 .widget-toolbar__search {
   grid-area: search;
-  min-width: 0;
+  /* First to give space — never collapse under trailing overlap. */
+  min-width: 6.5rem;
   width: 100%;
 }
 
@@ -3590,6 +3617,25 @@ textarea.input {
   position: relative;
   width: 100%;
   height: var(--wt-control-h);
+}
+
+/* Segment track — same height as search (platform --control-h). */
+.control-segment {
+  height: var(--control-h);
+  box-sizing: border-box;
+}
+
+.control-segment__btn {
+  height: 100%;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+/* Export / icon triggers in the strip match search height. */
+.widget-toolbar__trailing .w-9 {
+  width: var(--wt-control-h);
+  height: var(--wt-control-h);
+  min-width: var(--wt-control-h);
 }
 
 .widget-toolbar__search-icon {
@@ -6823,7 +6869,7 @@ textarea.input {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 1.65rem;
+  width: var(--review-chevron-slot);
   height: 2.1rem;
   flex-shrink: 0;
   color: var(--text-faint);
@@ -6881,7 +6927,7 @@ textarea.input {
 }
 
 .thread-nav-thread-meta {
-  font-size: 11px;
+  font-size: var(--review-meta-size);
   line-height: 1.3;
   color: var(--text-faint);
   font-variant-numeric: tabular-nums;
@@ -7011,12 +7057,12 @@ textarea.input {
 }
 
 .thread-nav-runs {
-  --thread-tree-gutter: 1.55rem;
-  /* Align stem under the chevron column center (chevron width 1.65rem). */
-  --thread-tree-x: 0.82rem;
-  --thread-tree-line: color-mix(in srgb, var(--border) 70%, var(--text-faint));
+  /* Same curved tree tokens as Trace / Event Stream / Pipelines. */
+  --thread-tree-gutter: var(--review-tree-gutter);
+  --thread-tree-x: var(--review-tree-x);
+  --thread-tree-line: var(--review-tree-line);
   position: relative;
-  padding: 0.08rem 0 0.3rem var(--thread-tree-gutter);
+  padding: 0.08rem 0 0.3rem var(--review-tree-gutter);
   opacity: 0;
   transform: translateY(-4px);
   transition:
@@ -7079,28 +7125,27 @@ textarea.input {
   transition: background-color 160ms ease, color 160ms ease;
 }
 
-/* Elbow from the vertical stem (under the thread chevron) into this run. */
+/* Elbow + stem — identical geometry to .review-tree__item. */
 .thread-nav-run::before {
   content: "";
   position: absolute;
-  left: calc(var(--thread-tree-x) - var(--thread-tree-gutter));
+  left: calc(var(--review-tree-x) - var(--review-tree-gutter));
   top: 0;
-  width: calc(var(--thread-tree-gutter) - var(--thread-tree-x));
-  height: 50%;
-  border-left: 1px solid var(--thread-tree-line);
-  border-bottom: 1px solid var(--thread-tree-line);
-  border-bottom-left-radius: 0.45rem;
+  width: calc(var(--review-tree-gutter) - var(--review-tree-x));
+  height: var(--review-tree-mid);
+  border-left: 1px solid var(--review-tree-line);
+  border-bottom: 1px solid var(--review-tree-line);
+  border-bottom-left-radius: var(--review-tree-radius);
   pointer-events: none;
 }
 
-/* Continue the stem below non-last runs so siblings share one trunk. */
 .thread-nav-run:not(:last-child)::after {
   content: "";
   position: absolute;
-  left: calc(var(--thread-tree-x) - var(--thread-tree-gutter));
-  top: 50%;
+  left: calc(var(--review-tree-x) - var(--review-tree-gutter));
+  top: var(--review-tree-mid);
   bottom: 0;
-  border-left: 1px solid var(--thread-tree-line);
+  border-left: 1px solid var(--review-tree-line);
   pointer-events: none;
 }
 
@@ -7134,9 +7179,10 @@ textarea.input {
 
 .thread-nav-run-meta {
   flex-shrink: 0;
-  font-size: 11px;
+  font-size: var(--review-meta-size);
   color: var(--text-faint);
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 .thread-nav-run--active .thread-nav-run-meta {

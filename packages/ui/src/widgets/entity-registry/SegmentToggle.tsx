@@ -38,7 +38,7 @@ export function SegmentToggle<T extends string>({
             aria-checked={active}
             onClick={() => onChange(option.value)}
             className={[
-              "rounded-md px-3.5 py-2 text-sm leading-none",
+              "control-segment__btn inline-flex items-center rounded-md px-3.5 text-sm leading-none",
               SELECT_FOCUS,
               active ? SELECT_ACTIVE : SELECT_IDLE,
             ].join(" ")}

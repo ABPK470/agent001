@@ -70,7 +70,7 @@ export function TraceExportMenu({
     <ToolbarMenu
       title="Download trace"
       ariaLabel="Download trace"
-      trigger={<Download size={16} strokeWidth={1.75} />}
+      trigger={<Download size={14} strokeWidth={1.75} />}
       minWidthClass="min-w-[14rem]"
     >
       <ToolbarMenuItem

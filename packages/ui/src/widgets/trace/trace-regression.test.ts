@@ -159,11 +159,10 @@ describe("peer yield — Context must not cover Plan", () => {
       { id: "phase-plan", top: 400, depth: 0 },
     ]
     const band = { stackInScroll: false as const }
-    expect(computePinnedFromEntries(peers, 400 - H + 1, H, 4, band)).toEqual([
+    expect(computePinnedFromEntries(peers, 399, H, 4, band)).toEqual([
       "context",
     ])
-    expect(computePinnedFromEntries(peers, 400, H, 4, band)).toEqual([])
-    expect(computePinnedFromEntries(peers, 400 + H, H, 4, band)).toEqual([
+    expect(computePinnedFromEntries(peers, 400, H, 4, band)).toEqual([
       "phase-plan",
     ])
   })
@@ -387,7 +386,7 @@ describe("Trace CSS contract — pin indent + work-note divider", () => {
   it("pin chrome is absolute on the scroll frame (not height:0, not inside overflow)", () => {
     // height:0 clipped the stack while data-trace-pinned hid headers.
     // Absolute *inside* overflow scrolled away when pins became eligible.
-    // Flex band above scroll resized clientHeight → jump/flicker.
+    // Scroll top inset by --trace-pin-stack-h keeps body below the pin band.
     expect(css).toMatch(/\.trace-scroll-frame\s*\{[^}]*position:\s*relative/s)
     expect(css).toMatch(/\.trace-dag\s+\.trace-scroll\s*\{[^}]*position:\s*absolute/s)
     expect(css).toMatch(/\.trace-pin\s*\{[^}]*position:\s*absolute/s)
@@ -404,11 +403,18 @@ describe("Trace CSS contract — pin indent + work-note divider", () => {
     expect(src).not.toContain("pinBandScrollDelta")
   })
 
-  it("Trace pin math uses overlay focus (stackInScroll: true)", () => {
+  it("Trace pin math uses external band (stackInScroll: false)", () => {
     const pinPath = join(dirname(fileURLToPath(import.meta.url)), "trace-pin.ts")
     expect(readFileSync(pinPath, "utf8")).toMatch(
-      /TRACE_PIN_OPTS\s*=\s*\{\s*stackInScroll:\s*true/,
+      /TRACE_PIN_OPTS\s*=\s*\{\s*stackInScroll:\s*false/,
     )
+  })
+
+  it("scrollport starts below the pin band so body text is never covered", () => {
+    expect(css).toMatch(
+      /\.trace-dag\s+\.trace-scroll\s*\{[^}]*top:\s*var\(--trace-pin-stack-h/s,
+    )
+    expect(css).not.toMatch(/\.trace-dag\s+\.trace-scroll\s*\{[^}]*inset:\s*0/s)
   })
 
   it("pin stack honors data-trace-depth (messages under Sent)", () => {
@@ -417,12 +423,24 @@ describe("Trace CSS contract — pin indent + work-note divider", () => {
     expect(css).toContain('.trace-pin__stack > .trace-scope[data-trace-depth="3"]')
   })
 
-  it("pin message indent matches in-flow nest geometry (not ScopeRow depth steps)", () => {
+  it("pin message indent matches review-tree gutters (messages under Sent)", () => {
     expect(css).toMatch(
-      /\.trace-pin__stack\s*>\s*\.trace-scope\[data-trace-kind="message"\]\s*\{[^}]*padding-left:\s*calc\(0\.85rem\s*\+\s*1\.35rem\)/s,
+      /\.trace-pin__stack\s*>\s*\.trace-scope\[data-trace-kind="message"\]\s*\{[^}]*padding-left:\s*calc\(var\(--review-tree-gutter\)\s*\*\s*2\)/s,
     )
     expect(css).toMatch(
-      /\.trace-pin__stack\s*>\s*\.trace-scope\[data-trace-kind="sent"\]\s*,\s*\n\s*\.trace-pin__stack\s*>\s*\.trace-scope\[data-trace-kind="received"\]\s*\{[^}]*padding-left:\s*calc\(0\.85rem\s*\+\s*0\.55rem\)/s,
+      /\.trace-pin__stack\s*>\s*\.trace-scope\[data-trace-kind="sent"\]\s*,\s*\n\s*\.trace-pin__stack\s*>\s*\.trace-scope\[data-trace-kind="received"\]\s*\{[^}]*padding-left:\s*var\(--review-tree-gutter\)/s,
+    )
+  })
+
+  it("Call outline nests messages under Sent via ReviewTree (not peer of Sent)", () => {
+    const callPath = join(dirname(fileURLToPath(import.meta.url)), "TraceCall.tsx")
+    const call = readFileSync(callPath, "utf8")
+    expect(call).toContain("ReviewTree")
+    expect(call).toContain("ReviewTreeItem")
+    expect(call).toMatch(/sentOpen[\s\S]*ReviewTree[\s\S]*PromptMessageRow/)
+    // Old override that flattened System/User onto Sent must stay gone.
+    expect(css).not.toMatch(
+      /\.trace-nest\s*>\s*\.trace-stick-block\s*>\s*\.trace-scope-body[^}]*padding-left:\s*0\.15rem/s,
     )
   })
 

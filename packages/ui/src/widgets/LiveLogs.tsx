@@ -38,8 +38,11 @@ import { WIDGET_ICONS } from "./widget-icons"
 import {
   WIDGET_LOG_SHELL_CLASS,
   WIDGET_LOG_STACK_CLASS,
+  WidgetToolbar,
   WidgetToolbarCount,
+  WidgetToolbarLeading,
   WidgetToolbarSearch,
+  WidgetToolbarTrailing,
 } from "./widget-toolbar"
 import {
   EVENT_TYPES,
@@ -335,61 +338,57 @@ export function LiveLogs() {
   return (
     <div ref={rootRef} className={WIDGET_LOG_SHELL_CLASS}>
       <div className={WIDGET_LOG_STACK_CLASS}>
-      {/* Sync History dialect: one Filters sheet (time + type), same choice grid. */}
-      <div className="widget-toolbar shrink-0">
-        <div className="flex items-center gap-2 min-w-0">
-          <div className="min-w-0 flex-1">
-            <WidgetToolbarSearch
-              value={searchText}
-              onChange={setSearchText}
-              placeholder="Search message, type, plan id…"
-              loading={searching || loading}
-            />
-          </div>
-          <div className="flex shrink-0 items-center gap-1.5">
-            <WidgetToolbarCount filtered={filtered.length} total={entries.length} hidden={tiny} />
-
-            <button
-              ref={filterBtnRef}
-              type="button"
-              onClick={() => setFiltersOpen((o) => !o)}
-              className={`widget-toolbar__icon-btn relative ${
-                filtersOpen || filtersActive ? "widget-toolbar__icon-btn--active" : ""
-              }`}
-              title={
-                filtersActive
-                  ? `Filters (${activeFilterCount} active)`
-                  : "Filters"
-              }
-              aria-pressed={filtersOpen || filtersActive}
-            >
-              <SlidersHorizontal size={14} />
-              {filtersActive && (
-                <span className="absolute -top-0.5 -right-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-accent px-0.5 text-[9px] font-mono font-medium leading-none text-text-on-accent">
-                  {activeFilterCount > 9 ? "9+" : activeFilterCount}
-                </span>
-              )}
-            </button>
-
-            <button
-              type="button"
-              title={paused ? `Resume (${pendingLiveCount} buffered)` : "Pause live append"}
-              className={`widget-toolbar__icon-btn relative ${
-                paused ? "bg-error/15 text-error hover:bg-error/20" : ""
-              }`}
-              aria-pressed={paused}
-              onClick={() => setPaused((p) => !p)}
-            >
-              {paused ? <Play size={15} /> : <Pause size={15} />}
-              {paused && pendingLiveCount > 0 && (
-                <span className="absolute -top-1.5 -right-1.5 text-xs font-bold bg-error-soft text-error border border-error/35 rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-0.5">
-                  {pendingLiveCount > 99 ? "99+" : pendingLiveCount}
-                </span>
-              )}
-            </button>
-          </div>
-        </div>
-      </div>
+      {/* Review dialect: leading | search | trailing — filters sheet is band-2 power. */}
+      <WidgetToolbar>
+        <WidgetToolbarLeading>{null}</WidgetToolbarLeading>
+        <WidgetToolbarSearch
+          value={searchText}
+          onChange={setSearchText}
+          placeholder="Filter events…"
+          loading={searching || loading}
+          onClear={() => setSearchText("")}
+        />
+        <WidgetToolbarTrailing>
+          <WidgetToolbarCount filtered={filtered.length} total={entries.length} hidden={tiny} />
+          <button
+            ref={filterBtnRef}
+            type="button"
+            onClick={() => setFiltersOpen((o) => !o)}
+            className={`widget-toolbar__icon-btn relative ${
+              filtersOpen || filtersActive ? "widget-toolbar__icon-btn--active" : ""
+            }`}
+            title={
+              filtersActive
+                ? `Filters (${activeFilterCount} active)`
+                : "Filters"
+            }
+            aria-pressed={filtersOpen || filtersActive}
+          >
+            <SlidersHorizontal size={14} strokeWidth={1.75} />
+            {filtersActive && (
+              <span className="absolute -top-0.5 -right-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-text px-0.5 text-[9px] font-mono font-medium leading-none text-text-on-accent">
+                {activeFilterCount > 9 ? "9+" : activeFilterCount}
+              </span>
+            )}
+          </button>
+          <button
+            type="button"
+            title={paused ? `Resume (${pendingLiveCount} buffered)` : "Pause live append"}
+            className={`widget-toolbar__icon-btn relative ${
+              paused ? "text-error" : ""
+            }`}
+            aria-pressed={paused}
+            onClick={() => setPaused((p) => !p)}
+          >
+            {paused ? <Play size={15} /> : <Pause size={15} />}
+            {paused && pendingLiveCount > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 text-xs font-bold bg-error-soft text-error border border-error/35 rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-0.5">
+                {pendingLiveCount > 99 ? "99+" : pendingLiveCount}
+              </span>
+            )}
+          </button>
+        </WidgetToolbarTrailing>
+      </WidgetToolbar>
 
       <ActiveFilterChips
         chips={activeChips}
@@ -609,10 +608,19 @@ function LogRow({
         } ${hasData ? "cursor-pointer" : ""}`}
         onClick={() => hasData && setExpanded((e) => !e)}
       >
-        <span className="shrink-0 w-3 flex items-center justify-center" style={{ color: msgColor, opacity: 0.3 }}>
-          {hasData ? <ChevronRight size={13} className={`transition-transform ${expanded ? "rotate-90" : ""}`} /> : null}
+        <span
+          className="review-chevron-slot"
+          style={{ color: msgColor, opacity: 0.3 }}
+        >
+          {hasData ? (
+            <ChevronRight
+              size={13}
+              strokeWidth={1.75}
+              className={`transition-transform ${expanded ? "rotate-90" : ""}`}
+            />
+          ) : null}
         </span>
-        <span className="shrink-0 text-sm tabular-nums whitespace-nowrap" style={{ color: msgColor, opacity: 0.55 }}>
+        <span className="shrink-0 review-meta" style={{ color: msgColor, opacity: 0.55 }}>
           {formatLogTimestamp(log.timestamp, tiny)}
         </span>
         <button
@@ -642,11 +650,15 @@ function LogRow({
         </span>
       </div>
       {expanded && log.data && (
-        <div className={`${compact ? "pl-3 pr-3" : "pl-[7rem] pr-4"} py-2 bg-base border-l-2 border-border-subtle ml-3 space-y-2`}>
+        <div className="review-tree space-y-2 py-1 pr-3">
           {log.eventName && isSyncSqlEventType(log.eventName) && (
-            <SqlTraceFromEventData data={log.data} compact maxHeight={compact ? 120 : 180} />
+            <div className="review-tree__item">
+              <SqlTraceFromEventData data={log.data} compact maxHeight={compact ? 120 : 180} />
+            </div>
           )}
-          <JsonViewer value={log.data} label="payload" defaultExpandDepth={2} maxHeight={compact ? 160 : 240} />
+          <div className="review-tree__item">
+            <JsonViewer value={log.data} label="payload" defaultExpandDepth={2} maxHeight={compact ? 160 : 240} />
+          </div>
         </div>
       )}
     </div>

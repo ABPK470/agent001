@@ -1,6 +1,7 @@
 import { ChevronRight, Loader2 } from "lucide-react"
 import type { ReactNode } from "react"
 import type { OperationStatus } from "../../client/index"
+import { ReviewTree, ReviewTreeItem } from "../../components/ReviewTree"
 
 export const OP_LOG = "text-sm leading-snug"
 export const OP_LOG_MONO = `${OP_LOG} font-mono`
@@ -134,7 +135,10 @@ export function StatusDot({ status }: { status: OperationStatus }) {
   )
 }
 
-/** Bordered group — pipeline card or nested step group. */
+/**
+ * Pipeline / step group — flush list chrome (no nested grey plates).
+ * Nested groups use the shared ReviewTree.
+ */
 export function LogGroup({
   children,
   nested,
@@ -148,15 +152,10 @@ export function LogGroup({
   if (flat) {
     return <div className="divide-y divide-border-subtle">{children}</div>
   }
-  return (
-    <div
-      className={`overflow-hidden rounded-md border border-border-subtle bg-overlay-1/40 ${
-        nested ? "ml-3 mt-0.5" : "mb-1 last:mb-0"
-      }`}
-    >
-      {children}
-    </div>
-  )
+  if (nested) {
+    return <ReviewTree className="mt-0.5">{children}</ReviewTree>
+  }
+  return <div className="mb-1 border-b border-border-subtle last:mb-0 last:border-b-0">{children}</div>
 }
 
 function LogRowCells({
@@ -169,8 +168,6 @@ function LogRowCells({
   meta,
   durationMs,
   timestamp,
-  actions,
-  linear,
   depth = 0,
 }: {
   expanded: boolean
@@ -182,23 +179,21 @@ function LogRowCells({
   meta?: ReactNode
   durationMs?: number | null
   timestamp?: string | null
-  actions?: ReactNode
-  linear?: boolean
   depth?: number
 }) {
-  void linear
   const textSize = OP_LOG
   const labelWeight = depth > 0 ? "font-normal" : "font-medium"
   return (
     <>
-      {showChevron ? (
-        <ChevronRight
-          size={14}
-          className={`shrink-0 text-text-muted transition-transform ${expanded ? "rotate-90" : ""} ${expandable ? "opacity-100" : "opacity-0"}`}
-        />
-      ) : (
-        <span className="w-3.5 shrink-0" aria-hidden />
-      )}
+      <span className="review-chevron-slot" aria-hidden={!showChevron}>
+        {showChevron ? (
+          <ChevronRight
+            size={13}
+            strokeWidth={1.75}
+            className={`text-text-muted transition-transform ${expanded ? "rotate-90" : ""} ${expandable ? "opacity-100" : "opacity-0"}`}
+          />
+        ) : null}
+      </span>
       {showStatus && status ? (
         <StatusDot status={status} />
       ) : (
@@ -208,18 +203,20 @@ function LogRowCells({
         <span className={`${labelWeight} ${OP_LOG_MUTED}`}>{label}</span>
         {meta ? <span className={`font-normal ${OP_LOG_DESC}`}> · {meta}</span> : null}
       </span>
-      <span className={`shrink-0 tabular-nums w-14 text-right ${textSize} ${OP_LOG_MUTED}`}>
+      <span className={`shrink-0 review-meta w-14 text-right ${OP_LOG_MUTED}`}>
         {durationMs !== undefined ? fmtDuration(durationMs ?? null) : ""}
       </span>
-      <span className={`shrink-0 tabular-nums w-[4.5rem] text-right ${textSize} ${OP_LOG_MUTED}`}>
+      <span className={`shrink-0 review-meta w-[4.5rem] text-right ${OP_LOG_MUTED}`}>
         {timestamp ? fmtTime(timestamp) : ""}
       </span>
-      {actions}
     </>
   )
 }
 
-/** Unified row — same layout at every depth; nesting via LogNest. */
+/**
+ * Unified row. When `treeItem`, wraps as ReviewTreeItem (required inside LogNest).
+ * Root pipeline headers set `treeItem={false}`.
+ */
 export function OpLogRow({
   status,
   expanded = false,
@@ -236,6 +233,7 @@ export function OpLogRow({
   linear,
   isLast,
   depth = 0,
+  treeItem = true,
 }: {
   status?: OperationStatus
   expanded?: boolean
@@ -252,12 +250,14 @@ export function OpLogRow({
   linear?: boolean
   isLast?: boolean
   depth?: number
+  /** Wrap in ReviewTreeItem (default true — nest peers). */
+  treeItem?: boolean
 }) {
+  // pl-0 — chevron slot centers on --review-tree-x; nested LogNest stays flush.
   const rowClass = linear
-    ? "flex items-center gap-2.5 px-3 py-2 text-left text-text transition-colors hover:bg-elevated/50"
+    ? "flex items-center gap-2 py-2 pr-2 text-left text-text transition-colors hover:bg-elevated/50"
     : [
-        "flex items-center gap-2 px-2.5 py-1.5 text-left text-text transition-colors hover:bg-overlay-2/80",
-        // Never draw a bottom rule on the last row — it fights the card edge.
+        "flex items-center gap-2 py-1.5 pr-2.5 text-left text-text transition-colors hover:bg-overlay-2/80",
         isLast ? "" : "border-b border-border-subtle",
         expanded && expandable ? "bg-overlay-1/50" : "",
       ].join(" ")
@@ -273,27 +273,21 @@ export function OpLogRow({
       meta={meta}
       durationMs={durationMs}
       timestamp={timestamp}
-      actions={undefined}
-      linear={linear}
       depth={depth}
     />
   )
 
-  if (expandable && onToggle) {
-    return (
-      <>
-        <div className={rowClass}>
-          <button type="button" className="flex min-w-0 flex-1 items-center gap-2 text-left" onClick={onToggle}>
-            {cells}
-          </button>
-          {actions}
-        </div>
-        {expanded && children}
-      </>
-    )
-  }
-
-  return (
+  const row = expandable && onToggle ? (
+    <>
+      <div className={rowClass}>
+        <button type="button" className="flex min-w-0 flex-1 items-center gap-2 text-left" onClick={onToggle}>
+          {cells}
+        </button>
+        {actions}
+      </div>
+      {expanded && children}
+    </>
+  ) : (
     <>
       <div className={rowClass}>
         {cells}
@@ -302,49 +296,35 @@ export function OpLogRow({
       {expanded && children}
     </>
   )
+
+  if (!treeItem) return <div className="min-w-0">{row}</div>
+  return <ReviewTreeItem>{row}</ReviewTreeItem>
 }
 
 /**
- * Nested content under a pipeline / activity.
+ * Nested peers under a pipeline / activity.
  *
- * Root nest is an *inset* panel (padding + inner rounded border) so guide
- * rails never run into the outer card’s rounded corner or double its lip.
- * Deeper nests only indent inside that panel.
+ * Hard: render LogNest *inside* the parent OpLogRow / ReviewTreeItem.
+ * As a sibling it punches a hole in the parent stem (Configured → Preview gap).
+ *
+ * Nest is flush with the parent row — stem under `.review-chevron-slot` center
+ * (same as Threads). Never wrap in pl-* (that parks the stem under content).
  */
 export function LogNest({
   children,
   linear,
   root,
+  align = "flush",
 }: {
   children: ReactNode
   linear?: boolean
-  /** First level under a pipeline card header */
+  /** @deprecated unused — kept for call-site compat */
   root?: boolean
+  /** @deprecated always flush — stem under chevron via shared tokens */
+  align?: "chevron" | "flush"
 }) {
-  if (linear) {
-    return (
-      <div className="ml-[1.125rem] border-l border-border-subtle pl-0">
-        {children}
-      </div>
-    )
-  }
-  if (root) {
-    // Inset the nested panel so rails/dividers never meet the outer card radius.
-    return (
-      <div className="border-t border-border-subtle bg-base/15 px-3 py-2.5">
-        <div className="divide-y divide-border-subtle overflow-hidden rounded-md border border-border-subtle bg-overlay-1/30">
-          {children}
-        </div>
-      </div>
-    )
-  }
-  // Deeper nest: indent + rail, with bottom padding so the last child doesn’t
-  // sit on the inset panel’s lip. Strip the last row’s bottom rule as a belt-
-  // and-suspenders against double lips. Root nest is inset, so this rail never
-  // meets the outer card’s rounded corner.
-  return (
-    <div className="ml-2.5 border-l border-border-subtle pb-1.5 [&>div:last-child]:border-b-0">
-      {children}
-    </div>
-  )
+  void root
+  void linear
+  void align
+  return <ReviewTree className="pb-1">{children}</ReviewTree>
 }

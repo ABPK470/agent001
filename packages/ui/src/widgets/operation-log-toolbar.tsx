@@ -1,175 +1,184 @@
-import { Check, Filter, X } from "lucide-react"
+/**
+ * Pipelines toolbar — same review dialect as Event Stream:
+ *   leading empty | search | count · filter sheet
+ * Kind + Status live in FilterSheet (multi-select), not leading chips.
+ * No expand/collapse toggle — row chevrons own that.
+ */
+
+import { SlidersHorizontal } from "lucide-react"
+import { useMemo, useRef, useState, type JSX } from "react"
 import type { OperationStatus } from "../client/index"
-import { statusFilterActiveClass } from "./pipelines/operation-log-row"
 import {
-  LOG_TOOLBAR_CHIP,
-  LOG_TOOLBAR_CHIP_ACTIVE,
-  LOG_TOOLBAR_CHIP_IDLE,
-  LOG_TOOLBAR_DIVIDER,
-  LOG_TOOLBAR_ICON_BTN,
-  LogWidgetToolbar,
-  LogWidgetToolbarCount,
-  LogWidgetToolbarFilters,
-  LogWidgetToolbarSearch,
-  LogWidgetToolbarTail,
-  WidgetToolbarFilterMenu,
+  ActiveFilterChips,
+  FilterChoiceGrid,
+  FilterField,
+  FilterSheet,
+  type ActiveFilterChipModel,
+} from "../components/FilterSheet"
+import {
+  WidgetToolbar,
+  WidgetToolbarCount,
+  WidgetToolbarLeading,
+  WidgetToolbarSearch,
+  WidgetToolbarTrailing,
 } from "./widget-toolbar"
 
-const ALL_STATUSES: OperationStatus[] = ["running", "success", "failed", "cancelled", "skipped"]
+export type PipelineKindFilter = "agent" | "sync" | "bridge"
 
-function StatusFilterChip({
-  status,
-  active,
-  onClick,
-}: {
-  status: OperationStatus
-  active: boolean
-  onClick: () => void
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      className={`${LOG_TOOLBAR_CHIP} capitalize ${
-        active ? statusFilterActiveClass(status) : LOG_TOOLBAR_CHIP_IDLE
-      }`}
-    >
-      {status}
-    </button>
-  )
-}
+const KIND_OPTIONS: readonly { value: PipelineKindFilter; label: string }[] = [
+  { value: "agent", label: "Agent" },
+  { value: "sync", label: "Sync" },
+  { value: "bridge", label: "Bridge" },
+]
+
+const STATUS_OPTIONS: readonly { value: OperationStatus; label: string }[] = [
+  { value: "running", label: "Running" },
+  { value: "success", label: "Success" },
+  { value: "failed", label: "Failed" },
+  { value: "cancelled", label: "Cancelled" },
+  { value: "skipped", label: "Skipped" },
+]
 
 export function OperationLogToolbar({
-  kindView,
-  setKindView,
+  kinds,
+  setKinds,
   statuses,
-  toggleStatus,
-  clearStatuses,
+  setStatuses,
   search,
   setSearch,
   searchPending,
-  compact,
   tiny,
   filteredCount,
   totalCount,
 }: {
-  kindView: "all" | "agent" | "sync" | "bridge"
-  setKindView: (v: "all" | "agent" | "sync" | "bridge") => void
+  kinds: Set<PipelineKindFilter>
+  setKinds: (next: Set<PipelineKindFilter>) => void
   statuses: Set<OperationStatus>
-  toggleStatus: (s: OperationStatus) => void
-  clearStatuses: () => void
+  setStatuses: (next: Set<OperationStatus>) => void
   search: string
   setSearch: (v: string) => void
   searchPending: boolean
-  compact: boolean
   tiny: boolean
   filteredCount: number
   totalCount: number
-}) {
+}): JSX.Element {
+  const [filtersOpen, setFiltersOpen] = useState(false)
+  const filterBtnRef = useRef<HTMLButtonElement>(null)
+
+  const filtersActive = kinds.size > 0 || statuses.size > 0
+  const activeFilterCount = kinds.size + statuses.size
+
+  const activeChips = useMemo((): ActiveFilterChipModel[] => {
+    const chips: ActiveFilterChipModel[] = []
+    for (const kind of kinds) {
+      chips.push({
+        id: `kind:${kind}`,
+        label: "Kind",
+        value: kind,
+        onRemove: () => {
+          const next = new Set(kinds)
+          next.delete(kind)
+          setKinds(next)
+        },
+      })
+    }
+    for (const status of statuses) {
+      chips.push({
+        id: `status:${status}`,
+        label: "Status",
+        value: status,
+        onRemove: () => {
+          const next = new Set(statuses)
+          next.delete(status)
+          setStatuses(next)
+        },
+      })
+    }
+    return chips
+  }, [kinds, statuses, setKinds, setStatuses])
+
+  function clearAllFilters(): void {
+    setKinds(new Set())
+    setStatuses(new Set())
+  }
+
   return (
-    <LogWidgetToolbar compact={compact}>
-      <LogWidgetToolbarFilters>
-        {(["all", "agent", "sync", "bridge"] as const).map((v) => {
-          const active = v === kindView
-          const label =
-            v === "sync" ? (compact || tiny ? "sync" : "synchronization") : v
-          return (
-            <button
-              key={v}
-              type="button"
-              onClick={() => setKindView(v)}
-              className={`${LOG_TOOLBAR_CHIP} ${active ? LOG_TOOLBAR_CHIP_ACTIVE : LOG_TOOLBAR_CHIP_IDLE}`}
-            >
-              {label}
-            </button>
-          )
-        })}
-
-        {!compact && <div className={LOG_TOOLBAR_DIVIDER} aria-hidden />}
-
-        {!compact ? (
-          <>
-            {ALL_STATUSES.map((s) => (
-              <StatusFilterChip
-                key={s}
-                status={s}
-                active={statuses.has(s)}
-                onClick={() => toggleStatus(s)}
-              />
-            ))}
-            {statuses.size > 0 && (
-              <button
-                type="button"
-                onClick={clearStatuses}
-                className={`${LOG_TOOLBAR_ICON_BTN} text-text-muted hover:text-text hover:bg-elevated/40`}
-                title="Clear status filters"
-              >
-                <X size={14} />
-              </button>
-            )}
-          </>
-        ) : (
-          <WidgetToolbarFilterMenu
-            active={statuses.size > 0}
-            ariaLabel="Filter by status"
-            label={
-              <>
-                <Filter size={13} />
-                {statuses.size === 0 ? "status" : `${statuses.size} status`}
-              </>
+    <>
+      <WidgetToolbar>
+        <WidgetToolbarLeading>{null}</WidgetToolbarLeading>
+        <WidgetToolbarSearch
+          value={search}
+          onChange={setSearch}
+          placeholder="Filter pipelines…"
+          loading={searchPending}
+          onClear={() => setSearch("")}
+        />
+        <WidgetToolbarTrailing>
+          <WidgetToolbarCount filtered={filteredCount} total={totalCount} hidden={tiny} />
+          <button
+            ref={filterBtnRef}
+            type="button"
+            onClick={() => setFiltersOpen((o) => !o)}
+            className={`widget-toolbar__icon-btn relative ${
+              filtersOpen || filtersActive ? "widget-toolbar__icon-btn--active" : ""
+            }`}
+            title={
+              filtersActive
+                ? `Filters (${activeFilterCount} active)`
+                : "Filters"
             }
+            aria-pressed={filtersOpen || filtersActive}
           >
-            {ALL_STATUSES.map((s) => {
-              const on = statuses.has(s)
-              return (
-                <button
-                  key={s}
-                  type="button"
-                  role="menuitemcheckbox"
-                  aria-checked={on}
-                  onClick={() => toggleStatus(s)}
-                  className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm capitalize transition-colors ${
-                    on
-                      ? statusFilterActiveClass(s)
-                      : "text-text-muted hover:bg-[var(--select-fill)] hover:text-text"
-                  }`}
-                >
-                  <Check
-                    size={14}
-                    className={`shrink-0 ${on ? "opacity-100" : "opacity-0"}`}
-                    aria-hidden
-                  />
-                  {s}
-                </button>
-              )
-            })}
-            {statuses.size > 0 && (
-              <button
-                type="button"
-                role="menuitem"
-                onClick={clearStatuses}
-                className="flex w-full items-center gap-2 border-t border-border-subtle px-3 py-2 text-sm text-text-muted hover:bg-[var(--select-fill)] hover:text-text"
-              >
-                <X size={14} />
-                Clear filters
-              </button>
+            <SlidersHorizontal size={14} strokeWidth={1.75} />
+            {filtersActive && (
+              <span className="absolute -top-0.5 -right-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-text px-0.5 text-[9px] font-mono font-medium leading-none text-text-on-accent">
+                {activeFilterCount > 9 ? "9+" : activeFilterCount}
+              </span>
             )}
-          </WidgetToolbarFilterMenu>
-        )}
-      </LogWidgetToolbarFilters>
+          </button>
+        </WidgetToolbarTrailing>
+      </WidgetToolbar>
 
-      <LogWidgetToolbarSearch
-        value={search}
-        onChange={setSearch}
-        placeholder="Filter operations…"
-        loading={searchPending}
-        onClear={() => setSearch("")}
+      <ActiveFilterChips
+        chips={activeChips}
+        onClear={activeFilterCount > 0 ? clearAllFilters : undefined}
       />
 
-      <LogWidgetToolbarTail>
-        <LogWidgetToolbarCount filtered={filteredCount} total={totalCount} hidden={tiny} />
-      </LogWidgetToolbarTail>
-    </LogWidgetToolbar>
+      <FilterSheet
+        open={filtersOpen}
+        onClose={() => setFiltersOpen(false)}
+        anchorRef={filterBtnRef}
+        footer={
+          filtersActive ? (
+            <button
+              type="button"
+              onClick={clearAllFilters}
+              className="text-sm font-medium text-text-muted hover:text-text"
+            >
+              Clear all
+            </button>
+          ) : null
+        }
+      >
+        <FilterField label="Kind">
+          <FilterChoiceGrid
+            options={KIND_OPTIONS}
+            values={[...kinds]}
+            onChange={(values) => setKinds(new Set(values))}
+            columns={3}
+            mode="multi"
+          />
+        </FilterField>
+        <FilterField label="Status">
+          <FilterChoiceGrid
+            options={STATUS_OPTIONS}
+            values={[...statuses]}
+            onChange={(values) => setStatuses(new Set(values))}
+            columns={3}
+            mode="multi"
+          />
+        </FilterField>
+      </FilterSheet>
+    </>
   )
 }

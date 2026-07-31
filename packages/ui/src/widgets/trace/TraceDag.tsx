@@ -3,21 +3,27 @@
  *
  * Sticky scroll geometry (first principles):
  *   .trace-scroll-frame  — fixed-size relative shell (flex child)
- *     .trace-pin         — absolute sibling OVER the scrollport (does not scroll)
- *     .trace-scroll      — absolute fill; only this node scrolls
+ *     .trace-pin         — absolute band at top [0, stackH)
+ *     .trace-scroll      — absolute fill from stackH → bottom (only this scrolls)
  *
- * Never put pins inside the overflow node (they scroll away while
- * data-trace-pinned hides originals → "no pins"). Never make pins a flex
- * sibling that resizes the scrollport (jump/flicker at peer handoff).
+ * Pins are outside the scrollport so body text is never covered. Never put
+ * pins inside the overflow node (they scroll away while data-trace-pinned
+ * hides originals → "no pins").
  */
 
-import { Search, X } from "lucide-react"
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { VirtualList } from "../../components/VirtualList"
 import { fmtTokens, formatMs } from "../../lib/util"
 import { parkScrollOnScope, offsetInScrollHost } from "../../lib/chatScroll"
 import { SegmentToggle } from "../entity-registry/SegmentToggle"
-import { WIDGET_LOG_SHELL_CLASS, WIDGET_LOG_STACK_CLASS } from "../widget-toolbar"
+import {
+  WIDGET_LOG_SHELL_CLASS,
+  WIDGET_LOG_STACK_CLASS,
+  WidgetToolbar,
+  WidgetToolbarLeading,
+  WidgetToolbarSearch,
+  WidgetToolbarTrailing,
+} from "../widget-toolbar"
 import {
   messagePreview,
   searchCall,
@@ -36,6 +42,7 @@ import {
   samePinnedIds,
   syncPinnedInFlow,
   traceScopeDepth,
+  type TraceScopeLayout,
 } from "./trace-pin"
 import { CallOutline } from "./TraceCall"
 import { PreambleOutline } from "./TraceContext"
@@ -65,6 +72,7 @@ export function TraceDag({
   const [pinnedIds, setPinnedIds] = useState<string[]>([])
   const scrollRef = useRef<HTMLDivElement>(null)
   const pinnedIdsRef = useRef<string[]>([])
+  const pinLayoutCacheRef = useRef(new Map<string, TraceScopeLayout>())
   const pinRafRef = useRef(0)
   const seededRef = useRef(false)
   const searchSeedRef = useRef("")
@@ -76,11 +84,13 @@ export function TraceDag({
   function refreshPinStack() {
     const el = scrollRef.current
     if (!el) return
-    // VirtualList only mounts the window — pin from those nodes; offscreen scopes are skipped.
-    const ids = computeTracePinnedScopeIds(el)
+    // Cache layouts from the virtual window so headers above the viewport still pin.
+    const ids = computeTracePinnedScopeIds(el, pinLayoutCacheRef.current)
     const stackH = ids.length * TRACE_STICKY_ROW_H
+    // Insets the scrollport below the pin band (CSS top) — content never sits under pins.
     el.style.setProperty("--trace-pin-stack-h", `${stackH}px`)
-    syncPinnedInFlow(el, ids, TRACE_STICKY_ROW_H, { reserveScrollPadding: true })
+    // Replace in-flow headers; no scroll-padding — pins are outside the scrollport.
+    syncPinnedInFlow(el, ids, TRACE_STICKY_ROW_H, { reserveScrollPadding: false })
     if (samePinnedIds(pinnedIdsRef.current, ids)) return
     pinnedIdsRef.current = ids
     setPinnedIds(ids)
@@ -148,6 +158,7 @@ export function TraceDag({
     searchSeedRef.current = ""
     setOpenState(emptyOpen())
     pinnedIdsRef.current = []
+    pinLayoutCacheRef.current.clear()
     setPinnedIds([])
   }, [runId])
 
@@ -178,6 +189,25 @@ export function TraceDag({
   }, [query, callHits])
 
   useEffect(() => {
+    // Expand/collapse shifts absolute tops — drop stale cache and relearn.
+    // Do not clear on call/spine append: ancestors above the virtual window
+    // must keep their last known tops so pins still stick while following.
+    pinLayoutCacheRef.current.clear()
+    schedulePinRefresh()
+  }, [
+    openState.calls,
+    openState.sent,
+    openState.received,
+    openState.messages,
+    openState.tools,
+    openState.preamble,
+    openState.contextPrompt,
+    openState.contextTools,
+    openState.phases,
+    openState.work,
+  ])
+
+  useEffect(() => {
     const el = scrollRef.current
     if (!el) return
     function onScroll() {
@@ -196,20 +226,7 @@ export function TraceDag({
       if (pinRafRef.current) cancelAnimationFrame(pinRafRef.current)
       pinRafRef.current = 0
     }
-  }, [
-    dag.calls.length,
-    dag.spine.length,
-    openState.calls,
-    openState.sent,
-    openState.received,
-    openState.messages,
-    openState.tools,
-    openState.preamble,
-    openState.contextPrompt,
-    openState.contextTools,
-    openState.phases,
-    openState.work,
-  ])
+  }, [dag.calls.length, dag.spine.length])
 
   useEffect(() => {
     const el = scrollRef.current
@@ -879,97 +896,77 @@ export function TraceDag({
       ? `${callHits?.size ?? 0} of ${dag.calls.length} calls`
       : null
 
+  const metaParts: string[] = []
+  if (stats.callCount > 0) metaParts.push(`${stats.callCount} call${stats.callCount === 1 ? "" : "s"}`)
+  if (stats.toolRunCount > 0) metaParts.push(`${stats.toolRunCount} tool${stats.toolRunCount === 1 ? "" : "s"}`)
+  if (stats.phaseCount > 0) metaParts.push(`${stats.phaseCount} phase${stats.phaseCount === 1 ? "" : "s"}`)
+  if (stats.totalDuration > 0) metaParts.push(formatMs(stats.totalDuration))
+  if (stats.promptTokens > 0 || stats.completionTokens > 0) {
+    metaParts.push(`${fmtTokens(stats.promptTokens)} in · ${fmtTokens(stats.completionTokens)} out`)
+  }
+  const showMetaBand = metaParts.length > 0 || Boolean(runId || threadId)
+
   return (
     <div className={`trace-dag ${WIDGET_LOG_SHELL_CLASS}`}>
       <div className={WIDGET_LOG_STACK_CLASS}>
-      <div className="trace-toolbar shrink-0">
-        <div className="trace-toolbar__row">
-          <div className="trace-toolbar__meta">
-            {stats.callCount === 0 && stats.toolRunCount === 0 ? (
-              <span>No agent loop yet</span>
-            ) : (
-              <>
-                {stats.callCount > 0 && (
-                  <span>
-                    {stats.callCount} call{stats.callCount === 1 ? "" : "s"}
-                  </span>
-                )}
-                {stats.toolRunCount > 0 && (
-                  <span>
-                    {stats.toolRunCount} tool{stats.toolRunCount === 1 ? "" : "s"}
-                  </span>
-                )}
-                {stats.phaseCount > 0 && (
-                  <span>
-                    {stats.phaseCount} phase{stats.phaseCount === 1 ? "" : "s"}
-                  </span>
-                )}
-                {stats.totalDuration > 0 && (
-                  <span className="tabular-nums">{formatMs(stats.totalDuration)}</span>
-                )}
-                {(stats.promptTokens > 0 || stats.completionTokens > 0) && (
-                  <span className="tabular-nums">
-                    {fmtTokens(stats.promptTokens)} in ·{" "}
-                    {fmtTokens(stats.completionTokens)} out
-                  </span>
-                )}
-              </>
-            )}
-          </div>
-          <div className="trace-toolbar__actions">
-            <SegmentToggle
-              value={openState.foldMode}
-              options={[
-                { value: "expanded", label: "Expanded" },
-                { value: "collapsed", label: "Collapsed" },
-              ]}
-              onChange={onFoldModeChange}
-              ariaLabel="Expand or collapse all trace scopes"
-            />
-            <TraceExportMenu
-              target={
-                runId
-                  ? { kind: "run", runId }
-                  : threadId
-                    ? { kind: "thread", threadId }
-                    : null
-              }
-              onExported={onExportMessage}
-              onError={onExportError}
-            />
-          </div>
-        </div>
-
-        {(runId || threadId) && (
-          <div className="trace-toolbar__ids">
-            {runId && <IdChip label="run" value={runId} />}
-            {threadId && <IdChip label="thread" value={threadId} />}
-          </div>
-        )}
-
-        <div className="trace-search">
-          <Search size={14} className="trace-search__icon" />
-          <input
-            type="search"
-            placeholder="Filter calls, tools, work…"
-            value={search}
-            onChange={(e) => onSearchChange(e.target.value)}
-            className="trace-search__input"
-            aria-label="Filter trace"
+      <WidgetToolbar>
+        <WidgetToolbarLeading>{null}</WidgetToolbarLeading>
+        <WidgetToolbarSearch
+          value={search}
+          onChange={onSearchChange}
+          placeholder="Filter calls, tools, work…"
+          onClear={() => onSearchChange("")}
+        />
+        <WidgetToolbarTrailing>
+          {searchStatus ? (
+            <span className="widget-toolbar__count text-text-muted" aria-live="polite">
+              {searchStatus}
+            </span>
+          ) : null}
+          <SegmentToggle
+            value={openState.foldMode}
+            options={[
+              { value: "expanded", label: "Expanded" },
+              { value: "collapsed", label: "Collapsed" },
+            ]}
+            onChange={onFoldModeChange}
+            ariaLabel="Expand or collapse all trace scopes"
           />
-          {search && (
-            <button
-              type="button"
-              className="trace-search__clear"
-              onClick={() => onSearchChange("")}
-              aria-label="Clear filter"
-            >
-              <X size={14} />
-            </button>
+          <TraceExportMenu
+            target={
+              runId
+                ? { kind: "run", runId }
+                : threadId
+                  ? { kind: "thread", threadId }
+                  : null
+            }
+            onExported={onExportMessage}
+            onError={onExportError}
+          />
+        </WidgetToolbarTrailing>
+      </WidgetToolbar>
+
+      {showMetaBand && (
+        <div className="widget-review-meta">
+          {metaParts.length === 0 ? (
+            <span>No agent loop yet</span>
+          ) : (
+            <span>{metaParts.join(" · ")}</span>
           )}
+          {runId ? (
+            <span className="widget-review-meta__id-group">
+              {metaParts.length > 0 ? " · " : null}
+              <IdChip label="run" value={runId} tone="meta" />
+            </span>
+          ) : null}
+          {threadId ? (
+            <span className="widget-review-meta__id-group">
+              {metaParts.length > 0 || runId ? " · " : null}
+              <IdChip label="thread" value={threadId} tone="meta" />
+            </span>
+          ) : null}
         </div>
-        {searchStatus && <div className="trace-search__status">{searchStatus}</div>}
-      </div>
+      )}
 
       <div className="trace-body min-h-0 flex-1 flex flex-col">
         {emptySlot ? (
@@ -1006,7 +1003,7 @@ export function TraceDag({
                     scrollRef={scrollRef}
                     estimateSize={estimateSpineSize}
                     getItemKey={spineItemKey}
-                    overscan={6}
+                    overscan={24}
                     renderItem={renderSpineItem}
                   />
                 </div>

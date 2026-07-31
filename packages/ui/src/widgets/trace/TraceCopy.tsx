@@ -32,30 +32,66 @@ function useCopyFeedback() {
 export function CopyControl({
   value,
   ariaLabel,
+  iconOnly = false,
 }: {
   value: string
   ariaLabel: string
+  /** Icon-only for quiet meta bands — label stays on aria-label. */
+  iconOnly?: boolean
 }) {
   const { copied, copyValue } = useCopyFeedback()
   return (
     <button
       type="button"
-      className="trace-copy"
+      className={iconOnly ? "trace-copy trace-copy--icon" : "trace-copy"}
       onClick={(e) => copyValue(value, e)}
       aria-label={copied ? "Copied" : ariaLabel}
+      title={copied ? "Copied" : ariaLabel}
     >
       {copied ? <Check size={11} className="text-success" /> : <Copy size={11} />}
-      <span>{copied ? "Copied" : "Copy"}</span>
+      {!iconOnly && <span>{copied ? "Copied" : "Copy"}</span>}
     </button>
   )
 }
 
-export function IdChip({ label, value }: { label: string; value: string }) {
+export function IdChip({
+  label,
+  value,
+  tone = "chip",
+}: {
+  label: string
+  value: string
+  /** `meta` — plain review-band type (no pill frame). `chip` — bordered badge. */
+  tone?: "chip" | "meta"
+}) {
+  const short =
+    tone === "meta" && value.length > 12 ? `${value.slice(0, 8)}…` : value
   return (
-    <span className="trace-id">
-      <span className="trace-id__label">{label}</span>
-      <span className="trace-id__value font-mono">{value}</span>
-      <CopyControl value={value} ariaLabel={`Copy ${label}`} />
+    <span
+      className={tone === "meta" ? "widget-review-meta__id" : "trace-id"}
+      title={value}
+    >
+      <span
+        className={
+          tone === "meta" ? "widget-review-meta__id-label" : "trace-id__label"
+        }
+      >
+        {label}
+      </span>
+      <span
+        className={
+          tone === "meta"
+            ? "widget-review-meta__id-value font-mono"
+            : "trace-id__value font-mono"
+        }
+      >
+        {short}
+      </span>
+      <CopyControl
+        value={value}
+        ariaLabel={`Copy ${label}`}
+        iconOnly={tone === "meta"}
+      />
     </span>
   )
 }

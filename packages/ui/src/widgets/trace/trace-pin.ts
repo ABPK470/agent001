@@ -2,7 +2,13 @@
  * Trace pin helpers — thin façade over lib/events/pin + Trace expand paths.
  */
 
-import { computePinnedScopeIds } from "../../lib/events/pin"
+import {
+  OUTLINE_STICKY_MAX,
+  OUTLINE_STICKY_ROW_H,
+  computePinnedFromEntries,
+  computePinnedScopeIds,
+  listOutlineScopes,
+} from "../../lib/events/pin"
 
 export {
   OUTLINE_STICKY_ROW_H as TRACE_STICKY_ROW_H,
@@ -19,12 +25,48 @@ export {
 } from "../../lib/events/pin"
 
 /**
- * Focus line steps down per pinned row — pins overlay a fixed-size scrollport
- * (frame sibling). Do not use an external flex band (resizes clientHeight).
+ * Pin band sits above the scrollport (frame sibling; scroll `top` inset by
+ * stack height). Focus is scrollTop — not an in-scroll overlay — so body
+ * text is never covered under the pins.
  */
-export const TRACE_PIN_OPTS = { stackInScroll: true } as const
+export const TRACE_PIN_OPTS = { stackInScroll: false } as const
 
-export function computeTracePinnedScopeIds(scrollEl: HTMLElement): string[] {
+export type TraceScopeLayout = {
+  id: string
+  top: number
+  height: number
+  depth: number
+  open?: boolean
+}
+
+/**
+ * Pin from mounted scopes, merging into `layoutCache` so VirtualList-unmounted
+ * headers above the window still stick (otherwise we scroll past and never pin).
+ */
+export function computeTracePinnedScopeIds(
+  scrollEl: HTMLElement,
+  layoutCache?: Map<string, TraceScopeLayout>,
+): string[] {
+  const mounted = listOutlineScopes(scrollEl)
+  if (layoutCache) {
+    for (const e of mounted) {
+      layoutCache.set(e.id, {
+        id: e.id,
+        top: e.top,
+        height: e.height,
+        depth: e.depth,
+        open: e.el.getAttribute("aria-expanded") !== "false",
+      })
+    }
+    const entries = [...layoutCache.values()].sort((a, b) => a.top - b.top || a.depth - b.depth)
+    return computePinnedFromEntries(
+      entries,
+      scrollEl.scrollTop,
+      OUTLINE_STICKY_ROW_H,
+      OUTLINE_STICKY_MAX,
+      TRACE_PIN_OPTS,
+    )
+  }
   return computePinnedScopeIds(scrollEl, undefined, TRACE_PIN_OPTS)
 }
 

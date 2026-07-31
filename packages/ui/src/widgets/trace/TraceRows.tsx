@@ -3,7 +3,7 @@
  * so sticky scroll stacks them under Sent instead of covering them.
  */
 
-import { ChevronDown, ChevronRight, ListChevronsDownUp, ListChevronsUpDown } from "lucide-react"
+import { ChevronRight, ListChevronsDownUp, ListChevronsUpDown } from "lucide-react"
 import { useRef, useState } from "react"
 import { JsonViewer } from "../../components/JsonViewer"
 import { preserveScrollAnchor } from "../../lib/chatScroll"
@@ -74,11 +74,10 @@ export function PromptMessageRow({
         aria-expanded={open}
       >
         <span className="trace-scope__chevslot" aria-hidden>
-          {open ? (
-            <ChevronDown size={12} className="trace-scope__chev" />
-          ) : (
-            <ChevronRight size={12} className="trace-scope__chev" />
-          )}
+          <ChevronRight
+            size={13}
+            className={`trace-scope__chev transition-transform ${open ? "rotate-90" : ""}`}
+          />
         </span>
         <span className={isUserAnswer ? "trace-row__speaker is-em" : "trace-row__speaker"}>
           {msg.speaker}
@@ -152,11 +151,10 @@ export function ToolRow({
         aria-expanded={open}
       >
         <span className="trace-scope__chevslot" aria-hidden>
-          {open ? (
-            <ChevronDown size={12} className="trace-scope__chev" />
-          ) : (
-            <ChevronRight size={12} className="trace-scope__chev" />
-          )}
+          <ChevronRight
+            size={13}
+            className={`trace-scope__chev transition-transform ${open ? "rotate-90" : ""}`}
+          />
         </span>
         <span className="font-mono trace-msg__tool">{tool.name}</span>
         {tool.status === "error" && <span className="trace-msg__detail is-error">failed</span>}

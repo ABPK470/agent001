@@ -492,12 +492,9 @@ export interface Widget {
 
 export type WidgetType =
   | "thread-nav"
-  | "agent-chat"
   | "term-chat"
   | "run-status"
   | "live-logs"
-  | "step-timeline"
-  | "run-history"
   | "debug-inspector"
   | "mymi-db"
   | "active-users"

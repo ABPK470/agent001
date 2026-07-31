@@ -175,7 +175,7 @@ function isTerminalInfrastructureError(message: string | null | undefined): bool
  * Schema v14 dropped the `runs.data` column, so the server no longer
  * persists step rows directly — they live only as `tool-call` /
  * `tool-result` / `tool-error` entries inside `trace_entries`. Several
- * widgets (StepTimeline, ToolTimelinePanel,
+ * widgets (Trace, ToolTimelinePanel,
  * "current activity" derivation, etc.) still consume `Step[]`, so we
  * rebuild the shape here from whatever trace the server returns.
  *
@@ -650,8 +650,8 @@ export const useStore = create<AppState>()(
       // `trace`, `streamingAnswer`, `stepData`, or
       // `auditTrail` that we accumulate from the event stream. A plain
       // `set({ runs })` would wipe all of that, which is exactly what
-      // happened when widgets like RunHistory re-fetched the run list on
-      // mount: switching to a view containing RunHistory and then back
+      // happened when widgets re-fetched the run list on mount: switching
+      // to a view that hydrates runs and then back
       // to TermChat would erase the active run's narrative + tool calls.
       //
       // `runs` is a multi-thread cache. Callers pass the list for the *active*
@@ -711,7 +711,7 @@ export const useStore = create<AppState>()(
           const d = detail as RunDetail
           const trace = rawTrace as TraceEntry[]
           // Schema v14: server no longer ships steps in d.data — derive
-          // from the trace so all step-driven widgets (StepTimeline,
+          // from the trace so all step-driven widgets (Trace,
           // ToolTimelinePanel, problems, current-activity) keep working
           // for historical runs. If the server ever brings back d.data.steps,
           // we prefer that over the derived shape.

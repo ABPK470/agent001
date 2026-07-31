@@ -67,7 +67,7 @@ function JsonPrimitive({ name, value }: { name?: string; value: unknown }) {
     <div className="flex items-baseline gap-1 py-px font-mono text-xs leading-relaxed min-w-0">
       {name != null && (
         <>
-          <span className="text-accent shrink-0">{name}</span>
+          <span className="text-text shrink-0">{name}</span>
           <span className="text-text-muted/50 shrink-0">:</span>
         </>
       )}
@@ -111,12 +111,12 @@ function JsonNode({
         onClick={() => setCollapsed((c) => !c)}
       >
         <ChevronRight
-          size={12}
+          size={13}
           className={`shrink-0 mt-0.5 text-text-muted/60 transition-transform ${collapsed ? "" : "rotate-90"}`}
         />
         {name != null && (
           <>
-            <span className="text-accent shrink-0">{name}</span>
+            <span className="text-text shrink-0">{name}</span>
             <span className="text-text-muted/50 shrink-0">:</span>
           </>
         )}
@@ -129,7 +129,7 @@ function JsonNode({
       {!collapsed && (
         <div className="ml-3 pl-2 border-l border-border-subtle/80 space-y-0.5 my-0.5">
           {entries.length === 0 ? (
-            <div className="text-xs font-mono text-text-muted/50 py-px">{isArray ? "empty" : "empty"}</div>
+            <div className="text-xs font-mono text-text-muted/50 py-px">empty</div>
           ) : (
             entries.map(([key, child]) => (
               <JsonNode
@@ -189,9 +189,7 @@ export function JsonViewer({
       {(copyable || label) && (
         <div className="mia-surface__chrome flex items-center justify-between gap-2 px-2 py-1">
           {label ? (
-            <span className="text-[10px] uppercase tracking-wide text-text-muted font-mono">
-              {label}
-            </span>
+            <span className="mia-code-block__label">{label}</span>
           ) : (
             <span />
           )}

@@ -16,7 +16,8 @@
  * has scrolled away but is not yet pinned.
  *
  * `stackInScroll` (default): focus line steps down by one row per already-
- * pinned ancestor. `stackInScroll: false` is legacy external-band math only.
+ * pinned ancestor. `stackInScroll: false` is Trace’s external pin band:
+ * focus is always scrollTop; stick when the header top reaches that line.
  */
 
 export const OUTLINE_STICKY_ROW_H = 34
@@ -151,12 +152,16 @@ export function computePinnedFromEntries(
     const threshold = stackInScroll
       ? scrollTop + pinned.length * rowH
       : scrollTop
-    // Stick once this header's *own* bottom has cleared the focus line.
-    // Message rows (Agent / System / …) are shorter than --trace-row-h; using
-    // a fixed rowH here left a dead zone where the label was gone but not yet
-    // pinned — children looked parented by the wrong ancestor.
+    // Overlay (stackInScroll): stick once this header's *own* bottom has
+    // cleared the focus line — measured height, so short message rows do not
+    // leave a dead zone.
+    // External band: stick as soon as the header *top* reaches the scrollport
+    // top — "right as we pass it." Waiting for full clear + VirtualList
+    // unmount often meant the scope never pinned at all.
     const headerH = e.height ?? rowH
-    const pastHeader = e.top + headerH <= threshold + 0.5
+    const pastHeader = stackInScroll
+      ? e.top + headerH <= threshold + 0.5
+      : e.top <= threshold + 0.5
     // …and yield when the next same-or-shallower header reaches the focus
     // line (overlay: +rowH so peers are not covered under the stack).
     const yieldPad = stackInScroll ? rowH : 0

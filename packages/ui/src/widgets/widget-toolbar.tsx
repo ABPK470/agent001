@@ -1,13 +1,15 @@
 /**
- * Widget toolbar — shared banner for Event Stream, Pipelines, Manual Sync.
+ * Widget toolbar — review-family banner (Event Stream, Pipelines, Trace).
+ * Sync may share the shell/inset; its leading controls stay act-widget special.
  *
  * Layout (wide):  [ leading filters ] [ search ············ ] [ trailing ]
  * Layout (compact): row1 = leading full width
  *                   row2 = search flex + trailing
  *
- * Chrome (all three flush widgets):
- *   shell = top + left/right inset; stack = toolbar→body gap.
+ * Chrome:
+ *   shell = top + left/right inset; stack = toolbar → optional band 2 → body.
  *   Do not put margin on the toolbar itself — the shell owns the inset.
+ *   Band 2 (optional): ActiveFilterChips or Trace meta/ids — same stack gap.
  */
 
 import { Loader2, Search, X } from "lucide-react"
@@ -82,7 +84,7 @@ export function WidgetToolbarSearch({
   return (
     <div className="widget-toolbar__search">
       <div className="widget-toolbar__search-wrap">
-        <Search size={13} className="widget-toolbar__search-icon" aria-hidden />
+        <Search size={14} strokeWidth={1.75} className="widget-toolbar__search-icon" aria-hidden />
         <input
           type="text"
           autoFocus={autoFocus}
@@ -97,7 +99,7 @@ export function WidgetToolbarSearch({
           ].filter(Boolean).join(" ")}
         />
         {loading && (
-          <Loader2 size={12} className="widget-toolbar__search-spinner" aria-hidden />
+          <Loader2 size={14} strokeWidth={1.75} className="widget-toolbar__search-spinner" aria-hidden />
         )}
         {value && !loading && (
           <button
@@ -106,7 +108,7 @@ export function WidgetToolbarSearch({
             onClick={() => (onClear ? onClear() : onChange(""))}
             aria-label="Clear search"
           >
-            <X size={13} />
+            <X size={14} strokeWidth={1.75} />
           </button>
         )}
       </div>
