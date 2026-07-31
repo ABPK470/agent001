@@ -16,6 +16,16 @@ describe("VirtualList sticky contract", () => {
   })
 })
 
+describe("VirtualList resize scroll adjust", () => {
+  it("exposes adjustScrollOnResize → shouldAdjustScrollPositionOnItemSizeChange", () => {
+    // Trace sets false so fold height changes do not yank scrollTop.
+    expect(src).toMatch(/adjustScrollOnResize\s*=\s*true/)
+    expect(src).toContain(
+      "shouldAdjustScrollPositionOnItemSizeChange: adjustScrollOnResize",
+    )
+  })
+})
+
 describe("VirtualList append / measure contract", () => {
   it("never calls virtualizer.measure() on items.length (wipes size cache → overlap)", () => {
     // TanStack measure() clears itemSizeCache. On chat append that collapsed

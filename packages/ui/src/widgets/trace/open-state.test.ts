@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs"
+import { dirname, join } from "node:path"
+import { fileURLToPath } from "node:url"
 import { describe, expect, it } from "vitest"
 import {
   callToolOpenKey,
@@ -28,5 +31,19 @@ describe("open-state", () => {
     expect(workToolOpenKey("work-0", id)).toBe("work-0:tool:tc-shared")
     expect(callToolOpenKey(0, id)).not.toBe(workToolOpenKey("work-0", id))
     expect(callToolOpenKey(0, id)).not.toBe(callToolOpenKey(1, id))
+  })
+
+  it("Call / Work / fold expand wire parent-scoped tool keys", () => {
+    const here = dirname(fileURLToPath(import.meta.url))
+    const call = readFileSync(join(here, "TraceCall.tsx"), "utf8")
+    const work = readFileSync(join(here, "TraceWork.tsx"), "utf8")
+    const dag = readFileSync(join(here, "TraceDag.tsx"), "utf8")
+    expect(call).toContain("callToolOpenKey(call.index, tc.id)")
+    expect(work).toContain("workToolOpenKey(work.id, tool.id)")
+    expect(dag).toContain("callToolOpenKey(c.index, t.id)")
+    expect(dag).toContain("workToolOpenKey(w.id, t.id)")
+    // Bare toolCallId in the open set would collapse Call+Work together.
+    expect(call).not.toMatch(/openState\.tools\.has\(\s*tc\.id\s*\)/)
+    expect(work).not.toMatch(/openState\.tools\.has\(\s*tool\.id\s*\)/)
   })
 })

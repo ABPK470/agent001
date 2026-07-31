@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import {
+  TRACE_PIN_OPTS,
   TRACE_STICKY_ROW_H,
   computePinnedFromEntries,
   expandPathForScope,
@@ -122,6 +123,19 @@ describe("computePinnedFromEntries — structural ancestor chain only", () => {
       "sent:0",
       "message:0:m:1",
     ])
+  })
+})
+
+describe("TRACE_PIN_OPTS — overlay (default pin path)", () => {
+  it("matches default computePinnedFromEntries (stackInScroll: true)", () => {
+    expect(TRACE_PIN_OPTS).toEqual({ stackInScroll: true })
+    const tree = [
+      { id: "call:0", top: 0, depth: 0 },
+      { id: "sent:0", top: 100, depth: 1 },
+    ]
+    expect(computePinnedFromEntries(tree, 100 + H, H, 4, TRACE_PIN_OPTS)).toEqual(
+      computePinnedFromEntries(tree, 100 + H),
+    )
   })
 })
 

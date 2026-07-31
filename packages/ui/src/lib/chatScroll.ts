@@ -35,8 +35,8 @@ export function offsetInScrollHost(scrollHost: HTMLElement, el: HTMLElement): nu
 
 /**
  * After collapsing a long body, park the viewport on that scope's header.
- * Trace pins sit outside the scrollport — park on the header with no stack offset.
- * Pass `stackInScroll: true` only for overlays that paint inside the scroll host.
+ * Overlay pins (`stackInScroll: true`) need stack height subtracted so the
+ * header lands below the pin chrome. Reserved-band pins leave stack at 0.
  */
 export function parkScrollOnScope(
   scrollHost: HTMLElement,
@@ -57,12 +57,20 @@ export function parkScrollOnScope(
 }
 
 /**
+ * Header still intersects the scrollport → fold is show/hide only.
+ * Header above the fold (scrolled into body) → park after layout.
+ */
+export function shouldParkAfterToggle(scrollTop: number, headerDoc: number): boolean {
+  return scrollTop > headerDoc + 1
+}
+
+/**
  * Toggle expandable content without shifting the clicked control vertically.
  *
  * First principles:
  * - Header still on screen → only show/hide the body. Do not touch scrollTop.
- *   Multi-frame scroll correction fights pin-band inset + VirtualList resize
- *   and makes the whole outline flinch like a reload.
+ *   Multi-frame scroll correction fights VirtualList resize and makes the
+ *   whole outline flinch like a reload.
  * - Scrolled into the body (header above the fold) → park on the header once
  *   after layout so the viewport is not left in the hole.
  */
@@ -80,7 +88,7 @@ export function preserveScrollAnchor(
   const scrollHost = findChatScrollHost(anchor)
   const headerDoc = scrollHost ? offsetInScrollHost(scrollHost, anchor) : 0
   const scrolledIntoBody = Boolean(
-    scrollHost && scrollHost.scrollTop > headerDoc + 1,
+    scrollHost && shouldParkAfterToggle(scrollHost.scrollTop, headerDoc),
   )
   toggle()
   if (!scrolledIntoBody || !scrollHost) return
@@ -91,7 +99,7 @@ export function preserveScrollAnchor(
       offsetInScrollHost(scrollHost, anchor) - 2,
     )
   }
-  // One layout pass for the unmount, one for pin-band inset compensation.
+  // Commit unmount, then settle once more after pin overlay / measure.
   requestAnimationFrame(() => {
     park()
     requestAnimationFrame(park)

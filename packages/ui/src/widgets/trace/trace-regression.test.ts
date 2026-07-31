@@ -23,6 +23,7 @@ import {
 import { parkScrollOnScope } from "../../lib/chatScroll.js"
 import {
   TRACE_PIN_KINDS,
+  TRACE_PIN_OPTS,
   TRACE_STICKY_MAX,
   TRACE_STICKY_ROW_H,
   expandPathForScope,
@@ -194,7 +195,7 @@ function mockRect(top: number, height = 34) {
   }
 }
 
-function makeScopeEl(spec: ScopeSpec, hostTop: number, scrollTop: number) {
+function makeScopeEl(spec: ScopeSpec, hostTop: number, getScrollTop: () => number) {
   const attrs: Record<string, string> = {
     "data-trace-scope": spec.id,
     "data-trace-kind": spec.kind,
@@ -237,8 +238,9 @@ function makeScopeEl(spec: ScopeSpec, hostTop: number, scrollTop: number) {
     removeAttribute: (name: string) => {
       delete attrs[name]
     },
+    // Live scrollTop — parkScrollOnScope iterates with updated host scroll.
     getBoundingClientRect: () =>
-      mockRect(hostTop + spec.top - scrollTop, H),
+      mockRect(hostTop + spec.top - getScrollTop(), H),
     offsetHeight: H,
   }
 }
@@ -246,7 +248,7 @@ function makeScopeEl(spec: ScopeSpec, hostTop: number, scrollTop: number) {
 function mockTraceHost(scopes: ScopeSpec[], scrollTop: number) {
   const hostTop = 40
   let top = scrollTop
-  const els = scopes.map((s) => makeScopeEl(s, hostTop, top))
+  const els = scopes.map((s) => makeScopeEl(s, hostTop, () => top))
   const style: { scrollPaddingTop: string } = { scrollPaddingTop: "" }
   const host = {
     get scrollTop() {
@@ -370,9 +372,95 @@ describe("parkScrollOnScope — collapse while scrolled into body", () => {
     ]
     const { host, els } = mockTraceHost(scopes, 800)
     const toolsEl = els[1]! as unknown as HTMLElement
-    parkScrollOnScope(host, toolsEl, H, () => ["call:0"])
+    parkScrollOnScope(host, toolsEl, H, () => ["call:0"], TRACE_PIN_OPTS)
     // Must leave the deep scroll that would land on later Call content.
     expect(host.scrollTop).toBeLessThan(200)
+    // Overlay stack: park below the one pinned ancestor row.
+    expect(host.scrollTop).toBe(Math.max(0, 40 - H - 2))
+  })
+})
+
+describe("syncPinnedInFlow — Trace overlay padding", () => {
+  it("overlay mode reserves scroll-padding; reserved-band mode clears it", () => {
+    const g = globalThis as { CSS?: { escape: (s: string) => string } }
+    g.CSS ??= { escape: (s) => s }
+
+    const scopes: ScopeSpec[] = [
+      { id: "call:0", kind: "call", depth: 0, top: 0 },
+      { id: "sent:0", kind: "sent", depth: 1, top: 40 },
+    ]
+    const { host, style } = mockTraceHost(scopes, 100)
+
+    syncPinnedInFlow(host, ["call:0", "sent:0"], H, { reserveScrollPadding: true })
+    expect(style.scrollPaddingTop).toBe(`${2 * H}px`)
+
+    syncPinnedInFlow(host, ["call:0", "sent:0"], H, { reserveScrollPadding: false })
+    expect(style.scrollPaddingTop).toBe("")
+  })
+})
+
+/**
+ * Fold-must-not-flinch — recording 2026-07-31: collapsing mid-body briefly
+ * jumped the outline to an earlier spine then snapped back. Root cause was
+ * pin count resizing scrollport `top`. These contracts keep the overlay path.
+ */
+describe("fold must not flinch scrollport", () => {
+  const here = dirname(fileURLToPath(import.meta.url))
+  const css = readFileSync(join(here, "../../boot/index.css"), "utf8")
+  const dagSrc = readFileSync(join(here, "TraceDag.tsx"), "utf8")
+  const pinSrc = readFileSync(join(here, "trace-pin.ts"), "utf8")
+  const scrollSrc = readFileSync(join(here, "../../lib/chatScroll.ts"), "utf8")
+
+  it("scrollport is inset:0 — never top: var(--trace-pin-stack-h)", () => {
+    expect(css).toMatch(/\.trace-dag\s+\.trace-scroll\s*\{[^}]*inset:\s*0/s)
+    expect(css).not.toMatch(
+      /\.trace-dag\s+\.trace-scroll\s*\{[^}]*top:\s*var\(--trace-pin-stack-h/s,
+    )
+  })
+
+  it("pins overlay the frame; TRACE_PIN_OPTS stacks in scroll", () => {
+    expect(TRACE_PIN_OPTS).toEqual({ stackInScroll: true })
+    expect(pinSrc).toMatch(/TRACE_PIN_OPTS\s*=\s*\{\s*stackInScroll:\s*true/)
+    expect(css).toMatch(/\.trace-scroll-frame\s*\{[^}]*position:\s*relative/s)
+    expect(css).toMatch(/\.trace-dag\s+\.trace-scroll\s*\{[^}]*position:\s*absolute/s)
+    expect(css).toMatch(/\.trace-pin\s*\{[^}]*position:\s*absolute/s)
+    expect(css).not.toMatch(/\.trace-pin\s*\{[^}]*height:\s*0\b/s)
+  })
+
+  it("PinOverlay is a sibling of the scroll host (not inside overflow)", () => {
+    expect(dagSrc).toMatch(
+      /trace-scroll-frame">\s*<PinOverlay[\s\S]*?<div ref=\{scrollRef\} className="trace-scroll"/,
+    )
+    expect(dagSrc).not.toMatch(/data-trace-scroll-host>\s*<PinOverlay/)
+    expect(dagSrc).not.toContain("pinBandScrollDelta")
+    expect(dagSrc).not.toContain("compensatePinBandInset")
+  })
+
+  it("Trace VirtualList opts out of resize scroll adjust; pads for overlay", () => {
+    expect(dagSrc).toContain("adjustScrollOnResize={false}")
+    expect(dagSrc).toContain("reserveScrollPadding: true")
+    // Overlay height updates CSS var only — never move scrollport top.
+    expect(dagSrc).toContain('--trace-pin-stack-h')
+    expect(dagSrc).toMatch(
+      /if\s*\(el\.style\.getPropertyValue\("--trace-pin-stack-h"\)\s*!==/,
+    )
+  })
+
+  it("fold refreshes pins without wiping the layout cache", () => {
+    // Cache clear belongs on run change only — not on every expand/collapse.
+    expect(dagSrc).toContain("pinLayoutCacheRef.current.clear()")
+    expect(dagSrc).toMatch(
+      /pinLayoutCacheRef\.current\.clear\(\)\s*\n\s*setPinnedIds\(\[\]\)\s*\n\s*\}, \[runId\]\)/,
+    )
+    expect(dagSrc).not.toMatch(
+      /pinLayoutCacheRef\.current\.clear\(\)\s*\n\s*schedulePinRefresh\(\)/,
+    )
+  })
+
+  it("header-visible folds do not multi-frame-correct scrollTop", () => {
+    expect(scrollSrc).toContain("shouldParkAfterToggle")
+    expect(scrollSrc).toMatch(/if\s*\(\s*!scrolledIntoBody\s*\|\|\s*!scrollHost\s*\)\s*return/)
+    expect(scrollSrc).not.toMatch(/performance\.now\(\)\s*\+\s*280/)
   })
 })
 
@@ -382,64 +470,6 @@ describe("Trace CSS contract — pin indent + work-note divider", () => {
     "../../boot/index.css",
   )
   const css = readFileSync(cssPath, "utf8")
-
-  it("pin chrome is absolute on the scroll frame (not height:0, not inside overflow)", () => {
-    // height:0 clipped the stack while data-trace-pinned hid headers.
-    // Absolute *inside* overflow scrolled away when pins became eligible.
-    // Overlay sibling + inset:0 scrollport — pin count must not resize scroll.
-    expect(css).toMatch(/\.trace-scroll-frame\s*\{[^}]*position:\s*relative/s)
-    expect(css).toMatch(/\.trace-dag\s+\.trace-scroll\s*\{[^}]*position:\s*absolute/s)
-    expect(css).toMatch(/\.trace-pin\s*\{[^}]*position:\s*absolute/s)
-    expect(css).not.toMatch(/\.trace-pin\s*\{[^}]*height:\s*0\b/s)
-  })
-
-  it("PinOverlay is a sibling of the scroll host inside the frame", () => {
-    const dagPath = join(dirname(fileURLToPath(import.meta.url)), "TraceDag.tsx")
-    const src = readFileSync(dagPath, "utf8")
-    expect(src).toMatch(
-      /trace-scroll-frame">\s*<PinOverlay[\s\S]*?<div ref=\{scrollRef\} className="trace-scroll"/,
-    )
-    expect(src).not.toMatch(/data-trace-scroll-host>\s*<PinOverlay/)
-    expect(src).not.toContain("pinBandScrollDelta")
-  })
-
-  it("fold refreshes pins without wiping the layout cache (no reload jump)", () => {
-    const dagPath = join(dirname(fileURLToPath(import.meta.url)), "TraceDag.tsx")
-    const src = readFileSync(dagPath, "utf8")
-    // Cache clear belongs on run change only — not on every expand/collapse.
-    expect(src).toContain("pinLayoutCacheRef.current.clear()")
-    expect(src).toMatch(
-      /pinLayoutCacheRef\.current\.clear\(\)\s*\n\s*setPinnedIds\(\[\]\)\s*\n\s*\}, \[runId\]\)/,
-    )
-    expect(src).not.toMatch(
-      /pinLayoutCacheRef\.current\.clear\(\)\s*\n\s*schedulePinRefresh\(\)/,
-    )
-    expect(src).not.toContain("compensatePinBandInset")
-    expect(src).toContain("adjustScrollOnResize={false}")
-    expect(src).toContain("reserveScrollPadding: true")
-    const scrollPath = join(
-      dirname(fileURLToPath(import.meta.url)),
-      "../../lib/chatScroll.ts",
-    )
-    const scrollSrc = readFileSync(scrollPath, "utf8")
-    // Header-visible folds must not multi-frame-correct scrollTop.
-    expect(scrollSrc).toMatch(/if\s*\(\s*!scrolledIntoBody\s*\|\|\s*!scrollHost\s*\)\s*return/)
-    expect(scrollSrc).not.toMatch(/performance\.now\(\)\s*\+\s*280/)
-  })
-
-  it("Trace pin math uses overlay stack (stackInScroll: true)", () => {
-    const pinPath = join(dirname(fileURLToPath(import.meta.url)), "trace-pin.ts")
-    expect(readFileSync(pinPath, "utf8")).toMatch(
-      /TRACE_PIN_OPTS\s*=\s*\{\s*stackInScroll:\s*true/,
-    )
-  })
-
-  it("scrollport fills the frame — pin overlay must not resize scroll top", () => {
-    expect(css).toMatch(/\.trace-dag\s+\.trace-scroll\s*\{[^}]*inset:\s*0/s)
-    expect(css).not.toMatch(
-      /\.trace-dag\s+\.trace-scroll\s*\{[^}]*top:\s*var\(--trace-pin-stack-h/s,
-    )
-  })
 
   it("pin stack honors data-trace-depth (messages under Sent)", () => {
     expect(css).toContain('.trace-pin__stack > .trace-scope[data-trace-depth="1"]')
