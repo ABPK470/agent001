@@ -2099,14 +2099,16 @@ textarea.input {
 }
 
 .trace-dag .trace-scroll {
+  /*
+   * Scrollport fills the frame always (inset: 0). Pin stack is an overlay —
+   * never change `top` with pin count. That resize was the whole-outline
+   * flinch on every fold (recording: brief jump to earlier spine, then snap).
+   */
   position: absolute;
-  top: var(--trace-pin-stack-h, 0px);
-  left: 0;
-  right: 0;
-  bottom: 0;
+  inset: 0;
   padding: 0 0.35rem 1.25rem;
   --trace-row-h: 34px;
-  /* Updated by refreshPinStack — pin band height; scroll starts below it. */
+  /* Published for pin chrome height + scroll-padding — not for scroll `top`. */
   --trace-pin-stack-h: 0px;
   /*
    * Set BOTH axes. overflow-y alone computes overflow-x to auto and
@@ -2127,9 +2129,9 @@ textarea.input {
 }
 
 /*
- * Pin chrome — absolute on .trace-scroll-frame (sibling of .trace-scroll).
- * Occupies [0, --trace-pin-stack-h); scrollport starts below so body text
- * is never covered.
+ * Pin chrome — absolute overlay on .trace-scroll-frame (sibling of scroll).
+ * VS Code sticky-scroll: body may pass underneath; scroll-padding keeps
+ * park/focus clear of the stack. Geometry of the scrollport never moves.
  */
 .trace-pin {
   position: absolute;

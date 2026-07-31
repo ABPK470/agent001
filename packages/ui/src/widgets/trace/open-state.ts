@@ -1,6 +1,9 @@
 /**
  * Explicit open/fold state for the Trace outline.
  * One object — no nested closure state.
+ *
+ * Tool rows reuse the same toolCallId under Call (proposed) and Work
+ * (executed). Open keys MUST be parent-scoped or one toggle opens both.
  */
 
 export type FoldMode = "expanded" | "collapsed"
@@ -14,10 +17,21 @@ export type OpenState = {
   sent: Set<number>
   received: Set<number>
   messages: Set<string>
+  /** Parent-scoped tool keys — see callToolOpenKey / workToolOpenKey. */
   tools: Set<string>
   phases: Set<string>
   work: Set<string>
   foldMode: FoldMode
+}
+
+/** Proposed tool under Call → Received. */
+export function callToolOpenKey(callIndex: number, toolId: string): string {
+  return `call:${callIndex}:tool:${toolId}`
+}
+
+/** Executed tool under a Work card. */
+export function workToolOpenKey(workId: string, toolId: string): string {
+  return `${workId}:tool:${toolId}`
 }
 
 export function emptyOpen(): OpenState {

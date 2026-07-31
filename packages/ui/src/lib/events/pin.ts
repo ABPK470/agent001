@@ -15,9 +15,9 @@
  * shorter than ScopeRow, and a fixed rowH leaves a dead zone where the label
  * has scrolled away but is not yet pinned.
  *
- * `stackInScroll` (default): focus line steps down by one row per already-
- * pinned ancestor. `stackInScroll: false` is Trace’s external pin band:
- * focus is always scrollTop; stick when the header top reaches that line.
+ * `stackInScroll` (default / Trace overlay): focus line steps down by one
+ * row per already-pinned ancestor. `stackInScroll: false` is a reserved
+ * external band — focus is always scrollTop (no overlay cover).
  */
 
 export const OUTLINE_STICKY_ROW_H = 34

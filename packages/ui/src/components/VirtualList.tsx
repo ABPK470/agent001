@@ -45,6 +45,12 @@ export interface VirtualListProps<T> {
   renderItem: (args: { item: T; index: number }) => ReactNode
   /** Rendered after the virtual window (e.g. load-more sentinel). */
   footer?: ReactNode
+  /**
+   * When false, row resize never nudges scrollTop.
+   * Trace folds own scroll via pin-band compensation + header park — TanStack
+   * resize correction otherwise flinches the whole outline.
+   */
+  adjustScrollOnResize?: boolean
 }
 
 function VirtualListInner<T>(
@@ -58,6 +64,7 @@ function VirtualListInner<T>(
     getItemKey,
     renderItem,
     footer,
+    adjustScrollOnResize = true,
   }: VirtualListProps<T>,
   ref: ForwardedRef<VirtualListHandle>,
 ) {
@@ -73,6 +80,9 @@ function VirtualListInner<T>(
     getItemKey: getItemKey
       ? (index) => getItemKey(index, items[index]!)
       : undefined,
+    shouldAdjustScrollPositionOnItemSizeChange: adjustScrollOnResize
+      ? undefined
+      : () => false,
   })
 
   useImperativeHandle(

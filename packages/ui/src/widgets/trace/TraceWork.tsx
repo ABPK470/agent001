@@ -4,7 +4,7 @@
  *   Call (Sent → Received / proposed tools) → Work (execute + validate).
  */
 
-import type { OpenState } from "./open-state"
+import { workToolOpenKey, type OpenState } from "./open-state"
 import type { TraceWorkNode } from "./build-trace-dag"
 import { SqlQualityRow, ToolRow } from "./TraceRows"
 import { traceScopeDepth } from "./trace-pin"
@@ -47,15 +47,18 @@ export function WorkOutline({
       {open && expandable && (
         <div className="trace-card__body">
           <div className="trace-branch review-tree">
-            {work.tools.map((tool) => (
-              <div key={tool.id} className="review-tree__item">
-                <ToolRow
-                  tool={tool}
-                  open={openState.tools.has(tool.id)}
-                  onToggle={() => onToggleTool(tool.id)}
-                />
-              </div>
-            ))}
+            {work.tools.map((tool) => {
+              const toolKey = workToolOpenKey(work.id, tool.id)
+              return (
+                <div key={tool.id} className="review-tree__item">
+                  <ToolRow
+                    tool={tool}
+                    open={openState.tools.has(toolKey)}
+                    onToggle={() => onToggleTool(toolKey)}
+                  />
+                </div>
+              )
+            })}
             {work.sqlQuality.length > 0 && (
               <div className="review-tree__item">
                 <div className="trace-branch__caption is-sql">

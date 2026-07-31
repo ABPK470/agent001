@@ -12,7 +12,7 @@
 import { ReviewTree, ReviewTreeItem } from "../../components/ReviewTree"
 import { fmtTokens, formatMs } from "../../lib/util"
 import type { TraceCallNode, TraceCallSearchHit } from "./build-trace-dag"
-import type { OpenState } from "./open-state"
+import { callToolOpenKey, type OpenState } from "./open-state"
 import { callReceivedSummary, callSentSummary } from "./trace-format"
 import { traceScopeDepth } from "./trace-pin"
 import { ExpandableText } from "./TraceExpandable"
@@ -158,15 +158,18 @@ export function CallOutline({
                       </div>
                     </div>
                     <ReviewTree>
-                      {call.toolBranches.map((tc) => (
-                        <ReviewTreeItem key={tc.id}>
-                          <ToolRow
-                            tool={tc}
-                            open={openState.tools.has(tc.id)}
-                            onToggle={() => onToggleTool(tc.id)}
-                          />
-                        </ReviewTreeItem>
-                      ))}
+                      {call.toolBranches.map((tc) => {
+                        const toolKey = callToolOpenKey(call.index, tc.id)
+                        return (
+                          <ReviewTreeItem key={tc.id}>
+                            <ToolRow
+                              tool={tc}
+                              open={openState.tools.has(toolKey)}
+                              onToggle={() => onToggleTool(toolKey)}
+                            />
+                          </ReviewTreeItem>
+                        )
+                      })}
                     </ReviewTree>
                   </>
                 ) : null}

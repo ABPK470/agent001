@@ -25,11 +25,11 @@ export {
 } from "../../lib/events/pin"
 
 /**
- * Pin band sits above the scrollport (frame sibling; scroll `top` inset by
- * stack height). Focus is scrollTop — not an in-scroll overlay — so body
- * text is never covered under the pins.
+ * Pin band overlays the scrollport (frame sibling). Focus steps down by one
+ * row per pinned ancestor — body may pass under the stack; scroll-padding
+ * keeps park/focus clear. Never resize scroll `top` by pin count (fold flinch).
  */
-export const TRACE_PIN_OPTS = { stackInScroll: false } as const
+export const TRACE_PIN_OPTS = { stackInScroll: true } as const
 
 export type TraceScopeLayout = {
   id: string

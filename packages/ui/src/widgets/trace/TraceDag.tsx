@@ -3,18 +3,20 @@
  *
  * Sticky scroll geometry (first principles):
  *   .trace-scroll-frame  — fixed-size relative shell (flex child)
- *     .trace-pin         — absolute band at top [0, stackH)
- *     .trace-scroll      — absolute fill from stackH → bottom (only this scrolls)
+ *     .trace-pin         — absolute OVERLAY at top (does not resize scroll)
+ *     .trace-scroll      — absolute inset:0 (only this scrolls; geometry fixed)
  *
- * Pins are outside the scrollport so body text is never covered. Never put
- * pins inside the overflow node (they scroll away while data-trace-pinned
- * hides originals → "no pins").
+ * Never put pins inside the overflow node (they scroll away). Never inset
+ * scroll `top` by pin count — that made every fold flinch the whole outline.
  */
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { VirtualList } from "../../components/VirtualList"
 import { fmtTokens, formatMs } from "../../lib/util"
-import { parkScrollOnScope, offsetInScrollHost } from "../../lib/chatScroll"
+import {
+  offsetInScrollHost,
+  parkScrollOnScope,
+} from "../../lib/chatScroll"
 import { SegmentToggle } from "../entity-registry/SegmentToggle"
 import {
   WIDGET_LOG_SHELL_CLASS,
@@ -31,9 +33,17 @@ import {
   type TraceDag,
   type TraceSpineEntry,
 } from "./build-trace-dag"
-import { emptyOpen, seedLatest, type FoldMode, type OpenState } from "./open-state"
+import {
+  callToolOpenKey,
+  emptyOpen,
+  seedLatest,
+  workToolOpenKey,
+  type FoldMode,
+  type OpenState,
+} from "./open-state"
 import { callReceivedSummary, callSentSummary, formatCharCount } from "./trace-format"
 import {
+  TRACE_PIN_OPTS,
   TRACE_STICKY_ROW_H,
   callIndexForTool,
   computeTracePinnedScopeIds,
@@ -87,13 +97,12 @@ export function TraceDag({
     // Cache layouts from the virtual window so headers above the viewport still pin.
     const ids = computeTracePinnedScopeIds(el, pinLayoutCacheRef.current)
     const stackH = ids.length * TRACE_STICKY_ROW_H
-    // Only touch the inset when height changes — rewriting the same px still
-    // resizes the absolute scrollport and makes folds feel like a reload.
+    // Overlay height only — never move scrollport `top`.
     if (el.style.getPropertyValue("--trace-pin-stack-h") !== `${stackH}px`) {
       el.style.setProperty("--trace-pin-stack-h", `${stackH}px`)
     }
-    // Replace in-flow headers; no scroll-padding — pins are outside the scrollport.
-    syncPinnedInFlow(el, ids, TRACE_STICKY_ROW_H, { reserveScrollPadding: false })
+    // scroll-padding keeps park/focus clear of the overlay; does not shift paint.
+    syncPinnedInFlow(el, ids, TRACE_STICKY_ROW_H, { reserveScrollPadding: true })
     if (samePinnedIds(pinnedIdsRef.current, ids)) return
     pinnedIdsRef.current = ids
     setPinnedIds(ids)
@@ -315,9 +324,15 @@ export function TraceDag({
 
   function onFoldModeChange(mode: FoldMode) {
     if (mode === "expanded") {
-      const workTools = dag.spine.flatMap((e) =>
-        e.kind === "work" ? e.work.tools.map((t) => t.id) : [],
-      )
+      const workNodes = dag.spine.flatMap((e) => {
+        if (e.kind === "work") return [e.work]
+        if (e.kind === "phase") {
+          return (e.phase.children ?? [])
+            .filter((c): c is Extract<typeof c, { kind: "work" }> => c.kind === "work")
+            .map((c) => c.work)
+        }
+        return []
+      })
       setOpenState({
         preamble: true,
         contextPrompt: true,
@@ -331,15 +346,17 @@ export function TraceDag({
           ),
         ),
         tools: new Set([
-          ...dag.calls.flatMap((c) => c.toolBranches.map((t) => t.id)),
-          ...workTools,
+          ...dag.calls.flatMap((c) =>
+            c.toolBranches.map((t) => callToolOpenKey(c.index, t.id)),
+          ),
+          ...workNodes.flatMap((w) =>
+            w.tools.map((t) => workToolOpenKey(w.id, t.id)),
+          ),
         ]),
         phases: new Set(
           dag.spine.filter((e) => e.kind === "phase").map((e) => e.phase.id),
         ),
-        work: new Set(
-          dag.spine.filter((e) => e.kind === "work").map((e) => e.work.id),
-        ),
+        work: new Set(workNodes.map((w) => w.id)),
         foldMode: "expanded",
       })
       return
@@ -702,7 +719,13 @@ export function TraceDag({
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           if (!scopeEl.isConnected) return
-          parkScrollOnScope(host, scopeEl, TRACE_STICKY_ROW_H, computeTracePinnedScopeIds)
+          parkScrollOnScope(
+            host,
+            scopeEl,
+            TRACE_STICKY_ROW_H,
+            computeTracePinnedScopeIds,
+            TRACE_PIN_OPTS,
+          )
           refreshPinStack()
           suppressFollowRef.current = false
         })
@@ -729,8 +752,10 @@ export function TraceDag({
       let callIndex = path.callIndex
       if (path.toolId) {
         const found = callIndexForTool(path.toolId, dag.calls)
-        if (found != null) callIndex = found
-        tools.add(path.toolId)
+        if (found != null) {
+          callIndex = found
+          tools.add(callToolOpenKey(found, path.toolId))
+        }
       }
       if (callIndex != null) {
         calls.add(callIndex)
@@ -1031,6 +1056,7 @@ export function TraceDag({
                     estimateSize={estimateSpineSize}
                     getItemKey={spineItemKey}
                     overscan={24}
+                    adjustScrollOnResize={false}
                     renderItem={renderSpineItem}
                   />
                 </div>

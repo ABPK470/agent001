@@ -58,13 +58,13 @@ export function parkScrollOnScope(
 
 /**
  * Toggle expandable content without shifting the clicked control vertically.
- * Header stays put; body opens downward (or collapses upward into it).
  *
- * If the user had scrolled *into* the body (header above the viewport),
- * collapse parks on the header instead of leaving scrollTop in the hole.
- *
- * Settle in a few frames (commit → measure → pin inset). A long rAF loop
- * fights VirtualList resize correction and feels like the outline reloads.
+ * First principles:
+ * - Header still on screen → only show/hide the body. Do not touch scrollTop.
+ *   Multi-frame scroll correction fights pin-band inset + VirtualList resize
+ *   and makes the whole outline flinch like a reload.
+ * - Scrolled into the body (header above the fold) → park on the header once
+ *   after layout so the viewport is not left in the hole.
  */
 export function preserveScrollAnchor(
   button: HTMLElement | null,
@@ -78,31 +78,39 @@ export function preserveScrollAnchor(
   }
   const anchor = button
   const scrollHost = findChatScrollHost(anchor)
-  const beforeTop = anchor.getBoundingClientRect().top
   const headerDoc = scrollHost ? offsetInScrollHost(scrollHost, anchor) : 0
   const scrolledIntoBody = Boolean(
     scrollHost && scrollHost.scrollTop > headerDoc + 1,
   )
   toggle()
-  function adjust() {
+  if (!scrolledIntoBody || !scrollHost) return
+  function park() {
     if (!scrollHost || !anchor.isConnected) return
-    if (scrolledIntoBody) {
-      // Trace pin band is outside the scrollport — do not subtract stack height.
-      scrollHost.scrollTop = Math.max(
-        0,
-        offsetInScrollHost(scrollHost, anchor) - 2,
-      )
-      return
-    }
-    const afterTop = anchor.getBoundingClientRect().top
-    const delta = afterTop - beforeTop
-    if (delta !== 0) scrollHost.scrollTop += delta
+    scrollHost.scrollTop = Math.max(
+      0,
+      offsetInScrollHost(scrollHost, anchor) - 2,
+    )
   }
-  let frames = 0
-  function tick() {
-    adjust()
-    frames += 1
-    if (frames < 3) requestAnimationFrame(tick)
-  }
-  requestAnimationFrame(tick)
+  // One layout pass for the unmount, one for pin-band inset compensation.
+  requestAnimationFrame(() => {
+    park()
+    requestAnimationFrame(park)
+  })
+}
+
+/**
+ * When the Trace pin band grows/shrinks, `.trace-scroll` `top` moves.
+ * Shift scrollTop by the same delta so document content stays put on screen.
+ */
+export function compensatePinBandInset(
+  scrollHost: HTMLElement,
+  nextStackH: number,
+  cssVar = "--trace-pin-stack-h",
+): void {
+  const prevRaw = scrollHost.style.getPropertyValue(cssVar).trim()
+  const prevH = prevRaw.endsWith("px") ? Number.parseFloat(prevRaw) : Number.parseFloat(prevRaw)
+  const from = Number.isFinite(prevH) ? prevH : 0
+  if (from === nextStackH) return
+  scrollHost.style.setProperty(cssVar, `${nextStackH}px`)
+  scrollHost.scrollTop = Math.max(0, scrollHost.scrollTop + (nextStackH - from))
 }

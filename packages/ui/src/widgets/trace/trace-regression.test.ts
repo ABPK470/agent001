@@ -386,7 +386,7 @@ describe("Trace CSS contract — pin indent + work-note divider", () => {
   it("pin chrome is absolute on the scroll frame (not height:0, not inside overflow)", () => {
     // height:0 clipped the stack while data-trace-pinned hid headers.
     // Absolute *inside* overflow scrolled away when pins became eligible.
-    // Scroll top inset by --trace-pin-stack-h keeps body below the pin band.
+    // Overlay sibling + inset:0 scrollport — pin count must not resize scroll.
     expect(css).toMatch(/\.trace-scroll-frame\s*\{[^}]*position:\s*relative/s)
     expect(css).toMatch(/\.trace-dag\s+\.trace-scroll\s*\{[^}]*position:\s*absolute/s)
     expect(css).toMatch(/\.trace-pin\s*\{[^}]*position:\s*absolute/s)
@@ -414,27 +414,31 @@ describe("Trace CSS contract — pin indent + work-note divider", () => {
     expect(src).not.toMatch(
       /pinLayoutCacheRef\.current\.clear\(\)\s*\n\s*schedulePinRefresh\(\)/,
     )
+    expect(src).not.toContain("compensatePinBandInset")
+    expect(src).toContain("adjustScrollOnResize={false}")
+    expect(src).toContain("reserveScrollPadding: true")
     const scrollPath = join(
       dirname(fileURLToPath(import.meta.url)),
       "../../lib/chatScroll.ts",
     )
     const scrollSrc = readFileSync(scrollPath, "utf8")
+    // Header-visible folds must not multi-frame-correct scrollTop.
+    expect(scrollSrc).toMatch(/if\s*\(\s*!scrolledIntoBody\s*\|\|\s*!scrollHost\s*\)\s*return/)
     expect(scrollSrc).not.toMatch(/performance\.now\(\)\s*\+\s*280/)
-    expect(scrollSrc).toMatch(/frames\s*<\s*3/)
   })
 
-  it("Trace pin math uses external band (stackInScroll: false)", () => {
+  it("Trace pin math uses overlay stack (stackInScroll: true)", () => {
     const pinPath = join(dirname(fileURLToPath(import.meta.url)), "trace-pin.ts")
     expect(readFileSync(pinPath, "utf8")).toMatch(
-      /TRACE_PIN_OPTS\s*=\s*\{\s*stackInScroll:\s*false/,
+      /TRACE_PIN_OPTS\s*=\s*\{\s*stackInScroll:\s*true/,
     )
   })
 
-  it("scrollport starts below the pin band so body text is never covered", () => {
-    expect(css).toMatch(
+  it("scrollport fills the frame — pin overlay must not resize scroll top", () => {
+    expect(css).toMatch(/\.trace-dag\s+\.trace-scroll\s*\{[^}]*inset:\s*0/s)
+    expect(css).not.toMatch(
       /\.trace-dag\s+\.trace-scroll\s*\{[^}]*top:\s*var\(--trace-pin-stack-h/s,
     )
-    expect(css).not.toMatch(/\.trace-dag\s+\.trace-scroll\s*\{[^}]*inset:\s*0/s)
   })
 
   it("pin stack honors data-trace-depth (messages under Sent)", () => {
