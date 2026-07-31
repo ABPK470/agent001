@@ -1,6 +1,6 @@
 /**
- * Maximize/restore performance contracts — snap geometry, cheap solo-hide,
- * Trace overscan. Expanded Trace lag was 260ms W/H ease + measure storms.
+ * Maximize/restore performance contracts — snap W/H, FLIP transform motion,
+ * cheap solo-hide, Trace overscan. Expanded Trace lag was 260ms W/H ease.
  */
 
 import { readFileSync } from "node:fs"
@@ -8,25 +8,27 @@ import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { describe, expect, it } from "vitest"
 import { TRACE_SPINE_OVERSCAN } from "../../../widgets/trace/TraceDag.js"
+import { SOLO_FLIP_MS } from "./solo-flip.js"
 
 const here = dirname(fileURLToPath(import.meta.url))
 
-describe("maximize / restore geometry snap", () => {
+describe("maximize / restore geometry + FLIP", () => {
   const css = readFileSync(join(here, "../../../boot/index.css"), "utf8")
   const canvas = readFileSync(join(here, "GridCanvas.tsx"), "utf8")
+  const shell = readFileSync(join(here, "../WidgetShell.tsx"), "utf8")
 
-  it("GridCanvas adds workspace-canvas-geometry-snap on soloTileId change", () => {
+  it("snaps W/H under geometry-snap; motion is transform FLIP", () => {
     expect(canvas).toContain("workspace-canvas-geometry-snap")
-    expect(canvas).toContain("[soloTileId]")
-    expect(canvas).toMatch(/classList\.add\(\s*"workspace-canvas-geometry-snap"\s*\)/)
-    expect(canvas).toMatch(/requestAnimationFrame[\s\S]*requestAnimationFrame/)
-  })
-
-  it("CSS disables tile transitions under geometry-snap and solo", () => {
+    expect(canvas).toContain("playSoloFlip")
+    expect(canvas).toContain("takeSoloFlipFrom")
+    expect(canvas).toContain("soloFlipInvertTransform")
+    expect(shell).toContain("captureSoloFlipFrom")
+    expect(SOLO_FLIP_MS).toBe(260)
     expect(css).toMatch(
       /\.workspace-canvas-geometry-snap\s+\.workspace-tile\s*\{[^}]*transition:\s*none\s*!important/s,
     )
     expect(css).toMatch(/\.workspace-tile-solo\s*\{[^}]*transition:\s*none/s)
+    expect(css).toMatch(/\.workspace-tile-solo-flipping\s*\{[^}]*will-change:\s*transform/s)
   })
 
   it("solo-hidden uses content-visibility (not visibility hammer on *)", () => {

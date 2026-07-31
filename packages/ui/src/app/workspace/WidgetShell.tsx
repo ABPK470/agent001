@@ -13,6 +13,7 @@ import type { EdgePin } from "../../lib/grid-math"
 import { useLayoutStore } from "../../state/layout-store"
 import { useStore } from "../../state/store"
 import type { WidgetType } from "../../types"
+import { captureSoloFlipFrom } from "./layout/solo-flip"
 import { getWidgetDefinition } from "./widget-definitions"
 import { WidgetInstanceProvider } from "./widget-instance"
 
@@ -112,6 +113,11 @@ export function WidgetShell({
   function handleToggleMaximize(event: React.MouseEvent<HTMLButtonElement>) {
     event.preventDefault()
     event.stopPropagation()
+    const tile = event.currentTarget.closest("[data-tile-id]")
+    const canvas = tile?.closest(".workspace-canvas-pad")
+    if (tile instanceof HTMLElement && canvas instanceof HTMLElement) {
+      captureSoloFlipFrom(tile, canvas)
+    }
     toggleTileMaximized(viewId, widgetId)
   }
 

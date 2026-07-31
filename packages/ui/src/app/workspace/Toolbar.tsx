@@ -20,6 +20,7 @@ import { SessionMenu } from "../SessionMenu"
 import { ViewingAsControl } from "../ViewingAsControl"
 import { SHELL_CHROME_HEADER_WORKSPACE_CLASS } from "../shell-chrome"
 import type { AppShellMode } from "../types"
+import { captureSoloFlipFrom } from "./layout/solo-flip"
 import { ViewTabDragFloat } from "./ViewTabDragFloat"
 import { getWidgetDefinition } from "./widget-definitions"
 
@@ -322,7 +323,16 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
                 <button
                   type="button"
                   className="toolbar-ops-btn toolbar-ops-btn--active max-w-[14rem] shrink-0 px-2.5"
-                  onClick={() => toggleTileMaximized(activeViewId, soloTileId)}
+                  onClick={() => {
+                    const tile = document.querySelector(
+                      `[data-tile-id="${CSS.escape(soloTileId)}"]`,
+                    )
+                    const canvas = tile?.closest(".workspace-canvas-pad")
+                    if (tile instanceof HTMLElement && canvas instanceof HTMLElement) {
+                      captureSoloFlipFrom(tile, canvas)
+                    }
+                    toggleTileMaximized(activeViewId, soloTileId)
+                  }}
                   title={`Restore ${soloLabel}`}
                   aria-label={`Restore ${soloLabel}`}
                 >

@@ -3,11 +3,13 @@
  */
 
 import {
+  OUTLINE_PIN_FAMILIES,
   OUTLINE_STICKY_MAX,
   OUTLINE_STICKY_ROW_H,
   computePinnedFromEntries,
   computePinnedScopeIds,
-  listOutlineScopes,
+  layoutOffsetInScroll,
+  withScopeEnds,
 } from "../../lib/events/pin"
 
 export {
@@ -40,6 +42,63 @@ export type TraceScopeLayout = {
 }
 
 /**
+ * Sync live headers into the pin layout cache.
+ *
+ * Must record collapsed rows (`open: false`) — previously we only wrote open
+ * scopes from `listOutlineScopes`, so fold left stale `open: true` entries and
+ * the overlay kept pinning Context/Prompt with nothing expanded.
+ *
+ * Children of a collapsed parent leave the DOM; drop them from the cache so
+ * they cannot pin as orphans. VirtualList-unmounted *open* ancestors stay.
+ */
+export function syncTracePinLayoutCache(
+  scrollEl: HTMLElement,
+  layoutCache: Map<string, TraceScopeLayout>,
+): void {
+  const nodes = [
+    ...scrollEl.querySelectorAll<HTMLElement>("[data-outline-scope], [data-trace-scope]"),
+  ]
+  for (const el of nodes) {
+    const id = el.dataset.outlineScope ?? el.dataset.traceScope
+    if (!id) continue
+    const family = el.dataset.outlineFamily ?? el.dataset.traceKind ?? "call"
+    if (!OUTLINE_PIN_FAMILIES.has(family)) continue
+    if (el.classList.contains("is-leaf")) {
+      layoutCache.delete(id)
+      continue
+    }
+    const open = el.getAttribute("aria-expanded") !== "false"
+    layoutCache.set(id, {
+      id,
+      top: layoutOffsetInScroll(scrollEl, el),
+      height: Math.max(
+        1,
+        el.getBoundingClientRect().height || el.offsetHeight || OUTLINE_STICKY_ROW_H,
+      ),
+      depth: Number(el.dataset.outlineDepth ?? el.dataset.traceDepth ?? "0") || 0,
+      open,
+    })
+  }
+
+  const closed = [...layoutCache.values()].filter((e) => e.open === false)
+  if (closed.length === 0) return
+
+  const ordered = [...layoutCache.values()].sort(
+    (a, b) => a.top - b.top || a.depth - b.depth,
+  )
+  const endById = new Map(withScopeEnds(ordered).map((e) => [e.id, e.end]))
+  for (const parent of closed) {
+    const end = endById.get(parent.id) ?? Number.POSITIVE_INFINITY
+    for (const [id, e] of [...layoutCache.entries()]) {
+      if (id === parent.id) continue
+      if (e.depth > parent.depth && e.top >= parent.top && e.top < end) {
+        layoutCache.delete(id)
+      }
+    }
+  }
+}
+
+/**
  * Pin from mounted scopes, merging into `layoutCache` so VirtualList-unmounted
  * headers above the window still stick (otherwise we scroll past and never pin).
  */
@@ -47,18 +106,11 @@ export function computeTracePinnedScopeIds(
   scrollEl: HTMLElement,
   layoutCache?: Map<string, TraceScopeLayout>,
 ): string[] {
-  const mounted = listOutlineScopes(scrollEl)
   if (layoutCache) {
-    for (const e of mounted) {
-      layoutCache.set(e.id, {
-        id: e.id,
-        top: e.top,
-        height: e.height,
-        depth: e.depth,
-        open: e.el.getAttribute("aria-expanded") !== "false",
-      })
-    }
-    const entries = [...layoutCache.values()].sort((a, b) => a.top - b.top || a.depth - b.depth)
+    syncTracePinLayoutCache(scrollEl, layoutCache)
+    const entries = [...layoutCache.values()].sort(
+      (a, b) => a.top - b.top || a.depth - b.depth,
+    )
     return computePinnedFromEntries(
       entries,
       scrollEl.scrollTop,

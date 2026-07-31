@@ -3,11 +3,19 @@
  *
  * Stage pad is applied in JS (not CSS padding) so solo maximize can fill the
  * stage edge-to-edge — container size stays fixed, no ResizeObserver mid-morph,
- * no negative-bleed clipping. Solo toggle snaps tile geometry (no width/height
- * ease) so expanded Trace/Chat trees are not reflowed for 260ms.
+ * no negative-bleed clipping. Solo toggle snaps W/H once, then FLIP-animates
+ * via transform so expanded Trace/Chat are not reflowed for 260ms.
  */
 
-import { memo, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react"
+import {
+  memo,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from "react"
 import {
   COLS,
   viewportGridMetrics,
@@ -26,8 +34,101 @@ import { widgetComponent } from "../widget-definitions"
 import { DropZoneOverlay } from "./DropZoneOverlay"
 import { entranceClassName } from "./motion"
 import { paintTilesForCanvas } from "./paint-tiles"
+import {
+  readTileRectInCanvas,
+  SOLO_FLIP_MS,
+  soloFlipInvertTransform,
+  takeSoloFlipFrom,
+} from "./solo-flip"
 import { useGridInteraction, type ResizeEdge } from "./useGridInteraction"
 import { TilePaintProvider } from "../tile-paint"
+
+function prefersReducedMotion(): boolean {
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches
+}
+
+type SoloFlipPlay = {
+  tile: HTMLElement
+  canvas: HTMLElement
+  cleaned: boolean
+  playRaf: number
+  safetyTimer: number
+  onTransitionEnd: (event: TransitionEvent) => void
+}
+
+function clearSoloFlipStyles(tile: HTMLElement, canvas: HTMLElement) {
+  tile.style.transform = ""
+  tile.style.transition = ""
+  tile.style.transformOrigin = ""
+  tile.classList.remove("workspace-tile-solo-flipping")
+  canvas.classList.remove("workspace-canvas-geometry-snap")
+}
+
+function finishSoloFlip(play: SoloFlipPlay) {
+  if (play.cleaned) return
+  play.cleaned = true
+  cancelAnimationFrame(play.playRaf)
+  window.clearTimeout(play.safetyTimer)
+  play.tile.removeEventListener("transitionend", play.onTransitionEnd)
+  clearSoloFlipStyles(play.tile, play.canvas)
+}
+
+function onSoloFlipTransitionEnd(play: SoloFlipPlay, event: TransitionEvent) {
+  if (event.target !== play.tile) return
+  if (event.propertyName !== "transform") return
+  finishSoloFlip(play)
+}
+
+function beginSoloFlipEase(play: SoloFlipPlay) {
+  play.tile.style.transition =
+    `transform ${SOLO_FLIP_MS}ms var(--workspace-ease, cubic-bezier(0.22, 1, 0.36, 1))`
+  play.tile.style.transform = "translate(0px, 0px) scale(1)"
+  play.tile.addEventListener("transitionend", play.onTransitionEnd)
+  play.safetyTimer = window.setTimeout(() => finishSoloFlip(play), SOLO_FLIP_MS + 120)
+}
+
+function playSoloFlip(canvas: HTMLElement, tile: HTMLElement, from: {
+  left: number
+  top: number
+  width: number
+  height: number
+}): () => void {
+  const to = readTileRectInCanvas(tile, canvas)
+  const invert = soloFlipInvertTransform(from, to)
+  canvas.classList.add("workspace-canvas-geometry-snap")
+  if (!invert || prefersReducedMotion()) {
+    const outer = requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        canvas.classList.remove("workspace-canvas-geometry-snap")
+      })
+    })
+    return () => {
+      cancelAnimationFrame(outer)
+      canvas.classList.remove("workspace-canvas-geometry-snap")
+    }
+  }
+
+  const play: SoloFlipPlay = {
+    tile,
+    canvas,
+    cleaned: false,
+    playRaf: 0,
+    safetyTimer: 0,
+    onTransitionEnd: (event) => onSoloFlipTransitionEnd(play, event),
+  }
+
+  tile.style.transformOrigin = "0 0"
+  tile.style.transition = "none"
+  tile.style.transform =
+    `translate(${invert.dx}px, ${invert.dy}px) scale(${invert.sx}, ${invert.sy})`
+  tile.classList.add("workspace-tile-solo-flipping")
+
+  play.playRaf = requestAnimationFrame(() => {
+    play.playRaf = requestAnimationFrame(() => beginSoloFlipEase(play))
+  })
+
+  return () => finishSoloFlip(play)
+}
 
 const RESIZE_EDGES: ResizeEdge[] = ["n", "s", "e", "w", "ne", "nw", "se", "sw"]
 
@@ -253,27 +354,38 @@ export function GridCanvas({ viewId, tiles, split }: Props) {
     if (maxRows > 0) setViewportRows(maxRows)
   }, [maxRows, setViewportRows])
 
-  /** Maximize/restore: snap geometry for two frames (no 260ms W/H thrash). */
-  const soloSnapBootRef = useRef(true)
-  useEffect(() => {
-    if (soloSnapBootRef.current) {
-      soloSnapBootRef.current = false
+  /**
+   * Maximize/restore: snap W/H (no layout thrash), FLIP via transform for the
+   * mature ease. From-rect captured on click before this commit.
+   */
+  const soloFlipBootRef = useRef(true)
+  useLayoutEffect(() => {
+    if (soloFlipBootRef.current) {
+      soloFlipBootRef.current = false
       return
     }
-    const el = containerRef.current
-    if (!el) return
-    el.classList.add("workspace-canvas-geometry-snap")
-    let innerRaf = 0
-    const outerRaf = requestAnimationFrame(() => {
-      innerRaf = requestAnimationFrame(() => {
-        el.classList.remove("workspace-canvas-geometry-snap")
+    const canvas = containerRef.current
+    if (!canvas) return
+    const from = takeSoloFlipFrom()
+    if (!from) {
+      canvas.classList.add("workspace-canvas-geometry-snap")
+      let innerRaf = 0
+      const outerRaf = requestAnimationFrame(() => {
+        innerRaf = requestAnimationFrame(() => {
+          canvas.classList.remove("workspace-canvas-geometry-snap")
+        })
       })
-    })
-    return () => {
-      cancelAnimationFrame(outerRaf)
-      cancelAnimationFrame(innerRaf)
-      el.classList.remove("workspace-canvas-geometry-snap")
+      return () => {
+        cancelAnimationFrame(outerRaf)
+        cancelAnimationFrame(innerRaf)
+        canvas.classList.remove("workspace-canvas-geometry-snap")
+      }
     }
+    const tile = canvas.querySelector(
+      `[data-tile-id="${CSS.escape(from.tileId)}"]`,
+    )
+    if (!(tile instanceof HTMLElement)) return
+    return playSoloFlip(canvas, tile, from)
   }, [soloTileId])
 
   useEffect(() => {

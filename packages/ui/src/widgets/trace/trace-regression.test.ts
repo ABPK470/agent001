@@ -26,8 +26,11 @@ import {
   TRACE_PIN_OPTS,
   TRACE_STICKY_MAX,
   TRACE_STICKY_ROW_H,
+  computeTracePinnedScopeIds,
   expandPathForScope,
+  syncTracePinLayoutCache,
   traceScopeDepth,
+  type TraceScopeLayout,
 } from "./trace-pin.js"
 import { sqlQualityPhaseLabel } from "./trace-format.js"
 
@@ -326,6 +329,62 @@ describe("listOutlineScopes + computePinnedScopeIds (DOM)", () => {
     expect(computePinnedScopeIds(host, undefined, { stackInScroll: false })).toEqual([
       "call:1",
     ])
+  })
+})
+
+describe("pin layout cache — fold must clear stale open entries", () => {
+  it("does not pin collapsed Context / Prompt after they were previously open", () => {
+    // Real bug: expand → scroll (cache open:true) → collapse all → still pinned.
+    const cache = new Map<string, TraceScopeLayout>([
+      ["context", { id: "context", top: 0, height: H, depth: 0, open: true }],
+      ["prompt", { id: "prompt", top: 40, height: H, depth: 1, open: true }],
+      ["tools", { id: "tools", top: 80, height: H, depth: 1, open: true }],
+    ])
+    // Folded: only Context header remains in the DOM (children unmounted).
+    const { host } = mockTraceHost(
+      [{ id: "context", kind: "context", depth: 0, top: 0, expanded: false }],
+      400,
+    )
+    expect(computeTracePinnedScopeIds(host, cache)).toEqual([])
+    expect(cache.get("context")?.open).toBe(false)
+    expect(cache.has("prompt")).toBe(false)
+    expect(cache.has("tools")).toBe(false)
+  })
+
+  it("sync marks collapsed and prunes nested cache rows", () => {
+    const cache = new Map<string, TraceScopeLayout>([
+      ["call:0", { id: "call:0", top: 0, height: H, depth: 0, open: true }],
+      ["sent:0", { id: "sent:0", top: 40, height: H, depth: 1, open: true }],
+      ["message:0:m:0", { id: "message:0:m:0", top: 80, height: H, depth: 2, open: true }],
+    ])
+    const { host } = mockTraceHost(
+      [{ id: "call:0", kind: "call", depth: 0, top: 0, expanded: false }],
+      200,
+    )
+    syncTracePinLayoutCache(host, cache)
+    expect(cache.get("call:0")?.open).toBe(false)
+    expect(cache.has("sent:0")).toBe(false)
+    expect(cache.has("message:0:m:0")).toBe(false)
+  })
+
+  it("keeps VirtualList-unmounted open ancestors while still inside their range", () => {
+    const cache = new Map<string, TraceScopeLayout>([
+      ["call:0", { id: "call:0", top: 0, height: H, depth: 0, open: true }],
+      ["sent:0", { id: "sent:0", top: 40, height: H, depth: 1, open: true }],
+      ["message:0:m:0", { id: "message:0:m:0", top: 80, height: H, depth: 2, open: true }],
+    ])
+    // Deep in call:0 body — only a nested message is mounted (window scrolled).
+    const { host } = mockTraceHost(
+      [{ id: "message:0:m:0", kind: "message", depth: 2, top: 80 }],
+      200,
+    )
+    expect(computeTracePinnedScopeIds(host, cache)).toEqual([
+      "call:0",
+      "sent:0",
+      "message:0:m:0",
+    ])
+    expect(cache.get("call:0")?.open).toBe(true)
+    expect(cache.get("sent:0")?.open).toBe(true)
   })
 })
 

@@ -4616,8 +4616,8 @@ textarea.input {
 }
 
 /*
- * Maximize/restore snaps tile geometry (GridCanvas adds this for two frames).
- * Animating width/height across expanded Trace/Chat DOM is main-thread thrash.
+ * Maximize/restore: snap left/top/width/height (no layout thrash on heavy
+ * Trace). Motion is FLIP `transform` on .workspace-tile-solo-flipping.
  */
 .workspace-canvas-geometry-snap .workspace-tile {
   transition: none !important;
@@ -4628,6 +4628,13 @@ textarea.input {
   z-index: 40;
   /* Never ease solo geometry — window resize must stay one-shot too. */
   transition: none;
+}
+
+/* Compositor-only maximize/restore ease (same 260ms curve as before). */
+.workspace-tile-solo-flipping {
+  z-index: 40;
+  will-change: transform;
+  pointer-events: none;
 }
 
 /* Solo keeps the product surface — only the card frame goes away. */
