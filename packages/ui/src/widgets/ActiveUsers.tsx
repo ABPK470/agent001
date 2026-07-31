@@ -505,7 +505,7 @@ export function ActiveUsers(): ReactNode {
           </div>
         ) : (
           <table className="au-users-table w-full border-collapse">
-            <thead className="sticky top-0 z-20 bg-surface">
+            <thead className="sticky top-0 z-20">
               <tr className="text-left text-xs uppercase tracking-wider text-text-muted border-b border-border-subtle">
                 <SortTh k="status" current={sortKey} dir={sortDir} onClick={onSort} className="w-8" label="" />
                 <SortTh k="name" current={sortKey} dir={sortDir} onClick={onSort} className="au-th-name" label="Name" />
@@ -519,7 +519,7 @@ export function ActiveUsers(): ReactNode {
                 <SortTh k="lastModel" current={sortKey} dir={sortDir} onClick={onSort} label="Model" />
                 <SortTh k="firstSeen" current={sortKey} dir={sortDir} onClick={onSort} label="First Seen" />
                 <SortTh k="lastSeen" current={sortKey} dir={sortDir} onClick={onSort} label="Last Seen" />
-                <th className="py-2 px-2 text-xs w-8 bg-surface" aria-hidden />
+                <th className="py-2 px-2 text-xs w-8" aria-hidden />
               </tr>
             </thead>
             <tbody>
@@ -768,6 +768,7 @@ function ActiveUsersFilterBar({
               <WidgetToolbarCount
                 filtered={filteredCount}
                 total={totalCount}
+                compact
               />
             </span>
           )}
@@ -1000,7 +1001,7 @@ function SortTh({ k, current, dir, onClick, label, className }: {
   const active = current === k
   return (
     <th
-      className={`py-2 px-3 text-xs font-semibold cursor-pointer select-none hover:text-text transition-colors bg-surface whitespace-nowrap ${active ? "text-text" : ""} ${className ?? ""}`}
+      className={`py-2 px-3 text-xs font-semibold cursor-pointer select-none hover:text-text transition-colors whitespace-nowrap ${active ? "text-text" : ""} ${className ?? ""}`}
       onClick={() => onClick(k)}
       title={label ? (active ? (dir === "asc" ? "Sort descending ↓" : "Sort ascending ↑") : `Sort by ${label}`) : undefined}
     >
@@ -1119,7 +1120,7 @@ function UserDetail({ user, liveRuns, history, stack, adminBusy, onToggleAdmin, 
     const active = runSort === k
     return (
       <th
-        className={`py-2 px-3 au-label font-semibold cursor-pointer select-none whitespace-nowrap transition-colors bg-[var(--workspace-widget-bg,var(--panel-2))] ${active ? "text-text" : "text-text-muted/50 hover:text-text-muted"} ${right ? "text-right" : "text-left"}`}
+        className={`py-2 px-3 au-label font-semibold cursor-pointer select-none whitespace-nowrap transition-colors ${active ? "text-text" : "text-text-muted/50 hover:text-text-muted"} ${right ? "text-right" : "text-left"}`}
         onClick={() => onRunSort(k)}
       >
         {label}
@@ -1252,16 +1253,18 @@ function UserDetail({ user, liveRuns, history, stack, adminBusy, onToggleAdmin, 
 
       {/* ── Run history ───────────────────────────────── */}
       <div>
-        {/* Toolbar */}
-        <div className="px-4 py-2 border-b border-border-subtle flex flex-wrap items-center gap-2 bg-overlay-1">
-          <span className="au-label font-semibold text-text-muted/60 tracking-widest shrink-0">
-            Runs
-          </span>
-          {history && !history.loading && (
-            <span className="au-label text-text-muted/40 shrink-0">
-              {history.total}{displayRows.length !== history.rows.length ? ` · ${displayRows.length} shown` : ""}
+        {/* Toolbar — sticky under the user banner with the run thead */}
+        <div className="au-run-toolbar px-4 py-2 border-b border-border-subtle flex flex-wrap items-center gap-2">
+          <span className="inline-flex items-baseline gap-1.5 shrink-0">
+            <span className="au-label font-semibold text-text-muted/60 tracking-widest">
+              Runs
             </span>
-          )}
+            {history && !history.loading && (
+              <span className="au-label text-text-muted/40 tabular-nums">
+                {history.total}{displayRows.length !== history.rows.length ? ` · ${displayRows.length} shown` : ""}
+              </span>
+            )}
+          </span>
           <div className="w-px h-3 bg-overlay-3 shrink-0" />
           <input
             className="flex-1 min-w-[140px] bg-transparent text-text placeholder:text-text-muted/30 outline-none"
@@ -1367,17 +1370,17 @@ function UserDetail({ user, liveRuns, history, stack, adminBusy, onToggleAdmin, 
           ) : (
             <div className="au-run-table-wrap min-w-0">
               <table className="w-full border-collapse">
-                <thead className="au-run-thead bg-[var(--workspace-widget-bg,var(--panel-2))]">
-                  <tr className="bg-[var(--workspace-widget-bg,var(--panel-2))]">
-                    <th className="py-2 px-3 w-6 bg-[var(--workspace-widget-bg,var(--panel-2))]" onClick={() => onRunSort("status")} />
-                    <th className="py-2 px-3 text-left au-label font-semibold text-text-muted/50 cursor-default bg-[var(--workspace-widget-bg,var(--panel-2))]">Run</th>
+                <thead className="au-run-thead">
+                  <tr>
+                    <th className="py-2 px-3 w-6" onClick={() => onRunSort("status")} />
+                    <th className="py-2 px-3 text-left au-label font-semibold text-text-muted/50 cursor-default">Run</th>
                     <RSortTh k="started"  label="Started" />
                     <RSortTh k="duration" label="Duration" right />
                     <RSortTh k="steps"    label="Steps" right />
                     <RSortTh k="tokens"   label="Tokens" right />
                     <RSortTh k="llmCalls" label="LLM Calls" right />
                     <RSortTh k="model"    label="Model" />
-                    <th className="py-2 px-3 text-left au-label font-semibold text-text-muted/50 cursor-default bg-[var(--workspace-widget-bg,var(--panel-2))]">Goal</th>
+                    <th className="py-2 px-3 text-left au-label font-semibold text-text-muted/50 cursor-default">Goal</th>
                   </tr>
                 </thead>
                 <tbody>

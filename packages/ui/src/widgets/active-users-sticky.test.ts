@@ -1,6 +1,6 @@
 /**
- * Expanded-user sticky banner — operator always sees name/UPN while
- * scrolling run history (restored after responsive refactor dropped it).
+ * Expanded-user sticky stack — operator always sees name/UPN and the Runs
+ * toolbar while scrolling run history (restored after responsive refactor).
  */
 
 import { readFileSync } from "node:fs"
@@ -19,7 +19,7 @@ describe("Active Users sticky context banner", () => {
       /\.active-users-widget\s+\.au-detail-header\s*\{[^}]*position:\s*sticky/s,
     )
     expect(css).toMatch(
-      /\.active-users-widget\s+\.au-detail-header\s*\{[^}]*top:\s*var\(--au-sticky-thead-h\)/s,
+      /\.active-users-widget\s+\.au-detail-header\s*\{[^}]*top:\s*calc\(\s*var\(--au-sticky-thead-h\)\s*-\s*1px\s*\)/s,
     )
     expect(css).toContain("--au-sticky-thead-h")
     expect(css).toMatch(
@@ -28,12 +28,23 @@ describe("Active Users sticky context banner", () => {
     expect(src).toContain("au-detail-header")
   })
 
-  it("run-history thead sticks under the context banner", () => {
+  it("runs toolbar sticks under the context banner", () => {
+    expect(css).toMatch(
+      /\.active-users-widget\s+\.au-run-toolbar\s*\{[^}]*position:\s*sticky/s,
+    )
+    expect(css).toContain("--au-sticky-runs-bar-h")
+    expect(css).toMatch(
+      /top:\s*calc\(\s*var\(--au-sticky-thead-h\)\s*\+\s*var\(--au-sticky-banner-h\)\s*-\s*1px\s*\)/,
+    )
+    expect(src).toContain("au-run-toolbar")
+  })
+
+  it("run-history thead sticks under the runs toolbar", () => {
     expect(css).toMatch(
       /\.active-users-widget\s+\.au-run-thead\s*\{[^}]*position:\s*sticky/s,
     )
     expect(css).toMatch(
-      /top:\s*calc\(\s*var\(--au-sticky-thead-h\)\s*\+\s*var\(--au-sticky-banner-h\)\s*\)/,
+      /var\(--au-sticky-thead-h\)\s*\+\s*var\(--au-sticky-banner-h\)\s*\+\s*var\(--au-sticky-runs-bar-h\)/,
     )
     expect(src).toContain("au-run-thead")
   })
@@ -42,5 +53,10 @@ describe("Active Users sticky context banner", () => {
     expect(css).not.toMatch(
       /\.active-users-widget\s+\.au-detail-panel\s*\{[^}]*contain:\s*layout/s,
     )
+  })
+
+  it("users count beside icon uses compact toolbar count (no min-width gap)", () => {
+    expect(src).toMatch(/WidgetToolbarCount[\s\S]*compact/)
+    expect(css).toContain("widget-toolbar__count--compact")
   })
 })

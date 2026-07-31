@@ -129,14 +129,20 @@ export function WidgetToolbarCount({
   filtered,
   total,
   hidden,
+  /** Drop grid min-widths — sit flush next to an icon. */
+  compact,
 }: {
   filtered: number
   total: number
   hidden?: boolean
+  compact?: boolean
 }): JSX.Element | null {
   if (hidden) return null
   return (
-    <span className="widget-toolbar__count" aria-label={`${filtered} of ${total} shown`}>
+    <span
+      className={`widget-toolbar__count${compact ? " widget-toolbar__count--compact" : ""}`}
+      aria-label={`${filtered} of ${total} shown`}
+    >
       {filtered !== total ? (
         <>
           <span className="widget-toolbar__count-filtered">{filtered}</span>

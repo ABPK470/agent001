@@ -3359,16 +3359,20 @@ textarea.input {
   min-width: 0;
   /*
    * Sticky stack when a user is expanded (operator always sees who):
-   *   table thead → detail banner → run-history thead
+   *   table thead → detail banner → runs toolbar → run-history thead
    * Stack layout has no table thead (offset 0).
    */
   --au-sticky-thead-h: 0px;
-  --au-sticky-banner-h: 2.625rem;
+  /* py-2.5 + ~1.25rem line (name / badge). */
+  --au-sticky-banner-h: 2.5rem;
+  /* py-2 + single-line filter row. */
+  --au-sticky-runs-bar-h: 2.5rem;
+  --au-sticky-fill: var(--workspace-widget-bg, var(--panel-2));
 }
 
 .active-users-widget--table {
-  /* Matches SortTh row (~py-2 + au-label). */
-  --au-sticky-thead-h: 2.125rem;
+  /* SortTh: text-xs leading-4 (1rem) + py-2 (1rem) + tr border-b (1px). */
+  --au-sticky-thead-h: calc(2rem + 1px);
 }
 
 .active-users-widget .au-stat-grid {
@@ -3504,24 +3508,47 @@ textarea.input {
 }
 
 /*
- * Expanded-user context banner — sticks under the users thead (table) or
- * at the scrollport top (stack). Operator always sees name/UPN while
- * scrolling long run history.
+ * Expanded-user sticky stack — opaque fills, 1px upward seal so scrolled
+ * row text cannot peek through a subpixel gap under the users thead.
  */
 .active-users-widget .au-detail-header {
   position: sticky;
-  top: var(--au-sticky-thead-h);
+  top: calc(var(--au-sticky-thead-h) - 1px);
   z-index: 18;
   cursor: pointer;
-  background: var(--workspace-widget-bg, var(--panel-2));
-  backdrop-filter: blur(6px);
+  background: var(--au-sticky-fill);
+  /* Paint over any hairline crack above the pin. */
+  box-shadow: 0 -1px 0 var(--au-sticky-fill);
 }
 
-/* Run-history columns stick under the context banner. */
+/* Runs filter bar pins under the user banner. */
+.active-users-widget .au-run-toolbar {
+  position: sticky;
+  top: calc(var(--au-sticky-thead-h) + var(--au-sticky-banner-h) - 1px);
+  z-index: 17;
+  background: var(--au-sticky-fill);
+  box-shadow: 0 -1px 0 var(--au-sticky-fill);
+}
+
+/* Run-history columns stick under the Runs toolbar. */
 .active-users-widget .au-run-thead {
   position: sticky;
-  top: calc(var(--au-sticky-thead-h) + var(--au-sticky-banner-h));
+  top: calc(
+    var(--au-sticky-thead-h) + var(--au-sticky-banner-h) + var(--au-sticky-runs-bar-h) - 1px
+  );
   z-index: 16;
+  background: var(--au-sticky-fill);
+  box-shadow: 0 -1px 0 var(--au-sticky-fill);
+}
+
+.active-users-widget .au-run-thead th {
+  background: var(--au-sticky-fill);
+}
+
+/* Users table thead — same opaque fill as the pin stack below it. */
+.active-users-widget--table .au-users-table > thead,
+.active-users-widget--table .au-users-table > thead th {
+  background: var(--au-sticky-fill);
 }
 
 .active-users-widget .au-detail-kv {
@@ -3841,6 +3868,19 @@ textarea.input {
   font-variant-numeric: tabular-nums;
   color: var(--color-text-muted);
   white-space: nowrap;
+}
+
+/* Icon + count: no reserved digit columns / end-justify gap. */
+.widget-toolbar__count--compact {
+  min-width: 0;
+  justify-content: start;
+  padding: 0;
+}
+
+.widget-toolbar__count--compact .widget-toolbar__count-filtered,
+.widget-toolbar__count--compact .widget-toolbar__count-total {
+  min-width: 0;
+  text-align: start;
 }
 
 .widget-toolbar__count-filtered {
