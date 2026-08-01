@@ -1091,6 +1091,8 @@ export const api = {
   operations: (opts: {
     limit?: number
     before?: string
+    since?: string
+    until?: string
     search?: string
     kind?: string
     status?: string
@@ -1101,6 +1103,8 @@ export const api = {
     const params = new URLSearchParams()
     if (opts.limit != null) params.set("limit", String(opts.limit))
     if (opts.before) params.set("before", opts.before)
+    if (opts.since) params.set("since", opts.since)
+    if (opts.until) params.set("until", opts.until)
     if (opts.search) params.set("search", opts.search)
     if (opts.kind) params.set("kind", opts.kind)
     if (opts.status) params.set("status", opts.status)

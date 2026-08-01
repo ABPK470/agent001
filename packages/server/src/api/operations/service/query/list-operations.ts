@@ -96,7 +96,12 @@ export function listOperations(opts: ListOperationsOpts = {}): ListOperationsRes
 
   while (scannedEvents < eventBudget) {
     const take = Math.min(pageSize, eventBudget - scannedEvents)
-    const events = db.listEvents({ limit: take, before: before ?? undefined })
+    const events = db.listEvents({
+      limit: take,
+      before: before ?? undefined,
+      since: opts.since,
+      until: opts.until,
+    })
     if (events.length === 0) {
       hasMore = false
       break

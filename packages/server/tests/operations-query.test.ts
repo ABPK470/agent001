@@ -10,7 +10,8 @@ vi.mock("../src/infra/persistence/sqlite.js", () => ({
   listEvents,
   getRun,
   getSyncRun,
-  getSyncRunPlanJson
+  getSyncRunPlanJson,
+  runHasResumeChild: () => false,
 }))
 
 describe("listOperations sync bucketing", () => {
@@ -685,5 +686,21 @@ describe("listOperations sync bucketing", () => {
 
     expect(result.operations).toHaveLength(1)
     expect(result.operations[0]?.kind).toBe(OperationKind.SyncRun)
+  })
+
+  it("forwards since/until to event_log listEvents", async () => {
+    listEvents.mockReturnValue([])
+    const { listOperations } = await import("../src/api/operations/service/query/index.ts")
+    listOperations({
+      limit: 50,
+      since: "2026-07-01T00:00:00.000Z",
+      until: "2026-07-02T23:59:59.999Z",
+    })
+    expect(listEvents).toHaveBeenCalledWith(
+      expect.objectContaining({
+        since: "2026-07-01T00:00:00.000Z",
+        until: "2026-07-02T23:59:59.999Z",
+      }),
+    )
   })
 })

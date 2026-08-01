@@ -22,6 +22,8 @@ const OPERATIONS_STREAM_DEBOUNCE_MS = 1500
 type OperationsStreamFilters = {
   kind: string | undefined
   search: string | undefined
+  since: string | undefined
+  until: string | undefined
   viewingAsUpn: string
 }
 
@@ -39,6 +41,8 @@ function pushOperationsHeadSnapshot(reply: FastifyReply, filters: OperationsStre
     limit: OPERATIONS_HEAD_EVENT_LIMIT,
     kind: filters.kind,
     search: filters.search,
+    since: filters.since,
+    until: filters.until,
     viewingAsUpn: filters.viewingAsUpn,
   })
   return writeOperationsSse(reply, { ...snapshot, live: true })
@@ -49,6 +53,8 @@ export function registerOperationRoutes(app: FastifyInstance): void {
     Querystring: {
       limit?: string
       before?: string
+      since?: string
+      until?: string
       search?: string
       kind?: string
       status?: string
@@ -58,9 +64,19 @@ export function registerOperationRoutes(app: FastifyInstance): void {
   }>("/api/operations", personal.read, async (req) => {
     const { viewingAsUpn } = viewingAsOf(req)
     const limit = Math.min(Number(req.query.limit) || OPERATIONS_PAGE_EVENT_LIMIT, 10_000)
+    const since =
+      typeof req.query.since === "string" && req.query.since.length > 0
+        ? req.query.since
+        : undefined
+    const until =
+      typeof req.query.until === "string" && req.query.until.length > 0
+        ? req.query.until
+        : undefined
     return listOperations({
       limit,
       before: req.query.before,
+      since,
+      until,
       search: req.query.search,
       kind: req.query.kind,
       status: req.query.status,
@@ -91,12 +107,28 @@ export function registerOperationRoutes(app: FastifyInstance): void {
   })
 
   app.get<{
-    Querystring: { kind?: string; search?: string; viewingAs?: string }
+    Querystring: {
+      kind?: string
+      search?: string
+      since?: string
+      until?: string
+      viewingAs?: string
+    }
   }>("/api/operations/stream", personal.read, (req, reply) => {
     const { viewingAsUpn } = viewingAsOf(req)
+    const since =
+      typeof req.query.since === "string" && req.query.since.length > 0
+        ? req.query.since
+        : undefined
+    const until =
+      typeof req.query.until === "string" && req.query.until.length > 0
+        ? req.query.until
+        : undefined
     const filters: OperationsStreamFilters = {
       kind: req.query.kind,
       search: req.query.search,
+      since,
+      until,
       viewingAsUpn,
     }
 

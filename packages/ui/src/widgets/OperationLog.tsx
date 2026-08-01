@@ -15,8 +15,15 @@ import { EmptyState } from "../components/EmptyState"
 import { JsonViewer } from "../components/JsonViewer"
 import { ReviewTreeItem } from "../components/ReviewTree"
 import { ToolIoBlock } from "./chat/ToolCallModal"
+import { useWidgetInstance } from "../app/workspace/widget-instance"
 import { useContainerSize } from "../hooks/useContainerSize"
 import { useOperationLogData, type OperationLogKindView } from "../hooks/useOperationLogData"
+import {
+  readOperationLogPrefs,
+  writeOperationLogPrefs,
+  type PipelineKindFilter,
+} from "../lib/operation-log-prefs"
+import type { EventStreamRange, EventStreamWindow } from "../lib/event-stream-prefs"
 import { flattenOperationRows } from "../lib/operation-flat-rows"
 import {
   OperationLogModalsProvider,
@@ -55,10 +62,7 @@ import {
   readToolIoFromEvent,
   stripToolIoForInlineDisplay,
 } from "./chat/tool-call-io"
-import {
-  OperationLogToolbar,
-  type PipelineKindFilter,
-} from "./operation-log-toolbar"
+import { OperationLogToolbar } from "./operation-log-toolbar"
 
 // ── Visuals ──────────────────────────────────────────────────────
 
@@ -390,9 +394,20 @@ function kindViewFromKinds(kinds: Set<PipelineKindFilter>): OperationLogKindView
 }
 
 export function OperationLog() {
-  const [kinds, setKinds] = useState<Set<PipelineKindFilter>>(new Set())
-  const [statuses, setStatuses] = useState<Set<OperationStatus>>(new Set())
-  const [search, setSearch] = useState("")
+  const instance = useWidgetInstance()
+  const tileId = instance?.widgetId ?? null
+  const initialPrefs = useMemo(() => readOperationLogPrefs(tileId), [tileId])
+
+  const [kinds, setKinds] = useState<Set<PipelineKindFilter>>(
+    () => new Set(initialPrefs.kinds),
+  )
+  const [statuses, setStatuses] = useState<Set<OperationStatus>>(
+    () => new Set(initialPrefs.statuses),
+  )
+  const [search, setSearch] = useState(() => initialPrefs.searchText)
+  const [timeWindow, setTimeWindow] = useState<EventStreamWindow>(
+    () => initialPrefs.window,
+  )
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [actExpanded, setActExpanded] = useState<Set<string>>(new Set())
   const [evExpanded, setEvExpanded] = useState<Set<string>>(new Set())
@@ -405,6 +420,25 @@ export function OperationLog() {
   const tiny = width > 0 && width < 480
   const [cancellingId, setCancellingId] = useState<string | null>(null)
 
+  useEffect(() => {
+    writeOperationLogPrefs(tileId, {
+      kinds: [...kinds],
+      statuses: [...statuses],
+      searchText: search,
+      window: timeWindow,
+    })
+  }, [tileId, kinds, statuses, search, timeWindow])
+
+  const setQuickRange = useCallback((range: EventStreamRange) => {
+    setTimeWindow({ range, from: undefined, to: undefined })
+  }, [])
+  const setFromDate = useCallback((from: string | undefined) => {
+    setTimeWindow((prev) => ({ ...prev, from: from || undefined }))
+  }, [])
+  const setToDate = useCallback((to: string | undefined) => {
+    setTimeWindow((prev) => ({ ...prev, to: to || undefined }))
+  }, [])
+
   const kindView = kindViewFromKinds(kinds)
   const {
     pipelines,
@@ -413,7 +447,7 @@ export function OperationLog() {
     hasMore,
     loadMore,
     error,
-  } = useOperationLogData({ kindView, search })
+  } = useOperationLogData({ kindView, search, window: timeWindow })
 
   const cancelPipeline = useCallback(async (pipeline: OperationPipeline): Promise<void> => {
     if (pipeline.status !== "running") return
@@ -488,11 +522,16 @@ export function OperationLog() {
 
   const emptyMessage = useMemo(() => {
     if (error) return error
-    if (pipelines.length === 0) return "No operations recorded yet."
+    if (pipelines.length === 0) {
+      const hasTime =
+        Boolean(timeWindow.from || timeWindow.to) || timeWindow.range !== "live"
+      if (hasTime) return "No operations in this time range."
+      return "No operations recorded yet."
+    }
     if (kinds.size > 0 || statuses.size > 0) return "No operations match the selected filters."
     if (needle) return "No operations match your search."
     return "No operations recorded yet."
-  }, [error, pipelines.length, kinds.size, statuses.size, needle])
+  }, [error, pipelines.length, kinds.size, statuses.size, needle, timeWindow])
 
   return (
     <OperationLogModalsProvider>
@@ -507,6 +546,10 @@ export function OperationLog() {
         search={search}
         setSearch={setSearch}
         searchPending={searchPending}
+        timeWindow={timeWindow}
+        setQuickRange={setQuickRange}
+        setFromDate={setFromDate}
+        setToDate={setToDate}
         tiny={tiny}
         filteredCount={filtered.length}
         totalCount={pipelines.length}

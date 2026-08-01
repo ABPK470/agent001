@@ -1,6 +1,6 @@
 /**
  * Operations capability owner — one REST head + one EventSource per window.
- * Widgets are lenses (kind/search); they retain/release but never own transport.
+ * Widgets are lenses (kind/search/time window); they retain/release but never own transport.
  */
 
 import { create } from "zustand"
@@ -13,6 +13,8 @@ import {
   OPERATIONS_PAGE_EVENT_LIMIT,
   type OperationLogKindView,
 } from "../lib/operations-pipelines"
+import type { OperationsTimeWindow } from "../lib/operations-window"
+import { resolveOperationsWindowBounds } from "../lib/operations-window"
 
 export type { OperationLogKindView }
 export {
@@ -30,12 +32,19 @@ function serverSearchParam(search: string): string | undefined {
   return trimmed.length >= 2 ? trimmed : undefined
 }
 
-function operationsStreamUrl(kindView: OperationLogKindView, search: string): string {
+function operationsStreamUrl(
+  kindView: OperationLogKindView,
+  search: string,
+  since: string | undefined,
+  until: string | undefined,
+): string {
   const params = new URLSearchParams()
   const kind = serverKindParam(kindView)
   const q = serverSearchParam(search)
   if (kind) params.set("kind", kind)
   if (q) params.set("search", q)
+  if (since) params.set("since", since)
+  if (until) params.set("until", until)
   const qs = params.toString()
   return attachViewingAsQuery(`/api/operations/stream${qs ? `?${qs}` : ""}`)
 }
@@ -48,6 +57,10 @@ function isOperationsSnapshot(data: unknown): data is OperationsResponse {
   )
 }
 
+function sameWindow(a: OperationsTimeWindow, b: OperationsTimeWindow): boolean {
+  return a.range === b.range && a.from === b.from && a.to === b.to
+}
+
 interface OperationsState {
   pipelines: OperationPipeline[]
   loading: boolean
@@ -57,6 +70,7 @@ interface OperationsState {
   error: string | null
   kind: OperationLogKindView
   search: string
+  window: OperationsTimeWindow
   viewingAsUpn: string | null
   /** When true, SSE snapshots update state but UI subscribers may freeze. */
   paintSuspended: boolean
@@ -64,12 +78,14 @@ interface OperationsState {
   retain: (lens: {
     kind: OperationLogKindView
     search: string
+    window: OperationsTimeWindow
     viewingAsUpn: string | null
   }) => void
   release: () => void
   setLens: (lens: {
     kind: OperationLogKindView
     search: string
+    window: OperationsTimeWindow
     viewingAsUpn: string | null
   }) => void
   loadMore: () => void
@@ -105,15 +121,24 @@ function stopTransport(): void {
   }
 }
 
+function stopStreamOnly(): void {
+  transport.es?.close()
+  transport.es = null
+}
+
 async function fetchPage(
   kind: OperationLogKindView,
   search: string,
+  window: OperationsTimeWindow,
   before: string | undefined,
   signal: AbortSignal,
 ): Promise<OperationsResponse> {
+  const bounds = resolveOperationsWindowBounds(window)
   return api.operations({
     limit: OPERATIONS_PAGE_EVENT_LIMIT,
     before,
+    since: bounds.since,
+    until: bounds.until,
     kind: serverKindParam(kind),
     search: serverSearchParam(search),
     signal,
@@ -121,15 +146,19 @@ async function fetchPage(
 }
 
 function openStream(get: () => OperationsState, set: (partial: Partial<OperationsState>) => void): void {
-  const { kind, search } = get()
-  transport.es?.close()
-  const es = new EventSource(operationsStreamUrl(kind, search), { withCredentials: true })
+  const { kind, search, window } = get()
+  const bounds = resolveOperationsWindowBounds(window)
+  stopStreamOnly()
+  if (!bounds.followLive) return
+  const es = new EventSource(
+    operationsStreamUrl(kind, search, bounds.since, bounds.until),
+    { withCredentials: true },
+  )
   es.onmessage = (event) => {
     try {
       const data = JSON.parse(event.data as string) as unknown
       if (!isOperationsSnapshot(data)) return
       if (document.visibilityState === "hidden") return
-      // Keep buffer warm under solo-hide; UI freezes via selector snapshot.
       const prev = get()
       set({
         pipelines: mergeHeadRefresh(prev.pipelines, data.operations, data.oldestTimestamp),
@@ -149,7 +178,7 @@ function reloadHead(get: () => OperationsState, set: (partial: Partial<Operation
   transport.abort = ac
   const gen = ++transport.listGeneration
   transport.loadingMore = false
-  const { kind, search } = get()
+  const { kind, search, window } = get()
   set({
     loading: true,
     loadingMore: false,
@@ -159,7 +188,7 @@ function reloadHead(get: () => OperationsState, set: (partial: Partial<Operation
     pipelines: [],
   })
 
-  void fetchPage(kind, search, undefined, ac.signal)
+  void fetchPage(kind, search, window, undefined, ac.signal)
     .then((res) => {
       if (gen !== transport.listGeneration) return
       set({
@@ -190,8 +219,8 @@ function ensureVisibilityRefresh(
     if (document.visibilityState !== "visible") return
     if (transport.refCount <= 0) return
     const ac = new AbortController()
-    const { kind, search } = get()
-    void fetchPage(kind, search, undefined, ac.signal)
+    const { kind, search, window } = get()
+    void fetchPage(kind, search, window, undefined, ac.signal)
       .then((res) => {
         const prev = get()
         set({
@@ -218,6 +247,7 @@ export const useOperationsStore = create<OperationsState>((set, get) => ({
   error: null,
   kind: "all",
   search: "",
+  window: { range: "live" },
   viewingAsUpn: null,
   paintSuspended: false,
 
@@ -227,10 +257,12 @@ export const useOperationsStore = create<OperationsState>((set, get) => ({
     const lensChanged =
       get().kind !== lens.kind ||
       get().search !== lens.search ||
-      get().viewingAsUpn !== lens.viewingAsUpn
+      get().viewingAsUpn !== lens.viewingAsUpn ||
+      !sameWindow(get().window, lens.window)
     set({
       kind: lens.kind,
       search: lens.search,
+      window: lens.window,
       viewingAsUpn: lens.viewingAsUpn,
     })
     if (first) {
@@ -262,13 +294,15 @@ export const useOperationsStore = create<OperationsState>((set, get) => ({
     if (
       get().kind === lens.kind &&
       get().search === lens.search &&
-      get().viewingAsUpn === lens.viewingAsUpn
+      get().viewingAsUpn === lens.viewingAsUpn &&
+      sameWindow(get().window, lens.window)
     ) {
       return
     }
     set({
       kind: lens.kind,
       search: lens.search,
+      window: lens.window,
       viewingAsUpn: lens.viewingAsUpn,
     })
     if (transport.refCount > 0) {
@@ -285,7 +319,7 @@ export const useOperationsStore = create<OperationsState>((set, get) => ({
     const ac = new AbortController()
     transport.loadingMore = true
     set({ loadingMore: true })
-    void fetchPage(s.kind, s.search, s.cursorBefore, ac.signal)
+    void fetchPage(s.kind, s.search, s.window, s.cursorBefore, ac.signal)
       .then((res) => {
         if (gen !== transport.listGeneration) return
         const prev = get()

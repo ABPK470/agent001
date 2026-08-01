@@ -1,13 +1,13 @@
 /**
  * Pipelines toolbar — same review dialect as Event Stream:
  *   leading empty | search | count · filter sheet
- * Kind + Status live in FilterSheet (multi-select), not leading chips.
- * No expand/collapse toggle — row chevrons own that.
+ * Kind + Status + Quick range + From/Until in FilterSheet.
  */
 
 import { SlidersHorizontal } from "lucide-react"
 import { useMemo, useRef, useState, type JSX } from "react"
 import type { OperationStatus } from "../client/index"
+import { DateField } from "../components/DateField"
 import {
   ActiveFilterChips,
   FilterChoiceGrid,
@@ -15,6 +15,8 @@ import {
   FilterSheet,
   type ActiveFilterChipModel,
 } from "../components/FilterSheet"
+import type { PipelineKindFilter } from "../lib/operation-log-prefs"
+import type { EventStreamRange, EventStreamWindow } from "../lib/event-stream-prefs"
 import {
   WidgetToolbar,
   WidgetToolbarCount,
@@ -23,7 +25,7 @@ import {
   WidgetToolbarTrailing,
 } from "./widget-toolbar"
 
-export type PipelineKindFilter = "agent" | "sync" | "bridge"
+export type { PipelineKindFilter }
 
 const KIND_OPTIONS: readonly { value: PipelineKindFilter; label: string }[] = [
   { value: "agent", label: "Agent" },
@@ -39,6 +41,14 @@ const STATUS_OPTIONS: readonly { value: OperationStatus; label: string }[] = [
   { value: "skipped", label: "Skipped" },
 ]
 
+const QUICK_RANGES: { id: EventStreamRange; label: string }[] = [
+  { id: "live", label: "Live" },
+  { id: "15m", label: "15m" },
+  { id: "1h", label: "1h" },
+  { id: "6h", label: "6h" },
+  { id: "24h", label: "24h" },
+]
+
 export function OperationLogToolbar({
   kinds,
   setKinds,
@@ -47,6 +57,10 @@ export function OperationLogToolbar({
   search,
   setSearch,
   searchPending,
+  timeWindow,
+  setQuickRange,
+  setFromDate,
+  setToDate,
   tiny,
   filteredCount,
   totalCount,
@@ -58,6 +72,10 @@ export function OperationLogToolbar({
   search: string
   setSearch: (v: string) => void
   searchPending: boolean
+  timeWindow: EventStreamWindow
+  setQuickRange: (range: EventStreamRange) => void
+  setFromDate: (from: string | undefined) => void
+  setToDate: (to: string | undefined) => void
   tiny: boolean
   filteredCount: number
   totalCount: number
@@ -65,11 +83,45 @@ export function OperationLogToolbar({
   const [filtersOpen, setFiltersOpen] = useState(false)
   const filterBtnRef = useRef<HTMLButtonElement>(null)
 
-  const filtersActive = kinds.size > 0 || statuses.size > 0
-  const activeFilterCount = kinds.size + statuses.size
+  const hasCustomDates = Boolean(timeWindow.from || timeWindow.to)
+  const timeFiltered = hasCustomDates || timeWindow.range !== "live"
+  const filtersActive = kinds.size > 0 || statuses.size > 0 || timeFiltered
+  const activeFilterCount =
+    kinds.size +
+    statuses.size +
+    (hasCustomDates
+      ? (timeWindow.from ? 1 : 0) + (timeWindow.to ? 1 : 0)
+      : timeFiltered
+        ? 1
+        : 0)
 
   const activeChips = useMemo((): ActiveFilterChipModel[] => {
     const chips: ActiveFilterChipModel[] = []
+    if (hasCustomDates) {
+      if (timeWindow.from) {
+        chips.push({
+          id: "from",
+          label: "From",
+          value: timeWindow.from,
+          onRemove: () => setFromDate(undefined),
+        })
+      }
+      if (timeWindow.to) {
+        chips.push({
+          id: "until",
+          label: "Until",
+          value: timeWindow.to,
+          onRemove: () => setToDate(undefined),
+        })
+      }
+    } else if (timeWindow.range !== "live") {
+      chips.push({
+        id: "range",
+        label: "Range",
+        value: timeWindow.range,
+        onRemove: () => setQuickRange("live"),
+      })
+    }
     for (const kind of kinds) {
       chips.push({
         id: `kind:${kind}`,
@@ -95,11 +147,32 @@ export function OperationLogToolbar({
       })
     }
     return chips
-  }, [kinds, statuses, setKinds, setStatuses])
+  }, [
+    kinds,
+    statuses,
+    hasCustomDates,
+    timeWindow.from,
+    timeWindow.to,
+    timeWindow.range,
+    setKinds,
+    setStatuses,
+    setFromDate,
+    setToDate,
+    setQuickRange,
+  ])
 
   function clearAllFilters(): void {
     setKinds(new Set())
     setStatuses(new Set())
+    setQuickRange("live")
+    setFromDate(undefined)
+    setToDate(undefined)
+  }
+
+  function onQuickRange(range: EventStreamRange): void {
+    setFromDate(undefined)
+    setToDate(undefined)
+    setQuickRange(range)
   }
 
   return (
@@ -160,6 +233,40 @@ export function OperationLogToolbar({
           ) : null
         }
       >
+        <FilterField label="Quick range">
+          <FilterChoiceGrid
+            options={QUICK_RANGES.map((r) => ({ value: r.id, label: r.label }))}
+            values={hasCustomDates ? [] : [timeWindow.range]}
+            onChange={(values) => {
+              const next = values[0]
+              if (next) onQuickRange(next)
+            }}
+            columns={3}
+            mode="single"
+          />
+        </FilterField>
+        <div className="grid grid-cols-2 gap-3">
+          <FilterField label="From">
+            <DateField
+              value={timeWindow.from}
+              onChange={(from) => setFromDate(from || undefined)}
+              placeholder="Pick date"
+              ariaLabel="From"
+              size="sm"
+              className="w-full"
+            />
+          </FilterField>
+          <FilterField label="Until">
+            <DateField
+              value={timeWindow.to}
+              onChange={(to) => setToDate(to || undefined)}
+              placeholder="Pick date"
+              ariaLabel="Until"
+              size="sm"
+              className="w-full"
+            />
+          </FilterField>
+        </div>
         <FilterField label="Kind">
           <FilterChoiceGrid
             options={KIND_OPTIONS}

@@ -10,6 +10,7 @@ import {
   useOperationsStore,
   type OperationLogKindView,
 } from "../state/operations-store"
+import type { OperationsTimeWindow } from "../lib/operations-window"
 
 export {
   mergeHeadRefresh,
@@ -30,8 +31,9 @@ export interface UseOperationLogDataResult {
 export function useOperationLogData(opts: {
   kindView: OperationLogKindView
   search: string
+  window: OperationsTimeWindow
 }): UseOperationLogDataResult {
-  const { kindView, search } = opts
+  const { kindView, search, window } = opts
   const { viewingAsUpn } = useViewingAs()
   const { soloHidden } = useTilePaint()
   const [searchQuery, setSearchQuery] = useState(search)
@@ -65,6 +67,7 @@ export function useOperationLogData(opts: {
     retain({
       kind: kindView,
       search: searchQuery,
+      window,
       viewingAsUpn,
     })
     return () => release()
@@ -74,9 +77,10 @@ export function useOperationLogData(opts: {
     setLens({
       kind: kindView,
       search: searchQuery,
+      window,
       viewingAsUpn,
     })
-  }, [kindView, searchQuery, viewingAsUpn, setLens])
+  }, [kindView, searchQuery, window, viewingAsUpn, setLens])
 
   return {
     pipelines: paintSuspended || soloHidden ? frozenRef.current : pipelines,

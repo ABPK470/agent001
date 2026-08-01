@@ -51,6 +51,10 @@ export interface OperationPipeline {
 export interface ListOperationsOpts {
   limit?: number
   before?: string
+  /** Inclusive lower bound on event `created_at` (ISO). */
+  since?: string
+  /** Inclusive upper bound on event `created_at` (ISO). */
+  until?: string
   search?: string
   /** `all` | `agent` | `sync` | `bridge` | specific OperationKind */
   kind?: string
