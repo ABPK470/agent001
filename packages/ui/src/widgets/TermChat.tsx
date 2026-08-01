@@ -579,7 +579,7 @@ function ToolSyncProgressBody({ part }: { part: ResponseSyncProgressPart }) {
   const tone = part.level === "error" || part.status === "error" ? "error" : "neutral"
   const lineClass = [
     "text-[15px] leading-5 font-mono",
-    tone === "error" ? "rounded-md bg-diff-surface px-2 py-1.5 text-diff-del" : "text-text-faint",
+    tone === "error" ? "mia-callout mia-callout--err rounded-md px-2 py-1.5" : "text-text-faint",
   ].join(" ")
   // Skip stub/trivial statuses ("ok", "done") — they read as orphan junk under the SQL chip.
   // Real SSE summaries look like "Preview complete — plan abc12345: +3 ~1 -0".
@@ -607,7 +607,7 @@ function ToolSyncProgressBody({ part }: { part: ResponseSyncProgressPart }) {
       )}
       {resultLine ? (
         part.status === "error" ? (
-          <p className="rounded-md bg-diff-surface px-2 py-1.5 text-[15px] leading-5 font-mono text-diff-del">
+          <p className="mia-callout mia-callout--err rounded-md px-2 py-1.5 text-[15px] leading-5 font-mono">
             {resultLine}
           </p>
         ) : (
@@ -737,7 +737,7 @@ function ToolPill({
                 className={isError ? "mia-surface--danger" : undefined}
               />
             ) : isError ? (
-              <p className="rounded-md bg-diff-surface px-2 py-1.5 code-pre text-[15px] leading-5 whitespace-pre-wrap break-words text-diff-del">
+              <p className="mia-callout mia-callout--err rounded-md px-2 py-1.5 code-pre text-[15px] leading-5 whitespace-pre-wrap break-words">
                 {row.details}
               </p>
             ) : (
@@ -984,7 +984,7 @@ function StepBlock({
           className="mt-0.5 ml-[0.35rem] pl-3 border-l border-border-subtle min-w-0"
         >
           {hasErrorBody ? (
-            <div className="my-0.5 rounded-md bg-diff-surface px-2.5 py-1.5 text-[15px] leading-6 text-diff-del whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+            <div className="mia-callout mia-callout--err my-0.5 rounded-md px-2.5 py-1.5 text-[15px] leading-6 whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
               {errorBody}
             </div>
           ) : null}
@@ -1159,10 +1159,10 @@ function CheckBlock({ part }: { part: ResponseProgressPart }) {
   if (needsWork) {
     return (
       <div className="py-1 min-w-0">
-        <div className="rounded-md bg-diff-surface px-2.5 py-1.5">
+        <div className="mia-callout mia-callout--warn rounded-md px-2.5 py-1.5">
           {header}
           {open && hasBody ? (
-            <div className="mt-1 text-[15px] leading-6 text-policy-approval whitespace-pre-wrap break-words">
+            <div className="mt-1 text-[15px] leading-6 whitespace-pre-wrap break-words">
               {body}
             </div>
           ) : null}
@@ -1385,20 +1385,20 @@ function RunErrorBanner({ error }: { error: string }) {
   const showDetails = details != null && details !== summary
 
   return (
-    <div className="max-w-full rounded-lg border border-transparent bg-diff-surface px-3 py-2.5">
-      <div className="text-[15px] font-medium leading-6 text-diff-del">Run failed</div>
-      <p className="mt-1 text-[15px] leading-5 text-diff-del/85 break-words">{summary}</p>
+    <div className="mia-callout mia-callout--err max-w-full rounded-lg px-3 py-2.5">
+      <div className="text-[15px] font-medium leading-6">Run failed</div>
+      <p className="mt-1 text-[15px] leading-5 opacity-85 break-words">{summary}</p>
       {showDetails && (
         <>
           <button
             type="button"
             onClick={() => setExpanded((value) => !value)}
-            className="mt-2 text-[15px] font-medium text-diff-del/75 hover:text-diff-del"
+            className="mt-2 text-[15px] font-medium opacity-75 hover:opacity-100"
           >
             {expanded ? "Hide details" : "Show details"}
           </button>
           {expanded && (
-            <pre className="code-pre mt-2 max-h-40 overflow-auto rounded-md border border-border-subtle bg-panel px-2.5 py-2 text-diff-del/80">
+            <pre className="code-pre mt-2 max-h-40 overflow-auto rounded-md border border-policy-deny/25 bg-panel/60 px-2.5 py-2 opacity-80">
               {details}
             </pre>
           )}
@@ -1905,7 +1905,7 @@ function RunMessageImpl({
 
       {/* Terminal status — same rhythm as answer blocks under the user pill */}
       {run.status === "cancelled" && (
-        <div className="rounded-lg border border-transparent bg-diff-surface px-3 py-2.5 text-[15px] leading-6 text-policy-approval">
+        <div className="mia-callout mia-callout--warn rounded-lg px-3 py-2.5 text-[15px] leading-6">
           Run cancelled.
         </div>
       )}
@@ -2089,7 +2089,7 @@ function TermChatInputBar({
                           <button
                               type="button"
                               onClick={onCancel}
-                              className="shrink-0 flex items-center justify-center w-10 h-10 rounded-xl bg-overlay-2 hover:bg-diff-del/12 text-diff-del transition-colors cursor-pointer"
+                              className="shrink-0 flex items-center justify-center w-10 h-10 rounded-xl bg-policy-deny-soft hover:bg-policy-deny/20 text-policy-deny transition-colors cursor-pointer"
                               title="Stop run"
                               aria-label="Stop run"
                           >
@@ -2139,7 +2139,7 @@ function TermChatInputBar({
                       <button
                           type="button"
                           onClick={onCancel}
-                          className="shrink-0 flex items-center justify-center w-9 h-9 rounded-lg bg-diff-del-soft hover:bg-diff-del/25 text-diff-del transition-colors cursor-pointer"
+                          className="shrink-0 flex items-center justify-center w-9 h-9 rounded-lg bg-policy-deny-soft hover:bg-policy-deny/25 text-policy-deny transition-colors cursor-pointer"
                           title="Stop run"
                           aria-label="Stop run"
                       >

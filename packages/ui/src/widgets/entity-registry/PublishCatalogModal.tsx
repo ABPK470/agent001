@@ -231,7 +231,7 @@ export function PublishCatalogModal({
               <MetaCell label="Tip sections" value={tipSectionsLabel} mono={false} grow />
             </div>
             {(stampDrift || operationalOnly) && (
-              <div className="shrink-0 space-y-1 border-b border-warning/30 bg-warning/10 px-6 py-2 text-xs leading-relaxed text-warning">
+              <div className="mia-callout mia-callout--warn shrink-0 space-y-1 border-x-0 border-t-0 rounded-none px-6 py-2 text-xs leading-relaxed">
                 {stampDrift && (
                   <p>
                     Tip stamp is ahead of publish, but live tip content matches the published

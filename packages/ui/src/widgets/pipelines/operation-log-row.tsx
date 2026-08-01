@@ -3,6 +3,7 @@ import type { ReactNode } from "react"
 import type { OperationStatus } from "../../client/index"
 import { ReviewTree, ReviewTreeItem } from "../../components/ReviewTree"
 import { StatusMark } from "../../components/StatusMark"
+import { operationStatusBadge, statusCalloutTone } from "../../lib/status-callout"
 
 export const OP_LOG = "text-sm leading-snug"
 export const OP_LOG_MONO = `${OP_LOG} font-mono`
@@ -43,56 +44,41 @@ export function formatPipelineSubtitle(subtitle: string): string {
   )
 }
 
-/** Ink-first: light collapses hue to ink; meaning from weight + border dialect. */
+/** Policies dialect: soft chroma wash + thin border + chroma text. */
 export function statusTextClass(status: OperationStatus): string {
-  switch (status) {
-    case "success":
-      return "text-text-muted"
-    case "failed":
-      return "text-text"
-    case "skipped":
-      return "text-text-faint"
-    case "running":
-      return "text-text"
-    case "cancelled":
-      return "text-text-muted"
+  switch (statusCalloutTone(status)) {
+    case "ok":
+      return "text-policy-allow"
+    case "err":
+      return "text-policy-deny"
+    case "warn":
+      return "text-policy-approval"
+    case "info":
+      return "text-callout-info"
     default:
       return "text-text-muted"
   }
 }
 
 /**
- * Status chrome without traffic chroma — label + quiet border dialect
- * (success subtle, failed stronger wash, skipped dashed, running strong).
- * Never border-2 / full-ink frames — too loud on paper and dark.
+ * Status badge chrome — same wash/border family as policy effect chips.
  */
 export function statusSoftBgClass(status: OperationStatus): string {
-  switch (status) {
-    case "success":
-      return "border border-border-subtle bg-transparent"
-    case "failed":
-      return "border border-border-strong bg-overlay-2"
-    case "skipped":
-      return "border border-dashed border-border bg-transparent"
-    case "running":
-      return "border border-border bg-overlay-1"
-    default:
-      return "border border-border-subtle bg-transparent"
-  }
+  return operationStatusBadge(status).replace(/\s*text-\S+/g, "").trim()
 }
 
 export function statusFilterActiveClass(status: OperationStatus): string {
-  switch (status) {
-    case "success":
-      return "ring-1 ring-inset ring-border-subtle text-text-muted font-medium bg-transparent"
-    case "failed":
-      return "ring-1 ring-inset ring-border-strong text-text font-semibold bg-overlay-2"
-    case "skipped":
-      return "border border-dashed border-border text-text-faint font-medium bg-transparent"
-    case "running":
-      return "ring-1 ring-inset ring-border-strong text-text font-medium bg-transparent"
-    case "cancelled":
-      return "ring-1 ring-inset ring-border text-text font-medium bg-transparent"
+  switch (statusCalloutTone(status)) {
+    case "ok":
+      return "ring-1 ring-inset ring-policy-allow/40 text-policy-allow font-medium bg-policy-allow-soft"
+    case "err":
+      return "ring-1 ring-inset ring-policy-deny/40 text-policy-deny font-semibold bg-policy-deny-soft"
+    case "skip":
+      return "border border-dashed border-border text-text-muted font-medium bg-transparent"
+    case "info":
+      return "ring-1 ring-inset ring-callout-info/40 text-callout-info font-medium bg-callout-info-soft"
+    case "warn":
+      return "ring-1 ring-inset ring-policy-approval/40 text-policy-approval font-medium bg-policy-approval-soft"
     default:
       return "ring-1 ring-inset ring-border-subtle text-text-muted font-medium bg-transparent"
   }
@@ -111,7 +97,7 @@ export function LogStatusLabel({
 }) {
   return (
     <span
-      className={`inline-flex items-center gap-0.5 shrink-0 rounded px-1.5 py-0.5 text-xs font-semibold uppercase tracking-wide ${statusSoftBgClass(status)} ${statusTextClass(status)}`}
+      className={`inline-flex items-center gap-0.5 shrink-0 rounded px-1.5 py-0.5 text-xs font-semibold uppercase tracking-wide ${operationStatusBadge(status)}`}
     >
       {status === "running" && <Loader2 size={10} className="animate-spin" />}
       {status}

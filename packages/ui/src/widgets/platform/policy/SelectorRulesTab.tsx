@@ -410,8 +410,15 @@ function RuleRow(props: RowProps) {
   const summary = summarizeRule(rule)
   const isReadOnly = src !== "db"
 
+  const cardTone =
+    rule.effect === "allow"
+      ? "border-policy-allow/30 bg-policy-allow-soft"
+      : rule.effect === "deny"
+        ? "border-policy-deny/30 bg-policy-deny-soft"
+        : "border-policy-approval/30 bg-policy-approval-soft"
+
   return (
-    <div className={`rounded-lg border ${isEditing ? "border-accent/40 bg-overlay-2" : "border-border-subtle bg-overlay-2"}`}>
+    <div className={`rounded-lg border ${isEditing ? "border-accent/40 bg-overlay-2" : cardTone}`}>
       <div className="flex items-center gap-3 px-4 py-2.5">
         <span
           className={`inline-flex items-center justify-center rounded-md p-1.5 shrink-0 ${eff.bg} ${eff.color}`}

@@ -83,24 +83,22 @@ describe("light theme color system", () => {
     expect(schema).toContain("text-policy-approval")
   })
 
-  it("severity callouts reuse sheet + chroma (Trace / Pipelines / Event Stream)", () => {
+  it("severity callouts use policies dialect (soft wash + thin border + chroma)", () => {
     expect(css).toMatch(
-      /\.trace-phase-event\.is-error\s*\{[^}]*color:\s*var\(--diff-del/s,
+      /\.trace-phase-event\.is-error\s*\{[^}]*background:\s*var\(--policy-deny-soft/s,
     )
     expect(css).toMatch(
-      /\.trace-phase-event\.is-warn\s*\{[^}]*color:\s*var\(--policy-approval/s,
+      /\.trace-phase-event\.is-warn\s*\{[^}]*background:\s*var\(--policy-approval-soft/s,
     )
-    expect(css).toMatch(
-      /\.trace-phase-event\.is-warn,\s*\.trace-phase-event\.is-error\s*\{[^}]*background:\s*var\(--diff-surface/s,
-    )
+    expect(css).toMatch(/\.mia-toast--err\s*\{[^}]*--policy-deny-soft/s)
+    expect(css).toMatch(/\.mia-callout--err\s*\{[^}]*--policy-deny-soft/s)
     const ops = readFileSync(join(here, "../widgets/OperationLog.tsx"), "utf8")
-    expect(ops).toMatch(/failed:\s*"bg-diff-surface[^"]*text-diff-del/)
-    expect(ops).toMatch(/cancelled:\s*"bg-diff-surface[^"]*text-policy-approval/)
+    expect(ops).toContain("operationStatusCallout")
+    expect(ops).not.toMatch(/failed:\s*"bg-diff-surface/)
     const live = readFileSync(join(here, "../widgets/LiveLogs.tsx"), "utf8")
-    expect(live).toContain("bg-diff-surface")
-    expect(live).toContain("text-diff-del")
-    expect(live).toContain("var(--color-diff-del)")
-    expect(live).not.toMatch(/log\.error\s*\n?\s*\?\s*"bg-error-soft"/)
+    expect(live).toContain("bg-policy-deny-soft")
+    expect(live).toContain("mia-callout--err")
+    expect(live).not.toMatch(/log\.error[\s\S]{0,80}bg-diff-surface/)
   })
 
   it("shared StatusMark + statusDotKind used across Pipelines / Threads / Active Users", () => {
@@ -130,16 +128,21 @@ describe("light theme color system", () => {
   it("chat severity + ask-user use chroma exceptions (not ink --error/--warning)", () => {
     const chat = readFileSync(join(here, "../widgets/TermChat.tsx"), "utf8")
     const ask = readFileSync(join(here, "../components/AskUserPrompt.tsx"), "utf8")
-    // Payload callouts (sheet + chroma) — not painted activity headers.
-    expect(chat).toContain("bg-diff-surface")
-    expect(chat).toContain("text-diff-del")
-    expect(chat).toContain("text-policy-approval")
+    expect(chat).toContain("mia-callout--err")
+    expect(chat).toContain("mia-callout--warn")
     expect(chat).toMatch(/headerToneClass = "text-text-faint"/)
     expect(ask).toContain("border-accent")
     expect(ask).toContain("bg-accent-soft")
     expect(ask).toContain("text-accent")
     expect(ask).toContain("ArrowUp")
+    expect(ask).toContain("mia-callout--err")
     expect(ask).not.toMatch(/from "lucide-react".*Send|import \{[^}]*Send/)
+  })
+
+  it("light keeps callout-info chroma (running washes)", () => {
+    const block = lightThemeBlock()
+    expect(block).toMatch(/--callout-info:\s*#2563eb/)
+    expect(block).toMatch(/--callout-info-soft:\s*color-mix/)
   })
 
   it("JsonViewer uses datatype tokens (not status success/error for scalars)", () => {

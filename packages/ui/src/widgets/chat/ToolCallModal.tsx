@@ -87,17 +87,19 @@ function ToolCallModalBody({
           </div>
         )}
         {io.status === "failed" && io.error && (
-          <div className="rounded-md border border-error/30 bg-error-soft px-3 py-2 text-sm break-all text-error">
+          <div className="mia-callout mia-callout--err px-3 py-2 text-sm break-all">
             {io.error}
           </div>
         )}
         {io.status === "skipped" && (
-          <div className="rounded-md border border-warning/30 bg-warning-soft px-3 py-2 text-sm break-all text-warning">
+          <div className="mia-callout mia-callout--warn px-3 py-2 text-sm break-all">
             {io.error ?? "Awaiting approval — tool did not run."}
           </div>
         )}
         {io.status === "running" && (
-          <div className="text-sm italic text-text-muted">Step still running — output not available yet.</div>
+          <div className="mia-callout mia-callout--info px-3 py-2 text-sm italic">
+            Step still running — output not available yet.
+          </div>
         )}
       </div>
     </>

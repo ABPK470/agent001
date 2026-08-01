@@ -364,7 +364,7 @@ export function PolicyEditor({ onClose }: Props) {
 
         {/* Error banner */}
         {error && (
-          <div className="mx-7 mb-3 px-3 py-2 bg-error/10 text-error text-sm rounded-lg">
+          <div className="mia-callout mia-callout--err mx-7 mb-3 px-3 py-2 text-sm">
             {error}
           </div>
         )}

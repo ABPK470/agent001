@@ -82,7 +82,7 @@ export function AskUserPrompt({
       </p>
 
       {error && !submitted && (
-        <p className="mx-3 mb-3 rounded-lg border border-transparent bg-diff-surface px-3 py-2 text-[14px] text-diff-del">
+        <p className="mia-callout mia-callout--err mx-3 mb-3 rounded-lg px-3 py-2 text-[14px]">
           {error} — you can try again, or stop the run.
         </p>
       )}

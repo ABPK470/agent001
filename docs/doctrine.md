@@ -243,20 +243,21 @@ becoming “selected.”
 | Layer | What | Treatment |
 |---|---|---|
 | **Status mark** | Any run / operation / user-state indicator | One `StatusMark` + `statusDotKind` — ok = hollow ring, fail = filled, live = pulse ring, skip = dashed (skipped / cancelled / stopped), muted = soft fill. Shape over traffic chroma on light (`packages/ui/src/components/StatusMark.tsx`). Same glyph for the same status string in Pipelines, Threads, Active Users, Sync. |
-| **Severity callout** | Failed / warn / cancelled **payloads** (message boxes, banners, Event Stream error rows, Trace phase events, Chat error / needs-work / cancelled bodies) | Sheet `--diff-surface` + chroma text (`--diff-del` error, `--policy-approval` warn/cancel). Never `--error-soft` on light (that token is `--overlay-2` = select-fill lookalike). |
+| **Status callout** | Failed / warn / cancel / success / running **payloads** (message boxes, banners, Event Stream error rows, Trace phase events, Chat error / needs-work / cancelled bodies, toasts) | Policies dialect: soft chroma wash + thin chroma border + chroma text (`--policy-allow|deny|approval-soft`, `--callout-info-soft`). Shared helpers in `packages/ui/src/lib/status-callout.ts` / `.mia-callout--*`. Never plain paper/sheet + colored text alone; never `--error-soft` as select-lookalike overlay on light. |
 
 Chat / Trace **activity headers** stay muted ink chrome (Cursor dialect) —
 narrative labels are not status marks; never paint the whole “Subagent · …
-· failed” row red. On **light**, status + syntax tokens
-(`--success|warning|error|info`, `--dt-*`) resolve to **ink**; soft washes are
-`--overlay-2` (never transparent). **Exception — diffs:** content change panes
-(`CatalogJsonDiff`, env-sync sample/row diffs, workspace file change markers)
-use dedicated `--diff-*` tokens: pane surface =`#f6f4f1` (same as workspace
-field / top bar, not widget `--paper`); added = clear green, removed = clear
-red, unchanged = ink text. **Exception — policy effects:** allow / deny /
-require-approval use `--policy-*` chroma so the three outcomes read in ~300ms
-(not ink status). Dark keeps meaning hues (diff/policy tokens alias status).
-Orient in ~300ms with
+· failed” row red. On **light**, structural status + syntax tokens
+(`--success|warning|error|info`, `--dt-*`) resolve to **ink** for marks /
+datatype; callout chroma lives on **policy / callout-info** tokens. Soft
+structural washes stay `--overlay-2`. **Exception — diffs:** content change
+panes (`CatalogJsonDiff`, env-sync sample/row diffs, workspace file change
+markers) use dedicated `--diff-*` tokens: pane surface =`#f6f4f1` (same as
+workspace field / top bar, not widget `--paper`); added = clear green,
+removed = clear red, unchanged = ink text. **Exception — policy effects:**
+allow / deny / require-approval use `--policy-*` chroma (and the same wash
+on Selector Rules cards) so outcomes read in ~300ms. Dark keeps meaning
+hues (diff/policy tokens alias status). Orient in ~300ms with
 three signals only (`packages/ui/src/lib/selection.ts`): **place** = quiet `--select-fill` aliased to `--overlay-2` on light (same wash as Active Users KPI interiors; layout sheets = inset pill with air in the
 chrome row; section tabs = rounded shade); list rows same wash with
 `--list-row-radius` (Threads / Trace / Event Stream / rails) — never

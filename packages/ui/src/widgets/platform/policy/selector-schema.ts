@@ -240,7 +240,7 @@ export const SOURCE_META: Record<PolicySource, SourceMeta> = {
   [PolicySource.EnvDerived]: {
     value:       PolicySource.EnvDerived,
     label:       "env-derived",
-    badgeClass:  "text-warning bg-warning/10",
+    badgeClass:  "text-policy-approval bg-policy-approval-soft",
     description: "Obsolete leftover from the old Access→policy path. Cleared on boot and on factory policy reset — edit Policies directly.",
   },
 }
@@ -260,8 +260,8 @@ export interface PriorityBand {
 export const PRIORITY_BANDS: ReadonlyArray<PriorityBand> = Object.freeze([
   { min:   0, max:  10, label: "Baseline allow",    description: "Default permissive baselines.",                color: "text-text-muted" },
   { min:  11, max:  40, label: "Per-env allow",     description: "Per-environment allow extensions.",            color: "text-policy-allow" },
-  { min:  41, max:  60, label: "Per-env approval",  description: "Per-environment approval requirements.",       color: "text-warning" },
-  { min:  61, max:  85, label: "Deny",              description: "Hosted-default and per-env denies.",           color: "text-error" },
+  { min:  41, max:  60, label: "Per-env approval",  description: "Per-environment approval requirements.",       color: "text-policy-approval" },
+  { min:  61, max:  85, label: "Deny",              description: "Hosted-default and per-env denies.",           color: "text-policy-deny" },
   { min:  86, max: 999, label: "Operator override", description: "Operator rules that beat all built-ins.",      color: "text-accent" },
 ])
 

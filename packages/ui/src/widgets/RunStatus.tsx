@@ -313,9 +313,9 @@ export function RunStatus() {
       </div>
 
       {run.error && (
-        <div className={`${PANEL} border-error/30 px-3 py-2.5`}>
-          <div className="text-[12px] uppercase tracking-wide text-error">Error</div>
-          <p className="mt-1 text-sm leading-snug text-error/90 whitespace-pre-wrap break-words">
+        <div className="mia-callout mia-callout--err px-3 py-2.5">
+          <div className="text-[12px] uppercase tracking-wide font-semibold">Error</div>
+          <p className="mt-1 text-sm leading-snug whitespace-pre-wrap break-words">
             {run.error}
           </p>
         </div>
@@ -331,7 +331,7 @@ export function RunStatus() {
       )}
 
       {run.status === RunStatusEnum.WaitingForApproval && (
-        <div className={`${PANEL} border-warning/30 px-3 py-2.5 text-sm text-text`}>
+        <div className="mia-callout mia-callout--warn px-3 py-2.5 text-sm">
           Waiting for tool approval — cancel here, or approve/deny from the chat prompt.
         </div>
       )}

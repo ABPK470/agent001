@@ -54,7 +54,7 @@ export function ModalShell({
 
 export function Err({ children }: { children: ReactNode }) {
   return (
-    <div className="px-4 py-3 m-3 text-sm text-error bg-error/10 border border-error/30 rounded flex items-start gap-2 min-w-0">
+    <div className="mia-callout mia-callout--err m-3 flex items-start gap-2 px-4 py-3 text-sm min-w-0">
       <XCircle size={14} className="mt-0.5 shrink-0" />
       <span className="font-mono whitespace-pre-wrap break-all min-w-0">{children}</span>
     </div>

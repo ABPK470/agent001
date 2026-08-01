@@ -108,18 +108,19 @@ const KIND_META: Record<
     },
 };
 
+import { operationStatusCallout } from "../lib/status-callout"
+
 /**
- * Message box — quiet wash + hairline for most statuses.
- * Failed uses the shared severity callout dialect (sheet + error chroma) —
- * same as Trace `.trace-phase-event.is-error` / diffs.
+ * Message box — policies dialect (soft chroma wash + thin border + chroma text).
+ * Diff panes stay `--diff-*` elsewhere.
  */
 const STATUS_MESSAGE_BOX: Record<OperationStatus, string> = {
-  running:   "bg-overlay-1 border border-border text-text",
-  success:   "bg-overlay-1 border border-border-subtle text-text-muted",
-  failed:    "bg-diff-surface border border-transparent text-diff-del font-medium",
-  cancelled: "bg-diff-surface border border-transparent text-policy-approval font-medium",
-  skipped:   "bg-transparent border border-dashed border-border text-text-faint",
-  unknown:   "bg-overlay-2 border border-border-subtle text-text-muted",
+  running:   operationStatusCallout("running"),
+  success:   operationStatusCallout("success"),
+  failed:    `${operationStatusCallout("failed")} font-medium`,
+  cancelled: `${operationStatusCallout("cancelled")} font-medium`,
+  skipped:   operationStatusCallout("skipped"),
+  unknown:   operationStatusCallout("unknown"),
 }
 
 const LOG_ROW_ACTION =
@@ -127,7 +128,7 @@ const LOG_ROW_ACTION =
 
 function StatusMessage({ status, children }: { status: OperationStatus; children: ReactNode }) {
   return (
-    <div className={`px-2 py-1 mb-1 rounded border break-all ${OP_LOG} ${STATUS_MESSAGE_BOX[status]}`}>
+    <div className={`px-2 py-1 mb-1 rounded break-all ${OP_LOG} ${STATUS_MESSAGE_BOX[status]}`}>
       {children}
     </div>
   )

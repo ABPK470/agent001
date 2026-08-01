@@ -90,7 +90,7 @@ export function DeleteThreadModal({
         </div>
 
         {error && (
-          <div className="mx-5 mb-1 rounded-lg border border-error/30 bg-error/10 px-3 py-2 text-center text-xs text-error">
+          <div className="mia-callout mia-callout--err mx-5 mb-1 px-3 py-2 text-center text-xs">
             {error}
           </div>
         )}

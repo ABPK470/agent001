@@ -194,7 +194,7 @@ export function ConfirmModal({
       <div className="px-6 py-5">
         <p className="text-sm leading-relaxed text-text-muted">{message}</p>
         {error && (
-          <p className="mt-3 rounded-lg border border-error/30 bg-error/10 px-3 py-2 text-xs text-error">
+          <p className="mia-callout mia-callout--err mt-3 px-3 py-2 text-xs">
             {error}
           </p>
         )}

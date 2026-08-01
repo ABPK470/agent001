@@ -481,7 +481,7 @@ export function LiveLogs() {
       )}
 
       {error && (
-        <div className="py-2 px-2.5 text-sm text-diff-del bg-diff-surface rounded border border-transparent">
+        <div className="mia-callout mia-callout--err py-2 px-2.5 text-sm rounded">
           {error}
         </div>
       )}
@@ -597,16 +597,16 @@ function LogRow({
   tiny: boolean
 }) {
   const [expanded, setExpanded] = useState(false)
-  const msgColor = log.error ? "var(--color-diff-del)" : (MSG_COLOR[log.type] ?? "var(--color-text-muted)")
+  const msgColor = log.error ? "var(--color-policy-deny)" : (MSG_COLOR[log.type] ?? "var(--color-text-muted)")
   const hasData = log.data && Object.keys(log.data).length > 0
 
   return (
     <div>
       <div
         className={[
-          "flex items-baseline gap-2.5 py-1 rounded-[var(--list-row-radius)] transition-colors",
+          "flex items-baseline gap-2.5 py-1 rounded-[var(--list-row-radius)] transition-colors border border-transparent",
           log.error
-            ? "bg-diff-surface"
+            ? "bg-policy-deny-soft border-policy-deny/35"
             : expanded && hasData
               ? "bg-[var(--select-fill)]"
               : "hover:bg-[var(--hover-fill)]",

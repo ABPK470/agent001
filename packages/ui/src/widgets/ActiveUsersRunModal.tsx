@@ -135,7 +135,7 @@ export function ActiveUsersRunModal({
               <p className="text-sm text-text-muted">Loading run details…</p>
             )}
             {error && (
-              <p className="text-sm text-error">Failed to load run: {error}</p>
+              <p className="mia-callout mia-callout--err px-3 py-2 text-sm">Failed to load run: {error}</p>
             )}
 
             <DetailSection title="Overview">
@@ -211,7 +211,9 @@ export function ActiveUsersRunModal({
 
             {errText && (
               <DetailSection title="Error">
-                <p className="text-sm leading-relaxed text-error whitespace-pre-wrap break-words">{errText}</p>
+                <p className="mia-callout mia-callout--err px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap break-words">
+                  {errText}
+                </p>
               </DetailSection>
             )}
 

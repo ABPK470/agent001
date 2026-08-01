@@ -614,7 +614,7 @@ export function EntityEditModal({ mode, initial, reservedEntityIds = [], onClose
                     </div>
                   </div>
                   {sourceError && (
-                    <div className="flex shrink-0 items-center gap-2 rounded-lg border border-error/30 bg-error-soft px-3 py-2 text-sm text-error">
+                    <div className="flex shrink-0 items-center gap-2 mia-callout mia-callout--err px-3 py-2 text-sm">
                       <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
                       {sourceError}
                     </div>

@@ -102,9 +102,9 @@ export function ExecModal({ exec, plan, execPlanId, tgtEnv, onConfirm, onCancel,
   const headerIcon = isIdle ? <Ship size={20} className="text-accent" />
     : isRunning ? <Loader2 size={20} className="animate-spin text-accent" />
       : cancelled ? <XCircle size={20} className="text-text-muted" />
-        : skipped ? <CheckCircle2 size={20} className="text-warning" />
-          : success ? <CheckCircle2 size={20} className="text-accent" />
-            : <XCircle size={20} style={{ color: DIFF.del }} />
+        : skipped ? <CheckCircle2 size={20} className="text-policy-approval" />
+          : success ? <CheckCircle2 size={20} className="text-policy-allow" />
+            : <XCircle size={20} className="text-policy-deny" />
 
   function handleHeaderClose() {
     if (isRunning) onCancel()
@@ -206,11 +206,11 @@ export function ExecModal({ exec, plan, execPlanId, tgtEnv, onConfirm, onCancel,
                   {preflightChecks.map((check) => (
                     <div key={check.id} className="flex items-start gap-2 text-xs">
                       {check.blocking === false ? (
-                        <CheckCircle2 size={14} className="shrink-0 mt-0.5 text-info" />
+                        <CheckCircle2 size={14} className="shrink-0 mt-0.5 text-callout-info" />
                       ) : check.passed ? (
-                        <CheckCircle2 size={14} className="shrink-0 mt-0.5" style={{ color: DIFF.ins }} />
+                        <CheckCircle2 size={14} className="shrink-0 mt-0.5 text-policy-allow" />
                       ) : (
-                        <XCircle size={14} className="shrink-0 mt-0.5" style={{ color: DIFF.del }} />
+                        <XCircle size={14} className="shrink-0 mt-0.5 text-policy-deny" />
                       )}
                       <div className="min-w-0">
                         <div className={check.passed ? "text-text-muted" : "text-text"}>{check.label}</div>
@@ -226,7 +226,7 @@ export function ExecModal({ exec, plan, execPlanId, tgtEnv, onConfirm, onCancel,
               )}
 
               {preflightBlocked && preflightBlockReason && (
-                <div className="mx-4 sm:mx-5 mt-3 rounded-lg border border-error/25 bg-error/8 px-3 py-2 text-xs leading-relaxed" style={{ color: DIFF.del }}>
+                <div className="mia-callout mia-callout--err mx-4 sm:mx-5 mt-3 px-3 py-2 text-xs leading-relaxed">
                   Execute blocked: {preflightBlockReason}
                 </div>
               )}
@@ -278,7 +278,7 @@ export function ExecModal({ exec, plan, execPlanId, tgtEnv, onConfirm, onCancel,
                       className="exec-modal-progress__fill"
                       style={{
                         width: `${pct}%`,
-                        background: failed ? DIFF.del : "var(--accent)",
+                        background: failed ? "var(--policy-deny)" : "var(--accent)",
                       }}
                     />
                   ) : isRunning ? (
@@ -289,7 +289,7 @@ export function ExecModal({ exec, plan, execPlanId, tgtEnv, onConfirm, onCancel,
                       style={{
                         width: "100%",
                         background: failed && !cancelled
-                          ? DIFF.del
+                          ? "var(--policy-deny)"
                           : cancelled
                             ? "var(--color-text-muted)"
                             : "var(--accent)",
@@ -314,7 +314,7 @@ export function ExecModal({ exec, plan, execPlanId, tgtEnv, onConfirm, onCancel,
                         className="exec-modal-progress__fill"
                         style={{
                           width: `${deployPct}%`,
-                          background: deployProgress.failed > 0 ? DIFF.del : "var(--accent)",
+                          background: deployProgress.failed > 0 ? "var(--policy-deny)" : "var(--accent)",
                         }}
                       />
                     </div>
@@ -347,7 +347,7 @@ export function ExecModal({ exec, plan, execPlanId, tgtEnv, onConfirm, onCancel,
                         {status === "running" && <Loader2 size={11} className="animate-spin text-accent shrink-0" />}
                         {status === "applying" && <Loader2 size={11} className="animate-spin text-accent shrink-0" />}
                         {status === "done" && <CheckCircle2 size={11} className="shrink-0 text-accent" />}
-                        {status === "failed" && <XCircle size={11} style={{ color: DIFF.del }} className="shrink-0" />}
+                        {status === "failed" && <XCircle size={11} className="shrink-0 text-policy-deny" />}
                         {status === "cancelled" && <XCircle size={11} className="shrink-0 text-text-muted/50" />}
                         {!status && <span className="w-[11px] h-[11px] rounded-full border border-border shrink-0" />}
                         <span
@@ -355,10 +355,9 @@ export function ExecModal({ exec, plan, execPlanId, tgtEnv, onConfirm, onCancel,
                             status === "done" || status === "running" || status === "applying"
                               ? "text-accent"
                               : status === "failed"
-                                ? ""
+                                ? "text-policy-deny"
                                 : "text-text-muted"
                           }
-                          style={status === "failed" ? { color: DIFF.del } : undefined}
                           title={status === "applying" ? "Applied in transaction — not committed until metadata step succeeds" : undefined}
                         >
                           {short}
@@ -423,8 +422,7 @@ export function ExecModal({ exec, plan, execPlanId, tgtEnv, onConfirm, onCancel,
                       {rows ? <>{rows}</> : <span className="exec-modal-log__empty">—</span>}
                     </span>
                     <span
-                      className={`exec-modal-log__message text-xs ${detailIsError ? "" : detailIsSkipped ? "text-warning/90" : event.type === "step" ? "text-text-muted/70" : "text-text/90"}`}
-                      style={detailIsError ? { color: DIFF.del } : undefined}
+                      className={`exec-modal-log__message text-xs ${detailIsError ? "text-policy-deny" : detailIsSkipped ? "text-policy-approval/90" : event.type === "step" ? "text-text-muted/70" : "text-text/90"}`}
                     >
                       {detail ?? <span className="exec-modal-log__empty">—</span>}
                     </span>
@@ -432,12 +430,12 @@ export function ExecModal({ exec, plan, execPlanId, tgtEnv, onConfirm, onCancel,
                 )
               })}
               {exec.kind === "done" && skipped && (exec.message ?? exec.error) && (
-                <div className="mt-3 px-3 py-2.5 rounded-lg bg-warning/10 border border-warning/20 whitespace-pre-wrap break-words text-sm leading-relaxed text-warning">
+                <div className="mia-callout mia-callout--warn mt-3 px-3 py-2.5 whitespace-pre-wrap break-words text-sm leading-relaxed">
                   {exec.message ?? exec.error}
                 </div>
               )}
               {exec.kind === "done" && failed && exec.error && (
-                <div className="mt-3 px-3 py-2.5 rounded-lg bg-error/10 border border-error/20 whitespace-pre-wrap break-words text-sm leading-relaxed" style={{ color: cancelled ? "var(--color-text-muted)" : DIFF.del }}>
+                <div className={`mt-3 px-3 py-2.5 rounded-lg whitespace-pre-wrap break-words text-sm leading-relaxed ${cancelled ? "bg-overlay-2 border border-border-subtle text-text-muted" : "mia-callout mia-callout--err"}`}>
                   {exec.error}
                 </div>
               )}
