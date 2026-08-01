@@ -1218,7 +1218,7 @@ function DetailViewport({
 
   return (
     <div className="mt-1 rounded-xl overflow-hidden">
-      <div ref={hostRef} className="relative overflow-y-auto" style={{ maxHeight, ...viewportMaskStyle }}>
+      <div ref={hostRef} className="relative overflow-y-auto overscroll-contain" style={{ maxHeight, ...viewportMaskStyle }}>
         <div ref={innerRef} className="relative z-0 px-2 pt-3 pb-4">
           {children}
         </div>
@@ -2373,8 +2373,8 @@ export function TermChat({
 
     const handleWheel = (event: WheelEvent) => {
       if (Math.abs(event.deltaY) < Math.abs(event.deltaX) || event.deltaY === 0) return
-      // Hit-test under the pointer (not stale event.target). Nested panes
-      // scroll first; at their edge the transcript takes over.
+      // Pointer hit-test + manual nested/host scroll. Never trust a stale
+      // event.target alone (trackpad inertia) — that was the stuck-wheel bug.
       if (handleNestedWheelDelta(event, host)) {
         event.preventDefault()
       }

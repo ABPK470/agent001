@@ -1,7 +1,10 @@
 /**
  * Nested wheel for chat — tool I/O and tool-chain lists scroll first;
- * at their edge the transcript takes over. Hit-test uses the pointer
- * position (not a stale event.target) so leaving a pane unsticks scroll.
+ * at their edge the transcript takes over.
+ *
+ * Hit-test uses the element under the pointer. Trackpad inertia often keeps
+ * event.target on the pane that started the gesture; trusting that alone is
+ * what made scroll feel stuck after the cursor left a full-width tool box.
  */
 
 import { canElementScrollVertically } from "./milestone"
@@ -14,7 +17,6 @@ export type NestedScrollMetrics = {
 
 export type NestedWheelAction =
   | { kind: "passthrough" }
-  | { kind: "browser" }
   | { kind: "scroll"; index: number }
   | { kind: "host" }
 
@@ -24,7 +26,12 @@ export function collectNestedScrollables(
   host: HTMLElement,
 ): HTMLElement[] {
   const out: HTMLElement[] = []
-  let node = target instanceof HTMLElement ? target : null
+  let node =
+    target instanceof Element
+      ? target instanceof HTMLElement
+        ? target
+        : target.parentElement
+      : null
   while (node && node !== host) {
     const style = window.getComputedStyle(node)
     const overflowY = style.overflowY
@@ -40,9 +47,7 @@ export function collectNestedScrollables(
 }
 
 /**
- * Prefer the element under the pointer. Wheel/trackpad inertia often keeps
- * event.target on the pane that started the gesture — that is what made
- * scroll feel "stuck" after the cursor left a full-width tool box.
+ * Prefer the element under the pointer over a stale event.target.
  */
 export function wheelHitTarget(
   host: HTMLElement,
@@ -56,8 +61,23 @@ export function wheelHitTarget(
   return fallback
 }
 
+/** Normalize wheel deltas to CSS pixels (LINE/PAGE modes are common on Windows). */
+export function wheelDeltaPixels(
+  deltaY: number,
+  deltaMode: number,
+  pageHeight: number,
+): number {
+  if (deltaMode === 1) return deltaY * 16
+  if (deltaMode === 2) return deltaY * pageHeight
+  return deltaY
+}
+
 /**
- * Pure decision — I/O → tool-chain → transcript host (escape at edge).
+ * Pure decision from the pointer hit-test chain.
+ * - scroll index 0 = innermost (I/O)
+ * - scroll index >0 = outer nested (tool-chain list)
+ * - host = nested at edge → transcript
+ * - passthrough = pointer not over any nested overflow pane
  */
 export function resolveNestedWheelAction(
   chain: readonly NestedScrollMetrics[],
@@ -67,29 +87,45 @@ export function resolveNestedWheelAction(
 
   for (let i = 0; i < chain.length; i++) {
     if (!canElementScrollVertically(chain[i]!, deltaY)) continue
-    if (i === 0) return { kind: "browser" }
     return { kind: "scroll", index: i }
   }
   return { kind: "host" }
 }
 
 /**
- * Apply a wheel delta inside nested panes / host.
- * Returns true when the event was handled (caller should preventDefault).
+ * Apply a wheel delta. Returns true when the caller must preventDefault.
+ *
+ * Always scrolls nested panes manually (never relies on browser default under
+ * a capture listener). If the pointer has left nested panes but event.target
+ * is still stuck on one, steals the gesture for the transcript host.
  */
 export function handleNestedWheelDelta(
-  event: Pick<WheelEvent, "target" | "clientX" | "clientY" | "deltaY">,
+  event: Pick<WheelEvent, "target" | "clientX" | "clientY" | "deltaY" | "deltaMode">,
   host: HTMLElement,
 ): boolean {
+  const deltaY = wheelDeltaPixels(event.deltaY, event.deltaMode, host.clientHeight)
+  if (deltaY === 0) return false
+
   const hit = wheelHitTarget(host, event.clientX, event.clientY, event.target)
   const chain = collectNestedScrollables(hit, host)
-  const action = resolveNestedWheelAction(chain, event.deltaY)
-  if (action.kind === "passthrough" || action.kind === "browser") return false
-  if (action.kind === "scroll") {
-    chain[action.index]!.scrollTop += event.deltaY
+  const staleChain = collectNestedScrollables(event.target, host)
+  const action = resolveNestedWheelAction(chain, deltaY)
+
+  if (action.kind === "passthrough") {
+    // Pointer is outside nested overflow panes. If inertia still targets one,
+    // move the transcript — otherwise the browser keeps "scrolling" a pane
+    // that cannot move (stuck wheel).
+    if (staleChain.length === 0) return false
+    host.scrollTop += deltaY
     return true
   }
-  // Nested panes at edge — move the transcript (contain would otherwise eat the wheel).
-  host.scrollTop += event.deltaY
+
+  if (action.kind === "scroll") {
+    chain[action.index]!.scrollTop += deltaY
+    return true
+  }
+
+  // Nested panes under the pointer are at their edge — transcript continues.
+  host.scrollTop += deltaY
   return true
 }

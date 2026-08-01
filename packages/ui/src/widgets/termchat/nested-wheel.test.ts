@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest"
-import { resolveNestedWheelAction } from "./nested-wheel"
+import { resolveNestedWheelAction, wheelDeltaPixels } from "./nested-wheel"
 
 describe("resolveNestedWheelAction", () => {
   it("passthrough when there is no nested overflow pane", () => {
     expect(resolveNestedWheelAction([], 10)).toEqual({ kind: "passthrough" })
   })
 
-  it("lets the browser scroll the innermost pane when it still can", () => {
+  it("scrolls the innermost pane when it still can", () => {
     expect(
       resolveNestedWheelAction(
         [
@@ -15,7 +15,7 @@ describe("resolveNestedWheelAction", () => {
         ],
         10,
       ),
-    ).toEqual({ kind: "browser" })
+    ).toEqual({ kind: "scroll", index: 0 })
   })
 
   it("hands the wheel to the tool-chain list when I/O is at its edge", () => {
@@ -40,5 +40,13 @@ describe("resolveNestedWheelAction", () => {
         10,
       ),
     ).toEqual({ kind: "host" })
+  })
+})
+
+describe("wheelDeltaPixels", () => {
+  it("keeps pixel mode as-is and expands line/page modes", () => {
+    expect(wheelDeltaPixels(40, 0, 800)).toBe(40)
+    expect(wheelDeltaPixels(3, 1, 800)).toBe(48)
+    expect(wheelDeltaPixels(1, 2, 800)).toBe(800)
   })
 })

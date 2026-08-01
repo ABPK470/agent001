@@ -70,8 +70,12 @@ describe("chatTranscriptLayout", () => {
     expect(ioPane).not.toContain("parsePipeTable")
     expect(css).toMatch(/\.mia-code-block__body\s*\{[^}]*overscroll-behavior:\s*contain/s)
     expect(io).toContain("overscroll-contain")
-    // Nested wheel: I/O → tool-chain → transcript (pointer hit-test, not stale target).
+    // Nested wheel: pointer hit-test; I/O → tool-chain → transcript; steal stale targets.
     expect(term).toContain("handleNestedWheelDelta")
     expect(term).toContain("overscroll-contain")
+    const nested = readFileSync(join(here, "../widgets/termchat/nested-wheel.ts"), "utf8")
+    expect(nested).toContain("elementFromPoint")
+    expect(nested).toContain("staleChain")
+    expect(nested).toContain("wheelDeltaPixels")
   })
 })
