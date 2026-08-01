@@ -229,9 +229,9 @@ export function FreezeWindowsModal({
 function FreezeStatusBadge({ status }: { status: FreezeWindowStatus }): JSX.Element {
   const cls =
     status === "active"
-      ? "bg-policy-deny-soft text-text border-policy-deny/35"
+      ? "bg-status-callout-err-soft text-text-muted border-status-callout-err-border"
       : status === "scheduled"
-        ? "bg-policy-approval-soft text-text border-policy-approval/35"
+        ? "bg-status-callout-warn-soft text-text-muted border-status-callout-warn-border"
         : "bg-overlay-2 text-text-muted border-border-subtle"
   return (
     <span className={`rounded border px-1.5 py-0.5 text-xs uppercase tracking-wider ${cls}`}>

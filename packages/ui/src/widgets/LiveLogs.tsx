@@ -601,15 +601,17 @@ function LogRow({
   const hasData = log.data && Object.keys(log.data).length > 0
 
   return (
-    <div>
+    <div className={log.error ? "py-0.5" : undefined}>
       <div
         className={[
-          "flex items-baseline gap-2.5 py-1 rounded-[var(--list-row-radius)] transition-colors border border-transparent",
+          "flex items-baseline gap-2.5 py-1.5 px-2.5 rounded-[var(--list-row-radius)] transition-colors border",
+          // Never pair status-callout borders with border-transparent — Tailwind
+          // stylesheet order can leave the hairline invisible (Event Stream bug).
           log.error
-            ? "bg-policy-deny-soft border-policy-deny/35"
+            ? "bg-status-callout-err-soft border-status-callout-err-border"
             : expanded && hasData
-              ? "bg-[var(--select-fill)]"
-              : "hover:bg-[var(--hover-fill)]",
+              ? "border-transparent bg-[var(--select-fill)]"
+              : "border-transparent hover:bg-[var(--hover-fill)]",
           hasData ? "cursor-pointer" : "",
         ].join(" ")}
         onClick={() => hasData && setExpanded((e) => !e)}

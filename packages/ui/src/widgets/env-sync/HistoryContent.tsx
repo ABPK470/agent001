@@ -771,7 +771,7 @@ function HistoryRunRow({
           </div>
 
           {run.error && (
-            <div className="rounded-md border border-error/20 bg-error/5 px-2.5 py-1.5 text-sm font-mono leading-relaxed break-all text-error">
+            <div className="rounded-md border border-status-callout-err-border bg-status-callout-err-soft px-2.5 py-1.5 text-sm font-mono leading-relaxed break-all text-text-muted">
               {run.error}
             </div>
           )}

@@ -32,9 +32,25 @@ export interface ToolPresentationSpec {
  * never branch on tool names in UI components.
  */
 export const TOOL_PRESENTATION: Readonly<Record<string, ToolPresentationSpec>> = {
-  query_mssql: { artifactField: "query", artifactLang: "sql", summaryField: "query" },
-  export_query_to_file: { artifactField: "query", artifactLang: "sql", summaryField: "query" },
+  query_mssql: {
+    artifactField: "query",
+    artifactLang: "sql",
+    summaryField: "query",
+    /** Historical / seed traces used `sql` before the contract locked to `query`. */
+    fieldOrder: ["query", "sql", "connection", "database"],
+  },
+  export_query_to_file: {
+    artifactField: "query",
+    artifactLang: "sql",
+    summaryField: "query",
+    fieldOrder: ["query", "sql", "path"],
+  },
   run_command: { artifactField: "command", artifactLang: "sh", summaryField: "command" },
+  ask_user: {
+    scalarFields: ["question", "prompt", "message"],
+    summaryField: "question",
+    fieldOrder: ["question", "prompt", "message", "options"],
+  },
   write_file: {
     artifactField: "content",
     artifactLang: "auto",
@@ -194,19 +210,37 @@ function formatStructuredArgs(args: Record<string, unknown>, spec?: ToolPresenta
   return lines.join("\n")
 }
 
+/** Alternate arg keys that still carry the primary code body (legacy traces). */
+const ARTIFACT_FIELD_ALIASES: Readonly<Record<string, readonly string[]>> = {
+  query: ["sql"],
+}
+
+function artifactCodeFromArgs(
+  args: Record<string, unknown>,
+  field: string
+): { code: string; field: string } | null {
+  const primary = args[field]
+  if (typeof primary === "string" && primary.trim()) return { code: primary, field }
+  for (const alt of ARTIFACT_FIELD_ALIASES[field] ?? []) {
+    const value = args[alt]
+    if (typeof value === "string" && value.trim()) return { code: value, field: alt }
+  }
+  return null
+}
+
 function extractArtifact(
   toolName: string,
   args: Record<string, unknown>
 ): ToolCallArtifact | null {
   const spec = TOOL_PRESENTATION[toolName]
   if (!spec?.artifactField) return null
-  const code = args[spec.artifactField]
-  if (typeof code !== "string" || !code.trim()) return null
+  const found = artifactCodeFromArgs(args, spec.artifactField)
+  if (!found) return null
   const lang =
     spec.artifactLang === "auto"
       ? guessLangFromPath(String(args[spec.pathField ?? "path"] ?? ""))
       : (spec.artifactLang ?? "text")
-  return { code, lang, field: spec.artifactField }
+  return { code: found.code, lang, field: found.field }
 }
 
 function scalarOnlyValue(args: Record<string, unknown>, spec?: ToolPresentationSpec): string | null {
@@ -225,10 +259,15 @@ function buildSummary(toolName: string, args: Record<string, unknown>): string {
   const keys = Object.keys(args)
   if (keys.length === 0) return ""
 
-  if (spec?.summaryField && spec.summaryField in args) {
-    const value = args[spec.summaryField]
-    if (value !== undefined && value !== null) {
-      return `${spec.summaryField}=${JSON.stringify(value)}`
+  if (spec?.summaryField) {
+    const primary = args[spec.summaryField]
+    if (primary !== undefined && primary !== null) {
+      return `${spec.summaryField}=${JSON.stringify(primary)}`
+    }
+    for (const alt of ARTIFACT_FIELD_ALIASES[spec.summaryField] ?? []) {
+      if (alt in args && args[alt] !== undefined && args[alt] !== null) {
+        return `${alt}=${JSON.stringify(args[alt])}`
+      }
     }
   }
 
@@ -281,12 +320,38 @@ export function presentToolCallFromFormatted(
   try {
     const parsed = JSON.parse(argsFormatted) as unknown
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      return { summary: "", display: argsFormatted, cleanArgs: {}, artifact: null }
+      return presentRawToolBody(toolName, argsFormatted)
     }
     return presentToolCall(toolName, parsed as Record<string, unknown>)
   } catch {
-    return { summary: "", display: argsFormatted, cleanArgs: {}, artifact: null }
+    return presentRawToolBody(toolName, argsFormatted)
   }
+}
+
+/** Legacy / export traces sometimes store the code body alone (not JSON args). */
+const SQL_RAW_BODY_RE =
+  /^\s*(?:--|\/\*|WITH|SELECT|INSERT|UPDATE|DELETE|MERGE|EXEC(?:UTE)?|DECLARE|CREATE|ALTER|DROP|TRUNCATE|IF\b|BEGIN\b)/i
+
+function presentRawToolBody(toolName: string, body: string): ToolCallPresentation {
+  const spec = TOOL_PRESENTATION[toolName]
+  const lang = spec?.artifactLang
+  // Only invent a code artifact when the raw string is actually code.
+  // Tool *results* ("10 rows returned", gate messages) must never become
+  // a fake SQL/Shell CodeBlock just because the tool name has an artifactLang.
+  if (
+    spec?.artifactField &&
+    lang === "sql" &&
+    body.trim() &&
+    SQL_RAW_BODY_RE.test(body)
+  ) {
+    return {
+      summary: "",
+      display: body,
+      cleanArgs: { [spec.artifactField]: body },
+      artifact: { code: body, lang: "sql", field: spec.artifactField },
+    }
+  }
+  return { summary: "", display: body, cleanArgs: {}, artifact: null }
 }
 
 /** Short preview for timeline rows (path basename, search term, etc.). */

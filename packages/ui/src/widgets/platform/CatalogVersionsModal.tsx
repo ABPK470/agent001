@@ -420,9 +420,9 @@ function ActivePublishBadge({
   })
   const toneClass =
     badge.tone === "success"
-      ? "border-policy-allow/35 bg-policy-allow-soft text-text"
+      ? "border-status-callout-ok-border bg-status-callout-ok-soft text-text-muted"
       : badge.tone === "warning"
-        ? "border-policy-approval/35 bg-policy-approval-soft text-text"
+        ? "border-status-callout-warn-border bg-status-callout-warn-soft text-text-muted"
         : "border-accent/30 bg-accent/10 text-accent"
   return (
     <span

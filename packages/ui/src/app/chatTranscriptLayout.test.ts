@@ -33,20 +33,42 @@ describe("chatTranscriptLayout", () => {
     expect(COMPACT_TABLE_WRAPPER_CLASS).not.toContain("flex-1")
   })
 
-  it("markdown fences in answers reuse the same CodeBlock as tool output", () => {
+  it("markdown fences and tool I/O share frontier CodeBlock panes", () => {
     const src = readFileSync(join(here, "../components/SmartAnswer.tsx"), "utf8")
     const css = readFileSync(join(here, "../boot/index.css"), "utf8")
     const code = readFileSync(join(here, "../components/CodeBlock.tsx"), "utf8")
+    const term = readFileSync(join(here, "../widgets/TermChat.tsx"), "utf8")
+    const io = readFileSync(join(here, "../components/tool-code-display.tsx"), "utf8")
     const compactFn = src.match(/function CompactCodeBlock[\s\S]*?\n\}/)?.[0] ?? ""
     expect(compactFn).toContain("<CodeBlock")
+    expect(compactFn).toContain("w-fit")
     expect(compactFn).not.toContain("copyTone")
     expect(compactFn).not.toContain("mia-control")
     expect(code).not.toContain("copyTone")
     expect(code).toMatch(/Copy size=\{12\}/)
+    expect(css).toMatch(/\.mia-code-block\s*\{[^}]*width:\s*100%/s)
+    expect(css).toMatch(/\.mia-code-block\s*\{[^}]*background:\s*var\(--panel-2\)/s)
+    expect(css).toMatch(/\.mia-callout\s*\{[^}]*width:\s*fit-content/s)
     expect(css).toMatch(/\.mia-code-block__copy\s*\{[^}]*border:\s*none/s)
     expect(css).not.toContain("mia-code-block__copy--quiet")
     expect(css).not.toMatch(
       /\.mia-code-block__copy:hover\s*\{[^}]*border-color:/s,
     )
+    // Input = CodeBlock (column width); success output = bare monospace text.
+    expect(term).toContain("ToolIoPane")
+    expect(term).toMatch(/role="input"/)
+    expect(term).toMatch(/role=\{isError \? "error" : "output"\}/)
+    const ioPane = io.match(/export function ToolIoPane[\s\S]*?\n\}\n\nexport interface ParsedTable/)?.[0] ?? ""
+    expect(ioPane).toContain('role === "output"')
+    expect(ioPane).toContain("<pre")
+    expect(ioPane).toContain("w-full")
+    expect(ioPane).toContain("return (")
+    expect(ioPane).toContain("<CodeBlock")
+    expect(ioPane).toContain('"Input"')
+    expect(ioPane).not.toContain('"Output"')
+    expect(ioPane).not.toContain("ToolResultTable")
+    expect(ioPane).not.toContain("parsePipeTable")
+    expect(term).not.toContain("extractedOutput")
+    expect(term).not.toContain("ScrollMaskedDetails")
   })
 })

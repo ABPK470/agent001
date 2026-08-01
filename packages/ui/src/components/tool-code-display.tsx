@@ -39,6 +39,54 @@ export function extractToolCode(
   return presentToolCallFromFormatted(toolName, JSON.stringify(args)).artifact
 }
 
+/**
+ * Chat tool I/O — match the Claude/Cursor dialect in the product screenshots:
+ * - Input: CodeBlock when it's code (SQL / Shell) or a labeled Input pane for prose
+ * - Output: bare monospace text (pipe tables stay text) — no Output chrome box
+ * - Error: status callout
+ */
+export function ToolIoPane({
+  role,
+  text,
+  lang,
+  maxHeight = 176,
+}: {
+  role: "input" | "output" | "error"
+  text: string
+  /** When set (sql / sh / …), toolbar shows the language instead of Input. */
+  lang?: string
+  maxHeight?: number
+}) {
+  if (role === "error") {
+    return (
+      <p className="mia-callout mia-callout--err w-full max-w-full rounded-md px-2.5 py-2 code-pre text-[15px] leading-5 whitespace-pre-wrap break-words">
+        {text}
+      </p>
+    )
+  }
+  if (role === "output") {
+    return (
+      <pre
+        className="code-pre m-0 w-full max-w-full overflow-auto px-0.5 text-[15px] leading-5 whitespace-pre text-text-muted"
+        style={{ maxHeight }}
+      >
+        {text}
+      </pre>
+    )
+  }
+  const codeLang = lang && lang !== "text" && lang !== "auto" && lang !== "" ? lang : "text"
+  const label = codeLang === "text" ? "Input" : undefined
+  return (
+    <CodeBlock
+      code={text}
+      lang={codeLang}
+      label={label}
+      maxHeight={maxHeight}
+      className="w-full max-w-full"
+    />
+  )
+}
+
 export interface ParsedTable {
   rowCount: number | null
   headers: string[]
@@ -69,7 +117,7 @@ export function parsePipeTable(text: string): ParsedTable | null {
   const headers = splitRow(headerLine)
   idx++
 
-  if (lines[idx] && /^[-+\s]+$/.test(lines[idx])) idx++
+  if (lines[idx] && /^[-+:|\s]+$/.test(lines[idx]!)) idx++
 
   let truncated = false
   const rows: string[][] = []

@@ -30,6 +30,7 @@ import { CodeBlock } from "../components/CodeBlock"
 import {
   extractToolCode,
   formatToolInputDisplay,
+  ToolIoPane,
 } from "../components/tool-code-display"
 import { ScrollToLatestButton } from "../components/ScrollToLatestButton"
 import { VirtualList, type VirtualListHandle } from "../components/VirtualList"
@@ -529,53 +530,6 @@ function findNestedScrollable(target: EventTarget | null, container: HTMLDivElem
   return null
 }
 
-// Inline scrollable detail area for raw (non-extracted) tool payloads.
-// Inherits the surrounding panel background (no dark slab) and applies
-// a soft fade mask on top/bottom only when content actually overflows
-// the height cap, so rows visually dissolve into the edge as the user
-// scrolls instead of being hard-clipped.
-function ScrollMaskedDetails({ text, maxHeight }: { text: string; maxHeight: number }) {
-  const ref = useRef<HTMLDivElement>(null)
-  const [edges, setEdges] = useState<{ top: boolean; bottom: boolean }>({ top: false, bottom: false })
-
-  useLayoutEffect(() => {
-    const el = ref.current
-    if (!el) return
-    const update = () => {
-      const overflow = el.scrollHeight > el.clientHeight + 1
-      setEdges({
-        top: overflow && el.scrollTop > 0,
-        bottom: overflow && el.scrollTop + el.clientHeight < el.scrollHeight - 1,
-      })
-    }
-    update()
-    el.addEventListener("scroll", update, { passive: true })
-    const ro = new ResizeObserver(update)
-    ro.observe(el)
-    return () => {
-      el.removeEventListener("scroll", update)
-      ro.disconnect()
-    }
-  }, [text])
-
-  const maskStyle = useMemo<React.CSSProperties>(() => {
-    // Top-only fade — same rationale as IterationToolList.
-    if (!edges.top) return {}
-    const mask = `linear-gradient(180deg, transparent 0px, black 22px, black 100%)`
-    return { WebkitMaskImage: mask, maskImage: mask, WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat" }
-  }, [edges.top])
-
-  return (
-    <div
-      ref={ref}
-      className="code-pre overflow-auto px-3 py-2.5"
-      style={{ maxHeight, ...maskStyle }}
-    >
-      {text}
-    </div>
-  )
-}
-
 function ToolSyncProgressBody({ part }: { part: ResponseSyncProgressPart }) {
   const isRunning = part.status === "running"
   const tone = part.level === "error" || part.status === "error" ? "error" : "neutral"
@@ -599,6 +553,7 @@ function ToolSyncProgressBody({ part }: { part: ResponseSyncProgressPart }) {
           code={part.sql.preview}
           lang="sql"
           maxHeight={120}
+          className="w-full max-w-full"
           label={[
             part.sql.label,
             part.sql.connection,
@@ -654,7 +609,6 @@ function ToolPill({
   const canExpand = hasInput || hasOutput || Boolean(syncProgress)
   const extractedInput = row.argsFormatted ? extractToolCode(row.tool, row.argsFormatted) : null
   const displayInput = row.argsFormatted ? formatToolInputDisplay(row.tool, row.argsFormatted) : ""
-  const extractedOutput = row.details ? extractToolCode(row.tool, row.details) : null
   const isError = row.status === "error"
   const buttonRef = useRef<HTMLButtonElement>(null)
   // Sync progress detail only while live or when the user expands the row —
@@ -714,39 +668,21 @@ function ToolPill({
       {expanded && (hasInput || hasOutput) && (
         <div className="ml-[14px] mt-1 pl-3 space-y-1.5">
           {/*
-           * CodeBlock owns the only perimeter for code.
-           * Plain status/args text is not a second framed card.
+           * Same pane for every tool — Input then Output (or Error).
+           * Code bodies keep SQL/Shell labels; prose uses Input/Output.
            */}
-          {hasInput && row.argsFormatted ? (
-            extractedInput ? (
-              <CodeBlock
-                code={extractedInput.code}
-                lang={extractedInput.lang}
-                maxHeight={176}
-              />
-            ) : (
-              <div className="mia-surface overflow-hidden">
-                <ScrollMaskedDetails text={displayInput} maxHeight={176} />
-              </div>
-            )
+          {hasInput && displayInput ? (
+            <ToolIoPane
+              role="input"
+              text={extractedInput?.code ?? displayInput}
+              lang={extractedInput?.lang}
+            />
           ) : null}
           {hasOutput && row.details ? (
-            extractedOutput ? (
-              <CodeBlock
-                code={extractedOutput.code}
-                lang={extractedOutput.lang}
-                maxHeight={176}
-                className={isError ? "mia-surface--danger" : undefined}
-              />
-            ) : isError ? (
-              <p className="mia-callout mia-callout--err rounded-md px-2 py-1.5 code-pre text-[15px] leading-5 whitespace-pre-wrap break-words">
-                {row.details}
-              </p>
-            ) : (
-              <p className="code-pre px-0.5 text-[15px] leading-5 whitespace-pre-wrap break-words text-text-muted">
-                {row.details}
-              </p>
-            )
+            <ToolIoPane
+              role={isError ? "error" : "output"}
+              text={row.details}
+            />
           ) : null}
         </div>
       )}
@@ -1367,7 +1303,7 @@ function RunErrorBanner({ error }: { error: string }) {
   const showDetails = details != null && details !== summary
 
   return (
-    <div className="mia-callout mia-callout--err max-w-full rounded-lg px-3 py-2.5">
+    <div className="mia-callout mia-callout--err w-fit max-w-full rounded-lg px-3 py-2.5">
       <div className="text-[15px] font-medium leading-6">Run failed</div>
       <p className="mt-1 text-[15px] leading-5 opacity-85 break-words">{summary}</p>
       {showDetails && (
@@ -1380,7 +1316,7 @@ function RunErrorBanner({ error }: { error: string }) {
             {expanded ? "Hide details" : "Show details"}
           </button>
           {expanded && (
-            <pre className="code-pre mt-2 max-h-40 overflow-auto rounded-md border border-policy-deny/25 bg-panel/60 px-2.5 py-2 opacity-80">
+            <pre className="code-pre mt-2 max-h-40 w-fit max-w-full overflow-auto rounded-md border border-status-callout-err-border bg-panel/60 px-2.5 py-2 opacity-80">
               {details}
             </pre>
           )}
@@ -1887,7 +1823,7 @@ function RunMessageImpl({
 
       {/* Terminal status — same rhythm as answer blocks under the user pill */}
       {run.status === "cancelled" && (
-        <div className="mia-callout mia-callout--warn rounded-lg px-3 py-2.5 text-[15px] leading-6">
+        <div className="mia-callout mia-callout--warn w-fit max-w-full rounded-lg px-3 py-2.5 text-[15px] leading-6">
           Run cancelled.
         </div>
       )}

@@ -233,7 +233,7 @@ export function ImportGateModal({
             placeholder="Why are you applying this configuration?"
           />
         </label>
-        {session.err && <p className="text-sm text-error">{session.err}</p>}
+        {session.err && <p className="mia-callout mia-callout--err px-3 py-2 text-sm">{session.err}</p>}
         {session.preview && <ImportImpactPanel result={session.preview} />}
         {!session.preview && (
           <p className="text-xs text-text-faint">

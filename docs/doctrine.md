@@ -243,14 +243,26 @@ becoming “selected.”
 | Layer | What | Treatment |
 |---|---|---|
 | **Status mark** | Any run / operation / user-state indicator | One `StatusMark` + `statusDotKind` — ok = hollow ring, fail = filled, live = pulse ring, skip = dashed (skipped / cancelled / stopped), muted = soft fill. Shape over traffic chroma on light (`packages/ui/src/components/StatusMark.tsx`). Same glyph for the same status string in Pipelines, Threads, Active Users, Sync. |
-| **Status callout** | Failed / warn / cancel / success / running **payloads** (message boxes, banners, Event Stream error rows, Trace phase events, Chat **terminal** error / cancelled bodies, toasts) | Soft chroma wash + thin chroma border; **theme ink text** (`text-text` / `--color-text`) — never chroma-colored copy on the wash. Shared helpers in `packages/ui/src/lib/status-callout.ts` / `.mia-callout--*`. Never plain paper/sheet + colored text alone; never `--error-soft` as select-lookalike overlay on light. |
+| **Status callout** | Failed / warn / cancel / success / running **payloads** (message boxes, banners, Event Stream error rows, Trace phase events, Chat **terminal** error / cancelled bodies, toasts, danger-zone cards) | Theme-split `--status-callout-*` soft + border; muted regular text. **Light:** chroma wash on paper (same family as policy softs). **Dark only — Factory Reset dialect:** quiet `--overlay-2` panel + ~20% chroma hairline border (e.g. `border-error/20`); body stays muted theme ink; icons/buttons may use muted `--error` accents. Never loud soft slabs on dark. Shared helpers in `packages/ui/src/lib/status-callout.ts` / `.mia-callout--*`. Policy-effect softs (`--policy-*-soft`) stay separate for ALLOW/DENY cards. Never plain paper + colored text alone. |
 
 Chat **orchestrator process beats** (`Subagent ·`, `Check · needs work`,
 `Repair ·`, `Checked work`) are mid-loop gates — muted activity chrome like
 other step headers, not status callouts. Soft chroma is reserved for true
 terminals (run failed / cancelled / escalate). Chat / Trace **activity
 headers** stay muted ink chrome (Cursor dialect) — narrative labels are not
-status marks; never paint the whole “Subagent · … · failed” row red. On **light**, structural status + syntax tokens
+status marks; never paint the whole “Subagent · … · failed” row red.
+
+**Chat tool I/O (locked):** dark reference dialect — code boxed, results bare text.
+1. **Input** — `CodeBlock` for code (SQL / Shell + Copy); prose uses labeled
+   **Input** pane. Uses the column width (`width: 100%`); short answer fences
+   may still `w-fit`.
+2. **Output** — raw monospace text on the sheet: `(N rows)`, header,
+   `----+----` rule, then rows. No Output chrome box, no DataTable.
+3. **Error** — status callout (theme-split soft wash).
+
+Never leave code inputs unframed; never frame success results like code.
+
+On **light**, structural status + syntax tokens
 (`--success|warning|error|info`, `--dt-*`) resolve to **ink** for marks /
 datatype; callout chroma lives on **policy / callout-info** tokens. Soft
 structural washes stay `--overlay-2`. **Exception — diffs:** content change

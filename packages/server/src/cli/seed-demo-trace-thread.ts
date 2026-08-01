@@ -188,7 +188,7 @@ function buildDirectFourCalls(): TraceEntry[] {
     msg("assistant", null, [tcExplore]),
     msg("tool", "README.md\nsrc/\ndata/", [], "d-tc-explore"),
     msg("assistant", null, [tcSql]),
-    msg("tool", "name | revenue\nAda | 120\nBea | 95", [], "d-tc-sql"),
+    msg("tool", "name | revenue\n----+-------\nAda | 120\nBea | 95", [], "d-tc-sql"),
   ])
   const tcExport = {
     id: "d-tc-export",
@@ -200,7 +200,7 @@ function buildDirectFourCalls(): TraceEntry[] {
     msg("assistant", null, [tcExplore]),
     msg("tool", "README.md\nsrc/\ndata/", [], "d-tc-explore"),
     msg("assistant", null, [tcSql]),
-    msg("tool", "name | revenue\nAda | 120\nBea | 95", [], "d-tc-sql"),
+    msg("tool", "name | revenue\n----+-------\nAda | 120\nBea | 95", [], "d-tc-sql"),
     msg("assistant", null, [tcExport]),
     msg("tool", "Wrote top-bankers.csv (5 rows)", [], "d-tc-export"),
   ])
@@ -251,7 +251,7 @@ function buildDirectFourCalls(): TraceEntry[] {
       kind: "tool-result",
       invocationId: "d-inv-sql",
       toolCallId: "d-tc-sql",
-      text: "name | revenue\nAda | 120\nBea | 95\nCal | 88\nDee | 70\nEve | 61",
+      text: "(5 rows)\nname | revenue\n----+-------\nAda | 120\nBea | 95\nCal | 88\nDee | 70\nEve | 61",
     },
     { kind: "iteration", current: 3, max: 12 },
     llmReq(2, u2, 3),

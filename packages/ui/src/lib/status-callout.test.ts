@@ -19,20 +19,19 @@ describe("status-callout", () => {
     expect(statusCalloutTone("skipped")).toBe("skip")
   })
 
-  it("callout classes use soft wash + thin border + muted regular type", () => {
+  it("callout classes use theme-split status-callout tokens (not policy softs)", () => {
     for (const tone of ["ok", "err", "warn", "info"] as const) {
-      expect(STATUS_CALLOUT[tone]).toMatch(/-soft/)
+      expect(STATUS_CALLOUT[tone]).toMatch(/status-callout-/)
       expect(STATUS_CALLOUT[tone]).toMatch(/border/)
       expect(STATUS_CALLOUT[tone]).toMatch(/text-text-muted/)
       expect(STATUS_CALLOUT[tone]).toMatch(/font-normal/)
-      expect(STATUS_CALLOUT[tone]).not.toMatch(/text-policy-|text-callout-info/)
+      expect(STATUS_CALLOUT[tone]).not.toMatch(/policy-allow-soft|policy-deny-soft|policy-approval-soft/)
       expect(STATUS_CALLOUT[tone]).not.toMatch(/diff-surface/)
-      expect(STATUS_CALLOUT_BADGE[tone]).toMatch(/text-text-muted/)
-      expect(STATUS_CALLOUT_BADGE[tone]).not.toMatch(/text-policy-|text-callout-info/)
+      expect(STATUS_CALLOUT_BADGE[tone]).toMatch(/status-callout-/)
     }
-    expect(operationStatusCallout("failed")).toContain("policy-deny-soft")
-    expect(operationStatusCallout("cancelled")).toContain("policy-approval-soft")
-    expect(operationStatusCallout("running")).toContain("callout-info-soft")
-    expect(operationStatusBadge("success")).toContain("policy-allow-soft")
+    expect(operationStatusCallout("failed")).toContain("status-callout-err")
+    expect(operationStatusCallout("cancelled")).toContain("status-callout-warn")
+    expect(operationStatusCallout("running")).toContain("status-callout-info")
+    expect(operationStatusBadge("success")).toContain("status-callout-ok")
   })
 })

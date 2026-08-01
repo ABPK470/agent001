@@ -89,7 +89,7 @@ export function SyncPolicyApprovalModal({
           {pending.policyName && (
             <p className="font-mono text-xs text-text-faint">Policy: {pending.policyName}</p>
           )}
-          {error && <p className="text-error">{error}</p>}
+          {error && <p className="mia-callout mia-callout--err px-3 py-2 text-sm">{error}</p>}
         </div>
         <footer className="flex shrink-0 justify-end gap-2 border-t border-border-subtle px-5 py-3">
           <button

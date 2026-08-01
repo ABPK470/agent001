@@ -59,15 +59,15 @@ export function statusSoftBgClass(status: OperationStatus): string {
 export function statusFilterActiveClass(status: OperationStatus): string {
   switch (statusCalloutTone(status)) {
     case "ok":
-      return "ring-1 ring-inset ring-policy-allow/40 text-text font-medium bg-policy-allow-soft"
+      return "ring-1 ring-inset ring-status-callout-ok-border text-text font-medium bg-status-callout-ok-soft"
     case "err":
-      return "ring-1 ring-inset ring-policy-deny/40 text-text font-semibold bg-policy-deny-soft"
+      return "ring-1 ring-inset ring-status-callout-err-border text-text font-semibold bg-status-callout-err-soft"
     case "skip":
       return "border border-dashed border-border text-text-muted font-medium bg-transparent"
     case "info":
-      return "ring-1 ring-inset ring-callout-info/40 text-text font-medium bg-callout-info-soft"
+      return "ring-1 ring-inset ring-status-callout-info-border text-text font-medium bg-status-callout-info-soft"
     case "warn":
-      return "ring-1 ring-inset ring-policy-approval/40 text-text font-medium bg-policy-approval-soft"
+      return "ring-1 ring-inset ring-status-callout-warn-border text-text font-medium bg-status-callout-warn-soft"
     default:
       return "ring-1 ring-inset ring-border-subtle text-text-muted font-medium bg-transparent"
   }

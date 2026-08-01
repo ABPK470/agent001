@@ -17,6 +17,12 @@ function lightThemeBlock(): string {
   return match![1]!
 }
 
+function darkThemeBlock(): string {
+  const match = css.match(/:root,\s*:root\[data-theme="dark"\]\s*\{([\s\S]*?)\n\}/)
+  expect(match?.[1]).toBeTruthy()
+  return match![1]!
+}
+
 describe("light theme color system", () => {
   it("restores brand purple accent (not ink)", () => {
     const block = lightThemeBlock()
@@ -83,29 +89,61 @@ describe("light theme color system", () => {
     expect(schema).toContain("text-policy-approval")
   })
 
-  it("severity callouts use policies dialect (soft wash + thin border + chroma)", () => {
-    expect(css).toMatch(
-      /\.trace-phase-event\.is-error\s*\{[^}]*background:\s*var\(--policy-deny-soft/s,
+  it("status callouts are theme-split (light chroma wash; dark Factory Reset dialect)", () => {
+    const light = lightThemeBlock()
+    const dark = darkThemeBlock()
+    expect(light).toMatch(/--status-callout-err-soft:\s*var\(--policy-deny-soft\)/)
+    expect(light).toMatch(/--status-callout-ok-soft:\s*var\(--policy-allow-soft\)/)
+    expect(dark).toMatch(/--status-callout-err-soft:\s*var\(--overlay-2\)/)
+    expect(dark).toMatch(/--status-callout-ok-soft:\s*var\(--overlay-2\)/)
+    expect(dark).toMatch(
+      /--status-callout-err-border:\s*color-mix\(in srgb,\s*var\(--error\) 25%,\s*transparent\)/,
+    )
+    expect(dark).not.toMatch(/--status-callout-err-soft:\s*var\(--error-soft\)/)
+    expect(dark).not.toMatch(
+      /--status-callout-err-soft:\s*color-mix\(in srgb,\s*var\(--error\)/,
     )
     expect(css).toMatch(
-      /\.trace-phase-event\.is-warn\s*\{[^}]*background:\s*var\(--policy-approval-soft/s,
+      /\.trace-phase-event\.is-error\s*\{[^}]*background:\s*var\(--status-callout-err-soft/s,
     )
     expect(css).toMatch(
-      /\.trace-phase-event\.is-error\s*\{[^}]*color:\s*var\(--text/s,
+      /\.trace-phase-event\.is-warn\s*\{[^}]*background:\s*var\(--status-callout-warn-soft/s,
     )
-    expect(css).toMatch(/\.mia-toast--err\s*\{[^}]*--policy-deny-soft/s)
-    expect(css).toMatch(/\.mia-callout--err\s*\{[^}]*--policy-deny-soft/s)
+    expect(css).toMatch(/\.mia-toast--err\s*\{[^}]*--status-callout-err-soft/s)
+    expect(css).toMatch(/\.mia-callout--err\s*\{[^}]*--status-callout-err-soft/s)
     expect(css).toMatch(/\.mia-callout\s*\{[^}]*font-weight:\s*400/s)
-    expect(css).toMatch(
-      /\.trace-phase-event\.is-error\s*\{[^}]*font-weight:\s*400/s,
-    )
     const ops = readFileSync(join(here, "../widgets/OperationLog.tsx"), "utf8")
     expect(ops).toContain("operationStatusCallout")
     expect(ops).not.toMatch(/failed:\s*"bg-diff-surface/)
     const live = readFileSync(join(here, "../widgets/LiveLogs.tsx"), "utf8")
-    expect(live).toContain("bg-policy-deny-soft")
+    expect(live).toContain("bg-status-callout-err-soft")
+    expect(live).toContain("border-status-callout-err-border")
     expect(live).toContain("mia-callout--err")
+    const logRow = live.match(/function LogRow[\s\S]*?\n\}\n/)?.[0] ?? ""
+    const errorChrome = logRow.match(/\? "([^"]*status-callout-err[^"]*)"/)?.[1] ?? ""
+    expect(errorChrome).toContain("border-status-callout-err-border")
+    expect(errorChrome).not.toContain("border-transparent")
     expect(live).not.toMatch(/log\.error[\s\S]{0,80}bg-diff-surface/)
+    expect(live).not.toContain("bg-policy-deny-soft")
+    // Factory Reset card is the dark danger-zone SOT (status-callout err tokens).
+    const policy = readFileSync(join(here, "../widgets/platform/PolicyEditor.tsx"), "utf8")
+    expect(policy).toContain("bg-status-callout-err-soft")
+    expect(policy).toContain("border-status-callout-err-border")
+  })
+
+  it("Model provider uses SELECT_TRACK dialect (not inverted ink outline)", () => {
+    const policy = readFileSync(join(here, "../widgets/platform/PolicyEditor.tsx"), "utf8")
+    expect(policy).toContain("SELECT_TRACK")
+    expect(policy).toContain("SELECT_ACTIVE")
+    expect(policy).not.toMatch(/border-text[\s\S]{0,40}Copilot Chat|llmProvider === p[\s\S]{0,80}border-text/)
+  })
+
+  it("SessionMenu isolates Sign out behind a divider with inset hover wash", () => {
+    const menu = readFileSync(join(here, "../app/SessionMenu.tsx"), "utf8")
+    expect(menu).toMatch(/About[\s\S]*session-menu-divider[\s\S]*Sign out/)
+    expect(menu).toContain("hover:bg-status-callout-err-soft")
+    expect(menu).toContain("rounded-[var(--list-row-radius)]")
+    expect(menu).not.toMatch(/text-error hover:bg-error\/10/)
   })
 
   it("shared StatusMark + statusDotKind used across Pipelines / Threads / Active Users", () => {

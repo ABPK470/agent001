@@ -341,7 +341,7 @@ function CompactCodeBlock({ lang, text }: { lang: string; text: string }) {
       code={text}
       lang={lang || "text"}
       maxHeight={320}
-      className="my-1.5 w-full min-w-0"
+      className="my-1.5 w-fit max-w-full min-w-0"
     />
   )
 }

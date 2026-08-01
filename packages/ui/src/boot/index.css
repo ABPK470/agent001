@@ -91,6 +91,19 @@
   --color-callout-info: var(--callout-info);
   --color-callout-info-soft: var(--callout-info-soft);
 
+  /*
+   * Status callout surfaces — theme-split from policy-effect softs.
+   * Light = chroma wash on paper; dark = quiet panel tint (not loud soft slabs).
+   */
+  --color-status-callout-ok-soft: var(--status-callout-ok-soft);
+  --color-status-callout-ok-border: var(--status-callout-ok-border);
+  --color-status-callout-err-soft: var(--status-callout-err-soft);
+  --color-status-callout-err-border: var(--status-callout-err-border);
+  --color-status-callout-warn-soft: var(--status-callout-warn-soft);
+  --color-status-callout-warn-border: var(--status-callout-warn-border);
+  --color-status-callout-info-soft: var(--status-callout-info-soft);
+  --color-status-callout-info-border: var(--status-callout-info-border);
+
   /* Chrome */
   --color-scrim: var(--scrim);
   --color-scrim-strong: var(--scrim-strong);
@@ -206,6 +219,22 @@
   --policy-approval-soft: var(--warning-soft);
   --callout-info: var(--info);
   --callout-info-soft: var(--info-soft);
+
+  /*
+   * Status callouts — DARK ONLY (Factory Reset dialect).
+   * Quiet panel fill + hairline meaning edge (chroma at ~25% / transparent —
+   * same family as border-error/20 on the Factory Reset card).
+   * Body copy stays muted theme ink; icons/buttons may use --error accents.
+   * Never light’s soft chroma wash slabs. Policy ALLOW/DENY softs stay separate.
+   */
+  --status-callout-ok-soft: var(--overlay-2);
+  --status-callout-ok-border: color-mix(in srgb, var(--success) 25%, transparent);
+  --status-callout-err-soft: var(--overlay-2);
+  --status-callout-err-border: color-mix(in srgb, var(--error) 25%, transparent);
+  --status-callout-warn-soft: var(--overlay-2);
+  --status-callout-warn-border: color-mix(in srgb, var(--warning) 25%, transparent);
+  --status-callout-info-soft: var(--overlay-2);
+  --status-callout-info-border: color-mix(in srgb, var(--info) 25%, transparent);
 
   /* Viewing as — brand accent (same ink as live logo mark). */
   --viewing-as: var(--accent);
@@ -330,6 +359,16 @@
   --callout-info: #2563eb;
   --callout-info-soft: color-mix(in srgb, var(--callout-info) 12%, var(--paper));
 
+  /* Status callouts — same family as policy softs on light paper. */
+  --status-callout-ok-soft: var(--policy-allow-soft);
+  --status-callout-ok-border: color-mix(in srgb, var(--policy-allow) 35%, var(--border-subtle));
+  --status-callout-err-soft: var(--policy-deny-soft);
+  --status-callout-err-border: color-mix(in srgb, var(--policy-deny) 35%, var(--border-subtle));
+  --status-callout-warn-soft: var(--policy-approval-soft);
+  --status-callout-warn-border: color-mix(in srgb, var(--policy-approval) 35%, var(--border-subtle));
+  --status-callout-info-soft: var(--callout-info-soft);
+  --status-callout-info-border: color-mix(in srgb, var(--callout-info) 35%, var(--border-subtle));
+
   --viewing-as: var(--accent);
   --viewing-as-soft: var(--accent-soft);
 
@@ -383,8 +422,10 @@
   background: var(--color-text);
 }
 
-.mia-surface,
-.mia-code-block {
+.mia-surface {
+  /* Hug content — short shells / errors must not stretch the column. */
+  width: fit-content;
+  max-width: 100%;
   border: 1px solid var(--border);
   border-radius: 0.5rem;
   background: transparent;
@@ -392,14 +433,26 @@
   outline: none;
 }
 
+.mia-code-block {
+  /* Chat/tool panes use the column; short answer fences override with w-fit. */
+  width: 100%;
+  max-width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background: var(--panel-2);
+  box-shadow: none;
+  outline: none;
+}
+
 .mia-surface--danger,
 .mia-code-block.mia-surface--danger {
-  /* Status callout dialect — deny soft + thin deny border. */
-  border-color: color-mix(in srgb, var(--policy-deny) 35%, var(--border));
-  background: var(--policy-deny-soft);
+  /* Status callout dialect — theme-split soft + border. */
+  border-color: var(--status-callout-err-border);
+  background: var(--status-callout-err-soft);
 }
 
 .mia-code-block--embedded {
+  width: auto;
   border: none !important;
   border-radius: 0 !important;
   box-shadow: none !important;
@@ -1440,36 +1493,39 @@ label:focus-within > .mia-checkbox,
   line-height: 1.5;
 }
 
-/* ── Toasts — soft chroma wash + thin border; theme ink text ─ */
+/* ── Toasts — theme-split status callout surfaces; muted regular type ─ */
 .mia-toast {
   border-color: var(--border-subtle);
   background: var(--panel-2);
-  color: var(--color-text);
+  color: var(--color-text-muted, var(--color-text));
+  font-weight: 400;
 }
 
 .mia-toast--ok {
-  border-color: color-mix(in srgb, var(--policy-allow) 35%, var(--border-subtle));
-  background: var(--policy-allow-soft);
+  border-color: var(--status-callout-ok-border);
+  background: var(--status-callout-ok-soft);
   color: var(--color-text-muted, var(--color-text));
   font-weight: 400;
 }
 
 .mia-toast--err {
-  border-color: color-mix(in srgb, var(--policy-deny) 35%, var(--border-subtle));
-  background: var(--policy-deny-soft);
+  border-color: var(--status-callout-err-border);
+  background: var(--status-callout-err-soft);
   color: var(--color-text-muted, var(--color-text));
   font-weight: 400;
 }
 
 .mia-toast--info {
-  border-color: color-mix(in srgb, var(--callout-info) 35%, var(--border-subtle));
-  background: var(--callout-info-soft);
+  border-color: var(--status-callout-info-border);
+  background: var(--status-callout-info-soft);
   color: var(--color-text-muted, var(--color-text));
   font-weight: 400;
 }
 
-/* Shared status callout shell — wash + border signal; muted regular type */
+/* Shared status callout shell — wash + border from theme-split tokens */
 .mia-callout {
+  width: fit-content;
+  max-width: 100%;
   border-radius: 0.5rem;
   border-width: 1px;
   border-style: solid;
@@ -1478,23 +1534,23 @@ label:focus-within > .mia-checkbox,
 }
 
 .mia-callout--ok {
-  border-color: color-mix(in srgb, var(--policy-allow) 35%, var(--border-subtle));
-  background: var(--policy-allow-soft);
+  border-color: var(--status-callout-ok-border);
+  background: var(--status-callout-ok-soft);
 }
 
 .mia-callout--err {
-  border-color: color-mix(in srgb, var(--policy-deny) 35%, var(--border-subtle));
-  background: var(--policy-deny-soft);
+  border-color: var(--status-callout-err-border);
+  background: var(--status-callout-err-soft);
 }
 
 .mia-callout--warn {
-  border-color: color-mix(in srgb, var(--policy-approval) 35%, var(--border-subtle));
-  background: var(--policy-approval-soft);
+  border-color: var(--status-callout-warn-border);
+  background: var(--status-callout-warn-soft);
 }
 
 .mia-callout--info {
-  border-color: color-mix(in srgb, var(--callout-info) 35%, var(--border-subtle));
-  background: var(--callout-info-soft);
+  border-color: var(--status-callout-info-border);
+  background: var(--status-callout-info-soft);
 }
 
 /* ── Listbox popover (portaled — opaque above modals) ─────────── */
@@ -3292,8 +3348,8 @@ textarea.input {
   padding: 0.3rem 0.55rem;
   border-radius: 0.35rem;
   margin: 0.15rem 0;
-  border: 1px solid color-mix(in srgb, var(--policy-approval) 35%, var(--border-subtle));
-  background: var(--policy-approval-soft);
+  border: 1px solid var(--status-callout-warn-border);
+  background: var(--status-callout-warn-soft);
   color: var(--text-muted, var(--color-text-muted));
   font-weight: 400;
   width: fit-content;
@@ -3304,8 +3360,8 @@ textarea.input {
   padding: 0.3rem 0.55rem;
   border-radius: 0.35rem;
   margin: 0.15rem 0;
-  border: 1px solid color-mix(in srgb, var(--policy-deny) 35%, var(--border-subtle));
-  background: var(--policy-deny-soft);
+  border: 1px solid var(--status-callout-err-border);
+  background: var(--status-callout-err-soft);
   color: var(--text-muted, var(--color-text-muted));
   font-weight: 400;
   width: fit-content;

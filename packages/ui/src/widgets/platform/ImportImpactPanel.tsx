@@ -11,7 +11,7 @@ export function ImportImpactPanel({ result }: { result: PlatformImportGateResult
   return (
     <div
       className={`rounded-lg border p-3 text-sm ${
-        result.ok ? "border-success/30 bg-success/5" : "border-error/30 bg-error/5"
+        result.ok ? "border-status-callout-ok-border bg-status-callout-ok-soft" : "border-status-callout-err-border bg-status-callout-err-soft"
       }`}
     >
       <div className="flex items-center gap-2 font-medium">
@@ -24,7 +24,7 @@ export function ImportImpactPanel({ result }: { result: PlatformImportGateResult
         {result.applied ? " · applied" : ""}
       </div>
       {result.errors.length > 0 && (
-        <ul className="mt-2 list-disc pl-5 text-error">
+        <ul className="mt-2 list-disc pl-5 text-text-muted">
           {result.errors.map((error) => (
             <li key={error}>{error}</li>
           ))}

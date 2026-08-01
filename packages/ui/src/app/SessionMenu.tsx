@@ -41,10 +41,10 @@ interface Props {
 
 function menuItemClass(destructive = false): string {
   return [
-    "flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm transition-colors",
+    "mx-1 flex w-[calc(100%-0.5rem)] items-center gap-3 rounded-[var(--list-row-radius)] px-3 py-2 text-left text-sm transition-colors",
     destructive
-      ? "text-error hover:bg-error/10"
-      : "text-text-secondary hover:bg-overlay-hover hover:text-text",
+      ? "text-text-muted hover:bg-status-callout-err-soft hover:text-text"
+      : "text-text-secondary hover:bg-[var(--hover-fill)] hover:text-text",
   ].join(" ")
 }
 
@@ -263,6 +263,7 @@ export function SessionMenu({
               <BookOpen size={15} className="shrink-0 text-text-muted" />
               About
             </button>
+            <div className="session-menu-divider" />
             <button
               type="button"
               role="menuitem"

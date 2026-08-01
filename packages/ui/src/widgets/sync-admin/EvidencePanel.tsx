@@ -123,7 +123,7 @@ export function EvidencePanel({ tabsToolbar }: { tabsToolbar?: ReactNode }): JSX
               </ModalBtnSecondary>
             </div>
             {verify && (
-              <div className={`mt-3 flex items-start gap-2 rounded-lg border px-3 py-2 text-xs text-text ${verify.ok ? "border-policy-allow/35 bg-policy-allow-soft" : "border-policy-deny/35 bg-policy-deny-soft"}`}>
+              <div className={`mt-3 flex items-start gap-2 rounded-lg border px-3 py-2 text-xs text-text-muted ${verify.ok ? "border-status-callout-ok-border bg-status-callout-ok-soft" : "border-status-callout-err-border bg-status-callout-err-soft"}`}>
                 {verify.ok ? <CheckCircle2 size={14} className="text-policy-allow" /> : <XCircle size={14} className="text-policy-deny" />}
                 <span>{verify.message}</span>
               </div>

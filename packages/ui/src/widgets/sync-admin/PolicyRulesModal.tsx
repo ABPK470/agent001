@@ -373,7 +373,7 @@ function KindBadge({ kind, muted = false }: { kind: Kind; muted?: boolean }): JS
   const cls = muted
     ? "bg-overlay-2 text-text-muted border-border-subtle"
     : kind === "none" ? "bg-overlay-2 text-text-muted border-border-subtle"
-    : kind === "single" ? "bg-callout-info-soft text-text border-callout-info/35"
-    : "bg-policy-approval-soft text-text border-policy-approval/35"
+    : kind === "single" ? "bg-status-callout-info-soft text-text-muted border-status-callout-info-border"
+    : "bg-status-callout-warn-soft text-text-muted border-status-callout-warn-border"
   return <span className={`rounded border px-1.5 py-0.5 text-xs uppercase ${cls}`}>{kind}</span>
 }

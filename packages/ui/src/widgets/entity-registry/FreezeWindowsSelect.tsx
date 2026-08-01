@@ -82,7 +82,7 @@ export function FreezeWindowsSelect({ selected, onSelected }: FreezeWindowsSelec
         )
       })}
       {orphans.map((id) => (
-        <label key={id} className="flex items-start gap-2 rounded border border-policy-deny/35 bg-policy-deny-soft px-2 py-1.5">
+        <label key={id} className="flex items-start gap-2 rounded border border-status-callout-err-border bg-status-callout-err-soft px-2 py-1.5">
           <Checkbox checked onChange={() => toggle(id)} className="mt-0.5" />
           <div className="flex-1">
             <span className="font-mono text-sm text-text">{id}</span>

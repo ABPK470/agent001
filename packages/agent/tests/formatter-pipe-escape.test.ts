@@ -10,6 +10,19 @@ function makeRs(rows: Array<Record<string, unknown>>): sql.IRecordSet<unknown> {
 }
 
 describe("formatResults — pipe escaping", () => {
+  it("emits a markdown header delimiter between column names and rows", () => {
+    const rs = makeRs([
+      { name: "Ada", revenue: 120 },
+      { name: "Bea", revenue: 95 },
+    ])
+    const out = formatResults([rs], [2])
+    const lines = out.split("\n")
+    const headerIdx = lines.findIndex((l) => l === "name | revenue")
+    expect(headerIdx).toBeGreaterThanOrEqual(0)
+    expect(lines[headerIdx + 1]).toBe("----+-------")
+    expect(lines[headerIdx + 2]).toContain("Ada")
+  })
+
   it("escapes a literal `|` inside a string cell so column count is preserved", () => {
     const rs = makeRs([
       { client: "ACME", coverage: "COVERAGE UNMANAGED | SOUTH AFRICA" },

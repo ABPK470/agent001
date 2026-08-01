@@ -248,8 +248,8 @@ export function PublishCatalogModal({
             )}
 
             {compileNotes && compileNotes.length > 0 && (
-              <div className="shrink-0 border-b border-error/20 bg-error/5 px-6 py-2">
-                <p className="field-label mb-1.5 text-error">Publish blocked</p>
+              <div className="shrink-0 border-b border-status-callout-err-border bg-status-callout-err-soft px-6 py-2">
+                <p className="field-label mb-1.5 text-text">Publish blocked</p>
                 <ul className="space-y-1 font-mono text-xs leading-snug text-text-muted">
                   {compileNotes.map((line) => (
                     <li key={line}>{line}</li>

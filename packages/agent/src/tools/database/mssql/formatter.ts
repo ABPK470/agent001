@@ -26,7 +26,8 @@ function formatRowValue(v: unknown): string {
 function renderTable(columns: string[], rows: unknown[]): string[] {
   const out: string[] = []
   out.push(columns.join(" | "))
-  out.push(columns.map((c) => "-".repeat(Math.min(c.length, 20))).join("-+-"))
+  // ASCII rule under column names (Claude/Cursor dialect) — not optional.
+  out.push(columns.map((c) => "-".repeat(Math.max(c.length, 3))).join("+"))
   for (const row of rows) {
     const r = row as Record<string, unknown>
     out.push(columns.map((c) => formatRowValue(r[c])).join(" | "))

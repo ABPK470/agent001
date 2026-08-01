@@ -32,6 +32,36 @@ describe("tool-call-presentation", () => {
     expect(presentation.artifact?.lang).toBe("sh")
   })
 
+  it("treats legacy query_mssql `sql` arg as the SQL artifact", () => {
+    const presentation = presentToolCall("query_mssql", { sql: "SELECT * FROM HugeTable" })
+    expect(presentation.artifact?.lang).toBe("sql")
+    expect(presentation.artifact?.code).toBe("SELECT * FROM HugeTable")
+    expect(presentation.display).toBe("SELECT * FROM HugeTable")
+  })
+
+  it("treats raw SQL argsFormatted as a code artifact", () => {
+    const presentation = presentToolCallFromFormatted("query_mssql", "SELECT * FROM HugeTable")
+    expect(presentation.artifact?.lang).toBe("sql")
+    expect(presentation.artifact?.code).toBe("SELECT * FROM HugeTable")
+  })
+
+  it("does not invent a SQL CodeBlock from tool result prose", () => {
+    expect(presentToolCallFromFormatted("query_mssql", "10 rows returned").artifact).toBeNull()
+    expect(
+      presentToolCallFromFormatted(
+        "query_mssql",
+        "Blocked before send (MISSING_WHERE) — query needs a tighter filter."
+      ).artifact
+    ).toBeNull()
+  })
+
+  it("presents ask_user question as plain display (Input pane, not SQL)", () => {
+    const presentation = presentToolCall("ask_user", { question: "Which brand colors?" })
+    expect(presentation.artifact).toBeNull()
+    expect(presentation.display).toBe("Which brand colors?")
+    expect(presentation.summary).toContain("Which brand colors?")
+  })
+
   it("re-presents persisted JSON args", () => {
     const argsFormatted = serializeToolCallArgs({ pattern: "foo", path: "src" })
     const presentation = presentToolCallFromFormatted("search_files", argsFormatted)

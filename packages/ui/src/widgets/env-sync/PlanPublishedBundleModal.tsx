@@ -91,7 +91,7 @@ export function PlanPublishedBundleModal({
             )}
           </div>
           {versionMismatch && (
-            <div className="rounded border border-warning/30 bg-warning/5 px-3 py-2 text-xs text-warning shrink-0">
+            <div className="rounded border border-status-callout-warn-border bg-status-callout-warn-soft px-3 py-2 text-xs text-text-muted shrink-0">
               The on-disk bundle version differs from the version this plan was compiled with. The JSON below is the
               current published bundle entry — not a historical snapshot stored in the database.
             </div>

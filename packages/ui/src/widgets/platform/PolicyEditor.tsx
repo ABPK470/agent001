@@ -32,6 +32,7 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { api } from "../../client/index"
 import { Listbox, type ListboxOption } from "../../components/Listbox"
+import { SELECT_ACTIVE, SELECT_FOCUS, SELECT_IDLE, SELECT_TRACK } from "../../lib/selection"
 import type { PolicyRule, ToolInfo } from "../../types"
 import { SelectorRulesTab } from "./policy/SelectorRulesTab"
 import { modalOverlayClass, MODAL_ADMIN_PANEL, MODAL_SURFACE_CLASS } from "../entity-registry/modal-overlay"
@@ -444,20 +445,19 @@ export function PolicyEditor({ onClose }: Props) {
                 <p className="text-sm text-text-muted leading-snug mb-3">
                   Choose the LLM backend. Defaults update when you switch.
                 </p>
-                <div className="flex gap-2 flex-wrap">
+                <div className={`${SELECT_TRACK} flex-wrap h-auto min-h-[var(--control-h)]`}>
                   {(["copilot-chat", "databricks"] as const).map((p) => (
                     <button
                       key={p}
+                      type="button"
                       onClick={() => {
                         setLlmProvider(p)
                         setLlmModel(llmDefaults[p]?.model ?? "")
                         setLlmBaseUrl(llmDefaults[p]?.baseUrl ?? "")
                         setLlmApiKey("")
                       }}
-                      className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors border ${
-                        llmProvider === p
-                          ? "bg-transparent text-text font-semibold border-text"
-                          : "bg-transparent text-text-muted border-border-subtle hover:text-text hover:border-border"
+                      className={`rounded-md px-3 py-1 text-sm ${SELECT_FOCUS} ${
+                        llmProvider === p ? SELECT_ACTIVE : SELECT_IDLE
                       }`}
                     >
                       {p === "copilot-chat" ? "Copilot Chat" : "Databricks"}
@@ -924,7 +924,7 @@ export function PolicyEditor({ onClose }: Props) {
 
               <div className="h-px bg-overlay-3 my-1" />
 
-              <div className="px-4 py-3.5 rounded-xl bg-overlay-2 border border-error/20">
+              <div className="px-4 py-3.5 rounded-xl bg-status-callout-err-soft border border-status-callout-err-border">
                 <div className="flex items-center gap-2.5 mb-1.5">
                   <Trash2 size={15} className="text-error" />
                   <span className="text-sm font-semibold text-text">Factory Reset Platform</span>
