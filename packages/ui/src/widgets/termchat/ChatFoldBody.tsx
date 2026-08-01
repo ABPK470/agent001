@@ -38,7 +38,9 @@ export function ChatFoldBody({
       aria-hidden={!open}
     >
       <div className="min-h-0 overflow-hidden">
-        <div className={className}>{children}</div>
+        <div className={className} data-chat-expand-body="">
+          {children}
+        </div>
       </div>
     </div>
   )

@@ -602,7 +602,7 @@ function ToolPill({
   // never dump headline/SQL under a collapsed pill.
   const showSyncProgress = Boolean(syncProgress) && (expanded || isRunning)
   return (
-    <div className="relative py-0.5">
+    <div className="relative py-0.5" data-chat-expand-root="">
       {!isLast && <div className="pointer-events-none absolute left-[11px] top-[20px] -bottom-1 w-px bg-border-subtle" />}
       <div className="flex items-start gap-2 min-w-0 px-2 py-1">
         <span
@@ -653,7 +653,7 @@ function ToolPill({
       </div>
       {showSyncProgress && syncProgress ? <ToolSyncProgressBody part={syncProgress} /> : null}
       {expanded && (hasInput || hasOutput) && (
-        <div className="ml-[14px] mt-1 pl-3 space-y-1.5">
+        <div className="ml-[14px] mt-1 pl-3 space-y-1.5" data-chat-expand-body="">
           {/*
            * Same pane for every tool — Input then Output (or Error).
            * Code bodies keep SQL/Shell labels; prose uses Input/Output.
@@ -712,7 +712,7 @@ function IterationBlock({
   const animateFold = userToggled || !isLiveRun
 
   return (
-    <div className="py-1.5">
+    <div className="py-1.5" data-chat-expand-root="">
       <button
         ref={buttonRef}
         type="button"
@@ -754,7 +754,7 @@ function PlanBlock({ part }: { part: ResponsePlanPart }) {
             : null
 
   return (
-    <div className="py-1">
+    <div className="py-1" data-chat-expand-root="">
       <button
         ref={buttonRef}
         type="button"
@@ -771,7 +771,10 @@ function PlanBlock({ part }: { part: ResponsePlanPart }) {
         </span>
       </button>
       {open && part.steps.length > 0 && (
-        <ol className="mt-1 ml-[0.35rem] pl-3 border-l border-border-subtle space-y-1 list-none">
+        <ol
+          className="mt-1 ml-[0.35rem] pl-3 border-l border-border-subtle space-y-1 list-none"
+          data-chat-expand-body=""
+        >
           {part.steps.map((step, i) => {
             const isSubagent = step.type === "subagent_task"
             return (
@@ -855,7 +858,7 @@ function StepBlock({
     part.status === "running" || part.hasRunning ? "text-text-muted" : "text-text-faint"
 
   return (
-    <div className="py-1 min-w-0" data-chat-step-id={part.id}>
+    <div className="py-1 min-w-0" data-chat-step-id={part.id} data-chat-expand-root="">
       <button
         ref={buttonRef}
         type="button"
@@ -1055,7 +1058,7 @@ function CheckBlock({ part }: { part: ResponseProgressPart }) {
     part.status === "running" ? "text-text-muted" : "text-text-faint"
 
   return (
-    <div className="py-1 min-w-0">
+    <div className="py-1 min-w-0" data-chat-expand-root="">
       <button
         ref={buttonRef}
         type="button"
@@ -1080,7 +1083,10 @@ function CheckBlock({ part }: { part: ResponseProgressPart }) {
         </span>
       </button>
       {open && hasBody ? (
-        <div className="mt-0.5 ml-[0.35rem] pl-3 border-l border-border-subtle text-[15px] leading-6 text-text-faint whitespace-pre-wrap break-words">
+        <div
+          className="mt-0.5 ml-[0.35rem] pl-3 border-l border-border-subtle text-[15px] leading-6 text-text-faint whitespace-pre-wrap break-words"
+          data-chat-expand-body=""
+        >
           {body}
         </div>
       ) : null}
@@ -1261,7 +1267,7 @@ function HistoryDisclosure({
   if (parts.length === 0) return null
 
   return (
-    <div className="pt-1 pb-4">
+    <div className="pt-1 pb-4" data-chat-expand-root="">
       <button
         ref={buttonRef}
         type="button"
@@ -1273,7 +1279,7 @@ function HistoryDisclosure({
       </button>
 
       {open && (
-        <div className="pt-0.5 pl-1">
+        <div className="pt-0.5 pl-1" data-chat-expand-body="">
           <DetailViewportRows parts={parts} maxHeight={280} />
         </div>
       )}
