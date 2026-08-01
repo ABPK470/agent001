@@ -83,13 +83,13 @@ import {
   userGoalTextClass,
 } from "./termchat/goalPin"
 import {
-  canElementScrollVertically,
   deriveActiveMilestoneLabel,
   formatDeliverableBytes,
   isOffThreadProgress,
   summarizeHistory,
   summarizeRunError,
 } from "./termchat/milestone"
+import { handleNestedWheelDelta } from "./termchat/nested-wheel"
 import {
   firstRunningSubagentStepId,
   isParallelSubagentFanOut,
@@ -516,19 +516,6 @@ void presentTenseLabel
 // tool into a block before its result event arrived (e.g. when an
 // `iteration` boundary fired between tool-call and tool-result).
 
-
-function findNestedScrollable(target: EventTarget | null, container: HTMLDivElement): HTMLElement | null {
-  let node = target instanceof HTMLElement ? target : null
-  while (node && node !== container) {
-    const style = window.getComputedStyle(node)
-    const overflowY = style.overflowY
-    if ((overflowY === "auto" || overflowY === "scroll") && node.scrollHeight > node.clientHeight + 1) {
-      return node
-    }
-    node = node.parentElement
-  }
-  return null
-}
 
 function ToolSyncProgressBody({ part }: { part: ResponseSyncProgressPart }) {
   const isRunning = part.status === "running"
@@ -1024,7 +1011,7 @@ function IterationToolList({
   return (
     <div
       ref={ref}
-      className="overflow-y-auto"
+      className="overflow-y-auto overscroll-contain"
       style={{ maxHeight: ITERATION_BODY_MAX_HEIGHT, ...maskStyle }}
     >
       {tools.map((toolPart, i) => (
@@ -2386,15 +2373,11 @@ export function TermChat({
 
     const handleWheel = (event: WheelEvent) => {
       if (Math.abs(event.deltaY) < Math.abs(event.deltaX) || event.deltaY === 0) return
-
-      const nestedScrollable = findNestedScrollable(event.target, host)
-      if (!nestedScrollable || nestedScrollable === host) return
-      if (canElementScrollVertically(nestedScrollable, event.deltaY)) return
-
-      // Nested pane (tool Input/Output, code body, …) is at its edge —
-      // absorb the wheel. Never chain scroll into the transcript while
-      // the pointer is still inside that space.
-      event.preventDefault()
+      // Hit-test under the pointer (not stale event.target). Nested panes
+      // scroll first; at their edge the transcript takes over.
+      if (handleNestedWheelDelta(event, host)) {
+        event.preventDefault()
+      }
     }
 
     host.addEventListener("wheel", handleWheel, { capture: true, passive: false })
