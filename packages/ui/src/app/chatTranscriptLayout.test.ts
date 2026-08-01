@@ -68,7 +68,10 @@ describe("chatTranscriptLayout", () => {
     expect(ioPane).not.toContain('"Output"')
     expect(ioPane).not.toContain("ToolResultTable")
     expect(ioPane).not.toContain("parsePipeTable")
-    expect(term).not.toContain("extractedOutput")
-    expect(term).not.toContain("ScrollMaskedDetails")
+    expect(css).toMatch(/\.mia-code-block__body\s*\{[^}]*overscroll-behavior:\s*contain/s)
+    expect(io).toContain("overscroll-contain")
+    // Wheel at nested I/O edge must not chain into the transcript host.
+    expect(term).toMatch(/Nested pane[\s\S]*?event\.preventDefault\(\)/)
+    expect(term).not.toMatch(/canElementScrollVertically[\s\S]{0,200}host\.scrollTop \+= event\.deltaY/)
   })
 })

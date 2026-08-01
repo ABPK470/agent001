@@ -2391,8 +2391,10 @@ export function TermChat({
       if (!nestedScrollable || nestedScrollable === host) return
       if (canElementScrollVertically(nestedScrollable, event.deltaY)) return
 
+      // Nested pane (tool Input/Output, code body, …) is at its edge —
+      // absorb the wheel. Never chain scroll into the transcript while
+      // the pointer is still inside that space.
       event.preventDefault()
-      host.scrollTop += event.deltaY
     }
 
     host.addEventListener("wheel", handleWheel, { capture: true, passive: false })

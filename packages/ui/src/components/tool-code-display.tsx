@@ -67,7 +67,7 @@ export function ToolIoPane({
   if (role === "output") {
     return (
       <pre
-        className="code-pre m-0 w-full max-w-full overflow-auto px-0.5 text-[15px] leading-5 whitespace-pre text-text-muted"
+        className="code-pre m-0 w-full max-w-full overflow-auto overscroll-contain px-0.5 text-[15px] leading-5 whitespace-pre text-text-muted"
         style={{ maxHeight }}
       >
         {text}
