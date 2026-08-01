@@ -577,7 +577,10 @@ function ScrollMaskedDetails({ text, maxHeight }: { text: string; maxHeight: num
 function ToolSyncProgressBody({ part }: { part: ResponseSyncProgressPart }) {
   const isRunning = part.status === "running"
   const tone = part.level === "error" || part.status === "error" ? "error" : "neutral"
-  const lineClass = ["text-[15px] leading-5 font-mono", tone === "error" ? "text-error" : "text-text-faint"].join(" ")
+  const lineClass = [
+    "text-[15px] leading-5 font-mono",
+    tone === "error" ? "rounded-md bg-diff-surface px-2 py-1.5 text-diff-del" : "text-text-faint",
+  ].join(" ")
   // Skip stub/trivial statuses ("ok", "done") — they read as orphan junk under the SQL chip.
   // Real SSE summaries look like "Preview complete — plan abc12345: +3 ~1 -0".
   const resultLine = syncProgressResultLine(part.result, part.status)
@@ -603,9 +606,13 @@ function ToolSyncProgressBody({ part }: { part: ResponseSyncProgressPart }) {
         />
       )}
       {resultLine ? (
-        <p className={["text-[15px] leading-5 font-mono", part.status === "error" ? "text-error" : "text-text-secondary"].join(" ")}>
-          {resultLine}
-        </p>
+        part.status === "error" ? (
+          <p className="rounded-md bg-diff-surface px-2 py-1.5 text-[15px] leading-5 font-mono text-diff-del">
+            {resultLine}
+          </p>
+        ) : (
+          <p className="text-[15px] leading-5 font-mono text-text-secondary">{resultLine}</p>
+        )
       ) : null}
     </div>
   )
@@ -655,7 +662,18 @@ function ToolPill({
     <div className="relative py-0.5">
       {!isLast && <div className="pointer-events-none absolute left-[11px] top-[20px] -bottom-1 w-px bg-border-subtle" />}
       <div className="flex items-start gap-2 min-w-0 px-2 py-1">
-        <span className={["shrink-0 w-1.5 h-1.5 rounded-full mt-[7px]", isRunning ? calmRunning ? "bg-text-muted" : "bg-text-secondary animate-pulse" : row.status === "done" || row.status === "running" ? "bg-text-muted" : "bg-text-faint"].join(" ")} />
+        <span
+          className={[
+            "shrink-0 w-1.5 h-1.5 rounded-full mt-[7px]",
+            isRunning
+              ? calmRunning
+                ? "bg-accent"
+                : "bg-text-secondary animate-pulse"
+              : row.status === "done" || row.status === "running" || isError
+                ? "bg-text-muted"
+                : "bg-text-faint",
+          ].join(" ")}
+        />
         {/* Cap the pill content (label + preview) at 80% of the
             iteration-column width before CSS ellipsis kicks in, so even
             short paths leave breathing room on the right and the
@@ -718,13 +736,12 @@ function ToolPill({
                 maxHeight={176}
                 className={isError ? "mia-surface--danger" : undefined}
               />
+            ) : isError ? (
+              <p className="rounded-md bg-diff-surface px-2 py-1.5 code-pre text-[15px] leading-5 whitespace-pre-wrap break-words text-diff-del">
+                {row.details}
+              </p>
             ) : (
-              <p
-                className={[
-                  "code-pre px-0.5 text-[15px] leading-5 whitespace-pre-wrap break-words",
-                  isError ? "text-error" : "text-text-muted",
-                ].join(" ")}
-              >
+              <p className="code-pre px-0.5 text-[15px] leading-5 whitespace-pre-wrap break-words text-text-muted">
                 {row.details}
               </p>
             )
@@ -761,13 +778,9 @@ function IterationBlock({
   }, [shouldStayOpen, userToggled])
 
   const buttonRef = useRef<HTMLButtonElement>(null)
-  const errored = part.tools.some((p) => p.row.status === "error")
-  // Visual hierarchy: the block header is *system chrome* describing
-  // what the agent did — it should read as muted grey so the bright
-  // assistant prose (`NarrativeUpdate` paragraphs and the final answer)
-  // visually dominate. Mirrors GitHub Copilot Chat's grey "Searched for
-  // X / Updated Y" rows alternating with white assistant text.
-  const headerToneClass = errored ? "text-text-faint" : "text-text-faint"
+  // Cursor / Copilot dialect: activity headers stay muted chrome even when a
+  // nested tool failed — severity lives on the error payload (sheet callout).
+  const headerToneClass = "text-text-faint"
   const Chevron = open ? ChevronDown : ChevronRight
   // Live auto open/close must be instant — height animation fights host
   // stick-to-bottom and shakes the transcript. Animate only after a user toggle.
@@ -911,7 +924,8 @@ function StepBlock({
   const canToggle = hasTools || hasErrorBody
   const Chevron = open ? ChevronDown : ChevronRight
   const animateFold = userToggled || !isLiveRun
-  // Step gaps are process detail — same muted chrome as successful steps.
+  // Step headers stay muted chrome (frontier harness dialect). Error body
+  // below gets the cancelled-style sheet callout — not painted headers.
   const labelClass =
     part.status === "running" || part.hasRunning ? "text-text-muted" : "text-text-faint"
 
@@ -970,7 +984,7 @@ function StepBlock({
           className="mt-0.5 ml-[0.35rem] pl-3 border-l border-border-subtle min-w-0"
         >
           {hasErrorBody ? (
-            <div className="py-0.5 text-[15px] leading-6 text-text-faint whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+            <div className="my-0.5 rounded-md bg-diff-surface px-2.5 py-1.5 text-[15px] leading-6 text-diff-del whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
               {errorBody}
             </div>
           ) : null}
@@ -1101,6 +1115,8 @@ function ProgressPill({ part }: { part: ResponseProgressPart }) {
 /**
  * Orchestrator verification beat — not agent prose.
  * Visible: Check · needs work · {step}. Expand for issue text.
+ * Needs-work uses the same sheet callout as cancelled / run-failed — header
+ * stays muted chrome (Cursor dialect), payload carries the warn wash.
  */
 function CheckBlock({ part }: { part: ResponseProgressPart }) {
   const { preserveToggle } = useChatScroll()
@@ -1110,34 +1126,54 @@ function CheckBlock({ part }: { part: ResponseProgressPart }) {
   const body = part.body?.trim() || ""
   const hasBody = body.length > 0
   const Chevron = open ? ChevronDown : ChevronRight
+  const needsWork = part.label.includes("needs work")
   const labelClass =
     part.status === "running" ? "text-text-muted" : "text-text-faint"
 
+  const header = (
+    <button
+      ref={buttonRef}
+      type="button"
+      disabled={!hasBody}
+      onClick={() => {
+        if (!hasBody) return
+        preserveToggle(buttonRef.current, () => setOpen((v) => !v))
+      }}
+      className={[
+        "inline-flex max-w-full items-baseline gap-1.5 py-0.5 text-left text-[15px] leading-6",
+        labelClass,
+        hasBody ? "transition-colors hover:text-text-muted" : "cursor-default",
+      ].join(" ")}
+      aria-expanded={hasBody ? open : undefined}
+    >
+      {hasBody ? (
+        <Chevron size={12} strokeWidth={1.5} className="text-text-faint shrink-0 translate-y-[2px]" />
+      ) : null}
+      <span className="min-w-0">
+        <span>{part.label}</span>
+        {what ? <span className="text-text-faint"> · {what}</span> : null}
+      </span>
+    </button>
+  )
+
+  if (needsWork) {
+    return (
+      <div className="py-1 min-w-0">
+        <div className="rounded-md bg-diff-surface px-2.5 py-1.5">
+          {header}
+          {open && hasBody ? (
+            <div className="mt-1 text-[15px] leading-6 text-policy-approval whitespace-pre-wrap break-words">
+              {body}
+            </div>
+          ) : null}
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="py-1 min-w-0">
-      <button
-        ref={buttonRef}
-        type="button"
-        disabled={!hasBody}
-        onClick={() => {
-          if (!hasBody) return
-          preserveToggle(buttonRef.current, () => setOpen((v) => !v))
-        }}
-        className={[
-          "inline-flex max-w-full items-baseline gap-1.5 py-0.5 text-left text-[15px] leading-6",
-          labelClass,
-          hasBody ? "transition-colors hover:text-text-muted" : "cursor-default",
-        ].join(" ")}
-        aria-expanded={hasBody ? open : undefined}
-      >
-        {hasBody ? (
-          <Chevron size={12} strokeWidth={1.5} className="text-text-faint shrink-0 translate-y-[2px]" />
-        ) : null}
-        <span className="min-w-0">
-          <span>{part.label}</span>
-          {what ? <span className="text-text-faint"> · {what}</span> : null}
-        </span>
-      </button>
+      {header}
       {open && hasBody ? (
         <div className="mt-0.5 ml-[0.35rem] pl-3 border-l border-border-subtle text-[15px] leading-6 text-text-faint whitespace-pre-wrap break-words">
           {body}
@@ -1173,7 +1209,7 @@ function NarrativeUpdate({ part }: { part: ResponseNarrativePart }) {
 }
 
 function ErrorNote({ text }: { text: string }) {
-  // Same chrome as activity rows — never scream red mono for recoverable notes.
+  // Recoverable process notes stay muted; hard failures use RunErrorBanner.
   return (
     <div className="py-1 min-w-0 text-[15px] leading-6 text-text-muted">{text}</div>
   )
@@ -1349,20 +1385,20 @@ function RunErrorBanner({ error }: { error: string }) {
   const showDetails = details != null && details !== summary
 
   return (
-    <div className="max-w-full rounded-lg border border-error/30 bg-error/5 px-3 py-2.5">
-      <div className="text-[15px] font-medium leading-6 text-error">Run failed</div>
-      <p className="mt-1 text-[15px] leading-5 text-error/85 break-words">{summary}</p>
+    <div className="max-w-full rounded-lg border border-transparent bg-diff-surface px-3 py-2.5">
+      <div className="text-[15px] font-medium leading-6 text-diff-del">Run failed</div>
+      <p className="mt-1 text-[15px] leading-5 text-diff-del/85 break-words">{summary}</p>
       {showDetails && (
         <>
           <button
             type="button"
             onClick={() => setExpanded((value) => !value)}
-            className="mt-2 text-[15px] font-medium text-error/75 hover:text-error"
+            className="mt-2 text-[15px] font-medium text-diff-del/75 hover:text-diff-del"
           >
             {expanded ? "Hide details" : "Show details"}
           </button>
           {expanded && (
-            <pre className="code-pre mt-2 max-h-40 overflow-auto rounded-md border border-error/20 bg-error/5 px-2.5 py-2 text-error/80">
+            <pre className="code-pre mt-2 max-h-40 overflow-auto rounded-md border border-border-subtle bg-panel px-2.5 py-2 text-diff-del/80">
               {details}
             </pre>
           )}
@@ -1869,7 +1905,7 @@ function RunMessageImpl({
 
       {/* Terminal status — same rhythm as answer blocks under the user pill */}
       {run.status === "cancelled" && (
-        <div className="rounded-lg border border-warning/30 bg-warning/5 px-3 py-2.5 text-[15px] leading-6 text-warning">
+        <div className="rounded-lg border border-transparent bg-diff-surface px-3 py-2.5 text-[15px] leading-6 text-policy-approval">
           Run cancelled.
         </div>
       )}
@@ -2053,7 +2089,7 @@ function TermChatInputBar({
                           <button
                               type="button"
                               onClick={onCancel}
-                              className="shrink-0 flex items-center justify-center w-10 h-10 rounded-xl bg-overlay-2 hover:bg-error/12 text-error transition-colors cursor-pointer"
+                              className="shrink-0 flex items-center justify-center w-10 h-10 rounded-xl bg-overlay-2 hover:bg-diff-del/12 text-diff-del transition-colors cursor-pointer"
                               title="Stop run"
                               aria-label="Stop run"
                           >
@@ -2103,7 +2139,7 @@ function TermChatInputBar({
                       <button
                           type="button"
                           onClick={onCancel}
-                          className="shrink-0 flex items-center justify-center w-9 h-9 rounded-lg bg-error-soft hover:bg-error/25 text-error transition-colors cursor-pointer"
+                          className="shrink-0 flex items-center justify-center w-9 h-9 rounded-lg bg-diff-del-soft hover:bg-diff-del/25 text-diff-del transition-colors cursor-pointer"
                           title="Stop run"
                           aria-label="Stop run"
                       >

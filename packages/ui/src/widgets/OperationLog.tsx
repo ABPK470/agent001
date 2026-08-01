@@ -104,12 +104,16 @@ const KIND_META: Record<
     },
 };
 
-/** Message box — quiet wash + hairline; failed is stronger wash, not an ink frame. */
+/**
+ * Message box — quiet wash + hairline for most statuses.
+ * Failed uses the shared severity callout dialect (sheet + error chroma) —
+ * same as Trace `.trace-phase-event.is-error` / diffs.
+ */
 const STATUS_MESSAGE_BOX: Record<OperationStatus, string> = {
   running:   "bg-overlay-1 border border-border text-text",
   success:   "bg-overlay-1 border border-border-subtle text-text-muted",
-  failed:    "bg-overlay-2 border border-border-strong text-text",
-  cancelled: "bg-overlay-2 border border-border-subtle text-text-muted",
+  failed:    "bg-diff-surface border border-transparent text-diff-del font-medium",
+  cancelled: "bg-diff-surface border border-transparent text-policy-approval font-medium",
   skipped:   "bg-transparent border border-dashed border-border text-text-faint",
   unknown:   "bg-overlay-2 border border-border-subtle text-text-muted",
 }

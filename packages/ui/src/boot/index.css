@@ -17,8 +17,8 @@
      • Text       text | text-secondary | text-muted | text-faint
      • Accent     accent | accent-hover | accent-soft
      • Status     success | warning | error | info  (each has -soft)
-     • Diff       diff-surface | diff-add | diff-del (+ softs) — content change panes only
-     • Policy     policy-allow | policy-deny | policy-approval (+ softs) — effect meaning
+     • Diff       diff-surface | diff-add | diff-del (+ softs) — change panes; surface also severity callouts
+     • Policy     policy-allow | policy-deny | policy-approval (+ softs) — effect meaning; approval = warn callouts
      • Chrome     scrim | scrim-strong | scrim-focus | bubble-user
      • Datatype   datatype-int|string|date|bool|real|bin  (MymiDb)
      • Viz        viz-deep|mid|plum|rose|peach|coral     (unchanged)
@@ -145,14 +145,9 @@
 
   /*
    * Sticky day / section caps (Pipelines TODAY, entity rail groups, …).
-   * Lift on the tile — never sink to --panel under a --panel-2 widget
-   * (that reads as a muddy dark plate). Light overrides to flat paper.
+   * Flat on the tile — same as light (no lifted grey strip).
    */
-  --section-cap-bg: color-mix(
-    in srgb,
-    var(--text) 8%,
-    var(--workspace-widget-bg, var(--panel-2))
-  );
+  --section-cap-bg: var(--workspace-widget-bg, var(--panel-2));
 
   /* Selection dialect — same language as light (ink wash, not accent). */
   --select-fill: color-mix(in srgb, var(--text) 10%, transparent);
@@ -294,7 +289,7 @@
 
   /*
    * Status + syntax — ink only on light paper. Meaning from labels / borders /
-   * mark shapes (see StatusDot, LogStatusLabel). Soft = KPI-matched overlay.
+   * mark shapes (see StatusMark / statusDotKind). Soft = KPI-matched overlay.
    */
   --success: var(--ink);
   --success-soft: var(--overlay-2);
@@ -391,7 +386,8 @@
 
 .mia-surface--danger,
 .mia-code-block.mia-surface--danger {
-  border-color: color-mix(in srgb, var(--error) 45%, var(--border));
+  /* Severity callout — not ink `--error` (greyscale on light). */
+  border-color: color-mix(in srgb, var(--diff-del, var(--error)) 45%, var(--border));
 }
 
 .mia-code-block--embedded {
@@ -580,15 +576,12 @@
   background: var(--paper);
 }
 
-/* Light Trace rows share the flat list dialect — no per-row frames. */
-:root[data-theme="light"] .trace-card:not(.is-open) > .trace-scope,
-:root[data-theme="light"] .trace-card.is-open > .trace-scope {
+/* Light Trace rows share the flat list dialect — no per-row frames.
+ * Dark matches (same dialect both themes). */
+.trace-card:not(.is-open) > .trace-scope,
+.trace-card.is-open > .trace-scope {
   border: none;
-}
-
-:root[data-theme="light"] .trace-scope:hover,
-:root[data-theme="light"] .trace-card:not(.is-open) > .trace-scope:hover {
-  border-color: transparent;
+  border-bottom: none;
 }
 
 :root[data-theme="light"] .trace-toolbtn[aria-pressed="true"],
@@ -2684,9 +2677,8 @@ textarea.input {
 
 /*
  * Outline seams (hard truth):
- * - Collapsed peers keep a quiet hairline — the list must stay scannable.
- * - Open headers drop the under-line — ReviewTree elbows already own descent.
- *   (A full rule under CONTEXT + another under every peer = striped paper.)
+ * - Flat list dialect — no hairlines between peers (both themes).
+ * - Open headers stay select-fill; ReviewTree elbows own descent.
  */
 /* Open header stays active (Event Stream / Pipelines expanded dialect). */
 .trace-card.is-open > .trace-scope {
@@ -2697,7 +2689,7 @@ textarea.input {
 
 .trace-card:not(.is-open) > .trace-scope {
   border: none;
-  border-bottom: 1px solid var(--border-subtle, var(--color-border-subtle));
+  border-bottom: none;
 }
 
 .trace-card.is-nested {
@@ -2829,7 +2821,9 @@ textarea.input {
 }
 
 .trace-scope[data-trace-kind="tools"] .trace-scope__lead {
-  color: var(--accent, var(--color-accent));
+  color: var(--text-muted, var(--color-text-muted));
+  font-weight: 600;
+  letter-spacing: 0.04em;
 }
 
 .trace-scope[data-trace-kind="phase"] .trace-scope__lead {
@@ -2843,7 +2837,7 @@ textarea.input {
 /*
  * Light: Trace leads stay ink (status/syntax tokens are ink). Kind meaning from
  * weight / letter-spacing already on leads — never traffic chroma on paper.
- * Tools keep brand accent (category, not success/fail).
+ * TOOLS / CONTEXT stay muted peers (never brand accent).
  */
 :root[data-theme="light"] .trace-scope[data-trace-kind="sent"] .trace-scope__lead,
 :root[data-theme="light"] .trace-scope[data-trace-kind="received"] .trace-scope__lead,
@@ -2855,7 +2849,7 @@ textarea.input {
 :root[data-theme="light"] .trace-work-note.is-error .trace-work-note__label,
 :root[data-theme="light"] .trace-row.is-error .font-mono,
 :root[data-theme="light"] .trace-row__detail.is-error {
-  color: var(--ink);
+  color: var(--diff-del);
   font-weight: 600;
 }
 
@@ -2876,7 +2870,7 @@ textarea.input {
 }
 
 .trace-work-note.is-error .trace-work-note__label {
-  color: var(--error, var(--color-error));
+  color: var(--diff-del, var(--error, var(--color-error)));
 }
 
 /* Leaf phase/work — aligned chrome, not a fake toggle */
@@ -2889,11 +2883,11 @@ textarea.input {
 }
 
 .trace-row.is-error .font-mono {
-  color: var(--error, var(--color-error));
+  color: var(--diff-del, var(--error, var(--color-error)));
 }
 
 .trace-row__detail.is-error {
-  color: var(--error, var(--color-error));
+  color: var(--diff-del, var(--error, var(--color-error)));
 }
 
 .trace-scope[data-trace-kind="message"] .trace-scope__lead {
@@ -3032,7 +3026,7 @@ textarea.input {
   display: flex;
   flex-direction: column;
   gap: 0.15rem;
-  border-bottom: 1px solid var(--border-subtle, var(--color-border-subtle));
+  border-bottom: none;
   background: transparent;
 }
 
@@ -3041,7 +3035,7 @@ textarea.input {
   display: flex;
   flex-direction: column;
   padding: 0.15rem 0.5rem 0.4rem 0;
-  border-bottom: 1px solid var(--border-subtle, var(--color-border-subtle));
+  border-bottom: none;
   background: transparent;
   gap: 0;
 }
@@ -3108,7 +3102,7 @@ textarea.input {
 }
 
 .trace-msg__detail.is-error {
-  color: var(--error, var(--color-error));
+  color: var(--diff-del, var(--error, var(--color-error)));
 }
 
 .trace-msg__preview {
@@ -3245,14 +3239,27 @@ textarea.input {
   background: transparent;
 }
 
+/*
+ * Severity callouts — same exception family as diffs / policy effects:
+ * sheet wash (`--diff-surface`) + meaning chroma (error red / warn amber).
+ * Both themes; ink status alone cannot separate PARSE_RETRY from WEAK_ACCEPTANCE.
+ */
+.trace-phase-event.is-warn,
+.trace-phase-event.is-error {
+  padding: 0.3rem 0.55rem;
+  border-radius: 0.35rem;
+  margin: 0.15rem 0;
+  background: var(--diff-surface, var(--panel-2));
+}
+
 .trace-phase-event.is-warn {
-  color: var(--text, var(--color-text));
-  background: color-mix(in srgb, var(--warning, #b45309) 12%, transparent);
+  color: var(--policy-approval, var(--warning, #a16207));
+  font-weight: 550;
 }
 
 .trace-phase-event.is-error {
-  color: var(--error, var(--color-error));
-  background: color-mix(in srgb, var(--error, var(--color-error)) 10%, transparent);
+  color: var(--diff-del, var(--error, #b91c1c));
+  font-weight: 600;
 }
 
 .trace-phase-steps {
@@ -7666,6 +7673,17 @@ textarea.input {
   font-weight: 600;
 }
 
+.status-mark {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  vertical-align: middle;
+}
+
+.status-mark--sm,
 .thread-nav-run-dot {
   width: 0.42rem;
   height: 0.42rem;
@@ -7674,28 +7692,32 @@ textarea.input {
   box-sizing: border-box;
 }
 
-/* Shape dialect — filled fail, ring ok, pulse live, dashed skip (ink on light). */
+.status-mark--ok,
 .thread-nav-run-dot--ok {
   background: transparent;
   border: 1.5px solid var(--text);
 }
 
+.status-mark--fail,
 .thread-nav-run-dot--fail {
   background: var(--text);
   border: none;
 }
 
+.status-mark--live,
 .thread-nav-run-dot--live {
   background: transparent;
   border: 1.5px solid var(--text-muted);
   animation: mia-dot-pulse 1.4s ease-in-out infinite;
 }
 
+.status-mark--skip,
 .thread-nav-run-dot--skip {
   background: transparent;
   border: 1px dashed var(--text-muted);
 }
 
+.status-mark--muted,
 .thread-nav-run-dot--muted {
   background: color-mix(in srgb, var(--text-muted) 40%, transparent);
   border: none;

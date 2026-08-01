@@ -481,7 +481,7 @@ export function LiveLogs() {
       )}
 
       {error && (
-        <div className="py-2 text-sm text-error bg-error-soft rounded border border-error/20">
+        <div className="py-2 px-2.5 text-sm text-diff-del bg-diff-surface rounded border border-transparent">
           {error}
         </div>
       )}
@@ -597,7 +597,7 @@ function LogRow({
   tiny: boolean
 }) {
   const [expanded, setExpanded] = useState(false)
-  const msgColor = log.error ? "var(--color-error)" : (MSG_COLOR[log.type] ?? "var(--color-text-muted)")
+  const msgColor = log.error ? "var(--color-diff-del)" : (MSG_COLOR[log.type] ?? "var(--color-text-muted)")
   const hasData = log.data && Object.keys(log.data).length > 0
 
   return (
@@ -606,7 +606,7 @@ function LogRow({
         className={[
           "flex items-baseline gap-2.5 py-1 rounded-[var(--list-row-radius)] transition-colors",
           log.error
-            ? "bg-error-soft"
+            ? "bg-diff-surface"
             : expanded && hasData
               ? "bg-[var(--select-fill)]"
               : "hover:bg-[var(--hover-fill)]",

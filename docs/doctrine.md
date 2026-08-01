@@ -231,22 +231,32 @@ capability (`platform`), not a synonym for `infra/`.
 
 **Visual / interaction dialect (locked):** structure is two-ink (paper + ink
 borders / select-fill). **Brand accent** is the shared purple (`--accent`,
-same family in light and dark) for logo live mark, Viewing as, and brand
-links — never for “selected.” **Go-to** (`CONTROL_READY` /
+same family in light and dark) for logo live mark, Viewing as, Ask-user
+interrupt, and brand links — never for “selected,” never for Trace category
+leads (TOOLS / CONTEXT stay muted peers). **Go-to** (`CONTROL_READY` /
 `.mia-control--ready`) = solid **ink** fill for the one next step (Preview →
 Execute, Save when dirty, Publish when armed) — navigates the eye without
-becoming “selected.” On **light**, status + syntax tokens
+becoming “selected.”
+
+**Status dialect (two layers, shared everywhere):**
+
+| Layer | What | Treatment |
+|---|---|---|
+| **Status mark** | Any run / operation / user-state indicator | One `StatusMark` + `statusDotKind` — ok = hollow ring, fail = filled, live = pulse ring, skip = dashed (skipped / cancelled / stopped), muted = soft fill. Shape over traffic chroma on light (`packages/ui/src/components/StatusMark.tsx`). Same glyph for the same status string in Pipelines, Threads, Active Users, Sync. |
+| **Severity callout** | Failed / warn / cancelled **payloads** (message boxes, banners, Event Stream error rows, Trace phase events, Chat error / needs-work / cancelled bodies) | Sheet `--diff-surface` + chroma text (`--diff-del` error, `--policy-approval` warn/cancel). Never `--error-soft` on light (that token is `--overlay-2` = select-fill lookalike). |
+
+Chat / Trace **activity headers** stay muted ink chrome (Cursor dialect) —
+narrative labels are not status marks; never paint the whole “Subagent · …
+· failed” row red. On **light**, status + syntax tokens
 (`--success|warning|error|info`, `--dt-*`) resolve to **ink**; soft washes are
-`--overlay-2` (never transparent). Meaning for success / failed / skipped /
-running comes from **label, border weight/style, and mark shape** (filled /
-ring / dashed / spin) — not traffic chroma on warm paper. **Exception —
-diffs:** content change panes (`CatalogJsonDiff`, env-sync sample/row diffs,
-workspace file change markers) use dedicated `--diff-*` tokens: pane surface
-=`#f6f4f1` (same as workspace field / top bar, not widget `--paper`); added =
-clear green, removed = clear red, unchanged = ink text. **Exception —
-policy effects:** allow / deny / require-approval use `--policy-*` chroma so
-the three outcomes read in ~300ms (not ink status). Dark keeps meaning
-hues (diff/policy tokens alias status). Orient in ~300ms with
+`--overlay-2` (never transparent). **Exception — diffs:** content change panes
+(`CatalogJsonDiff`, env-sync sample/row diffs, workspace file change markers)
+use dedicated `--diff-*` tokens: pane surface =`#f6f4f1` (same as workspace
+field / top bar, not widget `--paper`); added = clear green, removed = clear
+red, unchanged = ink text. **Exception — policy effects:** allow / deny /
+require-approval use `--policy-*` chroma so the three outcomes read in ~300ms
+(not ink status). Dark keeps meaning hues (diff/policy tokens alias status).
+Orient in ~300ms with
 three signals only (`packages/ui/src/lib/selection.ts`): **place** = quiet `--select-fill` aliased to `--overlay-2` on light (same wash as Active Users KPI interiors; layout sheets = inset pill with air in the
 chrome row; section tabs = rounded shade); list rows same wash with
 `--list-row-radius` (Threads / Trace / Event Stream / rails) — never

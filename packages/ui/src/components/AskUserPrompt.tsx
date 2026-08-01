@@ -1,8 +1,11 @@
-import { Send } from "lucide-react"
+import { ArrowUp } from "lucide-react"
 import { useState } from "react"
 
 /**
  * AskUserPrompt — the card the agent shows when it calls `ask_user`.
+ *
+ * Interrupt dialect: brand accent wash (not ink status, not greyscale). Same
+ * purple family as logo live / Viewing as — must read in ~300ms on both themes.
  *
  * Robustness contract (the fix for the "Response sent — waiting for agent"
  * hang): the card must NOT claim success until the server has actually
@@ -57,18 +60,15 @@ export function AskUserPrompt({
 
   return (
     <div
-      className="rounded-xl border border-accent/40 bg-accent/5 overflow-hidden"
+      className="rounded-xl border border-accent bg-accent-soft overflow-hidden"
       onClick={(e) => e.stopPropagation()}
       aria-busy={submitted || sending || undefined}
     >
       <div className="flex items-center gap-2 px-3 pt-3 pb-2">
         <span className="relative flex shrink-0 h-2 w-2">
-          <span className="relative inline-flex rounded-full h-2 w-2 bg-accent/85" />
+          <span className="relative inline-flex rounded-full h-2 w-2 bg-accent" />
         </span>
-        <span
-          className="text-[15px] font-semibold uppercase tracking-wide text-text"
-          style={{ color: "var(--color-text, rgb(244 244 245))" }}
-        >
+        <span className="text-[15px] font-semibold uppercase tracking-wide text-accent">
           {submitted
             ? "Response sent — waiting for agent"
             : error
@@ -77,17 +77,12 @@ export function AskUserPrompt({
         </span>
       </div>
 
-      <p
-        className="px-3 pb-3 text-[15px] leading-relaxed text-text"
-        style={{ color: "var(--color-text, rgb(244 244 245))" }}
-      >
+      <p className="px-3 pb-3 text-[15px] leading-relaxed text-text">
         {question}
       </p>
 
       {error && !submitted && (
-        <p
-          className="mx-3 mb-3 rounded-lg border border-error/30 bg-error/10 px-3 py-2 text-[14px] text-error"
-        >
+        <p className="mx-3 mb-3 rounded-lg border border-transparent bg-diff-surface px-3 py-2 text-[14px] text-diff-del">
           {error} — you can try again, or stop the run.
         </p>
       )}
@@ -99,7 +94,7 @@ export function AskUserPrompt({
               key={`${index}-${option}`}
               type="button"
               disabled={submitted || sending}
-              className="px-3 py-1.5 rounded-lg border border-accent/30 bg-overlay-2 text-[15px] text-text hover:bg-accent/10 hover:border-accent/60 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-overlay-2 disabled:hover:border-accent/30"
+              className="px-3 py-1.5 rounded-lg border border-accent/40 bg-panel text-[15px] text-text hover:bg-accent/15 hover:border-accent transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-panel disabled:hover:border-accent/40"
               onClick={() => submit(option)}
             >
               {option}
@@ -123,16 +118,17 @@ export function AskUserPrompt({
             }
           }}
           placeholder={sensitive ? "••••••••" : "Type your response…"}
-          className="flex-1 min-w-0 bg-overlay-2 border border-border rounded-lg px-3 py-2 text-[15px] text-text placeholder:text-text-muted focus:outline-none focus:border-accent/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className="flex-1 min-w-0 bg-panel border border-border rounded-lg px-3 py-2 text-[15px] text-text placeholder:text-text-muted focus:outline-none focus:border-accent transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         />
         <button
           type="button"
-          className="shrink-0 flex items-center justify-center w-9 h-9 bg-accent hover:bg-accent-hover text-text rounded-lg transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-accent"
+          className="shrink-0 flex items-center justify-center w-9 h-9 bg-accent hover:bg-accent-hover text-text-on-accent rounded-lg transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-accent"
           disabled={submitted || sending || !value.trim()}
           onClick={() => submit(value)}
           aria-label={submitted ? "Response already sent" : "Send response"}
+          title="Send"
         >
-          <Send size={14} />
+          <ArrowUp size={18} />
         </button>
       </div>
     </div>

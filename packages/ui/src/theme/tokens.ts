@@ -28,7 +28,7 @@ export const C = {
 export type StatusDotKind = "ok" | "fail" | "live" | "skip" | "muted"
 
 export function statusDotKind(status: string): StatusDotKind {
-  switch (status) {
+  switch (status.toLowerCase()) {
     case "completed":
     case "succeeded":
     case "success":
@@ -40,8 +40,11 @@ export function statusDotKind(status: string): StatusDotKind {
     case "running":
     case "pending":
     case "planning":
+    case "waiting":
       return "live"
     case "cancelled":
+    case "canceled":
+    case "stopped":
     case "skipped":
       return "skip"
     default:

@@ -2,6 +2,7 @@ import { ChevronRight, Loader2 } from "lucide-react"
 import type { ReactNode } from "react"
 import type { OperationStatus } from "../../client/index"
 import { ReviewTree, ReviewTreeItem } from "../../components/ReviewTree"
+import { StatusMark } from "../../components/StatusMark"
 
 export const OP_LOG = "text-sm leading-snug"
 export const OP_LOG_MONO = `${OP_LOG} font-mono`
@@ -118,32 +119,8 @@ export function LogStatusLabel({
   )
 }
 
-/** Mark shape carries meaning when hue collapses to ink (filled / ring / dashed / spin). */
-export function StatusDot({ status }: { status: OperationStatus }) {
-  if (status === "running") {
-    return <Loader2 size={11} className="shrink-0 animate-spin text-text-muted" aria-hidden />
-  }
-  if (status === "failed") {
-    return <span className="w-[7px] h-[7px] rounded-full shrink-0 bg-text" aria-hidden />
-  }
-  if (status === "success") {
-    return (
-      <span
-        className="w-[7px] h-[7px] rounded-full shrink-0 border-[1.5px] border-text bg-transparent"
-        aria-hidden
-      />
-    )
-  }
-  if (status === "skipped") {
-    return (
-      <span
-        className="w-[7px] h-[7px] rounded-full shrink-0 border border-dashed border-text-muted bg-transparent"
-        aria-hidden
-      />
-    )
-  }
-  return <span className="w-[7px] h-[7px] rounded-full shrink-0 bg-text-muted/40" aria-hidden />
-}
+/** @deprecated Prefer `StatusMark` — re-export for call-site compat. */
+export { StatusMark as StatusDot } from "../../components/StatusMark"
 
 /**
  * Pipeline / step group — flush list chrome (no nested grey plates).
@@ -205,7 +182,7 @@ function LogRowCells({
         ) : null}
       </span>
       {showStatus && status ? (
-        <StatusDot status={status} />
+        <StatusMark status={status} />
       ) : (
         <span className="w-[7px] shrink-0" aria-hidden />
       )}

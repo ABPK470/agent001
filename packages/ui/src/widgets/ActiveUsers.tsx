@@ -23,6 +23,7 @@ import type { ReactNode } from "react"
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { api } from "../client/index"
 import { EmptyState } from "../components/EmptyState"
+import { StatusMark } from "../components/StatusMark"
 import {
   ActiveFilterChips,
   FilterChoiceGrid,
@@ -869,20 +870,11 @@ function ActiveUsersFilterBar({
 
 function UserStatusDot({ user, liveCount }: { user: UserRow; liveCount: number }) {
   if (liveCount > 0) {
-    return (
-      <span
-        className="inline-block w-2 h-2 rounded-full border-[1.5px] border-text-muted bg-transparent animate-pulse"
-        title={`${liveCount} running`}
-      />
-    )
+    return <StatusMark status="running" title={`${liveCount} running`} />
   }
   return (
-    <span
-      className={`inline-block w-2 h-2 rounded-full ${
-        user.online
-          ? "border-[1.5px] border-text bg-transparent"
-          : "bg-text-muted/40"
-      }`}
+    <StatusMark
+      status={user.online ? "success" : "offline"}
       title={user.online ? "online" : "offline"}
     />
   )
@@ -1348,7 +1340,7 @@ function UserDetail({ user, liveRuns, history, stack, adminBusy, onToggleAdmin, 
                   }}
                 >
                   <div className="flex items-start gap-2 min-w-0">
-                    <span className="shrink-0 pt-1"><StatusDot status={h.status} /></span>
+                    <span className="shrink-0 pt-1"><StatusMark status={h.status} title={h.status} /></span>
                     <span className="min-w-0 flex-1">
                       <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-text-muted">
                         <span className="font-mono">
@@ -1411,7 +1403,7 @@ function UserDetail({ user, liveRuns, history, stack, adminBusy, onToggleAdmin, 
                         })
                       }}
                     >
-                      <td className="py-2 px-3"><StatusDot status={h.status} /></td>
+                      <td className="py-2 px-3"><StatusMark status={h.status} title={h.status} /></td>
                       <td className="py-2 px-3 font-mono text-text-muted/70">
                         {h.runId.slice(0, 8)}<CopyBtn value={h.runId} label="run ID" />
                       </td>
@@ -1507,31 +1499,6 @@ function CopyBtn({ value, label }: { value: string; label?: string }) {
       {copied ? "✓" : "⎘"}
     </button>
   )
-}
-
-/** Mark shape — filled / ring / pulse / faint (hue collapses to ink on light). */
-function StatusDot({ status }: { status: string }) {
-  const s = status.toLowerCase()
-  if (s === "running" || s === "pending" || s === "planning") {
-    return (
-      <span
-        className="inline-block w-2 h-2 rounded-full border-[1.5px] border-text bg-transparent animate-pulse"
-        title={status}
-      />
-    )
-  }
-  if (s === "error" || s === "failed" || s === "timeout") {
-    return <span className="inline-block w-2 h-2 rounded-full bg-text" title={status} />
-  }
-  if (s === "succeeded" || s === "completed") {
-    return (
-      <span
-        className="inline-block w-2 h-2 rounded-full border-[1.5px] border-text bg-transparent"
-        title={status}
-      />
-    )
-  }
-  return <span className="inline-block w-2 h-2 rounded-full bg-text-muted/40" title={status} />
 }
 
 // ── Formatters ──────────────────────────────────────────────────

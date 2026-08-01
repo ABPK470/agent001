@@ -373,17 +373,16 @@ describe("widget log chrome — Trace meta & scope payload", () => {
     expect(css).toMatch(
       /\.widget-review-meta\s*\{[^}]*border-bottom:\s*none/s,
     )
-    // Open outline header: elbows own descent (no under-line).
+    // Flat list dialect both themes — no hairlines under outline headers.
     expect(css).toMatch(
       /\.trace-card\.is-open\s*>\s*\.trace-scope\s*\{[^}]*border-bottom:\s*none/s,
     )
-    // Collapsed peers keep a quiet hairline for scanability.
     expect(css).toMatch(
-      /\.trace-card:not\(\.is-open\)\s*>\s*\.trace-scope\s*\{[^}]*border-bottom:\s*1px solid/s,
+      /\.trace-card:not\(\.is-open\)\s*>\s*\.trace-scope\s*\{[^}]*border-bottom:\s*none/s,
     )
-    // Sticky pin: no hard rule into the scrollport (open stays flush).
+    // Sticky pin: one underline under the whole block (Cursor dialect) — not per-row hairlines.
     expect(css).toMatch(
-      /\.trace-pin__stack\s*\{[^}]*border-bottom:\s*none/s,
+      /\.trace-pin__stack\s*\{[^}]*border-bottom:\s*1px solid/s,
     )
     // Toolbar still closes the control band.
     expect(css).toMatch(
@@ -466,9 +465,10 @@ describe("widget log chrome — shared content dialect", () => {
     expect(sheet).toContain("review-group-label")
   })
 
-  it("sticky section caps use --section-cap-bg (dark lift / light paper)", () => {
+  it("sticky section caps use flat --section-cap-bg (both themes)", () => {
     const css = read(cssPath)
     expect(css).toContain("--section-cap-bg")
+    expect(css).not.toMatch(/--section-cap-bg:\s*color-mix/)
     expect(css).toMatch(
       /\.review-group-cap\s*\{[^}]*background:\s*var\(--section-cap-bg\)/s,
     )

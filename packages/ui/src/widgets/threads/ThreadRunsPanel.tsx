@@ -12,7 +12,7 @@ import { RunStatus } from "../../enums"
 import { useStore } from "../../state/store"
 import type { Run, Thread } from "../../types"
 import { timeAgo } from "../../lib/util"
-import { statusDotKind } from "../../theme/tokens"
+import { StatusMark } from "../../components/StatusMark"
 import { WIDGET_ICONS } from "../../widgets/widget-icons"
 import { DeleteThreadModal } from "./DeleteThreadModal"
 import { ThreadRowMenu } from "./ThreadRowMenu"
@@ -86,10 +86,7 @@ function RunRow({
       onFocus={onGoalEnter}
       onBlur={onGoalLeave}
     >
-      <span
-        className={`thread-nav-run-dot thread-nav-run-dot--${statusDotKind(run.status)}`}
-        aria-hidden
-      />
+      <StatusMark status={run.status} size="sm" />
       <span ref={goalRef} className="thread-nav-run-goal">
         {run.goal}
       </span>
