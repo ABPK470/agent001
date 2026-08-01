@@ -111,14 +111,14 @@ const KIND_META: Record<
 import { operationStatusCallout } from "../lib/status-callout"
 
 /**
- * Message box — policies dialect (soft chroma wash + thin border + chroma text).
+ * Message box — soft chroma wash + thin border; regular log type (not bold).
  * Diff panes stay `--diff-*` elsewhere.
  */
 const STATUS_MESSAGE_BOX: Record<OperationStatus, string> = {
   running:   operationStatusCallout("running"),
   success:   operationStatusCallout("success"),
-  failed:    `${operationStatusCallout("failed")} font-medium`,
-  cancelled: `${operationStatusCallout("cancelled")} font-medium`,
+  failed:    operationStatusCallout("failed"),
+  cancelled: operationStatusCallout("cancelled"),
   skipped:   operationStatusCallout("skipped"),
   unknown:   operationStatusCallout("unknown"),
 }
@@ -128,7 +128,7 @@ const LOG_ROW_ACTION =
 
 function StatusMessage({ status, children }: { status: OperationStatus; children: ReactNode }) {
   return (
-    <div className={`px-2 py-1 mb-1 rounded break-all ${OP_LOG} ${STATUS_MESSAGE_BOX[status]}`}>
+    <div className={`w-fit max-w-full px-2 py-1 mb-1 rounded break-all font-normal ${OP_LOG} ${OP_LOG_MUTED} ${STATUS_MESSAGE_BOX[status]}`}>
       {children}
     </div>
   )

@@ -355,7 +355,7 @@ export function ExecModal({ exec, plan, execPlanId, tgtEnv, onConfirm, onCancel,
                             status === "done" || status === "running" || status === "applying"
                               ? "text-accent"
                               : status === "failed"
-                                ? "text-policy-deny"
+                                ? "text-text"
                                 : "text-text-muted"
                           }
                           title={status === "applying" ? "Applied in transaction — not committed until metadata step succeeds" : undefined}
@@ -422,7 +422,7 @@ export function ExecModal({ exec, plan, execPlanId, tgtEnv, onConfirm, onCancel,
                       {rows ? <>{rows}</> : <span className="exec-modal-log__empty">—</span>}
                     </span>
                     <span
-                      className={`exec-modal-log__message text-xs ${detailIsError ? "text-policy-deny" : detailIsSkipped ? "text-policy-approval/90" : event.type === "step" ? "text-text-muted/70" : "text-text/90"}`}
+                      className={`exec-modal-log__message text-xs ${detailIsError ? "text-text" : detailIsSkipped ? "text-text-muted" : event.type === "step" ? "text-text-muted/70" : "text-text/90"}`}
                     >
                       {detail ?? <span className="exec-modal-log__empty">—</span>}
                     </span>

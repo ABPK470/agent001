@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs"
 import { describe, expect, it } from "vitest"
 import { STICKY_GOAL_HOME_OFFSET_PX, STICKY_GOAL_HOME_TOP } from "../../components/StickyUserGoal.js"
 import {
@@ -96,5 +97,13 @@ describe("user goal pin slot contract", () => {
     expect(userGoalTextClass(false)).toBe("max-w-[calc(100%-2.5rem)]")
     expect(userGoalTextClass(true)).toBe("")
     expect(userGoalPinSlotClass()).toBe("w-10")
+  })
+
+  it("UserGoalBubble hugs text (w-fit) — never stretches to the column", () => {
+    const src = readFileSync(new URL("../TermChat.tsx", import.meta.url), "utf8")
+    const block = src.match(/function UserGoalBubble[\s\S]*?\n\}\n\nfunction ChatTurn/)?.[0] ?? ""
+    expect(block).toContain("w-fit")
+    expect(block).not.toMatch(/(?<![\w-])w-full(?![\w-])/)
+    expect(block).not.toContain("flex-1")
   })
 })

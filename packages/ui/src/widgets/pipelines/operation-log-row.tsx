@@ -44,20 +44,9 @@ export function formatPipelineSubtitle(subtitle: string): string {
   )
 }
 
-/** Policies dialect: soft chroma wash + thin border + chroma text. */
-export function statusTextClass(status: OperationStatus): string {
-  switch (statusCalloutTone(status)) {
-    case "ok":
-      return "text-policy-allow"
-    case "err":
-      return "text-policy-deny"
-    case "warn":
-      return "text-policy-approval"
-    case "info":
-      return "text-callout-info"
-    default:
-      return "text-text-muted"
-  }
+/** Status label ink — theme text; wash/border carry the status hue. */
+export function statusTextClass(_status: OperationStatus): string {
+  return "text-text"
 }
 
 /**
@@ -70,15 +59,15 @@ export function statusSoftBgClass(status: OperationStatus): string {
 export function statusFilterActiveClass(status: OperationStatus): string {
   switch (statusCalloutTone(status)) {
     case "ok":
-      return "ring-1 ring-inset ring-policy-allow/40 text-policy-allow font-medium bg-policy-allow-soft"
+      return "ring-1 ring-inset ring-policy-allow/40 text-text font-medium bg-policy-allow-soft"
     case "err":
-      return "ring-1 ring-inset ring-policy-deny/40 text-policy-deny font-semibold bg-policy-deny-soft"
+      return "ring-1 ring-inset ring-policy-deny/40 text-text font-semibold bg-policy-deny-soft"
     case "skip":
       return "border border-dashed border-border text-text-muted font-medium bg-transparent"
     case "info":
-      return "ring-1 ring-inset ring-callout-info/40 text-callout-info font-medium bg-callout-info-soft"
+      return "ring-1 ring-inset ring-callout-info/40 text-text font-medium bg-callout-info-soft"
     case "warn":
-      return "ring-1 ring-inset ring-policy-approval/40 text-policy-approval font-medium bg-policy-approval-soft"
+      return "ring-1 ring-inset ring-policy-approval/40 text-text font-medium bg-policy-approval-soft"
     default:
       return "ring-1 ring-inset ring-border-subtle text-text-muted font-medium bg-transparent"
   }

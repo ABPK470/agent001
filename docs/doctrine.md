@@ -243,11 +243,14 @@ becoming “selected.”
 | Layer | What | Treatment |
 |---|---|---|
 | **Status mark** | Any run / operation / user-state indicator | One `StatusMark` + `statusDotKind` — ok = hollow ring, fail = filled, live = pulse ring, skip = dashed (skipped / cancelled / stopped), muted = soft fill. Shape over traffic chroma on light (`packages/ui/src/components/StatusMark.tsx`). Same glyph for the same status string in Pipelines, Threads, Active Users, Sync. |
-| **Status callout** | Failed / warn / cancel / success / running **payloads** (message boxes, banners, Event Stream error rows, Trace phase events, Chat error / needs-work / cancelled bodies, toasts) | Policies dialect: soft chroma wash + thin chroma border + chroma text (`--policy-allow|deny|approval-soft`, `--callout-info-soft`). Shared helpers in `packages/ui/src/lib/status-callout.ts` / `.mia-callout--*`. Never plain paper/sheet + colored text alone; never `--error-soft` as select-lookalike overlay on light. |
+| **Status callout** | Failed / warn / cancel / success / running **payloads** (message boxes, banners, Event Stream error rows, Trace phase events, Chat **terminal** error / cancelled bodies, toasts) | Soft chroma wash + thin chroma border; **theme ink text** (`text-text` / `--color-text`) — never chroma-colored copy on the wash. Shared helpers in `packages/ui/src/lib/status-callout.ts` / `.mia-callout--*`. Never plain paper/sheet + colored text alone; never `--error-soft` as select-lookalike overlay on light. |
 
-Chat / Trace **activity headers** stay muted ink chrome (Cursor dialect) —
-narrative labels are not status marks; never paint the whole “Subagent · …
-· failed” row red. On **light**, structural status + syntax tokens
+Chat **orchestrator process beats** (`Subagent ·`, `Check · needs work`,
+`Repair ·`, `Checked work`) are mid-loop gates — muted activity chrome like
+other step headers, not status callouts. Soft chroma is reserved for true
+terminals (run failed / cancelled / escalate). Chat / Trace **activity
+headers** stay muted ink chrome (Cursor dialect) — narrative labels are not
+status marks; never paint the whole “Subagent · … · failed” row red. On **light**, structural status + syntax tokens
 (`--success|warning|error|info`, `--dt-*`) resolve to **ink** for marks /
 datatype; callout chroma lives on **policy / callout-info** tokens. Soft
 structural washes stay `--overlay-2`. **Exception — diffs:** content change

@@ -90,8 +90,15 @@ describe("light theme color system", () => {
     expect(css).toMatch(
       /\.trace-phase-event\.is-warn\s*\{[^}]*background:\s*var\(--policy-approval-soft/s,
     )
+    expect(css).toMatch(
+      /\.trace-phase-event\.is-error\s*\{[^}]*color:\s*var\(--text/s,
+    )
     expect(css).toMatch(/\.mia-toast--err\s*\{[^}]*--policy-deny-soft/s)
     expect(css).toMatch(/\.mia-callout--err\s*\{[^}]*--policy-deny-soft/s)
+    expect(css).toMatch(/\.mia-callout\s*\{[^}]*font-weight:\s*400/s)
+    expect(css).toMatch(
+      /\.trace-phase-event\.is-error\s*\{[^}]*font-weight:\s*400/s,
+    )
     const ops = readFileSync(join(here, "../widgets/OperationLog.tsx"), "utf8")
     expect(ops).toContain("operationStatusCallout")
     expect(ops).not.toMatch(/failed:\s*"bg-diff-surface/)
@@ -125,12 +132,16 @@ describe("light theme color system", () => {
     )
   })
 
-  it("chat severity + ask-user use chroma exceptions (not ink --error/--warning)", () => {
+  it("chat terminals use callouts; Check/needs-work stays quiet process chrome", () => {
     const chat = readFileSync(join(here, "../widgets/TermChat.tsx"), "utf8")
     const ask = readFileSync(join(here, "../components/AskUserPrompt.tsx"), "utf8")
     expect(chat).toContain("mia-callout--err")
-    expect(chat).toContain("mia-callout--warn")
+    expect(chat).toContain("mia-callout--warn") // run cancelled terminal
     expect(chat).toMatch(/headerToneClass = "text-text-faint"/)
+    // Verification gate is process, not severity — no warn wash around CheckBlock.
+    expect(chat).toMatch(/function CheckBlock[\s\S]*?function isVerificationProgress/)
+    const checkBlock = chat.match(/function CheckBlock[\s\S]*?function isVerificationProgress/)?.[0] ?? ""
+    expect(checkBlock).not.toContain("mia-callout")
     expect(ask).toContain("border-accent")
     expect(ask).toContain("bg-accent-soft")
     expect(ask).toContain("text-accent")

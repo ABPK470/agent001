@@ -85,8 +85,8 @@ export function FreezeWindowsSelect({ selected, onSelected }: FreezeWindowsSelec
         <label key={id} className="flex items-start gap-2 rounded border border-policy-deny/35 bg-policy-deny-soft px-2 py-1.5">
           <Checkbox checked onChange={() => toggle(id)} className="mt-0.5" />
           <div className="flex-1">
-            <span className="font-mono text-sm text-policy-deny">{id}</span>
-            <span className="ml-2 text-xs text-policy-deny">
+            <span className="font-mono text-sm text-text">{id}</span>
+            <span className="ml-2 text-xs text-text-muted">
               unknown id — save will fail until removed or defined
             </span>
           </div>

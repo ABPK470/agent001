@@ -197,8 +197,10 @@ function UserGoalBubble({
   showUnpin?: boolean
   onUnpin?: () => void
 }): React.ReactElement {
+  // w-fit: hug the goal text (short goals must not stretch to the column).
+  // max-w still caps long goals; ml-auto keeps the pill right-aligned.
   const shellClass =
-    "overflow-hidden rounded-2xl border border-border-subtle bg-bubble-user text-[15px] leading-relaxed text-text shadow-[var(--shadow-bubble)]"
+    "w-fit overflow-hidden rounded-2xl border border-border-subtle bg-bubble-user text-[15px] leading-relaxed text-text shadow-[var(--shadow-bubble)]"
   const shellStyle = { boxShadow: "var(--shadow-bubble)" }
   const bodyClass = "min-w-0 px-5 py-3"
   const appendageClass =
@@ -217,7 +219,7 @@ function UserGoalBubble({
   }
 
   return (
-    <div className={`ml-auto flex w-full max-w-full items-stretch ${shellClass}`} style={shellStyle}>
+    <div className={`ml-auto flex max-w-full items-stretch ${shellClass}`} style={shellStyle}>
       <button
         type="button"
         onClick={onUnpin}
@@ -227,7 +229,7 @@ function UserGoalBubble({
       >
         <Dot size={15} strokeWidth={2} />
       </button>
-      <div className={`${bodyClass} min-w-0 flex-1`}>
+      <div className={bodyClass}>
         <UserGoalText text={goal} />
       </div>
     </div>
@@ -924,8 +926,8 @@ function StepBlock({
   const canToggle = hasTools || hasErrorBody
   const Chevron = open ? ChevronDown : ChevronRight
   const animateFold = userToggled || !isLiveRun
-  // Step headers stay muted chrome (frontier harness dialect). Error body
-  // below gets the cancelled-style sheet callout — not painted headers.
+  // Step headers stay muted chrome (frontier harness dialect). Hard-fail
+  // body below may use err callout — not painted headers.
   const labelClass =
     part.status === "running" || part.hasRunning ? "text-text-muted" : "text-text-faint"
 
@@ -1113,10 +1115,10 @@ function ProgressPill({ part }: { part: ResponseProgressPart }) {
 }
 
 /**
- * Orchestrator verification beat — not agent prose.
- * Visible: Check · needs work · {step}. Expand for issue text.
- * Needs-work uses the same sheet callout as cancelled / run-failed — header
- * stays muted chrome (Cursor dialect), payload carries the warn wash.
+ * Orchestrator verification beat — process gate, not a terminal failure.
+ * Same quiet chrome as Subagent / Repair: `Check · needs work · {step}` or
+ * `Checked work`. Expand for issue text. Soft chroma callouts stay for
+ * true terminals (run cancelled / run failed), not mid-loop gates.
  */
 function CheckBlock({ part }: { part: ResponseProgressPart }) {
   const { preserveToggle } = useChatScroll()
@@ -1126,54 +1128,34 @@ function CheckBlock({ part }: { part: ResponseProgressPart }) {
   const body = part.body?.trim() || ""
   const hasBody = body.length > 0
   const Chevron = open ? ChevronDown : ChevronRight
-  const needsWork = part.label.includes("needs work")
   const labelClass =
     part.status === "running" ? "text-text-muted" : "text-text-faint"
 
-  const header = (
-    <button
-      ref={buttonRef}
-      type="button"
-      disabled={!hasBody}
-      onClick={() => {
-        if (!hasBody) return
-        preserveToggle(buttonRef.current, () => setOpen((v) => !v))
-      }}
-      className={[
-        "inline-flex max-w-full items-baseline gap-1.5 py-0.5 text-left text-[15px] leading-6",
-        labelClass,
-        hasBody ? "transition-colors hover:text-text-muted" : "cursor-default",
-      ].join(" ")}
-      aria-expanded={hasBody ? open : undefined}
-    >
-      {hasBody ? (
-        <Chevron size={12} strokeWidth={1.5} className="text-text-faint shrink-0 translate-y-[2px]" />
-      ) : null}
-      <span className="min-w-0">
-        <span>{part.label}</span>
-        {what ? <span className="text-text-faint"> · {what}</span> : null}
-      </span>
-    </button>
-  )
-
-  if (needsWork) {
-    return (
-      <div className="py-1 min-w-0">
-        <div className="mia-callout mia-callout--warn rounded-md px-2.5 py-1.5">
-          {header}
-          {open && hasBody ? (
-            <div className="mt-1 text-[15px] leading-6 whitespace-pre-wrap break-words">
-              {body}
-            </div>
-          ) : null}
-        </div>
-      </div>
-    )
-  }
-
   return (
     <div className="py-1 min-w-0">
-      {header}
+      <button
+        ref={buttonRef}
+        type="button"
+        disabled={!hasBody}
+        onClick={() => {
+          if (!hasBody) return
+          preserveToggle(buttonRef.current, () => setOpen((v) => !v))
+        }}
+        className={[
+          "inline-flex max-w-full items-baseline gap-1.5 py-0.5 text-left text-[15px] leading-6",
+          labelClass,
+          hasBody ? "transition-colors hover:text-text-muted" : "cursor-default",
+        ].join(" ")}
+        aria-expanded={hasBody ? open : undefined}
+      >
+        {hasBody ? (
+          <Chevron size={12} strokeWidth={1.5} className="text-text-faint shrink-0 translate-y-[2px]" />
+        ) : null}
+        <span className="min-w-0">
+          <span>{part.label}</span>
+          {what ? <span className="text-text-faint"> · {what}</span> : null}
+        </span>
+      </button>
       {open && hasBody ? (
         <div className="mt-0.5 ml-[0.35rem] pl-3 border-l border-border-subtle text-[15px] leading-6 text-text-faint whitespace-pre-wrap break-words">
           {body}

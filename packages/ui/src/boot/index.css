@@ -1440,7 +1440,7 @@ label:focus-within > .mia-checkbox,
   line-height: 1.5;
 }
 
-/* ── Toasts — policies dialect: soft chroma wash + thin chroma border ─ */
+/* ── Toasts — soft chroma wash + thin border; theme ink text ─ */
 .mia-toast {
   border-color: var(--border-subtle);
   background: var(--panel-2);
@@ -1450,50 +1450,51 @@ label:focus-within > .mia-checkbox,
 .mia-toast--ok {
   border-color: color-mix(in srgb, var(--policy-allow) 35%, var(--border-subtle));
   background: var(--policy-allow-soft);
-  color: var(--policy-allow);
+  color: var(--color-text-muted, var(--color-text));
+  font-weight: 400;
 }
 
 .mia-toast--err {
   border-color: color-mix(in srgb, var(--policy-deny) 35%, var(--border-subtle));
   background: var(--policy-deny-soft);
-  color: var(--policy-deny);
+  color: var(--color-text-muted, var(--color-text));
+  font-weight: 400;
 }
 
 .mia-toast--info {
   border-color: color-mix(in srgb, var(--callout-info) 35%, var(--border-subtle));
   background: var(--callout-info-soft);
-  color: var(--callout-info);
+  color: var(--color-text-muted, var(--color-text));
+  font-weight: 400;
 }
 
-/* Shared status callout shell (Trace / Chat / Pipelines / Event Stream) */
+/* Shared status callout shell — wash + border signal; muted regular type */
 .mia-callout {
   border-radius: 0.5rem;
   border-width: 1px;
   border-style: solid;
+  color: var(--color-text-muted, var(--color-text));
+  font-weight: 400;
 }
 
 .mia-callout--ok {
   border-color: color-mix(in srgb, var(--policy-allow) 35%, var(--border-subtle));
   background: var(--policy-allow-soft);
-  color: var(--policy-allow);
 }
 
 .mia-callout--err {
   border-color: color-mix(in srgb, var(--policy-deny) 35%, var(--border-subtle));
   background: var(--policy-deny-soft);
-  color: var(--policy-deny);
 }
 
 .mia-callout--warn {
   border-color: color-mix(in srgb, var(--policy-approval) 35%, var(--border-subtle));
   background: var(--policy-approval-soft);
-  color: var(--policy-approval);
 }
 
 .mia-callout--info {
   border-color: color-mix(in srgb, var(--callout-info) 35%, var(--border-subtle));
   background: var(--callout-info-soft);
-  color: var(--callout-info);
 }
 
 /* ── Listbox popover (portaled — opaque above modals) ─────────── */
@@ -2889,8 +2890,8 @@ textarea.input {
 :root[data-theme="light"] .trace-work-note.is-error .trace-work-note__label,
 :root[data-theme="light"] .trace-row.is-error .font-mono,
 :root[data-theme="light"] .trace-row__detail.is-error {
-  color: var(--policy-deny);
-  font-weight: 600;
+  color: var(--text-muted, var(--ink));
+  font-weight: 400;
 }
 
 .trace-work-note {
@@ -2910,7 +2911,8 @@ textarea.input {
 }
 
 .trace-work-note.is-error .trace-work-note__label {
-  color: var(--policy-deny, var(--diff-del, var(--error)));
+  color: var(--text-muted, var(--color-text-muted));
+  font-weight: 400;
 }
 
 /* Leaf phase/work — aligned chrome, not a fake toggle */
@@ -2923,11 +2925,13 @@ textarea.input {
 }
 
 .trace-row.is-error .font-mono {
-  color: var(--policy-deny, var(--diff-del, var(--error)));
+  color: var(--text-muted, var(--color-text-muted));
+  font-weight: 400;
 }
 
 .trace-row__detail.is-error {
-  color: var(--policy-deny, var(--diff-del, var(--error)));
+  color: var(--text-muted, var(--color-text-muted));
+  font-weight: 400;
 }
 
 .trace-scope[data-trace-kind="message"] .trace-scope__lead {
@@ -3142,7 +3146,8 @@ textarea.input {
 }
 
 .trace-msg__detail.is-error {
-  color: var(--policy-deny, var(--diff-del, var(--error)));
+  color: var(--text-muted, var(--color-text-muted));
+  font-weight: 400;
 }
 
 .trace-msg__preview {
@@ -3280,8 +3285,8 @@ textarea.input {
 }
 
 /*
- * Severity callouts — policies dialect: soft chroma wash + thin chroma border
- * (not ink-on-sheet). Diff panes stay `--diff-*` only.
+ * Severity callouts — soft chroma wash + thin border; theme ink text
+ * (not chroma-on-wash). Diff panes stay `--diff-*` only.
  */
 .trace-phase-event.is-warn {
   padding: 0.3rem 0.55rem;
@@ -3289,8 +3294,10 @@ textarea.input {
   margin: 0.15rem 0;
   border: 1px solid color-mix(in srgb, var(--policy-approval) 35%, var(--border-subtle));
   background: var(--policy-approval-soft);
-  color: var(--policy-approval);
-  font-weight: 550;
+  color: var(--text-muted, var(--color-text-muted));
+  font-weight: 400;
+  width: fit-content;
+  max-width: 100%;
 }
 
 .trace-phase-event.is-error {
@@ -3299,8 +3306,10 @@ textarea.input {
   margin: 0.15rem 0;
   border: 1px solid color-mix(in srgb, var(--policy-deny) 35%, var(--border-subtle));
   background: var(--policy-deny-soft);
-  color: var(--policy-deny);
-  font-weight: 600;
+  color: var(--text-muted, var(--color-text-muted));
+  font-weight: 400;
+  width: fit-content;
+  max-width: 100%;
 }
 
 .trace-phase-steps {
@@ -3474,7 +3483,7 @@ textarea.input {
 }
 
 .trace-empty.is-error {
-  color: var(--error, var(--color-error));
+  color: var(--text-muted, var(--color-text-muted));
   font-style: italic;
 }
 

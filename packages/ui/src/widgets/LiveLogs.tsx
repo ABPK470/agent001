@@ -597,7 +597,7 @@ function LogRow({
   tiny: boolean
 }) {
   const [expanded, setExpanded] = useState(false)
-  const msgColor = log.error ? "var(--color-policy-deny)" : (MSG_COLOR[log.type] ?? "var(--color-text-muted)")
+  const msgColor = log.error ? "var(--color-text)" : (MSG_COLOR[log.type] ?? "var(--color-text-muted)")
   const hasData = log.data && Object.keys(log.data).length > 0
 
   return (

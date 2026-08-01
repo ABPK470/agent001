@@ -36,9 +36,10 @@ export const WIDGET_CHAT_INPUT_DOCK_CLASS =
 
 /**
  * User goal row in the transcript — full width of the sticky row (capped).
- * The pin appendage shares this cap: text is limited to
+ * The pin appendage shares this cap: the unpinned pill uses
  * `USER_GOAL_TEXT_MAX_CLASS` so the left pin slot is reserved *outside*
- * the unpinned pill (empty gutter), and text never shifts when the pin appears.
+ * the pill (empty gutter), and text never shifts when the pin appears.
+ * The pill itself is `w-fit` (hugs text); only long goals hit the max.
  */
 export const USER_GOAL_COLUMN_CLASS = "w-full max-w-[82%] min-w-0"
 

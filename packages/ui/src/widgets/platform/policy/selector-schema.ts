@@ -240,7 +240,7 @@ export const SOURCE_META: Record<PolicySource, SourceMeta> = {
   [PolicySource.EnvDerived]: {
     value:       PolicySource.EnvDerived,
     label:       "env-derived",
-    badgeClass:  "text-policy-approval bg-policy-approval-soft",
+    badgeClass:  "text-text bg-policy-approval-soft",
     description: "Obsolete leftover from the old Access→policy path. Cleared on boot and on factory policy reset — edit Policies directly.",
   },
 }
