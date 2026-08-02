@@ -86,6 +86,10 @@ export class AgentOrchestrator {
   setLlm(client: LLMClient): void {
     this.llm = client
   }
+
+  getLlm(): LLMClient {
+    return this.llm
+  }
   setMessageRouter(router: MessageRouterPort): void {
     this.messageRouter = router
   }

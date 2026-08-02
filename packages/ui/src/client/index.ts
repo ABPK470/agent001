@@ -380,6 +380,43 @@ export const api = {
   }),
   getActiveRuns: () => json<{ runIds: string[] }>("/api/runs/active"),
   getRunTrace: (id: string) => json<Record<string, unknown>[]>(`/api/runs/${id}/trace`),
+  replayTraceStep: (
+    runId: string,
+    body: {
+      systemPrompt?: string | null
+      input?: string | null
+      messages?: Array<{ role: string; content: string | null }>
+      maxTokens?: number
+    },
+  ) =>
+    json<{
+      content: string | null
+      model: string | null
+      usage: {
+        promptTokens: number
+        completionTokens: number
+        totalTokens: number
+      } | null
+      toolCalls: Array<{ id: string; name: string; arguments: Record<string, unknown> }>
+    }>(`/api/runs/${encodeURIComponent(runId)}/trace/replay-step`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  addEvalDatasetEntry: (body: {
+    runId: string
+    threadId?: string | null
+    scopeId: string
+    kind: string
+    callIndex?: number | null
+    label?: string | null
+    input: unknown
+    output?: unknown
+    metadata?: Record<string, unknown>
+  }) =>
+    json<{ id: string }>(`/api/eval/dataset`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
   listRunArtifacts: (id: string) =>
     json<{ runId: string; files: Array<{ path: string; sizeBytes: number }> }>(
       `/api/runs/${encodeURIComponent(id)}/artifacts`,

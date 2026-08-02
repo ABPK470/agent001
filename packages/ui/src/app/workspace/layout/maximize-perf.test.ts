@@ -7,7 +7,7 @@ import { readFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { describe, expect, it } from "vitest"
-import { TRACE_SPINE_OVERSCAN } from "../../../widgets/trace/TraceDag.js"
+import { TRACE_TREE_OVERSCAN } from "../../../widgets/trace/TraceDag.js"
 import { SOLO_FLIP_MS } from "./solo-flip.js"
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -61,17 +61,16 @@ describe("Trace maximize calm", () => {
   const dag = readFileSync(join(here, "../../../widgets/trace/TraceDag.tsx"), "utf8")
   const inspector = readFileSync(join(here, "../../../widgets/DebugInspector.tsx"), "utf8")
 
-  it("spine overscan stays small for expanded cards", () => {
-    expect(TRACE_SPINE_OVERSCAN).toBe(6)
-    expect(dag).toContain("overscan={TRACE_SPINE_OVERSCAN}")
+  it("tree overscan stays small for expanded cards", () => {
+    expect(TRACE_TREE_OVERSCAN).toBe(8)
+    expect(dag).toContain("overscan={TRACE_TREE_OVERSCAN}")
     expect(dag).not.toMatch(/overscan=\{24\}/)
   })
 
-  it("pin resize skips unchanged size and solo-hidden / geometry-snap", () => {
-    expect(dag).toContain("pinSizeRef")
-    expect(dag).toContain("soloHiddenRef")
-    expect(dag).toContain("workspace-canvas-geometry-snap")
-    expect(dag).toContain("useTilePaint")
+  it("master-detail split layout for trace inspector", () => {
+    expect(dag).toContain("trace-split")
+    expect(dag).toContain("TraceDetailInspector")
+    expect(dag).toContain("VirtualList")
   })
 
   it("DebugInspector freezes DAG rebuild while solo-hidden", () => {

@@ -32,6 +32,8 @@ import { registerProfileRoutes } from "../api/profile/routes.js"
 import { registerProposerRoutes } from "../api/proposer/index.js"
 import type { AgentOrchestrator } from "../runtime/orchestrator.js"
 import { registerRunRoutes } from "../api/runs/routes.js"
+import { registerTraceRoutes } from "../api/trace/routes.js"
+import { registerEvalRoutes } from "../api/eval/routes.js"
 import {
   registerEntityRegistryRoutes,
   registerFreezeWindowRoutes,
@@ -214,6 +216,7 @@ export async function buildApp(opts: BuildAppOptions) {
   })
 
   registerRunRoutes(app, orchestrator)
+  registerTraceRoutes(app, orchestrator)
   registerThreadRoutes(app, orchestrator)
   registerToolRoutes(app)
   registerLayoutRoutes(app)
@@ -238,6 +241,7 @@ export async function buildApp(opts: BuildAppOptions) {
   registerToolCacheRoutes(app)
   registerEventRoutes(app)
   registerOperationRoutes(app)
+  registerEvalRoutes(app)
   registerWebhookRoutes(app, messageRouter, messageQueue)
   registerNotificationRoutes(app, orchestrator)
   registerMemoryRoutes(app, orchestrator)

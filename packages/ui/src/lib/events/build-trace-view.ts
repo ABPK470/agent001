@@ -10,6 +10,7 @@ import type { TraceEntry } from "@mia/shared-types"
 import { buildOutline, TRACE_VIEW_SPEC } from "./build-outline"
 import { atomsFromTrace } from "./normalize"
 import { isPlannerStepSuccessStatus } from "./planner-step-status"
+import { computeTokenCostUsd } from "./trace-cost"
 import type { OutlineNode } from "./types"
 
 type LlmRequest = Extract<TraceEntry, { kind: "llm-request" }>
@@ -54,6 +55,12 @@ export type TraceCallNode = {
   content: string | null
   toolBranches: TraceToolCall[]
   durationMs: number | null
+  /** Offset from run start for waterfall / Gantt (ms). */
+  startOffsetMs: number
+  /** Resolved model id when known (planner-prompt-budget telemetry). */
+  model: string | null
+  /** USD cost from token usage + model pricing table. */
+  costUsd: number | null
   usage: {
     promptTokens: number
     completionTokens: number
@@ -93,6 +100,8 @@ export type TracePhaseNode = {
   leading?: string
   /** Call / Work that ran inside this step (not flat spine peers). */
   children?: TracePhaseChild[]
+  startOffsetMs: number
+  durationMs: number | null
 }
 
 export type TraceWorkNote = {
@@ -111,6 +120,8 @@ export type TraceWorkNode = {
   notes: TraceWorkNote[]
   /** SQL validation that ran during this work (not part of the prompt). */
   sqlQuality: TraceSqlQuality[]
+  startOffsetMs: number
+  durationMs: number | null
 }
 
 /** Chronological spine after Context — phases, calls, and between-call work. */
@@ -133,6 +144,7 @@ export type TraceDagStats = {
   promptTokens: number
   completionTokens: number
   totalDuration: number
+  totalCostUsd: number
   toolRunCount: number
   phaseCount: number
 }
@@ -771,6 +783,8 @@ function mergePhase(prev: TracePhaseNode, next: PhaseUpdate): TracePhaseNode {
     details: [...prev.details, ...next.details].slice(0, 48),
     leading: next.leading ?? prev.leading,
     children: prev.children,
+    startOffsetMs: prev.startOffsetMs,
+    durationMs: prev.durationMs,
   }
 }
 
@@ -826,7 +840,15 @@ export function buildTraceDag(trace: TraceEntry[]): TraceDag {
   const toolsResolved = trace.find((e): e is ToolsResolved => e.kind === "tools-resolved")
   const sqlQuality = trace.filter((e): e is TraceSqlQuality => e.kind === "planner-sql-quality")
 
+  const modelByIteration = new Map<number, string>()
+  for (const entry of trace) {
+    if (entry.kind === "planner-prompt-budget" && entry.model) {
+      modelByIteration.set(entry.iteration, entry.model)
+    }
+  }
+
   const paired = pairLlmCalls(trace)
+  let callOffsetMs = 0
   const calls: TraceCallNode[] = paired.map(({ request, response }, index) => {
     const toolBranches = (response?.toolCalls ?? []).map((tc) => ({
       id: tc.id,
@@ -835,6 +857,14 @@ export function buildTraceDag(trace: TraceEntry[]): TraceDag {
       status: "proposed" as const,
     }))
     const usage = response?.usage ?? null
+    const model = modelByIteration.get(request.iteration) ?? null
+    const startOffsetMs = callOffsetMs
+    const durationMs = response?.durationMs ?? null
+    if (durationMs != null) callOffsetMs += durationMs
+    const costUsd =
+      usage != null
+        ? computeTokenCostUsd(model, usage.promptTokens, usage.completionTokens)
+        : null
     return {
       index,
       iteration: request.iteration,
@@ -843,7 +873,10 @@ export function buildTraceDag(trace: TraceEntry[]): TraceDag {
       messages: enrichMessages(request.messages, systemPrompt),
       content: response?.content ?? null,
       toolBranches,
-      durationMs: response?.durationMs ?? null,
+      durationMs,
+      startOffsetMs,
+      model,
+      costUsd,
       usage,
       headline: replyHeadline(response),
       askedUser: toolBranches.some((t) => t.name === "ask_user"),
@@ -914,6 +947,8 @@ export function buildTraceDag(trace: TraceEntry[]): TraceDag {
       summary: update.summary,
       status: update.status,
       details: update.details,
+      startOffsetMs: 0,
+      durationMs: null,
       ...(update.leading ? { leading: update.leading } : {}),
       ...(isStepFamily(update.family) ? { children: [] } : {}),
     }
@@ -974,6 +1009,8 @@ export function buildTraceDag(trace: TraceEntry[]): TraceDag {
       tools: [],
       notes: [],
       sqlQuality: [],
+      startOffsetMs: 0,
+      durationMs: null,
     }
     return openWork
   }
@@ -1097,12 +1134,14 @@ export function buildTraceDag(trace: TraceEntry[]): TraceDag {
   let promptTokens = 0
   let completionTokens = 0
   let totalDuration = 0
+  let totalCostUsd = 0
   for (const c of calls) {
     if (c.durationMs != null) totalDuration += c.durationMs
     if (c.usage) {
       promptTokens += c.usage.promptTokens
       completionTokens += c.usage.completionTokens
     }
+    if (c.costUsd != null) totalCostUsd += c.costUsd
   }
 
   const preamble: TracePreamble = {
@@ -1110,7 +1149,7 @@ export function buildTraceDag(trace: TraceEntry[]): TraceDag {
     tools: toolsResolved?.tools ?? [],
   }
 
-  const finalSpine = spineFromOutline(outline, calls, spine)
+  const finalSpine = enrichSpanTimings(spineFromOutline(outline, calls, spine), calls)
 
   const toolRunCount = finalSpine.reduce((n, e) => {
     if (e.kind === "work") return n + e.work.tools.length
@@ -1144,11 +1183,68 @@ export function buildTraceDag(trace: TraceEntry[]): TraceDag {
       promptTokens,
       completionTokens,
       totalDuration,
+      totalCostUsd,
       toolRunCount,
       phaseCount,
     },
     hasData,
   }
+}
+
+/** Assign startOffsetMs / durationMs to work and phase spans from call timeline. */
+function enrichSpanTimings(spine: TraceSpineEntry[], calls: TraceCallNode[]): TraceSpineEntry[] {
+  function callEndOffset(index: number): number {
+    const call = calls[index]
+    if (!call) return 0
+    return call.startOffsetMs + (call.durationMs ?? 0)
+  }
+
+  function enrichWork(work: TraceWorkNode): void {
+    const after = calls[work.afterCallIndex]
+    work.startOffsetMs = after ? callEndOffset(work.afterCallIndex) : 0
+    const nextCall = calls.find((c) => c.startOffsetMs > work.startOffsetMs)
+    const sqlMs = work.sqlQuality.reduce(
+      (max, s) => Math.max(max, s.durationMs ?? 0),
+      0,
+    )
+    const spanEnd = nextCall?.startOffsetMs ?? work.startOffsetMs + sqlMs
+    work.durationMs = Math.max(0, spanEnd - work.startOffsetMs) || (work.tools.length > 0 ? sqlMs || null : null)
+  }
+
+  function enrichPhase(phase: TracePhaseNode): void {
+    if (!phase.children?.length) {
+      phase.startOffsetMs = 0
+      phase.durationMs = null
+      return
+    }
+    let minStart = Number.POSITIVE_INFINITY
+    let maxEnd = 0
+    for (const child of phase.children) {
+      if (child.kind === "call") {
+        const call = calls[child.callIndex]
+        if (!call) continue
+        minStart = Math.min(minStart, call.startOffsetMs)
+        maxEnd = Math.max(maxEnd, call.startOffsetMs + (call.durationMs ?? 0))
+      } else {
+        enrichWork(child.work)
+        minStart = Math.min(minStart, child.work.startOffsetMs)
+        maxEnd = Math.max(
+          maxEnd,
+          child.work.startOffsetMs + (child.work.durationMs ?? 0),
+        )
+      }
+    }
+    if (Number.isFinite(minStart)) {
+      phase.startOffsetMs = minStart
+      phase.durationMs = maxEnd > minStart ? maxEnd - minStart : null
+    }
+  }
+
+  for (const entry of spine) {
+    if (entry.kind === "work") enrichWork(entry.work)
+    if (entry.kind === "phase") enrichPhase(entry.phase)
+  }
+  return spine
 }
 
 /**
@@ -1309,6 +1405,8 @@ function spineFromOutline(
             status: node.severity === "error" ? "error" : "done",
             details: [],
             leading: node.title ? node.label : undefined,
+            startOffsetMs: 0,
+            durationMs: null,
             ...(children.length > 0 ? { children } : {}),
           },
         })

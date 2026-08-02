@@ -1,4 +1,7 @@
-import type { TraceCallNode, TraceSqlQuality } from "./build-trace-dag"
+import type { TraceCallNode, TraceSqlQuality, TraceToolCall } from "./build-trace-dag"
+import { formatCostUsd } from "../../lib/events/trace-cost"
+
+export { formatCostUsd }
 
 export function formatCharCount(n: number): string {
   return n.toLocaleString()
@@ -40,4 +43,17 @@ export function callReceivedSummary(call: TraceCallNode): string {
     return call.toolBranches.map((t) => t.name).join(", ")
   }
   return "Empty reply"
+}
+
+export function toolStatusLabel(tool: TraceToolCall): string {
+  if (tool.status === "error") return "failed"
+  if (tool.status === "running") return "running"
+  if (tool.status === "done") return "success"
+  if (tool.status === "proposed") return "proposed"
+  return "running"
+}
+
+export function tokenPairLabel(prompt: number, completion: number): string {
+  if (prompt <= 0 && completion <= 0) return "—"
+  return `${prompt} in / ${completion} out`
 }

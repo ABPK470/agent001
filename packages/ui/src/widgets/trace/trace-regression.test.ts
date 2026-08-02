@@ -515,64 +515,37 @@ describe("syncPinnedInFlow — Trace overlay padding", () => {
 })
 
 /**
- * Cursor sticky-scroll dialect — reserved pin band makes space; band height
- * deltas are compensated so fold/peer handoff does not cancel wheel scroll.
- * Overlay-covering-body is the corrupted path; do not lock that in.
+ * Master-detail split — reserved pin band retired; tree + inspector layout.
  */
-describe("reserved pin band — make space (Cursor dialect)", () => {
+describe("trace master-detail split", () => {
   const here = dirname(fileURLToPath(import.meta.url))
   const css = readFileSync(join(here, "../../boot/index.css"), "utf8")
   const dagSrc = readFileSync(join(here, "TraceDag.tsx"), "utf8")
-  const pinSrc = readFileSync(join(here, "trace-pin.ts"), "utf8")
-  const scrollSrc = readFileSync(join(here, "../../lib/chatScroll.ts"), "utf8")
 
-  it("pin band is a flex sibling with real height (not absolute overlay)", () => {
-    expect(css).toMatch(/\.trace-scroll-frame\s*\{[^}]*display:\s*flex/s)
-    expect(css).toMatch(/\.trace-pin\s*\{[^}]*flex-shrink:\s*0/s)
-    expect(css).toMatch(/\.trace-pin\s*\{[^}]*height:\s*auto/s)
-    expect(css).not.toMatch(/\.trace-pin\s*\{[^}]*height:\s*0\b/s)
-    expect(css).not.toMatch(/\.trace-pin\s*\{[^}]*position:\s*absolute/s)
-    expect(css).toMatch(/\.trace-dag\s+\.trace-scroll\s*\{[^}]*position:\s*relative/s)
-    expect(css).not.toMatch(/\.trace-dag\s+\.trace-scroll\s*\{[^}]*inset:\s*0/s)
+  it("uses split shell with tree sidebar and detail main", () => {
+    expect(dagSrc).toContain("trace-split-shell entity-registry-shell widget-split-shell")
+    expect(dagSrc).toContain("trace-split-tree widget-split-sidebar")
+    expect(dagSrc).toContain("trace-split-detail widget-split-main")
+    expect(dagSrc).toContain("TraceDetailInspector")
+    expect(dagSrc).toContain("selectedScopeId")
   })
 
-  it("TRACE_PIN_OPTS uses reserved-band focus + stable band scroll compensation", () => {
-    expect(TRACE_PIN_OPTS).toEqual({ stackInScroll: false })
-    expect(pinSrc).toMatch(/TRACE_PIN_OPTS\s*=\s*\{\s*stackInScroll:\s*false/)
-    expect(dagSrc).toContain("stabilizePinBandScrollTop")
-    expect(dagSrc).toContain("reserveScrollPadding: false")
-    // Naive count-only compensation re-admits SENT after RECEIVED handoff.
-    expect(dagSrc).not.toMatch(
-      /pinBandScrollDelta\([\s\S]*?el\.scrollTop\s*=/,
-    )
-  })
-
-  it("PinOverlay is a sibling above the scroll host (not inside overflow)", () => {
-    expect(dagSrc).toMatch(
-      /trace-scroll-frame">\s*<PinOverlay[\s\S]*?<div ref=\{scrollRef\} className="trace-scroll"/,
-    )
-    expect(dagSrc).not.toMatch(/data-trace-scroll-host>\s*<PinOverlay/)
-  })
-
-  it("Trace VirtualList opts out of resize scroll adjust", () => {
+  it("tree VirtualList opts out of resize scroll adjust", () => {
     expect(dagSrc).toContain("adjustScrollOnResize={false}")
   })
 
-  it("fold refreshes pins without wiping the layout cache", () => {
-    // Cache clear belongs on run change only — not on every expand/collapse.
-    expect(dagSrc).toContain("pinLayoutCacheRef.current.clear()")
-    expect(dagSrc).toMatch(
-      /pinLayoutCacheRef\.current\.clear\(\)\s*\n\s*setPinnedIds\(\[\]\)\s*\n\s*\}, \[runId\]\)/,
-    )
-    expect(dagSrc).not.toMatch(
-      /pinLayoutCacheRef\.current\.clear\(\)\s*\n\s*schedulePinRefresh\(\)/,
-    )
+  it("CSS defines metric tree rows and detail inspector", () => {
+    expect(css).toContain(".trace-tree-row")
+    expect(css).toContain(".trace-detail")
+    expect(css).toContain(".trace-split-body")
   })
 
-  it("header-visible folds do not multi-frame-correct scrollTop", () => {
-    expect(scrollSrc).toContain("shouldParkAfterToggle")
-    expect(scrollSrc).toMatch(/if\s*\(\s*!scrolledIntoBody\s*\|\|\s*!scrollHost\s*\)\s*return/)
-    expect(scrollSrc).not.toMatch(/performance\.now\(\)\s*\+\s*280/)
+  it("does not render inline accordion bodies in the tree list", () => {
+    expect(dagSrc).not.toContain("CallOutline")
+    expect(dagSrc).not.toContain("WorkOutline")
+    expect(dagSrc).not.toContain("PhaseOutline")
+    expect(dagSrc).not.toContain("PreambleOutline")
+    expect(dagSrc).not.toContain("PinOverlay")
   })
 })
 

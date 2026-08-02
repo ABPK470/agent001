@@ -13,7 +13,7 @@ export const WIDGET_DEFAULTS: Record<WidgetType, WidgetSizeDefaults> = {
   "term-chat":       { w: 12, h: 24, minW: 2, minH: 2 },
   "run-status":      { w: 12, h: 24, minW: 2, minH: 2 },
   "live-logs":       { w: 12, h: 24, minW: 4, minH: 2 },
-  "debug-inspector": { w: 12, h: 24, minW: 2, minH: 2 },
+  "debug-inspector": { w: 28, h: 24, minW: 24, minH: 2 },
   "mymi-db":         { w: 12, h: 24, minW: 2, minH: 2 },
   "active-users":    { w: 12, h: 24, minW: 2, minH: 2 },
   "env-sync":        { w: 12, h: 24, minW: 4, minH: 4 },

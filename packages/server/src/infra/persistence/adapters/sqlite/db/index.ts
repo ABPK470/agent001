@@ -86,7 +86,16 @@ export {
 } from "./runs.js"
 
 export {
-  extractToolResultText,
+  deleteEvalDatasetEntry,
+  evalEntryToWire,
+  getEvalDatasetEntry,
+  insertEvalDatasetEntry,
+  listEvalDatasetEntries,
+  type DbEvalDatasetEntry,
+  type InsertEvalDatasetInput,
+} from "./eval-dataset.js"
+
+export {
   getToolResult,
   isRecallableToolResult,
   isRecallableToolText,

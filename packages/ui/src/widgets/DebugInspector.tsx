@@ -15,6 +15,7 @@ export function DebugInspector() {
   const { soloHidden } = useTilePaint()
   const trace = useStore((s) => s.trace)
   const activeRunId = useStore((s) => s.activeRunId)
+  const runs = useStore((s) => s.runs)
   const activeThreadId = useStore((s) => {
     if (!s.activeRunId) return null
     return s.runs.find((r) => r.id === s.activeRunId)?.threadId ?? null
@@ -58,6 +59,7 @@ export function DebugInspector() {
         dag={dag}
         runId={activeRunId}
         threadId={activeThreadId}
+        runs={runs}
         emptySlot={emptySlot}
         onExportMessage={notify}
         onExportError={notifyError}

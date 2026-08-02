@@ -138,6 +138,9 @@ describe("buildTraceDag", () => {
     expect(dag.stats.promptTokens).toBe(100)
     expect(dag.stats.completionTokens).toBe(20)
     expect(dag.stats.totalDuration).toBe(250)
+    expect(dag.stats.totalCostUsd).toBeGreaterThan(0)
+    expect(dag.calls[0]?.startOffsetMs).toBe(0)
+    expect(dag.calls[1]?.startOffsetMs).toBe(200)
   })
 
   it("attaches sql quality to the matching call and Work card", () => {
