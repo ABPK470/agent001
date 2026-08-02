@@ -1,7 +1,4 @@
 import type { TraceCallNode, TraceSqlQuality, TraceToolCall } from "./build-trace-dag"
-import { formatCostUsd } from "../../lib/events/trace-cost"
-
-export { formatCostUsd }
 
 export function formatCharCount(n: number): string {
   return n.toLocaleString()

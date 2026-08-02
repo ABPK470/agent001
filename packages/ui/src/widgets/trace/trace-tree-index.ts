@@ -3,13 +3,13 @@
  */
 
 import type {
-  TraceCallNode,
-  TraceCallSearchHit,
-  TraceDag,
-  TracePhaseNode,
-  TraceSpineEntry,
-  TraceToolCall,
-  TraceWorkNode,
+    TraceCallNode,
+    TraceCallSearchHit,
+    TraceDag,
+    TracePhaseNode,
+    TraceSpineEntry,
+    TraceToolCall,
+    TraceWorkNode,
 } from "../../lib/events/build-trace-view"
 import { callToolOpenKey, workToolOpenKey, type OpenState } from "./open-state"
 import { callReceivedSummary, callSentSummary } from "./trace-format"

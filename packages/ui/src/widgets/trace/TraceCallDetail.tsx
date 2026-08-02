@@ -4,11 +4,10 @@
 
 import { useMemo, useState } from "react"
 import { JsonViewer } from "../../components/JsonViewer"
-import { pricingForModel } from "../../lib/events/trace-cost"
 import { fmtTokens, formatMs } from "../../lib/util"
 import type { TraceCallNode, TraceDag } from "./build-trace-dag"
 import { TracePayloadStream, TraceMessageCard } from "./TraceMessageCard"
-import { formatCostUsd, tokenPairLabel } from "./trace-format"
+import { tokenPairLabel } from "./trace-format"
 
 type DetailTab = "input" | "raw" | "output" | "system"
 
@@ -49,15 +48,6 @@ export function TraceCallDetail({
     }),
     [call],
   )
-
-  const inputCost =
-    call.usage && call.model
-      ? (call.usage.promptTokens / 1_000_000) * pricingForModel(call.model).inputPer1M
-      : null
-  const outputCost =
-    call.usage && call.model
-      ? (call.usage.completionTokens / 1_000_000) * pricingForModel(call.model).outputPer1M
-      : null
 
   const workAfter = useMemo(() => {
     for (const entry of dag.spine) {
@@ -170,21 +160,15 @@ export function TraceCallDetail({
           </dl>
         </section>
         <section className="trace-detail-breakdown">
-          <div className="trace-detail-breakdown__title">Token cost breakdown</div>
+          <div className="trace-detail-breakdown__title">Token breakdown</div>
           <dl className="trace-detail-kv">
             <div>
               <dt>Input</dt>
-              <dd>
-                {call.usage ? fmtTokens(call.usage.promptTokens) : "—"}
-                {inputCost != null ? ` · ${formatCostUsd(inputCost)}` : ""}
-              </dd>
+              <dd>{call.usage ? fmtTokens(call.usage.promptTokens) : "—"}</dd>
             </div>
             <div>
               <dt>Output</dt>
-              <dd>
-                {call.usage ? fmtTokens(call.usage.completionTokens) : "—"}
-                {outputCost != null ? ` · ${formatCostUsd(outputCost)}` : ""}
-              </dd>
+              <dd>{call.usage ? fmtTokens(call.usage.completionTokens) : "—"}</dd>
             </div>
             <div>
               <dt>Total</dt>
@@ -192,7 +176,6 @@ export function TraceCallDetail({
                 {call.usage
                   ? tokenPairLabel(call.usage.promptTokens, call.usage.completionTokens)
                   : "—"}
-                {call.costUsd != null ? ` · ${formatCostUsd(call.costUsd)}` : ""}
               </dd>
             </div>
           </dl>

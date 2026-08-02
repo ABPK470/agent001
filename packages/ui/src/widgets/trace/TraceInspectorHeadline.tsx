@@ -5,7 +5,7 @@
 import { formatMs } from "../../lib/util"
 import type { TraceTreeNode } from "./trace-tree-index"
 import { TraceTreeStatusBadge } from "./TraceTreeStatusBadge"
-import { formatCostUsd, tokenPairLabel } from "./trace-format"
+import { tokenPairLabel } from "./trace-format"
 
 export function inspectorTitle(node: TraceTreeNode): string {
   switch (node.kind) {
@@ -55,8 +55,6 @@ function headlineMetricsLine(node: TraceTreeNode): string | null {
   } else if (node.kind === "call" || node.kind === "phase" || node.kind === "sent") {
     parts.push("0 tokens")
   }
-  if (node.costUsd != null) parts.push(formatCostUsd(node.costUsd))
-  else if (node.kind === "call" || node.kind === "phase") parts.push(formatCostUsd(0))
 
   const subtitle = headlineSubtitle(node)
   if (subtitle && !parts.some((p) => p.includes(subtitle))) {

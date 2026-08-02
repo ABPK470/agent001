@@ -42,7 +42,6 @@ import {
   type FoldMode,
   type OpenState,
 } from "./open-state"
-import { formatCostUsd } from "./trace-format"
 import {
   buildTraceTreeIndex,
   defaultSelectedScopeId,
@@ -488,9 +487,6 @@ export function TraceDag({
   if (stats.totalDuration > 0) {
     metaStats.push({ value: formatMs(stats.totalDuration) })
   }
-  if (stats.totalCostUsd > 0) {
-    metaStats.push({ value: formatCostUsd(stats.totalCostUsd), label: "cost" })
-  }
   if (stats.promptTokens > 0 || stats.completionTokens > 0) {
     metaStats.push({ value: fmtTokens(stats.promptTokens), label: "in" })
     metaStats.push({ value: fmtTokens(stats.completionTokens), label: "out" })
@@ -621,7 +617,6 @@ export function TraceDag({
                       <span className="trace-tree-header__node">Node</span>
                       <span className="trace-tree-header__metric">Latency</span>
                       <span className="trace-tree-header__metric">Tokens</span>
-                      <span className="trace-tree-header__metric">Cost</span>
                     </div>
                     <div ref={treeScrollRef} className="trace-split-tree-scroll">
                       <VirtualList

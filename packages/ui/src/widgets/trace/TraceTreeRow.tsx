@@ -2,11 +2,12 @@
  * Multi-column metric row for trace master-detail tree.
  */
 
+import type { CSSProperties } from "react"
 import { Bot, ChevronRight, Cpu, Layers, Mail, MessageSquare, Reply, Wrench, Zap } from "lucide-react"
 import { fmtTokens, formatMs } from "../../lib/util"
+import { TRACE_TREE_BASE_PAD_PX, TRACE_TREE_INDENT_PX } from "./trace-tree-guides"
 import type { TraceTreeNode, TraceTreeNodeKind } from "./trace-tree-index"
-import { formatCostUsd } from "./trace-format"
-import { TraceTreeStatusBadge } from "./TraceTreeStatusBadge"
+import { TraceTreeStatusBadge, TraceTreeStatusDot } from "./TraceTreeStatusBadge"
 
 const KIND_ICON: Record<TraceTreeNodeKind, typeof Bot> = {
   context: Layers,
@@ -23,6 +24,14 @@ const KIND_ICON: Record<TraceTreeNodeKind, typeof Bot> = {
 
 function displayTitle(node: TraceTreeNode): string {
   return node.leading ? `${node.leading} ${node.name}` : node.name
+}
+
+function nodeCellStyle(depth: number): CSSProperties {
+  return {
+    ["--trace-tree-depth" as string]: depth,
+    ["--trace-tree-base-pad" as string]: `${TRACE_TREE_BASE_PAD_PX}px`,
+    ["--trace-tree-indent" as string]: `${TRACE_TREE_INDENT_PX}px`,
+  }
 }
 
 export function TraceTreeRow({
@@ -42,11 +51,11 @@ export function TraceTreeRow({
   onJumpToRootCause: (scopeId: string) => void
 }) {
   const Icon = KIND_ICON[node.kind]
-  const indent = node.depth * 12
   const tokens =
     node.promptTokens > 0 || node.completionTokens > 0
       ? `${fmtTokens(node.promptTokens)} in / ${fmtTokens(node.completionTokens)} out`
       : "—"
+  const showTopLevelBadge = node.depth === 0
 
   function onRowClick() {
     onSelect(node.scopeId, false)
@@ -59,19 +68,24 @@ export function TraceTreeRow({
 
   return (
     <div
-      className={`trace-tree-row${selected ? " is-selected" : ""}${node.branchHasError ? " has-branch-error" : ""}${node.subtitle ? " has-subtitle" : ""}`}
+      className={[
+        "trace-tree-row",
+        selected ? "is-selected" : "",
+        node.branchHasError ? "has-branch-error" : "",
+        node.subtitle ? "has-subtitle" : "",
+        node.hasChildren ? "is-branch" : "is-leaf",
+        node.depth > 0 ? "is-child" : "is-root",
+      ]
+        .filter(Boolean)
+        .join(" ")}
       data-trace-scope={node.scopeId}
       data-trace-kind={node.kind}
+      data-trace-depth={node.depth}
       role="treeitem"
       aria-selected={selected}
     >
-      <button
-        type="button"
-        className="trace-tree-row__btn"
-        style={{ paddingLeft: `${8 + indent}px` }}
-        onClick={onRowClick}
-      >
-        <span className="trace-tree-row__node-cell">
+      <button type="button" className="trace-tree-row__btn" onClick={onRowClick}>
+        <span className="trace-tree-row__node-cell" style={nodeCellStyle(node.depth)}>
           <span className="trace-tree-row__chev" onClick={onChevronClick} aria-hidden>
             {node.hasChildren ? (
               <ChevronRight
@@ -81,43 +95,48 @@ export function TraceTreeRow({
             ) : null}
           </span>
           <span className="trace-tree-row__icon" aria-hidden>
-            <Icon size={14} />
-          </span>
-          <span className="trace-tree-row__text-block">
-            <span className="trace-tree-row__title-row">
-              <TraceTreeStatusBadge
+            {!showTopLevelBadge ? (
+              <TraceTreeStatusDot
                 status={node.status}
                 branchHasError={node.branchHasError}
                 hasError={node.hasError}
                 onJumpToRootCause={() => onJumpToRootCause(node.scopeId)}
               />
-              <span className="trace-tree-row__title-stack">
-                <span className="trace-tree-row__name" title={displayTitle(node)}>
-                  {node.leading ? (
-                    <>
-                      <span className="trace-tree-row__leading">{node.leading}</span>
-                      <span className="trace-tree-row__title">{node.name}</span>
-                    </>
-                  ) : (
-                    node.name
-                  )}
-                </span>
-                {node.subtitle ? (
-                  <span className="trace-tree-row__subtitle" title={node.subtitle}>
-                    {node.subtitle}
-                  </span>
-                ) : null}
+            ) : null}
+            <Icon size={node.hasChildren ? 14 : 12} />
+          </span>
+          <span className="trace-tree-row__text-block">
+            <span className="trace-tree-row__title-stack">
+              <span className="trace-tree-row__name" title={displayTitle(node)}>
+                {node.leading ? (
+                  <>
+                    <span className="trace-tree-row__leading">{node.leading}</span>
+                    <span className="trace-tree-row__title">{node.name}</span>
+                  </>
+                ) : (
+                  node.name
+                )}
               </span>
+              {node.subtitle ? (
+                <span className="trace-tree-row__subtitle" title={node.subtitle}>
+                  {node.subtitle}
+                </span>
+              ) : null}
             </span>
           </span>
+          {showTopLevelBadge ? (
+            <TraceTreeStatusBadge
+              status={node.status}
+              branchHasError={node.branchHasError}
+              hasError={node.hasError}
+              onJumpToRootCause={() => onJumpToRootCause(node.scopeId)}
+            />
+          ) : null}
         </span>
         <span className="trace-tree-row__metric tabular-nums">
           {node.durationMs != null ? formatMs(node.durationMs) : "—"}
         </span>
         <span className="trace-tree-row__metric tabular-nums">{tokens}</span>
-        <span className="trace-tree-row__metric tabular-nums">
-          {node.costUsd != null ? formatCostUsd(node.costUsd) : "—"}
-        </span>
       </button>
     </div>
   )
@@ -127,3 +146,5 @@ export function traceTreeRowEstimateSize(node: TraceTreeNode | undefined): numbe
   if (!node) return 44
   return node.subtitle ? 54 : 44
 }
+
+export { TRACE_TREE_BASE_PAD_PX, TRACE_TREE_INDENT_PX }

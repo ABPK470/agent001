@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest"
 import { buildTraceDag } from "./build-trace-dag"
 import { emptyOpen } from "./open-state"
 import {
-  buildTraceTreeIndex,
-  findDeepestFailure,
-  resolveSelectionScopeId,
+    buildTraceTreeIndex,
+    findDeepestFailure,
+    resolveSelectionScopeId,
 } from "./trace-tree-index"
 
 describe("trace-tree-index", () => {
