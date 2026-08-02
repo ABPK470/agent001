@@ -1,40 +1,11 @@
 /**
- * Tool span detail — structured I/O with schema validation + curl.
+ * Tool span detail — structured I/O with schema validation; errors in callout only.
  */
 
 import type { TraceDag } from "./build-trace-dag"
-import { callToolOpenKey, workToolOpenKey } from "./open-state"
-import type { TraceToolCall } from "./build-trace-dag"
+import { TraceErrorBlock } from "./TraceErrorBlock"
 import { TraceToolIo } from "./TraceToolIo"
-
-function resolveTool(dag: TraceDag, toolKey: string): TraceToolCall | null {
-  for (const call of dag.calls) {
-    for (const tool of call.toolBranches) {
-      if (callToolOpenKey(call.index, tool.id) === toolKey) return tool
-    }
-  }
-  for (const entry of dag.spine) {
-    const works =
-      entry.kind === "work"
-        ? [entry.work]
-        : entry.kind === "phase"
-          ? (entry.phase.children ?? [])
-              .filter((c): c is Extract<typeof c, { kind: "work" }> => c.kind === "work")
-              .map((c) => c.work)
-          : []
-    for (const work of works) {
-      for (const tool of work.tools) {
-        if (workToolOpenKey(work.id, tool.id) === toolKey) return tool
-      }
-    }
-  }
-  return null
-}
-
-function toolCurl(tool: TraceToolCall): string | null {
-  if (!tool.name) return null
-  return `curl -X POST '/api/tools/${tool.name}' -H 'Content-Type: application/json' -d '${JSON.stringify(tool.arguments)}'`
-}
+import { resolveTraceTool } from "./trace-tool-resolve"
 
 export function TraceToolDetail({
   dag,
@@ -43,12 +14,12 @@ export function TraceToolDetail({
   dag: TraceDag
   toolKey: string
 }) {
-  const tool = resolveTool(dag, toolKey)
+  const tool = resolveTraceTool(dag, toolKey)
   if (!tool) {
     return <p className="trace-empty">Tool not found</p>
   }
 
-  const curl = toolCurl(tool)
+  const isError = tool.status === "error"
 
   return (
     <div className="trace-detail-body">
@@ -56,18 +27,13 @@ export function TraceToolDetail({
         dag={dag}
         toolName={tool.name}
         argumentsValue={tool.arguments}
-        resultText={tool.resultText}
+        resultText={isError ? null : tool.resultText}
+        resultLabel={isError ? undefined : "Result"}
       />
-      {tool.status === "error" && tool.resultText ? (
-        <div className="trace-error-block">
-          <div className="trace-error-block__title">ERROR</div>
-          <pre className="trace-error-block__trace">{tool.resultText}</pre>
-        </div>
-      ) : null}
-      {curl ? (
+      {isError && tool.resultText ? (
         <div className="trace-detail-section">
-          <div className="trace-detail-section__label">Copy as curl</div>
-          <pre className="trace-detail-curl">{curl}</pre>
+          <div className="trace-detail-section__label">Error / result</div>
+          <TraceErrorBlock text={tool.resultText} title="ERROR / EXCEPTION TRACE" />
         </div>
       ) : null}
     </div>

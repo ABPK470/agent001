@@ -17,6 +17,7 @@ import {
   nextSelectableSlashIndex,
   slashCommandQuery,
   slashPaletteVisible,
+  parseCommandFlags,
 } from "./slashPaletteUtils.js"
 import {
   composerDraftStorageKey,
@@ -150,6 +151,14 @@ describe("slash palette utils", () => {
     )
     const next = nextSelectableSlashIndex(withUnavailable, 0, 1)
     expect(withUnavailable[next]?.available).toBe(true)
+  })
+
+  it("parses hint flags into discrete tokens", () => {
+    expect(parseCommandFlags("--txt | --json | --no-code")).toEqual([
+      "--txt",
+      "--json",
+      "--no-code",
+    ])
   })
 })
 

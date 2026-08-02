@@ -1,10 +1,10 @@
 /**
- * Message row detail — single prompt message body.
+ * Message row detail — single prompt message in a structured card.
  */
 
 import { JsonViewer } from "../../components/JsonViewer"
 import type { TraceCallNode } from "./build-trace-dag"
-import { ExpandableText } from "./TraceExpandable"
+import { TraceMessageCardFromPrompt } from "./TraceMessageCard"
 
 export function TraceMessageDetail({
   call,
@@ -19,13 +19,8 @@ export function TraceMessageDetail({
 
   return (
     <div className="trace-detail-body">
-      <div className="trace-detail-section">
-        <div className="trace-detail-section__label">{msg.speaker}</div>
-        {msg.content ? (
-          <ExpandableText text={msg.content} className="trace-body-muted" />
-        ) : (
-          <span className="trace-empty">empty</span>
-        )}
+      <div className="trace-payload-stream">
+        <TraceMessageCardFromPrompt msg={msg} />
       </div>
       {msg.toolCalls.length > 0 ? (
         <div className="trace-detail-section">

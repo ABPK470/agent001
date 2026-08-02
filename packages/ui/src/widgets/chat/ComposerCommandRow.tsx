@@ -1,8 +1,10 @@
 import type { ReactNode } from "react"
+import { CommandFlagBadges } from "./CommandFlagBadges"
 
 export function ComposerCommandRow({
   name,
   description,
+  flags,
   meta,
   active = false,
   disabled = false,
@@ -15,6 +17,7 @@ export function ComposerCommandRow({
 }: {
   name: ReactNode
   description: string
+  flags?: string[]
   meta?: string
   active?: boolean
   disabled?: boolean
@@ -31,15 +34,22 @@ export function ComposerCommandRow({
     active ? "composer-cmd-row--active" : "",
     disabled ? "composer-cmd-row--disabled" : "",
     disabled && unavailableNote ? "composer-cmd-row--has-status" : "",
+    flags && flags.length > 0 ? "composer-cmd-row--has-flags" : "",
   ]
     .filter(Boolean)
     .join(" ")
+
+  const trailing = flags && flags.length > 0
+    ? <CommandFlagBadges flags={flags} />
+    : meta
+      ? <span className="composer-cmd-row__meta">{meta}</span>
+      : null
 
   const content = (
     <>
       <span className="composer-cmd-row__name">{name}</span>
       <span className="composer-cmd-row__desc">{description}</span>
-      {meta ? <span className="composer-cmd-row__meta">{meta}</span> : null}
+      {trailing}
       {disabled && unavailableNote ? (
         <span className="composer-cmd-row__status">{unavailableNote}</span>
       ) : null}

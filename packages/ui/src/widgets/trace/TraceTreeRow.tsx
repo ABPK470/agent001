@@ -71,43 +71,43 @@ export function TraceTreeRow({
         style={{ paddingLeft: `${8 + indent}px` }}
         onClick={onRowClick}
       >
-        <span className="trace-tree-row__chev" onClick={onChevronClick} aria-hidden>
-          {node.hasChildren ? (
-            <ChevronRight
-              size={13}
-              className={`trace-tree-row__chev-icon${folded ? "" : " is-open"}`}
-            />
-          ) : (
-            <span className="trace-tree-row__chev-spacer" />
-          )}
-        </span>
-        <span className="trace-tree-row__icon" aria-hidden>
-          <Icon size={14} />
-        </span>
-        <span className="trace-tree-row__name-col">
-          <span className="trace-tree-row__label-cell">
-            <TraceTreeStatusBadge
-              status={node.status}
-              branchHasError={node.branchHasError}
-              hasError={node.hasError}
-              onJumpToRootCause={() => onJumpToRootCause(node.scopeId)}
-            />
-            <span className="trace-tree-row__text-group">
-              <span className="trace-tree-row__name" title={displayTitle(node)}>
-                {node.leading ? (
-                  <>
-                    <span className="trace-tree-row__leading">{node.leading}</span>
-                    <span className="trace-tree-row__title">{node.name}</span>
-                  </>
-                ) : (
-                  node.name
-                )}
-              </span>
-              {node.subtitle ? (
-                <span className="trace-tree-row__subtitle" title={node.subtitle}>
-                  {node.subtitle}
+        <span className="trace-tree-row__node-cell">
+          <span className="trace-tree-row__chev" onClick={onChevronClick} aria-hidden>
+            {node.hasChildren ? (
+              <ChevronRight
+                size={13}
+                className={`trace-tree-row__chev-icon${folded ? "" : " is-open"}`}
+              />
+            ) : null}
+          </span>
+          <span className="trace-tree-row__icon" aria-hidden>
+            <Icon size={14} />
+          </span>
+          <span className="trace-tree-row__text-block">
+            <span className="trace-tree-row__title-row">
+              <TraceTreeStatusBadge
+                status={node.status}
+                branchHasError={node.branchHasError}
+                hasError={node.hasError}
+                onJumpToRootCause={() => onJumpToRootCause(node.scopeId)}
+              />
+              <span className="trace-tree-row__title-stack">
+                <span className="trace-tree-row__name" title={displayTitle(node)}>
+                  {node.leading ? (
+                    <>
+                      <span className="trace-tree-row__leading">{node.leading}</span>
+                      <span className="trace-tree-row__title">{node.name}</span>
+                    </>
+                  ) : (
+                    node.name
+                  )}
                 </span>
-              ) : null}
+                {node.subtitle ? (
+                  <span className="trace-tree-row__subtitle" title={node.subtitle}>
+                    {node.subtitle}
+                  </span>
+                ) : null}
+              </span>
             </span>
           </span>
         </span>
@@ -124,6 +124,6 @@ export function TraceTreeRow({
 }
 
 export function traceTreeRowEstimateSize(node: TraceTreeNode | undefined): number {
-  if (!node) return 36
-  return node.subtitle ? 48 : 36
+  if (!node) return 44
+  return node.subtitle ? 54 : 44
 }

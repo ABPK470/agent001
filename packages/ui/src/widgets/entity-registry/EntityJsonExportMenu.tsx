@@ -2,7 +2,7 @@
  * Per-entity Catalog JSON import/export.
  * Menu title names the object; items are verbs only — no TypeScript type names in UI.
  *
- * Peer of SegmentToggle: [Overview|JSON] … [one bordered icon menu]
+ * Peer of SegmentToggle: [Form|JSON] … [one bordered icon menu]
  */
 
 import { ArrowUpDown, Copy, Download, Upload } from "lucide-react"

@@ -85,7 +85,7 @@ export function EntityOverview({
             <SegmentToggle
               value={view}
               options={[
-                { value: "overview", label: "Overview" },
+                { value: "overview", label: "Form" },
                 { value: "json", label: "JSON" },
               ]}
               onChange={setView}

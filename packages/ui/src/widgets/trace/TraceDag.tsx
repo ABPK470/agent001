@@ -26,7 +26,7 @@ import {
   type TraceCallSearchHit,
   type TraceDag,
 } from "./build-trace-dag"
-import { previousRunInThread } from "./trace-step-payload"
+import { type CompareRunRow, nodeSupportsCompare, previousRunInThread, priorRunsInThread } from "./trace-run-compare"
 import {
   emptyOpen,
   seedLatest,
@@ -109,6 +109,14 @@ export function TraceDag({
     [dag, openState, query, callHits],
   )
 
+  const priorRuns = useMemo(
+    (): CompareRunRow[] => priorRunsInThread(runs, runId),
+    [runs, runId],
+  )
+
+  const selectedNode = selectedScopeId ? treeIndex.byScopeId.get(selectedScopeId) : null
+  const canCompare = selectedNode ? nodeSupportsCompare(dag, selectedNode) : false
+
   useEffect(() => {
     if (seededRef.current || (dag.calls.length === 0 && dag.spine.length === 0)) return
     seededRef.current = true
@@ -146,6 +154,14 @@ export function TraceDag({
     setCompareRunId(null)
     setCompareDag(null)
   }, [runId])
+
+  useEffect(() => {
+    if (!compareRunId) return
+    if (!canCompare) {
+      setCompareRunId(null)
+      setCompareDag(null)
+    }
+  }, [compareRunId, canCompare])
 
   useEffect(() => {
     if (!compareRunId) {
@@ -331,19 +347,34 @@ export function TraceDag({
     setOpenState({ ...emptyOpen(), foldMode: "collapsed" })
   }
 
+  function onTogglePlayground() {
+    setPlaygroundOpen((open) => {
+      const next = !open
+      if (next) {
+        setCompareRunId(null)
+        setCompareDag(null)
+      }
+      return next
+    })
+  }
+
   function onToggleCompare() {
     if (compareRunId) {
       setCompareRunId(null)
       setCompareDag(null)
-      setPlaygroundOpen(false)
       return
     }
     const prevId = previousRunInThread(runs, runId)
     if (!prevId) {
-      onExportError?.("No previous run in this thread")
+      onExportError?.("No prior run in this thread")
       return
     }
     setCompareRunId(prevId)
+    setPlaygroundOpen(false)
+  }
+
+  function onCompareRunChange(nextRunId: string) {
+    setCompareRunId(nextRunId)
     setPlaygroundOpen(false)
   }
 
@@ -504,9 +535,7 @@ export function TraceDag({
                 {runId && dag.hasData && viewMode === "tree" && (
                   <>
                     <div className="trace-tree-header" aria-hidden>
-                      <span className="trace-tree-header__chev" />
-                      <span className="trace-tree-header__icon" />
-                      <span className="trace-tree-header__name">Node</span>
+                      <span className="trace-tree-header__node">Node</span>
                       <span className="trace-tree-header__metric">Latency</span>
                       <span className="trace-tree-header__metric">Tokens</span>
                       <span className="trace-tree-header__metric">Cost</span>
@@ -544,9 +573,12 @@ export function TraceDag({
                     runId={runId}
                     threadId={threadId}
                     playgroundOpen={playgroundOpen}
-                    onTogglePlayground={() => setPlaygroundOpen((v) => !v)}
+                    onTogglePlayground={onTogglePlayground}
                     compareRunId={compareRunId}
                     onToggleCompare={onToggleCompare}
+                    priorRuns={priorRuns}
+                    onCompareRunChange={onCompareRunChange}
+                    canCompare={canCompare}
                     onNotify={onExportMessage}
                     onError={onExportError}
                   />

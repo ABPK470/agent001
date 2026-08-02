@@ -25,6 +25,15 @@ export function autofillSlashCommand(cmd: ChatSlashCatalogEntry): string {
   return `/${cmd.slash}`
 }
 
+/** Split `--txt | --json` style hints into discrete flag tokens for badges. */
+export function parseCommandFlags(hint?: string): string[] {
+  if (!hint?.trim()) return []
+  return hint
+    .split("|")
+    .map((part) => part.trim())
+    .filter(Boolean)
+}
+
 export function slashPaletteVisible(value: string, disabled: boolean): boolean {
   return !disabled && slashCommandQuery(value) !== null
 }

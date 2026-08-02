@@ -2,9 +2,8 @@
  * Sticky step detail inspector — header, tabs, error surface, action bar.
  */
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { api } from "../../client/index"
-import { formatMs } from "../../lib/util"
 import type { TraceDag } from "./build-trace-dag"
 import { TraceCallDetail } from "./TraceCallDetail"
 import { TraceContextDetail } from "./TraceContextDetail"
@@ -14,8 +13,13 @@ import { TraceRunDiff } from "./TraceRunDiff"
 import { TraceStepPlayground } from "./TraceStepPlayground"
 import { TraceToolDetail } from "./TraceToolDetail"
 import { TraceWorkDetail } from "./TraceWorkDetail"
-import { formatCostUsd, tokenPairLabel } from "./trace-format"
+import {
+  TraceInspectorHeadline,
+  inspectorActionKind,
+} from "./TraceInspectorHeadline"
 import { buildTraceStepPayload } from "./trace-step-payload"
+import { type CompareRunRow } from "./trace-run-compare"
+import { resolveTraceTool, traceToolCurl } from "./trace-tool-resolve"
 import type { TraceTreeIndex, TraceTreeNode } from "./trace-tree-index"
 
 function findWork(dag: TraceDag, workId: string) {
@@ -33,17 +37,6 @@ function findWork(dag: TraceDag, workId: string) {
 function findPhase(dag: TraceDag, phaseId: string) {
   const entry = dag.spine.find((e) => e.kind === "phase" && e.phase.id === phaseId)
   return entry?.kind === "phase" ? entry.phase : null
-}
-
-function inspectorHeader(node: TraceTreeNode): string {
-  const bits: string[] = [node.name]
-  if (node.subtitle && node.kind === "call") bits.unshift(node.subtitle)
-  if (node.durationMs != null) bits.push(formatMs(node.durationMs))
-  if (node.costUsd != null) bits.push(formatCostUsd(node.costUsd))
-  if (node.promptTokens > 0 || node.completionTokens > 0) {
-    bits.push(tokenPairLabel(node.promptTokens, node.completionTokens))
-  }
-  return bits.join("  ·  ")
 }
 
 function renderDetail(dag: TraceDag, node: TraceTreeNode) {
@@ -108,6 +101,9 @@ export function TraceDetailInspector({
   onTogglePlayground,
   compareRunId,
   onToggleCompare,
+  priorRuns,
+  onCompareRunChange,
+  canCompare,
   onNotify,
   onError,
 }: {
@@ -121,11 +117,25 @@ export function TraceDetailInspector({
   onTogglePlayground: () => void
   compareRunId: string | null
   onToggleCompare: () => void
+  priorRuns: CompareRunRow[]
+  onCompareRunChange: (runId: string) => void
+  canCompare: boolean
   onNotify?: (message: string) => void
   onError?: (message: string) => void
 }) {
   const [evalBusy, setEvalBusy] = useState(false)
+  const [evalAdded, setEvalAdded] = useState(false)
   const node = selectedScopeId ? treeIndex.byScopeId.get(selectedScopeId) : null
+
+  useEffect(() => {
+    setEvalAdded(false)
+  }, [selectedScopeId])
+
+  useEffect(() => {
+    if (!evalAdded) return
+    const timer = window.setTimeout(() => setEvalAdded(false), 2500)
+    return () => window.clearTimeout(timer)
+  }, [evalAdded])
 
   if (!node) {
     return (
@@ -134,6 +144,19 @@ export function TraceDetailInspector({
       </div>
     )
   }
+
+  const actions = inspectorActionKind(node)
+  const toolKey =
+    node.kind === "tool"
+      ? node.toolKey
+      : node.kind === "work" && node.toolKey
+        ? node.toolKey
+        : null
+  const tool = toolKey ? resolveTraceTool(dag, toolKey) : null
+  const curl = tool ? traceToolCurl(tool) : null
+  const showLlmPlayground = actions === "llm" && playgroundOpen && runId
+  const showCompare = actions === "llm" && Boolean(compareRunId) && canCompare
+  const compareAvailable = priorRuns.length > 0
 
   async function onAddEval() {
     if (!runId) return
@@ -156,6 +179,7 @@ export function TraceDetailInspector({
         metadata: payload.metadata,
       })
       onNotify?.("Added to evaluation dataset")
+      setEvalAdded(true)
     } catch (err: unknown) {
       onError?.(err instanceof Error ? err.message : "Failed to add to dataset")
     } finally {
@@ -163,51 +187,101 @@ export function TraceDetailInspector({
     }
   }
 
+  async function onCopyCurl() {
+    if (!curl) return
+    try {
+      await navigator.clipboard.writeText(curl)
+      onNotify?.("Copied curl command")
+    } catch {
+      onError?.("Could not copy to clipboard")
+    }
+  }
+
+  function onTestTool() {
+    if (!tool) return
+    onNotify?.("Tool replay is not wired yet — use Copy as curl")
+  }
+
   return (
     <div className="trace-detail">
       <div className="trace-detail__header">
-        <div className="trace-detail__headline">{inspectorHeader(node)}</div>
+        <TraceInspectorHeadline node={node} />
         <div className="trace-detail__actions">
-          <button
-            type="button"
-            className="trace-detail-action"
-            onClick={onTogglePlayground}
-            disabled={!runId}
-          >
-            {playgroundOpen ? "Close playground" : "Re-run in playground"}
-          </button>
-          <button
-            type="button"
-            className="trace-detail-action"
-            disabled={!runId || evalBusy}
-            onClick={onAddEval}
-          >
-            {evalBusy ? "Saving…" : "Add to evaluation dataset"}
-          </button>
-          <button
-            type="button"
-            className="trace-detail-action"
-            onClick={onToggleCompare}
-          >
-            {compareRunId ? "Close diff" : "Compare with previous run"}
-          </button>
+          {actions === "tool" ? (
+            <>
+              <button
+                type="button"
+                className="trace-detail-action is-primary"
+                onClick={onTestTool}
+              >
+                Test tool in playground
+              </button>
+              <button
+                type="button"
+                className="trace-detail-action"
+                disabled={!curl}
+                onClick={onCopyCurl}
+              >
+                Copy as curl
+              </button>
+            </>
+          ) : actions === "llm" ? (
+            <>
+              <button
+                type="button"
+                className={`trace-detail-action is-toggle${playgroundOpen ? " is-active" : ""}`}
+                aria-pressed={playgroundOpen}
+                onClick={onTogglePlayground}
+                disabled={!runId}
+              >
+                Re-run in playground
+              </button>
+              <button
+                type="button"
+                className={`trace-detail-action is-toggle${evalAdded ? " is-success" : ""}`}
+                disabled={!runId || evalBusy || evalAdded}
+                onClick={onAddEval}
+              >
+                {evalBusy ? "Saving…" : evalAdded ? "Added ✓" : "Add to evaluation dataset"}
+              </button>
+              {canCompare ? (
+                <button
+                  type="button"
+                  className={`trace-detail-action is-toggle${compareRunId ? " is-active" : ""}`}
+                  aria-pressed={Boolean(compareRunId)}
+                  onClick={onToggleCompare}
+                  disabled={!compareAvailable}
+                  title={
+                    compareAvailable
+                      ? undefined
+                      : "No prior run in this thread to compare against"
+                  }
+                >
+                  Compare with previous run
+                </button>
+              ) : null}
+            </>
+          ) : null}
         </div>
       </div>
 
       <div className="trace-detail__scroll">
-        {playgroundOpen && runId ? (
+        {showLlmPlayground ? (
           <TraceStepPlayground
             dag={dag}
             node={node}
             runId={runId}
             onError={onError}
           />
-        ) : compareRunId ? (
+        ) : showCompare && compareRunId ? (
           <TraceRunDiff
             dag={dag}
             compareDag={compareDag}
             node={node}
             compareRunId={compareRunId}
+            currentRunId={runId}
+            priorRuns={priorRuns}
+            onCompareRunChange={onCompareRunChange}
           />
         ) : (
           renderDetail(dag, node)

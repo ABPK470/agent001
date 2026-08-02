@@ -131,19 +131,4 @@ export function buildTraceStepPayload(
   return null
 }
 
-export function previousRunInThread(
-  runs: Array<{ id: string; threadId?: string | null; createdAt?: string }>,
-  activeRunId: string | null,
-): string | null {
-  if (!activeRunId) return null
-  const current = runs.find((r) => r.id === activeRunId)
-  if (!current?.threadId) return null
-  const siblings = runs
-    .filter((r) => r.threadId === current.threadId && r.id !== activeRunId)
-    .sort((a, b) => {
-      const ta = a.createdAt ? Date.parse(a.createdAt) : 0
-      const tb = b.createdAt ? Date.parse(b.createdAt) : 0
-      return tb - ta
-    })
-  return siblings[0]?.id ?? null
-}
+export { previousRunInThread, priorRunsInThread } from "./trace-run-compare"

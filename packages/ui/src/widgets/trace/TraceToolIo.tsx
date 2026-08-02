@@ -18,12 +18,14 @@ export function TraceToolIo({
   argumentsValue,
   resultText,
   label = "Arguments",
+  resultLabel = "Result",
 }: {
   dag: TraceDag
   toolName: string
   argumentsValue: Record<string, unknown>
   resultText?: string | null
   label?: string
+  resultLabel?: string
 }) {
   const [schemaOpen, setSchemaOpen] = useState(false)
   const validation = useMemo(
@@ -71,7 +73,7 @@ export function TraceToolIo({
       {resultText ? (
         <div className="trace-tool-io__result">
           <div className="trace-tool-io__head">
-            <span className="trace-detail-section__label">Result</span>
+            <span className="trace-detail-section__label">{resultLabel}</span>
             <span
               className={`trace-json-badge${resultIsJson ? " is-valid" : " is-plain"}`}
             >

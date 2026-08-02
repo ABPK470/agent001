@@ -39,16 +39,20 @@ export function TraceWorkDetail({
   const errorNotes = work.notes.filter((n) => n.tone === "error")
 
   if (tool) {
+    const isError = tool.status === "error"
     return (
       <div className="trace-detail-body">
         <TraceToolIo
           dag={dag}
           toolName={tool.name}
           argumentsValue={tool.arguments}
-          resultText={tool.resultText}
+          resultText={isError ? null : tool.resultText}
         />
-        {tool.status === "error" && tool.resultText ? (
-          <TraceErrorBlock text={tool.resultText} title="ERROR" />
+        {isError && tool.resultText ? (
+          <div className="trace-detail-section">
+            <div className="trace-detail-section__label">Error / result</div>
+            <TraceErrorBlock text={tool.resultText} title="ERROR / EXCEPTION TRACE" />
+          </div>
         ) : null}
       </div>
     )
@@ -60,14 +64,18 @@ export function TraceWorkDetail({
         <TraceErrorBlock key={note.id} text={note.text} />
       ))}
       {work.tools.map((t) => (
-        <TraceToolIo
-          key={t.id}
-          dag={dag}
-          toolName={t.name}
-          argumentsValue={t.arguments}
-          resultText={t.resultText}
-          label={t.name}
-        />
+        <div key={t.id} className="trace-detail-section">
+          <TraceToolIo
+            dag={dag}
+            toolName={t.name}
+            argumentsValue={t.arguments}
+            resultText={t.status === "error" ? null : t.resultText}
+            label={t.name}
+          />
+          {t.status === "error" && t.resultText ? (
+            <TraceErrorBlock text={t.resultText} title="ERROR / EXCEPTION TRACE" />
+          ) : null}
+        </div>
       ))}
       {work.sqlQuality.length > 0 && (
         <div className="trace-detail-section">

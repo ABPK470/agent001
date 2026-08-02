@@ -1881,12 +1881,13 @@ function TermChatInputBar({
   return (
       <div
           data-intro-target="termchat-input"
-          className={`${chromeClass} ${palette || hasResult ? "chathome-chrome-pill--composer-open" : "overflow-hidden"} ${className} mx-auto ${isHero ? "rounded-[24px] px-5 py-4" : chrome === "flush" ? "rounded-none px-3 py-2.5" : "rounded-2xl px-4 py-3"}`}
+          className={`chat-input-wrapper ${chromeClass} ${palette || hasResult ? "chathome-chrome-pill--composer-open" : "overflow-hidden"}${palette ? " chat-input-wrapper--palette-open" : ""} ${className} mx-auto ${isHero ? "rounded-[24px] px-5 py-4" : chrome === "flush" ? "rounded-none px-3 py-2.5" : "rounded-2xl px-4 py-3"}`}
           style={heroStyle}
       >
+          {palette}
           <ChatComposerShell
             console={commandConsole}
-            slashPalette={palette}
+            paletteOpen={Boolean(palette)}
             variant="term"
             density={isHero ? "hero" : "default"}
           >

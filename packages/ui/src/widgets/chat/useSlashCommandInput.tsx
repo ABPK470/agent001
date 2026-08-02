@@ -112,7 +112,6 @@ export function useSlashCommandInput({
         onSelect={acceptCommand}
         onHover={setActiveIndex}
         variant={variant}
-        inline
       />
     ) : null
 

@@ -539,6 +539,30 @@ function annotateBranchErrors(index: TraceTreeIndex): void {
   }
 }
 
+function annotateFailureSubtitles(index: TraceTreeIndex): void {
+  function firstFailedDescendant(scopeId: string): TraceTreeNode | null {
+    for (const kid of index.childrenByParent.get(scopeId) ?? []) {
+      const node = index.byScopeId.get(kid)
+      if (!node) continue
+      if (node.hasError || node.status === "failed") return node
+      const deeper = firstFailedDescendant(kid)
+      if (deeper) return deeper
+    }
+    return null
+  }
+
+  for (const node of index.nodes) {
+    if (!node.branchHasError || node.hasError) continue
+    const failed = firstFailedDescendant(node.scopeId)
+    if (!failed) continue
+    const hint = failed.subtitle?.trim() || failed.name
+    const normalized = node.subtitle?.trim().toLowerCase()
+    if (normalized === "done" || normalized === "success" || !node.subtitle) {
+      node.subtitle = `failed — ${hint}`
+    }
+  }
+}
+
 export function buildTraceTreeIndex(
   dag: TraceDag,
   openState: OpenState,
@@ -572,6 +596,7 @@ export function buildTraceTreeIndex(
     maxDurationMs: maxDurationMs || dag.stats.totalDuration || 1,
   }
   annotateBranchErrors(index)
+  annotateFailureSubtitles(index)
   return index
 }
 

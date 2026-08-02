@@ -7,7 +7,7 @@ import { JsonViewer } from "../../components/JsonViewer"
 import { pricingForModel } from "../../lib/events/trace-cost"
 import { fmtTokens, formatMs } from "../../lib/util"
 import type { TraceCallNode, TraceDag } from "./build-trace-dag"
-import { ExpandableText } from "./TraceExpandable"
+import { TracePayloadStream, TraceMessageCard } from "./TraceMessageCard"
 import { formatCostUsd, tokenPairLabel } from "./trace-format"
 
 type DetailTab = "input" | "raw" | "output" | "system"
@@ -106,16 +106,7 @@ export function TraceCallDetail({
             {userMessages.length === 0 ? (
               <p className="trace-empty">No user/assistant messages recorded</p>
             ) : (
-              userMessages.map((msg, i) => (
-                <div key={`${msg.role}-${i}`} className="trace-detail-message">
-                  <div className="trace-detail-message__speaker">{msg.speaker}</div>
-                  {msg.content ? (
-                    <ExpandableText text={msg.content} className="trace-body-muted" />
-                  ) : (
-                    <span className="trace-empty">empty</span>
-                  )}
-                </div>
-              ))
+              <TracePayloadStream messages={userMessages} />
             )}
           </div>
         )}
@@ -123,34 +114,36 @@ export function TraceCallDetail({
           <JsonViewer value={rawPayload} copyable embedded inline label="request" />
         )}
         {tab === "output" && (
-          <div className="trace-detail-section">
+          <div className="trace-detail-section trace-payload-stream">
             {call.waiting && <p className="trace-empty">Waiting for reply…</p>}
-            {!call.waiting && call.content && (
-              <ExpandableText text={call.content} className="trace-body-reply" />
+            {!call.waiting && (
+              <TraceMessageCard
+                role="agent"
+                speaker="Agent reply"
+                content={call.content}
+              />
             )}
             {!call.waiting && call.toolBranches.length > 0 && (
               <div className="trace-detail-tools">
                 <div className="trace-detail-section__label">Proposed tools</div>
                 {call.toolBranches.map((tool) => (
-                  <JsonViewer
+                  <TraceMessageCard
                     key={tool.id}
-                    value={tool.arguments}
-                    copyable
-                    embedded
-                    label={tool.name}
+                    role="tool"
+                    speaker="Proposed tool"
+                    detail={tool.name}
+                    content={JSON.stringify(tool.arguments, null, 2)}
+                    mono
                   />
                 ))}
               </div>
             )}
-            {!call.waiting && !call.content && call.toolBranches.length === 0 && (
-              <p className="trace-empty is-error">Empty reply</p>
-            )}
           </div>
         )}
         {tab === "system" && (
-          <div className="trace-detail-section">
+          <div className="trace-detail-section trace-payload-stream">
             {systemPrompt ? (
-              <ExpandableText text={systemPrompt} className="trace-body-muted" />
+              <TraceMessageCard role="system" speaker="System" content={systemPrompt} />
             ) : (
               <p className="trace-empty">No system prompt</p>
             )}

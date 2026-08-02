@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react"
 import { ComposerCommandRow } from "./ComposerCommandRow"
 import { COMPOSER_RESULT_HINTS, ComposerKbdFooter } from "./ComposerKbdFooter"
 import type { CommandConsoleLine } from "./commandConsoleModel"
+import { parseCommandFlags } from "./slashPaletteUtils"
 
 export type CommandConsoleVariant = "term"
 
@@ -64,7 +65,7 @@ function CommandConsoleBlock({ line }: { line: CommandConsoleLine }) {
             key={cmd.slash}
             name={`/${cmd.slash}`}
             description={cmd.label}
-            meta={cmd.hint}
+            flags={parseCommandFlags(cmd.hint)}
             disabled={cmd.available === false}
             unavailableNote={cmd.unavailableReason}
           />

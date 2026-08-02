@@ -43,6 +43,9 @@ describe("trace-tree-index", () => {
     expect(work?.hasError).toBe(true)
     if (phase) {
       expect(phase.branchHasError).toBe(true)
+      if (phase.subtitle === "done" || phase.subtitle?.endsWith("done")) {
+        expect(phase.subtitle).toMatch(/^failed —/)
+      }
       const deepest = findDeepestFailure(index, phase.scopeId)
       expect(deepest).toBe(work?.scopeId)
       expect(resolveSelectionScopeId(index, phase.scopeId, true)).toBe(work?.scopeId)
