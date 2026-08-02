@@ -76,17 +76,6 @@ export function TraceTreeRow({
       role="treeitem"
       aria-selected={selected}
     >
-      {node.branchHasError ? (
-        <button
-          type="button"
-          className="trace-tree-row__jump-error"
-          title="Jump to root cause"
-          aria-label="Jump to root cause"
-          onClick={onErrorBadgeClick}
-        >
-          !
-        </button>
-      ) : null}
       <button
         type="button"
         className="trace-tree-row__btn"
@@ -130,11 +119,25 @@ export function TraceTreeRow({
         <span className="trace-tree-row__metric tabular-nums">
           {node.costUsd != null ? formatCostUsd(node.costUsd) : "—"}
         </span>
-        <span
-          className={`trace-tree-row__status-dot is-${node.status}${node.branchHasError ? " has-branch-error" : ""}`}
-          title={statusLabel(node.status)}
-          aria-hidden
-        />
+        <span className="trace-tree-row__status">
+          {node.branchHasError && !node.hasError ? (
+            <button
+              type="button"
+              className="trace-tree-row__jump-error"
+              title="Jump to root cause"
+              aria-label="Jump to root cause"
+              onClick={onErrorBadgeClick}
+            >
+              !
+            </button>
+          ) : (
+            <span
+              className={`trace-tree-row__status-dot is-${node.status}`}
+              title={statusLabel(node.status)}
+              aria-hidden
+            />
+          )}
+        </span>
       </button>
     </div>
   )
