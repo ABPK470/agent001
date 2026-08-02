@@ -51,6 +51,20 @@ export function scopeSummary(scope: EntityRegistryTableScope): string {
   }
 }
 
+/** Collapsed table row — scannable metadata, never raw SQL predicates. */
+export function tableScopeSubtitle(table: EntityRegistryTable): string {
+  switch (table.scope.kind) {
+    case "rootPk":
+      return table.scope.column ? `rootPk · ${table.scope.column}` : "rootPk"
+    case "sql": {
+      const col = table.scopeColumn?.trim()
+      return col ? `${col} · sql scope` : "sql scope"
+    }
+    default:
+      return scopeSummary(table.scope)
+  }
+}
+
 export function tableSourceLabel(source: EntityRegistryTable["source"]): string {
   switch (source ?? "manual") {
     case "fk+pipeline":

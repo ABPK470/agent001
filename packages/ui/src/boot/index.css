@@ -1686,15 +1686,279 @@ label:focus-within > .mia-checkbox,
   outline-offset: 2px;
 }
 
-/* ── Entity Registry · Tables tab rows ─────────────────────────── */
-.entity-table-row__scope {
+/* ── Entity Registry · accordion lists (Overview + Tables) ─────── */
+.entity-accordion-list {
+  container-type: inline-size;
+  container-name: entity-accordion;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: 0.5rem;
+  background: var(--panel);
+}
+
+.entity-accordion__item + .entity-accordion__item {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.entity-accordion__item--noted {
+  border-left: 2px solid var(--accent);
+}
+
+.entity-accordion__header {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.65rem 0.85rem;
+  text-align: left;
+  transition: background-color 160ms ease;
+}
+
+.entity-accordion__header:hover {
+  background: var(--hover-fill);
+}
+
+.entity-accordion__header--overview .entity-accordion__name {
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.entity-accordion__header--overview .entity-accordion__subtitle {
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+}
+
+.entity-accordion__panel--overview {
+  padding: 0.85rem 1rem 1.1rem;
+}
+
+.entity-accordion__item--expanded > .entity-accordion__header {
+  background: var(--select-fill);
+}
+
+.entity-accordion__index {
+  width: 1.25rem;
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: var(--text-faint);
+}
+
+.entity-accordion__main {
+  min-width: 0;
+  flex: 1;
+}
+
+.entity-accordion__name {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.entity-accordion__subtitle {
+  display: block;
+  margin-top: 0.125rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  line-height: 1.35;
+  color: var(--text-muted);
+}
+
+.entity-accordion__meta {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.entity-accordion__badge {
+  border: 1px solid var(--border-subtle);
+  border-radius: 0.375rem;
+  background: var(--panel-2);
+  padding: 0.125rem 0.45rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.entity-accordion__status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.35rem;
+  height: 1.35rem;
+  border-radius: 0.35rem;
+  border: 1px solid var(--border-subtle);
+  background: var(--overlay-1);
+}
+
+.entity-accordion__chevron {
+  width: 0.875rem;
+  height: 0.875rem;
+  flex-shrink: 0;
+  color: var(--text-faint);
+  transition: transform 220ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.entity-accordion__chevron--open {
+  transform: rotate(180deg);
+}
+
+.entity-accordion__panel {
+  padding: 0.85rem 1rem 1.1rem 2.65rem;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--panel-2);
+}
+
+.entity-accordion-list--embedded {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+}
+
+.entity-accordion-detail__block + .entity-accordion-detail__block,
+.entity-accordion-detail__block + .entity-accordion-detail__empty,
+.entity-accordion-detail__hint + .entity-accordion-detail__block {
+  margin-top: 1rem;
+}
+
+.entity-accordion-detail__heading {
+  margin: 0 0 0.65rem;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.entity-accordion-detail__prose,
+.entity-accordion-detail__empty,
+.entity-accordion-detail__hint {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.entity-accordion-detail__hint {
+  color: var(--text-muted);
+}
+
+.entity-accordion-detail__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--border-subtle);
+  border-radius: 0.375rem;
+  overflow: hidden;
+}
+
+.entity-accordion-detail__list-item {
+  padding: 0.5rem 0.65rem;
+  font-size: 0.8125rem;
+  line-height: 1.35;
+  color: var(--text);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.entity-accordion-detail__list-item:last-child {
+  border-bottom: none;
+}
+
+.entity-accordion-detail__list-item--mono {
   font-family: var(--font-mono);
   font-size: 0.75rem;
-  line-height: 1.4;
-  color: var(--color-text-muted);
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
+}
+
+.entity-accordion-detail__list--rich .entity-accordion-detail__list-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.entity-accordion-detail__list-primary {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text);
+}
+
+.entity-accordion-detail__list-secondary {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.entity-accordion-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.85rem 1rem;
+}
+
+@container entity-accordion (min-width: 36rem) {
+  .entity-accordion-meta-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.entity-accordion-meta-field {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.entity-accordion-meta-field__label {
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.entity-accordion-meta-field__value {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1.35;
+  color: var(--text);
   word-break: break-word;
+}
+
+.entity-accordion-meta-field__value--mono {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+}
+
+.entity-accordion-pill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 0.3rem;
+  padding: 0.05rem 0.4rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+}
+
+.entity-accordion-pill--yes {
+  border: 1px solid color-mix(in srgb, var(--success) 35%, var(--border-subtle));
+  background: color-mix(in srgb, var(--success) 12%, var(--panel));
+  color: var(--success);
+}
+
+.entity-accordion-pill--no {
+  border: 1px solid var(--border-subtle);
+  background: var(--overlay-1);
+  color: var(--text-muted);
 }
 
 /* ── Entity Registry · entity JSON code blocks ─────────────────── */

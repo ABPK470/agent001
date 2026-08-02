@@ -1,22 +1,20 @@
 /**
- * Catalog entity overview — read-only section list with detail modals.
+ * Catalog entity overview — accordion sections with inline detail panels.
  */
 
-import { useEffect, useState } from "react"
-import type { JSX } from "react"
+import { ChevronDown } from "lucide-react"
+import { useEffect, useState, type JSX } from "react"
 import { api } from "../../client/index"
 import type { EntityRegistryDefinition, SyncDefinitionAdminItem } from "../../types"
-import { LIST_FLUSH } from "./chrome"
 import { buildEntityOverviewSections, type EntityOverviewSectionId } from "./entity-overview-helpers"
-import { EntitySectionModal } from "./EntitySectionModal"
-import { ChevronRight } from "lucide-react"
+import { EntityOverviewSectionDetail } from "./EntityOverviewSectionDetail"
 
 export interface EntityOverviewSectionsProps {
   def: EntityRegistryDefinition
 }
 
 export function EntityOverviewSections({ def }: EntityOverviewSectionsProps): JSX.Element {
-  const [openSection, setOpenSection] = useState<EntityOverviewSectionId | null>(null)
+  const [expanded, setExpanded] = useState<Set<EntityOverviewSectionId>>(() => new Set())
   const [runConfig, setRunConfig] = useState<SyncDefinitionAdminItem | null>(null)
 
   useEffect(() => {
@@ -36,43 +34,65 @@ export function EntityOverviewSections({ def }: EntityOverviewSectionsProps): JS
       : null,
   )
 
+  function toggle(sectionId: EntityOverviewSectionId): void {
+    setExpanded((prev) => {
+      const next = new Set(prev)
+      if (next.has(sectionId)) next.delete(sectionId)
+      else next.add(sectionId)
+      return next
+    })
+  }
+
   return (
-    <>
-      <ol className={LIST_FLUSH}>
-        {sections.map((section) => (
-          <li key={section.id} className="border-b border-border-subtle last:border-b-0">
+    <ol className="entity-accordion-list">
+      {sections.map((section) => {
+        const isExpanded = expanded.has(section.id)
+        return (
+          <li
+            key={section.id}
+            className={[
+              "entity-accordion__item",
+              isExpanded ? "entity-accordion__item--expanded" : "",
+            ]
+              .filter(Boolean)
+              .join(" ")}
+          >
             <button
               type="button"
-              onClick={() => setOpenSection(section.id)}
-              className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:text-text"
+              onClick={() => toggle(section.id)}
+              aria-expanded={isExpanded}
+              className="entity-accordion__header entity-accordion__header--overview"
             >
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-xs font-medium text-text">
-                  {section.title}
-                </span>
-                <span className="mt-0.5 block truncate text-sm text-text-muted">
-                  {section.subtitle}
-                </span>
+              <span className="entity-accordion__main">
+                <span className="entity-accordion__name">{section.title}</span>
+                <span className="entity-accordion__subtitle">{section.subtitle}</span>
               </span>
-              {section.badge && (
-                <span className="shrink-0 rounded border border-border-subtle bg-panel px-1.5 py-0.5 text-xs font-medium text-text-muted">
-                  {section.badge}
-                </span>
-              )}
-              <ChevronRight className="h-3.5 w-3.5 shrink-0 text-text-faint" />
+              <span className="entity-accordion__meta">
+                {section.badge && (
+                  <span className="entity-accordion__badge">{section.badge}</span>
+                )}
+                <ChevronDown
+                  className={[
+                    "entity-accordion__chevron",
+                    isExpanded ? "entity-accordion__chevron--open" : "",
+                  ].join(" ")}
+                  aria-hidden
+                />
+              </span>
             </button>
-          </li>
-        ))}
-      </ol>
 
-      {openSection && (
-        <EntitySectionModal
-          sectionId={openSection}
-          def={def}
-          runConfig={runConfig}
-          onClose={() => setOpenSection(null)}
-        />
-      )}
-    </>
+            {isExpanded && (
+              <div className="entity-accordion__panel entity-accordion__panel--overview">
+                <EntityOverviewSectionDetail
+                  sectionId={section.id}
+                  def={def}
+                  runConfig={runConfig}
+                />
+              </div>
+            )}
+          </li>
+        )
+      })}
+    </ol>
   )
 }
