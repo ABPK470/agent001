@@ -89,7 +89,7 @@ import {
   summarizeHistory,
   summarizeRunError,
 } from "./termchat/milestone"
-import { handleNestedWheelDelta } from "./termchat/nested-wheel"
+import { useNestedWheelScroll } from "../hooks/useNestedWheelScroll"
 import {
   firstRunningSubagentStepId,
   isParallelSubagentFanOut,
@@ -2373,23 +2373,6 @@ export function TermChat({
     }
   }
 
-  useEffect(() => {
-    const host = scrollHostRef.current
-    if (!host) return
-
-    const handleWheel = (event: WheelEvent) => {
-      if (Math.abs(event.deltaY) < Math.abs(event.deltaX) || event.deltaY === 0) return
-      // Pointer hit-test + manual nested/host scroll. Never trust a stale
-      // event.target alone (trackpad inertia) — that was the stuck-wheel bug.
-      if (handleNestedWheelDelta(event, host)) {
-        event.preventDefault()
-      }
-    }
-
-    host.addEventListener("wheel", handleWheel, { capture: true, passive: false })
-    return () => host.removeEventListener("wheel", handleWheel, { capture: true })
-  }, [])
-
   // Build message list: each "run" is a (user msg, assistant response) pair.
   // Always oldest → newest so the input bar sits under the most recent turn.
   // Approval resumes spawn child runs with the same goal — collapse those
@@ -2410,6 +2393,8 @@ export function TermChat({
 
   const showEmptyState = FORCE_EMPTY_STATE_PREVIEW || displayRuns.length === 0
   const latestDisplayRunId = displayRuns.length > 0 ? displayRuns[displayRuns.length - 1]!.id : null
+
+  useNestedWheelScroll(scrollHostRef, `${isHomeMode}:${showEmptyState}`)
 
   useLayoutEffect(() => {
     const host = scrollHostRef.current

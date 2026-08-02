@@ -6,6 +6,7 @@ import type {
 } from "../../lib/events/build-chat-parts.js"
 import {
   canElementScrollVertically,
+  scrollElementByDelta,
   deriveActiveMilestoneLabel,
   formatDeliverableBytes,
   isOffThreadProgress,
@@ -225,5 +226,16 @@ describe("summarizeHistory / summarizeRunError / bytes", () => {
     expect(canElementScrollVertically({ scrollHeight: 100, clientHeight: 100, scrollTop: 0 }, 10)).toBe(
       false,
     )
+  })
+
+  it("scrollElementByDelta moves only when the element can scroll", () => {
+    const el = { scrollHeight: 200, clientHeight: 100, scrollTop: 0 }
+    expect(scrollElementByDelta(el, 10)).toBe(true)
+    expect(el.scrollTop).toBe(10)
+    expect(scrollElementByDelta(el, -10)).toBe(true)
+    expect(el.scrollTop).toBe(0)
+    expect(scrollElementByDelta(el, -10)).toBe(false)
+    el.scrollTop = 100
+    expect(scrollElementByDelta(el, 10)).toBe(false)
   })
 })

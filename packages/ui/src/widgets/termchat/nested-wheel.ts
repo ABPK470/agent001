@@ -7,7 +7,7 @@
  * what made scroll feel stuck after the cursor left a full-width tool box.
  */
 
-import { canElementScrollVertically } from "./milestone"
+import { canElementScrollVertically, scrollElementByDelta } from "./milestone"
 
 export type NestedScrollMetrics = {
   scrollHeight: number
@@ -95,9 +95,9 @@ export function resolveNestedWheelAction(
 /**
  * Apply a wheel delta. Returns true when the caller must preventDefault.
  *
- * Always scrolls nested panes manually (never relies on browser default under
- * a capture listener). If the pointer has left nested panes but event.target
- * is still stuck on one, steals the gesture for the transcript host.
+ * Always scroll manually (never rely on browser default under a capture listener).
+ * preventDefault only when scrollTop actually moves — swallowing the event at a
+ * dead edge (nested or host) was the stuck-wheel bug.
  */
 export function handleNestedWheelDelta(
   event: Pick<WheelEvent, "target" | "clientX" | "clientY" | "deltaY" | "deltaMode">,
@@ -108,24 +108,14 @@ export function handleNestedWheelDelta(
 
   const hit = wheelHitTarget(host, event.clientX, event.clientY, event.target)
   const chain = collectNestedScrollables(hit, host)
-  const staleChain = collectNestedScrollables(event.target, host)
   const action = resolveNestedWheelAction(chain, deltaY)
 
-  if (action.kind === "passthrough") {
-    // Pointer is outside nested overflow panes. If inertia still targets one,
-    // move the transcript — otherwise the browser keeps "scrolling" a pane
-    // that cannot move (stuck wheel).
-    if (staleChain.length === 0) return false
-    host.scrollTop += deltaY
-    return true
-  }
-
   if (action.kind === "scroll") {
-    chain[action.index]!.scrollTop += deltaY
-    return true
+    const nested = chain[action.index]!
+    if (scrollElementByDelta(nested, deltaY)) return true
+    return scrollElementByDelta(host, deltaY)
   }
 
-  // Nested panes under the pointer are at their edge — transcript continues.
-  host.scrollTop += deltaY
-  return true
+  // host + passthrough: pointer not over a nested pane, or every nested pane is at its edge.
+  return scrollElementByDelta(host, deltaY)
 }

@@ -216,3 +216,14 @@ export function canElementScrollVertically(el: {
   if (deltaY > 0) return el.scrollTop + el.clientHeight < el.scrollHeight - 1
   return false
 }
+
+/** Apply delta when the element can still move; returns whether scrollTop changed. */
+export function scrollElementByDelta(
+  el: { scrollTop: number } & Parameters<typeof canElementScrollVertically>[0],
+  deltaY: number,
+): boolean {
+  if (!canElementScrollVertically(el, deltaY)) return false
+  const before = el.scrollTop
+  el.scrollTop += deltaY
+  return el.scrollTop !== before
+}
