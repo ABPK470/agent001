@@ -1,11 +1,13 @@
 /**
- * Phase detail — timeline, steps, JSON blocks, nested errors.
+ * Phase detail — timeline, steps, JSON blocks; scoped to selected tree node state.
  */
 
 import { useState } from "react"
 import { JsonViewer } from "../../components/JsonViewer"
 import type { TracePhaseDetail, TracePhaseNode } from "./build-trace-dag"
 import { TraceErrorBlock } from "./TraceErrorBlock"
+import { TracePhaseEventText } from "./TracePhaseEventText"
+import type { TraceSpanStatus } from "./trace-tree-index"
 
 function eventIcon(tone: string | undefined): string {
   if (tone === "error") return "✕"
@@ -13,7 +15,15 @@ function eventIcon(tone: string | undefined): string {
   return "·"
 }
 
-export function TracePhaseDetail({ phase }: { phase: TracePhaseNode }) {
+export function TracePhaseDetail({
+  phase,
+  nodeStatus,
+  nodeHasError,
+}: {
+  phase: TracePhaseNode
+  nodeStatus: TraceSpanStatus
+  nodeHasError: boolean
+}) {
   const events = phase.details.filter(
     (d): d is Extract<TracePhaseDetail, { kind: "event" }> => d.kind === "event",
   )
@@ -23,7 +33,11 @@ export function TracePhaseDetail({ phase }: { phase: TracePhaseNode }) {
   const jsonBlocks = phase.details.filter(
     (d): d is Extract<TracePhaseDetail, { kind: "json" }> => d.kind === "json",
   )
+  const showErrorSurface = nodeHasError || nodeStatus === "failed"
   const errorEvents = events.filter((e) => e.tone === "error")
+  const timelineEvents = showErrorSurface
+    ? events
+    : events.filter((e) => e.tone !== "error")
   const [openJsonIds, setOpenJsonIds] = useState(() => new Set<string>())
 
   function toggleJson(id: string) {
@@ -37,33 +51,35 @@ export function TracePhaseDetail({ phase }: { phase: TracePhaseNode }) {
 
   return (
     <div className="trace-detail-body">
-      {phase.status === "error" || errorEvents.length > 0 ? (
+      {showErrorSurface ? (
         errorEvents.length > 0 ? (
           errorEvents.map((ev) => (
             <TraceErrorBlock key={ev.id} text={ev.text} title="ERROR / EXCEPTION TRACE" />
           ))
-        ) : (
+        ) : phase.status === "error" && phase.summary ? (
           <TraceErrorBlock text={phase.summary} title="ERROR / EXCEPTION TRACE" />
-        )
+        ) : null
       ) : null}
 
-      {events.length > 0 && (
+      {timelineEvents.length > 0 && (
         <section className="trace-detail-section">
           <div className="trace-detail-section__label">Timeline</div>
           <ol className="trace-phase-timeline">
-            {events.map((ev, index) => (
+            {timelineEvents.map((ev, index) => (
               <li
                 key={ev.id}
                 className={`trace-phase-timeline__item${ev.tone && ev.tone !== "neutral" ? ` is-${ev.tone}` : ""}`}
               >
                 <span className="trace-phase-timeline__rail" aria-hidden>
                   <span className="trace-phase-timeline__dot">{eventIcon(ev.tone)}</span>
-                  {index < events.length - 1 ? (
+                  {index < timelineEvents.length - 1 ? (
                     <span className="trace-phase-timeline__line" />
                   ) : null}
                 </span>
                 <div className="trace-phase-timeline__body">
-                  <div className="trace-phase-timeline__text">{ev.text}</div>
+                  <div className="trace-phase-timeline__text">
+                    <TracePhaseEventText text={ev.text} />
+                  </div>
                 </div>
               </li>
             ))}

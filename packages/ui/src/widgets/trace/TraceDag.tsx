@@ -44,7 +44,7 @@ import {
 import { TraceDetailInspector } from "./TraceDetailInspector"
 import { IdChip } from "./TraceCopy"
 import { TraceExportMenu } from "./TraceExportMenu"
-import { TraceTreeRow } from "./TraceTreeRow"
+import { TraceTreeRow, traceTreeRowEstimateSize } from "./TraceTreeRow"
 import { TraceWaterfallView } from "./TraceWaterfallView"
 
 export const TRACE_TREE_OVERSCAN = 8
@@ -347,8 +347,8 @@ export function TraceDag({
     setPlaygroundOpen(false)
   }
 
-  function estimateTreeRowSize(): number {
-    return 36
+  function estimateTreeRowSize(index: number): number {
+    return traceTreeRowEstimateSize(treeIndex.nodes[index])
   }
 
   function treeItemKey(_index: number, node: TraceTreeNode): string {
@@ -510,7 +510,6 @@ export function TraceDag({
                       <span className="trace-tree-header__metric">Latency</span>
                       <span className="trace-tree-header__metric">Tokens</span>
                       <span className="trace-tree-header__metric">Cost</span>
-                      <span className="trace-tree-header__status" />
                     </div>
                     <div ref={treeScrollRef} className="trace-split-tree-scroll">
                       <VirtualList

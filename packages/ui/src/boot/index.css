@@ -3289,7 +3289,7 @@ textarea.input {
 
 .trace-tree-header {
   display: grid;
-  grid-template-columns: 1rem 1rem minmax(7rem, 1fr) 3.25rem 4.75rem 3.25rem 1.25rem;
+  grid-template-columns: 1rem 1rem minmax(7rem, 1fr) 3.25rem 4.75rem 3.25rem;
   gap: 0.35rem;
   align-items: center;
   padding: 0.35rem 0.5rem 0.35rem 0.25rem;
@@ -3329,31 +3329,9 @@ textarea.input {
   background: var(--select-fill, rgb(255 255 255 / 0.06));
 }
 
-.trace-tree-row__jump-error {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 1rem;
-  height: 1rem;
-  padding: 0;
-  border: none;
-  border-radius: 999px;
-  font-size: 0.625rem;
-  font-weight: 700;
-  line-height: 1;
-  color: #fff;
-  background: var(--color-error, #ef4444);
-  cursor: pointer;
-  flex-shrink: 0;
-}
-
-.trace-tree-row__jump-error:hover {
-  opacity: 0.9;
-}
-
 .trace-tree-row__btn {
   display: grid;
-  grid-template-columns: 1rem 1rem minmax(7rem, 1fr) 3.25rem 4.75rem 3.25rem 1.25rem;
+  grid-template-columns: 1rem 1rem minmax(7rem, 1fr) 3.25rem 4.75rem 3.25rem;
   gap: 0.35rem;
   align-items: center;
   width: 100%;
@@ -3398,10 +3376,58 @@ textarea.input {
 
 .trace-tree-row__name-col {
   min-width: 0;
+  overflow: hidden;
+}
+
+.trace-tree-row__label-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.trace-tree-row.has-subtitle .trace-tree-row__label-cell {
+  align-items: flex-start;
+}
+
+.trace-tree-row.has-subtitle .trace-tree-status-pill {
+  margin-top: 0.1rem;
+}
+
+.trace-tree-row__text-group {
   display: flex;
   flex-direction: column;
-  gap: 0.05rem;
-  overflow: hidden;
+  justify-content: center;
+  gap: 0.1rem;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.trace-tree-status-pill {
+  flex-shrink: 0;
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+  font-size: 0.625rem;
+  font-weight: 650;
+  letter-spacing: 0.03em;
+  line-height: 1.2;
+}
+
+.trace-tree-status-pill__icon {
+  font-size: 0.625rem;
+  line-height: 1;
+}
+
+.trace-tree-status-pill__label {
+  font-size: 0.625rem;
+}
+
+button.trace-tree-status-pill {
+  cursor: pointer;
+}
+
+button.trace-tree-status-pill:hover {
+  filter: brightness(0.97);
 }
 
 .trace-tree-row__name {
@@ -3410,7 +3436,8 @@ textarea.input {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 0.8125rem;
-  line-height: 1.25;
+  font-weight: 500;
+  line-height: 1.2;
 }
 
 .trace-tree-row__leading {
@@ -3428,6 +3455,11 @@ textarea.input {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  line-height: 1.2;
+}
+
+.trace-tree-row.has-subtitle .trace-tree-row__btn {
+  min-height: 42px;
 }
 
 .trace-tree-row__metric {
@@ -3437,34 +3469,6 @@ textarea.input {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.trace-tree-row__status {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 1.25rem;
-}
-
-.trace-tree-row__status-dot {
-  width: 0.4rem;
-  height: 0.4rem;
-  border-radius: 999px;
-  background: var(--color-success, #22c55e);
-  flex-shrink: 0;
-}
-
-.trace-tree-row__status-dot.is-failed {
-  background: var(--color-error, #ef4444);
-}
-
-.trace-tree-row__status-dot.is-running {
-  background: var(--color-warning, #eab308);
-}
-
-.trace-tree-row__status-dot.is-skipped {
-  background: var(--text-muted, var(--color-text-muted));
-  opacity: 0.45;
 }
 
 .trace-detail {
@@ -3656,6 +3660,37 @@ textarea.input {
   color: var(--text, var(--color-text));
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.trace-phase-timeline__label {
+  font-weight: 500;
+  color: var(--text, var(--color-text));
+}
+
+.trace-phase-timeline__detail {
+  color: var(--text-secondary, var(--color-text-muted));
+}
+
+.trace-phase-timeline__metric {
+  color: var(--text-muted, var(--color-text-muted));
+  font-size: 0.75rem;
+}
+
+.trace-phase-timeline__tool-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.05rem 0.35rem;
+  border-radius: 0.25rem;
+  border: 1px solid var(--border-subtle, var(--color-border-subtle));
+  background: var(--overlay-1, rgb(255 255 255 / 0.03));
+  font-size: 0.6875rem;
+  color: var(--text, var(--color-text));
+  vertical-align: baseline;
+}
+
+:root[data-theme="light"] .trace-phase-timeline__tool-pill {
+  background: var(--panel-2, #f8fafc);
+  border-color: var(--border-subtle, #e2e8f0);
 }
 
 .trace-phase-timeline__item.is-warn .trace-phase-timeline__dot {

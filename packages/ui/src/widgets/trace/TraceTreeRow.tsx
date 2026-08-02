@@ -4,8 +4,9 @@
 
 import { Bot, ChevronRight, Cpu, Layers, Mail, MessageSquare, Reply, Wrench, Zap } from "lucide-react"
 import { fmtTokens, formatMs } from "../../lib/util"
-import type { TraceSpanStatus, TraceTreeNode, TraceTreeNodeKind } from "./trace-tree-index"
+import type { TraceTreeNode, TraceTreeNodeKind } from "./trace-tree-index"
 import { formatCostUsd } from "./trace-format"
+import { TraceTreeStatusBadge } from "./TraceTreeStatusBadge"
 
 const KIND_ICON: Record<TraceTreeNodeKind, typeof Bot> = {
   context: Layers,
@@ -18,13 +19,6 @@ const KIND_ICON: Record<TraceTreeNodeKind, typeof Bot> = {
   message: MessageSquare,
   work: Zap,
   tool: Wrench,
-}
-
-function statusLabel(status: TraceSpanStatus): string {
-  if (status === "failed") return "Failed"
-  if (status === "running") return "Running"
-  if (status === "skipped") return "Skipped"
-  return "Success"
 }
 
 function displayTitle(node: TraceTreeNode): string {
@@ -63,14 +57,9 @@ export function TraceTreeRow({
     if (node.hasChildren) onToggleFold(node.scopeId)
   }
 
-  function onErrorBadgeClick(event: React.MouseEvent) {
-    event.stopPropagation()
-    onJumpToRootCause(node.scopeId)
-  }
-
   return (
     <div
-      className={`trace-tree-row${selected ? " is-selected" : ""}${node.branchHasError ? " has-branch-error" : ""}`}
+      className={`trace-tree-row${selected ? " is-selected" : ""}${node.branchHasError ? " has-branch-error" : ""}${node.subtitle ? " has-subtitle" : ""}`}
       data-trace-scope={node.scopeId}
       data-trace-kind={node.kind}
       role="treeitem"
@@ -96,21 +85,31 @@ export function TraceTreeRow({
           <Icon size={14} />
         </span>
         <span className="trace-tree-row__name-col">
-          <span className="trace-tree-row__name" title={displayTitle(node)}>
-            {node.leading ? (
-              <>
-                <span className="trace-tree-row__leading">{node.leading}</span>
-                <span className="trace-tree-row__title">{node.name}</span>
-              </>
-            ) : (
-              node.name
-            )}
-          </span>
-          {node.subtitle ? (
-            <span className="trace-tree-row__subtitle" title={node.subtitle}>
-              {node.subtitle}
+          <span className="trace-tree-row__label-cell">
+            <TraceTreeStatusBadge
+              status={node.status}
+              branchHasError={node.branchHasError}
+              hasError={node.hasError}
+              onJumpToRootCause={() => onJumpToRootCause(node.scopeId)}
+            />
+            <span className="trace-tree-row__text-group">
+              <span className="trace-tree-row__name" title={displayTitle(node)}>
+                {node.leading ? (
+                  <>
+                    <span className="trace-tree-row__leading">{node.leading}</span>
+                    <span className="trace-tree-row__title">{node.name}</span>
+                  </>
+                ) : (
+                  node.name
+                )}
+              </span>
+              {node.subtitle ? (
+                <span className="trace-tree-row__subtitle" title={node.subtitle}>
+                  {node.subtitle}
+                </span>
+              ) : null}
             </span>
-          ) : null}
+          </span>
         </span>
         <span className="trace-tree-row__metric tabular-nums">
           {node.durationMs != null ? formatMs(node.durationMs) : "—"}
@@ -119,26 +118,12 @@ export function TraceTreeRow({
         <span className="trace-tree-row__metric tabular-nums">
           {node.costUsd != null ? formatCostUsd(node.costUsd) : "—"}
         </span>
-        <span className="trace-tree-row__status">
-          {node.branchHasError && !node.hasError ? (
-            <button
-              type="button"
-              className="trace-tree-row__jump-error"
-              title="Jump to root cause"
-              aria-label="Jump to root cause"
-              onClick={onErrorBadgeClick}
-            >
-              !
-            </button>
-          ) : (
-            <span
-              className={`trace-tree-row__status-dot is-${node.status}`}
-              title={statusLabel(node.status)}
-              aria-hidden
-            />
-          )}
-        </span>
       </button>
     </div>
   )
+}
+
+export function traceTreeRowEstimateSize(node: TraceTreeNode | undefined): number {
+  if (!node) return 36
+  return node.subtitle ? 48 : 36
 }

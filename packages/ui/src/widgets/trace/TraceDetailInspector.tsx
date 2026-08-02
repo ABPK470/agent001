@@ -75,7 +75,13 @@ function renderDetail(dag: TraceDag, node: TraceTreeNode) {
   if (node.kind === "phase" && node.phaseId) {
     const phase = findPhase(dag, node.phaseId)
     if (!phase) return <p className="trace-empty">Phase not found</p>
-    return <TracePhaseDetail phase={phase} />
+    return (
+      <TracePhaseDetail
+        phase={phase}
+        nodeStatus={node.status}
+        nodeHasError={node.hasError}
+      />
+    )
   }
   if (node.kind === "tool" && node.toolKey) {
     return <TraceToolDetail dag={dag} toolKey={node.toolKey} />
