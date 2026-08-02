@@ -1880,11 +1880,14 @@ function TermChatInputBar({
     : undefined
   return (
       <div
-          data-intro-target="termchat-input"
-          className={`chat-input-wrapper ${chromeClass} ${palette || hasResult ? "chathome-chrome-pill--composer-open" : "overflow-hidden"}${palette ? " chat-input-wrapper--palette-open" : ""} ${className} mx-auto ${isHero ? "rounded-[24px] px-5 py-4" : chrome === "flush" ? "rounded-none px-3 py-2.5" : "rounded-2xl px-4 py-3"}`}
-          style={heroStyle}
+          className={`chat-input-stack${palette ? " chat-input-stack--palette-open" : ""} ${className} mx-auto w-full min-w-0`}
       >
           {palette}
+          <div
+              data-intro-target="termchat-input"
+              className={`chat-input-wrapper ${chromeClass} ${palette || hasResult ? "chathome-chrome-pill--composer-open" : "overflow-hidden"} ${isHero ? "rounded-[24px] px-5 py-4" : chrome === "flush" ? "rounded-none px-3 py-2.5" : "rounded-2xl px-4 py-3"}`}
+              style={heroStyle}
+          >
           <ChatComposerShell
             console={commandConsole}
             paletteOpen={Boolean(palette)}
@@ -1996,6 +1999,7 @@ function TermChatInputBar({
               </div>
           )}
           </ChatComposerShell>
+          </div>
       </div>
   );
 }
