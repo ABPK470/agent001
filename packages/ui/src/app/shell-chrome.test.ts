@@ -74,26 +74,22 @@ describe("shell chrome SOT", () => {
     expect(css).not.toContain("--stage-gap:")
   })
 
-  it("light workspace chrome only — cool field/bar; widgets keep --paper", () => {
+  it("light workspace chrome — white top bar, canvas stage gutter", () => {
     const css = readFileSync(resolve(here, "../boot/index.css"), "utf8")
     expect(css).toMatch(
-      /:root\[data-theme="light"\]\s+\.workspace-chrome\s*\{[^}]*--workspace-sheet:\s*#f6f4f1/s,
+      /:root\[data-theme="light"\]\s+\.workspace-chrome\s*\{[^}]*--workspace-sheet:\s*var\(--canvas\)/s,
     )
     expect(css).toMatch(
-      /:root\[data-theme="light"\]\s+\.workspace-chrome\s*\{[^}]*--workspace-chrome:\s*#f6f4f1/s,
+      /:root\[data-theme="light"\]\s+\.workspace-chrome\s*\{[^}]*--workspace-chrome:\s*var\(--panel\)/s,
     )
     expect(css).toMatch(
-      /:root\[data-theme="light"\]\s+\.workspace-chrome\s*\{[^}]*--workspace-ops-bg:\s*#f6f4f1/s,
-    )
-    expect(css).toMatch(
-      /:root\[data-theme="light"\]\s+\.workspace-chrome\s*\{[^}]*--workspace-widget-bg:\s*var\(--paper\)/s,
-    )
-    // Paper itself stays warm — widgets / modals unchanged.
-    expect(css).toMatch(
-      /:root\[data-theme="light"\]\s*\{[^}]*--paper:\s*#f3f1ec/s,
+      /:root\[data-theme="light"\]\s+\.workspace-chrome\s*\{[^}]*--workspace-widget-bg:\s*var\(--panel\)/s,
     )
     expect(css).toMatch(
       /\.toolbar-shell\s*\{[^}]*background:\s*var\(--workspace-chrome,\s*var\(--panel\)\)/s,
+    )
+    expect(css).toMatch(
+      /\.toolbar-shell\s*\{[^}]*border-bottom:\s*1px solid var\(--border-subtle\)/s,
     )
   })
 })

@@ -280,13 +280,14 @@
   --soft: var(--panel-2);
   --bg: var(--canvas);
 
-  /* Ink washes on white surfaces — selection/hover register in ~300ms. */
-  --overlay-1: color-mix(in srgb, var(--ink) 4%, var(--panel));
-  --overlay-2: color-mix(in srgb, var(--ink) 7%, var(--panel));
-  --overlay-3: color-mix(in srgb, var(--ink) 10%, var(--panel));
-  --overlay-hover: color-mix(in srgb, var(--ink) 9%, var(--panel));
-  --hover-fill: var(--overlay-1);
-  --select-fill: var(--overlay-2);
+  /* Explicit slate hover/selection — crisp on white (no muddy ink color-mix). */
+  --hover-fill: #f1f5f9;
+  --select-fill: #e2e8f0;
+  --active-fill: #cbd5e1;
+  --overlay-1: #f8fafc;
+  --overlay-2: #f1f5f9;
+  --overlay-3: #e2e8f0;
+  --overlay-hover: var(--hover-fill);
 
   --section-cap-bg: var(--workspace-widget-bg, var(--panel));
 
@@ -5569,9 +5570,9 @@ textarea.input {
 
 :root[data-theme="light"] .workspace-chrome {
   /*
-   * Cool canvas shell; crisp white widget tiles; soft inset ops strip.
+   * White top bar anchors the frame; cool canvas gutter behind widget tiles.
    */
-  --workspace-chrome: var(--canvas);
+  --workspace-chrome: var(--panel);
   --workspace-sheet: var(--canvas);
   --workspace-widget-bg: var(--panel);
   --workspace-widget-border: var(--border-subtle);
@@ -5600,7 +5601,7 @@ textarea.input {
  */
 :root[data-theme="light"] .workspace-chrome--contrast {
   --workspace-sheet: var(--canvas);
-  --workspace-chrome: var(--canvas);
+  --workspace-chrome: var(--panel);
   --workspace-border: transparent;
   --workspace-sheet-shadow: none;
   --workspace-widget-bg: var(--panel);
@@ -5673,9 +5674,9 @@ textarea.input {
 .toolbar-shell {
   position: relative;
   z-index: 2;
-  /* Views bar — workspace chrome token (light: #f6f4f1); widgets stay on --paper. */
+  /* Views bar — white panel on light; canvas gutter sits below in the stage. */
   background: var(--workspace-chrome, var(--panel));
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .workspace-sheet > .shell-chrome-header {

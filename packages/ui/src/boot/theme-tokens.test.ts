@@ -62,11 +62,12 @@ describe("light theme color system", () => {
     expect(block).not.toMatch(/--dt-string:\s*var\(--ink\)/)
   })
 
-  it("select/hover fills mix ink on white panel", () => {
+  it("select/hover fills use explicit slate on white panel", () => {
     const block = lightThemeBlock()
-    expect(block).toMatch(/--overlay-1: color-mix\(in srgb, var\(--ink\) 4%, var\(--panel\)\)/)
-    expect(block).toMatch(/--select-fill:\s*var\(--overlay-2\)/)
-    expect(block).toMatch(/--hover-fill:\s*var\(--overlay-1\)/)
+    expect(block).toMatch(/--hover-fill:\s*#f1f5f9/)
+    expect(block).toMatch(/--select-fill:\s*#e2e8f0/)
+    expect(block).toMatch(/--overlay-1:\s*#f8fafc/)
+    expect(block).toMatch(/--overlay-hover:\s*var\(--hover-fill\)/)
   })
 
   it("diff panes use inset panel-2 sheet", () => {
