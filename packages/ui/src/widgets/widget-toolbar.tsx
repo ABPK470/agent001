@@ -42,6 +42,9 @@ export const WIDGET_LOG_BODY_CLASS = "widget-panel-body"
 /** Toolbar + optional filter/meta band — one panel-2 control surface. */
 export const WIDGET_REVIEW_CONTROLS_CLASS = "widget-review-controls"
 
+/** Shared horizontal inset for each band row inside review-controls. */
+export const WIDGET_REVIEW_CONTROLS_INSET_CLASS = "widget-review-controls__inset"
+
 /** @deprecated use WidgetToolbarChip classes via widget-toolbar__chip */
 export const LOG_TOOLBAR_CHIP = "widget-toolbar__chip"
 export const LOG_TOOLBAR_CHIP_ACTIVE = "widget-toolbar__chip--active"

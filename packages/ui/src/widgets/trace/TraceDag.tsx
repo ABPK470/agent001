@@ -24,6 +24,7 @@ import {
   WIDGET_LOG_SHELL_CLASS,
   WIDGET_LOG_STACK_CLASS,
   WIDGET_REVIEW_CONTROLS_CLASS,
+  WIDGET_REVIEW_CONTROLS_INSET_CLASS,
   WidgetToolbar,
   WidgetToolbarLeading,
   WidgetToolbarSearch,
@@ -467,6 +468,7 @@ export function TraceDag({
       <div className={WIDGET_LOG_STACK_CLASS}>
         {!isZen ? (
           <div className={WIDGET_REVIEW_CONTROLS_CLASS}>
+          <div className={WIDGET_REVIEW_CONTROLS_INSET_CLASS}>
           <WidgetToolbar>
             <WidgetToolbarLeading>
               <SegmentToggle
@@ -511,8 +513,10 @@ export function TraceDag({
               />
             </WidgetToolbarTrailing>
           </WidgetToolbar>
+          </div>
 
-          {showMetaBand && (
+          {showMetaBand ? (
+            <div className={WIDGET_REVIEW_CONTROLS_INSET_CLASS}>
             <div className="widget-review-meta">
               <div className="widget-review-meta__stats">
                 {metaStats.length === 0 ? (
@@ -546,7 +550,8 @@ export function TraceDag({
                 </div>
               )}
             </div>
-          )}
+            </div>
+          ) : null}
         </div>
         ) : null}
 

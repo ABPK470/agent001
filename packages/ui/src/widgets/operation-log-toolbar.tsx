@@ -24,6 +24,7 @@ import {
   WidgetToolbarSearch,
   WidgetToolbarTrailing,
   WIDGET_REVIEW_CONTROLS_CLASS,
+  WIDGET_REVIEW_CONTROLS_INSET_CLASS,
 } from "./widget-toolbar"
 
 export type { PipelineKindFilter }
@@ -179,6 +180,7 @@ export function OperationLogToolbar({
   return (
     <>
       <div className={WIDGET_REVIEW_CONTROLS_CLASS}>
+      <div className={WIDGET_REVIEW_CONTROLS_INSET_CLASS}>
       <WidgetToolbar>
         <WidgetToolbarLeading>{null}</WidgetToolbarLeading>
         <WidgetToolbarSearch
@@ -213,11 +215,14 @@ export function OperationLogToolbar({
           </button>
         </WidgetToolbarTrailing>
       </WidgetToolbar>
+      </div>
 
+      <div className={WIDGET_REVIEW_CONTROLS_INSET_CLASS}>
       <ActiveFilterChips
         chips={activeChips}
         onClear={activeFilterCount > 0 ? clearAllFilters : undefined}
       />
+      </div>
       </div>
 
       <FilterSheet

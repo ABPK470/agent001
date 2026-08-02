@@ -54,39 +54,41 @@ export function TraceZenHud({
     setStatsOpen((open) => !open)
   }
 
+  function onDismissSearch() {
+    if (search) onSearchChange("")
+    else onSearchOpenChange(false)
+  }
+
   return (
     <div className="trace-zen-hud trace-split-header-row trace-split-header-row--primary">
       {searchOpen ? (
-        <>
-          <div className="trace-zen-hud__search-inline" role="search">
-            <Search size={14} className="trace-zen-hud__search-icon" aria-hidden />
-            <input
-              ref={searchRef}
-              type="search"
-              className="trace-zen-hud__search-input"
-              value={search}
-              placeholder="Filter calls, tools, work…"
-              aria-label="Filter trace"
-              onChange={(event) => onSearchChange(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Escape") {
-                  event.preventDefault()
-                  onSearchOpenChange(false)
-                }
-              }}
-            />
-          </div>
-          <div className="trace-zen-hud__trailing">
-            <button
-              type="button"
-              className="trace-zen-hud__icon-btn"
-              aria-label="Close filter"
-              onClick={() => onSearchOpenChange(false)}
-            >
-              <X size={14} />
-            </button>
-          </div>
-        </>
+        <div className="trace-zen-hud__search-inline" role="search">
+          <Search size={14} className="trace-zen-hud__search-icon" aria-hidden />
+          <input
+            ref={searchRef}
+            type="text"
+            className="trace-zen-hud__search-input"
+            value={search}
+            placeholder="Filter calls, tools, work…"
+            aria-label="Filter trace"
+            onChange={(event) => onSearchChange(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                event.preventDefault()
+                onSearchOpenChange(false)
+              }
+            }}
+          />
+          <button
+            type="button"
+            className="trace-zen-hud__search-clear"
+            aria-label={search ? "Clear filter" : "Close filter"}
+            title={search ? "Clear" : "Close filter (Esc)"}
+            onClick={onDismissSearch}
+          >
+            <X size={14} />
+          </button>
+        </div>
       ) : (
         <>
           <div className="trace-zen-hud__leading">

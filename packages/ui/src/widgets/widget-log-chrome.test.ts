@@ -23,6 +23,7 @@ import {
   WIDGET_LOG_SHELL_CLASS,
   WIDGET_LOG_STACK_CLASS,
   WIDGET_REVIEW_CONTROLS_CLASS,
+  WIDGET_REVIEW_CONTROLS_INSET_CLASS,
 } from "./widget-toolbar"
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -64,24 +65,28 @@ describe("widget log chrome — shell", () => {
     expect(css).toContain(".widget-content-gutter-inner")
     expect(css).toMatch(/\.widget-panel\s*\{[^}]*--widget-panel-inset-x:/s)
     expect(css).toContain(".widget-review-controls")
+    expect(css).toContain(".widget-review-controls__inset")
     expect(css).toContain(".widget-filter-band")
     expect(css).toMatch(
-      /\.widget-review-controls\s*>\s*\.widget-toolbar\s*\{[^}]*padding:[^}]*var\(--review-controls-pad-x\)/s,
+      /\.widget-review-controls__inset\s*\{[^}]*padding-inline:\s*var\(--review-controls-pad-x\)/s,
     )
     expect(css).toMatch(
-      /\.widget-review-controls\s*>\s*\.widget-review-meta\s*\{[^}]*padding:[^}]*var\(--review-controls-pad-x\)/s,
+      /\.widget-review-controls__inset\s*>\s*\.widget-review-meta\s*\{[^}]*padding:\s*0/s,
     )
     expect(css).toMatch(
-      /\.widget-review-controls\s*>\s*\.widget-review-meta\s+\.widget-review-meta__ids\s*\{[^}]*padding-right:\s*0\.4rem/s,
+      /\.widget-review-controls__inset\s*>\s*\.widget-review-meta\s+\.widget-review-meta__ids\s*\{[^}]*padding-right:\s*0\.4rem/s,
     )
 
     expect(WIDGET_REVIEW_CONTROLS_CLASS).toBe("widget-review-controls")
+    expect(WIDGET_REVIEW_CONTROLS_INSET_CLASS).toBe("widget-review-controls__inset")
 
     const live = read(livePath)
     const trace = read(traceDagPath)
     const ops = read(opsToolbarPath)
     expect(live).toContain("WIDGET_REVIEW_CONTROLS_CLASS")
+    expect(live).toContain("WIDGET_REVIEW_CONTROLS_INSET_CLASS")
     expect(trace).toContain("WIDGET_REVIEW_CONTROLS_CLASS")
+    expect(trace).toContain("WIDGET_REVIEW_CONTROLS_INSET_CLASS")
     expect(trace).toContain("WIDGET_LOG_BODY_CLASS")
     expect(read(opsPath)).toContain("WIDGET_LOG_BODY_CLASS")
     expect(live).toContain("WIDGET_LOG_BODY_CLASS")
