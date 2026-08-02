@@ -590,13 +590,6 @@ export function TraceDag({
             emptySlot
           ) : (
             <div className="trace-split-host relative min-h-0 flex-1 overflow-hidden">
-              {isZen ? (
-                <div className="trace-zen-exit">
-                  <button type="button" className="trace-zen-exit__btn" onClick={exitZen}>
-                    <kbd>Esc</kbd> or <kbd>Z</kbd> to exit focus
-                  </button>
-                </div>
-              ) : null}
               <div
                 ref={splitShellRef}
                 className={`trace-split-shell trace-split-shell--resizable entity-registry-shell widget-split-shell grid h-full min-h-0 overflow-hidden${isZen ? " trace-split-shell--zen" : ""}`}

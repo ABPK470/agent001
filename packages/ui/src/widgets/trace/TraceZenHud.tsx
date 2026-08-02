@@ -94,6 +94,10 @@ export function TraceZenHud({
           <Search size={14} />
         </button>
 
+        <span className="trace-zen-hud__hint" aria-hidden>
+          <kbd>Esc</kbd>
+        </span>
+
         <button
           type="button"
           className="trace-zen-hud__icon-btn"
