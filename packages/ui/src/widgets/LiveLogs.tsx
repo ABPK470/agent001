@@ -38,6 +38,7 @@ import { operationStatusPill } from "../lib/status-callout"
 import { WIDGET_ICONS } from "./widget-icons"
 import {
   WIDGET_LOG_BODY_CLASS,
+  WIDGET_LOG_SCROLL_CLASS,
   WIDGET_LOG_SHELL_CLASS,
   WIDGET_LOG_STACK_CLASS,
   WIDGET_REVIEW_CONTROLS_CLASS,
@@ -386,12 +387,14 @@ export function LiveLogs() {
       </WidgetToolbar>
       </div>
 
+      {activeChips.length > 0 ? (
       <div className={WIDGET_REVIEW_CONTROLS_INSET_CLASS}>
       <ActiveFilterChips
         chips={activeChips}
         onClear={activeFilterCount > 0 ? clearAllFilters : undefined}
       />
       </div>
+      ) : null}
       </div>
 
       <FilterSheet
@@ -487,7 +490,7 @@ export function LiveLogs() {
 
       <div
         ref={containerRef}
-        className={`${WIDGET_LOG_BODY_CLASS} log-stream overflow-y-auto`}
+        className={`${WIDGET_LOG_SCROLL_CLASS} log-stream`}
         onScroll={onScroll}
       >
         <div ref={topSentinelRef} />

@@ -217,12 +217,14 @@ export function OperationLogToolbar({
       </WidgetToolbar>
       </div>
 
+      {activeChips.length > 0 ? (
       <div className={WIDGET_REVIEW_CONTROLS_INSET_CLASS}>
       <ActiveFilterChips
         chips={activeChips}
         onClear={activeFilterCount > 0 ? clearAllFilters : undefined}
       />
       </div>
+      ) : null}
       </div>
 
       <FilterSheet

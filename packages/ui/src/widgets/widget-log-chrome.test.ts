@@ -19,6 +19,7 @@ import {
   WIDGET_CONTENT_GUTTER_CLASS,
   WIDGET_CONTENT_GUTTER_INNER_CLASS,
   WIDGET_LOG_BODY_CLASS,
+  WIDGET_LOG_SCROLL_CLASS,
   WIDGET_LOG_INSET_CLASS,
   WIDGET_LOG_SHELL_CLASS,
   WIDGET_LOG_STACK_CLASS,
@@ -56,6 +57,7 @@ describe("widget log chrome — shell", () => {
       `widget-panel-stack ${WIDGET_CONTENT_GUTTER_INNER_CLASS}`,
     )
     expect(WIDGET_LOG_BODY_CLASS).toBe("widget-panel-body")
+    expect(WIDGET_LOG_SCROLL_CLASS).toBe("widget-panel-body widget-panel-body--scroll")
     expect(WIDGET_CONTENT_GUTTER_CLASS).toBe("widget-content-gutter")
     expect(WIDGET_CONTENT_GUTTER_INNER_CLASS).toBe("widget-content-gutter-inner")
 
@@ -63,6 +65,7 @@ describe("widget log chrome — shell", () => {
     expect(css).toMatch(/\.widget-view-container\s*\{[^}]*--widget-content-gutter-inner-y:/s)
     expect(css).toContain(".widget-content-gutter")
     expect(css).toContain(".widget-content-gutter-inner")
+    expect(css).toMatch(/\.widget-panel-body--scroll\s*\{[^}]*overflow-y:\s*auto/s)
     expect(css).toMatch(/\.widget-panel\s*\{[^}]*--widget-panel-inset-x:/s)
     expect(css).toContain(".widget-review-controls")
     expect(css).toContain(".widget-review-controls__inset")
@@ -88,8 +91,8 @@ describe("widget log chrome — shell", () => {
     expect(trace).toContain("WIDGET_REVIEW_CONTROLS_CLASS")
     expect(trace).toContain("WIDGET_REVIEW_CONTROLS_INSET_CLASS")
     expect(trace).toContain("WIDGET_LOG_BODY_CLASS")
-    expect(read(opsPath)).toContain("WIDGET_LOG_BODY_CLASS")
-    expect(live).toContain("WIDGET_LOG_BODY_CLASS")
+    expect(read(opsPath)).toContain("WIDGET_LOG_SCROLL_CLASS")
+    expect(live).toContain("WIDGET_LOG_SCROLL_CLASS")
     expect(read(threadsPath)).toContain("WIDGET_CONTENT_GUTTER_INNER_CLASS")
     expect(read(threadsPath)).toContain("thread-nav-panel")
   })

@@ -36,8 +36,11 @@ export const WIDGET_CONTENT_GUTTER_INNER_CLASS = "widget-content-gutter-inner"
 export const WIDGET_LOG_STACK_CLASS =
   `widget-panel-stack ${WIDGET_CONTENT_GUTTER_INNER_CLASS}`
 
-/** Scroll body slot under review controls (stack owns horizontal inset). */
+/** Flex body slot — inner panes own scroll (Trace split). */
 export const WIDGET_LOG_BODY_CLASS = "widget-panel-body"
+
+/** Scroll host under review controls — list virtualizes inside this element. */
+export const WIDGET_LOG_SCROLL_CLASS = "widget-panel-body widget-panel-body--scroll"
 
 /** Toolbar + optional filter/meta band — one panel-2 control surface. */
 export const WIDGET_REVIEW_CONTROLS_CLASS = "widget-review-controls"

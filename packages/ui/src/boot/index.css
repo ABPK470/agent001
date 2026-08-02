@@ -1192,6 +1192,12 @@ body {
   overflow: hidden;
 }
 
+/* Pipelines / Event Stream — this node is the scroll parent (not a Tailwind utility). */
+.widget-panel-body--scroll {
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
 /* Review family — toolbar, active filters, and Trace meta share one control band. */
 .widget-review-controls {
   --review-controls-pad-x: 0.625rem;
