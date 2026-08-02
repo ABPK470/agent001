@@ -38,6 +38,7 @@ import { type CompareRunRow, nodeSupportsCompare, previousRunInThread, priorRuns
 import {
   emptyOpen,
   seedLatest,
+  openStateForFoldMode,
   type FoldMode,
   type OpenState,
 } from "./open-state"
@@ -94,6 +95,7 @@ export function TraceDag({
   const splitDragRef = useRef<SplitPaneDragState | null>(null)
   const seededRef = useRef(false)
   const searchSeedRef = useRef("")
+  const hadSearchRef = useRef(false)
   const prevRunIdRef = useRef(runId)
   const { isZen, isSolo, toggleZen, exitZen } = useWidgetFocus()
   const widgetInstance = useWidgetInstance()
@@ -129,6 +131,8 @@ export function TraceDag({
     onSearchOpenChange: setZenSearchOpen,
     onViewModeChange: setViewMode,
     viewMode,
+    foldMode: openState.foldMode,
+    onFoldModeChange,
     onToggleZen: toggleZen,
     onExitZen: exitZen,
   })
@@ -244,9 +248,14 @@ export function TraceDag({
 
   useEffect(() => {
     if (!treeSearch) {
+      if (hadSearchRef.current) {
+        hadSearchRef.current = false
+        setOpenState((prev) => openStateForFoldMode(dag, prev.foldMode))
+      }
       searchSeedRef.current = ""
       return
     }
+    hadSearchRef.current = true
     if (searchSeedRef.current === treeSearch.query) return
     searchSeedRef.current = treeSearch.query
     setOpenState((prev) => {
@@ -273,7 +282,7 @@ export function TraceDag({
       }
       return next
     })
-  }, [treeSearch])
+  }, [treeSearch, dag])
 
   function isNodeFolded(node: TraceTreeNode): boolean {
     if (node.kind === "context") return !openState.preamble
@@ -364,36 +373,7 @@ export function TraceDag({
   }
 
   function onFoldModeChange(mode: FoldMode) {
-    if (mode === "expanded") {
-      const workNodes = dag.spine.flatMap((e) => {
-        if (e.kind === "work") return [e.work]
-        if (e.kind === "phase") {
-          return (e.phase.children ?? [])
-            .filter((c): c is Extract<typeof c, { kind: "work" }> => c.kind === "work")
-            .map((c) => c.work)
-        }
-        return []
-      })
-      setOpenState({
-        preamble: true,
-        contextPrompt: true,
-        contextTools: true,
-        calls: new Set(dag.calls.map((c) => c.index)),
-        sent: new Set(dag.calls.map((c) => c.index)),
-        received: new Set(dag.calls.map((c) => c.index)),
-        messages: new Set(
-          dag.calls.flatMap((c) => c.messages.map((_, mi) => `${c.index}:m:${mi}`)),
-        ),
-        tools: new Set(),
-        phases: new Set(
-          dag.spine.filter((e) => e.kind === "phase").map((e) => e.phase.id),
-        ),
-        work: new Set(workNodes.map((w) => w.id)),
-        foldMode: "expanded",
-      })
-      return
-    }
-    setOpenState({ ...emptyOpen(), foldMode: "collapsed" })
+    setOpenState(openStateForFoldMode(dag, mode))
   }
 
   function onTogglePlayground() {
@@ -594,6 +574,9 @@ export function TraceDag({
                     onSearchChange={setSearch}
                     searchOpen={zenSearchOpen}
                     onSearchOpenChange={setZenSearchOpen}
+                    foldMode={openState.foldMode}
+                    onFoldModeChange={onFoldModeChange}
+                    viewMode={viewMode}
                     onExitZen={exitZen}
                   />
                 ) : null}

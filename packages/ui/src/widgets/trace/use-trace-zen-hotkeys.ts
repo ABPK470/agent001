@@ -1,9 +1,10 @@
 /**
- * Trace zen hotkeys — view mode, filter overlay, focus toggle.
+ * Trace zen hotkeys — view mode, filter overlay, focus toggle, fold all.
  */
 
 import { useEffect } from "react"
 import { isEditableKeyboardTarget } from "../../lib/keyboard-target"
+import type { FoldMode } from "./open-state"
 
 export function useTraceZenHotkeys({
   enabled,
@@ -12,6 +13,8 @@ export function useTraceZenHotkeys({
   onSearchOpenChange,
   onViewModeChange,
   viewMode,
+  foldMode,
+  onFoldModeChange,
   onToggleZen,
   onExitZen,
 }: {
@@ -21,6 +24,8 @@ export function useTraceZenHotkeys({
   onSearchOpenChange: (open: boolean) => void
   onViewModeChange: (mode: "tree" | "waterfall") => void
   viewMode: "tree" | "waterfall"
+  foldMode: FoldMode
+  onFoldModeChange: (mode: FoldMode) => void
   onToggleZen: () => void
   onExitZen: () => void
 }) {
@@ -77,6 +82,18 @@ export function useTraceZenHotkeys({
         return
       }
 
+      if (viewMode === "tree" && key === "[" && !mod) {
+        event.preventDefault()
+        if (foldMode !== "collapsed") onFoldModeChange("collapsed")
+        return
+      }
+
+      if (viewMode === "tree" && key === "]" && !mod) {
+        event.preventDefault()
+        if (foldMode !== "expanded") onFoldModeChange("expanded")
+        return
+      }
+
       if (event.key === "Tab" && !mod) {
         event.preventDefault()
         onViewModeChange(viewMode === "tree" ? "waterfall" : "tree")
@@ -87,8 +104,10 @@ export function useTraceZenHotkeys({
     return () => window.removeEventListener("keydown", onKeyDown)
   }, [
     enabled,
+    foldMode,
     isZen,
     onExitZen,
+    onFoldModeChange,
     onSearchOpenChange,
     onToggleZen,
     onViewModeChange,

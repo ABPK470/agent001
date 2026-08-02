@@ -1,10 +1,12 @@
 /**
- * Trace zen HUD — row-1 controls: stats trigger, inline search, exit.
+ * Trace zen HUD — row-1 controls: stats, search, exit.
  */
 
 import { ChevronDown, Info, Search, X } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { IdChip } from "./TraceCopy"
+import { TraceTreeFoldToggle } from "./TraceTreeFoldToggle"
+import type { FoldMode } from "./open-state"
 
 type MetaStat = { value: string; label?: string }
 
@@ -16,6 +18,9 @@ export function TraceZenHud({
   onSearchChange,
   searchOpen,
   onSearchOpenChange,
+  foldMode,
+  onFoldModeChange,
+  viewMode,
   onExitZen,
 }: {
   metaStats: MetaStat[]
@@ -25,6 +30,9 @@ export function TraceZenHud({
   onSearchChange: (value: string) => void
   searchOpen: boolean
   onSearchOpenChange: (open: boolean) => void
+  foldMode: FoldMode
+  onFoldModeChange: (mode: FoldMode) => void
+  viewMode: "tree" | "waterfall"
   onExitZen: () => void
 }) {
   const [statsOpen, setStatsOpen] = useState(false)
@@ -49,32 +57,36 @@ export function TraceZenHud({
   return (
     <div className="trace-zen-hud trace-split-header-row trace-split-header-row--primary">
       {searchOpen ? (
-        <div className="trace-zen-hud__search-inline" role="search">
-          <Search size={14} className="trace-zen-hud__search-icon" aria-hidden />
-          <input
-            ref={searchRef}
-            type="search"
-            className="trace-zen-hud__search-input"
-            value={search}
-            placeholder="Filter calls, tools, work…"
-            aria-label="Filter trace"
-            onChange={(event) => onSearchChange(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Escape") {
-                event.preventDefault()
-                onSearchOpenChange(false)
-              }
-            }}
-          />
-          <button
-            type="button"
-            className="trace-zen-hud__icon-btn"
-            aria-label="Close filter"
-            onClick={() => onSearchOpenChange(false)}
-          >
-            <X size={14} />
-          </button>
-        </div>
+        <>
+          <div className="trace-zen-hud__search-inline" role="search">
+            <Search size={14} className="trace-zen-hud__search-icon" aria-hidden />
+            <input
+              ref={searchRef}
+              type="search"
+              className="trace-zen-hud__search-input"
+              value={search}
+              placeholder="Filter calls, tools, work…"
+              aria-label="Filter trace"
+              onChange={(event) => onSearchChange(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") {
+                  event.preventDefault()
+                  onSearchOpenChange(false)
+                }
+              }}
+            />
+          </div>
+          <div className="trace-zen-hud__trailing">
+            <button
+              type="button"
+              className="trace-zen-hud__icon-btn"
+              aria-label="Close filter"
+              onClick={() => onSearchOpenChange(false)}
+            >
+              <X size={14} />
+            </button>
+          </div>
+        </>
       ) : (
         <>
           <div className="trace-zen-hud__leading">
@@ -117,6 +129,12 @@ export function TraceZenHud({
                   </div>
                 ) : null}
               </div>
+            ) : null}
+            {viewMode === "tree" ? (
+              <TraceTreeFoldToggle
+                foldMode={foldMode}
+                onFoldModeChange={onFoldModeChange}
+              />
             ) : null}
           </div>
 

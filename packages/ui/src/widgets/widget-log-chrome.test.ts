@@ -65,6 +65,15 @@ describe("widget log chrome — shell", () => {
     expect(css).toMatch(/\.widget-panel\s*\{[^}]*--widget-panel-inset-x:/s)
     expect(css).toContain(".widget-review-controls")
     expect(css).toContain(".widget-filter-band")
+    expect(css).toMatch(
+      /\.widget-review-controls\s*>\s*\.widget-toolbar\s*\{[^}]*padding:[^}]*var\(--review-controls-pad-x\)/s,
+    )
+    expect(css).toMatch(
+      /\.widget-review-controls\s*>\s*\.widget-review-meta\s*\{[^}]*padding:[^}]*var\(--review-controls-pad-x\)/s,
+    )
+    expect(css).toMatch(
+      /\.widget-review-controls\s*>\s*\.widget-review-meta\s+\.widget-review-meta__ids\s*\{[^}]*padding-right:\s*0\.4rem/s,
+    )
 
     expect(WIDGET_REVIEW_CONTROLS_CLASS).toBe("widget-review-controls")
 

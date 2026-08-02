@@ -6,6 +6,8 @@
  * (executed). Open keys MUST be parent-scoped or one toggle opens both.
  */
 
+import type { TraceDag } from "./build-trace-dag"
+
 export type FoldMode = "expanded" | "collapsed"
 
 export type OpenState = {
@@ -55,4 +57,47 @@ export function seedLatest(callCount: number): OpenState {
   if (callCount === 0) return next
   next.calls.add(callCount - 1)
   return next
+}
+
+function collectWorkIds(dag: TraceDag): string[] {
+  const ids: string[] = []
+  for (const entry of dag.spine) {
+    if (entry.kind === "work") ids.push(entry.work.id)
+    if (entry.kind === "phase") {
+      for (const child of entry.phase.children ?? []) {
+        if (child.kind === "work") ids.push(child.work.id)
+      }
+    }
+  }
+  return ids
+}
+
+/** Expand every trace scope — same shape as toolbar Expanded toggle. */
+export function expandedOpenState(dag: TraceDag): OpenState {
+  return {
+    preamble: true,
+    contextPrompt: true,
+    contextTools: true,
+    calls: new Set(dag.calls.map((c) => c.index)),
+    sent: new Set(dag.calls.map((c) => c.index)),
+    received: new Set(dag.calls.map((c) => c.index)),
+    messages: new Set(
+      dag.calls.flatMap((c) => c.messages.map((_, mi) => `${c.index}:m:${mi}`)),
+    ),
+    tools: new Set(),
+    phases: new Set(
+      dag.spine.filter((e) => e.kind === "phase").map((e) => e.phase.id),
+    ),
+    work: new Set(collectWorkIds(dag)),
+    foldMode: "expanded",
+  }
+}
+
+/** Collapse every trace scope — same shape as toolbar Collapsed toggle. */
+export function collapsedOpenState(): OpenState {
+  return { ...emptyOpen(), foldMode: "collapsed" }
+}
+
+export function openStateForFoldMode(dag: TraceDag, mode: FoldMode): OpenState {
+  return mode === "expanded" ? expandedOpenState(dag) : collapsedOpenState()
 }

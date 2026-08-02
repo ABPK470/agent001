@@ -1194,6 +1194,10 @@ body {
 
 /* Review family — toolbar, active filters, and Trace meta share one control band. */
 .widget-review-controls {
+  --review-controls-pad-x: 0.625rem;
+  --review-controls-pad-y: 0.5rem;
+  --review-controls-pad-bottom: 0.625rem;
+  box-sizing: border-box;
   flex-shrink: 0;
   border-radius: 0.375rem;
   background: var(--panel-2);
@@ -1201,7 +1205,7 @@ body {
 }
 
 .widget-review-controls > .widget-toolbar {
-  padding: 0.5rem 0.625rem;
+  padding: var(--review-controls-pad-y) var(--review-controls-pad-x);
   border-bottom: none;
 }
 
@@ -1219,9 +1223,21 @@ body {
   border-bottom: none;
 }
 
-.widget-review-controls .widget-review-meta {
-  padding: 0.5rem 0.625rem 0.625rem;
+.widget-review-controls > .widget-filter-band {
+  padding: var(--review-controls-pad-y) var(--review-controls-pad-x)
+    var(--review-controls-pad-bottom);
   border-bottom: none;
+}
+
+.widget-review-controls > .widget-review-meta {
+  padding: var(--review-controls-pad-y) var(--review-controls-pad-x)
+    var(--review-controls-pad-bottom);
+  border-bottom: none;
+}
+
+/* Match toolbar trailing badge inset — export icon sits 0.4rem in from the edge. */
+.widget-review-controls > .widget-review-meta .widget-review-meta__ids {
+  padding-right: 0.4rem;
 }
 
 .widget-panel--canvas > .termchat-home-shell {
@@ -3501,6 +3517,10 @@ textarea.input {
 
 .trace-zen-hud__icon-btn:hover {
   background: var(--overlay-2, rgb(255 255 255 / 0.06));
+}
+
+.trace-zen-hud__icon-btn[aria-pressed="true"] {
+  background: var(--overlay-2, rgb(255 255 255 / 0.08));
 }
 
 .trace-zen-hud__hint {
@@ -6819,7 +6839,8 @@ button.trace-tree-status-pill:hover {
 }
 
 /* Review band 2 — Trace meta/ids (peer of ActiveFilterChips).
- * KPIs left, run/thread ids right — different jobs, one row. */
+ * KPIs left, run/thread ids right — different jobs, one row.
+ * Horizontal inset lives on .widget-review-controls > .widget-review-meta. */
 .widget-review-meta {
   display: flex;
   flex-wrap: wrap;
@@ -6827,7 +6848,6 @@ button.trace-tree-status-pill:hover {
   justify-content: space-between;
   gap: 0.5rem 1rem;
   min-width: 0;
-  padding: 0.15rem 0 0.65rem;
   border-bottom: none;
   font-size: var(--review-meta-size);
   line-height: 1.4;
