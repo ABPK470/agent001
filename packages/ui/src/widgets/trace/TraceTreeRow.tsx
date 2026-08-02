@@ -3,18 +3,18 @@
  */
 
 import type { CSSProperties } from "react"
-import { Bot, ChevronRight, Cpu, Layers, Mail, MessageSquare, Reply, Wrench, Zap } from "lucide-react"
+import { Brain, ChevronRight, Cpu, Layers, Mail, MessageSquare, Reply, Wrench, Zap } from "lucide-react"
 import { fmtTokens, formatMs } from "../../lib/util"
 import { TRACE_TREE_BASE_PAD_PX, TRACE_TREE_INDENT_PX } from "./trace-tree-guides"
 import type { TraceTreeNode, TraceTreeNodeKind } from "./trace-tree-index"
 import { TraceTreeStatusBadge, TraceTreeStatusDot } from "./TraceTreeStatusBadge"
 
-const KIND_ICON: Record<TraceTreeNodeKind, typeof Bot> = {
+const KIND_ICON: Record<TraceTreeNodeKind, typeof Brain> = {
   context: Layers,
   prompt: Cpu,
   tools: Wrench,
   phase: Layers,
-  call: Bot,
+  call: Brain,
   sent: Mail,
   received: Reply,
   message: MessageSquare,

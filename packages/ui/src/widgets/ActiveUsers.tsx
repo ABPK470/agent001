@@ -19,7 +19,7 @@
  */
 
 import { Activity, CircleDot, Cpu, Play, SlidersHorizontal, Users, Zap } from "lucide-react"
-import type { ReactNode } from "react"
+import type { ReactNode, RefObject } from "react"
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { api } from "../client/index"
 import { EmptyState } from "../components/EmptyState"
@@ -34,7 +34,11 @@ import {
 import { ToastStack, useWidgetToasts } from "../components/useWidgetToasts"
 import { useContainerSize } from "../hooks/useContainerSize"
 import { useViewingAs } from "../hooks/useViewingAs"
+import { useWidgetFocus } from "../hooks/useWidgetFocus"
+import { useWidgetZenHotkeys } from "../hooks/useWidgetZenHotkeys"
+import { useLayoutStore } from "../state/layout-store"
 import { useStore } from "../state/store"
+import { useWidgetInstance } from "../app/workspace/widget-instance"
 import {
   isActiveRunStepEvent,
   isHistoryRefreshEvent,
@@ -42,6 +46,7 @@ import {
   useAdminSseEvents,
 } from "./active-users-sse"
 import { ActiveUsersRunInspector, type RunPreview } from "./ActiveUsersRunInspector"
+import { ActiveUsersZenHud } from "./ActiveUsersZenHud"
 import { WIDGET_ICONS } from "./widget-icons"
 import {
   WidgetToolbar,
@@ -185,13 +190,28 @@ export function ActiveUsers(): ReactNode {
   const [adminBusy, setAdminBusy] = useState<string | null>(null)
   const [runInspector, setRunInspector] = useState<{ runId: string; preview?: RunPreview } | null>(null)
   const [inspectorOpen, setInspectorOpen] = useState(false)
+  const [filtersOpen, setFiltersOpen] = useState(false)
+  const [zenSearchOpen, setZenSearchOpen] = useState(false)
+  const [zenStatsOpen, setZenStatsOpen] = useState(false)
   const runNavRef = useRef<{ runId: string; preview?: RunPreview }[]>([])
   const runInspectorRef = useRef(runInspector)
   runInspectorRef.current = runInspector
   const inspectorOpenRef = useRef(inspectorOpen)
   inspectorOpenRef.current = inspectorOpen
+  const filtersOpenRef = useRef(filtersOpen)
+  filtersOpenRef.current = filtersOpen
+  const zenSearchOpenRef = useRef(zenSearchOpen)
+  zenSearchOpenRef.current = zenSearchOpen
+  const zenStatsOpenRef = useRef(zenStatsOpen)
+  zenStatsOpenRef.current = zenStatsOpen
+  const filterBtnRef = useRef<HTMLButtonElement>(null)
   const openInspectorRafRef = useRef(0)
   const rootRef = useRef<HTMLDivElement>(null)
+  const { isZen, toggleZen, exitZen } = useWidgetFocus()
+  const widgetInstance = useWidgetInstance()
+  const focusedTileId = useLayoutStore((s) => s.focusedTileId)
+  const zenHotkeysEnabled =
+    isZen || Boolean(widgetInstance && focusedTileId === widgetInstance.widgetId)
   const { width: widgetWidth } = useContainerSize(rootRef)
   // Inspector is a transform overlay — never fold layout mode off its open state
   // (that reflowed the user table mid-animation and looked like jitter).
@@ -394,6 +414,80 @@ export function ActiveUsers(): ReactNode {
     })
   }, [])
 
+  const filtersActive =
+    statusFilter !== "all" || failedOnly || lastSeenRange !== "all"
+  const activeFilterCount =
+    (statusFilter !== "all" ? 1 : 0) +
+    (failedOnly ? 1 : 0) +
+    (lastSeenRange !== "all" ? 1 : 0)
+
+  const zenStats = useMemo(() => {
+    if (!summary) return []
+    return [
+      { value: String(summary.online), label: "online" },
+      { value: String(summary.users), label: "users (7d)" },
+      { value: String(summary.runsInFlight), label: "in flight" },
+      { value: String(summary.runs24h), label: "runs (24h)" },
+      { value: formatCompact(summary.tokens24h), label: "tokens (24h)" },
+      { value: String(summary.llmCalls24h ?? 0), label: "LLM calls (24h)" },
+    ]
+  }, [summary])
+
+  const onEscapeBeforeExit = useCallback((): boolean => {
+    if (inspectorOpenRef.current) return true
+    if (filtersOpenRef.current) {
+      setFiltersOpen(false)
+      return true
+    }
+    if (zenSearchOpenRef.current) {
+      setZenSearchOpen(false)
+      return true
+    }
+    if (zenStatsOpenRef.current) {
+      setZenStatsOpen(false)
+      return true
+    }
+    return false
+  }, [])
+
+  useWidgetZenHotkeys({
+    enabled: zenHotkeysEnabled,
+    isZen,
+    onToggleZen: toggleZen,
+    onExitZen: exitZen,
+    onEscapeBeforeExit,
+  })
+
+  useEffect(() => {
+    if (!isZen) {
+      setZenSearchOpen(false)
+      setZenStatsOpen(false)
+      setFiltersOpen(false)
+    }
+  }, [isZen])
+
+  useEffect(() => {
+    if (!isZen || !zenHotkeysEnabled) return
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.target instanceof HTMLElement) {
+        const tag = event.target.tagName
+        if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || event.target.isContentEditable) {
+          return
+        }
+      }
+      const key = event.key.toLowerCase()
+      const mod = event.metaKey || event.ctrlKey
+      if ((mod && key === "f") || (key === "/" && !mod)) {
+        event.preventDefault()
+        setZenSearchOpen(true)
+      }
+    }
+
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+  }, [isZen, zenHotkeysEnabled])
+
   const openRunInspector = useCallback((runId: string, preview?: RunPreview) => {
     setRunInspector({ runId, preview })
     if (inspectorOpenRef.current) return
@@ -472,56 +566,103 @@ export function ActiveUsers(): ReactNode {
         useStack ? "active-users-widget--stack" : "active-users-widget--table",
         compact ? "active-users-widget--compact" : "",
         tiny ? "active-users-widget--tiny" : "",
+        isZen ? "active-users-widget--zen" : "",
         runInspector ? "active-users-widget--inspector-open" : "",
       ].filter(Boolean).join(" ")}
     >
       {/* Main column — contracts when the inspector pushes in from the right. */}
       <div className="au-main">
-        {/* KPI cards — same dialect as Usage modal */}
-        {summary && (
-          <div className="shrink-0 border-b border-border-subtle px-4 py-3">
-            <div className="au-stat-grid">
-              <StatCard
-                icon={<CircleDot size={15} className={summary.online > 0 ? "text-success" : undefined} />}
-                label="Online"
-                value={String(summary.online)}
-                valueClassName={summary.online > 0 ? "text-success" : undefined}
-              />
-              <StatCard icon={<Users size={15} />} label="Users (7d)" value={String(summary.users)} />
-              <StatCard
-                icon={<Activity size={15} className={summary.runsInFlight > 0 ? "text-info" : undefined} />}
-                label="Runs in flight"
-                value={String(summary.runsInFlight)}
-                valueClassName={summary.runsInFlight > 0 ? "text-info" : undefined}
-              />
-              <StatCard icon={<Play size={15} />} label="Runs (24h)" value={String(summary.runs24h)} />
-              <StatCard icon={<Zap size={15} />} label="Tokens (24h)" value={formatCompact(summary.tokens24h)} />
-              <StatCard
-                icon={<Cpu size={15} />}
-                label="LLM Calls (24h)"
-                value={String(summary.llmCalls24h ?? 0)}
-              />
-            </div>
-          </div>
-        )}
+        {isZen ? (
+          <>
+            <ActiveUsersZenHud
+              stats={zenStats}
+              filter={filter}
+              onFilterChange={setFilter}
+              searchOpen={zenSearchOpen}
+              onSearchOpenChange={setZenSearchOpen}
+              statsOpen={zenStatsOpen}
+              onStatsOpenChange={setZenStatsOpen}
+              filteredCount={filteredSorted.length}
+              totalCount={users.length}
+              filtersActive={filtersActive}
+              activeFilterCount={activeFilterCount}
+              onOpenFilters={() => setFiltersOpen((open) => !open)}
+              filterBtnRef={filterBtnRef}
+              onExitZen={exitZen}
+            />
+            <ActiveUsersFilterBar
+              filter={filter}
+              setFilter={setFilter}
+              statusFilter={statusFilter}
+              setStatusFilter={setStatusFilter}
+              failedOnly={failedOnly}
+              setFailedOnly={setFailedOnly}
+              lastSeenRange={lastSeenRange}
+              setLastSeenRange={setLastSeenRange}
+              filteredCount={filteredSorted.length}
+              totalCount={users.length}
+              tiny={tiny}
+              useStack={useStack}
+              sortKey={sortKey}
+              sortDir={sortDir}
+              onSort={onSort}
+              showToolbar={false}
+              filtersOpen={filtersOpen}
+              setFiltersOpen={setFiltersOpen}
+              filterBtnRef={filterBtnRef}
+            />
+          </>
+        ) : (
+          <>
+            {summary && (
+              <div className="shrink-0 border-b border-border-subtle px-4 py-3">
+                <div className="au-stat-grid">
+                  <StatCard
+                    icon={<CircleDot size={15} className={summary.online > 0 ? "text-success" : undefined} />}
+                    label="Online"
+                    value={String(summary.online)}
+                    valueClassName={summary.online > 0 ? "text-success" : undefined}
+                  />
+                  <StatCard icon={<Users size={15} />} label="Users (7d)" value={String(summary.users)} />
+                  <StatCard
+                    icon={<Activity size={15} className={summary.runsInFlight > 0 ? "text-info" : undefined} />}
+                    label="Runs in flight"
+                    value={String(summary.runsInFlight)}
+                    valueClassName={summary.runsInFlight > 0 ? "text-info" : undefined}
+                  />
+                  <StatCard icon={<Play size={15} />} label="Runs (24h)" value={String(summary.runs24h)} />
+                  <StatCard icon={<Zap size={15} />} label="Tokens (24h)" value={formatCompact(summary.tokens24h)} />
+                  <StatCard
+                    icon={<Cpu size={15} />}
+                    label="LLM Calls (24h)"
+                    value={String(summary.llmCalls24h ?? 0)}
+                  />
+                </div>
+              </div>
+            )}
 
-        <ActiveUsersFilterBar
-          filter={filter}
-          setFilter={setFilter}
-          statusFilter={statusFilter}
-          setStatusFilter={setStatusFilter}
-          failedOnly={failedOnly}
-          setFailedOnly={setFailedOnly}
-          lastSeenRange={lastSeenRange}
-          setLastSeenRange={setLastSeenRange}
-          filteredCount={filteredSorted.length}
-          totalCount={users.length}
-          tiny={tiny}
-          useStack={useStack}
-          sortKey={sortKey}
-          sortDir={sortDir}
-          onSort={onSort}
-        />
+            <ActiveUsersFilterBar
+              filter={filter}
+              setFilter={setFilter}
+              statusFilter={statusFilter}
+              setStatusFilter={setStatusFilter}
+              failedOnly={failedOnly}
+              setFailedOnly={setFailedOnly}
+              lastSeenRange={lastSeenRange}
+              setLastSeenRange={setLastSeenRange}
+              filteredCount={filteredSorted.length}
+              totalCount={users.length}
+              tiny={tiny}
+              useStack={useStack}
+              sortKey={sortKey}
+              sortDir={sortDir}
+              onSort={onSort}
+              filtersOpen={filtersOpen}
+              setFiltersOpen={setFiltersOpen}
+              filterBtnRef={filterBtnRef}
+            />
+          </>
+        )}
 
         {/* Stack = reflow (no clip). Table = only when container is wide enough for all columns. */}
         <div className="flex-1 min-h-0 min-w-0 au-body-scroll">
@@ -763,6 +904,10 @@ function ActiveUsersFilterBar({
   sortKey,
   sortDir,
   onSort,
+  showToolbar = true,
+  filtersOpen,
+  setFiltersOpen,
+  filterBtnRef,
 }: {
   filter: string
   setFilter: (value: string) => void
@@ -779,9 +924,13 @@ function ActiveUsersFilterBar({
   sortKey: SortKey
   sortDir: SortDir
   onSort: (key: SortKey) => void
+  showToolbar?: boolean
+  filtersOpen: boolean
+  setFiltersOpen: (open: boolean | ((open: boolean) => boolean)) => void
+  filterBtnRef: RefObject<HTMLButtonElement | null>
 }) {
-  const [filtersOpen, setFiltersOpen] = useState(false)
-  const filterBtnRef = useRef<HTMLButtonElement>(null)
+  const localFilterBtnRef = useRef<HTMLButtonElement>(null)
+  const anchorRef = filterBtnRef ?? localFilterBtnRef
 
   const filtersActive =
     statusFilter !== "all" || failedOnly || lastSeenRange !== "all"
@@ -836,48 +985,49 @@ function ActiveUsersFilterBar({
 
   return (
     <>
-      <WidgetToolbar>
-        <WidgetToolbarLeading>{null}</WidgetToolbarLeading>
-        <WidgetToolbarSearch
-          value={filter}
-          onChange={setFilter}
-          placeholder="Filter by name, UPN, IP, model…"
-          onClear={() => setFilter("")}
-        />
-        <WidgetToolbarTrailing>
-          {!tiny && (
-            <span className="inline-flex items-center gap-1.5 text-text-muted">
-              {/* <Users size={15} strokeWidth={1.75} aria-hidden /> */}
-              <WidgetToolbarCount
-                filtered={filteredCount}
-                total={totalCount}
-                compact
-              />
-            </span>
-          )}
-          <button
-            ref={filterBtnRef}
-            type="button"
-            onClick={() => setFiltersOpen((o) => !o)}
-            className={`widget-toolbar__icon-btn ${
-              filtersOpen || filtersActive ? "widget-toolbar__icon-btn--active" : ""
-            }`}
-            title={
-              filtersActive
-                ? `Filters (${activeFilterCount} active)`
-                : "Filters"
-            }
-            aria-pressed={filtersOpen || filtersActive}
-          >
-            <SlidersHorizontal size={14} strokeWidth={1.75} />
-            {filtersActive && (
-              <span className="widget-toolbar__icon-badge" aria-hidden>
-                {activeFilterCount > 9 ? "9+" : activeFilterCount}
+      {showToolbar ? (
+        <WidgetToolbar>
+          <WidgetToolbarLeading>{null}</WidgetToolbarLeading>
+          <WidgetToolbarSearch
+            value={filter}
+            onChange={setFilter}
+            placeholder="Filter by name, UPN, IP, model…"
+            onClear={() => setFilter("")}
+          />
+          <WidgetToolbarTrailing>
+            {!tiny && (
+              <span className="inline-flex items-center gap-1.5 text-text-muted">
+                <WidgetToolbarCount
+                  filtered={filteredCount}
+                  total={totalCount}
+                  compact
+                />
               </span>
             )}
-          </button>
-        </WidgetToolbarTrailing>
-      </WidgetToolbar>
+            <button
+              ref={anchorRef}
+              type="button"
+              onClick={() => setFiltersOpen((o) => !o)}
+              className={`widget-toolbar__icon-btn ${
+                filtersOpen || filtersActive ? "widget-toolbar__icon-btn--active" : ""
+              }`}
+              title={
+                filtersActive
+                  ? `Filters (${activeFilterCount} active)`
+                  : "Filters"
+              }
+              aria-pressed={filtersOpen || filtersActive}
+            >
+              <SlidersHorizontal size={14} strokeWidth={1.75} />
+              {filtersActive && (
+                <span className="widget-toolbar__icon-badge" aria-hidden>
+                  {activeFilterCount > 9 ? "9+" : activeFilterCount}
+                </span>
+              )}
+            </button>
+          </WidgetToolbarTrailing>
+        </WidgetToolbar>
+      ) : null}
 
       <ActiveFilterChips
         chips={activeChips}
@@ -887,7 +1037,7 @@ function ActiveUsersFilterBar({
       <FilterSheet
         open={filtersOpen}
         onClose={() => setFiltersOpen(false)}
-        anchorRef={filterBtnRef}
+        anchorRef={anchorRef}
         footer={
           filtersActive ? (
             <button

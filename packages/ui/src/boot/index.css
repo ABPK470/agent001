@@ -6330,6 +6330,40 @@ button.trace-tree-status-pill:hover {
   --au-sticky-fill: var(--workspace-widget-bg, var(--panel-2));
 }
 
+.active-users-widget--zen .au-main {
+  min-height: 0;
+}
+
+.active-users-widget--zen .trace-zen-hud {
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.active-users-widget--zen .au-zen-hud {
+  display: flex;
+  flex-direction: column;
+  background: var(--overlay-1, rgb(255 255 255 / 0.02));
+}
+
+.active-users-widget--zen .au-zen-hud__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  min-height: 2.5rem;
+  padding: 0 0.75rem;
+  min-width: 0;
+}
+
+.active-users-widget--zen .au-zen-hud__search {
+  width: 100%;
+}
+
+.active-users-widget--zen .au-zen-hud__stats-panel {
+  padding: 0.55rem 0.75rem 0.65rem;
+  border-top: 1px solid var(--border-subtle);
+}
+
 .active-users-widget--table {
   /* SortTh: text-xs leading-4 (1rem) + py-2 (1rem) + tr border-b (1px). */
   --au-sticky-thead-h: calc(2rem + 1px);

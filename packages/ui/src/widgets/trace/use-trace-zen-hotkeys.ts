@@ -2,8 +2,9 @@
  * Trace zen hotkeys — view mode, filter overlay, focus toggle, fold all.
  */
 
-import { useEffect } from "react"
+import { useCallback, useEffect } from "react"
 import { isEditableKeyboardTarget } from "../../lib/keyboard-target"
+import { useWidgetZenHotkeys } from "../../hooks/useWidgetZenHotkeys"
 import type { FoldMode } from "./open-state"
 
 export function useTraceZenHotkeys({
@@ -29,34 +30,28 @@ export function useTraceZenHotkeys({
   onToggleZen: () => void
   onExitZen: () => void
 }) {
+  const onEscapeBeforeExit = useCallback((): boolean => {
+    if (!searchOpen) return false
+    onSearchOpenChange(false)
+    return true
+  }, [onSearchOpenChange, searchOpen])
+
+  useWidgetZenHotkeys({
+    enabled,
+    isZen,
+    onToggleZen,
+    onExitZen,
+    onEscapeBeforeExit,
+  })
+
   useEffect(() => {
-    if (!enabled) return
+    if (!enabled || !isZen) return
 
     function onKeyDown(event: KeyboardEvent) {
       if (isEditableKeyboardTarget(event.target)) return
 
       const key = event.key.toLowerCase()
       const mod = event.metaKey || event.ctrlKey
-
-      if (key === "z" && !mod && !event.altKey && !event.shiftKey) {
-        event.preventDefault()
-        if (isZen) onExitZen()
-        else onToggleZen()
-        return
-      }
-
-      if (!isZen) return
-
-      if (event.key === "Escape") {
-        if (searchOpen) {
-          event.preventDefault()
-          onSearchOpenChange(false)
-          return
-        }
-        event.preventDefault()
-        onExitZen()
-        return
-      }
 
       if (mod && key === "f") {
         event.preventDefault()
@@ -106,12 +101,9 @@ export function useTraceZenHotkeys({
     enabled,
     foldMode,
     isZen,
-    onExitZen,
     onFoldModeChange,
     onSearchOpenChange,
-    onToggleZen,
     onViewModeChange,
-    searchOpen,
     viewMode,
   ])
 }
