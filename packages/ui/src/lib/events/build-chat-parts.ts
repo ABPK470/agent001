@@ -12,6 +12,7 @@ import {
 } from "@mia/shared-types"
 import type { TraceEntry } from "@mia/shared-types"
 import { RunStatus } from "../../enums"
+import { isTerminalRunStatus } from "../run-actions"
 import { formatMs } from "../util"
 import { isPlannerStepSuccessStatus, plannerStepEndDetail } from "./planner-step-status"
 import type { ViewSpec } from "./types"
@@ -1294,7 +1295,11 @@ export function buildResponseParts(
     }
   }
 
-  if (pendingInput?.runId === runId && !parts.some((part) => part.kind === "input")) {
+  if (
+    pendingInput?.runId === runId
+    && !isTerminalRunStatus(runStatus)
+    && !parts.some((part) => part.kind === "input")
+  ) {
     parts.push({ kind: "input", id: `input-live-${runId}`, question: pendingInput.question, options: pendingInput.options, sensitive: pendingInput.sensitive })
   }
 
@@ -1369,6 +1374,10 @@ export function buildResponseParts(
       }
       return part
     })
+  }
+
+  if (isTerminalRunStatus(runStatus)) {
+    parts = parts.filter((part) => part.kind !== "input")
   }
 
   return parts

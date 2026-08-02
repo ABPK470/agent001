@@ -36,6 +36,7 @@ export function statusDotKind(status: string): StatusDotKind {
     case "failed":
     case "error":
     case "timeout":
+    case "crashed":
       return "fail"
     case "running":
     case "pending":

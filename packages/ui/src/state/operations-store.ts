@@ -90,6 +90,8 @@ interface OperationsState {
   }) => void
   loadMore: () => void
   setPaintSuspended: (suspended: boolean) => void
+  /** Refresh the head page after SSE reconnect (no-op when no widget retains). */
+  refreshHeadIfRetained: () => void
 }
 
 interface Transport {
@@ -345,6 +347,11 @@ export const useOperationsStore = create<OperationsState>((set, get) => ({
 
   setPaintSuspended(suspended) {
     set({ paintSuspended: suspended })
+  },
+
+  refreshHeadIfRetained() {
+    if (transport.refCount <= 0) return
+    reloadHead(get, set)
   },
 }))
 

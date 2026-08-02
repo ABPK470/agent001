@@ -1091,7 +1091,7 @@ function UserDetail({ user, liveRuns, history, stack, adminBusy, onToggleAdmin, 
     if (runStatus !== "all") {
       rows = rows.filter((r) => {
         if (runStatus === "succeeded") return r.status === "succeeded" || r.status === "completed"
-        if (runStatus === "failed")    return r.status === "failed" || r.status === "error" || r.status === "timeout"
+        if (runStatus === "failed")    return r.status === "failed" || r.status === "error" || r.status === "timeout" || r.status === "crashed"
         if (runStatus === "running")   return r.status === "running" || r.status === "pending" || r.status === "planning"
         return true
       })

@@ -163,10 +163,27 @@ function isTerminalInfrastructureError(message: string | null | undefined): bool
   if (!message) return false
   const text = message.trim().toLowerCase()
   return text === "run cancelled by user"
+    || text.startsWith("server restarted")
     || text.startsWith("device flow failed:")
     || text.startsWith("device flow initiation failed:")
     || text.startsWith("device flow timed out")
     || text.startsWith("copilot oauth token expired")
+}
+
+function isServerRestartError(message: string | null | undefined): boolean {
+  if (!message) return false
+  return message.trim().toLowerCase().startsWith("server restarted")
+}
+
+/** Runs that may still look live in the client after an SSE gap (restart). */
+function needsRunStatusReconcile(status: string | undefined): boolean {
+  if (!status) return false
+  return (
+    status === RunStatus.Pending
+    || status === RunStatus.Running
+    || status === RunStatus.Planning
+    || status === RunStatus.WaitingForApproval
+  )
 }
 
 /**
@@ -232,6 +249,8 @@ interface AppState {
   // Connection
   connected: boolean
   setConnected: (v: boolean) => void
+  /** Refetch runs that still look in-flight after SSE reconnect. */
+  reconcileLiveRuns: () => void
 
   // Runs
   runs: Run[]
@@ -640,6 +659,30 @@ export const useStore = create<AppState>()(
       // Connection
       connected: false,
       setConnected: (connected) => set({ connected }),
+      reconcileLiveRuns: () => {
+        const liveRuns = get().runs.filter((r) => needsRunStatusReconcile(r.status))
+        if (liveRuns.length === 0) return
+        void Promise.all(liveRuns.map((r) => api.getRun(r.id)))
+          .then((details) => {
+            set((s) => {
+              let runs = s.runs
+              for (const detail of details) {
+                const current = runs.find((r) => r.id === detail.id)
+                if (!current || current.status === detail.status) continue
+                runs = patchRunFields(runs, detail.id, {
+                  status: detail.status,
+                  error: detail.error,
+                  completedAt: detail.completedAt,
+                  hasCheckpoint: detail.hasCheckpoint,
+                  rollbackAvailable: detail.rollbackAvailable,
+                  answer: detail.answer,
+                })
+              }
+              return { runs }
+            })
+          })
+          .catch((err: unknown) => { console.error("[mia]", err) })
+      },
 
       // Runs
       runs: [],
@@ -1365,23 +1408,29 @@ export const useStore = create<AppState>()(
 
           case "run.failed":
             store.clearStreamingAnswer()
-            if (!isTerminalInfrastructureError(data["error"] as string)) {
-              store.addTrace({ kind: "error", text: data["error"] as string })
-            }
-            store.upsertRun({
-              id: data["runId"] as string,
-              status: RunStatus.Failed,
-              error: data["error"] as string,
-              stepCount: data["stepCount"] as number,
-              completedAt: timestamp,
-              totalTokens: (data["totalTokens"] as number) ?? 0,
-              promptTokens: (data["promptTokens"] as number) ?? 0,
-              completionTokens: (data["completionTokens"] as number) ?? 0,
-              llmCalls: (data["llmCalls"] as number) ?? 0,
-              streamingAnswer: "",
-            })
-            if (!isTerminalInfrastructureError(data["error"] as string)) {
-              set((s) => ({ runs: appendRunTrace(s.runs, data["runId"] as string, { kind: "error", text: data["error"] as string }) }))
+            {
+              const errorText = data["error"] as string
+              const terminalStatus = isServerRestartError(errorText)
+                ? RunStatus.Crashed
+                : RunStatus.Failed
+              if (!isTerminalInfrastructureError(errorText)) {
+                store.addTrace({ kind: "error", text: errorText })
+              }
+              store.upsertRun({
+                id: data["runId"] as string,
+                status: terminalStatus,
+                error: errorText,
+                stepCount: data["stepCount"] as number,
+                completedAt: timestamp,
+                totalTokens: (data["totalTokens"] as number) ?? 0,
+                promptTokens: (data["promptTokens"] as number) ?? 0,
+                completionTokens: (data["completionTokens"] as number) ?? 0,
+                llmCalls: (data["llmCalls"] as number) ?? 0,
+                streamingAnswer: "",
+              })
+              if (!isTerminalInfrastructureError(errorText)) {
+                set((s) => ({ runs: appendRunTrace(s.runs, data["runId"] as string, { kind: "error", text: errorText }) }))
+              }
             }
             set({ pendingInput: null, executingToolCalls: new Map(), pendingKill: null, activeSyncInvocation: null, syncProgressStates: new Map() })
             if (get().pendingToolApproval?.runId === (data["runId"] as string)) {

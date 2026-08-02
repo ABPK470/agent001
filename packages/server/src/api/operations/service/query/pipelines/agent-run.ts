@@ -18,7 +18,7 @@ export function buildAgentRunPipeline(runId: string, events: OperationEvent[]): 
   const status: OperationStatus =
     run?.status === RunStatus.Completed
       ? OperationStatus.Success
-      : run?.status === RunStatus.Failed
+      : run?.status === RunStatus.Failed || run?.status === RunStatus.Crashed
         ? OperationStatus.Failed
         : run?.status === RunStatus.Cancelled
           ? OperationStatus.Cancelled

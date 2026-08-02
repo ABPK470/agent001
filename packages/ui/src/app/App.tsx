@@ -10,6 +10,7 @@ import { resetViewingAsMemory, syncViewingAsForSession } from "../lib/viewing-as
 import { usePlatformHealth } from "../hooks/usePlatformHealth"
 import { useServerReachable } from "../hooks/useServerReachable"
 import { useLayoutStore } from "../state/layout-store"
+import { useOperationsStore } from "../state/operations-store"
 import { useStore } from "../state/store"
 import type { AuditEntry, LogEntry, Step, WidgetType } from "../types"
 import { widgetRegistry } from "../widgets"
@@ -142,6 +143,8 @@ function restorePersonalEnvSyncForm(): void {
 export function App() {
   const setConnected = useStore((s) => s.setConnected)
   const connected = useStore((s) => s.connected)
+  const reconcileLiveRuns = useStore((s) => s.reconcileLiveRuns)
+  const refreshOperationsHead = useOperationsStore((s) => s.refreshHeadIfRetained)
   const handleEvent = useStore((s) => s.handleEvent)
   const setRuns = useStore((s) => s.setRuns)
   const setActiveRun = useStore((s) => s.setActiveRun)
@@ -166,6 +169,7 @@ export function App() {
   shellModeRef.current = shellMode
   const [shellVisible, setShellVisible] = useState(true)
   const shellTimerRef = useRef<number | null>(null)
+  const prevConnectedRef = useRef(false)
   // Becomes true when the login overlay starts its final fade so the home
   // shell crossfades with it instead of waiting for it to fully disappear.
   const [shellRevealing, setShellRevealing] = useState(false)
@@ -317,6 +321,15 @@ export function App() {
       : createEventStream(handleEvent, setConnected)
     return () => stream.close()
   }, [handleEvent, setConnected, popOut, me?.upn, viewingAsUpn])
+
+  // After reconnect, reconcile runs that may have terminated while offline.
+  useEffect(() => {
+    if (connected && !prevConnectedRef.current) {
+      reconcileLiveRuns()
+      refreshOperationsHead()
+    }
+    prevConnectedRef.current = connected
+  }, [connected, reconcileLiveRuns, refreshOperationsHead])
 
   // Widget-gated Personal followers (same scope key; do not re-clear).
   useEffect(() => {

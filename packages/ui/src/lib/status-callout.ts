@@ -64,6 +64,7 @@ export function statusCalloutTone(status: string): StatusCalloutTone {
     case "failed":
     case "error":
     case "timeout":
+    case "crashed":
       return "err"
     case "cancelled":
     case "canceled":
