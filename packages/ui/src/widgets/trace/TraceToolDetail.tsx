@@ -5,7 +5,13 @@
 import type { TraceDag } from "./build-trace-dag"
 import { TraceErrorBlock } from "./TraceErrorBlock"
 import { TraceToolIo } from "./TraceToolIo"
-import { resolveTraceTool } from "./trace-tool-resolve"
+import { TraceAskUserInteraction } from "./TraceAskUserInteraction"
+import {
+  extractAskUserAnswer,
+  extractAskUserQuestion,
+  isAskUserTool,
+} from "./trace-ask-user"
+import { resolveTraceTool, resolveTraceWorkForTool } from "./trace-tool-resolve"
 
 export function TraceToolDetail({
   dag,
@@ -20,6 +26,32 @@ export function TraceToolDetail({
   }
 
   const isError = tool.status === "error"
+  const work = resolveTraceWorkForTool(dag, toolKey)
+  const notes = work?.notes ?? []
+
+  if (isAskUserTool(tool)) {
+    const question = extractAskUserQuestion(tool.arguments, notes)
+    const answer = isError ? null : extractAskUserAnswer(tool.resultText, notes)
+
+    return (
+      <div className="trace-detail-body">
+        <TraceAskUserInteraction question={question} answer={answer} />
+        <TraceToolIo
+          dag={dag}
+          toolName={tool.name}
+          argumentsValue={tool.arguments}
+          layout="developer"
+          hideResult
+        />
+        {isError && tool.resultText ? (
+          <div className="trace-detail-section">
+            <div className="trace-detail-section__label">Error</div>
+            <TraceErrorBlock text={tool.resultText} title="ERROR / EXCEPTION TRACE" />
+          </div>
+        ) : null}
+      </div>
+    )
+  }
 
   return (
     <div className="trace-detail-body">

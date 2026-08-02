@@ -15,6 +15,8 @@ import { TraceToolDetail } from "./TraceToolDetail"
 import { TraceWorkDetail } from "./TraceWorkDetail"
 import {
   TraceInspectorHeadline,
+  TraceInspectorHeadlinePrimary,
+  TraceInspectorHeadlineSecondary,
   inspectorActionKind,
 } from "./TraceInspectorHeadline"
 import { buildTraceStepPayload } from "./trace-step-payload"
@@ -106,6 +108,7 @@ export function TraceDetailInspector({
   canCompare,
   onNotify,
   onError,
+  splitHeader = false,
 }: {
   dag: TraceDag
   compareDag: TraceDag | null
@@ -122,6 +125,8 @@ export function TraceDetailInspector({
   canCompare: boolean
   onNotify?: (message: string) => void
   onError?: (message: string) => void
+  /** Zen split pane — lock header to 2-row grid aligned with tree column. */
+  splitHeader?: boolean
 }) {
   const [evalBusy, setEvalBusy] = useState(false)
   const [evalAdded, setEvalAdded] = useState(false)
@@ -204,67 +209,137 @@ export function TraceDetailInspector({
 
   return (
     <div className="trace-detail">
-      <div className="trace-detail__header">
-        <div className="trace-detail__header-top">
-          <TraceInspectorHeadline node={node} />
-          <div className="trace-detail__actions">
-            {actions === "tool" ? (
-              <>
-                <button
-                  type="button"
-                  className="trace-detail-action trace-detail-action--toolbar is-primary"
-                  onClick={onTestTool}
-                >
-                  Test tool
-                </button>
-                <button
-                  type="button"
-                  className="trace-detail-action trace-detail-action--toolbar"
-                  disabled={!curl}
-                  onClick={onCopyCurl}
-                >
-                  Copy curl
-                </button>
-              </>
-            ) : actions === "llm" ? (
-              <>
-                <button
-                  type="button"
-                  className={`trace-detail-action trace-detail-action--toolbar is-toggle${playgroundOpen ? " is-active" : ""}`}
-                  aria-pressed={playgroundOpen}
-                  onClick={onTogglePlayground}
-                  disabled={!runId}
-                >
-                  Playground
-                </button>
-                <button
-                  type="button"
-                  className={`trace-detail-action trace-detail-action--toolbar is-toggle${evalAdded ? " is-success" : ""}`}
-                  disabled={!runId || evalBusy || evalAdded}
-                  onClick={onAddEval}
-                >
-                  {evalBusy ? "Saving…" : evalAdded ? "Added ✓" : "Add to eval"}
-                </button>
-                {canCompare ? (
+      <div
+        className={`trace-detail__header${splitHeader ? " trace-detail__header--split" : ""}`}
+      >
+        {splitHeader ? (
+          <>
+            <div className="trace-split-header-row trace-split-header-row--primary">
+              <TraceInspectorHeadlinePrimary node={node} />
+              <div className="trace-detail__actions">
+                {actions === "tool" ? (
+                  <>
+                    <button
+                      type="button"
+                      className="trace-detail-action trace-detail-action--toolbar is-primary"
+                      onClick={onTestTool}
+                    >
+                      Test tool
+                    </button>
+                    <button
+                      type="button"
+                      className="trace-detail-action trace-detail-action--toolbar"
+                      disabled={!curl}
+                      onClick={onCopyCurl}
+                    >
+                      Copy curl
+                    </button>
+                  </>
+                ) : actions === "llm" ? (
+                  <>
+                    <button
+                      type="button"
+                      className={`trace-detail-action trace-detail-action--toolbar is-toggle${playgroundOpen ? " is-active" : ""}`}
+                      aria-pressed={playgroundOpen}
+                      onClick={onTogglePlayground}
+                      disabled={!runId}
+                    >
+                      Playground
+                    </button>
+                    <button
+                      type="button"
+                      className={`trace-detail-action trace-detail-action--toolbar is-toggle${evalAdded ? " is-success" : ""}`}
+                      disabled={!runId || evalBusy || evalAdded}
+                      onClick={onAddEval}
+                    >
+                      {evalBusy ? "Saving…" : evalAdded ? "Added ✓" : "Add to eval"}
+                    </button>
+                    {canCompare ? (
+                      <button
+                        type="button"
+                        className={`trace-detail-action trace-detail-action--toolbar is-toggle${compareRunId ? " is-active" : ""}`}
+                        aria-pressed={Boolean(compareRunId)}
+                        onClick={onToggleCompare}
+                        disabled={!compareAvailable}
+                        title={
+                          compareAvailable
+                            ? undefined
+                            : "No prior run in this thread to compare against"
+                        }
+                      >
+                        Compare
+                      </button>
+                    ) : null}
+                  </>
+                ) : null}
+              </div>
+            </div>
+            <div className="trace-split-header-row trace-split-header-row--secondary trace-detail__header-row2">
+              <TraceInspectorHeadlineSecondary node={node} />
+            </div>
+          </>
+        ) : (
+          <div className="trace-detail__header-top">
+            <TraceInspectorHeadline node={node} />
+            <div className="trace-detail__actions">
+              {actions === "tool" ? (
+                <>
                   <button
                     type="button"
-                    className={`trace-detail-action trace-detail-action--toolbar is-toggle${compareRunId ? " is-active" : ""}`}
-                    aria-pressed={Boolean(compareRunId)}
-                    onClick={onToggleCompare}
-                    disabled={!compareAvailable}
-                    title={
-                      compareAvailable
-                        ? undefined
-                        : "No prior run in this thread to compare against"
-                    }
+                    className="trace-detail-action trace-detail-action--toolbar is-primary"
+                    onClick={onTestTool}
                   >
-                    Compare
+                    Test tool
                   </button>
-                ) : null}
-              </>
-            ) : null}
+                  <button
+                    type="button"
+                    className="trace-detail-action trace-detail-action--toolbar"
+                    disabled={!curl}
+                    onClick={onCopyCurl}
+                  >
+                    Copy curl
+                  </button>
+                </>
+              ) : actions === "llm" ? (
+                <>
+                  <button
+                    type="button"
+                    className={`trace-detail-action trace-detail-action--toolbar is-toggle${playgroundOpen ? " is-active" : ""}`}
+                    aria-pressed={playgroundOpen}
+                    onClick={onTogglePlayground}
+                    disabled={!runId}
+                  >
+                    Playground
+                  </button>
+                  <button
+                    type="button"
+                    className={`trace-detail-action trace-detail-action--toolbar is-toggle${evalAdded ? " is-success" : ""}`}
+                    disabled={!runId || evalBusy || evalAdded}
+                    onClick={onAddEval}
+                  >
+                    {evalBusy ? "Saving…" : evalAdded ? "Added ✓" : "Add to eval"}
+                  </button>
+                  {canCompare ? (
+                    <button
+                      type="button"
+                      className={`trace-detail-action trace-detail-action--toolbar is-toggle${compareRunId ? " is-active" : ""}`}
+                      aria-pressed={Boolean(compareRunId)}
+                      onClick={onToggleCompare}
+                      disabled={!compareAvailable}
+                      title={
+                        compareAvailable
+                          ? undefined
+                          : "No prior run in this thread to compare against"
+                      }
+                    >
+                      Compare
+                    </button>
+                  ) : null}
+                </>
+              ) : null}
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       <div className="trace-detail__scroll">

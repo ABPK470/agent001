@@ -47,39 +47,72 @@ function headlineSubtitle(node: TraceTreeNode): string | null {
   return node.subtitle
 }
 
-function headlineMetricsLine(node: TraceTreeNode): string | null {
-  const parts: string[] = []
-  if (node.durationMs != null) parts.push(formatMs(node.durationMs))
-  if (node.promptTokens > 0 || node.completionTokens > 0) {
-    parts.push(tokenPairLabel(node.promptTokens, node.completionTokens))
-  } else if (node.kind === "call" || node.kind === "phase" || node.kind === "sent") {
-    parts.push("0 tokens")
-  }
-
+export function headlineRow2Line(node: TraceTreeNode): string | null {
   const subtitle = headlineSubtitle(node)
-  if (subtitle && !parts.some((p) => p.includes(subtitle))) {
-    parts.unshift(subtitle)
+  if (subtitle) return subtitle
+  if (node.promptTokens > 0 || node.completionTokens > 0) {
+    return tokenPairLabel(node.promptTokens, node.completionTokens)
   }
+  if (node.kind === "call" || node.kind === "phase" || node.kind === "sent") {
+    return "0 tokens"
+  }
+  return null
+}
 
-  return parts.length > 0 ? parts.join(" · ") : null
+export function TraceInspectorHeadlinePrimary({ node }: { node: TraceTreeNode }) {
+  const duration =
+    node.durationMs != null && node.durationMs > 0 ? formatMs(node.durationMs) : null
+
+  return (
+    <div className="trace-detail__headline trace-detail__headline--split">
+      <div className="trace-detail__headline-row">
+        <span className="trace-detail__headline-title">{inspectorTitle(node)}</span>
+        <span className="trace-detail__headline-trailing">
+          {duration ? (
+            <span className="trace-detail__headline-duration tabular-nums">{duration}</span>
+          ) : null}
+          <TraceTreeStatusBadge
+            status={node.status}
+            branchHasError={node.branchHasError}
+            hasError={node.hasError}
+          />
+        </span>
+      </div>
+    </div>
+  )
+}
+
+export function TraceInspectorHeadlineSecondary({ node }: { node: TraceTreeNode }) {
+  const row2 = headlineRow2Line(node)
+  if (!row2) {
+    return (
+      <span className="trace-detail__headline-row2 trace-detail__headline-row2--empty" aria-hidden />
+    )
+  }
+  return <p className="trace-detail__headline-row2 tabular-nums">{row2}</p>
 }
 
 export function TraceInspectorHeadline({ node }: { node: TraceTreeNode }) {
-  const metricsLine = headlineMetricsLine(node)
+  const row2 = headlineRow2Line(node)
+  const duration =
+    node.durationMs != null && node.durationMs > 0 ? formatMs(node.durationMs) : null
 
   return (
     <div className="trace-detail__headline">
       <div className="trace-detail__headline-row">
         <span className="trace-detail__headline-title">{inspectorTitle(node)}</span>
-        <TraceTreeStatusBadge
-          status={node.status}
-          branchHasError={node.branchHasError}
-          hasError={node.hasError}
-        />
+        <span className="trace-detail__headline-trailing">
+          {duration ? (
+            <span className="trace-detail__headline-duration tabular-nums">{duration}</span>
+          ) : null}
+          <TraceTreeStatusBadge
+            status={node.status}
+            branchHasError={node.branchHasError}
+            hasError={node.hasError}
+          />
+        </span>
       </div>
-      {metricsLine ? (
-        <p className="trace-detail__headline-metrics tabular-nums">{metricsLine}</p>
-      ) : null}
+      {row2 ? <p className="trace-detail__headline-metrics tabular-nums">{row2}</p> : null}
     </div>
   )
 }

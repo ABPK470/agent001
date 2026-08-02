@@ -612,8 +612,11 @@ export function TraceDag({
                   <p className="trace-empty px-2 py-3">No matches for “{query}”</p>
                 ) : null}
                 {runId && dag.hasData && viewMode === "tree" && (
-                  <>
-                    <div className="trace-tree-header" aria-hidden>
+                  <div className="trace-split-tree-table">
+                    <div
+                      className="trace-tree-header trace-split-header-row trace-split-header-row--secondary"
+                      aria-hidden
+                    >
                       <span className="trace-tree-header__node">Node</span>
                       <span className="trace-tree-header__metric">Latency</span>
                       <span className="trace-tree-header__metric">Tokens</span>
@@ -629,7 +632,7 @@ export function TraceDag({
                         renderItem={renderTreeRow}
                       />
                     </div>
-                  </>
+                  </div>
                 )}
                 {runId && dag.hasData && viewMode === "waterfall" && (
                   <div ref={treeScrollRef} className="trace-split-tree-scroll">
@@ -671,6 +674,7 @@ export function TraceDag({
                     canCompare={canCompare}
                     onNotify={onExportMessage}
                     onError={onExportError}
+                    splitHeader={isZen}
                   />
                 </div>
               </div>

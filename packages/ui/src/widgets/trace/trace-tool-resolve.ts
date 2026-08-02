@@ -2,8 +2,30 @@
  * Resolve tool spans from tree keys — shared by detail panel + inspector header.
  */
 
-import type { TraceDag, TraceToolCall } from "./build-trace-dag"
+import type { TraceDag, TraceToolCall, TraceWorkNode } from "./build-trace-dag"
 import { callToolOpenKey, workToolOpenKey } from "./open-state"
+
+function workToolsFromSpine(dag: TraceDag): TraceWorkNode[] {
+  const works: TraceWorkNode[] = []
+  for (const entry of dag.spine) {
+    if (entry.kind === "work") works.push(entry.work)
+    if (entry.kind === "phase") {
+      for (const child of entry.phase.children ?? []) {
+        if (child.kind === "work") works.push(child.work)
+      }
+    }
+  }
+  return works
+}
+
+export function resolveTraceWorkForTool(dag: TraceDag, toolKey: string): TraceWorkNode | null {
+  for (const work of workToolsFromSpine(dag)) {
+    for (const tool of work.tools) {
+      if (workToolOpenKey(work.id, tool.id) === toolKey) return work
+    }
+  }
+  return null
+}
 
 export function resolveTraceTool(dag: TraceDag, toolKey: string): TraceToolCall | null {
   for (const call of dag.calls) {

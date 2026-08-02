@@ -1,8 +1,8 @@
 /**
- * Trace zen HUD — collapsed stats badge, exit pill, floating search overlay.
+ * Trace zen HUD — row-1 controls: stats trigger, inline search, exit.
  */
 
-import { Search, X } from "lucide-react"
+import { ChevronDown, Info, Search, X } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { IdChip } from "./TraceCopy"
 
@@ -42,102 +42,111 @@ export function TraceZenHud({
     return () => window.clearTimeout(t)
   }, [searchOpen])
 
+  function onToggleStats() {
+    setStatsOpen((open) => !open)
+  }
+
   return (
-    <div className="trace-zen-hud">
-      <div className="trace-zen-hud__leading">
-        {compactStats ? (
-          <div
-            className="trace-zen-hud__stats"
-            onMouseEnter={() => setStatsOpen(true)}
-            onMouseLeave={() => setStatsOpen(false)}
+    <div className="trace-zen-hud trace-split-header-row trace-split-header-row--primary">
+      {searchOpen ? (
+        <div className="trace-zen-hud__search-inline" role="search">
+          <Search size={14} className="trace-zen-hud__search-icon" aria-hidden />
+          <input
+            ref={searchRef}
+            type="search"
+            className="trace-zen-hud__search-input"
+            value={search}
+            placeholder="Filter calls, tools, work…"
+            aria-label="Filter trace"
+            onChange={(event) => onSearchChange(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                event.preventDefault()
+                onSearchOpenChange(false)
+              }
+            }}
+          />
+          <button
+            type="button"
+            className="trace-zen-hud__icon-btn"
+            aria-label="Close filter"
+            onClick={() => onSearchOpenChange(false)}
           >
-            <button
-              type="button"
-              className="trace-zen-hud__stats-badge tabular-nums"
-              aria-expanded={statsOpen}
-            >
-              {compactStats}
-              <span className="trace-zen-hud__stats-info" aria-hidden>
-                ℹ
-              </span>
-            </button>
-            {statsOpen ? (
-              <div className="trace-zen-hud__stats-popover" role="tooltip">
-                <div className="trace-zen-hud__stats-grid">
-                  {metaStats.map((stat) => (
-                    <span key={`${stat.value}:${stat.label ?? ""}`} className="trace-zen-hud__stat">
-                      <span className="trace-zen-hud__stat-value tabular-nums">{stat.value}</span>
-                      {stat.label ? (
-                        <span className="trace-zen-hud__stat-label">{stat.label}</span>
-                      ) : null}
-                    </span>
-                  ))}
-                </div>
-                {(runId || threadId) && (
-                  <div className="trace-zen-hud__ids">
-                    {runId ? <IdChip label="run" value={runId} tone="meta" /> : null}
-                    {threadId ? <IdChip label="thread" value={threadId} tone="meta" /> : null}
+            <X size={14} />
+          </button>
+        </div>
+      ) : (
+        <>
+          <div className="trace-zen-hud__leading">
+            {compactStats ? (
+              <div className="trace-zen-hud__stats">
+                <button
+                  type="button"
+                  className="trace-zen-hud__stats-badge tabular-nums"
+                  aria-expanded={statsOpen}
+                  aria-haspopup="dialog"
+                  onClick={onToggleStats}
+                >
+                  <span className="trace-zen-hud__stats-text">{compactStats}</span>
+                  <span className="trace-zen-hud__stats-trigger" aria-hidden>
+                    <Info size={11} strokeWidth={2.25} />
+                    <ChevronDown
+                      size={12}
+                      className={`trace-zen-hud__stats-chev${statsOpen ? " is-open" : ""}`}
+                    />
+                  </span>
+                </button>
+                {statsOpen ? (
+                  <div className="trace-zen-hud__stats-popover" role="dialog" aria-label="Run stats">
+                    <div className="trace-zen-hud__stats-grid">
+                      {metaStats.map((stat) => (
+                        <span key={`${stat.value}:${stat.label ?? ""}`} className="trace-zen-hud__stat">
+                          <span className="trace-zen-hud__stat-value tabular-nums">{stat.value}</span>
+                          {stat.label ? (
+                            <span className="trace-zen-hud__stat-label">{stat.label}</span>
+                          ) : null}
+                        </span>
+                      ))}
+                    </div>
+                    {(runId || threadId) && (
+                      <div className="trace-zen-hud__ids">
+                        {runId ? <IdChip label="run" value={runId} tone="meta" /> : null}
+                        {threadId ? <IdChip label="thread" value={threadId} tone="meta" /> : null}
+                      </div>
+                    )}
                   </div>
-                )}
+                ) : null}
               </div>
             ) : null}
           </div>
-        ) : null}
 
-        <button
-          type="button"
-          className="trace-zen-hud__icon-btn"
-          title="Filter (⌘F or /)"
-          aria-label="Filter trace"
-          onClick={() => onSearchOpenChange(true)}
-        >
-          <Search size={14} />
-        </button>
-
-        <span className="trace-zen-hud__hint" aria-hidden>
-          <kbd>Esc</kbd>
-        </span>
-
-        <button
-          type="button"
-          className="trace-zen-hud__icon-btn"
-          title="Exit focus (Esc or Z)"
-          aria-label="Exit focus mode"
-          onClick={onExitZen}
-        >
-          <X size={14} />
-        </button>
-      </div>
-
-      {searchOpen ? (
-        <div className="trace-zen-hud__search-overlay" role="dialog" aria-label="Filter trace">
-          <div className="trace-zen-hud__search-panel">
-            <Search size={14} className="trace-zen-hud__search-icon" aria-hidden />
-            <input
-              ref={searchRef}
-              type="search"
-              className="trace-zen-hud__search-input"
-              value={search}
-              placeholder="Filter calls, tools, work…"
-              onChange={(event) => onSearchChange(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Escape") {
-                  event.preventDefault()
-                  onSearchOpenChange(false)
-                }
-              }}
-            />
+          <div className="trace-zen-hud__trailing">
             <button
               type="button"
-              className="trace-zen-hud__search-close"
-              aria-label="Close filter"
-              onClick={() => onSearchOpenChange(false)}
+              className="trace-zen-hud__icon-btn"
+              title="Filter (⌘F or /)"
+              aria-label="Filter trace"
+              onClick={() => onSearchOpenChange(true)}
+            >
+              <Search size={14} />
+            </button>
+
+            <span className="trace-zen-hud__hint" aria-hidden>
+              <kbd>Esc</kbd>
+            </span>
+
+            <button
+              type="button"
+              className="trace-zen-hud__icon-btn"
+              title="Exit focus (Esc or Z)"
+              aria-label="Exit focus mode"
+              onClick={onExitZen}
             >
               <X size={14} />
             </button>
           </div>
-        </div>
-      ) : null}
+        </>
+      )}
     </div>
   )
 }
