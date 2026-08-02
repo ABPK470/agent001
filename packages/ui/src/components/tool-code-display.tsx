@@ -52,6 +52,7 @@ export function ToolIoPane({
   lang,
   maxHeight,
   inline = true,
+  variant = "default",
 }: {
   role: "input" | "output" | "error"
   text: string
@@ -60,8 +61,15 @@ export function ToolIoPane({
   /** Panel/modal only — inline chat/trace must not nest scrollports. */
   maxHeight?: number
   inline?: boolean
+  /** Chat transcript — terminal errors use inset tint, not status callout pills. */
+  variant?: "default" | "chat"
 }) {
   if (role === "error") {
+    if (variant === "chat") {
+      return (
+        <pre className="chat-tool-error m-0 w-full max-w-full">{text}</pre>
+      )
+    }
     return (
       <p className="mia-callout mia-callout--err w-full max-w-full rounded-md px-2.5 py-2 code-pre text-[15px] leading-5 whitespace-pre-wrap break-words">
         {text}

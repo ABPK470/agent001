@@ -8,6 +8,7 @@ import { useRef, useState } from "react"
 import { JsonViewer } from "../../components/JsonViewer"
 import { preserveScrollAnchor } from "../../lib/chatScroll"
 import { formatMs } from "../../lib/util"
+import { operationStatusPill } from "../../lib/status-callout"
 import {
   messagePreview,
   type TracePromptMessage,
@@ -157,7 +158,9 @@ export function ToolRow({
           />
         </span>
         <span className="font-mono trace-msg__tool">{tool.name}</span>
-        {tool.status === "error" && <span className="trace-msg__detail is-error">failed</span>}
+        {tool.status === "error" ? (
+          <span className={operationStatusPill("failed")}>Failed</span>
+        ) : null}
         {tool.status === "done" && <span className="trace-msg__detail">done</span>}
         {tool.status === "running" && <span className="trace-msg__detail">running</span>}
         {tool.status === "proposed" && <span className="trace-msg__detail">proposed</span>}
@@ -202,10 +205,14 @@ export function SqlQualityRow({ entry }: { entry: TraceSqlQuality }) {
         : "is-ok"
   const phaseLabel = sqlQualityPhaseLabel(entry.phase)
   const codeLabel = sqlQualityValidationLabel(entry.validationCode)
+  const pillStatus =
+    entry.phase === "blocked" || entry.phase === "failed" ? "failed" : "success"
   return (
     <div className={`trace-sql-check ${phaseClass}`}>
       <div className="trace-sql-check__head">
-        <span className="trace-sql-check__badge">{phaseLabel}</span>
+        <span className={`trace-sql-check__badge ${operationStatusPill(pillStatus)}`}>
+          {phaseLabel}
+        </span>
         <span className="font-mono">{entry.toolName}</span>
         {codeLabel && (
           <span className="trace-sql-check__code" title={entry.validationCode ?? undefined}>

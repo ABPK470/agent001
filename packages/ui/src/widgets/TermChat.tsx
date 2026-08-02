@@ -96,6 +96,7 @@ import {
   scrollStepToHostTop,
 } from "./termchat/parallelFanOut"
 import { ChatFoldBody } from "./termchat/ChatFoldBody"
+import { operationStatusPill } from "../lib/status-callout"
 import { shouldAutoOpenWorkChip } from "./termchat/workChipFold"
 import { collapseResumeRunChains, resumeChainIds } from "./termchat/collapseResumeChains"
 import { planRevealRunInTranscript } from "./termchat/revealRunInTranscript"
@@ -522,7 +523,7 @@ function ToolSyncProgressBody({ part }: { part: ResponseSyncProgressPart }) {
   const tone = part.level === "error" || part.status === "error" ? "error" : "neutral"
   const lineClass = [
     "text-[15px] leading-5 font-mono",
-    tone === "error" ? "mia-callout mia-callout--err rounded-md px-2 py-1.5" : "text-text-faint",
+    tone === "error" ? "chat-tool-error" : "text-text-secondary",
   ].join(" ")
   // Skip stub/trivial statuses ("ok", "done") — they read as orphan junk under the SQL chip.
   // Real SSE summaries look like "Preview complete — plan abc12345: +3 ~1 -0".
@@ -551,9 +552,7 @@ function ToolSyncProgressBody({ part }: { part: ResponseSyncProgressPart }) {
       )}
       {resultLine ? (
         part.status === "error" ? (
-          <p className="mia-callout mia-callout--err rounded-md px-2 py-1.5 text-[15px] leading-5 font-mono">
-            {resultLine}
-          </p>
+          <pre className="chat-tool-error">{resultLine}</pre>
         ) : (
           <p className="text-[15px] leading-5 font-mono text-text-secondary">{resultLine}</p>
         )
@@ -603,7 +602,7 @@ function ToolPill({
   const showSyncProgress = Boolean(syncProgress) && (expanded || isRunning)
   return (
     <div className="relative py-0.5" data-chat-expand-root="">
-      {!isLast && <div className="pointer-events-none absolute left-[11px] top-[20px] -bottom-1 w-px bg-border-subtle" />}
+      {!isLast && <div className="pointer-events-none absolute left-[11px] top-[20px] -bottom-1 w-px chat-trace-rail" />}
       <div className="flex items-start gap-2 min-w-0 px-2 py-1">
         <span
           className={[
@@ -612,9 +611,9 @@ function ToolPill({
               ? calmRunning
                 ? "bg-accent"
                 : "bg-text-secondary animate-pulse"
-              : row.status === "done" || row.status === "running" || isError
-                ? "bg-text-muted"
-                : "bg-text-faint",
+              : isError
+                ? "bg-error"
+                : "chat-trace-dot--idle",
           ].join(" ")}
         />
         {/* Cap the pill content (label + preview) at 80% of the
@@ -669,6 +668,7 @@ function ToolPill({
             <ToolIoPane
               role={isError ? "error" : "output"}
               text={row.details}
+              variant="chat"
             />
           ) : null}
         </div>
@@ -728,7 +728,7 @@ function IterationBlock({
       <ChatFoldBody
         open={open}
         animated={animateFold}
-        className="mt-0.5 pl-4 border-l border-border-subtle ml-[5px]"
+        className="mt-0.5 pl-4 border-l chat-trace-fold ml-[5px]"
       >
         <IterationToolList tools={part.tools} syncByInvocation={syncByInvocation} />
       </ChatFoldBody>
@@ -848,14 +848,14 @@ function StepBlock({
   const hasTools = part.tools.length > 0
   const errorBody = part.body?.trim() || ""
   const hasErrorBody = errorBody.length > 0
-  const hasBodyContent = hasTools || part.hasRunning || hasErrorBody
+  const isSettled = part.status !== "running" && !part.hasRunning
+  const isFailed = isSettled && hasErrorBody
+  const hasBodyContent = hasTools || part.hasRunning || (hasErrorBody && !hasTools)
   const canToggle = hasTools || hasErrorBody
   const Chevron = open ? ChevronDown : ChevronRight
   const animateFold = userToggled || !isLiveRun
-  // Step headers stay muted chrome (frontier harness dialect). Hard-fail
-  // body below may use err callout — not painted headers.
   const labelClass =
-    part.status === "running" || part.hasRunning ? "text-text-muted" : "text-text-faint"
+    part.status === "running" || part.hasRunning ? "text-text-muted" : "text-text-secondary"
 
   return (
     <div className="py-1 min-w-0" data-chat-step-id={part.id} data-chat-expand-root="">
@@ -871,9 +871,9 @@ function StepBlock({
           })
         }}
         className={[
-          "flex max-w-full min-w-0 items-center gap-1.5 py-0.5 text-left text-[15px] leading-6",
+          "flex max-w-full min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 py-0.5 text-left text-[15px] leading-6",
           labelClass,
-          canToggle ? "transition-colors hover:text-text-secondary" : "cursor-default",
+          canToggle ? "transition-colors hover:text-text" : "cursor-default",
         ].join(" ")}
       >
         {/* Working logo sits in front of the chevron; fades out when the step settles. */}
@@ -893,28 +893,31 @@ function StepBlock({
             when the first nested tool arrives and the control appears. */}
         <span className="inline-flex h-3 w-3 shrink-0 items-center justify-center">
           {canToggle ? (
-            <Chevron size={12} strokeWidth={1.5} className="text-text-faint" />
+            <Chevron size={12} strokeWidth={1.5} className="chat-trace-chev" />
           ) : part.hasRunning && !part.subagent ? (
-            <span className="block h-1.5 w-1.5 rounded-full bg-text-faint/70" aria-hidden />
+            <span className="block h-1.5 w-1.5 rounded-full chat-trace-dot--idle" aria-hidden />
           ) : null}
         </span>
         <span className="min-w-0 truncate">{part.title}</span>
-        {part.detail ? (
-          <span className="min-w-0 truncate text-[15px] text-text-faint font-normal">
-            · {part.detail}
-          </span>
+        {isFailed ? (
+          <>
+            <span className={operationStatusPill("failed")}>Failed</span>
+            {part.detail ? (
+              <span className="min-w-0 truncate font-normal text-text-muted">— {part.detail}</span>
+            ) : null}
+          </>
+        ) : part.detail ? (
+          <span className="min-w-0 truncate font-normal text-text-faint">· {part.detail}</span>
         ) : null}
       </button>
       {hasBodyContent ? (
         <ChatFoldBody
           open={open}
           animated={animateFold}
-          className="mt-0.5 ml-[0.35rem] pl-3 border-l border-border-subtle min-w-0"
+          className="mt-0.5 ml-[0.35rem] pl-3 border-l chat-trace-fold min-w-0"
         >
-          {hasErrorBody ? (
-            <div className="mia-callout mia-callout--err my-0.5 rounded-md px-2.5 py-1.5 text-[15px] leading-6 whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
-              {errorBody}
-            </div>
+          {hasErrorBody && !hasTools ? (
+            <pre className="chat-tool-error my-0.5">{errorBody}</pre>
           ) : null}
           {hasTools ? (
             <IterationToolList

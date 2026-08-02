@@ -23,17 +23,15 @@ export function PolicyPanel({
   onToggle?: () => void
   trailing?: ReactNode
 }) {
-  const shellClass = [
-    "rounded-lg border border-border-subtle overflow-hidden",
-    danger ? "border-l-[3px] border-l-error" : "",
-  ]
-    .filter(Boolean)
-    .join(" ")
+  const shellClass = "rounded-lg border border-border-subtle overflow-hidden"
 
   const headerInner = (
     <>
       {icon ? <span className="shrink-0 text-text-faint">{icon}</span> : null}
       <span className="text-sm font-semibold text-text">{title}</span>
+      {danger ? (
+        <span className="mia-status-pill mia-status-pill--err shrink-0">Danger</span>
+      ) : null}
       {trailing ? <span className="ml-auto text-sm text-text-muted">{trailing}</span> : null}
     </>
   )

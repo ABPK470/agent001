@@ -3,7 +3,12 @@ import type { ReactNode } from "react"
 import type { OperationStatus } from "../../client/index"
 import { ReviewTree, ReviewTreeItem } from "../../components/ReviewTree"
 import { StatusMark } from "../../components/StatusMark"
-import { operationStatusBadge, operationStatusRowStroke, statusCalloutTone } from "../../lib/status-callout"
+import {
+  logStatusPillTone,
+  operationStatusPill,
+  operationStatusRowStroke,
+  statusCalloutTone,
+} from "../../lib/status-callout"
 
 export const OP_LOG = "text-sm leading-snug"
 export const OP_LOG_MONO = `${OP_LOG} font-mono`
@@ -86,7 +91,7 @@ export function LogStatusLabel({
 }) {
   return (
     <span
-      className={`inline-flex items-center gap-0.5 shrink-0 rounded px-1.5 py-0.5 text-xs font-semibold uppercase tracking-wide ${operationStatusBadge(status)}`}
+      className={`inline-flex items-center gap-0.5 shrink-0 ${operationStatusPill(status)}`}
     >
       {status === "running" && <Loader2 size={10} className="animate-spin" />}
       {status}

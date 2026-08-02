@@ -23,7 +23,6 @@ import {
   Search,
   Shield,
   Terminal,
-  Trash2,
   X,
 } from "lucide-react"
 import { useCallback, useEffect, useMemo, useState } from "react"
@@ -35,12 +34,17 @@ import { MODAL_ADMIN_PANEL, MODAL_SURFACE_CLASS, modalOverlayClass } from "../en
 import { ExpandableDescription } from "./policy/ExpandableDescription"
 import { PolicyPanel } from "./policy/PolicyPanel"
 import { SelectorRulesTab } from "./policy/SelectorRulesTab"
+import {
+  policyEffectPillClass,
+  policyEffectPillLabel,
+  type Effect,
+} from "./policy/selector-schema"
 
 interface Props {
   onClose: () => void
 }
 
-type Effect = "allow" | "deny" | "require_approval"
+type Tab = "tools" | "rules" | "model" | "security" | "platform"
 
 /** Icon mapping for known tools — falls back to Shield for unknown tools. */
 const TOOL_ICONS: Record<string, typeof Shield> = {
@@ -78,8 +82,6 @@ const SSRF_BLOCKED = [
   "10.*", "192.168.*", "172.16-31.*", "169.254.*",
   "*.local", "*.internal",
 ]
-
-type Tab = "tools" | "rules" | "model" | "security" | "platform"
 
 export function PolicyEditor({ onClose }: Props) {
   const [rules, setRules] = useState<PolicyRule[]>([])
@@ -707,7 +709,7 @@ export function PolicyEditor({ onClose }: Props) {
 
               <div className="rounded-lg border border-border-subtle px-4 py-3.5">
                 <div className="flex items-center gap-2.5 mb-1.5">
-                  <Trash2 size={15} className="text-error" />
+                  <span className="mia-status-pill mia-status-pill--err">Danger</span>
                   <span className="text-sm font-semibold text-text">Restore Defaults</span>
                 </div>
                 <p className="text-sm text-text-muted leading-snug mb-3">
@@ -966,9 +968,9 @@ export function PolicyEditor({ onClose }: Props) {
 
               <div className="h-px bg-overlay-3 my-1" />
 
-              <div className="px-4 py-3.5 rounded-xl border border-border-subtle border-l-[3px] border-l-error">
+              <div className="rounded-lg border border-border-subtle px-4 py-3.5">
                 <div className="flex items-center gap-2.5 mb-1.5">
-                  <Trash2 size={15} className="text-error" />
+                  <span className="mia-status-pill mia-status-pill--err">Danger</span>
                   <span className="text-sm font-semibold text-text">Factory Reset Platform</span>
                 </div>
                 <p className="text-sm text-text-muted leading-snug mb-3">
@@ -1036,24 +1038,30 @@ export function PolicyEditor({ onClose }: Props) {
 // ── Effect segmented control for the Tools tab ───────────────────
 
 function EffectSegmented({ value, onChange }: { value: Effect | null; onChange: (v: Effect | "none") => void }) {
-  const OPTIONS: { v: Effect | "none"; label: string; cls: string }[] = [
-    { v: "none",             label: "Allowed",  cls: "text-policy-allow" },
-    { v: "require_approval", label: "Approval", cls: "text-policy-approval" },
-    { v: "deny",             label: "Denied",   cls: "text-policy-deny" },
+  const OPTIONS: { v: Effect | "none"; label: string }[] = [
+    { v: "none",             label: policyEffectPillLabel("allow") },
+    { v: "require_approval", label: policyEffectPillLabel("require_approval") },
+    { v: "deny",             label: policyEffectPillLabel("deny") },
   ]
   const current = value ?? "none"
   return (
-    <div className="inline-flex max-w-full rounded-md border border-border-subtle p-0.5 shrink-0">
-      {OPTIONS.map((o) => (
-        <button
-          key={o.v}
-          type="button"
-          onClick={() => onChange(o.v)}
-          className={`whitespace-nowrap px-2 py-1 text-xs rounded transition-colors ${
-            current === o.v ? `${o.cls} bg-[var(--select-fill)] font-medium` : "text-text-muted hover:text-text"
-          }`}
-        >{o.label}</button>
-      ))}
+    <div className="inline-flex max-w-full shrink-0 gap-0.5 rounded-md border border-border-subtle p-0.5">
+      {OPTIONS.map((o) => {
+        const effect = o.v === "none" ? "allow" : o.v
+        const active = current === o.v
+        return (
+          <button
+            key={o.v}
+            type="button"
+            onClick={() => onChange(o.v)}
+            className={
+              active
+                ? policyEffectPillClass(effect)
+                : "whitespace-nowrap rounded px-2 py-1 text-xs text-text-muted transition-colors hover:text-text"
+            }
+          >{o.label}</button>
+        )
+      })}
     </div>
   )
 }

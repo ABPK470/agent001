@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest"
 import {
   STATUS_CALLOUT,
-  STATUS_CALLOUT_BADGE,
+  STATUS_PILL,
   STATUS_ROW_STROKE,
-  operationStatusBadge,
   operationStatusCallout,
+  operationStatusPill,
   operationStatusRowStroke,
   statusCalloutTone,
 } from "./status-callout"
@@ -12,6 +12,7 @@ import {
 describe("status-callout", () => {
   it("maps operation statuses onto policies dialect tones", () => {
     expect(statusCalloutTone("success")).toBe("ok")
+    expect(statusCalloutTone("validated")).toBe("ok")
     expect(statusCalloutTone("failed")).toBe("err")
     expect(statusCalloutTone("cancelled")).toBe("warn")
     expect(statusCalloutTone("canceled")).toBe("warn")
@@ -21,22 +22,27 @@ describe("status-callout", () => {
     expect(statusCalloutTone("skipped")).toBe("skip")
   })
 
-  it("callout classes use left stroke (no soft fill)", () => {
+  it("callout classes use left stroke (dark dialect; light wash in CSS)", () => {
     for (const tone of ["ok", "err", "warn", "info"] as const) {
       expect(STATUS_CALLOUT[tone]).toMatch(/border-l-/)
       expect(STATUS_CALLOUT[tone]).toContain("bg-transparent")
       expect(STATUS_CALLOUT[tone]).toMatch(/text-text-muted/)
       expect(STATUS_CALLOUT[tone]).toMatch(/font-normal/)
-      expect(STATUS_CALLOUT[tone]).not.toMatch(/status-callout-.*-soft|policy-allow-soft|policy-deny-soft/)
-      expect(STATUS_CALLOUT[tone]).not.toMatch(/diff-surface/)
-      expect(STATUS_CALLOUT_BADGE[tone]).toMatch(/border-l-/)
-      expect(STATUS_CALLOUT_BADGE[tone]).toContain("bg-transparent")
       expect(STATUS_ROW_STROKE[tone]).toMatch(/mia-row-stroke/)
     }
     expect(operationStatusCallout("failed")).toContain("border-l-error")
     expect(operationStatusCallout("cancelled")).toContain("border-l-warning")
     expect(operationStatusCallout("running")).toContain("border-l-info")
-    expect(operationStatusBadge("success")).toContain("border-l-success")
     expect(operationStatusRowStroke("failed")).toContain("mia-row-stroke--err")
+  })
+
+  it("pill classes use chunky scan anchors (not hairline strokes)", () => {
+    for (const tone of ["ok", "err", "warn", "info"] as const) {
+      expect(STATUS_PILL[tone]).toContain("mia-status-pill")
+      expect(STATUS_PILL[tone]).toContain(`mia-status-pill--${tone}`)
+      expect(STATUS_PILL[tone]).not.toMatch(/border-l-/)
+    }
+    expect(operationStatusPill("success")).toContain("mia-status-pill--ok")
+    expect(operationStatusPill("failed")).toContain("mia-status-pill--err")
   })
 })

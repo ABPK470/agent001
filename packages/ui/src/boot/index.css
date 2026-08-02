@@ -267,127 +267,115 @@
   color-scheme: light;
 
   /*
-   * Structure = two-ink (paper + ink borders / select-fill / go-to).
-   * Brand accent = same purple as dark (logo live, Viewing as, links).
-   * Status + syntax on light = ink only (no traffic chroma). States differ by
-   * label, weight, border style, and mark shape — soft washes are overlay.
-   * Diff panes (`--diff-*`) are the chroma exception — see tokens below.
+   * Surface elevation — cool canvas shell → crisp white widgets → soft inset.
+   * Brand accent unchanged. Status + policy use readable chroma (not ink-only).
    */
-  --paper: #f3f1ec;
-  --ink: #0a0a0a;
+  --ink: #0f172a;
+  --paper: #f4f4f6; /* legacy alias → canvas shell */
 
-  --canvas: var(--paper);
-  --panel: var(--paper);
-  --panel-2: var(--paper);
-  --panel-3: var(--paper);
-  --soft: var(--paper);
-  --bg: var(--paper);
+  --canvas: #f4f4f6;
+  --panel: #ffffff;
+  --panel-2: #f8fafc;
+  --panel-3: #f1f5f9;
+  --soft: var(--panel-2);
+  --bg: var(--canvas);
 
-  /* Quiet ink washes — strong enough to register on paper in 300ms. */
-  --overlay-1: color-mix(in srgb, var(--ink) 4%, var(--paper));
-  --overlay-2: color-mix(in srgb, var(--ink) 7%, var(--paper));
-  --overlay-3: color-mix(in srgb, var(--ink) 10%, var(--paper));
-  --overlay-hover: color-mix(in srgb, var(--ink) 9%, var(--paper));
-  /* Same wash as Active Users KPI (`bg-overlay-2`) — never a darker slate pill. */
+  /* Ink washes on white surfaces — selection/hover register in ~300ms. */
+  --overlay-1: color-mix(in srgb, var(--ink) 4%, var(--panel));
+  --overlay-2: color-mix(in srgb, var(--ink) 7%, var(--panel));
+  --overlay-3: color-mix(in srgb, var(--ink) 10%, var(--panel));
+  --overlay-hover: color-mix(in srgb, var(--ink) 9%, var(--panel));
   --hover-fill: var(--overlay-1);
   --select-fill: var(--overlay-2);
 
-  /* Flat paper seal — hierarchy from type / borders, not a grey plate. */
-  --section-cap-bg: var(--workspace-widget-bg, var(--paper));
+  --section-cap-bg: var(--workspace-widget-bg, var(--panel));
 
-  /* Opaque mixes — rgba fringes read as doubled hairlines on rounded corners. */
-  --border-subtle: color-mix(in srgb, var(--ink) 22%, var(--paper));
-  --border: color-mix(in srgb, var(--ink) 34%, var(--paper));
-  --border-strong: color-mix(in srgb, var(--ink) 55%, var(--paper));
-  --border-focus: color-mix(in srgb, var(--ink) 78%, var(--paper));
+  --border-subtle: #e2e8f0;
+  --border: #cbd5e1;
+  --border-strong: #94a3b8;
+  --border-focus: #64748b;
 
-  --text: var(--ink);
-  --text-secondary: var(--ink);
-  /* Readable idle — too faint and hover/place can’t register in 300ms. */
-  --text-muted: rgba(10, 10, 10, 0.66);
-  --text-faint: rgba(10, 10, 10, 0.48);
-  --text-on-accent: var(--paper);
+  --text: #0f172a;
+  --text-secondary: #334155;
+  --text-muted: #64748b;
+  --text-faint: #94a3b8;
+  --text-on-accent: #ffffff;
 
   /* Brand — same purple family as dark (go-to CTAs stay solid ink). */
   --accent: #7B6FC7;
   --accent-hover: #5F5499;
-  --accent-soft: color-mix(in srgb, var(--accent) 14%, var(--paper));
+  --accent-soft: color-mix(in srgb, var(--accent) 14%, var(--panel));
   --hero-pill-shadow: none;
   --hero-spotlight-core: transparent;
   --hero-spotlight-mid: transparent;
 
-  /* Logo — idle ink, live accent (same split as dark). */
   --logo-mark-idle: var(--ink);
   --logo-mark-live: var(--accent);
   --logo-mark-live-shadow: var(--accent-soft);
 
-  /*
-   * Status + syntax — ink only on light paper. Meaning from labels / borders /
-   * mark shapes (see StatusMark / statusDotKind). Soft = KPI-matched overlay.
-   */
-  --success: var(--ink);
-  --success-soft: var(--overlay-2);
-  --warning: var(--ink);
-  --warning-soft: var(--overlay-2);
-  --error: var(--ink);
-  --error-soft: var(--overlay-2);
-  --info: var(--ink);
-  --info-soft: var(--overlay-2);
+  /* Status — semantic chroma for scanability (logs, strokes, badges). */
+  --success: #166534;
+  --success-soft: #dcfce7;
+  --success-border: #86efac;
+  --success-surface: #f0fdf4;
+  --warning: #9a3412;
+  --warning-soft: #ffedd5;
+  --warning-border: #fdba74;
+  --error: #991b1b;
+  --error-soft: #fee2e2;
+  --error-border: #fca5a5;
+  --error-surface: #fef2f2;
+  --info: #1e40af;
+  --info-soft: #dbeafe;
+  --info-border: #93c5fd;
 
-  /*
-   * Diff exception — JSON / content change panes only.
-   * Surface = workspace field / top bar (#f6f4f1), not widget --paper.
-   * Add/remove = unmistakable green / red; unchanged = ink text.
-   */
-  --diff-surface: #f6f4f1;
+  /* Diff panes — inset sheet on white widgets. */
+  --diff-surface: var(--panel-2);
   --diff-add: #15803d;
   --diff-add-soft: color-mix(in srgb, var(--diff-add) 14%, var(--diff-surface));
   --diff-del: #b91c1c;
   --diff-del-soft: color-mix(in srgb, var(--diff-del) 14%, var(--diff-surface));
 
-  /*
-   * Policy effect exception — allow / deny / approval must be obvious on paper
-   * (not ink status). Same chroma honesty as diff panes.
-   */
-  --policy-allow: #15803d;
-  --policy-allow-soft: color-mix(in srgb, var(--policy-allow) 12%, var(--paper));
-  --policy-deny: #b91c1c;
-  --policy-deny-soft: color-mix(in srgb, var(--policy-deny) 12%, var(--paper));
+  /* Policy effects — same chroma family as status. */
+  --policy-allow: var(--success);
+  --policy-allow-soft: var(--success-soft);
+  --policy-deny: var(--error);
+  --policy-deny-soft: var(--error-soft);
   --policy-approval: #a16207;
-  --policy-approval-soft: color-mix(in srgb, var(--policy-approval) 12%, var(--paper));
-  /* Running / info callouts — chroma on paper (status --info stays ink). */
-  --callout-info: #2563eb;
-  --callout-info-soft: color-mix(in srgb, var(--callout-info) 12%, var(--paper));
+  --policy-approval-soft: var(--warning-soft);
+  --callout-info: var(--info);
+  --callout-info-soft: var(--info-soft);
 
-  /* Status callouts — same family as policy softs on light paper. */
-  --status-callout-ok-soft: var(--policy-allow-soft);
-  --status-callout-ok-border: color-mix(in srgb, var(--policy-allow) 35%, var(--border-subtle));
-  --status-callout-err-soft: var(--policy-deny-soft);
-  --status-callout-err-border: color-mix(in srgb, var(--policy-deny) 35%, var(--border-subtle));
-  --status-callout-warn-soft: var(--policy-approval-soft);
-  --status-callout-warn-border: color-mix(in srgb, var(--policy-approval) 35%, var(--border-subtle));
-  --status-callout-info-soft: var(--callout-info-soft);
-  --status-callout-info-border: color-mix(in srgb, var(--callout-info) 35%, var(--border-subtle));
+  /* Toasts + light-mode scans use soft fills; dark inline notices keep left stroke. */
+  --status-callout-ok-soft: var(--success-soft);
+  --status-callout-ok-border: var(--success-border);
+  --status-callout-err-soft: var(--error-soft);
+  --status-callout-err-border: var(--error-border);
+  --status-callout-warn-soft: var(--warning-soft);
+  --status-callout-warn-border: var(--warning-border);
+  --status-callout-info-soft: var(--info-soft);
+  --status-callout-info-border: var(--info-border);
 
   --viewing-as: var(--accent);
   --viewing-as-soft: var(--accent-soft);
 
-  --scrim: rgba(0, 0, 0, 0.48);
-  --scrim-strong: rgba(0, 0, 0, 0.78);
-  --scrim-focus: rgba(0, 0, 0, 0.42);
+  --scrim: rgba(15, 23, 42, 0.48);
+  --scrim-strong: rgba(15, 23, 42, 0.78);
+  --scrim-focus: rgba(15, 23, 42, 0.42);
 
-  --bubble-user: #f6f4f1;
-  --shadow-bubble: none;
+  --bubble-user: var(--panel-2);
+  --shadow-bubble: 0 1px 2px color-mix(in srgb, var(--ink) 6%, transparent);
 
-  --dt-int: var(--ink);
-  --dt-string: var(--ink);
-  --dt-date: var(--ink);
-  --dt-bool: var(--ink);
-  --dt-real: var(--ink);
-  --dt-bin: var(--ink);
+  /* Syntax on light — subtle hue (not traffic-light status). */
+  --dt-int: #1d4ed8;
+  --dt-string: #6d28d9;
+  --dt-date: #b45309;
+  --dt-bool: #be123c;
+  --dt-real: #047857;
+  --dt-bin: #9d174d;
 
   --sa: var(--ink);
-  --sd: rgba(10, 10, 10, 0.18);
+  --sd: rgba(15, 23, 42, 0.18);
 }
 
 
@@ -591,12 +579,16 @@
   color: var(--error);
 }
 
-/* ── Light two-ink: widgets use borders, not grey plates ─────────── */
+/* ── Light elevation: white widgets on cool canvas ───────────────── */
 :root[data-theme="light"] .trace-dag {
-  --bg: var(--paper);
+  --bg: var(--panel);
 }
 
-/* Idle Trace rows stay flat on paper (open/expanded keep select-fill below). */
+:root[data-theme="light"] .mia-code-block {
+  background: var(--panel-2);
+}
+
+/* Idle Trace rows stay flat on widget white (open/expanded keep select-fill below). */
 :root[data-theme="light"] .trace-scope,
 :root[data-theme="light"] .trace-scope.is-soft,
 :root[data-theme="light"] .trace-pin__stack,
@@ -624,10 +616,10 @@
   background: var(--select-fill);
 }
 
-/* Sticky band stays paper — not select-fill stacks (incl. soft open rows). */
+/* Sticky band stays widget white — not select-fill stacks (incl. soft open rows). */
 :root[data-theme="light"] .trace-pin,
 :root[data-theme="light"] .trace-pin__stack {
-  background: var(--paper);
+  background: var(--panel);
 }
 
 :root[data-theme="light"] .trace-pin__stack > .trace-scope,
@@ -640,7 +632,7 @@
 
 /* Copy/More rail must stay opaque while content scrolls under it */
 :root[data-theme="light"] .trace-expand__sticky {
-  background: var(--paper);
+  background: var(--panel);
 }
 
 /* Light Trace rows share the flat list dialect — no per-row frames.
@@ -654,12 +646,12 @@
 :root[data-theme="light"] .trace-toolbtn[aria-pressed="true"],
 :root[data-theme="light"] .trace-toolbtn.is-active {
   background: var(--ink);
-  color: var(--paper);
+  color: var(--panel);
   border-color: var(--ink);
 }
 
 :root[data-theme="light"] .chathome-chrome-pill {
-  background-color: var(--paper);
+  background-color: var(--panel);
   border-color: var(--border);
   box-shadow: none;
 }
@@ -682,12 +674,12 @@
 }
 
 :root[data-theme="light"] .viewing-as-trigger--other {
-  color: var(--paper);
+  color: var(--panel);
   background: var(--viewing-as);
 }
 
 :root[data-theme="light"] .viewing-as-trigger--other:hover {
-  color: var(--paper);
+  color: var(--panel);
   filter: none;
   opacity: 0.88;
 }
@@ -721,12 +713,12 @@ button.mia-chip-dirty:hover {
 
 :root[data-theme="light"] .mia-chip-dirty {
   border-color: color-mix(in srgb, var(--warning) 45%, var(--border));
-  background: color-mix(in srgb, var(--warning) 12%, var(--paper));
+  background: var(--warning-soft);
   color: var(--warning);
 }
 
 :root[data-theme="light"] button.mia-chip-dirty:hover {
-  background: color-mix(in srgb, var(--warning) 18%, var(--paper));
+  background: color-mix(in srgb, var(--warning) 22%, var(--warning-soft));
 }
 
 /* Active Users — Viewing as chip (theme --viewing-as; never dark-only amber). */
@@ -743,7 +735,7 @@ button.mia-chip-dirty:hover {
 }
 
 :root[data-theme="light"] .au-btn-viewing-as:hover {
-  background: color-mix(in srgb, var(--viewing-as) 20%, var(--paper));
+  background: color-mix(in srgb, var(--viewing-as) 20%, var(--panel));
 }
 
 /* ── Base ──────────────────────────────────────────────────────── */
@@ -1577,6 +1569,230 @@ label:focus-within > .mia-checkbox,
 
 .mia-row-stroke--info {
   border-left-color: var(--info);
+}
+
+/* Chunky status pill — Datadog/Sentry scan anchor (light = soft fill; dark = muted wash). */
+.mia-status-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  flex-shrink: 0;
+  padding: 0.15rem 0.45rem;
+  border-radius: 0.25rem;
+  border: 1px solid transparent;
+  font-size: 0.6875rem;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+/* Policy / governance lists — align rule titles on a straight grid. */
+.mia-status-pill--fixed {
+  min-width: 4.5rem;
+}
+
+/* Event Stream — stack meta + message so narrow tiles never letter-stack. */
+.event-stream-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+  padding: 0.375rem 0.625rem;
+}
+
+.event-stream-row__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.5rem;
+  min-width: 0;
+}
+
+.event-stream-row__message {
+  min-width: 0;
+  width: 100%;
+  font-size: 0.875rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.event-stream-row__event {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.875rem;
+  color: var(--text-faint, var(--color-text-muted));
+}
+
+@media (max-width: 28rem) {
+  .event-stream-row {
+    padding-inline: 0.5rem;
+  }
+
+  .event-stream-row__meta .review-meta {
+    font-size: 0.75rem;
+  }
+}
+
+.mia-status-pill--ok {
+  border-color: var(--status-callout-ok-border);
+  background: var(--status-callout-ok-soft);
+  color: var(--text-muted, var(--color-text-muted));
+}
+
+.mia-status-pill--err {
+  border-color: var(--status-callout-err-border);
+  background: var(--status-callout-err-soft);
+  color: var(--text-muted, var(--color-text-muted));
+}
+
+.mia-status-pill--warn {
+  border-color: var(--status-callout-warn-border);
+  background: var(--status-callout-warn-soft);
+  color: var(--text-muted, var(--color-text-muted));
+}
+
+.mia-status-pill--info {
+  border-color: var(--status-callout-info-border);
+  background: var(--status-callout-info-soft);
+  color: var(--text-muted, var(--color-text-muted));
+}
+
+/* Light — high-speed scan: filled pills, row washes, semantic ink (not hairline strokes). */
+:root[data-theme="light"] .mia-status-pill--ok {
+  color: var(--success);
+}
+
+:root[data-theme="light"] .mia-status-pill--err {
+  color: var(--error);
+}
+
+:root[data-theme="light"] .mia-status-pill--warn {
+  color: var(--warning);
+}
+
+:root[data-theme="light"] .mia-status-pill--info {
+  color: var(--info);
+}
+
+:root[data-theme="light"] .mia-callout {
+  border-left-width: 1px;
+}
+
+:root[data-theme="light"] .mia-callout--ok {
+  background: var(--success-soft);
+  border-color: var(--success-border);
+  color: var(--success);
+}
+
+:root[data-theme="light"] .mia-callout--err {
+  background: var(--error-soft);
+  border-color: var(--error-border);
+  color: var(--error);
+}
+
+:root[data-theme="light"] .mia-callout--warn {
+  background: var(--warning-soft);
+  border-color: var(--warning-border);
+  color: var(--warning);
+}
+
+:root[data-theme="light"] .mia-callout--info {
+  background: var(--info-soft);
+  border-color: var(--info-border);
+  color: var(--info);
+}
+
+:root[data-theme="light"] .mia-row-stroke--ok {
+  background: var(--success-surface);
+  border-color: var(--success-border);
+  border-left-color: var(--success-border);
+}
+
+:root[data-theme="light"] .mia-row-stroke--err {
+  background: var(--error-surface);
+  border-color: var(--error-border);
+  border-left-color: var(--error-border);
+}
+
+:root[data-theme="light"] .mia-row-stroke--warn {
+  background: var(--warning-soft);
+  border-color: var(--warning-border);
+  border-left-color: var(--warning-border);
+}
+
+:root[data-theme="light"] .mia-row-stroke--info {
+  background: var(--info-soft);
+  border-color: var(--info-border);
+  border-left-color: var(--info-border);
+}
+
+:root[data-theme="light"] .trace-sql-check {
+  border-left-width: 1px;
+}
+
+:root[data-theme="light"] .trace-sql-check.is-ok {
+  background: var(--success-surface);
+  border-color: var(--success-border);
+}
+
+:root[data-theme="light"] .trace-sql-check.is-blocked,
+:root[data-theme="light"] .trace-sql-check.is-failed {
+  background: var(--error-surface);
+  border-color: var(--error-border);
+}
+
+:root[data-theme="light"] .trace-sql-check.is-ok .trace-sql-check__badge {
+  color: var(--success);
+}
+
+:root[data-theme="light"] .trace-sql-check.is-blocked .trace-sql-check__badge,
+:root[data-theme="light"] .trace-sql-check.is-failed .trace-sql-check__badge {
+  color: var(--error);
+}
+
+:root[data-theme="light"] .trace-msg.is-error {
+  background: var(--error-surface);
+  border: 1px solid var(--error-border);
+  border-radius: 0.35rem;
+  padding: 0.25rem 0.45rem;
+}
+
+:root[data-theme="light"] .trace-msg.is-error .trace-msg__tool,
+:root[data-theme="light"] .trace-msg.is-error .trace-msg__detail.is-error {
+  color: var(--error);
+}
+
+:root[data-theme="light"] .trace-work-note.is-error {
+  background: var(--error-surface);
+  border: 1px solid var(--error-border);
+  border-radius: 0.35rem;
+  padding: 0.35rem 0.45rem;
+}
+
+:root[data-theme="light"] .trace-work-note.is-error .trace-work-note__label {
+  color: var(--error);
+  font-weight: 600;
+}
+
+:root[data-theme="light"] .trace-phase-event.is-error {
+  background: var(--error-surface);
+  border-color: var(--error-border);
+  border-left-width: 1px;
+  color: var(--error);
+}
+
+:root[data-theme="light"] .trace-phase-event.is-warn {
+  background: var(--warning-soft);
+  border-color: var(--warning-border);
+  border-left-width: 1px;
+  color: var(--warning);
 }
 
 /* ── Listbox popover (portaled — opaque above modals) ─────────── */
@@ -2964,13 +3180,6 @@ textarea.input {
 :root[data-theme="light"] .trace-scope[data-trace-kind="prompt"] .trace-scope__lead,
 :root[data-theme="light"] .trace-scope[data-trace-kind="work"] .trace-scope__lead {
   color: var(--text-faint, var(--ink));
-}
-
-:root[data-theme="light"] .trace-work-note.is-error .trace-work-note__label,
-:root[data-theme="light"] .trace-row.is-error .font-mono,
-:root[data-theme="light"] .trace-row__detail.is-error {
-  color: var(--text-muted, var(--ink));
-  font-weight: 400;
 }
 
 .trace-work-note {
@@ -5294,15 +5503,14 @@ textarea.input {
 
 :root[data-theme="light"] .workspace-chrome {
   /*
-   * One cool field for sheet / top bar / ops. Widgets + modals keep --paper.
-   * Dark mode untouched.
+   * Cool canvas shell; crisp white widget tiles; soft inset ops strip.
    */
-  --workspace-chrome: #f6f4f1;
-  --workspace-sheet: #f6f4f1;
-  --workspace-widget-bg: var(--paper);
-  --workspace-widget-border: var(--border);
-  --workspace-ops-bg: #f6f4f1;
-  --workspace-rail-line: var(--border);
+  --workspace-chrome: var(--canvas);
+  --workspace-sheet: var(--canvas);
+  --workspace-widget-bg: var(--panel);
+  --workspace-widget-border: var(--border-subtle);
+  --workspace-ops-bg: var(--panel-2);
+  --workspace-rail-line: var(--border-subtle);
   --workspace-border: transparent;
   --workspace-sheet-shadow: none;
   --stage-pad: 0.55rem;
@@ -5325,15 +5533,14 @@ textarea.input {
  * Light ON → white sheet, warm tiles + warm ops. Dark ON → panel-2 sheet, panel tiles.
  */
 :root[data-theme="light"] .workspace-chrome--contrast {
-  /* Compare — tiles stay on paper; chrome field unchanged at rest colors. */
-  --workspace-sheet: #f6f4f1;
-  --workspace-chrome: #f6f4f1;
+  --workspace-sheet: var(--canvas);
+  --workspace-chrome: var(--canvas);
   --workspace-border: transparent;
   --workspace-sheet-shadow: none;
-  --workspace-widget-bg: var(--paper);
-  --workspace-ops-bg: #f6f4f1;
-  --workspace-widget-border: color-mix(in srgb, var(--border) 55%, transparent);
-  --workspace-rail-line: color-mix(in srgb, var(--border) 55%, transparent);
+  --workspace-widget-bg: var(--panel);
+  --workspace-ops-bg: var(--panel-2);
+  --workspace-widget-border: var(--border-subtle);
+  --workspace-rail-line: var(--border-subtle);
 }
 
 :root[data-theme="dark"] .workspace-chrome--contrast {
@@ -6100,7 +6307,7 @@ textarea.input {
   --chathome-scroll-fade-edge: 1.125rem;
 }
 :root[data-theme="light"] .chathome {
-  /* Warm paper field; white pills + soft tool fills sit on top. */
+  /* White transcript column on cool canvas shell. */
   background: var(--panel);
   --chathome-scroll-fade: var(--panel);
 }
@@ -8076,6 +8283,51 @@ textarea.input {
   min-height: 0;
   flex: 1;
   flex-direction: column;
+}
+
+/* Chat trace — readable nest rails on white (widget + thread); not log-table pills. */
+.termchat-transcript-shell .chat-trace-rail {
+  background: color-mix(in srgb, var(--ink) 12%, var(--panel));
+}
+
+.termchat-transcript-shell .chat-trace-fold {
+  border-left-color: color-mix(in srgb, var(--ink) 12%, var(--panel));
+}
+
+.termchat-transcript-shell .chat-trace-dot--idle {
+  background: var(--text-muted);
+}
+
+.termchat-transcript-shell .chat-trace-chev {
+  color: var(--text-muted);
+}
+
+/* Terminal/tool errors — soft inset row (not a second floating status badge). */
+.termchat-transcript-shell .chat-tool-error {
+  margin: 0.125rem 0;
+  padding: 0.375rem 0.625rem;
+  border-radius: 0.35rem;
+  border: 1px solid var(--error-border, color-mix(in srgb, var(--error) 35%, var(--border-subtle)));
+  background: var(--error-surface, var(--status-callout-err-soft));
+  color: var(--error, var(--color-error));
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.9375rem;
+  line-height: 1.35;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+:root[data-theme="light"] .termchat-transcript-shell .chat-trace-rail {
+  background: #cbd5e1;
+}
+
+:root[data-theme="light"] .termchat-transcript-shell .chat-trace-fold {
+  border-left-color: #cbd5e1;
+}
+
+:root[data-theme="light"] .termchat-transcript-shell .chat-trace-dot--idle {
+  background: #64748b;
 }
 
 .termchat-input-dock {

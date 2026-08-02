@@ -15,6 +15,7 @@
 
 import { AlertTriangle, ShieldCheck, ShieldX } from "lucide-react"
 import type { ComponentType } from "react"
+import { STATUS_PILL, type StatusCalloutTone } from "../../../lib/status-callout"
 import type { PolicyRule } from "../../../types"
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -61,6 +62,38 @@ export const EFFECT_META: ReadonlyArray<EffectMeta> = Object.freeze([
 
 export function getEffectMeta(e: string): EffectMeta {
   return EFFECT_META.find((m) => m.value === e) ?? EFFECT_META[0]
+}
+
+export function policyEffectTone(effect: Effect | string): StatusCalloutTone {
+  switch (effect) {
+    case "deny":
+      return "err"
+    case "require_approval":
+      return "warn"
+    case "allow":
+      return "ok"
+    default:
+      return "muted"
+  }
+}
+
+/** Compact scan pill — same primitive as Event Stream / Trace status. */
+export function policyEffectPillClass(effect: Effect | string, fixedWidth = false): string {
+  const base = STATUS_PILL[policyEffectTone(effect)]
+  return fixedWidth ? `${base} mia-status-pill--fixed` : base
+}
+
+export function policyEffectPillLabel(effect: Effect | string): string {
+  switch (effect) {
+    case "deny":
+      return "Deny"
+    case "require_approval":
+      return "Approve"
+    case "allow":
+      return "Allow"
+    default:
+      return "Rule"
+  }
 }
 
 // ──────────────────────────────────────────────────────────────────────────

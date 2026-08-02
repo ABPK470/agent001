@@ -34,6 +34,7 @@ import { useWidgetInstance } from "../app/workspace/widget-instance"
 import { formatLogEntry } from "../state/store"
 import type { LogEntry } from "../types"
 import { isSyncSqlEventType } from "./sync/trace/sync-sql-trace"
+import { operationStatusPill } from "../lib/status-callout"
 import { WIDGET_ICONS } from "./widget-icons"
 import {
   WIDGET_LOG_SHELL_CLASS,
@@ -339,7 +340,7 @@ export function LiveLogs() {
     <div ref={rootRef} className={WIDGET_LOG_SHELL_CLASS}>
       <div className={WIDGET_LOG_STACK_CLASS}>
       {/* Review dialect: leading | search | trailing — filters sheet is band-2 power. */}
-      <WidgetToolbar>
+      <WidgetToolbar compact={compact}>
         <WidgetToolbarLeading>{null}</WidgetToolbarLeading>
         <WidgetToolbarSearch
           value={searchText}
@@ -468,7 +469,7 @@ export function LiveLogs() {
       {(pendingLiveCount > 0 && (paused || !followLive)) && (
         <button
           type="button"
-          className="flex items-center justify-center gap-1.5 py-1.5 text-sm text-accent hover:text-accent-hover bg-accent/5 border border-accent/20 rounded"
+          className="flex flex-wrap items-center justify-center gap-x-1.5 gap-y-1 px-2 py-1.5 text-center text-sm text-accent hover:text-accent-hover bg-accent/5 border border-accent/20 rounded"
           onClick={() => {
             setPaused(false)
             setAutoScroll(true)
@@ -518,7 +519,13 @@ export function LiveLogs() {
           <VirtualList
             items={displayRows}
             scrollRef={containerRef}
-            estimateSize={() => (compact ? 28 : 36)}
+            estimateSize={(i) => {
+              const log = displayRows[i]
+              if (!log) return 52
+              const lines = Math.max(1, Math.ceil(log.message.length / 42))
+              const base = log.error ? 58 : 50
+              return base + (lines - 1) * 18
+            }}
             getItemKey={(i, log) => `${log.timestamp}|${log.eventName ?? ""}|${i}`}
             renderItem={({ item: log }) => (
               <LogRow
@@ -597,16 +604,14 @@ function LogRow({
   tiny: boolean
 }) {
   const [expanded, setExpanded] = useState(false)
-  const msgColor = log.error ? "var(--color-text)" : (MSG_COLOR[log.type] ?? "var(--color-text-muted)")
+  const msgColor = log.error ? "var(--color-error)" : (MSG_COLOR[log.type] ?? "var(--color-text-muted)")
   const hasData = log.data && Object.keys(log.data).length > 0
 
   return (
     <div className={log.error ? "py-0.5" : undefined}>
       <div
         className={[
-          "flex items-baseline gap-2.5 py-1.5 px-2.5 rounded-[var(--list-row-radius)] transition-colors border",
-          // Never pair status-callout borders with border-transparent — Tailwind
-          // stylesheet order can leave the hairline invisible (Event Stream bug).
+          "event-stream-row rounded-[var(--list-row-radius)] transition-colors border",
           log.error
             ? "mia-row-stroke mia-row-stroke--err"
             : expanded && hasData
@@ -616,46 +621,55 @@ function LogRow({
         ].join(" ")}
         onClick={() => hasData && setExpanded((e) => !e)}
       >
-        <span
-          className="review-chevron-slot"
-          style={{ color: msgColor, opacity: 0.3 }}
-        >
-          {hasData ? (
-            <ChevronRight
-              size={13}
-              strokeWidth={1.75}
-              className={`transition-transform ${expanded ? "rotate-90" : ""}`}
-            />
+        <div className="event-stream-row__meta">
+          {log.error ? (
+            <span className={operationStatusPill("failed")}>Error</span>
           ) : null}
-        </span>
-        <span className="shrink-0 review-meta" style={{ color: msgColor, opacity: 0.55 }}>
-          {formatLogTimestamp(log.timestamp, tiny)}
-        </span>
-        <button
-          type="button"
-          className="shrink-0 w-14 text-sm font-medium text-left truncate hover:opacity-70 transition-opacity text-text-muted"
-          onClick={(e) => {
-            e.stopPropagation()
-            setTypeFilters((prev) => {
-              const next = new Set(prev)
-              const t = log.type as EventType
-              if (next.has(t)) next.delete(t)
-              else next.add(t)
-              return next
-            })
-          }}
-        >
-          {log.type}
-        </button>
-        <span
-          className={`shrink-0 text-sm text-text-muted/50 truncate ${compact ? "max-w-[9rem]" : "max-w-[14rem]"}`}
-          title={log.eventName ?? ""}
-        >
-          {log.eventName ?? ""}
-        </span>
-        <span className="min-w-0 break-all text-sm" style={{ color: msgColor }}>
+          <span
+            className="review-chevron-slot shrink-0"
+            style={{ color: msgColor, opacity: 0.3 }}
+          >
+            {hasData ? (
+              <ChevronRight
+                size={13}
+                strokeWidth={1.75}
+                className={`transition-transform ${expanded ? "rotate-90" : ""}`}
+              />
+            ) : null}
+          </span>
+          <span className="shrink-0 review-meta" style={{ color: msgColor, opacity: 0.55 }}>
+            {formatLogTimestamp(log.timestamp, tiny)}
+          </span>
+          <button
+            type="button"
+            className="shrink-0 text-sm font-medium text-left truncate hover:opacity-70 transition-opacity text-text-muted max-w-[5rem] sm:max-w-none"
+            onClick={(e) => {
+              e.stopPropagation()
+              setTypeFilters((prev) => {
+                const next = new Set(prev)
+                const t = log.type as EventType
+                if (next.has(t)) next.delete(t)
+                else next.add(t)
+                return next
+              })
+            }}
+          >
+            {log.type}
+          </button>
+          {!tiny && log.eventName ? (
+            <span className="event-stream-row__event" title={log.eventName}>
+              {log.eventName}
+            </span>
+          ) : null}
+        </div>
+        <div className="event-stream-row__message" style={{ color: msgColor }}>
           {log.message}
-        </span>
+          {tiny && log.eventName ? (
+            <span className="mt-0.5 block truncate text-xs text-text-faint" title={log.eventName}>
+              {log.eventName}
+            </span>
+          ) : null}
+        </div>
       </div>
       {expanded && log.data && (
         <div className="review-tree space-y-2 py-1 pr-3">

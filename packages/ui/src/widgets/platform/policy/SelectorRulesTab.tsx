@@ -34,9 +34,10 @@ import {
     EFFECT_META,
     EMPTY_RULE_FORM,
     formToParameters,
-    getEffectMeta,
     getPriorityBand,
     parseRuleParameters,
+    policyEffectPillClass,
+    policyEffectPillLabel,
     PRIORITY_BANDS,
     RULE_TEMPLATES,
     ruleToForm,
@@ -277,15 +278,14 @@ function HelpPanel({ open, onToggle, toolCount }: { open: boolean; onToggle: () 
           <section>
             <h4 className="font-semibold text-text mb-1.5">Effects</h4>
             <ul className="space-y-1.5">
-              {EFFECT_META.map((e) => {
-                const Icon = e.icon
-                return (
-                  <li key={e.value} className="flex items-start gap-2">
-                    <Icon size={14} className={`${e.color} mt-0.5 shrink-0`} />
-                    <span><code className={`font-mono ${e.color}`}>{e.value}</code> — {e.description}</span>
-                  </li>
-                )
-              })}
+              {EFFECT_META.map((e) => (
+                <li key={e.value} className="flex items-start gap-2">
+                  <span className={policyEffectPillClass(e.value)}>{policyEffectPillLabel(e.value)}</span>
+                  <span className="text-sm text-text-muted">
+                    <code className="font-mono text-text">{e.value}</code> — {e.description}
+                  </span>
+                </li>
+              ))}
             </ul>
             <p className="mt-2 text-text-muted">
               <code className="font-mono">require_approval</code> pauses the run and emits{" "}
@@ -395,47 +395,29 @@ interface RowProps {
 
 function RuleRow(props: RowProps) {
   const { rule, isEditing, onEdit, onCancelEdit, onDelete } = props
-  const eff = getEffectMeta(rule.effect)
-  const EffIcon = eff.icon
   const src = (rule.source ?? "db") as PolicySource
   const badge = SOURCE_META[src]
   const { priority } = parseRuleParameters(rule)
   const summary = summarizeRule(rule)
   const isReadOnly = src !== "db"
 
-  const strokeClass =
-    rule.effect === "deny"
-      ? "border-l-error"
-      : rule.effect === "require_approval"
-        ? "border-l-warning"
-        : "border-l-success"
-
   return (
-    <div
-      className={[
-        "border-l-[3px] bg-transparent",
-        strokeClass,
-        isEditing ? "bg-[var(--select-fill)]" : "",
-      ].filter(Boolean).join(" ")}
-    >
-      <div className="flex items-center gap-3 px-3 py-2.5 min-h-14">
-        <span
-          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border-subtle text-text-muted"
-          title={eff.label}
-        >
-          <EffIcon size={16} />
+    <div className={isEditing ? "bg-[var(--select-fill)]" : ""}>
+      <div className="flex items-start gap-3 px-3 py-3">
+        <span className={policyEffectPillClass(rule.effect, true)}>
+          {policyEffectPillLabel(rule.effect)}
         </span>
-        <div className="min-w-0 flex-1 grid grid-cols-[minmax(10rem,28%)_1fr] gap-x-4 gap-y-1 items-center">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="truncate text-xs font-semibold font-mono text-text">{rule.name}</span>
-              <span className={`text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded border border-border-subtle ${badge.badgeClass}`}>
-                {badge.label}
-              </span>
-              {priority !== null && <span className="text-xs text-text-faint">prio {priority}</span>}
-            </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="truncate text-xs font-semibold font-mono text-text">{rule.name}</span>
+            <span className={`text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded border border-border-subtle ${badge.badgeClass}`}>
+              {badge.label}
+            </span>
+            {priority !== null && (
+              <span className="text-xs tabular-nums text-text-faint">prio {priority}</span>
+            )}
           </div>
-          <ExpandableDescription text={summary} className="text-sm text-text-muted leading-snug" />
+          <ExpandableDescription text={summary} className="mt-1 text-sm text-text-muted leading-snug" />
         </div>
         {!isEditing && (
           <div className="flex shrink-0 items-center gap-1">
@@ -622,7 +604,6 @@ function RuleEditor(props: EditorProps) {
           <Section number={2} label="What should happen?" hint="Picked when this rule wins.">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
               {EFFECT_META.map((e) => {
-                const Icon = e.icon
                 const active = form.effect === e.value
                 return (
                   <button
@@ -630,17 +611,14 @@ function RuleEditor(props: EditorProps) {
                     type="button"
                     onClick={() => setForm((s) => ({ ...s, effect: e.value as Effect }))}
                     title={e.description}
-                    className={`flex items-start gap-2.5 px-3.5 py-3 rounded-lg border text-left transition-colors ${
+                    className={`rounded-lg border px-3.5 py-3 text-left transition-colors ${
                       active
-                        ? `${e.color} ${e.bg} border-current font-medium`
-                        : "border-border-subtle bg-surface text-text-muted hover:text-text hover:bg-overlay-3"
+                        ? `${policyEffectPillClass(e.value)} border-current`
+                        : "border-border-subtle bg-surface text-text-muted hover:bg-[var(--hover-fill)] hover:text-text"
                     }`}
                   >
-                    <Icon size={17} className="shrink-0 mt-0.5" />
-                    <div className="min-w-0">
-                      <div className="text-sm font-medium">{e.label}</div>
-                      <div className="text-xs opacity-80 leading-snug mt-0.5">{e.description}</div>
-                    </div>
+                    <div className="text-sm font-medium">{e.label}</div>
+                    <div className="mt-0.5 text-xs leading-snug opacity-90">{e.description}</div>
                   </button>
                 )
               })}
