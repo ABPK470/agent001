@@ -47,7 +47,7 @@ describe("chatTranscriptLayout", () => {
     expect(code).not.toContain("copyTone")
     expect(code).toMatch(/Copy size=\{12\}/)
     expect(css).toMatch(/\.mia-code-block\s*\{[^}]*width:\s*100%/s)
-    expect(css).toMatch(/\.mia-code-block\s*\{[^}]*background:\s*var\(--panel-2\)/s)
+    expect(css).toMatch(/\.mia-code-block\s*\{[^}]*background:\s*transparent/s)
     expect(css).toMatch(/\.mia-callout\s*\{[^}]*width:\s*fit-content/s)
     expect(css).toMatch(/\.mia-code-block__copy\s*\{[^}]*border:\s*none/s)
     expect(css).not.toContain("mia-code-block__copy--quiet")

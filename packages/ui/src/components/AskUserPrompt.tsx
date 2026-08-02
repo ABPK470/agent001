@@ -4,8 +4,8 @@ import { useState } from "react"
 /**
  * AskUserPrompt — the card the agent shows when it calls `ask_user`.
  *
- * Interrupt dialect: brand accent wash (not ink status, not greyscale). Same
- * purple family as logo live / Viewing as — must read in ~300ms on both themes.
+ * Interrupt dialect: left accent stroke on a clean background (not wash fill).
+ * Same purple family as logo live — must read in ~300ms on both themes.
  *
  * Robustness contract (the fix for the "Response sent — waiting for agent"
  * hang): the card must NOT claim success until the server has actually
@@ -60,7 +60,7 @@ export function AskUserPrompt({
 
   return (
     <div
-      className="rounded-xl border border-accent bg-accent-soft overflow-hidden"
+      className="rounded-lg border border-border-subtle border-l-[3px] border-l-accent bg-transparent overflow-hidden"
       onClick={(e) => e.stopPropagation()}
       aria-busy={submitted || sending || undefined}
     >

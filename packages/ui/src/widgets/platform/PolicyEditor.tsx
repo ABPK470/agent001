@@ -6,48 +6,41 @@
  */
 
 import {
-    AlertTriangle,
-    Brain,
-    ChevronDown,
-    ChevronRight,
-    Cpu,
-    Database,
-    Eye,
-    EyeOff,
-    FileEdit,
-    FilePlus,
-    FileSearch,
-    FolderOpen,
-    Globe,
-    MessageSquare,
-    Network,
-    Search,
-    Shield,
-    ShieldCheck,
-    ShieldX,
-    Terminal,
-    Trash2,
-    X,
+  Brain,
+  ChevronDown,
+  ChevronRight,
+  Cpu,
+  Database,
+  Eye,
+  EyeOff,
+  FileEdit,
+  FilePlus,
+  FileSearch,
+  FolderOpen,
+  Globe,
+  MessageSquare,
+  Network,
+  Search,
+  Shield,
+  Terminal,
+  Trash2,
+  X,
 } from "lucide-react"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { api } from "../../client/index"
 import { Listbox, type ListboxOption } from "../../components/Listbox"
 import { SELECT_ACTIVE, SELECT_FOCUS, SELECT_IDLE, SELECT_TRACK } from "../../lib/selection"
 import type { PolicyRule, ToolInfo } from "../../types"
+import { MODAL_ADMIN_PANEL, MODAL_SURFACE_CLASS, modalOverlayClass } from "../entity-registry/modal-overlay"
+import { ExpandableDescription } from "./policy/ExpandableDescription"
+import { PolicyPanel } from "./policy/PolicyPanel"
 import { SelectorRulesTab } from "./policy/SelectorRulesTab"
-import { modalOverlayClass, MODAL_ADMIN_PANEL, MODAL_SURFACE_CLASS } from "../entity-registry/modal-overlay"
 
 interface Props {
   onClose: () => void
 }
 
 type Effect = "allow" | "deny" | "require_approval"
-
-const EFFECTS: { value: Effect; label: string; icon: typeof ShieldCheck; color: string }[] = [
-  { value: "allow", label: "Allow", icon: ShieldCheck, color: "text-policy-allow" },
-  { value: "deny", label: "Deny", icon: ShieldX, color: "text-policy-deny" },
-  { value: "require_approval", label: "Require Approval", icon: AlertTriangle, color: "text-policy-approval" },
-]
 
 /** Icon mapping for known tools — falls back to Shield for unknown tools. */
 const TOOL_ICONS: Record<string, typeof Shield> = {
@@ -94,6 +87,8 @@ export function PolicyEditor({ onClose }: Props) {
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<Tab>("tools")
   const [error, setError] = useState<string | null>(null)
+  const [toolSearch, setToolSearch] = useState("")
+  const [bulkBusy, setBulkBusy] = useState(false)
 
   // Security section expand
   const [shellExpanded, setShellExpanded] = useState(false)
@@ -239,6 +234,29 @@ export function PolicyEditor({ onClose }: Props) {
     return map
   }, [rules])
 
+  const filteredTools = useMemo(() => {
+    const q = toolSearch.trim().toLowerCase()
+    if (!q) return tools
+    return tools.filter(
+      (tool) =>
+        tool.name.toLowerCase().includes(q)
+        || tool.description.toLowerCase().includes(q),
+    )
+  }, [tools, toolSearch])
+
+  async function handleAllowAllTools() {
+    setBulkBusy(true)
+    setError(null)
+    try {
+      const ruled = tools.filter((tool) => toolRuleMap.has(tool.name))
+      await Promise.all(ruled.map((tool) => handleToolToggle(tool.name, "none")))
+    } catch {
+      setError("Failed to reset tool permissions")
+    } finally {
+      setBulkBusy(false)
+    }
+  }
+
   async function handleDelete(ruleName: string) {
     try {
       await api.deletePolicy(ruleName)
@@ -273,9 +291,6 @@ export function PolicyEditor({ onClose }: Props) {
     }
   }
 
-  function getEffectStyle(e: string) {
-    return EFFECTS.find((ef) => ef.value === e) ?? EFFECTS[1]
-  }
 
   const TABS: { id: Tab; label: string }[] = [
     { id: "tools", label: "Tool Permissions" },
@@ -375,43 +390,86 @@ export function PolicyEditor({ onClose }: Props) {
           {loading ? (
             <div className="text-text-muted text-sm text-center py-8">Loading...</div>
           ) : tab === "tools" ? (
-            /* ── Tool Permissions tab ──────────────────────── */
-            <div className="space-y-2">
-              <div className="mb-4 px-3 py-2 rounded-lg bg-overlay-2/50 border border-border-subtle text-sm text-text-muted">
-                Tools are <span className="text-policy-allow font-medium">allowed</span> unless you set a rule here.
-              </div>
-              {tools.map((tool) => {
-                const rule = toolRuleMap.get(tool.name)
-                const currentEffect = rule ? (rule.effect as Effect) : null
-                const Icon = getToolIcon(tool.name)
-                const effectStyle = currentEffect ? getEffectStyle(currentEffect) : null
+            /* ── Tool Permissions tab — flat table, not card wall ── */
+            <div className="min-w-0 space-y-4">
+              <p className="text-sm text-text-muted leading-snug">
+                Tools are allowed unless you set a rule here. Path/env/command rules live under Selector Rules.
+              </p>
 
-                return (
-                  <div key={tool.name} className="flex items-center gap-4 px-4 py-3.5 rounded-xl bg-overlay-2 border border-border-subtle">
-                    <div className="w-9 h-9 rounded-lg bg-overlay-2 flex items-center justify-center shrink-0">
-                      <Icon size={16} className="text-text-secondary" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2.5">
-                        <span className="text-sm font-semibold text-text font-mono">{tool.name}</span>
-                        {!currentEffect && (
-                          <span className="text-xs uppercase font-semibold tracking-wider text-policy-allow">allowed</span>
-                        )}
-                        {effectStyle && (
-                          <span className={`text-xs uppercase font-semibold tracking-wider ${effectStyle.color}`}>
-                            {effectStyle.label}
-                          </span>
-                        )}
-                      </div>
-                      <div className="text-sm text-text-muted mt-0.5 line-clamp-2">{tool.description}</div>
-                    </div>
-                    <EffectSegmented
-                      value={currentEffect}
-                      onChange={(v) => handleToolToggle(tool.name, v)}
+              <div className="min-w-0 rounded-lg border border-border-subtle">
+                <div className="flex items-center gap-2 border-b border-border-subtle bg-[var(--overlay-1)] px-3 py-2">
+                  <div className="relative min-w-0 flex-1">
+                    <Search
+                      size={15}
+                      className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-text-faint"
+                    />
+                    <input
+                      type="search"
+                      value={toolSearch}
+                      onChange={(e) => setToolSearch(e.target.value)}
+                      placeholder="Search tool name…"
+                      className="w-full rounded-md border border-border-subtle bg-transparent py-1.5 pl-8 pr-3 text-sm text-text placeholder:text-text-faint focus:outline-none focus:ring-1 focus:ring-border-strong"
                     />
                   </div>
-                )
-              })}
+                  <button
+                    type="button"
+                    disabled={bulkBusy || tools.every((tool) => !toolRuleMap.has(tool.name))}
+                    onClick={handleAllowAllTools}
+                    className="shrink-0 rounded-md border border-border px-3 py-1.5 text-sm text-text-secondary transition-colors hover:bg-[var(--hover-fill)] hover:text-text disabled:cursor-not-allowed disabled:border-border-subtle disabled:text-text-faint"
+                  >
+                    {bulkBusy ? "Resetting…" : "Allow all tools"}
+                  </button>
+                </div>
+
+                <div
+                  className="grid grid-cols-[240px_minmax(0,1fr)_220px] items-center border-b border-border-subtle bg-[var(--overlay-1)] px-3 text-[11px] font-medium uppercase tracking-wide text-text-faint"
+                  style={{ minHeight: 36 }}
+                  role="row"
+                >
+                  <div className="py-2">Tool name</div>
+                  <div className="py-2">Description</div>
+                  <div className="py-2 text-right">Permission</div>
+                </div>
+
+                {filteredTools.length === 0 ? (
+                  <div className="px-3 py-6 text-center text-sm text-text-muted">
+                    No tools match &ldquo;{toolSearch.trim()}&rdquo;
+                  </div>
+                ) : (
+                  filteredTools.map((tool) => {
+                    const rule = toolRuleMap.get(tool.name)
+                    const currentEffect = rule ? (rule.effect as Effect) : null
+                    const Icon = getToolIcon(tool.name)
+
+                    return (
+                      <div
+                        key={tool.name}
+                        role="row"
+                        className="grid grid-cols-[240px_minmax(0,1fr)_220px] items-center border-b border-border-subtle px-3 py-2.5 last:border-b-0 hover:bg-[var(--hover-fill)]"
+                        style={{ minHeight: 56 }}
+                      >
+                        <div className="flex min-w-0 items-center gap-2 pr-3">
+                          <span className="flex h-4 w-4 shrink-0 items-center justify-center">
+                            <Icon size={16} className="text-text-faint" />
+                          </span>
+                          <span className="truncate font-mono text-xs font-semibold text-text">
+                            {tool.name}
+                          </span>
+                        </div>
+                        <div className="min-w-0 pr-3">
+                          <ExpandableDescription text={tool.description} />
+                        </div>
+                        <div className="flex justify-end">
+                          <EffectSegmented
+                            value={currentEffect}
+                            onChange={(v) => handleToolToggle(tool.name, v)}
+                          />
+                        </div>
+                      </div>
+                    )
+                  })
+                )}
+              </div>
             </div>
           ) : tab === "rules" ? (
             /* ── Selector Rules tab — see ./policy/SelectorRulesTab.tsx ── */
@@ -424,24 +482,18 @@ export function PolicyEditor({ onClose }: Props) {
               />
             </div>
           ) : tab === "model" ? (
-            /* ── Model tab ────────────────────────────────── */
             <div className="space-y-4">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-3">
                 <p className="text-sm text-text-muted">LLM provider and model for the agent.</p>
                 {llmActiveProvider && (
-                  <span className="flex items-center gap-1.5 text-sm text-text-muted bg-overlay-2 border border-border-subtle rounded-full px-3 py-1">
+                  <span className="flex items-center gap-1.5 text-sm text-text-muted border border-border-subtle rounded-full px-3 py-1">
                     <span className="w-1.5 h-1.5 rounded-full bg-success inline-block" />
                     {llmActiveProvider} / {llmActiveModel}
                   </span>
                 )}
               </div>
 
-              {/* Provider selector */}
-              <div className="px-4 py-3.5 rounded-xl bg-overlay-2 border border-border-subtle">
-                <div className="flex items-center gap-2.5 mb-1.5">
-                  <Cpu size={15} className="text-text-muted" />
-                  <span className="text-sm font-semibold text-text">Provider</span>
-                </div>
+              <PolicyPanel title="Provider" icon={<Cpu size={15} />}>
                 <p className="text-sm text-text-muted leading-snug mb-3">
                   Choose the LLM backend. Defaults update when you switch.
                 </p>
@@ -464,16 +516,10 @@ export function PolicyEditor({ onClose }: Props) {
                     </button>
                   ))}
                 </div>
-              </div>
+              </PolicyPanel>
 
-              {/* Model + credentials combined card */}
-              <div className="px-4 py-3.5 rounded-xl bg-overlay-2 border border-border-subtle">
-                <div className="flex items-center gap-2.5 mb-3">
-                  <Cpu size={15} className="text-text-muted" />
-                  <span className="text-sm font-semibold text-text">Connection</span>
-                </div>
+              <PolicyPanel title="Connection" icon={<Cpu size={15} />}>
                 <div className="space-y-3 mb-4">
-                  {/* Model */}
                   <div>
                     <label className="text-sm text-text-muted block mb-1.5">
                       {llmProvider === "databricks" ? "Serving endpoint" : "Model"}
@@ -483,11 +529,10 @@ export function PolicyEditor({ onClose }: Props) {
                       value={llmModel}
                       onChange={(e) => setLlmModel(e.target.value)}
                       placeholder={llmDefaults[llmProvider]?.model ?? "model name"}
-                      className="w-full px-3 py-1.5 rounded-lg bg-overlay-2 border border-border-subtle text-sm text-text placeholder:text-text-muted/50 focus:outline-none focus:ring-1 focus:ring-accent font-mono text-sm"
+                      className="w-full px-3 py-1.5 rounded-lg border border-border-subtle bg-transparent text-sm text-text placeholder:text-text-faint focus:outline-none focus:ring-1 focus:ring-border-strong font-mono"
                     />
                   </div>
 
-                  {/* API Key — only shown for copilot-chat (Device Flow auto-fills if blank). */}
                   {llmProvider === "copilot-chat" && (
                     <div>
                       <label className="text-sm text-text-muted block mb-1.5">
@@ -499,7 +544,7 @@ export function PolicyEditor({ onClose }: Props) {
                           value={llmApiKey}
                           onChange={(e) => setLlmApiKey(e.target.value)}
                           placeholder={llmDefaults[llmProvider]?.placeholder ?? "Leave blank to keep existing"}
-                          className="w-full px-3 py-1.5 pr-10 rounded-lg bg-overlay-2 border border-border-subtle text-sm text-text placeholder:text-text-muted/50 focus:outline-none focus:ring-1 focus:ring-accent font-mono text-sm"
+                          className="w-full px-3 py-1.5 pr-10 rounded-lg border border-border-subtle bg-transparent text-sm text-text placeholder:text-text-faint focus:outline-none focus:ring-1 focus:ring-border-strong font-mono"
                         />
                         <button
                           type="button"
@@ -512,11 +557,8 @@ export function PolicyEditor({ onClose }: Props) {
                       <p className="text-sm text-text-muted mt-1">Leave blank to keep the existing key.</p>
                     </div>
                   )}
-
-                  {/* Base URL — not shown; copilot-chat & databricks both auto-resolve */}
                 </div>
 
-                {/* Save */}
                 <div className="flex items-center gap-3">
                   <button
                     onClick={handleSaveLlm}
@@ -525,10 +567,10 @@ export function PolicyEditor({ onClose }: Props) {
                   >
                     {llmSaving ? "Saving…" : "Apply"}
                   </button>
-                  {llmSaved && <span className="text-sm text-success">Saved — active on next run</span>}
+                  {llmSaved && <span className="text-sm text-text-muted">Saved — active on next run</span>}
                   {llmError && <span className="text-sm text-error">{llmError}</span>}
                 </div>
-              </div>
+              </PolicyPanel>
             </div>
           ) : tab === "security" ? (
             /* ── Security tab ─────────────────────────────── */
@@ -538,7 +580,7 @@ export function PolicyEditor({ onClose }: Props) {
               </p>
 
               {/* Workspace */}
-              <div className="px-4 py-3.5 rounded-xl bg-overlay-2 border border-border-subtle">
+              <div className="rounded-lg border border-border-subtle px-4 py-3.5">
                 <div className="flex items-center gap-2.5 mb-2">
                   <FolderOpen size={15} className="text-text-muted" />
                   <span className="text-sm font-semibold text-text">Workspace (developer mode)</span>
@@ -570,7 +612,7 @@ export function PolicyEditor({ onClose }: Props) {
               </div>
 
               {/* Shell blocklist */}
-              <div className="px-4 py-3.5 rounded-xl bg-overlay-2 border border-border-subtle">
+              <div className="rounded-lg border border-border-subtle px-4 py-3.5">
                 <button
                   className="flex items-center gap-2.5 w-full text-left"
                   onClick={() => setShellExpanded((v) => !v)}
@@ -595,7 +637,7 @@ export function PolicyEditor({ onClose }: Props) {
               </div>
 
               {/* SSRF protection */}
-              <div className="px-4 py-3.5 rounded-xl bg-overlay-2 border border-border-subtle">
+              <div className="rounded-lg border border-border-subtle px-4 py-3.5">
                 <button
                   className="flex items-center gap-2.5 w-full text-left"
                   onClick={() => setSsrfExpanded((v) => !v)}
@@ -625,7 +667,7 @@ export function PolicyEditor({ onClose }: Props) {
               </div>
 
               {/* Policy enforcement */}
-              <div className="px-4 py-3.5 rounded-xl bg-overlay-2 border border-border-subtle">
+              <div className="rounded-lg border border-border-subtle px-4 py-3.5">
                 <div className="flex items-center gap-2.5 mb-1.5">
                   <Shield size={15} className="text-text-muted" />
                   <span className="text-sm font-semibold text-text">Policy Enforcement</span>
@@ -636,7 +678,7 @@ export function PolicyEditor({ onClose }: Props) {
               </div>
 
               {/* SQL rails — tool layer, not policy-editable */}
-              <div className="px-4 py-3.5 rounded-xl bg-overlay-2 border border-border-subtle">
+              <div className="rounded-lg border border-border-subtle px-4 py-3.5">
                 <button
                   className="flex items-center gap-2.5 w-full text-left"
                   onClick={() => setSqlGuardExpanded((v) => !v)}
@@ -663,7 +705,7 @@ export function PolicyEditor({ onClose }: Props) {
               {/* Reset data */}
               <div className="h-px bg-overlay-3 my-1" />
 
-              <div className="px-4 py-3.5 rounded-xl bg-overlay-2 border border-border-subtle">
+              <div className="rounded-lg border border-border-subtle px-4 py-3.5">
                 <div className="flex items-center gap-2.5 mb-1.5">
                   <Trash2 size={15} className="text-error" />
                   <span className="text-sm font-semibold text-text">Restore Defaults</span>
@@ -712,7 +754,7 @@ export function PolicyEditor({ onClose }: Props) {
           ) : tab === "platform" ? (
             /* ── Platform tab (schema catalog + sync artifacts) ── */
             <div className="space-y-4">
-              <div className="px-4 py-3.5 rounded-xl bg-overlay-2 border border-border-subtle">
+              <div className="rounded-lg border border-border-subtle px-4 py-3.5">
                 <div className="flex items-center gap-2.5 mb-1.5">
                   <Database size={15} className="text-accent" />
                   <span className="text-sm font-semibold text-text">MSSQL schema catalog</span>
@@ -769,7 +811,7 @@ export function PolicyEditor({ onClose }: Props) {
                 )}
               </div>
 
-              <div className="px-4 py-3.5 rounded-xl bg-overlay-2 border border-border-subtle">
+              <div className="rounded-lg border border-border-subtle px-4 py-3.5">
                 <div className="flex items-center gap-2.5 mb-1.5">
                   <Database size={15} className="text-text-muted" />
                   <span className="text-sm font-semibold text-text">Deploy sync artifacts</span>
@@ -846,7 +888,7 @@ export function PolicyEditor({ onClose }: Props) {
 
               <div className="h-px bg-overlay-3 my-1" />
 
-              <div className="px-4 py-3.5 rounded-xl bg-overlay-2 border border-border-subtle">
+              <div className="rounded-lg border border-border-subtle px-4 py-3.5">
                 <div className="flex items-center gap-2.5 mb-1.5">
                   <Shield size={15} className="text-accent" />
                   <span className="text-sm font-semibold text-text">Factory policy defaults</span>
@@ -924,7 +966,7 @@ export function PolicyEditor({ onClose }: Props) {
 
               <div className="h-px bg-overlay-3 my-1" />
 
-              <div className="px-4 py-3.5 rounded-xl bg-status-callout-err-soft border border-status-callout-err-border">
+              <div className="px-4 py-3.5 rounded-xl border border-border-subtle border-l-[3px] border-l-error">
                 <div className="flex items-center gap-2.5 mb-1.5">
                   <Trash2 size={15} className="text-error" />
                   <span className="text-sm font-semibold text-text">Factory Reset Platform</span>
@@ -1001,14 +1043,14 @@ function EffectSegmented({ value, onChange }: { value: Effect | null; onChange: 
   ]
   const current = value ?? "none"
   return (
-    <div className="inline-flex rounded-lg bg-surface border border-border-subtle p-0.5 shrink-0">
+    <div className="inline-flex max-w-full rounded-md border border-border-subtle p-0.5 shrink-0">
       {OPTIONS.map((o) => (
         <button
           key={o.v}
           type="button"
           onClick={() => onChange(o.v)}
-          className={`px-3.5 py-1.5 text-sm rounded-md transition-colors ${
-            current === o.v ? `${o.cls} bg-overlay-3 font-medium` : "text-text-muted hover:text-text"
+          className={`whitespace-nowrap px-2 py-1 text-xs rounded transition-colors ${
+            current === o.v ? `${o.cls} bg-[var(--select-fill)] font-medium` : "text-text-muted hover:text-text"
           }`}
         >{o.label}</button>
       ))}

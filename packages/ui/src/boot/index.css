@@ -443,16 +443,16 @@
   max-width: 100%;
   border: 1px solid var(--border);
   border-radius: 0.5rem;
-  background: var(--panel-2);
+  background: transparent;
   box-shadow: none;
   outline: none;
 }
 
 .mia-surface--danger,
 .mia-code-block.mia-surface--danger {
-  /* Status callout dialect — theme-split soft + border. */
-  border-color: var(--status-callout-err-border);
-  background: var(--status-callout-err-soft);
+  border-color: var(--border-subtle);
+  border-left: 3px solid var(--error);
+  background: transparent;
 }
 
 .mia-code-block--embedded {
@@ -1527,35 +1527,56 @@ label:focus-within > .mia-checkbox,
   font-weight: 400;
 }
 
-/* Shared status callout shell — wash + border from theme-split tokens */
+/* Shared status notice — left stroke, clean background (toasts keep soft fill). */
 .mia-callout {
   width: fit-content;
   max-width: 100%;
-  border-radius: 0.5rem;
-  border-width: 1px;
-  border-style: solid;
+  border-radius: 0.375rem;
+  border: 1px solid var(--border-subtle);
+  border-left-width: 3px;
+  background: transparent;
   color: var(--color-text-muted, var(--color-text));
   font-weight: 400;
 }
 
 .mia-callout--ok {
-  border-color: var(--status-callout-ok-border);
-  background: var(--status-callout-ok-soft);
+  border-left-color: var(--success);
 }
 
 .mia-callout--err {
-  border-color: var(--status-callout-err-border);
-  background: var(--status-callout-err-soft);
+  border-left-color: var(--error);
 }
 
 .mia-callout--warn {
-  border-color: var(--status-callout-warn-border);
-  background: var(--status-callout-warn-soft);
+  border-left-color: var(--warning);
 }
 
 .mia-callout--info {
-  border-color: var(--status-callout-info-border);
-  background: var(--status-callout-info-soft);
+  border-left-color: var(--info);
+}
+
+/* List-row stroke — event stream / dense logs (no card wash). */
+.mia-row-stroke {
+  border: 1px solid transparent;
+  border-left-width: 3px;
+  border-left-color: transparent;
+  background: transparent;
+}
+
+.mia-row-stroke--err {
+  border-left-color: var(--error);
+}
+
+.mia-row-stroke--warn {
+  border-left-color: var(--warning);
+}
+
+.mia-row-stroke--ok {
+  border-left-color: var(--success);
+}
+
+.mia-row-stroke--info {
+  border-left-color: var(--info);
 }
 
 /* ── Listbox popover (portaled — opaque above modals) ─────────── */
@@ -2906,12 +2927,11 @@ textarea.input {
   font-weight: 650;
 }
 
-.trace-scope[data-trace-kind="sent"] .trace-scope__lead {
-  color: var(--info, var(--color-info, #5b9fd4));
-}
-
-.trace-scope[data-trace-kind="received"] .trace-scope__lead {
-  color: var(--success, var(--color-success, #5a9e6f));
+.trace-scope[data-trace-kind="sent"] .trace-scope__lead,
+.trace-scope[data-trace-kind="received"] .trace-scope__lead,
+.trace-scope[data-trace-kind="prompt"] .trace-scope__lead,
+.trace-scope[data-trace-kind="work"] .trace-scope__lead {
+  color: var(--text-faint, var(--color-text-muted));
 }
 
 .trace-scope[data-trace-kind="context"] .trace-scope__lead {
@@ -2919,7 +2939,7 @@ textarea.input {
 }
 
 .trace-scope[data-trace-kind="prompt"] .trace-scope__lead {
-  color: var(--info, var(--color-info, #5b9fd4));
+  color: var(--text-faint, var(--color-text-muted));
 }
 
 .trace-scope[data-trace-kind="tools"] .trace-scope__lead {
@@ -2933,19 +2953,17 @@ textarea.input {
 }
 
 .trace-scope[data-trace-kind="work"] .trace-scope__lead {
-  color: var(--info, var(--color-info, #5b9fd4));
+  color: var(--text-faint, var(--color-text-muted));
 }
 
 /*
- * Light: Trace leads stay ink (status/syntax tokens are ink). Kind meaning from
- * weight / letter-spacing already on leads — never traffic chroma on paper.
- * TOOLS / CONTEXT stay muted peers (never brand accent).
+ * Trace leads stay ink — kind from weight / letter-spacing, never traffic chroma.
  */
 :root[data-theme="light"] .trace-scope[data-trace-kind="sent"] .trace-scope__lead,
 :root[data-theme="light"] .trace-scope[data-trace-kind="received"] .trace-scope__lead,
 :root[data-theme="light"] .trace-scope[data-trace-kind="prompt"] .trace-scope__lead,
 :root[data-theme="light"] .trace-scope[data-trace-kind="work"] .trace-scope__lead {
-  color: var(--ink);
+  color: var(--text-faint, var(--ink));
 }
 
 :root[data-theme="light"] .trace-work-note.is-error .trace-work-note__label,
@@ -2957,6 +2975,11 @@ textarea.input {
 
 .trace-work-note {
   padding: 0.35rem 0 0.45rem;
+}
+
+.trace-work-note.is-error {
+  border-left: 3px solid var(--error);
+  padding-left: 0.45rem;
 }
 
 /* Divider only between notes / after tools — not above the first body row */
@@ -3081,12 +3104,9 @@ textarea.input {
   opacity: 0.85;
 }
 
-.trace-branch__caption.is-tools {
-  color: var(--warning, var(--color-warning, #c4a35a));
-}
-
+.trace-branch__caption.is-tools,
 .trace-branch__caption.is-sql {
-  color: var(--info, var(--color-info, #5b9fd4));
+  color: var(--text-faint, var(--color-text-muted));
 }
 
 .trace-scope.is-soft .trace-scope__lead {
@@ -3250,8 +3270,14 @@ textarea.input {
   color: var(--text-muted, var(--color-text-muted));
 }
 
+.trace-msg.is-error {
+  border-left: 3px solid var(--error);
+  padding-left: 0.25rem;
+}
+
 .trace-msg.is-error .trace-msg__tool {
-  color: var(--error, var(--color-error));
+  color: var(--text-muted, var(--color-text-muted));
+  font-weight: 600;
 }
 
 .trace-row__preview {
@@ -3346,15 +3372,15 @@ textarea.input {
 }
 
 /*
- * Severity callouts — soft chroma wash + thin border; theme ink text
- * (not chroma-on-wash). Diff panes stay `--diff-*` only.
+ * Severity notices — left stroke; theme ink (not chroma wash).
  */
 .trace-phase-event.is-warn {
   padding: 0.3rem 0.55rem;
   border-radius: 0.35rem;
   margin: 0.15rem 0;
-  border: 1px solid var(--status-callout-warn-border);
-  background: var(--status-callout-warn-soft);
+  border: 1px solid var(--border-subtle);
+  border-left: 3px solid var(--warning);
+  background: transparent;
   color: var(--text-muted, var(--color-text-muted));
   font-weight: 400;
   width: fit-content;
@@ -3365,8 +3391,9 @@ textarea.input {
   padding: 0.3rem 0.55rem;
   border-radius: 0.35rem;
   margin: 0.15rem 0;
-  border: 1px solid var(--status-callout-err-border);
-  background: var(--status-callout-err-soft);
+  border: 1px solid var(--border-subtle);
+  border-left: 3px solid var(--error);
+  background: transparent;
   color: var(--text-muted, var(--color-text-muted));
   font-weight: 400;
   width: fit-content;
@@ -3583,12 +3610,9 @@ textarea.input {
   opacity: 0.85;
 }
 
-.trace-next__label.is-next {
-  color: var(--warning, var(--color-warning, #c4a35a));
-}
-
+.trace-next__label.is-next,
 .trace-next__label.is-sql {
-  color: var(--info, var(--color-info, #5b9fd4));
+  color: var(--text-faint, var(--color-text-muted));
 }
 
 .trace-sql-block {
@@ -3603,17 +3627,18 @@ textarea.input {
   padding: 0.35rem 0.45rem;
   border-radius: 0.35rem;
   border: 1px solid var(--border-subtle, var(--color-border-subtle));
+  border-left-width: 3px;
+  border-left-color: var(--border-subtle, var(--color-border-subtle));
+  background: transparent;
 }
 
 .trace-sql-check.is-blocked,
 .trace-sql-check.is-failed {
-  border-color: color-mix(in srgb, var(--error, var(--color-error)) 45%, transparent);
-  background: color-mix(in srgb, var(--error, var(--color-error)) 6%, transparent);
+  border-left-color: var(--error, var(--color-error));
 }
 
 .trace-sql-check.is-ok {
-  border-color: color-mix(in srgb, var(--success, var(--color-success)) 35%, transparent);
-  background: color-mix(in srgb, var(--success, var(--color-success)) 5%, transparent);
+  border-left-color: var(--success, var(--color-success));
 }
 
 .trace-sql-check__head {
@@ -3633,12 +3658,9 @@ textarea.input {
 }
 
 .trace-sql-check.is-blocked .trace-sql-check__badge,
-.trace-sql-check.is-failed .trace-sql-check__badge {
-  color: var(--error, var(--color-error));
-}
-
+.trace-sql-check.is-failed .trace-sql-check__badge,
 .trace-sql-check.is-ok .trace-sql-check__badge {
-  color: var(--success, var(--color-success));
+  color: var(--text-muted, var(--color-text-muted));
 }
 
 .trace-sql-check__code {

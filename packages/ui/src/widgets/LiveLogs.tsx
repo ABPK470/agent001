@@ -608,7 +608,7 @@ function LogRow({
           // Never pair status-callout borders with border-transparent — Tailwind
           // stylesheet order can leave the hairline invisible (Event Stream bug).
           log.error
-            ? "bg-status-callout-err-soft border-status-callout-err-border"
+            ? "mia-row-stroke mia-row-stroke--err"
             : expanded && hasData
               ? "border-transparent bg-[var(--select-fill)]"
               : "border-transparent hover:bg-[var(--hover-fill)]",

@@ -104,31 +104,39 @@ describe("light theme color system", () => {
       /--status-callout-err-soft:\s*color-mix\(in srgb,\s*var\(--error\)/,
     )
     expect(css).toMatch(
-      /\.trace-phase-event\.is-error\s*\{[^}]*background:\s*var\(--status-callout-err-soft/s,
+      /\.trace-phase-event\.is-error\s*\{[^}]*border-left:\s*3px solid var\(--error\)/s,
     )
     expect(css).toMatch(
-      /\.trace-phase-event\.is-warn\s*\{[^}]*background:\s*var\(--status-callout-warn-soft/s,
+      /\.trace-sql-check\s*\{[^}]*background:\s*transparent/s,
+    )
+    expect(css).toMatch(
+      /\.trace-sql-check\.is-failed\s*\{[^}]*border-left-color:\s*var\(--error/s,
+    )
+    expect(css).toMatch(
+      /\.trace-phase-event\.is-warn\s*\{[^}]*border-left:\s*3px solid var\(--warning\)/s,
     )
     expect(css).toMatch(/\.mia-toast--err\s*\{[^}]*--status-callout-err-soft/s)
-    expect(css).toMatch(/\.mia-callout--err\s*\{[^}]*--status-callout-err-soft/s)
+    expect(css).toMatch(/\.mia-callout--err\s*\{[^}]*border-left-color:\s*var\(--error\)/s)
+    expect(css).toMatch(/\.mia-callout\s*\{[^}]*background:\s*transparent/s)
     expect(css).toMatch(/\.mia-callout\s*\{[^}]*font-weight:\s*400/s)
+    expect(css).toMatch(/\.mia-code-block\s*\{[^}]*background:\s*transparent/s)
     const ops = readFileSync(join(here, "../widgets/OperationLog.tsx"), "utf8")
     expect(ops).toContain("operationStatusCallout")
     expect(ops).not.toMatch(/failed:\s*"bg-diff-surface/)
     const live = readFileSync(join(here, "../widgets/LiveLogs.tsx"), "utf8")
-    expect(live).toContain("bg-status-callout-err-soft")
-    expect(live).toContain("border-status-callout-err-border")
+    expect(live).toContain("mia-row-stroke--err")
     expect(live).toContain("mia-callout--err")
     const logRow = live.match(/function LogRow[\s\S]*?\n\}\n/)?.[0] ?? ""
-    const errorChrome = logRow.match(/\? "([^"]*status-callout-err[^"]*)"/)?.[1] ?? ""
-    expect(errorChrome).toContain("border-status-callout-err-border")
-    expect(errorChrome).not.toContain("border-transparent")
+    const errorChrome = logRow.match(/\? "([^"]*mia-row-stroke[^"]*)"/)?.[1] ?? ""
+    expect(errorChrome).toContain("mia-row-stroke--err")
     expect(live).not.toMatch(/log\.error[\s\S]{0,80}bg-diff-surface/)
     expect(live).not.toContain("bg-policy-deny-soft")
-    // Factory Reset card is the dark danger-zone SOT (status-callout err tokens).
+    expect(live).not.toContain("bg-status-callout-err-soft")
     const policy = readFileSync(join(here, "../widgets/platform/PolicyEditor.tsx"), "utf8")
-    expect(policy).toContain("bg-status-callout-err-soft")
-    expect(policy).toContain("border-status-callout-err-border")
+    expect(policy).toContain("border-l-error")
+    expect(policy).toContain("grid-cols-[240px_minmax(0,1fr)_220px]")
+    expect(policy).toContain("ExpandableDescription")
+    expect(policy).toContain("PolicyPanel")
   })
 
   it("Model provider uses SELECT_TRACK dialect (not inverted ink outline)", () => {
@@ -180,8 +188,9 @@ describe("light theme color system", () => {
     expect(chat).toMatch(/function CheckBlock[\s\S]*?function isVerificationProgress/)
     const checkBlock = chat.match(/function CheckBlock[\s\S]*?function isVerificationProgress/)?.[0] ?? ""
     expect(checkBlock).not.toContain("mia-callout")
-    expect(ask).toContain("border-accent")
-    expect(ask).toContain("bg-accent-soft")
+    expect(ask).toContain("border-l-accent")
+    expect(ask).toContain("bg-transparent")
+    expect(ask).not.toContain("bg-accent-soft")
     expect(ask).toContain("text-accent")
     expect(ask).toContain("ArrowUp")
     expect(ask).toContain("mia-callout--err")

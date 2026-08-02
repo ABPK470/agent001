@@ -3,7 +3,7 @@ import type { ReactNode } from "react"
 import type { OperationStatus } from "../../client/index"
 import { ReviewTree, ReviewTreeItem } from "../../components/ReviewTree"
 import { StatusMark } from "../../components/StatusMark"
-import { operationStatusBadge, statusCalloutTone } from "../../lib/status-callout"
+import { operationStatusBadge, operationStatusRowStroke, statusCalloutTone } from "../../lib/status-callout"
 
 export const OP_LOG = "text-sm leading-snug"
 export const OP_LOG_MONO = `${OP_LOG} font-mono`
@@ -53,23 +53,23 @@ export function statusTextClass(_status: OperationStatus): string {
  * Status badge chrome — same wash/border family as policy effect chips.
  */
 export function statusSoftBgClass(status: OperationStatus): string {
-  return operationStatusBadge(status).replace(/\s*text-\S+/g, "").trim()
+  return operationStatusRowStroke(status)
 }
 
 export function statusFilterActiveClass(status: OperationStatus): string {
   switch (statusCalloutTone(status)) {
     case "ok":
-      return "ring-1 ring-inset ring-status-callout-ok-border text-text font-medium bg-status-callout-ok-soft"
+      return "border-l-[3px] border-l-success text-text font-medium bg-transparent"
     case "err":
-      return "ring-1 ring-inset ring-status-callout-err-border text-text font-semibold bg-status-callout-err-soft"
+      return "border-l-[3px] border-l-error text-text font-semibold bg-transparent"
     case "skip":
       return "border border-dashed border-border text-text-muted font-medium bg-transparent"
     case "info":
-      return "ring-1 ring-inset ring-status-callout-info-border text-text font-medium bg-status-callout-info-soft"
+      return "border-l-[3px] border-l-info text-text font-medium bg-transparent"
     case "warn":
-      return "ring-1 ring-inset ring-status-callout-warn-border text-text font-medium bg-status-callout-warn-soft"
+      return "border-l-[3px] border-l-warning text-text font-medium bg-transparent"
     default:
-      return "ring-1 ring-inset ring-border-subtle text-text-muted font-medium bg-transparent"
+      return "border border-border-subtle text-text-muted font-medium bg-transparent"
   }
 }
 export const OP_LOG_MUTED = "text-text-muted"

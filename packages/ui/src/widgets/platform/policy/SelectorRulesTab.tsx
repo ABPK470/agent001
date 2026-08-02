@@ -19,8 +19,6 @@
 import {
     AlertCircle,
     BookOpen,
-    ChevronDown,
-    ChevronRight,
     FilePlus,
     Info,
     Sparkles,
@@ -51,6 +49,8 @@ import {
     type RuleTemplate,
     type SelectorKeyMeta,
 } from "./selector-schema"
+import { ExpandableDescription } from "./ExpandableDescription"
+import { PolicyPanel } from "./PolicyPanel"
 
 interface Props {
   rules:    PolicyRule[]
@@ -200,7 +200,7 @@ export function SelectorRulesTab({ rules, tools, onReload, onDelete }: Props) {
         />
       )}
 
-      <div className="space-y-1.5">
+      <div className="overflow-hidden rounded-lg border border-border-subtle divide-y divide-border-subtle">
         {filteredRules.map((r) => (
           <RuleRow
             key={r.name}
@@ -239,28 +239,22 @@ function HelpPanel({ open, onToggle, toolCount }: { open: boolean; onToggle: () 
     .reduce((n, s) => n + (s.enumValues?.length ?? 0), 0)
 
   return (
-    <div className="rounded-xl bg-overlay-2/60 border border-border-subtle">
-      <button
-        onClick={onToggle}
-        className="w-full flex items-center justify-between gap-2 px-4 py-3 text-left"
-      >
-        <span className="flex items-center gap-2 text-sm font-semibold text-text">
-          <BookOpen size={16} className="text-accent" />
-          How Selector Rules work
+    <PolicyPanel
+      title="How Selector Rules work"
+      icon={<BookOpen size={16} />}
+      collapsible
+      open={open}
+      onToggle={onToggle}
+      trailing={
+        <span className="hidden sm:inline text-xs">
+          <strong className="text-text">{SELECTOR_KEYS.length}</strong> dimensions ·{" "}
+          <strong className="text-text">{enumValueCount}</strong> fixed values ·{" "}
+          <strong className="text-text">{toolCount}</strong> tools ·{" "}
+          <strong className="text-text">{EFFECT_META.length}</strong> effects
         </span>
-        <span className="flex items-center gap-2">
-          <span className="text-xs text-text-muted hidden sm:inline">
-            <strong className="text-text">{SELECTOR_KEYS.length}</strong> dimensions ·{" "}
-            <strong className="text-text">{enumValueCount}</strong> fixed values ·{" "}
-            <strong className="text-text">{toolCount}</strong> tools ·{" "}
-            <strong className="text-text">{EFFECT_META.length}</strong> effects
-          </span>
-          {open ? <ChevronDown size={14} className="text-text-muted" /> : <ChevronRight size={14} className="text-text-muted" />}
-        </span>
-      </button>
-
-      {open && (
-        <div className="px-4 pb-4 space-y-4 text-sm text-text-secondary leading-relaxed border-t border-border-subtle pt-4">
+      }
+    >
+      <div className="space-y-4 text-sm text-text-secondary leading-relaxed">
           <section>
             <h4 className="font-semibold text-text mb-1">The model</h4>
             <p>
@@ -373,8 +367,7 @@ function HelpPanel({ open, onToggle, toolCount }: { open: boolean; onToggle: () 
             </ul>
           </section>
         </div>
-      )}
-    </div>
+    </PolicyPanel>
   )
 }
 
@@ -410,45 +403,49 @@ function RuleRow(props: RowProps) {
   const summary = summarizeRule(rule)
   const isReadOnly = src !== "db"
 
-  const cardTone =
-    rule.effect === "allow"
-      ? "border-policy-allow/30 bg-policy-allow-soft"
-      : rule.effect === "deny"
-        ? "border-policy-deny/30 bg-policy-deny-soft"
-        : "border-policy-approval/30 bg-policy-approval-soft"
+  const strokeClass =
+    rule.effect === "deny"
+      ? "border-l-error"
+      : rule.effect === "require_approval"
+        ? "border-l-warning"
+        : "border-l-success"
 
   return (
-    <div className={`rounded-lg border ${isEditing ? "border-accent/40 bg-overlay-2" : cardTone}`}>
-      <div className="flex items-center gap-3 px-4 py-2.5">
+    <div
+      className={[
+        "border-l-[3px] bg-transparent",
+        strokeClass,
+        isEditing ? "bg-[var(--select-fill)]" : "",
+      ].filter(Boolean).join(" ")}
+    >
+      <div className="flex items-center gap-3 px-3 py-2.5 min-h-14">
         <span
-          className={`inline-flex items-center justify-center rounded-md p-1.5 shrink-0 ${eff.bg} ${eff.color}`}
+          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border-subtle text-text-muted"
           title={eff.label}
         >
           <EffIcon size={16} />
         </span>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className={`text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded ${eff.bg} ${eff.color}`}>
-              {eff.label}
-            </span>
-            <span className="text-sm font-mono text-text truncate">{rule.name}</span>
-            <span className={`text-xs uppercase tracking-wider px-1.5 py-0.5 rounded ${badge.badgeClass}`}>
-              {badge.label}
-            </span>
-            {priority !== null && <span className="text-xs text-text-muted">prio {priority}</span>}
-            {rule.updatedAt && <span className="text-xs text-text-muted">edited by {rule.updatedBy ?? "?"}</span>}
+        <div className="min-w-0 flex-1 grid grid-cols-[minmax(10rem,28%)_1fr] gap-x-4 gap-y-1 items-center">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="truncate text-xs font-semibold font-mono text-text">{rule.name}</span>
+              <span className={`text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded border border-border-subtle ${badge.badgeClass}`}>
+                {badge.label}
+              </span>
+              {priority !== null && <span className="text-xs text-text-faint">prio {priority}</span>}
+            </div>
           </div>
-          <div className="text-sm text-text-muted truncate" title={summary}>{summary}</div>
+          <ExpandableDescription text={summary} className="text-sm text-text-muted leading-snug" />
         </div>
         {!isEditing && (
-          <>
+          <div className="flex shrink-0 items-center gap-1">
             <button onClick={onEdit} className="text-text-muted hover:text-text text-sm px-2">
               {isReadOnly ? "Override" : "Edit"}
             </button>
-            <button onClick={onDelete} className="text-error/70 hover:text-error p-1" title="Delete">
+            <button onClick={onDelete} className="text-text-faint hover:text-error p-1" title="Delete">
               <Trash2 size={15} />
             </button>
-          </>
+          </div>
         )}
       </div>
 
@@ -550,7 +547,7 @@ function RuleEditor(props: EditorProps) {
   const activeDimCount = Object.values(form.selectors).filter((v) => v !== ANY).length
 
   return (
-    <div ref={editorRef} className={`${props.embedded ? "px-5 py-5" : "px-5 py-4 rounded-xl bg-overlay-2 border border-accent/30"} space-y-5`}>
+    <div ref={editorRef} className={`${props.embedded ? "px-5 py-5 border-t border-border-subtle" : "px-5 py-4 rounded-lg border border-border-subtle"} space-y-5`}>
       <div className="flex items-center justify-between">
         <span className="text-base font-semibold text-text">{title}</span>
         <div className="flex items-center gap-2">
@@ -567,8 +564,8 @@ function RuleEditor(props: EditorProps) {
       </div>
 
       {props.readOnlyOriginNotice && (
-        <div className="flex items-start gap-2 rounded-lg border border-warning/40 bg-panel-2 px-3.5 py-2.5 text-sm text-text">
-          <AlertCircle size={15} className="mt-0.5 shrink-0 text-warning" />
+        <div className="mia-callout mia-callout--warn flex items-start gap-2 px-3.5 py-2.5 text-sm text-text">
+          <AlertCircle size={15} className="mt-0.5 shrink-0 text-text-muted" />
           <span>
             This rule is a <strong>{props.readOnlyOriginNotice.label}</strong> and lives outside the database.
             Saving creates a new <strong>operator</strong> rule with the same name that overrides it on the next run.
@@ -723,8 +720,8 @@ function RuleEditor(props: EditorProps) {
         </div>
       )}
 
-      <div className="px-3.5 py-2.5 rounded-lg bg-info/10 border border-info/20 text-sm text-info flex items-start gap-2">
-        <Info size={15} className="mt-0.5 shrink-0" />
+      <div className="mia-callout mia-callout--info px-3.5 py-2.5 text-sm flex items-start gap-2">
+        <Info size={15} className="mt-0.5 shrink-0 text-text-muted" />
         <span><strong>Preview:</strong> {previewSummary}</span>
       </div>
 
@@ -834,7 +831,10 @@ function DimensionRow({
           />
         )}
         <div className="text-sm text-text-muted mt-1 leading-snug">
-          {valueDescription ?? meta.description}
+          <ExpandableDescription
+            text={valueDescription ?? meta.description}
+            className="text-sm text-text-muted leading-snug"
+          />
           {meta.examples && meta.type !== "enum" && !valueDescription && (
             <> · e.g. {meta.examples.slice(0, 3).map((ex, i) => (
               <span key={ex}>{i > 0 && ", "}<code className="font-mono">{ex}</code></span>

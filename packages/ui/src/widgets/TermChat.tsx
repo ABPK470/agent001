@@ -1156,7 +1156,7 @@ function RunErrorBanner({ error }: { error: string }) {
             {expanded ? "Hide details" : "Show details"}
           </button>
           {expanded && (
-            <div className="mt-2 rounded-md border border-status-callout-err-border bg-panel/60 px-2.5 py-2 opacity-80">
+            <div className="mt-2 rounded-md border border-border-subtle border-l-[3px] border-l-error px-2.5 py-2 opacity-90">
               <InlinePeekText
                 text={details}
                 className="code-pre m-0 w-full max-w-full whitespace-pre-wrap break-words px-0 text-[15px] leading-5 opacity-100"
