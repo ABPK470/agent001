@@ -32,6 +32,8 @@ export async function finalizeFailedRun(
   error: unknown
 ): Promise<void> {
   const { request, runtime, sideEffects } = command
+  // cancelRun may have already persisted + broadcast; don't emit run.failed.
+  if (runtime.controller.signal.aborted) return
   const errMsg = error instanceof Error ? error.message : String(error)
   const persistedToolTrace = buildPersistedToolTrace(env.state.run.steps)
   env.state.run = failRunPure(env.state.run)

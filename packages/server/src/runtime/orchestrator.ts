@@ -260,6 +260,20 @@ export class AgentOrchestrator {
   }
 
   cancelRun(runId: string): boolean {
+    // Unblock ask_user (and similar) waits before aborting — otherwise
+    // govern-tool's abort race throws and finalizeFailedRun overwrites the
+    // cancelled row with a tool-failure while trace stays "waiting".
+    const pending = this.pendingInputs.get(runId)
+    if (pending) {
+      pending.resolve("Run cancelled by user")
+      this.pendingInputs.delete(runId)
+      saveTrace(this.activeRuns, runId, {
+        kind: TraceEventKind.UserInputResponse,
+        text: "Run cancelled by user",
+      })
+      broadcast({ type: EventType.UserInputResponse, data: { runId } })
+    }
+
     const active = this.activeRuns.get(runId)
     if (!active) {
       // No in-memory run — it's either queued, or stuck in DB as 'running'

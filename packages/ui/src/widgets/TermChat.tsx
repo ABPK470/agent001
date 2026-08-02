@@ -1841,7 +1841,7 @@ function TermChatInputBar({
   const canSend = !personalReadOnly && (slashOnlyMode
     ? slashInput && input.trim().length > 1 && !sending
     : (Boolean(input.trim()) || attachments.length > 0) && !sending)
-  const showStop = !personalReadOnly && isRunning && !slashInput && !pendingInput
+  const showStop = !personalReadOnly && isRunning && !slashInput
   const collapseComposer = useCallback(() => {
     commandConsole.clear()
     onChange("")
@@ -2089,6 +2089,7 @@ export function TermChat({
 
   const { tryDispatchSlash, slashCommands, slashOnlyMode } = useChatSlashActions({
     activeThreadId: continuityThreadId,
+    activeRunId: scopedActiveRunId,
     runs: scopedRuns,
     runStatus: scopedActiveRun?.status,
     hasPendingInput: Boolean(pendingInput),
@@ -2247,8 +2248,13 @@ export function TermChat({
   const cancel = useCallback(async () => {
     if (isViewingAsOther) return
     if (!scopedActiveRunId) return
-    try { await api.cancelRun(scopedActiveRunId) } catch (err: unknown) { console.error("[mia]", err) }
-  }, [scopedActiveRunId, isViewingAsOther])
+    try {
+      await api.cancelRun(scopedActiveRunId)
+    } catch (err: unknown) {
+      console.error("[mia]", err)
+      notifyError(err instanceof Error ? err.message : "Failed to cancel run")
+    }
+  }, [scopedActiveRunId, isViewingAsOther, notifyError])
 
   const uploadFiles = useCallback(async (files: File[]) => {
     if (isViewingAsOther) {

@@ -26,6 +26,7 @@ export function lastRunInThread(runs: Run[], threadId: string | null): Run | nul
 
 export interface ChatSlashActionsOptions {
   activeThreadId: string | null
+  activeRunId?: string | null
   runs: Run[]
   runStatus?: string | null
   hasPendingInput?: boolean
@@ -38,6 +39,7 @@ export interface ChatSlashActionsOptions {
 export function useChatSlashActions(opts: ChatSlashActionsOptions) {
   const {
     activeThreadId,
+    activeRunId = null,
     runs,
     runStatus,
     hasPendingInput = false,
@@ -57,6 +59,7 @@ export function useChatSlashActions(opts: ChatSlashActionsOptions) {
     [runs, activeThreadId],
   )
   const lastRunId = lastRun?.id ?? null
+  const cancelTargetRunId = activeRunId ?? lastRunId
   const upsertRun = useStore((s) => s.upsertRun)
 
   const ctx: ChatCommandContext = useMemo(
@@ -99,7 +102,7 @@ export function useChatSlashActions(opts: ChatSlashActionsOptions) {
         `Exported ${filename} (${bytes.toLocaleString()} bytes)`,
       )
     },
-    [lastRunId],
+    [activeThreadId, cancelTargetRunId, lastRunId],
   )
 
   const downloadThreadTrace = useCallback(
@@ -147,8 +150,8 @@ export function useChatSlashActions(opts: ChatSlashActionsOptions) {
           consoleRef.current.logList(items)
         },
         cancelRun: async () => {
-          if (!lastRunId) return
-          await api.cancelRun(lastRunId)
+          if (!cancelTargetRunId) return
+          await api.cancelRun(cancelTargetRunId)
           consoleRef.current.logSuccess("Run cancelled.")
         },
         rerunRun: async () => {
@@ -256,6 +259,7 @@ export function useChatSlashActions(opts: ChatSlashActionsOptions) {
       ctx,
       downloadLastRunTrace,
       downloadThreadTrace,
+      cancelTargetRunId,
       lastRunId,
       lastRun,
       onRunStarted,

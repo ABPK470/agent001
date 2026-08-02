@@ -29,6 +29,7 @@ import {
 } from "../lib/sse-run-trace.js"
 import { isDefaultThreadTitle, threadTitleFromGoal } from "../lib/thread-title.js"
 import { sortThreadsByPinThenUpdatedAt } from "../lib/thread-order.js"
+import { isCancelRaceFailureError, settleTraceOnCancel } from "../lib/events/trace-terminal.js"
 import { RunStatus } from "../enums"
 import type {
   AuditEntry,
@@ -1409,7 +1410,15 @@ export const useStore = create<AppState>()(
           case "run.failed":
             store.clearStreamingAnswer()
             {
+              const failedRunId = data["runId"] as string
               const errorText = data["error"] as string
+              const existing = get().runs.find((run) => run.id === failedRunId)
+              if (
+                existing?.status === RunStatus.Cancelled
+                && isCancelRaceFailureError(errorText)
+              ) {
+                break
+              }
               const terminalStatus = isServerRestartError(errorText)
                 ? RunStatus.Crashed
                 : RunStatus.Failed
@@ -1417,7 +1426,7 @@ export const useStore = create<AppState>()(
                 store.addTrace({ kind: "error", text: errorText })
               }
               store.upsertRun({
-                id: data["runId"] as string,
+                id: failedRunId,
                 status: terminalStatus,
                 error: errorText,
                 stepCount: data["stepCount"] as number,
@@ -1438,16 +1447,27 @@ export const useStore = create<AppState>()(
             }
             break
 
-          case "run.cancelled":
+          case "run.cancelled": {
+            const cancelledRunId = data["runId"] as string
             store.clearStreamingAnswer()
             store.upsertRun({
-              id: data["runId"] as string,
+              id: cancelledRunId,
               status: RunStatus.Cancelled,
               completedAt: timestamp,
               streamingAnswer: "",
+              error: null,
             })
-            set({ pendingInput: null, executingToolCalls: new Map(), pendingKill: null, activeSyncInvocation: null, syncProgressStates: new Map() })
+            set((s) => ({
+              runs: mapRunTrace(s.runs, cancelledRunId, settleTraceOnCancel),
+              trace: s.activeRunId === cancelledRunId ? settleTraceOnCancel(s.trace) : s.trace,
+              pendingInput: null,
+              executingToolCalls: new Map(),
+              pendingKill: null,
+              activeSyncInvocation: null,
+              syncProgressStates: new Map(),
+            }))
             break
+          }
 
           case "answer.chunk": {
             const chunk = data["chunk"] as string

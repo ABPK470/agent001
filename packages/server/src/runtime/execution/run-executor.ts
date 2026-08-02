@@ -44,6 +44,10 @@ export async function executeRunImpl(command: ExecuteRunCommand): Promise<void> 
       await finalizeWaitingForApprovalRun(command, env, agent, error)
       return
     }
+    if (runtime.controller.signal.aborted && env && agent) {
+      await finalizeCancelledRun(command, env, agent)
+      return
+    }
     if (env && agent) {
       await finalizeFailedRun(command, env, agent, error)
       return
