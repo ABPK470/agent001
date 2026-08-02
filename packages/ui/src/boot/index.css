@@ -2029,6 +2029,17 @@ label:focus-within > .mia-checkbox,
   border-left-color: var(--info);
 }
 
+/* Setup hint — flush band (modals) vs inset card (widget panels). */
+.setup-hint-strip--inset {
+  box-sizing: border-box;
+  margin-bottom: 0.625rem;
+  border-radius: 0.5rem;
+}
+
+.setup-hint-strip--flush {
+  border-radius: 0;
+}
+
 /* List-row stroke — event stream / dense logs (no card wash). */
 .mia-row-stroke {
   border: 1px solid transparent;

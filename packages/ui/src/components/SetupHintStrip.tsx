@@ -1,17 +1,11 @@
 /**
  * SetupHintStrip — persistent “something needs attention” strip.
  *
- * One dialect for widgets and Configuration modals (Entity Registry):
- * edge-to-edge `border-b`. Warning = amber wash (action required);
- * muted = panel wash (informational / Publish not required).
+ * Two placements:
+ * - flush (default) — edge-to-edge under modal chrome; header wash via SetupHintChromeProvider
+ * - inset — rounded card inside widget panels (matches panel border-radius)
  *
- * When mounted under SetupHintChromeProvider (WidgetShell / ModalShell),
- * the same wash paints the chrome header so title bar + strip read as one band.
- *
- * Prefer `open={…}` over conditional mount so height + header wash ease in/out
- * instead of snapping the layout.
- *
- * Not for transient failures — those stay on ToastStack / ModalToastStack.
+ * Prefer `open={…}` over conditional mount so height + header wash ease in/out.
  */
 
 import type { LucideIcon } from "lucide-react"
@@ -27,6 +21,7 @@ import {
 } from "react"
 
 export type SetupHintTone = "warning" | "muted"
+export type SetupHintPlacement = "flush" | "inset"
 
 type ChromeHintApi = {
   push: (tone: SetupHintTone) => void
@@ -99,6 +94,7 @@ export function useSetupHintChromeTone(): SetupHintTone | null {
 export function SetupHintStrip({
   open = true,
   tone = "warning",
+  placement = "flush",
   icon: Icon,
   children,
   className = "",
@@ -107,6 +103,8 @@ export function SetupHintStrip({
   /** When false, collapses smoothly (prefer over conditional unmount). */
   open?: boolean
   tone?: SetupHintTone
+  /** flush = modal band under header; inset = rounded card in widget panels */
+  placement?: SetupHintPlacement
   icon?: LucideIcon
   children: ReactNode
   /** Extra classes (e.g. denser `px-3` in compact widgets). */
@@ -114,17 +112,32 @@ export function SetupHintStrip({
   actions?: ReactNode
 }): JSX.Element {
   const chrome = useContext(ChromeHintApiContext)
+  const inset = placement === "inset"
 
   useLayoutEffect(() => {
-    if (!chrome || !open) return
+    if (!chrome || !open || inset) return
     chrome.push(tone)
     return () => chrome.pop(tone)
-  }, [chrome, tone, open])
+  }, [chrome, tone, open, inset])
 
   const toneClass =
     tone === "warning"
-      ? "border-warning/40 bg-warning/10 text-text"
-      : "border-border-subtle bg-panel-2 text-text-muted"
+      ? "setup-hint-strip--warning bg-warning/10 text-text"
+      : "setup-hint-strip--muted bg-panel-2 text-text-muted"
+
+  const placementClass = inset
+    ? "setup-hint-strip--inset"
+    : "setup-hint-strip--flush border-b"
+
+  const borderToneClass = inset
+    ? tone === "warning"
+      ? "border-warning/40"
+      : "border-border-subtle"
+    : tone === "warning"
+      ? "border-warning/40"
+      : "border-border-subtle"
+
+  const padClass = inset ? "px-3 py-2" : "px-5 py-2.5"
 
   return (
     <div
@@ -140,10 +153,14 @@ export function SetupHintStrip({
           role="status"
           aria-live="polite"
           className={[
-            "setup-hint-strip border-b px-5 py-2.5 text-sm",
+            "setup-hint-strip text-sm",
+            padClass,
             STRIP_FADE,
             open ? "opacity-100" : "opacity-0",
             toneClass,
+            placementClass,
+            borderToneClass,
+            inset ? "border" : "",
             className,
           ].join(" ")}
         >
