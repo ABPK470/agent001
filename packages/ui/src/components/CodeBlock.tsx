@@ -40,6 +40,8 @@ export function CodeBlock({
   embedded = false,
   label: labelProp,
   className,
+  /** Transcript inline — grow with content; parent scrollport owns vertical scroll. */
+  unbounded = false,
 }: {
   code: string
   lang?: string
@@ -54,6 +56,7 @@ export function CodeBlock({
   /** Override the toolbar label (e.g. sync meta). Skips lang uppercasing. */
   label?: string
   className?: string
+  unbounded?: boolean
 }) {
   const [copied, setCopied] = useState(false)
   const langLabel = LANG_LABEL[lang] ?? lang.toUpperCase()
@@ -96,7 +99,10 @@ export function CodeBlock({
           </button>
         </div>
       ) : null}
-      <pre className="mia-code-block__body code-pre" style={{ maxHeight }}>
+      <pre
+        className="mia-code-block__body code-pre"
+        style={unbounded ? undefined : { maxHeight }}
+      >
         {body}
       </pre>
     </div>

@@ -27,6 +27,7 @@ import {
   type ToolRow,
 } from "../lib/events/build-chat-parts"
 import { CodeBlock } from "../components/CodeBlock"
+import { InlinePeekText } from "../components/InlinePeekText"
 import {
   extractToolCode,
   formatToolInputDisplay,
@@ -89,7 +90,6 @@ import {
   summarizeHistory,
   summarizeRunError,
 } from "./termchat/milestone"
-import { useNestedWheelScroll } from "../hooks/useNestedWheelScroll"
 import {
   firstRunningSubagentStepId,
   isParallelSubagentFanOut,
@@ -539,7 +539,7 @@ function ToolSyncProgressBody({ part }: { part: ResponseSyncProgressPart }) {
         <CodeBlock
           code={part.sql.preview}
           lang="sql"
-          maxHeight={120}
+          unbounded
           className="w-full max-w-full"
           label={[
             part.sql.label,
@@ -730,7 +730,7 @@ function IterationBlock({
         animated={animateFold}
         className="mt-0.5 pl-4 border-l border-border-subtle ml-[5px]"
       >
-        <IterationToolList tools={part.tools} syncByInvocation={syncByInvocation} stickToBottom={part.hasRunning && isLiveRun} />
+        <IterationToolList tools={part.tools} syncByInvocation={syncByInvocation} />
       </ChatFoldBody>
     </div>
   )
@@ -920,7 +920,6 @@ function StepBlock({
             <IterationToolList
               tools={part.tools}
               syncByInvocation={syncByInvocation}
-              stickToBottom={part.hasRunning && isLiveRun}
             />
           ) : part.hasRunning && !hasErrorBody ? (
             <div className="py-0.5 text-[15px] leading-6 text-text-faint">
@@ -943,80 +942,16 @@ function StepBlock({
   )
 }
 
-// Caps the expanded iteration body so a single tool-call burst can't
-// monopolise the chat viewport. Once content overflows the cap, the
-// list becomes scrollable and rows visually dissolve into the top/bottom
-// edges via a CSS mask so they "disappear" gradually rather than being
-// hard-clipped. Auto-sticks to the bottom while running so newly
-// appended tool rows stay in view.
-const ITERATION_BODY_MAX_HEIGHT = 300
-
+// Tool rows stack in the transcript — one scrollport; no nested viewport.
 function IterationToolList({
   tools,
   syncByInvocation,
-  stickToBottom = false,
 }: {
   tools: ResponseToolPart[]
   syncByInvocation: Map<string, ResponseSyncProgressPart>
-  stickToBottom?: boolean
 }) {
-  const ref = useRef<HTMLDivElement>(null)
-  const stickBottomRef = useRef(stickToBottom)
-  const [edges, setEdges] = useState<{ top: boolean; bottom: boolean }>({ top: false, bottom: false })
-
-  useEffect(() => {
-    if (stickToBottom) stickBottomRef.current = true
-  }, [stickToBottom])
-
-  useLayoutEffect(() => {
-    const el = ref.current
-    if (!el) return
-    const update = () => {
-      const overflow = el.scrollHeight > el.clientHeight + 1
-      setEdges({
-        top: overflow && el.scrollTop > 0,
-        bottom: overflow && el.scrollTop + el.clientHeight < el.scrollHeight - 1,
-      })
-    }
-    const onScroll = () => {
-      stickBottomRef.current = el.scrollTop + el.clientHeight >= el.scrollHeight - 24
-      update()
-    }
-    if (stickBottomRef.current) el.scrollTop = el.scrollHeight
-    update()
-    el.addEventListener("scroll", onScroll, { passive: true })
-    let resizeRaf = 0
-    const ro = new ResizeObserver(() => {
-      cancelAnimationFrame(resizeRaf)
-      resizeRaf = requestAnimationFrame(() => {
-        if (stickBottomRef.current) el.scrollTop = el.scrollHeight
-        update()
-      })
-    })
-    ro.observe(el)
-    return () => {
-      cancelAnimationFrame(resizeRaf)
-      el.removeEventListener("scroll", onScroll)
-      ro.disconnect()
-    }
-  }, [tools.length])
-
-  const maskStyle = useMemo<React.CSSProperties>(() => {
-    // Top-only fade — rows visually dissolve into the upper edge as you
-    // scroll past them. No bottom fade: the bottom of the list is the
-    // "current" content (we auto-stick there) and a fade there would
-    // suggest hidden content even when there isn't any.
-    if (!edges.top) return {}
-    const mask = `linear-gradient(180deg, transparent 0px, black 28px, black 100%)`
-    return { WebkitMaskImage: mask, maskImage: mask, WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat" }
-  }, [edges.top])
-
   return (
-    <div
-      ref={ref}
-      className="overflow-y-auto overscroll-contain"
-      style={{ maxHeight: ITERATION_BODY_MAX_HEIGHT, ...maskStyle }}
-    >
+    <div className="space-y-0">
       {tools.map((toolPart, i) => (
         <ToolPill
           key={toolPart.id}
@@ -1143,105 +1078,17 @@ function ActiveMilestone({ part }: { part: ResponseProgressPart }) {
 }
 void ActiveMilestone
 
-function DetailViewport({
-  children,
-  maxHeight = 300,
-}: {
-  children: React.ReactNode
-  maxHeight?: number
-}) {
-  const hostRef = useRef<HTMLDivElement>(null)
-  const innerRef = useRef<HTMLDivElement>(null)
-  const shouldStickToBottomRef = useRef(true)
-  const [overflowState, setOverflowState] = useState({ hasOverflow: false, top: false, bottom: false })
-
-  const viewportMaskStyle = useMemo<React.CSSProperties>(() => {
-    // Fade rows in/out as they cross the viewport edges so they feel like
-    // they gradually disappear instead of being hard-clipped. Only apply
-    // the fade on edges that actually have hidden content beyond them.
-    const topFade = overflowState.top ? 28 : 0
-    const bottomFade = overflowState.bottom ? 28 : 0
-
-    if (topFade === 0 && bottomFade === 0) {
-      return {}
-    }
-
-    const maskImage = `linear-gradient(180deg, transparent 0px, black ${topFade}px, black calc(100% - ${bottomFade}px), transparent 100%)`
-
-    return {
-      WebkitMaskImage: maskImage,
-      maskImage,
-      WebkitMaskRepeat: "no-repeat",
-      maskRepeat: "no-repeat",
-    }
-  }, [overflowState.top, overflowState.bottom])
-
-  useLayoutEffect(() => {
-    const host = hostRef.current
-    const inner = innerRef.current
-    if (!host || !inner) return
-
-    const updateOverflow = () => {
-      const hasOverflow = host.scrollHeight > host.clientHeight + 1
-      setOverflowState({
-        hasOverflow,
-        top: hasOverflow && host.scrollTop > 0,
-        bottom: hasOverflow && host.scrollTop + host.clientHeight < host.scrollHeight - 1,
-      })
-    }
-
-    const scrollToBottom = () => {
-      host.scrollTop = host.scrollHeight
-      updateOverflow()
-    }
-
-    const onScroll = () => {
-      shouldStickToBottomRef.current = host.scrollTop + host.clientHeight >= host.scrollHeight - 24
-      updateOverflow()
-    }
-
-    if (shouldStickToBottomRef.current) {
-      scrollToBottom()
-    } else {
-      updateOverflow()
-    }
-
-    const resizeObserver = new ResizeObserver(() => {
-      if (shouldStickToBottomRef.current) {
-        scrollToBottom()
-        return
-      }
-      updateOverflow()
-    })
-    resizeObserver.observe(inner)
-    host.addEventListener("scroll", onScroll, { passive: true })
-
-    return () => {
-      resizeObserver.disconnect()
-      host.removeEventListener("scroll", onScroll)
-    }
-  }, [children])
-
-  return (
-    <div className="mt-1 rounded-xl overflow-hidden">
-      <div ref={hostRef} className="relative overflow-y-auto overscroll-contain" style={{ maxHeight, ...viewportMaskStyle }}>
-        <div ref={innerRef} className="relative z-0 px-2 pt-3 pb-4">
-          {children}
-        </div>
-      </div>
-    </div>
-  )
+function DetailViewport({ children }: { children: React.ReactNode }) {
+  return <div className="mt-1 rounded-xl px-2 pt-3 pb-4">{children}</div>
 }
 
 function DetailViewportRows({
   parts,
-  maxHeight,
 }: {
   parts: Array<ResponseProgressPart | ResponseToolPart>
-  maxHeight?: number
 }) {
   return (
-    <DetailViewport maxHeight={maxHeight}>
+    <DetailViewport>
       <div className="space-y-0.5">
         {parts.map((part, index) => (
           part.kind === "progress"
@@ -1280,7 +1127,7 @@ function HistoryDisclosure({
 
       {open && (
         <div className="pt-0.5 pl-1" data-chat-expand-body="">
-          <DetailViewportRows parts={parts} maxHeight={280} />
+          <DetailViewportRows parts={parts} />
         </div>
       )}
     </div>
@@ -1309,9 +1156,12 @@ function RunErrorBanner({ error }: { error: string }) {
             {expanded ? "Hide details" : "Show details"}
           </button>
           {expanded && (
-            <pre className="code-pre mt-2 max-h-40 w-fit max-w-full overflow-auto rounded-md border border-status-callout-err-border bg-panel/60 px-2.5 py-2 opacity-80">
-              {details}
-            </pre>
+            <div className="mt-2 rounded-md border border-status-callout-err-border bg-panel/60 px-2.5 py-2 opacity-80">
+              <InlinePeekText
+                text={details}
+                className="code-pre m-0 w-full max-w-full whitespace-pre-wrap break-words px-0 text-[15px] leading-5 opacity-100"
+              />
+            </div>
           )}
         </>
       )}
@@ -2393,8 +2243,6 @@ export function TermChat({
 
   const showEmptyState = FORCE_EMPTY_STATE_PREVIEW || displayRuns.length === 0
   const latestDisplayRunId = displayRuns.length > 0 ? displayRuns[displayRuns.length - 1]!.id : null
-
-  useNestedWheelScroll(scrollHostRef, `${isHomeMode}:${showEmptyState}`)
 
   useLayoutEffect(() => {
     const host = scrollHostRef.current

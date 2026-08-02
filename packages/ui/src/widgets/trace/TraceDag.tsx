@@ -9,7 +9,6 @@
  */
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
-import { useNestedWheelScroll } from "../../hooks/useNestedWheelScroll"
 import { useTilePaint } from "../../app/workspace/tile-paint"
 import { VirtualList } from "../../components/VirtualList"
 import { BrowseCount } from "../../components/BrowseStrip"
@@ -101,8 +100,6 @@ export function TraceDag({
 
   const query = search.trim()
   const { stats } = dag
-
-  useNestedWheelScroll(scrollRef, `${runId ?? ""}:${Boolean(emptySlot)}`)
 
   function refreshPinStack() {
     const el = scrollRef.current

@@ -19,6 +19,8 @@ export interface JsonViewerProps {
    * Drops the outer frame — toolbar divider + body only.
    */
   embedded?: boolean
+  /** Grow with content — transcript owns scroll (no inner scrollbar). */
+  inline?: boolean
 }
 
 function formatScalarDisplay(value: unknown): string {
@@ -156,6 +158,7 @@ export function JsonViewer({
   copyable = true,
   label,
   embedded = false,
+  inline = false,
 }: JsonViewerProps) {
   const [copied, setCopied] = useState(false)
   const text = useMemo(() => serialize(value), [value])
@@ -207,8 +210,8 @@ export function JsonViewer({
         </div>
       )}
       <div
-        className="px-2 py-1.5 overflow-auto"
-        style={{ maxHeight }}
+        className={inline ? "px-2 py-1.5" : "px-2 py-1.5 overflow-auto"}
+        style={inline ? undefined : { maxHeight }}
       >
         {body}
       </div>

@@ -119,7 +119,7 @@ function PhaseJsonBlock({
         <JsonViewer
           value={block.value}
           defaultExpandDepth={1}
-          maxHeight={220}
+          inline
           className="trace-json"
         />
       )}

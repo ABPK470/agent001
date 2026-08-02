@@ -9,6 +9,7 @@ import {
   type ToolCallArtifact,
 } from "@mia/shared-types"
 import { C } from "../theme/tokens"
+import { InlinePeekText } from "./InlinePeekText"
 import { CodeBlock } from "./CodeBlock"
 import { DataTable } from "./DataTable"
 import { JsonViewer } from "./JsonViewer"
@@ -49,13 +50,16 @@ export function ToolIoPane({
   role,
   text,
   lang,
-  maxHeight = 176,
+  maxHeight,
+  inline = true,
 }: {
   role: "input" | "output" | "error"
   text: string
   /** When set (sql / sh / …), toolbar shows the language instead of Input. */
   lang?: string
+  /** Panel/modal only — inline chat/trace must not nest scrollports. */
   maxHeight?: number
+  inline?: boolean
 }) {
   if (role === "error") {
     return (
@@ -65,6 +69,14 @@ export function ToolIoPane({
     )
   }
   if (role === "output") {
+    if (inline) {
+      return (
+        <InlinePeekText
+          text={text}
+          className="code-pre m-0 w-full max-w-full whitespace-pre px-0.5 text-[15px] leading-5 text-text-muted"
+        />
+      )
+    }
     return (
       <pre
         className="code-pre m-0 w-full max-w-full overflow-auto overscroll-contain px-0.5 text-[15px] leading-5 whitespace-pre text-text-muted"
@@ -76,6 +88,25 @@ export function ToolIoPane({
   }
   const codeLang = lang && lang !== "text" && lang !== "auto" && lang !== "" ? lang : "text"
   const label = codeLang === "text" ? "Input" : undefined
+  if (inline) {
+    if (codeLang === "text" && text.includes("\n")) {
+      return (
+        <InlinePeekText
+          text={text}
+          className="code-pre m-0 w-full max-w-full whitespace-pre px-0.5 text-[15px] leading-5 text-text-muted"
+        />
+      )
+    }
+    return (
+      <CodeBlock
+        code={text}
+        lang={codeLang}
+        label={label}
+        unbounded
+        className="w-full max-w-full"
+      />
+    )
+  }
   return (
     <CodeBlock
       code={text}

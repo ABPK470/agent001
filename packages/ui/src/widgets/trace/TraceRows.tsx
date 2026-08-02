@@ -109,7 +109,7 @@ export function PromptMessageRow({
               <JsonViewer
                 value={tc.arguments}
                 defaultExpandDepth={0}
-                maxHeight={160}
+                inline
                 className="trace-json"
               />
             </div>
@@ -175,7 +175,7 @@ export function ToolRow({
           <JsonViewer
             value={tool.arguments}
             defaultExpandDepth={1}
-            maxHeight={200}
+            inline
             className="trace-json"
           />
           {tool.resultText != null && tool.resultText !== "" && (
@@ -307,7 +307,7 @@ export function ToolDef({
             <JsonViewer
               value={tool.parameters}
               defaultExpandDepth={1}
-              maxHeight={220}
+              inline
               className="trace-json"
             />
           )}
