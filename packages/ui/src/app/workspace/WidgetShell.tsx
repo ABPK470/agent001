@@ -5,7 +5,7 @@
  * canvas viewport → unboxed title → bordered panel (or split grid).
  */
 
-import { ExternalLink, GripVertical, Maximize2, Minimize2, Pin, PinOff, X } from "lucide-react"
+import { ExternalLink, Expand, GripVertical, Maximize2, Minimize2, Pin, PinOff, X } from "lucide-react"
 import { type ReactNode } from "react"
 import {
   SetupHintChromeProvider,
@@ -19,6 +19,7 @@ import { captureSoloFlipFrom } from "./layout/solo-flip"
 import { getWidgetDefinition } from "./widget-definitions"
 import { wrapWidgetBody } from "./widget-shell-layout"
 import { WidgetInstanceProvider } from "./widget-instance"
+import { widgetSupportsFocusMode } from "../../lib/widget-focus"
 
 type ShellMode = "tile" | "modal" | "popout"
 
@@ -38,6 +39,7 @@ interface Props {
   /** Canvas edge glue from drag snap (`w`/`e`/`n`/`s`). */
   edgePin?: EdgePin
   maximized?: boolean
+  zen?: boolean
   onClose?: () => void
   onDragPointerDown?: (event: React.PointerEvent) => void
   children: ReactNode
@@ -55,6 +57,7 @@ export function WidgetShell({
   pinned = false,
   edgePin,
   maximized = false,
+  zen = false,
   onClose,
   onDragPointerDown,
   children,
@@ -62,8 +65,10 @@ export function WidgetShell({
   const removeWidget = useLayoutStore((s) => s.removeWidget)
   const setTilePinned = useLayoutStore((s) => s.setTilePinned)
   const toggleTileMaximized = useLayoutStore((s) => s.toggleTileMaximized)
+  const toggleTileZen = useLayoutStore((s) => s.toggleTileZen)
   const definition = getWidgetDefinition(type)
   const layout = definition.layout
+  const supportsFocus = widgetSupportsFocusMode(type)
 
   function handlePopOut(event: React.MouseEvent<HTMLButtonElement>) {
     event.stopPropagation()
@@ -124,8 +129,23 @@ export function WidgetShell({
     toggleTileMaximized(viewId, widgetId)
   }
 
-  const showChrome = mode !== "popout"
-  const showDragHandle = mode === "tile" && !pinned && !maximized
+  function handleToggleZen(event: React.MouseEvent<HTMLButtonElement>) {
+    event.preventDefault()
+    event.stopPropagation()
+    if (zen) {
+      useLayoutStore.getState().exitTileZen()
+      return
+    }
+    const tile = event.currentTarget.closest("[data-tile-id]")
+    const canvas = tile?.closest(".workspace-canvas-pad")
+    if (tile instanceof HTMLElement && canvas instanceof HTMLElement) {
+      captureSoloFlipFrom(tile, canvas)
+    }
+    toggleTileZen(viewId, widgetId)
+  }
+
+  const showChrome = mode !== "popout" && !zen
+  const showDragHandle = mode === "tile" && !pinned && !maximized && !zen
 
   const header = showChrome ? (
     <WidgetShellHeader
@@ -134,10 +154,13 @@ export function WidgetShell({
       pinned={pinned}
       edgePin={edgePin}
       maximized={maximized}
+      zen={zen}
+      supportsFocus={supportsFocus}
       showDragHandle={showDragHandle}
       onDragPointerDown={onDragPointerDown}
       onTogglePin={handleTogglePin}
       onToggleMaximize={handleToggleMaximize}
+      onToggleZen={handleToggleZen}
       onPopOut={handlePopOut}
       onClose={handleClose}
     />
@@ -146,7 +169,7 @@ export function WidgetShell({
   return (
     <WidgetInstanceProvider value={{ widgetId, viewId, type }}>
     <SetupHintChromeProvider>
-      <div className="workspace-shell workspace-shell--card-view flex h-full flex-col overflow-hidden">
+      <div className={`workspace-shell workspace-shell--card-view${zen ? " workspace-shell--zen" : ""} flex h-full flex-col overflow-hidden`}>
         <div className="widget-view-container flex min-h-0 flex-1 flex-col overflow-hidden">
           {header}
           <div className="widget-content flex min-h-0 flex-1 flex-col overflow-hidden p-0">
@@ -165,10 +188,13 @@ function WidgetShellHeader({
   pinned,
   edgePin,
   maximized,
+  zen,
+  supportsFocus,
   showDragHandle,
   onDragPointerDown,
   onTogglePin,
   onToggleMaximize,
+  onToggleZen,
   onPopOut,
   onClose,
 }: {
@@ -177,10 +203,13 @@ function WidgetShellHeader({
   pinned: boolean
   edgePin?: EdgePin
   maximized: boolean
+  zen: boolean
+  supportsFocus: boolean
   showDragHandle: boolean
   onDragPointerDown?: (event: React.PointerEvent) => void
   onTogglePin: (event: React.MouseEvent<HTMLButtonElement>) => void
   onToggleMaximize: (event: React.MouseEvent<HTMLButtonElement>) => void
+  onToggleZen: (event: React.MouseEvent<HTMLButtonElement>) => void
   onPopOut: (event: React.MouseEvent<HTMLButtonElement>) => void
   onClose: (event: React.MouseEvent<HTMLButtonElement>) => void
 }) {
@@ -243,6 +272,18 @@ function WidgetShellHeader({
             >
               {maximized ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
             </button>
+            {supportsFocus ? (
+              <button
+                type="button"
+                className={`widget-shell-icon${zen ? " is-active" : ""}`}
+                onClick={onToggleZen}
+                title={zen ? "Exit focus (Z)" : "Focus mode (Z)"}
+                aria-label={zen ? "Exit focus mode" : "Enter focus mode"}
+                aria-pressed={zen}
+              >
+                <Expand size={16} />
+              </button>
+            ) : null}
             <button
               type="button"
               className="widget-shell-icon"

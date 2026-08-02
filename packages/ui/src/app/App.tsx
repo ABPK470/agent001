@@ -158,6 +158,7 @@ export function App() {
   const views = useLayoutStore((s) => s.views)
   const activeViewId = useLayoutStore((s) => s.activeViewId)
   const soloTileId = useLayoutStore((s) => s.soloTileId)
+  const zenTileId = useLayoutStore((s) => s.zenTileId)
   const workspaceSurface = useLayoutStore((s) => s.workspaceSurface)
   const canvasRef = useRef<CanvasHandle>(null)
   const isMobile = useIsMobile()
@@ -674,6 +675,7 @@ export function App() {
         className={[
           "workspace-chrome flex h-full min-h-0 flex-col",
           workspaceSurface === "contrast" ? "workspace-chrome--contrast" : "",
+          zenTileId ? "workspace-chrome--zen" : "",
         ]
           .filter(Boolean)
           .join(" ")}

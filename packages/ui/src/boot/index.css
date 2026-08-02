@@ -3279,6 +3279,261 @@ textarea.input {
   grid-template-columns: minmax(15rem, 42%) minmax(0, 1fr);
 }
 
+.trace-split-shell--resizable {
+  grid-template-columns: 40% 4px minmax(0, 1fr);
+}
+
+.trace-split-handle {
+  position: relative;
+  z-index: 2;
+  width: 4px;
+  margin: 0 -2px;
+  cursor: col-resize;
+  touch-action: none;
+  background: transparent;
+}
+
+.trace-split-handle::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  margin: 0 auto;
+  width: 1px;
+  background: var(--border-subtle, var(--color-border-subtle));
+  transition: background 0.15s ease, width 0.15s ease;
+}
+
+.trace-split-handle:hover::after,
+.trace-split-handle:active::after {
+  width: 2px;
+  background: rgb(129 140 248 / 0.65);
+}
+
+.trace-split-host {
+  position: relative;
+  min-height: 0;
+}
+
+.trace-split-shell--zen {
+  position: relative;
+}
+
+.trace-split-tree--zen {
+  position: relative;
+}
+
+.trace-split-tree--zen .trace-tree-header,
+.trace-split-tree--zen > .trace-split-tree-scroll,
+.trace-split-tree--zen > .trace-empty {
+  margin-top: 2.35rem;
+}
+
+.trace-zen-exit {
+  pointer-events: none;
+  position: absolute;
+  top: 0.75rem;
+  left: 0;
+  right: 0;
+  z-index: 15;
+  display: flex;
+  justify-content: center;
+}
+
+.trace-zen-exit__btn {
+  pointer-events: auto;
+  border: 1px solid var(--border-subtle, var(--color-border-subtle));
+  border-radius: 999px;
+  background: var(--panel, var(--color-panel));
+  color: var(--text-muted, var(--color-text-muted));
+  font-size: 0.6875rem;
+  padding: 0.3rem 0.65rem;
+  cursor: pointer;
+  opacity: 0.45;
+  transition: opacity 0.2s ease;
+}
+
+.trace-zen-exit:hover .trace-zen-exit__btn,
+.trace-zen-exit:focus-within .trace-zen-exit__btn {
+  opacity: 1;
+}
+
+.trace-zen-exit__btn kbd {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--text, var(--color-text));
+}
+
+.trace-dag--zen {
+  background: var(--canvas);
+}
+
+.trace-dag--zen .widget-panel,
+.trace-dag--zen .widget-panel-stack {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+}
+
+.trace-zen-hud {
+  pointer-events: none;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  padding: 0.65rem 0.75rem;
+}
+
+.trace-zen-hud__leading,
+.trace-zen-hud__search-overlay {
+  pointer-events: auto;
+}
+
+.trace-zen-hud__leading {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.trace-zen-hud__stats {
+  position: relative;
+}
+
+.trace-zen-hud__stats-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border: 1px solid var(--border-subtle, var(--color-border-subtle));
+  border-radius: 999px;
+  background: var(--panel, var(--color-panel));
+  color: var(--text, var(--color-text));
+  font-size: 0.6875rem;
+  padding: 0.3rem 0.55rem;
+  cursor: default;
+}
+
+.trace-zen-hud__stats-info {
+  color: var(--text-muted, var(--color-text-muted));
+  font-size: 0.625rem;
+}
+
+.trace-zen-hud__stats-popover {
+  position: absolute;
+  top: calc(100% + 0.35rem);
+  left: 0;
+  min-width: 14rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--border-subtle, var(--color-border-subtle));
+  border-radius: 0.375rem;
+  background: var(--panel, var(--color-panel));
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.35);
+  z-index: 5;
+}
+
+.trace-zen-hud__stats-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+}
+
+.trace-zen-hud__stat {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+}
+
+.trace-zen-hud__stat-value {
+  font-weight: 600;
+  color: var(--text, var(--color-text));
+}
+
+.trace-zen-hud__stat-label {
+  color: var(--text-muted, var(--color-text-muted));
+}
+
+.trace-zen-hud__ids {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.55rem;
+  padding-top: 0.55rem;
+  border-top: 1px solid var(--border-subtle, var(--color-border-subtle));
+}
+
+.trace-zen-hud__icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border: 1px solid var(--border-subtle, var(--color-border-subtle));
+  border-radius: 0.375rem;
+  background: var(--panel, var(--color-panel));
+  color: var(--text, var(--color-text));
+  cursor: pointer;
+}
+
+.trace-zen-hud__icon-btn:hover {
+  background: var(--overlay-2, rgb(255 255 255 / 0.06));
+}
+
+.trace-zen-hud__search-overlay {
+  position: absolute;
+  top: calc(100% + 0.35rem);
+  left: 0.75rem;
+  width: min(24rem, calc(100% - 1.5rem));
+}
+
+.trace-zen-hud__search-panel {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid var(--border-subtle, var(--color-border-subtle));
+  border-radius: 0.5rem;
+  background: var(--panel, var(--color-panel));
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.4);
+}
+
+.trace-zen-hud__search-icon {
+  flex-shrink: 0;
+  color: var(--text-muted, var(--color-text-muted));
+}
+
+.trace-zen-hud__search-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  color: var(--text, var(--color-text));
+  font-size: 0.8125rem;
+  outline: none;
+}
+
+.trace-zen-hud__search-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border: none;
+  border-radius: 0.25rem;
+  background: transparent;
+  color: var(--text-muted, var(--color-text-muted));
+  cursor: pointer;
+}
+
+.trace-zen-hud__search-close:hover {
+  background: rgb(255 255 255 / 0.06);
+  color: var(--text, var(--color-text));
+}
+
+.trace-dag--zen .trace-detail__header {
+  position: relative;
+  z-index: 1;
+}
+
 .trace-split-tree-scroll {
   flex: 1 1 0;
   min-height: 0;
@@ -7367,6 +7622,42 @@ button.trace-tree-status-pill:hover {
 .workspace-tile-solo .widget-panel {
   border-color: var(--border-subtle);
   border-radius: 0.5rem;
+}
+
+.workspace-tile-zen {
+  z-index: 45;
+}
+
+.workspace-tile-zen .workspace-shell {
+  border-color: transparent;
+  border-radius: 0;
+  background: var(--canvas);
+}
+
+.workspace-tile-zen .widget-view-container {
+  padding: 0;
+}
+
+.workspace-tile-zen .widget-panel {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+}
+
+.workspace-chrome--zen .toolbar-shell {
+  display: none;
+}
+
+.workspace-chrome--zen .workspace-stage {
+  padding-top: 0;
+}
+
+.workspace-chrome--zen .workspace-canvas-pad {
+  padding: 0 !important;
+}
+
+.widget-shell-icon.is-active {
+  color: rgb(129 140 248);
 }
 
 /*

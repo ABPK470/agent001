@@ -172,6 +172,7 @@ interface GridTilePaneProps {
   isEntering: boolean
   isFocused: boolean
   maximized: boolean
+  zen: boolean
   soloHidden: boolean
   onFocus: () => void
   onBlur: () => void
@@ -194,6 +195,7 @@ const GridTilePane = memo(function GridTilePane({
   isEntering,
   isFocused,
   maximized,
+  zen,
   soloHidden,
   onFocus,
   onBlur,
@@ -230,7 +232,9 @@ const GridTilePane = memo(function GridTilePane({
         isFocused && !soloHidden ? "workspace-tile-focused" : ""
       } ${locked ? "workspace-tile-locked" : ""} ${
         maximized ? "workspace-tile-solo" : ""
-      } ${soloHidden ? "workspace-tile-solo-hidden" : ""}`}
+      } ${zen ? "workspace-tile-zen" : ""} ${
+        soloHidden ? "workspace-tile-solo-hidden" : ""
+      }`}
       style={style}
       onFocus={onFocus}
       onBlur={onBlur}
@@ -242,6 +246,7 @@ const GridTilePane = memo(function GridTilePane({
         type={tile.type}
         pinned={!!tile.pinned}
         maximized={maximized}
+        zen={zen}
         onDragPointerDown={onDragPointerDown}
       >
         <TilePaintProvider soloHidden={soloHidden}>
@@ -308,6 +313,7 @@ export function GridCanvas({ viewId, tiles, split }: Props) {
   const setFocusedTile = useLayoutStore((s) => s.setFocusedTile)
   const focusedTileId = useLayoutStore((s) => s.focusedTileId)
   const soloTileId = useLayoutStore((s) => s.soloTileId)
+  const zenTileId = useLayoutStore((s) => s.zenTileId)
   const commitSplit = useLayoutStore((s) => s.commitSplit)
   const setViewportRows = useLayoutStore((s) => s.setViewportRows)
   const viewportRows = useLayoutStore((s) => s.viewportRows)
@@ -480,6 +486,7 @@ export function GridCanvas({ viewId, tiles, split }: Props) {
                 isEntering={isEntering}
                 isFocused={focusedTileId === painted.id}
                 maximized={solo}
+                zen={zenTileId === painted.id}
                 soloHidden={soloHidden}
                 onFocus={() => setFocusedTile(painted.id)}
                 onBlur={() => setFocusedTile(null)}

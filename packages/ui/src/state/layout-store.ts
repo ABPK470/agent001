@@ -105,6 +105,11 @@ interface LayoutState {
    * their tree geometry and are paint-hidden until restore (no remount).
    */
   soloTileId: string | null
+  /**
+   * Zen / focus: edge-to-edge debugger — hides workspace toolbar and widget
+   * header. Implies solo for the same tile.
+   */
+  zenTileId: string | null
   /** Latest measured viewport row budget for the active canvas. */
   viewportRows: number
   /** Active tab / stage / widget surface treatment. */
@@ -127,6 +132,8 @@ interface LayoutState {
   setViewportRows: (rows: number) => void
   setTilePinned: (viewId: string, tileId: string, pinned: boolean) => void
   toggleTileMaximized: (viewId: string, tileId: string) => void
+  toggleTileZen: (viewId: string, tileId: string) => void
+  exitTileZen: () => void
 
   setFocusedTile: (tileId: string | null) => void
   clearEntering: (tileId: string) => void
@@ -140,10 +147,11 @@ export const useLayoutStore = create<LayoutState>()(
       focusedTileId: null,
       enteringTileIds: [],
       soloTileId: null,
+      zenTileId: null,
       viewportRows: 24,
       workspaceSurface: "default",
 
-      setActiveView: (id) => set({ activeViewId: id, soloTileId: null }),
+      setActiveView: (id) => set({ activeViewId: id, soloTileId: null, zenTileId: null }),
 
       setWorkspaceSurface: (surface) => set({ workspaceSurface: surface }),
 
@@ -153,6 +161,7 @@ export const useLayoutStore = create<LayoutState>()(
           views: [...s.views, { id, name, tiles: [], split: null }],
           activeViewId: id,
           soloTileId: null,
+          zenTileId: null,
         }))
         return id
       },
@@ -164,6 +173,7 @@ export const useLayoutStore = create<LayoutState>()(
           views: filtered,
           activeViewId: s.activeViewId === id ? filtered[0]!.id : s.activeViewId,
           soloTileId: null,
+          zenTileId: null,
         }
       }),
 
@@ -206,6 +216,7 @@ export const useLayoutStore = create<LayoutState>()(
           ),
           enteringTileIds: [...s.enteringTileIds, id],
           soloTileId: null,
+          zenTileId: null,
         }
       }),
 
@@ -221,6 +232,7 @@ export const useLayoutStore = create<LayoutState>()(
         focusedTileId: s.focusedTileId === tileId ? null : s.focusedTileId,
         enteringTileIds: s.enteringTileIds.filter((id) => id !== tileId),
         soloTileId: s.soloTileId === tileId ? null : s.soloTileId,
+        zenTileId: s.zenTileId === tileId ? null : s.zenTileId,
       }))
       },
 
@@ -278,10 +290,27 @@ export const useLayoutStore = create<LayoutState>()(
         }),
       })),
 
-      toggleTileMaximized: (_viewId, tileId) => set((s) => ({
-        soloTileId: s.soloTileId === tileId ? null : tileId,
-        focusedTileId: tileId,
-      })),
+      toggleTileMaximized: (_viewId, tileId) => set((s) => {
+        const restoring = s.soloTileId === tileId
+        return {
+          soloTileId: restoring ? null : tileId,
+          zenTileId: restoring || s.zenTileId === tileId ? null : s.zenTileId,
+          focusedTileId: tileId,
+        }
+      }),
+
+      toggleTileZen: (_viewId, tileId) => set((s) => {
+        if (s.zenTileId === tileId) {
+          return { zenTileId: null, focusedTileId: tileId }
+        }
+        return {
+          soloTileId: tileId,
+          zenTileId: tileId,
+          focusedTileId: tileId,
+        }
+      }),
+
+      exitTileZen: () => set({ zenTileId: null }),
 
       setFocusedTile: (tileId) => set({ focusedTileId: tileId }),
 
@@ -306,6 +335,7 @@ export const useLayoutStore = create<LayoutState>()(
           focusedTileId: null,
           enteringTileIds: [],
           soloTileId: null,
+          zenTileId: null,
           viewportRows: currentState.viewportRows,
         }
       },

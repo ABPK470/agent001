@@ -3,11 +3,20 @@
  * Selection drives the inspector; chevrons fold tree children only.
  */
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react"
 import { api } from "../../client/index"
 import type { TraceEntry } from "@mia/shared-types"
 import { VirtualList } from "../../components/VirtualList"
 import { BrowseCount } from "../../components/BrowseStrip"
+import { useWidgetFocus } from "../../hooks/useWidgetFocus"
+import { useWidgetInstance } from "../../app/workspace/widget-instance"
+import { useLayoutStore } from "../../state/layout-store"
+import {
+  beginSplitPaneDrag,
+  endSplitPaneDrag,
+  moveSplitPaneDrag,
+  type SplitPaneDragState,
+} from "../../lib/split-pane-drag"
 import { fmtTokens, formatMs } from "../../lib/util"
 import { SegmentToggle } from "../entity-registry/SegmentToggle"
 import {
@@ -46,8 +55,13 @@ import { IdChip } from "./TraceCopy"
 import { TraceExportMenu } from "./TraceExportMenu"
 import { TraceTreeRow, traceTreeRowEstimateSize } from "./TraceTreeRow"
 import { TraceWaterfallView } from "./TraceWaterfallView"
+import { TraceZenHud } from "./TraceZenHud"
+import { useTraceZenHotkeys } from "./use-trace-zen-hotkeys"
 
 export const TRACE_TREE_OVERSCAN = 8
+const TRACE_SPLIT_MIN = 0.28
+const TRACE_SPLIT_MAX = 0.62
+const TRACE_SPLIT_DEFAULT = 0.4
 
 type ViewMode = "tree" | "waterfall"
 
@@ -75,10 +89,19 @@ export function TraceDag({
   const [playgroundOpen, setPlaygroundOpen] = useState(false)
   const [compareRunId, setCompareRunId] = useState<string | null>(null)
   const [compareDag, setCompareDag] = useState<TraceDag | null>(null)
+  const [zenSearchOpen, setZenSearchOpen] = useState(false)
+  const [splitRatio, setSplitRatio] = useState(TRACE_SPLIT_DEFAULT)
   const treeScrollRef = useRef<HTMLDivElement>(null)
+  const splitShellRef = useRef<HTMLDivElement>(null)
+  const splitDragRef = useRef<SplitPaneDragState | null>(null)
   const seededRef = useRef(false)
   const searchSeedRef = useRef("")
   const prevRunIdRef = useRef(runId)
+  const { isZen, isSolo, toggleZen, exitZen } = useWidgetFocus()
+  const widgetInstance = useWidgetInstance()
+  const focusedTileId = useLayoutStore((s) => s.focusedTileId)
+  const zenHotkeysEnabled =
+    isZen || isSolo || Boolean(widgetInstance && focusedTileId === widgetInstance.widgetId)
 
   const query = search.trim()
   const { stats } = dag
@@ -116,6 +139,43 @@ export function TraceDag({
 
   const selectedNode = selectedScopeId ? treeIndex.byScopeId.get(selectedScopeId) : null
   const canCompare = selectedNode ? nodeSupportsCompare(dag, selectedNode) : false
+
+  useTraceZenHotkeys({
+    enabled: zenHotkeysEnabled,
+    isZen,
+    searchOpen: zenSearchOpen,
+    onSearchOpenChange: setZenSearchOpen,
+    onViewModeChange: setViewMode,
+    viewMode,
+    onToggleZen: toggleZen,
+    onExitZen: exitZen,
+  })
+
+  useEffect(() => {
+    if (!isZen) setZenSearchOpen(false)
+  }, [isZen])
+
+  function onSplitPointerDown(event: ReactPointerEvent<HTMLDivElement>) {
+    const shell = splitShellRef.current
+    if (!shell) return
+    splitDragRef.current = beginSplitPaneDrag(event, shell, splitRatio)
+  }
+
+  function onSplitPointerMove(event: ReactPointerEvent<HTMLDivElement>) {
+    const drag = splitDragRef.current
+    if (!drag || event.pointerId !== drag.pointerId) return
+    setSplitRatio(moveSplitPaneDrag(drag, event, TRACE_SPLIT_MIN, TRACE_SPLIT_MAX))
+  }
+
+  function onSplitPointerUp(event: ReactPointerEvent<HTMLDivElement>) {
+    endSplitPaneDrag(splitDragRef.current, event)
+    splitDragRef.current = null
+  }
+
+  function onSplitPointerCancel(event: ReactPointerEvent<HTMLDivElement>) {
+    endSplitPaneDrag(splitDragRef.current, event)
+    splitDragRef.current = null
+  }
 
   useEffect(() => {
     if (seededRef.current || (dag.calls.length === 0 && dag.spine.length === 0)) return
@@ -438,9 +498,10 @@ export function TraceDag({
   const showMetaBand = metaStats.length > 0 || Boolean(runId || threadId)
 
   return (
-    <div className={`trace-dag trace-dag--split ${WIDGET_LOG_SHELL_CLASS}`}>
+    <div className={`trace-dag trace-dag--split${isZen ? " trace-dag--zen" : ""} ${WIDGET_LOG_SHELL_CLASS}`}>
       <div className={WIDGET_LOG_STACK_CLASS}>
-        <div className={WIDGET_REVIEW_CONTROLS_CLASS}>
+        {!isZen ? (
+          <div className={WIDGET_REVIEW_CONTROLS_CLASS}>
           <WidgetToolbar>
             <WidgetToolbarLeading>
               <SegmentToggle
@@ -522,13 +583,42 @@ export function TraceDag({
             </div>
           )}
         </div>
+        ) : null}
 
-        <div className={`trace-body trace-split-body ${WIDGET_LOG_BODY_CLASS}`}>
+        <div className={`trace-body trace-split-body${isZen ? " trace-split-body--zen" : ""} ${WIDGET_LOG_BODY_CLASS}`}>
           {emptySlot ? (
             emptySlot
           ) : (
-            <div className="trace-split-shell entity-registry-shell widget-split-shell grid min-h-0 flex-1 overflow-hidden">
-              <div className="trace-split-tree widget-split-sidebar flex min-h-0 flex-col">
+            <div className="trace-split-host relative min-h-0 flex-1 overflow-hidden">
+              {isZen ? (
+                <div className="trace-zen-exit">
+                  <button type="button" className="trace-zen-exit__btn" onClick={exitZen}>
+                    <kbd>Esc</kbd> or <kbd>Z</kbd> to exit focus
+                  </button>
+                </div>
+              ) : null}
+              <div
+                ref={splitShellRef}
+                className={`trace-split-shell trace-split-shell--resizable entity-registry-shell widget-split-shell grid h-full min-h-0 overflow-hidden${isZen ? " trace-split-shell--zen" : ""}`}
+                style={{
+                  gridTemplateColumns: `${Math.round(splitRatio * 1000) / 10}% 4px minmax(0, 1fr)`,
+                }}
+              >
+              <div
+                className={`trace-split-tree widget-split-sidebar flex min-h-0 flex-col${isZen ? " trace-split-tree--zen" : ""}`}
+              >
+                {isZen ? (
+                  <TraceZenHud
+                    metaStats={metaStats}
+                    runId={runId}
+                    threadId={threadId}
+                    search={search}
+                    onSearchChange={setSearch}
+                    searchOpen={zenSearchOpen}
+                    onSearchOpenChange={setZenSearchOpen}
+                    onExitZen={exitZen}
+                  />
+                ) : null}
                 {runId && dag.hasData && query && (callHits?.size ?? 0) === 0 ? (
                   <p className="trace-empty px-2 py-3">No matches for “{query}”</p>
                 ) : null}
@@ -563,6 +653,18 @@ export function TraceDag({
                   </div>
                 )}
               </div>
+              <div
+                className="trace-split-handle"
+                role="separator"
+                aria-orientation="vertical"
+                aria-valuenow={Math.round(splitRatio * 100)}
+                aria-valuemin={Math.round(TRACE_SPLIT_MIN * 100)}
+                aria-valuemax={Math.round(TRACE_SPLIT_MAX * 100)}
+                onPointerDown={onSplitPointerDown}
+                onPointerMove={onSplitPointerMove}
+                onPointerUp={onSplitPointerUp}
+                onPointerCancel={onSplitPointerCancel}
+              />
               <div className="trace-split-detail widget-split-main flex min-h-0 min-w-0 flex-col overflow-hidden">
                 <div className="widget-split-inset flex min-h-0 flex-1 flex-col overflow-hidden">
                   <TraceDetailInspector
@@ -584,6 +686,7 @@ export function TraceDag({
                   />
                 </div>
               </div>
+            </div>
             </div>
           )}
         </div>

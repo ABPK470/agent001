@@ -523,8 +523,9 @@ describe("trace master-detail split", () => {
   const dagSrc = readFileSync(join(here, "TraceDag.tsx"), "utf8")
 
   it("uses split shell with tree sidebar and detail main", () => {
-    expect(dagSrc).toContain("trace-split-shell entity-registry-shell widget-split-shell")
+    expect(dagSrc).toContain("trace-split-shell trace-split-shell--resizable entity-registry-shell widget-split-shell")
     expect(dagSrc).toContain("trace-split-tree widget-split-sidebar")
+    expect(dagSrc).toContain("trace-split-handle")
     expect(dagSrc).toContain("trace-split-detail widget-split-main")
     expect(dagSrc).toContain("TraceDetailInspector")
     expect(dagSrc).toContain("selectedScopeId")
