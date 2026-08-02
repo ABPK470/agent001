@@ -37,7 +37,6 @@ import { isSyncSqlEventType } from "./sync/trace/sync-sql-trace"
 import { operationStatusPill } from "../lib/status-callout"
 import { WIDGET_ICONS } from "./widget-icons"
 import {
-  WIDGET_LOG_BODY_CLASS,
   WIDGET_LOG_SCROLL_CLASS,
   WIDGET_LOG_SHELL_CLASS,
   WIDGET_LOG_STACK_CLASS,

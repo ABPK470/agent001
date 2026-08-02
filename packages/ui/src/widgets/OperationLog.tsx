@@ -45,7 +45,6 @@ import {
   OpLogRow,
 } from "./pipelines/operation-log-row"
 import {
-  WIDGET_LOG_BODY_CLASS,
   WIDGET_LOG_SCROLL_CLASS,
   WIDGET_LOG_SHELL_CLASS,
   WIDGET_LOG_STACK_CLASS,

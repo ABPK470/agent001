@@ -36,10 +36,18 @@ export const WIDGET_CONTENT_GUTTER_INNER_CLASS = "widget-content-gutter-inner"
 export const WIDGET_LOG_STACK_CLASS =
   `widget-panel-stack ${WIDGET_CONTENT_GUTTER_INNER_CLASS}`
 
-/** Flex body slot — inner panes own scroll (Trace split). */
+/**
+ * Flex body slot — height-bounded; inner panes own scroll (Trace split).
+ * Never pair with Tailwind `overflow-y-auto` — see WIDGET_LOG_SCROLL_CLASS.
+ */
 export const WIDGET_LOG_BODY_CLASS = "widget-panel-body"
 
-/** Scroll host under review controls — list virtualizes inside this element. */
+/**
+ * Scroll host under review controls — VirtualList / sentinel scroll parent.
+ * Uses `.widget-panel-body--scroll` in index.css (overflow-y: auto there).
+ * Tailwind `overflow-y-auto` loses to `.widget-panel-body { overflow: hidden }`
+ * in the production bundle — do not use utilities for this node.
+ */
 export const WIDGET_LOG_SCROLL_CLASS = "widget-panel-body widget-panel-body--scroll"
 
 /** Toolbar + optional filter/meta band — one panel-2 control surface. */

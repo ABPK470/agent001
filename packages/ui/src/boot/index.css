@@ -1192,7 +1192,11 @@ body {
   overflow: hidden;
 }
 
-/* Pipelines / Event Stream — this node is the scroll parent (not a Tailwind utility). */
+/*
+ * Review-family list scroll host (Pipelines, Event Stream).
+ * Must live in source CSS — Tailwind overflow-y-auto is emitted before this
+ * file in the bundle and loses to overflow:hidden on .widget-panel-body.
+ */
 .widget-panel-body--scroll {
   overflow-x: hidden;
   overflow-y: auto;
