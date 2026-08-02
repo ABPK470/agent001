@@ -423,9 +423,13 @@
 }
 
 .mia-surface {
-  /* Hug content — short shells / errors must not stretch the column. */
-  width: fit-content;
+  /*
+   * Fill the available column — lists, JSON, SQL, tool I/O.
+   * Short status copy uses `.mia-callout` (fit-content), not this.
+   */
+  width: 100%;
   max-width: 100%;
+  min-width: 0;
   border: 1px solid var(--border);
   border-radius: 0.5rem;
   background: transparent;

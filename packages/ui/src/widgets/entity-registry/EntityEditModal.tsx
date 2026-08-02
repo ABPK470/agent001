@@ -506,8 +506,8 @@ export function EntityEditModal({ mode, initial, reservedEntityIds = [], onClose
             Loading…
           </div>
         ) : (
-          <div className="flex min-h-0 flex-1 flex-col lg:flex-row lg:overflow-hidden">
-            <div className="min-h-0 shrink-0 overflow-auto border-b border-border-subtle p-5 lg:max-w-[min(36rem,42%)] lg:flex-1 lg:border-b-0 lg:border-r">
+          <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[minmax(16rem,0.95fr)_minmax(0,1.35fr)] lg:overflow-hidden">
+            <div className="min-h-0 min-w-0 overflow-auto border-b border-border-subtle p-5 lg:border-b-0 lg:border-r">
               <ul className={PANEL}>
                 {sections.map((item) => (
                   <li

@@ -29,8 +29,8 @@ function readFormSection(): string {
 
 describe("environment-form-layout", () => {
   it("exports a Connectors-style minmax(0) split grid contract", () => {
-    expect(CONFIG_SPLIT_GRID_CLASS).toContain("minmax(0,0.9fr)")
-    expect(CONFIG_SPLIT_GRID_CLASS).toContain("minmax(0,1.1fr)")
+    expect(CONFIG_SPLIT_GRID_CLASS).toContain("minmax(16rem,0.95fr)")
+    expect(CONFIG_SPLIT_GRID_CLASS).toContain("minmax(0,1.35fr)")
     expect(CONFIG_SPLIT_GRID_CLASS).toContain("minmax(0,auto)")
     expect(CONFIG_SPLIT_GRID_CLASS).toContain("minmax(0,1fr)")
     expect(CONFIG_SPLIT_GRID_CLASS).toContain("lg:grid-rows-1")

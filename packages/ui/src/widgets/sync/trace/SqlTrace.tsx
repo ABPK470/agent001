@@ -19,8 +19,8 @@ export function SqlTraceBlock({
   const [modalOpen, setModalOpen] = useState(false)
 
   return (
-    <div className={`mia-surface overflow-hidden ${compact ? "" : ""}`}>
-      <div className="mia-surface__chrome flex items-start justify-between gap-2 px-2.5 py-1.5">
+    <div className={`mia-code-block overflow-hidden ${compact ? "" : ""}`}>
+      <div className="mia-code-block__toolbar flex items-start justify-between gap-2 px-2.5 py-1.5">
         <span className="font-mono text-text min-w-0 break-all whitespace-pre-wrap">{formatSqlTraceMeta(fields)}</span>
         {(fields.sqlLogId != null || fields.sql.trim()) && (
           <button

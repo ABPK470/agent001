@@ -68,7 +68,7 @@ export function AdminModalCanvas({
 
 export function AdminModalSplit({ children }: { children: ReactNode }): JSX.Element {
   return (
-    <div className="grid min-h-0 flex-1 grid-cols-1 gap-0 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+    <div className="grid min-h-0 flex-1 grid-cols-1 gap-0 lg:grid-cols-[minmax(16rem,0.95fr)_minmax(0,1.35fr)]">
       {children}
     </div>
   )

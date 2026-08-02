@@ -23,8 +23,8 @@ export function ToolIoBlock({
   maxHeight?: number
 }) {
   return (
-    <div className={`mia-surface overflow-hidden ${compact ? "text-xs" : "text-sm"}`}>
-      <div className="mia-surface__chrome px-2.5 py-1.5 font-mono text-text-muted text-xs">
+    <div className={`mia-code-block overflow-hidden ${compact ? "text-xs" : "text-sm"}`}>
+      <div className="mia-code-block__toolbar px-2.5 py-1.5 font-mono text-text-muted text-xs">
         {formatToolIoMeta(io)}
       </div>
       {io.inputFormatted && (

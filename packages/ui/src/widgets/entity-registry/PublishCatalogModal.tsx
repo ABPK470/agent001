@@ -37,7 +37,7 @@ const SECTION_LABELS: Record<string, string> = {
 }
 
 const PUBLISH_MODAL_PANEL =
-  `w-full max-w-4xl ${MODAL_TALL_HEIGHT} min-h-[36rem] flex flex-col overflow-hidden`
+  `w-full max-w-[min(72rem,calc(100vw-1.5rem))] ${MODAL_TALL_HEIGHT} min-h-[36rem] flex flex-col overflow-hidden`
 
 function MetaCell({
   label,

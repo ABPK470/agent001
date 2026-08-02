@@ -143,7 +143,7 @@ export function ViewportOverlay({
       aria-label={ariaLabel}
     >
       <div
-        className="flex max-h-[min(96vh,calc(100dvh-1rem))] w-full max-w-4xl flex-col overflow-hidden rounded-lg border border-border-subtle bg-base shadow-2xl"
+        className="flex max-h-[min(96vh,calc(100dvh-1rem))] w-[min(98vw,calc(100vw-1rem))] max-w-none flex-col overflow-hidden rounded-lg border border-border-subtle bg-base shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         {children}

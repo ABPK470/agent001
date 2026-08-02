@@ -61,24 +61,24 @@ export const MODAL_ENTITY_WORKSPACE_PANEL = MODAL_ENTITY_FOCUS_PANEL
 export const MODAL_DETAIL_PANEL =
   "w-[min(40rem,calc(100vw-1rem))] h-auto max-h-[min(85dvh,calc(100dvh-2rem))]"
 
-/** Mid-width tall shell (default ModalShell, import gate, …). */
+/** Tall shell for mid-complexity editors — use the monitor, not a 768px column. */
 export const MODAL_DEFAULT_PANEL =
-  `w-full max-w-3xl ${MODAL_TALL_HEIGHT} min-h-[32rem]`
+  `w-full max-w-[min(72rem,calc(100vw-1.5rem))] ${MODAL_TALL_HEIGHT} min-h-[32rem]`
 
 /** Standard list/catalog viewers — Widget picker, catalog browsers. */
 export const MODAL_VIEWER_PANEL =
-  `w-[min(92vw,52rem)] ${MODAL_TALL_HEIGHT} min-h-[28rem]`
+  `w-[min(92vw,72rem)] ${MODAL_TALL_HEIGHT} min-h-[28rem]`
 
 /** Full-bleed viewer on narrow viewports. */
 export const MODAL_VIEWER_PANEL_MOBILE =
   `w-full max-w-none ${MODAL_TALL_HEIGHT}`
 
 /**
- * Admin session modals (Policies, About) — mid width, tall viewport fill.
+ * Admin session modals (Policies, About) — wide tall shell.
  * Audit / Usage use ModalShell size="focus".
  */
 export const MODAL_ADMIN_PANEL =
-  `w-full max-w-[min(1080px,calc(100vw-1.5rem))] ${MODAL_TALL_HEIGHT}`
+  `w-full max-w-[min(92vw,calc(100vw-1.5rem))] ${MODAL_TALL_HEIGHT}`
 
 export function modalViewerPanelClass(mobile = false): string {
   return `${mobile ? MODAL_VIEWER_PANEL_MOBILE : MODAL_VIEWER_PANEL} flex flex-col overflow-hidden`

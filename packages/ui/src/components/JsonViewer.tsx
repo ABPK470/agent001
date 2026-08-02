@@ -182,12 +182,12 @@ export function JsonViewer({
   return (
     <div
       className={[
-        embedded ? "mia-code-block--embedded overflow-hidden" : "mia-surface overflow-hidden",
+        embedded ? "mia-code-block--embedded overflow-hidden" : "mia-code-block overflow-hidden",
         className,
       ].filter(Boolean).join(" ")}
     >
       {(copyable || label) && (
-        <div className="mia-surface__chrome flex items-center justify-between gap-2 px-2 py-1">
+        <div className="mia-code-block__toolbar flex items-center justify-between gap-2 px-2 py-1">
           {label ? (
             <span className="mia-code-block__label">{label}</span>
           ) : (
