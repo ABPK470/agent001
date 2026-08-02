@@ -30,11 +30,10 @@ import {
   WidgetToolbarTrailing,
 } from "../widget-toolbar"
 import {
-  searchCall,
   buildTraceDag,
-  type TraceCallSearchHit,
   type TraceDag,
 } from "./build-trace-dag"
+import { buildTraceTreeSearch, traceSearchSummary } from "./trace-tree-search"
 import { type CompareRunRow, nodeSupportsCompare, previousRunInThread, priorRunsInThread } from "./trace-run-compare"
 import {
   emptyOpen,
@@ -105,30 +104,14 @@ export function TraceDag({
   const query = search.trim()
   const { stats } = dag
 
-  const callHits = useMemo(() => {
-    if (!query) return null
-    const q = query.toLowerCase()
-    const matchedRun = Boolean(runId && runId.toLowerCase().includes(q))
-    const matchedThread = Boolean(threadId && threadId.toLowerCase().includes(q))
-    const map = new Map<number, TraceCallSearchHit>()
-    for (const call of dag.calls) {
-      if (matchedRun || matchedThread) {
-        map.set(call.index, {
-          reasons: [matchedRun ? "run id" : "thread id"],
-          inHistory: false,
-          inReply: false,
-        })
-        continue
-      }
-      const hit = searchCall(call, query)
-      if (hit) map.set(call.index, hit)
-    }
-    return map
-  }, [dag.calls, query, runId, threadId])
+  const treeSearch = useMemo(
+    () => buildTraceTreeSearch(dag, query, runId, threadId),
+    [dag, query, runId, threadId],
+  )
 
   const treeIndex = useMemo(
-    () => buildTraceTreeIndex(dag, openState, query, callHits),
-    [dag, openState, query, callHits],
+    () => buildTraceTreeIndex(dag, openState, treeSearch),
+    [dag, openState, treeSearch],
   )
 
   const priorRuns = useMemo(
@@ -260,20 +243,20 @@ export function TraceDag({
   }, [treeIndex, selectedScopeId])
 
   useEffect(() => {
-    if (!query || !callHits) {
+    if (!treeSearch) {
       searchSeedRef.current = ""
       return
     }
-    if (searchSeedRef.current === query) return
-    searchSeedRef.current = query
+    if (searchSeedRef.current === treeSearch.query) return
+    searchSeedRef.current = treeSearch.query
     setOpenState((prev) => {
       const next: OpenState = {
         ...prev,
-        calls: new Set(callHits.keys()),
+        calls: new Set(treeSearch.callHits.keys()),
         sent: new Set(prev.sent),
         received: new Set(prev.received),
       }
-      for (const [i, hit] of callHits) {
+      for (const [i, hit] of treeSearch.callHits) {
         if (hit.inHistory) next.sent.add(i)
         if (hit.inReply) next.received.add(i)
         if (!hit.inHistory && !hit.inReply) {
@@ -281,9 +264,16 @@ export function TraceDag({
           next.received.add(i)
         }
       }
+      for (const phaseId of treeSearch.visiblePhaseIds) next.phases.add(phaseId)
+      for (const workId of treeSearch.matchedWorkIds) next.work.add(workId)
+      if (treeSearch.contextVisible) {
+        next.preamble = true
+        if (treeSearch.contextPromptVisible) next.contextPrompt = true
+        if (treeSearch.contextToolsVisible) next.contextTools = true
+      }
       return next
     })
-  }, [query, callHits])
+  }, [treeSearch])
 
   function isNodeFolded(node: TraceTreeNode): boolean {
     if (node.kind === "context") return !openState.preamble
@@ -459,10 +449,9 @@ export function TraceDag({
     )
   }
 
-  const searchStatus =
-    query && dag.calls.length > 0
-      ? `${callHits?.size ?? 0} of ${dag.calls.length} calls`
-      : null
+  const searchStatus = treeSearch
+    ? traceSearchSummary(treeSearch, dag, treeIndex.nodes.length)
+    : null
 
   type MetaStat = { value: string; label?: string }
   const metaStats: MetaStat[] = []
@@ -608,7 +597,7 @@ export function TraceDag({
                     onExitZen={exitZen}
                   />
                 ) : null}
-                {runId && dag.hasData && query && (callHits?.size ?? 0) === 0 ? (
+                {runId && dag.hasData && treeSearch && treeIndex.nodes.length === 0 ? (
                   <p className="trace-empty px-2 py-3">No matches for “{query}”</p>
                 ) : null}
                 {runId && dag.hasData && viewMode === "tree" && (

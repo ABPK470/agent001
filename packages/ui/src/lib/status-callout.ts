@@ -3,7 +3,7 @@
  *
  * Dark: left stroke, clean background (`.mia-callout`, `.mia-row-stroke`).
  * Light: soft row/card washes + chunky pills (`.mia-status-pill`) for scan speed.
- * Toasts keep `--status-callout-*-soft` separately (`.mia-toast`).
+ * Toasts use opaque `--toast-*-bg` surfaces (`.mia-toast`), not callout soft fills.
  */
 
 import type { OperationStatus } from "../client/index"

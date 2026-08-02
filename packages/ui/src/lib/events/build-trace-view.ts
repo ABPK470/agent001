@@ -1450,6 +1450,11 @@ export function searchCall(
     reasons.push(`Iteration ${iterNo}`)
   }
 
+  if (call.model?.toLowerCase().includes(q)) {
+    reasons.push("model")
+    inHistory = true
+  }
+
   for (const tc of call.toolBranches) {
     if (tc.name.toLowerCase().includes(q)) {
       reasons.push(`tool ${tc.name}`)

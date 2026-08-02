@@ -37,7 +37,7 @@ describe("trace-tree-index", () => {
     ])
     const open = emptyOpen()
     open.calls.add(0)
-    const index = buildTraceTreeIndex(dag, open, "", null)
+    const index = buildTraceTreeIndex(dag, open, null)
     const phase = index.nodes.find((n) => n.kind === "phase")
     const work = index.nodes.find((n) => n.kind === "work")
     expect(work?.hasError).toBe(true)

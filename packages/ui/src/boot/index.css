@@ -236,6 +236,15 @@
   --status-callout-info-soft: var(--overlay-2);
   --status-callout-info-border: color-mix(in srgb, var(--info) 25%, transparent);
 
+  /* Toasts — fully opaque surfaces (never translucent over grid/content). */
+  --toast-surface: var(--panel-2);
+  --toast-ok-bg: color-mix(in srgb, var(--panel-2) 88%, var(--success) 12%);
+  --toast-err-bg: color-mix(in srgb, var(--panel-2) 88%, var(--error) 12%);
+  --toast-info-bg: color-mix(in srgb, var(--panel-2) 88%, var(--info) 12%);
+  --toast-ok-border: color-mix(in srgb, var(--success) 40%, var(--border));
+  --toast-err-border: color-mix(in srgb, var(--error) 40%, var(--border));
+  --toast-info-border: color-mix(in srgb, var(--info) 40%, var(--border));
+
   /* Viewing as — brand accent (same ink as live logo mark). */
   --viewing-as: var(--accent);
   --viewing-as-soft: var(--accent-soft);
@@ -347,7 +356,7 @@
   --callout-info: var(--info);
   --callout-info-soft: var(--info-soft);
 
-  /* Toasts + light-mode scans use soft fills; dark inline notices keep left stroke. */
+  /* Status callouts (inline) — soft fills; toasts use opaque --toast-*-bg below. */
   --status-callout-ok-soft: var(--success-soft);
   --status-callout-ok-border: var(--success-border);
   --status-callout-err-soft: var(--error-soft);
@@ -356,6 +365,15 @@
   --status-callout-warn-border: var(--warning-border);
   --status-callout-info-soft: var(--info-soft);
   --status-callout-info-border: var(--info-border);
+
+  /* Toasts — solid fills (readable over any widget chrome). */
+  --toast-surface: var(--panel);
+  --toast-ok-bg: var(--success-soft);
+  --toast-err-bg: var(--error-soft);
+  --toast-info-bg: var(--info-soft);
+  --toast-ok-border: var(--success-border);
+  --toast-err-border: var(--error-border);
+  --toast-info-border: var(--info-border);
 
   --viewing-as: var(--accent);
   --viewing-as-soft: var(--accent-soft);
@@ -1996,32 +2014,32 @@ label:focus-within > .mia-checkbox,
   line-height: 1.5;
 }
 
-/* ── Toasts — theme-split status callout surfaces; muted regular type ─ */
+/* ── Toasts — opaque status surfaces; readable over any underlying UI ─ */
 .mia-toast {
   border-color: var(--border-subtle);
-  background: var(--panel-2);
-  color: var(--color-text-muted, var(--color-text));
+  background-color: var(--toast-surface);
+  color: var(--text);
   font-weight: 400;
 }
 
 .mia-toast--ok {
-  border-color: var(--status-callout-ok-border);
-  background: var(--status-callout-ok-soft);
-  color: var(--color-text-muted, var(--color-text));
+  border-color: var(--toast-ok-border);
+  background-color: var(--toast-ok-bg);
+  color: var(--text);
   font-weight: 400;
 }
 
 .mia-toast--err {
-  border-color: var(--status-callout-err-border);
-  background: var(--status-callout-err-soft);
-  color: var(--color-text-muted, var(--color-text));
+  border-color: var(--toast-err-border);
+  background-color: var(--toast-err-bg);
+  color: var(--text);
   font-weight: 400;
 }
 
 .mia-toast--info {
-  border-color: var(--status-callout-info-border);
-  background: var(--status-callout-info-soft);
-  color: var(--color-text-muted, var(--color-text));
+  border-color: var(--toast-info-border);
+  background-color: var(--toast-info-bg);
+  color: var(--text);
   font-weight: 400;
 }
 

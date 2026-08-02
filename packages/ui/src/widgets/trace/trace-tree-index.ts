@@ -4,7 +4,6 @@
 
 import type {
     TraceCallNode,
-    TraceCallSearchHit,
     TraceDag,
     TracePhaseNode,
     TraceSpineEntry,
@@ -13,6 +12,7 @@ import type {
 } from "../../lib/events/build-trace-view"
 import { callToolOpenKey, workToolOpenKey, type OpenState } from "./open-state"
 import { callReceivedSummary, callSentSummary } from "./trace-format"
+import type { TraceTreeSearch } from "./trace-tree-search"
 
 export type TraceSpanStatus = "success" | "failed" | "running" | "skipped"
 
@@ -113,10 +113,9 @@ function buildCallNodes(
   parentScopeId: string | null,
   _nested: boolean,
   openState: OpenState,
-  callHits: Map<number, TraceCallSearchHit> | null,
-  query: string,
+  search: TraceTreeSearch | null,
 ): void {
-  if (query && callHits && !callHits.has(call.index)) return
+  if (search && !search.callHits.has(call.index)) return
 
   const scopeId = `call:${call.index}`
   const metrics = callMetrics(call)
@@ -265,11 +264,16 @@ function buildWorkNodes(
   depth: number,
   parentScopeId: string | null,
   openState: OpenState,
-  callHits: Map<number, TraceCallSearchHit> | null,
-  query: string,
+  search: TraceTreeSearch | null,
   startOffsetMs: number,
 ): void {
-  if (query && callHits && !callHits.has(work.afterCallIndex)) return
+  if (
+    search &&
+    !search.matchedWorkIds.has(work.id) &&
+    !search.callHits.has(work.afterCallIndex)
+  ) {
+    return
+  }
 
   const status = workStatus(work)
   const hasChildren =
@@ -335,10 +339,10 @@ function buildPhaseNodes(
   parentScopeId: string | null,
   dag: TraceDag,
   openState: OpenState,
-  callHits: Map<number, TraceCallSearchHit> | null,
-  query: string,
+  search: TraceTreeSearch | null,
   startOffsetMs: number,
 ): number {
+  if (search && !search.visiblePhaseIds.has(phase.id)) return startOffsetMs
   const status = phaseStatus(phase)
   const hasChildren = Boolean(phase.children?.length)
   const name = phase.title || phase.leading || phase.family || "Phase"
@@ -375,10 +379,10 @@ function buildPhaseNodes(
     if (child.kind === "call") {
       const call = dag.calls[child.callIndex]
       if (!call) continue
-      buildCallNodes(acc, call, depth + 1, phase.id, true, openState, callHits, query)
+      buildCallNodes(acc, call, depth + 1, phase.id, true, openState, search)
       if (call.durationMs != null) offset += call.durationMs
     } else {
-      buildWorkNodes(acc, child.work, depth + 1, phase.id, openState, callHits, query, offset)
+      buildWorkNodes(acc, child.work, depth + 1, phase.id, openState, search, offset)
     }
   }
   return offset
@@ -389,8 +393,7 @@ function buildSpineNodes(
   spine: TraceSpineEntry[],
   dag: TraceDag,
   openState: OpenState,
-  callHits: Map<number, TraceCallSearchHit> | null,
-  query: string,
+  search: TraceTreeSearch | null,
 ): void {
   let offsetMs = 0
   for (const entry of spine) {
@@ -402,19 +405,18 @@ function buildSpineNodes(
         null,
         dag,
         openState,
-        callHits,
-        query,
+        search,
         offsetMs,
       )
       continue
     }
     if (entry.kind === "work") {
-      buildWorkNodes(acc, entry.work, 0, null, openState, callHits, query, offsetMs)
+      buildWorkNodes(acc, entry.work, 0, null, openState, search, offsetMs)
       continue
     }
     const call = dag.calls[entry.callIndex]
     if (!call) continue
-    buildCallNodes(acc, call, 0, null, false, openState, callHits, query)
+    buildCallNodes(acc, call, 0, null, false, openState, search)
     if (call.durationMs != null) offsetMs += call.durationMs
   }
 }
@@ -423,10 +425,11 @@ function buildContextNodes(
   acc: TraceTreeNode[],
   dag: TraceDag,
   openState: OpenState,
-  query: string,
+  search: TraceTreeSearch | null,
 ): void {
   const { preamble } = dag
   if (!preamble.systemPrompt && preamble.tools.length === 0) return
+  if (search && !search.contextVisible) return
 
   const bits: string[] = []
   if (preamble.systemPrompt) bits.push("prompt")
@@ -458,11 +461,9 @@ function buildContextNodes(
 
   if (!openState.preamble) return
 
-  const q = query.trim().toLowerCase()
-  if (preamble.systemPrompt) {
-    const matches = !q || preamble.systemPrompt.toLowerCase().includes(q)
-    if (matches) {
-      pushNode(acc, {
+  const q = search?.query.toLowerCase() ?? ""
+  if (preamble.systemPrompt && (!search || search.contextPromptVisible)) {
+    pushNode(acc, {
         scopeId: "prompt",
         kind: "prompt",
         depth: 1,
@@ -484,17 +485,19 @@ function buildContextNodes(
         phaseId: null,
         toolKey: null,
         messageKey: null,
-      })
-    }
+    })
   }
 
-  const tools = !q
-    ? preamble.tools
-    : preamble.tools.filter(
-        (t) =>
-          t.name.toLowerCase().includes(q) ||
-          t.description.toLowerCase().includes(q),
-      )
+  const tools =
+    search && !search.contextToolsVisible
+      ? []
+      : !q
+        ? preamble.tools
+        : preamble.tools.filter(
+            (t) =>
+              t.name.toLowerCase().includes(q) ||
+              t.description.toLowerCase().includes(q),
+          )
   if (tools.length > 0 && openState.contextTools) {
     pushNode(acc, {
       scopeId: "tools",
@@ -566,12 +569,11 @@ function annotateFailureSubtitles(index: TraceTreeIndex): void {
 export function buildTraceTreeIndex(
   dag: TraceDag,
   openState: OpenState,
-  query: string,
-  callHits: Map<number, TraceCallSearchHit> | null,
+  search: TraceTreeSearch | null,
 ): TraceTreeIndex {
   const nodes: TraceTreeNode[] = []
-  buildContextNodes(nodes, dag, openState, query)
-  buildSpineNodes(nodes, dag.spine, dag, openState, callHits, query)
+  buildContextNodes(nodes, dag, openState, search)
+  buildSpineNodes(nodes, dag.spine, dag, openState, search)
 
   const byScopeId = new Map<string, TraceTreeNode>()
   const childrenByParent = new Map<string, string[]>()
