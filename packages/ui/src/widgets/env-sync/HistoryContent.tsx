@@ -39,6 +39,11 @@ import { HistoryPlanTables } from "./PlanTables"
 import { SqlTraceModal } from "../sync/trace/SqlTraceModal"
 import { hasSqlTraceContent, type SqlTraceFields } from "../sync/trace/sync-sql-trace"
 import { JsonViewer } from "../../components/JsonViewer"
+import {
+  StatusIndicator,
+  syncHistoryStatusForMark,
+  syncHistoryStatusLabel,
+} from "../../components/StatusIndicator"
 
 const PAGE_SIZE = 25
 const SEARCH_DEBOUNCE_MS = 300
@@ -46,7 +51,6 @@ const SQL_TRACE_PAGE = 50
 
 type SyncRunItem = SyncHistoryPage["items"][number]
 type SyncAuditEvent = Awaited<ReturnType<typeof api.syncHistoryDetail>>["audit"][number]
-type RunStatus = SyncRunItem["status"]
 
 type HistoryFilters = Omit<SyncHistoryParams, "page" | "pageSize">
 
@@ -71,40 +75,6 @@ const SORT_OPTIONS: ListboxOption<NonNullable<HistoryFilters["sort"]>>[] = [
 function entityLabel(run: SyncRunItem): string {
   const ref = `${run.entityType}#${run.entityId}`
   return run.entityDisplayName ? `${run.entityDisplayName} (${ref})` : ref
-}
-
-function runStatusTone(status: RunStatus): string {
-  switch (status) {
-    case "success":
-      return DIFF.ins
-    case "failed":
-      return DIFF.del
-    case "skipped":
-      return "var(--color-warning)"
-    case "started":
-      return "var(--color-accent)"
-    case "cancelled":
-      return "var(--color-text-muted)"
-    default:
-      return "var(--color-text-muted)"
-  }
-}
-
-function runStatusLabel(status: RunStatus): string {
-  switch (status) {
-    case "success":
-      return "completed"
-    case "failed":
-      return "failed"
-    case "skipped":
-      return "skipped"
-    case "started":
-      return "executing"
-    case "cancelled":
-      return "cancelled"
-    default:
-      return "preview"
-  }
 }
 
 function formatAuditAction(action: string): string {
@@ -708,10 +678,10 @@ function HistoryRunRow({
         ) : (
           <ChevronRight size={13} className="text-text-muted shrink-0" />
         )}
-        <span
-          className="w-2 h-2 shrink-0 rounded-full"
-          style={{ background: runStatusTone(run.status) }}
-          title={run.status}
+        <StatusIndicator
+          status={syncHistoryStatusForMark(run.status)}
+          label={syncHistoryStatusLabel(run.status)}
+          className="shrink-0 capitalize"
         />
         <span className="text-text font-mono truncate flex-1">{label}</span>
         <span className="text-text-muted font-mono flex items-center gap-1 shrink-0">
@@ -724,7 +694,6 @@ function HistoryRunRow({
           {totals.update > 0 && <span style={{ color: DIFF.upd }}>{totals.update} upd</span>}
           {totals.delete > 0 && <span style={{ color: DIFF.del }}>{totals.delete} del</span>}
         </span>
-        <span className="text-text-muted capitalize shrink-0">{runStatusLabel(run.status)}</span>
         <span className="text-text-muted flex items-center gap-1 shrink-0" title={formatHistoryDateTime(run.startedAt)}>
           <Clock size={11} />
           {timeAgo(run.finishedAt ?? run.startedAt)}

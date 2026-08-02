@@ -127,11 +127,20 @@ describe("light theme color system", () => {
 
   it("shared StatusMark + statusDotKind used across Pipelines / Threads / Active Users", () => {
     const mark = readFileSync(join(here, "../components/StatusMark.tsx"), "utf8")
+    const indicator = readFileSync(join(here, "../components/StatusIndicator.tsx"), "utf8")
     const tokens = readFileSync(join(here, "../theme/tokens.ts"), "utf8")
     expect(mark).toContain("statusDotKind")
+    expect(indicator).toContain("StatusIndicator")
     expect(tokens).toMatch(/case "waiting":/)
     expect(css).toMatch(/\.status-mark--ok\b/)
     expect(css).toMatch(/\.status-mark--fail\b/)
+    expect(css).toMatch(/\.status-indicator--ok\b/)
+  })
+
+  it("light chat uses canvas shell and trace readability tokens", () => {
+    expect(css).toMatch(/:root\[data-theme="light"\][\s\S]*--chat-trace-text:\s*#475569/)
+    expect(css).toMatch(/:root\[data-theme="light"\] \.termchat-home-shell[\s\S]*background:\s*var\(--canvas\)/)
+    expect(css).toMatch(/--bubble-user:\s*var\(--panel\)/)
   })
 
   it("go-to ready control stays ink fill (brand ≠ go-to)", () => {
