@@ -7,8 +7,9 @@
  *                   row2 = search flex + trailing
  *
  * Chrome:
- *   widget-panel owns canvas inset; widget-review-controls groups toolbar + band 2.
- *   Band 2 (optional): ActiveFilterChips or Trace meta/ids inside review-controls.
+ *   Panel widgets: widget-panel = outer inset; stack = inner inset (controls + list).
+ *   Chat (canvas): widget-content-gutter on the transcript column.
+ *   widget-review-controls groups toolbar + band 2 inside the panel.
  */
 
 import { Loader2, Search, X } from "lucide-react"
@@ -25,8 +26,18 @@ export const WIDGET_LOG_INSET_CLASS = ""
 export const WIDGET_LOG_SHELL_CLASS =
   "flex h-full min-h-0 flex-1 flex-col overflow-hidden text-text"
 
-/** Column under widget-panel: controls band then scroll body. */
-export const WIDGET_LOG_STACK_CLASS = "widget-panel-stack"
+/** Outer content gutter — toolbar + stack align with Chat / Threads. */
+export const WIDGET_CONTENT_GUTTER_CLASS = "widget-content-gutter"
+
+/** Inner scroll/list gutter — second layer inside outer. */
+export const WIDGET_CONTENT_GUTTER_INNER_CLASS = "widget-content-gutter-inner"
+
+/** Column under widget-panel — inner gutter insets controls + scroll together. */
+export const WIDGET_LOG_STACK_CLASS =
+  `widget-panel-stack ${WIDGET_CONTENT_GUTTER_INNER_CLASS}`
+
+/** Scroll body slot under review controls (stack owns horizontal inset). */
+export const WIDGET_LOG_BODY_CLASS = "widget-panel-body"
 
 /** Toolbar + optional filter/meta band — one panel-2 control surface. */
 export const WIDGET_REVIEW_CONTROLS_CLASS = "widget-review-controls"

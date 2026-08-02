@@ -1091,6 +1091,34 @@ body {
   gap: 0.75rem;
   padding: 0.75rem 1rem 1rem;
   overflow: hidden;
+  /*
+   * Multi-layer gutter tokens. Canvas widgets use both layers explicitly;
+   * panel widgets use widget-panel inset as the outer layer + inner on scroll.
+   */
+  --widget-content-gutter-x: 0.75rem;
+  --widget-content-gutter-inner-x: 0.5rem;
+  --widget-content-gutter-inner-y: 0.35rem;
+}
+
+@media (min-width: 640px) {
+  .widget-view-container {
+    --widget-content-gutter-x: 1.25rem;
+  }
+}
+
+/* Outer gutter — canvas widgets (Chat transcript column, input dock). */
+.widget-content-gutter {
+  box-sizing: border-box;
+  min-width: 0;
+  padding-inline: var(--widget-content-gutter-x);
+}
+
+/* Inner gutter — second layer inside widget-panel (horizontal + top air). */
+.widget-content-gutter-inner {
+  box-sizing: border-box;
+  min-width: 0;
+  padding-inline: var(--widget-content-gutter-inner-x);
+  padding-block: var(--widget-content-gutter-inner-y) 0;
 }
 
 .widget-shell-header--flush {
@@ -1178,13 +1206,9 @@ body {
   border-bottom: none;
 }
 
-.widget-panel--canvas > .termchat-home-shell,
-.widget-panel--canvas > .thread-nav-panel {
+.widget-panel--canvas > .termchat-home-shell {
   flex: 1;
   min-height: 0;
-}
-
-.widget-panel--canvas > .termchat-home-shell {
   background: var(--canvas);
 }
 
@@ -3257,7 +3281,8 @@ textarea.input {
   position: relative;
   flex: 1 1 0;
   min-height: 0;
-  padding: 0 0.35rem 1.25rem;
+  /* Horizontal inset lives on the review stack (.widget-content-gutter-inner). */
+  padding: 0 0 1.25rem;
   --trace-row-h: 34px;
   /* Band is outside this scroller — no in-scroll overlay clearance. */
   --trace-pin-stack-h: 0px;
@@ -3290,8 +3315,8 @@ textarea.input {
   z-index: 50;
   height: auto;
   margin: 0;
-  /* Match .trace-scroll horizontal pad so sticky aligns with in-flow rows. */
-  padding: 0 0.35rem;
+  /* Align with in-flow rows — parent owns horizontal gutter. */
+  padding: 0;
   overflow: visible;
   pointer-events: none;
   background: var(--bg, var(--paper));
@@ -8325,7 +8350,8 @@ textarea.input {
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 0.35rem 0.4rem 0.45rem;
+  /* Top air lives on .widget-content-gutter-inner (thread-nav-panel). */
+  padding-block-end: 0.45rem;
 }
 
 .thread-nav-thread {

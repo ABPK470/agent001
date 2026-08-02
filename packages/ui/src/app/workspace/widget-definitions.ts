@@ -109,6 +109,8 @@ function layoutForType(type: WidgetType): WidgetLayout {
     || type === "sync-admin"
     || type.startsWith("sync-")
   ) return "split"
+  /* Chat only — transparent canvas + explicit gutter. Review/agent widgets keep
+     the bordered widget-panel; inner scroll gutter adds the second layer. */
   if (type === "term-chat") return "canvas"
   return "panel"
 }

@@ -40,7 +40,7 @@ describe("chatLayout — home + TermChat alignment", () => {
     expect(CHAT_INPUT_PILL_CLASS).toContain("border border-border")
     expect(CHAT_INPUT_PILL_CLASS).not.toContain("ring-")
     expect(CHAT_INPUT_PILL_CLASS).toContain("chathome-chrome-pill")
-    expect(WIDGET_CHAT_INPUT_DOCK_CLASS).toContain("px-3")
+    expect(WIDGET_CHAT_INPUT_DOCK_CLASS).toContain("widget-content-gutter")
     expect(WIDGET_CHAT_INPUT_DOCK_CLASS).not.toContain("border-t")
   })
 })

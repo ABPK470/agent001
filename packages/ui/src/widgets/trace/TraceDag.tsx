@@ -22,6 +22,7 @@ import {
 export const TRACE_SPINE_OVERSCAN = 6
 import { SegmentToggle } from "../entity-registry/SegmentToggle"
 import {
+  WIDGET_LOG_BODY_CLASS,
   WIDGET_LOG_SHELL_CLASS,
   WIDGET_LOG_STACK_CLASS,
   WIDGET_REVIEW_CONTROLS_CLASS,
@@ -1081,7 +1082,7 @@ export function TraceDag({
       )}
       </div>
 
-      <div className="trace-body widget-panel-body">
+      <div className={`trace-body ${WIDGET_LOG_BODY_CLASS}`}>
         {emptySlot ? (
           emptySlot
         ) : (

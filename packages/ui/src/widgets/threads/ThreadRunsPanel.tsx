@@ -14,6 +14,7 @@ import type { Run, Thread } from "../../types"
 import { timeAgo } from "../../lib/util"
 import { StatusMark } from "../../components/StatusMark"
 import { WIDGET_ICONS } from "../../widgets/widget-icons"
+import { WIDGET_CONTENT_GUTTER_INNER_CLASS } from "../widget-toolbar"
 import { DeleteThreadModal } from "./DeleteThreadModal"
 import { ThreadRowMenu } from "./ThreadRowMenu"
 import { sortThreadsByPinThenUpdatedAt } from "../../lib/thread-order"
@@ -436,7 +437,7 @@ export function ThreadRunsPanel(): React.ReactElement {
 
   return (
     <>
-      <div className="thread-nav-panel">
+      <div className={`thread-nav-panel ${WIDGET_CONTENT_GUTTER_INNER_CLASS}`}>
         <div className="thread-nav-scroll">{list}</div>
         <button
           type="button"

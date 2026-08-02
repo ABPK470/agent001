@@ -37,6 +37,7 @@ import { isSyncSqlEventType } from "./sync/trace/sync-sql-trace"
 import { operationStatusPill } from "../lib/status-callout"
 import { WIDGET_ICONS } from "./widget-icons"
 import {
+  WIDGET_LOG_BODY_CLASS,
   WIDGET_LOG_SHELL_CLASS,
   WIDGET_LOG_STACK_CLASS,
   WIDGET_REVIEW_CONTROLS_CLASS,
@@ -481,7 +482,7 @@ export function LiveLogs() {
 
       <div
         ref={containerRef}
-        className="widget-panel-body log-stream overflow-y-auto"
+        className={`${WIDGET_LOG_BODY_CLASS} log-stream overflow-y-auto`}
         onScroll={onScroll}
       >
         <div ref={topSentinelRef} />

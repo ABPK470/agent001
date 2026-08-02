@@ -16,6 +16,9 @@ import { fileURLToPath } from "node:url"
 import { describe, expect, it } from "vitest"
 import { CONTROL_IDLE, CONTROL_PRESSED, SELECT_TRACK } from "../lib/selection"
 import {
+  WIDGET_CONTENT_GUTTER_CLASS,
+  WIDGET_CONTENT_GUTTER_INNER_CLASS,
+  WIDGET_LOG_BODY_CLASS,
   WIDGET_LOG_INSET_CLASS,
   WIDGET_LOG_SHELL_CLASS,
   WIDGET_LOG_STACK_CLASS,
@@ -48,9 +51,17 @@ describe("widget log chrome — shell", () => {
     expect(WIDGET_LOG_INSET_CLASS).toBe("")
     expect(WIDGET_LOG_SHELL_CLASS).not.toContain("pt-3")
     expect(WIDGET_LOG_SHELL_CLASS).toContain("flex-1")
-    expect(WIDGET_LOG_STACK_CLASS).toBe("widget-panel-stack")
+    expect(WIDGET_LOG_STACK_CLASS).toBe(
+      `widget-panel-stack ${WIDGET_CONTENT_GUTTER_INNER_CLASS}`,
+    )
+    expect(WIDGET_LOG_BODY_CLASS).toBe("widget-panel-body")
+    expect(WIDGET_CONTENT_GUTTER_CLASS).toBe("widget-content-gutter")
+    expect(WIDGET_CONTENT_GUTTER_INNER_CLASS).toBe("widget-content-gutter-inner")
 
     const css = read(cssPath)
+    expect(css).toMatch(/\.widget-view-container\s*\{[^}]*--widget-content-gutter-inner-y:/s)
+    expect(css).toContain(".widget-content-gutter")
+    expect(css).toContain(".widget-content-gutter-inner")
     expect(css).toMatch(/\.widget-panel\s*\{[^}]*--widget-panel-inset-x:/s)
     expect(css).toContain(".widget-review-controls")
     expect(css).toContain(".widget-filter-band")
@@ -62,7 +73,11 @@ describe("widget log chrome — shell", () => {
     const ops = read(opsToolbarPath)
     expect(live).toContain("WIDGET_REVIEW_CONTROLS_CLASS")
     expect(trace).toContain("WIDGET_REVIEW_CONTROLS_CLASS")
-    expect(ops).toContain("WIDGET_REVIEW_CONTROLS_CLASS")
+    expect(trace).toContain("WIDGET_LOG_BODY_CLASS")
+    expect(read(opsPath)).toContain("WIDGET_LOG_BODY_CLASS")
+    expect(live).toContain("WIDGET_LOG_BODY_CLASS")
+    expect(read(threadsPath)).toContain("WIDGET_CONTENT_GUTTER_INNER_CLASS")
+    expect(read(threadsPath)).toContain("thread-nav-panel")
   })
 
   it("review widgets mount WidgetToolbar (not freestyle header columns)", () => {

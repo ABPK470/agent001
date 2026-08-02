@@ -21,6 +21,7 @@ import { fmtTokens, statusColor, timeAgo } from "../lib/util"
 import { useStore } from "../state/store"
 import type { RollbackPreview, TraceEntry, WorkspaceDiff } from "../types"
 import { WIDGET_ICONS } from "./widget-icons"
+import { WIDGET_CONTENT_GUTTER_INNER_CLASS } from "./widget-toolbar"
 
 type PlannerDecisionTrace = Extract<TraceEntry, { kind: "planner-decision" }>
 
@@ -244,7 +245,7 @@ export function RunStatus() {
 
   if (!run) {
     return (
-      <div className="flex h-full flex-col">
+      <div className={`run-status-panel flex h-full flex-col ${WIDGET_CONTENT_GUTTER_INNER_CLASS}`}>
         <EmptyState icon={WIDGET_ICONS["run-status"]} message="No active run" />
       </div>
     )
@@ -285,7 +286,10 @@ export function RunStatus() {
               : null
 
   return (
-    <div ref={rootRef} className="relative flex h-full flex-col gap-3 overflow-y-auto">
+    <div
+      ref={rootRef}
+      className={`run-status-panel relative flex h-full flex-col gap-3 overflow-y-auto ${WIDGET_CONTENT_GUTTER_INNER_CLASS}`}
+    >
       <ToastStack toasts={toasts} onDismiss={dismissToast} />
 
       <div className="flex items-center gap-2.5">

@@ -44,7 +44,11 @@ import {
   OP_LOG_DESC,
   OpLogRow,
 } from "./pipelines/operation-log-row"
-import { WIDGET_LOG_SHELL_CLASS, WIDGET_LOG_STACK_CLASS } from "./widget-toolbar"
+import {
+  WIDGET_LOG_BODY_CLASS,
+  WIDGET_LOG_SHELL_CLASS,
+  WIDGET_LOG_STACK_CLASS,
+} from "./widget-toolbar"
 import {
   describeSqlEvent,
   describeSqlOnlyActivity,
@@ -557,7 +561,7 @@ export function OperationLog() {
       />
 
       {/* ── Body — bottom padding keeps the last card off the widget lip ─ */}
-      <div ref={scrollRef} className="widget-panel-body overflow-y-auto pb-4">
+      <div ref={scrollRef} className={`${WIDGET_LOG_BODY_CLASS} overflow-y-auto pb-4`}>
         {loading && filtered.length === 0 && (
           <div className="flex flex-1 items-center justify-center gap-2 text-center text-sm text-text-muted/60">
             <Loader2 size={14} className="animate-spin" />

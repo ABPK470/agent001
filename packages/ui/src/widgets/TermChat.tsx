@@ -2666,7 +2666,7 @@ export function TermChat({
               }`
             : showEmptyState
               ? "flex min-h-0 flex-1 flex-col"
-              : "flex min-h-0 flex-1 flex-col px-3 py-3 sm:px-5 sm:py-4"
+              : "flex min-h-0 flex-1 flex-col widget-content-gutter py-3 sm:py-4"
         }
       >
       {isHomeMode ? (

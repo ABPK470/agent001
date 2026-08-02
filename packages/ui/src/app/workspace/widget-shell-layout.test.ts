@@ -20,7 +20,12 @@ describe("widget shell layout", () => {
     ])
     expect(getWidgetDefinition("sync-proposals").layout).toBe("split")
     expect(getWidgetDefinition("term-chat").layout).toBe("canvas")
+    expect(getWidgetDefinition("thread-nav").layout).toBe("panel")
+    expect(getWidgetDefinition("debug-inspector").layout).toBe("panel")
     expect(getWidgetDefinition("live-logs").layout).toBe("panel")
+    expect(getWidgetDefinition("run-status").layout).toBe("panel")
+    expect(getWidgetDefinition("operation-log").layout).toBe("panel")
+    expect(getWidgetDefinition("active-users").layout).toBe("panel")
   })
 
   it("WidgetShell applies card view to every widget", () => {

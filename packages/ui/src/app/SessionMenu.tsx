@@ -43,7 +43,7 @@ function menuItemClass(destructive = false): string {
   return [
     "mx-1 flex w-[calc(100%-0.5rem)] items-center gap-3 rounded-[var(--list-row-radius)] px-3 py-2 text-left text-sm transition-colors",
     destructive
-      ? "text-text-muted hover:bg-status-callout-err-soft hover:text-text"
+      ? "text-text-muted hover:bg-error-soft hover:text-text"
       : "text-text-secondary hover:bg-[var(--hover-fill)] hover:text-text",
   ].join(" ")
 }

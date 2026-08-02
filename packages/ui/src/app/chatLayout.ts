@@ -32,7 +32,7 @@ export const CHAT_INPUT_WIDGET_CLASS =
 
 /** Widget input dock — gutters around the same bordered pill as home chat. */
 export const WIDGET_CHAT_INPUT_DOCK_CLASS =
-  "px-3 pb-3 pt-2 sm:px-5 sm:pb-4"
+  "widget-content-gutter pb-3 pt-2 sm:pb-4"
 
 /**
  * User goal row in the transcript — full width of the sticky row (capped).
