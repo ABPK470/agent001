@@ -44,7 +44,9 @@ import {
 import { STICKY_GOAL_HOME_TOP, StickyUserGoal } from "../components/StickyUserGoal"
 import { TypewriterAnswer } from "../components/TypewriterAnswer"
 import { RunStatus } from "../enums"
+import { canResumeRun, isTerminalFailureStatus } from "../lib/run-actions"
 import { useMe } from "../hooks/useMe"
+import { useTheme } from "../hooks/useTheme"
 import { useViewingAs } from "../hooks/useViewingAs"
 import { ToastStack, useWidgetToasts } from "../components/useWidgetToasts"
 import { useStickToBottomScroll } from "../hooks/useStickToBottomScroll"
@@ -1140,6 +1142,59 @@ void HistoryDisclosure
 
 // ── Run error ─────────────────────────────────────────────────────
 
+function formatRunTerminalTime(iso: string | null | undefined): string {
+  if (!iso) return ""
+  try {
+    return new Date(iso).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })
+  } catch {
+    return ""
+  }
+}
+
+function ChatSystemDivider({
+  label,
+  tone = "muted",
+}: {
+  label: string
+  tone?: "warn" | "err" | "muted"
+}) {
+  return (
+    <div className="chat-system-divider" data-tone={tone} role="status">
+      <span className="chat-system-divider__line" aria-hidden />
+      <span className="chat-system-divider__label">{label}</span>
+      <span className="chat-system-divider__line" aria-hidden />
+    </div>
+  )
+}
+
+function ChatRunInterruptedBar({
+  message,
+  canResume,
+  onResume,
+  resuming,
+}: {
+  message: string
+  canResume: boolean
+  onResume: () => void
+  resuming: boolean
+}) {
+  return (
+    <div className="chat-run-interrupted-bar" role="status">
+      <span className="chat-run-interrupted-bar__message">{message}</span>
+      {canResume ? (
+        <button
+          type="button"
+          onClick={onResume}
+          disabled={resuming}
+          className="chat-run-interrupted-bar__action"
+        >
+          {resuming ? "Resuming…" : "Resume run"}
+        </button>
+      ) : null}
+    </div>
+  )
+}
+
 function RunErrorBanner({ error }: { error: string }) {
   const [expanded, setExpanded] = useState(false)
   const { summary, details } = summarizeRunError(error)
@@ -1400,6 +1455,7 @@ function RunMessageImpl({
     status: string
     answer: string | null
     error: string | null
+    completedAt?: string | null
     pendingWorkspaceChanges?: number
     trace?: TraceEntry[]
     streamingAnswer?: string
@@ -1412,6 +1468,8 @@ function RunMessageImpl({
   /** Active turn only — pauses transcript stick-to-bottom while 2+ subagents run. */
   onParallelFanOutChange?: (fanOut: boolean) => void
 }) {
+  const { resolved: theme } = useTheme()
+  const isLight = theme === "light"
   const { pauseAutoScroll, scrollHostRef } = useChatScroll()
   const wasFanOutRef = useRef(false)
   const trace = run.trace ?? []
@@ -1667,14 +1725,28 @@ function RunMessageImpl({
       {/* Deliverable downloads — files the agent promoted (CSV/MD/… exports) */}
       <DeliverableChips runId={run.id} />
 
-      {/* Terminal status — same rhythm as answer blocks under the user pill */}
+      {/* Terminal status — light: inline dividers; dark: callout cards */}
       {run.status === "cancelled" && (
-        <div className="mia-callout mia-callout--warn w-fit max-w-full rounded-lg px-3 py-2.5 text-[15px] leading-6">
-          Run cancelled.
-        </div>
+        isLight ? (
+          <ChatSystemDivider
+            label={`Run cancelled${formatRunTerminalTime(run.completedAt) ? ` · ${formatRunTerminalTime(run.completedAt)}` : ""}`}
+            tone="warn"
+          />
+        ) : (
+          <div className="mia-callout mia-callout--warn w-fit max-w-full rounded-lg px-3 py-2.5 text-[15px] leading-6">
+            Run cancelled.
+          </div>
+        )
       )}
-      {run.error && run.status !== "cancelled" && (
-        <RunErrorBanner error={run.error} />
+      {run.error && run.status !== "cancelled" && !(isLight && isActive) && (
+        isLight ? (
+          <ChatSystemDivider
+            label={summarizeRunError(run.error).summary}
+            tone="err"
+          />
+        ) : (
+          <RunErrorBanner error={run.error} />
+        )
       )}
 
       {/* Workspace diff */}
@@ -1980,6 +2052,33 @@ export function TermChat({
     : undefined
   const isRunning = isRunActiveStatus(scopedActiveRun?.status)
   const streamingAnswer = scopedActiveRun?.streamingAnswer ?? ""
+  const { resolved: theme } = useTheme()
+  const isLight = theme === "light"
+  const [resumingRun, setResumingRun] = useState(false)
+
+  const activeRunInterrupted = useMemo(() => {
+    if (!isLight || !scopedActiveRun?.error) return null
+    if (!isTerminalFailureStatus(scopedActiveRun.status)) return null
+    return summarizeRunError(scopedActiveRun.error).summary
+  }, [isLight, scopedActiveRun?.error, scopedActiveRun?.status])
+
+  const canResumeInterrupted = Boolean(
+    scopedActiveRun && canResumeRun(scopedActiveRun.status, scopedActiveRun.hasCheckpoint),
+  )
+
+  const resumeInterruptedRun = useCallback(async () => {
+    if (!scopedActiveRunId || resumingRun) return
+    setResumingRun(true)
+    try {
+      const { runId } = await api.resumeRun(scopedActiveRunId)
+      setActiveRun(runId)
+      setScrollToRunId(runId)
+    } catch (err: unknown) {
+      notifyError(err instanceof Error ? err.message : "Failed to resume run")
+    } finally {
+      setResumingRun(false)
+    }
+  }, [scopedActiveRunId, resumingRun, setActiveRun, notifyError])
 
   const scopedRuns = useMemo(
     () => runs.filter((r) => r.threadId === continuityThreadId),
@@ -2738,6 +2837,14 @@ export function TermChat({
           isHomeMode ? HOME_CHAT_INPUT_DOCK_CLASS : WIDGET_CHAT_INPUT_DOCK_CLASS
         }`}>
           <div className={`relative z-20 ${isHomeMode ? HOME_CHAT_COLUMN_CLASS : WIDGET_CHAT_COLUMN_CLASS}`}>
+            {activeRunInterrupted ? (
+              <ChatRunInterruptedBar
+                message={activeRunInterrupted}
+                canResume={canResumeInterrupted}
+                onResume={() => { void resumeInterruptedRun() }}
+                resuming={resumingRun}
+              />
+            ) : null}
             <TermChatInputBar
               input={input}
               isRunning={isRunning}

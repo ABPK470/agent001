@@ -307,4 +307,25 @@ describe("agent-run pipeline telemetry grouping", () => {
     expect(toolIo.input?.url).toBe("https://example.com")
     expect(operation!.activities.some((a) => a.status === OperationStatus.Running)).toBe(false)
   })
+
+  it("maps crashed run status to Failed even without a run.failed event", async () => {
+    getRun.mockReturnValue({
+      status: "crashed",
+      completed_at: "2026-05-27T15:00:00.000Z",
+      goal: "ask user then restart",
+      step_count: 1,
+      error: "Server restarted — run interrupted",
+    })
+    listEventsForRunId.mockReturnValue([
+      { type: EventType.RunStarted, created_at: "2026-05-27T14:55:00.000Z", data: JSON.stringify({ runId: "run-1", goal: "ask user then restart" }) },
+      { type: EventType.StepStarted, created_at: "2026-05-27T14:55:01.000Z", data: JSON.stringify({ runId: "run-1", action: "ask_user" }) },
+    ])
+
+    const { listOperationsForRun } = await import("../src/api/operations/service/query/index.ts")
+    const { operation } = listOperationsForRun("run-1")
+
+    expect(operation).not.toBeNull()
+    expect(operation!.status).toBe(OperationStatus.Failed)
+    expect(operation!.error).toBe("Server restarted — run interrupted")
+  })
 })

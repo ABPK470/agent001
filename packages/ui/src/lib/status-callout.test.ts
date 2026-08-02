@@ -14,6 +14,7 @@ describe("status-callout", () => {
     expect(statusCalloutTone("success")).toBe("ok")
     expect(statusCalloutTone("validated")).toBe("ok")
     expect(statusCalloutTone("failed")).toBe("err")
+    expect(statusCalloutTone("crashed")).toBe("err")
     expect(statusCalloutTone("cancelled")).toBe("warn")
     expect(statusCalloutTone("canceled")).toBe("warn")
     expect(statusCalloutTone("warning")).toBe("warn")
