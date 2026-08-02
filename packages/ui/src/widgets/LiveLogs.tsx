@@ -105,16 +105,6 @@ function eventTypeDbPatterns(filters: Set<EventType>): string[] | undefined {
   return patterns.length > 0 ? patterns : undefined
 }
 
-const MSG_COLOR: Record<string, string> = {
-  run: "var(--color-info)",
-  step: "var(--color-accent)",
-  sync: "var(--color-success)",
-  bridge: "var(--color-accent)",
-  agent: "var(--color-accent-hover)",
-  api: "var(--color-accent)",
-  system: "var(--color-text-muted)",
-}
-
 export function LiveLogs() {
   const instance = useWidgetInstance()
   const tileId = instance?.widgetId ?? null
@@ -519,13 +509,7 @@ export function LiveLogs() {
           <VirtualList
             items={displayRows}
             scrollRef={containerRef}
-            estimateSize={(i) => {
-              const log = displayRows[i]
-              if (!log) return 52
-              const lines = Math.max(1, Math.ceil(log.message.length / 42))
-              const base = log.error ? 58 : 50
-              return base + (lines - 1) * 18
-            }}
+            estimateSize={() => 36}
             getItemKey={(i, log) => `${log.timestamp}|${log.eventName ?? ""}|${i}`}
             renderItem={({ item: log }) => (
               <LogRow
@@ -604,82 +588,83 @@ function LogRow({
   tiny: boolean
 }) {
   const [expanded, setExpanded] = useState(false)
-  const msgColor = log.error ? "var(--color-error)" : (MSG_COLOR[log.type] ?? "var(--color-text-muted)")
   const hasData = log.data && Object.keys(log.data).length > 0
+  const isError = Boolean(log.error)
 
   return (
-    <div className={log.error ? "py-0.5" : undefined}>
+    <div className="event-stream-entry">
       <div
         className={[
-          "event-stream-row rounded-[var(--list-row-radius)] transition-colors border",
-          log.error
-            ? "mia-row-stroke mia-row-stroke--err"
-            : expanded && hasData
-              ? "border-transparent bg-[var(--select-fill)]"
-              : "border-transparent hover:bg-[var(--hover-fill)]",
+          "event-stream-row",
+          expanded && hasData ? "event-stream-row--open" : "",
           hasData ? "cursor-pointer" : "",
         ].join(" ")}
         onClick={() => hasData && setExpanded((e) => !e)}
       >
-        <div className="event-stream-row__meta">
-          {log.error ? (
-            <span className={operationStatusPill("failed")}>Error</span>
+        {isError ? (
+          <span className={`${operationStatusPill("failed")} event-stream-row__pill`}>Error</span>
+        ) : null}
+        <span className="review-chevron-slot shrink-0 text-text-muted/40">
+          {hasData ? (
+            <ChevronRight
+              size={13}
+              strokeWidth={1.75}
+              className={`transition-transform ${expanded ? "rotate-90" : ""}`}
+            />
           ) : null}
-          <span
-            className="review-chevron-slot shrink-0"
-            style={{ color: msgColor, opacity: 0.3 }}
-          >
-            {hasData ? (
-              <ChevronRight
-                size={13}
-                strokeWidth={1.75}
-                className={`transition-transform ${expanded ? "rotate-90" : ""}`}
-              />
-            ) : null}
+        </span>
+        <span className="shrink-0 review-meta text-text-muted">
+          {formatLogTimestamp(log.timestamp, tiny)}
+        </span>
+        <button
+          type="button"
+          className="shrink-0 text-sm font-medium text-left truncate hover:opacity-70 transition-opacity text-text-muted max-w-[4.5rem] sm:max-w-none"
+          onClick={(e) => {
+            e.stopPropagation()
+            setTypeFilters((prev) => {
+              const next = new Set(prev)
+              const t = log.type as EventType
+              if (next.has(t)) next.delete(t)
+              else next.add(t)
+              return next
+            })
+          }}
+        >
+          {log.type}
+        </button>
+        {!tiny && log.eventName ? (
+          <span className="event-stream-row__event" title={log.eventName}>
+            {log.eventName}
           </span>
-          <span className="shrink-0 review-meta" style={{ color: msgColor, opacity: 0.55 }}>
-            {formatLogTimestamp(log.timestamp, tiny)}
-          </span>
-          <button
-            type="button"
-            className="shrink-0 text-sm font-medium text-left truncate hover:opacity-70 transition-opacity text-text-muted max-w-[5rem] sm:max-w-none"
-            onClick={(e) => {
-              e.stopPropagation()
-              setTypeFilters((prev) => {
-                const next = new Set(prev)
-                const t = log.type as EventType
-                if (next.has(t)) next.delete(t)
-                else next.add(t)
-                return next
-              })
-            }}
-          >
-            {log.type}
-          </button>
-          {!tiny && log.eventName ? (
-            <span className="event-stream-row__event" title={log.eventName}>
-              {log.eventName}
+        ) : null}
+        {log.message ? (
+          <>
+            <span className="event-stream-row__sep" aria-hidden>
+              —
             </span>
-          ) : null}
-        </div>
-        <div className="event-stream-row__message" style={{ color: msgColor }}>
-          {log.message}
-          {tiny && log.eventName ? (
-            <span className="mt-0.5 block truncate text-xs text-text-faint" title={log.eventName}>
-              {log.eventName}
+            <span
+              className={[
+                "event-stream-row__message",
+                isError ? "event-stream-row__message--err" : "text-text-muted",
+              ].join(" ")}
+              title={log.message}
+            >
+              {log.message}
             </span>
-          ) : null}
-        </div>
+          </>
+        ) : null}
       </div>
       {expanded && log.data && (
-        <div className="review-tree space-y-2 py-1 pr-3">
-          {log.eventName && isSyncSqlEventType(log.eventName) && (
+        <div className="event-stream-payload">
+          <div className="review-tree">
             <div className="review-tree__item">
-              <SqlTraceFromEventData data={log.data} compact maxHeight={compact ? 120 : 180} />
+              <div className={isError ? "event-stream-payload__box event-stream-payload__box--err" : "event-stream-payload__box"}>
+                {log.eventName && isSyncSqlEventType(log.eventName) && (
+                  <SqlTraceFromEventData data={log.data} compact maxHeight={compact ? 120 : 180} />
+                )}
+                <JsonViewer value={log.data} label="payload" defaultExpandDepth={2} maxHeight={compact ? 160 : 240} />
+              </div>
             </div>
-          )}
-          <div className="review-tree__item">
-            <JsonViewer value={log.data} label="payload" defaultExpandDepth={2} maxHeight={compact ? 160 : 240} />
           </div>
         </div>
       )}
