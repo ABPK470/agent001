@@ -16,6 +16,7 @@ import {
   modalOverlayClass,
 } from "../../widgets/entity-registry/modal-overlay"
 import { getWidgetDefinition } from "./widget-definitions"
+import { wrapWidgetBody } from "./widget-shell-layout"
 
 export function WidgetModal() {
   const modalWidget = useStore((s) => s.modalWidget)
@@ -49,20 +50,18 @@ export function WidgetModal() {
           className={`${MODAL_SURFACE_CLASS} ${MODAL_ENTITY_FOCUS_PANEL} flex flex-col overflow-hidden`}
           onClick={(e) => e.stopPropagation()}
         >
-          <WidgetModalHeader
-            label={definition.label}
-            icon={<WidgetIcon size={16} className="text-text-muted" />}
-            alreadyInView={alreadyInView}
-            onAddToView={handleAddToView}
-            onClose={closeModalWidget}
-          />
+          <div className="widget-view-container flex min-h-0 flex-1 flex-col overflow-hidden">
+            <WidgetModalHeader
+              label={definition.label}
+              icon={<WidgetIcon size={16} className="text-text-muted" />}
+              alreadyInView={alreadyInView}
+              onAddToView={handleAddToView}
+              onClose={closeModalWidget}
+            />
 
-          <div
-            className={`flex-1 overflow-hidden ${
-              definition.chrome === "flush" ? "p-0" : "p-3"
-            }`}
-          >
-            <WidgetComponent />
+            <div className="widget-content flex min-h-0 flex-1 flex-col overflow-hidden p-0">
+              {wrapWidgetBody(definition.layout, <WidgetComponent />)}
+            </div>
           </div>
         </div>
       </SetupHintChromeProvider>

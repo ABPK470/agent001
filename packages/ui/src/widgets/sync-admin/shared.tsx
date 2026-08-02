@@ -11,6 +11,10 @@ import {
   TAB_BODY,
   TAB_BODY_INNER,
   TOOLBAR_ROW,
+  WIDGET_SPLIT_INSET,
+  WIDGET_SPLIT_MAIN,
+  WIDGET_SPLIT_SHELL,
+  WIDGET_SPLIT_SIDEBAR,
 } from "./design"
 import { IconButton } from "../entity-registry/IconButton"
 
@@ -137,8 +141,8 @@ export function ItemShell({
   const listContent = empty != null ? empty : list
 
   return (
-    <div className="entity-registry-shell grid min-h-0 flex-1 overflow-hidden">
-      <aside className="entity-rail flex min-h-0 flex-col border-r border-border-subtle">
+    <div className={WIDGET_SPLIT_SHELL}>
+      <aside className={WIDGET_SPLIT_SIDEBAR}>
         {showListHeader && (
           <div className="entity-rail-header">
             {listLabel ? (
@@ -155,13 +159,15 @@ export function ItemShell({
         </div>
       </aside>
 
-      <div className="flex min-h-0 min-w-0 flex-col overflow-hidden">
+      <div className={WIDGET_SPLIT_MAIN}>
         {detailToolbar}
-        <div className={TAB_BODY}>
-          <div className={TAB_BODY_INNER}>
-            <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-              <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto p-3">
-                {detail}
+        <div className={WIDGET_SPLIT_INSET}>
+          <div className={TAB_BODY}>
+            <div className={TAB_BODY_INNER}>
+              <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+                <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto p-3">
+                  {detail}
+                </div>
               </div>
             </div>
           </div>

@@ -261,7 +261,7 @@ export function BridgeShell(): JSX.Element {
   )
 
   return (
-    <div className="bridge flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-panel">
+    <div className="bridge flex h-full min-h-0 flex-1 flex-col overflow-hidden">
       <ModalToastStack toasts={toasts} onDismiss={dismissToast} />
 
       {!loaded ? (

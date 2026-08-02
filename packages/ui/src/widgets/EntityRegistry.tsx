@@ -17,17 +17,23 @@ import type {
 } from "../types"
 import { CatalogImportGate } from "./platform/CatalogImportGate"
 import { CatalogVersionsModal } from "./platform/CatalogVersionsModal"
-import { Empty } from "./sync-admin/shared"
 import {
   EntityDetailContent,
   EntityDetailToolbar,
   type EntityTab,
 } from "./entity-registry/EntityDetail"
+import { EntityRegistryEmptyState } from "./entity-registry/EntityRegistryEmptyState"
 import { EntityEditModal } from "./entity-registry/EntityEditModal"
 import { EntityHistoryModal } from "./entity-registry/EntityHistoryModal"
 import { EntityList } from "./entity-registry/EntityList"
 import { EntityRailHeader } from "./entity-registry/EntityRailHeader"
-import { ACTION_BTN, WIDGET_ENVELOPE } from "./entity-registry/chrome"
+import {
+  ACTION_BTN,
+  WIDGET_ENVELOPE,
+  WIDGET_SPLIT_MAIN,
+  WIDGET_SPLIT_SHELL,
+  WIDGET_SPLIT_SIDEBAR,
+} from "./entity-registry/chrome"
 import { ModalShell } from "./entity-registry/ModalShell"
 import { PublishCatalogModal } from "./entity-registry/PublishCatalogModal"
 import { SyncMetadataModal } from "./entity-registry/SyncMetadataModal"
@@ -197,8 +203,8 @@ export function EntityRegistry(): JSX.Element {
     <>
       <div className="entity-registry relative flex h-full min-h-0 flex-1 flex-col overflow-hidden">
         <div className={WIDGET_ENVELOPE}>
-          <div className="entity-registry-shell grid min-h-0 flex-1 overflow-hidden">
-            <aside className="entity-rail flex min-h-0 flex-col border-r border-border-subtle">
+          <div className={WIDGET_SPLIT_SHELL}>
+            <aside className={WIDGET_SPLIT_SIDEBAR}>
               <EntityRailHeader
                 isAdmin={isAdmin}
                 busy={busy || exportingConfig}
@@ -222,7 +228,7 @@ export function EntityRegistry(): JSX.Element {
                 />
               </div>
               {isAdmin && (
-                <div className="shrink-0 border-t border-border-subtle p-3">
+                <div className="entity-rail-footer shrink-0">
                   <button
                     type="button"
                     disabled={busy || !publishEnabled}
@@ -260,7 +266,7 @@ export function EntityRegistry(): JSX.Element {
               )}
             </aside>
 
-            <div className="flex min-h-0 min-w-0 flex-col overflow-hidden">
+            <div className={WIDGET_SPLIT_MAIN}>
               {selected
                 ? (
                   <>
@@ -279,7 +285,10 @@ export function EntityRegistry(): JSX.Element {
                   </>
                 )
                 : (
-                  <Empty title="Select an entity" />
+                  <EntityRegistryEmptyState
+                    isAdmin={isAdmin}
+                    onCreate={() => setModal({ kind: "new" })}
+                  />
                 )}
             </div>
           </div>

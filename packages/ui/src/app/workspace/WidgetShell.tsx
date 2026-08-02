@@ -1,12 +1,14 @@
 /**
  * WidgetShell — container chrome for layout tiles, modals, and pop-outs.
+ *
+ * Every widget shares one card-shell dialect:
+ * canvas viewport → unboxed title → bordered panel (or split grid).
  */
 
 import { ExternalLink, GripVertical, Maximize2, Minimize2, Pin, PinOff, X } from "lucide-react"
 import { type ReactNode } from "react"
 import {
   SetupHintChromeProvider,
-  setupHintHeaderClass,
   useSetupHintChromeTone,
 } from "../../components/SetupHintStrip"
 import type { EdgePin } from "../../lib/grid-math"
@@ -15,6 +17,7 @@ import { useStore } from "../../state/store"
 import type { WidgetType } from "../../types"
 import { captureSoloFlipFrom } from "./layout/solo-flip"
 import { getWidgetDefinition } from "./widget-definitions"
+import { wrapWidgetBody } from "./widget-shell-layout"
 import { WidgetInstanceProvider } from "./widget-instance"
 
 type ShellMode = "tile" | "modal" | "popout"
@@ -60,7 +63,7 @@ export function WidgetShell({
   const setTilePinned = useLayoutStore((s) => s.setTilePinned)
   const toggleTileMaximized = useLayoutStore((s) => s.toggleTileMaximized)
   const definition = getWidgetDefinition(type)
-  const chrome = definition.chrome
+  const layout = definition.layout
 
   function handlePopOut(event: React.MouseEvent<HTMLButtonElement>) {
     event.stopPropagation()
@@ -124,32 +127,31 @@ export function WidgetShell({
   const showChrome = mode !== "popout"
   const showDragHandle = mode === "tile" && !pinned && !maximized
 
+  const header = showChrome ? (
+    <WidgetShellHeader
+      label={definition.label}
+      mode={mode}
+      pinned={pinned}
+      edgePin={edgePin}
+      maximized={maximized}
+      showDragHandle={showDragHandle}
+      onDragPointerDown={onDragPointerDown}
+      onTogglePin={handleTogglePin}
+      onToggleMaximize={handleToggleMaximize}
+      onPopOut={handlePopOut}
+      onClose={handleClose}
+    />
+  ) : null
+
   return (
     <WidgetInstanceProvider value={{ widgetId, viewId, type }}>
     <SetupHintChromeProvider>
-      <div className="workspace-shell flex h-full flex-col overflow-hidden">
-        {showChrome && (
-          <WidgetShellHeader
-            label={definition.label}
-            mode={mode}
-            pinned={pinned}
-            edgePin={edgePin}
-            maximized={maximized}
-            showDragHandle={showDragHandle}
-            onDragPointerDown={onDragPointerDown}
-            onTogglePin={handleTogglePin}
-            onToggleMaximize={handleToggleMaximize}
-            onPopOut={handlePopOut}
-            onClose={handleClose}
-          />
-        )}
-
-        <div
-          className={`widget-content flex flex-1 flex-col overflow-hidden ${
-            chrome === "flush" ? "p-0" : chrome === "transparent" ? "p-0" : "p-3"
-          }`}
-        >
-          {children}
+      <div className="workspace-shell workspace-shell--card-view flex h-full flex-col overflow-hidden">
+        <div className="widget-view-container flex min-h-0 flex-1 flex-col overflow-hidden">
+          {header}
+          <div className="widget-content flex min-h-0 flex-1 flex-col overflow-hidden p-0">
+            {wrapWidgetBody(layout, children)}
+          </div>
         </div>
       </div>
     </SetupHintChromeProvider>
@@ -182,14 +184,14 @@ function WidgetShellHeader({
   onPopOut: (event: React.MouseEvent<HTMLButtonElement>) => void
   onClose: (event: React.MouseEvent<HTMLButtonElement>) => void
 }) {
-  const hintTone = useSetupHintChromeTone()
-  const hintWash = setupHintHeaderClass(hintTone)
+  useSetupHintChromeTone()
 
   return (
     <div
-      className={`widget-drag-handle group flex h-9 shrink-0 select-none items-center gap-1.5 border-b border-border-subtle px-2.5 ${hintWash} ${
-        showDragHandle ? "cursor-grab active:cursor-grabbing" : "cursor-default"
-      }`}
+      className={[
+        "widget-drag-handle widget-shell-header--flush group flex h-9 shrink-0 select-none items-center gap-1.5 px-1",
+        showDragHandle ? "cursor-grab active:cursor-grabbing" : "cursor-default",
+      ].join(" ")}
       onPointerDown={showDragHandle ? onDragPointerDown : undefined}
     >
       {mode === "tile" && (
@@ -202,10 +204,8 @@ function WidgetShellHeader({
       )}
       <span
         className={[
-          "truncate min-w-0 flex-1 tracking-normal",
-          maximized
-            ? "text-[14px] font-semibold text-text"
-            : "text-[13px] font-medium text-text-muted",
+          "truncate min-w-0 flex-1 tracking-normal text-[13px] font-medium text-text-secondary",
+          maximized ? "!text-[14px] !font-semibold !text-text" : "",
         ].join(" ")}
       >
         {label}

@@ -5,7 +5,7 @@
 
 import type { JSX } from "react"
 import type { EntityRegistryDefinition } from "../../types"
-import { TAB_PILL, TAB_PILL_ACTIVE, TAB_PILL_IDLE, TOOLBAR_ROW } from "./chrome"
+import { TAB_PILL, TAB_PILL_ACTIVE, TAB_PILL_IDLE, SPLIT_MAIN_TOOLBAR } from "./chrome"
 import { EntityOverview } from "./EntityOverview"
 import { EntityTables } from "./EntityTables"
 
@@ -29,7 +29,7 @@ export function EntityDetailToolbar({
   onTab,
 }: EntityDetailToolbarProps): JSX.Element {
   return (
-    <div className={TOOLBAR_ROW}>
+    <div className={SPLIT_MAIN_TOOLBAR}>
       <nav className="flex min-w-0 items-center gap-1" aria-label="Sections">
         {TABS.map((t) => (
           <button

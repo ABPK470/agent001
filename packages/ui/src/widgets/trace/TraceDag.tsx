@@ -24,6 +24,7 @@ import { SegmentToggle } from "../entity-registry/SegmentToggle"
 import {
   WIDGET_LOG_SHELL_CLASS,
   WIDGET_LOG_STACK_CLASS,
+  WIDGET_REVIEW_CONTROLS_CLASS,
   WidgetToolbar,
   WidgetToolbarLeading,
   WidgetToolbarSearch,
@@ -1010,6 +1011,7 @@ export function TraceDag({
   return (
     <div className={`trace-dag ${WIDGET_LOG_SHELL_CLASS}`}>
       <div className={WIDGET_LOG_STACK_CLASS}>
+      <div className={WIDGET_REVIEW_CONTROLS_CLASS}>
       <WidgetToolbar>
         <WidgetToolbarLeading>{null}</WidgetToolbarLeading>
         <WidgetToolbarSearch
@@ -1071,8 +1073,9 @@ export function TraceDag({
           ) : null}
         </div>
       )}
+      </div>
 
-      <div className="trace-body min-h-0 flex-1 flex flex-col">
+      <div className="trace-body widget-panel-body">
         {emptySlot ? (
           emptySlot
         ) : (

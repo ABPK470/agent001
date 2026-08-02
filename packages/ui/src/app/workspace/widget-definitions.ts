@@ -17,6 +17,9 @@ import { WIDGET_ICONS } from "../../widgets/widget-icons"
 
 export type WidgetChrome = "flush" | "transparent" | "default"
 
+/** Interior layout — shell wraps content per layout (split manages its own cards). */
+export type WidgetLayout = "split" | "panel" | "canvas"
+
 export interface WidgetDefinition {
   type: WidgetType
   component: ComponentType
@@ -26,6 +29,7 @@ export interface WidgetDefinition {
   defaultRect: WidgetSizeDefaults
   catalogVisible: boolean
   chrome: WidgetChrome
+  layout: WidgetLayout
 }
 
 const CATALOG_META: Array<{
@@ -99,6 +103,16 @@ const CATALOG_META: Array<{
   { type: "sync-evidence", label: "Sync Evidence", desc: "Sync evidence records", catalogVisible: false },
 ]
 
+function layoutForType(type: WidgetType): WidgetLayout {
+  if (
+    type === "entity-registry"
+    || type === "sync-admin"
+    || type.startsWith("sync-")
+  ) return "split"
+  if (type === "term-chat") return "canvas"
+  return "panel"
+}
+
 function chromeForType(type: WidgetType): WidgetChrome {
   if (type === "term-chat" || type === "thread-nav") return "transparent"
   if (
@@ -126,6 +140,7 @@ for (const meta of CATALOG_META) {
     defaultRect: WIDGET_DEFAULTS[meta.type],
     catalogVisible: meta.catalogVisible ?? true,
     chrome: chromeForType(meta.type),
+    layout: layoutForType(meta.type),
   }
 }
 

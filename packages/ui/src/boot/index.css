@@ -364,12 +364,8 @@
   --scrim-strong: rgba(15, 23, 42, 0.78);
   --scrim-focus: rgba(15, 23, 42, 0.42);
 
-  --bubble-user: var(--panel);
-  --shadow-bubble: 0 1px 3px rgba(15, 23, 42, 0.05);
-
-  /* Chat trace — readable metadata on white (not invisible faint gray). */
-  --chat-trace-text: #475569;
-  --chat-trace-subagent: #334155;
+  --bubble-user: var(--panel-2);
+  --shadow-bubble: 0 1px 2px color-mix(in srgb, var(--ink) 6%, transparent);
 
   /* Sync History + inline status micro-badges */
   --status-completed-bg: #f0fdf4;
@@ -659,6 +655,17 @@
   background: var(--ink);
   color: var(--panel);
   border-color: var(--ink);
+}
+
+:root[data-theme="light"] .chathome-chrome-pill {
+  background-color: var(--panel);
+  border-color: var(--border);
+  box-shadow: none;
+}
+
+:root[data-theme="light"] .chathome-chrome-pill:focus-within {
+  border-color: var(--border-strong);
+  --tw-ring-color: transparent;
 }
 
 :root[data-theme="light"] .btn-danger {
@@ -1062,8 +1069,166 @@ body {
 }
 
 /* Entity registry sidebar — mirrors thread rail */
+.entity-registry-shell.widget-split-shell {
+  gap: 0.75rem;
+  flex: 1;
+  min-height: 0;
+}
+
+/* ── Widget card shell — canvas viewport, unboxed title, bordered body ── */
+.workspace-shell--card-view,
+.workspace-shell--flush-view {
+  background: var(--canvas);
+  border-color: var(--border-subtle);
+}
+
+.widget-view-container {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem 1rem;
+  overflow: hidden;
+}
+
+.widget-shell-header--flush {
+  border-bottom: none;
+  background: transparent;
+}
+
+.widget-panel {
+  --widget-panel-inset-x: 0.875rem;
+  --widget-panel-inset-top: 0.625rem;
+  --widget-panel-inset-bottom: 0.75rem;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+  padding: var(--widget-panel-inset-top) var(--widget-panel-inset-x)
+    var(--widget-panel-inset-bottom);
+  background: var(--panel);
+  border: 1px solid var(--border-subtle);
+  border-radius: 0.5rem;
+  box-shadow: 0 1px 3px rgb(15 23 42 / 0.03);
+  overflow: hidden;
+}
+
+.widget-panel > :only-child {
+  min-height: 0;
+  min-width: 0;
+  flex: 1;
+}
+
+.widget-panel--canvas {
+  padding: 0;
+  border-color: transparent;
+  box-shadow: none;
+  background: transparent;
+}
+
+.widget-panel-stack {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.625rem;
+  overflow: hidden;
+}
+
+.widget-panel-body {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Review family — toolbar, active filters, and Trace meta share one control band. */
+.widget-review-controls {
+  flex-shrink: 0;
+  border-radius: 0.375rem;
+  background: var(--panel-2);
+  overflow: hidden;
+}
+
+.widget-review-controls > .widget-toolbar {
+  padding: 0.5rem 0.625rem;
+  border-bottom: none;
+}
+
+.widget-review-controls > * + * {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.widget-filter-band {
+  display: flex;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.375rem 0.5rem;
+  padding: 0.5rem 0.625rem;
+  border-bottom: none;
+}
+
+.widget-review-controls .widget-review-meta {
+  padding: 0.5rem 0.625rem 0.625rem;
+  border-bottom: none;
+}
+
+.widget-panel--canvas > .termchat-home-shell,
+.widget-panel--canvas > .thread-nav-panel {
+  flex: 1;
+  min-height: 0;
+}
+
+.widget-panel--canvas > .termchat-home-shell {
+  background: var(--canvas);
+}
+
+/* ── Widget split interior — bordered rail + main panels inside view container ── */
+.widget-split-envelope {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+  background: transparent;
+}
+
+.widget-split-sidebar,
+.widget-split-main {
+  box-sizing: border-box;
+  min-height: 0;
+  min-width: 0;
+  background: var(--panel);
+  border: 1px solid var(--border-subtle);
+  border-radius: 0.5rem;
+  box-shadow: 0 1px 3px rgb(15 23 42 / 0.03);
+  overflow: hidden;
+}
+
+/* Scroll/flex body slot inside split main — same surface as the panel (not a second frame). */
+.widget-split-inset {
+  background: var(--panel);
+}
+
+/* Idle main — full panel surface; inset is editor-only (below toolbar). */
+.entity-registry-workspace-empty {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  background: var(--panel);
+}
+
 .entity-registry-shell {
-  grid-template-columns: 12.5rem minmax(0, 1fr);
+  grid-template-columns: 16.25rem minmax(0, 1fr);
 }
 
 @media (max-width: 900px) {
@@ -1072,10 +1237,10 @@ body {
     grid-template-rows: auto minmax(0, 1fr);
   }
 
-  .entity-registry-shell .entity-rail {
+  .entity-registry-shell .widget-split-sidebar {
     max-height: min(40vh, 16rem);
     border-right: 0;
-    border-bottom: 1px solid var(--color-border-subtle);
+    border-bottom: 1px solid var(--border-subtle);
   }
 }
 
@@ -1091,7 +1256,7 @@ body {
 }
 
 .entity-rail {
-  /* Hairline only — no third surface color inside the tile. */
+  /* Sidebar paint lives on `.widget-split-sidebar`. */
   background: transparent;
 }
 
@@ -1174,6 +1339,8 @@ body {
 
 .entity-rail-item-wrap--active .entity-rail-item-row {
   background: var(--select-fill);
+  border-left: 3px solid var(--accent);
+  padding-left: calc(0.65rem - 3px);
 }
 
 .entity-rail-item {
@@ -1196,21 +1363,72 @@ body {
 }
 
 .entity-rail-item-title {
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
   line-height: 1.35;
   font-weight: 500;
   letter-spacing: -0.01em;
+  color: var(--text);
 }
 
 .entity-rail-item-meta {
   margin-top: 0.1rem;
-  font-size: 0.75rem;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
   line-height: 1.3;
-  color: var(--color-text-faint);
+  color: var(--text-secondary);
 }
 
 .entity-rail-item-wrap--active .entity-rail-item-meta {
-  color: color-mix(in srgb, var(--color-text-muted) 70%, var(--color-text-faint));
+  color: var(--text-secondary);
+}
+
+.entity-rail-footer {
+  padding: 0.75rem;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.entity-registry-empty-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  max-width: 25rem;
+  padding: 3rem;
+  border: 1px dashed var(--border-subtle);
+  border-radius: 0.5rem;
+  background: var(--panel-2);
+  text-align: center;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.04);
+}
+
+.entity-registry-empty-card__icon {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.375rem 0.625rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: 0.375rem;
+  background: var(--panel-2);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.entity-registry-empty-card__title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.entity-registry-empty-card__detail {
+  margin: 0;
+  max-width: 20rem;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--text-secondary);
 }
 
 .entity-rail-group {
@@ -5337,11 +5555,25 @@ textarea.input {
   transition: none !important;
 }
 
-/* Solo keeps the product surface — only the card frame goes away. */
+/* Solo keeps canvas gutter + panel frame — only the outer tile card goes away. */
 .workspace-tile-solo .workspace-shell {
   border-color: transparent;
   border-radius: 0;
   background: var(--workspace-widget-bg, var(--workspace-sheet, var(--panel)));
+}
+
+.workspace-tile-solo .workspace-shell--card-view,
+.workspace-tile-solo .workspace-shell--flush-view {
+  background: var(--canvas);
+}
+
+.workspace-tile-solo .widget-view-container {
+  padding: 0.875rem 1.25rem 1.25rem;
+}
+
+.workspace-tile-solo .widget-panel {
+  border-color: var(--border-subtle);
+  border-radius: 0.5rem;
 }
 
 /*
@@ -6364,6 +6596,61 @@ textarea.input {
    No crossfades, no veils. The user reads it as: ASCII makes space,
    ASCII draws the pill, real pill takes its place. */
 
+/* Status micro-badge — light: soft pill; dark: mark + muted label. */
+.status-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  flex-shrink: 0;
+  line-height: 1.2;
+  vertical-align: middle;
+}
+
+.status-indicator__label {
+  font-size: inherit;
+  font-weight: inherit;
+  text-transform: inherit;
+}
+
+:root[data-theme="light"] .status-indicator {
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  border: 1px solid var(--border-subtle);
+  background: var(--panel-2);
+  color: var(--text-muted);
+}
+
+:root[data-theme="light"] .status-indicator__mark {
+  display: none;
+}
+
+:root[data-theme="light"] .status-indicator--ok {
+  background: var(--status-completed-bg, var(--success-surface));
+  color: var(--status-completed-text, var(--success));
+  border-color: var(--success-border);
+}
+
+:root[data-theme="light"] .status-indicator--fail {
+  background: var(--status-failed-bg, var(--error-surface));
+  color: var(--status-failed-text, var(--error));
+  border-color: var(--error-border);
+}
+
+:root[data-theme="light"] .status-indicator--live {
+  background: var(--info-soft);
+  color: var(--info);
+  border-color: var(--info-border);
+}
+
+:root[data-theme="light"] .status-indicator--skip {
+  background: var(--warning-soft);
+  color: var(--warning);
+  border-color: var(--warning-border);
+}
+
 .chathome {
   background: var(--canvas);
   --hero-pill-shadow-live: none;
@@ -6464,18 +6751,17 @@ textarea.input {
 }
 
 /* Chathome chrome pills — input bar (+ expanded thread sidebar chrome).
- * Light: white lift on canvas — clear edge + soft shadow. */
+ * Light: white lift on warm paper — clear edge, not a soft twin of the field. */
 :root[data-theme="light"] .chathome-chrome-pill {
-  background-color: var(--panel);
-  border-color: var(--border-subtle);
-  box-shadow: var(--shadow-bubble);
+  background-color: var(--panel-2);
+  border-color: rgba(20, 18, 16, 0.20);
+  box-shadow: 0 1px 2px rgba(20, 18, 16, 0.04), 0 4px 14px rgba(20, 18, 16, 0.05);
   --tw-ring-color: transparent;
 }
 
 :root[data-theme="light"] .chathome-chrome-pill:focus-within {
-  border-color: var(--border);
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05), 0 4px 14px rgba(15, 23, 42, 0.08);
-  --tw-ring-color: rgba(15, 23, 42, 0.06);
+  border-color: rgba(20, 18, 16, 0.34);
+  --tw-ring-color: rgba(20, 18, 16, 0.08);
 }
 
 /* ── Chat composer (collapsed pill · expands on `/` or command output) ─ */
@@ -8130,76 +8416,6 @@ textarea.input {
   border: none;
 }
 
-/* Status micro-badge — light: soft pill; dark: mark + muted label. */
-.status-indicator {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
-  flex-shrink: 0;
-  line-height: 1.2;
-  vertical-align: middle;
-}
-
-.status-indicator__label {
-  font-size: inherit;
-  font-weight: inherit;
-  text-transform: inherit;
-}
-
-:root[data-theme="light"] .status-indicator {
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-  border: 1px solid var(--border-subtle);
-  background: var(--panel-2);
-  color: var(--text-muted);
-}
-
-:root[data-theme="light"] .status-indicator__mark {
-  display: none;
-}
-
-:root[data-theme="light"] .status-indicator--ok {
-  background: var(--status-completed-bg, var(--success-surface));
-  color: var(--status-completed-text, var(--success));
-  border-color: var(--success-border);
-}
-
-:root[data-theme="light"] .status-indicator--fail {
-  background: var(--status-failed-bg, var(--error-surface));
-  color: var(--status-failed-text, var(--error));
-  border-color: var(--error-border);
-}
-
-:root[data-theme="light"] .status-indicator--live {
-  background: var(--info-soft);
-  color: var(--info);
-  border-color: var(--info-border);
-}
-
-:root[data-theme="light"] .status-indicator--skip {
-  background: var(--warning-soft);
-  color: var(--warning);
-  border-color: var(--warning-border);
-}
-
-:root[data-theme="light"] .status-indicator--muted {
-  background: var(--panel-2);
-  color: var(--text-muted);
-  border-color: var(--border-subtle);
-}
-
-:root[data-theme="dark"] .status-indicator {
-  padding: 0;
-  border: none;
-  background: transparent;
-  color: var(--text-muted);
-  font-size: 12px;
-  font-weight: 500;
-}
-
 @keyframes mia-dot-pulse {
   0%,
   100% {
@@ -8415,37 +8631,11 @@ textarea.input {
   flex-direction: column;
 }
 
-:root[data-theme="light"] .termchat-home-shell {
-  background: var(--canvas);
-}
-
-:root[data-theme="light"] .termchat-widget {
-  background: var(--canvas);
-}
-
 .termchat-transcript-shell {
   display: flex;
   min-height: 0;
   flex: 1;
   flex-direction: column;
-}
-
-/* Light chat — lift trace metadata contrast (quiet, not invisible). */
-:root[data-theme="light"] .termchat-transcript-shell .text-text-faint {
-  color: var(--chat-trace-text, var(--text-muted));
-}
-
-:root[data-theme="light"] .termchat-transcript-shell .chat-trace-chev {
-  color: var(--chat-trace-text, var(--text-muted));
-}
-
-:root[data-theme="light"] .termchat-transcript-shell [data-chat-step-id] button.text-text-secondary,
-:root[data-theme="light"] .termchat-transcript-shell [data-chat-step-id] .text-text-secondary {
-  color: var(--chat-trace-subagent, var(--text-secondary));
-}
-
-:root[data-theme="light"] .termchat-transcript-shell .font-mono.text-text-secondary {
-  color: var(--chat-trace-text, var(--text-muted));
 }
 
 /* Chat trace — readable nest rails on white (widget + thread); not log-table pills. */
@@ -8559,23 +8749,6 @@ textarea.input {
 :root[data-theme="light"] .termchat-input-dock .chat-run-interrupted-bar__action:disabled {
   opacity: 0.55;
   cursor: not-allowed;
-}
-
-:root[data-theme="light"] .termchat-input-dock--composer {
-  background: var(--panel);
-  border-top: 1px solid var(--border-subtle);
-  box-shadow: 0 -4px 12px rgba(15, 23, 42, 0.04);
-}
-
-:root[data-theme="light"] .termchat-input-dock--composer .chathome-chrome-pill {
-  background-color: var(--panel);
-  border-color: var(--border-subtle);
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
-}
-
-:root[data-theme="light"] .termchat-input-dock--composer .chathome-chrome-pill:focus-within {
-  border-color: var(--border);
-  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.08);
 }
 
 .termchat-input-dock {

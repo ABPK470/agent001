@@ -6,7 +6,13 @@ import type { JSX } from "react"
 import { useState } from "react"
 import { ApprovalsPanel } from "./ApprovalsPanel"
 import { ConsoleProvider } from "./console-context"
-import { WIDGET_ENVELOPE } from "./design"
+import {
+  WIDGET_ENVELOPE,
+  WIDGET_SPLIT_INSET,
+  WIDGET_SPLIT_MAIN,
+  WIDGET_SPLIT_SHELL,
+  WIDGET_SPLIT_SIDEBAR,
+} from "./design"
 import { OverviewPanel } from "./OverviewPanel"
 import { ProposalsPanel } from "./ProposalsPanel"
 import { RoutesPanel } from "./RoutesPanel"
@@ -54,8 +60,8 @@ export function SyncAdminShell({
     <ConsoleProvider>
       <div className="sync-admin flex h-full min-h-0 flex-1 flex-col overflow-hidden">
         <div className={WIDGET_ENVELOPE}>
-          <div className="entity-registry-shell grid min-h-0 flex-1 overflow-hidden">
-            <aside className="entity-rail flex min-h-0 flex-col border-r border-border-subtle" aria-label="Sections">
+          <div className={WIDGET_SPLIT_SHELL}>
+            <aside className={WIDGET_SPLIT_SIDEBAR} aria-label="Sections">
               <div className="entity-rail-header">
                 <span className="entity-rail-header__label">Sync</span>
               </div>
@@ -92,13 +98,15 @@ export function SyncAdminShell({
               </div>
             </aside>
 
-            <div className="flex min-h-0 min-w-0 flex-col overflow-hidden">
-              {section === "overview"     && <OverviewPanel onJump={setSection} />}
-              {section === "proposals"    && <ProposalsPanel />}
-              {section === "runs"         && <RunsPanel initialTab={runsTab} />}
-              {section === "approvals"    && <ApprovalsPanel />}
-              {section === "schedules"    && <SchedulesPanel />}
-              {section === "routes"       && <RoutesPanel />}
+            <div className={WIDGET_SPLIT_MAIN}>
+              <div className={WIDGET_SPLIT_INSET}>
+                {section === "overview"     && <OverviewPanel onJump={setSection} />}
+                {section === "proposals"    && <ProposalsPanel />}
+                {section === "runs"         && <RunsPanel initialTab={runsTab} />}
+                {section === "approvals"    && <ApprovalsPanel />}
+                {section === "schedules"    && <SchedulesPanel />}
+                {section === "routes"       && <RoutesPanel />}
+              </div>
             </div>
           </div>
         </div>

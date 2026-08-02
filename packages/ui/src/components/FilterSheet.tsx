@@ -280,7 +280,7 @@ export function ActiveFilterChips({
 }): JSX.Element | null {
   if (chips.length === 0) return null
   return (
-    <div className="flex shrink-0 flex-wrap items-center gap-1.5 border-b border-border-subtle py-2">
+    <div className="widget-filter-band">
       {chips.map((chip) => (
         <button
           key={chip.id}

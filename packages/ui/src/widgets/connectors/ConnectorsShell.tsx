@@ -33,7 +33,6 @@ import {
   TAB_PILL_IDLE,
   TEXT_BTN,
   TEXT_BTN_PRIMARY,
-  WIDGET_ENVELOPE,
 } from "../entity-registry/chrome"
 import { CONTROL_READY, LIST_ROW_ACTIVE, LIST_ROW_IDLE } from "../../lib/selection"
 import { FormFieldGroup, FormSectionCard } from "../entity-registry/form-section"
@@ -212,9 +211,7 @@ export function ConnectorsShell(): JSX.Element {
   return (
     <>
       <div className="connectors flex h-full min-h-0 flex-1 flex-col overflow-hidden">
-        <div className={WIDGET_ENVELOPE}>
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            <ModalToastStack toasts={toasts} onDismiss={dismissToast} />
+        <ModalToastStack toasts={toasts} onDismiss={dismissToast} />
             <div className="shrink-0 space-y-2 border-b border-border-subtle px-5 py-3">
               <div className="flex h-9 items-center justify-between gap-3">
                 <div className="inline-flex items-center gap-1" role="tablist" aria-label="Connectors sections">
@@ -363,8 +360,6 @@ export function ConnectorsShell(): JSX.Element {
                 )}
               </div>
             </div>
-          </div>
-        </div>
       </div>
 
       {confirmSaveOpen && (

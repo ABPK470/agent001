@@ -557,7 +557,7 @@ export function OperationLog() {
       />
 
       {/* ── Body — bottom padding keeps the last card off the widget lip ─ */}
-      <div ref={scrollRef} className="flex min-h-0 flex-1 flex-col overflow-y-auto pb-4">
+      <div ref={scrollRef} className="widget-panel-body overflow-y-auto pb-4">
         {loading && filtered.length === 0 && (
           <div className="flex flex-1 items-center justify-center gap-2 text-center text-sm text-text-muted/60">
             <Loader2 size={14} className="animate-spin" />

@@ -23,6 +23,7 @@ import {
   WidgetToolbarLeading,
   WidgetToolbarSearch,
   WidgetToolbarTrailing,
+  WIDGET_REVIEW_CONTROLS_CLASS,
 } from "./widget-toolbar"
 
 export type { PipelineKindFilter }
@@ -177,6 +178,7 @@ export function OperationLogToolbar({
 
   return (
     <>
+      <div className={WIDGET_REVIEW_CONTROLS_CLASS}>
       <WidgetToolbar>
         <WidgetToolbarLeading>{null}</WidgetToolbarLeading>
         <WidgetToolbarSearch
@@ -216,6 +218,7 @@ export function OperationLogToolbar({
         chips={activeChips}
         onClear={activeFilterCount > 0 ? clearAllFilters : undefined}
       />
+      </div>
 
       <FilterSheet
         open={filtersOpen}

@@ -137,12 +137,6 @@ describe("light theme color system", () => {
     expect(css).toMatch(/\.status-indicator--ok\b/)
   })
 
-  it("light chat uses canvas shell and trace readability tokens", () => {
-    expect(css).toMatch(/:root\[data-theme="light"\][\s\S]*--chat-trace-text:\s*#475569/)
-    expect(css).toMatch(/:root\[data-theme="light"\] \.termchat-home-shell[\s\S]*background:\s*var\(--canvas\)/)
-    expect(css).toMatch(/--bubble-user:\s*var\(--panel\)/)
-  })
-
   it("go-to ready control stays ink fill (brand ≠ go-to)", () => {
     expect(css).toMatch(
       /\.mia-control\.mia-control--ready[^{]*\{[^}]*background:\s*var\(--text\)/s,

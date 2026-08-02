@@ -7,9 +7,8 @@
  *                   row2 = search flex + trailing
  *
  * Chrome:
- *   shell = top + left/right inset; stack = toolbar → optional band 2 → body.
- *   Do not put margin on the toolbar itself — the shell owns the inset.
- *   Band 2 (optional): ActiveFilterChips or Trace meta/ids — same stack gap.
+ *   widget-panel owns canvas inset; widget-review-controls groups toolbar + band 2.
+ *   Band 2 (optional): ActiveFilterChips or Trace meta/ids inside review-controls.
  */
 
 import { Loader2, Search, X } from "lucide-react"
@@ -19,16 +18,18 @@ import { createPortal } from "react-dom"
 import { placeAnchoredPanelForElements } from "../lib/anchored-panel"
 import { BrowseCount } from "../components/BrowseStrip"
 
-/** Shared top/side/bottom inset (12px) — Event Stream, Pipelines, Sync. */
-export const WIDGET_LOG_INSET_CLASS = "pt-3 px-3 pb-1"
+/** @deprecated Shell owns gutter — kept for modal/tooling references. */
+export const WIDGET_LOG_INSET_CLASS = ""
 
-/** Full-height shell for flush log widgets. */
+/** Full-height body inside `widget-panel` — no extra tile inset. */
 export const WIDGET_LOG_SHELL_CLASS =
-  `flex h-full min-h-0 flex-col overflow-hidden ${WIDGET_LOG_INSET_CLASS} text-text`
+  "flex h-full min-h-0 flex-1 flex-col overflow-hidden text-text"
 
-/** Column under the shell: toolbar then body with a shared gap. */
-export const WIDGET_LOG_STACK_CLASS =
-  "flex min-h-0 flex-1 flex-col gap-3 overflow-hidden"
+/** Column under widget-panel: controls band then scroll body. */
+export const WIDGET_LOG_STACK_CLASS = "widget-panel-stack"
+
+/** Toolbar + optional filter/meta band — one panel-2 control surface. */
+export const WIDGET_REVIEW_CONTROLS_CLASS = "widget-review-controls"
 
 /** @deprecated use WidgetToolbarChip classes via widget-toolbar__chip */
 export const LOG_TOOLBAR_CHIP = "widget-toolbar__chip"

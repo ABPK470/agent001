@@ -1,5 +1,5 @@
-/** Left rail width — keep in sync with grid template below. */
-export const RAIL_WIDTH = "12.5rem"
+/** Left rail width — keep in sync with `.entity-registry-shell` grid column. */
+export const RAIL_WIDTH = "16.25rem"
 
 export const RAIL_GRID = `grid-cols-[${RAIL_WIDTH}_1fr]` as const
 
@@ -22,6 +22,10 @@ export const TOOLBAR =
 
 export const TOOLBAR_ROW =
   "flex h-12 shrink-0 items-center px-3"
+
+/** Main-panel section tabs — matches entity rail header hairline. */
+export const SPLIT_MAIN_TOOLBAR =
+  `${TOOLBAR_ROW} border-b border-border-subtle`
 
 /** Vertical rule between toolbar control groups. */
 export const TOOLBAR_DIVIDER = "h-4 w-px shrink-0 bg-overlay-3"
@@ -61,11 +65,29 @@ export const PANEL = "mia-surface overflow-hidden"
 export const LIST_FLUSH = "overflow-hidden"
 
 /**
- * Admin split shell — flush with the workspace tile (no nested canvas card).
- * Rail / detail separate with a hairline only; tile owns the surface paint.
+ * Widget interior — canvas gutter inside the tile, then bordered rail + main panels.
+ * Shared by Entity Registry, Sync Operations, Connectors, and other flush widgets.
  */
 export const WIDGET_ENVELOPE =
-  "flex min-h-0 flex-1 flex-col overflow-hidden"
+  "widget-split-envelope flex min-h-0 flex-1 flex-col overflow-hidden"
+
+/** Rail + main grid — sidebar column width matches `--thread-rail` / entity list. */
+export const WIDGET_SPLIT_SHELL =
+  "entity-registry-shell widget-split-shell grid min-h-0 flex-1 overflow-hidden"
+
+export const WIDGET_SPLIT_SIDEBAR =
+  "entity-rail widget-split-sidebar flex min-h-0 flex-col"
+
+export const WIDGET_SPLIT_MAIN =
+  "widget-split-main flex min-h-0 min-w-0 flex-col overflow-hidden"
+
+/** Inset editor canvas inside the main panel — flex body only; panel owns the frame. */
+export const WIDGET_SPLIT_INSET =
+  "widget-split-inset flex min-h-0 flex-1 flex-col overflow-hidden"
+
+/** Single-panel body — shell wraps via `wrapWidgetBody`; exported for modal/tooling parity. */
+export const WIDGET_PANEL =
+  "widget-panel flex min-h-0 flex-1 flex-col overflow-hidden"
 export const TAB_SHELL = "flex h-full min-h-0 flex-col overflow-hidden"
 
 /** Same height and horizontal inset as the main tab toolbar row (`TOOLBAR_ROW`). */

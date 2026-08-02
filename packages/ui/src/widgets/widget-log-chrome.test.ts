@@ -19,6 +19,7 @@ import {
   WIDGET_LOG_INSET_CLASS,
   WIDGET_LOG_SHELL_CLASS,
   WIDGET_LOG_STACK_CLASS,
+  WIDGET_REVIEW_CONTROLS_CLASS,
 } from "./widget-toolbar"
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -43,12 +44,25 @@ function read(path: string): string {
 }
 
 describe("widget log chrome — shell", () => {
-  it("shares the same inset and toolbar→body gap", () => {
-    expect(WIDGET_LOG_INSET_CLASS).toContain("pt-3")
-    expect(WIDGET_LOG_INSET_CLASS).toContain("px-3")
-    expect(WIDGET_LOG_INSET_CLASS).toContain("pb-1")
-    expect(WIDGET_LOG_SHELL_CLASS).toContain(WIDGET_LOG_INSET_CLASS)
-    expect(WIDGET_LOG_STACK_CLASS).toContain("gap-3")
+  it("fills widget-panel from shell — no legacy tile inset on log widgets", () => {
+    expect(WIDGET_LOG_INSET_CLASS).toBe("")
+    expect(WIDGET_LOG_SHELL_CLASS).not.toContain("pt-3")
+    expect(WIDGET_LOG_SHELL_CLASS).toContain("flex-1")
+    expect(WIDGET_LOG_STACK_CLASS).toBe("widget-panel-stack")
+
+    const css = read(cssPath)
+    expect(css).toMatch(/\.widget-panel\s*\{[^}]*--widget-panel-inset-x:/s)
+    expect(css).toContain(".widget-review-controls")
+    expect(css).toContain(".widget-filter-band")
+
+    expect(WIDGET_REVIEW_CONTROLS_CLASS).toBe("widget-review-controls")
+
+    const live = read(livePath)
+    const trace = read(traceDagPath)
+    const ops = read(opsToolbarPath)
+    expect(live).toContain("WIDGET_REVIEW_CONTROLS_CLASS")
+    expect(trace).toContain("WIDGET_REVIEW_CONTROLS_CLASS")
+    expect(ops).toContain("WIDGET_REVIEW_CONTROLS_CLASS")
   })
 
   it("review widgets mount WidgetToolbar (not freestyle header columns)", () => {

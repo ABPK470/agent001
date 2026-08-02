@@ -39,6 +39,7 @@ import { WIDGET_ICONS } from "./widget-icons"
 import {
   WIDGET_LOG_SHELL_CLASS,
   WIDGET_LOG_STACK_CLASS,
+  WIDGET_REVIEW_CONTROLS_CLASS,
   WidgetToolbar,
   WidgetToolbarCount,
   WidgetToolbarLeading,
@@ -329,7 +330,7 @@ export function LiveLogs() {
   return (
     <div ref={rootRef} className={WIDGET_LOG_SHELL_CLASS}>
       <div className={WIDGET_LOG_STACK_CLASS}>
-      {/* Review dialect: leading | search | trailing — filters sheet is band-2 power. */}
+      <div className={WIDGET_REVIEW_CONTROLS_CLASS}>
       <WidgetToolbar compact={compact}>
         <WidgetToolbarLeading>{null}</WidgetToolbarLeading>
         <WidgetToolbarSearch
@@ -385,6 +386,7 @@ export function LiveLogs() {
         chips={activeChips}
         onClear={activeFilterCount > 0 ? clearAllFilters : undefined}
       />
+      </div>
 
       <FilterSheet
         open={filtersOpen}
@@ -479,7 +481,7 @@ export function LiveLogs() {
 
       <div
         ref={containerRef}
-        className="log-stream flex min-h-0 flex-1 flex-col overflow-y-auto"
+        className="widget-panel-body log-stream overflow-y-auto"
         onScroll={onScroll}
       >
         <div ref={topSentinelRef} />
