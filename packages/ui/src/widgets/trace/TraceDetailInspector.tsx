@@ -205,63 +205,65 @@ export function TraceDetailInspector({
   return (
     <div className="trace-detail">
       <div className="trace-detail__header">
-        <TraceInspectorHeadline node={node} />
-        <div className="trace-detail__actions">
-          {actions === "tool" ? (
-            <>
-              <button
-                type="button"
-                className="trace-detail-action is-primary"
-                onClick={onTestTool}
-              >
-                Test tool in playground
-              </button>
-              <button
-                type="button"
-                className="trace-detail-action"
-                disabled={!curl}
-                onClick={onCopyCurl}
-              >
-                Copy as curl
-              </button>
-            </>
-          ) : actions === "llm" ? (
-            <>
-              <button
-                type="button"
-                className={`trace-detail-action is-toggle${playgroundOpen ? " is-active" : ""}`}
-                aria-pressed={playgroundOpen}
-                onClick={onTogglePlayground}
-                disabled={!runId}
-              >
-                Re-run in playground
-              </button>
-              <button
-                type="button"
-                className={`trace-detail-action is-toggle${evalAdded ? " is-success" : ""}`}
-                disabled={!runId || evalBusy || evalAdded}
-                onClick={onAddEval}
-              >
-                {evalBusy ? "Saving…" : evalAdded ? "Added ✓" : "Add to evaluation dataset"}
-              </button>
-              {canCompare ? (
+        <div className="trace-detail__header-top">
+          <TraceInspectorHeadline node={node} />
+          <div className="trace-detail__actions">
+            {actions === "tool" ? (
+              <>
                 <button
                   type="button"
-                  className={`trace-detail-action is-toggle${compareRunId ? " is-active" : ""}`}
-                  aria-pressed={Boolean(compareRunId)}
-                  onClick={onToggleCompare}
-                  disabled={!compareAvailable}
-                  title={
-                    compareAvailable
-                      ? undefined
-                      : "No prior run in this thread to compare against"
-                  }
+                  className="trace-detail-action trace-detail-action--toolbar is-primary"
+                  onClick={onTestTool}
                 >
-                  Compare with previous run
+                  Test tool
                 </button>
-              ) : null}
-            </>
-          ) : null}
+                <button
+                  type="button"
+                  className="trace-detail-action trace-detail-action--toolbar"
+                  disabled={!curl}
+                  onClick={onCopyCurl}
+                >
+                  Copy curl
+                </button>
+              </>
+            ) : actions === "llm" ? (
+              <>
+                <button
+                  type="button"
+                  className={`trace-detail-action trace-detail-action--toolbar is-toggle${playgroundOpen ? " is-active" : ""}`}
+                  aria-pressed={playgroundOpen}
+                  onClick={onTogglePlayground}
+                  disabled={!runId}
+                >
+                  Playground
+                </button>
+                <button
+                  type="button"
+                  className={`trace-detail-action trace-detail-action--toolbar is-toggle${evalAdded ? " is-success" : ""}`}
+                  disabled={!runId || evalBusy || evalAdded}
+                  onClick={onAddEval}
+                >
+                  {evalBusy ? "Saving…" : evalAdded ? "Added ✓" : "Add to eval"}
+                </button>
+                {canCompare ? (
+                  <button
+                    type="button"
+                    className={`trace-detail-action trace-detail-action--toolbar is-toggle${compareRunId ? " is-active" : ""}`}
+                    aria-pressed={Boolean(compareRunId)}
+                    onClick={onToggleCompare}
+                    disabled={!compareAvailable}
+                    title={
+                      compareAvailable
+                        ? undefined
+                        : "No prior run in this thread to compare against"
+                    }
+                  >
+                    Compare
+                  </button>
+                ) : null}
+              </>
+            ) : null}
+          </div>
         </div>
       </div>
 

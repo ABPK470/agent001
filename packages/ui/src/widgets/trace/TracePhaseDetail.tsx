@@ -1,18 +1,26 @@
 /**
- * Phase detail — timeline, steps, JSON blocks; scoped to selected tree node state.
+ * Phase detail — timeline, steps, accordion JSON blocks.
  */
 
+import { ChevronRight } from "lucide-react"
 import { useState } from "react"
 import { JsonViewer } from "../../components/JsonViewer"
+import { formatMs } from "../../lib/util"
 import type { TracePhaseDetail, TracePhaseNode } from "./build-trace-dag"
 import { TraceErrorBlock } from "./TraceErrorBlock"
 import { TracePhaseEventText } from "./TracePhaseEventText"
+import {
+  buildTimelineOffsets,
+  timelineEventKind,
+} from "./trace-phase-timeline-utils"
 import type { TraceSpanStatus } from "./trace-tree-index"
 
-function eventIcon(tone: string | undefined): string {
-  if (tone === "error") return "✕"
-  if (tone === "warn") return "!"
-  return "·"
+function TimelineDot({ kind }: { kind: ReturnType<typeof timelineEventKind> }) {
+  return (
+    <span className={`trace-phase-timeline__dot is-${kind}`} aria-hidden>
+      {kind === "error" ? "✕" : kind === "warn" ? "!" : kind === "complete" ? "✓" : "●"}
+    </span>
+  )
 }
 
 export function TracePhaseDetail({
@@ -38,6 +46,8 @@ export function TracePhaseDetail({
   const timelineEvents = showErrorSurface
     ? events
     : events.filter((e) => e.tone !== "error")
+  const phaseDone = phase.status === "done" && !showErrorSurface
+  const offsets = buildTimelineOffsets(timelineEvents, phase.durationMs)
   const [openJsonIds, setOpenJsonIds] = useState(() => new Set<string>())
 
   function toggleJson(id: string) {
@@ -62,27 +72,39 @@ export function TracePhaseDetail({
       ) : null}
 
       {timelineEvents.length > 0 && (
-        <section className="trace-detail-section">
+        <section className="trace-detail-section trace-detail-section--timeline">
           <div className="trace-detail-section__label">Timeline</div>
           <ol className="trace-phase-timeline">
-            {timelineEvents.map((ev, index) => (
-              <li
-                key={ev.id}
-                className={`trace-phase-timeline__item${ev.tone && ev.tone !== "neutral" ? ` is-${ev.tone}` : ""}`}
-              >
-                <span className="trace-phase-timeline__rail" aria-hidden>
-                  <span className="trace-phase-timeline__dot">{eventIcon(ev.tone)}</span>
-                  {index < timelineEvents.length - 1 ? (
-                    <span className="trace-phase-timeline__line" />
-                  ) : null}
-                </span>
-                <div className="trace-phase-timeline__body">
-                  <div className="trace-phase-timeline__text">
-                    <TracePhaseEventText text={ev.text} />
+            {timelineEvents.map((ev, index) => {
+              const kind = timelineEventKind(
+                ev.text,
+                ev.tone,
+                index === timelineEvents.length - 1,
+                phaseDone,
+              )
+              const offsetMs = offsets[index] ?? 0
+              return (
+                <li
+                  key={ev.id}
+                  className={`trace-phase-timeline__item${ev.tone && ev.tone !== "neutral" ? ` is-${ev.tone}` : ""} is-${kind}`}
+                >
+                  <span className="trace-phase-timeline__rail" aria-hidden>
+                    <TimelineDot kind={kind} />
+                    {index < timelineEvents.length - 1 ? (
+                      <span className="trace-phase-timeline__line" />
+                    ) : null}
+                  </span>
+                  <div className="trace-phase-timeline__body">
+                    <div className="trace-phase-timeline__text">
+                      <TracePhaseEventText text={ev.text} />
+                    </div>
+                    <span className="trace-phase-timeline__time tabular-nums">
+                      {formatMs(offsetMs)}
+                    </span>
                   </div>
-                </div>
-              </li>
-            ))}
+                </li>
+              )
+            })}
           </ol>
         </section>
       )}
@@ -103,23 +125,31 @@ export function TracePhaseDetail({
         </section>
       )}
 
-      {jsonBlocks.map((block) => (
-        <section key={block.id} className="trace-detail-section">
-          <div className="trace-detail-section__header">
-            <span className="trace-detail-section__label">{block.label}</span>
+      {jsonBlocks.map((block) => {
+        const open = openJsonIds.has(block.id)
+        return (
+          <section key={block.id} className="trace-detail-section trace-detail-section--accordion">
             <button
               type="button"
-              className="trace-detail-section__expand"
+              className="trace-detail-accordion"
+              aria-expanded={open}
               onClick={() => toggleJson(block.id)}
             >
-              {openJsonIds.has(block.id) ? "Collapse" : "Expand"}
+              <ChevronRight
+                size={14}
+                className={`trace-detail-accordion__chev${open ? " is-open" : ""}`}
+                aria-hidden
+              />
+              <span className="trace-detail-accordion__label">{block.label}</span>
             </button>
-          </div>
-          {openJsonIds.has(block.id) ? (
-            <JsonViewer value={block.value} copyable embedded inline />
-          ) : null}
-        </section>
-      ))}
+            {open ? (
+              <div className="trace-detail-accordion__body">
+                <JsonViewer value={block.value} copyable embedded inline />
+              </div>
+            ) : null}
+          </section>
+        )
+      })}
     </div>
   )
 }

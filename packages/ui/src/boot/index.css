@@ -3514,12 +3514,16 @@ button.trace-tree-status-pill:hover {
 
 .trace-detail__header {
   flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.875rem;
   padding: 1rem 1rem 0.875rem;
   border-bottom: 1px solid var(--border-subtle, var(--color-border-subtle));
   background: var(--overlay-1, rgb(255 255 255 / 0.02));
+}
+
+.trace-detail__header-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
 }
 
 .trace-detail__headline {
@@ -3527,6 +3531,7 @@ button.trace-tree-status-pill:hover {
   flex-direction: column;
   gap: 0.375rem;
   min-width: 0;
+  flex: 1 1 auto;
 }
 
 .trace-detail__headline-row {
@@ -3567,7 +3572,9 @@ button.trace-tree-status-pill:hover {
   flex-wrap: wrap;
   gap: 0.5rem;
   align-items: center;
-  padding-top: 0.125rem;
+  justify-content: flex-end;
+  flex-shrink: 0;
+  max-width: min(100%, 20rem);
 }
 
 .trace-detail__actions:empty {
@@ -3576,6 +3583,7 @@ button.trace-tree-status-pill:hover {
 
 .trace-detail-action {
   font-size: 0.6875rem;
+  font-weight: 500;
   padding: 0.35rem 0.7rem;
   border: 1px solid var(--border-subtle, var(--color-border-subtle));
   border-radius: 999px;
@@ -3583,6 +3591,32 @@ button.trace-tree-status-pill:hover {
   color: var(--text, var(--color-text));
   cursor: pointer;
   white-space: nowrap;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.trace-detail-action--toolbar {
+  border-radius: 0.375rem;
+  padding: 0.375rem 0.75rem;
+  background: rgb(255 255 255 / 0.05);
+  border-color: rgb(255 255 255 / 0.1);
+}
+
+:root[data-theme="light"] .trace-detail-action--toolbar {
+  background: rgb(15 23 42 / 0.04);
+  border-color: rgb(15 23 42 / 0.12);
+}
+
+.trace-detail-action--toolbar:hover:not(:disabled) {
+  background: rgb(255 255 255 / 0.1);
+  border-color: rgb(255 255 255 / 0.2);
+}
+
+:root[data-theme="light"] .trace-detail-action--toolbar:hover:not(:disabled) {
+  background: rgb(15 23 42 / 0.07);
+  border-color: rgb(15 23 42 / 0.18);
 }
 
 .trace-detail-action:hover:not(:disabled) {
@@ -3778,6 +3812,57 @@ button.trace-tree-status-pill:hover {
   margin-bottom: 0;
 }
 
+.trace-detail-section--timeline .trace-detail-section__label {
+  padding-bottom: 0.5rem;
+  margin-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border-subtle, var(--color-border-subtle));
+}
+
+.trace-detail-section--accordion {
+  margin-bottom: 0;
+}
+
+.trace-detail-accordion {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.625rem 0;
+  margin: 0;
+  border: none;
+  border-top: 1px solid var(--border-subtle, var(--color-border-subtle));
+  background: transparent;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted, var(--color-text-muted));
+  cursor: pointer;
+  text-align: left;
+}
+
+.trace-detail-accordion:hover {
+  color: var(--text, var(--color-text));
+}
+
+.trace-detail-accordion__chev {
+  flex-shrink: 0;
+  color: var(--text-muted, var(--color-text-muted));
+  transition: transform 0.15s ease;
+}
+
+.trace-detail-accordion__chev.is-open {
+  transform: rotate(90deg);
+}
+
+.trace-detail-accordion__label {
+  min-width: 0;
+}
+
+.trace-detail-accordion__body {
+  padding: 0 0 0.75rem;
+}
+
 .trace-detail-section__expand {
   flex-shrink: 0;
   font-size: 0.6875rem;
@@ -3838,16 +3923,30 @@ button.trace-tree-status-pill:hover {
 }
 
 .trace-phase-timeline__body {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
   min-width: 0;
   padding: 0.15rem 0 0.65rem;
 }
 
 .trace-phase-timeline__text {
+  flex: 1 1 auto;
+  min-width: 0;
   font-size: 0.8125rem;
   line-height: 1.45;
   color: var(--text, var(--color-text));
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.trace-phase-timeline__time {
+  flex-shrink: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.6875rem;
+  line-height: 1.45;
+  color: var(--text-muted, var(--color-text-muted));
 }
 
 .trace-phase-timeline__label {
@@ -3889,6 +3988,23 @@ button.trace-tree-status-pill:hover {
 .trace-phase-timeline__item.is-error .trace-phase-timeline__dot {
   color: var(--color-error, #ef4444);
   border-color: var(--color-error, #ef4444);
+}
+
+.trace-phase-timeline__item.is-tools .trace-phase-timeline__dot {
+  color: rgb(129 140 248);
+  border-color: rgb(129 140 248 / 0.65);
+  background: rgb(99 102 241 / 0.12);
+  font-size: 0.5rem;
+}
+
+.trace-phase-timeline__item.is-complete .trace-phase-timeline__dot {
+  color: rgb(74 222 128);
+  border-color: rgb(74 222 128 / 0.65);
+  background: rgb(34 197 94 / 0.12);
+}
+
+.trace-phase-timeline__item.is-tools .trace-phase-timeline__text {
+  color: var(--text, var(--color-text));
 }
 
 .trace-phase-timeline__item.is-warn .trace-phase-timeline__text,

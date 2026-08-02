@@ -1,5 +1,5 @@
 /**
- * Inspector header — node-type title, status badge, metrics.
+ * Inspector header — title, status badge, metrics line (left column of hero banner).
  */
 
 import { formatMs } from "../../lib/util"
@@ -34,25 +34,40 @@ export function inspectorTitle(node: TraceTreeNode): string {
   }
 }
 
-function inspectorMetrics(node: TraceTreeNode): string[] {
-  const bits: string[] = []
-  if (node.durationMs != null) bits.push(formatMs(node.durationMs))
-  if (node.costUsd != null) bits.push(formatCostUsd(node.costUsd))
-  if (node.promptTokens > 0 || node.completionTokens > 0) {
-    bits.push(tokenPairLabel(node.promptTokens, node.completionTokens))
-  }
-  return bits
-}
-
-function inspectorSubtitle(node: TraceTreeNode): string | null {
+function headlineSubtitle(node: TraceTreeNode): string | null {
   if (!node.subtitle) return null
   if (node.kind === "call") return null
+  const normalized = node.subtitle.trim().toLowerCase()
+  if (
+    node.status === "success" &&
+    (normalized === "done" || normalized === "success" || normalized.startsWith("success"))
+  ) {
+    return null
+  }
   return node.subtitle
 }
 
+function headlineMetricsLine(node: TraceTreeNode): string | null {
+  const parts: string[] = []
+  if (node.durationMs != null) parts.push(formatMs(node.durationMs))
+  if (node.promptTokens > 0 || node.completionTokens > 0) {
+    parts.push(tokenPairLabel(node.promptTokens, node.completionTokens))
+  } else if (node.kind === "call" || node.kind === "phase" || node.kind === "sent") {
+    parts.push("0 tokens")
+  }
+  if (node.costUsd != null) parts.push(formatCostUsd(node.costUsd))
+  else if (node.kind === "call" || node.kind === "phase") parts.push(formatCostUsd(0))
+
+  const subtitle = headlineSubtitle(node)
+  if (subtitle && !parts.some((p) => p.includes(subtitle))) {
+    parts.unshift(subtitle)
+  }
+
+  return parts.length > 0 ? parts.join(" · ") : null
+}
+
 export function TraceInspectorHeadline({ node }: { node: TraceTreeNode }) {
-  const metrics = inspectorMetrics(node)
-  const subtitle = inspectorSubtitle(node)
+  const metricsLine = headlineMetricsLine(node)
 
   return (
     <div className="trace-detail__headline">
@@ -64,11 +79,8 @@ export function TraceInspectorHeadline({ node }: { node: TraceTreeNode }) {
           hasError={node.hasError}
         />
       </div>
-      {subtitle ? (
-        <p className="trace-detail__headline-sub">{subtitle}</p>
-      ) : null}
-      {metrics.length > 0 ? (
-        <p className="trace-detail__headline-metrics tabular-nums">{metrics.join(" · ")}</p>
+      {metricsLine ? (
+        <p className="trace-detail__headline-metrics tabular-nums">{metricsLine}</p>
       ) : null}
     </div>
   )
