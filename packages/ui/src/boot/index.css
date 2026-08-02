@@ -4506,19 +4506,38 @@ textarea.input {
 }
 
 /* Review band 2 — Trace meta/ids (peer of ActiveFilterChips).
- * Space separates stats (no middots). Numbers carry weight; labels stay quiet.
- * No hairline under meta: toolbar already closed the control band. */
+ * KPIs left, run/thread ids right — different jobs, one row. */
 .widget-review-meta {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: 0.55rem 1.15rem;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
   min-width: 0;
   padding: 0.15rem 0 0.65rem;
   border-bottom: none;
   font-size: var(--review-meta-size);
   line-height: 1.4;
   color: var(--text-muted);
+}
+
+.widget-review-meta__stats {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.55rem 1.15rem;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.widget-review-meta__ids {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 0.55rem 1rem;
+  margin-left: auto;
+  flex: 0 1 auto;
 }
 
 .widget-review-meta__stat {
@@ -8109,9 +8128,9 @@ textarea.input {
   padding-right: 1.75rem;
 }
 
-.thread-nav-thread:not(.thread-nav-thread--pinned):hover .thread-nav-thread-btn,
+.thread-nav-thread:not(.thread-nav-thread--pinned) > .thread-nav-thread-row:hover .thread-nav-thread-btn,
 .thread-nav-thread:not(.thread-nav-thread--pinned).thread-nav-thread--menu-open .thread-nav-thread-btn,
-.thread-nav-thread:not(.thread-nav-thread--pinned):focus-within .thread-nav-thread-btn {
+.thread-nav-thread:not(.thread-nav-thread--pinned) > .thread-nav-thread-row:focus-within .thread-nav-thread-btn {
   padding-right: 1.75rem;
 }
 
@@ -8161,15 +8180,15 @@ textarea.input {
   pointer-events: none;
 }
 
-.thread-nav-thread--pinned:hover .thread-nav-thread-actions,
-.thread-nav-thread--pinned.thread-nav-thread--menu-open .thread-nav-thread-actions,
-.thread-nav-thread--pinned:focus-within .thread-nav-thread-actions {
+.thread-nav-thread--pinned > .thread-nav-thread-row:hover .thread-nav-thread-actions,
+.thread-nav-thread--pinned.thread-nav-thread--menu-open > .thread-nav-thread-row .thread-nav-thread-actions,
+.thread-nav-thread--pinned > .thread-nav-thread-row:focus-within .thread-nav-thread-actions {
   pointer-events: auto;
 }
 
-.thread-nav-thread:not(.thread-nav-thread--pinned):hover .thread-nav-thread-actions,
-.thread-nav-thread:not(.thread-nav-thread--pinned).thread-nav-thread--menu-open .thread-nav-thread-actions,
-.thread-nav-thread:not(.thread-nav-thread--pinned):focus-within .thread-nav-thread-actions {
+.thread-nav-thread:not(.thread-nav-thread--pinned) > .thread-nav-thread-row:hover .thread-nav-thread-actions,
+.thread-nav-thread:not(.thread-nav-thread--pinned).thread-nav-thread--menu-open > .thread-nav-thread-row .thread-nav-thread-actions,
+.thread-nav-thread:not(.thread-nav-thread--pinned) > .thread-nav-thread-row:focus-within .thread-nav-thread-actions {
   opacity: 1;
   pointer-events: auto;
 }
@@ -8216,18 +8235,18 @@ textarea.input {
   opacity: 1;
 }
 
-.thread-nav-thread--pinned:hover .thread-nav-pin-slot,
+.thread-nav-thread--pinned > .thread-nav-thread-row:hover .thread-nav-pin-slot,
 .thread-nav-thread--pinned.thread-nav-thread--menu-open .thread-nav-pin-slot,
-.thread-nav-thread--pinned:focus-within .thread-nav-pin-slot {
+.thread-nav-thread--pinned > .thread-nav-thread-row:focus-within .thread-nav-pin-slot {
   opacity: 0;
 }
 
-.thread-nav-thread:not(.thread-nav-thread--pinned):hover .thread-nav-options-btn,
+.thread-nav-thread:not(.thread-nav-thread--pinned) > .thread-nav-thread-row:hover .thread-nav-options-btn,
 .thread-nav-thread:not(.thread-nav-thread--pinned).thread-nav-thread--menu-open .thread-nav-options-btn,
-.thread-nav-thread:not(.thread-nav-thread--pinned):focus-within .thread-nav-options-btn,
-.thread-nav-thread--pinned:hover .thread-nav-options-btn,
+.thread-nav-thread:not(.thread-nav-thread--pinned) > .thread-nav-thread-row:focus-within .thread-nav-options-btn,
+.thread-nav-thread--pinned > .thread-nav-thread-row:hover .thread-nav-options-btn,
 .thread-nav-thread--pinned.thread-nav-thread--menu-open .thread-nav-options-btn,
-.thread-nav-thread--pinned:focus-within .thread-nav-options-btn {
+.thread-nav-thread--pinned > .thread-nav-thread-row:focus-within .thread-nav-options-btn {
   opacity: 1;
   pointer-events: auto;
   color: var(--text-muted);

@@ -373,8 +373,10 @@ describe("widget log chrome — Trace meta & scope payload", () => {
       /\.widget-review-meta__stat-value\s*\{[^}]*font-weight:\s*600/s,
     )
     expect(css).toContain(".widget-review-meta__id-group")
+    expect(css).toContain(".widget-review-meta__ids")
 
-    expect(dag).toContain("widget-review-meta__stat")
+    expect(dag).toContain("widget-review-meta__stats")
+    expect(dag).toContain("widget-review-meta__ids")
     expect(dag).toContain("widget-review-meta__stat-value")
     expect(dag).toContain('tone="meta"')
     expect(dag).not.toMatch(/metaParts\.join\(" · "\)/)

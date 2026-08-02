@@ -1049,28 +1049,34 @@ export function TraceDag({
 
       {showMetaBand && (
         <div className="widget-review-meta">
-          {metaStats.length === 0 ? (
-            <span className="widget-review-meta__empty">No agent loop yet</span>
-          ) : (
-            metaStats.map((stat) => (
-              <span key={`${stat.value}:${stat.label ?? ""}`} className="widget-review-meta__stat">
-                <span className="widget-review-meta__stat-value">{stat.value}</span>
-                {stat.label ? (
-                  <span className="widget-review-meta__stat-label">{stat.label}</span>
-                ) : null}
-              </span>
-            ))
+          <div className="widget-review-meta__stats">
+            {metaStats.length === 0 ? (
+              <span className="widget-review-meta__empty">No agent loop yet</span>
+            ) : (
+              metaStats.map((stat) => (
+                <span key={`${stat.value}:${stat.label ?? ""}`} className="widget-review-meta__stat">
+                  <span className="widget-review-meta__stat-value">{stat.value}</span>
+                  {stat.label ? (
+                    <span className="widget-review-meta__stat-label">{stat.label}</span>
+                  ) : null}
+                </span>
+              ))
+            )}
+          </div>
+          {(runId || threadId) && (
+            <div className="widget-review-meta__ids">
+              {runId ? (
+                <span className="widget-review-meta__id-group">
+                  <IdChip label="run" value={runId} tone="meta" />
+                </span>
+              ) : null}
+              {threadId ? (
+                <span className="widget-review-meta__id-group">
+                  <IdChip label="thread" value={threadId} tone="meta" />
+                </span>
+              ) : null}
+            </div>
           )}
-          {runId ? (
-            <span className="widget-review-meta__id-group">
-              <IdChip label="run" value={runId} tone="meta" />
-            </span>
-          ) : null}
-          {threadId ? (
-            <span className="widget-review-meta__id-group">
-              <IdChip label="thread" value={threadId} tone="meta" />
-            </span>
-          ) : null}
         </div>
       )}
       </div>
