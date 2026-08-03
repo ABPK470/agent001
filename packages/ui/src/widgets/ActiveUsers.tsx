@@ -641,7 +641,6 @@ export function ActiveUsers(): ReactNode {
                           adminBusy={adminBusy === u.identifier}
                           onToggleAdmin={(next) => void toggleAdmin(u, next).catch((err: unknown) => { console.error("[mia]", err) })}
                           onPageChange={(offset) => void loadHistory(u.identifier, offset).catch((err: unknown) => { console.error("[mia]", err) })}
-                          onCollapse={() => toggle(u.identifier)}
                           viewingAsUpn={viewingAsUpn}
                           onViewingAs={() => {
                             if (!u.upn) return
@@ -669,8 +668,8 @@ export function ActiveUsers(): ReactNode {
               )}
             </div>
           ) : (
-            <table className="au-users-table w-full border-collapse">
-              <thead className="sticky top-0 z-20">
+            <table className="au-users-table w-full">
+              <thead>
                 <tr className="text-left text-xs uppercase tracking-wider text-text-muted border-b border-border-subtle">
                   <SortTh k="status" current={sortKey} dir={sortDir} onClick={onSort} className="w-8" label="" />
                   <SortTh k="name" current={sortKey} dir={sortDir} onClick={onSort} className="au-th-name" label="Name" />
@@ -695,7 +694,10 @@ export function ActiveUsers(): ReactNode {
                   return (
                     <Fragment key={u.identifier}>
                       <tr
-                        className={`border-b border-border-subtle cursor-pointer hover:bg-overlay-2 transition-colors ${isOpen ? "bg-overlay-2" : ""}`}
+                        className={[
+                          "border-b border-border-subtle cursor-pointer hover:bg-overlay-2 transition-colors",
+                          isOpen ? "au-user-row--open" : "",
+                        ].filter(Boolean).join(" ")}
                         onClick={() => toggle(u.identifier)}
                       >
                         <td className="py-2 px-3 w-8">
@@ -740,7 +742,7 @@ export function ActiveUsers(): ReactNode {
                       </tr>
                       {isOpen && (
                         <tr className="au-detail-row">
-                          <td colSpan={AU_TABLE_COL_SPAN} className="w-0 min-w-0 p-0 align-top">
+                          <td colSpan={AU_TABLE_COL_SPAN} className="au-detail-cell p-0 align-top">
                             <div className="au-detail-nest">
                               <UserDetail
                                 user={u}
@@ -750,7 +752,6 @@ export function ActiveUsers(): ReactNode {
                                 adminBusy={adminBusy === u.identifier}
                                 onToggleAdmin={(next) => void toggleAdmin(u, next).catch((err: unknown) => { console.error("[mia]", err) })}
                                 onPageChange={(offset) => void loadHistory(u.identifier, offset).catch((err: unknown) => { console.error("[mia]", err) })}
-                                onCollapse={() => toggle(u.identifier)}
                                 viewingAsUpn={viewingAsUpn}
                                 onViewingAs={() => {
                                   if (!u.upn) return
@@ -1114,7 +1115,7 @@ function UserCardRow({
   return (
     <button
       type="button"
-      className={`au-user-card w-full text-left px-3 py-3 hover:bg-overlay-2 transition-colors ${isOpen ? "bg-overlay-2" : ""}`}
+      className={`au-user-card w-full text-left px-3 py-3 hover:bg-overlay-2 transition-colors ${isOpen ? "au-user-card--open" : ""}`}
       onClick={onToggle}
     >
       <div className="flex items-start gap-2.5 min-w-0">
@@ -1213,14 +1214,13 @@ type RunSortKey = "started" | "duration" | "steps" | "tokens" | "llmCalls" | "mo
 /** Run-history table needs ~this many CSS px; below → stacked cards. */
 const AU_RUN_TABLE_MIN_WIDTH_PX = 720
 
-function UserDetail({ user, liveRuns, history, stack, adminBusy, onToggleAdmin, onPageChange, onCollapse, viewingAsUpn, onViewingAs }: {
+function UserDetail({ user, liveRuns, history, stack, adminBusy, onToggleAdmin, onPageChange, viewingAsUpn, onViewingAs }: {
   user: UserRow; liveRuns: ActiveRunRow[]
   history: HistoryState | undefined
   stack: boolean
   adminBusy: boolean
   onToggleAdmin: (next: boolean) => void
   onPageChange: (offset: number) => void
-  onCollapse: () => void
   viewingAsUpn: string | null
   onViewingAs: () => void
 }) {
@@ -1313,7 +1313,7 @@ function UserDetail({ user, liveRuns, history, stack, adminBusy, onToggleAdmin, 
     const active = runSort === k
     return (
       <th
-        className={`py-2 px-3 au-label font-semibold cursor-pointer select-none whitespace-nowrap transition-colors ${active ? "text-text" : "text-text-muted/50 hover:text-text-muted"} ${right ? "text-right" : "text-left"}`}
+        className={`py-2 px-3 au-run-th cursor-pointer select-none whitespace-nowrap transition-colors ${active ? "au-run-th--active" : ""} ${right ? "text-right" : "text-left"}`}
         onClick={() => onRunSort(k)}
       >
         {label}
@@ -1327,38 +1327,8 @@ function UserDetail({ user, liveRuns, history, stack, adminBusy, onToggleAdmin, 
   return (
     <div ref={detailRef} className="au-detail-panel min-w-0">
 
-      {/* Sticky context banner — stays under users thead while history scrolls */}
-      <button
-        type="button"
-        className="au-detail-header flex w-full items-center gap-2.5 px-4 py-2.5 text-left hover:bg-overlay-2 border-b border-border-subtle transition-colors"
-        onClick={onCollapse}
-        title="Collapse user details"
-      >
-        <span className={`inline-block w-2 h-2 rounded-full shrink-0 ${
-          liveRuns.length > 0
-            ? "border-[1.5px] border-text-muted bg-transparent animate-pulse"
-            : user.online
-              ? "border-[1.5px] border-text bg-transparent"
-              : "bg-text-muted/40"
-        }`} />
-        <span className="font-medium text-text truncate">
-          {user.displayName ?? <span className="text-text-muted">—</span>}
-        </span>
-        {user.isAdmin ? (
-          <span className="shrink-0 rounded bg-accent/15 px-1.5 py-0.5 au-label font-semibold text-accent">
-            admin
-          </span>
-        ) : null}
-        {user.upn ? (
-          <span className="min-w-0 truncate font-mono text-sm text-text-muted">{user.upn}</span>
-        ) : (
-          <span className="font-mono text-sm text-text-muted/60">anon · {user.identifier.slice(4, 12)}</span>
-        )}
-        <span className="ml-auto shrink-0 au-label text-text-muted">collapse ▾</span>
-      </button>
-
-      {/* Identity — labeled grid, not a faux table row */}
-      <div className="au-detail-meta px-4 py-3 border-b border-border-subtle">
+      {/* Identity + actions toolbar */}
+      <div className="au-detail-meta">
         <div className="au-detail-meta-grid">
           <KV label="Role" value={user.isAdmin ? "Admin" : "User"} />
           <KV label="First seen" value={formatAbsolute(user.firstSeenAt)} />
@@ -1379,7 +1349,7 @@ function UserDetail({ user, liveRuns, history, stack, adminBusy, onToggleAdmin, 
           )}
         </div>
         {user.upn ? (
-          <div className="mt-3 flex flex-wrap justify-end gap-2">
+          <div className="au-detail-actions">
             <button
               type="button"
               onClick={(e) => {
@@ -1392,11 +1362,11 @@ function UserDetail({ user, liveRuns, history, stack, adminBusy, onToggleAdmin, 
                   ? "au-btn-viewing-as"
                   : "border-border-subtle text-text-muted hover:bg-overlay-2 hover:text-text",
               ].join(" ")}
-              title="Viewing as this user — Personal widgets show their data"
+              title="Personal widgets show this user's data"
             >
               {viewingAsUpn && viewingAsUpn.toLowerCase() === user.upn.toLowerCase()
-                ? "Viewing as · back to Me"
-                : "Viewing as"}
+                ? "Back to me"
+                : "View as user"}
             </button>
             <button
               type="button"
@@ -1447,40 +1417,36 @@ function UserDetail({ user, liveRuns, history, stack, adminBusy, onToggleAdmin, 
       )}
 
       {/* ── Run history ───────────────────────────────── */}
-      <div>
-        {/* Toolbar — sticky under the user banner with the run thead */}
+      <div className="au-run-history">
+        {/* Toolbar — pins under the open user row once metadata scrolls past */}
         <div className="au-run-toolbar px-4 py-2 border-b border-border-subtle flex flex-wrap items-center gap-2">
           <span className="inline-flex items-baseline gap-1.5 shrink-0">
-            <span className="au-label font-semibold text-text-muted/60 tracking-widest">
+            <span className="au-label font-semibold text-text-secondary tracking-widest">
               Runs
             </span>
             {history && !history.loading && (
-              <span className="au-label text-text-muted/40 tabular-nums">
+              <span className="au-label text-text-muted tabular-nums">
                 {history.total}{displayRows.length !== history.rows.length ? ` · ${displayRows.length} shown` : ""}
               </span>
             )}
           </span>
-          <div className="w-px h-3 bg-overlay-3 shrink-0" />
+          <div className="w-px h-3 bg-border-subtle shrink-0" />
           <input
-            className="flex-1 min-w-[140px] bg-transparent text-text placeholder:text-text-muted/30 outline-none"
+            className="au-run-filter-input flex-1 min-w-[140px]"
             placeholder="filter goal, run ID, model, error…"
             value={runFilter}
             onChange={(e) => setRunFilter(e.target.value)}
             onClick={(e) => e.stopPropagation()}
             spellCheck={false}
           />
-          <div className="flex items-center gap-0.5 shrink-0">
+          <div className="au-run-status-filters flex items-center gap-0.5 shrink-0">
             {(["all", "succeeded", "failed", "running"] as const).map((s) => (
               <button key={s}
                 onClick={(e) => { e.stopPropagation(); setRunStatus(s) }}
-                className={`px-2 py-0.5 rounded-md transition-colors ${
-                  runStatus === s
-                    ? s === "failed"    ? "bg-overlay-2 border border-border-strong text-text font-semibold"
-                    : s === "succeeded" ? "bg-overlay-1 border border-border-subtle text-text-muted font-medium"
-                    : s === "running"   ? "bg-overlay-1 border border-border text-text font-medium"
-                    : "bg-overlay-3 text-text font-medium"
-                    : "text-text-muted/50 hover:text-text-muted"
-                }`}
+                className={[
+                  "au-run-status-chip px-2 py-0.5 rounded-md transition-colors",
+                  runStatus === s ? "au-run-status-chip--active" : "",
+                ].filter(Boolean).join(" ")}
               >{s}</button>
             ))}
           </div>
@@ -1564,14 +1530,14 @@ function UserDetail({ user, liveRuns, history, stack, adminBusy, onToggleAdmin, 
                 <thead className="au-run-thead">
                   <tr>
                     <th className="py-2 px-3 w-6" onClick={() => onRunSort("status")} />
-                    <th className="py-2 px-3 text-left au-label font-semibold text-text-muted/50 cursor-default">Run</th>
+                    <th className="py-2 px-3 text-left au-run-th">Run</th>
                     <RSortTh k="started"  label="Started" />
                     <RSortTh k="duration" label="Duration" right />
                     <RSortTh k="steps"    label="Steps" right />
                     <RSortTh k="tokens"   label="Tokens" right />
                     <RSortTh k="llmCalls" label="LLM Calls" right />
                     <RSortTh k="model"    label="Model" />
-                    <th className="py-2 px-3 text-left au-label font-semibold text-text-muted/50 cursor-default">Goal</th>
+                    <th className="py-2 px-3 text-left au-run-th cursor-default">Goal</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1594,13 +1560,20 @@ function UserDetail({ user, liveRuns, history, stack, adminBusy, onToggleAdmin, 
                           {h.runId.slice(0, 8)}<CopyBtn value={h.runId} label="run ID" />
                         </td>
                         <td className="py-2 px-3 text-text-muted/70 whitespace-nowrap" title={h.createdAt}>{formatRelative(h.createdAt)}</td>
-                        <td className="py-2 px-3 text-right tabular-nums text-text-muted/70">{formatDuration(h.durationMs)}</td>
-                        <td className="py-2 px-3 text-right tabular-nums text-text-muted/70">{h.stepCount}</td>
-                        <td className="py-2 px-3 text-right tabular-nums text-text-muted/70">{h.totalTokens != null ? formatCompact(h.totalTokens) : <span className="text-text-muted/30">—</span>}</td>
-                        <td className="py-2 px-3 text-right tabular-nums text-text-muted/70">{h.llmCalls ?? <span className="text-text-muted/30">—</span>}</td>
+                        <td className="py-2 px-3 au-td-num text-text-muted/70">{formatDuration(h.durationMs)}</td>
+                        <td className="py-2 px-3 au-td-num text-text-muted/70">{h.stepCount}</td>
+                        <td className="py-2 px-3 au-td-num text-text-muted/70">
+                          {h.totalTokens != null ? formatCompact(h.totalTokens) : <span className="au-empty-cell">—</span>}
+                        </td>
+                        <td className="py-2 px-3 au-td-num text-text-muted/70">
+                          {h.llmCalls != null ? h.llmCalls : <span className="au-empty-cell">—</span>}
+                        </td>
                         <td className="py-2 px-3 text-text-muted/70 whitespace-nowrap">{h.model ?? <span className="text-text-muted/30">—</span>}</td>
-                        <td className="py-2 px-3 max-w-[320px]">
-                          <span className="block truncate" title={h.error ? `${h.goal}\n\nError: ${h.error}` : h.goal}>
+                        <td className="py-2 px-3 au-col-goal">
+                          <span
+                            className="block break-words leading-snug"
+                            title={h.error ? `${h.goal}\n\nError: ${h.error}` : h.goal}
+                          >
                             {h.error && <span className="text-error/90 mr-1.5" title={h.error}>⚠</span>}
                             <span className={h.error ? "text-text-muted/70" : "text-text"}>{h.goal}</span>
                           </span>
