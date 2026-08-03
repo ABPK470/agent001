@@ -1,5 +1,6 @@
 /**
- * MSSQL {@link MigrationRunner} — applies {@link platformMultiDialectMigrations}.
+ * MSSQL {@link MigrationRunner} — applies {@link platformMultiDialectMigrations}
+ * through the single platform Kysely handle (tedious/tarn). No mssql.ConnectionPool.
  *
  * Ledger table: `dbo._mia_schema_migrations` (platform-owned; never warehouse).
  */
@@ -9,11 +10,12 @@ import {
   type AppliedMigration,
   type MigrationRunner,
 } from "@mia/sql-kit"
-import type { ConnectionPool } from "mssql"
+import { type Kysely, sql } from "kysely"
 import {
   platformMultiDialectMigrations,
   type MssqlMigrationExecutor,
 } from "../../../migrations/registry.js"
+import type { PlatformDatabase } from "../../../schema/tables.js"
 
 const LEDGER_DDL = `
 IF OBJECT_ID(N'dbo._mia_schema_migrations', N'U') IS NULL
@@ -30,12 +32,17 @@ export type MssqlQueryExecutor = MssqlMigrationExecutor & {
   query: (sqlText: string) => Promise<{ recordset?: unknown }>
 }
 
-/** Wrap a ConnectionPool (or transaction) as the migration executor. */
-export function mssqlQueryExecutor(pool: ConnectionPool): MssqlQueryExecutor {
+/**
+ * DDL executor over the platform Kysely instance (same tarn pool as DML/tx).
+ * Registry steps and ledger writes all go through this.
+ */
+export function kyselyPlatformDdlExecutor(
+  db: Kysely<PlatformDatabase>,
+): MssqlQueryExecutor {
   return {
     async query(sqlText) {
-      const result = await pool.request().query(sqlText)
-      return { recordset: result.recordset }
+      const result = await sql.raw(sqlText).execute(db)
+      return { recordset: result.rows }
     },
   }
 }

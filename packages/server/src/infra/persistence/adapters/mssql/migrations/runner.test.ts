@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest"
-import { createMssqlMigrationRunner, type MssqlQueryExecutor } from "./runner.js"
+import {
+  createMssqlMigrationRunner,
+  kyselyPlatformDdlExecutor,
+  type MssqlQueryExecutor,
+} from "./runner.js"
 
 function fakeExecutor(): MssqlQueryExecutor & { statements: string[] } {
   const statements: string[] = []
@@ -51,5 +55,9 @@ describe("createMssqlMigrationRunner", () => {
     expect(inserts).toHaveLength(4)
     expect(ex.statements.some((s) => s.includes("CREATE TABLE dbo.sync_runs"))).toBe(true)
     expect(ex.statements.some((s) => s.includes("CREATE TABLE dbo.attachments"))).toBe(true)
+  })
+
+  it("exports a Kysely-backed DDL executor factory", () => {
+    expect(typeof kyselyPlatformDdlExecutor).toBe("function")
   })
 })

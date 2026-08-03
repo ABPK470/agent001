@@ -3,9 +3,8 @@
  *
  * Separate from warehouse / Bridge connector pools — never reuse Sync
  * connector ids here. Env-only until composition grows richer secrets wiring.
+ * Driver wiring is Kysely MssqlDialect (tedious/tarn), not npm `mssql` pools.
  */
-
-import type { config as MssqlConfig } from "mssql"
 
 export type MssqlPlatformConfig = {
   readonly server: string
@@ -56,26 +55,5 @@ export function resolveMssqlPlatformConfig(
     password,
     encrypt: envBool(env["MIA_PLATFORM_MSSQL_ENCRYPT"], true),
     trustServerCertificate: envBool(env["MIA_PLATFORM_MSSQL_TRUST_SERVER_CERTIFICATE"], true),
-  }
-}
-
-/** Build a `mssql` driver config — platform pool only, never warehouse. */
-export function toMssqlDriverConfig(cfg: MssqlPlatformConfig): MssqlConfig {
-  return {
-    server: cfg.server,
-    port: cfg.port,
-    database: cfg.database,
-    user: cfg.user,
-    password: cfg.password,
-    options: {
-      encrypt: cfg.encrypt,
-      trustServerCertificate: cfg.trustServerCertificate,
-      enableArithAbort: true,
-    },
-    pool: {
-      max: 10,
-      min: 0,
-      idleTimeoutMillis: 30_000,
-    },
   }
 }

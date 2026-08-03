@@ -1,8 +1,8 @@
 /**
- * Kysely MssqlDialect factory for the platform store (not warehouse Sync).
+ * Kysely MssqlDialect factory — sole platform MSSQL connection stack.
  *
- * Uses tedious + tarn (Kysely’s supported MSSQL stack). Separate from the
- * `mssql` npm ConnectionPool used by the migrator pilot.
+ * Uses tedious + tarn (Kysely’s supported MSSQL drivers). Warehouse Sync /
+ * Bridge keep npm `mssql` pools separately; never share those with platform.
  */
 
 import { Kysely, MssqlDialect } from "kysely"

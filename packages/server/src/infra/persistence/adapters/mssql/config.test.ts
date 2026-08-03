@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest"
-import { resolveMssqlPlatformConfig, toMssqlDriverConfig } from "./config.js"
+import { resolveMssqlPlatformConfig } from "./config.js"
 
 describe("resolveMssqlPlatformConfig", () => {
   it("requires server, database, and user", () => {
     expect(() => resolveMssqlPlatformConfig({})).toThrow(/MIA_PLATFORM_MSSQL_SERVER/)
   })
 
-  it("maps env into a driver config", () => {
+  it("maps env into platform config", () => {
     const cfg = resolveMssqlPlatformConfig({
       MIA_PLATFORM_MSSQL_SERVER: "db.example",
       MIA_PLATFORM_MSSQL_DATABASE: "mia",
@@ -25,8 +25,5 @@ describe("resolveMssqlPlatformConfig", () => {
       encrypt: false,
       trustServerCertificate: false,
     })
-    const driver = toMssqlDriverConfig(cfg)
-    expect(driver.server).toBe("db.example")
-    expect(driver.options?.encrypt).toBe(false)
   })
 })
