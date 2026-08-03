@@ -410,8 +410,10 @@ describe("widget log chrome — Trace meta & scope payload", () => {
     const css = read(cssPath)
     const dag = read(traceDagPath)
 
-    expect(css).toMatch(/\.widget-review-meta\s*\{[^}]*display:\s*flex/s)
-    expect(css).toMatch(/\.widget-review-meta\s*\{[^}]*gap:/s)
+    // Band chrome shared with Pipelines ActiveFilterChips.
+    expect(css).toMatch(/\.widget-filter-band\s*\{[^}]*display:\s*flex/s)
+    expect(css).toMatch(/\.widget-filter-band\s*\{[^}]*gap:/s)
+    expect(dag).toContain("widget-filter-band widget-review-meta")
     expect(css).toContain(".widget-review-meta__stat-value")
     expect(css).toMatch(
       /\.widget-review-meta__stat-value\s*\{[^}]*font-weight:\s*600/s,
@@ -429,9 +431,9 @@ describe("widget log chrome — Trace meta & scope payload", () => {
 
   it("Trace seams earn their keep — no striped chrome / open-header rules", () => {
     const css = read(cssPath)
-    // Meta: space, not a second full rule after the toolbar.
+    // Meta rides .widget-filter-band — same hairline-free strip as filter chips.
     expect(css).toMatch(
-      /\.widget-review-meta\s*\{[^}]*border-bottom:\s*none/s,
+      /\.widget-filter-band\s*\{[^}]*border-bottom:\s*none/s,
     )
     // Flat list dialect both themes — no hairlines under outline headers.
     expect(css).toMatch(

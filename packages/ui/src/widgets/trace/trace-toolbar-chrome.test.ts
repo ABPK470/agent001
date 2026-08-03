@@ -139,6 +139,7 @@ describe("Trace toolbar structure + behavior wiring", () => {
 
   it("meta band surfaces run stats and identity chips", () => {
     const dag = read(dagPath)
+    expect(dag).toContain("widget-filter-band widget-review-meta")
     expect(dag).toContain("widget-review-meta__stats")
     expect(dag).toContain("widget-review-meta__stat-value")
     expect(dag).toContain("widget-review-meta__ids")

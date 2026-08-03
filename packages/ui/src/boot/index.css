@@ -1259,6 +1259,14 @@ body {
   --review-controls-pad-x: 0.625rem;
   --review-controls-pad-y: 0.5rem;
   --review-controls-pad-bottom: 0.625rem;
+  /*
+   * Band-2 content floor = ActiveFilterChips button
+   * (text-xs line-height + py-1 + 1px border × 2). Trace meta must match
+   * this or the strip reads shorter than Pipelines’ filter row.
+   */
+  --review-band-2-content-h: calc(
+    var(--text-xs--line-height, 1rem) + 0.5rem + 2px
+  );
   box-sizing: border-box;
   flex-shrink: 0;
   border-radius: 0.375rem;
@@ -1304,6 +1312,7 @@ body {
   flex-wrap: wrap;
   align-items: center;
   gap: 0.375rem 0.5rem;
+  min-height: var(--review-band-2-content-h, calc(1rem + 0.5rem + 2px));
   padding: 0.5rem 0.625rem;
   border-bottom: none;
 }
@@ -8636,44 +8645,44 @@ button.trace-tree-status-pill:hover {
   color: var(--color-text);
 }
 
-/* Review band 2 — Trace meta/ids (peer of ActiveFilterChips).
- * KPIs left, run/thread ids right — different jobs, one row.
- * Horizontal inset lives on .widget-review-controls > .widget-review-meta. */
+/*
+ * Review band 2 — Trace meta/ids.
+ * Mounts with .widget-filter-band (shared min-height = filter chip).
+ * Content layout only — inset zeros band padding.
+ */
 .widget-review-meta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
   justify-content: space-between;
-  gap: 0.5rem 1rem;
   min-width: 0;
-  border-bottom: none;
   font-size: var(--review-meta-size);
-  line-height: 1.4;
+  line-height: var(--text-xs--line-height, 1rem);
   color: var(--text-muted);
 }
 
 .widget-review-meta__stats {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0.55rem 1.15rem;
+  align-items: center;
+  gap: 0.375rem 0.75rem;
   min-width: 0;
   flex: 1 1 auto;
+  /* Same vertical box as ActiveFilterChips (py-1). */
+  min-height: var(--review-band-2-content-h, calc(1rem + 0.5rem + 2px));
 }
 
 .widget-review-meta__ids {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
+  align-items: center;
   justify-content: flex-end;
-  gap: 0.55rem 1rem;
+  gap: 0.375rem 0.5rem;
   margin-left: auto;
   flex: 0 1 auto;
+  min-height: var(--review-band-2-content-h, calc(1rem + 0.5rem + 2px));
 }
 
 .widget-review-meta__stat {
   display: inline-flex;
-  align-items: baseline;
+  align-items: center;
   gap: 0.28rem;
   white-space: nowrap;
 }

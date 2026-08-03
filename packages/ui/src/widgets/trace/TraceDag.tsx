@@ -517,7 +517,8 @@ export function TraceDag({
 
           {showMetaBand ? (
             <div className={WIDGET_REVIEW_CONTROLS_INSET_CLASS}>
-            <div className="widget-review-meta">
+            {/* Same band chrome as Pipelines ActiveFilterChips (.widget-filter-band). */}
+            <div className="widget-filter-band widget-review-meta">
               <div className="widget-review-meta__stats">
                 {metaStats.length === 0 ? (
                   <span className="widget-review-meta__empty">No agent loop yet</span>
