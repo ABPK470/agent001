@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import { OperationKind } from "../client/index"
 import type { OperationPipeline } from "../client/index"
-import { pipelineActivityKey, syncPlanIdFromPipeline } from "./OperationLog"
+import { pipelineActivityKey, pipelineEventKey, syncPlanIdFromPipeline } from "./OperationLog"
 
 function syncPipeline(over: Partial<OperationPipeline> & Pick<OperationPipeline, "id" | "kind">): OperationPipeline {
   return {
@@ -23,6 +23,27 @@ describe("OperationLog helpers", () => {
     const previewKey = pipelineActivityKey("plan-1:preview", "decision:abc:0")
     const executeKey = pipelineActivityKey("plan-1:execute", "decision:abc:0")
     expect(previewKey).not.toBe(executeKey)
+  })
+
+  it("scopes duplicate activity ids under parent path", () => {
+    const previewPreflight = pipelineActivityKey(
+      "plan-1",
+      "preflight",
+      "plan-1|phase:preview",
+    )
+    const executePreflight = pipelineActivityKey(
+      "plan-1",
+      "preflight",
+      "plan-1|phase:execute",
+    )
+    expect(previewPreflight).toBe("plan-1|phase:preview/preflight")
+    expect(executePreflight).toBe("plan-1|phase:execute/preflight")
+    expect(previewPreflight).not.toBe(executePreflight)
+  })
+
+  it("scopes event keys under activity path", () => {
+    const actKey = "plan-1|phase:preview/preflight"
+    expect(pipelineEventKey(actKey, "ev:0")).toBe(`${actKey}|ev:0`)
   })
 
   it("resolves sync plan id from kind-scoped pipeline id", () => {

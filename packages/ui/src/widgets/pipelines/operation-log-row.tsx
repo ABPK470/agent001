@@ -1,14 +1,17 @@
-import { ChevronRight, Loader2 } from "lucide-react"
-import type { ReactNode } from "react"
+import { ChevronRight, Loader2, type LucideIcon } from "lucide-react"
+import type { CSSProperties, ReactNode } from "react"
 import type { OperationStatus } from "../../client/index"
 import { ReviewTree, ReviewTreeItem } from "../../components/ReviewTree"
-import { StatusMark } from "../../components/StatusMark"
 import {
-  logStatusPillTone,
   operationStatusPill,
   operationStatusRowStroke,
   statusCalloutTone,
 } from "../../lib/status-callout"
+import { OpLogEntityIcon } from "./OpLogEntityIcon"
+import { OpLogStatusPill } from "./OpLogStatusPill"
+export { OpLogErrorTreeRow } from "./OpLogErrorCallout"
+export { opLogShowEntityIcon, opLogShowStatusPill } from "./op-log-row-policy"
+export { truncateOpLogText } from "./op-log-text"
 
 export const OP_LOG = "text-sm leading-snug"
 export const OP_LOG_MONO = `${OP_LOG} font-mono`
@@ -54,9 +57,6 @@ export function statusTextClass(_status: OperationStatus): string {
   return "text-text"
 }
 
-/**
- * Status badge chrome — same wash/border family as policy effect chips.
- */
 export function statusSoftBgClass(status: OperationStatus): string {
   return operationStatusRowStroke(status)
 }
@@ -77,16 +77,25 @@ export function statusFilterActiveClass(status: OperationStatus): string {
       return "border border-border-subtle text-text-muted font-medium bg-transparent"
   }
 }
+
 export const OP_LOG_MUTED = "text-text-muted"
-/** Description / summary after the middle dot — one step lighter than the label. */
 export const OP_LOG_DESC = "text-text-faint"
 
-/** Status badge — uppercase label + border dialect (not traffic chroma). */
+/** Pipelines row chrome — hover wash; expanded rows stay flat in the inspector timeline. */
+export function opLogRowChromeClass(active?: boolean): string {
+  return [
+    "op-log-row-chrome rounded-[var(--list-row-radius)] transition-colors",
+    active ? "op-log-row-chrome--active" : "",
+  ]
+    .filter(Boolean)
+    .join(" ")
+}
+
+/** @deprecated Prefer `OpLogStatusPill` in the status column. */
 export function LogStatusLabel({
   status,
 }: {
   status: OperationStatus
-  /** @deprecated Size is fixed; kept for call-site compat. */
   compact?: boolean
 }) {
   return (
@@ -99,13 +108,55 @@ export function LogStatusLabel({
   )
 }
 
-/** @deprecated Prefer `StatusMark` — re-export for call-site compat. */
-export { StatusMark as StatusDot } from "../../components/StatusMark"
+export const OP_LOG_WIDGET_FRAME_CLASS = "op-log-widget-frame"
 
-/**
- * Pipeline / step group — flush list chrome (no nested grey plates).
- * Nested groups use the shared ReviewTree.
- */
+export function OpLogTreeHeader({ wide = false }: { wide?: boolean }) {
+  return (
+    <div className="op-log-tree-header" aria-hidden>
+      <div
+        className={`op-log-row-grid op-log-tree-header__grid${wide ? " op-log-row-grid--wide" : ""}`}
+      >
+        <span className="op-log-row-grid__chev review-chevron-slot" aria-hidden />
+        <span className="op-log-row-grid__icon" aria-hidden />
+        <span className="op-log-tree-header__node">Node</span>
+        {wide ? <span className="op-log-tree-header__counts" aria-hidden /> : null}
+        <span className="op-log-tree-header__metric op-log-tree-header__metric--status">Status</span>
+        <span className="op-log-tree-header__metric op-log-tree-header__metric--duration">
+          Duration
+        </span>
+        <span className="op-log-tree-header__metric op-log-tree-header__metric--time">Time</span>
+      </div>
+    </div>
+  )
+}
+
+/** Grid-aligned nested payload — JSON / details stay in the node column. */
+export function OpLogNestedBlock({
+  children,
+  depth = 0,
+}: {
+  children: ReactNode
+  depth?: number
+}) {
+  const gridStyle: CSSProperties = {
+    ["--op-log-depth" as string]: depth,
+  }
+  return (
+    <div className="op-log-nested-block">
+      <div className="op-log-row-grid" style={gridStyle}>
+        <span className="op-log-row-grid__chev review-chevron-slot" aria-hidden>
+          <span className="op-log-row-grid__chev-spacer" />
+        </span>
+        <span className="op-log-row-grid__icon" aria-hidden />
+        <div className="op-log-nested-block__content">{children}</div>
+        <span className="op-log-row-grid__status" aria-hidden />
+        <span className="op-log-row-grid__duration" aria-hidden />
+        <span className="op-log-row-grid__time" aria-hidden />
+      </div>
+    </div>
+  )
+}
+
 export function LogGroup({
   children,
   nested,
@@ -113,7 +164,6 @@ export function LogGroup({
 }: {
   children: ReactNode
   nested?: boolean
-  /** Linear variant: no outer border. */
   flat?: boolean
 }) {
   if (flat) {
@@ -129,70 +179,103 @@ function LogRowCells({
   expanded,
   expandable,
   showChevron,
-  showStatus,
+  entityIcon,
+  entityIconColor,
   status,
+  showStatusPill = true,
   label,
   meta,
+  metaTitle,
+  counts,
   durationMs,
   timestamp,
   depth = 0,
+  wide = false,
 }: {
   expanded: boolean
   expandable: boolean
   showChevron: boolean
-  showStatus: boolean
+  entityIcon?: LucideIcon
+  entityIconColor?: string
   status?: OperationStatus
+  showStatusPill?: boolean
   label: ReactNode
   meta?: ReactNode
+  metaTitle?: string
+  counts?: ReactNode
   durationMs?: number | null
   timestamp?: string | null
   depth?: number
+  wide?: boolean
 }) {
   const textSize = OP_LOG
   const labelWeight = depth > 0 ? "font-normal" : "font-medium"
+  const gridStyle: CSSProperties = {
+    ["--op-log-depth" as string]: depth,
+  }
+  const labelInk = depth > 0 ? OP_LOG_MUTED : "text-text"
   return (
-    <>
-      <span className="review-chevron-slot" aria-hidden={!showChevron}>
-        {showChevron ? (
+    <div
+      className={`op-log-row-grid${wide ? " op-log-row-grid--wide" : ""}`}
+      style={gridStyle}
+    >
+      <span className="op-log-row-grid__chev review-chevron-slot" aria-hidden={!expandable && !showChevron}>
+        {showChevron && expandable ? (
           <ChevronRight
             size={13}
             strokeWidth={1.75}
-            className={`text-text-muted transition-transform ${expanded ? "rotate-90" : ""} ${expandable ? "opacity-100" : "opacity-0"}`}
+            className={`text-text-muted transition-transform ${expanded ? "rotate-90" : ""}`}
           />
+        ) : (
+          <span className="op-log-row-grid__chev-spacer" aria-hidden />
+        )}
+      </span>
+      <span className="op-log-row-grid__icon">
+        {entityIcon ? (
+          <OpLogEntityIcon icon={entityIcon} color={entityIconColor} />
         ) : null}
       </span>
-      {showStatus && status ? (
-        <StatusMark status={status} />
-      ) : (
-        <span className="w-[7px] shrink-0" aria-hidden />
-      )}
-      <span className={`min-w-0 flex-1 truncate ${textSize}`}>
-        <span className={`${labelWeight} ${OP_LOG_MUTED}`}>{label}</span>
-        {meta ? <span className={`font-normal ${OP_LOG_DESC}`}> · {meta}</span> : null}
+      <span className={`op-log-row-grid__label ${textSize}`}>
+        <span className="op-log-row-grid__label-line" title={metaTitle}>
+          <span className={`${labelWeight} ${labelInk}`}>{label}</span>
+          {meta ? (
+            <>
+              <span className={OP_LOG_DESC}> · </span>
+              <span className={OP_LOG_DESC}>{meta}</span>
+            </>
+          ) : null}
+        </span>
       </span>
-      <span className={`shrink-0 review-meta w-14 text-right ${OP_LOG_MUTED}`}>
+      {wide ? (
+        <span className={`op-log-row-grid__counts review-meta ${OP_LOG_MUTED}`}>
+          {counts ?? ""}
+        </span>
+      ) : null}
+      <span className="op-log-row-grid__status">
+        {showStatusPill && status ? <OpLogStatusPill status={status} /> : null}
+      </span>
+      <span className={`op-log-row-grid__duration review-meta ${OP_LOG_MUTED}`}>
         {durationMs !== undefined ? fmtDuration(durationMs ?? null) : ""}
       </span>
-      <span className={`shrink-0 review-meta w-[4.5rem] text-right ${OP_LOG_MUTED}`}>
+      <span className={`op-log-row-grid__time review-meta ${OP_LOG_MUTED}`}>
         {timestamp ? fmtTime(timestamp) : ""}
       </span>
-    </>
+    </div>
   )
 }
 
-/**
- * Unified row. When `treeItem`, wraps as ReviewTreeItem (required inside LogNest).
- * Root pipeline headers set `treeItem={false}`.
- */
 export function OpLogRow({
   status,
   expanded = false,
   expandable = false,
   onToggle,
   showChevron = true,
-  showStatus = true,
+  showStatusPill = true,
+  entityIcon,
+  entityIconColor,
   label,
   meta,
+  metaTitle,
   durationMs,
   timestamp,
   actions,
@@ -207,9 +290,12 @@ export function OpLogRow({
   expandable?: boolean
   onToggle?: () => void
   showChevron?: boolean
-  showStatus?: boolean
+  showStatusPill?: boolean
+  entityIcon?: LucideIcon
+  entityIconColor?: string
   label: ReactNode
   meta?: ReactNode
+  metaTitle?: string
   durationMs?: number | null
   timestamp?: string | null
   actions?: ReactNode
@@ -217,20 +303,18 @@ export function OpLogRow({
   linear?: boolean
   isLast?: boolean
   depth?: number
-  /** Wrap in ReviewTreeItem (default true — nest peers). */
   treeItem?: boolean
 }) {
-  // pl-0 — chevron slot centers on --review-tree-x; nested LogNest stays flush.
   const activeFill = expanded && expandable
   const rowClass = linear
     ? [
-        "flex items-center gap-2 py-2 pr-2 text-left text-text rounded-[var(--list-row-radius)] transition-colors",
-        activeFill ? "bg-[var(--select-fill)]" : "hover:bg-[var(--hover-fill)]",
+        "flex items-center gap-2 py-2 pr-2 text-left text-text",
+        opLogRowChromeClass(activeFill),
       ].join(" ")
     : [
-        "flex items-center gap-2 py-1.5 pr-2.5 text-left text-text rounded-[var(--list-row-radius)] transition-colors",
+        "flex items-center gap-2 py-1.5 pr-2.5 text-left text-text",
         isLast ? "" : "border-b border-border-subtle",
-        activeFill ? "bg-[var(--select-fill)]" : "hover:bg-[var(--hover-fill)]",
+        opLogRowChromeClass(activeFill),
       ].join(" ")
 
   const cells = (
@@ -238,49 +322,97 @@ export function OpLogRow({
       expanded={expanded}
       expandable={expandable}
       showChevron={showChevron}
-      showStatus={showStatus}
+      entityIcon={entityIcon}
+      entityIconColor={entityIconColor}
       status={status}
+      showStatusPill={showStatusPill}
       label={label}
       meta={meta}
+      metaTitle={metaTitle}
       durationMs={durationMs}
       timestamp={timestamp}
       depth={depth}
     />
   )
 
-  const row = expandable && onToggle ? (
+  const rowInner = expandable && onToggle ? (
     <>
-      <div className={rowClass}>
-        <button type="button" className="flex min-w-0 flex-1 items-center gap-2 text-left" onClick={onToggle}>
-          {cells}
-        </button>
-        {actions}
-      </div>
-      {expanded && children}
+      <button type="button" className="flex min-w-0 flex-1 items-center text-left" onClick={onToggle}>
+        {cells}
+      </button>
+      {actions}
     </>
   ) : (
     <>
-      <div className={rowClass}>
-        {cells}
-        {actions}
-      </div>
-      {expanded && children}
+      {cells}
+      {actions}
     </>
   )
 
-  if (!treeItem) return <div className="min-w-0">{row}</div>
-  return <ReviewTreeItem>{row}</ReviewTreeItem>
+  const rowChrome = (
+    <div className={rowClass}>
+      {rowInner}
+    </div>
+  )
+
+  if (!treeItem) {
+    return (
+      <div className="min-w-0">
+        {rowChrome}
+        {expanded && children}
+      </div>
+    )
+  }
+
+  return (
+    <ReviewTreeItem>
+      <div className="review-tree__row">{rowChrome}</div>
+      {expanded && children ? <div className="review-tree__branch">{children}</div> : null}
+    </ReviewTreeItem>
+  )
 }
 
-/**
- * Nested peers under a pipeline / activity.
- *
- * Hard: render LogNest *inside* the parent OpLogRow / ReviewTreeItem.
- * As a sibling it punches a hole in the parent stem (Configured → Preview gap).
- *
- * Nest is flush with the parent row — stem under `.review-chevron-slot` center
- * (same as Threads). Never wrap in pl-* (that parks the stem under content).
- */
+export function PipelineRowCells({
+  expanded,
+  status,
+  entityIcon,
+  entityIconColor,
+  title,
+  subtitle,
+  counts,
+  durationMs,
+  timestamp,
+  wide = false,
+}: {
+  expanded: boolean
+  status: OperationStatus
+  entityIcon: LucideIcon
+  entityIconColor: string
+  title: ReactNode
+  subtitle?: ReactNode
+  counts?: ReactNode
+  durationMs: number | null
+  timestamp: string
+  wide?: boolean
+}) {
+  return (
+    <LogRowCells
+      expanded={expanded}
+      expandable
+      showChevron
+      entityIcon={entityIcon}
+      entityIconColor={entityIconColor}
+      status={status}
+      label={title}
+      meta={subtitle}
+      counts={counts}
+      durationMs={durationMs}
+      timestamp={timestamp}
+      wide={wide}
+    />
+  )
+}
+
 export function LogNest({
   children,
   linear,
@@ -289,9 +421,7 @@ export function LogNest({
 }: {
   children: ReactNode
   linear?: boolean
-  /** @deprecated unused — kept for call-site compat */
   root?: boolean
-  /** @deprecated always flush — stem under chevron via shared tokens */
   align?: "chevron" | "flush"
 }) {
   void root

@@ -2599,6 +2599,544 @@ textarea.input {
   min-width: 0;
 }
 
+/* ── Pipelines split-pane (master-detail) ── */
+.op-log-split-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+.op-log-split-list-scroll {
+  min-height: 0;
+}
+
+.op-log-split-list__items {
+  min-width: 0;
+}
+
+.op-log-split-list__cap {
+  background: var(--op-log-tree-header-bg, color-mix(in srgb, var(--text) 5%, transparent));
+  padding-inline: var(--trace-tree-hpad, 16px);
+}
+
+.op-log-split-list-scroll .review-group-label {
+  padding-inline: var(--trace-tree-hpad, 16px);
+}
+
+.op-log-pipeline-list-row.trace-tree-row {
+  min-width: 0;
+}
+
+.op-log-pipeline-list-row__btn {
+  grid-template-columns: minmax(0, 1fr);
+  /* Beat Trace `.trace-tree-row__btn { min-width: 22rem }` — narrow split pane. */
+  min-width: 0 !important;
+  width: 100%;
+  min-height: 44px;
+  padding: 0.3rem 1rem 0.3rem var(--trace-tree-hpad, 16px);
+  box-sizing: border-box;
+}
+
+.op-log-pipeline-list-row.has-subtitle .op-log-pipeline-list-row__btn {
+  min-height: 54px;
+}
+
+.op-log-pipeline-list-row .trace-tree-row__node-cell,
+.op-log-pipeline-list-row__node-cell {
+  gap: 0.625rem;
+  flex: 1 1 auto;
+  min-width: 0;
+  align-items: flex-start;
+}
+
+.op-log-pipeline-list-row .trace-tree-row__icon {
+  margin-top: 0.125rem;
+  opacity: 1;
+}
+
+.op-log-pipeline-list-row.is-leaf .trace-tree-row__name {
+  color: var(--text);
+  font-weight: 500;
+  font-size: 0.8125rem;
+  line-height: 1.3;
+}
+
+.op-log-pipeline-list-row.is-selected .trace-tree-row__name {
+  font-weight: 600;
+}
+
+.op-log-pipeline-list-row__route {
+  display: block;
+  margin-top: 0.0625rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.25;
+  letter-spacing: 0.01em;
+  font-variant-numeric: tabular-nums;
+}
+
+.op-log-pipeline-list-row.is-selected .op-log-pipeline-list-row__route {
+  color: var(--text-secondary, var(--color-text-muted));
+}
+
+.op-log-pipeline-list-row .trace-tree-row__text-block {
+  min-width: 0;
+}
+
+.op-log-pipeline-list-row .op-log-status-pill {
+  flex-shrink: 0;
+  margin-top: 0.125rem;
+  margin-right: 0.125rem;
+}
+
+.op-log-detail {
+  background: var(--panel);
+}
+
+.op-log-detail--empty {
+  background: transparent;
+}
+
+.op-log-detail__header {
+  background: var(--panel);
+}
+
+.op-log-detail__section-cap {
+  padding: 0.625rem 1rem 0.375rem;
+  font-size: var(--review-group-size);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.op-log-detail__error-callout {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  padding: 0.5rem 0.625rem;
+  border-left: 3px solid var(--error);
+  border-radius: 0 var(--list-row-radius) var(--list-row-radius) 0;
+  background: var(--status-callout-err-soft);
+}
+
+.op-log-detail__error-label {
+  font-size: var(--review-group-size);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--error);
+}
+
+.op-log-detail__error-text {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: var(--review-meta-size);
+  line-height: 1.35;
+  color: var(--error);
+  word-break: break-word;
+}
+
+.op-log-tree-table--inspector {
+  --op-log-tree-header-bg: transparent;
+  --op-log-indent: 20px;
+  padding-inline: var(--trace-tree-hpad, 16px);
+  max-width: none;
+  margin-inline: 0;
+}
+
+.op-log-tree-table--inspector .op-log-tree-header {
+  margin-inline: 0;
+  padding-inline: 0;
+  background: transparent;
+}
+
+.op-log-tree-table {
+  --op-log-icon-slot: 1.25rem;
+  --op-log-row-active-bar: var(--accent);
+  --op-log-tree-header-bg: color-mix(in srgb, var(--text) 5%, transparent);
+  --op-log-col-status: 6.25rem;
+  --op-log-col-duration: 6.25rem;
+  --op-log-col-time: 7.5rem;
+  --op-log-grid-cols: var(--review-chevron-slot) var(--op-log-icon-slot) minmax(0, 1fr)
+    var(--op-log-col-status) var(--op-log-col-duration) var(--op-log-col-time);
+  --op-log-grid-cols-wide: var(--review-chevron-slot) var(--op-log-icon-slot) minmax(0, 1fr)
+    auto var(--op-log-col-status) var(--op-log-col-duration) var(--op-log-col-time);
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  padding-top: 0;
+  padding-inline: 0.625rem;
+}
+
+.op-log-row-grid {
+  display: grid;
+  grid-template-columns: var(--op-log-grid-cols);
+  column-gap: 0.5rem;
+  align-items: center;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.op-log-row-grid--wide {
+  grid-template-columns: var(--op-log-grid-cols-wide);
+}
+
+.op-log-row-grid__chev {
+  justify-self: center;
+}
+
+.op-log-row-grid__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--op-log-icon-slot);
+  height: var(--op-log-icon-slot);
+  min-width: var(--op-log-icon-slot);
+  max-width: var(--op-log-icon-slot);
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+
+.op-log-row-grid__label {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.op-log-row-grid__label-line {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  max-width: 36rem;
+}
+
+.op-log-row-grid__label-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  min-width: 0;
+}
+
+.op-log-row-grid__error {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 400;
+  color: color-mix(in srgb, var(--error) 78%, var(--text-muted));
+}
+
+.op-log-row-grid__counts {
+  flex-shrink: 0;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.op-log-row-grid__status {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  min-width: 0;
+}
+
+.op-log-status-pill {
+  max-width: 100%;
+}
+
+.op-log-status-pill__spin {
+  flex-shrink: 0;
+}
+
+.op-log-entity-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--op-log-icon-slot);
+  height: var(--op-log-icon-slot);
+  min-width: var(--op-log-icon-slot);
+  max-width: var(--op-log-icon-slot);
+  flex-shrink: 0;
+}
+
+.op-log-entity-icon__glyph {
+  flex-shrink: 0;
+}
+
+.op-log-row-grid__chev-spacer {
+  display: block;
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+}
+
+.op-log-error-row {
+  min-width: 0;
+}
+
+.op-log-error-row__banner {
+  grid-column: 3 / 4;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.375rem;
+  min-width: 0;
+  max-width: 100%;
+  padding: 0.3125rem 0.625rem;
+  border-left: 3px solid var(--error);
+  border-radius: 0 var(--list-row-radius) var(--list-row-radius) 0;
+  background: var(--status-callout-err-soft);
+}
+
+.op-log-nested-block {
+  min-width: 0;
+  padding-block: 0.25rem 0.375rem;
+}
+
+.op-log-nested-block__content {
+  grid-column: 3 / 4;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.op-log-error-row__icon {
+  margin-top: 0.0625rem;
+  color: var(--error);
+  flex-shrink: 0;
+}
+
+.op-log-error-row__text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  flex: 1 1 auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: var(--review-meta-size);
+  line-height: 1.35;
+  color: var(--error);
+}
+
+.op-log-row-grid__duration,
+.op-log-row-grid__time {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* 20×20 status container — same semantic tokens as Trace status pills. */
+.op-log-tree-table {
+  --op-log-status-ok-bg: var(--status-callout-ok-soft);
+  --op-log-status-ok-fg: var(--success);
+  --op-log-status-err-bg: var(--status-callout-err-soft);
+  --op-log-status-err-fg: var(--error);
+  --op-log-status-warn-bg: var(--status-callout-warn-soft);
+  --op-log-status-warn-fg: var(--warning);
+  --op-log-status-info-bg: var(--status-callout-info-soft);
+  --op-log-status-info-fg: var(--info);
+  --op-log-status-skip-bg: color-mix(in srgb, var(--text-muted) 10%, var(--panel));
+  --op-log-status-skip-fg: var(--text-muted);
+  --op-log-status-muted-bg: color-mix(in srgb, var(--text-muted) 8%, var(--panel));
+  --op-log-status-muted-fg: var(--text-muted);
+}
+
+.op-log-status-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: var(--op-log-icon-slot);
+  height: var(--op-log-icon-slot);
+  min-width: var(--op-log-icon-slot);
+  min-height: var(--op-log-icon-slot);
+  max-width: var(--op-log-icon-slot);
+  max-height: var(--op-log-icon-slot);
+  border-radius: 9999px;
+  flex-shrink: 0;
+  line-height: 0;
+}
+
+.op-log-status-badge--ok {
+  background: var(--op-log-status-ok-bg);
+  color: var(--op-log-status-ok-fg);
+}
+
+.op-log-status-badge--err {
+  background: var(--op-log-status-err-bg);
+  color: var(--op-log-status-err-fg);
+}
+
+.op-log-status-badge--warn {
+  background: var(--op-log-status-warn-bg);
+  color: var(--op-log-status-warn-fg);
+}
+
+.op-log-status-badge--info {
+  background: var(--op-log-status-info-bg);
+  color: var(--op-log-status-info-fg);
+}
+
+.op-log-status-badge--skip {
+  background: var(--op-log-status-skip-bg);
+  color: var(--op-log-status-skip-fg);
+}
+
+.op-log-status-badge--muted {
+  background: var(--op-log-status-muted-bg);
+  color: var(--op-log-status-muted-fg);
+}
+
+.op-log-status-badge--subtle {
+  background: var(--op-log-status-muted-bg);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--op-log-status-muted-fg) 28%, transparent);
+}
+
+.op-log-status-badge__spin {
+  animation: spin 1s linear infinite;
+}
+
+.op-log-status-badge__dot {
+  width: 0.3125rem;
+  height: 0.3125rem;
+  border-radius: 9999px;
+  background: currentColor;
+}
+
+.op-log-tree-header {
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  height: 2.25rem;
+  min-height: 2.25rem;
+  margin-inline: -0.625rem;
+  padding-inline: 0.625rem;
+  margin-bottom: 0.25rem;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--op-log-tree-header-bg);
+}
+
+.op-log-tree-header__grid {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.op-log-tree-header__node {
+  text-align: left;
+  min-width: 0;
+  font-size: var(--review-group-size);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  line-height: 1.25;
+  color: var(--text-muted);
+}
+
+.op-log-tree-header__counts {
+  min-width: 0;
+}
+
+.op-log-tree-header__metric {
+  font-size: var(--review-group-size);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  line-height: 1.25;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.op-log-tree-header__metric--status {
+  text-align: right;
+}
+
+.op-log-tree-header__metric--duration,
+.op-log-tree-header__metric--time {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+:root[data-theme="light"] .op-log-tree-table {
+  --op-log-tree-header-bg: color-mix(in srgb, var(--text) 4%, var(--panel));
+  --op-log-row-active-bar: var(--text);
+}
+
+/*
+ * Inspector timeline — Trace metric-tree dialect:
+ * depth indent (no curved review elbows), flat hairline rows (no rounded boxes).
+ */
+.op-log-tree-table--inspector .review-tree,
+.op-log-tree-table--inspector .review-tree__branch > .review-tree {
+  padding-left: 0 !important;
+}
+
+.op-log-tree-table--inspector .review-tree > .review-tree__item::before,
+.op-log-tree-table--inspector .review-tree > .review-tree__item::after,
+.op-log-tree-table--inspector .review-tree__branch .review-tree > .review-tree__item::before,
+.op-log-tree-table--inspector .review-tree__branch .review-tree > .review-tree__item::after,
+.op-log-tree-table--inspector .review-tree > .review-tree__item > .review-tree__row::before,
+.op-log-tree-table--inspector .review-tree > .review-tree__item > .review-tree__row::after {
+  content: none !important;
+  display: none !important;
+}
+
+.op-log-tree-table--inspector .review-tree__branch {
+  margin-left: 0;
+  padding-left: 0;
+  border-left: none;
+  min-width: 0;
+}
+
+.op-log-tree-table--inspector .op-log-row-grid {
+  padding-left: calc(var(--op-log-depth, 0) * var(--op-log-indent, 20px));
+}
+
+/* No entity icons in inspector — drop the empty icon column. */
+.op-log-tree-table--inspector .op-log-row-grid--no-icon,
+.op-log-tree-table--inspector .op-log-tree-header__grid {
+  --op-log-grid-cols: var(--review-chevron-slot) minmax(0, 1fr)
+    var(--op-log-col-status) var(--op-log-col-duration) var(--op-log-col-time);
+  --op-log-grid-cols-wide: var(--review-chevron-slot) minmax(0, 1fr) auto
+    var(--op-log-col-status) var(--op-log-col-duration) var(--op-log-col-time);
+}
+
+.op-log-tree-table--inspector .op-log-row-grid--no-icon .op-log-row-grid__icon,
+.op-log-tree-table--inspector .op-log-tree-header__grid .op-log-row-grid__icon {
+  display: none;
+}
+
+.op-log-tree-table--inspector .review-tree__row {
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.op-log-tree-table--inspector .review-tree__row > .op-log-row-chrome {
+  border-radius: 0;
+  border-bottom: none !important;
+  box-shadow: none;
+}
+
+.op-log-tree-table--inspector .op-log-row-chrome--active,
+.op-log-tree-table--inspector .op-log-row-chrome--active:hover {
+  background: transparent;
+  box-shadow: none;
+}
+
+.op-log-tree-table--inspector .op-log-row-chrome:hover {
+  background: var(--hover-fill);
+}
+
+.op-log-row-chrome:hover {
+  background: var(--hover-fill);
+}
+
+.op-log-row-chrome--active {
+  background: transparent;
+  box-shadow: inset 3px 0 0 var(--op-log-row-active-bar);
+}
+
+.op-log-row-chrome--active:hover {
+  background: var(--hover-fill);
+}
+
 /* ── Form panel headings (shared class + entity-registry tokens) ─ */
 .form-panel-heading {
   font-size: 1rem;
@@ -3750,6 +4288,15 @@ textarea.input {
   background: var(--select-fill, rgb(255 255 255 / 0.06));
 }
 
+/* Pipelines list — accent bar only (no select-fill slab; Trace master tree keeps fill). */
+.op-log-split-list .op-log-pipeline-list-row.trace-tree-row.is-selected .trace-tree-row__btn {
+  background: transparent !important;
+}
+
+.op-log-split-list .op-log-pipeline-list-row.trace-tree-row.is-selected .trace-tree-row__btn:hover {
+  background: var(--overlay-2, rgb(255 255 255 / 0.04));
+}
+
 .trace-tree-row__btn {
   display: grid;
   grid-template-columns: var(--trace-tree-grid-cols);
@@ -3837,16 +4384,16 @@ button.trace-tree-row__icon-dot {
 }
 
 .trace-tree-row__icon-dot.is-success {
-  background: rgb(74 222 128);
+  background: var(--success);
 }
 
 .trace-tree-row__icon-dot.is-failed,
 .trace-tree-row__icon-dot.is-error {
-  background: rgb(248 113 113);
+  background: var(--error);
 }
 
 .trace-tree-row__icon-dot.is-running {
-  background: rgb(129 140 248);
+  background: var(--info);
 }
 
 .trace-tree-row__icon-dot.is-skipped {

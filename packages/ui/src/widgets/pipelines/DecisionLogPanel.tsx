@@ -5,7 +5,7 @@
 import { useState } from "react"
 import { OperationStatus } from "../../client/index"
 import { JsonViewer } from "../../components/JsonViewer"
-import { OP_LOG_MONO, OP_LOG_MUTED, OpLogRow } from "./operation-log-row"
+import { OP_LOG_MONO, OP_LOG_MUTED, OpLogNestedBlock, OpLogRow, opLogShowStatusPill } from "./operation-log-row"
 
 export interface SyncDecisionEntry {
   id: string
@@ -49,6 +49,7 @@ function DecisionRow({
       expandable={hasDetails}
       onToggle={() => setExpanded((v) => !v)}
       showChevron={hasDetails}
+      showStatusPill={opLogShowStatusPill({ status })}
       label={
         <span className={`${OP_LOG_MONO} ${OP_LOG_MUTED}`}>
           {decision.title ?? decision.id}
@@ -56,15 +57,15 @@ function DecisionRow({
       }
       meta={decision.summary ?? undefined}
     >
-      {hasDetails && (
-        <div className={`px-2.5 py-1.5 ${linear ? "bg-elevated/30" : "bg-base/30 border-t border-border-subtle"}`}>
+      {hasDetails && expanded && (
+        <OpLogNestedBlock>
           <JsonViewer
             value={decision.details}
             label="details"
             defaultExpandDepth={2}
             maxHeight={240}
           />
-        </div>
+        </OpLogNestedBlock>
       )}
     </OpLogRow>
   )
