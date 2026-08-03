@@ -86,3 +86,12 @@ export {
   platformNow,
   platformNowMinusSeconds,
 } from "./sql-time.js"
+export {
+  getRowByKeys,
+  getRowByKeysAsync,
+  insertRowOrIgnore,
+  insertRowOrIgnoreAsync,
+  upsertRow,
+  upsertRowAsync,
+  type UpsertArgs,
+} from "./upsert.js"

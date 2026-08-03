@@ -14,6 +14,7 @@
 
 import Database from "better-sqlite3"
 import { mkdirSync } from "node:fs"
+import { resetPlatformDbForTests } from "../../schema/kysely.js"
 import { initMemoryFts } from "./memory/schema.js"
 import { applyLlmEnvOverride } from "./llm-env-bootstrap.js"
 import { createSqliteMigrationRunner } from "./migrations/runner.js"
@@ -31,9 +32,11 @@ export function getDbPath(): string {
 }
 
 function bootstrapSchema(db: Database.Database): void {
+  connection = db
+  resetPlatformDbForTests()
   createSqliteMigrationRunner(db).applyPending()
-  runSeeds(db)
-  applyLlmEnvOverride(db)
+  runSeeds()
+  applyLlmEnvOverride()
   initMemoryFts(db)
 }
 
@@ -65,10 +68,10 @@ export function getDb(): Database.Database {
 /** @internal Test hook — replace the process connection. */
 export function _setDb(db: Database.Database): void {
   connection = db
+  resetPlatformDbForTests()
 }
 
 /** @internal Test hook — point at a database and run migrations/seeds on it. */
 export function _migrate(db: Database.Database): void {
-  connection = db
   bootstrapSchema(db)
 }

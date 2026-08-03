@@ -1,6 +1,8 @@
 import Database from "better-sqlite3"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import { applyLlmEnvOverride } from "../src/infra/persistence/adapters/sqlite/llm-env-bootstrap.js"
+import { _setDb } from "../src/infra/persistence/adapters/sqlite/connection.js"
+import { resetPlatformDbForTests } from "../src/infra/persistence/schema/kysely.js"
 
 let db: Database.Database
 const envBackup = { ...process.env }
@@ -26,26 +28,28 @@ beforeEach(() => {
     INSERT INTO llm_config (id, provider, model, api_key, base_url, updated_at)
     VALUES (1, 'databricks', 'databricks-gpt-5-4', '', '', datetime('now'));
   `)
+  _setDb(db)
   delete process.env["MIA_SKIP_SETUP"]
   delete process.env["LLM_MODEL"]
 })
 
 afterEach(() => {
   process.env = { ...envBackup }
+  resetPlatformDbForTests()
   db.close()
 })
 
 describe("applyLlmEnvOverride", () => {
   it("throws when LLM_PROVIDER is unset on normal boot", () => {
     delete process.env["LLM_PROVIDER"]
-    expect(() => applyLlmEnvOverride(db)).toThrow(/LLM_PROVIDER is not set/)
+    expect(() => applyLlmEnvOverride()).toThrow(/LLM_PROVIDER is not set/)
     expect(readRow().provider).toBe("databricks")
   })
 
   it("skips when MIA_SKIP_SETUP is set (tests)", () => {
     delete process.env["LLM_PROVIDER"]
     process.env["MIA_SKIP_SETUP"] = "1"
-    expect(applyLlmEnvOverride(db)).toBe(false)
+    expect(applyLlmEnvOverride()).toBe(false)
     expect(readRow().provider).toBe("databricks")
   })
 
@@ -53,7 +57,7 @@ describe("applyLlmEnvOverride", () => {
     process.env["LLM_PROVIDER"] = "copilot-chat"
     process.env["LLM_MODEL"] = "gpt-5.4"
 
-    expect(applyLlmEnvOverride(db)).toBe(true)
+    expect(applyLlmEnvOverride()).toBe(true)
 
     const row = readRow()
     expect(row.provider).toBe("copilot-chat")
@@ -63,7 +67,7 @@ describe("applyLlmEnvOverride", () => {
   it("uses databricks default when LLM_MODEL is unset", () => {
     process.env["LLM_PROVIDER"] = "databricks"
 
-    expect(applyLlmEnvOverride(db)).toBe(true)
+    expect(applyLlmEnvOverride()).toBe(true)
     expect(readRow().model).toBe("databricks-gpt-5-4")
   })
 
@@ -71,12 +75,12 @@ describe("applyLlmEnvOverride", () => {
     process.env["LLM_PROVIDER"] = "databricks"
     process.env["LLM_MODEL"] = "corp-gpt-endpoint"
 
-    expect(applyLlmEnvOverride(db)).toBe(true)
+    expect(applyLlmEnvOverride()).toBe(true)
     expect(readRow().model).toBe("corp-gpt-endpoint")
   })
 
   it("throws on invalid LLM_PROVIDER", () => {
     process.env["LLM_PROVIDER"] = "openai"
-    expect(() => applyLlmEnvOverride(db)).toThrow(/Invalid LLM_PROVIDER/)
+    expect(() => applyLlmEnvOverride()).toThrow(/Invalid LLM_PROVIDER/)
   })
 })

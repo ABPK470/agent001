@@ -5,11 +5,15 @@
  * does select → update | insert on the bound platform dialect so product
  * repos stay one code path. Call inside a transaction when concurrent
  * writers on the same key are possible.
+ *
+ * Prefer {@link upsertRowAsync} / {@link insertRowOrIgnoreAsync} as the
+ * async cutover proceeds; sync helpers remain for sqlite-bound callers.
  */
 
 import { sql } from "kysely"
 import type { CompiledQuery } from "./execute.js"
 import { runExec, runGet } from "./execute.js"
+import { runExecAsync, runGetAsync } from "./execute-async.js"
 import { getPlatformDb } from "./kysely.js"
 import type { PlatformDatabase } from "./tables.js"
 
@@ -52,6 +56,14 @@ function insertCompiled(table: TableName, insert: object): CompiledQuery {
     .compile()
 }
 
+function selectByKeysCompiled(table: TableName, keys: Record<string, unknown>): CompiledQuery {
+  let q = getPlatformDb().selectFrom(table as never).selectAll()
+  for (const [col, value] of Object.entries(keys)) {
+    q = q.where(col as never, "=", value as never)
+  }
+  return q.compile()
+}
+
 /** Sync upsert (sqlite execute path today). */
 export function upsertRow(args: UpsertArgs): void {
   const hit = runGet<{ ok: number }>(existsCompiled(args.table, args.keys))
@@ -60,6 +72,16 @@ export function upsertRow(args: UpsertArgs): void {
     return
   }
   runExec(insertCompiled(args.table, args.insert))
+}
+
+/** Async upsert — dialect-aware via execute-async. */
+export async function upsertRowAsync(args: UpsertArgs): Promise<void> {
+  const hit = await runGetAsync<{ ok: number }>(existsCompiled(args.table, args.keys))
+  if (hit) {
+    await runExecAsync(updateCompiled(args.table, args.keys, args.update))
+    return
+  }
+  await runExecAsync(insertCompiled(args.table, args.insert))
 }
 
 /** Insert-or-ignore: skip when the key already exists. Returns true if inserted. */
@@ -74,14 +96,28 @@ export function insertRowOrIgnore(args: {
   return true
 }
 
+export async function insertRowOrIgnoreAsync(args: {
+  table: TableName
+  keys: Record<string, unknown>
+  insert: object
+}): Promise<boolean> {
+  const hit = await runGetAsync<{ ok: number }>(existsCompiled(args.table, args.keys))
+  if (hit) return false
+  await runExecAsync(insertCompiled(args.table, args.insert))
+  return true
+}
+
 /** Fetch one row by key columns (for coalesce-style upserts). */
 export function getRowByKeys<T extends Record<string, unknown>>(
   table: TableName,
   keys: Record<string, unknown>,
 ): T | undefined {
-  let q = getPlatformDb().selectFrom(table as never).selectAll()
-  for (const [col, value] of Object.entries(keys)) {
-    q = q.where(col as never, "=", value as never)
-  }
-  return runGet<T>(q.compile())
+  return runGet<T>(selectByKeysCompiled(table, keys))
+}
+
+export async function getRowByKeysAsync<T extends Record<string, unknown>>(
+  table: TableName,
+  keys: Record<string, unknown>,
+): Promise<T | undefined> {
+  return runGetAsync<T>(selectByKeysCompiled(table, keys))
 }

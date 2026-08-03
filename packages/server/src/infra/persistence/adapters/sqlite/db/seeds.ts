@@ -1,44 +1,58 @@
 /**
  * Idempotent data seeds — run on every server boot after schema migrations.
  * Shipped defaults load from deploy/sync artifacts, not TypeScript constants.
+ * Uses the platform schema toolkit (portable across dialects).
  */
 
 import { PolicyEffect } from "@mia/agent"
 import { loadStrategiesArtifact } from "@mia/sync"
 import { dirname, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
-import type Database from "better-sqlite3"
+import { PolicySource } from "../../../../../internal/enums/index.js"
+import { getPlatformDb } from "../../../schema/kysely.js"
+import { insertRowOrIgnore } from "../../../schema/upsert.js"
 
 const DEFAULT_TENANT = "_default"
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../../../../..")
 
-function seedScd2StrategiesFromArtifact(db: Database.Database, projectRoot: string): void {
+function seedScd2StrategiesFromArtifact(projectRoot: string): void {
   const artifact = loadStrategiesArtifact(resolve(projectRoot))
-  const seedStrategyPointer = db.prepare(
-    `INSERT OR IGNORE INTO scd2_strategy_active (tenant_id, id, current_version, retired_at)
-     VALUES (?, ?, ?, NULL)`,
-  )
-  const seedStrategyVersion = db.prepare(
-    `INSERT OR IGNORE INTO scd2_strategy_versions
-       (tenant_id, id, version, body_json, created_by, created_at, reason)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
-  )
+  const now = new Date().toISOString()
   for (const strategy of artifact.strategies) {
-    seedStrategyPointer.run(DEFAULT_TENANT, strategy.id, strategy.version)
-    seedStrategyVersion.run(
-      DEFAULT_TENANT,
-      strategy.id,
-      strategy.version,
-      JSON.stringify(strategy),
-      strategy.createdBy,
-      strategy.createdAt,
-      "shipped",
-    )
+    insertRowOrIgnore({
+      table: "scd2_strategy_active",
+      keys: { tenant_id: DEFAULT_TENANT, id: strategy.id },
+      insert: {
+        tenant_id: DEFAULT_TENANT,
+        id: strategy.id,
+        current_version: strategy.version,
+        retired_at: null,
+      },
+    })
+    insertRowOrIgnore({
+      table: "scd2_strategy_versions",
+      keys: {
+        tenant_id: DEFAULT_TENANT,
+        id: strategy.id,
+        version: strategy.version,
+      },
+      insert: {
+        tenant_id: DEFAULT_TENANT,
+        id: strategy.id,
+        version: strategy.version,
+        body_json: JSON.stringify(strategy),
+        created_by: strategy.createdBy,
+        created_at: strategy.createdAt ?? now,
+        reason: "shipped",
+      },
+    })
   }
 }
 
-export function runSeeds(db: Database.Database, projectRoot = REPO_ROOT): void {
-  seedScd2StrategiesFromArtifact(db, projectRoot)
+export function runSeeds(projectRoot = REPO_ROOT): void {
+  // Ensure Kysely is bound to the open connection before seeding.
+  getPlatformDb()
+  seedScd2StrategiesFromArtifact(projectRoot)
 
   const seedPolicies: { name: string; effect: PolicyEffect; condition: string; parameters: string }[] = [
     {
@@ -47,8 +61,8 @@ export function runSeeds(db: Database.Database, projectRoot = REPO_ROOT): void {
       condition: "tool_call",
       parameters: JSON.stringify({
         scope: "all_tools",
-        description: "Controls which tools agents are permitted to invoke"
-      })
+        description: "Controls which tools agents are permitted to invoke",
+      }),
     },
     {
       name: "Model",
@@ -56,8 +70,8 @@ export function runSeeds(db: Database.Database, projectRoot = REPO_ROOT): void {
       condition: "model_selection",
       parameters: JSON.stringify({
         scope: "all_models",
-        description: "Controls model selection and usage limits"
-      })
+        description: "Controls model selection and usage limits",
+      }),
     },
     {
       name: "Security",
@@ -65,13 +79,25 @@ export function runSeeds(db: Database.Database, projectRoot = REPO_ROOT): void {
       condition: "sensitive_action",
       parameters: JSON.stringify({
         scope: "destructive_ops",
-        description: "Requires approval for destructive or sensitive operations"
-      })
-    }
+        description: "Requires approval for destructive or sensitive operations",
+      }),
+    },
   ]
-  const insertPolicy = db.prepare(`
-    INSERT OR IGNORE INTO policy_configs (name, effect, condition, parameters, created_at)
-    VALUES (@name, @effect, @condition, @parameters, datetime('now'))
-  `)
-  for (const p of seedPolicies) insertPolicy.run(p)
+  const now = new Date().toISOString()
+  for (const p of seedPolicies) {
+    insertRowOrIgnore({
+      table: "policy_configs",
+      keys: { name: p.name },
+      insert: {
+        name: p.name,
+        effect: p.effect,
+        condition: p.condition,
+        parameters: p.parameters,
+        created_at: now,
+        source: PolicySource.HostedDefault,
+        updated_at: null,
+        updated_by: null,
+      },
+    })
+  }
 }
