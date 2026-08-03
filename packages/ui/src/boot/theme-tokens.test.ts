@@ -119,6 +119,41 @@ describe("light theme color system", () => {
     expect(policy).toContain("grid-cols-[240px_minmax(0,1fr)_220px]")
   })
 
+  it("dark status pills use tinted fills + semantic ink; callout softs stay quiet", () => {
+    const dark = darkThemeBlock()
+    // Callout boxes remain Factory Reset quiet.
+    expect(dark).toMatch(/--status-callout-ok-soft:\s*var\(--overlay-2\)/)
+    expect(dark).toMatch(/--status-callout-err-soft:\s*var\(--overlay-2\)/)
+    // Pills are scan anchors — tint fill (FAIL hotter than OK).
+    expect(dark).toMatch(
+      /--status-pill-ok-soft:\s*color-mix\(in srgb,\s*var\(--success\) 12%,\s*transparent\)/,
+    )
+    expect(dark).toMatch(
+      /--status-pill-err-soft:\s*color-mix\(in srgb,\s*var\(--error\) 15%,\s*transparent\)/,
+    )
+    expect(dark).toMatch(
+      /--status-pill-err-border:\s*color-mix\(in srgb,\s*var\(--error\) 30%,\s*transparent\)/,
+    )
+    expect(dark).toMatch(
+      /--status-pill-ok-border:\s*color-mix\(in srgb,\s*var\(--success\) 22%,\s*transparent\)/,
+    )
+    expect(dark).toMatch(
+      /--status-pill-info-soft:\s*color-mix\(in srgb,\s*var\(--info\) 12%,\s*transparent\)/,
+    )
+    expect(css).toMatch(
+      /\.mia-status-pill--ok\s*\{[^}]*background:\s*var\(--status-pill-ok-soft\)[^}]*color:\s*var\(--success\)/s,
+    )
+    expect(css).toMatch(
+      /\.mia-status-pill--err\s*\{[^}]*background:\s*var\(--status-pill-err-soft\)[^}]*color:\s*var\(--error\)/s,
+    )
+    expect(css).toMatch(/\.mia-status-pill--info\s*\{[^}]*color:\s*var\(--info\)/s)
+    expect(css).toContain(".mia-status-pill--skip")
+    expect(css).toContain(".mia-status-pill--muted")
+    // Pill rules must not fall back to muted zinc ink on dark.
+    expect(css).not.toMatch(/\.mia-status-pill--ok\s*\{[^}]*color:\s*var\(--text-muted/s)
+    expect(css).not.toMatch(/\.mia-status-pill--err\s*\{[^}]*color:\s*var\(--text-muted/s)
+  })
+
   it("Model provider uses SELECT_TRACK dialect (not inverted ink outline)", () => {
     const policy = readFileSync(join(here, "../widgets/platform/PolicyEditor.tsx"), "utf8")
     expect(policy).toContain("SELECT_TRACK")

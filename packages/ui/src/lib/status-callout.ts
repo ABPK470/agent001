@@ -1,8 +1,11 @@
 /**
  * Shared status notice dialect — theme-split in CSS.
  *
- * Dark: left stroke, clean background (`.mia-callout`, `.mia-row-stroke`).
- * Light: soft row/card washes + chunky pills (`.mia-status-pill`) for scan speed.
+ * Two surfaces, one family:
+ *   - Pills (`.mia-status-pill`) — scan anchors: tint fill + semantic ink
+ *     via `--status-pill-*` (dark louder; light soft fills).
+ *   - Callouts (`.mia-callout`, `.mia-row-stroke`) — quiet notices: dark
+ *     left stroke / `--status-callout-*` overlay; light soft washes.
  * Toasts use opaque `--toast-*-bg` surfaces (`.mia-toast`), not callout soft fills.
  */
 
@@ -36,8 +39,8 @@ export const STATUS_PILL: Readonly<Record<StatusCalloutTone, string>> = {
   err: "mia-status-pill mia-status-pill--err",
   warn: "mia-status-pill mia-status-pill--warn",
   info: "mia-status-pill mia-status-pill--info",
-  skip: "mia-status-pill border border-dashed border-border bg-transparent text-text-muted",
-  muted: "mia-status-pill border border-border-subtle bg-transparent text-text-muted",
+  skip: "mia-status-pill mia-status-pill--skip",
+  muted: "mia-status-pill mia-status-pill--muted",
 }
 
 /** @deprecated Prefer STATUS_PILL — kept for call-site compat. */

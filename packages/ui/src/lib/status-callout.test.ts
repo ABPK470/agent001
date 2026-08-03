@@ -38,12 +38,15 @@ describe("status-callout", () => {
   })
 
   it("pill classes use chunky scan anchors (not hairline strokes)", () => {
-    for (const tone of ["ok", "err", "warn", "info"] as const) {
-      expect(STATUS_PILL[tone]).toContain("mia-status-pill")
-      expect(STATUS_PILL[tone]).toContain(`mia-status-pill--${tone}`)
+    for (const tone of ["ok", "err", "warn", "info", "skip", "muted"] as const) {
+      expect(STATUS_PILL[tone]).toBe(`mia-status-pill mia-status-pill--${tone}`)
       expect(STATUS_PILL[tone]).not.toMatch(/border-l-/)
+      expect(STATUS_PILL[tone]).not.toMatch(/border-dashed|bg-transparent|text-text-muted/)
     }
     expect(operationStatusPill("success")).toContain("mia-status-pill--ok")
     expect(operationStatusPill("failed")).toContain("mia-status-pill--err")
+    expect(operationStatusPill("running")).toContain("mia-status-pill--info")
+    expect(operationStatusPill("skipped")).toContain("mia-status-pill--skip")
+    expect(operationStatusPill("unknown")).toContain("mia-status-pill--muted")
   })
 })

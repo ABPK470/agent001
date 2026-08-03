@@ -242,6 +242,23 @@
   --status-callout-info-soft: var(--overlay-2);
   --status-callout-info-border: color-mix(in srgb, var(--info) 25%, transparent);
 
+  /*
+   * Status pills — scan anchors (louder than callout boxes).
+   * Tint fill + full semantic ink; FAIL hotter than OK.
+   */
+  --status-pill-ok-soft: color-mix(in srgb, var(--success) 12%, transparent);
+  --status-pill-ok-border: color-mix(in srgb, var(--success) 22%, transparent);
+  --status-pill-err-soft: color-mix(in srgb, var(--error) 15%, transparent);
+  --status-pill-err-border: color-mix(in srgb, var(--error) 30%, transparent);
+  --status-pill-warn-soft: color-mix(in srgb, var(--warning) 12%, transparent);
+  --status-pill-warn-border: color-mix(in srgb, var(--warning) 22%, transparent);
+  --status-pill-info-soft: color-mix(in srgb, var(--info) 12%, transparent);
+  --status-pill-info-border: color-mix(in srgb, var(--info) 22%, transparent);
+  --status-pill-skip-soft: transparent;
+  --status-pill-skip-border: var(--border);
+  --status-pill-muted-soft: transparent;
+  --status-pill-muted-border: var(--border-subtle);
+
   /* Toasts — fully opaque surfaces (never translucent over grid/content). */
   --toast-surface: var(--panel-2);
   --toast-ok-bg: color-mix(in srgb, var(--panel-2) 88%, var(--success) 12%);
@@ -374,6 +391,20 @@
   --status-callout-warn-border: var(--warning-border);
   --status-callout-info-soft: var(--info-soft);
   --status-callout-info-border: var(--info-border);
+
+  /* Status pills — same soft fills as light callouts (scan speed). */
+  --status-pill-ok-soft: var(--success-soft);
+  --status-pill-ok-border: var(--success-border);
+  --status-pill-err-soft: var(--error-soft);
+  --status-pill-err-border: var(--error-border);
+  --status-pill-warn-soft: var(--warning-soft);
+  --status-pill-warn-border: var(--warning-border);
+  --status-pill-info-soft: var(--info-soft);
+  --status-pill-info-border: var(--info-border);
+  --status-pill-skip-soft: transparent;
+  --status-pill-skip-border: var(--border);
+  --status-pill-muted-soft: transparent;
+  --status-pill-muted-border: var(--border-subtle);
 
   /* Toasts — solid fills (readable over any widget chrome). */
   --toast-surface: var(--panel);
@@ -2300,46 +2331,45 @@ label:focus-within > .mia-checkbox,
   }
 }
 
+/* Pills use --status-pill-* (scan anchors). Callout boxes keep --status-callout-*. */
 .mia-status-pill--ok {
-  border-color: var(--status-callout-ok-border);
-  background: var(--status-callout-ok-soft);
-  color: var(--text-muted, var(--color-text-muted));
-}
-
-.mia-status-pill--err {
-  border-color: var(--status-callout-err-border);
-  background: var(--status-callout-err-soft);
-  color: var(--text-muted, var(--color-text-muted));
-}
-
-.mia-status-pill--warn {
-  border-color: var(--status-callout-warn-border);
-  background: var(--status-callout-warn-soft);
-  color: var(--text-muted, var(--color-text-muted));
-}
-
-.mia-status-pill--info {
-  border-color: var(--status-callout-info-border);
-  background: var(--status-callout-info-soft);
-  color: var(--text-muted, var(--color-text-muted));
-}
-
-/* Light — high-speed scan: filled pills, row washes, semantic ink (not hairline strokes). */
-:root[data-theme="light"] .mia-status-pill--ok {
+  border-color: var(--status-pill-ok-border);
+  background: var(--status-pill-ok-soft);
   color: var(--success);
 }
 
-:root[data-theme="light"] .mia-status-pill--err {
+.mia-status-pill--err {
+  border-color: var(--status-pill-err-border);
+  background: var(--status-pill-err-soft);
   color: var(--error);
 }
 
-:root[data-theme="light"] .mia-status-pill--warn {
+.mia-status-pill--warn {
+  border-color: var(--status-pill-warn-border);
+  background: var(--status-pill-warn-soft);
   color: var(--warning);
 }
 
-:root[data-theme="light"] .mia-status-pill--info {
+.mia-status-pill--info {
+  border-color: var(--status-pill-info-border);
+  background: var(--status-pill-info-soft);
   color: var(--info);
 }
+
+.mia-status-pill--skip {
+  border-style: dashed;
+  border-color: var(--status-pill-skip-border);
+  background: var(--status-pill-skip-soft);
+  color: var(--text-muted, var(--color-text-muted));
+}
+
+.mia-status-pill--muted {
+  border-color: var(--status-pill-muted-border);
+  background: var(--status-pill-muted-soft);
+  color: var(--text-muted, var(--color-text-muted));
+}
+
+/* Light — high-speed scan: row washes + callout soft fills (pill tokens already semantic). */
 
 :root[data-theme="light"] .mia-callout {
   border-left-width: 1px;
