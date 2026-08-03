@@ -709,6 +709,7 @@ export function OperationPipelineList({
           }
           hasChildren={row.hasChildren}
           folded={!actExpanded.has(row.activityKey)}
+          guideSlots={row.guideSlots}
           onSelect={() => onSelectActivity(row.pipeline.id, row.activityKey)}
           onToggleFold={() => toggleActivity(row.activityKey)}
         />

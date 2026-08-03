@@ -76,7 +76,18 @@ describe("pipelines left-tree gutter — review kit", () => {
     expect(activity).toContain("ReviewTreeRow")
     expect(activity).toContain("resolveActivityTreeVisual")
     expect(activity).toContain("OpLogStatusDot")
+    expect(activity).toContain("guideSlots")
     expect(activity).not.toContain("activityEntityIcon")
+  })
+
+  it("hosts IDE tree guide hairlines on the shared review kit", () => {
+    const css = read(cssPath)
+    expect(css).toContain(".review-tree-row__guides")
+    expect(css).toContain(".review-tree-guide.is-branch")
+    expect(css).toContain(".review-tree-guide.is-corner")
+    expect(css).toContain("var(--review-tree-line)")
+    // Corners paint via backgrounds — abspos %-height drops the └ vertical.
+    expect(css).toMatch(/\.review-tree-guide\.is-corner\s*\{[^}]*background-size:\s*1px 50%/s)
   })
 
   it("wires depth via CSS vars — not inline paddingLeft", () => {

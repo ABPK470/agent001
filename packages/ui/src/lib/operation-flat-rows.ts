@@ -3,11 +3,20 @@
  * virtualizable row model for the left master tree.
  */
 
+import type { ReviewTreeGuideSlot } from "../components/review/review-tree-guides"
+import { annotateTreeGuideSlots } from "../components/review/review-tree-guides"
 import type { OperationActivity, OperationPipeline } from "../client/index"
 
 export type OperationFlatRow =
   | { type: "day"; key: string; label: string; count: number }
-  | { type: "pipeline"; key: string; pipeline: OperationPipeline }
+  | {
+      type: "pipeline"
+      key: string
+      pipeline: OperationPipeline
+      depth: 0
+      parentScopeId: null
+      guideSlots: ReviewTreeGuideSlot[]
+    }
   | {
       type: "activity"
       key: string
@@ -17,7 +26,15 @@ export type OperationFlatRow =
       depth: number
       hasChildren: boolean
       parentPhaseId?: string
+      parentScopeId: string
+      guideSlots: ReviewTreeGuideSlot[]
     }
+
+type GuideAnnotated = {
+  depth: number
+  parentScopeId: string | null
+  guideSlots?: ReviewTreeGuideSlot[]
+}
 
 export function flattenOperationRows(
   pipelines: readonly OperationPipeline[],
@@ -40,6 +57,7 @@ export function flattenOperationRows(
     pipeline: OperationPipeline,
     activities: readonly OperationActivity[],
     depth: number,
+    parentScopeId: string,
     parentKey?: string,
     parentPhaseId?: string,
   ): void {
@@ -57,9 +75,11 @@ export function flattenOperationRows(
         depth,
         hasChildren,
         parentPhaseId: phaseId,
+        parentScopeId,
+        guideSlots: [],
       })
       if (hasChildren && openActivityKeys.has(activityKey)) {
-        pushActivities(pipeline, activity.children!, depth + 1, activityKey, phaseId)
+        pushActivities(pipeline, activity.children!, depth + 1, activityKey, activityKey, phaseId)
       }
     }
   }
@@ -78,10 +98,13 @@ export function flattenOperationRows(
           type: "pipeline",
           key: pipeline.id,
           pipeline,
+          depth: 0,
+          parentScopeId: null,
+          guideSlots: [],
         })
         if (openPipelineIds?.has(pipeline.id) && activityKeyOf && openActivityKeys) {
           // Depth 1 = first nest under pipeline root (Trace dialect: +1 indent step).
-          pushActivities(pipeline, pipeline.activities, 1)
+          pushActivities(pipeline, pipeline.activities, 1, pipeline.id)
         }
       }
     }
@@ -97,5 +120,17 @@ export function flattenOperationRows(
     curItems.push(pipeline)
   }
   flush()
+
+  const guideNodes: GuideAnnotated[] = rows.map((row) => {
+    if (row.type === "day") return { depth: -1, parentScopeId: null }
+    return row
+  })
+  annotateTreeGuideSlots(guideNodes)
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i]!
+    if (row.type === "day") continue
+    row.guideSlots = guideNodes[i]!.guideSlots ?? []
+  }
+
   return rows
 }

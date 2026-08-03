@@ -6,6 +6,11 @@ export {
   reviewTreeNodeCellStyle,
 } from "./review-tree-geometry"
 export {
+  annotateTreeGuideSlots,
+  buildGuideSlots,
+  type ReviewTreeGuideSlot,
+} from "./review-tree-guides"
+export {
   reviewTreeOpenStateForMode,
   type ReviewTreeFoldMode,
 } from "./review-tree-open-state"

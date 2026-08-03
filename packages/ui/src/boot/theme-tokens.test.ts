@@ -55,6 +55,23 @@ describe("light theme color system", () => {
     expect(block).not.toMatch(/--error:\s*var\(--ink\)/)
   })
 
+  it("tree status dots use theme-split chroma (muted light / bright dark)", () => {
+    const light = lightThemeBlock()
+    const dark = darkThemeBlock()
+    expect(light).toMatch(/--status-dot-ok:\s*#059669/)
+    expect(light).toMatch(/--status-dot-err:\s*#e11d48/)
+    expect(dark).toMatch(/--status-dot-ok:\s*#34d399/)
+    expect(dark).toMatch(/--status-dot-err:\s*#fb7185/)
+    expect(css).toMatch(
+      /\.op-log-status-dot\.is-ok\s*\{[^}]*background:\s*var\(--status-dot-ok\)/s,
+    )
+    expect(css).toMatch(
+      /\.op-log-status-dot\.is-err\s*\{[^}]*background:\s*var\(--status-dot-err\)/s,
+    )
+    expect(css).toContain(".review-tree-guide.is-branch")
+    expect(css).toContain(".review-tree-guide.is-corner")
+  })
+
   it("maps datatype tokens to subtle syntax hues", () => {
     const block = lightThemeBlock()
     expect(block).toMatch(/--dt-string:\s*#6d28d9/)

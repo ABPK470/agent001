@@ -66,9 +66,51 @@ describe("flattenOperationRows", () => {
         parentKey ? `${parentKey}/${activityId}` : `${pipelineId}|${activityId}`,
     })
     expect(rows.map((r) => r.type)).toEqual(["day", "pipeline", "activity", "activity"])
-    expect(rows.filter((r) => r.type === "activity").map((r) => r.activityKey)).toEqual([
+    const activities = rows.filter((r) => r.type === "activity")
+    expect(activities.map((r) => r.activityKey)).toEqual([
       "run-1|phase:preview",
       "run-1|phase:preview/preflight",
     ])
+    expect(activities[0]).toMatchObject({
+      parentScopeId: "run-1",
+      guideSlots: ["corner"],
+    })
+    expect(activities[1]).toMatchObject({
+      parentScopeId: "run-1|phase:preview",
+      guideSlots: ["blank", "corner"],
+    })
+  })
+
+  it("marks sibling phases as branch then corner", () => {
+    const run: OperationPipeline = {
+      ...pipeline("run-2", "2026-01-01T10:00:00.000Z"),
+      activities: [
+        {
+          id: "phase:preview",
+          name: "Preview",
+          status: "success",
+          startedAt: "2026-01-01T10:00:00.000Z",
+          endedAt: "2026-01-01T10:00:01.000Z",
+          durationMs: 1000,
+          events: [],
+        },
+        {
+          id: "phase:execute",
+          name: "Execute",
+          status: "failed",
+          startedAt: "2026-01-01T10:00:01.000Z",
+          endedAt: "2026-01-01T10:00:02.000Z",
+          durationMs: 1000,
+          events: [],
+        },
+      ],
+    }
+    const rows = flattenOperationRows([run], new Set(), () => "Today", {
+      openPipelineIds: new Set(["run-2"]),
+      openActivityKeys: new Set(),
+      activityKeyOf: (pipelineId, activityId) => `${pipelineId}|${activityId}`,
+    })
+    const activities = rows.filter((r) => r.type === "activity")
+    expect(activities.map((r) => r.guideSlots)).toEqual([["branch"], ["corner"]])
   })
 })

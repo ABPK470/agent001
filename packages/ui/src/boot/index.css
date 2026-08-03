@@ -206,6 +206,12 @@
   --info: #60a5fa;
   --info-soft: rgba(96, 165, 250, 0.14);
 
+  /* Tree status dots — bright markers on dark (not pill ink). */
+  --status-dot-ok: #34d399; /* emerald-400 */
+  --status-dot-err: #fb7185; /* rose-400 */
+  --status-dot-warn: #fbbf24;
+  --status-dot-info: #60a5fa;
+
   /* Diff panes — clear add/remove chroma (aliases status on dark). */
   --diff-surface: var(--panel-2);
   --diff-add: var(--success);
@@ -361,6 +367,15 @@
   --info: #1e40af;
   --info-soft: #dbeafe;
   --info-border: #93c5fd;
+
+  /* Tree status dots — deeper/muted on white (no neon glare). */
+  --status-dot-ok: #059669; /* emerald-600 */
+  --status-dot-err: #e11d48; /* rose-600 */
+  --status-dot-warn: #d97706;
+  --status-dot-info: #2563eb;
+
+  /* Flat tree guides (├ └) — zinc-200 on white. */
+  --review-tree-line: #e4e4e7;
 
   /* Diff panes — inset sheet on white widgets. */
   --diff-surface: var(--panel-2);
@@ -2542,7 +2557,8 @@ textarea.input {
   --review-meta-size: 0.875rem;
   /* Day / section caps — quieter than body so the list stays the hero. */
   --review-group-size: 0.6875rem;
-  --review-tree-line: color-mix(in srgb, var(--border) 70%, var(--text-faint));
+  /* Flat virtualized trees (├ └) + curved ReviewTree nests share this ink. */
+  --review-tree-line: #27272a; /* zinc-800 — dark */
   /*
    * Curved nest geometry (Threads / Trace / Pipelines / Event Stream).
    * First principle: nest is flush with the parent row’s left edge; stem sits
@@ -2858,6 +2874,62 @@ textarea.input {
 .review-tree-row.has-subtitle .review-tree-row__chev,
 .review-tree-row.has-subtitle .review-tree-row__icon {
   margin-top: 0.1875rem;
+}
+
+/*
+ * Flat IDE guides (├ └) — Pipelines left tree.
+ * Paint with backgrounds (not abspos %-height): flex-stretched guides often
+ * have no definite containing-block height for abspos %, which drops the └
+ * vertical on last siblings (Completed under Execute).
+ */
+.review-tree-row.has-guides > .review-tree-row__btn {
+  align-items: stretch;
+}
+
+.review-tree-row.has-guides .review-tree-row__node-cell {
+  align-items: stretch;
+  min-height: 100%;
+}
+
+.review-tree-row.has-guides .review-tree-row__node-cell > :not(.review-tree-row__guides) {
+  align-self: center;
+}
+
+.review-tree-row__guides {
+  display: flex;
+  align-self: stretch;
+  flex-shrink: 0;
+  min-height: 100%;
+}
+
+.review-tree-guide {
+  width: var(--review-tree-indent, 20px);
+  align-self: stretch;
+  flex-shrink: 0;
+  min-height: 100%;
+  background-repeat: no-repeat;
+}
+
+.review-tree-guide.is-line {
+  background-image: linear-gradient(var(--review-tree-line), var(--review-tree-line));
+  background-size: 1px 100%;
+  background-position: 50% 0;
+}
+
+.review-tree-guide.is-branch {
+  background-image:
+    linear-gradient(var(--review-tree-line), var(--review-tree-line)),
+    linear-gradient(var(--review-tree-line), var(--review-tree-line));
+  background-size: 1px 100%, 50% 1px;
+  background-position: 50% 0, 50% 50%;
+}
+
+.review-tree-guide.is-corner {
+  background-image:
+    linear-gradient(var(--review-tree-line), var(--review-tree-line)),
+    linear-gradient(var(--review-tree-line), var(--review-tree-line));
+  background-size: 1px 50%, 50% 1px;
+  background-position: 50% 0, 50% 50%;
 }
 
 .review-tree-row__chev {
@@ -3277,22 +3349,22 @@ textarea.input {
 }
 
 .op-log-status-dot.is-ok {
-  background: var(--success);
+  background: var(--status-dot-ok);
   opacity: 1;
 }
 
 .op-log-status-dot.is-err {
-  background: var(--error);
+  background: var(--status-dot-err);
   opacity: 1;
 }
 
 .op-log-status-dot.is-warn {
-  background: var(--warning);
+  background: var(--status-dot-warn);
   opacity: 1;
 }
 
 .op-log-status-dot.is-info {
-  background: var(--info);
+  background: var(--status-dot-info);
   opacity: 1;
 }
 
@@ -4828,16 +4900,16 @@ button.trace-tree-row__icon-dot {
 }
 
 .trace-tree-row__icon-dot.is-success {
-  background: var(--success);
+  background: var(--status-dot-ok);
 }
 
 .trace-tree-row__icon-dot.is-failed,
 .trace-tree-row__icon-dot.is-error {
-  background: var(--error);
+  background: var(--status-dot-err);
 }
 
 .trace-tree-row__icon-dot.is-running {
-  background: var(--info);
+  background: var(--status-dot-info);
 }
 
 .trace-tree-row__icon-dot.is-skipped {

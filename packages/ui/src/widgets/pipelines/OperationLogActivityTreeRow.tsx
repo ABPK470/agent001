@@ -5,6 +5,7 @@
 
 import type { OperationActivity, OperationStatus } from "../../client/index"
 import { ReviewTreeRow } from "../../components/review"
+import type { ReviewTreeGuideSlot } from "../../components/review/review-tree-guides"
 import { resolveActivityTreeVisual } from "./op-log-entity-icon"
 import { OpLogEntityIcon } from "./OpLogEntityIcon"
 import { OpLogStatusDot } from "./OpLogStatusDot"
@@ -23,6 +24,7 @@ export function OperationLogActivityTreeRow({
   selected,
   hasChildren,
   folded,
+  guideSlots,
   onSelect,
   onToggleFold,
 }: {
@@ -34,10 +36,12 @@ export function OperationLogActivityTreeRow({
   selected: boolean
   hasChildren: boolean
   folded: boolean
+  guideSlots?: readonly ReviewTreeGuideSlot[]
   onSelect: () => void
   onToggleFold: () => void
 }) {
-  const showPill = opLogShowStatusPill({ status })
+  // Leaves: status dot only for OK; FAIL/Running keep the pill (errors must break flow).
+  const showPill = opLogShowStatusPill({ status, leaf: !hasChildren })
   const visual = resolveActivityTreeVisual({ activity, hasChildren, status })
   const icon =
     visual.type === "icon" ? (
@@ -55,6 +59,7 @@ export function OperationLogActivityTreeRow({
       isRoot={depth === 0}
       rowClassName="op-log-activity-tree-row"
       gridTemplateColumns={REVIEW_TREE_GRID_COLS}
+      guideSlots={guideSlots}
       onSelect={onSelect}
       onToggleFold={onToggleFold}
       icon={icon}

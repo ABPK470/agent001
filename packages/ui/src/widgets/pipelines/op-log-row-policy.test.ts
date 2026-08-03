@@ -8,12 +8,14 @@ describe("op-log-row-policy", () => {
     expect(opLogShowStatusPill({ pipelineRow: true, status: OperationStatus.Failed })).toBe(true)
   })
 
-  it("hides OK pills on child rows", () => {
+  it("hides OK pills on stage and leaf rows (dots / quiet path)", () => {
     expect(opLogShowStatusPill({ status: OperationStatus.Success })).toBe(false)
+    expect(opLogShowStatusPill({ status: OperationStatus.Success, leaf: true })).toBe(false)
   })
 
-  it("shows pills for failed or in-flight child rows", () => {
+  it("keeps FAIL / Running pills on child rows (errors break flow)", () => {
     expect(opLogShowStatusPill({ status: OperationStatus.Failed })).toBe(true)
+    expect(opLogShowStatusPill({ status: OperationStatus.Failed, leaf: true })).toBe(true)
     expect(opLogShowStatusPill({ status: OperationStatus.Running })).toBe(true)
   })
 

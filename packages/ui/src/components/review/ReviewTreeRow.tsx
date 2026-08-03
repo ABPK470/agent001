@@ -1,6 +1,7 @@
 import { ChevronRight } from "lucide-react"
 import type { CSSProperties, MouseEvent, ReactNode } from "react"
 import { reviewTreeNodeCellStyle } from "./review-tree-geometry"
+import type { ReviewTreeGuideSlot } from "./review-tree-guides"
 
 export function ReviewTreeRow({
   depth,
@@ -13,6 +14,7 @@ export function ReviewTreeRow({
   btnClassName = "",
   nodeCellClassName = "",
   gridTemplateColumns,
+  guideSlots,
   onSelect,
   onToggleFold,
   icon,
@@ -31,6 +33,8 @@ export function ReviewTreeRow({
   btnClassName?: string
   nodeCellClassName?: string
   gridTemplateColumns?: string
+  /** When set, indent comes from guide slots (not depth×padding). */
+  guideSlots?: readonly ReviewTreeGuideSlot[]
   onSelect: () => void
   onToggleFold?: () => void
   icon?: ReactNode
@@ -47,6 +51,8 @@ export function ReviewTreeRow({
   const btnStyle: CSSProperties | undefined = gridTemplateColumns
     ? { gridTemplateColumns }
     : undefined
+  const useGuides = guideSlots != null
+  const cellDepth = useGuides ? 0 : depth
 
   return (
     <div
@@ -57,6 +63,7 @@ export function ReviewTreeRow({
         hasSubtitle ? "has-subtitle" : "",
         hasChildren ? "is-branch" : "is-leaf",
         isRoot ?? depth === 0 ? "is-root" : "is-child",
+        useGuides ? "has-guides" : "",
       ]
         .filter(Boolean)
         .join(" ")}
@@ -72,8 +79,15 @@ export function ReviewTreeRow({
       >
         <span
           className={["review-tree-row__node-cell", nodeCellClassName].filter(Boolean).join(" ")}
-          style={reviewTreeNodeCellStyle(depth)}
+          style={reviewTreeNodeCellStyle(cellDepth)}
         >
+          {useGuides && guideSlots.length > 0 ? (
+            <span className="review-tree-row__guides" aria-hidden>
+              {guideSlots.map((slot, index) => (
+                <span key={index} className={`review-tree-guide is-${slot}`} />
+              ))}
+            </span>
+          ) : null}
           <span className="review-tree-row__chev" onClick={onChevronClick} aria-hidden>
             {hasChildren ? (
               <ChevronRight
