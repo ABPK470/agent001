@@ -6,18 +6,18 @@
  * @module
  */
 
-import { type Transaction } from "mssql"
 import type { Scd2TablePolicy } from "@mia/shared-types"
 import {
   materializeScd2PolicyForSchema,
 } from "../../core/entity-registry/scd2-policy.js"
 import { buildBatchWhere } from "../../core/diff-engine/sql-helpers.js"
 import type { SyncRuntimeHost } from "../../ports/index.js"
+import type { WarehouseTx } from "../../ports/warehouse-tx.js"
 import type { SyncTelemetryContext } from "../events.js"
 import { resolveWarehouseDialect } from "../warehouse-dialect.js"
 import { type SyncPlan, type SyncPlanTable } from "../plan-store.js"
 import { deleteRows, changeRowsAsPkHash, upsertRows } from "./plan-table.js"
-import { qtable, trackedQuery } from "./db/db-helpers.js"
+import { qtable, trackedQuery, trackedTxQuery } from "./db/db-helpers.js"
 
 const CHANGE_SET_FETCH_BATCH = 200
 
@@ -102,7 +102,7 @@ export async function fetchPkColumns(
  */
 export async function applyInsertsUpdates(
   host: SyncRuntimeHost,
-  tx: Transaction,
+  tx: WarehouseTx,
   plan: SyncPlan,
   tableName: string,
   pkColumns: string[],
@@ -124,33 +124,34 @@ export async function applyInsertsUpdates(
 
   const dialect = resolveWarehouseDialect(host, plan.target)
   // Discover columns from target metadata (not source row keys — schemas may diverge).
-  const colResult = await trackedQuery(
+  const colResult = await trackedTxQuery(
     host,
     plan.target,
+    tx,
     dialect.targetColumnsSql(tableName),
     `applyInsertsUpdates.cols(${tableName})`,
     telemetryContext,
-    tx.request()
   )
   const targetCols = colResult.recordset as Array<{
     name: string
-    is_identity: boolean
-    is_computed: boolean
+    is_identity: boolean | number
+    is_computed: boolean | number
   }>
+  const asBool = (v: boolean | number) => v === true || v === 1
   const policy = materializeScd2PolicyForSchema(
     requireScd2Policy(plan, tableName),
     Object.keys(rows[0]!),
     targetCols.map((c) => c.name),
   ).policy
   const excluded = new Set(policy.excludeFromDiff)
-  const identityCol = targetCols.find((c) => c.is_identity)?.name ?? null
+  const identityCol = targetCols.find((c) => asBool(c.is_identity))?.name ?? null
   const onInsertStamps = policy.onInsert
   const onUpdateStamps = policy.onUpdate
   const allSourceCols = new Set(Object.keys(rows[0]))
   const omitIdentity = policy.identityHandling === "omit-identity-column"
 
   const allSyncCols = targetCols
-    .filter((c) => allSourceCols.has(c.name) && !c.is_computed)
+    .filter((c) => allSourceCols.has(c.name) && !asBool(c.is_computed))
     .map((c) => c.name)
 
   const tempCols = allSyncCols.filter((c) => {
@@ -181,15 +182,18 @@ export async function applyInsertsUpdates(
     onUpdateStamps,
   })
 
-  const result = await trackedQuery(
+  const result = await trackedTxQuery(
     host,
     plan.target,
+    tx,
     fullSql,
     `applyInsertsUpdates.merge(${tableName})`,
     telemetryContext,
-    tx.request()
   )
-  // rowsAffected: last meaningful entry is the MERGE itself
+  // MSSQL MERGE: last meaningful entry is the MERGE itself; Postgres ON CONFLICT: single count.
+  if (tx.dialect === "postgres") {
+    return result.rowsAffected.reduce((a, b) => a + b, 0)
+  }
   const raIdx = result.rowsAffected.length - 2
   return (result.rowsAffected[raIdx] as number | undefined) ?? 0
 }
@@ -199,7 +203,7 @@ export async function applyInsertsUpdates(
  */
 export async function applyDeletes(
   host: SyncRuntimeHost,
-  tx: Transaction,
+  tx: WarehouseTx,
   plan: SyncPlan,
   tableName: string,
   pkColumns: string[],
@@ -220,14 +224,17 @@ export async function applyDeletes(
     rows: pkRows.map((r) => r.pkValues),
   })
 
-  const result = await trackedQuery(
+  const result = await trackedTxQuery(
     host,
     plan.target,
+    tx,
     fullSql,
     `applyDeletes.execChangeSet(${tableName})`,
     telemetryContext,
-    tx.request()
   )
+  if (tx.dialect === "postgres") {
+    return result.rowsAffected.reduce((a, b) => a + b, 0)
+  }
   const raIdx = result.rowsAffected.length - 2
   return (result.rowsAffected[raIdx] as number | undefined) ?? 0
 }

@@ -57,7 +57,7 @@ vi.mock("./apply.js", () => ({
   fetchPkColumns: (...args: unknown[]) => fetchPkColumnsMock(...args)
 }))
 
-vi.mock("./metadata-sync.js", () => ({
+vi.mock("./metadata/metadata-sync.js", () => ({
   runMetadataSync: (...args: unknown[]) => runMetadataSyncMock(...args)
 }))
 

@@ -21,6 +21,7 @@ import type {
   SyncRuntimeHost,
 } from "../../../ports/host.js"
 import type { WarehouseQueryResult } from "../../../ports/warehouse-query.js"
+import type { WarehouseTx } from "../../../ports/warehouse-tx.js"
 import type { SyncTelemetryContext } from "../../events.js"
 import { emitSyncSqlEvent } from "../../events.js"
 import { runWarehouseQuery } from "../../warehouse-query.js"
@@ -150,6 +151,49 @@ export async function trackedQuery<T = unknown>(
     return result
   } catch (e) {
     emitErr(e, t0)
+    throw e
+  }
+}
+
+/** Run SQL on an open warehouse transaction with Sync SQL telemetry. */
+export async function trackedTxQuery<T = unknown>(
+  host: SyncEventHost,
+  connection: string,
+  tx: WarehouseTx,
+  sqlText: string,
+  label: string,
+  telemetryContext?: SyncTelemetryContext,
+): Promise<WarehouseQueryResult<T>> {
+  const t0 = Date.now()
+  try {
+    const result = await tx.query<T>(sqlText)
+    emitSyncSqlEvent(
+      host,
+      {
+        label,
+        connection,
+        sql: sqlText,
+        durationMs: Date.now() - t0,
+        rowCount:
+          result.recordset.length || result.rowsAffected.reduce((a, b) => a + b, 0),
+        attempts: 1,
+      },
+      telemetryContext,
+    )
+    return result
+  } catch (e) {
+    emitSyncSqlEvent(
+      host,
+      {
+        label,
+        connection,
+        sql: sqlText,
+        durationMs: Date.now() - t0,
+        attempts: 1,
+        error: e instanceof Error ? e.message : String(e),
+      },
+      telemetryContext,
+    )
     throw e
   }
 }

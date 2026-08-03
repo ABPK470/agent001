@@ -7,15 +7,16 @@
  * @module
  */
 
-import sqlMod from "mssql"
 import { EventType, SyncProgressKind, type SyncRuntimeHost } from "../../../ports/index.js"
+import type { WarehouseTx } from "../../../ports/warehouse-tx.js"
 import { emitSyncEvent as emit, type SyncTelemetryContext } from "../../events.js"
 import { type SyncPlan, type SyncPlanTable } from "../../plan-store.js"
 import { applyDeletes, applyInsertsUpdates } from "../apply.js"
 import { movementFromChangeSet } from "../plan-table.js"
 import { maybeArchive } from "../archive.js"
-import { trackedQuery } from "../db/db-helpers.js"
+import { trackedTxQuery } from "../db/db-helpers.js"
 import { resolveWarehouseDialect } from "../../warehouse-dialect.js"
+import { beginWarehouseTx } from "../../warehouse-tx.js"
 import { constraintRelaxationTables, dataMovementTables } from "./metadata-scope.js"
 import { SyncExecuteError, toSyncExecuteError, type ExecuteProgress } from "../types.js"
 import { deleteRows, upsertRows } from "../plan-table.js"
@@ -28,14 +29,15 @@ export interface RunMetadataSyncInput {
   triggerCache: Map<string, boolean>
   onProgress: (p: ExecuteProgress) => void
   target: string
-  tgtPool: import("mssql").ConnectionPool
+  /** Optional pre-opened tx (tests); otherwise begun via {@link beginWarehouseTx}. */
+  tx?: WarehouseTx
   telemetryContext?: SyncTelemetryContext
 }
 
 export async function runMetadataSync(
   input: RunMetadataSyncInput
 ): Promise<{ applied: { insert: number; update: number; delete: number } }> {
-  const { plan, planId, pkByTable, triggerCache, onProgress, target, tgtPool, telemetryContext } = input
+  const { plan, planId, pkByTable, triggerCache, onProgress, target, telemetryContext } = input
   const host = input.host
   const dialect = resolveWarehouseDialect(host, target)
   const relaxConstraints = dialect.supports("constraint_relax")
@@ -45,7 +47,7 @@ export async function runMetadataSync(
   const allTables = plan.executionContract.metadata.executionOrder
   const constraintTables = constraintRelaxationTables(plan)
   const movementTables = dataMovementTables(plan)
-  const tx = new sqlMod.Transaction(tgtPool)
+  const tx = input.tx ?? (await beginWarehouseTx(host, target))
 
   const fail = (error: unknown, context: { table?: string; op?: string }) => {
     const failure = toSyncExecuteError(error, {
@@ -72,19 +74,17 @@ export async function runMetadataSync(
   }
 
   try {
-    await tx.begin()
-
     if (relaxConstraints) {
       for (const t of allTables) {
         if (!constraintTables.has(t)) continue
         try {
-          await trackedQuery(
+          await trackedTxQuery(
             host,
             target,
+            tx,
             dialect.disableConstraintsSql(t),
             `nocheck-constraint(${t})`,
             telemetryContext,
-            tx.request()
           )
         } catch (error) {
           throw fail(error, { table: t, op: "nocheck-constraint" })
@@ -172,13 +172,13 @@ export async function runMetadataSync(
       for (const t of allTables) {
         if (!constraintTables.has(t)) continue
         try {
-          await trackedQuery(
+          await trackedTxQuery(
             host,
             target,
+            tx,
             dialect.enableConstraintsSql(t),
             `check-constraint(${t})`,
             telemetryContext,
-            tx.request()
           )
         } catch (error) {
           throw fail(error, { table: t, op: "check-constraint" })
@@ -211,13 +211,13 @@ export async function runMetadataSync(
           const rollbackCtx = telemetryContext
             ? { ...telemetryContext, scope: "rollback" }
             : undefined
-          await trackedQuery(
+          await trackedTxQuery(
             host,
             target,
+            tx,
             dialect.enableConstraintsSql(t),
             `rollback.check-constraint(${t})`,
             rollbackCtx,
-            tx.request()
           )
         } catch (err: unknown) { console.error("[mia]", err) }
       }

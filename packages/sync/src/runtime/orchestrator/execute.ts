@@ -91,14 +91,6 @@ export async function executeSync(
     return refuseExecute(planId, e instanceof Error ? e.message : String(e))
   }
 
-  const targetDialect = resolveWarehouseDialect(opts.host, plan.target)
-  if (targetDialect.kind === "postgres") {
-    return refuseExecute(
-      planId,
-      `Sync execute to Postgres is not available yet — preview and catalog checks can use Postgres; apply still requires an MSSQL target.`,
-    )
-  }
-
   if (!plan.executionContract) {
     return refuseExecute(planId, `Plan ${planId} predates the unified execution contract — re-preview before executing.`)
   }
@@ -257,13 +249,8 @@ async function executeSyncInner(
   )
   throwIfAborted(signal)
 
-  const resolvePool = opts.getPool ?? ((envName: string) => getPool(opts.host, envName))
-  const { pool: tgtPool } = await resolvePool(plan.target)
-  const { pool: srcPool } = await resolvePool(plan.source)
-  if (!tgtPool) return { outcome: "refused", planId, success: false, error: "Target pool unavailable." }
-  if (!srcPool) return { outcome: "refused", planId, success: false, error: "Source pool unavailable." }
-  const targetPool = tgtPool
-  const sourcePool = srcPool
+  const targetDialect = resolveWarehouseDialect(opts.host, plan.target)
+  const sourceDialect = resolveWarehouseDialect(opts.host, plan.source)
 
   const entityId = plan.entity.id
   const entityType = executionContract.definitionId
@@ -276,8 +263,53 @@ async function executeSyncInner(
   const lockStepPresent = flowSteps.some((step) => step.kind === "targetLock")
   const stepWarnings: { step: string; sproc: string; error: string }[] = []
 
+  if (targetDialect.kind === "postgres") {
+    if (scheduled.beforeMetadata.length > 0 || scheduled.afterMetadata.length > 0) {
+      return refuseExecute(
+        planId,
+        `Postgres Sync execute supports metadata apply only — this plan has flow steps ` +
+          `(locks / procedures) that require MSSQL. Use an MSSQL target or a metadata-only definition.`,
+      )
+    }
+    if (sourceDialect.kind === "postgres" && lockStepPresent) {
+      return refuseExecute(
+        planId,
+        `Postgres Sync execute cannot run contract lock steps — use an MSSQL source or omit targetLock.`,
+      )
+    }
+  }
+
+  const resolvePool = opts.getPool ?? ((envName: string) => getPool(opts.host, envName))
+  // Flow pipeline (procs / locks) still needs MSSQL pools when those steps exist.
+  const needsMssqlPools =
+    targetDialect.kind === "mssql" ||
+    sourceDialect.kind === "mssql" ||
+    scheduled.beforeMetadata.length > 0 ||
+    scheduled.afterMetadata.length > 0 ||
+    lockStepPresent
+  let targetPool: import("mssql").ConnectionPool | null = null
+  let sourcePool: import("mssql").ConnectionPool | null = null
+  if (needsMssqlPools) {
+    if (targetDialect.kind === "mssql") {
+      const resolved = await resolvePool(plan.target)
+      targetPool = resolved.pool
+    }
+    if (sourceDialect.kind === "mssql") {
+      const resolved = await resolvePool(plan.source)
+      sourcePool = resolved.pool
+    }
+    if (targetDialect.kind === "mssql" && !targetPool) {
+      return { outcome: "refused", planId, success: false, error: "Target pool unavailable." }
+    }
+    if ((lockStepPresent || scheduled.beforeMetadata.length > 0 || scheduled.afterMetadata.length > 0) &&
+      sourceDialect.kind === "mssql" &&
+      !sourcePool) {
+      return { outcome: "refused", planId, success: false, error: "Source pool unavailable." }
+    }
+  }
+
   async function ensureContractUnlockedOnSource(): Promise<void> {
-    if (entityType !== "contract" || !lockStepPresent) return
+    if (entityType !== "contract" || !lockStepPresent || !sourcePool) return
     try {
       await setContractLockOnSource(
         opts.host,
@@ -303,6 +335,9 @@ async function executeSyncInner(
     let metadataApplied = { insert: 0, update: 0, delete: 0 }
 
     if (scheduled.beforeMetadata.length > 0) {
+      if (!targetPool || !sourcePool) {
+        return refuseExecute(planId, "Pre-metadata flow steps require MSSQL source and target pools.")
+      }
       const { stepWarnings: preWarnings } = await runPostMetadataPipeline({
         host: opts.host,
         tgtPool: targetPool,
@@ -325,7 +360,6 @@ async function executeSyncInner(
     const movementTables = dataMovementTables(plan)
     const triggerCache = await probeTriggers(
       opts.host,
-      targetPool,
       planId,
       plan.target,
       [...movementTables],
@@ -340,13 +374,15 @@ async function executeSyncInner(
       triggerCache,
       onProgress,
       target: plan.target,
-      tgtPool: targetPool,
       telemetryContext,
     })
     metadataApplied = applied
     stepEmit(`${metadataStep.id}-done`, "Metadata sync committed")
 
     if (scheduled.afterMetadata.length > 0) {
+      if (!targetPool || !sourcePool) {
+        return refuseExecute(planId, "Post-metadata flow steps require MSSQL source and target pools.")
+      }
       const { stepWarnings: pipelineWarnings } = await runPostMetadataPipeline({
         host: opts.host,
         tgtPool: targetPool,

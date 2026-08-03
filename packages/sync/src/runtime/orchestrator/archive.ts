@@ -13,19 +13,19 @@
  * @module
  */
 
-import type { ConnectionPool } from "mssql"
 import { tableHasTriggers } from "../../runtime/catalog-drift.js"
 import { EventType, type SyncRuntimeHost } from "../../ports/index.js"
 import { emitSyncEvent as emit, type SyncTelemetryContext } from "../events.js"
 import { type SyncPlan } from "../plan-store.js"
+import { resolveWarehouseDialect } from "../warehouse-dialect.js"
 import { trackedQuery } from "./db/db-helpers.js"
 
 /**
- * Batch-probe target triggers for data-movement tables in one query.
+ * Batch-probe target triggers for data-movement tables.
+ * MSSQL uses one sys.triggers query; Postgres probes per table via dialect SQL.
  */
 export async function probeTriggers(
   host: SyncRuntimeHost,
-  _tgtPool: ConnectionPool,
   planId: string,
   target: string,
   dataMovementTables: string[],
@@ -34,6 +34,24 @@ export async function probeTriggers(
   const triggerCache = new Map<string, boolean>()
   if (dataMovementTables.length === 0) return triggerCache
   const probeT0 = Date.now()
+  const dialect = resolveWarehouseDialect(host, target)
+
+  if (dialect.kind !== "mssql") {
+    for (const tableName of dataMovementTables) {
+      try {
+        triggerCache.set(tableName, await tableHasTriggers(host, target, tableName, telemetryContext))
+      } catch {
+        triggerCache.set(tableName, false)
+      }
+    }
+    emit(host, EventType.SyncExecuteArchiveProbeBatch, {
+      planId,
+      tables: dataMovementTables.length,
+      durationMs: Date.now() - probeT0
+    })
+    return triggerCache
+  }
+
   try {
     const pairs = dataMovementTables
       .map((tn) => {
