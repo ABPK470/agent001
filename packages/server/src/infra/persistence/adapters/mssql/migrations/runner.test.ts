@@ -45,16 +45,16 @@ describe("createMssqlMigrationRunner", () => {
     await runner.applyPending()
     await runner.applyPending()
     const list = await runner.list()
-    expect(list.map((r) => r.version)).toEqual([1, 2, 3, 4])
-    expect(list[3]).toMatchObject({
-      version: 4,
-      name: "mssql_pilot_sync_catalog_and_entities",
+    expect(list.map((r) => r.version)).toEqual([1, 2, 3, 4, 5])
+    expect(list[4]).toMatchObject({
+      version: 5,
+      name: "mssql_pilot_run_ops_catalog_approvals",
       appliedAt: "2026-01-01T00:00:00",
     })
     const inserts = ex.statements.filter((s) => s.includes("INSERT INTO dbo._mia_schema_migrations"))
-    expect(inserts).toHaveLength(4)
+    expect(inserts).toHaveLength(5)
     expect(ex.statements.some((s) => s.includes("CREATE TABLE dbo.sync_runs"))).toBe(true)
-    expect(ex.statements.some((s) => s.includes("CREATE TABLE dbo.attachments"))).toBe(true)
+    expect(ex.statements.some((s) => s.includes("CREATE TABLE dbo.approval_configs"))).toBe(true)
   })
 
   it("exports a Kysely-backed DDL executor factory", () => {

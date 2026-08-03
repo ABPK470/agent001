@@ -2,9 +2,9 @@
  * LLM configuration persistence.
  */
 
-import { sql } from "kysely"
 import { getPlatformDb } from "../../../schema/kysely.js"
 import { runExec, runGet } from "../../../schema/execute.js"
+import { platformNow } from "../../../schema/sql-time.js"
 import { LlmProvider } from "../../../../../internal/enums/llm.js"
 
 export { LlmProvider }
@@ -35,7 +35,7 @@ export function saveLlmConfig(cfg: Omit<DbLlmConfig, "updated_at">): void {
       model: cfg.model,
       api_key: cfg.api_key,
       base_url: cfg.base_url,
-      updated_at: sql`datetime('now')`,
+      updated_at: platformNow(),
     })
     .where("id", "=", 1)
     .compile()

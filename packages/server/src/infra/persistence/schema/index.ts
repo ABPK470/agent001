@@ -81,3 +81,4 @@ export {
   runGetAsync,
   runInsertIdAsync,
 } from "./execute-async.js"
+export { coalescePlatformNow, platformNow } from "./sql-time.js"

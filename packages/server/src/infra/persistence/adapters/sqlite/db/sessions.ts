@@ -19,6 +19,7 @@ import { randomBytes } from "node:crypto"
 import { sql } from "kysely"
 import { getPlatformDb } from "../../../schema/kysely.js"
 import { runAll, runExec, runGet } from "../../../schema/execute.js"
+import { platformNow } from "../../../schema/sql-time.js"
 
 function newSid(): string {
   return randomBytes(16).toString("hex")
@@ -47,8 +48,8 @@ export function createSession(args: { upn: string; ip: string; userAgent: string
       upn: args.upn.toLowerCase(),
       ip: args.ip,
       user_agent: args.userAgent,
-      created_at: sql`datetime('now')`,
-      last_seen_at: sql`datetime('now')`,
+      created_at: platformNow(),
+      last_seen_at: platformNow(),
     })
     .compile()
   runExec(compiled)
@@ -58,7 +59,7 @@ export function createSession(args: { upn: string; ip: string; userAgent: string
 export function touchSession(sid: string): void {
   const compiled = getPlatformDb()
     .updateTable("sessions")
-    .set({ last_seen_at: sql`datetime('now')` })
+    .set({ last_seen_at: platformNow() })
     .where("sid", "=", sid)
     .compile()
   runExec(compiled)

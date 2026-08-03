@@ -201,8 +201,8 @@ Leave Bridge multi-dialect move engine; thin sql-kit reuse only.
 3. **Platform: schema toolkit + SQLite adapter** — nearly done.
 4. **Platform: second dialect (mssql hosted default)** — in progress:
    - **4a** Single Kysely/tedious platform pool (migrator + tx + queries) — **done**
-   - **4b** Grow multi-dialect registry toward baseline parity — **next**
-   - **4c** Dialect-safe SQL + `run*Async` repo migration
+   - **4b** Grow multi-dialect registry toward baseline parity — **in progress** (v1–5; proposals/channels/memory remain)
+   - **4c** Dialect-safe SQL + `run*Async` — **started** (`platformNow`; continue across repos)
    - **4d** Lift boot gate only when 4a–4c are honest
 5. **Sync: extract MSSQL behind WarehouseDialect**
 6. **Sync: PostgreSQL dialect + eligibility + pool provider**

@@ -13,9 +13,9 @@
 import { randomUUID } from "node:crypto"
 import { mkdirSync, writeFileSync } from "node:fs"
 import { dirname, join } from "node:path"
-import { sql } from "kysely"
 import { getPlatformDb } from "../../../schema/kysely.js"
 import { runAll, runExec, runGet } from "../../../schema/execute.js"
+import { platformNow } from "../../../schema/sql-time.js"
 import {
   buildEnvelope,
   envelopeBodyBytes,
@@ -92,7 +92,7 @@ export async function sealEvidence(i: SealEvidenceInput): Promise<SealedEvidence
       signature_alg: i.signer.alg,
       signer_id: i.signer.id,
       signature: sig,
-      created_at: sql`datetime('now')`,
+      created_at: platformNow(),
     })
     .compile()
   runExec(compiled)

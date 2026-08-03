@@ -492,4 +492,299 @@ END;
       },
     },
   },
+  {
+    version: 5,
+    name: "mssql_pilot_run_ops_catalog_approvals",
+    up: {
+      mssql: async (executor) => {
+        await mssqlExec(
+          executor,
+          `
+IF OBJECT_ID(N'dbo.run_log', N'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.run_log (
+    id         INT            NOT NULL IDENTITY(1,1) CONSTRAINT PK_run_log PRIMARY KEY,
+    run_id     NVARCHAR(64)   NOT NULL
+      CONSTRAINT FK_run_log_runs REFERENCES dbo.runs(id) ON DELETE CASCADE,
+    level      NVARCHAR(32)   NOT NULL CONSTRAINT DF_run_log_level DEFAULT (N'info'),
+    message    NVARCHAR(MAX)  NOT NULL,
+    timestamp  DATETIME2      NOT NULL
+  );
+  CREATE INDEX IX_run_log_run ON dbo.run_log(run_id);
+END;
+
+IF OBJECT_ID(N'dbo.trace_entries', N'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.trace_entries (
+    id          INT            NOT NULL IDENTITY(1,1) CONSTRAINT PK_trace_entries PRIMARY KEY,
+    run_id      NVARCHAR(64)   NOT NULL
+      CONSTRAINT FK_trace_entries_runs REFERENCES dbo.runs(id) ON DELETE CASCADE,
+    seq         INT            NOT NULL CONSTRAINT DF_trace_entries_seq DEFAULT (0),
+    data        NVARCHAR(MAX)  NOT NULL,
+    created_at  DATETIME2      NOT NULL
+  );
+  CREATE INDEX IX_trace_entries_run ON dbo.trace_entries(run_id, seq);
+END;
+
+IF OBJECT_ID(N'dbo.run_tool_approvals', N'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.run_tool_approvals (
+    id            NVARCHAR(64)   NOT NULL CONSTRAINT PK_run_tool_approvals PRIMARY KEY,
+    run_id        NVARCHAR(64)   NOT NULL,
+    step_id       NVARCHAR(128)  NOT NULL,
+    tool_name     NVARCHAR(256)  NOT NULL,
+    args_json     NVARCHAR(MAX)  NOT NULL,
+    reason        NVARCHAR(MAX)  NOT NULL,
+    policy_name   NVARCHAR(256)  NOT NULL,
+    status        NVARCHAR(32)   NOT NULL,
+    requested_at  DATETIME2      NOT NULL,
+    resolved_at   DATETIME2      NULL,
+    resolved_by   NVARCHAR(320)  NULL,
+    CONSTRAINT UQ_run_tool_approvals_run_step UNIQUE (run_id, step_id)
+  );
+  CREATE INDEX IX_run_tool_approvals_run ON dbo.run_tool_approvals(run_id, status);
+END;
+
+IF OBJECT_ID(N'dbo.tool_results', N'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.tool_results (
+    id            INT            NOT NULL IDENTITY(1,1) CONSTRAINT PK_tool_results PRIMARY KEY,
+    run_id        NVARCHAR(64)   NOT NULL
+      CONSTRAINT FK_tool_results_runs REFERENCES dbo.runs(id) ON DELETE CASCADE,
+    tool_call_id  NVARCHAR(128)  NOT NULL,
+    tool_name     NVARCHAR(256)  NOT NULL,
+    args_json     NVARCHAR(MAX)  NOT NULL CONSTRAINT DF_tool_results_args DEFAULT (N'{}'),
+    result_json   NVARCHAR(MAX)  NOT NULL,
+    row_count     INT            NULL,
+    bytes         INT            NOT NULL CONSTRAINT DF_tool_results_bytes DEFAULT (0),
+    truncated     INT            NOT NULL CONSTRAINT DF_tool_results_trunc DEFAULT (0),
+    goal_excerpt  NVARCHAR(MAX)  NULL,
+    created_at    DATETIME2      NOT NULL
+  );
+  CREATE INDEX IX_tool_results_run ON dbo.tool_results(run_id);
+END;
+
+IF OBJECT_ID(N'dbo.agent_messages', N'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.agent_messages (
+    id            NVARCHAR(64)   NOT NULL CONSTRAINT PK_agent_messages PRIMARY KEY,
+    root_run_id   NVARCHAR(64)   NOT NULL
+      CONSTRAINT FK_agent_messages_runs REFERENCES dbo.runs(id) ON DELETE CASCADE,
+    from_run_id   NVARCHAR(64)   NOT NULL,
+    from_agent    NVARCHAR(256)  NOT NULL,
+    protocol      NVARCHAR(64)   NOT NULL,
+    topic         NVARCHAR(256)  NOT NULL,
+    content       NVARCHAR(MAX)  NOT NULL,
+    reply_to      NVARCHAR(64)   NULL,
+    created_at    DATETIME2      NOT NULL
+  );
+  CREATE INDEX IX_agent_messages_root ON dbo.agent_messages(root_run_id, created_at);
+END;
+
+IF OBJECT_ID(N'dbo.sync_sql_log', N'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.sync_sql_log (
+    id           INT            NOT NULL IDENTITY(1,1) CONSTRAINT PK_sync_sql_log PRIMARY KEY,
+    plan_id      NVARCHAR(128)  NULL,
+    preview_id   NVARCHAR(128)  NULL,
+    event_type   NVARCHAR(128)  NOT NULL,
+    scope        NVARCHAR(128)  NULL,
+    label        NVARCHAR(512)  NOT NULL,
+    connection   NVARCHAR(256)  NOT NULL,
+    sql_text     NVARCHAR(MAX)  NOT NULL,
+    duration_ms  INT            NULL,
+    row_count    INT            NULL,
+    error        NVARCHAR(MAX)  NULL,
+    created_at   DATETIME2      NOT NULL CONSTRAINT DF_sync_sql_log_created DEFAULT (SYSUTCDATETIME())
+  );
+  CREATE INDEX IX_sync_sql_log_plan ON dbo.sync_sql_log(plan_id, id);
+END;
+
+IF OBJECT_ID(N'dbo.sync_environment_override_configs', N'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.sync_environment_override_configs (
+    name            NVARCHAR(128)  NOT NULL CONSTRAINT PK_sync_env_overrides PRIMARY KEY,
+    overrides_json  NVARCHAR(MAX)  NOT NULL CONSTRAINT DF_sync_env_overrides_json DEFAULT (N'{}'),
+    updated_at      DATETIME2      NOT NULL,
+    updated_by      NVARCHAR(320)  NULL
+  );
+END;
+
+IF OBJECT_ID(N'dbo.sync_catalog_versions', N'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.sync_catalog_versions (
+    tenant_id      NVARCHAR(128)  NOT NULL,
+    version        INT            NOT NULL,
+    snapshot_json  NVARCHAR(MAX)  NOT NULL,
+    reason         NVARCHAR(MAX)  NOT NULL,
+    created_by     NVARCHAR(320)  NOT NULL,
+    created_at     DATETIME2      NOT NULL,
+    CONSTRAINT PK_sync_catalog_versions PRIMARY KEY (tenant_id, version)
+  );
+END;
+
+IF OBJECT_ID(N'dbo.sync_catalog_active', N'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.sync_catalog_active (
+    tenant_id   NVARCHAR(128)  NOT NULL CONSTRAINT PK_sync_catalog_active PRIMARY KEY,
+    version     INT            NOT NULL,
+    updated_at  DATETIME2      NOT NULL
+  );
+END;
+
+IF OBJECT_ID(N'dbo.scd2_strategy_active', N'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.scd2_strategy_active (
+    tenant_id        NVARCHAR(128)  NOT NULL,
+    id               NVARCHAR(128)  NOT NULL,
+    current_version  INT            NOT NULL,
+    retired_at       DATETIME2      NULL,
+    CONSTRAINT PK_scd2_strategy_active PRIMARY KEY (tenant_id, id)
+  );
+END;
+
+IF OBJECT_ID(N'dbo.scd2_strategy_versions', N'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.scd2_strategy_versions (
+    tenant_id    NVARCHAR(128)  NOT NULL,
+    id           NVARCHAR(128)  NOT NULL,
+    version      INT            NOT NULL,
+    body_json    NVARCHAR(MAX)  NOT NULL,
+    created_by   NVARCHAR(320)  NOT NULL,
+    created_at   DATETIME2      NOT NULL CONSTRAINT DF_scd2_strategy_versions_created DEFAULT (SYSUTCDATETIME()),
+    reason       NVARCHAR(MAX)  NOT NULL CONSTRAINT DF_scd2_strategy_versions_reason DEFAULT (N''),
+    CONSTRAINT PK_scd2_strategy_versions PRIMARY KEY (tenant_id, id, version)
+  );
+END;
+
+IF OBJECT_ID(N'dbo.approval_configs', N'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.approval_configs (
+    tenant_id       NVARCHAR(128)  NOT NULL,
+    target_env      NVARCHAR(128)  NOT NULL,
+    risk_tier       NVARCHAR(32)   NOT NULL,
+    policy          NVARCHAR(32)   NOT NULL,
+    approvers_json  NVARCHAR(MAX)  NOT NULL CONSTRAINT DF_approval_configs_approvers DEFAULT (N'[]'),
+    bypass_role     NVARCHAR(128)  NULL,
+    updated_at      DATETIME2      NOT NULL CONSTRAINT DF_approval_configs_updated DEFAULT (SYSUTCDATETIME()),
+    updated_by      NVARCHAR(320)  NOT NULL,
+    CONSTRAINT PK_approval_configs PRIMARY KEY (tenant_id, target_env, risk_tier)
+  );
+END;
+
+IF OBJECT_ID(N'dbo.notification_route_configs', N'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.notification_route_configs (
+    id            NVARCHAR(64)   NOT NULL CONSTRAINT PK_notification_route_configs PRIMARY KEY,
+    tenant_id     NVARCHAR(128)  NOT NULL,
+    event_type    NVARCHAR(128)  NOT NULL,
+    filter_json   NVARCHAR(MAX)  NOT NULL CONSTRAINT DF_notification_routes_filter DEFAULT (N'{}'),
+    channel       NVARCHAR(32)   NOT NULL,
+    target        NVARCHAR(512)  NOT NULL,
+    enabled       INT            NOT NULL CONSTRAINT DF_notification_routes_enabled DEFAULT (1),
+    updated_at    DATETIME2      NOT NULL CONSTRAINT DF_notification_routes_updated DEFAULT (SYSUTCDATETIME()),
+    updated_by    NVARCHAR(320)  NOT NULL
+  );
+  CREATE INDEX IX_notification_route_configs_ev
+    ON dbo.notification_route_configs(tenant_id, event_type, enabled);
+END;
+
+IF OBJECT_ID(N'dbo.notification_log', N'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.notification_log (
+    id            INT            NOT NULL IDENTITY(1,1) CONSTRAINT PK_notification_log PRIMARY KEY,
+    route_id      NVARCHAR(64)   NULL,
+    event_type    NVARCHAR(128)  NOT NULL,
+    channel       NVARCHAR(32)   NOT NULL,
+    target        NVARCHAR(512)  NOT NULL,
+    payload_json  NVARCHAR(MAX)  NOT NULL,
+    status        NVARCHAR(32)   NOT NULL,
+    attempts      INT            NOT NULL CONSTRAINT DF_notification_log_attempts DEFAULT (0),
+    last_error    NVARCHAR(MAX)  NULL,
+    created_at    DATETIME2      NOT NULL CONSTRAINT DF_notification_log_created DEFAULT (SYSUTCDATETIME()),
+    sent_at       DATETIME2      NULL
+  );
+END;
+
+IF OBJECT_ID(N'dbo.freeze_window_configs', N'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.freeze_window_configs (
+    tenant_id     NVARCHAR(128)  NOT NULL,
+    id            NVARCHAR(128)  NOT NULL,
+    display_name  NVARCHAR(512)  NOT NULL,
+    description   NVARCHAR(MAX)  NOT NULL CONSTRAINT DF_freeze_windows_desc DEFAULT (N''),
+    starts_at     DATETIME2      NOT NULL,
+    ends_at       DATETIME2      NOT NULL,
+    created_by    NVARCHAR(320)  NOT NULL,
+    created_at    DATETIME2      NOT NULL CONSTRAINT DF_freeze_windows_created DEFAULT (SYSUTCDATETIME()),
+    updated_at    DATETIME2      NOT NULL CONSTRAINT DF_freeze_windows_updated DEFAULT (SYSUTCDATETIME()),
+    CONSTRAINT PK_freeze_window_configs PRIMARY KEY (tenant_id, id)
+  );
+END;
+
+IF OBJECT_ID(N'dbo.proposer_schedule_configs', N'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.proposer_schedule_configs (
+    tenant_id    NVARCHAR(128)  NOT NULL,
+    source       NVARCHAR(256)  NOT NULL,
+    target       NVARCHAR(256)  NOT NULL,
+    cron         NVARCHAR(128)  NOT NULL,
+    enabled      INT            NOT NULL CONSTRAINT DF_proposer_schedules_enabled DEFAULT (1),
+    last_run_at  DATETIME2      NULL,
+    next_run_at  DATETIME2      NULL,
+    updated_at   DATETIME2      NOT NULL CONSTRAINT DF_proposer_schedules_updated DEFAULT (SYSUTCDATETIME()),
+    updated_by   NVARCHAR(320)  NOT NULL,
+    CONSTRAINT PK_proposer_schedule_configs PRIMARY KEY (tenant_id, source, target)
+  );
+END;
+
+IF OBJECT_ID(N'dbo.notifications', N'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.notifications (
+    id          NVARCHAR(64)   NOT NULL CONSTRAINT PK_notifications PRIMARY KEY,
+    type        NVARCHAR(128)  NOT NULL,
+    title       NVARCHAR(512)  NOT NULL,
+    message     NVARCHAR(MAX)  NOT NULL,
+    run_id      NVARCHAR(64)   NULL,
+    step_id     NVARCHAR(128)  NULL,
+    owner_upn   NVARCHAR(320)  NOT NULL
+      CONSTRAINT FK_notifications_users REFERENCES dbo.users(upn),
+    actions     NVARCHAR(MAX)  NOT NULL CONSTRAINT DF_notifications_actions DEFAULT (N'[]'),
+    read        INT            NOT NULL CONSTRAINT DF_notifications_read DEFAULT (0),
+    created_at  DATETIME2      NOT NULL
+  );
+  CREATE INDEX IX_notifications_owner ON dbo.notifications(owner_upn, created_at DESC);
+END;
+
+IF OBJECT_ID(N'dbo.api_request_log', N'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.api_request_log (
+    id                INT            NOT NULL IDENTITY(1,1) CONSTRAINT PK_api_request_log PRIMARY KEY,
+    method            NVARCHAR(16)   NOT NULL,
+    url               NVARCHAR(2048) NOT NULL,
+    status_code       INT            NOT NULL,
+    duration_ms       FLOAT          NOT NULL,
+    request_body      NVARCHAR(MAX)  NULL,
+    response_summary  NVARCHAR(MAX)  NULL,
+    created_at        DATETIME2      NOT NULL
+  );
+END;
+
+IF OBJECT_ID(N'dbo.webhook_drain_configs', N'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.webhook_drain_configs (
+    id             NVARCHAR(64)   NOT NULL CONSTRAINT PK_webhook_drain_configs PRIMARY KEY,
+    url            NVARCHAR(2048) NOT NULL,
+    secret         NVARCHAR(MAX)  NOT NULL CONSTRAINT DF_webhook_drain_secret DEFAULT (N''),
+    event_filters  NVARCHAR(MAX)  NOT NULL CONSTRAINT DF_webhook_drain_filters DEFAULT (N'[]'),
+    enabled        INT            NOT NULL CONSTRAINT DF_webhook_drain_enabled DEFAULT (1),
+    created_at     DATETIME2      NOT NULL,
+    updated_at     DATETIME2      NOT NULL
+  );
+END;
+`,
+        )
+      },
+    },
+  },
 ]

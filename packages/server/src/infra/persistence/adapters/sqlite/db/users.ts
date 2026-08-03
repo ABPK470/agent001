@@ -9,6 +9,7 @@ import { sql } from "kysely"
 import { UserSource } from "../../../../../internal/enums/auth.js"
 import { getPlatformDb } from "../../../schema/kysely.js"
 import { runAll, runExec, runGet } from "../../../schema/execute.js"
+import { platformNow } from "../../../schema/sql-time.js"
 
 export interface DbUser {
   upn: string // canonical, lowercased
@@ -40,7 +41,7 @@ export function insertUser(u: InsertUserInput): void {
       is_admin: u.isAdmin ? 1 : 0,
       password_hash: u.passwordHash,
       source: u.source,
-      created_at: sql`datetime('now')`,
+      created_at: platformNow(),
       last_login_at: null,
     })
     .compile()
@@ -68,7 +69,7 @@ export function findUserByUsername(username: string): DbUser | undefined {
 export function updateLastLoginAt(upn: string): void {
   const compiled = getPlatformDb()
     .updateTable("users")
-    .set({ last_login_at: sql`datetime('now')` })
+    .set({ last_login_at: platformNow() })
     .where("upn", "=", upn.toLowerCase())
     .compile()
   runExec(compiled)
