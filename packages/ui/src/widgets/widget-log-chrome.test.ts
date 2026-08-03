@@ -75,6 +75,9 @@ describe("widget log chrome — shell", () => {
       /\.widget-review-controls__inset\s*\{[^}]*padding-inline:\s*var\(--review-controls-pad-x\)/s,
     )
     expect(css).toMatch(
+      /\.widget-review-controls__inset:not\(:last-child\)\s*\{[^}]*padding-bottom:\s*var\(--review-controls-pad-y\)/s,
+    )
+    expect(css).toMatch(
       /\.widget-review-controls__inset\s*>\s*\.widget-review-meta\s*\{[^}]*padding:\s*0/s,
     )
     expect(css).toMatch(
@@ -92,7 +95,8 @@ describe("widget log chrome — shell", () => {
     expect(trace).toContain("WIDGET_REVIEW_CONTROLS_CLASS")
     expect(trace).toContain("WIDGET_REVIEW_CONTROLS_INSET_CLASS")
     expect(trace).toContain("WIDGET_LOG_BODY_CLASS")
-    expect(read(opsPath)).toContain("WIDGET_LOG_SCROLL_CLASS")
+    // Pipelines split-pane owns its own list scroll; Event Stream keeps the shared host.
+    expect(read(opsPath)).toContain("op-log-split-list-scroll")
     expect(live).toContain("WIDGET_LOG_SCROLL_CLASS")
     expect(read(threadsPath)).toContain("WIDGET_CONTENT_GUTTER_INNER_CLASS")
     expect(read(threadsPath)).toContain("thread-nav-panel")

@@ -1230,6 +1230,11 @@ body {
   padding-block: var(--review-controls-pad-y) 0;
 }
 
+/* Air above the band divider — controls must not sit on the hairline. */
+.widget-review-controls__inset:not(:last-child) {
+  padding-bottom: var(--review-controls-pad-y);
+}
+
 .widget-review-controls__inset:last-child {
   padding-bottom: var(--review-controls-pad-bottom);
 }
