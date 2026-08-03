@@ -64,15 +64,17 @@ describe("pipelines left-tree gutter — review kit", () => {
     expect(nodeCell).not.toMatch(/padding-left:\s*0\s*!important/)
   })
 
-  it("day banners sit left of the tree so pipeline rows read as children", () => {
+  it("day groups are sticky full-width section dividers (no card boxes)", () => {
     const css = read(cssPath)
+    const ops = read(opsPath)
+    expect(css).toContain(".op-log-day-cap")
+    expect(css).not.toContain(".op-log-day-card")
     expect(css).toMatch(
-      /\.review-operator \.review-split-list-scroll \.review-group-cap\s*\{[^}]*padding-inline-start:\s*var\(--review-tree-hpad/s,
+      /\.op-log-day-cap\s*\{[^}]*padding-inline:\s*var\(--review-tree-hpad/s,
     )
-    expect(css).toMatch(
-      /\.review-operator \.review-split-list-scroll \.review-group-cap\s*\{[^}]*background:\s*var\(--panel-3/s,
-    )
-    expect(css).toContain(".review-group-cap__count")
+    expect(ops).toContain("op-log-day-cap")
+    expect(ops).not.toContain("dayCardClass")
+    expect(ops).not.toContain("op-log-day-card")
   })
 
   it("activity rows reserve the icon column via ReviewTreeRow", () => {

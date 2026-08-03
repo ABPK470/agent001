@@ -604,7 +604,10 @@ function ToolPill({
   const showSyncProgress = Boolean(syncProgress) && (expanded || isRunning)
   return (
     <div className="relative py-0.5" data-chat-expand-root="">
-      {!isLast && <div className="pointer-events-none absolute left-[11px] top-[20px] -bottom-1 w-px chat-trace-rail" />}
+      {/* Continuity between sibling tool dots (same geometry as pre-regression TermChat). */}
+      {!isLast && (
+        <div className="pointer-events-none absolute left-[11px] top-[20px] -bottom-1 w-px chat-trace-rail" />
+      )}
       <div className="flex items-start gap-2 min-w-0 px-2 py-1">
         <span
           className={[
@@ -860,7 +863,7 @@ function StepBlock({
     part.status === "running" || part.hasRunning ? "text-text-muted" : "text-text-secondary"
 
   return (
-    <div className="py-1 min-w-0" data-chat-step-id={part.id} data-chat-expand-root="">
+    <div className="chat-step py-1 min-w-0" data-chat-step-id={part.id} data-chat-expand-root="">
       <button
         ref={buttonRef}
         type="button"
@@ -873,44 +876,43 @@ function StepBlock({
           })
         }}
         className={[
-          "flex max-w-full min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 py-0.5 text-left text-[15px] leading-6",
+          "chat-step__header flex max-w-full min-w-0 items-center gap-1.5 py-0.5 text-left text-[15px] leading-6",
           labelClass,
           canToggle ? "transition-colors hover:text-text" : "cursor-default",
         ].join(" ")}
       >
-        {/* Working logo sits in front of the chevron; fades out when the step settles. */}
-        {showLogo ? (
-          <span
-            className="inline-flex h-3 w-3 shrink-0 items-center justify-center"
-            aria-hidden
-          >
+        {/*
+          One fixed lead column (12px): logo while working, else chevron/dot.
+          Never stack logo+chevron — that shifted the title and parked the
+          fold rail under the wrong glyph (detail wrap then spilled left).
+        */}
+        <span className="chat-step__lead inline-flex h-3 w-3 shrink-0 items-center justify-center" aria-hidden>
+          {showLogo ? (
             <Logo
               size={11}
               working={!logoExiting}
               className={logoExiting ? "mia-colon-logo--working-exit" : undefined}
             />
-          </span>
-        ) : null}
-        {/* Always reserve the chevron column so the title does not jump
-            when the first nested tool arrives and the control appears. */}
-        <span className="inline-flex h-3 w-3 shrink-0 items-center justify-center">
-          {canToggle ? (
+          ) : canToggle ? (
             <Chevron size={12} strokeWidth={1.5} className="chat-trace-chev" />
           ) : part.hasRunning && !part.subagent ? (
-            <span className="block h-1.5 w-1.5 rounded-full chat-trace-dot--idle" aria-hidden />
+            <span className="block h-1.5 w-1.5 rounded-full chat-trace-dot--idle" />
           ) : null}
         </span>
-        <span className="min-w-0 truncate">{part.title}</span>
-        {isFailed ? (
-          <>
-            <span className={operationStatusPill("failed")}>Failed</span>
-            {part.detail ? (
-              <span className="min-w-0 truncate font-normal text-text-muted">— {part.detail}</span>
-            ) : null}
-          </>
-        ) : part.detail ? (
-          <span className="min-w-0 truncate font-normal text-text-faint">· {part.detail}</span>
-        ) : null}
+        <span className="chat-step__title min-w-0 flex-1 truncate">
+          <span>{part.title}</span>
+          {isFailed ? (
+            <>
+              {" "}
+              <span className={operationStatusPill("failed")}>Failed</span>
+              {part.detail ? (
+                <span className="font-normal text-text-muted"> — {part.detail}</span>
+              ) : null}
+            </>
+          ) : part.detail ? (
+            <span className="font-normal text-text-faint"> · {part.detail}</span>
+          ) : null}
+        </span>
       </button>
       {hasBodyContent ? (
         <ChatFoldBody

@@ -1,6 +1,9 @@
 /**
  * Flatten day-grouped pipelines (+ optional open activity trees) into a
  * virtualizable row model for the left master tree.
+ *
+ * Day headers are sticky section dividers in a flat table — not card wrappers
+ * and not tree parents. NODE / DURATION stay one column for the whole list.
  */
 
 import type { ReviewTreeGuideSlot } from "../components/review/review-tree-guides"
@@ -8,7 +11,12 @@ import { annotateTreeGuideSlots } from "../components/review/review-tree-guides"
 import type { OperationActivity, OperationPipeline } from "../client/index"
 
 export type OperationFlatRow =
-  | { type: "day"; key: string; label: string; count: number }
+  | {
+      type: "day"
+      key: string
+      label: string
+      count: number
+    }
   | {
       type: "pipeline"
       key: string

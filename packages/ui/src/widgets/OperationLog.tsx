@@ -49,12 +49,7 @@ const OP_LOG_LIST_ROW_HEIGHT = 44
 const REVIEW_TREE_GRID_COLS = "minmax(0, 1fr) var(--review-tree-col-duration)"
 
 const DAY_GROUP_BTN =
-  "review-group-label review-group-cap sticky top-0 z-10 w-full flex items-center text-left transition-colors"
-
-function dayGroupWrapClass(isFirst: boolean): string {
-  /* Air above later day banners; first cap sits under the NODE header. */
-  return isFirst ? "" : "pt-2"
-}
+  "review-group-label review-group-cap op-log-day-cap sticky top-0 z-10 w-full flex items-center text-left transition-colors"
 
 function dayLabel(iso: string): string {
   const d = new Date(iso)
@@ -670,24 +665,23 @@ export function OperationPipelineList({
     [pipelines, collapsedDays, openPipelineIds, actExpanded],
   )
 
-  const renderRow = (row: (typeof rows)[number], index: number) => {
+  const renderRow = (row: (typeof rows)[number], _index: number) => {
     if (row.type === "day") {
       const collapsed = collapsedDays.has(row.label)
       return (
-        <div key={row.key} className={dayGroupWrapClass(index === 0)}>
-          <button
-            type="button"
-            className={DAY_GROUP_BTN}
-            onClick={() => toggleDay(row.label)}
-          >
-            <ChevronRight
-              size={12}
-              className={`shrink-0 transition-transform ${collapsed ? "" : "rotate-90"}`}
-            />
-            {row.label}
-            <span className="review-group-cap__count">{row.count}</span>
-          </button>
-        </div>
+        <button
+          key={row.key}
+          type="button"
+          className={DAY_GROUP_BTN}
+          onClick={() => toggleDay(row.label)}
+        >
+          <ChevronRight
+            size={12}
+            className={`shrink-0 transition-transform ${collapsed ? "" : "rotate-90"}`}
+          />
+          {row.label}
+          <span className="review-group-cap__count">{row.count}</span>
+        </button>
       )
     }
     if (row.type === "activity") {
@@ -740,7 +734,7 @@ export function OperationPipelineList({
       estimateSize={(index) => {
         const row = rows[index]
         if (!row) return OP_LOG_LIST_ROW_HEIGHT
-        if (row.type === "day") return index === 0 ? 32 : 40
+        if (row.type === "day") return 32
         if (row.type === "activity") return opLogActivityTreeRowHeight()
         return opLogPipelineListRowHeight(row.pipeline)
       }}

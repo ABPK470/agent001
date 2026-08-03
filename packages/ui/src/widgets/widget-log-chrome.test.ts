@@ -367,6 +367,11 @@ describe("widget log chrome — curved nest geometry", () => {
     expect(css).toContain(".review-tree > .review-tree__item:not(:last-child)::after")
     expect(css).toContain("border-bottom-left-radius: var(--review-tree-radius)")
     expect(css).toContain("--review-tree-line")
+    // Shared nest ink must stay visible on dark chat/Threads — never raw zinc-800.
+    expect(css).toMatch(
+      /:root\s*\{[^}]*--review-tree-line:\s*color-mix\(in srgb,\s*var\(--border\) 70%,\s*var\(--text-faint\)\)/s,
+    )
+    expect(css).not.toMatch(/:root\s*\{[^}]*--review-tree-line:\s*#27272a/s)
     expect(css).toContain("--review-tree-radius")
 
     const foundation = read(reviewTreePath)
@@ -534,11 +539,15 @@ describe("widget log chrome — shared content dialect", () => {
     )
   })
 
-  it("day groups open air above later caps (virtual rows are absolute)", () => {
+  it("day groups use sticky section dividers aligned to the table", () => {
     const ops = read(opsPath)
-    expect(ops).toContain("dayGroupWrapClass")
-    expect(ops).toMatch(/isFirst \? "" : "pt-2"/)
+    const css = read(cssPath)
+    expect(ops).toContain("op-log-day-cap")
     expect(ops).toContain("review-group-cap__count")
+    expect(ops).not.toContain("dayCardClass")
+    expect(ops).not.toContain("op-log-day-card")
+    expect(css).toContain(".op-log-day-cap")
+    expect(css).not.toContain(".op-log-day-card")
   })
 
   it("Pipelines tree uses review kit grid, column headers, and split shell", () => {
