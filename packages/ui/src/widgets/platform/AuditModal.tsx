@@ -101,6 +101,7 @@ export function AuditModal({ onClose }: { onClose: () => void }) {
     actions: [],
   })
   const filterBtnRef = useRef<HTMLButtonElement>(null)
+  const tableScrollRef = useRef<HTMLDivElement>(null)
   const openInspectorRafRef = useRef(0)
   const inspectorOpenRef = useRef(inspectorOpen)
   inspectorOpenRef.current = inspectorOpen
@@ -251,6 +252,20 @@ export function AuditModal({ onClose }: { onClose: () => void }) {
     if (!next) return
     openInspector(next.id)
   }
+
+  function scrollSelectedRowIntoView(id: number) {
+    const root = tableScrollRef.current
+    if (!root) return
+    const row = root.querySelector(`[data-audit-id="${id}"]`)
+    if (!(row instanceof HTMLElement)) return
+    row.scrollIntoView({ block: "nearest", inline: "nearest" })
+  }
+
+  // Keep keyboard (and wrap-around) selection visible in the scrollport.
+  useEffect(() => {
+    if (selectedId == null) return
+    scrollSelectedRowIntoView(selectedId)
+  }, [selectedId])
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -582,7 +597,7 @@ export function AuditModal({ onClose }: { onClose: () => void }) {
             />
           ) : (
             <>
-              <div className="audit-log-host__table show-scrollbar">
+              <div ref={tableScrollRef} className="audit-log-host__table show-scrollbar">
                 <div className="audit-log-table" role="table" aria-label="Audit log">
                   <div className="audit-log-table__head" role="row">
                     <span role="columnheader">Timestamp</span>
@@ -605,6 +620,7 @@ export function AuditModal({ onClose }: { onClose: () => void }) {
                         type="button"
                         role="row"
                         className="audit-log-table__row"
+                        data-audit-id={entry.id}
                         data-selected={selectedId === entry.id ? "true" : "false"}
                         onClick={() => openInspector(entry.id)}
                       >

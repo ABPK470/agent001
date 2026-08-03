@@ -85,10 +85,13 @@ describe("audit modal table + inspector contracts", () => {
     expect(src).not.toContain("AdminBrowseFiltersPanel")
   })
 
-  it("wires j/k selection stepping", () => {
+  it("wires j/k selection stepping + scroll into view", () => {
     const src = readFileSync(join(here, "AuditModal.tsx"), "utf8")
     expect(src).toContain('e.key === "j"')
     expect(src).toContain('e.key === "k"')
     expect(src).toContain("stepSelection")
+    expect(src).toContain("scrollSelectedRowIntoView")
+    expect(src).toContain("data-audit-id")
+    expect(src).toContain('block: "nearest"')
   })
 })

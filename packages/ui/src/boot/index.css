@@ -7607,6 +7607,9 @@ button.trace-tree-status-pill:hover {
 }
 
 .audit-log-table__row {
+  /* Clear sticky thead when keyboard selection scrolls into view. */
+  scroll-margin-top: 2rem;
+  scroll-margin-bottom: 0.5rem;
   border-radius: 0.5rem;
   text-align: left;
   font-size: 0.8125rem;
