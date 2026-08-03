@@ -63,7 +63,7 @@ function queryViewingAs(req: FastifyRequest): string | undefined {
  * Pure resolve — owned by this module and its tests.
  * Routes declare `personal.read` / `personal.write`; handlers use `viewingAsOf`.
  */
-export function resolveViewingAs(req: FastifyRequest): ViewingAs {
+export async function resolveViewingAs(req: FastifyRequest): Promise<ViewingAs> {
   const session = req.session
   if (!session?.upn?.trim()) {
     throw new ViewingAsError(401, "Authentication required")
@@ -78,7 +78,7 @@ export function resolveViewingAs(req: FastifyRequest): ViewingAs {
     throw new ViewingAsError(403, "Viewing as another user requires admin")
   }
 
-  const target = findUserByUpn(requested)
+  const target = await findUserByUpn(requested)
   if (!target) {
     throw new ViewingAsError(403, "Viewing as: user not found")
   }
@@ -119,12 +119,12 @@ export function viewingAsOf(req: FastifyRequest): ViewingAs {
 
 /** Personal GET / list / stream — resolve Viewing as onto the request. */
 export async function personalRead(req: FastifyRequest, _reply: FastifyReply): Promise<void> {
-  req.viewingAs = resolveViewingAs(req)
+  req.viewingAs = await resolveViewingAs(req)
 }
 
 /** Personal POST / PATCH / DELETE — resolve Viewing as and require Me. */
 export async function personalWrite(req: FastifyRequest, _reply: FastifyReply): Promise<void> {
-  req.viewingAs = resolveViewingAs(req)
+  req.viewingAs = await resolveViewingAs(req)
   requirePersonalWrite(req.viewingAs)
 }
 

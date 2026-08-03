@@ -42,7 +42,7 @@ export function registerNotificationManagementRoutes(app: FastifyInstance): void
       return { error: "admin only" }
     }
     try {
-      const route = upsertNotificationRoute({
+      const route = await upsertNotificationRoute({
         id: req.body.id,
         tenantId: resolveTenant(req),
         eventType: req.body.eventType,

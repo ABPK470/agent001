@@ -24,13 +24,13 @@ function hostWithConnections(names: string[], defaultConn: string | null): Agent
 }
 
 describe("resolveEffectiveMssqlConnection", () => {
-  it("maps lowercase MSSQL_DEFAULT_CONNECTION to canonical DEV catalog key", () => {
+  it("maps lowercase MSSQL_DEFAULT_CONNECTION to canonical DEV catalog key", async () => {
     const h = hostWithConnections(["DEV", "UAT"], "dev")
-    expect(resolveEffectiveMssqlConnection(h, "top bankers")).toBe("DEV")
+    expect(await resolveEffectiveMssqlConnection(h, "top bankers")).toBe("DEV")
   })
 
-  it("maps goal token dev to canonical connection", () => {
+  it("maps goal token dev to canonical connection", async () => {
     const h = hostWithConnections(["DEV", "UAT"], null)
-    expect(resolveEffectiveMssqlConnection(h, "show revenue on dev")).toBe("DEV")
+    expect(await resolveEffectiveMssqlConnection(h, "show revenue on dev")).toBe("DEV")
   })
 })

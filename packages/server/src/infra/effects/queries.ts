@@ -36,24 +36,24 @@ function rowToSnapshot(row: FileSnapshotRow): FileSnapshot {
   }
 }
 
-export function getRunEffects(runId: string): Effect[] {
-  return listEffectsByRun(runId).map(rowToEffect)
+export async function getRunEffects(runId: string): Promise<Effect[]> {
+  return (await listEffectsByRun(runId)).map(rowToEffect)
 }
 
-export function getFileHistory(filePath: string): Effect[] {
-  return listEffectsByTarget(filePath).map(rowToEffect)
+export async function getFileHistory(filePath: string): Promise<Effect[]> {
+  return (await listEffectsByTarget(filePath)).map(rowToEffect)
 }
 
-export function getLatestSnapshot(filePath: string): FileSnapshot | null {
-  const row = getLatestFileSnapshotRow(filePath)
+export async function getLatestSnapshot(filePath: string): Promise<FileSnapshot | null> {
+  const row = await getLatestFileSnapshotRow(filePath)
   return row ? rowToSnapshot(row) : null
 }
 
-export function getRunSnapshots(runId: string): FileSnapshot[] {
-  return listFileSnapshotsByRun(runId).map(rowToSnapshot)
+export async function getRunSnapshots(runId: string): Promise<FileSnapshot[]> {
+  return (await listFileSnapshotsByRun(runId)).map(rowToSnapshot)
 }
 
-export function getEffectStats(runId: string): {
+export async function getEffectStats(runId: string): Promise<{
   total: number
   creates: number
   modifies: number
@@ -62,8 +62,8 @@ export function getEffectStats(runId: string): {
   network: number
   compensated: number
   idempotent: number
-} {
-  const effects = getRunEffects(runId)
+}> {
+  const effects = await getRunEffects(runId)
   return {
     total: effects.length,
     creates: effects.filter((e) => e.kind === "create").length,
@@ -77,8 +77,8 @@ export function getEffectStats(runId: string): {
 }
 
 /** True when rollback can still compensate at least one file effect. */
-export function runHasCompensatableEffects(runId: string): boolean {
-  return getRunEffects(runId).some(
+export async function runHasCompensatableEffects(runId: string): Promise<boolean> {
+  return (await getRunEffects(runId)).some(
     (effect) =>
       (effect.kind === "create" || effect.kind === "modify" || effect.kind === "delete")
       && effect.status !== "compensated",

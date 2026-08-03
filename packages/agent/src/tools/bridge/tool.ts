@@ -31,8 +31,12 @@ function emitBridge(
   }
 }
 
-function connectorMeta(host: AgentHost, connectorId: string): { name: string; kind: string } {
-  const hit = host.connectors.port.value?.listAdapters().find((c) => c.id === connectorId)
+async function connectorMeta(
+  host: AgentHost,
+  connectorId: string,
+): Promise<{ name: string; kind: string }> {
+  const adapters = (await host.connectors.port.value?.listAdapters()) ?? []
+  const hit = adapters.find((c) => c.id === connectorId)
   return { name: hit?.displayName ?? connectorId, kind: hit?.kind ?? "?" }
 }
 
@@ -140,8 +144,8 @@ function buildBridgeDataTool(host: AgentHost, run?: RunContext): ExecutableTool 
       const transform = (args["transform"] ?? undefined) as Transform | undefined
       const moveId = randomUUID()
       const t0 = Date.now()
-      const src = connectorMeta(host, source.connectorId)
-      const tgt = connectorMeta(host, target.connectorId)
+      const src = await connectorMeta(host, source.connectorId)
+      const tgt = await connectorMeta(host, target.connectorId)
       const writeSpec = target.spec
       const base = {
         moveId,

@@ -16,17 +16,18 @@ import {
 
 const GOAL_ENV_RE = /\b(dev|uat|prod|production|development)\b/i
 
-export function resolveEffectiveMssqlConnection(
+export async function resolveEffectiveMssqlConnection(
   host: MssqlCatalogHost,
   goal: string,
   explicitConnection?: string | null
-): string {
+): Promise<string> {
   if (explicitConnection?.trim()) {
     return resolveMssqlConnectionName(host, explicitConnection)
   }
 
-  const names = listMssqlConnectionNames(host).length > 0
-    ? listMssqlConnectionNames(host)
+  const configuredNames = await listMssqlConnectionNames(host)
+  const names = configuredNames.length > 0
+    ? configuredNames
     : getCatalogConnectionNames(host)
 
   const goalLc = goal.toLowerCase()
@@ -40,7 +41,7 @@ export function resolveEffectiveMssqlConnection(
     const alias = token === "production" ? "prod" : token === "development" ? "dev" : token
     const hit = lookupRegistryKey(names, alias)
     if (hit) return hit
-    const resolved = tryResolveMssqlConnectionName(host, alias)
+    const resolved = await tryResolveMssqlConnectionName(host, alias)
     if (resolved) return resolved
   }
 

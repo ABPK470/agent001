@@ -17,7 +17,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
 
   app.get("/api/state/attachment-usage", async (req) => {
     const ownerUpn = req.session.upn
-    const usage = getOwnerUsage(ownerUpn)
+    const usage = await getOwnerUsage(ownerUpn)
     const retention = getRetentionPolicy()
     return {
       ownerUpn,

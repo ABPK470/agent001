@@ -102,7 +102,7 @@ export function schedulerHealth(): {
 // ── tick ────────────────────────────────────────────────────────
 
 async function tick(opts: SchedulerOptions): Promise<void> {
-  const due = listDueSchedules(new Date())
+  const due = await listDueSchedules(new Date())
   for (const s of due) {
     const key = scheduleKey(s)
     if (inflight.has(key)) continue
@@ -147,7 +147,7 @@ async function executeWithRetry(s: ProposerScheduleRow, opts: SchedulerOptions):
         error: lastErr instanceof Error ? lastErr.message : String(lastErr)
       })
     }
-    persistScheduleAdvance(s)
+    await persistScheduleAdvance(s)
   } finally {
     inflight.delete(key)
     activeRuns--
@@ -174,8 +174,8 @@ function resolveLlm(
 
 // ── schedule persistence ───────────────────────────────────────
 
-export function listDueSchedules(now: Date): ProposerScheduleRow[] {
-  const all = listEnabledProposerSchedules()
+export async function listDueSchedules(now: Date): Promise<ProposerScheduleRow[]> {
+  const all = await listEnabledProposerSchedules()
   return all.filter((s) => isDue(s, now))
 }
 
@@ -189,10 +189,10 @@ function isDue(s: ProposerScheduleRow, now: Date): boolean {
   return next.getTime() <= now.getTime()
 }
 
-function persistScheduleAdvance(s: ProposerScheduleRow): void {
+async function persistScheduleAdvance(s: ProposerScheduleRow): Promise<void> {
   const now = new Date()
   const next = nextCronMatch(s.cron, new Date(now.getTime() + 60_000))
-  advanceProposerSchedule(
+  await advanceProposerSchedule(
     s.tenant_id,
     s.source,
     s.target,
@@ -210,9 +210,9 @@ export interface UpsertScheduleInput {
   actor: string
 }
 
-export function upsertSchedule(i: UpsertScheduleInput): ProposerScheduleRow {
+export async function upsertSchedule(i: UpsertScheduleInput): Promise<ProposerScheduleRow> {
   const next = nextCronMatch(i.cron, new Date())
-  upsertProposerSchedule({
+  await upsertProposerSchedule({
     tenantId: i.tenantId,
     source: i.source,
     target: i.target,
@@ -221,17 +221,17 @@ export function upsertSchedule(i: UpsertScheduleInput): ProposerScheduleRow {
     nextRunAt: next ? next.toISOString() : null,
     updatedBy: i.actor
   })
-  const row = getProposerSchedule(i.tenantId, i.source, i.target)
+  const row = await getProposerSchedule(i.tenantId, i.source, i.target)
   if (!row) throw new Error(`proposer schedule ${i.tenantId}|${i.source}|${i.target} missing after upsert`)
   return row
 }
 
-export function listSchedules(tenantId: string): ProposerScheduleRow[] {
-  return listProposerSchedules(tenantId)
+export async function listSchedules(tenantId: string): Promise<ProposerScheduleRow[]> {
+  return await listProposerSchedules(tenantId)
 }
 
-export function deleteSchedule(tenantId: string, source: string, target: string): void {
-  deleteProposerSchedule(tenantId, source, target)
+export async function deleteSchedule(tenantId: string, source: string, target: string): Promise<void> {
+  await deleteProposerSchedule(tenantId, source, target)
 }
 
 // ── cron parsing (minimal but real) ────────────────────────────

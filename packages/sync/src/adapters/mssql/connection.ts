@@ -46,7 +46,9 @@ export async function getPool(
   if (!env.connectorId) {
     throw new Error(`Environment "${name}" has no connectorId — cannot resolve MSSQL pool.`)
   }
-  const warehouseKind = (host as SyncRuntimeHost).sync.warehousePools?.dialectOf(env.connectorId)
+  const warehouseKind = await (host as SyncRuntimeHost).sync.warehousePools?.dialectOf(
+    env.connectorId,
+  )
   if (warehouseKind === "postgres") {
     throw new Error(
       `Environment "${name}" links Postgres connector "${env.connectorId}" — ` +

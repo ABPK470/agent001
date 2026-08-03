@@ -22,7 +22,7 @@ export async function buildCatalog(
 ): Promise<CatalogGraph> {
   const o: CatalogBuildOptions = typeof opts === "string" ? { connection: opts } : (opts ?? {})
   const rawConn = o.connection ?? "default"
-  const conn = tryResolveMssqlConnectionName(host, rawConn) ?? rawConn
+  const conn = (await tryResolveMssqlConnectionName(host, rawConn)) ?? rawConn
   const cachePath = o.cachePath ?? host.catalog.defaultCachePath.value
   const maxAge = o.maxAgeMs ?? 7 * 24 * 3600_000 // 7 days default
   if (o.cachePath) host.catalog.defaultCachePath.value = o.cachePath // remember for refresh calls
@@ -64,11 +64,6 @@ export async function buildCatalog(
 /** Get a previously built/loaded catalog. */
 export function getCatalog(host: MssqlCatalogHost, connection = "default"): CatalogGraph | null {
   if (host.catalog.instances.size === 0) return null
-  const resolved = tryResolveMssqlConnectionName(host, connection)
-  if (resolved) {
-    const exact = host.catalog.instances.get(resolved)
-    if (exact) return exact
-  }
   // Catalog keys follow the same names as MSSQL connections at boot; fall back
   // to case-insensitive match when registry is empty (tests) or names diverge.
   const target = (connection ?? "default").trim().toLowerCase()

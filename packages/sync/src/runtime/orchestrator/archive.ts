@@ -34,7 +34,7 @@ export async function probeTriggers(
   const triggerCache = new Map<string, boolean>()
   if (dataMovementTables.length === 0) return triggerCache
   const probeT0 = Date.now()
-  const dialect = resolveWarehouseDialect(host, target)
+  const dialect = await resolveWarehouseDialect(host, target)
 
   if (dialect.kind !== "mssql") {
     for (const tableName of dataMovementTables) {

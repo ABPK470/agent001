@@ -169,9 +169,9 @@ export interface MssqlPoolProvider {
   /** Resolve a pool by connector name (case-insensitive). */
   getByName(name: string): Promise<MssqlConnectorPool>
   /** Read a connector's finalized `sql.config` without connecting (for pool gating). */
-  configOf(connectorId: string): MssqlConfig | undefined
+  configOf(connectorId: string): Promise<MssqlConfig | undefined>
   /** Enabled mssql connectors (live read). */
-  list(): readonly { id: string; name: string }[]
+  list(): Promise<readonly { id: string; name: string }[]>
   /** Drop the cached pool for a connector (e.g. after config change). */
   invalidate(connectorId: string): void
   /**

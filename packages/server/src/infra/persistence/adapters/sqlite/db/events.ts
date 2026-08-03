@@ -5,7 +5,7 @@
  */
 
 import { getPlatformDb } from "../../../schema/kysely.js"
-import { runAll, runExec, runGet } from "../../../schema/execute.js"
+import { runAllAsync, runExecAsync, runGetAsync } from "../../../schema/execute-async.js"
 
 export type { StoredEvent as DbEvent } from "../../../../../ports/event-store.js"
 export {
@@ -28,37 +28,37 @@ export interface DbWebhookDrain {
   updated_at: string
 }
 
-export function listWebhookDrains(): DbWebhookDrain[] {
+export async function listWebhookDrains(): Promise<DbWebhookDrain[]> {
   const compiled = getPlatformDb()
     .selectFrom("webhook_drain_configs")
     .selectAll()
     .orderBy("created_at")
     .compile()
-  return runAll<DbWebhookDrain>(compiled)
+  return await runAllAsync<DbWebhookDrain>(compiled)
 }
 
-export function getWebhookDrain(id: string): DbWebhookDrain | undefined {
+export async function getWebhookDrain(id: string): Promise<DbWebhookDrain | undefined> {
   const compiled = getPlatformDb()
     .selectFrom("webhook_drain_configs")
     .selectAll()
     .where("id", "=", id)
     .compile()
-  return runGet<DbWebhookDrain>(compiled)
+  return await runGetAsync<DbWebhookDrain>(compiled)
 }
 
-export function saveWebhookDrain(drain: DbWebhookDrain): void {
+export async function saveWebhookDrain(drain: DbWebhookDrain): Promise<void> {
   const compiled = getPlatformDb()
     .insertInto("webhook_drain_configs")
     .orReplace()
     .values(drain)
     .compile()
-  runExec(compiled)
+  await runExecAsync(compiled)
 }
 
-export function deleteWebhookDrain(id: string): void {
+export async function deleteWebhookDrain(id: string): Promise<void> {
   const compiled = getPlatformDb()
     .deleteFrom("webhook_drain_configs")
     .where("id", "=", id)
     .compile()
-  runExec(compiled)
+  await runExecAsync(compiled)
 }

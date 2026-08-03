@@ -7,14 +7,14 @@ import type { ActiveRun, NotificationOpts } from "../../ports/orchestration.js"
 import type { AuditLogPort } from "./run-executor/types.js"
 // ── Trace ─────────────────────────────────────────────────────────
 
-export function saveTrace(
+export async function saveTrace(
   activeRuns: Map<string, ActiveRun>,
   runId: string,
   entry: Record<string, unknown>
-): void {
+): Promise<void> {
   const active = activeRuns.get(runId)
   const seq = active ? active.traceSeq++ : 0
-  db.saveTraceEntry({
+  await db.saveTraceEntry({
     run_id: runId,
     seq,
     data: JSON.stringify(entry),
@@ -24,14 +24,14 @@ export function saveTrace(
 
 // ── Run persistence ───────────────────────────────────────────────
 
-export function persistRun(
+export async function persistRun(
   run: { id: string; status: RunStatus; steps: unknown[]; createdAt: Date; completedAt: Date | null },
   goal: string,
   parentRunId?: string,
   answer?: string,
   error?: string
-): void {
-  db.saveRun({
+): Promise<void> {
+  await db.saveRun({
     id: run.id,
     goal,
     status: run.status,
@@ -47,7 +47,7 @@ export function persistRun(
 export async function persistAuditLog(auditLog: AuditLogPort, runId: string): Promise<void> {
   const entries = await auditLog.history("AgentRun", runId)
   for (const entry of entries) {
-    db.saveAudit({
+    await db.saveAudit({
       run_id: runId,
       actor: entry.actor,
       action: entry.action,
@@ -57,9 +57,9 @@ export async function persistAuditLog(auditLog: AuditLogPort, runId: string): Pr
   }
 }
 
-export function persistTokenUsage(runId: string, agent: Agent): void {
+export async function persistTokenUsage(runId: string, agent: Agent): Promise<void> {
   if (agent.usage.totalTokens > 0 || agent.llmCalls > 0) {
-    db.saveTokenUsage({
+    await db.saveTokenUsage({
       run_id: runId,
       prompt_tokens: agent.usage.promptTokens,
       completion_tokens: agent.usage.completionTokens,
@@ -73,7 +73,7 @@ export function persistTokenUsage(runId: string, agent: Agent): void {
 
 // ── Notifications ─────────────────────────────────────────────────
 
-export function createNotification(opts: NotificationOpts): void {
+export async function createNotification(opts: NotificationOpts): Promise<void> {
   // Stamp tenancy onto the notification so list queries can scope by
   // owner without joining back to runs. If we have a run_id, prefer the
   // run's persisted owner (consistent with how the run was launched);
@@ -84,7 +84,7 @@ export function createNotification(opts: NotificationOpts): void {
   // ALS-bound session) and we want it to surface loudly.
   let ownerUpn: string | null = null
   if (opts.runId) {
-    const r = db.getRun(opts.runId)
+    const r = await db.getRun(opts.runId)
     if (r) ownerUpn = r.upn ?? null
   }
   if (!ownerUpn) {
@@ -103,7 +103,7 @@ export function createNotification(opts: NotificationOpts): void {
     read: 0,
     created_at: new Date().toISOString()
   }
-  db.saveNotification(notification)
+  await db.saveNotification(notification)
   broadcast({
     type: EventType.Notification,
     data: {

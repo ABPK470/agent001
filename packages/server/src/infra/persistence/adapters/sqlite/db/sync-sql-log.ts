@@ -7,8 +7,9 @@
  *   - sqlLogId is the only runtime link between event_log and sync_sql_log.
  */
 
+import { sql } from "kysely"
 import { getPlatformDb } from "../../../schema/kysely.js"
-import { runAll, runGet, runInsertId } from "../../../schema/execute.js"
+import { runAllAsync, runGetAsync, runInsertIdAsync } from "../../../schema/execute-async.js"
 import { platformNow } from "../../../schema/sql-time.js"
 
 export interface SyncSqlLogRow {
@@ -40,7 +41,7 @@ export interface RecordSyncSqlLogInput {
   createdAt?: string
 }
 
-export function recordSyncSqlLog(input: RecordSyncSqlLogInput): number {
+export async function recordSyncSqlLog(input: RecordSyncSqlLogInput): Promise<number> {
   const compiled = getPlatformDb()
     .insertInto("sync_sql_log")
     .values({
@@ -57,22 +58,22 @@ export function recordSyncSqlLog(input: RecordSyncSqlLogInput): number {
       created_at: input.createdAt != null ? input.createdAt : platformNow(),
     })
     .compile()
-  return runInsertId(compiled)
+  return await runInsertIdAsync(compiled)
 }
 
-export function getSyncSqlLog(id: number): SyncSqlLogRow | undefined {
+export async function getSyncSqlLog(id: number): Promise<SyncSqlLogRow | undefined> {
   const compiled = getPlatformDb()
     .selectFrom("sync_sql_log")
     .selectAll()
     .where("id", "=", id)
     .compile()
-  return runGet<SyncSqlLogRow>(compiled)
+  return await runGetAsync<SyncSqlLogRow>(compiled)
 }
 
-export function listSyncSqlLogByPlan(
+export async function listSyncSqlLogByPlan(
   planId: string,
   opts?: { limit?: number; offset?: number },
-): SyncSqlLogRow[] {
+): Promise<SyncSqlLogRow[]> {
   const limit = Math.min(opts?.limit ?? 500, 2000)
   const offset = opts?.offset ?? 0
   const compiled = getPlatformDb()
@@ -83,16 +84,16 @@ export function listSyncSqlLogByPlan(
     .limit(limit)
     .offset(offset)
     .compile()
-  return runAll<SyncSqlLogRow>(compiled)
+  return await runAllAsync<SyncSqlLogRow>(compiled)
 }
 
-export function countSyncSqlLogByPlan(planId: string): number {
+export async function countSyncSqlLogByPlan(planId: string): Promise<number> {
   const compiled = getPlatformDb()
     .selectFrom("sync_sql_log")
     .select(sql<number>`count(*)`.as("cnt"))
     .where("plan_id", "=", planId)
     .compile()
-  const row = runGet<{ cnt: number | bigint }>(compiled)
+  const row = await runGetAsync<{ cnt: number | bigint }>(compiled)
   return Number(row?.cnt ?? 0)
 }
 
@@ -128,10 +129,10 @@ function coercePersistedSqlLogId(value: unknown): number | null {
  * Denormalize preview text from sync_sql_log when event_log has sqlLogId but no inline sql.
  * This is a straight FK lookup — not a correlation guess.
  */
-export function hydratePersistedSqlEventData(
+export async function hydratePersistedSqlEventData(
   eventType: string,
   data: Record<string, unknown>,
-): Record<string, unknown> {
+): Promise<Record<string, unknown>> {
   if (!eventType.endsWith(".sql")) return data
 
   const existingSql = typeof data["sql"] === "string" ? data["sql"] : ""
@@ -140,7 +141,7 @@ export function hydratePersistedSqlEventData(
   const sqlLogId = coercePersistedSqlLogId(data["sqlLogId"])
   if (sqlLogId == null) return data
 
-  const row = getSyncSqlLog(sqlLogId)
+  const row = await getSyncSqlLog(sqlLogId)
   if (!row) return data
 
   return {

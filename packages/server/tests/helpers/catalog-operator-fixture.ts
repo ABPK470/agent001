@@ -167,9 +167,9 @@ export async function buildSyncDefinitionsApp(
   return app
 }
 
-export function listPresetStepKinds(tenantId = TENANT): string[] {
+export async function listPresetStepKinds(tenantId = TENANT): Promise<string[]> {
   const kinds: string[] = []
-  for (const preset of db.listSyncFlows(tenantId)) {
+  for (const preset of await db.listSyncFlows(tenantId)) {
     for (const step of db.parseFlowSteps(preset.steps_json)) {
       kinds.push(step.kind)
     }
@@ -177,8 +177,8 @@ export function listPresetStepKinds(tenantId = TENANT): string[] {
   return kinds
 }
 
-export function contentFlowStepsFromDb(tenantId = TENANT) {
-  const preset = db.getSyncFlow(tenantId, "content")
+export async function contentFlowStepsFromDb(tenantId = TENANT) {
+  const preset = await db.getSyncFlow(tenantId, "content")
   if (!preset) throw new Error("content flow preset missing from seeded catalog")
   return db.parseFlowSteps(preset.steps_json)
 }
@@ -195,9 +195,9 @@ export async function bootstrapPublishedCatalog(
   )
   ensureInitialSyncCatalogVersion("system")
   const published = publishSyncDefinitionsFromDb(fixture.projectRoot)
-  const tipVersion = db.getActiveSyncCatalogVersion(TENANT)
+  const tipVersion = await db.getActiveSyncCatalogVersion(TENANT)
   if (tipVersion == null) throw new Error("expected active catalog version after seed")
-  const meta = db.getSyncPublishMeta(TENANT)
+  const meta = await db.getSyncPublishMeta(TENANT)
   if (meta?.catalog_version == null) throw new Error("expected publish stamp after publish")
   void published
   return { tipVersion, publishedVersion: meta.catalog_version }
@@ -213,7 +213,7 @@ export async function appendFlowMarkerStep(args: {
   const { recordSyncCatalogChange } = await import(
     "../../src/api/platform/service/sync-catalog-versioning.js"
   )
-  const flow = db.getSyncFlow(TENANT, args.flowId)
+  const flow = await db.getSyncFlow(TENANT, args.flowId)
   if (!flow) throw new Error(`flow ${args.flowId} missing`)
   const steps = db.parseFlowSteps(flow.steps_json)
   steps.push({
@@ -223,7 +223,7 @@ export async function appendFlowMarkerStep(args: {
     description: "regression marker",
     bindings: {},
   })
-  db.saveSyncFlow({
+  await db.saveSyncFlow({
     tenant_id: TENANT,
     id: flow.id,
     label: flow.label,
@@ -250,7 +250,7 @@ export async function bumpSyncEnvironmentTip(args?: {
   )
   const name = args?.name ?? "regression-env"
   const now = new Date().toISOString()
-  const existing = db.getSyncEnvironment(name)
+  const existing = await db.getSyncEnvironment(name)
   const body = existing
     ? (JSON.parse(existing.body_json) as Record<string, unknown>)
     : {
@@ -263,7 +263,7 @@ export async function bumpSyncEnvironmentTip(args?: {
         connectorId: "mssql-dev",
       }
   body.displayName = `${name}-${Date.now()}`
-  db.saveSyncEnvironment({
+  await db.saveSyncEnvironment({
     name,
     body_json: JSON.stringify(body),
     created_at: existing?.created_at ?? now,

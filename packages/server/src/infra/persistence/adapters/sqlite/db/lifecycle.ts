@@ -5,20 +5,20 @@
 import { sql } from "kysely"
 import { getDb } from "../connection.js"
 import { getPlatformDb } from "../../../schema/kysely.js"
-import { runAll, runChanges, runExec, runGet } from "../../../schema/execute.js"
+import { runAllAsync, runChangesAsync, runExecAsync, runGetAsync } from "../../../schema/execute-async.js"
 
 // ── Data reset (preserve policies + layout_configs) ─────────────────────
 
-export function clearTransactionalData(): void {
+export async function clearTransactionalData(): Promise<void> {
   // Deleting runs cascades to audit_log, checkpoints, run_log, token_usage,
   // trace_entries, notifications (where run-scoped), effects, file_snapshots,
   // attachment_imports, and attachments owned by those runs.
-  runExec(getPlatformDb().deleteFrom("runs").where("id", "is not", null).compile())
+  await runExecAsync(getPlatformDb().deleteFrom("runs").where("id", "is not", null).compile())
   // System-wide notifications (run_id IS NULL) survive a `runs` purge —
   // wipe them explicitly so the inbox is empty after reset.
-  runExec(getPlatformDb().deleteFrom("notifications").where("id", "is not", null).compile())
+  await runExecAsync(getPlatformDb().deleteFrom("notifications").where("id", "is not", null).compile())
   try {
-    runExec(getPlatformDb().deleteFrom("api_request_log").where("id", "is not", null).compile())
+    await runExecAsync(getPlatformDb().deleteFrom("api_request_log").where("id", "is not", null).compile())
   } catch (err: unknown) {
     console.error("[mia]", err)
   }
@@ -43,18 +43,18 @@ export function clearTransactionalData(): void {
  * supported "wipe everything" path and goes through
  * `clearTransactionalData()`.
  */
-export function pruneOldData(opts?: {
+export async function pruneOldData(opts?: {
   keepRuns?: number
   keepApiRequests?: number
   keepNotifications?: number
   keepEvents?: number
-}): {
+}): Promise<{ 
   prunedRuns: number
   prunedApiRequests: number
   prunedNotifications: number
   prunedEvents: number
   vacuumed: boolean
-} {
+ }> {
   const db = getDb()
   // keepRuns defaults to `undefined` → no run pruning. Operators that
   // really want a cap must opt in via the admin endpoint.
@@ -66,7 +66,7 @@ export function pruneOldData(opts?: {
   let prunedRuns = 0
   if (typeof keepRuns === "number" && keepRuns >= 0) {
     // SQLite LIMIT -1 OFFSET n ≡ "all rows after the first n".
-    const runsToPrune = runAll<{ id: string }>(
+    const runsToPrune = await runAllAsync<{ id: string }>(
       sql`
         SELECT id FROM runs
         WHERE status IN ('completed', 'failed', 'cancelled')
@@ -77,12 +77,12 @@ export function pruneOldData(opts?: {
 
     if (runsToPrune.length > 0) {
       const ids = runsToPrune.map((r) => r.id)
-      runExec(getPlatformDb().deleteFrom("runs").where("id", "in", ids).compile())
+      await runExecAsync(getPlatformDb().deleteFrom("runs").where("id", "in", ids).compile())
       prunedRuns = ids.length
     }
   }
 
-  const prunedApiRequests = runChanges(
+  const prunedApiRequests = await runChangesAsync(
     sql`
       DELETE FROM api_request_log WHERE id NOT IN (
         SELECT id FROM api_request_log ORDER BY created_at DESC LIMIT ${keepApiRequests}
@@ -90,7 +90,7 @@ export function pruneOldData(opts?: {
     `.compile(getPlatformDb()),
   )
 
-  const prunedNotifications = runChanges(
+  const prunedNotifications = await runChangesAsync(
     sql`
       DELETE FROM notifications WHERE id NOT IN (
         SELECT id FROM notifications ORDER BY created_at DESC LIMIT ${keepNotifications}
@@ -100,7 +100,7 @@ export function pruneOldData(opts?: {
 
   let prunedEvents = 0
   try {
-    prunedEvents = runChanges(
+    prunedEvents = await runChangesAsync(
       sql`
         DELETE FROM event_log WHERE id NOT IN (
           SELECT id FROM event_log ORDER BY created_at DESC LIMIT ${keepEvents}
@@ -122,7 +122,7 @@ export function pruneOldData(opts?: {
 
 // ── Stats ────────────────────────────────────────────────────────
 
-export function getDbStats(): Record<string, number> {
+export async function getDbStats(): Promise<Record<string, number>> {
   const db = getDb()
   const tables = [
     "runs",
@@ -144,7 +144,7 @@ export function getDbStats(): Record<string, number> {
       const compiled = sql<{ count: number }>`select count(*) as count from ${sql.table(t)}`.compile(
         getPlatformDb(),
       )
-      const row = runGet<{ count: number | bigint }>(compiled)
+      const row = await runGetAsync<{ count: number | bigint }>(compiled)
       stats[t] = Number(row?.count ?? 0)
     } catch {
       stats[t] = -1

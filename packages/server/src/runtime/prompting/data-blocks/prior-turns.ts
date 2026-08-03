@@ -45,11 +45,11 @@ export interface LoadPriorTurnsOptions {
  * Load the most recent completed (or failed) top-level runs in a thread.
  * Returns newest-first. Answers are truncated.
  */
-export function loadPriorTurns(opts: LoadPriorTurnsOptions): PriorTurn[] {
+export async function loadPriorTurns(opts: LoadPriorTurnsOptions): Promise<PriorTurn[]> {
   const limit = opts.limit ?? 3
   if (!opts.upn || !opts.threadId || limit <= 0) return []
 
-  const rows = listPriorTurnRows({
+  const rows = await listPriorTurnRows({
     threadId: opts.threadId,
     upn: opts.upn,
     excludeRunId: opts.excludeRunId ?? null,

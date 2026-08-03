@@ -37,14 +37,14 @@ export function registerThreadRoutes(app: FastifyInstance, orchestrator: AgentOr
   app.get("/api/threads", personal.read, async (req) => {
     const { viewingAsUpn } = viewingAsOf(req)
     const includeArchived = (req.query as { includeArchived?: string }).includeArchived === "1"
-    const rows = db.listThreadsForUser(viewingAsUpn, { includeArchived })
+    const rows = await db.listThreadsForUser(viewingAsUpn, { includeArchived })
     return rows.map((row): Thread => db.dbThreadToWire(row))
   })
 
   app.post<{ Body: { title?: string } }>("/api/threads", personal.write, async (req, reply) => {
     const { session } = viewingAsOf(req)
     const title = typeof req.body?.title === "string" ? req.body.title : undefined
-    const thread = db.createThread(session.upn, title)
+    const thread = await db.createThread(session.upn, title)
     reply.code(201)
     return db.dbThreadToWire({ ...thread, run_count: 0 })
   })
@@ -54,13 +54,13 @@ export function registerThreadRoutes(app: FastifyInstance, orchestrator: AgentOr
     Body: { title?: string; pinned?: boolean; archived?: boolean }
   }>("/api/threads/:id", personal.write, async (req, reply) => {
     const viewingAs = viewingAsOf(req)
-    const thread = db.getThread(req.params.id)
+    const thread = await db.getThread(req.params.id)
     if (!thread || !canAccessThread(viewingAs, thread)) {
       reply.code(404)
       return { error: "Thread not found" }
     }
     const { title, pinned, archived } = req.body ?? {}
-    const updated = db.updateThread(thread.id, {
+    const updated = await db.updateThread(thread.id, {
       ...(typeof title === "string" ? { title } : {}),
       ...(typeof pinned === "boolean" ? { pinned: pinned ? 1 : 0 } : {}),
       ...(typeof archived === "boolean"
@@ -71,28 +71,28 @@ export function registerThreadRoutes(app: FastifyInstance, orchestrator: AgentOr
       reply.code(404)
       return { error: "Thread not found" }
     }
-    const rows = db.listThreadsForUser(thread.upn).find((r) => r.id === thread.id)
+    const rows = (await db.listThreadsForUser(thread.upn)).find((r) => r.id === thread.id)
     return db.dbThreadToWire(rows ?? { ...updated, run_count: 0 })
   })
 
   app.get<{ Params: { id: string } }>("/api/threads/:id/runs", personal.read, async (req, reply) => {
     const viewingAs = viewingAsOf(req)
-    const thread = db.getThread(req.params.id)
+    const thread = await db.getThread(req.params.id)
     if (!thread || !canAccessThread(viewingAs, thread)) {
       reply.code(404)
       return { error: "Thread not found" }
     }
-    return mapRuns(db.listRunsWithUsageForThread(thread.id), orchestrator)
+    return mapRuns(await db.listRunsWithUsageForThread(thread.id), orchestrator)
   })
 
   app.delete<{ Params: { id: string } }>("/api/threads/:id", personal.write, async (req, reply) => {
     const viewingAs = viewingAsOf(req)
-    const thread = db.getThread(req.params.id)
+    const thread = await db.getThread(req.params.id)
     if (!thread || !canAccessThread(viewingAs, thread)) {
       reply.code(404)
       return { error: "Thread not found" }
     }
-    const result = orchestrator.purgeThread(thread.id, viewingAs.session.upn)
+    const result = await orchestrator.purgeThread(thread.id, viewingAs.session.upn)
     if (!result) {
       reply.code(404)
       return { error: "Thread not found" }
@@ -105,16 +105,16 @@ export function registerThreadRoutes(app: FastifyInstance, orchestrator: AgentOr
     personal.read,
     async (req, reply) => {
     const viewingAs = viewingAsOf(req)
-    const thread = db.getThread(req.params.id)
+    const thread = await db.getThread(req.params.id)
     if (!thread || !canAccessThread(viewingAs, thread)) {
       reply.code(404)
       return { error: "Thread not found" }
     }
     const omitCode = req.query.omitCode === "1" || req.query.omitCode === "true"
-    const runRows = db.listRunsWithUsageForThread(thread.id)
-    const runs = runRows.map((run) => {
-      const entries = db.getTraceEntries(run.id).map((entry) => parseBoundaryJson(entry.data) as Record<string, unknown>)
-      const usage = db.getTokenUsage(run.id)
+    const runRows = await db.listRunsWithUsageForThread(thread.id)
+    const runs = runRows.map(async (run) => {
+      const entries = (await db.getTraceEntries(run.id)).map((entry) => parseBoundaryJson(entry.data) as Record<string, unknown>)
+      const usage = await db.getTokenUsage(run.id)
       return {
         meta: {
           runId: run.id,
@@ -126,7 +126,11 @@ export function registerThreadRoutes(app: FastifyInstance, orchestrator: AgentOr
         entries,
       }
     })
-    const text = formatThreadExportText(runs, { threadId: thread.id, title: thread.title }, { omitCode })
+    const text = formatThreadExportText(
+      await Promise.all(runs),
+      { threadId: thread.id, title: thread.title },
+      { omitCode },
+    )
     return sendUserDownload(reply, {
       filename: threadExportFilename(thread.id, "txt", { omitCode }),
       contentType: "text/plain; charset=utf-8",
@@ -139,19 +143,19 @@ export function registerThreadRoutes(app: FastifyInstance, orchestrator: AgentOr
     personal.read,
     async (req, reply) => {
     const viewingAs = viewingAsOf(req)
-    const thread = db.getThread(req.params.id)
+    const thread = await db.getThread(req.params.id)
     if (!thread || !canAccessThread(viewingAs, thread)) {
       reply.code(404)
       return { error: "Thread not found" }
     }
     const omitCode = req.query.omitCode === "1" || req.query.omitCode === "true"
-    const runRows = db.listRunsWithUsageForThread(thread.id)
-    const runs = runRows.map((run) => ({
+    const runRows = await db.listRunsWithUsageForThread(thread.id)
+    const runs = runRows.map(async (run) => ({
       runId: run.id,
       goal: run.goal,
       status: run.status,
       createdAt: run.created_at,
-      entries: db.getTraceEntries(run.id).map((entry) => {
+      entries: (await db.getTraceEntries(run.id)).map((entry) => {
         const parsed = parseBoundaryJson(entry.data) as Record<string, unknown>
         return omitCode ? stripCodeFromTraceEntry(parsed) : parsed
       }),
@@ -160,7 +164,12 @@ export function registerThreadRoutes(app: FastifyInstance, orchestrator: AgentOr
       filename: threadExportFilename(thread.id, "json", { omitCode }),
       contentType: "application/json; charset=utf-8",
       body: JSON.stringify(
-        { threadId: thread.id, title: thread.title, omitCode: omitCode || undefined, runs },
+        {
+          threadId: thread.id,
+          title: thread.title,
+          omitCode: omitCode || undefined,
+          runs: await Promise.all(runs),
+        },
         null,
         2,
       ),

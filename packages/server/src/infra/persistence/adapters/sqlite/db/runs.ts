@@ -7,10 +7,9 @@ import type { Run } from "@mia/shared-types"
 import type { SelectQueryBuilder } from "kysely"
 import { sql } from "kysely"
 import { getPlatformDb } from "../../../schema/kysely.js"
-import type { PlatformDatabase } from "../../../schema/tables.js"
-import { runAll, runChanges, runExec, runGet } from "../../../schema/execute.js"
+import { runAllAsync, runChangesAsync, runExecAsync, runGetAsync } from "../../../schema/execute-async.js"
 import { coalescePlatformNow, platformNow } from "../../../schema/sql-time.js"
-import { upsertRow } from "../../../schema/upsert.js"
+import { upsertRowAsync } from "../../../schema/upsert.js"
 import { rememberRunOwner } from "../../../../../ports/run-owner-index.js"
 
 // ── Run queries ──────────────────────────────────────────────────
@@ -42,7 +41,7 @@ export interface DbRun {
 // run — leaving every UI widget (MIA-CHAT, IOE, StepTimeline, AgentViz, …) blank.
 // ON CONFLICT DO UPDATE updates the row in place and does not fire cascade deletes.
 
-export function saveRun(run: DbRun): void {
+export async function saveRun(run: DbRun): Promise<void> {
   // Hard runtime check at the DB write boundary. The TypeScript signature
   // already constrains DbRun.status to RunStatus, but boundary writes
   // (HTTP/SSE deserialisation, JSON.parse from checkpoints, etc.) erase
@@ -57,7 +56,7 @@ export function saveRun(run: DbRun): void {
     .select(["thread_id", "upn", "display_name"])
     .where("id", "=", run.id)
     .compile()
-  const existing = runGet<{
+  const existing = await runGetAsync<{
     thread_id: string | null
     upn: string | null
     display_name: string | null
@@ -83,7 +82,7 @@ export function saveRun(run: DbRun): void {
   }
 
   // Upsert — never OR REPLACE (CASCADE would wipe child rows).
-  upsertRow({
+  await upsertRowAsync({
     table: "runs",
     keys: { id: run.id },
     insert: row,
@@ -104,27 +103,27 @@ export function saveRun(run: DbRun): void {
   rememberRunOwner(run.id, upn)
 }
 
-export function getRun(id: string): DbRun | undefined {
+export async function getRun(id: string): Promise<DbRun | undefined> {
   const compiled = getPlatformDb()
     .selectFrom("runs")
     .selectAll()
     .where("id", "=", id)
     .compile()
-  return runGet<DbRun>(compiled)
+  return await runGetAsync<DbRun>(compiled)
 }
 
 /** True when approve/resume already spawned a child that supersedes this run. */
-export function runHasResumeChild(runId: string): boolean {
+export async function runHasResumeChild(runId: string): Promise<boolean> {
   const compiled = getPlatformDb()
     .selectFrom("runs")
     .select(sql<number>`1`.as("ok"))
     .where("parent_run_id", "=", runId)
     .limit(1)
     .compile()
-  return Boolean(runGet(compiled))
+  return Boolean(await runGetAsync(compiled))
 }
 
-export function listRuns(limit = 100, offset = 0): DbRun[] {
+export async function listRuns(limit = 100, offset = 0): Promise<DbRun[]> {
   const compiled = getPlatformDb()
     .selectFrom("runs")
     .selectAll()
@@ -132,7 +131,7 @@ export function listRuns(limit = 100, offset = 0): DbRun[] {
     .limit(limit)
     .offset(offset)
     .compile()
-  return runAll<DbRun>(compiled)
+  return (await runAllAsync<DbRun>(compiled))
 }
 
 export interface DbRunWithUsage extends DbRun {
@@ -195,35 +194,35 @@ export function dbRunToWire(row: DbRun, extras: RunWireExtras): Run {
   }
 }
 
-export function listRunsWithUsageForThread(
+export async function listRunsWithUsageForThread(
   threadId: string,
   limit = 200,
   offset = 0
-): DbRunWithUsage[] {
+): Promise<DbRunWithUsage[]> {
   const compiled = runsWithUsageQuery()
     .where("r.thread_id", "=", threadId)
     .orderBy("r.created_at", "desc")
     .limit(limit)
     .offset(offset)
     .compile()
-  return runAll<DbRunWithUsage>(compiled)
+  return await runAllAsync<DbRunWithUsage>(compiled)
 }
 
-export function listRunsWithUsage(limit = 100, offset = 0): DbRunWithUsage[] {
+export async function listRunsWithUsage(limit = 100, offset = 0): Promise<DbRunWithUsage[]> {
   const compiled = runsWithUsageQuery()
     .orderBy("r.created_at", "desc")
     .limit(limit)
     .offset(offset)
     .compile()
-  return runAll<DbRunWithUsage>(compiled)
+  return await runAllAsync<DbRunWithUsage>(compiled)
 }
 
 /** Scoped listing for authenticated visitors — upn only (no session_id fallback). */
-export function listRunsWithUsageForUser(
+export async function listRunsWithUsageForUser(
   opts: { upn?: string | null },
   limit = 100,
   offset = 0
-): DbRunWithUsage[] {
+): Promise<DbRunWithUsage[]> {
   const { upn } = opts
   if (!upn) return []
   const compiled = runsWithUsageQuery()
@@ -232,7 +231,7 @@ export function listRunsWithUsageForUser(
     .limit(limit)
     .offset(offset)
     .compile()
-  return runAll<DbRunWithUsage>(compiled)
+  return await runAllAsync<DbRunWithUsage>(compiled)
 }
 
 /** Every non-terminal RunStatus — anything still in this set after a
@@ -244,17 +243,17 @@ const NON_TERMINAL_RUN_STATUSES = [
   RunStatus.WaitingForApproval
 ] as const
 
-export function findStaleRuns(): DbRun[] {
+export async function findStaleRuns(): Promise<DbRun[]> {
   const compiled = getPlatformDb()
     .selectFrom("runs")
     .selectAll()
     .where("status", "in", [...NON_TERMINAL_RUN_STATUSES])
     .orderBy("created_at", "desc")
     .compile()
-  return runAll<DbRun>(compiled)
+  return await runAllAsync<DbRun>(compiled)
 }
 
-export function markRunCrashed(runId: string): void {
+export async function markRunCrashed(runId: string): Promise<void> {
   const compiled = getPlatformDb()
     .updateTable("runs")
     .set({
@@ -264,24 +263,24 @@ export function markRunCrashed(runId: string): void {
     })
     .where("id", "=", runId)
     .compile()
-  runExec(compiled)
+  await runExecAsync(compiled)
 }
 
 /** Boot-time hygiene: any row whose status is NOT a known RunStatus
  *  (e.g. legacy 'queued' or anything mistakenly written before the
  *  enum guard existed) gets normalised to 'failed' so the lifecycle
  *  invariants downstream code relies on remain true. */
-export function normaliseUnknownRunStatuses(): number {
+export async function normaliseUnknownRunStatuses(): Promise<number> {
   const compiled = getPlatformDb()
     .updateTable("runs")
     .set({
       status: RunStatus.Failed,
       error: sql`coalesce(error, 'Unknown legacy status \u2014 normalised on boot')`,
-      completed_at: coalescePlatformNow("completed_at"),
+      completed_at: coalescePlatformNow("completed_at") as never,
     })
     .where("status", "not in", [...RUN_STATUSES])
     .compile()
-  return runChanges(compiled)
+  return await runChangesAsync(compiled)
 }
 
 /**
@@ -296,17 +295,17 @@ export function normaliseUnknownRunStatuses(): number {
  * Only updates rows that are still in an active state, so it can't clobber
  * a run that has already finished, failed, or completed in the meantime.
  */
-export function markRunCancelled(runId: string): void {
+export async function markRunCancelled(runId: string): Promise<void> {
   const compiled = getPlatformDb()
     .updateTable("runs")
     .set({
       status: RunStatus.Cancelled,
-      completed_at: coalescePlatformNow("completed_at"),
+      completed_at: coalescePlatformNow("completed_at") as never,
     })
     .where("id", "=", runId)
     .where("status", "in", [...NON_TERMINAL_RUN_STATUSES])
     .compile()
-  runExec(compiled)
+  await runExecAsync(compiled)
 }
 
 // ── Audit queries ────────────────────────────────────────────────
@@ -324,12 +323,12 @@ export interface DbAudit {
   timestamp: string
 }
 
-export function saveAudit(
+export async function saveAudit(
   entry: Omit<DbAudit, "id" | "scope_type" | "scope_id"> & {
     scope_type?: AuditScopeType
     scope_id?: string | null
   }
-): void {
+): Promise<void> {
   const scopeType: AuditScopeType = entry.scope_type ?? (entry.run_id ? "run" : "admin")
   const scopeId = entry.scope_id ?? (scopeType === "run" ? entry.run_id : "platform")
   const compiled = getPlatformDb()
@@ -344,13 +343,13 @@ export function saveAudit(
       timestamp: entry.timestamp,
     })
     .compile()
-  runExec(compiled)
+  await runExecAsync(compiled)
 }
 
-export function saveAdminAudit(
+export async function saveAdminAudit(
   entry: Omit<DbAudit, "id" | "run_id" | "scope_type"> & { scope_id?: string | null }
-): void {
-  saveAudit({
+): Promise<void> {
+  await saveAudit({
     run_id: null,
     actor: entry.actor,
     action: entry.action,
@@ -361,7 +360,7 @@ export function saveAdminAudit(
   })
 }
 
-export function getAuditLog(runId: string): DbAudit[] {
+export async function getAuditLog(runId: string): Promise<DbAudit[]> {
   const compiled = getPlatformDb()
     .selectFrom("audit_log")
     .selectAll()
@@ -369,7 +368,7 @@ export function getAuditLog(runId: string): DbAudit[] {
     .where("run_id", "=", runId)
     .orderBy("timestamp")
     .compile()
-  return runAll<DbAudit>(compiled)
+  return await runAllAsync<DbAudit>(compiled)
 }
 
 /** Admin cross-run / cross-scope audit browser filters. */
@@ -407,11 +406,9 @@ export interface DbAuditWithRun extends DbAudit {
   thread_title: string | null
 }
 
-type AuditLogSelectQuery = SelectQueryBuilder<
-  PlatformDatabase,
-  "audit_log as a" | "runs as r" | "threads as t",
-  object
->
+// Aliased multi-table builders lose precise Kysely table keys; keep fluent, not typed.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AuditLogSelectQuery = SelectQueryBuilder<any, any, object>
 
 function auditLogListFrom(): AuditLogSelectQuery {
   return getPlatformDb()
@@ -509,16 +506,16 @@ function applyAuditLogOrder(
     : query.orderBy("a.timestamp", "desc")
 }
 
-export function countAuditLog(filters: AuditLogFilters = {}): number {
+export async function countAuditLog(filters: AuditLogFilters = {}): Promise<number> {
   const compiled = applyAuditLogFilters(
     auditLogListFrom().select(sql<number>`count(1)`.as("c")),
     filters,
   ).compile()
-  const row = runGet<{ c: number }>(compiled)
+  const row = await runGetAsync<{ c: number }>(compiled)
   return row?.c ?? 0
 }
 
-export function listAuditLogPaginated(input: ListAuditLogPaginatedInput): DbAuditWithRun[] {
+export async function listAuditLogPaginated(input: ListAuditLogPaginatedInput): Promise<DbAuditWithRun[]> {
   const page = Math.max(1, input.page)
   const pageSize = Math.max(1, input.pageSize)
   const offset = (page - 1) * pageSize
@@ -529,7 +526,7 @@ export function listAuditLogPaginated(input: ListAuditLogPaginatedInput): DbAudi
     .limit(pageSize)
     .offset(offset)
     .compile()
-  return runAll<DbAuditWithRun>(compiled)
+  return await runAllAsync<DbAuditWithRun>(compiled)
 }
 
 function auditFilterUserUpnUnion() {
@@ -555,11 +552,11 @@ function auditFilterUserUpnUnion() {
 }
 
 /** Distinct users / scope_ids for filter pickers (admin audit UI). */
-export function listAuditFilterOptions(): {
+export async function listAuditFilterOptions(): Promise<{
   users: Array<{ upn: string; role: "admin" | "operator" }>
   scopeIds: string[]
   actions: string[]
-} {
+}> {
   const usersCompiled = getPlatformDb()
     .selectFrom(auditFilterUserUpnUnion().as("x"))
     .leftJoin("users as u", "u.upn", "x.upn")
@@ -568,7 +565,7 @@ export function listAuditFilterOptions(): {
     .orderBy("x.upn")
     .limit(200)
     .compile()
-  const users = runAll<{ upn: string; is_admin: number }>(usersCompiled).map((r) => ({
+  const users = (await runAllAsync<{ upn: string; is_admin: number }>(usersCompiled)).map((r) => ({
     upn: r.upn,
     role: r.is_admin === 1 ? ("admin" as const) : ("operator" as const),
   }))
@@ -581,7 +578,7 @@ export function listAuditFilterOptions(): {
     .orderBy("scope_id")
     .limit(100)
     .compile()
-  const scopeIds = runAll<{ scope_id: string }>(scopeIdsCompiled).map((r) => r.scope_id)
+  const scopeIds = (await runAllAsync<{ scope_id: string }>(scopeIdsCompiled)).map((r) => r.scope_id)
   const actionsCompiled = getPlatformDb()
     .selectFrom("audit_log")
     .select("action")
@@ -590,7 +587,7 @@ export function listAuditFilterOptions(): {
     .orderBy("action")
     .limit(300)
     .compile()
-  const actions = runAll<{ action: string }>(actionsCompiled).map((r) => r.action)
+  const actions = (await runAllAsync<{ action: string }>(actionsCompiled)).map((r) => r.action)
   return { users, scopeIds, actions }
 }
 
@@ -604,8 +601,8 @@ export interface DbCheckpoint {
   updated_at: string
 }
 
-export function saveCheckpoint(cp: DbCheckpoint): void {
-  upsertRow({
+export async function saveCheckpoint(cp: DbCheckpoint): Promise<void> {
+  await upsertRowAsync({
     table: "checkpoints",
     keys: { run_id: cp.run_id },
     insert: {
@@ -624,13 +621,13 @@ export function saveCheckpoint(cp: DbCheckpoint): void {
   })
 }
 
-export function getCheckpoint(runId: string): DbCheckpoint | undefined {
+export async function getCheckpoint(runId: string): Promise<DbCheckpoint | undefined> {
   const compiled = getPlatformDb()
     .selectFrom("checkpoints")
     .selectAll()
     .where("run_id", "=", runId)
     .compile()
-  return runGet<DbCheckpoint>(compiled)
+  return await runGetAsync<DbCheckpoint>(compiled)
 }
 
 // ── Log queries ──────────────────────────────────────────────────
@@ -643,7 +640,7 @@ export interface DbLog {
   timestamp: string
 }
 
-export function saveLog(entry: Omit<DbLog, "id">): void {
+export async function saveLog(entry: Omit<DbLog, "id">): Promise<void> {
   const compiled = getPlatformDb()
     .insertInto("run_log")
     .values({
@@ -653,10 +650,10 @@ export function saveLog(entry: Omit<DbLog, "id">): void {
       timestamp: entry.timestamp,
     })
     .compile()
-  runExec(compiled)
+  await runExecAsync(compiled)
 }
 
-export function getLogs(runId: string, level?: string): DbLog[] {
+export async function getLogs(runId: string, level?: string): Promise<DbLog[]> {
   let query = getPlatformDb()
     .selectFrom("run_log")
     .selectAll()
@@ -665,7 +662,7 @@ export function getLogs(runId: string, level?: string): DbLog[] {
     query = query.where("level", "=", level)
   }
   const compiled = query.orderBy("timestamp").compile()
-  return runAll<DbLog>(compiled)
+  return (await runAllAsync<DbLog>(compiled))
 }
 
 // ── Trace entry queries ──────────────────────────────────────────
@@ -678,7 +675,7 @@ export interface DbTraceEntry {
   created_at: string
 }
 
-export function saveTraceEntry(entry: Omit<DbTraceEntry, "id">): void {
+export async function saveTraceEntry(entry: Omit<DbTraceEntry, "id">): Promise<void> {
   const compiled = getPlatformDb()
     .insertInto("trace_entries")
     .values({
@@ -688,17 +685,17 @@ export function saveTraceEntry(entry: Omit<DbTraceEntry, "id">): void {
       created_at: entry.created_at,
     })
     .compile()
-  runExec(compiled)
+  await runExecAsync(compiled)
 }
 
-export function getTraceEntries(runId: string): DbTraceEntry[] {
+export async function getTraceEntries(runId: string): Promise<DbTraceEntry[]> {
   const compiled = getPlatformDb()
     .selectFrom("trace_entries")
     .selectAll()
     .where("run_id", "=", runId)
     .orderBy("seq")
     .compile()
-  return runAll<DbTraceEntry>(compiled)
+  return await runAllAsync<DbTraceEntry>(compiled)
 }
 
 // ── Token usage queries ──────────────────────────────────────────
@@ -713,8 +710,8 @@ export interface DbTokenUsage {
   created_at: string
 }
 
-export function saveTokenUsage(usage: DbTokenUsage): void {
-  upsertRow({
+export async function saveTokenUsage(usage: DbTokenUsage): Promise<void> {
+  await upsertRowAsync({
     table: "token_usage",
     keys: { run_id: usage.run_id },
     insert: {
@@ -737,23 +734,23 @@ export function saveTokenUsage(usage: DbTokenUsage): void {
   })
 }
 
-export function getTokenUsage(runId: string): DbTokenUsage | undefined {
+export async function getTokenUsage(runId: string): Promise<DbTokenUsage | undefined> {
   const compiled = getPlatformDb()
     .selectFrom("token_usage")
     .selectAll()
     .where("run_id", "=", runId)
     .compile()
-  return runGet<DbTokenUsage>(compiled)
+  return await runGetAsync<DbTokenUsage>(compiled)
 }
 
-export function listTokenUsage(limit = 100): DbTokenUsage[] {
+export async function listTokenUsage(limit = 100): Promise<DbTokenUsage[]> {
   const compiled = getPlatformDb()
     .selectFrom("token_usage")
     .selectAll()
     .orderBy("created_at", "desc")
     .limit(limit)
     .compile()
-  return runAll<DbTokenUsage>(compiled)
+  return await runAllAsync<DbTokenUsage>(compiled)
 }
 
 /** Admin token-usage browser filters (join token_usage → runs). */
@@ -788,11 +785,8 @@ export interface DbTokenUsageWithRun extends DbTokenUsage {
   thread_title: string | null
 }
 
-type TokenUsageSelectQuery = SelectQueryBuilder<
-  PlatformDatabase,
-  "token_usage as t" | "runs as r" | "threads as th",
-  object
->
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type TokenUsageSelectQuery = SelectQueryBuilder<any, any, object>
 
 function tokenUsageListFrom(): TokenUsageSelectQuery {
   return getPlatformDb()
@@ -882,16 +876,16 @@ function applyTokenUsageOrder(
   }
 }
 
-export function countTokenUsage(filters: TokenUsageFilters = {}): number {
+export async function countTokenUsage(filters: TokenUsageFilters = {}): Promise<number> {
   const compiled = applyTokenUsageFilters(
     tokenUsageListFrom().select(sql<number>`count(1)`.as("c")),
     filters,
   ).compile()
-  const row = runGet<{ c: number }>(compiled)
+  const row = await runGetAsync<{ c: number }>(compiled)
   return row?.c ?? 0
 }
 
-export function listTokenUsagePaginated(input: ListTokenUsagePaginatedInput): DbTokenUsageWithRun[] {
+export async function listTokenUsagePaginated(input: ListTokenUsagePaginatedInput): Promise<DbTokenUsageWithRun[]> {
   const page = Math.max(1, input.page)
   const pageSize = Math.max(1, input.pageSize)
   const offset = (page - 1) * pageSize
@@ -902,11 +896,11 @@ export function listTokenUsagePaginated(input: ListTokenUsagePaginatedInput): Db
     .limit(pageSize)
     .offset(offset)
     .compile()
-  return runAll<DbTokenUsageWithRun>(compiled)
+  return await runAllAsync<DbTokenUsageWithRun>(compiled)
 }
 
 /** Sums for the same filter set as the usage list (KPI strip). */
-export function sumTokenUsage(filters: TokenUsageFilters = {}): {
+export async function sumTokenUsage(filters: TokenUsageFilters = {}): Promise<{ 
   total_prompt_tokens: number
   total_completion_tokens: number
   total_tokens: number
@@ -917,7 +911,7 @@ export function sumTokenUsage(filters: TokenUsageFilters = {}): {
   cancelled_runs: number
   crashed_runs: number
   running_runs: number
-} {
+ }> {
   const compiled = applyTokenUsageFilters(
     tokenUsageListFrom().select([
       sql<number>`coalesce(sum(t.prompt_tokens), 0)`.as("total_prompt_tokens"),
@@ -943,13 +937,13 @@ export function sumTokenUsage(filters: TokenUsageFilters = {}): {
     ]),
     filters,
   ).compile()
-  return runGet(compiled)!
+  return (await runGetAsync(compiled))!
 }
 
-export function listTokenUsageFilterOptions(): {
+export async function listTokenUsageFilterOptions(): Promise<{
   users: Array<{ upn: string; role: "admin" | "operator" }>
   models: string[]
-} {
+}> {
   const usersCompiled = getPlatformDb()
     .selectFrom(
       getPlatformDb()
@@ -966,7 +960,7 @@ export function listTokenUsageFilterOptions(): {
     .orderBy("x.upn")
     .limit(200)
     .compile()
-  const users = runAll<{ upn: string; is_admin: number }>(usersCompiled).map((r) => ({
+  const users = (await runAllAsync<{ upn: string; is_admin: number }>(usersCompiled)).map((r) => ({
     upn: r.upn,
     role: r.is_admin === 1 ? ("admin" as const) : ("operator" as const),
   }))
@@ -978,7 +972,7 @@ export function listTokenUsageFilterOptions(): {
     .orderBy("model")
     .limit(100)
     .compile()
-  const models = runAll<{ model: string }>(modelsCompiled).map((r) => r.model)
+  const models = (await runAllAsync<{ model: string }>(modelsCompiled)).map((r) => r.model)
   return { users, models }
 }
 
@@ -992,7 +986,7 @@ export interface UsageTotals {
   failed_runs: number
 }
 
-export function getUsageTotals(): UsageTotals {
+export async function getUsageTotals(): Promise<UsageTotals> {
   const tokensCompiled = getPlatformDb()
     .selectFrom("token_usage")
     .select([
@@ -1002,9 +996,9 @@ export function getUsageTotals(): UsageTotals {
       sql<number>`coalesce(sum(llm_calls), 0)`.as("total_llm_calls"),
     ])
     .compile()
-  const tokens = runGet<Omit<UsageTotals, "run_count" | "completed_runs" | "failed_runs">>(
-    tokensCompiled
-  )!
+  const tokens = (await runGetAsync<
+    Omit<UsageTotals, "run_count" | "completed_runs" | "failed_runs">
+  >(tokensCompiled))!
   const runStatsCompiled = getPlatformDb()
     .selectFrom("runs")
     .select([
@@ -1017,14 +1011,16 @@ export function getUsageTotals(): UsageTotals {
       ),
     ])
     .compile()
-  const runStats = runGet<{ run_count: number; completed_runs: number; failed_runs: number }>(
-    runStatsCompiled
-  )!
+  const runStats = (await runGetAsync<{
+    run_count: number
+    completed_runs: number
+    failed_runs: number
+  }>(runStatsCompiled))!
   return { ...tokens, ...runStats }
 }
 
 /** Usage totals for one user (operator About / personal dossier). */
-export function getUsageTotalsForUser(upn: string): UsageTotals {
+export async function getUsageTotalsForUser(upn: string): Promise<UsageTotals> {
   if (!upn) {
     return {
       total_prompt_tokens: 0,
@@ -1047,9 +1043,9 @@ export function getUsageTotalsForUser(upn: string): UsageTotals {
     ])
     .where("r.upn", "=", upn)
     .compile()
-  const tokens = runGet<Omit<UsageTotals, "run_count" | "completed_runs" | "failed_runs">>(
-    tokensCompiled
-  )!
+  const tokens = (await runGetAsync<
+    Omit<UsageTotals, "run_count" | "completed_runs" | "failed_runs">
+  >(tokensCompiled))!
   const runStatsCompiled = getPlatformDb()
     .selectFrom("runs")
     .select([
@@ -1063,9 +1059,11 @@ export function getUsageTotalsForUser(upn: string): UsageTotals {
     ])
     .where("upn", "=", upn)
     .compile()
-  const runStats = runGet<{ run_count: number; completed_runs: number; failed_runs: number }>(
-    runStatsCompiled
-  )!
+  const runStats = (await runGetAsync<{
+    run_count: number
+    completed_runs: number
+    failed_runs: number
+  }>(runStatsCompiled))!
   return { ...tokens, ...runStats }
 }
 
@@ -1079,7 +1077,7 @@ export interface RunSummaryRow {
   display_name: string | null
 }
 
-export function listRunSummariesByIds(ids: readonly string[]): RunSummaryRow[] {
+export async function listRunSummariesByIds(ids: readonly string[]): Promise<RunSummaryRow[]> {
   if (ids.length === 0) return []
   const compiled = getPlatformDb()
     .selectFrom("runs")
@@ -1087,10 +1085,10 @@ export function listRunSummariesByIds(ids: readonly string[]): RunSummaryRow[] {
     .where("id", "in", [...ids])
     .orderBy("created_at", "desc")
     .compile()
-  return runAll<RunSummaryRow>(compiled)
+  return await runAllAsync<RunSummaryRow>(compiled)
 }
 
-export function countActiveRunsByUpn(ids: readonly string[]): Array<{ upn: string; n: number }> {
+export async function countActiveRunsByUpn(ids: readonly string[]): Promise<Array<{ upn: string; n: number }>> {
   if (ids.length === 0) return []
   const compiled = getPlatformDb()
     .selectFrom("runs")
@@ -1098,7 +1096,7 @@ export function countActiveRunsByUpn(ids: readonly string[]): Array<{ upn: strin
     .where("id", "in", [...ids])
     .groupBy(sql`lower(upn)`)
     .compile()
-  return runAll<{ upn: string; n: number }>(compiled)
+  return await runAllAsync<{ upn: string; n: number }>(compiled)
 }
 
 export interface PriorTurnRow {
@@ -1110,12 +1108,12 @@ export interface PriorTurnRow {
   completed_at: string | null
 }
 
-export function listPriorTurnRows(input: {
+export async function listPriorTurnRows(input: {
   threadId: string
   upn: string
   excludeRunId?: string | null
   limit: number
-}): PriorTurnRow[] {
+}): Promise<PriorTurnRow[]> {
   let query = getPlatformDb()
     .selectFrom("runs")
     .select(["id", "goal", "status", "answer", "created_at", "completed_at"])
@@ -1130,5 +1128,5 @@ export function listPriorTurnRows(input: {
     .orderBy(sql`coalesce(completed_at, created_at)`, "desc")
     .limit(input.limit)
     .compile()
-  return runAll<PriorTurnRow>(compiled)
+  return await runAllAsync<PriorTurnRow>(compiled)
 }

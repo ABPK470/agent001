@@ -10,7 +10,7 @@ import { existsSync } from "node:fs"
 import { sql } from "kysely"
 import { getDbPath } from "../connection.js"
 import { getPlatformDb } from "../../../schema/kysely.js"
-import { runAll, runExec, runGet } from "../../../schema/execute.js"
+import { runAllAsync, runExecAsync, runGetAsync } from "../../../schema/execute-async.js"
 
 export interface DbConnector {
   id: string
@@ -22,26 +22,26 @@ export interface DbConnector {
   updated_by: string | null
 }
 
-export function listConnectors(): DbConnector[] {
+export async function listConnectors(): Promise<DbConnector[]> {
   const compiled = getPlatformDb()
     .selectFrom("connectors")
     .selectAll()
     .orderBy("id")
     .compile()
-  return runAll<DbConnector>(compiled)
+  return await runAllAsync<DbConnector>(compiled)
 }
 
-export function getConnector(id: string): DbConnector | undefined {
+export async function getConnector(id: string): Promise<DbConnector | undefined> {
   const compiled = getPlatformDb()
     .selectFrom("connectors")
     .selectAll()
     .where("id", "=", id)
     .compile()
-  return runGet<DbConnector>(compiled)
+  return await runGetAsync<DbConnector>(compiled)
 }
 
-export function saveConnector(row: DbConnector): void {
-  const existing = getConnector(row.id)
+export async function saveConnector(row: DbConnector): Promise<void> {
+  const existing = await getConnector(row.id)
   if (existing) {
     const compiled = getPlatformDb()
       .updateTable("connectors")
@@ -54,7 +54,7 @@ export function saveConnector(row: DbConnector): void {
       })
       .where("id", "=", row.id)
       .compile()
-    runExec(compiled)
+    await runExecAsync(compiled)
     return
   }
   const compiled = getPlatformDb()
@@ -69,23 +69,23 @@ export function saveConnector(row: DbConnector): void {
       updated_by: row.updated_by,
     })
     .compile()
-  runExec(compiled)
+  await runExecAsync(compiled)
 }
 
-export function deleteConnector(id: string): void {
+export async function deleteConnector(id: string): Promise<void> {
   const compiled = getPlatformDb()
     .deleteFrom("connectors")
     .where("id", "=", id)
     .compile()
-  runExec(compiled)
+  await runExecAsync(compiled)
 }
 
-export function countConnectors(): number {
+export async function countConnectors(): Promise<number> {
   const compiled = getPlatformDb()
     .selectFrom("connectors")
     .select(sql<number>`count(*)`.as("count"))
     .compile()
-  const row = runGet<{ count: number | bigint }>(compiled)
+  const row = await runGetAsync<{ count: number | bigint }>(compiled)
   return Number(row?.count ?? 0)
 }
 

@@ -23,13 +23,14 @@ type PoolGateHost = MssqlAccessHost & SyncEnvironmentRegistryHost
 
 const gatesByHost = new WeakMap<MssqlAccessHost, Map<string, GateState>>()
 
-export function readPoolMax(host: PoolGateHost, connection: string): number {
+export async function readPoolMax(host: PoolGateHost, connection: string): Promise<number> {
   const pools = host.mssql.pools
   if (pools) {
     const env = host.sync.environments.items.get(connection)
     const connectorId = env?.connectorId
     if (connectorId) {
-      const max = pools.configOf(connectorId)?.pool?.max
+      const cfg = await pools.configOf(connectorId)
+      const max = cfg?.pool?.max
       if (typeof max === "number" && max > 0) return max
     }
   }
@@ -37,23 +38,24 @@ export function readPoolMax(host: PoolGateHost, connection: string): number {
 }
 
 /** Slots available for sync work on this connection (pool max minus headroom). */
-export function poolGateLimit(host: PoolGateHost, connection: string): number {
+export async function poolGateLimit(host: PoolGateHost, connection: string): Promise<number> {
   const headroom = Math.max(1, parseInt(process.env["SYNC_POOL_HEADROOM"] ?? "3", 10) || 3)
-  return Math.max(1, readPoolMax(host, connection) - headroom)
+  return Math.max(1, (await readPoolMax(host, connection)) - headroom)
 }
 
-function gateFor(host: PoolGateHost, connection: string): GateState {
+async function gateFor(host: PoolGateHost, connection: string): Promise<GateState> {
   let perHost = gatesByHost.get(host)
   if (!perHost) {
     perHost = new Map()
     gatesByHost.set(host, perHost)
   }
+  const limit = await poolGateLimit(host, connection)
   let gate = perHost.get(connection)
   if (!gate) {
-    gate = { limit: poolGateLimit(host, connection), active: 0, queue: [] }
+    gate = { limit, active: 0, queue: [] }
     perHost.set(connection, gate)
   } else {
-    gate.limit = poolGateLimit(host, connection)
+    gate.limit = limit
   }
   return gate
 }
@@ -92,7 +94,7 @@ export async function withPoolSlot<T>(
   if (budget) {
     return budget(connectorKeyFor(host, connection), fn)
   }
-  const gate = gateFor(host, connection)
+  const gate = await gateFor(host, connection)
   await acquire(gate)
   try {
     return await fn()

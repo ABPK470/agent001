@@ -1,6 +1,9 @@
 /**
  * EventStore — durable event_log behind a port.
  * Fanout enqueues; durability flushes off the SSE stack.
+ *
+ * Read/flush paths are async so the store can run on mssql/postgres
+ * (sqlite execute-async wraps sync better-sqlite3 today).
  */
 
 export interface DurableEvent {
@@ -50,11 +53,11 @@ export interface EventStore {
   /** Enqueue for durable append — must not block the caller on disk I/O. */
   append(event: DurableEvent): void
   /** Drain the write queue (tests / shutdown). */
-  flush(): void
-  list(opts?: EventListOpts): StoredEvent[]
-  search(q: string, opts?: EventSearchOpts): StoredEvent[]
-  listForPlanId(planId: string, opts?: { limit?: number }): StoredEvent[]
-  listForRunId(runId: string, opts?: { limit?: number }): StoredEvent[]
+  flush(): Promise<void>
+  list(opts?: EventListOpts): Promise<StoredEvent[]>
+  search(q: string, opts?: EventSearchOpts): Promise<StoredEvent[]>
+  listForPlanId(planId: string, opts?: { limit?: number }): Promise<StoredEvent[]>
+  listForRunId(runId: string, opts?: { limit?: number }): Promise<StoredEvent[]>
   /** Approximate pending appends waiting for flush. */
   queueDepth(): number
 }

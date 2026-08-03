@@ -19,13 +19,13 @@ afterEach(() => {
   rmSync(projectRoot, { recursive: true, force: true })
 })
 
-function saveMssqlConnector(
+async function saveMssqlConnector(
   id: string,
   config: Record<string, string | number | boolean | null>,
   enabled = true,
-): void {
+): Promise<void> {
   const now = new Date().toISOString()
-  db.saveConnector({
+  await db.saveConnector({
     id,
     kind: "mssql",
     body_json: JSON.stringify({
@@ -47,10 +47,10 @@ function saveMssqlConnector(
 }
 
 describe("mssqlConfigsFromConnectors", () => {
-  it("builds live mssql configs from persisted connectors preserving every field + knowledge", () => {
+  it("builds live mssql configs from persisted connectors preserving every field + knowledge", async () => {
     const knowledgePath = "./knowledge.md"
     writeFileSync(join(projectRoot, "knowledge.md"), "# Knowledge\nSchema guidance for dev.")
-    saveMssqlConnector("dev", {
+    await saveMssqlConnector("dev", {
       host: "db-dev",
       port: 1433,
       database: "mymi_dev",
@@ -61,7 +61,7 @@ describe("mssqlConfigsFromConnectors", () => {
       trustServerCertificate: true,
       knowledgePath,
     })
-    saveMssqlConnector("prod", {
+    await saveMssqlConnector("prod", {
       host: "db-prod",
       port: 1433,
       database: "mymi_prod",
@@ -73,7 +73,7 @@ describe("mssqlConfigsFromConnectors", () => {
     })
 
     const configs = mssqlConfigsFromConnectors(
-      db.listConnectors().map((r) => JSON.parse(r.body_json)),
+      (await db.listConnectors()).map((r) => JSON.parse(r.body_json)),
       projectRoot,
     )
 
@@ -96,10 +96,10 @@ describe("mssqlConfigsFromConnectors", () => {
     expect(gotProd.options?.trustServerCertificate).toBe(false)
   })
 
-  it("skips disabled connectors and non-mssql kinds", () => {
-    saveMssqlConnector("off", { host: "db-off", database: "mymi", user: "sa", password: "x" }, false)
+  it("skips disabled connectors and non-mssql kinds", async () => {
+    await saveMssqlConnector("off", { host: "db-off", database: "mymi", user: "sa", password: "x" }, false)
     const now = new Date().toISOString()
-    db.saveConnector({
+    await db.saveConnector({
       id: "pg",
       kind: "postgres",
       body_json: JSON.stringify({
@@ -120,17 +120,17 @@ describe("mssqlConfigsFromConnectors", () => {
     })
 
     const configs = mssqlConfigsFromConnectors(
-      db.listConnectors().map((r) => JSON.parse(r.body_json)),
+      (await db.listConnectors()).map((r) => JSON.parse(r.body_json)),
       projectRoot,
     )
     expect(configs).toEqual([])
   })
 
-  it("falls back to schema defaults for missing optional fields", () => {
-    saveMssqlConnector("minimal", { host: "db-min", database: "mymi" })
+  it("falls back to schema defaults for missing optional fields", async () => {
+    await saveMssqlConnector("minimal", { host: "db-min", database: "mymi" })
 
     const [got] = mssqlConfigsFromConnectors(
-      db.listConnectors().map((r) => JSON.parse(r.body_json)),
+      (await db.listConnectors()).map((r) => JSON.parse(r.body_json)),
       projectRoot,
     )
     expect(got.name).toBe("minimal")

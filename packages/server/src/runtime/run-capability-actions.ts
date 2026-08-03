@@ -13,22 +13,22 @@ import { runHasCompensatableEffects } from "../infra/effects/index.js"
 import * as db from "../infra/persistence/sqlite.js"
 import { NotificationActionType } from "../internal/enums/notifications.js"
 
-export function runCapabilityFlags(runId: string): {
+export async function runCapabilityFlags(runId: string): Promise<{
   hasCheckpoint: boolean
   rollbackAvailable: boolean
-} {
+}> {
   return {
-    hasCheckpoint: !!db.getCheckpoint(runId),
-    rollbackAvailable: runHasCompensatableEffects(runId),
+    hasCheckpoint: !!await db.getCheckpoint(runId),
+    rollbackAvailable: await runHasCompensatableEffects(runId),
   }
 }
 
 /** Resume / Rollback actions that are meaningful for this run right now. */
-export function buildRunCapabilityActions(
+export async function buildRunCapabilityActions(
   runId: string,
   status: string,
-): NotificationAction[] {
-  const caps = runCapabilityFlags(runId)
+): Promise<NotificationAction[]> {
+  const caps = await runCapabilityFlags(runId)
   const actions: NotificationAction[] = []
   if (canResumeRun(status, caps.hasCheckpoint)) {
     actions.push({
@@ -51,12 +51,12 @@ export function buildRunCapabilityActions(
  * Drop stale Resume/Rollback from a stored notification using current
  * run state. Other actions (View, approve, apply-diff, …) pass through.
  */
-export function filterNotificationActionsForCapabilities(
+export async function filterNotificationActionsForCapabilities(
   runId: string | null,
   actions: NotificationAction[],
-): NotificationAction[] {
+): Promise<NotificationAction[]> {
   if (!runId) return actions
-  const run = db.getRun(runId)
+  const run = await db.getRun(runId)
   if (!run) {
     // Run gone — capability actions are meaningless.
     return actions.filter(
@@ -64,7 +64,7 @@ export function filterNotificationActionsForCapabilities(
         && a.action !== NotificationActionType.RollbackRun,
     )
   }
-  const caps = runCapabilityFlags(runId)
+  const caps = await runCapabilityFlags(runId)
   return actions.filter((a) =>
     isRunCapabilityActionAllowed(a.action, run.status, caps),
   )

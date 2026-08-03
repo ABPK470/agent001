@@ -8,20 +8,20 @@ import type { MssqlAccessHost, SyncRuntimeHost } from "../ports/host.js"
 import type { SyncConnectorReadyIds } from "../core/eligibility/sync-env-eligibility.js"
 
 /** Enabled warehouse connector ids (mssql | postgres when warehousePools is wired). */
-export function readyWarehouseConnectorIds(
+export async function readyWarehouseConnectorIds(
   host: MssqlAccessHost | SyncRuntimeHost,
-): SyncConnectorReadyIds {
+): Promise<SyncConnectorReadyIds> {
   const syncHost = host as SyncRuntimeHost
   const warehouse = syncHost.sync?.warehousePools
   if (warehouse) {
-    return new Set(warehouse.list().map((c) => c.id))
+    return new Set((await warehouse.list()).map((c) => c.id))
   }
   const pools = host.mssql.pools
   if (!pools) return new Set()
-  return new Set(pools.list().map((c) => c.id))
+  return new Set((await pools.list()).map((c) => c.id))
 }
 
 /** @deprecated Prefer {@link readyWarehouseConnectorIds}. */
-export function readyMssqlConnectorIds(host: MssqlAccessHost): SyncConnectorReadyIds {
+export async function readyMssqlConnectorIds(host: MssqlAccessHost): Promise<SyncConnectorReadyIds> {
   return readyWarehouseConnectorIds(host)
 }

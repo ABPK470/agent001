@@ -9,9 +9,9 @@ describe("importConnectors gate", () => {
     _migrate(new Database(":memory:"))
   })
 
-  it("dry-run classifies create vs update and does not write", () => {
+  it("dry-run classifies create vs update and does not write", async () => {
     const now = new Date().toISOString()
-    db.saveConnector({
+    await db.saveConnector({
       id: "dev",
       kind: "mssql",
       body_json: JSON.stringify({
@@ -41,7 +41,7 @@ describe("importConnectors gate", () => {
       updated_by: "seed",
     })
 
-    const result = importConnectors({
+    const result = await importConnectors({
       version: 1,
       connectors: [
         {
@@ -91,11 +91,11 @@ describe("importConnectors gate", () => {
     expect(result.applied).toBe(false)
     expect(result.impact.updates).toContain("dev")
     expect(result.impact.creates).toContain("uat")
-    expect(db.getConnector("uat")).toBeFalsy()
+    expect(await db.getConnector("uat")).toBeFalsy()
   })
 
-  it("fail-closed on invalid config and refuses apply without reason", () => {
-    const plan = planConnectorsImport({
+  it("fail-closed on invalid config and refuses apply without reason", async () => {
+    const plan = await planConnectorsImport({
       version: 1,
       connectors: [
         {
@@ -109,7 +109,7 @@ describe("importConnectors gate", () => {
     expect(plan.ok).toBe(false)
     expect(plan.errors.length).toBeGreaterThan(0)
 
-    const blocked = importConnectors({
+    const blocked = await importConnectors({
       version: 1,
       connectors: [
         {
@@ -138,11 +138,11 @@ describe("importConnectors gate", () => {
     expect(blocked.ok).toBe(false)
     expect(blocked.applied).toBe(false)
     expect(blocked.errors.some((e) => e.includes("reason"))).toBe(true)
-    expect(db.getConnector("uat")).toBeFalsy()
+    expect(await db.getConnector("uat")).toBeFalsy()
   })
 
-  it("applies when valid with reason", () => {
-    const result = importConnectors({
+  it("applies when valid with reason", async () => {
+    const result = await importConnectors({
       version: 1,
       connectors: [
         {
@@ -170,6 +170,6 @@ describe("importConnectors gate", () => {
     })
     expect(result.ok).toBe(true)
     expect(result.applied).toBe(true)
-    expect(db.getConnector("uat")).toBeTruthy()
+    expect(await db.getConnector("uat")).toBeTruthy()
   })
 })

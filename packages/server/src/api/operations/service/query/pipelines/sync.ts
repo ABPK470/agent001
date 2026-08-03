@@ -21,13 +21,13 @@ import {
   finalizeStaleRunningActivities
 } from "../utils.js"
 
-export function buildSyncPipeline(
+export async function buildSyncPipeline(
   planId: string,
   kind: typeof OperationKind.SyncPreview | typeof OperationKind.SyncExecute,
   events: OperationEvent[]
-): OperationPipeline {
-  const meta = db.getSyncRun?.(planId)
-  const planSummary = loadPersistedSyncPlanSummary(planId)
+): Promise<OperationPipeline> {
+  const meta = await db.getSyncRun?.(planId)
+  const planSummary = await loadPersistedSyncPlanSummary(planId)
   const eventHints = extractSyncEntityHintsFromEvents(events)
   const startedAt = events[0].timestamp
   const lastEv = events[events.length - 1]
@@ -163,7 +163,7 @@ function extractRunIdFromEvents(events: OperationEvent[]): string | null {
 }
 
 function buildPreflightActivity(
-  planSummary: ReturnType<typeof loadPersistedSyncPlanSummary>,
+  planSummary: Awaited<ReturnType<typeof loadPersistedSyncPlanSummary>>,
   fallbackTimestamp: string
 ): OperationActivity[] {
   if (!planSummary || planSummary.decisionLog.length === 0) return []

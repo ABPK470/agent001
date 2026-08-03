@@ -43,14 +43,14 @@ function createRunContextForExecution(
   })
 }
 
-function createPolicyContext(
+async function createPolicyContext(
   runId: string,
   activeRun: ActiveRunRecord | undefined,
   runWorkspace: RunWorkspace,
   opts?: { parentRunId?: string | null }
-): HostedPolicyContext {
+): Promise<HostedPolicyContext> {
   const grantRunIds = [runId, opts?.parentRunId].filter((id): id is string => !!id)
-  const toolApprovalGrants = db.listApprovedToolGrantsForRuns(grantRunIds).map((grant) => ({
+  const toolApprovalGrants = (await db.listApprovedToolGrantsForRuns(grantRunIds)).map((grant) => ({
     grantId: grant.id,
     toolName: grant.toolName,
     args: grant.args,
@@ -66,14 +66,14 @@ function createPolicyContext(
   })
 }
 
-export function createPerRunHost(
+export async function createPerRunHost(
   command: ExecuteRunCommand,
   activeRun: ActiveRunRecord | undefined,
   runWorkspace: RunWorkspace
-): PerRunHostBundle {
+): Promise<PerRunHostBundle> {
   const { request, runtime } = command
   const runContext = createRunContextForExecution(activeRun, request.runId, runtime.controller)
-  const policyCtx = createPolicyContext(request.runId, activeRun, runWorkspace, {
+  const policyCtx = await createPolicyContext(request.runId, activeRun, runWorkspace, {
     parentRunId: request.resume?.parentRunId ?? null,
   })
   const bootOptions = bootHostDepsToConfigureAgentOptions(runtime.bootHostDeps)
@@ -86,7 +86,7 @@ export function createPerRunHost(
         actorUpn: activeRun?.ownerUpn ?? null
       }
     },
-    attachments: createServerAttachmentService(() => policyCtx),
+    attachments: await createServerAttachmentService(() => policyCtx),
     workspaceRoot: runWorkspace.executionRoot,
     filesystemBasePath: runWorkspace.executionRoot,
     searchFilesBasePath: runWorkspace.executionRoot,

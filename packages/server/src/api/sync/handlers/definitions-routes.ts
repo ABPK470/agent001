@@ -21,7 +21,7 @@ import {
   type EntityDefinition,
   type Scd2Strategy
 } from "@mia/sync"
-import type { FastifyInstance, FastifyRequest } from "fastify"
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify"
 import { broadcast } from "../../../infra/events/broadcaster.js"
 import * as db from "../../../infra/persistence/sqlite.js"
 import {
@@ -49,9 +49,9 @@ function resolveTenant(req: FastifyRequest): string {
   return DEFAULT_TENANT_ID
 }
 
-function audit(req: FastifyRequest, action: string, detail: Record<string, unknown>): void {
+async function audit(req: FastifyRequest, action: string, detail: Record<string, unknown>): Promise<void> {
   try {
-    db.saveAdminAudit({
+    await db.saveAdminAudit({
       actor: req.session.upn,
       action,
       detail: JSON.stringify(detail),
@@ -73,7 +73,7 @@ function resolveFlowTemplateId(
     : null
 }
 
-function importEntitiesFromText(args: {
+async function importEntitiesFromText(args: {
   tenantId: string
   actor: string
   reason: string
@@ -81,7 +81,7 @@ function importEntitiesFromText(args: {
   format: "yaml" | "json"
   dryRun: boolean
   projectRoot?: string
-}): EntityRegistryYamlImportResponse {
+}): Promise<EntityRegistryYamlImportResponse> {
   const parsed = args.format === "json" ? parseEntitiesJson(args.content) : parseEntitiesYaml(args.content)
   const saved: EntityRegistryYamlImportResponse["saved"] = []
   const skipped: EntityRegistryYamlImportResponse["skipped"] = []
@@ -94,7 +94,7 @@ function importEntitiesFromText(args: {
       continue
     }
     if (args.projectRoot) {
-      const flowError = validateEntityFlowId(args.projectRoot, item.def.flowId, args.tenantId)
+      const flowError = await validateEntityFlowId(args.projectRoot, item.def.flowId, args.tenantId)
       if (flowError) {
         rowErrors.push({ id: item.def.id, error: flowError })
         continue
@@ -106,7 +106,7 @@ function importEntitiesFromText(args: {
       rowErrors.push({ id: item.def.id, error: validation })
       continue
     }
-    const existing = db.getEntityDefinition(args.tenantId, item.def.id, { includeRetired: true })
+    const existing = await db.getEntityDefinition(args.tenantId, item.def.id, { includeRetired: true })
     const created = existing === null
     if (args.dryRun) {
       saved.push({ id: item.def.id, version: existing ? existing.version + 1 : 1, created })
@@ -114,7 +114,7 @@ function importEntitiesFromText(args: {
       continue
     }
     try {
-      const result = db.saveEntityDefinition({
+      const result = await db.saveEntityDefinition({
         tenantId: args.tenantId,
         def: defWithTenant,
         actor: args.actor,
@@ -141,7 +141,7 @@ function importEntitiesFromText(args: {
   }
 
   if (!args.dryRun && saved.length > 0) {
-    recordSyncCatalogChange({
+    await recordSyncCatalogChange({
       tenantId: args.tenantId,
       reason: `entity-registry:import:${args.reason}`,
       actor: args.actor,
@@ -159,11 +159,33 @@ function importEntitiesFromText(args: {
   }
 }
 
-function exportEntityRegistryJson(tenantId: string, entityId: string): string {
-  const def = db.getEntityDefinition(tenantId, entityId, { includeRetired: true })
+async function exportEntityRegistryJson(tenantId: string, entityId: string): Promise<string> {
+  const def = await db.getEntityDefinition(tenantId, entityId, { includeRetired: true })
   if (!def) return ""
   assertEntityExportable(def)
   return formatEntityJson(def)
+}
+
+async function sendRegistryJson(
+  tenantId: string,
+  entityId: string,
+  reply: FastifyReply,
+): Promise<string | { error: string; entityId?: string; validation?: unknown }> {
+  try {
+    const body = await exportEntityRegistryJson(tenantId, entityId)
+    if (!body) {
+      reply.code(404)
+      return { error: `entity not found: ${entityId}` }
+    }
+    reply.header("content-type", "application/json; charset=utf-8")
+    return body
+  } catch (error) {
+    if (error instanceof EntityExportValidationError) {
+      reply.code(409)
+      return { error: error.message, entityId: error.entityId, validation: error.result }
+    }
+    throw error
+  }
 }
 
 export function registerEntityRegistryRoutes(app: FastifyInstance, projectRoot?: string): void {
@@ -171,7 +193,7 @@ export function registerEntityRegistryRoutes(app: FastifyInstance, projectRoot?:
     const tenantId = resolveTenant(req)
     const includeRetired =
       ((req.query as Record<string, string> | undefined)?.["includeRetired"] ?? "false") === "true"
-    return { tenantId, items: db.listEntityDefinitions(tenantId, { includeRetired }) }
+    return { tenantId, items: await db.listEntityDefinitions(tenantId, { includeRetired }) }
   })
 
   app.get<{ Params: { id: string }; Querystring: { version?: string; includeRetired?: string } }>(
@@ -180,7 +202,7 @@ export function registerEntityRegistryRoutes(app: FastifyInstance, projectRoot?:
       const tenantId = resolveTenant(req)
       const version = req.query.version ? Number(req.query.version) : undefined
       const includeRetired = req.query.includeRetired === "true"
-      const def = db.getEntityDefinition(tenantId, req.params.id, { version, includeRetired })
+      const def = await db.getEntityDefinition(tenantId, req.params.id, { version, includeRetired })
       if (!def) {
         reply.code(404)
         return { error: `entity not found: ${req.params.id}` }
@@ -191,7 +213,7 @@ export function registerEntityRegistryRoutes(app: FastifyInstance, projectRoot?:
 
   app.get<{ Params: { id: string } }>("/api/entity-registry/entities/:id.yaml", async (req, reply) => {
     const tenantId = resolveTenant(req)
-    const def = db.getEntityDefinition(tenantId, req.params.id, { includeRetired: true })
+    const def = await db.getEntityDefinition(tenantId, req.params.id, { includeRetired: true })
     if (!def) {
       reply.code(404)
       return { error: `entity not found: ${req.params.id}` }
@@ -209,39 +231,21 @@ export function registerEntityRegistryRoutes(app: FastifyInstance, projectRoot?:
     return formatEntityYaml(def)
   })
 
-  const sendRegistryJson = (tenantId: string, entityId: string, reply: import("fastify").FastifyReply) => {
-    try {
-      const body = exportEntityRegistryJson(tenantId, entityId)
-      if (!body) {
-        reply.code(404)
-        return { error: `entity not found: ${entityId}` }
-      }
-      reply.header("content-type", "application/json; charset=utf-8")
-      return body
-    } catch (error) {
-      if (error instanceof EntityExportValidationError) {
-        reply.code(409)
-        return { error: error.message, entityId: error.entityId, validation: error.result }
-      }
-      throw error
-    }
-  }
-
   app.get<{ Params: { id: string } }>("/api/entity-registry/entities/:id/registry.json", async (req, reply) => {
     const tenantId = resolveTenant(req)
-    return sendRegistryJson(tenantId, req.params.id, reply)
+    return await sendRegistryJson(tenantId, req.params.id, reply)
   })
 
   /** @deprecated Use /entities/:id/registry.json — kept for backward compatibility. */
   app.get<{ Params: { id: string } }>("/api/entity-registry/entities/:id.json", async (req, reply) => {
     const tenantId = resolveTenant(req)
-    return sendRegistryJson(tenantId, req.params.id, reply)
+    return await sendRegistryJson(tenantId, req.params.id, reply)
   })
 
   app.get("/api/entity-registry/entities.yaml", async (req, reply) => {
     const tenantId = resolveTenant(req)
     try {
-      assertTenantEntitiesExportable(tenantId, { includeRetired: true })
+      await assertTenantEntitiesExportable(tenantId, { includeRetired: true })
     } catch (error) {
       if (error instanceof EntityExportValidationError) {
         reply.code(409)
@@ -249,13 +253,13 @@ export function registerEntityRegistryRoutes(app: FastifyInstance, projectRoot?:
       }
       throw error
     }
-    const defs = db.listEntityDefinitions(tenantId, { includeRetired: true })
+    const defs = await db.listEntityDefinitions(tenantId, { includeRetired: true })
     reply.header("content-type", "application/yaml; charset=utf-8")
     return formatEntitiesYaml(defs)
   })
 
   app.get<{ Params: { id: string } }>("/api/entity-registry/entities/:id/history", async (req) =>
-    db.listEntityDefinitionHistory(resolveTenant(req), req.params.id)
+    await db.listEntityDefinitionHistory(resolveTenant(req), req.params.id)
   )
 
   app.get<{ Querystring: { rootTable?: string } }>(
@@ -349,14 +353,14 @@ export function registerEntityRegistryRoutes(app: FastifyInstance, projectRoot?:
       }
       const tenantId = resolveTenant(req)
       if (projectRoot) {
-        const flowError = validateEntityFlowId(projectRoot, req.body.def.flowId, tenantId)
+        const flowError = await validateEntityFlowId(projectRoot, req.body.def.flowId, tenantId)
         if (flowError) {
           reply.code(400)
           return { error: flowError }
         }
       }
       try {
-        const result = db.saveEntityDefinition({
+        const result = await db.saveEntityDefinition({
           tenantId,
           def: req.body.def,
           actor: req.session.upn,
@@ -364,7 +368,7 @@ export function registerEntityRegistryRoutes(app: FastifyInstance, projectRoot?:
           versionLabel: req.body.versionLabel ?? null,
           createOnly: req.body.createOnly === true,
         })
-        audit(
+        await audit(
           req,
           "entity_registry.saved",
           withEntityVersionRef(
@@ -392,7 +396,7 @@ export function registerEntityRegistryRoutes(app: FastifyInstance, projectRoot?:
             diffSize: result.diff.length
           }
         })
-        recordSyncCatalogChange({
+        await recordSyncCatalogChange({
           tenantId,
           reason: `entity-registry:save:${result.id}`,
           actor: req.session.upn,
@@ -419,17 +423,17 @@ export function registerEntityRegistryRoutes(app: FastifyInstance, projectRoot?:
       return { error: "admin only" }
     }
     const tenantId = resolveTenant(req)
-    const result = db.retireEntityDefinition(tenantId, req.params.id, req.session.upn)
+    const result = await db.retireEntityDefinition(tenantId, req.params.id, req.session.upn)
     if (!result) {
       reply.code(404)
       return { error: `entity not found: ${req.params.id}` }
     }
-    audit(req, "entity_registry.retired", { tenantId, id: req.params.id })
+    await audit(req, "entity_registry.retired", { tenantId, id: req.params.id })
     broadcast({
       type: EventType.EntityRegistryRetired,
       data: { tenantId, id: req.params.id, actor: req.session.upn, retiredAt: result.retiredAt }
     })
-    recordSyncCatalogChange({
+    await recordSyncCatalogChange({
       tenantId,
       reason: `entity-registry:retire:${req.params.id}`,
       actor: req.session.upn,
@@ -454,7 +458,7 @@ export function registerEntityRegistryRoutes(app: FastifyInstance, projectRoot?:
       }
       const tenantId = resolveTenant(req)
       const dryRun = Boolean(req.body.dryRun)
-      const result = importEntitiesFromText({
+      const result = await importEntitiesFromText({
         tenantId,
         actor: req.session.upn,
         reason: req.body.reason,
@@ -464,7 +468,7 @@ export function registerEntityRegistryRoutes(app: FastifyInstance, projectRoot?:
         projectRoot
       })
       if (!dryRun) {
-        audit(req, "entity_registry.imported", {
+        await audit(req, "entity_registry.imported", {
           tenantId,
           format: "yaml",
           savedCount: result.saved.length,
@@ -492,7 +496,7 @@ export function registerEntityRegistryRoutes(app: FastifyInstance, projectRoot?:
       }
       const tenantId = resolveTenant(req)
       const dryRun = Boolean(req.body.dryRun)
-      const result = importEntitiesFromText({
+      const result = await importEntitiesFromText({
         tenantId,
         actor: req.session.upn,
         reason: req.body.reason,
@@ -502,7 +506,7 @@ export function registerEntityRegistryRoutes(app: FastifyInstance, projectRoot?:
         projectRoot,
       })
       if (!dryRun) {
-        audit(req, "entity_registry.imported", {
+        await audit(req, "entity_registry.imported", {
           tenantId,
           format: "registry-json",
           savedCount: result.saved.length,
@@ -545,7 +549,7 @@ export function registerEntityRegistryRoutes(app: FastifyInstance, projectRoot?:
 
   app.get("/api/entity-registry/strategies", async (req) => {
     const tenantId = resolveTenant(req)
-    const items = db.listAvailableStrategies(tenantId)
+    const items = await db.listAvailableStrategies(tenantId)
     return { tenantId, items }
   })
 
@@ -560,7 +564,7 @@ export function registerEntityRegistryRoutes(app: FastifyInstance, projectRoot?:
       }
       const rawVersion = req.query?.version
       const versionNum = rawVersion != null && rawVersion !== "" ? Number(rawVersion) : NaN
-      const strategy = db.resolveScd2Strategy(
+      const strategy = await db.resolveScd2Strategy(
         tenantId,
         id,
         Number.isFinite(versionNum) ? versionNum : "latest",
@@ -587,19 +591,19 @@ export function registerEntityRegistryRoutes(app: FastifyInstance, projectRoot?:
         return { error: "strategy id is required" }
       }
       try {
-        const result = db.retireScd2Strategy(tenantId, id)
+        const result = await db.retireScd2Strategy(tenantId, id)
         if (!result) {
           reply.code(404)
           return {
             error: `strategy not found for tenant: ${id}. Shipped defaults cannot be deleted — fork a custom copy first.`,
           }
         }
-        audit(req, "entity_registry.strategy_retired", { tenantId, id })
+        await audit(req, "entity_registry.strategy_retired", { tenantId, id })
         broadcast({
           type: EventType.EntityRegistryStrategyRetired,
           data: { tenantId, id, actor: req.session.upn, retiredAt: result.retiredAt },
         })
-        recordSyncCatalogChange({
+        await recordSyncCatalogChange({
           tenantId,
           reason: `entity-registry:strategy:retire:${id}`,
           actor: req.session.upn,
@@ -620,7 +624,7 @@ export function registerEntityRegistryRoutes(app: FastifyInstance, projectRoot?:
       if (!id) {
         return { tenantId, id: "", items: [] }
       }
-      return { tenantId, id, items: db.listScd2StrategyHistory(tenantId, id) }
+      return { tenantId, id, items: await db.listScd2StrategyHistory(tenantId, id) }
     }
   )
 
@@ -641,13 +645,13 @@ export function registerEntityRegistryRoutes(app: FastifyInstance, projectRoot?:
       }
       const tenantId = resolveTenant(req)
       try {
-        const result = db.saveScd2Strategy({
+        const result = await db.saveScd2Strategy({
           tenantId,
           strategy: req.body.strategy,
           actor: req.session.upn,
           reason: req.body.reason
         })
-        audit(
+        await audit(
           req,
           "entity_registry.strategy_saved",
           withStrategyVersionRef(
@@ -664,7 +668,7 @@ export function registerEntityRegistryRoutes(app: FastifyInstance, projectRoot?:
           type: EventType.EntityRegistryStrategySaved,
           data: { tenantId, id: result.id, version: result.version, actor: req.session.upn }
         })
-        recordSyncCatalogChange({
+        await recordSyncCatalogChange({
           tenantId,
           reason: `entity-registry:strategy:save:${result.id}`,
           actor: req.session.upn,

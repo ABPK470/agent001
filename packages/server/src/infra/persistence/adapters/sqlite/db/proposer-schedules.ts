@@ -1,7 +1,7 @@
 import { getPlatformDb } from "../../../schema/kysely.js"
-import { runAll, runExec, runGet } from "../../../schema/execute.js"
+import { runAllAsync, runExecAsync, runGetAsync } from "../../../schema/execute-async.js"
 import { platformNow } from "../../../schema/sql-time.js"
-import { upsertRow } from "../../../schema/upsert.js"
+import { upsertRowAsync } from "../../../schema/upsert.js"
 
 export interface ProposerScheduleRow {
   tenant_id: string
@@ -13,22 +13,22 @@ export interface ProposerScheduleRow {
   next_run_at: string | null
 }
 
-export function listEnabledProposerSchedules(): ProposerScheduleRow[] {
+export async function listEnabledProposerSchedules(): Promise<ProposerScheduleRow[]> {
   const compiled = getPlatformDb()
     .selectFrom("proposer_schedule_configs")
     .selectAll()
     .where("enabled", "=", 1)
     .compile()
-  return runAll<ProposerScheduleRow>(compiled)
+  return await runAllAsync<ProposerScheduleRow>(compiled)
 }
 
-export function advanceProposerSchedule(
+export async function advanceProposerSchedule(
   tenantId: string,
   source: string,
   target: string,
   lastRunAt: string,
   nextRunAt: string | null
-): void {
+): Promise<void> {
   const compiled = getPlatformDb()
     .updateTable("proposer_schedule_configs")
     .set({ last_run_at: lastRunAt, next_run_at: nextRunAt })
@@ -36,10 +36,10 @@ export function advanceProposerSchedule(
     .where("source", "=", source)
     .where("target", "=", target)
     .compile()
-  runExec(compiled)
+  await runExecAsync(compiled)
 }
 
-export function upsertProposerSchedule(input: {
+export async function upsertProposerSchedule(input: {
   tenantId: string
   source: string
   target: string
@@ -47,9 +47,9 @@ export function upsertProposerSchedule(input: {
   enabled: number
   nextRunAt: string | null
   updatedBy: string
-}): void {
+}): Promise<void> {
   const now = platformNow()
-  upsertRow({
+  await upsertRowAsync({
     table: "proposer_schedule_configs",
     keys: {
       tenant_id: input.tenantId,
@@ -76,11 +76,11 @@ export function upsertProposerSchedule(input: {
   })
 }
 
-export function getProposerSchedule(
+export async function getProposerSchedule(
   tenantId: string,
   source: string,
   target: string
-): ProposerScheduleRow | null {
+): Promise<ProposerScheduleRow | null> {
   const compiled = getPlatformDb()
     .selectFrom("proposer_schedule_configs")
     .selectAll()
@@ -88,10 +88,10 @@ export function getProposerSchedule(
     .where("source", "=", source)
     .where("target", "=", target)
     .compile()
-  return runGet<ProposerScheduleRow>(compiled) ?? null
+  return await runGetAsync<ProposerScheduleRow>(compiled) ?? null
 }
 
-export function listProposerSchedules(tenantId: string): ProposerScheduleRow[] {
+export async function listProposerSchedules(tenantId: string): Promise<ProposerScheduleRow[]> {
   const compiled = getPlatformDb()
     .selectFrom("proposer_schedule_configs")
     .selectAll()
@@ -99,15 +99,15 @@ export function listProposerSchedules(tenantId: string): ProposerScheduleRow[] {
     .orderBy("source")
     .orderBy("target")
     .compile()
-  return runAll<ProposerScheduleRow>(compiled)
+  return await runAllAsync<ProposerScheduleRow>(compiled)
 }
 
-export function deleteProposerSchedule(tenantId: string, source: string, target: string): void {
+export async function deleteProposerSchedule(tenantId: string, source: string, target: string): Promise<void> {
   const compiled = getPlatformDb()
     .deleteFrom("proposer_schedule_configs")
     .where("tenant_id", "=", tenantId)
     .where("source", "=", source)
     .where("target", "=", target)
     .compile()
-  runExec(compiled)
+  await runExecAsync(compiled)
 }

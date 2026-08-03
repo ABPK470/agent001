@@ -11,13 +11,13 @@ if (args[0] === "setup") {
   const setupArgs = args.slice(1)
   const code =
     setupArgs.includes("--check") || setupArgs.includes("-c")
-      ? runSetupCheckOnly()
+      ? await runSetupCheckOnly()
       : await runSetupWizard({ force: setupArgs.includes("--force") })
   process.exit(code)
 }
 
 import { ensureSetupReady } from "./cli/setup/gate.js"
-ensureSetupReady()
+await ensureSetupReady()
 
 import { startServer } from "./boot/start-server.js"
 

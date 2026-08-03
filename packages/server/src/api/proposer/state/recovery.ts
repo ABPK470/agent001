@@ -11,13 +11,13 @@ import {
 } from "../../../infra/persistence/proposals.js"
 import { cancelOperation } from "../../../infra/operations/cancel-registry.js"
 
-export function recoverStaleProposerRuns(): string[] {
-  const stale = findStaleProposerRuns()
+export async function recoverStaleProposerRuns(): Promise<string[]> {
+  const stale = await findStaleProposerRuns()
   const cancelled: string[] = []
 
   for (const row of stale) {
     cancelOperation("proposer.run", row.id, "Server restarted — run interrupted")
-    finishProposerRun({
+    await finishProposerRun({
       id: row.id,
       status: "cancelled",
       counts: { scanned: row.scanned, produced: row.produced, errors: row.errors },

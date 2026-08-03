@@ -235,7 +235,7 @@ describe("sync-environment routes", () => {
   it("strips legacy syncAllowlist from stored rows on read and write", async () => {
     const { app } = await buildApp(adminSession())
     const now = new Date().toISOString()
-    db.saveSyncEnvironment({
+    await db.saveSyncEnvironment({
       name: "UAT",
       body_json: JSON.stringify({
         name: "UAT",
@@ -269,7 +269,7 @@ describe("sync-environment routes", () => {
     })
     expect(updated.statusCode).toBe(200)
 
-    const row = db.getSyncEnvironment("UAT")
+    const row = await db.getSyncEnvironment("UAT")
     expect(row).toBeTruthy()
     const stored = JSON.parse(row!.body_json) as Record<string, unknown>
     expect(stored).not.toHaveProperty("syncAllowlist")

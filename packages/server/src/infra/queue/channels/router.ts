@@ -24,20 +24,20 @@ import type { Channel, ChannelType, Conversation, InboundMessage } from "./types
 // ── Persistence interface ────────────────────────────────────────
 
 export interface ConversationStore {
-  findByChannelAndSender(channelType: ChannelType, senderId: string): Conversation | undefined
-  save(conv: Conversation): void
-  updateActiveRun(id: string, runId: string | null): void
-  updateThreadId(id: string, threadId: string): void
-  get(id: string): Conversation | undefined
-  getByRunId(runId: string): Conversation | undefined
-  list(): Conversation[]
+  findByChannelAndSender(channelType: ChannelType, senderId: string): Promise<Conversation | undefined>
+  save(conv: Conversation): Promise<void>
+  updateActiveRun(id: string, runId: string | null): Promise<void>
+  updateThreadId(id: string, threadId: string): Promise<void>
+  get(id: string): Promise<Conversation | undefined>
+  getByRunId(runId: string): Promise<Conversation | undefined>
+  list(): Promise<Conversation[]>
 }
 
 // ── Agent run trigger (injected — avoids circular dependency) ────
 
 export interface RunTrigger {
   /** Start a new agent run with the given goal. Returns the run ID. */
-  startRun(goal: string, session?: CurrentSession | null, threadId?: string): string
+  startRun(goal: string, session?: CurrentSession | null, threadId?: string): Promise<string>
 }
 
 // ── Message Router ───────────────────────────────────────────────
@@ -81,9 +81,9 @@ export class MessageRouter {
    * 3. The agent runs async — when it completes, the orchestrator
    *    calls sendReply() to deliver the response
    */
-  handleInbound(message: InboundMessage): { conversationId: string; runId: string } {
+  async handleInbound(message: InboundMessage): Promise<{ conversationId: string; runId: string }> {
     // Find or create conversation
-    let conv = this.store.findByChannelAndSender(message.channelType, message.senderId)
+    let conv = await this.store.findByChannelAndSender(message.channelType, message.senderId)
 
     if (!conv) {
       conv = {
@@ -96,21 +96,21 @@ export class MessageRouter {
         createdAt: new Date(),
         updatedAt: new Date()
       }
-      this.store.save(conv)
+      await this.store.save(conv)
     }
 
     const channelSession = buildChannelSession(message)
     let threadId = conv.threadId ?? undefined
     if (!threadId && channelSession?.upn) {
-      ensureChannelUser(channelSession)
-      threadId = db.createThread(
+      await ensureChannelUser(channelSession)
+      threadId = (await db.createThread(
         channelSession.upn,
         `${message.channelType}: ${message.senderName ?? message.senderId}`
-      ).id
+      )).id
       conv.threadId = threadId
-      this.store.updateThreadId(conv.id, threadId)
+      await this.store.updateThreadId(conv.id, threadId)
     }
-    const runId = this.runTrigger.startRun(message.text, channelSession, threadId)
+    const runId = await this.runTrigger.startRun(message.text, channelSession, threadId)
 
     // Track run → conversation so sendReply works even if active_run_id
     // is later overwritten by a subsequent inbound message.
@@ -119,7 +119,7 @@ export class MessageRouter {
     // Link the run to the conversation
     conv.activeRunId = runId
     conv.updatedAt = new Date()
-    this.store.updateActiveRun(conv.id, runId)
+    await this.store.updateActiveRun(conv.id, runId)
 
     broadcast({
       type: EventType.ConversationMessage,
@@ -148,14 +148,14 @@ export class MessageRouter {
     // Prefer the in-memory map: the DB query (`WHERE active_run_id = ?`) fails
     // once a newer message has overwritten active_run_id on the conversation.
     const convId = this.runToConv.get(runId)
-    const conv = convId ? this.store.get(convId) : this.store.getByRunId(runId)
+    const conv = convId ? await this.store.get(convId) : await this.store.getByRunId(runId)
     if (!conv) return // Run wasn't triggered by a chat message
 
     // Clean up the tracking entry
     this.runToConv.delete(runId)
 
     // Clear active run
-    this.store.updateActiveRun(conv.id, null)
+    await this.store.updateActiveRun(conv.id, null)
 
     // Queue the message for delivery
     await this.queue.enqueue(conv.channelType, conv.senderId, text, conv.id)
@@ -174,8 +174,8 @@ export class MessageRouter {
   }
 
   /** List all conversations. */
-  listConversations(): Conversation[] {
-    return this.store.list()
+  async listConversations(): Promise<Conversation[]> {
+    return await this.store.list()
   }
 
   /** Get channels info for the API. */
@@ -188,9 +188,9 @@ export class MessageRouter {
 }
 
 /** Channel senders are synthetic users — threads FK requires a users row. */
-function ensureChannelUser(session: CurrentSession): void {
-  if (!session.upn || db.findUserByUpn(session.upn)) return
-  db.insertUser({
+async function ensureChannelUser(session: CurrentSession): Promise<void> {
+  if (!session.upn || await db.findUserByUpn(session.upn)) return
+  await db.insertUser({
     upn: session.upn,
     username: null,
     displayName: session.displayName,

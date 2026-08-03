@@ -9,8 +9,11 @@ import {
 } from "../api/sync/index.js"
 import { ensureInitialSyncCatalogVersion } from "../api/platform/service/sync-catalog-versioning.js"
 
-export function loadBootSyncEnvironments(projectRoot: string, connections: ReadonlyArray<{ name: string }>) {
-  const entitySeed = seedEntityRegistryIfEmpty(projectRoot)
+export async function loadBootSyncEnvironments(
+  projectRoot: string,
+  connections: ReadonlyArray<{ name: string }>,
+) {
+  const entitySeed = await seedEntityRegistryIfEmpty(projectRoot)
   if (entitySeed.seeded > 0) {
     const label =
       entitySeed.source === "yaml"
@@ -21,17 +24,17 @@ export function loadBootSyncEnvironments(projectRoot: string, connections: Reado
     )
   }
   // Refresh deploy catalog (including built-in flow presets) before reading presets for publish.
-  seedSyncMetadataIfEmpty(projectRoot)
-  ensureFlowPresetsSeeded(projectRoot)
-  ensureDeploySyncMetadataSeeds(projectRoot)
-  ensureCustomValueSourcesSeeded(projectRoot)
-  const repairedEntities = repairBundledEntityDefinitionsFromArtifacts(projectRoot)
+  await seedSyncMetadataIfEmpty(projectRoot)
+  await ensureFlowPresetsSeeded(projectRoot)
+  await ensureDeploySyncMetadataSeeds(projectRoot)
+  await ensureCustomValueSourcesSeeded(projectRoot)
+  const repairedEntities = await repairBundledEntityDefinitionsFromArtifacts(projectRoot)
   if (repairedEntities.length > 0) {
     console.log(
       `[entity-registry] repaired ${repairedEntities.length} bundled definition(s) from deploy artifacts: ${repairedEntities.join(", ")}`,
     )
   }
-  const environments = loadPersistedSyncEnvironments(projectRoot, connections)
-  ensureInitialSyncCatalogVersion("system")
+  const environments = await loadPersistedSyncEnvironments(projectRoot, connections)
+  await ensureInitialSyncCatalogVersion("system")
   return environments
 }

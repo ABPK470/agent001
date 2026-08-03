@@ -124,7 +124,7 @@ export function registerMemoryRoutes(app: FastifyInstance, _orchestrator: AgentO
   })
 
   app.get<{ Params: { runId: string } }>("/api/effects/:runId", async (req) =>
-    getRunEffects(req.params.runId).map((effect) => ({
+    (await getRunEffects(req.params.runId)).map((effect) => ({
       id: effect.id,
       seq: effect.seq,
       kind: effect.kind,
@@ -141,7 +141,7 @@ export function registerMemoryRoutes(app: FastifyInstance, _orchestrator: AgentO
     getEffectStats(req.params.runId)
   )
   app.get<{ Params: { runId: string } }>("/api/effects/:runId/snapshots", async (req) =>
-    getRunSnapshots(req.params.runId).map((snapshot) => ({
+    (await getRunSnapshots(req.params.runId)).map((snapshot) => ({
       id: snapshot.id,
       effectId: snapshot.effectId,
       filePath: snapshot.filePath,
@@ -156,7 +156,7 @@ export function registerMemoryRoutes(app: FastifyInstance, _orchestrator: AgentO
       reply.code(400)
       return { error: "filePath is required" }
     }
-    return getFileHistory(filePath).map((effect) => ({
+    return (await getFileHistory(filePath)).map((effect) => ({
       id: effect.id,
       runId: effect.runId,
       kind: effect.kind,

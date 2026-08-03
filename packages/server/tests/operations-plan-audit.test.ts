@@ -61,7 +61,7 @@ describe("listOperationsForPlan", () => {
     const { listOperationsForPlan } = await import(
       "../src/api/operations/service/query/list-operations-for-plan.ts"
     )
-    const result = listOperationsForPlan(planId)
+    const result = await listOperationsForPlan(planId)
 
     expect(result.scannedEvents).toBe(4)
     expect(result.operation).toBeDefined()
@@ -80,7 +80,7 @@ describe("listOperationsForPlan", () => {
     const { listOperationsForPlan } = await import(
       "../src/api/operations/service/query/list-operations-for-plan.ts"
     )
-    const result = listOperationsForPlan("missing-plan")
+    const result = await listOperationsForPlan("missing-plan")
 
     expect(result.operation).toBeNull()
     expect(result.scannedEvents).toBe(0)

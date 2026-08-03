@@ -1,7 +1,7 @@
 import { getPlatformStore } from "../platform-store.js"
 import { getPlatformDb } from "../../../schema/kysely.js"
-import { runAll, runExec, runGet } from "../../../schema/execute.js"
-import { upsertRow } from "../../../schema/upsert.js"
+import { runAllAsync, runExecAsync, runGetAsync } from "../../../schema/execute-async.js"
+import { upsertRowAsync } from "../../../schema/upsert.js"
 
 const DEFAULT_TENANT = "_default"
 
@@ -28,22 +28,22 @@ export interface PublishedBundleFromDb {
   definitions: Record<string, object>
 }
 
-export function getSyncPublishMeta(tenantId = DEFAULT_TENANT): DbSyncPublishMeta | null {
+export async function getSyncPublishMeta(tenantId = DEFAULT_TENANT): Promise<DbSyncPublishMeta | null> {
   const compiled = getPlatformDb()
     .selectFrom("sync_publish_meta")
     .select(["tenant_id", "published_at", "published_version", "catalog_version"])
     .where("tenant_id", "=", tenantId)
     .compile()
-  return runGet<DbSyncPublishMeta>(compiled) ?? null
+  return await runGetAsync<DbSyncPublishMeta>(compiled) ?? null
 }
 
-export function saveSyncPublishMeta(row: {
+export async function saveSyncPublishMeta(row: {
   tenant_id: string
   published_at: string
   published_version: string
   catalog_version: number | null
-}): void {
-  upsertRow({
+}): Promise<void> {
+  await upsertRowAsync({
     table: "sync_publish_meta",
     keys: { tenant_id: row.tenant_id },
     insert: row,
@@ -55,27 +55,27 @@ export function saveSyncPublishMeta(row: {
   })
 }
 
-export function listSyncDefinitions(tenantId = DEFAULT_TENANT): DbSyncDefinitionRow[] {
+export async function listSyncDefinitions(tenantId = DEFAULT_TENANT): Promise<DbSyncDefinitionRow[]> {
   const compiled = getPlatformDb()
     .selectFrom("sync_definitions")
     .select(["tenant_id", "entity_id", "definition_json", "published_at", "published_version"])
     .where("tenant_id", "=", tenantId)
     .orderBy("entity_id")
     .compile()
-  return runAll<DbSyncDefinitionRow>(compiled)
+  return await runAllAsync<DbSyncDefinitionRow>(compiled)
 }
 
-export function getSyncDefinition(
+export async function getSyncDefinition(
   tenantId: string,
   entityId: string,
-): DbSyncDefinitionRow | null {
+): Promise<DbSyncDefinitionRow | null> {
   const compiled = getPlatformDb()
     .selectFrom("sync_definitions")
     .select(["tenant_id", "entity_id", "definition_json", "published_at", "published_version"])
     .where("tenant_id", "=", tenantId)
     .where("entity_id", "=", entityId)
     .compile()
-  return runGet<DbSyncDefinitionRow>(compiled) ?? null
+  return await runGetAsync<DbSyncDefinitionRow>(compiled) ?? null
 }
 
 /**
@@ -83,7 +83,7 @@ export function getSyncDefinition(
  * Clears existing rows, upserts non-null definitions, and retains the previous
  * row when a compile failure yields null (so prior published defs stay live).
  */
-export function replaceSyncDefinitions(
+export async function replaceSyncDefinitions(
   tenantId: string,
   input: {
     publishedAt: string
@@ -91,17 +91,17 @@ export function replaceSyncDefinitions(
     catalogVersion: number | null
     definitions: Record<string, object | null>
   },
-): void {
-  getPlatformStore().transaction(() => {
+): Promise<void> {
+  await getPlatformStore().transactionAsync(async () => {
     const previous = new Map(
-      listSyncDefinitions(tenantId).map((row) => [row.entity_id, row] as const),
+      (await listSyncDefinitions(tenantId)).map((row) => [row.entity_id, row] as const),
     )
 
     const del = getPlatformDb()
       .deleteFrom("sync_definitions")
       .where("tenant_id", "=", tenantId)
       .compile()
-    runExec(del)
+    await runExecAsync(del)
 
     for (const [entityId, definition] of Object.entries(input.definitions)) {
       if (definition != null) {
@@ -115,7 +115,7 @@ export function replaceSyncDefinitions(
             published_version: input.publishedVersion,
           })
           .compile()
-        runExec(ins)
+        await runExecAsync(ins)
         continue
       }
       const kept = previous.get(entityId)
@@ -130,10 +130,10 @@ export function replaceSyncDefinitions(
           published_version: kept.published_version,
         })
         .compile()
-      runExec(ins)
+      await runExecAsync(ins)
     }
 
-    saveSyncPublishMeta({
+    await saveSyncPublishMeta({
       tenant_id: tenantId,
       published_at: input.publishedAt,
       published_version: input.publishedVersion,
@@ -143,14 +143,14 @@ export function replaceSyncDefinitions(
 }
 
 /** Load the published SyncDefinition bundle shape from SQLite (replaces file bundle). */
-export function loadPublishedBundleFromDb(
+export async function loadPublishedBundleFromDb(
   tenantId = DEFAULT_TENANT,
-): PublishedBundleFromDb | null {
-  const meta = getSyncPublishMeta(tenantId)
+): Promise<PublishedBundleFromDb | null> {
+  const meta = await getSyncPublishMeta(tenantId)
   if (!meta) return null
 
   const definitions: Record<string, object> = {}
-  for (const row of listSyncDefinitions(tenantId)) {
+  for (const row of await listSyncDefinitions(tenantId)) {
     definitions[row.entity_id] = JSON.parse(row.definition_json) as object
   }
 
@@ -163,9 +163,9 @@ export function loadPublishedBundleFromDb(
   }
 }
 
-export function clearSyncDefinitionsAndPublishMeta(): void {
-  getPlatformStore().transaction(() => {
-    runExec(getPlatformDb().deleteFrom("sync_definitions").where("tenant_id", "is not", null).compile())
-    runExec(getPlatformDb().deleteFrom("sync_publish_meta").where("tenant_id", "is not", null).compile())
+export async function clearSyncDefinitionsAndPublishMeta(): Promise<void> {
+  await getPlatformStore().transactionAsync(async () => {
+    await runExecAsync(getPlatformDb().deleteFrom("sync_definitions").where("tenant_id", "is not", null).compile())
+    await runExecAsync(getPlatformDb().deleteFrom("sync_publish_meta").where("tenant_id", "is not", null).compile())
   })
 }

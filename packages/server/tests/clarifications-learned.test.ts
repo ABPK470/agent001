@@ -84,7 +84,7 @@ const baseResolved = {
 describe("persistLearnedTermFromResolution", () => {
   it("persists a schema-match answer that names a catalog qname", async () => {
     const mem = await setupMemory()
-    persistLearnedTermFromResolution(
+    await persistLearnedTermFromResolution(
       { ...baseResolved, answer: "dim.Client" },
       "top 5 clients by revenue",
       "alice@corp",
@@ -97,7 +97,7 @@ describe("persistLearnedTermFromResolution", () => {
 
   it("persists a canonical-ambiguity answer too", async () => {
     const mem = await setupMemory()
-    persistLearnedTermFromResolution(
+    await persistLearnedTermFromResolution(
       { ...baseResolved, kind: "canonical-ambiguity", answer: "dim.Client" },
       "top clients by revenue",
       null,
@@ -108,7 +108,7 @@ describe("persistLearnedTermFromResolution", () => {
 
   it("ignores a free-text answer with no resolvable qname", async () => {
     const mem = await setupMemory()
-    persistLearnedTermFromResolution(
+    await persistLearnedTermFromResolution(
       { ...baseResolved, answer: "I mean the main client dimension" },
       "top clients by revenue",
       "alice@corp",
@@ -119,7 +119,7 @@ describe("persistLearnedTermFromResolution", () => {
 
   it("ignores an answer whose qname is not in the catalog", async () => {
     const mem = await setupMemory()
-    persistLearnedTermFromResolution(
+    await persistLearnedTermFromResolution(
       { ...baseResolved, answer: "dim.Gone" },
       "top clients by revenue",
       "alice@corp",
@@ -130,7 +130,7 @@ describe("persistLearnedTermFromResolution", () => {
 
   it("ignores clarification kinds that do not teach a term→table mapping", async () => {
     const mem = await setupMemory()
-    persistLearnedTermFromResolution(
+    await persistLearnedTermFromResolution(
       { ...baseResolved, kind: "time-range", answer: "dim.Client" },
       "top clients by revenue",
       "alice@corp",
@@ -141,14 +141,14 @@ describe("persistLearnedTermFromResolution", () => {
 
   it("never throws when boot deps are missing (no mssql/catalog)", async () => {
     const mem = await setupMemory()
-    expect(() =>
+    await expect(
       persistLearnedTermFromResolution(
         { ...baseResolved, answer: "dim.Client" },
         "top clients by revenue",
         null,
         {} as BootHostDeps
       )
-    ).not.toThrow()
+    ).resolves.toBeUndefined()
     expect(mem.listResolvedTerms({ connection: "default" })).toEqual([])
   })
 })

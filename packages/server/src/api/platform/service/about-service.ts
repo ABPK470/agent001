@@ -141,7 +141,7 @@ function buildAccess(isAdmin: boolean): AboutDossier["access"] {
   }
 }
 
-export function buildAboutDossier(opts: {
+export async function buildAboutDossier(opts: {
   projectRoot: string
   mssqlSummary: string
   bootHost: AgentHost
@@ -149,15 +149,15 @@ export function buildAboutDossier(opts: {
   activeRuns: number
   queuePending: number
   viewer: { upn: string; displayName: string; isAdmin: boolean }
-}): AboutDossier {
+}): Promise<AboutDossier> {
   void opts.activeRuns
   void opts.queuePending
 
   const isAdmin = opts.viewer.isAdmin
-  const usage = db.getUsageTotalsForUser(opts.viewer.upn)
-  const syncTotal = db.countSyncRuns({ actorUpn: opts.viewer.upn })
-  const llm = db.getLlmConfig()
-  const platformHealth = getPlatformHealth(opts.projectRoot, opts.mssqlSummary, opts.bootHost)
+  const usage = await db.getUsageTotalsForUser(opts.viewer.upn)
+  const syncTotal = await db.countSyncRuns({ actorUpn: opts.viewer.upn })
+  const llm = await db.getLlmConfig()
+  const platformHealth = await getPlatformHealth(opts.projectRoot, opts.mssqlSummary, opts.bootHost)
 
   const environments = getEnvironments(opts.bootHost)
     .slice()

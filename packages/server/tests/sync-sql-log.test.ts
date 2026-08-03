@@ -23,7 +23,7 @@ describe("sync-sql-log", () => {
     testDb.close()
   })
 
-  it("stores full SQL and strips __fullSql from broadcast payload", () => {
+  it("stores full SQL and strips __fullSql from broadcast payload", async () => {
     const data = enrichSyncSqlEventData("sync.preview.sql", {
       planId: "plan-1",
       previewId: "prev-1",
@@ -42,20 +42,20 @@ describe("sync-sql-log", () => {
     expect(data["sql"]).toContain("SELECT 1")
     expect(data["sqlLength"]).toBe(20)
 
-    const row = getSyncSqlLog(data["sqlLogId"] as number)
+    const row = await getSyncSqlLog(data["sqlLogId"] as number)
     expect(row?.sql_text).toBe("SELECT 1 FROM core.Activity")
     expect(row?.plan_id).toBe("plan-1")
   })
 
-  it("lists SQL rows by plan id in order", () => {
-    recordSyncSqlLog({
+  it("lists SQL rows by plan id in order", async () => {
+    await recordSyncSqlLog({
       planId: "plan-a",
       eventType: "sync.preview.sql",
       label: "first",
       connection: "uat",
       sqlText: "SELECT 1",
     })
-    recordSyncSqlLog({
+    await recordSyncSqlLog({
       planId: "plan-a",
       eventType: "sync.execute.sql",
       label: "second",
@@ -63,12 +63,12 @@ describe("sync-sql-log", () => {
       sqlText: "MERGE ...",
     })
 
-    expect(countSyncSqlLogByPlan("plan-a")).toBe(2)
-    const rows = listSyncSqlLogByPlan("plan-a")
+    expect(await countSyncSqlLogByPlan("plan-a")).toBe(2)
+    const rows = await listSyncSqlLogByPlan("plan-a")
     expect(rows.map((r) => r.label)).toEqual(["first", "second"])
   })
 
-  it("always persists EXEC preview for audit-check SQL even when only __fullSql is present", () => {
+  it("always persists EXEC preview for audit-check SQL even when only __fullSql is present", async () => {
     const execSql =
       "EXEC core.uspAuditRunCheck @id=N'42', @objType=N'Contract', @action=N'syncOrNot', @schema=N'core'"
     const data = enrichSyncSqlEventData("sync.execute.sql", {
@@ -83,13 +83,13 @@ describe("sync-sql-log", () => {
     expect(data["sql"]).toBe(execSql)
     expect(data["sqlLength"]).toBe(execSql.length)
     expect(typeof data["sqlLogId"]).toBe("number")
-    expect(getSyncSqlLog(data["sqlLogId"] as number)?.sql_text).toBe(execSql)
+    expect(await await await getSyncSqlLog(data["sqlLogId"] as number)?.sql_text).toBe(execSql)
   })
 
-  it("hydrates preview from sync_sql_log only via sqlLogId", () => {
+  it("hydrates preview from sync_sql_log only via sqlLogId", async () => {
     const execSql =
       "EXEC core.uspAuditRunCheck @id=N'7', @objType=N'Contract', @action=N'syncOrNot', @schema=N'core'"
-    const sqlLogId = recordSyncSqlLog({
+    const sqlLogId = await recordSyncSqlLog({
       planId: "plan-skip",
       eventType: "sync.execute.sql",
       label: "flowStep.auditCheck(auditCheck)",
@@ -112,8 +112,8 @@ describe("sync-sql-log", () => {
     expect(hydrated["sqlLength"]).toBe(execSql.length)
   })
 
-  it("does not guess sql_log rows at read time when sqlLogId is missing", () => {
-    recordSyncSqlLog({
+  it("does not guess sql_log rows at read time when sqlLogId is missing", async () => {
+    await recordSyncSqlLog({
       planId: "plan-legacy",
       eventType: "sync.execute.sql",
       label: "flowStep.auditCheck(auditCheck)",

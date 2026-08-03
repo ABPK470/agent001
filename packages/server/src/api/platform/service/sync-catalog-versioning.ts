@@ -11,6 +11,7 @@ import { EventType } from "@mia/shared-enums"
 
 import { broadcast } from "../../../infra/events/broadcaster.js"
 import * as db from "../../../infra/persistence/sqlite.js"
+import { refreshEntityNeedsRepublishCacheAfterCatalogMutation } from "../../sync/service/definitions.js"
 import { rebuildLiveSyncEnvironments } from "../../sync/state/live-environments.js"
 import {
   applyDeployCatalogSnapshot,
@@ -35,14 +36,14 @@ export interface SyncCatalogVersionCommitResult {
   reason: string
 }
 
-export function commitSyncCatalogVersion(args: {
+export async function commitSyncCatalogVersion(args: {
   tenantId?: string
   reason: string
   actor: string
-}): SyncCatalogVersionCommitResult {
+}): Promise<SyncCatalogVersionCommitResult> {
   const tenantId = args.tenantId ?? DEFAULT_TENANT
-  const snapshot = buildDeployCatalogSnapshot({ tenantId })
-  const version = db.appendSyncCatalogVersion({
+  const snapshot = await buildDeployCatalogSnapshot({ tenantId })
+  const version = await db.appendSyncCatalogVersion({
     tenantId,
     snapshotJson: JSON.stringify(snapshot),
     reason: args.reason,
@@ -60,17 +61,17 @@ export function commitSyncCatalogVersion(args: {
   return { tenantId, version, reason: args.reason }
 }
 
-export function ensureInitialSyncCatalogVersion(actor = "system"): SyncCatalogVersionCommitResult | null {
-  if (db.countSyncCatalogVersions(DEFAULT_TENANT) > 0) return null
+export async function ensureInitialSyncCatalogVersion(actor = "system"): Promise<SyncCatalogVersionCommitResult | null> {
+  if (await db.countSyncCatalogVersions(DEFAULT_TENANT) > 0) return null
   return commitSyncCatalogVersion({ reason: "seed:initial", actor })
 }
 
-export function listSyncCatalogVersions(tenantId = DEFAULT_TENANT, limit = 50) {
-  return db.listSyncCatalogVersionSummaries(tenantId, limit)
+export async function listSyncCatalogVersions(tenantId = DEFAULT_TENANT, limit = 50) {
+  return await db.listSyncCatalogVersionSummaries(tenantId, limit)
 }
 
-export function getActiveSyncCatalogVersion(tenantId = DEFAULT_TENANT): number | null {
-  return db.getActiveSyncCatalogVersion(tenantId)
+export async function getActiveSyncCatalogVersion(tenantId = DEFAULT_TENANT): Promise<number | null> {
+  return await db.getActiveSyncCatalogVersion(tenantId)
 }
 
 export interface SyncCatalogVersionDetailSummary {
@@ -144,13 +145,13 @@ export function summarizeDeployCatalogSnapshot(
   }
 }
 
-export function getSyncCatalogVersionDetail(
+export async function getSyncCatalogVersionDetail(
   version: number,
   tenantId = DEFAULT_TENANT,
-): SyncCatalogVersionDetail | null {
-  const row = db.getSyncCatalogVersionRow(tenantId, version)
+): Promise<SyncCatalogVersionDetail | null> {
+  const row = await db.getSyncCatalogVersionRow(tenantId, version)
   if (!row) return null
-  const activeVersion = getActiveSyncCatalogVersion(tenantId)
+  const activeVersion = await getActiveSyncCatalogVersion(tenantId)
   const snapshot = parseBoundaryJson(row.snapshot_json) as DeployCatalogSnapshot
   return {
     tenantId: row.tenant_id,
@@ -163,13 +164,13 @@ export function getSyncCatalogVersionDetail(
   }
 }
 
-export function getSyncCatalogVersionDiff(args: {
+export async function getSyncCatalogVersionDiff(args: {
   version: number
   against?: "previous" | "active" | number
   tenantId?: string
-}): DeployCatalogSnapshotDiff | null {
+}): Promise<DeployCatalogSnapshotDiff | null> {
   const tenantId = args.tenantId ?? DEFAULT_TENANT
-  const toRow = db.getSyncCatalogVersionRow(tenantId, args.version)
+  const toRow = await db.getSyncCatalogVersionRow(tenantId, args.version)
   if (!toRow) return null
 
   const against = args.against ?? "previous"
@@ -180,7 +181,7 @@ export function getSyncCatalogVersionDiff(args: {
     fromVersion = args.version > 1 ? args.version - 1 : null
     againstKind = "previous"
   } else if (against === "active") {
-    fromVersion = getActiveSyncCatalogVersion(tenantId)
+    fromVersion = await getActiveSyncCatalogVersion(tenantId)
     againstKind = "active"
   } else {
     fromVersion = against
@@ -199,7 +200,7 @@ export function getSyncCatalogVersionDiff(args: {
 
   let fromSnapshot: DeployCatalogSnapshot | null = null
   if (fromVersion != null) {
-    const fromRow = db.getSyncCatalogVersionRow(tenantId, fromVersion)
+    const fromRow = await db.getSyncCatalogVersionRow(tenantId, fromVersion)
     if (!fromRow) {
       if (againstKind === "previous") {
         fromSnapshot = null
@@ -221,19 +222,19 @@ export function getSyncCatalogVersionDiff(args: {
   })
 }
 
-export function rollbackSyncCatalogVersion(args: {
+export async function rollbackSyncCatalogVersion(args: {
   tenantId?: string
   targetVersion: number
   actor: string
   projectRoot?: string
   host?: AgentHost
-}): { importResult: CatalogImportResult; version: SyncCatalogVersionCommitResult } {
+}): Promise<{ importResult: CatalogImportResult; version: SyncCatalogVersionCommitResult }> {
   const tenantId = args.tenantId ?? DEFAULT_TENANT
-  const row = db.getSyncCatalogVersionRow(tenantId, args.targetVersion)
+  const row = await db.getSyncCatalogVersionRow(tenantId, args.targetVersion)
   if (!row) throw new Error(`Unknown catalog version ${args.targetVersion}`)
 
   const snapshot = parseBoundaryJson(row.snapshot_json) as DeployCatalogSnapshot
-  const importResult = applyDeployCatalogSnapshot({
+  const importResult = await applyDeployCatalogSnapshot({
     snapshot,
     actor: args.actor,
     projectRoot: args.projectRoot,
@@ -242,9 +243,9 @@ export function rollbackSyncCatalogVersion(args: {
     throw new Error(importResult.errors.join("; ") || "Rollback apply failed")
   }
 
-  if (args.host) rebuildLiveSyncEnvironments(args.host)
+  if (args.host) await rebuildLiveSyncEnvironments(args.host)
 
-  const version = commitSyncCatalogVersion({
+  const version = await commitSyncCatalogVersion({
     tenantId,
     reason: `rollback:from:${args.targetVersion}`,
     actor: args.actor,
@@ -253,7 +254,7 @@ export function rollbackSyncCatalogVersion(args: {
   return { importResult, version }
 }
 
-export function importSyncCatalogBundle(args: {
+export async function importSyncCatalogBundle(args: {
   zipBase64?: string
   snapshot?: DeployCatalogSnapshot
   body?: Record<string, unknown>
@@ -262,7 +263,7 @@ export function importSyncCatalogBundle(args: {
   actor: string
   projectRoot?: string
   host?: AgentHost
-}): { preview: CatalogImportResult; version?: SyncCatalogVersionCommitResult } {
+}): Promise<{ preview: CatalogImportResult; version?: SyncCatalogVersionCommitResult }> {
   let snapshot: DeployCatalogSnapshot
   if (args.snapshot) {
     snapshot = args.snapshot
@@ -275,7 +276,7 @@ export function importSyncCatalogBundle(args: {
     throw new Error("Provide snapshot, zipBase64, or catalog bundle fields")
   }
 
-  const preview = applyDeployCatalogSnapshot({
+  const preview = await applyDeployCatalogSnapshot({
     snapshot,
     actor: args.actor,
     projectRoot: args.projectRoot,
@@ -286,9 +287,9 @@ export function importSyncCatalogBundle(args: {
     return { preview }
   }
 
-  if (args.host) rebuildLiveSyncEnvironments(args.host)
+  if (args.host) await rebuildLiveSyncEnvironments(args.host)
 
-  const version = commitSyncCatalogVersion({
+  const version = await commitSyncCatalogVersion({
     tenantId: snapshot.tenantId || DEFAULT_TENANT,
     reason: args.reason.trim() || "import",
     actor: args.actor,
@@ -298,10 +299,12 @@ export function importSyncCatalogBundle(args: {
 }
 
 /** Call after any catalog mutation that should be versioned. */
-export function recordSyncCatalogChange(args: {
+export async function recordSyncCatalogChange(args: {
   reason: string
   actor: string
   tenantId?: string
-}): SyncCatalogVersionCommitResult {
-  return commitSyncCatalogVersion(args)
+}): Promise<SyncCatalogVersionCommitResult> {
+  const result = await commitSyncCatalogVersion(args)
+  await refreshEntityNeedsRepublishCacheAfterCatalogMutation()
+  return result
 }

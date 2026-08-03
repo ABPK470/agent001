@@ -36,8 +36,11 @@ function writeOperationsSse(reply: FastifyReply, data: unknown): boolean {
   }
 }
 
-function pushOperationsHeadSnapshot(reply: FastifyReply, filters: OperationsStreamFilters): boolean {
-  const snapshot = listOperations({
+async function pushOperationsHeadSnapshot(
+  reply: FastifyReply,
+  filters: OperationsStreamFilters,
+): Promise<boolean> {
+  const snapshot = await listOperations({
     limit: OPERATIONS_HEAD_EVENT_LIMIT,
     kind: filters.kind,
     search: filters.search,
@@ -72,7 +75,7 @@ export function registerOperationRoutes(app: FastifyInstance): void {
       typeof req.query.until === "string" && req.query.until.length > 0
         ? req.query.until
         : undefined
-    return listOperations({
+    return await listOperations({
       limit,
       before: req.query.before,
       since,
@@ -88,7 +91,7 @@ export function registerOperationRoutes(app: FastifyInstance): void {
 
   app.get<{ Params: { planId: string } }>("/api/operations/plan/:planId", personal.read, async (req, reply) => {
     const { viewingAsUpn } = viewingAsOf(req)
-    const result = listOperations({ planId: req.params.planId, viewingAsUpn })
+    const result = await listOperations({ planId: req.params.planId, viewingAsUpn })
     if (result.operations.length === 0) {
       reply.code(403)
       return { error: "forbidden" }
@@ -98,7 +101,7 @@ export function registerOperationRoutes(app: FastifyInstance): void {
 
   app.get<{ Params: { runId: string } }>("/api/operations/run/:runId", personal.read, async (req, reply) => {
     const { viewingAsUpn } = viewingAsOf(req)
-    const result = listOperations({ runId: req.params.runId, viewingAsUpn })
+    const result = await listOperations({ runId: req.params.runId, viewingAsUpn })
     if (result.operations.length === 0) {
       reply.code(403)
       return { error: "forbidden" }
@@ -149,8 +152,8 @@ export function registerOperationRoutes(app: FastifyInstance): void {
     const unsubscribe = subscribeToEvents((event) => {
       if (!isOperationLogEvent(event.type)) return
       if (debounce) clearTimeout(debounce)
-      debounce = setTimeout(() => {
-        if (!pushOperationsHeadSnapshot(reply, filters)) {
+      debounce = setTimeout(async () => {
+        if (!(await pushOperationsHeadSnapshot(reply, filters))) {
           unsubscribe()
           if (debounce) clearTimeout(debounce)
         }
@@ -208,7 +211,7 @@ export function registerOperationRoutes(app: FastifyInstance): void {
       return { events: [], count: 0 }
     }
     const limit = Math.min(Number(req.query.limit) || 200, 1000)
-    const rows = searchEvents(q, {
+    const rows = await searchEvents(q, {
       limit,
       types,
       type_patterns: typePatterns,
@@ -217,14 +220,20 @@ export function registerOperationRoutes(app: FastifyInstance): void {
       since,
       until,
     })
-    const events = rows
+    const candidateEvents = rows
       .map((row) => ({
         id: row.id,
         type: row.type,
         data: parseBoundaryJson(row.data) as Record<string, unknown>,
         timestamp: row.created_at
       }))
-      .filter((event) => eventMatchesViewingAs(event.data, viewingAsUpn))
+    const visible = await Promise.all(
+      candidateEvents.map(async (event) => ({
+        event,
+        visible: await eventMatchesViewingAs(event.data, viewingAsUpn)
+      }))
+    )
+    const events = visible.filter(({ visible }) => visible).map(({ event }) => event)
     return { events, count: events.length }
   })
 }

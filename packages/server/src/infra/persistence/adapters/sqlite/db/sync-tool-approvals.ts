@@ -6,7 +6,7 @@
 import { createHash, randomUUID } from "node:crypto"
 import { stripRuntimeToolArgs } from "@mia/shared-types"
 import { getPlatformDb } from "../../../schema/kysely.js"
-import { runAll, runExec, runGet } from "../../../schema/execute.js"
+import { runAllAsync, runExecAsync, runGetAsync } from "../../../schema/execute-async.js"
 
 export type SyncToolApprovalStatus = "pending" | "approved" | "denied" | "consumed"
 
@@ -68,13 +68,13 @@ export function syncToolFingerprint(toolName: string, args: Record<string, unkno
   return createHash("sha256").update(`${toolName}\n${key}`).digest("hex").slice(0, 24)
 }
 
-export function upsertPendingSyncToolApproval(input: {
+export async function upsertPendingSyncToolApproval(input: {
   actorUpn: string
   toolName: string
   args: Record<string, unknown>
   reason: string
   policyName: string
-}): SyncToolApprovalRecord {
+}): Promise<SyncToolApprovalRecord> {
   ensureSyncToolApprovalsTable()
   const argsKey = syncToolArgsKey(input.args)
   const existingCompiled = getPlatformDb()
@@ -85,7 +85,7 @@ export function upsertPendingSyncToolApproval(input: {
     .where("args_key", "=", argsKey)
     .where("status", "=", "pending")
     .compile()
-  const existing = runGet<DbRow>(existingCompiled)
+  const existing = await runGetAsync<DbRow>(existingCompiled)
   if (existing) return mapRow(existing)
 
   const row: DbRow = {
@@ -102,25 +102,25 @@ export function upsertPendingSyncToolApproval(input: {
     resolved_by: null,
   }
   const compiled = getPlatformDb().insertInto("sync_tool_approvals").values(row).compile()
-  runExec(compiled)
+  await runExecAsync(compiled)
   return mapRow(row)
 }
 
-export function getSyncToolApproval(id: string): SyncToolApprovalRecord | null {
+export async function getSyncToolApproval(id: string): Promise<SyncToolApprovalRecord | null> {
   ensureSyncToolApprovalsTable()
   const compiled = getPlatformDb()
     .selectFrom("sync_tool_approvals")
     .selectAll()
     .where("id", "=", id)
     .compile()
-  const row = runGet<DbRow>(compiled)
+  const row = await runGetAsync<DbRow>(compiled)
   return row ? mapRow(row) : null
 }
 
-export function listApprovedSyncToolGrants(
+export async function listApprovedSyncToolGrants(
   actorUpn: string,
   toolName: string,
-): Array<{ grantId: string; toolName: string; args: Record<string, unknown> }> {
+): Promise<Array<{ grantId: string; toolName: string; args: Record<string, unknown> }>> {
   ensureSyncToolApprovalsTable()
   const compiled = getPlatformDb()
     .selectFrom("sync_tool_approvals")
@@ -130,17 +130,17 @@ export function listApprovedSyncToolGrants(
     .where("status", "=", "approved")
     .orderBy("resolved_at", "desc")
     .compile()
-  return runAll<DbRow>(compiled).map((row) => ({
+  return (await runAllAsync<DbRow>(compiled)).map((row) => ({
     grantId: row.id,
     toolName: row.tool_name,
     args: JSON.parse(row.args_json) as Record<string, unknown>,
   }))
 }
 
-export function markSyncToolApprovalApproved(
+export async function markSyncToolApprovalApproved(
   id: string,
   actor: string,
-): SyncToolApprovalRecord | null {
+): Promise<SyncToolApprovalRecord | null> {
   ensureSyncToolApprovalsTable()
   const now = new Date().toISOString()
   const compiled = getPlatformDb()
@@ -149,14 +149,14 @@ export function markSyncToolApprovalApproved(
     .where("id", "=", id)
     .where("status", "=", "pending")
     .compile()
-  runExec(compiled)
+  await runExecAsync(compiled)
   return getSyncToolApproval(id)
 }
 
-export function markSyncToolApprovalDenied(
+export async function markSyncToolApprovalDenied(
   id: string,
   actor: string,
-): SyncToolApprovalRecord | null {
+): Promise<SyncToolApprovalRecord | null> {
   ensureSyncToolApprovalsTable()
   const now = new Date().toISOString()
   const compiled = getPlatformDb()
@@ -165,11 +165,11 @@ export function markSyncToolApprovalDenied(
     .where("id", "=", id)
     .where("status", "=", "pending")
     .compile()
-  runExec(compiled)
+  await runExecAsync(compiled)
   return getSyncToolApproval(id)
 }
 
-export function consumeSyncToolApprovalGrant(id: string): void {
+export async function consumeSyncToolApprovalGrant(id: string): Promise<void> {
   ensureSyncToolApprovalsTable()
   const compiled = getPlatformDb()
     .updateTable("sync_tool_approvals")
@@ -177,5 +177,5 @@ export function consumeSyncToolApprovalGrant(id: string): void {
     .where("id", "=", id)
     .where("status", "=", "approved")
     .compile()
-  runExec(compiled)
+  await runExecAsync(compiled)
 }

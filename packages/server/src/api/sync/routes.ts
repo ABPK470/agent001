@@ -128,15 +128,15 @@ function sanitiseDefinitionConfig(body: Record<string, unknown>):
   return out
 }
 
-function auditSync(
+async function auditSync(
   planId: string,
   actor: string,
   actorUpn: string | null,
   action: string,
   detail: Record<string, unknown>
-): void {
+): Promise<void> {
   try {
-    db.recordSyncAudit({ planId, actor, actorUpn, action, detail })
+    await db.recordSyncAudit({ planId, actor, actorUpn, action, detail })
   } catch (error) {
     console.error("auditSync failed:", error instanceof Error ? error.message : error)
   }
@@ -217,7 +217,7 @@ function syncExecuteAuditDetail(
   }
 }
 
-function mapSyncRunRow(row: db.SyncRunRow) {
+async function mapSyncRunRow(row: db.SyncRunRow) {
   const previewTotals = {
     insert: row.preview_inserts,
     update: row.preview_updates,
@@ -246,16 +246,16 @@ function mapSyncRunRow(row: db.SyncRunRow) {
     startedAt: row.started_at,
     finishedAt: row.finished_at,
     durationMs: row.duration_ms,
-    planAvailable: Boolean(db.getSyncRunPlanJson(row.plan_id))
+    planAvailable: Boolean(await db.getSyncRunPlanJson(row.plan_id))
   }
 }
 
 export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, host: AgentHost): void {
   app.get("/api/sync/environments", async () => {
-    rebuildLiveSyncEnvironments(host)
+    await rebuildLiveSyncEnvironments(host)
     const readyIds = new Set(
-      db
-        .listConnectors()
+      (await db
+        .listConnectors())
         .filter((row) => (row.kind === "mssql" || row.kind === "postgres") && row.enabled === 1)
         .map((row) => row.id),
     )
@@ -280,7 +280,7 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
     // List is empty-safe: no published bundle → [] (not 500). Preview/execute
     // still fail closed when a specific definition is required.
     try {
-      return listPublishedSyncDefinitions(host, projectRoot)
+    return await listPublishedSyncDefinitions(host, projectRoot)
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error)
       if (/no published sync definitions/i.test(msg)) return []
@@ -291,7 +291,7 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
     "/api/sync/definitions/:entityId/published-bundle",
     async (req, reply) => {
       try {
-        const bundle = loadPublishedSyncDefinitionBundle(host, projectRoot)
+        const bundle = await loadPublishedSyncDefinitionBundle(host, projectRoot)
         const definition = bundle.definitions[req.params.entityId]
         if (!definition) {
           reply.code(404)
@@ -317,28 +317,28 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
       reply.code(403)
       return { error: "admin only" }
     }
-    return listSyncDefinitionAdminItems(projectRoot)
+    return await listSyncDefinitionAdminItems(projectRoot)
   })
   app.get("/api/sync/definitions/publish-status", async (req, reply) => {
     if (!req.session?.isAdmin) {
       reply.code(403)
       return { error: "admin only" }
     }
-    return getSyncPublishStatus(projectRoot)
+    return await getSyncPublishStatus(projectRoot)
   })
   app.get("/api/sync/definitions/publish-preview", async (req, reply) => {
     if (!req.session?.isAdmin) {
       reply.code(403)
       return { error: "admin only" }
     }
-    return getSyncPublishPreview(projectRoot)
+    return await getSyncPublishPreview(projectRoot)
   })
   app.get("/api/sync-definition-config-options", async (req, reply) => {
     if (!req.session?.isAdmin) {
       reply.code(403)
       return { error: "admin only" }
     }
-    return listSyncDefinitionRuntimeOptions(projectRoot)
+    return await listSyncDefinitionRuntimeOptions(projectRoot)
   })
   app.put<{ Params: { entityId: string }; Body: Record<string, unknown> }>(
     "/api/sync-definition-configs/:entityId",
@@ -347,7 +347,7 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
         reply.code(403)
         return { error: "admin only" }
       }
-      const entity = db.getEntityDefinition("_default", req.params.entityId)
+      const entity = await db.getEntityDefinition("_default", req.params.entityId)
       if (!entity) {
         reply.code(404)
         return { error: `unknown entity \"${req.params.entityId}\"` }
@@ -357,11 +357,11 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
         reply.code(400)
         return { error: sanitised }
       }
-      const runtimeOptions = listSyncDefinitionRuntimeOptions(projectRoot)
+      const runtimeOptions = await listSyncDefinitionRuntimeOptions(projectRoot)
       const flowId =
         sanitised.flowTemplateId ??
         entity.flowId ??
-        defaultEntityFlowId(projectRoot, req.params.entityId)
+        await defaultEntityFlowId(projectRoot, req.params.entityId)
       if (!flowId) {
         reply.code(400)
         return { error: "flowTemplateId is required" }
@@ -370,7 +370,7 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
         reply.code(400)
         return { error: `unknown flowTemplateId "${flowId}"` }
       }
-      db.saveEntityDefinition({
+      await db.saveEntityDefinition({
         tenantId: "_default",
         def: { ...entity, flowId: asFlowId(flowId) },
         actor: req.session.upn,
@@ -390,7 +390,7 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
         reply.code(403)
         return { error: "admin only" }
       }
-      const reset = resetEntityFlowId(projectRoot, "_default", req.params.entityId, req.session.upn)
+      const reset = await resetEntityFlowId(projectRoot, "_default", req.params.entityId, req.session.upn)
       if (!reset) {
         reply.code(404)
         return { error: `unknown entity \"${req.params.entityId}\"` }
@@ -423,9 +423,9 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
           toolName: "sync_publish",
           args: { action: "publish_definitions" },
         })
-        const tipBefore = getActiveSyncCatalogVersion()
-        const result = publishSyncDefinitionsFromDb(projectRoot)
-        const tipAfter = getActiveSyncCatalogVersion()
+        const tipBefore = await getActiveSyncCatalogVersion()
+        const result = await publishSyncDefinitionsFromDb(projectRoot)
+        const tipAfter = await getActiveSyncCatalogVersion()
         const publishDetail = {
           publishedAt: result.publishedAt,
           publishedVersion: result.publishedVersion,
@@ -437,7 +437,7 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
             : tipAfter != null && tipAfter > 1
               ? tipAfter - 1
               : undefined
-        db.saveAdminAudit({
+        await db.saveAdminAudit({
           actor: req.session.upn,
           action: "sync.definitions.published",
           detail: JSON.stringify(
@@ -477,7 +477,7 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
   app.get<{ Querystring: { entityType: string; source: string; q: string; limit?: string; mode?: string } }>(
     "/api/sync/search",
     async (req, reply) => {
-      rebuildLiveSyncEnvironments(host)
+      await rebuildLiveSyncEnvironments(host)
       const { entityType, source, q, limit, mode } = req.query
       if (!entityType || !source || !q) {
         reply.code(400)
@@ -510,9 +510,11 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
   app.get<{ Params: { planId: string } }>("/api/sync/execute/:planId/stream", async (req, reply) => {
     const actor = req.session.upn
     const actorUpn = req.session.upn
-    rebuildLiveSyncEnvironments(host)
+    await rebuildLiveSyncEnvironments(host)
     const plan = loadPlan(host, req.params.planId)
-    const planSummary = plan ? summarizeSyncPlan(plan) : loadPersistedSyncPlanSummary(req.params.planId)
+    const planSummary = plan
+      ? summarizeSyncPlan(plan)
+      : await loadPersistedSyncPlanSummary(req.params.planId)
     const planDetail = planSummary && plan ? buildSyncAuditDetail(planSummary, plan.totals) : {}
     try {
       await assertSyncHttpPolicy({
@@ -526,7 +528,7 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
     } catch (error) {
       const policyBody = replySyncPolicyError(reply, error)
       if (policyBody) {
-        auditSync(req.params.planId, actor, actorUpn, "sync.execute.failed", {
+        await auditSync(req.params.planId, actor, actorUpn, "sync.execute.failed", {
           ...planDetail,
           error: policyBody.error,
           code: policyBody.code,
@@ -535,7 +537,7 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
       }
       throw error
     }
-    auditSync(req.params.planId, actor, actorUpn, "sync.execute.start", planDetail)
+    await auditSync(req.params.planId, actor, actorUpn, "sync.execute.start", planDetail)
     setupSse(reply)
     const send = (event: ExecuteProgress) => reply.raw.write(`data: ${JSON.stringify(event)}\n\n`)
     const heartbeat = setInterval(() => reply.raw.write(`: hb\n\n`), 25_000)
@@ -553,7 +555,7 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
         onProgress: send,
       })
       if (!clientClosed) {
-        auditSync(
+        await auditSync(
           req.params.planId,
           actor,
           actorUpn,
@@ -565,7 +567,7 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
       const msg = error instanceof Error ? error.message : String(error)
       if (!clientClosed) {
         send({ type: "failed", error: msg })
-        auditSync(req.params.planId, actor, actorUpn, "sync.execute.failed", {
+        await auditSync(req.params.planId, actor, actorUpn, "sync.execute.failed", {
           ...planDetail,
           error: msg,
           ...(isSyncPublishRequiredError(error) ? { code: PUBLISH_REQUIRED_CODE } : {}),
@@ -578,7 +580,7 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
   })
 
   app.post<{ Params: { id: string } }>("/api/sync/policy-approvals/:id/approve", async (req, reply) => {
-    const approval = db.getSyncToolApproval(req.params.id)
+    const approval = await db.getSyncToolApproval(req.params.id)
     if (!approval) {
       reply.code(404)
       return { error: "Approval not found" }
@@ -591,12 +593,12 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
       reply.code(409)
       return { error: `Approval is already ${approval.status}` }
     }
-    const updated = db.markSyncToolApprovalApproved(req.params.id, req.session.upn)
+    const updated = await db.markSyncToolApprovalApproved(req.params.id, req.session.upn)
     return { approval: updated }
   })
 
   app.post<{ Params: { id: string } }>("/api/sync/policy-approvals/:id/deny", async (req, reply) => {
-    const approval = db.getSyncToolApproval(req.params.id)
+    const approval = await db.getSyncToolApproval(req.params.id)
     if (!approval) {
       reply.code(404)
       return { error: "Approval not found" }
@@ -609,7 +611,7 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
       reply.code(409)
       return { error: `Approval is already ${approval.status}` }
     }
-    const updated = db.markSyncToolApprovalDenied(req.params.id, req.session.upn)
+    const updated = await db.markSyncToolApprovalDenied(req.params.id, req.session.upn)
     return { approval: updated }
   })
 
@@ -630,11 +632,11 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
   }>("/api/sync/history", personal.read, async (req) => {
     const { viewingAsUpn } = viewingAsOf(req)
     const filters = parseSyncHistoryQuery(req.query, viewingAsUpn)
-    const total = db.countSyncRuns(filters)
-    const rows = db.listSyncRunsPaginated(filters)
+    const total = await db.countSyncRuns(filters)
+    const rows = await db.listSyncRunsPaginated(filters)
     const totalPages = total === 0 ? 0 : Math.ceil(total / filters.pageSize)
     return {
-      items: rows.map(mapSyncRunRow),
+      items: await Promise.all(rows.map(mapSyncRunRow)),
       total,
       page: filters.page,
       pageSize: filters.pageSize,
@@ -644,7 +646,7 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
 
   app.get<{ Params: { planId: string } }>("/api/sync/history/:planId", personal.read, async (req, reply) => {
     const viewingAs = viewingAsOf(req)
-    const row = db.getSyncRun(req.params.planId)
+    const row = await db.getSyncRun(req.params.planId)
     if (!row) {
       reply.code(404)
       return { error: `Sync run ${req.params.planId} not found` }
@@ -653,7 +655,7 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
       reply.code(403)
       return { error: "forbidden" }
     }
-    const audit = db.listSyncAuditForPlan(req.params.planId).map((entry) => {
+    const audit = (await db.listSyncAuditForPlan(req.params.planId)).map((entry) => {
       let detail: unknown = null
       try {
         detail = parseBoundaryJson(entry.detail)
@@ -672,7 +674,7 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
         detail
       }
     })
-    return { run: mapSyncRunRow(row), audit }
+    return { run: await mapSyncRunRow(row), audit }
   })
 
   app.get<{
@@ -680,7 +682,7 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
     Querystring: { limit?: string; offset?: string }
   }>("/api/sync/history/:planId/sql-trace", personal.read, async (req, reply) => {
     const viewingAs = viewingAsOf(req)
-    const row = db.getSyncRun(req.params.planId)
+    const row = await db.getSyncRun(req.params.planId)
     if (!row) {
       reply.code(404)
       return { error: `Sync run ${req.params.planId} not found` }
@@ -691,11 +693,11 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
     }
     const limit = Math.min(Number(req.query.limit) || 500, 2000)
     const offset = Math.max(Number(req.query.offset) || 0, 0)
-    const items = db.listSyncSqlLogByPlan(req.params.planId, { limit, offset })
+    const items = await db.listSyncSqlLogByPlan(req.params.planId, { limit, offset })
     return {
       planId: req.params.planId,
       count: items.length,
-      total: db.countSyncSqlLogByPlan(req.params.planId),
+      total: await db.countSyncSqlLogByPlan(req.params.planId),
       items: items.map((entry) => ({
         id: entry.id,
         planId: entry.plan_id,
@@ -723,7 +725,7 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
       return { error: "forbidden" }
     }
     const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 25))
-    return db.listSyncRuns(limit).map(mapSyncRunRow)
+    return await Promise.all((await db.listSyncRuns(limit)).map(mapSyncRunRow))
   })
 
   registerSyncMetadataRoutes(app, projectRoot)

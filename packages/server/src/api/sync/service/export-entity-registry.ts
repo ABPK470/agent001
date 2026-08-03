@@ -12,12 +12,12 @@ import { formatEntityJson } from "../types/entity-yaml.js"
 import * as db from "../../../infra/persistence/sqlite.js"
 
 /** Entities-only snapshot — same tree as full catalog export (`artifacts/entities/`). */
-export function writeEntityRegistrySnapshot(options: {
+export async function writeEntityRegistrySnapshot(options: {
   outputParentDir: string
   tenantId?: string
   includeRetiredEntities?: boolean
-}): { folderPath: string; entityIds: string[] } {
-  const snapshot = buildDeployCatalogSnapshot({
+}): Promise<{ folderPath: string; entityIds: string[] }> {
+  const snapshot = await buildDeployCatalogSnapshot({
     tenantId: options.tenantId,
     includeRetiredEntities: options.includeRetiredEntities,
   })
@@ -26,7 +26,7 @@ export function writeEntityRegistrySnapshot(options: {
   const entitiesDir = join(folderPath, "artifacts", "entities")
   mkdirSync(entitiesDir, { recursive: true })
 
-  const definitions = db.listEntityDefinitions(snapshot.tenantId, {
+  const definitions = await db.listEntityDefinitions(snapshot.tenantId, {
     includeRetired: options.includeRetiredEntities ?? false,
   }) as EntityDefinition[]
   if (definitions.length === 0) {

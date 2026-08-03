@@ -131,7 +131,7 @@ export function createServerAttachmentService(
       const seen = new Set<string>()
       const merged: AttachmentRow[] = []
       for (const b of branches) {
-        for (const r of listAttachments(b)) {
+        for (const r of await listAttachments(b)) {
           if (seen.has(r.id)) continue
           seen.add(r.id)
           merged.push(r)
@@ -141,12 +141,12 @@ export function createServerAttachmentService(
     },
 
     async get(id) {
-      const row = getAttachment(id)
+      const row = await getAttachment(id)
       return row ? toMetadata(row) : null
     },
 
     async read(id, opts) {
-      const row = getAttachment(id)
+      const row = await getAttachment(id)
       if (!row) throw new Error(`attachment not found: ${id}`)
       const bytes = await readAttachmentBlob(row.storage_uri)
       const offset = Math.max(0, Math.min(opts?.offset ?? 0, bytes.byteLength))
@@ -181,13 +181,13 @@ export function createServerAttachmentService(
       if (!sandboxRoot) {
         throw new Error("import_attachment requires an active sandbox; this run has none.")
       }
-      const row = getAttachment(id)
+      const row = await getAttachment(id)
       if (!row) throw new Error(`attachment not found: ${id}`)
       const dest = resolveSandboxPath(sandboxRoot, sandboxRelPath)
       const bytes = await readAttachmentBlob(row.storage_uri)
       await mkdir(dirname(dest), { recursive: true })
       await writeFile(dest, bytes)
-      recordAttachmentImport({
+      await recordAttachmentImport({
         attachmentId: id,
         runId,
         sandboxPath: dest,

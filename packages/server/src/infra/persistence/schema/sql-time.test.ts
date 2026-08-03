@@ -6,7 +6,7 @@ import {
   getPlatformDbKind,
   resetPlatformDbForTests,
 } from "./kysely.js"
-import { platformNow, platformNowMinusSeconds } from "./sql-time.js"
+import { platformNow, platformNowMinusSeconds, platformNowSql } from "./sql-time.js"
 import type { PlatformDatabase } from "./tables.js"
 
 afterEach(() => {
@@ -14,13 +14,17 @@ afterEach(() => {
 })
 
 describe("platformNow", () => {
-  it("defaults to sqlite datetime('now')", async () => {
+  it("returns an ISO UTC string bind value", () => {
     expect(getPlatformDbKind()).toBe("sqlite")
+    expect(platformNow()).toMatch(/^\d{4}-\d{2}-\d{2}T/)
+  })
+
+  it("emits sqlite datetime('now') as SQL fragment", async () => {
     const mem = new Database(":memory:")
     const db = new Kysely<PlatformDatabase>({
       dialect: new SqliteDialect({ database: mem }),
     })
-    const compiled = db.selectNoFrom(platformNow().as("now")).compile()
+    const compiled = db.selectNoFrom(platformNowSql().as("now")).compile()
     expect(compiled.sql).toContain("datetime('now')")
     await db.destroy()
     mem.close()
@@ -32,8 +36,7 @@ describe("platformNow", () => {
       dialect: new SqliteDialect({ database: mem }),
     })
     bindPlatformDb("mssql", fake)
-    // Fragment chooses by getPlatformDbKind(), not by the query compiler dialect.
-    const compiled = fake.selectNoFrom(platformNow().as("now")).compile()
+    const compiled = fake.selectNoFrom(platformNowSql().as("now")).compile()
     expect(compiled.sql).toContain("SYSUTCDATETIME()")
     const windowed = fake.selectNoFrom(platformNowMinusSeconds(3600).as("cut")).compile()
     expect(windowed.sql).toMatch(/DATEADD\s*\(\s*second/i)

@@ -11,22 +11,22 @@ import { normaliseUnknownRunStatuses } from "./adapters/sqlite/db/runs.js"
 import { pruneOldData } from "./adapters/sqlite/db/lifecycle.js"
 import { prune as pruneMemory } from "./memory.js"
 
-export function runDatabaseMaintenance(): void {
+export async function runDatabaseMaintenance(): Promise<void> {
   console.log(`Database opened (${getDbPath()})`)
 
-  const normalised = normaliseUnknownRunStatuses()
+  const normalised = await normaliseUnknownRunStatuses()
   if (normalised > 0) {
     console.log(`Normalised ${normalised} runs with unknown legacy statuses to 'failed'`)
   }
 
-  const pruneResult = pruneOldData()
+  const pruneResult = await pruneOldData()
   if (pruneResult.prunedRuns > 0 || pruneResult.prunedApiRequests > 0) {
     console.log(
       `Pruned ${pruneResult.prunedRuns} old runs, ${pruneResult.prunedApiRequests} API request logs`
     )
   }
 
-  const attachmentPrune = pruneExpiredAttachments()
+  const attachmentPrune = await pruneExpiredAttachments()
   if (attachmentPrune.prunedAttachments > 0) {
     console.log(`Pruned ${attachmentPrune.prunedAttachments} expired attachments (retention TTL)`)
   }

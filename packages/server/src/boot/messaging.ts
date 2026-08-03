@@ -11,20 +11,20 @@ import {
 export interface MessagingRuntime {
   readonly messageQueue: MessageQueue
   readonly messageRouter: MessageRouter
-  readonly channelConfigs: ReturnType<typeof listChannelConfigs>
+  readonly channelConfigs: Awaited<ReturnType<typeof listChannelConfigs>>
 }
 
-export function initMessaging(orchestrator: AgentOrchestrator): MessagingRuntime {
+export async function initMessaging(orchestrator: AgentOrchestrator): Promise<MessagingRuntime> {
   const queueStore = new SqliteQueueStore()
   const conversationStore = new SqliteConversationStore()
   const messageQueue = new MessageQueue(queueStore)
   const messageRouter = new MessageRouter(messageQueue, conversationStore, {
-    startRun: (goal, session, threadId) =>
-      orchestrator.startRun(goal, threadId ? { threadId } : undefined, session ?? null)
+    startRun: async (goal, session, threadId) =>
+      await orchestrator.startRun(await goal, threadId ? { threadId } : undefined, session ?? null)
   })
   orchestrator.setMessageRouter(messageRouter)
 
-  const channelConfigs = listChannelConfigs()
+  const channelConfigs = await listChannelConfigs()
   for (const cfg of channelConfigs) {
     if (cfg.type === "teams") {
       const channel = new TeamsChannel(cfg)
@@ -33,7 +33,7 @@ export function initMessaging(orchestrator: AgentOrchestrator): MessagingRuntime
       console.log(`Channel loaded: teams (appId: ${cfg.platformId})`)
     }
   }
-  messageQueue.start()
+  await messageQueue.start()
 
   return { messageQueue, messageRouter, channelConfigs }
 }

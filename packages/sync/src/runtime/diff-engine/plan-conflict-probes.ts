@@ -137,7 +137,7 @@ async function collectInboundDeleteHits(
     const refPkCols = pkByRef.get(fk.fromTable) ?? []
     if (refPkCols.length === 0) continue
     const ownerCols = ownerColsByRef.get(fk.fromTable) ?? []
-    const dialect = resolveWarehouseDialect(host, targetConn)
+    const dialect = await resolveWarehouseDialect(host, targetConn)
     const q = (c: string) => dialect.quoteIdent(c)
     const pkSelect = refPkCols.map((c) => `r.${q(c)} AS ${q(`pk_${c}`)}`).join(", ")
     const ownerSelect = ownerCols.map((c) => `r.${q(c)} AS ${q(`owner_${c}`)}`).join(", ")
@@ -227,7 +227,7 @@ async function collectMissingParentHits(
     const literals = [...needed.keys()].map((pk) => quoteValue(coerceLiteral(pk))).join(", ")
     let present = new Set<string>()
     try {
-      const dialect = resolveWarehouseDialect(host, targetConn)
+      const dialect = await resolveWarehouseDialect(host, targetConn)
       const result = await runQueryWithRetry(
         host,
         targetConn,
@@ -295,7 +295,7 @@ async function fetchInboundForeignKeys(
   referencedColumn: string,
   telemetryContext?: SyncTelemetryContext
 ): Promise<ForeignKeyEdge[]> {
-  const dialect = resolveWarehouseDialect(host, connectionName)
+  const dialect = await resolveWarehouseDialect(host, connectionName)
   const result = await runQueryWithRetry(
     host,
     connectionName,
@@ -313,7 +313,7 @@ async function fetchOutboundForeignKeys(
   qualifiedTable: string,
   telemetryContext?: SyncTelemetryContext
 ): Promise<ForeignKeyEdge[]> {
-  const dialect = resolveWarehouseDialect(host, connectionName)
+  const dialect = await resolveWarehouseDialect(host, connectionName)
   const result = await runQueryWithRetry(
     host,
     connectionName,
@@ -365,7 +365,7 @@ async function fetchPrimaryKeyColumns(
     const [schema, name] = qn.split(".")
     if (!schema || !name) continue
     try {
-      const dialect = resolveWarehouseDialect(host, connectionName)
+      const dialect = await resolveWarehouseDialect(host, connectionName)
       const r = await runQueryWithRetry(
         host,
         connectionName,

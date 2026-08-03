@@ -12,7 +12,7 @@ const VALID_PROVIDERS: LlmProvider[] = [LlmProvider.CopilotChat, LlmProvider.Dat
 
 export function registerLlmRoutes(app: FastifyInstance, onUpdate: (client: LLMClient) => void): void {
   app.get("/api/llm", async () => {
-    const cfg = getLlmConfig()
+    const cfg = await getLlmConfig()
     return {
       provider: cfg.provider,
       model: cfg.model,
@@ -38,7 +38,7 @@ export function registerLlmRoutes(app: FastifyInstance, onUpdate: (client: LLMCl
       return { error: `provider must be one of: ${VALID_PROVIDERS.join(", ")}` }
     }
 
-    const current = getLlmConfig()
+    const current = await getLlmConfig()
     const defaults = PROVIDER_DEFAULTS[provider]
 
     const newCfg = {
@@ -48,7 +48,7 @@ export function registerLlmRoutes(app: FastifyInstance, onUpdate: (client: LLMCl
       base_url: baseUrl !== undefined ? baseUrl : defaults.baseUrl
     }
 
-    saveLlmConfig(newCfg)
+    await saveLlmConfig(newCfg)
 
     try {
       const client = buildLlmClient({ ...newCfg, updated_at: new Date().toISOString() })

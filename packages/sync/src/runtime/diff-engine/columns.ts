@@ -22,7 +22,7 @@ export async function fetchTableColumns(
   excludeFromDiff: ReadonlySet<string> = new Set(),
   telemetryContext?: import("../../ports/events.js").SyncTelemetryContext
 ): Promise<TableColumnInfo> {
-  const dialect = resolveWarehouseDialect(host, connectionName)
+  const dialect = await resolveWarehouseDialect(host, connectionName)
   const result = await runQueryWithRetry(
     host,
     connectionName,
@@ -71,7 +71,7 @@ export async function fetchPkHash(
 ): Promise<PkHashRow[]> {
   // No NOLOCK: dirty reads cause classification flapping between runs.
   // Dialect session prefix pins LANGUAGE/DATEFORMAT so CONVERT is pool-stable.
-  const dialect = resolveWarehouseDialect(host, connectionName)
+  const dialect = await resolveWarehouseDialect(host, connectionName)
   const query = dialect.hashSelectSql({
     table: qualifiedTable,
     pkColumns,

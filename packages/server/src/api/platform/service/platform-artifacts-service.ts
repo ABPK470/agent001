@@ -25,15 +25,15 @@ export interface ArtifactRefreshResult {
 }
 
 /** Import deploy/sync artifacts from disk into SQLite (entity registry + sync catalog). */
-export function importDeployArtifactsIntoSqlite(
+export async function importDeployArtifactsIntoSqlite(
   projectRoot: string,
   options: { reseedEntities: boolean },
-): { seeded: number; entityIds: string[] } {
+): Promise<{ seeded: number; entityIds: string[] }> {
   let seeded = 0
   let entityIds: string[] = []
 
   if (options.reseedEntities) {
-    const reset = factoryResetSyncPlatform(projectRoot)
+    const reset = await factoryResetSyncPlatform(projectRoot)
     seeded = reset.seeded
     entityIds = reset.entityIds
   }
@@ -45,8 +45,8 @@ export function importDeployArtifactsIntoSqlite(
 }
 
 /** Use bundled deploy/sync artifacts — re-seed SQLite from disk. */
-export function useShippedDeployArtifacts(projectRoot: string, actor = "system"): ArtifactRefreshResult {
-  const reseeded = importDeployArtifactsIntoSqlite(projectRoot, { reseedEntities: true })
+export async function useShippedDeployArtifacts(projectRoot: string, actor = "system"): Promise<ArtifactRefreshResult> {
+  const reseeded = await importDeployArtifactsIntoSqlite(projectRoot, { reseedEntities: true })
   recordSyncCatalogChange({ reason: "refresh:shipped", actor })
   const message =
     reseeded.seeded > 0
@@ -112,7 +112,7 @@ export async function refreshDeployArtifactsFromDatabase(
     const catalogNote = catalog.ok ? ` Schema catalog: ${catalog.message}.` : ` Schema catalog: ${catalog.message}`
 
     if (options.reseedSqlite !== false) {
-      reseeded = importDeployArtifactsIntoSqlite(artifactRoot, { reseedEntities: true })
+      reseeded = await importDeployArtifactsIntoSqlite(artifactRoot, { reseedEntities: true })
     } else {
       ensureDeploySyncMetadataSeeds(artifactRoot)
       refreshBuiltInFlowPresetsFromArtifact(artifactRoot)

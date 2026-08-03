@@ -30,21 +30,21 @@ export function registerEvalRoutes(app: FastifyInstance): void {
       const limit = Math.min(Number(req.query.limit) || 200, 500)
 
       if (runId) {
-        const run = db.getRun(runId)
+        const run = await db.getRun(runId)
         if (!run || !canAccessRun(viewingAs, run)) {
           reply.code(404)
           return { error: "Run not found" }
         }
       }
       if (threadId) {
-        const thread = db.getThread(threadId)
+        const thread = await db.getThread(threadId)
         if (!thread || !canAccessThread(viewingAs, thread)) {
           reply.code(404)
           return { error: "Thread not found" }
         }
       }
 
-      const rows = db.listEvalDatasetEntries({ runId, threadId, limit })
+      const rows = await db.listEvalDatasetEntries({ runId, threadId, limit })
       return { entries: rows.map(db.evalEntryToWire) }
     },
   )
@@ -52,20 +52,20 @@ export function registerEvalRoutes(app: FastifyInstance): void {
   app.post<{ Body: AddEvalBody }>("/api/eval/dataset", personal.write, async (req, reply) => {
     const viewingAs = viewingAsOf(req)
     const body = req.body as AddEvalBody
-    const run = db.getRun(body.runId)
+    const run = await db.getRun(body.runId)
     if (!run || !canAccessRun(viewingAs, run)) {
       reply.code(404)
       return { error: "Run not found" }
     }
     if (body.threadId) {
-      const thread = db.getThread(body.threadId)
+      const thread = await db.getThread(body.threadId)
       if (!thread || !canAccessThread(viewingAs, thread)) {
         reply.code(404)
         return { error: "Thread not found" }
       }
     }
 
-    const row = db.insertEvalDatasetEntry({
+    const row = await db.insertEvalDatasetEntry({
       threadId: body.threadId ?? run.thread_id,
       runId: body.runId,
       scopeId: body.scopeId,
@@ -82,12 +82,12 @@ export function registerEvalRoutes(app: FastifyInstance): void {
   })
 
   app.get<{ Params: { id: string } }>("/api/eval/dataset/:id", personal.read, async (req, reply) => {
-    const row = db.getEvalDatasetEntry(req.params.id)
+    const row = await db.getEvalDatasetEntry(req.params.id)
     if (!row) {
       reply.code(404)
       return { error: "Entry not found" }
     }
-    const run = db.getRun(row.run_id)
+    const run = await db.getRun(row.run_id)
     const viewingAs = viewingAsOf(req)
     if (!run || !canAccessRun(viewingAs, run)) {
       reply.code(404)
@@ -100,18 +100,18 @@ export function registerEvalRoutes(app: FastifyInstance): void {
     "/api/eval/dataset/:id",
     personal.write,
     async (req, reply) => {
-      const row = db.getEvalDatasetEntry(req.params.id)
+      const row = await db.getEvalDatasetEntry(req.params.id)
       if (!row) {
         reply.code(404)
         return { error: "Entry not found" }
       }
-      const run = db.getRun(row.run_id)
+      const run = await db.getRun(row.run_id)
       const viewingAs = viewingAsOf(req)
       if (!run || !canAccessRun(viewingAs, run)) {
         reply.code(404)
         return { error: "Entry not found" }
       }
-      db.deleteEvalDatasetEntry(req.params.id)
+      await db.deleteEvalDatasetEntry(req.params.id)
       reply.code(204)
       return null
     },

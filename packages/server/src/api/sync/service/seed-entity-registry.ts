@@ -39,11 +39,11 @@ export interface EntityRegistrySeedResult {
   entityIds: string[]
 }
 
-export function seedEntityRegistryIfEmpty(
+export async function seedEntityRegistryIfEmpty(
   projectRoot: string,
   tenantId = DEFAULT_TENANT_ID,
-): EntityRegistrySeedResult {
-  const existing = db.listEntityDefinitions(tenantId)
+): Promise<EntityRegistrySeedResult> {
+  const existing = await db.listEntityDefinitions(tenantId)
   if (existing.length > 0) {
     return { seeded: 0, source: "none", entityIds: [] }
   }
@@ -57,10 +57,10 @@ export function seedEntityRegistryIfEmpty(
 }
 
 /** Re-import shipped deploy artifacts when SQLite entity rows have drifted to degraded predicates. */
-export function repairBundledEntityDefinitionsFromArtifacts(
+export async function repairBundledEntityDefinitionsFromArtifacts(
   projectRoot: string,
   tenantId = DEFAULT_TENANT_ID,
-): string[] {
+): Promise<string[]> {
   const artifactsDir = resolve(projectRoot, ARTIFACTS_DIR)
   if (!existsSync(artifactsDir)) return []
 
@@ -77,9 +77,9 @@ export function repairBundledEntityDefinitionsFromArtifacts(
       )
     }
 
-    const existing = db.getEntityDefinition(tenantId, canonical.id)
+    const existing = await db.getEntityDefinition(tenantId, canonical.id)
     if (!existing || !validateEntityDefinition(existing).ok || entityDefinitionDrifted(existing, canonical)) {
-      db.saveEntityDefinition({
+      await db.saveEntityDefinition({
         tenantId,
         def: canonical,
         actor: SEED_ACTOR,
@@ -106,7 +106,7 @@ function entityDefinitionDrifted(existing: EntityDefinition, canonical: EntityDe
   return false
 }
 
-function seedFromYaml(yamlPath: string, tenantId: string): EntityRegistrySeedResult {
+async function seedFromYaml(yamlPath: string, tenantId: string): Promise<EntityRegistrySeedResult> {
   const definitions = loadEntityDefinitionsFromDocument(yamlPath)
   const entityIds: string[] = []
   for (const raw of definitions) {
@@ -117,13 +117,13 @@ function seedFromYaml(yamlPath: string, tenantId: string): EntityRegistrySeedRes
         `[entity-registry] bundled YAML entity "${def.id}" failed validation: ${validation.errors[0]?.message ?? "unknown"}`,
       )
     }
-    db.saveEntityDefinition({ tenantId, def, actor: SEED_ACTOR, reason: SEED_REASON })
+    await db.saveEntityDefinition({ tenantId, def, actor: SEED_ACTOR, reason: SEED_REASON })
     entityIds.push(def.id)
   }
   return { seeded: entityIds.length, source: "yaml", entityIds }
 }
 
-function seedFromArtifacts(artifactsDir: string, tenantId: string): EntityRegistrySeedResult {
+async function seedFromArtifacts(artifactsDir: string, tenantId: string): Promise<EntityRegistrySeedResult> {
   if (!existsSync(artifactsDir)) {
     return { seeded: 0, source: "none", entityIds: [] }
   }
@@ -142,7 +142,7 @@ function seedFromArtifacts(artifactsDir: string, tenantId: string): EntityRegist
         `[entity-registry] artifact ${file} failed validation: ${validation.errors[0]?.message ?? "unknown"}`,
       )
     }
-    db.saveEntityDefinition({ tenantId, def, actor: SEED_ACTOR, reason: SEED_REASON })
+    await db.saveEntityDefinition({ tenantId, def, actor: SEED_ACTOR, reason: SEED_REASON })
     entityIds.push(def.id)
   }
 

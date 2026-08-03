@@ -33,22 +33,22 @@ interface QueueEntry {
 // ── Persistence interface (injected by the server) ───────────────
 
 export interface QueueStore {
-  save(msg: OutboundMessage): void
+  save(msg: OutboundMessage): Promise<void>
   updateStatus(
     id: string,
     status: DeliveryStatus,
     error: string | null,
     nextRetryAt: Date | null,
     deliveredAt: Date | null
-  ): void
-  loadPending(): OutboundMessage[]
+  ): Promise<void>
+  loadPending(): Promise<OutboundMessage[]>
   saveAttempt(
     messageId: string,
     attempt: number,
     status: "success" | typeof DeliveryStatus.Failed,
     error: string | null,
     durationMs: number
-  ): void
+  ): Promise<void>
 }
 
 // ── Message Queue ────────────────────────────────────────────────
@@ -72,9 +72,9 @@ export class MessageQueue {
   }
 
   /** Start the queue — recovers pending messages from the store. */
-  start(): void {
+  async start(): Promise<void> {
     // Recover pending/retrying messages from the database
-    const pending = this.store.loadPending()
+    const pending = await this.store.loadPending()
     for (const msg of pending) {
       this.enqueueInternal(msg)
     }
@@ -118,7 +118,7 @@ export class MessageQueue {
       deliveredAt: null
     }
 
-    this.store.save(msg)
+    await this.store.save(msg)
     broadcast({ type: EventType.MessageQueued, data: { messageId: msg.id, channelType, recipientId } })
 
     return new Promise((resolve) => {
@@ -175,7 +175,7 @@ export class MessageQueue {
     if (!channel) {
       message.status = DeliveryStatus.Failed
       message.lastError = `No channel registered for type "${message.channelType}"`
-      this.store.updateStatus(message.id, DeliveryStatus.Failed, message.lastError, null, null)
+      await this.store.updateStatus(message.id, DeliveryStatus.Failed, message.lastError, null, null)
       broadcast({
         type: EventType.MessageFailed,
         data: { messageId: message.id, error: message.lastError }
@@ -185,7 +185,7 @@ export class MessageQueue {
     }
 
     message.status = DeliveryStatus.Sending
-    this.store.updateStatus(message.id, DeliveryStatus.Sending, null, null, null)
+    await this.store.updateStatus(message.id, DeliveryStatus.Sending, null, null, null)
 
     const startTime = Date.now()
     const result = await withRetry(
@@ -199,8 +199,8 @@ export class MessageQueue {
     if (result.success) {
       message.status = DeliveryStatus.Delivered
       message.deliveredAt = new Date()
-      this.store.updateStatus(message.id, DeliveryStatus.Delivered, null, null, message.deliveredAt)
-      this.store.saveAttempt(message.id, result.attempts, "success", null, durationMs)
+      await this.store.updateStatus(message.id, DeliveryStatus.Delivered, null, null, message.deliveredAt)
+      await this.store.saveAttempt(message.id, result.attempts, "success", null, durationMs)
 
       broadcast({
         type: EventType.MessageDelivered,
@@ -214,8 +214,8 @@ export class MessageQueue {
     } else {
       message.status = DeliveryStatus.Failed
       message.lastError = result.lastError?.message ?? "Unknown error"
-      this.store.updateStatus(message.id, DeliveryStatus.Failed, message.lastError, null, null)
-      this.store.saveAttempt(
+      await this.store.updateStatus(message.id, DeliveryStatus.Failed, message.lastError, null, null)
+      await this.store.saveAttempt(
         message.id,
         result.attempts,
         DeliveryStatus.Failed,
@@ -240,7 +240,7 @@ export class MessageQueue {
       if (queue.length > 0 && !this.processing.has(key)) {
         const first = queue[0]
         if (first.message.nextRetryAt && first.message.nextRetryAt <= now) {
-          this.processQueue(key)
+          void this.processQueue(key)
         }
       }
     }

@@ -30,26 +30,26 @@ import {
 
 const TENANT = "_default"
 
-function afterCatalogMutation(reason: string, actor: string): void {
-  recordSyncCatalogChange({ reason, actor })
+async function afterCatalogMutation(reason: string, actor: string): Promise<void> {
+  await recordSyncCatalogChange({ reason, actor })
 }
 
-function mapCatalog(projectRoot: string) {
+async function mapCatalog(projectRoot: string) {
   const tip = {
-    actions: db.listSyncActions(TENANT).map((row) => ({
+    actions: (await db.listSyncActions(TENANT)).map((row) => ({
       id: row.id,
       label: row.label,
       builtIn: row.built_in === 1,
       definition: db.mapKindDefinition(row),
     })),
-    flows: db.listSyncFlows(TENANT).map((row) => ({
+    flows: (await db.listSyncFlows(TENANT)).map((row) => ({
       id: row.id,
       label: row.label,
       description: row.description,
       steps: db.parseFlowSteps(row.steps_json),
       builtIn: row.built_in === 1,
     })),
-    valueSources: db.listSyncValueSources(TENANT).map((row) => ({
+    valueSources: (await db.listSyncValueSources(TENANT)).map((row) => ({
       id: row.id,
       label: row.label,
       builtIn: row.built_in === 1,
@@ -59,9 +59,9 @@ function mapCatalog(projectRoot: string) {
   return annotateCatalogShippedDrift(tip, loadShippedSyncMetadata(projectRoot))
 }
 
-function customValueSourceCatalogFromDb(): Record<string, CustomValueSourceDefinition> {
+async function customValueSourceCatalogFromDb(): Promise<Record<string, CustomValueSourceDefinition>> {
   return customValueSourceCatalogFromRows(
-    db.listSyncValueSources(TENANT).map((row) => ({
+    (await db.listSyncValueSources(TENANT)).map((row) => ({
       id: row.id,
       definition: db.mapValueSourceDefinition(row),
     })),
@@ -84,20 +84,20 @@ function validateHandlerBindings(
   return null
 }
 
-function flowCatalogFromDb() {
+async function flowCatalogFromDb() {
   return buildFlowCatalogFromSyncMetadataDoc({
-    phases: db.listSyncPhases(TENANT).map((row) => ({
+    phases: (await db.listSyncPhases(TENANT)).map((row) => ({
       id: row.id,
       label: row.label,
       sortOrder: row.sort_order,
       definition: db.mapPhaseDefinition(row),
     })),
-    actions: db.listSyncActions(TENANT).map((row) => ({
+    actions: (await db.listSyncActions(TENANT)).map((row) => ({
       id: row.id,
       label: row.label,
       definition: db.mapKindDefinition(row),
     })),
-    valueSources: db.listSyncValueSources(TENANT).map((row) => ({
+    valueSources: (await db.listSyncValueSources(TENANT)).map((row) => ({
       id: row.id,
       label: row.label,
       definition: db.mapValueSourceDefinition(row),
@@ -130,7 +130,7 @@ export function registerSyncMetadataRoutes(app: FastifyInstance, projectRoot: st
       const metadata = loadShippedSyncMetadata(projectRoot)
 
       if (kind === "flows") {
-        const row = db.getSyncFlow(TENANT, id)
+        const row = await db.getSyncFlow(TENANT, id)
         if (!row || row.built_in !== 1) {
           reply.code(404)
           return { error: "built-in flow not found" }
@@ -148,7 +148,7 @@ export function registerSyncMetadataRoutes(app: FastifyInstance, projectRoot: st
       }
 
       if (kind === "actions") {
-        const row = db.listSyncActions(TENANT).find((entry) => entry.id === id)
+        const row = (await db.listSyncActions(TENANT)).find((entry) => entry.id === id)
         if (!row || row.built_in !== 1) {
           reply.code(404)
           return { error: "built-in action not found" }
@@ -161,7 +161,7 @@ export function registerSyncMetadataRoutes(app: FastifyInstance, projectRoot: st
         })
       }
 
-      const row = db.listSyncValueSources(TENANT).find((entry) => entry.id === id)
+      const row = (await db.listSyncValueSources(TENANT)).find((entry) => entry.id === id)
       if (!row || row.built_in !== 1) {
         reply.code(404)
         return { error: "built-in value source not found" }
@@ -184,8 +184,8 @@ export function registerSyncMetadataRoutes(app: FastifyInstance, projectRoot: st
     if (!id || !label) return reply.code(400).send({ error: "id and label required" })
     const idError = validateCatalogId(id, "Action id")
     if (idError) return reply.code(400).send({ error: idError })
-    const existing = db.listSyncActions(TENANT).find((row) => row.id === id)
-    const customCatalog = customValueSourceCatalogFromDb()
+    const existing = (await db.listSyncActions(TENANT)).find((row) => row.id === id)
+    const customCatalog = await customValueSourceCatalogFromDb()
     const definition = req.body.definition
       ? normalizeKindDefinition(req.body.definition, id)
       : undefined
@@ -194,23 +194,23 @@ export function registerSyncMetadataRoutes(app: FastifyInstance, projectRoot: st
       const bindingError = validateHandlerBindings(definition, catalogIds)
       if (bindingError) return reply.code(400).send({ error: bindingError })
     }
-    db.saveSyncAction({
+    await db.saveSyncAction({
       tenant_id: TENANT,
       id,
       label,
       built_in: existing?.built_in ?? 0,
       definition_json: definition ? JSON.stringify(definition) : undefined,
     })
-    afterCatalogMutation(`sync-metadata:action:${id}`, req.session.upn)
+    await afterCatalogMutation(`sync-metadata:action:${id}`, req.session.upn)
     return mapCatalog(projectRoot)
   })
 
   app.delete<{ Params: { id: string } }>("/api/sync-metadata/actions/:id", async (req, reply) => {
     if (!req.session?.isAdmin) return reply.code(403).send({ error: "admin only" })
-    if (!db.deleteSyncAction(TENANT, req.params.id)) {
+    if (!await db.deleteSyncAction(TENANT, req.params.id)) {
       return reply.code(400).send({ error: "cannot delete built-in or missing action" })
     }
-    afterCatalogMutation(`sync-metadata:action:delete:${req.params.id}`, req.session.upn)
+    await afterCatalogMutation(`sync-metadata:action:delete:${req.params.id}`, req.session.upn)
     return mapCatalog(projectRoot)
   })
 
@@ -234,24 +234,24 @@ export function registerSyncMetadataRoutes(app: FastifyInstance, projectRoot: st
         error: error instanceof Error ? error.message : String(error),
       })
     }
-    const existing = db.listSyncValueSources(TENANT).find((row) => row.id === id)
-    db.saveSyncValueSource({
+    const existing = (await db.listSyncValueSources(TENANT)).find((row) => row.id === id)
+    await db.saveSyncValueSource({
       tenant_id: TENANT,
       id,
       label,
       built_in: existing?.built_in ?? 0,
       definition_json: JSON.stringify(definition),
     })
-    afterCatalogMutation(`sync-metadata:value-source:${id}`, req.session.upn)
+    await afterCatalogMutation(`sync-metadata:value-source:${id}`, req.session.upn)
     return mapCatalog(projectRoot)
   })
 
   app.delete<{ Params: { id: string } }>("/api/sync-metadata/value-sources/:id", async (req, reply) => {
     if (!req.session?.isAdmin) return reply.code(403).send({ error: "admin only" })
-    if (!db.deleteSyncValueSource(TENANT, req.params.id)) {
+    if (!await db.deleteSyncValueSource(TENANT, req.params.id)) {
       return reply.code(400).send({ error: "cannot delete built-in or missing value source" })
     }
-    afterCatalogMutation(`sync-metadata:value-source:delete:${req.params.id}`, req.session.upn)
+    await afterCatalogMutation(`sync-metadata:value-source:delete:${req.params.id}`, req.session.upn)
     return mapCatalog(projectRoot)
   })
 
@@ -264,8 +264,8 @@ export function registerSyncMetadataRoutes(app: FastifyInstance, projectRoot: st
     if (!id || !label) return reply.code(400).send({ error: "id and label required" })
     const idError = validateCatalogId(id, "Flow id")
     if (idError) return reply.code(400).send({ error: idError })
-    const existing = db.getSyncFlow(TENANT, id)
-    const flowCatalog = flowCatalogFromDb()
+    const existing = await db.getSyncFlow(TENANT, id)
+    const flowCatalog = await flowCatalogFromDb()
     const rawSteps = req.body.steps ?? (existing ? db.parseFlowSteps(existing.steps_json) : [])
     let steps: AuthoredSyncFlowStep[]
     try {
@@ -275,7 +275,7 @@ export function registerSyncMetadataRoutes(app: FastifyInstance, projectRoot: st
         error: error instanceof Error ? error.message : String(error),
       })
     }
-    db.saveSyncFlow({
+    await db.saveSyncFlow({
       tenant_id: TENANT,
       id,
       label,
@@ -285,16 +285,16 @@ export function registerSyncMetadataRoutes(app: FastifyInstance, projectRoot: st
       updated_at: new Date().toISOString(),
       updated_by: req.session.upn,
     })
-    afterCatalogMutation(`sync-metadata:flow:${id}`, req.session.upn)
+    await afterCatalogMutation(`sync-metadata:flow:${id}`, req.session.upn)
     return mapCatalog(projectRoot)
   })
 
   app.delete<{ Params: { id: string } }>("/api/sync-metadata/flows/:id", async (req, reply) => {
     if (!req.session?.isAdmin) return reply.code(403).send({ error: "admin only" })
-    if (!db.deleteSyncFlow(TENANT, req.params.id)) {
+    if (!await db.deleteSyncFlow(TENANT, req.params.id)) {
       return reply.code(400).send({ error: "cannot delete built-in or missing flow" })
     }
-    afterCatalogMutation(`sync-metadata:flow:delete:${req.params.id}`, req.session.upn)
+    await afterCatalogMutation(`sync-metadata:flow:delete:${req.params.id}`, req.session.upn)
     return mapCatalog(projectRoot)
   })
 }

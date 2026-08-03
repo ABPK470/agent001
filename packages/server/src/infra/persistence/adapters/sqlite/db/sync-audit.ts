@@ -7,7 +7,7 @@
  */
 
 import { getPlatformDb } from "../../../schema/kysely.js"
-import { runAll, runExec } from "../../../schema/execute.js"
+import { runAllAsync, runExecAsync } from "../../../schema/execute-async.js"
 import { platformNow } from "../../../schema/sql-time.js"
 
 export interface SyncAuditRow {
@@ -28,7 +28,7 @@ export interface RecordSyncAuditInput {
   detail: Record<string, unknown>
 }
 
-export function recordSyncAudit(i: RecordSyncAuditInput): void {
+export async function recordSyncAudit(i: RecordSyncAuditInput): Promise<void> {
   const compiled = getPlatformDb()
     .insertInto("sync_audit")
     .values({
@@ -40,24 +40,24 @@ export function recordSyncAudit(i: RecordSyncAuditInput): void {
       timestamp: platformNow(),
     })
     .compile()
-  runExec(compiled)
+  await runExecAsync(compiled)
 }
 
-export function listSyncAuditForPlan(planId: string): SyncAuditRow[] {
+export async function listSyncAuditForPlan(planId: string): Promise<SyncAuditRow[]> {
   const compiled = getPlatformDb()
     .selectFrom("sync_audit")
     .selectAll()
     .where("plan_id", "=", planId)
     .orderBy("timestamp")
     .compile()
-  return runAll<SyncAuditRow>(compiled)
+  return await runAllAsync<SyncAuditRow>(compiled)
 }
 
-export function listRecentSyncAudit(limit = 100, opts?: { actorUpn?: string | null }): SyncAuditRow[] {
+export async function listRecentSyncAudit(limit = 100, opts?: { actorUpn?: string | null }): Promise<SyncAuditRow[]> {
   let query = getPlatformDb().selectFrom("sync_audit").selectAll()
   if (opts?.actorUpn) {
     query = query.where("actor_upn", "=", opts.actorUpn)
   }
   const compiled = query.orderBy("timestamp", "desc").limit(limit).compile()
-  return runAll<SyncAuditRow>(compiled)
+  return await runAllAsync<SyncAuditRow>(compiled)
 }

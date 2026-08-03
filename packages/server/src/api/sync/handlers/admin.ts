@@ -40,7 +40,7 @@ function audit(req: FastifyRequest, action: string, detail: Record<string, unkno
 export function registerFreezeWindowRoutes(app: FastifyInstance): void {
   app.get("/api/sync/freeze-windows", async (req) => {
     const tenantId = resolveTenant(req)
-    const items = listFreezeWindowsForTenant(tenantId)
+    const items = await listFreezeWindowsForTenant(tenantId)
     return { tenantId, items }
   })
 
@@ -58,8 +58,8 @@ export function registerFreezeWindowRoutes(app: FastifyInstance): void {
     }
     const tenantId = resolveTenant(req)
     try {
-      const prior = getFreezeWindow(tenantId, body.id)
-      const record = upsertFreezeWindow({
+      const prior = await getFreezeWindow(tenantId, body.id)
+      const record = await upsertFreezeWindow({
         tenantId,
         id: body.id,
         displayName: body.displayName,
@@ -109,8 +109,8 @@ export function registerFreezeWindowRoutes(app: FastifyInstance): void {
       return { error: "admin only" }
     }
     const tenantId = resolveTenant(req)
-    const prior = getFreezeWindow(tenantId, req.params.id)
-    const ok = deleteFreezeWindow(tenantId, req.params.id)
+    const prior = await getFreezeWindow(tenantId, req.params.id)
+    const ok = await deleteFreezeWindow(tenantId, req.params.id)
     if (!ok) {
       reply.code(404)
       return { error: `freeze_window not found: ${req.params.id}` }

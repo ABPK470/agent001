@@ -7,7 +7,7 @@ export async function buildLlmAndCatalog(
   host: AgentHost,
   mssqlSummary: string,
 ): Promise<LLMClient> {
-  const llmCfg = getLlmConfig()
+  const llmCfg = await getLlmConfig()
   const llm = buildLlmClient(llmCfg)
   console.log(`LLM: ${llmCfg.provider} / ${llmCfg.model}`)
 

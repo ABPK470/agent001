@@ -4,7 +4,7 @@
 
 import { sql } from "kysely"
 import { getPlatformDb } from "../../../schema/kysely.js"
-import { runAll, runExec } from "../../../schema/execute.js"
+import { runAllAsync, runExecAsync } from "../../../schema/execute-async.js"
 import { getPlatformStore } from "../platform-store.js"
 import type {
   DurableEvent,
@@ -36,13 +36,13 @@ export class SqliteEventStore implements EventStore {
     return this.lastFlushMs
   }
 
-  flush(): void {
+  async flush(): Promise<void> {
     this.flushScheduled = false
     if (this.pending.length === 0) return
     const batch = this.pending.splice(0, this.pending.length)
     const started = Date.now()
     try {
-      this.insertBatch(batch)
+      await this.insertBatch(batch)
     } catch (err: unknown) {
       if (isDatabaseClosed(err)) {
         // Teardown / shutdown — named drop, not silent forever-retry.
@@ -59,8 +59,8 @@ export class SqliteEventStore implements EventStore {
     }
   }
 
-  list(opts?: EventListOpts): StoredEvent[] {
-    this.flush()
+  async list(opts?: EventListOpts): Promise<StoredEvent[]> {
+    await this.flush()
     const limit = opts?.limit ?? 200
     let query = getPlatformDb().selectFrom("event_log").selectAll()
 
@@ -81,11 +81,11 @@ export class SqliteEventStore implements EventStore {
     if (opts?.planId) query = query.where("plan_id", "=", opts.planId)
 
     const compiled = query.orderBy("created_at", "desc").limit(limit).compile()
-    return runAll<StoredEvent>(compiled)
+    return await runAllAsync<StoredEvent>(compiled)
   }
 
-  search(q: string, opts?: EventSearchOpts): StoredEvent[] {
-    this.flush()
+  async search(q: string, opts?: EventSearchOpts): Promise<StoredEvent[]> {
+    await this.flush()
     const limit = Math.min(opts?.limit ?? 200, 1000)
     let query = getPlatformDb().selectFrom("event_log").selectAll()
     let hasConditions = false
@@ -128,11 +128,11 @@ export class SqliteEventStore implements EventStore {
     if (!hasConditions) return []
 
     const compiled = query.orderBy("created_at", "desc").limit(limit).compile()
-    return runAll<StoredEvent>(compiled)
+    return await runAllAsync<StoredEvent>(compiled)
   }
 
-  listForPlanId(planId: string, opts?: { limit?: number }): StoredEvent[] {
-    this.flush()
+  async listForPlanId(planId: string, opts?: { limit?: number }): Promise<StoredEvent[]> {
+    await this.flush()
     const limit = Math.min(opts?.limit ?? 20_000, 50_000)
 
     const primaryCompiled = getPlatformDb()
@@ -145,7 +145,7 @@ export class SqliteEventStore implements EventStore {
       .orderBy("created_at", "asc")
       .limit(limit)
       .compile()
-    const primary = runAll<StoredEvent>(primaryCompiled)
+    const primary = await runAllAsync<StoredEvent>(primaryCompiled)
 
     const previewIds = new Set<string>()
     for (const row of primary) {
@@ -175,15 +175,15 @@ export class SqliteEventStore implements EventStore {
       )
       .orderBy("created_at", "asc")
       .compile()
-    const correlated = runAll<StoredEvent>(correlatedCompiled)
+    const correlated = await runAllAsync<StoredEvent>(correlatedCompiled)
 
     const byId = new Map<number, StoredEvent>()
     for (const row of [...primary, ...correlated]) byId.set(row.id, row)
     return [...byId.values()].sort((a, b) => a.created_at.localeCompare(b.created_at))
   }
 
-  listForRunId(runId: string, opts?: { limit?: number }): StoredEvent[] {
-    this.flush()
+  async listForRunId(runId: string, opts?: { limit?: number }): Promise<StoredEvent[]> {
+    await this.flush()
     const limit = Math.min(opts?.limit ?? 20_000, 50_000)
     const compiled = getPlatformDb()
       .selectFrom("event_log")
@@ -192,7 +192,7 @@ export class SqliteEventStore implements EventStore {
       .orderBy("created_at", "asc")
       .limit(limit)
       .compile()
-    return runAll<StoredEvent>(compiled)
+    return await runAllAsync<StoredEvent>(compiled)
   }
 
   private scheduleFlush(): void {
@@ -202,7 +202,7 @@ export class SqliteEventStore implements EventStore {
     queueMicrotask(() => {
       setImmediate(() => {
         try {
-          this.flush()
+          void this.flush()
         } catch (err: unknown) {
           console.error("[mia] event_store.scheduled_flush", err)
         }
@@ -210,8 +210,8 @@ export class SqliteEventStore implements EventStore {
     })
   }
 
-  private insertBatch(batch: DurableEvent[]): void {
-    getPlatformStore().transaction(() => {
+  private async insertBatch(batch: DurableEvent[]): Promise<void> {
+    await getPlatformStore().transactionAsync(async () => {
       for (let i = 0; i < batch.length; i += BATCH_SIZE) {
         const slice = batch.slice(i, i + BATCH_SIZE)
         for (const e of slice) {
@@ -226,7 +226,7 @@ export class SqliteEventStore implements EventStore {
               plan_id: e.planId,
             })
             .compile()
-          runExec(compiled)
+          await runExecAsync(compiled)
         }
       }
     })
@@ -244,24 +244,24 @@ export function saveEvent(type: string, data: Record<string, unknown>, timestamp
   _default.append(toDurableEvent(type, data, timestamp))
 }
 
-export function listEvents(opts?: EventListOpts): StoredEvent[] {
-  return _default.list(opts)
+export async function listEvents(opts?: EventListOpts): Promise<StoredEvent[]> {
+  return await _default.list(opts)
 }
 
-export function searchEvents(q: string, opts?: EventSearchOpts): StoredEvent[] {
-  return _default.search(q, opts)
+export async function searchEvents(q: string, opts?: EventSearchOpts): Promise<StoredEvent[]> {
+  return await _default.search(q, opts)
 }
 
-export function listEventsForPlanId(planId: string, opts?: { limit?: number }): StoredEvent[] {
-  return _default.listForPlanId(planId, opts)
+export async function listEventsForPlanId(planId: string, opts?: { limit?: number }): Promise<StoredEvent[]> {
+  return await _default.listForPlanId(planId, opts)
 }
 
-export function listEventsForRunId(runId: string, opts?: { limit?: number }): StoredEvent[] {
-  return _default.listForRunId(runId, opts)
+export async function listEventsForRunId(runId: string, opts?: { limit?: number }): Promise<StoredEvent[]> {
+  return await _default.listForRunId(runId, opts)
 }
 
-export function flushEventStore(): void {
-  _default.flush()
+export async function flushEventStore(): Promise<void> {
+  await _default.flush()
 }
 
 function isDatabaseClosed(err: unknown): boolean {

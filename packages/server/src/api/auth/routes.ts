@@ -32,8 +32,8 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
     }
     const { username = "", password = "", displayName = "" } = req.body ?? {}
     try {
-      const user = registerLocalUser({ username, password, displayName })
-      loginAndSetCookie({
+      const user = await registerLocalUser({ username, password, displayName })
+      await loginAndSetCookie({
         reply,
         upn: user.upn,
         ip: req.ip,
@@ -59,8 +59,8 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
   app.post<{ Body: LoginBody }>("/api/auth/login", async (req, reply) => {
     const { username = "", password = "" } = req.body ?? {}
     try {
-      const user = verifyLocalLogin(username, password)
-      loginAndSetCookie({
+      const user = await verifyLocalLogin(username, password)
+      await loginAndSetCookie({
         reply,
         upn: user.upn,
         ip: req.ip,

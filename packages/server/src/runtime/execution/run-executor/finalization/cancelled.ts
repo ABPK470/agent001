@@ -41,7 +41,7 @@ export async function finalizeCancelledRun(
       llmCalls: agent.llmCalls
     }
   })
-  db.saveLog({
+  await db.saveLog({
     run_id: request.runId,
     level: "run:error",
     message: "Cancelled",
@@ -54,7 +54,7 @@ export async function finalizeCancelledRun(
     runId: request.runId,
     actions: [
       { label: "View", action: NotificationActionType.ViewRun, data: { runId: request.runId } },
-      ...buildRunCapabilityActions(request.runId, RunStatus.Cancelled),
+      ...await buildRunCapabilityActions(request.runId, RunStatus.Cancelled),
     ]
   })
 }

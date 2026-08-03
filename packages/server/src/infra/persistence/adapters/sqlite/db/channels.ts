@@ -1,6 +1,6 @@
 import { sql } from "kysely"
 import { getPlatformDb } from "../../../schema/kysely.js"
-import { runAll, runExec, runGet } from "../../../schema/execute.js"
+import { runAllAsync, runExecAsync, runGetAsync } from "../../../schema/execute-async.js"
 
 export interface DbConversationRow {
   id: string
@@ -54,20 +54,20 @@ export interface DbDeliveryStatsRow {
   pending: number
 }
 
-export function findConversationByChannelAndSender(
+export async function findConversationByChannelAndSender(
   channelType: string,
   senderId: string
-): DbConversationRow | null {
+): Promise<DbConversationRow | null> {
   const compiled = getPlatformDb()
     .selectFrom("conversations")
     .selectAll()
     .where("channel_type", "=", channelType)
     .where("sender_id", "=", senderId)
     .compile()
-  return runGet<DbConversationRow>(compiled) ?? null
+  return await runGetAsync<DbConversationRow>(compiled) ?? null
 }
 
-export function upsertConversationRow(row: {
+export async function upsertConversationRow(row: {
   id: string
   channel_type: string
   sender_id: string
@@ -76,61 +76,61 @@ export function upsertConversationRow(row: {
   thread_id: string | null
   created_at: string
   updated_at: string
-}): void {
+}): Promise<void> {
   const compiled = getPlatformDb()
     .insertInto("conversations")
     .orReplace()
     .values(row)
     .compile()
-  runExec(compiled)
+  await runExecAsync(compiled)
 }
 
-export function updateConversationThreadId(id: string, threadId: string, updatedAt: string): void {
+export async function updateConversationThreadId(id: string, threadId: string, updatedAt: string): Promise<void> {
   const compiled = getPlatformDb()
     .updateTable("conversations")
     .set({ thread_id: threadId, updated_at: updatedAt })
     .where("id", "=", id)
     .compile()
-  runExec(compiled)
+  await runExecAsync(compiled)
 }
 
-export function updateConversationActiveRun(id: string, runId: string | null, updatedAt: string): void {
+export async function updateConversationActiveRun(id: string, runId: string | null, updatedAt: string): Promise<void> {
   const compiled = getPlatformDb()
     .updateTable("conversations")
     .set({ active_run_id: runId, updated_at: updatedAt })
     .where("id", "=", id)
     .compile()
-  runExec(compiled)
+  await runExecAsync(compiled)
 }
 
-export function getConversationRow(id: string): DbConversationRow | null {
+export async function getConversationRow(id: string): Promise<DbConversationRow | null> {
   const compiled = getPlatformDb()
     .selectFrom("conversations")
     .selectAll()
     .where("id", "=", id)
     .compile()
-  return runGet<DbConversationRow>(compiled) ?? null
+  return await runGetAsync<DbConversationRow>(compiled) ?? null
 }
 
-export function getConversationRowByRunId(runId: string): DbConversationRow | null {
+export async function getConversationRowByRunId(runId: string): Promise<DbConversationRow | null> {
   const compiled = getPlatformDb()
     .selectFrom("conversations")
     .selectAll()
     .where("active_run_id", "=", runId)
     .compile()
-  return runGet<DbConversationRow>(compiled) ?? null
+  return await runGetAsync<DbConversationRow>(compiled) ?? null
 }
 
-export function listConversationRows(): DbConversationRow[] {
+export async function listConversationRows(): Promise<DbConversationRow[]> {
   const compiled = getPlatformDb()
     .selectFrom("conversations")
     .selectAll()
     .orderBy("updated_at", "desc")
     .compile()
-  return runAll<DbConversationRow>(compiled)
+  return await runAllAsync<DbConversationRow>(compiled)
 }
 
-export function insertOutboundMessageRow(row: {
+export async function insertOutboundMessageRow(row: {
   id: string
   conversation_id: string
   channel_type: string
@@ -142,21 +142,21 @@ export function insertOutboundMessageRow(row: {
   last_error: string | null
   created_at: string
   delivered_at: string | null
-}): void {
+}): Promise<void> {
   const compiled = getPlatformDb()
     .insertInto("outbound_messages")
     .values(row)
     .compile()
-  runExec(compiled)
+  await runExecAsync(compiled)
 }
 
-export function updateOutboundMessageStatus(input: {
+export async function updateOutboundMessageStatus(input: {
   id: string
   status: string
   error: string | null
   nextRetryAt: string | null
   deliveredAt: string | null
-}): void {
+}): Promise<void> {
   const compiled = getPlatformDb()
     .updateTable("outbound_messages")
     .set({
@@ -167,27 +167,27 @@ export function updateOutboundMessageStatus(input: {
     })
     .where("id", "=", input.id)
     .compile()
-  runExec(compiled)
+  await runExecAsync(compiled)
 }
 
-export function listPendingOutboundMessageRows(): DbOutboundMessageRow[] {
+export async function listPendingOutboundMessageRows(): Promise<DbOutboundMessageRow[]> {
   const compiled = getPlatformDb()
     .selectFrom("outbound_messages")
     .selectAll()
     .where("status", "in", ["queued", "sending", "retrying"])
     .orderBy("created_at")
     .compile()
-  return runAll<DbOutboundMessageRow>(compiled)
+  return await runAllAsync<DbOutboundMessageRow>(compiled)
 }
 
-export function insertDeliveryAttemptRow(input: {
+export async function insertDeliveryAttemptRow(input: {
   messageId: string
   attempt: number
   status: string
   error: string | null
   durationMs: number
   createdAt: string
-}): void {
+}): Promise<void> {
   const compiled = getPlatformDb()
     .insertInto("delivery_attempts")
     .values({
@@ -199,19 +199,19 @@ export function insertDeliveryAttemptRow(input: {
       created_at: input.createdAt,
     })
     .compile()
-  runExec(compiled)
+  await runExecAsync(compiled)
 }
 
-export function updateOutboundMessageAttempts(messageId: string, attempt: number): void {
+export async function updateOutboundMessageAttempts(messageId: string, attempt: number): Promise<void> {
   const compiled = getPlatformDb()
     .updateTable("outbound_messages")
     .set({ attempts: attempt })
     .where("id", "=", messageId)
     .compile()
-  runExec(compiled)
+  await runExecAsync(compiled)
 }
 
-export function upsertChannelConfigRow(row: {
+export async function upsertChannelConfigRow(row: {
   type: string
   access_token: string
   verify_token: string
@@ -219,42 +219,42 @@ export function upsertChannelConfigRow(row: {
   platform_id: string
   created_at: string
   updated_at: string
-}): void {
+}): Promise<void> {
   const compiled = getPlatformDb()
     .insertInto("channel_configs")
     .orReplace()
     .values(row)
     .compile()
-  runExec(compiled)
+  await runExecAsync(compiled)
 }
 
-export function getChannelConfigRow(type: string): DbChannelConfigRow | null {
+export async function getChannelConfigRow(type: string): Promise<DbChannelConfigRow | null> {
   const compiled = getPlatformDb()
     .selectFrom("channel_configs")
     .selectAll()
     .where("type", "=", type)
     .compile()
-  return runGet<DbChannelConfigRow>(compiled) ?? null
+  return await runGetAsync<DbChannelConfigRow>(compiled) ?? null
 }
 
-export function listChannelConfigRows(): DbChannelConfigRow[] {
+export async function listChannelConfigRows(): Promise<DbChannelConfigRow[]> {
   const compiled = getPlatformDb()
     .selectFrom("channel_configs")
     .selectAll()
     .orderBy("type")
     .compile()
-  return runAll<DbChannelConfigRow>(compiled)
+  return await runAllAsync<DbChannelConfigRow>(compiled)
 }
 
-export function deleteChannelConfigRow(type: string): void {
+export async function deleteChannelConfigRow(type: string): Promise<void> {
   const compiled = getPlatformDb()
     .deleteFrom("channel_configs")
     .where("type", "=", type)
     .compile()
-  runExec(compiled)
+  await runExecAsync(compiled)
 }
 
-export function listOutboundMessageRows(conversationId: string, limit: number): DbOutboundMessageRow[] {
+export async function listOutboundMessageRows(conversationId: string, limit: number): Promise<DbOutboundMessageRow[]> {
   const compiled = getPlatformDb()
     .selectFrom("outbound_messages")
     .selectAll()
@@ -262,20 +262,20 @@ export function listOutboundMessageRows(conversationId: string, limit: number): 
     .orderBy("created_at", "desc")
     .limit(limit)
     .compile()
-  return runAll<DbOutboundMessageRow>(compiled)
+  return await runAllAsync<DbOutboundMessageRow>(compiled)
 }
 
-export function listDeliveryAttemptRows(messageId: string): DbDeliveryAttemptRow[] {
+export async function listDeliveryAttemptRows(messageId: string): Promise<DbDeliveryAttemptRow[]> {
   const compiled = getPlatformDb()
     .selectFrom("delivery_attempts")
     .selectAll()
     .where("message_id", "=", messageId)
     .orderBy("attempt_number")
     .compile()
-  return runAll<DbDeliveryAttemptRow>(compiled)
+  return await runAllAsync<DbDeliveryAttemptRow>(compiled)
 }
 
-export function getDeliveryStatsRows(): { summary: DbDeliveryStatsRow; avgAttemptsOnSuccess: number } {
+export async function getDeliveryStatsRows(): Promise<{  summary: DbDeliveryStatsRow; avgAttemptsOnSuccess: number  }> {
   const summaryCompiled = getPlatformDb()
     .selectFrom("outbound_messages")
     .select((eb) => [
@@ -287,7 +287,7 @@ export function getDeliveryStatsRows(): { summary: DbDeliveryStatsRow; avgAttemp
       ),
     ])
     .compile()
-  const summary = runGet<DbDeliveryStatsRow>(summaryCompiled) ?? {
+  const summary = await runGetAsync<DbDeliveryStatsRow>(summaryCompiled) ?? {
     total: 0,
     delivered: 0,
     failed: 0,
@@ -299,7 +299,7 @@ export function getDeliveryStatsRows(): { summary: DbDeliveryStatsRow; avgAttemp
     .select(sql<number>`coalesce(avg(attempts), 0)`.as("avg_attempts"))
     .where("status", "=", "delivered")
     .compile()
-  const avgRow = runGet<{ avg_attempts: number }>(avgCompiled)
+  const avgRow = await runGetAsync<{ avg_attempts: number }>(avgCompiled)
 
   return {
     summary,

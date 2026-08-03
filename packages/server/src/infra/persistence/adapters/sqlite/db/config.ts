@@ -6,8 +6,8 @@ import { PolicyEffect } from "@mia/agent"
 import { sql } from "kysely"
 import { PolicySource } from "../../../../../internal/enums/index.js"
 import { getPlatformDb } from "../../../schema/kysely.js"
-import { runAll, runExec, runGet } from "../../../schema/execute.js"
-import { insertRowOrIgnore, upsertRow } from "../../../schema/upsert.js"
+import { runAllAsync, runExecAsync, runGetAsync } from "../../../schema/execute-async.js"
+import { insertRowOrIgnoreAsync, upsertRowAsync } from "../../../schema/upsert.js"
 
 export { PolicySource } from "../../../../../internal/enums/index.js"
 
@@ -20,8 +20,8 @@ export interface DbLayout {
   updated_at: string
 }
 
-export function saveLayout(layout: DbLayout): void {
-  upsertRow({
+export async function saveLayout(layout: DbLayout): Promise<void> {
+  await upsertRowAsync({
     table: "layout_configs",
     keys: { id: layout.id },
     insert: layout,
@@ -33,30 +33,30 @@ export function saveLayout(layout: DbLayout): void {
   })
 }
 
-export function getLayouts(): DbLayout[] {
+export async function getLayouts(): Promise<DbLayout[]> {
   const compiled = getPlatformDb()
     .selectFrom("layout_configs")
     .selectAll()
     .orderBy("updated_at", "desc")
     .compile()
-  return runAll<DbLayout>(compiled)
+  return await runAllAsync<DbLayout>(compiled)
 }
 
-export function getLayout(id: string): DbLayout | undefined {
+export async function getLayout(id: string): Promise<DbLayout | undefined> {
   const compiled = getPlatformDb()
     .selectFrom("layout_configs")
     .selectAll()
     .where("id", "=", id)
     .compile()
-  return runGet<DbLayout>(compiled)
+  return await runGetAsync<DbLayout>(compiled)
 }
 
-export function deleteLayout(id: string): void {
+export async function deleteLayout(id: string): Promise<void> {
   const compiled = getPlatformDb()
     .deleteFrom("layout_configs")
     .where("id", "=", id)
     .compile()
-  runExec(compiled)
+  await runExecAsync(compiled)
 }
 
 // ── Policy rule queries ──────────────────────────────────────────
@@ -83,16 +83,16 @@ export interface DbPolicyRule {
   updated_by?: string | null
 }
 
-export function listPolicyRules(): DbPolicyRule[] {
+export async function listPolicyRules(): Promise<DbPolicyRule[]> {
   const compiled = getPlatformDb()
     .selectFrom("policy_configs")
     .selectAll()
     .orderBy("created_at")
     .compile()
-  return runAll<DbPolicyRule>(compiled)
+  return await runAllAsync<DbPolicyRule>(compiled)
 }
 
-export function savePolicyRule(rule: DbPolicyRule): void {
+export async function savePolicyRule(rule: DbPolicyRule): Promise<void> {
   const source = rule.source ?? PolicySource.Db
   const updatedAt = rule.updated_at ?? null
   const updatedBy = rule.updated_by ?? null
@@ -106,7 +106,7 @@ export function savePolicyRule(rule: DbPolicyRule): void {
     updated_at: updatedAt,
     updated_by: updatedBy,
   }
-  upsertRow({
+  await upsertRowAsync({
     table: "policy_configs",
     keys: { name: rule.name },
     insert: row,
@@ -126,9 +126,9 @@ export function savePolicyRule(rule: DbPolicyRule): void {
  * Insert a rule only if no row with that name already exists. Used by
  * the seeder so re-running boot doesn't trample operator edits.
  */
-export function seedPolicyRuleIfMissing(rule: DbPolicyRule): boolean {
+export async function seedPolicyRuleIfMissing(rule: DbPolicyRule): Promise<boolean> {
   const source = rule.source ?? PolicySource.HostedDefault
-  return insertRowOrIgnore({
+  return await insertRowOrIgnoreAsync({
     table: "policy_configs",
     keys: { name: rule.name },
     insert: {
@@ -144,12 +144,12 @@ export function seedPolicyRuleIfMissing(rule: DbPolicyRule): boolean {
   })
 }
 
-export function deletePolicyRule(name: string): void {
+export async function deletePolicyRule(name: string): Promise<void> {
   const compiled = getPlatformDb()
     .deleteFrom("policy_configs")
     .where("name", "=", name)
     .compile()
-  runExec(compiled)
+  await runExecAsync(compiled)
 }
 
 // ── Sync-environment override queries ────────────────────────────
@@ -169,26 +169,26 @@ export interface DbSyncEnvironment {
   updated_by: string | null
 }
 
-export function listSyncEnvOverrides(): DbSyncEnvOverride[] {
+export async function listSyncEnvOverrides(): Promise<DbSyncEnvOverride[]> {
   const compiled = getPlatformDb()
     .selectFrom("sync_environment_override_configs")
     .selectAll()
     .orderBy("name")
     .compile()
-  return runAll<DbSyncEnvOverride>(compiled)
+  return await runAllAsync<DbSyncEnvOverride>(compiled)
 }
 
-export function getSyncEnvOverride(name: string): DbSyncEnvOverride | undefined {
+export async function getSyncEnvOverride(name: string): Promise<DbSyncEnvOverride | undefined> {
   const compiled = getPlatformDb()
     .selectFrom("sync_environment_override_configs")
     .selectAll()
     .where("name", "=", name)
     .compile()
-  return runGet<DbSyncEnvOverride>(compiled)
+  return await runGetAsync<DbSyncEnvOverride>(compiled)
 }
 
-export function saveSyncEnvOverride(row: DbSyncEnvOverride): void {
-  upsertRow({
+export async function saveSyncEnvOverride(row: DbSyncEnvOverride): Promise<void> {
+  await upsertRowAsync({
     table: "sync_environment_override_configs",
     keys: { name: row.name },
     insert: row,
@@ -200,43 +200,43 @@ export function saveSyncEnvOverride(row: DbSyncEnvOverride): void {
   })
 }
 
-export function deleteSyncEnvOverride(name: string): void {
+export async function deleteSyncEnvOverride(name: string): Promise<void> {
   const compiled = getPlatformDb()
     .deleteFrom("sync_environment_override_configs")
     .where("name", "=", name)
     .compile()
-  runExec(compiled)
+  await runExecAsync(compiled)
 }
 
-export function countSyncEnvironments(): number {
+export async function countSyncEnvironments(): Promise<number> {
   const compiled = getPlatformDb()
     .selectFrom("sync_environments")
     .select(sql<number>`count(*)`.as("count"))
     .compile()
-  const row = runGet<{ count: number | bigint }>(compiled)
+  const row = await runGetAsync<{ count: number | bigint }>(compiled)
   return Number(row?.count ?? 0)
 }
 
-export function listSyncEnvironments(): DbSyncEnvironment[] {
+export async function listSyncEnvironments(): Promise<DbSyncEnvironment[]> {
   const compiled = getPlatformDb()
     .selectFrom("sync_environments")
     .selectAll()
     .orderBy("name")
     .compile()
-  return runAll<DbSyncEnvironment>(compiled)
+  return await runAllAsync<DbSyncEnvironment>(compiled)
 }
 
-export function getSyncEnvironment(name: string): DbSyncEnvironment | undefined {
+export async function getSyncEnvironment(name: string): Promise<DbSyncEnvironment | undefined> {
   const compiled = getPlatformDb()
     .selectFrom("sync_environments")
     .selectAll()
     .where("name", "=", name)
     .compile()
-  return runGet<DbSyncEnvironment>(compiled)
+  return await runGetAsync<DbSyncEnvironment>(compiled)
 }
 
-export function saveSyncEnvironment(row: DbSyncEnvironment): void {
-  const existing = getSyncEnvironment(row.name)
+export async function saveSyncEnvironment(row: DbSyncEnvironment): Promise<void> {
+  const existing = await getSyncEnvironment(row.name)
   if (existing) {
     const compiled = getPlatformDb()
       .updateTable("sync_environments")
@@ -247,7 +247,7 @@ export function saveSyncEnvironment(row: DbSyncEnvironment): void {
       })
       .where("name", "=", row.name)
       .compile()
-    runExec(compiled)
+    await runExecAsync(compiled)
     return
   }
   const compiled = getPlatformDb()
@@ -260,13 +260,13 @@ export function saveSyncEnvironment(row: DbSyncEnvironment): void {
       updated_by: row.updated_by,
     })
     .compile()
-  runExec(compiled)
+  await runExecAsync(compiled)
 }
 
-export function deleteSyncEnvironment(name: string): void {
+export async function deleteSyncEnvironment(name: string): Promise<void> {
   const compiled = getPlatformDb()
     .deleteFrom("sync_environments")
     .where("name", "=", name)
     .compile()
-  runExec(compiled)
+  await runExecAsync(compiled)
 }

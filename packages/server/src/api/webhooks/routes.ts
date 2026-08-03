@@ -37,12 +37,12 @@ export function registerWebhookRoutes(
       return { error: "Invalid Bot Framework token" }
     }
     const messages = channel.parseWebhook(req.body)
-    const results = messages.map((msg) => router.handleInbound(msg))
+    const results = await Promise.all(messages.map((msg) => router.handleInbound(msg)))
     return { ok: true, processed: results.length }
   })
 
   app.get("/api/channels", async () =>
-    listChannelConfigs().map((config) => ({
+    (await listChannelConfigs()).map((config) => ({
       type: config.type,
       platformId: config.platformId,
       connected: !!router.getChannel(config.type)
@@ -74,7 +74,7 @@ export function registerWebhookRoutes(
       appSecret,
       platformId
     }
-    saveChannelConfig(cfg)
+    await saveChannelConfig(cfg)
     const channel = new TeamsChannel(cfg)
     queue.registerChannel(channel)
     router.registerChannel(channel)
@@ -92,12 +92,12 @@ export function registerWebhookRoutes(
       reply.code(400)
       return { error: "Invalid channel type" }
     }
-    deleteChannelConfig(type)
+    await deleteChannelConfig(type)
     return { ok: true }
   })
 
   app.get("/api/conversations", async () =>
-    router.listConversations().map((conversation) => ({
+    (await router.listConversations()).map((conversation) => ({
       id: conversation.id,
       channelType: conversation.channelType,
       senderId: conversation.senderId,
@@ -109,7 +109,7 @@ export function registerWebhookRoutes(
   )
 
   app.get<{ Params: { id: string } }>("/api/conversations/:id/messages", async (req) =>
-    getOutboundMessages(req.params.id).map((message) => ({
+    (await getOutboundMessages(req.params.id)).map((message) => ({
       id: message.id,
       channelType: message.channelType,
       recipientId: message.recipientId,

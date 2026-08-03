@@ -22,7 +22,7 @@ export async function prepareExecutionEnvironment(
 
   await persistence.initialize()
 
-  const host = createPerRunHost(command, workspace.activeRun, workspace.runWorkspace)
+  const host = await createPerRunHost(command, workspace.activeRun, workspace.runWorkspace)
   const tools = await resolveExecutionTools({
     request,
     signal: runtime.controller.signal,

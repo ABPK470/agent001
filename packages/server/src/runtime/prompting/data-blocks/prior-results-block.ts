@@ -30,9 +30,9 @@ export interface LoadPriorResultsOptions {
 }
 
 /** Load recent structured tool results for the thread, newest first. */
-export function loadPriorResults(opts: LoadPriorResultsOptions): DbToolResult[] {
+export async function loadPriorResults(opts: LoadPriorResultsOptions): Promise<DbToolResult[]> {
   if (!opts.threadId || !opts.upn) return []
-  const rows = loadRecentToolResultsForThread({
+  const rows = await loadRecentToolResultsForThread({
     threadId: opts.threadId,
     upn: opts.upn,
     limit: MAX_RESULTS * 4,

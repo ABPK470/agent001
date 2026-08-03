@@ -1,8 +1,8 @@
 import { sql } from "kysely"
 import { getPlatformStore } from "../platform-store.js"
 import { getPlatformDb } from "../../../schema/kysely.js"
-import { runAll, runExec, runGet } from "../../../schema/execute.js"
-import { upsertRow } from "../../../schema/upsert.js"
+import { runAllAsync, runExecAsync, runGetAsync } from "../../../schema/execute-async.js"
+import { upsertRowAsync } from "../../../schema/upsert.js"
 
 const DEFAULT_TENANT = "_default"
 
@@ -24,34 +24,34 @@ export interface SyncCatalogVersionSummary {
   isActive: boolean
 }
 
-export function getActiveSyncCatalogVersion(tenantId = DEFAULT_TENANT): number | null {
+export async function getActiveSyncCatalogVersion(tenantId = DEFAULT_TENANT): Promise<number | null> {
   const compiled = getPlatformDb()
     .selectFrom("sync_catalog_active")
     .select("version")
     .where("tenant_id", "=", tenantId)
     .compile()
-  const row = runGet<{ version: number }>(compiled)
+  const row = await runGetAsync<{ version: number }>(compiled)
   return row?.version ?? null
 }
 
-export function getSyncCatalogVersionRow(
+export async function getSyncCatalogVersionRow(
   tenantId: string,
   version: number,
-): DbSyncCatalogVersion | undefined {
+): Promise<DbSyncCatalogVersion | undefined> {
   const compiled = getPlatformDb()
     .selectFrom("sync_catalog_versions")
     .select(["tenant_id", "version", "snapshot_json", "reason", "created_by", "created_at"])
     .where("tenant_id", "=", tenantId)
     .where("version", "=", version)
     .compile()
-  return runGet<DbSyncCatalogVersion>(compiled)
+  return await runGetAsync<DbSyncCatalogVersion>(compiled)
 }
 
-export function listSyncCatalogVersionSummaries(
+export async function listSyncCatalogVersionSummaries(
   tenantId = DEFAULT_TENANT,
   limit = 50,
-): SyncCatalogVersionSummary[] {
-  const active = getActiveSyncCatalogVersion(tenantId)
+): Promise<SyncCatalogVersionSummary[]> {
+  const active = await getActiveSyncCatalogVersion(tenantId)
   const compiled = getPlatformDb()
     .selectFrom("sync_catalog_versions")
     .select(["tenant_id", "version", "reason", "created_by", "created_at"])
@@ -59,7 +59,7 @@ export function listSyncCatalogVersionSummaries(
     .orderBy("version", "desc")
     .limit(limit)
     .compile()
-  const rows = runAll<
+  const rows = await runAllAsync<
     Pick<DbSyncCatalogVersion, "tenant_id" | "version" | "reason" | "created_by" | "created_at">
   >(compiled)
 
@@ -73,22 +73,22 @@ export function listSyncCatalogVersionSummaries(
   }))
 }
 
-export function appendSyncCatalogVersion(args: {
+export async function appendSyncCatalogVersion(args: {
   tenantId?: string
   snapshotJson: string
   reason: string
   actor: string
-}): number {
+}): Promise<number> {
   const tenantId = args.tenantId ?? DEFAULT_TENANT
   const createdAt = new Date().toISOString()
 
-  return getPlatformStore().transaction(() => {
+  return await getPlatformStore().transactionAsync(async () => {
     const maxCompiled = getPlatformDb()
       .selectFrom("sync_catalog_versions")
       .select(sql<number>`coalesce(max(version), 0)`.as("max_version"))
       .where("tenant_id", "=", tenantId)
       .compile()
-    const maxRow = runGet<{ max_version: number | bigint }>(maxCompiled)
+    const maxRow = await runGetAsync<{ max_version: number | bigint }>(maxCompiled)
     const nextVersion = Number(maxRow?.max_version ?? 0) + 1
 
     const insertVersion = getPlatformDb()
@@ -102,9 +102,9 @@ export function appendSyncCatalogVersion(args: {
         created_at: createdAt,
       })
       .compile()
-    runExec(insertVersion)
+    await runExecAsync(insertVersion)
 
-    upsertRow({
+    await upsertRowAsync({
       table: "sync_catalog_active",
       keys: { tenant_id: tenantId },
       insert: {
@@ -122,12 +122,12 @@ export function appendSyncCatalogVersion(args: {
   })
 }
 
-export function countSyncCatalogVersions(tenantId = DEFAULT_TENANT): number {
+export async function countSyncCatalogVersions(tenantId = DEFAULT_TENANT): Promise<number> {
   const compiled = getPlatformDb()
     .selectFrom("sync_catalog_versions")
     .select(sql<number>`count(*)`.as("count"))
     .where("tenant_id", "=", tenantId)
     .compile()
-  const row = runGet<{ count: number | bigint }>(compiled)
+  const row = await runGetAsync<{ count: number | bigint }>(compiled)
   return Number(row?.count ?? 0)
 }

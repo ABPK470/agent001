@@ -72,16 +72,16 @@ export class AgentBus implements AgentBusPort {
    * subscribers, and emits SSE so connected UIs see it in real time.
    * Help messages also fire `AgentHelpRequested` for prominent display.
    */
-  publish(input: {
+  async publish(input: {
     topic: string
     fromRunId: string
     fromAgent: string
     content: string
     protocol?: BusProtocol
     replyTo?: string | null
-  }): AgentMessage {
+  }): Promise<AgentMessage> {
     const protocol = input.protocol ?? BusProtocol.Broadcast
-    const row = db.insertAgentMessage({
+    const row = await db.insertAgentMessage({
       rootRunId: this.rootRunId,
       fromRunId: input.fromRunId,
       fromAgent: input.fromAgent,
@@ -136,8 +136,8 @@ export class AgentBus implements AgentBusPort {
   }
 
   /** Read message history from the persistent store (oldest first). */
-  history(topic?: string): AgentMessage[] {
-    const all = db.listAgentMessages(this.rootRunId).map(rowToMessage)
+  async history(topic?: string): Promise<AgentMessage[]> {
+    const all = (await db.listAgentMessages(this.rootRunId)).map(rowToMessage)
     if (!topic || topic === "*") return all
     return all.filter((m) => m.topic === topic)
   }
@@ -188,7 +188,10 @@ export function createBusTools(bus: AgentBus, runId: string, agentName: string):
   // Live inbox — accumulates messages observed since this agent's last
   // check_messages call. Initialized from persisted history so a child
   // spawned mid-run-tree sees what siblings published before it existed.
-  const inbox: AgentMessage[] = bus.history().filter((m) => m.fromRunId !== runId)
+  const inbox: AgentMessage[] = []
+  void bus.history().then((messages) => {
+    inbox.push(...messages.filter((message) => message.fromRunId !== runId))
+  })
 
   bus.subscribe("*", (msg) => {
     if (msg.fromRunId === runId) return // don't echo own messages
@@ -236,7 +239,7 @@ export function createBusTools(bus: AgentBus, runId: string, agentName: string):
         if (protocol === BusProtocol.Answer && !replyTo) {
           return `Error: protocol="answer" requires reply_to (the message id being answered).`
         }
-        const msg = bus.publish({
+        const msg = await bus.publish({
           topic,
           fromRunId: runId,
           fromAgent: agentName,
@@ -320,7 +323,7 @@ export function createBusTools(bus: AgentBus, runId: string, agentName: string):
         // Fast path: check the persistent store first — an Answer might
         // already exist (sibling replied between send_message returning
         // and us calling wait_for_response).
-        const existing = db.findReplyTo(messageId)
+        const existing = await db.findReplyTo(messageId)
         if (existing) {
           return `[${existing.fromAgent}] (answer to ${messageId}): ${existing.content}`
         }

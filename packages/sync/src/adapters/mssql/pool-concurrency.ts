@@ -18,17 +18,17 @@ function parsePositiveInt(raw: string | undefined): number | null {
   return Number.isFinite(n) && n > 0 ? n : null
 }
 
-export function resolvePreviewTableConcurrency(
+export async function resolvePreviewTableConcurrency(
   host: MssqlAccessHost & SyncEnvironmentRegistryHost,
   source: string,
   target: string
-): number {
+): Promise<number> {
   const override = parsePositiveInt(process.env["SYNC_PREVIEW_CONCURRENCY"])
   if (override) return override
 
   const limit = Math.min(
-    Math.floor(poolGateLimit(host, source) / PEAK_POOL_SLOTS_PER_TABLE),
-    Math.floor(poolGateLimit(host, target) / PEAK_POOL_SLOTS_PER_TABLE)
+    Math.floor((await poolGateLimit(host, source)) / PEAK_POOL_SLOTS_PER_TABLE),
+    Math.floor((await poolGateLimit(host, target)) / PEAK_POOL_SLOTS_PER_TABLE)
   )
   return Math.max(1, limit)
 }
@@ -37,19 +37,19 @@ export function resolvePreviewTableConcurrency(
  * How many full entity previews may run at once (e.g. sync_diff_scan).
  * Defaults to 1 on typical pool sizes — table parallelism already fills the budget.
  */
-export function resolveEntityPreviewConcurrency(
+export async function resolveEntityPreviewConcurrency(
   host: MssqlAccessHost & SyncEnvironmentRegistryHost,
   source: string,
   target: string
-): number {
+): Promise<number> {
   const override = parsePositiveInt(process.env["SYNC_ENTITY_PREVIEW_CONCURRENCY"])
   if (override) return override
 
-  const tableConcurrency = resolvePreviewTableConcurrency(host, source, target)
+  const tableConcurrency = await resolvePreviewTableConcurrency(host, source, target)
   const slotsPerPreview = tableConcurrency * PEAK_POOL_SLOTS_PER_TABLE
   const limit = Math.min(
-    Math.floor(poolGateLimit(host, source) / slotsPerPreview),
-    Math.floor(poolGateLimit(host, target) / slotsPerPreview)
+    Math.floor((await poolGateLimit(host, source)) / slotsPerPreview),
+    Math.floor((await poolGateLimit(host, target)) / slotsPerPreview)
   )
   return Math.max(1, limit)
 }
@@ -63,17 +63,17 @@ export interface PoolConcurrencySummary {
   readonly entityConcurrency: number
 }
 
-export function summarizePoolConcurrency(
+export async function summarizePoolConcurrency(
   host: MssqlAccessHost & SyncEnvironmentRegistryHost,
   source: string,
   target: string
-): PoolConcurrencySummary {
+): Promise<PoolConcurrencySummary> {
   return {
     source,
     target,
-    sourcePoolMax: readPoolMax(host, source),
-    targetPoolMax: readPoolMax(host, target),
-    tableConcurrency: resolvePreviewTableConcurrency(host, source, target),
-    entityConcurrency: resolveEntityPreviewConcurrency(host, source, target)
+    sourcePoolMax: await readPoolMax(host, source),
+    targetPoolMax: await readPoolMax(host, target),
+    tableConcurrency: await resolvePreviewTableConcurrency(host, source, target),
+    entityConcurrency: await resolveEntityPreviewConcurrency(host, source, target)
   }
 }

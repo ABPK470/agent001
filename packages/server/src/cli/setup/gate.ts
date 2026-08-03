@@ -8,13 +8,13 @@ export interface GateOptions {
   readonly strict?: boolean
 }
 
-export function ensureSetupReady(opts: GateOptions = {}): void {
+export async function ensureSetupReady(opts: GateOptions = {}): Promise<void> {
   if (opts.skip || process.env.MIA_SKIP_SETUP === "1" || process.env.MIA_SKIP_SETUP === "true") {
     return
   }
 
   const layout = resolveSetupLayout()
-  const report = runSetupChecks(layout)
+  const report = await runSetupChecks(layout)
   const strict = opts.strict || process.env.MIA_SETUP_STRICT === "1"
 
   if (report.checks.every((c) => c.severity === "ok")) {
@@ -38,8 +38,8 @@ export function ensureSetupReady(opts: GateOptions = {}): void {
   console.warn("")
 }
 
-export function runSetupCheckOnly(): number {
-  const report = runSetupChecks(resolveSetupLayout())
+export async function runSetupCheckOnly(): Promise<number> {
+  const report = await runSetupChecks(resolveSetupLayout())
   console.log(formatSetupReport(report))
   if (hasBlockingErrors(report)) return 1
   return 0

@@ -44,7 +44,7 @@ export async function buildRuntimeSections(ctx: BuildContext): Promise<Message[]
     })
   }
 
-  const attachmentBlock = buildAttachmentManifest(opts.attachmentIds ?? [])
+  const attachmentBlock = await buildAttachmentManifest(opts.attachmentIds ?? [])
   if (attachmentBlock) {
     messages.push({
       role: MessageRole.System,

@@ -115,10 +115,10 @@ function serialise(
   }
 }
 
-export function planConnectorsImport(args: {
+export async function planConnectorsImport(args: {
   version: unknown
   connectors: unknown
-}): ConnectorImportPlan {
+}): Promise<ConnectorImportPlan> {
   const errors: string[] = []
   const warnings: string[] = []
   const entries: ConnectorImportEntry[] = []
@@ -170,7 +170,7 @@ export function planConnectorsImport(args: {
       continue
     }
 
-    const existing = db.getConnector(id)
+    const existing = await db.getConnector(id)
     const resolvedConfig =
       existing && row["config"] !== undefined
         ? mergeSecretsOnUpdate(kind, sanitised, parseRow(existing).config)
@@ -225,14 +225,14 @@ function planToGate(plan: ConnectorImportPlan, dryRun: boolean, applied: boolean
   })
 }
 
-export function importConnectors(args: {
+export async function importConnectors(args: {
   version: unknown
   connectors: unknown
   dryRun: boolean
   reason: unknown
   actor: string
-}): PlatformImportGateResult {
-  const plan = planConnectorsImport({
+}): Promise<PlatformImportGateResult> {
+  const plan = await planConnectorsImport({
     version: args.version,
     connectors: args.connectors,
   })
@@ -254,7 +254,7 @@ export function importConnectors(args: {
   }
 
   // Re-plan so apply never trusts a stale client dry-run.
-  const fresh = planConnectorsImport({
+  const fresh = await planConnectorsImport({
     version: args.version,
     connectors: args.connectors,
   })
@@ -263,7 +263,7 @@ export function importConnectors(args: {
   const reason = requireReason(args.reason)!
   const now = new Date().toISOString()
   for (const entry of fresh.entries) {
-    const existing = db.getConnector(entry.id)
+    const existing = await db.getConnector(entry.id)
     const connector: Connector = {
       id: entry.id,
       kind: entry.kind,
@@ -275,7 +275,7 @@ export function importConnectors(args: {
       updatedAt: now,
       updatedBy: args.actor,
     }
-    db.saveConnector(serialise(connector, args.actor, existing?.created_at))
+    await db.saveConnector(serialise(connector, args.actor, existing?.created_at))
   }
 
   const applied = planToGate(fresh, false, true)

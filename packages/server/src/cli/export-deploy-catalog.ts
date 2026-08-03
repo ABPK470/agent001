@@ -17,14 +17,14 @@ import {
 } from "../api/platform/service/export-deploy-artifacts.js"
 import { openDatabase } from "../infra/persistence/adapters/sqlite/index.js"
 
-main()
+await main()
 
-function main(): void {
+async function main(): Promise<void> {
   const options = parseArgs(process.argv.slice(2))
   openDatabase()
 
   if (options.dryRun) {
-    const snapshot = buildDeployCatalogSnapshot({
+    const snapshot = await buildDeployCatalogSnapshot({
       tenantId: options.tenantId ?? undefined,
       includeRetiredEntities: options.includeRetired,
     })
@@ -32,7 +32,7 @@ function main(): void {
     return
   }
 
-  const result = writeDeployCatalogSnapshot({
+  const result = await writeDeployCatalogSnapshot({
     outputParentDir: resolve(options.output),
     tenantId: options.tenantId ?? undefined,
     includeRetiredEntities: options.includeRetired,

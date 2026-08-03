@@ -3,7 +3,7 @@
  */
 
 import { getPlatformDb } from "../../../schema/kysely.js"
-import { runExec, runGet } from "../../../schema/execute.js"
+import { runExecAsync, runGetAsync } from "../../../schema/execute-async.js"
 import { platformNow } from "../../../schema/sql-time.js"
 import { LlmProvider } from "../../../../../internal/enums/llm.js"
 
@@ -18,16 +18,16 @@ export interface DbLlmConfig {
   updated_at: string
 }
 
-export function getLlmConfig(): DbLlmConfig {
+export async function getLlmConfig(): Promise<DbLlmConfig> {
   const compiled = getPlatformDb()
     .selectFrom("llm_config")
     .select(["provider", "model", "api_key", "base_url", "updated_at"])
     .where("id", "=", 1)
     .compile()
-  return runGet<DbLlmConfig>(compiled) as DbLlmConfig
+  return await runGetAsync<DbLlmConfig>(compiled) as DbLlmConfig
 }
 
-export function saveLlmConfig(cfg: Omit<DbLlmConfig, "updated_at">): void {
+export async function saveLlmConfig(cfg: Omit<DbLlmConfig, "updated_at">): Promise<void> {
   const compiled = getPlatformDb()
     .updateTable("llm_config")
     .set({
@@ -39,5 +39,5 @@ export function saveLlmConfig(cfg: Omit<DbLlmConfig, "updated_at">): void {
     })
     .where("id", "=", 1)
     .compile()
-  runExec(compiled)
+  await runExecAsync(compiled)
 }

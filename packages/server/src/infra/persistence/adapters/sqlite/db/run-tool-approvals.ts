@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto"
 import { getPlatformDb } from "../../../schema/kysely.js"
-import { runAll, runExec, runGet } from "../../../schema/execute.js"
+import { runAllAsync, runExecAsync, runGetAsync } from "../../../schema/execute-async.js"
 import { platformNow } from "../../../schema/sql-time.js"
 
 export type RunToolApprovalStatus = "pending" | "approved" | "denied" | "consumed"
@@ -49,14 +49,14 @@ function mapRow(row: DbRunToolApproval): RunToolApprovalRecord {
   }
 }
 
-export function upsertPendingRunToolApproval(input: {
+export async function upsertPendingRunToolApproval(input: {
   runId: string
   stepId: string
   toolName: string
   args: Record<string, unknown>
   reason: string
   policyName: string
-}): RunToolApprovalRecord {
+}): Promise<RunToolApprovalRecord> {
   const existingCompiled = getPlatformDb()
     .selectFrom("run_tool_approvals")
     .selectAll()
@@ -64,7 +64,7 @@ export function upsertPendingRunToolApproval(input: {
     .where("step_id", "=", input.stepId)
     .where("status", "=", "pending")
     .compile()
-  const existing = runGet<DbRunToolApproval>(existingCompiled)
+  const existing = await runGetAsync<DbRunToolApproval>(existingCompiled)
   if (existing) return mapRow(existing)
 
   const row: DbRunToolApproval = {
@@ -82,24 +82,24 @@ export function upsertPendingRunToolApproval(input: {
   }
 
   const compiled = getPlatformDb().insertInto("run_tool_approvals").values(row).compile()
-  runExec(compiled)
+  await runExecAsync(compiled)
   return mapRow(row)
 }
 
-export function getRunToolApproval(id: string): RunToolApprovalRecord | null {
+export async function getRunToolApproval(id: string): Promise<RunToolApprovalRecord | null> {
   const compiled = getPlatformDb()
     .selectFrom("run_tool_approvals")
     .selectAll()
     .where("id", "=", id)
     .compile()
-  const row = runGet<DbRunToolApproval>(compiled)
+  const row = await runGetAsync<DbRunToolApproval>(compiled)
   return row ? mapRow(row) : null
 }
 
-export function getPendingRunToolApproval(
+export async function getPendingRunToolApproval(
   runId: string,
   stepId: string
-): RunToolApprovalRecord | null {
+): Promise<RunToolApprovalRecord | null> {
   const compiled = getPlatformDb()
     .selectFrom("run_tool_approvals")
     .selectAll()
@@ -107,11 +107,11 @@ export function getPendingRunToolApproval(
     .where("step_id", "=", stepId)
     .where("status", "=", "pending")
     .compile()
-  const row = runGet<DbRunToolApproval>(compiled)
+  const row = await runGetAsync<DbRunToolApproval>(compiled)
   return row ? mapRow(row) : null
 }
 
-export function listPendingRunToolApprovalsForRuns(runIds: readonly string[]): RunToolApprovalRecord[] {
+export async function listPendingRunToolApprovalsForRuns(runIds: readonly string[]): Promise<RunToolApprovalRecord[]> {
   if (runIds.length === 0) return []
   const compiled = getPlatformDb()
     .selectFrom("run_tool_approvals")
@@ -120,10 +120,10 @@ export function listPendingRunToolApprovalsForRuns(runIds: readonly string[]): R
     .where("status", "=", "pending")
     .orderBy("requested_at", "desc")
     .compile()
-  return runAll<DbRunToolApproval>(compiled).map(mapRow)
+  return (await runAllAsync<DbRunToolApproval>(compiled)).map(mapRow)
 }
 
-export function listApprovedToolGrantsForRuns(runIds: readonly string[]): RunToolApprovalRecord[] {
+export async function listApprovedToolGrantsForRuns(runIds: readonly string[]): Promise<RunToolApprovalRecord[]> {
   if (runIds.length === 0) return []
   const compiled = getPlatformDb()
     .selectFrom("run_tool_approvals")
@@ -132,10 +132,10 @@ export function listApprovedToolGrantsForRuns(runIds: readonly string[]): RunToo
     .where("status", "=", "approved")
     .orderBy("requested_at", "asc")
     .compile()
-  return runAll<DbRunToolApproval>(compiled).map(mapRow)
+  return (await runAllAsync<DbRunToolApproval>(compiled)).map(mapRow)
 }
 
-export function markRunToolApprovalApproved(id: string, actor: string): RunToolApprovalRecord | null {
+export async function markRunToolApprovalApproved(id: string, actor: string): Promise<RunToolApprovalRecord | null> {
   const compiled = getPlatformDb()
     .updateTable("run_tool_approvals")
     .set({
@@ -146,14 +146,14 @@ export function markRunToolApprovalApproved(id: string, actor: string): RunToolA
     .where("id", "=", id)
     .where("status", "=", "pending")
     .compile()
-  runExec(compiled)
+  await runExecAsync(compiled)
   return getRunToolApproval(id)
 }
 
-export function markRunToolApprovalDenied(
+export async function markRunToolApprovalDenied(
   id: string,
   actor: string
-): RunToolApprovalRecord | null {
+): Promise<RunToolApprovalRecord | null> {
   const compiled = getPlatformDb()
     .updateTable("run_tool_approvals")
     .set({
@@ -164,25 +164,25 @@ export function markRunToolApprovalDenied(
     .where("id", "=", id)
     .where("status", "=", "pending")
     .compile()
-  runExec(compiled)
+  await runExecAsync(compiled)
   return getRunToolApproval(id)
 }
 
-export function consumeRunToolApprovalGrant(id: string): void {
+export async function consumeRunToolApprovalGrant(id: string): Promise<void> {
   const compiled = getPlatformDb()
     .updateTable("run_tool_approvals")
     .set({ status: "consumed" })
     .where("id", "=", id)
     .where("status", "=", "approved")
     .compile()
-  runExec(compiled)
+  await runExecAsync(compiled)
 }
 
-export function markRunWaitingForApproval(runId: string): void {
+export async function markRunWaitingForApproval(runId: string): Promise<void> {
   const compiled = getPlatformDb()
     .updateTable("runs")
     .set({ status: "waiting_for_approval", error: null })
     .where("id", "=", runId)
     .compile()
-  runExec(compiled)
+  await runExecAsync(compiled)
 }

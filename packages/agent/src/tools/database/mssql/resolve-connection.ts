@@ -30,13 +30,15 @@ export function lookupRegistryKey(keys: Iterable<string>, name: string): string 
 }
 
 /** Live connector entries (id + name) from the pool provider, or null when absent. */
-function connectorEntries(host: MssqlResolveHost): Array<{ id: string; name: string }> | null {
+async function connectorEntries(
+  host: MssqlResolveHost,
+): Promise<ReadonlyArray<{ id: string; name: string }> | null> {
   const pools = host.mssql.pools
-  return pools ? Array.from(pools.list()) : null
+  return pools ? await pools.list() : null
 }
 
-export function listMssqlConnectionNames(host: MssqlResolveHost): string[] {
-  const entries = connectorEntries(host)
+export async function listMssqlConnectionNames(host: MssqlResolveHost): Promise<string[]> {
+  const entries = await connectorEntries(host)
   if (entries) return entries.map((e) => e.id)
   return Array.from(host.mssql.databases.keys())
 }
@@ -51,8 +53,11 @@ function isDefaultConnectionToken(name: string | null | undefined): boolean {
  * for the legacy databases path). Throws when an explicit name is unknown or no
  * connections are configured.
  */
-export function resolveMssqlConnectionName(host: MssqlResolveHost, name?: string | null): string {
-  const entries = connectorEntries(host)
+export async function resolveMssqlConnectionName(
+  host: MssqlResolveHost,
+  name?: string | null
+): Promise<string> {
+  const entries = await connectorEntries(host)
   if (entries) {
     if (entries.length === 0) {
       throw new Error("MSSQL not configured — no connectors enabled.")
@@ -77,7 +82,7 @@ export function resolveMssqlConnectionName(host: MssqlResolveHost, name?: string
   }
 
   // Legacy databases-map path (tests).
-  const keys = listMssqlConnectionNames(host)
+  const keys = await listMssqlConnectionNames(host)
   if (keys.length === 0) {
     throw new Error("MSSQL not configured — no database connections registered.")
   }
@@ -101,7 +106,10 @@ export function resolveMssqlConnectionName(host: MssqlResolveHost, name?: string
 }
 
 /** Resolve `connection` from a tool args object to the canonical connector id. */
-export function resolveToolConnectionArg(host: MssqlResolveHost, args: Record<string, unknown>): string {
+export async function resolveToolConnectionArg(
+  host: MssqlResolveHost,
+  args: Record<string, unknown>
+): Promise<string> {
   const raw = args.connection != null && String(args.connection).trim()
     ? String(args.connection).trim()
     : null
@@ -109,12 +117,12 @@ export function resolveToolConnectionArg(host: MssqlResolveHost, args: Record<st
 }
 
 /** Non-throwing variant — returns null when resolution fails. */
-export function tryResolveMssqlConnectionName(
+export async function tryResolveMssqlConnectionName(
   host: MssqlResolveHost,
   name?: string | null
-): string | null {
+): Promise<string | null> {
   try {
-    return resolveMssqlConnectionName(host, name)
+    return await resolveMssqlConnectionName(host, name)
   } catch {
     return null
   }

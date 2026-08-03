@@ -47,14 +47,14 @@ const upnArg =
   ?? (args.includes("--upn") ? args[args.indexOf("--upn") + 1] : undefined)
 const force = args.includes("--force")
 
-function resolveDefaultSeedUpn(): string {
-  const recentSession = listSessions()[0]?.upn?.trim().toLowerCase()
+async function resolveDefaultSeedUpn(): Promise<string> {
+  const recentSession = (await listSessions())[0]?.upn?.trim().toLowerCase()
   if (recentSession) return recentSession
-  return usersFallbackUpn()
+  return await usersFallbackUpn()
 }
 
-function usersFallbackUpn(): string {
-  return (listUsers()[0]?.upn ?? "").toLowerCase()
+async function usersFallbackUpn(): Promise<string> {
+  return ((await listUsers())[0]?.upn ?? "").toLowerCase()
 }
 
 function ensureUser(upn: string): void {
@@ -83,11 +83,11 @@ function clearDemoHistory(): void {
   db.prepare(`DELETE FROM sync_runs WHERE plan_id LIKE ?`).run(`${DEMO_SYNC_PLAN_PREFIX}%`)
 }
 
-function ensureCatalog(): void {
-  loadBootSyncEnvironments(projectRoot, [])
-  if (listSyncDefinitions().length === 0) {
+async function ensureCatalog(): Promise<void> {
+  await loadBootSyncEnvironments(projectRoot, [])
+  if ((await listSyncDefinitions()).length === 0) {
     console.log("[seed] publishing sync definitions from entity registry…")
-    const result = publishSyncDefinitionsFromDb(projectRoot)
+    const result = await publishSyncDefinitionsFromDb(projectRoot)
     console.log(
       `[seed] published ${result.definitionCount} definition(s) at ${result.publishedAt}`,
     )
@@ -96,16 +96,16 @@ function ensureCatalog(): void {
 }
 
 openDatabase()
-ensureCatalog()
+await ensureCatalog()
 
-const upn = (upnArg ?? resolveDefaultSeedUpn()).toLowerCase()
+const upn = (upnArg ?? await resolveDefaultSeedUpn()).toLowerCase()
 if (!upn) {
   console.error("No users in the database. Log in once, then re-run this script.")
   process.exit(1)
 }
 ensureUser(upn)
 
-const activeSessionUpn = listSessions()[0]?.upn?.trim().toLowerCase() ?? null
+const activeSessionUpn = (await listSessions())[0]?.upn?.trim().toLowerCase() ?? null
 if (activeSessionUpn && activeSessionUpn !== upn) {
   console.warn(
     `[seed] note: demo runs will be owned by "${upn}" but your latest session is "${activeSessionUpn}".`,
@@ -177,7 +177,7 @@ for (const scenario of DEMO_SYNC_SCENARIOS) {
   }
 }
 
-flushEventStore()
+await flushEventStore()
 
 console.log(`Database:  ${getDbPath()}`)
 console.log(`User:      ${upn}`)

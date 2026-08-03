@@ -90,7 +90,7 @@ export async function finalizeFailedRun(
       llmCalls: agent.llmCalls
     }
   })
-  db.saveLog({
+  await db.saveLog({
     run_id: request.runId,
     level: "run:error",
     message: `Failed — ${errMsg.slice(0, 200)}`,
@@ -103,7 +103,7 @@ export async function finalizeFailedRun(
     runId: request.runId,
     actions: [
       { label: "Review", action: NotificationActionType.ViewRun, data: { runId: request.runId } },
-      ...buildRunCapabilityActions(request.runId, RunStatus.Failed),
+      ...await buildRunCapabilityActions(request.runId, RunStatus.Failed),
     ]
   })
 }

@@ -168,7 +168,7 @@ export function wireEventBroadcasting(
         default:
           logMsg = eventType.replace(/^[^.]+\./, "")
       }
-      db.saveLog({
+      await db.saveLog({
         run_id: runId,
         level: isError ? `${typeGroup}:error` : typeGroup,
         message: logMsg,

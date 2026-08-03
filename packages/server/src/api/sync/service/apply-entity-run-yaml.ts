@@ -7,15 +7,15 @@ import { hasSyncDefinitionFlowTemplate } from "@mia/sync"
 import * as db from "../../../infra/persistence/sqlite.js"
 import { loadAuthoringFlowCatalog } from "./definitions.js"
 
-export function validateEntityFlowId(
+export async function validateEntityFlowId(
   projectRoot: string,
   flowId: string,
   tenantId = "_default",
-): string | null {
+): Promise<string | null> {
   const trimmed = flowId.trim()
   if (!trimmed) return "flowId is required"
-  if (db.getSyncFlow(tenantId, trimmed)) return null
-  const catalog = loadAuthoringFlowCatalog(projectRoot, tenantId)
+  if (await db.getSyncFlow(tenantId, trimmed)) return null
+  const catalog = await loadAuthoringFlowCatalog(projectRoot, tenantId)
   if (!hasSyncDefinitionFlowTemplate(catalog, trimmed)) {
     return `unknown flowId "${trimmed}"`
   }
@@ -23,10 +23,10 @@ export function validateEntityFlowId(
 }
 
 /** @deprecated Use validateEntityFlowId */
-export function validateEntityRunYaml(
+export async function validateEntityRunYaml(
   projectRoot: string,
   run: { template: string },
   tenantId = "_default",
-): string | null {
-  return validateEntityFlowId(projectRoot, run.template, tenantId)
+): Promise<string | null> {
+  return await validateEntityFlowId(projectRoot, run.template, tenantId)
 }

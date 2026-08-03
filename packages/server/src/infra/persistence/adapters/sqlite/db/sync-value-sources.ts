@@ -4,8 +4,8 @@ import {
 } from "@mia/shared-types"
 
 import { getPlatformDb } from "../../../schema/kysely.js"
-import { runAll, runChanges } from "../../../schema/execute.js"
-import { upsertRow } from "../../../schema/upsert.js"
+import { runAllAsync, runChangesAsync } from "../../../schema/execute-async.js"
+import { upsertRowAsync } from "../../../schema/upsert.js"
 
 const DEFAULT_TENANT = "_default"
 
@@ -17,27 +17,27 @@ export interface DbSyncValueSource {
   definition_json: string
 }
 
-export function listSyncValueSources(tenantId = DEFAULT_TENANT): DbSyncValueSource[] {
+export async function listSyncValueSources(tenantId = DEFAULT_TENANT): Promise<DbSyncValueSource[]> {
   const compiled = getPlatformDb()
     .selectFrom("sync_value_sources")
     .select(["tenant_id", "id", "label", "built_in", "definition_json"])
     .where("tenant_id", "=", tenantId)
     .orderBy("id")
     .compile()
-  return runAll<DbSyncValueSource>(compiled)
+  return await runAllAsync<DbSyncValueSource>(compiled)
 }
 
-export function saveSyncValueSource(
+export async function saveSyncValueSource(
   row: Omit<DbSyncValueSource, "built_in" | "definition_json"> & {
     built_in?: number
     definition_json?: string
   },
-): void {
+): Promise<void> {
   const definition =
     row.definition_json ??
     JSON.stringify(parseCustomValueSourceDefinition("{}", row.id))
   const builtIn = row.built_in ?? 0
-  upsertRow({
+  await upsertRowAsync({
     table: "sync_value_sources",
     keys: { tenant_id: row.tenant_id, id: row.id },
     insert: {
@@ -54,14 +54,14 @@ export function saveSyncValueSource(
   })
 }
 
-export function deleteSyncValueSource(tenantId: string, id: string): boolean {
+export async function deleteSyncValueSource(tenantId: string, id: string): Promise<boolean> {
   const compiled = getPlatformDb()
     .deleteFrom("sync_value_sources")
     .where("tenant_id", "=", tenantId)
     .where("id", "=", id)
     .where("built_in", "=", 0)
     .compile()
-  return runChanges(compiled) > 0
+  return await runChangesAsync(compiled) > 0
 }
 
 export function mapValueSourceDefinition(

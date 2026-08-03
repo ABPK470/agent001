@@ -14,12 +14,12 @@ function dashboardIdFor(req: { session: { upn: string } }): string {
 
 export function registerLayoutRoutes(app: FastifyInstance): void {
   app.get("/api/dashboard-state", async (req) => {
-    const state = db.getLayout(dashboardIdFor(req))
+    const state = await db.getLayout(dashboardIdFor(req))
     return state ? parseBoundaryJson(state.config) : null
   })
 
   app.put<{ Body: { views: unknown; activeViewId: string } }>("/api/dashboard-state", async (req) => {
-    db.saveLayout({
+    await db.saveLayout({
       id: dashboardIdFor(req),
       name: `Dashboard for ${req.session.displayName}`,
       config: JSON.stringify({
@@ -32,7 +32,7 @@ export function registerLayoutRoutes(app: FastifyInstance): void {
   })
 
   app.get("/api/layouts", async () => {
-    const layouts = db.getLayouts()
+    const layouts = await db.getLayouts()
     return layouts.map((layout) => ({
       id: layout.id,
       name: layout.name,
@@ -49,7 +49,7 @@ export function registerLayoutRoutes(app: FastifyInstance): void {
     }
 
     const id = randomUUID()
-    db.saveLayout({
+    await db.saveLayout({
       id,
       name: String(name),
       config: JSON.stringify(config),
@@ -63,13 +63,13 @@ export function registerLayoutRoutes(app: FastifyInstance): void {
   app.put<{ Params: { id: string }; Body: { name?: string; config?: unknown } }>(
     "/api/layouts/:id",
     async (req, reply) => {
-      const existing = db.getLayout(req.params.id)
+      const existing = await db.getLayout(req.params.id)
       if (!existing) {
         reply.code(404)
         return { error: "Layout not found" }
       }
 
-      db.saveLayout({
+      await db.saveLayout({
         id: req.params.id,
         name: req.body.name ? String(req.body.name) : existing.name,
         config: req.body.config ? JSON.stringify(req.body.config) : existing.config,
@@ -81,7 +81,7 @@ export function registerLayoutRoutes(app: FastifyInstance): void {
   )
 
   app.delete<{ Params: { id: string } }>("/api/layouts/:id", async (req) => {
-    db.deleteLayout(req.params.id)
+    await db.deleteLayout(req.params.id)
     return { ok: true }
   })
 }

@@ -116,7 +116,7 @@ function buildInspectDefinitionTool(host: AgentHost): Tool {
     async execute(args) {
       let connName: string
       try {
-        connName = resolveToolConnectionArg(host, args)
+        connName = await resolveToolConnectionArg(host, args)
       } catch (err) {
         return `Error: ${err instanceof Error ? err.message : String(err)}`
       }

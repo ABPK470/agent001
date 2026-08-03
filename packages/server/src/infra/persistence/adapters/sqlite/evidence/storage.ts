@@ -14,7 +14,7 @@ import { randomUUID } from "node:crypto"
 import { mkdirSync, writeFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { getPlatformDb } from "../../../schema/kysely.js"
-import { runAll, runExec, runGet } from "../../../schema/execute.js"
+import { runAllAsync, runExecAsync, runGetAsync } from "../../../schema/execute-async.js"
 import { platformNow } from "../../../schema/sql-time.js"
 import {
   buildEnvelope,
@@ -95,7 +95,7 @@ export async function sealEvidence(i: SealEvidenceInput): Promise<SealedEvidence
       created_at: platformNow(),
     })
     .compile()
-  runExec(compiled)
+  await runExecAsync(compiled)
 
   return {
     id,
@@ -122,7 +122,7 @@ export interface EvidenceIndexRow {
   created_at: string
 }
 
-export function getEvidenceByPlan(planId: string): EvidenceIndexRow | null {
+export async function getEvidenceByPlan(planId: string): Promise<EvidenceIndexRow | null> {
   const compiled = getPlatformDb()
     .selectFrom("sync_evidence_log")
     .selectAll()
@@ -130,19 +130,19 @@ export function getEvidenceByPlan(planId: string): EvidenceIndexRow | null {
     .orderBy("created_at", "desc")
     .limit(1)
     .compile()
-  return runGet<EvidenceIndexRow>(compiled) ?? null
+  return await runGetAsync<EvidenceIndexRow>(compiled) ?? null
 }
 
-export function getEvidenceById(id: string): EvidenceIndexRow | null {
+export async function getEvidenceById(id: string): Promise<EvidenceIndexRow | null> {
   const compiled = getPlatformDb()
     .selectFrom("sync_evidence_log")
     .selectAll()
     .where("id", "=", id)
     .compile()
-  return runGet<EvidenceIndexRow>(compiled) ?? null
+  return await runGetAsync<EvidenceIndexRow>(compiled) ?? null
 }
 
-export function listEvidence(tenantId: string, limit = 100): EvidenceIndexRow[] {
+export async function listEvidence(tenantId: string, limit = 100): Promise<EvidenceIndexRow[]> {
   const compiled = getPlatformDb()
     .selectFrom("sync_evidence_log")
     .selectAll()
@@ -150,5 +150,5 @@ export function listEvidence(tenantId: string, limit = 100): EvidenceIndexRow[] 
     .orderBy("created_at", "desc")
     .limit(limit)
     .compile()
-  return runAll<EvidenceIndexRow>(compiled)
+  return await runAllAsync<EvidenceIndexRow>(compiled)
 }

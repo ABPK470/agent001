@@ -56,12 +56,12 @@ function mssqlCatalogHostFromBoot(boot: BootHostDeps): MssqlCatalogHost | null {
  * If `resolved` teaches a term→table mapping the org can reuse, persist it.
  * No-op otherwise. Never throws.
  */
-export function persistLearnedTermFromResolution(
+export async function persistLearnedTermFromResolution(
   resolved: ResolvedClarification,
   goal: string,
   ownerUpn: string | null,
   boot: BootHostDeps
-): void {
+): Promise<void> {
   if (!LEARNED_KINDS.has(resolved.kind)) return
   const qname = extractQname(resolved.answer)
   if (!qname) return
@@ -69,7 +69,7 @@ export function persistLearnedTermFromResolution(
   try {
     const host = mssqlCatalogHostFromBoot(boot)
     if (!host) return
-    const connection = resolveEffectiveMssqlConnection(host, goal)
+    const connection = await resolveEffectiveMssqlConnection(host, goal)
     const catalog = getCatalog(host, connection)
     if (!catalog || !catalog.getTable(qname)) return
     saveResolvedTerm({

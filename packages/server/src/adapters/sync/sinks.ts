@@ -3,7 +3,6 @@ import { syncPlanActorUpn } from "../../infra/persistence/sync-plan-actor.js"
 import { broadcast } from "../../infra/events/broadcaster.js"
 import { enrichSyncSqlEventData } from "../../infra/persistence/adapters/sqlite/db/sync-sql-log.js"
 import {
-  getSyncRunPlanJson,
   recordSyncRunFinish,
   recordSyncRunPreview,
   recordSyncRunStart
@@ -24,25 +23,27 @@ export function createBridgeEventSink(): AgentHost["connectors"]["events"]["sink
 }
 
 export function createSyncRunSink(): AgentHost["sync"]["runs"]["sink"] {
+  const plans = new Map<string, Parameters<NonNullable<AgentHost["sync"]["runs"]["sink"]["savePlan"]>>[0]>()
   return {
-    start: (input) => {
+    start: async (input) => {
       try {
-        recordSyncRunStart(input)
+        await recordSyncRunStart(input)
       } catch (error) {
         console.warn("[sync] recordSyncRunStart failed:", error)
       }
     },
-    finish: (input) => {
+    finish: async (input) => {
       try {
-        recordSyncRunFinish(input)
+        await recordSyncRunFinish(input)
       } catch (error) {
         console.warn("[sync] recordSyncRunFinish failed:", error)
       }
     },
-    savePlan: (plan, actorUpn) => {
+    savePlan: async (plan, actorUpn) => {
       try {
+        plans.set(plan.planId, plan)
         const resolvedActorUpn = syncPlanActorUpn(plan) ?? actorUpn ?? null
-        recordSyncRunPreview({
+        await recordSyncRunPreview({
           planId: plan.planId,
           entityType: plan.executionContract.definitionId,
           entityId: plan.entity.id,
@@ -59,8 +60,7 @@ export function createSyncRunSink(): AgentHost["sync"]["runs"]["sink"] {
     },
     loadPlan: (planId) => {
       try {
-        const json = getSyncRunPlanJson(planId)
-        return json ? JSON.parse(json) : null
+        return plans.get(planId) ?? null
       } catch (error) {
         console.warn("[sync] getSyncRunPlanJson failed:", error)
         return null

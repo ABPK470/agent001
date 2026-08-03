@@ -145,7 +145,7 @@ export function registerConnectorRoutes(app: FastifyInstance, _host: AgentHost):
       reply.code(403)
       return { error: "admin only" }
     }
-    return db.listConnectors().map(parseRow).map(toAdmin)
+    return (await db.listConnectors()).map(parseRow).map(toAdmin)
   })
 
   app.get("/api/connectors/kinds", async (req, reply) => {
@@ -201,7 +201,7 @@ export function registerConnectorRoutes(app: FastifyInstance, _host: AgentHost):
         reply.code(400)
         return { error: "id must be a non-empty slug" }
       }
-      if (db.getConnector(id)) {
+      if (await db.getConnector(id)) {
         reply.code(409)
         return { error: `connector already exists: ${id}` }
       }
@@ -233,7 +233,7 @@ export function registerConnectorRoutes(app: FastifyInstance, _host: AgentHost):
         updatedAt: now,
         updatedBy: req.session.upn,
       }
-      db.saveConnector(serialise(connector, req.session.upn))
+      await db.saveConnector(serialise(connector, req.session.upn))
       audit(
         req,
         "connector.create",
@@ -250,7 +250,7 @@ export function registerConnectorRoutes(app: FastifyInstance, _host: AgentHost):
         reply.code(403)
         return { error: "admin only" }
       }
-      const row = db.getConnector(req.params.id)
+      const row = await db.getConnector(req.params.id)
       if (!row) {
         reply.code(404)
         return { error: `unknown connector "${req.params.id}"` }
@@ -284,7 +284,7 @@ export function registerConnectorRoutes(app: FastifyInstance, _host: AgentHost):
         updatedAt: new Date().toISOString(),
         updatedBy: req.session.upn,
       }
-      db.saveConnector(serialise(next, req.session.upn, existing.createdAt))
+      await db.saveConnector(serialise(next, req.session.upn, existing.createdAt))
       audit(
         req,
         "connector.update",
@@ -303,13 +303,13 @@ export function registerConnectorRoutes(app: FastifyInstance, _host: AgentHost):
       reply.code(403)
       return { error: "admin only" }
     }
-    const row = db.getConnector(req.params.id)
+    const row = await db.getConnector(req.params.id)
     if (!row) {
       reply.code(404)
       return { error: `unknown connector "${req.params.id}"` }
     }
     const existing = parseRow(row)
-    db.deleteConnector(req.params.id)
+    await db.deleteConnector(req.params.id)
     audit(
       req,
       "connector.delete",
@@ -326,7 +326,7 @@ export function registerConnectorRoutes(app: FastifyInstance, _host: AgentHost):
         return { error: "admin only" }
       }
       const includeSecrets = req.query?.includeSecrets === "1" || req.query?.includeSecrets === "true"
-      const connectors = db.listConnectors().map(parseRow)
+      const connectors = (await db.listConnectors()).map(parseRow)
       return {
         version: 1,
         connectors: connectors.map((c) => ({
@@ -355,7 +355,7 @@ export function registerConnectorRoutes(app: FastifyInstance, _host: AgentHost):
     }
     const { importConnectors } = await import("../service/import-connectors.js")
     const payload = req.body ?? {}
-    const result = importConnectors({
+    const result = await importConnectors({
       version: payload.version,
       connectors: payload.connectors,
       dryRun: Boolean(payload.dryRun),

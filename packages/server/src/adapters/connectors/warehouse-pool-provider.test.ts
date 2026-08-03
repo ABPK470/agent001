@@ -5,12 +5,12 @@ import type { PostgresPoolProvider } from "./postgres-pool-provider.js"
 import type { MssqlPoolProvider } from "@mia/agent"
 
 describe("createWarehousePoolProvider", () => {
-  it("lists mssql and postgres connectors with dialect tags", () => {
+  it("lists mssql and postgres connectors with dialect tags", async () => {
     const mssql: MssqlPoolProvider = {
       get: vi.fn(),
       getByName: vi.fn(),
-      list: () => [{ id: "m1", name: "mssql-dev" }],
-      configOf: () => undefined,
+      list: async () => [{ id: "m1", name: "mssql-dev" }],
+      configOf: async () => undefined,
       invalidate: vi.fn(),
     }
     const postgres: PostgresPoolProvider = {
@@ -21,13 +21,13 @@ describe("createWarehousePoolProvider", () => {
         knowledge: null,
       })),
       getByName: vi.fn(),
-      list: () => [{ id: "p1", name: "pg-dev" }],
+      list: async () => [{ id: "p1", name: "pg-dev" }],
       invalidate: vi.fn(),
       closeAll: vi.fn(async () => {}),
     }
 
     const warehouse = createWarehousePoolProvider({ mssql, postgres })
-    expect(warehouse.list()).toEqual([
+    expect(await warehouse.list()).toEqual([
       { id: "m1", name: "mssql-dev", dialect: "mssql" },
       { id: "p1", name: "pg-dev", dialect: "postgres" },
     ])
@@ -39,21 +39,21 @@ describe("createWarehousePoolProvider", () => {
   it("routes get() to the matching provider", async () => {
     const mssqlGet = vi.fn(async () => ({
       connectorId: "m1",
-      pool: { kind: "mssql" },
+      pool: {} as never,
       config: {},
       knowledge: null,
-    }))
+    }) as never)
     const mssql: MssqlPoolProvider = {
       get: mssqlGet,
       getByName: vi.fn(),
-      list: () => [{ id: "m1", name: "mssql-dev" }],
-      configOf: () => undefined,
+      list: async () => [{ id: "m1", name: "mssql-dev" }],
+      configOf: async () => undefined,
       invalidate: vi.fn(),
     }
     const postgres: PostgresPoolProvider = {
       get: vi.fn(),
       getByName: vi.fn(),
-      list: () => [],
+      list: async () => [],
       invalidate: vi.fn(),
       closeAll: vi.fn(async () => {}),
     }

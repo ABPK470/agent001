@@ -18,14 +18,15 @@ import * as db from "../infra/persistence/sqlite.js"
 
 /** @deprecated Not written by Publish; only used for one-time upgrade import. */
 export const PUBLISHED_SYNC_BUNDLE_PATH = "sync-definitions/published/definitions.bundle.json"
+let publishedBundleCache: PublishedSyncDefinitionBundle | null = null
 
 export function publishedSyncBundlePath(projectRoot: string): string {
   return resolve(projectRoot, PUBLISHED_SYNC_BUNDLE_PATH)
 }
 
-export function isPublishedSyncBundlePresent(_projectRoot: string): boolean {
+export async function isPublishedSyncBundlePresent(_projectRoot: string): Promise<boolean> {
   try {
-    return db.getSyncPublishMeta() != null && db.listSyncDefinitions().length > 0
+    return await db.getSyncPublishMeta() != null && (await db.listSyncDefinitions()).length > 0
   } catch {
     // Setup checks may run before migrations (or against an empty data dir).
     return false
@@ -35,8 +36,8 @@ export function isPublishedSyncBundlePresent(_projectRoot: string): boolean {
 /**
  * If SQLite has no publish meta but a legacy file bundle exists, import it once.
  */
-export function importLegacyPublishedBundleFileIfNeeded(projectRoot: string): boolean {
-  if (db.getSyncPublishMeta() != null) return false
+export async function importLegacyPublishedBundleFileIfNeeded(projectRoot: string): Promise<boolean> {
+  if (await db.getSyncPublishMeta() != null) return false
   const path = publishedSyncBundlePath(projectRoot)
   if (!existsSync(path)) return false
   const parsed = JSON.parse(readFileSync(path, "utf-8")) as {
@@ -51,7 +52,7 @@ export function importLegacyPublishedBundleFileIfNeeded(projectRoot: string): bo
   }
   const publishedAt = parsed.publishedAt ?? new Date().toISOString()
   const publishedVersion = parsed.publishedVersion ?? publishedAt
-  db.replaceSyncDefinitions("_default", {
+  await db.replaceSyncDefinitions("_default", {
     publishedAt,
     publishedVersion,
     catalogVersion: parsed.catalogVersion ?? null,
@@ -63,14 +64,15 @@ export function importLegacyPublishedBundleFileIfNeeded(projectRoot: string): bo
   return true
 }
 
-function vocabularyIdsFromDb(): readonly string[] {
-  return db.listSyncDefinitions().map((row) => row.entity_id)
+async function vocabularyIdsFromDb(): Promise<readonly string[]> {
+  return (await db.listSyncDefinitions()).map((row) => row.entity_id)
 }
 
 /** Load entity ids into the agent singleton; log success or a boot warning. */
-export function loadPublishedSyncVocabularyAtBoot(projectRoot: string): readonly string[] {
-  importLegacyPublishedBundleFileIfNeeded(projectRoot)
-  const syncIds = loadPublishedSyncEntityIdsFromList(vocabularyIdsFromDb())
+export async function loadPublishedSyncVocabularyAtBoot(projectRoot: string): Promise<readonly string[]> {
+  await importLegacyPublishedBundleFileIfNeeded(projectRoot)
+  await refreshPublishedBundleCache()
+  const syncIds = loadPublishedSyncEntityIdsFromList(await vocabularyIdsFromDb())
   if (syncIds.length > 0) {
     console.log(`Published sync vocabulary: ${syncIds.length} entity types (${syncIds.join(", ")})`)
   } else {
@@ -80,12 +82,13 @@ export function loadPublishedSyncVocabularyAtBoot(projectRoot: string): readonly
 }
 
 /** Reload in-process vocabulary after publish (no server restart). */
-export function reloadPublishedSyncVocabulary(_projectRoot?: string): readonly string[] {
-  return loadPublishedSyncEntityIdsFromList(vocabularyIdsFromDb())
+export async function reloadPublishedSyncVocabulary(_projectRoot?: string): Promise<readonly string[]> {
+  await refreshPublishedBundleCache()
+  return loadPublishedSyncEntityIdsFromList(await vocabularyIdsFromDb())
 }
 
-export function loadPublishedBundleFromSqlite(): PublishedSyncDefinitionBundle | null {
-  const raw = db.loadPublishedBundleFromDb()
+export async function loadPublishedBundleFromSqlite(): Promise<PublishedSyncDefinitionBundle | null> {
+  const raw = await db.loadPublishedBundleFromDb()
   if (!raw) return null
   return {
     version: 1,
@@ -94,6 +97,15 @@ export function loadPublishedBundleFromSqlite(): PublishedSyncDefinitionBundle |
     catalogVersion: raw.catalogVersion,
     definitions: raw.definitions as PublishedSyncDefinitionBundle["definitions"],
   }
+}
+
+export async function refreshPublishedBundleCache(): Promise<PublishedSyncDefinitionBundle | null> {
+  publishedBundleCache = await loadPublishedBundleFromSqlite()
+  return publishedBundleCache
+}
+
+export function loadPublishedBundleFromSqliteCached(): PublishedSyncDefinitionBundle | null {
+  return publishedBundleCache
 }
 
 export function formatPublishedSyncBundleMissingWarning(): string {

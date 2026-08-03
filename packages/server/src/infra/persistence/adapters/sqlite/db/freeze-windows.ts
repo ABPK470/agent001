@@ -11,9 +11,9 @@
 
 import { DEFAULT_TENANT_ID, installFreezeWindowRegistry, type FreezeWindowDefinition } from "@mia/sync"
 import { getPlatformDb } from "../../../schema/kysely.js"
-import { runAll, runChanges, runGet } from "../../../schema/execute.js"
+import { runAllAsync, runChangesAsync, runGetAsync } from "../../../schema/execute-async.js"
 import { platformNow } from "../../../schema/sql-time.js"
-import { upsertRow } from "../../../schema/upsert.js"
+import { upsertRowAsync } from "../../../schema/upsert.js"
 import { refreshesGlobalRegistryOnMutation } from "./tenant-inheritance.js"
 
 // ── Public type (matches shared-types `FreezeWindow`) ───────────
@@ -81,7 +81,7 @@ const rowToRecord = (r: Row): FreezeWindowRecord => ({
   updatedAt: r.updated_at
 })
 
-export function listFreezeWindowsForTenant(tenantId: string): FreezeWindowRecord[] {
+export async function listFreezeWindowsForTenant(tenantId: string): Promise<FreezeWindowRecord[]> {
   const compiled = getPlatformDb()
     .selectFrom("freeze_window_configs")
     .selectAll()
@@ -89,17 +89,17 @@ export function listFreezeWindowsForTenant(tenantId: string): FreezeWindowRecord
     .orderBy("starts_at", "asc")
     .orderBy("id", "asc")
     .compile()
-  return runAll<Row>(compiled).map(rowToRecord)
+  return (await runAllAsync<Row>(compiled)).map(rowToRecord)
 }
 
-export function getFreezeWindow(tenantId: string, id: string): FreezeWindowRecord | null {
+export async function getFreezeWindow(tenantId: string, id: string): Promise<FreezeWindowRecord | null> {
   const compiled = getPlatformDb()
     .selectFrom("freeze_window_configs")
     .selectAll()
     .where("tenant_id", "=", tenantId)
     .where("id", "=", id)
     .compile()
-  const r = runGet<Row>(compiled)
+  const r = await runGetAsync<Row>(compiled)
   return r ? rowToRecord(r) : null
 }
 
@@ -113,10 +113,10 @@ export interface UpsertFreezeWindowArgs {
   actor: string
 }
 
-export function upsertFreezeWindow(args: UpsertFreezeWindowArgs): FreezeWindowRecord {
+export async function upsertFreezeWindow(args: UpsertFreezeWindowArgs): Promise<FreezeWindowRecord> {
   validate(args)
   const now = platformNow()
-  upsertRow({
+  await upsertRowAsync({
     table: "freeze_window_configs",
     keys: { tenant_id: args.tenantId, id: args.id },
     insert: {
@@ -138,20 +138,20 @@ export function upsertFreezeWindow(args: UpsertFreezeWindowArgs): FreezeWindowRe
       updated_at: now,
     },
   })
-  const fresh = getFreezeWindow(args.tenantId, args.id)
+  const fresh = await getFreezeWindow(args.tenantId, args.id)
   if (!fresh) throw new Error(`freeze_window not persisted: ${args.id}`)
-  if (refreshesGlobalRegistryOnMutation(args.tenantId)) refreshFreezeWindowRegistry()
+  if (refreshesGlobalRegistryOnMutation(args.tenantId)) await refreshFreezeWindowRegistry()
   return fresh
 }
 
-export function deleteFreezeWindow(tenantId: string, id: string): boolean {
+export async function deleteFreezeWindow(tenantId: string, id: string): Promise<boolean> {
   const compiled = getPlatformDb()
     .deleteFrom("freeze_window_configs")
     .where("tenant_id", "=", tenantId)
     .where("id", "=", id)
     .compile()
-  const changes = runChanges(compiled)
-  if (changes > 0 && refreshesGlobalRegistryOnMutation(tenantId)) refreshFreezeWindowRegistry()
+  const changes = await runChangesAsync(compiled)
+  if (changes > 0 && refreshesGlobalRegistryOnMutation(tenantId)) await refreshFreezeWindowRegistry()
   return changes > 0
 }
 
@@ -167,8 +167,8 @@ export function deleteFreezeWindow(tenantId: string, id: string): boolean {
  * is the only shipping shape. Future multi-tenant work will swap this
  * for a tenant-keyed registry.
  */
-export function listFreezeWindowDefinitionsForTenant(tenantId = DEFAULT_TENANT_ID): FreezeWindowDefinition[] {
-  const recs = listFreezeWindowsForTenant(tenantId)
+export async function listFreezeWindowDefinitionsForTenant(tenantId = DEFAULT_TENANT_ID): Promise<FreezeWindowDefinition[]> {
+  const recs = await listFreezeWindowsForTenant(tenantId)
   return recs.map((r) => ({
     id: r.id,
     displayName: r.displayName,
@@ -178,8 +178,8 @@ export function listFreezeWindowDefinitionsForTenant(tenantId = DEFAULT_TENANT_I
   }))
 }
 
-export function refreshFreezeWindowRegistry(tenantId = DEFAULT_TENANT_ID): FreezeWindowDefinition[] {
-  const defs = listFreezeWindowDefinitionsForTenant(tenantId)
+export async function refreshFreezeWindowRegistry(tenantId = DEFAULT_TENANT_ID): Promise<FreezeWindowDefinition[]> {
+  const defs = await listFreezeWindowDefinitionsForTenant(tenantId)
   if (refreshesGlobalRegistryOnMutation(tenantId)) installFreezeWindowRegistry(defs)
   return defs
 }

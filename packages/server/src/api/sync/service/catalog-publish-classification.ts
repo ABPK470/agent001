@@ -33,8 +33,8 @@ export type PersistedPublishedBundle = {
   definitions: Record<string, PublishedSyncDefinition | null>
 }
 
-function loadPublishedBundle(tenantId: string): PersistedPublishedBundle | null {
-  const raw = db.loadPublishedBundleFromDb(tenantId)
+async function loadPublishedBundle(tenantId: string): Promise<PersistedPublishedBundle | null> {
+  const raw = await db.loadPublishedBundleFromDb(tenantId)
   if (!raw) return null
   return {
     version: 1,
@@ -87,12 +87,12 @@ function asRecord(value: unknown): Record<string, unknown> | null {
     : null
 }
 
-function loadSnapshotAtVersion(
+async function loadSnapshotAtVersion(
   tenantId: string,
   version: number | null,
-): DeployCatalogSnapshot | null {
+): Promise<DeployCatalogSnapshot | null> {
   if (version == null) return null
-  const row = db.getSyncCatalogVersionRow(tenantId, version)
+  const row = await db.getSyncCatalogVersionRow(tenantId, version)
   if (!row) return null
   try {
     return parseBoundaryJson(row.snapshot_json) as DeployCatalogSnapshot
@@ -261,16 +261,16 @@ export function compileAffectedEntityIdsFromDiff(args: {
   return [...affected]
 }
 
-export function classifyCatalogPublish(
+export async function classifyCatalogPublish(
   projectRoot: string,
   tenantId = DEFAULT_TENANT_ID,
-): CatalogPublishClassification {
+): Promise<CatalogPublishClassification> {
   void projectRoot
-  const published = loadPublishedBundle(tenantId)
-  const activeCatalogVersion = db.getActiveSyncCatalogVersion(tenantId)
+  const published = await loadPublishedBundle(tenantId)
+  const activeCatalogVersion = await db.getActiveSyncCatalogVersion(tenantId)
   const publishedCatalogVersion = published?.catalogVersion ?? null
   const publishedAt = published?.publishedAt ?? null
-  const tipSnapshot = buildDeployCatalogSnapshot({ tenantId })
+  const tipSnapshot = await buildDeployCatalogSnapshot({ tenantId })
   const tipAhead =
     published == null ||
     publishedCatalogVersion == null ||
@@ -323,7 +323,7 @@ export function classifyCatalogPublish(
     }
   }
 
-  const publishedSnapshot = loadSnapshotAtVersion(tenantId, publishedCatalogVersion)
+  const publishedSnapshot = await loadSnapshotAtVersion(tenantId, publishedCatalogVersion)
   const diff = publishedSnapshot
     ? diffDeployCatalogSnapshots({
         from: publishedSnapshot,

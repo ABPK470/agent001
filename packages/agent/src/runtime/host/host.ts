@@ -163,7 +163,7 @@ export interface ConnectorPort {
   ): Promise<{ rows: Record<string, unknown>[]; truncated: boolean }>
   /** Schema-qualified table names for SQL target pickers (mssql/postgres/…). */
   listTables(connectorId: string): Promise<string[]>
-  listAdapters(): ConnectorInfo[]
+  listAdapters(): Promise<ConnectorInfo[]>
 }
 
 /** Sink for Bridge lifecycle events (preview / run) — wired to SSE + event_log on the server. */

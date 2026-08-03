@@ -121,10 +121,10 @@ describe("catalog import/export round-trip", () => {
     expect(datasetItem?.executionSteps.length).toBeGreaterThan(0)
   })
 
-  it("resolves metadataOnly even when DB presets omit it", () => {
-    for (const preset of db.listSyncFlows("_default")) {
+  it("resolves metadataOnly even when DB presets omit it", async () => {
+    for (const preset of await db.listSyncFlows("_default")) {
       if (preset.id === "metadataOnly") {
-        db.deleteSyncFlow("_default", preset.id)
+        await db.deleteSyncFlow("_default", preset.id)
       }
     }
 
@@ -134,7 +134,7 @@ describe("catalog import/export round-trip", () => {
 
     const entity = db.getEntityDefinition("_default", "dataset")
     expect(entity).toBeTruthy()
-    db.saveEntityDefinition({
+    await db.saveEntityDefinition({
       tenantId: "_default",
       actor: "test",
       reason: "test-flowId",
@@ -183,12 +183,12 @@ describe("catalog import/export round-trip", () => {
     rmSync(parent, { recursive: true, force: true })
   })
 
-  it("catalog import retires active entities missing from the snapshot", () => {
+  it("catalog import retires active entities missing from the snapshot", async () => {
     const snapshot = buildDeployCatalogSnapshot({ tenantId: "_default" })
     const template = db.getEntityDefinition("_default", "contract")
     expect(template).toBeTruthy()
 
-    db.saveEntityDefinition({
+    await db.saveEntityDefinition({
       tenantId: "_default",
       actor: "test",
       reason: "test-add",
@@ -232,7 +232,7 @@ describe("catalog import/export round-trip", () => {
 
   it("loadAuthoringFlowCatalog falls back to shipped steps when a DB preset is empty", async () => {
     const { loadAuthoringFlowCatalog } = await import("../src/api/sync/service/definitions.js")
-    db.saveSyncFlow({
+    await db.saveSyncFlow({
       tenant_id: "_default",
       id: "content",
       label: "Broken content",
@@ -272,12 +272,12 @@ describe("catalog import/export round-trip", () => {
     expect(preview.errors.some((error) => error.includes("camelCase"))).toBe(true)
   })
 
-  it("catalog rollback retires entities added after the restored version", () => {
+  it("catalog rollback retires entities added after the restored version", async () => {
     const baseline = commitSyncCatalogVersion({ reason: "test-baseline", actor: "test" })
     const template = db.getEntityDefinition("_default", "contract")
     expect(template).toBeTruthy()
 
-    db.saveEntityDefinition({
+    await db.saveEntityDefinition({
       tenantId: "_default",
       actor: "test",
       reason: "test-add",

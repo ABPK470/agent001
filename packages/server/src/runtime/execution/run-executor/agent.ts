@@ -303,7 +303,7 @@ export async function normalizeRunAnswer(
 
   const truncatedRaw = internalFailure.rawDetail.slice(0, 4000)
   try {
-    db.saveLog({
+    await db.saveLog({
       run_id: request.runId,
       level: "run:error",
       message: `[user-safe-failure] ${internalFailure.kind} — ${internalFailure.summary}\n${truncatedRaw}`,

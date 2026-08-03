@@ -85,6 +85,7 @@ export {
   coalescePlatformNow,
   platformNow,
   platformNowMinusSeconds,
+  platformNowSql,
 } from "./sql-time.js"
 export {
   getRowByKeys,

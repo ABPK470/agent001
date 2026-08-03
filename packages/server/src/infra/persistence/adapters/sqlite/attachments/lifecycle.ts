@@ -19,7 +19,7 @@
 import { sql } from "kysely"
 import { AttachmentScope } from "../../../../../internal/enums/attachments.js"
 import { getPlatformDb } from "../../../schema/kysely.js"
-import { runChanges, runGet } from "../../../schema/execute.js"
+import { runChangesAsync, runGetAsync } from "../../../schema/execute-async.js"
 import { AttachmentStatus } from "./repo.js"
 import { auditAttachmentsPruned } from "./audit.js"
 
@@ -78,7 +78,7 @@ export interface OwnerUsage {
  * Sum live (non-deleted) attachment bytes for an owner. Used to enforce
  * per-user quota at upload time.
  */
-export function getOwnerUsage(ownerUpn: string | null | undefined): OwnerUsage {
+export async function getOwnerUsage(ownerUpn: string | null | undefined): Promise<OwnerUsage> {
   const policy = getRetentionPolicy()
   if (!ownerUpn) {
     return { bytesUsed: 0, bytesQuota: policy.ownerQuotaBytes, bytesRemain: policy.ownerQuotaBytes }
@@ -89,7 +89,7 @@ export function getOwnerUsage(ownerUpn: string | null | undefined): OwnerUsage {
     .where("owner_upn", "=", ownerUpn)
     .where("status", "!=", AttachmentStatus.Deleted)
     .compile()
-  const row = runGet<{ used: number | bigint }>(compiled)
+  const row = await runGetAsync<{ used: number | bigint }>(compiled)
   const used = Number(row?.used ?? 0)
   return {
     bytesUsed: used,
@@ -116,9 +116,9 @@ export class QuotaExceededError extends Error {
  * would push them over their quota. Pure DB read — safe to call many
  * times per request.
  */
-export function assertOwnerQuota(ownerUpn: string | null | undefined, incomingBytes: number): void {
+export async function assertOwnerQuota(ownerUpn: string | null | undefined, incomingBytes: number): Promise<void> {
   if (!ownerUpn) return
-  const usage = getOwnerUsage(ownerUpn)
+  const usage = await getOwnerUsage(ownerUpn)
   if (usage.bytesUsed + incomingBytes > usage.bytesQuota) {
     throw new QuotaExceededError(usage, incomingBytes)
   }
@@ -134,7 +134,7 @@ export interface PruneResult {
  * same hash may back another live row. A separate (future) GC pass over
  * unreferenced blobs can reclaim disk space.
  */
-export function pruneExpiredAttachments(now: Date = new Date()): PruneResult {
+export async function pruneExpiredAttachments(now: Date = new Date()): Promise<PruneResult> {
   const cutoff = now.toISOString()
   const compiled = getPlatformDb()
     .updateTable("attachments")
@@ -143,7 +143,7 @@ export function pruneExpiredAttachments(now: Date = new Date()): PruneResult {
     .where("retention_until", "is not", null)
     .where("retention_until", "<=", cutoff)
     .compile()
-  const pruned = { prunedAttachments: runChanges(compiled) }
-  auditAttachmentsPruned(pruned.prunedAttachments)
+  const pruned = { prunedAttachments: await runChangesAsync(compiled) }
+  await auditAttachmentsPruned(pruned.prunedAttachments)
   return pruned
 }

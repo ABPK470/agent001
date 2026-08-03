@@ -32,11 +32,11 @@ export function registerEvidenceRoutes(app: FastifyInstance, deps: EvidenceRoute
   app.get<{ Querystring: { tenant?: string; limit?: string } }>("/api/evidence", async (req) => {
     const tenantId = resolveTenant(req)
     const limit = Math.min(500, Math.max(1, Number(req.query.limit) || 100))
-    return listEvidence(tenantId, limit)
+    return await listEvidence(tenantId, limit)
   })
 
   app.get<{ Params: { planId: string } }>("/api/evidence/by-plan/:planId", async (req, reply) => {
-    const row = getEvidenceByPlan(req.params.planId)
+    const row = await getEvidenceByPlan(req.params.planId)
     if (!row) {
       reply.code(404)
       return { error: "no evidence for plan" }
@@ -45,7 +45,7 @@ export function registerEvidenceRoutes(app: FastifyInstance, deps: EvidenceRoute
   })
 
   app.get<{ Params: { id: string } }>("/api/evidence/:id/envelope.json", async (req, reply) => {
-    const row = lookupEvidenceById(req.params.id)
+    const row = await lookupEvidenceById(req.params.id)
     if (!row) {
       reply.code(404)
       return reply.send({ error: "evidence not found" })
@@ -61,7 +61,7 @@ export function registerEvidenceRoutes(app: FastifyInstance, deps: EvidenceRoute
   })
 
   app.get<{ Params: { id: string } }>("/api/evidence/:id/evidence.pdf", async (req, reply) => {
-    const row = lookupEvidenceById(req.params.id)
+    const row = await lookupEvidenceById(req.params.id)
     if (!row || !row.pdf_path) {
       reply.code(404)
       return reply.send({ error: "evidence pdf not found" })
@@ -81,7 +81,7 @@ export function registerEvidenceRoutes(app: FastifyInstance, deps: EvidenceRoute
       reply.code(501)
       return { error: "evidence signer not configured" }
     }
-    const row = lookupEvidenceById(req.params.id)
+    const row = await lookupEvidenceById(req.params.id)
     if (!row) {
       reply.code(404)
       return { error: "evidence not found" }
@@ -92,10 +92,10 @@ export function registerEvidenceRoutes(app: FastifyInstance, deps: EvidenceRoute
       return { error: "envelope file missing on disk" }
     }
     const envelopeJson = await readFile(abs, "utf-8")
-    return verifyEvidence({ envelopeJson, signer: deps.signer })
+    return await verifyEvidence({ envelopeJson, signer: deps.signer })
   })
 }
 
-function lookupEvidenceById(id: string): EvidenceIndexRow | null {
-  return getEvidenceById(id)
+async function lookupEvidenceById(id: string): Promise<EvidenceIndexRow | null> {
+  return await getEvidenceById(id)
 }

@@ -38,8 +38,8 @@ export type WarehousePoolHandle =
 export interface WarehousePoolProvider {
   get(connectorId: string): Promise<WarehousePoolHandle>
   getByName(name: string): Promise<WarehousePoolHandle>
-  list(): readonly WarehouseConnectorRef[]
-  dialectOf(connectorId: string): WarehouseDialectKind | undefined
+  list(): Promise<readonly WarehouseConnectorRef[]>
+  dialectOf(connectorId: string): Promise<WarehouseDialectKind | undefined>
   invalidate(connectorId: string): void
   /** Close every cached pool (shutdown). */
   closeAll?(): Promise<void>

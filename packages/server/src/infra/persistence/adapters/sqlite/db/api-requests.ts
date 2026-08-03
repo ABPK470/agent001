@@ -3,7 +3,7 @@
  */
 
 import { getPlatformDb } from "../../../schema/kysely.js"
-import { runAll, runExec } from "../../../schema/execute.js"
+import { runAllAsync, runExecAsync } from "../../../schema/execute-async.js"
 
 export interface DbApiRequest {
   id?: number
@@ -16,7 +16,7 @@ export interface DbApiRequest {
   created_at: string
 }
 
-export function saveApiRequest(entry: Omit<DbApiRequest, "id">): void {
+export async function saveApiRequest(entry: Omit<DbApiRequest, "id">): Promise<void> {
   const compiled = getPlatformDb()
     .insertInto("api_request_log")
     .values({
@@ -29,15 +29,15 @@ export function saveApiRequest(entry: Omit<DbApiRequest, "id">): void {
       created_at: entry.created_at,
     })
     .compile()
-  runExec(compiled)
+  await runExecAsync(compiled)
 }
 
-export function listApiRequests(limit = 200): DbApiRequest[] {
+export async function listApiRequests(limit = 200): Promise<DbApiRequest[]> {
   const compiled = getPlatformDb()
     .selectFrom("api_request_log")
     .selectAll()
     .orderBy("created_at", "desc")
     .limit(limit)
     .compile()
-  return runAll<DbApiRequest>(compiled)
+  return await runAllAsync<DbApiRequest>(compiled)
 }

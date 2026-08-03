@@ -1,7 +1,7 @@
 import { getPlatformDb } from "../../../schema/kysely.js"
-import { runAll, runExec, runGet, runInsertId } from "../../../schema/execute.js"
+import { runAllAsync, runExecAsync, runGetAsync, runInsertIdAsync } from "../../../schema/execute-async.js"
 import { platformNow } from "../../../schema/sql-time.js"
-import { upsertRow } from "../../../schema/upsert.js"
+import { upsertRowAsync } from "../../../schema/upsert.js"
 
 export interface NotificationRouteRow {
   id: string
@@ -29,7 +29,7 @@ export interface NotificationLogRow {
   sent_at: string | null
 }
 
-export function listEnabledRoutesForEvent(tenantId: string, eventType: string): NotificationRouteRow[] {
+export async function listEnabledRoutesForEvent(tenantId: string, eventType: string): Promise<NotificationRouteRow[]> {
   const compiled = getPlatformDb()
     .selectFrom("notification_route_configs")
     .selectAll()
@@ -37,16 +37,16 @@ export function listEnabledRoutesForEvent(tenantId: string, eventType: string): 
     .where("event_type", "=", eventType)
     .where("enabled", "=", 1)
     .compile()
-  return runAll<NotificationRouteRow>(compiled)
+  return await runAllAsync<NotificationRouteRow>(compiled)
 }
 
-export function appendNotificationLog(input: {
+export async function appendNotificationLog(input: {
   routeId: string
   eventType: string
   channel: string
   target: string
   payloadJson: string
-}): number {
+}): Promise<number> {
   const compiled = getPlatformDb()
     .insertInto("notification_log")
     .values({
@@ -60,24 +60,24 @@ export function appendNotificationLog(input: {
       created_at: platformNow(),
     })
     .compile()
-  return runInsertId(compiled)
+  return await runInsertIdAsync(compiled)
 }
 
-export function markNotificationLogAttempt(
+export async function markNotificationLogAttempt(
   id: number,
   attempts: number,
   error: string,
   status: "retrying" | "dlq"
-): void {
+): Promise<void> {
   const compiled = getPlatformDb()
     .updateTable("notification_log")
     .set({ attempts, last_error: error, status })
     .where("id", "=", id)
     .compile()
-  runExec(compiled)
+  await runExecAsync(compiled)
 }
 
-export function markNotificationLogSent(id: number, attempts: number): void {
+export async function markNotificationLogSent(id: number, attempts: number): Promise<void> {
   const compiled = getPlatformDb()
     .updateTable("notification_log")
     .set({
@@ -88,10 +88,10 @@ export function markNotificationLogSent(id: number, attempts: number): void {
     })
     .where("id", "=", id)
     .compile()
-  runExec(compiled)
+  await runExecAsync(compiled)
 }
 
-export function upsertNotificationRouteRow(input: {
+export async function upsertNotificationRouteRow(input: {
   id: string
   tenantId: string
   eventType: string
@@ -100,9 +100,9 @@ export function upsertNotificationRouteRow(input: {
   target: string
   enabled: number
   updatedBy: string
-}): void {
+}): Promise<void> {
   const now = platformNow()
-  upsertRow({
+  await upsertRowAsync({
     table: "notification_route_configs",
     keys: { id: input.id },
     insert: {
@@ -129,16 +129,16 @@ export function upsertNotificationRouteRow(input: {
   })
 }
 
-export function getNotificationRouteRow(id: string): NotificationRouteRow | null {
+export async function getNotificationRouteRow(id: string): Promise<NotificationRouteRow | null> {
   const compiled = getPlatformDb()
     .selectFrom("notification_route_configs")
     .selectAll()
     .where("id", "=", id)
     .compile()
-  return runGet<NotificationRouteRow>(compiled) ?? null
+  return await runGetAsync<NotificationRouteRow>(compiled) ?? null
 }
 
-export function listNotificationRouteRows(tenantId: string): NotificationRouteRow[] {
+export async function listNotificationRouteRows(tenantId: string): Promise<NotificationRouteRow[]> {
   const compiled = getPlatformDb()
     .selectFrom("notification_route_configs")
     .selectAll()
@@ -146,20 +146,20 @@ export function listNotificationRouteRows(tenantId: string): NotificationRouteRo
     .orderBy("event_type")
     .orderBy("channel")
     .compile()
-  return runAll<NotificationRouteRow>(compiled)
+  return await runAllAsync<NotificationRouteRow>(compiled)
 }
 
-export function deleteNotificationRouteRow(id: string): void {
+export async function deleteNotificationRouteRow(id: string): Promise<void> {
   const compiled = getPlatformDb()
     .deleteFrom("notification_route_configs")
     .where("id", "=", id)
     .compile()
-  runExec(compiled)
+  await runExecAsync(compiled)
 }
 
-export function listNotificationLogRows(
+export async function listNotificationLogRows(
   filter: { status?: NotificationLogRow["status"]; limit?: number } = {}
-): NotificationLogRow[] {
+): Promise<NotificationLogRow[]> {
   let query = getPlatformDb().selectFrom("notification_log").selectAll()
   if (filter.status) {
     query = query.where("status", "=", filter.status)
@@ -168,5 +168,5 @@ export function listNotificationLogRows(
     .orderBy("created_at", "desc")
     .limit(filter.limit ?? 100)
     .compile()
-  return runAll<NotificationLogRow>(compiled)
+  return await runAllAsync<NotificationLogRow>(compiled)
 }

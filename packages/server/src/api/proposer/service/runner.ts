@@ -83,7 +83,7 @@ export async function runProposer(
   envPair: EnvPair,
   options: ProposerRunnerOptions
 ): Promise<ProposerRunnerResult> {
-  const runId = options.runId ?? createProposerRun({
+  const runId = options.runId ?? await createProposerRun({
     tenantId: options.tenantId,
     source: envPair.source,
     target: envPair.target,
@@ -95,7 +95,7 @@ export async function runProposer(
     runId,
     `Scan ${envPair.source} → ${envPair.target}`,
   )
-  markProposerRunRunning(runId)
+  await markProposerRunRunning(runId)
   broadcast({
     type: EventType.SyncProposerRunStarted,
     data: { runId, envPair, triggeredBy: options.triggeredBy }
@@ -107,7 +107,7 @@ export async function runProposer(
     passResult = await runProposerPass(envPair, { ...options, signal }, deps)
     throwIfCancelled(signal)
 
-    const insertedIds = ingestFindings(options.tenantId, runId, passResult.findings)
+    const insertedIds = await ingestFindings(options.tenantId, runId, passResult.findings)
     for (const id of insertedIds) {
       broadcast({
         type: EventType.SyncProposalCreated,
@@ -131,9 +131,9 @@ export async function runProposer(
       throwIfCancelled(signal)
     }
 
-    const rankedCount = rerankOpenQueue(options.tenantId)
+    const rankedCount = await rerankOpenQueue(options.tenantId)
 
-    finishProposerRun({
+    await finishProposerRun({
       id: runId,
       status: "completed",
       counts: passResult.counts,
@@ -156,7 +156,7 @@ export async function runProposer(
     const cancelled = signal.aborted
     const msg = e instanceof Error ? e.message : String(e)
     if (cancelled) {
-      finishProposerRun({
+      await finishProposerRun({
         id: runId,
         status: "cancelled",
         counts: { scanned: 0, produced: 0, errors: 0 },
@@ -169,7 +169,7 @@ export async function runProposer(
       })
       throw e
     }
-    finishProposerRun({
+    await finishProposerRun({
       id: runId,
       status: "failed",
       counts: { scanned: 0, produced: 0, errors: 1 },
@@ -238,7 +238,7 @@ async function annotateInserted(
   llm: LlmCompletionPort,
   signal?: AbortSignal,
 ): Promise<number> {
-  const rows = listProposals({ tenantId, status: ["open"], limit: 1000 })
+  const rows = await listProposals({ tenantId, status: ["open"], limit: 1000 })
   const subset = rows.filter((r) => ids.includes(r.id))
   let n = 0
   for (const r of subset) {
@@ -246,11 +246,11 @@ async function annotateInserted(
     const finding = rowToFinding(r)
     try {
       const ann = await annotateProposal(finding, {}, llm)
-      saveAnnotation(r.id, ann.annotation, ann.failedOpen)
+      await saveAnnotation(r.id, ann.annotation, ann.failedOpen)
       n++
     } catch (e) {
       // Hard failure: persist a critical "annotator-error" stamp so reviewers see it.
-      saveAnnotation(
+      await saveAnnotation(
         r.id,
         {
           riskTier: "critical",
@@ -267,8 +267,8 @@ async function annotateInserted(
   return n
 }
 
-function rerankOpenQueue(tenantId: string): number {
-  const open = listProposals({
+async function rerankOpenQueue(tenantId: string): Promise<number> {
+  const open = await listProposals({
     tenantId,
     status: ["open", "awaiting_approval", "previewed", "snoozed"],
     limit: 5000
@@ -280,7 +280,7 @@ function rerankOpenQueue(tenantId: string): number {
     enqueuedAt: r.enqueued_at
   }))
   const { ranked } = rankProposals(rankable)
-  for (const item of ranked) saveRankScore(item.id, item.score)
+  for (const item of ranked) await saveRankScore(item.id, item.score)
   return ranked.length
 }
 

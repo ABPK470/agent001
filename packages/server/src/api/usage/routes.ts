@@ -71,7 +71,7 @@ export function registerUsageRoutes(app: FastifyInstance): void {
       reply.code(403)
       return { error: "Forbidden" }
     }
-    return db.listTokenUsageFilterOptions()
+    return await db.listTokenUsageFilterOptions()
   })
 
   app.get("/api/usage", async (req, reply) => {
@@ -80,9 +80,9 @@ export function registerUsageRoutes(app: FastifyInstance): void {
       return { error: "Forbidden" }
     }
     const filters = parseUsageQuery(req.query as Record<string, string | undefined>)
-    const totals = db.sumTokenUsage(filters)
-    const total = db.countTokenUsage(filters)
-    const rows = db.listTokenUsagePaginated(filters)
+    const totals = await db.sumTokenUsage(filters)
+    const total = await db.countTokenUsage(filters)
+    const rows = await db.listTokenUsagePaginated(filters)
     const totalPages = Math.max(1, Math.ceil(total / filters.pageSize))
 
     // Total tokens must equal prompt + completion (never an independent SUM that can drift).

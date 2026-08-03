@@ -29,11 +29,11 @@ import { ContinuityError } from "../../runtime/continuity.js"
 import type { AgentOrchestrator } from "../../runtime/orchestrator.js"
 import { listRunArtifactFiles, openRunArtifactStream } from "./run-artifacts.js"
 
-function withRunCapabilities(run: Run): Run {
+async function withRunCapabilities(run: Run): Promise<Run> {
   return {
     ...run,
-    hasCheckpoint: !!db.getCheckpoint(run.id),
-    rollbackAvailable: runHasCompensatableEffects(run.id),
+    hasCheckpoint: !!await db.getCheckpoint(run.id),
+    rollbackAvailable: await runHasCompensatableEffects(run.id),
   }
 }
 
@@ -44,68 +44,68 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
     const viewingAs = viewingAsOf(req)
     const threadId = req.query.threadId
     if (threadId) {
-      const thread = db.getThread(threadId)
+      const thread = await db.getThread(threadId)
       if (!thread || !canAccessThread(viewingAs, thread)) {
         reply.code(404)
         return { error: "Thread not found" }
       }
-      const runs = db.listRunsWithUsageForThread(threadId)
-      return runs.map((run): Run => {
+      const runs = await db.listRunsWithUsageForThread(threadId)
+      return Promise.all(runs.map(async (run): Promise<Run> => {
         const diff = orchestrator.getRunWorkspaceDiff(run.id)
         const pendingWorkspaceChanges = diff
           ? diff.added.length + diff.modified.length + diff.deleted.length
           : 0
-        return withRunCapabilities(db.dbRunToWire(run, {
+        return await withRunCapabilities(db.dbRunToWire(run, {
           totalTokens: run.total_tokens ?? 0,
           promptTokens: run.prompt_tokens ?? 0,
           completionTokens: run.completion_tokens ?? 0,
           llmCalls: run.llm_calls ?? 0,
           pendingWorkspaceChanges
         }))
-      })
+      }))
     }
-    const runs = db.listRunsWithUsageForUser({ upn: viewingAs.viewingAsUpn })
-    return runs.map((run): Run => {
+    const runs = await db.listRunsWithUsageForUser({ upn: viewingAs.viewingAsUpn })
+    return Promise.all(runs.map(async (run): Promise<Run> => {
       const diff = orchestrator.getRunWorkspaceDiff(run.id)
       const pendingWorkspaceChanges = diff
         ? diff.added.length + diff.modified.length + diff.deleted.length
         : 0
-      return withRunCapabilities(db.dbRunToWire(run, {
+      return await withRunCapabilities(db.dbRunToWire(run, {
         totalTokens: run.total_tokens ?? 0,
         promptTokens: run.prompt_tokens ?? 0,
         completionTokens: run.completion_tokens ?? 0,
         llmCalls: run.llm_calls ?? 0,
         pendingWorkspaceChanges
       }))
-    })
+    }))
   })
 
   app.get<{ Params: { id: string } }>("/api/runs/:id", personal.read,
     async (req, reply) => {
     const viewingAs = viewingAsOf(req)
-    const run = db.getRun(req.params.id)
+    const run = await db.getRun(req.params.id)
     if (!run || !canAccessRun(viewingAs, run)) {
       reply.code(404)
       return { error: "Run not found" }
     }
 
-    const audit = db.getAuditLog(run.id)
-    const logs = db.getLogs(run.id)
-    const checkpoint = db.getCheckpoint(run.id)
-    const usage = db.getTokenUsage(run.id)
+    const audit = await db.getAuditLog(run.id)
+    const logs = await db.getLogs(run.id)
+    const checkpoint = await db.getCheckpoint(run.id)
+    const usage = await db.getTokenUsage(run.id)
     const pendingDiff = orchestrator.getRunWorkspaceDiff(run.id)
     const pendingWorkspaceChanges = pendingDiff
       ? pendingDiff.added.length + pendingDiff.modified.length + pendingDiff.deleted.length
       : 0
 
     return {
-      ...withRunCapabilities(db.dbRunToWire(run, {
+      ...(await withRunCapabilities(db.dbRunToWire(run, {
         totalTokens: usage?.total_tokens ?? 0,
         promptTokens: usage?.prompt_tokens ?? 0,
         completionTokens: usage?.completion_tokens ?? 0,
         llmCalls: usage?.llm_calls ?? 0,
         pendingWorkspaceChanges
-      })),
+      }))),
       audit: audit.map(
         (entry): AuditEntry => ({
           actor: entry.actor,
@@ -186,7 +186,7 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
         for (const id of attachmentIds) {
           if (typeof id !== "string" || seen.has(id)) continue
           seen.add(id)
-          const row: AttachmentRow | undefined = getAttachment(id)
+          const row: AttachmentRow | undefined = await getAttachment(id)
           if (!row) {
             reply.code(400)
             return { error: `attachment not found: ${id}` }
@@ -201,7 +201,7 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
       }
 
       try {
-        const runId = orchestrator.startRun(
+        const runId = await orchestrator.startRun(
           goal,
           { attachmentIds: resolvedAttachmentIds, threadId },
           req.session!
@@ -225,12 +225,12 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
   app.post<{ Params: { id: string } }>("/api/runs/:id/cancel", personal.write,
     async (req, reply) => {
     const viewingAs = viewingAsOf(req)
-    const run = db.getRun(req.params.id)
+    const run = await db.getRun(req.params.id)
     if (!run || !canAccessRun(viewingAs, run)) {
       reply.code(404)
       return { error: "Run not found" }
     }
-    const ok = orchestrator.cancelRun(req.params.id)
+    const ok = await orchestrator.cancelRun(req.params.id)
     if (!ok) {
       reply.code(404)
       return { error: "Run not found or not active" }
@@ -241,12 +241,12 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
   app.post<{ Params: { id: string } }>("/api/runs/:id/resume", personal.write,
     async (req, reply) => {
     const viewingAs = viewingAsOf(req)
-    const run = db.getRun(req.params.id)
+    const run = await db.getRun(req.params.id)
     if (!run || !canAccessRun(viewingAs, run)) {
       reply.code(404)
       return { error: "Run not found" }
     }
-    const newRunId = orchestrator.resumeRun(req.params.id, req.session ?? null)
+    const newRunId = await orchestrator.resumeRun(req.params.id, req.session ?? null)
     if (!newRunId) {
       reply.code(404)
       return { error: "Run not found or no checkpoint available" }
@@ -303,12 +303,12 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
   app.post<{ Params: { id: string } }>("/api/runs/:id/rerun", personal.write,
     async (req, reply) => {
     const viewingAs = viewingAsOf(req)
-    const original = db.getRun(req.params.id)
+    const original = await db.getRun(req.params.id)
     if (!original || !canAccessRun(viewingAs, original)) {
       reply.code(404)
       return { error: "Run not found" }
     }
-    const runId = orchestrator.startRun(
+    const runId = await orchestrator.startRun(
       original.goal,
       { threadId: original.thread_id ?? undefined },
       req.session ?? null
@@ -322,7 +322,7 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
     personal.write,
     async (req, reply) => {
       const viewingAs = viewingAsOf(req)
-      const run = db.getRun(req.params.id)
+      const run = await db.getRun(req.params.id)
       if (!run || !canAccessRun(viewingAs, run)) {
         reply.code(404)
         return { error: "Run not found" }
@@ -346,7 +346,7 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
     personal.write,
     async (req, reply) => {
       const viewingAs = viewingAsOf(req)
-      const run = db.getRun(req.params.id)
+      const run = await db.getRun(req.params.id)
       if (!run || !canAccessRun(viewingAs, run)) {
         reply.code(404)
         return { error: "Run not found" }
@@ -368,12 +368,12 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
   app.get<{ Params: { id: string } }>("/api/runs/:id/trace", personal.read,
     async (req, reply) => {
     const viewingAs = viewingAsOf(req)
-    const run = db.getRun(req.params.id)
+    const run = await db.getRun(req.params.id)
     if (!run || !canAccessRun(viewingAs, run)) {
       reply.code(404)
       return { error: "Run not found" }
     }
-    return db.getTraceEntries(req.params.id).map((entry) => parseBoundaryJson(entry.data))
+    return (await db.getTraceEntries(req.params.id)).map((entry) => parseBoundaryJson(entry.data))
   })
 
   /** User download — trace as .txt (streamed to browser, not saved on server). */
@@ -382,14 +382,14 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
     personal.read,
     async (req, reply) => {
     const viewingAs = viewingAsOf(req)
-    const run = db.getRun(req.params.id)
+    const run = await db.getRun(req.params.id)
     if (!run || !canAccessRun(viewingAs, run)) {
       reply.code(404)
       return { error: "Run not found" }
     }
     const omitCode = req.query.omitCode === "1" || req.query.omitCode === "true"
-    const entries = db.getTraceEntries(req.params.id).map((entry) => parseBoundaryJson(entry.data) as Record<string, unknown>)
-    const usage = db.getTokenUsage(req.params.id)
+    const entries = (await db.getTraceEntries(req.params.id)).map((entry) => parseBoundaryJson(entry.data) as Record<string, unknown>)
+    const usage = await db.getTokenUsage(req.params.id)
     const text = formatTraceExportText(
       entries,
       {
@@ -414,13 +414,13 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
     personal.read,
     async (req, reply) => {
     const viewingAs = viewingAsOf(req)
-    const run = db.getRun(req.params.id)
+    const run = await db.getRun(req.params.id)
     if (!run || !canAccessRun(viewingAs, run)) {
       reply.code(404)
       return { error: "Run not found" }
     }
     const omitCode = req.query.omitCode === "1" || req.query.omitCode === "true"
-    const entries = db.getTraceEntries(req.params.id).map((entry) => parseBoundaryJson(entry.data))
+    const entries = (await db.getTraceEntries(req.params.id)).map((entry) => parseBoundaryJson(entry.data))
     const body = omitCode
       ? JSON.stringify(
           {
@@ -449,7 +449,7 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
     personal.write,
     async (req, reply) => {
       const viewingAs = viewingAsOf(req)
-      const run = db.getRun(req.params.id)
+      const run = await db.getRun(req.params.id)
       if (!run || !canAccessRun(viewingAs, run)) {
         reply.code(404)
         return { error: "Run not found" }
@@ -489,7 +489,7 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
   app.get<{ Params: { id: string } }>("/api/runs/:id/artifacts", personal.read,
     async (req, reply) => {
     const viewingAs = viewingAsOf(req)
-    const run = db.getRun(req.params.id)
+    const run = await db.getRun(req.params.id)
     if (!run || !canAccessRun(viewingAs, run)) {
       reply.code(404)
       return { error: "Run not found" }
@@ -506,7 +506,7 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
   app.get<{ Params: { id: string; "*": string } }>("/api/runs/:id/artifacts/*", personal.read,
     async (req, reply) => {
     const viewingAs = viewingAsOf(req)
-    const run = db.getRun(req.params.id)
+    const run = await db.getRun(req.params.id)
     if (!run || !canAccessRun(viewingAs, run)) {
       reply.code(404)
       return { error: "Run not found" }
@@ -533,7 +533,7 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
     personal.write,
     async (req, reply) => {
       const viewingAs = viewingAsOf(req)
-      const run = db.getRun(req.params.id)
+      const run = await db.getRun(req.params.id)
       if (!run || !canAccessRun(viewingAs, run)) {
         reply.code(404)
         return { error: "Run not found" }
@@ -553,7 +553,7 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
   app.get<{ Params: { id: string } }>("/api/runs/:id/workspace-diff", personal.read,
     async (req, reply) => {
     const viewingAs = viewingAsOf(req)
-    const run = db.getRun(req.params.id)
+    const run = await db.getRun(req.params.id)
     if (!run || !canAccessRun(viewingAs, run)) {
       reply.code(404)
       return { error: "Run not found" }
@@ -579,7 +579,7 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
   app.post<{ Params: { id: string } }>("/api/runs/:id/workspace-diff/apply", personal.write,
     async (req, reply) => {
     const viewingAs = viewingAsOf(req)
-    const run = db.getRun(req.params.id)
+    const run = await db.getRun(req.params.id)
     if (!run || !canAccessRun(viewingAs, run)) {
       reply.code(404)
       return { error: "Run not found" }
@@ -595,7 +595,8 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
   app.get("/api/runs/active", personal.read, async (req) => {
     const viewingAs = viewingAsOf(req)
     const ids = orchestrator.getActiveRunIds()
-    const visible = ids.filter((id) => canAccessRun(viewingAs, db.getRun(id)))
+    const runs = (await Promise.all(ids.map(async (id) => await db.getRun(id))))
+    const visible = ids.filter((_, index) => canAccessRun(viewingAs, runs[index]))
     return { runIds: visible }
   })
 

@@ -18,7 +18,7 @@
 import { randomBytes } from "node:crypto"
 import { sql } from "kysely"
 import { getPlatformDb } from "../../../schema/kysely.js"
-import { runAll, runExec, runGet } from "../../../schema/execute.js"
+import { runAllAsync, runExecAsync, runGetAsync } from "../../../schema/execute-async.js"
 import { platformNow, platformNowMinusSeconds } from "../../../schema/sql-time.js"
 
 function newSid(): string {
@@ -39,7 +39,7 @@ export interface SessionWithUser extends DbSession {
   is_admin: number // 0 | 1
 }
 
-export function createSession(args: { upn: string; ip: string; userAgent: string }): string {
+export async function createSession(args: { upn: string; ip: string; userAgent: string }): Promise<string> {
   const sid = newSid()
   const compiled = getPlatformDb()
     .insertInto("sessions")
@@ -52,33 +52,33 @@ export function createSession(args: { upn: string; ip: string; userAgent: string
       last_seen_at: platformNow(),
     })
     .compile()
-  runExec(compiled)
+  await runExecAsync(compiled)
   return sid
 }
 
-export function touchSession(sid: string): void {
+export async function touchSession(sid: string): Promise<void> {
   const compiled = getPlatformDb()
     .updateTable("sessions")
     .set({ last_seen_at: platformNow() })
     .where("sid", "=", sid)
     .compile()
-  runExec(compiled)
+  await runExecAsync(compiled)
 }
 
-export function deleteSession(sid: string): void {
+export async function deleteSession(sid: string): Promise<void> {
   const compiled = getPlatformDb()
     .deleteFrom("sessions")
     .where("sid", "=", sid)
     .compile()
-  runExec(compiled)
+  await runExecAsync(compiled)
 }
 
-export function deleteSessionsForUser(upn: string): void {
+export async function deleteSessionsForUser(upn: string): Promise<void> {
   const compiled = getPlatformDb()
     .deleteFrom("sessions")
     .where("upn", "=", upn.toLowerCase())
     .compile()
-  runExec(compiled)
+  await runExecAsync(compiled)
 }
 
 /**
@@ -86,7 +86,7 @@ export function deleteSessionsForUser(upn: string): void {
  * not match any row (e.g. logged out / revoked). Used by the identity
  * hook on every request.
  */
-export function getSessionWithUser(sid: string): SessionWithUser | null {
+export async function getSessionWithUser(sid: string): Promise<SessionWithUser | null> {
   const compiled = getPlatformDb()
     .selectFrom("sessions")
     .innerJoin("users", "users.upn", "sessions.upn")
@@ -102,19 +102,19 @@ export function getSessionWithUser(sid: string): SessionWithUser | null {
     ])
     .where("sessions.sid", "=", sid)
     .compile()
-  return runGet<SessionWithUser>(compiled) ?? null
+  return (await runGetAsync<SessionWithUser>(compiled)) ?? null
 }
 
-export function getSession(sid: string): DbSession | undefined {
+export async function getSession(sid: string): Promise<DbSession | undefined> {
   const compiled = getPlatformDb()
     .selectFrom("sessions")
     .selectAll()
     .where("sid", "=", sid)
     .compile()
-  return runGet<DbSession>(compiled)
+  return await runGetAsync<DbSession>(compiled)
 }
 
-export function listSessions(opts?: { sinceSeconds?: number }): SessionWithUser[] {
+export async function listSessions(opts?: { sinceSeconds?: number }): Promise<SessionWithUser[]> {
   let query = getPlatformDb()
     .selectFrom("sessions")
     .innerJoin("users", "users.upn", "sessions.upn")
@@ -134,7 +134,7 @@ export function listSessions(opts?: { sinceSeconds?: number }): SessionWithUser[
     )
   }
   const compiled = query.orderBy("sessions.last_seen_at", "desc").compile()
-  return runAll<SessionWithUser>(compiled)
+  return await runAllAsync<SessionWithUser>(compiled)
 }
 
 // ── Per-user aggregations (admin observability) ──────────────────
@@ -169,10 +169,10 @@ export interface UserStatsRow {
  * runs may still carry mixed-case UPNs — exact `=` dropped tokens/LLM calls
  * for those users while run counts looked fine when both sides matched.
  */
-export function listUsersWithStats(opts?: {
+export async function listUsersWithStats(opts?: {
   sinceSeconds?: number
   activityWindowSeconds?: number
-}): UserStatsRow[] {
+}): Promise<UserStatsRow[]> {
   const sinceSeconds = opts?.sinceSeconds ?? 604_800
   const activityWindow = opts?.activityWindowSeconds ?? 86_400
   const sinceCutoff = platformNowMinusSeconds(sinceSeconds)
@@ -262,7 +262,7 @@ export function listUsersWithStats(opts?: {
     LEFT JOIN last_models  lm ON lm.upn = lower(g.upn)
     ORDER BY g.last_seen_at DESC
   `.compile(getPlatformDb())
-  const rows = runAll<{
+  const rows = await runAllAsync<{
     upn: string
     display_name: string
     is_admin: number
@@ -320,11 +320,11 @@ export interface UserHistoryRunRow {
  * Recent runs for a single user (looked up by UPN). Joined with
  * token_usage so the widget can render tokens / model in one round-trip.
  */
-export function listUserHistory(
+export async function listUserHistory(
   identifier: string,
   limit = 25,
   offset = 0
-): { runs: UserHistoryRunRow[]; total: number } {
+): Promise<{  runs: UserHistoryRunRow[]; total: number  }> {
   // v19: identifier is always a UPN (anonymous "sid:..." identifiers are gone).
   // We strip the legacy "sid:" prefix defensively so older client links keep working.
   // Match case-insensitively — users are lowercased; legacy runs may not be.
@@ -334,7 +334,7 @@ export function listUserHistory(
     .select(sql<number>`count(*)`.as("cnt"))
     .where(sql<boolean>`lower(upn) = ${upn}`)
     .compile()
-  const total = Number(runGet<{ cnt: number | bigint }>(totalCompiled)?.cnt ?? 0)
+  const total = Number((await runGetAsync<{ cnt: number | bigint }>(totalCompiled))?.cnt ?? 0)
   const rowsCompiled = getPlatformDb()
     .selectFrom("runs as r")
     .leftJoin("token_usage as t", "t.run_id", "r.id")
@@ -355,7 +355,7 @@ export function listUserHistory(
     .limit(limit)
     .offset(offset)
     .compile()
-  const rows = runAll<{
+  const rows = await runAllAsync<{
     id: string
     goal: string
     status: string

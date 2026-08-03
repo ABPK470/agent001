@@ -87,7 +87,7 @@ describe("listOperations sync bucketing", () => {
     })
 
     const { listOperations } = await import("../src/api/operations/service/query/index.ts")
-    const result = listOperations({ limit: 50 })
+    const result = await listOperations({ limit: 50 })
 
     expect(result.operations).toHaveLength(2)
     expect(result.operations.map((op) => op.kind)).toEqual([
@@ -138,7 +138,7 @@ describe("listOperations sync bucketing", () => {
     })
 
     const { listOperations } = await import("../src/api/operations/service/query/index.ts")
-    const result = listOperations({ limit: 50 })
+    const result = await listOperations({ limit: 50 })
     const execute = result.operations[0]
 
     expect(execute.kind).toBe(OperationKind.SyncRun)
@@ -211,7 +211,7 @@ describe("listOperations sync bucketing", () => {
     )
 
     const { listOperations } = await import("../src/api/operations/service/query/index.ts")
-    const result = listOperations({ limit: 50 })
+    const result = await listOperations({ limit: 50 })
     const execute = result.operations[0]
     const executePhase = execute.activities.find((a) => a.name === "Execute")
 
@@ -308,7 +308,7 @@ describe("listOperations sync bucketing", () => {
     getSyncRunPlanJson.mockReturnValue(null)
 
     const { listOperations } = await import("../src/api/operations/service/query/index.ts")
-    const result = listOperations({ limit: 50 })
+    const result = await listOperations({ limit: 50 })
     const execute = result.operations[0]
     const executePhase = execute.activities.find((a) => a.name === "Execute")
 
@@ -382,7 +382,7 @@ describe("listOperations sync bucketing", () => {
     getSyncRunPlanJson.mockReturnValue(null)
 
     const { listOperations } = await import("../src/api/operations/service/query/index.ts")
-    const result = listOperations({ limit: 50 })
+    const result = await listOperations({ limit: 50 })
     const preview = result.operations.find((op) => op.kind === OperationKind.SyncRun)
 
     expect(preview).toBeDefined()
@@ -442,7 +442,7 @@ describe("listOperations sync bucketing", () => {
     )
 
     const { listOperations } = await import("../src/api/operations/service/query/index.ts")
-    const result = listOperations({ limit: 50 })
+    const result = await listOperations({ limit: 50 })
     const preview = result.operations.find((op) => op.kind === OperationKind.SyncRun)
     const scope = preview?.activities[0]?.children?.find((a) => a.name === "Preflight checks")
 
@@ -508,7 +508,8 @@ describe("listOperations sync bucketing", () => {
     getSyncRun.mockReturnValue(undefined)
 
     const { listOperations } = await import("../src/api/operations/service/query/index.ts")
-    const agent = listOperations({ limit: 50 }).operations.find((op) => op.kind === OperationKind.AgentRun)
+    const result = await listOperations({ limit: 50 })
+    const agent = result.operations.find((op) => op.kind === OperationKind.AgentRun)
 
     expect(agent?.activities.map((a) => a.name)).toEqual([
       "started",
@@ -584,7 +585,7 @@ describe("listOperations sync bucketing", () => {
     })
 
     const { listOperations } = await import("../src/api/operations/service/query/index.ts")
-    const result = listOperations({ limit: 50 })
+    const result = await listOperations({ limit: 50 })
 
     const preview = result.operations.find((op) => op.id === "plan-skip")
     const executePhase = preview?.activities.find((a) => a.name === "Execute")
@@ -640,7 +641,7 @@ describe("listOperations sync bucketing", () => {
     })
 
     const { listOperations } = await import("../src/api/operations/service/query/index.ts")
-    const result = listOperations({ limit: 50 })
+    const result = await listOperations({ limit: 50 })
 
     expect(result.operations.every((op) => op.kind !== OperationKind.System)).toBe(true)
     expect(result.operations.some((op) => op.id === "plan-visible")).toBe(true)
@@ -682,7 +683,7 @@ describe("listOperations sync bucketing", () => {
     })
 
     const { listOperations } = await import("../src/api/operations/service/query/index.ts")
-    const result = listOperations({ limit: 50, kind: "sync" })
+    const result = await listOperations({ limit: 50, kind: "sync" })
 
     expect(result.operations).toHaveLength(1)
     expect(result.operations[0]?.kind).toBe(OperationKind.SyncRun)
@@ -691,7 +692,7 @@ describe("listOperations sync bucketing", () => {
   it("forwards since/until to event_log listEvents", async () => {
     listEvents.mockReturnValue([])
     const { listOperations } = await import("../src/api/operations/service/query/index.ts")
-    listOperations({
+    await listOperations({
       limit: 50,
       since: "2026-07-01T00:00:00.000Z",
       until: "2026-07-02T23:59:59.999Z",

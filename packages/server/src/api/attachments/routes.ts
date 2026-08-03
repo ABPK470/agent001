@@ -37,7 +37,7 @@ interface UploadBody {
   tags?: Array<{ key: string; value: string }>
 }
 
-function publicView(row: AttachmentRow): Record<string, unknown> {
+async function publicView(row: AttachmentRow): Promise<Record<string, unknown>> {
   return {
     id: row.id,
     scope: row.scope,
@@ -54,7 +54,7 @@ function publicView(row: AttachmentRow): Record<string, unknown> {
     purposeTag: row.purpose_tag,
     uploadedAt: row.uploaded_at,
     processedAt: row.processed_at,
-    tags: listAttachmentTags(row.id).map((tag) => ({ key: tag.tag_key, value: tag.tag_value }))
+    tags: (await listAttachmentTags(row.id)).map((tag) => ({ key: tag.tag_key, value: tag.tag_value }))
   }
 }
 
@@ -123,18 +123,19 @@ export function registerAttachmentRoutes(app: FastifyInstance): void {
     personal.read,
     async (req) => {
       const { viewingAsUpn } = viewingAsOf(req)
-      return listAttachments({
+      const attachments = await listAttachments({
         scope: req.query.scope,
         runId: req.query.runId,
         q: req.query.q,
         ownerUpn: viewingAsUpn,
-      }).map(publicView)
+      })
+      return Promise.all(attachments.map(publicView))
     }
   )
 
   app.get<{ Params: { id: string } }>("/api/attachments/:id", personal.read, async (req, reply) => {
     const viewingAs = viewingAsOf(req)
-    const row = getAttachment(req.params.id)
+    const row = await getAttachment(req.params.id)
     if (!row || !canAccessOwned(viewingAs, row.owner_upn)) {
       reply.code(404)
       return { error: "attachment not found" }
@@ -144,7 +145,7 @@ export function registerAttachmentRoutes(app: FastifyInstance): void {
 
   app.get<{ Params: { id: string } }>("/api/attachments/:id/content", personal.read, async (req, reply) => {
     const viewingAs = viewingAsOf(req)
-    const row = getAttachment(req.params.id)
+    const row = await getAttachment(req.params.id)
     if (!row || !canAccessOwned(viewingAs, row.owner_upn)) {
       reply.code(404)
       return { error: "attachment not found" }
@@ -159,12 +160,12 @@ export function registerAttachmentRoutes(app: FastifyInstance): void {
 
   app.delete<{ Params: { id: string } }>("/api/attachments/:id", personal.write, async (req, reply) => {
     const viewingAs = viewingAsOf(req)
-    const row = getAttachment(req.params.id)
+    const row = await getAttachment(req.params.id)
     if (!row || !canAccessOwned(viewingAs, row.owner_upn)) {
       reply.code(404)
       return { error: "attachment not found" }
     }
-    softDeleteAttachment(row.id)
+    await softDeleteAttachment(row.id)
     auditAttachmentDeleted({ id: row.id, ownerUpn: row.owner_upn, reason: "user" })
     return { ok: true }
   })

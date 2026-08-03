@@ -23,8 +23,8 @@ export interface MssqlConnectorPool {
 export interface MssqlPoolProvider {
   get(connectorId: string): Promise<MssqlConnectorPool>
   getByName(name: string): Promise<MssqlConnectorPool>
-  configOf(connectorId: string): MssqlConfig | undefined
-  list(): readonly { id: string; name: string }[]
+  configOf(connectorId: string): Promise<MssqlConfig | undefined>
+  list(): Promise<readonly { id: string; name: string }[]>
   invalidate(connectorId: string): void
   /** Optional shared budget for sync-work leases (wired by the platform shell). */
   runWithSyncBudget?<T>(connectorKey: string, fn: () => Promise<T>): Promise<T>

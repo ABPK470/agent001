@@ -36,7 +36,7 @@ function isWritableDir(path: string, create = false): boolean {
   }
 }
 
-export function runSetupChecks(layout: SetupLayout): SetupReport {
+export async function runSetupChecks(layout: SetupLayout): Promise<SetupReport> {
   const checks: SetupCheck[] = []
   const env = readEnvState(layout.envPath)
 
@@ -212,7 +212,7 @@ export function runSetupChecks(layout: SetupLayout): SetupReport {
       ok("mssql", "MSSQL", `${countEnabledMssqlConnectors()} enabled connector(s) in SQLite`),
     )
     checks.push(
-      isPublishedSyncBundlePresent(layout.projectRoot)
+      await isPublishedSyncBundlePresent(layout.projectRoot)
         ? ok("published-sync-definitions", "Published SyncDefinitions", "SQLite sync_definitions")
         : warn(
             "published-sync-definitions",
@@ -230,7 +230,7 @@ export function runSetupChecks(layout: SetupLayout): SetupReport {
       ),
     )
     checks.push(
-      isPublishedSyncBundlePresent(layout.projectRoot)
+      await isPublishedSyncBundlePresent(layout.projectRoot)
         ? ok("published-sync-definitions", "Published SyncDefinitions", "SQLite sync_definitions")
         : warn(
             "published-sync-definitions",

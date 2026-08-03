@@ -40,7 +40,7 @@ describe("agent-run pipeline telemetry grouping", () => {
     ])
 
     const { listOperationsForRun } = await import("../src/api/operations/service/query/index.ts")
-    const { operation } = listOperationsForRun("run-1")
+    const { operation } = await listOperationsForRun("run-1")
 
     expect(operation).not.toBeNull()
     // Chronological order: the debug-trace burst sits BETWEEN "started" and the
@@ -79,7 +79,7 @@ describe("agent-run pipeline telemetry grouping", () => {
     ])
 
     const { listOperationsForRun } = await import("../src/api/operations/service/query/index.ts")
-    const { operation } = listOperationsForRun("run-1")
+    const { operation } = await listOperationsForRun("run-1")
 
     // The step between the two bursts closes the first group, so each iteration
     // gets its own "Debug trace" row in chronological position.
@@ -108,7 +108,7 @@ describe("agent-run pipeline telemetry grouping", () => {
     ])
 
     const { listOperationsForRun } = await import("../src/api/operations/service/query/index.ts")
-    const { operation } = listOperationsForRun("run-1")
+    const { operation } = await listOperationsForRun("run-1")
     const names = operation!.activities.map((a) => a.name)
 
     // ask_user is a step row exactly like any other tool; the tool_call.* signals
@@ -146,7 +146,7 @@ describe("agent-run pipeline telemetry grouping", () => {
     ])
 
     const { listOperationsForRun } = await import("../src/api/operations/service/query/index.ts")
-    const { operation } = listOperationsForRun("run-1")
+    const { operation } = await listOperationsForRun("run-1")
     expect(operation!.activities.map((a) => a.name)).toEqual([
       "started",
       "query_mssql",
@@ -191,7 +191,7 @@ describe("agent-run pipeline telemetry grouping", () => {
     ])
 
     const { listOperationsForRun } = await import("../src/api/operations/service/query/index.ts")
-    const { operation } = listOperationsForRun("run-1")
+    const { operation } = await listOperationsForRun("run-1")
     const names = operation!.activities.map((a) => a.name)
     expect(names).toEqual(["started", "query_mssql", "completed"])
     expect(names.filter((n) => n === "Tool call").length).toBe(0)
@@ -218,7 +218,7 @@ describe("agent-run pipeline telemetry grouping", () => {
     ])
 
     const { listOperationsForRun } = await import("../src/api/operations/service/query/index.ts")
-    const { operation } = listOperationsForRun("run-1")
+    const { operation } = await listOperationsForRun("run-1")
     const names = operation!.activities.map((a) => a.name)
     expect(names).toEqual(["started", "query_mssql", "Checkpoint", "completed"])
     expect(names.filter((n) => n === "Tool call").length).toBe(0)
@@ -243,7 +243,7 @@ describe("agent-run pipeline telemetry grouping", () => {
     ])
 
     const { listOperationsForRun } = await import("../src/api/operations/service/query/index.ts")
-    const { operation } = listOperationsForRun("run-1")
+    const { operation } = await listOperationsForRun("run-1")
     const step = operation!.activities.find((a) => a.name === "read_file")!
     expect(step).toBeTruthy()
     expect(step.details?.["toolIo"]).toBeTruthy()
@@ -259,7 +259,7 @@ describe("agent-run pipeline telemetry grouping", () => {
     ])
 
     const { listOperationsForRun } = await import("../src/api/operations/service/query/index.ts")
-    const { operation } = listOperationsForRun("run-1")
+    const { operation } = await listOperationsForRun("run-1")
     expect(operation!.activities.map((a) => a.name)).toEqual(["started", "Debug trace", "failed"])
     const debugTrace = operation!.activities.find((a) => a.name === "Debug trace")!
     expect(debugTrace.status).toBe(OperationStatus.Failed)
@@ -295,7 +295,7 @@ describe("agent-run pipeline telemetry grouping", () => {
     ])
 
     const { listOperationsForRun } = await import("../src/api/operations/service/query/index.ts")
-    const { operation } = listOperationsForRun("run-1")
+    const { operation } = await listOperationsForRun("run-1")
     expect(operation!.status).toBe(OperationStatus.Skipped)
     const fetch = operation!.activities.find((a) => a.name === "fetch_url")!
     expect(fetch).toBeTruthy()
@@ -322,7 +322,7 @@ describe("agent-run pipeline telemetry grouping", () => {
     ])
 
     const { listOperationsForRun } = await import("../src/api/operations/service/query/index.ts")
-    const { operation } = listOperationsForRun("run-1")
+    const { operation } = await listOperationsForRun("run-1")
 
     expect(operation).not.toBeNull()
     expect(operation!.status).toBe(OperationStatus.Failed)

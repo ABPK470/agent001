@@ -151,7 +151,7 @@ async function collectLlm(
 async function promptForBlockingGaps(
   rl: ReturnType<typeof createInterface>,
   layout: SetupLayout,
-  report: ReturnType<typeof runSetupChecks>,
+  report: Awaited<ReturnType<typeof runSetupChecks>>,
 ): Promise<Updates> {
   const env = readEnvState(layout.envPath)
   const failed = new Set(report.checks.filter((c) => c.severity === "error").map((c) => c.id))
@@ -194,7 +194,7 @@ export async function runSetupWizard(opts?: { force?: boolean }): Promise<number
   ensureEnvFile(layout)
   reloadEnv(layout)
 
-  let report = runSetupChecks(layout)
+  let report = await runSetupChecks(layout)
 
   console.log("")
   console.log("MI:A setup")
@@ -267,7 +267,7 @@ export async function runSetupWizard(opts?: { force?: boolean }): Promise<number
   reloadEnv(layout)
   applyEnvToProcess(updates)
 
-  report = runSetupChecks(layout)
+  report = await runSetupChecks(layout)
   console.log("")
   console.log(formatSetupReport(report))
   console.log("")

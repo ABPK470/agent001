@@ -59,8 +59,8 @@ export interface AgentBusPort {
     content: string
     protocol?: BusProtocol
     replyTo?: string | null
-  }): AgentBusMessage
+  }): Promise<AgentBusMessage>
   subscribe(topic: string, handler: (msg: AgentBusMessage) => void): () => void
-  history(topic?: string): AgentBusMessage[]
+  history(topic?: string): Promise<AgentBusMessage[]>
   dispose(): void
 }

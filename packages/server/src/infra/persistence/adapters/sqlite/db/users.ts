@@ -8,7 +8,7 @@
 import { sql } from "kysely"
 import { UserSource } from "../../../../../internal/enums/auth.js"
 import { getPlatformDb } from "../../../schema/kysely.js"
-import { runAll, runExec, runGet } from "../../../schema/execute.js"
+import { runAllAsync, runExecAsync, runGetAsync } from "../../../schema/execute-async.js"
 import { platformNow } from "../../../schema/sql-time.js"
 
 export interface DbUser {
@@ -31,7 +31,7 @@ export interface InsertUserInput {
   source: UserSource
 }
 
-export function insertUser(u: InsertUserInput): void {
+export async function insertUser(u: InsertUserInput): Promise<void> {
   const compiled = getPlatformDb()
     .insertInto("users")
     .values({
@@ -45,71 +45,71 @@ export function insertUser(u: InsertUserInput): void {
       last_login_at: null,
     })
     .compile()
-  runExec(compiled)
+  await runExecAsync(compiled)
 }
 
-export function findUserByUpn(upn: string): DbUser | undefined {
+export async function findUserByUpn(upn: string): Promise<DbUser | undefined> {
   const compiled = getPlatformDb()
     .selectFrom("users")
     .selectAll()
     .where("upn", "=", upn.toLowerCase())
     .compile()
-  return runGet<DbUser>(compiled)
+  return await runGetAsync<DbUser>(compiled)
 }
 
-export function findUserByUsername(username: string): DbUser | undefined {
+export async function findUserByUsername(username: string): Promise<DbUser | undefined> {
   const compiled = getPlatformDb()
     .selectFrom("users")
     .selectAll()
     .where("username", "=", username.toLowerCase())
     .compile()
-  return runGet<DbUser>(compiled)
+  return await runGetAsync<DbUser>(compiled)
 }
 
-export function updateLastLoginAt(upn: string): void {
+export async function updateLastLoginAt(upn: string): Promise<void> {
   const compiled = getPlatformDb()
     .updateTable("users")
     .set({ last_login_at: platformNow() })
     .where("upn", "=", upn.toLowerCase())
     .compile()
-  runExec(compiled)
+  await runExecAsync(compiled)
 }
 
-export function countUsers(): number {
+export async function countUsers(): Promise<number> {
   const compiled = getPlatformDb()
     .selectFrom("users")
     .select(sql<number>`count(*)`.as("n"))
     .compile()
-  const row = runGet<{ n: number | bigint }>(compiled)
+  const row = await runGetAsync<{ n: number | bigint }>(compiled)
   return Number(row?.n ?? 0)
 }
 
-export function listUsers(): DbUser[] {
+export async function listUsers(): Promise<DbUser[]> {
   const compiled = getPlatformDb()
     .selectFrom("users")
     .selectAll()
     .orderBy("created_at", "desc")
     .compile()
-  return runAll<DbUser>(compiled)
+  return await runAllAsync<DbUser>(compiled)
 }
 
-export function countAdmins(): number {
+export async function countAdmins(): Promise<number> {
   const compiled = getPlatformDb()
     .selectFrom("users")
     .select(sql<number>`count(*)`.as("n"))
     .where("is_admin", "=", 1)
     .compile()
-  const row = runGet<{ n: number | bigint }>(compiled)
+  const row = await runGetAsync<{ n: number | bigint }>(compiled)
   return Number(row?.n ?? 0)
 }
 
-export function setUserAdmin(upn: string, isAdmin: boolean): DbUser {
+export async function setUserAdmin(upn: string, isAdmin: boolean): Promise<DbUser> {
   const normalized = upn.toLowerCase()
-  const existing = findUserByUpn(normalized)
+  const existing = await findUserByUpn(normalized)
   if (!existing) {
     throw new Error(`user not found: ${upn}`)
   }
-  if (!isAdmin && existing.is_admin === 1 && countAdmins() <= 1) {
+  if (!isAdmin && existing.is_admin === 1 && await countAdmins() <= 1) {
     throw new Error("cannot demote the last admin")
   }
   const compiled = getPlatformDb()
@@ -117,8 +117,8 @@ export function setUserAdmin(upn: string, isAdmin: boolean): DbUser {
     .set({ is_admin: isAdmin ? 1 : 0 })
     .where("upn", "=", normalized)
     .compile()
-  runExec(compiled)
-  const updated = findUserByUpn(normalized)
+  await runExecAsync(compiled)
+  const updated = await findUserByUpn(normalized)
   if (!updated) throw new Error("user update failed")
   return updated
 }

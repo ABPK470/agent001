@@ -79,7 +79,7 @@ export interface ConnectorPort {
    * Throws when the connector kind has no table catalog.
    */
   listTables(connectorId: string): Promise<string[]>
-  listAdapters(): ConnectorInfo[]
+  listAdapters(): Promise<ConnectorInfo[]>
 }
 
 /** Resolve a connector id to its persisted Connector, or throw. */
@@ -93,11 +93,14 @@ function resolveConnector(connectors: readonly Connector[], id: string): Connect
  * A connector source is either a static snapshot or a provider that re-reads
  * the persisted connectors live. The live form lets the port reflect
  * runtime create/enable/disable/delete without a server restart.
+ * Providers may be async (platform store cutover).
  */
-export type ConnectorSource = readonly Connector[] | (() => readonly Connector[])
+export type ConnectorSource =
+  | readonly Connector[]
+  | (() => readonly Connector[] | Promise<readonly Connector[]>)
 
-function readConnectors(source: ConnectorSource): readonly Connector[] {
-  return typeof source === "function" ? source() : source
+async function readConnectors(source: ConnectorSource): Promise<readonly Connector[]> {
+  return typeof source === "function" ? await source() : source
 }
 
 export function connectorInfo(connector: Connector, capabilities: AdapterCapabilities): ConnectorInfo {
@@ -125,7 +128,7 @@ export function buildConnectorPort(
 ): ConnectorPort {
   return {
     async moveData(source, target, options) {
-      const list = readConnectors(connectors)
+      const list = await readConnectors(connectors)
       const srcConnector = resolveConnector(list, source.connectorId)
       const tgtConnector = resolveConnector(list, target.connectorId)
       const srcAdapter = registry.forConnector(srcConnector)
@@ -143,7 +146,7 @@ export function buildConnectorPort(
     },
     async previewMove(source, options) {
       const limit = options?.limit ?? 50
-      const list = readConnectors(connectors)
+      const list = await readConnectors(connectors)
       const srcConnector = resolveConnector(list, source.connectorId)
       const srcAdapter = registry.forConnector(srcConnector)
       await srcAdapter.open()
@@ -170,7 +173,7 @@ export function buildConnectorPort(
       }
     },
     async listTables(connectorId) {
-      const list = readConnectors(connectors)
+      const list = await readConnectors(connectors)
       const connector = resolveConnector(list, connectorId)
       const sql = listTablesSql(connector.kind)
       if (!sql) {
@@ -201,8 +204,9 @@ export function buildConnectorPort(
         await adapter.close()
       }
     },
-    listAdapters() {
-      return readConnectors(connectors)
+    async listAdapters() {
+      const list = await readConnectors(connectors)
+      return list
         .filter((c) => registry.has(c.kind))
         .map((c) => connectorInfo(c, registry.forConnector(c).capabilities))
     },

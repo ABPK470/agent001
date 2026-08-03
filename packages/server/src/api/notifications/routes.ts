@@ -19,12 +19,12 @@ import {
 } from "../../runtime/run-capability-actions.js"
 import type { AgentOrchestrator } from "../../runtime/orchestrator.js"
 
-function canSee(
+async function canSee(
   viewingAs: ViewingAs,
   notification: { run_id: string | null }
-): boolean {
+): Promise<boolean> {
   if (!notification.run_id) return true
-  const run = db.getRun(notification.run_id)
+  const run = await db.getRun(notification.run_id)
   return canAccessRun(viewingAs, run ?? null)
 }
 
@@ -32,7 +32,7 @@ export function registerNotificationRoutes(app: FastifyInstance, orchestrator: A
   app.get<{ Querystring: { limit?: string } }>("/api/notifications", personal.read, async (req) => {
     const { viewingAsUpn } = viewingAsOf(req)
     const limit = Math.min(Number(req.query.limit) || 50, 200)
-    const notifications = db.listNotificationsForUser(viewingAsUpn, limit)
+    const notifications = await db.listNotificationsForUser(viewingAsUpn, limit)
     return notifications.map((notification) => {
       const actions = parseBoundaryJson(notification.actions) as NotificationAction[]
       return {
@@ -51,25 +51,25 @@ export function registerNotificationRoutes(app: FastifyInstance, orchestrator: A
 
   app.get("/api/notifications/unread-count", personal.read, async (req) => {
     const { viewingAsUpn } = viewingAsOf(req)
-    return { count: db.getUnreadNotificationCountForUser(viewingAsUpn) }
+    return { count: await db.getUnreadNotificationCountForUser(viewingAsUpn) }
   })
 
   app.post<{ Params: { id: string } }>("/api/notifications/:id/read", personal.write, async (req, reply) => {
     const viewingAs = viewingAsOf(req)
-    const notification = db.getNotification(req.params.id)
+    const notification = await db.getNotification(req.params.id)
     if (!notification || !canSee(viewingAs, notification)) {
       reply.code(404)
       return { error: "Not found" }
     }
-    db.markNotificationRead(req.params.id)
+    await db.markNotificationRead(req.params.id)
     return { ok: true }
   })
 
   app.post("/api/notifications/read-all", personal.write, async (req) => {
     const { viewingAsUpn } = viewingAsOf(req)
-    const notifications = db.listNotificationsForUser(viewingAsUpn, 10_000)
+    const notifications = await db.listNotificationsForUser(viewingAsUpn, 10_000)
     for (const notification of notifications)
-      if (notification.read === 0) db.markNotificationRead(notification.id)
+      if (notification.read === 0) await db.markNotificationRead(notification.id)
     return { ok: true }
   })
 
@@ -78,13 +78,13 @@ export function registerNotificationRoutes(app: FastifyInstance, orchestrator: A
     personal.write,
     async (req, reply) => {
       const viewingAs = viewingAsOf(req)
-      const notification = db.getNotification(req.params.id)
+      const notification = await db.getNotification(req.params.id)
       if (!notification || !canSee(viewingAs, notification)) {
         reply.code(404)
         return { error: "Not found" }
       }
       const { action, data } = req.body
-      db.markNotificationRead(req.params.id)
+      await db.markNotificationRead(req.params.id)
 
       switch (action) {
         case "resume-run": {
@@ -93,13 +93,13 @@ export function registerNotificationRoutes(app: FastifyInstance, orchestrator: A
             reply.code(400)
             return { error: "runId required" }
           }
-          const run = db.getRun(runId)
-          const caps = runCapabilityFlags(runId)
+          const run = await db.getRun(runId)
+          const caps = await runCapabilityFlags(runId)
           if (!run || !canResumeRun(run.status, caps.hasCheckpoint)) {
             reply.code(409)
             return { error: "Resume not available for this run" }
           }
-          const newRunId = orchestrator.resumeRun(runId, req.session ?? null)
+          const newRunId = await orchestrator.resumeRun(runId, req.session ?? null)
           if (!newRunId) {
             reply.code(404)
             return { error: "Cannot resume — no checkpoint" }
@@ -112,7 +112,7 @@ export function registerNotificationRoutes(app: FastifyInstance, orchestrator: A
             reply.code(400)
             return { error: "runId required" }
           }
-          orchestrator.cancelRun(runId)
+          await orchestrator.cancelRun(runId)
           return { ok: true }
         }
         case "view-run":
@@ -123,8 +123,8 @@ export function registerNotificationRoutes(app: FastifyInstance, orchestrator: A
             reply.code(400)
             return { error: "runId required" }
           }
-          const run = db.getRun(runId)
-          const caps = runCapabilityFlags(runId)
+          const run = await db.getRun(runId)
+          const caps = await runCapabilityFlags(runId)
           if (!run || !canRollbackRun(run.status, { rollbackAvailable: caps.rollbackAvailable })) {
             reply.code(409)
             return { error: "Nothing left to roll back" }

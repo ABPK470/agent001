@@ -21,10 +21,10 @@ export class ContinuityError extends Error {
 }
 
 /** Resolve and validate a client-supplied thread id for the authenticated user. */
-export function requireOwnedThreadId(threadId: string | undefined, upn: string): string {
+export async function requireOwnedThreadId(threadId: string | undefined, upn: string): Promise<string> {
   const id = threadId?.trim()
   if (!id) throw new ContinuityError("threadId is required")
-  const thread = db.getThread(id)
+  const thread = await db.getThread(id)
   if (!thread || thread.upn.toLowerCase() !== upn.toLowerCase()) {
     throw new ContinuityError(`thread not found: ${id}`)
   }

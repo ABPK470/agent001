@@ -73,7 +73,7 @@ export function registerPreviewExecuteRoutes(
     }
     const body = decoded.value
     try {
-      rebuildLiveSyncEnvironments(host)
+      await rebuildLiveSyncEnvironments(host)
       await assertSyncHttpPolicy({
         session: req.session,
         toolName: "sync_preview",
@@ -96,7 +96,7 @@ export function registerPreviewExecuteRoutes(
         enabledOptionalTables: body.enabledOptionalTables,
         userUpn: actorUpn,
       })
-      const planSummary = summarizeSyncPlan(plan)
+      const planSummary = await summarizeSyncPlan(plan)
       auditSync(
         plan.planId,
         actor,
@@ -149,9 +149,11 @@ export function registerPreviewExecuteRoutes(
   app.post<{ Params: { planId: string } }>("/api/sync/execute/:planId", personal.write, async (req, reply) => {
     const actor = req.session.upn
     const actorUpn = req.session.upn
-    rebuildLiveSyncEnvironments(host)
+    await rebuildLiveSyncEnvironments(host)
     const plan = loadPlan(host, req.params.planId)
-    const planSummary = plan ? summarizeSyncPlan(plan) : loadPersistedSyncPlanSummary(req.params.planId)
+    const planSummary = plan
+      ? await summarizeSyncPlan(plan)
+      : await loadPersistedSyncPlanSummary(req.params.planId)
     const planDetail = planSummary && plan ? buildSyncAuditDetail(planSummary, plan.totals) : {}
     auditSync(req.params.planId, actor, actorUpn, "sync.execute.start", planDetail)
     try {

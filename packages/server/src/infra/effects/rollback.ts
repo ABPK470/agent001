@@ -20,8 +20,8 @@ async function safeFileHash(filePath: string): Promise<string | null> {
   }
 }
 
-function markCompensated(effectId: string): void {
-  markEffectCompensated(effectId)
+async function markCompensated(effectId: string): Promise<void> {
+  await markEffectCompensated(effectId)
 }
 
 // ── Rollback / Compensation ──────────────────────────────────────
@@ -49,9 +49,8 @@ export async function rollbackRun(runId: string): Promise<RollbackResult> {
     }
   }
 
-  broadcast({ type: EventType.RollbackStarted, data: { runId, effectCount: getRunEffects(runId).length } })
-
-  const effects = getRunEffects(runId)
+  const effects = await getRunEffects(runId)
+  broadcast({ type: EventType.RollbackStarted, data: { runId, effectCount: effects.length } })
   const result: RollbackResult = {
     total: effects.length,
     compensated: 0,
@@ -71,14 +70,14 @@ export async function rollbackRun(runId: string): Promise<RollbackResult> {
       continue
     }
 
-    const snapshot = getFileSnapshotByEffectId(effect.id)
+    const snapshot = await getFileSnapshotByEffectId(effect.id)
 
     try {
       if (effect.kind === "create") {
         const currentHash = await safeFileHash(effect.target)
         if (currentHash === effect.postHash) {
           await unlink(effect.target)
-          markCompensated(effect.id)
+          await markCompensated(effect.id)
           result.compensated++
           compensatedTargets.push(effect.target)
           broadcast({
@@ -107,7 +106,7 @@ export async function rollbackRun(runId: string): Promise<RollbackResult> {
             await unlink(effect.target)
           } catch (err: unknown) { console.error("[mia]", err) }
         }
-        markCompensated(effect.id)
+        await markCompensated(effect.id)
         result.compensated++
         compensatedTargets.push(effect.target)
         broadcast({
@@ -130,7 +129,7 @@ export async function rollbackRun(runId: string): Promise<RollbackResult> {
             if (fileMode != null) {
               await chmod(effect.target, fileMode & 0o7777)
             }
-            markCompensated(effect.id)
+            await markCompensated(effect.id)
             result.compensated++
             compensatedTargets.push(effect.target)
             broadcast({
@@ -174,7 +173,7 @@ export async function rollbackRun(runId: string): Promise<RollbackResult> {
   })
 
   try {
-    saveAudit({
+    await saveAudit({
       run_id: runId,
       actor: "operator",
       action: "rollback.executed",
@@ -193,7 +192,7 @@ export async function rollbackRun(runId: string): Promise<RollbackResult> {
 }
 
 export async function previewRollback(runId: string): Promise<RollbackPreview> {
-  const effects = getRunEffects(runId)
+  const effects = await getRunEffects(runId)
   const preview: RollbackPreview = {
     wouldCompensate: [],
     wouldSkip: [],
@@ -214,7 +213,7 @@ export async function previewRollback(runId: string): Promise<RollbackPreview> {
       continue
     }
 
-    const snapshot = getFileSnapshotByEffectId(effect.id)
+    const snapshot = await getFileSnapshotByEffectId(effect.id)
 
     if (effect.kind === "create") {
       const currentHash = await safeFileHash(effect.target)

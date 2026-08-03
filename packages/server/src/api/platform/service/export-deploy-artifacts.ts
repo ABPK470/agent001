@@ -88,28 +88,28 @@ export function exportTimestampFolderName(exportedAt = new Date()): string {
   return `${EXPORT_FOLDER_PREFIX}-${stamp}`
 }
 
-function exportSyncMetadataDocument(tenantId: string) {
-  const phases = db.listSyncPhases(tenantId).map((row) => ({
+async function exportSyncMetadataDocument(tenantId: string) {
+  const phases = (await db.listSyncPhases(tenantId)).map((row) => ({
     id: row.id,
     label: row.label,
     sortOrder: row.sort_order,
     definition: db.mapPhaseDefinition(row),
   }))
 
-  const actions = db.listSyncActions(tenantId).map((row) => ({
+  const actions = (await db.listSyncActions(tenantId)).map((row) => ({
     id: row.id,
     label: row.label,
     definition: db.mapKindDefinition(row),
   }))
 
-  const valueSources = db.listSyncValueSources(tenantId).map((row) => ({
+  const valueSources = (await db.listSyncValueSources(tenantId)).map((row) => ({
     id: row.id,
     label: row.label,
     definition: db.mapValueSourceDefinition(row),
   }))
 
   const flows = Object.fromEntries(
-    db.listSyncFlows(tenantId).map((row) => [
+    (await db.listSyncFlows(tenantId)).map((row) => [
       row.id,
       {
         label: row.label,
@@ -130,8 +130,8 @@ function exportSyncMetadataDocument(tenantId: string) {
   }
 }
 
-function exportStrategiesDocument(tenantId: string) {
-  const strategies = db.listAvailableStrategies(tenantId) as Scd2Strategy[]
+async function exportStrategiesDocument(tenantId: string) {
+  const strategies = await db.listAvailableStrategies(tenantId) as Scd2Strategy[]
 
   return {
     version: 1 as const,
@@ -140,8 +140,8 @@ function exportStrategiesDocument(tenantId: string) {
   }
 }
 
-function exportEnvironmentsDocument() {
-  const environments = db.listSyncEnvironments().map((row) => {
+async function exportEnvironmentsDocument() {
+  const environments = (await db.listSyncEnvironments()).map((row) => {
     const body = parseBoundaryJson(row.body_json) as SyncEnvironment
     return {
       name: body.name,
@@ -170,34 +170,34 @@ function exportEnvironmentsDocument() {
   }
 }
 
-function exportEntityRegistryDocument(tenantId: string, includeRetired: boolean): {
+async function exportEntityRegistryDocument(tenantId: string, includeRetired: boolean): Promise<{
   document: EntityRegistryExportDocument | null
   entityIds: string[]
-} {
-  const definitions = db.listEntityDefinitions(tenantId, { includeRetired }) as EntityDefinition[]
+}> {
+  const definitions = await db.listEntityDefinitions(tenantId, { includeRetired }) as EntityDefinition[]
   return {
     document: definitions.length > 0 ? buildEntityRegistryExportDocument(definitions) : null,
     entityIds: definitions.map((def) => def.id),
   }
 }
 
-export function buildDeployCatalogSnapshot(
+export async function buildDeployCatalogSnapshot(
   options: BuildDeployCatalogSnapshotOptions = {},
-): DeployCatalogSnapshot {
+): Promise<DeployCatalogSnapshot> {
   const tenantId = options.tenantId ?? DEFAULT_TENANT
-  assertTenantEntitiesExportable(tenantId, {
+  await assertTenantEntitiesExportable(tenantId, {
     includeRetired: options.includeRetiredEntities ?? false,
   })
   const exportedAt = new Date().toISOString()
-  const entities = exportEntityRegistryDocument(tenantId, options.includeRetiredEntities ?? false)
-  const syncMetadata = exportSyncMetadataDocument(tenantId)
+  const entities = await exportEntityRegistryDocument(tenantId, options.includeRetiredEntities ?? false)
+  const syncMetadata = await exportSyncMetadataDocument(tenantId)
 
   return {
     exportedAt,
     tenantId,
     syncMetadata,
-    strategies: exportStrategiesDocument(tenantId),
-    environments: exportEnvironmentsDocument(),
+    strategies: await exportStrategiesDocument(tenantId),
+    environments: await exportEnvironmentsDocument(),
     entityRegistry: entities.document,
     syncDefinitionConfigs: null,
     entityIds: entities.entityIds,
@@ -221,17 +221,17 @@ function tryZipDirectory(folderPath: string, folderName: string): string | null 
   return zipPath
 }
 
-export function writeDeployCatalogSnapshot(
+export async function writeDeployCatalogSnapshot(
   options: WriteDeployCatalogSnapshotOptions,
-): DeployCatalogExportResult {
-  const snapshot = buildDeployCatalogSnapshot(options)
+): Promise<DeployCatalogExportResult> {
+  const snapshot = await buildDeployCatalogSnapshot(options)
   const folderName = exportTimestampFolderName(new Date(snapshot.exportedAt))
   const folderPath = resolve(options.outputParentDir, folderName)
   const artifactsDir = join(folderPath, "artifacts")
   const entitiesDir = join(artifactsDir, "entities")
   mkdirSync(entitiesDir, { recursive: true })
 
-  const definitions = db.listEntityDefinitions(snapshot.tenantId, {
+  const definitions = await db.listEntityDefinitions(snapshot.tenantId, {
     includeRetired: options.includeRetiredEntities ?? false,
   }) as EntityDefinition[]
   const entityFiles = definitions.map((def) => {
@@ -275,12 +275,12 @@ export function writeDeployCatalogSnapshot(
   return { folderPath, folderName, zipPath, files, snapshot }
 }
 
-export function exportDeployCatalogZipBuffer(
+export async function exportDeployCatalogZipBuffer(
   options: BuildDeployCatalogSnapshotOptions = {},
-): { buffer: Buffer; filename: string; snapshot: DeployCatalogSnapshot } {
+): Promise<{ buffer: Buffer; filename: string; snapshot: DeployCatalogSnapshot }> {
   const parent = mkdtempSync(join(tmpdir(), "mia-export-"))
   try {
-    const result = writeDeployCatalogSnapshot({
+    const result = await writeDeployCatalogSnapshot({
       ...options,
       outputParentDir: parent,
       zip: true,
@@ -297,7 +297,7 @@ export function exportDeployCatalogZipBuffer(
 }
 
 /** @deprecated Use buildDeployCatalogSnapshot + writeDeployCatalogSnapshot */
-export function exportDeployArtifactsFromSqlite(
+export async function exportDeployArtifactsFromSqlite(
   options: {
     tenantId?: string
     projectRoot?: string
@@ -310,7 +310,7 @@ export function exportDeployArtifactsFromSqlite(
 ) {
   void options.projectRoot
   void options.include
-  const snapshot = buildDeployCatalogSnapshot({ tenantId: options.tenantId })
+  const snapshot = await buildDeployCatalogSnapshot({ tenantId: options.tenantId })
   return {
     paths: {},
     syncMetadata: snapshot.syncMetadata,

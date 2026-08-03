@@ -14,53 +14,65 @@ import { hydratePersistedSqlEventData } from "../../../../infra/persistence/adap
 import * as db from "../../../../infra/persistence/sqlite.js"
 import { safeParse } from "./utils.js"
 
-function mapDbEventRow(e: DbEvent): OperationEvent | null {
+async function mapDbEventRow(e: DbEvent): Promise<OperationEvent | null> {
   if (!isEventType(e.type)) return null
-  const data = hydratePersistedSqlEventData(e.type, safeParse(e.data))
+  const data = await hydratePersistedSqlEventData(e.type, safeParse(e.data))
   return { type: e.type, timestamp: e.created_at, data }
 }
 
-export function mapDbEventsChronological(events: readonly DbEvent[]): OperationEvent[] {
-  return [...events].reverse().flatMap<OperationEvent>((e) => {
-    const mapped = mapDbEventRow(e)
-    return mapped ? [mapped] : []
-  })
+export async function mapDbEventsChronological(events: readonly DbEvent[]): Promise<OperationEvent[]> {
+  const mapped = await Promise.all([...events].reverse().map(mapDbEventRow))
+  return mapped.filter((event): event is OperationEvent => event !== null)
 }
 
 /** Map event_log rows already in ascending created_at order (plan/run audit queries). */
-export function mapDbEventsAsc(events: readonly DbEvent[]): OperationEvent[] {
-  return events.flatMap<OperationEvent>((e) => {
-    const mapped = mapDbEventRow(e)
-    return mapped ? [mapped] : []
-  })
+export async function mapDbEventsAsc(events: readonly DbEvent[]): Promise<OperationEvent[]> {
+  const mapped = await Promise.all(events.map(mapDbEventRow))
+  return mapped.filter((event): event is OperationEvent => event !== null)
 }
 
-export function buildOperationsFromEvents(
+export async function buildOperationsFromEvents(
   chrono: readonly OperationEvent[],
   opts: ListOperationsOpts = {}
-): OperationPipeline[] {
+): Promise<OperationPipeline[]> {
   const previewToPlan = buildPreviewToPlanMap(chrono)
   const buckets = correlateEventsIntoBuckets(chrono, previewToPlan)
-  const built = filterOperations(buildPipelinesFromBuckets(buckets.values()), opts)
-  const syncMerged = mergeSyncPlanPipelines(built)
+  const built = await filterOperations(await buildPipelinesFromBuckets(buckets.values()), opts)
+  const syncMerged = await mergeSyncPlanPipelines(built)
+  const runIds = syncMerged.map((operation) => operation.id)
+  const runs = new Map(
+    await Promise.all(
+      runIds.map(async (runId) => [runId, await db.getRun(runId)] as const),
+    ),
+  )
+  const resumeChildren = new Map(
+    await Promise.all(
+      runIds.map(async (runId) => [runId, await db.runHasResumeChild(runId)] as const),
+    ),
+  )
+  const rootMeta = new Map<string, { startedAt: string; title: string } | null>()
+  for (const runId of runIds) {
+    let cur = runs.get(runId) ?? await db.getRun(runId)
+    if (!cur) {
+      rootMeta.set(runId, null)
+      continue
+    }
+    const guard = new Set<string>()
+    while (cur.parent_run_id && !guard.has(cur.id)) {
+      guard.add(cur.id)
+      const parent = await db.getRun(cur.parent_run_id)
+      if (!parent) break
+      cur = parent
+    }
+    const goal = cur.goal
+    rootMeta.set(runId, {
+      startedAt: cur.created_at,
+      title: goal.length > 100 ? `${goal.slice(0, 97)}…` : goal,
+    })
+  }
   return mergeAgentRunResumePipelines(syncMerged, {
-    parentRunId: (runId) => db.getRun(runId)?.parent_run_id ?? null,
-    hasResumeChild: (runId) => db.runHasResumeChild(runId),
-    rootMeta: (runId) => {
-      let cur = db.getRun(runId)
-      if (!cur) return null
-      const guard = new Set<string>()
-      while (cur.parent_run_id && !guard.has(cur.id)) {
-        guard.add(cur.id)
-        const parent = db.getRun(cur.parent_run_id)
-        if (!parent) break
-        cur = parent
-      }
-      const goal = cur.goal
-      return {
-        startedAt: cur.created_at,
-        title: goal.length > 100 ? `${goal.slice(0, 97)}…` : goal,
-      }
-    },
+    parentRunId: (runId) => runs.get(runId)?.parent_run_id ?? null,
+    hasResumeChild: (runId) => resumeChildren.get(runId) ?? false,
+    rootMeta: (runId) => rootMeta.get(runId) ?? null,
   })
 }

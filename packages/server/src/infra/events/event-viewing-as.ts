@@ -15,30 +15,30 @@ import {
 export { eventMatchesViewingAsHot, ownerFromEventDataHot }
 
 /** Prefer stamps; fall back to DB for legacy event_log rows without actorUpn. */
-export function ownerFromEventData(data: Record<string, unknown>): string | null {
+export async function ownerFromEventData(data: Record<string, unknown>): Promise<string | null> {
   const hot = ownerFromEventDataHot(data)
   if (hot) return hot
 
   const runId = typeof data["runId"] === "string" ? data["runId"] : null
   if (runId) {
-    const run = getRun(runId)
+    const run = await getRun(runId)
     if (run?.upn?.trim()) return run.upn.trim().toLowerCase()
   }
 
   const planId = typeof data["planId"] === "string" ? data["planId"] : null
   if (planId) {
-    const syncRun = getSyncRun(planId)
+    const syncRun = await getSyncRun(planId)
     if (syncRun?.actor_upn?.trim()) return syncRun.actor_upn.trim().toLowerCase()
   }
 
   return null
 }
 
-export function eventMatchesViewingAs(
+export async function eventMatchesViewingAs(
   data: Record<string, unknown>,
   viewingAsUpn: string,
-): boolean {
-  const owner = ownerFromEventData(data)
+): Promise<boolean> {
+  const owner = await ownerFromEventData(data)
   if (!owner) return true
   return sameUpn(owner, viewingAsUpn)
 }

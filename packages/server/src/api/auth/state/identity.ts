@@ -111,14 +111,14 @@ function clearSessionCookie(reply: FastifyReply): void {
  * Try to materialise a session from the cookie or an SSO header. Returns
  * the session on success; null on failure (caller decides 401 vs bypass).
  */
-function tryResolveSession(req: FastifyRequest, reply: FastifyReply): CurrentSession | null {
+async function tryResolveSession(req: FastifyRequest, reply: FastifyReply): Promise<CurrentSession | null> {
   const ip = req.ip
   const userAgent = String(req.headers["user-agent"] ?? "")
 
   // 1. Existing cookie path — JOIN users and return.
   const sid = verifySid(req.cookies?.[SESSION_COOKIE])
   if (sid) {
-    const row = getSessionWithUser(sid)
+    const row = await getSessionWithUser(sid)
     if (row) {
       // NOTE: we intentionally do NOT call touchSession() here. Bumping
       // last_seen_at on every HTTP request would mark every open tab as
@@ -151,11 +151,11 @@ function tryResolveSession(req: FastifyRequest, reply: FastifyReply): CurrentSes
   // the cookie path above (no need to re-trust headers every time).
   const headerUpn = readHeaderUpn(req)
   if (headerUpn) {
-    const user = upsertSsoUser({
+    const user = await upsertSsoUser({
       upn: headerUpn,
       displayName: readHeaderDisplayName(req) ?? headerUpn
     })
-    const newSid = createSession({ upn: user.upn, ip, userAgent })
+    const newSid = await createSession({ upn: user.upn, ip, userAgent })
     try {
       setSessionCookie(reply, newSid)
     } catch (err: unknown) { console.error("[mia]", err) }
@@ -184,7 +184,7 @@ export async function registerIdentity(app: FastifyInstance): Promise<void> {
     const isProbe = req.method === "HEAD" || req.url === "/api/health" || req.url.startsWith("/api/health?")
     if (isProbe) return
 
-    const session = tryResolveSession(req, reply)
+    const session = await tryResolveSession(req, reply)
     if (session) {
       req.session = session
       return
@@ -217,7 +217,7 @@ export async function registerIdentity(app: FastifyInstance): Promise<void> {
   app.post("/api/auth/logout", async (req, reply) => {
     if (req.session?.sid) {
       try {
-        deleteSession(req.session.sid)
+        await deleteSession(req.session.sid)
       } catch (err) {
         req.log.warn({ err, sid: req.session.sid }, "deleteSession failed")
       }
@@ -228,13 +228,13 @@ export async function registerIdentity(app: FastifyInstance): Promise<void> {
 }
 
 /** Mint a sessions row and set the signed cookie (used by local login/register). */
-export function loginAndSetCookie(args: {
+export async function loginAndSetCookie(args: {
   reply: FastifyReply
   upn: string
   ip: string
   userAgent: string
-}): string {
-  const sid = createSession({ upn: args.upn, ip: args.ip, userAgent: args.userAgent })
+}): Promise<string> {
+  const sid = await createSession({ upn: args.upn, ip: args.ip, userAgent: args.userAgent })
   setSessionCookie(args.reply, sid)
   return sid
 }

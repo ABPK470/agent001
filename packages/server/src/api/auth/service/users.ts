@@ -40,7 +40,7 @@ export interface SsoUpsertInput {
  * upn) is already taken. The username doubles as the upn for local
  * accounts so per-user FKs use a single canonical key.
  */
-export function registerLocalUser(input: RegisterInput): DbUser {
+export async function registerLocalUser(input: RegisterInput): Promise<DbUser> {
   const username = input.username.trim().toLowerCase()
   if (!username) throw new AuthError("username required", 400)
   if (!/^[A-Za-z0-9._-]{2,64}$/.test(input.username.trim())) {
@@ -55,7 +55,7 @@ export function registerLocalUser(input: RegisterInput): DbUser {
   // For local accounts, upn = username so the FK key is single-source.
   const upn = username
 
-  if (findUserByUsername(username) || findUserByUpn(upn)) {
+  if (await findUserByUsername(username) || await findUserByUpn(upn)) {
     throw new AuthError("username already taken", 409)
   }
 
@@ -66,8 +66,8 @@ export function registerLocalUser(input: RegisterInput): DbUser {
   // typed at the welcome screen own the platform — no env vars to set,
   // no separate admin step. Subsequent registrations get isAdmin=false
   // regardless of what the caller passes.
-  const isFirstUser = countUsers() === 0
-  insertUser({
+  const isFirstUser = await countUsers() === 0
+  await insertUser({
     upn,
     username,
     displayName,
@@ -75,7 +75,7 @@ export function registerLocalUser(input: RegisterInput): DbUser {
     passwordHash,
     source: UserSource.Local
   })
-  const created = findUserByUpn(upn)
+  const created = await findUserByUpn(upn)
   if (!created) throw new AuthError("user creation failed", 500)
   return created
 }
@@ -85,15 +85,15 @@ export function registerLocalUser(input: RegisterInput): DbUser {
  * success; throws AuthError(401) on failure (intentionally indistinct
  * "user not found" vs "wrong password" to avoid username enumeration).
  */
-export function verifyLocalLogin(username: string, password: string): DbUser {
-  const u = findUserByUsername(username.trim().toLowerCase())
+export async function verifyLocalLogin(username: string, password: string): Promise<DbUser> {
+  const u = await findUserByUsername(username.trim().toLowerCase())
   if (!u || u.source !== UserSource.Local || !u.password_hash) {
     throw new AuthError("invalid credentials", 401)
   }
   if (!bcrypt.compareSync(password, u.password_hash)) {
     throw new AuthError("invalid credentials", 401)
   }
-  updateLastLoginAt(u.upn)
+  await updateLastLoginAt(u.upn)
   return u
 }
 
@@ -102,16 +102,16 @@ export function verifyLocalLogin(username: string, password: string): DbUser {
  * when a trusted proxy header (From-User-Name / X-Forwarded-User /
  * X-Remote-User) carries a UPN we haven't seen before.
  */
-export function upsertSsoUser(input: SsoUpsertInput): DbUser {
+export async function upsertSsoUser(input: SsoUpsertInput): Promise<DbUser> {
   const upn = input.upn.trim().toLowerCase()
   if (!upn) throw new AuthError("upn required", 400)
 
-  const existing = findUserByUpn(upn)
+  const existing = await findUserByUpn(upn)
   if (existing) {
-    updateLastLoginAt(upn)
+    await updateLastLoginAt(upn)
     return existing
   }
-  insertUser({
+  await insertUser({
     upn,
     username: null,
     displayName: input.displayName.trim() || upn,
@@ -119,7 +119,7 @@ export function upsertSsoUser(input: SsoUpsertInput): DbUser {
     passwordHash: null,
     source: UserSource.Sso
   })
-  const created = findUserByUpn(upn)
+  const created = await findUserByUpn(upn)
   if (!created) throw new AuthError("sso user creation failed", 500)
   return created
 }
@@ -134,8 +134,8 @@ export function upsertSsoUser(input: SsoUpsertInput): DbUser {
  * /api/auth/register may be gated by MIA_ALLOW_LOCAL_REGISTRATION in
  * prod).
  */
-export function bootstrapAdminFromEnv(): void {
-  if (countUsers() > 0) return
+export async function bootstrapAdminFromEnv(): Promise<void> {
+  if (await countUsers() > 0) return
   const username = (process.env["MIA_BOOTSTRAP_ADMIN_USERNAME"] || "").trim()
   const password = process.env["MIA_BOOTSTRAP_ADMIN_PASSWORD"] || ""
   const displayName = (process.env["MIA_BOOTSTRAP_ADMIN_DISPLAY_NAME"] || "Admin").trim()
@@ -147,7 +147,7 @@ export function bootstrapAdminFromEnv(): void {
     return
   }
   try {
-    registerLocalUser({ username, password, displayName, isAdmin: true })
+    await registerLocalUser({ username, password, displayName, isAdmin: true })
     console.warn(`[auth] bootstrap admin '${username}' created from env`)
   } catch (err) {
     console.error("[auth] failed to bootstrap admin from env:", err)

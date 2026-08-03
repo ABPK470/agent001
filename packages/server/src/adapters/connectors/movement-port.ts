@@ -78,8 +78,8 @@ function parseConnector(row: db.DbConnector): Connector {
  * call so runtime create/enable/disable/delete is reflected without a
  * server restart.
  */
-function listConnectorsLive(): readonly Connector[] {
-  return db.listConnectors().map(parseConnector)
+async function listConnectorsLive(): Promise<readonly Connector[]> {
+  return (await db.listConnectors()).map(parseConnector)
 }
 
 /** Build a pg.Pool config from a persisted postgres connector's config. */

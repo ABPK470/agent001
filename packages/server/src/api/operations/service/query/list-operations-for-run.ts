@@ -7,16 +7,16 @@ import { mapDbEventsAsc } from "./build-operations-from-events.js"
 import { buildAgentRunPipeline } from "./pipelines/agent-run.js"
 import type { OperationPipeline } from "./types.js"
 
-export function listOperationsForRun(runId: string): {
+export async function listOperationsForRun(runId: string): Promise<{
   operation: OperationPipeline | null
   scannedEvents: number
-} {
-  const rows = db.listEventsForRunId(runId)
+}> {
+  const rows = await db.listEventsForRunId(runId)
   if (rows.length === 0) return { operation: null, scannedEvents: 0 }
 
-  const events = mapDbEventsAsc(rows)
+  const events = await mapDbEventsAsc(rows)
   return {
-    operation: buildAgentRunPipeline(runId, events),
+    operation: await buildAgentRunPipeline(runId, events),
     scannedEvents: rows.length
   }
 }

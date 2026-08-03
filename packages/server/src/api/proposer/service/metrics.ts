@@ -26,19 +26,19 @@ import {
   countProposalsByStatusMetrics
 } from "../../../infra/persistence/sqlite.js"
 
-export function renderPrometheusMetrics(): string {
+export async function renderPrometheusMetrics(): Promise<string> {
   const lines: string[] = []
   push(
     lines,
     "mia_proposer_runs_total",
     "Total proposer runs by terminal status",
-    rowsToLabels(countProposerRunsByStatus(), (r) => ({ status: String(r.status) }))
+    rowsToLabels(await countProposerRunsByStatus(), (r) => ({ status: String(r.status) }))
   )
   push(
     lines,
     "mia_proposals_open",
     "Currently-open proposals by tenant and risk tier",
-    rowsToLabels(countOpenProposalsByTenantRisk(), (r) => ({
+    rowsToLabels(await countOpenProposalsByTenantRisk(), (r) => ({
       tenant: String(r.tenant_id),
       risk_tier: String(r.risk_tier)
     }))
@@ -47,22 +47,22 @@ export function renderPrometheusMetrics(): string {
     lines,
     "mia_proposals_status_total",
     "Lifetime proposal count by status",
-    rowsToLabels(countProposalsByStatusMetrics(), (r) => ({ status: String(r.status) }))
+    rowsToLabels(await countProposalsByStatusMetrics(), (r) => ({ status: String(r.status) }))
   )
   push(
     lines,
     "mia_approvals_state_total",
     "Lifetime approval count by state",
-    rowsToLabels(countApprovalsByState(), (r) => ({ state: String(r.state) }))
+    rowsToLabels(await countApprovalsByState(), (r) => ({ state: String(r.state) }))
   )
   push(lines, "mia_evidence_envelopes_total", "Total signed evidence envelopes", [
-    { labels: {}, value: countEvidenceEnvelopes() }
+    { labels: {}, value: await countEvidenceEnvelopes() }
   ])
   push(
     lines,
     "mia_notification_log_total",
     "Notification deliveries by status and channel",
-    rowsToLabels(countNotificationLogByStatusChannel(), (r) => ({
+    rowsToLabels(await countNotificationLogByStatusChannel(), (r) => ({
       status: String(r.status),
       channel: String(r.channel)
     }))

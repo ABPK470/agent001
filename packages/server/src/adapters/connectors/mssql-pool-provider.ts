@@ -55,19 +55,19 @@ function parseConnector(row: db.DbConnector): Connector {
 }
 
 /** Read every persisted connector live from the DB. */
-function listConnectorsLive(): readonly Connector[] {
-  return db.listConnectors().map(parseConnector)
+async function listConnectorsLive(): Promise<readonly Connector[]> {
+  return (await db.listConnectors()).map(parseConnector)
 }
 
 /** Find a single connector by id, live. */
-function getConnectorLive(id: string): Connector | undefined {
-  const row = db.getConnector(id)
+async function getConnectorLive(id: string): Promise<Connector | undefined> {
+  const row = await db.getConnector(id)
   return row ? parseConnector(row) : undefined
 }
 
 /** Enabled mssql connectors, live. */
-function listEnabledMssql(): readonly Connector[] {
-  return listConnectorsLive().filter((c) => c.kind === "mssql" && c.enabled)
+async function listEnabledMssql(): Promise<readonly Connector[]> {
+  return (await listConnectorsLive()).filter((c) => c.kind === "mssql" && c.enabled)
 }
 
 /** A stable fingerprint of the connection-relevant config fields. */
@@ -195,9 +195,9 @@ export function createMssqlPoolProvider(projectRoot: string): MssqlPoolProvider 
 
   return {
     async get(connectorId: string): Promise<MssqlConnectorPool> {
-      const connector = getConnectorLive(connectorId)
+      const connector = await getConnectorLive(connectorId)
       if (!connector || connector.kind !== "mssql" || !connector.enabled) {
-        const available = listEnabledMssql()
+        const available = (await listEnabledMssql())
           .map((c) => c.id)
           .join(", ")
         throw new Error(
@@ -207,7 +207,7 @@ export function createMssqlPoolProvider(projectRoot: string): MssqlPoolProvider 
       return resolve(connector)
     },
     async getByName(name: string): Promise<MssqlConnectorPool> {
-      const list = listEnabledMssql()
+      const list = await listEnabledMssql()
       const lower = name.toLowerCase()
       const connector =
         list.find((c) => c.name.toLowerCase() === lower) ??
@@ -220,11 +220,11 @@ export function createMssqlPoolProvider(projectRoot: string): MssqlPoolProvider 
       }
       return resolve(connector)
     },
-    list(): readonly { id: string; name: string }[] {
-      return listEnabledMssql().map((c) => ({ id: c.id, name: c.name }))
+    async list(): Promise<readonly { id: string; name: string }[]> {
+      return (await listEnabledMssql()).map((c) => ({ id: c.id, name: c.name }))
     },
-    configOf(connectorId: string): sql.config | undefined {
-      const connector = getConnectorLive(connectorId)
+    async configOf(connectorId: string): Promise<sql.config | undefined> {
+      const connector = await getConnectorLive(connectorId)
       if (!connector || connector.kind !== "mssql" || !connector.enabled) return undefined
       return buildConfig(connector, projectRoot).config
     },
@@ -238,24 +238,24 @@ export function createMssqlPoolProvider(projectRoot: string): MssqlPoolProvider 
       cache.delete(connectorId)
     },
     async runWithAgentBudget<T>(connectorKey: string, fn: () => Promise<T>): Promise<T> {
-      const poolMax = poolMaxForKey(connectorKey, projectRoot)
+      const poolMax = await poolMaxForKey(connectorKey, projectRoot)
       const limit = agentBudgetLimit(poolMax)
       return getConnectionBudget().withSlot(connectorKey, "agent-query", limit, fn)
     },
     async runWithSyncBudget<T>(connectorKey: string, fn: () => Promise<T>): Promise<T> {
-      const poolMax = poolMaxForKey(connectorKey, projectRoot)
+      const poolMax = await poolMaxForKey(connectorKey, projectRoot)
       const limit = syncBudgetLimit(poolMax)
       return getConnectionBudget().withSlot(connectorKey, "sync-work", limit, fn)
     },
   }
 }
 
-function poolMaxForKey(connectorKey: string, projectRoot: string): number {
-  const byId = getConnectorLive(connectorKey)
+async function poolMaxForKey(connectorKey: string, projectRoot: string): Promise<number> {
+  const byId = await getConnectorLive(connectorKey)
   if (byId && byId.kind === "mssql" && byId.enabled) {
     return buildConfig(byId, projectRoot).config.pool?.max ?? 20
   }
-  const list = listEnabledMssql()
+  const list = await listEnabledMssql()
   const lower = connectorKey.toLowerCase()
   const byName =
     list.find((c) => c.name.toLowerCase() === lower) ??

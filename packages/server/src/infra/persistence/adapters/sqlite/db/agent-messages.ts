@@ -12,7 +12,7 @@
 import { randomUUID } from "node:crypto"
 import { BusProtocol, isBusProtocol } from "../../../../../internal/enums/bus.js"
 import { getPlatformDb } from "../../../schema/kysely.js"
-import { runAll, runExec, runGet } from "../../../schema/execute.js"
+import { runAllAsync, runExecAsync, runGetAsync } from "../../../schema/execute-async.js"
 
 export interface AgentMessageRow {
   id: string
@@ -67,7 +67,7 @@ export interface InsertMessageInput {
 }
 
 /** Insert a message and return the row that was written (with assigned id + timestamp). */
-export function insertAgentMessage(input: InsertMessageInput): AgentMessageRow {
+export async function insertAgentMessage(input: InsertMessageInput): Promise<AgentMessageRow> {
   const id = randomUUID()
   const createdAt = new Date().toISOString()
   const compiled = getPlatformDb()
@@ -84,7 +84,7 @@ export function insertAgentMessage(input: InsertMessageInput): AgentMessageRow {
       created_at: createdAt,
     })
     .compile()
-  runExec(compiled)
+  await runExecAsync(compiled)
   return {
     id,
     rootRunId: input.rootRunId,
@@ -99,7 +99,7 @@ export function insertAgentMessage(input: InsertMessageInput): AgentMessageRow {
 }
 
 /** Load every message for a root run, oldest first. */
-export function listAgentMessages(rootRunId: string): AgentMessageRow[] {
+export async function listAgentMessages(rootRunId: string): Promise<AgentMessageRow[]> {
   const compiled = getPlatformDb()
     .selectFrom("agent_messages")
     .select([
@@ -117,11 +117,11 @@ export function listAgentMessages(rootRunId: string): AgentMessageRow[] {
     .orderBy("created_at", "asc")
     .orderBy("id", "asc")
     .compile()
-  return runAll<RawRow>(compiled).map(fromRaw)
+  return (await runAllAsync<RawRow>(compiled)).map(fromRaw)
 }
 
 /** Find a single Answer that replies to the given message id. NULL if none yet. */
-export function findReplyTo(messageId: string): AgentMessageRow | null {
+export async function findReplyTo(messageId: string): Promise<AgentMessageRow | null> {
   const compiled = getPlatformDb()
     .selectFrom("agent_messages")
     .select([
@@ -141,6 +141,6 @@ export function findReplyTo(messageId: string): AgentMessageRow | null {
     .orderBy("id", "asc")
     .limit(1)
     .compile()
-  const row = runGet<RawRow>(compiled)
+  const row = await runGetAsync<RawRow>(compiled)
   return row ? fromRaw(row) : null
 }

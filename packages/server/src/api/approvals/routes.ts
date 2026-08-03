@@ -20,10 +20,10 @@ function resolveTenant(req: FastifyRequest): string {
   return DEFAULT_TENANT_ID
 }
 
-function normalizeTargetEnv(raw: string | undefined): string | null {
+async function normalizeTargetEnv(raw: string | undefined): Promise<string | null> {
   const targetEnv = raw?.trim() || POLICY_DEFAULT_TARGET_ENV
   if (targetEnv === POLICY_DEFAULT_TARGET_ENV) return POLICY_DEFAULT_TARGET_ENV
-  const known = new Set(db.listSyncEnvironments().map((row) => row.name))
+  const known = new Set((await db.listSyncEnvironments()).map((row) => row.name))
   return known.has(targetEnv) ? targetEnv : null
 }
 
@@ -45,7 +45,7 @@ export function registerApprovalRoutes(app: FastifyInstance): void {
     "/api/approvals",
     async (req) => {
       const tenantId = resolveTenant(req)
-      return db.listApprovals({
+      return await db.listApprovals({
         tenantId,
         state: req.query.state,
         proposalId: req.query.proposalId
@@ -55,7 +55,7 @@ export function registerApprovalRoutes(app: FastifyInstance): void {
 
   app.get<{ Querystring: { tenant?: string } }>("/api/approvals/policies", async (req) => {
     const tenantId = resolveTenant(req)
-    return db.listApprovalPolicies(tenantId)
+    return await db.listApprovalPolicies(tenantId)
   })
 
   app.put<{
@@ -83,7 +83,7 @@ export function registerApprovalRoutes(app: FastifyInstance): void {
       reply.code(400)
       return { error: "kind must be one of none, single, dual" }
     }
-    const targetEnv = normalizeTargetEnv(req.body.targetEnv)
+    const targetEnv = await normalizeTargetEnv(req.body.targetEnv)
     if (!targetEnv) {
       reply.code(400)
       return {
@@ -99,7 +99,7 @@ export function registerApprovalRoutes(app: FastifyInstance): void {
         return { error: `Invalid approver UPN: ${upn}` }
       }
     }
-    db.upsertApprovalPolicy(
+    await db.upsertApprovalPolicy(
       {
         tenantId,
         targetEnv,
@@ -135,7 +135,7 @@ export function registerApprovalRoutes(app: FastifyInstance): void {
       reply.code(400)
       return { error: "targetEnv is required" }
     }
-    const removed = db.deleteApprovalPolicy(tenantId, targetEnv, riskTier as RiskTier)
+    const removed = await db.deleteApprovalPolicy(tenantId, targetEnv, riskTier as RiskTier)
     if (!removed) {
       reply.code(404)
       return { error: "policy rule not found" }
@@ -148,7 +148,7 @@ export function registerApprovalRoutes(app: FastifyInstance): void {
   })
 
   app.get<{ Params: { id: string } }>("/api/approvals/:id", async (req, reply) => {
-    const approval = db.getApproval(req.params.id)
+    const approval = await db.getApproval(req.params.id)
     if (!approval) {
       reply.code(404)
       return { error: "not found" }
@@ -159,13 +159,13 @@ export function registerApprovalRoutes(app: FastifyInstance): void {
   app.post<{ Body: { proposalId: string; planId?: string; planHash?: string; ttlMs?: number } }>(
     "/api/approvals",
     async (req, reply) => {
-      const proposal = db.getProposal(req.body.proposalId)
+      const proposal = await db.getProposal(req.body.proposalId)
       if (!proposal) {
         reply.code(404)
         return { error: "proposal not found" }
       }
       const tier: RiskTier = (proposal.risk_tier ?? "low") as RiskTier
-      const policy = db.getApprovalPolicy(
+      const policy = await db.getApprovalPolicy(
         proposal.tenant_id,
         proposal.target ?? POLICY_DEFAULT_TARGET_ENV,
         tier
@@ -175,7 +175,7 @@ export function registerApprovalRoutes(app: FastifyInstance): void {
         return { error: "approval not required for this risk tier" }
       }
       const ttl = req.body.ttlMs ?? APPROVAL_TTL_MS_DEFAULT
-      const approval = db.createApproval({
+      const approval = await db.createApproval({
         proposalId: req.body.proposalId,
         tenantId: proposal.tenant_id,
         requestedBy: req.session.upn,
@@ -184,7 +184,7 @@ export function registerApprovalRoutes(app: FastifyInstance): void {
         planId: req.body.planId ?? null,
         planHash: req.body.planHash ?? null
       })
-      db.updateProposalStatus({
+      await db.updateProposalStatus({
         id: req.body.proposalId,
         to: "awaiting_approval",
         actor: req.session.upn,
@@ -203,7 +203,7 @@ export function registerApprovalRoutes(app: FastifyInstance): void {
     "/api/approvals/:id/grant",
     async (req, reply) => {
       try {
-        const approval = db.grantApproval({
+        const approval = await db.grantApproval({
           approvalId: req.params.id,
           approver: req.session.upn,
           planHashAtGrant: req.body.planHashAtGrant ?? null
@@ -232,7 +232,7 @@ export function registerApprovalRoutes(app: FastifyInstance): void {
         return { error: "reason is required" }
       }
       try {
-        const approval = db.rejectApproval(req.params.id, req.session.upn, req.body.reason)
+        const approval = await db.rejectApproval(req.params.id, req.session.upn, req.body.reason)
         broadcast({
           type: EventType.SyncApprovalRejected,
           data: {
@@ -261,7 +261,7 @@ export function registerApprovalRoutes(app: FastifyInstance): void {
         return { error: "reason is required" }
       }
       try {
-        const approval = db.bypassApproval(req.params.id, req.session.upn, req.body.reason)
+        const approval = await db.bypassApproval(req.params.id, req.session.upn, req.body.reason)
         broadcast({
           type: EventType.SyncApprovalBypassed,
           data: {
@@ -287,7 +287,7 @@ export function registerApprovalRoutes(app: FastifyInstance): void {
       return { error: "admin only" }
     }
     const secret = requireTokenSecret()
-    const token = db.issueApprovalToken({
+    const token = await db.issueApprovalToken({
       approvalId: req.params.id,
       action: req.body.action,
       issuedTo: req.body.issuedTo,
@@ -303,9 +303,9 @@ export function registerApprovalRoutes(app: FastifyInstance): void {
     async (req, reply) => {
       const secret = requireTokenSecret()
       try {
-        const token = db.consumeApprovalToken({ raw: req.params.raw, secret, by: req.session.upn })
+        const token = await db.consumeApprovalToken({ raw: req.params.raw, secret, by: req.session.upn })
         if (token.action === "grant") {
-          const approval = db.grantApproval({
+          const approval = await db.grantApproval({
             approvalId: token.approvalId,
             approver: req.session.upn,
             planHashAtGrant: null
@@ -321,7 +321,7 @@ export function registerApprovalRoutes(app: FastifyInstance): void {
           })
           return approval
         }
-        const rejected = db.rejectApproval(
+        const rejected = await db.rejectApproval(
           token.approvalId,
           req.session.upn,
           req.query.reason ?? "rejected via token"

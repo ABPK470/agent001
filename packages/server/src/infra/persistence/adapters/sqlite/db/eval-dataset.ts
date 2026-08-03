@@ -4,7 +4,7 @@
 
 import { randomUUID } from "node:crypto"
 import { getPlatformDb } from "../../../schema/kysely.js"
-import { runAll, runChanges, runExec, runGet } from "../../../schema/execute.js"
+import { runAllAsync, runChangesAsync, runExecAsync, runGetAsync } from "../../../schema/execute-async.js"
 
 export type DbEvalDatasetEntry = {
   id: string
@@ -34,7 +34,7 @@ export type InsertEvalDatasetInput = {
   createdBy: string
 }
 
-export function insertEvalDatasetEntry(input: InsertEvalDatasetInput): DbEvalDatasetEntry {
+export async function insertEvalDatasetEntry(input: InsertEvalDatasetInput): Promise<DbEvalDatasetEntry> {
   const id = randomUUID()
   const created_at = new Date().toISOString()
   const row: DbEvalDatasetEntry = {
@@ -52,15 +52,15 @@ export function insertEvalDatasetEntry(input: InsertEvalDatasetInput): DbEvalDat
     created_at,
   }
   const compiled = getPlatformDb().insertInto("eval_dataset_entries").values(row).compile()
-  runExec(compiled)
+  await runExecAsync(compiled)
   return row
 }
 
-export function listEvalDatasetEntries(filters?: {
+export async function listEvalDatasetEntries(filters?: {
   runId?: string
   threadId?: string
   limit?: number
-}): DbEvalDatasetEntry[] {
+}): Promise<DbEvalDatasetEntry[]> {
   const limit = filters?.limit ?? 200
   let query = getPlatformDb().selectFrom("eval_dataset_entries").selectAll()
   if (filters?.runId) {
@@ -69,24 +69,24 @@ export function listEvalDatasetEntries(filters?: {
     query = query.where("thread_id", "=", filters.threadId)
   }
   const compiled = query.orderBy("created_at", "desc").limit(limit).compile()
-  return runAll<DbEvalDatasetEntry>(compiled)
+  return await runAllAsync<DbEvalDatasetEntry>(compiled)
 }
 
-export function getEvalDatasetEntry(id: string): DbEvalDatasetEntry | undefined {
+export async function getEvalDatasetEntry(id: string): Promise<DbEvalDatasetEntry | undefined> {
   const compiled = getPlatformDb()
     .selectFrom("eval_dataset_entries")
     .selectAll()
     .where("id", "=", id)
     .compile()
-  return runGet<DbEvalDatasetEntry>(compiled)
+  return await runGetAsync<DbEvalDatasetEntry>(compiled)
 }
 
-export function deleteEvalDatasetEntry(id: string): boolean {
+export async function deleteEvalDatasetEntry(id: string): Promise<boolean> {
   const compiled = getPlatformDb()
     .deleteFrom("eval_dataset_entries")
     .where("id", "=", id)
     .compile()
-  return runChanges(compiled) > 0
+  return await runChangesAsync(compiled) > 0
 }
 
 export function evalEntryToWire(row: DbEvalDatasetEntry) {

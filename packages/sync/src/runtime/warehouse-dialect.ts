@@ -7,14 +7,16 @@ import { createPostgresWarehouseDialect } from "../adapters/postgres/dialect/ind
 import type { SyncRuntimeHost } from "../ports/host.js"
 import type { WarehouseDialect } from "../ports/warehouse-dialect.js"
 
-export function resolveWarehouseDialect(
+export async function resolveWarehouseDialect(
   host: SyncRuntimeHost,
   connectionName?: string,
-): WarehouseDialect {
+): Promise<WarehouseDialect> {
   if (connectionName) {
     const env = host.sync.environments?.items?.get(connectionName)
     const connectorId = typeof env?.connectorId === "string" ? env.connectorId.trim() : ""
-    const kind = connectorId ? host.sync.warehousePools?.dialectOf(connectorId) : undefined
+    const kind = connectorId
+      ? await host.sync.warehousePools?.dialectOf(connectorId)
+      : undefined
     if (kind === "postgres") return createPostgresWarehouseDialect()
     if (kind === "mssql") return createMssqlWarehouseDialect()
   }

@@ -85,7 +85,7 @@ function buildQueryMssqlTool(host: AgentHost, run?: RunContext): Tool {
 
       let connectionName: string
       try {
-        connectionName = resolveToolConnectionArg(host, args)
+        connectionName = await resolveToolConnectionArg(host, args)
       } catch (err) {
         return `Error: ${err instanceof Error ? err.message : String(err)}`
       }
@@ -255,7 +255,7 @@ function buildSchemaMssqlTool(host: AgentHost, run?: RunContext): Tool {
     async execute(args) {
       let connectionName: string
       try {
-        connectionName = resolveToolConnectionArg(host, args)
+        connectionName = await resolveToolConnectionArg(host, args)
       } catch (err) {
         return `Error: ${err instanceof Error ? err.message : String(err)}`
       }

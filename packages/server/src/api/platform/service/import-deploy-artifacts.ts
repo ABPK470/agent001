@@ -312,7 +312,7 @@ export function validateDeployCatalogSnapshot(snapshot: DeployCatalogSnapshot): 
   return { ok: errors.length === 0, errors, counts }
 }
 
-function applyEnvironments(doc: EnvironmentsDoc): number {
+async function applyEnvironments(doc: EnvironmentsDoc): Promise<number> {
   const environments = doc.environments ?? []
   const names = new Set<string>()
 
@@ -349,8 +349,8 @@ function applyEnvironments(doc: EnvironmentsDoc): number {
             : [],
     })
     const now = new Date().toISOString()
-    const existing = db.getSyncEnvironment(name)
-    db.saveSyncEnvironment({
+    const existing = await db.getSyncEnvironment(name)
+    await db.saveSyncEnvironment({
       name,
       body_json: JSON.stringify(env),
       created_at: existing?.created_at ?? now,
@@ -359,14 +359,14 @@ function applyEnvironments(doc: EnvironmentsDoc): number {
     })
   }
 
-  for (const row of db.listSyncEnvironments()) {
-    if (!names.has(row.name)) db.deleteSyncEnvironment(row.name)
+  for (const row of await db.listSyncEnvironments()) {
+    if (!names.has(row.name)) await db.deleteSyncEnvironment(row.name)
   }
 
   return environments.length
 }
 
-function applySyncMetadata(tenantId: string, doc: SyncMetadataDoc): void {
+async function applySyncMetadata(tenantId: string, doc: SyncMetadataDoc): Promise<void> {
   const phases = doc.phases ?? []
   const actions = docActions(doc)
   const wiring = docValueSources(doc)
@@ -379,8 +379,8 @@ function applySyncMetadata(tenantId: string, doc: SyncMetadataDoc): void {
   const flowIds = new Set(Object.keys(flows))
 
   for (const phase of phases) {
-    const existing = db.listSyncPhases(tenantId).find((row) => row.id === phase.id)
-    db.saveSyncPhase({
+    const existing = (await db.listSyncPhases(tenantId)).find((row) => row.id === phase.id)
+    await db.saveSyncPhase({
       tenant_id: tenantId,
       id: phase.id,
       label: phase.label,
@@ -389,13 +389,13 @@ function applySyncMetadata(tenantId: string, doc: SyncMetadataDoc): void {
       definition_json: JSON.stringify(phase.definition),
     })
   }
-  for (const row of db.listSyncPhases(tenantId)) {
-    if (!phaseIds.has(row.id) && row.built_in === 0) db.deleteSyncPhase(tenantId, row.id)
+  for (const row of await db.listSyncPhases(tenantId)) {
+    if (!phaseIds.has(row.id) && row.built_in === 0) await db.deleteSyncPhase(tenantId, row.id)
   }
 
   for (const action of actions) {
-    const existing = db.listSyncActions(tenantId).find((row) => row.id === action.id)
-    db.saveSyncAction({
+    const existing = (await db.listSyncActions(tenantId)).find((row) => row.id === action.id)
+    await db.saveSyncAction({
       tenant_id: tenantId,
       id: action.id,
       label: action.label,
@@ -403,13 +403,13 @@ function applySyncMetadata(tenantId: string, doc: SyncMetadataDoc): void {
       definition_json: JSON.stringify(action.definition),
     })
   }
-  for (const row of db.listSyncActions(tenantId)) {
-    if (!kindIds.has(row.id) && row.built_in === 0) db.deleteSyncAction(tenantId, row.id)
+  for (const row of await db.listSyncActions(tenantId)) {
+    if (!kindIds.has(row.id) && row.built_in === 0) await db.deleteSyncAction(tenantId, row.id)
   }
 
   for (const source of wiring) {
-    const existing = db.listSyncValueSources(tenantId).find((row) => row.id === source.id)
-    db.saveSyncValueSource({
+    const existing = (await db.listSyncValueSources(tenantId)).find((row) => row.id === source.id)
+    await db.saveSyncValueSource({
       tenant_id: tenantId,
       id: source.id,
       label: source.label,
@@ -417,12 +417,12 @@ function applySyncMetadata(tenantId: string, doc: SyncMetadataDoc): void {
       definition_json: JSON.stringify(source.definition),
     })
   }
-  for (const row of db.listSyncValueSources(tenantId)) {
-    if (!wiringIds.has(row.id) && row.built_in === 0) db.deleteSyncValueSource(tenantId, row.id)
+  for (const row of await db.listSyncValueSources(tenantId)) {
+    if (!wiringIds.has(row.id) && row.built_in === 0) await db.deleteSyncValueSource(tenantId, row.id)
   }
 
   for (const [id, flow] of Object.entries(flows)) {
-    const existing = db.getSyncFlow(tenantId, id)
+    const existing = await db.getSyncFlow(tenantId, id)
     let stepsJson: string
     try {
       stepsJson = JSON.stringify(prepareFlowStepsForStorage(flow.steps ?? [], flowCatalog))
@@ -430,7 +430,7 @@ function applySyncMetadata(tenantId: string, doc: SyncMetadataDoc): void {
       const message = error instanceof FlowStepsValidationError ? error.message : String(error)
       throw new Error(`sync-metadata.json flow "${id}": ${message}`)
     }
-    db.saveSyncFlow({
+    await db.saveSyncFlow({
       tenant_id: tenantId,
       id,
       label: flow.label,
@@ -441,14 +441,14 @@ function applySyncMetadata(tenantId: string, doc: SyncMetadataDoc): void {
       updated_by: "catalog-import",
     })
   }
-  for (const row of db.listSyncFlows(tenantId)) {
-    if (!flowIds.has(row.id) && row.built_in === 0) db.deleteSyncFlow(tenantId, row.id)
+  for (const row of await db.listSyncFlows(tenantId)) {
+    if (!flowIds.has(row.id) && row.built_in === 0) await db.deleteSyncFlow(tenantId, row.id)
   }
 }
 
-function applyStrategies(tenantId: string, doc: StrategiesDoc, actor: string): void {
+async function applyStrategies(tenantId: string, doc: StrategiesDoc, actor: string): Promise<void> {
   for (const strategy of doc.strategies ?? []) {
-    db.saveScd2Strategy({
+    await db.saveScd2Strategy({
       tenantId,
       strategy,
       actor,
@@ -461,23 +461,23 @@ function applyStrategies(tenantId: string, doc: StrategiesDoc, actor: string): v
  * Legacy zip compat: sync-definition-configs.json only patches entity.flowId.
  * Bindings/ownership in that file are ignored (compose-time stubs on Publish).
  */
-function applyLegacyConfigFlowIds(
+async function applyLegacyConfigFlowIds(
   tenantId: string,
   doc: SyncDefinitionConfigExportDocument | null,
   projectRoot: string,
   actor: string,
-): number {
+): Promise<number> {
   if (!doc?.configs?.length) return 0
-  const flowTemplateCatalog = loadAuthoringFlowCatalog(projectRoot, tenantId)
+  const flowTemplateCatalog = await loadAuthoringFlowCatalog(projectRoot, tenantId)
   let count = 0
   for (const config of doc.configs) {
-    const entity = db.getEntityDefinition(tenantId, config.entityId)
+    const entity = await db.getEntityDefinition(tenantId, config.entityId)
     if (!entity) continue
     const flowId = hasSyncDefinitionFlowTemplate(flowTemplateCatalog, config.flowPreset)
       ? config.flowPreset
       : defaultSyncDefinitionFlowTemplateId(asEntityId(config.entityId), flowTemplateCatalog)
     if (entity.flowId === flowId) continue
-    db.saveEntityDefinition({
+    await db.saveEntityDefinition({
       tenantId: asTenantId(tenantId),
       def: { ...entity, flowId: asFlowId(flowId) },
       actor,
@@ -503,11 +503,11 @@ function collectSnapshotEntityIds(snapshot: DeployCatalogSnapshot): Set<string> 
   return ids
 }
 
-function applyEntityDefinitions(
+async function applyEntityDefinitions(
   tenantId: string,
   snapshot: DeployCatalogSnapshot,
   actor: string,
-): number {
+): Promise<number> {
   const importedIds = collectSnapshotEntityIds(snapshot)
   let count = 0
 
@@ -515,7 +515,7 @@ function applyEntityDefinitions(
     const parsed = parseEntitiesJson(JSON.stringify(entry))
     for (const item of parsed) {
       if (!item.ok || !item.def) throw new Error(item.error ?? "entity parse failed")
-      db.saveEntityDefinition({
+      await db.saveEntityDefinition({
         tenantId: asTenantId(tenantId),
         def: { ...item.def, tenantId: asTenantId(tenantId) },
         actor,
@@ -526,21 +526,21 @@ function applyEntityDefinitions(
   }
 
   // Match environments and sync-definition configs: drop active entities absent from snapshot.
-  for (const entity of db.listEntityDefinitions(tenantId, { includeRetired: false })) {
+  for (const entity of await db.listEntityDefinitions(tenantId, { includeRetired: false })) {
     if (!importedIds.has(entity.id)) {
-      db.retireEntityDefinition(tenantId, entity.id, actor)
+      await db.retireEntityDefinition(tenantId, entity.id, actor)
     }
   }
 
   return count
 }
 
-export function applyDeployCatalogSnapshot(args: {
+export async function applyDeployCatalogSnapshot(args: {
   snapshot: DeployCatalogSnapshot
   actor: string
   projectRoot?: string
   dryRun?: boolean
-}): CatalogImportResult {
+}): Promise<CatalogImportResult> {
   const preview = validateDeployCatalogSnapshot(args.snapshot)
   if (!preview.ok || args.dryRun) {
     return { ...preview, dryRun: true, applied: false }
@@ -559,14 +559,14 @@ export function applyDeployCatalogSnapshot(args: {
   const tenantId = args.snapshot.tenantId || DEFAULT_TENANT
   const projectRoot = args.projectRoot
 
-  getPlatformStore().transaction(() => {
-    applyEnvironments(args.snapshot.environments as EnvironmentsDoc)
-    applySyncMetadata(tenantId, args.snapshot.syncMetadata as SyncMetadataDoc)
-    applyStrategies(tenantId, args.snapshot.strategies as StrategiesDoc, args.actor)
-    applyEntityDefinitions(tenantId, args.snapshot, args.actor)
+  await getPlatformStore().transactionAsync(async () => {
+    await applyEnvironments(args.snapshot.environments as EnvironmentsDoc)
+    await applySyncMetadata(tenantId, args.snapshot.syncMetadata as SyncMetadataDoc)
+    await applyStrategies(tenantId, args.snapshot.strategies as StrategiesDoc, args.actor)
+    await applyEntityDefinitions(tenantId, args.snapshot, args.actor)
     // Entities already carry flowId. Legacy configs JSON only patches flowId when present.
     if (args.snapshot.syncDefinitionConfigs?.configs?.length) {
-      applyLegacyConfigFlowIds(
+      await applyLegacyConfigFlowIds(
         tenantId,
         args.snapshot.syncDefinitionConfigs,
         projectRoot,

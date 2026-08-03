@@ -13,7 +13,6 @@
 import type { AgentHost } from "../runtime/runtime.js"
 import type { ToolKnowledgeCachedTool, ToolKnowledgeFingerprint } from "../ports/index.js"
 import { getCatalog } from "./catalog/store.js"
-import { tryResolveMssqlConnectionName } from "./database/mssql/resolve-connection.js"
 
 function fnv1a32(s: string): string {
   let h = 0x811c9dc5
@@ -25,7 +24,7 @@ function fnv1a32(s: string): string {
 }
 
 function canonicalConnection(host: AgentHost, connName: string | undefined): string {
-  return tryResolveMssqlConnectionName(host, connName ?? null) ?? (connName?.trim() || "default")
+  return connName?.trim() || host.mssql.defaultConnection.value || "default"
 }
 
 /**

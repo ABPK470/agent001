@@ -54,8 +54,8 @@ export function summarizeSyncPlan(plan: unknown): SyncPlanSummary | null {
   }
 }
 
-export function loadPersistedSyncPlanSummary(planId: string): SyncPlanSummary | null {
-  const json = db.getSyncRunPlanJson(planId)
+export async function loadPersistedSyncPlanSummary(planId: string): Promise<SyncPlanSummary | null> {
+  const json = await db.getSyncRunPlanJson(planId)
   if (!json) return null
   try {
     return summarizeSyncPlan(parseBoundaryJson(json))

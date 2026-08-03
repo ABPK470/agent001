@@ -47,7 +47,7 @@ export function registerPolicyRoutes(app: FastifyInstance): void {
       reply.code(403)
       return { error: "admin only" }
     }
-    return db.listPolicyRules().map((rule) => ({
+    return (await db.listPolicyRules()).map((rule) => ({
       name: rule.name,
       effect: rule.effect,
       condition: rule.condition,
@@ -76,9 +76,9 @@ export function registerPolicyRoutes(app: FastifyInstance): void {
       return { error: "effect must be allow, require_approval, or deny" }
     }
 
-    const existing = db.listPolicyRules().find((rule) => rule.name === name)
+    const existing = (await db.listPolicyRules()).find((rule) => rule.name === name)
     const now = new Date().toISOString()
-    db.savePolicyRule({
+    await db.savePolicyRule({
       name,
       effect: effect satisfies PolicyEffect,
       condition,
@@ -117,8 +117,8 @@ export function registerPolicyRoutes(app: FastifyInstance): void {
       reply.code(403)
       return { error: "admin only" }
     }
-    const before = db.listPolicyRules().find((rule) => rule.name === req.params.name)
-    db.deletePolicyRule(req.params.name)
+    const before = (await db.listPolicyRules()).find((rule) => rule.name === req.params.name)
+    await db.deletePolicyRule(req.params.name)
     audit(
       req,
       "policy.delete",

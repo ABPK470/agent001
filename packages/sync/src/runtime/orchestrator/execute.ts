@@ -82,7 +82,7 @@ export async function executeSync(
   const targetEnv = getEnvironment(opts.host, plan.target)
   if (sourceEnv.role === "target") return refuseExecute(planId, `Source "${sourceEnv.name}" is target-only.`)
   if (targetEnv.role === "source") return refuseExecute(planId, `Target "${targetEnv.name}" is source-only.`)
-  const readyIds = opts.readyIds ?? readyMssqlConnectorIds(opts.host)
+  const readyIds = opts.readyIds ?? await readyMssqlConnectorIds(opts.host)
   try {
     assertEnvConnectorReady(sourceEnv, readyIds)
     assertEnvConnectorReady(targetEnv, readyIds)
@@ -249,8 +249,8 @@ async function executeSyncInner(
   )
   throwIfAborted(signal)
 
-  const targetDialect = resolveWarehouseDialect(opts.host, plan.target)
-  const sourceDialect = resolveWarehouseDialect(opts.host, plan.source)
+  const targetDialect = await resolveWarehouseDialect(opts.host, plan.target)
+  const sourceDialect = await resolveWarehouseDialect(opts.host, plan.source)
 
   const entityId = plan.entity.id
   const entityType = executionContract.definitionId

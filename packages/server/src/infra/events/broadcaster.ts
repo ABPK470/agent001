@@ -137,7 +137,7 @@ export class EventBroadcaster {
   }
 
   private async pushToWebhooks(event: SseEvent, json: string): Promise<void> {
-    const drains = listWebhookDrains()
+    const drains = await listWebhookDrains()
     if (drains.length === 0) return
 
     for (const drain of drains) {

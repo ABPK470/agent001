@@ -46,18 +46,18 @@ export function mergeOperationPipelinePages(
   return [...byId.values()].sort((a, b) => b.startedAt.localeCompare(a.startedAt))
 }
 
-function buildPage(
+async function buildPage(
   events: DbEvent[],
   opts: ListOperationsOpts,
-): OperationPipeline[] {
-  const chrono = mapDbEventsChronological(events)
-  return filterOperations(excludeSystemPipelines(buildOperationsFromEvents(chrono)), opts)
+): Promise<OperationPipeline[]> {
+  const chrono = await mapDbEventsChronological(events)
+  return await filterOperations(excludeSystemPipelines(await buildOperationsFromEvents(chrono)), opts)
 }
 
-export function listOperations(opts: ListOperationsOpts = {}): ListOperationsResult {
+export async function listOperations(opts: ListOperationsOpts = {}): Promise<ListOperationsResult> {
   if (opts.planId) {
-    const { operation, scannedEvents } = listOperationsForPlan(opts.planId)
-    const scoped = scopeOperationsToViewingAs(operation ? [operation] : [], opts)
+    const { operation, scannedEvents } = await listOperationsForPlan(opts.planId)
+    const scoped = await scopeOperationsToViewingAs(operation ? [operation] : [], opts)
     return {
       operations: scoped,
       scannedEvents,
@@ -68,8 +68,8 @@ export function listOperations(opts: ListOperationsOpts = {}): ListOperationsRes
   }
 
   if (opts.runId) {
-    const { operation, scannedEvents } = listOperationsForRun(opts.runId)
-    const scoped = scopeOperationsToViewingAs(operation ? [operation] : [], opts)
+    const { operation, scannedEvents } = await listOperationsForRun(opts.runId)
+    const scoped = await scopeOperationsToViewingAs(operation ? [operation] : [], opts)
     return {
       operations: scoped,
       scannedEvents,
@@ -96,7 +96,7 @@ export function listOperations(opts: ListOperationsOpts = {}): ListOperationsRes
 
   while (scannedEvents < eventBudget) {
     const take = Math.min(pageSize, eventBudget - scannedEvents)
-    const events = db.listEvents({
+    const events = await db.listEvents({
       limit: take,
       before: before ?? undefined,
       since: opts.since,
@@ -112,7 +112,7 @@ export function listOperations(opts: ListOperationsOpts = {}): ListOperationsRes
     hasMore = events.length >= take
     before = oldestTimestamp
 
-    const page = buildPage(events, opts)
+    const page = await buildPage(events, opts)
     if (page.length > 0) batches.push(page)
 
     if (mergeOperationPipelinePages(...batches).length >= targetOps) break

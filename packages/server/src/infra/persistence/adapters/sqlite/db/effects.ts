@@ -1,5 +1,5 @@
 import { getPlatformDb } from "../../../schema/kysely.js"
-import { runAll, runExec, runGet } from "../../../schema/execute.js"
+import { runAllAsync, runExecAsync, runGetAsync } from "../../../schema/execute-async.js"
 
 export interface EffectRow {
   id: string
@@ -26,7 +26,7 @@ export interface FileSnapshotRow {
   created_at: string
 }
 
-export function insertEffect(effect: {
+export async function insertEffect(effect: {
   id: string
   runId: string
   seq: number
@@ -38,7 +38,7 @@ export function insertEffect(effect: {
   status: string
   metadata: string
   createdAt: string
-}): void {
+}): Promise<void> {
   const compiled = getPlatformDb()
     .insertInto("effects")
     .values({
@@ -55,39 +55,39 @@ export function insertEffect(effect: {
       created_at: effect.createdAt,
     })
     .compile()
-  runExec(compiled)
+  await runExecAsync(compiled)
 }
 
-export function markEffectCompensated(effectId: string): void {
+export async function markEffectCompensated(effectId: string): Promise<void> {
   const compiled = getPlatformDb()
     .updateTable("effects")
     .set({ status: "compensated" })
     .where("id", "=", effectId)
     .compile()
-  runExec(compiled)
+  await runExecAsync(compiled)
 }
 
-export function listEffectsByRun(runId: string): EffectRow[] {
+export async function listEffectsByRun(runId: string): Promise<EffectRow[]> {
   const compiled = getPlatformDb()
     .selectFrom("effects")
     .selectAll()
     .where("run_id", "=", runId)
     .orderBy("seq")
     .compile()
-  return runAll<EffectRow>(compiled)
+  return await runAllAsync<EffectRow>(compiled)
 }
 
-export function listEffectsByTarget(filePath: string): EffectRow[] {
+export async function listEffectsByTarget(filePath: string): Promise<EffectRow[]> {
   const compiled = getPlatformDb()
     .selectFrom("effects")
     .selectAll()
     .where("target", "=", filePath)
     .orderBy("created_at")
     .compile()
-  return runAll<EffectRow>(compiled)
+  return await runAllAsync<EffectRow>(compiled)
 }
 
-export function insertFileSnapshot(snapshot: {
+export async function insertFileSnapshot(snapshot: {
   id: string
   effectId: string
   runId: string
@@ -96,7 +96,7 @@ export function insertFileSnapshot(snapshot: {
   hash: string | null
   fileMode: number | null
   createdAt: string
-}): void {
+}): Promise<void> {
   const compiled = getPlatformDb()
     .insertInto("file_snapshots")
     .values({
@@ -110,10 +110,10 @@ export function insertFileSnapshot(snapshot: {
       created_at: snapshot.createdAt,
     })
     .compile()
-  runExec(compiled)
+  await runExecAsync(compiled)
 }
 
-export function getLatestFileSnapshot(filePath: string): FileSnapshotRow | null {
+export async function getLatestFileSnapshot(filePath: string): Promise<FileSnapshotRow | null> {
   const compiled = getPlatformDb()
     .selectFrom("file_snapshots")
     .selectAll()
@@ -121,25 +121,25 @@ export function getLatestFileSnapshot(filePath: string): FileSnapshotRow | null 
     .orderBy("created_at", "desc")
     .limit(1)
     .compile()
-  return runGet<FileSnapshotRow>(compiled) ?? null
+  return await runGetAsync<FileSnapshotRow>(compiled) ?? null
 }
 
-export function listFileSnapshotsByRun(runId: string): FileSnapshotRow[] {
+export async function listFileSnapshotsByRun(runId: string): Promise<FileSnapshotRow[]> {
   const compiled = getPlatformDb()
     .selectFrom("file_snapshots")
     .selectAll()
     .where("run_id", "=", runId)
     .orderBy("created_at")
     .compile()
-  return runAll<FileSnapshotRow>(compiled)
+  return await runAllAsync<FileSnapshotRow>(compiled)
 }
 
-export function getFileSnapshotByEffectId(effectId: string): FileSnapshotRow | null {
+export async function getFileSnapshotByEffectId(effectId: string): Promise<FileSnapshotRow | null> {
   const compiled = getPlatformDb()
     .selectFrom("file_snapshots")
     .selectAll()
     .where("effect_id", "=", effectId)
     .limit(1)
     .compile()
-  return runGet<FileSnapshotRow>(compiled) ?? null
+  return await runGetAsync<FileSnapshotRow>(compiled) ?? null
 }

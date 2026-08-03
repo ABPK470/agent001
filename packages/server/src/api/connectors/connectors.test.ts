@@ -13,9 +13,9 @@ beforeEach(() => {
 })
 
 describe("connector persistence", () => {
-  it("round-trips a connector through save / get / list / delete", () => {
+  it("round-trips a connector through save / get / list / delete", async () => {
     const now = new Date().toISOString()
-    db.saveConnector({
+    await db.saveConnector({
       id: "dev",
       kind: "mssql",
       body_json: JSON.stringify({
@@ -35,13 +35,13 @@ describe("connector persistence", () => {
       updated_by: null,
     })
 
-    expect(db.getConnector("dev")).toBeDefined()
-    expect(db.countConnectors()).toBe(1)
-    expect(db.listConnectors().map((r) => r.id)).toEqual(["dev"])
+    expect(await db.getConnector("dev")).toBeDefined()
+    expect(await db.countConnectors()).toBe(1)
+    expect((await db.listConnectors()).map((r) => r.id)).toEqual(["dev"])
 
-    db.deleteConnector("dev")
-    expect(db.getConnector("dev")).toBeUndefined()
-    expect(db.countConnectors()).toBe(0)
+    await db.deleteConnector("dev")
+    expect(await db.getConnector("dev")).toBeUndefined()
+    expect(await db.countConnectors()).toBe(0)
   })
 })
 
@@ -56,7 +56,7 @@ describe("loadPersistedConnectors seeding", () => {
     rmSync(projectRoot, { recursive: true, force: true })
   })
 
-  it("seeds from deploy/connectors/connectors.json when the table is empty", () => {
+  it("seeds from deploy/connectors/connectors.json when the table is empty", async () => {
     mkdirSync(join(projectRoot, "deploy", "connectors"), { recursive: true })
     writeFileSync(
       join(projectRoot, "deploy", "connectors", "connectors.json"),
@@ -75,24 +75,24 @@ describe("loadPersistedConnectors seeding", () => {
       }),
     )
 
-    const result = loadPersistedConnectors(projectRoot)
+    const result = await loadPersistedConnectors(projectRoot)
     expect(result.source).toBe("file")
     expect(result.seeded).toBe(true)
     expect(result.connectors.map((c) => c.id)).toEqual(["dev"])
     expect(result.connectors[0]!.kind).toBe("mssql")
     expect(result.connectors[0]!.config["host"]).toBe("db-dev")
-    expect(db.countConnectors()).toBe(1)
+    expect(await db.countConnectors()).toBe(1)
   })
 
-  it("leaves the table empty when no seed file exists", () => {
-    const result = loadPersistedConnectors(projectRoot)
+  it("leaves the table empty when no seed file exists", async () => {
+    const result = await loadPersistedConnectors(projectRoot)
     expect(result.source).toBe("none")
     expect(result.seeded).toBe(true)
     expect(result.connectors).toEqual([])
-    expect(db.countConnectors()).toBe(0)
+    expect(await db.countConnectors()).toBe(0)
   })
 
-  it("reads from the db (no re-seed) once rows exist", () => {
+  it("reads from the db (no re-seed) once rows exist", async () => {
     mkdirSync(join(projectRoot, "deploy", "connectors"), { recursive: true })
     writeFileSync(
       join(projectRoot, "deploy", "connectors", "connectors.json"),
@@ -108,10 +108,10 @@ describe("loadPersistedConnectors seeding", () => {
         ],
       }),
     )
-    loadPersistedConnectors(projectRoot)
-    const second = loadPersistedConnectors(projectRoot)
+    await loadPersistedConnectors(projectRoot)
+    const second = await loadPersistedConnectors(projectRoot)
     expect(second.source).toBe("db")
     expect(second.seeded).toBe(false)
-    expect(db.countConnectors()).toBe(1)
+    expect(await db.countConnectors()).toBe(1)
   })
 })

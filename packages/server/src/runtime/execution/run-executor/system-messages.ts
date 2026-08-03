@@ -33,11 +33,12 @@ export async function buildExecutionSystemMessages(
   perTier: MemoryPerTier
 ): Promise<ExecutionSystemMessagesBundle> {
   const { request, interaction, messaging } = input
+  const messageHistory = await messaging.history()
   const priorTurns =
     envBase.activeRun?.ownerUpn &&
     envBase.activeRun.threadId &&
     envBase.runWorkspace.taskType !== "code_generation"
-      ? loadPriorTurns({
+      ? await loadPriorTurns({
           threadId: envBase.activeRun.threadId,
           excludeRunId: request.runId,
           upn: envBase.activeRun.ownerUpn,
@@ -49,14 +50,14 @@ export async function buildExecutionSystemMessages(
     envBase.activeRun?.threadId &&
     envBase.activeRun.ownerUpn &&
     envBase.runWorkspace.taskType !== "code_generation"
-      ? loadPriorResults({
+      ? await loadPriorResults({
           threadId: envBase.activeRun.threadId,
           upn: envBase.activeRun.ownerUpn,
           excludeRunId: request.runId
         })
       : []
 
-  const effectiveConnection = resolveEffectiveMssqlConnection(envBase.perRunHost, request.goal)
+  const effectiveConnection = await resolveEffectiveMssqlConnection(envBase.perRunHost, request.goal)
 
   const knownObjects = (() => {
     try {
@@ -127,9 +128,9 @@ export async function buildExecutionSystemMessages(
       }
     },
     isAdmin: (envBase.activeRun?.role ?? PolicyRole.HostedUser) === PolicyRole.Admin,
-    hasSiblings: !!request.resume?.parentRunId || messaging.history().length > 0,
+    hasSiblings: !!request.resume?.parentRunId || messageHistory.length > 0,
     siblingProgressDigest: (() => {
-      const recent = messaging.history().slice(-6)
+      const recent = messageHistory.slice(-6)
       if (recent.length === 0) return ""
       return recent
         .map((message) => {

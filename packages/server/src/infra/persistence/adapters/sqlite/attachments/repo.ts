@@ -17,8 +17,8 @@ import {
   AttachmentStatus
 } from "../../../../../internal/enums/attachments.js"
 import { getPlatformDb } from "../../../schema/kysely.js"
-import { runAll, runExec, runGet } from "../../../schema/execute.js"
-import { insertRowOrIgnore } from "../../../schema/upsert.js"
+import { runAllAsync, runExecAsync, runGetAsync } from "../../../schema/execute-async.js"
+import { insertRowOrIgnoreAsync } from "../../../schema/upsert.js"
 
 export { AttachmentImportMode, AttachmentIngestionMode, AttachmentScope, AttachmentSource, AttachmentStatus }
 
@@ -78,7 +78,7 @@ export interface CreateAttachmentInput {
   retentionUntil?: string | null
 }
 
-export function insertAttachment(input: CreateAttachmentInput): AttachmentRow {
+export async function insertAttachment(input: CreateAttachmentInput): Promise<AttachmentRow> {
   const id = randomUUID()
   const uploadedAt = new Date().toISOString()
   const insert = getPlatformDb()
@@ -105,29 +105,29 @@ export function insertAttachment(input: CreateAttachmentInput): AttachmentRow {
       retention_until: input.retentionUntil ?? null,
     })
     .compile()
-  runExec(insert)
-  const row = getAttachmentIncludingDeleted(id)
+  await runExecAsync(insert)
+  const row = await getAttachmentIncludingDeleted(id)
   if (!row) throw new Error(`attachment insert failed: ${id}`)
   return row
 }
 
-function getAttachmentIncludingDeleted(id: string): AttachmentRow | undefined {
+async function getAttachmentIncludingDeleted(id: string): Promise<AttachmentRow | undefined> {
   const compiled = getPlatformDb()
     .selectFrom("attachments")
     .selectAll()
     .where("id", "=", id)
     .compile()
-  return runGet<AttachmentRow>(compiled)
+  return await runGetAsync<AttachmentRow>(compiled)
 }
 
-export function getAttachment(id: string): AttachmentRow | undefined {
+export async function getAttachment(id: string): Promise<AttachmentRow | undefined> {
   const compiled = getPlatformDb()
     .selectFrom("attachments")
     .selectAll()
     .where("id", "=", id)
     .where("status", "!=", AttachmentStatus.Deleted)
     .compile()
-  return runGet<AttachmentRow>(compiled)
+  return await runGetAsync<AttachmentRow>(compiled)
 }
 
 export interface ListAttachmentsFilter {
@@ -138,7 +138,7 @@ export interface ListAttachmentsFilter {
   q?: string
 }
 
-export function listAttachments(filter: ListAttachmentsFilter = {}): AttachmentRow[] {
+export async function listAttachments(filter: ListAttachmentsFilter = {}): Promise<AttachmentRow[]> {
   let q = getPlatformDb()
     .selectFrom("attachments")
     .selectAll()
@@ -157,19 +157,19 @@ export function listAttachments(filter: ListAttachmentsFilter = {}): AttachmentR
     )
   }
   const compiled = q.orderBy("uploaded_at", "desc").compile()
-  return runAll<AttachmentRow>(compiled)
+  return await runAllAsync<AttachmentRow>(compiled)
 }
 
-export function softDeleteAttachment(id: string): void {
+export async function softDeleteAttachment(id: string): Promise<void> {
   const compiled = getPlatformDb()
     .updateTable("attachments")
     .set({ status: AttachmentStatus.Deleted })
     .where("id", "=", id)
     .compile()
-  runExec(compiled)
+  await runExecAsync(compiled)
 }
 
-export function markAttachmentProcessed(id: string, textExtractUri: string | null): void {
+export async function markAttachmentProcessed(id: string, textExtractUri: string | null): Promise<void> {
   const processedAt = new Date().toISOString()
   const compiled =
     textExtractUri === null
@@ -190,13 +190,13 @@ export function markAttachmentProcessed(id: string, textExtractUri: string | nul
           })
           .where("id", "=", id)
           .compile()
-  runExec(compiled)
+  await runExecAsync(compiled)
 }
 
 // ── Tags ───────────────────────────────────────────────────────────
 
-export function addAttachmentTag(attachmentId: string, key: string, value: string): void {
-  insertRowOrIgnore({
+export async function addAttachmentTag(attachmentId: string, key: string, value: string): Promise<void> {
+  await insertRowOrIgnoreAsync({
     table: "attachment_tags",
     keys: {
       attachment_id: attachmentId,
@@ -211,13 +211,13 @@ export function addAttachmentTag(attachmentId: string, key: string, value: strin
   })
 }
 
-export function listAttachmentTags(attachmentId: string): AttachmentTagRow[] {
+export async function listAttachmentTags(attachmentId: string): Promise<AttachmentTagRow[]> {
   const compiled = getPlatformDb()
     .selectFrom("attachment_tags")
     .selectAll()
     .where("attachment_id", "=", attachmentId)
     .compile()
-  return runAll<AttachmentTagRow>(compiled)
+  return await runAllAsync<AttachmentTagRow>(compiled)
 }
 
 // ── Imports ────────────────────────────────────────────────────────
@@ -230,7 +230,7 @@ export interface RecordImportInput {
   importedByToolCall?: string | null
 }
 
-export function recordAttachmentImport(input: RecordImportInput): AttachmentImportRow {
+export async function recordAttachmentImport(input: RecordImportInput): Promise<AttachmentImportRow> {
   const id = randomUUID()
   const importedAt = new Date().toISOString()
   const insert = getPlatformDb()
@@ -245,23 +245,23 @@ export function recordAttachmentImport(input: RecordImportInput): AttachmentImpo
       imported_by_tool_call: input.importedByToolCall ?? null,
     })
     .compile()
-  runExec(insert)
+  await runExecAsync(insert)
   const compiled = getPlatformDb()
     .selectFrom("attachment_imports")
     .selectAll()
     .where("id", "=", id)
     .compile()
-  const row = runGet<AttachmentImportRow>(compiled)
+  const row = await runGetAsync<AttachmentImportRow>(compiled)
   if (!row) throw new Error(`attachment import insert failed: ${id}`)
   return row
 }
 
-export function listAttachmentImports(runId: string): AttachmentImportRow[] {
+export async function listAttachmentImports(runId: string): Promise<AttachmentImportRow[]> {
   const compiled = getPlatformDb()
     .selectFrom("attachment_imports")
     .selectAll()
     .where("run_id", "=", runId)
     .orderBy("imported_at", "desc")
     .compile()
-  return runAll<AttachmentImportRow>(compiled)
+  return await runAllAsync<AttachmentImportRow>(compiled)
 }

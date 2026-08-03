@@ -11,8 +11,8 @@ import { buildToolIoFromStepEvents, buildToolIoSummary, resolveStepToolName } fr
 import { durationOf, inferPipelineStatus, numField, strField } from "../utils.js"
 import { presentToolCall, serializeToolCallArgs } from "@mia/shared-types"
 
-export function buildAgentRunPipeline(runId: string, events: OperationEvent[]): OperationPipeline {
-  const run = db.getRun(runId)
+export async function buildAgentRunPipeline(runId: string, events: OperationEvent[]): Promise<OperationPipeline> {
+  const run = await db.getRun(runId)
   const startedAt = events[0].timestamp
   const lastEv = events[events.length - 1]
   const status: OperationStatus =

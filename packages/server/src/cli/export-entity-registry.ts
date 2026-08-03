@@ -13,13 +13,13 @@ import {
   writeEntityRegistrySnapshot,
 } from "../api/sync/service/export-entity-registry.js"
 
-main()
+await main()
 
-function main(): void {
+async function main(): Promise<void> {
   const options = parseArgs(process.argv.slice(2))
   openDatabase()
 
-  const result = writeEntityRegistrySnapshot({
+  const result = await writeEntityRegistrySnapshot({
     outputParentDir: resolve(options.output),
     tenantId: options.tenantId ?? undefined,
     includeRetiredEntities: options.includeRetired,

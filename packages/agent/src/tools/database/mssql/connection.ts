@@ -21,7 +21,7 @@ export interface DatabaseEntry {
 
 /** Override which named connection is used when connection='default' or is omitted. */
 export function setDefaultMssqlConnection(host: AgentHost, name: string): void {
-  const canonical = canonicalizeConfiguredConnectionName(listMssqlConnectionNames(host), name)
+  const canonical = canonicalizeConfiguredConnectionName(host.mssql.databases.keys(), name)
   host.mssql.defaultConnection.value = canonical ?? name
 }
 
@@ -29,7 +29,7 @@ export function setDefaultMssqlConnection(host: AgentHost, name: string): void {
 export function getDefaultMssqlConnectionName(host: AgentHost): string | null {
   const raw = host.mssql.defaultConnection.value
   if (!raw) return null
-  return canonicalizeConfiguredConnectionName(listMssqlConnectionNames(host), raw) ?? raw
+  return canonicalizeConfiguredConnectionName(host.mssql.databases.keys(), raw) ?? raw
 }
 
 /**
@@ -120,7 +120,7 @@ export async function getPool(
   host: AgentHost,
   name = "default"
 ): Promise<{ pool: sql.ConnectionPool; entry: DatabaseEntry }> {
-  const resolvedName = resolveMssqlConnectionName(host, name)
+  const resolvedName = await resolveMssqlConnectionName(host, name)
   const pools = host.mssql.pools
   if (pools) {
     // Live provider path (production): resolvedName is a connector id.
@@ -133,7 +133,7 @@ export async function getPool(
   // Legacy databases-map path (tests/hosts without a live provider).
   const entry = host.mssql.databases.get(resolvedName)
   if (!entry) {
-    const available = listMssqlConnectionNames(host).join(", ") || "none"
+    const available = (await listMssqlConnectionNames(host)).join(", ") || "none"
     throw new Error(
       `MSSQL connection "${name}" not configured. Available: ${available}. ` +
         `Call setMssqlConfig() or setMssqlConfigs() at startup.`
@@ -167,7 +167,7 @@ export async function withMssqlPool<T>(
   fn: (ctx: { pool: sql.ConnectionPool; entry: DatabaseEntry }) => Promise<T>,
 ): Promise<T> {
   const connectionName = name ?? "default"
-  const resolvedName = resolveMssqlConnectionName(host, connectionName)
+  const resolvedName = await resolveMssqlConnectionName(host, connectionName)
   const budget = host.mssql.pools?.runWithAgentBudget
   if (budget) {
     return budget(resolvedName, async () => {

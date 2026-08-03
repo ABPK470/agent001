@@ -10,7 +10,7 @@ import { broadcast, broadcastTraceLoose } from "../../../infra/events/broadcaste
  * Handle a single onPlannerTrace entry from the agent engine.
  * Routes each planner event kind to its SSE broadcast + audit log.
  */
-export function handlePlannerTrace(
+export async function handlePlannerTrace(
   entry: unknown,
   ctx: {
     runId: string
@@ -18,7 +18,7 @@ export function handlePlannerTrace(
     debugSeqRef: { value: number }
     saveTrace: (runId: string, entry: Record<string, unknown>) => void
   }
-): void {
+): Promise<void> {
   const e = entry as Record<string, unknown>
   const { runId, services, debugSeqRef, saveTrace } = ctx
 
@@ -90,7 +90,7 @@ export function handlePlannerTrace(
     const remediation = String(e.remediation ?? "")
     const stepName = String(e.stepName ?? "?")
     const message = `Platform integration not configured: ${subject} (step "${stepName}"). ${remediation}`
-    db.saveLog({ run_id: runId, level: "run:error", message, timestamp: new Date().toISOString() })
+    await db.saveLog({ run_id: runId, level: "run:error", message, timestamp: new Date().toISOString() })
     broadcast({
       type: EventType.PlannerPlatformUnconfigured,
       data: { runId, stepName, subject, remediation, rawError: e.rawError }

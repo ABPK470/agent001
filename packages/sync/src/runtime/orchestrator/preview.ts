@@ -122,7 +122,7 @@ async function previewSyncInner(
       throw new Error(`Environment "${sourceEnv.name}" is target-only — cannot use as source.`)
     if (targetEnv.role === "source")
       throw new Error(`Environment "${targetEnv.name}" is source-only — cannot use as target.`)
-    const readyIds = readyMssqlConnectorIds(input.host)
+    const readyIds = await readyMssqlConnectorIds(input.host)
     assertEnvConnectorReady(sourceEnv, readyIds)
     assertEnvConnectorReady(targetEnv, readyIds)
     assertSupportedSyncDirection(sourceEnv, targetEnv)
@@ -218,7 +218,7 @@ async function previewSyncInner(
       input.source,
       schemaGroundedTables.map((t) => t.name)
     )
-    const tableConcurrency = resolvePreviewTableConcurrency(
+    const tableConcurrency = await resolvePreviewTableConcurrency(
       input.host,
       input.source,
       input.target

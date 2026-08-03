@@ -1,10 +1,15 @@
 /**
  * PlatformStore — thin SQLite facade for transactional multi-statement work.
  * Event durability is {@link getEventStore}; domain data uses repository functions.
+ *
+ * Async transactions use BEGIN IMMEDIATE + a process mutex so awaited
+ * repo calls inside transactionAsync stay atomic on the single connection.
  */
 
 import type { PlatformStore } from "../../../../ports/platform-store.js"
 import { getDb } from "./connection.js"
+
+let txChain: Promise<unknown> = Promise.resolve()
 
 const store: PlatformStore = {
   kind: "sqlite",
@@ -14,13 +19,28 @@ const store: PlatformStore = {
   },
 
   async transactionAsync<T>(fn: () => Promise<T> | T): Promise<T> {
-    const out = fn()
-    if (out instanceof Promise) {
-      // better-sqlite3 has no async transactions. Async bodies run without an
-      // atomic TX until a server-RDBMS adapter lands — sync callbacks preferred.
-      return out
+    const run = async (): Promise<T> => {
+      const db = getDb()
+      db.exec("BEGIN IMMEDIATE")
+      try {
+        const out = await fn()
+        db.exec("COMMIT")
+        return out
+      } catch (err) {
+        try {
+          db.exec("ROLLBACK")
+        } catch {
+          // Connection may already be closed during teardown.
+        }
+        throw err
+      }
     }
-    return store.transaction(() => out)
+    const next = txChain.then(run, run)
+    txChain = next.then(
+      () => undefined,
+      () => undefined,
+    )
+    return next
   },
 }
 

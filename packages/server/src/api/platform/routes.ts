@@ -35,7 +35,7 @@ export interface RegisterPlatformRoutesOptions {
 export function registerPlatformRoutes(app: FastifyInstance, opts: RegisterPlatformRoutesOptions): void {
   app.get("/api/platform/health", async (_req, reply) => {
     try {
-      return getPlatformHealth(opts.projectRoot, opts.mssqlSummary, opts.bootHost)
+      return await getPlatformHealth(opts.projectRoot, opts.mssqlSummary, opts.bootHost)
     } catch (error) {
       reply.code(500)
       return {
@@ -103,7 +103,7 @@ export function registerPlatformRoutes(app: FastifyInstance, opts: RegisterPlatf
       return { ok: false, message: 'Type confirm: "FACTORY RESET"' }
     }
     try {
-      const result = factoryResetSyncPlatform(opts.projectRoot)
+      const result = await factoryResetSyncPlatform(opts.projectRoot)
       return {
         ok: true,
         message:
@@ -137,7 +137,7 @@ export function registerPlatformRoutes(app: FastifyInstance, opts: RegisterPlatf
       return { ok: false, message: 'Type confirm: "RESET POLICY DEFAULTS"' }
     }
     try {
-      const result = resetFactoryPolicyDefaults(opts.projectRoot)
+      const result = await resetFactoryPolicyDefaults(opts.projectRoot)
       return {
         ok: true,
         message: `Restored ${result.inserted} factory policy rule(s) from ${result.seedPath} (removed ${result.removed} prior factory/edited factory-named row(s)). Operator rules with other names were preserved.`,
@@ -194,7 +194,7 @@ export function registerPlatformRoutes(app: FastifyInstance, opts: RegisterPlatf
       const { exportDeployCatalogZipBuffer } = await import(
         "./service/export-deploy-artifacts.js"
       )
-      const { buffer, filename } = exportDeployCatalogZipBuffer({
+      const { buffer, filename } = await exportDeployCatalogZipBuffer({
         includeRetiredEntities: body.includeRetiredEntities,
       })
       reply
@@ -238,7 +238,7 @@ export function registerPlatformRoutes(app: FastifyInstance, opts: RegisterPlatf
     try {
       const result =
         source === "shipped"
-          ? useShippedDeployArtifacts(opts.projectRoot, actor)
+          ? await useShippedDeployArtifacts(opts.projectRoot, actor)
           : await refreshDeployArtifactsFromDatabase(opts.projectRoot, opts.bootHost, {
               connection: body.connection,
               reseedSqlite: body.reseedSqlite,
@@ -262,8 +262,8 @@ export function registerPlatformRoutes(app: FastifyInstance, opts: RegisterPlatf
       reply.code(403)
       return { ok: false, message: "Admin only" }
     }
-    const activeVersion = getActiveSyncCatalogVersion()
-    const versions = listSyncCatalogVersions()
+    const activeVersion = await getActiveSyncCatalogVersion()
+    const versions = await listSyncCatalogVersions()
     return { ok: true, activeVersion, versions }
   })
 
@@ -279,7 +279,7 @@ export function registerPlatformRoutes(app: FastifyInstance, opts: RegisterPlatf
         reply.code(400)
         return { ok: false, message: "version must be a number" }
       }
-      const detail = getSyncCatalogVersionDetail(version)
+      const detail = await getSyncCatalogVersionDetail(version)
       if (!detail) {
         reply.code(404)
         return { ok: false, message: `Unknown catalog version ${version}` }
@@ -312,7 +312,7 @@ export function registerPlatformRoutes(app: FastifyInstance, opts: RegisterPlatf
         }
         against = asNumber
       }
-      const diff = getSyncCatalogVersionDiff({ version, against })
+      const diff = await getSyncCatalogVersionDiff({ version, against })
       if (!diff) {
         reply.code(404)
         return { ok: false, message: `Unknown catalog version ${version}` }
@@ -347,7 +347,7 @@ export function registerPlatformRoutes(app: FastifyInstance, opts: RegisterPlatf
       }
     }
     try {
-      const result = importSyncCatalogBundle({
+      const result = await importSyncCatalogBundle({
         zipBase64: body.zipBase64,
         snapshot: body.snapshot,
         dryRun,
@@ -403,7 +403,7 @@ export function registerPlatformRoutes(app: FastifyInstance, opts: RegisterPlatf
     try {
       if (dryRun) {
         const { getSyncCatalogVersionRow } = await import("../../infra/persistence/sqlite.js")
-        const row = getSyncCatalogVersionRow("_default", body.version)
+        const row = await getSyncCatalogVersionRow("_default", body.version)
         if (!row) {
           return catalogPreviewToGate({
             ok: false,
@@ -436,7 +436,7 @@ export function registerPlatformRoutes(app: FastifyInstance, opts: RegisterPlatf
         })
       }
 
-      const result = rollbackSyncCatalogVersion({
+      const result = await rollbackSyncCatalogVersion({
         targetVersion: body.version,
         actor: req.session.upn,
         projectRoot: opts.projectRoot,

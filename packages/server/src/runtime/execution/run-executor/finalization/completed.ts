@@ -82,7 +82,7 @@ export async function finalizeCompletedRun(
       pendingWorkspaceChanges: pendingChangeCount
     }
   })
-  db.saveLog({
+  await db.saveLog({
     run_id: request.runId,
     level: "run",
     message: `Completed — ${env.state.run.steps.length} steps`,
@@ -98,7 +98,7 @@ export async function finalizeCompletedRun(
     runId: request.runId,
     actions: [
       { label: "View", action: NotificationActionType.ViewRun, data: { runId: request.runId } },
-      ...buildRunCapabilityActions(request.runId, RunStatus.Completed),
+      ...await buildRunCapabilityActions(request.runId, RunStatus.Completed),
     ]
   })
 

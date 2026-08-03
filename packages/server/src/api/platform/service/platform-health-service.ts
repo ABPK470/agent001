@@ -37,22 +37,22 @@ function readCatalogCacheDetail(path: string): string {
   }
 }
 
-function mssqlConnectionNames(host: AgentHost): string[] {
+async function mssqlConnectionNames(host: AgentHost): Promise<string[]> {
   // Live: prefer the connector-keyed pool provider (reads the connectors DB on
   // every call) so runtime enable/disable is reflected without a restart.
   const pools = host.mssql.pools
-  if (pools) return pools.list().map((c) => c.name)
+  if (pools) return (await pools.list()).map((c) => c.name)
   return getMssqlConfig(host).map((c) => c.name)
 }
 
-export function getPlatformHealth(
+export async function getPlatformHealth(
   _projectRoot: string,
   mssqlSummary: string,
   bootHost: AgentHost,
-): PlatformHealth {
+): Promise<PlatformHealth> {
   const pools = bootHost.mssql.pools
-  const configured = pools ? pools.list().length > 0 : mssqlSummary !== "not configured"
-  const connections = configured ? mssqlConnectionNames(bootHost) : []
+  const configured = pools ? (await pools.list()).length > 0 : mssqlSummary !== "not configured"
+  const connections = configured ? await mssqlConnectionNames(bootHost) : []
 
   let catalogAvailable = false
   let catalogDetail: string | null = null
@@ -64,7 +64,7 @@ export function getPlatformHealth(
     }
   }
 
-  const entities = db.listEntityDefinitions("_default")
+  const entities = await db.listEntityDefinitions("_default")
   const entityErrors: string[] = []
   for (const entity of entities) {
     const validation = validateEntityDefinition(entity)
@@ -76,7 +76,7 @@ export function getPlatformHealth(
   let publishedAt: string | null = null
   let publishedVersion: string | null = null
   let definitionCount = 0
-  const published = db.loadPublishedBundleFromDb()
+  const published = await db.loadPublishedBundleFromDb()
   if (published) {
     publishedAt = published.publishedAt
     publishedVersion = published.publishedVersion
@@ -166,10 +166,10 @@ export async function rebuildPlatformCatalog(
 }
 
 /** Wipe entity registry + published bundle, then re-seed entities from deploy artifacts. */
-export function factoryResetSyncPlatform(projectRoot: string): { seeded: number; entityIds: string[] } {
-  db.wipeEntityRegistry()
-  db.clearSyncDefinitionsAndPublishMeta()
+export async function factoryResetSyncPlatform(projectRoot: string): Promise<{ seeded: number; entityIds: string[] }> {
+  await db.wipeEntityRegistry()
+  await db.clearSyncDefinitionsAndPublishMeta()
 
-  const seed = seedEntityRegistryIfEmpty(projectRoot)
+  const seed = await seedEntityRegistryIfEmpty(projectRoot)
   return { seeded: seed.seeded, entityIds: seed.entityIds }
 }

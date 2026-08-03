@@ -88,9 +88,9 @@ function makeStep(toolName: SyncHttpTool, args: Record<string, unknown>): Step {
   }
 }
 
-function loadEvaluator(): RulePolicyEvaluator {
+async function loadEvaluator(): Promise<RulePolicyEvaluator> {
   const ev = new RulePolicyEvaluator()
-  for (const rule of db.listPolicyRules()) {
+  for (const rule of await db.listPolicyRules()) {
     ev.addRule({
       name: rule.name,
       effect: rule.effect,
@@ -119,7 +119,7 @@ export async function assertSyncHttpPolicy(input: {
   const { session, toolName, args } = input
   const step = makeStep(toolName, args)
   const actorUpn = session.upn
-  const grants = listApprovedSyncToolGrants(actorUpn, toolName)
+  const grants = await listApprovedSyncToolGrants(actorUpn, toolName)
   const argsKey = syncToolArgsKey(args)
   const matching = grants.filter((g) => syncToolArgsKey(g.args) === argsKey)
   const ctx = buildPolicyContext({
@@ -130,7 +130,7 @@ export async function assertSyncHttpPolicy(input: {
     sandboxRoot: null,
     toolApprovalGrants: matching.length > 0 ? matching : undefined,
   })
-  const evaluator = loadEvaluator()
+  const evaluator = await loadEvaluator()
   const dummyRun = { id: asRunId(ctx.runId) } as unknown as AgentRun
 
   let approval: string | null
@@ -148,7 +148,7 @@ export async function assertSyncHttpPolicy(input: {
 
   if (approval) {
     const policyName = parsePolicyName(approval)
-    const pending: SyncToolApprovalRecord = upsertPendingSyncToolApproval({
+    const pending: SyncToolApprovalRecord = await upsertPendingSyncToolApproval({
       actorUpn: session.upn,
       toolName,
       args,
@@ -164,7 +164,7 @@ export async function assertSyncHttpPolicy(input: {
   }
 
   const grant = ctx.toolApprovalGrants?.[0]
-  if (grant) consumeSyncToolApprovalGrant(grant.grantId)
+  if (grant) await consumeSyncToolApprovalGrant(grant.grantId)
 }
 
 export function isSyncHttpPolicyDeniedError(e: unknown): e is SyncHttpPolicyDeniedError {

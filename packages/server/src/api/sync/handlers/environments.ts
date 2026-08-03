@@ -205,8 +205,8 @@ function defaultAccessModeForName(name: string): SyncEnvironment["defaultAccessM
 }
 
 /** Live FK: connectorId must be a persisted, enabled warehouse connector. */
-function resolveWarehouseConnector(connectorId: string): db.DbConnector | undefined {
-  const row = db.getConnector(connectorId)
+async function resolveWarehouseConnector(connectorId: string): Promise<db.DbConnector | undefined> {
+  const row = await db.getConnector(connectorId)
   if (!row || row.enabled !== 1) return undefined
   if (row.kind !== "mssql" && row.kind !== "postgres") return undefined
   return row
@@ -218,8 +218,8 @@ export function registerSyncEnvironmentRoutes(app: FastifyInstance, host: AgentH
       reply.code(403)
       return { error: "admin only" }
     }
-    rebuildLiveSyncEnvironments(host)
-    return db.listSyncEnvironments().map(parseEnvironmentRow)
+    await rebuildLiveSyncEnvironments(host)
+    return (await db.listSyncEnvironments()).map(parseEnvironmentRow)
   })
 
   app.post<{ Body: { name?: string } & Record<string, unknown> }>(
@@ -251,7 +251,7 @@ export function registerSyncEnvironmentRoutes(app: FastifyInstance, host: AgentH
           error: `Warehouse connector "${connectorId}" is missing, not mssql|postgres, or disabled — enable it in Connectors first`,
         }
       }
-      if (db.getSyncEnvironment(name)) {
+      if (await db.getSyncEnvironment(name)) {
         reply.code(409)
         return { error: `environment already exists: ${name}` }
       }
@@ -275,8 +275,8 @@ export function registerSyncEnvironmentRoutes(app: FastifyInstance, host: AgentH
         ...(sanitised.serviceUrls ? { serviceUrls: sanitised.serviceUrls } : {}),
         connectorId,
       })
-      db.saveSyncEnvironment(serialiseEnvironment(env, req.session.upn))
-      rebuildLiveSyncEnvironments(host)
+      await db.saveSyncEnvironment(serialiseEnvironment(env, req.session.upn))
+      await rebuildLiveSyncEnvironments(host)
       refreshEnvDerivedPolicies(host, name)
       audit(req, "sync_env.create", withBeforeAfter({ name, fields: sanitised }, null, env))
       broadcast({
@@ -295,7 +295,7 @@ export function registerSyncEnvironmentRoutes(app: FastifyInstance, host: AgentH
         reply.code(403)
         return { error: "admin only" }
       }
-      const row = db.getSyncEnvironment(req.params.name)
+      const row = await db.getSyncEnvironment(req.params.name)
       if (!row) {
         reply.code(404)
         return { error: `unknown env "${req.params.name}"` }
@@ -333,8 +333,8 @@ export function registerSyncEnvironmentRoutes(app: FastifyInstance, host: AgentH
         ...sanitised,
         name: req.params.name,
       })
-      db.saveSyncEnvironment(serialiseEnvironment(env, req.session.upn, row.created_at))
-      rebuildLiveSyncEnvironments(host)
+      await db.saveSyncEnvironment(serialiseEnvironment(env, req.session.upn, row.created_at))
+      await rebuildLiveSyncEnvironments(host)
       refreshEnvDerivedPolicies(host, req.params.name)
       audit(
         req,
@@ -364,15 +364,15 @@ export function registerSyncEnvironmentRoutes(app: FastifyInstance, host: AgentH
       reply.code(403)
       return { error: builtinLock }
     }
-    const row = db.getSyncEnvironment(req.params.name)
+    const row = await db.getSyncEnvironment(req.params.name)
     const prior = row
       ? normalizeStoredSyncEnvironment(
           req.params.name,
           parseBoundaryJson(row.body_json) as Record<string, unknown>,
         )
       : null
-    db.deleteSyncEnvironment(req.params.name)
-    rebuildLiveSyncEnvironments(host)
+    await db.deleteSyncEnvironment(req.params.name)
+    await rebuildLiveSyncEnvironments(host)
     audit(req, "sync_env.delete", withBeforeAfter({ name: req.params.name }, prior, null))
     broadcast({
       type: EventType.SyncEnvUpdate,

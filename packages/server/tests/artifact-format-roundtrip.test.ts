@@ -108,16 +108,16 @@ describe("catalog format round-trip integration", () => {
     expect(db.getEntityDefinition("_default", "dataset")?.flowId).toBe(expectedFlowId)
   })
 
-  it("catalog snapshot export/import restores retired entities", () => {
+  it("catalog snapshot export/import restores retired entities", async () => {
     const snapshot = buildDeployCatalogSnapshot({
       tenantId: "_default",
       includeRetiredEntities: true,
     })
 
-    for (const row of db.listEntityDefinitions("_default")) {
-      db.retireEntityDefinition("_default", row.id, "test")
+    for (const row of await db.listEntityDefinitions("_default")) {
+      await db.retireEntityDefinition("_default", row.id, "test")
     }
-    expect(db.listEntityDefinitions("_default").length).toBe(0)
+    expect((await db.listEntityDefinitions("_default")).length).toBe(0)
 
     const applied = applyDeployCatalogSnapshot({
       snapshot,
@@ -126,6 +126,6 @@ describe("catalog format round-trip integration", () => {
       dryRun: false,
     })
     expect(applied.applied).toBe(true)
-    expect(db.listEntityDefinitions("_default").length).toBeGreaterThan(0)
+    expect((await db.listEntityDefinitions("_default")).length).toBeGreaterThan(0)
   })
 })

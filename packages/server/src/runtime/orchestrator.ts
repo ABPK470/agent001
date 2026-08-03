@@ -130,11 +130,11 @@ export class AgentOrchestrator {
 
   // ── Run lifecycle ─────────────────────────────────────────────
 
-  private resolveThreadId(requestedThreadId: string | undefined, upn: string): string {
-    return requireOwnedThreadId(requestedThreadId, upn)
+  private async resolveThreadId(requestedThreadId: string | undefined, upn: string): Promise<string> {
+    return await requireOwnedThreadId(requestedThreadId, upn)
   }
 
-  startRun(goal: string, config?: AgentRunConfig, session: CurrentSession | null = null): string {
+  async startRun(goal: string, config?: AgentRunConfig, session: CurrentSession | null = null): Promise<string> {
     this.assertAcceptingRuns()
     const upn = requireSessionUpn(session)
     const runId = randomUUID()
@@ -155,7 +155,7 @@ export class AgentOrchestrator {
     }
     const bus = new AgentBus(runId)
 
-    const dbRules = db.listPolicyRules()
+    const dbRules = await db.listPolicyRules()
     for (const r of dbRules) {
       services.policyEvaluator.addRule({
         name: r.name,
@@ -169,7 +169,7 @@ export class AgentOrchestrator {
     // Operators edit/delete them; boot never refreshes existing names.
     // through the admin UI; this loop already loaded them above.
 
-    const threadId = this.resolveThreadId(config?.threadId, upn)
+    const threadId = await this.resolveThreadId(config?.threadId, upn)
 
     this.activeRuns.set(runId, {
       id: runId,
@@ -191,7 +191,7 @@ export class AgentOrchestrator {
     // first also means: cancel route (which checks db.getRun) can find
     // the row immediately, and SSE consumers never see a `run.queued`
     // event for a run that does not exist server-side.
-    db.saveRun({
+    await db.saveRun({
       id: runId,
       goal,
       status: RunStatus.Pending,
@@ -207,7 +207,7 @@ export class AgentOrchestrator {
     })
 
     if (threadId) {
-      db.touchThread(threadId)
+      await db.touchThread(threadId)
       db.autoTitleThreadFromGoal(threadId, goal)
     }
 
@@ -228,7 +228,7 @@ export class AgentOrchestrator {
       priority: RunPriority.Normal
     })
 
-    this.executeRun(command).catch((err) => {
+    this.executeRun(command).catch(async (err) => {
       console.error(`Run ${runId} crashed:`, err)
       // executeRun threw before its own try/catch could mark the run
       // failed (e.g. crash during prepareWorkspace). Without this the
@@ -238,8 +238,8 @@ export class AgentOrchestrator {
       // settle their local state.
       const message = err instanceof Error ? err.message : String(err)
       try {
-        const existing = db.getRun(runId)
-        db.saveRun({
+        const existing = await db.getRun(runId)
+        await db.saveRun({
           id: runId,
           goal,
           status: RunStatus.Failed,
@@ -263,7 +263,7 @@ export class AgentOrchestrator {
     return runId
   }
 
-  cancelRun(runId: string): boolean {
+  async cancelRun(runId: string): Promise<boolean> {
     // Unblock ask_user (and similar) waits before aborting — otherwise
     // govern-tool's abort race throws and finalizeFailedRun overwrites the
     // cancelled row with a tool-failure while trace stays "waiting".
@@ -283,7 +283,7 @@ export class AgentOrchestrator {
       // No in-memory run — it's either queued, or stuck in DB as 'running'
       // because a previous run never observed its abort signal. Persist the
       // cancel either way so list/status calls reflect reality immediately.
-      db.markRunCancelled(runId)
+      await db.markRunCancelled(runId)
       const removed = this.queue.remove(runId)
       broadcast({ type: EventType.RunCancelled, data: { runId } })
       return removed || true
@@ -293,12 +293,12 @@ export class AgentOrchestrator {
     // loop unwinds, but if the LLM call hangs and never observes the signal
     // the row would stay 'running' forever. This is a no-op if the loop
     // races us to completion (markRunCancelled only touches active rows).
-    db.markRunCancelled(runId)
+    await db.markRunCancelled(runId)
     broadcast({ type: EventType.RunCancelled, data: { runId } })
     return true
   }
 
-  resumeRun(runId: string, resumeSession: CurrentSession | null = null): string | null {
+  async resumeRun(runId: string, resumeSession: CurrentSession | null = null): Promise<string | null> {
     if (!this.acceptingRuns) return null
     let upn: string
     try {
@@ -306,14 +306,14 @@ export class AgentOrchestrator {
     } catch {
       return null
     }
-    const checkpoint = db.getCheckpoint(runId)
-    const originalRun = db.getRun(runId)
+    const checkpoint = await db.getCheckpoint(runId)
+    const originalRun = await db.getRun(runId)
     if (!checkpoint || !originalRun) return null
     if (originalRun.upn?.toLowerCase() !== upn.toLowerCase()) return null
     if (this.activeRuns.has(runId)) return null
     if (originalRun.status === RunStatus.Completed) return null
 
-    const existingRuns = db.listRuns(200)
+    const existingRuns = await db.listRuns(200)
     const alreadyResumed = existingRuns.find(
       (r) =>
         r.parent_run_id === runId &&
@@ -330,7 +330,7 @@ export class AgentOrchestrator {
     // resumed run is policed identically to a fresh start. Previously the
     // resume path skipped rule loading entirely, leaving the policy engine
     // empty for the rest of the run.
-    const dbRules = db.listPolicyRules()
+    const dbRules = await db.listPolicyRules()
     for (const r of dbRules) {
       services.policyEvaluator.addRule({
         name: r.name,
@@ -362,7 +362,7 @@ export class AgentOrchestrator {
     // entries. trace_entries.run_id has a hard FK to runs(id), so the
     // saveTrace below would fail with SQLITE_CONSTRAINT_FOREIGNKEY
     // otherwise (mirrors the same ordering invariant in startRun).
-    db.saveRun({
+    await db.saveRun({
       id: newRunId,
       goal: originalRun.goal,
       status: RunStatus.Pending,
@@ -379,10 +379,10 @@ export class AgentOrchestrator {
 
     // Parent was parked for approval — close it so the thread follows the
     // resumed child instead of staying stuck on "waiting for approval".
-    db.markRunCancelled(runId)
+    await db.markRunCancelled(runId)
 
     if (originalRun.thread_id) {
-      db.touchThread(originalRun.thread_id)
+      await db.touchThread(originalRun.thread_id)
     }
 
     broadcast({
@@ -443,7 +443,7 @@ export class AgentOrchestrator {
       // Learn the term→table mapping durably (org-wide) so future runs reuse
       // the user's answer instead of re-asking "what do you mean by X?".
       const activeRun = this.activeRuns.get(runId)
-      persistLearnedTermFromResolution(
+      void persistLearnedTermFromResolution(
         resolvedClarification,
         activeRun?.goal ?? "",
         activeRun?.ownerUpn ?? null,
@@ -471,8 +471,8 @@ export class AgentOrchestrator {
     return true
   }
 
-  recoverStaleRuns(): { recovered: string[]; failed: string[] } {
-    return recoverStaleRunsImpl(this)
+  async recoverStaleRuns(): Promise<{ recovered: string[]; failed: string[] }> {
+    return await recoverStaleRunsImpl()
   }
 
   // ── Notifications ─────────────────────────────────────────────
@@ -509,8 +509,8 @@ export class AgentOrchestrator {
   }
 
   /** Cancel in-flight runs, drop workspace caches, then purge DB rows. */
-  purgeThread(threadId: string, upn: string): { deletedRuns: number } | null {
-    const runIds = db.listRunIdsForThread(threadId, upn)
+  async purgeThread(threadId: string, upn: string): Promise<{ deletedRuns: number } | null> {
+    const runIds = await db.listRunIdsForThread(threadId, upn)
     for (const runId of runIds) {
       this.cancelRun(runId)
       this.queue.remove(runId)
@@ -521,7 +521,7 @@ export class AgentOrchestrator {
       this.activeRuns.delete(runId)
       if (workspace) void cleanupRunWorkspace(workspace).catch((err: unknown) => { console.error("[mia]", err) })
     }
-    return db.deleteThreadAndRuns(threadId, upn)
+    return await db.deleteThreadAndRuns(threadId, upn)
   }
 
   // ── Private: delegate to run-executor ────────────────────────

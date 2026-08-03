@@ -1,7 +1,11 @@
 import { configureAgent, type AgentHost } from "@mia/agent"
-import { configurePlanStore, createDbPublishedSyncDefinitionRegistry } from "@mia/sync"
+import {
+  configurePlanStore,
+  createDbPublishedSyncDefinitionRegistry,
+  listFreezeWindows,
+} from "@mia/sync"
 import { seedDefaultPoliciesIfMissing } from "../api/policies/service/policy-seeder.js"
-import { listFreezeWindowDefinitionsForTenant } from "../infra/persistence/index.js"
+import { refreshFreezeWindowRegistry } from "../infra/persistence/index.js"
 import type { BootHostDeps } from "../ports/orchestration.js"
 import {
   createServerWorkspaceRef,
@@ -9,9 +13,9 @@ import {
   type ServerWorkspaceRef
 } from "./server-workspace.js"
 import { resolveSyncPlansDir } from "../infra/persistence/server-data-dir.js"
-import { entityNeedsRepublish } from "../api/sync/service/definitions.js"
+import { entityNeedsRepublishCached, refreshEntityNeedsRepublishCache } from "../api/sync/service/definitions.js"
 
-import { loadPublishedBundleFromSqlite } from "./published-sync-bundle.js"
+import { loadPublishedBundleFromSqliteCached } from "./published-sync-bundle.js"
 import { projectRoot } from "./paths.js"
 import { configureSandbox, type SandboxRuntime } from "../adapters/agent/shell.js"
 import {
@@ -37,7 +41,7 @@ export interface ServerContext {
   readonly sandbox: SandboxRuntime
   readonly bootHost: AgentHost
   readonly mssqlSummary: string
-  readonly syncEnvironments: ReturnType<typeof loadBootSyncEnvironments>
+  readonly syncEnvironments: Awaited<ReturnType<typeof loadBootSyncEnvironments>>
 }
 
 function logSyncEnvironments(syncEnvironments: ServerContext["syncEnvironments"]): void {
@@ -58,11 +62,13 @@ export async function createServerContext(): Promise<ServerContext> {
 
   // Connectors DB is the source of truth for SQL Server (and other) connections.
   // Empty DB seeds once from deploy/connectors/connectors.json when present.
-  const connectors = loadPersistedConnectors(projectRoot)
+  const connectors = await loadPersistedConnectors(projectRoot)
   const mssqlConfigs = mssqlConfigsFromConnectors(connectors.connectors, projectRoot)
   const mssqlDefaultConnectionName = process.env["MSSQL_DEFAULT_CONNECTION"] ?? null
 
-  const syncEnvironments = loadBootSyncEnvironments(projectRoot, mssqlConfigs)
+  const syncEnvironments = await loadBootSyncEnvironments(projectRoot, mssqlConfigs)
+  await refreshFreezeWindowRegistry()
+  await refreshEntityNeedsRepublishCache(projectRoot)
   const syncEventSink = createSyncEventSink()
   const syncRunSink = createSyncRunSink()
 
@@ -85,12 +91,12 @@ export async function createServerContext(): Promise<ServerContext> {
       environments: { items: syncEnvironments.environments },
       project: {
         dbProjectRoot: projectRoot,
-        publishedDefinitions: createDbPublishedSyncDefinitionRegistry(loadPublishedBundleFromSqlite),
+        publishedDefinitions: createDbPublishedSyncDefinitionRegistry(loadPublishedBundleFromSqliteCached),
         publishReadiness: {
-          entityNeedsRepublish: (entityId) => entityNeedsRepublish(projectRoot, entityId),
+          entityNeedsRepublish: entityNeedsRepublishCached,
         },
       },
-      governance: { freezeWindowsReader: () => listFreezeWindowDefinitionsForTenant() },
+      governance: { freezeWindowsReader: listFreezeWindows },
       warehousePools,
     }
   })
@@ -120,7 +126,7 @@ export async function createServerContext(): Promise<ServerContext> {
     console.log("Connectors: none — add from platform menu → Connectors")
   }
   console.log(`MSSQL databases (from connectors): ${mssqlSummary}`)
-  seedDefaultPoliciesIfMissing(projectRoot)
+  await seedDefaultPoliciesIfMissing(projectRoot)
   configurePlanStore(bootHost, resolveSyncPlansDir())
 
   return {

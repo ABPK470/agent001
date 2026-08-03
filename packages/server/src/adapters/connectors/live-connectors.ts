@@ -97,11 +97,11 @@ function loadFromSeedFile(projectRoot: string, relPath: string): Connector[] {
   }))
 }
 
-export function loadPersistedConnectors(
+export async function loadPersistedConnectors(
   projectRoot: string,
   relPath = DEFAULT_SEED_PATH,
-): PersistedConnectorLoad {
-  const persistedRows = db.listConnectors()
+): Promise<PersistedConnectorLoad> {
+  const persistedRows = await db.listConnectors()
   if (persistedRows.length > 0) {
     const connectors = persistedRows.map(parseRow)
     return { connectors, source: "db", seeded: false, summary: renderSummary(connectors) }
@@ -109,7 +109,7 @@ export function loadPersistedConnectors(
 
   const connectors = loadFromSeedFile(projectRoot, relPath)
   for (const connector of connectors) {
-    db.saveConnector(serialiseConnector(connector, null))
+    await db.saveConnector(serialiseConnector(connector, null))
   }
   return {
     connectors,
@@ -124,11 +124,11 @@ export function loadPersistedConnectors(
  * to an mssql connector id/name. Call **after** both connectors and
  * environments have been loaded/seeded (first boot otherwise finds no env rows).
  */
-export function linkSyncEnvironmentConnectorIds(): void {
-  const envRows = db.listSyncEnvironments()
+export async function linkSyncEnvironmentConnectorIds(): Promise<void> {
+  const envRows = await db.listSyncEnvironments()
   if (envRows.length === 0) return
 
-  const connectorRows = db.listConnectors().filter((row) => row.kind === "mssql")
+  const connectorRows = (await db.listConnectors()).filter((row) => row.kind === "mssql")
   const connectorByKey = new Map<string, string>()
   for (const row of connectorRows) {
     connectorByKey.set(row.id.toLowerCase(), row.id)
@@ -156,7 +156,7 @@ export function linkSyncEnvironmentConnectorIds(): void {
     if (!matchId) continue
 
     body["connectorId"] = matchId
-    db.saveSyncEnvironment({
+    await db.saveSyncEnvironment({
       ...env,
       body_json: JSON.stringify(body),
       updated_at: now,

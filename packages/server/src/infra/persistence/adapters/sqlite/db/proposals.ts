@@ -28,7 +28,7 @@ import { randomUUID } from "node:crypto"
 import { sql } from "kysely"
 import { getPlatformStore } from "../platform-store.js"
 import { getPlatformDb } from "../../../schema/kysely.js"
-import { runAll, runExec, runGet } from "../../../schema/execute.js"
+import { runAllAsync, runExecAsync, runGetAsync } from "../../../schema/execute-async.js"
 import { platformNow } from "../../../schema/sql-time.js"
 
 // ── proposer_runs ────────────────────────────────────────────────
@@ -41,7 +41,7 @@ export interface CreateProposerRunInput {
   trigger: ProposerRun["trigger"]
 }
 
-export function createProposerRun(input: CreateProposerRunInput): string {
+export async function createProposerRun(input: CreateProposerRunInput): Promise<string> {
   const id = randomUUID()
   const compiled = getPlatformDb()
     .insertInto("proposer_runs")
@@ -59,18 +59,18 @@ export function createProposerRun(input: CreateProposerRunInput): string {
       trigger: input.trigger,
     })
     .compile()
-  runExec(compiled)
+  await runExecAsync(compiled)
   return id
 }
 
-export function markProposerRunRunning(id: string): void {
+export async function markProposerRunRunning(id: string): Promise<void> {
   const compiled = getPlatformDb()
     .updateTable("proposer_runs")
     .set({ status: "running" })
     .where("id", "=", id)
     .where("status", "=", "pending")
     .compile()
-  runExec(compiled)
+  await runExecAsync(compiled)
 }
 
 export interface FinishProposerRunInput {
@@ -81,7 +81,7 @@ export interface FinishProposerRunInput {
   error: string | null
 }
 
-export function finishProposerRun(i: FinishProposerRunInput): void {
+export async function finishProposerRun(i: FinishProposerRunInput): Promise<void> {
   const compiled = getPlatformDb()
     .updateTable("proposer_runs")
     .set({
@@ -95,7 +95,7 @@ export function finishProposerRun(i: FinishProposerRunInput): void {
     })
     .where("id", "=", i.id)
     .compile()
-  runExec(compiled)
+  await runExecAsync(compiled)
 }
 
 export interface ProposerRunRow {
@@ -115,16 +115,16 @@ export interface ProposerRunRow {
   error: string | null
 }
 
-export function getProposerRun(id: string): ProposerRunRow | null {
+export async function getProposerRun(id: string): Promise<ProposerRunRow | null> {
   const compiled = getPlatformDb()
     .selectFrom("proposer_runs")
     .selectAll()
     .where("id", "=", id)
     .compile()
-  return runGet<ProposerRunRow>(compiled) ?? null
+  return await runGetAsync<ProposerRunRow>(compiled) ?? null
 }
 
-export function listProposerRuns(tenantId: string, limit = 50): ProposerRunRow[] {
+export async function listProposerRuns(tenantId: string, limit = 50): Promise<ProposerRunRow[]> {
   const compiled = getPlatformDb()
     .selectFrom("proposer_runs")
     .selectAll()
@@ -132,18 +132,18 @@ export function listProposerRuns(tenantId: string, limit = 50): ProposerRunRow[]
     .orderBy("started_at", "desc")
     .limit(limit)
     .compile()
-  return runAll<ProposerRunRow>(compiled)
+  return await runAllAsync<ProposerRunRow>(compiled)
 }
 
 /** Runs left in pending/running after a crash or restart. */
-export function findStaleProposerRuns(): ProposerRunRow[] {
+export async function findStaleProposerRuns(): Promise<ProposerRunRow[]> {
   const compiled = getPlatformDb()
     .selectFrom("proposer_runs")
     .selectAll()
     .where("status", "in", ["pending", "running"])
     .orderBy("started_at", "asc")
     .compile()
-  return runAll<ProposerRunRow>(compiled)
+  return await runAllAsync<ProposerRunRow>(compiled)
 }
 
 // ── sync_proposals ───────────────────────────────────────────────
@@ -183,13 +183,13 @@ export interface ProposalRow {
  * already-open proposal are skipped (idempotent re-runs).
  * Returns ids of newly-inserted rows.
  */
-export function ingestFindings(
+export async function ingestFindings(
   tenantId: string,
   runId: string,
   findings: readonly ProposerFinding[]
-): string[] {
+): Promise<string[]> {
   const inserted: string[] = []
-  getPlatformStore().transaction(() => {
+  await getPlatformStore().transactionAsync(async () => {
     for (const f of findings) {
       const findOpen = getPlatformDb()
         .selectFrom("sync_proposals")
@@ -199,7 +199,7 @@ export function ingestFindings(
         .where("status", "in", ["open", "awaiting_approval", "previewed", "snoozed"])
         .limit(1)
         .compile()
-      if (runGet<{ id: string }>(findOpen)) continue
+      if (await runGetAsync<{ id: string }>(findOpen)) continue
 
       const id = randomUUID()
       const ins = getPlatformDb()
@@ -226,7 +226,7 @@ export function ingestFindings(
           last_action_at: platformNow(),
         })
         .compile()
-      runExec(ins)
+      await runExecAsync(ins)
 
       const hist = getPlatformDb()
         .insertInto("sync_proposal_history")
@@ -240,20 +240,20 @@ export function ingestFindings(
           at: platformNow(),
         })
         .compile()
-      runExec(hist)
+      await runExecAsync(hist)
       inserted.push(id)
     }
   })
   return inserted
 }
 
-export function getProposal(id: string): ProposalRow | null {
+export async function getProposal(id: string): Promise<ProposalRow | null> {
   const compiled = getPlatformDb()
     .selectFrom("sync_proposals")
     .selectAll()
     .where("id", "=", id)
     .compile()
-  return runGet<ProposalRow>(compiled) ?? null
+  return await runGetAsync<ProposalRow>(compiled) ?? null
 }
 
 export interface ListProposalsFilter {
@@ -267,7 +267,7 @@ export interface ListProposalsFilter {
   offset?: number
 }
 
-export function listProposals(f: ListProposalsFilter): ProposalRow[] {
+export async function listProposals(f: ListProposalsFilter): Promise<ProposalRow[]> {
   let query = getPlatformDb()
     .selectFrom("sync_proposals")
     .selectAll()
@@ -293,17 +293,17 @@ export function listProposals(f: ListProposalsFilter): ProposalRow[] {
     .limit(f.limit ?? 100)
     .offset(f.offset ?? 0)
     .compile()
-  return runAll<ProposalRow>(compiled)
+  return await runAllAsync<ProposalRow>(compiled)
 }
 
-export function countProposalsByStatus(tenantId: string): Record<ProposalStatus, number> {
+export async function countProposalsByStatus(tenantId: string): Promise<Record<ProposalStatus, number>> {
   const compiled = getPlatformDb()
     .selectFrom("sync_proposals")
     .select(["status", sql<number>`count(*)`.as("n")])
     .where("tenant_id", "=", tenantId)
     .groupBy("status")
     .compile()
-  const rows = runAll<{ status: ProposalStatus; n: number }>(compiled)
+  const rows = await runAllAsync<{ status: ProposalStatus; n: number }>(compiled)
   const out: Partial<Record<ProposalStatus, number>> = {}
   for (const r of rows) out[r.status] = Number(r.n)
   for (const s of Object.values(ProposalStatus)) if (out[s] === undefined) out[s] = 0
@@ -312,7 +312,7 @@ export function countProposalsByStatus(tenantId: string): Record<ProposalStatus,
 
 // ── annotation + ranking persistence ────────────────────────────
 
-export function saveAnnotation(id: string, annotation: RiskAnnotation, failedOpen: boolean): void {
+export async function saveAnnotation(id: string, annotation: RiskAnnotation, failedOpen: boolean): Promise<void> {
   const compiled = getPlatformDb()
     .updateTable("sync_proposals")
     .set({
@@ -323,16 +323,16 @@ export function saveAnnotation(id: string, annotation: RiskAnnotation, failedOpe
     })
     .where("id", "=", id)
     .compile()
-  runExec(compiled)
+  await runExecAsync(compiled)
 }
 
-export function saveRankScore(id: string, score: number): void {
+export async function saveRankScore(id: string, score: number): Promise<void> {
   const compiled = getPlatformDb()
     .updateTable("sync_proposals")
     .set({ rank_score: score })
     .where("id", "=", id)
     .compile()
-  runExec(compiled)
+  await runExecAsync(compiled)
 }
 
 // ── lifecycle transitions ───────────────────────────────────────
@@ -348,12 +348,12 @@ export interface UpdateProposalStatusInput {
   supersededBy?: string | null
 }
 
-export function updateProposalStatus(i: UpdateProposalStatusInput): ProposalRow {
-  const row = getProposal(i.id)
+export async function updateProposalStatus(i: UpdateProposalStatusInput): Promise<ProposalRow> {
+  const row = await getProposal(i.id)
   if (!row) throw new Error(`Proposal not found: ${i.id}`)
   assertProposalTransition(row.status, i.to)
 
-  getPlatformStore().transaction(() => {
+  await getPlatformStore().transactionAsync(async () => {
     const upd = getPlatformDb()
       .updateTable("sync_proposals")
       .set({
@@ -368,7 +368,7 @@ export function updateProposalStatus(i: UpdateProposalStatusInput): ProposalRow 
       })
       .where("id", "=", i.id)
       .compile()
-    runExec(upd)
+    await runExecAsync(upd)
 
     const hist = getPlatformDb()
       .insertInto("sync_proposal_history")
@@ -382,9 +382,9 @@ export function updateProposalStatus(i: UpdateProposalStatusInput): ProposalRow 
         at: platformNow(),
       })
       .compile()
-    runExec(hist)
+    await runExecAsync(hist)
   })
-  return getProposal(i.id)!
+  return (await getProposal(i.id))!
 }
 
 export interface ProposalHistoryRow {
@@ -398,7 +398,7 @@ export interface ProposalHistoryRow {
   at: string
 }
 
-export function listProposalHistory(id: string): ProposalHistoryRow[] {
+export async function listProposalHistory(id: string): Promise<ProposalHistoryRow[]> {
   const compiled = getPlatformDb()
     .selectFrom("sync_proposal_history")
     .selectAll()
@@ -406,7 +406,7 @@ export function listProposalHistory(id: string): ProposalHistoryRow[] {
     .orderBy("at", "asc")
     .orderBy("id", "asc")
     .compile()
-  return runAll<ProposalHistoryRow>(compiled)
+  return await runAllAsync<ProposalHistoryRow>(compiled)
 }
 
 // ── parse helpers (DB row → domain) ─────────────────────────────

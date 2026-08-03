@@ -464,7 +464,7 @@ export const PER_RUN_FACTORIES: PerRunToolFactory[] = [
         try {
           // Path 1: explicit evidence-tag lookup.
           if (payload.runId && payload.toolCallId) {
-            const row = getToolResult(payload.runId, payload.toolCallId)
+            const row = await getToolResult(payload.runId, payload.toolCallId)
             if (!row)
               return {
                 ok: false,
@@ -487,7 +487,7 @@ export const PER_RUN_FACTORIES: PerRunToolFactory[] = [
           }
           const limit = Math.abs(payload.turn ?? -1)
           const toolNames = payload.toolName ? [payload.toolName] : undefined
-          const rows = loadRecentToolResultsForThread({
+          const rows = await loadRecentToolResultsForThread({
             threadId: ctx.threadId,
             upn: ctx.upn,
             limit: Math.max(limit, 25),

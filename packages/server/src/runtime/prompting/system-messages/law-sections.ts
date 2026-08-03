@@ -88,7 +88,7 @@ export async function buildLawSections(ctx: BuildContext): Promise<Message[]> {
   const messages: Message[] = []
   const { opts, runId, goal, decision, syncOperationIntent, syncDriftIntent } = ctx
 
-  const effectiveConnection = opts.host ? resolveEffectiveMssqlConnection(opts.host, goal) : "default"
+  const effectiveConnection = opts.host ? await resolveEffectiveMssqlConnection(opts.host, goal) : "default"
 
   try {
     const catalog = opts.host ? getCatalog(opts.host, effectiveConnection) : null

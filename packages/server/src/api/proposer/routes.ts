@@ -34,7 +34,7 @@ export function registerProposerRoutes(app: FastifyInstance, deps: ProposerRoute
     }
     const tenantId = resolveTenant(req)
     const limit = Math.min(500, Math.max(1, Number(req.query.limit) || 50))
-    return db.listProposerRuns(tenantId, limit)
+    return await db.listProposerRuns(tenantId, limit)
   })
 
   app.post<{ Body: { source: string; target: string } }>("/api/proposer/run", async (req, reply) => {
@@ -49,7 +49,7 @@ export function registerProposerRoutes(app: FastifyInstance, deps: ProposerRoute
     }
     const tenantId = resolveTenant(req)
     const envPair = { source, target }
-    const runId = db.createProposerRun({
+    const runId = await db.createProposerRun({
       tenantId,
       source,
       target,
@@ -79,7 +79,7 @@ export function registerProposerRoutes(app: FastifyInstance, deps: ProposerRoute
       return { error: "admin only" }
     }
     const runId = req.params.id
-    const row = db.getProposerRun(runId)
+    const row = await db.getProposerRun(runId)
     if (!row || (row.status !== "running" && row.status !== "pending")) {
       reply.code(404)
       return { error: "No active run to cancel" }
@@ -88,7 +88,7 @@ export function registerProposerRoutes(app: FastifyInstance, deps: ProposerRoute
     const aborted = cancelOperation("proposer.run", runId)
     clearLlmInteractionForOperation("proposer.run", runId)
     if (!aborted) {
-      db.finishProposerRun({
+      await db.finishProposerRun({
         id: runId,
         status: "cancelled",
         counts: { scanned: row.scanned, produced: row.produced, errors: row.errors },
@@ -122,7 +122,7 @@ export function registerProposerRoutes(app: FastifyInstance, deps: ProposerRoute
       return { error: "admin only" }
     }
     const tenantId = resolveTenant(req)
-    const rows = db.listProposals({
+    const rows = await db.listProposals({
       tenantId,
       status: req.query.status?.split(",") as ProposalStatus[] | undefined,
       riskTier: req.query.riskTier?.split(",") as RiskTier[] | undefined,
@@ -138,12 +138,12 @@ export function registerProposerRoutes(app: FastifyInstance, deps: ProposerRoute
       reply.code(403)
       return { error: "admin only" }
     }
-    const row = db.getProposal(req.params.id)
+    const row = await db.getProposal(req.params.id)
     if (!row) {
       reply.code(404)
       return { error: "proposal not found" }
     }
-    return { ...materialiseProposal(row), history: db.listProposalHistory(req.params.id) }
+    return { ...materialiseProposal(row), history: await db.listProposalHistory(req.params.id) }
   })
 
   app.post<{
@@ -161,12 +161,12 @@ export function registerProposerRoutes(app: FastifyInstance, deps: ProposerRoute
       return { error: "admin only" }
     }
     try {
-      const before = db.getProposal(req.params.id)
+      const before = await db.getProposal(req.params.id)
       if (!before) {
         reply.code(404)
         return { error: "proposal not found" }
       }
-      const row = db.updateProposalStatus({
+      const row = await db.updateProposalStatus({
         id: req.params.id,
         to: req.body.to,
         actor: req.session.upn,
@@ -191,7 +191,7 @@ export function registerProposerRoutes(app: FastifyInstance, deps: ProposerRoute
       reply.code(403)
       return { error: "admin only" }
     }
-    return listSchedules(resolveTenant(req))
+    return await listSchedules(resolveTenant(req))
   })
   app.post<{ Body: { source: string; target: string; cron: string; enabled?: boolean } }>(
     "/api/proposer/schedules",
@@ -201,7 +201,7 @@ export function registerProposerRoutes(app: FastifyInstance, deps: ProposerRoute
         return { error: "admin only" }
       }
       try {
-        const row = upsertSchedule({
+        const row = await upsertSchedule({
           tenantId: resolveTenant(req),
           source: req.body.source,
           target: req.body.target,
@@ -233,7 +233,7 @@ export function registerProposerRoutes(app: FastifyInstance, deps: ProposerRoute
         reply.code(403)
         return { error: "admin only" }
       }
-      deleteSchedule(req.params.tenant, req.params.source, req.params.target)
+      await deleteSchedule(req.params.tenant, req.params.source, req.params.target)
       broadcast({
         type: EventType.SyncProposerScheduleDeleted,
         data: {

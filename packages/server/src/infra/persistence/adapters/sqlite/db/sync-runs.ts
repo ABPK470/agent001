@@ -11,9 +11,9 @@ import type { SelectQueryBuilder } from "kysely"
 import { sql } from "kysely"
 import { requireSyncRunActorUpn } from "../../../sync-plan-actor.js"
 import { rememberPlanOwner } from "../../../../../ports/run-owner-index.js"
-import { runAll, runExec, runGet } from "../../../schema/execute.js"
+import { runAllAsync, runExecAsync, runGetAsync } from "../../../schema/execute-async.js"
 import { platformNow } from "../../../schema/sql-time.js"
-import { getRowByKeys, upsertRow } from "../../../schema/upsert.js"
+import { getRowByKeysAsync, upsertRowAsync } from "../../../schema/upsert.js"
 import { getPlatformDb } from "../../../schema/kysely.js"
 import type { PlatformDatabase } from "../../../schema/tables.js"
 
@@ -70,15 +70,15 @@ export interface RecordSyncRunStartInput {
   previewTotals: unknown
 }
 
-export function recordSyncRunStart(i: RecordSyncRunStartInput): void {
+export async function recordSyncRunStart(i: RecordSyncRunStartInput): Promise<void> {
   const actorUpn = requireSyncRunActorUpn(i.actorUpn, "recordSyncRunStart")
   const c = asCounts(i.previewTotals)
   const now = platformNow()
-  const existing = getRowByKeys<{ entity_display_name: string | null }>("sync_runs", {
+  const existing = await getRowByKeysAsync<{ entity_display_name: string | null }>("sync_runs", {
     plan_id: i.planId,
   })
   const displayName = i.entityDisplayName ?? existing?.entity_display_name ?? null
-  upsertRow({
+  await upsertRowAsync({
     table: "sync_runs",
     keys: { plan_id: i.planId },
     insert: {
@@ -133,7 +133,7 @@ export interface RecordSyncRunFinishInput {
   durationMs: number
 }
 
-export function recordSyncRunFinish(i: RecordSyncRunFinishInput): void {
+export async function recordSyncRunFinish(i: RecordSyncRunFinishInput): Promise<void> {
   if (
     !isSyncRunStatus(i.status) ||
     (i.status !== SyncRunStatus.Success &&
@@ -161,7 +161,7 @@ export function recordSyncRunFinish(i: RecordSyncRunFinishInput): void {
       })
       .where("plan_id", "=", i.planId)
       .compile()
-    runExec(compiled)
+    await runExecAsync(compiled)
     return
   }
 
@@ -175,17 +175,17 @@ export function recordSyncRunFinish(i: RecordSyncRunFinishInput): void {
     })
     .where("plan_id", "=", i.planId)
     .compile()
-  runExec(compiled)
+  await runExecAsync(compiled)
 }
 
-export function listSyncRuns(limit = 50): SyncRunRow[] {
+export async function listSyncRuns(limit = 50): Promise<SyncRunRow[]> {
   const compiled = getPlatformDb()
     .selectFrom("sync_runs")
     .selectAll()
     .orderBy("started_at", "desc")
     .limit(limit)
     .compile()
-  return runAll<SyncRunRow>(compiled)
+  return await runAllAsync<SyncRunRow>(compiled)
 }
 
 export type SyncRunHistorySort =
@@ -278,16 +278,16 @@ function applySyncRunHistoryOrder(
   }
 }
 
-export function countSyncRuns(filters: SyncRunHistoryFilters = {}): number {
+export async function countSyncRuns(filters: SyncRunHistoryFilters = {}): Promise<number> {
   const compiled = applySyncRunHistoryFilters(
     getPlatformDb().selectFrom("sync_runs").select(sql<number>`count(1)`.as("c")),
     filters,
   ).compile()
-  const row = runGet<{ c: number }>(compiled)
+  const row = await runGetAsync<{ c: number }>(compiled)
   return row?.c ?? 0
 }
 
-export function listSyncRunsPaginated(input: ListSyncRunsPaginatedInput): SyncRunRow[] {
+export async function listSyncRunsPaginated(input: ListSyncRunsPaginatedInput): Promise<SyncRunRow[]> {
   const page = Math.max(1, input.page)
   const pageSize = Math.max(1, input.pageSize)
   const offset = (page - 1) * pageSize
@@ -298,16 +298,16 @@ export function listSyncRunsPaginated(input: ListSyncRunsPaginatedInput): SyncRu
     .limit(pageSize)
     .offset(offset)
     .compile()
-  return runAll<SyncRunRow>(compiled)
+  return await runAllAsync<SyncRunRow>(compiled)
 }
 
-export function getSyncRun(planId: string): SyncRunRow | undefined {
+export async function getSyncRun(planId: string): Promise<SyncRunRow | undefined> {
   const compiled = getPlatformDb()
     .selectFrom("sync_runs")
     .selectAll()
     .where("plan_id", "=", planId)
     .compile()
-  return runGet<SyncRunRow>(compiled)
+  return await runGetAsync<SyncRunRow>(compiled)
 }
 
 /**
@@ -320,7 +320,7 @@ export function getSyncRun(planId: string): SyncRunRow | undefined {
  *   `recordSyncRunFinish` when the plan is later executed.
  * - Stores a complete JSON snapshot of the plan in `plan_json`.
  */
-export function recordSyncRunPreview(i: {
+export async function recordSyncRunPreview(i: {
   planId: string
   entityType: string
   entityId: string | number
@@ -330,16 +330,16 @@ export function recordSyncRunPreview(i: {
   actorUpn: string | null
   previewTotals: unknown
   planJson: string
-}): void {
+}): Promise<void> {
   const actorUpn = requireSyncRunActorUpn(i.actorUpn, "recordSyncRunPreview")
   const c = asCounts(i.previewTotals)
   // Don't clobber an in-progress / completed run with a "preview" status.
   // On conflict only overwrite plan_json + preview metadata; leave status/timestamps.
-  const existing = getRowByKeys<{ entity_display_name: string | null }>("sync_runs", {
+  const existing = await getRowByKeysAsync<{ entity_display_name: string | null }>("sync_runs", {
     plan_id: i.planId,
   })
   const displayName = i.entityDisplayName ?? existing?.entity_display_name ?? null
-  upsertRow({
+  await upsertRowAsync({
     table: "sync_runs",
     keys: { plan_id: i.planId },
     insert: {
@@ -370,12 +370,12 @@ export function recordSyncRunPreview(i: {
 }
 
 /** Re-hydrate the full plan body for a given planId, or null if absent. */
-export function getSyncRunPlanJson(planId: string): string | null {
+export async function getSyncRunPlanJson(planId: string): Promise<string | null> {
   const compiled = getPlatformDb()
     .selectFrom("sync_runs")
     .select("plan_json")
     .where("plan_id", "=", planId)
     .compile()
-  const row = runGet<{ plan_json: string | null }>(compiled)
+  const row = await runGetAsync<{ plan_json: string | null }>(compiled)
   return row?.plan_json ?? null
 }

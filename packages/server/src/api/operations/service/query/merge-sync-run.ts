@@ -34,11 +34,11 @@ function phaseFromPipeline(
   }
 }
 
-function buildSyncRunFromParts(
+async function buildSyncRunFromParts(
   planId: string,
   preview: OperationPipeline | undefined,
   execute: OperationPipeline | undefined
-): OperationPipeline {
+): Promise<OperationPipeline> {
   const phases: OperationActivity[] = []
   if (preview) phases.push(phaseFromPipeline("phase:preview", "Preview", preview))
   if (execute) phases.push(phaseFromPipeline("phase:execute", "Execute", execute))
@@ -46,7 +46,7 @@ function buildSyncRunFromParts(
   const primary = execute ?? preview!
   const startedAt = preview?.startedAt ?? execute!.startedAt
   const endedAt = execute?.endedAt ?? preview?.endedAt ?? null
-  const meta = db.getSyncRun?.(planId)
+  const meta = await db.getSyncRun?.(planId)
 
   let status: OperationStatus = primary.status
   if (preview && execute) {
@@ -86,7 +86,7 @@ function buildSyncRunFromParts(
 }
 
 /** Collapse paired preview/execute rows into unified sync-run pipelines. */
-export function mergeSyncPlanPipelines(operations: OperationPipeline[]): OperationPipeline[] {
+export async function mergeSyncPlanPipelines(operations: OperationPipeline[]): Promise<OperationPipeline[]> {
   const groups = new Map<string, { preview?: OperationPipeline; execute?: OperationPipeline }>()
   const rest: OperationPipeline[] = []
 
@@ -105,7 +105,7 @@ export function mergeSyncPlanPipelines(operations: OperationPipeline[]): Operati
   const merged: OperationPipeline[] = [...rest]
   for (const [planId, { preview, execute }] of groups) {
     if (!preview && !execute) continue
-    merged.push(buildSyncRunFromParts(planId, preview, execute))
+    merged.push(await buildSyncRunFromParts(planId, preview, execute))
   }
 
   merged.sort((a, b) => b.startedAt.localeCompare(a.startedAt))

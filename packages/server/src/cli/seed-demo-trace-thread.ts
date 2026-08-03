@@ -27,7 +27,7 @@ const upnArg = args.find((a) => a.startsWith("--upn="))?.slice(6)
 
 openDatabase()
 
-const users = listUsers()
+const users = await listUsers()
 const upn = (upnArg ?? users[0]?.upn ?? "").toLowerCase()
 if (!upn) {
   console.error("No users in the database. Log in once, then re-run this script.")
@@ -1292,7 +1292,7 @@ function persistRun(opts: {
   })
 }
 
-const thread = createThread(upn, "Demo Trace — Direct / Planner / Kitchen sink")
+const thread = await createThread(upn, "Demo Trace — Direct / Planner / Kitchen sink")
 touchThread(thread.id)
 
 const run1 = randomUUID()

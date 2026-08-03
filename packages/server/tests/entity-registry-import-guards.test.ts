@@ -199,11 +199,11 @@ describe("catalog snapshot import guards", () => {
     expect(isDegradedLegacyFallbackPredicate(predicate!)).toBe(false)
   })
 
-  it("bulk catalog re-import never introduces degraded IN-list predicates", () => {
+  it("bulk catalog re-import never introduces degraded IN-list predicates", async () => {
     const snapshot = buildDeployCatalogSnapshot({ tenantId: TENANT, includeRetiredEntities: true })
 
-    for (const row of db.listEntityDefinitions(TENANT)) {
-      db.retireEntityDefinition(TENANT, row.id, "test")
+    for (const row of await db.listEntityDefinitions(TENANT)) {
+      await db.retireEntityDefinition(TENANT, row.id, "test")
     }
 
     const applied = applyDeployCatalogSnapshot({
@@ -214,7 +214,7 @@ describe("catalog snapshot import guards", () => {
     })
     expect(applied.applied).toBe(true)
 
-    for (const entity of db.listEntityDefinitions(TENANT)) {
+    for (const entity of await db.listEntityDefinitions(TENANT)) {
       for (const table of entity.tables) {
         if (table.scope.kind !== "sql") continue
         expect(

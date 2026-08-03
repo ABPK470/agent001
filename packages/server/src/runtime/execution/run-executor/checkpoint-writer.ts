@@ -50,10 +50,10 @@ export interface WriteCheckpointInput {
  * (e.g. a failure before any tool call completed); such calls are a no-op so
  * a stale/empty checkpoint is never written over a real one.
  */
-export function writeRunCheckpoint(input: WriteCheckpointInput): void {
+export async function writeRunCheckpoint(input: WriteCheckpointInput): Promise<void> {
   if (input.messages.length === 0) return
   try {
-    db.saveCheckpoint({
+    await db.saveCheckpoint({
       run_id: input.runId,
       messages: JSON.stringify(input.messages),
       iteration: input.iteration,

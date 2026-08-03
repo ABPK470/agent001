@@ -46,7 +46,7 @@ export function registerEventRoutes(app: FastifyInstance): void {
       ? req.query.until
       : undefined
 
-    const rows = db.listEvents({
+    const rows = await db.listEvents({
       limit: Math.min(limit * 3, 6000),
       before: req.query.before,
       after: req.query.after,
@@ -56,15 +56,20 @@ export function registerEventRoutes(app: FastifyInstance): void {
       excludeTypes
     })
 
-    const events = rows
+    const candidateEvents = rows
       .map((event) => ({
         id: event.id,
         type: event.type,
         data: parseBoundaryJson(event.data) as Record<string, unknown>,
         timestamp: event.created_at
       }))
-      .filter((event) => eventMatchesViewingAs(event.data, viewingAsUpn))
-      .slice(0, limit)
+    const visible = await Promise.all(
+      candidateEvents.map(async (event) => ({
+        event,
+        visible: await eventMatchesViewingAs(event.data, viewingAsUpn)
+      }))
+    )
+    const events = visible.filter(({ visible }) => visible).map(({ event }) => event).slice(0, limit)
 
     // Newest-first from DB; oldestTimestamp is the cursor for the next older page.
     const oldestTimestamp = events.length > 0 ? events[events.length - 1]!.timestamp : null
@@ -80,7 +85,7 @@ export function registerEventRoutes(app: FastifyInstance): void {
   })
 
   app.get("/api/webhooks/drains", async () => {
-    const drains = db.listWebhookDrains()
+    const drains = await db.listWebhookDrains()
     return drains.map((drain) => ({
       id: drain.id,
       url: drain.url,
@@ -119,7 +124,7 @@ export function registerEventRoutes(app: FastifyInstance): void {
         updated_at: now
       }
 
-      db.saveWebhookDrain(drain)
+      await db.saveWebhookDrain(drain)
       reply.code(201)
       return {
         id: drain.id,
@@ -136,7 +141,7 @@ export function registerEventRoutes(app: FastifyInstance): void {
     Params: { id: string }
     Body: { url?: string; secret?: string; eventFilters?: string[]; enabled?: boolean }
   }>("/api/webhooks/drains/:id", async (req, reply) => {
-    const existing = db.getWebhookDrain(req.params.id)
+    const existing = await db.getWebhookDrain(req.params.id)
     if (!existing) {
       reply.code(404)
       return { error: "Drain not found" }
@@ -160,7 +165,7 @@ export function registerEventRoutes(app: FastifyInstance): void {
       updated_at: new Date().toISOString()
     }
 
-    db.saveWebhookDrain(updated)
+    await db.saveWebhookDrain(updated)
     return {
       id: updated.id,
       url: updated.url,
@@ -172,12 +177,12 @@ export function registerEventRoutes(app: FastifyInstance): void {
   })
 
   app.delete<{ Params: { id: string } }>("/api/webhooks/drains/:id", async (req, reply) => {
-    const existing = db.getWebhookDrain(req.params.id)
+    const existing = await db.getWebhookDrain(req.params.id)
     if (!existing) {
       reply.code(404)
       return { error: "Drain not found" }
     }
-    db.deleteWebhookDrain(req.params.id)
+    await db.deleteWebhookDrain(req.params.id)
     return { ok: true }
   })
 
@@ -188,7 +193,7 @@ export function registerEventRoutes(app: FastifyInstance): void {
       reply.code(400)
       return { error: "invalid sql log id" }
     }
-    const row = db.getSyncSqlLog(id)
+    const row = await db.getSyncSqlLog(id)
     if (!row) {
       reply.code(404)
       return { error: "sql log not found" }
@@ -198,7 +203,7 @@ export function registerEventRoutes(app: FastifyInstance): void {
       reply.code(403)
       return { error: "forbidden" }
     }
-    const syncRun = db.getSyncRun(planId)
+    const syncRun = await db.getSyncRun(planId)
     if (!canAccessOwned(viewingAs, syncRun?.actor_upn)) {
       reply.code(403)
       return { error: "forbidden" }

@@ -8,8 +8,11 @@ import { getProposerRun } from "../../../../../infra/persistence/proposals.js"
 import type { OperationActivity, OperationEvent, OperationPipeline } from "../types.js"
 import { durationOf, inferPipelineStatus, numField, strField } from "../utils.js"
 
-export function buildProposerRunPipeline(runId: string, events: OperationEvent[]): OperationPipeline {
-  const row = getProposerRun(runId)
+export async function buildProposerRunPipeline(
+  runId: string,
+  events: OperationEvent[],
+): Promise<OperationPipeline> {
+  const row = await getProposerRun(runId)
   const startedAt = events[0]?.timestamp ?? row?.started_at ?? new Date().toISOString()
   const lastEv = events[events.length - 1]
   const startedEvent = events.find((e) => e.type === EventType.SyncProposerRunStarted)

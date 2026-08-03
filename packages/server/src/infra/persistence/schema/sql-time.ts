@@ -1,16 +1,22 @@
 /**
- * Dialect-aware SQL time fragments for platform repos.
+ * Dialect-aware time helpers for platform repos.
  *
- * Prefer ISO strings from JS (`new Date().toISOString()`) when the value
- * is application-owned. Use {@link platformNow} only when the database
- * should stamp "now" in the statement body.
+ * {@link platformNow} returns an application-owned ISO string (portable bind
+ * value for TEXT/datetime columns). Use {@link platformNowSql} /
+ * {@link coalescePlatformNow} / {@link platformNowMinusSeconds} only when the
+ * SQL body itself must express "now".
  */
 
 import { sql } from "kysely"
 import { getPlatformDbKind } from "./kysely.js"
 
-/** Current UTC timestamp expression for the bound platform dialect. */
-export function platformNow() {
+/** Current UTC timestamp as an ISO string (bind value — all dialects). */
+export function platformNow(): string {
+  return new Date().toISOString()
+}
+
+/** Current UTC timestamp SQL expression for the bound platform dialect. */
+export function platformNowSql() {
   const kind = getPlatformDbKind()
   if (kind === "mssql") return sql`SYSUTCDATETIME()`
   if (kind === "postgres") return sql`(NOW() AT TIME ZONE 'utc')`
@@ -19,7 +25,7 @@ export function platformNow() {
 
 /** `coalesce(<column>, now)` for the bound platform dialect. */
 export function coalescePlatformNow(column: string) {
-  return sql`coalesce(${sql.ref(column)}, ${platformNow()})`
+  return sql`coalesce(${sql.ref(column)}, ${platformNowSql()})`
 }
 
 /**

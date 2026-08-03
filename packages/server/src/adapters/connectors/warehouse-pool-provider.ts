@@ -17,16 +17,19 @@ export function createWarehousePoolProvider(input: {
 }): WarehousePoolProvider {
   const { mssql, postgres } = input
 
-  function dialectOf(connectorId: string): WarehouseDialectKind | undefined {
-    if (mssql.list().some((c) => c.id === connectorId)) return "mssql"
-    if (postgres.list().some((c) => c.id === connectorId)) return "postgres"
+  async function dialectOf(connectorId: string): Promise<WarehouseDialectKind | undefined> {
+    const mssqlList = await mssql.list()
+    if (mssqlList.some((c) => c.id === connectorId)) return "mssql"
+    const pgList = await postgres.list()
+    if (pgList.some((c) => c.id === connectorId)) return "postgres"
     return undefined
   }
 
-  function list(): readonly WarehouseConnectorRef[] {
+  async function list(): Promise<readonly WarehouseConnectorRef[]> {
+    const [mssqlList, pgList] = await Promise.all([mssql.list(), postgres.list()])
     return [
-      ...mssql.list().map((c) => ({ id: c.id, name: c.name, dialect: "mssql" as const })),
-      ...postgres.list().map((c) => ({
+      ...mssqlList.map((c) => ({ id: c.id, name: c.name, dialect: "mssql" as const })),
+      ...pgList.map((c) => ({
         id: c.id,
         name: c.name,
         dialect: "postgres" as const,
@@ -35,7 +38,7 @@ export function createWarehousePoolProvider(input: {
   }
 
   async function get(connectorId: string): Promise<WarehousePoolHandle> {
-    const kind = dialectOf(connectorId)
+    const kind = await dialectOf(connectorId)
     if (kind === "mssql") {
       const resolved = await mssql.get(connectorId)
       return {
@@ -54,7 +57,7 @@ export function createWarehousePoolProvider(input: {
         knowledge: resolved.knowledge,
       }
     }
-    const available = list()
+    const available = (await list())
       .map((c) => c.id)
       .join(", ")
     throw new Error(
@@ -64,15 +67,17 @@ export function createWarehousePoolProvider(input: {
 
   async function getByName(name: string): Promise<WarehousePoolHandle> {
     const lower = name.toLowerCase()
-    const mssqlHit = mssql.list().find((c) => c.name.toLowerCase() === lower)
+    const mssqlList = await mssql.list()
+    const mssqlHit = mssqlList.find((c) => c.name.toLowerCase() === lower)
     if (mssqlHit) return get(mssqlHit.id)
-    const pgHit = postgres.list().find((c) => c.name.toLowerCase() === lower)
+    const pgList = await postgres.list()
+    const pgHit = pgList.find((c) => c.name.toLowerCase() === lower)
     if (pgHit) return get(pgHit.id)
     if (name === "default") {
-      const first = list()[0]
+      const first = (await list())[0]
       if (first) return get(first.id)
     }
-    const available = list()
+    const available = (await list())
       .map((c) => c.name)
       .join(", ")
     throw new Error(
@@ -90,7 +95,7 @@ export function createWarehousePoolProvider(input: {
   }
 
   async function runWithSyncBudget<T>(connectorKey: string, fn: () => Promise<T>): Promise<T> {
-    const kind = dialectOf(connectorKey)
+    const kind = await dialectOf(connectorKey)
     if (kind === "postgres" && postgres.runWithSyncBudget) {
       return postgres.runWithSyncBudget(connectorKey, fn)
     }

@@ -20,9 +20,9 @@ import { randomBytes, randomUUID } from "node:crypto"
 import type { UpdateObject } from "kysely"
 import type { PlatformDatabase } from "../../../schema/tables.js"
 import { getPlatformDb } from "../../../schema/kysely.js"
-import { runAll, runChanges, runExec, runGet } from "../../../schema/execute.js"
+import { runAllAsync, runChangesAsync, runExecAsync, runGetAsync } from "../../../schema/execute-async.js"
 import { platformNow } from "../../../schema/sql-time.js"
-import { upsertRow } from "../../../schema/upsert.js"
+import { upsertRowAsync } from "../../../schema/upsert.js"
 
 // ── policies ────────────────────────────────────────────────────
 
@@ -53,10 +53,10 @@ export interface ApprovalPolicy {
   bypassRole: string | null
 }
 
-export function upsertApprovalPolicy(p: ApprovalPolicy, actor: string): void {
+export async function upsertApprovalPolicy(p: ApprovalPolicy, actor: string): Promise<void> {
   const approversJson = JSON.stringify(p.approvers)
   const now = platformNow()
-  upsertRow({
+  await upsertRowAsync({
     table: "approval_configs",
     keys: {
       tenant_id: p.tenantId,
@@ -83,7 +83,7 @@ export function upsertApprovalPolicy(p: ApprovalPolicy, actor: string): void {
   })
 }
 
-export function getApprovalPolicy(tenantId: string, targetEnv: string, tier: RiskTier): ApprovalPolicy {
+export async function getApprovalPolicy(tenantId: string, targetEnv: string, tier: RiskTier): Promise<ApprovalPolicy> {
   const compiled = getPlatformDb()
     .selectFrom("approval_configs")
     .selectAll()
@@ -91,7 +91,7 @@ export function getApprovalPolicy(tenantId: string, targetEnv: string, tier: Ris
     .where("target_env", "=", targetEnv)
     .where("risk_tier", "=", tier)
     .compile()
-  const row = runGet<ApprovalPolicyRow>(compiled)
+  const row = await runGetAsync<ApprovalPolicyRow>(compiled)
   if (row) {
     return {
       tenantId: row.tenant_id,
@@ -116,7 +116,7 @@ export function getApprovalPolicy(tenantId: string, targetEnv: string, tier: Ris
   }
 }
 
-export function listApprovalPolicies(tenantId: string): ApprovalPolicy[] {
+export async function listApprovalPolicies(tenantId: string): Promise<ApprovalPolicy[]> {
   const compiled = getPlatformDb()
     .selectFrom("approval_configs")
     .selectAll()
@@ -124,7 +124,7 @@ export function listApprovalPolicies(tenantId: string): ApprovalPolicy[] {
     .orderBy("target_env")
     .orderBy("risk_tier")
     .compile()
-  const rows = runAll<ApprovalPolicyRow>(compiled)
+  const rows = await runAllAsync<ApprovalPolicyRow>(compiled)
   return rows.map((row) => ({
     tenantId: row.tenant_id,
     targetEnv: row.target_env,
@@ -135,18 +135,18 @@ export function listApprovalPolicies(tenantId: string): ApprovalPolicy[] {
   }))
 }
 
-export function deleteApprovalPolicy(
+export async function deleteApprovalPolicy(
   tenantId: string,
   targetEnv: string,
   riskTier: RiskTier
-): boolean {
+): Promise<boolean> {
   const compiled = getPlatformDb()
     .deleteFrom("approval_configs")
     .where("tenant_id", "=", tenantId)
     .where("target_env", "=", targetEnv)
     .where("risk_tier", "=", riskTier)
     .compile()
-  return runChanges(compiled) > 0
+  return await runChangesAsync(compiled) > 0
 }
 
 // ── approvals ────────────────────────────────────────────────────
@@ -194,7 +194,7 @@ export interface CreateApprovalInput {
   planHash: string | null
 }
 
-export function createApproval(i: CreateApprovalInput): ApprovalRow {
+export async function createApproval(i: CreateApprovalInput): Promise<ApprovalRow> {
   const id = randomUUID()
   const expiresAt = new Date(Date.now() + i.ttlMs).toISOString()
   const compiled = getPlatformDb()
@@ -212,25 +212,27 @@ export function createApproval(i: CreateApprovalInput): ApprovalRow {
       plan_hash_at_request: i.planHash,
     })
     .compile()
-  runExec(compiled)
-  return getApproval(id)!
+  await runExecAsync(compiled)
+  const approval = await getApproval(id)
+  if (!approval) throw new Error(`Approval ${id} missing after insert`)
+  return approval
 }
 
-export function getApproval(id: string): ApprovalRow | null {
+export async function getApproval(id: string): Promise<ApprovalRow | null> {
   const compiled = getPlatformDb()
     .selectFrom("sync_approvals")
     .selectAll()
     .where("id", "=", id)
     .compile()
-  return runGet<ApprovalRow>(compiled) ?? null
+  return await runGetAsync<ApprovalRow>(compiled) ?? null
 }
 
-export function listApprovals(filter: {
+export async function listApprovals(filter: {
   tenantId: string
   state?: string
   proposalId?: string
   limit?: number
-}): ApprovalRow[] {
+}): Promise<ApprovalRow[]> {
   let query = getPlatformDb()
     .selectFrom("sync_approvals")
     .selectAll()
@@ -245,10 +247,10 @@ export function listApprovals(filter: {
     .orderBy("requested_at", "desc")
     .limit(filter.limit ?? 500)
     .compile()
-  return runAll<ApprovalRow>(compiled)
+  return await runAllAsync<ApprovalRow>(compiled)
 }
 
-export function findActiveApprovalForProposal(proposalId: string): ApprovalRow | null {
+export async function findActiveApprovalForProposal(proposalId: string): Promise<ApprovalRow | null> {
   const compiled = getPlatformDb()
     .selectFrom("sync_approvals")
     .selectAll()
@@ -257,7 +259,7 @@ export function findActiveApprovalForProposal(proposalId: string): ApprovalRow |
     .orderBy("requested_at", "desc")
     .limit(1)
     .compile()
-  return runGet<ApprovalRow>(compiled) ?? null
+  return await runGetAsync<ApprovalRow>(compiled) ?? null
 }
 
 export class ApprovalError extends Error {
@@ -276,27 +278,27 @@ export interface GrantApprovalInput {
   planHashAtGrant: string | null
 }
 
-function updateApprovalById(
+async function updateApprovalById(
   id: string,
   patch: UpdateObject<PlatformDatabase, "sync_approvals">,
-): void {
+): Promise<void> {
   const compiled = getPlatformDb()
     .updateTable("sync_approvals")
     .set(patch)
     .where("id", "=", id)
     .compile()
-  runExec(compiled)
+  await runExecAsync(compiled)
 }
 
 /** Atomically advance the approval state machine on a grant action. */
-export function grantApproval(i: GrantApprovalInput): ApprovalRow {
-  const row = getApproval(i.approvalId)
+export async function grantApproval(i: GrantApprovalInput): Promise<ApprovalRow> {
+  const row = await getApproval(i.approvalId)
   if (!row) throw new ApprovalError("not_found", `Approval ${i.approvalId} not found`)
   if (row.state !== "pending" && row.state !== "partially_granted") {
     throw new ApprovalError("wrong_state", `Approval is ${row.state}`)
   }
   if (new Date(row.expires_at).getTime() < Date.now()) {
-    updateApprovalById(i.approvalId, { state: "expired" })
+    await updateApprovalById(i.approvalId, { state: "expired" })
     throw new ApprovalError("expired", "Approval window has closed")
   }
   if (i.approver === row.requested_by) {
@@ -307,20 +309,20 @@ export function grantApproval(i: GrantApprovalInput): ApprovalRow {
   }
 
   if (row.policy === "single") {
-    updateApprovalById(i.approvalId, {
+    await updateApprovalById(i.approvalId, {
       state: "granted",
       granted_by_1: i.approver,
       granted_at_1: platformNow(),
     })
   } else if (row.policy === "dual") {
     if (!row.granted_by_1) {
-      updateApprovalById(i.approvalId, {
+      await updateApprovalById(i.approvalId, {
         state: "partially_granted",
         granted_by_1: i.approver,
         granted_at_1: platformNow(),
       })
     } else {
-      updateApprovalById(i.approvalId, {
+      await updateApprovalById(i.approvalId, {
         state: "granted",
         granted_by_2: i.approver,
         granted_at_2: platformNow(),
@@ -328,39 +330,39 @@ export function grantApproval(i: GrantApprovalInput): ApprovalRow {
     }
   } else {
     // 'none' policies should never reach the grant route — guard anyway.
-    updateApprovalById(i.approvalId, { state: "granted" })
+    await updateApprovalById(i.approvalId, { state: "granted" })
   }
-  return getApproval(i.approvalId)!
+  return (await getApproval(i.approvalId))!
 }
 
-export function rejectApproval(approvalId: string, rejector: string, reason: string): ApprovalRow {
-  const row = getApproval(approvalId)
+export async function rejectApproval(approvalId: string, rejector: string, reason: string): Promise<ApprovalRow> {
+  const row = await getApproval(approvalId)
   if (!row) throw new ApprovalError("not_found", `Approval ${approvalId} not found`)
   if (row.state !== "pending" && row.state !== "partially_granted") {
     throw new ApprovalError("wrong_state", `Approval is ${row.state}`)
   }
-  updateApprovalById(approvalId, {
+  await updateApprovalById(approvalId, {
     state: "rejected",
     rejected_by: rejector,
     rejected_at: platformNow(),
     reject_reason: reason,
   })
-  return getApproval(approvalId)!
+  return (await getApproval(approvalId))!
 }
 
-export function bypassApproval(approvalId: string, actor: string, reason: string): ApprovalRow {
-  const row = getApproval(approvalId)
+export async function bypassApproval(approvalId: string, actor: string, reason: string): Promise<ApprovalRow> {
+  const row = await getApproval(approvalId)
   if (!row) throw new ApprovalError("not_found", `Approval ${approvalId} not found`)
   if (row.state === "granted" || row.state === "bypassed") return row
-  updateApprovalById(approvalId, {
+  await updateApprovalById(approvalId, {
     state: "bypassed",
     bypass_by: actor,
     bypass_reason: reason,
   })
-  return getApproval(approvalId)!
+  return (await getApproval(approvalId))!
 }
 
-export function expireDueApprovals(): number {
+export async function expireDueApprovals(): Promise<number> {
   // `expires_at` is stored as a JS ISO-8601 string ("…T…Z"). SQLite's
   // `datetime('now')` returns "YYYY-MM-DD HH:MM:SS" which, under text
   // comparison, sorts *before* any 'T'-shaped ISO string — so a naïve
@@ -373,7 +375,7 @@ export function expireDueApprovals(): number {
     .where("state", "in", ["pending", "partially_granted"])
     .where("expires_at", "<", new Date().toISOString())
     .compile()
-  return runChanges(compiled)
+  return await runChangesAsync(compiled)
 }
 
 // ── one-click tokens ─────────────────────────────────────────────
@@ -392,7 +394,7 @@ export interface IssuedToken {
   expiresAt: string
 }
 
-export function issueApprovalToken(i: IssueTokenInput): IssuedToken {
+export async function issueApprovalToken(i: IssueTokenInput): Promise<IssuedToken> {
   const raw = randomBytes(32).toString("base64url")
   const tokenHash = sha256Hex(hmacSha256Hex(i.secret, raw))
   const expiresAt = new Date(Date.now() + i.ttlMs).toISOString()
@@ -407,7 +409,7 @@ export function issueApprovalToken(i: IssueTokenInput): IssuedToken {
       expires_at: expiresAt,
     })
     .compile()
-  runExec(compiled)
+  await runExecAsync(compiled)
   return { raw, expiresAt }
 }
 
@@ -423,14 +425,14 @@ export interface ConsumedToken {
   issuedTo: string
 }
 
-export function consumeApprovalToken(i: ConsumeTokenInput): ConsumedToken {
+export async function consumeApprovalToken(i: ConsumeTokenInput): Promise<ConsumedToken> {
   const tokenHash = sha256Hex(hmacSha256Hex(i.secret, i.raw))
   const compiled = getPlatformDb()
     .selectFrom("sync_approval_tokens")
     .select(["approval_id", "action", "issued_to", "expires_at", "used_at"])
     .where("token_hash", "=", tokenHash)
     .compile()
-  const row = runGet<{
+  const row = await runGetAsync<{
     approval_id: string
     action: "grant" | "reject"
     issued_to: string
@@ -447,6 +449,6 @@ export function consumeApprovalToken(i: ConsumeTokenInput): ConsumedToken {
     .set({ used_at: platformNow(), used_by: i.by })
     .where("token_hash", "=", tokenHash)
     .compile()
-  runExec(markUsed)
+  await runExecAsync(markUsed)
   return { approvalId: row.approval_id, action: row.action, issuedTo: row.issued_to }
 }

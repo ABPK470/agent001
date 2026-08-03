@@ -86,11 +86,11 @@ describe("sync config — baseline seed + first publish", () => {
     expect(preview().changeCount).toBe(0)
   })
 
-  it("first publish without prior tip commits still produces a stamp", () => {
+  it("first publish without prior tip commits still produces a stamp", async () => {
     ensureInitialSyncCatalogVersion("system")
     const result = publishSyncDefinitionsFromDb(fixture.projectRoot)
     expect(result.definitionCount).toBeGreaterThan(0)
-    const meta = db.getSyncPublishMeta(TENANT)
+    const meta = await db.getSyncPublishMeta(TENANT)
     expect(meta?.catalog_version).toBe(getActiveSyncCatalogVersion(TENANT))
     stampQuiet()
   })
@@ -211,8 +211,8 @@ describe("sync config — boot tip SoT (built-in flows)", () => {
       markerId: "surviveBootMarker",
       kind: "metadataSync",
     })
-    db.syncBuiltInFlowsFromArtifact(fixture.projectRoot, TENANT)
-    const steps = db.parseFlowSteps(db.getSyncFlow(TENANT, "content")!.steps_json)
+    await db.syncBuiltInFlowsFromArtifact(fixture.projectRoot, TENANT)
+    const steps = db.parseFlowSteps((await db.getSyncFlow(TENANT, "content"))!.steps_json)
     expect(steps.some((s) => s.id === "surviveBootMarker")).toBe(true)
     stampPublishPending()
   })
@@ -224,8 +224,8 @@ describe("sync config — boot tip SoT (built-in flows)", () => {
       markerId: "surviveDeploySync",
       kind: "auditCheck",
     })
-    db.syncDeploySyncMetadataFromArtifact(fixture.projectRoot, TENANT)
-    const steps = db.parseFlowSteps(db.getSyncFlow(TENANT, "contract")!.steps_json)
+    await db.syncDeploySyncMetadataFromArtifact(fixture.projectRoot, TENANT)
+    const steps = db.parseFlowSteps((await db.getSyncFlow(TENANT, "contract"))!.steps_json)
     expect(steps.some((s) => s.id === "surviveDeploySync")).toBe(true)
     const p = preview()
     expect(p.catalogNeedsPublish).toBe(true)
@@ -234,7 +234,7 @@ describe("sync config — boot tip SoT (built-in flows)", () => {
 
   it("corrupt kebab tip is repaired from artifact on boot refresh", async () => {
     await bootstrapPublishedCatalog(fixture)
-    db.saveSyncFlow({
+    await db.saveSyncFlow({
       tenant_id: TENANT,
       id: "content",
       label: "Broken",
@@ -246,8 +246,8 @@ describe("sync config — boot tip SoT (built-in flows)", () => {
       updated_at: new Date().toISOString(),
       updated_by: "operator",
     })
-    db.syncBuiltInFlowsFromArtifact(fixture.projectRoot, TENANT)
-    const steps = db.parseFlowSteps(db.getSyncFlow(TENANT, "content")!.steps_json)
+    await db.syncBuiltInFlowsFromArtifact(fixture.projectRoot, TENANT)
+    const steps = db.parseFlowSteps((await db.getSyncFlow(TENANT, "content"))!.steps_json)
     expect(steps.every((s) => !s.kind.includes("-"))).toBe(true)
     expect(steps.some((s) => s.kind === "metadataSync")).toBe(true)
   })
@@ -259,7 +259,7 @@ describe("sync config — boot tip SoT (built-in flows)", () => {
       markerId: "bootThenPublish",
       kind: "metadataSync",
     })
-    db.syncDeploySyncMetadataFromArtifact(fixture.projectRoot, TENANT)
+    await db.syncDeploySyncMetadataFromArtifact(fixture.projectRoot, TENANT)
     stampPublishPending()
     publishSyncDefinitionsFromDb(fixture.projectRoot)
     stampQuiet()
@@ -326,15 +326,15 @@ describe("sync config — zombie tip stamp (version ahead, live matches publish)
     stampPublishPending()
 
     // Revert live flow to published-era content without a new catalog version.
-    const publishedSnapshot = db.getSyncCatalogVersionRow(TENANT, publishedVersion!)
+    const publishedSnapshot = await db.getSyncCatalogVersionRow(TENANT, publishedVersion!)
     expect(publishedSnapshot).toBeTruthy()
     const snap = JSON.parse(publishedSnapshot!.snapshot_json) as {
       syncMetadata?: { flows?: Record<string, { label?: string; description?: string; steps?: unknown[] }> }
     }
     const flow = snap.syncMetadata?.flows?.contract
     expect(flow?.steps).toBeTruthy()
-    const row = db.getSyncFlow(TENANT, "contract")!
-    db.saveSyncFlow({
+    const row = (await db.getSyncFlow(TENANT, "contract"))!
+    await db.saveSyncFlow({
       tenant_id: TENANT,
       id: "contract",
       label: typeof flow!.label === "string" ? flow!.label : row.label,
@@ -367,13 +367,13 @@ describe("sync config — zombie tip stamp (version ahead, live matches publish)
       markerId: "zombieReconcile",
       kind: "metadataSync",
     })
-    const publishedSnapshot = db.getSyncCatalogVersionRow(TENANT, publishedVersion!)!
+    const publishedSnapshot = (await db.getSyncCatalogVersionRow(TENANT, publishedVersion!))!
     const snap = JSON.parse(publishedSnapshot.snapshot_json) as {
       syncMetadata?: { flows?: Record<string, { steps?: unknown[]; label?: string; description?: string }> }
     }
     const flow = snap.syncMetadata?.flows?.content
-    const row = db.getSyncFlow(TENANT, "content")!
-    db.saveSyncFlow({
+    const row = (await db.getSyncFlow(TENANT, "content"))!
+    await db.saveSyncFlow({
       tenant_id: TENANT,
       id: "content",
       label: row.label,
@@ -506,13 +506,13 @@ describe("sync config — classify / status / preview coherence", () => {
     expect(preview().sections.every((s) => s.section !== "environments")).toBe(true)
   })
 
-  it("never-published tip arms Publish with all entities unpublished", () => {
+  it("never-published tip arms Publish with all entities unpublished", async () => {
     ensureInitialSyncCatalogVersion("system")
     // Wipe publish meta by replacing with empty — simulate fresh DB after tip seed.
     // If no publish meta, classify treats tip ahead as needing publish.
     const c = classifyCatalogPublish(fixture.projectRoot, TENANT)
     // Fresh seed may already have no publish meta
-    if (db.getSyncPublishMeta(TENANT) == null) {
+    if (await db.getSyncPublishMeta(TENANT) == null) {
       expect(c.compileNeedsPublish).toBe(true)
       expect(c.compileAffectedEntityIds.length).toBeGreaterThan(0)
     }
@@ -527,14 +527,14 @@ describe("sync config — history vs live tip (preview SoT)", () => {
       markerId: "liveTipSoT",
       kind: "auditCheck",
     })
-    db.syncDeploySyncMetadataFromArtifact(fixture.projectRoot, TENANT)
+    await db.syncDeploySyncMetadataFromArtifact(fixture.projectRoot, TENANT)
     const s = status()
     const p = preview()
     expect(s.catalogNeedsPublish).toBe(true)
     expect(p.catalogNeedsPublish).toBe(true)
     expect(p.changeCount).toBeGreaterThan(0)
     expect(
-      db.parseFlowSteps(db.getSyncFlow(TENANT, "contract")!.steps_json)
+      db.parseFlowSteps((await db.getSyncFlow(TENANT, "contract"))!.steps_json)
         .some((step) => step.id === "liveTipSoT"),
     ).toBe(true)
   })
@@ -635,7 +635,7 @@ describe("sync config — entity tip version drift", () => {
     await bootstrapPublishedCatalog(fixture)
     const entity = db.getEntityDefinition(TENANT, "contract")
     expect(entity).toBeTruthy()
-    db.saveEntityDefinition({
+    await db.saveEntityDefinition({
       tenantId: TENANT,
       def: { ...entity!, version: (entity!.version ?? 1) + 1 },
       actor: "operator",
@@ -650,7 +650,7 @@ describe("sync config — entity tip version drift", () => {
   it("entity bump then Publish clears needsPublish on admin list", async () => {
     await bootstrapPublishedCatalog(fixture)
     const entity = db.getEntityDefinition(TENANT, "content")!
-    db.saveEntityDefinition({
+    await db.saveEntityDefinition({
       tenantId: TENANT,
       def: { ...entity, version: (entity.version ?? 1) + 1 },
       actor: "operator",
@@ -668,7 +668,7 @@ describe("sync config — custom (non-built-in) flows", () => {
   it("custom flow tip edit survives boot metadata sync", async () => {
     await bootstrapPublishedCatalog(fixture)
     const now = new Date().toISOString()
-    db.saveSyncFlow({
+    await db.saveSyncFlow({
       tenant_id: TENANT,
       id: "operatorCustomFlow",
       label: "Custom",
@@ -687,8 +687,8 @@ describe("sync config — custom (non-built-in) flows", () => {
       updated_by: "operator",
     })
     recordSyncCatalogChange({ reason: "sync-metadata:flow:operatorCustomFlow", actor: "operator" })
-    db.syncDeploySyncMetadataFromArtifact(fixture.projectRoot, TENANT)
-    const custom = db.getSyncFlow(TENANT, "operatorCustomFlow")
+    await db.syncDeploySyncMetadataFromArtifact(fixture.projectRoot, TENANT)
+    const custom = await db.getSyncFlow(TENANT, "operatorCustomFlow")
     expect(custom).toBeTruthy()
     expect(custom!.built_in).toBe(0)
     expect(db.parseFlowSteps(custom!.steps_json).some((s) => s.kind === "metadataSync")).toBe(true)

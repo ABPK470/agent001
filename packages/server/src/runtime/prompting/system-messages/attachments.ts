@@ -5,11 +5,11 @@
 
 import { getAttachment, type AttachmentRow } from "../../../infra/persistence/attachments.js"
 
-export function buildAttachmentManifest(ids: string[]): string {
+export async function buildAttachmentManifest(ids: string[]): Promise<string> {
   if (ids.length === 0) return ""
   const rows: AttachmentRow[] = []
   for (const id of ids) {
-    const row = getAttachment(id)
+    const row = await getAttachment(id)
     if (row) rows.push(row)
   }
   if (rows.length === 0) return ""

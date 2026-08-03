@@ -24,7 +24,7 @@ export type PostgresConnectorPool = {
 export interface PostgresPoolProvider {
   get(connectorId: string): Promise<PostgresConnectorPool>
   getByName(name: string): Promise<PostgresConnectorPool>
-  list(): readonly { id: string; name: string }[]
+  list(): Promise<readonly { id: string; name: string }[]>
   invalidate(connectorId: string): void
   closeAll(): Promise<void>
   runWithSyncBudget?<T>(connectorKey: string, fn: () => Promise<T>): Promise<T>
@@ -60,17 +60,17 @@ function parseConnector(row: db.DbConnector): Connector {
   }
 }
 
-function listConnectorsLive(): readonly Connector[] {
-  return db.listConnectors().map(parseConnector)
+async function listConnectorsLive(): Promise<readonly Connector[]> {
+  return (await db.listConnectors()).map(parseConnector)
 }
 
-function getConnectorLive(id: string): Connector | undefined {
-  const row = db.getConnector(id)
+async function getConnectorLive(id: string): Promise<Connector | undefined> {
+  const row = await db.getConnector(id)
   return row ? parseConnector(row) : undefined
 }
 
-function listEnabledPostgres(): readonly Connector[] {
-  return listConnectorsLive().filter((c) => c.kind === "postgres" && c.enabled)
+async function listEnabledPostgres(): Promise<readonly Connector[]> {
+  return (await listConnectorsLive()).filter((c) => c.kind === "postgres" && c.enabled)
 }
 
 function configFingerprint(connector: Connector): string {
@@ -151,9 +151,9 @@ export function createPostgresPoolProvider(): PostgresPoolProvider {
 
   return {
     async get(connectorId: string): Promise<PostgresConnectorPool> {
-      const connector = getConnectorLive(connectorId)
+      const connector = await getConnectorLive(connectorId)
       if (!connector || connector.kind !== "postgres" || !connector.enabled) {
-        const available = listEnabledPostgres()
+        const available = (await listEnabledPostgres())
           .map((c) => c.id)
           .join(", ")
         throw new Error(
@@ -164,7 +164,7 @@ export function createPostgresPoolProvider(): PostgresPoolProvider {
     },
 
     async getByName(name: string): Promise<PostgresConnectorPool> {
-      const list = listEnabledPostgres()
+      const list = await listEnabledPostgres()
       const lower = name.toLowerCase()
       const connector =
         list.find((c) => c.name.toLowerCase() === lower) ??
@@ -178,8 +178,8 @@ export function createPostgresPoolProvider(): PostgresPoolProvider {
       return resolve(connector)
     },
 
-    list(): readonly { id: string; name: string }[] {
-      return listEnabledPostgres().map((c) => ({ id: c.id, name: c.name }))
+    async list(): Promise<readonly { id: string; name: string }[]> {
+      return (await listEnabledPostgres()).map((c) => ({ id: c.id, name: c.name }))
     },
 
     invalidate(connectorId: string): void {

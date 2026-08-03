@@ -26,7 +26,7 @@ function buildListAdaptersTool(host: AgentHost): ExecutableTool {
       if (!port) {
         return "list_adapters: connector bridge is not configured on this server (no connectors port wired)."
       }
-      const adapters: ConnectorInfo[] = port.listAdapters()
+      const adapters: ConnectorInfo[] = await port.listAdapters()
       if (adapters.length === 0) {
         return "list_adapters: no connectors configured. Add one via the platform menu → Connectors."
       }

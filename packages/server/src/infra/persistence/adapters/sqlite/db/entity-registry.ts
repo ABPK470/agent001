@@ -43,7 +43,7 @@ import {
 } from "@mia/sync"
 import { getDb } from "../connection.js"
 import { getPlatformStore } from "../platform-store.js"
-import { runAll, runExec, runGet } from "../../../schema/execute.js"
+import { runAllAsync, runExecAsync, runGetAsync } from "../../../schema/execute-async.js"
 import { getPlatformDb } from "../../../schema/kysely.js"
 import { listFreezeWindowsForTenant } from "./freeze-windows.js"
 
@@ -108,12 +108,12 @@ function normalizeEntityTable(t: EntityDefinition["tables"][number]): EntityDefi
 //                                            (tenant → _default → bundled)
 // - policies.freezeWindowIds[]            → in-process registry (which
 //                                            mirrors freeze_window_configs DB)
-function validateEntityReferences(tenantId: string, def: EntityDefinition): ValidationResult {
+async function validateEntityReferences(tenantId: string, def: EntityDefinition): Promise<ValidationResult> {
   const errors: ValidationResult["errors"] = []
   const warnings: ValidationResult["warnings"] = []
 
   // strategy resolution
-  const strategy = resolveScd2Strategy(tenantId, def.scd2.strategyId, def.scd2.strategyVersion)
+  const strategy = await resolveScd2Strategy(tenantId, def.scd2.strategyId, def.scd2.strategyVersion)
   if (!strategy) {
     errors.push({
       path: "scd2.strategyId",
@@ -125,7 +125,7 @@ function validateEntityReferences(tenantId: string, def: EntityDefinition): Vali
   // freeze windows: every referenced id must be in the in-process
   // registry (which mirrors the freeze_window_configs DB table for _default).
   if (def.policies.freezeWindowIds.length > 0) {
-    const reg = listFreezeWindowIdsForGate()
+    const reg = await listFreezeWindowIdsForGate()
     for (const fwId of def.policies.freezeWindowIds) {
       if (!reg.has(fwId)) {
         errors.push({
@@ -144,8 +144,8 @@ function validateEntityReferences(tenantId: string, def: EntityDefinition): Vali
  * registry. Bound at call time (not module-load) so test setups that
  * swap `installFreezeWindowRegistry` between cases see the latest set.
  */
-function listFreezeWindowIdsForGate(): Set<string> {
-  return new Set(listFreezeWindowsForTenant(DEFAULT_TENANT_ID).map((w) => w.id))
+async function listFreezeWindowIdsForGate(): Promise<Set<string>> {
+  return new Set((await listFreezeWindowsForTenant(DEFAULT_TENANT_ID)).map((w) => w.id))
 }
 
 // ── Entity definitions ──────────────────────────────────────────────
@@ -196,17 +196,17 @@ export interface SaveEntityResult {
   diff: ReturnType<typeof diffEntityDefinitions>
 }
 
-function selectEntityPointer(tenantId: string, id: string) {
+async function selectEntityPointer(tenantId: string, id: string) {
   const compiled = getPlatformDb()
     .selectFrom("entity_active")
     .select(["current_version", "retired_at"])
     .where("tenant_id", "=", tenantId)
     .where("id", "=", id)
     .compile()
-  return runGet<{ current_version: number; retired_at: string | null }>(compiled)
+  return await runGetAsync<{ current_version: number; retired_at: string | null }>(compiled)
 }
 
-function insertEntityVersion(row: {
+async function insertEntityVersion(row: {
   tenant_id: string
   id: string
   version: number
@@ -216,20 +216,20 @@ function insertEntityVersion(row: {
   created_at: string
   reason: string
   diff_json: string
-}): void {
+}): Promise<void> {
   const compiled = getPlatformDb()
     .insertInto("entity_versions")
     .values(row)
     .compile()
-  runExec(compiled)
+  await runExecAsync(compiled)
 }
 
-function upsertEntityActivePointer(
+async function upsertEntityActivePointer(
   tenantId: string,
   id: string,
   nextVersion: number,
   hadPointer: boolean,
-): void {
+): Promise<void> {
   if (hadPointer) {
     const compiled = getPlatformDb()
       .updateTable("entity_active")
@@ -237,7 +237,7 @@ function upsertEntityActivePointer(
       .where("tenant_id", "=", tenantId)
       .where("id", "=", id)
       .compile()
-    runExec(compiled)
+    await runExecAsync(compiled)
     return
   }
   const compiled = getPlatformDb()
@@ -249,7 +249,7 @@ function upsertEntityActivePointer(
       retired_at: null,
     })
     .compile()
-  runExec(compiled)
+  await runExecAsync(compiled)
 }
 
 /**
@@ -261,7 +261,7 @@ function upsertEntityActivePointer(
  * Atomicity: pointer update + version insert happen inside a single
  * SQLite transaction (better-sqlite3 `db.transaction(...)`).
  */
-export function saveEntityDefinition(args: {
+export async function saveEntityDefinition(args: {
   tenantId?: string
   def: EntityDefinition
   actor: string
@@ -269,7 +269,7 @@ export function saveEntityDefinition(args: {
   versionLabel?: string | null
   /** When true, reject if any row exists for this id (including retired). */
   createOnly?: boolean
-}): SaveEntityResult {
+}): Promise<SaveEntityResult> {
   const tenantId = asTenantId(args.tenantId ?? args.def.tenantId ?? DEFAULT_TENANT_ID)
   const def = normalizeEntityDefinition({ ...args.def, tenantId, version: 1 })
   const validation = validateEntityDefinition(def)
@@ -278,11 +278,11 @@ export function saveEntityDefinition(args: {
   // Cross-reference validation: every id the entity points at must
   // actually resolve. Structural validators above can't do this — they
   // don't have access to the strategy / freeze-window stores.
-  const xref = validateEntityReferences(tenantId, def)
+  const xref = await validateEntityReferences(tenantId, def)
   if (!xref.ok) throw new EntityRegistryValidationError(xref)
 
-  return getPlatformStore().transaction(() => {
-    const pointer = selectEntityPointer(tenantId, args.def.id)
+  return await getPlatformStore().transactionAsync(async () => {
+    const pointer = await selectEntityPointer(tenantId, args.def.id)
 
     if (args.createOnly && pointer) {
       throw new EntityRegistryConflictError(
@@ -294,7 +294,7 @@ export function saveEntityDefinition(args: {
     }
 
     const prev: EntityDefinition | null = pointer
-      ? readEntityVersionBody(tenantId, def.id, pointer.current_version)
+      ? await readEntityVersionBody(tenantId, def.id, pointer.current_version)
       : null
 
     const nextVersion = (pointer?.current_version ?? 0) + 1
@@ -313,7 +313,7 @@ export function saveEntityDefinition(args: {
 
     const diff = diffEntityDefinitions(prev, persisted)
 
-    insertEntityVersion({
+    await insertEntityVersion({
       tenant_id: tenantId,
       id: persisted.id,
       version: nextVersion,
@@ -325,7 +325,7 @@ export function saveEntityDefinition(args: {
       diff_json: JSON.stringify(diff),
     })
 
-    upsertEntityActivePointer(tenantId, persisted.id, nextVersion, pointer != null)
+    await upsertEntityActivePointer(tenantId, persisted.id, nextVersion, pointer != null)
 
     return { tenantId, id: persisted.id, version: nextVersion, diff }
   })
@@ -341,11 +341,11 @@ function reason(input: string, isCreate: boolean): string {
  * Read the EntityDefinition body at a specific version. Returns null when
  * no such (tenant, id, version) tuple exists.
  */
-export function readEntityVersionBody(
+export async function readEntityVersionBody(
   tenantId: string,
   id: string,
   version: number
-): EntityDefinition | null {
+): Promise<EntityDefinition | null> {
   const compiled = getPlatformDb()
     .selectFrom("entity_versions")
     .select("body_json")
@@ -353,7 +353,7 @@ export function readEntityVersionBody(
     .where("id", "=", id)
     .where("version", "=", version)
     .compile()
-  const row = runGet<{ body_json: string }>(compiled)
+  const row = await runGetAsync<{ body_json: string }>(compiled)
   if (!row) return null
   return normalizeEntityDefinition(JSON.parse(row.body_json) as EntityDefinition)
 }
@@ -363,18 +363,18 @@ export function readEntityVersionBody(
  * the entity doesn't exist OR (without `version`) if it has been retired.
  * Pass `{ includeRetired: true }` to surface retired entities.
  */
-export function getEntityDefinition(
+export async function getEntityDefinition(
   tenantId: string,
   id: string,
   opts: { version?: number; includeRetired?: boolean } = {}
-): EntityDefinition | null {
+): Promise<EntityDefinition | null> {
   if (opts.version !== undefined) {
-    return readEntityVersionBody(tenantId, id, opts.version)
+    return await readEntityVersionBody(tenantId, id, opts.version)
   }
-  const pointer = selectEntityPointer(tenantId, id)
+  const pointer = await selectEntityPointer(tenantId, id)
   if (!pointer) return null
   if (pointer.retired_at && !opts.includeRetired) return null
-  const def = readEntityVersionBody(tenantId, id, pointer.current_version)
+  const def = await readEntityVersionBody(tenantId, id, pointer.current_version)
   if (!def) return null
   return { ...def, retiredAt: pointer.retired_at }
 }
@@ -383,22 +383,22 @@ export function getEntityDefinition(
  * List all entities in a tenant. Excludes retired by default. Returns
  * the *current* version body for each.
  */
-export function listEntityDefinitions(
+export async function listEntityDefinitions(
   tenantId: string,
   opts: { includeRetired?: boolean } = {}
-): EntityDefinition[] {
+): Promise<EntityDefinition[]> {
   const compiled = getPlatformDb()
     .selectFrom("entity_active")
     .select(["id", "current_version", "retired_at"])
     .where("tenant_id", "=", tenantId)
     .orderBy("id")
     .compile()
-  const rows = runAll<{ id: string; current_version: number; retired_at: string | null }>(compiled)
+  const rows = await runAllAsync<{ id: string; current_version: number; retired_at: string | null }>(compiled)
 
   const out: EntityDefinition[] = []
   for (const row of rows) {
     if (row.retired_at && !opts.includeRetired) continue
-    const body = readEntityVersionBody(tenantId, row.id, row.current_version)
+    const body = await readEntityVersionBody(tenantId, row.id, row.current_version)
     if (body) out.push({ ...body, retiredAt: row.retired_at })
   }
   return out
@@ -415,7 +415,7 @@ export interface EntityDefinitionHistoryEntry extends EntityDefinitionVersionRow
   diff: ReturnType<typeof diffEntityDefinitions>
 }
 
-export function listEntityDefinitionHistory(tenantId: string, id: string): EntityDefinitionHistoryEntry[] {
+export async function listEntityDefinitionHistory(tenantId: string, id: string): Promise<EntityDefinitionHistoryEntry[]> {
   const compiled = getPlatformDb()
     .selectFrom("entity_versions")
     .select(["version", "version_label", "created_by", "created_at", "reason", "diff_json"])
@@ -423,7 +423,7 @@ export function listEntityDefinitionHistory(tenantId: string, id: string): Entit
     .where("id", "=", id)
     .orderBy("version", "desc")
     .compile()
-  const rows = runAll<{
+  const rows = await runAllAsync<{
     version: number
     version_label: string | null
     created_by: string
@@ -448,27 +448,27 @@ export function listEntityDefinitionHistory(tenantId: string, id: string): Entit
  * Mark an entity retired. Idempotent. Does NOT delete history; existing
  * pinned version references still resolve via `readEntityVersionBody`.
  */
-export function retireEntityDefinition(
+export async function retireEntityDefinition(
   tenantId: string,
   id: string,
   actor: string
-): { retiredAt: string } | null {
-  const pointer = selectEntityPointer(tenantId, id)
+): Promise<{  retiredAt: string  } | null> {
+  const pointer = await selectEntityPointer(tenantId, id)
   if (!pointer) return null
   if (pointer.retired_at) return { retiredAt: pointer.retired_at }
 
   const retiredAt = new Date().toISOString()
-  return getPlatformStore().transaction(() => {
+  return await getPlatformStore().transactionAsync(async () => {
     const setRetired = getPlatformDb()
       .updateTable("entity_active")
       .set({ retired_at: retiredAt })
       .where("tenant_id", "=", tenantId)
       .where("id", "=", id)
       .compile()
-    runExec(setRetired)
+    await runExecAsync(setRetired)
 
     // Record the retire as a new version so the diff history has it.
-    const prev = readEntityVersionBody(tenantId, id, pointer.current_version)
+    const prev = await readEntityVersionBody(tenantId, id, pointer.current_version)
     if (prev) {
       const nextVersion = pointer.current_version + 1
       const retiredDef: EntityDefinition = {
@@ -481,7 +481,7 @@ export function retireEntityDefinition(
         retiredAt
       }
       const diff = diffEntityDefinitions(prev, retiredDef)
-      insertEntityVersion({
+      await insertEntityVersion({
         tenant_id: tenantId,
         id,
         version: nextVersion,
@@ -498,7 +498,7 @@ export function retireEntityDefinition(
         .where("tenant_id", "=", tenantId)
         .where("id", "=", id)
         .compile()
-      runExec(bumpVersion)
+      await runExecAsync(bumpVersion)
     }
     return { retiredAt }
   })
@@ -510,13 +510,13 @@ export function retireEntityDefinition(
  *
  * Trigger DDL is SQLite-adapter-specific (RAISE); row wipes go through Kysely.
  */
-export function wipeEntityRegistry(): void {
+export async function wipeEntityRegistry(): Promise<void> {
   getDb().exec(`
     DROP TRIGGER IF EXISTS entity_versions_no_update;
     DROP TRIGGER IF EXISTS entity_versions_no_delete;
   `)
-  runExec(getPlatformDb().deleteFrom("entity_versions").compile())
-  runExec(getPlatformDb().deleteFrom("entity_active").compile())
+  await runExecAsync(getPlatformDb().deleteFrom("entity_versions").compile())
+  await runExecAsync(getPlatformDb().deleteFrom("entity_active").compile())
   getDb().exec(`
     CREATE TRIGGER IF NOT EXISTS entity_versions_no_update
       BEFORE UPDATE ON entity_versions
@@ -535,17 +535,17 @@ export interface SaveStrategyResult {
   version: number
 }
 
-function selectStrategyPointer(tenantId: string, id: string) {
+async function selectStrategyPointer(tenantId: string, id: string) {
   const compiled = getPlatformDb()
     .selectFrom("scd2_strategy_active")
     .select(["current_version", "retired_at"])
     .where("tenant_id", "=", tenantId)
     .where("id", "=", id)
     .compile()
-  return runGet<{ current_version: number; retired_at: string | null }>(compiled)
+  return await runGetAsync<{ current_version: number; retired_at: string | null }>(compiled)
 }
 
-function insertStrategyVersion(row: {
+async function insertStrategyVersion(row: {
   tenant_id: string
   id: string
   version: number
@@ -553,20 +553,20 @@ function insertStrategyVersion(row: {
   created_by: string
   created_at: string
   reason: string
-}): void {
+}): Promise<void> {
   const compiled = getPlatformDb()
     .insertInto("scd2_strategy_versions")
     .values(row)
     .compile()
-  runExec(compiled)
+  await runExecAsync(compiled)
 }
 
-function upsertStrategyActivePointer(
+async function upsertStrategyActivePointer(
   tenantId: string,
   id: string,
   nextVersion: number,
   hadPointer: boolean,
-): void {
+): Promise<void> {
   if (hadPointer) {
     const compiled = getPlatformDb()
       .updateTable("scd2_strategy_active")
@@ -574,7 +574,7 @@ function upsertStrategyActivePointer(
       .where("tenant_id", "=", tenantId)
       .where("id", "=", id)
       .compile()
-    runExec(compiled)
+    await runExecAsync(compiled)
     return
   }
   const compiled = getPlatformDb()
@@ -586,27 +586,27 @@ function upsertStrategyActivePointer(
       retired_at: null,
     })
     .compile()
-  runExec(compiled)
+  await runExecAsync(compiled)
 }
 
 /**
  * Save a new SCD2 strategy version. Same append-only semantics as
  * entity definitions. Returns the new version number.
  */
-export function saveScd2Strategy(args: {
+export async function saveScd2Strategy(args: {
   tenantId?: string
   strategy: Scd2Strategy
   actor: string
   reason: string
-}): SaveStrategyResult {
+}): Promise<SaveStrategyResult> {
   const tenantId = args.tenantId ?? DEFAULT_TENANT_ID
   const validation = validateScd2Strategy(args.strategy)
   if (!validation.ok) throw new EntityRegistryValidationError(validation)
 
   const normalized = normalizeScd2Strategy(args.strategy)
 
-  return getPlatformStore().transaction(() => {
-    const pointer = selectStrategyPointer(tenantId, normalized.id)
+  return await getPlatformStore().transactionAsync(async () => {
+    const pointer = await selectStrategyPointer(tenantId, normalized.id)
 
     const nextVersion = (pointer?.current_version ?? 0) + 1
     const createdAt = normalized.createdAt || new Date().toISOString()
@@ -617,7 +617,7 @@ export function saveScd2Strategy(args: {
       createdAt
     }
 
-    insertStrategyVersion({
+    await insertStrategyVersion({
       tenant_id: tenantId,
       id: persisted.id,
       version: nextVersion,
@@ -627,7 +627,7 @@ export function saveScd2Strategy(args: {
       reason: args.reason || (pointer ? "edit" : "create"),
     })
 
-    upsertStrategyActivePointer(tenantId, persisted.id, nextVersion, pointer != null)
+    await upsertStrategyActivePointer(tenantId, persisted.id, nextVersion, pointer != null)
 
     return { tenantId, id: persisted.id, version: nextVersion }
   })
@@ -642,32 +642,32 @@ export function saveScd2Strategy(args: {
  * Returns null when nothing resolves. Retired strategies are still
  * resolvable (historical recipes must remain runnable).
  */
-export function resolveScd2Strategy(
+export async function resolveScd2Strategy(
   tenantId: string,
   id: string,
   version?: number | "latest"
-): Scd2Strategy | null {
+): Promise<Scd2Strategy | null> {
   if (typeof version === "number") {
-    const row = readStrategyVersionBody(tenantId, id, version)
+    const row = await readStrategyVersionBody(tenantId, id, version)
     if (row) return row
     for (const fallbackTenant of strategyResolutionTenants(tenantId).slice(1)) {
-      const def = readStrategyVersionBody(fallbackTenant, id, version)
+      const def = await readStrategyVersionBody(fallbackTenant, id, version)
       if (def) return def
     }
     return null
   }
 
   for (const t of strategyResolutionTenants(tenantId)) {
-    const pointer = selectStrategyPointer(t, id)
+    const pointer = await selectStrategyPointer(t, id)
     if (pointer) {
-      const row = readStrategyVersionBody(t, id, pointer.current_version)
+      const row = await readStrategyVersionBody(t, id, pointer.current_version)
       if (row) return row
     }
   }
   return null
 }
 
-function readStrategyVersionBody(tenantId: string, id: string, version: number): Scd2Strategy | null {
+async function readStrategyVersionBody(tenantId: string, id: string, version: number): Promise<Scd2Strategy | null> {
   const compiled = getPlatformDb()
     .selectFrom("scd2_strategy_versions")
     .select("body_json")
@@ -675,7 +675,7 @@ function readStrategyVersionBody(tenantId: string, id: string, version: number):
     .where("id", "=", id)
     .where("version", "=", version)
     .compile()
-  const row = runGet<{ body_json: string }>(compiled)
+  const row = await runGetAsync<{ body_json: string }>(compiled)
   if (!row) return null
   return parseStoredStrategy(row.body_json)
 }
@@ -695,7 +695,7 @@ export interface Scd2StrategyHistoryEntry {
   reason: string
 }
 
-function readStrategyHistoryRows(tenantId: string, id: string): Scd2StrategyHistoryEntry[] {
+async function readStrategyHistoryRows(tenantId: string, id: string): Promise<Scd2StrategyHistoryEntry[]> {
   const compiled = getPlatformDb()
     .selectFrom("scd2_strategy_versions")
     .select(["version", "body_json", "created_by", "created_at", "reason"])
@@ -703,7 +703,7 @@ function readStrategyHistoryRows(tenantId: string, id: string): Scd2StrategyHist
     .where("id", "=", id)
     .orderBy("version", "desc")
     .compile()
-  const rows = runAll<{
+  const rows = await runAllAsync<{
     version: number
     body_json: string
     created_by: string
@@ -730,30 +730,30 @@ function readStrategyHistoryRows(tenantId: string, id: string): Scd2StrategyHist
  * tenant when the requesting tenant has no rows, then to the bundled
  * constant when the id is a shipped default with no DB rows yet.
  */
-export function listScd2StrategyHistory(tenantId: string, id: string): Scd2StrategyHistoryEntry[] {
-  const tenantRows = readStrategyHistoryRows(tenantId, id)
+export async function listScd2StrategyHistory(tenantId: string, id: string): Promise<Scd2StrategyHistoryEntry[]> {
+  const tenantRows = await readStrategyHistoryRows(tenantId, id)
   if (tenantRows.length > 0) return tenantRows
 
   for (const fallbackTenant of strategyHistoryTenants(tenantId).slice(1)) {
-    const defaultRows = readStrategyHistoryRows(fallbackTenant, id)
+    const defaultRows = await readStrategyHistoryRows(fallbackTenant, id)
     if (defaultRows.length > 0) return defaultRows
   }
 
   return []
 }
 
-export function listAvailableStrategies(tenantId: string): Scd2Strategy[] {
-  const tenantStrategies = readTenantStrategies(tenantId)
+export async function listAvailableStrategies(tenantId: string): Promise<Scd2Strategy[]> {
+  const tenantStrategies = await readTenantStrategies(tenantId)
   if (!mergesBundledStrategies(tenantId)) return tenantStrategies
   const seen = new Set(tenantStrategies.map((s) => s.id))
-  const defaults = readTenantStrategies(DEFAULT_TENANT_ID).filter((s) => !seen.has(s.id))
+  const defaults = (await readTenantStrategies(DEFAULT_TENANT_ID)).filter((s) => !seen.has(s.id))
   return [...tenantStrategies, ...defaults]
 }
 
-function readTenantStrategies(
+async function readTenantStrategies(
   tenantId: string,
   opts: { includeRetired?: boolean } = {},
-): Scd2Strategy[] {
+): Promise<Scd2Strategy[]> {
   let query = getPlatformDb()
     .selectFrom("scd2_strategy_active as s")
     .innerJoin("scd2_strategy_versions as v", (join) =>
@@ -770,14 +770,14 @@ function readTenantStrategies(
     query = query.where("s.retired_at", "is", null)
   }
 
-  const rows = runAll<{ id: string; current_version: number; retired_at: string | null; body_json: string }>(
+  const rows = await runAllAsync<{ id: string; current_version: number; retired_at: string | null; body_json: string }>(
     query.compile(),
   )
   return rows.map((r) => parseStoredStrategy(r.body_json))
 }
 
-export function countActiveEntitiesUsingStrategy(tenantId: string, strategyId: string): number {
-  return listEntityDefinitions(tenantId).filter((def) => def.scd2.strategyId === strategyId).length
+export async function countActiveEntitiesUsingStrategy(tenantId: string, strategyId: string): Promise<number> {
+  return (await listEntityDefinitions(tenantId)).filter((def) => def.scd2.strategyId === strategyId).length
 }
 
 /**
@@ -785,15 +785,15 @@ export function countActiveEntitiesUsingStrategy(tenantId: string, strategyId: s
  * as inherited constants cannot be retired — fork a custom copy instead.
  * Historical version rows remain for pinned entity references.
  */
-export function retireScd2Strategy(
+export async function retireScd2Strategy(
   tenantId: string,
   id: string,
-): { retiredAt: string } | null {
-  const pointer = selectStrategyPointer(tenantId, id)
+): Promise<{  retiredAt: string  } | null> {
+  const pointer = await selectStrategyPointer(tenantId, id)
   if (!pointer) return null
   if (pointer.retired_at) return { retiredAt: pointer.retired_at }
 
-  const inUse = countActiveEntitiesUsingStrategy(tenantId, id)
+  const inUse = await countActiveEntitiesUsingStrategy(tenantId, id)
   if (inUse > 0) {
     throw new Error(
       `Strategy "${id}" is referenced by ${inUse} active entity definition(s). Retire or reassign them first.`,
@@ -807,6 +807,6 @@ export function retireScd2Strategy(
     .where("tenant_id", "=", tenantId)
     .where("id", "=", id)
     .compile()
-  runExec(compiled)
+  await runExecAsync(compiled)
   return { retiredAt }
 }

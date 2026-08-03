@@ -77,15 +77,15 @@ export interface DispatchEvent {
  * background (`void`) so the caller doesn't block; durable retry +
  * DLQ live in `notification_log`.
  */
-export function dispatchNotification(ev: DispatchEvent): void {
-  const routes = listMatchingRoutes(ev)
+export async function dispatchNotification(ev: DispatchEvent): Promise<void> {
+  const routes = await listMatchingRoutes(ev)
   for (const r of routes) {
     void deliverWithRetry(r, ev).catch((err: unknown) => { console.error("[mia]", err) })
   }
 }
 
-export function listMatchingRoutes(ev: DispatchEvent): NotificationRoute[] {
-  const rows = listEnabledRoutesForEvent(ev.tenantId, ev.eventType)
+export async function listMatchingRoutes(ev: DispatchEvent): Promise<NotificationRoute[]> {
+  const rows = await listEnabledRoutesForEvent(ev.tenantId, ev.eventType)
   return rows.map(rowToRoute).filter((r) => matches(r.filter, ev))
 }
 
@@ -98,7 +98,7 @@ function matches(f: NotificationFilter, ev: DispatchEvent): boolean {
 
 async function deliverWithRetry(route: NotificationRoute, ev: DispatchEvent): Promise<void> {
   const body = renderNotificationBody(ev.eventType, ev.context)
-  const logId = appendLogRow(route, ev, body)
+  const logId = await appendLogRow(route, ev, body)
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     try {
@@ -113,7 +113,7 @@ async function deliverWithRetry(route: NotificationRoute, ev: DispatchEvent): Pr
           await deliverSlack({ target: route.target, body })
           break
       }
-      markLogSent(logId, attempt)
+      await markLogSent(logId, attempt)
       broadcast({
         type: EventType.SyncNotificationDelivered,
         data: { routeId: route.id, channel: route.channel, eventType: ev.eventType }
@@ -122,7 +122,7 @@ async function deliverWithRetry(route: NotificationRoute, ev: DispatchEvent): Pr
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       const isLast = attempt === MAX_ATTEMPTS
-      markLogAttempt(logId, attempt, msg, isLast ? "dlq" : "retrying")
+      await markLogAttempt(logId, attempt, msg, isLast ? "dlq" : "retrying")
       if (isLast) {
         broadcast({
           type: EventType.SyncNotificationFailed,
@@ -141,12 +141,12 @@ function sleep(ms: number): Promise<void> {
 
 // ── persistence ────────────────────────────────────────────────
 
-function appendLogRow(
+async function appendLogRow(
   route: NotificationRoute,
   ev: DispatchEvent,
   body: { subject: string; text: string }
-): number {
-  return appendNotificationLog({
+): Promise<number> {
+  return await appendNotificationLog({
     routeId: route.id,
     eventType: ev.eventType,
     channel: route.channel,
@@ -155,12 +155,12 @@ function appendLogRow(
   })
 }
 
-function markLogAttempt(id: number, attempts: number, error: string, status: "retrying" | "dlq"): void {
-  markNotificationLogAttempt(id, attempts, error, status)
+async function markLogAttempt(id: number, attempts: number, error: string, status: "retrying" | "dlq"): Promise<void> {
+  await markNotificationLogAttempt(id, attempts, error, status)
 }
 
-function markLogSent(id: number, attempts: number): void {
-  markNotificationLogSent(id, attempts)
+async function markLogSent(id: number, attempts: number): Promise<void> {
+  await markNotificationLogSent(id, attempts)
 }
 
 // ── CRUD ───────────────────────────────────────────────────────
@@ -190,9 +190,9 @@ export interface UpsertRouteInput {
   actor: string
 }
 
-export function upsertNotificationRoute(i: UpsertRouteInput): NotificationRoute {
+export async function upsertNotificationRoute(i: UpsertRouteInput): Promise<NotificationRoute> {
   const id = i.id ?? randomUUID()
-  upsertNotificationRouteRow({
+  await upsertNotificationRouteRow({
     id,
     tenantId: i.tenantId,
     eventType: i.eventType,
@@ -202,23 +202,23 @@ export function upsertNotificationRoute(i: UpsertRouteInput): NotificationRoute 
     enabled: i.enabled ? 1 : 0,
     updatedBy: i.actor
   })
-  const row = getNotificationRouteRow(id)
+  const row = await getNotificationRouteRow(id)
   if (!row) throw new Error(`notification route ${id} missing after upsert`)
   return rowToRoute(row)
 }
 
-export function listNotificationRoutes(tenantId: string): NotificationRoute[] {
-  return listNotificationRouteRows(tenantId).map(rowToRoute)
+export async function listNotificationRoutes(tenantId: string): Promise<NotificationRoute[]> {
+  return (await listNotificationRouteRows(tenantId)).map(rowToRoute)
 }
 
-export function deleteNotificationRoute(id: string): void {
-  deleteNotificationRouteRow(id)
+export async function deleteNotificationRoute(id: string): Promise<void> {
+  await deleteNotificationRouteRow(id)
 }
 
 export type { NotificationLogRow }
 
-export function listNotificationLog(
+export async function listNotificationLog(
   filter: { status?: NotificationLogRow["status"]; limit?: number } = {}
-): NotificationLogRow[] {
-  return listNotificationLogRows(filter)
+): Promise<NotificationLogRow[]> {
+  return await listNotificationLogRows(filter)
 }

@@ -133,7 +133,7 @@ async function countRootInstances(
   conn: string,
   rootTable: string
 ): Promise<number> {
-  const dialect = resolveWarehouseDialect(host, conn)
+  const dialect = await resolveWarehouseDialect(host, conn)
   const qt = `${dialect.quoteTable(rootTable)}${dialect.readFromHintSql()}`
   const countExpr = dialect.kind === "mssql" ? "COUNT_BIG(1)" : "COUNT(*)::bigint"
   const sqlText = `SELECT ${countExpr} AS cnt FROM ${qt}`
@@ -162,7 +162,7 @@ async function discoverRootInstances(
       : undefined
 
   const ctx = { kind: SyncOperationType.Preview, opId: `scan-${rootTable}`, scope: "discovery" as const }
-  const dialect = resolveWarehouseDialect(host, conn)
+  const dialect = await resolveWarehouseDialect(host, conn)
   const qt = `${dialect.quoteTable(rootTable)}${dialect.readFromHintSql()}`
   const qid = dialect.quoteIdent(idColumn)
   const countExpr = dialect.kind === "mssql" ? "COUNT_BIG(1)" : "COUNT(*)::bigint"
@@ -192,7 +192,7 @@ export async function syncDiffScan(input: SyncDiffScanInput): Promise<SyncDiffSc
   const target = input.target.trim()
   const sourceEnv = getEnvironment(input.host, source)
   const targetEnv = getEnvironment(input.host, target)
-  const readyIds = readyMssqlConnectorIds(input.host)
+  const readyIds = await readyMssqlConnectorIds(input.host)
   assertEnvConnectorReady(sourceEnv, readyIds)
   assertEnvConnectorReady(targetEnv, readyIds)
   assertSupportedSyncDirection(sourceEnv, targetEnv)
@@ -237,7 +237,7 @@ export async function syncDiffScan(input: SyncDiffScanInput): Promise<SyncDiffSc
   const errors: SyncDiffScanError[] = []
   const results: SyncDiffScanEntityResult[] = []
 
-  const entityConcurrency = resolveEntityPreviewConcurrency(input.host, source, target)
+  const entityConcurrency = await resolveEntityPreviewConcurrency(input.host, source, target)
 
   const perEntity = await mapWithConcurrency(
     candidateIds.map((entityId, index) => ({ entityId, index })),

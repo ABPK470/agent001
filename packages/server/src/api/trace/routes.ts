@@ -15,7 +15,7 @@ export function registerTraceRoutes(app: FastifyInstance, orchestrator: AgentOrc
     Body: TraceReplayStepRequest
   }>("/api/runs/:runId/trace/replay-step", personal.write, async (req, reply) => {
     const viewingAs = viewingAsOf(req)
-    const run = db.getRun(req.params.runId)
+    const run = await db.getRun(req.params.runId)
     if (!run || !canAccessRun(viewingAs, run)) {
       reply.code(404)
       return { error: "Run not found" }

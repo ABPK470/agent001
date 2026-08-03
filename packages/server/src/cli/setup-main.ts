@@ -15,7 +15,7 @@ const args = process.argv.slice(2)
 
 async function main(): Promise<number> {
   if (args.includes("--check") || args.includes("-c")) {
-    return runSetupCheckOnly()
+    return await runSetupCheckOnly()
   }
   return runSetupWizard({ force: args.includes("--force") })
 }

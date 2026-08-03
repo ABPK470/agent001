@@ -6,13 +6,6 @@ import { NotificationActionType } from "../../internal/enums/notifications.js"
 import { buildRunCapabilityActions } from "../run-capability-actions.js"
 import { createNotification } from "./persistence.js"
 
-// ── Recovery depends interface ────────────────────────────────────
-
-interface RecoveryDeps {
-  /** Resume a run from its checkpoint, returning the new run ID or null. */
-  resumeRun(runId: string): string | null
-}
-
 // ── Recovery ──────────────────────────────────────────────────────
 
 /**
@@ -24,15 +17,13 @@ interface RecoveryDeps {
  * rows in the UI when the resumed loop fails immediately. Instead, the
  * notification gives the user a one-click Resume action.
  *
- * `activeDeps` is kept on the signature for parity with callers and possible
- * future opt-in auto-resume; it's intentionally unused right now.
  */
-export function recoverStaleRunsImpl(_activeDeps: RecoveryDeps): { recovered: string[]; failed: string[] } {
-  const staleRuns = db.findStaleRuns()
+export async function recoverStaleRunsImpl(): Promise<{ recovered: string[]; failed: string[] }> {
+  const staleRuns = await db.findStaleRuns()
   const failed: string[] = []
 
   for (const stale of staleRuns) {
-    db.markRunCrashed(stale.id)
+    await db.markRunCrashed(stale.id)
     failed.push(stale.id)
     // Broadcast a synthetic run.failed so any live UI (PIPELINES,
     // ActiveUsers in-flight count, run.status badges, ...) settles
@@ -42,7 +33,7 @@ export function recoverStaleRunsImpl(_activeDeps: RecoveryDeps): { recovered: st
       data: { runId: stale.id, error: "Server restarted — run interrupted" }
     })
 
-    const capabilityActions = buildRunCapabilityActions(stale.id, RunStatus.Crashed)
+    const capabilityActions = await buildRunCapabilityActions(stale.id, RunStatus.Crashed)
     const canResume = capabilityActions.some((a) => a.action === NotificationActionType.ResumeRun)
     createNotification({
       type: EventType.RunFailed,

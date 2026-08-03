@@ -71,14 +71,14 @@ function phaseActivity(
   }
 }
 
-export function buildSyncRunPipeline(planId: string, events: OperationEvent[]): OperationPipeline {
+export async function buildSyncRunPipeline(planId: string, events: OperationEvent[]): Promise<OperationPipeline> {
   const { preview, execute } = partitionSyncRunEvents(events)
   const previewPipe =
-    preview.length > 0 ? buildSyncPipeline(planId, OperationKind.SyncPreview, preview) : null
+    preview.length > 0 ? await buildSyncPipeline(planId, OperationKind.SyncPreview, preview) : null
   const executePipe =
-    execute.length > 0 ? buildSyncPipeline(planId, OperationKind.SyncExecute, execute) : null
+    execute.length > 0 ? await buildSyncPipeline(planId, OperationKind.SyncExecute, execute) : null
 
-  const meta = db.getSyncRun?.(planId)
+  const meta = await db.getSyncRun?.(planId)
   const startedAt =
     previewPipe?.startedAt ?? executePipe?.startedAt ?? events[0]?.timestamp ?? new Date().toISOString()
   const endedAt = executePipe?.endedAt ?? previewPipe?.endedAt ?? null

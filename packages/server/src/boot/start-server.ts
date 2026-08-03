@@ -26,9 +26,9 @@ import { registerGracefulShutdown } from "./shutdown.js"
 import { startSyncPlatform } from "./sync-platform.js"
 import { recoverStaleProposerRuns } from "../api/proposer/state/recovery.js"
 
-function recoverStaleRuns(orchestrator: ReturnType<typeof createOrchestrator>): void {
-  const recovery = orchestrator.recoverStaleRuns()
-  const proposerCancelled = recoverStaleProposerRuns()
+async function recoverStaleRuns(orchestrator: ReturnType<typeof createOrchestrator>): Promise<void> {
+  const recovery = await orchestrator.recoverStaleRuns()
+  const proposerCancelled = await recoverStaleProposerRuns()
   if (recovery.failed.length > 0 || proposerCancelled.length > 0) {
     console.log(
       `Recovered stale runs: ${recovery.failed.length} agent, ${proposerCancelled.length} proposer scan${proposerCancelled.length === 1 ? "" : "s"}`,
@@ -44,7 +44,7 @@ export async function startServer(): Promise<void> {
     `Data directory: ${resolveServerDataDir()} (db: ${getDbPath()}; platform store: ${platformKind})`,
   )
   runDatabaseMaintenance()
-  bootstrapAdminFromEnv()
+  await bootstrapAdminFromEnv()
 
   // Tenant config — one JSON file per mia server install (see packages/agent/config/TENANT-CONFIG.md)
   const tenantPath = process.env.MIA_TENANT_CONFIG
@@ -76,7 +76,7 @@ export async function startServer(): Promise<void> {
   const workspace = createServerWorkspaceRef(ctx.workspace.get(), (path) =>
     orchestrator.setWorkspace(path)
   )
-  const messaging = initMessaging(orchestrator)
+  const messaging = await initMessaging(orchestrator)
 
   // 6. HTTP application
   const uiDist = resolveUiDist()
@@ -96,15 +96,13 @@ export async function startServer(): Promise<void> {
 
   // 7. Listen
   await app.listen({ port: listenPort, host: listenHost })
-  recoverStaleRuns(orchestrator)
+  await recoverStaleRuns(orchestrator)
+  const llmConfig = await getLlmConfig()
   printStartupBanner({
     mssqlSummary: ctx.mssqlSummary,
     channelConfigs: messaging.channelConfigs,
     uiDist,
-    llmSummary: (() => {
-      const cfg = getLlmConfig()
-      return `${cfg.provider} / ${cfg.model}`
-    })()
+    llmSummary: `${llmConfig.provider} / ${llmConfig.model}`
   })
 
   // 8. Graceful shutdown

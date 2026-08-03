@@ -14,7 +14,7 @@
  */
 
 import { getPlatformDb } from "../../../schema/kysely.js"
-import { runAll, runExec, runGet } from "../../../schema/execute.js"
+import { runAllAsync, runExecAsync, runGetAsync } from "../../../schema/execute-async.js"
 
 export interface DbToolResult {
   id?: number
@@ -37,7 +37,7 @@ const NON_RECALLABLE_RESULT_PATTERNS = [
 ] as const
 
 /** Write one tool-call result. Idempotent on (run_id, tool_call_id). */
-export function saveToolResult(record: Omit<DbToolResult, "id">): void {
+export async function saveToolResult(record: Omit<DbToolResult, "id">): Promise<void> {
   const existingCompiled = getPlatformDb()
     .selectFrom("tool_results")
     .select("id")
@@ -45,7 +45,7 @@ export function saveToolResult(record: Omit<DbToolResult, "id">): void {
     .where("tool_call_id", "=", record.tool_call_id)
     .limit(1)
     .compile()
-  const existing = runGet<{ id: number }>(existingCompiled)
+  const existing = await runGetAsync<{ id: number }>(existingCompiled)
   if (existing) {
     const upd = getPlatformDb()
       .updateTable("tool_results")
@@ -61,7 +61,7 @@ export function saveToolResult(record: Omit<DbToolResult, "id">): void {
       })
       .where("id", "=", existing.id)
       .compile()
-    runExec(upd)
+    await runExecAsync(upd)
     return
   }
   const ins = getPlatformDb()
@@ -79,19 +79,19 @@ export function saveToolResult(record: Omit<DbToolResult, "id">): void {
       created_at: record.created_at,
     })
     .compile()
-  runExec(ins)
+  await runExecAsync(ins)
 }
 
 /**
  * Load the most recent N tool results for a thread, optionally filtered to
  * specific tool names. Joins runs so continuity is always thread-scoped.
  */
-export function loadRecentToolResultsForThread(opts: {
+export async function loadRecentToolResultsForThread(opts: {
   threadId: string
   upn: string
   limit?: number
   toolNames?: readonly string[]
-}): DbToolResult[] {
+}): Promise<DbToolResult[]> {
   const limit = Math.max(1, Math.min(opts.limit ?? 25, 200))
   let query = getPlatformDb()
     .selectFrom("tool_results as tr")
@@ -103,27 +103,27 @@ export function loadRecentToolResultsForThread(opts: {
     query = query.where("tr.tool_name", "in", [...opts.toolNames])
   }
   const compiled = query.orderBy("tr.id", "desc").limit(limit).compile()
-  return runAll<DbToolResult>(compiled)
+  return await runAllAsync<DbToolResult>(compiled)
 }
 
-export function loadToolResultsForRun(runId: string): DbToolResult[] {
+export async function loadToolResultsForRun(runId: string): Promise<DbToolResult[]> {
   const compiled = getPlatformDb()
     .selectFrom("tool_results")
     .selectAll()
     .where("run_id", "=", runId)
     .orderBy("id", "asc")
     .compile()
-  return runAll<DbToolResult>(compiled)
+  return await runAllAsync<DbToolResult>(compiled)
 }
 
-export function getToolResult(runId: string, toolCallId: string): DbToolResult | null {
+export async function getToolResult(runId: string, toolCallId: string): Promise<DbToolResult | null> {
   const compiled = getPlatformDb()
     .selectFrom("tool_results")
     .selectAll()
     .where("run_id", "=", runId)
     .where("tool_call_id", "=", toolCallId)
     .compile()
-  return runGet<DbToolResult>(compiled) ?? null
+  return await runGetAsync<DbToolResult>(compiled) ?? null
 }
 
 export function extractToolResultText(json: string): string {

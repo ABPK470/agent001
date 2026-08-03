@@ -19,12 +19,12 @@ function host(names: string[], defaultConn: string | null = null): AgentHost {
 }
 
 describe("resolveMssqlConnectionName", () => {
-  it("treats dev, DEV, and Dev as the same connection", () => {
+  it("treats dev, DEV, and Dev as the same connection", async () => {
     const h = host(["DEV", "UAT"], "dev")
-    expect(resolveMssqlConnectionName(h, "dev")).toBe("DEV")
-    expect(resolveMssqlConnectionName(h, "DEV")).toBe("DEV")
-    expect(resolveMssqlConnectionName(h, "Dev")).toBe("DEV")
-    expect(resolveMssqlConnectionName(h, null)).toBe("DEV")
+    expect(await resolveMssqlConnectionName(h, "dev")).toBe("DEV")
+    expect(await resolveMssqlConnectionName(h, "DEV")).toBe("DEV")
+    expect(await resolveMssqlConnectionName(h, "Dev")).toBe("DEV")
+    expect(await resolveMssqlConnectionName(h, null)).toBe("DEV")
   })
 
   it("canonicalizes MSSQL_DEFAULT_CONNECTION at boot", () => {

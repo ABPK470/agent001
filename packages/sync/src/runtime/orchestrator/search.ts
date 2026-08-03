@@ -77,7 +77,7 @@ async function resolveDisplayColumn(
     )
   }
   const ctx = discoveryContext(telemetryContext)
-  const dialect = resolveWarehouseDialect(host, source)
+  const dialect = await resolveWarehouseDialect(host, source)
   const sqlText = dialect.rootTableColumnsSql(schema, table)
   const result = await trackedLoggedQuery(
     host,
@@ -114,7 +114,7 @@ export async function searchEntities(
   const safeLike = query.replace(/[%_[\]^]/g, "[$&]")
   const capped = Math.min(limit, 500)
 
-  const dialect = resolveWarehouseDialect(host, source)
+  const dialect = await resolveWarehouseDialect(host, source)
   const fromTable = `${dialect.quoteTable(definition.rootTable)}${dialect.readFromHintSql()}`
 
   if (mode === "id") {
@@ -265,7 +265,7 @@ export async function fetchEntityDisplayName(
   const id = coerceSyncEntityId(entityId)
   const ctx = discoveryContext(telemetryContext)
   const displayColumn = await resolveDisplayColumn(host, source, definition, ctx)
-  const dialect = resolveWarehouseDialect(host, source)
+  const dialect = await resolveWarehouseDialect(host, source)
   const idLiteral = typeof id === "number" ? String(id) : `N'${String(id).replace(/'/g, "''")}'`
   const sqlText = `
     SELECT TOP 1 [${displayColumn}] AS displayName
@@ -292,7 +292,7 @@ export async function expandTreeIds(
   const id = coerceSyncEntityId(entityId)
   if (!definition.selfJoinColumn) return [id]
   const ctx = discoveryContext(telemetryContext)
-  const dialect = resolveWarehouseDialect(host, source)
+  const dialect = await resolveWarehouseDialect(host, source)
   const pk = definition.idColumn
   const fk = definition.selfJoinColumn
   const table = dialect.quoteTable(definition.rootTable)

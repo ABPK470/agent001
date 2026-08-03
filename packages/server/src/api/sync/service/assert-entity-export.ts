@@ -26,11 +26,11 @@ export function assertEntityExportable(def: EntityDefinition): void {
   }
 }
 
-export function assertTenantEntitiesExportable(
+export async function assertTenantEntitiesExportable(
   tenantId: string,
   options: { includeRetired?: boolean } = {},
-): void {
-  for (const def of db.listEntityDefinitions(tenantId, {
+): Promise<void> {
+  for (const def of await db.listEntityDefinitions(tenantId, {
     includeRetired: options.includeRetired ?? false,
   })) {
     assertEntityExportable(def)

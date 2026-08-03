@@ -1,5 +1,6 @@
 /**
  * Boot-time LLM env → llm_config write via the platform schema toolkit.
+ * Sync path — runs inside sqlite open/migrate before the HTTP server starts.
  */
 
 import {

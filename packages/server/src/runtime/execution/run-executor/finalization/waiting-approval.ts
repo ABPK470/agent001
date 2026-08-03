@@ -30,7 +30,7 @@ export async function finalizeWaitingForApprovalRun(
 ): Promise<void> {
   const { request, sideEffects } = command
 
-  const approval = db.upsertPendingRunToolApproval({
+  const approval = await db.upsertPendingRunToolApproval({
     runId: error.runId,
     stepId: error.stepId,
     toolName: error.toolName,
@@ -41,7 +41,7 @@ export async function finalizeWaitingForApprovalRun(
 
   saveWaitingCheckpoint(command, env)
 
-  db.markRunWaitingForApproval(request.runId)
+  await db.markRunWaitingForApproval(request.runId)
   env.state.run.status = RunStatus.WaitingForApproval
   await sideEffects.runRepo.save(env.state.run)
   env.persistCurrentRun(undefined, undefined)
@@ -52,7 +52,7 @@ export async function finalizeWaitingForApprovalRun(
     text: error.message,
   })
 
-  db.saveLog({
+  await db.saveLog({
     run_id: request.runId,
     level: "run:warning",
     message: `Waiting for approval — ${error.toolName}: ${error.reason.slice(0, 180)}`,

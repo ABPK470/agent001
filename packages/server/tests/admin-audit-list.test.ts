@@ -22,14 +22,14 @@ describe("admin audit list", () => {
     seedRun(testDb, "run-a", { upn: "alice@x", goal: "deploy contract" })
     seedRun(testDb, "run-b", { upn: "bob@x", goal: "sync entity" })
 
-    saveAudit({
+    await saveAudit({
       run_id: "run-a",
       actor: "agent",
       action: "tool.completed",
       detail: JSON.stringify({ tool: "mssql_query" }),
       timestamp: "2026-07-10T10:00:00",
     })
-    saveAudit({
+    await saveAudit({
       run_id: "run-b",
       actor: "user",
       action: "tool.denied",
@@ -49,16 +49,16 @@ describe("admin audit list", () => {
     testDb.close()
   })
 
-  it("lists all scopes by default, newest first", () => {
-    const rows = listAuditLogPaginated({ page: 1, pageSize: 50 })
+  it("lists all scopes by default, newest first", async () => {
+    const rows = await listAuditLogPaginated({ page: 1, pageSize: 50 })
     expect(rows).toHaveLength(3)
     expect(rows[0]?.action).toBe("policy.create")
     expect(rows[0]?.scope_type).toBe("admin")
-    expect(countAuditLog()).toBe(3)
+    expect(await countAuditLog()).toBe(3)
   })
 
-  it("filters by scope type and scope id", () => {
-    const rows = listAuditLogPaginated({
+  it("filters by scope type and scope id", async () => {
+    const rows = await listAuditLogPaginated({
       page: 1,
       pageSize: 50,
       scopeType: "admin",
@@ -68,8 +68,8 @@ describe("admin audit list", () => {
     expect(rows[0]?.action).toBe("policy.create")
   })
 
-  it("filters by user UPN across run owner and admin actor", () => {
-    const bobRows = listAuditLogPaginated({
+  it("filters by user UPN across run owner and admin actor", async () => {
+    const bobRows = await listAuditLogPaginated({
       page: 1,
       pageSize: 50,
       user: "bob@x",
@@ -80,7 +80,7 @@ describe("admin audit list", () => {
     expect(bobRows[0]?.run_id).toBe("run-b")
     expect(bobRows[0]?.action).toBe("tool.denied")
 
-    const aliceRows = listAuditLogPaginated({
+    const aliceRows = await listAuditLogPaginated({
       page: 1,
       pageSize: 50,
       user: "alice@x",
@@ -88,8 +88,8 @@ describe("admin audit list", () => {
     expect(aliceRows.map((r) => r.action).sort()).toEqual(["policy.create", "tool.completed"])
   })
 
-  it("searches across action / detail / goal", () => {
-    const rows = listAuditLogPaginated({
+  it("searches across action / detail / goal", async () => {
+    const rows = await listAuditLogPaginated({
       page: 1,
       pageSize: 50,
       search: "contract",
@@ -98,8 +98,8 @@ describe("admin audit list", () => {
     expect(rows[0]?.run_id).toBe("run-a")
   })
 
-  it("supports action prefix match", () => {
-    const rows = listAuditLogPaginated({
+  it("supports action prefix match", async () => {
+    const rows = await listAuditLogPaginated({
       page: 1,
       pageSize: 50,
       action: "tool.",

@@ -26,9 +26,9 @@ function requireProjectRoot(host: AgentHost): string {
   return root
 }
 
-function mergeLegacyOverrides(environments: SyncEnvironment[]): SyncEnvironment[] {
+async function mergeLegacyOverrides(environments: SyncEnvironment[]): Promise<SyncEnvironment[]> {
   const overrides = new Map<string, Partial<SyncEnvironment>>()
-  for (const row of db.listSyncEnvOverrides()) {
+  for (const row of await db.listSyncEnvOverrides()) {
     try {
       overrides.set(row.name, parseBoundaryJson(row.overrides_json) as Partial<SyncEnvironment>)
     } catch (error) {
@@ -52,20 +52,20 @@ function renderSummary(environments: SyncEnvironment[]): string {
   return environments.map((env) => `${env.name}[${env.role}/${env.defaultAccessMode}]`).join(", ")
 }
 
-export function loadPersistedSyncEnvironments(
+export async function loadPersistedSyncEnvironments(
   projectRoot: string,
   connections: ReadonlyArray<{ name: string }>
-): PersistedSyncEnvironmentLoad {
-  const persistedRows = db.listSyncEnvironments()
+): Promise<PersistedSyncEnvironmentLoad> {
+  const persistedRows = await db.listSyncEnvironments()
   let source: PersistedSyncEnvironmentLoad["source"] = "db"
   let seeded = false
 
   if (persistedRows.length === 0) {
     const loaded = loadSyncEnvironments(projectRoot, connections)
-    const environments = mergeLegacyOverrides(loaded.environments)
+    const environments = await mergeLegacyOverrides(loaded.environments)
     const now = new Date().toISOString()
     for (const env of environments) {
-      db.saveSyncEnvironment({
+      await db.saveSyncEnvironment({
         name: env.name,
         body_json: JSON.stringify(env),
         created_at: now,
@@ -80,7 +80,7 @@ export function loadPersistedSyncEnvironments(
   // After envs exist (seeded or already in DB): heal missing connectorId links,
   // then always re-read so in-memory matches SQLite.
   linkSyncEnvironmentConnectorIds()
-  const environments = db.listSyncEnvironments().map(parsePersistedEnvironment)
+  const environments = (await db.listSyncEnvironments()).map(parsePersistedEnvironment)
   return {
     environments,
     source,
@@ -89,7 +89,10 @@ export function loadPersistedSyncEnvironments(
   }
 }
 
-export function rebuildLiveSyncEnvironments(host: AgentHost): void {
-  const loaded = loadPersistedSyncEnvironments(requireProjectRoot(host), getMssqlConfig(host))
+export async function rebuildLiveSyncEnvironments(host: AgentHost): Promise<void> {
+  const loaded = await loadPersistedSyncEnvironments(
+    requireProjectRoot(host),
+    getMssqlConfig(host),
+  )
   replaceEnvironments(host, loaded.environments)
 }

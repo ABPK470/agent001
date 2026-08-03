@@ -12,17 +12,17 @@ import { buildSyncPipeline } from "./pipelines/sync.js"
 import { buildSystemPipeline } from "./pipelines/system.js"
 import type { EventBucket } from "./types.js"
 
-export function buildPipelinesFromBuckets(buckets: Iterable<EventBucket>): OperationPipeline[] {
+export async function buildPipelinesFromBuckets(buckets: Iterable<EventBucket>): Promise<OperationPipeline[]> {
   const operations: OperationPipeline[] = []
 
   for (const bucket of buckets) {
     if (bucket.kind === OperationKind.AgentRun) {
-      operations.push(buildAgentRunPipeline(bucket.key.slice(4), bucket.events))
+      operations.push(await buildAgentRunPipeline(bucket.key.slice(4), bucket.events))
     } else if (bucket.kind === OperationKind.ProposerRun) {
-      operations.push(buildProposerRunPipeline(bucket.key.slice(9), bucket.events))
+      operations.push(await buildProposerRunPipeline(bucket.key.slice(9), bucket.events))
     } else if (bucket.kind === OperationKind.SyncPreview || bucket.kind === OperationKind.SyncExecute) {
       const planId = bucket.planId ?? bucket.key.slice(5)
-      operations.push(buildSyncPipeline(planId, bucket.kind, bucket.events))
+      operations.push(await buildSyncPipeline(planId, bucket.kind, bucket.events))
     } else if (
       bucket.kind === OperationKind.BridgePreview ||
       bucket.kind === OperationKind.BridgeRun

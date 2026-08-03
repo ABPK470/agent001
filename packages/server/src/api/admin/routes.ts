@@ -132,7 +132,7 @@ export function registerAdminRoutes(app: FastifyInstance, orchestrator: AgentOrc
       return { error: "admin only" }
     }
     const since = Number((req.query as Record<string, string>)?.["sinceSeconds"] ?? "604800")
-    const sessions = listSessions({ sinceSeconds: since })
+    const sessions = await listSessions({ sinceSeconds: since })
     const onlineCutoff = Date.now() - 60_000
     return {
       sessions: sessions.map((session) => ({
@@ -156,7 +156,7 @@ export function registerAdminRoutes(app: FastifyInstance, orchestrator: AgentOrc
     }
     const activeIds = orchestrator.getActiveRunIds()
     if (activeIds.length === 0) return { runs: [] }
-    const rows = db.listRunSummariesByIds(activeIds)
+    const rows = await db.listRunSummariesByIds(activeIds)
     return {
       runs: rows.map((row) => ({
         runId: row.id,
@@ -178,12 +178,12 @@ export function registerAdminRoutes(app: FastifyInstance, orchestrator: AgentOrc
     const q = req.query as Record<string, string | undefined>
     const sinceSeconds = Number(q["sinceSeconds"] ?? "604800")
     const activityWindowSeconds = Number(q["activityWindowSeconds"] ?? "86400")
-    const users = listUsersWithStats({ sinceSeconds, activityWindowSeconds })
+    const users = await listUsersWithStats({ sinceSeconds, activityWindowSeconds })
 
     const activeIds = orchestrator.getActiveRunIds()
     let activeByUpn = new Map<string, number>()
     if (activeIds.length > 0) {
-      activeByUpn = new Map(db.countActiveRunsByUpn(activeIds).map((row) => [row.upn, row.n]))
+      activeByUpn = new Map((await db.countActiveRunsByUpn(activeIds)).map((row) => [row.upn, row.n]))
     }
 
     return {
@@ -210,7 +210,7 @@ export function registerAdminRoutes(app: FastifyInstance, orchestrator: AgentOrc
     const limit = Math.min(200, Math.max(1, Number((req.query as Record<string, string>)?.["limit"] ?? "25")))
     const offset = Math.max(0, Number((req.query as Record<string, string>)?.["offset"] ?? "0"))
     const identifier = decodeURIComponent(req.params.identifier)
-    const { runs, total } = listUserHistory(identifier, limit, offset)
+    const { runs, total } = await listUserHistory(identifier, limit, offset)
     return { runs, total, limit, offset }
   })
 
@@ -227,7 +227,7 @@ export function registerAdminRoutes(app: FastifyInstance, orchestrator: AgentOrc
       }
       const identifier = decodeURIComponent(req.params.identifier)
       try {
-        const updated = setUserAdmin(identifier, req.body.isAdmin)
+        const updated = await setUserAdmin(identifier, req.body.isAdmin)
         return {
           upn: updated.upn,
           displayName: updated.display_name,
@@ -252,7 +252,7 @@ export function registerAdminRoutes(app: FastifyInstance, orchestrator: AgentOrc
       reply.code(403)
       return { error: "admin only" }
     }
-    return db.listAuditFilterOptions()
+    return await db.listAuditFilterOptions()
   })
 
   app.get("/api/admin/audit", async (req, reply) => {
@@ -261,8 +261,8 @@ export function registerAdminRoutes(app: FastifyInstance, orchestrator: AgentOrc
       return { error: "admin only" }
     }
     const filters = parseAuditQuery(req.query as Record<string, string | undefined>)
-    const total = db.countAuditLog(filters)
-    const rows = db.listAuditLogPaginated(filters)
+    const total = await db.countAuditLog(filters)
+    const rows = await db.listAuditLogPaginated(filters)
     const totalPages = Math.max(1, Math.ceil(total / filters.pageSize))
     return {
       items: rows.map(mapAuditRow),
@@ -281,14 +281,14 @@ export function registerAdminRoutes(app: FastifyInstance, orchestrator: AgentOrc
     const q = req.query as Record<string, string | undefined>
     const format = q.format === "json" ? "json" : "csv"
     const filters = parseAuditQuery({ ...q, page: "1", pageSize: "10000" })
-    const total = db.countAuditLog(filters)
+    const total = await db.countAuditLog(filters)
     if (total > 10_000) {
       reply.code(400)
       return {
         error: `Export limited to 10,000 rows (matched ${total}). Narrow the time window or filters.`,
       }
     }
-    const rows = db.listAuditLogPaginated({ ...filters, page: 1, pageSize: Math.max(total, 1) }).map(mapAuditRow)
+    const rows = (await db.listAuditLogPaginated({ ...filters, page: 1, pageSize: Math.max(total, 1) })).map(mapAuditRow)
     const stamp = new Date().toISOString().slice(0, 10)
     if (format === "json") {
       reply.header("content-type", "application/json; charset=utf-8")

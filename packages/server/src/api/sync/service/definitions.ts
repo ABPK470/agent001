@@ -41,6 +41,8 @@ import {
 const DEFAULT_TENANT_ID = "_default"
 const ENTITY_SEEDS_DIR = "deploy/sync/artifacts/entities"
 const SQLITE_PUBLISHED_STORAGE = "sqlite:sync_definitions" as const
+let entityIdsNeedingRepublish = new Set<string>()
+let entityNeedsRepublishProjectRoot: string | null = null
 
 const SERVICE_PROFILE_OPTIONS: SyncDefinitionRuntimeOptions["serviceProfiles"] = [
   {
@@ -78,16 +80,16 @@ export interface SyncDefinitionAdminItem {
   needsPublish: boolean
 }
 
-export function defaultEntityFlowId(
+export async function defaultEntityFlowId(
   projectRoot: string,
   entityId: string,
   tenantId = DEFAULT_TENANT_ID,
-): EntityRegistrySyncFlowTemplateId {
-  return defaultFlowTemplateId(entityId, loadAuthoringFlowCatalog(projectRoot, tenantId))
+): Promise<EntityRegistrySyncFlowTemplateId> {
+  return defaultFlowTemplateId(entityId, await loadAuthoringFlowCatalog(projectRoot, tenantId))
 }
 
-export function listSyncDefinitionRuntimeOptions(projectRoot: string): SyncDefinitionRuntimeOptions {
-  const presets = db.listSyncFlows("_default")
+export async function listSyncDefinitionRuntimeOptions(projectRoot: string): Promise<SyncDefinitionRuntimeOptions> {
+  const presets = await db.listSyncFlows("_default")
   if (presets.length > 0) {
     const flowTemplateSteps = Object.fromEntries(
       presets.map((preset) => [preset.id, db.parseFlowSteps(preset.steps_json)])
@@ -104,7 +106,7 @@ export function listSyncDefinitionRuntimeOptions(projectRoot: string): SyncDefin
     }
   }
 
-  const flowTemplateCatalog = loadFlowTemplateCatalog(projectRoot)
+  const flowTemplateCatalog = await loadFlowTemplateCatalog(projectRoot)
   return {
     flowTemplates: buildSyncDefinitionRuntimeFlowOptions(flowTemplateCatalog),
     flowTemplateSteps: buildSyncDefinitionFlowTemplateSteps(flowTemplateCatalog),
@@ -122,12 +124,12 @@ interface PersistedPublishedBundle {
   definitions: Record<string, PublishedSyncDefinition | null>
 }
 
-export function loadAuthoringFlowCatalog(
+export async function loadAuthoringFlowCatalog(
   projectRoot: string,
   tenantId = DEFAULT_TENANT_ID,
-): SyncDefinitionFlowTemplateCatalog {
+): Promise<SyncDefinitionFlowTemplateCatalog> {
   const fileCatalog = loadSyncDefinitionFlowTemplateCatalog(projectRoot)
-  const presets = db.listSyncFlows(tenantId)
+  const presets = await db.listSyncFlows(tenantId)
   if (presets.length === 0) return fileCatalog
 
   // DB presets override shipped flows; keep platform builtins (e.g. metadataOnly) from file catalog.
@@ -151,8 +153,8 @@ export function loadAuthoringFlowCatalog(
 }
 
 /** @deprecated Use loadAuthoringFlowCatalog */
-function loadFlowTemplateCatalog(projectRoot: string): SyncDefinitionFlowTemplateCatalog {
-  return loadAuthoringFlowCatalog(projectRoot)
+async function loadFlowTemplateCatalog(projectRoot: string): Promise<SyncDefinitionFlowTemplateCatalog> {
+  return await loadAuthoringFlowCatalog(projectRoot)
 }
 
 function defaultFlowTemplateId(
@@ -181,8 +183,8 @@ export function seedFlowIdFromRepo(projectRoot: string, entityId: string): strin
   }
 }
 
-function loadPublishedBundle(_projectRoot?: string): PersistedPublishedBundle | null {
-  const raw = db.loadPublishedBundleFromDb(DEFAULT_TENANT_ID)
+async function loadPublishedBundle(_projectRoot?: string): Promise<PersistedPublishedBundle | null> {
+  const raw = await db.loadPublishedBundleFromDb(DEFAULT_TENANT_ID)
   if (!raw) return null
   return {
     version: 1,
@@ -193,11 +195,11 @@ function loadPublishedBundle(_projectRoot?: string): PersistedPublishedBundle | 
   }
 }
 
-export function getSyncPublishStatus(
+export async function getSyncPublishStatus(
   projectRoot: string,
   tenantId = DEFAULT_TENANT_ID,
-): SyncPublishStatus {
-  const classified = classifyCatalogPublish(projectRoot, tenantId)
+): Promise<SyncPublishStatus> {
+  const classified = await classifyCatalogPublish(projectRoot, tenantId)
   const unpublishedEntityIds = [...classified.compileAffectedEntityIds].sort()
   return {
     // Arms Publish only for compile-relevant tip deltas (not env-only).
@@ -214,11 +216,11 @@ export function getSyncPublishStatus(
 }
 
 /** Live tip vs published catalog snapshot — Publish modal SoT (not version-history JSON). */
-export function getSyncPublishPreview(
+export async function getSyncPublishPreview(
   projectRoot: string,
   tenantId = DEFAULT_TENANT_ID,
-): SyncPublishPreview {
-  const classified = classifyCatalogPublish(projectRoot, tenantId)
+): Promise<SyncPublishPreview> {
+  const classified = await classifyCatalogPublish(projectRoot, tenantId)
   const sections = (classified.diff?.sections ?? [])
     .filter((s) => COMPILE_CATALOG_SECTIONS.has(s.section))
     .map((s) => ({
@@ -261,26 +263,45 @@ export function getSyncPublishPreview(
 }
 
 /** True when this entity's published SyncDefinition is behind compile-relevant tip. */
-export function entityNeedsRepublish(
+export async function entityNeedsRepublish(
   projectRoot: string,
   entityId: string,
   tenantId = DEFAULT_TENANT_ID,
-): boolean {
-  const classified = classifyCatalogPublish(projectRoot, tenantId)
+): Promise<boolean> {
+  const classified = await classifyCatalogPublish(projectRoot, tenantId)
   return classified.compileAffectedEntityIds.includes(entityId)
+}
+
+export async function refreshEntityNeedsRepublishCache(
+  projectRoot: string,
+  tenantId = DEFAULT_TENANT_ID,
+): Promise<void> {
+  const classified = await classifyCatalogPublish(projectRoot, tenantId)
+  entityNeedsRepublishProjectRoot = projectRoot
+  entityIdsNeedingRepublish = new Set(classified.compileAffectedEntityIds)
+}
+
+export function entityNeedsRepublishCached(entityId: string): boolean {
+  return entityIdsNeedingRepublish.has(entityId)
+}
+
+export async function refreshEntityNeedsRepublishCacheAfterCatalogMutation(): Promise<void> {
+  if (entityNeedsRepublishProjectRoot) {
+    await refreshEntityNeedsRepublishCache(entityNeedsRepublishProjectRoot)
+  }
 }
 
 /**
  * Admin list for Publish UI. Flow comes from entity.flowId + catalog.
  * Bindings/ownership fields are compose-time stubs (same as Publish), not tip SoT.
  */
-export function listSyncDefinitionAdminItems(
+export async function listSyncDefinitionAdminItems(
   projectRoot: string,
   tenantId = DEFAULT_TENANT_ID
-): SyncDefinitionAdminItem[] {
-  const flowTemplateCatalog = loadAuthoringFlowCatalog(projectRoot, tenantId)
-  const entities = db.listEntityDefinitions(tenantId)
-  const classified = classifyCatalogPublish(projectRoot, tenantId)
+): Promise<SyncDefinitionAdminItem[]> {
+  const flowTemplateCatalog = await loadAuthoringFlowCatalog(projectRoot, tenantId)
+  const entities = await db.listEntityDefinitions(tenantId)
+  const classified = await classifyCatalogPublish(projectRoot, tenantId)
   const published = classified.published
   const compileAffected = new Set(classified.compileAffectedEntityIds)
   return entities.map((entity) => {
@@ -312,27 +333,27 @@ export function listSyncDefinitionAdminItems(
 }
 
 /** Reset entity.flowId to shipped seed (or catalog default). */
-export function resetEntityFlowId(
+export async function resetEntityFlowId(
   projectRoot: string,
   tenantId: string,
   entityId: string,
   actor: string,
-): EntityDefinition | null {
-  const entity = db.getEntityDefinition(tenantId, entityId)
+): Promise<EntityDefinition | null> {
+  const entity = await db.getEntityDefinition(tenantId, entityId)
   if (!entity) return null
-  const catalog = loadAuthoringFlowCatalog(projectRoot, tenantId)
+  const catalog = await loadAuthoringFlowCatalog(projectRoot, tenantId)
   const seedFlow = seedFlowIdFromRepo(projectRoot, entityId)
   const flowId =
     seedFlow && hasSyncDefinitionFlowTemplate(catalog, seedFlow)
       ? seedFlow
       : defaultFlowTemplateId(entityId, catalog)
-  const result = db.saveEntityDefinition({
+  const result = await db.saveEntityDefinition({
     tenantId,
     def: { ...entity, flowId: asFlowId(flowId) },
     actor,
     reason: "sync-definition-config:reset",
   })
-  return db.getEntityDefinition(tenantId, result.id) ?? null
+  return await db.getEntityDefinition(tenantId, result.id) ?? null
 }
 
 function resolveExecutionStepsForValidation(
@@ -356,10 +377,10 @@ export class PublishSyncDefinitionsError extends Error {
   }
 }
 
-export function publishSyncDefinitionsFromDb(
+export async function publishSyncDefinitionsFromDb(
   projectRoot: string,
   tenantId = DEFAULT_TENANT_ID
-): {
+): Promise<{
   publishedAt: string
   publishedVersion: string
   definitionCount: number
@@ -367,14 +388,25 @@ export function publishSyncDefinitionsFromDb(
   publishedBundlePath: string
   stdout: string[]
   stderr: string[]
-} {
-  const flowTemplateCatalog = loadAuthoringFlowCatalog(projectRoot, tenantId)
+}> {
+  const flowTemplateCatalog = await loadAuthoringFlowCatalog(projectRoot, tenantId)
   const flowCatalog = buildFlowCatalog(
-    db.listSyncPhases(tenantId),
-    db.listSyncActions(tenantId),
-    db.listSyncValueSources(tenantId),
+    await db.listSyncPhases(tenantId),
+    await db.listSyncActions(tenantId),
+    await db.listSyncValueSources(tenantId),
   )
-  const entities = db.listEntityDefinitions(tenantId)
+  const entities = await db.listEntityDefinitions(tenantId)
+  const strategiesByIdAndVersion = new Map<string, Awaited<ReturnType<typeof db.resolveScd2Strategy>>>()
+  for (const entity of entities) {
+    const strategy = entity.scd2
+    if (!strategy) continue
+    const resolved = await db.resolveScd2Strategy(
+      tenantId,
+      strategy.strategyId,
+      strategy.strategyVersion,
+    )
+    strategiesByIdAndVersion.set(`${strategy.strategyId}:${strategy.strategyVersion}`, resolved)
+  }
   const publishedAt = new Date().toISOString()
   const publishedVersion = publishedAt
   const compiled: Record<string, PublishedSyncDefinition | null> = {}
@@ -418,11 +450,7 @@ export function publishSyncDefinitionsFromDb(
       publishedAt,
       publishedVersion,
       (strategyId, strategyVersion) =>
-        db.resolveScd2Strategy(
-          tenantId,
-          strategyId,
-          strategyVersion === "latest" ? "latest" : strategyVersion,
-        ),
+        strategiesByIdAndVersion.get(`${strategyId}:${strategyVersion}`) ?? null,
     )
   }
 
@@ -431,22 +459,23 @@ export function publishSyncDefinitionsFromDb(
     throw new PublishSyncDefinitionsError(stderr)
   }
 
-  const previousBundle = loadPublishedBundle(projectRoot)
+  const previousBundle = await loadPublishedBundle(projectRoot)
   const definitions: Record<string, PublishedSyncDefinition | null> = {}
   for (const entity of entities) {
     definitions[entity.id] =
       compiled[entity.id] ?? previousBundle?.definitions?.[entity.id] ?? null
   }
 
-  const catalogVersion = db.getActiveSyncCatalogVersion(tenantId)
-  db.replaceSyncDefinitions(tenantId, {
+  const catalogVersion = await db.getActiveSyncCatalogVersion(tenantId)
+  await db.replaceSyncDefinitions(tenantId, {
     publishedAt,
     publishedVersion,
     catalogVersion,
     definitions,
   })
 
-  const vocabularyIds = reloadPublishedSyncVocabulary(projectRoot)
+  const vocabularyIds = await reloadPublishedSyncVocabulary(projectRoot)
+  await refreshEntityNeedsRepublishCache(projectRoot, tenantId)
   _resetGoalClassificationCache()
 
   const definitionCount = Object.values(definitions).filter((value) => value !== null).length

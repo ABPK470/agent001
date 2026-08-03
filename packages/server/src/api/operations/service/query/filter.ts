@@ -29,11 +29,11 @@ function matchesKindFilter(pipeline: OperationPipeline, kind: string): boolean {
 }
 
 /** Resolve owner for scoping — prefer stamped actorUpn, else persistence lookup. */
-export function pipelineOwnerUpn(pipeline: OperationPipeline): string | null {
+export async function pipelineOwnerUpn(pipeline: OperationPipeline): Promise<string | null> {
   if (pipeline.actorUpn?.trim()) return pipeline.actorUpn.trim()
 
   if (pipeline.kind === OperationKind.AgentRun) {
-    return db.getRun(pipeline.id)?.upn?.trim() || null
+    return (await db.getRun(pipeline.id))?.upn?.trim() || null
   }
 
   if (
@@ -42,32 +42,40 @@ export function pipelineOwnerUpn(pipeline: OperationPipeline): string | null {
     pipeline.kind === OperationKind.SyncExecute
   ) {
     const planId = pipeline.planId ?? pipeline.id
-    return db.getSyncRun(planId)?.actor_upn?.trim() || null
+    return (await db.getSyncRun(planId))?.actor_upn?.trim() || null
   }
 
   // Bridge / proposer / unknown without stamp — fail closed.
   return null
 }
 
-export function scopeOperationsToViewingAs(
+export async function scopeOperationsToViewingAs(
   operations: OperationPipeline[],
   opts: Pick<ListOperationsOpts, "viewingAsUpn">,
-): OperationPipeline[] {
+): Promise<OperationPipeline[]> {
   // No Viewing as context (unit tests / internal callers) — leave unscoped.
   if (opts.viewingAsUpn === undefined) return operations
   const viewingAsUpn = opts.viewingAsUpn.trim()
   if (!viewingAsUpn) return []
-  return operations.filter((p) => sameUpn(pipelineOwnerUpn(p), viewingAsUpn))
+  const scoped = await Promise.all(
+    operations.map(async (pipeline) => ({
+      pipeline,
+      ownerUpn: await pipelineOwnerUpn(pipeline),
+    })),
+  )
+  return scoped
+    .filter(({ ownerUpn }) => sameUpn(ownerUpn, viewingAsUpn))
+    .map(({ pipeline }) => pipeline)
 }
 
 export function excludeSystemPipelines(operations: OperationPipeline[]): OperationPipeline[] {
   return operations.filter((p) => p.kind !== OperationKind.System)
 }
 
-export function filterOperations(
+export async function filterOperations(
   operations: OperationPipeline[],
   opts: ListOperationsOpts
-): OperationPipeline[] {
+): Promise<OperationPipeline[]> {
   let filtered = operations
 
   if (opts.kind && opts.kind !== "all") {
@@ -94,5 +102,5 @@ export function filterOperations(
     )
   }
 
-  return scopeOperationsToViewingAs(filtered, opts)
+  return await scopeOperationsToViewingAs(filtered, opts)
 }

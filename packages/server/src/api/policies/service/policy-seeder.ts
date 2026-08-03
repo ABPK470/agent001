@@ -27,13 +27,13 @@ export interface PolicyFactoryResetResult {
  * Existing rows (any source) are left untouched — including old
  * `hosted_default` rows an operator never edited.
  */
-export function seedDefaultPoliciesIfMissing(projectRoot: string): PolicySeedResult {
+export async function seedDefaultPoliciesIfMissing(projectRoot: string): Promise<PolicySeedResult> {
   const { rules } = loadPolicyDefaults(projectRoot)
   const now = new Date().toISOString()
   let inserted = 0
 
   for (const r of rules) {
-    const didInsert = db.seedPolicyRuleIfMissing({
+    const didInsert = await db.seedPolicyRuleIfMissing({
       name: r.name,
       effect: r.effect,
       condition: r.condition,
@@ -44,7 +44,7 @@ export function seedDefaultPoliciesIfMissing(projectRoot: string): PolicySeedRes
     if (didInsert) inserted++
   }
 
-  const clearedEnvDerived = clearAllEnvDerivedPolicies()
+  const clearedEnvDerived = await clearAllEnvDerivedPolicies()
   if (inserted || clearedEnvDerived) {
     console.log(
       `[policy-seeder] seeded ${inserted} missing default(s) from ${POLICY_DEFAULTS_SEED_PATH}; cleared ${clearedEnvDerived} env_derived leftover(s)`,
@@ -58,23 +58,23 @@ export function seedDefaultPoliciesIfMissing(projectRoot: string): PolicySeedRes
  * every factory-named row (plus leftover `hosted_default` / `env_derived`).
  * Operator rules with names outside the factory set are preserved.
  */
-export function resetFactoryPolicyDefaults(projectRoot: string): PolicyFactoryResetResult {
+export async function resetFactoryPolicyDefaults(projectRoot: string): Promise<PolicyFactoryResetResult> {
   const { rules } = loadPolicyDefaults(projectRoot)
   const factoryNames = new Set(rules.map((r) => r.name))
   let removed = 0
 
-  for (const row of db.listPolicyRules()) {
+  for (const row of await db.listPolicyRules()) {
     if (row.source === db.PolicySource.HostedDefault || factoryNames.has(row.name)) {
-      db.deletePolicyRule(row.name)
+      await db.deletePolicyRule(row.name)
       removed++
     }
   }
 
-  const clearedEnvDerived = clearAllEnvDerivedPolicies()
+  const clearedEnvDerived = await clearAllEnvDerivedPolicies()
   const now = new Date().toISOString()
   let inserted = 0
   for (const r of rules) {
-    db.savePolicyRule({
+    await db.savePolicyRule({
       name: r.name,
       effect: r.effect,
       condition: r.condition,
@@ -99,9 +99,9 @@ export function resetFactoryPolicyDefaults(projectRoot: string): PolicyFactoryRe
 }
 
 /** Drop every env_derived rule (Access is no longer a policy editor). */
-export function clearAllEnvDerivedPolicies(): number {
-  const existing = db.listPolicyRules().filter((r) => r.source === db.PolicySource.EnvDerived)
-  for (const r of existing) db.deletePolicyRule(r.name)
+export async function clearAllEnvDerivedPolicies(): Promise<number> {
+  const existing = (await db.listPolicyRules()).filter((r) => r.source === db.PolicySource.EnvDerived)
+  for (const r of existing) await db.deletePolicyRule(r.name)
   return existing.length
 }
 
@@ -109,10 +109,10 @@ export function clearAllEnvDerivedPolicies(): number {
  * After an admin edits env config, drop leftover `env_derived` rules for
  * that env name. Does not re-insert — Policies are the sole governance rail.
  */
-export function refreshEnvDerivedPolicies(_host: unknown, envName: string): void {
+export async function refreshEnvDerivedPolicies(_host: unknown, envName: string): Promise<void> {
   const prefix = `env_${envName}_`
-  const existing = db
-    .listPolicyRules()
+  const existing = (await db
+    .listPolicyRules())
     .filter((r) => r.source === db.PolicySource.EnvDerived && r.name.startsWith(prefix))
-  for (const r of existing) db.deletePolicyRule(r.name)
+  for (const r of existing) await db.deletePolicyRule(r.name)
 }

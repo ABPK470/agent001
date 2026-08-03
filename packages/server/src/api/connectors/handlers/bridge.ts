@@ -52,12 +52,15 @@ function emitBridge(
   }
 }
 
-function adapters(host: AgentHost) {
-  return host.connectors.port.value?.listAdapters() ?? []
+async function adapters(host: AgentHost) {
+  return (await host.connectors.port.value?.listAdapters()) ?? []
 }
 
-function connectorMeta(host: AgentHost, connectorId: string): { name: string; kind: string } {
-  const hit = adapters(host).find((c) => c.id === connectorId)
+async function connectorMeta(
+  host: AgentHost,
+  connectorId: string,
+): Promise<{ name: string; kind: string }> {
+  const hit = (await adapters(host)).find((c) => c.id === connectorId)
   return { name: hit?.displayName ?? connectorId, kind: hit?.kind ?? "?" }
 }
 
@@ -75,7 +78,7 @@ export function registerBridgeRoutes(app: FastifyInstance, host: AgentHost): voi
     }
     const port = host.connectors.port.value
     if (!port) return { connectors: [] }
-    return { connectors: port.listAdapters() }
+    return { connectors: await port.listAdapters() }
   })
 
   app.post<{ Body: PreviewBody }>("/api/bridge/preview", async (req, reply) => {
@@ -95,7 +98,7 @@ export function registerBridgeRoutes(app: FastifyInstance, host: AgentHost): voi
     }
     const moveId = randomUUID()
     const t0 = Date.now()
-    const src = connectorMeta(host, body.source.connectorId)
+    const src = await connectorMeta(host, body.source.connectorId)
     const sourceSpecLabel = summarizeBridgeReadSpec(body.source.spec)
     const base = {
       moveId,
@@ -170,8 +173,8 @@ export function registerBridgeRoutes(app: FastifyInstance, host: AgentHost): voi
     }
     const moveId = randomUUID()
     const t0 = Date.now()
-    const src = connectorMeta(host, body.source.connectorId)
-    const tgt = connectorMeta(host, body.target.connectorId)
+    const src = await connectorMeta(host, body.source.connectorId)
+    const tgt = await connectorMeta(host, body.target.connectorId)
     const writeSpec = body.target.spec
     const base = {
       moveId,

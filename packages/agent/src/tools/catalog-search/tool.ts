@@ -84,7 +84,7 @@ function buildSearchCatalogTool(host: AgentHost, run?: RunContext): Tool {
     async execute(args) {
       let connName: string
       try {
-        connName = resolveMssqlConnectionName(host, args.connection ? String(args.connection).trim() : null)
+        connName = await resolveMssqlConnectionName(host, args.connection ? String(args.connection).trim() : null)
       } catch (err) {
         return err instanceof Error ? err.message : String(err)
       }

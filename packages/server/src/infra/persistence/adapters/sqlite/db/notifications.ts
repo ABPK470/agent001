@@ -4,7 +4,7 @@
 
 import { sql } from "kysely"
 import { getPlatformDb } from "../../../schema/kysely.js"
-import { runAll, runExec, runGet } from "../../../schema/execute.js"
+import { runAllAsync, runExecAsync, runGetAsync } from "../../../schema/execute-async.js"
 
 export interface DbNotification {
   id: string
@@ -20,7 +20,7 @@ export interface DbNotification {
   created_at: string
 }
 
-export function saveNotification(n: DbNotification): void {
+export async function saveNotification(n: DbNotification): Promise<void> {
   const compiled = getPlatformDb()
     .insertInto("notifications")
     .orReplace()
@@ -37,30 +37,30 @@ export function saveNotification(n: DbNotification): void {
       created_at: n.created_at,
     })
     .compile()
-  runExec(compiled)
+  await runExecAsync(compiled)
 }
 
-export function getNotification(id: string): DbNotification | undefined {
+export async function getNotification(id: string): Promise<DbNotification | undefined> {
   const compiled = getPlatformDb()
     .selectFrom("notifications")
     .selectAll()
     .where("id", "=", id)
     .compile()
-  return runGet<DbNotification>(compiled)
+  return await runGetAsync<DbNotification>(compiled)
 }
 
-export function listNotifications(limit = 50): DbNotification[] {
+export async function listNotifications(limit = 50): Promise<DbNotification[]> {
   const compiled = getPlatformDb()
     .selectFrom("notifications")
     .selectAll()
     .orderBy("created_at", "desc")
     .limit(limit)
     .compile()
-  return runAll<DbNotification>(compiled)
+  return await runAllAsync<DbNotification>(compiled)
 }
 
 /** Notifications visible to a logged-in user (upn-scoped + system-wide). */
-export function listNotificationsForUser(upn: string, limit = 50): DbNotification[] {
+export async function listNotificationsForUser(upn: string, limit = 50): Promise<DbNotification[]> {
   const compiled = getPlatformDb()
     .selectFrom("notifications")
     .selectAll()
@@ -68,44 +68,44 @@ export function listNotificationsForUser(upn: string, limit = 50): DbNotificatio
     .orderBy("created_at", "desc")
     .limit(limit)
     .compile()
-  return runAll<DbNotification>(compiled)
+  return await runAllAsync<DbNotification>(compiled)
 }
 
-export function markNotificationRead(id: string): void {
+export async function markNotificationRead(id: string): Promise<void> {
   const compiled = getPlatformDb()
     .updateTable("notifications")
     .set({ read: 1 })
     .where("id", "=", id)
     .compile()
-  runExec(compiled)
+  await runExecAsync(compiled)
 }
 
-export function markAllNotificationsRead(): void {
+export async function markAllNotificationsRead(): Promise<void> {
   const compiled = getPlatformDb()
     .updateTable("notifications")
     .set({ read: 1 })
     .where("read", "=", 0)
     .compile()
-  runExec(compiled)
+  await runExecAsync(compiled)
 }
 
-export function getUnreadNotificationCount(): number {
+export async function getUnreadNotificationCount(): Promise<number> {
   const compiled = getPlatformDb()
     .selectFrom("notifications")
     .select(sql<number>`count(*)`.as("count"))
     .where("read", "=", 0)
     .compile()
-  const row = runGet<{ count: number | bigint }>(compiled)
+  const row = await runGetAsync<{ count: number | bigint }>(compiled)
   return Number(row?.count ?? 0)
 }
 
-export function getUnreadNotificationCountForUser(upn: string): number {
+export async function getUnreadNotificationCountForUser(upn: string): Promise<number> {
   const compiled = getPlatformDb()
     .selectFrom("notifications")
     .select(sql<number>`count(*)`.as("count"))
     .where("read", "=", 0)
     .where((eb) => eb.or([eb("owner_upn", "is", null), eb("owner_upn", "=", upn)]))
     .compile()
-  const row = runGet<{ count: number | bigint }>(compiled)
+  const row = await runGetAsync<{ count: number | bigint }>(compiled)
   return Number(row?.count ?? 0)
 }

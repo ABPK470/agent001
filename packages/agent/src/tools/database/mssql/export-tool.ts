@@ -237,7 +237,7 @@ async function executeExportQueryToFile(
 
   let connectionName: string
   try {
-    connectionName = resolveToolConnectionArg(opts.host, args)
+    connectionName = await resolveToolConnectionArg(opts.host, args)
   } catch (err) {
     return `Error: ${err instanceof Error ? err.message : String(err)}`
   }

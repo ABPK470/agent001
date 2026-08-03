@@ -9,8 +9,8 @@ import {
   prepareFlowStepsForStorage,
 } from "../../../sync-flow-steps.js"
 import { getPlatformDb } from "../../../schema/kysely.js"
-import { runAll, runChanges, runExec, runGet } from "../../../schema/execute.js"
-import { getRowByKeys, upsertRow } from "../../../schema/upsert.js"
+import { runAllAsync, runChangesAsync, runGetAsync } from "../../../schema/execute-async.js"
+import { getRowByKeysAsync, upsertRowAsync } from "../../../schema/upsert.js"
 
 const DEFAULT_TENANT = "_default"
 
@@ -42,7 +42,7 @@ export interface DbSyncFlow {
   updated_by: string | null
 }
 
-export function listSyncPhases(tenantId = DEFAULT_TENANT): DbSyncPhase[] {
+export async function listSyncPhases(tenantId = DEFAULT_TENANT): Promise<DbSyncPhase[]> {
   const compiled = getPlatformDb()
     .selectFrom("sync_phases")
     .select(["tenant_id", "id", "label", "sort_order", "built_in", "definition_json"])
@@ -50,20 +50,20 @@ export function listSyncPhases(tenantId = DEFAULT_TENANT): DbSyncPhase[] {
     .orderBy("sort_order")
     .orderBy("id")
     .compile()
-  return runAll<DbSyncPhase>(compiled)
+  return await runAllAsync<DbSyncPhase>(compiled)
 }
 
-export function listSyncActions(tenantId = DEFAULT_TENANT): DbSyncAction[] {
+export async function listSyncActions(tenantId = DEFAULT_TENANT): Promise<DbSyncAction[]> {
   const compiled = getPlatformDb()
     .selectFrom("sync_actions")
     .select(["tenant_id", "id", "label", "built_in", "definition_json"])
     .where("tenant_id", "=", tenantId)
     .orderBy("id")
     .compile()
-  return runAll<DbSyncAction>(compiled)
+  return await runAllAsync<DbSyncAction>(compiled)
 }
 
-export function listSyncFlows(tenantId = DEFAULT_TENANT): DbSyncFlow[] {
+export async function listSyncFlows(tenantId = DEFAULT_TENANT): Promise<DbSyncFlow[]> {
   const compiled = getPlatformDb()
     .selectFrom("sync_flows")
     .select([
@@ -80,10 +80,10 @@ export function listSyncFlows(tenantId = DEFAULT_TENANT): DbSyncFlow[] {
     .orderBy("built_in", "desc")
     .orderBy("id")
     .compile()
-  return runAll<DbSyncFlow>(compiled)
+  return await runAllAsync<DbSyncFlow>(compiled)
 }
 
-export function getSyncFlow(tenantId: string, id: string): DbSyncFlow | null {
+export async function getSyncFlow(tenantId: string, id: string): Promise<DbSyncFlow | null> {
   const compiled = getPlatformDb()
     .selectFrom("sync_flows")
     .select([
@@ -99,19 +99,19 @@ export function getSyncFlow(tenantId: string, id: string): DbSyncFlow | null {
     .where("tenant_id", "=", tenantId)
     .where("id", "=", id)
     .compile()
-  return runGet<DbSyncFlow>(compiled) ?? null
+  return await runGetAsync<DbSyncFlow>(compiled) ?? null
 }
 
-export function saveSyncPhase(
+export async function saveSyncPhase(
   row: Omit<DbSyncPhase, "built_in" | "definition_json"> & {
     built_in?: number
     definition_json?: string
   },
-): void {
+): Promise<void> {
   const definition =
     row.definition_json ?? JSON.stringify(parsePhaseDefinition("{}", row.id, row.label))
   const builtIn = row.built_in ?? 0
-  upsertRow({
+  await upsertRowAsync({
     table: "sync_phases",
     keys: { tenant_id: row.tenant_id, id: row.id },
     insert: {
@@ -130,16 +130,16 @@ export function saveSyncPhase(
   })
 }
 
-export function saveSyncAction(
+export async function saveSyncAction(
   row: Omit<DbSyncAction, "built_in" | "definition_json"> & {
     built_in?: number
     definition_json?: string
   },
-): void {
+): Promise<void> {
   const definition =
     row.definition_json ?? JSON.stringify(parseKindDefinition("{}", row.id, row.label))
   const builtIn = row.built_in ?? 0
-  upsertRow({
+  await upsertRowAsync({
     table: "sync_actions",
     keys: { tenant_id: row.tenant_id, id: row.id },
     insert: {
@@ -156,8 +156,8 @@ export function saveSyncAction(
   })
 }
 
-export function saveSyncFlow(row: DbSyncFlow): void {
-  upsertRow({
+export async function saveSyncFlow(row: DbSyncFlow): Promise<void> {
+  await upsertRowAsync({
     table: "sync_flows",
     keys: { tenant_id: row.tenant_id, id: row.id },
     insert: row,
@@ -171,37 +171,37 @@ export function saveSyncFlow(row: DbSyncFlow): void {
   })
 }
 
-export function deleteSyncPhase(tenantId: string, id: string): boolean {
+export async function deleteSyncPhase(tenantId: string, id: string): Promise<boolean> {
   const compiled = getPlatformDb()
     .deleteFrom("sync_phases")
     .where("tenant_id", "=", tenantId)
     .where("id", "=", id)
     .where("built_in", "=", 0)
     .compile()
-  return runChanges(compiled) > 0
+  return await runChangesAsync(compiled) > 0
 }
 
-export function deleteSyncAction(tenantId: string, id: string): boolean {
+export async function deleteSyncAction(tenantId: string, id: string): Promise<boolean> {
   const compiled = getPlatformDb()
     .deleteFrom("sync_actions")
     .where("tenant_id", "=", tenantId)
     .where("id", "=", id)
     .where("built_in", "=", 0)
     .compile()
-  return runChanges(compiled) > 0
+  return await runChangesAsync(compiled) > 0
 }
 
-export function deleteSyncFlow(tenantId: string, id: string): boolean {
+export async function deleteSyncFlow(tenantId: string, id: string): Promise<boolean> {
   const compiled = getPlatformDb()
     .deleteFrom("sync_flows")
     .where("tenant_id", "=", tenantId)
     .where("id", "=", id)
     .where("built_in", "=", 0)
     .compile()
-  return runChanges(compiled) > 0
+  return await runChangesAsync(compiled) > 0
 }
 
-export function syncCatalogEmpty(tenantId = DEFAULT_TENANT): boolean {
+export async function syncCatalogEmpty(tenantId = DEFAULT_TENANT): Promise<boolean> {
   const compiled = getPlatformDb()
     .selectNoFrom(
       sql<number>`(
@@ -212,7 +212,7 @@ export function syncCatalogEmpty(tenantId = DEFAULT_TENANT): boolean {
       )`.as("n"),
     )
     .compile()
-  const row = runGet<{ n: number }>(compiled)
+  const row = await runGetAsync<{ n: number }>(compiled)
   return (row?.n ?? 0) === 0
 }
 
@@ -252,16 +252,16 @@ export function serializeBuiltInFlowStepsFromArtifact(
  * Corrupt tip (e.g. legacy kebab-case) is repaired from the artifact.
  * New built-in ids are inserted from the artifact.
  */
-export function syncBuiltInFlowsFromArtifact(
+export async function syncBuiltInFlowsFromArtifact(
   projectRoot: string,
   tenantId = DEFAULT_TENANT,
-): void {
+): Promise<void> {
   const metadata = loadSyncMetadataArtifact(resolve(projectRoot))
   const now = new Date().toISOString()
 
   for (const [id, flow] of Object.entries(metadata.flows)) {
     const artifactStepsJson = serializeFlowStepsFromArtifact(metadata, flow.steps)
-    const existing = getSyncFlow(tenantId, id)
+    const existing = await getSyncFlow(tenantId, id)
     let stepsJson = artifactStepsJson
     let updatedAt = now
     let updatedBy: string | null = null
@@ -281,7 +281,7 @@ export function syncBuiltInFlowsFromArtifact(
       }
     }
 
-    upsertRow({
+    await upsertRowAsync({
       table: "sync_flows",
       keys: { tenant_id: tenantId, id },
       insert: {
@@ -314,16 +314,16 @@ export function mapKindDefinition(row: Pick<DbSyncAction, "id" | "label" | "defi
 }
 
 /** Sync deploy-seeded built-in rows from deploy/sync/artifacts/sync-metadata.json. */
-export function syncDeploySyncMetadataFromArtifact(projectRoot: string, tenantId = DEFAULT_TENANT): void {
+export async function syncDeploySyncMetadataFromArtifact(projectRoot: string, tenantId = DEFAULT_TENANT): Promise<void> {
   const metadata = loadSyncMetadataArtifact(resolve(projectRoot))
 
   for (const phase of metadata.phases) {
     const definitionJson = JSON.stringify(phase.definition)
-    const existing = getRowByKeys<{ built_in: number; definition_json: string }>("sync_phases", {
+    const existing = await getRowByKeysAsync<{ built_in: number; definition_json: string }>("sync_phases", {
       tenant_id: tenantId,
       id: phase.id,
     })
-    upsertRow({
+    await upsertRowAsync({
       table: "sync_phases",
       keys: { tenant_id: tenantId, id: phase.id },
       insert: {
@@ -345,11 +345,11 @@ export function syncDeploySyncMetadataFromArtifact(projectRoot: string, tenantId
 
   for (const action of metadata.actions) {
     const definitionJson = JSON.stringify(action.definition)
-    const existing = getRowByKeys<{ built_in: number; definition_json: string }>("sync_actions", {
+    const existing = await getRowByKeysAsync<{ built_in: number; definition_json: string }>("sync_actions", {
       tenant_id: tenantId,
       id: action.id,
     })
-    upsertRow({
+    await upsertRowAsync({
       table: "sync_actions",
       keys: { tenant_id: tenantId, id: action.id },
       insert: {
@@ -369,11 +369,11 @@ export function syncDeploySyncMetadataFromArtifact(projectRoot: string, tenantId
 
   for (const valueSource of metadata.valueSources ?? []) {
     const definitionJson = JSON.stringify(valueSource.definition)
-    const existing = getRowByKeys<{ built_in: number; definition_json: string }>(
+    const existing = await getRowByKeysAsync<{ built_in: number; definition_json: string }>(
       "sync_value_sources",
       { tenant_id: tenantId, id: valueSource.id },
     )
-    upsertRow({
+    await upsertRowAsync({
       table: "sync_value_sources",
       keys: { tenant_id: tenantId, id: valueSource.id },
       insert: {
@@ -391,9 +391,9 @@ export function syncDeploySyncMetadataFromArtifact(projectRoot: string, tenantId
     })
   }
 
-  for (const row of listSyncPhases(tenantId)) {
+  for (const row of await listSyncPhases(tenantId)) {
     if (row.definition_json && row.definition_json !== "{}") continue
-    saveSyncPhase({
+    await saveSyncPhase({
       tenant_id: row.tenant_id,
       id: row.id,
       label: row.label,
@@ -402,9 +402,9 @@ export function syncDeploySyncMetadataFromArtifact(projectRoot: string, tenantId
     })
   }
 
-  for (const row of listSyncActions(tenantId)) {
+  for (const row of await listSyncActions(tenantId)) {
     if (row.definition_json && row.definition_json !== "{}") continue
-    saveSyncAction({
+    await saveSyncAction({
       tenant_id: row.tenant_id,
       id: row.id,
       label: row.label,
@@ -412,12 +412,12 @@ export function syncDeploySyncMetadataFromArtifact(projectRoot: string, tenantId
     })
   }
 
-  syncBuiltInFlowsFromArtifact(projectRoot, tenantId)
+  await syncBuiltInFlowsFromArtifact(projectRoot, tenantId)
 }
 
 /** @deprecated Use syncDeploySyncMetadataFromArtifact */
-export function syncDeployRunCatalogFromArtifact(projectRoot: string, tenantId = DEFAULT_TENANT): void {
-  syncDeploySyncMetadataFromArtifact(projectRoot, tenantId)
+export async function syncDeployRunCatalogFromArtifact(projectRoot: string, tenantId = DEFAULT_TENANT): Promise<void> {
+  await syncDeploySyncMetadataFromArtifact(projectRoot, tenantId)
 }
 
 /** @deprecated Use syncDeploySyncMetadataFromArtifact */

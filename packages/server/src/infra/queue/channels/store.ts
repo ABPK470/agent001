@@ -42,13 +42,13 @@ export type { DbDeliveryAttemptRow }
 // ── Conversation Store ───────────────────────────────────────────
 
 export class SqliteConversationStore implements ConversationStore {
-  findByChannelAndSender(channelType: ChannelType, senderId: string): Conversation | undefined {
-    const row = findConversationByChannelAndSender(channelType, senderId)
+  async findByChannelAndSender(channelType: ChannelType, senderId: string): Promise<Conversation | undefined> {
+    const row = await findConversationByChannelAndSender(channelType, senderId)
     return row ? toConversation(row) : undefined
   }
 
-  save(conv: Conversation): void {
-    upsertConversationRow({
+  async save(conv: Conversation): Promise<void> {
+    await upsertConversationRow({
       id: conv.id,
       channel_type: conv.channelType,
       sender_id: conv.senderId,
@@ -60,34 +60,34 @@ export class SqliteConversationStore implements ConversationStore {
     })
   }
 
-  updateThreadId(id: string, threadId: string): void {
-    updateConversationThreadId(id, threadId, new Date().toISOString())
+  async updateThreadId(id: string, threadId: string): Promise<void> {
+    await updateConversationThreadId(id, threadId, new Date().toISOString())
   }
 
-  updateActiveRun(id: string, runId: string | null): void {
-    updateConversationActiveRun(id, runId, new Date().toISOString())
+  async updateActiveRun(id: string, runId: string | null): Promise<void> {
+    await updateConversationActiveRun(id, runId, new Date().toISOString())
   }
 
-  get(id: string): Conversation | undefined {
-    const row = getConversationRow(id)
+  async get(id: string): Promise<Conversation | undefined> {
+    const row = await getConversationRow(id)
     return row ? toConversation(row) : undefined
   }
 
-  getByRunId(runId: string): Conversation | undefined {
-    const row = getConversationRowByRunId(runId)
+  async getByRunId(runId: string): Promise<Conversation | undefined> {
+    const row = await getConversationRowByRunId(runId)
     return row ? toConversation(row) : undefined
   }
 
-  list(): Conversation[] {
-    return listConversationRows().map(toConversation)
+  async list(): Promise<Conversation[]> {
+    return (await listConversationRows()).map(toConversation)
   }
 }
 
 // ── Queue Store ──────────────────────────────────────────────────
 
 export class SqliteQueueStore implements QueueStore {
-  save(msg: OutboundMessage): void {
-    insertOutboundMessageRow({
+  async save(msg: OutboundMessage): Promise<void> {
+    await insertOutboundMessageRow({
       id: msg.id,
       conversation_id: msg.conversationId,
       channel_type: msg.channelType,
@@ -102,14 +102,14 @@ export class SqliteQueueStore implements QueueStore {
     })
   }
 
-  updateStatus(
+  async updateStatus(
     id: string,
     status: DeliveryStatus,
     error: string | null,
     nextRetryAt: Date | null,
     deliveredAt: Date | null
-  ): void {
-    updateOutboundMessageStatus({
+  ): Promise<void> {
+    await updateOutboundMessageStatus({
       id,
       status,
       error,
@@ -118,18 +118,18 @@ export class SqliteQueueStore implements QueueStore {
     })
   }
 
-  loadPending(): OutboundMessage[] {
-    return listPendingOutboundMessageRows().map(toOutboundMessage)
+  async loadPending(): Promise<OutboundMessage[]> {
+    return (await listPendingOutboundMessageRows()).map(toOutboundMessage)
   }
 
-  saveAttempt(
+  async saveAttempt(
     messageId: string,
     attempt: number,
     status: "success" | "failed",
     error: string | null,
     durationMs: number
-  ): void {
-    insertDeliveryAttemptRow({
+  ): Promise<void> {
+    await insertDeliveryAttemptRow({
       messageId,
       attempt,
       status,
@@ -137,15 +137,15 @@ export class SqliteQueueStore implements QueueStore {
       durationMs,
       createdAt: new Date().toISOString()
     })
-    updateOutboundMessageAttempts(messageId, attempt)
+    await updateOutboundMessageAttempts(messageId, attempt)
   }
 }
 
 // ── Channel Config Store ─────────────────────────────────────────
 
-export function saveChannelConfig(config: ChannelConfig): void {
+export async function saveChannelConfig(config: ChannelConfig): Promise<void> {
   const now = new Date().toISOString()
-  upsertChannelConfigRow({
+  await upsertChannelConfigRow({
     type: config.type,
     access_token: config.accessToken,
     verify_token: config.verifyToken,
@@ -156,38 +156,38 @@ export function saveChannelConfig(config: ChannelConfig): void {
   })
 }
 
-export function getChannelConfig(type: ChannelType): ChannelConfig | undefined {
-  const row = getChannelConfigRow(type)
+export async function getChannelConfig(type: ChannelType): Promise<ChannelConfig | undefined> {
+  const row = await getChannelConfigRow(type)
   if (!row) return undefined
   return toChannelConfig(row)
 }
 
-export function listChannelConfigs(): ChannelConfig[] {
-  return listChannelConfigRows().map(toChannelConfig)
+export async function listChannelConfigs(): Promise<ChannelConfig[]> {
+  return (await listChannelConfigRows()).map(toChannelConfig)
 }
 
-export function deleteChannelConfig(type: ChannelType): void {
-  deleteChannelConfigRow(type)
+export async function deleteChannelConfig(type: ChannelType): Promise<void> {
+  await deleteChannelConfigRow(type)
 }
 
 // ── Message queries (for API) ────────────────────────────────────
 
-export function getOutboundMessages(conversationId: string, limit = 50): OutboundMessage[] {
-  return listOutboundMessageRows(conversationId, limit).map(toOutboundMessage)
+export async function getOutboundMessages(conversationId: string, limit = 50): Promise<OutboundMessage[]> {
+  return (await listOutboundMessageRows(conversationId, limit)).map(toOutboundMessage)
 }
 
-export function getDeliveryAttempts(messageId: string): DbDeliveryAttemptRow[] {
-  return listDeliveryAttemptRows(messageId)
+export async function getDeliveryAttempts(messageId: string): Promise<DbDeliveryAttemptRow[]> {
+  return await listDeliveryAttemptRows(messageId)
 }
 
-export function getDeliveryStats(): {
+export async function getDeliveryStats(): Promise<{
   total: number
   delivered: number
   failed: number
   pending: number
   avgAttemptsOnSuccess: number
-} {
-  const { summary, avgAttemptsOnSuccess } = getDeliveryStatsRows()
+}> {
+  const { summary, avgAttemptsOnSuccess } = await getDeliveryStatsRows()
   return {
     ...summary,
     avgAttemptsOnSuccess
