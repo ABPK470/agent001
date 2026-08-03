@@ -13,4 +13,5 @@ export {
 } from "./connection.js"
 
 export * from "./db/index.js"
-export { getPlatformStore } from "./platform-store.js"
+/** @deprecated Prefer {@link import("../../platform-store.js").getPlatformStore} (kind-aware). */
+export { getPlatformStore } from "../../platform-store.js"

@@ -6,6 +6,11 @@
  */
 
 export { runDatabaseMaintenance } from "./startup.js"
+export {
+  assertPlatformStoreReady,
+  getPlatformStore,
+} from "./platform-store.js"
+export { resolvePlatformStoreKind } from "./platform-store-config.js"
 export * from "./attachments.js"
 export * from "./evidence.js"
 export * from "./memory.js"

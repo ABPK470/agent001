@@ -8,8 +8,9 @@
 import Database from "better-sqlite3"
 import { existsSync } from "node:fs"
 import { sql } from "kysely"
-import { getDb, getDbPath } from "../connection.js"
+import { getDbPath } from "../connection.js"
 import { getPlatformDb } from "../../../schema/kysely.js"
+import { runAll, runExec, runGet } from "../../../schema/execute.js"
 
 export interface DbConnector {
   id: string
@@ -19,18 +20,6 @@ export interface DbConnector {
   created_at: string
   updated_at: string
   updated_by: string | null
-}
-
-function runAll<T>(compiled: { sql: string; parameters: readonly unknown[] }): T[] {
-  return getDb().prepare(compiled.sql).all(...compiled.parameters) as T[]
-}
-
-function runGet<T>(compiled: { sql: string; parameters: readonly unknown[] }): T | undefined {
-  return getDb().prepare(compiled.sql).get(...compiled.parameters) as T | undefined
-}
-
-function runExec(compiled: { sql: string; parameters: readonly unknown[] }): void {
-  getDb().prepare(compiled.sql).run(...compiled.parameters)
 }
 
 export function listConnectors(): DbConnector[] {

@@ -12,6 +12,7 @@ import { buildApp } from "../http/build-app.js"
 import { loadPublishedSyncVocabularyAtBoot } from "./published-sync-bundle.js"
 import { bootstrapAdminFromEnv } from "../api/auth/index.js"
 import { getLlmConfig, runDatabaseMaintenance } from "../infra/persistence/index.js"
+import { assertPlatformStoreReady } from "../infra/persistence/platform-store.js"
 import { getDbPath, openDatabase } from "../infra/persistence/adapters/sqlite/index.js"
 import { resolveServerDataDir } from "../infra/persistence/server-data-dir.js"
 import { printStartupBanner } from "./banner.js"
@@ -36,9 +37,12 @@ function recoverStaleRuns(orchestrator: ReturnType<typeof createOrchestrator>): 
 }
 
 export async function startServer(): Promise<void> {
-  // 1. Persistence — open SQLite, then one-time boot hygiene
+  // 1. Persistence — platform store kind (sqlite only today), then open + hygiene
+  const platformKind = assertPlatformStoreReady()
   openDatabase()
-  console.log(`Data directory: ${resolveServerDataDir()} (db: ${getDbPath()})`)
+  console.log(
+    `Data directory: ${resolveServerDataDir()} (db: ${getDbPath()}; platform store: ${platformKind})`,
+  )
   runDatabaseMaintenance()
   bootstrapAdminFromEnv()
 

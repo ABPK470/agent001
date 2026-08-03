@@ -3,8 +3,11 @@
  */
 
 import { PolicyEffect } from "@mia/agent"
+import { sql } from "kysely"
 import { PolicySource } from "../../../../../internal/enums/index.js"
 import { getDb } from "../connection.js"
+import { getPlatformDb } from "../../../schema/kysely.js"
+import { runAll, runExec, runGet } from "../../../schema/execute.js"
 
 export { PolicySource } from "../../../../../internal/enums/index.js"
 
@@ -152,31 +155,64 @@ export function deleteSyncEnvOverride(name: string): void {
 }
 
 export function countSyncEnvironments(): number {
-  const row = getDb().prepare("SELECT COUNT(*) AS count FROM sync_environments").get() as { count: number }
-  return row.count
+  const compiled = getPlatformDb()
+    .selectFrom("sync_environments")
+    .select(sql<number>`count(*)`.as("count"))
+    .compile()
+  const row = runGet<{ count: number | bigint }>(compiled)
+  return Number(row?.count ?? 0)
 }
 
 export function listSyncEnvironments(): DbSyncEnvironment[] {
-  return getDb().prepare("SELECT * FROM sync_environments ORDER BY name").all() as DbSyncEnvironment[]
+  const compiled = getPlatformDb()
+    .selectFrom("sync_environments")
+    .selectAll()
+    .orderBy("name")
+    .compile()
+  return runAll<DbSyncEnvironment>(compiled)
 }
 
 export function getSyncEnvironment(name: string): DbSyncEnvironment | undefined {
-  return getDb().prepare("SELECT * FROM sync_environments WHERE name = ?").get(name) as
-    | DbSyncEnvironment
-    | undefined
+  const compiled = getPlatformDb()
+    .selectFrom("sync_environments")
+    .selectAll()
+    .where("name", "=", name)
+    .compile()
+  return runGet<DbSyncEnvironment>(compiled)
 }
 
 export function saveSyncEnvironment(row: DbSyncEnvironment): void {
-  getDb()
-    .prepare(
-      `
-    INSERT OR REPLACE INTO sync_environments (name, body_json, created_at, updated_at, updated_by)
-    VALUES (@name, @body_json, COALESCE((SELECT created_at FROM sync_environments WHERE name = @name), @created_at), @updated_at, @updated_by)
-  `
-    )
-    .run(row)
+  const existing = getSyncEnvironment(row.name)
+  if (existing) {
+    const compiled = getPlatformDb()
+      .updateTable("sync_environments")
+      .set({
+        body_json: row.body_json,
+        updated_at: row.updated_at,
+        updated_by: row.updated_by,
+      })
+      .where("name", "=", row.name)
+      .compile()
+    runExec(compiled)
+    return
+  }
+  const compiled = getPlatformDb()
+    .insertInto("sync_environments")
+    .values({
+      name: row.name,
+      body_json: row.body_json,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+      updated_by: row.updated_by,
+    })
+    .compile()
+  runExec(compiled)
 }
 
 export function deleteSyncEnvironment(name: string): void {
-  getDb().prepare("DELETE FROM sync_environments WHERE name = ?").run(name)
+  const compiled = getPlatformDb()
+    .deleteFrom("sync_environments")
+    .where("name", "=", name)
+    .compile()
+  runExec(compiled)
 }

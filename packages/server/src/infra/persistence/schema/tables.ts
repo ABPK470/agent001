@@ -1,8 +1,8 @@
 /**
  * Platform schema table types — dialect-agnostic column contracts for Kysely.
  *
- * First cutover table: `connectors`. Add tables here as repos migrate off
- * raw SQLite strings; migrations still own DDL until a migrator ships.
+ * Grow table-by-table as repos migrate off raw SQLite strings.
+ * Migrations still own DDL until a multi-dialect migrator ships.
  */
 
 import type { ColumnType, Generated } from "kysely"
@@ -18,12 +18,35 @@ export interface ConnectorsTable {
   updated_by: string | null
 }
 
+/** `users` — canonical identity. */
+export interface UsersTable {
+  upn: string
+  username: string | null
+  display_name: string
+  is_admin: number
+  password_hash: string | null
+  source: string
+  created_at: string
+  last_login_at: string | null
+}
+
+/** `sync_environments` — Sync From/To places. */
+export interface SyncEnvironmentsTable {
+  name: string
+  body_json: string
+  created_at: string
+  updated_at: string
+  updated_by: string | null
+}
+
 /**
- * Full platform database shape. Grow table-by-table; unmigrated tables stay
- * on raw better-sqlite3 until their repo moves.
+ * Full platform database shape. Unlisted tables stay on raw better-sqlite3
+ * until their repo moves.
  */
 export interface PlatformDatabase {
   connectors: ConnectorsTable
+  users: UsersTable
+  sync_environments: SyncEnvironmentsTable
 }
 
 /** Helper for optional Generated columns in later tables. */

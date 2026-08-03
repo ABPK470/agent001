@@ -1,19 +1,14 @@
 /**
  * Users persistence — the canonical identity table.
  *
- * Every per-user row in the system FK's into here via `upn`. There are
- * exactly two ways a row gets created:
- *   1. Local registration (POST /api/auth/register) → source='local',
- *      password_hash set.
- *   2. SSO header detection (auth/identity.ts) → source='sso',
- *      password_hash NULL.
- *
- * Identity mutations live in auth/users.ts (the layer that knows about
- * bcrypt). This module is the pure DB surface.
+ * Typed via the platform schema toolkit (Kysely compile → SQLite execute).
+ * Identity mutations that need bcrypt live in auth layers; this is the DB surface.
  */
 
+import { sql } from "kysely"
 import { UserSource } from "../../../../../internal/enums/auth.js"
-import { getDb } from "../connection.js"
+import { getPlatformDb } from "../../../schema/kysely.js"
+import { runAll, runExec, runGet } from "../../../schema/execute.js"
 
 export interface DbUser {
   upn: string // canonical, lowercased
@@ -36,49 +31,75 @@ export interface InsertUserInput {
 }
 
 export function insertUser(u: InsertUserInput): void {
-  getDb()
-    .prepare(
-      `
-    INSERT INTO users (upn, username, display_name, is_admin, password_hash, source, created_at)
-    VALUES (@upn, @username, @display_name, @is_admin, @password_hash, @source, datetime('now'))
-  `
-    )
-    .run({
+  const compiled = getPlatformDb()
+    .insertInto("users")
+    .values({
       upn: u.upn.toLowerCase(),
       username: u.username?.toLowerCase() ?? null,
       display_name: u.displayName,
       is_admin: u.isAdmin ? 1 : 0,
       password_hash: u.passwordHash,
-      source: u.source
+      source: u.source,
+      created_at: sql`datetime('now')`,
+      last_login_at: null,
     })
+    .compile()
+  runExec(compiled)
 }
 
 export function findUserByUpn(upn: string): DbUser | undefined {
-  return getDb().prepare("SELECT * FROM users WHERE upn = ?").get(upn.toLowerCase()) as DbUser | undefined
+  const compiled = getPlatformDb()
+    .selectFrom("users")
+    .selectAll()
+    .where("upn", "=", upn.toLowerCase())
+    .compile()
+  return runGet<DbUser>(compiled)
 }
 
 export function findUserByUsername(username: string): DbUser | undefined {
-  return getDb().prepare("SELECT * FROM users WHERE username = ?").get(username.toLowerCase()) as
-    | DbUser
-    | undefined
+  const compiled = getPlatformDb()
+    .selectFrom("users")
+    .selectAll()
+    .where("username", "=", username.toLowerCase())
+    .compile()
+  return runGet<DbUser>(compiled)
 }
 
 export function updateLastLoginAt(upn: string): void {
-  getDb().prepare("UPDATE users SET last_login_at = datetime('now') WHERE upn = ?").run(upn.toLowerCase())
+  const compiled = getPlatformDb()
+    .updateTable("users")
+    .set({ last_login_at: sql`datetime('now')` })
+    .where("upn", "=", upn.toLowerCase())
+    .compile()
+  runExec(compiled)
 }
 
 export function countUsers(): number {
-  const row = getDb().prepare("SELECT COUNT(*) AS n FROM users").get() as { n: number }
-  return row.n
+  const compiled = getPlatformDb()
+    .selectFrom("users")
+    .select(sql<number>`count(*)`.as("n"))
+    .compile()
+  const row = runGet<{ n: number | bigint }>(compiled)
+  return Number(row?.n ?? 0)
 }
 
 export function listUsers(): DbUser[] {
-  return getDb().prepare("SELECT * FROM users ORDER BY created_at DESC").all() as DbUser[]
+  const compiled = getPlatformDb()
+    .selectFrom("users")
+    .selectAll()
+    .orderBy("created_at", "desc")
+    .compile()
+  return runAll<DbUser>(compiled)
 }
 
 export function countAdmins(): number {
-  const row = getDb().prepare("SELECT COUNT(*) AS n FROM users WHERE is_admin = 1").get() as { n: number }
-  return row.n
+  const compiled = getPlatformDb()
+    .selectFrom("users")
+    .select(sql<number>`count(*)`.as("n"))
+    .where("is_admin", "=", 1)
+    .compile()
+  const row = runGet<{ n: number | bigint }>(compiled)
+  return Number(row?.n ?? 0)
 }
 
 export function setUserAdmin(upn: string, isAdmin: boolean): DbUser {
@@ -90,7 +111,12 @@ export function setUserAdmin(upn: string, isAdmin: boolean): DbUser {
   if (!isAdmin && existing.is_admin === 1 && countAdmins() <= 1) {
     throw new Error("cannot demote the last admin")
   }
-  getDb().prepare("UPDATE users SET is_admin = ? WHERE upn = ?").run(isAdmin ? 1 : 0, normalized)
+  const compiled = getPlatformDb()
+    .updateTable("users")
+    .set({ is_admin: isAdmin ? 1 : 0 })
+    .where("upn", "=", normalized)
+    .compile()
+  runExec(compiled)
   const updated = findUserByUpn(normalized)
   if (!updated) throw new Error("user update failed")
   return updated

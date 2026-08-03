@@ -18,7 +18,7 @@ import { defaultSyncDefinitionFlowTemplateId, hasSyncDefinitionFlowTemplate, wit
 import { validateCatalogId } from "@mia/shared-types"
 
 import * as db from "../../../infra/persistence/sqlite.js"
-import { getPlatformStore } from "../../../infra/persistence/adapters/sqlite/platform-store.js"
+import { getPlatformStore } from "../../../infra/persistence/platform-store.js"
 import {
   buildFlowCatalogFromSyncMetadataDoc,
   FlowStepsValidationError,
