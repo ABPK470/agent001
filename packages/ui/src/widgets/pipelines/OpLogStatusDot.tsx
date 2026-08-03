@@ -1,5 +1,6 @@
 /**
- * Leaf-row status marker — replaces kind/entity icons under pipeline stages.
+ * Activity-row status marker — primary glyph on nested/leaf rows;
+ * corner badge on top-level phase icons.
  */
 
 import type { OperationStatus } from "../../client/index"
@@ -14,11 +15,18 @@ const DOT_CLASS: Record<ReturnType<typeof statusCalloutTone>, string> = {
   muted: "is-muted",
 }
 
-export function OpLogStatusDot({ status }: { status: OperationStatus }) {
+export function OpLogStatusDot({
+  status,
+  badge = false,
+}: {
+  status: OperationStatus
+  /** Corner micro-dot on a functional phase icon. */
+  badge?: boolean
+}) {
   const tone = statusCalloutTone(status)
   return (
     <span
-      className={`op-log-status-dot ${DOT_CLASS[tone]}`}
+      className={`op-log-status-dot ${DOT_CLASS[tone]}${badge ? " is-badge" : ""}`}
       title={status}
       aria-hidden
     />

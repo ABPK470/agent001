@@ -55,4 +55,25 @@ describe("buildGuideSlots", () => {
     expect(shouldDrawGuideLine(nodes, 0, 0)).toBe(false)
     expect(shouldDrawGuideLine([{ depth: 2 }, { depth: 1 }], 0, 0)).toBe(true)
   })
+
+  it("renders Preview/Execute like a file tree (├ children, └ last, stem into Execute)", () => {
+    const nodes = [
+      { depth: 0, parentScopeId: null },
+      { depth: 1, parentScopeId: "run" }, // Preview
+      { depth: 2, parentScopeId: "preview" }, // Preflight
+      { depth: 2, parentScopeId: "preview" }, // Started
+      { depth: 2, parentScopeId: "preview" }, // Completed
+      { depth: 1, parentScopeId: "run" }, // Execute
+      { depth: 2, parentScopeId: "execute" }, // Preflight
+      { depth: 2, parentScopeId: "execute" }, // Started
+      { depth: 0, parentScopeId: null },
+    ]
+    expect(buildGuideSlots(nodes, 1)).toEqual(["branch"]) // ├── Preview
+    expect(buildGuideSlots(nodes, 2)).toEqual(["line", "branch"]) // │ ├── Preflight
+    expect(buildGuideSlots(nodes, 3)).toEqual(["line", "branch"]) // │ ├── Started
+    expect(buildGuideSlots(nodes, 4)).toEqual(["line", "corner"]) // │ └── Completed
+    expect(buildGuideSlots(nodes, 5)).toEqual(["corner"]) // └── Execute
+    expect(buildGuideSlots(nodes, 6)).toEqual(["blank", "branch"]) //     ├── Preflight
+    expect(buildGuideSlots(nodes, 7)).toEqual(["blank", "corner"]) //     └── Started
+  })
 })

@@ -1,6 +1,6 @@
 /**
  * Left-tree activity row — select drives the right detail pane; chevron folds children.
- * Icon hierarchy: stage = functional icon; leaf = status dot (no kind inflation).
+ * Glyph column: top-level phases = functional icon + status badge; nested/leaf = status dot.
  */
 
 import type { OperationActivity, OperationStatus } from "../../client/index"
@@ -40,12 +40,15 @@ export function OperationLogActivityTreeRow({
   onSelect: () => void
   onToggleFold: () => void
 }) {
-  // Leaves: status dot only for OK; FAIL/Running keep the pill (errors must break flow).
+  // Leaves / nested steps: status dot only for OK; FAIL/Running keep the pill.
   const showPill = opLogShowStatusPill({ status, leaf: !hasChildren })
-  const visual = resolveActivityTreeVisual({ activity, hasChildren, status })
+  const visual = resolveActivityTreeVisual({ activity, hasChildren, status, depth })
   const icon =
     visual.type === "icon" ? (
-      <OpLogEntityIcon icon={visual.Icon} color={visual.color} />
+      <>
+        <OpLogEntityIcon icon={visual.Icon} color={visual.color} />
+        <OpLogStatusDot status={visual.status} badge />
+      </>
     ) : (
       <OpLogStatusDot status={visual.status} />
     )

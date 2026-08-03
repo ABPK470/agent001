@@ -1,8 +1,8 @@
 /**
  * Pipelines tree icon hierarchy (Kind Inheritance):
- *   Root run     → kind icon (Sync / Bridge / Agent)
- *   Stage/phase  → functional step icon (not pipeline kind)
- *   Leaf action  → status dot only (no icon inflation)
+ *   Root run              → kind icon (Sync / Bridge / Agent)
+ *   Top-level phase (d1)  → functional step icon + status badge
+ *   Nested step / leaf    → status dot only (aligned labels, no icon inflation)
  */
 
 import {
@@ -39,14 +39,14 @@ export const OP_LOG_KIND_META: Record<
 export type OpLogEntityVisual = { Icon: LucideIcon; color: string }
 
 export type OpLogActivityTreeVisual =
-  | { type: "icon"; Icon: LucideIcon; color: string }
+  | { type: "icon"; Icon: LucideIcon; color: string; status: OperationStatus }
   | { type: "status-dot"; status: OperationStatus }
 
 export function pipelineEntityIcon(kind: OperationKind): OpLogEntityVisual {
   return OP_LOG_KIND_META[kind] ?? OP_LOG_KIND_META.system
 }
 
-/** Functional icon for an expandable stage/phase — never the pipeline kind icon. */
+/** Functional icon for a top-level phase — never the pipeline kind icon. */
 export function activityPhaseIcon(activity: OperationActivity): OpLogEntityVisual {
   const name = activity.name.toLowerCase()
   const id = activity.id.toLowerCase()
@@ -70,17 +70,20 @@ export function activityPhaseIcon(activity: OperationActivity): OpLogEntityVisua
 }
 
 /**
- * Left-tree activity visual — stages get functional icons; leaves get status dots.
- * Kind icons belong only on pipeline roots (`pipelineEntityIcon`).
+ * Left-tree activity visual.
+ * Nested expandables (MetadataSync) share the status-dot column with leaf siblings
+ * so labels stay vertically aligned and status stays scannable.
  */
 export function resolveActivityTreeVisual(opts: {
   activity: OperationActivity
   hasChildren: boolean
   status: OperationStatus
+  /** Flat-row depth: 1 = Preview/Execute under pipeline root. */
+  depth: number
 }): OpLogActivityTreeVisual {
-  if (opts.hasChildren) {
+  if (opts.hasChildren && opts.depth <= 1) {
     const phase = activityPhaseIcon(opts.activity)
-    return { type: "icon", Icon: phase.Icon, color: phase.color }
+    return { type: "icon", Icon: phase.Icon, color: phase.color, status: opts.status }
   }
   return { type: "status-dot", status: opts.status }
 }

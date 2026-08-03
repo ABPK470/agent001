@@ -50,13 +50,37 @@ describe("activityPhaseIcon — functional stages, never kind fallback", () => {
 })
 
 describe("resolveActivityTreeVisual — Kind Inheritance", () => {
-  it("gives expandable stages a functional icon", () => {
+  it("gives top-level phases (depth 1) a functional icon + status", () => {
     const visual = resolveActivityTreeVisual({
-      activity: activity({ id: "phase:preview", name: "Preview", children: [activity({ id: "c", name: "child" })] }),
+      activity: activity({
+        id: "phase:preview",
+        name: "Preview",
+        children: [activity({ id: "c", name: "child" })],
+      }),
       hasChildren: true,
       status: OperationStatus.Failed,
+      depth: 1,
     })
-    expect(visual).toEqual({ type: "icon", Icon: Eye, color: "var(--color-info)" })
+    expect(visual).toEqual({
+      type: "icon",
+      Icon: Eye,
+      color: "var(--color-info)",
+      status: OperationStatus.Failed,
+    })
+  })
+
+  it("gives nested expandables a status dot so labels align with leaf siblings", () => {
+    const visual = resolveActivityTreeVisual({
+      activity: activity({
+        id: "metasync",
+        name: "MetadataSync",
+        children: [activity({ id: "c", name: "child" })],
+      }),
+      hasChildren: true,
+      status: OperationStatus.Success,
+      depth: 2,
+    })
+    expect(visual).toEqual({ type: "status-dot", status: OperationStatus.Success })
   })
 
   it("gives leaves a status dot — never a kind/entity icon", () => {
@@ -64,6 +88,7 @@ describe("resolveActivityTreeVisual — Kind Inheritance", () => {
       activity: activity({ id: "started", name: "Started" }),
       hasChildren: false,
       status: OperationStatus.Success,
+      depth: 2,
     })
     expect(visual).toEqual({ type: "status-dot", status: OperationStatus.Success })
   })
@@ -73,6 +98,7 @@ describe("resolveActivityTreeVisual — Kind Inheritance", () => {
       activity: activity({ id: "configured", name: "Configured" }),
       hasChildren: false,
       status: OperationStatus.Success,
+      depth: 1,
     })
     expect(visual.type).toBe("status-dot")
   })

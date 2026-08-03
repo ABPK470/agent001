@@ -2878,16 +2878,26 @@ textarea.input {
 
 /*
  * Flat IDE guides (├ └) — Pipelines left tree.
- * Paint with backgrounds (not abspos %-height): flex-stretched guides often
- * have no definite containing-block height for abspos %, which drops the └
- * vertical on last siblings (Completed under Execute).
+ *
+ * Geometry (gap: 0): [guide×N][chev 16px][icon]
+ *   • │ / ├ verticals span the full button (inset row hairline underneath)
+ *   • ├ / └ horizontal runs from stem through the chevron slot to the icon/dot
+ *   • └ vertical stops at mid — does not continue into the next section
  */
+.review-tree-row.has-guides {
+  overflow: visible;
+  border-bottom: none;
+}
+
 .review-tree-row.has-guides > .review-tree-row__btn {
   align-items: stretch;
+  /* Separator sits under the stem so │ stays continuous across rows. */
+  box-shadow: inset 0 -1px 0 var(--border-subtle, var(--color-border-subtle));
 }
 
 .review-tree-row.has-guides .review-tree-row__node-cell {
   align-items: stretch;
+  gap: 0;
   min-height: 100%;
 }
 
@@ -2895,41 +2905,83 @@ textarea.input {
   align-self: center;
 }
 
+.review-tree-row.has-guides .review-tree-row__icon {
+  position: relative;
+  margin-top: 0;
+  /* Node-cell gap is 0 so the lead can reach the glyph; restore air before label. */
+  margin-inline-end: 0.5rem;
+}
+
+.review-tree-row.has-guides .review-tree-row__chev {
+  position: relative;
+  z-index: 1;
+  width: 16px;
+  height: 16px;
+}
+
 .review-tree-row__guides {
   display: flex;
   align-self: stretch;
   flex-shrink: 0;
   min-height: 100%;
+  /* Air between stem and chevron so › isn't cramped on the ├ junction. */
+  margin-inline-end: 4px;
 }
 
 .review-tree-guide {
+  position: relative;
   width: var(--review-tree-indent, 20px);
   align-self: stretch;
   flex-shrink: 0;
   min-height: 100%;
+}
+
+/* Ancestor stem │ — full height over the inset hairline. */
+.review-tree-guide.is-line::before {
+  content: "";
+  position: absolute;
+  left: calc(50% - 0.5px);
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--review-tree-line);
+}
+
+/* ├ branch — full vertical + horizontal lead into icon/dot. */
+.review-tree-guide.is-branch::before {
+  content: "";
+  position: absolute;
+  left: calc(50% - 0.5px);
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--review-tree-line);
+}
+
+/*
+ * └ corner — vertical stops at mid (no drop into the next parent section).
+ * Background vertical (own used height) + ::after horizontal lead.
+ */
+.review-tree-guide.is-corner {
+  background-image: linear-gradient(var(--review-tree-line), var(--review-tree-line));
+  background-size: 1px 50%;
+  background-position: 50% 0;
   background-repeat: no-repeat;
 }
 
-.review-tree-guide.is-line {
-  background-image: linear-gradient(var(--review-tree-line), var(--review-tree-line));
-  background-size: 1px 100%;
-  background-position: 50% 0;
-}
-
-.review-tree-guide.is-branch {
-  background-image:
-    linear-gradient(var(--review-tree-line), var(--review-tree-line)),
-    linear-gradient(var(--review-tree-line), var(--review-tree-line));
-  background-size: 1px 100%, 50% 1px;
-  background-position: 50% 0, 50% 50%;
-}
-
-.review-tree-guide.is-corner {
-  background-image:
-    linear-gradient(var(--review-tree-line), var(--review-tree-line)),
-    linear-gradient(var(--review-tree-line), var(--review-tree-line));
-  background-size: 1px 50%, 50% 1px;
-  background-position: 50% 0, 50% 50%;
+/*
+ * Horizontal lead: stem → gap → chevron → center of 20px glyph (dot / phase icon).
+ * width = half guide + guides margin (4) + chevron (16) + half icon (10).
+ */
+.review-tree-guide.is-branch::after,
+.review-tree-guide.is-corner::after {
+  content: "";
+  position: absolute;
+  top: calc(50% - 0.5px);
+  left: 50%;
+  width: calc(50% + 4px + 16px + 10px);
+  height: 1px;
+  background: var(--review-tree-line);
 }
 
 .review-tree-row__chev {
@@ -3333,8 +3385,8 @@ textarea.input {
   flex-shrink: 0;
 }
 
-/* Leaf activity marker — de-escalated from kind/entity icons. */
-.op-log-activity-tree-row.is-leaf .review-tree-row__icon:has(.op-log-status-dot) {
+/* Status dots stay full chroma (leaf primary glyph or phase corner badge). */
+.op-log-activity-tree-row .review-tree-row__icon:has(.op-log-status-dot) {
   opacity: 1;
 }
 
@@ -3346,6 +3398,17 @@ textarea.input {
   flex-shrink: 0;
   background: var(--text-muted);
   opacity: 0.65;
+}
+
+/* Corner badge on top-level phase icons (Preview / Execute). */
+.op-log-status-dot.is-badge {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 0.3125rem;
+  height: 0.3125rem;
+  opacity: 1;
+  box-shadow: 0 0 0 1px var(--panel, var(--color-panel));
 }
 
 .op-log-status-dot.is-ok {

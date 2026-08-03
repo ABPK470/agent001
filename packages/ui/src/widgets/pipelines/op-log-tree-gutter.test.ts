@@ -80,14 +80,19 @@ describe("pipelines left-tree gutter — review kit", () => {
     expect(activity).not.toContain("activityEntityIcon")
   })
 
-  it("hosts IDE tree guide hairlines on the shared review kit", () => {
+  it("hosts IDE tree guide hairlines that touch icons and bridge rows", () => {
     const css = read(cssPath)
     expect(css).toContain(".review-tree-row__guides")
     expect(css).toContain(".review-tree-guide.is-branch")
     expect(css).toContain(".review-tree-guide.is-corner")
     expect(css).toContain("var(--review-tree-line)")
-    // Corners paint via backgrounds — abspos %-height drops the └ vertical.
-    expect(css).toMatch(/\.review-tree-guide\.is-corner\s*\{[^}]*background-size:\s*1px 50%/s)
+    // Horizontal lead crosses chevron air to the glyph center (dot / phase icon).
+    expect(css).toContain("width: calc(50% + 4px + 16px + 10px)")
+    // Guided rows drop border-bottom; inset shadow sits under continuous │.
+    expect(css).toMatch(
+      /\.review-tree-row\.has-guides\s*>\s*\.review-tree-row__btn\s*\{[^}]*box-shadow:\s*inset 0 -1px 0/s,
+    )
+    expect(css).toMatch(/\.review-tree-row\.has-guides\s*\{[^}]*border-bottom:\s*none/s)
   })
 
   it("wires depth via CSS vars — not inline paddingLeft", () => {

@@ -21,8 +21,7 @@ export function opLogShowStatusPill(opts: {
 
 /**
  * Kind (entity) icons belong on pipeline roots only.
- * Nested stages use functional icons / status dots via `resolveActivityTreeVisual`.
- * Inspector timeline stays icon-free.
+ * Activity glyphs: `resolveActivityTreeVisual` (phase icon @ depth 1, else status dot).
  */
 export function opLogShowEntityIcon(opts: { pipelineRow?: boolean }): boolean {
   return !!opts.pipelineRow
