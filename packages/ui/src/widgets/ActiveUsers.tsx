@@ -19,7 +19,7 @@
  */
 
 import { Activity, CircleDot, Cpu, Play, SlidersHorizontal, Users, Zap } from "lucide-react"
-import type { CSSProperties, ReactNode, RefObject } from "react"
+import type { ReactNode, RefObject } from "react"
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { api } from "../client/index"
 import { EmptyState } from "../components/EmptyState"
@@ -45,7 +45,7 @@ import {
   isSummaryRefreshEvent,
   useAdminSseEvents,
 } from "./active-users-sse"
-import { ActiveUsersRunInspector, type RunPreview } from "./ActiveUsersRunInspector"
+import { ActiveUsersRunAccordionPanel, type RunPreview } from "./ActiveUsersRunAccordion"
 import { ActiveUsersZenHud } from "./ActiveUsersZenHud"
 import { WIDGET_ICONS } from "./widget-icons"
 import {
@@ -166,6 +166,31 @@ function sortUsers(users: UserRow[], key: SortKey, dir: SortDir): UserRow[] {
   })
 }
 
+/** Compact browser + OS labels for expanded user detail (full UA stays in title). */
+function summarizeUserAgent(ua: string): { browser: string; os: string | null } {
+  const edg = ua.match(/\bEdg\/(\d+)/)
+  const firefox = ua.match(/\bFirefox\/(\d+)/)
+  const chrome = ua.match(/\bChrome\/(\d+)/)
+  const safari = ua.match(/\bVersion\/(\d+(?:\.\d+)?).*\bSafari\//)
+
+  let browser = "Unknown"
+  if (edg?.[1]) browser = `Edge ${edg[1]}`
+  else if (firefox?.[1]) browser = `Firefox ${firefox[1]}`
+  else if (chrome?.[1] && !ua.includes("Edg/")) browser = `Chrome ${chrome[1]}`
+  else if (safari?.[1]) browser = `Safari ${safari[1].split(".")[0]}`
+  else if (/curl\//i.test(ua)) browser = "curl"
+  else if (/bot|crawler|spider/i.test(ua)) browser = "Bot"
+
+  let os: string | null = null
+  if (/iPhone|iPad|iPod/.test(ua)) os = "iOS"
+  else if (ua.includes("Android")) os = "Android"
+  else if (ua.includes("Mac OS X") || ua.includes("Macintosh")) os = "macOS"
+  else if (ua.includes("Windows")) os = "Windows"
+  else if (ua.includes("Linux")) os = "Linux"
+
+  return { browser, os }
+}
+
 // ── Component ──────────────────────────────────────────────────
 
 export function ActiveUsers(): ReactNode {
@@ -188,16 +213,9 @@ export function ActiveUsers(): ReactNode {
   const [failedOnly, setFailedOnly] = useState(false)
   const [lastSeenRange, setLastSeenRange] = useState<"all" | "1h" | "24h" | "7d">("all")
   const [adminBusy, setAdminBusy] = useState<string | null>(null)
-  const [runInspector, setRunInspector] = useState<{ runId: string; preview?: RunPreview } | null>(null)
-  const [inspectorOpen, setInspectorOpen] = useState(false)
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [zenSearchOpen, setZenSearchOpen] = useState(false)
   const [zenStatsOpen, setZenStatsOpen] = useState(false)
-  const runNavRef = useRef<{ runId: string; preview?: RunPreview }[]>([])
-  const runInspectorRef = useRef(runInspector)
-  runInspectorRef.current = runInspector
-  const inspectorOpenRef = useRef(inspectorOpen)
-  inspectorOpenRef.current = inspectorOpen
   const filtersOpenRef = useRef(filtersOpen)
   filtersOpenRef.current = filtersOpen
   const zenSearchOpenRef = useRef(zenSearchOpen)
@@ -205,8 +223,6 @@ export function ActiveUsers(): ReactNode {
   const zenStatsOpenRef = useRef(zenStatsOpen)
   zenStatsOpenRef.current = zenStatsOpen
   const filterBtnRef = useRef<HTMLButtonElement>(null)
-  const bodyScrollRef = useRef<HTMLDivElement>(null)
-  const openInspectorRafRef = useRef(0)
   const rootRef = useRef<HTMLDivElement>(null)
   const { isZen, toggleZen, exitZen } = useWidgetFocus()
   const widgetInstance = useWidgetInstance()
@@ -214,7 +230,6 @@ export function ActiveUsers(): ReactNode {
   const zenHotkeysEnabled =
     isZen || Boolean(widgetInstance && focusedTileId === widgetInstance.widgetId)
   const { width: widgetWidth } = useContainerSize(rootRef)
-  const { width: bodyScrollWidth } = useContainerSize(bodyScrollRef)
   const useStack = widgetWidth < AU_TABLE_MIN_WIDTH_PX
   // Filters collapse whenever we stack — chips fight for width on mid-size panels.
   const compact = useStack || widgetWidth < 860
@@ -434,7 +449,6 @@ export function ActiveUsers(): ReactNode {
   }, [summary])
 
   const onEscapeBeforeExit = useCallback((): boolean => {
-    if (inspectorOpenRef.current) return true
     if (filtersOpenRef.current) {
       setFiltersOpen(false)
       return true
@@ -487,68 +501,6 @@ export function ActiveUsers(): ReactNode {
     window.addEventListener("keydown", onKeyDown)
     return () => window.removeEventListener("keydown", onKeyDown)
   }, [isZen, zenHotkeysEnabled])
-
-  const openRunInspector = useCallback((runId: string, preview?: RunPreview) => {
-    setRunInspector({ runId, preview })
-    if (inspectorOpenRef.current) return
-    cancelAnimationFrame(openInspectorRafRef.current)
-    // Mount closed for one paint, then open — so width transition can run.
-    openInspectorRafRef.current = requestAnimationFrame(() => {
-      openInspectorRafRef.current = requestAnimationFrame(() => {
-        setInspectorOpen(true)
-      })
-    })
-  }, [])
-
-  const closeRunInspector = useCallback(() => {
-    setInspectorOpen(false)
-  }, [])
-
-  const onInspectorExited = useCallback(() => {
-    if (inspectorOpenRef.current) return
-    setRunInspector(null)
-  }, [])
-
-  const setInspectableRuns = useCallback((runs: { runId: string; preview?: RunPreview }[]) => {
-    runNavRef.current = runs
-  }, [])
-
-  function stepRunInspector(delta: number) {
-    const open = runInspectorRef.current
-    if (!open) return
-    const nav = runNavRef.current
-    if (nav.length === 0) return
-    const idx = nav.findIndex((r) => r.runId === open.runId)
-    const from = idx >= 0 ? idx : 0
-    const next = nav[(from + delta + nav.length) % nav.length]
-    if (!next || next.runId === open.runId) return
-    setRunInspector(next)
-  }
-
-  function onRunInspectorNavKey(e: KeyboardEvent) {
-    if (!runInspectorRef.current) return
-    if (e.target instanceof HTMLElement) {
-      const tag = e.target.tagName
-      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || e.target.isContentEditable) return
-    }
-    if (e.key === "ArrowDown" || e.key === "j") {
-      e.preventDefault()
-      stepRunInspector(1)
-      return
-    }
-    if (e.key === "ArrowUp" || e.key === "k") {
-      e.preventDefault()
-      stepRunInspector(-1)
-    }
-  }
-
-  useEffect(() => {
-    if (!inspectorOpen) return
-    window.addEventListener("keydown", onRunInspectorNavKey)
-    return () => window.removeEventListener("keydown", onRunInspectorNavKey)
-  }, [inspectorOpen])
-
-  useEffect(() => () => cancelAnimationFrame(openInspectorRafRef.current), [])
 
   if (loading) {
     return (
@@ -664,16 +616,7 @@ export function ActiveUsers(): ReactNode {
         )}
 
         {/* Stack = reflow (no clip). Table = only when container is wide enough for all columns. */}
-        <div
-          className="au-run-host flex-1 min-h-0 min-w-0"
-          data-inspector-open={inspectorOpen ? "true" : "false"}
-          style={
-            bodyScrollWidth > 0
-              ? ({ ["--au-body-scroll-w" as string]: `${bodyScrollWidth}px` } as CSSProperties)
-              : undefined
-          }
-        >
-          <div ref={bodyScrollRef} className="flex-1 min-h-0 min-w-0 au-body-scroll">
+        <div className="flex-1 min-h-0 min-w-0 au-body-scroll">
           {useStack ? (
             <div className="au-user-list divide-y divide-border-subtle">
               {filteredSorted.map((u) => {
@@ -699,10 +642,6 @@ export function ActiveUsers(): ReactNode {
                           onToggleAdmin={(next) => void toggleAdmin(u, next).catch((err: unknown) => { console.error("[mia]", err) })}
                           onPageChange={(offset) => void loadHistory(u.identifier, offset).catch((err: unknown) => { console.error("[mia]", err) })}
                           onCollapse={() => toggle(u.identifier)}
-                          selectedRunId={runInspector?.runId ?? null}
-                          availableWidth={bodyScrollWidth}
-                          onRunClick={openRunInspector}
-                          onInspectableChange={setInspectableRuns}
                           viewingAsUpn={viewingAsUpn}
                           onViewingAs={() => {
                             if (!u.upn) return
@@ -736,15 +675,15 @@ export function ActiveUsers(): ReactNode {
                   <SortTh k="status" current={sortKey} dir={sortDir} onClick={onSort} className="w-8" label="" />
                   <SortTh k="name" current={sortKey} dir={sortDir} onClick={onSort} className="au-th-name" label="Name" />
                   <SortTh k="upn" current={sortKey} dir={sortDir} onClick={onSort} className="au-th-upn" label="UPN / Session" />
-                  <SortTh k="sessions" current={sortKey} dir={sortDir} onClick={onSort} className="text-right" label="Sessions" />
-                  <SortTh k="totalRuns" current={sortKey} dir={sortDir} onClick={onSort} className="text-right" label="Total Runs" />
-                  <SortTh k="runs24h" current={sortKey} dir={sortDir} onClick={onSort} className="text-right" label="Runs 24h" />
-                  <SortTh k="failed24h" current={sortKey} dir={sortDir} onClick={onSort} className="text-right" label="Failed 24h" />
-                  <SortTh k="tokens24h" current={sortKey} dir={sortDir} onClick={onSort} className="text-right" label="Tokens 24h" />
-                  <SortTh k="llmCalls24h" current={sortKey} dir={sortDir} onClick={onSort} className="text-right" label="LLM Calls 24h" />
-                  <SortTh k="lastModel" current={sortKey} dir={sortDir} onClick={onSort} label="Model" />
-                  <SortTh k="firstSeen" current={sortKey} dir={sortDir} onClick={onSort} label="First Seen" />
-                  <SortTh k="lastSeen" current={sortKey} dir={sortDir} onClick={onSort} label="Last Seen" />
+                  <SortTh k="sessions" current={sortKey} dir={sortDir} onClick={onSort} className="au-col-num text-right" label="Sessions" />
+                  <SortTh k="totalRuns" current={sortKey} dir={sortDir} onClick={onSort} className="au-col-num-wide text-right" label="Total Runs" />
+                  <SortTh k="runs24h" current={sortKey} dir={sortDir} onClick={onSort} className="au-col-num text-right" label="Runs 24h" />
+                  <SortTh k="failed24h" current={sortKey} dir={sortDir} onClick={onSort} className="au-col-num-wide text-right" label="Failed 24h" />
+                  <SortTh k="tokens24h" current={sortKey} dir={sortDir} onClick={onSort} className="au-col-num-wide text-right" label="Tokens 24h" />
+                  <SortTh k="llmCalls24h" current={sortKey} dir={sortDir} onClick={onSort} className="au-col-num-wide text-right" label="LLM Calls 24h" />
+                  <SortTh k="lastModel" current={sortKey} dir={sortDir} onClick={onSort} className="au-col-model" label="Model" />
+                  <SortTh k="firstSeen" current={sortKey} dir={sortDir} onClick={onSort} className="au-col-when" label="First Seen" />
+                  <SortTh k="lastSeen" current={sortKey} dir={sortDir} onClick={onSort} className="au-col-when" label="Last Seen" />
                   <th className="py-2 px-2 text-xs w-8" aria-hidden />
                 </tr>
               </thead>
@@ -768,31 +707,33 @@ export function ActiveUsers(): ReactNode {
                         <td className="py-2 px-3 au-td-upn">
                           <UserUpnCell user={u} />
                         </td>
-                        <td className="py-2 px-3 text-right tabular-nums text-text-muted">{u.sessionCount}</td>
-                        <td className="py-2 px-3 text-right tabular-nums text-text">
+                        <td className="py-2 px-3 au-col-num text-right tabular-nums text-text-muted">{u.sessionCount}</td>
+                        <td className="py-2 px-3 au-col-num-wide text-right tabular-nums text-text">
                           {u.totalRuns > 0 ? u.totalRuns : <span className="text-text-muted/50">0</span>}
                         </td>
-                        <td className="py-2 px-3 text-right tabular-nums text-text">
+                        <td className="py-2 px-3 au-col-num text-right tabular-nums text-text">
                           {u.runs24h > 0 ? u.runs24h : <span className="text-text-muted/50">0</span>}
                         </td>
-                        <td className="py-2 px-3 text-right tabular-nums">
+                        <td className="py-2 px-3 au-col-num-wide text-right tabular-nums">
                           {u.runsFailed24h > 0
                             ? <span className="text-error">{u.runsFailed24h}</span>
                             : <span className="text-text-muted/50">0</span>}
                         </td>
-                        <td className="py-2 px-3 text-right tabular-nums text-text-muted">
+                        <td className="py-2 px-3 au-col-num-wide text-right tabular-nums text-text-muted">
                           {u.totalTokens24h > 0 ? formatCompact(u.totalTokens24h) : <span className="text-text-muted/50">0</span>}
                         </td>
-                        <td className="py-2 px-3 text-right tabular-nums text-text-muted">
+                        <td className="py-2 px-3 au-col-num-wide text-right tabular-nums text-text-muted">
                           {u.totalLlmCalls24h > 0 ? u.totalLlmCalls24h : <span className="text-text-muted/50">0</span>}
                         </td>
-                        <td className="py-2 px-3 text-text-muted whitespace-nowrap">
-                          {u.lastModel ?? <span className="text-text-muted/50">—</span>}
+                        <td className="py-2 px-3 au-col-model text-text-muted">
+                          <span className="block truncate" title={u.lastModel ?? undefined}>
+                            {u.lastModel ?? <span className="text-text-muted/50">—</span>}
+                          </span>
                         </td>
-                        <td className="py-2 px-3 text-text-muted whitespace-nowrap" title={u.firstSeenAt}>
+                        <td className="py-2 px-3 au-col-when text-text-muted whitespace-nowrap" title={u.firstSeenAt}>
                           {formatRelative(u.firstSeenAt)}
                         </td>
-                        <td className="py-2 px-3 text-text-muted whitespace-nowrap" title={u.lastSeenAt}>
+                        <td className="py-2 px-3 au-col-when text-text-muted whitespace-nowrap" title={u.lastSeenAt}>
                           {formatRelative(u.lastSeenAt)}
                         </td>
                         <td className="py-2 px-2 text-text-muted w-8">{isOpen ? "▾" : "▸"}</td>
@@ -810,10 +751,6 @@ export function ActiveUsers(): ReactNode {
                                 onToggleAdmin={(next) => void toggleAdmin(u, next).catch((err: unknown) => { console.error("[mia]", err) })}
                                 onPageChange={(offset) => void loadHistory(u.identifier, offset).catch((err: unknown) => { console.error("[mia]", err) })}
                                 onCollapse={() => toggle(u.identifier)}
-                                selectedRunId={runInspector?.runId ?? null}
-                                availableWidth={bodyScrollWidth}
-                                onRunClick={openRunInspector}
-                                onInspectableChange={setInspectableRuns}
                                 viewingAsUpn={viewingAsUpn}
                                 onViewingAs={() => {
                                   if (!u.upn) return
@@ -847,16 +784,6 @@ export function ActiveUsers(): ReactNode {
                 )}
               </tbody>
             </table>
-          )}
-          </div>
-          {runInspector && (
-            <ActiveUsersRunInspector
-              runId={runInspector.runId}
-              preview={runInspector.preview}
-              open={inspectorOpen}
-              onClose={closeRunInspector}
-              onExited={onInspectorExited}
-            />
           )}
         </div>
       </div>
@@ -1286,7 +1213,7 @@ type RunSortKey = "started" | "duration" | "steps" | "tokens" | "llmCalls" | "mo
 /** Run-history table needs ~this many CSS px; below → stacked cards. */
 const AU_RUN_TABLE_MIN_WIDTH_PX = 720
 
-function UserDetail({ user, liveRuns, history, stack, adminBusy, onToggleAdmin, onPageChange, onCollapse, selectedRunId, availableWidth, onRunClick, onInspectableChange, viewingAsUpn, onViewingAs }: {
+function UserDetail({ user, liveRuns, history, stack, adminBusy, onToggleAdmin, onPageChange, onCollapse, viewingAsUpn, onViewingAs }: {
   user: UserRow; liveRuns: ActiveRunRow[]
   history: HistoryState | undefined
   stack: boolean
@@ -1294,17 +1221,42 @@ function UserDetail({ user, liveRuns, history, stack, adminBusy, onToggleAdmin, 
   onToggleAdmin: (next: boolean) => void
   onPageChange: (offset: number) => void
   onCollapse: () => void
-  selectedRunId: string | null
-  /** Scrollport width (shrinks when run inspector is open). */
-  availableWidth: number
-  onRunClick: (runId: string, preview?: RunPreview) => void
-  onInspectableChange: (runs: { runId: string; preview?: RunPreview }[]) => void
   viewingAsUpn: string | null
   onViewingAs: () => void
 }) {
-  // Run history follows scrollport width — not the full users-table colspan (which
-  // ignores the inspector margin and caused nested horizontal clipping).
-  const stackRuns = stack || availableWidth === 0 || availableWidth < AU_RUN_TABLE_MIN_WIDTH_PX
+  const detailRef = useRef<HTMLDivElement>(null)
+  const { width: detailWidth } = useContainerSize(detailRef)
+  const stackRuns = stack || detailWidth === 0 || detailWidth < AU_RUN_TABLE_MIN_WIDTH_PX
+
+  const [expandedRun, setExpandedRun] = useState<{ runId: string; preview?: RunPreview } | null>(null)
+
+  function toggleRun(runId: string, preview?: RunPreview) {
+    setExpandedRun((prev) => (prev?.runId === runId ? null : { runId, preview }))
+  }
+
+  function runPreviewForLive(r: ActiveRunRow): RunPreview {
+    return {
+      goal: r.goal,
+      status: r.status,
+      stepCount: r.stepCount,
+      createdAt: r.createdAt,
+    }
+  }
+
+  function runPreviewForHistory(h: HistoryRow): RunPreview {
+    return {
+      goal: h.goal,
+      status: h.status,
+      model: h.model,
+      stepCount: h.stepCount,
+      totalTokens: h.totalTokens,
+      llmCalls: h.llmCalls,
+      error: h.error,
+      createdAt: h.createdAt,
+      completedAt: h.completedAt,
+      durationMs: h.durationMs,
+    }
+  }
 
   const [runFilter, setRunFilter] = useState("")
   const [runStatus, setRunStatus] = useState<"all" | "succeeded" | "failed" | "running">("all")
@@ -1357,44 +1309,6 @@ function UserDetail({ user, liveRuns, history, stack, adminBusy, onToggleAdmin, 
     return rows
   }, [history?.rows, runFilter, runStatus, runSort, runSortDir])
 
-  useEffect(() => {
-    const seen = new Set<string>()
-    const runs: { runId: string; preview?: RunPreview }[] = []
-    for (const r of liveRuns) {
-      if (seen.has(r.runId)) continue
-      seen.add(r.runId)
-      runs.push({
-        runId: r.runId,
-        preview: {
-          goal: r.goal,
-          status: r.status,
-          stepCount: r.stepCount,
-          createdAt: r.createdAt,
-        },
-      })
-    }
-    for (const h of displayRows) {
-      if (seen.has(h.runId)) continue
-      seen.add(h.runId)
-      runs.push({
-        runId: h.runId,
-        preview: {
-          goal: h.goal,
-          status: h.status,
-          model: h.model,
-          stepCount: h.stepCount,
-          totalTokens: h.totalTokens,
-          llmCalls: h.llmCalls,
-          error: h.error,
-          createdAt: h.createdAt,
-          completedAt: h.completedAt,
-          durationMs: h.durationMs,
-        },
-      })
-    }
-    onInspectableChange(runs)
-  }, [liveRuns, displayRows, onInspectableChange])
-
   const RSortTh = ({ k, label, right }: { k: RunSortKey; label: string; right?: boolean }) => {
     const active = runSort === k
     return (
@@ -1411,7 +1325,7 @@ function UserDetail({ user, liveRuns, history, stack, adminBusy, onToggleAdmin, 
   }
 
   return (
-    <div className="au-detail-panel min-w-0">
+    <div ref={detailRef} className="au-detail-panel min-w-0">
 
       {/* Sticky context banner — stays under users thead while history scrolls */}
       <button
@@ -1458,17 +1372,12 @@ function UserDetail({ user, liveRuns, history, stack, adminBusy, onToggleAdmin, 
           <KV label="Last run" value={user.lastRunAt ? formatRelative(user.lastRunAt) : "—"} />
           <KV label="Last IP" value={user.lastIp ?? "—"} mono />
           <KV label="Last model" value={user.lastModel ?? "—"} mono />
+          {user.lastUserAgent ? (
+            <UserAgentSummary ua={user.lastUserAgent} />
+          ) : (
+            <KV label="User agent" value="—" />
+          )}
         </div>
-        {user.lastUserAgent ? (
-          <div className="mt-3 pt-3 border-t border-border-subtle/60">
-            <div className="au-detail-kv">
-              <span className="au-detail-kv__label">User agent</span>
-              <span className="au-detail-kv__value font-mono text-xs text-text-muted break-all" title={user.lastUserAgent}>
-                {user.lastUserAgent}
-              </span>
-            </div>
-          </div>
-        ) : null}
         {user.upn ? (
           <div className="mt-3 flex flex-wrap justify-end gap-2">
             <button
@@ -1510,27 +1419,29 @@ function UserDetail({ user, liveRuns, history, stack, adminBusy, onToggleAdmin, 
         <div className="px-4 py-2.5 border-b border-border-subtle flex flex-col gap-1">
           <div className="au-label font-semibold text-success tracking-widest mb-1">Running now</div>
           {liveRuns.map((r) => (
-            <button
-              key={r.runId}
-              type="button"
-              className={[
-                "flex w-full items-baseline gap-3 rounded-md px-1 py-0.5 text-left transition-colors hover:bg-overlay-2",
-                selectedRunId === r.runId ? "au-run-selected" : "",
-              ].filter(Boolean).join(" ")}
-              onClick={(e) => {
-                e.stopPropagation()
-                onRunClick(r.runId, {
-                  goal: r.goal,
-                  status: r.status,
-                  stepCount: r.stepCount,
-                  createdAt: r.createdAt,
-                })
-              }}
-            >
-              <span className="font-mono text-text-muted/60 shrink-0">{r.runId.slice(0, 8)}</span>
-              <span className="text-text-muted/60 shrink-0">step {r.stepCount}</span>
-              <span className="truncate text-text">{r.goal}</span>
-            </button>
+            <Fragment key={r.runId}>
+              <button
+                type="button"
+                className={[
+                  "flex w-full items-baseline gap-3 rounded-md px-1 py-0.5 text-left transition-colors hover:bg-overlay-2",
+                  expandedRun?.runId === r.runId ? "au-run-selected" : "",
+                ].filter(Boolean).join(" ")}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  toggleRun(r.runId, runPreviewForLive(r))
+                }}
+              >
+                <span className="font-mono text-text-muted/60 shrink-0">{r.runId.slice(0, 8)}</span>
+                <span className="text-text-muted/60 shrink-0">step {r.stepCount}</span>
+                <span className="truncate text-text">{r.goal}</span>
+              </button>
+              {expandedRun?.runId === r.runId && (
+                <ActiveUsersRunAccordionPanel
+                  runId={r.runId}
+                  preview={expandedRun.preview}
+                />
+              )}
+            </Fragment>
           ))}
         </div>
       )}
@@ -1603,52 +1514,48 @@ function UserDetail({ user, liveRuns, history, stack, adminBusy, onToggleAdmin, 
               {displayRows.length === 0 ? (
                 <div className="px-4 py-5 text-center text-text-muted/40">No runs match filter.</div>
               ) : displayRows.map((h) => (
-                <button
-                  key={h.runId}
-                  type="button"
-                  className={[
-                    "au-run-card w-full text-left px-4 py-3 hover:bg-overlay-2 transition-colors min-w-0",
-                    selectedRunId === h.runId ? "au-run-selected" : "",
-                  ].filter(Boolean).join(" ")}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    onRunClick(h.runId, {
-                      goal: h.goal,
-                      status: h.status,
-                      model: h.model,
-                      stepCount: h.stepCount,
-                      totalTokens: h.totalTokens,
-                      llmCalls: h.llmCalls,
-                      error: h.error,
-                      createdAt: h.createdAt,
-                      completedAt: h.completedAt,
-                      durationMs: h.durationMs,
-                    })
-                  }}
-                >
-                  <div className="flex items-start gap-2 min-w-0">
-                    <span className="shrink-0 pt-1"><StatusMark status={h.status} title={h.status} /></span>
-                    <span className="min-w-0 flex-1">
-                      <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-text-muted">
-                        <span className="font-mono">
-                          {h.runId.slice(0, 8)}
-                          <CopyBtn value={h.runId} label="run ID" />
+                <div key={h.runId} className="au-run-stack-item min-w-0">
+                  <button
+                    type="button"
+                    className={[
+                      "au-run-card w-full text-left px-4 py-3 hover:bg-overlay-2 transition-colors min-w-0",
+                      expandedRun?.runId === h.runId ? "au-run-selected" : "",
+                    ].filter(Boolean).join(" ")}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      toggleRun(h.runId, runPreviewForHistory(h))
+                    }}
+                  >
+                    <div className="flex items-start gap-2 min-w-0">
+                      <span className="shrink-0 pt-1"><StatusMark status={h.status} title={h.status} /></span>
+                      <span className="min-w-0 flex-1">
+                        <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-text-muted">
+                          <span className="font-mono">
+                            {h.runId.slice(0, 8)}
+                            <CopyBtn value={h.runId} label="run ID" />
+                          </span>
+                          <span title={h.createdAt}>{formatRelative(h.createdAt)}</span>
+                          <span className="tabular-nums">{formatDuration(h.durationMs)}</span>
+                          <span className="tabular-nums">{h.stepCount} steps</span>
+                          {h.totalTokens != null && (
+                            <span className="tabular-nums">{formatCompact(h.totalTokens)} tok</span>
+                          )}
+                          {h.model && <span className="truncate max-w-[10rem]">{h.model}</span>}
                         </span>
-                        <span title={h.createdAt}>{formatRelative(h.createdAt)}</span>
-                        <span className="tabular-nums">{formatDuration(h.durationMs)}</span>
-                        <span className="tabular-nums">{h.stepCount} steps</span>
-                        {h.totalTokens != null && (
-                          <span className="tabular-nums">{formatCompact(h.totalTokens)} tok</span>
-                        )}
-                        {h.model && <span className="truncate max-w-[10rem]">{h.model}</span>}
+                        <span className="mt-1 block text-sm text-text break-words" title={h.error ? `${h.goal}\n\nError: ${h.error}` : h.goal}>
+                          {h.error && <span className="text-error/90 mr-1.5" title={h.error}>⚠</span>}
+                          {h.goal}
+                        </span>
                       </span>
-                      <span className="mt-1 block text-sm text-text break-words" title={h.error ? `${h.goal}\n\nError: ${h.error}` : h.goal}>
-                        {h.error && <span className="text-error/90 mr-1.5" title={h.error}>⚠</span>}
-                        {h.goal}
-                      </span>
-                    </span>
-                  </div>
-                </button>
+                    </div>
+                  </button>
+                  {expandedRun?.runId === h.runId && (
+                    <ActiveUsersRunAccordionPanel
+                      runId={h.runId}
+                      preview={expandedRun.preview}
+                    />
+                  )}
+                </div>
               ))}
             </div>
           ) : (
@@ -1671,45 +1578,45 @@ function UserDetail({ user, liveRuns, history, stack, adminBusy, onToggleAdmin, 
                   {displayRows.length === 0 ? (
                     <tr><td colSpan={9} className="py-5 text-center text-text-muted/40">No runs match filter.</td></tr>
                   ) : displayRows.map((h) => (
-                    <tr
-                      key={h.runId}
-                      className={[
-                        "border-t border-border-subtle cursor-pointer transition-colors hover:bg-overlay-2",
-                        selectedRunId === h.runId ? "au-run-selected" : "",
-                      ].filter(Boolean).join(" ")}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        onRunClick(h.runId, {
-                          goal: h.goal,
-                          status: h.status,
-                          model: h.model,
-                          stepCount: h.stepCount,
-                          totalTokens: h.totalTokens,
-                          llmCalls: h.llmCalls,
-                          error: h.error,
-                          createdAt: h.createdAt,
-                          completedAt: h.completedAt,
-                          durationMs: h.durationMs,
-                        })
-                      }}
-                    >
-                      <td className="py-2 px-3"><StatusMark status={h.status} title={h.status} /></td>
-                      <td className="py-2 px-3 font-mono text-text-muted/70">
-                        {h.runId.slice(0, 8)}<CopyBtn value={h.runId} label="run ID" />
-                      </td>
-                      <td className="py-2 px-3 text-text-muted/70 whitespace-nowrap" title={h.createdAt}>{formatRelative(h.createdAt)}</td>
-                      <td className="py-2 px-3 text-right tabular-nums text-text-muted/70">{formatDuration(h.durationMs)}</td>
-                      <td className="py-2 px-3 text-right tabular-nums text-text-muted/70">{h.stepCount}</td>
-                      <td className="py-2 px-3 text-right tabular-nums text-text-muted/70">{h.totalTokens != null ? formatCompact(h.totalTokens) : <span className="text-text-muted/30">—</span>}</td>
-                      <td className="py-2 px-3 text-right tabular-nums text-text-muted/70">{h.llmCalls ?? <span className="text-text-muted/30">—</span>}</td>
-                      <td className="py-2 px-3 text-text-muted/70 whitespace-nowrap">{h.model ?? <span className="text-text-muted/30">—</span>}</td>
-                      <td className="py-2 px-3 max-w-[320px]">
-                        <span className="block truncate" title={h.error ? `${h.goal}\n\nError: ${h.error}` : h.goal}>
-                          {h.error && <span className="text-error/90 mr-1.5" title={h.error}>⚠</span>}
-                          <span className={h.error ? "text-text-muted/70" : "text-text"}>{h.goal}</span>
-                        </span>
-                      </td>
-                    </tr>
+                    <Fragment key={h.runId}>
+                      <tr
+                        className={[
+                          "border-t border-border-subtle cursor-pointer transition-colors hover:bg-overlay-2",
+                          expandedRun?.runId === h.runId ? "au-run-selected" : "",
+                        ].filter(Boolean).join(" ")}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          toggleRun(h.runId, runPreviewForHistory(h))
+                        }}
+                      >
+                        <td className="py-2 px-3"><StatusMark status={h.status} title={h.status} /></td>
+                        <td className="py-2 px-3 font-mono text-text-muted/70">
+                          {h.runId.slice(0, 8)}<CopyBtn value={h.runId} label="run ID" />
+                        </td>
+                        <td className="py-2 px-3 text-text-muted/70 whitespace-nowrap" title={h.createdAt}>{formatRelative(h.createdAt)}</td>
+                        <td className="py-2 px-3 text-right tabular-nums text-text-muted/70">{formatDuration(h.durationMs)}</td>
+                        <td className="py-2 px-3 text-right tabular-nums text-text-muted/70">{h.stepCount}</td>
+                        <td className="py-2 px-3 text-right tabular-nums text-text-muted/70">{h.totalTokens != null ? formatCompact(h.totalTokens) : <span className="text-text-muted/30">—</span>}</td>
+                        <td className="py-2 px-3 text-right tabular-nums text-text-muted/70">{h.llmCalls ?? <span className="text-text-muted/30">—</span>}</td>
+                        <td className="py-2 px-3 text-text-muted/70 whitespace-nowrap">{h.model ?? <span className="text-text-muted/30">—</span>}</td>
+                        <td className="py-2 px-3 max-w-[320px]">
+                          <span className="block truncate" title={h.error ? `${h.goal}\n\nError: ${h.error}` : h.goal}>
+                            {h.error && <span className="text-error/90 mr-1.5" title={h.error}>⚠</span>}
+                            <span className={h.error ? "text-text-muted/70" : "text-text"}>{h.goal}</span>
+                          </span>
+                        </td>
+                      </tr>
+                      {expandedRun?.runId === h.runId && (
+                        <tr className="au-run-accordion-row">
+                          <td colSpan={9} className="p-0 align-top">
+                            <ActiveUsersRunAccordionPanel
+                              runId={h.runId}
+                              preview={expandedRun.preview}
+                            />
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
                   ))}
                 </tbody>
               </table>
@@ -1768,6 +1675,19 @@ function KV({ label, value, mono }: { label: string; value: string; mono?: boole
     <div className="au-detail-kv min-w-0">
       <span className="au-detail-kv__label">{label}</span>
       <span className={`au-detail-kv__value ${mono ? "font-mono" : ""}`}>{value}</span>
+    </div>
+  )
+}
+
+function UserAgentSummary({ ua }: { ua: string }): ReactNode {
+  const { browser, os } = summarizeUserAgent(ua)
+  return (
+    <div className="au-detail-kv au-detail-ua min-w-0" title={ua}>
+      <span className="au-detail-kv__label">User agent</span>
+      <div className="au-detail-ua__badges">
+        <span className="au-detail-ua__badge">{browser}</span>
+        {os ? <span className="au-detail-ua__badge au-detail-ua__badge--muted">{os}</span> : null}
+      </div>
     </div>
   )
 }

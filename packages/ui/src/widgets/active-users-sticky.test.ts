@@ -68,19 +68,30 @@ describe("Active Users sticky context banner", () => {
     expect(css).toContain("browse-count--compact")
   })
 
-  it("run inspector shares body track — margin contract + transform slide", () => {
-    expect(src).toContain("au-run-host")
-    expect(src).toContain('data-inspector-open={inspectorOpen ? "true" : "false"}')
-    expect(src).toContain("bodyScrollRef")
-    expect(src).toContain("availableWidth={bodyScrollWidth}")
-    expect(src).toContain("ActiveUsersRunInspector")
-    expect(css).toMatch(/\.active-users-widget\s+\.au-run-host\s*\{[^}]*position:\s*relative/s)
-    expect(css).toContain('data-inspector-open="true"] .au-body-scroll')
-    expect(css).toContain("margin-right: var(--au-run-inspector-w)")
-    expect(css).toContain("--au-body-scroll-w")
-    expect(css).toContain('data-inspector-open="true"] .au-detail-nest')
-    expect(css).toContain("translate3d(100%, 0, 0)")
-    expect(css).toContain("box-shadow: none")
+  it("run details use inline accordion under selected row — no slide-over drawer", () => {
+    expect(src).toContain("ActiveUsersRunAccordionPanel")
+    expect(src).toContain("au-run-accordion-row")
+    expect(src).toContain("detailRef")
+    expect(src).not.toContain("ActiveUsersRunInspector")
+    expect(src).not.toContain("au-run-host")
+    expect(src).not.toContain("data-inspector-open")
+    expect(css).toMatch(/\.active-users-widget\s+\.au-run-accordion\s*\{/s)
+    expect(css).not.toContain("--au-run-inspector-w")
+    expect(css).not.toContain("grid-template-columns: minmax(0, 1fr) var(--au-run-inspector-w)")
+  })
+
+  it("users table columns reserve min width — headers don't crush when detail expands", () => {
+    expect(css).toContain(".au-col-when")
+    expect(css).toContain("min-width: 7.25rem")
+    expect(css).toContain("min-width: 68rem")
+    expect(src).toContain('className="au-col-when"')
+  })
+
+  it("user agent renders compact badges, not raw break-all block", () => {
+    expect(src).toContain("UserAgentSummary")
+    expect(src).toContain("summarizeUserAgent")
+    expect(src).toContain("au-detail-ua__badge")
+    expect(css).toContain(".au-detail-ua__badge")
   })
 
   it("Viewing as chip uses theme tokens (not dark-only amber text)", () => {
