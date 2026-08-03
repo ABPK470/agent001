@@ -732,6 +732,10 @@ export interface PlatformDatabase {
   attachment_tags: AttachmentTagsTable
   attachment_imports: AttachmentImportsTable
   eval_dataset_entries: EvalDatasetEntriesTable
+  memory_entries: MemoryEntriesTable
+  memory_vectors: MemoryVectorsTable
+  tool_knowledge_cache: ToolKnowledgeCacheTable
+  resolved_terms_cache: ResolvedTermsCacheTable
 }
 
 /** `sync_audit` — plan-scoped sync action audit. */
@@ -815,6 +819,62 @@ export interface EvalDatasetEntriesTable {
   metadata_json: string | null
   created_by: string
   created_at: string
+}
+
+/** `memory_entries` — tiered agent memory (working / episodic / semantic). */
+export interface MemoryEntriesTable {
+  id: string
+  tier: string
+  role: string
+  content: string
+  metadata: string
+  source: string
+  confidence: number
+  salience: number
+  access_count: number
+  run_id: string | null
+  parent_id: string | null
+  upn: string | null
+  shared: number
+  created_at: string
+  updated_at: string
+}
+
+/** `memory_vectors` — embedding blob per memory entry. */
+export interface MemoryVectorsTable {
+  entry_id: string
+  embedding: Buffer
+  dimension: number
+  upn: string | null
+  shared: number
+}
+
+/** `tool_knowledge_cache` — durable tool payload cache. */
+export interface ToolKnowledgeCacheTable {
+  id: Generated<number>
+  tool: string
+  qname: string
+  mode: string
+  connection: string
+  payload_text: string
+  fingerprint: string
+  bytes: number
+  created_by_upn: string | null
+  created_at: number
+  last_hit_at: number | null
+  hit_count: number
+}
+
+/** `resolved_terms_cache` — clarification term → qname mappings. */
+export interface ResolvedTermsCacheTable {
+  id: Generated<number>
+  term: string
+  qname: string
+  connection: string
+  created_by_upn: string | null
+  created_at: number
+  last_hit_at: number | null
+  hit_count: number
 }
 
 /** Helper for optional Generated columns in later tables. */

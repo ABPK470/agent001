@@ -1130,4 +1130,99 @@ END;
       },
     },
   },
+  {
+    version: 9,
+    name: "mssql_memory_base_tables",
+    up: {
+      mssql: async (executor) => {
+        await mssqlExec(
+          executor,
+          `
+IF OBJECT_ID(N'dbo.memory_entries', N'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.memory_entries (
+    id            NVARCHAR(64)   NOT NULL CONSTRAINT PK_memory_entries PRIMARY KEY,
+    tier          NVARCHAR(32)   NOT NULL,
+    role          NVARCHAR(32)   NOT NULL CONSTRAINT DF_memory_entries_role DEFAULT (N'assistant'),
+    content       NVARCHAR(MAX)  NOT NULL,
+    metadata      NVARCHAR(MAX)  NOT NULL CONSTRAINT DF_memory_entries_metadata DEFAULT (N'{}'),
+    source        NVARCHAR(32)   NOT NULL CONSTRAINT DF_memory_entries_source DEFAULT (N'agent'),
+    confidence    FLOAT          NOT NULL CONSTRAINT DF_memory_entries_confidence DEFAULT (0.5),
+    salience      FLOAT          NOT NULL CONSTRAINT DF_memory_entries_salience DEFAULT (0.5),
+    access_count  INT            NOT NULL CONSTRAINT DF_memory_entries_access DEFAULT (0),
+    run_id        NVARCHAR(64)   NULL
+      CONSTRAINT FK_memory_entries_runs REFERENCES dbo.runs(id) ON DELETE SET NULL,
+    parent_id     NVARCHAR(64)   NULL,
+    upn           NVARCHAR(320)  NULL,
+    shared        INT            NOT NULL CONSTRAINT DF_memory_entries_shared DEFAULT (0),
+    created_at    DATETIME2      NOT NULL,
+    updated_at    DATETIME2      NOT NULL,
+    CONSTRAINT CK_memory_entries_tier CHECK (tier IN (N'working', N'episodic', N'semantic')),
+    CONSTRAINT CK_memory_entries_role CHECK (role IN (N'user', N'assistant', N'tool', N'system', N'summary')),
+    CONSTRAINT CK_memory_entries_source CHECK (source IN (N'system', N'tool', N'user', N'agent', N'external'))
+  );
+  CREATE INDEX IX_me_tier ON dbo.memory_entries(tier);
+  CREATE INDEX IX_me_run ON dbo.memory_entries(run_id);
+  CREATE INDEX IX_me_created ON dbo.memory_entries(created_at);
+  CREATE INDEX IX_me_upn ON dbo.memory_entries(upn);
+  CREATE INDEX IX_me_shared ON dbo.memory_entries(shared);
+END;
+
+IF OBJECT_ID(N'dbo.memory_vectors', N'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.memory_vectors (
+    entry_id   NVARCHAR(64)   NOT NULL CONSTRAINT PK_memory_vectors PRIMARY KEY
+      CONSTRAINT FK_memory_vectors_entries REFERENCES dbo.memory_entries(id) ON DELETE CASCADE,
+    embedding  VARBINARY(MAX) NOT NULL,
+    dimension  INT            NOT NULL,
+    upn        NVARCHAR(320)  NULL,
+    shared     INT            NOT NULL CONSTRAINT DF_memory_vectors_shared DEFAULT (0)
+  );
+  CREATE INDEX IX_mv_upn ON dbo.memory_vectors(upn);
+  CREATE INDEX IX_mv_shared ON dbo.memory_vectors(shared);
+END;
+
+IF OBJECT_ID(N'dbo.tool_knowledge_cache', N'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.tool_knowledge_cache (
+    id              INT            NOT NULL IDENTITY(1,1) CONSTRAINT PK_tool_knowledge_cache PRIMARY KEY,
+    tool            NVARCHAR(256)  NOT NULL,
+    qname           NVARCHAR(512)  NOT NULL,
+    mode            NVARCHAR(128)  NOT NULL CONSTRAINT DF_tk_mode DEFAULT (N''),
+    connection      NVARCHAR(128)  NOT NULL CONSTRAINT DF_tk_connection DEFAULT (N'default'),
+    payload_text    NVARCHAR(MAX)  NOT NULL,
+    fingerprint     NVARCHAR(128)  NOT NULL,
+    bytes           INT            NOT NULL,
+    created_by_upn  NVARCHAR(320)  NULL,
+    created_at      BIGINT         NOT NULL,
+    last_hit_at     BIGINT         NULL,
+    hit_count       INT            NOT NULL CONSTRAINT DF_tk_hit_count DEFAULT (0),
+    CONSTRAINT UQ_tool_knowledge_cache UNIQUE (tool, qname, mode, connection)
+  );
+  CREATE INDEX IX_tk_lookup ON dbo.tool_knowledge_cache(tool, qname);
+  CREATE INDEX IX_tk_created ON dbo.tool_knowledge_cache(created_at);
+END;
+
+IF OBJECT_ID(N'dbo.resolved_terms_cache', N'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.resolved_terms_cache (
+    id              INT            NOT NULL IDENTITY(1,1) CONSTRAINT PK_resolved_terms_cache PRIMARY KEY,
+    term            NVARCHAR(512)  NOT NULL,
+    qname           NVARCHAR(512)  NOT NULL,
+    connection      NVARCHAR(128)  NOT NULL CONSTRAINT DF_rt_connection DEFAULT (N'default'),
+    created_by_upn  NVARCHAR(320)  NULL,
+    created_at      BIGINT         NOT NULL,
+    last_hit_at     BIGINT         NULL,
+    hit_count       INT            NOT NULL CONSTRAINT DF_rt_hit_count DEFAULT (0),
+    CONSTRAINT UQ_resolved_terms_cache UNIQUE (term, qname, connection)
+  );
+  CREATE INDEX IX_rt_term ON dbo.resolved_terms_cache(term);
+  CREATE INDEX IX_rt_conn ON dbo.resolved_terms_cache(connection);
+  CREATE INDEX IX_rt_created ON dbo.resolved_terms_cache(created_at DESC);
+END;
+`,
+        )
+      },
+    },
+  },
 ]

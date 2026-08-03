@@ -96,13 +96,13 @@ flowchart TB
 |---|---|
 | 1 Doctrine + ports | **Done** |
 | 2 sql-kit extract | **Done** |
-| 3 Platform schema toolkit + SQLite Kysely cutover | **Nearly done** — product repos on Kysely; leftovers: Memory FTS, lifecycle pragma, SQLite-only triggers |
-| 4 Platform second dialect (**hosted default: mssql**) | **In progress** — **4a single Kysely pool done**; registry v1–4; boot still refuses until 4b–4c |
-| 5–6 Sync WarehouseDialect + Postgres | Separate track; do not block on full platform ORM |
+| 3 Platform schema toolkit + SQLite Kysely cutover | **Done** — product repos on `run*Async` / portable upsert |
+| 4 Platform second dialect (**hosted default: mssql**) | **Bootable** — single Kysely pool; registry v1–8; `openConfiguredPlatformStore`; memory gated |
+| 5–6 Sync WarehouseDialect + Postgres | Largely present; polish + goldens remain |
 | 7 CI matrices | Not started |
-| 8 Memory search / FTS port | Last hard platform piece — **do not start early** |
+| 8 Memory search / FTS port | **In progress next** — last hard platform piece |
 
-**Readiness:** platform swap is **not** live. Scaffolding exists; production mssql requires the single-pool cutover below **and** dialect-safe SQL/repos.
+**Readiness:** `MIA_PLATFORM_STORE=mssql` opens migrate+seed path. Memory FTS / sqlite prune idioms still gated; treat mssql as production-ready only after m8 for memory-heavy installs.
 
 ---
 
