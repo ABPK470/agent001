@@ -6966,6 +6966,8 @@ button.trace-tree-status-pill:hover {
   --au-sticky-fill: var(--workspace-widget-bg, var(--panel-2));
   --au-detail-nest-bg: color-mix(in srgb, var(--panel-3) 10%, var(--panel));
   --au-user-row-open-bg: var(--panel-2);
+  --au-run-selected-bg: color-mix(in srgb, var(--accent) 14%, var(--au-detail-nest-bg));
+  --au-run-selected-bg-hover: color-mix(in srgb, var(--accent) 20%, var(--au-detail-nest-bg));
 }
 
 .active-users-widget--zen .au-main {
@@ -7468,19 +7470,22 @@ button.trace-tree-status-pill:hover {
   background: color-mix(in srgb, var(--select-fill, rgb(255 255 255 / 0.06)) 35%, var(--overlay-1));
 }
 
-/* Selected run — trace-style accent (cells + cards). */
+/* Selected run — accent-tinted fill + full-contrast text (table + stack). */
 .active-users-widget .au-run-selected,
 .active-users-widget tr.au-run-selected > td {
-  background: var(--select-fill, rgb(255 255 255 / 0.06)) !important;
+  background: var(--au-run-selected-bg) !important;
   box-shadow: none !important;
+  color: var(--text);
 }
 
 .active-users-widget .au-run-card.au-run-selected,
 .active-users-widget button.au-run-selected {
   position: relative;
-  background: var(--select-fill, rgb(255 255 255 / 0.06));
+  background: var(--au-run-selected-bg);
   box-shadow: none;
+  color: var(--text);
 }
+
 .active-users-widget .au-run-card.au-run-selected::before,
 .active-users-widget button.au-run-selected::before,
 .active-users-widget tr.au-run-selected > td:first-child::before {
@@ -7500,7 +7505,28 @@ button.trace-tree-status-pill:hover {
 
 .active-users-widget .au-run-selected:hover,
 .active-users-widget tr.au-run-selected:hover > td {
-  background: var(--select-fill, rgb(255 255 255 / 0.06)) !important;
+  background: var(--au-run-selected-bg-hover) !important;
+}
+
+/* Muted cell utilities must not wash out on the selected highlight. */
+.active-users-widget tr.au-run-selected > td,
+.active-users-widget tr.au-run-selected > td *:not([class*="text-error"]) {
+  color: var(--text);
+}
+
+.active-users-widget tr.au-run-selected > td .au-empty-cell {
+  color: var(--text-secondary);
+  opacity: 1;
+}
+
+.active-users-widget button.au-run-selected [class*="text-text-muted"],
+.active-users-widget .au-run-card.au-run-selected [class*="text-text-muted"] {
+  color: var(--text-secondary);
+}
+
+.active-users-widget button.au-run-selected .text-text,
+.active-users-widget button.au-run-selected [class*="text-sm"][class*="text-text"] {
+  color: var(--text);
 }
 
 .active-users-widget .au-run-accordion {
