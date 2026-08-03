@@ -74,7 +74,9 @@ describe("pipelines left-tree gutter — review kit", () => {
   it("activity rows reserve the icon column via ReviewTreeRow", () => {
     const activity = read(activityRowPath)
     expect(activity).toContain("ReviewTreeRow")
-    expect(activity).toContain("activityEntityIcon")
+    expect(activity).toContain("resolveActivityTreeVisual")
+    expect(activity).toContain("OpLogStatusDot")
+    expect(activity).not.toContain("activityEntityIcon")
   })
 
   it("wires depth via CSS vars — not inline paddingLeft", () => {

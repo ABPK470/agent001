@@ -704,8 +704,6 @@ export function OperationPipelineList({
           summary={summary}
           status={status}
           depth={row.depth}
-          pipelineKind={row.pipeline.kind}
-          effectiveKind={effectiveKind}
           selected={
             selection?.kind === "activity" && selection.activityKey === row.activityKey
           }

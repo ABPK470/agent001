@@ -12,7 +12,11 @@ export function opLogShowStatusPill(opts: {
   return CHILD_PILL_STATUSES.has(opts.status)
 }
 
-/** Entity icons belong on the left pipeline list only — not the inspector timeline. */
+/**
+ * Kind (entity) icons belong on pipeline roots only.
+ * Nested stages use functional icons / status dots via `resolveActivityTreeVisual`.
+ * Inspector timeline stays icon-free.
+ */
 export function opLogShowEntityIcon(opts: { pipelineRow?: boolean }): boolean {
   return !!opts.pipelineRow
 }

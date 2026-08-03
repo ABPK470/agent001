@@ -1,14 +1,25 @@
+/**
+ * Pipelines tree icon hierarchy (Kind Inheritance):
+ *   Root run     → kind icon (Sync / Bridge / Agent)
+ *   Stage/phase  → functional step icon (not pipeline kind)
+ *   Leaf action  → status dot only (no icon inflation)
+ */
+
 import {
   Brain,
   Database,
+  Eye,
   GitCompareArrows,
+  Layers,
+  ListChecks,
+  Play,
   Settings,
   Shuffle,
+  Table2,
   Wrench,
-  Zap,
   type LucideIcon,
 } from "lucide-react"
-import type { OperationActivity } from "../../client/index"
+import type { OperationActivity, OperationStatus } from "../../client/index"
 import { OperationKind } from "../../client/index"
 
 export const OP_LOG_KIND_META: Record<
@@ -27,32 +38,49 @@ export const OP_LOG_KIND_META: Record<
 
 export type OpLogEntityVisual = { Icon: LucideIcon; color: string }
 
+export type OpLogActivityTreeVisual =
+  | { type: "icon"; Icon: LucideIcon; color: string }
+  | { type: "status-dot"; status: OperationStatus }
+
 export function pipelineEntityIcon(kind: OperationKind): OpLogEntityVisual {
   return OP_LOG_KIND_META[kind] ?? OP_LOG_KIND_META.system
 }
 
-export function activityEntityIcon(
-  pipelineKind: OperationKind,
-  effectiveKind: OperationKind,
-  activity: OperationActivity,
-): OpLogEntityVisual {
+/** Functional icon for an expandable stage/phase — never the pipeline kind icon. */
+export function activityPhaseIcon(activity: OperationActivity): OpLogEntityVisual {
   const name = activity.name.toLowerCase()
   const id = activity.id.toLowerCase()
 
-  if (id === "phase:execute" || name === "execute") {
-    return { Icon: Zap, color: "var(--color-warning)" }
-  }
   if (id === "phase:preview" || name === "preview") {
-    return { Icon: Database, color: "var(--color-info)" }
+    return { Icon: Eye, color: "var(--color-info)" }
+  }
+  if (id === "phase:execute" || name === "execute") {
+    return { Icon: Play, color: "var(--color-success)" }
+  }
+  if (name.includes("preflight")) {
+    return { Icon: ListChecks, color: "var(--color-info)" }
   }
   if (name.includes("metadatasync") || name === "metadatasync") {
-    return { Icon: Database, color: "var(--color-success)" }
+    return { Icon: Table2, color: "var(--color-success)" }
   }
-  if (effectiveKind === OperationKind.AgentRun && activity.events.some((e) => e.type.startsWith("tool_call."))) {
+  if (activity.events.some((e) => e.type.startsWith("tool_call."))) {
     return { Icon: Wrench, color: "var(--color-accent)" }
   }
-  if (effectiveKind === OperationKind.AgentRun) {
-    return { Icon: Brain, color: "var(--color-accent)" }
+  return { Icon: Layers, color: "var(--color-text-muted)" }
+}
+
+/**
+ * Left-tree activity visual — stages get functional icons; leaves get status dots.
+ * Kind icons belong only on pipeline roots (`pipelineEntityIcon`).
+ */
+export function resolveActivityTreeVisual(opts: {
+  activity: OperationActivity
+  hasChildren: boolean
+  status: OperationStatus
+}): OpLogActivityTreeVisual {
+  if (opts.hasChildren) {
+    const phase = activityPhaseIcon(opts.activity)
+    return { type: "icon", Icon: phase.Icon, color: phase.color }
   }
-  return pipelineEntityIcon(effectiveKind !== pipelineKind ? effectiveKind : pipelineKind)
+  return { type: "status-dot", status: opts.status }
 }

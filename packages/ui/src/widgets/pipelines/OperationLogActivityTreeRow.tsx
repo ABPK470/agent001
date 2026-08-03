@@ -1,11 +1,13 @@
 /**
  * Left-tree activity row — select drives the right detail pane; chevron folds children.
+ * Icon hierarchy: stage = functional icon; leaf = status dot (no kind inflation).
  */
 
-import type { OperationActivity, OperationKind, OperationStatus } from "../../client/index"
+import type { OperationActivity, OperationStatus } from "../../client/index"
 import { ReviewTreeRow } from "../../components/review"
-import { activityEntityIcon } from "./op-log-entity-icon"
+import { resolveActivityTreeVisual } from "./op-log-entity-icon"
 import { OpLogEntityIcon } from "./OpLogEntityIcon"
+import { OpLogStatusDot } from "./OpLogStatusDot"
 import { OpLogStatusPill } from "./OpLogStatusPill"
 import { OP_LOG, OP_LOG_DESC, fmtDuration } from "./operation-log-row"
 import { opLogShowStatusPill } from "./op-log-row-policy"
@@ -18,8 +20,6 @@ export function OperationLogActivityTreeRow({
   summary,
   status,
   depth,
-  pipelineKind,
-  effectiveKind,
   selected,
   hasChildren,
   folded,
@@ -31,8 +31,6 @@ export function OperationLogActivityTreeRow({
   summary?: string
   status: OperationStatus
   depth: number
-  pipelineKind: OperationKind
-  effectiveKind: OperationKind
   selected: boolean
   hasChildren: boolean
   folded: boolean
@@ -40,7 +38,13 @@ export function OperationLogActivityTreeRow({
   onToggleFold: () => void
 }) {
   const showPill = opLogShowStatusPill({ status })
-  const entity = activityEntityIcon(pipelineKind, effectiveKind, activity)
+  const visual = resolveActivityTreeVisual({ activity, hasChildren, status })
+  const icon =
+    visual.type === "icon" ? (
+      <OpLogEntityIcon icon={visual.Icon} color={visual.color} />
+    ) : (
+      <OpLogStatusDot status={visual.status} />
+    )
 
   return (
     <ReviewTreeRow
@@ -53,7 +57,7 @@ export function OperationLogActivityTreeRow({
       gridTemplateColumns={REVIEW_TREE_GRID_COLS}
       onSelect={onSelect}
       onToggleFold={onToggleFold}
-      icon={<OpLogEntityIcon icon={entity.Icon} color={entity.color} />}
+      icon={icon}
       title={
         <span className={OP_LOG} title={label}>
           {label}
