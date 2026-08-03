@@ -9,7 +9,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } fro
 import type { OperationActivity, OperationPipeline } from "../client/index"
 import { api, OperationKind, OperationStatus } from "../client/index"
 import { VirtualList } from "../components/VirtualList"
-import { ReviewSplitPane, ReviewTreeHeader } from "../components/review"
+import { ReviewSplitPane } from "../components/review"
 import { EmptyState } from "../components/EmptyState"
 import { useWidgetInstance } from "../app/workspace/widget-instance"
 import { useContainerSize } from "../hooks/useContainerSize"
@@ -46,7 +46,6 @@ const OP_LOG_SPLIT_MIN = 0.28
 const OP_LOG_SPLIT_MAX = 0.62
 const OP_LOG_SPLIT_DEFAULT = 0.4
 const OP_LOG_LIST_ROW_HEIGHT = 44
-const REVIEW_TREE_GRID_COLS = "minmax(0, 1fr) var(--review-tree-col-duration)"
 
 const DAY_GROUP_BTN =
   "review-group-label review-group-cap op-log-day-cap sticky top-0 z-10 w-full flex items-center text-left transition-colors"
@@ -570,13 +569,6 @@ export function OperationLog() {
                 sidebar={
                   <div className="review-split-list widget-split-sidebar flex min-h-0 min-w-0 flex-col overflow-hidden">
                     <div className="review-split-tree-table">
-                      <ReviewTreeHeader
-                        columns={[
-                          { id: "node", label: "Node" },
-                          { id: "duration", label: "Duration", align: "right" },
-                        ]}
-                        gridTemplateColumns={REVIEW_TREE_GRID_COLS}
-                      />
                       <div
                         ref={listScrollRef}
                         className="review-split-list-scroll min-h-0 flex-1 overflow-y-auto"

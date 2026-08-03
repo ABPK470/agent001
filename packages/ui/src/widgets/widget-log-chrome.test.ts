@@ -550,14 +550,14 @@ describe("widget log chrome — shared content dialect", () => {
     expect(css).not.toContain(".op-log-day-card")
   })
 
-  it("Pipelines tree uses review kit grid, column headers, and split shell", () => {
+  it("Pipelines tree uses review kit grid, day grouping caps, and split shell", () => {
     const css = read(cssPath)
     const listRow = read(opLogListRowPath)
     const ops = read(opsPath)
     const scope = read(join(here, "pipelines/OperationLogScopeDetail.tsx"))
 
     expect(css).toContain(".review-tree-row")
-    expect(css).toContain(".review-tree-header")
+    expect(css).toContain(".op-log-day-cap")
     expect(css).toContain(".op-log-entity-icon")
     expect(css).toContain(".op-log-status-pill")
     expect(css).toContain(".review-detail")
@@ -566,7 +566,8 @@ describe("widget log chrome — shared content dialect", () => {
     expect(listRow).toContain("formatPipelineSubtitle")
     expect(listRow).toContain("onToggleFold")
     expect(ops).toContain("ReviewSplitPane")
-    expect(ops).toContain("ReviewTreeHeader")
+    expect(ops).not.toContain("ReviewTreeHeader")
+    expect(ops).toContain("op-log-day-cap")
     expect(ops).toContain("review-split-body")
     expect(ops).toContain("OperationLogInspector")
     expect(ops).toContain("OperationLogPipelineListRow")

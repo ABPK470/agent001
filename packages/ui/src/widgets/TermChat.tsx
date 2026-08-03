@@ -533,7 +533,7 @@ function ToolSyncProgressBody({ part }: { part: ResponseSyncProgressPart }) {
 
   // Same indent as expanded tool I/O — no second border-l (parent timeline owns the rail).
   return (
-    <div className="ml-[14px] mt-1 pl-3 space-y-1">
+    <div className="ml-[14px] mt-2 mb-1 pl-3 space-y-2">
       <p className={["text-[15px] leading-5 font-mono", isRunning ? "activity-shimmer-tight text-text-muted" : "text-text-secondary"].join(" ")}>
         {part.headline}
       </p>
@@ -603,12 +603,12 @@ function ToolPill({
   // never dump headline/SQL under a collapsed pill.
   const showSyncProgress = Boolean(syncProgress) && (expanded || isRunning)
   return (
-    <div className="relative py-0.5" data-chat-expand-root="">
+    <div className="relative py-1.5" data-chat-expand-root="">
       {/* Continuity between sibling tool dots (same geometry as pre-regression TermChat). */}
       {!isLast && (
-        <div className="pointer-events-none absolute left-[11px] top-[20px] -bottom-1 w-px chat-trace-rail" />
+        <div className="pointer-events-none absolute left-[11px] top-[22px] -bottom-1 w-px chat-trace-rail" />
       )}
-      <div className="flex items-start gap-2 min-w-0 px-2 py-1">
+      <div className="flex items-start gap-2 min-w-0 px-2 py-0.5">
         <span
           className={[
             "shrink-0 w-1.5 h-1.5 rounded-full mt-[7px]",
@@ -657,7 +657,7 @@ function ToolPill({
       </div>
       {showSyncProgress && syncProgress ? <ToolSyncProgressBody part={syncProgress} /> : null}
       {expanded && (hasInput || hasOutput) && (
-        <div className="ml-[14px] mt-1 pl-3 space-y-1.5" data-chat-expand-body="">
+        <div className="ml-[14px] mt-2 mb-1 pl-3 space-y-2" data-chat-expand-body="">
           {/*
            * Same pane for every tool — Input then Output (or Error).
            * Code bodies keep SQL/Shell labels; prose uses Input/Output.
