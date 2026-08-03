@@ -671,7 +671,7 @@ export function OperationPipelineList({
             size={12}
             className={`shrink-0 transition-transform ${collapsed ? "" : "rotate-90"}`}
           />
-          {row.label}
+          <span className="op-log-day-cap__label">{row.label}</span>
           <span className="review-group-cap__count">{row.count}</span>
         </button>
       )

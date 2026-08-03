@@ -222,7 +222,7 @@ describe("widget log chrome — control height & search", () => {
     expect(live).not.toContain("hover:bg-overlay-1")
   })
 
-  it("expanded / open rows stay select-fill — Event Stream / Trace / Threads; Pipelines uses left accent", () => {
+  it("expanded / open / selected rows share select-fill — Event Stream / Trace / Threads / Pipelines", () => {
     const css = read(cssPath)
     const listRow = read(opLogListRowPath)
     const live = read(livePath)
@@ -231,6 +231,12 @@ describe("widget log chrome — control height & search", () => {
     expect(css).toMatch(/\.log-stream \.event-stream-row--open\s*\{[^}]*background:\s*var\(--select-fill\)/s)
     expect(listRow).toContain("ReviewTreeRow")
     expect(css).toMatch(/\.review-tree-row\.is-selected::before\s*\{[^}]*background:\s*var\(--color-accent/s)
+    expect(css).toMatch(
+      /\.review-operator \.review-tree-row\.is-selected \.review-tree-row__btn\s*\{[^}]*background:\s*var\(--select-fill/s,
+    )
+    expect(css).toMatch(
+      /\.trace-tree-row\.is-selected \.trace-tree-row__btn\s*\{[^}]*background:\s*var\(--select-fill/s,
+    )
     expect(css).toMatch(
       /\.trace-card\.is-open\s*>\s*\.trace-scope\s*\{[^}]*background:\s*var\(--select-fill\)/s,
     )

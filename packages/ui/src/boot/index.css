@@ -2838,12 +2838,13 @@ textarea.input {
   z-index: 2;
 }
 
+/* Same selected fill as Trace master tree — rail + wash, not rail alone. */
 .review-operator .review-tree-row.is-selected .review-tree-row__btn {
-  background: transparent !important;
+  background: var(--select-fill, rgb(255 255 255 / 0.06));
 }
 
 .review-operator .review-tree-row.is-selected .review-tree-row__btn:hover {
-  background: var(--overlay-2, rgb(255 255 255 / 0.04));
+  background: var(--select-fill, rgb(255 255 255 / 0.06));
 }
 
 .review-tree-row__btn {
@@ -3181,26 +3182,41 @@ textarea.input {
   --review-tree-line: color-mix(in srgb, var(--border-strong, var(--border)) 55%, var(--text-faint));
 }
 
+/*
+ * Day caps — one type size for every group (Today / Jul 31 / …).
+ * Lock size/weight/tracking on the button; label + count inherit.
+ * No hover filter (compositor drift made sticky rows look larger).
+ */
 .review-operator .review-split-list .op-log-day-cap {
   gap: 0.375rem;
   padding-block: 0.4375rem;
   padding-inline: var(--review-tree-hpad, 16px);
   border-top: 1px solid var(--border-subtle, var(--color-border-subtle));
   border-bottom: 1px solid var(--border-subtle, var(--color-border-subtle));
+  font-size: var(--review-group-size);
   font-weight: 600;
+  letter-spacing: 0.05em;
+  line-height: 1.25;
+  text-transform: uppercase;
   color: var(--text-secondary, var(--color-text-muted));
   background: color-mix(in srgb, var(--section-cap-bg, var(--panel-2)) 97%, var(--text) 3%);
 }
 
 .review-operator .review-split-list .op-log-day-cap:hover {
-  filter: brightness(1.04);
+  background: color-mix(in srgb, var(--section-cap-bg, var(--panel-2)) 92%, var(--text) 8%);
+}
+
+.review-operator .review-split-list .op-log-day-cap .op-log-day-cap__label,
+.review-operator .review-split-list .op-log-day-cap .review-group-cap__count {
+  font-size: inherit;
+  font-weight: inherit;
+  letter-spacing: inherit;
+  line-height: inherit;
+  text-transform: inherit;
 }
 
 .review-operator .review-split-list .op-log-day-cap .review-group-cap__count {
   margin-left: 0.125rem;
-  font-weight: 500;
-  letter-spacing: normal;
-  text-transform: none;
   font-variant-numeric: tabular-nums;
   color: var(--text-faint, var(--color-text-muted));
 }
@@ -4904,15 +4920,6 @@ textarea.input {
 
 .trace-tree-row.is-selected .trace-tree-row__btn {
   background: var(--select-fill, rgb(255 255 255 / 0.06));
-}
-
-/* Pipelines list — accent bar only (no select-fill slab; Trace master tree keeps fill). */
-.op-log-split-list .op-log-pipeline-list-row.trace-tree-row.is-selected .trace-tree-row__btn {
-  background: transparent !important;
-}
-
-.op-log-split-list .op-log-pipeline-list-row.trace-tree-row.is-selected .trace-tree-row__btn:hover {
-  background: var(--overlay-2, rgb(255 255 255 / 0.04));
 }
 
 .trace-tree-row__btn {
