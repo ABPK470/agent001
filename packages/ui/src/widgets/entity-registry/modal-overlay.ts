@@ -74,8 +74,8 @@ export const MODAL_VIEWER_PANEL_MOBILE =
   `w-full max-w-none ${MODAL_TALL_HEIGHT}`
 
 /**
- * Admin session modals (Policies, About) — wide tall shell.
- * Audit / Usage use ModalShell size="focus".
+ * Admin session modals (About) — wide tall shell.
+ * Policies / Audit / Usage / Configuration use focus (`MODAL_ENTITY_FOCUS_PANEL`).
  */
 export const MODAL_ADMIN_PANEL =
   `w-full max-w-[min(92vw,calc(100vw-1.5rem))] ${MODAL_TALL_HEIGHT}`

@@ -5,9 +5,30 @@
 import type { FastifyInstance } from "fastify"
 import * as db from "../../infra/persistence/sqlite.js"
 
+const USAGE_STATUS_FILTERS = new Set([
+  "completed",
+  "failed",
+  "cancelled",
+  "crashed",
+  "running",
+])
+
 function parseUsageSort(raw: string | undefined): db.TokenUsageSort {
   if (raw === "created_asc" || raw === "tokens_desc" || raw === "tokens_asc") return raw
   return "created_desc"
+}
+
+function parseUsageStatuses(raw: string | undefined): string[] | undefined {
+  if (!raw?.trim()) return undefined
+  const statuses = [
+    ...new Set(
+      raw
+        .split(",")
+        .map((s) => s.trim().toLowerCase())
+        .filter((s) => USAGE_STATUS_FILTERS.has(s)),
+    ),
+  ]
+  return statuses.length > 0 ? statuses : undefined
 }
 
 function parseUsageQuery(query: Record<string, string | undefined>): db.ListTokenUsagePaginatedInput {
@@ -19,6 +40,7 @@ function parseUsageQuery(query: Record<string, string | undefined>): db.ListToke
     search: query.q?.trim() || undefined,
     user: query.user?.trim() || undefined,
     model: query.model?.trim() || undefined,
+    status: parseUsageStatuses(query.status),
     from: query.from?.trim() || undefined,
     to: query.to?.trim() || undefined,
     sort: parseUsageSort(query.sort),
@@ -63,15 +85,21 @@ export function registerUsageRoutes(app: FastifyInstance): void {
     const rows = db.listTokenUsagePaginated(filters)
     const totalPages = Math.max(1, Math.ceil(total / filters.pageSize))
 
+    // Total tokens must equal prompt + completion (never an independent SUM that can drift).
+    const promptTokens = totals.total_prompt_tokens
+    const completionTokens = totals.total_completion_tokens
     return {
       totals: {
-        promptTokens: totals.total_prompt_tokens,
-        completionTokens: totals.total_completion_tokens,
-        totalTokens: totals.total_tokens,
+        promptTokens,
+        completionTokens,
+        totalTokens: promptTokens + completionTokens,
         llmCalls: totals.total_llm_calls,
         runCount: totals.run_count,
         completedRuns: totals.completed_runs,
         failedRuns: totals.failed_runs,
+        cancelledRuns: totals.cancelled_runs,
+        crashedRuns: totals.crashed_runs,
+        runningRuns: totals.running_runs,
       },
       items: rows.map(mapUsageRow),
       /** @deprecated Prefer `items` — kept for transitional clients. */

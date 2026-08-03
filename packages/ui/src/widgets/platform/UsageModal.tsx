@@ -25,10 +25,12 @@ import {
 } from "../../client/index"
 import { DateField } from "../../components/DateField"
 import { EmptyState } from "../../components/EmptyState"
+import { StatusIndicator } from "../../components/StatusIndicator"
 import {
   ActiveFilterChips,
   FilterField,
   FilterSheet,
+  FilterToggles,
   type ActiveFilterChipModel,
 } from "../../components/FilterSheet"
 import { Listbox, type ListboxOption } from "../../components/Listbox"
@@ -52,10 +54,21 @@ const SORT_OPTIONS: ListboxOption<UsageSort>[] = [
 const EMPTY_FILTERS: Omit<UsageParams, "page" | "pageSize" | "q"> = {
   user: "",
   model: "",
+  status: [],
   from: "",
   to: "",
   sort: "created_desc",
 }
+
+type UsageStatus = "completed" | "failed" | "cancelled" | "crashed" | "running"
+
+const STATUS_OPTIONS: { value: UsageStatus; label: string }[] = [
+  { value: "completed", label: "Completed" },
+  { value: "failed", label: "Failed" },
+  { value: "cancelled", label: "Cancelled" },
+  { value: "crashed", label: "Crashed" },
+  { value: "running", label: "Running" },
+]
 
 const EMPTY_TOTALS: UsageTotalsWire = {
   promptTokens: 0,
@@ -65,12 +78,48 @@ const EMPTY_TOTALS: UsageTotalsWire = {
   runCount: 0,
   completedRuns: 0,
   failedRuns: 0,
+  cancelledRuns: 0,
+  crashedRuns: 0,
+  runningRuns: 0,
 }
 
-function formatNumber(n: number): string {
+/** KPI subtitle — every run status bucket, not just ok/failed. */
+function formatRunStatusHint(totals: UsageTotalsWire): string {
+  const parts = [
+    `${totals.runCount} runs`,
+    `${totals.completedRuns} ok`,
+    `${totals.failedRuns} failed`,
+    `${totals.cancelledRuns} cancelled`,
+  ]
+  if (totals.crashedRuns > 0) parts.push(`${totals.crashedRuns} crashed`)
+  if (totals.runningRuns > 0) parts.push(`${totals.runningRuns} running`)
+  return parts.join(" · ")
+}
+
+/**
+ * Compact for KPI headlines and row chips (1.2K / 3.4M).
+ * Below 1K stays exact. Total = formatCompact(prompt + completion) — source is additive;
+ * rare 0.1K display drift from independent rounding is fine.
+ */
+function formatCompact(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`
   return n.toLocaleString()
+}
+
+/** Fields already visible in the collapsed row — expand shows ids + token breakdown only. */
+function usageExpandEntries(row: UsageItem) {
+  return buildBrowseDetailEntries(
+    {},
+    {
+      runId: row.runId,
+      threadId: row.threadId,
+      promptTokens: row.promptTokens,
+      completionTokens: row.completionTokens,
+      totalTokens: row.totalTokens,
+      llmCalls: row.llmCalls,
+    },
+  )
 }
 
 function formatWhen(ts: string): string {
@@ -83,14 +132,6 @@ function formatWhen(ts: string): string {
     minute: "2-digit",
     second: "2-digit",
   })
-}
-
-function statusTone(status: string | null): string {
-  if (!status) return "text-text-muted"
-  if (status === "completed") return "text-success"
-  if (status === "failed" || status === "crashed") return "text-error"
-  if (status === "cancelled") return "text-warning"
-  return "text-text-secondary"
 }
 
 export function UsageModal({ onClose }: { onClose: () => void }) {
@@ -120,6 +161,7 @@ export function UsageModal({ onClose }: { onClose: () => void }) {
       pageSize: PAGE_SIZE,
       user: filters.user || undefined,
       model: filters.model || undefined,
+      status: filters.status && filters.status.length > 0 ? filters.status : undefined,
       from: filters.from || undefined,
       to: filters.to || undefined,
     }),
@@ -155,6 +197,7 @@ export function UsageModal({ onClose }: { onClose: () => void }) {
     let n = 0
     if (filters.user) n++
     if (filters.model) n++
+    if (filters.status && filters.status.length > 0) n++
     if (filters.from) n++
     if (filters.to) n++
     return n
@@ -230,6 +273,18 @@ export function UsageModal({ onClose }: { onClose: () => void }) {
         onRemove: () => patchFilters({ model: "" }),
       })
     }
+    for (const status of filters.status ?? []) {
+      const label = STATUS_OPTIONS.find((o) => o.value === status)?.label ?? status
+      chips.push({
+        id: `status:${status}`,
+        label: "Status",
+        value: label,
+        onRemove: () =>
+          patchFilters({
+            status: (filters.status ?? []).filter((s) => s !== status),
+          }),
+      })
+    }
     return chips
   }, [filters])
 
@@ -255,22 +310,26 @@ export function UsageModal({ onClose }: { onClose: () => void }) {
     >
       <div className="flex min-h-0 flex-1 flex-col">
         <div className="grid shrink-0 grid-cols-2 gap-3 border-b border-border-subtle px-6 py-3 sm:grid-cols-4">
-          <StatCard icon={<Zap size={15} />} label="Total tokens" value={formatNumber(totals.totalTokens)} />
+          <StatCard
+            icon={<Zap size={15} />}
+            label="Total tokens"
+            value={formatCompact(totals.promptTokens + totals.completionTokens)}
+          />
           <StatCard
             icon={<MessageSquare size={15} />}
             label="Prompt"
-            value={formatNumber(totals.promptTokens)}
+            value={formatCompact(totals.promptTokens)}
           />
           <StatCard
             icon={<MessageSquare size={15} />}
             label="Completion"
-            value={formatNumber(totals.completionTokens)}
+            value={formatCompact(totals.completionTokens)}
           />
           <StatCard
             icon={<Hash size={15} />}
             label="LLM calls"
-            value={formatNumber(totals.llmCalls)}
-            hint={`${totals.completedRuns} ok · ${totals.failedRuns} failed`}
+            value={formatCompact(totals.llmCalls)}
+            hint={formatRunStatusHint(totals)}
           />
         </div>
 
@@ -370,6 +429,13 @@ export function UsageModal({ onClose }: { onClose: () => void }) {
               blankIsPlaceholder
             />
           </FilterField>
+          <FilterField label="Status">
+            <FilterToggles
+              options={STATUS_OPTIONS}
+              values={(filters.status ?? []) as UsageStatus[]}
+              onChange={(status) => patchFilters({ status })}
+            />
+          </FilterField>
         </FilterSheet>
 
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 py-3 show-scrollbar">
@@ -394,21 +460,7 @@ export function UsageModal({ onClose }: { onClose: () => void }) {
           ) : (
             <div className="space-y-0.5">
               {items.map((row) => {
-                const entries = buildBrowseDetailEntries(
-                  {},
-                  {
-                    runId: row.runId,
-                    threadId: row.threadId,
-                    displayName: row.displayName,
-                    status: row.status,
-                    model: row.model,
-                    goal: row.goal,
-                    promptTokens: row.promptTokens,
-                    completionTokens: row.completionTokens,
-                    totalTokens: row.totalTokens,
-                    llmCalls: row.llmCalls,
-                  },
-                )
+                const entries = usageExpandEntries(row)
                 const open = expanded === row.runId
                 return (
                   <div key={row.runId}>
@@ -423,7 +475,7 @@ export function UsageModal({ onClose }: { onClose: () => void }) {
                         <ChevronRight size={14} className="mt-0.5 shrink-0 text-text-muted" />
                       )}
                       <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                        <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
                           <span className="shrink-0 font-mono text-[12px] text-text-muted">
                             {formatWhen(row.createdAt)}
                           </span>
@@ -434,25 +486,33 @@ export function UsageModal({ onClose }: { onClose: () => void }) {
                             <span className="shrink-0 text-text-secondary">{row.user}</span>
                           )}
                           {row.status && (
-                            <span className={`shrink-0 text-[12px] ${statusTone(row.status)}`}>
-                              {row.status}
-                            </span>
+                            <StatusIndicator
+                              status={row.status}
+                              className="shrink-0 capitalize"
+                            />
                           )}
-                          <span className="ml-auto font-medium tabular-nums text-text">
-                            {formatNumber(row.totalTokens)} tok
-                          </span>
-                          <span className="tabular-nums text-[12px] text-text-muted">
-                            {row.llmCalls} calls
-                          </span>
                         </div>
                         {(row.threadTitle || row.goal) && (
-                          <div className="mt-1 truncate text-[12px] text-text-muted">
+                          <div className="mt-1 truncate text-[12px]">
                             {row.threadTitle && (
-                              <span className="mr-2 text-text-secondary">{row.threadTitle}</span>
+                              <span className="mr-2 font-medium text-text-secondary">
+                                {row.threadTitle}
+                              </span>
                             )}
-                            {row.goal && <span className="opacity-80">{row.goal}</span>}
+                            {row.goal && (
+                              <span className="text-text-muted">{row.goal}</span>
+                            )}
                           </div>
                         )}
+                      </div>
+                      {/* Fixed tracks — calls stay on one vertical line regardless of tok width. */}
+                      <div className="usage-row-metrics grid shrink-0 grid-cols-[100px_80px] self-start text-right">
+                        <span className="font-medium tabular-nums text-text">
+                          {formatCompact(row.totalTokens)} tok
+                        </span>
+                        <span className="tabular-nums text-[12px] text-text-muted">
+                          {row.llmCalls} calls
+                        </span>
                       </div>
                     </button>
                     {open ? <AdminBrowseDetailPanel entries={entries} /> : null}

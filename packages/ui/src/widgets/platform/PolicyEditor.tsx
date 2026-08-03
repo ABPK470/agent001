@@ -30,7 +30,7 @@ import { api } from "../../client/index"
 import { Listbox, type ListboxOption } from "../../components/Listbox"
 import { SELECT_ACTIVE, SELECT_FOCUS, SELECT_IDLE, SELECT_TRACK } from "../../lib/selection"
 import type { PolicyRule, ToolInfo } from "../../types"
-import { MODAL_ADMIN_PANEL, MODAL_SURFACE_CLASS, modalOverlayClass } from "../entity-registry/modal-overlay"
+import { MODAL_ENTITY_FOCUS_PANEL, MODAL_SURFACE_CLASS, modalOverlayClass } from "../entity-registry/modal-overlay"
 import { ExpandableDescription } from "./policy/ExpandableDescription"
 import { PolicyPanel } from "./policy/PolicyPanel"
 import { SelectorRulesTab } from "./policy/SelectorRulesTab"
@@ -304,11 +304,11 @@ export function PolicyEditor({ onClose }: Props) {
 
   return (
     <div
-      className={modalOverlayClass("detail")}
+      className={modalOverlayClass("focus")}
       onClick={onClose}
     >
       <div
-        className={`${MODAL_SURFACE_CLASS} policy-editor-modal ${MODAL_ADMIN_PANEL} flex flex-col`}
+        className={`${MODAL_SURFACE_CLASS} policy-editor-modal ${MODAL_ENTITY_FOCUS_PANEL} flex flex-col overflow-hidden`}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}

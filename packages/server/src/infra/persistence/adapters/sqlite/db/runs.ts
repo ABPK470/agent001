@@ -614,6 +614,8 @@ export interface TokenUsageFilters {
   search?: string
   user?: string
   model?: string
+  /** Multi-select run statuses (OR). */
+  status?: string[]
   from?: string
   to?: string
 }
@@ -650,6 +652,16 @@ function buildTokenUsageWhere(filters: TokenUsageFilters): { where: string; para
   if (filters.model?.trim()) {
     clauses.push("t.model = ?")
     params.push(filters.model.trim())
+  }
+  if (filters.status && filters.status.length > 0) {
+    const statuses = filters.status.map((s) => s.trim()).filter(Boolean)
+    if (statuses.length === 1) {
+      clauses.push("r.status = ?")
+      params.push(statuses[0])
+    } else if (statuses.length > 1) {
+      clauses.push(`r.status IN (${statuses.map(() => "?").join(", ")})`)
+      params.push(...statuses)
+    }
   }
   if (filters.from?.trim()) {
     const from = filters.from.trim()
@@ -733,6 +745,9 @@ export function sumTokenUsage(filters: TokenUsageFilters = {}): {
   run_count: number
   completed_runs: number
   failed_runs: number
+  cancelled_runs: number
+  crashed_runs: number
+  running_runs: number
 } {
   const { where, params } = buildTokenUsageWhere(filters)
   return getDb()
@@ -745,7 +760,10 @@ export function sumTokenUsage(filters: TokenUsageFilters = {}): {
         COALESCE(SUM(t.llm_calls), 0) AS total_llm_calls,
         COUNT(1) AS run_count,
         COALESCE(SUM(CASE WHEN r.status = 'completed' THEN 1 ELSE 0 END), 0) AS completed_runs,
-        COALESCE(SUM(CASE WHEN r.status = 'failed' THEN 1 ELSE 0 END), 0) AS failed_runs
+        COALESCE(SUM(CASE WHEN r.status = 'failed' THEN 1 ELSE 0 END), 0) AS failed_runs,
+        COALESCE(SUM(CASE WHEN r.status = 'cancelled' THEN 1 ELSE 0 END), 0) AS cancelled_runs,
+        COALESCE(SUM(CASE WHEN r.status = 'crashed' THEN 1 ELSE 0 END), 0) AS crashed_runs,
+        COALESCE(SUM(CASE WHEN r.status = 'running' THEN 1 ELSE 0 END), 0) AS running_runs
       ${TOKEN_USAGE_LIST_FROM}
       ${where}
     `,
@@ -758,6 +776,9 @@ export function sumTokenUsage(filters: TokenUsageFilters = {}): {
     run_count: number
     completed_runs: number
     failed_runs: number
+    cancelled_runs: number
+    crashed_runs: number
+    running_runs: number
   }
 }
 

@@ -152,14 +152,23 @@ export function formatBrowseScalar(key: string, value: unknown): string {
 
 export function AdminBrowseDetailPanel({
   entries,
+  className,
 }: {
   entries: BrowseDetailEntry[]
+  /** Override default nest indent (chevron + gap under the row). */
+  className?: string
 }): ReactNode {
   if (entries.length === 0) return null
 
   return (
-    <div className="mb-2 ml-8 overflow-hidden rounded-xl border border-border-subtle bg-overlay-2/80">
-      <dl className="divide-y divide-border-subtle">
+    <div
+      className={[
+        "admin-browse-detail mb-2 overflow-hidden rounded-xl border border-border-subtle",
+        // Nest under the open chevron: row pad + chevron + gap + ml-6 child inset.
+        className ?? "ml-[calc(0.75rem+14px+0.75rem+1.5rem)] mr-3",
+      ].join(" ")}
+    >
+      <dl>
         {entries.map((entry) => (
           <BrowseDetailRow key={entry.key} entry={entry} />
         ))}
@@ -171,9 +180,9 @@ export function AdminBrowseDetailPanel({
 function BrowseDetailRow({ entry }: { entry: BrowseDetailEntry }) {
   const kind = classifyBrowseValue(entry.key, entry.value)
   return (
-    <div className="grid grid-cols-[minmax(7rem,9.5rem)_minmax(0,1fr)] gap-x-4 gap-y-1 px-3.5 py-2.5 sm:grid-cols-[10rem_minmax(0,1fr)]">
+    <div className="admin-browse-detail__row grid grid-cols-[11rem_minmax(0,1fr)] items-baseline gap-x-3 border-b border-border-subtle bg-transparent px-3.5 py-2.5 last:border-b-0">
       <dt className="text-[12px] font-medium text-text-muted">{entry.label}</dt>
-      <dd className="min-w-0 text-[13px] leading-snug text-text">
+      <dd className="min-w-0 justify-self-start text-[13px] leading-snug text-text">
         <BrowseDetailValue kind={kind} entryKey={entry.key} value={entry.value} />
       </dd>
     </div>

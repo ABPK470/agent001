@@ -47,6 +47,8 @@ export interface UsageParams {
   q?: string
   user?: string
   model?: string
+  /** Run statuses — multi-select; completed | failed | cancelled | crashed | running */
+  status?: string[]
   from?: string
   to?: string
   sort?: UsageSort
@@ -76,6 +78,9 @@ export interface UsageTotalsWire {
   runCount: number
   completedRuns: number
   failedRuns: number
+  cancelledRuns: number
+  crashedRuns: number
+  runningRuns: number
 }
 
 export interface UsagePage {
@@ -476,6 +481,11 @@ export const api = {
     const qs = new URLSearchParams()
     for (const [key, value] of Object.entries(params)) {
       if (value == null || value === "") continue
+      if (Array.isArray(value)) {
+        if (value.length === 0) continue
+        qs.set(key, value.join(","))
+        continue
+      }
       qs.set(key, String(value))
     }
     const suffix = qs.toString() ? `?${qs}` : ""
