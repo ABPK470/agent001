@@ -1,27 +1,121 @@
 /**
  * Audit inspector — transform-only slide-over (Active Users dialect).
- * List stays put; selection updates the panel in place.
+ * Forensic before/after via CatalogJsonDiff; version refs resolve only here (never from the table).
  */
 
 import { Check, ChevronDown, ChevronRight, Copy, Scale, X } from "lucide-react"
 import type { JSX, ReactNode, TransitionEvent } from "react"
 import { useEffect, useRef, useState } from "react"
-import type { AdminAuditItem } from "../../client/index"
+import { api, type AdminAuditItem } from "../../client/index"
 import { JsonViewer } from "../../components/JsonViewer"
+import { CatalogJsonDiff } from "./CatalogJsonDiff"
 import {
   actionVerbClass,
   actionVerbKind,
   auditChangeHints,
+  auditDiffSides,
   auditTarget,
   formatAuditScope,
   formatAuditWhen,
+  stringifyAuditJson,
+  type AuditVersionRef,
 } from "./audit-log-view"
+
+const REF_UNAVAILABLE =
+  "Historical version no longer available; showing event detail."
+
+type ResolvedDiff = {
+  beforeJson: string | null
+  afterJson: string | null
+  note?: string
+}
+
+type RefResolveState =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "ready"; diff: ResolvedDiff }
+  | { status: "unavailable"; message: string }
 
 function isTypingTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false
   const tag = target.tagName
   if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true
   return target.isContentEditable
+}
+
+function isNotFound(err: unknown): boolean {
+  return Boolean(err && typeof err === "object" && (err as { status?: number }).status === 404)
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+    return value as Record<string, unknown>
+  }
+  return null
+}
+
+async function resolveEntityRef(ref: AuditVersionRef): Promise<ResolvedDiff> {
+  if (!ref.id || ref.version == null) throw Object.assign(new Error("missing ref"), { status: 404 })
+  const tenant = ref.tenantId
+  const after = await api.getEntityRegistry(ref.id, { tenant, version: ref.version })
+  const before =
+    ref.prevVersion != null
+      ? await api.getEntityRegistry(ref.id, { tenant, version: ref.prevVersion })
+      : null
+  return {
+    beforeJson: stringifyAuditJson(asRecord(before)),
+    afterJson: stringifyAuditJson(asRecord(after)),
+  }
+}
+
+async function resolveStrategyRef(ref: AuditVersionRef): Promise<ResolvedDiff> {
+  if (!ref.id || ref.version == null) throw Object.assign(new Error("missing ref"), { status: 404 })
+  const tenant = ref.tenantId
+  const after = await api.getEntityRegistryStrategy(ref.id, { tenant, version: ref.version })
+  const before =
+    ref.prevVersion != null
+      ? await api.getEntityRegistryStrategy(ref.id, { tenant, version: ref.prevVersion })
+      : null
+  return {
+    beforeJson: stringifyAuditJson(asRecord(before)),
+    afterJson: stringifyAuditJson(asRecord(after)),
+  }
+}
+
+async function resolveCatalogRef(ref: AuditVersionRef): Promise<ResolvedDiff> {
+  if (ref.catalogVersion == null) throw Object.assign(new Error("missing ref"), { status: 404 })
+  const against = ref.againstCatalogVersion ?? "previous"
+  const { diff } = await api.getSyncCatalogVersionDiff(ref.catalogVersion, against)
+  for (const section of diff.sections) {
+    for (const row of [...section.updates, ...section.creates, ...section.deletes]) {
+      if (row.beforeJson || row.afterJson) {
+        return {
+          beforeJson: row.beforeJson,
+          afterJson: row.afterJson,
+          note: `First changed item in ${section.label} (catalog v${diff.toVersion}${diff.fromVersion != null ? ` ← v${diff.fromVersion}` : ""}). Full tip diff is in Configuration versions.`,
+        }
+      }
+    }
+  }
+  return {
+    beforeJson: null,
+    afterJson: JSON.stringify(
+      {
+        fromVersion: diff.fromVersion,
+        toVersion: diff.toVersion,
+        changeCount: diff.changeCount,
+      },
+      null,
+      2,
+    ) + "\n",
+    note: "No item-level JSON in this catalog tip; summary only.",
+  }
+}
+
+async function resolveVersionRef(ref: AuditVersionRef): Promise<ResolvedDiff> {
+  if (ref.kind === "entity_version") return resolveEntityRef(ref)
+  if (ref.kind === "strategy_version") return resolveStrategyRef(ref)
+  return resolveCatalogRef(ref)
 }
 
 function CopyIconBtn({ value, label }: { value: string; label: string }): JSX.Element {
@@ -78,10 +172,21 @@ export function AuditInspector({
   onExited: () => void
 }): JSX.Element {
   const [rawOpen, setRawOpen] = useState(false)
+  const [refState, setRefState] = useState<RefResolveState>({ status: "idle" })
   const exitedRef = useRef(false)
   const hasOpenedRef = useRef(false)
   const actionRef = useRef({ open, onClose, onExited })
   actionRef.current = { open, onClose, onExited }
+  const resolveGenRef = useRef(0)
+
+  const sides = auditDiffSides(entry.detail)
+  const embeddedDiff: ResolvedDiff | null =
+    sides.mode === "embedded"
+      ? {
+          beforeJson: stringifyAuditJson(sides.before),
+          afterJson: stringifyAuditJson(sides.after),
+        }
+      : null
 
   useEffect(() => {
     if (!open) return
@@ -92,6 +197,37 @@ export function AuditInspector({
   useEffect(() => {
     setRawOpen(false)
   }, [entry.id])
+
+  useEffect(() => {
+    const parsed = auditDiffSides(entry.detail)
+    if (parsed.mode !== "ref") {
+      setRefState({ status: "idle" })
+      return
+    }
+    const ref = parsed.ref
+    const gen = ++resolveGenRef.current
+    setRefState({ status: "loading" })
+    let cancelled = false
+    void resolveVersionRef(ref)
+      .then((diff) => {
+        if (cancelled || gen !== resolveGenRef.current) return
+        setRefState({ status: "ready", diff })
+      })
+      .catch((err: unknown) => {
+        if (cancelled || gen !== resolveGenRef.current) return
+        if (isNotFound(err)) {
+          setRefState({ status: "unavailable", message: REF_UNAVAILABLE })
+          return
+        }
+        setRefState({
+          status: "unavailable",
+          message: err instanceof Error ? err.message : REF_UNAVAILABLE,
+        })
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [entry.id, entry.detail])
 
   function finishExit() {
     if (actionRef.current.open || exitedRef.current || !hasOpenedRef.current) return
@@ -132,6 +268,11 @@ export function AuditInspector({
   const target = auditTarget(entry)
   const changes = auditChangeHints(entry.detail)
   const hasDetail = Object.keys(entry.detail).length > 0
+  const showHintsFallback =
+    !embeddedDiff && (refState.status === "unavailable" || refState.status === "idle" || sides.mode === "none")
+
+  const activeDiff: ResolvedDiff | null =
+    embeddedDiff ?? (refState.status === "ready" ? refState.diff : null)
 
   return (
     <aside
@@ -198,23 +339,58 @@ export function AuditInspector({
                   copy={{ text: entry.threadId, label: "thread id" }}
                 />
               ) : null}
-              {entry.run?.goal ? (
-                <PropRow label="Goal" value={entry.run.goal} />
-              ) : null}
+              {entry.run?.goal ? <PropRow label="Goal" value={entry.run.goal} /> : null}
             </div>
           </section>
+
+          {sides.mode === "ref" && refState.status === "loading" ? (
+            <section>
+              <h4 className="audit-inspector__section-title">Before / after</h4>
+              <p className="text-[12px] text-text-muted">Loading historical version…</p>
+            </section>
+          ) : null}
+
+          {sides.mode === "ref" && refState.status === "unavailable" ? (
+            <section>
+              <h4 className="audit-inspector__section-title">Before / after</h4>
+              <p className="text-[12px] leading-snug text-text-muted">{refState.message}</p>
+            </section>
+          ) : null}
+
+          {activeDiff ? (
+            <section>
+              <h4 className="audit-inspector__section-title">Before / after</h4>
+              {activeDiff.note ? (
+                <p className="mb-2 text-[11px] leading-snug text-text-faint">{activeDiff.note}</p>
+              ) : null}
+              <CatalogJsonDiff
+                beforeJson={activeDiff.beforeJson}
+                afterJson={activeDiff.afterJson}
+                changesOnly
+                className="max-h-[min(40rem,50vh)] overflow-auto rounded-lg border border-border-subtle"
+              />
+            </section>
+          ) : null}
 
           {changes.length > 0 ? (
             <section>
               <h4 className="audit-inspector__section-title">Changes</h4>
               <div className="audit-inspector__props">
                 {changes.map((hint) => (
-                  <PropRow key={`${hint.label}:${hint.value}`} label={hint.label} value={hint.value} mono />
+                  <PropRow
+                    key={`${hint.label}:${hint.value}`}
+                    label={hint.label}
+                    value={hint.value}
+                    mono
+                  />
                 ))}
               </div>
-              <p className="mt-2 text-[11px] leading-snug text-text-faint">
-                Snapshot from the audit detail blob — before/after diffs are not stored yet.
-              </p>
+              {showHintsFallback && !activeDiff ? (
+                <p className="mt-2 text-[11px] leading-snug text-text-faint">
+                  Structured hints from the event detail
+                  {entry.detail.truncated === true ? " (payload size-capped at write)." : "."}
+                </p>
+              ) : null}
             </section>
           ) : null}
 

@@ -4,6 +4,7 @@ import {
   actionVerbClass,
   actionVerbKind,
   auditChangeHints,
+  auditDiffSides,
   auditSummary,
   auditTarget,
 } from "./audit-log-view"
@@ -106,5 +107,27 @@ describe("auditChangeHints", () => {
       true,
     )
     expect(hints.some((h) => h.label === "name" && h.value === "test111")).toBe(true)
+  })
+})
+
+describe("auditDiffSides", () => {
+  it("reads embedded before/after", () => {
+    expect(
+      auditDiffSides({ before: { a: 1 }, after: { a: 2 } }),
+    ).toEqual({ mode: "embedded", before: { a: 1 }, after: { a: 2 } })
+    expect(auditDiffSides({ before: null, after: { name: "x" } }).mode).toBe("embedded")
+  })
+
+  it("prefers version ref over bodies", () => {
+    expect(
+      auditDiffSides({
+        before: { a: 1 },
+        ref: { kind: "entity_version", id: "e1", version: 2, prevVersion: 1 },
+      }),
+    ).toMatchObject({ mode: "ref", ref: { kind: "entity_version", id: "e1", version: 2 } })
+  })
+
+  it("returns none for legacy sparse detail", () => {
+    expect(auditDiffSides({ name: "x", fields: ["a"] })).toEqual({ mode: "none" })
   })
 })

@@ -1,6 +1,6 @@
 /**
- * Pure Audit Log view helpers — verb accents, target, 1-line summary, change hints.
- * No before/after in the store; synthesize from today's detail blob.
+ * Pure Audit Log view helpers — verb accents, target, 1-line summary, change hints,
+ * and forensic before/after / version-ref parsing for the inspector.
  */
 
 import type { AdminAuditItem } from "../../client/index"
@@ -10,6 +10,70 @@ export type ActionVerbKind = "create" | "update" | "delete" | "deny" | "other"
 export type AuditChangeHint = {
   label: string
   value: string
+}
+
+export type AuditVersionRef = {
+  kind: "entity_version" | "strategy_version" | "catalog_version"
+  tenantId?: string
+  id?: string
+  version?: number
+  prevVersion?: number
+  catalogVersion?: number
+  againstCatalogVersion?: number
+}
+
+export type AuditDiffSides =
+  | { mode: "embedded"; before: Record<string, unknown> | null; after: Record<string, unknown> | null }
+  | { mode: "ref"; ref: AuditVersionRef }
+  | { mode: "none" }
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+}
+
+function parseVersionRef(raw: unknown): AuditVersionRef | null {
+  if (!isPlainObject(raw)) return null
+  const kind = raw.kind
+  if (kind !== "entity_version" && kind !== "strategy_version" && kind !== "catalog_version") {
+    return null
+  }
+  const ref: AuditVersionRef = { kind }
+  if (typeof raw.tenantId === "string") ref.tenantId = raw.tenantId
+  if (typeof raw.id === "string") ref.id = raw.id
+  if (typeof raw.version === "number") ref.version = raw.version
+  if (typeof raw.prevVersion === "number") ref.prevVersion = raw.prevVersion
+  if (typeof raw.catalogVersion === "number") ref.catalogVersion = raw.catalogVersion
+  if (typeof raw.againstCatalogVersion === "number") {
+    ref.againstCatalogVersion = raw.againstCatalogVersion
+  }
+  return ref
+}
+
+/** Parse forensic sides from audit detail — embedded before/after or version-store ref. */
+export function auditDiffSides(detail: Record<string, unknown>): AuditDiffSides {
+  const ref = parseVersionRef(detail.ref)
+  if (ref) return { mode: "ref", ref }
+
+  const hasBefore = "before" in detail
+  const hasAfter = "after" in detail
+  if (!hasBefore && !hasAfter) return { mode: "none" }
+
+  const before =
+    detail.before === null ? null : isPlainObject(detail.before) ? detail.before : null
+  const after = detail.after === null ? null : isPlainObject(detail.after) ? detail.after : null
+  if (before == null && after == null && detail.before !== null && detail.after !== null) {
+    return { mode: "none" }
+  }
+  return { mode: "embedded", before, after }
+}
+
+export function stringifyAuditJson(value: Record<string, unknown> | null): string | null {
+  if (value == null) return null
+  try {
+    return `${JSON.stringify(value, null, 2)}\n`
+  } catch {
+    return null
+  }
 }
 
 function detailString(detail: Record<string, unknown>, key: string): string | null {

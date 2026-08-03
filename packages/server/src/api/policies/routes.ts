@@ -9,6 +9,7 @@ import { EventType } from "@mia/shared-enums"
 import type { FastifyInstance, FastifyRequest } from "fastify"
 import * as db from "../../infra/persistence/sqlite.js"
 import { broadcast } from "../../infra/events/broadcaster.js"
+import { withBeforeAfter } from "../admin/audit-detail.js"
 
 function audit(req: FastifyRequest, action: string, detail: Record<string, unknown>): void {
   try {
@@ -21,6 +22,22 @@ function audit(req: FastifyRequest, action: string, detail: Record<string, unkno
     })
   } catch (error) {
     console.warn("[policies] audit_log write failed:", error instanceof Error ? error.message : error)
+  }
+}
+
+function policyAuditSnapshot(rule: {
+  name: string
+  effect: string
+  condition: string
+  parameters?: string | null
+  source?: string | null
+}): Record<string, unknown> {
+  return {
+    name: rule.name,
+    effect: rule.effect,
+    condition: rule.condition,
+    parameters: parseBoundaryJson(rule.parameters ?? "{}"),
+    source: rule.source ?? null,
   }
 }
 
@@ -73,7 +90,20 @@ export function registerPolicyRoutes(app: FastifyInstance): void {
       updated_by: req.session.upn
     })
 
-    audit(req, existing ? "policy.update" : "policy.create", { name, effect, condition })
+    const afterSnap = {
+      name,
+      effect,
+      condition,
+      parameters: parameters ?? {},
+      source: db.PolicySource.Db,
+    }
+    audit(
+      req,
+      existing ? "policy.update" : "policy.create",
+      existing
+        ? withBeforeAfter({ name, effect, condition }, policyAuditSnapshot(existing), afterSnap)
+        : withBeforeAfter({ name, effect, condition }, null, afterSnap),
+    )
     broadcast({
       type: EventType.SyncPolicySaved,
       data: { name, effect, condition, actor: req.session.upn, created: !existing }
@@ -89,7 +119,15 @@ export function registerPolicyRoutes(app: FastifyInstance): void {
     }
     const before = db.listPolicyRules().find((rule) => rule.name === req.params.name)
     db.deletePolicyRule(req.params.name)
-    audit(req, "policy.delete", { name: req.params.name, source: before?.source ?? null })
+    audit(
+      req,
+      "policy.delete",
+      withBeforeAfter(
+        { name: req.params.name, source: before?.source ?? null },
+        before ? policyAuditSnapshot(before) : null,
+        null,
+      ),
+    )
     broadcast({
       type: EventType.SyncPolicyDeleted,
       data: { name: req.params.name, actor: req.session.upn, source: before?.source ?? null }

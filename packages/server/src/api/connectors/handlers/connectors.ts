@@ -25,6 +25,7 @@ import {
 } from "@mia/shared-types"
 import type { FastifyInstance, FastifyRequest } from "fastify"
 import * as db from "../../../infra/persistence/sqlite.js"
+import { withBeforeAfter } from "../../admin/audit-detail.js"
 
 type ConfigValue = string | number | boolean | null
 type ConfigMap = Record<string, ConfigValue>
@@ -126,6 +127,18 @@ function audit(req: FastifyRequest, action: string, detail: Record<string, unkno
   }
 }
 
+/** Audit-safe connector snapshot — secrets always masked. */
+function connectorAuditSnap(connector: Connector): Record<string, unknown> {
+  return {
+    id: connector.id,
+    kind: connector.kind,
+    name: connector.name,
+    displayName: connector.displayName,
+    enabled: connector.enabled,
+    config: maskConnectorConfig(connector.kind, connector.config),
+  }
+}
+
 export function registerConnectorRoutes(app: FastifyInstance, _host: AgentHost): void {
   app.get("/api/connectors", async (req, reply) => {
     if (!req.session?.isAdmin) {
@@ -221,7 +234,11 @@ export function registerConnectorRoutes(app: FastifyInstance, _host: AgentHost):
         updatedBy: req.session.upn,
       }
       db.saveConnector(serialise(connector, req.session.upn))
-      audit(req, "connector.create", { id, kind: kindRaw, name })
+      audit(
+        req,
+        "connector.create",
+        withBeforeAfter({ id, kind: kindRaw, name }, null, connectorAuditSnap(connector)),
+      )
       return { ok: true, id }
     },
   )
@@ -268,7 +285,15 @@ export function registerConnectorRoutes(app: FastifyInstance, _host: AgentHost):
         updatedBy: req.session.upn,
       }
       db.saveConnector(serialise(next, req.session.upn, existing.createdAt))
-      audit(req, "connector.update", { id: req.params.id, fields: Object.keys(body) })
+      audit(
+        req,
+        "connector.update",
+        withBeforeAfter(
+          { id: req.params.id, fields: Object.keys(body) },
+          connectorAuditSnap(existing),
+          connectorAuditSnap(next),
+        ),
+      )
       return { ok: true }
     },
   )
@@ -278,12 +303,18 @@ export function registerConnectorRoutes(app: FastifyInstance, _host: AgentHost):
       reply.code(403)
       return { error: "admin only" }
     }
-    if (!db.getConnector(req.params.id)) {
+    const row = db.getConnector(req.params.id)
+    if (!row) {
       reply.code(404)
       return { error: `unknown connector "${req.params.id}"` }
     }
+    const existing = parseRow(row)
     db.deleteConnector(req.params.id)
-    audit(req, "connector.delete", { id: req.params.id })
+    audit(
+      req,
+      "connector.delete",
+      withBeforeAfter({ id: req.params.id }, connectorAuditSnap(existing), null),
+    )
     return { ok: true }
   })
 

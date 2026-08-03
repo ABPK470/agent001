@@ -1373,6 +1373,15 @@ export const api = {
       `/api/entity-registry/strategies${qs ? `?${qs}` : ""}`,
     )
   },
+  getEntityRegistryStrategy: (id: string, opts?: { tenant?: string; version?: number }) => {
+    const p = new URLSearchParams()
+    if (opts?.tenant) p.set("tenant", opts.tenant)
+    if (opts?.version !== undefined) p.set("version", String(opts.version))
+    const qs = p.toString()
+    return json<import("../types").EntityRegistryStrategy>(
+      `/api/entity-registry/strategies/${encodeURIComponent(id)}${qs ? `?${qs}` : ""}`,
+    )
+  },
   saveEntityRegistryStrategy: (
     strategy: import("../types").EntityRegistryStrategy,
     reason: string,

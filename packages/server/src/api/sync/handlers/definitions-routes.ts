@@ -38,6 +38,7 @@ import {
   EntityExportValidationError,
 } from "../service/assert-entity-export.js"
 import { loadCatalogSnapshotForSuggest } from "../service/load-catalog-for-suggest.js"
+import { withEntityVersionRef, withStrategyVersionRef } from "../../admin/audit-detail.js"
 import { entityImportToGate } from "../../platform/service/import-gate.js"
 import { recordSyncCatalogChange } from "../../platform/service/sync-catalog-versioning.js"
 
@@ -363,12 +364,24 @@ export function registerEntityRegistryRoutes(app: FastifyInstance, projectRoot?:
           versionLabel: req.body.versionLabel ?? null,
           createOnly: req.body.createOnly === true,
         })
-        audit(req, "entity_registry.saved", {
-          tenantId,
-          id: result.id,
-          version: result.version,
-          reason: req.body.reason
-        })
+        audit(
+          req,
+          "entity_registry.saved",
+          withEntityVersionRef(
+            {
+              tenantId,
+              id: result.id,
+              version: result.version,
+              reason: req.body.reason,
+            },
+            {
+              tenantId,
+              id: result.id,
+              version: result.version,
+              ...(result.version > 1 ? { prevVersion: result.version - 1 } : {}),
+            },
+          ),
+        )
         broadcast({
           type: EventType.EntityRegistrySaved,
           data: {
@@ -536,6 +549,30 @@ export function registerEntityRegistryRoutes(app: FastifyInstance, projectRoot?:
     return { tenantId, items }
   })
 
+  app.get<{ Params: { id: string }; Querystring: { version?: string } }>(
+    "/api/entity-registry/strategies/:id",
+    async (req, reply) => {
+      const tenantId = resolveTenant(req)
+      const id = req.params.id
+      if (!id) {
+        reply.code(400)
+        return { error: "strategy id is required" }
+      }
+      const rawVersion = req.query?.version
+      const versionNum = rawVersion != null && rawVersion !== "" ? Number(rawVersion) : NaN
+      const strategy = db.resolveScd2Strategy(
+        tenantId,
+        id,
+        Number.isFinite(versionNum) ? versionNum : "latest",
+      )
+      if (!strategy) {
+        reply.code(404)
+        return { error: `strategy not found: ${id}` }
+      }
+      return strategy
+    },
+  )
+
   app.delete<{ Params: { id: string } }>(
     "/api/entity-registry/strategies/:id",
     async (req, reply) => {
@@ -610,11 +647,19 @@ export function registerEntityRegistryRoutes(app: FastifyInstance, projectRoot?:
           actor: req.session.upn,
           reason: req.body.reason
         })
-        audit(req, "entity_registry.strategy_saved", {
-          tenantId,
-          id: result.id,
-          version: result.version
-        })
+        audit(
+          req,
+          "entity_registry.strategy_saved",
+          withStrategyVersionRef(
+            { tenantId, id: result.id, version: result.version },
+            {
+              tenantId,
+              id: result.id,
+              version: result.version,
+              ...(result.version > 1 ? { prevVersion: result.version - 1 } : {}),
+            },
+          ),
+        )
         broadcast({
           type: EventType.EntityRegistryStrategySaved,
           data: { tenantId, id: result.id, version: result.version, actor: req.session.upn }

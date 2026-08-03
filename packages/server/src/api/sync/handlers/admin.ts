@@ -8,10 +8,12 @@ import { broadcast } from "../../../infra/events/broadcaster.js"
 import {
   deleteFreezeWindow,
   FreezeWindowValidationError,
+  getFreezeWindow,
   listFreezeWindowsForTenant,
   saveAdminAudit,
   upsertFreezeWindow
 } from "../../../infra/persistence/sqlite.js"
+import { withBeforeAfter } from "../../admin/audit-detail.js"
 
 const DEFAULT_TENANT_ID = "_default"
 
@@ -56,6 +58,7 @@ export function registerFreezeWindowRoutes(app: FastifyInstance): void {
     }
     const tenantId = resolveTenant(req)
     try {
+      const prior = getFreezeWindow(tenantId, body.id)
       const record = upsertFreezeWindow({
         tenantId,
         id: body.id,
@@ -65,12 +68,20 @@ export function registerFreezeWindowRoutes(app: FastifyInstance): void {
         endsAt: body.endsAt,
         actor: req.session.upn
       })
-      audit(req, "freeze_window.upserted", {
-        tenantId,
-        id: record.id,
-        startsAt: record.startsAt,
-        endsAt: record.endsAt
-      })
+      audit(
+        req,
+        "freeze_window.upserted",
+        withBeforeAfter(
+          {
+            tenantId,
+            id: record.id,
+            startsAt: record.startsAt,
+            endsAt: record.endsAt,
+          },
+          prior,
+          record,
+        ),
+      )
       broadcast({
         type: EventType.FreezeWindowUpserted,
         data: {
@@ -98,12 +109,17 @@ export function registerFreezeWindowRoutes(app: FastifyInstance): void {
       return { error: "admin only" }
     }
     const tenantId = resolveTenant(req)
+    const prior = getFreezeWindow(tenantId, req.params.id)
     const ok = deleteFreezeWindow(tenantId, req.params.id)
     if (!ok) {
       reply.code(404)
       return { error: `freeze_window not found: ${req.params.id}` }
     }
-    audit(req, "freeze_window.deleted", { tenantId, id: req.params.id })
+    audit(
+      req,
+      "freeze_window.deleted",
+      withBeforeAfter({ tenantId, id: req.params.id }, prior, null),
+    )
     broadcast({
       type: EventType.FreezeWindowDeleted,
       data: { tenantId, id: req.params.id, actor: req.session.upn }

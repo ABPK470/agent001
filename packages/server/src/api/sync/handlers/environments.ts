@@ -21,6 +21,7 @@ import {
 import type { FastifyInstance, FastifyRequest } from "fastify"
 import { broadcast } from "../../../infra/events/broadcaster.js"
 import * as db from "../../../infra/persistence/sqlite.js"
+import { withBeforeAfter } from "../../admin/audit-detail.js"
 import { recordSyncCatalogChange } from "../../platform/service/sync-catalog-versioning.js"
 import { refreshEnvDerivedPolicies } from "../../policies/service/policy-seeder.js"
 import { isBuiltinSyncEnvironment } from "../types/builtin-sync-environments.js"
@@ -275,7 +276,7 @@ export function registerSyncEnvironmentRoutes(app: FastifyInstance, host: AgentH
       db.saveSyncEnvironment(serialiseEnvironment(env, req.session.upn))
       rebuildLiveSyncEnvironments(host)
       refreshEnvDerivedPolicies(host, name)
-      audit(req, "sync_env.create", { name, fields: sanitised })
+      audit(req, "sync_env.create", withBeforeAfter({ name, fields: sanitised }, null, env))
       broadcast({
         type: EventType.SyncEnvUpdate,
         data: { name, action: "create", actor: req.session.upn }
@@ -321,15 +322,23 @@ export function registerSyncEnvironmentRoutes(app: FastifyInstance, host: AgentH
           }
         }
       }
+      const prior = normalizeStoredSyncEnvironment(
+        req.params.name,
+        parseBoundaryJson(row.body_json) as Record<string, unknown>,
+      )
       const env = withPermissionDefaults({
-        ...normalizeStoredSyncEnvironment(req.params.name, parseBoundaryJson(row.body_json) as Record<string, unknown>),
+        ...prior,
         ...sanitised,
         name: req.params.name,
       })
       db.saveSyncEnvironment(serialiseEnvironment(env, req.session.upn, row.created_at))
       rebuildLiveSyncEnvironments(host)
       refreshEnvDerivedPolicies(host, req.params.name)
-      audit(req, "sync_env.update", { name: req.params.name, fields: sanitised })
+      audit(
+        req,
+        "sync_env.update",
+        withBeforeAfter({ name: req.params.name, fields: sanitised }, prior, env),
+      )
       broadcast({
         type: EventType.SyncEnvUpdate,
         data: { name: req.params.name, action: "update", actor: req.session.upn }
@@ -353,9 +362,16 @@ export function registerSyncEnvironmentRoutes(app: FastifyInstance, host: AgentH
       reply.code(403)
       return { error: builtinLock }
     }
+    const row = db.getSyncEnvironment(req.params.name)
+    const prior = row
+      ? normalizeStoredSyncEnvironment(
+          req.params.name,
+          parseBoundaryJson(row.body_json) as Record<string, unknown>,
+        )
+      : null
     db.deleteSyncEnvironment(req.params.name)
     rebuildLiveSyncEnvironments(host)
-    audit(req, "sync_env.delete", { name: req.params.name })
+    audit(req, "sync_env.delete", withBeforeAfter({ name: req.params.name }, prior, null))
     broadcast({
       type: EventType.SyncEnvUpdate,
       data: { name: req.params.name, action: "delete", actor: req.session.upn }

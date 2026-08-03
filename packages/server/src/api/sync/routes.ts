@@ -23,6 +23,8 @@ import type { FastifyInstance, FastifyReply } from "fastify"
 import { broadcast } from "../../infra/events/broadcaster.js"
 import { cancelOperation } from "../../infra/operations/cancel-registry.js"
 import * as db from "../../infra/persistence/sqlite.js"
+import { withCatalogVersionRef } from "../admin/audit-detail.js"
+import { getActiveSyncCatalogVersion } from "../platform/service/sync-catalog-versioning.js"
 import {
   listSyncDefinitionAdminItems,
   listSyncDefinitionRuntimeOptions,
@@ -421,15 +423,31 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
           toolName: "sync_publish",
           args: { action: "publish_definitions" },
         })
+        const tipBefore = getActiveSyncCatalogVersion()
         const result = publishSyncDefinitionsFromDb(projectRoot)
+        const tipAfter = getActiveSyncCatalogVersion()
+        const publishDetail = {
+          publishedAt: result.publishedAt,
+          publishedVersion: result.publishedVersion,
+          definitionCount: result.definitionCount,
+        }
+        const against =
+          tipBefore != null && tipAfter != null && tipBefore !== tipAfter
+            ? tipBefore
+            : tipAfter != null && tipAfter > 1
+              ? tipAfter - 1
+              : undefined
         db.saveAdminAudit({
           actor: req.session.upn,
           action: "sync.definitions.published",
-          detail: JSON.stringify({
-            publishedAt: result.publishedAt,
-            publishedVersion: result.publishedVersion,
-            definitionCount: result.definitionCount
-          }),
+          detail: JSON.stringify(
+            tipAfter != null
+              ? withCatalogVersionRef(publishDetail, {
+                  catalogVersion: tipAfter,
+                  ...(against != null ? { againstCatalogVersion: against } : {}),
+                })
+              : publishDetail,
+          ),
           timestamp: new Date().toISOString(),
           scope_id: "sync-definitions"
         })

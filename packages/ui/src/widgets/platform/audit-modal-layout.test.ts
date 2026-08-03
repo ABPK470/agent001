@@ -38,18 +38,29 @@ describe("audit modal table + inspector contracts", () => {
     expect(css).toContain("minmax(0, 1.35fr)")
   })
 
-  it("inspector uses transform slide-over dialect", () => {
+  it("inspector uses transform slide-over dialect + CatalogJsonDiff", () => {
     const inspector = readFileSync(join(here, "AuditInspector.tsx"), "utf8")
     expect(inspector).toContain('className="audit-inspector"')
     expect(inspector).toContain('data-open={open ? "true" : "false"}')
     expect(inspector).toContain("onTransitionEnd")
     expect(inspector).toContain("JsonViewer")
+    expect(inspector).toContain("CatalogJsonDiff")
     expect(inspector).toContain("auditChangeHints")
+    expect(inspector).toContain("Historical version no longer available")
+    expect(inspector).toContain("resolveVersionRef")
 
     const css = readFileSync(join(here, "../../boot/index.css"), "utf8")
     expect(css).toContain("translate3d(100%, 0, 0)")
     expect(css).toContain(".audit-inspector[data-open=\"true\"]")
     expect(css).toContain("--audit-inspector-w")
+  })
+
+  it("table does not prefetch version refs (drawer-only resolve)", () => {
+    const modal = readFileSync(join(here, "AuditModal.tsx"), "utf8")
+    expect(modal).not.toContain("getEntityRegistry")
+    expect(modal).not.toContain("getEntityRegistryStrategy")
+    expect(modal).not.toContain("getSyncCatalogVersionDiff")
+    expect(modal).toContain("auditSummary")
   })
 
   it("filters use FilterSheet + chips dialect", () => {
