@@ -41,7 +41,7 @@ describe("audit modal table + inspector contracts", () => {
     expect(css).toContain("minmax(0, 1fr)")
     expect(css).toContain("column-gap: 1.5rem")
     expect(css).toContain('data-inspector-open="true"] .audit-log-host__table')
-    expect(css).toContain("padding-right: var(--audit-inspector-w)")
+    expect(css).toContain("margin-right: var(--audit-inspector-w)")
     expect(css).toContain(".audit-log-table__cell--action")
     expect(css).toContain(".audit-log-table__cell--summary")
     expect(css).not.toContain(".audit-log-table__col--scope {\n  display: none")
@@ -67,6 +67,7 @@ describe("audit modal table + inspector contracts", () => {
     expect(css).toContain("--audit-inspector-w")
     expect(css).toContain(".audit-inspector__prop--stacked")
     expect(css).toContain("word-break: break-word")
+    expect(css).toContain("box-shadow: none")
   })
 
   it("table does not prefetch version refs (drawer-only resolve)", () => {
@@ -83,6 +84,17 @@ describe("audit modal table + inspector contracts", () => {
     expect(src).toContain("ActiveFilterChips")
     expect(src).toContain("filterBtnRef")
     expect(src).not.toContain("AdminBrowseFiltersPanel")
+  })
+
+  it("table header uses cap fill — toolbar owns the control/data rule", () => {
+    const css = readFileSync(join(here, "../../boot/index.css"), "utf8")
+    expect(css).toMatch(
+      /\.audit-log-table__head\s*\{[^}]*background:\s*var\(--section-cap-bg/s,
+    )
+    expect(css).not.toMatch(
+      /\.audit-log-table__head\s*\{[^}]*border-bottom/s,
+    )
+    expect(css).toMatch(/\.browse-strip\s*\{[^}]*border-bottom/s)
   })
 
   it("wires j/k selection stepping + scroll into view", () => {

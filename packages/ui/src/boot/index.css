@@ -1391,7 +1391,7 @@ body {
 }
 
 .entity-rail-scroll {
-  padding: 0.35rem 0.45rem 0.65rem;
+  padding: 0;
 }
 
 .entity-rail-list {
@@ -1401,7 +1401,9 @@ body {
 }
 
 .entity-rail-item-wrap {
-  margin-bottom: 0.05rem;
+  position: relative;
+  margin-bottom: 0;
+  border-bottom: 1px solid var(--border-subtle, var(--color-border-subtle));
 }
 
 .entity-rail-item-row {
@@ -1409,27 +1411,44 @@ body {
   display: flex;
   align-items: center;
   min-width: 0;
-  padding: 0.3rem 0.35rem 0.3rem 0.65rem;
-  border-radius: var(--list-row-radius);
+  min-height: 44px;
+  padding: 0;
+  border-radius: 0;
   background: transparent;
   transition: color 160ms ease, background-color 160ms ease;
 }
 
 .entity-rail-item-wrap:hover .entity-rail-item-row,
 .entity-rail-item-wrap--menu-open .entity-rail-item-row {
-  background: var(--hover-fill);
+  background: var(--overlay-2, rgb(255 255 255 / 0.04));
+}
+
+.entity-rail-item-wrap--active::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--color-accent, #6366f1);
+  z-index: 2;
 }
 
 .entity-rail-item-wrap--active .entity-rail-item-row {
-  background: var(--select-fill);
-  border-left: 3px solid var(--accent);
-  padding-left: calc(0.65rem - 3px);
+  background: var(--select-fill, rgb(255 255 255 / 0.06));
+}
+
+.entity-rail-item-wrap--active:hover .entity-rail-item-row,
+.entity-rail-item-wrap--active.entity-rail-item-wrap--menu-open .entity-rail-item-row {
+  background: var(--select-fill, rgb(255 255 255 / 0.06));
 }
 
 .entity-rail-item {
-  display: block;
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
   min-width: 0;
-  padding: 0.15rem 0.15rem 0.15rem 0;
+  padding: 0.3rem 1rem;
   color: var(--color-text-muted);
   transition: color 160ms ease;
 }
@@ -1437,32 +1456,31 @@ body {
 .entity-rail-item-wrap:hover .entity-rail-item,
 .entity-rail-item-wrap--menu-open .entity-rail-item,
 .entity-rail-item-wrap--active .entity-rail-item {
-  padding-right: 1.65rem;
+  padding-right: 2.65rem;
   color: var(--color-text);
 }
 
-.entity-rail-item-wrap--active .entity-rail-item {
-  font-weight: 600;
-}
-
 .entity-rail-item-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 0.8125rem;
-  line-height: 1.35;
-  font-weight: 500;
-  letter-spacing: -0.01em;
-  color: var(--text);
+  line-height: 1.3;
+  font-weight: 600;
+  color: var(--text, var(--color-text));
 }
 
 .entity-rail-item-meta {
-  margin-top: 0.1rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-family: var(--font-mono);
   font-size: 0.6875rem;
-  line-height: 1.3;
-  color: var(--text-secondary);
-}
-
-.entity-rail-item-wrap--active .entity-rail-item-meta {
-  color: var(--text-secondary);
+  line-height: 1.2;
+  font-weight: 400;
+  color: var(--text-muted, var(--color-text-muted));
 }
 
 .entity-rail-footer {
@@ -7215,10 +7233,7 @@ button.trace-tree-status-pill:hover {
   word-break: break-word;
 }
 
-/* ── Run inspector — transform-only overlay (no main-panel reflow) ──
- * Width/flex animation reflows the user table every frame → visible jitter.
- * Slide with translate3d; main column size stays put. Clipped by widget card.
- */
+/* ── Run inspector — transform slide + margin contract (mirror audit dialect) ── */
 .active-users-widget .au-main {
   display: flex;
   flex: 1 1 0;
@@ -7229,24 +7244,57 @@ button.trace-tree-status-pill:hover {
   overflow: hidden;
 }
 
-/* Selected run — paint on cells (tr background is unreliable). */
+.active-users-widget .au-run-host {
+  position: relative;
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.active-users-widget .au-body-scroll {
+  transition: margin-right var(--au-inspector-dur) var(--au-inspector-ease);
+}
+
+.active-users-widget .au-run-host[data-inspector-open="true"] .au-body-scroll {
+  margin-right: var(--au-run-inspector-w);
+}
+
+/* Selected run — trace-style accent (cells + cards). */
 .active-users-widget .au-run-selected,
 .active-users-widget tr.au-run-selected > td {
-  background: color-mix(in srgb, var(--accent) 16%, transparent) !important;
+  background: var(--select-fill, rgb(255 255 255 / 0.06)) !important;
+  box-shadow: none !important;
 }
 
 .active-users-widget .au-run-card.au-run-selected,
 .active-users-widget button.au-run-selected {
-  box-shadow: inset 3px 0 0 var(--accent);
+  position: relative;
+  background: var(--select-fill, rgb(255 255 255 / 0.06));
+  box-shadow: none;
+}
+.active-users-widget .au-run-card.au-run-selected::before,
+.active-users-widget button.au-run-selected::before,
+.active-users-widget tr.au-run-selected > td:first-child::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--color-accent, #6366f1);
+  z-index: 1;
 }
 
 .active-users-widget tr.au-run-selected > td:first-child {
-  box-shadow: inset 3px 0 0 var(--accent);
+  position: relative;
 }
 
 .active-users-widget .au-run-selected:hover,
 .active-users-widget tr.au-run-selected:hover > td {
-  background: color-mix(in srgb, var(--accent) 22%, transparent) !important;
+  background: var(--select-fill, rgb(255 255 255 / 0.06)) !important;
 }
 
 .active-users-widget .au-run-inspector {
@@ -7254,16 +7302,17 @@ button.trace-tree-status-pill:hover {
   top: 0;
   right: 0;
   bottom: 0;
-  z-index: 30; /* above sticky user/run headers (z-16…20) */
+  z-index: 30;
   display: flex;
   flex-direction: column;
+  box-sizing: border-box;
   width: var(--au-run-inspector-w);
   max-width: 100%;
   min-height: 0;
   overflow: hidden;
   background: var(--panel, var(--workspace-widget-bg, var(--panel-2)));
   border-left: 1px solid var(--border-subtle);
-  box-shadow: -10px 0 28px rgb(0 0 0 / 0.32);
+  box-shadow: none;
   transform: translate3d(100%, 0, 0);
   pointer-events: none;
   transition: transform var(--au-inspector-dur) var(--au-inspector-ease);
@@ -7287,6 +7336,10 @@ button.trace-tree-status-pill:hover {
   .active-users-widget .au-run-inspector {
     transition-duration: 1ms !important;
   }
+
+  .active-users-widget .au-body-scroll {
+    transition-duration: 1ms !important;
+  }
 }
 
 .active-users-widget .au-run-inspector__header {
@@ -7297,6 +7350,7 @@ button.trace-tree-status-pill:hover {
   flex-shrink: 0;
   padding: 0.75rem 0.875rem;
   border-bottom: 1px solid var(--border-subtle);
+  background: inherit;
 }
 
 .active-users-widget .au-run-inspector__title {
@@ -7527,7 +7581,7 @@ button.trace-tree-status-pill:hover {
   min-width: 0;
 }
 
-/* ── Audit Log inspector — transform-only overlay (mirror AU dialect) ── */
+/* ── Audit Log inspector — transform slide + margin contract (stable, no grid reflow) ── */
 .audit-log-host {
   --audit-inspector-w: 25rem;
   --audit-inspector-ease: cubic-bezier(0.22, 1, 0.36, 1);
@@ -7539,6 +7593,8 @@ button.trace-tree-status-pill:hover {
   min-width: 0;
   min-height: 0;
   overflow: hidden;
+  /* Left inset matches BrowseStrip; top/right flush so drawer borders meet cleanly. */
+  padding: 0 0 0.75rem 1.5rem;
 }
 
 .audit-log-host__table {
@@ -7549,13 +7605,17 @@ button.trace-tree-status-pill:hover {
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
-  transition: padding-right var(--audit-inspector-dur) var(--audit-inspector-ease);
+  transition: margin-right var(--audit-inspector-dur) var(--audit-inspector-ease);
 }
 
-/* Drawer open: table pads by drawer width so rows compress instead of being covered. */
+/* Table reserves drawer track; inspector slides into the same width. */
 .audit-log-host[data-inspector-open="true"] .audit-log-host__table {
-  padding-right: var(--audit-inspector-w);
+  margin-right: var(--audit-inspector-w);
   overflow-x: auto;
+}
+
+.audit-log-host[data-resizing="true"] .audit-log-host__table {
+  transition: none;
 }
 
 /*
@@ -7597,8 +7657,7 @@ button.trace-tree-status-pill:hover {
   z-index: 1;
   padding-top: 0.4rem;
   padding-bottom: 0.4rem;
-  border-bottom: 1px solid var(--border-subtle);
-  background: var(--panel, var(--workspace-widget-bg, var(--panel-2)));
+  background: var(--section-cap-bg, var(--workspace-widget-bg, var(--panel-2)));
   font-size: 0.625rem;
   font-weight: 600;
   letter-spacing: 0.06em;
@@ -7608,9 +7667,10 @@ button.trace-tree-status-pill:hover {
 
 .audit-log-table__row {
   /* Clear sticky thead when keyboard selection scrolls into view. */
+  position: relative;
   scroll-margin-top: 2rem;
   scroll-margin-bottom: 0.5rem;
-  border-radius: 0.5rem;
+  border-radius: 0;
   text-align: left;
   font-size: 0.8125rem;
   color: var(--color-text);
@@ -7621,13 +7681,24 @@ button.trace-tree-status-pill:hover {
   background: var(--overlay-2);
 }
 
+.audit-log-table__row[data-selected="true"]::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--color-accent, #6366f1);
+  z-index: 1;
+}
+
 .audit-log-table__row[data-selected="true"] {
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
-  box-shadow: inset 3px 0 0 var(--accent);
+  background: var(--select-fill, rgb(255 255 255 / 0.06));
+  box-shadow: none;
 }
 
 .audit-log-table__row[data-selected="true"]:hover {
-  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  background: var(--select-fill, rgb(255 255 255 / 0.06));
 }
 
 /* Content-hugging cols: no ellipsis into empty neighbour space. */
@@ -7672,20 +7743,20 @@ button.trace-tree-status-pill:hover {
   top: 0;
   right: 0;
   bottom: 0;
-  z-index: 30;
+  z-index: 2;
   display: flex;
   flex-direction: column;
+  box-sizing: border-box;
   width: var(--audit-inspector-w);
   max-width: 100%;
   min-height: 0;
   overflow: hidden;
   background: var(--panel, var(--workspace-widget-bg, var(--panel-2)));
   border-left: 1px solid var(--border-subtle);
-  box-shadow: -10px 0 28px rgb(0 0 0 / 0.32);
+  box-shadow: none;
   transform: translate3d(100%, 0, 0);
   pointer-events: none;
-  transition: transform var(--audit-inspector-dur) var(--audit-inspector-ease),
-    width var(--audit-inspector-dur) var(--audit-inspector-ease);
+  transition: transform var(--audit-inspector-dur) var(--audit-inspector-ease);
   will-change: transform;
 }
 
@@ -7698,10 +7769,6 @@ button.trace-tree-status-pill:hover {
   transition: none;
 }
 
-.audit-log-host[data-resizing="true"] .audit-log-host__table {
-  transition: none;
-}
-
 .audit-inspector__resize {
   position: absolute;
   top: 0;
@@ -7709,7 +7776,7 @@ button.trace-tree-status-pill:hover {
   bottom: 0;
   z-index: 2;
   width: 0.35rem;
-  margin-left: -0.15rem;
+  transform: translateX(-50%);
   cursor: col-resize;
   touch-action: none;
   background: transparent;
@@ -7747,6 +7814,7 @@ button.trace-tree-status-pill:hover {
   flex-shrink: 0;
   padding: 0.75rem 0.875rem;
   border-bottom: 1px solid var(--border-subtle);
+  background: inherit;
 }
 
 .audit-inspector__title {

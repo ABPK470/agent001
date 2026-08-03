@@ -68,6 +68,17 @@ describe("Active Users sticky context banner", () => {
     expect(css).toContain("browse-count--compact")
   })
 
+  it("run inspector shares body track — margin contract + transform slide", () => {
+    expect(src).toContain("au-run-host")
+    expect(src).toContain('data-inspector-open={inspectorOpen ? "true" : "false"}')
+    expect(src).toContain("ActiveUsersRunInspector")
+    expect(css).toMatch(/\.active-users-widget\s+\.au-run-host\s*\{[^}]*position:\s*relative/s)
+    expect(css).toContain('data-inspector-open="true"] .au-body-scroll')
+    expect(css).toContain("margin-right: var(--au-run-inspector-w)")
+    expect(css).toContain("translate3d(100%, 0, 0)")
+    expect(css).toContain("box-shadow: none")
+  })
+
   it("Viewing as chip uses theme tokens (not dark-only amber text)", () => {
     expect(src).toContain("au-btn-viewing-as")
     expect(src).not.toContain("text-amber-200")

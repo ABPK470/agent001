@@ -576,7 +576,7 @@ export function AuditModal({ onClose }: { onClose: () => void }) {
         </FilterSheet>
 
         <div
-          className="audit-log-host min-w-0 px-6 pb-3 pt-1"
+          className="audit-log-host min-w-0"
           data-inspector-open={inspectorOpen ? "true" : "false"}
           data-resizing={inspectorResizing ? "true" : "false"}
           style={{ ["--audit-inspector-w" as string]: `${inspectorWidth}px` }}

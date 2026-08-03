@@ -567,10 +567,9 @@ export function ActiveUsers(): ReactNode {
         compact ? "active-users-widget--compact" : "",
         tiny ? "active-users-widget--tiny" : "",
         isZen ? "active-users-widget--zen" : "",
-        runInspector ? "active-users-widget--inspector-open" : "",
       ].filter(Boolean).join(" ")}
     >
-      {/* Main column — contracts when the inspector pushes in from the right. */}
+      {/* Main column — body + run inspector share one track below chrome. */}
       <div className="au-main">
         {isZen ? (
           <>
@@ -665,7 +664,11 @@ export function ActiveUsers(): ReactNode {
         )}
 
         {/* Stack = reflow (no clip). Table = only when container is wide enough for all columns. */}
-        <div className="flex-1 min-h-0 min-w-0 au-body-scroll">
+        <div
+          className="au-run-host flex-1 min-h-0 min-w-0"
+          data-inspector-open={inspectorOpen ? "true" : "false"}
+        >
+          <div className="flex-1 min-h-0 min-w-0 au-body-scroll">
           {useStack ? (
             <div className="au-user-list divide-y divide-border-subtle">
               {filteredSorted.map((u) => {
@@ -838,18 +841,19 @@ export function ActiveUsers(): ReactNode {
               </tbody>
             </table>
           )}
+          </div>
+          {runInspector && (
+            <ActiveUsersRunInspector
+              runId={runInspector.runId}
+              preview={runInspector.preview}
+              open={inspectorOpen}
+              onClose={closeRunInspector}
+              onExited={onInspectorExited}
+            />
+          )}
         </div>
       </div>
 
-      {runInspector && (
-        <ActiveUsersRunInspector
-          runId={runInspector.runId}
-          preview={runInspector.preview}
-          open={inspectorOpen}
-          onClose={closeRunInspector}
-          onExited={onInspectorExited}
-        />
-      )}
       <ToastStack toasts={toasts} onDismiss={dismissToast} />
     </div>
   )
