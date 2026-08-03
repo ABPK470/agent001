@@ -57,7 +57,7 @@ describe("runMigrations", () => {
     expect(
       testDb.prepare("SELECT name FROM sqlite_master WHERE name='eval_dataset_entries'").get(),
     ).toBeTruthy()
-    // Retired Playwright stack — never created on fresh DB; dropped by v2 if leftover.
+    // Retired Playwright stack — not created; baseline DROPs if present.
     for (const name of [
       "browser_contexts",
       "browser_credentials",
@@ -67,40 +67,7 @@ describe("runMigrations", () => {
     ]) {
       expect(testDb.prepare("SELECT name FROM sqlite_master WHERE name=?").get(name)).toBeFalsy()
     }
-    expect(MIGRATIONS.map((m) => m.version)).toEqual([1, 6])
-  })
-
-  it("drops leftover browser tables on upgrade (v6)", () => {
-    testDb.exec(`
-      CREATE TABLE browser_contexts (id TEXT PRIMARY KEY);
-      CREATE TABLE browser_credentials (id TEXT PRIMARY KEY);
-      CREATE TABLE browser_proxy_config (owner_upn TEXT PRIMARY KEY);
-      CREATE TABLE browser_domain_policy_configs (id TEXT PRIMARY KEY);
-      CREATE TABLE browser_audit_log (id INTEGER PRIMARY KEY);
-      CREATE TABLE schema_migrations (
-        version INTEGER PRIMARY KEY,
-        name TEXT NOT NULL,
-        applied_at TEXT NOT NULL
-      );
-      INSERT INTO schema_migrations VALUES (1, 'baseline', datetime('now'));
-    `)
-    runMigrations(testDb)
-    for (const name of [
-      "browser_contexts",
-      "browser_credentials",
-      "browser_proxy_config",
-      "browser_domain_policy_configs",
-      "browser_audit_log",
-    ]) {
-      expect(testDb.prepare("SELECT name FROM sqlite_master WHERE name=?").get(name)).toBeFalsy()
-    }
-    expect(
-      (
-        testDb.prepare("SELECT name FROM schema_migrations WHERE version = 6").get() as {
-          name: string
-        }
-      ).name,
-    ).toBe("drop_browser_tables")
+    expect(MIGRATIONS).toHaveLength(1)
   })
 
   it("is idempotent across repeated runs", () => {

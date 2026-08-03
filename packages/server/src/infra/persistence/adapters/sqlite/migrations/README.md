@@ -6,10 +6,9 @@ Terminal schema lives in a single squashed baseline. Server RDBMS peers
 
 ```
 migrations/
-  0001_baseline.ts              ← full schema for fresh installs
-  0006_drop_browser_tables.ts   ← in-place drop of retired Playwright tables (v6)
-  index.ts                      ← runner
-  runner.ts                     ← MigrationRunner adapter for sql-kit
+  0001_baseline.ts   ← full schema for fresh installs
+  index.ts           ← runner (version 1 only today)
+  runner.ts          ← MigrationRunner adapter for sql-kit
 ```
 
 ## Table naming (versioned documents)
@@ -38,6 +37,8 @@ Other suffixes: `*_config(s)`, `*_log` / `*_audit` / `*_history`, `*_cache`. Roo
 Delete `~/.mia/mia.db` (or the file under `MIA_DATA_DIR`) and restart.
 The runner applies **baseline (v1)** once. That includes catalog/sync tables,
 entity registry, memory, eval dataset entries, and the rest of the product schema.
+Retired Playwright `browser_*` tables are not created; baseline also
+`DROP TABLE IF EXISTS` them if an older file somehow still has them.
 
 Seeds (sync metadata from deploy artifacts, SCD2 strategies, factory policies,
 etc.) run after migrations in `db/seeds.ts` / boot paths.

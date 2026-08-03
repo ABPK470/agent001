@@ -1,16 +1,13 @@
 /**
  * Database migrations runner
  *
- * Terminal schema lives in `0001_baseline.ts`. Numbered follow-ups upgrade
- * existing installs in place (e.g. drop retired tables).
- *
- * Versions 2–5 were folded into baseline; next follow-up is v6 so older
- * ledgers that recorded those versions still pick up new steps.
+ * Terminal schema lives in `0001_baseline.ts` only. Fresh installs (or after
+ * deleting mia.db) run baseline once. Append a numbered follow-up only when
+ * existing installs must upgrade in place without a reset.
  */
 
 import type Database from "better-sqlite3"
-import { runBaselineMigration } from "./0001_baseline.js"
-import { runDropBrowserTablesMigration } from "./0006_drop_browser_tables.js"
+import { DROP_RETIRED_BROWSER_TABLES_SQL, runBaselineMigration } from "./0001_baseline.js"
 
 export interface Migration {
   version: number
@@ -20,7 +17,6 @@ export interface Migration {
 
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, name: "baseline", up: runBaselineMigration },
-  { version: 6, name: "drop_browser_tables", up: runDropBrowserTablesMigration },
 ]
 
 export function runMigrations(db: Database.Database): void {
@@ -32,6 +28,9 @@ export function runMigrations(db: Database.Database): void {
     migration.up(db)
     recordMigration(db, migration)
   }
+  // Baseline already records v1 — re-apply retired drops so older mia.db files
+  // lose Playwright leftovers without a numbered follow-up migration.
+  db.exec(DROP_RETIRED_BROWSER_TABLES_SQL)
 }
 
 export function listMigrations(db: Database.Database): Array<{

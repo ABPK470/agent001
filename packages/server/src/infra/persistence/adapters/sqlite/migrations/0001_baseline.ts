@@ -1028,8 +1028,22 @@ const BASELINE_SQL = `
     CREATE INDEX IF NOT EXISTS idx_eval_dataset_thread ON eval_dataset_entries(thread_id);
     CREATE INDEX IF NOT EXISTS idx_eval_dataset_created ON eval_dataset_entries(created_at DESC);
 
-    -- Legacy table from removed setup wizard (safe no-op on fresh installs).
+    -- Retired / legacy tables (safe no-op when absent).
+    DROP TABLE IF EXISTS browser_audit_log;
+    DROP TABLE IF EXISTS browser_domain_policy_configs;
+    DROP TABLE IF EXISTS browser_proxy_config;
+    DROP TABLE IF EXISTS browser_credentials;
+    DROP TABLE IF EXISTS browser_contexts;
     DROP TABLE IF EXISTS platform_setup;
+`
+
+/** Idempotent cleanup for retired Playwright tables (also at end of baseline SQL). */
+export const DROP_RETIRED_BROWSER_TABLES_SQL = `
+DROP TABLE IF EXISTS browser_audit_log;
+DROP TABLE IF EXISTS browser_domain_policy_configs;
+DROP TABLE IF EXISTS browser_proxy_config;
+DROP TABLE IF EXISTS browser_credentials;
+DROP TABLE IF EXISTS browser_contexts;
 `
 
 /** Full application schema for new databases (single squashed baseline). */
