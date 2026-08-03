@@ -1,21 +1,17 @@
 /**
  * AuditModal — admin platform-wide audit browser.
  *
- * Queries persistent audit_log across all runs and admin scopes
- * (not the in-memory active-session trail). Supports time window,
- * user (UPN), scope, action filters + CSV/JSON export.
+ * Fixed CSS-grid table + right transform inspector (no accordion).
+ * Filters: BrowseStrip → ActiveFilterChips → FilterSheet (Usage dialect).
  */
 
 import {
   AlertCircle,
-  ChevronDown,
-  ChevronRight,
   Download,
   Loader2,
   Scale,
-  X,
 } from "lucide-react"
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   api,
   type AdminAuditFilterOptions,
@@ -25,15 +21,27 @@ import {
 } from "../../client/index"
 import { DateField } from "../../components/DateField"
 import { EmptyState } from "../../components/EmptyState"
+import {
+  ActiveFilterChips,
+  FilterField,
+  FilterSheet,
+  type ActiveFilterChipModel,
+} from "../../components/FilterSheet"
 import { Listbox, type ListboxOption } from "../../components/Listbox"
 import { ModalShell } from "../entity-registry/ModalShell"
 import {
-  AdminBrowseFilterField,
-  AdminBrowseFiltersPanel,
   AdminBrowsePaginationFooter,
   AdminBrowseToolbar,
 } from "./admin-browse-chrome"
-import { AdminBrowseDetailPanel, buildBrowseDetailEntries } from "./admin-browse-detail"
+import { AuditInspector } from "./AuditInspector"
+import {
+  actionVerbClass,
+  actionVerbKind,
+  auditSummary,
+  auditTarget,
+  formatAuditScope,
+  formatAuditWhen,
+} from "./audit-log-view"
 
 const PAGE_SIZE = 50
 
@@ -44,12 +52,11 @@ const SCOPE_OPTIONS: ListboxOption<string>[] = [
 ]
 
 const SORT_OPTIONS: ListboxOption<AdminAuditSort>[] = [
-  { value: "timestamp_desc", label: "Newest first" },
-  { value: "timestamp_asc", label: "Oldest first" },
+  { value: "timestamp_desc", label: "Newest" },
+  { value: "timestamp_asc", label: "Oldest" },
 ]
 
-const EMPTY_FILTERS: Omit<AdminAuditParams, "page" | "pageSize"> = {
-  q: "",
+const EMPTY_FILTERS: Omit<AdminAuditParams, "page" | "pageSize" | "q"> = {
   scopeType: "",
   scopeId: "",
   user: "",
@@ -61,23 +68,11 @@ const EMPTY_FILTERS: Omit<AdminAuditParams, "page" | "pageSize"> = {
   sort: "timestamp_desc",
 }
 
-function actionTone(action: string): string {
-  if (action.includes("blocked") || action.includes("denied")) return "text-error"
-  if (action.includes("completed") || action.includes("success")) return "text-success"
-  if (action.includes("failed") || action.includes("error")) return "text-warning"
-  return "text-text"
-}
-
-function formatWhen(ts: string): string {
-  const d = new Date(ts.endsWith("Z") || ts.includes("+") ? ts : `${ts}Z`)
-  if (Number.isNaN(d.getTime())) return ts
-  return d.toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  })
+function isTypingTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false
+  const tag = target.tagName
+  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true
+  return target.isContentEditable
 }
 
 export function AuditModal({ onClose }: { onClose: () => void }) {
@@ -89,7 +84,8 @@ export function AuditModal({ onClose }: { onClose: () => void }) {
   const [totalPages, setTotalPages] = useState(1)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [expanded, setExpanded] = useState<number | null>(null)
+  const [selectedId, setSelectedId] = useState<number | null>(null)
+  const [inspectorOpen, setInspectorOpen] = useState(false)
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [options, setOptions] = useState<AdminAuditFilterOptions>({
@@ -97,10 +93,25 @@ export function AuditModal({ onClose }: { onClose: () => void }) {
     scopeIds: [],
     actions: [],
   })
+  const filterBtnRef = useRef<HTMLButtonElement>(null)
+  const openInspectorRafRef = useRef(0)
+  const inspectorOpenRef = useRef(inspectorOpen)
+  inspectorOpenRef.current = inspectorOpen
+  const selectedIdRef = useRef(selectedId)
+  selectedIdRef.current = selectedId
+  const itemsRef = useRef(items)
+  itemsRef.current = items
+
+  const selectedEntry = useMemo(
+    () => items.find((e) => e.id === selectedId) ?? null,
+    [items, selectedId],
+  )
 
   useEffect(() => {
     api.adminAuditOptions().then(setOptions).catch((err: unknown) => { console.error("[mia]", err) })
   }, [])
+
+  useEffect(() => () => cancelAnimationFrame(openInspectorRafRef.current), [])
 
   const queryParams = useMemo<AdminAuditParams>(
     () => ({
@@ -128,12 +139,20 @@ export function AuditModal({ onClose }: { onClose: () => void }) {
       setItems(data.items)
       setTotal(data.total)
       setTotalPages(data.totalPages)
-      setExpanded(null)
+      setSelectedId((prev) => {
+        if (prev == null) return null
+        return data.items.some((e) => e.id === prev) ? prev : null
+      })
+      if (!data.items.some((e) => e.id === selectedIdRef.current)) {
+        setInspectorOpen(false)
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load audit log")
       setItems([])
       setTotal(0)
       setTotalPages(1)
+      setSelectedId(null)
+      setInspectorOpen(false)
     } finally {
       setLoading(false)
     }
@@ -145,7 +164,6 @@ export function AuditModal({ onClose }: { onClose: () => void }) {
 
   const activeFilterCount = useMemo(() => {
     let n = 0
-    if (draftQ.trim()) n++
     if (filters.scopeType) n++
     if (filters.scopeId) n++
     if (filters.user) n++
@@ -155,7 +173,9 @@ export function AuditModal({ onClose }: { onClose: () => void }) {
     if (filters.from) n++
     if (filters.to) n++
     return n
-  }, [draftQ, filters])
+  }, [filters])
+
+  const hasActiveFilters = activeFilterCount > 0
 
   function patchFilters(patch: Partial<typeof EMPTY_FILTERS>) {
     setFilters((prev) => ({ ...prev, ...patch }))
@@ -172,6 +192,57 @@ export function AuditModal({ onClose }: { onClose: () => void }) {
     setDraftQ(value)
     setPage(1)
   }
+
+  function openInspector(id: number) {
+    setSelectedId(id)
+    if (inspectorOpenRef.current) return
+    cancelAnimationFrame(openInspectorRafRef.current)
+    // Mount closed for one paint, then open — so transform transition can run.
+    openInspectorRafRef.current = requestAnimationFrame(() => {
+      openInspectorRafRef.current = requestAnimationFrame(() => {
+        setInspectorOpen(true)
+      })
+    })
+  }
+
+  function closeInspector() {
+    setInspectorOpen(false)
+  }
+
+  function onInspectorExited() {
+    if (inspectorOpenRef.current) return
+    setSelectedId(null)
+  }
+
+  function stepSelection(delta: number) {
+    const list = itemsRef.current
+    if (list.length === 0) return
+    const cur = selectedIdRef.current
+    const idx = cur == null ? -1 : list.findIndex((e) => e.id === cur)
+    const from = idx >= 0 ? idx : 0
+    const next = list[(from + delta + list.length) % list.length]
+    if (!next) return
+    openInspector(next.id)
+  }
+
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (isTypingTarget(e.target)) return
+      if (filtersOpen) return
+      if (!selectedIdRef.current && !inspectorOpenRef.current) return
+      if (e.key === "ArrowDown" || e.key === "j") {
+        e.preventDefault()
+        stepSelection(1)
+        return
+      }
+      if (e.key === "ArrowUp" || e.key === "k") {
+        e.preventDefault()
+        stepSelection(-1)
+      }
+    }
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+  }, [filtersOpen])
 
   async function handleExport(format: "csv" | "json") {
     setExporting(true)
@@ -209,6 +280,75 @@ export function AuditModal({ onClose }: { onClose: () => void }) {
     [options.actions],
   )
 
+  const activeChips = useMemo((): ActiveFilterChipModel[] => {
+    const chips: ActiveFilterChipModel[] = []
+    if (filters.from?.trim()) {
+      chips.push({
+        id: "from",
+        label: "From",
+        value: filters.from,
+        onRemove: () => patchFilters({ from: "" }),
+      })
+    }
+    if (filters.to?.trim()) {
+      chips.push({
+        id: "to",
+        label: "To",
+        value: filters.to,
+        onRemove: () => patchFilters({ to: "" }),
+      })
+    }
+    if (filters.user?.trim()) {
+      chips.push({
+        id: "user",
+        label: "Actor",
+        value: filters.user,
+        onRemove: () => patchFilters({ user: "" }),
+      })
+    }
+    if (filters.scopeType?.trim()) {
+      chips.push({
+        id: "scopeType",
+        label: "Scope",
+        value: filters.scopeType === "run" ? "Agent runs" : "Admin / platform",
+        onRemove: () => patchFilters({ scopeType: "" }),
+      })
+    }
+    if (filters.scopeId?.trim()) {
+      chips.push({
+        id: "scopeId",
+        label: "Scope id",
+        value: filters.scopeId,
+        onRemove: () => patchFilters({ scopeId: "" }),
+      })
+    }
+    if (filters.action?.trim()) {
+      chips.push({
+        id: "action",
+        label: "Action",
+        value: filters.action,
+        onRemove: () => patchFilters({ action: "" }),
+      })
+    }
+    if (filters.runId?.trim()) {
+      chips.push({
+        id: "runId",
+        label: "Run",
+        value: filters.runId,
+        onRemove: () => patchFilters({ runId: "" }),
+      })
+    }
+    if (filters.threadId?.trim()) {
+      chips.push({
+        id: "threadId",
+        label: "Thread",
+        value: filters.threadId,
+        onRemove: () => patchFilters({ threadId: "" }),
+      })
+    }
+    return chips
+  }, [filters])
+
   return (
     <ModalShell
       title="Audit"
@@ -229,19 +369,30 @@ export function AuditModal({ onClose }: { onClose: () => void }) {
         />
       }
     >
-      <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <AdminBrowseToolbar
           search={draftQ}
           onSearchChange={onSearchChange}
-          searchPlaceholder="Search action, user, detail, run, goal…"
+          searchPlaceholder="Search action, actor, detail, run, goal…"
           searchAriaLabel="Search audit log"
           filtersOpen={filtersOpen}
           onToggleFilters={() => setFiltersOpen((v) => !v)}
           activeFilterCount={activeFilterCount}
           onRefresh={() => void load().catch((err: unknown) => { console.error("[mia]", err) })}
           loading={loading}
+          filterBtnRef={filterBtnRef}
           trailing={
             <>
+              <div className="w-[7.75rem] shrink-0">
+                <Listbox
+                  value={filters.sort ?? "timestamp_desc"}
+                  options={SORT_OPTIONS}
+                  onChange={(sort) => patchFilters({ sort })}
+                  size="sm"
+                  className="w-full listbox-control"
+                  ariaLabel="Sort"
+                />
+              </div>
               <button
                 type="button"
                 disabled={exporting || total === 0}
@@ -266,117 +417,123 @@ export function AuditModal({ onClose }: { onClose: () => void }) {
           }
         />
 
-        {filtersOpen && (
-          <AdminBrowseFiltersPanel>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <AdminBrowseFilterField label="From">
-                <DateField
-                  value={filters.from ?? ""}
-                  onChange={(from) => patchFilters({ from })}
-                  placeholder="Any start"
-                  ariaLabel="Filter from date"
-                  size="sm"
-                  className="w-full"
-                />
-              </AdminBrowseFilterField>
-              <AdminBrowseFilterField label="To">
-                <DateField
-                  value={filters.to ?? ""}
-                  onChange={(to) => patchFilters({ to })}
-                  placeholder="Any end"
-                  ariaLabel="Filter to date"
-                  size="sm"
-                  className="w-full"
-                />
-              </AdminBrowseFilterField>
-              <AdminBrowseFilterField label="User">
-                <Listbox
-                  value={filters.user ?? ""}
-                  options={userOptions}
-                  onChange={(user) => patchFilters({ user })}
-                  size="sm"
-                  className="w-full listbox-control"
-                  ariaLabel="Filter by user"
-                  placeholder="All users"
-                />
-              </AdminBrowseFilterField>
-              <AdminBrowseFilterField label="Scope">
-                <Listbox
-                  value={filters.scopeType ?? ""}
-                  options={SCOPE_OPTIONS}
-                  onChange={(scopeType) =>
-                    patchFilters({ scopeType: scopeType as AdminAuditParams["scopeType"] })
-                  }
-                  size="sm"
-                  className="w-full listbox-control"
-                  ariaLabel="Filter by scope type"
-                />
-              </AdminBrowseFilterField>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <AdminBrowseFilterField label="Scope id">
-                <Listbox
-                  value={filters.scopeId ?? ""}
-                  options={scopeIdOptions}
-                  onChange={(scopeId) => patchFilters({ scopeId })}
-                  size="sm"
-                  className="w-full listbox-control"
-                  ariaLabel="Filter by scope id"
-                />
-              </AdminBrowseFilterField>
-              <AdminBrowseFilterField label="Action">
-                <Listbox
-                  value={filters.action ?? ""}
-                  options={actionOptions}
-                  onChange={(action) => patchFilters({ action })}
-                  size="sm"
-                  className="w-full listbox-control"
-                  ariaLabel="Filter by action"
-                />
-              </AdminBrowseFilterField>
-              <AdminBrowseFilterField label="Sort">
-                <Listbox
-                  value={filters.sort ?? "timestamp_desc"}
-                  options={SORT_OPTIONS}
-                  onChange={(sort) => patchFilters({ sort })}
-                  size="sm"
-                  className="w-full listbox-control"
-                  ariaLabel="Sort order"
-                />
-              </AdminBrowseFilterField>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <AdminBrowseFilterField label="Run id">
-                <input
-                  value={filters.runId ?? ""}
-                  onChange={(e) => patchFilters({ runId: e.target.value })}
-                  placeholder="Exact run id"
-                  className="h-8 w-full rounded-lg border border-border bg-elevated px-2.5 font-mono text-[12px] text-text placeholder:text-text-faint focus:outline-none focus:ring-1 focus:ring-overlay-2"
-                />
-              </AdminBrowseFilterField>
-              <AdminBrowseFilterField label="Thread id">
-                <input
-                  value={filters.threadId ?? ""}
-                  onChange={(e) => patchFilters({ threadId: e.target.value })}
-                  placeholder="Exact thread id"
-                  className="h-8 w-full rounded-lg border border-border bg-elevated px-2.5 font-mono text-[12px] text-text placeholder:text-text-faint focus:outline-none focus:ring-1 focus:ring-overlay-2"
-                />
-              </AdminBrowseFilterField>
-            </div>
-            {activeFilterCount > 0 && (
+        {activeChips.length > 0 && (
+          <div className="px-6">
+            <ActiveFilterChips
+              chips={activeChips}
+              onClear={hasActiveFilters ? clearFilters : undefined}
+            />
+          </div>
+        )}
+
+        <FilterSheet
+          open={filtersOpen}
+          onClose={() => setFiltersOpen(false)}
+          anchorRef={filterBtnRef}
+          footer={
+            hasActiveFilters ? (
               <button
                 type="button"
                 onClick={clearFilters}
-                className="inline-flex items-center gap-1.5 text-[12px] text-text-muted hover:text-text"
+                className="text-sm font-medium text-text-muted hover:text-text"
               >
-                <X size={12} />
-                Clear filters
+                Clear all
               </button>
-            )}
-          </AdminBrowseFiltersPanel>
-        )}
+            ) : null
+          }
+        >
+          <div className="grid grid-cols-2 gap-3">
+            <FilterField label="From">
+              <DateField
+                value={filters.from ?? ""}
+                onChange={(from) => patchFilters({ from })}
+                placeholder="Pick date"
+                ariaLabel="From"
+                size="sm"
+                className="w-full"
+              />
+            </FilterField>
+            <FilterField label="To">
+              <DateField
+                value={filters.to ?? ""}
+                onChange={(to) => patchFilters({ to })}
+                placeholder="Pick date"
+                ariaLabel="To"
+                size="sm"
+                className="w-full"
+              />
+            </FilterField>
+          </div>
+          <FilterField label="Actor">
+            <Listbox
+              value={filters.user ?? ""}
+              options={userOptions}
+              onChange={(user) => patchFilters({ user })}
+              size="sm"
+              className="w-full listbox-control"
+              ariaLabel="Actor"
+              placeholder="All users"
+              blankIsPlaceholder
+            />
+          </FilterField>
+          <FilterField label="Scope">
+            <Listbox
+              value={filters.scopeType ?? ""}
+              options={SCOPE_OPTIONS}
+              onChange={(scopeType) =>
+                patchFilters({ scopeType: scopeType as AdminAuditParams["scopeType"] })
+              }
+              size="sm"
+              className="w-full listbox-control"
+              ariaLabel="Scope type"
+              blankIsPlaceholder
+            />
+          </FilterField>
+          <FilterField label="Scope id">
+            <Listbox
+              value={filters.scopeId ?? ""}
+              options={scopeIdOptions}
+              onChange={(scopeId) => patchFilters({ scopeId })}
+              size="sm"
+              className="w-full listbox-control"
+              ariaLabel="Scope id"
+              placeholder="Any scope id"
+              blankIsPlaceholder
+            />
+          </FilterField>
+          <FilterField label="Action">
+            <Listbox
+              value={filters.action ?? ""}
+              options={actionOptions}
+              onChange={(action) => patchFilters({ action })}
+              size="sm"
+              className="w-full listbox-control"
+              ariaLabel="Action"
+              placeholder="Any action"
+              blankIsPlaceholder
+            />
+          </FilterField>
+          <div className="grid grid-cols-2 gap-3">
+            <FilterField label="Run id">
+              <input
+                value={filters.runId ?? ""}
+                onChange={(e) => patchFilters({ runId: e.target.value })}
+                placeholder="Exact run id"
+                className="h-8 w-full rounded-lg border border-border bg-elevated px-2.5 font-mono text-[12px] text-text placeholder:text-text-faint focus:outline-none focus:ring-1 focus:ring-overlay-2"
+              />
+            </FilterField>
+            <FilterField label="Thread id">
+              <input
+                value={filters.threadId ?? ""}
+                onChange={(e) => patchFilters({ threadId: e.target.value })}
+                placeholder="Exact thread id"
+                className="h-8 w-full rounded-lg border border-border bg-elevated px-2.5 font-mono text-[12px] text-text placeholder:text-text-faint focus:outline-none focus:ring-1 focus:ring-overlay-2"
+              />
+            </FilterField>
+          </div>
+        </FilterSheet>
 
-        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 py-3 show-scrollbar">
+        <div className="audit-log-host min-w-0 px-6 pb-3 pt-1">
           {error ? (
             <EmptyState icon={AlertCircle} message={error} />
           ) : loading && items.length === 0 ? (
@@ -385,65 +542,75 @@ export function AuditModal({ onClose }: { onClose: () => void }) {
             <EmptyState
               icon={Scale}
               message="No audit entries match these filters."
-              detail={activeFilterCount > 0 ? "Try clearing or widening your filters." : undefined}
+              detail={
+                hasActiveFilters || draftQ.trim()
+                  ? "Try clearing or widening your filters."
+                  : undefined
+              }
             />
           ) : (
-            <div className="space-y-0.5">
-              {items.map((entry) => {
-                const entries = buildBrowseDetailEntries(entry.detail, {
-                  runId: entry.runId,
-                  threadId: entry.threadId,
-                })
-                const open = expanded === entry.id
-                const hasDetail = entries.length > 0
-                return (
-                  <div key={entry.id}>
-                    <button
-                      type="button"
-                      className="flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition-colors hover:bg-overlay-2"
-                      onClick={() => {
-                        if (!hasDetail) return
-                        setExpanded(open ? null : entry.id)
-                      }}
-                    >
-                      {hasDetail ? (
-                        open ? (
-                          <ChevronDown size={14} className="mt-0.5 shrink-0 text-text-muted" />
-                        ) : (
-                          <ChevronRight size={14} className="mt-0.5 shrink-0 text-text-muted" />
-                        )
-                      ) : (
-                        <span className="mt-0.5 w-3.5 shrink-0" />
-                      )}
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                          <span className="shrink-0 font-mono text-[12px] text-text-muted">
-                            {formatWhen(entry.timestamp)}
-                          </span>
-                          <span className="shrink-0 rounded bg-overlay-2 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wide text-text-faint">
-                            {entry.scopeType}
-                            {entry.scopeId ? ` · ${entry.scopeId}` : ""}
-                          </span>
-                          {entry.user && (
-                            <span className="shrink-0 text-text-secondary">{entry.user}</span>
-                          )}
-                          <span className={`font-medium ${actionTone(entry.action)}`}>{entry.action}</span>
-                        </div>
-                        {(entry.threadTitle || entry.run?.goal) && (
-                          <div className="mt-1 truncate text-[12px] text-text-muted">
-                            {entry.threadTitle && (
-                              <span className="mr-2 text-text-secondary">{entry.threadTitle}</span>
-                            )}
-                            {entry.run?.goal && <span className="opacity-80">{entry.run.goal}</span>}
-                          </div>
-                        )}
-                      </div>
-                    </button>
-                    {open && hasDetail ? <AdminBrowseDetailPanel entries={entries} /> : null}
+            <>
+              <div className="audit-log-host__table show-scrollbar">
+                <div className="audit-log-table" role="table" aria-label="Audit log">
+                  <div className="audit-log-table__head" role="row">
+                    <span role="columnheader">Timestamp</span>
+                    <span role="columnheader">Actor</span>
+                    <span role="columnheader">Scope</span>
+                    <span role="columnheader">Action</span>
+                    <span role="columnheader">Target</span>
+                    <span role="columnheader">Summary</span>
                   </div>
-                )
-              })}
-            </div>
+                  {items.map((entry) => {
+                    const summary = auditSummary(entry)
+                    const target = auditTarget(entry)
+                    const verb = actionVerbKind(entry.action)
+                    return (
+                      <button
+                        key={entry.id}
+                        type="button"
+                        role="row"
+                        className="audit-log-table__row"
+                        data-selected={selectedId === entry.id ? "true" : "false"}
+                        onClick={() => openInspector(entry.id)}
+                      >
+                        <span className="audit-log-table__cell font-mono text-[12px] text-text-muted" role="cell">
+                          {formatAuditWhen(entry.timestamp)}
+                        </span>
+                        <span className="audit-log-table__cell text-text-secondary" role="cell">
+                          {entry.user ?? "—"}
+                        </span>
+                        <span className="audit-log-table__cell" role="cell">
+                          <span className="audit-log-table__scope" title={formatAuditScope(entry)}>
+                            {formatAuditScope(entry)}
+                          </span>
+                        </span>
+                        <span
+                          className={`audit-log-table__cell font-mono text-[12px] font-medium ${actionVerbClass(verb)}`}
+                          role="cell"
+                          title={entry.action}
+                        >
+                          {entry.action}
+                        </span>
+                        <span className="audit-log-table__cell font-mono text-[12px] text-text-secondary" role="cell" title={target}>
+                          {target}
+                        </span>
+                        <span className="audit-log-table__cell text-text-muted" role="cell" title={summary}>
+                          {summary}
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+              {selectedEntry ? (
+                <AuditInspector
+                  entry={selectedEntry}
+                  open={inspectorOpen}
+                  onClose={closeInspector}
+                  onExited={onInspectorExited}
+                />
+              ) : null}
+            </>
           )}
         </div>
       </div>

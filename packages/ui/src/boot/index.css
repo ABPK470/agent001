@@ -7527,6 +7527,291 @@ button.trace-tree-status-pill:hover {
   min-width: 0;
 }
 
+/* ── Audit Log inspector — transform-only overlay (mirror AU dialect) ── */
+.audit-log-host {
+  --audit-inspector-w: min(24rem, 40%);
+  --audit-inspector-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --audit-inspector-dur: 340ms;
+  position: relative;
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.audit-log-host__table {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.audit-log-table {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  width: 100%;
+}
+
+.audit-log-table__head,
+.audit-log-table__row {
+  display: grid;
+  grid-template-columns:
+    7.25rem
+    5.5rem
+    8.75rem
+    minmax(7rem, 10.5rem)
+    minmax(0, 1fr)
+    minmax(0, 1.35fr);
+  column-gap: 0.75rem;
+  align-items: baseline;
+  min-width: 0;
+  width: 100%;
+}
+
+.audit-log-table__head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 0.4rem 0.75rem;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--panel, var(--workspace-widget-bg, var(--panel-2)));
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.audit-log-table__row {
+  padding: 0.55rem 0.75rem;
+  border-radius: 0.5rem;
+  text-align: left;
+  font-size: 0.8125rem;
+  color: var(--color-text);
+  transition: background-color 0.12s ease;
+}
+
+.audit-log-table__row:hover {
+  background: var(--overlay-2);
+}
+
+.audit-log-table__row[data-selected="true"] {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.audit-log-table__row[data-selected="true"]:hover {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.audit-log-table__cell {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.audit-log-table__scope {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border-radius: 0.25rem;
+  background: var(--overlay-2);
+  padding: 0.1rem 0.35rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.625rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-faint);
+}
+
+.audit-inspector {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  width: var(--audit-inspector-w);
+  max-width: 100%;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--panel, var(--workspace-widget-bg, var(--panel-2)));
+  border-left: 1px solid var(--border-subtle);
+  box-shadow: -10px 0 28px rgb(0 0 0 / 0.32);
+  transform: translate3d(100%, 0, 0);
+  pointer-events: none;
+  transition: transform var(--audit-inspector-dur) var(--audit-inspector-ease);
+  will-change: transform;
+}
+
+.audit-inspector[data-open="true"] {
+  transform: translate3d(0, 0, 0);
+  pointer-events: auto;
+}
+
+.audit-inspector__shell {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .audit-inspector {
+    transition-duration: 1ms !important;
+  }
+}
+
+.audit-inspector__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-shrink: 0;
+  padding: 0.75rem 0.875rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.audit-inspector__title {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.audit-inspector__title h3 {
+  margin: 0;
+}
+
+.audit-inspector__title p {
+  margin: 0.15rem 0 0;
+}
+
+.audit-inspector__icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 0.375rem;
+  color: var(--color-text-muted);
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.audit-inspector__icon-btn:hover {
+  background: var(--overlay-2);
+  color: var(--color-text);
+}
+
+.audit-inspector__body {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0.875rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.audit-inspector__section-title {
+  margin: 0 0 0.5rem;
+  font-size: 0.6875rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.audit-inspector__props {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.audit-inspector__prop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.audit-inspector__prop-key {
+  flex: 0 0 auto;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  padding-top: 0.1rem;
+}
+
+.audit-inspector__prop-val {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-width: 0;
+  max-width: 70%;
+  justify-content: flex-end;
+  text-align: right;
+  font-size: 0.8125rem;
+  color: var(--color-text);
+}
+
+.audit-inspector__prop-val--mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.75rem;
+}
+
+.audit-inspector__prop-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.audit-inspector__copy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 0.25rem;
+  color: var(--color-text-muted);
+  opacity: 0.55;
+  transition: opacity 0.12s ease, color 0.12s ease, background-color 0.12s ease;
+}
+
+.audit-inspector__copy:hover {
+  opacity: 1;
+  color: var(--accent);
+  background: var(--overlay-2);
+}
+
+.audit-inspector__raw-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  transition: color 0.12s ease;
+}
+
+.audit-inspector__raw-toggle:hover {
+  color: var(--color-text);
+}
+
 /* Review band 2 — Trace meta/ids (peer of ActiveFilterChips).
  * KPIs left, run/thread ids right — different jobs, one row.
  * Horizontal inset lives on .widget-review-controls > .widget-review-meta. */
