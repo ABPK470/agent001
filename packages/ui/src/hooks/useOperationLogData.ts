@@ -57,7 +57,7 @@ export function useOperationLogData(opts: {
   const paintSuspended = useOperationsStore((s) => s.paintSuspended)
 
   const frozenRef = useRef(pipelines)
-  if (!paintSuspended) frozenRef.current = pipelines
+  if (!paintSuspended && !soloHidden) frozenRef.current = pipelines
 
   useEffect(() => {
     setPaintSuspended(soloHidden)

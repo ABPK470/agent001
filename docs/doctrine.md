@@ -357,8 +357,8 @@ hairline. One meta size (`--review-meta-size`), one day/section cap
 sticky fill via `.review-group-cap` / `--section-cap-bg` — light = paper,
 dark = lifted wash on the tile, never a sunk `--panel` plate), one
 chevron (13px, rotate-90), one control height (`--control-h` for search /
-segments / icon buttons), one JSON/payload surface. Pipelines has no toolbar
-expand/collapse — row chevrons own that. Trace sticky pin stays.
+segments / icon buttons), one JSON/payload surface. Pipelines shares toolbar
+expand/collapse with Trace (`ReviewTreeFoldToggle` in trailing toolbar). Trace sticky pin stays.
 
 | Layer | Owns | Must not |
 | --- | --- | --- |

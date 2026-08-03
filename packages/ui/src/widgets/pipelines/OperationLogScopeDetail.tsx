@@ -3,9 +3,15 @@
  * Payloads live here — not inline under the left tree (Trace contract).
  */
 
+import { useState, type ReactNode } from "react"
 import type { OperationActivity, OperationEvent, OperationPipeline } from "../../client/index"
-import { OperationKind, OperationStatus } from "../../client/index"
-import { JsonViewer } from "../../components/JsonViewer"
+import { OperationKind } from "../../client/index"
+import {
+  ReviewDetailAccordion,
+  ReviewDetailErrorCallout,
+  ReviewDetailHeadline,
+  ReviewPayloadBlock,
+} from "../../components/review"
 import { ToolIoBlock } from "../chat/ToolCallModal"
 import { coerceToolIoFromActivity, readToolIoFromEvent } from "../chat/tool-call-io"
 import { isSyncHttpEventType, readHttpTraceFields } from "../sync/trace/sync-http-trace"
@@ -17,7 +23,6 @@ import {
   OP_LOG_MUTED,
   fmtDuration,
   fmtTime,
-  formatPipelineSubtitle,
 } from "./operation-log-row"
 
 export type OpLogSelection =
@@ -74,64 +79,53 @@ function findPhaseId(
   return walk(pipeline.activities, undefined, undefined)
 }
 
-function PipelineOverview({ pipeline }: { pipeline: OperationPipeline }) {
-  const subtitle = pipeline.subtitle ? formatPipelineSubtitle(pipeline.subtitle) : null
-  const showError = pipeline.error && pipeline.status === OperationStatus.Failed
-
+function PipelineOverview() {
   return (
     <div className="op-log-scope-detail__body px-4 py-3">
-      <p className={`${OP_LOG_MUTED} text-sm leading-relaxed`}>
+      <p className={`${OP_LOG_MUTED} op-log-scope-detail__intro text-sm leading-relaxed`}>
         Select a step in the tree to inspect payloads, tool I/O, and event data.
       </p>
-      <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 review-meta text-text-muted">
-        <span>{fmtDuration(pipeline.durationMs)}</span>
-        <span>{fmtTime(pipeline.startedAt)}</span>
-        <span>
-          {pipeline.activityCount} act · {pipeline.eventCount} ev
-        </span>
-      </div>
-      {subtitle ? <p className={`${OP_LOG_MUTED} mt-2 text-sm`}>{subtitle}</p> : null}
-      {showError && pipeline.error ? (
-        <div className="op-log-detail__error-callout mt-3" title={pipeline.error}>
-          <span className="op-log-detail__error-label">Error</span>
-          <span className="op-log-detail__error-text">{pipeline.error}</span>
-        </div>
-      ) : null}
     </div>
   )
 }
 
-function EventPayload({ ev }: { ev: OperationEvent }) {
+function OpenAccordion({ label, children }: { label: string; children: ReactNode }) {
+  const [open, setOpen] = useState(true)
+  return (
+    <ReviewDetailAccordion label={label} open={open} onToggle={() => setOpen((v) => !v)}>
+      {children}
+    </ReviewDetailAccordion>
+  )
+}
+
+function EventPayloadAccordion({ ev, label }: { ev: OperationEvent; label: string }) {
+  const [open, setOpen] = useState(true)
   const toolIo = readToolIoFromEvent(ev)
+
+  let body: ReactNode
   if (toolIo) {
-    return <ToolIoBlock io={toolIo} compact maxHeight={420} />
-  }
-  if (isSyncSqlEventType(ev.type)) {
+    body = <ToolIoBlock io={toolIo} compact maxHeight={420} />
+  } else if (isSyncSqlEventType(ev.type)) {
     const fields = readSqlTraceFields(ev.data)
-    return (
-      <JsonViewer
-        value={fields ?? ev.data}
-        label="sql"
-        defaultExpandDepth={2}
-        maxHeight={420}
-      />
-    )
-  }
-  if (isSyncHttpEventType(ev.type)) {
+    body = <ReviewPayloadBlock value={fields ?? ev.data} label="sql" />
+  } else if (isSyncHttpEventType(ev.type)) {
     const fields = readHttpTraceFields(ev.data)
-    return (
-      <JsonViewer
-        value={fields ?? ev.data}
-        label="http"
-        defaultExpandDepth={2}
-        maxHeight={420}
-      />
-    )
+    body = <ReviewPayloadBlock value={fields ?? ev.data} label="http" />
+  } else if (ev.data && Object.keys(ev.data).length > 0) {
+    body = <ReviewPayloadBlock value={ev.data} label="event" />
+  } else {
+    body = <p className={`${OP_LOG_MUTED} text-sm`}>No payload on this event.</p>
   }
-  if (ev.data && Object.keys(ev.data).length > 0) {
-    return <JsonViewer value={ev.data} label="event" defaultExpandDepth={2} maxHeight={420} />
-  }
-  return <p className={`${OP_LOG_MUTED} text-sm`}>No payload on this event.</p>
+
+  return (
+    <ReviewDetailAccordion
+      label={label}
+      open={open}
+      onToggle={() => setOpen((v) => !v)}
+    >
+      {body}
+    </ReviewDetailAccordion>
+  )
 }
 
 function ActivityDetail({
@@ -158,62 +152,71 @@ function ActivityDetail({
     effectiveKind === OperationKind.AgentRun && toolIo != null && !isResultRow
 
   return (
-    <div className="op-log-scope-detail__body flex min-h-0 flex-col gap-3 px-4 py-3">
-      <div className="flex min-w-0 items-center gap-2">
-        <h3 className={`min-w-0 flex-1 truncate ${OP_LOG} font-semibold text-text`}>
-          {activity.name}
-        </h3>
-        <OpLogStatusPill status={activity.status} />
-      </div>
-      {activity.summary ? (
-        <p className={`${OP_LOG_MUTED} text-sm`}>{activity.summary}</p>
-      ) : null}
-      <div className="flex flex-wrap gap-x-4 gap-y-1 review-meta text-text-muted">
-        <span>{fmtDuration(activity.durationMs)}</span>
-        <span>{fmtTime(activity.startedAt)}</span>
-      </div>
-      {activity.error ? (
-        <div className="op-log-detail__error-callout" title={activity.error}>
-          <span className="op-log-detail__error-label">Error</span>
-          <span className="op-log-detail__error-text">{activity.error}</span>
-        </div>
-      ) : null}
+    <div className="op-log-scope-detail__body flex min-h-0 flex-col gap-1 px-4 py-3">
+      <ReviewDetailHeadline
+        primary={
+          <div className="flex min-w-0 items-center gap-2 px-0 py-0">
+            <h3 className={`min-w-0 flex-1 truncate ${OP_LOG} font-semibold text-text`}>
+              {activity.name}
+            </h3>
+            <OpLogStatusPill status={activity.status} />
+          </div>
+        }
+        secondary={
+          <>
+            {activity.summary ? (
+              <p className={`${OP_LOG_MUTED} text-sm`}>{activity.summary}</p>
+            ) : null}
+            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 review-meta text-text-muted">
+              <span>{fmtDuration(activity.durationMs)}</span>
+              <span>{fmtTime(activity.startedAt)}</span>
+            </div>
+          </>
+        }
+        error={
+          activity.error ? (
+            <ReviewDetailErrorCallout message={activity.error} />
+          ) : undefined
+        }
+      />
 
-      {isAgentTool && toolIo ? <ToolIoBlock io={toolIo} compact maxHeight={420} /> : null}
+      {isAgentTool && toolIo ? (
+        <OpenAccordion label="Tool I/O">
+          <ToolIoBlock io={toolIo} compact maxHeight={420} />
+        </OpenAccordion>
+      ) : null}
 
       {isResultRow && activity.events[0] ? (
-        <JsonViewer
-          value={activity.events[0].data}
-          label="result"
-          defaultExpandDepth={2}
-          maxHeight={480}
-        />
+        <OpenAccordion label="Result">
+          <ReviewPayloadBlock value={activity.events[0].data} label="result" maxHeight={480} />
+        </OpenAccordion>
       ) : null}
 
       {!isResultRow && !isAgentTool && activity.events.length === 0 && activity.details ? (
         isSyncDecisionLogDetails(activity.details) ? (
-          <DecisionLogPanel decisions={activity.details.decisions} linear depth={0} />
+          <DecisionLogPanel decisions={activity.details.decisions} />
         ) : toolIo ? (
-          <ToolIoBlock io={toolIo} compact maxHeight={420} />
+          <OpenAccordion label="Tool I/O">
+            <ToolIoBlock io={toolIo} compact maxHeight={420} />
+          </OpenAccordion>
         ) : (
-          <JsonViewer
-            value={activity.details}
-            label="details"
-            defaultExpandDepth={2}
-            maxHeight={420}
-          />
+          <OpenAccordion label="Details">
+            <ReviewPayloadBlock value={activity.details} label="details" />
+          </OpenAccordion>
         )
       ) : null}
 
       {sqlEvents.map((ev, idx) => (
-        <EventPayload key={`sql:${idx}`} ev={ev} />
+        <EventPayloadAccordion key={`sql:${idx}`} ev={ev} label={`SQL · ${ev.type}`} />
       ))}
       {httpEvents.map((ev, idx) => (
-        <EventPayload key={`http:${idx}`} ev={ev} />
+        <EventPayloadAccordion key={`http:${idx}`} ev={ev} label={`HTTP · ${ev.type}`} />
       ))}
       {!isResultRow &&
         !isAgentTool &&
-        otherEvents.map((ev, idx) => <EventPayload key={`ev:${idx}`} ev={ev} />)}
+        otherEvents.map((ev, idx) => (
+          <EventPayloadAccordion key={`ev:${idx}`} ev={ev} label={ev.type} />
+        ))}
 
       {!activity.error &&
       !toolIo &&
@@ -222,7 +225,7 @@ function ActivityDetail({
       httpEvents.length === 0 &&
       otherEvents.length === 0 &&
       !activity.details ? (
-        <p className={`${OP_LOG_MUTED} text-sm`}>
+        <p className={`${OP_LOG_MUTED} px-0 py-2 text-sm`}>
           {(activity.children?.length ?? 0) > 0
             ? "This step has nested children — select one in the tree."
             : "No payload recorded for this step."}
@@ -242,15 +245,11 @@ export function OperationLogScopeDetail({
   keyOf: (pipelineId: string, activityId: string, parentKey?: string) => string
 }) {
   if (!pipeline || !selection || selection.pipelineId !== pipeline.id) {
-    return (
-      <div className="op-log-detail op-log-detail--empty flex min-h-0 flex-1 flex-col items-center justify-center px-6">
-        <p className="text-sm text-text-muted">Select a pipeline run to inspect</p>
-      </div>
-    )
+    return null
   }
 
   if (selection.kind === "pipeline") {
-    return <PipelineOverview pipeline={pipeline} />
+    return <PipelineOverview />
   }
 
   const activity = findActivityByKey(pipeline, selection.activityKey, keyOf)

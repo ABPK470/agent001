@@ -3,9 +3,8 @@
  */
 
 import { useState } from "react"
-import { OperationStatus } from "../../client/index"
-import { JsonViewer } from "../../components/JsonViewer"
-import { OP_LOG_MONO, OP_LOG_MUTED, OpLogNestedBlock, OpLogRow, opLogShowStatusPill } from "./operation-log-row"
+import { ReviewDetailAccordion, ReviewPayloadBlock } from "../../components/review"
+import { OP_LOG_MONO, OP_LOG_MUTED } from "./operation-log-row"
 
 export interface SyncDecisionEntry {
   id: string
@@ -17,57 +16,24 @@ export interface SyncDecisionEntry {
   details?: Record<string, unknown>
 }
 
-function severityToStatus(severity: string | null | undefined): OperationStatus {
-  if (severity === "error") return OperationStatus.Failed
-  if (severity === "warning") return OperationStatus.Skipped
-  return OperationStatus.Success
-}
-
-function DecisionRow({
-  decision,
-  linear,
-  isLast,
-  depth = 0,
-}: {
-  decision: SyncDecisionEntry
-  linear?: boolean
-  isLast?: boolean
-  depth?: number
-}) {
-  const status = severityToStatus(decision.severity)
+function DecisionAccordion({ decision }: { decision: SyncDecisionEntry }) {
   const hasDetails =
     decision.details != null && Object.keys(decision.details).length > 0
-  const [expanded, setExpanded] = useState(false)
+  const [open, setOpen] = useState(hasDetails)
 
   return (
-    <OpLogRow
-      linear={linear}
-      isLast={isLast && !expanded}
-      depth={depth}
-      status={status}
-      expanded={expanded}
-      expandable={hasDetails}
-      onToggle={() => setExpanded((v) => !v)}
-      showChevron={hasDetails}
-      showStatusPill={opLogShowStatusPill({ status })}
-      label={
-        <span className={`${OP_LOG_MONO} ${OP_LOG_MUTED}`}>
-          {decision.title ?? decision.id}
-        </span>
-      }
-      meta={decision.summary ?? undefined}
+    <ReviewDetailAccordion
+      label={decision.title ?? decision.id}
+      open={open}
+      onToggle={() => setOpen((v) => !v)}
     >
-      {hasDetails && expanded && (
-        <OpLogNestedBlock>
-          <JsonViewer
-            value={decision.details}
-            label="details"
-            defaultExpandDepth={2}
-            maxHeight={240}
-          />
-        </OpLogNestedBlock>
-      )}
-    </OpLogRow>
+      {decision.summary ? (
+        <p className={`${OP_LOG_MONO} ${OP_LOG_MUTED} mb-2 text-sm`}>{decision.summary}</p>
+      ) : null}
+      {hasDetails ? (
+        <ReviewPayloadBlock value={decision.details} label="details" maxHeight={240} />
+      ) : null}
+    </ReviewDetailAccordion>
   )
 }
 
@@ -84,26 +50,12 @@ export function isSyncDecisionLogDetails(
   )
 }
 
-export function DecisionLogPanel({
-  decisions,
-  linear,
-  depth = 0,
-}: {
-  decisions: SyncDecisionEntry[]
-  linear?: boolean
-  depth?: number
-}) {
+export function DecisionLogPanel({ decisions }: { decisions: SyncDecisionEntry[] }) {
   return (
-    <>
-      {decisions.map((decision, idx) => (
-        <DecisionRow
-          key={decision.id}
-          decision={decision}
-          linear={linear}
-          depth={depth}
-          isLast={idx === decisions.length - 1}
-        />
+    <div className="flex flex-col gap-0">
+      {decisions.map((decision) => (
+        <DecisionAccordion key={decision.id} decision={decision} />
       ))}
-    </>
+    </div>
   )
 }

@@ -15,6 +15,7 @@ import {
   mapDbEventsChronological
 } from "./build-operations-from-events.js"
 import { excludeSystemPipelines, filterOperations, scopeOperationsToViewingAs } from "./filter.js"
+import { OPERATIONS_LIST_EXCLUDE_EVENT_TYPES } from "./operation-log-events.js"
 import { listOperationsForPlan } from "./list-operations-for-plan.js"
 import { listOperationsForRun } from "./list-operations-for-run.js"
 import type { ListOperationsOpts, ListOperationsResult, OperationPipeline } from "./types.js"
@@ -43,7 +44,11 @@ export function mergeOperationPipelinePages(
       }
     }
   }
-  return [...byId.values()].sort((a, b) => b.startedAt.localeCompare(a.startedAt))
+  return [...byId.values()].sort((a, b) => {
+    const aAt = a.startedAt ?? ""
+    const bAt = b.startedAt ?? ""
+    return bAt.localeCompare(aAt)
+  })
 }
 
 async function buildPage(
@@ -101,6 +106,7 @@ export async function listOperations(opts: ListOperationsOpts = {}): Promise<Lis
       before: before ?? undefined,
       since: opts.since,
       until: opts.until,
+      excludeTypes: [...OPERATIONS_LIST_EXCLUDE_EVENT_TYPES],
     })
     if (events.length === 0) {
       hasMore = false

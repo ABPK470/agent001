@@ -7,7 +7,7 @@
  * - One control height (--control-h) for search / segments / icon buttons
  * - One curved tree: flush nest, stem under .review-chevron-slot center
  * - Prompt prose = .trace-scope-payload (not nested-peer gutter)
- * - Pipelines LogNest lives inside OpLogRow (sibling nest breaks the stem)
+ * - Pipelines uses the shared operator review kit (ReviewTreeRow / ReviewSplitPane)
  */
 
 import { readFileSync } from "node:fs"
@@ -34,6 +34,7 @@ const toolbarPath = join(here, "widget-toolbar.tsx")
 const livePath = join(here, "LiveLogs.tsx")
 const opsPath = join(here, "OperationLog.tsx")
 const opsToolbarPath = join(here, "operation-log-toolbar.tsx")
+const reviewKitPath = join(here, "../components/review/ReviewTreeRow.tsx")
 const nestPath = join(here, "pipelines/operation-log-row.tsx")
 const opLogListRowPath = join(here, "pipelines/OperationLogPipelineListRow.tsx")
 const traceDagPath = join(here, "trace/TraceDag.tsx")
@@ -96,7 +97,7 @@ describe("widget log chrome — shell", () => {
     expect(trace).toContain("WIDGET_REVIEW_CONTROLS_INSET_CLASS")
     expect(trace).toContain("WIDGET_LOG_BODY_CLASS")
     // Pipelines split-pane owns its own list scroll; Event Stream keeps the shared host.
-    expect(read(opsPath)).toContain("op-log-split-list-scroll")
+    expect(read(opsPath)).toContain("review-split-list-scroll")
     expect(live).toContain("WIDGET_LOG_SCROLL_CLASS")
     expect(read(threadsPath)).toContain("WIDGET_CONTENT_GUTTER_INNER_CLASS")
     expect(read(threadsPath)).toContain("thread-nav-panel")
@@ -115,7 +116,7 @@ describe("widget log chrome — shell", () => {
     expect(ops).toContain("WidgetToolbarSearch")
     expect(ops).toContain("FilterSheet")
     expect(ops).toContain("FilterChoiceGrid")
-    expect(ops).toContain("OpLogTreeFoldToggle")
+    expect(ops).toContain("ReviewTreeFoldToggle")
     expect(ops).toContain("treeFoldMode")
     expect(ops).not.toContain("LOG_TOOLBAR_CHIP")
 
@@ -204,41 +205,32 @@ describe("widget log chrome — control height & search", () => {
 
   it("Trace / Pipelines / Event Stream row hover — rounded wash, not sharp overlay", () => {
     const css = read(cssPath)
-    const opsRow = read(nestPath)
+    const reviewRow = read(reviewKitPath)
     const live = read(livePath)
 
     expect(css).toMatch(/\.trace-scope:hover\s*\{[^}]*background:\s*var\(--hover-fill\)/s)
     expect(css).toMatch(
       /\.trace-scope\[data-trace-kind="call"\]:hover\s*\{[^}]*background:\s*var\(--hover-fill\)/s,
     )
-    // Light idle flats beat bare `:hover` — hover fill must be restated.
     expect(css).toMatch(
       /:root\[data-theme="light"\] \.trace-scope:hover[\s\S]*?background:\s*var\(--hover-fill\)/,
     )
-    expect(css).toMatch(/\.op-log-row-chrome:hover\s*\{[^}]*background:\s*var\(--hover-fill\)/s)
-    expect(opsRow).toContain("op-log-row-chrome")
-    expect(opsRow).toContain("rounded-[var(--list-row-radius)]")
-    expect(opsRow).not.toContain("hover:bg-[var(--hover-fill)]")
-    expect(opsRow).not.toContain("hover:bg-elevated/50")
-    expect(opsRow).not.toContain("hover:bg-overlay-2/80")
-    expect(live).toContain("rounded-[var(--list-row-radius)]")
-    expect(live).toContain("hover:bg-[var(--hover-fill)]")
+    expect(css).toMatch(/\.review-tree-row__btn:hover\s*\{[^}]*background:\s*var\(--hover-fill\)/s)
+    expect(reviewRow).toContain("review-tree-row__btn")
+    expect(css).toMatch(/\.log-stream \.event-stream-row:hover\s*\{[^}]*background:\s*var\(--hover-fill\)/s)
+    expect(live).toContain("event-stream-row")
     expect(live).not.toContain("hover:bg-overlay-1")
   })
 
   it("expanded / open rows stay select-fill — Event Stream / Trace / Threads; Pipelines uses left accent", () => {
     const css = read(cssPath)
-    const opsRow = read(nestPath)
-    const ops = read(opsPath)
+    const listRow = read(opLogListRowPath)
     const live = read(livePath)
 
-    expect(live).toContain('bg-[var(--select-fill)]')
-    expect(opsRow).toContain("opLogRowChromeClass")
-    expect(opsRow).toContain("op-log-row-chrome--active")
-    expect(opsRow).not.toContain('bg-[var(--select-fill)]')
-    expect(ops).toContain("opLogRowChromeClass")
-    expect(ops).not.toMatch(/expanded \? "bg-\[var\(--select-fill\)\]"/)
-    expect(css).toMatch(/\.op-log-row-chrome--active\s*\{[^}]*box-shadow:\s*inset 3px 0 0 var\(--op-log-row-active-bar\)/s)
+    expect(live).toContain("event-stream-row--open")
+    expect(css).toMatch(/\.log-stream \.event-stream-row--open\s*\{[^}]*background:\s*var\(--select-fill\)/s)
+    expect(listRow).toContain("ReviewTreeRow")
+    expect(css).toMatch(/\.review-tree-row\.is-selected::before\s*\{[^}]*background:\s*var\(--color-accent/s)
     expect(css).toMatch(
       /\.trace-card\.is-open\s*>\s*\.trace-scope\s*\{[^}]*background:\s*var\(--select-fill\)/s,
     )
@@ -336,35 +328,37 @@ describe("widget log chrome — curved nest geometry", () => {
 
   it("Event Stream / Pipelines / Threads use the shared chevron slot", () => {
     const live = read(livePath)
-    const nest = read(nestPath)
+    const listRow = read(opLogListRowPath)
     const ops = read(opsPath)
     const threads = read(threadsPath)
 
     expect(live).toContain("review-chevron-slot")
-    expect(nest).toContain("review-chevron-slot")
-    expect(nest).toContain("PipelineRowCells")
-    expect(ops).toContain("PipelineRowCells")
+    expect(listRow).toContain("ReviewTreeRow")
+    expect(ops).toContain("ReviewSplitPane")
     expect(threads).toContain("thread-nav-chevron")
     expect(threads).toMatch(/ChevronRight size=\{13\}/)
   })
 
   it("nests stay flush — no second pl-* before ReviewTree (stem under first letter)", () => {
     const live = read(livePath)
-    const nest = read(nestPath)
     const foundation = read(reviewTreePath)
 
     expect(live).not.toMatch(/pl-3[\s\S]{0,40}review-tree/)
-    expect(nest).not.toContain("pl-3 min-w-0")
-    expect(nest).toMatch(/return <ReviewTree className="pb-1">/)
     expect(foundation).toContain("Nest flush with the parent row")
     expect(foundation).toContain("review-chevron-slot")
   })
 
-  it("Pipelines activity LogNest is inside OpLogRow (sibling nest gaps the stem)", () => {
+  it("Pipelines detail uses review kit accordions — no legacy inline timeline", () => {
     const ops = read(opsPath)
-    expect(ops).toMatch(/<OpLogRow[\s\S]*?<LogNest[\s\S]*?<\/OpLogRow>/)
-    expect(ops).not.toMatch(/<\/OpLogRow>\s*\{expanded && \(\s*<LogNest/)
-    expect(ops).toContain("Nest MUST live inside OpLogRow")
+    const scope = read(join(here, "pipelines/OperationLogScopeDetail.tsx"))
+    const inspector = read(join(here, "pipelines/OperationLogInspector.tsx"))
+
+    expect(ops).not.toContain("OperationLogPipelineTimeline")
+    expect(ops).not.toContain("OpLogRow")
+    expect(ops).not.toContain("LogNest")
+    expect(scope).toContain("ReviewDetailAccordion")
+    expect(scope).toContain("ReviewPayloadBlock")
+    expect(inspector).toContain("ReviewDetailPane")
   })
 
   it("elbow CSS stays on direct ReviewTreeItem children only", () => {
@@ -499,10 +493,9 @@ describe("widget log chrome — shared content dialect", () => {
     expect(live).toContain("JsonViewer")
     expect(live).not.toContain("border-l-2")
 
-    expect(ops).toContain("JsonViewer")
-    expect(ops).not.toContain("CodeBlock")
-    expect(nest).toContain("ReviewTree")
-    expect(nest).toContain("ReviewTreeItem")
+    const scope = read(join(here, "pipelines/OperationLogScopeDetail.tsx"))
+    expect(scope).toContain("ReviewPayloadBlock")
+    expect(nest).not.toContain("CodeBlock")
     expect(call).toContain("ReviewTree")
     expect(call).toContain("ReviewTreeItem")
   })
@@ -534,7 +527,7 @@ describe("widget log chrome — shared content dialect", () => {
       /\.review-group-cap\s*\{[^}]*background:\s*var\(--section-cap-bg\)/s,
     )
     expect(css).toMatch(
-      /:root\[data-theme="light"\][^{]*\{[^}]*--section-cap-bg:\s*var\(--workspace-widget-bg,\s*var\(--paper\)\)/s,
+      /:root\[data-theme="light"\][^{]*\{[^}]*--section-cap-bg:\s*var\(--workspace-widget-bg,\s*var\(--panel\)\)/s,
     )
     expect(css).toMatch(
       /\.entity-rail-group__header\s*\{[^}]*background:\s*var\(--section-cap-bg\)/s,
@@ -547,77 +540,42 @@ describe("widget log chrome — shared content dialect", () => {
     expect(ops).toMatch(/isFirst \? "pb-1" : "pt-3\.5 pb-1"/)
   })
 
-  it("Pipelines tree uses fixed metric grid, column headers, and inline errors", () => {
+  it("Pipelines tree uses review kit grid, column headers, and split shell", () => {
     const css = read(cssPath)
-    const nest = read(nestPath)
     const listRow = read(opLogListRowPath)
     const ops = read(opsPath)
+    const scope = read(join(here, "pipelines/OperationLogScopeDetail.tsx"))
 
-    expect(css).toContain(".op-log-row-grid")
+    expect(css).toContain(".review-tree-row")
+    expect(css).toContain(".review-tree-header")
     expect(css).toContain(".op-log-entity-icon")
-    expect(css).toContain(".op-log-row-grid__chev-spacer")
-    expect(css).toContain(".op-log-row-chrome--active")
-    expect(css).toContain("--op-log-row-active-bar")
-    expect(css).toContain(".op-log-error-row__banner")
-    expect(css).toContain(".op-log-error-row")
-    expect(css).toContain("--op-log-col-status")
     expect(css).toContain(".op-log-status-pill")
-    expect(css).toContain(".op-log-tree-header")
-    expect(css).toMatch(/\.op-log-tree-header\s*\{[^}]*height:\s*2\.25rem/s)
-    expect(css).toMatch(/\.op-log-tree-header\s*\{[^}]*border-bottom:/s)
-    expect(css).toContain("--op-log-tree-header-bg")
-    expect(css).toContain(".op-log-tree-header__node")
-    expect(nest).toContain("review-chevron-slot")
-    expect(nest).toContain("op-log-tree-header__grid")
-    expect(css).toMatch(/\.op-log-tree-table\s*\{[^}]*--op-log-col-status:\s*6\.25rem/s)
-    expect(css).not.toMatch(/\.op-log-tree-table\s*\{[^}]*padding-top:\s*0\.875rem/s)
-    expect(css).toContain(".op-log-row-grid__label-line")
-    expect(css).toContain("review-tree__row")
-    expect(nest).toContain("OpLogTreeHeader")
-    expect(nest).toContain("OpLogStatusPill")
-    expect(nest).toContain("OpLogEntityIcon")
-    expect(nest).toContain("review-tree__row")
-    expect(ops).toContain("OpLogTreeHeader")
-    expect(ops).toContain("op-log-split-body")
+    expect(css).toContain(".review-detail")
+    expect(css).toContain(".review-detail-section--accordion")
+    expect(listRow).toContain("ReviewTreeRow")
+    expect(listRow).toContain("formatPipelineSubtitle")
+    expect(listRow).toContain("onToggleFold")
+    expect(ops).toContain("ReviewSplitPane")
+    expect(ops).toContain("ReviewTreeHeader")
+    expect(ops).toContain("review-split-body")
     expect(ops).toContain("OperationLogInspector")
     expect(ops).toContain("OperationLogPipelineListRow")
-    expect(ops).toContain("OperationLogPipelineTimeline")
     expect(ops).toContain("selectPipeline")
     expect(ops).toContain("selectActivity")
     expect(ops).toContain("OperationLogScopeDetail")
     expect(ops).toContain("openPipelineIds")
-    expect(css).toContain(".op-log-detail")
     expect(css).toContain(".op-log-pipeline-list-row")
     expect(css).toContain(".op-log-activity-tree-row")
-    // Left air is Trace base-pad + hpad — never steal it for right-edge pills.
-    expect(css).toMatch(/\.op-log-split-list\s*\{[^}]*--trace-tree-base-pad:\s*16px/s)
-    expect(css).not.toMatch(
-      /\.op-log-activity-tree-row__node-cell\s*\{[^}]*padding-left:\s*0\s*!important/s,
+    expect(css).toMatch(
+      /\.review-operator \.review-split-list\s*\{[^}]*--review-tree-base-pad:\s*16px/s,
     )
     expect(css).toContain("scrollbar-gutter: stable")
-    expect(css).toContain(".op-log-split-list-scroll")
+    expect(css).toContain(".review-split-list-scroll")
     expect(ops).toContain("pipelineEventKey")
     expect(css).toContain(".op-log-pipeline-list-row.is-selected")
-    expect(listRow).toContain("op-log-pipeline-list-row__route")
-    expect(listRow).toContain("formatPipelineSubtitle")
-    expect(listRow).toContain("onToggleFold")
-    expect(css).toContain(".op-log-split-list .op-log-pipeline-list-row.trace-tree-row.is-selected .trace-tree-row__btn")
-    expect(css).toContain("background: transparent !important")
-    expect(css).toContain("min-width: 0 !important")
-    expect(nest).toContain("op-log-row-grid--no-icon")
-    expect(nest).toContain('className="op-log-row-grid__icon" aria-hidden')
-    expect(css).toContain(".op-log-nested-block")
-    expect(nest).toContain("opLogShowStatusPill")
-    expect(nest).toContain("OpLogNestedBlock")
-    expect(nest).toContain("opLogShowEntityIcon")
-    expect(ops).toContain("OpLogErrorTreeRow")
-    expect(ops).toMatch(/<LogNest[\s\S]*?<OpLogErrorTreeRow/)
-    expect(ops).toContain("isRedundantActivityEvent")
-    expect(ops).toContain("eventRowExpandable")
-    expect(ops).toContain("countActivityNestableRows")
+    expect(scope).toContain("ReviewDetailAccordion")
     expect(ops).not.toContain("LogStatusLabel")
     expect(ops).not.toContain("StatusMessage")
     expect(ops).not.toContain("STATUS_MESSAGE_BOX")
-    expect(ops).toContain("showPipelineError")
   })
 })

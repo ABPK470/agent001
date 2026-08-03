@@ -1,23 +1,20 @@
-/**
- * Left-tree fold-all state for Pipelines — same contract as Trace open-state.
- */
-
 import type { OperationActivity, OperationPipeline } from "../../client/index"
+import type { ReviewTreeFoldMode } from "../../components/review"
 
-export type OpLogTreeFoldMode = "expanded" | "collapsed"
-
-export type OpLogTreeOpenState = {
-  openPipelineIds: Set<string>
-  actExpanded: Set<string>
-  collapsedDays: Set<string>
-  foldMode: OpLogTreeFoldMode
-}
+export type { ReviewTreeFoldMode as OpLogTreeFoldMode } from "../../components/review"
 
 export type ActivityKeyOf = (
   pipelineId: string,
   activityId: string,
   parentKey?: string,
 ) => string
+
+export type OpLogTreeOpenState = {
+  openPipelineIds: Set<string>
+  actExpanded: Set<string>
+  collapsedDays: Set<string>
+  foldMode: ReviewTreeFoldMode
+}
 
 function walkExpandableActivityKeys(
   pipeline: OperationPipeline,
@@ -35,7 +32,6 @@ function walkExpandableActivityKeys(
   }
 }
 
-/** Every branch activity key in the visible pipeline list. */
 export function collectExpandableActivityKeys(
   pipelines: readonly OperationPipeline[],
   activityKeyOf: ActivityKeyOf,
@@ -70,7 +66,7 @@ export function collapsedTreeOpenState(): OpLogTreeOpenState {
 
 export function treeOpenStateForFoldMode(
   pipelines: readonly OperationPipeline[],
-  mode: OpLogTreeFoldMode,
+  mode: ReviewTreeFoldMode,
   activityKeyOf: ActivityKeyOf,
 ): OpLogTreeOpenState {
   return mode === "expanded"

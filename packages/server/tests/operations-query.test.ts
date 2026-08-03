@@ -701,7 +701,26 @@ describe("listOperations sync bucketing", () => {
       expect.objectContaining({
         since: "2026-07-01T00:00:00.000Z",
         until: "2026-07-02T23:59:59.999Z",
+        excludeTypes: expect.arrayContaining(["api.request"]),
       }),
     )
+  })
+
+  it("skips api.request noise when fill-scanning so pipelines are not buried", async () => {
+    listEvents.mockReturnValueOnce([
+      {
+        type: EventType.SyncPreviewStarted,
+        created_at: "2026-05-27T14:56:30.000Z",
+        data: JSON.stringify({ planId: "plan-1", source: "dev", target: "uat" }),
+      },
+    ])
+    const { listOperations } = await import("../src/api/operations/service/query/index.ts")
+    const result = await listOperations({ limit: 50 })
+    expect(listEvents).toHaveBeenCalledWith(
+      expect.objectContaining({
+        excludeTypes: expect.arrayContaining(["api.request"]),
+      }),
+    )
+    expect(result.operations.length).toBeGreaterThan(0)
   })
 })

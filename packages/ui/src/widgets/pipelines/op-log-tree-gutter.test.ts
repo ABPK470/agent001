@@ -1,7 +1,7 @@
 /**
- * Pipelines left-tree gutter — Trace dialect parity.
+ * Pipelines left-tree gutter — operator review kit parity.
  *
- * Root cause we lock out: killing `.trace-tree-row__node-cell` base-pad
+ * Root cause we lock out: killing node-cell base-pad
  * (`padding-left: 0 !important`) to squeeze right-edge pills also stole the
  * left air, so chevrons sat ~16px from the sidebar border instead of ~32px.
  *
@@ -15,125 +15,100 @@ import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { describe, expect, it } from "vitest"
 import {
-  TRACE_TREE_BASE_PAD_PX,
-  TRACE_TREE_HPAD_PX,
-  TRACE_TREE_INDENT_PX,
-  TRACE_TREE_ROOT_INSET_PX,
-  traceTreeNodeCellStyle,
-} from "../trace/trace-tree-guides"
+  REVIEW_TREE_BASE_PAD_PX,
+  REVIEW_TREE_HPAD_PX,
+  REVIEW_TREE_INDENT_PX,
+  REVIEW_TREE_ROOT_INSET_PX,
+  reviewTreeNodeCellStyle,
+} from "../../components/review/review-tree-geometry"
 
 const here = dirname(fileURLToPath(import.meta.url))
 const cssPath = join(here, "../../boot/index.css")
 const listRowPath = join(here, "OperationLogPipelineListRow.tsx")
 const activityRowPath = join(here, "OperationLogActivityTreeRow.tsx")
 const opsPath = join(here, "../OperationLog.tsx")
-const traceGuidesPath = join(here, "../trace/trace-tree-guides.ts")
-const traceTreeCssNeedle = "var(--trace-tree-base-pad, 16px) + var(--trace-tree-depth, 0) * var(--trace-tree-indent, 20px)"
+const geometryPath = join(here, "../../components/review/review-tree-geometry.ts")
+const reviewTreeCssNeedle =
+  "var(--review-tree-base-pad, 16px) + var(--review-tree-depth, 0) * var(--review-tree-indent, 20px)"
 
 function read(path: string): string {
   return readFileSync(path, "utf8")
 }
 
-describe("pipelines left-tree gutter — Trace dialect", () => {
+describe("pipelines left-tree gutter — review kit", () => {
   it("documents the root chevron inset (hpad + base-pad)", () => {
-    expect(TRACE_TREE_HPAD_PX).toBe(16)
-    expect(TRACE_TREE_BASE_PAD_PX).toBe(16)
-    expect(TRACE_TREE_INDENT_PX).toBe(20)
-    expect(TRACE_TREE_ROOT_INSET_PX).toBe(32)
+    expect(REVIEW_TREE_HPAD_PX).toBe(16)
+    expect(REVIEW_TREE_BASE_PAD_PX).toBe(16)
+    expect(REVIEW_TREE_INDENT_PX).toBe(20)
+    expect(REVIEW_TREE_ROOT_INSET_PX).toBe(32)
   })
 
-  it("hosts Trace left-tree tokens on .op-log-split-list (parity with .trace-split-tree)", () => {
+  it("hosts review left-tree tokens on .review-operator .review-split-list", () => {
     const css = read(cssPath)
     expect(css).toMatch(
-      /\.op-log-split-list\s*\{[^}]*--trace-tree-hpad:\s*16px/s,
+      /\.review-operator \.review-split-list\s*\{[^}]*--review-tree-hpad:\s*16px/s,
     )
     expect(css).toMatch(
-      /\.op-log-split-list\s*\{[^}]*--trace-tree-base-pad:\s*16px/s,
+      /\.review-operator \.review-split-list\s*\{[^}]*--review-tree-base-pad:\s*16px/s,
     )
     expect(css).toMatch(
-      /\.op-log-split-list\s*\{[^}]*--trace-tree-indent:\s*20px/s,
-    )
-    expect(css).toMatch(
-      /\.trace-split-tree\s*\{[^}]*--trace-tree-hpad:\s*16px/s,
+      /\.review-operator \.review-split-list\s*\{[^}]*--review-tree-indent:\s*20px/s,
     )
   })
 
-  it("never zeroes Trace node-cell left pad on Pipelines rows", () => {
+  it("never zeroes review node-cell left pad on Pipelines rows", () => {
     const css = read(cssPath)
-    const pipelinesNodeCell = css.match(
-      /\.op-log-pipeline-list-row \.trace-tree-row__node-cell,[\s\S]*?\.op-log-activity-tree-row__node-cell\s*\{[^}]*\}/,
-    )?.[0]
-    expect(pipelinesNodeCell).toBeTruthy()
-    expect(pipelinesNodeCell).not.toMatch(/padding-left:\s*0\s*!important/)
-    expect(pipelinesNodeCell).not.toMatch(/padding-right:\s*0\s*!important/)
-    // Trace formula still owns left inset for both widgets.
-    expect(css).toContain(traceTreeCssNeedle)
+    expect(css).toContain(reviewTreeCssNeedle)
+    const nodeCell = css.match(/\.review-tree-row__node-cell\s*\{[^}]*\}/)?.[0]
+    expect(nodeCell).toBeTruthy()
+    expect(nodeCell).not.toMatch(/padding-left:\s*0\s*!important/)
   })
 
-  it("TREE header + day caps share the same root inset as depth-0 chevrons", () => {
+  it("day caps share the same root inset as depth-0 chevrons", () => {
     const css = read(cssPath)
     expect(css).toMatch(
-      /\.op-log-split-list__cap\s*\{[^}]*padding-inline:\s*var\(--trace-tree-hpad/s,
-    )
-    expect(css).toMatch(
-      /\.op-log-split-list-scroll \.review-group-label\s*\{[^}]*padding-inline-start:\s*var\(--trace-tree-root-inset/s,
+      /\.review-operator \.review-split-list-scroll \.review-group-label\s*\{[^}]*padding-inline-start:\s*var\(--review-tree-root-inset/s,
     )
   })
 
-  it("activity rows reserve the Trace icon column", () => {
+  it("activity rows reserve the icon column via ReviewTreeRow", () => {
     const activity = read(activityRowPath)
-    expect(activity).toContain("trace-tree-row__icon")
+    expect(activity).toContain("ReviewTreeRow")
     expect(activity).toContain("activityEntityIcon")
   })
 
   it("wires depth via CSS vars — not inline paddingLeft", () => {
     const listRow = read(listRowPath)
     const activity = read(activityRowPath)
-    expect(listRow).toContain("traceTreeNodeCellStyle(0)")
-    expect(activity).toContain("traceTreeNodeCellStyle(depth)")
+    expect(listRow).toContain("ReviewTreeRow")
+    expect(activity).toContain("ReviewTreeRow")
     expect(activity).not.toContain("depth - 1")
     expect(activity).not.toContain("paddingLeft")
     expect(listRow).not.toContain("paddingLeft")
   })
 
-  it("traceTreeNodeCellStyle emits the shared depth tokens", () => {
-    const style = traceTreeNodeCellStyle(2)
+  it("reviewTreeNodeCellStyle emits the shared depth tokens", () => {
+    const style = reviewTreeNodeCellStyle(2)
     expect(style).toMatchObject({
-      "--trace-tree-depth": 2,
-      "--trace-tree-base-pad": "16px",
-      "--trace-tree-indent": "20px",
+      "--review-tree-depth": 2,
+      "--review-tree-base-pad": "16px",
+      "--review-tree-indent": "20px",
     })
-    expect(traceTreeNodeCellStyle(-1)["--trace-tree-depth" as string]).toBe(0)
+    expect(reviewTreeNodeCellStyle(-1)["--review-tree-depth" as string]).toBe(0)
   })
 
   it("keeps selection rail on the row edge (bar ≠ content inset)", () => {
     const css = read(cssPath)
-    expect(css).toMatch(
-      /\.trace-tree-row\.is-selected::before\s*\{[^}]*left:\s*0/s,
-    )
-    expect(css).toMatch(
-      /\.op-log-activity-tree-row\.is-selected::before\s*\{[^}]*left:\s*0/s,
-    )
+    expect(css).toMatch(/\.review-tree-row\.is-selected::before\s*\{[^}]*left:\s*0/s)
   })
 
-  it("protects right-edge pills without stealing left gutter", () => {
-    const css = read(cssPath)
-    expect(css).toMatch(
-      /\.op-log-pipeline-list-row__btn,[\s\S]*?min-width:\s*0\s*!important/s,
-    )
-    expect(css).toMatch(
-      /\.op-log-pipeline-list-row \.op-log-status-pill,[\s\S]*?margin-left:\s*auto/s,
-    )
-    expect(css).toContain("padding: 0.3rem 1.25rem 0.3rem var(--trace-tree-hpad, 16px)")
-  })
-
-  it("split shell still mounts the list host that carries the tokens", () => {
+  it("split shell mounts review kit list host with column header", () => {
     const ops = read(opsPath)
-    expect(ops).toContain("op-log-split-list widget-split-sidebar")
-    expect(ops).toContain("op-log-split-list__cap")
-    expect(ops).toContain("OpLogTreeFoldToggle")
+    expect(ops).toContain("review-split-list widget-split-sidebar")
+    expect(ops).toContain("ReviewTreeHeader")
+    expect(ops).toContain("ReviewSplitPane")
     expect(ops).toContain("OperationLogPipelineListRow")
     expect(ops).toContain("OperationLogActivityTreeRow")
-    expect(read(traceGuidesPath)).toContain("TRACE_TREE_ROOT_INSET_PX")
+    expect(read(geometryPath)).toContain("REVIEW_TREE_ROOT_INSET_PX")
   })
 })

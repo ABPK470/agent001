@@ -17,6 +17,8 @@ import {
 } from "../components/FilterSheet"
 import type { PipelineKindFilter } from "../lib/operation-log-prefs"
 import type { EventStreamRange, EventStreamWindow } from "../lib/event-stream-prefs"
+import { ReviewTreeFoldToggle } from "../components/review"
+import type { ReviewTreeFoldMode } from "../components/review/review-tree-open-state"
 import {
   WidgetToolbar,
   WidgetToolbarCount,
@@ -66,6 +68,8 @@ export function OperationLogToolbar({
   tiny,
   filteredCount,
   totalCount,
+  treeFoldMode,
+  onTreeFoldModeChange,
 }: {
   kinds: Set<PipelineKindFilter>
   setKinds: (next: Set<PipelineKindFilter>) => void
@@ -81,6 +85,8 @@ export function OperationLogToolbar({
   tiny: boolean
   filteredCount: number
   totalCount: number
+  treeFoldMode: ReviewTreeFoldMode
+  onTreeFoldModeChange: (mode: ReviewTreeFoldMode) => void
 }): JSX.Element {
   const [filtersOpen, setFiltersOpen] = useState(false)
   const filterBtnRef = useRef<HTMLButtonElement>(null)
@@ -192,6 +198,11 @@ export function OperationLogToolbar({
         />
         <WidgetToolbarTrailing>
           <WidgetToolbarCount filtered={filteredCount} total={totalCount} hidden={tiny} />
+          <ReviewTreeFoldToggle
+            foldMode={treeFoldMode}
+            onFoldModeChange={onTreeFoldModeChange}
+            ariaLabel="Expand or collapse all pipeline tree scopes"
+          />
           <button
             ref={filterBtnRef}
             type="button"

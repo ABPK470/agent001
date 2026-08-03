@@ -1,10 +1,11 @@
-import { ChevronRight } from "lucide-react"
 import type { OperationPipeline } from "../../client/index"
-import { traceTreeNodeCellStyle } from "../trace/trace-tree-guides"
+import { ReviewTreeRow } from "../../components/review"
 import { pipelineEntityIcon } from "./op-log-entity-icon"
 import { OpLogEntityIcon } from "./OpLogEntityIcon"
 import { OpLogStatusPill } from "./OpLogStatusPill"
 import { formatPipelineSubtitle, OP_LOG } from "./operation-log-row"
+
+const REVIEW_TREE_GRID_COLS = "minmax(0, 1fr) var(--review-tree-col-duration)"
 
 /** Left split-pane pipeline root — accent bar selection; chevron folds activity children. */
 export function OperationLogPipelineListRow({
@@ -26,61 +27,23 @@ export function OperationLogPipelineListRow({
   const subtitle = pipeline.subtitle ? formatPipelineSubtitle(pipeline.subtitle) : null
 
   return (
-    <div
-      className={[
-        "trace-tree-row op-log-pipeline-list-row",
-        selected ? "is-selected" : "",
-        subtitle ? "has-subtitle" : "",
-        hasChildren ? "is-branch" : "is-leaf",
-        "is-root",
-      ]
-        .filter(Boolean)
-        .join(" ")}
-      role="treeitem"
-      aria-selected={selected}
-      aria-expanded={hasChildren ? !folded : undefined}
-    >
-      <button
-        type="button"
-        className="trace-tree-row__btn op-log-pipeline-list-row__btn"
-        onClick={() => onSelect(pipeline.id)}
-      >
-        <span
-          className="trace-tree-row__node-cell op-log-pipeline-list-row__node-cell"
-          style={traceTreeNodeCellStyle(0)}
-        >
-          <span
-            className="trace-tree-row__chev"
-            onClick={(event) => {
-              event.stopPropagation()
-              if (hasChildren) onToggleFold(pipeline.id)
-            }}
-            aria-hidden
-          >
-            {hasChildren ? (
-              <ChevronRight
-                size={13}
-                className={`trace-tree-row__chev-icon${folded ? "" : " is-open"}`}
-              />
-            ) : null}
-          </span>
-          <span className="trace-tree-row__icon" aria-hidden>
-            <OpLogEntityIcon icon={entity.Icon} color={entity.color} />
-          </span>
-          <span className="trace-tree-row__text-block min-w-0 flex-1">
-            <span className="trace-tree-row__title-stack">
-              <span className={`trace-tree-row__name truncate ${OP_LOG}`}>{pipeline.title}</span>
-              {subtitle ? (
-                <span className="trace-tree-row__subtitle op-log-pipeline-list-row__route" title={subtitle}>
-                  {subtitle}
-                </span>
-              ) : null}
-            </span>
-          </span>
-          <OpLogStatusPill status={pipeline.status} />
-        </span>
-      </button>
-    </div>
+    <ReviewTreeRow
+      depth={0}
+      selected={selected}
+      hasChildren={hasChildren}
+      folded={folded}
+      hasSubtitle={Boolean(subtitle)}
+      isRoot
+      rowClassName="op-log-pipeline-list-row"
+      gridTemplateColumns={REVIEW_TREE_GRID_COLS}
+      onSelect={() => onSelect(pipeline.id)}
+      onToggleFold={() => onToggleFold(pipeline.id)}
+      icon={<OpLogEntityIcon icon={entity.Icon} color={entity.color} />}
+      title={<span className={OP_LOG}>{pipeline.title}</span>}
+      subtitle={subtitle}
+      trailing={<OpLogStatusPill status={pipeline.status} />}
+      metrics={["—"]}
+    />
   )
 }
 
