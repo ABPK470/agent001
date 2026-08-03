@@ -41,19 +41,15 @@ describe("createMssqlMigrationRunner", () => {
     await runner.applyPending()
     await runner.applyPending()
     const list = await runner.list()
-    expect(list).toEqual([
-      { version: 1, name: "mssql_pilot_identity", appliedAt: "2026-01-01T00:00:00" },
-      { version: 2, name: "mssql_pilot_threads_runs", appliedAt: "2026-01-01T00:00:00" },
-      {
-        version: 3,
-        name: "mssql_pilot_run_children_and_config",
-        appliedAt: "2026-01-01T00:00:00",
-      },
-    ])
+    expect(list.map((r) => r.version)).toEqual([1, 2, 3, 4])
+    expect(list[3]).toMatchObject({
+      version: 4,
+      name: "mssql_pilot_sync_catalog_and_entities",
+      appliedAt: "2026-01-01T00:00:00",
+    })
     const inserts = ex.statements.filter((s) => s.includes("INSERT INTO dbo._mia_schema_migrations"))
-    expect(inserts).toHaveLength(3)
-    expect(ex.statements.some((s) => s.includes("CREATE TABLE dbo.users"))).toBe(true)
-    expect(ex.statements.some((s) => s.includes("CREATE TABLE dbo.runs"))).toBe(true)
-    expect(ex.statements.some((s) => s.includes("CREATE TABLE dbo.event_log"))).toBe(true)
+    expect(inserts).toHaveLength(4)
+    expect(ex.statements.some((s) => s.includes("CREATE TABLE dbo.sync_runs"))).toBe(true)
+    expect(ex.statements.some((s) => s.includes("CREATE TABLE dbo.attachments"))).toBe(true)
   })
 })

@@ -505,18 +505,19 @@ export function retireEntityDefinition(
 }
 
 /**
- * Factory reset only — drops append-only triggers, wipes all entity rows,
- * then restores triggers. Normal API paths must never call this.
+ * Factory reset only — drops SQLite append-only triggers, wipes entity
+ * rows, then restores triggers. Normal API paths must never call this.
+ *
+ * Trigger DDL is SQLite-adapter-specific (RAISE); row wipes go through Kysely.
  */
 export function wipeEntityRegistry(): void {
-  const db = getDb()
-  db.exec(`
+  getDb().exec(`
     DROP TRIGGER IF EXISTS entity_versions_no_update;
     DROP TRIGGER IF EXISTS entity_versions_no_delete;
   `)
-  db.exec(`DELETE FROM entity_versions`)
-  db.exec(`DELETE FROM entity_active`)
-  db.exec(`
+  runExec(getPlatformDb().deleteFrom("entity_versions").compile())
+  runExec(getPlatformDb().deleteFrom("entity_active").compile())
+  getDb().exec(`
     CREATE TRIGGER IF NOT EXISTS entity_versions_no_update
       BEFORE UPDATE ON entity_versions
       BEGIN SELECT RAISE(ABORT, 'entity_versions is append-only'); END;

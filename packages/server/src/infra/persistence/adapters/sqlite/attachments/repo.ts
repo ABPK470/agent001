@@ -7,8 +7,8 @@
  * the engine, and the API/route layer composes them.
  */
 
-import type Database from "better-sqlite3"
 import { randomUUID } from "node:crypto"
+import { sql } from "kysely"
 import {
   AttachmentImportMode,
   AttachmentIngestionMode,
@@ -16,7 +16,8 @@ import {
   AttachmentSource,
   AttachmentStatus
 } from "../../../../../internal/enums/attachments.js"
-import { getDb } from "../db-connection.js"
+import { getPlatformDb } from "../../../schema/kysely.js"
+import { runAll, runExec, runGet } from "../../../schema/execute.js"
 
 export { AttachmentImportMode, AttachmentIngestionMode, AttachmentScope, AttachmentSource, AttachmentStatus }
 
@@ -76,56 +77,56 @@ export interface CreateAttachmentInput {
   retentionUntil?: string | null
 }
 
-function db(): Database.Database {
-  return getDb()
-}
-
 export function insertAttachment(input: CreateAttachmentInput): AttachmentRow {
   const id = randomUUID()
   const uploadedAt = new Date().toISOString()
-  db()
-    .prepare(
-      `
-    INSERT INTO attachments (
-      id, scope, run_id, owner_upn,
-      original_name, normalized_name, media_type, size_bytes, content_hash,
-      storage_uri, text_extract_uri, ingestion_mode, status, source,
-      purpose_tag, goal_snapshot, uploaded_at, retention_until
-    ) VALUES (
-      @id, @scope, @runId, @ownerUpn,
-      @originalName, @normalizedName, @mediaType, @sizeBytes, @contentHash,
-      @storageUri, @textExtractUri, @ingestionMode, 'uploaded', @source,
-      @purposeTag, @goalSnapshot, @uploadedAt, @retentionUntil
-    )
-  `
-    )
-    .run({
+  const insert = getPlatformDb()
+    .insertInto("attachments")
+    .values({
       id,
       scope: input.scope,
-      runId: input.runId ?? null,
-      ownerUpn: input.ownerUpn ?? null,
-      originalName: input.originalName,
-      normalizedName: input.normalizedName,
-      mediaType: input.mediaType,
-      sizeBytes: input.sizeBytes,
-      contentHash: input.contentHash,
-      storageUri: input.storageUri,
-      textExtractUri: input.textExtractUri ?? null,
-      ingestionMode: input.ingestionMode,
+      run_id: input.runId ?? null,
+      owner_upn: input.ownerUpn ?? null,
+      original_name: input.originalName,
+      normalized_name: input.normalizedName,
+      media_type: input.mediaType,
+      size_bytes: input.sizeBytes,
+      content_hash: input.contentHash,
+      storage_uri: input.storageUri,
+      text_extract_uri: input.textExtractUri ?? null,
+      ingestion_mode: input.ingestionMode,
+      status: AttachmentStatus.Uploaded,
       source: input.source ?? AttachmentSource.UserUpload,
-      purposeTag: input.purposeTag ?? null,
-      goalSnapshot: input.goalSnapshot ?? null,
-      uploadedAt,
-      retentionUntil: input.retentionUntil ?? null
+      purpose_tag: input.purposeTag ?? null,
+      goal_snapshot: input.goalSnapshot ?? null,
+      uploaded_at: uploadedAt,
+      processed_at: null,
+      retention_until: input.retentionUntil ?? null,
     })
-  const row = db().prepare("SELECT * FROM attachments WHERE id = ?").get(id) as AttachmentRow
+    .compile()
+  runExec(insert)
+  const row = getAttachmentIncludingDeleted(id)
+  if (!row) throw new Error(`attachment insert failed: ${id}`)
   return row
 }
 
+function getAttachmentIncludingDeleted(id: string): AttachmentRow | undefined {
+  const compiled = getPlatformDb()
+    .selectFrom("attachments")
+    .selectAll()
+    .where("id", "=", id)
+    .compile()
+  return runGet<AttachmentRow>(compiled)
+}
+
 export function getAttachment(id: string): AttachmentRow | undefined {
-  return db().prepare("SELECT * FROM attachments WHERE id = ? AND status != 'deleted'").get(id) as
-    | AttachmentRow
-    | undefined
+  const compiled = getPlatformDb()
+    .selectFrom("attachments")
+    .selectAll()
+    .where("id", "=", id)
+    .where("status", "!=", AttachmentStatus.Deleted)
+    .compile()
+  return runGet<AttachmentRow>(compiled)
 }
 
 export interface ListAttachmentsFilter {
@@ -137,63 +138,82 @@ export interface ListAttachmentsFilter {
 }
 
 export function listAttachments(filter: ListAttachmentsFilter = {}): AttachmentRow[] {
-  const where: string[] = ["status != 'deleted'"]
-  const params: Record<string, unknown> = {}
-  if (filter.scope) {
-    where.push("scope = @scope")
-    params["scope"] = filter.scope
-  }
-  if (filter.runId) {
-    where.push("run_id = @runId")
-    params["runId"] = filter.runId
-  }
-  if (filter.ownerUpn) {
-    where.push("owner_upn = @ownerUpn")
-    params["ownerUpn"] = filter.ownerUpn
-  }
+  let q = getPlatformDb()
+    .selectFrom("attachments")
+    .selectAll()
+    .where("status", "!=", AttachmentStatus.Deleted)
+  if (filter.scope) q = q.where("scope", "=", filter.scope)
+  if (filter.runId) q = q.where("run_id", "=", filter.runId)
+  if (filter.ownerUpn) q = q.where("owner_upn", "=", filter.ownerUpn)
   if (filter.q) {
-    where.push("(original_name LIKE @q OR normalized_name LIKE @q OR COALESCE(purpose_tag, '') LIKE @q)")
-    params["q"] = `%${filter.q}%`
+    const like = `%${filter.q}%`
+    q = q.where((eb) =>
+      eb.or([
+        eb("original_name", "like", like),
+        eb("normalized_name", "like", like),
+        eb(sql`coalesce(purpose_tag, '')`, "like", like),
+      ]),
+    )
   }
-  const sql = `SELECT * FROM attachments WHERE ${where.join(" AND ")} ORDER BY uploaded_at DESC, rowid DESC`
-  return db().prepare(sql).all(params) as AttachmentRow[]
+  const compiled = q.orderBy("uploaded_at", "desc").compile()
+  return runAll<AttachmentRow>(compiled)
 }
 
 export function softDeleteAttachment(id: string): void {
-  db().prepare("UPDATE attachments SET status = 'deleted' WHERE id = ?").run(id)
+  const compiled = getPlatformDb()
+    .updateTable("attachments")
+    .set({ status: AttachmentStatus.Deleted })
+    .where("id", "=", id)
+    .compile()
+  runExec(compiled)
 }
 
 export function markAttachmentProcessed(id: string, textExtractUri: string | null): void {
-  db()
-    .prepare(
-      `
-    UPDATE attachments
-       SET status = 'processed',
-           text_extract_uri = COALESCE(@textExtractUri, text_extract_uri),
-           processed_at = @now
-     WHERE id = @id
-  `
-    )
-    .run({ id, textExtractUri, now: new Date().toISOString() })
+  const processedAt = new Date().toISOString()
+  const compiled =
+    textExtractUri === null
+      ? getPlatformDb()
+          .updateTable("attachments")
+          .set({
+            status: AttachmentStatus.Processed,
+            processed_at: processedAt,
+          })
+          .where("id", "=", id)
+          .compile()
+      : getPlatformDb()
+          .updateTable("attachments")
+          .set({
+            status: AttachmentStatus.Processed,
+            text_extract_uri: textExtractUri,
+            processed_at: processedAt,
+          })
+          .where("id", "=", id)
+          .compile()
+  runExec(compiled)
 }
 
 // ── Tags ───────────────────────────────────────────────────────────
 
 export function addAttachmentTag(attachmentId: string, key: string, value: string): void {
-  db()
-    .prepare(
-      `
-    INSERT OR IGNORE INTO attachment_tags (attachment_id, tag_key, tag_value)
-    VALUES (?, ?, ?)
-  `
-    )
-    .run(attachmentId, key, value)
+  const compiled = getPlatformDb()
+    .insertInto("attachment_tags")
+    .values({
+      attachment_id: attachmentId,
+      tag_key: key,
+      tag_value: value,
+    })
+    .onConflict((oc) => oc.columns(["attachment_id", "tag_key", "tag_value"]).doNothing())
+    .compile()
+  runExec(compiled)
 }
 
 export function listAttachmentTags(attachmentId: string): AttachmentTagRow[] {
-  return db()
-    .prepare("SELECT * FROM attachment_tags WHERE attachment_id = ?")
-    .all(attachmentId) as AttachmentTagRow[]
+  const compiled = getPlatformDb()
+    .selectFrom("attachment_tags")
+    .selectAll()
+    .where("attachment_id", "=", attachmentId)
+    .compile()
+  return runAll<AttachmentTagRow>(compiled)
 }
 
 // ── Imports ────────────────────────────────────────────────────────
@@ -208,28 +228,36 @@ export interface RecordImportInput {
 
 export function recordAttachmentImport(input: RecordImportInput): AttachmentImportRow {
   const id = randomUUID()
-  db()
-    .prepare(
-      `
-    INSERT INTO attachment_imports (
-      id, attachment_id, run_id, sandbox_path, import_mode, imported_at, imported_by_tool_call
-    ) VALUES (?, ?, ?, ?, ?, ?, ?)
-  `
-    )
-    .run(
+  const importedAt = new Date().toISOString()
+  const insert = getPlatformDb()
+    .insertInto("attachment_imports")
+    .values({
       id,
-      input.attachmentId,
-      input.runId,
-      input.sandboxPath,
-      input.importMode,
-      new Date().toISOString(),
-      input.importedByToolCall ?? null
-    )
-  return db().prepare("SELECT * FROM attachment_imports WHERE id = ?").get(id) as AttachmentImportRow
+      attachment_id: input.attachmentId,
+      run_id: input.runId,
+      sandbox_path: input.sandboxPath,
+      import_mode: input.importMode,
+      imported_at: importedAt,
+      imported_by_tool_call: input.importedByToolCall ?? null,
+    })
+    .compile()
+  runExec(insert)
+  const compiled = getPlatformDb()
+    .selectFrom("attachment_imports")
+    .selectAll()
+    .where("id", "=", id)
+    .compile()
+  const row = runGet<AttachmentImportRow>(compiled)
+  if (!row) throw new Error(`attachment import insert failed: ${id}`)
+  return row
 }
 
 export function listAttachmentImports(runId: string): AttachmentImportRow[] {
-  return db()
-    .prepare("SELECT * FROM attachment_imports WHERE run_id = ? ORDER BY imported_at DESC")
-    .all(runId) as AttachmentImportRow[]
+  const compiled = getPlatformDb()
+    .selectFrom("attachment_imports")
+    .selectAll()
+    .where("run_id", "=", runId)
+    .orderBy("imported_at", "desc")
+    .compile()
+  return runAll<AttachmentImportRow>(compiled)
 }

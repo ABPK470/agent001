@@ -9,7 +9,7 @@ Track B of the RDBMS-agnostic program ([plan](../../../../../.cursor/plans/sqlit
 | Milestone | What | Status |
 | --- | --- | --- |
 | 3 | Schema toolkit + async SQLite adapter | **Nearly done** — product repos on Kysely; leftovers below |
-| 4 | Second dialect (**hosted default: mssql**) + multi-dialect migrator | **In progress** — config, pool, registry v1–3, migrator, Kysely MssqlDialect + `execute-async`; repos still mostly sync sqlite |
+| 4 | Second dialect (**hosted default: mssql**) + multi-dialect migrator | **In progress** — config, pool, registry v1–4, migrator, Kysely MssqlDialect + `execute-async`; repos still mostly sync sqlite |
 | 8 | Memory search port (FTS) | Last hard piece |
 
 Honest sizing in the plan: platform agnostic is **large (months)** — ~70 tables, async ripple, search redesign. Sync warehouse multi-dialect is a **separate** track and is further along.
@@ -23,7 +23,7 @@ Honest sizing in the plan: platform agnostic is **large (months)** — ~70 table
 | `execute.ts` | Sync compile → better-sqlite3 (sqlite only) |
 | `execute-async.ts` | Dialect-aware async execute (sqlite wrap / mssql Kysely) |
 | `@mia/sql-kit` `MigrationRunner` / `applyMultiDialectPending` | Shared migrator contract |
-| `migrations/registry.ts` | Multi-dialect peer DDL (mssql v1–3) |
+| `migrations/registry.ts` | Multi-dialect peer DDL (mssql v1–4) |
 | `adapters/mssql/**` | Platform pool + migrator + MssqlDialect factory |
 
 ## Cutover tables (Kysely)
@@ -49,5 +49,5 @@ Honest sizing in the plan: platform agnostic is **large (months)** — ~70 table
 - `runs` audit + token-usage admin browsers (fully Kysely)
 
 Still raw-ish: memory FTS adapter (milestone 8), `lifecycle` vacuum/pragma,
-entity wipe DDL, attachments. Next: grow mssql registry + migrate repos to
-`run*Async` before enabling boot.
+SQLite-only entity append-only triggers. Next: grow mssql registry + migrate
+repos to `run*Async` before enabling boot.

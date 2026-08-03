@@ -728,6 +728,9 @@ export interface PlatformDatabase {
   scd2_strategy_versions: Scd2StrategyVersionsTable
   sync_audit: SyncAuditTable
   sync_evidence_log: SyncEvidenceLogTable
+  attachments: AttachmentsTable
+  attachment_tags: AttachmentTagsTable
+  attachment_imports: AttachmentImportsTable
   eval_dataset_entries: EvalDatasetEntriesTable
 }
 
@@ -755,6 +758,47 @@ export interface SyncEvidenceLogTable {
   signer_id: string
   signature: string
   created_at: string
+}
+
+/** `attachments` — uploaded / generated file metadata. */
+export interface AttachmentsTable {
+  id: string
+  scope: string
+  run_id: string | null
+  owner_upn: string | null
+  original_name: string
+  normalized_name: string
+  media_type: string
+  size_bytes: number
+  content_hash: string
+  storage_uri: string
+  text_extract_uri: string | null
+  ingestion_mode: string
+  status: string
+  source: string
+  purpose_tag: string | null
+  goal_snapshot: string | null
+  uploaded_at: string
+  processed_at: string | null
+  retention_until: string | null
+}
+
+/** `attachment_tags` — key/value tags on an attachment. */
+export interface AttachmentTagsTable {
+  attachment_id: string
+  tag_key: string
+  tag_value: string
+}
+
+/** `attachment_imports` — sandbox import records for a run. */
+export interface AttachmentImportsTable {
+  id: string
+  attachment_id: string
+  run_id: string
+  sandbox_path: string
+  import_mode: string
+  imported_at: string
+  imported_by_tool_call: string | null
 }
 
 /** `eval_dataset_entries` — golden trace steps for eval. */

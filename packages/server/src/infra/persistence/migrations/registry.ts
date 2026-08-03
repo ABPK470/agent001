@@ -281,4 +281,215 @@ END;
       },
     },
   },
+  {
+    version: 4,
+    name: "mssql_pilot_sync_catalog_and_entities",
+    up: {
+      mssql: async (executor) => {
+        await mssqlExec(
+          executor,
+          `
+IF OBJECT_ID(N'dbo.sync_phases', N'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.sync_phases (
+    tenant_id        NVARCHAR(128)  NOT NULL,
+    id               NVARCHAR(128)  NOT NULL,
+    label            NVARCHAR(512)  NOT NULL,
+    sort_order       INT            NOT NULL CONSTRAINT DF_sync_phases_sort DEFAULT (0),
+    built_in         INT            NOT NULL CONSTRAINT DF_sync_phases_builtin DEFAULT (0),
+    definition_json  NVARCHAR(MAX)  NOT NULL CONSTRAINT DF_sync_phases_def DEFAULT (N'{}'),
+    CONSTRAINT PK_sync_phases PRIMARY KEY (tenant_id, id)
+  );
+END;
+
+IF OBJECT_ID(N'dbo.sync_actions', N'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.sync_actions (
+    tenant_id        NVARCHAR(128)  NOT NULL,
+    id               NVARCHAR(128)  NOT NULL,
+    label            NVARCHAR(512)  NOT NULL,
+    built_in         INT            NOT NULL CONSTRAINT DF_sync_actions_builtin DEFAULT (0),
+    definition_json  NVARCHAR(MAX)  NOT NULL CONSTRAINT DF_sync_actions_def DEFAULT (N'{}'),
+    CONSTRAINT PK_sync_actions PRIMARY KEY (tenant_id, id)
+  );
+END;
+
+IF OBJECT_ID(N'dbo.sync_flows', N'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.sync_flows (
+    tenant_id     NVARCHAR(128)  NOT NULL,
+    id            NVARCHAR(128)  NOT NULL,
+    label         NVARCHAR(512)  NOT NULL,
+    description   NVARCHAR(MAX)  NOT NULL CONSTRAINT DF_sync_flows_desc DEFAULT (N''),
+    steps_json    NVARCHAR(MAX)  NOT NULL CONSTRAINT DF_sync_flows_steps DEFAULT (N'[]'),
+    built_in      INT            NOT NULL CONSTRAINT DF_sync_flows_builtin DEFAULT (0),
+    updated_at    DATETIME2      NOT NULL,
+    updated_by    NVARCHAR(320)  NULL,
+    CONSTRAINT PK_sync_flows PRIMARY KEY (tenant_id, id)
+  );
+END;
+
+IF OBJECT_ID(N'dbo.sync_value_sources', N'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.sync_value_sources (
+    tenant_id        NVARCHAR(128)  NOT NULL,
+    id               NVARCHAR(128)  NOT NULL,
+    label            NVARCHAR(512)  NOT NULL,
+    built_in         INT            NOT NULL CONSTRAINT DF_sync_value_sources_builtin DEFAULT (0),
+    definition_json  NVARCHAR(MAX)  NOT NULL CONSTRAINT DF_sync_value_sources_def DEFAULT (N'{}'),
+    CONSTRAINT PK_sync_value_sources PRIMARY KEY (tenant_id, id)
+  );
+END;
+
+IF OBJECT_ID(N'dbo.sync_publish_meta', N'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.sync_publish_meta (
+    tenant_id          NVARCHAR(128)  NOT NULL CONSTRAINT PK_sync_publish_meta PRIMARY KEY,
+    published_at       DATETIME2      NOT NULL,
+    published_version  NVARCHAR(128)  NOT NULL,
+    catalog_version    INT            NULL
+  );
+END;
+
+IF OBJECT_ID(N'dbo.sync_definitions', N'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.sync_definitions (
+    tenant_id          NVARCHAR(128)  NOT NULL,
+    entity_id          NVARCHAR(128)  NOT NULL,
+    definition_json    NVARCHAR(MAX)  NOT NULL,
+    published_at       DATETIME2      NULL,
+    published_version  NVARCHAR(128)  NULL,
+    CONSTRAINT PK_sync_definitions PRIMARY KEY (tenant_id, entity_id)
+  );
+END;
+
+IF OBJECT_ID(N'dbo.sync_runs', N'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.sync_runs (
+    plan_id              NVARCHAR(128)  NOT NULL CONSTRAINT PK_sync_runs PRIMARY KEY,
+    entity_type          NVARCHAR(256)  NOT NULL,
+    entity_id            NVARCHAR(256)  NOT NULL,
+    entity_display_name  NVARCHAR(512)  NULL,
+    source               NVARCHAR(256)  NOT NULL,
+    target               NVARCHAR(256)  NOT NULL,
+    actor_upn            NVARCHAR(320)  NOT NULL
+      CONSTRAINT FK_sync_runs_users REFERENCES dbo.users(upn),
+    preview_inserts      INT            NOT NULL CONSTRAINT DF_sync_runs_pi DEFAULT (0),
+    preview_updates      INT            NOT NULL CONSTRAINT DF_sync_runs_pu DEFAULT (0),
+    preview_deletes      INT            NOT NULL CONSTRAINT DF_sync_runs_pd DEFAULT (0),
+    executed_inserts     INT            NULL,
+    executed_updates     INT            NULL,
+    executed_deletes     INT            NULL,
+    preview_totals_json  NVARCHAR(MAX)  NOT NULL,
+    execute_totals_json  NVARCHAR(MAX)  NULL,
+    plan_json            NVARCHAR(MAX)  NULL,
+    status               NVARCHAR(64)   NOT NULL,
+    error                NVARCHAR(MAX)  NULL,
+    drift_detected_pct   FLOAT          NULL,
+    started_at           DATETIME2      NOT NULL CONSTRAINT DF_sync_runs_started DEFAULT (SYSUTCDATETIME()),
+    finished_at          DATETIME2      NULL,
+    duration_ms          INT            NULL
+  );
+  CREATE INDEX IX_sync_runs_started ON dbo.sync_runs(started_at DESC);
+END;
+
+IF OBJECT_ID(N'dbo.sync_audit', N'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.sync_audit (
+    id         INT            NOT NULL IDENTITY(1,1) CONSTRAINT PK_sync_audit PRIMARY KEY,
+    plan_id    NVARCHAR(128)  NOT NULL
+      CONSTRAINT FK_sync_audit_runs REFERENCES dbo.sync_runs(plan_id) ON DELETE CASCADE,
+    actor      NVARCHAR(320)  NOT NULL,
+    actor_upn  NVARCHAR(320)  NULL,
+    action     NVARCHAR(128)  NOT NULL,
+    detail     NVARCHAR(MAX)  NOT NULL CONSTRAINT DF_sync_audit_detail DEFAULT (N'{}'),
+    timestamp  DATETIME2      NOT NULL
+  );
+  CREATE INDEX IX_sync_audit_plan ON dbo.sync_audit(plan_id);
+END;
+
+IF OBJECT_ID(N'dbo.entity_active', N'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.entity_active (
+    tenant_id        NVARCHAR(128)  NOT NULL,
+    id               NVARCHAR(128)  NOT NULL,
+    current_version  INT            NOT NULL,
+    retired_at       DATETIME2      NULL,
+    CONSTRAINT PK_entity_active PRIMARY KEY (tenant_id, id)
+  );
+END;
+
+IF OBJECT_ID(N'dbo.entity_versions', N'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.entity_versions (
+    tenant_id        NVARCHAR(128)  NOT NULL,
+    id               NVARCHAR(128)  NOT NULL,
+    version          INT            NOT NULL,
+    body_json        NVARCHAR(MAX)  NOT NULL,
+    version_label    NVARCHAR(256)  NULL,
+    created_by       NVARCHAR(320)  NOT NULL,
+    created_at       DATETIME2      NOT NULL CONSTRAINT DF_entity_versions_created DEFAULT (SYSUTCDATETIME()),
+    reason           NVARCHAR(MAX)  NOT NULL CONSTRAINT DF_entity_versions_reason DEFAULT (N''),
+    diff_json        NVARCHAR(MAX)  NOT NULL CONSTRAINT DF_entity_versions_diff DEFAULT (N'[]'),
+    CONSTRAINT PK_entity_versions PRIMARY KEY (tenant_id, id, version)
+  );
+END;
+
+IF OBJECT_ID(N'dbo.attachments', N'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.attachments (
+    id               NVARCHAR(64)   NOT NULL CONSTRAINT PK_attachments PRIMARY KEY,
+    scope            NVARCHAR(64)   NOT NULL,
+    run_id           NVARCHAR(64)   NULL,
+    owner_upn        NVARCHAR(320)  NULL,
+    original_name    NVARCHAR(512)  NOT NULL,
+    normalized_name  NVARCHAR(512)  NOT NULL,
+    media_type       NVARCHAR(256)  NOT NULL,
+    size_bytes       BIGINT         NOT NULL,
+    content_hash     NVARCHAR(128)  NOT NULL,
+    storage_uri      NVARCHAR(1024) NOT NULL,
+    text_extract_uri NVARCHAR(1024) NULL,
+    ingestion_mode   NVARCHAR(64)   NOT NULL,
+    status           NVARCHAR(32)   NOT NULL CONSTRAINT DF_attachments_status DEFAULT (N'uploaded'),
+    source           NVARCHAR(32)   NOT NULL CONSTRAINT DF_attachments_source DEFAULT (N'user_upload'),
+    purpose_tag      NVARCHAR(256)  NULL,
+    goal_snapshot    NVARCHAR(MAX)  NULL,
+    uploaded_at      DATETIME2      NOT NULL,
+    processed_at     DATETIME2      NULL,
+    retention_until  DATETIME2      NULL
+  );
+  CREATE INDEX IX_attachments_run ON dbo.attachments(run_id);
+  CREATE INDEX IX_attachments_owner ON dbo.attachments(owner_upn);
+END;
+
+IF OBJECT_ID(N'dbo.attachment_tags', N'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.attachment_tags (
+    attachment_id NVARCHAR(64)  NOT NULL
+      CONSTRAINT FK_attachment_tags_attachments REFERENCES dbo.attachments(id) ON DELETE CASCADE,
+    tag_key       NVARCHAR(128) NOT NULL,
+    tag_value     NVARCHAR(512) NOT NULL,
+    CONSTRAINT PK_attachment_tags PRIMARY KEY (attachment_id, tag_key, tag_value)
+  );
+END;
+
+IF OBJECT_ID(N'dbo.attachment_imports', N'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.attachment_imports (
+    id                    NVARCHAR(64)   NOT NULL CONSTRAINT PK_attachment_imports PRIMARY KEY,
+    attachment_id         NVARCHAR(64)   NOT NULL
+      CONSTRAINT FK_attachment_imports_attachments REFERENCES dbo.attachments(id) ON DELETE CASCADE,
+    run_id                NVARCHAR(64)   NOT NULL,
+    sandbox_path          NVARCHAR(1024) NOT NULL,
+    import_mode           NVARCHAR(32)   NOT NULL,
+    imported_at           DATETIME2      NOT NULL,
+    imported_by_tool_call NVARCHAR(128)  NULL
+  );
+  CREATE INDEX IX_attachment_imports_run ON dbo.attachment_imports(run_id);
+END;
+`,
+        )
+      },
+    },
+  },
 ]

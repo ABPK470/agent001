@@ -16,8 +16,11 @@
  * the user gets immediate feedback rather than a silent purge later.
  */
 
-import { getDb } from "../db-connection.js"
+import { sql } from "kysely"
 import { AttachmentScope } from "../../../../../internal/enums/attachments.js"
+import { getPlatformDb } from "../../../schema/kysely.js"
+import { runChanges, runGet } from "../../../schema/execute.js"
+import { AttachmentStatus } from "./repo.js"
 import { auditAttachmentsPruned } from "./audit.js"
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -80,16 +83,14 @@ export function getOwnerUsage(ownerUpn: string | null | undefined): OwnerUsage {
   if (!ownerUpn) {
     return { bytesUsed: 0, bytesQuota: policy.ownerQuotaBytes, bytesRemain: policy.ownerQuotaBytes }
   }
-  const row = getDb()
-    .prepare(
-      `
-    SELECT COALESCE(SUM(size_bytes), 0) AS used
-    FROM attachments
-    WHERE owner_upn = ? AND status != 'deleted'
-  `
-    )
-    .get(ownerUpn) as { used: number }
-  const used = Number(row.used ?? 0)
+  const compiled = getPlatformDb()
+    .selectFrom("attachments")
+    .select(sql<number>`coalesce(sum(size_bytes), 0)`.as("used"))
+    .where("owner_upn", "=", ownerUpn)
+    .where("status", "!=", AttachmentStatus.Deleted)
+    .compile()
+  const row = runGet<{ used: number | bigint }>(compiled)
+  const used = Number(row?.used ?? 0)
   return {
     bytesUsed: used,
     bytesQuota: policy.ownerQuotaBytes,
@@ -135,18 +136,14 @@ export interface PruneResult {
  */
 export function pruneExpiredAttachments(now: Date = new Date()): PruneResult {
   const cutoff = now.toISOString()
-  const result = getDb()
-    .prepare(
-      `
-    UPDATE attachments
-    SET status = 'deleted'
-    WHERE status != 'deleted'
-      AND retention_until IS NOT NULL
-      AND retention_until <= ?
-  `
-    )
-    .run(cutoff)
-  const pruned = { prunedAttachments: result.changes }
+  const compiled = getPlatformDb()
+    .updateTable("attachments")
+    .set({ status: AttachmentStatus.Deleted })
+    .where("status", "!=", AttachmentStatus.Deleted)
+    .where("retention_until", "is not", null)
+    .where("retention_until", "<=", cutoff)
+    .compile()
+  const pruned = { prunedAttachments: runChanges(compiled) }
   auditAttachmentsPruned(pruned.prunedAttachments)
   return pruned
 }
