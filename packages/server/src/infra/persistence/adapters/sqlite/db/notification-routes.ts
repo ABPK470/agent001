@@ -1,6 +1,6 @@
-import { sql } from "kysely"
 import { getPlatformDb } from "../../../schema/kysely.js"
 import { runAll, runExec, runGet, runInsertId } from "../../../schema/execute.js"
+import { platformNow } from "../../../schema/sql-time.js"
 
 export interface NotificationRouteRow {
   id: string
@@ -56,7 +56,7 @@ export function appendNotificationLog(input: {
       payload_json: input.payloadJson,
       status: "retrying",
       attempts: 0,
-      created_at: sql`datetime('now')`,
+      created_at: platformNow(),
     })
     .compile()
   return runInsertId(compiled)
@@ -82,7 +82,7 @@ export function markNotificationLogSent(id: number, attempts: number): void {
     .set({
       attempts,
       status: "sent",
-      sent_at: sql`datetime('now')`,
+      sent_at: platformNow(),
       last_error: null,
     })
     .where("id", "=", id)
@@ -110,7 +110,7 @@ export function upsertNotificationRouteRow(input: {
       channel: input.channel,
       target: input.target,
       enabled: input.enabled,
-      updated_at: sql`datetime('now')`,
+      updated_at: platformNow(),
       updated_by: input.updatedBy,
     })
     .onConflict((oc) =>
@@ -121,7 +121,7 @@ export function upsertNotificationRouteRow(input: {
         channel: input.channel,
         target: input.target,
         enabled: input.enabled,
-        updated_at: sql`datetime('now')`,
+        updated_at: platformNow(),
         updated_by: input.updatedBy,
       }),
     )

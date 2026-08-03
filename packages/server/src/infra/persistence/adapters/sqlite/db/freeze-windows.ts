@@ -9,10 +9,10 @@
  * holds the CRUD helpers and the registry-rehydrate routine.
  */
 
-import { sql } from "kysely"
 import { DEFAULT_TENANT_ID, installFreezeWindowRegistry, type FreezeWindowDefinition } from "@mia/sync"
 import { getPlatformDb } from "../../../schema/kysely.js"
 import { runAll, runChanges, runExec, runGet } from "../../../schema/execute.js"
+import { platformNow } from "../../../schema/sql-time.js"
 import { refreshesGlobalRegistryOnMutation } from "./tenant-inheritance.js"
 
 // ── Public type (matches shared-types `FreezeWindow`) ───────────
@@ -124,8 +124,8 @@ export function upsertFreezeWindow(args: UpsertFreezeWindowArgs): FreezeWindowRe
       starts_at: args.startsAt,
       ends_at: args.endsAt,
       created_by: args.actor,
-      created_at: sql`datetime('now')`,
-      updated_at: sql`datetime('now')`,
+      created_at: platformNow(),
+      updated_at: platformNow(),
     })
     .onConflict((oc) =>
       oc.columns(["tenant_id", "id"]).doUpdateSet({
@@ -133,7 +133,7 @@ export function upsertFreezeWindow(args: UpsertFreezeWindowArgs): FreezeWindowRe
         description: args.description,
         starts_at: args.startsAt,
         ends_at: args.endsAt,
-        updated_at: sql`datetime('now')`,
+        updated_at: platformNow(),
       }),
     )
     .compile()

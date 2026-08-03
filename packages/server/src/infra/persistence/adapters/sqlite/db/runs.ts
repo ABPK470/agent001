@@ -9,6 +9,7 @@ import { sql } from "kysely"
 import { getPlatformDb } from "../../../schema/kysely.js"
 import type { PlatformDatabase } from "../../../schema/tables.js"
 import { runAll, runChanges, runExec, runGet } from "../../../schema/execute.js"
+import { coalescePlatformNow, platformNow } from "../../../schema/sql-time.js"
 import { rememberRunOwner } from "../../../../../ports/run-owner-index.js"
 
 // ── Run queries ──────────────────────────────────────────────────
@@ -259,7 +260,7 @@ export function markRunCrashed(runId: string): void {
     .set({
       status: RunStatus.Crashed,
       error: "Server restarted \u2014 run interrupted",
-      completed_at: sql`datetime('now')`,
+      completed_at: platformNow(),
     })
     .where("id", "=", runId)
     .compile()
@@ -276,7 +277,7 @@ export function normaliseUnknownRunStatuses(): number {
     .set({
       status: RunStatus.Failed,
       error: sql`coalesce(error, 'Unknown legacy status \u2014 normalised on boot')`,
-      completed_at: sql`coalesce(completed_at, datetime('now'))`,
+      completed_at: coalescePlatformNow("completed_at"),
     })
     .where("status", "not in", [...RUN_STATUSES])
     .compile()
@@ -300,7 +301,7 @@ export function markRunCancelled(runId: string): void {
     .updateTable("runs")
     .set({
       status: RunStatus.Cancelled,
-      completed_at: sql`coalesce(completed_at, datetime('now'))`,
+      completed_at: coalescePlatformNow("completed_at"),
     })
     .where("id", "=", runId)
     .where("status", "in", [...NON_TERMINAL_RUN_STATUSES])

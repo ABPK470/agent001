@@ -787,4 +787,228 @@ END;
       },
     },
   },
+  {
+    version: 6,
+    name: "mssql_pilot_proposals_channels_effects",
+    up: {
+      mssql: async (executor) => {
+        await mssqlExec(
+          executor,
+          `
+IF OBJECT_ID(N'dbo.proposer_runs', N'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.proposer_runs (
+    id            NVARCHAR(64)   NOT NULL CONSTRAINT PK_proposer_runs PRIMARY KEY,
+    tenant_id     NVARCHAR(128)  NOT NULL,
+    source        NVARCHAR(256)  NOT NULL,
+    target        NVARCHAR(256)  NOT NULL,
+    started_at    DATETIME2      NOT NULL,
+    finished_at   DATETIME2      NULL,
+    status        NVARCHAR(64)   NOT NULL,
+    scanned       INT            NOT NULL CONSTRAINT DF_proposer_runs_scanned DEFAULT (0),
+    produced      INT            NOT NULL CONSTRAINT DF_proposer_runs_produced DEFAULT (0),
+    errors        INT            NOT NULL CONSTRAINT DF_proposer_runs_errors DEFAULT (0),
+    duration_ms   INT            NULL,
+    triggered_by  NVARCHAR(320)  NOT NULL,
+    trigger       NVARCHAR(32)   NOT NULL,
+    error         NVARCHAR(MAX)  NULL
+  );
+  CREATE INDEX IX_proposer_runs_pair
+    ON dbo.proposer_runs(tenant_id, source, target, started_at DESC);
+END;
+
+IF OBJECT_ID(N'dbo.sync_proposals', N'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.sync_proposals (
+    id                     NVARCHAR(64)   NOT NULL CONSTRAINT PK_sync_proposals PRIMARY KEY,
+    tenant_id              NVARCHAR(128)  NOT NULL,
+    run_id                 NVARCHAR(64)   NOT NULL
+      CONSTRAINT FK_sync_proposals_proposer_runs REFERENCES dbo.proposer_runs(id) ON DELETE CASCADE,
+    fingerprint            NVARCHAR(256)  NOT NULL,
+    source                 NVARCHAR(256)  NOT NULL,
+    target                 NVARCHAR(256)  NOT NULL,
+    entity_type            NVARCHAR(256)  NOT NULL,
+    entity_id              NVARCHAR(256)  NOT NULL,
+    entity_label           NVARCHAR(512)  NOT NULL,
+    kind                   NVARCHAR(64)   NOT NULL,
+    counts_json            NVARCHAR(MAX)  NOT NULL,
+    detail_json            NVARCHAR(MAX)  NOT NULL,
+    entity_def_version     INT            NULL,
+    observed_at            DATETIME2      NOT NULL,
+    enqueued_at            DATETIME2      NOT NULL CONSTRAINT DF_sync_proposals_enqueued DEFAULT (SYSUTCDATETIME()),
+    status                 NVARCHAR(64)   NOT NULL,
+    annotation_json        NVARCHAR(MAX)  NULL,
+    annotation_failed_open INT            NOT NULL CONSTRAINT DF_sync_proposals_ann_fo DEFAULT (0),
+    risk_tier              NVARCHAR(32)   NULL,
+    risk_score             FLOAT          NULL,
+    rank_score             FLOAT          NULL,
+    plan_id                NVARCHAR(128)  NULL,
+    snooze_until           DATETIME2      NULL,
+    superseded_by          NVARCHAR(64)   NULL,
+    last_actor             NVARCHAR(320)  NULL,
+    last_action            NVARCHAR(128)  NULL,
+    last_action_at         DATETIME2      NULL
+  );
+  CREATE INDEX IX_sync_proposals_status ON dbo.sync_proposals(tenant_id, status, risk_tier);
+END;
+
+IF OBJECT_ID(N'dbo.sync_proposal_history', N'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.sync_proposal_history (
+    id             INT            NOT NULL IDENTITY(1,1) CONSTRAINT PK_sync_proposal_history PRIMARY KEY,
+    proposal_id    NVARCHAR(64)   NOT NULL
+      CONSTRAINT FK_sync_proposal_history_proposals REFERENCES dbo.sync_proposals(id) ON DELETE CASCADE,
+    from_status    NVARCHAR(64)   NULL,
+    to_status      NVARCHAR(64)   NOT NULL,
+    actor          NVARCHAR(320)  NOT NULL,
+    reason         NVARCHAR(MAX)  NOT NULL CONSTRAINT DF_sync_proposal_history_reason DEFAULT (N''),
+    detail_json    NVARCHAR(MAX)  NOT NULL CONSTRAINT DF_sync_proposal_history_detail DEFAULT (N'{}'),
+    at             DATETIME2      NOT NULL CONSTRAINT DF_sync_proposal_history_at DEFAULT (SYSUTCDATETIME())
+  );
+  CREATE INDEX IX_sync_proposal_history_pid ON dbo.sync_proposal_history(proposal_id, at DESC);
+END;
+
+IF OBJECT_ID(N'dbo.sync_approvals', N'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.sync_approvals (
+    id                   NVARCHAR(64)   NOT NULL CONSTRAINT PK_sync_approvals PRIMARY KEY,
+    proposal_id          NVARCHAR(64)   NOT NULL
+      CONSTRAINT FK_sync_approvals_proposals REFERENCES dbo.sync_proposals(id) ON DELETE CASCADE,
+    tenant_id            NVARCHAR(128)  NOT NULL,
+    requested_by         NVARCHAR(320)  NOT NULL,
+    requested_at         DATETIME2      NOT NULL CONSTRAINT DF_sync_approvals_requested DEFAULT (SYSUTCDATETIME()),
+    expires_at           DATETIME2      NOT NULL,
+    policy               NVARCHAR(32)   NOT NULL,
+    state                NVARCHAR(64)   NOT NULL,
+    granted_by_1         NVARCHAR(320)  NULL,
+    granted_at_1         DATETIME2      NULL,
+    granted_by_2         NVARCHAR(320)  NULL,
+    granted_at_2         DATETIME2      NULL,
+    rejected_by          NVARCHAR(320)  NULL,
+    rejected_at          DATETIME2      NULL,
+    reject_reason        NVARCHAR(MAX)  NULL,
+    bypass_by            NVARCHAR(320)  NULL,
+    bypass_reason        NVARCHAR(MAX)  NULL,
+    plan_id_at_request   NVARCHAR(128)  NULL,
+    plan_hash_at_request NVARCHAR(128)  NULL
+  );
+  CREATE INDEX IX_sync_approvals_state ON dbo.sync_approvals(tenant_id, state, expires_at);
+END;
+
+IF OBJECT_ID(N'dbo.sync_approval_tokens', N'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.sync_approval_tokens (
+    token_hash    NVARCHAR(128)  NOT NULL CONSTRAINT PK_sync_approval_tokens PRIMARY KEY,
+    approval_id   NVARCHAR(64)   NOT NULL
+      CONSTRAINT FK_sync_approval_tokens_approvals REFERENCES dbo.sync_approvals(id) ON DELETE CASCADE,
+    action        NVARCHAR(32)   NOT NULL,
+    issued_to     NVARCHAR(320)  NOT NULL,
+    issued_at     DATETIME2      NOT NULL CONSTRAINT DF_sync_approval_tokens_issued DEFAULT (SYSUTCDATETIME()),
+    expires_at    DATETIME2      NOT NULL,
+    used_at       DATETIME2      NULL,
+    used_by       NVARCHAR(320)  NULL
+  );
+  CREATE INDEX IX_sync_approval_tokens_app ON dbo.sync_approval_tokens(approval_id);
+END;
+
+IF OBJECT_ID(N'dbo.conversations', N'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.conversations (
+    id            NVARCHAR(64)   NOT NULL CONSTRAINT PK_conversations PRIMARY KEY,
+    channel_type  NVARCHAR(32)   NOT NULL,
+    sender_id     NVARCHAR(256)  NOT NULL,
+    sender_name   NVARCHAR(512)  NULL,
+    active_run_id NVARCHAR(64)   NULL,
+    thread_id     NVARCHAR(64)   NULL,
+    created_at    DATETIME2      NOT NULL,
+    updated_at    DATETIME2      NOT NULL,
+    CONSTRAINT UQ_conversations_channel_sender UNIQUE (channel_type, sender_id)
+  );
+END;
+
+IF OBJECT_ID(N'dbo.outbound_messages', N'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.outbound_messages (
+    id              NVARCHAR(64)   NOT NULL CONSTRAINT PK_outbound_messages PRIMARY KEY,
+    conversation_id NVARCHAR(64)   NOT NULL
+      CONSTRAINT FK_outbound_messages_conversations REFERENCES dbo.conversations(id) ON DELETE CASCADE,
+    channel_type    NVARCHAR(32)   NOT NULL,
+    recipient_id    NVARCHAR(256)  NOT NULL,
+    text            NVARCHAR(MAX)  NOT NULL,
+    status          NVARCHAR(32)   NOT NULL CONSTRAINT DF_outbound_messages_status DEFAULT (N'queued'),
+    attempts        INT            NOT NULL CONSTRAINT DF_outbound_messages_attempts DEFAULT (0),
+    next_retry_at   DATETIME2      NULL,
+    last_error      NVARCHAR(MAX)  NULL,
+    created_at      DATETIME2      NOT NULL,
+    delivered_at    DATETIME2      NULL
+  );
+  CREATE INDEX IX_outbound_messages_status ON dbo.outbound_messages(status);
+END;
+
+IF OBJECT_ID(N'dbo.delivery_attempts', N'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.delivery_attempts (
+    id             INT            NOT NULL IDENTITY(1,1) CONSTRAINT PK_delivery_attempts PRIMARY KEY,
+    message_id     NVARCHAR(64)   NOT NULL
+      CONSTRAINT FK_delivery_attempts_messages REFERENCES dbo.outbound_messages(id) ON DELETE CASCADE,
+    attempt_number INT            NOT NULL,
+    status         NVARCHAR(32)   NOT NULL,
+    error          NVARCHAR(MAX)  NULL,
+    duration_ms    INT            NOT NULL,
+    created_at     DATETIME2      NOT NULL
+  );
+END;
+
+IF OBJECT_ID(N'dbo.channel_configs', N'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.channel_configs (
+    type          NVARCHAR(32)   NOT NULL CONSTRAINT PK_channel_configs PRIMARY KEY,
+    access_token  NVARCHAR(MAX)  NOT NULL,
+    verify_token  NVARCHAR(MAX)  NOT NULL,
+    app_secret    NVARCHAR(MAX)  NOT NULL,
+    platform_id   NVARCHAR(256)  NOT NULL,
+    created_at    DATETIME2      NOT NULL,
+    updated_at    DATETIME2      NOT NULL
+  );
+END;
+
+IF OBJECT_ID(N'dbo.effects', N'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.effects (
+    id          NVARCHAR(64)   NOT NULL CONSTRAINT PK_effects PRIMARY KEY,
+    run_id      NVARCHAR(64)   NOT NULL
+      CONSTRAINT FK_effects_runs REFERENCES dbo.runs(id) ON DELETE CASCADE,
+    seq         INT            NOT NULL CONSTRAINT DF_effects_seq DEFAULT (0),
+    kind        NVARCHAR(32)   NOT NULL,
+    tool        NVARCHAR(256)  NOT NULL,
+    target      NVARCHAR(1024) NOT NULL,
+    pre_hash    NVARCHAR(128)  NULL,
+    post_hash   NVARCHAR(128)  NULL,
+    status      NVARCHAR(32)   NOT NULL CONSTRAINT DF_effects_status DEFAULT (N'applied'),
+    metadata    NVARCHAR(MAX)  NOT NULL CONSTRAINT DF_effects_metadata DEFAULT (N'{}'),
+    created_at  DATETIME2      NOT NULL
+  );
+  CREATE INDEX IX_effects_run ON dbo.effects(run_id, seq);
+END;
+
+IF OBJECT_ID(N'dbo.file_snapshots', N'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.file_snapshots (
+    id          NVARCHAR(64)   NOT NULL CONSTRAINT PK_file_snapshots PRIMARY KEY,
+    effect_id   NVARCHAR(64)   NOT NULL
+      CONSTRAINT FK_file_snapshots_effects REFERENCES dbo.effects(id) ON DELETE CASCADE,
+    run_id      NVARCHAR(64)   NOT NULL,
+    file_path   NVARCHAR(1024) NOT NULL,
+    content     NVARCHAR(MAX)  NULL,
+    hash        NVARCHAR(128)  NULL,
+    file_mode   INT            NULL,
+    created_at  DATETIME2      NOT NULL
+  );
+  CREATE INDEX IX_file_snapshots_run ON dbo.file_snapshots(run_id);
+END;
+`,
+        )
+      },
+    },
+  },
 ]

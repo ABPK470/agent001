@@ -7,9 +7,9 @@
  *   - sqlLogId is the only runtime link between event_log and sync_sql_log.
  */
 
-import { sql } from "kysely"
 import { getPlatformDb } from "../../../schema/kysely.js"
 import { runAll, runGet, runInsertId } from "../../../schema/execute.js"
+import { platformNow } from "../../../schema/sql-time.js"
 
 export interface SyncSqlLogRow {
   id: number
@@ -54,7 +54,7 @@ export function recordSyncSqlLog(input: RecordSyncSqlLogInput): number {
       duration_ms: input.durationMs ?? null,
       row_count: input.rowCount ?? null,
       error: input.error ?? null,
-      created_at: input.createdAt != null ? input.createdAt : sql`datetime('now')`,
+      created_at: input.createdAt != null ? input.createdAt : platformNow(),
     })
     .compile()
   return runInsertId(compiled)

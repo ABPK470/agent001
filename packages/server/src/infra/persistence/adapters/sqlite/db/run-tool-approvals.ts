@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto"
-import { sql } from "kysely"
 import { getPlatformDb } from "../../../schema/kysely.js"
 import { runAll, runExec, runGet } from "../../../schema/execute.js"
+import { platformNow } from "../../../schema/sql-time.js"
 
 export type RunToolApprovalStatus = "pending" | "approved" | "denied" | "consumed"
 
@@ -140,7 +140,7 @@ export function markRunToolApprovalApproved(id: string, actor: string): RunToolA
     .updateTable("run_tool_approvals")
     .set({
       status: "approved",
-      resolved_at: sql`datetime('now')`,
+      resolved_at: platformNow(),
       resolved_by: actor,
     })
     .where("id", "=", id)
@@ -158,7 +158,7 @@ export function markRunToolApprovalDenied(
     .updateTable("run_tool_approvals")
     .set({
       status: "denied",
-      resolved_at: sql`datetime('now')`,
+      resolved_at: platformNow(),
       resolved_by: actor,
     })
     .where("id", "=", id)

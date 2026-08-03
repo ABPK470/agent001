@@ -29,6 +29,7 @@ import { sql } from "kysely"
 import { getPlatformStore } from "../platform-store.js"
 import { getPlatformDb } from "../../../schema/kysely.js"
 import { runAll, runExec, runGet } from "../../../schema/execute.js"
+import { platformNow } from "../../../schema/sql-time.js"
 
 // ── proposer_runs ────────────────────────────────────────────────
 
@@ -49,7 +50,7 @@ export function createProposerRun(input: CreateProposerRunInput): string {
       tenant_id: input.tenantId,
       source: input.source,
       target: input.target,
-      started_at: sql`datetime('now')`,
+      started_at: platformNow(),
       status: "pending",
       scanned: 0,
       produced: 0,
@@ -85,7 +86,7 @@ export function finishProposerRun(i: FinishProposerRunInput): void {
     .updateTable("proposer_runs")
     .set({
       status: i.status,
-      finished_at: sql`datetime('now')`,
+      finished_at: platformNow(),
       scanned: i.counts.scanned,
       produced: i.counts.produced,
       errors: i.counts.errors,
@@ -218,11 +219,11 @@ export function ingestFindings(
           detail_json: JSON.stringify(f.detail),
           entity_def_version: f.entityDefVersion,
           observed_at: f.observedAt,
-          enqueued_at: sql`datetime('now')`,
+          enqueued_at: platformNow(),
           status: "open",
           annotation_failed_open: 0,
           last_action: "ingested",
-          last_action_at: sql`datetime('now')`,
+          last_action_at: platformNow(),
         })
         .compile()
       runExec(ins)
@@ -236,7 +237,7 @@ export function ingestFindings(
           actor: "proposer",
           reason: "",
           detail_json: JSON.stringify({ runId, fingerprint: f.fingerprint }),
-          at: sql`datetime('now')`,
+          at: platformNow(),
         })
         .compile()
       runExec(hist)
@@ -363,7 +364,7 @@ export function updateProposalStatus(i: UpdateProposalStatusInput): ProposalRow 
         superseded_by: i.supersededBy ?? row.superseded_by,
         last_actor: i.actor,
         last_action: i.to,
-        last_action_at: sql`datetime('now')`,
+        last_action_at: platformNow(),
       })
       .where("id", "=", i.id)
       .compile()
@@ -378,7 +379,7 @@ export function updateProposalStatus(i: UpdateProposalStatusInput): ProposalRow 
         actor: i.actor,
         reason: i.reason ?? "",
         detail_json: JSON.stringify(i.detail ?? {}),
-        at: sql`datetime('now')`,
+        at: platformNow(),
       })
       .compile()
     runExec(hist)

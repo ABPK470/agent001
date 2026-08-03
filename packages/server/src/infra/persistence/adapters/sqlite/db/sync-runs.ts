@@ -12,6 +12,7 @@ import { sql } from "kysely"
 import { requireSyncRunActorUpn } from "../../../sync-plan-actor.js"
 import { rememberPlanOwner } from "../../../../../ports/run-owner-index.js"
 import { runAll, runExec, runGet } from "../../../schema/execute.js"
+import { platformNow } from "../../../schema/sql-time.js"
 import { getPlatformDb } from "../../../schema/kysely.js"
 import type { PlatformDatabase } from "../../../schema/tables.js"
 
@@ -86,7 +87,7 @@ export function recordSyncRunStart(i: RecordSyncRunStartInput): void {
       preview_deletes: c.delete ?? 0,
       preview_totals_json: JSON.stringify(i.previewTotals),
       status: SyncRunStatus.Started,
-      started_at: sql`datetime('now')`,
+      started_at: platformNow(),
     })
     .onConflict((oc) =>
       oc.column("plan_id").doUpdateSet({
@@ -101,7 +102,7 @@ export function recordSyncRunStart(i: RecordSyncRunStartInput): void {
         preview_deletes: c.delete ?? 0,
         preview_totals_json: JSON.stringify(i.previewTotals),
         status: SyncRunStatus.Started,
-        started_at: sql`datetime('now')`,
+        started_at: platformNow(),
         finished_at: null,
         duration_ms: null,
         error: null,
@@ -151,7 +152,7 @@ export function recordSyncRunFinish(i: RecordSyncRunFinishInput): void {
         executed_inserts: c?.insert ?? 0,
         executed_updates: c?.update ?? 0,
         executed_deletes: c?.delete ?? 0,
-        finished_at: sql`datetime('now')`,
+        finished_at: platformNow(),
         duration_ms: i.durationMs,
       })
       .where("plan_id", "=", i.planId)
@@ -165,7 +166,7 @@ export function recordSyncRunFinish(i: RecordSyncRunFinishInput): void {
     .set({
       status: i.status,
       error: i.error ?? null,
-      finished_at: sql`datetime('now')`,
+      finished_at: platformNow(),
       duration_ms: i.durationMs,
     })
     .where("plan_id", "=", i.planId)
@@ -347,7 +348,7 @@ export function recordSyncRunPreview(i: {
       preview_totals_json: JSON.stringify(i.previewTotals),
       plan_json: i.planJson,
       status: SyncRunStatus.Preview,
-      started_at: sql`datetime('now')`,
+      started_at: platformNow(),
     })
     .onConflict((oc) =>
       oc.column("plan_id").doUpdateSet({

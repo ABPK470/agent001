@@ -21,6 +21,7 @@ import { sql, type UpdateObject } from "kysely"
 import type { PlatformDatabase } from "../../../schema/tables.js"
 import { getPlatformDb } from "../../../schema/kysely.js"
 import { runAll, runChanges, runExec, runGet } from "../../../schema/execute.js"
+import { platformNow } from "../../../schema/sql-time.js"
 
 // ── policies ────────────────────────────────────────────────────
 
@@ -62,7 +63,7 @@ export function upsertApprovalPolicy(p: ApprovalPolicy, actor: string): void {
       policy: p.policy,
       approvers_json: approversJson,
       bypass_role: p.bypassRole,
-      updated_at: sql`datetime('now')`,
+      updated_at: platformNow(),
       updated_by: actor,
     })
     .onConflict((oc) =>
@@ -70,7 +71,7 @@ export function upsertApprovalPolicy(p: ApprovalPolicy, actor: string): void {
         policy: p.policy,
         approvers_json: approversJson,
         bypass_role: p.bypassRole,
-        updated_at: sql`datetime('now')`,
+        updated_at: platformNow(),
         updated_by: actor,
       }),
     )
@@ -199,7 +200,7 @@ export function createApproval(i: CreateApprovalInput): ApprovalRow {
       proposal_id: i.proposalId,
       tenant_id: i.tenantId,
       requested_by: i.requestedBy,
-      requested_at: sql`datetime('now')`,
+      requested_at: platformNow(),
       expires_at: expiresAt,
       policy: i.policy,
       state: "pending",
@@ -305,20 +306,20 @@ export function grantApproval(i: GrantApprovalInput): ApprovalRow {
     updateApprovalById(i.approvalId, {
       state: "granted",
       granted_by_1: i.approver,
-      granted_at_1: sql`datetime('now')`,
+      granted_at_1: platformNow(),
     })
   } else if (row.policy === "dual") {
     if (!row.granted_by_1) {
       updateApprovalById(i.approvalId, {
         state: "partially_granted",
         granted_by_1: i.approver,
-        granted_at_1: sql`datetime('now')`,
+        granted_at_1: platformNow(),
       })
     } else {
       updateApprovalById(i.approvalId, {
         state: "granted",
         granted_by_2: i.approver,
-        granted_at_2: sql`datetime('now')`,
+        granted_at_2: platformNow(),
       })
     }
   } else {
@@ -337,7 +338,7 @@ export function rejectApproval(approvalId: string, rejector: string, reason: str
   updateApprovalById(approvalId, {
     state: "rejected",
     rejected_by: rejector,
-    rejected_at: sql`datetime('now')`,
+    rejected_at: platformNow(),
     reject_reason: reason,
   })
   return getApproval(approvalId)!
@@ -398,7 +399,7 @@ export function issueApprovalToken(i: IssueTokenInput): IssuedToken {
       approval_id: i.approvalId,
       action: i.action,
       issued_to: i.issuedTo,
-      issued_at: sql`datetime('now')`,
+      issued_at: platformNow(),
       expires_at: expiresAt,
     })
     .compile()
@@ -439,7 +440,7 @@ export function consumeApprovalToken(i: ConsumeTokenInput): ConsumedToken {
   }
   const markUsed = getPlatformDb()
     .updateTable("sync_approval_tokens")
-    .set({ used_at: sql`datetime('now')`, used_by: i.by })
+    .set({ used_at: platformNow(), used_by: i.by })
     .where("token_hash", "=", tokenHash)
     .compile()
   runExec(markUsed)

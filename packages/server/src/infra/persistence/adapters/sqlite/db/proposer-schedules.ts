@@ -1,6 +1,6 @@
-import { sql } from "kysely"
 import { getPlatformDb } from "../../../schema/kysely.js"
 import { runAll, runExec, runGet } from "../../../schema/execute.js"
+import { platformNow } from "../../../schema/sql-time.js"
 
 export interface ProposerScheduleRow {
   tenant_id: string
@@ -56,7 +56,7 @@ export function upsertProposerSchedule(input: {
       cron: input.cron,
       enabled: input.enabled,
       next_run_at: input.nextRunAt,
-      updated_at: sql`datetime('now')`,
+      updated_at: platformNow(),
       updated_by: input.updatedBy,
     })
     .onConflict((oc) =>
@@ -64,7 +64,7 @@ export function upsertProposerSchedule(input: {
         cron: input.cron,
         enabled: input.enabled,
         next_run_at: input.nextRunAt,
-        updated_at: sql`datetime('now')`,
+        updated_at: platformNow(),
         updated_by: input.updatedBy,
       }),
     )

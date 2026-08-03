@@ -6,9 +6,9 @@
  * a single DELETE FROM sync_runs and audit rows go with it.
  */
 
-import { sql } from "kysely"
 import { getPlatformDb } from "../../../schema/kysely.js"
 import { runAll, runExec } from "../../../schema/execute.js"
+import { platformNow } from "../../../schema/sql-time.js"
 
 export interface SyncAuditRow {
   id: number
@@ -37,7 +37,7 @@ export function recordSyncAudit(i: RecordSyncAuditInput): void {
       actor_upn: i.actorUpn,
       action: i.action,
       detail: JSON.stringify(i.detail),
-      timestamp: sql`datetime('now')`,
+      timestamp: platformNow(),
     })
     .compile()
   runExec(compiled)
