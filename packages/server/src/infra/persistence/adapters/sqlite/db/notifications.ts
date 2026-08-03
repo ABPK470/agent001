@@ -2,7 +2,9 @@
  * Notification persistence.
  */
 
-import { getDb } from "../connection.js"
+import { sql } from "kysely"
+import { getPlatformDb } from "../../../schema/kysely.js"
+import { runAll, runExec, runGet } from "../../../schema/execute.js"
 
 export interface DbNotification {
   id: string
@@ -19,62 +21,91 @@ export interface DbNotification {
 }
 
 export function saveNotification(n: DbNotification): void {
-  getDb()
-    .prepare(
-      `
-    INSERT OR REPLACE INTO notifications (id, type, title, message, run_id, step_id, owner_upn, actions, read, created_at)
-    VALUES (@id, @type, @title, @message, @run_id, @step_id, @owner_upn, @actions, @read, @created_at)
-  `
-    )
-    .run(n)
+  const compiled = getPlatformDb()
+    .insertInto("notifications")
+    .orReplace()
+    .values({
+      id: n.id,
+      type: n.type,
+      title: n.title,
+      message: n.message,
+      run_id: n.run_id,
+      step_id: n.step_id,
+      owner_upn: n.owner_upn,
+      actions: n.actions,
+      read: n.read,
+      created_at: n.created_at,
+    })
+    .compile()
+  runExec(compiled)
 }
 
 export function getNotification(id: string): DbNotification | undefined {
-  return getDb().prepare("SELECT * FROM notifications WHERE id = ?").get(id) as DbNotification | undefined
+  const compiled = getPlatformDb()
+    .selectFrom("notifications")
+    .selectAll()
+    .where("id", "=", id)
+    .compile()
+  return runGet<DbNotification>(compiled)
 }
 
 export function listNotifications(limit = 50): DbNotification[] {
-  return getDb()
-    .prepare("SELECT * FROM notifications ORDER BY created_at DESC LIMIT ?")
-    .all(limit) as DbNotification[]
+  const compiled = getPlatformDb()
+    .selectFrom("notifications")
+    .selectAll()
+    .orderBy("created_at", "desc")
+    .limit(limit)
+    .compile()
+  return runAll<DbNotification>(compiled)
 }
 
 /** Notifications visible to a logged-in user (upn-scoped + system-wide). */
 export function listNotificationsForUser(upn: string, limit = 50): DbNotification[] {
-  return getDb()
-    .prepare(
-      `
-      SELECT * FROM notifications
-      WHERE owner_upn IS NULL OR owner_upn = @upn
-      ORDER BY created_at DESC LIMIT @limit
-    `
-    )
-    .all({ upn, limit }) as DbNotification[]
+  const compiled = getPlatformDb()
+    .selectFrom("notifications")
+    .selectAll()
+    .where((eb) => eb.or([eb("owner_upn", "is", null), eb("owner_upn", "=", upn)]))
+    .orderBy("created_at", "desc")
+    .limit(limit)
+    .compile()
+  return runAll<DbNotification>(compiled)
 }
 
 export function markNotificationRead(id: string): void {
-  getDb().prepare("UPDATE notifications SET read = 1 WHERE id = ?").run(id)
+  const compiled = getPlatformDb()
+    .updateTable("notifications")
+    .set({ read: 1 })
+    .where("id", "=", id)
+    .compile()
+  runExec(compiled)
 }
 
 export function markAllNotificationsRead(): void {
-  getDb().prepare("UPDATE notifications SET read = 1 WHERE read = 0").run()
+  const compiled = getPlatformDb()
+    .updateTable("notifications")
+    .set({ read: 1 })
+    .where("read", "=", 0)
+    .compile()
+  runExec(compiled)
 }
 
 export function getUnreadNotificationCount(): number {
-  const row = getDb().prepare("SELECT COUNT(*) as count FROM notifications WHERE read = 0").get() as {
-    count: number
-  }
-  return row.count
+  const compiled = getPlatformDb()
+    .selectFrom("notifications")
+    .select(sql<number>`count(*)`.as("count"))
+    .where("read", "=", 0)
+    .compile()
+  const row = runGet<{ count: number | bigint }>(compiled)
+  return Number(row?.count ?? 0)
 }
 
 export function getUnreadNotificationCountForUser(upn: string): number {
-  const row = getDb()
-    .prepare(
-      `
-      SELECT COUNT(*) as count FROM notifications
-      WHERE read = 0 AND (owner_upn IS NULL OR owner_upn = @upn)
-    `
-    )
-    .get({ upn }) as { count: number }
-  return row.count
+  const compiled = getPlatformDb()
+    .selectFrom("notifications")
+    .select(sql<number>`count(*)`.as("count"))
+    .where("read", "=", 0)
+    .where((eb) => eb.or([eb("owner_upn", "is", null), eb("owner_upn", "=", upn)]))
+    .compile()
+  const row = runGet<{ count: number | bigint }>(compiled)
+  return Number(row?.count ?? 0)
 }

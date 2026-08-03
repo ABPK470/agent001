@@ -17,7 +17,10 @@
 
 import { hmacSha256Hex, RiskTier, sha256Hex } from "@mia/sync"
 import { randomBytes, randomUUID } from "node:crypto"
+import { sql } from "kysely"
 import { getDb } from "../connection.js"
+import { getPlatformDb } from "../../../schema/kysely.js"
+import { runAll, runChanges, runExec, runGet } from "../../../schema/execute.js"
 
 // ── policies ────────────────────────────────────────────────────
 
@@ -49,31 +52,41 @@ export interface ApprovalPolicy {
 }
 
 export function upsertApprovalPolicy(p: ApprovalPolicy, actor: string): void {
-  getDb()
-    .prepare(
-      `
-    INSERT INTO approval_configs (tenant_id, target_env, risk_tier, policy, approvers_json, bypass_role, updated_at, updated_by)
-    VALUES (?, ?, ?, ?, ?, ?, datetime('now'), ?)
-    ON CONFLICT(tenant_id, target_env, risk_tier) DO UPDATE SET
-      policy         = excluded.policy,
-      approvers_json = excluded.approvers_json,
-      bypass_role    = excluded.bypass_role,
-      updated_at     = excluded.updated_at,
-      updated_by     = excluded.updated_by
-  `
+  const approversJson = JSON.stringify(p.approvers)
+  const compiled = getPlatformDb()
+    .insertInto("approval_configs")
+    .values({
+      tenant_id: p.tenantId,
+      target_env: p.targetEnv,
+      risk_tier: p.riskTier,
+      policy: p.policy,
+      approvers_json: approversJson,
+      bypass_role: p.bypassRole,
+      updated_at: sql`datetime('now')`,
+      updated_by: actor,
+    })
+    .onConflict((oc) =>
+      oc.columns(["tenant_id", "target_env", "risk_tier"]).doUpdateSet({
+        policy: p.policy,
+        approvers_json: approversJson,
+        bypass_role: p.bypassRole,
+        updated_at: sql`datetime('now')`,
+        updated_by: actor,
+      }),
     )
-    .run(p.tenantId, p.targetEnv, p.riskTier, p.policy, JSON.stringify(p.approvers), p.bypassRole, actor)
+    .compile()
+  runExec(compiled)
 }
 
 export function getApprovalPolicy(tenantId: string, targetEnv: string, tier: RiskTier): ApprovalPolicy {
-  const row = getDb()
-    .prepare(
-      `
-    SELECT * FROM approval_configs
-     WHERE tenant_id = ? AND target_env = ? AND risk_tier = ?
-  `
-    )
-    .get(tenantId, targetEnv, tier) as ApprovalPolicyRow | undefined
+  const compiled = getPlatformDb()
+    .selectFrom("approval_configs")
+    .selectAll()
+    .where("tenant_id", "=", tenantId)
+    .where("target_env", "=", targetEnv)
+    .where("risk_tier", "=", tier)
+    .compile()
+  const row = runGet<ApprovalPolicyRow>(compiled)
   if (row) {
     return {
       tenantId: row.tenant_id,
@@ -99,9 +112,14 @@ export function getApprovalPolicy(tenantId: string, targetEnv: string, tier: Ris
 }
 
 export function listApprovalPolicies(tenantId: string): ApprovalPolicy[] {
-  const rows = getDb()
-    .prepare(`SELECT * FROM approval_configs WHERE tenant_id = ? ORDER BY target_env, risk_tier`)
-    .all(tenantId) as ApprovalPolicyRow[]
+  const compiled = getPlatformDb()
+    .selectFrom("approval_configs")
+    .selectAll()
+    .where("tenant_id", "=", tenantId)
+    .orderBy("target_env")
+    .orderBy("risk_tier")
+    .compile()
+  const rows = runAll<ApprovalPolicyRow>(compiled)
   return rows.map((row) => ({
     tenantId: row.tenant_id,
     targetEnv: row.target_env,
@@ -117,12 +135,13 @@ export function deleteApprovalPolicy(
   targetEnv: string,
   riskTier: RiskTier
 ): boolean {
-  const r = getDb()
-    .prepare(
-      `DELETE FROM approval_configs WHERE tenant_id = ? AND target_env = ? AND risk_tier = ?`
-    )
-    .run(tenantId, targetEnv, riskTier)
-  return r.changes > 0
+  const compiled = getPlatformDb()
+    .deleteFrom("approval_configs")
+    .where("tenant_id", "=", tenantId)
+    .where("target_env", "=", targetEnv)
+    .where("risk_tier", "=", riskTier)
+    .compile()
+  return runChanges(compiled) > 0
 }
 
 // ── approvals ────────────────────────────────────────────────────

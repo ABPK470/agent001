@@ -2,7 +2,8 @@
  * API request logging persistence.
  */
 
-import { getDb } from "../connection.js"
+import { getPlatformDb } from "../../../schema/kysely.js"
+import { runAll, runExec } from "../../../schema/execute.js"
 
 export interface DbApiRequest {
   id?: number
@@ -16,18 +17,27 @@ export interface DbApiRequest {
 }
 
 export function saveApiRequest(entry: Omit<DbApiRequest, "id">): void {
-  getDb()
-    .prepare(
-      `
-    INSERT INTO api_request_log (method, url, status_code, duration_ms, request_body, response_summary, created_at)
-    VALUES (@method, @url, @status_code, @duration_ms, @request_body, @response_summary, @created_at)
-  `
-    )
-    .run(entry)
+  const compiled = getPlatformDb()
+    .insertInto("api_request_log")
+    .values({
+      method: entry.method,
+      url: entry.url,
+      status_code: entry.status_code,
+      duration_ms: entry.duration_ms,
+      request_body: entry.request_body,
+      response_summary: entry.response_summary,
+      created_at: entry.created_at,
+    })
+    .compile()
+  runExec(compiled)
 }
 
 export function listApiRequests(limit = 200): DbApiRequest[] {
-  return getDb()
-    .prepare("SELECT * FROM api_request_log ORDER BY created_at DESC LIMIT ?")
-    .all(limit) as DbApiRequest[]
+  const compiled = getPlatformDb()
+    .selectFrom("api_request_log")
+    .selectAll()
+    .orderBy("created_at", "desc")
+    .limit(limit)
+    .compile()
+  return runAll<DbApiRequest>(compiled)
 }

@@ -1,8 +1,9 @@
 /**
  * SQLite {@link MigrationRunner} — wraps the existing numbered migrations.
  *
- * Multi-dialect peers (mssql/postgres) will implement the same contract with
- * their own DDL bodies; this adapter keeps today’s better-sqlite3 path green.
+ * Milestone 4 will re-express steps as `MultiDialectMigrationStep` (see
+ * `@mia/sql-kit` `upForDialect`) so mssql/postgres supply peer DDL bodies.
+ * Today this adapter keeps the better-sqlite3 numbered path green.
  */
 
 import type { MigrationRunner } from "@mia/sql-kit"

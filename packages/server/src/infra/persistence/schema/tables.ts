@@ -72,6 +72,111 @@ export interface FreezeWindowConfigsTable {
   updated_at: string
 }
 
+/** `notifications` — in-app notification feed. */
+export interface NotificationsTable {
+  id: string
+  type: string
+  title: string
+  message: string
+  run_id: string | null
+  step_id: string | null
+  owner_upn: string
+  actions: string
+  read: number
+  created_at: string
+}
+
+/** `notification_route_configs` — outbound event → channel routes. */
+export interface NotificationRouteConfigsTable {
+  id: string
+  tenant_id: string
+  event_type: string
+  filter_json: string
+  channel: string
+  target: string
+  enabled: number
+  updated_at: string
+  updated_by: string
+}
+
+/** `notification_log` — delivery attempts for outbound routes. */
+export interface NotificationLogTable {
+  id: Generated<number>
+  route_id: string | null
+  event_type: string
+  channel: string
+  target: string
+  payload_json: string
+  status: string
+  attempts: number
+  last_error: string | null
+  created_at: string
+  sent_at: string | null
+}
+
+/** `api_request_log` — HTTP audit trail. */
+export interface ApiRequestLogTable {
+  id: Generated<number>
+  method: string
+  url: string
+  status_code: number
+  duration_ms: number
+  request_body: string | null
+  response_summary: string | null
+  created_at: string
+}
+
+/** `proposer_schedule_configs` — cron schedules per env pair. */
+export interface ProposerScheduleConfigsTable {
+  tenant_id: string
+  source: string
+  target: string
+  cron: string
+  enabled: number
+  last_run_at: string | null
+  next_run_at: string | null
+  updated_at: string
+  updated_by: string
+}
+
+/** `sync_value_sources` — custom sync value-source definitions. */
+export interface SyncValueSourcesTable {
+  tenant_id: string
+  id: string
+  label: string
+  built_in: number
+  definition_json: string
+}
+
+/** `sync_catalog_versions` — immutable catalog snapshots. */
+export interface SyncCatalogVersionsTable {
+  tenant_id: string
+  version: number
+  snapshot_json: string
+  reason: string
+  created_by: string
+  created_at: string
+}
+
+/** `sync_catalog_active` — pointer to the live catalog version per tenant. */
+export interface SyncCatalogActiveTable {
+  tenant_id: string
+  version: number
+  updated_at: string
+}
+
+/** `approval_configs` — risk-tier approval policy per tenant/env. */
+export interface ApprovalConfigsTable {
+  tenant_id: string
+  target_env: string
+  risk_tier: string
+  policy: string
+  approvers_json: string
+  bypass_role: string | null
+  updated_at: string
+  updated_by: string
+}
+
 /**
  * Full platform database shape. Unlisted tables stay on raw better-sqlite3
  * until their repo moves.
@@ -83,6 +188,15 @@ export interface PlatformDatabase {
   sessions: SessionsTable
   llm_config: LlmConfigTable
   freeze_window_configs: FreezeWindowConfigsTable
+  notifications: NotificationsTable
+  notification_route_configs: NotificationRouteConfigsTable
+  notification_log: NotificationLogTable
+  api_request_log: ApiRequestLogTable
+  proposer_schedule_configs: ProposerScheduleConfigsTable
+  sync_value_sources: SyncValueSourcesTable
+  sync_catalog_versions: SyncCatalogVersionsTable
+  sync_catalog_active: SyncCatalogActiveTable
+  approval_configs: ApprovalConfigsTable
 }
 
 /** Helper for optional Generated columns in later tables. */

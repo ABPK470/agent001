@@ -1,4 +1,7 @@
-import { getDb } from "../connection.js"
+import { sql } from "kysely"
+import { getPlatformStore } from "../platform-store.js"
+import { getPlatformDb } from "../../../schema/kysely.js"
+import { runAll, runExec, runGet } from "../../../schema/execute.js"
 
 const DEFAULT_TENANT = "_default"
 
@@ -21,9 +24,12 @@ export interface SyncCatalogVersionSummary {
 }
 
 export function getActiveSyncCatalogVersion(tenantId = DEFAULT_TENANT): number | null {
-  const row = getDb()
-    .prepare("SELECT version FROM sync_catalog_active WHERE tenant_id = ?")
-    .get(tenantId) as { version: number } | undefined
+  const compiled = getPlatformDb()
+    .selectFrom("sync_catalog_active")
+    .select("version")
+    .where("tenant_id", "=", tenantId)
+    .compile()
+  const row = runGet<{ version: number }>(compiled)
   return row?.version ?? null
 }
 
@@ -31,11 +37,13 @@ export function getSyncCatalogVersionRow(
   tenantId: string,
   version: number,
 ): DbSyncCatalogVersion | undefined {
-  return getDb()
-    .prepare(
-      "SELECT tenant_id, version, snapshot_json, reason, created_by, created_at FROM sync_catalog_versions WHERE tenant_id = ? AND version = ?",
-    )
-    .get(tenantId, version) as DbSyncCatalogVersion | undefined
+  const compiled = getPlatformDb()
+    .selectFrom("sync_catalog_versions")
+    .select(["tenant_id", "version", "snapshot_json", "reason", "created_by", "created_at"])
+    .where("tenant_id", "=", tenantId)
+    .where("version", "=", version)
+    .compile()
+  return runGet<DbSyncCatalogVersion>(compiled)
 }
 
 export function listSyncCatalogVersionSummaries(
@@ -43,17 +51,16 @@ export function listSyncCatalogVersionSummaries(
   limit = 50,
 ): SyncCatalogVersionSummary[] {
   const active = getActiveSyncCatalogVersion(tenantId)
-  const rows = getDb()
-    .prepare(
-      `SELECT tenant_id, version, reason, created_by, created_at
-       FROM sync_catalog_versions
-       WHERE tenant_id = ?
-       ORDER BY version DESC
-       LIMIT ?`,
-    )
-    .all(tenantId, limit) as Array<
+  const compiled = getPlatformDb()
+    .selectFrom("sync_catalog_versions")
+    .select(["tenant_id", "version", "reason", "created_by", "created_at"])
+    .where("tenant_id", "=", tenantId)
+    .orderBy("version", "desc")
+    .limit(limit)
+    .compile()
+  const rows = runAll<
     Pick<DbSyncCatalogVersion, "tenant_id" | "version" | "reason" | "created_by" | "created_at">
-  >
+  >(compiled)
 
   return rows.map((row) => ({
     tenantId: row.tenant_id,
@@ -74,34 +81,54 @@ export function appendSyncCatalogVersion(args: {
   const tenantId = args.tenantId ?? DEFAULT_TENANT
   const createdAt = new Date().toISOString()
 
-  return getDb().transaction(() => {
-    const maxRow = getDb()
-      .prepare("SELECT COALESCE(MAX(version), 0) AS max_version FROM sync_catalog_versions WHERE tenant_id = ?")
-      .get(tenantId) as { max_version: number }
-    const nextVersion = maxRow.max_version + 1
+  return getPlatformStore().transaction(() => {
+    const maxCompiled = getPlatformDb()
+      .selectFrom("sync_catalog_versions")
+      .select(sql<number>`coalesce(max(version), 0)`.as("max_version"))
+      .where("tenant_id", "=", tenantId)
+      .compile()
+    const maxRow = runGet<{ max_version: number | bigint }>(maxCompiled)
+    const nextVersion = Number(maxRow?.max_version ?? 0) + 1
 
-    getDb()
-      .prepare(
-        `INSERT INTO sync_catalog_versions (tenant_id, version, snapshot_json, reason, created_by, created_at)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-      )
-      .run(tenantId, nextVersion, args.snapshotJson, args.reason, args.actor, createdAt)
+    const insertVersion = getPlatformDb()
+      .insertInto("sync_catalog_versions")
+      .values({
+        tenant_id: tenantId,
+        version: nextVersion,
+        snapshot_json: args.snapshotJson,
+        reason: args.reason,
+        created_by: args.actor,
+        created_at: createdAt,
+      })
+      .compile()
+    runExec(insertVersion)
 
-    getDb()
-      .prepare(
-        `INSERT INTO sync_catalog_active (tenant_id, version, updated_at)
-         VALUES (?, ?, ?)
-         ON CONFLICT(tenant_id) DO UPDATE SET version = excluded.version, updated_at = excluded.updated_at`,
+    const upsertActive = getPlatformDb()
+      .insertInto("sync_catalog_active")
+      .values({
+        tenant_id: tenantId,
+        version: nextVersion,
+        updated_at: createdAt,
+      })
+      .onConflict((oc) =>
+        oc.column("tenant_id").doUpdateSet({
+          version: nextVersion,
+          updated_at: createdAt,
+        }),
       )
-      .run(tenantId, nextVersion, createdAt)
+      .compile()
+    runExec(upsertActive)
 
     return nextVersion
-  })()
+  })
 }
 
 export function countSyncCatalogVersions(tenantId = DEFAULT_TENANT): number {
-  const row = getDb()
-    .prepare("SELECT COUNT(*) AS count FROM sync_catalog_versions WHERE tenant_id = ?")
-    .get(tenantId) as { count: number }
-  return row.count
+  const compiled = getPlatformDb()
+    .selectFrom("sync_catalog_versions")
+    .select(sql<number>`count(*)`.as("count"))
+    .where("tenant_id", "=", tenantId)
+    .compile()
+  const row = runGet<{ count: number | bigint }>(compiled)
+  return Number(row?.count ?? 0)
 }

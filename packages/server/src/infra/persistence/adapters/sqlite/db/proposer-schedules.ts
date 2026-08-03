@@ -1,4 +1,6 @@
-import { getDb } from "../connection.js"
+import { sql } from "kysely"
+import { getPlatformDb } from "../../../schema/kysely.js"
+import { runAll, runExec, runGet } from "../../../schema/execute.js"
 
 export interface ProposerScheduleRow {
   tenant_id: string
@@ -11,9 +13,12 @@ export interface ProposerScheduleRow {
 }
 
 export function listEnabledProposerSchedules(): ProposerScheduleRow[] {
-  return getDb()
-    .prepare(`SELECT * FROM proposer_schedule_configs WHERE enabled = 1`)
-    .all() as ProposerScheduleRow[]
+  const compiled = getPlatformDb()
+    .selectFrom("proposer_schedule_configs")
+    .selectAll()
+    .where("enabled", "=", 1)
+    .compile()
+  return runAll<ProposerScheduleRow>(compiled)
 }
 
 export function advanceProposerSchedule(
@@ -23,15 +28,14 @@ export function advanceProposerSchedule(
   lastRunAt: string,
   nextRunAt: string | null
 ): void {
-  getDb()
-    .prepare(
-      `
-    UPDATE proposer_schedule_configs
-       SET last_run_at = ?, next_run_at = ?
-     WHERE tenant_id = ? AND source = ? AND target = ?
-  `
-    )
-    .run(lastRunAt, nextRunAt, tenantId, source, target)
+  const compiled = getPlatformDb()
+    .updateTable("proposer_schedule_configs")
+    .set({ last_run_at: lastRunAt, next_run_at: nextRunAt })
+    .where("tenant_id", "=", tenantId)
+    .where("source", "=", source)
+    .where("target", "=", target)
+    .compile()
+  runExec(compiled)
 }
 
 export function upsertProposerSchedule(input: {
@@ -43,28 +47,29 @@ export function upsertProposerSchedule(input: {
   nextRunAt: string | null
   updatedBy: string
 }): void {
-  getDb()
-    .prepare(
-      `
-    INSERT INTO proposer_schedule_configs (tenant_id, source, target, cron, enabled, next_run_at, updated_at, updated_by)
-    VALUES (?, ?, ?, ?, ?, ?, datetime('now'), ?)
-    ON CONFLICT(tenant_id, source, target) DO UPDATE SET
-      cron        = excluded.cron,
-      enabled     = excluded.enabled,
-      next_run_at = excluded.next_run_at,
-      updated_at  = excluded.updated_at,
-      updated_by  = excluded.updated_by
-  `
+  const compiled = getPlatformDb()
+    .insertInto("proposer_schedule_configs")
+    .values({
+      tenant_id: input.tenantId,
+      source: input.source,
+      target: input.target,
+      cron: input.cron,
+      enabled: input.enabled,
+      next_run_at: input.nextRunAt,
+      updated_at: sql`datetime('now')`,
+      updated_by: input.updatedBy,
+    })
+    .onConflict((oc) =>
+      oc.columns(["tenant_id", "source", "target"]).doUpdateSet({
+        cron: input.cron,
+        enabled: input.enabled,
+        next_run_at: input.nextRunAt,
+        updated_at: sql`datetime('now')`,
+        updated_by: input.updatedBy,
+      }),
     )
-    .run(
-      input.tenantId,
-      input.source,
-      input.target,
-      input.cron,
-      input.enabled,
-      input.nextRunAt,
-      input.updatedBy
-    )
+    .compile()
+  runExec(compiled)
 }
 
 export function getProposerSchedule(
@@ -72,21 +77,33 @@ export function getProposerSchedule(
   source: string,
   target: string
 ): ProposerScheduleRow | null {
-  return (
-    (getDb()
-      .prepare(`SELECT * FROM proposer_schedule_configs WHERE tenant_id = ? AND source = ? AND target = ?`)
-      .get(tenantId, source, target) as ProposerScheduleRow | undefined) ?? null
-  )
+  const compiled = getPlatformDb()
+    .selectFrom("proposer_schedule_configs")
+    .selectAll()
+    .where("tenant_id", "=", tenantId)
+    .where("source", "=", source)
+    .where("target", "=", target)
+    .compile()
+  return runGet<ProposerScheduleRow>(compiled) ?? null
 }
 
 export function listProposerSchedules(tenantId: string): ProposerScheduleRow[] {
-  return getDb()
-    .prepare(`SELECT * FROM proposer_schedule_configs WHERE tenant_id = ? ORDER BY source, target`)
-    .all(tenantId) as ProposerScheduleRow[]
+  const compiled = getPlatformDb()
+    .selectFrom("proposer_schedule_configs")
+    .selectAll()
+    .where("tenant_id", "=", tenantId)
+    .orderBy("source")
+    .orderBy("target")
+    .compile()
+  return runAll<ProposerScheduleRow>(compiled)
 }
 
 export function deleteProposerSchedule(tenantId: string, source: string, target: string): void {
-  getDb()
-    .prepare(`DELETE FROM proposer_schedule_configs WHERE tenant_id = ? AND source = ? AND target = ?`)
-    .run(tenantId, source, target)
+  const compiled = getPlatformDb()
+    .deleteFrom("proposer_schedule_configs")
+    .where("tenant_id", "=", tenantId)
+    .where("source", "=", source)
+    .where("target", "=", target)
+    .compile()
+  runExec(compiled)
 }

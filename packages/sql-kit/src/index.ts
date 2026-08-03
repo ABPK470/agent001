@@ -31,4 +31,6 @@ export type {
   MigrationId,
   MigrationRunner,
   MigrationStep,
+  MultiDialectMigrationStep,
 } from "./migrations.js"
+export { upForDialect } from "./migrations.js"

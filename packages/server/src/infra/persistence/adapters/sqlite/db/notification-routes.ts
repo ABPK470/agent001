@@ -1,4 +1,6 @@
-import { getDb } from "../connection.js"
+import { sql } from "kysely"
+import { getPlatformDb } from "../../../schema/kysely.js"
+import { runAll, runExec, runGet, runInsertId } from "../../../schema/execute.js"
 
 export interface NotificationRouteRow {
   id: string
@@ -27,14 +29,14 @@ export interface NotificationLogRow {
 }
 
 export function listEnabledRoutesForEvent(tenantId: string, eventType: string): NotificationRouteRow[] {
-  return getDb()
-    .prepare(
-      `
-    SELECT * FROM notification_route_configs
-     WHERE tenant_id = ? AND event_type = ? AND enabled = 1
-  `
-    )
-    .all(tenantId, eventType) as NotificationRouteRow[]
+  const compiled = getPlatformDb()
+    .selectFrom("notification_route_configs")
+    .selectAll()
+    .where("tenant_id", "=", tenantId)
+    .where("event_type", "=", eventType)
+    .where("enabled", "=", 1)
+    .compile()
+  return runAll<NotificationRouteRow>(compiled)
 }
 
 export function appendNotificationLog(input: {
@@ -44,15 +46,20 @@ export function appendNotificationLog(input: {
   target: string
   payloadJson: string
 }): number {
-  const r = getDb()
-    .prepare(
-      `
-    INSERT INTO notification_log (route_id, event_type, channel, target, payload_json, status, attempts)
-    VALUES (?, ?, ?, ?, ?, 'retrying', 0)
-  `
-    )
-    .run(input.routeId, input.eventType, input.channel, input.target, input.payloadJson)
-  return Number(r.lastInsertRowid)
+  const compiled = getPlatformDb()
+    .insertInto("notification_log")
+    .values({
+      route_id: input.routeId,
+      event_type: input.eventType,
+      channel: input.channel,
+      target: input.target,
+      payload_json: input.payloadJson,
+      status: "retrying",
+      attempts: 0,
+      created_at: sql`datetime('now')`,
+    })
+    .compile()
+  return runInsertId(compiled)
 }
 
 export function markNotificationLogAttempt(
@@ -61,17 +68,26 @@ export function markNotificationLogAttempt(
   error: string,
   status: "retrying" | "dlq"
 ): void {
-  getDb()
-    .prepare(`UPDATE notification_log SET attempts = ?, last_error = ?, status = ? WHERE id = ?`)
-    .run(attempts, error, status, id)
+  const compiled = getPlatformDb()
+    .updateTable("notification_log")
+    .set({ attempts, last_error: error, status })
+    .where("id", "=", id)
+    .compile()
+  runExec(compiled)
 }
 
 export function markNotificationLogSent(id: number, attempts: number): void {
-  getDb()
-    .prepare(
-      `UPDATE notification_log SET attempts = ?, status = 'sent', sent_at = datetime('now'), last_error = NULL WHERE id = ?`
-    )
-    .run(attempts, id)
+  const compiled = getPlatformDb()
+    .updateTable("notification_log")
+    .set({
+      attempts,
+      status: "sent",
+      sent_at: sql`datetime('now')`,
+      last_error: null,
+    })
+    .where("id", "=", id)
+    .compile()
+  runExec(compiled)
 }
 
 export function upsertNotificationRouteRow(input: {
@@ -84,68 +100,73 @@ export function upsertNotificationRouteRow(input: {
   enabled: number
   updatedBy: string
 }): void {
-  getDb()
-    .prepare(
-      `
-    INSERT INTO notification_route_configs (id, tenant_id, event_type, filter_json, channel, target, enabled, updated_at, updated_by)
-    VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), ?)
-    ON CONFLICT(id) DO UPDATE SET
-      tenant_id   = excluded.tenant_id,
-      event_type  = excluded.event_type,
-      filter_json = excluded.filter_json,
-      channel     = excluded.channel,
-      target      = excluded.target,
-      enabled     = excluded.enabled,
-      updated_at  = excluded.updated_at,
-      updated_by  = excluded.updated_by
-  `
+  const compiled = getPlatformDb()
+    .insertInto("notification_route_configs")
+    .values({
+      id: input.id,
+      tenant_id: input.tenantId,
+      event_type: input.eventType,
+      filter_json: input.filterJson,
+      channel: input.channel,
+      target: input.target,
+      enabled: input.enabled,
+      updated_at: sql`datetime('now')`,
+      updated_by: input.updatedBy,
+    })
+    .onConflict((oc) =>
+      oc.column("id").doUpdateSet({
+        tenant_id: input.tenantId,
+        event_type: input.eventType,
+        filter_json: input.filterJson,
+        channel: input.channel,
+        target: input.target,
+        enabled: input.enabled,
+        updated_at: sql`datetime('now')`,
+        updated_by: input.updatedBy,
+      }),
     )
-    .run(
-      input.id,
-      input.tenantId,
-      input.eventType,
-      input.filterJson,
-      input.channel,
-      input.target,
-      input.enabled,
-      input.updatedBy
-    )
+    .compile()
+  runExec(compiled)
 }
 
 export function getNotificationRouteRow(id: string): NotificationRouteRow | null {
-  return (
-    (getDb().prepare(`SELECT * FROM notification_route_configs WHERE id = ?`).get(id) as
-      | NotificationRouteRow
-      | undefined) ?? null
-  )
+  const compiled = getPlatformDb()
+    .selectFrom("notification_route_configs")
+    .selectAll()
+    .where("id", "=", id)
+    .compile()
+  return runGet<NotificationRouteRow>(compiled) ?? null
 }
 
 export function listNotificationRouteRows(tenantId: string): NotificationRouteRow[] {
-  return getDb()
-    .prepare(`SELECT * FROM notification_route_configs WHERE tenant_id = ? ORDER BY event_type, channel`)
-    .all(tenantId) as NotificationRouteRow[]
+  const compiled = getPlatformDb()
+    .selectFrom("notification_route_configs")
+    .selectAll()
+    .where("tenant_id", "=", tenantId)
+    .orderBy("event_type")
+    .orderBy("channel")
+    .compile()
+  return runAll<NotificationRouteRow>(compiled)
 }
 
 export function deleteNotificationRouteRow(id: string): void {
-  getDb().prepare(`DELETE FROM notification_route_configs WHERE id = ?`).run(id)
+  const compiled = getPlatformDb()
+    .deleteFrom("notification_route_configs")
+    .where("id", "=", id)
+    .compile()
+  runExec(compiled)
 }
 
 export function listNotificationLogRows(
   filter: { status?: NotificationLogRow["status"]; limit?: number } = {}
 ): NotificationLogRow[] {
-  const where: string[] = []
-  const args: unknown[] = []
+  let query = getPlatformDb().selectFrom("notification_log").selectAll()
   if (filter.status) {
-    where.push("status = ?")
-    args.push(filter.status)
+    query = query.where("status", "=", filter.status)
   }
-  return getDb()
-    .prepare(
-      `
-    SELECT * FROM notification_log
-    ${where.length ? "WHERE " + where.join(" AND ") : ""}
-    ORDER BY created_at DESC LIMIT ?
-  `
-    )
-    .all(...args, filter.limit ?? 100) as NotificationLogRow[]
+  const compiled = query
+    .orderBy("created_at", "desc")
+    .limit(filter.limit ?? 100)
+    .compile()
+  return runAll<NotificationLogRow>(compiled)
 }

@@ -3,7 +3,8 @@ import {
   type CustomValueSourceDefinition,
 } from "@mia/shared-types"
 
-import { getDb } from "../connection.js"
+import { getPlatformDb } from "../../../schema/kysely.js"
+import { runAll, runChanges, runExec } from "../../../schema/execute.js"
 
 const DEFAULT_TENANT = "_default"
 
@@ -16,11 +17,13 @@ export interface DbSyncValueSource {
 }
 
 export function listSyncValueSources(tenantId = DEFAULT_TENANT): DbSyncValueSource[] {
-  return getDb()
-    .prepare(
-      "SELECT tenant_id, id, label, built_in, definition_json FROM sync_value_sources WHERE tenant_id = ? ORDER BY id",
-    )
-    .all(tenantId) as DbSyncValueSource[]
+  const compiled = getPlatformDb()
+    .selectFrom("sync_value_sources")
+    .select(["tenant_id", "id", "label", "built_in", "definition_json"])
+    .where("tenant_id", "=", tenantId)
+    .orderBy("id")
+    .compile()
+  return runAll<DbSyncValueSource>(compiled)
 }
 
 export function saveSyncValueSource(
@@ -32,22 +35,34 @@ export function saveSyncValueSource(
   const definition =
     row.definition_json ??
     JSON.stringify(parseCustomValueSourceDefinition("{}", row.id))
-  getDb()
-    .prepare(
-      `INSERT INTO sync_value_sources (tenant_id, id, label, built_in, definition_json)
-       VALUES (@tenant_id, @id, @label, @built_in, @definition_json)
-       ON CONFLICT(tenant_id, id) DO UPDATE SET
-         label = excluded.label,
-         definition_json = excluded.definition_json`,
+  const builtIn = row.built_in ?? 0
+  const compiled = getPlatformDb()
+    .insertInto("sync_value_sources")
+    .values({
+      tenant_id: row.tenant_id,
+      id: row.id,
+      label: row.label,
+      built_in: builtIn,
+      definition_json: definition,
+    })
+    .onConflict((oc) =>
+      oc.columns(["tenant_id", "id"]).doUpdateSet({
+        label: row.label,
+        definition_json: definition,
+      }),
     )
-    .run({ ...row, built_in: row.built_in ?? 0, definition_json: definition })
+    .compile()
+  runExec(compiled)
 }
 
 export function deleteSyncValueSource(tenantId: string, id: string): boolean {
-  const result = getDb()
-    .prepare("DELETE FROM sync_value_sources WHERE tenant_id = ? AND id = ? AND built_in = 0")
-    .run(tenantId, id)
-  return result.changes > 0
+  const compiled = getPlatformDb()
+    .deleteFrom("sync_value_sources")
+    .where("tenant_id", "=", tenantId)
+    .where("id", "=", id)
+    .where("built_in", "=", 0)
+    .compile()
+  return runChanges(compiled) > 0
 }
 
 export function mapValueSourceDefinition(

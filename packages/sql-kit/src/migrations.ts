@@ -35,3 +35,23 @@ export interface MigrationRunner {
 export type MigrationStep<TExecutor = unknown> = MigrationId & {
   up: (executor: TExecutor) => Promise<void> | void
 }
+
+/**
+ * Multi-dialect migration body (plan milestone 4).
+ *
+ * One logical version; each dialect supplies its own DDL/`up`. Adapters
+ * pick {@link upForDialect} at apply time. Missing dialect = not portable yet.
+ */
+export type MultiDialectMigrationStep = MigrationId & {
+  up: Partial<
+    Record<RelationalDialectKind, (executor: unknown) => Promise<void> | void>
+  >
+}
+
+/** Resolve the dialect-specific `up`, or null when that dialect is not ready. */
+export function upForDialect(
+  step: MultiDialectMigrationStep,
+  dialect: RelationalDialectKind,
+): ((executor: unknown) => Promise<void> | void) | null {
+  return step.up[dialect] ?? null
+}

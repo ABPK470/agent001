@@ -20,3 +20,8 @@ export function runExec(compiled: { sql: string; parameters: readonly unknown[] 
 export function runChanges(compiled: { sql: string; parameters: readonly unknown[] }): number {
   return getDb().prepare(compiled.sql).run(...compiled.parameters).changes
 }
+
+/** Like {@link runExec}, but returns SQLite `lastInsertRowid`. */
+export function runInsertId(compiled: { sql: string; parameters: readonly unknown[] }): number {
+  return Number(getDb().prepare(compiled.sql).run(...compiled.parameters).lastInsertRowid)
+}

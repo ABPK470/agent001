@@ -27,5 +27,9 @@ Honest sizing in the plan: platform agnostic is **large (months)** — ~70 table
 
 - `connectors`, `users`, `sync_environments`, `sessions`
 - `llm_config`, `freeze_window_configs`
+- `notifications`, `notification_route_configs`, `notification_log`
+- `api_request_log`, `proposer_schedule_configs`, `sync_value_sources`
+- `sync_catalog_versions`, `sync_catalog_active`
+- `approval_configs` (policy CRUD; `sync_approvals` state machine still raw)
 
 Heavy/stats SQL in some repos may still be raw until those paths move. DDL still lives in numbered SQLite migrations (`adapters/sqlite/migrations`). Next: more repos → dialect-specific migration bodies → real `mssql`/`postgres` `PlatformStore`.
