@@ -35,9 +35,11 @@ export function dot(c: string): string {
 
 export const DIFF = {
   ins:    "var(--color-diff-add)",
-  upd:    "var(--color-diff-add)",
+  upd:    "var(--color-diff-upd)",
   del:    "var(--color-diff-del)",
-  eqDim:  "var(--color-text-muted)",
+  eq:     "var(--color-diff-eq)",
+  /** @deprecated use DIFF.eq */
+  eqDim:  "var(--color-diff-eq)",
   oldRow: "var(--color-diff-del)",
   newRow: "var(--color-diff-add)",
 } as const

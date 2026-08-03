@@ -78,8 +78,11 @@
   --color-diff-surface: var(--diff-surface);
   --color-diff-add: var(--diff-add);
   --color-diff-add-soft: var(--diff-add-soft);
+  --color-diff-upd: var(--diff-upd);
+  --color-diff-upd-soft: var(--diff-upd-soft);
   --color-diff-del: var(--diff-del);
   --color-diff-del-soft: var(--diff-del-soft);
+  --color-diff-eq: var(--diff-eq);
 
   /* Policy effects — allow / deny / approval must read in ~300ms */
   --color-policy-allow: var(--policy-allow);
@@ -207,8 +210,11 @@
   --diff-surface: var(--panel-2);
   --diff-add: var(--success);
   --diff-add-soft: var(--success-soft);
+  --diff-upd: var(--info);
+  --diff-upd-soft: var(--info-soft);
   --diff-del: var(--error);
   --diff-del-soft: var(--error-soft);
+  --diff-eq: var(--text-muted);
 
   /* Policy effects — same chroma family as status on dark. */
   --policy-allow: var(--success);
@@ -343,8 +349,11 @@
   --diff-surface: var(--panel-2);
   --diff-add: #15803d;
   --diff-add-soft: color-mix(in srgb, var(--diff-add) 14%, var(--diff-surface));
+  --diff-upd: #1d4ed8;
+  --diff-upd-soft: color-mix(in srgb, var(--diff-upd) 14%, var(--diff-surface));
   --diff-del: #b91c1c;
   --diff-del-soft: color-mix(in srgb, var(--diff-del) 14%, var(--diff-surface));
+  --diff-eq: var(--text-muted);
 
   /* Policy effects — same chroma family as status. */
   --policy-allow: var(--success);

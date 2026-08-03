@@ -6,6 +6,7 @@ import { movementOfTable, tableMovementTotal, syncPlanConflictBannerLabel } from
 import { timeAgo } from "../../lib/util"
 import { ModalShell } from "./chrome"
 import { DIFF } from "./constants"
+import { SyncMovementCounts } from "./SyncMovementCounts"
 import { formatPlanEntityLabel } from "./workflow"
 import { buildExecTableStatus, type ExecTableStatus } from "./exec-status"
 import { planHasMetadataChanges } from "./exec-preflight"
@@ -71,13 +72,14 @@ export function PlanView({ plan, expanded, setExpanded, exec }: {
           </div>
 
           <div className="flex items-center gap-4 mt-3 flex-wrap">
-            <div className="flex items-center gap-3 font-mono text-sm tabular-nums">
-              {totals.insert > 0 && <span style={{ color: DIFF.ins }}><span className="text-lg font-semibold">{totals.insert}</span> <span className="text-xs">ins</span></span>}
-              {totals.update > 0 && <span style={{ color: DIFF.upd }}><span className="text-lg font-semibold">{totals.update}</span> <span className="text-xs">upd</span></span>}
-              {totals.delete > 0 && <span style={{ color: DIFF.del }}><span className="text-lg font-semibold">{totals.delete}</span> <span className="text-xs">del</span></span>}
-              {hasConflicts && <span className="text-warning"><span className="text-lg font-semibold">{totals.conflicts}</span> <span className="text-xs">cnf</span></span>}
-              {totals.unchanged > 0 && <span className="text-text-muted"><span className="text-lg font-semibold">{totals.unchanged}</span> <span className="text-xs">eq</span></span>}
-            </div>
+            <SyncMovementCounts
+              insert={totals.insert}
+              update={totals.update}
+              delete={totals.delete}
+              unchanged={totals.unchanged}
+              conflicts={hasConflicts ? totals.conflicts : 0}
+              variant="md"
+            />
             <span className="text-text-muted/30">·</span>
             <span className="text-sm text-text-muted">{totals.tablesCount} tables w/ changes</span>
             {!planHasMetadataChanges(plan) && (
@@ -180,17 +182,13 @@ export function HistoryPlanTableModal({
       stackLevel={1}
       onClose={onClose}
       footer={
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm font-mono tabular-nums text-text-muted">
-          {movement.insert > 0 && <span style={{ color: DIFF.ins }}>{movement.insert.toLocaleString()} ins</span>}
-          {movement.update > 0 && <span style={{ color: DIFF.upd }}>{movement.update.toLocaleString()} upd</span>}
-          {movement.delete > 0 && <span style={{ color: DIFF.del }}>{movement.delete.toLocaleString()} del</span>}
-          {row.conflicts.length > 0 && (
-            <span className="text-warning">{row.conflicts.length.toLocaleString()} conflict{row.conflicts.length === 1 ? "" : "s"}</span>
-          )}
-          {row.stats.unchanged > 0 && (
-            <span className="text-text-muted/60">{row.stats.unchanged.toLocaleString()} eq</span>
-          )}
-        </div>
+        <SyncMovementCounts
+          insert={movement.insert}
+          update={movement.update}
+          delete={movement.delete}
+          unchanged={row.stats.unchanged}
+          conflicts={row.conflicts.length}
+        />
       }
     >
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto show-scrollbar">
@@ -259,13 +257,13 @@ function PlanTableSummaryRow({
       {status === "done" && <CheckCircle2 size={compact ? 12 : 13} className="shrink-0" style={{ color: DIFF.ins }} />}
       {status === "failed" && <XCircle size={compact ? 12 : 13} className="shrink-0" style={{ color: DIFF.del }} />}
       {status === "cancelled" && <XCircle size={compact ? 12 : 13} className="shrink-0 text-text-muted" aria-label="Cancelled" />}
-      <Ct n={movement.insert} color={DIFF.ins} label="ins" compact={compact} neutral={compact} />
-      <Ct n={movement.update} color={DIFF.upd} label="upd" compact={compact} neutral={compact} />
-      <Ct n={movement.delete} color={DIFF.del} label="del" compact={compact} neutral={compact} />
-      {row.conflicts.length > 0 && (
-        <Ct n={row.conflicts.length} color="var(--color-warning)" label="conflict" compact={compact} neutral={compact} />
-      )}
-      <Ct n={row.stats.unchanged} color={DIFF.eqDim} label="eq" dim compact={compact} neutral={compact} />
+      <SyncMovementCounts
+        insert={movement.insert}
+        update={movement.update}
+        delete={movement.delete}
+        unchanged={row.stats.unchanged}
+        conflicts={row.conflicts.length}
+      />
       {onOpen && (
         <span className="text-sm text-text-muted/40 opacity-0 transition-opacity group-hover:opacity-100 shrink-0">
           Open
@@ -363,42 +361,6 @@ function PlanCollapsibleSections({
         </div>
       )}
     </div>
-  )
-}
-
-function Ct({
-  n,
-  color,
-  label,
-  dim,
-  neutral,
-}: {
-  n: number
-  color: string
-  label: string
-  dim?: boolean
-  compact?: boolean
-  neutral?: boolean
-}) {
-  if (n <= 0) return null
-  if (neutral) {
-    return (
-      <span
-        className={`text-sm font-mono tabular-nums shrink-0 ${
-          dim ? "text-text-muted" : "text-text"
-        }`}
-      >
-        {n.toLocaleString()} {label}
-      </span>
-    )
-  }
-  return (
-    <span
-      className="text-sm font-mono tabular-nums shrink-0"
-      style={{ color, opacity: dim ? 0.4 : 1 }}
-    >
-      {n.toLocaleString()} <span className="opacity-60">{label}</span>
-    </span>
   )
 }
 

@@ -35,7 +35,8 @@
     "test": "vitest run",
     "lint": "tsc --noEmit",
     "db:status": "tsx src/cli/db-status.ts",
-    "db:seed-demo-traces": "tsx src/cli/seed-demo-trace-thread.ts"
+    "db:seed-demo-traces": "tsx src/cli/seed-demo-trace-thread.ts",
+    "db:seed-demo-sync": "tsx src/cli/seed-demo-sync-history.ts"
   },
   "dependencies": {
     "@fastify/cookie": "^11.0.2",

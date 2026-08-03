@@ -34,6 +34,7 @@ import type { SyncPlan } from "../../types"
 import { timeAgo } from "../../lib/util"
 import { EmptyHistory, Loading } from "./chrome"
 import { DIFF, ENTITY_TYPES, dot } from "./constants"
+import { SyncMovementCounts } from "./SyncMovementCounts"
 import { formatPlanEntityLabel } from "./workflow"
 import { HistoryPlanTables } from "./PlanTables"
 import { SqlTraceModal } from "../sync/trace/SqlTraceModal"
@@ -689,11 +690,12 @@ function HistoryRunRow({
           <ArrowRight size={10} className="opacity-60" />
           {run.target}
         </span>
-        <span className="font-mono tabular-nums flex gap-2 shrink-0">
-          {totals.insert > 0 && <span style={{ color: DIFF.ins }}>{totals.insert} ins</span>}
-          {totals.update > 0 && <span style={{ color: DIFF.upd }}>{totals.update} upd</span>}
-          {totals.delete > 0 && <span style={{ color: DIFF.del }}>{totals.delete} del</span>}
-        </span>
+        <SyncMovementCounts
+          insert={totals.insert}
+          update={totals.update}
+          delete={totals.delete}
+          className="shrink-0"
+        />
         <span className="text-text-muted flex items-center gap-1 shrink-0" title={formatHistoryDateTime(run.startedAt)}>
           <Clock size={11} />
           {timeAgo(run.finishedAt ?? run.startedAt)}
