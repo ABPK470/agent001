@@ -1,6 +1,7 @@
 import { getPlatformStore } from "../platform-store.js"
 import { getPlatformDb } from "../../../schema/kysely.js"
 import { runAll, runExec, runGet } from "../../../schema/execute.js"
+import { upsertRow } from "../../../schema/upsert.js"
 
 const DEFAULT_TENANT = "_default"
 
@@ -42,18 +43,16 @@ export function saveSyncPublishMeta(row: {
   published_version: string
   catalog_version: number | null
 }): void {
-  const compiled = getPlatformDb()
-    .insertInto("sync_publish_meta")
-    .values(row)
-    .onConflict((oc) =>
-      oc.column("tenant_id").doUpdateSet({
-        published_at: row.published_at,
-        published_version: row.published_version,
-        catalog_version: row.catalog_version,
-      }),
-    )
-    .compile()
-  runExec(compiled)
+  upsertRow({
+    table: "sync_publish_meta",
+    keys: { tenant_id: row.tenant_id },
+    insert: row,
+    update: {
+      published_at: row.published_at,
+      published_version: row.published_version,
+      catalog_version: row.catalog_version,
+    },
+  })
 }
 
 export function listSyncDefinitions(tenantId = DEFAULT_TENANT): DbSyncDefinitionRow[] {

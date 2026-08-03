@@ -1,6 +1,7 @@
 import { getPlatformDb } from "../../../schema/kysely.js"
 import { runAll, runExec, runGet, runInsertId } from "../../../schema/execute.js"
 import { platformNow } from "../../../schema/sql-time.js"
+import { upsertRow } from "../../../schema/upsert.js"
 
 export interface NotificationRouteRow {
   id: string
@@ -100,9 +101,11 @@ export function upsertNotificationRouteRow(input: {
   enabled: number
   updatedBy: string
 }): void {
-  const compiled = getPlatformDb()
-    .insertInto("notification_route_configs")
-    .values({
+  const now = platformNow()
+  upsertRow({
+    table: "notification_route_configs",
+    keys: { id: input.id },
+    insert: {
       id: input.id,
       tenant_id: input.tenantId,
       event_type: input.eventType,
@@ -110,23 +113,20 @@ export function upsertNotificationRouteRow(input: {
       channel: input.channel,
       target: input.target,
       enabled: input.enabled,
-      updated_at: platformNow(),
+      updated_at: now,
       updated_by: input.updatedBy,
-    })
-    .onConflict((oc) =>
-      oc.column("id").doUpdateSet({
-        tenant_id: input.tenantId,
-        event_type: input.eventType,
-        filter_json: input.filterJson,
-        channel: input.channel,
-        target: input.target,
-        enabled: input.enabled,
-        updated_at: platformNow(),
-        updated_by: input.updatedBy,
-      }),
-    )
-    .compile()
-  runExec(compiled)
+    },
+    update: {
+      tenant_id: input.tenantId,
+      event_type: input.eventType,
+      filter_json: input.filterJson,
+      channel: input.channel,
+      target: input.target,
+      enabled: input.enabled,
+      updated_at: now,
+      updated_by: input.updatedBy,
+    },
+  })
 }
 
 export function getNotificationRouteRow(id: string): NotificationRouteRow | null {

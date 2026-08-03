@@ -10,6 +10,7 @@ import { getPlatformDb } from "../../../schema/kysely.js"
 import type { PlatformDatabase } from "../../../schema/tables.js"
 import { runAll, runChanges, runExec, runGet } from "../../../schema/execute.js"
 import { coalescePlatformNow, platformNow } from "../../../schema/sql-time.js"
+import { upsertRow } from "../../../schema/upsert.js"
 import { rememberRunOwner } from "../../../../../ports/run-owner-index.js"
 
 // ── Run queries ──────────────────────────────────────────────────
@@ -81,26 +82,25 @@ export function saveRun(run: DbRun): void {
     display_name,
   }
 
-  const compiled = getPlatformDb()
-    .insertInto("runs")
-    .values(row as never)
-    .onConflict((oc) =>
-      oc.column("id").doUpdateSet({
-        goal: run.goal,
-        status: run.status,
-        answer: run.answer,
-        step_count: run.step_count,
-        error: run.error,
-        parent_run_id: run.parent_run_id,
-        created_at: run.created_at,
-        completed_at: run.completed_at,
-        thread_id,
-        upn: upn as never,
-        display_name: display_name as never,
-      })
-    )
-    .compile()
-  runExec(compiled)
+  // Upsert — never OR REPLACE (CASCADE would wipe child rows).
+  upsertRow({
+    table: "runs",
+    keys: { id: run.id },
+    insert: row,
+    update: {
+      goal: run.goal,
+      status: run.status,
+      answer: run.answer,
+      step_count: run.step_count,
+      error: run.error,
+      parent_run_id: run.parent_run_id,
+      created_at: run.created_at,
+      completed_at: run.completed_at,
+      thread_id,
+      upn,
+      display_name,
+    },
+  })
   rememberRunOwner(run.id, upn)
 }
 
@@ -492,8 +492,8 @@ function applyAuditLogFilters(
         eb("a.detail", "like", qLike),
         eb("a.run_id", "like", qLike),
         eb("a.scope_id", "like", qLike),
-        eb(sql`IFNULL(r.goal, '')`, "like", qLike),
-        eb(sql`IFNULL(r.upn, '')`, "like", qLike),
+        eb(sql`COALESCE(r.goal, '')`, "like", qLike),
+        eb(sql`COALESCE(r.upn, '')`, "like", qLike),
       ]),
     )
   }
@@ -605,25 +605,23 @@ export interface DbCheckpoint {
 }
 
 export function saveCheckpoint(cp: DbCheckpoint): void {
-  const compiled = getPlatformDb()
-    .insertInto("checkpoints")
-    .values({
+  upsertRow({
+    table: "checkpoints",
+    keys: { run_id: cp.run_id },
+    insert: {
       run_id: cp.run_id,
       messages: cp.messages,
       iteration: cp.iteration,
       step_counter: cp.step_counter,
       updated_at: cp.updated_at,
-    })
-    .onConflict((oc) =>
-      oc.column("run_id").doUpdateSet({
-        messages: cp.messages,
-        iteration: cp.iteration,
-        step_counter: cp.step_counter,
-        updated_at: cp.updated_at,
-      })
-    )
-    .compile()
-  runExec(compiled)
+    },
+    update: {
+      messages: cp.messages,
+      iteration: cp.iteration,
+      step_counter: cp.step_counter,
+      updated_at: cp.updated_at,
+    },
+  })
 }
 
 export function getCheckpoint(runId: string): DbCheckpoint | undefined {
@@ -716,9 +714,10 @@ export interface DbTokenUsage {
 }
 
 export function saveTokenUsage(usage: DbTokenUsage): void {
-  const compiled = getPlatformDb()
-    .insertInto("token_usage")
-    .values({
+  upsertRow({
+    table: "token_usage",
+    keys: { run_id: usage.run_id },
+    insert: {
       run_id: usage.run_id,
       prompt_tokens: usage.prompt_tokens,
       completion_tokens: usage.completion_tokens,
@@ -726,19 +725,16 @@ export function saveTokenUsage(usage: DbTokenUsage): void {
       llm_calls: usage.llm_calls,
       model: usage.model,
       created_at: usage.created_at,
-    })
-    .onConflict((oc) =>
-      oc.column("run_id").doUpdateSet({
-        prompt_tokens: usage.prompt_tokens,
-        completion_tokens: usage.completion_tokens,
-        total_tokens: usage.total_tokens,
-        llm_calls: usage.llm_calls,
-        model: usage.model,
-        created_at: usage.created_at,
-      })
-    )
-    .compile()
-  runExec(compiled)
+    },
+    update: {
+      prompt_tokens: usage.prompt_tokens,
+      completion_tokens: usage.completion_tokens,
+      total_tokens: usage.total_tokens,
+      llm_calls: usage.llm_calls,
+      model: usage.model,
+      created_at: usage.created_at,
+    },
+  })
 }
 
 export function getTokenUsage(runId: string): DbTokenUsage | undefined {
@@ -859,10 +855,10 @@ function applyTokenUsageFilters(
       eb.or([
         eb("t.run_id", "like", qLike),
         eb("t.model", "like", qLike),
-        eb(sql`IFNULL(r.goal, '')`, "like", qLike),
-        eb(sql`IFNULL(r.upn, '')`, "like", qLike),
-        eb(sql`IFNULL(r.display_name, '')`, "like", qLike),
-        eb(sql`IFNULL(th.title, '')`, "like", qLike),
+        eb(sql`COALESCE(r.goal, '')`, "like", qLike),
+        eb(sql`COALESCE(r.upn, '')`, "like", qLike),
+        eb(sql`COALESCE(r.display_name, '')`, "like", qLike),
+        eb(sql`COALESCE(th.title, '')`, "like", qLike),
       ]),
     )
   }

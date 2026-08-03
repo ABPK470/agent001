@@ -25,6 +25,7 @@ Honest sizing in the plan: platform agnostic is **large (months)** — ~70 table
 | `@mia/sql-kit` `MigrationRunner` / `applyMultiDialectPending` | Shared migrator contract |
 | `migrations/registry.ts` | Multi-dialect peer DDL (mssql v1–8; memory deferred to m8) |
 | `sql-time.ts` | `platformNow` / `coalescePlatformNow` / `platformNowMinusSeconds` |
+| `upsert.ts` | Dialect-portable select→update|insert (no `ON CONFLICT`) |
 | `adapters/mssql/**` | Sole Kysely/tedious handle + migrator (no platform `mssql` pool) |
 
 ## Cutover tables (Kysely)

@@ -13,6 +13,7 @@ import { requireSyncRunActorUpn } from "../../../sync-plan-actor.js"
 import { rememberPlanOwner } from "../../../../../ports/run-owner-index.js"
 import { runAll, runExec, runGet } from "../../../schema/execute.js"
 import { platformNow } from "../../../schema/sql-time.js"
+import { getRowByKeys, upsertRow } from "../../../schema/upsert.js"
 import { getPlatformDb } from "../../../schema/kysely.js"
 import type { PlatformDatabase } from "../../../schema/tables.js"
 
@@ -72,9 +73,15 @@ export interface RecordSyncRunStartInput {
 export function recordSyncRunStart(i: RecordSyncRunStartInput): void {
   const actorUpn = requireSyncRunActorUpn(i.actorUpn, "recordSyncRunStart")
   const c = asCounts(i.previewTotals)
-  const compiled = getPlatformDb()
-    .insertInto("sync_runs")
-    .values({
+  const now = platformNow()
+  const existing = getRowByKeys<{ entity_display_name: string | null }>("sync_runs", {
+    plan_id: i.planId,
+  })
+  const displayName = i.entityDisplayName ?? existing?.entity_display_name ?? null
+  upsertRow({
+    table: "sync_runs",
+    keys: { plan_id: i.planId },
+    insert: {
       plan_id: i.planId,
       entity_type: i.entityType,
       entity_id: String(i.entityId),
@@ -87,33 +94,30 @@ export function recordSyncRunStart(i: RecordSyncRunStartInput): void {
       preview_deletes: c.delete ?? 0,
       preview_totals_json: JSON.stringify(i.previewTotals),
       status: SyncRunStatus.Started,
-      started_at: platformNow(),
-    })
-    .onConflict((oc) =>
-      oc.column("plan_id").doUpdateSet({
-        entity_type: i.entityType,
-        entity_id: String(i.entityId),
-        entity_display_name: sql`COALESCE(excluded.entity_display_name, sync_runs.entity_display_name)`,
-        source: i.source,
-        target: i.target,
-        actor_upn: actorUpn,
-        preview_inserts: c.insert ?? 0,
-        preview_updates: c.update ?? 0,
-        preview_deletes: c.delete ?? 0,
-        preview_totals_json: JSON.stringify(i.previewTotals),
-        status: SyncRunStatus.Started,
-        started_at: platformNow(),
-        finished_at: null,
-        duration_ms: null,
-        error: null,
-        executed_inserts: null,
-        executed_updates: null,
-        executed_deletes: null,
-        execute_totals_json: null,
-      }),
-    )
-    .compile()
-  runExec(compiled)
+      started_at: now,
+    },
+    update: {
+      entity_type: i.entityType,
+      entity_id: String(i.entityId),
+      entity_display_name: displayName,
+      source: i.source,
+      target: i.target,
+      actor_upn: actorUpn,
+      preview_inserts: c.insert ?? 0,
+      preview_updates: c.update ?? 0,
+      preview_deletes: c.delete ?? 0,
+      preview_totals_json: JSON.stringify(i.previewTotals),
+      status: SyncRunStatus.Started,
+      started_at: now,
+      finished_at: null,
+      duration_ms: null,
+      error: null,
+      executed_inserts: null,
+      executed_updates: null,
+      executed_deletes: null,
+      execute_totals_json: null,
+    },
+  })
   rememberPlanOwner(i.planId, actorUpn)
 }
 
@@ -330,11 +334,15 @@ export function recordSyncRunPreview(i: {
   const actorUpn = requireSyncRunActorUpn(i.actorUpn, "recordSyncRunPreview")
   const c = asCounts(i.previewTotals)
   // Don't clobber an in-progress / completed run with a "preview" status.
-  // Use INSERT … ON CONFLICT to only overwrite plan_json + preview metadata
-  // for already-existing rows, leaving status / timestamps intact.
-  const compiled = getPlatformDb()
-    .insertInto("sync_runs")
-    .values({
+  // On conflict only overwrite plan_json + preview metadata; leave status/timestamps.
+  const existing = getRowByKeys<{ entity_display_name: string | null }>("sync_runs", {
+    plan_id: i.planId,
+  })
+  const displayName = i.entityDisplayName ?? existing?.entity_display_name ?? null
+  upsertRow({
+    table: "sync_runs",
+    keys: { plan_id: i.planId },
+    insert: {
       plan_id: i.planId,
       entity_type: i.entityType,
       entity_id: String(i.entityId),
@@ -349,19 +357,16 @@ export function recordSyncRunPreview(i: {
       plan_json: i.planJson,
       status: SyncRunStatus.Preview,
       started_at: platformNow(),
-    })
-    .onConflict((oc) =>
-      oc.column("plan_id").doUpdateSet({
-        plan_json: i.planJson,
-        preview_totals_json: JSON.stringify(i.previewTotals),
-        preview_inserts: c.insert ?? 0,
-        preview_updates: c.update ?? 0,
-        preview_deletes: c.delete ?? 0,
-        entity_display_name: sql`COALESCE(excluded.entity_display_name, sync_runs.entity_display_name)`,
-      }),
-    )
-    .compile()
-  runExec(compiled)
+    },
+    update: {
+      plan_json: i.planJson,
+      preview_totals_json: JSON.stringify(i.previewTotals),
+      preview_inserts: c.insert ?? 0,
+      preview_updates: c.update ?? 0,
+      preview_deletes: c.delete ?? 0,
+      entity_display_name: displayName,
+    },
+  })
 }
 
 /** Re-hydrate the full plan body for a given planId, or null if absent. */

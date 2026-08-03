@@ -6,7 +6,8 @@ import { PolicyEffect } from "@mia/agent"
 import { sql } from "kysely"
 import { PolicySource } from "../../../../../internal/enums/index.js"
 import { getPlatformDb } from "../../../schema/kysely.js"
-import { runAll, runChanges, runExec, runGet } from "../../../schema/execute.js"
+import { runAll, runExec, runGet } from "../../../schema/execute.js"
+import { insertRowOrIgnore, upsertRow } from "../../../schema/upsert.js"
 
 export { PolicySource } from "../../../../../internal/enums/index.js"
 
@@ -20,18 +21,16 @@ export interface DbLayout {
 }
 
 export function saveLayout(layout: DbLayout): void {
-  const compiled = getPlatformDb()
-    .insertInto("layout_configs")
-    .values(layout)
-    .onConflict((oc) =>
-      oc.column("id").doUpdateSet({
-        name: layout.name,
-        config: layout.config,
-        updated_at: layout.updated_at,
-      }),
-    )
-    .compile()
-  runExec(compiled)
+  upsertRow({
+    table: "layout_configs",
+    keys: { id: layout.id },
+    insert: layout,
+    update: {
+      name: layout.name,
+      config: layout.config,
+      updated_at: layout.updated_at,
+    },
+  })
 }
 
 export function getLayouts(): DbLayout[] {
@@ -97,10 +96,21 @@ export function savePolicyRule(rule: DbPolicyRule): void {
   const source = rule.source ?? PolicySource.Db
   const updatedAt = rule.updated_at ?? null
   const updatedBy = rule.updated_by ?? null
-  const compiled = getPlatformDb()
-    .insertInto("policy_configs")
-    .values({
-      name: rule.name,
+  const row = {
+    name: rule.name,
+    effect: rule.effect,
+    condition: rule.condition,
+    parameters: rule.parameters,
+    created_at: rule.created_at,
+    source,
+    updated_at: updatedAt,
+    updated_by: updatedBy,
+  }
+  upsertRow({
+    table: "policy_configs",
+    keys: { name: rule.name },
+    insert: row,
+    update: {
       effect: rule.effect,
       condition: rule.condition,
       parameters: rule.parameters,
@@ -108,20 +118,8 @@ export function savePolicyRule(rule: DbPolicyRule): void {
       source,
       updated_at: updatedAt,
       updated_by: updatedBy,
-    })
-    .onConflict((oc) =>
-      oc.column("name").doUpdateSet({
-        effect: rule.effect,
-        condition: rule.condition,
-        parameters: rule.parameters,
-        created_at: rule.created_at,
-        source,
-        updated_at: updatedAt,
-        updated_by: updatedBy,
-      }),
-    )
-    .compile()
-  runExec(compiled)
+    },
+  })
 }
 
 /**
@@ -130,9 +128,10 @@ export function savePolicyRule(rule: DbPolicyRule): void {
  */
 export function seedPolicyRuleIfMissing(rule: DbPolicyRule): boolean {
   const source = rule.source ?? PolicySource.HostedDefault
-  const compiled = getPlatformDb()
-    .insertInto("policy_configs")
-    .values({
+  return insertRowOrIgnore({
+    table: "policy_configs",
+    keys: { name: rule.name },
+    insert: {
       name: rule.name,
       effect: rule.effect,
       condition: rule.condition,
@@ -141,10 +140,8 @@ export function seedPolicyRuleIfMissing(rule: DbPolicyRule): boolean {
       source,
       updated_at: null,
       updated_by: null,
-    })
-    .onConflict((oc) => oc.column("name").doNothing())
-    .compile()
-  return runChanges(compiled) > 0
+    },
+  })
 }
 
 export function deletePolicyRule(name: string): void {
@@ -191,18 +188,16 @@ export function getSyncEnvOverride(name: string): DbSyncEnvOverride | undefined 
 }
 
 export function saveSyncEnvOverride(row: DbSyncEnvOverride): void {
-  const compiled = getPlatformDb()
-    .insertInto("sync_environment_override_configs")
-    .values(row)
-    .onConflict((oc) =>
-      oc.column("name").doUpdateSet({
-        overrides_json: row.overrides_json,
-        updated_at: row.updated_at,
-        updated_by: row.updated_by,
-      }),
-    )
-    .compile()
-  runExec(compiled)
+  upsertRow({
+    table: "sync_environment_override_configs",
+    keys: { name: row.name },
+    insert: row,
+    update: {
+      overrides_json: row.overrides_json,
+      updated_at: row.updated_at,
+      updated_by: row.updated_by,
+    },
+  })
 }
 
 export function deleteSyncEnvOverride(name: string): void {

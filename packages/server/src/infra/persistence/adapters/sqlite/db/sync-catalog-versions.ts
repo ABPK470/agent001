@@ -2,6 +2,7 @@ import { sql } from "kysely"
 import { getPlatformStore } from "../platform-store.js"
 import { getPlatformDb } from "../../../schema/kysely.js"
 import { runAll, runExec, runGet } from "../../../schema/execute.js"
+import { upsertRow } from "../../../schema/upsert.js"
 
 const DEFAULT_TENANT = "_default"
 
@@ -103,21 +104,19 @@ export function appendSyncCatalogVersion(args: {
       .compile()
     runExec(insertVersion)
 
-    const upsertActive = getPlatformDb()
-      .insertInto("sync_catalog_active")
-      .values({
+    upsertRow({
+      table: "sync_catalog_active",
+      keys: { tenant_id: tenantId },
+      insert: {
         tenant_id: tenantId,
         version: nextVersion,
         updated_at: createdAt,
-      })
-      .onConflict((oc) =>
-        oc.column("tenant_id").doUpdateSet({
-          version: nextVersion,
-          updated_at: createdAt,
-        }),
-      )
-      .compile()
-    runExec(upsertActive)
+      },
+      update: {
+        version: nextVersion,
+        updated_at: createdAt,
+      },
+    })
 
     return nextVersion
   })

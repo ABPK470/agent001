@@ -11,8 +11,9 @@
 
 import { DEFAULT_TENANT_ID, installFreezeWindowRegistry, type FreezeWindowDefinition } from "@mia/sync"
 import { getPlatformDb } from "../../../schema/kysely.js"
-import { runAll, runChanges, runExec, runGet } from "../../../schema/execute.js"
+import { runAll, runChanges, runGet } from "../../../schema/execute.js"
 import { platformNow } from "../../../schema/sql-time.js"
+import { upsertRow } from "../../../schema/upsert.js"
 import { refreshesGlobalRegistryOnMutation } from "./tenant-inheritance.js"
 
 // ── Public type (matches shared-types `FreezeWindow`) ───────────
@@ -114,9 +115,11 @@ export interface UpsertFreezeWindowArgs {
 
 export function upsertFreezeWindow(args: UpsertFreezeWindowArgs): FreezeWindowRecord {
   validate(args)
-  const compiled = getPlatformDb()
-    .insertInto("freeze_window_configs")
-    .values({
+  const now = platformNow()
+  upsertRow({
+    table: "freeze_window_configs",
+    keys: { tenant_id: args.tenantId, id: args.id },
+    insert: {
       tenant_id: args.tenantId,
       id: args.id,
       display_name: args.displayName,
@@ -124,20 +127,17 @@ export function upsertFreezeWindow(args: UpsertFreezeWindowArgs): FreezeWindowRe
       starts_at: args.startsAt,
       ends_at: args.endsAt,
       created_by: args.actor,
-      created_at: platformNow(),
-      updated_at: platformNow(),
-    })
-    .onConflict((oc) =>
-      oc.columns(["tenant_id", "id"]).doUpdateSet({
-        display_name: args.displayName,
-        description: args.description,
-        starts_at: args.startsAt,
-        ends_at: args.endsAt,
-        updated_at: platformNow(),
-      }),
-    )
-    .compile()
-  runExec(compiled)
+      created_at: now,
+      updated_at: now,
+    },
+    update: {
+      display_name: args.displayName,
+      description: args.description,
+      starts_at: args.startsAt,
+      ends_at: args.endsAt,
+      updated_at: now,
+    },
+  })
   const fresh = getFreezeWindow(args.tenantId, args.id)
   if (!fresh) throw new Error(`freeze_window not persisted: ${args.id}`)
   if (refreshesGlobalRegistryOnMutation(args.tenantId)) refreshFreezeWindowRegistry()

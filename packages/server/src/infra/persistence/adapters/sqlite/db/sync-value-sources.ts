@@ -4,7 +4,8 @@ import {
 } from "@mia/shared-types"
 
 import { getPlatformDb } from "../../../schema/kysely.js"
-import { runAll, runChanges, runExec } from "../../../schema/execute.js"
+import { runAll, runChanges } from "../../../schema/execute.js"
+import { upsertRow } from "../../../schema/upsert.js"
 
 const DEFAULT_TENANT = "_default"
 
@@ -36,23 +37,21 @@ export function saveSyncValueSource(
     row.definition_json ??
     JSON.stringify(parseCustomValueSourceDefinition("{}", row.id))
   const builtIn = row.built_in ?? 0
-  const compiled = getPlatformDb()
-    .insertInto("sync_value_sources")
-    .values({
+  upsertRow({
+    table: "sync_value_sources",
+    keys: { tenant_id: row.tenant_id, id: row.id },
+    insert: {
       tenant_id: row.tenant_id,
       id: row.id,
       label: row.label,
       built_in: builtIn,
       definition_json: definition,
-    })
-    .onConflict((oc) =>
-      oc.columns(["tenant_id", "id"]).doUpdateSet({
-        label: row.label,
-        definition_json: definition,
-      }),
-    )
-    .compile()
-  runExec(compiled)
+    },
+    update: {
+      label: row.label,
+      definition_json: definition,
+    },
+  })
 }
 
 export function deleteSyncValueSource(tenantId: string, id: string): boolean {

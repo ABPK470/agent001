@@ -17,11 +17,12 @@
 
 import { hmacSha256Hex, RiskTier, sha256Hex } from "@mia/sync"
 import { randomBytes, randomUUID } from "node:crypto"
-import { sql, type UpdateObject } from "kysely"
+import type { UpdateObject } from "kysely"
 import type { PlatformDatabase } from "../../../schema/tables.js"
 import { getPlatformDb } from "../../../schema/kysely.js"
 import { runAll, runChanges, runExec, runGet } from "../../../schema/execute.js"
 import { platformNow } from "../../../schema/sql-time.js"
+import { upsertRow } from "../../../schema/upsert.js"
 
 // ── policies ────────────────────────────────────────────────────
 
@@ -54,29 +55,32 @@ export interface ApprovalPolicy {
 
 export function upsertApprovalPolicy(p: ApprovalPolicy, actor: string): void {
   const approversJson = JSON.stringify(p.approvers)
-  const compiled = getPlatformDb()
-    .insertInto("approval_configs")
-    .values({
+  const now = platformNow()
+  upsertRow({
+    table: "approval_configs",
+    keys: {
+      tenant_id: p.tenantId,
+      target_env: p.targetEnv,
+      risk_tier: p.riskTier,
+    },
+    insert: {
       tenant_id: p.tenantId,
       target_env: p.targetEnv,
       risk_tier: p.riskTier,
       policy: p.policy,
       approvers_json: approversJson,
       bypass_role: p.bypassRole,
-      updated_at: platformNow(),
+      updated_at: now,
       updated_by: actor,
-    })
-    .onConflict((oc) =>
-      oc.columns(["tenant_id", "target_env", "risk_tier"]).doUpdateSet({
-        policy: p.policy,
-        approvers_json: approversJson,
-        bypass_role: p.bypassRole,
-        updated_at: platformNow(),
-        updated_by: actor,
-      }),
-    )
-    .compile()
-  runExec(compiled)
+    },
+    update: {
+      policy: p.policy,
+      approvers_json: approversJson,
+      bypass_role: p.bypassRole,
+      updated_at: now,
+      updated_by: actor,
+    },
+  })
 }
 
 export function getApprovalPolicy(tenantId: string, targetEnv: string, tier: RiskTier): ApprovalPolicy {

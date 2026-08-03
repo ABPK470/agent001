@@ -10,6 +10,7 @@ import {
 } from "../../../sync-flow-steps.js"
 import { getPlatformDb } from "../../../schema/kysely.js"
 import { runAll, runChanges, runExec, runGet } from "../../../schema/execute.js"
+import { getRowByKeys, upsertRow } from "../../../schema/upsert.js"
 
 const DEFAULT_TENANT = "_default"
 
@@ -110,25 +111,23 @@ export function saveSyncPhase(
   const definition =
     row.definition_json ?? JSON.stringify(parsePhaseDefinition("{}", row.id, row.label))
   const builtIn = row.built_in ?? 0
-  const compiled = getPlatformDb()
-    .insertInto("sync_phases")
-    .values({
+  upsertRow({
+    table: "sync_phases",
+    keys: { tenant_id: row.tenant_id, id: row.id },
+    insert: {
       tenant_id: row.tenant_id,
       id: row.id,
       label: row.label,
       sort_order: row.sort_order,
       built_in: builtIn,
       definition_json: definition,
-    })
-    .onConflict((oc) =>
-      oc.columns(["tenant_id", "id"]).doUpdateSet({
-        label: row.label,
-        sort_order: row.sort_order,
-        definition_json: definition,
-      }),
-    )
-    .compile()
-  runExec(compiled)
+    },
+    update: {
+      label: row.label,
+      sort_order: row.sort_order,
+      definition_json: definition,
+    },
+  })
 }
 
 export function saveSyncAction(
@@ -140,40 +139,36 @@ export function saveSyncAction(
   const definition =
     row.definition_json ?? JSON.stringify(parseKindDefinition("{}", row.id, row.label))
   const builtIn = row.built_in ?? 0
-  const compiled = getPlatformDb()
-    .insertInto("sync_actions")
-    .values({
+  upsertRow({
+    table: "sync_actions",
+    keys: { tenant_id: row.tenant_id, id: row.id },
+    insert: {
       tenant_id: row.tenant_id,
       id: row.id,
       label: row.label,
       built_in: builtIn,
       definition_json: definition,
-    })
-    .onConflict((oc) =>
-      oc.columns(["tenant_id", "id"]).doUpdateSet({
-        label: row.label,
-        definition_json: definition,
-      }),
-    )
-    .compile()
-  runExec(compiled)
+    },
+    update: {
+      label: row.label,
+      definition_json: definition,
+    },
+  })
 }
 
 export function saveSyncFlow(row: DbSyncFlow): void {
-  const compiled = getPlatformDb()
-    .insertInto("sync_flows")
-    .values(row)
-    .onConflict((oc) =>
-      oc.columns(["tenant_id", "id"]).doUpdateSet({
-        label: row.label,
-        description: row.description,
-        steps_json: row.steps_json,
-        updated_at: row.updated_at,
-        updated_by: row.updated_by,
-      }),
-    )
-    .compile()
-  runExec(compiled)
+  upsertRow({
+    table: "sync_flows",
+    keys: { tenant_id: row.tenant_id, id: row.id },
+    insert: row,
+    update: {
+      label: row.label,
+      description: row.description,
+      steps_json: row.steps_json,
+      updated_at: row.updated_at,
+      updated_by: row.updated_by,
+    },
+  })
 }
 
 export function deleteSyncPhase(tenantId: string, id: string): boolean {
@@ -286,9 +281,10 @@ export function syncBuiltInFlowsFromArtifact(
       }
     }
 
-    const compiled = getPlatformDb()
-      .insertInto("sync_flows")
-      .values({
+    upsertRow({
+      table: "sync_flows",
+      keys: { tenant_id: tenantId, id },
+      insert: {
         tenant_id: tenantId,
         id,
         label: flow.label,
@@ -297,18 +293,15 @@ export function syncBuiltInFlowsFromArtifact(
         built_in: 1,
         updated_at: updatedAt,
         updated_by: updatedBy,
-      })
-      .onConflict((oc) =>
-        oc.columns(["tenant_id", "id"]).doUpdateSet({
-          label: flow.label,
-          description: flow.description ?? "",
-          steps_json: stepsJson,
-          updated_at: updatedAt,
-          updated_by: updatedBy,
-        }),
-      )
-      .compile()
-    runExec(compiled)
+      },
+      update: {
+        label: flow.label,
+        description: flow.description ?? "",
+        steps_json: stepsJson,
+        updated_at: updatedAt,
+        updated_by: updatedBy,
+      },
+    })
   }
 }
 
@@ -326,67 +319,76 @@ export function syncDeploySyncMetadataFromArtifact(projectRoot: string, tenantId
 
   for (const phase of metadata.phases) {
     const definitionJson = JSON.stringify(phase.definition)
-    const compiled = getPlatformDb()
-      .insertInto("sync_phases")
-      .values({
+    const existing = getRowByKeys<{ built_in: number; definition_json: string }>("sync_phases", {
+      tenant_id: tenantId,
+      id: phase.id,
+    })
+    upsertRow({
+      table: "sync_phases",
+      keys: { tenant_id: tenantId, id: phase.id },
+      insert: {
         tenant_id: tenantId,
         id: phase.id,
         label: phase.label,
         sort_order: phase.sortOrder,
         built_in: 1,
         definition_json: definitionJson,
-      })
-      .onConflict((oc) =>
-        oc.columns(["tenant_id", "id"]).doUpdateSet({
-          label: phase.label,
-          sort_order: phase.sortOrder,
-          definition_json: sql`CASE WHEN sync_phases.built_in = 1 THEN excluded.definition_json ELSE sync_phases.definition_json END`,
-        }),
-      )
-      .compile()
-    runExec(compiled)
+      },
+      update: {
+        label: phase.label,
+        sort_order: phase.sortOrder,
+        definition_json:
+          existing && existing.built_in !== 1 ? existing.definition_json : definitionJson,
+      },
+    })
   }
 
   for (const action of metadata.actions) {
     const definitionJson = JSON.stringify(action.definition)
-    const compiled = getPlatformDb()
-      .insertInto("sync_actions")
-      .values({
+    const existing = getRowByKeys<{ built_in: number; definition_json: string }>("sync_actions", {
+      tenant_id: tenantId,
+      id: action.id,
+    })
+    upsertRow({
+      table: "sync_actions",
+      keys: { tenant_id: tenantId, id: action.id },
+      insert: {
         tenant_id: tenantId,
         id: action.id,
         label: action.label,
         built_in: 1,
         definition_json: definitionJson,
-      })
-      .onConflict((oc) =>
-        oc.columns(["tenant_id", "id"]).doUpdateSet({
-          label: action.label,
-          definition_json: sql`CASE WHEN sync_actions.built_in = 1 THEN excluded.definition_json ELSE sync_actions.definition_json END`,
-        }),
-      )
-      .compile()
-    runExec(compiled)
+      },
+      update: {
+        label: action.label,
+        definition_json:
+          existing && existing.built_in !== 1 ? existing.definition_json : definitionJson,
+      },
+    })
   }
 
   for (const valueSource of metadata.valueSources ?? []) {
     const definitionJson = JSON.stringify(valueSource.definition)
-    const compiled = getPlatformDb()
-      .insertInto("sync_value_sources")
-      .values({
+    const existing = getRowByKeys<{ built_in: number; definition_json: string }>(
+      "sync_value_sources",
+      { tenant_id: tenantId, id: valueSource.id },
+    )
+    upsertRow({
+      table: "sync_value_sources",
+      keys: { tenant_id: tenantId, id: valueSource.id },
+      insert: {
         tenant_id: tenantId,
         id: valueSource.id,
         label: valueSource.label,
         built_in: 1,
         definition_json: definitionJson,
-      })
-      .onConflict((oc) =>
-        oc.columns(["tenant_id", "id"]).doUpdateSet({
-          label: valueSource.label,
-          definition_json: sql`CASE WHEN sync_value_sources.built_in = 1 THEN excluded.definition_json ELSE sync_value_sources.definition_json END`,
-        }),
-      )
-      .compile()
-    runExec(compiled)
+      },
+      update: {
+        label: valueSource.label,
+        definition_json:
+          existing && existing.built_in !== 1 ? existing.definition_json : definitionJson,
+      },
+    })
   }
 
   for (const row of listSyncPhases(tenantId)) {

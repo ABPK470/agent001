@@ -1,6 +1,7 @@
 import { getPlatformDb } from "../../../schema/kysely.js"
 import { runAll, runExec, runGet } from "../../../schema/execute.js"
 import { platformNow } from "../../../schema/sql-time.js"
+import { upsertRow } from "../../../schema/upsert.js"
 
 export interface ProposerScheduleRow {
   tenant_id: string
@@ -47,29 +48,32 @@ export function upsertProposerSchedule(input: {
   nextRunAt: string | null
   updatedBy: string
 }): void {
-  const compiled = getPlatformDb()
-    .insertInto("proposer_schedule_configs")
-    .values({
+  const now = platformNow()
+  upsertRow({
+    table: "proposer_schedule_configs",
+    keys: {
+      tenant_id: input.tenantId,
+      source: input.source,
+      target: input.target,
+    },
+    insert: {
       tenant_id: input.tenantId,
       source: input.source,
       target: input.target,
       cron: input.cron,
       enabled: input.enabled,
       next_run_at: input.nextRunAt,
-      updated_at: platformNow(),
+      updated_at: now,
       updated_by: input.updatedBy,
-    })
-    .onConflict((oc) =>
-      oc.columns(["tenant_id", "source", "target"]).doUpdateSet({
-        cron: input.cron,
-        enabled: input.enabled,
-        next_run_at: input.nextRunAt,
-        updated_at: platformNow(),
-        updated_by: input.updatedBy,
-      }),
-    )
-    .compile()
-  runExec(compiled)
+    },
+    update: {
+      cron: input.cron,
+      enabled: input.enabled,
+      next_run_at: input.nextRunAt,
+      updated_at: now,
+      updated_by: input.updatedBy,
+    },
+  })
 }
 
 export function getProposerSchedule(

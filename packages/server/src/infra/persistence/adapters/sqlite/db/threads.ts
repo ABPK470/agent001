@@ -6,7 +6,7 @@ import { randomUUID } from "node:crypto"
 import { sql } from "kysely"
 import { getDb } from "../connection.js"
 import { getPlatformStore } from "../platform-store.js"
-import { getPlatformDb } from "../../../schema/kysely.js"
+import { getPlatformDb, getPlatformDbKind } from "../../../schema/kysely.js"
 import { runAll, runExec, runGet } from "../../../schema/execute.js"
 
 export interface DbThread {
@@ -161,9 +161,11 @@ export function deleteThreadAndRuns(threadId: string, upn: string): { deletedRun
 
   getPlatformStore().transaction(() => {
     if (runIds.length > 0) {
-      // memory_entries stay raw until Memory search port (milestone 8).
-      const placeholders = runIds.map(() => "?").join(",")
-      getDb().prepare(`DELETE FROM memory_entries WHERE run_id IN (${placeholders})`).run(...runIds)
+      // memory_entries: sqlite only until Memory search port (milestone 8).
+      if (getPlatformDbKind() === "sqlite") {
+        const placeholders = runIds.map(() => "?").join(",")
+        getDb().prepare(`DELETE FROM memory_entries WHERE run_id IN (${placeholders})`).run(...runIds)
+      }
       const delEvents = getPlatformDb()
         .deleteFrom("event_log")
         .where("run_id", "in", runIds)

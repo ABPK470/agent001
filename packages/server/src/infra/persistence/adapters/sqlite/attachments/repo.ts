@@ -18,6 +18,7 @@ import {
 } from "../../../../../internal/enums/attachments.js"
 import { getPlatformDb } from "../../../schema/kysely.js"
 import { runAll, runExec, runGet } from "../../../schema/execute.js"
+import { insertRowOrIgnore } from "../../../schema/upsert.js"
 
 export { AttachmentImportMode, AttachmentIngestionMode, AttachmentScope, AttachmentSource, AttachmentStatus }
 
@@ -195,16 +196,19 @@ export function markAttachmentProcessed(id: string, textExtractUri: string | nul
 // ── Tags ───────────────────────────────────────────────────────────
 
 export function addAttachmentTag(attachmentId: string, key: string, value: string): void {
-  const compiled = getPlatformDb()
-    .insertInto("attachment_tags")
-    .values({
+  insertRowOrIgnore({
+    table: "attachment_tags",
+    keys: {
       attachment_id: attachmentId,
       tag_key: key,
       tag_value: value,
-    })
-    .onConflict((oc) => oc.columns(["attachment_id", "tag_key", "tag_value"]).doNothing())
-    .compile()
-  runExec(compiled)
+    },
+    insert: {
+      attachment_id: attachmentId,
+      tag_key: key,
+      tag_value: value,
+    },
+  })
 }
 
 export function listAttachmentTags(attachmentId: string): AttachmentTagRow[] {
