@@ -1,8 +1,9 @@
 # Platform MSSQL — staging soak runbook
 
-Operator checklist before recommending `MIA_PLATFORM_STORE=mssql` as the hosted
-default. Engineering owns the list; staging owners run it. No code hard-stop —
-`assertPlatformStoreReady` already allows mssql.
+Operator checklist before flipping a deploy from sqlite to
+`MIA_PLATFORM_STORE=mssql`. Engineering owns the list; staging owners run it.
+No code hard-stop — `assertPlatformStoreReady` already allows mssql. Process
+default remains **sqlite** until that flip.
 
 ## Preconditions
 
@@ -49,10 +50,11 @@ whether Tier-2 memory was acceptable for the workload.
 3. Memory Tier-2 documented for product/support
    ([schema README](../packages/server/src/infra/persistence/schema/README.md),
    [doctrine §5c](./doctrine.md)).
-4. Hosted deploy env templates point at mssql when flipping the default.
+4. Architect / ops agree SQL Server is required; deploy env sets
+   `MIA_PLATFORM_STORE=mssql` (sqlite remains the process default otherwise).
 
 ## Out of scope for soak
 
 - Enabling SQL Server Full-Text (future Track B).
-- Platform postgres.
+- Choosing platform postgres (see [postgres soak](./platform-postgres-soak.md)).
 - Fixing unrelated full `@mia/sync` orchestrator test suite.

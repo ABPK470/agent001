@@ -1,8 +1,9 @@
 /**
- * Platform store selection — config only (no adapter rewrite yet).
- * MIA_PLATFORM_STORE=sqlite|mssql|postgres (default sqlite for local/dev).
- * Hosted default target: mssql (see doctrine §5c). Connection for mssql:
- * MIA_PLATFORM_MSSQL_* (never warehouse connector pools).
+ * Platform store selection — config only.
+ * MIA_PLATFORM_STORE=sqlite|mssql|postgres (default **sqlite**, including
+ * hosted until a deploy explicitly chooses mssql or postgres — see doctrine §5c).
+ * Connection for mssql: MIA_PLATFORM_MSSQL_* (never warehouse connector pools).
+ * Connection for postgres: MIA_PLATFORM_PG_* / MIA_PLATFORM_PG_URL.
  */
 
 import type { PlatformStoreKind } from "../../ports/platform-store.js"

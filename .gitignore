@@ -33,4 +33,5 @@ notes
 docs/*
 !docs/doctrine.md
 !docs/platform-mssql-soak.md
+!docs/platform-postgres-soak.md
 !docs/rdbms-future-tracks.md

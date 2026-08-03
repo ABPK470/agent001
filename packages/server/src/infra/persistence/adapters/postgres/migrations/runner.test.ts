@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest"
 import {
-  createMssqlMigrationRunner,
-  kyselyPlatformDdlExecutor,
-  type MssqlQueryExecutor,
+  createPostgresMigrationRunner,
+  kyselyPostgresDdlExecutor,
+  type PostgresMigrationExecutor,
 } from "./runner.js"
 
-function fakeExecutor(): MssqlQueryExecutor & { statements: string[] } {
+function fakeExecutor(): PostgresMigrationExecutor & { statements: string[] } {
   const statements: string[] = []
   const applied = new Map<number, { version: number; name: string; applied_at: string }>()
   return {
@@ -13,15 +13,13 @@ function fakeExecutor(): MssqlQueryExecutor & { statements: string[] } {
     async query(sqlText) {
       statements.push(sqlText)
       if (sqlText.includes("_mia_schema_migrations") && sqlText.includes("CREATE TABLE")) {
-        return { recordset: [] }
+        return { rows: [] }
       }
       if (sqlText.includes("SELECT version, name")) {
-        return {
-          recordset: [...applied.values()],
-        }
+        return { rows: [...applied.values()] }
       }
-      if (sqlText.includes("INSERT INTO dbo._mia_schema_migrations")) {
-        const match = /VALUES\s*\((\d+),\s*N'([^']*)'\)/i.exec(sqlText)
+      if (sqlText.includes("INSERT INTO _mia_schema_migrations")) {
+        const match = /VALUES\s*\((\d+),\s*'([^']*)'\)/i.exec(sqlText)
         if (match) {
           const version = Number(match[1])
           applied.set(version, {
@@ -30,18 +28,17 @@ function fakeExecutor(): MssqlQueryExecutor & { statements: string[] } {
             applied_at: "2026-01-01T00:00:00",
           })
         }
-        return { recordset: [] }
+        return { rows: [] }
       }
-      // pilot DDL body
-      return { recordset: [] }
+      return { rows: [] }
     },
   }
 }
 
-describe("createMssqlMigrationRunner", () => {
-  it("applies pilot migration once and lists it as applied", async () => {
+describe("createPostgresMigrationRunner", () => {
+  it("applies registry through memory_search_vector once", async () => {
     const ex = fakeExecutor()
-    const runner = createMssqlMigrationRunner(ex)
+    const runner = createPostgresMigrationRunner(ex)
     await runner.applyPending()
     await runner.applyPending()
     const list = await runner.list()
@@ -51,13 +48,14 @@ describe("createMssqlMigrationRunner", () => {
       name: "memory_search_vector",
       appliedAt: "2026-01-01T00:00:00",
     })
-    const inserts = ex.statements.filter((s) => s.includes("INSERT INTO dbo._mia_schema_migrations"))
+    const inserts = ex.statements.filter((s) => s.includes("INSERT INTO _mia_schema_migrations"))
     expect(inserts).toHaveLength(10)
-    expect(ex.statements.some((s) => s.includes("CREATE TABLE dbo.eval_dataset_entries"))).toBe(true)
-    expect(ex.statements.some((s) => s.includes("CREATE TABLE dbo.memory_entries"))).toBe(true)
+    expect(ex.statements.some((s) => s.includes("CREATE TABLE IF NOT EXISTS memory_entries"))).toBe(true)
+    expect(ex.statements.some((s) => s.includes("to_tsvector"))).toBe(true)
+    expect(ex.statements.some((s) => s.includes("USING GIN"))).toBe(true)
   })
 
   it("exports a Kysely-backed DDL executor factory", () => {
-    expect(typeof kyselyPlatformDdlExecutor).toBe("function")
+    expect(typeof kyselyPostgresDdlExecutor).toBe("function")
   })
 })

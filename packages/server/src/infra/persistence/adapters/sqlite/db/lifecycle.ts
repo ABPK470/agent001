@@ -34,7 +34,7 @@ async function pruneKeepingNewest(
 ): Promise<number> {
   if (keep < 0) return 0
   const kind = getPlatformDbKind()
-  if (kind === "sqlite") {
+  if (kind === "sqlite" || kind === "postgres") {
     return await runChangesAsync(
       sql`
         DELETE FROM ${sql.table(table)} WHERE id NOT IN (
@@ -113,6 +113,15 @@ export async function pruneOldData(opts?: {
           WHERE status IN ('completed', 'failed', 'cancelled')
           ORDER BY created_at DESC
           LIMIT -1 OFFSET ${keepRuns}
+        `.compile(getPlatformDb()),
+      )
+    } else if (kind === "postgres") {
+      runsToPrune = await runAllAsync<{ id: string }>(
+        sql`
+          SELECT id FROM runs
+          WHERE status IN ('completed', 'failed', 'cancelled')
+          ORDER BY created_at DESC
+          OFFSET ${keepRuns}
         `.compile(getPlatformDb()),
       )
     } else {

@@ -17,15 +17,15 @@ describe("platform-store composition", () => {
     expect(getPlatformStore().kind).toBe("sqlite")
   })
 
-  it("allows mssql at assert; refuses postgres", () => {
+  it("allows mssql and postgres at assert", () => {
     expect(assertPlatformStoreReady({ MIA_PLATFORM_STORE: "mssql" })).toBe("mssql")
-    expect(() => assertPlatformStoreReady({ MIA_PLATFORM_STORE: "postgres" })).toThrow(
-      /not ready/,
-    )
+    expect(assertPlatformStoreReady({ MIA_PLATFORM_STORE: "postgres" })).toBe("postgres")
   })
 
-  it("requires openConfiguredPlatformStore before getPlatformStore for mssql", () => {
+  it("requires openConfiguredPlatformStore before getPlatformStore for server RDBMS", () => {
     process.env["MIA_PLATFORM_STORE"] = "mssql"
+    expect(() => getPlatformStore()).toThrow(/not open/)
+    process.env["MIA_PLATFORM_STORE"] = "postgres"
     expect(() => getPlatformStore()).toThrow(/not open/)
   })
 })

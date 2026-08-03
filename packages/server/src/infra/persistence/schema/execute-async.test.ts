@@ -6,7 +6,11 @@ import {
   getPlatformDbKind,
   resetPlatformDbForTests,
 } from "./kysely.js"
-import { injectMssqlOutputInsertedId, runGetAsync } from "./execute-async.js"
+import {
+  injectMssqlOutputInsertedId,
+  injectPostgresReturningId,
+  runGetAsync,
+} from "./execute-async.js"
 import type { PlatformDatabase } from "./tables.js"
 
 afterEach(() => {
@@ -27,8 +31,17 @@ describe("execute-async", () => {
     )
   })
 
+  it("injects RETURNING id into postgres-shaped inserts", () => {
+    const out = injectPostgresReturningId(
+      `insert into "notification_log" ("route_id", "event_type") values ($1, $2)`,
+    )
+    expect(out.toLowerCase()).toContain("returning id")
+    expect(out).toMatch(/values/i)
+  })
+
   it("refuses inject on non-insert SQL", () => {
     expect(() => injectMssqlOutputInsertedId("select 1")).toThrow(/cannot inject/)
+    expect(() => injectPostgresReturningId("select 1")).toThrow(/cannot inject/)
   })
 
   it("runGetAsync uses executeQuery when non-sqlite is bound", async () => {
@@ -48,7 +61,7 @@ describe("execute-async", () => {
     const fake = new Kysely<PlatformDatabase>({
       dialect: new SqliteDialect({ database: mem }),
     })
-    bindPlatformDb("mssql", fake)
+    bindPlatformDb("postgres", fake)
     const compiled = fake
       .selectFrom("users")
       .selectAll()
@@ -56,7 +69,7 @@ describe("execute-async", () => {
       .compile()
     const row = await runGetAsync(compiled)
     expect(row).toBeUndefined()
-    expect(getPlatformDbKind()).toBe("mssql")
+    expect(getPlatformDbKind()).toBe("postgres")
     await fake.destroy()
     mem.close()
   })

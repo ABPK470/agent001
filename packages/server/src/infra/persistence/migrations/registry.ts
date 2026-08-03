@@ -1,14 +1,15 @@
 /**
  * Multi-dialect platform migration registry (plan milestone 4).
  *
- * Hosted default dialect: **mssql**. SQLite keeps the numbered better-sqlite3
- * runner as the production path today; these steps are the peer DDL bodies
- * the MSSQL PlatformStore migrator applies.
+ * Default platform store remains **sqlite** (numbered better-sqlite3 runner).
+ * These steps are peer DDL for mssql / postgres when
+ * `MIA_PLATFORM_STORE` selects those adapters.
  *
- * Grow table-by-table. A missing `up.mssql` fails apply loudly.
+ * Grow table-by-table. A missing dialect `up` fails apply loudly.
  */
 
 import type { MultiDialectMigrationStep } from "@mia/sql-kit"
+import { postgresExec, postgresMigrationSql } from "./postgres-bodies.js"
 
 /** MSSQL batch executor bound by the adapter (pool request or transaction). */
 export type MssqlMigrationExecutor = {
@@ -88,6 +89,9 @@ END;
 `,
         )
       },
+      postgres: async (executor) => {
+        await postgresExec(executor, postgresMigrationSql[1]!)
+      },
     },
   },
   {
@@ -152,6 +156,9 @@ BEGIN
 END;
 `,
         )
+      },
+      postgres: async (executor) => {
+        await postgresExec(executor, postgresMigrationSql[2]!)
       },
     },
   },
@@ -278,6 +285,9 @@ BEGIN
 END;
 `,
         )
+      },
+      postgres: async (executor) => {
+        await postgresExec(executor, postgresMigrationSql[3]!)
       },
     },
   },
@@ -489,6 +499,9 @@ BEGIN
 END;
 `,
         )
+      },
+      postgres: async (executor) => {
+        await postgresExec(executor, postgresMigrationSql[4]!)
       },
     },
   },
@@ -785,6 +798,9 @@ END;
 `,
         )
       },
+      postgres: async (executor) => {
+        await postgresExec(executor, postgresMigrationSql[5]!)
+      },
     },
   },
   {
@@ -1009,6 +1025,9 @@ END;
 `,
         )
       },
+      postgres: async (executor) => {
+        await postgresExec(executor, postgresMigrationSql[6]!)
+      },
     },
   },
   {
@@ -1095,6 +1114,9 @@ END;
 `,
         )
       },
+      postgres: async (executor) => {
+        await postgresExec(executor, postgresMigrationSql[7]!)
+      },
     },
   },
   {
@@ -1127,6 +1149,9 @@ BEGIN
 END;
 `,
         )
+      },
+      postgres: async (executor) => {
+        await postgresExec(executor, postgresMigrationSql[8]!)
       },
     },
   },
@@ -1222,6 +1247,20 @@ BEGIN
 END;
 `,
         )
+      },
+      postgres: async (executor) => {
+        await postgresExec(executor, postgresMigrationSql[9]!)
+      },
+    },
+  },
+
+  {
+    version: 10,
+    name: "memory_search_vector",
+    up: {
+      mssql: async () => {},
+      postgres: async (executor) => {
+        await postgresExec(executor, postgresMigrationSql[10]!)
       },
     },
   },

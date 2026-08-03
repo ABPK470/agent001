@@ -1,15 +1,30 @@
 import type { MemorySearchPort } from "../../../ports/memory-search.js"
 import { createMssqlDegradedMemorySearch } from "../adapters/mssql/memory/degraded-search.js"
+import { createPostgresTsvectorMemorySearch } from "../adapters/postgres/memory/tsvector-search.js"
 import { createSqliteMemorySearch } from "../adapters/sqlite/memory/fts-search.js"
 import { getPlatformDbKind } from "../schema/kysely.js"
 
 let cachedPort: MemorySearchPort | null = null
 
+function portKindForDb(): MemorySearchPort["kind"] {
+  const kind = getPlatformDbKind()
+  if (kind === "sqlite") return "sqlite-fts5"
+  if (kind === "postgres") return "postgres-tsvector"
+  return "mssql-degraded"
+}
+
+function createPort(): MemorySearchPort {
+  const kind = getPlatformDbKind()
+  if (kind === "sqlite") return createSqliteMemorySearch()
+  if (kind === "postgres") return createPostgresTsvectorMemorySearch()
+  return createMssqlDegradedMemorySearch()
+}
+
 /** Return the keyword-search implementation matching the bound platform store. */
 export function getMemorySearchPort(): MemorySearchPort {
-  const kind = getPlatformDbKind()
-  if (cachedPort?.kind === (kind === "sqlite" ? "sqlite-fts5" : "mssql-degraded")) return cachedPort
-  cachedPort = kind === "sqlite" ? createSqliteMemorySearch() : createMssqlDegradedMemorySearch()
+  const want = portKindForDb()
+  if (cachedPort?.kind === want) return cachedPort
+  cachedPort = createPort()
   return cachedPort
 }
 

@@ -139,6 +139,45 @@ jobs:
           MIA_PLATFORM_MSSQL_ENCRYPT: "false"
           MIA_PLATFORM_MSSQL_TRUST_SERVER_CERTIFICATE: "true"
 
+  platform-postgres:
+    name: platform / postgres (service)
+    needs: changes
+    if: ${{ github.event_name == 'workflow_dispatch' || needs.changes.outputs.rdbms == 'true' }}
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: mia
+          POSTGRES_PASSWORD: mia
+          POSTGRES_DB: mia_platform
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U mia -d mia_platform"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+    defaults:
+      run:
+        working-directory: packages/server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+        working-directory: .
+      - name: Postgres migration runner + schema + adapter unit tests
+        run: >
+          npx vitest run
+          src/infra/persistence/adapters/postgres
+          src/infra/persistence/schema
+        env:
+          MIA_PLATFORM_STORE: postgres
+          MIA_PLATFORM_PG_URL: postgres://mia:mia@localhost:5432/mia_platform
+
   sync-postgres-integration:
     name: sync / postgres integration
     needs: changes

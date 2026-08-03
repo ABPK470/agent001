@@ -154,11 +154,12 @@ channels, effects. Owned by server persistence ports + repository functions.
 
 **RDBMS is pluggable — one platform store per process:** adapters under
 `packages/server/src/infra/persistence/adapters/{sqlite,mssql,postgres}/**`.
-Product targets today: **`sqlite` (local/dev)** or **`mssql` (hosted)**.
-`MIA_PLATFORM_STORE=postgres` remains refused until a peer adapter lands.
-Selection is config (`MIA_PLATFORM_STORE` + connection), not a rewrite of
-API/services. Never run sqlite and mssql together as the platform; never use
-warehouse Sync / Bridge connector pools for platform life.
+Product targets: **`sqlite` (default — local and current hosted)**; **`mssql`**
+and **`postgres`** are first-class peers when a deploy chooses them. One of
+`sqlite | mssql | postgres` per process. Selection is config
+(`MIA_PLATFORM_STORE` + connection), not a rewrite of API/services. Never run
+two platform stores together; never use warehouse Sync / Bridge connector pools
+for platform life.
 
 Target contract: **async** repository ports; `PlatformStore.transactionAsync`
 is the multi-dialect shape. The SQLite adapter may still expose a sync
@@ -168,6 +169,9 @@ is the multi-dialect shape. The SQLite adapter may still expose a sync
 platform DB — not a search sidecar):
 
 - **Tier 1 (sqlite):** FTS5 BM25 on `memory_entries_fts`.
+- **Tier 1 (postgres):** `tsvector` / `plainto_tsquery('simple')` + `ts_rank`
+  on `memory_entries.search_vector` (trigger-maintained; `simple` regconfig
+  for keyword/code/id parity with FTS5).
 - **Tier 2 (mssql):** explicit degraded token/recency filter on
   `memory_entries` — intentional product trade-off, not silent FTS parity.
   SQL Server Full-Text (`CONTAINS`) is a future adapter on the same port.

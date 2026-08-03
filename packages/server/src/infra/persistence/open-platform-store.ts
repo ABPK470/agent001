@@ -2,8 +2,8 @@
  * Boot composition — open the configured platform store, migrate, seed.
  *
  * SQLite: existing openDatabase path (sync migrate/seeds/memory FTS5).
- * MSSQL: single Kysely handle + multi-dialect registry (incl. memory base tables);
- * keyword search uses explicit degraded MemorySearchPort (not FTS5).
+ * MSSQL / Postgres: single Kysely handle + multi-dialect registry; memory
+ * search is dialect-owned (degraded / tsvector).
  */
 
 import { PolicyEffect } from "@mia/agent"
@@ -16,6 +16,7 @@ import {
   readLlmEnvOverride,
 } from "../llm/env-override.js"
 import { openMssqlPlatformStore } from "./adapters/mssql/platform-store.js"
+import { openPostgresPlatformStore } from "./adapters/postgres/platform-store.js"
 import { getDbPath, openDatabase } from "./adapters/sqlite/index.js"
 import { runChangesAsync, runExecAsync } from "./schema/execute-async.js"
 import { getPlatformDb } from "./schema/kysely.js"
@@ -30,12 +31,12 @@ import {
 const DEFAULT_TENANT = "_default"
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../..")
 
-let mssqlClose: (() => Promise<void>) | null = null
+let serverStoreClose: (() => Promise<void>) | null = null
 
 export async function closeOpenedPlatformStore(): Promise<void> {
-  if (mssqlClose) {
-    await mssqlClose()
-    mssqlClose = null
+  if (serverStoreClose) {
+    await serverStoreClose()
+    serverStoreClose = null
   }
   _resetPlatformStoreCacheForTests()
 }
@@ -164,7 +165,7 @@ async function applyLlmEnvOverrideAsync(): Promise<boolean> {
 }
 
 export type OpenPlatformStoreResult = {
-  kind: "sqlite" | "mssql"
+  kind: "sqlite" | "mssql" | "postgres"
   location: string
 }
 
@@ -176,14 +177,23 @@ export async function openConfiguredPlatformStore(
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<OpenPlatformStoreResult> {
   const kind = resolvePlatformStoreKind(env)
-  if (kind === "postgres") {
-    throw new Error(
-      "MIA_PLATFORM_STORE=postgres is not ready — use sqlite (local) or mssql (hosted).",
-    )
-  }
   if (kind === "sqlite") {
     openDatabase()
     return { kind: "sqlite", location: getDbPath() }
+  }
+
+  if (kind === "postgres") {
+    const handle = await openPostgresPlatformStore(env)
+    await handle.applyMigrations()
+    await runSeedsAsync()
+    await applyLlmEnvOverrideAsync()
+    _setPlatformStoreCache(handle)
+    serverStoreClose = () => handle.close()
+    const url = (env["MIA_PLATFORM_PG_URL"] ?? "").trim()
+    const location = url
+      ? url.replace(/:[^:@/]+@/, ":***@")
+      : `${env["MIA_PLATFORM_PG_HOST"]}/${env["MIA_PLATFORM_PG_DATABASE"]}`
+    return { kind: "postgres", location }
   }
 
   const handle = await openMssqlPlatformStore(env)
@@ -191,7 +201,7 @@ export async function openConfiguredPlatformStore(
   await runSeedsAsync()
   await applyLlmEnvOverrideAsync()
   _setPlatformStoreCache(handle)
-  mssqlClose = () => handle.close()
+  serverStoreClose = () => handle.close()
   return {
     kind: "mssql",
     location: `${env["MIA_PLATFORM_MSSQL_SERVER"]}/${env["MIA_PLATFORM_MSSQL_DATABASE"]}`,
