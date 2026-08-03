@@ -12,3 +12,8 @@ export {
   summarizePoolConcurrency,
   type PoolConcurrencySummary
 } from "./pool-concurrency.js"
+export {
+  createMssqlWarehouseDialect,
+  mssqlHashExpr,
+  MSSQL_DETERMINISTIC_SESSION_PREFIX,
+} from "./dialect/index.js"

@@ -23,7 +23,8 @@ import type {
   SyncEventSink,
   SyncPlan,
   SyncPublishReadinessPort,
-  SyncRunSink
+  SyncRunSink,
+  WarehouseDialect,
 } from "@mia/sync"
 import type {
   ConnectorInfo,
@@ -124,6 +125,8 @@ export interface SyncHost {
   environments: SyncEnvironmentRegistryHost
   plans: SyncPlansHost
   project: SyncProjectHost
+  /** Warehouse SQL shape — mssql today; postgres next. Wired by configureAgent. */
+  warehouseDialect: WarehouseDialect
 }
 
 export interface TenantHost {

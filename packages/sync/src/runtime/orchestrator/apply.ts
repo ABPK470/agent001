@@ -14,9 +14,10 @@ import {
 import { buildBatchWhere } from "../../core/diff-engine/sql-helpers.js"
 import type { SyncRuntimeHost } from "../../ports/index.js"
 import type { SyncTelemetryContext } from "../events.js"
+import { resolveWarehouseDialect } from "../warehouse-dialect.js"
 import { type SyncPlan, type SyncPlanTable } from "../plan-store.js"
 import { deleteRows, changeRowsAsPkHash, upsertRows } from "./plan-table.js"
-import { qtable, sqlLiteral, trackedQuery } from "./db/db-helpers.js"
+import { qtable, trackedQuery } from "./db/db-helpers.js"
 
 const CHANGE_SET_FETCH_BATCH = 200
 
@@ -70,6 +71,7 @@ export async function fetchPkColumns(
 ): Promise<Map<string, string[]>> {
   const result = new Map<string, string[]>()
   if (tables.length === 0) return result
+  const dialect = resolveWarehouseDialect(host)
   for (const qn of tables) {
     const [schema, name] = qn.split(".")
     if (!schema || !name) continue
@@ -77,15 +79,7 @@ export async function fetchPkColumns(
       const r = await trackedQuery(
         host,
         connection,
-        `
-        SELECT c.name
-        FROM sys.indexes i
-        JOIN sys.index_columns ic ON ic.object_id = i.object_id AND ic.index_id = i.index_id
-        JOIN sys.columns c        ON c.object_id  = ic.object_id AND c.column_id = ic.column_id
-        WHERE i.is_primary_key = 1
-          AND i.object_id = OBJECT_ID('${schema}.${name}')
-        ORDER BY ic.key_ordinal
-      `,
+        dialect.primaryKeySql(qn),
         `fetchPkColumns(${qn})`,
         telemetryContext
       )
@@ -128,16 +122,12 @@ export async function applyInsertsUpdates(
   )
   if (rows.length === 0) return 0
 
+  const dialect = resolveWarehouseDialect(host)
   // Discover columns from target metadata (not source row keys — schemas may diverge).
   const colResult = await trackedQuery(
     host,
     plan.target,
-    `
-    SELECT c.name, c.is_identity, c.is_computed
-    FROM sys.columns c
-    WHERE c.object_id = OBJECT_ID('${tableName.replace(/'/g, "''")}')
-    ORDER BY c.column_id
-  `,
+    dialect.targetColumnsSql(tableName),
     `applyInsertsUpdates.cols(${tableName})`,
     telemetryContext,
     tx.request()
@@ -172,69 +162,24 @@ export async function applyInsertsUpdates(
 
   const pkSet = new Set(pkColumns)
   const updateCols = tempCols.filter((c) => !pkSet.has(c) && c !== identityCol)
-
-  const pkOn = pkColumns.map((c) => `T.[${c}] = S.[${c}]`).join(" AND ")
-
-  // 3. Build temp table, insert source rows, then MERGE — all in one batch.
-  const BATCH = 500
-  const batches: string[] = []
-  for (let i = 0; i < rows.length; i += BATCH) {
-    const batch = rows.slice(i, i + BATCH)
-    const valuesList = batch
-      .map((row) => {
-        const vals = tempCols.map((c) => sqlLiteral(row[c]))
-        return `(${vals.join(", ")})`
-      })
-      .join(",\n")
-    batches.push(`INSERT INTO #syncSrc (${tempCols.map((c) => `[${c}]`).join(", ")}) VALUES ${valuesList}`)
-  }
-
-  const tempColList = tempCols.map((c) => `[${c}]`).join(", ")
-  // Self-join trick: strips IDENTITY property from the temp table.
-  const tempCreate = identityCol
-    ? `SELECT TOP 0 ${tempCols.map((c) => `a.[${c}]`).join(", ")} INTO #syncSrc FROM ${qtable(tableName)} a LEFT JOIN ${qtable(tableName)} b ON 1 = 0`
-    : `SELECT TOP 0 ${tempColList} INTO #syncSrc FROM ${qtable(tableName)}`
-
-  // Build MERGE UPDATE SET — data cols from source + policy stamp expressions
-  const updateParts: string[] = updateCols.map((c) => `T.[${c}] = S.[${c}]`)
-  for (const [col, expr] of Object.entries(onUpdateStamps)) {
-    if (!updateParts.some((part) => part.startsWith(`T.[${col}]`))) {
-      updateParts.push(`T.[${col}] = ${expr}`)
-    }
-  }
   const allowUpdate = tableResult.changeSet.update.length > 0
-  const updateSet =
-    allowUpdate && updateParts.length > 0 ? `WHEN MATCHED THEN UPDATE SET ${updateParts.join(", ")}` : ""
-
-  const insertTargetCols = [...tempCols]
-  const insertValueExprs = [...tempCols.map((c) => `S.[${c}]`)]
-  for (const [col, expr] of Object.entries(onInsertStamps)) {
-    if (!insertTargetCols.includes(col)) {
-      insertTargetCols.push(col)
-      insertValueExprs.push(expr)
-    }
-  }
-  const insertTarget = insertTargetCols.map((c) => `[${c}]`).join(", ")
-  const insertValues = insertValueExprs.join(", ")
-
   const useIdentityInsert =
     Boolean(identityCol)
     && !omitIdentity
     && (policy.identityHandling === "setIdentityInsertOn" || policy.identityHandling === "none")
 
-  const mergeStmt = [
-    useIdentityInsert ? `SET IDENTITY_INSERT ${qtable(tableName)} ON` : null,
-    `MERGE ${qtable(tableName)} AS T`,
-    `USING #syncSrc AS S ON ${pkOn}`,
-    updateSet,
-    `WHEN NOT MATCHED BY TARGET THEN INSERT (${insertTarget}) VALUES (${insertValues})`,
-    `;`,
-    identityCol && useIdentityInsert ? `SET IDENTITY_INSERT ${qtable(tableName)} OFF` : null
-  ]
-    .filter(Boolean)
-    .join("\n")
-
-  const fullSql = [tempCreate, ...batches, mergeStmt, `DROP TABLE #syncSrc`].join(";\n")
+  const fullSql = dialect.upsertBatchSql({
+    table: tableName,
+    pkColumns,
+    tempCols,
+    updateCols,
+    identityCol,
+    useIdentityInsert,
+    allowUpdate,
+    rows,
+    onInsertStamps,
+    onUpdateStamps,
+  })
 
   const result = await trackedQuery(
     host,
@@ -268,29 +213,12 @@ export async function applyDeletes(
   if (deleteKeys.length === 0) return 0
 
   const pkRows = changeRowsAsPkHash(deleteKeys)
-  const pkOn = pkColumns.map((c) => `T.[${c}] = S.[${c}]`).join(" AND ")
-
-  const BATCH = 500
-  const batches: string[] = []
-  for (let i = 0; i < pkRows.length; i += BATCH) {
-    const batch = pkRows.slice(i, i + BATCH)
-    const valuesList = batch
-      .map((row) => {
-        const vals = pkColumns.map((c) => sqlLiteral(row.pkValues[c]))
-        return `(${vals.join(", ")})`
-      })
-      .join(",\n")
-    batches.push(`INSERT INTO #syncDelPk (${pkColumns.map((c) => `[${c}]`).join(", ")}) VALUES ${valuesList}`)
-  }
-
-  const tempCreate = `SELECT TOP 0 ${pkColumns.map((c) => `a.[${c}]`).join(", ")} INTO #syncDelPk FROM ${qtable(tableName)} a LEFT JOIN ${qtable(tableName)} b ON 1 = 0`
-  const fullSql = [
-    tempCreate,
-    ...batches,
-    `DELETE T FROM ${qtable(tableName)} T
-     INNER JOIN #syncDelPk S ON ${pkOn}`,
-    `DROP TABLE #syncDelPk`
-  ].join(";\n")
+  const dialect = resolveWarehouseDialect(host)
+  const fullSql = dialect.deleteBatchSql({
+    table: tableName,
+    pkColumns,
+    rows: pkRows.map((r) => r.pkValues),
+  })
 
   const result = await trackedQuery(
     host,

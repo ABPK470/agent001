@@ -8,60 +8,13 @@
  */
 
 import { isTransientMssqlError, quoteMssqlTable, quoteSqlLiteral } from "@mia/sql-kit"
-import type { HashColumn, PkHashRow } from "../../domain/diff-engine/types.js"
+import type { PkHashRow } from "../../domain/diff-engine/types.js"
 
 export { isTransientMssqlError }
 
 /** Bracket-quote a `schema.table` identifier → `[schema].[table]`. */
 export function qtable(name: string): string {
   return quoteMssqlTable(name)
-}
-
-/**
- * Build a culture-invariant SQL expression that converts `[col]` to NVARCHAR
- * for hashing. The default `CAST(x AS NVARCHAR(MAX))` is NOT safe — its output
- * for datetime/float/money varies with session LANGUAGE/DATEFORMAT, which
- * differs between pooled TDS connections.
- */
-export function hashExpr(col: HashColumn): string {
-  const c = `[${col.name}]`
-  switch (col.systemType) {
-    case "datetime":
-    case "datetime2":
-    case "smalldatetime":
-    case "datetimeoffset":
-      // Style 126/127 = ISO-8601, culture-invariant.
-      return `CONVERT(NVARCHAR(33), ${c}, 126)`
-    case "date":
-      return `CONVERT(NVARCHAR(10), ${c}, 23)`
-    case "time":
-      return `CONVERT(NVARCHAR(16), ${c}, 114)`
-    case "float":
-    case "real":
-      // Style 2 = full 17-digit scientific, invariant.
-      return `CONVERT(NVARCHAR(64), ${c}, 2)`
-    case "money":
-    case "smallmoney":
-      // Style 2 = 4 decimal places, no commas.
-      return `CONVERT(NVARCHAR(32), ${c}, 2)`
-    case "binary":
-    case "varbinary":
-    case "image":
-    case "timestamp":
-    case "rowversion":
-      // Style 1 = '0x...' hex.
-      return `CONVERT(NVARCHAR(MAX), ${c}, 1)`
-    case "uniqueidentifier":
-      return `CONVERT(NVARCHAR(36), ${c})`
-    case "xml":
-    case "hierarchyid":
-    case "geography":
-    case "geometry":
-    case "sql_variant":
-      return `CONVERT(NVARCHAR(MAX), CONVERT(VARBINARY(MAX), ${c}), 1)`
-    default:
-      return `CAST(${c} AS NVARCHAR(MAX))`
-  }
 }
 
 /** SQL literal for use in IN / equality clauses. */

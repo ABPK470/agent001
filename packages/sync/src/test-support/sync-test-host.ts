@@ -6,6 +6,7 @@ import { mkdirSync, mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
+import { createMssqlWarehouseDialect } from "../adapters/mssql/dialect/index.js"
 import { ALWAYS_PUBLISH_READY } from "../ports/publish-readiness.js"
 import { createPublishedSyncDefinitionRegistry } from "../runtime/published-definition-registry.js"
 import { withPermissionDefaults } from "../core/eligibility/environments.js"
@@ -100,7 +101,8 @@ export function createSyncTestHost(projectRoot: string): SyncRuntimeHost {
         dbProjectRoot: projectRoot,
         publishedDefinitions: createPublishedSyncDefinitionRegistry(),
         publishReadiness: ALWAYS_PUBLISH_READY,
-      }
+      },
+      warehouseDialect: createMssqlWarehouseDialect(),
     }
   } as unknown as SyncRuntimeHost
 }

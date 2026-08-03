@@ -4,14 +4,9 @@
  * @module
  */
 
-import { hashExpr, qtable } from "../../core/diff-engine/sql-helpers.js"
-import {
-  DETERMINISTIC_SESSION_PREFIX,
-  type HashColumn,
-  type PkHashRow,
-  type TableColumnInfo
-} from "../../domain/diff-engine/types.js"
+import type { HashColumn, PkHashRow, TableColumnInfo } from "../../domain/diff-engine/types.js"
 import type { SyncRuntimeHost } from "../../ports/index.js"
+import { resolveWarehouseDialect } from "../warehouse-dialect.js"
 import { runQueryWithRetry } from "./sql-query.js"
 
 /**
@@ -87,16 +82,15 @@ export async function fetchPkHash(
   colInfo: TableColumnInfo,
   telemetryContext?: import("../../ports/events.js").SyncTelemetryContext
 ): Promise<PkHashRow[]> {
-  const pkSelect = pkColumns.map((c) => `[${c}]`).join(", ")
-  const hashArgs = colInfo.hashColumns.map(hashExpr).join(", ")
   // No NOLOCK: dirty reads cause classification flapping between runs.
-  // Session prefix pins LANGUAGE/DATEFORMAT/etc so CONVERT output is identical
-  // across every TDS connection in the pool.
-  const query =
-    DETERMINISTIC_SESSION_PREFIX +
-    `SELECT ${pkSelect}, ` +
-    `HASHBYTES('SHA2_256', ISNULL(CONCAT_WS('|', ${hashArgs}), '')) AS rowHash ` +
-    `FROM ${qtable(qualifiedTable)} WHERE ${predicate}`
+  // Dialect session prefix pins LANGUAGE/DATEFORMAT so CONVERT is pool-stable.
+  const dialect = resolveWarehouseDialect(host)
+  const query = dialect.hashSelectSql({
+    table: qualifiedTable,
+    pkColumns,
+    hashColumns: colInfo.hashColumns,
+    whereSql: predicate,
+  })
   const result = await runQueryWithRetry(
     host,
     connectionName,

@@ -190,8 +190,10 @@ only — no wholesale connectors rewrite.
   added).
 - **Zero dialect SQL** (MERGE, HASHBYTES, `sys.*`, identity-insert, vendor
   temp tables, …) outside adapters — enforced by `lint:arch`. Sync
-  `domain/` / `ports/` stay pure today; runtime T-SQL extract is the next
-  milestone.
+  `domain/` / `ports/` stay pure. Warehouse SQL for hash / MERGE / PK / target
+  columns lives under `packages/sync/src/adapters/mssql/dialect/**` via
+  `WarehouseDialect`; remaining runtime owners (catalog-drift, search NOLOCK,
+  conflict probes) extract next.
 - Platform store and warehouse Sync **never** share a pool or transaction.
 - Scale ports sit beside the store, not inside SQL call sites: **EventStore**,
   **ResourceScheduler** / run queue, **ConnectionBudget** (warehouse pool

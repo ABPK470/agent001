@@ -52,18 +52,3 @@ export interface TableColumnInfo {
   identityColumn: string | null
 }
 
-/**
- * Session options pinned on every diff query so all pooled TDS connections
- * produce byte-identical CONVERT() output. Order matters — LANGUAGE resets
- * DATEFORMAT, so DATEFORMAT must come second.
- */
-export const DETERMINISTIC_SESSION_PREFIX =
-  "SET LANGUAGE us_english; " +
-  "SET DATEFORMAT ymd; " +
-  "SET NUMERIC_ROUNDABORT OFF; " +
-  "SET ANSI_WARNINGS ON; " +
-  "SET ANSI_PADDING ON; " +
-  "SET ANSI_NULLS ON; " +
-  "SET CONCAT_NULL_YIELDS_NULL ON; " +
-  "SET ARITHABORT ON; " +
-  "SET QUOTED_IDENTIFIER ON; "

@@ -27,9 +27,8 @@ const DIALECT_SQL_PATTERNS = [
  */
 function isSyncDialectOwner(rel) {
   if (rel.startsWith("adapters/")) return true
+  // Runtime still owns catalog-drift / search NOLOCK / conflict probes until later extracts.
   if (rel.startsWith("runtime/")) return true
-  // Cutover: hashExpr / CONVERT still live in core until WarehouseDialect extract.
-  if (rel.startsWith("core/diff-engine/")) return true
   return false
 }
 

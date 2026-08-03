@@ -43,11 +43,9 @@ export type { SyncPublishReadinessPort } from "./publish-readiness.js"
 export { ALWAYS_PUBLISH_READY } from "./publish-readiness.js"
 export type {
   WarehouseCapability,
-  WarehouseColumnMeta,
-  WarehouseDeleteBatchInput,
+  WarehouseDeleteSqlInput,
   WarehouseDialect,
   WarehouseDialectKind,
   WarehouseHashSelectInput,
-  WarehouseTableCatalog,
-  WarehouseUpsertBatchInput,
+  WarehouseUpsertSqlInput,
 } from "./warehouse-dialect.js"

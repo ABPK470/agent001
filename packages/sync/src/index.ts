@@ -36,11 +36,10 @@ export type { SyncPublishReadinessPort } from "./ports/publish-readiness.js"
 export { ALWAYS_PUBLISH_READY } from "./ports/publish-readiness.js"
 export type {
   WarehouseCapability,
-  WarehouseColumnMeta,
-  WarehouseDeleteBatchInput,
+  WarehouseDeleteSqlInput,
   WarehouseDialect,
   WarehouseDialectKind,
   WarehouseHashSelectInput,
-  WarehouseTableCatalog,
-  WarehouseUpsertBatchInput,
+  WarehouseUpsertSqlInput,
 } from "./ports/warehouse-dialect.js"
+export { createMssqlWarehouseDialect } from "./adapters/mssql/dialect/index.js"

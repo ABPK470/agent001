@@ -10,7 +10,13 @@
  * sole composition root for the agent.
  */
 
-import { ALWAYS_PUBLISH_READY, createPublishedSyncDefinitionRegistry, type SyncEnvironment } from "@mia/sync"
+import {
+  ALWAYS_PUBLISH_READY,
+  createMssqlWarehouseDialect,
+  createPublishedSyncDefinitionRegistry,
+  type SyncEnvironment,
+  type WarehouseDialect,
+} from "@mia/sync"
 import type sql from "mssql"
 import type { AgentHost } from "./host.js"
 import { canonicalizeConfiguredConnectionName } from "../../tools/database/mssql/resolve-connection.js"
@@ -32,6 +38,7 @@ export interface ConfigureAgentSyncOptions {
   }
   plans?: Partial<AgentHost["sync"]["plans"]>
   project?: Partial<AgentHost["sync"]["project"]>
+  warehouseDialect?: WarehouseDialect
 }
 
 /**
@@ -137,7 +144,8 @@ export function configureAgent(options: ConfigureAgentOptions = {}): AgentHost {
       publishedDefinitions:
         syncOptions?.project?.publishedDefinitions ?? createPublishedSyncDefinitionRegistry(),
       publishReadiness: syncOptions?.project?.publishReadiness ?? ALWAYS_PUBLISH_READY,
-    }
+    },
+    warehouseDialect: syncOptions?.warehouseDialect ?? createMssqlWarehouseDialect(),
   }
 
   return Object.freeze<AgentHost>({

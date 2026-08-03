@@ -6,6 +6,7 @@ import type { PublishedSyncDefinitionRegistry } from "./published-definition-reg
 import type { SyncPublishReadinessPort } from "./publish-readiness.js"
 import type { SyncEventSink } from "./events.js"
 import type { SyncRunSink } from "./run-sink.js"
+import type { WarehouseDialect } from "./warehouse-dialect.js"
 
 export type { SyncPublishReadinessPort }
 
@@ -111,6 +112,11 @@ export interface SyncHost {
   environments: SyncEnvironmentRegistry
   plans: SyncPlanRegistry
   project: SyncProjectRegistry
+  /**
+   * Warehouse SQL shape (mssql today; postgres next).
+   * Optional on stubs; runtime resolves via {@link import("../runtime/warehouse-dialect.js").resolveWarehouseDialect}.
+   */
+  warehouseDialect?: WarehouseDialect
 }
 
 export interface SyncEventHost {
