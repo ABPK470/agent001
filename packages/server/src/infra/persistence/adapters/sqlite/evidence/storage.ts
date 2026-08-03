@@ -13,7 +13,9 @@
 import { randomUUID } from "node:crypto"
 import { mkdirSync, writeFileSync } from "node:fs"
 import { dirname, join } from "node:path"
-import { getDb } from "../db-connection.js"
+import { sql } from "kysely"
+import { getPlatformDb } from "../../../schema/kysely.js"
+import { runAll, runExec, runGet } from "../../../schema/execute.js"
 import {
   buildEnvelope,
   envelopeBodyBytes,
@@ -77,26 +79,23 @@ export async function sealEvidence(i: SealEvidenceInput): Promise<SealedEvidence
   writeFileSync(pdfAbs, renderEvidencePdf(signed))
 
   const id = randomUUID()
-  getDb()
-    .prepare(
-      `
-    INSERT INTO sync_evidence_log (id, tenant_id, plan_id, proposal_id, envelope_path, pdf_path,
-                               content_hash, signature_alg, signer_id, signature)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `
-    )
-    .run(
+  const compiled = getPlatformDb()
+    .insertInto("sync_evidence_log")
+    .values({
       id,
-      i.tenantId,
-      i.header.planId,
-      i.header.proposalId,
-      join(folderRel, envFile),
-      join(folderRel, pdfFile),
-      contentHash,
-      i.signer.alg,
-      i.signer.id,
-      sig
-    )
+      tenant_id: i.tenantId,
+      plan_id: i.header.planId,
+      proposal_id: i.header.proposalId,
+      envelope_path: join(folderRel, envFile),
+      pdf_path: join(folderRel, pdfFile),
+      content_hash: contentHash,
+      signature_alg: i.signer.alg,
+      signer_id: i.signer.id,
+      signature: sig,
+      created_at: sql`datetime('now')`,
+    })
+    .compile()
+  runExec(compiled)
 
   return {
     id,
@@ -124,22 +123,32 @@ export interface EvidenceIndexRow {
 }
 
 export function getEvidenceByPlan(planId: string): EvidenceIndexRow | null {
-  return (
-    (getDb()
-      .prepare(`SELECT * FROM sync_evidence_log WHERE plan_id = ? ORDER BY created_at DESC LIMIT 1`)
-      .get(planId) as EvidenceIndexRow | undefined) ?? null
-  )
+  const compiled = getPlatformDb()
+    .selectFrom("sync_evidence_log")
+    .selectAll()
+    .where("plan_id", "=", planId)
+    .orderBy("created_at", "desc")
+    .limit(1)
+    .compile()
+  return runGet<EvidenceIndexRow>(compiled) ?? null
 }
 
 export function getEvidenceById(id: string): EvidenceIndexRow | null {
-  return (
-    (getDb().prepare(`SELECT * FROM sync_evidence_log WHERE id = ?`).get(id) as EvidenceIndexRow | undefined) ??
-    null
-  )
+  const compiled = getPlatformDb()
+    .selectFrom("sync_evidence_log")
+    .selectAll()
+    .where("id", "=", id)
+    .compile()
+  return runGet<EvidenceIndexRow>(compiled) ?? null
 }
 
 export function listEvidence(tenantId: string, limit = 100): EvidenceIndexRow[] {
-  return getDb()
-    .prepare(`SELECT * FROM sync_evidence_log WHERE tenant_id = ? ORDER BY created_at DESC LIMIT ?`)
-    .all(tenantId, limit) as EvidenceIndexRow[]
+  const compiled = getPlatformDb()
+    .selectFrom("sync_evidence_log")
+    .selectAll()
+    .where("tenant_id", "=", tenantId)
+    .orderBy("created_at", "desc")
+    .limit(limit)
+    .compile()
+  return runAll<EvidenceIndexRow>(compiled)
 }

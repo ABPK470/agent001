@@ -44,10 +44,16 @@ describe("createMssqlMigrationRunner", () => {
     expect(list).toEqual([
       { version: 1, name: "mssql_pilot_identity", appliedAt: "2026-01-01T00:00:00" },
       { version: 2, name: "mssql_pilot_threads_runs", appliedAt: "2026-01-01T00:00:00" },
+      {
+        version: 3,
+        name: "mssql_pilot_run_children_and_config",
+        appliedAt: "2026-01-01T00:00:00",
+      },
     ])
     const inserts = ex.statements.filter((s) => s.includes("INSERT INTO dbo._mia_schema_migrations"))
-    expect(inserts).toHaveLength(2)
+    expect(inserts).toHaveLength(3)
     expect(ex.statements.some((s) => s.includes("CREATE TABLE dbo.users"))).toBe(true)
     expect(ex.statements.some((s) => s.includes("CREATE TABLE dbo.runs"))).toBe(true)
+    expect(ex.statements.some((s) => s.includes("CREATE TABLE dbo.event_log"))).toBe(true)
   })
 })

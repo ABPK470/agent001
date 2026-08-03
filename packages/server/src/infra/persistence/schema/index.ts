@@ -57,5 +57,24 @@ export type {
   UsersTable,
   WebhookDrainConfigsTable,
 } from "./tables.js"
-export { getPlatformDb, resetPlatformDbForTests } from "./kysely.js"
-export { runAll, runChanges, runExec, runGet, runInsertId } from "./execute.js"
+export {
+  bindPlatformDb,
+  getPlatformDb,
+  getPlatformDbKind,
+  resetPlatformDbForTests,
+} from "./kysely.js"
+export {
+  runAll,
+  runChanges,
+  runExec,
+  runGet,
+  runInsertId,
+  type CompiledQuery,
+} from "./execute.js"
+export {
+  runAllAsync,
+  runChangesAsync,
+  runExecAsync,
+  runGetAsync,
+  runInsertIdAsync,
+} from "./execute-async.js"

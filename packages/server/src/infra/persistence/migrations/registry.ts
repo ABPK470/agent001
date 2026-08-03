@@ -155,4 +155,130 @@ END;
       },
     },
   },
+  {
+    version: 3,
+    name: "mssql_pilot_run_children_and_config",
+    up: {
+      mssql: async (executor) => {
+        await mssqlExec(
+          executor,
+          `
+IF OBJECT_ID(N'dbo.event_log', N'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.event_log (
+    id          INT            NOT NULL IDENTITY(1,1) CONSTRAINT PK_event_log PRIMARY KEY,
+    type        NVARCHAR(128)  NOT NULL,
+    data        NVARCHAR(MAX)  NOT NULL,
+    created_at  DATETIME2      NOT NULL,
+    actor_upn   NVARCHAR(320)  NULL,
+    run_id      NVARCHAR(64)   NULL,
+    plan_id     NVARCHAR(128)  NULL
+  );
+  CREATE INDEX IX_event_log_time ON dbo.event_log(created_at DESC);
+  CREATE INDEX IX_event_log_run_id ON dbo.event_log(run_id);
+END;
+
+IF OBJECT_ID(N'dbo.audit_log', N'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.audit_log (
+    id          INT            NOT NULL IDENTITY(1,1) CONSTRAINT PK_audit_log PRIMARY KEY,
+    run_id      NVARCHAR(64)   NULL,
+    scope_type  NVARCHAR(32)   NOT NULL CONSTRAINT DF_audit_log_scope DEFAULT (N'run'),
+    scope_id    NVARCHAR(128)  NULL,
+    actor       NVARCHAR(320)  NOT NULL,
+    action      NVARCHAR(128)  NOT NULL,
+    detail      NVARCHAR(MAX)  NOT NULL CONSTRAINT DF_audit_log_detail DEFAULT (N'{}'),
+    timestamp   DATETIME2      NOT NULL
+  );
+  CREATE INDEX IX_audit_log_run ON dbo.audit_log(run_id);
+END;
+
+IF OBJECT_ID(N'dbo.checkpoints', N'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.checkpoints (
+    run_id       NVARCHAR(64)  NOT NULL CONSTRAINT PK_checkpoints PRIMARY KEY
+      CONSTRAINT FK_checkpoints_runs REFERENCES dbo.runs(id) ON DELETE CASCADE,
+    messages     NVARCHAR(MAX) NOT NULL,
+    iteration    INT           NOT NULL CONSTRAINT DF_checkpoints_iteration DEFAULT (0),
+    step_counter INT           NOT NULL CONSTRAINT DF_checkpoints_step DEFAULT (0),
+    updated_at   DATETIME2     NOT NULL
+  );
+END;
+
+IF OBJECT_ID(N'dbo.sync_environments', N'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.sync_environments (
+    name        NVARCHAR(128)  NOT NULL CONSTRAINT PK_sync_environments PRIMARY KEY,
+    body_json   NVARCHAR(MAX)  NOT NULL,
+    created_at  DATETIME2      NOT NULL,
+    updated_at  DATETIME2      NOT NULL,
+    updated_by  NVARCHAR(320)  NULL
+  );
+END;
+
+IF OBJECT_ID(N'dbo.layout_configs', N'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.layout_configs (
+    id          NVARCHAR(128)  NOT NULL CONSTRAINT PK_layout_configs PRIMARY KEY,
+    name        NVARCHAR(256)  NOT NULL,
+    config      NVARCHAR(MAX)  NOT NULL,
+    updated_at  DATETIME2      NOT NULL
+  );
+END;
+
+IF OBJECT_ID(N'dbo.policy_configs', N'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.policy_configs (
+    name        NVARCHAR(128)  NOT NULL CONSTRAINT PK_policy_configs PRIMARY KEY,
+    effect      NVARCHAR(64)   NOT NULL,
+    condition   NVARCHAR(MAX)  NOT NULL,
+    parameters  NVARCHAR(MAX)  NOT NULL CONSTRAINT DF_policy_configs_parameters DEFAULT (N'{}'),
+    source      NVARCHAR(64)   NOT NULL CONSTRAINT DF_policy_configs_source DEFAULT (N'db'),
+    created_at  DATETIME2      NOT NULL,
+    updated_at  DATETIME2      NULL,
+    updated_by  NVARCHAR(320)  NULL
+  );
+END;
+
+IF OBJECT_ID(N'dbo.sync_tool_approvals', N'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.sync_tool_approvals (
+    id            NVARCHAR(64)   NOT NULL CONSTRAINT PK_sync_tool_approvals PRIMARY KEY,
+    actor_upn     NVARCHAR(320)  NOT NULL,
+    tool_name     NVARCHAR(256)  NOT NULL,
+    args_json     NVARCHAR(MAX)  NOT NULL,
+    args_key      NVARCHAR(128)  NOT NULL,
+    reason        NVARCHAR(MAX)  NOT NULL,
+    policy_name   NVARCHAR(256)  NOT NULL,
+    status        NVARCHAR(32)   NOT NULL,
+    requested_at  DATETIME2      NOT NULL,
+    resolved_at   DATETIME2      NULL,
+    resolved_by   NVARCHAR(320)  NULL
+  );
+  CREATE INDEX IX_sync_tool_approvals_actor
+    ON dbo.sync_tool_approvals(actor_upn, tool_name, status);
+END;
+
+IF OBJECT_ID(N'dbo.sync_evidence_log', N'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.sync_evidence_log (
+    id             NVARCHAR(64)   NOT NULL CONSTRAINT PK_sync_evidence_log PRIMARY KEY,
+    tenant_id      NVARCHAR(128)  NOT NULL,
+    plan_id        NVARCHAR(128)  NOT NULL,
+    proposal_id    NVARCHAR(128)  NULL,
+    envelope_path  NVARCHAR(1024) NOT NULL,
+    pdf_path       NVARCHAR(1024) NULL,
+    content_hash   NVARCHAR(128)  NOT NULL,
+    signature_alg  NVARCHAR(64)   NOT NULL,
+    signer_id      NVARCHAR(256)  NOT NULL,
+    signature      NVARCHAR(MAX)  NOT NULL,
+    created_at     DATETIME2      NOT NULL CONSTRAINT DF_sync_evidence_log_created DEFAULT (SYSUTCDATETIME())
+  );
+  CREATE INDEX IX_sync_evidence_log_plan ON dbo.sync_evidence_log(tenant_id, plan_id);
+END;
+`,
+        )
+      },
+    },
+  },
 ]

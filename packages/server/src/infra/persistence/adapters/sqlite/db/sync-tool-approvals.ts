@@ -5,7 +5,6 @@
 
 import { createHash, randomUUID } from "node:crypto"
 import { stripRuntimeToolArgs } from "@mia/shared-types"
-import { getDb } from "../connection.js"
 import { getPlatformDb } from "../../../schema/kysely.js"
 import { runAll, runExec, runGet } from "../../../schema/execute.js"
 
@@ -39,31 +38,9 @@ interface DbRow {
   resolved_by: string | null
 }
 
-let ensured = false
-
+/** Table is owned by numbered SQLite migrations (+ mssql registry v3). */
 export function ensureSyncToolApprovalsTable(): void {
-  if (ensured) return
-  // DDL bootstrap until this table is guaranteed by numbered migrations on all installs.
-  getDb().exec(`
-    CREATE TABLE IF NOT EXISTS sync_tool_approvals (
-      id            TEXT PRIMARY KEY,
-      actor_upn     TEXT NOT NULL,
-      tool_name     TEXT NOT NULL,
-      args_json     TEXT NOT NULL,
-      args_key      TEXT NOT NULL,
-      reason        TEXT NOT NULL,
-      policy_name   TEXT NOT NULL,
-      status        TEXT NOT NULL CHECK (status IN ('pending','approved','denied','consumed')),
-      requested_at  TEXT NOT NULL,
-      resolved_at   TEXT,
-      resolved_by   TEXT
-    );
-    CREATE INDEX IF NOT EXISTS idx_sync_tool_approvals_actor
-      ON sync_tool_approvals(actor_upn, tool_name, status);
-    CREATE INDEX IF NOT EXISTS idx_sync_tool_approvals_pending
-      ON sync_tool_approvals(status, requested_at DESC);
-  `)
-  ensured = true
+  // no-op — kept for call-site stability
 }
 
 function mapRow(row: DbRow): SyncToolApprovalRecord {

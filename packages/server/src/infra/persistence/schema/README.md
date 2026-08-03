@@ -9,7 +9,7 @@ Track B of the RDBMS-agnostic program ([plan](../../../../../.cursor/plans/sqlit
 | Milestone | What | Status |
 | --- | --- | --- |
 | 3 | Schema toolkit + async SQLite adapter | **Nearly done** — product repos on Kysely; leftovers below |
-| 4 | Second dialect (**hosted default: mssql**) + multi-dialect migrator | **In progress** — config, pool, pilot DDL registry, migrator; repos/execute still SQLite |
+| 4 | Second dialect (**hosted default: mssql**) + multi-dialect migrator | **In progress** — config, pool, registry v1–3, migrator, Kysely MssqlDialect + `execute-async`; repos still mostly sync sqlite |
 | 8 | Memory search port (FTS) | Last hard piece |
 
 Honest sizing in the plan: platform agnostic is **large (months)** — ~70 tables, async ripple, search redesign. Sync warehouse multi-dialect is a **separate** track and is further along.
@@ -19,11 +19,12 @@ Honest sizing in the plan: platform agnostic is **large (months)** — ~70 table
 | Piece | Role |
 | --- | --- |
 | `tables.ts` | Column contracts (`PlatformDatabase`) |
-| `kysely.ts` | Process-wide `Kysely` over the SQLite file |
-| `execute.ts` | Compile → better-sqlite3 sync execute |
+| `kysely.ts` | Process-wide `Kysely`; `bindPlatformDb` for mssql pilot |
+| `execute.ts` | Sync compile → better-sqlite3 (sqlite only) |
+| `execute-async.ts` | Dialect-aware async execute (sqlite wrap / mssql Kysely) |
 | `@mia/sql-kit` `MigrationRunner` / `applyMultiDialectPending` | Shared migrator contract |
-| `migrations/registry.ts` | Multi-dialect peer DDL (mssql pilot today) |
-| `adapters/mssql/**` | Platform pool + migrator (not product-ready) |
+| `migrations/registry.ts` | Multi-dialect peer DDL (mssql v1–3) |
+| `adapters/mssql/**` | Platform pool + migrator + MssqlDialect factory |
 
 ## Cutover tables (Kysely)
 
@@ -47,7 +48,6 @@ Honest sizing in the plan: platform agnostic is **large (months)** — ~70 table
 - `sync_audit`, `sync_evidence_log`, `eval_dataset_entries`
 - `runs` audit + token-usage admin browsers (fully Kysely)
 
-Still raw-ish: memory FTS adapter (milestone 8), a few `getDb` bootstrap/DDL/pragma
-paths (`lifecycle` vacuum, `sync_tool_approvals` ensure-table, entity wipe,
-attachments/evidence). Milestone 4 next: grow mssql registry toward baseline
-parity and dialect-aware `execute` before enabling boot.
+Still raw-ish: memory FTS adapter (milestone 8), `lifecycle` vacuum/pragma,
+entity wipe DDL, attachments. Next: grow mssql registry + migrate repos to
+`run*Async` before enabling boot.

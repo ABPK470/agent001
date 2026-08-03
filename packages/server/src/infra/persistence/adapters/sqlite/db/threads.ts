@@ -161,12 +161,14 @@ export function deleteThreadAndRuns(threadId: string, upn: string): { deletedRun
 
   getPlatformStore().transaction(() => {
     if (runIds.length > 0) {
-      // memory_entries / event_log not yet on the schema toolkit — raw until those repos move.
+      // memory_entries stay raw until Memory search port (milestone 8).
       const placeholders = runIds.map(() => "?").join(",")
       getDb().prepare(`DELETE FROM memory_entries WHERE run_id IN (${placeholders})`).run(...runIds)
-      for (const runId of runIds) {
-        getDb().prepare(`DELETE FROM event_log WHERE run_id = ?`).run(runId)
-      }
+      const delEvents = getPlatformDb()
+        .deleteFrom("event_log")
+        .where("run_id", "in", runIds)
+        .compile()
+      runExec(delEvents)
       const delRuns = getPlatformDb()
         .deleteFrom("runs")
         .where("thread_id", "=", threadId)
