@@ -41,9 +41,10 @@ import { AdminBrowseDetailPanel, buildBrowseDetailEntries } from "./admin-browse
 
 const PAGE_SIZE = 50
 
+/** Toolbar sort — Sync History dialect (short labels, not buried in Filters). */
 const SORT_OPTIONS: ListboxOption<UsageSort>[] = [
-  { value: "created_desc", label: "Newest first" },
-  { value: "created_asc", label: "Oldest first" },
+  { value: "created_desc", label: "Newest" },
+  { value: "created_asc", label: "Oldest" },
   { value: "tokens_desc", label: "Most tokens" },
   { value: "tokens_asc", label: "Least tokens" },
 ]
@@ -285,14 +286,14 @@ export function UsageModal({ onClose }: { onClose: () => void }) {
           loading={loading}
           filterBtnRef={filterBtnRef}
           trailing={(
-            <div className="w-[8.5rem] shrink-0">
+            <div className="w-[7.75rem] shrink-0">
               <Listbox
                 value={filters.sort ?? "created_desc"}
                 options={SORT_OPTIONS}
                 onChange={(sort) => patchFilters({ sort })}
                 size="sm"
                 className="w-full listbox-control"
-                ariaLabel="Sort order"
+                ariaLabel="Sort"
               />
             </div>
           )}
