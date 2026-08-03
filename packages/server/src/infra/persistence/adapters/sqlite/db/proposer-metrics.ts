@@ -1,43 +1,81 @@
-import { getDb } from "../connection.js"
+import { sql } from "kysely"
+import { getPlatformDb } from "../../../schema/kysely.js"
+import { runAll, runGet } from "../../../schema/execute.js"
 
 export function countProposerRunsByStatus(): Array<{ status: string; n: number }> {
-  return getDb()
-    .prepare(`SELECT status, COUNT(*) AS n FROM proposer_runs GROUP BY status`)
-    .all() as Array<{ status: string; n: number }>
+  const compiled = getPlatformDb()
+    .selectFrom("proposer_runs")
+    .select(["status", sql<number>`count(*)`.as("n")])
+    .groupBy("status")
+    .compile()
+  return runAll<{ status: string; n: number }>(compiled).map((r) => ({
+    status: r.status,
+    n: Number(r.n),
+  }))
 }
 
 export function countOpenProposalsByTenantRisk(): Array<{ tenant_id: string; risk_tier: string; n: number }> {
-  return getDb()
-    .prepare(
-      `
-      SELECT tenant_id, COALESCE(risk_tier,'unannotated') AS risk_tier, COUNT(*) AS n
-        FROM sync_proposals
-       WHERE status IN ('open','awaiting_approval','previewed','snoozed')
-       GROUP BY tenant_id, risk_tier
-    `
-    )
-    .all() as Array<{ tenant_id: string; risk_tier: string; n: number }>
+  const compiled = getPlatformDb()
+    .selectFrom("sync_proposals")
+    .select([
+      "tenant_id",
+      sql<string>`coalesce(risk_tier, 'unannotated')`.as("risk_tier"),
+      sql<number>`count(*)`.as("n"),
+    ])
+    .where("status", "in", ["open", "awaiting_approval", "previewed", "snoozed"])
+    .groupBy("tenant_id")
+    .groupBy(sql`coalesce(risk_tier, 'unannotated')`)
+    .compile()
+  return runAll<{ tenant_id: string; risk_tier: string; n: number }>(compiled).map((r) => ({
+    tenant_id: r.tenant_id,
+    risk_tier: r.risk_tier,
+    n: Number(r.n),
+  }))
 }
 
 export function countProposalsByStatus(): Array<{ status: string; n: number }> {
-  return getDb()
-    .prepare(`SELECT status, COUNT(*) AS n FROM sync_proposals GROUP BY status`)
-    .all() as Array<{ status: string; n: number }>
+  const compiled = getPlatformDb()
+    .selectFrom("sync_proposals")
+    .select(["status", sql<number>`count(*)`.as("n")])
+    .groupBy("status")
+    .compile()
+  return runAll<{ status: string; n: number }>(compiled).map((r) => ({
+    status: r.status,
+    n: Number(r.n),
+  }))
 }
 
 export function countApprovalsByState(): Array<{ state: string; n: number }> {
-  return getDb()
-    .prepare(`SELECT state, COUNT(*) AS n FROM sync_approvals GROUP BY state`)
-    .all() as Array<{ state: string; n: number }>
+  const compiled = getPlatformDb()
+    .selectFrom("sync_approvals")
+    .select(["state", sql<number>`count(*)`.as("n")])
+    .groupBy("state")
+    .compile()
+  return runAll<{ state: string; n: number }>(compiled).map((r) => ({
+    state: r.state,
+    n: Number(r.n),
+  }))
 }
 
 export function countEvidenceEnvelopes(): number {
-  const row = getDb().prepare(`SELECT COUNT(*) AS n FROM sync_evidence_log`).get() as { n: number } | undefined
-  return row ? Number(row.n) : 0
+  const compiled = getPlatformDb()
+    .selectFrom("sync_evidence_log")
+    .select(sql<number>`count(*)`.as("n"))
+    .compile()
+  const row = runGet<{ n: number | bigint }>(compiled)
+  return Number(row?.n ?? 0)
 }
 
 export function countNotificationLogByStatusChannel(): Array<{ status: string; channel: string; n: number }> {
-  return getDb()
-    .prepare(`SELECT status, channel, COUNT(*) AS n FROM notification_log GROUP BY status, channel`)
-    .all() as Array<{ status: string; channel: string; n: number }>
+  const compiled = getPlatformDb()
+    .selectFrom("notification_log")
+    .select(["status", "channel", sql<number>`count(*)`.as("n")])
+    .groupBy("status")
+    .groupBy("channel")
+    .compile()
+  return runAll<{ status: string; channel: string; n: number }>(compiled).map((r) => ({
+    status: r.status,
+    channel: r.channel,
+    n: Number(r.n),
+  }))
 }

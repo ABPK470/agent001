@@ -2,22 +2,26 @@
  * Data lifecycle — reset, pruning, and stats.
  */
 
+import { sql } from "kysely"
 import { getDb } from "../connection.js"
+import { getPlatformDb } from "../../../schema/kysely.js"
+import { runAll, runChanges, runExec, runGet } from "../../../schema/execute.js"
 
 // ── Data reset (preserve policies + layout_configs) ─────────────────────
 
 export function clearTransactionalData(): void {
-  const db = getDb()
   // Deleting runs cascades to audit_log, checkpoints, run_log, token_usage,
   // trace_entries, notifications (where run-scoped), effects, file_snapshots,
   // attachment_imports, and attachments owned by those runs.
-  db.exec(`DELETE FROM runs;`)
+  runExec(getPlatformDb().deleteFrom("runs").where("id", "is not", null).compile())
   // System-wide notifications (run_id IS NULL) survive a `runs` purge —
   // wipe them explicitly so the inbox is empty after reset.
-  db.exec(`DELETE FROM notifications;`)
+  runExec(getPlatformDb().deleteFrom("notifications").where("id", "is not", null).compile())
   try {
-    db.exec("DELETE FROM api_request_log")
-  } catch (err: unknown) { console.error("[mia]", err) }
+    runExec(getPlatformDb().deleteFrom("api_request_log").where("id", "is not", null).compile())
+  } catch (err: unknown) {
+    console.error("[mia]", err)
+  }
 }
 
 // ── Data lifecycle / pruning ─────────────────────────────────────
@@ -61,62 +65,51 @@ export function pruneOldData(opts?: {
 
   let prunedRuns = 0
   if (typeof keepRuns === "number" && keepRuns >= 0) {
-    const runsToPrune = db
-      .prepare(
-        `
-      SELECT id FROM runs
-      WHERE status IN ('completed', 'failed', 'cancelled')
-      ORDER BY created_at DESC
-      LIMIT -1 OFFSET ?
-    `
-      )
-      .all(keepRuns) as { id: string }[]
+    // SQLite LIMIT -1 OFFSET n ≡ "all rows after the first n".
+    const runsToPrune = runAll<{ id: string }>(
+      sql`
+        SELECT id FROM runs
+        WHERE status IN ('completed', 'failed', 'cancelled')
+        ORDER BY created_at DESC
+        LIMIT -1 OFFSET ${keepRuns}
+      `.compile(getPlatformDb()),
+    )
 
     if (runsToPrune.length > 0) {
       const ids = runsToPrune.map((r) => r.id)
-      const placeholders = ids.map(() => "?").join(",")
-      // ON DELETE CASCADE on every run-owned child handles the cleanup;
-      // a single DELETE replaces the previous eight per-table DELETEs.
-      db.prepare(`DELETE FROM runs WHERE id IN (${placeholders})`).run(...ids)
+      runExec(getPlatformDb().deleteFrom("runs").where("id", "in", ids).compile())
       prunedRuns = ids.length
     }
   }
 
-  const apiResult = db
-    .prepare(
-      `
-    DELETE FROM api_request_log WHERE id NOT IN (
-      SELECT id FROM api_request_log ORDER BY created_at DESC LIMIT ?
-    )
-  `
-    )
-    .run(keepApiRequests)
-  const prunedApiRequests = apiResult.changes
+  const prunedApiRequests = runChanges(
+    sql`
+      DELETE FROM api_request_log WHERE id NOT IN (
+        SELECT id FROM api_request_log ORDER BY created_at DESC LIMIT ${keepApiRequests}
+      )
+    `.compile(getPlatformDb()),
+  )
 
-  const notifResult = db
-    .prepare(
-      `
-    DELETE FROM notifications WHERE id NOT IN (
-      SELECT id FROM notifications ORDER BY created_at DESC LIMIT ?
-    )
-  `
-    )
-    .run(keepNotifications)
-  const prunedNotifications = notifResult.changes
+  const prunedNotifications = runChanges(
+    sql`
+      DELETE FROM notifications WHERE id NOT IN (
+        SELECT id FROM notifications ORDER BY created_at DESC LIMIT ${keepNotifications}
+      )
+    `.compile(getPlatformDb()),
+  )
 
   let prunedEvents = 0
   try {
-    const evtResult = db
-      .prepare(
-        `
-      DELETE FROM event_log WHERE id NOT IN (
-        SELECT id FROM event_log ORDER BY created_at DESC LIMIT ?
-      )
-    `
-      )
-      .run(keepEvents)
-    prunedEvents = evtResult.changes
-  } catch (err: unknown) { console.error("[mia]", err) }
+    prunedEvents = runChanges(
+      sql`
+        DELETE FROM event_log WHERE id NOT IN (
+          SELECT id FROM event_log ORDER BY created_at DESC LIMIT ${keepEvents}
+        )
+      `.compile(getPlatformDb()),
+    )
+  } catch (err: unknown) {
+    console.error("[mia]", err)
+  }
 
   let vacuumed = false
   if (prunedRuns > 50 || prunedApiRequests > 1000 || prunedEvents > 5000) {
@@ -143,13 +136,16 @@ export function getDbStats(): Record<string, number> {
     "notifications",
     "api_request_log",
     "event_log",
-    "webhook_drain_configs"
+    "webhook_drain_configs",
   ] as const
   const stats: Record<string, number> = {}
   for (const t of tables) {
     try {
-      const row = db.prepare(`SELECT COUNT(*) as count FROM ${t}`).get() as { count: number }
-      stats[t] = row.count
+      const compiled = sql<{ count: number }>`select count(*) as count from ${sql.table(t)}`.compile(
+        getPlatformDb(),
+      )
+      const row = runGet<{ count: number | bigint }>(compiled)
+      stats[t] = Number(row?.count ?? 0)
     } catch {
       stats[t] = -1
     }

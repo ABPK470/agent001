@@ -6,7 +6,9 @@
  * a single DELETE FROM sync_runs and audit rows go with it.
  */
 
-import { getDb } from "../connection.js"
+import { sql } from "kysely"
+import { getPlatformDb } from "../../../schema/kysely.js"
+import { runAll, runExec } from "../../../schema/execute.js"
 
 export interface SyncAuditRow {
   id: number
@@ -27,29 +29,35 @@ export interface RecordSyncAuditInput {
 }
 
 export function recordSyncAudit(i: RecordSyncAuditInput): void {
-  getDb()
-    .prepare(
-      `
-    INSERT INTO sync_audit (plan_id, actor, actor_upn, action, detail, timestamp)
-    VALUES (?, ?, ?, ?, ?, datetime('now'))
-  `
-    )
-    .run(i.planId, i.actor, i.actorUpn, i.action, JSON.stringify(i.detail))
+  const compiled = getPlatformDb()
+    .insertInto("sync_audit")
+    .values({
+      plan_id: i.planId,
+      actor: i.actor,
+      actor_upn: i.actorUpn,
+      action: i.action,
+      detail: JSON.stringify(i.detail),
+      timestamp: sql`datetime('now')`,
+    })
+    .compile()
+  runExec(compiled)
 }
 
 export function listSyncAuditForPlan(planId: string): SyncAuditRow[] {
-  return getDb()
-    .prepare(`SELECT * FROM sync_audit WHERE plan_id = ? ORDER BY timestamp`)
-    .all(planId) as SyncAuditRow[]
+  const compiled = getPlatformDb()
+    .selectFrom("sync_audit")
+    .selectAll()
+    .where("plan_id", "=", planId)
+    .orderBy("timestamp")
+    .compile()
+  return runAll<SyncAuditRow>(compiled)
 }
 
 export function listRecentSyncAudit(limit = 100, opts?: { actorUpn?: string | null }): SyncAuditRow[] {
+  let query = getPlatformDb().selectFrom("sync_audit").selectAll()
   if (opts?.actorUpn) {
-    return getDb()
-      .prepare(`SELECT * FROM sync_audit WHERE actor_upn = ? ORDER BY timestamp DESC LIMIT ?`)
-      .all(opts.actorUpn, limit) as SyncAuditRow[]
+    query = query.where("actor_upn", "=", opts.actorUpn)
   }
-  return getDb()
-    .prepare(`SELECT * FROM sync_audit ORDER BY timestamp DESC LIMIT ?`)
-    .all(limit) as SyncAuditRow[]
+  const compiled = query.orderBy("timestamp", "desc").limit(limit).compile()
+  return runAll<SyncAuditRow>(compiled)
 }

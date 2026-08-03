@@ -30,18 +30,16 @@ const SERVER_ROOT = join(here, "..")
 const SRC_ROOT = join(SERVER_ROOT, "src")
 const RUN_EXECUTOR_ENVIRONMENT = join(
   SRC_ROOT,
-  "features",
-  "runs",
+  "runtime",
   "execution",
   "run-executor",
   "environment.ts"
 )
-const RUN_EXECUTOR_TOOLS = join(SRC_ROOT, "features", "runs", "execution", "run-executor", "tools.ts")
-const RUN_EXECUTOR_HOST = join(SRC_ROOT, "features", "runs", "execution", "run-executor", "host.ts")
+const RUN_EXECUTOR_TOOLS = join(SRC_ROOT, "runtime", "execution", "run-executor", "tools.ts")
+const RUN_EXECUTOR_HOST = join(SRC_ROOT, "runtime", "execution", "run-executor", "host.ts")
 const RUN_EXECUTOR_FINALIZATION = join(
   SRC_ROOT,
-  "features",
-  "runs",
+  "runtime",
   "execution",
   "run-executor",
   "finalization",
@@ -256,8 +254,10 @@ describe("Wiring contracts: memory write↔read pair on runId / excludeRunId", (
 describe("Wiring contracts: HostedPolicyContext fields match memory call anchors", () => {
   it("B5: HostedPolicyContext actorUpn references activeRun owner (no cookie session)", () => {
     const src = readSrc(RUN_EXECUTOR_HOST)
-    const m = src.match(/function createPolicyContext\([\s\S]*?return \{([\s\S]*?)\n\s*\}/)
-    expect(m, "expected createPolicyContext() to return a HostedPolicyContext object literal").not.toBeNull()
+    const fnBody = src.match(/function createPolicyContext\([\s\S]*?\n\}/)?.[0]
+    expect(fnBody, "expected createPolicyContext() in run-executor host.ts").toBeDefined()
+    const m = fnBody!.match(/buildPolicyContext\(\{([\s\S]*?)\}\)/)
+    expect(m, "expected createPolicyContext() to call buildPolicyContext({...})").not.toBeNull()
     const fields = parseFields(m![1])
     const actorUpn = fields.get("actorUpn")
     expect(actorUpn, "HostedPolicyContext.actorUpn must be present").toBeDefined()

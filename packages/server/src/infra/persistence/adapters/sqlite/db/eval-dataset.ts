@@ -3,7 +3,8 @@
  */
 
 import { randomUUID } from "node:crypto"
-import { getDb } from "../connection.js"
+import { getPlatformDb } from "../../../schema/kysely.js"
+import { runAll, runChanges, runExec, runGet } from "../../../schema/execute.js"
 
 export type DbEvalDatasetEntry = {
   id: string
@@ -50,17 +51,8 @@ export function insertEvalDatasetEntry(input: InsertEvalDatasetInput): DbEvalDat
     created_by: input.createdBy,
     created_at,
   }
-  getDb()
-    .prepare(
-      `INSERT INTO eval_dataset_entries (
-        id, thread_id, run_id, scope_id, kind, call_index, label,
-        input_json, output_json, metadata_json, created_by, created_at
-      ) VALUES (
-        @id, @thread_id, @run_id, @scope_id, @kind, @call_index, @label,
-        @input_json, @output_json, @metadata_json, @created_by, @created_at
-      )`,
-    )
-    .run(row)
+  const compiled = getPlatformDb().insertInto("eval_dataset_entries").values(row).compile()
+  runExec(compiled)
   return row
 }
 
@@ -70,34 +62,31 @@ export function listEvalDatasetEntries(filters?: {
   limit?: number
 }): DbEvalDatasetEntry[] {
   const limit = filters?.limit ?? 200
+  let query = getPlatformDb().selectFrom("eval_dataset_entries").selectAll()
   if (filters?.runId) {
-    return getDb()
-      .prepare(
-        "SELECT * FROM eval_dataset_entries WHERE run_id = ? ORDER BY created_at DESC LIMIT ?",
-      )
-      .all(filters.runId, limit) as DbEvalDatasetEntry[]
+    query = query.where("run_id", "=", filters.runId)
+  } else if (filters?.threadId) {
+    query = query.where("thread_id", "=", filters.threadId)
   }
-  if (filters?.threadId) {
-    return getDb()
-      .prepare(
-        "SELECT * FROM eval_dataset_entries WHERE thread_id = ? ORDER BY created_at DESC LIMIT ?",
-      )
-      .all(filters.threadId, limit) as DbEvalDatasetEntry[]
-  }
-  return getDb()
-    .prepare("SELECT * FROM eval_dataset_entries ORDER BY created_at DESC LIMIT ?")
-    .all(limit) as DbEvalDatasetEntry[]
+  const compiled = query.orderBy("created_at", "desc").limit(limit).compile()
+  return runAll<DbEvalDatasetEntry>(compiled)
 }
 
 export function getEvalDatasetEntry(id: string): DbEvalDatasetEntry | undefined {
-  return getDb()
-    .prepare("SELECT * FROM eval_dataset_entries WHERE id = ?")
-    .get(id) as DbEvalDatasetEntry | undefined
+  const compiled = getPlatformDb()
+    .selectFrom("eval_dataset_entries")
+    .selectAll()
+    .where("id", "=", id)
+    .compile()
+  return runGet<DbEvalDatasetEntry>(compiled)
 }
 
 export function deleteEvalDatasetEntry(id: string): boolean {
-  const result = getDb().prepare("DELETE FROM eval_dataset_entries WHERE id = ?").run(id)
-  return result.changes > 0
+  const compiled = getPlatformDb()
+    .deleteFrom("eval_dataset_entries")
+    .where("id", "=", id)
+    .compile()
+  return runChanges(compiled) > 0
 }
 
 export function evalEntryToWire(row: DbEvalDatasetEntry) {

@@ -30,11 +30,70 @@ export interface UsersTable {
   last_login_at: string | null
 }
 
+/** `layout_configs` — UI widget arrangements. */
+export interface LayoutConfigsTable {
+  id: string
+  name: string
+  config: string
+  updated_at: string
+}
+
+/** `policy_configs` — governance rules. */
+export interface PolicyConfigsTable {
+  name: string
+  effect: string
+  condition: string
+  parameters: string
+  source: string
+  created_at: string
+  updated_at: string | null
+  updated_by: string | null
+}
+
+/** `sync_environment_override_configs` — admin overrides on sync env JSON. */
+export interface SyncEnvironmentOverrideConfigsTable {
+  name: string
+  overrides_json: string
+  updated_at: string
+  updated_by: string | null
+}
+
 /** `sync_environments` — Sync From/To places. */
 export interface SyncEnvironmentsTable {
   name: string
   body_json: string
   created_at: string
+  updated_at: string
+  updated_by: string | null
+}
+
+/** `sync_phases` — sync vocabulary phase catalog. */
+export interface SyncPhasesTable {
+  tenant_id: string
+  id: string
+  label: string
+  sort_order: number
+  built_in: number
+  definition_json: string
+}
+
+/** `sync_actions` — sync vocabulary action catalog. */
+export interface SyncActionsTable {
+  tenant_id: string
+  id: string
+  label: string
+  built_in: number
+  definition_json: string
+}
+
+/** `sync_flows` — authored sync flow recipes. */
+export interface SyncFlowsTable {
+  tenant_id: string
+  id: string
+  label: string
+  description: string
+  steps_json: string
+  built_in: number
   updated_at: string
   updated_by: string | null
 }
@@ -357,6 +416,17 @@ export interface TraceEntriesTable {
   created_at: string
 }
 
+/** `event_log` — durable SSE/event fanout journal. */
+export interface EventLogTable {
+  id: Generated<number>
+  type: string
+  data: string
+  created_at: string
+  actor_upn: string | null
+  run_id: string | null
+  plan_id: string | null
+}
+
 /** `audit_log` — run/admin action audit. */
 export interface AuditLogTable {
   id: Generated<number>
@@ -605,7 +675,13 @@ export interface SyncRunsTable {
 export interface PlatformDatabase {
   connectors: ConnectorsTable
   users: UsersTable
+  layout_configs: LayoutConfigsTable
+  policy_configs: PolicyConfigsTable
+  sync_environment_override_configs: SyncEnvironmentOverrideConfigsTable
   sync_environments: SyncEnvironmentsTable
+  sync_phases: SyncPhasesTable
+  sync_actions: SyncActionsTable
+  sync_flows: SyncFlowsTable
   sessions: SessionsTable
   llm_config: LlmConfigTable
   freeze_window_configs: FreezeWindowConfigsTable
@@ -632,6 +708,7 @@ export interface PlatformDatabase {
   checkpoints: CheckpointsTable
   run_log: RunLogTable
   trace_entries: TraceEntriesTable
+  event_log: EventLogTable
   audit_log: AuditLogTable
   webhook_drain_configs: WebhookDrainConfigsTable
   agent_messages: AgentMessagesTable
@@ -649,6 +726,51 @@ export interface PlatformDatabase {
   entity_versions: EntityVersionsTable
   scd2_strategy_active: Scd2StrategyActiveTable
   scd2_strategy_versions: Scd2StrategyVersionsTable
+  sync_audit: SyncAuditTable
+  sync_evidence_log: SyncEvidenceLogTable
+  eval_dataset_entries: EvalDatasetEntriesTable
+}
+
+/** `sync_audit` — plan-scoped sync action audit. */
+export interface SyncAuditTable {
+  id: Generated<number>
+  plan_id: string
+  actor: string
+  actor_upn: string | null
+  action: string
+  detail: string
+  timestamp: string
+}
+
+/** `sync_evidence_log` — signed evidence envelopes index. */
+export interface SyncEvidenceLogTable {
+  id: string
+  tenant_id: string
+  plan_id: string
+  proposal_id: string | null
+  envelope_path: string
+  pdf_path: string | null
+  content_hash: string
+  signature_alg: string
+  signer_id: string
+  signature: string
+  created_at: string
+}
+
+/** `eval_dataset_entries` — golden trace steps for eval. */
+export interface EvalDatasetEntriesTable {
+  id: string
+  thread_id: string | null
+  run_id: string
+  scope_id: string
+  kind: string
+  call_index: number | null
+  label: string | null
+  input_json: string
+  output_json: string | null
+  metadata_json: string | null
+  created_by: string
+  created_at: string
 }
 
 /** Helper for optional Generated columns in later tables. */

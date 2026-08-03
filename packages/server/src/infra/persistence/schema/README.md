@@ -40,7 +40,12 @@ Honest sizing in the plan: platform agnostic is **large (months)** — ~70 table
 - `sync_publish_meta`, `sync_definitions`, `sync_runs`, `sync_sql_log`
 - `run_tool_approvals`, `sync_tool_approvals`, `tool_results`
 - `entity_active` / `entity_versions`, `scd2_strategy_*`
+- `event_log` (EventStore), layouts/policies/env overrides, sync catalog
+  (phases/actions/flows)
+- `sync_audit`, `sync_evidence_log`, `eval_dataset_entries`
+- `runs` audit + token-usage admin browsers (fully Kysely)
 
-Still raw-ish: `event-store`, `lifecycle`, memory FTS, audit/token admin filter
-builders. DDL still in numbered SQLite migrations. Next: those leftovers →
-milestone 4 peer DDL.
+Still raw-ish: memory FTS adapter, a few `getDb` bootstrap/DDL/pragma paths
+(`lifecycle` vacuum, `sync_tool_approvals` ensure-table, entity wipe triggers,
+`sessions` heavy stats if any). Next: memory port (milestone 8) + milestone 4
+peer DDL.

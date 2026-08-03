@@ -4,9 +4,10 @@
 
 import { isRunStatus, RUN_STATUSES, RunStatus } from "@mia/agent"
 import type { Run } from "@mia/shared-types"
+import type { SelectQueryBuilder } from "kysely"
 import { sql } from "kysely"
-import { getDb } from "../connection.js"
 import { getPlatformDb } from "../../../schema/kysely.js"
+import type { PlatformDatabase } from "../../../schema/tables.js"
 import { runAll, runChanges, runExec, runGet } from "../../../schema/execute.js"
 import { rememberRunOwner } from "../../../../../ports/run-owner-index.js"
 
@@ -405,101 +406,151 @@ export interface DbAuditWithRun extends DbAudit {
   thread_title: string | null
 }
 
-function buildAuditLogWhere(filters: AuditLogFilters): { where: string; params: unknown[] } {
-  const clauses: string[] = []
-  const params: unknown[] = []
+type AuditLogSelectQuery = SelectQueryBuilder<
+  PlatformDatabase,
+  "audit_log as a" | "runs as r" | "threads as t",
+  object
+>
 
+function auditLogListFrom(): AuditLogSelectQuery {
+  return getPlatformDb()
+    .selectFrom("audit_log as a")
+    .leftJoin("runs as r", "r.id", "a.run_id")
+    .leftJoin("threads as t", "t.id", "r.thread_id")
+}
+
+function auditLogListSelect(): AuditLogSelectQuery {
+  return auditLogListFrom().select([
+    "a.id",
+    "a.run_id",
+    "a.scope_type",
+    "a.scope_id",
+    "a.actor",
+    "a.action",
+    "a.detail",
+    "a.timestamp",
+    sql<string | null>`r.goal`.as("run_goal"),
+    sql<string | null>`r.status`.as("run_status"),
+    sql<string | null>`r.upn`.as("run_upn"),
+    sql<string | null>`r.display_name`.as("run_display_name"),
+    sql<string | null>`r.thread_id`.as("thread_id"),
+    sql<string | null>`t.title`.as("thread_title"),
+  ])
+}
+
+function applyAuditLogFilters(
+  query: AuditLogSelectQuery,
+  filters: AuditLogFilters,
+): AuditLogSelectQuery {
+  let q = query
   if (filters.scopeType === "run" || filters.scopeType === "admin") {
-    clauses.push("a.scope_type = ?")
-    params.push(filters.scopeType)
+    q = q.where("a.scope_type", "=", filters.scopeType)
   }
-  if (filters.scopeId?.trim()) {
-    clauses.push("a.scope_id = ?")
-    params.push(filters.scopeId.trim())
+  const scopeId = filters.scopeId?.trim()
+  if (scopeId) {
+    q = q.where("a.scope_id", "=", scopeId)
   }
-  if (filters.runId?.trim()) {
-    clauses.push("a.run_id = ?")
-    params.push(filters.runId.trim())
+  const runId = filters.runId?.trim()
+  if (runId) {
+    q = q.where("a.run_id", "=", runId)
   }
-  if (filters.threadId?.trim()) {
-    clauses.push("r.thread_id = ?")
-    params.push(filters.threadId.trim())
+  const threadId = filters.threadId?.trim()
+  if (threadId) {
+    q = q.where("r.thread_id", "=", threadId)
   }
-  if (filters.user?.trim()) {
-    const upn = filters.user.trim()
+  const user = filters.user?.trim()
+  if (user) {
     // One identity: run owner (operator work) or admin actor UPN.
-    clauses.push("(r.upn = ? OR a.actor = ?)")
-    params.push(upn, upn)
+    q = q.where((eb) => eb.or([eb("r.upn", "=", user), eb("a.actor", "=", user)]))
   }
   const action = filters.action?.trim()
   if (action) {
     if (action.endsWith(".")) {
-      clauses.push("a.action LIKE ?")
-      params.push(`${action}%`)
+      q = q.where("a.action", "like", `${action}%`)
     } else {
-      clauses.push("a.action = ?")
-      params.push(action)
+      q = q.where("a.action", "=", action)
     }
   }
-  if (filters.from?.trim()) {
-    const from = filters.from.trim()
+  const from = filters.from?.trim()
+  if (from) {
     // Date-only inputs become start-of-day ISO so they compare correctly
     // against timestamps that use `T` (string compare: `T` > space).
-    clauses.push("a.timestamp >= ?")
-    params.push(from.includes("T") ? from : `${from}T00:00:00`)
+    q = q.where("a.timestamp", ">=", from.includes("T") ? from : `${from}T00:00:00`)
   }
-  if (filters.to?.trim()) {
-    const to = filters.to.trim()
-    clauses.push("a.timestamp <= ?")
-    params.push(to.includes("T") ? to : `${to}T23:59:59.999`)
+  const to = filters.to?.trim()
+  if (to) {
+    q = q.where("a.timestamp", "<=", to.includes("T") ? to : `${to}T23:59:59.999`)
   }
   const search = filters.search?.trim()
   if (search) {
-    const q = `%${search}%`
-    clauses.push(
-      `(a.action LIKE ? OR a.actor LIKE ? OR a.detail LIKE ? OR a.run_id LIKE ? OR a.scope_id LIKE ? OR IFNULL(r.goal, '') LIKE ? OR IFNULL(r.upn, '') LIKE ?)`,
+    const qLike = `%${search}%`
+    q = q.where((eb) =>
+      eb.or([
+        eb("a.action", "like", qLike),
+        eb("a.actor", "like", qLike),
+        eb("a.detail", "like", qLike),
+        eb("a.run_id", "like", qLike),
+        eb("a.scope_id", "like", qLike),
+        eb(sql`IFNULL(r.goal, '')`, "like", qLike),
+        eb(sql`IFNULL(r.upn, '')`, "like", qLike),
+      ]),
     )
-    params.push(q, q, q, q, q, q, q)
   }
-
-  return {
-    where: clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "",
-    params,
-  }
+  return q
 }
 
-const AUDIT_LIST_FROM = `
-  FROM audit_log a
-  LEFT JOIN runs r ON r.id = a.run_id
-  LEFT JOIN threads t ON t.id = r.thread_id
-`
-
-const AUDIT_LIST_SELECT = `
-  SELECT
-    a.id, a.run_id, a.scope_type, a.scope_id, a.actor, a.action, a.detail, a.timestamp,
-    r.goal AS run_goal, r.status AS run_status, r.upn AS run_upn,
-    r.display_name AS run_display_name,
-    r.thread_id AS thread_id, t.title AS thread_title
-  ${AUDIT_LIST_FROM}
-`
+function applyAuditLogOrder(
+  query: AuditLogSelectQuery,
+  sort: AuditLogSort | undefined,
+): AuditLogSelectQuery {
+  return sort === "timestamp_asc"
+    ? query.orderBy("a.timestamp", "asc")
+    : query.orderBy("a.timestamp", "desc")
+}
 
 export function countAuditLog(filters: AuditLogFilters = {}): number {
-  const { where, params } = buildAuditLogWhere(filters)
-  const row = getDb()
-    .prepare(`SELECT COUNT(1) AS c ${AUDIT_LIST_FROM} ${where}`)
-    .get(...params) as { c: number }
-  return row.c
+  const compiled = applyAuditLogFilters(
+    auditLogListFrom().select(sql<number>`count(1)`.as("c")),
+    filters,
+  ).compile()
+  const row = runGet<{ c: number }>(compiled)
+  return row?.c ?? 0
 }
 
 export function listAuditLogPaginated(input: ListAuditLogPaginatedInput): DbAuditWithRun[] {
   const page = Math.max(1, input.page)
   const pageSize = Math.max(1, input.pageSize)
   const offset = (page - 1) * pageSize
-  const { where, params } = buildAuditLogWhere(input)
-  const orderBy = input.sort === "timestamp_asc" ? "a.timestamp ASC" : "a.timestamp DESC"
-  return getDb()
-    .prepare(`${AUDIT_LIST_SELECT} ${where} ORDER BY ${orderBy} LIMIT ? OFFSET ?`)
-    .all(...params, pageSize, offset) as DbAuditWithRun[]
+  const compiled = applyAuditLogOrder(
+    applyAuditLogFilters(auditLogListSelect(), input),
+    input.sort,
+  )
+    .limit(pageSize)
+    .offset(offset)
+    .compile()
+  return runAll<DbAuditWithRun>(compiled)
+}
+
+function auditFilterUserUpnUnion() {
+  const fromUsers = getPlatformDb()
+    .selectFrom("users")
+    .select("upn")
+    .where("upn", "!=", "")
+
+  const fromRunOwners = getPlatformDb()
+    .selectFrom("audit_log as a")
+    .innerJoin("runs as r", "r.id", "a.run_id")
+    .select(sql<string>`r.upn`.as("upn"))
+    .where("r.upn", "is not", null)
+    .where("r.upn", "!=", "")
+
+  const fromActors = getPlatformDb()
+    .selectFrom("audit_log as a")
+    .select(sql<string>`a.actor`.as("upn"))
+    .where("a.actor", "!=", "")
+    .where("a.actor", "not in", ["user", "agent"])
+
+  return fromUsers.union(fromRunOwners).union(fromActors)
 }
 
 /** Distinct users / scope_ids for filter pickers (admin audit UI). */
@@ -508,44 +559,37 @@ export function listAuditFilterOptions(): {
   scopeIds: string[]
   actions: string[]
 } {
-  const db = getDb()
-  const users = (
-    db
-      .prepare(
-        `SELECT x.upn AS upn, COALESCE(u.is_admin, 0) AS is_admin
-         FROM (
-           SELECT DISTINCT upn FROM (
-             SELECT upn FROM users WHERE upn != ''
-             UNION
-             SELECT r.upn AS upn FROM audit_log a
-               INNER JOIN runs r ON r.id = a.run_id
-               WHERE r.upn IS NOT NULL AND r.upn != ''
-             UNION
-             SELECT a.actor AS upn FROM audit_log a
-               WHERE a.actor != '' AND a.actor NOT IN ('user', 'agent')
-           )
-         ) x
-         LEFT JOIN users u ON u.upn = x.upn
-         ORDER BY x.upn
-         LIMIT 200`,
-      )
-      .all() as Array<{ upn: string; is_admin: number }>
-  ).map((r) => ({
+  const usersCompiled = getPlatformDb()
+    .selectFrom(auditFilterUserUpnUnion().as("x"))
+    .leftJoin("users as u", "u.upn", "x.upn")
+    .select(["x.upn as upn", sql<number>`coalesce(u.is_admin, 0)`.as("is_admin")])
+    .distinct()
+    .orderBy("x.upn")
+    .limit(200)
+    .compile()
+  const users = runAll<{ upn: string; is_admin: number }>(usersCompiled).map((r) => ({
     upn: r.upn,
     role: r.is_admin === 1 ? ("admin" as const) : ("operator" as const),
   }))
-  const scopeIds = (
-    db
-      .prepare(
-        `SELECT DISTINCT scope_id AS scope_id FROM audit_log WHERE scope_id IS NOT NULL AND scope_id != '' ORDER BY scope_id LIMIT 100`,
-      )
-      .all() as Array<{ scope_id: string }>
-  ).map((r) => r.scope_id)
-  const actions = (
-    db
-      .prepare(`SELECT DISTINCT action FROM audit_log WHERE action != '' ORDER BY action LIMIT 300`)
-      .all() as Array<{ action: string }>
-  ).map((r) => r.action)
+  const scopeIdsCompiled = getPlatformDb()
+    .selectFrom("audit_log")
+    .select("scope_id")
+    .where("scope_id", "is not", null)
+    .where("scope_id", "!=", "")
+    .distinct()
+    .orderBy("scope_id")
+    .limit(100)
+    .compile()
+  const scopeIds = runAll<{ scope_id: string }>(scopeIdsCompiled).map((r) => r.scope_id)
+  const actionsCompiled = getPlatformDb()
+    .selectFrom("audit_log")
+    .select("action")
+    .where("action", "!=", "")
+    .distinct()
+    .orderBy("action")
+    .limit(300)
+    .compile()
+  const actions = runAll<{ action: string }>(actionsCompiled).map((r) => r.action)
   return { users, scopeIds, actions }
 }
 
@@ -747,99 +791,121 @@ export interface DbTokenUsageWithRun extends DbTokenUsage {
   thread_title: string | null
 }
 
-function buildTokenUsageWhere(filters: TokenUsageFilters): { where: string; params: unknown[] } {
-  const clauses: string[] = []
-  const params: unknown[] = []
+type TokenUsageSelectQuery = SelectQueryBuilder<
+  PlatformDatabase,
+  "token_usage as t" | "runs as r" | "threads as th",
+  object
+>
 
-  if (filters.user?.trim()) {
-    clauses.push("r.upn = ?")
-    params.push(filters.user.trim())
+function tokenUsageListFrom(): TokenUsageSelectQuery {
+  return getPlatformDb()
+    .selectFrom("token_usage as t")
+    .innerJoin("runs as r", "r.id", "t.run_id")
+    .leftJoin("threads as th", "th.id", "r.thread_id")
+}
+
+function tokenUsageListSelect(): TokenUsageSelectQuery {
+  return tokenUsageListFrom().select([
+    "t.run_id",
+    "t.prompt_tokens",
+    "t.completion_tokens",
+    "t.total_tokens",
+    "t.llm_calls",
+    "t.model",
+    "t.created_at",
+    sql<string | null>`r.goal`.as("run_goal"),
+    sql<string | null>`r.status`.as("run_status"),
+    sql<string | null>`r.upn`.as("run_upn"),
+    sql<string | null>`r.display_name`.as("run_display_name"),
+    sql<string | null>`r.thread_id`.as("thread_id"),
+    sql<string | null>`th.title`.as("thread_title"),
+  ])
+}
+
+function applyTokenUsageFilters(
+  query: TokenUsageSelectQuery,
+  filters: TokenUsageFilters,
+): TokenUsageSelectQuery {
+  let q = query
+  const user = filters.user?.trim()
+  if (user) {
+    q = q.where("r.upn", "=", user)
   }
-  if (filters.model?.trim()) {
-    clauses.push("t.model = ?")
-    params.push(filters.model.trim())
+  const model = filters.model?.trim()
+  if (model) {
+    q = q.where("t.model", "=", model)
   }
   if (filters.status && filters.status.length > 0) {
     const statuses = filters.status.map((s) => s.trim()).filter(Boolean)
     if (statuses.length === 1) {
-      clauses.push("r.status = ?")
-      params.push(statuses[0])
+      q = q.where("r.status", "=", statuses[0]!)
     } else if (statuses.length > 1) {
-      clauses.push(`r.status IN (${statuses.map(() => "?").join(", ")})`)
-      params.push(...statuses)
+      q = q.where("r.status", "in", statuses)
     }
   }
-  if (filters.from?.trim()) {
-    const from = filters.from.trim()
-    clauses.push("t.created_at >= ?")
-    params.push(from.includes("T") ? from : `${from}T00:00:00`)
+  const from = filters.from?.trim()
+  if (from) {
+    q = q.where("t.created_at", ">=", from.includes("T") ? from : `${from}T00:00:00`)
   }
-  if (filters.to?.trim()) {
-    const to = filters.to.trim()
-    clauses.push("t.created_at <= ?")
-    params.push(to.includes("T") ? to : `${to}T23:59:59.999`)
+  const to = filters.to?.trim()
+  if (to) {
+    q = q.where("t.created_at", "<=", to.includes("T") ? to : `${to}T23:59:59.999`)
   }
   const search = filters.search?.trim()
   if (search) {
-    const q = `%${search}%`
-    clauses.push(
-      `(t.run_id LIKE ? OR t.model LIKE ? OR IFNULL(r.goal, '') LIKE ? OR IFNULL(r.upn, '') LIKE ? OR IFNULL(r.display_name, '') LIKE ? OR IFNULL(th.title, '') LIKE ?)`,
+    const qLike = `%${search}%`
+    q = q.where((eb) =>
+      eb.or([
+        eb("t.run_id", "like", qLike),
+        eb("t.model", "like", qLike),
+        eb(sql`IFNULL(r.goal, '')`, "like", qLike),
+        eb(sql`IFNULL(r.upn, '')`, "like", qLike),
+        eb(sql`IFNULL(r.display_name, '')`, "like", qLike),
+        eb(sql`IFNULL(th.title, '')`, "like", qLike),
+      ]),
     )
-    params.push(q, q, q, q, q, q)
   }
-
-  return {
-    where: clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "",
-    params,
-  }
+  return q
 }
 
-const TOKEN_USAGE_LIST_FROM = `
-  FROM token_usage t
-  INNER JOIN runs r ON r.id = t.run_id
-  LEFT JOIN threads th ON th.id = r.thread_id
-`
-
-const TOKEN_USAGE_LIST_SELECT = `
-  SELECT
-    t.run_id, t.prompt_tokens, t.completion_tokens, t.total_tokens, t.llm_calls, t.model, t.created_at,
-    r.goal AS run_goal, r.status AS run_status, r.upn AS run_upn,
-    r.display_name AS run_display_name,
-    r.thread_id AS thread_id, th.title AS thread_title
-  ${TOKEN_USAGE_LIST_FROM}
-`
-
-function tokenUsageOrderBy(sort: TokenUsageSort | undefined): string {
+function applyTokenUsageOrder(
+  query: TokenUsageSelectQuery,
+  sort: TokenUsageSort | undefined,
+): TokenUsageSelectQuery {
   switch (sort) {
     case "created_asc":
-      return "t.created_at ASC"
+      return query.orderBy("t.created_at", "asc")
     case "tokens_desc":
-      return "t.total_tokens DESC, t.created_at DESC"
+      return query.orderBy("t.total_tokens", "desc").orderBy("t.created_at", "desc")
     case "tokens_asc":
-      return "t.total_tokens ASC, t.created_at DESC"
+      return query.orderBy("t.total_tokens", "asc").orderBy("t.created_at", "desc")
     case "created_desc":
     default:
-      return "t.created_at DESC"
+      return query.orderBy("t.created_at", "desc")
   }
 }
 
 export function countTokenUsage(filters: TokenUsageFilters = {}): number {
-  const { where, params } = buildTokenUsageWhere(filters)
-  const row = getDb()
-    .prepare(`SELECT COUNT(1) AS c ${TOKEN_USAGE_LIST_FROM} ${where}`)
-    .get(...params) as { c: number }
-  return row.c
+  const compiled = applyTokenUsageFilters(
+    tokenUsageListFrom().select(sql<number>`count(1)`.as("c")),
+    filters,
+  ).compile()
+  const row = runGet<{ c: number }>(compiled)
+  return row?.c ?? 0
 }
 
 export function listTokenUsagePaginated(input: ListTokenUsagePaginatedInput): DbTokenUsageWithRun[] {
   const page = Math.max(1, input.page)
   const pageSize = Math.max(1, input.pageSize)
   const offset = (page - 1) * pageSize
-  const { where, params } = buildTokenUsageWhere(input)
-  const orderBy = tokenUsageOrderBy(input.sort)
-  return getDb()
-    .prepare(`${TOKEN_USAGE_LIST_SELECT} ${where} ORDER BY ${orderBy} LIMIT ? OFFSET ?`)
-    .all(...params, pageSize, offset) as DbTokenUsageWithRun[]
+  const compiled = applyTokenUsageOrder(
+    applyTokenUsageFilters(tokenUsageListSelect(), input),
+    input.sort,
+  )
+    .limit(pageSize)
+    .offset(offset)
+    .compile()
+  return runAll<DbTokenUsageWithRun>(compiled)
 }
 
 /** Sums for the same filter set as the usage list (KPI strip). */
@@ -855,70 +921,67 @@ export function sumTokenUsage(filters: TokenUsageFilters = {}): {
   crashed_runs: number
   running_runs: number
 } {
-  const { where, params } = buildTokenUsageWhere(filters)
-  return getDb()
-    .prepare(
-      `
-      SELECT
-        COALESCE(SUM(t.prompt_tokens), 0) AS total_prompt_tokens,
-        COALESCE(SUM(t.completion_tokens), 0) AS total_completion_tokens,
-        COALESCE(SUM(t.total_tokens), 0) AS total_tokens,
-        COALESCE(SUM(t.llm_calls), 0) AS total_llm_calls,
-        COUNT(1) AS run_count,
-        COALESCE(SUM(CASE WHEN r.status = 'completed' THEN 1 ELSE 0 END), 0) AS completed_runs,
-        COALESCE(SUM(CASE WHEN r.status = 'failed' THEN 1 ELSE 0 END), 0) AS failed_runs,
-        COALESCE(SUM(CASE WHEN r.status = 'cancelled' THEN 1 ELSE 0 END), 0) AS cancelled_runs,
-        COALESCE(SUM(CASE WHEN r.status = 'crashed' THEN 1 ELSE 0 END), 0) AS crashed_runs,
-        COALESCE(SUM(CASE WHEN r.status = 'running' THEN 1 ELSE 0 END), 0) AS running_runs
-      ${TOKEN_USAGE_LIST_FROM}
-      ${where}
-    `,
-    )
-    .get(...params) as {
-    total_prompt_tokens: number
-    total_completion_tokens: number
-    total_tokens: number
-    total_llm_calls: number
-    run_count: number
-    completed_runs: number
-    failed_runs: number
-    cancelled_runs: number
-    crashed_runs: number
-    running_runs: number
-  }
+  const compiled = applyTokenUsageFilters(
+    tokenUsageListFrom().select([
+      sql<number>`coalesce(sum(t.prompt_tokens), 0)`.as("total_prompt_tokens"),
+      sql<number>`coalesce(sum(t.completion_tokens), 0)`.as("total_completion_tokens"),
+      sql<number>`coalesce(sum(t.total_tokens), 0)`.as("total_tokens"),
+      sql<number>`coalesce(sum(t.llm_calls), 0)`.as("total_llm_calls"),
+      sql<number>`count(1)`.as("run_count"),
+      sql<number>`coalesce(sum(case when r.status = 'completed' then 1 else 0 end), 0)`.as(
+        "completed_runs",
+      ),
+      sql<number>`coalesce(sum(case when r.status = 'failed' then 1 else 0 end), 0)`.as(
+        "failed_runs",
+      ),
+      sql<number>`coalesce(sum(case when r.status = 'cancelled' then 1 else 0 end), 0)`.as(
+        "cancelled_runs",
+      ),
+      sql<number>`coalesce(sum(case when r.status = 'crashed' then 1 else 0 end), 0)`.as(
+        "crashed_runs",
+      ),
+      sql<number>`coalesce(sum(case when r.status = 'running' then 1 else 0 end), 0)`.as(
+        "running_runs",
+      ),
+    ]),
+    filters,
+  ).compile()
+  return runGet(compiled)!
 }
 
 export function listTokenUsageFilterOptions(): {
   users: Array<{ upn: string; role: "admin" | "operator" }>
   models: string[]
 } {
-  const db = getDb()
-  const users = (
-    db
-      .prepare(
-        `SELECT x.upn AS upn, COALESCE(u.is_admin, 0) AS is_admin
-         FROM (
-           SELECT DISTINCT r.upn AS upn
-           FROM token_usage t
-           INNER JOIN runs r ON r.id = t.run_id
-           WHERE r.upn IS NOT NULL AND r.upn != ''
-         ) x
-         LEFT JOIN users u ON u.upn = x.upn
-         ORDER BY x.upn
-         LIMIT 200`,
-      )
-      .all() as Array<{ upn: string; is_admin: number }>
-  ).map((r) => ({
+  const usersCompiled = getPlatformDb()
+    .selectFrom(
+      getPlatformDb()
+        .selectFrom("token_usage as t")
+        .innerJoin("runs as r", "r.id", "t.run_id")
+        .select(sql<string>`r.upn`.as("upn"))
+        .where("r.upn", "is not", null)
+        .where("r.upn", "!=", "")
+        .distinct()
+        .as("x"),
+    )
+    .leftJoin("users as u", "u.upn", "x.upn")
+    .select(["x.upn as upn", sql<number>`coalesce(u.is_admin, 0)`.as("is_admin")])
+    .orderBy("x.upn")
+    .limit(200)
+    .compile()
+  const users = runAll<{ upn: string; is_admin: number }>(usersCompiled).map((r) => ({
     upn: r.upn,
     role: r.is_admin === 1 ? ("admin" as const) : ("operator" as const),
   }))
-  const models = (
-    db
-      .prepare(
-        `SELECT DISTINCT model FROM token_usage WHERE model != '' ORDER BY model LIMIT 100`,
-      )
-      .all() as Array<{ model: string }>
-  ).map((r) => r.model)
+  const modelsCompiled = getPlatformDb()
+    .selectFrom("token_usage")
+    .select("model")
+    .where("model", "!=", "")
+    .distinct()
+    .orderBy("model")
+    .limit(100)
+    .compile()
+  const models = runAll<{ model: string }>(modelsCompiled).map((r) => r.model)
   return { users, models }
 }
 

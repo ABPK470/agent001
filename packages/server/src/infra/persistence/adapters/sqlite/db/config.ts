@@ -5,9 +5,8 @@
 import { PolicyEffect } from "@mia/agent"
 import { sql } from "kysely"
 import { PolicySource } from "../../../../../internal/enums/index.js"
-import { getDb } from "../connection.js"
 import { getPlatformDb } from "../../../schema/kysely.js"
-import { runAll, runExec, runGet } from "../../../schema/execute.js"
+import { runAll, runChanges, runExec, runGet } from "../../../schema/execute.js"
 
 export { PolicySource } from "../../../../../internal/enums/index.js"
 
@@ -21,26 +20,44 @@ export interface DbLayout {
 }
 
 export function saveLayout(layout: DbLayout): void {
-  getDb()
-    .prepare(
-      `
-    INSERT OR REPLACE INTO layout_configs (id, name, config, updated_at)
-    VALUES (@id, @name, @config, @updated_at)
-  `
+  const compiled = getPlatformDb()
+    .insertInto("layout_configs")
+    .values(layout)
+    .onConflict((oc) =>
+      oc.column("id").doUpdateSet({
+        name: layout.name,
+        config: layout.config,
+        updated_at: layout.updated_at,
+      }),
     )
-    .run(layout)
+    .compile()
+  runExec(compiled)
 }
 
 export function getLayouts(): DbLayout[] {
-  return getDb().prepare("SELECT * FROM layout_configs ORDER BY updated_at DESC").all() as DbLayout[]
+  const compiled = getPlatformDb()
+    .selectFrom("layout_configs")
+    .selectAll()
+    .orderBy("updated_at", "desc")
+    .compile()
+  return runAll<DbLayout>(compiled)
 }
 
 export function getLayout(id: string): DbLayout | undefined {
-  return getDb().prepare("SELECT * FROM layout_configs WHERE id = ?").get(id) as DbLayout | undefined
+  const compiled = getPlatformDb()
+    .selectFrom("layout_configs")
+    .selectAll()
+    .where("id", "=", id)
+    .compile()
+  return runGet<DbLayout>(compiled)
 }
 
 export function deleteLayout(id: string): void {
-  getDb().prepare("DELETE FROM layout_configs WHERE id = ?").run(id)
+  const compiled = getPlatformDb()
+    .deleteFrom("layout_configs")
+    .where("id", "=", id)
+    .compile()
+  runExec(compiled)
 }
 
 // ── Policy rule queries ──────────────────────────────────────────
@@ -68,23 +85,43 @@ export interface DbPolicyRule {
 }
 
 export function listPolicyRules(): DbPolicyRule[] {
-  return getDb().prepare("SELECT * FROM policy_configs ORDER BY created_at").all() as DbPolicyRule[]
+  const compiled = getPlatformDb()
+    .selectFrom("policy_configs")
+    .selectAll()
+    .orderBy("created_at")
+    .compile()
+  return runAll<DbPolicyRule>(compiled)
 }
 
 export function savePolicyRule(rule: DbPolicyRule): void {
-  getDb()
-    .prepare(
-      `
-    INSERT OR REPLACE INTO policy_configs (name, effect, condition, parameters, created_at, source, updated_at, updated_by)
-    VALUES (@name, @effect, @condition, @parameters, @created_at, @source, @updated_at, @updated_by)
-  `
-    )
-    .run({
-      source: rule.source ?? PolicySource.Db,
-      updated_at: rule.updated_at ?? null,
-      updated_by: rule.updated_by ?? null,
-      ...rule
+  const source = rule.source ?? PolicySource.Db
+  const updatedAt = rule.updated_at ?? null
+  const updatedBy = rule.updated_by ?? null
+  const compiled = getPlatformDb()
+    .insertInto("policy_configs")
+    .values({
+      name: rule.name,
+      effect: rule.effect,
+      condition: rule.condition,
+      parameters: rule.parameters,
+      created_at: rule.created_at,
+      source,
+      updated_at: updatedAt,
+      updated_by: updatedBy,
     })
+    .onConflict((oc) =>
+      oc.column("name").doUpdateSet({
+        effect: rule.effect,
+        condition: rule.condition,
+        parameters: rule.parameters,
+        created_at: rule.created_at,
+        source,
+        updated_at: updatedAt,
+        updated_by: updatedBy,
+      }),
+    )
+    .compile()
+  runExec(compiled)
 }
 
 /**
@@ -92,22 +129,30 @@ export function savePolicyRule(rule: DbPolicyRule): void {
  * the seeder so re-running boot doesn't trample operator edits.
  */
 export function seedPolicyRuleIfMissing(rule: DbPolicyRule): boolean {
-  const result = getDb()
-    .prepare(
-      `
-    INSERT OR IGNORE INTO policy_configs (name, effect, condition, parameters, created_at, source, updated_at, updated_by)
-    VALUES (@name, @effect, @condition, @parameters, @created_at, @source, NULL, NULL)
-  `
-    )
-    .run({
-      source: rule.source ?? PolicySource.HostedDefault,
-      ...rule
+  const source = rule.source ?? PolicySource.HostedDefault
+  const compiled = getPlatformDb()
+    .insertInto("policy_configs")
+    .values({
+      name: rule.name,
+      effect: rule.effect,
+      condition: rule.condition,
+      parameters: rule.parameters,
+      created_at: rule.created_at,
+      source,
+      updated_at: null,
+      updated_by: null,
     })
-  return result.changes > 0
+    .onConflict((oc) => oc.column("name").doNothing())
+    .compile()
+  return runChanges(compiled) > 0
 }
 
 export function deletePolicyRule(name: string): void {
-  getDb().prepare("DELETE FROM policy_configs WHERE name = ?").run(name)
+  const compiled = getPlatformDb()
+    .deleteFrom("policy_configs")
+    .where("name", "=", name)
+    .compile()
+  runExec(compiled)
 }
 
 // ── Sync-environment override queries ────────────────────────────
@@ -128,30 +173,44 @@ export interface DbSyncEnvironment {
 }
 
 export function listSyncEnvOverrides(): DbSyncEnvOverride[] {
-  return getDb()
-    .prepare("SELECT * FROM sync_environment_override_configs ORDER BY name")
-    .all() as DbSyncEnvOverride[]
+  const compiled = getPlatformDb()
+    .selectFrom("sync_environment_override_configs")
+    .selectAll()
+    .orderBy("name")
+    .compile()
+  return runAll<DbSyncEnvOverride>(compiled)
 }
 
 export function getSyncEnvOverride(name: string): DbSyncEnvOverride | undefined {
-  return getDb().prepare("SELECT * FROM sync_environment_override_configs WHERE name = ?").get(name) as
-    | DbSyncEnvOverride
-    | undefined
+  const compiled = getPlatformDb()
+    .selectFrom("sync_environment_override_configs")
+    .selectAll()
+    .where("name", "=", name)
+    .compile()
+  return runGet<DbSyncEnvOverride>(compiled)
 }
 
 export function saveSyncEnvOverride(row: DbSyncEnvOverride): void {
-  getDb()
-    .prepare(
-      `
-    INSERT OR REPLACE INTO sync_environment_override_configs (name, overrides_json, updated_at, updated_by)
-    VALUES (@name, @overrides_json, @updated_at, @updated_by)
-  `
+  const compiled = getPlatformDb()
+    .insertInto("sync_environment_override_configs")
+    .values(row)
+    .onConflict((oc) =>
+      oc.column("name").doUpdateSet({
+        overrides_json: row.overrides_json,
+        updated_at: row.updated_at,
+        updated_by: row.updated_by,
+      }),
     )
-    .run(row)
+    .compile()
+  runExec(compiled)
 }
 
 export function deleteSyncEnvOverride(name: string): void {
-  getDb().prepare("DELETE FROM sync_environment_override_configs WHERE name = ?").run(name)
+  const compiled = getPlatformDb()
+    .deleteFrom("sync_environment_override_configs")
+    .where("name", "=", name)
+    .compile()
+  runExec(compiled)
 }
 
 export function countSyncEnvironments(): number {

@@ -2,7 +2,10 @@
  * SQLite EventStore — batched durable append off the SSE hot path.
  */
 
-import { getDb } from "../connection.js"
+import { sql } from "kysely"
+import { getPlatformDb } from "../../../schema/kysely.js"
+import { runAll, runExec } from "../../../schema/execute.js"
+import { getPlatformStore } from "../platform-store.js"
 import type {
   DurableEvent,
   EventListOpts,
@@ -59,117 +62,90 @@ export class SqliteEventStore implements EventStore {
   list(opts?: EventListOpts): StoredEvent[] {
     this.flush()
     const limit = opts?.limit ?? 200
-    const conditions: string[] = []
-    const params: unknown[] = []
+    let query = getPlatformDb().selectFrom("event_log").selectAll()
 
-    if (opts?.before) {
-      conditions.push("created_at < ?")
-      params.push(opts.before)
-    }
-    if (opts?.after) {
-      conditions.push("created_at > ?")
-      params.push(opts.after)
-    }
-    if (opts?.since) {
-      conditions.push("created_at >= ?")
-      params.push(opts.since)
-    }
-    if (opts?.until) {
-      conditions.push("created_at <= ?")
-      params.push(opts.until)
-    }
+    if (opts?.before) query = query.where("created_at", "<", opts.before)
+    if (opts?.after) query = query.where("created_at", ">", opts.after)
+    if (opts?.since) query = query.where("created_at", ">=", opts.since)
+    if (opts?.until) query = query.where("created_at", "<=", opts.until)
     if (opts?.types && opts.types.length > 0) {
-      conditions.push(`type IN (${opts.types.map(() => "?").join(",")})`)
-      params.push(...opts.types)
+      query = query.where("type", "in", [...opts.types])
     }
     if (opts?.excludeTypes && opts.excludeTypes.length > 0) {
-      conditions.push(`type NOT IN (${opts.excludeTypes.map(() => "?").join(",")})`)
-      params.push(...opts.excludeTypes)
+      query = query.where("type", "not in", [...opts.excludeTypes])
     }
     if (opts?.actorUpn) {
-      conditions.push("actor_upn = ?")
-      params.push(opts.actorUpn.trim().toLowerCase())
+      query = query.where("actor_upn", "=", opts.actorUpn.trim().toLowerCase())
     }
-    if (opts?.runId) {
-      conditions.push("run_id = ?")
-      params.push(opts.runId)
-    }
-    if (opts?.planId) {
-      conditions.push("plan_id = ?")
-      params.push(opts.planId)
-    }
+    if (opts?.runId) query = query.where("run_id", "=", opts.runId)
+    if (opts?.planId) query = query.where("plan_id", "=", opts.planId)
 
-    const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : ""
-    params.push(limit)
-    return getDb()
-      .prepare(`SELECT * FROM event_log ${where} ORDER BY created_at DESC LIMIT ?`)
-      .all(...params) as StoredEvent[]
+    const compiled = query.orderBy("created_at", "desc").limit(limit).compile()
+    return runAll<StoredEvent>(compiled)
   }
 
   search(q: string, opts?: EventSearchOpts): StoredEvent[] {
     this.flush()
     const limit = Math.min(opts?.limit ?? 200, 1000)
-    const conditions: string[] = []
-    const params: unknown[] = []
+    let query = getPlatformDb().selectFrom("event_log").selectAll()
+    let hasConditions = false
 
     if (q.length >= 2) {
       const words = q.split(/\s+/).filter((w) => w.length >= 2)
       for (const word of words) {
-        conditions.push("(data LIKE ? OR type LIKE ?)")
-        params.push(`%${word}%`, `%${word}%`)
+        const like = `%${word}%`
+        query = query.where((eb) => eb.or([eb("data", "like", like), eb("type", "like", like)]))
+        hasConditions = true
       }
     }
     if (opts?.before) {
-      conditions.push("created_at < ?")
-      params.push(opts.before)
+      query = query.where("created_at", "<", opts.before)
+      hasConditions = true
     }
     if (opts?.after) {
-      conditions.push("created_at > ?")
-      params.push(opts.after)
+      query = query.where("created_at", ">", opts.after)
+      hasConditions = true
     }
     if (opts?.since) {
-      conditions.push("created_at >= ?")
-      params.push(opts.since)
+      query = query.where("created_at", ">=", opts.since)
+      hasConditions = true
     }
     if (opts?.until) {
-      conditions.push("created_at <= ?")
-      params.push(opts.until)
+      query = query.where("created_at", "<=", opts.until)
+      hasConditions = true
     }
     if (opts?.types?.length) {
-      conditions.push(`type IN (${opts.types.map(() => "?").join(",")})`)
-      params.push(...opts.types)
+      query = query.where("type", "in", [...opts.types])
+      hasConditions = true
     }
     if (opts?.type_patterns?.length) {
-      const pats = opts.type_patterns.map(() => "type LIKE ?")
-      conditions.push(`(${pats.join(" OR ")})`)
-      params.push(...opts.type_patterns.map((p) => `%${p}%`))
+      query = query.where((eb) =>
+        eb.or(opts.type_patterns!.map((p) => eb("type", "like", `%${p}%`))),
+      )
+      hasConditions = true
     }
 
-    if (!conditions.length) return []
-    params.push(limit)
-    return getDb()
-      .prepare(
-        `SELECT * FROM event_log WHERE ${conditions.join(" AND ")} ORDER BY created_at DESC LIMIT ?`,
-      )
-      .all(...params) as StoredEvent[]
+    if (!hasConditions) return []
+
+    const compiled = query.orderBy("created_at", "desc").limit(limit).compile()
+    return runAll<StoredEvent>(compiled)
   }
 
   listForPlanId(planId: string, opts?: { limit?: number }): StoredEvent[] {
     this.flush()
     const limit = Math.min(opts?.limit ?? 20_000, 50_000)
-    const db = getDb()
 
-    const primary = db
-      .prepare(
-        `
-      SELECT * FROM event_log
-      WHERE type LIKE 'sync.%'
-        AND (plan_id = ? OR json_extract(data, '$.opId') = ?)
-      ORDER BY created_at ASC
-      LIMIT ?
-    `,
+    const primaryCompiled = getPlatformDb()
+      .selectFrom("event_log")
+      .selectAll()
+      .where("type", "like", "sync.%")
+      .where((eb) =>
+        eb.or([eb("plan_id", "=", planId), eb(sql`json_extract(data, '$.opId')`, "=", planId)]),
       )
-      .all(planId, planId, limit) as StoredEvent[]
+      .orderBy("created_at", "asc")
+      .limit(limit)
+      .compile()
+    const primary = runAll<StoredEvent>(primaryCompiled)
 
     const previewIds = new Set<string>()
     for (const row of primary) {
@@ -186,20 +162,20 @@ export class SqliteEventStore implements EventStore {
 
     if (previewIds.size === 0) return primary
 
-    const placeholders = [...previewIds].map(() => "?").join(",")
-    const correlated = db
-      .prepare(
-        `
-      SELECT * FROM event_log
-      WHERE type LIKE 'sync.%'
-        AND (
-          plan_id IN (${placeholders})
-          OR json_extract(data, '$.opId') IN (${placeholders})
-        )
-      ORDER BY created_at ASC
-    `,
+    const previewIdsArray = [...previewIds]
+    const correlatedCompiled = getPlatformDb()
+      .selectFrom("event_log")
+      .selectAll()
+      .where("type", "like", "sync.%")
+      .where((eb) =>
+        eb.or([
+          eb("plan_id", "in", previewIdsArray),
+          eb(sql`json_extract(data, '$.opId')`, "in", previewIdsArray),
+        ]),
       )
-      .all(...previewIds, ...previewIds) as StoredEvent[]
+      .orderBy("created_at", "asc")
+      .compile()
+    const correlated = runAll<StoredEvent>(correlatedCompiled)
 
     const byId = new Map<number, StoredEvent>()
     for (const row of [...primary, ...correlated]) byId.set(row.id, row)
@@ -209,16 +185,14 @@ export class SqliteEventStore implements EventStore {
   listForRunId(runId: string, opts?: { limit?: number }): StoredEvent[] {
     this.flush()
     const limit = Math.min(opts?.limit ?? 20_000, 50_000)
-    return getDb()
-      .prepare(
-        `
-      SELECT * FROM event_log
-      WHERE run_id = ?
-      ORDER BY created_at ASC
-      LIMIT ?
-    `,
-      )
-      .all(runId, limit) as StoredEvent[]
+    const compiled = getPlatformDb()
+      .selectFrom("event_log")
+      .selectAll()
+      .where("run_id", "=", runId)
+      .orderBy("created_at", "asc")
+      .limit(limit)
+      .compile()
+    return runAll<StoredEvent>(compiled)
   }
 
   private scheduleFlush(): void {
@@ -237,27 +211,25 @@ export class SqliteEventStore implements EventStore {
   }
 
   private insertBatch(batch: DurableEvent[]): void {
-    const db = getDb()
-    const insert = db.prepare(`
-      INSERT INTO event_log (type, data, created_at, actor_upn, run_id, plan_id)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `)
-    const run = db.transaction((rows: DurableEvent[]) => {
-      for (let i = 0; i < rows.length; i += BATCH_SIZE) {
-        const slice = rows.slice(i, i + BATCH_SIZE)
+    getPlatformStore().transaction(() => {
+      for (let i = 0; i < batch.length; i += BATCH_SIZE) {
+        const slice = batch.slice(i, i + BATCH_SIZE)
         for (const e of slice) {
-          insert.run(
-            e.type,
-            JSON.stringify(e.data),
-            e.createdAt,
-            e.actorUpn,
-            e.runId,
-            e.planId,
-          )
+          const compiled = getPlatformDb()
+            .insertInto("event_log")
+            .values({
+              type: e.type,
+              data: JSON.stringify(e.data),
+              created_at: e.createdAt,
+              actor_upn: e.actorUpn,
+              run_id: e.runId,
+              plan_id: e.planId,
+            })
+            .compile()
+          runExec(compiled)
         }
       }
     })
-    run(batch)
   }
 }
 
