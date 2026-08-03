@@ -8,7 +8,7 @@ import { useEffect, useState } from "react"
 import { api } from "../../client/index"
 import { formatApiError } from "../../lib/api-error"
 import { CatalogJsonDiff } from "../platform/CatalogJsonDiff"
-import { ACTION_BTN, META_TEXT } from "./chrome"
+import { META_TEXT } from "./chrome"
 import { ModalShell } from "./ModalShell"
 
 export type ShippedDriftDiffKind = "flows" | "actions" | "valueSources"
@@ -67,11 +67,6 @@ export function ShippedDriftDiffModal({
       onClose={onClose}
       size="default"
       stackLevel={stackLevel}
-      footer={(
-        <button type="button" className={`${ACTION_BTN} w-full`} onClick={onClose}>
-          Close
-        </button>
-      )}
     >
       <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden px-5 py-4">
         <p className={`${META_TEXT} text-text-muted`}>
