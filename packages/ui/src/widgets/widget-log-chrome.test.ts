@@ -537,7 +537,8 @@ describe("widget log chrome — shared content dialect", () => {
   it("day groups open air above later caps (virtual rows are absolute)", () => {
     const ops = read(opsPath)
     expect(ops).toContain("dayGroupWrapClass")
-    expect(ops).toMatch(/isFirst \? "pb-1" : "pt-3\.5 pb-1"/)
+    expect(ops).toMatch(/isFirst \? "" : "pt-2"/)
+    expect(ops).toContain("review-group-cap__count")
   })
 
   it("Pipelines tree uses review kit grid, column headers, and split shell", () => {

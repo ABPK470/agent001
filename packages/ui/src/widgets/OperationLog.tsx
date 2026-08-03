@@ -49,10 +49,11 @@ const OP_LOG_LIST_ROW_HEIGHT = 44
 const REVIEW_TREE_GRID_COLS = "minmax(0, 1fr) var(--review-tree-col-duration)"
 
 const DAY_GROUP_BTN =
-  "review-group-label review-group-cap sticky top-0 z-10 w-full flex items-center gap-1.5 py-1 text-left transition-colors"
+  "review-group-label review-group-cap sticky top-0 z-10 w-full flex items-center text-left transition-colors"
 
 function dayGroupWrapClass(isFirst: boolean): string {
-  return isFirst ? "pb-1" : "pt-3.5 pb-1"
+  /* Air above later day banners; first cap sits under the NODE header. */
+  return isFirst ? "" : "pt-2"
 }
 
 function dayLabel(iso: string): string {
@@ -680,13 +681,11 @@ export function OperationPipelineList({
             onClick={() => toggleDay(row.label)}
           >
             <ChevronRight
-              size={10}
+              size={12}
               className={`shrink-0 transition-transform ${collapsed ? "" : "rotate-90"}`}
             />
             {row.label}
-            <span className="ml-1 normal-case tracking-normal text-text-muted/30">
-              {row.count}
-            </span>
+            <span className="review-group-cap__count">{row.count}</span>
           </button>
         </div>
       )
@@ -741,7 +740,7 @@ export function OperationPipelineList({
       estimateSize={(index) => {
         const row = rows[index]
         if (!row) return OP_LOG_LIST_ROW_HEIGHT
-        if (row.type === "day") return index === 0 ? 28 : 42
+        if (row.type === "day") return index === 0 ? 32 : 40
         if (row.type === "activity") return opLogActivityTreeRowHeight()
         return opLogPipelineListRowHeight(row.pipeline)
       }}

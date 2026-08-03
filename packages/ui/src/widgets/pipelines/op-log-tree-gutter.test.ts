@@ -64,11 +64,15 @@ describe("pipelines left-tree gutter — review kit", () => {
     expect(nodeCell).not.toMatch(/padding-left:\s*0\s*!important/)
   })
 
-  it("day caps share the same root inset as depth-0 chevrons", () => {
+  it("day banners sit left of the tree so pipeline rows read as children", () => {
     const css = read(cssPath)
     expect(css).toMatch(
-      /\.review-operator \.review-split-list-scroll \.review-group-label\s*\{[^}]*padding-inline-start:\s*var\(--review-tree-root-inset/s,
+      /\.review-operator \.review-split-list-scroll \.review-group-cap\s*\{[^}]*padding-inline-start:\s*var\(--review-tree-hpad/s,
     )
+    expect(css).toMatch(
+      /\.review-operator \.review-split-list-scroll \.review-group-cap\s*\{[^}]*background:\s*var\(--panel-3/s,
+    )
+    expect(css).toContain(".review-group-cap__count")
   })
 
   it("activity rows reserve the icon column via ReviewTreeRow", () => {
