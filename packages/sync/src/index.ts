@@ -43,3 +43,4 @@ export type {
   WarehouseUpsertSqlInput,
 } from "./ports/warehouse-dialect.js"
 export { createMssqlWarehouseDialect } from "./adapters/mssql/dialect/index.js"
+export { createPostgresWarehouseDialect } from "./adapters/postgres/dialect/index.js"

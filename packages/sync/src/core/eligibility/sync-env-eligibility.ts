@@ -3,17 +3,28 @@
  *
  * An environment is Sync-selectable only when:
  *   1. `role` allows that side (source / target / both)
- *   2. `connectorId` is set and the gate says that MSSQL connector is ready
- *      (exists, kind mssql, enabled) — Bridge capabilities are irrelevant
+ *   2. `connectorId` is set and the gate says that warehouse connector is ready
+ *      (exists, kind ∈ {mssql, postgres}, enabled) — Bridge capabilities are irrelevant
  *   3. For a chosen source → target pair, `allowedSyncEnvironments` allows it
  *
  * Sync environments are the only From/To options. Connectors are shared plumbing.
  */
 
+import type { WarehouseDialectKind } from "@mia/sql-kit"
 import { EnvRole } from "../../domain/enums.js"
 import type { SyncEnvironment } from "../../domain/environments.js"
 
-/** Enabled MSSQL connector ids — resolved at the composition root. */
+/** Warehouse connector kinds eligible for Sync From/To. */
+export const SYNC_WAREHOUSE_CONNECTOR_KINDS: readonly WarehouseDialectKind[] = [
+  "mssql",
+  "postgres",
+] as const
+
+export function isSyncWarehouseConnectorKind(kind: string): kind is WarehouseDialectKind {
+  return kind === "mssql" || kind === "postgres"
+}
+
+/** Enabled warehouse connector ids — resolved at the composition root. */
 export type SyncConnectorReadyIds = ReadonlySet<string>
 
 export function envCanBeSyncSource(env: Pick<SyncEnvironment, "role">): boolean {
@@ -87,12 +98,12 @@ export function assertEnvConnectorReady(
   const id = typeof env.connectorId === "string" ? env.connectorId.trim() : ""
   if (!id) {
     throw new Error(
-      `Environment "${env.name}" has no connectorId — link an enabled MSSQL connector in Environments.`,
+      `Environment "${env.name}" has no connectorId — link an enabled MSSQL or Postgres connector in Environments.`,
     )
   }
   if (!readyIds.has(id)) {
     throw new Error(
-      `Environment "${env.name}" connector "${id}" is missing, not MSSQL, or disabled. Enable it in Connectors.`,
+      `Environment "${env.name}" connector "${id}" is missing, not a warehouse kind (mssql|postgres), or disabled. Enable it in Connectors.`,
     )
   }
 }

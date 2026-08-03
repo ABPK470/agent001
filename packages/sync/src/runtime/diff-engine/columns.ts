@@ -22,24 +22,11 @@ export async function fetchTableColumns(
   excludeFromDiff: ReadonlySet<string> = new Set(),
   telemetryContext?: import("../../ports/events.js").SyncTelemetryContext
 ): Promise<TableColumnInfo> {
-  const [schema, name] = qualifiedTable.split(".")
+  const dialect = resolveWarehouseDialect(host)
   const result = await runQueryWithRetry(
     host,
     connectionName,
-    `
-    SELECT
-      c.name             AS columnName,
-      c.is_computed      AS isComputed,
-      c.is_identity      AS isIdentity,
-      LOWER(ty.name)     AS systemType
-    FROM sys.columns c
-    JOIN sys.objects o  ON o.object_id = c.object_id
-    JOIN sys.types ty   ON ty.user_type_id = c.user_type_id
-    WHERE o.[type] = 'U'
-      AND o.name = '${name!.replace(/'/g, "''")}'
-      AND OBJECT_SCHEMA_NAME(c.object_id) = '${schema!.replace(/'/g, "''")}'
-    ORDER BY c.column_id
-  `,
+    dialect.hashColumnsMetaSql(qualifiedTable),
     `fetchTableColumns(${qualifiedTable})`,
     2,
     telemetryContext

@@ -14,7 +14,8 @@ import { getPublishedSyncDefinition } from "../../runtime/published-definitions.
 import type { SyncTelemetryContext } from "../../ports/events.js"
 import { getPool } from "../../adapters/mssql/connection.js"
 import type { SyncRuntimeHost } from "../../ports/index.js"
-import { projectRoot, qtable, trackedLoggedQuery, trackedQuery } from "./db/db-helpers.js"
+import { resolveWarehouseDialect } from "../warehouse-dialect.js"
+import { projectRoot, trackedLoggedQuery, trackedQuery } from "./db/db-helpers.js"
 
 export interface EntitySearchResult {
   id: string | number
@@ -76,36 +77,16 @@ async function resolveDisplayColumn(
     )
   }
   const ctx = discoveryContext(telemetryContext)
-  const sqlForLog = `
-      SELECT c.name
-      FROM sys.columns c
-      INNER JOIN sys.objects o ON o.object_id = c.object_id
-      INNER JOIN sys.schemas s ON s.schema_id = o.schema_id
-      WHERE s.name = N'${schema.replace(/'/g, "''")}'
-        AND o.name = N'${table.replace(/'/g, "''")}'
-        AND o.type IN ('U', 'V')
-      ORDER BY c.column_id
-    `
+  const dialect = resolveWarehouseDialect(host)
+  const sqlText = dialect.rootTableColumnsSql(schema, table)
   const result = await trackedLoggedQuery(
     host,
     source,
     `discovery.columns(${definition.rootTable})`,
-    sqlForLog,
+    sqlText,
     async () => {
       const { pool } = await getPool(host, source)
-      return pool
-        .request()
-        .input("schema", sqlMod.NVarChar(128), schema)
-        .input("table", sqlMod.NVarChar(128), table).query(`
-          SELECT c.name
-          FROM sys.columns c
-          INNER JOIN sys.objects o ON o.object_id = c.object_id
-          INNER JOIN sys.schemas s ON s.schema_id = o.schema_id
-          WHERE s.name = @schema
-            AND o.name = @table
-            AND o.type IN ('U', 'V')
-          ORDER BY c.column_id
-        `)
+      return pool.request().query(sqlText)
     },
     ctx
   )
@@ -133,12 +114,15 @@ export async function searchEntities(
   const safeLike = query.replace(/[%_[\]^]/g, "[$&]")
   const capped = Math.min(limit, 500)
 
+  const dialect = resolveWarehouseDialect(host)
+  const fromTable = `${dialect.quoteTable(definition.rootTable)}${dialect.readFromHintSql()}`
+
   if (mode === "id") {
     const sqlForLog = `
         SELECT TOP (${capped})
           [${definition.idColumn}] AS id,
           [${displayColumn}] AS name
-        FROM ${qtable(definition.rootTable)} WITH (NOLOCK)
+        FROM ${fromTable}
         WHERE CAST([${definition.idColumn}] AS NVARCHAR(100)) LIKE N'${safeLike.replace(/'/g, "''")}%'
         ORDER BY [${definition.idColumn}]
       `
@@ -156,7 +140,7 @@ export async function searchEntities(
             SELECT TOP (@limit)
               [${definition.idColumn}] AS id,
               [${displayColumn}] AS name
-            FROM ${qtable(definition.rootTable)} WITH (NOLOCK)
+            FROM ${fromTable}
             WHERE CAST([${definition.idColumn}] AS NVARCHAR(100)) LIKE @q
             ORDER BY [${definition.idColumn}]
           `)
@@ -173,7 +157,7 @@ export async function searchEntities(
       SELECT TOP (${capped})
         [${definition.idColumn}] AS id,
         [${displayColumn}] AS name
-      FROM ${qtable(definition.rootTable)} WITH (NOLOCK)
+      FROM ${fromTable}
       WHERE [${displayColumn}] LIKE N'%${safeLike.replace(/'/g, "''")}%'
       ORDER BY [${displayColumn}]
     `
@@ -191,7 +175,7 @@ export async function searchEntities(
           SELECT TOP (@limit)
             [${definition.idColumn}] AS id,
             [${displayColumn}] AS name
-          FROM ${qtable(definition.rootTable)} WITH (NOLOCK)
+          FROM ${fromTable}
           WHERE [${displayColumn}] LIKE @q
           ORDER BY [${displayColumn}]
         `)
@@ -281,10 +265,11 @@ export async function fetchEntityDisplayName(
   const id = coerceSyncEntityId(entityId)
   const ctx = discoveryContext(telemetryContext)
   const displayColumn = await resolveDisplayColumn(host, source, definition, ctx)
+  const dialect = resolveWarehouseDialect(host)
   const idLiteral = typeof id === "number" ? String(id) : `N'${String(id).replace(/'/g, "''")}'`
   const sqlText = `
     SELECT TOP 1 [${displayColumn}] AS displayName
-    FROM ${qtable(definition.rootTable)} WITH (NOLOCK)
+    FROM ${dialect.quoteTable(definition.rootTable)}${dialect.readFromHintSql()}
     WHERE [${definition.idColumn}] = ${idLiteral}
   `
   const r = await trackedQuery<{ displayName: string | null }>(
@@ -307,9 +292,10 @@ export async function expandTreeIds(
   const id = coerceSyncEntityId(entityId)
   if (!definition.selfJoinColumn) return [id]
   const ctx = discoveryContext(telemetryContext)
+  const dialect = resolveWarehouseDialect(host)
   const pk = definition.idColumn
   const fk = definition.selfJoinColumn
-  const table = qtable(definition.rootTable)
+  const table = dialect.quoteTable(definition.rootTable)
   const idLiteral = typeof id === "number" ? String(id) : `N'${String(id).replace(/'/g, "''")}'`
   const sqlForLog = `
       ;WITH tree AS (

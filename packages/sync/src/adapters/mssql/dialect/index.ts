@@ -14,7 +14,19 @@ import type {
   WarehouseHashSelectInput,
   WarehouseUpsertSqlInput,
 } from "../../../ports/warehouse-dialect.js"
-import { mssqlPrimaryKeySql, mssqlTargetColumnsSql } from "./catalog.js"
+import {
+  mssqlHashColumnsMetaSql,
+  mssqlInboundForeignKeysSql,
+  mssqlInformationSchemaColumnsBySchemasSql,
+  mssqlInformationSchemaColumnsByTablesSql,
+  mssqlOutboundForeignKeysSql,
+  mssqlPrimaryKeySql,
+  mssqlRootTableColumnsSql,
+  mssqlTableColumnNamesSql,
+  mssqlTableHasTriggersSql,
+  mssqlTargetColumnsSql,
+} from "./catalog.js"
+import { mssqlDisableConstraintsSql, mssqlEnableConstraintsSql } from "./constraints.js"
 import { mssqlDeleteBatchSql } from "./delete.js"
 import { mssqlHashSelectSql } from "./hash.js"
 import { MSSQL_DETERMINISTIC_SESSION_PREFIX } from "./session.js"
@@ -47,6 +59,10 @@ export function createMssqlWarehouseDialect(): WarehouseDialect {
       return "GETUTCDATE()"
     },
 
+    readFromHintSql(): string {
+      return " WITH (NOLOCK)"
+    },
+
     hashSelectSql(input: WarehouseHashSelectInput): string {
       return mssqlHashSelectSql(input)
     },
@@ -57,6 +73,46 @@ export function createMssqlWarehouseDialect(): WarehouseDialect {
 
     primaryKeySql(qualifiedTable: string): string {
       return mssqlPrimaryKeySql(qualifiedTable)
+    },
+
+    hashColumnsMetaSql(qualifiedTable: string): string {
+      return mssqlHashColumnsMetaSql(qualifiedTable)
+    },
+
+    informationSchemaColumnsBySchemasSql(schemas: readonly string[]): string {
+      return mssqlInformationSchemaColumnsBySchemasSql(schemas)
+    },
+
+    informationSchemaColumnsByTablesSql(tables: readonly string[]): string {
+      return mssqlInformationSchemaColumnsByTablesSql(tables)
+    },
+
+    tableColumnNamesSql(qualifiedTable: string): string {
+      return mssqlTableColumnNamesSql(qualifiedTable)
+    },
+
+    tableHasTriggersSql(qualifiedTable: string): string {
+      return mssqlTableHasTriggersSql(qualifiedTable)
+    },
+
+    inboundForeignKeysSql(qualifiedTable: string): string {
+      return mssqlInboundForeignKeysSql(qualifiedTable)
+    },
+
+    outboundForeignKeysSql(qualifiedTable: string): string {
+      return mssqlOutboundForeignKeysSql(qualifiedTable)
+    },
+
+    rootTableColumnsSql(schema: string, table: string): string {
+      return mssqlRootTableColumnsSql(schema, table)
+    },
+
+    disableConstraintsSql(qualifiedTable: string): string {
+      return mssqlDisableConstraintsSql(qualifiedTable)
+    },
+
+    enableConstraintsSql(qualifiedTable: string): string {
+      return mssqlEnableConstraintsSql(qualifiedTable)
     },
 
     upsertBatchSql(input: WarehouseUpsertSqlInput): string {

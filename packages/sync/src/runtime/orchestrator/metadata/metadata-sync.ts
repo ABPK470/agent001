@@ -14,7 +14,8 @@ import { type SyncPlan, type SyncPlanTable } from "../../plan-store.js"
 import { applyDeletes, applyInsertsUpdates } from "../apply.js"
 import { movementFromChangeSet } from "../plan-table.js"
 import { maybeArchive } from "../archive.js"
-import { qtable, trackedQuery } from "../db/db-helpers.js"
+import { trackedQuery } from "../db/db-helpers.js"
+import { resolveWarehouseDialect } from "../../warehouse-dialect.js"
 import { constraintRelaxationTables, dataMovementTables } from "./metadata-scope.js"
 import { SyncExecuteError, toSyncExecuteError, type ExecuteProgress } from "../types.js"
 import { deleteRows, upsertRows } from "../plan-table.js"
@@ -31,14 +32,13 @@ export interface RunMetadataSyncInput {
   telemetryContext?: SyncTelemetryContext
 }
 
-/** Re-enable constraints without validating existing rows (legacy uspSyncObjectTran parity). */
-const ENABLE_CONSTRAINTS_SQL = (table: string) => `ALTER TABLE ${qtable(table)} CHECK CONSTRAINT ALL`
-
 export async function runMetadataSync(
   input: RunMetadataSyncInput
 ): Promise<{ applied: { insert: number; update: number; delete: number } }> {
   const { plan, planId, pkByTable, triggerCache, onProgress, target, tgtPool, telemetryContext } = input
   const host = input.host
+  const dialect = resolveWarehouseDialect(host)
+  const relaxConstraints = dialect.supports("constraint_relax")
 
   const appliedTotals = { insert: 0, update: 0, delete: 0 }
   const pendingCommitted: Array<{ table: string; rowsApplied: number; op: "upsert" | "delete" }> = []
@@ -74,19 +74,21 @@ export async function runMetadataSync(
   try {
     await tx.begin()
 
-    for (const t of allTables) {
-      if (!constraintTables.has(t)) continue
-      try {
-        await trackedQuery(
-          host,
-          target,
-          `ALTER TABLE ${qtable(t)} NOCHECK CONSTRAINT ALL`,
-          `nocheck-constraint(${t})`,
-          telemetryContext,
-          tx.request()
-        )
-      } catch (error) {
-        throw fail(error, { table: t, op: "nocheck-constraint" })
+    if (relaxConstraints) {
+      for (const t of allTables) {
+        if (!constraintTables.has(t)) continue
+        try {
+          await trackedQuery(
+            host,
+            target,
+            dialect.disableConstraintsSql(t),
+            `nocheck-constraint(${t})`,
+            telemetryContext,
+            tx.request()
+          )
+        } catch (error) {
+          throw fail(error, { table: t, op: "nocheck-constraint" })
+        }
       }
     }
 
@@ -166,19 +168,21 @@ export async function runMetadataSync(
       }
     }
 
-    for (const t of allTables) {
-      if (!constraintTables.has(t)) continue
-      try {
-        await trackedQuery(
-          host,
-          target,
-          ENABLE_CONSTRAINTS_SQL(t),
-          `check-constraint(${t})`,
-          telemetryContext,
-          tx.request()
-        )
-      } catch (error) {
-        throw fail(error, { table: t, op: "check-constraint" })
+    if (relaxConstraints) {
+      for (const t of allTables) {
+        if (!constraintTables.has(t)) continue
+        try {
+          await trackedQuery(
+            host,
+            target,
+            dialect.enableConstraintsSql(t),
+            `check-constraint(${t})`,
+            telemetryContext,
+            tx.request()
+          )
+        } catch (error) {
+          throw fail(error, { table: t, op: "check-constraint" })
+        }
       }
     }
 
@@ -200,21 +204,23 @@ export async function runMetadataSync(
 
     return { applied: appliedTotals }
   } catch (e) {
-    for (const t of allTables) {
-      if (!constraintTables.has(t)) continue
-      try {
-        const rollbackCtx = telemetryContext
-          ? { ...telemetryContext, scope: "rollback" }
-          : undefined
-        await trackedQuery(
-          host,
-          target,
-          ENABLE_CONSTRAINTS_SQL(t),
-          `rollback.check-constraint(${t})`,
-          rollbackCtx,
-          tx.request()
-        )
-      } catch (err: unknown) { console.error("[mia]", err) }
+    if (relaxConstraints) {
+      for (const t of allTables) {
+        if (!constraintTables.has(t)) continue
+        try {
+          const rollbackCtx = telemetryContext
+            ? { ...telemetryContext, scope: "rollback" }
+            : undefined
+          await trackedQuery(
+            host,
+            target,
+            dialect.enableConstraintsSql(t),
+            `rollback.check-constraint(${t})`,
+            rollbackCtx,
+            tx.request()
+          )
+        } catch (err: unknown) { console.error("[mia]", err) }
+      }
     }
     try {
       await tx.rollback()

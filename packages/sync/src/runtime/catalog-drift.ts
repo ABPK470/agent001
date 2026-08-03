@@ -13,7 +13,8 @@ import { emitSyncEvent } from "./events.js"
 import { EventType } from "../domain/enums.js"
 import type { SyncTelemetryContext } from "../ports/events.js"
 import { getPool } from "../adapters/mssql/connection.js"
-import type { MssqlAccessHost, SyncEnvironmentRegistryHost, SyncEventHost } from "../ports/index.js"
+import type { MssqlAccessHost, SyncEnvironmentRegistryHost, SyncEventHost, SyncRuntimeHost } from "../ports/index.js"
+import { resolveWarehouseDialect } from "./warehouse-dialect.js"
 
 export interface CatalogDriftResult {
   catalogCompatible: boolean
@@ -126,7 +127,7 @@ async function queryWithRetry<T>(
 }
 
 async function fetchSchema(
-  host: MssqlAccessHost & SyncEnvironmentRegistryHost,
+  host: SyncRuntimeHost,
   connection: string,
   schemas: readonly string[],
   telemetryContext?: SyncTelemetryContext
@@ -134,7 +135,7 @@ async function fetchSchema(
   if (schemas.length === 0) {
     return { tables: new Set(), cols: new Map() }
   }
-  const list = schemas.map((s) => `'${s.replace(/'/g, "''")}'`).join(",")
+  const dialect = resolveWarehouseDialect(host)
   const rows = await queryWithRetry<{
     TABLE_SCHEMA: string
     TABLE_NAME: string
@@ -144,11 +145,7 @@ async function fetchSchema(
   }>(
     host,
     connection,
-    `
-    SELECT TABLE_SCHEMA, TABLE_NAME, COLUMN_NAME, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH
-    FROM INFORMATION_SCHEMA.COLUMNS
-    WHERE TABLE_SCHEMA IN (${list})
-  `,
+    dialect.informationSchemaColumnsBySchemasSql(schemas),
     "catalog.schema.columns",
     2,
     telemetryContext
@@ -157,18 +154,13 @@ async function fetchSchema(
 }
 
 async function fetchSchemaForTables(
-  host: MssqlAccessHost & SyncEnvironmentRegistryHost,
+  host: SyncRuntimeHost,
   connection: string,
   tables: readonly string[],
   telemetryContext?: SyncTelemetryContext
 ): Promise<SchemaSnapshot> {
   if (tables.length === 0) return { tables: new Set(), cols: new Map() }
-  const literals = tables
-    .map((qn) => {
-      const normalized = normalizeCatalogName(qn)
-      return `N'${normalized.replace(/'/g, "''")}'`
-    })
-    .join(", ")
+  const dialect = resolveWarehouseDialect(host)
   const rows = await queryWithRetry<{
     TABLE_SCHEMA: string
     TABLE_NAME: string
@@ -178,11 +170,7 @@ async function fetchSchemaForTables(
   }>(
     host,
     connection,
-    `
-    SELECT TABLE_SCHEMA, TABLE_NAME, COLUMN_NAME, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH
-    FROM INFORMATION_SCHEMA.COLUMNS
-    WHERE LOWER(TABLE_SCHEMA + '.' + TABLE_NAME) IN (${literals})
-  `,
+    dialect.informationSchemaColumnsByTablesSql(tables),
     "catalog.tables.columns",
     2,
     telemetryContext
@@ -215,13 +203,14 @@ function rowsToSnapshot(
 
 /** Live column names per qualified table (preserves catalog casing from sys.columns). */
 export async function fetchTableColumnNamesMap(
-  host: MssqlAccessHost & SyncEnvironmentRegistryHost,
+  host: SyncRuntimeHost,
   connection: string,
   tables: readonly string[],
   telemetryContext?: SyncTelemetryContext
 ): Promise<Map<string, string[]>> {
   const out = new Map<string, string[]>()
   if (tables.length === 0) return out
+  const dialect = resolveWarehouseDialect(host)
   for (const qn of tables) {
     const [schema, name] = qn.split(".")
     if (!schema || !name) {
@@ -231,12 +220,7 @@ export async function fetchTableColumnNamesMap(
     const rows = await queryWithRetry<{ name: string }>(
       host,
       connection,
-      `
-      SELECT c.name
-      FROM sys.columns c
-      WHERE c.object_id = OBJECT_ID('${schema.replace(/'/g, "''")}.${name.replace(/'/g, "''")}')
-      ORDER BY c.column_id
-    `,
+      dialect.tableColumnNamesSql(qn),
       `catalog.columns(${qn})`,
       2,
       telemetryContext
@@ -252,7 +236,7 @@ export async function fetchTableColumnNamesMap(
  * relevant to the upcoming sync.
  */
 export async function detectCatalogDrift(
-  host: MssqlAccessHost & SyncEnvironmentRegistryHost,
+  host: SyncRuntimeHost,
   source: string,
   target: string,
   restrictTables?: Iterable<string>,
@@ -306,7 +290,7 @@ export async function detectCatalogDrift(
  * rely on existing target-side triggers (the ABI convention is the latter).
  */
 export async function tableHasTriggers(
-  host: MssqlAccessHost & SyncEnvironmentRegistryHost,
+  host: SyncRuntimeHost,
   connection: string,
   qualifiedName: string,
   telemetryContext?: SyncTelemetryContext
@@ -314,16 +298,11 @@ export async function tableHasTriggers(
   const [schema, name] = qualifiedName.split(".")
   if (!schema || !name) return false
   try {
+    const dialect = resolveWarehouseDialect(host)
     const rows = await queryWithRetry<{ cnt: number }>(
       host,
       connection,
-      `
-      SELECT COUNT(*) AS cnt
-      FROM sys.triggers t
-      JOIN sys.objects o ON o.object_id = t.parent_id
-      JOIN sys.schemas s ON s.schema_id = o.schema_id
-      WHERE s.name = '${schema}' AND o.name = '${name}' AND t.is_disabled = 0
-    `,
+      dialect.tableHasTriggersSql(qualifiedName),
       `catalog.triggers(${qualifiedName})`,
       2,
       telemetryContext

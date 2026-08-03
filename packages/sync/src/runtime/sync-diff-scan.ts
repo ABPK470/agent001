@@ -24,6 +24,7 @@ import { emitSyncEvent } from "./events.js"
 import { mapWithConcurrency, trackedQuery } from "./orchestrator/db/db-helpers.js"
 import { previewSync } from "./orchestrator/preview.js"
 import type { SyncPlan } from "./plan-store.js"
+import { resolveWarehouseDialect } from "./warehouse-dialect.js"
 
 export interface SyncDiffScanInput {
   host: SyncRuntimeHost
@@ -132,9 +133,9 @@ async function countRootInstances(
   conn: string,
   rootTable: string
 ): Promise<number> {
-  const { schema, name } = parseRootTable(rootTable)
-  const qt = `[${schema}].[${name}]`
-  const sqlText = `SELECT COUNT_BIG(1) AS cnt FROM ${qt} WITH (NOLOCK)`
+  const dialect = resolveWarehouseDialect(host)
+  const qt = `${dialect.quoteTable(rootTable)}${dialect.readFromHintSql()}`
+  const sqlText = `SELECT COUNT_BIG(1) AS cnt FROM ${qt}`
   const ctx = { kind: SyncOperationType.Preview, opId: `scan-${rootTable}`, scope: "discovery" as const }
   const countR = await trackedQuery<{ cnt: number }>(
     host,
@@ -153,21 +154,22 @@ async function discoverRootInstances(
   sampleLimit?: number
 ): Promise<{ instances: RootInstance[]; totalOnSource: number }> {
   const { rootTable, idColumn, labelColumn } = definition
-  const { schema, name } = parseRootTable(rootTable)
+  parseRootTable(rootTable)
   const limit =
     sampleLimit != null && Number.isFinite(sampleLimit) && sampleLimit > 0
       ? Math.floor(sampleLimit)
       : undefined
 
   const ctx = { kind: SyncOperationType.Preview, opId: `scan-${rootTable}`, scope: "discovery" as const }
-  const qt = `[${schema}].[${name}]`
-  const qid = `[${idColumn}]`
-  const countSql = `SELECT COUNT_BIG(1) AS cnt FROM ${qt} WITH (NOLOCK)`
+  const dialect = resolveWarehouseDialect(host)
+  const qt = `${dialect.quoteTable(rootTable)}${dialect.readFromHintSql()}`
+  const qid = dialect.quoteIdent(idColumn)
+  const countSql = `SELECT COUNT_BIG(1) AS cnt FROM ${qt}`
   const countR = await trackedQuery<{ cnt: number }>(host, conn, countSql, `discovery.scanCount(${rootTable})`, ctx)
   const totalOnSource = Number(countR.recordset[0]?.cnt ?? 0)
-  const labelSel = labelColumn ? `, [${labelColumn}] AS label` : ""
+  const labelSel = labelColumn ? `, ${dialect.quoteIdent(labelColumn)} AS label` : ""
   const topClause = limit != null ? `TOP (${limit}) ` : ""
-  const listSql = `SELECT ${topClause}${qid} AS id${labelSel} FROM ${qt} WITH (NOLOCK) ORDER BY ${qid}`
+  const listSql = `SELECT ${topClause}${qid} AS id${labelSel} FROM ${qt} ORDER BY ${qid}`
   const listR = await trackedQuery<{ id: string | number; label?: string | null }>(
     host,
     conn,

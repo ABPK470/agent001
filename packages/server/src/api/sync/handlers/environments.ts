@@ -204,10 +204,12 @@ function defaultAccessModeForName(name: string): SyncEnvironment["defaultAccessM
   return /\bprod\b|\buat\b|\bstag(e|ing)?\b/i.test(name) ? "read_only" : "read_write"
 }
 
-/** Live FK: connectorId must be a persisted, enabled MSSQL connector. */
-function resolveMssqlConnector(connectorId: string): db.DbConnector | undefined {
+/** Live FK: connectorId must be a persisted, enabled warehouse connector. */
+function resolveWarehouseConnector(connectorId: string): db.DbConnector | undefined {
   const row = db.getConnector(connectorId)
-  return row && row.kind === "mssql" && row.enabled === 1 ? row : undefined
+  if (!row || row.enabled !== 1) return undefined
+  if (row.kind !== "mssql" && row.kind !== "postgres") return undefined
+  return row
 }
 
 export function registerSyncEnvironmentRoutes(app: FastifyInstance, host: AgentHost): void {
@@ -242,11 +244,11 @@ export function registerSyncEnvironmentRoutes(app: FastifyInstance, host: AgentH
         reply.code(400)
         return { error: "connectorId is required" }
       }
-      const connector = resolveMssqlConnector(connectorId)
+      const connector = resolveWarehouseConnector(connectorId)
       if (!connector) {
         reply.code(400)
         return {
-          error: `MSSQL connector "${connectorId}" is missing or disabled — enable it in Connectors first`,
+          error: `Warehouse connector "${connectorId}" is missing, not mssql|postgres, or disabled — enable it in Connectors first`,
         }
       }
       if (db.getSyncEnvironment(name)) {
@@ -315,10 +317,10 @@ export function registerSyncEnvironmentRoutes(app: FastifyInstance, host: AgentH
           reply.code(400)
           return { error: "connectorId is required" }
         }
-        if (!resolveMssqlConnector(sanitised.connectorId)) {
+        if (!resolveWarehouseConnector(sanitised.connectorId)) {
           reply.code(400)
           return {
-            error: `MSSQL connector "${sanitised.connectorId}" is missing or disabled — enable it in Connectors first`,
+            error: `Warehouse connector "${sanitised.connectorId}" is missing, not mssql|postgres, or disabled — enable it in Connectors first`,
           }
         }
       }

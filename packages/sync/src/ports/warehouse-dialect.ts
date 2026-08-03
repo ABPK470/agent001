@@ -61,14 +61,52 @@ export interface WarehouseDialect {
   /** SCD2 / audit stamp expression (GETUTCDATE vs NOW() AT TIME ZONE 'utc'). */
   utcNowExpr(): string
 
+  /**
+   * Optional FROM-clause read hint (` WITH (NOLOCK)` on MSSQL; empty on Postgres).
+   * Appended after the quoted table name.
+   */
+  readFromHintSql(): string
+
   /** Fingerprint SELECT for change detection (HASHBYTES / digest / …). */
   hashSelectSql(input: WarehouseHashSelectInput): string
 
-  /** Target column metadata (`sys.columns` / information_schema). */
+  /** Target column metadata for apply (`sys.columns` / information_schema). */
   targetColumnsSql(qualifiedTable: string): string
 
   /** Primary-key column names for a table. */
   primaryKeySql(qualifiedTable: string): string
+
+  /**
+   * Diff hash-column discovery — aliases: columnName, isComputed, isIdentity, systemType.
+   */
+  hashColumnsMetaSql(qualifiedTable: string): string
+
+  /** INFORMATION_SCHEMA snapshot for listed schemas (catalog drift). */
+  informationSchemaColumnsBySchemasSql(schemas: readonly string[]): string
+
+  /** INFORMATION_SCHEMA snapshot for listed schema.table names (catalog drift). */
+  informationSchemaColumnsByTablesSql(tables: readonly string[]): string
+
+  /** Ordered column names for one qualified table (preserves catalog casing). */
+  tableColumnNamesSql(qualifiedTable: string): string
+
+  /** Count of enabled triggers on a table (`cnt`). */
+  tableHasTriggersSql(qualifiedTable: string): string
+
+  /** Inbound single-column FK edges referencing `qualifiedTable`. */
+  inboundForeignKeysSql(qualifiedTable: string): string
+
+  /** Outbound single-column FK edges from `qualifiedTable`. */
+  outboundForeignKeysSql(qualifiedTable: string): string
+
+  /** Columns of a root table / view for Sync discovery (`name`). */
+  rootTableColumnsSql(schema: string, table: string): string
+
+  /** Disable FK / constraint checks for apply (capability: constraint_relax). */
+  disableConstraintsSql(qualifiedTable: string): string
+
+  /** Re-enable FK / constraint checks after apply. */
+  enableConstraintsSql(qualifiedTable: string): string
 
   /** Temp-table + MERGE upsert batch. */
   upsertBatchSql(input: WarehouseUpsertSqlInput): string

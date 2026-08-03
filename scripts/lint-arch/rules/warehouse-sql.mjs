@@ -1,9 +1,7 @@
 /**
  * Warehouse / dialect SQL ownership — high-signal T-SQL tokens stay out of
- * Sync domain/ports (and Sync core except known cutover modules).
- *
- * Full extract to adapters/{mssql,postgres}/dialect/** is the next milestone;
- * runtime/** and listed core cutover files remain owners until then.
+ * Sync domain/ports/core and most of runtime. Owners are adapters/** only
+ * (plus a short cutover allowlist for remaining runtime SQL).
  */
 
 import { readFileSync } from "node:fs"
@@ -16,19 +14,27 @@ const DIALECT_SQL_PATTERNS = [
   /\bHASHBYTES\s*\(/i,
   /\bMERGE\s+/i,
   /\bSET\s+IDENTITY_INSERT\b/i,
-  /\bsys\.(columns|tables|triggers|objects|foreign_keys)\b/i,
+  /\bsys\.(columns|tables|triggers|objects|foreign_keys|indexes|schemas)\b/i,
   /#syncSrc\b/,
   /\bWITH\s*\(\s*NOLOCK\s*\)/i,
 ]
 
 /**
- * Sync paths that may still contain warehouse dialect SQL until extract.
+ * Remaining runtime files that still embed dialect SQL (TOP/COUNT_BIG, archive
+ * triggers, contract-deploy). Shrink this list as extract continues.
+ * @type {Set<string>}
+ */
+const RUNTIME_CUTOVER_OWNERS = new Set([
+  "runtime/orchestrator/archive.ts",
+  "runtime/orchestrator/flow/contract-deploy.ts",
+])
+
+/**
  * @param {string} rel
  */
 function isSyncDialectOwner(rel) {
   if (rel.startsWith("adapters/")) return true
-  // Runtime still owns catalog-drift / search NOLOCK / conflict probes until later extracts.
-  if (rel.startsWith("runtime/")) return true
+  if (RUNTIME_CUTOVER_OWNERS.has(rel)) return true
   return false
 }
 
@@ -65,7 +71,7 @@ export function lintWarehouseSqlOwnership(pkg, files) {
         file,
         line,
         "warehouse-sql",
-        `Dialect SQL (${pattern.source}) must live under adapters/** or runtime/** until WarehouseDialect extract (got ${rel}).`,
+        `Dialect SQL (${pattern.source}) must live under adapters/** (got ${rel}).`,
       )
       break
     }

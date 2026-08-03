@@ -60,13 +60,13 @@ export function SyncEnvironmentForm({
   const connectorOptions: ListboxOption<string>[] = useMemo(() => {
     const none: ListboxOption<string> = { value: "", label: "None", hint: "No linked connector" }
     const opts: ListboxOption<string>[] = connectors.map((c) => {
-      const selectable = c.kind === "mssql" && c.enabled
-      const hint =
-        c.kind !== "mssql"
-          ? `${c.kind} (Sync needs MSSQL)`
-          : !c.enabled
-            ? "disabled — enable in Connectors"
-            : "mssql"
+      const warehouse = c.kind === "mssql" || c.kind === "postgres"
+      const selectable = warehouse && c.enabled
+      const hint = !warehouse
+        ? `${c.kind} (Sync needs mssql|postgres)`
+        : !c.enabled
+          ? "disabled — enable in Connectors"
+          : c.kind
       return {
         value: c.id,
         label: c.displayName,
@@ -114,7 +114,7 @@ export function SyncEnvironmentForm({
 
       <FormSectionCard
         title="Identity"
-        description="Logical Sync place. Link an enabled MSSQL connector for pools; name is a free-form slug. Allow / deny / approve live in Policies."
+        description="Logical Sync place. Link an enabled MSSQL or Postgres connector for pools; name is a free-form slug. Allow / deny / approve live in Policies."
         emphasized
       >
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -139,7 +139,7 @@ export function SyncEnvironmentForm({
         </div>
         <FormFieldGroup
           label="Connector"
-          hint="Enabled MSSQL connectors only. Enable a connector in Connectors before linking."
+          hint="Enabled MSSQL or Postgres connectors only. Enable a connector in Connectors before linking."
         >
           <Listbox
             value={value.connectorId ?? ""}

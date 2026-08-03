@@ -17,6 +17,7 @@ import {
 import type { SyncPlanTable } from "../../domain/plan.js"
 import type { SyncTelemetryContext } from "../../ports/events.js"
 import type { SyncRuntimeHost } from "../../ports/index.js"
+import { resolveWarehouseDialect } from "../warehouse-dialect.js"
 import { runQueryWithRetry } from "./sql-query.js"
 
 const CANDIDATE_CAP = 5_000
@@ -290,27 +291,11 @@ async function fetchInboundForeignKeys(
   referencedColumn: string,
   telemetryContext?: SyncTelemetryContext
 ): Promise<ForeignKeyEdge[]> {
-  const objectIdLiteral = qualifiedTable.replace(/'/g, "''")
+  const dialect = resolveWarehouseDialect(host)
   const result = await runQueryWithRetry(
     host,
     connectionName,
-    `
-    SELECT
-      OBJECT_SCHEMA_NAME(fk.parent_object_id) AS fromSchema,
-      OBJECT_NAME(fk.parent_object_id) AS fromName,
-      COL_NAME(fc.parent_object_id, fc.parent_column_id) AS fromColumn,
-      OBJECT_SCHEMA_NAME(fk.referenced_object_id) AS toSchema,
-      OBJECT_NAME(fk.referenced_object_id) AS toName,
-      COL_NAME(fc.referenced_object_id, fc.referenced_column_id) AS toColumn,
-      fk.name AS constraintName,
-      (
-        SELECT COUNT(*) FROM sys.foreign_key_columns x
-        WHERE x.constraint_object_id = fk.object_id
-      ) AS fkColumnCount
-    FROM sys.foreign_keys fk
-    INNER JOIN sys.foreign_key_columns fc ON fc.constraint_object_id = fk.object_id
-    WHERE fk.referenced_object_id = OBJECT_ID(N'${objectIdLiteral}')
-    `,
+    dialect.inboundForeignKeysSql(qualifiedTable),
     `fetchInboundForeignKeys(${qualifiedTable})`,
     2,
     telemetryContext
@@ -324,27 +309,11 @@ async function fetchOutboundForeignKeys(
   qualifiedTable: string,
   telemetryContext?: SyncTelemetryContext
 ): Promise<ForeignKeyEdge[]> {
-  const objectIdLiteral = qualifiedTable.replace(/'/g, "''")
+  const dialect = resolveWarehouseDialect(host)
   const result = await runQueryWithRetry(
     host,
     connectionName,
-    `
-    SELECT
-      OBJECT_SCHEMA_NAME(fk.parent_object_id) AS fromSchema,
-      OBJECT_NAME(fk.parent_object_id) AS fromName,
-      COL_NAME(fc.parent_object_id, fc.parent_column_id) AS fromColumn,
-      OBJECT_SCHEMA_NAME(fk.referenced_object_id) AS toSchema,
-      OBJECT_NAME(fk.referenced_object_id) AS toName,
-      COL_NAME(fc.referenced_object_id, fc.referenced_column_id) AS toColumn,
-      fk.name AS constraintName,
-      (
-        SELECT COUNT(*) FROM sys.foreign_key_columns x
-        WHERE x.constraint_object_id = fk.object_id
-      ) AS fkColumnCount
-    FROM sys.foreign_keys fk
-    INNER JOIN sys.foreign_key_columns fc ON fc.constraint_object_id = fk.object_id
-    WHERE fk.parent_object_id = OBJECT_ID(N'${objectIdLiteral}')
-    `,
+    dialect.outboundForeignKeysSql(qualifiedTable),
     `fetchOutboundForeignKeys(${qualifiedTable})`,
     2,
     telemetryContext
@@ -392,18 +361,11 @@ async function fetchPrimaryKeyColumns(
     const [schema, name] = qn.split(".")
     if (!schema || !name) continue
     try {
+      const dialect = resolveWarehouseDialect(host)
       const r = await runQueryWithRetry(
         host,
         connectionName,
-        `
-        SELECT c.name
-        FROM sys.indexes i
-        JOIN sys.index_columns ic ON ic.object_id = i.object_id AND ic.index_id = i.index_id
-        JOIN sys.columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id
-        WHERE i.is_primary_key = 1
-          AND i.object_id = OBJECT_ID('${schema.replace(/'/g, "''")}.${name.replace(/'/g, "''")}')
-        ORDER BY ic.key_ordinal
-        `,
+        dialect.primaryKeySql(qn),
         `fetchPrimaryKeyColumns(${qn})`,
         2,
         telemetryContext

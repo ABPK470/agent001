@@ -256,7 +256,7 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
     const readyIds = new Set(
       db
         .listConnectors()
-        .filter((row) => row.kind === "mssql" && row.enabled === 1)
+        .filter((row) => (row.kind === "mssql" || row.kind === "postgres") && row.enabled === 1)
         .map((row) => row.id),
     )
     return getEnvironments(host).map((env) => {

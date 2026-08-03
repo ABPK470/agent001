@@ -23,17 +23,16 @@ vi.mock("mssql", () => ({
   }
 }))
 
-vi.mock("./db-helpers.js", () => ({
-  qtable: (tableName: string) => tableName,
+vi.mock("../db/db-helpers.js", () => ({
   trackedQuery: vi.fn()
 }))
 
-vi.mock("./apply.js", () => ({
+vi.mock("../apply.js", () => ({
   applyInsertsUpdates: vi.fn(),
   applyDeletes: vi.fn()
 }))
 
-vi.mock("./archive.js", () => ({
+vi.mock("../archive.js", () => ({
   maybeArchive: vi.fn()
 }))
 
@@ -53,7 +52,7 @@ describe("runMetadataSync", () => {
 
   it("preserves the failing table and step when constraint re-enable fails", async () => {
     trackedQueryMock.mockImplementation(async (_host, _connection, sql) => {
-      if (String(sql).includes("ALTER TABLE core.Child CHECK CONSTRAINT ALL")) {
+      if (String(sql).includes("ALTER TABLE [core].[Child] CHECK CONSTRAINT ALL")) {
         throw new Error(
           'The ALTER TABLE statement conflicted with the FOREIGN KEY constraint "FK_Child_parent".'
         )
