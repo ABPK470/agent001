@@ -1,26 +1,25 @@
-# Platform schema toolkit (spike)
+# Platform schema toolkit
 
-Track B of the RDBMS-agnostic program: one schema source of truth that compiles
-to sqlite / mssql / postgres, with proper migrations.
+Track B of the RDBMS-agnostic program: typed SQL under
+`server/infra/persistence` only (not Sync/Agent cores — `drizzle-orm` stays
+denylisted there; this folder uses **Kysely**).
 
-## Placement
+## Shape
 
-Lives **only** under `server/infra/persistence/**`.
+| Piece | Role |
+| --- | --- |
+| `tables.ts` | Column contracts (`PlatformDatabase`) |
+| `kysely.ts` | Process-wide `Kysely` over the SQLite file |
+| Repos (`adapters/sqlite/db/*`) | Compile with Kysely, execute via better-sqlite3 (sync cutover) |
 
-`drizzle-orm` / `drizzle-kit` stay on the framework denylist for Sync/Agent
-`core` + `domain`. Composition roots and this folder may adopt a typed SQL /
-schema toolkit once the first table cutover lands.
+## First table
 
-## Cutover shape (behavior-preserving)
+`connectors` is the pilot. DDL still lives in numbered SQLite migrations;
+the toolkit owns query shape. Next: more repos, then a multi-dialect migrator
+and `MIA_PLATFORM_STORE=postgres|mssql` adapters.
 
-1. Declare tables in a dialect-agnostic schema module (Drizzle or Kysely-class).
-2. Generate / apply migrations per `MIA_PLATFORM_STORE` dialect.
-3. Keep SQLite adapter green (fast local tests) while adding a second dialect.
-4. Repos call the toolkit — no raw SQLite string SQL in product repos after cutover.
-5. Memory FTS stays behind a `MemorySearch` port (last hard piece).
+## Rules
 
-## Status
-
-Config kind is already wired (`platform-store-config.ts` → `MIA_PLATFORM_STORE`).
-Schema toolkit dependency + first-table migration are the next concrete steps —
-not a big-bang rewrite of ~70 tables.
+- Platform store and warehouse Sync never share a pool.
+- New repos prefer `getPlatformDb()` compile → driver execute.
+- Async `PlatformStore.transactionAsync` is the long-term transaction seam.

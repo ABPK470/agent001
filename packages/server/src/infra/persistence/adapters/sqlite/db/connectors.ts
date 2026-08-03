@@ -1,15 +1,15 @@
 /**
- * Connector persistence — CRUD over the `connectors` SQLite table.
+ * Connector persistence — CRUD over the `connectors` table.
  *
- * `body_json` holds the full `Connector` record (kind, name, displayName,
- * config, enabled). Secret config fields are stored in plaintext (admin-only
- * API; see `shared-types/connectors.ts` for the threat-model note). Reads
- * return the raw row; masking happens in the transport layer.
+ * First platform repo on the schema toolkit: Kysely builds SQL; better-sqlite3
+ * executes it (sync façade during PlatformStore async cutover).
  */
 
 import Database from "better-sqlite3"
 import { existsSync } from "node:fs"
+import { sql } from "kysely"
 import { getDb, getDbPath } from "../connection.js"
+import { getPlatformDb } from "../../../schema/kysely.js"
 
 export interface DbConnector {
   id: string
@@ -21,34 +21,83 @@ export interface DbConnector {
   updated_by: string | null
 }
 
+function runAll<T>(compiled: { sql: string; parameters: readonly unknown[] }): T[] {
+  return getDb().prepare(compiled.sql).all(...compiled.parameters) as T[]
+}
+
+function runGet<T>(compiled: { sql: string; parameters: readonly unknown[] }): T | undefined {
+  return getDb().prepare(compiled.sql).get(...compiled.parameters) as T | undefined
+}
+
+function runExec(compiled: { sql: string; parameters: readonly unknown[] }): void {
+  getDb().prepare(compiled.sql).run(...compiled.parameters)
+}
+
 export function listConnectors(): DbConnector[] {
-  return getDb().prepare("SELECT * FROM connectors ORDER BY id").all() as DbConnector[]
+  const compiled = getPlatformDb()
+    .selectFrom("connectors")
+    .selectAll()
+    .orderBy("id")
+    .compile()
+  return runAll<DbConnector>(compiled)
 }
 
 export function getConnector(id: string): DbConnector | undefined {
-  return getDb().prepare("SELECT * FROM connectors WHERE id = ?").get(id) as
-    | DbConnector
-    | undefined
+  const compiled = getPlatformDb()
+    .selectFrom("connectors")
+    .selectAll()
+    .where("id", "=", id)
+    .compile()
+  return runGet<DbConnector>(compiled)
 }
 
 export function saveConnector(row: DbConnector): void {
-  getDb()
-    .prepare(
-      `
-    INSERT OR REPLACE INTO connectors (id, kind, body_json, enabled, created_at, updated_at, updated_by)
-    VALUES (@id, @kind, @body_json, @enabled, COALESCE((SELECT created_at FROM connectors WHERE id = @id), @created_at), @updated_at, @updated_by)
-  `,
-    )
-    .run(row)
+  const existing = getConnector(row.id)
+  if (existing) {
+    const compiled = getPlatformDb()
+      .updateTable("connectors")
+      .set({
+        kind: row.kind,
+        body_json: row.body_json,
+        enabled: row.enabled,
+        updated_at: row.updated_at,
+        updated_by: row.updated_by,
+      })
+      .where("id", "=", row.id)
+      .compile()
+    runExec(compiled)
+    return
+  }
+  const compiled = getPlatformDb()
+    .insertInto("connectors")
+    .values({
+      id: row.id,
+      kind: row.kind,
+      body_json: row.body_json,
+      enabled: row.enabled,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+      updated_by: row.updated_by,
+    })
+    .compile()
+  runExec(compiled)
 }
 
 export function deleteConnector(id: string): void {
-  getDb().prepare("DELETE FROM connectors WHERE id = ?").run(id)
+  const compiled = getPlatformDb()
+    .deleteFrom("connectors")
+    .where("id", "=", id)
+    .compile()
+  runExec(compiled)
 }
 
 export function countConnectors(): number {
-  const row = getDb().prepare("SELECT COUNT(*) AS count FROM connectors").get() as { count: number }
-  return row.count
+  const compiled = getPlatformDb()
+    .selectFrom("connectors")
+    .select(sql<number>`count(*)`.as("count"))
+    .compile()
+  const row = runGet<{ count: number | bigint }>(compiled)
+  return Number(row?.count ?? 0)
 }
 
 /**
