@@ -43,7 +43,7 @@ describe("ingestAgentNote", () => {
   it("persists a note to working memory with summary role and agent source", async () => {
     const mem = await setupMemory()
 
-    const res = mem.ingestAgentNote({
+    const res = await mem.ingestAgentNote({
       subject: "publish.Revenue.RevenueZARMTD",
       claim: "cumulative MTD column; non-summable across periods",
       category: "column_semantics",
@@ -87,7 +87,7 @@ describe("ingestAgentNote", () => {
   it("raises confidence to 0.85 when evidence is provided", async () => {
     const mem = await setupMemory()
 
-    const res = mem.ingestAgentNote({
+    const res = await mem.ingestAgentNote({
       subject: "publish.Revenue",
       claim: "row count 1.2M as of 2026-01",
       evidence: "profile_data result: distinct values per client = 12 per year",
@@ -107,7 +107,7 @@ describe("ingestAgentNote", () => {
   it("accepts terse notes that would fail the default salience floor", async () => {
     const mem = await setupMemory()
     // A very short note whose value is the subject identifier, not prose.
-    const res = mem.ingestAgentNote({
+    const res = await mem.ingestAgentNote({
       subject: "join:A↔B",
       claim: "FK on pkClient",
       upn: "alice@corp"
@@ -117,13 +117,13 @@ describe("ingestAgentNote", () => {
 
   it("dedups a second identical note for the same user", async () => {
     const mem = await setupMemory()
-    const a = mem.ingestAgentNote({
+    const a = await mem.ingestAgentNote({
       subject: "publish.Balance.BalanceZAR",
       claim: "snapshot balance column; sum across clients meaningful, sum across time is not",
       upn: "alice@corp"
     })
     expect(a.ok).toBe(true)
-    const b = mem.ingestAgentNote({
+    const b = await mem.ingestAgentNote({
       subject: "publish.Balance.BalanceZAR",
       claim: "snapshot balance column; sum across clients meaningful, sum across time is not",
       upn: "alice@corp"
@@ -140,14 +140,14 @@ describe("ingestAgentNote", () => {
 
   it("isolates notes by tenant — Bob does not see Alice's note", async () => {
     const mem = await setupMemory()
-    const a = mem.ingestAgentNote({
+    const a = await mem.ingestAgentNote({
       subject: "publish.Revenue",
       claim: "alice-only-fact-keyword-XYZABC123",
       upn: "alice@corp"
     })
     expect(a.ok).toBe(true)
 
-    const b = mem.ingestAgentNote({
+    const b = await mem.ingestAgentNote({
       subject: "publish.Revenue",
       claim: "alice-only-fact-keyword-XYZABC123",
       upn: "bob@corp"
@@ -164,12 +164,12 @@ describe("ingestAgentNote", () => {
 
   it("rejects empty subject or claim with invalid_input", async () => {
     const mem = await setupMemory()
-    const a = mem.ingestAgentNote({ subject: "  ", claim: "ok", upn: "u" })
+    const a = await mem.ingestAgentNote({ subject: "  ", claim: "ok", upn: "u" })
     expect(a.ok).toBe(false)
     if (a.ok) return
     expect(a.reason).toBe("invalid_input")
 
-    const b = mem.ingestAgentNote({ subject: "ok", claim: "", upn: "u" })
+    const b = await mem.ingestAgentNote({ subject: "ok", claim: "", upn: "u" })
     expect(b.ok).toBe(false)
     if (b.ok) return
     expect(b.reason).toBe("invalid_input")
@@ -177,7 +177,7 @@ describe("ingestAgentNote", () => {
 
   it("defaults category to 'observation' when omitted", async () => {
     const mem = await setupMemory()
-    const res = mem.ingestAgentNote({
+    const res = await mem.ingestAgentNote({
       subject: "publish.Foo",
       claim: "miscellaneous note about a table that does not fit a category",
       upn: "alice@corp"

@@ -1,5 +1,7 @@
 import { EventType } from "@mia/agent"
-import { getDb } from "../connection.js"
+import { getPlatformDb } from "../../../schema/kysely.js"
+import { runAllAsync, runChangesAsync, runExecAsync } from "../../../schema/execute-async.js"
+import { platformNow } from "../../../schema/sql-time.js"
 import { MemoryRole, MemorySource, MemoryTier } from "../../../../../internal/enums/memory.js"
 import { broadcast } from "../../../../events/broadcaster.js"
 import { ingestTurn } from "./ingestion.js"
@@ -18,7 +20,7 @@ import { DEDUP_JACCARD_THRESHOLD, jaccardSimilarity, tokenize, truncateAtBoundar
 //   5. Promote with boosted confidence: 0.5 + clusterSize × 0.1 (capped at 0.95)
 //   6. Soft-delete source entries (reduce confidence so they fade)
 
-export function consolidate(opts?: {
+export async function consolidate(opts?: {
   minAgeHours?: number
   maxBatchSize?: number
   /**
@@ -28,7 +30,7 @@ export function consolidate(opts?: {
    * semantic fact always belongs to exactly one user.
    */
   upn?: string | null
-}): { promoted: number; pruned: number } {
+}): Promise<{ promoted: number; pruned: number }> {
   const minAgeHours = opts?.minAgeHours ?? 24
   const maxBatchSize = opts?.maxBatchSize ?? 200
   const cutoff = new Date(Date.now() - minAgeHours * 60 * 60 * 1000).toISOString()
@@ -42,21 +44,15 @@ export function consolidate(opts?: {
   //   2. They are already deduplicated by the episodic upsert (one per goal) \u2014 there
   //      is no value in further consolidation.
   // Only working-tier tool-call/result turns (raw patterns) should be clustered.
-  const tenantClause = opts?.upn === undefined ? "" : opts.upn === null ? " AND upn IS NULL" : " AND upn = ?"
-  const tenantParams: unknown[] = opts?.upn === undefined || opts.upn === null ? [] : [opts.upn]
-
-  const candidates = getDb()
-    .prepare(
-      `
-    SELECT * FROM memory_entries
-    WHERE (tier = 'episodic' OR (tier = 'working' AND created_at < ?))
-      AND role != 'summary'
-      AND created_at < ?${tenantClause}
-    ORDER BY created_at ASC
-    LIMIT ?
-  `
-    )
-    .all(cutoff, cutoff, ...tenantParams, maxBatchSize) as Array<Record<string, unknown>>
+  let candidateQuery = getPlatformDb().selectFrom("memory_entries").selectAll()
+    .where((eb) => eb.or([
+      eb("tier", "=", MemoryTier.Episodic),
+      eb.and([eb("tier", "=", MemoryTier.Working), eb("created_at", "<", cutoff)])
+    ]))
+    .where("role", "!=", MemoryRole.Summary)
+    .where("created_at", "<", cutoff)
+  if (opts?.upn !== undefined) candidateQuery = candidateQuery.where("upn", opts.upn === null ? "is" : "=", opts.upn)
+  const candidates = await runAllAsync<Record<string, unknown>>(candidateQuery.orderBy("created_at", "asc").limit(maxBatchSize).compile())
 
   if (candidates.length < 3) return { promoted: 0, pruned: 0 }
 
@@ -73,16 +69,15 @@ export function consolidate(opts?: {
   let totalPromoted = 0
   let totalPruned = 0
   for (const [tenantUpn, tenantRows] of byTenant) {
-    const r = consolidateTenant(tenantUpn, tenantRows)
+    const r = await consolidateTenant(tenantUpn, tenantRows)
     totalPromoted += r.promoted
     totalPruned += r.pruned
   }
 
   // Prune very low confidence entries (cross-tenant; threshold-only)
-  const deleted = getDb()
-    .prepare("DELETE FROM memory_entries WHERE confidence < 0.05 AND tier != 'semantic'")
-    .run()
-  totalPruned += deleted.changes ?? 0
+  totalPruned += await runChangesAsync(
+    getPlatformDb().deleteFrom("memory_entries").where("confidence", "<", 0.05).where("tier", "!=", MemoryTier.Semantic).compile()
+  )
 
   if (totalPromoted > 0 || totalPruned > 0) {
     broadcast({
@@ -94,21 +89,18 @@ export function consolidate(opts?: {
   return { promoted: totalPromoted, pruned: totalPruned }
 }
 
-function consolidateTenant(
+async function consolidateTenant(
   tenantUpn: string | null,
   candidates: Array<Record<string, unknown>>
-): { promoted: number; pruned: number } {
+): Promise<{ promoted: number; pruned: number }> {
   if (candidates.length < 2) return { promoted: 0, pruned: 0 }
 
   // Load existing semantic entries for THIS tenant only \u2014 cross-tier dedup
   // must not consult another user's semantic memory.
-  const semanticSql =
-    tenantUpn === null
-      ? "SELECT content FROM memory_entries WHERE tier = 'semantic' AND upn IS NULL ORDER BY created_at DESC LIMIT 100"
-      : "SELECT content FROM memory_entries WHERE tier = 'semantic' AND upn = ? ORDER BY created_at DESC LIMIT 100"
-  const existingSemantic = (
-    tenantUpn === null ? getDb().prepare(semanticSql).all() : getDb().prepare(semanticSql).all(tenantUpn)
-  ) as Array<{ content: string }>
+  const existingSemantic = await runAllAsync<{ content: string }>(
+    getPlatformDb().selectFrom("memory_entries").select("content").where("tier", "=", MemoryTier.Semantic)
+      .where("upn", tenantUpn === null ? "is" : "=", tenantUpn).orderBy("created_at", "desc").limit(100).compile()
+  )
   const semanticTokenSets = existingSemantic.map((s) => tokenize(s.content))
 
   // Agglomerative clustering by Jaccard \u2265 0.4
@@ -151,12 +143,11 @@ function consolidateTenant(
     )
     if (isDupOfSemantic) {
       const ids = cluster.map((c) => c.row.id as string)
-      const placeholders = ids.map(() => "?").join(", ")
-      getDb()
-        .prepare(
-          `UPDATE memory_entries SET confidence = confidence * 0.3, updated_at = ? WHERE id IN (${placeholders})`
-        )
-        .run(new Date().toISOString(), ...ids)
+      await runExecAsync(
+        getPlatformDb().updateTable("memory_entries").set({
+          confidence: (eb) => eb("confidence", "*", 0.3), updated_at: platformNow()
+        }).where("id", "in", ids).compile()
+      )
       pruned += ids.length
       continue
     }
@@ -164,7 +155,7 @@ function consolidateTenant(
     // Boosted confidence: 0.5 + clusterSize × 0.1 (agenc-core formula, cap at 0.95)
     const confidence = Math.min(0.95, 0.5 + cluster.length * 0.1)
 
-    ingestTurn({
+    await ingestTurn({
       tier: MemoryTier.Semantic,
       role: MemoryRole.Summary,
       content: truncateAtBoundary(merged, 2000, "\n\u2026(consolidated)"),
@@ -182,12 +173,11 @@ function consolidateTenant(
     semanticTokenSets.push(mergedTokens)
 
     const ids = cluster.map((c) => c.row.id as string)
-    const placeholders = ids.map(() => "?").join(", ")
-    getDb()
-      .prepare(
-        `UPDATE memory_entries SET confidence = confidence * 0.3, updated_at = ? WHERE id IN (${placeholders})`
-      )
-      .run(new Date().toISOString(), ...ids)
+    await runExecAsync(
+      getPlatformDb().updateTable("memory_entries").set({
+        confidence: (eb) => eb("confidence", "*", 0.3), updated_at: platformNow()
+      }).where("id", "in", ids).compile()
+    )
     pruned += ids.length
   }
 

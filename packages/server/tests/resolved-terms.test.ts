@@ -42,19 +42,19 @@ async function setupMemory() {
 describe("resolved_terms_cache — save + list", () => {
   it("returns an empty list when nothing has been written", async () => {
     const mem = await setupMemory()
-    expect(mem.listResolvedTerms({ connection: "default" })).toEqual([])
+    expect(await mem.listResolvedTerms({ connection: "default" })).toEqual([])
   })
 
   it("saves a mapping and a subsequent list returns it", async () => {
     const mem = await setupMemory()
-    mem.saveResolvedTerm({
+    await mem.saveResolvedTerm({
       term: "clients",
       qname: "dim.Client",
       connection: "default",
       upn: "alice@corp",
       now: 1_000_000_000_000
     })
-    const rows = mem.listResolvedTerms({ connection: "default", now: 1_000_000_000_001 })
+    const rows = await mem.listResolvedTerms({ connection: "default", now: 1_000_000_000_001 })
     expect(rows).toHaveLength(1)
     expect(rows[0].term).toBe("clients")
     expect(rows[0].qname).toBe("dim.Client")
@@ -63,42 +63,42 @@ describe("resolved_terms_cache — save + list", () => {
 
   it("lowercases the term on save so lookups are case-insensitive", async () => {
     const mem = await setupMemory()
-    mem.saveResolvedTerm({ term: "Clients", qname: "dim.Client", now: 1 })
-    const rows = mem.listResolvedTerms({ connection: "default" })
+    await mem.saveResolvedTerm({ term: "Clients", qname: "dim.Client", now: 1 })
+    const rows = await mem.listResolvedTerms({ connection: "default" })
     expect(rows[0].term).toBe("clients")
   })
 
   it("a newer answer for the same term overrides the older one (newest per term wins)", async () => {
     const mem = await setupMemory()
-    mem.saveResolvedTerm({ term: "clients", qname: "dim.Client", now: 1_000 })
-    mem.saveResolvedTerm({ term: "clients", qname: "archive.ClientOld", now: 2_000 })
-    const rows = mem.listResolvedTerms({ connection: "default", now: 3_000 })
+    await mem.saveResolvedTerm({ term: "clients", qname: "dim.Client", now: 1_000 })
+    await mem.saveResolvedTerm({ term: "clients", qname: "archive.ClientOld", now: 2_000 })
+    const rows = await mem.listResolvedTerms({ connection: "default", now: 3_000 })
     expect(rows).toHaveLength(1)
     expect(rows[0].qname).toBe("archive.ClientOld")
   })
 
   it("scopes by connection — a mapping saved on 'uat' is invisible to 'default'", async () => {
     const mem = await setupMemory()
-    mem.saveResolvedTerm({ term: "clients", qname: "uatdim.Client", connection: "uat", now: 1 })
-    mem.saveResolvedTerm({ term: "clients", qname: "dim.Client", connection: "default", now: 2 })
-    expect(mem.listResolvedTerms({ connection: "default" })).toHaveLength(1)
-    expect(mem.listResolvedTerms({ connection: "uat" })[0].qname).toBe("uatdim.Client")
+    await mem.saveResolvedTerm({ term: "clients", qname: "uatdim.Client", connection: "uat", now: 1 })
+    await mem.saveResolvedTerm({ term: "clients", qname: "dim.Client", connection: "default", now: 2 })
+    expect(await mem.listResolvedTerms({ connection: "default" })).toHaveLength(1)
+    expect((await mem.listResolvedTerms({ connection: "uat" }))[0]!.qname).toBe("uatdim.Client")
   })
 
   it("ignores empty term/qname", async () => {
     const mem = await setupMemory()
-    mem.saveResolvedTerm({ term: "  ", qname: "dim.Client", now: 1 })
-    mem.saveResolvedTerm({ term: "clients", qname: "  ", now: 1 })
-    expect(mem.listResolvedTerms({ connection: "default" })).toEqual([])
+    await mem.saveResolvedTerm({ term: "  ", qname: "dim.Client", now: 1 })
+    await mem.saveResolvedTerm({ term: "clients", qname: "  ", now: 1 })
+    expect(await mem.listResolvedTerms({ connection: "default" })).toEqual([])
   })
 
   it("prune drops mappings older than the cutoff", async () => {
     const mem = await setupMemory()
-    mem.saveResolvedTerm({ term: "old", qname: "dim.Client", now: 1_000 })
-    mem.saveResolvedTerm({ term: "new", qname: "dim.Account", now: 5_000 })
-    const removed = mem.pruneResolvedTerms({ maxAgeMs: 2_000, now: 5_000 })
+    await mem.saveResolvedTerm({ term: "old", qname: "dim.Client", now: 1_000 })
+    await mem.saveResolvedTerm({ term: "new", qname: "dim.Account", now: 5_000 })
+    const removed = await mem.pruneResolvedTerms({ maxAgeMs: 2_000, now: 5_000 })
     expect(removed).toBe(1)
-    const rows = mem.listResolvedTerms({ connection: "default", now: 5_000 })
+    const rows = await mem.listResolvedTerms({ connection: "default", now: 5_000 })
     expect(rows.map((r) => r.term)).toEqual(["new"])
   })
 })

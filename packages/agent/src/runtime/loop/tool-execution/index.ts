@@ -102,7 +102,12 @@ export async function executeToolRound(
     if (keyBlock) {
       const msg = `SKIPPED (circuit blocked): ${keyBlock.reason} Try a different approach for this call.`
       if (config.verbose) log.logToolError(msg)
-      messages.push({ role: MessageRole.Tool, toolCallId: asToolCallId(call.id), content: msg, section: "history" })
+      messages.push({
+        role: MessageRole.Tool,
+        toolCallId: asToolCallId(call.id),
+        content: msg,
+        section: "history"
+      })
       roundToolCalls.push({ name: call.name, args: call.arguments, result: msg, isError: true })
       failuresThisRound++
       continue
@@ -254,7 +259,12 @@ export async function executeToolRound(
     if (killed) {
       const msg = `[TOOL KILLED BY USER] ${killMessage}`
       if (config.verbose) log.logToolError(msg)
-      messages.push({ role: MessageRole.Tool, toolCallId: asToolCallId(call.id), content: msg, section: "history" })
+      messages.push({
+        role: MessageRole.Tool,
+        toolCallId: asToolCallId(call.id),
+        content: msg,
+        section: "history"
+      })
       roundToolCalls.push({ name: call.name, args: call.arguments, result: msg, isError: true })
       failuresThisRound++
       continue
@@ -279,7 +289,7 @@ export async function executeToolRound(
       // Wrapped in try/catch — a persistence failure must never break the
       // agent loop.
       try {
-        config.onToolResult?.({
+        await config.onToolResult?.({
           iteration: ctx.iteration,
           toolCallId: asToolCallId(call.id),
           toolName: call.name,
@@ -329,7 +339,7 @@ export async function executeToolRound(
       // We persist BOTH success and semantic-failure outcomes — knowing a
       // prior tool failed is itself ground truth the next turn needs.
       try {
-        config.onToolResult?.({
+        await config.onToolResult?.({
           iteration: ctx.iteration,
           toolCallId: asToolCallId(call.id),
           toolName: call.name,

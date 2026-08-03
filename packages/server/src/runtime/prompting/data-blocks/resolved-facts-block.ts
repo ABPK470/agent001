@@ -44,7 +44,7 @@ export function extractObjectTokens(text: string): string[] {
  * Build the resolvedFacts string for `system_law` injection. Empty
  * string means "skip the section entirely".
  */
-export function buildResolvedFactsBlock(input: {
+export async function buildResolvedFactsBlock(input: {
   goal: string
   catalog: CatalogGraph | null
   schemaFingerprint?: string | null
@@ -53,7 +53,7 @@ export function buildResolvedFactsBlock(input: {
    * tenant config; when explicitly null, mirror detection is disabled.
    */
   mirrorSchema?: string | null
-}): string {
+}): Promise<string> {
   const { goal, catalog } = input
   const mirrorSchema = input.mirrorSchema !== undefined ? input.mirrorSchema : getTenantConfig().mirrorSchema
 
@@ -87,7 +87,7 @@ export function buildResolvedFactsBlock(input: {
   // Overlay durable verdicts from memory when available (prior reflection).
   if (largeObjects.length > 0) {
     try {
-      const verdicts = listTableVerdicts({ qnames: largeObjects.map((o) => o.name) })
+      const verdicts = await listTableVerdicts({ qnames: largeObjects.map((o) => o.name) })
       if (verdicts.length > 0) {
         const byName = new Map(verdicts.map((v) => [v.qname.toLowerCase(), v.role]))
         for (let i = 0; i < largeObjects.length; i++) {

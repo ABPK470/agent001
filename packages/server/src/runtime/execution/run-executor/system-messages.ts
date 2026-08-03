@@ -61,7 +61,7 @@ export async function buildExecutionSystemMessages(
 
   const knownObjects = (() => {
     try {
-      return loadKnownObjects({ goal: request.goal, priorTurns, connection: effectiveConnection })
+      return await loadKnownObjects({ goal: request.goal, priorTurns, connection: effectiveConnection })
     } catch (error) {
       console.warn(`[run ${request.runId}] knownObjects load failed:`, (error as Error).message)
       return []
@@ -97,7 +97,7 @@ export async function buildExecutionSystemMessages(
     knownObjects,
     knownVerdicts: (() => {
       try {
-        return loadCandidateVerdicts({
+        return await loadCandidateVerdicts({
           goal: request.goal,
           catalog: getCatalog(envBase.perRunHost, effectiveConnection),
           upn: envBase.activeRun?.ownerUpn ?? null

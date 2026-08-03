@@ -542,7 +542,7 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
       if (useful !== false) {
         return { ok: true, action: MemoryValidationAction.None }
       }
-      const flagged = flagRunMemory(req.params.id, note)
+      const flagged = await flagRunMemory(req.params.id, note)
       if (!flagged) {
         return { ok: true, action: MemoryValidationAction.NoMemoryEntry }
       }

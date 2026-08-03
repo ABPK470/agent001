@@ -90,7 +90,7 @@ describe("persistLearnedTermFromResolution", () => {
       "alice@corp",
       bootDeps()
     )
-    const rows = mem.listResolvedTerms({ connection: "default" })
+    const rows = await mem.listResolvedTerms({ connection: "default" })
     expect(rows).toHaveLength(1)
     expect(rows[0]).toMatchObject({ term: "clients", qname: "dim.Client", createdByUpn: "alice@corp" })
   })
@@ -103,7 +103,7 @@ describe("persistLearnedTermFromResolution", () => {
       null,
       bootDeps()
     )
-    expect(mem.listResolvedTerms({ connection: "default" })).toHaveLength(1)
+    expect(await mem.listResolvedTerms({ connection: "default" })).toHaveLength(1)
   })
 
   it("ignores a free-text answer with no resolvable qname", async () => {
@@ -114,7 +114,7 @@ describe("persistLearnedTermFromResolution", () => {
       "alice@corp",
       bootDeps()
     )
-    expect(mem.listResolvedTerms({ connection: "default" })).toEqual([])
+    expect(await mem.listResolvedTerms({ connection: "default" })).toEqual([])
   })
 
   it("ignores an answer whose qname is not in the catalog", async () => {
@@ -125,7 +125,7 @@ describe("persistLearnedTermFromResolution", () => {
       "alice@corp",
       bootDeps()
     )
-    expect(mem.listResolvedTerms({ connection: "default" })).toEqual([])
+    expect(await mem.listResolvedTerms({ connection: "default" })).toEqual([])
   })
 
   it("ignores clarification kinds that do not teach a term→table mapping", async () => {
@@ -136,7 +136,7 @@ describe("persistLearnedTermFromResolution", () => {
       "alice@corp",
       bootDeps()
     )
-    expect(mem.listResolvedTerms({ connection: "default" })).toEqual([])
+    expect(await mem.listResolvedTerms({ connection: "default" })).toEqual([])
   })
 
   it("never throws when boot deps are missing (no mssql/catalog)", async () => {
@@ -149,6 +149,6 @@ describe("persistLearnedTermFromResolution", () => {
         {} as BootHostDeps
       )
     ).resolves.toBeUndefined()
-    expect(mem.listResolvedTerms({ connection: "default" })).toEqual([])
+    expect(await mem.listResolvedTerms({ connection: "default" })).toEqual([])
   })
 })

@@ -419,7 +419,7 @@ export const PER_RUN_FACTORIES: PerRunToolFactory[] = [
   (ctx) => [
     ctx.govern(
       bindNoteTool(async (payload) => {
-        const res = ingestAgentNote({
+        const res = await ingestAgentNote({
           subject: payload.subject,
           claim: payload.claim,
           evidence: payload.evidence,
@@ -441,7 +441,7 @@ export const PER_RUN_FACTORIES: PerRunToolFactory[] = [
     ctx.govern(
       bindRecordTableVerdictTool(async (payload) => {
         try {
-          const v = recordTableVerdict({
+          const v = await recordTableVerdict({
             qname: payload.qname,
             role: payload.role,
             evidence: payload.evidence,

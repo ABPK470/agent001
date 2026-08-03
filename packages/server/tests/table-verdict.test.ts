@@ -43,7 +43,7 @@ async function setupMemory() {
 describe("recordTableVerdict — write path", () => {
   it("persists a verdict to the semantic tier with kind=table_verdict metadata", async () => {
     const mem = await setupMemory()
-    const v = mem.recordTableVerdict({
+    const v = await mem.recordTableVerdict({
       qname: "publish.Revenue",
       role: "canonical",
       evidence: ["fanIn=59", "incomingFK=12"],
@@ -68,28 +68,32 @@ describe("recordTableVerdict — write path", () => {
 
   it("rejects empty qname", async () => {
     const mem = await setupMemory()
-    expect(() => mem.recordTableVerdict({ qname: "", role: "canonical" })).toThrow(/qname/)
-    expect(() => mem.recordTableVerdict({ qname: "   ", role: "canonical" })).toThrow(/qname/)
+    await expect(mem.recordTableVerdict({ qname: "", role: "canonical" })).rejects.toThrow(/qname/)
+    await expect(mem.recordTableVerdict({ qname: "   ", role: "canonical" })).rejects.toThrow(/qname/)
   })
 
   it("scopes verdicts by connection so cross-DB tenants do not collide", async () => {
     const mem = await setupMemory()
-    mem.recordTableVerdict({ qname: "publish.Revenue", role: "canonical", connection: "warehouse-prod" })
-    mem.recordTableVerdict({ qname: "publish.Revenue", role: "staging", connection: "warehouse-dev" })
+    await mem.recordTableVerdict({
+      qname: "publish.Revenue",
+      role: "canonical",
+      connection: "warehouse-prod"
+    })
+    await mem.recordTableVerdict({ qname: "publish.Revenue", role: "staging", connection: "warehouse-dev" })
 
-    const prod = mem.listTableVerdicts({ connection: "warehouse-prod" })
+    const prod = await mem.listTableVerdicts({ connection: "warehouse-prod" })
     expect(prod).toHaveLength(1)
     expect(prod[0]!.role).toBe("canonical")
 
-    const dev = mem.listTableVerdicts({ connection: "warehouse-dev" })
+    const dev = await mem.listTableVerdicts({ connection: "warehouse-dev" })
     expect(dev).toHaveLength(1)
     expect(dev[0]!.role).toBe("staging")
   })
 
   it("is additive — newer verdicts do not delete older ones", async () => {
     const mem = await setupMemory()
-    mem.recordTableVerdict({ qname: "publish.Revenue", role: "unknown" })
-    mem.recordTableVerdict({ qname: "publish.Revenue", role: "canonical" })
+    await mem.recordTableVerdict({ qname: "publish.Revenue", role: "unknown" })
+    await mem.recordTableVerdict({ qname: "publish.Revenue", role: "canonical" })
     const all = testDb
       .prepare(`SELECT COUNT(*) AS n FROM memory_entries WHERE metadata LIKE '%"kind":"table_verdict"%'`)
       .get() as { n: number }
@@ -100,23 +104,23 @@ describe("recordTableVerdict — write path", () => {
 describe("listTableVerdicts — read path", () => {
   it("returns only the newest verdict per qname", async () => {
     const mem = await setupMemory()
-    mem.recordTableVerdict({ qname: "publish.Revenue", role: "unknown" })
+    await mem.recordTableVerdict({ qname: "publish.Revenue", role: "unknown" })
     // Bump the clock so created_at orders correctly even on fast hardware.
     await new Promise((r) => setTimeout(r, 5))
-    mem.recordTableVerdict({ qname: "publish.Revenue", role: "canonical" })
+    await mem.recordTableVerdict({ qname: "publish.Revenue", role: "canonical" })
 
-    const out = mem.listTableVerdicts({ qnames: ["publish.Revenue"] })
+    const out = await mem.listTableVerdicts({ qnames: ["publish.Revenue"] })
     expect(out).toHaveLength(1)
     expect(out[0]!.role).toBe("canonical")
   })
 
   it("returns one row per qname when multiple qnames requested", async () => {
     const mem = await setupMemory()
-    mem.recordTableVerdict({ qname: "publish.Revenue", role: "canonical" })
-    mem.recordTableVerdict({ qname: "publish.RevenueESGRules", role: "subset" })
-    mem.recordTableVerdict({ qname: "publish.RevenueRWARules", role: "rules" })
+    await mem.recordTableVerdict({ qname: "publish.Revenue", role: "canonical" })
+    await mem.recordTableVerdict({ qname: "publish.RevenueESGRules", role: "subset" })
+    await mem.recordTableVerdict({ qname: "publish.RevenueRWARules", role: "rules" })
 
-    const out = mem.listTableVerdicts({
+    const out = await mem.listTableVerdicts({
       qnames: ["publish.Revenue", "publish.RevenueESGRules", "publish.RevenueRWARules"]
     })
     expect(out).toHaveLength(3)
@@ -128,35 +132,35 @@ describe("listTableVerdicts — read path", () => {
 
   it("matches qnames case-insensitively", async () => {
     const mem = await setupMemory()
-    mem.recordTableVerdict({ qname: "publish.Revenue", role: "canonical" })
-    const out = mem.listTableVerdicts({ qnames: ["PUBLISH.REVENUE"] })
+    await mem.recordTableVerdict({ qname: "publish.Revenue", role: "canonical" })
+    const out = await mem.listTableVerdicts({ qnames: ["PUBLISH.REVENUE"] })
     expect(out).toHaveLength(1)
     expect(out[0]!.qname).toBe("publish.Revenue")
   })
 
   it("returns all verdicts (per connection) when qnames is omitted", async () => {
     const mem = await setupMemory()
-    mem.recordTableVerdict({ qname: "publish.Revenue", role: "canonical" })
-    mem.recordTableVerdict({ qname: "publish.Balances", role: "canonical" })
-    const out = mem.listTableVerdicts({})
+    await mem.recordTableVerdict({ qname: "publish.Revenue", role: "canonical" })
+    await mem.recordTableVerdict({ qname: "publish.Balances", role: "canonical" })
+    const out = await mem.listTableVerdicts({})
     expect(out.map((v) => v.qname).sort()).toEqual(["publish.Balances", "publish.Revenue"])
   })
 
   it("returns [] when no verdicts have been recorded", async () => {
     const mem = await setupMemory()
-    expect(mem.listTableVerdicts({})).toEqual([])
-    expect(mem.listTableVerdicts({ qnames: ["publish.Revenue"] })).toEqual([])
+    expect(await mem.listTableVerdicts({})).toEqual([])
+    expect(await mem.listTableVerdicts({ qnames: ["publish.Revenue"] })).toEqual([])
   })
 
   it("preserves evidence and observedFromGoal in the result", async () => {
     const mem = await setupMemory()
-    mem.recordTableVerdict({
+    await mem.recordTableVerdict({
       qname: "publish.Revenue",
       role: "canonical",
       evidence: ["fanIn=59", "containsBranch:publish.RevenueESGRules"],
       observedFromGoal: "top 3 products by revenue"
     })
-    const [v] = mem.listTableVerdicts({ qnames: ["publish.Revenue"] })
+    const [v] = await mem.listTableVerdicts({ qnames: ["publish.Revenue"] })
     expect(v!.evidence).toEqual(["fanIn=59", "containsBranch:publish.RevenueESGRules"])
     expect(v!.observedFromGoal).toBe("top 3 products by revenue")
   })

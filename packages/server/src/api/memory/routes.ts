@@ -59,7 +59,7 @@ export function registerMemoryRoutes(app: FastifyInstance, _orchestrator: AgentO
   app.get<{ Querystring: { tier?: MemoryTier; limit?: string } }>("/api/memory", async (req) => {
     const tier = req.query.tier
     const limit = req.query.limit ? parseInt(req.query.limit, 10) : 50
-    const memories = listMemories(tier, limit, { upn: tenantScope(req) })
+    const memories = await listMemories(tier, limit, { upn: tenantScope(req) })
     return memories.map((memory) => ({
       id: memory.id,
       tier: memory.tier,
@@ -72,7 +72,7 @@ export function registerMemoryRoutes(app: FastifyInstance, _orchestrator: AgentO
     }))
   })
 
-  app.get("/api/memory/stats", async (req) => getMemoryStats({ upn: tenantScope(req) }))
+  app.get("/api/memory/stats", async (req) => await getMemoryStats({ upn: tenantScope(req) }))
 
   app.post<{ Body: { goal: string } }>("/api/memory/preview", async (req, reply) => {
     const { goal } = req.body
@@ -103,7 +103,7 @@ export function registerMemoryRoutes(app: FastifyInstance, _orchestrator: AgentO
       reply.code(403)
       return { error: "admin required" }
     }
-    return consolidate()
+    return await consolidate()
   })
 
   app.post("/api/memory/prune", async (req, reply) => {
@@ -111,7 +111,7 @@ export function registerMemoryRoutes(app: FastifyInstance, _orchestrator: AgentO
       reply.code(403)
       return { error: "admin required" }
     }
-    return prune()
+    return await prune()
   })
 
   app.delete("/api/memory", async (req, reply) => {
@@ -119,7 +119,7 @@ export function registerMemoryRoutes(app: FastifyInstance, _orchestrator: AgentO
       reply.code(403)
       return { error: "admin required" }
     }
-    clearAllMemories()
+    await clearAllMemories()
     return { ok: true }
   })
 

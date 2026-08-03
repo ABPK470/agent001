@@ -10,13 +10,12 @@
  * Freshness = catalog fingerprint match AND age < TTL(tool, mode).
  */
 
-import { getDb } from "../connection.js"
+import { getPlatformDb } from "../../../schema/kysely.js"
+import { runAllAsync, runChangesAsync, runExecAsync, runGetAsync } from "../../../schema/execute-async.js"
+import { upsertRowAsync } from "../../../schema/upsert.js"
 
 export type CachedTool =
-  | "profile_data"
-  | "inspect_definition"
-  | "discover_relationships"
-  | "explore_mssql_schema"
+  "profile_data" | "inspect_definition" | "discover_relationships" | "explore_mssql_schema"
 
 export interface ToolKnowledgeFingerprint {
   /** Column count from catalog snapshot at write time. */
@@ -83,9 +82,7 @@ function fnv1a32(s: string): string {
  */
 export function fingerprintFromCatalogTable(
   table:
-    | { type: "TABLE" | "VIEW"; columns: ReadonlyArray<{ name: string; dataType: string }> }
-    | null
-    | undefined
+    { type: "TABLE" | "VIEW"; columns: ReadonlyArray<{ name: string; dataType: string }> } | null | undefined
 ): ToolKnowledgeFingerprint | null {
   if (!table) return null
   const cols = table.columns ?? []
@@ -130,20 +127,23 @@ interface Row {
   created_by_upn: string | null
 }
 
-export function lookupToolKnowledge(opts: LookupOptions): ToolKnowledgeResult {
+export async function lookupToolKnowledge(opts: LookupOptions): Promise<ToolKnowledgeResult> {
   const mode = opts.mode ?? ""
-  const connection = opts.connection ?? "default"
+  const connection = (opts.connection ?? "default").trim().toLowerCase() || "default"
   const now = opts.now ?? Date.now()
   const ttlMs = opts.ttlMs ?? ttlForToolMode(opts.tool, mode)
 
-  const row = getDb()
-    .prepare<unknown[], Row>(
-      `SELECT payload_text, fingerprint, created_at, created_by_upn
-         FROM tool_knowledge_cache
-        WHERE tool = ? AND qname = ? AND mode = ? AND lower(connection) = lower(?)
-        LIMIT 1`
-    )
-    .get(opts.tool, opts.qname, mode, connection)
+  const row = await runGetAsync<Row>(
+    getPlatformDb()
+      .selectFrom("tool_knowledge_cache")
+      .select(["payload_text", "fingerprint", "created_at", "created_by_upn"])
+      .where("tool", "=", opts.tool)
+      .where("qname", "=", opts.qname)
+      .where("mode", "=", mode)
+      .where("connection", "=", connection)
+      .limit(1)
+      .compile()
+  )
 
   if (!row) return { hit: false, reason: "miss" }
 
@@ -162,14 +162,19 @@ export function lookupToolKnowledge(opts: LookupOptions): ToolKnowledgeResult {
 
   // Bump hit telemetry. Fire-and-forget; failure is non-fatal.
   try {
-    getDb()
-      .prepare(
-        `UPDATE tool_knowledge_cache
-            SET last_hit_at = ?, hit_count = hit_count + 1
-          WHERE tool = ? AND qname = ? AND mode = ? AND lower(connection) = lower(?)`
-      )
-      .run(now, opts.tool, opts.qname, mode, connection)
-  } catch (err: unknown) { console.error("[mia]", err) }
+    await runExecAsync(
+      getPlatformDb()
+        .updateTable("tool_knowledge_cache")
+        .set({ last_hit_at: now, hit_count: (eb) => eb("hit_count", "+", 1) })
+        .where("tool", "=", opts.tool)
+        .where("qname", "=", opts.qname)
+        .where("mode", "=", mode)
+        .where("connection", "=", connection)
+        .compile()
+    )
+  } catch (err: unknown) {
+    console.error("[mia]", err)
+  }
 
   return {
     hit: true,
@@ -194,28 +199,39 @@ export interface SaveOptions {
   now?: number
 }
 
-export function saveToolKnowledge(opts: SaveOptions): void {
+export async function saveToolKnowledge(opts: SaveOptions): Promise<void> {
   const mode = opts.mode ?? ""
-  const connection = opts.connection ?? "default"
+  const connection = (opts.connection ?? "default").trim().toLowerCase() || "default"
   const now = opts.now ?? Date.now()
   const fpJson = JSON.stringify(opts.fingerprint)
   const bytes = Buffer.byteLength(opts.payload, "utf8")
 
-  getDb()
-    .prepare(
-      `INSERT INTO tool_knowledge_cache
-         (tool, qname, mode, connection, payload_text, fingerprint, bytes, created_by_upn, created_at, hit_count)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
-       ON CONFLICT(tool, qname, mode, connection) DO UPDATE SET
-         payload_text   = excluded.payload_text,
-         fingerprint    = excluded.fingerprint,
-         bytes          = excluded.bytes,
-         created_by_upn = excluded.created_by_upn,
-         created_at     = excluded.created_at,
-         hit_count      = 0,
-         last_hit_at    = NULL`
-    )
-    .run(opts.tool, opts.qname, mode, connection, opts.payload, fpJson, bytes, opts.upn ?? null, now)
+  await upsertRowAsync({
+    table: "tool_knowledge_cache",
+    keys: { tool: opts.tool, qname: opts.qname, mode, connection },
+    insert: {
+      tool: opts.tool,
+      qname: opts.qname,
+      mode,
+      connection,
+      payload_text: opts.payload,
+      fingerprint: fpJson,
+      bytes,
+      created_by_upn: opts.upn ?? null,
+      created_at: now,
+      last_hit_at: null,
+      hit_count: 0
+    },
+    update: {
+      payload_text: opts.payload,
+      fingerprint: fpJson,
+      bytes,
+      created_by_upn: opts.upn ?? null,
+      created_at: now,
+      last_hit_at: null,
+      hit_count: 0
+    }
+  })
 }
 
 // ── Prune ─────────────────────────────────────────────────────────
@@ -235,45 +251,45 @@ export interface ToolKnowledgeListRow {
   payload_text: string
 }
 
-export function listToolKnowledgeByQnames(
+export async function listToolKnowledgeByQnames(
   qnames: readonly string[],
   connection: string,
   limit: number
-): ToolKnowledgeListRow[] {
+): Promise<ToolKnowledgeListRow[]> {
   if (qnames.length === 0) return []
-  const placeholders = qnames.map(() => "?").join(",")
-  return getDb()
-    .prepare(
-      `
-      SELECT qname, tool, mode, bytes, created_at, payload_text
-      FROM tool_knowledge_cache
-      WHERE qname IN (${placeholders}) AND lower(connection) = lower(?)
-      ORDER BY created_at DESC
-      LIMIT ?
-    `
-    )
-    .all(...qnames, connection, limit) as ToolKnowledgeListRow[]
+  return await runAllAsync<ToolKnowledgeListRow>(
+    getPlatformDb()
+      .selectFrom("tool_knowledge_cache")
+      .select(["qname", "tool", "mode", "bytes", "created_at", "payload_text"])
+      .where("qname", "in", [...qnames])
+      .where("connection", "=", connection)
+      .orderBy("created_at", "desc")
+      .limit(limit)
+      .compile()
+  )
 }
 
-export function listRecentToolKnowledge(connection: string, limit: number): ToolKnowledgeListRow[] {
-  return getDb()
-    .prepare(
-      `
-      SELECT qname, tool, mode, bytes, created_at, payload_text
-      FROM tool_knowledge_cache
-      WHERE lower(connection) = lower(?)
-      ORDER BY created_at DESC
-      LIMIT ?
-    `
-    )
-    .all(connection, limit) as ToolKnowledgeListRow[]
+export async function listRecentToolKnowledge(
+  connection: string,
+  limit: number
+): Promise<ToolKnowledgeListRow[]> {
+  return await runAllAsync<ToolKnowledgeListRow>(
+    getPlatformDb()
+      .selectFrom("tool_knowledge_cache")
+      .select(["qname", "tool", "mode", "bytes", "created_at", "payload_text"])
+      .where("connection", "=", connection)
+      .orderBy("created_at", "desc")
+      .limit(limit)
+      .compile()
+  )
 }
 
-export function pruneToolKnowledge(opts: PruneOptions): number {
+export async function pruneToolKnowledge(opts: PruneOptions): Promise<number> {
   const now = opts.now ?? Date.now()
   const cutoff = now - opts.maxAgeMs
-  const info = getDb().prepare(`DELETE FROM tool_knowledge_cache WHERE created_at < ?`).run(cutoff)
-  return typeof info.changes === "number" ? info.changes : 0
+  return await runChangesAsync(
+    getPlatformDb().deleteFrom("tool_knowledge_cache").where("created_at", "<", cutoff).compile()
+  )
 }
 
 // ── Header ────────────────────────────────────────────────────────

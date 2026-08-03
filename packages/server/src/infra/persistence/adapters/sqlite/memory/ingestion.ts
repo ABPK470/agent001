@@ -8,7 +8,9 @@ import {
   EpisodicAnswerKind
 } from "../../../../../internal/enums/memory.js"
 import { broadcast } from "../../../../events/broadcaster.js"
-import { getDb } from "../connection.js"
+import { getPlatformDb } from "../../../schema/kysely.js"
+import { runAllAsync, runGetAsync, runExecAsync } from "../../../schema/execute-async.js"
+import { platformNow } from "../../../schema/sql-time.js"
 import { stampProvenance } from "./provenance.js"
 import { computeSalience, isDuplicate, SALIENCE_THRESHOLD, truncateAtBoundary } from "./scoring.js"
 import { classifyEpisodicRun } from "./episodic-quality.js"
@@ -26,7 +28,7 @@ import { embedEntry } from "./vectors.js"
  * Applies salience scoring and dedup before storing.
  * Returns the entry if stored, null if filtered out.
  */
-export function ingestTurn(opts: {
+export async function ingestTurn(opts: {
   tier: MemoryTier
   role: MemoryRole
   content: string
@@ -48,7 +50,7 @@ export function ingestTurn(opts: {
   minSalience?: number
   /** Optional host — used to stamp the current catalog schema fingerprint. */
   host?: import("@mia/agent").AgentHost
-}): MemoryEntry | null {
+}): Promise<MemoryEntry | null> {
   const salience = computeSalience(opts.content, opts.role)
   const floor = opts.minSalience ?? SALIENCE_THRESHOLD
 
@@ -68,17 +70,18 @@ export function ingestTurn(opts: {
   }
 
   // Dedup: check against recent entries for the same tenant (upn).
-  const recentRows = getDb()
-    .prepare(
-      `
-    SELECT content FROM memory_entries
-    WHERE ((upn IS NULL AND @upn IS NULL) OR upn = @upn)
-    ORDER BY created_at DESC LIMIT 20
-  `
+  const recentRowsQuery = getPlatformDb()
+    .selectFrom("memory_entries")
+    .select("content")
+    .where((eb) =>
+      opts.upn === null || opts.upn === undefined
+        ? eb("upn", "is", null)
+        : eb("upn", "=", opts.upn)
     )
-    .all({ upn: opts.upn ?? null }) as Array<{
-    content: string
-  }>
+    .orderBy("created_at", "desc")
+    .limit(20)
+    .compile()
+  const recentRows = await runAllAsync<{ content: string }>(recentRowsQuery)
 
   if (
     isDuplicate(
@@ -98,7 +101,7 @@ export function ingestTurn(opts: {
     return null
   }
 
-  const now = new Date().toISOString()
+  const now = platformNow()
   const entry: MemoryEntry = {
     id: randomUUID(),
     tier: opts.tier,
@@ -122,14 +125,9 @@ export function ingestTurn(opts: {
     updatedAt: now
   }
 
-  getDb()
-    .prepare(
-      `
-    INSERT INTO memory_entries (id, tier, role, content, metadata, source, confidence, salience, access_count, run_id, parent_id, upn, shared, created_at, updated_at)
-    VALUES (@id, @tier, @role, @content, @metadata, @source, @confidence, @salience, @access_count, @run_id, @parent_id, @upn, @shared, @created_at, @updated_at)
-  `
-    )
-    .run({
+  const insertEntry = getPlatformDb()
+    .insertInto("memory_entries")
+    .values({
       id: entry.id,
       tier: entry.tier,
       role: entry.role,
@@ -144,8 +142,10 @@ export function ingestTurn(opts: {
       upn: entry.upn,
       shared: entry.shared ? 1 : 0,
       created_at: entry.createdAt,
-      updated_at: entry.updatedAt
+      updated_at: entry.updatedAt,
     })
+    .compile()
+  await runExecAsync(insertEntry)
 
   // Optionally embed (async, non-blocking)
   embedEntry(entry).catch((err: unknown) => { console.error("[mia]", err) })
@@ -169,7 +169,7 @@ export function ingestTurn(opts: {
  * Ingest all significant turns from a completed run.
  * Called by the orchestrator after a run finishes.
  */
-export function ingestRunTurns(run: {
+export async function ingestRunTurns(run: {
   id: string
   goal: string
   answer: string | null
@@ -180,7 +180,7 @@ export function ingestRunTurns(run: {
   trace: Array<{ kind: string; tool?: string; text?: string; argsSummary?: string; argsFormatted?: string }>
   /** Owner UPN — required; agent runs are authenticated-only. */
   upn: string
-}): void {
+}): Promise<void> {
   const upn = run.upn.trim()
   if (!upn) return
 
@@ -202,7 +202,7 @@ export function ingestRunTurns(run: {
   const MAX_TOOL_RESULT_MEMORY_BYTES = 6000
   for (const t of run.trace) {
     if (t.kind === "tool-call" && t.tool && t.text) {
-      ingestTurn({
+      await ingestTurn({
         tier: MemoryTier.Working,
         role: MemoryRole.Tool,
         content: `[Tool: ${t.tool}] ${truncateAtBoundary(t.text, MAX_TOOL_RESULT_MEMORY_BYTES, "\u2026 [truncated for memory]")}`,
@@ -213,7 +213,7 @@ export function ingestRunTurns(run: {
         upn
       })
     } else if (t.kind === "tool-result" && t.text) {
-      ingestTurn({
+      await ingestTurn({
         tier: MemoryTier.Working,
         role: MemoryRole.Tool,
         content: truncateAtBoundary(t.text, MAX_TOOL_RESULT_MEMORY_BYTES, "\u2026 [truncated for memory]"),
@@ -231,7 +231,7 @@ export function ingestRunTurns(run: {
   //    time-boxed (WORKING_SESSION_WINDOW_H). Follow-ups in the same thread see it;
   //    other threads and stale rows do not. Episodic upsert below is the long-lived record.
   if (run.answer && run.status === RunStatus.Completed) {
-    ingestTurn({
+    await ingestTurn({
       tier: MemoryTier.Working,
       role: MemoryRole.Assistant,
       content: run.answer,
@@ -303,41 +303,39 @@ export function ingestRunTurns(run: {
         : 0.3
 
   const goalPrefix = `Goal: ${run.goal}\n`
-  const existingEpisodic = getDb()
-    .prepare(
-      `
-        SELECT id FROM memory_entries
-        WHERE tier = 'episodic' AND role = 'summary'
-          AND substr(content, 1, ?) = ?
-          AND upn = ?
-        ORDER BY updated_at DESC LIMIT 1
-      `
-    )
-    .get(goalPrefix.length, goalPrefix, upn) as { id: string } | undefined
+  const existingEpisodic = await runGetAsync<{ id: string }>(
+    getPlatformDb()
+      .selectFrom("memory_entries")
+      .select("id")
+      .where("tier", "=", MemoryTier.Episodic)
+      .where("role", "=", MemoryRole.Summary)
+      .where("content", ">=", goalPrefix)
+      .where("content", "<", `${goalPrefix}\uffff`)
+      .where("upn", "=", upn)
+      .orderBy("updated_at", "desc")
+      .limit(1)
+      .compile()
+  )
 
   if (existingEpisodic) {
     // Update in place — keeps memory lean and avoids contradictory prior-failure entries
-    const now = new Date().toISOString()
-    getDb()
-      .prepare(
-        `
-      UPDATE memory_entries
-      SET content = ?, metadata = ?, confidence = ?, salience = ?, run_id = ?, upn = ?, updated_at = ?
-      WHERE id = ?
-    `
-      )
-      .run(
-        episodicContent,
-        JSON.stringify(episodicMeta),
-        episodicConfidence,
-        computeSalience(episodicContent, MemoryRole.Summary),
-        run.id,
-        upn,
-        now,
-        existingEpisodic.id
-      )
+    await runExecAsync(
+      getPlatformDb()
+        .updateTable("memory_entries")
+        .set({
+          content: episodicContent,
+          metadata: JSON.stringify(episodicMeta),
+          confidence: episodicConfidence,
+          salience: computeSalience(episodicContent, MemoryRole.Summary),
+          run_id: run.id,
+          upn,
+          updated_at: platformNow()
+        })
+        .where("id", "=", existingEpisodic.id)
+        .compile()
+    )
   } else {
-    ingestTurn({
+    await ingestTurn({
       tier: MemoryTier.Episodic,
       role: MemoryRole.Summary,
       content: episodicContent,
@@ -355,14 +353,18 @@ export function ingestRunTurns(run: {
  * Prepends a FEEDBACK block to the content and drops confidence to near-zero
  * so the entry is retrieved with very low weight in future runs.
  */
-export function flagRunMemory(runId: string, note?: string): boolean {
-  const row = getDb()
-    .prepare(
-      `SELECT id, content, confidence FROM memory_entries
-     WHERE run_id = ? AND tier = 'episodic' AND role = 'summary'
-     ORDER BY updated_at DESC LIMIT 1`
-    )
-    .get(runId) as { id: string; content: string; confidence: number } | undefined
+export async function flagRunMemory(runId: string, note?: string): Promise<boolean> {
+  const row = await runGetAsync<{ id: string; content: string; confidence: number }>(
+    getPlatformDb()
+      .selectFrom("memory_entries")
+      .select(["id", "content", "confidence"])
+      .where("run_id", "=", runId)
+      .where("tier", "=", MemoryTier.Episodic)
+      .where("role", "=", MemoryRole.Summary)
+      .orderBy("updated_at", "desc")
+      .limit(1)
+      .compile()
+  )
 
   if (!row) return false
 
@@ -370,12 +372,13 @@ export function flagRunMemory(runId: string, note?: string): boolean {
     `FEEDBACK: User marked this answer as NOT useful${note ? ` — ${note}` : ""}. ` +
     `Do NOT reuse the approaches described below. Find a different strategy.\n`
   const updated = prefix + row.content
-  const now = new Date().toISOString()
-  getDb()
-    .prepare(
-      `UPDATE memory_entries SET content = ?, confidence = 0.05, salience = 0.1, updated_at = ? WHERE id = ?`
-    )
-    .run(updated, now, row.id)
+  await runExecAsync(
+    getPlatformDb()
+      .updateTable("memory_entries")
+      .set({ content: updated, confidence: 0.05, salience: 0.1, updated_at: platformNow() })
+      .where("id", "=", row.id)
+      .compile()
+  )
   return true
 }
 
@@ -416,7 +419,7 @@ export type AgentNoteResult =
  * tool-execution paths (the `note` tool, doctrine auto-notes) so the result
  * surfaces cleanly back to the LLM.
  */
-export function ingestAgentNote(input: AgentNoteInput): AgentNoteResult {
+export async function ingestAgentNote(input: AgentNoteInput): Promise<AgentNoteResult> {
   const subject = input.subject.trim()
   const claim = input.claim.trim()
   if (!subject || !claim) {
@@ -431,7 +434,7 @@ export function ingestAgentNote(input: AgentNoteInput): AgentNoteResult {
   const evidenceTail = input.evidence && input.evidence.trim() ? `\n  ev: ${input.evidence.trim()}` : ""
   const content = `[note:${category}] ${subject} — ${claim}${evidenceTail}`
 
-  const entry = ingestTurn({
+  const entry = await ingestTurn({
     tier: MemoryTier.Working,
     // 'summary' role is exempt from the salience floor in ingestTurn, so even
     // a terse but valuable note ("pk = pkClient") is not rejected.

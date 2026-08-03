@@ -52,7 +52,7 @@ export interface PersistToolResultInput {
  *
  * @returns true if the call was persisted, false otherwise (filtered or error).
  */
-export function persistToolResult(input: PersistToolResultInput): boolean {
+export async function persistToolResult(input: PersistToolResultInput): Promise<boolean> {
   try {
     if (!input.upn.trim()) return false
     if (!CAPTURED_TOOLS.has(input.toolName)) return false
@@ -85,7 +85,7 @@ export function persistToolResult(input: PersistToolResultInput): boolean {
       goal_excerpt: input.goal.slice(0, GOAL_EXCERPT_CAP),
       created_at: new Date().toISOString()
     })
-    maybePersistReferableArtifact({
+    await maybePersistReferableArtifact({
       runId: input.runId,
       upn: input.upn,
       goal: input.goal,
@@ -115,12 +115,12 @@ interface ReferableArtifactInput {
   isError: boolean
 }
 
-function maybePersistReferableArtifact(input: ReferableArtifactInput): void {
+async function maybePersistReferableArtifact(input: ReferableArtifactInput): Promise<void> {
   if (input.isError) return
   const summary = summarizeReferableArtifact(input)
   if (!summary) return
 
-  ingestTurn({
+  await ingestTurn({
     tier: MemoryTier.Episodic,
     role: MemoryRole.Summary,
     content: summary,

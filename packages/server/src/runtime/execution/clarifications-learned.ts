@@ -72,11 +72,13 @@ export async function persistLearnedTermFromResolution(
     const connection = await resolveEffectiveMssqlConnection(host, goal)
     const catalog = getCatalog(host, connection)
     if (!catalog || !catalog.getTable(qname)) return
-    saveResolvedTerm({
+    await saveResolvedTerm({
       term: resolved.subject,
       qname,
       connection,
       upn: ownerUpn
     })
-  } catch (err: unknown) { console.error("[mia]", err) }
+  } catch (err: unknown) {
+    console.error("[mia]", err)
+  }
 }

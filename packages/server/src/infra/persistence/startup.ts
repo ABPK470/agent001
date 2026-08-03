@@ -40,11 +40,8 @@ export async function runDatabaseMaintenance(): Promise<void> {
     console.log(`Pruned ${attachmentPrune.prunedAttachments} expired attachments (retention TTL)`)
   }
 
-  // Memory FTS is sqlite-only until milestone 8.
-  if (kind === "sqlite") {
-    const memPrune = pruneMemory()
-    if (memPrune.deleted > 0) {
-      console.log(`Pruned ${memPrune.deleted} stale/duplicate memory entries`)
-    }
+  const memPrune = await pruneMemory()
+  if (memPrune.deleted > 0) {
+    console.log(`Pruned ${memPrune.deleted} stale/duplicate memory entries`)
   }
 }

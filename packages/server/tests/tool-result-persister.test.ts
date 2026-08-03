@@ -35,10 +35,9 @@ const THREAD_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
 const UPN = "pka@corp"
 
 function seedThreadAndRuns(runIds: string[]): void {
-  testDb.prepare(`INSERT OR IGNORE INTO users (upn, display_name, is_admin, source) VALUES (?, ?, 0, 'local')`).run(
-    UPN,
-    UPN
-  )
+  testDb
+    .prepare(`INSERT OR IGNORE INTO users (upn, display_name, is_admin, source) VALUES (?, ?, 0, 'local')`)
+    .run(UPN, UPN)
   testDb
     .prepare(
       `INSERT OR IGNORE INTO threads (id, upn, title, created_at, updated_at, archived_at, pinned)
@@ -64,7 +63,7 @@ describe("persistToolResult", () => {
   it("writes captured tool results to tool_results", async () => {
     const { persistToolResult } = await setupDb()
 
-    const ok = persistToolResult({
+    const ok = await persistToolResult({
       runId: "run-1",
       upn: "pka",
       goal: "find top products by revenue",
@@ -101,7 +100,7 @@ describe("persistToolResult", () => {
   it("stores an episodic referable artifact for successful tabular results", async () => {
     const { persistToolResult } = await setupDb()
 
-    persistToolResult({
+    await persistToolResult({
       runId: "run-2",
       upn: "pka",
       goal: "which product out of these 10 brings the least revenue",
@@ -153,7 +152,7 @@ describe("persistToolResult", () => {
   it("stores an episodic referable artifact for live query_mssql pipe tables", async () => {
     const { persistToolResult } = await setupDb()
 
-    persistToolResult({
+    await persistToolResult({
       runId: "run-live-shape",
       upn: "pka",
       goal: "top 10 products by 2025 revenue",
@@ -192,7 +191,7 @@ describe("persistToolResult", () => {
   it("does not store a referable artifact for failed tool results", async () => {
     const { persistToolResult } = await setupDb()
 
-    persistToolResult({
+    await persistToolResult({
       runId: "run-3",
       upn: "pka",
       goal: "find top products by revenue",
@@ -215,7 +214,7 @@ describe("persistToolResult", () => {
   it("does not persist governance-denied query results into tool_results", async () => {
     const { persistToolResult } = await setupDb()
 
-    const ok = persistToolResult({
+    const ok = await persistToolResult({
       runId: "run-4",
       upn: "pka",
       goal: "top products by revenue",

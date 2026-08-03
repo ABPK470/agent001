@@ -86,7 +86,7 @@ function extractQnames(text: string): string[] {
  * sees the org's recently-touched objects and can shortcut on them. The
  * fallback is hard-capped so the block stays small.
  */
-export function loadKnownObjects(opts: LoadKnownObjectsOptions): KnownObjectRow[] {
+export async function loadKnownObjects(opts: LoadKnownObjectsOptions): Promise<KnownObjectRow[]> {
   const limit = opts.limit ?? DEFAULT_LIMIT
   const connection = opts.connection ?? "default"
   const candidates = new Set<string>()
@@ -96,7 +96,7 @@ export function loadKnownObjects(opts: LoadKnownObjectsOptions): KnownObjectRow[
     if (t.answer) for (const q of extractQnames(t.answer)) candidates.add(q)
   }
 
-  let rows = listToolKnowledgeByQnames([...candidates], connection, limit)
+  let rows = await listToolKnowledgeByQnames([...candidates], connection, limit)
 
   // Track which rows came from the goal-mention path vs the fallback
   // top-up: only goal rows get the heavy summarizer treatment so the
@@ -112,7 +112,7 @@ export function loadKnownObjects(opts: LoadKnownObjectsOptions): KnownObjectRow[
   const FALLBACK_TOPUP = Math.max(1, Math.min(5, limit - rows.length))
   if (FALLBACK_TOPUP > 0) {
     const seenQnames = new Set(rows.map((r) => r.qname))
-    const extra = listRecentToolKnowledge(connection, FALLBACK_TOPUP * 2)
+    const extra = await listRecentToolKnowledge(connection, FALLBACK_TOPUP * 2)
     for (const r of extra) {
       if (seenQnames.has(r.qname)) continue
       rows.push(r)
@@ -318,7 +318,7 @@ export interface LoadCandidateVerdictsOptions {
  *
  * Silent fallback: empty array on any failure or missing catalog.
  */
-export function loadCandidateVerdicts(opts: LoadCandidateVerdictsOptions): CandidateVerdictRow[] {
+export async function loadCandidateVerdicts(opts: LoadCandidateVerdictsOptions): Promise<CandidateVerdictRow[]> {
   const k = opts.k ?? 8
   if (!opts.catalog) return []
   let hits: Array<{ table: { qualifiedName: string } }> = []
@@ -329,9 +329,9 @@ export function loadCandidateVerdicts(opts: LoadCandidateVerdictsOptions): Candi
   }
   if (hits.length === 0) return []
   const qnames = hits.map((h) => h.table.qualifiedName)
-  let verdicts: ReturnType<typeof listTableVerdicts> = []
+  let verdicts: Awaited<ReturnType<typeof listTableVerdicts>> = []
   try {
-    verdicts = listTableVerdicts({
+    verdicts = await listTableVerdicts({
       qnames,
       connection: opts.connection,
       upn: opts.upn ?? null

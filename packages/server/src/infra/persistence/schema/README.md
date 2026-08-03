@@ -4,16 +4,15 @@ Track B of the RDBMS-agnostic program ([plan](../../../../../.cursor/plans/sqlit
 
 ## When can we swap SQLite → MSSQL/Postgres?
 
-**sqlite|mssql boot is wired** via `openConfiguredPlatformStore`. Memory FTS and
-sqlite-only prune/vacuum remain gated. Progress:
+**sqlite|mssql boot is wired** via `openConfiguredPlatformStore`. Memory CRUD is
+async/Kysely; keyword search is FTS5 (sqlite) or explicit degraded (mssql).
+SQLite-only lifecycle prune/vacuum remains gated.
 
 | Milestone | What | Status |
 | --- | --- | --- |
 | 3 | Schema toolkit + async SQLite adapter | **Done** — product repos on `run*Async` |
-| 4 | Second dialect (**hosted default: mssql**) + multi-dialect migrator | **Bootable** — single Kysely handle; registry v1–8; async repos; memory deferred |
-| 8 | Memory search port (FTS) | Last hard piece |
-
-Honest sizing in the plan: platform agnostic is **large (months)** — ~70 tables, async ripple, search redesign. Sync warehouse multi-dialect is a **separate** track and is further along.
+| 4 | Second dialect (**hosted default: mssql**) + multi-dialect migrator | **Bootable** — single Kysely handle; registry v1–9 |
+| 8 | Memory search port | **Done** — FTS5 sqlite / degraded mssql; base tables in registry v9 |
 
 ## Shape
 
@@ -24,7 +23,8 @@ Honest sizing in the plan: platform agnostic is **large (months)** — ~70 table
 | `execute.ts` | Sync compile → better-sqlite3 (sqlite only) |
 | `execute-async.ts` | Dialect-aware async execute (sqlite wrap / mssql Kysely) |
 | `@mia/sql-kit` `MigrationRunner` / `applyMultiDialectPending` | Shared migrator contract |
-| `migrations/registry.ts` | Multi-dialect peer DDL (mssql v1–8; memory deferred to m8) |
+| `migrations/registry.ts` | Multi-dialect peer DDL (mssql v1–9 incl. memory base tables) |
+| `ports/memory-search.ts` | Keyword search port (FTS5 vs degraded) |
 | `sql-time.ts` | `platformNow` / `coalescePlatformNow` / `platformNowMinusSeconds` |
 | `upsert.ts` | Dialect-portable select→update|insert (no `ON CONFLICT`) |
 | `adapters/mssql/**` | Sole Kysely/tedious handle + migrator (no platform `mssql` pool) |

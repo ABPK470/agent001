@@ -54,7 +54,7 @@ export async function finalizeCompletedRun(
 
   const ownerUpn = env.activeRun?.ownerUpn
   if (ownerUpn) {
-    ingestRunTurns({
+    await ingestRunTurns({
       id: request.runId,
       goal: request.goal,
       answer: taskInternallyFailed ? null : answer,
@@ -65,7 +65,7 @@ export async function finalizeCompletedRun(
       trace: persistedToolTrace,
       upn: ownerUpn
     })
-    consolidate({ minAgeHours: 24, upn: ownerUpn })
+    await consolidate({ minAgeHours: 24, upn: ownerUpn })
   }
 
   broadcast({

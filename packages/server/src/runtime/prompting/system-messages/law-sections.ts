@@ -29,14 +29,14 @@ import type { BuildContext } from "./types.js"
  * never suppress a genuinely-needed clarification. Returns null when no
  * catalog is available (CLI / tests) or the store is empty.
  */
-function buildLearnedTermMappings(
+async function buildLearnedTermMappings(
   connection: string,
   catalog: ReturnType<typeof getCatalog>
-): Map<string, string> | null {
+): Promise<Map<string, string> | null> {
   if (!catalog) return null
   let rows
   try {
-    rows = listResolvedTerms({ connection })
+    rows = await listResolvedTerms({ connection })
   } catch {
     return null
   }
@@ -93,7 +93,7 @@ export async function buildLawSections(ctx: BuildContext): Promise<Message[]> {
   try {
     const catalog = opts.host ? getCatalog(opts.host, effectiveConnection) : null
     const fingerprint = opts.host ? getCatalogSchemaFingerprint(opts.host, effectiveConnection) : null
-    const block = buildResolvedFactsBlock({ goal, catalog, schemaFingerprint: fingerprint })
+    const block = await buildResolvedFactsBlock({ goal, catalog, schemaFingerprint: fingerprint })
     if (block.length > 0) {
       messages.push({ role: MessageRole.System, content: block, section: "system_law" })
     }
@@ -108,7 +108,7 @@ export async function buildLawSections(ctx: BuildContext): Promise<Message[]> {
     const tenant = getTenantConfig()
     const publishedSyncEntityIds = getPublishedSyncEntityIds()
     const resolved = opts.clarifications.getResolved(runId)
-    const learnedTermMappings = buildLearnedTermMappings(effectiveConnection, catalog)
+    const learnedTermMappings = await buildLearnedTermMappings(effectiveConnection, catalog)
     const synthMessages: Message[] = []
     for (let i = ctx.priorTurns.length - 1; i >= 0; i--) {
       const t = ctx.priorTurns[i]!

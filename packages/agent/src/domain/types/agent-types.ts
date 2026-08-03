@@ -226,13 +226,7 @@ export class ChatBudgetExceededError extends Error {
  * Canonical stop reason codes (subset of agenc-core LLMPipelineStopReason).
  */
 export type StopReason =
-  | "completed"
-  | "max_iterations"
-  | "budget_exceeded"
-  | "aborted"
-  | "error"
-  | "circuit_breaker"
-  | "stuck_loop"
+  "completed" | "max_iterations" | "budget_exceeded" | "aborted" | "error" | "circuit_breaker" | "stuck_loop"
 
 // ── Tool kill manager ────────────────────────────────────────────
 
@@ -342,7 +336,7 @@ export interface AgentConfig {
     isError: boolean
     /** Live message history, including the just-appended tool result. */
     messages: Message[]
-  }) => void
+  }) => void | Promise<void>
   /**
    * When true, defer recovery-hint system nudges until the agent first attempts
    * completion (response with zero tool calls). This preserves an uninterrupted

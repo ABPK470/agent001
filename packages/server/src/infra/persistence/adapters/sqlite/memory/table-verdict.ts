@@ -27,7 +27,9 @@
  */
 
 import { randomUUID } from "node:crypto"
-import { getDb } from "../connection.js"
+import { getPlatformDb } from "../../../schema/kysely.js"
+import { runAllAsync, runExecAsync } from "../../../schema/execute-async.js"
+import { platformNow } from "../../../schema/sql-time.js"
 import { MemoryRole, MemorySource, MemoryTier } from "./types.js"
 
 // ── Public types ─────────────────────────────────────────────────
@@ -92,7 +94,7 @@ export interface TableVerdict {
  * additive. `listTableVerdicts` returns the newest per qname so the
  * latest judgment naturally wins.
  */
-export function recordTableVerdict(input: TableVerdictInput): TableVerdict {
+export async function recordTableVerdict(input: TableVerdictInput): Promise<TableVerdict> {
   const qname = input.qname.trim()
   if (!qname) throw new Error("recordTableVerdict: qname is required")
   const role: TableVerdictRole = input.role
@@ -116,23 +118,10 @@ export function recordTableVerdict(input: TableVerdictInput): TableVerdict {
     connection
   }
 
-  const now = new Date().toISOString()
+  const now = platformNow()
   const id = randomUUID()
-  getDb()
-    .prepare(
-      `
-    INSERT INTO memory_entries (
-      id, tier, role, content, metadata, source, confidence, salience,
-      access_count, run_id, parent_id, upn, shared,
-      created_at, updated_at
-    ) VALUES (
-      @id, @tier, @role, @content, @metadata, @source, @confidence, @salience,
-      0, @run_id, NULL, @upn, @shared,
-      @created_at, @updated_at
-    )
-  `
-    )
-    .run({
+  await runExecAsync(
+    getPlatformDb().insertInto("memory_entries").values({
       id,
       tier: MemoryTier.Semantic,
       role: MemoryRole.Summary,
@@ -143,12 +132,15 @@ export function recordTableVerdict(input: TableVerdictInput): TableVerdict {
       // Verdicts are inherently high-value: a deliberate role classification
       // is worth more than the prose-length salience heuristic would award.
       salience: 0.9,
+      access_count: 0,
       run_id: input.runId ?? null,
+      parent_id: null,
       upn: input.upn ?? null,
       shared: (input.shared ?? true) ? 1 : 0,
       created_at: now,
       updated_at: now
-    })
+    }).compile()
+  )
 
   return {
     id,
@@ -183,7 +175,7 @@ export interface ListTableVerdictsOptions {
  * scans semantic-tier rows whose JSON metadata declares kind=table_verdict;
  * this is a tiny slice of the memory table on any realistic workload.
  */
-export function listTableVerdicts(options: ListTableVerdictsOptions = {}): TableVerdict[] {
+export async function listTableVerdicts(options: ListTableVerdictsOptions = {}): Promise<TableVerdict[]> {
   const connection = (options.connection ?? "default").trim() || "default"
   const limit = Math.max(1, Math.min(options.limit ?? 50, 500))
   const qnamesLower = options.qnames?.map((q) => q.trim().toLowerCase()).filter(Boolean) ?? []
@@ -191,25 +183,26 @@ export function listTableVerdicts(options: ListTableVerdictsOptions = {}): Table
   // We can't easily JSON-extract in a portable way that uses an index,
   // but the semantic tier is small. Filter in SQL by tier + JSON LIKE,
   // then refine in JS.
-  const rows = getDb()
-    .prepare(
-      `
-    SELECT id, content, metadata, confidence, created_at, upn
-    FROM memory_entries
-    WHERE tier = 'semantic'
-      AND metadata LIKE '%"kind":"table_verdict"%'
-      AND ((upn IS NULL AND ? IS NULL) OR upn = ? OR shared = 1)
-    ORDER BY created_at DESC
-  `
+  let statement = getPlatformDb().selectFrom("memory_entries")
+    .select(["id", "content", "metadata", "confidence", "created_at", "upn"])
+    .where("tier", "=", MemoryTier.Semantic)
+    .where("metadata", "like", '%"kind":"table_verdict"%')
+  if (options.upn !== undefined) {
+    const upn = options.upn
+    statement = statement.where((eb) =>
+      upn === null
+        ? eb.or([eb("upn", "is", null), eb("shared", "=", 1)])
+        : eb.or([eb("upn", "=", upn), eb("shared", "=", 1)])
     )
-    .all(options.upn ?? null, options.upn ?? null) as Array<{
+  }
+  const rows = await runAllAsync<{
     id: string
     content: string
     metadata: string
     confidence: number
     created_at: string
     upn: string | null
-  }>
+  }>(statement.orderBy("created_at", "desc").compile())
 
   const seen = new Set<string>() // lowercased qname
   const out: TableVerdict[] = []

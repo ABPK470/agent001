@@ -1,5 +1,6 @@
 import { MemoryTier } from "../../../../../internal/enums/memory.js"
-import { getDb } from "../connection.js"
+import { getPlatformDb } from "../../../schema/kysely.js"
+import { runAllAsync, runExecAsync } from "../../../schema/execute-async.js"
 import type { MemoryEntry } from "./types.js"
 
 // ── Vector embeddings (Ollama) ───────────────────────────────────
@@ -42,14 +43,25 @@ export async function embedEntry(entry: MemoryEntry): Promise<void> {
   // Mirror upn + shared from the entry so vectorSearch can apply the tenant
   // filter inside SQL (defence-in-depth + correct recall when one tenant's
   // rows would otherwise dominate the cosine top-K).
-  getDb()
-    .prepare(
-      `
-    INSERT OR REPLACE INTO memory_vectors (entry_id, embedding, dimension, upn, shared)
-    VALUES (?, ?, ?, ?, ?)
-  `
-    )
-    .run(entry.id, Buffer.from(embedding.buffer), embedding.length, entry.upn ?? null, entry.shared ? 1 : 0)
+  const db = getPlatformDb()
+  await runExecAsync(
+    db
+      .deleteFrom("memory_vectors")
+      .where("entry_id", "=", entry.id)
+      .compile()
+  )
+  await runExecAsync(
+    db
+      .insertInto("memory_vectors")
+      .values({
+        entry_id: entry.id,
+        embedding: Buffer.from(embedding.buffer),
+        dimension: embedding.length,
+        upn: entry.upn ?? null,
+        shared: entry.shared ? 1 : 0
+      })
+      .compile()
+  )
 }
 
 function cosineSimilarity(a: Float32Array, b: Float32Array): number {
@@ -80,39 +92,33 @@ export async function vectorSearch(
   const queryVec = await getEmbedding(query)
   if (!queryVec) return []
 
-  let sql = `
-    SELECT v.entry_id, v.embedding, v.dimension, e.tier
-    FROM memory_vectors v
-    JOIN memory_entries e ON e.id = v.entry_id
-  `
-  const where: string[] = []
-  const params: unknown[] = []
+  let statement = getPlatformDb()
+    .selectFrom("memory_vectors as v")
+    .innerJoin("memory_entries as e", "e.id", "v.entry_id")
+    .select(["v.entry_id", "v.embedding", "v.dimension", "e.tier"])
   if (tier) {
-    where.push("e.tier = ?")
-    params.push(tier)
+    statement = statement.where("e.tier", "=", tier)
   }
   if (tier === MemoryTier.Working && threadId && upn) {
-    where.push("e.run_id IN (SELECT id FROM runs WHERE thread_id = ? AND upn = ?)")
-    params.push(threadId, upn)
+    statement = statement.where(
+      "e.run_id",
+      "in",
+      getPlatformDb().selectFrom("runs").select("id").where("thread_id", "=", threadId).where("upn", "=", upn)
+    )
   }
   if (upn !== undefined) {
     if (upn === null) {
-      where.push("(v.upn IS NULL OR v.shared = 1)")
+      statement = statement.where((eb) => eb.or([eb("v.upn", "is", null), eb("v.shared", "=", 1)]))
     } else {
-      where.push("(v.upn = ? OR v.shared = 1)")
-      params.push(upn)
+      statement = statement.where((eb) => eb.or([eb("v.upn", "=", upn), eb("v.shared", "=", 1)]))
     }
   }
-  if (where.length > 0) sql += " WHERE " + where.join(" AND ")
-
-  const rows = getDb()
-    .prepare(sql)
-    .all(...params) as Array<{
+  const rows = await runAllAsync<{
     entry_id: string
     embedding: Buffer
     dimension: number
     tier: string
-  }>
+  }>(statement.compile())
 
   const scored = rows.map((row) => {
     const vec = new Float32Array(row.embedding.buffer, row.embedding.byteOffset, row.dimension)

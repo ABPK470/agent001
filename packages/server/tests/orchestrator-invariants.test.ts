@@ -3,7 +3,12 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
-import { buildFixture, DEFAULT_THREAD, salientAnswer, type TurnInputs } from "./helpers/orchestrator-fixture.js"
+import {
+  buildFixture,
+  DEFAULT_THREAD,
+  salientAnswer,
+  type TurnInputs
+} from "./helpers/orchestrator-fixture.js"
 
 let fixture: Awaited<ReturnType<typeof buildFixture>>
 beforeEach(async () => {
@@ -79,8 +84,7 @@ describe("Layer C — C2: working memory respects WORKING_SESSION_WINDOW_H cutof
     await fixture.simulateTurn(
       turn({
         goal: "fresh thing",
-        answer:
-          "Configured fresh state: fresh-window-marker-PAPA-1111 has been recorded in the live window.",
+        answer: "Configured fresh state: fresh-window-marker-PAPA-1111 has been recorded in the live window.",
         threadId: ALICE_THREAD,
         upn: ALICE
       })
@@ -100,7 +104,7 @@ describe("Layer C — C2: working memory respects WORKING_SESSION_WINDOW_H cutof
 
 describe("Layer C — C3: shared semantic rows", () => {
   it("a shared semantic row appears for both Alice and Bob queries", async () => {
-    fixture.mem.ingestTurn({
+    await fixture.mem.ingestTurn({
       tier: "semantic",
       role: "system",
       content: "Org policy: shared-canary-marker-TANGO-5050 applies to all tenants per platform docs.",

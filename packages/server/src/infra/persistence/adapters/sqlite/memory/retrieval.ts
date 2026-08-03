@@ -1,5 +1,8 @@
 import { EventType, getCatalogSchemaFingerprint } from "@mia/agent"
-import { getDb } from "../connection.js"
+import { getPlatformDb } from "../../../schema/kysely.js"
+import { runAllAsync, runExecAsync, runGetAsync } from "../../../schema/execute-async.js"
+import { platformNow } from "../../../schema/sql-time.js"
+import { getMemorySearchPort } from "../../../memory/search-port.js"
 import { MemoryRole, MemoryTier } from "../../../../../internal/enums/memory.js"
 import { broadcast } from "../../../../events/broadcaster.js"
 import { pickEpisodicChoreographyHint } from "./episodic-choreography.js"
@@ -165,12 +168,16 @@ export async function retrieveContext(
   // Bump access counts
   if (packed.length > 0) {
     const ids = packed.map((r) => r.entry.id)
-    const placeholders = ids.map(() => "?").join(", ")
-    getDb()
-      .prepare(
-        `UPDATE memory_entries SET access_count = access_count + 1, updated_at = ? WHERE id IN (${placeholders})`
-      )
-      .run(now.toISOString(), ...ids)
+    await runExecAsync(
+      getPlatformDb()
+        .updateTable("memory_entries")
+        .set({
+          access_count: (eb) => eb("access_count", "+", 1),
+          updated_at: platformNow()
+        })
+        .where("id", "in", ids)
+        .compile()
+    )
   }
 
   const context = formatMemoryContext(packed)
@@ -239,65 +246,34 @@ export async function searchEntries(
   const ftsQuery = sanitizeFtsQuery(query)
   if (!ftsQuery) {
     if (opts.tier === MemoryTier.Working) {
-      return getRecentEntries(opts.tier, opts.budget.maxItems, opts.threadId, opts.upn, opts.excludeRunId)
+      return await getRecentEntries(opts.tier, opts.budget.maxItems, opts.threadId, opts.upn, opts.excludeRunId)
     }
     return []
   }
 
-  let sql = `
-    SELECT e.*, memory_entries_fts.rank AS fts_rank
-    FROM memory_entries e
-    JOIN memory_entries_fts ON e.rowid = memory_entries_fts.rowid
-    WHERE memory_entries_fts MATCH ?
-  `
-  const params: unknown[] = [ftsQuery]
-
-  if (opts.tier) {
-    sql += " AND e.tier = ?"
-    params.push(opts.tier)
-  }
-  if (opts.excludeRunId) {
-    sql += " AND (e.run_id IS NULL OR e.run_id != ?)"
-    params.push(opts.excludeRunId)
-  }
-  if (opts.tier === MemoryTier.Working && opts.threadId && opts.upn) {
-    sql += " AND e.run_id IN (SELECT id FROM runs WHERE thread_id = ? AND upn = ?)"
-    params.push(opts.threadId, opts.upn)
-  }
-  if (opts.upn !== undefined) {
-    if (opts.upn === null) {
-      sql += " AND (e.upn IS NULL OR e.shared = 1)"
-    } else {
-      sql += " AND (e.upn = ? OR e.shared = 1)"
-      params.push(opts.upn)
-    }
-  }
-  if (opts.tier === MemoryTier.Working) {
-    // Hard cutoff: working memory only surfaces entries from the active session window.
-    // This prevents stale answers from previous sessions bleeding into a fresh run.
-    // The RECENCY_HALF_LIFE decay alone is not sufficient — entries with accessCount > 0
-    // get an ACT-R activation bonus that keeps them alive across session boundaries.
-    const windowCutoff = new Date(Date.now() - WORKING_SESSION_WINDOW_H * 60 * 60 * 1000).toISOString()
-    sql += " AND e.created_at > ?"
-    params.push(windowCutoff)
-  }
-
-  sql += " ORDER BY fts_rank LIMIT ?"
-  params.push(opts.budget.maxItems * 3)
-
-  const rows = getDb()
-    .prepare(sql)
-    .all(...params) as Array<Record<string, unknown> & { fts_rank: number }>
+  // Pass the raw query — each MemorySearchPort sanitizes for its dialect
+  // (FTS5 quoting vs degraded token filter). Never feed pre-quoted FTS text
+  // into the mssql degraded tokenizer.
+  const hits = await getMemorySearchPort().searchKeyword(query, {
+    tier: opts.tier,
+    limit: opts.budget.maxItems * 3,
+    threadId: opts.threadId,
+    excludeRunId: opts.excludeRunId,
+    upn: opts.upn,
+    createdAfter:
+      opts.tier === MemoryTier.Working
+        ? new Date(Date.now() - WORKING_SESSION_WINDOW_H * 60 * 60 * 1000).toISOString()
+        : undefined
+  })
 
   // For working tier, also get recent entries that may not match FTS
   let recentEntries: UnifiedSearchResult[] = []
   if (opts.tier === MemoryTier.Working) {
-    recentEntries = getRecentEntries(MemoryTier.Working, 12, opts.threadId, opts.upn, opts.excludeRunId)
+    recentEntries = await getRecentEntries(MemoryTier.Working, 12, opts.threadId, opts.upn, opts.excludeRunId)
   }
 
-  const ftsResults: UnifiedSearchResult[] = rows.map((row) => {
-    const entry = rowToEntry(row)
-    const rawRank = Math.abs(row.fts_rank)
+  const ftsResults: UnifiedSearchResult[] = hits.map(({ entry, rank }) => {
+    const rawRank = Math.abs(rank)
     // Down-weight failed/incomplete entries so they don't poison future runs.
     const isFailedEntry =
       entry.confidence < 0.5 &&
@@ -329,9 +305,9 @@ export async function searchEntries(
       if (ftsIds.has(vr.entryId)) continue
       if (vr.similarity < 0.5) continue
 
-      const row = getDb().prepare("SELECT * FROM memory_entries WHERE id = ?").get(vr.entryId) as
-        | Record<string, unknown>
-        | undefined
+      const row = await runGetAsync<Record<string, unknown>>(
+        getPlatformDb().selectFrom("memory_entries").selectAll().where("id", "=", vr.entryId).compile()
+      )
       if (!row) continue
       if (opts.excludeRunId && row.run_id === opts.excludeRunId) continue
       if (
@@ -340,9 +316,16 @@ export async function searchEntries(
         opts.upn &&
         row.run_id
       ) {
-        const inThread = getDb()
-          .prepare("SELECT 1 FROM runs WHERE id = ? AND thread_id = ? AND upn = ? LIMIT 1")
-          .get(row.run_id, opts.threadId, opts.upn)
+        const inThread = await runGetAsync<{ id: string }>(
+          getPlatformDb()
+            .selectFrom("runs")
+            .select("id")
+            .where("id", "=", row.run_id as string)
+            .where("thread_id", "=", opts.threadId)
+            .where("upn", "=", opts.upn)
+            .limit(1)
+            .compile()
+        )
         if (!inThread) continue
       }
       if (opts.upn !== undefined) {
@@ -391,22 +374,23 @@ export async function searchEntries(
   return packed
 }
 
-function getRecentEntries(
+async function getRecentEntries(
   tier: MemoryTier,
   limit: number,
   threadId?: string,
   upn?: string | null,
   excludeRunId?: string
-): UnifiedSearchResult[] {
+): Promise<UnifiedSearchResult[]> {
   const now = new Date()
   if (tier === MemoryTier.Working && (!threadId || !upn)) return []
 
-  let sql = "SELECT * FROM memory_entries WHERE tier = ?"
-  const params: unknown[] = [tier]
-
+  let query = getPlatformDb().selectFrom("memory_entries").selectAll().where("tier", "=", tier)
   if (tier === MemoryTier.Working && threadId && upn) {
-    sql += " AND run_id IN (SELECT id FROM runs WHERE thread_id = ? AND upn = ?)"
-    params.push(threadId, upn)
+    query = query.where(
+      "run_id",
+      "in",
+      getPlatformDb().selectFrom("runs").select("id").where("thread_id", "=", threadId).where("upn", "=", upn)
+    )
   }
   // Exclude the in-flight run's own rows so an agent cannot echo its own
   // mid-run state back at itself. Mirrors the FTS path predicate at
@@ -416,29 +400,23 @@ function getRecentEntries(
   // fallback at retrieval.ts:174 silently re-injected current-run rows
   // even when the caller asked them to be excluded — see Layer A A5b.
   if (excludeRunId) {
-    sql += " AND (run_id IS NULL OR run_id != ?)"
-    params.push(excludeRunId)
+    query = query.where((eb) => eb.or([eb("run_id", "is", null), eb("run_id", "!=", excludeRunId)]))
   }
   if (upn !== undefined) {
     if (upn === null) {
-      sql += " AND (upn IS NULL OR shared = 1)"
+      query = query.where((eb) => eb.or([eb("upn", "is", null), eb("shared", "=", 1)]))
     } else {
-      sql += " AND (upn = ? OR shared = 1)"
-      params.push(upn)
+      query = query.where((eb) => eb.or([eb("upn", "=", upn), eb("shared", "=", 1)]))
     }
   }
   if (tier === MemoryTier.Working) {
     const windowCutoff = new Date(Date.now() - WORKING_SESSION_WINDOW_H * 60 * 60 * 1000).toISOString()
-    sql += " AND created_at > ?"
-    params.push(windowCutoff)
+    query = query.where("created_at", ">", windowCutoff)
   }
 
-  sql += " ORDER BY created_at DESC LIMIT ?"
-  params.push(limit)
-
-  const rows = getDb()
-    .prepare(sql)
-    .all(...params) as Array<Record<string, unknown>>
+  const rows = await runAllAsync<Record<string, unknown>>(
+    query.orderBy("created_at", "desc").limit(limit).compile()
+  )
 
   return rows.map((row) => {
     const entry = rowToEntry(row)

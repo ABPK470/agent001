@@ -1,8 +1,9 @@
 /**
  * Boot composition — open the configured platform store, migrate, seed.
  *
- * SQLite: existing openDatabase path (sync migrate/seeds/memory FTS).
- * MSSQL: single Kysely handle + multi-dialect registry; memory FTS deferred (m8).
+ * SQLite: existing openDatabase path (sync migrate/seeds/memory FTS5).
+ * MSSQL: single Kysely handle + multi-dialect registry (incl. memory base tables);
+ * keyword search uses explicit degraded MemorySearchPort (not FTS5).
  */
 
 import { PolicyEffect } from "@mia/agent"

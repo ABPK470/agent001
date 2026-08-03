@@ -67,7 +67,7 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
     const mem = await setupMemory()
 
     // Use distinct salient phrases so FTS hits each entry deterministically.
-    mem.ingestTurn({
+    await mem.ingestTurn({
       tier: "semantic",
       role: "summary",
       content:
@@ -77,7 +77,7 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
       runId: "r-a",
       upn: "alice@corp"
     })
-    mem.ingestTurn({
+    await mem.ingestTurn({
       tier: "semantic",
       role: "summary",
       content:
@@ -115,7 +115,7 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
     // role='system' bypasses the salience filter so test fixtures land
     // deterministically regardless of content length / keyword density.
     for (const tier of ["working", "episodic", "semantic"] as const) {
-      mem.ingestTurn({
+      await mem.ingestTurn({
         tier,
         role: "system",
         content: `cross-tier-leak-canary alpha shared-keyword tier=${tier}`,
@@ -124,7 +124,7 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
         runId: `r-a-${tier}`,
         upn: "alice@corp"
       })
-      mem.ingestTurn({
+      await mem.ingestTurn({
         tier,
         role: "system",
         content: `cross-tier-leak-canary bravo shared-keyword tier=${tier}`,
@@ -154,7 +154,7 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
   it("shared=true rows are visible to every tenant", async () => {
     const mem = await setupMemory()
 
-    mem.ingestTurn({
+    await mem.ingestTurn({
       tier: "semantic",
       role: "system",
       content: "Operator note: org-wide policy applies to everyone unique-shared-marker-zzz",
@@ -187,7 +187,7 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
       { kind: "tool-call", tool: "query_mssql", text: "query", argsSummary: "SELECT" }
     ]
 
-    mem.ingestRunTurns({
+    await mem.ingestRunTurns({
       id: "ra",
       goal: "list customer revenue tenant-alphaonlytokenxyz",
       answer: "Revenue is in publish.Revenue for tenant alpha.",
@@ -197,7 +197,7 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
       trace,
       upn: "alice@corp"
     })
-    mem.ingestRunTurns({
+    await mem.ingestRunTurns({
       id: "rb",
       goal: "list customer revenue tenant-bravoonlytokenxyz",
       answer: "Revenue is in publish.Revenue for tenant bravo.",
@@ -234,7 +234,7 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
 
     // role='system' bypasses the salience filter so we measure dedup, not
     // ingestion thresholds.
-    const aliceFirst = mem.ingestTurn({
+    const aliceFirst = await mem.ingestTurn({
       tier: "working",
       role: "system",
       content: "exact same text body across users uniqueA-dedup-text-marker",
@@ -243,7 +243,7 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
       runId: "ra",
       upn: "alice@corp"
     })
-    const bobFirst = mem.ingestTurn({
+    const bobFirst = await mem.ingestTurn({
       tier: "working",
       role: "system",
       content: "exact same text body across users uniqueA-dedup-text-marker",
@@ -258,7 +258,7 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
     expect(aliceFirst!.id).not.toBe(bobFirst!.id)
 
     // Same tenant: identical second insert IS deduplicated.
-    const aliceSecond = mem.ingestTurn({
+    const aliceSecond = await mem.ingestTurn({
       tier: "working",
       role: "system",
       content: "exact same text body across users uniqueA-dedup-text-marker",
@@ -273,7 +273,7 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
   it("retrieveContext without upn returns empty (agent requires authentication)", async () => {
     const mem = await setupMemory()
 
-    mem.ingestTurn({
+    await mem.ingestTurn({
       tier: "semantic",
       role: "system",
       content: "alpha-only secret marker-anon-test-aaa",
@@ -291,7 +291,7 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
   it("episodic upsert is scoped per-tenant (alice's failure does not overwrite bob's success)", async () => {
     const mem = await setupMemory()
 
-    mem.ingestRunTurns({
+    await mem.ingestRunTurns({
       id: "ra",
       goal: "compute monthly KPI report",
       answer: "Bob's correct answer",
@@ -301,7 +301,7 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
       trace: [],
       upn: "bob@corp"
     })
-    mem.ingestRunTurns({
+    await mem.ingestRunTurns({
       id: "rb",
       goal: "compute monthly KPI report",
       answer: null,
@@ -337,8 +337,8 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
     // Insert a few entries for two tenants and stamp synthetic embeddings
     // directly so the test does not depend on Ollama being reachable.
     const inserted: Array<{ id: string; upn: string | null; shared: number }> = []
-    function plant(upn: string | null, content: string, shared = false) {
-      const e = mem.ingestTurn({
+    async function plant(upn: string | null, content: string, shared = false): Promise<void> {
+      const e = await mem.ingestTurn({
         tier: "semantic",
         role: "system",
         content,
@@ -363,11 +363,11 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
         .run(e.id, buf, 3, upn, shared ? 1 : 0)
     }
 
-    plant("alice@corp", "alice vector content marker-vec-alpha")
-    plant("alice@corp", "alice vector content marker-vec-alpha-2")
-    plant("alice@corp", "alice vector content marker-vec-alpha-3")
-    plant("bob@corp", "bob vector content marker-vec-bravo")
-    plant(null, "shared org policy marker-vec-shared", true)
+    await plant("alice@corp", "alice vector content marker-vec-alpha")
+    await plant("alice@corp", "alice vector content marker-vec-alpha-2")
+    await plant("alice@corp", "alice vector content marker-vec-alpha-3")
+    await plant("bob@corp", "bob vector content marker-vec-bravo")
+    await plant(null, "shared org policy marker-vec-shared", true)
 
     // Verify mirror columns are populated as expected.
     const vecRows = getDb()
@@ -414,7 +414,7 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
     const upn = "alice@corp"
     seedRun("run-1", THREAD_A, upn)
 
-    mem.ingestRunTurns({
+    await mem.ingestRunTurns({
       id: "run-1",
       goal: "summarize the deployment runbook for the platform",
       answer:
@@ -449,7 +449,7 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
     const upn = "alice@corp"
     seedRun("run-prev", THREAD_A, upn)
 
-    mem.ingestRunTurns({
+    await mem.ingestRunTurns({
       id: "run-prev",
       goal: "should I rebuild the index now?",
       answer:
@@ -483,7 +483,7 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
     const mem = await setupMemory()
     seedRun("run-alice-1", THREAD_A, "alice@corp")
 
-    mem.ingestRunTurns({
+    await mem.ingestRunTurns({
       id: "run-alice-1",
       goal: "draft the alpha launch checklist for the platform",
       answer:
@@ -518,7 +518,7 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
     seedRun("run-alice-prev", THREAD_A, "alice@corp")
     seedRun("run-bob-prev", THREAD_B, "bob@corp")
 
-    mem.ingestRunTurns({
+    await mem.ingestRunTurns({
       id: "run-alice-prev",
       goal: "should I deploy alpha now?",
       answer:
@@ -532,7 +532,7 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
       trace: [],
       upn: "alice@corp"
     })
-    mem.ingestRunTurns({
+    await mem.ingestRunTurns({
       id: "run-bob-prev",
       goal: "should I deploy bravo now?",
       answer:
@@ -570,21 +570,11 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
     const { dirname, join } = await import("node:path")
     const here = dirname(fileURLToPath(import.meta.url))
     const retrieveSrc = readFileSync(
-      join(here, "..", "src", "features", "runs", "execution", "run-executor", "tools.ts"),
+      join(here, "..", "src", "runtime", "execution", "run-executor", "tools.ts"),
       "utf8"
     )
     const ingestSrc = readFileSync(
-      join(
-        here,
-        "..",
-        "src",
-        "features",
-        "runs",
-        "execution",
-        "run-executor",
-        "finalization",
-        "completed.ts"
-      ),
+      join(here, "..", "src", "runtime", "execution", "run-executor", "finalization", "completed.ts"),
       "utf8"
     )
 

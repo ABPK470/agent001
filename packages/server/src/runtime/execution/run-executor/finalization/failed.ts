@@ -66,7 +66,7 @@ export async function finalizeFailedRun(
   )
   const ownerUpn = env.activeRun?.ownerUpn
   if (ownerUpn) {
-    ingestRunTurns({
+    await ingestRunTurns({
       id: request.runId,
       goal: request.goal,
       answer: null,

@@ -143,8 +143,8 @@ export function createRunAgent(command: ExecuteRunCommand, env: ExecutionEnviron
       env.boundSaveTrace(request.runId, entry)
       broadcastTrace(request.runId, env.debugSeqRef.value++, entry)
     },
-    onToolResult: (data) => {
-      persistToolResult({
+    onToolResult: async (data) => {
+      await persistToolResult({
         runId: request.runId,
         upn: env.activeRun?.ownerUpn ?? "",
         goal: request.goal,
@@ -295,7 +295,9 @@ export async function normalizeRunAnswer(
       },
       { signal: runtime.controller.signal }
     )
-    nextAnswer = polished ? markPolishedFailure(polished) : fillRunReference(nextAnswer, asRunId(request.runId))
+    nextAnswer = polished
+      ? markPolishedFailure(polished)
+      : fillRunReference(nextAnswer, asRunId(request.runId))
   }
 
   const internalFailure = detectInternalFailure(nextAnswer)
@@ -309,7 +311,9 @@ export async function normalizeRunAnswer(
       message: `[user-safe-failure] ${internalFailure.kind} — ${internalFailure.summary}\n${truncatedRaw}`,
       timestamp: new Date().toISOString()
     })
-  } catch (err: unknown) { console.error("[mia]", err) }
+  } catch (err: unknown) {
+    console.error("[mia]", err)
+  }
 
   try {
     await sideEffects.auditLog.log({
@@ -319,14 +323,18 @@ export async function normalizeRunAnswer(
       resourceId: request.runId,
       detail: { kind: internalFailure.kind, summary: internalFailure.summary, raw: truncatedRaw }
     })
-  } catch (err: unknown) { console.error("[mia]", err) }
+  } catch (err: unknown) {
+    console.error("[mia]", err)
+  }
 
   try {
     broadcast({
       type: EventType.RunUserSafeFailure,
       data: { runId: request.runId, kind: internalFailure.kind, summary: internalFailure.summary }
     })
-  } catch (err: unknown) { console.error("[mia]", err) }
+  } catch (err: unknown) {
+    console.error("[mia]", err)
+  }
 
   console.error(
     `[run-executor] Internal failure for run ${request.runId} (${internalFailure.kind}): ${internalFailure.summary}`
@@ -338,9 +346,7 @@ export async function normalizeRunAnswer(
       goal: request.goal,
       operatorSummary: internalFailure.summary,
       failureKind:
-        classified.kind === "rate_limited"
-          ? "rate_limited"
-          : mapFailureKindForPolish(internalFailure.kind),
+        classified.kind === "rate_limited" ? "rate_limited" : mapFailureKindForPolish(internalFailure.kind),
       userReason: classified.userReason,
       runRef: request.runId
     },
@@ -348,8 +354,5 @@ export async function normalizeRunAnswer(
   )
   return polished
     ? markPolishedFailure(polished)
-    : fillRunReference(
-        synthesizeGenericFailureAnswer(classified.userReason),
-        asRunId(request.runId)
-      )
+    : fillRunReference(synthesizeGenericFailureAnswer(classified.userReason), asRunId(request.runId))
 }

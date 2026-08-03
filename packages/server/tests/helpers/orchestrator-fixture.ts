@@ -52,12 +52,7 @@ function seedThread(db: Database.Database, threadId: string, upn: string): void 
   ).run(threadId, upn)
 }
 
-function seedRun(
-  db: Database.Database,
-  runId: string,
-  inputs: TurnInputs,
-  status = "completed"
-): void {
+function seedRun(db: Database.Database, runId: string, inputs: TurnInputs, status = "completed"): void {
   seedThread(db, inputs.threadId, inputs.upn)
   const now = new Date().toISOString()
   db.prepare(
@@ -106,12 +101,7 @@ export async function buildFixture(): Promise<Fixture> {
     else process.env["MIA_DATA_DIR"] = originalDataDir
   }
 
-  async function retrieve(args: {
-    goal: string
-    threadId: string
-    upn: string
-    runId: string
-  }) {
+  async function retrieve(args: { goal: string; threadId: string; upn: string; runId: string }) {
     return mem.retrieveContext(args.goal, {
       threadId: args.threadId,
       runId: args.runId,
@@ -119,9 +109,9 @@ export async function buildFixture(): Promise<Fixture> {
     })
   }
 
-  function ingest(runId: string, inputs: TurnInputs): void {
+  async function ingest(runId: string, inputs: TurnInputs): Promise<void> {
     seedRun(db, runId, inputs)
-    mem.ingestRunTurns({
+    await mem.ingestRunTurns({
       id: runId,
       goal: inputs.goal,
       answer: inputs.answer,
@@ -144,7 +134,7 @@ export async function buildFixture(): Promise<Fixture> {
       upn: inputs.upn,
       runId
     })
-    ingest(runId, inputs)
+    await ingest(runId, inputs)
     return { runId, retrievedContext, answer: inputs.answer }
   }
 

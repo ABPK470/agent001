@@ -50,38 +50,38 @@ function stubCatalog(hits: string[]) {
 }
 
 describe("loadCandidateVerdicts", () => {
-  it("returns [] when no catalog is provided", () => {
-    const out = loadCandidateVerdicts({ goal: "revenue", catalog: null })
+  it("returns [] when no catalog is provided", async () => {
+    const out = await loadCandidateVerdicts({ goal: "revenue", catalog: null })
     expect(out).toEqual([])
   })
 
-  it("returns [] when catalog yields no hits", () => {
-    const out = loadCandidateVerdicts({ goal: "revenue", catalog: stubCatalog([]) })
+  it("returns [] when catalog yields no hits", async () => {
+    const out = await loadCandidateVerdicts({ goal: "revenue", catalog: stubCatalog([]) })
     expect(out).toEqual([])
   })
 
-  it("returns [] when there are no verdicts for the candidates", () => {
-    const out = loadCandidateVerdicts({
+  it("returns [] when there are no verdicts for the candidates", async () => {
+    const out = await loadCandidateVerdicts({
       goal: "revenue",
       catalog: stubCatalog(["publish.Revenue", "publish.RevenueESGRules"])
     })
     expect(out).toEqual([])
   })
 
-  it("surfaces verdicts for candidates that have them, in catalog rank order", () => {
-    recordTableVerdict({
+  it("surfaces verdicts for candidates that have them, in catalog rank order", async () => {
+    await recordTableVerdict({
       qname: "publish.Revenue",
       role: "canonical",
       evidence: ["59-branch UNION"],
       observedFromGoal: "revenue by month"
     })
-    recordTableVerdict({
+    await recordTableVerdict({
       qname: "publish.RevenueESGRules",
       role: "subset",
       evidence: ["1-branch ESG-only"],
       observedFromGoal: "revenue by month"
     })
-    const out = loadCandidateVerdicts({
+    const out = await loadCandidateVerdicts({
       goal: "revenue",
       catalog: stubCatalog(["publish.Revenue", "publish.RevenueESGRules"])
     })
@@ -91,14 +91,14 @@ describe("loadCandidateVerdicts", () => {
     expect(out[0]?.evidence).toContain("59-branch UNION")
   })
 
-  it("matches qname case-insensitively", () => {
-    recordTableVerdict({
+  it("matches qname case-insensitively", async () => {
+    await recordTableVerdict({
       qname: "publish.Revenue",
       role: "canonical",
       evidence: ["wide"],
       observedFromGoal: "x"
     })
-    const out = loadCandidateVerdicts({
+    const out = await loadCandidateVerdicts({
       goal: "revenue",
       catalog: stubCatalog(["PUBLISH.REVENUE"])
     })
@@ -107,7 +107,7 @@ describe("loadCandidateVerdicts", () => {
   })
 
   it("returns the newest verdict per qname (latest wins)", async () => {
-    recordTableVerdict({
+    await recordTableVerdict({
       qname: "publish.Revenue",
       role: "subset",
       evidence: ["initial mistake"],
@@ -116,13 +116,13 @@ describe("loadCandidateVerdicts", () => {
     // Tiny gap so the second insert has a strictly-later ISO created_at;
     // ORDER BY created_at DESC then puts it first.
     await new Promise((r) => setTimeout(r, 5))
-    recordTableVerdict({
+    await recordTableVerdict({
       qname: "publish.Revenue",
       role: "canonical",
       evidence: ["corrected"],
       observedFromGoal: "y"
     })
-    const out = loadCandidateVerdicts({
+    const out = await loadCandidateVerdicts({
       goal: "revenue",
       catalog: stubCatalog(["publish.Revenue"])
     })
@@ -130,20 +130,20 @@ describe("loadCandidateVerdicts", () => {
     expect(out[0]?.role).toBe("canonical")
   })
 
-  it("respects the k limit", () => {
-    recordTableVerdict({
+  it("respects the k limit", async () => {
+    await recordTableVerdict({
       qname: "publish.A",
       role: "canonical",
       evidence: [],
       observedFromGoal: "x"
     })
-    recordTableVerdict({
+    await recordTableVerdict({
       qname: "publish.B",
       role: "subset",
       evidence: [],
       observedFromGoal: "x"
     })
-    const out = loadCandidateVerdicts({
+    const out = await loadCandidateVerdicts({
       goal: "revenue",
       catalog: stubCatalog(["publish.A", "publish.B"]),
       k: 1
@@ -152,8 +152,8 @@ describe("loadCandidateVerdicts", () => {
     expect(out.map((v) => v.qname)).toEqual(["publish.A"])
   })
 
-  it("survives a throwing catalog.search (returns [])", () => {
-    const out = loadCandidateVerdicts({
+  it("survives a throwing catalog.search (returns [])", async () => {
+    const out = await loadCandidateVerdicts({
       goal: "revenue",
       catalog: {
         search: () => {
@@ -166,7 +166,7 @@ describe("loadCandidateVerdicts", () => {
 })
 
 describe("renderKnownObjectsBlock — with verdicts", () => {
-  it("renders ONLY the verdicts sub-section when no cached rows", () => {
+  it("renders ONLY the verdicts sub-section when no cached rows", async () => {
     const block = renderKnownObjectsBlock(
       [],
       [{ qname: "publish.Revenue", role: "canonical", evidence: ["59-branch UNION"] }]
@@ -178,7 +178,7 @@ describe("renderKnownObjectsBlock — with verdicts", () => {
     expect(block).toMatch(/<\/known_objects>$/)
   })
 
-  it("renders BOTH cached rows and verdicts in a single block", () => {
+  it("renders BOTH cached rows and verdicts in a single block", async () => {
     const rows = [{ qname: "publish.Revenue", tool: "profile_data", mode: "fast", ageHours: 2, bytes: 1234 }]
     const verdicts = [
       { qname: "publish.Revenue", role: "canonical" as const, evidence: ["UNION"] },
@@ -191,11 +191,11 @@ describe("renderKnownObjectsBlock — with verdicts", () => {
     expect(block).toContain("publish.RevenueESGRules | subset | 1-branch")
   })
 
-  it('returns "" when both arrays are empty', () => {
+  it('returns "" when both arrays are empty', async () => {
     expect(renderKnownObjectsBlock([], [])).toBe("")
   })
 
-  it("renders an em-dash when evidence is empty", () => {
+  it("renders an em-dash when evidence is empty", async () => {
     const block = renderKnownObjectsBlock([], [{ qname: "publish.X", role: "unknown", evidence: [] }])
     expect(block).toContain("publish.X | unknown | \u2014")
   })

@@ -16,7 +16,9 @@
  * @module
  */
 
-import { getDb } from "../connection.js"
+import { getPlatformDb } from "../../../schema/kysely.js"
+import { runAllAsync, runChangesAsync, runExecAsync } from "../../../schema/execute-async.js"
+import { upsertRowAsync } from "../../../schema/upsert.js"
 
 export interface ResolvedTermInput {
   /** Lowercase business noun the user was asked about ("clients"). */
@@ -64,24 +66,27 @@ interface Row {
  * qname for the same (term, connection) adds a new row so both coexist
  * (the newest per term wins at read time — see `listResolvedTerms`).
  */
-export function saveResolvedTerm(input: ResolvedTermInput): void {
+export async function saveResolvedTerm(input: ResolvedTermInput): Promise<void> {
   const term = input.term.trim().toLowerCase()
   const qname = input.qname.trim()
   if (!term || !qname) return
-  const connection = (input.connection ?? "default").trim() || "default"
+  const connection = (input.connection ?? "default").trim().toLowerCase() || "default"
   const now = input.now ?? Date.now()
 
-  getDb()
-    .prepare(
-      `INSERT INTO resolved_terms_cache (term, qname, connection, created_by_upn, created_at, hit_count)
-       VALUES (?, ?, ?, ?, ?, 0)
-       ON CONFLICT(term, qname, connection) DO UPDATE SET
-         created_by_upn = excluded.created_by_upn,
-         created_at     = excluded.created_at,
-         hit_count      = 0,
-         last_hit_at    = NULL`
-    )
-    .run(term, qname, connection, input.upn ?? null, now)
+  await upsertRowAsync({
+    table: "resolved_terms_cache",
+    keys: { term, qname, connection },
+    insert: {
+      term,
+      qname,
+      connection,
+      created_by_upn: input.upn ?? null,
+      created_at: now,
+      last_hit_at: null,
+      hit_count: 0
+    },
+    update: { created_by_upn: input.upn ?? null, created_at: now, last_hit_at: null, hit_count: 0 }
+  })
 }
 
 /**
@@ -90,18 +95,18 @@ export function saveResolvedTerm(input: ResolvedTermInput): void {
  * further filters to mappings whose qname resolves in the live catalog, so a
  * mapping whose table has since been dropped never suppresses a clarification.
  */
-export function listResolvedTerms(options: ListResolvedTermsOptions = {}): ResolvedTerm[] {
-  const connection = (options.connection ?? "default").trim() || "default"
+export async function listResolvedTerms(options: ListResolvedTermsOptions = {}): Promise<ResolvedTerm[]> {
+  const connection = (options.connection ?? "default").trim().toLowerCase() || "default"
   const now = options.now ?? Date.now()
 
-  const rows = getDb()
-    .prepare<unknown[], Row>(
-      `SELECT term, qname, connection, created_by_upn, created_at, last_hit_at, hit_count
-         FROM resolved_terms_cache
-        WHERE lower(connection) = lower(?)
-        ORDER BY created_at DESC`
-    )
-    .all(connection)
+  const rows = await runAllAsync<Row>(
+    getPlatformDb()
+      .selectFrom("resolved_terms_cache")
+      .select(["term", "qname", "connection", "created_by_upn", "created_at", "last_hit_at", "hit_count"])
+      .where("connection", "=", connection)
+      .orderBy("created_at", "desc")
+      .compile()
+  )
 
   const seen = new Set<string>()
   const out: ResolvedTerm[] = []
@@ -122,13 +127,20 @@ export function listResolvedTerms(options: ListResolvedTermsOptions = {}): Resol
 
   // Bump hit telemetry for the rows we surfaced. Fire-and-forget; non-fatal.
   try {
-    const bump = getDb().prepare(
-      `UPDATE resolved_terms_cache
-          SET last_hit_at = ?, hit_count = hit_count + 1
-        WHERE term = ? AND lower(connection) = lower(?) AND created_at = ?`
-    )
-    for (const r of out) bump.run(now, r.term, connection, r.createdAt)
-  } catch (err: unknown) { console.error("[mia]", err) }
+    for (const r of out) {
+      await runExecAsync(
+        getPlatformDb()
+          .updateTable("resolved_terms_cache")
+          .set({ last_hit_at: now, hit_count: (eb) => eb("hit_count", "+", 1) })
+          .where("term", "=", r.term)
+          .where("connection", "=", connection)
+          .where("created_at", "=", r.createdAt)
+          .compile()
+      )
+    }
+  } catch (err: unknown) {
+    console.error("[mia]", err)
+  }
 
   return out
 }
@@ -140,9 +152,10 @@ export interface PruneResolvedTermsOptions {
 }
 
 /** Drop mappings older than `maxAgeMs`. Returns the number of rows removed. */
-export function pruneResolvedTerms(opts: PruneResolvedTermsOptions): number {
+export async function pruneResolvedTerms(opts: PruneResolvedTermsOptions): Promise<number> {
   const now = opts.now ?? Date.now()
   const cutoff = now - opts.maxAgeMs
-  const info = getDb().prepare(`DELETE FROM resolved_terms_cache WHERE created_at < ?`).run(cutoff)
-  return typeof info.changes === "number" ? info.changes : 0
+  return await runChangesAsync(
+    getPlatformDb().deleteFrom("resolved_terms_cache").where("created_at", "<", cutoff).compile()
+  )
 }

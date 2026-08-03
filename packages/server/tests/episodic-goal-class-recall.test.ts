@@ -30,7 +30,12 @@ const ORIGINAL_DATA_DIR = process.env["MIA_DATA_DIR"]
 
 const TOOL_TRACE = [
   { kind: "tool-call", tool: "search_catalog", text: "search_catalog(...)", argsSummary: "term=revenue" },
-  { kind: "tool-call", tool: "explore_mssql_schema", text: "explore(...)", argsSummary: "table=publish.Revenue" },
+  {
+    kind: "tool-call",
+    tool: "explore_mssql_schema",
+    text: "explore(...)",
+    argsSummary: "table=publish.Revenue"
+  },
   { kind: "tool-call", tool: "profile_data", text: "profile(...)", argsSummary: "table=publish.Revenue" },
   { kind: "tool-call", tool: "query_mssql", text: "query(...)", argsSummary: "SELECT TOP …" }
 ] as const
@@ -54,11 +59,11 @@ afterEach(() => {
   else process.env["MIA_DATA_DIR"] = ORIGINAL_DATA_DIR
 })
 
-function ingestSubstantiveRun(
+async function ingestSubstantiveRun(
   mem: typeof import("../src/infra/persistence/adapters/sqlite/memory/index.js"),
   opts: { id: string; goal: string; upn: string }
-): void {
-  mem.ingestRunTurns({
+): Promise<void> {
+  await mem.ingestRunTurns({
     id: opts.id,
     goal: opts.goal,
     answer: "Top products by revenue are in publish.Revenue for April 2025.",
@@ -71,23 +76,23 @@ function ingestSubstantiveRun(
 }
 
 describe("extractGoalClasses", () => {
-  it("tags a ranking-by-metric time-filtered pivot-by-dim goal", () => {
+  it("tags a ranking-by-metric time-filtered pivot-by-dim goal", async () => {
     const classes = extractGoalClasses("list top 3 products based on revenue for April 2025")
     expect(classes).toContain("rankbymetric")
     expect(classes).toContain("timefiltered")
     expect(classes).toContain("lookup")
   })
 
-  it("tags a ranking-by-metric goal whose dim is the ranked entity", () => {
+  it("tags a ranking-by-metric goal whose dim is the ranked entity", async () => {
     const classes = extractGoalClasses("top 50 clients by revenue")
     expect(classes).toContain("rankbymetric")
   })
 
-  it("returns [] for goals with no shape signal", () => {
+  it("returns [] for goals with no shape signal", async () => {
     expect(extractGoalClasses("hello there friend")).toEqual([])
   })
 
-  it("tags reconciliation-shaped goals separately from aggregate counts", () => {
+  it("tags reconciliation-shaped goals separately from aggregate counts", async () => {
     const reconcile = extractGoalClasses("reconcile pipelineActivity uat vs dev")
     expect(reconcile).toContain("syncreconcile")
     expect(reconcile).not.toContain("comparison")
@@ -98,17 +103,17 @@ describe("extractGoalClasses", () => {
     expect(countClasses).not.toContain("comparison")
   })
 
-  it("tags cross-env compare without reconcile verb as syncreconcile", () => {
+  it("tags cross-env compare without reconcile verb as syncreconcile", async () => {
     expect(extractGoalClasses("compare pipelineActivity uat vs dev")).toEqual(["syncreconcile"])
   })
 
-  it("does not tag env-vs-env counts as syncreconcile", () => {
+  it("does not tag env-vs-env counts as syncreconcile", async () => {
     const classes = extractGoalClasses("how many distinct pipelines in uat vs dev")
     expect(classes).toContain("aggregateby")
     expect(classes).not.toContain("syncreconcile")
   })
 
-  it("tags analytic trend goals as comparison not syncreconcile", () => {
+  it("tags analytic trend goals as comparison not syncreconcile", async () => {
     const classes = extractGoalClasses("revenue yoy growth trend")
     expect(classes).toContain("comparison")
     expect(classes).not.toContain("syncreconcile")
@@ -116,18 +121,20 @@ describe("extractGoalClasses", () => {
 })
 
 describe("goalClassesShareAffinity", () => {
-  it("requires shape-class overlap when either side has shape tags", () => {
+  it("requires shape-class overlap when either side has shape tags", async () => {
     expect(goalClassesShareAffinity(["syncreconcile", "comparison"], ["aggregateby"])).toBe(false)
     expect(goalClassesShareAffinity(["syncreconcile"], ["syncreconcile", "comparison"])).toBe(true)
     expect(goalClassesShareAffinity(["comparison", "timefiltered"], ["syncreconcile", "comparison"])).toBe(
       false
     )
-    expect(goalClassesShareAffinity(["comparison", "timefiltered"], ["comparison", "timefiltered"])).toBe(true)
+    expect(goalClassesShareAffinity(["comparison", "timefiltered"], ["comparison", "timefiltered"])).toBe(
+      true
+    )
   })
 })
 
 describe("episodicShortcutMatchesGoal", () => {
-  it("allows shortcut when remembered and current goals share a class", () => {
+  it("allows shortcut when remembered and current goals share a class", async () => {
     expect(
       episodicShortcutMatchesGoal("top 50 clients by revenue", [
         { content: "Goal: list top 3 products…", metadata: { goalClasses: ["rankbymetric", "lookup"] } }
@@ -135,7 +142,7 @@ describe("episodicShortcutMatchesGoal", () => {
     ).toBe(true)
   })
 
-  it("blocks shortcut across incompatible task shapes", () => {
+  it("blocks shortcut across incompatible task shapes", async () => {
     expect(
       episodicShortcutMatchesGoal("how many distinct pipelines are in DE and in UAT", [
         {
@@ -146,7 +153,7 @@ describe("episodicShortcutMatchesGoal", () => {
     ).toBe(false)
   })
 
-  it("blocks shortcut when only ambient comparison overlaps reconcile memory", () => {
+  it("blocks shortcut when only ambient comparison overlaps reconcile memory", async () => {
     expect(
       episodicShortcutMatchesGoal("revenue yoy growth trend", [
         {
@@ -157,7 +164,7 @@ describe("episodicShortcutMatchesGoal", () => {
     ).toBe(false)
   })
 
-  it("allows shortcut when either side has no class tags (legacy rows)", () => {
+  it("allows shortcut when either side has no class tags (legacy rows)", async () => {
     expect(episodicShortcutMatchesGoal("how many rows", [{ content: "Goal: old run without tags" }])).toBe(
       true
     )
@@ -165,20 +172,15 @@ describe("episodicShortcutMatchesGoal", () => {
 })
 
 describe("episodic choreography extraction", () => {
-  it("extracts ordered substantive tools and formats a choreography line", () => {
+  it("extracts ordered substantive tools and formats a choreography line", async () => {
     const seq = extractOrderedToolSequence(TOOL_TRACE)
-    expect(seq).toEqual([
-      "search_catalog",
-      "explore_mssql_schema",
-      "profile_data",
-      "query_mssql"
-    ])
+    expect(seq).toEqual(["search_catalog", "explore_mssql_schema", "profile_data", "query_mssql"])
     expect(formatChoreographyLine(seq)).toBe(
       "Choreography: search_catalog → explore_mssql_schema → profile_data → query_mssql"
     )
   })
 
-  it("skips low-signal tools like ask_user", () => {
+  it("skips low-signal tools like ask_user", async () => {
     const seq = extractOrderedToolSequence([
       { kind: "tool-call", tool: "search_catalog" },
       { kind: "tool-call", tool: "ask_user" },
@@ -191,7 +193,7 @@ describe("episodic choreography extraction", () => {
 describe("episodic recall — goal-class overlap", () => {
   it("recalls a prior run across surface-different but shape-similar goals", async () => {
     const mem = await import("../src/infra/persistence/adapters/sqlite/memory/index.js")
-    ingestSubstantiveRun(mem, {
+    await ingestSubstantiveRun(mem, {
       id: "r1",
       goal: "list top 3 products based on revenue for April 2025",
       upn: "user@example.com"
@@ -214,7 +216,7 @@ describe("episodic recall — goal-class overlap", () => {
 
   it("still recalls on literal-token overlap", async () => {
     const mem = await import("../src/infra/persistence/adapters/sqlite/memory/index.js")
-    ingestSubstantiveRun(mem, {
+    await ingestSubstantiveRun(mem, {
       id: "r2",
       goal: "list top 3 products based on revenue for April 2025",
       upn: "user@example.com"
@@ -230,7 +232,7 @@ describe("episodic recall — goal-class overlap", () => {
 
   it("does NOT match wholly unrelated goals", async () => {
     const mem = await import("../src/infra/persistence/adapters/sqlite/memory/index.js")
-    ingestSubstantiveRun(mem, {
+    await ingestSubstantiveRun(mem, {
       id: "r3",
       goal: "list top 3 products based on revenue for April 2025",
       upn: "user@example.com"
@@ -246,7 +248,7 @@ describe("episodic recall — goal-class overlap", () => {
 
   it("stores goal-class tags in metadata for FTS indexing (not in visible content)", async () => {
     const mem = await import("../src/infra/persistence/adapters/sqlite/memory/index.js")
-    ingestSubstantiveRun(mem, {
+    await ingestSubstantiveRun(mem, {
       id: "r4",
       goal: "total revenue per month",
       upn: "user@example.com"
