@@ -135,7 +135,8 @@ async function countRootInstances(
 ): Promise<number> {
   const dialect = resolveWarehouseDialect(host, conn)
   const qt = `${dialect.quoteTable(rootTable)}${dialect.readFromHintSql()}`
-  const sqlText = `SELECT COUNT_BIG(1) AS cnt FROM ${qt}`
+  const countExpr = dialect.kind === "mssql" ? "COUNT_BIG(1)" : "COUNT(*)::bigint"
+  const sqlText = `SELECT ${countExpr} AS cnt FROM ${qt}`
   const ctx = { kind: SyncOperationType.Preview, opId: `scan-${rootTable}`, scope: "discovery" as const }
   const countR = await trackedQuery<{ cnt: number }>(
     host,
@@ -164,12 +165,14 @@ async function discoverRootInstances(
   const dialect = resolveWarehouseDialect(host, conn)
   const qt = `${dialect.quoteTable(rootTable)}${dialect.readFromHintSql()}`
   const qid = dialect.quoteIdent(idColumn)
-  const countSql = `SELECT COUNT_BIG(1) AS cnt FROM ${qt}`
+  const countExpr = dialect.kind === "mssql" ? "COUNT_BIG(1)" : "COUNT(*)::bigint"
+  const countSql = `SELECT ${countExpr} AS cnt FROM ${qt}`
   const countR = await trackedQuery<{ cnt: number }>(host, conn, countSql, `discovery.scanCount(${rootTable})`, ctx)
   const totalOnSource = Number(countR.recordset[0]?.cnt ?? 0)
   const labelSel = labelColumn ? `, ${dialect.quoteIdent(labelColumn)} AS label` : ""
-  const topClause = limit != null ? `TOP (${limit}) ` : ""
-  const listSql = `SELECT ${topClause}${qid} AS id${labelSel} FROM ${qt} ORDER BY ${qid}`
+  const topPrefix = limit != null ? dialect.selectLimitPrefixSql(limit) : ""
+  const topSuffix = limit != null ? dialect.selectLimitSuffixSql(limit) : ""
+  const listSql = `SELECT ${topPrefix}${qid} AS id${labelSel} FROM ${qt} ORDER BY ${qid}${topSuffix}`
   const listR = await trackedQuery<{ id: string | number; label?: string | null }>(
     host,
     conn,

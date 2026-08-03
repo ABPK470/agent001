@@ -9,7 +9,7 @@
  * Probe I/O failures become plan warnings — never silent empty success.
  */
 
-import { qtable, quoteValue } from "../../core/diff-engine/sql-helpers.js"
+import { quoteValue } from "../../core/diff-engine/sql-helpers.js"
 import {
   reconcilePlanConflicts,
   type PlanConflictHit
@@ -137,9 +137,11 @@ async function collectInboundDeleteHits(
     const refPkCols = pkByRef.get(fk.fromTable) ?? []
     if (refPkCols.length === 0) continue
     const ownerCols = ownerColsByRef.get(fk.fromTable) ?? []
-    const pkSelect = refPkCols.map((c) => `r.[${c}] AS [pk_${c}]`).join(", ")
-    const ownerSelect = ownerCols.map((c) => `r.[${c}] AS [owner_${c}]`).join(", ")
-    const selectList = [pkSelect, `r.[${fk.fromColumn}] AS blockedPk`, ownerSelect]
+    const dialect = resolveWarehouseDialect(host, targetConn)
+    const q = (c: string) => dialect.quoteIdent(c)
+    const pkSelect = refPkCols.map((c) => `r.${q(c)} AS ${q(`pk_${c}`)}`).join(", ")
+    const ownerSelect = ownerCols.map((c) => `r.${q(c)} AS ${q(`owner_${c}`)}`).join(", ")
+    const selectList = [pkSelect, `r.${q(fk.fromColumn)} AS blockedPk`, ownerSelect]
       .filter(Boolean)
       .join(", ")
 
@@ -148,8 +150,8 @@ async function collectInboundDeleteHits(
       result = await runQueryWithRetry(
         host,
         targetConn,
-        `SELECT TOP (${HITS_CAP}) ${selectList} FROM ${qtable(fk.fromTable)} r ` +
-          `WHERE r.[${fk.fromColumn}] IN (${pkLiterals})`,
+        `SELECT ${dialect.selectLimitPrefixSql(HITS_CAP)}${selectList} FROM ${dialect.quoteTable(fk.fromTable)} r ` +
+          `WHERE r.${q(fk.fromColumn)} IN (${pkLiterals})${dialect.selectLimitSuffixSql(HITS_CAP)}`,
         `planConflict.inbound(${table.table}←${fk.fromTable}.${fk.fromColumn})`,
         2,
         telemetryContext
@@ -225,11 +227,13 @@ async function collectMissingParentHits(
     const literals = [...needed.keys()].map((pk) => quoteValue(coerceLiteral(pk))).join(", ")
     let present = new Set<string>()
     try {
+      const dialect = resolveWarehouseDialect(host, targetConn)
       const result = await runQueryWithRetry(
         host,
         targetConn,
-        `SELECT TOP (${HITS_CAP}) [${fk.toColumn}] AS parentPk ` +
-          `FROM ${qtable(fk.toTable)} WHERE [${fk.toColumn}] IN (${literals})`,
+        `SELECT ${dialect.selectLimitPrefixSql(HITS_CAP)}${dialect.quoteIdent(fk.toColumn)} AS parentPk ` +
+          `FROM ${dialect.quoteTable(fk.toTable)} WHERE ${dialect.quoteIdent(fk.toColumn)} IN (${literals})` +
+          dialect.selectLimitSuffixSql(HITS_CAP),
         `planConflict.missingParent(${table.table}→${fk.toTable}.${fk.toColumn})`,
         2,
         telemetryContext

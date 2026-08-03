@@ -3,51 +3,71 @@ import { describe, expect, it, vi } from "vitest"
 import type { SyncRuntimeHost } from "../ports/host.js"
 import { ALWAYS_PUBLISH_READY } from "../ports/publish-readiness.js"
 import { createPublishedSyncDefinitionRegistry } from "./published-definition-registry.js"
+import { detectCatalogDrift } from "./catalog-drift.js"
 
 const queryMock = vi.fn()
 const capturedSql: string[] = []
 
-vi.mock("../adapters/mssql/connection.js", () => ({
-  getPool: vi.fn(async (_host: unknown, connection: string) => ({
-    pool: {
+function createHost(): SyncRuntimeHost {
+  const envItems = new Map([
+    ["source", { name: "source", connectorId: "src", role: "both" as const }],
+    ["target", { name: "target", connectorId: "tgt", role: "both" as const }],
+  ])
+
+  function poolFor(connectorId: string) {
+    const connection = connectorId === "src" ? "source" : "target"
+    return {
       request() {
         return {
           query: async (sql: string) => {
             capturedSql.push(sql)
-            return { recordset: queryMock(connection) }
-          }
+            return { recordset: queryMock(connection), rowsAffected: [0] }
+          },
         }
-      }
+      },
     }
-  }))
-}))
+  }
 
-import { detectCatalogDrift } from "./catalog-drift.js"
-
-function createHost(): SyncRuntimeHost {
   return {
     mssql: {
       databases: new Map(),
-      defaultConnection: { value: null }
+      defaultConnection: { value: null },
     },
     sync: {
       events: { sink: () => {} },
       runs: {
         sink: {
           start: () => {},
-          finish: () => {}
+          finish: () => {},
         },
-        actorUpn: null
+        actorUpn: null,
       },
-      environments: { items: new Map() },
+      environments: { items: envItems },
       plans: { diskRoot: null, memCache: new Map() },
       project: {
         dbProjectRoot: null,
         publishedDefinitions: createPublishedSyncDefinitionRegistry(),
         publishReadiness: ALWAYS_PUBLISH_READY,
-      }
-    }
-  }
+      },
+      warehousePools: {
+        dialectOf: (id: string) => (id === "src" || id === "tgt" ? ("mssql" as const) : undefined),
+        list: () => [
+          { id: "src", name: "source", dialect: "mssql" as const },
+          { id: "tgt", name: "target", dialect: "mssql" as const },
+        ],
+        get: async (connectorId: string) => ({
+          dialect: "mssql" as const,
+          connectorId,
+          pool: poolFor(connectorId),
+          knowledge: null,
+        }),
+        getByName: async () => {
+          throw new Error("unused")
+        },
+        invalidate: () => {},
+      },
+    },
+  } as unknown as SyncRuntimeHost
 }
 
 describe("detectCatalogDrift", () => {
@@ -60,8 +80,8 @@ describe("detectCatalogDrift", () => {
             TABLE_NAME: "JsonSchema",
             COLUMN_NAME: "jsonSchemaId",
             DATA_TYPE: "int",
-            CHARACTER_MAXIMUM_LENGTH: null
-          }
+            CHARACTER_MAXIMUM_LENGTH: null,
+          },
         ]
       }
       return [
@@ -70,8 +90,8 @@ describe("detectCatalogDrift", () => {
           TABLE_NAME: "jsonSchema",
           COLUMN_NAME: "JsonSchemaId",
           DATA_TYPE: "int",
-          CHARACTER_MAXIMUM_LENGTH: null
-        }
+          CHARACTER_MAXIMUM_LENGTH: null,
+        },
       ]
     })
 
@@ -79,7 +99,7 @@ describe("detectCatalogDrift", () => {
 
     expect(result).toEqual({
       catalogCompatible: true,
-      issues: []
+      issues: [],
     })
   })
 
@@ -91,8 +111,8 @@ describe("detectCatalogDrift", () => {
         TABLE_NAME: "Contract",
         COLUMN_NAME: "contractId",
         DATA_TYPE: "int",
-        CHARACTER_MAXIMUM_LENGTH: null
-      }
+        CHARACTER_MAXIMUM_LENGTH: null,
+      },
     ])
 
     await detectCatalogDrift(createHost(), "source", "target", ["core.Contract"], ["core"])

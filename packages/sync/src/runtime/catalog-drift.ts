@@ -7,14 +7,14 @@
  *   - the execute preflight gate (hard refusal on drift)
  */
 
-import { withPoolSlot } from "../adapters/mssql/pool-gate.js"
 import { runQueryWithRetry } from "./diff-engine/sql-query.js"
 import { emitSyncEvent } from "./events.js"
 import { EventType } from "../domain/enums.js"
 import type { SyncTelemetryContext } from "../ports/events.js"
-import { getPool } from "../adapters/mssql/connection.js"
-import type { MssqlAccessHost, SyncEnvironmentRegistryHost, SyncEventHost, SyncRuntimeHost } from "../ports/index.js"
+import type { MssqlAccessHost, SyncEventHost, SyncRuntimeHost } from "../ports/index.js"
 import { resolveWarehouseDialect } from "./warehouse-dialect.js"
+import { runWarehouseQuery } from "./warehouse-query.js"
+import { isTransientSqlError } from "@mia/sql-kit"
 
 export interface CatalogDriftResult {
   catalogCompatible: boolean
@@ -44,19 +44,7 @@ function normalizeCatalogName(name: string): string {
 }
 
 function isTransientCatalogDriftError(e: unknown): boolean {
-  if (!(e instanceof Error)) return false
-  const msg = e.message.toLowerCase()
-  const code = (e as { code?: string }).code ?? ""
-  if (code === "ETIMEOUT" || code === "ECONNRESET" || code === "ECONNCLOSED" || code === "ESOCKET")
-    return true
-  return (
-    msg.includes("connection is closed") ||
-    msg.includes("connection lost") ||
-    msg.includes("connection reset") ||
-    msg.includes("socket hang up") ||
-    msg.includes("timeout: request failed to complete") ||
-    msg.includes("the connection is closed")
-  )
+  return isTransientSqlError(e)
 }
 
 function catalogContext(
@@ -73,7 +61,7 @@ function eventHostFromAccess(host: MssqlAccessHost): SyncEventHost | undefined {
 }
 
 async function queryWithRetry<T>(
-  host: MssqlAccessHost & SyncEnvironmentRegistryHost,
+  host: SyncRuntimeHost,
   connection: string,
   query: string,
   label: string,
@@ -83,47 +71,37 @@ async function queryWithRetry<T>(
   const eventHost = eventHostFromAccess(host)
   const ctx = catalogContext(telemetryContext)
   if (eventHost && ctx) {
-    const result = await runQueryWithRetry<T>(
-      host as unknown as SyncEventHost & MssqlAccessHost & SyncEnvironmentRegistryHost,
-      connection,
-      query,
-      label,
-      maxRetries,
-      ctx
-    )
+    const result = await runQueryWithRetry<T>(host, connection, query, label, maxRetries, ctx)
     return result.recordset
   }
 
-  return withPoolSlot(host, connection, async () => {
-    const { pool } = await getPool(host, connection)
-    let lastErr: unknown
-    for (let attempt = 0; attempt <= maxRetries; attempt++) {
-      try {
-        const result = await pool.request().query<T>(query)
-        return result.recordset
-      } catch (e) {
-        lastErr = e
-        if (attempt === maxRetries || !isTransientCatalogDriftError(e)) throw e
-        const delay = 100 * Math.pow(4, attempt) + Math.floor(Math.random() * 50)
-        const errMsg = e instanceof Error ? e.message : String(e)
-        console.warn(
-          `[sync.catalog] transient schema fetch failure for ${connection} (attempt ${attempt + 1}/${maxRetries + 1}): ${errMsg}; retrying in ${delay}ms`
-        )
-        if (eventHost) {
-          emitSyncEvent(eventHost, EventType.SyncRetry, {
-            phase: "catalog",
-            connection,
-            attempt: attempt + 1,
-            maxAttempts: maxRetries + 1,
-            error: errMsg,
-            delayMs: delay
-          })
-        }
-        await new Promise((resolve) => setTimeout(resolve, delay))
+  let lastErr: unknown
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const result = await runWarehouseQuery<T>(host, connection, query)
+      return result.recordset
+    } catch (e) {
+      lastErr = e
+      if (attempt === maxRetries || !isTransientCatalogDriftError(e)) throw e
+      const delay = 100 * Math.pow(4, attempt) + Math.floor(Math.random() * 50)
+      const errMsg = e instanceof Error ? e.message : String(e)
+      console.warn(
+        `[sync.catalog] transient schema fetch failure for ${connection} (attempt ${attempt + 1}/${maxRetries + 1}): ${errMsg}; retrying in ${delay}ms`
+      )
+      if (eventHost) {
+        emitSyncEvent(eventHost, EventType.SyncRetry, {
+          phase: "catalog",
+          connection,
+          attempt: attempt + 1,
+          maxAttempts: maxRetries + 1,
+          error: errMsg,
+          delayMs: delay,
+        })
       }
+      await new Promise((resolve) => setTimeout(resolve, delay))
     }
-    throw lastErr
-  })
+  }
+  throw lastErr
 }
 
 async function fetchSchema(

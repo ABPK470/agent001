@@ -61,6 +61,14 @@ export function createPostgresWarehouseDialect(): WarehouseDialect {
       return ""
     },
 
+    selectLimitPrefixSql(_limit: number): string {
+      return ""
+    },
+
+    selectLimitSuffixSql(limit: number): string {
+      return ` LIMIT ${Math.max(0, Math.floor(limit))}`
+    },
+
     hashSelectSql(input: WarehouseHashSelectInput): string {
       return pgHashSelectSql(input)
     },

@@ -13,9 +13,17 @@ import { quoteMssqlTable, quoteSqlLiteral } from "@mia/sql-kit"
 import type sql from "mssql"
 import { getPool } from "../../../adapters/mssql/connection.js"
 import { withPoolSlot } from "../../../adapters/mssql/pool-gate.js"
-import type { MssqlAccessHost, SyncEnvironmentRegistryHost, SyncEventHost, SyncProjectRootHost } from "../../../ports/host.js"
+import type {
+  MssqlAccessHost,
+  SyncEnvironmentRegistryHost,
+  SyncEventHost,
+  SyncProjectRootHost,
+  SyncRuntimeHost,
+} from "../../../ports/host.js"
+import type { WarehouseQueryResult } from "../../../ports/warehouse-query.js"
 import type { SyncTelemetryContext } from "../../events.js"
 import { emitSyncSqlEvent } from "../../events.js"
+import { runWarehouseQuery } from "../../warehouse-query.js"
 
 /**
  * @deprecated Use {@link resolvePreviewTableConcurrency} — kept for tests that import the constant.
@@ -87,48 +95,63 @@ export async function trackedQuery<T = unknown>(
   sqlText: string,
   label: string,
   telemetryContext?: SyncTelemetryContext,
-  request?: { query: (sql: string) => Promise<sql.IResult<T>> }
-): Promise<sql.IResult<T>> {
-  const run = async (req: { query: (sql: string) => Promise<sql.IResult<T>> }): Promise<sql.IResult<T>> => {
+  request?: { query: (sql: string) => Promise<sql.IResult<T> | WarehouseQueryResult<T>> }
+): Promise<sql.IResult<T> | WarehouseQueryResult<T>> {
+  const emitOk = (
+    result: { recordset?: T[]; rowsAffected?: number[] },
+    t0: number,
+  ): void => {
+    emitSyncSqlEvent(
+      host,
+      {
+        label,
+        connection,
+        sql: sqlText,
+        durationMs: Date.now() - t0,
+        rowCount:
+          result.recordset?.length ?? result.rowsAffected?.reduce((a: number, b: number) => a + b, 0) ?? 0,
+        attempts: 1,
+      },
+      telemetryContext,
+    )
+  }
+
+  const emitErr = (e: unknown, t0: number): void => {
+    emitSyncSqlEvent(
+      host,
+      {
+        label,
+        connection,
+        sql: sqlText,
+        durationMs: Date.now() - t0,
+        attempts: 1,
+        error: e instanceof Error ? e.message : String(e),
+      },
+      telemetryContext,
+    )
+  }
+
+  if (request) {
     const t0 = Date.now()
     try {
-      const result = await req.query(sqlText)
-      emitSyncSqlEvent(
-        host,
-        {
-          label,
-          connection,
-          sql: sqlText,
-          durationMs: Date.now() - t0,
-          rowCount:
-            result.recordset?.length ?? result.rowsAffected?.reduce((a: number, b: number) => a + b, 0) ?? 0,
-          attempts: 1
-        },
-        telemetryContext
-      )
+      const result = await request.query(sqlText)
+      emitOk(result, t0)
       return result
     } catch (e) {
-      emitSyncSqlEvent(
-        host,
-        {
-          label,
-          connection,
-          sql: sqlText,
-          durationMs: Date.now() - t0,
-          attempts: 1,
-          error: e instanceof Error ? e.message : String(e)
-        },
-        telemetryContext
-      )
+      emitErr(e, t0)
       throw e
     }
   }
 
-  if (request) return run(request)
-  return withPoolSlot(host, connection, async () => {
-    const { pool } = await getPool(host, connection)
-    return run(pool.request())
-  })
+  const t0 = Date.now()
+  try {
+    const result = await runWarehouseQuery<T>(host as SyncRuntimeHost, connection, sqlText)
+    emitOk(result, t0)
+    return result
+  } catch (e) {
+    emitErr(e, t0)
+    throw e
+  }
 }
 
 /**

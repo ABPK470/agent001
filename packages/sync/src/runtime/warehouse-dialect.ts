@@ -12,7 +12,7 @@ export function resolveWarehouseDialect(
   connectionName?: string,
 ): WarehouseDialect {
   if (connectionName) {
-    const env = host.sync.environments.items.get(connectionName)
+    const env = host.sync.environments?.items?.get(connectionName)
     const connectorId = typeof env?.connectorId === "string" ? env.connectorId.trim() : ""
     const kind = connectorId ? host.sync.warehousePools?.dialectOf(connectorId) : undefined
     if (kind === "postgres") return createPostgresWarehouseDialect()

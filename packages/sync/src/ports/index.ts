@@ -54,3 +54,4 @@ export type {
   WarehousePoolHandle,
   WarehousePoolProvider,
 } from "./warehouse-pool.js"
+export type { WarehouseQueryResult } from "./warehouse-query.js"

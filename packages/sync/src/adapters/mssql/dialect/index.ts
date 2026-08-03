@@ -63,6 +63,14 @@ export function createMssqlWarehouseDialect(): WarehouseDialect {
       return " WITH (NOLOCK)"
     },
 
+    selectLimitPrefixSql(limit: number): string {
+      return `TOP (${Math.max(0, Math.floor(limit))}) `
+    },
+
+    selectLimitSuffixSql(_limit: number): string {
+      return ""
+    },
+
     hashSelectSql(input: WarehouseHashSelectInput): string {
       return mssqlHashSelectSql(input)
     },

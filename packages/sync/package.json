@@ -12,15 +12,17 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
-    "@mia/shared-types": "*",
     "@mia/shared-enums": "*",
+    "@mia/shared-types": "*",
     "@mia/sql-kit": "*",
     "mssql": "^12.2.1",
+    "pg": "^8.22.0",
     "yaml": "^2.9.0"
   },
   "devDependencies": {
     "@types/mssql": "^9.1.11",
     "@types/node": "^22.16.4",
+    "@types/pg": "^8.20.3",
     "tsx": "^4.7.0",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4"

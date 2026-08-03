@@ -20,6 +20,7 @@ import {
   assertEnvConnectorReady,
 } from "../../core/eligibility/sync-env-eligibility.js"
 import { readyMssqlConnectorIds } from "../connector-readiness.js"
+import { resolveWarehouseDialect } from "../warehouse-dialect.js"
 import { evaluateFreezeWindows } from "../../runtime/governance/freeze-windows.js"
 import { assertPublishedContractCurrent } from "../../core/publish/assert-published-contract.js"
 import { getPool } from "../../adapters/mssql/connection.js"
@@ -88,6 +89,14 @@ export async function executeSync(
     assertSupportedSyncDirection(sourceEnv, targetEnv)
   } catch (e) {
     return refuseExecute(planId, e instanceof Error ? e.message : String(e))
+  }
+
+  const targetDialect = resolveWarehouseDialect(opts.host, plan.target)
+  if (targetDialect.kind === "postgres") {
+    return refuseExecute(
+      planId,
+      `Sync execute to Postgres is not available yet — preview and catalog checks can use Postgres; apply still requires an MSSQL target.`,
+    )
   }
 
   if (!plan.executionContract) {

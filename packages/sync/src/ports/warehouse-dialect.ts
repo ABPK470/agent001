@@ -67,6 +67,16 @@ export interface WarehouseDialect {
    */
   readFromHintSql(): string
 
+  /**
+   * Limit clause before the select list (`TOP (n) ` on MSSQL; empty on Postgres).
+   */
+  selectLimitPrefixSql(limit: number): string
+
+  /**
+   * Limit clause after ORDER BY (` LIMIT n` on Postgres; empty on MSSQL).
+   */
+  selectLimitSuffixSql(limit: number): string
+
   /** Fingerprint SELECT for change detection (HASHBYTES / digest / …). */
   hashSelectSql(input: WarehouseHashSelectInput): string
 
