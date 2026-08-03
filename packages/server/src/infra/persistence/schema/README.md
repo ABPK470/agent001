@@ -33,6 +33,9 @@ Honest sizing in the plan: platform agnostic is **large (months)** — ~70 table
 - `approval_configs`, `sync_approvals`, `sync_approval_tokens`
 - `conversations`, `outbound_messages`, `delivery_attempts`, `channel_configs`
 - `effects`, `file_snapshots`
-- `threads` (+ `runs` typed for joins; `runs.ts` repo still mostly raw)
+- `threads`, `runs` (core CRUD/upsert; audit & token-usage browsers still raw filters)
+- `token_usage`, `checkpoints`, `run_log`, `trace_entries`, `audit_log` (simple paths)
+- `webhook_drain_configs`, `agent_messages`
+- `proposer_runs`, `sync_proposals`, `sync_proposal_history`
 
 Heavy/stats SQL in some repos may still be raw until those paths move. DDL still lives in numbered SQLite migrations (`adapters/sqlite/migrations`). Next: more repos → dialect-specific migration bodies → real `mssql`/`postgres` `PlatformStore`.

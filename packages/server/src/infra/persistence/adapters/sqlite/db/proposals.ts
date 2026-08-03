@@ -25,7 +25,10 @@ import {
   type RiskTier
 } from "@mia/sync"
 import { randomUUID } from "node:crypto"
-import { getDb } from "../connection.js"
+import { sql } from "kysely"
+import { getPlatformStore } from "../platform-store.js"
+import { getPlatformDb } from "../../../schema/kysely.js"
+import { runAll, runExec, runGet } from "../../../schema/execute.js"
 
 // ── proposer_runs ────────────────────────────────────────────────
 
@@ -39,20 +42,34 @@ export interface CreateProposerRunInput {
 
 export function createProposerRun(input: CreateProposerRunInput): string {
   const id = randomUUID()
-  getDb()
-    .prepare(
-      `
-    INSERT INTO proposer_runs (id, tenant_id, source, target, started_at, status,
-                               scanned, produced, errors, triggered_by, trigger)
-    VALUES (?, ?, ?, ?, datetime('now'), 'pending', 0, 0, 0, ?, ?)
-  `
-    )
-    .run(id, input.tenantId, input.source, input.target, input.triggeredBy, input.trigger)
+  const compiled = getPlatformDb()
+    .insertInto("proposer_runs")
+    .values({
+      id,
+      tenant_id: input.tenantId,
+      source: input.source,
+      target: input.target,
+      started_at: sql`datetime('now')`,
+      status: "pending",
+      scanned: 0,
+      produced: 0,
+      errors: 0,
+      triggered_by: input.triggeredBy,
+      trigger: input.trigger,
+    })
+    .compile()
+  runExec(compiled)
   return id
 }
 
 export function markProposerRunRunning(id: string): void {
-  getDb().prepare(`UPDATE proposer_runs SET status = 'running' WHERE id = ? AND status = 'pending'`).run(id)
+  const compiled = getPlatformDb()
+    .updateTable("proposer_runs")
+    .set({ status: "running" })
+    .where("id", "=", id)
+    .where("status", "=", "pending")
+    .compile()
+  runExec(compiled)
 }
 
 export interface FinishProposerRunInput {
@@ -64,16 +81,20 @@ export interface FinishProposerRunInput {
 }
 
 export function finishProposerRun(i: FinishProposerRunInput): void {
-  getDb()
-    .prepare(
-      `
-    UPDATE proposer_runs
-       SET status = ?, finished_at = datetime('now'), scanned = ?, produced = ?,
-           errors = ?, duration_ms = ?, error = ?
-     WHERE id = ?
-  `
-    )
-    .run(i.status, i.counts.scanned, i.counts.produced, i.counts.errors, i.durationMs, i.error, i.id)
+  const compiled = getPlatformDb()
+    .updateTable("proposer_runs")
+    .set({
+      status: i.status,
+      finished_at: sql`datetime('now')`,
+      scanned: i.counts.scanned,
+      produced: i.counts.produced,
+      errors: i.counts.errors,
+      duration_ms: i.durationMs,
+      error: i.error,
+    })
+    .where("id", "=", i.id)
+    .compile()
+  runExec(compiled)
 }
 
 export interface ProposerRunRow {
@@ -94,23 +115,34 @@ export interface ProposerRunRow {
 }
 
 export function getProposerRun(id: string): ProposerRunRow | null {
-  return (
-    (getDb().prepare(`SELECT * FROM proposer_runs WHERE id = ?`).get(id) as ProposerRunRow | undefined) ??
-    null
-  )
+  const compiled = getPlatformDb()
+    .selectFrom("proposer_runs")
+    .selectAll()
+    .where("id", "=", id)
+    .compile()
+  return runGet<ProposerRunRow>(compiled) ?? null
 }
 
 export function listProposerRuns(tenantId: string, limit = 50): ProposerRunRow[] {
-  return getDb()
-    .prepare(`SELECT * FROM proposer_runs WHERE tenant_id = ? ORDER BY started_at DESC LIMIT ?`)
-    .all(tenantId, limit) as ProposerRunRow[]
+  const compiled = getPlatformDb()
+    .selectFrom("proposer_runs")
+    .selectAll()
+    .where("tenant_id", "=", tenantId)
+    .orderBy("started_at", "desc")
+    .limit(limit)
+    .compile()
+  return runAll<ProposerRunRow>(compiled)
 }
 
 /** Runs left in pending/running after a crash or restart. */
 export function findStaleProposerRuns(): ProposerRunRow[] {
-  return getDb()
-    .prepare(`SELECT * FROM proposer_runs WHERE status IN ('pending', 'running') ORDER BY started_at ASC`)
-    .all() as ProposerRunRow[]
+  const compiled = getPlatformDb()
+    .selectFrom("proposer_runs")
+    .selectAll()
+    .where("status", "in", ["pending", "running"])
+    .orderBy("started_at", "asc")
+    .compile()
+  return runAll<ProposerRunRow>(compiled)
 }
 
 // ── sync_proposals ───────────────────────────────────────────────
@@ -155,58 +187,72 @@ export function ingestFindings(
   runId: string,
   findings: readonly ProposerFinding[]
 ): string[] {
-  const db = getDb()
-  const findOpen = db.prepare(`
-    SELECT id FROM sync_proposals
-     WHERE tenant_id = ? AND fingerprint = ?
-       AND status IN ('open','awaiting_approval','previewed','snoozed')
-     LIMIT 1
-  `)
-  const ins = db.prepare(`
-    INSERT INTO sync_proposals (
-      id, tenant_id, run_id, fingerprint, source, target,
-      entity_type, entity_id, entity_label, kind, counts_json, detail_json,
-      entity_def_version, observed_at, status, last_action, last_action_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', 'ingested', datetime('now'))
-  `)
-  const insHistory = db.prepare(`
-    INSERT INTO sync_proposal_history (proposal_id, from_status, to_status, actor, reason, detail_json)
-    VALUES (?, NULL, 'open', ?, '', ?)
-  `)
   const inserted: string[] = []
-  const tx = db.transaction((items: readonly ProposerFinding[]) => {
-    for (const f of items) {
-      const dup = findOpen.get(tenantId, f.fingerprint) as { id: string } | undefined
-      if (dup) continue
+  getPlatformStore().transaction(() => {
+    for (const f of findings) {
+      const findOpen = getPlatformDb()
+        .selectFrom("sync_proposals")
+        .select("id")
+        .where("tenant_id", "=", tenantId)
+        .where("fingerprint", "=", f.fingerprint)
+        .where("status", "in", ["open", "awaiting_approval", "previewed", "snoozed"])
+        .limit(1)
+        .compile()
+      if (runGet<{ id: string }>(findOpen)) continue
+
       const id = randomUUID()
-      ins.run(
-        id,
-        tenantId,
-        runId,
-        f.fingerprint,
-        f.envPair.source,
-        f.envPair.target,
-        f.entityType,
-        f.entityId,
-        f.entityLabel,
-        f.kind,
-        JSON.stringify(f.counts),
-        JSON.stringify(f.detail),
-        f.entityDefVersion,
-        f.observedAt
-      )
-      insHistory.run(id, "proposer", JSON.stringify({ runId, fingerprint: f.fingerprint }))
+      const ins = getPlatformDb()
+        .insertInto("sync_proposals")
+        .values({
+          id,
+          tenant_id: tenantId,
+          run_id: runId,
+          fingerprint: f.fingerprint,
+          source: f.envPair.source,
+          target: f.envPair.target,
+          entity_type: f.entityType,
+          entity_id: f.entityId,
+          entity_label: f.entityLabel,
+          kind: f.kind,
+          counts_json: JSON.stringify(f.counts),
+          detail_json: JSON.stringify(f.detail),
+          entity_def_version: f.entityDefVersion,
+          observed_at: f.observedAt,
+          enqueued_at: sql`datetime('now')`,
+          status: "open",
+          annotation_failed_open: 0,
+          last_action: "ingested",
+          last_action_at: sql`datetime('now')`,
+        })
+        .compile()
+      runExec(ins)
+
+      const hist = getPlatformDb()
+        .insertInto("sync_proposal_history")
+        .values({
+          proposal_id: id,
+          from_status: null,
+          to_status: "open",
+          actor: "proposer",
+          reason: "",
+          detail_json: JSON.stringify({ runId, fingerprint: f.fingerprint }),
+          at: sql`datetime('now')`,
+        })
+        .compile()
+      runExec(hist)
       inserted.push(id)
     }
   })
-  tx(findings)
   return inserted
 }
 
 export function getProposal(id: string): ProposalRow | null {
-  return (
-    (getDb().prepare(`SELECT * FROM sync_proposals WHERE id = ?`).get(id) as ProposalRow | undefined) ?? null
-  )
+  const compiled = getPlatformDb()
+    .selectFrom("sync_proposals")
+    .selectAll()
+    .where("id", "=", id)
+    .compile()
+  return runGet<ProposalRow>(compiled) ?? null
 }
 
 export interface ListProposalsFilter {
@@ -221,49 +267,44 @@ export interface ListProposalsFilter {
 }
 
 export function listProposals(f: ListProposalsFilter): ProposalRow[] {
-  const where: string[] = ["tenant_id = ?"]
-  const args: unknown[] = [f.tenantId]
+  let query = getPlatformDb()
+    .selectFrom("sync_proposals")
+    .selectAll()
+    .where("tenant_id", "=", f.tenantId)
   if (f.status?.length) {
-    where.push(`status IN (${f.status.map(() => "?").join(",")})`)
-    args.push(...f.status)
+    query = query.where("status", "in", [...f.status])
   }
   if (f.riskTier?.length) {
-    where.push(`risk_tier IN (${f.riskTier.map(() => "?").join(",")})`)
-    args.push(...f.riskTier)
+    query = query.where("risk_tier", "in", [...f.riskTier])
   }
   if (f.source) {
-    where.push("source = ?")
-    args.push(f.source)
+    query = query.where("source", "=", f.source)
   }
   if (f.target) {
-    where.push("target = ?")
-    args.push(f.target)
+    query = query.where("target", "=", f.target)
   }
   if (f.entityType) {
-    where.push("entity_type = ?")
-    args.push(f.entityType)
+    query = query.where("entity_type", "=", f.entityType)
   }
-  const limit = f.limit ?? 100
-  const offset = f.offset ?? 0
-  return getDb()
-    .prepare(
-      `
-    SELECT * FROM sync_proposals
-     WHERE ${where.join(" AND ")}
-     ORDER BY COALESCE(rank_score, 0) DESC, enqueued_at DESC
-     LIMIT ? OFFSET ?
-  `
-    )
-    .all(...args, limit, offset) as ProposalRow[]
+  const compiled = query
+    .orderBy(sql`coalesce(rank_score, 0)`, "desc")
+    .orderBy("enqueued_at", "desc")
+    .limit(f.limit ?? 100)
+    .offset(f.offset ?? 0)
+    .compile()
+  return runAll<ProposalRow>(compiled)
 }
 
 export function countProposalsByStatus(tenantId: string): Record<ProposalStatus, number> {
-  const rows = getDb()
-    .prepare(`SELECT status, COUNT(*) AS n FROM sync_proposals WHERE tenant_id = ? GROUP BY status`)
-    .all(tenantId) as { status: ProposalStatus; n: number }[]
+  const compiled = getPlatformDb()
+    .selectFrom("sync_proposals")
+    .select(["status", sql<number>`count(*)`.as("n")])
+    .where("tenant_id", "=", tenantId)
+    .groupBy("status")
+    .compile()
+  const rows = runAll<{ status: ProposalStatus; n: number }>(compiled)
   const out: Partial<Record<ProposalStatus, number>> = {}
-  for (const r of rows) out[r.status] = r.n
-  // ensure every status key present
+  for (const r of rows) out[r.status] = Number(r.n)
   for (const s of Object.values(ProposalStatus)) if (out[s] === undefined) out[s] = 0
   return out as Record<ProposalStatus, number>
 }
@@ -271,20 +312,26 @@ export function countProposalsByStatus(tenantId: string): Record<ProposalStatus,
 // ── annotation + ranking persistence ────────────────────────────
 
 export function saveAnnotation(id: string, annotation: RiskAnnotation, failedOpen: boolean): void {
-  getDb()
-    .prepare(
-      `
-    UPDATE sync_proposals
-       SET annotation_json = ?, annotation_failed_open = ?,
-           risk_tier = ?, risk_score = ?
-     WHERE id = ?
-  `
-    )
-    .run(JSON.stringify(annotation), failedOpen ? 1 : 0, annotation.riskTier, annotation.riskScore, id)
+  const compiled = getPlatformDb()
+    .updateTable("sync_proposals")
+    .set({
+      annotation_json: JSON.stringify(annotation),
+      annotation_failed_open: failedOpen ? 1 : 0,
+      risk_tier: annotation.riskTier,
+      risk_score: annotation.riskScore,
+    })
+    .where("id", "=", id)
+    .compile()
+  runExec(compiled)
 }
 
 export function saveRankScore(id: string, score: number): void {
-  getDb().prepare(`UPDATE sync_proposals SET rank_score = ? WHERE id = ?`).run(score, id)
+  const compiled = getPlatformDb()
+    .updateTable("sync_proposals")
+    .set({ rank_score: score })
+    .where("id", "=", id)
+    .compile()
+  runExec(compiled)
 }
 
 // ── lifecycle transitions ───────────────────────────────────────
@@ -301,31 +348,41 @@ export interface UpdateProposalStatusInput {
 }
 
 export function updateProposalStatus(i: UpdateProposalStatusInput): ProposalRow {
-  const db = getDb()
   const row = getProposal(i.id)
   if (!row) throw new Error(`Proposal not found: ${i.id}`)
   assertProposalTransition(row.status, i.to)
 
-  const tx = db.transaction(() => {
-    db.prepare(
-      `
-      UPDATE sync_proposals
-         SET status = ?,
-             plan_id = COALESCE(?, plan_id),
-             snooze_until = COALESCE(?, snooze_until),
-             superseded_by = COALESCE(?, superseded_by),
-             last_actor = ?, last_action = ?, last_action_at = datetime('now')
-       WHERE id = ?
-    `
-    ).run(i.to, i.planId ?? null, i.snoozeUntil ?? null, i.supersededBy ?? null, i.actor, i.to, i.id)
-    db.prepare(
-      `
-      INSERT INTO sync_proposal_history (proposal_id, from_status, to_status, actor, reason, detail_json)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `
-    ).run(i.id, row.status, i.to, i.actor, i.reason ?? "", JSON.stringify(i.detail ?? {}))
+  getPlatformStore().transaction(() => {
+    const upd = getPlatformDb()
+      .updateTable("sync_proposals")
+      .set({
+        status: i.to,
+        // Match SQL COALESCE(?, col): null/undefined keeps the prior value.
+        plan_id: i.planId ?? row.plan_id,
+        snooze_until: i.snoozeUntil ?? row.snooze_until,
+        superseded_by: i.supersededBy ?? row.superseded_by,
+        last_actor: i.actor,
+        last_action: i.to,
+        last_action_at: sql`datetime('now')`,
+      })
+      .where("id", "=", i.id)
+      .compile()
+    runExec(upd)
+
+    const hist = getPlatformDb()
+      .insertInto("sync_proposal_history")
+      .values({
+        proposal_id: i.id,
+        from_status: row.status,
+        to_status: i.to,
+        actor: i.actor,
+        reason: i.reason ?? "",
+        detail_json: JSON.stringify(i.detail ?? {}),
+        at: sql`datetime('now')`,
+      })
+      .compile()
+    runExec(hist)
   })
-  tx()
   return getProposal(i.id)!
 }
 
@@ -341,9 +398,14 @@ export interface ProposalHistoryRow {
 }
 
 export function listProposalHistory(id: string): ProposalHistoryRow[] {
-  return getDb()
-    .prepare(`SELECT * FROM sync_proposal_history WHERE proposal_id = ? ORDER BY at ASC, id ASC`)
-    .all(id) as ProposalHistoryRow[]
+  const compiled = getPlatformDb()
+    .selectFrom("sync_proposal_history")
+    .selectAll()
+    .where("proposal_id", "=", id)
+    .orderBy("at", "asc")
+    .orderBy("id", "asc")
+    .compile()
+  return runAll<ProposalHistoryRow>(compiled)
 }
 
 // ── parse helpers (DB row → domain) ─────────────────────────────

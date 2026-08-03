@@ -319,6 +319,141 @@ export interface RunsTable {
   completed_at: string | null
 }
 
+/** `token_usage` — per-run LLM usage rollup. */
+export interface TokenUsageTable {
+  run_id: string
+  prompt_tokens: number
+  completion_tokens: number
+  total_tokens: number
+  llm_calls: number
+  model: string
+  created_at: string
+}
+
+/** `checkpoints` — resumable agent loop state. */
+export interface CheckpointsTable {
+  run_id: string
+  messages: string
+  iteration: number
+  step_counter: number
+  updated_at: string
+}
+
+/** `run_log` — structured per-run log lines. */
+export interface RunLogTable {
+  id: Generated<number>
+  run_id: string
+  level: string
+  message: string
+  timestamp: string
+}
+
+/** `trace_entries` — ordered trace events for a run. */
+export interface TraceEntriesTable {
+  id: Generated<number>
+  run_id: string
+  seq: number
+  data: string
+  created_at: string
+}
+
+/** `audit_log` — run/admin action audit. */
+export interface AuditLogTable {
+  id: Generated<number>
+  run_id: string | null
+  scope_type: string
+  scope_id: string | null
+  actor: string
+  action: string
+  detail: string
+  timestamp: string
+}
+
+/** `webhook_drain_configs` — outbound event webhooks. */
+export interface WebhookDrainConfigsTable {
+  id: string
+  url: string
+  secret: string
+  event_filters: string
+  enabled: number
+  created_at: string
+  updated_at: string
+}
+
+/** `agent_messages` — inter-agent bus durability. */
+export interface AgentMessagesTable {
+  id: string
+  root_run_id: string
+  from_run_id: string
+  from_agent: string
+  protocol: string
+  topic: string
+  content: string
+  reply_to: string | null
+  created_at: string
+}
+
+/** `proposer_runs` — one proposer pass envelope. */
+export interface ProposerRunsTable {
+  id: string
+  tenant_id: string
+  source: string
+  target: string
+  started_at: string
+  finished_at: string | null
+  status: string
+  scanned: number
+  produced: number
+  errors: number
+  duration_ms: number | null
+  triggered_by: string
+  trigger: string
+  error: string | null
+}
+
+/** `sync_proposals` — proposer findings awaiting review. */
+export interface SyncProposalsTable {
+  id: string
+  tenant_id: string
+  run_id: string
+  fingerprint: string
+  source: string
+  target: string
+  entity_type: string
+  entity_id: string
+  entity_label: string
+  kind: string
+  counts_json: string
+  detail_json: string
+  entity_def_version: number | null
+  observed_at: string
+  enqueued_at: string
+  status: string
+  annotation_json: string | null
+  annotation_failed_open: number
+  risk_tier: string | null
+  risk_score: number | null
+  rank_score: number | null
+  plan_id: string | null
+  snooze_until: string | null
+  superseded_by: string | null
+  last_actor: string | null
+  last_action: string | null
+  last_action_at: string | null
+}
+
+/** `sync_proposal_history` — append-only proposal transitions. */
+export interface SyncProposalHistoryTable {
+  id: Generated<number>
+  proposal_id: string
+  from_status: string | null
+  to_status: string
+  actor: string
+  reason: string
+  detail_json: string
+  at: string
+}
+
 /**
  * Full platform database shape. Unlisted tables stay on raw better-sqlite3
  * until their repo moves.
@@ -349,6 +484,16 @@ export interface PlatformDatabase {
   file_snapshots: FileSnapshotsTable
   threads: ThreadsTable
   runs: RunsTable
+  token_usage: TokenUsageTable
+  checkpoints: CheckpointsTable
+  run_log: RunLogTable
+  trace_entries: TraceEntriesTable
+  audit_log: AuditLogTable
+  webhook_drain_configs: WebhookDrainConfigsTable
+  agent_messages: AgentMessagesTable
+  proposer_runs: ProposerRunsTable
+  sync_proposals: SyncProposalsTable
+  sync_proposal_history: SyncProposalHistoryTable
 }
 
 /** Helper for optional Generated columns in later tables. */

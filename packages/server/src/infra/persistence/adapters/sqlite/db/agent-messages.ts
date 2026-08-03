@@ -11,7 +11,8 @@
 
 import { randomUUID } from "node:crypto"
 import { BusProtocol, isBusProtocol } from "../../../../../internal/enums/bus.js"
-import { getDb } from "../connection.js"
+import { getPlatformDb } from "../../../schema/kysely.js"
+import { runAll, runExec, runGet } from "../../../schema/execute.js"
 
 export interface AgentMessageRow {
   id: string
@@ -69,23 +70,21 @@ export interface InsertMessageInput {
 export function insertAgentMessage(input: InsertMessageInput): AgentMessageRow {
   const id = randomUUID()
   const createdAt = new Date().toISOString()
-  const db = getDb()
-  db.prepare(
-    `
-    INSERT INTO agent_messages (id, root_run_id, from_run_id, from_agent, protocol, topic, content, reply_to, created_at)
-    VALUES (@id, @root, @from_run, @from_agent, @protocol, @topic, @content, @reply_to, @created_at)
-  `
-  ).run({
-    id,
-    root: input.rootRunId,
-    from_run: input.fromRunId,
-    from_agent: input.fromAgent,
-    protocol: input.protocol,
-    topic: input.topic,
-    content: input.content,
-    reply_to: input.replyTo ?? null,
-    created_at: createdAt
-  })
+  const compiled = getPlatformDb()
+    .insertInto("agent_messages")
+    .values({
+      id,
+      root_run_id: input.rootRunId,
+      from_run_id: input.fromRunId,
+      from_agent: input.fromAgent,
+      protocol: input.protocol,
+      topic: input.topic,
+      content: input.content,
+      reply_to: input.replyTo ?? null,
+      created_at: createdAt,
+    })
+    .compile()
+  runExec(compiled)
   return {
     id,
     rootRunId: input.rootRunId,
@@ -101,32 +100,47 @@ export function insertAgentMessage(input: InsertMessageInput): AgentMessageRow {
 
 /** Load every message for a root run, oldest first. */
 export function listAgentMessages(rootRunId: string): AgentMessageRow[] {
-  const rows = getDb()
-    .prepare(
-      `
-    SELECT id, root_run_id, from_run_id, from_agent, protocol, topic, content, reply_to, created_at
-      FROM agent_messages
-     WHERE root_run_id = ?
-     ORDER BY created_at ASC, id ASC
-  `
-    )
-    .all(rootRunId) as RawRow[]
-  return rows.map(fromRaw)
+  const compiled = getPlatformDb()
+    .selectFrom("agent_messages")
+    .select([
+      "id",
+      "root_run_id",
+      "from_run_id",
+      "from_agent",
+      "protocol",
+      "topic",
+      "content",
+      "reply_to",
+      "created_at",
+    ])
+    .where("root_run_id", "=", rootRunId)
+    .orderBy("created_at", "asc")
+    .orderBy("id", "asc")
+    .compile()
+  return runAll<RawRow>(compiled).map(fromRaw)
 }
 
 /** Find a single Answer that replies to the given message id. NULL if none yet. */
 export function findReplyTo(messageId: string): AgentMessageRow | null {
-  const row = getDb()
-    .prepare(
-      `
-    SELECT id, root_run_id, from_run_id, from_agent, protocol, topic, content, reply_to, created_at
-      FROM agent_messages
-     WHERE reply_to = ?
-       AND protocol = 'answer'
-     ORDER BY created_at ASC, id ASC
-     LIMIT 1
-  `
-    )
-    .get(messageId) as RawRow | undefined
+  const compiled = getPlatformDb()
+    .selectFrom("agent_messages")
+    .select([
+      "id",
+      "root_run_id",
+      "from_run_id",
+      "from_agent",
+      "protocol",
+      "topic",
+      "content",
+      "reply_to",
+      "created_at",
+    ])
+    .where("reply_to", "=", messageId)
+    .where("protocol", "=", "answer")
+    .orderBy("created_at", "asc")
+    .orderBy("id", "asc")
+    .limit(1)
+    .compile()
+  const row = runGet<RawRow>(compiled)
   return row ? fromRaw(row) : null
 }

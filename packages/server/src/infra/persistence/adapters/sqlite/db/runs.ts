@@ -4,7 +4,10 @@
 
 import { isRunStatus, RUN_STATUSES, RunStatus } from "@mia/agent"
 import type { Run } from "@mia/shared-types"
+import { sql } from "kysely"
 import { getDb } from "../connection.js"
+import { getPlatformDb } from "../../../schema/kysely.js"
+import { runAll, runChanges, runExec, runGet } from "../../../schema/execute.js"
 import { rememberRunOwner } from "../../../../../ports/run-owner-index.js"
 
 // ── Run queries ──────────────────────────────────────────────────
@@ -28,31 +31,13 @@ export interface DbRun {
   display_name?: string | null
 }
 
-// IMPORTANT: this is a true upsert (INSERT … ON CONFLICT DO UPDATE), NOT
-// `INSERT OR REPLACE`. With the v14 schema redesign, several child tables
-// (trace_entries, audit_log, run_log, notifications, …) FK to runs(id) with
-// `ON DELETE CASCADE`. `INSERT OR REPLACE` is implemented as DELETE + INSERT
-// in SQLite, so each status update would silently wipe the entire trace,
-// audit log, and stored logs for that run — leaving every UI widget
-// (MIA-CHAT, IOE, StepTimeline, AgentViz, …) blank. ON CONFLICT DO UPDATE
-// updates the row in place and does not fire cascade deletes.
-const upsertRun = () =>
-  getDb().prepare(`
-  INSERT INTO runs (id, goal, status, answer, step_count, error, parent_run_id, created_at, completed_at, thread_id, upn, display_name)
-  VALUES (@id, @goal, @status, @answer, @step_count, @error, @parent_run_id, @created_at, @completed_at, @thread_id, @upn, @display_name)
-  ON CONFLICT(id) DO UPDATE SET
-    goal          = excluded.goal,
-    status        = excluded.status,
-    answer        = excluded.answer,
-    step_count    = excluded.step_count,
-    error         = excluded.error,
-    parent_run_id = excluded.parent_run_id,
-    created_at    = excluded.created_at,
-    completed_at  = excluded.completed_at,
-    thread_id     = excluded.thread_id,
-    upn           = excluded.upn,
-    display_name  = excluded.display_name
-`)
+// IMPORTANT: saveRun uses INSERT … ON CONFLICT DO UPDATE, NOT `INSERT OR REPLACE`.
+// With the v14 schema redesign, several child tables (trace_entries, audit_log,
+// run_log, notifications, …) FK to runs(id) with `ON DELETE CASCADE`.
+// `INSERT OR REPLACE` is implemented as DELETE + INSERT in SQLite, so each status
+// update would silently wipe the entire trace, audit log, and stored logs for that
+// run — leaving every UI widget (MIA-CHAT, IOE, StepTimeline, AgentViz, …) blank.
+// ON CONFLICT DO UPDATE updates the row in place and does not fire cascade deletes.
 
 export function saveRun(run: DbRun): void {
   // Hard runtime check at the DB write boundary. The TypeScript signature
@@ -64,39 +49,88 @@ export function saveRun(run: DbRun): void {
       `runs.status must be one of [${RUN_STATUSES.join(", ")}]; got "${String(run.status)}" for run ${run.id}`
     )
   }
-  const existing = getDb()
-    .prepare("SELECT thread_id, upn, display_name FROM runs WHERE id = ?")
-    .get(run.id) as {
+  const existingCompiled = getPlatformDb()
+    .selectFrom("runs")
+    .select(["thread_id", "upn", "display_name"])
+    .where("id", "=", run.id)
+    .compile()
+  const existing = runGet<{
     thread_id: string | null
     upn: string | null
     display_name: string | null
-  } | undefined
-  upsertRun().run({
-    ...run,
-    thread_id: run.thread_id ?? existing?.thread_id ?? null,
-    upn: (run.upn ?? existing?.upn ?? null)?.trim().toLowerCase() || null,
-    display_name: run.display_name ?? existing?.display_name ?? null
-  })
-  const storedUpn = (run.upn ?? existing?.upn ?? null)?.trim().toLowerCase() || null
-  rememberRunOwner(run.id, storedUpn)
+  }>(existingCompiled)
+
+  const thread_id = run.thread_id ?? existing?.thread_id ?? null
+  const upn = (run.upn ?? existing?.upn ?? null)?.trim().toLowerCase() || null
+  const display_name = run.display_name ?? existing?.display_name ?? null
+
+  const row = {
+    id: run.id,
+    goal: run.goal,
+    status: run.status,
+    answer: run.answer,
+    step_count: run.step_count,
+    error: run.error,
+    parent_run_id: run.parent_run_id,
+    created_at: run.created_at,
+    completed_at: run.completed_at,
+    thread_id,
+    upn,
+    display_name,
+  }
+
+  const compiled = getPlatformDb()
+    .insertInto("runs")
+    .values(row as never)
+    .onConflict((oc) =>
+      oc.column("id").doUpdateSet({
+        goal: run.goal,
+        status: run.status,
+        answer: run.answer,
+        step_count: run.step_count,
+        error: run.error,
+        parent_run_id: run.parent_run_id,
+        created_at: run.created_at,
+        completed_at: run.completed_at,
+        thread_id,
+        upn: upn as never,
+        display_name: display_name as never,
+      })
+    )
+    .compile()
+  runExec(compiled)
+  rememberRunOwner(run.id, upn)
 }
 
 export function getRun(id: string): DbRun | undefined {
-  return getDb().prepare("SELECT * FROM runs WHERE id = ?").get(id) as DbRun | undefined
+  const compiled = getPlatformDb()
+    .selectFrom("runs")
+    .selectAll()
+    .where("id", "=", id)
+    .compile()
+  return runGet<DbRun>(compiled)
 }
 
 /** True when approve/resume already spawned a child that supersedes this run. */
 export function runHasResumeChild(runId: string): boolean {
-  const row = getDb()
-    .prepare("SELECT 1 AS ok FROM runs WHERE parent_run_id = ? LIMIT 1")
-    .get(runId) as { ok: number } | undefined
-  return Boolean(row)
+  const compiled = getPlatformDb()
+    .selectFrom("runs")
+    .select(sql<number>`1`.as("ok"))
+    .where("parent_run_id", "=", runId)
+    .limit(1)
+    .compile()
+  return Boolean(runGet(compiled))
 }
 
 export function listRuns(limit = 100, offset = 0): DbRun[] {
-  return getDb()
-    .prepare("SELECT * FROM runs ORDER BY created_at DESC LIMIT ? OFFSET ?")
-    .all(limit, offset) as DbRun[]
+  const compiled = getPlatformDb()
+    .selectFrom("runs")
+    .selectAll()
+    .orderBy("created_at", "desc")
+    .limit(limit)
+    .offset(offset)
+    .compile()
+  return runAll<DbRun>(compiled)
 }
 
 export interface DbRunWithUsage extends DbRun {
@@ -104,6 +138,19 @@ export interface DbRunWithUsage extends DbRun {
   prompt_tokens: number | null
   completion_tokens: number | null
   llm_calls: number | null
+}
+
+function runsWithUsageQuery() {
+  return getPlatformDb()
+    .selectFrom("runs as r")
+    .leftJoin("token_usage as t", "t.run_id", "r.id")
+    .selectAll("r")
+    .select([
+      "t.total_tokens",
+      "t.prompt_tokens",
+      "t.completion_tokens",
+      "t.llm_calls",
+    ])
 }
 
 /**
@@ -151,31 +198,22 @@ export function listRunsWithUsageForThread(
   limit = 200,
   offset = 0
 ): DbRunWithUsage[] {
-  return getDb()
-    .prepare(
-      `
-      SELECT r.*, t.total_tokens, t.prompt_tokens, t.completion_tokens, t.llm_calls
-      FROM runs r
-      LEFT JOIN token_usage t ON t.run_id = r.id
-      WHERE r.thread_id = @threadId
-      ORDER BY r.created_at DESC
-      LIMIT @limit OFFSET @offset
-    `
-    )
-    .all({ threadId, limit, offset }) as DbRunWithUsage[]
+  const compiled = runsWithUsageQuery()
+    .where("r.thread_id", "=", threadId)
+    .orderBy("r.created_at", "desc")
+    .limit(limit)
+    .offset(offset)
+    .compile()
+  return runAll<DbRunWithUsage>(compiled)
 }
 
 export function listRunsWithUsage(limit = 100, offset = 0): DbRunWithUsage[] {
-  return getDb()
-    .prepare(
-      `
-      SELECT r.*, t.total_tokens, t.prompt_tokens, t.completion_tokens, t.llm_calls
-      FROM runs r
-      LEFT JOIN token_usage t ON t.run_id = r.id
-      ORDER BY r.created_at DESC LIMIT ? OFFSET ?
-    `
-    )
-    .all(limit, offset) as DbRunWithUsage[]
+  const compiled = runsWithUsageQuery()
+    .orderBy("r.created_at", "desc")
+    .limit(limit)
+    .offset(offset)
+    .compile()
+  return runAll<DbRunWithUsage>(compiled)
 }
 
 /** Scoped listing for authenticated visitors — upn only (no session_id fallback). */
@@ -186,17 +224,13 @@ export function listRunsWithUsageForUser(
 ): DbRunWithUsage[] {
   const { upn } = opts
   if (!upn) return []
-  return getDb()
-    .prepare(
-      `
-      SELECT r.*, t.total_tokens, t.prompt_tokens, t.completion_tokens, t.llm_calls
-      FROM runs r
-      LEFT JOIN token_usage t ON t.run_id = r.id
-      WHERE r.upn = @upn
-      ORDER BY r.created_at DESC LIMIT @limit OFFSET @offset
-    `
-    )
-    .all({ upn, limit, offset }) as DbRunWithUsage[]
+  const compiled = runsWithUsageQuery()
+    .where("r.upn", "=", upn)
+    .orderBy("r.created_at", "desc")
+    .limit(limit)
+    .offset(offset)
+    .compile()
+  return runAll<DbRunWithUsage>(compiled)
 }
 
 /** Every non-terminal RunStatus — anything still in this set after a
@@ -209,18 +243,26 @@ const NON_TERMINAL_RUN_STATUSES = [
 ] as const
 
 export function findStaleRuns(): DbRun[] {
-  const placeholders = NON_TERMINAL_RUN_STATUSES.map(() => "?").join(", ")
-  return getDb()
-    .prepare(`SELECT * FROM runs WHERE status IN (${placeholders}) ORDER BY created_at DESC`)
-    .all(...NON_TERMINAL_RUN_STATUSES) as DbRun[]
+  const compiled = getPlatformDb()
+    .selectFrom("runs")
+    .selectAll()
+    .where("status", "in", [...NON_TERMINAL_RUN_STATUSES])
+    .orderBy("created_at", "desc")
+    .compile()
+  return runAll<DbRun>(compiled)
 }
 
 export function markRunCrashed(runId: string): void {
-  getDb()
-    .prepare(
-      "UPDATE runs SET status = ?, error = 'Server restarted \u2014 run interrupted', completed_at = datetime('now') WHERE id = ?"
-    )
-    .run(RunStatus.Crashed, runId)
+  const compiled = getPlatformDb()
+    .updateTable("runs")
+    .set({
+      status: RunStatus.Crashed,
+      error: "Server restarted \u2014 run interrupted",
+      completed_at: sql`datetime('now')`,
+    })
+    .where("id", "=", runId)
+    .compile()
+  runExec(compiled)
 }
 
 /** Boot-time hygiene: any row whose status is NOT a known RunStatus
@@ -228,13 +270,16 @@ export function markRunCrashed(runId: string): void {
  *  enum guard existed) gets normalised to 'failed' so the lifecycle
  *  invariants downstream code relies on remain true. */
 export function normaliseUnknownRunStatuses(): number {
-  const placeholders = RUN_STATUSES.map(() => "?").join(", ")
-  const res = getDb()
-    .prepare(
-      `UPDATE runs SET status = ?, error = COALESCE(error, 'Unknown legacy status \u2014 normalised on boot'), completed_at = COALESCE(completed_at, datetime('now')) WHERE status NOT IN (${placeholders})`
-    )
-    .run(RunStatus.Failed, ...RUN_STATUSES)
-  return res.changes
+  const compiled = getPlatformDb()
+    .updateTable("runs")
+    .set({
+      status: RunStatus.Failed,
+      error: sql`coalesce(error, 'Unknown legacy status \u2014 normalised on boot')`,
+      completed_at: sql`coalesce(completed_at, datetime('now'))`,
+    })
+    .where("status", "not in", [...RUN_STATUSES])
+    .compile()
+  return runChanges(compiled)
 }
 
 /**
@@ -250,12 +295,16 @@ export function normaliseUnknownRunStatuses(): number {
  * a run that has already finished, failed, or completed in the meantime.
  */
 export function markRunCancelled(runId: string): void {
-  const placeholders = NON_TERMINAL_RUN_STATUSES.map(() => "?").join(", ")
-  getDb()
-    .prepare(
-      `UPDATE runs SET status = ?, completed_at = COALESCE(completed_at, datetime('now')) WHERE id = ? AND status IN (${placeholders})`
-    )
-    .run(RunStatus.Cancelled, runId, ...NON_TERMINAL_RUN_STATUSES)
+  const compiled = getPlatformDb()
+    .updateTable("runs")
+    .set({
+      status: RunStatus.Cancelled,
+      completed_at: sql`coalesce(completed_at, datetime('now'))`,
+    })
+    .where("id", "=", runId)
+    .where("status", "in", [...NON_TERMINAL_RUN_STATUSES])
+    .compile()
+  runExec(compiled)
 }
 
 // ── Audit queries ────────────────────────────────────────────────
@@ -281,18 +330,19 @@ export function saveAudit(
 ): void {
   const scopeType: AuditScopeType = entry.scope_type ?? (entry.run_id ? "run" : "admin")
   const scopeId = entry.scope_id ?? (scopeType === "run" ? entry.run_id : "platform")
-  getDb()
-    .prepare(
-      `
-    INSERT INTO audit_log (run_id, scope_type, scope_id, actor, action, detail, timestamp)
-    VALUES (@run_id, @scope_type, @scope_id, @actor, @action, @detail, @timestamp)
-  `
-    )
-    .run({
-      ...entry,
+  const compiled = getPlatformDb()
+    .insertInto("audit_log")
+    .values({
+      run_id: entry.run_id,
       scope_type: scopeType,
-      scope_id: scopeId
+      scope_id: scopeId,
+      actor: entry.actor,
+      action: entry.action,
+      detail: entry.detail,
+      timestamp: entry.timestamp,
     })
+    .compile()
+  runExec(compiled)
 }
 
 export function saveAdminAudit(
@@ -310,9 +360,14 @@ export function saveAdminAudit(
 }
 
 export function getAuditLog(runId: string): DbAudit[] {
-  return getDb()
-    .prepare("SELECT * FROM audit_log WHERE scope_type = 'run' AND run_id = ? ORDER BY timestamp")
-    .all(runId) as DbAudit[]
+  const compiled = getPlatformDb()
+    .selectFrom("audit_log")
+    .selectAll()
+    .where("scope_type", "=", "run")
+    .where("run_id", "=", runId)
+    .orderBy("timestamp")
+    .compile()
+  return runAll<DbAudit>(compiled)
 }
 
 /** Admin cross-run / cross-scope audit browser filters. */
@@ -505,18 +560,34 @@ export interface DbCheckpoint {
 }
 
 export function saveCheckpoint(cp: DbCheckpoint): void {
-  getDb()
-    .prepare(
-      `
-    INSERT OR REPLACE INTO checkpoints (run_id, messages, iteration, step_counter, updated_at)
-    VALUES (@run_id, @messages, @iteration, @step_counter, @updated_at)
-  `
+  const compiled = getPlatformDb()
+    .insertInto("checkpoints")
+    .values({
+      run_id: cp.run_id,
+      messages: cp.messages,
+      iteration: cp.iteration,
+      step_counter: cp.step_counter,
+      updated_at: cp.updated_at,
+    })
+    .onConflict((oc) =>
+      oc.column("run_id").doUpdateSet({
+        messages: cp.messages,
+        iteration: cp.iteration,
+        step_counter: cp.step_counter,
+        updated_at: cp.updated_at,
+      })
     )
-    .run(cp)
+    .compile()
+  runExec(compiled)
 }
 
 export function getCheckpoint(runId: string): DbCheckpoint | undefined {
-  return getDb().prepare("SELECT * FROM checkpoints WHERE run_id = ?").get(runId) as DbCheckpoint | undefined
+  const compiled = getPlatformDb()
+    .selectFrom("checkpoints")
+    .selectAll()
+    .where("run_id", "=", runId)
+    .compile()
+  return runGet<DbCheckpoint>(compiled)
 }
 
 // ── Log queries ──────────────────────────────────────────────────
@@ -530,23 +601,28 @@ export interface DbLog {
 }
 
 export function saveLog(entry: Omit<DbLog, "id">): void {
-  getDb()
-    .prepare(
-      `
-    INSERT INTO run_log (run_id, level, message, timestamp)
-    VALUES (@run_id, @level, @message, @timestamp)
-  `
-    )
-    .run(entry)
+  const compiled = getPlatformDb()
+    .insertInto("run_log")
+    .values({
+      run_id: entry.run_id,
+      level: entry.level,
+      message: entry.message,
+      timestamp: entry.timestamp,
+    })
+    .compile()
+  runExec(compiled)
 }
 
 export function getLogs(runId: string, level?: string): DbLog[] {
+  let query = getPlatformDb()
+    .selectFrom("run_log")
+    .selectAll()
+    .where("run_id", "=", runId)
   if (level) {
-    return getDb()
-      .prepare("SELECT * FROM run_log WHERE run_id = ? AND level = ? ORDER BY timestamp")
-      .all(runId, level) as DbLog[]
+    query = query.where("level", "=", level)
   }
-  return getDb().prepare("SELECT * FROM run_log WHERE run_id = ? ORDER BY timestamp").all(runId) as DbLog[]
+  const compiled = query.orderBy("timestamp").compile()
+  return runAll<DbLog>(compiled)
 }
 
 // ── Trace entry queries ──────────────────────────────────────────
@@ -560,20 +636,26 @@ export interface DbTraceEntry {
 }
 
 export function saveTraceEntry(entry: Omit<DbTraceEntry, "id">): void {
-  getDb()
-    .prepare(
-      `
-    INSERT INTO trace_entries (run_id, seq, data, created_at)
-    VALUES (@run_id, @seq, @data, @created_at)
-  `
-    )
-    .run(entry)
+  const compiled = getPlatformDb()
+    .insertInto("trace_entries")
+    .values({
+      run_id: entry.run_id,
+      seq: entry.seq,
+      data: entry.data,
+      created_at: entry.created_at,
+    })
+    .compile()
+  runExec(compiled)
 }
 
 export function getTraceEntries(runId: string): DbTraceEntry[] {
-  return getDb()
-    .prepare("SELECT * FROM trace_entries WHERE run_id = ? ORDER BY seq")
-    .all(runId) as DbTraceEntry[]
+  const compiled = getPlatformDb()
+    .selectFrom("trace_entries")
+    .selectAll()
+    .where("run_id", "=", runId)
+    .orderBy("seq")
+    .compile()
+  return runAll<DbTraceEntry>(compiled)
 }
 
 // ── Token usage queries ──────────────────────────────────────────
@@ -589,24 +671,48 @@ export interface DbTokenUsage {
 }
 
 export function saveTokenUsage(usage: DbTokenUsage): void {
-  getDb()
-    .prepare(
-      `
-    INSERT OR REPLACE INTO token_usage (run_id, prompt_tokens, completion_tokens, total_tokens, llm_calls, model, created_at)
-    VALUES (@run_id, @prompt_tokens, @completion_tokens, @total_tokens, @llm_calls, @model, @created_at)
-  `
+  const compiled = getPlatformDb()
+    .insertInto("token_usage")
+    .values({
+      run_id: usage.run_id,
+      prompt_tokens: usage.prompt_tokens,
+      completion_tokens: usage.completion_tokens,
+      total_tokens: usage.total_tokens,
+      llm_calls: usage.llm_calls,
+      model: usage.model,
+      created_at: usage.created_at,
+    })
+    .onConflict((oc) =>
+      oc.column("run_id").doUpdateSet({
+        prompt_tokens: usage.prompt_tokens,
+        completion_tokens: usage.completion_tokens,
+        total_tokens: usage.total_tokens,
+        llm_calls: usage.llm_calls,
+        model: usage.model,
+        created_at: usage.created_at,
+      })
     )
-    .run(usage)
+    .compile()
+  runExec(compiled)
 }
 
 export function getTokenUsage(runId: string): DbTokenUsage | undefined {
-  return getDb().prepare("SELECT * FROM token_usage WHERE run_id = ?").get(runId) as DbTokenUsage | undefined
+  const compiled = getPlatformDb()
+    .selectFrom("token_usage")
+    .selectAll()
+    .where("run_id", "=", runId)
+    .compile()
+  return runGet<DbTokenUsage>(compiled)
 }
 
 export function listTokenUsage(limit = 100): DbTokenUsage[] {
-  return getDb()
-    .prepare("SELECT * FROM token_usage ORDER BY created_at DESC LIMIT ?")
-    .all(limit) as DbTokenUsage[]
+  const compiled = getPlatformDb()
+    .selectFrom("token_usage")
+    .selectAll()
+    .orderBy("created_at", "desc")
+    .limit(limit)
+    .compile()
+  return runAll<DbTokenUsage>(compiled)
 }
 
 /** Admin token-usage browser filters (join token_usage → runs). */
@@ -827,16 +933,33 @@ export interface UsageTotals {
 }
 
 export function getUsageTotals(): UsageTotals {
-  const tokens = getDb()
-    .prepare(
-      "SELECT COALESCE(SUM(prompt_tokens),0) as total_prompt_tokens, COALESCE(SUM(completion_tokens),0) as total_completion_tokens, COALESCE(SUM(total_tokens),0) as total_tokens, COALESCE(SUM(llm_calls),0) as total_llm_calls FROM token_usage"
-    )
-    .get() as Omit<UsageTotals, "run_count" | "completed_runs" | "failed_runs">
-  const runStats = getDb()
-    .prepare(
-      "SELECT COUNT(*) as run_count, COALESCE(SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END),0) as completed_runs, COALESCE(SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END),0) as failed_runs FROM runs"
-    )
-    .get() as { run_count: number; completed_runs: number; failed_runs: number }
+  const tokensCompiled = getPlatformDb()
+    .selectFrom("token_usage")
+    .select([
+      sql<number>`coalesce(sum(prompt_tokens), 0)`.as("total_prompt_tokens"),
+      sql<number>`coalesce(sum(completion_tokens), 0)`.as("total_completion_tokens"),
+      sql<number>`coalesce(sum(total_tokens), 0)`.as("total_tokens"),
+      sql<number>`coalesce(sum(llm_calls), 0)`.as("total_llm_calls"),
+    ])
+    .compile()
+  const tokens = runGet<Omit<UsageTotals, "run_count" | "completed_runs" | "failed_runs">>(
+    tokensCompiled
+  )!
+  const runStatsCompiled = getPlatformDb()
+    .selectFrom("runs")
+    .select([
+      sql<number>`count(*)`.as("run_count"),
+      sql<number>`coalesce(sum(case when status = 'completed' then 1 else 0 end), 0)`.as(
+        "completed_runs"
+      ),
+      sql<number>`coalesce(sum(case when status = 'failed' then 1 else 0 end), 0)`.as(
+        "failed_runs"
+      ),
+    ])
+    .compile()
+  const runStats = runGet<{ run_count: number; completed_runs: number; failed_runs: number }>(
+    runStatsCompiled
+  )!
   return { ...tokens, ...runStats }
 }
 
@@ -853,32 +976,36 @@ export function getUsageTotalsForUser(upn: string): UsageTotals {
       failed_runs: 0,
     }
   }
-  const tokens = getDb()
-    .prepare(
-      `
-      SELECT
-        COALESCE(SUM(t.prompt_tokens), 0) AS total_prompt_tokens,
-        COALESCE(SUM(t.completion_tokens), 0) AS total_completion_tokens,
-        COALESCE(SUM(t.total_tokens), 0) AS total_tokens,
-        COALESCE(SUM(t.llm_calls), 0) AS total_llm_calls
-      FROM runs r
-      LEFT JOIN token_usage t ON t.run_id = r.id
-      WHERE r.upn = ?
-    `,
-    )
-    .get(upn) as Omit<UsageTotals, "run_count" | "completed_runs" | "failed_runs">
-  const runStats = getDb()
-    .prepare(
-      `
-      SELECT
-        COUNT(*) AS run_count,
-        COALESCE(SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END), 0) AS completed_runs,
-        COALESCE(SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END), 0) AS failed_runs
-      FROM runs
-      WHERE upn = ?
-    `,
-    )
-    .get(upn) as { run_count: number; completed_runs: number; failed_runs: number }
+  const tokensCompiled = getPlatformDb()
+    .selectFrom("runs as r")
+    .leftJoin("token_usage as t", "t.run_id", "r.id")
+    .select([
+      sql<number>`coalesce(sum(t.prompt_tokens), 0)`.as("total_prompt_tokens"),
+      sql<number>`coalesce(sum(t.completion_tokens), 0)`.as("total_completion_tokens"),
+      sql<number>`coalesce(sum(t.total_tokens), 0)`.as("total_tokens"),
+      sql<number>`coalesce(sum(t.llm_calls), 0)`.as("total_llm_calls"),
+    ])
+    .where("r.upn", "=", upn)
+    .compile()
+  const tokens = runGet<Omit<UsageTotals, "run_count" | "completed_runs" | "failed_runs">>(
+    tokensCompiled
+  )!
+  const runStatsCompiled = getPlatformDb()
+    .selectFrom("runs")
+    .select([
+      sql<number>`count(*)`.as("run_count"),
+      sql<number>`coalesce(sum(case when status = 'completed' then 1 else 0 end), 0)`.as(
+        "completed_runs"
+      ),
+      sql<number>`coalesce(sum(case when status = 'failed' then 1 else 0 end), 0)`.as(
+        "failed_runs"
+      ),
+    ])
+    .where("upn", "=", upn)
+    .compile()
+  const runStats = runGet<{ run_count: number; completed_runs: number; failed_runs: number }>(
+    runStatsCompiled
+  )!
   return { ...tokens, ...runStats }
 }
 
@@ -894,31 +1021,24 @@ export interface RunSummaryRow {
 
 export function listRunSummariesByIds(ids: readonly string[]): RunSummaryRow[] {
   if (ids.length === 0) return []
-  const placeholders = ids.map(() => "?").join(",")
-  return getDb()
-    .prepare(
-      `
-      SELECT id, goal, status, step_count, created_at, upn, display_name
-      FROM runs
-      WHERE id IN (${placeholders})
-      ORDER BY created_at DESC
-    `
-    )
-    .all(...ids) as RunSummaryRow[]
+  const compiled = getPlatformDb()
+    .selectFrom("runs")
+    .select(["id", "goal", "status", "step_count", "created_at", "upn", "display_name"])
+    .where("id", "in", [...ids])
+    .orderBy("created_at", "desc")
+    .compile()
+  return runAll<RunSummaryRow>(compiled)
 }
 
 export function countActiveRunsByUpn(ids: readonly string[]): Array<{ upn: string; n: number }> {
   if (ids.length === 0) return []
-  const placeholders = ids.map(() => "?").join(",")
-  return getDb()
-    .prepare(
-      `
-      SELECT lower(upn) AS upn, COUNT(*) AS n
-      FROM runs WHERE id IN (${placeholders})
-      GROUP BY lower(upn)
-    `
-    )
-    .all(...ids) as Array<{ upn: string; n: number }>
+  const compiled = getPlatformDb()
+    .selectFrom("runs")
+    .select([sql<string>`lower(upn)`.as("upn"), sql<number>`count(*)`.as("n")])
+    .where("id", "in", [...ids])
+    .groupBy(sql`lower(upn)`)
+    .compile()
+  return runAll<{ upn: string; n: number }>(compiled)
 }
 
 export interface PriorTurnRow {
@@ -936,24 +1056,19 @@ export function listPriorTurnRows(input: {
   excludeRunId?: string | null
   limit: number
 }): PriorTurnRow[] {
-  return getDb()
-    .prepare(
-      `
-      SELECT id, goal, status, answer, created_at, completed_at
-      FROM runs
-      WHERE thread_id = @threadId
-        AND upn = @upn
-        AND parent_run_id IS NULL
-        AND status IN ('completed', 'failed')
-        AND (@excludeRunId IS NULL OR id != @excludeRunId)
-      ORDER BY COALESCE(completed_at, created_at) DESC
-      LIMIT @limit
-    `
-    )
-    .all({
-      threadId: input.threadId,
-      excludeRunId: input.excludeRunId ?? null,
-      upn: input.upn,
-      limit: input.limit
-    }) as PriorTurnRow[]
+  let query = getPlatformDb()
+    .selectFrom("runs")
+    .select(["id", "goal", "status", "answer", "created_at", "completed_at"])
+    .where("thread_id", "=", input.threadId)
+    .where("upn", "=", input.upn)
+    .where("parent_run_id", "is", null)
+    .where("status", "in", ["completed", "failed"])
+  if (input.excludeRunId) {
+    query = query.where("id", "!=", input.excludeRunId)
+  }
+  const compiled = query
+    .orderBy(sql`coalesce(completed_at, created_at)`, "desc")
+    .limit(input.limit)
+    .compile()
+  return runAll<PriorTurnRow>(compiled)
 }

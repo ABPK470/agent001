@@ -4,7 +4,8 @@
  * and re-exports the store helpers for existing callers.
  */
 
-import { getDb } from "../connection.js"
+import { getPlatformDb } from "../../../schema/kysely.js"
+import { runAll, runExec, runGet } from "../../../schema/execute.js"
 
 export type { StoredEvent as DbEvent } from "../../../../../ports/event-store.js"
 export {
@@ -28,26 +29,36 @@ export interface DbWebhookDrain {
 }
 
 export function listWebhookDrains(): DbWebhookDrain[] {
-  return getDb().prepare("SELECT * FROM webhook_drain_configs ORDER BY created_at").all() as DbWebhookDrain[]
+  const compiled = getPlatformDb()
+    .selectFrom("webhook_drain_configs")
+    .selectAll()
+    .orderBy("created_at")
+    .compile()
+  return runAll<DbWebhookDrain>(compiled)
 }
 
 export function getWebhookDrain(id: string): DbWebhookDrain | undefined {
-  return getDb().prepare("SELECT * FROM webhook_drain_configs WHERE id = ?").get(id) as
-    | DbWebhookDrain
-    | undefined
+  const compiled = getPlatformDb()
+    .selectFrom("webhook_drain_configs")
+    .selectAll()
+    .where("id", "=", id)
+    .compile()
+  return runGet<DbWebhookDrain>(compiled)
 }
 
 export function saveWebhookDrain(drain: DbWebhookDrain): void {
-  getDb()
-    .prepare(
-      `
-    INSERT OR REPLACE INTO webhook_drain_configs (id, url, secret, event_filters, enabled, created_at, updated_at)
-    VALUES (@id, @url, @secret, @event_filters, @enabled, @created_at, @updated_at)
-  `,
-    )
-    .run(drain)
+  const compiled = getPlatformDb()
+    .insertInto("webhook_drain_configs")
+    .orReplace()
+    .values(drain)
+    .compile()
+  runExec(compiled)
 }
 
 export function deleteWebhookDrain(id: string): void {
-  getDb().prepare("DELETE FROM webhook_drain_configs WHERE id = ?").run(id)
+  const compiled = getPlatformDb()
+    .deleteFrom("webhook_drain_configs")
+    .where("id", "=", id)
+    .compile()
+  runExec(compiled)
 }

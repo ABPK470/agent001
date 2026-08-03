@@ -1,7 +1,10 @@
 export type {
+  AgentMessagesTable,
   ApiRequestLogTable,
   ApprovalConfigsTable,
+  AuditLogTable,
   ChannelConfigsTable,
+  CheckpointsTable,
   ConnectorsTable,
   ConversationsTable,
   DeliveryAttemptsTable,
@@ -14,7 +17,9 @@ export type {
   NotificationsTable,
   OutboundMessagesTable,
   PlatformDatabase,
+  ProposerRunsTable,
   ProposerScheduleConfigsTable,
+  RunLogTable,
   RunsTable,
   SessionsTable,
   SyncApprovalTokensTable,
@@ -22,9 +27,14 @@ export type {
   SyncCatalogActiveTable,
   SyncCatalogVersionsTable,
   SyncEnvironmentsTable,
+  SyncProposalHistoryTable,
+  SyncProposalsTable,
   SyncValueSourcesTable,
   ThreadsTable,
+  TokenUsageTable,
+  TraceEntriesTable,
   UsersTable,
+  WebhookDrainConfigsTable,
 } from "./tables.js"
 export { getPlatformDb, resetPlatformDbForTests } from "./kysely.js"
 export { runAll, runChanges, runExec, runGet, runInsertId } from "./execute.js"
