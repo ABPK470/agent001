@@ -59,14 +59,16 @@ export async function buildExecutionSystemMessages(
 
   const effectiveConnection = await resolveEffectiveMssqlConnection(envBase.perRunHost, request.goal)
 
-  const knownObjects = (() => {
-    try {
-      return await loadKnownObjects({ goal: request.goal, priorTurns, connection: effectiveConnection })
-    } catch (error) {
-      console.warn(`[run ${request.runId}] knownObjects load failed:`, (error as Error).message)
-      return []
-    }
-  })()
+  let knownObjects: Awaited<ReturnType<typeof loadKnownObjects>> = []
+  try {
+    knownObjects = await loadKnownObjects({
+      goal: request.goal,
+      priorTurns,
+      connection: effectiveConnection,
+    })
+  } catch (error) {
+    console.warn(`[run ${request.runId}] knownObjects load failed:`, (error as Error).message)
+  }
 
   if (input.runContext) {
     const catalog = getCatalog(envBase.perRunHost, effectiveConnection)
@@ -83,6 +85,17 @@ export async function buildExecutionSystemMessages(
     }
   }
 
+  let knownVerdicts: Awaited<ReturnType<typeof loadCandidateVerdicts>> = []
+  try {
+    knownVerdicts = await loadCandidateVerdicts({
+      goal: request.goal,
+      catalog: getCatalog(envBase.perRunHost, effectiveConnection),
+      upn: envBase.activeRun?.ownerUpn ?? null,
+    })
+  } catch (error) {
+    console.warn(`[run ${request.runId}] knownVerdicts load failed:`, (error as Error).message)
+  }
+
   const systemMessages = await buildSystemMessages({
     goal: request.goal,
     systemPrompt: request.systemPrompt,
@@ -95,18 +108,7 @@ export async function buildExecutionSystemMessages(
     priorTurns,
     priorResults,
     knownObjects,
-    knownVerdicts: (() => {
-      try {
-        return await loadCandidateVerdicts({
-          goal: request.goal,
-          catalog: getCatalog(envBase.perRunHost, effectiveConnection),
-          upn: envBase.activeRun?.ownerUpn ?? null
-        })
-      } catch (error) {
-        console.warn(`[run ${request.runId}] knownVerdicts load failed:`, (error as Error).message)
-        return []
-      }
-    })(),
+    knownVerdicts,
     clarifications: interaction.clarifications,
     llmForClarification: interaction.llm,
     onClarificationTrace: (event) => {
