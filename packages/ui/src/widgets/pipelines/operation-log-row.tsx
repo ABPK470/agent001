@@ -114,7 +114,7 @@ export function OpLogTreeHeader({ wide = false }: { wide?: boolean }) {
   return (
     <div className="op-log-tree-header" aria-hidden>
       <div
-        className={`op-log-row-grid op-log-tree-header__grid${wide ? " op-log-row-grid--wide" : ""}`}
+        className={`op-log-row-grid op-log-row-grid--no-icon op-log-tree-header__grid${wide ? " op-log-row-grid--wide" : ""}`}
       >
         <span className="op-log-row-grid__chev review-chevron-slot" aria-hidden />
         <span className="op-log-row-grid__icon" aria-hidden />
@@ -143,7 +143,7 @@ export function OpLogNestedBlock({
   }
   return (
     <div className="op-log-nested-block">
-      <div className="op-log-row-grid" style={gridStyle}>
+      <div className="op-log-row-grid op-log-row-grid--no-icon" style={gridStyle}>
         <span className="op-log-row-grid__chev review-chevron-slot" aria-hidden>
           <span className="op-log-row-grid__chev-spacer" />
         </span>
@@ -214,9 +214,10 @@ function LogRowCells({
     ["--op-log-depth" as string]: depth,
   }
   const labelInk = depth > 0 ? OP_LOG_MUTED : "text-text"
+  const noIcon = !entityIcon
   return (
     <div
-      className={`op-log-row-grid${wide ? " op-log-row-grid--wide" : ""}`}
+      className={`op-log-row-grid${wide ? " op-log-row-grid--wide" : ""}${noIcon ? " op-log-row-grid--no-icon" : ""}`}
       style={gridStyle}
     >
       <span className="op-log-row-grid__chev review-chevron-slot" aria-hidden={!expandable && !showChevron}>

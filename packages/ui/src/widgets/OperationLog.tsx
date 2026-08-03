@@ -78,11 +78,16 @@ import {
   type SplitPaneDragState,
 } from "../lib/split-pane-drag"
 import { OperationLogInspector } from "./pipelines/OperationLogInspector"
+import {
+  OperationLogActivityTreeRow,
+  opLogActivityTreeRowHeight,
+} from "./pipelines/OperationLogActivityTreeRow"
 import { OperationLogPipelineListRow, opLogPipelineListRowHeight } from "./pipelines/OperationLogPipelineListRow"
+import type { OpLogSelection } from "./pipelines/OperationLogScopeDetail"
 
 const OP_LOG_SPLIT_MIN = 0.28
 const OP_LOG_SPLIT_MAX = 0.62
-const OP_LOG_SPLIT_DEFAULT = 0.35
+const OP_LOG_SPLIT_DEFAULT = 0.4
 const OP_LOG_LIST_ROW_HEIGHT = 44
 
 // ── Visuals ──────────────────────────────────────────────────────
@@ -484,9 +489,9 @@ export function OperationLog() {
   const [timeWindow, setTimeWindow] = useState<EventStreamWindow>(
     () => initialPrefs.window,
   )
-  const [selectedPipelineId, setSelectedPipelineId] = useState<string | null>(null)
+  const [selection, setSelection] = useState<OpLogSelection | null>(null)
+  const [openPipelineIds, setOpenPipelineIds] = useState<Set<string>>(new Set())
   const [actExpanded, setActExpanded] = useState<Set<string>>(new Set())
-  const [evExpanded, setEvExpanded] = useState<Set<string>>(new Set())
   const [collapsedDays, setCollapsedDays] = useState<Set<string>>(new Set())
   const [splitRatio, setSplitRatio] = useState(OP_LOG_SPLIT_DEFAULT)
   const rootRef = useRef<HTMLDivElement>(null)
@@ -561,9 +566,6 @@ export function OperationLog() {
   const toggleActivity = useCallback((key: string) => {
     setActExpanded(s => { const n = new Set(s); n.has(key) ? n.delete(key) : n.add(key); return n })
   }, [])
-  const toggleEvent = useCallback((key: string) => {
-    setEvExpanded(s => { const n = new Set(s); n.has(key) ? n.delete(key) : n.add(key); return n })
-  }, [])
   const toggleDay = useCallback((label: string) => {
     setCollapsedDays(s => { const n = new Set(s); n.has(label) ? n.delete(label) : n.add(label); return n })
   }, [])
@@ -584,19 +586,76 @@ export function OperationLog() {
     return map
   }, [filtered])
 
+  const openTopLevelActivities = useCallback((pipeline: OperationPipeline) => {
+    setActExpanded((s) => {
+      let changed = false
+      const n = new Set(s)
+      for (const activity of pipeline.activities) {
+        const key = pipelineActivityKey(pipeline.id, activity.id)
+        if ((activity.children?.length ?? 0) > 0 && !n.has(key)) {
+          n.add(key)
+          changed = true
+        }
+      }
+      return changed ? n : s
+    })
+  }, [])
+
+  const openPipelineTree = useCallback((pipelineId: string) => {
+    const target = pipelineById.get(pipelineId)
+    setOpenPipelineIds((s) => {
+      if (s.has(pipelineId)) return s
+      const n = new Set(s)
+      n.add(pipelineId)
+      return n
+    })
+    if (target) openTopLevelActivities(target)
+  }, [pipelineById, openTopLevelActivities])
+
+  const togglePipelineTree = useCallback((pipelineId: string) => {
+    const target = pipelineById.get(pipelineId)
+    const wasOpen = openPipelineIds.has(pipelineId)
+    setOpenPipelineIds((s) => {
+      const n = new Set(s)
+      if (n.has(pipelineId)) n.delete(pipelineId)
+      else n.add(pipelineId)
+      return n
+    })
+    if (!wasOpen && target) openTopLevelActivities(target)
+  }, [pipelineById, openPipelineIds, openTopLevelActivities])
+
+  const selectPipeline = useCallback((pipelineId: string) => {
+    setSelection({ kind: "pipeline", pipelineId })
+    openPipelineTree(pipelineId)
+  }, [openPipelineTree])
+
+  const selectActivity = useCallback((pipelineId: string, activityKey: string) => {
+    setSelection({ kind: "activity", pipelineId, activityKey })
+    openPipelineTree(pipelineId)
+  }, [openPipelineTree])
+
+  const selectedPipelineId = selection?.pipelineId ?? null
   const selectedPipeline = selectedPipelineId
     ? pipelineById.get(selectedPipelineId) ?? null
     : null
 
   useEffect(() => {
     if (filtered.length === 0) {
-      setSelectedPipelineId(null)
+      setSelection(null)
       return
     }
     if (!selectedPipelineId || !pipelineById.has(selectedPipelineId)) {
-      setSelectedPipelineId(filtered[0]!.id)
+      const first = filtered[0]!
+      setSelection({ kind: "pipeline", pipelineId: first.id })
+      setOpenPipelineIds((s) => {
+        if (s.has(first.id)) return s
+        const n = new Set(s)
+        n.add(first.id)
+        return n
+      })
+      openTopLevelActivities(first)
     }
-  }, [filtered, pipelineById, selectedPipelineId])
+  }, [filtered, pipelineById, selectedPipelineId, openTopLevelActivities])
 
   function onSplitPointerDown(event: ReactPointerEvent<HTMLDivElement>) {
     const shell = splitShellRef.current
@@ -690,14 +749,19 @@ export function OperationLog() {
             >
               <div className="op-log-split-list widget-split-sidebar flex min-h-0 min-w-0 flex-col overflow-hidden">
                 <div className="op-log-split-list__cap shrink-0 border-b border-border-subtle py-2 text-xs font-semibold uppercase tracking-wide text-text-muted">
-                  Pipeline runs
+                  Tree
                 </div>
                 <div ref={listScrollRef} className="op-log-split-list-scroll min-h-0 flex-1 overflow-y-auto">
                   <OperationPipelineList
                     scrollRef={listScrollRef}
                     pipelines={filtered}
-                    selectedPipelineId={selectedPipelineId}
-                    onSelectPipeline={setSelectedPipelineId}
+                    selection={selection}
+                    onSelectPipeline={selectPipeline}
+                    onSelectActivity={selectActivity}
+                    openPipelineIds={openPipelineIds}
+                    togglePipelineTree={togglePipelineTree}
+                    actExpanded={actExpanded}
+                    toggleActivity={toggleActivity}
                     collapsedDays={collapsedDays}
                     toggleDay={toggleDay}
                   />
@@ -729,19 +793,10 @@ export function OperationLog() {
                 <div className="widget-split-inset flex min-h-0 flex-1 flex-col overflow-hidden">
                   <OperationLogInspector
                     pipeline={selectedPipeline}
+                    selection={selection}
+                    keyOf={pipelineActivityKey}
                     onCancel={cancelPipeline}
                     cancelling={cancellingId === selectedPipeline?.id}
-                    timeline={
-                      selectedPipeline ? (
-                        <OperationLogPipelineTimeline
-                          pipeline={selectedPipeline}
-                          actExpanded={actExpanded}
-                          toggleActivity={toggleActivity}
-                          evExpanded={evExpanded}
-                          toggleEvent={toggleEvent}
-                        />
-                      ) : null
-                    }
                   />
                 </div>
               </div>
@@ -757,22 +812,37 @@ export function OperationLog() {
 
 export function OperationPipelineList({
   pipelines,
-  selectedPipelineId,
+  selection,
   onSelectPipeline,
+  onSelectActivity,
+  openPipelineIds,
+  togglePipelineTree,
+  actExpanded,
+  toggleActivity,
   collapsedDays,
   toggleDay,
   scrollRef,
 }: {
   pipelines: OperationPipeline[]
-  selectedPipelineId: string | null
+  selection: OpLogSelection | null
   onSelectPipeline: (id: string) => void
+  onSelectActivity: (pipelineId: string, activityKey: string) => void
+  openPipelineIds: Set<string>
+  togglePipelineTree: (id: string) => void
+  actExpanded: Set<string>
+  toggleActivity: (key: string) => void
   collapsedDays: Set<string>
   toggleDay: (label: string) => void
   scrollRef?: RefObject<HTMLElement | null>
 }) {
   const rows = useMemo(
-    () => flattenOperationRows(pipelines, collapsedDays, dayLabel),
-    [pipelines, collapsedDays],
+    () =>
+      flattenOperationRows(pipelines, collapsedDays, dayLabel, {
+        openPipelineIds,
+        openActivityKeys: actExpanded,
+        activityKeyOf: pipelineActivityKey,
+      }),
+    [pipelines, collapsedDays, openPipelineIds, actExpanded],
   )
 
   const renderRow = (row: (typeof rows)[number], index: number) => {
@@ -792,12 +862,40 @@ export function OperationPipelineList({
         </div>
       )
     }
+    if (row.type === "activity") {
+      const effectiveKind = activityPipelineKind(row.pipeline.kind, row.parentPhaseId)
+      const status = effectiveActivityStatus(row.activity, row.pipeline.status)
+      const label = formatActivityName(effectiveKind, row.activity)
+      const summary = defaultActivitySummary(effectiveKind, row.activity)
+      return (
+        <OperationLogActivityTreeRow
+          key={row.key}
+          activity={row.activity}
+          label={label}
+          summary={summary}
+          status={status}
+          depth={row.depth}
+          selected={
+            selection?.kind === "activity" && selection.activityKey === row.activityKey
+          }
+          hasChildren={row.hasChildren}
+          folded={!actExpanded.has(row.activityKey)}
+          onSelect={() => onSelectActivity(row.pipeline.id, row.activityKey)}
+          onToggleFold={() => toggleActivity(row.activityKey)}
+        />
+      )
+    }
     return (
       <OperationLogPipelineListRow
         key={row.key}
         pipeline={row.pipeline}
-        selected={selectedPipelineId === row.pipeline.id}
+        selected={
+          selection?.pipelineId === row.pipeline.id && selection.kind === "pipeline"
+        }
+        hasChildren={row.pipeline.activities.length > 0}
+        folded={!openPipelineIds.has(row.pipeline.id)}
         onSelect={onSelectPipeline}
+        onToggleFold={togglePipelineTree}
       />
     )
   }
@@ -814,6 +912,7 @@ export function OperationPipelineList({
         const row = rows[index]
         if (!row) return OP_LOG_LIST_ROW_HEIGHT
         if (row.type === "day") return index === 0 ? 28 : 42
+        if (row.type === "activity") return opLogActivityTreeRowHeight()
         return opLogPipelineListRowHeight(row.pipeline)
       }}
       getItemKey={(_i, item) => item.key}
@@ -1319,7 +1418,7 @@ function ActivityRow({ activityKey, activity, pipelineKind, pipelineId, pipeline
     >
       {expanded ? (
         <LogNest linear={linear}>
-          {inlineError ? <OpLogErrorTreeRow message={inlineError} /> : null}
+          {inlineError ? <OpLogErrorTreeRow message={inlineError} depth={depth + 1} /> : null}
           {isFlowStep && sqlEvents.map((ev, idx) => {
             const key = pipelineEventKey(activityKey, `sql:${idx}`)
             const resultData = resultChild?.events[0]?.data as Record<string, unknown> | undefined

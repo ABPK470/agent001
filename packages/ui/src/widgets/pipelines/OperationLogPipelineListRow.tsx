@@ -1,18 +1,25 @@
+import { ChevronRight } from "lucide-react"
 import type { OperationPipeline } from "../../client/index"
 import { pipelineEntityIcon } from "./op-log-entity-icon"
 import { OpLogEntityIcon } from "./OpLogEntityIcon"
 import { OpLogStatusPill } from "./OpLogStatusPill"
 import { formatPipelineSubtitle, OP_LOG } from "./operation-log-row"
 
-/** Left split-pane row — accent bar selection, entity icon, route/def subtitle. */
+/** Left split-pane pipeline root — accent bar selection; chevron folds activity children. */
 export function OperationLogPipelineListRow({
   pipeline,
   selected,
+  hasChildren,
+  folded,
   onSelect,
+  onToggleFold,
 }: {
   pipeline: OperationPipeline
   selected: boolean
+  hasChildren: boolean
+  folded: boolean
   onSelect: (id: string) => void
+  onToggleFold: (id: string) => void
 }) {
   const entity = pipelineEntityIcon(pipeline.kind)
   const subtitle = pipeline.subtitle ? formatPipelineSubtitle(pipeline.subtitle) : null
@@ -23,12 +30,14 @@ export function OperationLogPipelineListRow({
         "trace-tree-row op-log-pipeline-list-row",
         selected ? "is-selected" : "",
         subtitle ? "has-subtitle" : "",
-        "is-root is-leaf",
+        hasChildren ? "is-branch" : "is-leaf",
+        "is-root",
       ]
         .filter(Boolean)
         .join(" ")}
       role="treeitem"
       aria-selected={selected}
+      aria-expanded={hasChildren ? !folded : undefined}
     >
       <button
         type="button"
@@ -36,6 +45,21 @@ export function OperationLogPipelineListRow({
         onClick={() => onSelect(pipeline.id)}
       >
         <span className="trace-tree-row__node-cell op-log-pipeline-list-row__node-cell">
+          <span
+            className="trace-tree-row__chev"
+            onClick={(event) => {
+              event.stopPropagation()
+              if (hasChildren) onToggleFold(pipeline.id)
+            }}
+            aria-hidden
+          >
+            {hasChildren ? (
+              <ChevronRight
+                size={13}
+                className={`trace-tree-row__chev-icon${folded ? "" : " is-open"}`}
+              />
+            ) : null}
+          </span>
           <span className="trace-tree-row__icon" aria-hidden>
             <OpLogEntityIcon icon={entity.Icon} color={entity.color} />
           </span>

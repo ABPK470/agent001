@@ -1,8 +1,11 @@
 import { Loader2, Square } from "lucide-react"
-import type { ReactNode } from "react"
 import type { OperationPipeline } from "../../client/index"
 import { OperationKind, OperationStatus } from "../../client/index"
 import { OpLogStatusPill } from "./OpLogStatusPill"
+import {
+  OperationLogScopeDetail,
+  type OpLogSelection,
+} from "./OperationLogScopeDetail"
 import {
   OP_LOG,
   OP_LOG_MUTED,
@@ -13,14 +16,16 @@ import {
 
 export function OperationLogInspector({
   pipeline,
+  selection,
+  keyOf,
   onCancel,
   cancelling,
-  timeline,
 }: {
   pipeline: OperationPipeline | null
+  selection: OpLogSelection | null
+  keyOf: (pipelineId: string, activityId: string, parentKey?: string) => string
   onCancel?: (pipeline: OperationPipeline) => void
   cancelling?: boolean
-  timeline: ReactNode
 }) {
   if (!pipeline) {
     return (
@@ -32,7 +37,9 @@ export function OperationLogInspector({
 
   const subtitle = pipeline.subtitle ? formatPipelineSubtitle(pipeline.subtitle) : null
   const showError =
-    pipeline.error && pipeline.status === OperationStatus.Failed
+    selection?.kind === "pipeline" &&
+    pipeline.error &&
+    pipeline.status === OperationStatus.Failed
   const canCancel =
     pipeline.status === "running" &&
     onCancel &&
@@ -82,8 +89,12 @@ export function OperationLogInspector({
         </div>
       </div>
       <div className="op-log-detail__scroll min-h-0 flex-1 overflow-y-auto">
-        <div className="op-log-detail__section-cap">Timeline</div>
-        <div className="op-log-detail__timeline pb-4">{timeline}</div>
+        <div className="op-log-detail__section-cap">Detail</div>
+        <OperationLogScopeDetail
+          pipeline={pipeline}
+          selection={selection}
+          keyOf={keyOf}
+        />
       </div>
     </div>
   )

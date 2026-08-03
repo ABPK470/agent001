@@ -2609,6 +2609,7 @@ textarea.input {
 
 .op-log-split-list-scroll {
   min-height: 0;
+  scrollbar-gutter: stable;
 }
 
 .op-log-split-list__items {
@@ -2628,13 +2629,14 @@ textarea.input {
   min-width: 0;
 }
 
-.op-log-pipeline-list-row__btn {
+.op-log-pipeline-list-row__btn,
+.op-log-activity-tree-row__btn {
   grid-template-columns: minmax(0, 1fr);
   /* Beat Trace `.trace-tree-row__btn { min-width: 22rem }` — narrow split pane. */
   min-width: 0 !important;
   width: 100%;
   min-height: 44px;
-  padding: 0.3rem 1rem 0.3rem var(--trace-tree-hpad, 16px);
+  padding: 0.3rem 1.25rem 0.3rem var(--trace-tree-hpad, 16px);
   box-sizing: border-box;
 }
 
@@ -2642,17 +2644,32 @@ textarea.input {
   min-height: 54px;
 }
 
+.op-log-activity-tree-row__btn {
+  min-height: 40px;
+}
+
 .op-log-pipeline-list-row .trace-tree-row__node-cell,
-.op-log-pipeline-list-row__node-cell {
-  gap: 0.625rem;
+.op-log-pipeline-list-row__node-cell,
+.op-log-activity-tree-row .trace-tree-row__node-cell,
+.op-log-activity-tree-row__node-cell {
+  gap: 0.5rem;
   flex: 1 1 auto;
   min-width: 0;
   align-items: flex-start;
+  /* Kill Trace depth pad — pills were hugging the splitter. */
+  padding-left: 0 !important;
+  padding-right: 0 !important;
 }
 
 .op-log-pipeline-list-row .trace-tree-row__icon {
   margin-top: 0.125rem;
+  margin-right: 0;
   opacity: 1;
+}
+
+.op-log-pipeline-list-row .trace-tree-row__chev,
+.op-log-activity-tree-row .trace-tree-row__chev {
+  margin-right: 0;
 }
 
 .op-log-pipeline-list-row.is-leaf .trace-tree-row__name {
@@ -2684,10 +2701,37 @@ textarea.input {
   min-width: 0;
 }
 
-.op-log-pipeline-list-row .op-log-status-pill {
+.op-log-pipeline-list-row .op-log-status-pill,
+.op-log-activity-tree-row .op-log-status-pill {
   flex-shrink: 0;
   margin-top: 0.125rem;
-  margin-right: 0.125rem;
+  margin-left: auto;
+  margin-right: 0;
+}
+
+.op-log-activity-tree-row__duration {
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.op-log-activity-tree-row.is-selected::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--color-accent, #6366f1);
+  z-index: 2;
+}
+
+.op-log-split-list .op-log-activity-tree-row.trace-tree-row.is-selected .trace-tree-row__btn {
+  background: transparent !important;
+}
+
+.op-log-split-list .op-log-activity-tree-row.trace-tree-row.is-selected .trace-tree-row__btn:hover {
+  background: var(--overlay-2, rgb(255 255 255 / 0.04));
 }
 
 .op-log-detail {
@@ -3102,6 +3146,12 @@ textarea.input {
 .op-log-tree-table--inspector .op-log-row-grid--no-icon .op-log-row-grid__icon,
 .op-log-tree-table--inspector .op-log-tree-header__grid .op-log-row-grid__icon {
   display: none;
+}
+
+/* Label column is index 2 once the icon track is dropped. */
+.op-log-tree-table--inspector .op-log-row-grid--no-icon .op-log-nested-block__content,
+.op-log-tree-table--inspector .op-log-row-grid--no-icon .op-log-error-row__banner {
+  grid-column: 2 / 3;
 }
 
 .op-log-tree-table--inspector .review-tree__row {

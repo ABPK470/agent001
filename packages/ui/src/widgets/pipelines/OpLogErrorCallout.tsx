@@ -16,11 +16,18 @@ export function OpLogErrorBanner({ message }: { message: string }) {
  * Error preview as a dedicated tree peer — keeps parent row height fixed so
  * connectors do not overshoot into blank space.
  */
-export function OpLogErrorTreeRow({ message }: { message: string }) {
+export function OpLogErrorTreeRow({
+  message,
+  depth = 0,
+}: {
+  message: string
+  depth?: number
+}) {
+  const gridStyle = { ["--op-log-depth" as string]: depth }
   return (
     <ReviewTreeItem>
       <div className="review-tree__row op-log-error-row">
-        <div className="op-log-row-grid">
+        <div className="op-log-row-grid op-log-row-grid--no-icon" style={gridStyle}>
           <span className="op-log-row-grid__chev review-chevron-slot" aria-hidden>
             <span className="op-log-row-grid__chev-spacer" />
           </span>
