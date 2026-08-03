@@ -1,5 +1,6 @@
 /**
- * Platform store boundary — getDb / better-sqlite3 stay inside the SQLite adapter.
+ * Platform store boundary — driver / getDb stay inside persistence adapters.
+ * Adapter tree: infra/persistence/adapters/{sqlite,mssql,pg}/
  */
 
 import ts from "typescript"
@@ -7,7 +8,18 @@ import { fail } from "../report.mjs"
 import { isTestFile } from "../fs-walk.mjs"
 import { collectModuleSpecifiers, lineOf, parseSourceFile, relToPkg } from "../ts-context.mjs"
 
-const ADAPTER_PREFIX = "infra/persistence/adapters/sqlite/"
+const ADAPTER_TREE = "infra/persistence/adapters/"
+const ADAPTER_KINDS = new Set(["sqlite", "mssql", "pg"])
+
+/**
+ * @param {string} rel
+ */
+function isPlatformAdapterPath(rel) {
+  if (!rel.startsWith(ADAPTER_TREE)) return false
+  const rest = rel.slice(ADAPTER_TREE.length)
+  const kind = rest.split("/")[0]
+  return Boolean(kind && ADAPTER_KINDS.has(kind))
+}
 
 /**
  * @param {{ name: string, src: string }} pkg
@@ -18,7 +30,7 @@ export function lintPlatformStoreBoundary(pkg, files) {
 
   for (const file of files) {
     const rel = relToPkg(pkg.src, file)
-    if (rel.startsWith(ADAPTER_PREFIX)) continue
+    if (isPlatformAdapterPath(rel)) continue
     // Harness may import getDb / better-sqlite3 from the adapter for setup.
     if (isTestFile(rel)) continue
 
@@ -31,7 +43,7 @@ export function lintPlatformStoreBoundary(pkg, files) {
           file,
           line,
           "platform-store",
-          `better-sqlite3 must only be imported under ${ADAPTER_PREFIX} (got ${rel}). Use repository functions via infra/persistence/sqlite.js.`,
+          `better-sqlite3 must only be imported under ${ADAPTER_TREE}{sqlite,mssql,pg}/ (got ${rel}). Use repository functions via infra/persistence barrels.`,
         )
       }
       if (isConnectionModule(specifier)) {
@@ -39,7 +51,7 @@ export function lintPlatformStoreBoundary(pkg, files) {
           file,
           line,
           "platform-store",
-          `Do not import SQLite connection modules outside ${ADAPTER_PREFIX} (got ${rel}). Boot/CLI: adapters/sqlite/index.js (openDatabase); product code: repository functions.`,
+          `Do not import SQLite connection modules outside ${ADAPTER_TREE} (got ${rel}). Boot/CLI: adapters/sqlite/index.js (openDatabase); product code: repository functions.`,
         )
       }
       if (importsGetDbName(sf, specifier)) {
@@ -47,7 +59,7 @@ export function lintPlatformStoreBoundary(pkg, files) {
           file,
           line,
           "platform-store",
-          `getDb must not be imported outside ${ADAPTER_PREFIX} (got ${rel}).`,
+          `getDb must not be imported outside ${ADAPTER_TREE} (got ${rel}).`,
         )
       }
     }
@@ -62,7 +74,7 @@ export function lintPlatformStoreBoundary(pkg, files) {
           file,
           lineOf(sf, node),
           "platform-store",
-          `getDb() calls must stay under ${ADAPTER_PREFIX} (got ${rel}). Use repository functions.`,
+          `getDb() calls must stay under ${ADAPTER_TREE}{sqlite,mssql,pg}/ (got ${rel}). Use repository functions.`,
         )
       }
       ts.forEachChild(node, visit)
@@ -74,9 +86,9 @@ export function lintPlatformStoreBoundary(pkg, files) {
 /** @param {string} specifier */
 function isConnectionModule(specifier) {
   return (
-    /(?:^|\/)infra\/persistence\/(?:adapters\/sqlite\/)?(?:connection|db-connection)(?:\.js)?$/.test(
+    /(?:^|\/)infra\/persistence\/(?:adapters\/(?:sqlite|mssql|pg)\/)?(?:connection|db-connection)(?:\.js)?$/.test(
       specifier,
-    ) || /(?:^|\/)adapters\/sqlite\/(?:connection|db-connection)(?:\.js)?$/.test(specifier)
+    ) || /(?:^|\/)adapters\/(?:sqlite|mssql|pg)\/(?:connection|db-connection)(?:\.js)?$/.test(specifier)
   )
 }
 

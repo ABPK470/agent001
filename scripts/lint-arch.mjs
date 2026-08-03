@@ -75,6 +75,7 @@ import {
   lintSchemaAtBoundary,
 } from "./lint-arch/rules/boundaries.mjs"
 import { lintPlatformStoreBoundary } from "./lint-arch/rules/platform-store.mjs"
+import { lintWarehouseSqlOwnership } from "./lint-arch/rules/warehouse-sql.mjs"
 
 const ROOT = resolve(fileURLToPath(import.meta.url), "../..")
 const PACKAGES = createPackageConfigs(ROOT)
@@ -114,6 +115,7 @@ const RUNNERS = new Map([
   ["branded-types", ({ pkg, files }) => lintBrandedTypes(pkg, files)],
   ["leak-free-ports", ({ pkg, files }) => lintLeakFreePorts(pkg, files)],
   ["platform-store", ({ pkg, files }) => lintPlatformStoreBoundary(pkg, files)],
+  ["warehouse-sql", ({ pkg, files }) => lintWarehouseSqlOwnership(pkg, files)],
   ["deterministic-execution", ({ pkg, files }) => lintDeterministicExecution(pkg, files)],
   ["deterministic-ordering", ({ pkg, files }) => lintDeterministicOrdering(pkg, files)],
   ["data-sanitization", ({ pkg, files }) => lintDataSanitization(pkg, files)],

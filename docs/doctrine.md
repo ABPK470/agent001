@@ -140,29 +140,64 @@ One owned concept in the platform shell. Same words in UI, code, and docs.
 
 ---
 
-## 5c. Platform store vs domain connectors
+## 5c. Platform store vs domain connectors vs warehouse Sync
 
-**Platform store** is the server’s product durability: users, sessions, threads,
-runs, events, policies, entity registry, sync definitions/runs, approvals,
-memory, notifications, channels, effects. Owned by server persistence ports +
-repository functions. Today there is **one** adapter:
-`packages/server/src/infra/persistence/adapters/sqlite/**`.
+Three durability / I/O concerns. They share **sql-kit helpers** (quoting,
+literals, error taxonomy) — never one connection, never one ORM over both
+worlds, never document/NoSQL stores as platform life.
 
-**Domain connectors** are separate: warehouse MSSQL pools, Bridge, and other
-execution I/O. They never share the platform SQLite handle and must not be mixed
-into the platform store.
+### Platform store (Mia’s own life)
 
-**Laws**
+Product durability: users, sessions, threads, runs, events, policies, entity
+registry, sync *definitions*/catalog tip, approvals, memory, notifications,
+channels, effects. Owned by server persistence ports + repository functions.
 
-- Callers use repository functions (via `infra/persistence/sqlite.js` / public
-  persistence barrels) or named ports — never `getDb()` / `better-sqlite3`
-  outside `adapters/sqlite/**`.
+**RDBMS is pluggable:** `sqlite | mssql | postgres` via
+`packages/server/src/infra/persistence/adapters/{sqlite,mssql,pg}/**`.
+Local/dev default remains SQLite. Hosted picks one server RDBMS. Selection is
+config (`MIA_PLATFORM_STORE` + connection), not a rewrite of API/services.
+
+Target contract: **async** repository ports; `PlatformStore.transactionAsync`
+is the multi-dialect shape. The SQLite adapter may still expose a sync
+`transaction` bridge during cutover.
+
+### Warehouse Sync (customer From/To)
+
+Diff, fingerprint, apply/upsert/delete, SCD2 stamps, catalog drift, FK probes
+run against the **customer** warehouse through `WarehouseDialect` plugins
+(`packages/sync/src/adapters/{mssql,postgres}/dialect/**`). Pure changeSet /
+plan core stays dialect-free. Eligibility: connector kind ∈ `{mssql, postgres}`
+(enabled). Capabilities such as `mssql_procedure` / Mymi `usp*` stay
+**MSSQL-only** — Postgres envs refuse or use `custom_sql` / http; no fake
+parity.
+
+### Domain connectors / Bridge (row-move)
+
+Warehouse pools for Bridge `moveData`, agent `query_*` tools, and other
+execution I/O. Already multi-dialect. **Never** share the platform store
+connection. Sync apply does **not** call Bridge `moveData` (bulk transfer ≠
+entity reconcile). Optional thin reuse of sql-kit quoting / identity helpers
+only — no wholesale connectors rewrite.
+
+### Laws
+
+- Callers use repository functions (via public persistence barrels) or named
+  ports — never `getDb()` / `better-sqlite3` / driver clients outside the owning
+  adapter tree (`infra/persistence/adapters/**` for platform;
+  `packages/sync/src/adapters/**` for warehouse dialect SQL after extract).
 - `getDb` is not re-exported from public barrels. Tests and boot may import
-  connection hooks from `adapters/sqlite/index.js`.
-- Scale ports sit beside the store, not inside SQL call sites: **EventStore**
-  (durable event_log), **ResourceScheduler** / run queue, **ConnectionBudget**
-  (MSSQL pool caps), **LlmThrottle**, **PlatformStore** (transactions over
-  repository work).
+  connection hooks from `adapters/sqlite/index.js` (and peer adapters when
+  added).
+- **Zero dialect SQL** (MERGE, HASHBYTES, `sys.*`, identity-insert, vendor
+  temp tables, …) outside adapters — enforced by `lint:arch`. Sync
+  `domain/` / `ports/` stay pure today; runtime T-SQL extract is the next
+  milestone.
+- Platform store and warehouse Sync **never** share a pool or transaction.
+- Scale ports sit beside the store, not inside SQL call sites: **EventStore**,
+  **ResourceScheduler** / run queue, **ConnectionBudget** (warehouse pool
+  caps), **LlmThrottle**, **PlatformStore**.
+- Shared kit: `@mia/sql-kit` — quoting, literals, transient-error helpers.
+  Sync MERGE semantics and platform repos do **not** share one query builder.
 
 ---
 

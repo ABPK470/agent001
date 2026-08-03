@@ -14,6 +14,7 @@
   "dependencies": {
     "@mia/shared-types": "*",
     "@mia/shared-enums": "*",
+    "@mia/sql-kit": "*",
     "mssql": "^12.2.1",
     "yaml": "^2.9.0"
   },

@@ -34,3 +34,13 @@ export type { SyncRunFinishInput, SyncRunSink, SyncRunStartInput } from "./ports
 export type { PublishedSyncDefinitionRegistry } from "./ports/published-definition-registry.js"
 export type { SyncPublishReadinessPort } from "./ports/publish-readiness.js"
 export { ALWAYS_PUBLISH_READY } from "./ports/publish-readiness.js"
+export type {
+  WarehouseCapability,
+  WarehouseColumnMeta,
+  WarehouseDeleteBatchInput,
+  WarehouseDialect,
+  WarehouseDialectKind,
+  WarehouseHashSelectInput,
+  WarehouseTableCatalog,
+  WarehouseUpsertBatchInput,
+} from "./ports/warehouse-dialect.js"

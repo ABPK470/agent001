@@ -7,36 +7,14 @@
  * @module
  */
 
+import { isTransientMssqlError, quoteMssqlTable, quoteSqlLiteral } from "@mia/sql-kit"
 import type { HashColumn, PkHashRow } from "../../domain/diff-engine/types.js"
+
+export { isTransientMssqlError }
 
 /** Bracket-quote a `schema.table` identifier → `[schema].[table]`. */
 export function qtable(name: string): string {
-  return name
-    .split(".")
-    .map((p) => `[${p}]`)
-    .join(".")
-}
-
-/**
- * Detect transient mssql errors that are safe to retry. The pool's TDS
- * connections can be killed by server-side timeout, network blip, or
- * `requestTimeout` firing, leaving the next request on that conn with
- * `ConnectionError: Connection is closed.` Retrying gets a fresh conn.
- */
-export function isTransientMssqlError(e: unknown): boolean {
-  if (!(e instanceof Error)) return false
-  const msg = e.message.toLowerCase()
-  const code = (e as { code?: string }).code ?? ""
-  if (code === "ETIMEOUT" || code === "ECONNRESET" || code === "ECONNCLOSED" || code === "ESOCKET")
-    return true
-  return (
-    msg.includes("connection is closed") ||
-    msg.includes("connection lost") ||
-    msg.includes("connection reset") ||
-    msg.includes("socket hang up") ||
-    msg.includes("timeout: request failed to complete") ||
-    msg.includes("the connection is closed")
-  )
+  return quoteMssqlTable(name)
 }
 
 /**
@@ -88,10 +66,7 @@ export function hashExpr(col: HashColumn): string {
 
 /** SQL literal for use in IN / equality clauses. */
 export function quoteValue(v: unknown): string {
-  if (v === null || v === undefined) return "NULL"
-  if (typeof v === "number") return String(v)
-  if (typeof v === "boolean") return v ? "1" : "0"
-  return `N'${String(v).replace(/'/g, "''")}'`
+  return quoteSqlLiteral(v)
 }
 
 /** Same as quoteValue but with single quotes for non-numeric/bool — used in human-facing summaries. */

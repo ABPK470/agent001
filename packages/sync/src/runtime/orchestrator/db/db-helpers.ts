@@ -9,6 +9,7 @@
  * @module
  */
 
+import { quoteMssqlTable, quoteSqlLiteral } from "@mia/sql-kit"
 import type sql from "mssql"
 import { getPool } from "../../../adapters/mssql/connection.js"
 import { withPoolSlot } from "../../../adapters/mssql/pool-gate.js"
@@ -38,20 +39,12 @@ export function projectRoot(host: SyncProjectRootHost): string {
 
 /** Bracket-quote a `schema.table` identifier → `[schema].[table]`. */
 export function qtable(name: string): string {
-  return name
-    .split(".")
-    .map((p) => `[${p}]`)
-    .join(".")
+  return quoteMssqlTable(name)
 }
 
 /** Convert a JS value to a SQL literal for use in a VALUES clause. */
 export function sqlLiteral(v: unknown): string {
-  if (v === null || v === undefined) return "NULL"
-  if (typeof v === "number") return String(v)
-  if (typeof v === "boolean") return v ? "1" : "0"
-  if (v instanceof Date) return `'${v.toISOString()}'`
-  if (Buffer.isBuffer(v)) return `0x${v.toString("hex")}`
-  return `N'${String(v).replace(/'/g, "''")}'`
+  return quoteSqlLiteral(v)
 }
 
 /**

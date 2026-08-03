@@ -39,6 +39,7 @@ export const PACKAGE_RULES = [
   "trust",
   "forbidden-constructors",
   "platform-store",
+  "warehouse-sql",
 ]
 
 /** Extra per-package rules (data — not if-branches in the entrypoint). */

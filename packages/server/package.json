@@ -48,6 +48,7 @@
     "@mia/connectors": "*",
     "@mia/shared-enums": "*",
     "@mia/shared-types": "*",
+    "@mia/sql-kit": "*",
     "bcryptjs": "^2.4.3",
     "better-sqlite3": "^12.10.0",
     "dotenv": "^17.3.1",
