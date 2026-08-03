@@ -1,5 +1,6 @@
-# Platform + Sync RDBMS matrices (plan milestones 5–7).
-# sqlite platform always; mssql platform + postgres sync when credentials/services available.
+# Platform + Sync RDBMS matrices.
+# Always-on: sqlite platform unit + sync dialect/eligibility goldens.
+# Path-filtered (or workflow_dispatch): live MSSQL / Postgres service jobs.
 
 name: rdbms-matrix
 
@@ -10,6 +11,26 @@ on:
   workflow_dispatch:
 
 jobs:
+  changes:
+    name: detect rdbms paths
+    runs-on: ubuntu-latest
+    outputs:
+      rdbms: ${{ steps.filter.outputs.rdbms }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            rdbms:
+              - 'packages/server/src/infra/persistence/**'
+              - 'packages/server/src/ports/platform-store.ts'
+              - 'packages/server/src/ports/memory-search.ts'
+              - 'packages/sync/**'
+              - 'packages/sql-kit/**'
+              - '.github/workflows/rdbms-matrix.yml'
+              - 'package.json'
+
   platform-sqlite:
     name: platform / sqlite
     runs-on: ubuntu-latest
@@ -51,17 +72,13 @@ jobs:
       - run: npm ci
         working-directory: .
       - name: WarehouseDialect + eligibility goldens
-        run: >
-          npx vitest run
-          src/adapters
-          src/runtime/warehouse-dialect.test.ts
-          src/core/eligibility
-          src/ports
+        run: npm run test:dialects
 
   platform-mssql:
     name: platform / mssql (service)
+    needs: changes
+    if: ${{ github.event_name == 'workflow_dispatch' || needs.changes.outputs.rdbms == 'true' }}
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'workflow_dispatch' || vars.MIA_CI_MSSQL == '1' }}
     services:
       mssql:
         image: mcr.microsoft.com/mssql/server:2022-latest
@@ -71,10 +88,11 @@ jobs:
         ports:
           - 1433:1433
         options: >-
-          --health-cmd="/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P 'Your_strong_Password123' -Q 'SELECT 1' || exit 1"
+          --health-cmd="echo healthy"
           --health-interval=10s
           --health-timeout=5s
-          --health-retries=20
+          --health-retries=10
+          --health-start-period=30s
     defaults:
       run:
         working-directory: packages/server
@@ -86,14 +104,27 @@ jobs:
           cache: npm
       - run: npm ci
         working-directory: .
-      - name: Create platform database
+      - name: Wait for SQL Server and create platform database
         run: |
-          for i in $(seq 1 30); do
-            docker exec $(docker ps -q --filter ancestor=mcr.microsoft.com/mssql/server:2022-latest) \
+          set -e
+          for i in $(seq 1 60); do
+            if docker exec "$(docker ps -q --filter ancestor=mcr.microsoft.com/mssql/server:2022-latest | head -1)" \
               /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P 'Your_strong_Password123' \
-              -Q "IF DB_ID('mia_platform') IS NULL CREATE DATABASE mia_platform" && break
-            sleep 2
+              -Q "IF DB_ID('mia_platform') IS NULL CREATE DATABASE mia_platform; SELECT 1" 2>/dev/null; then
+              echo "mia_platform ready"
+              exit 0
+            fi
+            # tools18 path may differ — try tools
+            if docker exec "$(docker ps -q --filter ancestor=mcr.microsoft.com/mssql/server:2022-latest | head -1)" \
+              /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P 'Your_strong_Password123' \
+              -Q "IF DB_ID('mia_platform') IS NULL CREATE DATABASE mia_platform; SELECT 1" 2>/dev/null; then
+              echo "mia_platform ready (mssql-tools)"
+              exit 0
+            fi
+            sleep 3
           done
+          echo "SQL Server did not become ready" >&2
+          exit 1
       - name: MSSQL migration runner + schema unit tests
         run: >
           npx vitest run
@@ -110,8 +141,9 @@ jobs:
 
   sync-postgres-integration:
     name: sync / postgres integration
+    needs: changes
+    if: ${{ github.event_name == 'workflow_dispatch' || needs.changes.outputs.rdbms == 'true' }}
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'workflow_dispatch' || vars.MIA_CI_PG == '1' }}
     services:
       postgres:
         image: postgres:16

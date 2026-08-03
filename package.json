@@ -29,7 +29,7 @@
     "eval:reliability": "node scripts/reliability-eval.mjs",
     "lint": "npm run lint:arch && npm run lint --workspaces --if-present",
     "lint:arch": "node scripts/lint-arch.mjs",
-    "test:rdbms-matrix": "npm test -w packages/server -- --run src/infra/persistence && npm test -w packages/sync -- --run src/adapters src/runtime/warehouse-dialect.test.ts src/core/eligibility src/ports",
+    "test:rdbms-matrix": "npm test -w packages/server -- --run src/infra/persistence && npm run test:dialects -w packages/sync",
     "pack:test": "npm run build && npm pack",
     "rebuild:native": "npm rebuild better-sqlite3 --build-from-source",
     "postinstall": "node scripts/ensure-native-modules.mjs",

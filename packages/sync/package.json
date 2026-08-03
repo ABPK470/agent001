@@ -9,6 +9,7 @@
   "scripts": {
     "build": "tsc",
     "test": "vitest run",
+    "test:dialects": "vitest run src/adapters src/runtime/warehouse-dialect.test.ts src/core/eligibility src/ports",
     "lint": "tsc --noEmit"
   },
   "dependencies": {
