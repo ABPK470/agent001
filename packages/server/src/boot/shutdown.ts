@@ -33,6 +33,11 @@ export function registerGracefulShutdown(deps: GracefulShutdownDeps): void {
     deps.unsubscribeNotifications()
     await deps.orchestrator.drainRuns(60_000)
     await closeMssqlPool(deps.bootHost)
+    try {
+      await deps.bootHost.sync.warehousePools?.closeAll?.()
+    } catch (err: unknown) {
+      console.error("[mia]", err)
+    }
     await deps.sandbox.cleanup()
 
     console.log("[shutdown] complete")

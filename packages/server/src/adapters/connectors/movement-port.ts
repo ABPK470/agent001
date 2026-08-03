@@ -4,8 +4,8 @@ import { parseBoundaryJson } from "../../internal/parse-json.js"
  * runtime/movement-port.ts — build the opaque `host.connectors` port at boot.
  *
  * Wires persisted connectors to per-kind adapter factories:
- *   - mssql resolves a live pool by connector id via host.mssql.pools (MssqlPoolProvider).
- *   - postgres creates a per-move pg.Pool from the connector config.
+ *   - mssql resolves a live pool by connector id via host.mssql.pools.
+ *   - postgres resolves a live pool via PostgresPoolProvider when wired.
  *   - oracle creates a per-move oracledb pool from the connector config.
  *
  * The returned port is injected into configureAgent({ connectors }) and is the
@@ -41,6 +41,7 @@ import {
 import { Pool } from "pg"
 import type { Connector, ConnectorKindId } from "@mia/shared-types"
 import * as db from "../../infra/persistence/sqlite.js"
+import type { PostgresPoolProvider } from "./postgres-pool-provider.js"
 
 function asString(value: unknown): string | undefined {
   return typeof value === "string" && value !== "" ? value : undefined
@@ -94,8 +95,12 @@ function pgPoolConfig(connector: Connector): ConstructorParameters<typeof Pool>[
   }
 }
 
-export function buildMovementPort(host: AgentHost): ConnectorPort {
+export function buildMovementPort(
+  host: AgentHost,
+  options?: { postgresPools?: PostgresPoolProvider },
+): ConnectorPort {
   const registry = new AdapterRegistry()
+  const postgresPools = options?.postgresPools
 
   registry.register("mssql", (connector) => {
     return createMssqlAdapter(connector, {
@@ -110,9 +115,13 @@ export function buildMovementPort(host: AgentHost): ConnectorPort {
 
   registry.register("postgres", (connector) => {
     return createPostgresAdapter(connector, {
-      driverProvider: () => {
+      driverProvider: async () => {
+        if (postgresPools) {
+          const { pool } = await postgresPools.get(connector.id)
+          return defaultPostgresDriver(pool)
+        }
         const pool = new Pool(pgPoolConfig(connector))
-        return Promise.resolve(defaultPostgresDriver(pool))
+        return defaultPostgresDriver(pool)
       }
     })
   })

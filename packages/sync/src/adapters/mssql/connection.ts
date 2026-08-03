@@ -1,5 +1,10 @@
 import sql from "mssql"
-import type { MssqlAccessHost, MssqlEntry, SyncEnvironmentRegistryHost } from "../../ports/host.js"
+import type {
+  MssqlAccessHost,
+  MssqlEntry,
+  SyncEnvironmentRegistryHost,
+  SyncRuntimeHost,
+} from "../../ports/host.js"
 
 export type { MssqlEntry }
 
@@ -40,6 +45,14 @@ export async function getPool(
   }
   if (!env.connectorId) {
     throw new Error(`Environment "${name}" has no connectorId — cannot resolve MSSQL pool.`)
+  }
+  const warehouseKind = (host as SyncRuntimeHost).sync.warehousePools?.dialectOf(env.connectorId)
+  if (warehouseKind === "postgres") {
+    throw new Error(
+      `Environment "${name}" links Postgres connector "${env.connectorId}" — ` +
+        `MSSQL getPool cannot open it. Sync apply on Postgres is not wired yet; ` +
+        `use warehousePools.get() for dialect-aware access.`,
+    )
   }
   const resolved = await pools.get(env.connectorId)
   return {

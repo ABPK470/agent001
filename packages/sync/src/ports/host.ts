@@ -7,6 +7,7 @@ import type { SyncPublishReadinessPort } from "./publish-readiness.js"
 import type { SyncEventSink } from "./events.js"
 import type { SyncRunSink } from "./run-sink.js"
 import type { WarehouseDialect } from "./warehouse-dialect.js"
+import type { WarehousePoolProvider } from "./warehouse-pool.js"
 
 export type { SyncPublishReadinessPort }
 
@@ -117,6 +118,11 @@ export interface SyncHost {
    * Optional on stubs; runtime resolves via {@link import("../runtime/warehouse-dialect.js").resolveWarehouseDialect}.
    */
   warehouseDialect?: WarehouseDialect
+  /**
+   * Kind-aware warehouse pools (mssql | postgres). Optional on stubs;
+   * readiness prefers this over {@link MssqlHost.pools} when present.
+   */
+  warehousePools?: WarehousePoolProvider
 }
 
 export interface SyncEventHost {

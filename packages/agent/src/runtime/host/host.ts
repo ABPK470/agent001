@@ -25,6 +25,7 @@ import type {
   SyncPublishReadinessPort,
   SyncRunSink,
   WarehouseDialect,
+  WarehousePoolProvider,
 } from "@mia/sync"
 import type {
   ConnectorInfo,
@@ -127,6 +128,8 @@ export interface SyncHost {
   project: SyncProjectHost
   /** Warehouse SQL shape — mssql today; postgres next. Wired by configureAgent. */
   warehouseDialect: WarehouseDialect
+  /** Kind-aware warehouse pools (mssql | postgres). Optional until shell wires it. */
+  warehousePools?: WarehousePoolProvider
 }
 
 export interface TenantHost {

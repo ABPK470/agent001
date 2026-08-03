@@ -37,7 +37,7 @@ export async function runMetadataSync(
 ): Promise<{ applied: { insert: number; update: number; delete: number } }> {
   const { plan, planId, pkByTable, triggerCache, onProgress, target, tgtPool, telemetryContext } = input
   const host = input.host
-  const dialect = resolveWarehouseDialect(host)
+  const dialect = resolveWarehouseDialect(host, target)
   const relaxConstraints = dialect.supports("constraint_relax")
 
   const appliedTotals = { insert: 0, update: 0, delete: 0 }

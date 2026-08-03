@@ -135,7 +135,7 @@ async function fetchSchema(
   if (schemas.length === 0) {
     return { tables: new Set(), cols: new Map() }
   }
-  const dialect = resolveWarehouseDialect(host)
+  const dialect = resolveWarehouseDialect(host, connection)
   const rows = await queryWithRetry<{
     TABLE_SCHEMA: string
     TABLE_NAME: string
@@ -160,7 +160,7 @@ async function fetchSchemaForTables(
   telemetryContext?: SyncTelemetryContext
 ): Promise<SchemaSnapshot> {
   if (tables.length === 0) return { tables: new Set(), cols: new Map() }
-  const dialect = resolveWarehouseDialect(host)
+  const dialect = resolveWarehouseDialect(host, connection)
   const rows = await queryWithRetry<{
     TABLE_SCHEMA: string
     TABLE_NAME: string
@@ -210,7 +210,7 @@ export async function fetchTableColumnNamesMap(
 ): Promise<Map<string, string[]>> {
   const out = new Map<string, string[]>()
   if (tables.length === 0) return out
-  const dialect = resolveWarehouseDialect(host)
+  const dialect = resolveWarehouseDialect(host, connection)
   for (const qn of tables) {
     const [schema, name] = qn.split(".")
     if (!schema || !name) {
@@ -298,7 +298,7 @@ export async function tableHasTriggers(
   const [schema, name] = qualifiedName.split(".")
   if (!schema || !name) return false
   try {
-    const dialect = resolveWarehouseDialect(host)
+    const dialect = resolveWarehouseDialect(host, connection)
     const rows = await queryWithRetry<{ cnt: number }>(
       host,
       connection,

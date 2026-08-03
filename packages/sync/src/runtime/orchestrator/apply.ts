@@ -71,7 +71,7 @@ export async function fetchPkColumns(
 ): Promise<Map<string, string[]>> {
   const result = new Map<string, string[]>()
   if (tables.length === 0) return result
-  const dialect = resolveWarehouseDialect(host)
+  const dialect = resolveWarehouseDialect(host, connection)
   for (const qn of tables) {
     const [schema, name] = qn.split(".")
     if (!schema || !name) continue
@@ -122,7 +122,7 @@ export async function applyInsertsUpdates(
   )
   if (rows.length === 0) return 0
 
-  const dialect = resolveWarehouseDialect(host)
+  const dialect = resolveWarehouseDialect(host, plan.target)
   // Discover columns from target metadata (not source row keys — schemas may diverge).
   const colResult = await trackedQuery(
     host,
@@ -213,7 +213,7 @@ export async function applyDeletes(
   if (deleteKeys.length === 0) return 0
 
   const pkRows = changeRowsAsPkHash(deleteKeys)
-  const dialect = resolveWarehouseDialect(host)
+  const dialect = resolveWarehouseDialect(host, plan.target)
   const fullSql = dialect.deleteBatchSql({
     table: tableName,
     pkColumns,

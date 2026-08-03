@@ -23,6 +23,8 @@ import { loadBootSyncEnvironments } from "./sync-environments.js"
 import { loadPersistedConnectors } from "../adapters/connectors/live-connectors.js"
 import { mssqlConfigsFromConnectors } from "../adapters/connectors/mssql-from-connectors.js"
 import { createMssqlPoolProvider } from "../adapters/connectors/mssql-pool-provider.js"
+import { createPostgresPoolProvider } from "../adapters/connectors/postgres-pool-provider.js"
+import { createWarehousePoolProvider } from "../adapters/connectors/warehouse-pool-provider.js"
 import { buildMovementPort } from "../adapters/connectors/movement-port.js"
 import {
   registerOperation,
@@ -64,9 +66,10 @@ export async function createServerContext(): Promise<ServerContext> {
   const syncEventSink = createSyncEventSink()
   const syncRunSink = createSyncRunSink()
 
-  // Live, connector-keyed MSSQL pool provider — the single source of truth for
-  // pools. Sync environments resolve their pool through `connectorId`.
+  // Live, connector-keyed pool providers — Sync envs resolve through connectorId.
   const mssqlPools = createMssqlPoolProvider(projectRoot)
+  const postgresPools = createPostgresPoolProvider()
+  const warehousePools = createWarehousePoolProvider({ mssql: mssqlPools, postgres: postgresPools })
 
   const catalogInstances: AgentHost["catalog"]["instances"] = new Map()
   const catalogDefaultCachePath: AgentHost["catalog"]["defaultCachePath"] = { value: undefined }
@@ -87,7 +90,8 @@ export async function createServerContext(): Promise<ServerContext> {
           entityNeedsRepublish: (entityId) => entityNeedsRepublish(projectRoot, entityId),
         },
       },
-      governance: { freezeWindowsReader: () => listFreezeWindowDefinitionsForTenant() }
+      governance: { freezeWindowsReader: () => listFreezeWindowDefinitionsForTenant() },
+      warehousePools,
     }
   })
 
@@ -95,7 +99,7 @@ export async function createServerContext(): Promise<ServerContext> {
   // so it is built after configureAgent and stored in the mutable slot. The
   // port re-reads persisted connectors live from the DB on each call, so
   // runtime create/enable/disable/delete is reflected without a restart.
-  bootHost.connectors.port.value = buildMovementPort(bootHost)
+  bootHost.connectors.port.value = buildMovementPort(bootHost, { postgresPools })
   bootHost.connectors.events.sink = createBridgeEventSink()
   bootHost.connectors.operations.value = {
     register: registerOperation,

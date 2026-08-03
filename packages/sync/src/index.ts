@@ -44,3 +44,8 @@ export type {
 } from "./ports/warehouse-dialect.js"
 export { createMssqlWarehouseDialect } from "./adapters/mssql/dialect/index.js"
 export { createPostgresWarehouseDialect } from "./adapters/postgres/dialect/index.js"
+export type {
+  WarehouseConnectorRef,
+  WarehousePoolHandle,
+  WarehousePoolProvider,
+} from "./ports/warehouse-pool.js"

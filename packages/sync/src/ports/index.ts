@@ -49,3 +49,8 @@ export type {
   WarehouseHashSelectInput,
   WarehouseUpsertSqlInput,
 } from "./warehouse-dialect.js"
+export type {
+  WarehouseConnectorRef,
+  WarehousePoolHandle,
+  WarehousePoolProvider,
+} from "./warehouse-pool.js"

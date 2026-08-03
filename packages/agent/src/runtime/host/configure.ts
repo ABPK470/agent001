@@ -16,6 +16,7 @@ import {
   createPublishedSyncDefinitionRegistry,
   type SyncEnvironment,
   type WarehouseDialect,
+  type WarehousePoolProvider,
 } from "@mia/sync"
 import type sql from "mssql"
 import type { AgentHost } from "./host.js"
@@ -39,6 +40,7 @@ export interface ConfigureAgentSyncOptions {
   plans?: Partial<AgentHost["sync"]["plans"]>
   project?: Partial<AgentHost["sync"]["project"]>
   warehouseDialect?: WarehouseDialect
+  warehousePools?: WarehousePoolProvider
 }
 
 /**
@@ -146,6 +148,7 @@ export function configureAgent(options: ConfigureAgentOptions = {}): AgentHost {
       publishReadiness: syncOptions?.project?.publishReadiness ?? ALWAYS_PUBLISH_READY,
     },
     warehouseDialect: syncOptions?.warehouseDialect ?? createMssqlWarehouseDialect(),
+    ...(syncOptions?.warehousePools ? { warehousePools: syncOptions.warehousePools } : {}),
   }
 
   return Object.freeze<AgentHost>({

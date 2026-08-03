@@ -133,7 +133,7 @@ async function countRootInstances(
   conn: string,
   rootTable: string
 ): Promise<number> {
-  const dialect = resolveWarehouseDialect(host)
+  const dialect = resolveWarehouseDialect(host, conn)
   const qt = `${dialect.quoteTable(rootTable)}${dialect.readFromHintSql()}`
   const sqlText = `SELECT COUNT_BIG(1) AS cnt FROM ${qt}`
   const ctx = { kind: SyncOperationType.Preview, opId: `scan-${rootTable}`, scope: "discovery" as const }
@@ -161,7 +161,7 @@ async function discoverRootInstances(
       : undefined
 
   const ctx = { kind: SyncOperationType.Preview, opId: `scan-${rootTable}`, scope: "discovery" as const }
-  const dialect = resolveWarehouseDialect(host)
+  const dialect = resolveWarehouseDialect(host, conn)
   const qt = `${dialect.quoteTable(rootTable)}${dialect.readFromHintSql()}`
   const qid = dialect.quoteIdent(idColumn)
   const countSql = `SELECT COUNT_BIG(1) AS cnt FROM ${qt}`

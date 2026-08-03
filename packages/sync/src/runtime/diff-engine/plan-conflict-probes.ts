@@ -291,7 +291,7 @@ async function fetchInboundForeignKeys(
   referencedColumn: string,
   telemetryContext?: SyncTelemetryContext
 ): Promise<ForeignKeyEdge[]> {
-  const dialect = resolveWarehouseDialect(host)
+  const dialect = resolveWarehouseDialect(host, connectionName)
   const result = await runQueryWithRetry(
     host,
     connectionName,
@@ -309,7 +309,7 @@ async function fetchOutboundForeignKeys(
   qualifiedTable: string,
   telemetryContext?: SyncTelemetryContext
 ): Promise<ForeignKeyEdge[]> {
-  const dialect = resolveWarehouseDialect(host)
+  const dialect = resolveWarehouseDialect(host, connectionName)
   const result = await runQueryWithRetry(
     host,
     connectionName,
@@ -361,7 +361,7 @@ async function fetchPrimaryKeyColumns(
     const [schema, name] = qn.split(".")
     if (!schema || !name) continue
     try {
-      const dialect = resolveWarehouseDialect(host)
+      const dialect = resolveWarehouseDialect(host, connectionName)
       const r = await runQueryWithRetry(
         host,
         connectionName,
