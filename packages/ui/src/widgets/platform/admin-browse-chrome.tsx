@@ -4,7 +4,7 @@
  */
 
 import { ChevronLeft, ChevronRight, RefreshCw, SlidersHorizontal } from "lucide-react"
-import type { ReactNode } from "react"
+import type { ReactNode, RefObject } from "react"
 import {
   BrowseIconButton,
   BrowseSearchField,
@@ -13,6 +13,7 @@ import {
   BrowseStripTrailing,
 } from "../../components/BrowseStrip"
 
+/** @deprecated Prefer FilterSheet + FilterField (Catalog / Sync History dialect). */
 export function AdminBrowseFilterField({
   label,
   children,
@@ -40,6 +41,7 @@ export function AdminBrowseToolbar({
   activeFilterCount,
   onRefresh,
   loading,
+  filterBtnRef,
   trailing,
 }: {
   search: string
@@ -51,6 +53,8 @@ export function AdminBrowseToolbar({
   activeFilterCount: number
   onRefresh: () => void
   loading: boolean
+  /** Anchor for FilterSheet — Sync History / Catalog versions dialect. */
+  filterBtnRef?: RefObject<HTMLButtonElement | null>
   trailing?: ReactNode
 }) {
   return (
@@ -64,24 +68,26 @@ export function AdminBrowseToolbar({
         />
       </BrowseStripSearch>
       <BrowseStripTrailing>
+        {trailing}
         <BrowseIconButton
+          buttonRef={filterBtnRef}
           active={filtersOpen || activeFilterCount > 0}
           badge={activeFilterCount > 0 ? activeFilterCount : null}
           onClick={onToggleFilters}
           title={activeFilterCount > 0 ? `Filters (${activeFilterCount} active)` : "Filters"}
-          aria-pressed={filtersOpen}
+          aria-pressed={filtersOpen || activeFilterCount > 0}
         >
           <SlidersHorizontal size={15} />
         </BrowseIconButton>
         <BrowseIconButton onClick={onRefresh} title="Refresh">
           <RefreshCw size={15} className={loading ? "animate-spin" : undefined} />
         </BrowseIconButton>
-        {trailing}
       </BrowseStripTrailing>
     </BrowseStrip>
   )
 }
 
+/** @deprecated Prefer FilterSheet popover (Catalog / Sync History dialect). */
 export function AdminBrowseFiltersPanel({ children }: { children: ReactNode }) {
   return (
     <div className="shrink-0 space-y-3 border-b border-border-subtle bg-base/30 px-6 py-3">

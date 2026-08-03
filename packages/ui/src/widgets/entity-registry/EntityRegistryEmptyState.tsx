@@ -2,9 +2,12 @@
  * Entity Registry — idle workspace placeholder when no entity is selected.
  */
 
-import { Layers, Plus } from "lucide-react"
+import { Plus } from "lucide-react"
 import type { JSX } from "react"
+import { WIDGET_ICONS } from "../widget-icons"
 import { ACTION_BTN } from "./chrome"
+
+const EntityIcon = WIDGET_ICONS["entity-registry"]
 
 export interface EntityRegistryEmptyStateProps {
   isAdmin: boolean
@@ -19,7 +22,7 @@ export function EntityRegistryEmptyState({
     <div className="entity-registry-workspace-empty">
       <div className="entity-registry-empty-card">
         <div className="entity-registry-empty-card__icon">
-          <Layers size={16} strokeWidth={1.75} aria-hidden />
+          <EntityIcon size={16} strokeWidth={1.75} aria-hidden />
           <span>Entity</span>
         </div>
         <h2 className="entity-registry-empty-card__title">Select an Entity</h2>

@@ -1,6 +1,7 @@
 /**
  * UsageModal — admin token browser.
- * Same focus chrome as Audit: KPIs → search / collapsed filters → paginated list.
+ * Same filter dialect as Sync History / Catalog versions / Event Stream:
+ * BrowseStrip → ActiveFilterChips → FilterSheet popover (not an inline filter grid).
  */
 
 import {
@@ -11,10 +12,9 @@ import {
   Hash,
   Loader2,
   MessageSquare,
-  X,
   Zap,
 } from "lucide-react"
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   api,
   type UsageFilterOptions,
@@ -25,11 +25,15 @@ import {
 } from "../../client/index"
 import { DateField } from "../../components/DateField"
 import { EmptyState } from "../../components/EmptyState"
+import {
+  ActiveFilterChips,
+  FilterField,
+  FilterSheet,
+  type ActiveFilterChipModel,
+} from "../../components/FilterSheet"
 import { Listbox, type ListboxOption } from "../../components/Listbox"
 import { ModalShell } from "../entity-registry/ModalShell"
 import {
-  AdminBrowseFilterField,
-  AdminBrowseFiltersPanel,
   AdminBrowsePaginationFooter,
   AdminBrowseToolbar,
 } from "./admin-browse-chrome"
@@ -101,6 +105,7 @@ export function UsageModal({ onClose }: { onClose: () => void }) {
   const [expanded, setExpanded] = useState<string | null>(null)
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [options, setOptions] = useState<UsageFilterOptions>({ users: [], models: [] })
+  const filterBtnRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
     api.usageOptions().then(setOptions).catch((err: unknown) => { console.error("[mia]", err) })
@@ -147,13 +152,14 @@ export function UsageModal({ onClose }: { onClose: () => void }) {
 
   const activeFilterCount = useMemo(() => {
     let n = 0
-    if (draftQ.trim()) n++
     if (filters.user) n++
     if (filters.model) n++
     if (filters.from) n++
     if (filters.to) n++
     return n
-  }, [draftQ, filters])
+  }, [filters])
+
+  const hasActiveFilters = activeFilterCount > 0
 
   function patchFilters(patch: Partial<typeof EMPTY_FILTERS>) {
     setFilters((prev) => ({ ...prev, ...patch }))
@@ -188,6 +194,43 @@ export function UsageModal({ onClose }: { onClose: () => void }) {
     ],
     [options.models],
   )
+
+  const activeChips = useMemo((): ActiveFilterChipModel[] => {
+    const chips: ActiveFilterChipModel[] = []
+    if (filters.from?.trim()) {
+      chips.push({
+        id: "from",
+        label: "From",
+        value: filters.from,
+        onRemove: () => patchFilters({ from: "" }),
+      })
+    }
+    if (filters.to?.trim()) {
+      chips.push({
+        id: "to",
+        label: "To",
+        value: filters.to,
+        onRemove: () => patchFilters({ to: "" }),
+      })
+    }
+    if (filters.user?.trim()) {
+      chips.push({
+        id: "user",
+        label: "User",
+        value: filters.user,
+        onRemove: () => patchFilters({ user: "" }),
+      })
+    }
+    if (filters.model?.trim()) {
+      chips.push({
+        id: "model",
+        label: "Model",
+        value: filters.model,
+        onRemove: () => patchFilters({ model: "" }),
+      })
+    }
+    return chips
+  }, [filters])
 
   return (
     <ModalShell
@@ -240,78 +283,93 @@ export function UsageModal({ onClose }: { onClose: () => void }) {
           activeFilterCount={activeFilterCount}
           onRefresh={() => void load().catch((err: unknown) => { console.error("[mia]", err) })}
           loading={loading}
+          filterBtnRef={filterBtnRef}
+          trailing={(
+            <div className="w-[8.5rem] shrink-0">
+              <Listbox
+                value={filters.sort ?? "created_desc"}
+                options={SORT_OPTIONS}
+                onChange={(sort) => patchFilters({ sort })}
+                size="sm"
+                className="w-full listbox-control"
+                ariaLabel="Sort order"
+              />
+            </div>
+          )}
         />
 
-        {filtersOpen && (
-          <AdminBrowseFiltersPanel>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <AdminBrowseFilterField label="From">
-                <DateField
-                  value={filters.from ?? ""}
-                  onChange={(from) => patchFilters({ from })}
-                  placeholder="Any start"
-                  ariaLabel="Filter from date"
-                  size="sm"
-                  className="w-full"
-                />
-              </AdminBrowseFilterField>
-              <AdminBrowseFilterField label="To">
-                <DateField
-                  value={filters.to ?? ""}
-                  onChange={(to) => patchFilters({ to })}
-                  placeholder="Any end"
-                  ariaLabel="Filter to date"
-                  size="sm"
-                  className="w-full"
-                />
-              </AdminBrowseFilterField>
-              <AdminBrowseFilterField label="User">
-                <Listbox
-                  value={filters.user ?? ""}
-                  options={userOptions}
-                  onChange={(user) => patchFilters({ user })}
-                  size="sm"
-                  className="w-full listbox-control"
-                  ariaLabel="Filter by user"
-                  placeholder="All users"
-                />
-              </AdminBrowseFilterField>
-              <AdminBrowseFilterField label="Model">
-                <Listbox
-                  value={filters.model ?? ""}
-                  options={modelOptions}
-                  onChange={(model) => patchFilters({ model })}
-                  size="sm"
-                  className="w-full listbox-control"
-                  ariaLabel="Filter by model"
-                  placeholder="All models"
-                />
-              </AdminBrowseFilterField>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <AdminBrowseFilterField label="Sort">
-                <Listbox
-                  value={filters.sort ?? "created_desc"}
-                  options={SORT_OPTIONS}
-                  onChange={(sort) => patchFilters({ sort })}
-                  size="sm"
-                  className="w-full listbox-control"
-                  ariaLabel="Sort order"
-                />
-              </AdminBrowseFilterField>
-            </div>
-            {activeFilterCount > 0 && (
+        {activeChips.length > 0 && (
+          <div className="px-6">
+            <ActiveFilterChips
+              chips={activeChips}
+              onClear={hasActiveFilters ? clearFilters : undefined}
+            />
+          </div>
+        )}
+
+        <FilterSheet
+          open={filtersOpen}
+          onClose={() => setFiltersOpen(false)}
+          anchorRef={filterBtnRef}
+          footer={
+            hasActiveFilters ? (
               <button
                 type="button"
                 onClick={clearFilters}
-                className="inline-flex items-center gap-1.5 text-[12px] text-text-muted hover:text-text"
+                className="text-sm font-medium text-text-muted hover:text-text"
               >
-                <X size={12} />
-                Clear filters
+                Clear all
               </button>
-            )}
-          </AdminBrowseFiltersPanel>
-        )}
+            ) : null
+          }
+        >
+          <div className="grid grid-cols-2 gap-3">
+            <FilterField label="From">
+              <DateField
+                value={filters.from ?? ""}
+                onChange={(from) => patchFilters({ from })}
+                placeholder="Pick date"
+                ariaLabel="From"
+                size="sm"
+                className="w-full"
+              />
+            </FilterField>
+            <FilterField label="To">
+              <DateField
+                value={filters.to ?? ""}
+                onChange={(to) => patchFilters({ to })}
+                placeholder="Pick date"
+                ariaLabel="To"
+                size="sm"
+                className="w-full"
+              />
+            </FilterField>
+          </div>
+          <FilterField label="User">
+            <Listbox
+              value={filters.user ?? ""}
+              options={userOptions}
+              onChange={(user) => patchFilters({ user })}
+              size="sm"
+              className="w-full listbox-control"
+              ariaLabel="User"
+              placeholder="All users"
+              blankIsPlaceholder
+            />
+          </FilterField>
+          <FilterField label="Model">
+            <Listbox
+              value={filters.model ?? ""}
+              options={modelOptions}
+              onChange={(model) => patchFilters({ model })}
+              size="sm"
+              className="w-full listbox-control"
+              ariaLabel="Model"
+              placeholder="All models"
+              blankIsPlaceholder
+            />
+          </FilterField>
+        </FilterSheet>
 
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 py-3 show-scrollbar">
           {error ? (
@@ -327,7 +385,7 @@ export function UsageModal({ onClose }: { onClose: () => void }) {
               icon={Activity}
               message="No usage rows match these filters."
               detail={
-                activeFilterCount > 0
+                hasActiveFilters || draftQ.trim()
                   ? "Try clearing or widening your filters."
                   : "Start an agent run to track tokens."
               }
