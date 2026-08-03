@@ -21,3 +21,18 @@ export function platformNow() {
 export function coalescePlatformNow(column: string) {
   return sql`coalesce(${sql.ref(column)}, ${platformNow()})`
 }
+
+/**
+ * Timestamp that is `seconds` before now (UTC), for activity / retention windows.
+ * Prefer binding a JS ISO cutoff when the comparison is simple equality on TEXT;
+ * use this when the SQL body must express "now − N seconds".
+ */
+export function platformNowMinusSeconds(seconds: number) {
+  const n = Math.max(0, Math.floor(seconds))
+  const kind = getPlatformDbKind()
+  if (kind === "mssql") return sql`DATEADD(second, ${-n}, SYSUTCDATETIME())`
+  if (kind === "postgres") {
+    return sql`(NOW() AT TIME ZONE 'utc') - (${sql.raw(String(n))} * INTERVAL '1 second')`
+  }
+  return sql`datetime('now', ${`-${n} seconds`})`
+}

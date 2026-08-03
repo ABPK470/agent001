@@ -1011,4 +1011,90 @@ END;
       },
     },
   },
+  {
+    version: 7,
+    name: "mssql_pilot_browser",
+    up: {
+      mssql: async (executor) => {
+        await mssqlExec(
+          executor,
+          `
+IF OBJECT_ID(N'dbo.browser_contexts', N'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.browser_contexts (
+    id               NVARCHAR(64)   NOT NULL CONSTRAINT PK_browser_contexts PRIMARY KEY,
+    owner_upn        NVARCHAR(320)  NOT NULL
+      CONSTRAINT FK_browser_contexts_users REFERENCES dbo.users(upn),
+    storage_path     NVARCHAR(1024) NOT NULL,
+    fingerprint_seed NVARCHAR(256)  NOT NULL,
+    created_at       DATETIME2      NOT NULL CONSTRAINT DF_browser_contexts_created DEFAULT (SYSUTCDATETIME()),
+    last_used_at     DATETIME2      NOT NULL CONSTRAINT DF_browser_contexts_last_used DEFAULT (SYSUTCDATETIME())
+  );
+  CREATE UNIQUE INDEX IX_browser_contexts_owner ON dbo.browser_contexts(owner_upn);
+END;
+
+IF OBJECT_ID(N'dbo.browser_credentials', N'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.browser_credentials (
+    id             NVARCHAR(64)   NOT NULL CONSTRAINT PK_browser_credentials PRIMARY KEY,
+    owner_upn      NVARCHAR(320)  NOT NULL
+      CONSTRAINT FK_browser_credentials_users REFERENCES dbo.users(upn),
+    label          NVARCHAR(256)  NOT NULL,
+    kind           NVARCHAR(32)   NOT NULL,
+    target_origin  NVARCHAR(1024) NOT NULL,
+    enc_payload    VARBINARY(MAX) NOT NULL,
+    iv             VARBINARY(64)  NOT NULL,
+    auth_tag       VARBINARY(64)  NOT NULL,
+    created_at     DATETIME2      NOT NULL CONSTRAINT DF_browser_credentials_created DEFAULT (SYSUTCDATETIME()),
+    updated_at     DATETIME2      NOT NULL CONSTRAINT DF_browser_credentials_updated DEFAULT (SYSUTCDATETIME()),
+    last_used_at   DATETIME2      NULL,
+    CONSTRAINT UQ_browser_credentials_label UNIQUE (owner_upn, label)
+  );
+  CREATE INDEX IX_browser_credentials_owner ON dbo.browser_credentials(owner_upn);
+END;
+
+IF OBJECT_ID(N'dbo.browser_proxy_config', N'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.browser_proxy_config (
+    owner_upn   NVARCHAR(320)  NOT NULL CONSTRAINT PK_browser_proxy_config PRIMARY KEY
+      CONSTRAINT FK_browser_proxy_config_users REFERENCES dbo.users(upn),
+    enc_url     VARBINARY(MAX) NOT NULL,
+    iv          VARBINARY(64)  NOT NULL,
+    auth_tag    VARBINARY(64)  NOT NULL,
+    bypass      NVARCHAR(MAX)  NOT NULL CONSTRAINT DF_browser_proxy_bypass DEFAULT (N''),
+    updated_at  DATETIME2      NOT NULL CONSTRAINT DF_browser_proxy_updated DEFAULT (SYSUTCDATETIME())
+  );
+END;
+
+IF OBJECT_ID(N'dbo.browser_domain_policy_configs', N'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.browser_domain_policy_configs (
+    id          NVARCHAR(64)   NOT NULL CONSTRAINT PK_browser_domain_policy_configs PRIMARY KEY,
+    owner_upn   NVARCHAR(320)  NULL,
+    pattern     NVARCHAR(512)  NOT NULL,
+    effect      NVARCHAR(16)   NOT NULL,
+    reason      NVARCHAR(MAX)  NOT NULL CONSTRAINT DF_browser_domain_policy_reason DEFAULT (N''),
+    created_at  DATETIME2      NOT NULL CONSTRAINT DF_browser_domain_policy_created DEFAULT (SYSUTCDATETIME())
+  );
+  CREATE INDEX IX_browser_domain_policy_owner ON dbo.browser_domain_policy_configs(owner_upn);
+END;
+
+IF OBJECT_ID(N'dbo.browser_audit_log', N'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.browser_audit_log (
+    id          INT            NOT NULL IDENTITY(1,1) CONSTRAINT PK_browser_audit_log PRIMARY KEY,
+    owner_upn   NVARCHAR(320)  NOT NULL,
+    action      NVARCHAR(128)  NOT NULL,
+    target_url  NVARCHAR(2048) NULL,
+    detail      NVARCHAR(MAX)  NULL,
+    decision    NVARCHAR(32)   NOT NULL CONSTRAINT DF_browser_audit_decision DEFAULT (N'allow'),
+    created_at  DATETIME2      NOT NULL CONSTRAINT DF_browser_audit_created DEFAULT (SYSUTCDATETIME())
+  );
+  CREATE INDEX IX_browser_audit_owner ON dbo.browser_audit_log(owner_upn, created_at DESC);
+END;
+`,
+        )
+      },
+    },
+  },
 ]

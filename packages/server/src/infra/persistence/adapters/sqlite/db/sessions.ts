@@ -19,7 +19,7 @@ import { randomBytes } from "node:crypto"
 import { sql } from "kysely"
 import { getPlatformDb } from "../../../schema/kysely.js"
 import { runAll, runExec, runGet } from "../../../schema/execute.js"
-import { platformNow } from "../../../schema/sql-time.js"
+import { platformNow, platformNowMinusSeconds } from "../../../schema/sql-time.js"
 
 function newSid(): string {
   return randomBytes(16).toString("hex")
@@ -129,8 +129,9 @@ export function listSessions(opts?: { sinceSeconds?: number }): SessionWithUser[
       "users.is_admin",
     ])
   if (opts?.sinceSeconds !== undefined) {
-    const mod = `-${opts.sinceSeconds} seconds`
-    query = query.where(sql<boolean>`sessions.last_seen_at >= datetime('now', ${mod})`)
+    query = query.where(
+      sql<boolean>`sessions.last_seen_at >= ${platformNowMinusSeconds(opts.sinceSeconds)}`,
+    )
   }
   const compiled = query.orderBy("sessions.last_seen_at", "desc").compile()
   return runAll<SessionWithUser>(compiled)
@@ -174,10 +175,9 @@ export function listUsersWithStats(opts?: {
 }): UserStatsRow[] {
   const sinceSeconds = opts?.sinceSeconds ?? 604_800
   const activityWindow = opts?.activityWindowSeconds ?? 86_400
-  const sinceMod = `-${sinceSeconds} seconds`
-  const activityMod = `-${activityWindow} seconds`
-  // Irreducible admin CTE — SQLite datetime modifiers stay until milestone 4
-  // rewrites this as dialect-specific SQL. Routed through the schema toolkit.
+  const sinceCutoff = platformNowMinusSeconds(sinceSeconds)
+  const activityCutoff = platformNowMinusSeconds(activityWindow)
+  // Admin CTE — time windows via dialect-aware helpers (milestone 4c).
   const compiled = sql`
     WITH grouped_sessions AS (
       SELECT
@@ -190,15 +190,15 @@ export function listUsersWithStats(opts?: {
         (SELECT s2.ip         FROM sessions s2 WHERE lower(s2.upn) = lower(u.upn) ORDER BY s2.last_seen_at DESC LIMIT 1) AS last_ip,
         (SELECT s2.user_agent FROM sessions s2 WHERE lower(s2.upn) = lower(u.upn) ORDER BY s2.last_seen_at DESC LIMIT 1) AS last_user_agent
       FROM users u
-      LEFT JOIN sessions s ON lower(s.upn) = lower(u.upn) AND s.last_seen_at >= datetime('now', ${sinceMod})
+      LEFT JOIN sessions s ON lower(s.upn) = lower(u.upn) AND s.last_seen_at >= ${sinceCutoff}
       GROUP BY u.upn
     ),
     run_totals AS (
       SELECT
         lower(upn) AS upn,
         COUNT(*) AS total_runs,
-        SUM(CASE WHEN created_at >= datetime('now', ${activityMod}) THEN 1 ELSE 0 END) AS runs_24h,
-        SUM(CASE WHEN created_at >= datetime('now', ${activityMod}) AND status IN ('failed','crashed','timeout','error') THEN 1 ELSE 0 END) AS runs_failed_24h,
+        SUM(CASE WHEN created_at >= ${activityCutoff} THEN 1 ELSE 0 END) AS runs_24h,
+        SUM(CASE WHEN created_at >= ${activityCutoff} AND status IN ('failed','crashed','timeout','error') THEN 1 ELSE 0 END) AS runs_failed_24h,
         MAX(created_at) AS last_run_at
       FROM runs
       WHERE upn IS NOT NULL AND trim(upn) != ''
@@ -212,7 +212,7 @@ export function listUsersWithStats(opts?: {
       FROM runs r
       JOIN token_usage t ON t.run_id = r.id
       WHERE r.upn IS NOT NULL AND trim(r.upn) != ''
-        AND r.created_at >= datetime('now', ${activityMod})
+        AND r.created_at >= ${activityCutoff}
       GROUP BY lower(r.upn)
     ),
     last_models AS (
