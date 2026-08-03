@@ -3,7 +3,11 @@
  */
 
 import { randomUUID } from "node:crypto"
+import { sql } from "kysely"
 import { getDb } from "../connection.js"
+import { getPlatformStore } from "../platform-store.js"
+import { getPlatformDb } from "../../../schema/kysely.js"
+import { runAll, runExec, runGet } from "../../../schema/execute.js"
 
 export interface DbThread {
   id: string
@@ -30,21 +34,31 @@ export function createThread(upn: string, title = DEFAULT_TITLE): DbThread {
     created_at: now,
     updated_at: now,
     archived_at: null,
-    pinned: 0
+    pinned: 0,
   }
-  getDb()
-    .prepare(
-      `
-      INSERT INTO threads (id, upn, title, created_at, updated_at, archived_at, pinned)
-      VALUES (@id, @upn, @title, @created_at, @updated_at, NULL, 0)
-    `
-    )
-    .run(row)
+  const compiled = getPlatformDb()
+    .insertInto("threads")
+    .values({
+      id: row.id,
+      upn: row.upn,
+      title: row.title,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+      archived_at: null,
+      pinned: 0,
+    })
+    .compile()
+  runExec(compiled)
   return row
 }
 
 export function getThread(id: string): DbThread | undefined {
-  return getDb().prepare("SELECT * FROM threads WHERE id = ?").get(id) as DbThread | undefined
+  const compiled = getPlatformDb()
+    .selectFrom("threads")
+    .selectAll()
+    .where("id", "=", id)
+    .compile()
+  return runGet<DbThread>(compiled)
 }
 
 export function listThreadsForUser(
@@ -52,19 +66,29 @@ export function listThreadsForUser(
   opts: { includeArchived?: boolean } = {}
 ): DbThreadWithRunCount[] {
   const { includeArchived = false } = opts
-  return getDb()
-    .prepare(
-      `
-      SELECT t.*, COUNT(r.id) AS run_count
-      FROM threads t
-      LEFT JOIN runs r ON r.thread_id = t.id
-      WHERE t.upn = @upn
-        AND (@includeArchived = 1 OR t.archived_at IS NULL)
-      GROUP BY t.id
-      ORDER BY t.pinned DESC, t.updated_at DESC
-    `
-    )
-    .all({ upn, includeArchived: includeArchived ? 1 : 0 }) as DbThreadWithRunCount[]
+  let query = getPlatformDb()
+    .selectFrom("threads as t")
+    .leftJoin("runs as r", "r.thread_id", "t.id")
+    .select([
+      "t.id",
+      "t.upn",
+      "t.title",
+      "t.created_at",
+      "t.updated_at",
+      "t.archived_at",
+      "t.pinned",
+      sql<number>`count(r.id)`.as("run_count"),
+    ])
+    .where("t.upn", "=", upn)
+    .groupBy("t.id")
+  if (!includeArchived) {
+    query = query.where("t.archived_at", "is", null)
+  }
+  const compiled = query
+    .orderBy("t.pinned", "desc")
+    .orderBy("t.updated_at", "desc")
+    .compile()
+  return runAll<DbThreadWithRunCount>(compiled)
 }
 
 export function updateThread(
@@ -78,22 +102,29 @@ export function updateThread(
     title: patch.title?.trim() ? patch.title.trim() : existing.title,
     archived_at: patch.archived_at !== undefined ? patch.archived_at : existing.archived_at,
     pinned: patch.pinned !== undefined ? patch.pinned : existing.pinned,
-    updated_at: new Date().toISOString()
+    updated_at: new Date().toISOString(),
   }
-  getDb()
-    .prepare(
-      `
-      UPDATE threads
-      SET title = @title, archived_at = @archived_at, pinned = @pinned, updated_at = @updated_at
-      WHERE id = @id
-    `
-    )
-    .run(next)
+  const compiled = getPlatformDb()
+    .updateTable("threads")
+    .set({
+      title: next.title,
+      archived_at: next.archived_at,
+      pinned: next.pinned,
+      updated_at: next.updated_at,
+    })
+    .where("id", "=", id)
+    .compile()
+  runExec(compiled)
   return next
 }
 
 export function touchThread(id: string, at = new Date().toISOString()): void {
-  getDb().prepare("UPDATE threads SET updated_at = ? WHERE id = ?").run(at, id)
+  const compiled = getPlatformDb()
+    .updateTable("threads")
+    .set({ updated_at: at })
+    .where("id", "=", id)
+    .compile()
+  runExec(compiled)
 }
 
 export function autoTitleThreadFromGoal(threadId: string, goal: string): void {
@@ -107,15 +138,13 @@ export function autoTitleThreadFromGoal(threadId: string, goal: string): void {
 
 /** List run ids owned by a thread (caller must verify thread access). */
 export function listRunIdsForThread(threadId: string, upn: string): string[] {
-  const rows = getDb()
-    .prepare(
-      `
-      SELECT id FROM runs
-      WHERE thread_id = ? AND upn = ?
-    `
-    )
-    .all(threadId, upn.toLowerCase()) as Array<{ id: string }>
-  return rows.map((r) => r.id)
+  const compiled = getPlatformDb()
+    .selectFrom("runs")
+    .select("id")
+    .where("thread_id", "=", threadId)
+    .where("upn", "=", upn.toLowerCase())
+    .compile()
+  return runAll<{ id: string }>(compiled).map((r) => r.id)
 }
 
 /**
@@ -128,22 +157,37 @@ export function deleteThreadAndRuns(threadId: string, upn: string): { deletedRun
   if (!thread || thread.upn.toLowerCase() !== upn.toLowerCase()) return null
 
   const runIds = listRunIdsForThread(threadId, upn)
-  const db = getDb()
+  const normalizedUpn = upn.toLowerCase()
 
-  const purge = db.transaction(() => {
+  getPlatformStore().transaction(() => {
     if (runIds.length > 0) {
+      // memory_entries / event_log not yet on the schema toolkit — raw until those repos move.
       const placeholders = runIds.map(() => "?").join(",")
-      db.prepare(`DELETE FROM memory_entries WHERE run_id IN (${placeholders})`).run(...runIds)
+      getDb().prepare(`DELETE FROM memory_entries WHERE run_id IN (${placeholders})`).run(...runIds)
       for (const runId of runIds) {
-        db.prepare(`DELETE FROM event_log WHERE run_id = ?`).run(runId)
+        getDb().prepare(`DELETE FROM event_log WHERE run_id = ?`).run(runId)
       }
-      db.prepare(`DELETE FROM runs WHERE thread_id = ? AND upn = ?`).run(threadId, upn.toLowerCase())
+      const delRuns = getPlatformDb()
+        .deleteFrom("runs")
+        .where("thread_id", "=", threadId)
+        .where("upn", "=", normalizedUpn)
+        .compile()
+      runExec(delRuns)
     }
-    db.prepare(`UPDATE conversations SET thread_id = NULL WHERE thread_id = ?`).run(threadId)
-    db.prepare(`DELETE FROM threads WHERE id = ? AND upn = ?`).run(threadId, upn.toLowerCase())
+    const clearConv = getPlatformDb()
+      .updateTable("conversations")
+      .set({ thread_id: null })
+      .where("thread_id", "=", threadId)
+      .compile()
+    runExec(clearConv)
+    const delThread = getPlatformDb()
+      .deleteFrom("threads")
+      .where("id", "=", threadId)
+      .where("upn", "=", normalizedUpn)
+      .compile()
+    runExec(delThread)
   })
 
-  purge()
   return { deletedRuns: runIds.length }
 }
 

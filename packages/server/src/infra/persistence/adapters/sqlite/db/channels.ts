@@ -1,4 +1,6 @@
-import { getDb } from "../connection.js"
+import { sql } from "kysely"
+import { getPlatformDb } from "../../../schema/kysely.js"
+import { runAll, runExec, runGet } from "../../../schema/execute.js"
 
 export interface DbConversationRow {
   id: string
@@ -56,11 +58,13 @@ export function findConversationByChannelAndSender(
   channelType: string,
   senderId: string
 ): DbConversationRow | null {
-  return (
-    (getDb()
-      .prepare("SELECT * FROM conversations WHERE channel_type = ? AND sender_id = ?")
-      .get(channelType, senderId) as DbConversationRow | undefined) ?? null
-  )
+  const compiled = getPlatformDb()
+    .selectFrom("conversations")
+    .selectAll()
+    .where("channel_type", "=", channelType)
+    .where("sender_id", "=", senderId)
+    .compile()
+  return runGet<DbConversationRow>(compiled) ?? null
 }
 
 export function upsertConversationRow(row: {
@@ -73,46 +77,57 @@ export function upsertConversationRow(row: {
   created_at: string
   updated_at: string
 }): void {
-  getDb()
-    .prepare(
-      `
-      INSERT OR REPLACE INTO conversations (id, channel_type, sender_id, sender_name, active_run_id, thread_id, created_at, updated_at)
-      VALUES (@id, @channel_type, @sender_id, @sender_name, @active_run_id, @thread_id, @created_at, @updated_at)
-    `
-    )
-    .run(row)
+  const compiled = getPlatformDb()
+    .insertInto("conversations")
+    .orReplace()
+    .values(row)
+    .compile()
+  runExec(compiled)
 }
 
 export function updateConversationThreadId(id: string, threadId: string, updatedAt: string): void {
-  getDb()
-    .prepare("UPDATE conversations SET thread_id = ?, updated_at = ? WHERE id = ?")
-    .run(threadId, updatedAt, id)
+  const compiled = getPlatformDb()
+    .updateTable("conversations")
+    .set({ thread_id: threadId, updated_at: updatedAt })
+    .where("id", "=", id)
+    .compile()
+  runExec(compiled)
 }
 
 export function updateConversationActiveRun(id: string, runId: string | null, updatedAt: string): void {
-  getDb()
-    .prepare("UPDATE conversations SET active_run_id = ?, updated_at = ? WHERE id = ?")
-    .run(runId, updatedAt, id)
+  const compiled = getPlatformDb()
+    .updateTable("conversations")
+    .set({ active_run_id: runId, updated_at: updatedAt })
+    .where("id", "=", id)
+    .compile()
+  runExec(compiled)
 }
 
 export function getConversationRow(id: string): DbConversationRow | null {
-  return (
-    (getDb().prepare("SELECT * FROM conversations WHERE id = ?").get(id) as DbConversationRow | undefined) ?? null
-  )
+  const compiled = getPlatformDb()
+    .selectFrom("conversations")
+    .selectAll()
+    .where("id", "=", id)
+    .compile()
+  return runGet<DbConversationRow>(compiled) ?? null
 }
 
 export function getConversationRowByRunId(runId: string): DbConversationRow | null {
-  return (
-    (getDb().prepare("SELECT * FROM conversations WHERE active_run_id = ?").get(runId) as
-      | DbConversationRow
-      | undefined) ?? null
-  )
+  const compiled = getPlatformDb()
+    .selectFrom("conversations")
+    .selectAll()
+    .where("active_run_id", "=", runId)
+    .compile()
+  return runGet<DbConversationRow>(compiled) ?? null
 }
 
 export function listConversationRows(): DbConversationRow[] {
-  return getDb()
-    .prepare("SELECT * FROM conversations ORDER BY updated_at DESC")
-    .all() as DbConversationRow[]
+  const compiled = getPlatformDb()
+    .selectFrom("conversations")
+    .selectAll()
+    .orderBy("updated_at", "desc")
+    .compile()
+  return runAll<DbConversationRow>(compiled)
 }
 
 export function insertOutboundMessageRow(row: {
@@ -128,14 +143,11 @@ export function insertOutboundMessageRow(row: {
   created_at: string
   delivered_at: string | null
 }): void {
-  getDb()
-    .prepare(
-      `
-      INSERT INTO outbound_messages (id, conversation_id, channel_type, recipient_id, text, status, attempts, next_retry_at, last_error, created_at, delivered_at)
-      VALUES (@id, @conversation_id, @channel_type, @recipient_id, @text, @status, @attempts, @next_retry_at, @last_error, @created_at, @delivered_at)
-    `
-    )
-    .run(row)
+  const compiled = getPlatformDb()
+    .insertInto("outbound_messages")
+    .values(row)
+    .compile()
+  runExec(compiled)
 }
 
 export function updateOutboundMessageStatus(input: {
@@ -145,23 +157,27 @@ export function updateOutboundMessageStatus(input: {
   nextRetryAt: string | null
   deliveredAt: string | null
 }): void {
-  getDb()
-    .prepare(
-      `
-      UPDATE outbound_messages
-      SET status = ?, last_error = ?, next_retry_at = ?, delivered_at = ?
-      WHERE id = ?
-    `
-    )
-    .run(input.status, input.error, input.nextRetryAt, input.deliveredAt, input.id)
+  const compiled = getPlatformDb()
+    .updateTable("outbound_messages")
+    .set({
+      status: input.status,
+      last_error: input.error,
+      next_retry_at: input.nextRetryAt,
+      delivered_at: input.deliveredAt,
+    })
+    .where("id", "=", input.id)
+    .compile()
+  runExec(compiled)
 }
 
 export function listPendingOutboundMessageRows(): DbOutboundMessageRow[] {
-  return getDb()
-    .prepare(
-      "SELECT * FROM outbound_messages WHERE status IN ('queued', 'sending', 'retrying') ORDER BY created_at"
-    )
-    .all() as DbOutboundMessageRow[]
+  const compiled = getPlatformDb()
+    .selectFrom("outbound_messages")
+    .selectAll()
+    .where("status", "in", ["queued", "sending", "retrying"])
+    .orderBy("created_at")
+    .compile()
+  return runAll<DbOutboundMessageRow>(compiled)
 }
 
 export function insertDeliveryAttemptRow(input: {
@@ -172,18 +188,27 @@ export function insertDeliveryAttemptRow(input: {
   durationMs: number
   createdAt: string
 }): void {
-  getDb()
-    .prepare(
-      `
-      INSERT INTO delivery_attempts (message_id, attempt_number, status, error, duration_ms, created_at)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `
-    )
-    .run(input.messageId, input.attempt, input.status, input.error, input.durationMs, input.createdAt)
+  const compiled = getPlatformDb()
+    .insertInto("delivery_attempts")
+    .values({
+      message_id: input.messageId,
+      attempt_number: input.attempt,
+      status: input.status,
+      error: input.error,
+      duration_ms: input.durationMs,
+      created_at: input.createdAt,
+    })
+    .compile()
+  runExec(compiled)
 }
 
 export function updateOutboundMessageAttempts(messageId: string, attempt: number): void {
-  getDb().prepare("UPDATE outbound_messages SET attempts = ? WHERE id = ?").run(attempt, messageId)
+  const compiled = getPlatformDb()
+    .updateTable("outbound_messages")
+    .set({ attempts: attempt })
+    .where("id", "=", messageId)
+    .compile()
+  runExec(compiled)
 }
 
 export function upsertChannelConfigRow(row: {
@@ -195,68 +220,89 @@ export function upsertChannelConfigRow(row: {
   created_at: string
   updated_at: string
 }): void {
-  getDb()
-    .prepare(
-      `
-    INSERT OR REPLACE INTO channel_configs (type, access_token, verify_token, app_secret, platform_id, created_at, updated_at)
-    VALUES (@type, @access_token, @verify_token, @app_secret, @platform_id, @created_at, @updated_at)
-  `
-    )
-    .run(row)
+  const compiled = getPlatformDb()
+    .insertInto("channel_configs")
+    .orReplace()
+    .values(row)
+    .compile()
+  runExec(compiled)
 }
 
 export function getChannelConfigRow(type: string): DbChannelConfigRow | null {
-  return (
-    (getDb().prepare("SELECT * FROM channel_configs WHERE type = ?").get(type) as DbChannelConfigRow | undefined) ??
-    null
-  )
+  const compiled = getPlatformDb()
+    .selectFrom("channel_configs")
+    .selectAll()
+    .where("type", "=", type)
+    .compile()
+  return runGet<DbChannelConfigRow>(compiled) ?? null
 }
 
 export function listChannelConfigRows(): DbChannelConfigRow[] {
-  return getDb().prepare("SELECT * FROM channel_configs ORDER BY type").all() as DbChannelConfigRow[]
+  const compiled = getPlatformDb()
+    .selectFrom("channel_configs")
+    .selectAll()
+    .orderBy("type")
+    .compile()
+  return runAll<DbChannelConfigRow>(compiled)
 }
 
 export function deleteChannelConfigRow(type: string): void {
-  getDb().prepare("DELETE FROM channel_configs WHERE type = ?").run(type)
+  const compiled = getPlatformDb()
+    .deleteFrom("channel_configs")
+    .where("type", "=", type)
+    .compile()
+  runExec(compiled)
 }
 
 export function listOutboundMessageRows(conversationId: string, limit: number): DbOutboundMessageRow[] {
-  return getDb()
-    .prepare("SELECT * FROM outbound_messages WHERE conversation_id = ? ORDER BY created_at DESC LIMIT ?")
-    .all(conversationId, limit) as DbOutboundMessageRow[]
+  const compiled = getPlatformDb()
+    .selectFrom("outbound_messages")
+    .selectAll()
+    .where("conversation_id", "=", conversationId)
+    .orderBy("created_at", "desc")
+    .limit(limit)
+    .compile()
+  return runAll<DbOutboundMessageRow>(compiled)
 }
 
 export function listDeliveryAttemptRows(messageId: string): DbDeliveryAttemptRow[] {
-  return getDb()
-    .prepare("SELECT * FROM delivery_attempts WHERE message_id = ? ORDER BY attempt_number")
-    .all(messageId) as DbDeliveryAttemptRow[]
+  const compiled = getPlatformDb()
+    .selectFrom("delivery_attempts")
+    .selectAll()
+    .where("message_id", "=", messageId)
+    .orderBy("attempt_number")
+    .compile()
+  return runAll<DbDeliveryAttemptRow>(compiled)
 }
 
 export function getDeliveryStatsRows(): { summary: DbDeliveryStatsRow; avgAttemptsOnSuccess: number } {
-  const summary = getDb()
-    .prepare(
-      `
-    SELECT
-      COUNT(*) as total,
-      SUM(CASE WHEN status = 'delivered' THEN 1 ELSE 0 END) as delivered,
-      SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed,
-      SUM(CASE WHEN status IN ('queued', 'sending', 'retrying') THEN 1 ELSE 0 END) as pending
-    FROM outbound_messages
-  `
-    )
-    .get() as DbDeliveryStatsRow
+  const summaryCompiled = getPlatformDb()
+    .selectFrom("outbound_messages")
+    .select((eb) => [
+      eb.fn.countAll<number>().as("total"),
+      sql<number>`sum(case when status = 'delivered' then 1 else 0 end)`.as("delivered"),
+      sql<number>`sum(case when status = 'failed' then 1 else 0 end)`.as("failed"),
+      sql<number>`sum(case when status in ('queued', 'sending', 'retrying') then 1 else 0 end)`.as(
+        "pending",
+      ),
+    ])
+    .compile()
+  const summary = runGet<DbDeliveryStatsRow>(summaryCompiled) ?? {
+    total: 0,
+    delivered: 0,
+    failed: 0,
+    pending: 0,
+  }
 
-  const avgRow = getDb()
-    .prepare(
-      `
-    SELECT COALESCE(AVG(attempts), 0) as avg_attempts
-    FROM outbound_messages WHERE status = 'delivered'
-  `
-    )
-    .get() as { avg_attempts: number }
+  const avgCompiled = getPlatformDb()
+    .selectFrom("outbound_messages")
+    .select(sql<number>`coalesce(avg(attempts), 0)`.as("avg_attempts"))
+    .where("status", "=", "delivered")
+    .compile()
+  const avgRow = runGet<{ avg_attempts: number }>(avgCompiled)
 
   return {
     summary,
-    avgAttemptsOnSuccess: Math.round(avgRow.avg_attempts * 100) / 100
+    avgAttemptsOnSuccess: Math.round(Number(avgRow?.avg_attempts ?? 0) * 100) / 100,
   }
 }

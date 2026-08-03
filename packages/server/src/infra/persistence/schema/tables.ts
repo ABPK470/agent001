@@ -177,6 +177,148 @@ export interface ApprovalConfigsTable {
   updated_by: string
 }
 
+/** `sync_approvals` — proposal approval state machine. */
+export interface SyncApprovalsTable {
+  id: string
+  proposal_id: string
+  tenant_id: string
+  requested_by: string
+  requested_at: string
+  expires_at: string
+  policy: string
+  state: string
+  granted_by_1: string | null
+  granted_at_1: string | null
+  granted_by_2: string | null
+  granted_at_2: string | null
+  rejected_by: string | null
+  rejected_at: string | null
+  reject_reason: string | null
+  bypass_by: string | null
+  bypass_reason: string | null
+  plan_id_at_request: string | null
+  plan_hash_at_request: string | null
+}
+
+/** `sync_approval_tokens` — one-click HMAC grant/reject tokens. */
+export interface SyncApprovalTokensTable {
+  token_hash: string
+  approval_id: string
+  action: string
+  issued_to: string
+  issued_at: string
+  expires_at: string
+  used_at: string | null
+  used_by: string | null
+}
+
+/** `conversations` — channel inbox threads. */
+export interface ConversationsTable {
+  id: string
+  channel_type: string
+  sender_id: string
+  sender_name: string | null
+  active_run_id: string | null
+  thread_id: string | null
+  created_at: string
+  updated_at: string
+}
+
+/** `outbound_messages` — channel delivery queue. */
+export interface OutboundMessagesTable {
+  id: string
+  conversation_id: string
+  channel_type: string
+  recipient_id: string
+  text: string
+  status: string
+  attempts: number
+  next_retry_at: string | null
+  last_error: string | null
+  created_at: string
+  delivered_at: string | null
+}
+
+/** `delivery_attempts` — per-send attempt log. */
+export interface DeliveryAttemptsTable {
+  id: Generated<number>
+  message_id: string
+  attempt_number: number
+  status: string
+  error: string | null
+  duration_ms: number
+  created_at: string
+}
+
+/** `channel_configs` — Teams (etc.) connector secrets. */
+export interface ChannelConfigsTable {
+  type: string
+  access_token: string
+  verify_token: string
+  app_secret: string
+  platform_id: string
+  created_at: string
+  updated_at: string
+}
+
+/** `effects` — run side-effect journal. */
+export interface EffectsTable {
+  id: string
+  run_id: string
+  seq: number
+  kind: string
+  tool: string
+  target: string
+  pre_hash: string | null
+  post_hash: string | null
+  status: string
+  metadata: string
+  created_at: string
+}
+
+/** `file_snapshots` — pre/post file content for effects. */
+export interface FileSnapshotsTable {
+  id: string
+  effect_id: string
+  run_id: string
+  file_path: string
+  content: string | null
+  hash: string | null
+  file_mode: number | null
+  created_at: string
+}
+
+/** `threads` — named conversation workspaces. */
+export interface ThreadsTable {
+  id: string
+  upn: string
+  title: string
+  created_at: string
+  updated_at: string
+  archived_at: string | null
+  pinned: number
+}
+
+/**
+ * `runs` — agent run records.
+ * Full column contract so other repos can migrate onto the same type.
+ */
+export interface RunsTable {
+  id: string
+  goal: string
+  status: string
+  answer: string | null
+  step_count: number
+  error: string | null
+  parent_run_id: string | null
+  agent_id: string | null
+  thread_id: string | null
+  upn: string
+  display_name: string
+  created_at: string
+  completed_at: string | null
+}
+
 /**
  * Full platform database shape. Unlisted tables stay on raw better-sqlite3
  * until their repo moves.
@@ -197,6 +339,16 @@ export interface PlatformDatabase {
   sync_catalog_versions: SyncCatalogVersionsTable
   sync_catalog_active: SyncCatalogActiveTable
   approval_configs: ApprovalConfigsTable
+  sync_approvals: SyncApprovalsTable
+  sync_approval_tokens: SyncApprovalTokensTable
+  conversations: ConversationsTable
+  outbound_messages: OutboundMessagesTable
+  delivery_attempts: DeliveryAttemptsTable
+  channel_configs: ChannelConfigsTable
+  effects: EffectsTable
+  file_snapshots: FileSnapshotsTable
+  threads: ThreadsTable
+  runs: RunsTable
 }
 
 /** Helper for optional Generated columns in later tables. */

@@ -1,4 +1,5 @@
-import { getDb } from "../connection.js"
+import { getPlatformDb } from "../../../schema/kysely.js"
+import { runAll, runExec, runGet } from "../../../schema/execute.js"
 
 export interface EffectRow {
   id: string
@@ -38,14 +39,9 @@ export function insertEffect(effect: {
   metadata: string
   createdAt: string
 }): void {
-  getDb()
-    .prepare(
-      `
-      INSERT INTO effects (id, run_id, seq, kind, tool, target, pre_hash, post_hash, status, metadata, created_at)
-      VALUES (@id, @run_id, @seq, @kind, @tool, @target, @pre_hash, @post_hash, @status, @metadata, @created_at)
-    `
-    )
-    .run({
+  const compiled = getPlatformDb()
+    .insertInto("effects")
+    .values({
       id: effect.id,
       run_id: effect.runId,
       seq: effect.seq,
@@ -56,24 +52,39 @@ export function insertEffect(effect: {
       post_hash: effect.postHash,
       status: effect.status,
       metadata: effect.metadata,
-      created_at: effect.createdAt
+      created_at: effect.createdAt,
     })
+    .compile()
+  runExec(compiled)
 }
 
 export function markEffectCompensated(effectId: string): void {
-  getDb().prepare("UPDATE effects SET status = 'compensated' WHERE id = ?").run(effectId)
+  const compiled = getPlatformDb()
+    .updateTable("effects")
+    .set({ status: "compensated" })
+    .where("id", "=", effectId)
+    .compile()
+  runExec(compiled)
 }
 
 export function listEffectsByRun(runId: string): EffectRow[] {
-  return getDb()
-    .prepare("SELECT * FROM effects WHERE run_id = ? ORDER BY seq")
-    .all(runId) as EffectRow[]
+  const compiled = getPlatformDb()
+    .selectFrom("effects")
+    .selectAll()
+    .where("run_id", "=", runId)
+    .orderBy("seq")
+    .compile()
+  return runAll<EffectRow>(compiled)
 }
 
 export function listEffectsByTarget(filePath: string): EffectRow[] {
-  return getDb()
-    .prepare("SELECT * FROM effects WHERE target = ? ORDER BY created_at")
-    .all(filePath) as EffectRow[]
+  const compiled = getPlatformDb()
+    .selectFrom("effects")
+    .selectAll()
+    .where("target", "=", filePath)
+    .orderBy("created_at")
+    .compile()
+  return runAll<EffectRow>(compiled)
 }
 
 export function insertFileSnapshot(snapshot: {
@@ -86,14 +97,9 @@ export function insertFileSnapshot(snapshot: {
   fileMode: number | null
   createdAt: string
 }): void {
-  getDb()
-    .prepare(
-      `
-    INSERT INTO file_snapshots (id, effect_id, run_id, file_path, content, hash, file_mode, created_at)
-    VALUES (@id, @effect_id, @run_id, @file_path, @content, @hash, @file_mode, @created_at)
-  `
-    )
-    .run({
+  const compiled = getPlatformDb()
+    .insertInto("file_snapshots")
+    .values({
       id: snapshot.id,
       effect_id: snapshot.effectId,
       run_id: snapshot.runId,
@@ -101,28 +107,39 @@ export function insertFileSnapshot(snapshot: {
       content: snapshot.content,
       hash: snapshot.hash,
       file_mode: snapshot.fileMode,
-      created_at: snapshot.createdAt
+      created_at: snapshot.createdAt,
     })
+    .compile()
+  runExec(compiled)
 }
 
 export function getLatestFileSnapshot(filePath: string): FileSnapshotRow | null {
-  return (
-    (getDb()
-      .prepare("SELECT * FROM file_snapshots WHERE file_path = ? ORDER BY created_at DESC LIMIT 1")
-      .get(filePath) as FileSnapshotRow | undefined) ?? null
-  )
+  const compiled = getPlatformDb()
+    .selectFrom("file_snapshots")
+    .selectAll()
+    .where("file_path", "=", filePath)
+    .orderBy("created_at", "desc")
+    .limit(1)
+    .compile()
+  return runGet<FileSnapshotRow>(compiled) ?? null
 }
 
 export function listFileSnapshotsByRun(runId: string): FileSnapshotRow[] {
-  return getDb()
-    .prepare("SELECT * FROM file_snapshots WHERE run_id = ? ORDER BY created_at")
-    .all(runId) as FileSnapshotRow[]
+  const compiled = getPlatformDb()
+    .selectFrom("file_snapshots")
+    .selectAll()
+    .where("run_id", "=", runId)
+    .orderBy("created_at")
+    .compile()
+  return runAll<FileSnapshotRow>(compiled)
 }
 
 export function getFileSnapshotByEffectId(effectId: string): FileSnapshotRow | null {
-  return (
-    (getDb()
-      .prepare("SELECT * FROM file_snapshots WHERE effect_id = ? LIMIT 1")
-      .get(effectId) as FileSnapshotRow | undefined) ?? null
-  )
+  const compiled = getPlatformDb()
+    .selectFrom("file_snapshots")
+    .selectAll()
+    .where("effect_id", "=", effectId)
+    .limit(1)
+    .compile()
+  return runGet<FileSnapshotRow>(compiled) ?? null
 }

@@ -17,8 +17,8 @@
 
 import { hmacSha256Hex, RiskTier, sha256Hex } from "@mia/sync"
 import { randomBytes, randomUUID } from "node:crypto"
-import { sql } from "kysely"
-import { getDb } from "../connection.js"
+import { sql, type UpdateObject } from "kysely"
+import type { PlatformDatabase } from "../../../schema/tables.js"
 import { getPlatformDb } from "../../../schema/kysely.js"
 import { runAll, runChanges, runExec, runGet } from "../../../schema/execute.js"
 
@@ -192,22 +192,32 @@ export interface CreateApprovalInput {
 export function createApproval(i: CreateApprovalInput): ApprovalRow {
   const id = randomUUID()
   const expiresAt = new Date(Date.now() + i.ttlMs).toISOString()
-  getDb()
-    .prepare(
-      `
-    INSERT INTO sync_approvals (id, proposal_id, tenant_id, requested_by, expires_at,
-                                policy, state, plan_id_at_request, plan_hash_at_request)
-    VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?)
-  `
-    )
-    .run(id, i.proposalId, i.tenantId, i.requestedBy, expiresAt, i.policy, i.planId, i.planHash)
+  const compiled = getPlatformDb()
+    .insertInto("sync_approvals")
+    .values({
+      id,
+      proposal_id: i.proposalId,
+      tenant_id: i.tenantId,
+      requested_by: i.requestedBy,
+      requested_at: sql`datetime('now')`,
+      expires_at: expiresAt,
+      policy: i.policy,
+      state: "pending",
+      plan_id_at_request: i.planId,
+      plan_hash_at_request: i.planHash,
+    })
+    .compile()
+  runExec(compiled)
   return getApproval(id)!
 }
 
 export function getApproval(id: string): ApprovalRow | null {
-  return (
-    (getDb().prepare(`SELECT * FROM sync_approvals WHERE id = ?`).get(id) as ApprovalRow | undefined) ?? null
-  )
+  const compiled = getPlatformDb()
+    .selectFrom("sync_approvals")
+    .selectAll()
+    .where("id", "=", id)
+    .compile()
+  return runGet<ApprovalRow>(compiled) ?? null
 }
 
 export function listApprovals(filter: {
@@ -216,35 +226,33 @@ export function listApprovals(filter: {
   proposalId?: string
   limit?: number
 }): ApprovalRow[] {
-  const where: string[] = ["tenant_id = ?"]
-  const args: unknown[] = [filter.tenantId]
+  let query = getPlatformDb()
+    .selectFrom("sync_approvals")
+    .selectAll()
+    .where("tenant_id", "=", filter.tenantId)
   if (filter.state) {
-    where.push("state = ?")
-    args.push(filter.state)
+    query = query.where("state", "=", filter.state)
   }
   if (filter.proposalId) {
-    where.push("proposal_id = ?")
-    args.push(filter.proposalId)
+    query = query.where("proposal_id", "=", filter.proposalId)
   }
-  const sql = `SELECT * FROM sync_approvals WHERE ${where.join(" AND ")} ORDER BY requested_at DESC LIMIT ?`
-  return getDb()
-    .prepare(sql)
-    .all(...args, filter.limit ?? 500) as ApprovalRow[]
+  const compiled = query
+    .orderBy("requested_at", "desc")
+    .limit(filter.limit ?? 500)
+    .compile()
+  return runAll<ApprovalRow>(compiled)
 }
 
 export function findActiveApprovalForProposal(proposalId: string): ApprovalRow | null {
-  return (
-    (getDb()
-      .prepare(
-        `
-    SELECT * FROM sync_approvals
-     WHERE proposal_id = ? AND state IN ('pending','partially_granted')
-     ORDER BY requested_at DESC
-     LIMIT 1
-  `
-      )
-      .get(proposalId) as ApprovalRow | undefined) ?? null
-  )
+  const compiled = getPlatformDb()
+    .selectFrom("sync_approvals")
+    .selectAll()
+    .where("proposal_id", "=", proposalId)
+    .where("state", "in", ["pending", "partially_granted"])
+    .orderBy("requested_at", "desc")
+    .limit(1)
+    .compile()
+  return runGet<ApprovalRow>(compiled) ?? null
 }
 
 export class ApprovalError extends Error {
@@ -263,16 +271,27 @@ export interface GrantApprovalInput {
   planHashAtGrant: string | null
 }
 
+function updateApprovalById(
+  id: string,
+  patch: UpdateObject<PlatformDatabase, "sync_approvals">,
+): void {
+  const compiled = getPlatformDb()
+    .updateTable("sync_approvals")
+    .set(patch)
+    .where("id", "=", id)
+    .compile()
+  runExec(compiled)
+}
+
 /** Atomically advance the approval state machine on a grant action. */
 export function grantApproval(i: GrantApprovalInput): ApprovalRow {
-  const db = getDb()
   const row = getApproval(i.approvalId)
   if (!row) throw new ApprovalError("not_found", `Approval ${i.approvalId} not found`)
   if (row.state !== "pending" && row.state !== "partially_granted") {
     throw new ApprovalError("wrong_state", `Approval is ${row.state}`)
   }
   if (new Date(row.expires_at).getTime() < Date.now()) {
-    db.prepare(`UPDATE sync_approvals SET state = 'expired' WHERE id = ?`).run(i.approvalId)
+    updateApprovalById(i.approvalId, { state: "expired" })
     throw new ApprovalError("expired", "Approval window has closed")
   }
   if (i.approver === row.requested_by) {
@@ -283,28 +302,28 @@ export function grantApproval(i: GrantApprovalInput): ApprovalRow {
   }
 
   if (row.policy === "single") {
-    db.prepare(
-      `
-      UPDATE sync_approvals SET state = 'granted', granted_by_1 = ?, granted_at_1 = datetime('now')
-       WHERE id = ?`
-    ).run(i.approver, i.approvalId)
+    updateApprovalById(i.approvalId, {
+      state: "granted",
+      granted_by_1: i.approver,
+      granted_at_1: sql`datetime('now')`,
+    })
   } else if (row.policy === "dual") {
     if (!row.granted_by_1) {
-      db.prepare(
-        `
-        UPDATE sync_approvals SET state = 'partially_granted', granted_by_1 = ?, granted_at_1 = datetime('now')
-         WHERE id = ?`
-      ).run(i.approver, i.approvalId)
+      updateApprovalById(i.approvalId, {
+        state: "partially_granted",
+        granted_by_1: i.approver,
+        granted_at_1: sql`datetime('now')`,
+      })
     } else {
-      db.prepare(
-        `
-        UPDATE sync_approvals SET state = 'granted', granted_by_2 = ?, granted_at_2 = datetime('now')
-         WHERE id = ?`
-      ).run(i.approver, i.approvalId)
+      updateApprovalById(i.approvalId, {
+        state: "granted",
+        granted_by_2: i.approver,
+        granted_at_2: sql`datetime('now')`,
+      })
     }
   } else {
     // 'none' policies should never reach the grant route — guard anyway.
-    db.prepare(`UPDATE sync_approvals SET state = 'granted' WHERE id = ?`).run(i.approvalId)
+    updateApprovalById(i.approvalId, { state: "granted" })
   }
   return getApproval(i.approvalId)!
 }
@@ -315,13 +334,12 @@ export function rejectApproval(approvalId: string, rejector: string, reason: str
   if (row.state !== "pending" && row.state !== "partially_granted") {
     throw new ApprovalError("wrong_state", `Approval is ${row.state}`)
   }
-  getDb()
-    .prepare(
-      `
-    UPDATE sync_approvals SET state = 'rejected', rejected_by = ?, rejected_at = datetime('now'), reject_reason = ?
-     WHERE id = ?`
-    )
-    .run(rejector, reason, approvalId)
+  updateApprovalById(approvalId, {
+    state: "rejected",
+    rejected_by: rejector,
+    rejected_at: sql`datetime('now')`,
+    reject_reason: reason,
+  })
   return getApproval(approvalId)!
 }
 
@@ -329,13 +347,11 @@ export function bypassApproval(approvalId: string, actor: string, reason: string
   const row = getApproval(approvalId)
   if (!row) throw new ApprovalError("not_found", `Approval ${approvalId} not found`)
   if (row.state === "granted" || row.state === "bypassed") return row
-  getDb()
-    .prepare(
-      `
-    UPDATE sync_approvals SET state = 'bypassed', bypass_by = ?, bypass_reason = ?
-     WHERE id = ?`
-    )
-    .run(actor, reason, approvalId)
+  updateApprovalById(approvalId, {
+    state: "bypassed",
+    bypass_by: actor,
+    bypass_reason: reason,
+  })
   return getApproval(approvalId)!
 }
 
@@ -346,17 +362,13 @@ export function expireDueApprovals(): number {
   // `< datetime('now')` never matches. Pass the current ISO timestamp
   // explicitly so the comparison stays text-lexicographic on a uniform
   // format.
-  const r = getDb()
-    .prepare(
-      `
-    UPDATE sync_approvals
-       SET state = 'expired'
-     WHERE state IN ('pending','partially_granted')
-       AND expires_at < ?
-  `
-    )
-    .run(new Date().toISOString())
-  return r.changes
+  const compiled = getPlatformDb()
+    .updateTable("sync_approvals")
+    .set({ state: "expired" })
+    .where("state", "in", ["pending", "partially_granted"])
+    .where("expires_at", "<", new Date().toISOString())
+    .compile()
+  return runChanges(compiled)
 }
 
 // ── one-click tokens ─────────────────────────────────────────────
@@ -379,14 +391,18 @@ export function issueApprovalToken(i: IssueTokenInput): IssuedToken {
   const raw = randomBytes(32).toString("base64url")
   const tokenHash = sha256Hex(hmacSha256Hex(i.secret, raw))
   const expiresAt = new Date(Date.now() + i.ttlMs).toISOString()
-  getDb()
-    .prepare(
-      `
-    INSERT INTO sync_approval_tokens (token_hash, approval_id, action, issued_to, expires_at)
-    VALUES (?, ?, ?, ?, ?)
-  `
-    )
-    .run(tokenHash, i.approvalId, i.action, i.issuedTo, expiresAt)
+  const compiled = getPlatformDb()
+    .insertInto("sync_approval_tokens")
+    .values({
+      token_hash: tokenHash,
+      approval_id: i.approvalId,
+      action: i.action,
+      issued_to: i.issuedTo,
+      issued_at: sql`datetime('now')`,
+      expires_at: expiresAt,
+    })
+    .compile()
+  runExec(compiled)
   return { raw, expiresAt }
 }
 
@@ -404,29 +420,28 @@ export interface ConsumedToken {
 
 export function consumeApprovalToken(i: ConsumeTokenInput): ConsumedToken {
   const tokenHash = sha256Hex(hmacSha256Hex(i.secret, i.raw))
-  const row = getDb()
-    .prepare(
-      `
-    SELECT approval_id, action, issued_to, expires_at, used_at
-      FROM sync_approval_tokens WHERE token_hash = ?
-  `
-    )
-    .get(tokenHash) as
-    | {
-        approval_id: string
-        action: "grant" | "reject"
-        issued_to: string
-        expires_at: string
-        used_at: string | null
-      }
-    | undefined
+  const compiled = getPlatformDb()
+    .selectFrom("sync_approval_tokens")
+    .select(["approval_id", "action", "issued_to", "expires_at", "used_at"])
+    .where("token_hash", "=", tokenHash)
+    .compile()
+  const row = runGet<{
+    approval_id: string
+    action: "grant" | "reject"
+    issued_to: string
+    expires_at: string
+    used_at: string | null
+  }>(compiled)
   if (!row) throw new ApprovalError("token_invalid", "Unknown or invalid token")
   if (row.used_at) throw new ApprovalError("token_used", "Token has already been used")
   if (new Date(row.expires_at).getTime() < Date.now()) {
     throw new ApprovalError("token_expired", "Token has expired")
   }
-  getDb()
-    .prepare(`UPDATE sync_approval_tokens SET used_at = datetime('now'), used_by = ? WHERE token_hash = ?`)
-    .run(i.by, tokenHash)
+  const markUsed = getPlatformDb()
+    .updateTable("sync_approval_tokens")
+    .set({ used_at: sql`datetime('now')`, used_by: i.by })
+    .where("token_hash", "=", tokenHash)
+    .compile()
+  runExec(markUsed)
   return { approvalId: row.approval_id, action: row.action, issuedTo: row.issued_to }
 }
