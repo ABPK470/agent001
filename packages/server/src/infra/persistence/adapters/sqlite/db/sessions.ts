@@ -17,9 +17,8 @@
 
 import { randomBytes } from "node:crypto"
 import { sql } from "kysely"
-import { getDb } from "../connection.js"
 import { getPlatformDb } from "../../../schema/kysely.js"
-import { runExec, runGet } from "../../../schema/execute.js"
+import { runAll, runExec, runGet } from "../../../schema/execute.js"
 
 function newSid(): string {
   return randomBytes(16).toString("hex")
@@ -115,18 +114,25 @@ export function getSession(sid: string): DbSession | undefined {
 }
 
 export function listSessions(opts?: { sinceSeconds?: number }): SessionWithUser[] {
-  const since = opts?.sinceSeconds
-  const sql = `
-    SELECT s.sid, s.upn, s.ip, s.user_agent, s.created_at, s.last_seen_at,
-           u.display_name, u.is_admin
-    FROM sessions s
-    JOIN users u ON u.upn = s.upn
-    ${since !== undefined ? "WHERE s.last_seen_at >= datetime('now', ?)" : ""}
-    ORDER BY s.last_seen_at DESC
-  `
-  return since !== undefined
-    ? (getDb().prepare(sql).all(`-${since} seconds`) as SessionWithUser[])
-    : (getDb().prepare(sql).all() as SessionWithUser[])
+  let query = getPlatformDb()
+    .selectFrom("sessions")
+    .innerJoin("users", "users.upn", "sessions.upn")
+    .select([
+      "sessions.sid",
+      "sessions.upn",
+      "sessions.ip",
+      "sessions.user_agent",
+      "sessions.created_at",
+      "sessions.last_seen_at",
+      "users.display_name",
+      "users.is_admin",
+    ])
+  if (opts?.sinceSeconds !== undefined) {
+    const mod = `-${opts.sinceSeconds} seconds`
+    query = query.where(sql<boolean>`sessions.last_seen_at >= datetime('now', ${mod})`)
+  }
+  const compiled = query.orderBy("sessions.last_seen_at", "desc").compile()
+  return runAll<SessionWithUser>(compiled)
 }
 
 // ── Per-user aggregations (admin observability) ──────────────────
@@ -167,9 +173,11 @@ export function listUsersWithStats(opts?: {
 }): UserStatsRow[] {
   const sinceSeconds = opts?.sinceSeconds ?? 604_800
   const activityWindow = opts?.activityWindowSeconds ?? 86_400
-  const rows = getDb()
-    .prepare(
-      `
+  const sinceMod = `-${sinceSeconds} seconds`
+  const activityMod = `-${activityWindow} seconds`
+  // Irreducible admin CTE — SQLite datetime modifiers stay until milestone 4
+  // rewrites this as dialect-specific SQL. Routed through the schema toolkit.
+  const compiled = sql`
     WITH grouped_sessions AS (
       SELECT
         u.upn                  AS upn,
@@ -181,15 +189,15 @@ export function listUsersWithStats(opts?: {
         (SELECT s2.ip         FROM sessions s2 WHERE lower(s2.upn) = lower(u.upn) ORDER BY s2.last_seen_at DESC LIMIT 1) AS last_ip,
         (SELECT s2.user_agent FROM sessions s2 WHERE lower(s2.upn) = lower(u.upn) ORDER BY s2.last_seen_at DESC LIMIT 1) AS last_user_agent
       FROM users u
-      LEFT JOIN sessions s ON lower(s.upn) = lower(u.upn) AND s.last_seen_at >= datetime('now', ?)
+      LEFT JOIN sessions s ON lower(s.upn) = lower(u.upn) AND s.last_seen_at >= datetime('now', ${sinceMod})
       GROUP BY u.upn
     ),
     run_totals AS (
       SELECT
         lower(upn) AS upn,
         COUNT(*) AS total_runs,
-        SUM(CASE WHEN created_at >= datetime('now', ?) THEN 1 ELSE 0 END) AS runs_24h,
-        SUM(CASE WHEN created_at >= datetime('now', ?) AND status IN ('failed','crashed','timeout','error') THEN 1 ELSE 0 END) AS runs_failed_24h,
+        SUM(CASE WHEN created_at >= datetime('now', ${activityMod}) THEN 1 ELSE 0 END) AS runs_24h,
+        SUM(CASE WHEN created_at >= datetime('now', ${activityMod}) AND status IN ('failed','crashed','timeout','error') THEN 1 ELSE 0 END) AS runs_failed_24h,
         MAX(created_at) AS last_run_at
       FROM runs
       WHERE upn IS NOT NULL AND trim(upn) != ''
@@ -203,7 +211,7 @@ export function listUsersWithStats(opts?: {
       FROM runs r
       JOIN token_usage t ON t.run_id = r.id
       WHERE r.upn IS NOT NULL AND trim(r.upn) != ''
-        AND r.created_at >= datetime('now', ?)
+        AND r.created_at >= datetime('now', ${activityMod})
       GROUP BY lower(r.upn)
     ),
     last_models AS (
@@ -238,14 +246,8 @@ export function listUsersWithStats(opts?: {
     LEFT JOIN token_totals tt ON tt.upn = lower(g.upn)
     LEFT JOIN last_models  lm ON lm.upn = lower(g.upn)
     ORDER BY g.last_seen_at DESC
-  `
-    )
-    .all(
-      `-${sinceSeconds} seconds`,
-      `-${activityWindow} seconds`,
-      `-${activityWindow} seconds`,
-      `-${activityWindow} seconds`
-    ) as Array<{
+  `.compile(getPlatformDb())
+  const rows = runAll<{
     upn: string
     display_name: string
     is_admin: number
@@ -261,7 +263,7 @@ export function listUsersWithStats(opts?: {
     total_llm_calls_24h: number
     last_run_at: string | null
     last_model: string | null
-  }>
+  }>(compiled)
 
   const onlineCutoff = Date.now() - 60_000
   return rows.map((r) => ({
@@ -312,23 +314,33 @@ export function listUserHistory(
   // We strip the legacy "sid:" prefix defensively so older client links keep working.
   // Match case-insensitively — users are lowercased; legacy runs may not be.
   const upn = (identifier.startsWith("sid:") ? identifier.slice(4) : identifier).trim().toLowerCase()
-  const total = (
-    getDb().prepare("SELECT COUNT(*) AS cnt FROM runs WHERE lower(upn) = ?").get(upn) as { cnt: number }
-  ).cnt
-  const rows = getDb()
-    .prepare(
-      `
-    SELECT
-      r.id, r.goal, r.status, r.step_count, r.created_at, r.completed_at, r.error,
-      t.total_tokens, t.llm_calls, t.model
-    FROM runs r
-    LEFT JOIN token_usage t ON t.run_id = r.id
-    WHERE lower(r.upn) = ?
-    ORDER BY r.created_at DESC
-    LIMIT ? OFFSET ?
-  `
-    )
-    .all(upn, limit, offset) as Array<{
+  const totalCompiled = getPlatformDb()
+    .selectFrom("runs")
+    .select(sql<number>`count(*)`.as("cnt"))
+    .where(sql<boolean>`lower(upn) = ${upn}`)
+    .compile()
+  const total = Number(runGet<{ cnt: number | bigint }>(totalCompiled)?.cnt ?? 0)
+  const rowsCompiled = getPlatformDb()
+    .selectFrom("runs as r")
+    .leftJoin("token_usage as t", "t.run_id", "r.id")
+    .select([
+      "r.id",
+      "r.goal",
+      "r.status",
+      "r.step_count",
+      "r.created_at",
+      "r.completed_at",
+      "r.error",
+      "t.total_tokens",
+      "t.llm_calls",
+      "t.model",
+    ])
+    .where(sql<boolean>`lower(r.upn) = ${upn}`)
+    .orderBy("r.created_at", "desc")
+    .limit(limit)
+    .offset(offset)
+    .compile()
+  const rows = runAll<{
     id: string
     goal: string
     status: string
@@ -339,7 +351,7 @@ export function listUserHistory(
     total_tokens: number | null
     llm_calls: number | null
     model: string | null
-  }>
+  }>(rowsCompiled)
   return {
     total,
     runs: rows.map((r) => {

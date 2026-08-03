@@ -153,9 +153,11 @@ registry, sync *definitions*/catalog tip, approvals, memory, notifications,
 channels, effects. Owned by server persistence ports + repository functions.
 
 **RDBMS is pluggable:** `sqlite | mssql | postgres` via
-`packages/server/src/infra/persistence/adapters/{sqlite,mssql,pg}/**`.
-Local/dev default remains SQLite. Hosted picks one server RDBMS. Selection is
-config (`MIA_PLATFORM_STORE` + connection), not a rewrite of API/services.
+`packages/server/src/infra/persistence/adapters/{sqlite,mssql,postgres}/**`.
+Local/dev default remains SQLite. **Hosted default is MSSQL** (first peer
+dialect; Postgres may follow). Selection is config (`MIA_PLATFORM_STORE` +
+connection), not a rewrite of API/services. Platform pools must never be the
+warehouse Sync / Bridge connector pools.
 
 Target contract: **async** repository ports; `PlatformStore.transactionAsync`
 is the multi-dialect shape. The SQLite adapter may still expose a sync

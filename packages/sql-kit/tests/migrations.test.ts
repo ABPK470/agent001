@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import type { MigrationRunner, MigrationStep, MultiDialectMigrationStep } from "../src/migrations.js"
-import { upForDialect } from "../src/migrations.js"
+import { applyMultiDialectPending, upForDialect } from "../src/migrations.js"
 
 describe("MigrationRunner contract", () => {
   it("shapes a sqlite-style runner", async () => {
@@ -46,5 +46,36 @@ describe("MigrationRunner contract", () => {
     expect(upForDialect(step, "sqlite")).toBeTypeOf("function")
     expect(upForDialect(step, "postgres")).toBeTypeOf("function")
     expect(upForDialect(step, "mssql")).toBeNull()
+  })
+
+  it("applies pending multi-dialect steps in version order", async () => {
+    const seen: number[] = []
+    const steps: MultiDialectMigrationStep[] = [
+      { version: 2, name: "b", up: { mssql: () => { seen.push(2) } } },
+      { version: 1, name: "a", up: { mssql: () => { seen.push(1) } } },
+    ]
+    const applied = new Set<number>()
+    await applyMultiDialectPending({
+      dialect: "mssql",
+      steps,
+      executor: null,
+      applied: {
+        has: (v) => applied.has(v),
+        record: (id) => { applied.add(id.version) },
+      },
+    })
+    expect(seen).toEqual([1, 2])
+    expect(applied.has(1)).toBe(true)
+  })
+
+  it("refuses steps missing the requested dialect body", async () => {
+    await expect(
+      applyMultiDialectPending({
+        dialect: "mssql",
+        steps: [{ version: 1, name: "only-sqlite", up: { sqlite: () => {} } }],
+        executor: null,
+        applied: { has: () => false, record: () => {} },
+      }),
+    ).rejects.toThrow(/no "mssql" body/)
   })
 })

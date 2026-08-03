@@ -55,3 +55,33 @@ export function upForDialect(
 ): ((executor: unknown) => Promise<void> | void) | null {
   return step.up[dialect] ?? null
 }
+
+export type AppliedMigrationLookup = {
+  has(version: number): boolean | Promise<boolean>
+  record(id: MigrationId): void | Promise<void>
+}
+
+/**
+ * Apply pending {@link MultiDialectMigrationStep}s for one dialect.
+ * Throws when a step lacks an `up` for that dialect (not portable yet).
+ */
+export async function applyMultiDialectPending(args: {
+  dialect: RelationalDialectKind
+  steps: readonly MultiDialectMigrationStep[]
+  executor: unknown
+  applied: AppliedMigrationLookup
+}): Promise<void> {
+  const ordered = [...args.steps].sort((a, b) => a.version - b.version)
+  for (const step of ordered) {
+    if (await args.applied.has(step.version)) continue
+    const up = upForDialect(step, args.dialect)
+    if (!up) {
+      throw new Error(
+        `Migration ${step.version}_${step.name} has no "${args.dialect}" body ` +
+          `(multi-dialect registry incomplete)`,
+      )
+    }
+    await up(args.executor)
+    await args.applied.record({ version: step.version, name: step.name })
+  }
+}

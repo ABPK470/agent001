@@ -28,9 +28,10 @@ export type {
 
 export type {
   AppliedMigration,
+  AppliedMigrationLookup,
   MigrationId,
   MigrationRunner,
   MigrationStep,
   MultiDialectMigrationStep,
 } from "./migrations.js"
-export { upForDialect } from "./migrations.js"
+export { applyMultiDialectPending, upForDialect } from "./migrations.js"

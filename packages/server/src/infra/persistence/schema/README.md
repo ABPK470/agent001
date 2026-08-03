@@ -4,12 +4,12 @@ Track B of the RDBMS-agnostic program ([plan](../../../../../.cursor/plans/sqlit
 
 ## When can we swap SQLite → MSSQL/Postgres?
 
-**Not yet.** It is **explicitly in the plan**:
+**Not yet.** Boot still refuses non-sqlite. Progress:
 
 | Milestone | What | Status |
 | --- | --- | --- |
-| 3 | Schema toolkit + async SQLite adapter | **In progress** — Kysely table-by-table |
-| 4 | Second dialect (`mssql` *or* `postgres`) + multi-dialect migrator | **Scaffold only** — boot refuses unimplemented kinds |
+| 3 | Schema toolkit + async SQLite adapter | **Nearly done** — product repos on Kysely; leftovers below |
+| 4 | Second dialect (**hosted default: mssql**) + multi-dialect migrator | **In progress** — config, pool, pilot DDL registry, migrator; repos/execute still SQLite |
 | 8 | Memory search port (FTS) | Last hard piece |
 
 Honest sizing in the plan: platform agnostic is **large (months)** — ~70 tables, async ripple, search redesign. Sync warehouse multi-dialect is a **separate** track and is further along.
@@ -21,11 +21,13 @@ Honest sizing in the plan: platform agnostic is **large (months)** — ~70 table
 | `tables.ts` | Column contracts (`PlatformDatabase`) |
 | `kysely.ts` | Process-wide `Kysely` over the SQLite file |
 | `execute.ts` | Compile → better-sqlite3 sync execute |
-| `@mia/sql-kit` `MigrationRunner` | Shared migrator contract; SQLite implements today |
+| `@mia/sql-kit` `MigrationRunner` / `applyMultiDialectPending` | Shared migrator contract |
+| `migrations/registry.ts` | Multi-dialect peer DDL (mssql pilot today) |
+| `adapters/mssql/**` | Platform pool + migrator (not product-ready) |
 
 ## Cutover tables (Kysely)
 
-- `connectors`, `users`, `sync_environments`, `sessions`
+- `connectors`, `users`, `sync_environments`, `sessions` (incl. stats CTE)
 - `llm_config`, `freeze_window_configs`
 - `notifications`, `notification_route_configs`, `notification_log`
 - `api_request_log`, `proposer_schedule_configs`, `sync_value_sources`
@@ -45,7 +47,7 @@ Honest sizing in the plan: platform agnostic is **large (months)** — ~70 table
 - `sync_audit`, `sync_evidence_log`, `eval_dataset_entries`
 - `runs` audit + token-usage admin browsers (fully Kysely)
 
-Still raw-ish: memory FTS adapter, a few `getDb` bootstrap/DDL/pragma paths
-(`lifecycle` vacuum, `sync_tool_approvals` ensure-table, entity wipe triggers,
-`sessions` heavy stats if any). Next: memory port (milestone 8) + milestone 4
-peer DDL.
+Still raw-ish: memory FTS adapter (milestone 8), a few `getDb` bootstrap/DDL/pragma
+paths (`lifecycle` vacuum, `sync_tool_approvals` ensure-table, entity wipe,
+attachments/evidence). Milestone 4 next: grow mssql registry toward baseline
+parity and dialect-aware `execute` before enabling boot.

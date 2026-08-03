@@ -32,7 +32,8 @@ export function assertPlatformStoreReady(
   const kind = resolvePlatformStoreKind(env)
   if (kind !== "sqlite") {
     throw new Error(
-      `MIA_PLATFORM_STORE=${kind} is not ready — platform persistence still requires sqlite. ` +
+      `MIA_PLATFORM_STORE=${kind} is not ready — platform persistence still requires sqlite ` +
+        `(hosted default will be mssql once milestone 4 completes; repos/execute still SQLite-bound). ` +
         `Sync warehouse mssql|postgres is separate (connectors / WarehouseDialect).`,
     )
   }
