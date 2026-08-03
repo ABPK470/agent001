@@ -37,5 +37,10 @@ Honest sizing in the plan: platform agnostic is **large (months)** — ~70 table
 - `token_usage`, `checkpoints`, `run_log`, `trace_entries`, `audit_log` (simple paths)
 - `webhook_drain_configs`, `agent_messages`
 - `proposer_runs`, `sync_proposals`, `sync_proposal_history`
+- `sync_publish_meta`, `sync_definitions`, `sync_runs`, `sync_sql_log`
+- `run_tool_approvals`, `sync_tool_approvals`, `tool_results`
+- `entity_active` / `entity_versions`, `scd2_strategy_*`
 
-Heavy/stats SQL in some repos may still be raw until those paths move. DDL still lives in numbered SQLite migrations (`adapters/sqlite/migrations`). Next: more repos → dialect-specific migration bodies → real `mssql`/`postgres` `PlatformStore`.
+Still raw-ish: `event-store`, `lifecycle`, memory FTS, audit/token admin filter
+builders. DDL still in numbered SQLite migrations. Next: those leftovers →
+milestone 4 peer DDL.

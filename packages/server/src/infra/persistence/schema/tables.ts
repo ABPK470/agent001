@@ -454,6 +454,150 @@ export interface SyncProposalHistoryTable {
   at: string
 }
 
+/** `sync_publish_meta` — published catalog stamp per tenant. */
+export interface SyncPublishMetaTable {
+  tenant_id: string
+  published_at: string
+  published_version: string
+  catalog_version: number | null
+}
+
+/** `sync_definitions` — live published SyncDefinition JSON per entity. */
+export interface SyncDefinitionsTable {
+  tenant_id: string
+  entity_id: string
+  definition_json: string
+  published_at: string | null
+  published_version: string | null
+}
+
+/** `run_tool_approvals` — RequireApproval grants for agent runs. */
+export interface RunToolApprovalsTable {
+  id: string
+  run_id: string
+  step_id: string
+  tool_name: string
+  args_json: string
+  reason: string
+  policy_name: string
+  status: string
+  requested_at: string
+  resolved_at: string | null
+  resolved_by: string | null
+}
+
+/** `sync_tool_approvals` — RequireApproval grants for Env Sync tools. */
+export interface SyncToolApprovalsTable {
+  id: string
+  actor_upn: string
+  tool_name: string
+  args_json: string
+  args_key: string
+  reason: string
+  policy_name: string
+  status: string
+  requested_at: string
+  resolved_at: string | null
+  resolved_by: string | null
+}
+
+/** `tool_results` — structured tool-call payloads for prior-turn grounding. */
+export interface ToolResultsTable {
+  id: Generated<number>
+  run_id: string
+  tool_call_id: string
+  tool_name: string
+  args_json: string
+  result_json: string
+  row_count: number | null
+  bytes: number
+  truncated: number
+  goal_excerpt: string | null
+  created_at: string
+}
+
+/** `sync_sql_log` — full-text SQL trace for sync operations. */
+export interface SyncSqlLogTable {
+  id: Generated<number>
+  plan_id: string | null
+  preview_id: string | null
+  event_type: string
+  scope: string | null
+  label: string
+  connection: string
+  sql_text: string
+  duration_ms: number | null
+  row_count: number | null
+  error: string | null
+  created_at: string
+}
+
+/** `entity_active` — current-version cursor for entity definitions. */
+export interface EntityActiveTable {
+  tenant_id: string
+  id: string
+  current_version: number
+  retired_at: string | null
+}
+
+/** `entity_versions` — immutable entity definition history. */
+export interface EntityVersionsTable {
+  tenant_id: string
+  id: string
+  version: number
+  body_json: string
+  version_label: string | null
+  created_by: string
+  created_at: string
+  reason: string
+  diff_json: string
+}
+
+/** `scd2_strategy_active` — current-version cursor for SCD2 strategies. */
+export interface Scd2StrategyActiveTable {
+  tenant_id: string
+  id: string
+  current_version: number
+  retired_at: string | null
+}
+
+/** `scd2_strategy_versions` — immutable SCD2 strategy history. */
+export interface Scd2StrategyVersionsTable {
+  tenant_id: string
+  id: string
+  version: number
+  body_json: string
+  created_by: string
+  created_at: string
+  reason: string
+}
+
+/** `sync_runs` — one row per executeSync invocation. */
+export interface SyncRunsTable {
+  plan_id: string
+  entity_type: string
+  entity_id: string
+  entity_display_name: string | null
+  source: string
+  target: string
+  actor_upn: string
+  preview_inserts: number
+  preview_updates: number
+  preview_deletes: number
+  executed_inserts: number | null
+  executed_updates: number | null
+  executed_deletes: number | null
+  preview_totals_json: string
+  execute_totals_json: string | null
+  plan_json: string | null
+  status: string
+  error: string | null
+  drift_detected_pct: number | null
+  started_at: string
+  finished_at: string | null
+  duration_ms: number | null
+}
+
 /**
  * Full platform database shape. Unlisted tables stay on raw better-sqlite3
  * until their repo moves.
@@ -494,6 +638,17 @@ export interface PlatformDatabase {
   proposer_runs: ProposerRunsTable
   sync_proposals: SyncProposalsTable
   sync_proposal_history: SyncProposalHistoryTable
+  sync_publish_meta: SyncPublishMetaTable
+  sync_definitions: SyncDefinitionsTable
+  run_tool_approvals: RunToolApprovalsTable
+  sync_tool_approvals: SyncToolApprovalsTable
+  tool_results: ToolResultsTable
+  sync_sql_log: SyncSqlLogTable
+  sync_runs: SyncRunsTable
+  entity_active: EntityActiveTable
+  entity_versions: EntityVersionsTable
+  scd2_strategy_active: Scd2StrategyActiveTable
+  scd2_strategy_versions: Scd2StrategyVersionsTable
 }
 
 /** Helper for optional Generated columns in later tables. */

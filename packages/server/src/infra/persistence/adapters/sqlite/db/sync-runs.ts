@@ -7,9 +7,13 @@
  */
 
 import { isSyncRunStatus, SYNC_RUN_STATUSES, SyncRunStatus } from "@mia/shared-enums"
+import type { SelectQueryBuilder } from "kysely"
+import { sql } from "kysely"
 import { requireSyncRunActorUpn } from "../../../sync-plan-actor.js"
-import { getDb } from "../connection.js"
 import { rememberPlanOwner } from "../../../../../ports/run-owner-index.js"
+import { runAll, runExec, runGet } from "../../../schema/execute.js"
+import { getPlatformDb } from "../../../schema/kysely.js"
+import type { PlatformDatabase } from "../../../schema/tables.js"
 
 export interface SyncRunRow {
   plan_id: string
@@ -67,48 +71,48 @@ export interface RecordSyncRunStartInput {
 export function recordSyncRunStart(i: RecordSyncRunStartInput): void {
   const actorUpn = requireSyncRunActorUpn(i.actorUpn, "recordSyncRunStart")
   const c = asCounts(i.previewTotals)
-  getDb()
-    .prepare(
-      `INSERT INTO sync_runs
-         (plan_id, entity_type, entity_id, entity_display_name, source, target,
-          actor_upn, preview_inserts, preview_updates, preview_deletes,
-          preview_totals_json, status, started_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
-       ON CONFLICT(plan_id) DO UPDATE SET
-         entity_type = excluded.entity_type,
-         entity_id = excluded.entity_id,
-         entity_display_name = COALESCE(excluded.entity_display_name, sync_runs.entity_display_name),
-         source = excluded.source,
-         target = excluded.target,
-         actor_upn = excluded.actor_upn,
-         preview_inserts = excluded.preview_inserts,
-         preview_updates = excluded.preview_updates,
-         preview_deletes = excluded.preview_deletes,
-         preview_totals_json = excluded.preview_totals_json,
-         status = excluded.status,
-         started_at = datetime('now'),
-         finished_at = NULL,
-         duration_ms = NULL,
-         error = NULL,
-         executed_inserts = NULL,
-         executed_updates = NULL,
-         executed_deletes = NULL,
-         execute_totals_json = NULL`
+  const compiled = getPlatformDb()
+    .insertInto("sync_runs")
+    .values({
+      plan_id: i.planId,
+      entity_type: i.entityType,
+      entity_id: String(i.entityId),
+      entity_display_name: i.entityDisplayName,
+      source: i.source,
+      target: i.target,
+      actor_upn: actorUpn,
+      preview_inserts: c.insert ?? 0,
+      preview_updates: c.update ?? 0,
+      preview_deletes: c.delete ?? 0,
+      preview_totals_json: JSON.stringify(i.previewTotals),
+      status: SyncRunStatus.Started,
+      started_at: sql`datetime('now')`,
+    })
+    .onConflict((oc) =>
+      oc.column("plan_id").doUpdateSet({
+        entity_type: i.entityType,
+        entity_id: String(i.entityId),
+        entity_display_name: sql`COALESCE(excluded.entity_display_name, sync_runs.entity_display_name)`,
+        source: i.source,
+        target: i.target,
+        actor_upn: actorUpn,
+        preview_inserts: c.insert ?? 0,
+        preview_updates: c.update ?? 0,
+        preview_deletes: c.delete ?? 0,
+        preview_totals_json: JSON.stringify(i.previewTotals),
+        status: SyncRunStatus.Started,
+        started_at: sql`datetime('now')`,
+        finished_at: null,
+        duration_ms: null,
+        error: null,
+        executed_inserts: null,
+        executed_updates: null,
+        executed_deletes: null,
+        execute_totals_json: null,
+      }),
     )
-    .run(
-      i.planId,
-      i.entityType,
-      String(i.entityId),
-      i.entityDisplayName,
-      i.source,
-      i.target,
-      actorUpn,
-      c.insert ?? 0,
-      c.update ?? 0,
-      c.delete ?? 0,
-      JSON.stringify(i.previewTotals),
-      SyncRunStatus.Started
-    )
+    .compile()
+  runExec(compiled)
   rememberPlanOwner(i.planId, actorUpn)
 }
 
@@ -138,41 +142,45 @@ export function recordSyncRunFinish(i: RecordSyncRunFinishInput): void {
   }
   const c = i.executeTotals ? asCounts(i.executeTotals) : null
   if (i.executeTotals) {
-    getDb()
-      .prepare(
-        `UPDATE sync_runs
-         SET status = ?, error = ?, execute_totals_json = ?,
-             executed_inserts = ?, executed_updates = ?, executed_deletes = ?,
-             finished_at = datetime('now'), duration_ms = ?
-         WHERE plan_id = ?`
-      )
-      .run(
-        i.status,
-        i.error ?? null,
-        JSON.stringify(i.executeTotals),
-        c?.insert ?? 0,
-        c?.update ?? 0,
-        c?.delete ?? 0,
-        i.durationMs,
-        i.planId
-      )
+    const compiled = getPlatformDb()
+      .updateTable("sync_runs")
+      .set({
+        status: i.status,
+        error: i.error ?? null,
+        execute_totals_json: JSON.stringify(i.executeTotals),
+        executed_inserts: c?.insert ?? 0,
+        executed_updates: c?.update ?? 0,
+        executed_deletes: c?.delete ?? 0,
+        finished_at: sql`datetime('now')`,
+        duration_ms: i.durationMs,
+      })
+      .where("plan_id", "=", i.planId)
+      .compile()
+    runExec(compiled)
     return
   }
 
-  getDb()
-    .prepare(
-      `UPDATE sync_runs
-       SET status = ?, error = ?,
-           finished_at = datetime('now'), duration_ms = ?
-       WHERE plan_id = ?`
-    )
-    .run(i.status, i.error ?? null, i.durationMs, i.planId)
+  const compiled = getPlatformDb()
+    .updateTable("sync_runs")
+    .set({
+      status: i.status,
+      error: i.error ?? null,
+      finished_at: sql`datetime('now')`,
+      duration_ms: i.durationMs,
+    })
+    .where("plan_id", "=", i.planId)
+    .compile()
+  runExec(compiled)
 }
 
 export function listSyncRuns(limit = 50): SyncRunRow[] {
-  return getDb()
-    .prepare(`SELECT * FROM sync_runs ORDER BY started_at DESC LIMIT ?`)
-    .all(limit) as SyncRunRow[]
+  const compiled = getPlatformDb()
+    .selectFrom("sync_runs")
+    .selectAll()
+    .orderBy("started_at", "desc")
+    .limit(limit)
+    .compile()
+  return runAll<SyncRunRow>(compiled)
 }
 
 export type SyncRunHistorySort =
@@ -198,85 +206,103 @@ export interface ListSyncRunsPaginatedInput extends SyncRunHistoryFilters {
   sort?: SyncRunHistorySort
 }
 
-function syncRunHistoryOrderBy(sort: SyncRunHistorySort = "started_desc"): string {
-  switch (sort) {
-    case "started_asc":
-      return "started_at ASC"
-    case "finished_desc":
-      return "finished_at IS NULL, finished_at DESC"
-    case "finished_asc":
-      return "finished_at ASC"
-    default:
-      return "started_at DESC"
-  }
-}
+type SyncRunSelectQuery = SelectQueryBuilder<PlatformDatabase, "sync_runs", object>
 
-function buildSyncRunHistoryWhere(filters: SyncRunHistoryFilters): { where: string; params: unknown[] } {
-  const clauses: string[] = []
-  const params: unknown[] = []
-
+function applySyncRunHistoryFilters(
+  query: SyncRunSelectQuery,
+  filters: SyncRunHistoryFilters,
+): SyncRunSelectQuery {
+  let q = query
   if (filters.actorUpn) {
-    clauses.push("actor_upn = ?")
-    params.push(filters.actorUpn)
+    q = q.where("actor_upn", "=", filters.actorUpn)
   }
   if (filters.status?.length) {
-    clauses.push(`status IN (${filters.status.map(() => "?").join(", ")})`)
-    params.push(...filters.status)
+    q = q.where("status", "in", [...filters.status])
   }
-  if (filters.entityType?.trim()) {
-    clauses.push("entity_type = ?")
-    params.push(filters.entityType.trim())
+  const entityType = filters.entityType?.trim()
+  if (entityType) {
+    q = q.where("entity_type", "=", entityType)
   }
-  if (filters.source?.trim()) {
-    clauses.push("source = ?")
-    params.push(filters.source.trim())
+  const source = filters.source?.trim()
+  if (source) {
+    q = q.where("source", "=", source)
   }
-  if (filters.target?.trim()) {
-    clauses.push("target = ?")
-    params.push(filters.target.trim())
+  const target = filters.target?.trim()
+  if (target) {
+    q = q.where("target", "=", target)
   }
-  if (filters.startedAfter?.trim()) {
-    clauses.push("started_at >= ?")
-    params.push(filters.startedAfter.trim())
+  const startedAfter = filters.startedAfter?.trim()
+  if (startedAfter) {
+    q = q.where("started_at", ">=", startedAfter)
   }
-  if (filters.startedBefore?.trim()) {
-    clauses.push("started_at <= ?")
-    params.push(`${filters.startedBefore.trim()} 23:59:59`)
+  const startedBefore = filters.startedBefore?.trim()
+  if (startedBefore) {
+    q = q.where("started_at", "<=", `${startedBefore} 23:59:59`)
   }
   const search = filters.search?.trim()
   if (search) {
-    const q = `%${search}%`
-    clauses.push(
-      `(entity_display_name LIKE ? OR entity_id LIKE ? OR entity_type LIKE ? OR plan_id LIKE ? OR source LIKE ? OR target LIKE ? OR actor_upn LIKE ?)`
+    const qLike = `%${search}%`
+    q = q.where((eb) =>
+      eb.or([
+        eb("entity_display_name", "like", qLike),
+        eb("entity_id", "like", qLike),
+        eb("entity_type", "like", qLike),
+        eb("plan_id", "like", qLike),
+        eb("source", "like", qLike),
+        eb("target", "like", qLike),
+        eb("actor_upn", "like", qLike),
+      ]),
     )
-    params.push(q, q, q, q, q, q, q)
   }
+  return q
+}
 
-  return {
-    where: clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "",
-    params
+function applySyncRunHistoryOrder(
+  query: SyncRunSelectQuery,
+  sort: SyncRunHistorySort = "started_desc",
+): SyncRunSelectQuery {
+  switch (sort) {
+    case "started_asc":
+      return query.orderBy("started_at", "asc")
+    case "finished_desc":
+      return query.orderBy(sql`finished_at is null`).orderBy("finished_at", "desc")
+    case "finished_asc":
+      return query.orderBy("finished_at", "asc")
+    default:
+      return query.orderBy("started_at", "desc")
   }
 }
 
 export function countSyncRuns(filters: SyncRunHistoryFilters = {}): number {
-  const { where, params } = buildSyncRunHistoryWhere(filters)
-  const row = getDb().prepare(`SELECT COUNT(1) AS c FROM sync_runs ${where}`).get(...params) as { c: number }
-  return row.c
+  const compiled = applySyncRunHistoryFilters(
+    getPlatformDb().selectFrom("sync_runs").select(sql<number>`count(1)`.as("c")),
+    filters,
+  ).compile()
+  const row = runGet<{ c: number }>(compiled)
+  return row?.c ?? 0
 }
 
 export function listSyncRunsPaginated(input: ListSyncRunsPaginatedInput): SyncRunRow[] {
   const page = Math.max(1, input.page)
   const pageSize = Math.max(1, input.pageSize)
   const offset = (page - 1) * pageSize
-  const { where, params } = buildSyncRunHistoryWhere(input)
-  const orderBy = syncRunHistoryOrderBy(input.sort)
-  return getDb()
-    .prepare(`SELECT * FROM sync_runs ${where} ORDER BY ${orderBy} LIMIT ? OFFSET ?`)
-    .all(...params, pageSize, offset) as SyncRunRow[]
+  const compiled = applySyncRunHistoryOrder(
+    applySyncRunHistoryFilters(getPlatformDb().selectFrom("sync_runs").selectAll(), input),
+    input.sort,
+  )
+    .limit(pageSize)
+    .offset(offset)
+    .compile()
+  return runAll<SyncRunRow>(compiled)
 }
 
 export function getSyncRun(planId: string): SyncRunRow | undefined {
-  return getDb().prepare(`SELECT * FROM sync_runs WHERE plan_id = ?`).get(planId) as SyncRunRow | undefined
+  const compiled = getPlatformDb()
+    .selectFrom("sync_runs")
+    .selectAll()
+    .where("plan_id", "=", planId)
+    .compile()
+  return runGet<SyncRunRow>(compiled)
 }
 
 /**
@@ -305,42 +331,45 @@ export function recordSyncRunPreview(i: {
   // Don't clobber an in-progress / completed run with a "preview" status.
   // Use INSERT … ON CONFLICT to only overwrite plan_json + preview metadata
   // for already-existing rows, leaving status / timestamps intact.
-  getDb()
-    .prepare(
-      `INSERT INTO sync_runs
-         (plan_id, entity_type, entity_id, entity_display_name, source, target,
-          actor_upn, preview_inserts, preview_updates, preview_deletes,
-          preview_totals_json, plan_json, status, started_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
-       ON CONFLICT(plan_id) DO UPDATE SET
-         plan_json = excluded.plan_json,
-         preview_totals_json = excluded.preview_totals_json,
-         preview_inserts = excluded.preview_inserts,
-         preview_updates = excluded.preview_updates,
-         preview_deletes = excluded.preview_deletes,
-         entity_display_name = COALESCE(excluded.entity_display_name, sync_runs.entity_display_name)`
+  const compiled = getPlatformDb()
+    .insertInto("sync_runs")
+    .values({
+      plan_id: i.planId,
+      entity_type: i.entityType,
+      entity_id: String(i.entityId),
+      entity_display_name: i.entityDisplayName,
+      source: i.source,
+      target: i.target,
+      actor_upn: actorUpn,
+      preview_inserts: c.insert ?? 0,
+      preview_updates: c.update ?? 0,
+      preview_deletes: c.delete ?? 0,
+      preview_totals_json: JSON.stringify(i.previewTotals),
+      plan_json: i.planJson,
+      status: SyncRunStatus.Preview,
+      started_at: sql`datetime('now')`,
+    })
+    .onConflict((oc) =>
+      oc.column("plan_id").doUpdateSet({
+        plan_json: i.planJson,
+        preview_totals_json: JSON.stringify(i.previewTotals),
+        preview_inserts: c.insert ?? 0,
+        preview_updates: c.update ?? 0,
+        preview_deletes: c.delete ?? 0,
+        entity_display_name: sql`COALESCE(excluded.entity_display_name, sync_runs.entity_display_name)`,
+      }),
     )
-    .run(
-      i.planId,
-      i.entityType,
-      String(i.entityId),
-      i.entityDisplayName,
-      i.source,
-      i.target,
-      actorUpn,
-      c.insert ?? 0,
-      c.update ?? 0,
-      c.delete ?? 0,
-      JSON.stringify(i.previewTotals),
-      i.planJson,
-      SyncRunStatus.Preview
-    )
+    .compile()
+  runExec(compiled)
 }
 
 /** Re-hydrate the full plan body for a given planId, or null if absent. */
 export function getSyncRunPlanJson(planId: string): string | null {
-  const row = getDb().prepare(`SELECT plan_json FROM sync_runs WHERE plan_id = ?`).get(planId) as
-    | { plan_json: string | null }
-    | undefined
+  const compiled = getPlatformDb()
+    .selectFrom("sync_runs")
+    .select("plan_json")
+    .where("plan_id", "=", planId)
+    .compile()
+  const row = runGet<{ plan_json: string | null }>(compiled)
   return row?.plan_json ?? null
 }

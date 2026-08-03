@@ -1,4 +1,6 @@
-import { getDb } from "../connection.js"
+import { getPlatformStore } from "../platform-store.js"
+import { getPlatformDb } from "../../../schema/kysely.js"
+import { runAll, runExec, runGet } from "../../../schema/execute.js"
 
 const DEFAULT_TENANT = "_default"
 
@@ -26,14 +28,12 @@ export interface PublishedBundleFromDb {
 }
 
 export function getSyncPublishMeta(tenantId = DEFAULT_TENANT): DbSyncPublishMeta | null {
-  return (
-    (getDb()
-      .prepare(
-        `SELECT tenant_id, published_at, published_version, catalog_version
-         FROM sync_publish_meta WHERE tenant_id = ?`,
-      )
-      .get(tenantId) as DbSyncPublishMeta | undefined) ?? null
-  )
+  const compiled = getPlatformDb()
+    .selectFrom("sync_publish_meta")
+    .select(["tenant_id", "published_at", "published_version", "catalog_version"])
+    .where("tenant_id", "=", tenantId)
+    .compile()
+  return runGet<DbSyncPublishMeta>(compiled) ?? null
 }
 
 export function saveSyncPublishMeta(row: {
@@ -42,39 +42,41 @@ export function saveSyncPublishMeta(row: {
   published_version: string
   catalog_version: number | null
 }): void {
-  getDb()
-    .prepare(
-      `INSERT INTO sync_publish_meta (tenant_id, published_at, published_version, catalog_version)
-       VALUES (@tenant_id, @published_at, @published_version, @catalog_version)
-       ON CONFLICT(tenant_id) DO UPDATE SET
-         published_at = excluded.published_at,
-         published_version = excluded.published_version,
-         catalog_version = excluded.catalog_version`,
+  const compiled = getPlatformDb()
+    .insertInto("sync_publish_meta")
+    .values(row)
+    .onConflict((oc) =>
+      oc.column("tenant_id").doUpdateSet({
+        published_at: row.published_at,
+        published_version: row.published_version,
+        catalog_version: row.catalog_version,
+      }),
     )
-    .run(row)
+    .compile()
+  runExec(compiled)
 }
 
 export function listSyncDefinitions(tenantId = DEFAULT_TENANT): DbSyncDefinitionRow[] {
-  return getDb()
-    .prepare(
-      `SELECT tenant_id, entity_id, definition_json, published_at, published_version
-       FROM sync_definitions WHERE tenant_id = ? ORDER BY entity_id`,
-    )
-    .all(tenantId) as DbSyncDefinitionRow[]
+  const compiled = getPlatformDb()
+    .selectFrom("sync_definitions")
+    .select(["tenant_id", "entity_id", "definition_json", "published_at", "published_version"])
+    .where("tenant_id", "=", tenantId)
+    .orderBy("entity_id")
+    .compile()
+  return runAll<DbSyncDefinitionRow>(compiled)
 }
 
 export function getSyncDefinition(
   tenantId: string,
   entityId: string,
 ): DbSyncDefinitionRow | null {
-  return (
-    (getDb()
-      .prepare(
-        `SELECT tenant_id, entity_id, definition_json, published_at, published_version
-         FROM sync_definitions WHERE tenant_id = ? AND entity_id = ?`,
-      )
-      .get(tenantId, entityId) as DbSyncDefinitionRow | undefined) ?? null
-  )
+  const compiled = getPlatformDb()
+    .selectFrom("sync_definitions")
+    .select(["tenant_id", "entity_id", "definition_json", "published_at", "published_version"])
+    .where("tenant_id", "=", tenantId)
+    .where("entity_id", "=", entityId)
+    .compile()
+  return runGet<DbSyncDefinitionRow>(compiled) ?? null
 }
 
 /**
@@ -91,40 +93,45 @@ export function replaceSyncDefinitions(
     definitions: Record<string, object | null>
   },
 ): void {
-  const db = getDb()
-  db.transaction(() => {
+  getPlatformStore().transaction(() => {
     const previous = new Map(
       listSyncDefinitions(tenantId).map((row) => [row.entity_id, row] as const),
     )
 
-    db.prepare(`DELETE FROM sync_definitions WHERE tenant_id = ?`).run(tenantId)
-
-    const insert = db.prepare(
-      `INSERT INTO sync_definitions
-         (tenant_id, entity_id, definition_json, published_at, published_version)
-       VALUES (?, ?, ?, ?, ?)`,
-    )
+    const del = getPlatformDb()
+      .deleteFrom("sync_definitions")
+      .where("tenant_id", "=", tenantId)
+      .compile()
+    runExec(del)
 
     for (const [entityId, definition] of Object.entries(input.definitions)) {
       if (definition != null) {
-        insert.run(
-          tenantId,
-          entityId,
-          JSON.stringify(definition),
-          input.publishedAt,
-          input.publishedVersion,
-        )
+        const ins = getPlatformDb()
+          .insertInto("sync_definitions")
+          .values({
+            tenant_id: tenantId,
+            entity_id: entityId,
+            definition_json: JSON.stringify(definition),
+            published_at: input.publishedAt,
+            published_version: input.publishedVersion,
+          })
+          .compile()
+        runExec(ins)
         continue
       }
       const kept = previous.get(entityId)
       if (!kept) continue
-      insert.run(
-        tenantId,
-        entityId,
-        kept.definition_json,
-        kept.published_at,
-        kept.published_version,
-      )
+      const ins = getPlatformDb()
+        .insertInto("sync_definitions")
+        .values({
+          tenant_id: tenantId,
+          entity_id: entityId,
+          definition_json: kept.definition_json,
+          published_at: kept.published_at,
+          published_version: kept.published_version,
+        })
+        .compile()
+      runExec(ins)
     }
 
     saveSyncPublishMeta({
@@ -133,7 +140,7 @@ export function replaceSyncDefinitions(
       published_version: input.publishedVersion,
       catalog_version: input.catalogVersion,
     })
-  })()
+  })
 }
 
 /** Load the published SyncDefinition bundle shape from SQLite (replaces file bundle). */
@@ -158,7 +165,8 @@ export function loadPublishedBundleFromDb(
 }
 
 export function clearSyncDefinitionsAndPublishMeta(): void {
-  const db = getDb()
-  db.exec(`DELETE FROM sync_definitions`)
-  db.exec(`DELETE FROM sync_publish_meta`)
+  getPlatformStore().transaction(() => {
+    runExec(getPlatformDb().deleteFrom("sync_definitions").where("tenant_id", "is not", null).compile())
+    runExec(getPlatformDb().deleteFrom("sync_publish_meta").where("tenant_id", "is not", null).compile())
+  })
 }

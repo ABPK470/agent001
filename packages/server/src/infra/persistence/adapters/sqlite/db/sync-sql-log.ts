@@ -7,7 +7,9 @@
  *   - sqlLogId is the only runtime link between event_log and sync_sql_log.
  */
 
-import { getDb } from "../connection.js"
+import { sql } from "kysely"
+import { getPlatformDb } from "../../../schema/kysely.js"
+import { runAll, runGet, runInsertId } from "../../../schema/execute.js"
 
 export interface SyncSqlLogRow {
   id: number
@@ -39,19 +41,9 @@ export interface RecordSyncSqlLogInput {
 }
 
 export function recordSyncSqlLog(input: RecordSyncSqlLogInput): number {
-  const result = getDb()
-    .prepare(
-      `
-    INSERT INTO sync_sql_log (
-      plan_id, preview_id, event_type, scope, label, connection,
-      sql_text, duration_ms, row_count, error, created_at
-    ) VALUES (
-      @plan_id, @preview_id, @event_type, @scope, @label, @connection,
-      @sql_text, @duration_ms, @row_count, @error, COALESCE(@created_at, datetime('now'))
-    )
-  `,
-    )
-    .run({
+  const compiled = getPlatformDb()
+    .insertInto("sync_sql_log")
+    .values({
       plan_id: input.planId ?? null,
       preview_id: input.previewId ?? null,
       event_type: input.eventType,
@@ -62,13 +54,19 @@ export function recordSyncSqlLog(input: RecordSyncSqlLogInput): number {
       duration_ms: input.durationMs ?? null,
       row_count: input.rowCount ?? null,
       error: input.error ?? null,
-      created_at: input.createdAt ?? null,
+      created_at: input.createdAt != null ? input.createdAt : sql`datetime('now')`,
     })
-  return Number(result.lastInsertRowid)
+    .compile()
+  return runInsertId(compiled)
 }
 
 export function getSyncSqlLog(id: number): SyncSqlLogRow | undefined {
-  return getDb().prepare("SELECT * FROM sync_sql_log WHERE id = ?").get(id) as SyncSqlLogRow | undefined
+  const compiled = getPlatformDb()
+    .selectFrom("sync_sql_log")
+    .selectAll()
+    .where("id", "=", id)
+    .compile()
+  return runGet<SyncSqlLogRow>(compiled)
 }
 
 export function listSyncSqlLogByPlan(
@@ -77,27 +75,25 @@ export function listSyncSqlLogByPlan(
 ): SyncSqlLogRow[] {
   const limit = Math.min(opts?.limit ?? 500, 2000)
   const offset = opts?.offset ?? 0
-  return getDb()
-    .prepare(
-      `
-    SELECT * FROM sync_sql_log
-    WHERE plan_id = ?
-    ORDER BY id ASC
-    LIMIT ? OFFSET ?
-  `,
-    )
-    .all(planId, limit, offset) as SyncSqlLogRow[]
+  const compiled = getPlatformDb()
+    .selectFrom("sync_sql_log")
+    .selectAll()
+    .where("plan_id", "=", planId)
+    .orderBy("id", "asc")
+    .limit(limit)
+    .offset(offset)
+    .compile()
+  return runAll<SyncSqlLogRow>(compiled)
 }
 
 export function countSyncSqlLogByPlan(planId: string): number {
-  const row = getDb()
-    .prepare(
-      `
-    SELECT COUNT(*) AS cnt FROM sync_sql_log WHERE plan_id = ?
-  `,
-    )
-    .get(planId) as { cnt: number }
-  return row.cnt
+  const compiled = getPlatformDb()
+    .selectFrom("sync_sql_log")
+    .select(sql<number>`count(*)`.as("cnt"))
+    .where("plan_id", "=", planId)
+    .compile()
+  const row = runGet<{ cnt: number | bigint }>(compiled)
+  return Number(row?.cnt ?? 0)
 }
 
 const SQL_EVENT_PREVIEW_MAX_CHARS = 2_000

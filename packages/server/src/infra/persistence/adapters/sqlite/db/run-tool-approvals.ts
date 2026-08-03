@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto"
-
-import { getDb } from "../connection.js"
+import { sql } from "kysely"
+import { getPlatformDb } from "../../../schema/kysely.js"
+import { runAll, runExec, runGet } from "../../../schema/execute.js"
 
 export type RunToolApprovalStatus = "pending" | "approved" | "denied" | "consumed"
 
@@ -56,12 +57,14 @@ export function upsertPendingRunToolApproval(input: {
   reason: string
   policyName: string
 }): RunToolApprovalRecord {
-  const existing = getDb()
-    .prepare(
-      `SELECT * FROM run_tool_approvals WHERE run_id = ? AND step_id = ? AND status = 'pending'`
-    )
-    .get(input.runId, input.stepId) as DbRunToolApproval | undefined
-
+  const existingCompiled = getPlatformDb()
+    .selectFrom("run_tool_approvals")
+    .selectAll()
+    .where("run_id", "=", input.runId)
+    .where("step_id", "=", input.stepId)
+    .where("status", "=", "pending")
+    .compile()
+  const existing = runGet<DbRunToolApproval>(existingCompiled)
   if (existing) return mapRow(existing)
 
   const row: DbRunToolApproval = {
@@ -78,21 +81,18 @@ export function upsertPendingRunToolApproval(input: {
     resolved_by: null,
   }
 
-  getDb()
-    .prepare(
-      `INSERT INTO run_tool_approvals
-        (id, run_id, step_id, tool_name, args_json, reason, policy_name, status, requested_at, resolved_at, resolved_by)
-       VALUES (@id, @run_id, @step_id, @tool_name, @args_json, @reason, @policy_name, @status, @requested_at, @resolved_at, @resolved_by)`
-    )
-    .run(row)
-
+  const compiled = getPlatformDb().insertInto("run_tool_approvals").values(row).compile()
+  runExec(compiled)
   return mapRow(row)
 }
 
 export function getRunToolApproval(id: string): RunToolApprovalRecord | null {
-  const row = getDb()
-    .prepare(`SELECT * FROM run_tool_approvals WHERE id = ?`)
-    .get(id) as DbRunToolApproval | undefined
+  const compiled = getPlatformDb()
+    .selectFrom("run_tool_approvals")
+    .selectAll()
+    .where("id", "=", id)
+    .compile()
+  const row = runGet<DbRunToolApproval>(compiled)
   return row ? mapRow(row) : null
 }
 
@@ -100,48 +100,53 @@ export function getPendingRunToolApproval(
   runId: string,
   stepId: string
 ): RunToolApprovalRecord | null {
-  const row = getDb()
-    .prepare(
-      `SELECT * FROM run_tool_approvals WHERE run_id = ? AND step_id = ? AND status = 'pending'`
-    )
-    .get(runId, stepId) as DbRunToolApproval | undefined
+  const compiled = getPlatformDb()
+    .selectFrom("run_tool_approvals")
+    .selectAll()
+    .where("run_id", "=", runId)
+    .where("step_id", "=", stepId)
+    .where("status", "=", "pending")
+    .compile()
+  const row = runGet<DbRunToolApproval>(compiled)
   return row ? mapRow(row) : null
 }
 
 export function listPendingRunToolApprovalsForRuns(runIds: readonly string[]): RunToolApprovalRecord[] {
   if (runIds.length === 0) return []
-  const placeholders = runIds.map(() => "?").join(", ")
-  const rows = getDb()
-    .prepare(
-      `SELECT * FROM run_tool_approvals
-       WHERE run_id IN (${placeholders}) AND status = 'pending'
-       ORDER BY requested_at DESC`
-    )
-    .all(...runIds) as DbRunToolApproval[]
-  return rows.map(mapRow)
+  const compiled = getPlatformDb()
+    .selectFrom("run_tool_approvals")
+    .selectAll()
+    .where("run_id", "in", [...runIds])
+    .where("status", "=", "pending")
+    .orderBy("requested_at", "desc")
+    .compile()
+  return runAll<DbRunToolApproval>(compiled).map(mapRow)
 }
 
 export function listApprovedToolGrantsForRuns(runIds: readonly string[]): RunToolApprovalRecord[] {
   if (runIds.length === 0) return []
-  const placeholders = runIds.map(() => "?").join(", ")
-  const rows = getDb()
-    .prepare(
-      `SELECT * FROM run_tool_approvals
-       WHERE run_id IN (${placeholders}) AND status = 'approved'
-       ORDER BY requested_at ASC`
-    )
-    .all(...runIds) as DbRunToolApproval[]
-  return rows.map(mapRow)
+  const compiled = getPlatformDb()
+    .selectFrom("run_tool_approvals")
+    .selectAll()
+    .where("run_id", "in", [...runIds])
+    .where("status", "=", "approved")
+    .orderBy("requested_at", "asc")
+    .compile()
+  return runAll<DbRunToolApproval>(compiled).map(mapRow)
 }
 
 export function markRunToolApprovalApproved(id: string, actor: string): RunToolApprovalRecord | null {
-  getDb()
-    .prepare(
-      `UPDATE run_tool_approvals
-       SET status = 'approved', resolved_at = datetime('now'), resolved_by = ?
-       WHERE id = ? AND status = 'pending'`
-    )
-    .run(actor, id)
+  const compiled = getPlatformDb()
+    .updateTable("run_tool_approvals")
+    .set({
+      status: "approved",
+      resolved_at: sql`datetime('now')`,
+      resolved_by: actor,
+    })
+    .where("id", "=", id)
+    .where("status", "=", "pending")
+    .compile()
+  runExec(compiled)
   return getRunToolApproval(id)
 }
 
@@ -149,26 +154,35 @@ export function markRunToolApprovalDenied(
   id: string,
   actor: string
 ): RunToolApprovalRecord | null {
-  getDb()
-    .prepare(
-      `UPDATE run_tool_approvals
-       SET status = 'denied', resolved_at = datetime('now'), resolved_by = ?
-       WHERE id = ? AND status = 'pending'`
-    )
-    .run(actor, id)
+  const compiled = getPlatformDb()
+    .updateTable("run_tool_approvals")
+    .set({
+      status: "denied",
+      resolved_at: sql`datetime('now')`,
+      resolved_by: actor,
+    })
+    .where("id", "=", id)
+    .where("status", "=", "pending")
+    .compile()
+  runExec(compiled)
   return getRunToolApproval(id)
 }
 
 export function consumeRunToolApprovalGrant(id: string): void {
-  getDb()
-    .prepare(`UPDATE run_tool_approvals SET status = 'consumed' WHERE id = ? AND status = 'approved'`)
-    .run(id)
+  const compiled = getPlatformDb()
+    .updateTable("run_tool_approvals")
+    .set({ status: "consumed" })
+    .where("id", "=", id)
+    .where("status", "=", "approved")
+    .compile()
+  runExec(compiled)
 }
 
 export function markRunWaitingForApproval(runId: string): void {
-  getDb()
-    .prepare(
-      `UPDATE runs SET status = 'waiting_for_approval', error = NULL WHERE id = ?`
-    )
-    .run(runId)
+  const compiled = getPlatformDb()
+    .updateTable("runs")
+    .set({ status: "waiting_for_approval", error: null })
+    .where("id", "=", runId)
+    .compile()
+  runExec(compiled)
 }

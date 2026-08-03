@@ -13,7 +13,8 @@
  * Continuity scope: thread_id + upn via JOIN on runs (not cookie session).
  */
 
-import { getDb } from "../connection.js"
+import { getPlatformDb } from "../../../schema/kysely.js"
+import { runAll, runExec, runGet } from "../../../schema/execute.js"
 
 export interface DbToolResult {
   id?: number
@@ -37,32 +38,48 @@ const NON_RECALLABLE_RESULT_PATTERNS = [
 
 /** Write one tool-call result. Idempotent on (run_id, tool_call_id). */
 export function saveToolResult(record: Omit<DbToolResult, "id">): void {
-  const db = getDb()
-  const existing = db
-    .prepare("SELECT id FROM tool_results WHERE run_id = ? AND tool_call_id = ? LIMIT 1")
-    .get(record.run_id, record.tool_call_id) as { id: number } | undefined
+  const existingCompiled = getPlatformDb()
+    .selectFrom("tool_results")
+    .select("id")
+    .where("run_id", "=", record.run_id)
+    .where("tool_call_id", "=", record.tool_call_id)
+    .limit(1)
+    .compile()
+  const existing = runGet<{ id: number }>(existingCompiled)
   if (existing) {
-    db.prepare(
-      `
-      UPDATE tool_results
-      SET tool_name=@tool_name, args_json=@args_json, result_json=@result_json,
-          row_count=@row_count, bytes=@bytes, truncated=@truncated,
-          goal_excerpt=@goal_excerpt, created_at=@created_at
-      WHERE id=@id
-    `
-    ).run({ ...record, id: existing.id })
+    const upd = getPlatformDb()
+      .updateTable("tool_results")
+      .set({
+        tool_name: record.tool_name,
+        args_json: record.args_json,
+        result_json: record.result_json,
+        row_count: record.row_count,
+        bytes: record.bytes,
+        truncated: record.truncated,
+        goal_excerpt: record.goal_excerpt,
+        created_at: record.created_at,
+      })
+      .where("id", "=", existing.id)
+      .compile()
+    runExec(upd)
     return
   }
-  db.prepare(
-    `
-    INSERT INTO tool_results
-      (run_id, tool_call_id, tool_name, args_json, result_json,
-       row_count, bytes, truncated, goal_excerpt, created_at)
-    VALUES
-      (@run_id, @tool_call_id, @tool_name, @args_json, @result_json,
-       @row_count, @bytes, @truncated, @goal_excerpt, @created_at)
-  `
-  ).run(record)
+  const ins = getPlatformDb()
+    .insertInto("tool_results")
+    .values({
+      run_id: record.run_id,
+      tool_call_id: record.tool_call_id,
+      tool_name: record.tool_name,
+      args_json: record.args_json,
+      result_json: record.result_json,
+      row_count: record.row_count,
+      bytes: record.bytes,
+      truncated: record.truncated,
+      goal_excerpt: record.goal_excerpt,
+      created_at: record.created_at,
+    })
+    .compile()
+  runExec(ins)
 }
 
 /**
@@ -76,42 +93,37 @@ export function loadRecentToolResultsForThread(opts: {
   toolNames?: readonly string[]
 }): DbToolResult[] {
   const limit = Math.max(1, Math.min(opts.limit ?? 25, 200))
-  const db = getDb()
-  const toolFilter =
-    opts.toolNames && opts.toolNames.length > 0
-      ? ` AND tr.tool_name IN (${opts.toolNames.map(() => "?").join(",")})`
-      : ""
-  const params: Array<string | number> = [opts.threadId, opts.upn]
-  if (opts.toolNames && opts.toolNames.length > 0) params.push(...opts.toolNames)
-  params.push(limit)
-  return db
-    .prepare(
-      `
-      SELECT tr.*
-      FROM tool_results tr
-      INNER JOIN runs r ON r.id = tr.run_id
-      WHERE r.thread_id = ?
-        AND r.upn = ?
-        ${toolFilter}
-      ORDER BY tr.id DESC
-      LIMIT ?
-    `
-    )
-    .all(...params) as DbToolResult[]
+  let query = getPlatformDb()
+    .selectFrom("tool_results as tr")
+    .innerJoin("runs as r", "r.id", "tr.run_id")
+    .selectAll("tr")
+    .where("r.thread_id", "=", opts.threadId)
+    .where("r.upn", "=", opts.upn)
+  if (opts.toolNames && opts.toolNames.length > 0) {
+    query = query.where("tr.tool_name", "in", [...opts.toolNames])
+  }
+  const compiled = query.orderBy("tr.id", "desc").limit(limit).compile()
+  return runAll<DbToolResult>(compiled)
 }
 
 export function loadToolResultsForRun(runId: string): DbToolResult[] {
-  return getDb()
-    .prepare("SELECT * FROM tool_results WHERE run_id = ? ORDER BY id ASC")
-    .all(runId) as DbToolResult[]
+  const compiled = getPlatformDb()
+    .selectFrom("tool_results")
+    .selectAll()
+    .where("run_id", "=", runId)
+    .orderBy("id", "asc")
+    .compile()
+  return runAll<DbToolResult>(compiled)
 }
 
 export function getToolResult(runId: string, toolCallId: string): DbToolResult | null {
-  return (
-    (getDb()
-      .prepare("SELECT * FROM tool_results WHERE run_id = ? AND tool_call_id = ?")
-      .get(runId, toolCallId) as DbToolResult | undefined) ?? null
-  )
+  const compiled = getPlatformDb()
+    .selectFrom("tool_results")
+    .selectAll()
+    .where("run_id", "=", runId)
+    .where("tool_call_id", "=", toolCallId)
+    .compile()
+  return runGet<DbToolResult>(compiled) ?? null
 }
 
 export function extractToolResultText(json: string): string {

@@ -6,6 +6,8 @@
 import { createHash, randomUUID } from "node:crypto"
 import { stripRuntimeToolArgs } from "@mia/shared-types"
 import { getDb } from "../connection.js"
+import { getPlatformDb } from "../../../schema/kysely.js"
+import { runAll, runExec, runGet } from "../../../schema/execute.js"
 
 export type SyncToolApprovalStatus = "pending" | "approved" | "denied" | "consumed"
 
@@ -41,6 +43,7 @@ let ensured = false
 
 export function ensureSyncToolApprovalsTable(): void {
   if (ensured) return
+  // DDL bootstrap until this table is guaranteed by numbered migrations on all installs.
   getDb().exec(`
     CREATE TABLE IF NOT EXISTS sync_tool_approvals (
       id            TEXT PRIMARY KEY,
@@ -97,12 +100,15 @@ export function upsertPendingSyncToolApproval(input: {
 }): SyncToolApprovalRecord {
   ensureSyncToolApprovalsTable()
   const argsKey = syncToolArgsKey(input.args)
-  const existing = getDb()
-    .prepare(
-      `SELECT * FROM sync_tool_approvals
-       WHERE actor_upn = ? AND tool_name = ? AND args_key = ? AND status = 'pending'`,
-    )
-    .get(input.actorUpn, input.toolName, argsKey) as DbRow | undefined
+  const existingCompiled = getPlatformDb()
+    .selectFrom("sync_tool_approvals")
+    .selectAll()
+    .where("actor_upn", "=", input.actorUpn)
+    .where("tool_name", "=", input.toolName)
+    .where("args_key", "=", argsKey)
+    .where("status", "=", "pending")
+    .compile()
+  const existing = runGet<DbRow>(existingCompiled)
   if (existing) return mapRow(existing)
 
   const row: DbRow = {
@@ -118,21 +124,19 @@ export function upsertPendingSyncToolApproval(input: {
     resolved_at: null,
     resolved_by: null,
   }
-  getDb()
-    .prepare(
-      `INSERT INTO sync_tool_approvals
-        (id, actor_upn, tool_name, args_json, args_key, reason, policy_name, status, requested_at, resolved_at, resolved_by)
-       VALUES (@id, @actor_upn, @tool_name, @args_json, @args_key, @reason, @policy_name, @status, @requested_at, @resolved_at, @resolved_by)`,
-    )
-    .run(row)
+  const compiled = getPlatformDb().insertInto("sync_tool_approvals").values(row).compile()
+  runExec(compiled)
   return mapRow(row)
 }
 
 export function getSyncToolApproval(id: string): SyncToolApprovalRecord | null {
   ensureSyncToolApprovalsTable()
-  const row = getDb().prepare(`SELECT * FROM sync_tool_approvals WHERE id = ?`).get(id) as
-    | DbRow
-    | undefined
+  const compiled = getPlatformDb()
+    .selectFrom("sync_tool_approvals")
+    .selectAll()
+    .where("id", "=", id)
+    .compile()
+  const row = runGet<DbRow>(compiled)
   return row ? mapRow(row) : null
 }
 
@@ -141,14 +145,15 @@ export function listApprovedSyncToolGrants(
   toolName: string,
 ): Array<{ grantId: string; toolName: string; args: Record<string, unknown> }> {
   ensureSyncToolApprovalsTable()
-  const rows = getDb()
-    .prepare(
-      `SELECT * FROM sync_tool_approvals
-       WHERE actor_upn = ? AND tool_name = ? AND status = 'approved'
-       ORDER BY resolved_at DESC`,
-    )
-    .all(actorUpn, toolName) as DbRow[]
-  return rows.map((row) => ({
+  const compiled = getPlatformDb()
+    .selectFrom("sync_tool_approvals")
+    .selectAll()
+    .where("actor_upn", "=", actorUpn)
+    .where("tool_name", "=", toolName)
+    .where("status", "=", "approved")
+    .orderBy("resolved_at", "desc")
+    .compile()
+  return runAll<DbRow>(compiled).map((row) => ({
     grantId: row.id,
     toolName: row.tool_name,
     args: JSON.parse(row.args_json) as Record<string, unknown>,
@@ -161,13 +166,13 @@ export function markSyncToolApprovalApproved(
 ): SyncToolApprovalRecord | null {
   ensureSyncToolApprovalsTable()
   const now = new Date().toISOString()
-  getDb()
-    .prepare(
-      `UPDATE sync_tool_approvals
-       SET status = 'approved', resolved_at = ?, resolved_by = ?
-       WHERE id = ? AND status = 'pending'`,
-    )
-    .run(now, actor, id)
+  const compiled = getPlatformDb()
+    .updateTable("sync_tool_approvals")
+    .set({ status: "approved", resolved_at: now, resolved_by: actor })
+    .where("id", "=", id)
+    .where("status", "=", "pending")
+    .compile()
+  runExec(compiled)
   return getSyncToolApproval(id)
 }
 
@@ -177,21 +182,23 @@ export function markSyncToolApprovalDenied(
 ): SyncToolApprovalRecord | null {
   ensureSyncToolApprovalsTable()
   const now = new Date().toISOString()
-  getDb()
-    .prepare(
-      `UPDATE sync_tool_approvals
-       SET status = 'denied', resolved_at = ?, resolved_by = ?
-       WHERE id = ? AND status = 'pending'`,
-    )
-    .run(now, actor, id)
+  const compiled = getPlatformDb()
+    .updateTable("sync_tool_approvals")
+    .set({ status: "denied", resolved_at: now, resolved_by: actor })
+    .where("id", "=", id)
+    .where("status", "=", "pending")
+    .compile()
+  runExec(compiled)
   return getSyncToolApproval(id)
 }
 
 export function consumeSyncToolApprovalGrant(id: string): void {
   ensureSyncToolApprovalsTable()
-  getDb()
-    .prepare(
-      `UPDATE sync_tool_approvals SET status = 'consumed' WHERE id = ? AND status = 'approved'`,
-    )
-    .run(id)
+  const compiled = getPlatformDb()
+    .updateTable("sync_tool_approvals")
+    .set({ status: "consumed" })
+    .where("id", "=", id)
+    .where("status", "=", "approved")
+    .compile()
+  runExec(compiled)
 }

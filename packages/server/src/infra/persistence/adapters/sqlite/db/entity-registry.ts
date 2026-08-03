@@ -42,6 +42,9 @@ import {
   type ValidationResult
 } from "@mia/sync"
 import { getDb } from "../connection.js"
+import { getPlatformStore } from "../platform-store.js"
+import { runAll, runExec, runGet } from "../../../schema/execute.js"
+import { getPlatformDb } from "../../../schema/kysely.js"
 import { listFreezeWindowsForTenant } from "./freeze-windows.js"
 
 import {
@@ -193,6 +196,62 @@ export interface SaveEntityResult {
   diff: ReturnType<typeof diffEntityDefinitions>
 }
 
+function selectEntityPointer(tenantId: string, id: string) {
+  const compiled = getPlatformDb()
+    .selectFrom("entity_active")
+    .select(["current_version", "retired_at"])
+    .where("tenant_id", "=", tenantId)
+    .where("id", "=", id)
+    .compile()
+  return runGet<{ current_version: number; retired_at: string | null }>(compiled)
+}
+
+function insertEntityVersion(row: {
+  tenant_id: string
+  id: string
+  version: number
+  body_json: string
+  version_label: string | null
+  created_by: string
+  created_at: string
+  reason: string
+  diff_json: string
+}): void {
+  const compiled = getPlatformDb()
+    .insertInto("entity_versions")
+    .values(row)
+    .compile()
+  runExec(compiled)
+}
+
+function upsertEntityActivePointer(
+  tenantId: string,
+  id: string,
+  nextVersion: number,
+  hadPointer: boolean,
+): void {
+  if (hadPointer) {
+    const compiled = getPlatformDb()
+      .updateTable("entity_active")
+      .set({ current_version: nextVersion, retired_at: null })
+      .where("tenant_id", "=", tenantId)
+      .where("id", "=", id)
+      .compile()
+    runExec(compiled)
+    return
+  }
+  const compiled = getPlatformDb()
+    .insertInto("entity_active")
+    .values({
+      tenant_id: tenantId,
+      id,
+      current_version: nextVersion,
+      retired_at: null,
+    })
+    .compile()
+  runExec(compiled)
+}
+
 /**
  * Save (insert or new version) an entity definition. The caller-supplied
  * `def` MUST already carry the new version's metadata (createdBy, reason,
@@ -222,12 +281,8 @@ export function saveEntityDefinition(args: {
   const xref = validateEntityReferences(tenantId, def)
   if (!xref.ok) throw new EntityRegistryValidationError(xref)
 
-  const db = getDb()
-
-  return db.transaction(() => {
-    const pointer = db
-      .prepare(`SELECT current_version, retired_at FROM entity_active WHERE tenant_id = ? AND id = ?`)
-      .get(tenantId, args.def.id) as { current_version: number; retired_at: string | null } | undefined
+  return getPlatformStore().transaction(() => {
+    const pointer = selectEntityPointer(tenantId, args.def.id)
 
     if (args.createOnly && pointer) {
       throw new EntityRegistryConflictError(
@@ -258,34 +313,22 @@ export function saveEntityDefinition(args: {
 
     const diff = diffEntityDefinitions(prev, persisted)
 
-    db.prepare(
-      `INSERT INTO entity_versions
-         (tenant_id, id, version, body_json, version_label, created_by, created_at, reason, diff_json)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(
-      tenantId,
-      persisted.id,
-      nextVersion,
-      JSON.stringify(persisted),
-      persisted.versionLabel,
-      args.actor,
-      createdAt,
-      reason(args.reason, prev === null),
-      JSON.stringify(diff)
-    )
+    insertEntityVersion({
+      tenant_id: tenantId,
+      id: persisted.id,
+      version: nextVersion,
+      body_json: JSON.stringify(persisted),
+      version_label: persisted.versionLabel,
+      created_by: args.actor,
+      created_at: createdAt,
+      reason: reason(args.reason, prev === null),
+      diff_json: JSON.stringify(diff),
+    })
 
-    if (pointer) {
-      db.prepare(
-        `UPDATE entity_active SET current_version = ?, retired_at = NULL WHERE tenant_id = ? AND id = ?`
-      ).run(nextVersion, tenantId, persisted.id)
-    } else {
-      db.prepare(
-        `INSERT INTO entity_active (tenant_id, id, current_version, retired_at) VALUES (?, ?, ?, NULL)`
-      ).run(tenantId, persisted.id, nextVersion)
-    }
+    upsertEntityActivePointer(tenantId, persisted.id, nextVersion, pointer != null)
 
     return { tenantId, id: persisted.id, version: nextVersion, diff }
-  })()
+  })
 }
 
 function reason(input: string, isCreate: boolean): string {
@@ -303,13 +346,14 @@ export function readEntityVersionBody(
   id: string,
   version: number
 ): EntityDefinition | null {
-  const db = getDb()
-  const row = db
-    .prepare(
-      `SELECT body_json FROM entity_versions
-       WHERE tenant_id = ? AND id = ? AND version = ?`
-    )
-    .get(tenantId, id, version) as { body_json: string } | undefined
+  const compiled = getPlatformDb()
+    .selectFrom("entity_versions")
+    .select("body_json")
+    .where("tenant_id", "=", tenantId)
+    .where("id", "=", id)
+    .where("version", "=", version)
+    .compile()
+  const row = runGet<{ body_json: string }>(compiled)
   if (!row) return null
   return normalizeEntityDefinition(JSON.parse(row.body_json) as EntityDefinition)
 }
@@ -324,13 +368,10 @@ export function getEntityDefinition(
   id: string,
   opts: { version?: number; includeRetired?: boolean } = {}
 ): EntityDefinition | null {
-  const db = getDb()
   if (opts.version !== undefined) {
     return readEntityVersionBody(tenantId, id, opts.version)
   }
-  const pointer = db
-    .prepare(`SELECT current_version, retired_at FROM entity_active WHERE tenant_id = ? AND id = ?`)
-    .get(tenantId, id) as { current_version: number; retired_at: string | null } | undefined
+  const pointer = selectEntityPointer(tenantId, id)
   if (!pointer) return null
   if (pointer.retired_at && !opts.includeRetired) return null
   const def = readEntityVersionBody(tenantId, id, pointer.current_version)
@@ -346,10 +387,13 @@ export function listEntityDefinitions(
   tenantId: string,
   opts: { includeRetired?: boolean } = {}
 ): EntityDefinition[] {
-  const db = getDb()
-  const rows = db
-    .prepare(`SELECT id, current_version, retired_at FROM entity_active WHERE tenant_id = ? ORDER BY id`)
-    .all(tenantId) as { id: string; current_version: number; retired_at: string | null }[]
+  const compiled = getPlatformDb()
+    .selectFrom("entity_active")
+    .select(["id", "current_version", "retired_at"])
+    .where("tenant_id", "=", tenantId)
+    .orderBy("id")
+    .compile()
+  const rows = runAll<{ id: string; current_version: number; retired_at: string | null }>(compiled)
 
   const out: EntityDefinition[] = []
   for (const row of rows) {
@@ -372,22 +416,21 @@ export interface EntityDefinitionHistoryEntry extends EntityDefinitionVersionRow
 }
 
 export function listEntityDefinitionHistory(tenantId: string, id: string): EntityDefinitionHistoryEntry[] {
-  const db = getDb()
-  const rows = db
-    .prepare(
-      `SELECT version, version_label, created_by, created_at, reason, diff_json
-       FROM entity_versions
-       WHERE tenant_id = ? AND id = ?
-       ORDER BY version DESC`
-    )
-    .all(tenantId, id) as {
+  const compiled = getPlatformDb()
+    .selectFrom("entity_versions")
+    .select(["version", "version_label", "created_by", "created_at", "reason", "diff_json"])
+    .where("tenant_id", "=", tenantId)
+    .where("id", "=", id)
+    .orderBy("version", "desc")
+    .compile()
+  const rows = runAll<{
     version: number
     version_label: string | null
     created_by: string
     created_at: string
     reason: string
     diff_json: string
-  }[]
+  }>(compiled)
 
   return rows.map((r) => ({
     tenantId,
@@ -410,20 +453,20 @@ export function retireEntityDefinition(
   id: string,
   actor: string
 ): { retiredAt: string } | null {
-  const db = getDb()
-  const pointer = db
-    .prepare(`SELECT current_version, retired_at FROM entity_active WHERE tenant_id = ? AND id = ?`)
-    .get(tenantId, id) as { current_version: number; retired_at: string | null } | undefined
+  const pointer = selectEntityPointer(tenantId, id)
   if (!pointer) return null
   if (pointer.retired_at) return { retiredAt: pointer.retired_at }
 
   const retiredAt = new Date().toISOString()
-  return db.transaction(() => {
-    db.prepare(`UPDATE entity_active SET retired_at = ? WHERE tenant_id = ? AND id = ?`).run(
-      retiredAt,
-      tenantId,
-      id
-    )
+  return getPlatformStore().transaction(() => {
+    const setRetired = getPlatformDb()
+      .updateTable("entity_active")
+      .set({ retired_at: retiredAt })
+      .where("tenant_id", "=", tenantId)
+      .where("id", "=", id)
+      .compile()
+    runExec(setRetired)
+
     // Record the retire as a new version so the diff history has it.
     const prev = readEntityVersionBody(tenantId, id, pointer.current_version)
     if (prev) {
@@ -438,19 +481,27 @@ export function retireEntityDefinition(
         retiredAt
       }
       const diff = diffEntityDefinitions(prev, retiredDef)
-      db.prepare(
-        `INSERT INTO entity_versions
-           (tenant_id, id, version, body_json, version_label, created_by, created_at, reason, diff_json)
-         VALUES (?, ?, ?, ?, NULL, ?, ?, 'retire', ?)`
-      ).run(tenantId, id, nextVersion, JSON.stringify(retiredDef), actor, retiredAt, JSON.stringify(diff))
-      db.prepare(`UPDATE entity_active SET current_version = ? WHERE tenant_id = ? AND id = ?`).run(
-        nextVersion,
-        tenantId,
-        id
-      )
+      insertEntityVersion({
+        tenant_id: tenantId,
+        id,
+        version: nextVersion,
+        body_json: JSON.stringify(retiredDef),
+        version_label: null,
+        created_by: actor,
+        created_at: retiredAt,
+        reason: "retire",
+        diff_json: JSON.stringify(diff),
+      })
+      const bumpVersion = getPlatformDb()
+        .updateTable("entity_active")
+        .set({ current_version: nextVersion })
+        .where("tenant_id", "=", tenantId)
+        .where("id", "=", id)
+        .compile()
+      runExec(bumpVersion)
     }
     return { retiredAt }
-  })()
+  })
 }
 
 /**
@@ -483,6 +534,60 @@ export interface SaveStrategyResult {
   version: number
 }
 
+function selectStrategyPointer(tenantId: string, id: string) {
+  const compiled = getPlatformDb()
+    .selectFrom("scd2_strategy_active")
+    .select(["current_version", "retired_at"])
+    .where("tenant_id", "=", tenantId)
+    .where("id", "=", id)
+    .compile()
+  return runGet<{ current_version: number; retired_at: string | null }>(compiled)
+}
+
+function insertStrategyVersion(row: {
+  tenant_id: string
+  id: string
+  version: number
+  body_json: string
+  created_by: string
+  created_at: string
+  reason: string
+}): void {
+  const compiled = getPlatformDb()
+    .insertInto("scd2_strategy_versions")
+    .values(row)
+    .compile()
+  runExec(compiled)
+}
+
+function upsertStrategyActivePointer(
+  tenantId: string,
+  id: string,
+  nextVersion: number,
+  hadPointer: boolean,
+): void {
+  if (hadPointer) {
+    const compiled = getPlatformDb()
+      .updateTable("scd2_strategy_active")
+      .set({ current_version: nextVersion, retired_at: null })
+      .where("tenant_id", "=", tenantId)
+      .where("id", "=", id)
+      .compile()
+    runExec(compiled)
+    return
+  }
+  const compiled = getPlatformDb()
+    .insertInto("scd2_strategy_active")
+    .values({
+      tenant_id: tenantId,
+      id,
+      current_version: nextVersion,
+      retired_at: null,
+    })
+    .compile()
+  runExec(compiled)
+}
+
 /**
  * Save a new SCD2 strategy version. Same append-only semantics as
  * entity definitions. Returns the new version number.
@@ -499,11 +604,8 @@ export function saveScd2Strategy(args: {
 
   const normalized = normalizeScd2Strategy(args.strategy)
 
-  const db = getDb()
-  return db.transaction(() => {
-    const pointer = db
-      .prepare(`SELECT current_version FROM scd2_strategy_active WHERE tenant_id = ? AND id = ?`)
-      .get(tenantId, normalized.id) as { current_version: number } | undefined
+  return getPlatformStore().transaction(() => {
+    const pointer = selectStrategyPointer(tenantId, normalized.id)
 
     const nextVersion = (pointer?.current_version ?? 0) + 1
     const createdAt = normalized.createdAt || new Date().toISOString()
@@ -514,32 +616,20 @@ export function saveScd2Strategy(args: {
       createdAt
     }
 
-    db.prepare(
-      `INSERT INTO scd2_strategy_versions
-         (tenant_id, id, version, body_json, created_by, created_at, reason)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
-    ).run(
-      tenantId,
-      persisted.id,
-      nextVersion,
-      JSON.stringify(persisted),
-      args.actor,
-      createdAt,
-      args.reason || (pointer ? "edit" : "create")
-    )
+    insertStrategyVersion({
+      tenant_id: tenantId,
+      id: persisted.id,
+      version: nextVersion,
+      body_json: JSON.stringify(persisted),
+      created_by: args.actor,
+      created_at: createdAt,
+      reason: args.reason || (pointer ? "edit" : "create"),
+    })
 
-    if (pointer) {
-      db.prepare(
-        `UPDATE scd2_strategy_active SET current_version = ?, retired_at = NULL WHERE tenant_id = ? AND id = ?`
-      ).run(nextVersion, tenantId, persisted.id)
-    } else {
-      db.prepare(
-        `INSERT INTO scd2_strategy_active (tenant_id, id, current_version, retired_at) VALUES (?, ?, ?, NULL)`
-      ).run(tenantId, persisted.id, nextVersion)
-    }
+    upsertStrategyActivePointer(tenantId, persisted.id, nextVersion, pointer != null)
 
     return { tenantId, id: persisted.id, version: nextVersion }
-  })()
+  })
 }
 
 /**
@@ -556,42 +646,37 @@ export function resolveScd2Strategy(
   id: string,
   version?: number | "latest"
 ): Scd2Strategy | null {
-  const db = getDb()
-
   if (typeof version === "number") {
-    const row = db
-      .prepare(
-        `SELECT body_json FROM scd2_strategy_versions
-         WHERE tenant_id = ? AND id = ? AND version = ?`
-      )
-      .get(tenantId, id, version) as { body_json: string } | undefined
-    if (row) return parseStoredStrategy(row.body_json)
+    const row = readStrategyVersionBody(tenantId, id, version)
+    if (row) return row
     for (const fallbackTenant of strategyResolutionTenants(tenantId).slice(1)) {
-      const def = db
-        .prepare(
-          `SELECT body_json FROM scd2_strategy_versions
-           WHERE tenant_id = ? AND id = ? AND version = ?`
-        )
-        .get(fallbackTenant, id, version) as { body_json: string } | undefined
-      if (def) return parseStoredStrategy(def.body_json)
+      const def = readStrategyVersionBody(fallbackTenant, id, version)
+      if (def) return def
     }
     return null
   }
 
   for (const t of strategyResolutionTenants(tenantId)) {
-    const pointer = db
-      .prepare(`SELECT current_version FROM scd2_strategy_active WHERE tenant_id = ? AND id = ?`)
-      .get(t, id) as { current_version: number } | undefined
+    const pointer = selectStrategyPointer(t, id)
     if (pointer) {
-      const row = db
-        .prepare(
-          `SELECT body_json FROM scd2_strategy_versions WHERE tenant_id = ? AND id = ? AND version = ?`
-        )
-        .get(t, id, pointer.current_version) as { body_json: string } | undefined
-      if (row) return parseStoredStrategy(row.body_json)
+      const row = readStrategyVersionBody(t, id, pointer.current_version)
+      if (row) return row
     }
   }
   return null
+}
+
+function readStrategyVersionBody(tenantId: string, id: string, version: number): Scd2Strategy | null {
+  const compiled = getPlatformDb()
+    .selectFrom("scd2_strategy_versions")
+    .select("body_json")
+    .where("tenant_id", "=", tenantId)
+    .where("id", "=", id)
+    .where("version", "=", version)
+    .compile()
+  const row = runGet<{ body_json: string }>(compiled)
+  if (!row) return null
+  return parseStoredStrategy(row.body_json)
 }
 
 /**
@@ -609,25 +694,21 @@ export interface Scd2StrategyHistoryEntry {
   reason: string
 }
 
-function readStrategyHistoryRows(
-  db: ReturnType<typeof getDb>,
-  tenantId: string,
-  id: string
-): Scd2StrategyHistoryEntry[] {
-  const rows = db
-    .prepare(
-      `SELECT version, body_json, created_by, created_at, reason
-       FROM scd2_strategy_versions
-       WHERE tenant_id = ? AND id = ?
-       ORDER BY version DESC`
-    )
-    .all(tenantId, id) as {
+function readStrategyHistoryRows(tenantId: string, id: string): Scd2StrategyHistoryEntry[] {
+  const compiled = getPlatformDb()
+    .selectFrom("scd2_strategy_versions")
+    .select(["version", "body_json", "created_by", "created_at", "reason"])
+    .where("tenant_id", "=", tenantId)
+    .where("id", "=", id)
+    .orderBy("version", "desc")
+    .compile()
+  const rows = runAll<{
     version: number
     body_json: string
     created_by: string
     created_at: string
     reason: string
-  }[]
+  }>(compiled)
 
   return rows.map((r) => {
     const body = JSON.parse(r.body_json) as Scd2Strategy
@@ -649,12 +730,11 @@ function readStrategyHistoryRows(
  * constant when the id is a shipped default with no DB rows yet.
  */
 export function listScd2StrategyHistory(tenantId: string, id: string): Scd2StrategyHistoryEntry[] {
-  const db = getDb()
-  const tenantRows = readStrategyHistoryRows(db, tenantId, id)
+  const tenantRows = readStrategyHistoryRows(tenantId, id)
   if (tenantRows.length > 0) return tenantRows
 
   for (const fallbackTenant of strategyHistoryTenants(tenantId).slice(1)) {
-    const defaultRows = readStrategyHistoryRows(db, fallbackTenant, id)
+    const defaultRows = readStrategyHistoryRows(fallbackTenant, id)
     if (defaultRows.length > 0) return defaultRows
   }
 
@@ -662,30 +742,36 @@ export function listScd2StrategyHistory(tenantId: string, id: string): Scd2Strat
 }
 
 export function listAvailableStrategies(tenantId: string): Scd2Strategy[] {
-  const db = getDb()
-  const tenantStrategies = readTenantStrategies(db, tenantId)
+  const tenantStrategies = readTenantStrategies(tenantId)
   if (!mergesBundledStrategies(tenantId)) return tenantStrategies
   const seen = new Set(tenantStrategies.map((s) => s.id))
-  const defaults = readTenantStrategies(db, DEFAULT_TENANT_ID).filter((s) => !seen.has(s.id))
+  const defaults = readTenantStrategies(DEFAULT_TENANT_ID).filter((s) => !seen.has(s.id))
   return [...tenantStrategies, ...defaults]
 }
 
 function readTenantStrategies(
-  db: ReturnType<typeof getDb>,
   tenantId: string,
   opts: { includeRetired?: boolean } = {},
 ): Scd2Strategy[] {
-  const rows = db
-    .prepare(
-      `SELECT s.id, s.current_version, s.retired_at, v.body_json
-       FROM scd2_strategy_active s
-       JOIN scd2_strategy_versions v
-         ON v.tenant_id = s.tenant_id AND v.id = s.id AND v.version = s.current_version
-       WHERE s.tenant_id = ?
-       ${opts.includeRetired ? "" : "AND s.retired_at IS NULL"}
-       ORDER BY s.id`
+  let query = getPlatformDb()
+    .selectFrom("scd2_strategy_active as s")
+    .innerJoin("scd2_strategy_versions as v", (join) =>
+      join
+        .onRef("v.tenant_id", "=", "s.tenant_id")
+        .onRef("v.id", "=", "s.id")
+        .onRef("v.version", "=", "s.current_version")
     )
-    .all(tenantId) as { id: string; current_version: number; retired_at: string | null; body_json: string }[]
+    .select(["s.id", "s.current_version", "s.retired_at", "v.body_json"])
+    .where("s.tenant_id", "=", tenantId)
+    .orderBy("s.id")
+
+  if (!opts.includeRetired) {
+    query = query.where("s.retired_at", "is", null)
+  }
+
+  const rows = runAll<{ id: string; current_version: number; retired_at: string | null; body_json: string }>(
+    query.compile(),
+  )
   return rows.map((r) => parseStoredStrategy(r.body_json))
 }
 
@@ -702,10 +788,7 @@ export function retireScd2Strategy(
   tenantId: string,
   id: string,
 ): { retiredAt: string } | null {
-  const db = getDb()
-  const pointer = db
-    .prepare(`SELECT current_version, retired_at FROM scd2_strategy_active WHERE tenant_id = ? AND id = ?`)
-    .get(tenantId, id) as { current_version: number; retired_at: string | null } | undefined
+  const pointer = selectStrategyPointer(tenantId, id)
   if (!pointer) return null
   if (pointer.retired_at) return { retiredAt: pointer.retired_at }
 
@@ -717,10 +800,12 @@ export function retireScd2Strategy(
   }
 
   const retiredAt = new Date().toISOString()
-  db.prepare(`UPDATE scd2_strategy_active SET retired_at = ? WHERE tenant_id = ? AND id = ?`).run(
-    retiredAt,
-    tenantId,
-    id,
-  )
+  const compiled = getPlatformDb()
+    .updateTable("scd2_strategy_active")
+    .set({ retired_at: retiredAt })
+    .where("tenant_id", "=", tenantId)
+    .where("id", "=", id)
+    .compile()
+  runExec(compiled)
   return { retiredAt }
 }

@@ -140,6 +140,13 @@ export async function buildSyncDefinitionsApp(
 ): Promise<FastifyInstance> {
   const { registerSyncRoutes } = await import("../../src/api/sync/routes.js")
   const { seedUser, seedSession } = await import("../_fk-helpers.js")
+  const { seedDefaultPoliciesIfMissing } = await import(
+    "../../src/api/policies/service/policy-seeder.js"
+  )
+  const { resolve } = await import("node:path")
+  const { fileURLToPath } = await import("node:url")
+
+  seedDefaultPoliciesIfMissing(resolve(fileURLToPath(new URL("..", import.meta.url)), "../../.."))
 
   seedUser(fixture.testDb, fixture.adminSession.upn, {
     displayName: fixture.adminSession.displayName,
