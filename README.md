@@ -92,8 +92,6 @@ Everything server-local and not in git lives under that directory:
 | `sync-plans/` | On-disk cache of preview plans (24h); see sync plan persistence below |
 | `evidence/` | Signed reconciliation evidence blobs |
 | `attachments/` | Uploaded file bytes |
-| `browser-contexts/` | Persisted Playwright sessions |
-| `vault.key` | Encryption key when `MIA_VAULT_KEY` is unset |
 
 Nothing under this tree is in git.
 

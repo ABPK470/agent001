@@ -106,7 +106,7 @@ export function createPackageConfigs(root) {
         "engine",
       ],
       stateAllowlist: new Set(["domain/tenant/tenant-config.ts"]),
-      timerAllowlist: new Set(["tools/browse-web/session.ts"]),
+      timerAllowlist: new Set(),
       /** Rare escape for `createRequire` when a native dep is CJS-only. Prefer import. */
       cjsRequireAllowlist: new Set(),
       skipTestFilesForLayers: false,

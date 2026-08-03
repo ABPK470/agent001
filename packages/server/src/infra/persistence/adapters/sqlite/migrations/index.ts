@@ -1,16 +1,16 @@
 /**
  * Database migrations runner
  *
- * Terminal schema lives in `0001_baseline.ts` only. Fresh installs (or after
- * deleting mia.db) run baseline once.
+ * Terminal schema lives in `0001_baseline.ts`. Numbered follow-ups upgrade
+ * existing installs in place (e.g. drop retired tables).
+ *
+ * Versions 2–5 were folded into baseline; next follow-up is v6 so older
+ * ledgers that recorded those versions still pick up new steps.
  */
 
 import type Database from "better-sqlite3"
 import { runBaselineMigration } from "./0001_baseline.js"
-import { runSyncToolApprovalsMigration } from "./0002_sync_tool_approvals.js"
-import { runDropAgentConfigsMigration } from "./0003_drop_agent_configs.js"
-import { runEventLogColumnsMigration } from "./0004_event_log_columns.js"
-import { runEvalDatasetMigration } from "./0005_eval_dataset.js"
+import { runDropBrowserTablesMigration } from "./0006_drop_browser_tables.js"
 
 export interface Migration {
   version: number
@@ -20,10 +20,7 @@ export interface Migration {
 
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, name: "baseline", up: runBaselineMigration },
-  { version: 2, name: "sync_tool_approvals", up: runSyncToolApprovalsMigration },
-  { version: 3, name: "drop_agent_configs", up: runDropAgentConfigsMigration },
-  { version: 4, name: "event_log_columns", up: runEventLogColumnsMigration },
-  { version: 5, name: "eval_dataset", up: runEvalDatasetMigration },
+  { version: 6, name: "drop_browser_tables", up: runDropBrowserTablesMigration },
 ]
 
 export function runMigrations(db: Database.Database): void {

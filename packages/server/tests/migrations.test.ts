@@ -51,9 +51,56 @@ describe("runMigrations", () => {
       testDb.prepare("SELECT name FROM sqlite_master WHERE name='sync_catalog_versions'").get(),
     ).toBeTruthy()
 
-    // Multi-agent CRUD erasure (migration 3): agent_configs dropped, runs.agent_id gone.
+    // Baseline terminal shape: no agent_configs / runs.agent_id; eval dataset present.
     expect(testDb.prepare("SELECT name FROM sqlite_master WHERE name='agent_configs'").get()).toBeFalsy()
     expect(runsCols.some((c) => c.name === "agent_id")).toBe(false)
+    expect(
+      testDb.prepare("SELECT name FROM sqlite_master WHERE name='eval_dataset_entries'").get(),
+    ).toBeTruthy()
+    // Retired Playwright stack — never created on fresh DB; dropped by v2 if leftover.
+    for (const name of [
+      "browser_contexts",
+      "browser_credentials",
+      "browser_proxy_config",
+      "browser_domain_policy_configs",
+      "browser_audit_log",
+    ]) {
+      expect(testDb.prepare("SELECT name FROM sqlite_master WHERE name=?").get(name)).toBeFalsy()
+    }
+    expect(MIGRATIONS.map((m) => m.version)).toEqual([1, 6])
+  })
+
+  it("drops leftover browser tables on upgrade (v6)", () => {
+    testDb.exec(`
+      CREATE TABLE browser_contexts (id TEXT PRIMARY KEY);
+      CREATE TABLE browser_credentials (id TEXT PRIMARY KEY);
+      CREATE TABLE browser_proxy_config (owner_upn TEXT PRIMARY KEY);
+      CREATE TABLE browser_domain_policy_configs (id TEXT PRIMARY KEY);
+      CREATE TABLE browser_audit_log (id INTEGER PRIMARY KEY);
+      CREATE TABLE schema_migrations (
+        version INTEGER PRIMARY KEY,
+        name TEXT NOT NULL,
+        applied_at TEXT NOT NULL
+      );
+      INSERT INTO schema_migrations VALUES (1, 'baseline', datetime('now'));
+    `)
+    runMigrations(testDb)
+    for (const name of [
+      "browser_contexts",
+      "browser_credentials",
+      "browser_proxy_config",
+      "browser_domain_policy_configs",
+      "browser_audit_log",
+    ]) {
+      expect(testDb.prepare("SELECT name FROM sqlite_master WHERE name=?").get(name)).toBeFalsy()
+    }
+    expect(
+      (
+        testDb.prepare("SELECT name FROM schema_migrations WHERE version = 6").get() as {
+          name: string
+        }
+      ).name,
+    ).toBe("drop_browser_tables")
   })
 
   it("is idempotent across repeated runs", () => {

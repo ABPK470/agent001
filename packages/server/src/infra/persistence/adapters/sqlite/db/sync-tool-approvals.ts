@@ -38,7 +38,7 @@ interface DbRow {
   resolved_by: string | null
 }
 
-/** Table is owned by numbered SQLite migrations (+ mssql registry v3). */
+/** Table is owned by SQLite baseline (+ mssql/postgres registry peers). */
 export function ensureSyncToolApprovalsTable(): void {
   // no-op — kept for call-site stability
 }

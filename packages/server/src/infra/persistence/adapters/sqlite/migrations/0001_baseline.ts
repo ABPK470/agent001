@@ -62,22 +62,10 @@ const BASELINE_SQL = `
     );
     CREATE INDEX IF NOT EXISTS idx_threads_upn_updated ON threads(upn, updated_at DESC);
 
-    -- ── agent_configs ────────────────────────────────────────
-    -- The 'tools' column has been dropped: tools are always resolved from
-    -- ALL_TOOLS in code, never from the DB.
-    CREATE TABLE IF NOT EXISTS agent_configs (
-      id            TEXT PRIMARY KEY,
-      name          TEXT NOT NULL UNIQUE,
-      description   TEXT NOT NULL DEFAULT '',
-      system_prompt TEXT NOT NULL,
-      created_at    TEXT NOT NULL DEFAULT (datetime('now')),
-      updated_at    TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-
     -- ── runs: every run is owned by a user (hard FK on upn). ─────
     -- Continuity is thread_id + upn; auth cookies live in sessions only.
-    -- parent_run_id and agent_id SET NULL so deleting a parent run or
-    -- agent definition leaves the child row intact for audit.
+    -- parent_run_id SET NULL so deleting a parent leaves the child for audit.
+    -- System prompt is file-managed (packages/agent/prompts); no agent_configs.
     CREATE TABLE IF NOT EXISTS runs (
       id             TEXT PRIMARY KEY,
       goal           TEXT NOT NULL,
@@ -87,7 +75,6 @@ const BASELINE_SQL = `
       step_count     INTEGER NOT NULL DEFAULT 0,
       error          TEXT,
       parent_run_id  TEXT REFERENCES runs(id) ON DELETE SET NULL,
-      agent_id       TEXT REFERENCES agent_configs(id) ON DELETE SET NULL,
       thread_id      TEXT REFERENCES threads(id) ON DELETE SET NULL,
       upn            TEXT NOT NULL REFERENCES users(upn) ON DELETE CASCADE,
       display_name   TEXT NOT NULL,
@@ -507,103 +494,6 @@ const BASELINE_SQL = `
       imported_by_tool_call TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_attachment_imports_run ON attachment_imports(run_id);
-
-    -- ── Browser contexts (persistent per-user storage state) ─────
-    -- Keeps cookies / localStorage / IndexedDB scoped to a tenant so the
-    -- agent can stay logged in across runs. Anonymous sessions get
-    -- ephemeral contexts that are NOT persisted (no row written).
-    --
-    -- owner_upn is the canonical tenant key for authenticated users.
-    -- storage_path is a relative path under ~/.mia/browser-contexts/
-    -- (resolved by context-store.ts) holding the JSON storageState file.
-    -- fingerprint_seed is captured once and reused so the same tenant
-    -- always gets the same UA / viewport / locale / timezone.
-    CREATE TABLE IF NOT EXISTS browser_contexts (
-      id               TEXT PRIMARY KEY,
-      owner_upn        TEXT NOT NULL REFERENCES users(upn) ON DELETE CASCADE,
-      storage_path     TEXT NOT NULL,
-      fingerprint_seed TEXT NOT NULL,
-      created_at       TEXT NOT NULL DEFAULT (datetime('now')),
-      last_used_at     TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_browser_contexts_owner ON browser_contexts(owner_upn);
-    CREATE INDEX IF NOT EXISTS idx_browser_contexts_last_used   ON browser_contexts(last_used_at);
-
-    -- ── Browser credentials (vault-encrypted) ────────────────────
-    -- Per-user credentials the agent uses for auto-login. NEVER stored
-    -- plaintext — every payload is encrypted with the master vault key
-    -- (see crypto/vault.ts). Anonymous sessions cannot create or use
-    -- credentials (owner_upn is NOT NULL).
-    --
-    -- kind:
-    --   password   — { username, password } JSON
-    --   totp       — { secret, digits?, period? } JSON (otplib config)
-    --   cookie_jar — Playwright storageState JSON (manual import path)
-    CREATE TABLE IF NOT EXISTS browser_credentials (
-      id             TEXT PRIMARY KEY,
-      owner_upn      TEXT NOT NULL REFERENCES users(upn) ON DELETE CASCADE,
-      label          TEXT NOT NULL,
-      kind           TEXT NOT NULL CHECK (kind IN ('password','totp','cookie_jar')),
-      target_origin  TEXT NOT NULL,
-      enc_payload    BLOB NOT NULL,
-      iv             BLOB NOT NULL,
-      auth_tag       BLOB NOT NULL,
-      created_at     TEXT NOT NULL DEFAULT (datetime('now')),
-      updated_at     TEXT NOT NULL DEFAULT (datetime('now')),
-      last_used_at   TEXT
-    );
-    CREATE INDEX IF NOT EXISTS idx_browser_credentials_owner  ON browser_credentials(owner_upn);
-    CREATE INDEX IF NOT EXISTS idx_browser_credentials_origin ON browser_credentials(target_origin);
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_browser_credentials_label
-      ON browser_credentials(owner_upn, label);
-
-    -- ── Browser proxy config (BYO, vault-encrypted URL) ──────────
-    -- Per-user upstream proxy. Plain http(s) or socks5 URL the user
-    -- supplies; encrypted at rest like credentials. NULL row means
-    -- "use direct connection". Anonymous sessions never get a row.
-    CREATE TABLE IF NOT EXISTS browser_proxy_config (
-      owner_upn   TEXT PRIMARY KEY REFERENCES users(upn) ON DELETE CASCADE,
-      enc_url     BLOB NOT NULL,
-      iv          BLOB NOT NULL,
-      auth_tag    BLOB NOT NULL,
-      bypass      TEXT NOT NULL DEFAULT '',
-      updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-
-    -- ── Browser domain policy ────────────────────────────────────
-    -- Default-deny / default-allow toggle is implicit in evaluator:
-    -- deny-list is checked first, then allow-list (if any allow rows
-    -- exist for the tenant the policy becomes default-deny). Patterns
-    -- are domain globs ("*.example.com" = match host or any subdomain).
-    -- effect ∈ {allow, deny}. owner_upn = NULL means a global rule that
-    -- applies to every authenticated tenant (admin-managed).
-    -- owner_upn nullable here on purpose: NULL = admin-defined global rule
-    -- that applies to every authenticated user.
-    CREATE TABLE IF NOT EXISTS browser_domain_policy_configs (
-      id          TEXT PRIMARY KEY,
-      owner_upn   TEXT REFERENCES users(upn) ON DELETE CASCADE,
-      pattern     TEXT NOT NULL,
-      effect      TEXT NOT NULL CHECK (effect IN ('allow','deny')),
-      reason      TEXT NOT NULL DEFAULT '',
-      created_at  TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-    CREATE INDEX IF NOT EXISTS idx_browser_policy_owner ON browser_domain_policy_configs(owner_upn);
-
-    -- ── Browser audit log ────────────────────────────────────────
-    -- Every navigation, search, credential use, and handoff is appended
-    -- here so admins can answer "what did agent X do on user Y's behalf
-    -- last week?". Append-only; pruned by the existing pruneOldData job.
-    CREATE TABLE IF NOT EXISTS browser_audit_log (
-      id          INTEGER PRIMARY KEY AUTOINCREMENT,
-      owner_upn   TEXT NOT NULL REFERENCES users(upn) ON DELETE CASCADE,
-      action      TEXT NOT NULL,
-      target_url  TEXT,
-      detail      TEXT,
-      decision    TEXT NOT NULL DEFAULT 'allow'
-        CHECK (decision IN ('allow','deny','captcha','error')),
-      created_at  TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-    CREATE INDEX IF NOT EXISTS idx_browser_audit_owner ON browser_audit_log(owner_upn, created_at DESC);
 
     -- ── Entity registry: SCD2 strategies (versioned) ─────────────
     -- Tenant-scoped registry of column-handling strategies referenced by
@@ -1118,6 +1008,25 @@ const BASELINE_SQL = `
     CREATE INDEX IF NOT EXISTS idx_snapshots_run    ON file_snapshots(run_id);
     CREATE INDEX IF NOT EXISTS idx_snapshots_effect ON file_snapshots(effect_id);
     CREATE INDEX IF NOT EXISTS idx_snapshots_path   ON file_snapshots(file_path);
+
+    -- ── eval_dataset_entries: golden steps from trace inspector ──
+    CREATE TABLE IF NOT EXISTS eval_dataset_entries (
+      id            TEXT PRIMARY KEY,
+      thread_id     TEXT,
+      run_id        TEXT NOT NULL,
+      scope_id      TEXT NOT NULL,
+      kind          TEXT NOT NULL,
+      call_index    INTEGER,
+      label         TEXT,
+      input_json    TEXT NOT NULL,
+      output_json   TEXT,
+      metadata_json TEXT,
+      created_by    TEXT NOT NULL,
+      created_at    TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_eval_dataset_run ON eval_dataset_entries(run_id);
+    CREATE INDEX IF NOT EXISTS idx_eval_dataset_thread ON eval_dataset_entries(thread_id);
+    CREATE INDEX IF NOT EXISTS idx_eval_dataset_created ON eval_dataset_entries(created_at DESC);
 
     -- Legacy table from removed setup wizard (safe no-op on fresh installs).
     DROP TABLE IF EXISTS platform_setup;
