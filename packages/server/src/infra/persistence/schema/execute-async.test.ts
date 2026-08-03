@@ -6,7 +6,7 @@ import {
   getPlatformDbKind,
   resetPlatformDbForTests,
 } from "./kysely.js"
-import { runGetAsync, runInsertIdAsync } from "./execute-async.js"
+import { injectMssqlOutputInsertedId, runGetAsync } from "./execute-async.js"
 import type { PlatformDatabase } from "./tables.js"
 
 afterEach(() => {
@@ -18,18 +18,17 @@ describe("execute-async", () => {
     expect(getPlatformDbKind()).toBe("sqlite")
   })
 
-  it("refuses runInsertIdAsync when mssql is bound", async () => {
-    const mem = new Database(":memory:")
-    const fake = new Kysely<PlatformDatabase>({
-      dialect: new SqliteDialect({ database: mem }),
-    })
-    bindPlatformDb("mssql", fake)
-    expect(getPlatformDbKind()).toBe("mssql")
-    await expect(
-      runInsertIdAsync({ sql: "select 1", parameters: [] }),
-    ).rejects.toThrow(/sqlite-only/)
-    await fake.destroy()
-    mem.close()
+  it("injects OUTPUT INSERTED.id into mssql-shaped inserts", () => {
+    const out = injectMssqlOutputInsertedId(
+      `insert into "notification_log" ("route_id", "event_type") values (@1, @2)`,
+    )
+    expect(out).toBe(
+      `insert into "notification_log" ("route_id", "event_type") OUTPUT INSERTED.id values (@1, @2)`,
+    )
+  })
+
+  it("refuses inject on non-insert SQL", () => {
+    expect(() => injectMssqlOutputInsertedId("select 1")).toThrow(/cannot inject/)
   })
 
   it("runGetAsync uses executeQuery when non-sqlite is bound", async () => {
@@ -57,6 +56,7 @@ describe("execute-async", () => {
       .compile()
     const row = await runGetAsync(compiled)
     expect(row).toBeUndefined()
+    expect(getPlatformDbKind()).toBe("mssql")
     await fake.destroy()
     mem.close()
   })

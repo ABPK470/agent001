@@ -2,9 +2,9 @@
  * SQLite EventStore — batched durable append off the SSE hot path.
  */
 
-import { sql } from "kysely"
 import { getPlatformDb } from "../../../schema/kysely.js"
 import { runAllAsync, runExecAsync } from "../../../schema/execute-async.js"
+import { jsonPathText } from "../../../schema/json-path.js"
 import { getPlatformStore } from "../platform-store.js"
 import type {
   DurableEvent,
@@ -140,7 +140,7 @@ export class SqliteEventStore implements EventStore {
       .selectAll()
       .where("type", "like", "sync.%")
       .where((eb) =>
-        eb.or([eb("plan_id", "=", planId), eb(sql`json_extract(data, '$.opId')`, "=", planId)]),
+        eb.or([eb("plan_id", "=", planId), eb(jsonPathText("data", "$.opId"), "=", planId)]),
       )
       .orderBy("created_at", "asc")
       .limit(limit)
@@ -170,7 +170,7 @@ export class SqliteEventStore implements EventStore {
       .where((eb) =>
         eb.or([
           eb("plan_id", "in", previewIdsArray),
-          eb(sql`json_extract(data, '$.opId')`, "in", previewIdsArray),
+          eb(jsonPathText("data", "$.opId"), "in", previewIdsArray),
         ]),
       )
       .orderBy("created_at", "asc")

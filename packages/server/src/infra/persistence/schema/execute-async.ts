@@ -48,12 +48,33 @@ export async function runChangesAsync(compiled: CompiledQuery): Promise<number> 
 }
 
 /**
- * Insert id — SQLite `lastInsertRowid` only.
- * MSSQL callers should use `OUTPUT INSERTED.id` in the query body instead.
+ * Inject `OUTPUT INSERTED.id` into a compiled INSERT for MSSQL identity return.
+ * Expects Kysely-shaped `insert into … (…) values …`.
+ */
+export function injectMssqlOutputInsertedId(sqlText: string): string {
+  const match = /^(\s*insert\s+into\s+[\w."[\]]+\s*\([^)]*\))\s*(values\b)/i.exec(sqlText)
+  if (!match) {
+    throw new Error(
+      `runInsertIdAsync: cannot inject OUTPUT INSERTED.id into SQL: ${sqlText.slice(0, 160)}`,
+    )
+  }
+  return `${match[1]} OUTPUT INSERTED.id ${match[2]}${sqlText.slice(match[0].length)}`
+}
+
+/**
+ * Insert and return the generated integer id.
+ * SQLite: `lastInsertRowid`. MSSQL: `OUTPUT INSERTED.id` injected into the compiled INSERT.
  */
 export async function runInsertIdAsync(compiled: CompiledQuery): Promise<number> {
   if (getPlatformDbKind() === "sqlite") return runInsertId(compiled)
-  throw new Error(
-    "runInsertIdAsync is sqlite-only — use OUTPUT INSERTED.* on mssql inserts",
+  const sqlText = injectMssqlOutputInsertedId(compiled.sql)
+  const result = await getPlatformDb().executeQuery(
+    asKyselyCompiled({ sql: sqlText, parameters: compiled.parameters }),
   )
+  const row = result.rows[0] as { id?: number | string | bigint } | undefined
+  const id = row?.id
+  if (id === undefined || id === null) {
+    throw new Error("runInsertIdAsync: MSSQL INSERT returned no id")
+  }
+  return Number(id)
 }

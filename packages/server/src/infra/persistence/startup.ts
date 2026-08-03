@@ -25,14 +25,11 @@ export async function runDatabaseMaintenance(): Promise<void> {
     console.log(`Normalised ${normalised} runs with unknown legacy statuses to 'failed'`)
   }
 
-  // pruneOldData uses SQLite LIMIT/OFFSET/vacuum idioms — skip on server RDBMS for now.
-  if (kind === "sqlite") {
-    const pruneResult = await pruneOldData()
-    if (pruneResult.prunedRuns > 0 || pruneResult.prunedApiRequests > 0) {
-      console.log(
-        `Pruned ${pruneResult.prunedRuns} old runs, ${pruneResult.prunedApiRequests} API request logs`,
-      )
-    }
+  const pruneResult = await pruneOldData()
+  if (pruneResult.prunedRuns > 0 || pruneResult.prunedApiRequests > 0) {
+    console.log(
+      `Pruned ${pruneResult.prunedRuns} old runs, ${pruneResult.prunedApiRequests} API request logs`,
+    )
   }
 
   const attachmentPrune = await pruneExpiredAttachments()

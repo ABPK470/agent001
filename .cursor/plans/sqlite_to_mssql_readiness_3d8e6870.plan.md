@@ -10,22 +10,22 @@ todos:
     status: completed
   - id: platform-orm-migrate
     content: "Platform store — Kysely schema toolkit + SQLite cutover (milestone 3); then mssql peer (milestone 4)"
-    status: in_progress
+    status: completed
   - id: platform-mssql-single-pool
     content: "Platform MSSQL — one Kysely (tedious/tarn) handle for migrator + queries + transactionAsync; no platform mssql.ConnectionPool; boot stays refused until dialect-safe repos"
     status: completed
   - id: sync-dialect-extract
     content: "Sync — extract current T-SQL behind WarehouseDialect; keep changeSet core pure; gate mssql_procedure as dialect-capability"
-    status: pending
+    status: completed
   - id: sync-pg-peer
     content: "Sync — add PostgreSQL WarehouseDialect + pool provider; eligibility for mssql|postgres connectors"
-    status: pending
+    status: completed
   - id: connectors-thin
     content: "Connectors — no wholesale rewrite; share quoting/driver helpers only; Bridge remains row-move"
-    status: pending
+    status: completed
   - id: dual-ci
     content: "CI — platform matrix (sqlite+one server RDBMS) and sync matrix (mssql+postgres goldens/integration)"
-    status: pending
+    status: completed
 isProject: false
 ---
 
@@ -98,11 +98,11 @@ flowchart TB
 | 2 sql-kit extract | **Done** |
 | 3 Platform schema toolkit + SQLite Kysely cutover | **Done** — product repos on `run*Async` / portable upsert |
 | 4 Platform second dialect (**hosted default: mssql**) | **Bootable** — single Kysely pool; registry v1–9; `openConfiguredPlatformStore` |
-| 5–6 Sync WarehouseDialect + Postgres | Largely present; polish + goldens remain |
-| 7 CI matrices | Not started |
+| 5–6 Sync WarehouseDialect + Postgres | **Done** — dialects + eligibility; procs capability-gated |
+| 7 CI matrices | **Done** — `.github/workflows/rdbms-matrix.yml` + `npm run test:rdbms-matrix` |
 | 8 Memory search / FTS port | **Done** — async CRUD; FTS5 sqlite / degraded mssql |
 
-**Readiness:** `MIA_PLATFORM_STORE=mssql` opens migrate+seed+memory path (degraded keyword search). Remaining: portable lifecycle prune, insert-id helper, CI matrices, Sync polish.
+**Readiness:** Platform sqlite|mssql bootable with memory; Sync mssql|postgres peers; CI matrices land. Live MSSQL/PG service jobs opt-in via repo vars.
 
 ---
 
@@ -198,18 +198,16 @@ Leave Bridge multi-dialect move engine; thin sql-kit reuse only.
 
 1. **Doctrine + ports** — done.
 2. **sql-kit extract** — done.
-3. **Platform: schema toolkit + SQLite adapter** — nearly done.
-4. **Platform: second dialect (mssql hosted default)** — in progress:
-   - **4a** Single Kysely/tedious platform pool (migrator + tx + queries) — **done**
-   - **4b** Grow multi-dialect registry toward baseline parity — **near-complete** (v1–8 product tables; memory/FTS = milestone 8)
-   - **4c** Dialect-safe SQL + `run*Async` — **in progress** (time helpers + portable sessions stats CTE; async repo cutover remains)
-   - **4d** Lift boot gate only when 4a–4c are honest
-5. **Sync: extract MSSQL behind WarehouseDialect**
-6. **Sync: PostgreSQL dialect + eligibility + pool provider**
-7. **CI matrices** — platform (sqlite + mssql peer); sync (mssql + postgres)
-8. **Memory search port** — last
-
-Order 3–4 before or interleaved with 5–6 is fine; **do not** block Sync extract on full platform ORM — but **do** finish platform single-pool before enabling mssql boot.
+3. **Platform: schema toolkit + SQLite adapter** — done.
+4. **Platform: second dialect (mssql hosted default)** — done:
+   - **4a** Single Kysely/tedious platform pool — **done**
+   - **4b** Multi-dialect registry v1–9 (incl. memory base) — **done**
+   - **4c** Dialect-safe SQL + `run*Async` — **done**
+   - **4d** Boot via `openConfiguredPlatformStore` — **done**
+5. **Sync: extract MSSQL behind WarehouseDialect** — done.
+6. **Sync: PostgreSQL dialect + eligibility + pool provider** — done.
+7. **CI matrices** — `.github/workflows/rdbms-matrix.yml` + `npm run test:rdbms-matrix`.
+8. **Memory search port** — done (FTS5 sqlite / degraded mssql).
 
 ---
 

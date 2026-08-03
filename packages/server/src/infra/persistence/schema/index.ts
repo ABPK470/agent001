@@ -20,6 +20,8 @@ export type {
   FreezeWindowConfigsTable,
   LayoutConfigsTable,
   LlmConfigTable,
+  MemoryEntriesTable,
+  MemoryVectorsTable,
   NotificationLogTable,
   NotificationRouteConfigsTable,
   NotificationsTable,
@@ -28,6 +30,7 @@ export type {
   PolicyConfigsTable,
   ProposerRunsTable,
   ProposerScheduleConfigsTable,
+  ResolvedTermsCacheTable,
   RunLogTable,
   RunToolApprovalsTable,
   RunsTable,
@@ -55,6 +58,7 @@ export type {
   SyncValueSourcesTable,
   ThreadsTable,
   TokenUsageTable,
+  ToolKnowledgeCacheTable,
   ToolResultsTable,
   TraceEntriesTable,
   UsersTable,
@@ -75,12 +79,14 @@ export {
   type CompiledQuery,
 } from "./execute.js"
 export {
+  injectMssqlOutputInsertedId,
   runAllAsync,
   runChangesAsync,
   runExecAsync,
   runGetAsync,
   runInsertIdAsync,
 } from "./execute-async.js"
+export { jsonPathText } from "./json-path.js"
 export {
   coalescePlatformNow,
   platformNow,

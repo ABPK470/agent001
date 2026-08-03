@@ -1,0 +1,147 @@
+# Platform + Sync RDBMS matrices (plan milestones 5–7).
+# sqlite platform always; mssql platform + postgres sync when credentials/services available.
+
+name: rdbms-matrix
+
+on:
+  push:
+    branches: [main, "feat/**", "fix/**"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  platform-sqlite:
+    name: platform / sqlite
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+        working-directory: .
+      - name: Persistence + memory unit tests
+        run: >
+          npx vitest run
+          src/infra/persistence
+          tests/memory-tenancy.test.ts
+          tests/memory-ingest-note.test.ts
+          tests/tool-knowledge.test.ts
+          tests/resolved-terms.test.ts
+          tests/table-verdict.test.ts
+        env:
+          MIA_PLATFORM_STORE: sqlite
+
+  sync-unit:
+    name: sync / dialect unit (mssql+postgres peers)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/sync
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+        working-directory: .
+      - name: WarehouseDialect + eligibility goldens
+        run: >
+          npx vitest run
+          src/adapters
+          src/runtime/warehouse-dialect.test.ts
+          src/core/eligibility
+          src/ports
+
+  platform-mssql:
+    name: platform / mssql (service)
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'workflow_dispatch' || vars.MIA_CI_MSSQL == '1' }}
+    services:
+      mssql:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: Y
+          MSSQL_SA_PASSWORD: "Your_strong_Password123"
+        ports:
+          - 1433:1433
+        options: >-
+          --health-cmd="/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P 'Your_strong_Password123' -Q 'SELECT 1' || exit 1"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=20
+    defaults:
+      run:
+        working-directory: packages/server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+        working-directory: .
+      - name: Create platform database
+        run: |
+          for i in $(seq 1 30); do
+            docker exec $(docker ps -q --filter ancestor=mcr.microsoft.com/mssql/server:2022-latest) \
+              /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P 'Your_strong_Password123' \
+              -Q "IF DB_ID('mia_platform') IS NULL CREATE DATABASE mia_platform" && break
+            sleep 2
+          done
+      - name: MSSQL migration runner + schema unit tests
+        run: >
+          npx vitest run
+          src/infra/persistence/adapters/mssql
+          src/infra/persistence/schema
+        env:
+          MIA_PLATFORM_STORE: mssql
+          MIA_PLATFORM_MSSQL_SERVER: localhost
+          MIA_PLATFORM_MSSQL_DATABASE: mia_platform
+          MIA_PLATFORM_MSSQL_USER: sa
+          MIA_PLATFORM_MSSQL_PASSWORD: "Your_strong_Password123"
+          MIA_PLATFORM_MSSQL_ENCRYPT: "false"
+          MIA_PLATFORM_MSSQL_TRUST_SERVER_CERTIFICATE: "true"
+
+  sync-postgres-integration:
+    name: sync / postgres integration
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'workflow_dispatch' || vars.MIA_CI_PG == '1' }}
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: mia
+          POSTGRES_PASSWORD: mia
+          POSTGRES_DB: mia_sync
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U mia -d mia_sync"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+    defaults:
+      run:
+        working-directory: packages/sync
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+        working-directory: .
+      - name: Postgres dialect peer tests
+        run: >
+          npx vitest run
+          src/adapters/postgres
+          src/runtime/warehouse-dialect.test.ts
+          src/core/eligibility
+        env:
+          MIA_SYNC_PG_URL: postgres://mia:mia@localhost:5432/mia_sync
