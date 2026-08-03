@@ -32,3 +32,5 @@ packages/*/data/
 notes
 docs/*
 !docs/doctrine.md
+!docs/platform-mssql-soak.md
+!docs/rdbms-future-tracks.md

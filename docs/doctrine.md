@@ -152,16 +152,25 @@ Product durability: users, sessions, threads, runs, events, policies, entity
 registry, sync *definitions*/catalog tip, approvals, memory, notifications,
 channels, effects. Owned by server persistence ports + repository functions.
 
-**RDBMS is pluggable:** `sqlite | mssql | postgres` via
+**RDBMS is pluggable — one platform store per process:** adapters under
 `packages/server/src/infra/persistence/adapters/{sqlite,mssql,postgres}/**`.
-Local/dev default remains SQLite. **Hosted default is MSSQL** (first peer
-dialect; Postgres may follow). Selection is config (`MIA_PLATFORM_STORE` +
-connection), not a rewrite of API/services. Platform pools must never be the
-warehouse Sync / Bridge connector pools.
+Product targets today: **`sqlite` (local/dev)** or **`mssql` (hosted)**.
+`MIA_PLATFORM_STORE=postgres` remains refused until a peer adapter lands.
+Selection is config (`MIA_PLATFORM_STORE` + connection), not a rewrite of
+API/services. Never run sqlite and mssql together as the platform; never use
+warehouse Sync / Bridge connector pools for platform life.
 
 Target contract: **async** repository ports; `PlatformStore.transactionAsync`
 is the multi-dialect shape. The SQLite adapter may still expose a sync
-`transaction` bridge during cutover.
+`transaction` bridge for local paths.
+
+**Memory keyword search** is dialect-owned via `MemorySearchPort` (same
+platform DB — not a search sidecar):
+
+- **Tier 1 (sqlite):** FTS5 BM25 on `memory_entries_fts`.
+- **Tier 2 (mssql):** explicit degraded token/recency filter on
+  `memory_entries` — intentional product trade-off, not silent FTS parity.
+  SQL Server Full-Text (`CONTAINS`) is a future adapter on the same port.
 
 ### Warehouse Sync (customer From/To)
 

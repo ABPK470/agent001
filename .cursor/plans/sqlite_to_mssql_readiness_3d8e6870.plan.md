@@ -99,10 +99,10 @@ flowchart TB
 | 3 Platform schema toolkit + SQLite Kysely cutover | **Done** — product repos on `run*Async` / portable upsert |
 | 4 Platform second dialect (**hosted default: mssql**) | **Bootable** — single Kysely pool; registry v1–9; `openConfiguredPlatformStore` |
 | 5–6 Sync WarehouseDialect + Postgres | **Done** — dialects + eligibility; procs capability-gated |
-| 7 CI matrices | **Done** — `.github/workflows/rdbms-matrix.yml` + `npm run test:rdbms-matrix` |
+| 7 CI matrices | **Done** — always-on unit goldens; path-filtered live MSSQL/PG jobs |
 | 8 Memory search / FTS port | **Done** — async CRUD; FTS5 sqlite / degraded mssql |
 
-**Readiness:** Platform sqlite|mssql bootable with memory; Sync mssql|postgres peers; CI matrices land. Live MSSQL/PG service jobs opt-in via repo vars.
+**Readiness:** Targeted matrix **delivered** — platform `sqlite|mssql` (one store per deploy); Sync warehouse `mssql|postgres`; memory Tier-1 FTS5 (sqlite) / Tier-2 degraded (mssql). Remaining work is **production sign-off** (docs, path-filtered CI, soak) — see `.cursor/plans/rdbms_production_signoff_0a436059.plan.md`. Not unfinished foundation.
 
 ---
 
@@ -145,11 +145,7 @@ flowchart TB
 3. **`transactionAsync` uses Kysely `db.transaction().execute`** — in-transaction work must use the transactional builder (`trx`), not a top-level ambient handle that escapes the tx. Rebind or pass `trx` explicitly.
 4. **No `openMssqlPlatformPool` / platform `mssql.ConnectionPool`** — remove from platform lifecycle. Keep npm `mssql` for Sync/Bridge only.
 5. **DDL scripts:** prefer `IF OBJECT_ID` batches **without `GO`**. If a hard batch break is needed, split into separate `execute` calls — do not introduce `GO` into the registry.
-6. **Boot gate:** `assertPlatformStoreReady` stays refused for mssql until:
-   - single pool is live, **and**
-   - repos are dialect-safe (no sqlite-only `datetime('now')` / sync-sqlite execute assumptions for paths that must run on mssql).
-
-Pool unify alone does **not** lift the boot restriction.
+6. **Boot:** `assertPlatformStoreReady` allows `sqlite|mssql`; refuses postgres until that adapter lands. Open via `openConfiguredPlatformStore` (single Kysely handle).
 
 ### Cutover blueprint (platform store)
 
@@ -168,7 +164,7 @@ Pool unify alone does **not** lift the boot restriction.
 2. **Dialect-agnostic schema** — Kysely `PlatformDatabase` + multi-dialect DDL registry.
 3. **Proper migrations** — versioned, idempotent; sqlite numbered runner today; mssql peer bodies in `migrations/registry.ts`.
 4. **Adapters** — `adapters/{sqlite,mssql,postgres}`. Local default **sqlite**; **hosted default mssql**.
-5. **Search/FTS** — milestone 8 last.
+5. **Search/FTS** — `MemorySearchPort`: FTS5 on sqlite; degraded on mssql (Full-Text = future).
 6. **Composition** — `MIA_PLATFORM_STORE` + connection env. Never warehouse connector pools for platform life.
 
 **ORM choice:** Kysely under `server/infra/persistence` only. Raw dialect SQL outside adapters forbidden after cutover.
@@ -190,7 +186,7 @@ Leave Bridge multi-dialect move engine; thin sql-kit reuse only.
 - Sync apply via Bridge `moveData`.
 - Big-bang single PR rewriting platform + Sync + connectors.
 - ORM everywhere including agent warehouse tools.
-- Lifting `MIA_PLATFORM_STORE=mssql` boot while dual platform pools or sqlite-bound repos remain.
+- Claiming FTS parity on mssql while keyword search remains Tier-2 degraded (name the gap; do not silent-fallback).
 
 ---
 
@@ -211,13 +207,17 @@ Leave Bridge multi-dialect move engine; thin sql-kit reuse only.
 
 ---
 
-## Honest sizing
+## Delivered matrix + hardening backlog
 
-| Track | Signal |
-|---|---|
-| Platform agnostic (ORM + migrations + 2 dialects + FTS port) | Large — months; ~70 tables, async ripple, search redesign |
-| Sync WarehouseDialect extract + Postgres peer | Large — ~2–4 eng-months for mssql+pg production sync |
-| Connectors thin share | Small |
-| Combined program | Multi-quarter architecture investment |
+| Concern | Delivered | Not this program |
+|---|---|---|
+| Platform store | **Either** sqlite (local) **or** mssql (hosted) — never both | `MIA_PLATFORM_STORE=postgres` |
+| Sync warehouse | `WarehouseDialect` mssql + postgres; procs capability-gated | — |
+| Memory keyword search | Same platform DB: FTS5 (sqlite) / degraded token-recency (mssql) | SQL Server Full-Text; external search sidecars |
+| CI | Unit goldens always-on; live MSSQL/PG when persistence/sync/sql-kit paths change | — |
 
-**After this program:** storage/RDBMS choice becomes config + adapter — the first-principles bar.
+**Success criteria for the targeted matrix are met.** Storage choice for platform life is config + adapter (`sqlite|mssql`). Warehouse Sync is independently pluggable (`mssql|postgres`).
+
+**Hardening (sign-off, not new dialects):** document Tier-2 search, mandatory path-filtered CI, hosted mssql soak before recommending hosted default.
+
+**Future tracks (parked):** platform postgres adapter; MSSQL Full-Text via `MemorySearchPort` if product rejects Tier-2.
