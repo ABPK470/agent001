@@ -6968,6 +6968,7 @@ button.trace-tree-status-pill:hover {
   --au-user-row-open-bg: var(--panel-2);
   --au-run-selected-bg: color-mix(in srgb, var(--accent) 14%, var(--au-detail-nest-bg));
   --au-run-selected-bg-hover: color-mix(in srgb, var(--accent) 20%, var(--au-detail-nest-bg));
+  --au-run-accordion-bg: color-mix(in srgb, var(--accent) 8%, var(--au-detail-nest-bg));
 }
 
 .active-users-widget--zen .au-main {
@@ -7304,7 +7305,7 @@ button.trace-tree-status-pill:hover {
   background-color: var(--au-detail-nest-bg);
 }
 
-.active-users-widget .au-run-table-wrap tbody tr:hover > td {
+.active-users-widget .au-run-table-wrap tbody tr:not(.au-run-selected):not(.au-run-accordion-row):hover > td {
   background-color: var(--panel-3);
 }
 
@@ -7467,7 +7468,11 @@ button.trace-tree-status-pill:hover {
 .active-users-widget .au-run-accordion-row > td {
   padding: 0;
   border-top: none;
-  background: color-mix(in srgb, var(--select-fill, rgb(255 255 255 / 0.06)) 35%, var(--overlay-1));
+  background: var(--au-run-accordion-bg);
+}
+
+.active-users-widget .au-run-accordion-row:hover > td {
+  background: var(--au-run-accordion-bg);
 }
 
 /* Selected run — accent-tinted fill + full-contrast text (table + stack). */
@@ -7508,6 +7513,17 @@ button.trace-tree-status-pill:hover {
   background: var(--au-run-selected-bg-hover) !important;
 }
 
+/* Expanded run — lock row highlight; details panel is not a hover target. */
+.active-users-widget .au-run-selected--open:hover,
+.active-users-widget tr.au-run-selected--open:hover > td {
+  background: var(--au-run-selected-bg) !important;
+}
+
+.active-users-widget button.au-run-selected--open:hover,
+.active-users-widget .au-run-card.au-run-selected--open:hover {
+  background: var(--au-run-selected-bg);
+}
+
 /* Muted cell utilities must not wash out on the selected highlight. */
 .active-users-widget tr.au-run-selected > td,
 .active-users-widget tr.au-run-selected > td *:not([class*="text-error"]) {
@@ -7535,7 +7551,7 @@ button.trace-tree-status-pill:hover {
   gap: 0.75rem;
   min-width: 0;
   padding: 0.75rem 1rem 0.875rem 2.25rem;
-  background: color-mix(in srgb, var(--select-fill, rgb(255 255 255 / 0.06)) 28%, transparent);
+  background: var(--au-run-accordion-bg);
   box-shadow: inset 2px 0 0 var(--color-accent, #6366f1);
 }
 
@@ -7646,11 +7662,10 @@ button.trace-tree-status-pill:hover {
   padding: 0.25rem 0;
   font-size: 0.8125rem;
   color: var(--color-text-muted);
-  transition: color 0.12s ease;
 }
 
 .active-users-widget .au-run-accordion__action:hover {
-  color: var(--color-text);
+  color: var(--color-text-muted);
 }
 
 .active-users-widget .au-run-accordion__action--primary {
@@ -7658,7 +7673,7 @@ button.trace-tree-status-pill:hover {
 }
 
 .active-users-widget .au-run-accordion__action--primary:hover {
-  color: color-mix(in srgb, var(--accent) 82%, white);
+  color: var(--accent);
 }
 
 /* ── Audit Log inspector — grid split (scroll + drawer share tracks) ── */

@@ -1393,8 +1393,8 @@ function UserDetail({ user, liveRuns, history, stack, adminBusy, onToggleAdmin, 
               <button
                 type="button"
                 className={[
-                  "flex w-full items-baseline gap-3 rounded-md px-1 py-0.5 text-left transition-colors hover:bg-overlay-2",
-                  expandedRun?.runId === r.runId ? "au-run-selected" : "",
+                  "flex w-full items-baseline gap-3 rounded-md px-1 py-0.5 text-left transition-colors",
+                  expandedRun?.runId === r.runId ? "au-run-selected au-run-selected--open" : "hover:bg-overlay-2",
                 ].filter(Boolean).join(" ")}
                 onClick={(e) => {
                   e.stopPropagation()
@@ -1484,8 +1484,8 @@ function UserDetail({ user, liveRuns, history, stack, adminBusy, onToggleAdmin, 
                   <button
                     type="button"
                     className={[
-                      "au-run-card w-full text-left px-4 py-3 hover:bg-overlay-2 transition-colors min-w-0",
-                      expandedRun?.runId === h.runId ? "au-run-selected" : "",
+                      "au-run-card w-full text-left px-4 py-3 transition-colors min-w-0",
+                      expandedRun?.runId === h.runId ? "au-run-selected au-run-selected--open" : "hover:bg-overlay-2",
                     ].filter(Boolean).join(" ")}
                     onClick={(e) => {
                       e.stopPropagation()
@@ -1547,8 +1547,8 @@ function UserDetail({ user, liveRuns, history, stack, adminBusy, onToggleAdmin, 
                     <Fragment key={h.runId}>
                       <tr
                         className={[
-                          "border-t border-border-subtle cursor-pointer transition-colors hover:bg-overlay-2",
-                          expandedRun?.runId === h.runId ? "au-run-selected" : "",
+                          "border-t border-border-subtle cursor-pointer transition-colors",
+                          expandedRun?.runId === h.runId ? "au-run-selected au-run-selected--open" : "hover:bg-overlay-2",
                         ].filter(Boolean).join(" ")}
                         onClick={(e) => {
                           e.stopPropagation()
