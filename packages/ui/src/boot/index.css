@@ -2612,6 +2612,17 @@ textarea.input {
   min-height: 0;
 }
 
+/*
+ * Same left-tree tokens as `.trace-split-tree`.
+ * Chevron inset at depth 0 = hpad + base-pad (32px) — never kill base-pad.
+ * Right-edge pill squeeze is truncation + `min-width: 0`, not stolen left air.
+ */
+.op-log-split-list {
+  --trace-tree-hpad: 16px;
+  --trace-tree-base-pad: 16px;
+  --trace-tree-indent: 20px;
+}
+
 .op-log-split-list-scroll {
   min-height: 0;
   scrollbar-gutter: stable;
@@ -2661,9 +2672,7 @@ textarea.input {
   flex: 1 1 auto;
   min-width: 0;
   align-items: flex-start;
-  /* Kill Trace depth pad — pills were hugging the splitter. */
-  padding-left: 0 !important;
-  padding-right: 0 !important;
+  /* Left pad comes from Trace `.trace-tree-row__node-cell` (base-pad + depth). */
 }
 
 .op-log-pipeline-list-row .trace-tree-row__icon {

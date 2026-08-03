@@ -4,6 +4,7 @@
 
 import { ChevronRight } from "lucide-react"
 import type { OperationActivity, OperationStatus } from "../../client/index"
+import { traceTreeNodeCellStyle } from "../trace/trace-tree-guides"
 import { OpLogStatusPill } from "./OpLogStatusPill"
 import { OP_LOG, OP_LOG_DESC, OP_LOG_MUTED, fmtDuration } from "./operation-log-row"
 import { opLogShowStatusPill } from "./op-log-row-policy"
@@ -32,7 +33,9 @@ export function OperationLogActivityTreeRow({
   onToggleFold: () => void
 }) {
   const showPill = opLogShowStatusPill({ status })
-  const indent = Math.max(0, depth - 1) * 20
+  // Pipeline root is depth 0 in the Trace dialect; first activity nest level
+  // shares that inset, then each deeper level adds one indent step.
+  const treeDepth = Math.max(0, depth - 1)
 
   return (
     <div
@@ -55,7 +58,7 @@ export function OperationLogActivityTreeRow({
       >
         <span
           className="trace-tree-row__node-cell op-log-activity-tree-row__node-cell"
-          style={{ paddingLeft: `${indent}px` }}
+          style={traceTreeNodeCellStyle(treeDepth)}
         >
           <span
             className="trace-tree-row__chev"

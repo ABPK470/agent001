@@ -1,5 +1,6 @@
 import { ChevronRight } from "lucide-react"
 import type { OperationPipeline } from "../../client/index"
+import { traceTreeNodeCellStyle } from "../trace/trace-tree-guides"
 import { pipelineEntityIcon } from "./op-log-entity-icon"
 import { OpLogEntityIcon } from "./OpLogEntityIcon"
 import { OpLogStatusPill } from "./OpLogStatusPill"
@@ -44,7 +45,10 @@ export function OperationLogPipelineListRow({
         className="trace-tree-row__btn op-log-pipeline-list-row__btn"
         onClick={() => onSelect(pipeline.id)}
       >
-        <span className="trace-tree-row__node-cell op-log-pipeline-list-row__node-cell">
+        <span
+          className="trace-tree-row__node-cell op-log-pipeline-list-row__node-cell"
+          style={traceTreeNodeCellStyle(0)}
+        >
           <span
             className="trace-tree-row__chev"
             onClick={(event) => {

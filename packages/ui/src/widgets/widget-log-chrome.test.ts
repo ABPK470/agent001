@@ -588,7 +588,11 @@ describe("widget log chrome — shared content dialect", () => {
     expect(css).toContain(".op-log-detail")
     expect(css).toContain(".op-log-pipeline-list-row")
     expect(css).toContain(".op-log-activity-tree-row")
-    expect(css).toContain("padding-left: 0 !important")
+    // Left air is Trace base-pad + hpad — never steal it for right-edge pills.
+    expect(css).toMatch(/\.op-log-split-list\s*\{[^}]*--trace-tree-base-pad:\s*16px/s)
+    expect(css).not.toMatch(
+      /\.op-log-activity-tree-row__node-cell\s*\{[^}]*padding-left:\s*0\s*!important/s,
+    )
     expect(css).toContain("scrollbar-gutter: stable")
     expect(css).toContain(".op-log-split-list-scroll")
     expect(ops).toContain("pipelineEventKey")

@@ -2,10 +2,13 @@
  * Multi-column metric row for trace master-detail tree.
  */
 
-import type { CSSProperties } from "react"
 import { Brain, ChevronRight, Cpu, Layers, Mail, MessageSquare, Reply, Wrench, Zap } from "lucide-react"
 import { fmtTokens, formatMs } from "../../lib/util"
-import { TRACE_TREE_BASE_PAD_PX, TRACE_TREE_INDENT_PX } from "./trace-tree-guides"
+import {
+  TRACE_TREE_BASE_PAD_PX,
+  TRACE_TREE_INDENT_PX,
+  traceTreeNodeCellStyle,
+} from "./trace-tree-guides"
 import type { TraceTreeNode, TraceTreeNodeKind } from "./trace-tree-index"
 import { TraceTreeStatusBadge, TraceTreeStatusDot } from "./TraceTreeStatusBadge"
 
@@ -24,14 +27,6 @@ const KIND_ICON: Record<TraceTreeNodeKind, typeof Brain> = {
 
 function displayTitle(node: TraceTreeNode): string {
   return node.leading ? `${node.leading} ${node.name}` : node.name
-}
-
-function nodeCellStyle(depth: number): CSSProperties {
-  return {
-    ["--trace-tree-depth" as string]: depth,
-    ["--trace-tree-base-pad" as string]: `${TRACE_TREE_BASE_PAD_PX}px`,
-    ["--trace-tree-indent" as string]: `${TRACE_TREE_INDENT_PX}px`,
-  }
 }
 
 export function TraceTreeRow({
@@ -85,7 +80,7 @@ export function TraceTreeRow({
       aria-selected={selected}
     >
       <button type="button" className="trace-tree-row__btn" onClick={onRowClick}>
-        <span className="trace-tree-row__node-cell" style={nodeCellStyle(node.depth)}>
+        <span className="trace-tree-row__node-cell" style={traceTreeNodeCellStyle(node.depth)}>
           <span className="trace-tree-row__chev" onClick={onChevronClick} aria-hidden>
             {node.hasChildren ? (
               <ChevronRight
