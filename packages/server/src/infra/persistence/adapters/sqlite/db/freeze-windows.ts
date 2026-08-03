@@ -9,8 +9,10 @@
  * holds the CRUD helpers and the registry-rehydrate routine.
  */
 
+import { sql } from "kysely"
 import { DEFAULT_TENANT_ID, installFreezeWindowRegistry, type FreezeWindowDefinition } from "@mia/sync"
-import { getDb } from "../connection.js"
+import { getPlatformDb } from "../../../schema/kysely.js"
+import { runAll, runChanges, runExec, runGet } from "../../../schema/execute.js"
 import { refreshesGlobalRegistryOnMutation } from "./tenant-inheritance.js"
 
 // ── Public type (matches shared-types `FreezeWindow`) ───────────
@@ -79,16 +81,24 @@ const rowToRecord = (r: Row): FreezeWindowRecord => ({
 })
 
 export function listFreezeWindowsForTenant(tenantId: string): FreezeWindowRecord[] {
-  const rows = getDb()
-    .prepare(`SELECT * FROM freeze_window_configs WHERE tenant_id = ? ORDER BY starts_at ASC, id ASC`)
-    .all(tenantId) as Row[]
-  return rows.map(rowToRecord)
+  const compiled = getPlatformDb()
+    .selectFrom("freeze_window_configs")
+    .selectAll()
+    .where("tenant_id", "=", tenantId)
+    .orderBy("starts_at", "asc")
+    .orderBy("id", "asc")
+    .compile()
+  return runAll<Row>(compiled).map(rowToRecord)
 }
 
 export function getFreezeWindow(tenantId: string, id: string): FreezeWindowRecord | null {
-  const r = getDb()
-    .prepare(`SELECT * FROM freeze_window_configs WHERE tenant_id = ? AND id = ?`)
-    .get(tenantId, id) as Row | undefined
+  const compiled = getPlatformDb()
+    .selectFrom("freeze_window_configs")
+    .selectAll()
+    .where("tenant_id", "=", tenantId)
+    .where("id", "=", id)
+    .compile()
+  const r = runGet<Row>(compiled)
   return r ? rowToRecord(r) : null
 }
 
@@ -104,30 +114,30 @@ export interface UpsertFreezeWindowArgs {
 
 export function upsertFreezeWindow(args: UpsertFreezeWindowArgs): FreezeWindowRecord {
   validate(args)
-  const db = getDb()
-  db.prepare(
-    `
-    INSERT INTO freeze_window_configs
-      (tenant_id, id, display_name, description, starts_at, ends_at, created_by, created_at, updated_at)
-    VALUES
-      (@tenantId, @id, @displayName, @description, @startsAt, @endsAt, @actor,
-       datetime('now'), datetime('now'))
-    ON CONFLICT(tenant_id, id) DO UPDATE SET
-      display_name = excluded.display_name,
-      description  = excluded.description,
-      starts_at    = excluded.starts_at,
-      ends_at      = excluded.ends_at,
-      updated_at   = datetime('now')
-  `
-  ).run({
-    tenantId: args.tenantId,
-    id: args.id,
-    displayName: args.displayName,
-    description: args.description,
-    startsAt: args.startsAt,
-    endsAt: args.endsAt,
-    actor: args.actor
-  })
+  const compiled = getPlatformDb()
+    .insertInto("freeze_window_configs")
+    .values({
+      tenant_id: args.tenantId,
+      id: args.id,
+      display_name: args.displayName,
+      description: args.description,
+      starts_at: args.startsAt,
+      ends_at: args.endsAt,
+      created_by: args.actor,
+      created_at: sql`datetime('now')`,
+      updated_at: sql`datetime('now')`,
+    })
+    .onConflict((oc) =>
+      oc.columns(["tenant_id", "id"]).doUpdateSet({
+        display_name: args.displayName,
+        description: args.description,
+        starts_at: args.startsAt,
+        ends_at: args.endsAt,
+        updated_at: sql`datetime('now')`,
+      }),
+    )
+    .compile()
+  runExec(compiled)
   const fresh = getFreezeWindow(args.tenantId, args.id)
   if (!fresh) throw new Error(`freeze_window not persisted: ${args.id}`)
   if (refreshesGlobalRegistryOnMutation(args.tenantId)) refreshFreezeWindowRegistry()
@@ -135,9 +145,14 @@ export function upsertFreezeWindow(args: UpsertFreezeWindowArgs): FreezeWindowRe
 }
 
 export function deleteFreezeWindow(tenantId: string, id: string): boolean {
-  const info = getDb().prepare(`DELETE FROM freeze_window_configs WHERE tenant_id = ? AND id = ?`).run(tenantId, id)
-  if (info.changes > 0 && refreshesGlobalRegistryOnMutation(tenantId)) refreshFreezeWindowRegistry()
-  return info.changes > 0
+  const compiled = getPlatformDb()
+    .deleteFrom("freeze_window_configs")
+    .where("tenant_id", "=", tenantId)
+    .where("id", "=", id)
+    .compile()
+  const changes = runChanges(compiled)
+  if (changes > 0 && refreshesGlobalRegistryOnMutation(tenantId)) refreshFreezeWindowRegistry()
+  return changes > 0
 }
 
 // ── Host reader bridge ──────────────────────────────────────────

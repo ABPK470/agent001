@@ -39,6 +39,39 @@ export interface SyncEnvironmentsTable {
   updated_by: string | null
 }
 
+/** `sessions` — opaque transport tokens FK'd to users. */
+export interface SessionsTable {
+  sid: string
+  upn: string
+  ip: string | null
+  user_agent: string | null
+  created_at: string
+  last_seen_at: string
+}
+
+/** `llm_config` — singleton row (`id = 1`) for agent model settings. */
+export interface LlmConfigTable {
+  id: number
+  provider: string
+  model: string
+  api_key: string
+  base_url: string
+  updated_at: string
+}
+
+/** `freeze_window_configs` — tenant-scoped change freezes. */
+export interface FreezeWindowConfigsTable {
+  tenant_id: string
+  id: string
+  display_name: string
+  description: string
+  starts_at: string
+  ends_at: string
+  created_by: string
+  created_at: string
+  updated_at: string
+}
+
 /**
  * Full platform database shape. Unlisted tables stay on raw better-sqlite3
  * until their repo moves.
@@ -47,6 +80,9 @@ export interface PlatformDatabase {
   connectors: ConnectorsTable
   users: UsersTable
   sync_environments: SyncEnvironmentsTable
+  sessions: SessionsTable
+  llm_config: LlmConfigTable
+  freeze_window_configs: FreezeWindowConfigsTable
 }
 
 /** Helper for optional Generated columns in later tables. */

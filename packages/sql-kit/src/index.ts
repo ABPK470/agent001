@@ -25,3 +25,10 @@ export type {
   WarehouseDialectKind,
   WarehousePoolProvider,
 } from "./pool.js"
+
+export type {
+  AppliedMigration,
+  MigrationId,
+  MigrationRunner,
+  MigrationStep,
+} from "./migrations.js"

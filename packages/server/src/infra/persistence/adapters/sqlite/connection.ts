@@ -16,7 +16,7 @@ import Database from "better-sqlite3"
 import { mkdirSync } from "node:fs"
 import { initMemoryFts } from "./memory/schema.js"
 import { applyLlmEnvOverride } from "./llm-env-bootstrap.js"
-import { runMigrations } from "./migrations/index.js"
+import { createSqliteMigrationRunner } from "./migrations/runner.js"
 import { runSeeds } from "./db/seeds.js"
 import { resolveDbPath, resolveServerDataDir } from "../../server-data-dir.js"
 
@@ -31,7 +31,7 @@ export function getDbPath(): string {
 }
 
 function bootstrapSchema(db: Database.Database): void {
-  runMigrations(db)
+  createSqliteMigrationRunner(db).applyPending()
   runSeeds(db)
   applyLlmEnvOverride(db)
   initMemoryFts(db)

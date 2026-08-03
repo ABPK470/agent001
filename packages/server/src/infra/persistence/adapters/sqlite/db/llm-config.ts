@@ -2,7 +2,9 @@
  * LLM configuration persistence.
  */
 
-import { getDb } from "../connection.js"
+import { sql } from "kysely"
+import { getPlatformDb } from "../../../schema/kysely.js"
+import { runExec, runGet } from "../../../schema/execute.js"
 import { LlmProvider } from "../../../../../internal/enums/llm.js"
 
 export { LlmProvider }
@@ -17,20 +19,25 @@ export interface DbLlmConfig {
 }
 
 export function getLlmConfig(): DbLlmConfig {
-  return getDb()
-    .prepare("SELECT provider, model, api_key, base_url, updated_at FROM llm_config WHERE id = 1")
-    .get() as DbLlmConfig
+  const compiled = getPlatformDb()
+    .selectFrom("llm_config")
+    .select(["provider", "model", "api_key", "base_url", "updated_at"])
+    .where("id", "=", 1)
+    .compile()
+  return runGet<DbLlmConfig>(compiled) as DbLlmConfig
 }
 
 export function saveLlmConfig(cfg: Omit<DbLlmConfig, "updated_at">): void {
-  getDb()
-    .prepare(
-      `
-    UPDATE llm_config
-    SET provider = @provider, model = @model, api_key = @api_key,
-        base_url = @base_url, updated_at = datetime('now')
-    WHERE id = 1
-  `
-    )
-    .run(cfg)
+  const compiled = getPlatformDb()
+    .updateTable("llm_config")
+    .set({
+      provider: cfg.provider,
+      model: cfg.model,
+      api_key: cfg.api_key,
+      base_url: cfg.base_url,
+      updated_at: sql`datetime('now')`,
+    })
+    .where("id", "=", 1)
+    .compile()
+  runExec(compiled)
 }

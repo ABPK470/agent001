@@ -16,7 +16,10 @@
  */
 
 import { randomBytes } from "node:crypto"
+import { sql } from "kysely"
 import { getDb } from "../connection.js"
+import { getPlatformDb } from "../../../schema/kysely.js"
+import { runExec, runGet } from "../../../schema/execute.js"
 
 function newSid(): string {
   return randomBytes(16).toString("hex")
@@ -38,27 +41,44 @@ export interface SessionWithUser extends DbSession {
 
 export function createSession(args: { upn: string; ip: string; userAgent: string }): string {
   const sid = newSid()
-  getDb()
-    .prepare(
-      `
-    INSERT INTO sessions (sid, upn, ip, user_agent, created_at, last_seen_at)
-    VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))
-  `
-    )
-    .run(sid, args.upn.toLowerCase(), args.ip, args.userAgent)
+  const compiled = getPlatformDb()
+    .insertInto("sessions")
+    .values({
+      sid,
+      upn: args.upn.toLowerCase(),
+      ip: args.ip,
+      user_agent: args.userAgent,
+      created_at: sql`datetime('now')`,
+      last_seen_at: sql`datetime('now')`,
+    })
+    .compile()
+  runExec(compiled)
   return sid
 }
 
 export function touchSession(sid: string): void {
-  getDb().prepare("UPDATE sessions SET last_seen_at = datetime('now') WHERE sid = ?").run(sid)
+  const compiled = getPlatformDb()
+    .updateTable("sessions")
+    .set({ last_seen_at: sql`datetime('now')` })
+    .where("sid", "=", sid)
+    .compile()
+  runExec(compiled)
 }
 
 export function deleteSession(sid: string): void {
-  getDb().prepare("DELETE FROM sessions WHERE sid = ?").run(sid)
+  const compiled = getPlatformDb()
+    .deleteFrom("sessions")
+    .where("sid", "=", sid)
+    .compile()
+  runExec(compiled)
 }
 
 export function deleteSessionsForUser(upn: string): void {
-  getDb().prepare("DELETE FROM sessions WHERE upn = ?").run(upn.toLowerCase())
+  const compiled = getPlatformDb()
+    .deleteFrom("sessions")
+    .where("upn", "=", upn.toLowerCase())
+    .compile()
+  runExec(compiled)
 }
 
 /**
@@ -67,22 +87,31 @@ export function deleteSessionsForUser(upn: string): void {
  * hook on every request.
  */
 export function getSessionWithUser(sid: string): SessionWithUser | null {
-  const row = getDb()
-    .prepare(
-      `
-    SELECT s.sid, s.upn, s.ip, s.user_agent, s.created_at, s.last_seen_at,
-           u.display_name, u.is_admin
-    FROM sessions s
-    JOIN users u ON u.upn = s.upn
-    WHERE s.sid = ?
-  `
-    )
-    .get(sid) as SessionWithUser | undefined
-  return row ?? null
+  const compiled = getPlatformDb()
+    .selectFrom("sessions")
+    .innerJoin("users", "users.upn", "sessions.upn")
+    .select([
+      "sessions.sid",
+      "sessions.upn",
+      "sessions.ip",
+      "sessions.user_agent",
+      "sessions.created_at",
+      "sessions.last_seen_at",
+      "users.display_name",
+      "users.is_admin",
+    ])
+    .where("sessions.sid", "=", sid)
+    .compile()
+  return runGet<SessionWithUser>(compiled) ?? null
 }
 
 export function getSession(sid: string): DbSession | undefined {
-  return getDb().prepare("SELECT * FROM sessions WHERE sid = ?").get(sid) as DbSession | undefined
+  const compiled = getPlatformDb()
+    .selectFrom("sessions")
+    .selectAll()
+    .where("sid", "=", sid)
+    .compile()
+  return runGet<DbSession>(compiled)
 }
 
 export function listSessions(opts?: { sinceSeconds?: number }): SessionWithUser[] {

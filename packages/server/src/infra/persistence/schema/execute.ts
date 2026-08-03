@@ -15,3 +15,8 @@ export function runGet<T>(compiled: { sql: string; parameters: readonly unknown[
 export function runExec(compiled: { sql: string; parameters: readonly unknown[] }): void {
   getDb().prepare(compiled.sql).run(...compiled.parameters)
 }
+
+/** Like {@link runExec}, but returns `changes` (DELETE/UPDATE row count). */
+export function runChanges(compiled: { sql: string; parameters: readonly unknown[] }): number {
+  return getDb().prepare(compiled.sql).run(...compiled.parameters).changes
+}

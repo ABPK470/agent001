@@ -6,6 +6,8 @@
  */
 
 import type { PlatformStore } from "../../ports/platform-store.js"
+import { createMssqlPlatformStore } from "./adapters/mssql/platform-store.js"
+import { createPostgresPlatformStore } from "./adapters/postgres/platform-store.js"
 import { getPlatformStore as getSqlitePlatformStore } from "./adapters/sqlite/platform-store.js"
 import { resolvePlatformStoreKind } from "./platform-store-config.js"
 
@@ -18,11 +20,9 @@ export function getPlatformStore(): PlatformStore {
     cached = getSqlitePlatformStore()
     return cached
   }
-  throw new Error(
-    `Platform store kind "${kind}" is not implemented yet. ` +
-      `Only sqlite is wired (Kysely cutover + multi-dialect migrator still in progress). ` +
-      `Unset MIA_PLATFORM_STORE or set it to sqlite.`,
-  )
+  // Scaffolds throw with a milestone-4 message (same gate as assertPlatformStoreReady).
+  if (kind === "mssql") return createMssqlPlatformStore()
+  return createPostgresPlatformStore()
 }
 
 /** Boot helper — fail fast when an unimplemented kind is configured. */
