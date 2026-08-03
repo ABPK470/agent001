@@ -80,6 +80,7 @@ export function flattenOperationRows(
           pipeline,
         })
         if (openPipelineIds?.has(pipeline.id) && activityKeyOf && openActivityKeys) {
+          // Depth 1 = first nest under pipeline root (Trace dialect: +1 indent step).
           pushActivities(pipeline, pipeline.activities, 1)
         }
       }

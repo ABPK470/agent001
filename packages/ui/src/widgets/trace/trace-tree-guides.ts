@@ -3,7 +3,10 @@
  *
  * Left geometry (Trace + Pipelines share this dialect):
  *   panel edge → button `--trace-tree-hpad` → node-cell
- *   `base-pad + depth * indent` → chevron/icon.
+ *   `base-pad + depth * indent` → chevron → icon → text.
+ *
+ * Pipelines: pipeline row depth 0; activities use flat-row depth as-is
+ * (1 = Preview/Execute under pipeline, 2+ = nested tasks).
  */
 
 import type { CSSProperties } from "react"

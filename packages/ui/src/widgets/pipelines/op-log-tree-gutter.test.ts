@@ -70,22 +70,28 @@ describe("pipelines left-tree gutter — Trace dialect", () => {
     expect(css).toContain(traceTreeCssNeedle)
   })
 
-  it("TREE header + day caps share the same hpad token as rows", () => {
+  it("TREE header + day caps share the same root inset as depth-0 chevrons", () => {
     const css = read(cssPath)
     expect(css).toMatch(
       /\.op-log-split-list__cap\s*\{[^}]*padding-inline:\s*var\(--trace-tree-hpad/s,
     )
     expect(css).toMatch(
-      /\.op-log-split-list-scroll \.review-group-label\s*\{[^}]*padding-inline:\s*var\(--trace-tree-hpad/s,
+      /\.op-log-split-list-scroll \.review-group-label\s*\{[^}]*padding-inline-start:\s*var\(--trace-tree-root-inset/s,
     )
+  })
+
+  it("activity rows reserve the Trace icon column", () => {
+    const activity = read(activityRowPath)
+    expect(activity).toContain("trace-tree-row__icon")
+    expect(activity).toContain("activityEntityIcon")
   })
 
   it("wires depth via CSS vars — not inline paddingLeft", () => {
     const listRow = read(listRowPath)
     const activity = read(activityRowPath)
     expect(listRow).toContain("traceTreeNodeCellStyle(0)")
-    expect(activity).toContain("traceTreeNodeCellStyle(treeDepth)")
-    expect(activity).toContain("Math.max(0, depth - 1)")
+    expect(activity).toContain("traceTreeNodeCellStyle(depth)")
+    expect(activity).not.toContain("depth - 1")
     expect(activity).not.toContain("paddingLeft")
     expect(listRow).not.toContain("paddingLeft")
   })
@@ -125,6 +131,7 @@ describe("pipelines left-tree gutter — Trace dialect", () => {
     const ops = read(opsPath)
     expect(ops).toContain("op-log-split-list widget-split-sidebar")
     expect(ops).toContain("op-log-split-list__cap")
+    expect(ops).toContain("OpLogTreeFoldToggle")
     expect(ops).toContain("OperationLogPipelineListRow")
     expect(ops).toContain("OperationLogActivityTreeRow")
     expect(read(traceGuidesPath)).toContain("TRACE_TREE_ROOT_INSET_PX")

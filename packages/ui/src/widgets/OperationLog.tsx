@@ -83,6 +83,11 @@ import {
   opLogActivityTreeRowHeight,
 } from "./pipelines/OperationLogActivityTreeRow"
 import { OperationLogPipelineListRow, opLogPipelineListRowHeight } from "./pipelines/OperationLogPipelineListRow"
+import { OpLogTreeFoldToggle } from "./pipelines/OpLogTreeFoldToggle"
+import {
+  treeOpenStateForFoldMode,
+  type OpLogTreeFoldMode,
+} from "./pipelines/op-log-tree-open-state"
 import type { OpLogSelection } from "./pipelines/OperationLogScopeDetail"
 
 const OP_LOG_SPLIT_MIN = 0.28
@@ -493,6 +498,7 @@ export function OperationLog() {
   const [openPipelineIds, setOpenPipelineIds] = useState<Set<string>>(new Set())
   const [actExpanded, setActExpanded] = useState<Set<string>>(new Set())
   const [collapsedDays, setCollapsedDays] = useState<Set<string>>(new Set())
+  const [treeFoldMode, setTreeFoldMode] = useState<OpLogTreeFoldMode>("collapsed")
   const [splitRatio, setSplitRatio] = useState(OP_LOG_SPLIT_DEFAULT)
   const rootRef = useRef<HTMLDivElement>(null)
   const listScrollRef = useRef<HTMLDivElement>(null)
@@ -579,6 +585,17 @@ export function OperationLog() {
     if (!serverSearchActive && needle && !matchesPipeline(p, needle)) return false
     return true
   }), [pipelines, kinds, statuses, needle, serverSearchActive])
+
+  const onTreeFoldModeChange = useCallback((mode: OpLogTreeFoldMode) => {
+    setTreeFoldMode(mode)
+  }, [])
+
+  useEffect(() => {
+    const next = treeOpenStateForFoldMode(filtered, treeFoldMode, pipelineActivityKey)
+    setOpenPipelineIds(next.openPipelineIds)
+    setActExpanded(next.actExpanded)
+    if (treeFoldMode === "expanded") setCollapsedDays(next.collapsedDays)
+  }, [filtered, treeFoldMode])
 
   const pipelineById = useMemo(() => {
     const map = new Map<string, OperationPipeline>()
@@ -748,8 +765,14 @@ export function OperationLog() {
               }}
             >
               <div className="op-log-split-list widget-split-sidebar flex min-h-0 min-w-0 flex-col overflow-hidden">
-                <div className="op-log-split-list__cap shrink-0 border-b border-border-subtle py-2 text-xs font-semibold uppercase tracking-wide text-text-muted">
-                  Tree
+                <div className="op-log-split-list__cap shrink-0 border-b border-border-subtle">
+                  <div className="op-log-split-list__cap-row">
+                    <span className="op-log-split-list__cap-label">Tree</span>
+                    <OpLogTreeFoldToggle
+                      foldMode={treeFoldMode}
+                      onFoldModeChange={onTreeFoldModeChange}
+                    />
+                  </div>
                 </div>
                 <div ref={listScrollRef} className="op-log-split-list-scroll min-h-0 flex-1 overflow-y-auto">
                   <OperationPipelineList
@@ -875,6 +898,8 @@ export function OperationPipelineList({
           summary={summary}
           status={status}
           depth={row.depth}
+          pipelineKind={row.pipeline.kind}
+          effectiveKind={effectiveKind}
           selected={
             selection?.kind === "activity" && selection.activityKey === row.activityKey
           }

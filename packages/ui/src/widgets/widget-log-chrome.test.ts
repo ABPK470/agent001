@@ -115,7 +115,8 @@ describe("widget log chrome — shell", () => {
     expect(ops).toContain("WidgetToolbarSearch")
     expect(ops).toContain("FilterSheet")
     expect(ops).toContain("FilterChoiceGrid")
-    expect(ops).not.toContain("SegmentToggle")
+    expect(ops).toContain("OpLogTreeFoldToggle")
+    expect(ops).toContain("treeFoldMode")
     expect(ops).not.toContain("LOG_TOOLBAR_CHIP")
 
     expect(trace).toContain("WidgetToolbar")

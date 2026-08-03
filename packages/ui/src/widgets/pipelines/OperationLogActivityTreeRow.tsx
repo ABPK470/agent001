@@ -3,8 +3,10 @@
  */
 
 import { ChevronRight } from "lucide-react"
-import type { OperationActivity, OperationStatus } from "../../client/index"
+import type { OperationActivity, OperationKind, OperationStatus } from "../../client/index"
 import { traceTreeNodeCellStyle } from "../trace/trace-tree-guides"
+import { activityEntityIcon } from "./op-log-entity-icon"
+import { OpLogEntityIcon } from "./OpLogEntityIcon"
 import { OpLogStatusPill } from "./OpLogStatusPill"
 import { OP_LOG, OP_LOG_DESC, OP_LOG_MUTED, fmtDuration } from "./operation-log-row"
 import { opLogShowStatusPill } from "./op-log-row-policy"
@@ -15,6 +17,8 @@ export function OperationLogActivityTreeRow({
   summary,
   status,
   depth,
+  pipelineKind,
+  effectiveKind,
   selected,
   hasChildren,
   folded,
@@ -26,6 +30,8 @@ export function OperationLogActivityTreeRow({
   summary?: string
   status: OperationStatus
   depth: number
+  pipelineKind: OperationKind
+  effectiveKind: OperationKind
   selected: boolean
   hasChildren: boolean
   folded: boolean
@@ -33,9 +39,7 @@ export function OperationLogActivityTreeRow({
   onToggleFold: () => void
 }) {
   const showPill = opLogShowStatusPill({ status })
-  // Pipeline root is depth 0 in the Trace dialect; first activity nest level
-  // shares that inset, then each deeper level adds one indent step.
-  const treeDepth = Math.max(0, depth - 1)
+  const entity = activityEntityIcon(pipelineKind, effectiveKind, activity)
 
   return (
     <div
@@ -43,7 +47,7 @@ export function OperationLogActivityTreeRow({
         "trace-tree-row op-log-activity-tree-row",
         selected ? "is-selected" : "",
         hasChildren ? "is-branch" : "is-leaf",
-        "is-child",
+        depth > 0 ? "is-child" : "is-root",
       ]
         .filter(Boolean)
         .join(" ")}
@@ -58,7 +62,7 @@ export function OperationLogActivityTreeRow({
       >
         <span
           className="trace-tree-row__node-cell op-log-activity-tree-row__node-cell"
-          style={traceTreeNodeCellStyle(treeDepth)}
+          style={traceTreeNodeCellStyle(depth)}
         >
           <span
             className="trace-tree-row__chev"
@@ -74,6 +78,9 @@ export function OperationLogActivityTreeRow({
                 className={`trace-tree-row__chev-icon${folded ? "" : " is-open"}`}
               />
             ) : null}
+          </span>
+          <span className="trace-tree-row__icon" aria-hidden>
+            <OpLogEntityIcon icon={entity.Icon} color={entity.color} />
           </span>
           <span className="trace-tree-row__text-block min-w-0 flex-1">
             <span className="trace-tree-row__title-stack">
