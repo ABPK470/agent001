@@ -211,20 +211,48 @@ export function auditSummary(entry: AdminAuditItem): string {
   return action
 }
 
+/** Format any detail value for inspector hints — never drop null / arrays / objects. */
+export function formatAuditHintValue(value: unknown): string {
+  if (value === undefined) return "undefined"
+  if (value === null) return "null"
+  if (typeof value === "string") return value
+  if (typeof value === "number" || typeof value === "boolean") return String(value)
+  try {
+    return JSON.stringify(value)
+  } catch {
+    return String(value)
+  }
+}
+
+function hintSourceObject(detail: Record<string, unknown>): Record<string, unknown> | null {
+  // Prefer full snapshots when present; else the sparse fields patch object.
+  if (isPlainObject(detail.after)) return detail.after
+  if (isPlainObject(detail.before)) return detail.before
+  if (isPlainObject(detail.fields)) return detail.fields
+  return null
+}
+
 export function auditChangeHints(detail: Record<string, unknown>): AuditChangeHint[] {
   const hints: AuditChangeHint[] = []
-  const keys = fieldKeys(detail)
-  if (keys.length > 0) {
-    hints.push({
-      label: keys.length === 1 ? "Field" : "Fields",
-      value: keys.join(", "),
-    })
-    const fields = detail.fields
-    if (fields && typeof fields === "object" && !Array.isArray(fields)) {
-      for (const key of keys.slice(0, 12)) {
-        const v = (fields as Record<string, unknown>)[key]
-        if (v == null || typeof v === "object") continue
-        hints.push({ label: key, value: String(v) })
+  const source = hintSourceObject(detail)
+
+  if (source) {
+    for (const key of Object.keys(source)) {
+      hints.push({ label: key, value: formatAuditHintValue(source[key]) })
+    }
+  } else {
+    // Size-capped / legacy: fields may be a string[] of key names (+ optional samples).
+    const keys = fieldKeys(detail)
+    if (keys.length > 0) {
+      hints.push({
+        label: keys.length === 1 ? "Field" : "Fields",
+        value: keys.join(", "),
+      })
+      if (isPlainObject(detail.samples)) {
+        for (const key of keys) {
+          if (!(key in detail.samples)) continue
+          hints.push({ label: key, value: formatAuditHintValue(detail.samples[key]) })
+        }
       }
     }
   }
@@ -253,4 +281,17 @@ export function formatAuditWhen(ts: string): string {
 export function formatAuditScope(entry: AdminAuditItem): string {
   if (entry.scopeId) return `${entry.scopeType} · ${entry.scopeId}`
   return entry.scopeType
+}
+
+const STACK_VALUE_LEN = 25
+
+/** Long / URL-like / JSON values stack under the key in the inspector (no mid-value ellipsis). */
+export function auditValueStacks(text: string): boolean {
+  const t = text.trim()
+  if (t.length === 0) return false
+  if (t.length > STACK_VALUE_LEN) return true
+  if (/^https?:\/\//i.test(t)) return true
+  if (t.includes("://")) return true
+  if (t.startsWith("{") || t.startsWith("[")) return true
+  return false
 }

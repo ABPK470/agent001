@@ -21,11 +21,14 @@ describe("audit modal table + inspector contracts", () => {
     expect(src).not.toContain("ChevronRight")
   })
 
-  it("host clips overflow; Summary/Target truncate under inspector", () => {
+  it("host clips overflow; table contracts when inspector open", () => {
     const src = readFileSync(join(here, "AuditModal.tsx"), "utf8")
     expect(src).toContain("audit-log-host")
     expect(src).toContain("audit-log-host__table")
     expect(src).toContain("min-w-0")
+    expect(src).toContain('data-inspector-open={inspectorOpen ? "true" : "false"}')
+    expect(src).toContain("title={when}")
+    expect(src).toContain("title={summary}")
 
     const css = readFileSync(join(here, "../../boot/index.css"), "utf8")
     expect(css).toContain(".audit-log-host")
@@ -33,9 +36,15 @@ describe("audit modal table + inspector contracts", () => {
     expect(css).toContain(".audit-log-host__table")
     expect(css).toContain("overflow-x: hidden")
     expect(css).toContain(".audit-log-table__cell")
-    expect(css).toContain("text-overflow: ellipsis")
+    expect(css).toContain("grid-template-columns: subgrid")
+    expect(css).toContain("minmax(7.5rem, max-content)")
     expect(css).toContain("minmax(0, 1fr)")
-    expect(css).toContain("minmax(0, 1.35fr)")
+    expect(css).toContain("column-gap: 1.5rem")
+    expect(css).toContain('data-inspector-open="true"] .audit-log-host__table')
+    expect(css).toContain("padding-right: var(--audit-inspector-w)")
+    expect(css).toContain(".audit-log-table__cell--action")
+    expect(css).toContain(".audit-log-table__cell--summary")
+    expect(css).not.toContain(".audit-log-table__col--scope {\n  display: none")
   })
 
   it("inspector uses transform slide-over dialect + CatalogJsonDiff", () => {
@@ -48,11 +57,16 @@ describe("audit modal table + inspector contracts", () => {
     expect(inspector).toContain("auditChangeHints")
     expect(inspector).toContain("Historical version no longer available")
     expect(inspector).toContain("resolveVersionRef")
+    expect(inspector).toContain("auditValueStacks")
+    expect(inspector).toContain("audit-inspector__resize")
+    expect(inspector).toContain("onToggleWide")
 
     const css = readFileSync(join(here, "../../boot/index.css"), "utf8")
     expect(css).toContain("translate3d(100%, 0, 0)")
     expect(css).toContain(".audit-inspector[data-open=\"true\"]")
     expect(css).toContain("--audit-inspector-w")
+    expect(css).toContain(".audit-inspector__prop--stacked")
+    expect(css).toContain("word-break: break-word")
   })
 
   it("table does not prefetch version refs (drawer-only resolve)", () => {

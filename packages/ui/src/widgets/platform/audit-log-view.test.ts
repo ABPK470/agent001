@@ -7,6 +7,7 @@ import {
   auditDiffSides,
   auditSummary,
   auditTarget,
+  auditValueStacks,
 } from "./audit-log-view"
 
 function entry(partial: Partial<AdminAuditItem> & Pick<AdminAuditItem, "action">): AdminAuditItem {
@@ -95,18 +96,38 @@ describe("auditTarget / auditSummary", () => {
 })
 
 describe("auditChangeHints", () => {
-  it("lists field keys and scalar highlights", () => {
+  it("renders every fields key including null, arrays, and objects", () => {
     const hints = auditChangeHints({
       name: "test111",
-      fields: { defaultAccessMode: "read_write", displayName: "test111" },
+      fields: {
+        displayName: "test111",
+        defaultAccessMode: "read_write",
+        agentServiceBaseUrl: null,
+        allowedOperations: ["query_read"],
+        serviceUrls: { agent: "http://x" },
+      },
     })
-    expect(hints.some((h) => h.label === "Fields" && h.value.includes("defaultAccessMode"))).toBe(
-      true,
-    )
+    expect(hints.some((h) => h.label === "Fields")).toBe(false)
     expect(hints.some((h) => h.label === "defaultAccessMode" && h.value === "read_write")).toBe(
       true,
     )
+    expect(hints.some((h) => h.label === "agentServiceBaseUrl" && h.value === "null")).toBe(true)
+    expect(hints.some((h) => h.label === "allowedOperations" && h.value.includes("query_read"))).toBe(
+      true,
+    )
+    expect(hints.some((h) => h.label === "serviceUrls" && h.value.includes("agent"))).toBe(true)
     expect(hints.some((h) => h.label === "name" && h.value === "test111")).toBe(true)
+  })
+
+  it("lists key names when fields is a string array (size-capped)", () => {
+    const hints = auditChangeHints({
+      fields: ["displayName", "agentServiceBaseUrl"],
+      samples: { displayName: "prod" },
+    })
+    expect(hints.some((h) => h.label === "Fields" && h.value.includes("agentServiceBaseUrl"))).toBe(
+      true,
+    )
+    expect(hints.some((h) => h.label === "displayName" && h.value === "prod")).toBe(true)
   })
 })
 
@@ -129,5 +150,15 @@ describe("auditDiffSides", () => {
 
   it("returns none for legacy sparse detail", () => {
     expect(auditDiffSides({ name: "x", fields: ["a"] })).toEqual({ mode: "none" })
+  })
+})
+
+describe("auditValueStacks", () => {
+  it("stacks long strings, URLs, and JSON", () => {
+    expect(auditValueStacks("short")).toBe(false)
+    expect(auditValueStacks("http://example.internal/v1")).toBe(true)
+    expect(auditValueStacks("a".repeat(26))).toBe(true)
+    expect(auditValueStacks('["query_read"]')).toBe(true)
+    expect(auditValueStacks('{"a":1}')).toBe(true)
   })
 })

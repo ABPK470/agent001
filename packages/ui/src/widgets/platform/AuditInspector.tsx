@@ -3,8 +3,17 @@
  * Forensic before/after via CatalogJsonDiff; version refs resolve only here (never from the table).
  */
 
-import { Check, ChevronDown, ChevronRight, Copy, Scale, X } from "lucide-react"
-import type { JSX, ReactNode, TransitionEvent } from "react"
+import {
+  Check,
+  ChevronDown,
+  ChevronRight,
+  Copy,
+  PanelLeftClose,
+  PanelRightOpen,
+  Scale,
+  X,
+} from "lucide-react"
+import type { JSX, PointerEvent as ReactPointerEvent, ReactNode, TransitionEvent } from "react"
 import { useEffect, useRef, useState } from "react"
 import { api, type AdminAuditItem } from "../../client/index"
 import { JsonViewer } from "../../components/JsonViewer"
@@ -15,11 +24,14 @@ import {
   auditChangeHints,
   auditDiffSides,
   auditTarget,
+  auditValueStacks,
   formatAuditScope,
   formatAuditWhen,
   stringifyAuditJson,
   type AuditVersionRef,
 } from "./audit-log-view"
+
+type ResizeDrag = { startX: number; startW: number }
 
 const REF_UNAVAILABLE =
   "Historical version no longer available; showing event detail."
@@ -138,6 +150,13 @@ function CopyIconBtn({ value, label }: { value: string; label: string }): JSX.El
   )
 }
 
+function propPlainText(value: ReactNode, copyText?: string): string | null {
+  if (typeof value === "string") return value
+  if (typeof value === "number" || typeof value === "boolean") return String(value)
+  if (copyText) return copyText
+  return null
+}
+
 function PropRow({
   label,
   value,
@@ -149,12 +168,41 @@ function PropRow({
   mono?: boolean
   copy?: { text: string; label: string }
 }): JSX.Element {
+  const plain = propPlainText(value, copy?.text)
+  const stacked = plain != null && auditValueStacks(plain)
+  const useMono = Boolean(mono || stacked)
+  const copySpec =
+    copy ?? (plain && stacked ? { text: plain, label: label } : undefined)
+  const display = value ?? "—"
+
+  if (stacked) {
+    return (
+      <div className="audit-inspector__prop audit-inspector__prop--stacked">
+        <div className="audit-inspector__prop-head">
+          <span className="audit-inspector__prop-key">{label}</span>
+          {copySpec ? <CopyIconBtn value={copySpec.text} label={copySpec.label} /> : null}
+        </div>
+        <span
+          className={`audit-inspector__prop-val audit-inspector__prop-val--block${
+            useMono ? " audit-inspector__prop-val--mono" : ""
+          }`}
+        >
+          <span className="audit-inspector__prop-text" title={plain ?? undefined}>
+            {display}
+          </span>
+        </span>
+      </div>
+    )
+  }
+
   return (
     <div className="audit-inspector__prop">
       <span className="audit-inspector__prop-key">{label}</span>
-      <span className={`audit-inspector__prop-val${mono ? " audit-inspector__prop-val--mono" : ""}`}>
-        <span className="audit-inspector__prop-text">{value ?? "—"}</span>
-        {copy ? <CopyIconBtn value={copy.text} label={copy.label} /> : null}
+      <span className={`audit-inspector__prop-val${useMono ? " audit-inspector__prop-val--mono" : ""}`}>
+        <span className="audit-inspector__prop-text" title={plain ?? undefined}>
+          {display}
+        </span>
+        {copySpec ? <CopyIconBtn value={copySpec.text} label={copySpec.label} /> : null}
       </span>
     </div>
   )
@@ -163,21 +211,73 @@ function PropRow({
 export function AuditInspector({
   entry,
   open,
+  wide,
+  widthPx,
+  onWidthChange,
+  onToggleWide,
+  onResizingChange,
   onClose,
   onExited,
 }: {
   entry: AdminAuditItem
   open: boolean
+  wide: boolean
+  widthPx: number
+  onWidthChange: (px: number) => void
+  onToggleWide: () => void
+  onResizingChange: (resizing: boolean) => void
   onClose: () => void
   onExited: () => void
 }): JSX.Element {
   const [rawOpen, setRawOpen] = useState(false)
   const [refState, setRefState] = useState<RefResolveState>({ status: "idle" })
+  const [resizing, setResizing] = useState(false)
   const exitedRef = useRef(false)
   const hasOpenedRef = useRef(false)
-  const actionRef = useRef({ open, onClose, onExited })
-  actionRef.current = { open, onClose, onExited }
+  const dragRef = useRef<ResizeDrag | null>(null)
+  const actionRef = useRef({
+    open,
+    onClose,
+    onExited,
+    widthPx,
+    onWidthChange,
+    onResizingChange,
+  })
+  actionRef.current = {
+    open,
+    onClose,
+    onExited,
+    widthPx,
+    onWidthChange,
+    onResizingChange,
+  }
   const resolveGenRef = useRef(0)
+
+  function onResizePointerDown(e: ReactPointerEvent<HTMLDivElement>) {
+    if (e.button !== 0) return
+    e.preventDefault()
+    dragRef.current = { startX: e.clientX, startW: actionRef.current.widthPx }
+    setResizing(true)
+    actionRef.current.onResizingChange(true)
+    e.currentTarget.setPointerCapture(e.pointerId)
+  }
+
+  function onResizePointerMove(e: ReactPointerEvent<HTMLDivElement>) {
+    const drag = dragRef.current
+    if (!drag) return
+    const next = drag.startW + (drag.startX - e.clientX)
+    actionRef.current.onWidthChange(next)
+  }
+
+  function onResizePointerUp(e: ReactPointerEvent<HTMLDivElement>) {
+    if (!dragRef.current) return
+    dragRef.current = null
+    setResizing(false)
+    actionRef.current.onResizingChange(false)
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId)
+    }
+  }
 
   const sides = auditDiffSides(entry.detail)
   const embeddedDiff: ResolvedDiff | null =
@@ -278,33 +378,60 @@ export function AuditInspector({
     <aside
       className="audit-inspector"
       data-open={open ? "true" : "false"}
+      data-resizing={resizing ? "true" : "false"}
       role="dialog"
       aria-label="Audit entry details"
       aria-hidden={!open}
       onTransitionEnd={onPanelTransitionEnd}
     >
+      <div
+        className="audit-inspector__resize"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize inspector"
+        title="Drag to resize"
+        onPointerDown={onResizePointerDown}
+        onPointerMove={onResizePointerMove}
+        onPointerUp={onResizePointerUp}
+        onPointerCancel={onResizePointerUp}
+      />
       <div className="audit-inspector__shell">
         <header className="audit-inspector__header">
           <div className="audit-inspector__title">
             <Scale size={15} className="shrink-0 text-text-muted" />
             <div className="min-w-0">
-              <h3 className={`truncate font-mono text-[13px] font-semibold ${verbClass}`}>
+              <h3
+                className={`truncate font-mono text-[13px] font-semibold ${verbClass}`}
+                title={entry.action}
+              >
                 {entry.action}
               </h3>
-              <p className="truncate text-[11px] text-text-muted">
+              <p className="truncate text-[11px] text-text-muted" title={formatAuditWhen(entry.timestamp)}>
                 {formatAuditWhen(entry.timestamp)}
               </p>
             </div>
           </div>
-          <button
-            type="button"
-            className="audit-inspector__icon-btn"
-            onClick={onClose}
-            aria-label="Close inspector"
-            title="Close (Esc)"
-          >
-            <X size={16} />
-          </button>
+          <div className="audit-inspector__header-actions">
+            <button
+              type="button"
+              className="audit-inspector__icon-btn"
+              onClick={onToggleWide}
+              aria-label={wide ? "Narrow inspector" : "Widen inspector"}
+              aria-pressed={wide}
+              title={wide ? "Narrow drawer" : "Widen drawer"}
+            >
+              {wide ? <PanelLeftClose size={16} /> : <PanelRightOpen size={16} />}
+            </button>
+            <button
+              type="button"
+              className="audit-inspector__icon-btn"
+              onClick={onClose}
+              aria-label="Close inspector"
+              title="Close (Esc)"
+            >
+              <X size={16} />
+            </button>
+          </div>
         </header>
 
         <div className="audit-inspector__body show-scrollbar">
@@ -372,7 +499,8 @@ export function AuditInspector({
             </section>
           ) : null}
 
-          {changes.length > 0 ? (
+          {/* When before/after (or resolved ref) is on screen, rely on CatalogJsonDiff — no partial Fields list. */}
+          {changes.length > 0 && !activeDiff ? (
             <section>
               <h4 className="audit-inspector__section-title">Changes</h4>
               <div className="audit-inspector__props">
@@ -385,7 +513,7 @@ export function AuditInspector({
                   />
                 ))}
               </div>
-              {showHintsFallback && !activeDiff ? (
+              {showHintsFallback ? (
                 <p className="mt-2 text-[11px] leading-snug text-text-faint">
                   Structured hints from the event detail
                   {entry.detail.truncated === true ? " (payload size-capped at write)." : "."}

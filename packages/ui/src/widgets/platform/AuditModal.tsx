@@ -44,6 +44,10 @@ import {
 } from "./audit-log-view"
 
 const PAGE_SIZE = 50
+const AUDIT_INSPECTOR_W_DEFAULT = 400
+const AUDIT_INSPECTOR_W_WIDE = 640
+const AUDIT_INSPECTOR_W_MIN = 360
+const AUDIT_INSPECTOR_W_MAX = 700
 
 const SCOPE_OPTIONS: ListboxOption<string>[] = [
   { value: "", label: "All scopes" },
@@ -86,6 +90,9 @@ export function AuditModal({ onClose }: { onClose: () => void }) {
   const [error, setError] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [inspectorOpen, setInspectorOpen] = useState(false)
+  const [inspectorWidth, setInspectorWidth] = useState(AUDIT_INSPECTOR_W_DEFAULT)
+  const [inspectorWide, setInspectorWide] = useState(false)
+  const [inspectorResizing, setInspectorResizing] = useState(false)
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [options, setOptions] = useState<AdminAuditFilterOptions>({
@@ -212,6 +219,26 @@ export function AuditModal({ onClose }: { onClose: () => void }) {
   function onInspectorExited() {
     if (inspectorOpenRef.current) return
     setSelectedId(null)
+  }
+
+  function clampInspectorWidth(px: number): number {
+    return Math.min(AUDIT_INSPECTOR_W_MAX, Math.max(AUDIT_INSPECTOR_W_MIN, Math.round(px)))
+  }
+
+  function onInspectorWidthChange(px: number) {
+    const next = clampInspectorWidth(px)
+    setInspectorWidth(next)
+    setInspectorWide(next >= AUDIT_INSPECTOR_W_WIDE - 8)
+  }
+
+  function toggleInspectorWide() {
+    if (inspectorWide) {
+      setInspectorWide(false)
+      setInspectorWidth(AUDIT_INSPECTOR_W_DEFAULT)
+      return
+    }
+    setInspectorWide(true)
+    setInspectorWidth(AUDIT_INSPECTOR_W_WIDE)
   }
 
   function stepSelection(delta: number) {
@@ -533,7 +560,12 @@ export function AuditModal({ onClose }: { onClose: () => void }) {
           </div>
         </FilterSheet>
 
-        <div className="audit-log-host min-w-0 px-6 pb-3 pt-1">
+        <div
+          className="audit-log-host min-w-0 px-6 pb-3 pt-1"
+          data-inspector-open={inspectorOpen ? "true" : "false"}
+          data-resizing={inspectorResizing ? "true" : "false"}
+          style={{ ["--audit-inspector-w" as string]: `${inspectorWidth}px` }}
+        >
           {error ? (
             <EmptyState icon={AlertCircle} message={error} />
           ) : loading && items.length === 0 ? (
@@ -555,7 +587,7 @@ export function AuditModal({ onClose }: { onClose: () => void }) {
                   <div className="audit-log-table__head" role="row">
                     <span role="columnheader">Timestamp</span>
                     <span role="columnheader">Actor</span>
-                    <span role="columnheader">Scope</span>
+                    <span className="audit-log-table__col--scope" role="columnheader">Scope</span>
                     <span role="columnheader">Action</span>
                     <span role="columnheader">Target</span>
                     <span role="columnheader">Summary</span>
@@ -563,6 +595,9 @@ export function AuditModal({ onClose }: { onClose: () => void }) {
                   {items.map((entry) => {
                     const summary = auditSummary(entry)
                     const target = auditTarget(entry)
+                    const when = formatAuditWhen(entry.timestamp)
+                    const scope = formatAuditScope(entry)
+                    const actor = entry.user ?? "—"
                     const verb = actionVerbKind(entry.action)
                     return (
                       <button
@@ -573,28 +608,44 @@ export function AuditModal({ onClose }: { onClose: () => void }) {
                         data-selected={selectedId === entry.id ? "true" : "false"}
                         onClick={() => openInspector(entry.id)}
                       >
-                        <span className="audit-log-table__cell font-mono text-[12px] text-text-muted" role="cell">
-                          {formatAuditWhen(entry.timestamp)}
+                        <span
+                          className="audit-log-table__cell font-mono text-[12px] text-text-muted"
+                          role="cell"
+                          title={when}
+                        >
+                          {when}
                         </span>
-                        <span className="audit-log-table__cell text-text-secondary" role="cell">
-                          {entry.user ?? "—"}
+                        <span
+                          className="audit-log-table__cell text-text-secondary"
+                          role="cell"
+                          title={actor}
+                        >
+                          {actor}
                         </span>
-                        <span className="audit-log-table__cell" role="cell">
-                          <span className="audit-log-table__scope" title={formatAuditScope(entry)}>
-                            {formatAuditScope(entry)}
+                        <span className="audit-log-table__cell audit-log-table__col--scope" role="cell">
+                          <span className="audit-log-table__scope" title={scope}>
+                            {scope}
                           </span>
                         </span>
                         <span
-                          className={`audit-log-table__cell font-mono text-[12px] font-medium ${actionVerbClass(verb)}`}
+                          className={`audit-log-table__cell audit-log-table__cell--action font-mono text-[12px] font-medium ${actionVerbClass(verb)}`}
                           role="cell"
                           title={entry.action}
                         >
                           {entry.action}
                         </span>
-                        <span className="audit-log-table__cell font-mono text-[12px] text-text-secondary" role="cell" title={target}>
+                        <span
+                          className="audit-log-table__cell audit-log-table__cell--target font-mono text-[12px] text-text-secondary"
+                          role="cell"
+                          title={target}
+                        >
                           {target}
                         </span>
-                        <span className="audit-log-table__cell text-text-muted" role="cell" title={summary}>
+                        <span
+                          className="audit-log-table__cell audit-log-table__cell--summary text-text-muted"
+                          role="cell"
+                          title={summary}
+                        >
                           {summary}
                         </span>
                       </button>
@@ -606,6 +657,11 @@ export function AuditModal({ onClose }: { onClose: () => void }) {
                 <AuditInspector
                   entry={selectedEntry}
                   open={inspectorOpen}
+                  wide={inspectorWide}
+                  widthPx={inspectorWidth}
+                  onWidthChange={onInspectorWidthChange}
+                  onToggleWide={toggleInspectorWide}
+                  onResizingChange={setInspectorResizing}
                   onClose={closeInspector}
                   onExited={onInspectorExited}
                 />

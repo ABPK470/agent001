@@ -7529,7 +7529,7 @@ button.trace-tree-status-pill:hover {
 
 /* ── Audit Log inspector — transform-only overlay (mirror AU dialect) ── */
 .audit-log-host {
-  --audit-inspector-w: min(24rem, 40%);
+  --audit-inspector-w: 25rem;
   --audit-inspector-ease: cubic-bezier(0.22, 1, 0.36, 1);
   --audit-inspector-dur: 340ms;
   position: relative;
@@ -7549,11 +7549,31 @@ button.trace-tree-status-pill:hover {
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
+  transition: padding-right var(--audit-inspector-dur) var(--audit-inspector-ease);
 }
 
+/* Drawer open: table pads by drawer width so rows compress instead of being covered. */
+.audit-log-host[data-inspector-open="true"] .audit-log-host__table {
+  padding-right: var(--audit-inspector-w);
+  overflow-x: auto;
+}
+
+/*
+ * One shared column track definition for head + every data row (CSS subgrid).
+ * Without this, each row is its own grid and max-content columns misalign
+ * headers vs cells (ACTION/TARGET float over dead whitespace).
+ */
 .audit-log-table {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns:
+    max-content /* Timestamp */
+    max-content /* Actor */
+    max-content /* Scope */
+    max-content /* Action */
+    minmax(7.5rem, max-content) /* Target — hug full id, don’t invent empty track */
+    minmax(0, 1fr); /* Summary — only leftover space */
+  column-gap: 1.5rem;
+  align-items: baseline;
   min-width: 0;
   width: 100%;
 }
@@ -7561,24 +7581,22 @@ button.trace-tree-status-pill:hover {
 .audit-log-table__head,
 .audit-log-table__row {
   display: grid;
-  grid-template-columns:
-    7.25rem
-    5.5rem
-    8.75rem
-    minmax(7rem, 10.5rem)
-    minmax(0, 1fr)
-    minmax(0, 1.35fr);
-  column-gap: 0.75rem;
+  grid-template-columns: subgrid;
+  grid-column: 1 / -1;
+  column-gap: inherit;
   align-items: baseline;
   min-width: 0;
-  width: 100%;
+  width: auto;
+  box-sizing: border-box;
+  padding: 0.55rem 0.75rem;
 }
 
 .audit-log-table__head {
   position: sticky;
   top: 0;
   z-index: 1;
-  padding: 0.4rem 0.75rem;
+  padding-top: 0.4rem;
+  padding-bottom: 0.4rem;
   border-bottom: 1px solid var(--border-subtle);
   background: var(--panel, var(--workspace-widget-bg, var(--panel-2)));
   font-size: 0.625rem;
@@ -7589,7 +7607,6 @@ button.trace-tree-status-pill:hover {
 }
 
 .audit-log-table__row {
-  padding: 0.55rem 0.75rem;
   border-radius: 0.5rem;
   text-align: left;
   font-size: 0.8125rem;
@@ -7610,18 +7627,31 @@ button.trace-tree-status-pill:hover {
   background: color-mix(in srgb, var(--accent) 20%, transparent);
 }
 
+/* Content-hugging cols: no ellipsis into empty neighbour space. */
 .audit-log-table__cell {
+  white-space: nowrap;
+}
+
+.audit-log-table__cell--action,
+.audit-log-table__cell--target,
+.audit-log-table__col--scope {
+  min-width: max-content;
+  overflow: visible;
+  text-overflow: unset;
+}
+
+/* Summary alone truncates into leftover flex space. */
+.audit-log-table__cell--summary {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .audit-log-table__scope {
   display: inline-block;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  max-width: none;
+  overflow: visible;
+  text-overflow: unset;
   white-space: nowrap;
   border-radius: 0.25rem;
   background: var(--overlay-2);
@@ -7651,13 +7681,41 @@ button.trace-tree-status-pill:hover {
   box-shadow: -10px 0 28px rgb(0 0 0 / 0.32);
   transform: translate3d(100%, 0, 0);
   pointer-events: none;
-  transition: transform var(--audit-inspector-dur) var(--audit-inspector-ease);
+  transition: transform var(--audit-inspector-dur) var(--audit-inspector-ease),
+    width var(--audit-inspector-dur) var(--audit-inspector-ease);
   will-change: transform;
 }
 
 .audit-inspector[data-open="true"] {
   transform: translate3d(0, 0, 0);
   pointer-events: auto;
+}
+
+.audit-inspector[data-resizing="true"] {
+  transition: none;
+}
+
+.audit-log-host[data-resizing="true"] .audit-log-host__table {
+  transition: none;
+}
+
+.audit-inspector__resize {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  z-index: 2;
+  width: 0.35rem;
+  margin-left: -0.15rem;
+  cursor: col-resize;
+  touch-action: none;
+  background: transparent;
+}
+
+.audit-inspector__resize:hover,
+.audit-inspector__resize:focus-visible,
+.audit-inspector[data-resizing="true"] .audit-inspector__resize {
+  background: color-mix(in srgb, var(--accent) 45%, transparent);
 }
 
 .audit-inspector__shell {
@@ -7670,6 +7728,10 @@ button.trace-tree-status-pill:hover {
 
 @media (prefers-reduced-motion: reduce) {
   .audit-inspector {
+    transition-duration: 1ms !important;
+  }
+
+  .audit-log-host__table {
     transition-duration: 1ms !important;
   }
 }
@@ -7699,6 +7761,13 @@ button.trace-tree-status-pill:hover {
   margin: 0.15rem 0 0;
 }
 
+.audit-inspector__header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+  flex-shrink: 0;
+}
+
 .audit-inspector__icon-btn {
   display: inline-flex;
   align-items: center;
@@ -7713,6 +7782,11 @@ button.trace-tree-status-pill:hover {
 .audit-inspector__icon-btn:hover {
   background: var(--overlay-2);
   color: var(--color-text);
+}
+
+.audit-inspector__icon-btn[aria-pressed="true"] {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
 .audit-inspector__body {
@@ -7748,28 +7822,57 @@ button.trace-tree-status-pill:hover {
   min-width: 0;
 }
 
+.audit-inspector__prop--stacked {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.3rem;
+}
+
+.audit-inspector__prop-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
 .audit-inspector__prop-key {
   flex: 0 0 auto;
-  font-size: 0.75rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.6875rem;
+  font-weight: 500;
   color: var(--color-text-muted);
-  padding-top: 0.1rem;
+  padding-top: 0.15rem;
 }
 
 .audit-inspector__prop-val {
   display: inline-flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 0.25rem;
   min-width: 0;
   max-width: 70%;
   justify-content: flex-end;
   text-align: right;
   font-size: 0.8125rem;
+  font-weight: 600;
   color: var(--color-text);
 }
 
 .audit-inspector__prop-val--mono {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.audit-inspector__prop-val--block {
+  max-width: 100%;
+  width: 100%;
+  justify-content: flex-start;
+  text-align: left;
+  padding: 0.4rem 0.5rem;
+  border-radius: 0.375rem;
+  border: 1px solid var(--border-subtle);
+  background: var(--overlay-1);
 }
 
 .audit-inspector__prop-text {
@@ -7777,6 +7880,19 @@ button.trace-tree-status-pill:hover {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.audit-inspector__prop--stacked .audit-inspector__prop-text {
+  overflow: visible;
+  text-overflow: unset;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.audit-inspector__prop:hover .audit-inspector__copy,
+.audit-inspector__prop:focus-within .audit-inspector__copy {
+  opacity: 1;
 }
 
 .audit-inspector__copy {
