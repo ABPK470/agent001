@@ -44,7 +44,7 @@ import {
 import { getDb } from "../connection.js"
 import { getPlatformStore } from "../platform-store.js"
 import { runAllAsync, runExecAsync, runGetAsync } from "../../../schema/execute-async.js"
-import { getPlatformDb } from "../../../schema/kysely.js"
+import { getPlatformDb, getPlatformDbKind } from "../../../schema/kysely.js"
 import { listFreezeWindowsForTenant } from "./freeze-windows.js"
 
 import {
@@ -511,20 +511,24 @@ export async function retireEntityDefinition(
  * Trigger DDL is SQLite-adapter-specific (RAISE); row wipes go through Kysely.
  */
 export async function wipeEntityRegistry(): Promise<void> {
-  getDb().exec(`
-    DROP TRIGGER IF EXISTS entity_versions_no_update;
-    DROP TRIGGER IF EXISTS entity_versions_no_delete;
-  `)
+  if (getPlatformDbKind() === "sqlite") {
+    getDb().exec(`
+      DROP TRIGGER IF EXISTS entity_versions_no_update;
+      DROP TRIGGER IF EXISTS entity_versions_no_delete;
+    `)
+  }
   await runExecAsync(getPlatformDb().deleteFrom("entity_versions").compile())
   await runExecAsync(getPlatformDb().deleteFrom("entity_active").compile())
-  getDb().exec(`
-    CREATE TRIGGER IF NOT EXISTS entity_versions_no_update
-      BEFORE UPDATE ON entity_versions
-      BEGIN SELECT RAISE(ABORT, 'entity_versions is append-only'); END;
-    CREATE TRIGGER IF NOT EXISTS entity_versions_no_delete
-      BEFORE DELETE ON entity_versions
-      BEGIN SELECT RAISE(ABORT, 'entity_versions is append-only'); END;
-  `)
+  if (getPlatformDbKind() === "sqlite") {
+    getDb().exec(`
+      CREATE TRIGGER IF NOT EXISTS entity_versions_no_update
+        BEFORE UPDATE ON entity_versions
+        BEGIN SELECT RAISE(ABORT, 'entity_versions is append-only'); END;
+      CREATE TRIGGER IF NOT EXISTS entity_versions_no_delete
+        BEFORE DELETE ON entity_versions
+        BEGIN SELECT RAISE(ABORT, 'entity_versions is append-only'); END;
+    `)
+  }
 }
 
 // ── SCD2 strategies ─────────────────────────────────────────────────

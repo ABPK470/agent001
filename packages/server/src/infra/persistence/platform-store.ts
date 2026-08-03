@@ -1,17 +1,21 @@
 /**
  * PlatformStore composition root — selected by `MIA_PLATFORM_STORE`.
  *
- * SQLite is the only implemented adapter today. mssql|postgres fail loudly
- * until a second dialect adapter lands (plan milestone 4).
+ * sqlite (local default) and mssql (hosted) are product-ready after async
+ * cutover. postgres remains refused until a peer adapter lands.
  */
 
 import type { PlatformStore } from "../../ports/platform-store.js"
-import { createMssqlPlatformStore } from "./adapters/mssql/platform-store.js"
 import { createPostgresPlatformStore } from "./adapters/postgres/platform-store.js"
 import { getPlatformStore as getSqlitePlatformStore } from "./adapters/sqlite/platform-store.js"
 import { resolvePlatformStoreKind } from "./platform-store-config.js"
 
 let cached: PlatformStore | null = null
+
+/** Boot / openConfiguredPlatformStore — install the live handle. */
+export function _setPlatformStoreCache(store: PlatformStore): void {
+  cached = store
+}
 
 export function getPlatformStore(): PlatformStore {
   if (cached) return cached
@@ -20,21 +24,26 @@ export function getPlatformStore(): PlatformStore {
     cached = getSqlitePlatformStore()
     return cached
   }
-  // Scaffolds throw with a milestone-4 message (same gate as assertPlatformStoreReady).
-  if (kind === "mssql") return createMssqlPlatformStore()
+  if (kind === "mssql") {
+    throw new Error(
+      "MSSQL PlatformStore is not open — call openConfiguredPlatformStore() at boot before getPlatformStore()",
+    )
+  }
   return createPostgresPlatformStore()
 }
 
-/** Boot helper — fail fast when an unimplemented kind is configured. */
+/**
+ * Boot helper — allow sqlite|mssql; refuse postgres until that adapter lands.
+ * Callers must still open the store via {@link openConfiguredPlatformStore}.
+ */
 export function assertPlatformStoreReady(
   env: NodeJS.ProcessEnv = process.env,
 ): ReturnType<typeof resolvePlatformStoreKind> {
   const kind = resolvePlatformStoreKind(env)
-  if (kind !== "sqlite") {
+  if (kind === "postgres") {
     throw new Error(
-      `MIA_PLATFORM_STORE=${kind} is not ready — platform persistence still requires sqlite ` +
-        `(hosted default will be mssql once milestone 4 completes; repos/execute still SQLite-bound). ` +
-        `Sync warehouse mssql|postgres is separate (connectors / WarehouseDialect).`,
+      `MIA_PLATFORM_STORE=postgres is not ready — platform persistence supports sqlite|mssql. ` +
+        `Sync warehouse postgres is separate (WarehouseDialect).`,
     )
   }
   return kind

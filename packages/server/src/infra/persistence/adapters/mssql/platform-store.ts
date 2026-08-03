@@ -1,14 +1,10 @@
 /**
- * MSSQL PlatformStore adapter — milestone 4 skeleton.
+ * MSSQL PlatformStore adapter — single Kysely (tedious + tarn) handle for
+ * migrator DDL, typed queries, and transactionAsync.
  *
- * Single connection lifecycle: Kysely MssqlDialect (tedious + tarn) for
- * migrator DDL, typed queries, and transactionAsync. No platform
- * `mssql.ConnectionPool` (npm `mssql` remains for warehouse Sync/Bridge).
- *
- * Product repos still mostly call sync SQLite execute, so boot refuses
- * `MIA_PLATFORM_STORE=mssql` via {@link assertPlatformStoreReady}.
- *
- * Use {@link openMssqlPlatformStore} for migrator / async-execute pilots only.
+ * Open via {@link openMssqlPlatformStore} / boot
+ * {@link import("../../open-platform-store.js").openConfiguredPlatformStore}.
+ * No platform `mssql.ConnectionPool` (npm `mssql` remains for warehouse Sync/Bridge).
  */
 
 import type { Kysely } from "kysely"
@@ -29,19 +25,6 @@ export type MssqlPlatformStoreHandle = PlatformStore & {
   close(): Promise<void>
 }
 
-/**
- * Composition-root entry — still refused for product boot.
- * Single Kysely handle lives behind {@link openMssqlPlatformStore}.
- */
-export function createMssqlPlatformStore(): PlatformStore {
-  throw new Error(
-    "MSSQL PlatformStore is not product-ready (plan milestone 4). " +
-      "Single Kysely (tedious/tarn) handle + migrator land under adapters/mssql/**; " +
-      "repos still call sync SQLite execute. Keep MIA_PLATFORM_STORE=sqlite. " +
-      "For pilot only: openMssqlPlatformStore().",
-  )
-}
-
 /** Open the sole platform Kysely handle; bind process-wide for execute-async. */
 export async function openMssqlPlatformStore(
   env: NodeJS.ProcessEnv = process.env,
@@ -60,8 +43,6 @@ export async function openMssqlPlatformStore(
       )
     },
     async transactionAsync(fn) {
-      // Same tarn pool as DML/DDL. Rebind ambient getPlatformDb() to trx so
-      // in-tx work does not escape onto the outer connection (autocommit).
       return db.transaction().execute(async (trx) => {
         bindPlatformDb("mssql", trx as unknown as Kysely<PlatformDatabase>)
         try {

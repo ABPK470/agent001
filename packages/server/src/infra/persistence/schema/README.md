@@ -4,12 +4,13 @@ Track B of the RDBMS-agnostic program ([plan](../../../../../.cursor/plans/sqlit
 
 ## When can we swap SQLite → MSSQL/Postgres?
 
-**Not yet.** Boot still refuses non-sqlite. Progress:
+**sqlite|mssql boot is wired** via `openConfiguredPlatformStore`. Memory FTS and
+sqlite-only prune/vacuum remain gated. Progress:
 
 | Milestone | What | Status |
 | --- | --- | --- |
-| 3 | Schema toolkit + async SQLite adapter | **Nearly done** — product repos on Kysely; leftovers below |
-| 4 | Second dialect (**hosted default: mssql**) + multi-dialect migrator | **In progress** — single Kysely handle; registry v1–8; time helpers + portable admin CTE; boot still refuses |
+| 3 | Schema toolkit + async SQLite adapter | **Done** — product repos on `run*Async` |
+| 4 | Second dialect (**hosted default: mssql**) + multi-dialect migrator | **Bootable** — single Kysely handle; registry v1–8; async repos; memory deferred |
 | 8 | Memory search port (FTS) | Last hard piece |
 
 Honest sizing in the plan: platform agnostic is **large (months)** — ~70 tables, async ripple, search redesign. Sync warehouse multi-dialect is a **separate** track and is further along.

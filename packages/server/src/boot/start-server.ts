@@ -13,7 +13,7 @@ import { loadPublishedSyncVocabularyAtBoot } from "./published-sync-bundle.js"
 import { bootstrapAdminFromEnv } from "../api/auth/index.js"
 import { getLlmConfig, runDatabaseMaintenance } from "../infra/persistence/index.js"
 import { assertPlatformStoreReady } from "../infra/persistence/platform-store.js"
-import { getDbPath, openDatabase } from "../infra/persistence/adapters/sqlite/index.js"
+import { openConfiguredPlatformStore } from "../infra/persistence/open-platform-store.js"
 import { resolveServerDataDir } from "../infra/persistence/server-data-dir.js"
 import { printStartupBanner } from "./banner.js"
 import { createServerContext } from "./context.js"
@@ -37,13 +37,13 @@ async function recoverStaleRuns(orchestrator: ReturnType<typeof createOrchestrat
 }
 
 export async function startServer(): Promise<void> {
-  // 1. Persistence — platform store kind (sqlite only today), then open + hygiene
+  // 1. Persistence — open sqlite|mssql platform store, then hygiene
   const platformKind = assertPlatformStoreReady()
-  openDatabase()
+  const opened = await openConfiguredPlatformStore()
   console.log(
-    `Data directory: ${resolveServerDataDir()} (db: ${getDbPath()}; platform store: ${platformKind})`,
+    `Data directory: ${resolveServerDataDir()} (platform store: ${platformKind} @ ${opened.location})`,
   )
-  runDatabaseMaintenance()
+  await runDatabaseMaintenance()
   await bootstrapAdminFromEnv()
 
   // Tenant config — one JSON file per mia server install (see packages/agent/config/TENANT-CONFIG.md)
@@ -63,7 +63,7 @@ export async function startServer(): Promise<void> {
   const ctx = await createServerContext()
 
   // Published bundle — written by Entity Registry publish, not setup or first boot
-  loadPublishedSyncVocabularyAtBoot(projectRoot)
+  await loadPublishedSyncVocabularyAtBoot(projectRoot)
 
   // 3. LLM + catalog
   const llm = await buildLlmAndCatalog(ctx.bootHost, ctx.mssqlSummary)
