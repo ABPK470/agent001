@@ -1097,4 +1097,37 @@ END;
       },
     },
   },
+  {
+    version: 8,
+    name: "mssql_pilot_eval_dataset",
+    up: {
+      mssql: async (executor) => {
+        await mssqlExec(
+          executor,
+          `
+IF OBJECT_ID(N'dbo.eval_dataset_entries', N'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.eval_dataset_entries (
+    id             NVARCHAR(64)   NOT NULL CONSTRAINT PK_eval_dataset_entries PRIMARY KEY,
+    thread_id      NVARCHAR(64)   NULL,
+    run_id         NVARCHAR(64)   NOT NULL,
+    scope_id       NVARCHAR(128)  NOT NULL,
+    kind           NVARCHAR(64)   NOT NULL,
+    call_index     INT            NULL,
+    label          NVARCHAR(512)  NULL,
+    input_json     NVARCHAR(MAX)  NOT NULL,
+    output_json    NVARCHAR(MAX)  NULL,
+    metadata_json  NVARCHAR(MAX)  NULL,
+    created_by     NVARCHAR(320)  NOT NULL,
+    created_at     DATETIME2      NOT NULL
+  );
+  CREATE INDEX IX_eval_dataset_run ON dbo.eval_dataset_entries(run_id);
+  CREATE INDEX IX_eval_dataset_thread ON dbo.eval_dataset_entries(thread_id);
+  CREATE INDEX IX_eval_dataset_created ON dbo.eval_dataset_entries(created_at DESC);
+END;
+`,
+        )
+      },
+    },
+  },
 ]

@@ -177,9 +177,20 @@ export function listUsersWithStats(opts?: {
   const activityWindow = opts?.activityWindowSeconds ?? 86_400
   const sinceCutoff = platformNowMinusSeconds(sinceSeconds)
   const activityCutoff = platformNowMinusSeconds(activityWindow)
-  // Admin CTE — time windows via dialect-aware helpers (milestone 4c).
+  // Admin CTE — portable windows (ROW_NUMBER, no LIMIT/TOP dialect fork).
   const compiled = sql`
-    WITH grouped_sessions AS (
+    WITH last_session AS (
+      SELECT upn, ip, user_agent FROM (
+        SELECT
+          lower(upn) AS upn,
+          ip,
+          user_agent,
+          ROW_NUMBER() OVER (PARTITION BY lower(upn) ORDER BY last_seen_at DESC) AS rn
+        FROM sessions
+      ) ranked
+      WHERE rn = 1
+    ),
+    grouped_sessions AS (
       SELECT
         u.upn                  AS upn,
         u.display_name         AS display_name,
@@ -187,11 +198,13 @@ export function listUsersWithStats(opts?: {
         COUNT(s.sid)           AS session_count,
         MIN(s.created_at)      AS first_seen_at,
         MAX(s.last_seen_at)    AS last_seen_at,
-        (SELECT s2.ip         FROM sessions s2 WHERE lower(s2.upn) = lower(u.upn) ORDER BY s2.last_seen_at DESC LIMIT 1) AS last_ip,
-        (SELECT s2.user_agent FROM sessions s2 WHERE lower(s2.upn) = lower(u.upn) ORDER BY s2.last_seen_at DESC LIMIT 1) AS last_user_agent
+        ls.ip                  AS last_ip,
+        ls.user_agent          AS last_user_agent
       FROM users u
-      LEFT JOIN sessions s ON lower(s.upn) = lower(u.upn) AND s.last_seen_at >= ${sinceCutoff}
-      GROUP BY u.upn
+      LEFT JOIN sessions s
+        ON lower(s.upn) = lower(u.upn) AND s.last_seen_at >= ${sinceCutoff}
+      LEFT JOIN last_session ls ON ls.upn = lower(u.upn)
+      GROUP BY u.upn, u.display_name, u.is_admin, ls.ip, ls.user_agent
     ),
     run_totals AS (
       SELECT
@@ -201,7 +214,7 @@ export function listUsersWithStats(opts?: {
         SUM(CASE WHEN created_at >= ${activityCutoff} AND status IN ('failed','crashed','timeout','error') THEN 1 ELSE 0 END) AS runs_failed_24h,
         MAX(created_at) AS last_run_at
       FROM runs
-      WHERE upn IS NOT NULL AND trim(upn) != ''
+      WHERE upn IS NOT NULL AND TRIM(upn) != ''
       GROUP BY lower(upn)
     ),
     token_totals AS (
@@ -211,7 +224,7 @@ export function listUsersWithStats(opts?: {
         SUM(t.llm_calls)    AS total_llm_calls_24h
       FROM runs r
       JOIN token_usage t ON t.run_id = r.id
-      WHERE r.upn IS NOT NULL AND trim(r.upn) != ''
+      WHERE r.upn IS NOT NULL AND TRIM(r.upn) != ''
         AND r.created_at >= ${activityCutoff}
       GROUP BY lower(r.upn)
     ),
@@ -223,8 +236,9 @@ export function listUsersWithStats(opts?: {
           ROW_NUMBER() OVER (PARTITION BY lower(r.upn) ORDER BY t.created_at DESC) AS rn
         FROM runs r
         JOIN token_usage t ON t.run_id = r.id
-        WHERE r.upn IS NOT NULL AND trim(r.upn) != ''
-      ) WHERE rn = 1
+        WHERE r.upn IS NOT NULL AND TRIM(r.upn) != ''
+      ) ranked
+      WHERE rn = 1
     )
     SELECT
       g.upn,
