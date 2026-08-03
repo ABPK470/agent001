@@ -19,7 +19,7 @@
  */
 
 import { Activity, CircleDot, Cpu, Play, SlidersHorizontal, Users, Zap } from "lucide-react"
-import type { ReactNode, RefObject } from "react"
+import type { CSSProperties, ReactNode, RefObject } from "react"
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { api } from "../client/index"
 import { EmptyState } from "../components/EmptyState"
@@ -205,6 +205,7 @@ export function ActiveUsers(): ReactNode {
   const zenStatsOpenRef = useRef(zenStatsOpen)
   zenStatsOpenRef.current = zenStatsOpen
   const filterBtnRef = useRef<HTMLButtonElement>(null)
+  const bodyScrollRef = useRef<HTMLDivElement>(null)
   const openInspectorRafRef = useRef(0)
   const rootRef = useRef<HTMLDivElement>(null)
   const { isZen, toggleZen, exitZen } = useWidgetFocus()
@@ -213,8 +214,7 @@ export function ActiveUsers(): ReactNode {
   const zenHotkeysEnabled =
     isZen || Boolean(widgetInstance && focusedTileId === widgetInstance.widgetId)
   const { width: widgetWidth } = useContainerSize(rootRef)
-  // Inspector is a transform overlay — never fold layout mode off its open state
-  // (that reflowed the user table mid-animation and looked like jitter).
+  const { width: bodyScrollWidth } = useContainerSize(bodyScrollRef)
   const useStack = widgetWidth < AU_TABLE_MIN_WIDTH_PX
   // Filters collapse whenever we stack — chips fight for width on mid-size panels.
   const compact = useStack || widgetWidth < 860
@@ -667,8 +667,13 @@ export function ActiveUsers(): ReactNode {
         <div
           className="au-run-host flex-1 min-h-0 min-w-0"
           data-inspector-open={inspectorOpen ? "true" : "false"}
+          style={
+            bodyScrollWidth > 0
+              ? ({ ["--au-body-scroll-w" as string]: `${bodyScrollWidth}px` } as CSSProperties)
+              : undefined
+          }
         >
-          <div className="flex-1 min-h-0 min-w-0 au-body-scroll">
+          <div ref={bodyScrollRef} className="flex-1 min-h-0 min-w-0 au-body-scroll">
           {useStack ? (
             <div className="au-user-list divide-y divide-border-subtle">
               {filteredSorted.map((u) => {
@@ -695,6 +700,7 @@ export function ActiveUsers(): ReactNode {
                           onPageChange={(offset) => void loadHistory(u.identifier, offset).catch((err: unknown) => { console.error("[mia]", err) })}
                           onCollapse={() => toggle(u.identifier)}
                           selectedRunId={runInspector?.runId ?? null}
+                          availableWidth={bodyScrollWidth}
                           onRunClick={openRunInspector}
                           onInspectableChange={setInspectableRuns}
                           viewingAsUpn={viewingAsUpn}
@@ -805,6 +811,7 @@ export function ActiveUsers(): ReactNode {
                                 onPageChange={(offset) => void loadHistory(u.identifier, offset).catch((err: unknown) => { console.error("[mia]", err) })}
                                 onCollapse={() => toggle(u.identifier)}
                                 selectedRunId={runInspector?.runId ?? null}
+                                availableWidth={bodyScrollWidth}
                                 onRunClick={openRunInspector}
                                 onInspectableChange={setInspectableRuns}
                                 viewingAsUpn={viewingAsUpn}
@@ -1279,7 +1286,7 @@ type RunSortKey = "started" | "duration" | "steps" | "tokens" | "llmCalls" | "mo
 /** Run-history table needs ~this many CSS px; below → stacked cards. */
 const AU_RUN_TABLE_MIN_WIDTH_PX = 720
 
-function UserDetail({ user, liveRuns, history, stack, adminBusy, onToggleAdmin, onPageChange, onCollapse, selectedRunId, onRunClick, onInspectableChange, viewingAsUpn, onViewingAs }: {
+function UserDetail({ user, liveRuns, history, stack, adminBusy, onToggleAdmin, onPageChange, onCollapse, selectedRunId, availableWidth, onRunClick, onInspectableChange, viewingAsUpn, onViewingAs }: {
   user: UserRow; liveRuns: ActiveRunRow[]
   history: HistoryState | undefined
   stack: boolean
@@ -1288,16 +1295,16 @@ function UserDetail({ user, liveRuns, history, stack, adminBusy, onToggleAdmin, 
   onPageChange: (offset: number) => void
   onCollapse: () => void
   selectedRunId: string | null
+  /** Scrollport width (shrinks when run inspector is open). */
+  availableWidth: number
   onRunClick: (runId: string, preview?: RunPreview) => void
   onInspectableChange: (runs: { runId: string; preview?: RunPreview }[]) => void
   viewingAsUpn: string | null
   onViewingAs: () => void
 }) {
-  const detailRef = useRef<HTMLDivElement>(null)
-  const { width: detailWidth } = useContainerSize(detailRef)
-  // Parent `stack` covers the user list; run history follows *this* panel —
-  // a wide users table can still leave a narrow detail column / window.
-  const stackRuns = stack || detailWidth === 0 || detailWidth < AU_RUN_TABLE_MIN_WIDTH_PX
+  // Run history follows scrollport width — not the full users-table colspan (which
+  // ignores the inspector margin and caused nested horizontal clipping).
+  const stackRuns = stack || availableWidth === 0 || availableWidth < AU_RUN_TABLE_MIN_WIDTH_PX
 
   const [runFilter, setRunFilter] = useState("")
   const [runStatus, setRunStatus] = useState<"all" | "succeeded" | "failed" | "running">("all")
@@ -1404,7 +1411,7 @@ function UserDetail({ user, liveRuns, history, stack, adminBusy, onToggleAdmin, 
   }
 
   return (
-    <div ref={detailRef} className="au-detail-panel min-w-0">
+    <div className="au-detail-panel min-w-0">
 
       {/* Sticky context banner — stays under users thead while history scrolls */}
       <button

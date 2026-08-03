@@ -7262,6 +7262,17 @@ button.trace-tree-status-pill:hover {
   margin-right: var(--au-run-inspector-w);
 }
 
+/* Drawer open — cap expanded user detail to scrollport (not full colspan width). */
+.active-users-widget .au-run-host[data-inspector-open="true"] .au-detail-nest,
+.active-users-widget .au-run-host[data-inspector-open="true"] .au-detail-panel {
+  max-width: var(--au-body-scroll-w, 100%);
+  overflow-x: hidden;
+}
+
+.active-users-widget .au-run-host[data-inspector-open="true"] .au-run-table-wrap {
+  overflow-x: hidden;
+}
+
 /* Selected run — trace-style accent (cells + cards). */
 .active-users-widget .au-run-selected,
 .active-users-widget tr.au-run-selected > td {
