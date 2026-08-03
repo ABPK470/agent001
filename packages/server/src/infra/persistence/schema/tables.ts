@@ -370,7 +370,6 @@ export interface RunsTable {
   step_count: number
   error: string | null
   parent_run_id: string | null
-  agent_id: string | null
   thread_id: string | null
   upn: string
   display_name: string

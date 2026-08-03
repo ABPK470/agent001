@@ -128,7 +128,6 @@ BEGIN
     step_count     INT            NOT NULL CONSTRAINT DF_runs_step_count DEFAULT (0),
     error          NVARCHAR(MAX)  NULL,
     parent_run_id  NVARCHAR(64)   NULL,
-    agent_id       NVARCHAR(64)   NULL,
     thread_id      NVARCHAR(64)   NULL
       CONSTRAINT FK_runs_threads REFERENCES dbo.threads(id),
     upn            NVARCHAR(320)  NOT NULL
@@ -1205,6 +1204,25 @@ IF OBJECT_ID(N'dbo.browser_contexts', N'U') IS NOT NULL DROP TABLE dbo.browser_c
       },
       postgres: async (executor) => {
         await postgresExec(executor, postgresMigrationSql[11]!)
+      },
+    },
+  },
+
+  {
+    version: 12,
+    name: "drop_runs_agent_id",
+    up: {
+      mssql: async (executor) => {
+        await mssqlExec(
+          executor,
+          `
+IF COL_LENGTH(N'dbo.runs', N'agent_id') IS NOT NULL
+  ALTER TABLE dbo.runs DROP COLUMN agent_id;
+`,
+        )
+      },
+      postgres: async (executor) => {
+        await postgresExec(executor, postgresMigrationSql[12]!)
       },
     },
   },

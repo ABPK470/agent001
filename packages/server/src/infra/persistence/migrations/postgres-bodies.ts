@@ -81,7 +81,6 @@ CREATE TABLE IF NOT EXISTS runs (
   step_count     INT           NOT NULL DEFAULT 0,
   error          TEXT          NULL,
   parent_run_id  TEXT          NULL,
-  agent_id       TEXT          NULL,
   thread_id      TEXT          NULL
     CONSTRAINT FK_runs_threads REFERENCES threads(id),
   upn            TEXT          NOT NULL
@@ -777,6 +776,10 @@ DROP TABLE IF EXISTS browser_domain_policy_configs;
 DROP TABLE IF EXISTS browser_proxy_config;
 DROP TABLE IF EXISTS browser_credentials;
 DROP TABLE IF EXISTS browser_contexts;
+`,
+
+  12: `
+ALTER TABLE runs DROP COLUMN IF EXISTS agent_id;
 `,
 
   8: `
