@@ -40,9 +40,14 @@ import {
   emptyOpen,
   seedLatest,
   openStateForFoldMode,
+  pruneOpenState,
   type FoldMode,
   type OpenState,
 } from "./open-state"
+import {
+  readTraceTreePrefs,
+  writeTraceTreePrefs,
+} from "./trace-tree-prefs"
 import {
   buildTraceTreeIndex,
   defaultSelectedScopeId,
@@ -83,8 +88,17 @@ export function TraceDag({
   onExportMessage?: (message: string) => void
   onExportError?: (message: string) => void
 }) {
+  const { isZen, isSolo, toggleZen, exitZen } = useWidgetFocus()
+  const widgetInstance = useWidgetInstance()
+  const tileId = widgetInstance?.widgetId ?? null
+  const focusedTileId = useLayoutStore((s) => s.focusedTileId)
+  const zenHotkeysEnabled =
+    isZen || isSolo || Boolean(widgetInstance && focusedTileId === widgetInstance.widgetId)
+
   const [search, setSearch] = useState("")
-  const [openState, setOpenState] = useState<OpenState>(() => emptyOpen())
+  const [openState, setOpenState] = useState<OpenState>(() =>
+    readTraceTreePrefs(tileId, runId) ?? emptyOpen(),
+  )
   const [selectedScopeId, setSelectedScopeId] = useState<string | null>(null)
   const [viewMode, setViewMode] = useState<ViewMode>("tree")
   const [playgroundOpen, setPlaygroundOpen] = useState(false)
@@ -95,15 +109,13 @@ export function TraceDag({
   const treeScrollRef = useRef<HTMLDivElement>(null)
   const splitShellRef = useRef<HTMLDivElement>(null)
   const splitDragRef = useRef<SplitPaneDragState | null>(null)
-  const seededRef = useRef(false)
+  /** True once we have either restored prefs or applied first-visit seed. */
+  const seededRef = useRef(readTraceTreePrefs(tileId, runId) != null)
+  /** Gate writes so the empty pre-seed state cannot wipe sessionStorage. */
+  const persistReadyRef = useRef(seededRef.current)
   const searchSeedRef = useRef("")
   const hadSearchRef = useRef(false)
   const prevRunIdRef = useRef(runId)
-  const { isZen, isSolo, toggleZen, exitZen } = useWidgetFocus()
-  const widgetInstance = useWidgetInstance()
-  const focusedTileId = useLayoutStore((s) => s.focusedTileId)
-  const zenHotkeysEnabled =
-    isZen || isSolo || Boolean(widgetInstance && focusedTileId === widgetInstance.widgetId)
 
   const query = search.trim()
   const { stats } = dag
@@ -166,8 +178,31 @@ export function TraceDag({
   }
 
   useEffect(() => {
+    if (prevRunIdRef.current === runId) return
+    prevRunIdRef.current = runId
+    searchSeedRef.current = ""
+    const restored = readTraceTreePrefs(tileId, runId)
+    setOpenState(restored ?? emptyOpen())
+    setSelectedScopeId(null)
+    setPlaygroundOpen(false)
+    setCompareRunId(null)
+    setCompareDag(null)
+    seededRef.current = restored != null
+    persistReadyRef.current = restored != null
+  }, [runId, tileId])
+
+  // First visit for this run: seed latest open path. Returning visits keep prefs.
+  useEffect(() => {
     if (seededRef.current || (dag.calls.length === 0 && dag.spine.length === 0)) return
+    const restored = readTraceTreePrefs(tileId, runId)
+    if (restored) {
+      seededRef.current = true
+      persistReadyRef.current = true
+      setOpenState(pruneOpenState(restored, dag))
+      return
+    }
     seededRef.current = true
+    persistReadyRef.current = true
     setOpenState((prev) => {
       const next = seedLatest(dag.calls.length)
       const lastCall = dag.calls.length - 1
@@ -193,19 +228,18 @@ export function TraceDag({
       }
       return { ...next, foldMode: prev.foldMode }
     })
-  }, [dag.calls.length, dag.spine])
+  }, [dag, tileId, runId])
 
   useEffect(() => {
-    if (prevRunIdRef.current === runId) return
-    prevRunIdRef.current = runId
-    seededRef.current = false
-    searchSeedRef.current = ""
-    setOpenState(emptyOpen())
-    setSelectedScopeId(null)
-    setPlaygroundOpen(false)
-    setCompareRunId(null)
-    setCompareDag(null)
-  }, [runId])
+    if (!seededRef.current) return
+    if (dag.calls.length === 0 && dag.spine.length === 0) return
+    setOpenState((prev) => pruneOpenState(prev, dag))
+  }, [dag])
+
+  useEffect(() => {
+    if (!persistReadyRef.current || !runId) return
+    writeTraceTreePrefs(tileId, runId, openState)
+  }, [tileId, runId, openState])
 
   useEffect(() => {
     if (!compareRunId) return

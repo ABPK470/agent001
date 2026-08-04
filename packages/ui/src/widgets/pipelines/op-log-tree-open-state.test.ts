@@ -5,6 +5,7 @@ import {
   collectExpandableActivityKeys,
   collapsedTreeOpenState,
   expandedTreeOpenState,
+  pruneTreeOpenState,
   treeOpenStateForFoldMode,
 } from "./op-log-tree-open-state"
 
@@ -81,5 +82,19 @@ describe("op-log-tree-open-state", () => {
     const keys = collectExpandableActivityKeys([samplePipeline], activityKey)
     expect(keys.has("p1|phase:preview")).toBe(true)
     expect(keys.has("p1|phase:execute")).toBe(false)
+  })
+
+  it("prune drops vanished ids and leaves state alone when pipelines empty", () => {
+    const open = {
+      foldMode: "collapsed" as const,
+      openPipelineIds: new Set(["p1", "gone"]),
+      actExpanded: new Set(["p1|phase:preview", "gone|x"]),
+      collapsedDays: new Set(["Mon"]),
+    }
+    expect(pruneTreeOpenState(open, [], activityKey)).toBe(open)
+    const pruned = pruneTreeOpenState(open, [samplePipeline], activityKey)
+    expect(pruned.openPipelineIds).toEqual(new Set(["p1"]))
+    expect(pruned.actExpanded).toEqual(new Set(["p1|phase:preview"]))
+    expect(pruned.collapsedDays).toEqual(new Set(["Mon"]))
   })
 })

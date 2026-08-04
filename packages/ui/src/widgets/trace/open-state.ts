@@ -123,3 +123,45 @@ export function collapsedOpenState(): OpenState {
 export function openStateForFoldMode(dag: TraceDag, mode: FoldMode): OpenState {
   return mode === "expanded" ? expandedOpenState(dag) : collapsedOpenState()
 }
+
+function setEqual<T>(a: Set<T>, b: Set<T>): boolean {
+  if (a.size !== b.size) return false
+  for (const v of a) if (!b.has(v)) return false
+  return true
+}
+
+export function openStateEquals(a: OpenState, b: OpenState): boolean {
+  return (
+    a.preamble === b.preamble &&
+    a.contextPrompt === b.contextPrompt &&
+    a.contextTools === b.contextTools &&
+    a.foldMode === b.foldMode &&
+    setEqual(a.calls, b.calls) &&
+    setEqual(a.sent, b.sent) &&
+    setEqual(a.received, b.received) &&
+    setEqual(a.messages, b.messages) &&
+    setEqual(a.tools, b.tools) &&
+    setEqual(a.phases, b.phases) &&
+    setEqual(a.work, b.work)
+  )
+}
+
+/** Drop open keys that no longer exist after a DAG rebuild — keep the rest. */
+export function pruneOpenState(state: OpenState, dag: TraceDag): OpenState {
+  const callIndexes = new Set(dag.calls.map((c) => c.index))
+  const phaseIds = new Set(collectPhaseIds(dag))
+  const workIds = new Set(collectWorkIds(dag))
+  const messageKeys = new Set(
+    dag.calls.flatMap((c) => c.messages.map((_, mi) => `${c.index}:m:${mi}`)),
+  )
+  const next: OpenState = {
+    ...state,
+    calls: new Set([...state.calls].filter((i) => callIndexes.has(i))),
+    sent: new Set([...state.sent].filter((i) => callIndexes.has(i))),
+    received: new Set([...state.received].filter((i) => callIndexes.has(i))),
+    messages: new Set([...state.messages].filter((k) => messageKeys.has(k))),
+    phases: new Set([...state.phases].filter((id) => phaseIds.has(id))),
+    work: new Set([...state.work].filter((id) => workIds.has(id))),
+  }
+  return openStateEquals(state, next) ? state : next
+}

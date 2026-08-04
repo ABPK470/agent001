@@ -19,6 +19,11 @@ import {
   writeOperationLogPrefs,
   type PipelineKindFilter,
 } from "../lib/operation-log-prefs"
+import {
+  DEFAULT_OPERATION_LOG_TREE_PREFS,
+  readOperationLogTreePrefs,
+  writeOperationLogTreePrefs,
+} from "../lib/operation-log-tree-prefs"
 import type { EventStreamRange, EventStreamWindow } from "../lib/event-stream-prefs"
 import { flattenOperationRows } from "../lib/operation-flat-rows"
 import { OperationLogModalsProvider } from "./pipelines/operation-log-modals"
@@ -37,6 +42,7 @@ import {
 } from "./pipelines/OperationLogActivityTreeRow"
 import { OperationLogPipelineListRow, opLogPipelineListRowHeight } from "./pipelines/OperationLogPipelineListRow"
 import {
+  pruneTreeOpenState,
   treeOpenStateForFoldMode,
   type OpLogTreeFoldMode,
 } from "./pipelines/op-log-tree-open-state"
@@ -283,6 +289,11 @@ export function OperationLog() {
   const instance = useWidgetInstance()
   const tileId = instance?.widgetId ?? null
   const initialPrefs = useMemo(() => readOperationLogPrefs(tileId), [tileId])
+  /** Sync hydrate once — same dialect as Trace open-state restore. */
+  const restoredTreeRef = useRef(readOperationLogTreePrefs(tileId))
+  /** Gate writes so the empty pre-data mount cannot wipe sessionStorage. */
+  const treePersistReadyRef = useRef(restoredTreeRef.current != null)
+  const treeDefaults = restoredTreeRef.current ?? DEFAULT_OPERATION_LOG_TREE_PREFS
 
   const [kinds, setKinds] = useState<Set<PipelineKindFilter>>(
     () => new Set(initialPrefs.kinds),
@@ -295,10 +306,18 @@ export function OperationLog() {
     () => initialPrefs.window,
   )
   const [selection, setSelection] = useState<OpLogSelection | null>(null)
-  const [openPipelineIds, setOpenPipelineIds] = useState<Set<string>>(new Set())
-  const [actExpanded, setActExpanded] = useState<Set<string>>(new Set())
-  const [collapsedDays, setCollapsedDays] = useState<Set<string>>(new Set())
-  const [treeFoldMode, setTreeFoldMode] = useState<OpLogTreeFoldMode>("collapsed")
+  const [openPipelineIds, setOpenPipelineIds] = useState<Set<string>>(
+    () => new Set(treeDefaults.openPipelineIds),
+  )
+  const [actExpanded, setActExpanded] = useState<Set<string>>(
+    () => new Set(treeDefaults.actExpanded),
+  )
+  const [collapsedDays, setCollapsedDays] = useState<Set<string>>(
+    () => new Set(treeDefaults.collapsedDays),
+  )
+  const [treeFoldMode, setTreeFoldMode] = useState<OpLogTreeFoldMode>(
+    () => treeDefaults.foldMode,
+  )
   const [splitRatio, setSplitRatio] = useState(OP_LOG_SPLIT_DEFAULT)
   const rootRef = useRef<HTMLDivElement>(null)
   const listScrollRef = useRef<HTMLDivElement>(null)
@@ -336,6 +355,17 @@ export function OperationLog() {
     error,
   } = useOperationLogData({ kindView, search, window: timeWindow })
 
+  // Persist only after hydrate-from-store or first reconcile with real data.
+  useEffect(() => {
+    if (!treePersistReadyRef.current) return
+    writeOperationLogTreePrefs(tileId, {
+      foldMode: treeFoldMode,
+      openPipelineIds: [...openPipelineIds],
+      actExpanded: [...actExpanded],
+      collapsedDays: [...collapsedDays],
+    })
+  }, [tileId, treeFoldMode, openPipelineIds, actExpanded, collapsedDays])
+
   const cancelPipeline = useCallback(async (pipeline: OperationPipeline): Promise<void> => {
     if (pipeline.status !== "running") return
     setCancellingId(pipeline.id)
@@ -368,22 +398,28 @@ export function OperationLog() {
     }
   }, [])
 
+  const touchTreePersist = useCallback(() => {
+    treePersistReadyRef.current = true
+  }, [])
+
   const toggleActivity = useCallback((key: string) => {
+    touchTreePersist()
     setActExpanded((s) => {
       const n = new Set(s)
       if (n.has(key)) n.delete(key)
       else n.add(key)
       return n
     })
-  }, [])
+  }, [touchTreePersist])
   const toggleDay = useCallback((label: string) => {
+    touchTreePersist()
     setCollapsedDays((s) => {
       const n = new Set(s)
       if (n.has(label)) n.delete(label)
       else n.add(label)
       return n
     })
-  }, [])
+  }, [touchTreePersist])
 
   const needle = search.trim().toLowerCase()
   const serverSearchActive = needle.length >= 2
@@ -399,16 +435,50 @@ export function OperationLog() {
     [pipelines, kinds, statuses, needle, serverSearchActive],
   )
 
-  const onTreeFoldModeChange = useCallback((mode: OpLogTreeFoldMode) => {
-    setTreeFoldMode(mode)
-  }, [])
+  const onTreeFoldModeChange = useCallback(
+    (mode: OpLogTreeFoldMode) => {
+      touchTreePersist()
+      setTreeFoldMode(mode)
+      const next = treeOpenStateForFoldMode(filtered, mode, pipelineActivityKey)
+      setOpenPipelineIds(next.openPipelineIds)
+      setActExpanded(next.actExpanded)
+      if (mode === "expanded") setCollapsedDays(next.collapsedDays)
+    },
+    [filtered, touchTreePersist],
+  )
 
+  // Reconcile with real data only. Empty list on remount is not a fold change —
+  // never prune restored opens against [].
   useEffect(() => {
-    const next = treeOpenStateForFoldMode(filtered, treeFoldMode, pipelineActivityKey)
-    setOpenPipelineIds(next.openPipelineIds)
-    setActExpanded(next.actExpanded)
-    if (treeFoldMode === "expanded") setCollapsedDays(next.collapsedDays)
-  }, [filtered, treeFoldMode])
+    if (pipelines.length === 0) return
+    treePersistReadyRef.current = true
+    setOpenPipelineIds((prev) => {
+      const next = pruneTreeOpenState(
+        {
+          foldMode: "collapsed",
+          openPipelineIds: prev,
+          actExpanded: new Set(),
+          collapsedDays: new Set(),
+        },
+        pipelines,
+        pipelineActivityKey,
+      ).openPipelineIds
+      return next.size === prev.size && [...prev].every((id) => next.has(id)) ? prev : next
+    })
+    setActExpanded((prev) => {
+      const next = pruneTreeOpenState(
+        {
+          foldMode: "collapsed",
+          openPipelineIds: new Set(),
+          actExpanded: prev,
+          collapsedDays: new Set(),
+        },
+        pipelines,
+        pipelineActivityKey,
+      ).actExpanded
+      return next.size === prev.size && [...prev].every((key) => next.has(key)) ? prev : next
+    })
+  }, [pipelines])
 
   const pipelineById = useMemo(() => {
     const map = new Map<string, OperationPipeline>()
@@ -417,6 +487,7 @@ export function OperationLog() {
   }, [filtered])
 
   const openTopLevelActivities = useCallback((pipeline: OperationPipeline) => {
+    touchTreePersist()
     setActExpanded((s) => {
       let changed = false
       const n = new Set(s)
@@ -429,11 +500,12 @@ export function OperationLog() {
       }
       return changed ? n : s
     })
-  }, [])
+  }, [touchTreePersist])
 
   const openPipelineTree = useCallback(
     (pipelineId: string) => {
       const target = pipelineById.get(pipelineId)
+      touchTreePersist()
       setOpenPipelineIds((s) => {
         if (s.has(pipelineId)) return s
         const n = new Set(s)
@@ -442,13 +514,14 @@ export function OperationLog() {
       })
       if (target) openTopLevelActivities(target)
     },
-    [pipelineById, openTopLevelActivities],
+    [pipelineById, openTopLevelActivities, touchTreePersist],
   )
 
   const togglePipelineTree = useCallback(
     (pipelineId: string) => {
       const target = pipelineById.get(pipelineId)
       const wasOpen = openPipelineIds.has(pipelineId)
+      touchTreePersist()
       setOpenPipelineIds((s) => {
         const n = new Set(s)
         if (n.has(pipelineId)) n.delete(pipelineId)
@@ -457,7 +530,7 @@ export function OperationLog() {
       })
       if (!wasOpen && target) openTopLevelActivities(target)
     },
-    [pipelineById, openPipelineIds, openTopLevelActivities],
+    [pipelineById, openPipelineIds, openTopLevelActivities, touchTreePersist],
   )
 
   const selectPipeline = useCallback(
@@ -481,23 +554,16 @@ export function OperationLog() {
     ? (pipelineById.get(selectedPipelineId) ?? null)
     : null
 
+  // Default selection only — never force-open folds (that fought tree persistence).
   useEffect(() => {
     if (filtered.length === 0) {
       setSelection(null)
       return
     }
     if (!selectedPipelineId || !pipelineById.has(selectedPipelineId)) {
-      const first = filtered[0]!
-      setSelection({ kind: "pipeline", pipelineId: first.id })
-      setOpenPipelineIds((s) => {
-        if (s.has(first.id)) return s
-        const n = new Set(s)
-        n.add(first.id)
-        return n
-      })
-      openTopLevelActivities(first)
+      setSelection({ kind: "pipeline", pipelineId: filtered[0]!.id })
     }
-  }, [filtered, pipelineById, selectedPipelineId, openTopLevelActivities])
+  }, [filtered, pipelineById, selectedPipelineId])
 
   const searchPending = serverSearchActive && loading
 

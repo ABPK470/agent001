@@ -73,3 +73,39 @@ export function treeOpenStateForFoldMode(
     ? expandedTreeOpenState(pipelines, activityKeyOf)
     : collapsedTreeOpenState()
 }
+
+function setEqual(a: Set<string>, b: Set<string>): boolean {
+  if (a.size !== b.size) return false
+  for (const v of a) if (!b.has(v)) return false
+  return true
+}
+
+export function treeOpenStateEquals(a: OpLogTreeOpenState, b: OpLogTreeOpenState): boolean {
+  return (
+    a.foldMode === b.foldMode &&
+    setEqual(a.openPipelineIds, b.openPipelineIds) &&
+    setEqual(a.actExpanded, b.actExpanded) &&
+    setEqual(a.collapsedDays, b.collapsedDays)
+  )
+}
+
+/**
+ * Drop open keys that vanished after a data refresh — keep the rest.
+ * Empty `pipelines` must leave state untouched (remount/loading is not a fold).
+ */
+export function pruneTreeOpenState(
+  state: OpLogTreeOpenState,
+  pipelines: readonly OperationPipeline[],
+  activityKeyOf: ActivityKeyOf,
+): OpLogTreeOpenState {
+  if (pipelines.length === 0) return state
+  const validPipelines = new Set(pipelines.map((p) => p.id))
+  const validActs = collectExpandableActivityKeys(pipelines, activityKeyOf)
+  const next: OpLogTreeOpenState = {
+    foldMode: state.foldMode,
+    openPipelineIds: new Set([...state.openPipelineIds].filter((id) => validPipelines.has(id))),
+    actExpanded: new Set([...state.actExpanded].filter((key) => validActs.has(key))),
+    collapsedDays: state.collapsedDays,
+  }
+  return treeOpenStateEquals(state, next) ? state : next
+}
