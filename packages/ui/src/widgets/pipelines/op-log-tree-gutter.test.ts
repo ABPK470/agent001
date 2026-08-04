@@ -77,34 +77,28 @@ describe("pipelines left-tree gutter — review kit", () => {
     expect(ops).not.toContain("op-log-day-card")
   })
 
-  it("activity rows reserve the icon column via ReviewTreeRow", () => {
+  it("activity rows use Trace dialect — title/subtitle stack, no guideSlots", () => {
     const activity = read(activityRowPath)
+    const ops = read(opsPath)
     expect(activity).toContain("ReviewTreeRow")
     expect(activity).toContain("resolveActivityTreeVisual")
     expect(activity).toContain("OpLogStatusDot")
-    expect(activity).toContain("guideSlots")
-    expect(activity).not.toContain("activityEntityIcon")
+    expect(activity).toContain("hasSubtitle")
+    expect(activity).toContain("subtitle=")
+    expect(activity).not.toContain("guideSlots")
+    expect(activity).not.toContain(" · ")
+    expect(ops).not.toContain("guideSlots=")
   })
 
-  it("hosts IDE tree guide hairlines — parents end at chevron, leaves at status glyph", () => {
+  it("nests with whitespace depth padding — Trace dialect, not ├└ hairlines", () => {
+    const activity = read(activityRowPath)
     const css = read(cssPath)
-    expect(css).toContain(".review-tree-row__guides")
-    expect(css).toContain(".review-tree-guide.is-branch")
-    expect(css).toContain(".review-tree-guide.is-corner")
-    expect(css).toContain("var(--review-tree-line)")
-    // Parents: stem → gap → chevron center (never through › into the icon).
+    expect(activity).not.toContain("guideSlots")
+    // Depth indent still comes from shared review node-cell tokens.
+    expect(css).toContain(reviewTreeCssNeedle)
     expect(css).toMatch(
-      /\.review-tree-row\.has-guides\.is-branch[\s\S]*?width:\s*calc\(50% \+ 4px \+ 8px\)/s,
+      /\.review-operator \.op-log-activity-tree-row \.review-tree-row__subtitle\s*\{[^}]*font-size:\s*0\.6875rem/s,
     )
-    // Leaves: stem → empty chevron slot → status-dot / glyph center.
-    expect(css).toMatch(
-      /\.review-tree-row\.has-guides\.is-leaf[\s\S]*?width:\s*calc\(50% \+ 4px \+ 16px \+ 10px\)/s,
-    )
-    // Guided rows drop border-bottom; inset shadow sits under continuous │.
-    expect(css).toMatch(
-      /\.review-tree-row\.has-guides\s*>\s*\.review-tree-row__btn\s*\{[^}]*box-shadow:\s*inset 0 -1px 0/s,
-    )
-    expect(css).toMatch(/\.review-tree-row\.has-guides\s*\{[^}]*border-bottom:\s*none/s)
   })
 
   it("wires depth via CSS vars — not inline paddingLeft", () => {

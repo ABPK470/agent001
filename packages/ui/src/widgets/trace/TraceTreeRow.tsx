@@ -98,7 +98,8 @@ export function TraceTreeRow({
                 onJumpToRootCause={() => onJumpToRootCause(node.scopeId)}
               />
             ) : null}
-            <Icon size={node.hasChildren ? 14 : 12} />
+            {/* Fixed glyph size — leaf/branch share the icon column (chevron slot already reserved). */}
+            <Icon size={14} />
           </span>
           <span className="trace-tree-row__text-block">
             <span className="trace-tree-row__title-stack">

@@ -1,16 +1,16 @@
 /**
  * Left-tree activity row — select drives the right detail pane; chevron folds children.
- * Glyph column: top-level phases = functional icon + status badge; nested/leaf = status dot.
+ * Trace dialect: title over muted subtitle, whitespace depth indent (no ├└ hairlines).
+ * Glyph: top-level phases = functional icon + status badge; nested/leaf = status dot.
  */
 
 import type { OperationActivity, OperationStatus } from "../../client/index"
 import { ReviewTreeRow } from "../../components/review"
-import type { ReviewTreeGuideSlot } from "../../components/review/review-tree-guides"
 import { resolveActivityTreeVisual } from "./op-log-entity-icon"
 import { OpLogEntityIcon } from "./OpLogEntityIcon"
 import { OpLogStatusDot } from "./OpLogStatusDot"
 import { OpLogStatusPill } from "./OpLogStatusPill"
-import { OP_LOG, OP_LOG_DESC, fmtDuration } from "./operation-log-row"
+import { fmtDuration } from "./operation-log-row"
 import { opLogShowStatusPill } from "./op-log-row-policy"
 
 const REVIEW_TREE_GRID_COLS = "minmax(0, 1fr) var(--review-tree-col-duration)"
@@ -24,7 +24,6 @@ export function OperationLogActivityTreeRow({
   selected,
   hasChildren,
   folded,
-  guideSlots,
   onSelect,
   onToggleFold,
 }: {
@@ -36,13 +35,13 @@ export function OperationLogActivityTreeRow({
   selected: boolean
   hasChildren: boolean
   folded: boolean
-  guideSlots?: readonly ReviewTreeGuideSlot[]
   onSelect: () => void
   onToggleFold: () => void
 }) {
   // Leaves / nested steps: status dot only for OK; FAIL/Running keep the pill.
   const showPill = opLogShowStatusPill({ status, leaf: !hasChildren })
   const visual = resolveActivityTreeVisual({ activity, hasChildren, status, depth })
+  const hasSubtitle = Boolean(summary?.trim())
   const icon =
     visual.type === "icon" ? (
       <>
@@ -59,23 +58,16 @@ export function OperationLogActivityTreeRow({
       selected={selected}
       hasChildren={hasChildren}
       folded={folded}
+      hasSubtitle={hasSubtitle}
       isRoot={depth === 0}
       rowClassName="op-log-activity-tree-row"
       gridTemplateColumns={REVIEW_TREE_GRID_COLS}
-      guideSlots={guideSlots}
       onSelect={onSelect}
       onToggleFold={onToggleFold}
       icon={icon}
-      title={
-        <span className={OP_LOG} title={label}>
-          {label}
-          {summary ? (
-            <>
-              <span className={OP_LOG_DESC}> · </span>
-              <span className={`${OP_LOG_DESC} font-normal`}>{summary}</span>
-            </>
-          ) : null}
-        </span>
+      title={<span title={label}>{label}</span>}
+      subtitle={
+        hasSubtitle ? <span title={summary}>{summary}</span> : undefined
       }
       trailing={showPill ? <OpLogStatusPill status={status} /> : null}
       metrics={[fmtDuration(activity.durationMs)]}
@@ -83,6 +75,6 @@ export function OperationLogActivityTreeRow({
   )
 }
 
-export function opLogActivityTreeRowHeight(): number {
-  return 40
+export function opLogActivityTreeRowHeight(summary?: string | null): number {
+  return summary?.trim() ? 54 : 40
 }

@@ -73,15 +73,15 @@ describe("flattenOperationRows", () => {
     ])
     expect(activities[0]).toMatchObject({
       parentScopeId: "run-1",
-      guideSlots: ["corner"],
+      depth: 1,
     })
     expect(activities[1]).toMatchObject({
       parentScopeId: "run-1|phase:preview",
-      guideSlots: ["blank", "corner"],
+      depth: 2,
     })
   })
 
-  it("marks sibling phases as branch then corner", () => {
+  it("nests sibling phases at the same depth under an open pipeline", () => {
     const run: OperationPipeline = {
       ...pipeline("run-2", "2026-01-01T10:00:00.000Z"),
       activities: [
@@ -111,6 +111,6 @@ describe("flattenOperationRows", () => {
       activityKeyOf: (pipelineId, activityId) => `${pipelineId}|${activityId}`,
     })
     const activities = rows.filter((r) => r.type === "activity")
-    expect(activities.map((r) => r.guideSlots)).toEqual([["branch"], ["corner"]])
+    expect(activities.map((r) => r.depth)).toEqual([1, 1])
   })
 })

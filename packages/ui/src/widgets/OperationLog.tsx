@@ -694,7 +694,6 @@ export function OperationPipelineList({
           }
           hasChildren={row.hasChildren}
           folded={!actExpanded.has(row.activityKey)}
-          guideSlots={row.guideSlots}
           onSelect={() => onSelectActivity(row.pipeline.id, row.activityKey)}
           onToggleFold={() => toggleActivity(row.activityKey)}
         />
@@ -727,7 +726,10 @@ export function OperationPipelineList({
         const row = rows[index]
         if (!row) return OP_LOG_LIST_ROW_HEIGHT
         if (row.type === "day") return 32
-        if (row.type === "activity") return opLogActivityTreeRowHeight()
+        if (row.type === "activity") {
+          const kind = activityPipelineKind(row.pipeline.kind, row.parentPhaseId)
+          return opLogActivityTreeRowHeight(defaultActivitySummary(kind, row.activity))
+        }
         return opLogPipelineListRowHeight(row.pipeline)
       }}
       getItemKey={(_i, item) => item.key}

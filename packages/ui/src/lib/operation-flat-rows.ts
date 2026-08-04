@@ -2,12 +2,10 @@
  * Flatten day-grouped pipelines (+ optional open activity trees) into a
  * virtualizable row model for the left master tree.
  *
- * Day headers are sticky section dividers in a flat table — not card wrappers
- * and not tree parents. NODE / DURATION stay one column for the whole list.
+ * Day headers are sticky section dividers. Nest indent is Trace-style
+ * whitespace depth padding (no ├└ hairline guides).
  */
 
-import type { ReviewTreeGuideSlot } from "../components/review/review-tree-guides"
-import { annotateTreeGuideSlots } from "../components/review/review-tree-guides"
 import type { OperationActivity, OperationPipeline } from "../client/index"
 
 export type OperationFlatRow =
@@ -23,7 +21,6 @@ export type OperationFlatRow =
       pipeline: OperationPipeline
       depth: 0
       parentScopeId: null
-      guideSlots: ReviewTreeGuideSlot[]
     }
   | {
       type: "activity"
@@ -35,14 +32,7 @@ export type OperationFlatRow =
       hasChildren: boolean
       parentPhaseId?: string
       parentScopeId: string
-      guideSlots: ReviewTreeGuideSlot[]
     }
-
-type GuideAnnotated = {
-  depth: number
-  parentScopeId: string | null
-  guideSlots?: ReviewTreeGuideSlot[]
-}
 
 export function flattenOperationRows(
   pipelines: readonly OperationPipeline[],
@@ -84,7 +74,6 @@ export function flattenOperationRows(
         hasChildren,
         parentPhaseId: phaseId,
         parentScopeId,
-        guideSlots: [],
       })
       if (hasChildren && openActivityKeys.has(activityKey)) {
         pushActivities(pipeline, activity.children!, depth + 1, activityKey, activityKey, phaseId)
@@ -108,7 +97,6 @@ export function flattenOperationRows(
           pipeline,
           depth: 0,
           parentScopeId: null,
-          guideSlots: [],
         })
         if (openPipelineIds?.has(pipeline.id) && activityKeyOf && openActivityKeys) {
           // Depth 1 = first nest under pipeline root (Trace dialect: +1 indent step).
@@ -128,17 +116,6 @@ export function flattenOperationRows(
     curItems.push(pipeline)
   }
   flush()
-
-  const guideNodes: GuideAnnotated[] = rows.map((row) => {
-    if (row.type === "day") return { depth: -1, parentScopeId: null }
-    return row
-  })
-  annotateTreeGuideSlots(guideNodes)
-  for (let i = 0; i < rows.length; i++) {
-    const row = rows[i]!
-    if (row.type === "day") continue
-    row.guideSlots = guideNodes[i]!.guideSlots ?? []
-  }
 
   return rows
 }
