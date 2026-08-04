@@ -61,7 +61,7 @@ function ContextToolsBody({
   }
 
   return (
-    <div className="trace-detail-collapsible-list">
+    <div className="trace-detail-nested-list">
       {tools.map((tool) => (
         <TraceDetailCollapsible
           key={tool.name}

@@ -5529,7 +5529,74 @@ button.trace-tree-status-pill:hover {
 .trace-detail-body--stack {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: 0;
+}
+
+.trace-detail-section--sticky .trace-detail-accordion-bar {
+  position: sticky;
+  top: 0;
+  z-index: 6;
+  background: var(--bg);
+}
+
+.trace-detail-accordion-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.trace-detail-accordion-bar .trace-detail-accordion {
+  flex: 1;
+  min-width: 0;
+}
+
+.trace-detail-accordion__actions {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding-right: 0.1rem;
+}
+
+.trace-detail-accordion__actions .trace-copy {
+  padding: 0.1rem 0.3rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.trace-detail-section--nested .trace-detail-accordion {
+  padding-left: 0.65rem;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0.01em;
+}
+
+.trace-detail-section--nested .trace-detail-accordion__label {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.8125rem;
+  text-transform: none;
+  letter-spacing: 0.01em;
+  color: var(--text, var(--color-text));
+}
+
+.trace-detail-section--nested .trace-detail-accordion__body {
+  padding-left: 1.35rem;
+}
+
+.trace-detail-nested-list > .trace-detail-section--nested:first-child .trace-detail-accordion {
+  border-top: none;
+}
+
+.trace-detail-nested-list .trace-detail-section--sticky .trace-detail-accordion-bar {
+  top: 2rem;
+}
+
+.trace-detail-nested-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
 }
 
 .trace-detail-prose {
@@ -5549,11 +5616,10 @@ button.trace-tree-status-pill:hover {
   min-width: 0;
 }
 
-.trace-detail-collapsible-list {
+.trace-detail-tools {
   display: flex;
   flex-direction: column;
   gap: 0;
-  margin: -0.15rem -0.25rem 0;
 }
 
 .trace-detail-accordion {
@@ -6055,6 +6121,330 @@ button.trace-tree-status-pill:hover {
   margin-top: 0.25rem;
 }
 
+/* Unified execution block — flat list dialect (chat + trace) */
+.trace-exec {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  border-top: 1px solid var(--border-subtle, var(--color-border-subtle));
+  overflow: visible;
+}
+
+.trace-exec__summary {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  width: 100%;
+  min-height: unset;
+  padding: 0.625rem 0;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  color: var(--text-muted, var(--color-text-muted));
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  line-height: 1.35;
+}
+
+.trace-exec__summary:hover {
+  color: var(--text, var(--color-text));
+  background: transparent;
+}
+
+.trace-exec.is-open .trace-exec__summary {
+  border-bottom: none;
+}
+
+.trace-exec__icon {
+  flex-shrink: 0;
+  width: 0.75rem;
+  height: 0.75rem;
+  opacity: 0.8;
+}
+
+.trace-exec__icon--ok {
+  color: var(--success, #22c55e);
+}
+
+.trace-exec__icon--error {
+  color: var(--error, #ef4444);
+}
+
+.trace-exec__icon--running,
+.trace-exec__icon--proposed {
+  background: var(--text-muted, var(--color-text-muted));
+  opacity: 0.55;
+}
+
+.trace-exec__icon--running {
+  animation: trace-exec-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes trace-exec-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 0.85;
+  }
+}
+
+.trace-exec__verb {
+  flex-shrink: 0;
+  font-weight: inherit;
+  color: inherit;
+}
+
+.trace-exec__name {
+  flex-shrink: 0;
+  font-family: inherit;
+  font-weight: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: inherit;
+}
+
+.trace-exec__detail {
+  min-width: 0;
+  flex: 1 1 auto;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--text-muted, var(--color-text-muted));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.trace-exec__arrow {
+  flex-shrink: 0;
+  color: var(--text-muted, var(--color-text-muted));
+  opacity: 0.65;
+}
+
+.trace-exec__duration {
+  flex-shrink: 0;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted, var(--color-text-muted));
+  padding-right: 0.15rem;
+}
+
+.trace-exec__chev {
+  flex-shrink: 0;
+  margin-left: 0.15rem;
+  color: var(--text-muted, var(--color-text-muted));
+  transition: transform 0.15s ease;
+}
+
+.trace-exec__chev.is-open {
+  transform: rotate(90deg);
+}
+
+.trace-exec__terminal {
+  padding: 0 0 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.trace-exec__input {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.trace-exec__lane-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.trace-exec__lane-label {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted, var(--color-text-muted));
+}
+
+.trace-exec__lane-head .trace-copy {
+  padding: 0.1rem 0.35rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.trace-exec__input-pre,
+.trace-exec__output-pre {
+  margin: 0;
+  padding: 0.15rem 0 0.15rem 0.65rem;
+  border-radius: 0;
+  background: transparent;
+  border: none;
+  border-left: 2px solid var(--border-subtle, var(--color-border-subtle));
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--text-secondary, var(--text-muted, var(--color-text-muted)));
+}
+
+:root[data-theme="light"] .trace-exec__input-pre,
+:root[data-theme="light"] .trace-exec__output-pre {
+  background: transparent;
+  border-left-color: var(--border-subtle, #e2e8f0);
+}
+
+.trace-exec__divider {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.1rem 0 0;
+}
+
+.trace-exec__divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border-subtle, var(--color-border-subtle));
+}
+
+.trace-exec__divider-label {
+  flex-shrink: 0;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted, var(--color-text-muted));
+}
+
+.trace-exec__output {
+  border-left: 2px solid var(--border-subtle, var(--color-border-subtle));
+  padding-left: 0.65rem;
+}
+
+.trace-exec__output.is-success {
+  border-left-color: rgb(34 197 94 / 0.75);
+}
+
+.trace-exec__output.is-error {
+  border-left-color: rgb(239 68 68 / 0.85);
+}
+
+.trace-exec__output.is-standalone {
+  border-left-width: 2px;
+  padding-left: 0.65rem;
+  margin-top: 0.15rem;
+}
+
+.trace-exec__output-body {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.trace-exec__return {
+  flex-shrink: 0;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--text-muted, var(--color-text-muted));
+  opacity: 0.75;
+  padding-top: 0.55rem;
+}
+
+.trace-exec__output-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.trace-exec__output-main .trace-exec__output-pre {
+  background: transparent;
+  border: none;
+  border-left: none;
+  padding: 0.15rem 0;
+}
+
+.trace-exec__output.is-error .trace-exec__output-pre {
+  color: color-mix(in srgb, var(--error, #ef4444) 82%, var(--text, #fff));
+}
+
+.trace-exec__error-code {
+  margin-bottom: 0.25rem;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--error, #ef4444);
+}
+
+.trace-exec__trailing,
+.trace-exec__footer {
+  padding-top: 0.15rem;
+}
+
+.trace-exec__footer .trace-tool-io__schema .trace-detail-accordion {
+  border-top: 1px solid var(--border-subtle, var(--color-border-subtle));
+  padding-top: 0.45rem;
+}
+
+.trace-exec--chat {
+  width: 100%;
+  max-width: 100%;
+}
+
+.trace-exec--chat .trace-exec__summary {
+  font-size: 0.9375rem;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  text-transform: none;
+  padding: 0.45rem 0;
+  color: var(--text-muted, var(--color-text-muted));
+}
+
+.trace-exec--chat .trace-exec__name {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-weight: 500;
+}
+
+.trace-exec--chat .trace-exec__detail {
+  font-size: 0.9375rem;
+}
+
+.trace-exec--chat .trace-exec__input-pre,
+.trace-exec--chat .trace-exec__output-pre {
+  font-size: 0.875rem;
+  color: var(--text-secondary, var(--text-muted, var(--color-text-muted)));
+}
+
+.trace-exec__summary--static {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  width: 100%;
+  padding: 0.625rem 0;
+  color: var(--text-muted, var(--color-text-muted));
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  line-height: 1.35;
+}
+
 .trace-tool-io__validation-hint {
   margin: 0 0 0.5rem;
   font-size: 0.6875rem;
@@ -6066,162 +6456,6 @@ button.trace-tree-status-pill:hover {
   margin-top: 0.5rem;
   padding-top: 0.35rem;
   border-top: 1px solid var(--border-subtle, var(--color-border-subtle));
-}
-
-.trace-detail-collapsible {
-  border: 1px solid var(--border-subtle, var(--color-border-subtle));
-  border-radius: 0.375rem;
-  background: var(--overlay-1, rgb(255 255 255 / 0.02));
-  overflow: hidden;
-}
-
-:root[data-theme="light"] .trace-detail-collapsible {
-  background: var(--panel-2, #f8fafc);
-}
-
-.trace-detail-collapsible.is-open .trace-detail-collapsible__head-row {
-  border-bottom: 1px solid var(--border-subtle, var(--color-border-subtle));
-}
-
-.trace-detail-collapsible.is-open > .trace-detail-collapsible__head {
-  border-bottom: 1px solid var(--border-subtle, var(--color-border-subtle));
-}
-
-.trace-detail-collapsible__head-row {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  min-height: 2.375rem;
-  padding-right: 0.625rem;
-}
-
-.trace-detail-collapsible--sticky .trace-detail-collapsible__head-row {
-  position: sticky;
-  top: 0;
-  z-index: 6;
-  background: inherit;
-}
-
-.trace-detail-collapsible--sticky.is-open {
-  z-index: 5;
-}
-
-.trace-detail-collapsible__head {
-  display: flex;
-  align-items: center;
-  gap: 0.45rem;
-  flex: 1;
-  min-width: 0;
-  padding: 0.55rem 0.625rem;
-  border: none;
-  background: transparent;
-  text-align: left;
-  cursor: pointer;
-  color: var(--text-muted, var(--color-text-muted));
-}
-
-.trace-detail-collapsible__head:hover {
-  color: var(--text, var(--color-text));
-  background: var(--overlay-2, rgb(255 255 255 / 0.04));
-}
-
-.trace-detail-collapsible__head-meta {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.45rem;
-  flex-shrink: 0;
-}
-
-.trace-detail-collapsible__meta {
-  font-size: 0.6875rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--text-muted, var(--color-text-muted));
-  white-space: nowrap;
-}
-
-.trace-detail-collapsible__head-meta .trace-copy {
-  padding: 0.15rem 0.35rem;
-  font-size: 0.6875rem;
-  font-weight: 600;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-  border: none;
-  background: transparent;
-}
-
-.trace-detail-collapsible__head--nested {
-  padding: 0.35rem 0;
-  border-top: none;
-}
-
-.trace-detail-collapsible__chev {
-  flex-shrink: 0;
-  transition: transform 0.15s ease;
-  opacity: 0.7;
-}
-
-.trace-detail-collapsible__chev.is-open {
-  transform: rotate(90deg);
-}
-
-.trace-detail-collapsible__title {
-  font-size: 0.6875rem;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  min-width: 0;
-}
-
-.trace-detail-collapsible__body {
-  padding: 0.75rem 0.875rem;
-}
-
-.trace-detail-collapsible--nested {
-  border: none;
-  border-radius: 0;
-  background: transparent;
-  overflow: visible;
-}
-
-.trace-detail-collapsible--nested .trace-detail-collapsible__head-row {
-  min-height: 2rem;
-  padding-right: 0.35rem;
-  border-top: 1px solid var(--border-subtle, var(--color-border-subtle));
-}
-
-.trace-detail-collapsible-list > .trace-detail-collapsible--nested:first-child .trace-detail-collapsible__head-row {
-  border-top: none;
-}
-
-.trace-detail-collapsible--nested .trace-detail-collapsible__head {
-  padding: 0.5rem 0.35rem;
-}
-
-.trace-detail-collapsible--nested .trace-detail-collapsible__head:hover {
-  background: transparent;
-}
-
-.trace-detail-collapsible--nested.is-open .trace-detail-collapsible__head-row {
-  border-bottom: none;
-}
-
-.trace-detail-collapsible--nested .trace-detail-collapsible__title {
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 0.8125rem;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-  text-transform: none;
-  color: var(--text, var(--color-text));
-}
-
-.trace-detail-collapsible--nested .trace-detail-collapsible__body {
-  padding: 0 0.35rem 0.65rem 1.35rem;
-}
-
-.trace-detail-collapsible-list .trace-detail-collapsible--nested.trace-detail-collapsible--sticky .trace-detail-collapsible__head-row {
-  top: 2.375rem;
 }
 
 .trace-interaction-card {

@@ -15,7 +15,6 @@ import { AttachmentChips, type PendingAttachment } from "../components/Attachmen
 import { ChatScrollProvider, useChatScroll } from "../components/ChatScrollContext"
 import {
   buildResponseParts,
-  compactToolPreview,
   humanizeStepName,
   type ResponseIterationPart,
   type ResponseNarrativePart,
@@ -28,11 +27,8 @@ import {
 } from "../lib/events/build-chat-parts"
 import { CodeBlock } from "../components/CodeBlock"
 import { InlinePeekText } from "../components/InlinePeekText"
-import {
-  extractToolCode,
-  formatToolInputDisplay,
-  ToolIoPane,
-} from "../components/tool-code-display"
+import { ToolExecutionCard } from "../components/ToolExecutionCard"
+import { parseToolArgsFormatted } from "../components/tool-code-display"
 import { ScrollToLatestButton } from "../components/ScrollToLatestButton"
 import { VirtualList, type VirtualListHandle } from "../components/VirtualList"
 import { Logo } from "../components/Logo"
@@ -441,7 +437,7 @@ function isRunActiveStatus(status: string | null | undefined): boolean {
   return status === RunStatus.Pending || status === RunStatus.Running || status === RunStatus.Planning
 }
 
-import { termToolDisplayLabel } from "@mia/shared-types"
+
 // ── Narrative target extraction ────────────────────────────────────
 // Each tool call carries the JSON args the model invoked it with. We
 // pull out the most user-meaningful field (file path, command, URL,
@@ -520,20 +516,23 @@ void presentTenseLabel
 // `iteration` boundary fired between tool-call and tool-result).
 
 
-function ToolSyncProgressBody({ part }: { part: ResponseSyncProgressPart }) {
+function ToolSyncProgressBody({
+  part,
+  embedded = false,
+}: {
+  part: ResponseSyncProgressPart
+  embedded?: boolean
+}) {
   const isRunning = part.status === "running"
   const tone = part.level === "error" || part.status === "error" ? "error" : "neutral"
   const lineClass = [
     "text-[15px] leading-5 font-mono",
     tone === "error" ? "chat-tool-error" : "text-text-secondary",
   ].join(" ")
-  // Skip stub/trivial statuses ("ok", "done") — they read as orphan junk under the SQL chip.
-  // Real SSE summaries look like "Preview complete — plan abc12345: +3 ~1 -0".
   const resultLine = syncProgressResultLine(part.result, part.status)
 
-  // Same indent as expanded tool I/O — no second border-l (parent timeline owns the rail).
   return (
-    <div className="ml-[14px] mt-2 mb-1 pl-3 space-y-2">
+    <div className={embedded ? "space-y-2" : "ml-[14px] mt-2 mb-1 pl-3 space-y-2"}>
       <p className={["text-[15px] leading-5 font-mono", isRunning ? "activity-shimmer-tight text-text-muted" : "text-text-secondary"].join(" ")}>
         {part.headline}
       </p>
@@ -575,45 +574,41 @@ function ToolPill({
   isLiveRun?: boolean
 }) {
   const { preserveToggle } = useChatScroll()
-  const label = termToolDisplayLabel(row.tool)
   const isRunning = row.status === "running" && isLiveRun
-  const calmRunning = isRunning && row.tool === "ask_user"
-  const [expanded, setExpanded] = useState(false)
-  // Pill preview uses `summary` (short — argsSummary like `command="python3 -"`
-  // or extracted target). The expanded body now renders TWO blocks: the
-  // raw input (argsFormatted, e.g. the full `command` or `query`) and
-  // the tool's output (details). Previously the expanded body showed
-  // only the output — the input was hidden once the result arrived
-  // because `details` was overloaded for both.
-  const previewText = (() => {
-    if (expanded) return ""
-    if (syncProgress && !isRunning) {
-      return syncProgress.detail?.trim() || syncProgress.headline?.trim() || compactToolPreview(row.summary || "")
-    }
-    return compactToolPreview(row.summary || "")
-  })()
-  const hasInput = Boolean(row.argsFormatted && row.argsFormatted.trim().length > 0)
-  const hasOutput = Boolean(row.details && row.details.trim().length > 0)
-  const canExpand = hasInput || hasOutput || Boolean(syncProgress)
-  const extractedInput = row.argsFormatted ? extractToolCode(row.tool, row.argsFormatted) : null
-  const displayInput = row.argsFormatted ? formatToolInputDisplay(row.tool, row.argsFormatted) : ""
   const isError = row.status === "error"
-  const buttonRef = useRef<HTMLButtonElement>(null)
-  // Sync progress detail only while live or when the user expands the row —
-  // never dump headline/SQL under a collapsed pill.
-  const showSyncProgress = Boolean(syncProgress) && (expanded || isRunning)
+  const [open, setOpen] = useState(false)
+  const summaryRef = useRef<HTMLButtonElement>(null)
+  const argumentsValue = useMemo(
+    () =>
+      row.argsFormatted?.trim()
+        ? parseToolArgsFormatted(row.argsFormatted) ?? {}
+        : {},
+    [row.argsFormatted],
+  )
+  const status = isError ? "error" : isRunning ? "running" : "done"
+  const resultText = isError ? null : row.details ?? null
+  const errorText = isError ? row.details ?? null : null
+  const showLiveSync = Boolean(syncProgress) && isRunning
+  const trailing =
+    open && syncProgress && !isRunning ? (
+      <ToolSyncProgressBody part={syncProgress} embedded />
+    ) : null
+
+  function onOpenChange(next: boolean) {
+    preserveToggle(summaryRef.current, () => setOpen(next))
+  }
+
   return (
     <div className="relative py-1.5" data-chat-expand-root="">
-      {/* Continuity between sibling tool dots (same geometry as pre-regression TermChat). */}
       {!isLast && (
         <div className="pointer-events-none absolute left-[11px] top-[22px] -bottom-1 w-px chat-trace-rail" />
       )}
       <div className="flex items-start gap-2 min-w-0 px-2 py-0.5">
         <span
           className={[
-            "shrink-0 w-1.5 h-1.5 rounded-full mt-[7px]",
+            "shrink-0 w-1.5 h-1.5 rounded-full mt-[10px]",
             isRunning
-              ? calmRunning
+              ? row.tool === "ask_user"
                 ? "bg-accent"
                 : "bg-text-secondary animate-pulse"
               : isError
@@ -621,63 +616,27 @@ function ToolPill({
                 : "chat-trace-dot--idle",
           ].join(" ")}
         />
-        {/* Cap the pill content (label + preview) at 80% of the
-            iteration-column width before CSS ellipsis kicks in, so even
-            short paths leave breathing room on the right and the
-            timeline doesn't feel edge-to-edge. */}
-        <div className="min-w-0 flex-1 max-w-[80%]">
-          {canExpand ? (
-            <button
-              ref={buttonRef}
-              type="button"
-              onClick={() => preserveToggle(buttonRef.current, () => setExpanded((value) => !value))}
-              className="inline-flex min-w-0 max-w-full items-center gap-2 text-left transition-colors outline-none focus-visible:outline-none group cursor-pointer"
-              style={{ width: "fit-content", maxWidth: "100%" }}
-            >
-              <span className="text-[15px] font-mono text-text-muted group-hover:text-text transition-colors">{label}</span>
-              {previewText && !expanded && (
-                <span
-                  className="text-[15px] text-text-faint group-hover:text-text transition-colors font-mono min-w-0 flex-1 whitespace-nowrap overflow-hidden text-ellipsis"
-                >
-                  {previewText}
-                </span>
-              )}
-            </button>
-          ) : (
-            <div className="flex min-w-0 max-w-full items-center gap-2">
-              <span className="text-[15px] font-mono text-text-muted transition-colors">{label}</span>
-              {previewText && !expanded && (
-                <span className="text-[15px] text-text-faint font-mono min-w-0 flex-1 whitespace-nowrap overflow-hidden text-ellipsis">
-                  {previewText}
-                </span>
-              )}
-            </div>
-          )}
+        <div className="min-w-0 flex-1">
+          <ToolExecutionCard
+            className="trace-exec--chat"
+            toolName={row.tool}
+            argumentsValue={argumentsValue}
+            argsFormatted={row.argsFormatted}
+            resultText={resultText}
+            errorText={errorText}
+            status={status}
+            open={open}
+            onOpenChange={onOpenChange}
+            summaryRef={summaryRef}
+            trailing={trailing}
+          />
         </div>
       </div>
-      {showSyncProgress && syncProgress ? <ToolSyncProgressBody part={syncProgress} /> : null}
-      {expanded && (hasInput || hasOutput) && (
-        <div className="ml-[14px] mt-2 mb-1 pl-3 space-y-2" data-chat-expand-body="">
-          {/*
-           * Same pane for every tool — Input then Output (or Error).
-           * Code bodies keep SQL/Shell labels; prose uses Input/Output.
-           */}
-          {hasInput && displayInput ? (
-            <ToolIoPane
-              role="input"
-              text={extractedInput?.code ?? displayInput}
-              lang={extractedInput?.lang}
-            />
-          ) : null}
-          {hasOutput && row.details ? (
-            <ToolIoPane
-              role={isError ? "error" : "output"}
-              text={row.details}
-              variant="chat"
-            />
-          ) : null}
+      {showLiveSync && syncProgress ? (
+        <div className="ml-[14px] mt-2 mb-1 pl-3" data-chat-expand-body="">
+          <ToolSyncProgressBody part={syncProgress} />
         </div>
-      )}
+      ) : null}
     </div>
   )
 }

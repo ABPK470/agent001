@@ -16,6 +16,7 @@ import {
   extractAskUserQuestion,
   isAskUserTool,
 } from "./trace-ask-user"
+import { statusFromToolCall } from "./trace-tool-exec"
 
 function findWorkTool(
   dag: TraceDag,
@@ -74,8 +75,11 @@ function AskUserToolDetail({
         dag={dag}
         toolName={tool.name}
         argumentsValue={tool.arguments}
+        argsFormatted={tool.argsFormatted}
         layout="developer"
         hideResult
+        status={statusFromToolCall(tool)}
+        durationMs={work.durationMs}
         errorText={isError ? tool.resultText : null}
         trailing={trailing}
       />
@@ -108,8 +112,11 @@ function renderWorkTool(
         dag={dag}
         toolName={tool.name}
         argumentsValue={tool.arguments}
+        argsFormatted={tool.argsFormatted}
         resultText={isError ? null : tool.resultText}
         errorText={isError ? tool.resultText : null}
+        status={statusFromToolCall(tool)}
+        durationMs={work.durationMs}
         trailing={trailing}
       />
     </div>
@@ -153,8 +160,11 @@ export function TraceWorkDetail({
           dag={dag}
           toolName={tool.name}
           argumentsValue={tool.arguments}
+          argsFormatted={tool.argsFormatted}
           resultText={isError ? null : tool.resultText}
           errorText={isError ? tool.resultText : null}
+          status={statusFromToolCall(tool)}
+          durationMs={work.durationMs}
           trailing={<SqlValidationBlock work={work} />}
         />
       </div>

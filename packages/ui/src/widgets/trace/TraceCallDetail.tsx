@@ -7,6 +7,7 @@ import { JsonViewer } from "../../components/JsonViewer"
 import { fmtTokens, formatMs } from "../../lib/util"
 import type { TraceCallNode, TraceDag } from "./build-trace-dag"
 import { TracePayloadStream, TraceMessageCard } from "./TraceMessageCard"
+import { TraceExecutionCard } from "./TraceExecutionCard"
 import { tokenPairLabel } from "./trace-format"
 
 type DetailTab = "input" | "raw" | "output" | "system"
@@ -93,13 +94,12 @@ export function TraceCallDetail({
               <div className="trace-detail-tools">
                 <div className="trace-detail-section__label">Proposed tools</div>
                 {call.toolBranches.map((tool) => (
-                  <TraceMessageCard
+                  <TraceExecutionCard
                     key={tool.id}
-                    role="tool"
-                    speaker="Proposed tool"
-                    detail={tool.name}
-                    content={JSON.stringify(tool.arguments, null, 2)}
-                    mono
+                    toolName={tool.name}
+                    argumentsValue={tool.arguments}
+                    argsFormatted={tool.argsFormatted}
+                    status="proposed"
                   />
                 ))}
               </div>

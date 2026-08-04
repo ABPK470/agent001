@@ -11,6 +11,7 @@ import {
   isAskUserTool,
 } from "./trace-ask-user"
 import { resolveTraceTool, resolveTraceWorkForTool } from "./trace-tool-resolve"
+import { statusFromToolCall } from "./trace-tool-exec"
 
 export function TraceToolDetail({
   dag,
@@ -39,8 +40,11 @@ export function TraceToolDetail({
           dag={dag}
           toolName={tool.name}
           argumentsValue={tool.arguments}
+          argsFormatted={tool.argsFormatted}
           layout="developer"
           hideResult
+          status={statusFromToolCall(tool)}
+          durationMs={work?.durationMs ?? null}
           errorText={isError ? tool.resultText : null}
         />
       </div>
@@ -53,8 +57,11 @@ export function TraceToolDetail({
         dag={dag}
         toolName={tool.name}
         argumentsValue={tool.arguments}
+        argsFormatted={tool.argsFormatted}
         resultText={isError ? null : tool.resultText}
         errorText={isError ? tool.resultText : null}
+        status={statusFromToolCall(tool)}
+        durationMs={work?.durationMs ?? null}
       />
     </div>
   )
