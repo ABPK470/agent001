@@ -1,15 +1,27 @@
 /**
- * Unified tool execution card — collapsed summary + terminal I/O (chat + trace).
+ * Tool execution UI — inspector (flat) vs chat (VS Code Copilot dialect).
  *
- * Inspector (default): flat accordion dialect — no tree knees, no boxed chrome.
- * Chat (`surface="chat"`): bordered terminal card for the transcript.
+ * Chat collapsed:  [glyph] Ran  [command pill…]  ⌄
+ * Chat expanded:   bordered panel — multi-line input (if any) + output only.
+ *                  Single-line prompts stay on the summary pill (no duplicate).
+ * Inspector:       flat accordion summary + indented lanes (trace detail).
  */
 
-import { Check, ChevronDown, ChevronRight, X } from "lucide-react"
+import {
+  Check,
+  ChevronRight,
+  Database,
+  FileCode,
+  SquareTerminal,
+  Wrench,
+  X,
+} from "lucide-react"
 import { useMemo, useState, type ReactNode, type RefObject } from "react"
 import { isValidJsonText } from "../lib/events/trace-tool-schema"
 import {
   buildExecSummary,
+  chatToolPillText,
+  chatToolVerb,
   execErrorCode,
   formatExecInput,
   resolveExecStatus,
@@ -33,14 +45,30 @@ function ExecStatusIcon({ status }: { status: ToolExecStatus }) {
   )
 }
 
-function TerminalOutput({
+function ChatToolGlyph({ toolName }: { toolName: string }) {
+  const cls = "chat-tool__glyph"
+  if (toolName === "run_command") {
+    return <SquareTerminal size={14} strokeWidth={1.75} className={cls} aria-hidden />
+  }
+  if (toolName.includes("query") || toolName.includes("mssql") || toolName.includes("sql")) {
+    return <Database size={14} strokeWidth={1.75} className={cls} aria-hidden />
+  }
+  if (
+    toolName.includes("file") ||
+    toolName.includes("directory") ||
+    toolName.includes("dir")
+  ) {
+    return <FileCode size={14} strokeWidth={1.75} className={cls} aria-hidden />
+  }
+  return <Wrench size={14} strokeWidth={1.75} className={cls} aria-hidden />
+}
+
+function InspectorOutput({
   text,
   isError,
-  showReturnGlyph,
 }: {
   text: string
   isError: boolean
-  showReturnGlyph: boolean
 }) {
   const trimmed = text.trim()
   if (!trimmed) return null
@@ -56,11 +84,6 @@ function TerminalOutput({
   return (
     <div className={`trace-exec__output${isError ? " is-error" : " is-success"}`}>
       <div className="trace-exec__output-body">
-        {showReturnGlyph && !isError ? (
-          <span className="trace-exec__return" aria-hidden>
-            ↳
-          </span>
-        ) : null}
         <div className="trace-exec__output-main">
           {isError && code ? (
             <div className="trace-exec__error-code">{code}</div>
@@ -80,6 +103,7 @@ export function ToolExecutionCard({
   errorText,
   status: statusProp,
   durationMs,
+  preview,
   defaultOpen = false,
   open: openProp,
   onOpenChange,
@@ -96,12 +120,13 @@ export function ToolExecutionCard({
   errorText?: string | null
   status?: ToolExecStatus
   durationMs?: number | null
+  /** Prefers args summary for the collapsed chat pill. */
+  preview?: string | null
   defaultOpen?: boolean
   open?: boolean
   onOpenChange?: (open: boolean) => void
   summaryRef?: RefObject<HTMLButtonElement | null>
   className?: string
-  /** Inspector = flat list; chat = bordered terminal card. */
   surface?: "inspector" | "chat"
   trailing?: ReactNode
   footer?: ReactNode
@@ -134,19 +159,117 @@ export function ToolExecutionCard({
   )
   const showError = Boolean(errorText?.trim())
   const showResult = !showError && Boolean(resultText?.trim())
-  const hasTerminalBody =
-    Boolean(input.text.trim()) || showError || showResult || trailing || footer
+  const inputText = input.text.trim()
+  const hasOutputPayload =
+    showError || showResult || Boolean(trailing) || Boolean(footer)
+  const hasTerminalBody = Boolean(inputText) || hasOutputPayload
   const canToggle = hasTerminalBody
   const isChat = surface === "chat"
+  const chatVerb = chatToolVerb(toolName, status, errorText)
+  const chatPill = chatToolPillText(inputText, preview ?? summary.detail)
+  // Pill already owns single-line prompts — expand body keeps multi-line input only.
+  const showChatInputBody =
+    Boolean(inputText) && (inputText.includes("\n") || !chatPill)
+  const outputCopyText = (
+    showError ? errorText : showResult ? resultText : ""
+  )?.trim() ?? ""
 
   const rootClass = [
-    "trace-exec",
+    isChat ? "chat-tool" : "trace-exec",
     open ? "is-open" : "",
-    isChat ? "trace-exec--chat" : "trace-exec--inspector",
+    isChat ? "" : "trace-exec--inspector",
+    status === "error" ? "is-error" : "",
     className ?? "",
   ]
     .filter(Boolean)
     .join(" ")
+
+  if (isChat) {
+    return (
+      <div className={rootClass}>
+        {canToggle ? (
+          <button
+            ref={summaryRef}
+            type="button"
+            className="chat-tool__summary"
+            aria-expanded={open}
+            onClick={() => setOpen(!open)}
+          >
+            <ChatToolGlyph toolName={toolName} />
+            <span className="chat-tool__verb">{chatVerb}</span>
+            {chatPill ? <span className="chat-tool__pill">{chatPill}</span> : null}
+            <span className="chat-tool__chev-slot" aria-hidden>
+              <ChevronRight
+                size={16}
+                strokeWidth={1.5}
+                className={`chat-tool__chev chat-trace-chev${open ? " is-open" : ""}`}
+              />
+            </span>
+          </button>
+        ) : (
+          <div className="chat-tool__summary chat-tool__summary--static">
+            <ChatToolGlyph toolName={toolName} />
+            <span className="chat-tool__verb">{chatVerb}</span>
+            {chatPill ? <span className="chat-tool__pill">{chatPill}</span> : null}
+          </div>
+        )}
+
+        {open && hasTerminalBody ? (
+          <div className="chat-tool__panel" data-chat-expand-body="">
+            {showChatInputBody ? (
+              <div className="chat-tool__cmd">
+                <span className="chat-tool__dot" aria-hidden />
+                <pre className="chat-tool__cmd-text">{inputText}</pre>
+                <CopyControl value={input.copyText} ariaLabel="Copy input" iconOnly />
+              </div>
+            ) : null}
+
+            {showError || showResult ? (
+              <>
+                {showChatInputBody ? <div className="chat-tool__sep" /> : null}
+                <div className="chat-tool__cmd">
+                  {showError && errorText ? (
+                    <pre className="chat-tool__out is-error">{errorText.trim()}</pre>
+                  ) : null}
+                  {showResult && resultText ? (
+                    resultText.trim().length > 480 ? (
+                      <InlinePeekText
+                        text={resultText.trim()}
+                        className="chat-tool__out"
+                      />
+                    ) : (
+                      <pre className="chat-tool__out">{resultText.trim()}</pre>
+                    )
+                  ) : null}
+                  {outputCopyText ? (
+                    <CopyControl
+                      value={outputCopyText}
+                      ariaLabel={showError ? "Copy error" : "Copy output"}
+                      iconOnly
+                    />
+                  ) : null}
+                </div>
+              </>
+            ) : !hasOutputPayload ? (
+              <>
+                {showChatInputBody ? <div className="chat-tool__sep" /> : null}
+                <p className="chat-tool__empty">No output was produced.</p>
+              </>
+            ) : null}
+
+            {trailing ? (
+              <>
+                {showChatInputBody && !showError && !showResult ? (
+                  <div className="chat-tool__sep" />
+                ) : null}
+                <div className="chat-tool__trailing">{trailing}</div>
+              </>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+    )
+  }
 
   return (
     <div className={rootClass}>
@@ -167,29 +290,11 @@ export function ToolExecutionCard({
           {summary.duration ? (
             <span className="trace-exec__duration">{summary.duration}</span>
           ) : null}
-          {isChat ? (
-            open ? (
-              <ChevronDown
-                size={12}
-                strokeWidth={1.5}
-                className="trace-exec__chev chat-trace-chev"
-                aria-hidden
-              />
-            ) : (
-              <ChevronRight
-                size={12}
-                strokeWidth={1.5}
-                className="trace-exec__chev chat-trace-chev"
-                aria-hidden
-              />
-            )
-          ) : (
-            <ChevronRight
-              size={14}
-              className={`trace-exec__chev${open ? " is-open" : ""}`}
-              aria-hidden
-            />
-          )}
+          <ChevronRight
+            size={14}
+            className={`trace-exec__chev${open ? " is-open" : ""}`}
+            aria-hidden
+          />
         </button>
       ) : (
         <div className="trace-exec__summary trace-exec__summary--static">
@@ -222,10 +327,10 @@ export function ToolExecutionCard({
                 <span className="trace-exec__lane-label">Output</span>
               </div>
               {showError && errorText ? (
-                <TerminalOutput text={errorText} isError showReturnGlyph={isChat} />
+                <InspectorOutput text={errorText} isError />
               ) : null}
               {showResult && resultText ? (
-                <TerminalOutput text={resultText} isError={false} showReturnGlyph={isChat} />
+                <InspectorOutput text={resultText} isError={false} />
               ) : null}
             </div>
           ) : null}

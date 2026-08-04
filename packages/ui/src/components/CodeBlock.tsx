@@ -42,6 +42,8 @@ export function CodeBlock({
   className,
   /** Transcript inline — grow with content; parent scrollport owns vertical scroll. */
   unbounded = false,
+  /** Icon-only copy control (tooltip via title/aria-label). */
+  copyIconOnly = false,
 }: {
   code: string
   lang?: string
@@ -57,6 +59,7 @@ export function CodeBlock({
   label?: string
   className?: string
   unbounded?: boolean
+  copyIconOnly?: boolean
 }) {
   const [copied, setCopied] = useState(false)
   const langLabel = LANG_LABEL[lang] ?? lang.toUpperCase()
@@ -89,13 +92,14 @@ export function CodeBlock({
           <span className={labelClass}>{label}</span>
           <button
             type="button"
-            className="mia-code-block__copy"
+            className={`mia-code-block__copy${copyIconOnly ? " mia-code-block__copy--icon" : ""}`}
             data-copied={copied || undefined}
             onClick={copy}
-            title="Copy to clipboard"
+            title={copied ? "Copied" : "Copy to clipboard"}
+            aria-label={copied ? "Copied" : "Copy to clipboard"}
           >
             {copied ? <Check size={12} /> : <Copy size={12} />}
-            <span>{copied ? "Copied" : "Copy"}</span>
+            {!copyIconOnly ? <span>{copied ? "Copied" : "Copy"}</span> : null}
           </button>
         </div>
       ) : null}

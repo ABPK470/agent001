@@ -322,3 +322,51 @@ export function syncProgressResultLine(
   }
   return trimmed
 }
+
+function overlapsStatusLine(a: string, b: string): boolean {
+  const left = a.toLowerCase()
+  const right = b.toLowerCase()
+  return left.includes(right) || right.includes(left)
+}
+
+/**
+ * One status line for the expanded sync tool panel — never stack headline +
+ * detail + result variants of the same beat.
+ * e.g. "Sync preview complete — 2 tables ready (8ms)"
+ */
+export function consolidateSyncProgressStatus(part: {
+  headline?: string | null
+  detail?: string | null
+  result?: string | null
+  status: SyncProgressState["status"]
+  sql?: { durationMs?: number | null } | null
+}): string | null {
+  const result = syncProgressResultLine(part.result, part.status)
+  const detail = part.detail?.trim() || ""
+  const headline = part.headline?.trim() || ""
+  // Settled: result + complementary detail (skip live headline variants).
+  // Running: headline, then detail if it adds something new.
+  const settled = part.status === "done" || part.status === "error"
+  const candidates = (settled
+    ? [result, detail]
+    : [headline, detail, result]
+  ).filter((s): s is string => Boolean(s))
+  if (candidates.length === 0) return null
+
+  const kept: string[] = []
+  for (const next of candidates) {
+    const overlapIdx = kept.findIndex((p) => overlapsStatusLine(p, next))
+    if (overlapIdx >= 0) {
+      if (next.length > kept[overlapIdx]!.length) kept[overlapIdx] = next
+      continue
+    }
+    kept.push(next)
+  }
+
+  let core = kept.join(" — ")
+  const ms = part.sql?.durationMs
+  if (ms != null && ms >= 0 && !/\d+\s*ms\b/i.test(core)) {
+    core = `${core} (${Math.round(ms)}ms)`
+  }
+  return core
+}

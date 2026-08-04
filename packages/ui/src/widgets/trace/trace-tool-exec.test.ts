@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest"
 import {
   buildExecSummary,
+  chatToolPillText,
+  chatToolVerb,
   execErrorCode,
   execStatusVerb,
   formatExecInput,
@@ -60,5 +62,16 @@ describe("tool-execution", () => {
     })
     expect(summary.verb).toBe("Blocked")
     expect(summary.detail).toBe("MISSING_WHERE")
+  })
+
+  it("uses Copilot-style chat verbs and pill truncation", () => {
+    expect(chatToolVerb("run_command", "done")).toBe("Ran")
+    expect(chatToolVerb("query_mssql", "done")).toBe("Queried")
+    expect(chatToolVerb("query_mssql", "error", "Blocked by SQL quality: MISSING_WHERE")).toBe(
+      "Blocked",
+    )
+    expect(chatToolPillText("SELECT TOP 10 id FROM clients WHERE active = 1", null, 20)).toBe(
+      "SELECT TOP 10 id FR…",
+    )
   })
 })

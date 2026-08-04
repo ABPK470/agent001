@@ -13,6 +13,64 @@ export function humanizeToolName(name: string): string {
   return name.replace(/_/g, " ")
 }
 
+/** Copilot-style short past-tense verb for chat tool rows. */
+export function chatToolVerb(
+  toolName: string,
+  status: ToolExecStatus,
+  errorText?: string | null,
+): string {
+  if (status === "error") {
+    const head = (errorText ?? "").trim().split(/\r?\n/)[0] ?? ""
+    if (/blocked/i.test(head)) return "Blocked"
+    return "Failed"
+  }
+  if (status === "running") return "Running"
+  if (status === "proposed") return "Proposed"
+  switch (toolName) {
+    case "run_command":
+      return "Ran"
+    case "query_mssql":
+      return "Queried"
+    case "write_file":
+    case "append_file":
+      return "Wrote"
+    case "read_file":
+    case "read_attachment":
+      return "Read"
+    case "list_directory":
+    case "list_dir":
+      return "Listed"
+    case "replace_in_file":
+      return "Edited"
+    case "search_files":
+    case "search_catalog":
+      return "Searched"
+    case "ask_user":
+      return "Asked"
+    case "fetch_url":
+      return "Fetched"
+    case "sync_preview":
+      return "Previewed"
+    case "sync_execute":
+      return "Synced"
+    case "delegate":
+      return "Delegated"
+    default:
+      return "Used"
+  }
+}
+
+/** Truncated mono pill text for the collapsed chat summary. */
+export function chatToolPillText(
+  inputText: string,
+  fallbackSummary?: string | null,
+  max = 56,
+): string {
+  const raw = (inputText || fallbackSummary || "").replace(/\s+/g, " ").trim()
+  if (!raw) return ""
+  return raw.length > max ? `${raw.slice(0, max - 1)}…` : raw
+}
+
 export function resolveExecStatus(
   explicit: ToolExecStatus | undefined,
   errorText: string | null | undefined,

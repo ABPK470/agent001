@@ -578,18 +578,6 @@ function truncateStepDetail(text: string, max = 88): string {
   return t.length > max ? `${t.slice(0, max - 1)}…` : t
 }
 
-/** Terse tool beat for a step header — same dialect as live subagent tools. */
-function stepToolsDetail(tools: ResponseToolPart[]): string {
-  return tools
-    .slice(0, 3)
-    .map((t) => {
-      const name = t.row.tool.replace(/_/g, " ")
-      const target = extractToolTarget(t.row.tool, t.row.argsFormatted ?? "", t.row.summary)
-      return target ? `${name} ${target}` : name
-    })
-    .join(" · ")
-}
-
 function hasHiddenToolDetails(summary: string, details?: string): boolean {
   const full = (details ?? "").trim()
   if (!full) return false
@@ -904,22 +892,15 @@ export function buildResponseParts(
           !ok && entry.error && entry.error.trim().length > 0 ? entry.error.trim() : undefined
         // Process gaps (verify fail → repair) are normal agent work — settle
         // as done chrome with the reason in detail, never alarm-red "error".
-        // Pipeline success is "completed"; older traces may use pass/success.
-        // When nested tools exist (deterministic I/O), keep the tool label on
-        // the header — same terse dialect as live subagent tool beats.
+        // Success: title stays `Subagent · schema layer`; detail is duration only.
+        // Child tool pills own the query/command strings — never repeat them here.
         parts = parts.map((part) => {
           if (part.kind !== "step-block" || part.id !== activityId) return part
-          const toolLabel =
-            ok && part.tools.length > 0 ? stepToolsDetail(part.tools) : undefined
           const shortFail =
             errorBody && errorBody.length > 72
               ? `${errorBody.slice(0, 71)}…`
               : errorBody
-          const detail = ok
-            ? toolLabel && endDetail
-              ? `${toolLabel} · ${endDetail}`
-              : (toolLabel ?? endDetail)
-            : shortFail || endDetail
+          const detail = ok ? endDetail : shortFail || endDetail
           return {
             ...part,
             status: "done" as const,
@@ -1197,7 +1178,7 @@ export function buildResponseParts(
               tools,
               hasRunning: true,
               status: "running" as const,
-              detail: stepToolsDetail(tools) || part.detail,
+              // Keep header free of tool/SQL beats — child pills own those.
             }
           })
           break

@@ -54,10 +54,13 @@ describe("chatTranscriptLayout", () => {
     expect(css).not.toMatch(
       /\.mia-code-block__copy:hover\s*\{[^}]*border-color:/s,
     )
-    // Input = CodeBlock (column width); success output = bare monospace text.
-    expect(term).toContain("ToolIoPane")
-    expect(term).toMatch(/role="input"/)
-    expect(term).toMatch(/role=\{isError \? "error" : "output"\}/)
+    // Chat tools = Copilot dialect (ToolExecutionCard surface=chat).
+    expect(term).toContain("ToolExecutionCard")
+    expect(term).toContain('surface="chat"')
+    expect(term).toContain("chat-tool-list")
+    expect(css).toMatch(/\.chat-tool__pill\s*\{/)
+    expect(css).toMatch(/\.chat-tool__panel\s*\{/)
+    // ToolIoPane remains available for non-chat surfaces.
     const ioPane = io.match(/export function ToolIoPane[\s\S]*?\n\}\n\nexport interface ParsedTable/)?.[0] ?? ""
     expect(ioPane).toContain('role === "output"')
     expect(ioPane).toContain("InlinePeekText")
@@ -70,12 +73,14 @@ describe("chatTranscriptLayout", () => {
     expect(ioPane).not.toContain("ToolResultTable")
     expect(ioPane).not.toContain("parsePipeTable")
     expect(css).toMatch(/\.mia-code-block__body\s*\{[^}]*overscroll-behavior:\s*contain/s)
-    // Inline chat/trace: one scrollport — peek long output, no nested wheel.
-    expect(term).toContain("InlinePeekText")
+    // One scrollport — peek long output, no nested wheel.
     expect(term).not.toContain("useNestedWheelScroll")
     expect(term).not.toContain("overscroll-contain")
     const peek = readFileSync(join(here, "../components/InlinePeekText.tsx"), "utf8")
     expect(peek).toContain("buildPeekDisplay")
     expect(peek).toContain("preserveScrollAnchor")
+    const card = readFileSync(join(here, "../components/ToolExecutionCard.tsx"), "utf8")
+    expect(card).toContain("InlinePeekText")
+    expect(card).toContain("chat-tool__panel")
   })
 })

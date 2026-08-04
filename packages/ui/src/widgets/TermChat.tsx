@@ -47,7 +47,7 @@ import { useViewingAs } from "../hooks/useViewingAs"
 import { ToastStack, useWidgetToasts } from "../components/useWidgetToasts"
 import { useStickToBottomScroll } from "../hooks/useStickToBottomScroll"
 import { CHAT_SCROLL_HOST_ATTR, isNearBottom } from "../lib/chatScroll"
-import { syncProgressResultLine } from "../state/sync-trace-progress"
+import { consolidateSyncProgressStatus } from "../state/sync-trace-progress"
 import {
   HOME_CHAT_COLUMN_CLASS,
   HOME_CHAT_GUTTER_X_CLASS,
@@ -524,39 +524,40 @@ function ToolSyncProgressBody({
   embedded?: boolean
 }) {
   const isRunning = part.status === "running"
-  const tone = part.level === "error" || part.status === "error" ? "error" : "neutral"
-  const lineClass = [
-    "text-[15px] leading-5 font-mono",
-    tone === "error" ? "chat-tool-error" : "text-text-secondary",
-  ].join(" ")
-  const resultLine = syncProgressResultLine(part.result, part.status)
+  const isError = part.level === "error" || part.status === "error"
+  const statusLine = consolidateSyncProgressStatus(part)
 
   return (
-    <div className={embedded ? "space-y-2" : "ml-[14px] mt-2 mb-1 pl-3 space-y-2"}>
-      <p className={["text-[15px] leading-5 font-mono", isRunning ? "activity-shimmer-tight text-text-muted" : "text-text-secondary"].join(" ")}>
-        {part.headline}
-      </p>
-      {part.detail && <p className={lineClass}>{part.detail}</p>}
-      {part.sql?.preview && (
+    <div className={embedded ? "space-y-2" : "ml-[14px] mt-2 mb-1 pl-6 space-y-2"}>
+      {statusLine ? (
+        isError ? (
+          <pre className="chat-tool-error">{statusLine}</pre>
+        ) : (
+          <p
+            className={[
+              "text-[15px] leading-5 font-mono text-text-secondary",
+              isRunning ? "activity-shimmer-tight text-text-muted" : "",
+            ]
+              .filter(Boolean)
+              .join(" ")}
+          >
+            {statusLine}
+          </p>
+        )
+      ) : null}
+      {part.sql?.preview ? (
         <CodeBlock
           code={part.sql.preview}
           lang="sql"
           unbounded
+          copyIconOnly
           className="w-full max-w-full"
           label={[
             part.sql.label,
             part.sql.connection,
             part.sql.rowCount != null ? `${part.sql.rowCount} rows` : null,
-            part.sql.durationMs != null ? `${part.sql.durationMs}ms` : null,
           ].filter(Boolean).join(" · ")}
         />
-      )}
-      {resultLine ? (
-        part.status === "error" ? (
-          <pre className="chat-tool-error">{resultLine}</pre>
-        ) : (
-          <p className="text-[15px] leading-5 font-mono text-text-secondary">{resultLine}</p>
-        )
       ) : null}
     </div>
   )
@@ -565,10 +566,12 @@ function ToolSyncProgressBody({
 function ToolPill({
   row,
   syncProgress,
+  isLast = false,
   isLiveRun = false,
 }: {
   row: ToolRow
   syncProgress?: ResponseSyncProgressPart
+  isLast?: boolean
   isLiveRun?: boolean
 }) {
   const { preserveToggle } = useChatScroll()
@@ -584,7 +587,9 @@ function ToolPill({
     [row.argsFormatted],
   )
   const status = isError ? "error" : isRunning ? "running" : "done"
-  const resultText = isError ? null : row.details ?? null
+  // Sync trailing owns the status line — don't also dump tool-result variants.
+  const resultText =
+    isError || syncProgress ? null : row.details ?? null
   const errorText = isError ? row.details ?? null : null
   const showLiveSync = Boolean(syncProgress) && isRunning
   const trailing =
@@ -597,44 +602,27 @@ function ToolPill({
   }
 
   return (
-    <div className="relative py-1.5" data-chat-expand-root="">
-      {/*
-       * Execution cards are self-contained — no inter-tool stem.
-       * A gray rail against a red status dot reads as a drawing glitch.
-       */}
-      <div className="flex items-start gap-2 min-w-0 px-2 py-0.5">
-        <span
-          className={[
-            "shrink-0 w-1.5 h-1.5 rounded-full mt-[10px]",
-            isRunning
-              ? row.tool === "ask_user"
-                ? "bg-accent"
-                : "bg-text-secondary animate-pulse"
-              : isError
-                ? "bg-error"
-                : "chat-trace-dot--idle",
-          ].join(" ")}
-          aria-hidden
-        />
-        <div className="min-w-0 flex-1">
-          <ToolExecutionCard
-            surface="chat"
-            toolName={row.tool}
-            argumentsValue={argumentsValue}
-            argsFormatted={row.argsFormatted}
-            resultText={resultText}
-            errorText={errorText}
-            status={status}
-            open={open}
-            onOpenChange={onOpenChange}
-            summaryRef={summaryRef}
-            trailing={trailing}
-          />
-        </div>
-      </div>
+    <div
+      className={`chat-tool-row${isLast ? " is-last" : ""}${isError ? " is-error" : ""}`}
+      data-chat-expand-root=""
+    >
+      <ToolExecutionCard
+        surface="chat"
+        toolName={row.tool}
+        argumentsValue={argumentsValue}
+        argsFormatted={row.argsFormatted}
+        resultText={resultText}
+        errorText={errorText}
+        status={status}
+        preview={row.summary}
+        open={open}
+        onOpenChange={onOpenChange}
+        summaryRef={summaryRef}
+        trailing={trailing}
+      />
       {showLiveSync && syncProgress ? (
-        <div className="ml-[14px] mt-2 mb-1 pl-3" data-chat-expand-body="">
-          <ToolSyncProgressBody part={syncProgress} />
+        <div className="chat-tool__live" data-chat-expand-body="">
+          <ToolSyncProgressBody part={syncProgress} embedded />
         </div>
       ) : null}
     </div>
@@ -670,7 +658,6 @@ function IterationBlock({
   // Cursor / Copilot dialect: activity headers stay muted chrome even when a
   // nested tool failed — severity lives on the error payload (sheet callout).
   const headerToneClass = "text-text-faint"
-  const Chevron = open ? ChevronDown : ChevronRight
   // Live auto open/close must be instant — height animation fights host
   // stick-to-bottom and shakes the transcript. Animate only after a user toggle.
   const animateFold = userToggled || !isLiveRun
@@ -684,15 +671,20 @@ function IterationBlock({
           setUserToggled(true)
           setOpen((v) => !v)
         })}
-        className={`inline-flex max-w-full items-center gap-1.5 py-0.5 text-left text-[15px] leading-6 transition-colors hover:text-text-secondary ${headerToneClass}`}
+        className={`inline-flex max-w-full items-center gap-2 py-0.5 text-left text-[15px] leading-6 transition-colors hover:text-text-secondary ${headerToneClass}`}
       >
-        <Chevron size={12} strokeWidth={1.5} className="text-text-faint shrink-0" />
+        <ChevronRight
+          size={16}
+          strokeWidth={1.5}
+          className={`chat-trace-chev shrink-0${open ? " is-open" : ""}`}
+          aria-hidden
+        />
         <span>{part.summary}</span>
       </button>
       <ChatFoldBody
         open={open}
         animated={animateFold}
-        className="mt-0.5 pl-4 border-l chat-trace-fold ml-[5px]"
+        className="mt-0.5 pl-6 border-l chat-trace-fold ml-[5px]"
       >
         <IterationToolList tools={part.tools} syncByInvocation={syncByInvocation} />
       </ChatFoldBody>
@@ -705,7 +697,6 @@ function PlanBlock({ part }: { part: ResponsePlanPart }) {
   const { preserveToggle } = useChatScroll()
   const [open, setOpen] = useState(part.steps.length > 0 && part.steps.length <= 8)
   const buttonRef = useRef<HTMLButtonElement>(null)
-  const Chevron = open ? ChevronDown : ChevronRight
   const modeHint =
     part.executionMode === "parallel"
       ? "Parallel"
@@ -725,9 +716,14 @@ function PlanBlock({ part }: { part: ResponsePlanPart }) {
         onClick={() =>
           preserveToggle(buttonRef.current, () => setOpen((v) => !v))
         }
-        className="inline-flex max-w-full items-center gap-1.5 py-0.5 text-left text-[15px] leading-6 text-text-muted transition-colors hover:text-text-secondary"
+        className="inline-flex max-w-full items-center gap-2 py-0.5 text-left text-[15px] leading-6 text-text-muted transition-colors hover:text-text-secondary"
       >
-        <Chevron size={12} strokeWidth={1.5} className="text-text-faint shrink-0" />
+        <ChevronRight
+          size={16}
+          strokeWidth={1.5}
+          className={`chat-trace-chev shrink-0${open ? " is-open" : ""}`}
+          aria-hidden
+        />
         <span>Plan</span>
         <span className="text-text-faint">
           {part.stepCount} step{part.stepCount !== 1 ? "s" : ""}
@@ -736,7 +732,7 @@ function PlanBlock({ part }: { part: ResponsePlanPart }) {
       </button>
       {open && part.steps.length > 0 && (
         <ol
-          className="mt-1 ml-[0.35rem] pl-3 border-l border-border-subtle space-y-1 list-none"
+          className="mt-1 ml-[0.35rem] pl-6 border-l border-border-subtle space-y-1 list-none"
           data-chat-expand-body=""
         >
           {part.steps.map((step, i) => {
@@ -816,7 +812,6 @@ function StepBlock({
   const isFailed = isSettled && hasErrorBody
   const hasBodyContent = hasTools || part.hasRunning || (hasErrorBody && !hasTools)
   const canToggle = hasTools || hasErrorBody
-  const Chevron = open ? ChevronDown : ChevronRight
   const animateFold = userToggled || !isLiveRun
   const labelClass =
     part.status === "running" || part.hasRunning ? "text-text-muted" : "text-text-secondary"
@@ -835,17 +830,17 @@ function StepBlock({
           })
         }}
         className={[
-          "chat-step__header flex max-w-full min-w-0 items-center gap-1.5 py-0.5 text-left text-[15px] leading-6",
+          "chat-step__header flex max-w-full min-w-0 items-center gap-2 py-0.5 text-left text-[15px] leading-6",
           labelClass,
           canToggle ? "transition-colors hover:text-text" : "cursor-default",
         ].join(" ")}
       >
         {/*
-          One fixed lead column (12px): logo while working, else chevron/dot.
+          One fixed lead column (16px): logo while working, else chevron/dot.
           Never stack logo+chevron — that shifted the title and parked the
           fold rail under the wrong glyph (detail wrap then spilled left).
         */}
-        <span className="chat-step__lead inline-flex h-3 w-3 shrink-0 items-center justify-center" aria-hidden>
+        <span className="chat-step__lead inline-flex h-4 w-4 shrink-0 items-center justify-center" aria-hidden>
           {showLogo ? (
             <Logo
               size={11}
@@ -853,7 +848,11 @@ function StepBlock({
               className={logoExiting ? "mia-colon-logo--working-exit" : undefined}
             />
           ) : canToggle ? (
-            <Chevron size={12} strokeWidth={1.5} className="chat-trace-chev" />
+            <ChevronRight
+              size={16}
+              strokeWidth={1.5}
+              className={`chat-trace-chev${open ? " is-open" : ""}`}
+            />
           ) : part.hasRunning && !part.subagent ? (
             <span className="block h-1.5 w-1.5 rounded-full chat-trace-dot--idle" />
           ) : null}
@@ -877,7 +876,7 @@ function StepBlock({
         <ChatFoldBody
           open={open}
           animated={animateFold}
-          className="mt-0.5 ml-[0.35rem] pl-3 border-l chat-trace-fold min-w-0"
+          className="mt-0.5 ml-[0.35rem] pl-6 border-l chat-trace-fold min-w-0"
         >
           {hasErrorBody && !hasTools ? (
             <pre className="chat-tool-error my-0.5">{errorBody}</pre>
@@ -917,12 +916,13 @@ function IterationToolList({
   syncByInvocation: Map<string, ResponseSyncProgressPart>
 }) {
   return (
-    <div className="space-y-0">
-      {tools.map((toolPart) => (
+    <div className="chat-tool-list">
+      {tools.map((toolPart, i) => (
         <ToolPill
           key={toolPart.id}
           row={toolPart.row}
           syncProgress={syncByInvocation.get(toolPart.id)}
+          isLast={i === tools.length - 1}
         />
       ))}
     </div>
@@ -953,7 +953,6 @@ function CheckBlock({ part }: { part: ResponseProgressPart }) {
   const what = part.detail?.trim() || ""
   const body = part.body?.trim() || ""
   const hasBody = body.length > 0
-  const Chevron = open ? ChevronDown : ChevronRight
   const labelClass =
     part.status === "running" ? "text-text-muted" : "text-text-faint"
 
@@ -968,14 +967,19 @@ function CheckBlock({ part }: { part: ResponseProgressPart }) {
           preserveToggle(buttonRef.current, () => setOpen((v) => !v))
         }}
         className={[
-          "inline-flex max-w-full items-baseline gap-1.5 py-0.5 text-left text-[15px] leading-6",
+          "inline-flex max-w-full items-center gap-2 py-0.5 text-left text-[15px] leading-6",
           labelClass,
           hasBody ? "transition-colors hover:text-text-muted" : "cursor-default",
         ].join(" ")}
         aria-expanded={hasBody ? open : undefined}
       >
         {hasBody ? (
-          <Chevron size={12} strokeWidth={1.5} className="text-text-faint shrink-0 translate-y-[2px]" />
+          <ChevronRight
+            size={16}
+            strokeWidth={1.5}
+            className={`chat-trace-chev shrink-0${open ? " is-open" : ""}`}
+            aria-hidden
+          />
         ) : null}
         <span className="min-w-0">
           <span>{part.label}</span>
@@ -984,7 +988,7 @@ function CheckBlock({ part }: { part: ResponseProgressPart }) {
       </button>
       {open && hasBody ? (
         <div
-          className="mt-0.5 ml-[0.35rem] pl-3 border-l border-border-subtle text-[15px] leading-6 text-text-faint whitespace-pre-wrap break-words"
+          className="mt-0.5 ml-[0.35rem] pl-6 border-l border-border-subtle text-[15px] leading-6 text-text-faint whitespace-pre-wrap break-words"
           data-chat-expand-body=""
         >
           {body}
@@ -1084,9 +1088,14 @@ function HistoryDisclosure({
         ref={buttonRef}
         type="button"
         onClick={() => preserveToggle(buttonRef.current, () => setOpen((value) => !value))}
-        className="inline-flex max-w-full items-center gap-1.5 py-1 text-left text-[15px] text-text-faint hover:text-text-secondary transition-colors"
+        className="inline-flex max-w-full items-center gap-2 py-1 text-left text-[15px] text-text-faint hover:text-text-secondary transition-colors"
       >
-        {open ? <ChevronDown size={12} strokeWidth={1.5} className="text-text-faint shrink-0" /> : <ChevronRight size={12} strokeWidth={1.5} className="text-text-faint shrink-0" />}
+        <ChevronRight
+          size={16}
+          strokeWidth={1.5}
+          className={`chat-trace-chev shrink-0${open ? " is-open" : ""}`}
+          aria-hidden
+        />
         <span className="truncate">{summary}</span>
       </button>
 
@@ -1279,7 +1288,12 @@ function WorkspaceDiffCard({ runId, onNotify, onNotifyError }: {
         <span className="text-[15px] text-text-muted flex-1">
           {diff ? `${total} file${total !== 1 ? "s" : ""} changed` : "File changes ready"}
         </span>
-        {open ? <ChevronDown size={12} strokeWidth={1.5} className="text-text-faint" /> : <ChevronRight size={12} strokeWidth={1.5} className="text-text-faint" />}
+        <ChevronRight
+          size={16}
+          strokeWidth={1.5}
+          className={`chat-trace-chev shrink-0${open ? " is-open" : ""}`}
+          aria-hidden
+        />
       </button>
 
       {open && diff && (

@@ -356,8 +356,9 @@ describe("buildResponseParts — TermChat projection", () => {
       expect(step.tools[0]?.row.argsFormatted).toContain("publish.Revenue")
       expect(step.tools[0]?.row.details).toContain("columns")
       expect(step.tools[0]?.row.status).toBe("done")
-      expect(step.detail).toMatch(/explore|schema|Revenue/i)
+      // Header stays duration-only — query/target lives on the child pill.
       expect(step.detail).toMatch(/4\.4|4400|s|ms/)
+      expect(step.detail).not.toMatch(/Revenue|SELECT/i)
     }
   })
 

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import {
+  consolidateSyncProgressStatus,
   createSyncProgressState,
   finalizeSyncProgress,
   reduceSyncSseEvent,
@@ -76,5 +77,17 @@ describe("sync-trace-progress", () => {
       "Preview complete — plan abc",
     )
     expect(syncProgressResultLine("ok", "error")).toBe("ok")
+  })
+
+  it("consolidates sync preview status into one line", () => {
+    expect(
+      consolidateSyncProgressStatus({
+        status: "done",
+        headline: "Preview OK – 2 tables",
+        detail: "2 tables ready",
+        result: "Sync preview complete",
+        sql: { durationMs: 8 },
+      }),
+    ).toBe("Sync preview complete — 2 tables ready (8ms)")
   })
 })
