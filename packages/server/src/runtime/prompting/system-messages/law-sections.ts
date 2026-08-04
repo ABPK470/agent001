@@ -16,7 +16,11 @@ import {
   shouldInvokePlanner,
   type Message
 } from "@mia/agent"
-import { buildSyncOperationalVocabularyForHost, formatSyncDriftIntentBlock, formatSyncOperationIntentBlock } from "@mia/sync"
+import {
+  buildSyncOperationalVocabularyForHost,
+  formatSyncDriftIntentBlock,
+  formatSyncOperationIntentBlock
+} from "@mia/sync"
 import { listResolvedTerms } from "../../../infra/persistence/memory.js"
 import { buildClarificationBlock } from "../clarification-block.js"
 import { buildResolvedFactsBlock } from "../data-blocks/resolved-facts-block.js"
@@ -56,10 +60,7 @@ async function buildLearnedTermMappings(
  * corrected ("say otherwise to change"). Only terms that actually appear
  * in the goal are listed, keeping the block tight.
  */
-function buildLearnedTermsBlock(
-  goal: string,
-  learned: Map<string, string>
-): string {
+function buildLearnedTermsBlock(goal: string, learned: Map<string, string>): string {
   const goalLc = goal.toLowerCase()
   const lines: string[] = []
   for (const [term, qname] of learned) {
@@ -172,7 +173,10 @@ export async function buildLawSections(ctx: BuildContext): Promise<Message[]> {
       opts.llmForClarification &&
       shouldInvokePlanner(clarCtx, findings)
     ) {
-      findings = await runLlmPlanner(clarCtx, opts.llmForClarification)
+      findings = filterFindingsForSyncIntent(
+        await runLlmPlanner(clarCtx, opts.llmForClarification),
+        syncOperationIntent ?? undefined
+      )
       opts.onClarificationTrace?.({ kind: "planner-invoked", findingsCount: findings.length })
     }
 

@@ -59,7 +59,7 @@ DO NOT emit a dashboard. Show these sections in order:
 3. One sentence telling the user what they need to fix before re-running sync_preview.
 4. Do NOT show KPI cards, charts, or sample rows for other buckets — conflicts make the plan unusable.
 
-IF the plan has no conflicts — normal plan format:
+IF the plan has no conflicts and has pending changes — normal plan format:
 (a) One-paragraph prose summary: entity, source→target, totals (X inserts, Y updates, Z deletes across N tables), top risk if any.
 (b) A ```dashboard block: a kpi row (inserts/updates/deletes/unchanged/tables) + a relationships chart of the dependency graph (each node coloured by dominant change). Only add a per-table bar if there are changes across 3+ tables.
 (c) For any table with ≤ 25 sample rows, a markdown table per bucket — UPDATE rows show old→new only for changed columns; INSERT/DELETE show full row.
@@ -67,13 +67,16 @@ IF the plan has no conflicts — normal plan format:
 Open the env-sync widget for an interactive view.
 Apply command:
 sync_execute planId=<id> confirm=true
-Do not wrap the command in bold markers, quotes, or prose.
+Do not wrap the command in bold markers, quotes, or prose. The user must submit it in a separate turn.
+
+IF the plan has no conflicts and no pending changes:
+State that source and target already reconcile for the previewed scope. Do not offer or print an execution command.
 
 Safety rails (enforced server-side; mention them when relevant):
 
 - Plan TTL is 1 hour; stale plans must be re-previewed.
 - Target environment role must be in the recipe allowlist.
 - All DML runs in one transaction per execute; on any failure, full rollback.
-- Never call sync_execute without an explicit prior sync_preview and explicit user "confirm" in the same turn.
+- Never call sync_execute without an explicit prior sync_preview and a separate user confirmation in a later turn.
 
 Provide a concise final answer when done.

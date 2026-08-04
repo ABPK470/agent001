@@ -15,7 +15,7 @@ import { schemaMatchDetector } from "../../src/core/clarify/detectors/schema-mat
 import { termUndefinedDetector } from "../../src/core/clarify/detectors/term-undefined.js"
 import { timeRangeDetector } from "../../src/core/clarify/detectors/time-range.js"
 import { writeConfirmationDetector } from "../../src/core/clarify/detectors/write-confirmation.js"
-import type { ClarifyContext } from "../../src/core/clarify/types.js"
+import { filterFindingsForSyncIntent, type ClarifyContext } from "../../src/core/clarify/types.js"
 import { DEFAULT_TENANT_CONFIG, type TenantConfig } from "../../src/domain/tenant/tenant-config.js"
 import { CatalogGraph } from "../../src/tools/catalog/graph/index.js"
 import type { CatalogColumn, CatalogTable } from "../../src/tools/catalog/types.js"
@@ -102,17 +102,12 @@ describe("schemaMatchDetector", () => {
       table("agent", "vPipelineRunContract")
     ])
     expect(
-      schemaMatchDetector.detect(
-        ctx({ goal: "pls sync contract acrwawtest from uat to dev", catalog: cat })
-      )
+      schemaMatchDetector.detect(ctx({ goal: "pls sync contract acrwawtest from uat to dev", catalog: cat }))
     ).toEqual([])
   })
 
   it("does not block sync entity instance names when syncOperationIntent is set", () => {
-    const cat = catalogFrom([
-      table("archive", "abcd"),
-      table("fact", "abcd")
-    ])
+    const cat = catalogFrom([table("archive", "abcd"), table("fact", "abcd")])
     const findings = schemaMatchDetector.detect(
       ctx({
         goal: "sync contract abcd from uat to dev",
@@ -130,11 +125,43 @@ describe("schemaMatchDetector", () => {
     expect(findings).toEqual([])
   })
 
+  it("filters compound operational planner findings covered by a parsed sync intent", () => {
+    const intent = {
+      entityType: "pipelineActivity",
+      entityQuery: null,
+      entityId: "4243",
+      source: "uat",
+      target: "dev",
+      reservedTokens: new Set(["synchronize", "pipeline", "uat", "to", "dev"])
+    }
+    const findings = filterFindingsForSyncIntent(
+      [
+        {
+          id: "term-undefined:synchronize-pipeline",
+          kind: "term-undefined",
+          severity: "block",
+          subject: "synchronize pipeline",
+          reasoning: "planner output",
+          suggestedQuestion: "What action should synchronize pipeline perform?",
+          source: "llm-planner"
+        },
+        {
+          id: "term-undefined:uat-to-dev",
+          kind: "term-undefined",
+          severity: "block",
+          subject: "UAT to DEV",
+          reasoning: "planner output",
+          suggestedQuestion: "How are UAT and DEV represented?",
+          source: "llm-planner"
+        }
+      ],
+      intent
+    )
+    expect(findings).toEqual([])
+  })
+
   it("honours domainVocabulary reserved tokens from operational registries", () => {
-    const cat = catalogFrom([
-      table("core", "Contract"),
-      table("core", "ContractColumn")
-    ])
+    const cat = catalogFrom([table("core", "Contract"), table("core", "ContractColumn")])
     const findings = schemaMatchDetector.detect(
       ctx({
         goal: "sync contract acrwawtest from uat to dev",
@@ -319,9 +346,9 @@ describe("schemaMatchDetector", () => {
         canonicalQualifiedNames: { client: "dim.Client", clients: "dim.Client" }
       }
     }
-    expect(schemaMatchDetector.detect(ctx({ goal: "show top clients by revenue", catalog: cat, tenant }))).toEqual(
-      []
-    )
+    expect(
+      schemaMatchDetector.detect(ctx({ goal: "show top clients by revenue", catalog: cat, tenant }))
+    ).toEqual([])
   })
 
   it("ranks dim tables ahead of archive when schema-match still fires", () => {
@@ -377,9 +404,9 @@ describe("termUndefinedDetector", () => {
       ...DEFAULT_TENANT_CONFIG,
       domainKeywords: ["absa"]
     }
-    expect(termUndefinedDetector.detect(ctx({ goal: "Show ABSA clients only", catalog: cat, tenant }))).toEqual(
-      []
-    )
+    expect(
+      termUndefinedDetector.detect(ctx({ goal: "Show ABSA clients only", catalog: cat, tenant }))
+    ).toEqual([])
   })
 
   it("ignores a capitalised imperative verb starting the SECOND sentence of the goal", () => {
@@ -456,7 +483,9 @@ describe("grainUndefinedDetector", () => {
       table("dim", "Month", [col("pkMonth", "int"), col("MonthNo", "smallint")]),
       table("dim", "Date", [col("pkMonth", "int"), col("pkAccountingMonth", "int")])
     ])
-    expect(grainUndefinedDetector.detect(ctx({ goal: "summarise revenue monthly", catalog: cat }))).toEqual([])
+    expect(grainUndefinedDetector.detect(ctx({ goal: "summarise revenue monthly", catalog: cat }))).toEqual(
+      []
+    )
   })
 
   it("stays silent when only one grain column matches", () => {

@@ -5,15 +5,15 @@
  */
 
 import { buildRecoveryHints } from "../../../core/recover.js"
+import { MessageRole } from "../../../domain/enums/message.js"
+import type { AgentConfig, Message } from "../../../domain/types/agent-types.js"
 import * as log from "../../../internal/index.js"
-import type { ToolCallRecord } from "../../../tools/_shared/result.js"
 import {
   evaluateToolRoundBudgetExtension,
   summarizeToolRoundProgress
 } from "../../../tools/_shared/progress.js"
+import type { ToolCallRecord } from "../../../tools/_shared/result.js"
 import { checkToolLoopStuckDetection } from "../../../tools/_shared/utils/stuck-detection.js"
-import { MessageRole } from "../../../domain/enums/message.js"
-import type { AgentConfig, Message } from "../../../domain/types/agent-types.js"
 import type { AgentLoopState } from "../state.js"
 
 /** Result of post-round processing. */
@@ -60,17 +60,31 @@ export function processPostRound(ctx: PostRoundContext): PostRoundResult {
   // Accumulate tool calls
   ctx.allToolCalls.push(...roundToolCalls)
 
-  // ── Sync preview stop — MANDATORY ──
-  // After sync_preview completes, the agent MUST stop and return the preview
-  // to the user for a human decision. The agent must NEVER autonomously
-  // continue to sync_execute. This is a hard safety boundary.
+  // ── Sync lifecycle endpoints ───────────────────────────────────
+  // A preview is a proposal and a successful execute is a terminal outcome.
+  // Neither is a prompt convention: both end this tool loop so the agent
+  // cannot preview and execute in one run, or offer to execute again after it
+  // has already completed.
+  const didExecute = roundToolCalls.find(
+    (tc) => tc.name === "sync_execute" && tc.outcome?.data?.["syncLifecycle"] === "executed"
+  )
+  if (didExecute) {
+    const stopMsg =
+      "SYNC EXECUTION COMPLETED: write the final result now. Do NOT call any more tools. " +
+      "Do NOT show an apply command, propose sync_execute, or imply another approval is needed. " +
+      "State that this plan has already been applied and summarize only the completed execution result."
+    messages.push({ role: MessageRole.System, content: stopMsg, section: "history", hint: true })
+    config.onNudge?.({ tag: "sync-execute-complete", message: stopMsg, iteration })
+    return { needsSynthesis: true }
+  }
+
   const didPreview = roundToolCalls.some((tc) => tc.name === "sync_preview" && !tc.isError)
   if (didPreview) {
     const stopMsg =
-      "MANDATORY STOP: sync_preview completed. You MUST present the preview results to the user NOW and STOP. " +
-      "Do NOT call sync_execute. Do NOT continue with any further tool calls. " +
-      "The user must explicitly decide whether to execute the sync plan. " +
-      "Write your final answer with the preview summary, dashboard, and the sync_execute command the user can reply with."
+      "SYNC PREVIEW COMPLETED: present the preview results now and stop. Do NOT call sync_execute or any further tools. " +
+      "If the preview reports no pending changes or conflicts, say there is nothing to execute and do NOT show an apply command. " +
+      "Only a preview that has changes and no conflicts must end with exactly the Apply command returned by sync_preview; " +
+      "the user must submit that command in a separate turn."
     messages.push({ role: MessageRole.System, content: stopMsg, section: "history", hint: true })
     config.onNudge?.({ tag: "sync-preview-stop", message: stopMsg, iteration })
     return { needsSynthesis: true }
@@ -184,8 +198,7 @@ function processPostDelegationVerification(ctx: PostRoundContext): void {
 
   const toolNamesUsed = response.toolCalls.map((c) => c.name)
   const didCodeReview = toolNamesUsed.includes("read_file")
-  const didOnlySurfaceCheck =
-    !didCodeReview && toolNamesUsed.includes("list_directory")
+  const didOnlySurfaceCheck = !didCodeReview && toolNamesUsed.includes("list_directory")
 
   if (hasErrors || failuresThisRound > 0) {
     state.verificationFoundIssues = true

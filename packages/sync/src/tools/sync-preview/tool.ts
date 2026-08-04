@@ -2,17 +2,17 @@
  * `sync_preview` agent tool.
  */
 
-import type { ExecutableTool, Tool, ToolMetadata } from "../../ports/host.js"
 import { movementOfTable, normalizeSyncPlanConflictKind, tableMovementTotal } from "@mia/shared-types"
+import type { SyncEntityId } from "../../domain/definition-selection.js"
+import type { ExecutableTool, Tool, ToolMetadata } from "../../ports/host.js"
+import type { SyncRuntimeHost } from "../../ports/index.js"
 import { previewSync } from "../../runtime/orchestrator/index.js"
+import { formatSyncPreviewDashboardFence } from "../../runtime/preview-dashboard.js"
 import {
   formatSyncToolError,
   publishedEntityTypeHint,
-  validatePublishedEntityType,
+  validatePublishedEntityType
 } from "../_shared/helpers.js"
-import type { SyncEntityId } from "../../domain/definition-selection.js"
-import type { SyncRuntimeHost } from "../../ports/index.js"
-import { formatSyncPreviewDashboardFence } from "../../runtime/preview-dashboard.js"
 
 // ── sync_preview ─────────────────────────────────────────────────
 
@@ -106,9 +106,19 @@ function buildSyncPreviewTool(host: SyncRuntimeHost): Tool {
         lines.push(``)
         lines.push(`Include this dashboard block verbatim in your answer:`)
         lines.push(formatSyncPreviewDashboardFence(plan))
-        lines.push(``)
-        lines.push(`Apply command:`)
-        lines.push(`sync_execute planId="${plan.planId}" confirm=true`)
+        const changes = plan.totals.insert + plan.totals.update + plan.totals.delete
+        const hasConflicts = conflictedTables.length > 0
+        if (changes > 0 && !hasConflicts) {
+          lines.push(``)
+          lines.push(`Apply command:`)
+          lines.push(`sync_execute planId="${plan.planId}" confirm=true`)
+        } else if (hasConflicts) {
+          lines.push(``)
+          lines.push(`Next action: resolve the reported conflicts, then create a new preview.`)
+        } else {
+          lines.push(``)
+          lines.push(`Next action: no changes are pending; there is nothing to execute.`)
+        }
         return lines.join("\n")
       } catch (e) {
         return formatSyncToolError(e)

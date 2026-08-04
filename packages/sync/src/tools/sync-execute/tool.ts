@@ -2,13 +2,12 @@
  * `sync_execute` agent tool.
  */
 
+import { ToolOutcomeSeverity } from "../../domain/enums.js"
 import type { ExecutableTool, Tool, ToolMetadata } from "../../ports/host.js"
-import { executeSync } from "../../runtime/orchestrator/index.js"
-import {
-  formatSyncToolError,
-} from "../_shared/helpers.js"
 import type { SyncRuntimeHost } from "../../ports/index.js"
+import { executeSync } from "../../runtime/orchestrator/index.js"
 import { loadPlan } from "../../runtime/plan-store.js"
+import { formatSyncToolError } from "../_shared/helpers.js"
 
 // ── sync_execute ──────────────────────────────────────
 
@@ -38,7 +37,14 @@ function buildSyncExecuteTool(host: SyncRuntimeHost): Tool {
       try {
         const result = await executeSync(planId, { host, confirm: true, userUpn: "agent" })
         if (result.outcome === "refused") return `Error: ${result.error}`
-        if (result.outcome === "completed" && result.success) return `Plan ${planId} executed successfully against ${plan.target}.`
+        if (result.outcome === "completed" && result.success) {
+          return {
+            ok: true,
+            summary: `Plan ${planId} executed successfully against ${plan.target}.`,
+            severity: ToolOutcomeSeverity.Info,
+            data: { syncLifecycle: "executed", planId, target: plan.target }
+          }
+        }
         return `Execute failed: ${result.error}`
       } catch (e) {
         return formatSyncToolError(e)
