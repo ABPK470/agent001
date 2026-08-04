@@ -168,6 +168,7 @@ export function TraceWorkDetail({
     }
 
     const isError = tool.status === "error"
+    // Headline is already Tool: name when toolKey is set — flat pane, not Executed card.
     return (
       <div className="trace-detail-body">
         <TraceToolIo
@@ -179,6 +180,7 @@ export function TraceWorkDetail({
           errorText={isError ? tool.resultText : null}
           status={statusFromToolCall(tool)}
           durationMs={work.durationMs}
+          layout="pane"
           trailing={<SqlValidationBlock work={work} hideSqlPreview />}
         />
       </div>

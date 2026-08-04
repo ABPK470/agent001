@@ -79,17 +79,21 @@ export function TraceInspectorHeadlinePrimary({ node }: { node: TraceTreeNode })
   return (
     <div className="trace-detail__headline trace-detail__headline--split">
       <div className="trace-detail__headline-row">
-        <span className="trace-detail__headline-title">{inspectorTitle(node)}</span>
-        <span className="trace-detail__headline-trailing">
-          {duration ? (
-            <span className="trace-detail__headline-duration tabular-nums">{duration}</span>
-          ) : null}
+        <span className="trace-detail__headline-lead">
+          <span className="trace-detail__headline-title">{inspectorTitle(node)}</span>
           <TraceTreeStatusBadge
             status={node.status}
             branchHasError={node.branchHasError}
             hasError={node.hasError}
           />
         </span>
+        {duration ? (
+          <span className="trace-detail__headline-trailing">
+            <span className="trace-detail__headline-duration tabular-nums">{duration}</span>
+          </span>
+        ) : (
+          <span className="trace-detail__headline-trailing" aria-hidden />
+        )}
       </div>
     </div>
   )
@@ -113,17 +117,19 @@ export function TraceInspectorHeadline({ node }: { node: TraceTreeNode }) {
   return (
     <div className="trace-detail__headline">
       <div className="trace-detail__headline-row">
-        <span className="trace-detail__headline-title">{inspectorTitle(node)}</span>
-        <span className="trace-detail__headline-trailing">
-          {duration ? (
-            <span className="trace-detail__headline-duration tabular-nums">{duration}</span>
-          ) : null}
+        <span className="trace-detail__headline-lead">
+          <span className="trace-detail__headline-title">{inspectorTitle(node)}</span>
           <TraceTreeStatusBadge
             status={node.status}
             branchHasError={node.branchHasError}
             hasError={node.hasError}
           />
         </span>
+        {duration ? (
+          <span className="trace-detail__headline-trailing">
+            <span className="trace-detail__headline-duration tabular-nums">{duration}</span>
+          </span>
+        ) : null}
       </div>
       {row2 ? <p className="trace-detail__headline-metrics tabular-nums">{row2}</p> : null}
     </div>

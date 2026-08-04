@@ -1,21 +1,27 @@
 /**
- * Structured tool I/O — unified execution card (standard) or developer layout (ask_user).
+ * Structured tool I/O.
+ *
+ * - pane: inspector owns the tool title — Input/Output lanes only (no nested Executed pill)
+ * - standard: collapsible TraceExecutionCard (lists under Work)
+ * - developer: ask_user payload accordion
  */
 
 import { ChevronRight } from "lucide-react"
 import { useMemo, useState, type ReactNode } from "react"
 import { JsonViewer } from "../../components/JsonViewer"
+import { formatExecInput } from "../../lib/tool-execution"
 import {
   isValidJsonText,
   validateToolArguments,
   type ToolSchemaValidation,
 } from "../../lib/events/trace-tool-schema"
 import type { TraceDag } from "./build-trace-dag"
+import { CopyControl } from "./TraceCopy"
 import { TraceExecutionCard } from "./TraceExecutionCard"
 import { ExpandableText } from "./TraceExpandable"
 import type { ToolExecStatus } from "../../lib/tool-execution"
 
-export type TraceToolIoLayout = "standard" | "developer"
+export type TraceToolIoLayout = "standard" | "developer" | "pane"
 
 export function TraceToolIo({
   dag,
@@ -54,12 +60,56 @@ export function TraceToolIo({
   const showError = Boolean(errorText)
   const showResult = !hideResult && !showError && Boolean(resultText)
   const validationHint = actionableValidationHint(validation)
+  const input = formatExecInput(toolName, argumentsValue, argsFormatted)
 
   const schemaFooter = schema ? (
     <SchemaAccordion open={schemaOpen} onToggle={() => setSchemaOpen((v) => !v)}>
       <JsonViewer value={schema} copyable embedded defaultExpandDepth={1} label="schema" />
     </SchemaAccordion>
   ) : null
+
+  if (layout === "pane") {
+    return (
+      <div className="trace-tool-io trace-tool-io--pane">
+        {validationHint ? (
+          <p className="trace-tool-io__validation-hint">{validationHint}</p>
+        ) : null}
+        {input.text.trim() ? (
+          <div className="trace-exec__input">
+            <div className="trace-exec__lane-head">
+              <span className="trace-exec__lane-label">
+                {input.lang ? input.lang.toUpperCase() : "Input"}
+              </span>
+              <CopyControl value={input.copyText} ariaLabel="Copy input" />
+            </div>
+            <ExpandableText text={input.text.trim()} className="trace-exec__input-pre" />
+          </div>
+        ) : null}
+        {showError && errorText ? <TraceToolErrorSection text={errorText} /> : null}
+        {showResult && resultText ? (
+          <div className="trace-exec__output-lane">
+            <div className="trace-exec__lane-head">
+              <span className="trace-exec__lane-label">Output</span>
+              <CopyControl value={resultText} ariaLabel="Copy output" />
+            </div>
+            {resultIsJson ? (
+              <JsonViewer
+                value={JSON.parse(resultText.trim())}
+                copyable
+                embedded
+                inline
+                label="result"
+              />
+            ) : (
+              <ExpandableText text={resultText} className="trace-exec__output-pre" />
+            )}
+          </div>
+        ) : null}
+        {trailing}
+        {schemaFooter}
+      </div>
+    )
+  }
 
   if (layout === "developer") {
     return (

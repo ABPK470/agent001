@@ -51,6 +51,7 @@ export function TraceToolDetail({
     )
   }
 
+  // Inspector headline already says Tool: name — no nested Executed pill.
   return (
     <div className="trace-detail-body">
       <TraceToolIo
@@ -62,6 +63,7 @@ export function TraceToolDetail({
         errorText={isError ? tool.resultText : null}
         status={statusFromToolCall(tool)}
         durationMs={work?.durationMs ?? null}
+        layout="pane"
       />
     </div>
   )

@@ -5220,7 +5220,7 @@ button.trace-tree-status-pill:hover {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 1rem;
+  gap: 1.25rem;
   min-width: 0;
 }
 
@@ -5237,7 +5237,20 @@ button.trace-tree-status-pill:hover {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
+  gap: 0.75rem;
+}
+
+/* Title + status together; actions stay in .trace-detail__actions on the right. */
+.trace-detail__headline-lead {
+  display: inline-flex;
+  align-items: center;
   gap: 0.5rem;
+  min-width: 0;
+}
+
+.trace-detail__headline-lead .trace-tree-status-pill {
+  margin: 0;
+  flex-shrink: 0;
 }
 
 .trace-detail__headline-trailing {
@@ -5280,16 +5293,11 @@ button.trace-tree-status-pill:hover {
   color: var(--text-muted, var(--color-text-muted));
 }
 
-.trace-detail__headline-row .trace-tree-status-pill {
-  margin: 0;
-  flex-shrink: 0;
-}
-
 .trace-detail__actions {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
-  align-items: flex-start;
+  align-items: center;
   justify-content: flex-end;
   flex-shrink: 0;
 }
@@ -6291,6 +6299,25 @@ button.trace-tree-status-pill:hover {
 
 .trace-tool-io--developer {
   margin-top: 0.25rem;
+}
+
+/* Tool node inspector — lanes only; headline already names the tool. */
+.trace-tool-io--pane {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  margin-bottom: 0;
+}
+
+.trace-tool-io--pane .trace-exec__input,
+.trace-tool-io--pane .trace-exec__output-lane {
+  min-width: 0;
+}
+
+.trace-tool-io--pane .trace-tool-io__schema {
+  margin-top: 0.15rem;
+  border-top: 1px solid var(--border-subtle, var(--color-border-subtle));
+  padding-top: 0.15rem;
 }
 
 /* Trace inspector — flat execution rows (no tree knees / boxed chrome).
