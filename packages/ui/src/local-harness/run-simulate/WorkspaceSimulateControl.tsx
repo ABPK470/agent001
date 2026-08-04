@@ -23,7 +23,7 @@ import "./run-simulate.css"
 const SCENARIOS: Array<{ id: SimScenario; label: string }> = [
   { id: "direct", label: "Direct" },
   { id: "planner-seq", label: "Planner seq" },
-  { id: "planner-parallel", label: "Planner ∥" },
+  { id: "planner-parallel", label: "Planner ∥3" },
 ]
 
 const PACES: Array<{ id: SimPace; label: string }> = [

@@ -18,7 +18,7 @@ export function shellModeToggleHint(modKey: "⌘" | "Ctrl" = detectModHint()): s
   return modKey === "⌘" ? "⌘⌥" : "Ctrl+Alt"
 }
 
-function detectModHint(): "⌘" | "Ctrl" {
+export function detectModHint(): "⌘" | "Ctrl" {
   if (typeof navigator === "undefined") return "Ctrl"
   return /Mac|iPhone|iPad/i.test(navigator.platform) ? "⌘" : "Ctrl"
 }

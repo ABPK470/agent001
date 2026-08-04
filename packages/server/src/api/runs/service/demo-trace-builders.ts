@@ -40,6 +40,7 @@ function llmReq(
   iteration: number,
   messages: ReturnType<typeof msg>[],
   toolCount = 0,
+  stepName?: string,
 ): TraceEntry {
   return {
     kind: "llm-request",
@@ -47,6 +48,7 @@ function llmReq(
     messageCount: messages.length,
     toolCount,
     messages,
+    ...(stepName ? { stepName } : {}),
   }
 }
 
@@ -63,6 +65,7 @@ function llmRes(
     durationMs?: number
     prompt?: number
     completion?: number
+    stepName?: string
   } = {},
 ): TraceEntry {
   const prompt = opts.prompt ?? 120 + iteration * 40
@@ -78,6 +81,7 @@ function llmRes(
       completionTokens: completion,
       totalTokens: prompt + completion,
     },
+    ...(opts.stepName ? { stepName: opts.stepName } : {}),
   }
 }
 
@@ -1826,16 +1830,32 @@ export function buildPlannerFailThenRecover(): TraceEntry[] {
   ]
 }
 
-/** Slim planner + parallel delegation (watchable live sim). */
+/**
+ * Planner + 3 concurrent subagents (watchable live sim / chat fan-out).
+ * Each subagent gets its own llm-request(stepName) + tools — same Trace shape
+ * as a real parallel run (expandable Call → tool under each Subagent).
+ */
 export function buildPlannerParallel(): TraceEntry[] {
-  const goal = "Preview client 9 sync in parallel with writing an ops checklist"
-  const system = "You are Mia. Plan multi-step sync + docs work; use parallel when independent."
+  const goal =
+    "Ship client 9 in parallel: probe schema, preview sync, and write an ops checklist"
+  const system =
+    "You are Mia. When work is independent, fan out three subagents in parallel."
   const tools = [
-    { name: "list_sync_definitions", description: "List sync defs", parameters: { type: "object" } },
+    { name: "query_mssql", description: "Run SQL", parameters: { type: "object" } },
     { name: "sync_preview", description: "Preview sync", parameters: { type: "object" } },
     { name: "write_file", description: "Write a file", parameters: { type: "object" } },
     { name: "run_command", description: "Shell", parameters: { type: "object" } },
   ]
+  const steps = [
+    { name: "schema_probe", type: "subagent_task", dependsOn: [] as string[] },
+    { name: "sync_preview", type: "subagent_task", dependsOn: [] as string[] },
+    { name: "ops_checklist", type: "subagent_task", dependsOn: [] as string[] },
+  ]
+  const tcSql = {
+    id: "pp-tc-sql",
+    name: "query_mssql",
+    arguments: { sql: "SELECT TOP 5 name FROM sys.tables ORDER BY name" },
+  }
   const tcSync = {
     id: "pp-tc-sync",
     name: "sync_preview",
@@ -1844,46 +1864,127 @@ export function buildPlannerParallel(): TraceEntry[] {
   const tcWrite = {
     id: "pp-tc-write",
     name: "write_file",
-    arguments: { path: "ops/client-9.md", content: "# Client 9\nPreview in flight.\n" },
+    arguments: { path: "ops/client-9.md", content: "# Client 9\nParallel fan-out.\n" },
   }
   const base = withSystem(system, [msg("user", goal)])
   return [
     { kind: "goal", text: goal },
     ...richSystemPromptEntries(),
     { kind: "tools-resolved", tools },
+    { kind: "planning_preflight", mode: "planner-first" },
     {
       kind: "planner-decision",
-      score: 5,
+      score: 8,
       shouldPlan: true,
       route: "planner",
-      reason: "parallel_sync_and_docs",
+      reason: "three_independent_workstreams",
+    },
+    { kind: "planner-generating" },
+    {
+      kind: "planner-plan-generated",
+      reason: "parallel fan-out",
+      stepCount: 3,
+      steps,
+      edges: [],
+    },
+    {
+      kind: "planner-delegation-decision",
+      shouldDelegate: true,
+      reason: "independent_subagents",
+      utilityScore: 0.9,
+      safetyRisk: 0.1,
+      confidence: 0.88,
+      hardBlockedTaskClass: null,
+      executionMode: "parallel",
     },
     { kind: "planner-pipeline-start", attempt: 1, maxRetries: 1 },
-    { kind: "planner-step-start", stepName: "parallel_ops", stepType: "subagent_task" },
+    // Open all three subagents before work — chat + Trace fan-out.
+    { kind: "planner-step-start", stepName: "schema_probe", stepType: "subagent_task" },
     {
       kind: "planner-delegation-start",
-      goal: "Sync preview + ops note",
-      stepName: "parallel_ops",
+      goal: "Probe schema tables for client 9",
+      stepName: "schema_probe",
       depth: 1,
-      tools: ["sync_preview", "write_file"],
+      tools: ["query_mssql"],
+      budget: budget({ hasComplexImplementation: false }),
+      envelope: { targetArtifacts: [], verificationMode: "none" },
+    },
+    { kind: "planner-step-start", stepName: "sync_preview", stepType: "subagent_task" },
+    {
+      kind: "planner-delegation-start",
+      goal: "Preview sync for client:9",
+      stepName: "sync_preview",
+      depth: 1,
+      tools: ["sync_preview"],
+      budget: budget({ hasComplexImplementation: false }),
+      envelope: { targetArtifacts: [] },
+    },
+    { kind: "planner-step-start", stepName: "ops_checklist", stepType: "subagent_task" },
+    {
+      kind: "planner-delegation-start",
+      goal: "Write ops checklist",
+      stepName: "ops_checklist",
+      depth: 1,
+      tools: ["write_file"],
       budget: budget({ hasComplexImplementation: false }),
       envelope: { targetArtifacts: ["ops/client-9.md"] },
     },
     {
       kind: "delegation-parallel-start",
       depth: 1,
-      taskCount: 2,
-      goals: ["preview sync client:9", "write ops checklist"],
+      taskCount: 3,
+      goals: ["probe schema", "preview sync client:9", "write ops checklist"],
     },
-    { kind: "iteration", current: 1, max: 12 },
-    { kind: "thinking", text: "Kick sync preview and ops note in parallel." },
-    llmReq(0, base, 4),
-    llmRes(0, { toolCalls: [tcSync, tcWrite], durationMs: 280 }),
+    { kind: "thinking", text: "Three independent subagents — fan out together." },
+    // Per-subagent Call (stepName) — Trace nests Call → tool under each Subagent.
+    llmReq(0, base, 1, "schema_probe"),
+    llmRes(0, {
+      toolCalls: [tcSql],
+      durationMs: 220,
+      stepName: "schema_probe",
+      prompt: 400,
+      completion: 60,
+    }),
+    {
+      kind: "planner-delegation-iteration",
+      stepName: "schema_probe",
+      depth: 1,
+      iteration: 1,
+      maxIterations: 6,
+      toolNames: ["query_mssql"],
+      content: "Listing tables…",
+    },
+    {
+      kind: "tool-call",
+      invocationId: "pp-inv-sql",
+      toolCallId: "pp-tc-sql",
+      tool: "query_mssql",
+      stepName: "schema_probe",
+      argsSummary: "sys.tables",
+      argsFormatted: JSON.stringify(tcSql.arguments),
+    },
+    llmReq(0, base, 1, "sync_preview"),
+    llmRes(0, {
+      toolCalls: [tcSync],
+      durationMs: 260,
+      stepName: "sync_preview",
+      prompt: 420,
+      completion: 80,
+    }),
+    {
+      kind: "planner-delegation-iteration",
+      stepName: "sync_preview",
+      depth: 1,
+      iteration: 1,
+      maxIterations: 6,
+      toolNames: ["sync_preview"],
+    },
     {
       kind: "tool-call",
       invocationId: "pp-inv-sync",
       toolCallId: "pp-tc-sync",
       tool: "sync_preview",
+      stepName: "sync_preview",
       argsSummary: "client:9",
       argsFormatted: JSON.stringify(tcSync.arguments),
     },
@@ -1897,11 +1998,28 @@ export function buildPlannerParallel(): TraceEntry[] {
       level: "info",
       lastTable: { name: "clients", index: 1, total: 2, status: "running" },
     },
+    llmReq(0, base, 1, "ops_checklist"),
+    llmRes(0, {
+      toolCalls: [tcWrite],
+      durationMs: 180,
+      stepName: "ops_checklist",
+      prompt: 380,
+      completion: 50,
+    }),
+    {
+      kind: "planner-delegation-iteration",
+      stepName: "ops_checklist",
+      depth: 1,
+      iteration: 1,
+      maxIterations: 6,
+      toolNames: ["write_file"],
+    },
     {
       kind: "tool-call",
       invocationId: "pp-inv-write",
       toolCallId: "pp-tc-write",
       tool: "write_file",
+      stepName: "ops_checklist",
       argsSummary: "ops/client-9.md",
       argsFormatted: JSON.stringify(tcWrite.arguments),
     },
@@ -1909,7 +2027,15 @@ export function buildPlannerParallel(): TraceEntry[] {
       kind: "tool-result",
       invocationId: "pp-inv-write",
       toolCallId: "pp-tc-write",
+      stepName: "ops_checklist",
       text: "Wrote ops/client-9.md",
+    },
+    {
+      kind: "tool-result",
+      invocationId: "pp-inv-sql",
+      toolCallId: "pp-tc-sql",
+      stepName: "schema_probe",
+      text: "5 rows — clients, orders, products, …",
     },
     {
       kind: "sync-progress",
@@ -1925,53 +2051,85 @@ export function buildPlannerParallel(): TraceEntry[] {
       kind: "tool-result",
       invocationId: "pp-inv-sync",
       toolCallId: "pp-tc-sync",
+      stepName: "sync_preview",
       text: "Plan plan-pp9 — client 9\n  Totals: +1 ~1 -0 across 2 table(s)",
     },
     {
       kind: "delegation-parallel-end",
       depth: 1,
-      taskCount: 2,
-      fulfilled: 2,
+      taskCount: 3,
+      fulfilled: 3,
       rejected: 0,
     },
     {
       kind: "planner-delegation-end",
-      stepName: "parallel_ops",
+      stepName: "schema_probe",
       depth: 1,
       status: "done",
-      answer: "Preview + ops note ready",
+      answer: "Schema probe ok",
     },
     {
       kind: "planner-step-end",
-      stepName: "parallel_ops",
+      stepName: "schema_probe",
       status: "pass",
-      durationMs: 900,
+      durationMs: 700,
+    },
+    {
+      kind: "planner-delegation-end",
+      stepName: "sync_preview",
+      depth: 1,
+      status: "done",
+      answer: "Preview ready",
+    },
+    {
+      kind: "planner-step-end",
+      stepName: "sync_preview",
+      status: "pass",
+      durationMs: 1100,
+    },
+    {
+      kind: "planner-delegation-end",
+      stepName: "ops_checklist",
+      depth: 1,
+      status: "done",
+      answer: "Checklist written",
+    },
+    {
+      kind: "planner-step-end",
+      stepName: "ops_checklist",
+      status: "pass",
+      durationMs: 500,
       producedArtifacts: ["ops/client-9.md"],
     },
     {
       kind: "planner-verification",
       overall: "pass",
-      confidence: 0.91,
+      confidence: 0.92,
       verifierRound: 1,
-      steps: [{ stepName: "parallel_ops", outcome: "pass", issues: [] }],
+      steps: [
+        { stepName: "schema_probe", outcome: "pass", issues: [] },
+        { stepName: "sync_preview", outcome: "pass", issues: [] },
+        { stepName: "ops_checklist", outcome: "pass", issues: [] },
+      ],
     },
     {
       kind: "planner-pipeline-end",
       status: "success",
-      completedSteps: 1,
-      totalSteps: 1,
+      completedSteps: 3,
+      totalSteps: 3,
     },
     {
       kind: "usage",
-      iterationTokens: 220,
-      totalTokens: 980,
-      promptTokens: 700,
-      completionTokens: 280,
+      iterationTokens: 280,
+      totalTokens: 1200,
+      promptTokens: 860,
+      completionTokens: 340,
       llmCalls: 1,
     },
     {
       kind: "answer",
-      text: "Parallel path done: client 9 sync preview (+1 ~1) and ops/client-9.md written.",
+      text:
+        "All three subagents finished: schema probe, client 9 sync preview (+1 ~1), and ops/client-9.md.",
     },
   ]
 }

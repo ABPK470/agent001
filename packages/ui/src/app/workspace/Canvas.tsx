@@ -11,6 +11,7 @@ import { useViewingAs } from "../../hooks/useViewingAs"
 import { useLayoutStore } from "../../state/layout-store"
 import { IntroAsciiField } from "../home/IntroAsciiField"
 import { openWidgetCatalogHint } from "../types"
+import { OpenWidgetCatalogHintMark } from "./OpenWidgetCatalogHint"
 import { WidgetCatalog } from "./WidgetCatalog"
 import { GridCanvas } from "./layout/GridCanvas"
 
@@ -71,9 +72,7 @@ export const Canvas = forwardRef<CanvasHandle>(function Canvas(_props, ref) {
             >
               <Plus size={15} className="block shrink-0" aria-hidden />
               Add to layout
-              <span className="font-mono text-[11px] text-text-faint" aria-hidden>
-                {catalogHint}
-              </span>
+              <OpenWidgetCatalogHintMark />
             </button>
           </div>
         ) : (

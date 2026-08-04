@@ -21,6 +21,7 @@ import { ViewingAsControl } from "../ViewingAsControl"
 import { SHELL_CHROME_HEADER_WORKSPACE_CLASS } from "../shell-chrome"
 import type { AppShellMode } from "../types"
 import { openWidgetCatalogHint } from "../types"
+import { OpenWidgetCatalogHintMark } from "./OpenWidgetCatalogHint"
 import { captureSoloFlipFrom } from "./layout/solo-flip"
 import { ViewTabDragFloat } from "./ViewTabDragFloat"
 import { getWidgetDefinition } from "./widget-definitions"
@@ -38,7 +39,10 @@ function LocalRunSimulateSlot() {
   const [Control, setControl] = useState<ComponentType | null>(null)
   useEffect(() => {
     void loadLocalRunSimulateControl()
-      .then(setControl)
+      .then((Loaded) => {
+        // Function form — a component is itself a function; bare setState would invoke it.
+        setControl(() => Loaded)
+      })
       .catch((err: unknown) => {
         console.error("[mia] local sim control load failed", err)
       })
@@ -375,11 +379,8 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
                   >
                     <LayoutGrid size={15} className="block shrink-0" aria-hidden />
                     <span className="hidden leading-none sm:inline">Add</span>
-                    <span
-                      className="hidden font-mono text-[11px] leading-none text-text-faint sm:inline"
-                      aria-hidden
-                    >
-                      {catalogHint}
+                    <span className="hidden sm:inline">
+                      <OpenWidgetCatalogHintMark />
                     </span>
                   </button>
                   <button

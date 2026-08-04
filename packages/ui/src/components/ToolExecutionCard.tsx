@@ -227,7 +227,9 @@ export function ToolExecutionCard({
             ) : null}
             {showChatInputBody ? (
               <div className="chat-tool__cmd">
-                <span className="chat-tool__dot" aria-hidden />
+                <span className="chat-tool__prompt" aria-hidden>
+                  {">"}
+                </span>
                 <InlinePeekText text={inputText} className="chat-tool__cmd-text" />
               </div>
             ) : null}

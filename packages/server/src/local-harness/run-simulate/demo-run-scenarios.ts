@@ -38,8 +38,9 @@ export const DEMO_RUN_SCENARIOS: Record<DemoRunScenarioId, DemoRunScenario> = {
   },
   "planner-parallel": {
     id: "planner-parallel",
-    label: "Planner (parallel)",
-    goal: "Preview client 9 sync in parallel with writing an ops checklist",
+    label: "Planner (∥ 3)",
+    goal:
+      "Ship client 9 in parallel: probe schema, preview sync, and write an ops checklist",
     buildTrace: buildPlannerParallel,
     terminalStatus: "completed",
   },

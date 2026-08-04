@@ -34,6 +34,8 @@ export type SimulateLiveRunInput = {
 export type SimulateLiveRunResult = {
   runId: string
   threadId: string
+  goal: string
+  threadTitle: string
 }
 
 type ActiveSim = {
@@ -189,6 +191,8 @@ function companionEvents(
             name: entry.tool,
             action: entry.tool,
             input,
+            // Parallel-safe nest key for chat step-blocks.
+            ...(entry.stepName ? { stepName: entry.stepName } : {}),
           },
         },
         {
@@ -255,14 +259,36 @@ function companionEvents(
   }
 }
 
-function shouldBroadcastTrace(entry: TraceEntry): boolean {
+/**
+ * Live SSE copy of a persisted entry. Drop tool rows (step.* owns those).
+ * Keep system-prompt + full llm-request — Context / Call Sent need them.
+ */
+function liveWireTrace(entry: TraceEntry): TraceEntry | null {
   // Tools: step.* synthesizes live rows — avoid duplicates.
   if (entry.kind === "tool-call" || entry.kind === "tool-result" || entry.kind === "tool-error") {
-    return false
+    return null
   }
   // run.queued already seeds the goal on the client.
-  if (entry.kind === "goal") return false
-  return true
+  if (entry.kind === "goal") return null
+  return entry
+}
+
+/** Kinds chat ignores — don't burn pace budget on dead air before visible work. */
+function isChatVisiblePace(entry: TraceEntry): boolean {
+  switch (entry.kind) {
+    case "system-prompt":
+    case "tools-resolved":
+    case "tools-filtered":
+    case "llm-request":
+    case "llm-response":
+    case "usage":
+    case "planner-runtime-compiled":
+    case "iteration":
+    case "planner-sql-quality":
+      return false
+    default:
+      return true
+  }
 }
 
 async function persistTerminal(
@@ -363,7 +389,12 @@ async function playSimulation(
 
     for (const entry of trace) {
       if (entry.kind === "goal") continue
-      await sleep(paceDelayMs(pace, entry), signal)
+      const delay = isChatVisiblePace(entry)
+        ? paceDelayMs(pace, entry)
+        : pace === "slow"
+          ? 12
+          : 0
+      if (delay > 0) await sleep(delay, signal)
 
       await saveTraceEntry({
         run_id: runId,
@@ -372,8 +403,9 @@ async function playSimulation(
         created_at: new Date().toISOString(),
       })
 
-      if (shouldBroadcastTrace(entry)) {
-        broadcastTrace(runId, seq - 1, entry)
+      const wire = liveWireTrace(entry)
+      if (wire) {
+        broadcastTrace(runId, seq - 1, wire)
       }
 
       for (const ev of companionEvents(runId, entry)) {
@@ -475,28 +507,41 @@ export async function startSimulatedLiveRun(
   const scenario = DEMO_RUN_SCENARIOS[input.scenario]
 
   let threadId = input.threadId?.trim() || null
+  let threadTitle = `Sim — ${scenario.label}`
   if (!threadId) {
-    const thread = await createThread(input.upn, `Sim — ${scenario.label}`)
+    const thread = await createThread(input.upn, threadTitle)
     threadId = thread.id
+    threadTitle = thread.title
+  } else {
+    await touchThread(threadId)
+    threadTitle = scenario.label
   }
-  await touchThread(threadId)
 
   const runId = randomUUID()
   const controller = new AbortController()
   activeSims.set(runId, { controller, upn: input.upn })
 
-  void playSimulation(
-    runId,
-    threadId,
-    input.scenario,
-    pace,
-    input.upn,
-    input.displayName,
-    controller.signal,
-  ).catch((err) => {
-    if (controller.signal.aborted) return
-    console.error(`[simulate] run ${runId} failed:`, err)
-  })
+  // Let the POST response land and the client seed the optimistic run before
+  // SSE floods — otherwise early trace events are dropped (no run row yet).
+  const signal = controller.signal
+  void (async () => {
+    try {
+      await sleep(120, signal)
+      await playSimulation(
+        runId,
+        threadId,
+        input.scenario,
+        pace,
+        input.upn,
+        input.displayName,
+        signal,
+      )
+    } catch (err) {
+      if (signal.aborted) return
+      if (err instanceof Error && err.name === "AbortError") return
+      console.error(`[simulate] run ${runId} failed:`, err)
+    }
+  })()
 
-  return { runId, threadId }
+  return { runId, threadId, goal: scenario.goal, threadTitle }
 }

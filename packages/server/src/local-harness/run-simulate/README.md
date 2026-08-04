@@ -6,17 +6,14 @@ LLM-free paced SSE playback so you can exercise chat / Trace / Pipelines on your
 
 ## Enable (local only)
 
-In your machine `.env` (not committed):
+In the **repo-root** `.env` (not committed):
 
 ```bash
 MIA_LOCAL_RUN_SIMULATE=1
-```
-
-And for the UI Vite app (same `.env` or `packages/ui` env):
-
-```bash
 VITE_LOCAL_RUN_SIMULATE=1
 ```
+
+Restart **both** server and Vite (`npm run dev`). Open the **workspace** shell (not chat). Toolbar ops rail → **Local sim** → flip ON.
 
 Without both flags, the route is unregistered and the toolbar control is not mounted.
 

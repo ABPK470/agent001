@@ -48,7 +48,17 @@ export function writeSimConfig(config: SimConfig): void {
   localStorage.setItem(CONFIG_KEY, JSON.stringify(config))
 }
 
-async function postSimulate(config: SimConfig): Promise<{ runId: string; threadId: string }> {
+type SimulateResponse = {
+  runId: string
+  threadId: string
+  goal: string
+  threadTitle: string
+}
+
+async function postSimulate(
+  config: SimConfig,
+  threadId: string | null,
+): Promise<SimulateResponse> {
   const headers: Record<string, string> = { "Content-Type": "application/json" }
   const viewingAs = getViewingAsUpn()
   if (viewingAs) headers["X-Viewing-As"] = viewingAs
@@ -56,27 +66,57 @@ async function postSimulate(config: SimConfig): Promise<{ runId: string; threadI
     method: "POST",
     credentials: "include",
     headers,
-    body: JSON.stringify({ scenario: config.scenario, pace: config.pace }),
+    body: JSON.stringify({
+      scenario: config.scenario,
+      pace: config.pace,
+      ...(threadId ? { threadId } : {}),
+    }),
     signal: AbortSignal.timeout(60_000),
   })
   if (!res.ok) {
     const body = (await res.json().catch(() => null)) as { error?: string } | null
     throw new Error(body?.error ?? `HTTP ${res.status}`)
   }
-  return (await res.json()) as { runId: string; threadId: string }
+  return (await res.json()) as SimulateResponse
 }
 
+/**
+ * Start like a real chat turn: prefer the active thread, optimistic run row,
+ * never setActiveRun (REST hydrate races wipe live SSE).
+ */
 export async function startSimulation(config: SimConfig = readSimConfig()): Promise<{
   runId: string
   threadId: string
 }> {
   writeSimConfig(config)
-  const result = await postSimulate(config)
-  simSession.runId = result.runId
   const store = useStore.getState()
-  store.setActiveThreadId(result.threadId)
-  store.setActiveRun(result.runId)
-  return result
+  const activeThreadId = store.activeThreadId
+  const result = await postSimulate(config, activeThreadId)
+  simSession.runId = result.runId
+
+  const now = new Date().toISOString()
+  const existing = store.threads.find((t) => t.id === result.threadId)
+  store.upsertThread({
+    id: result.threadId,
+    title: existing?.title || result.threadTitle || "Simulated run",
+    createdAt: existing?.createdAt ?? now,
+    updatedAt: now,
+    runCount: (existing?.runCount ?? 0) + 1,
+    pinned: existing?.pinned ?? false,
+    archivedAt: existing?.archivedAt ?? null,
+  })
+
+  // Thread first, then optimistic run — same order as a real send.
+  if (store.activeThreadId !== result.threadId) {
+    store.setActiveThreadId(result.threadId)
+  }
+  store.beginOptimisticRun({
+    id: result.runId,
+    goal: result.goal || "Simulated run",
+    threadId: result.threadId,
+  })
+
+  return { runId: result.runId, threadId: result.threadId }
 }
 
 export async function stopSimulation(): Promise<void> {

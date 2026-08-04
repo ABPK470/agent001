@@ -5537,12 +5537,12 @@ button.trace-tree-status-pill:hover {
   gap: 0.85rem;
 }
 
-/* Context / stacked sections — distinct blocks, not hairline-stacked peers. */
+/* Context / stacked sections — distinct blocks, not hairline-stacked peers.
+ * No overflow:hidden — it traps sticky and kills the More/Less rail. */
 .trace-detail-body--stack > .trace-detail-section--accordion {
   border: 1px solid var(--border-subtle, var(--color-border-subtle));
   border-radius: 0.5rem;
   background: var(--overlay-1, rgb(255 255 255 / 0.015));
-  overflow: hidden;
 }
 
 .trace-detail-body--stack > .trace-detail-section--accordion .trace-detail-accordion {
@@ -5558,15 +5558,24 @@ button.trace-tree-status-pill:hover {
   padding: 0 0.85rem 0.9rem;
 }
 
+/* Opaque sticky fills — scrolled body must never read through the bar. */
 .trace-detail-section--sticky .trace-detail-accordion-bar {
   position: sticky;
   top: 0;
   z-index: 6;
   background: var(--bg);
+  /* Seal the seam above the bar (sticky can leave a 1px peek). */
+  box-shadow: 0 -0.5rem 0 var(--bg);
 }
 
 .trace-detail-body--stack > .trace-detail-section--sticky .trace-detail-accordion-bar {
-  background: color-mix(in srgb, var(--bg, #0f1115) 92%, transparent);
+  /* Same surface as the accordion card: solid tile + card wash. */
+  background:
+    linear-gradient(
+      var(--overlay-1, rgb(255 255 255 / 0.015)),
+      var(--overlay-1, rgb(255 255 255 / 0.015))
+    ),
+    var(--bg);
 }
 
 .trace-detail-accordion-bar {
@@ -6557,13 +6566,16 @@ button.trace-tree-status-pill:hover {
   min-width: 0;
 }
 
-.chat-tool__dot {
+/* Terminal prompt — input/command cue for every tool (not brand accent). */
+.chat-tool__prompt {
   flex-shrink: 0;
-  width: 0.4rem;
-  height: 0.4rem;
-  margin-top: 0.45rem;
-  border-radius: 999px;
-  background: var(--color-accent, #3b82f6);
+  margin-top: 0;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1.5;
+  color: var(--text-tertiary, var(--text-faint, var(--color-text-faint)));
+  user-select: none;
 }
 
 .chat-tool__cmd > .inline-peek {
@@ -8024,7 +8036,7 @@ button.trace-tree-status-pill:hover {
 
 .trace-expand__sticky {
   position: sticky;
-  /* Pin band is outside the scrollport — stick to the scroll top. */
+  /* Pin against .trace-scroll; clear sticky section headers when nested. */
   top: 0.35rem;
   z-index: 4;
   display: flex;
@@ -8035,29 +8047,77 @@ button.trace-tree-status-pill:hover {
   padding: 0.05rem 0;
 }
 
+.trace-detail-section--sticky .trace-expand__sticky {
+  /* Clear the sticky accordion bar (stack padding + label row). */
+  top: 3rem;
+  z-index: 5;
+  background: var(--bg);
+  box-shadow: 0 -0.35rem 0 var(--bg);
+}
+
+.trace-detail-body--stack > .trace-detail-section--sticky .trace-expand__sticky {
+  background:
+    linear-gradient(
+      var(--overlay-1, rgb(255 255 255 / 0.015)),
+      var(--overlay-1, rgb(255 255 255 / 0.015))
+    ),
+    var(--bg);
+  box-shadow: none;
+}
+
 .trace-expand__toggle {
-  font-size: 0.6875rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--color-accent, #6366f1);
-  background: transparent;
-  border: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin: 0;
+  padding: 0.28rem 0.55rem;
+  border: 1px solid var(--border, var(--color-border));
+  border-radius: 0.375rem;
+  background: color-mix(in srgb, var(--text, #fff) 6%, transparent);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: normal;
+  text-transform: none;
+  line-height: 1.2;
+  color: var(--text-secondary, var(--color-text-secondary));
   cursor: pointer;
-  padding: 0.15rem 0;
   white-space: nowrap;
-  text-align: right;
-  line-height: 1.3;
+  transition: color 0.12s ease, background 0.12s ease, border-color 0.12s ease;
 }
 
 .trace-expand__toggle:hover {
-  text-decoration: underline;
+  color: var(--text, var(--color-text));
+  background: var(--hover-fill, color-mix(in srgb, var(--text, #fff) 10%, transparent));
+  border-color: var(--border, var(--color-border));
+  text-decoration: none;
 }
 
 .trace-expand__toggle:focus-visible {
-  outline: 2px solid var(--color-accent, #6366f1);
+  outline: 2px solid var(--focus-ring, var(--color-accent, #3b82f6));
   outline-offset: 2px;
-  border-radius: 0.15rem;
+  border-radius: 0.375rem;
+}
+
+:root[data-theme="light"] .trace-expand__toggle {
+  background: color-mix(in srgb, var(--text, #0f172a) 4%, transparent);
+}
+
+:root[data-theme="light"] .trace-detail-section--sticky .trace-expand__sticky {
+  background: var(--panel);
+  box-shadow: 0 -0.35rem 0 var(--panel);
+}
+
+:root[data-theme="light"]
+  .trace-detail-body--stack
+  > .trace-detail-section--sticky
+  .trace-expand__sticky {
+  background:
+    linear-gradient(
+      var(--overlay-1, #f8fafc),
+      var(--overlay-1, #f8fafc)
+    ),
+    var(--panel);
+  box-shadow: none;
 }
 
 .trace-expand.is-clipped .trace-expand__main {
@@ -11308,6 +11368,46 @@ button.trace-tree-status-pill:hover {
   border-color: var(--border);
   box-shadow: none;
   font-weight: 600;
+}
+
+/* Add-to-layout shortcut — one quiet shared border; mod icon matches K’s em box. */
+.catalog-shortcut-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15em;
+  box-sizing: border-box;
+  height: 1.45em;
+  padding: 0 0.35em;
+  border: 1px solid var(--border-subtle);
+  border-radius: 0.25em;
+  background: transparent;
+  box-shadow: none;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1;
+  color: var(--text-muted);
+}
+
+.catalog-shortcut-hint__mod,
+.catalog-shortcut-hint__key {
+  display: block;
+  width: 1em;
+  height: 1em;
+  flex-shrink: 0;
+}
+
+.catalog-shortcut-hint__key {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1em;
+  line-height: 1;
+}
+
+.catalog-shortcut-hint__ctrl {
+  font-size: 0.9em;
+  line-height: 1;
 }
 
 /* Session triggers live in nested wrappers — same outline dialect. */

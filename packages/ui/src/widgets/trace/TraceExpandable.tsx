@@ -1,7 +1,8 @@
 /**
- * Expandable text in trace — line peek with sticky expand/collapse rail.
+ * Expandable text in trace — line peek with sticky More/Less rail.
  */
 
+import { ChevronDown, ChevronRight } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { buildPeekDisplay } from "../../components/InlinePeekText"
 import { preserveScrollAnchor } from "../../lib/chatScroll"
@@ -29,7 +30,7 @@ export function ExpandableText({
     setExpanded(false)
   }, [text])
 
-  const { body, hiddenLines, totalLines } = buildPeekDisplay(
+  const { body, hiddenLines } = buildPeekDisplay(
     text,
     HEAD_LINES,
     TAIL_LINES,
@@ -60,13 +61,19 @@ export function ExpandableText({
               type="button"
               className="trace-expand__toggle"
               aria-expanded={expanded}
+              aria-label={expanded ? "Show less" : "Show more"}
               onClick={() => {
                 preserveScrollAnchor(toggleRef.current, () =>
                   setExpanded((value) => !value),
                 )
               }}
             >
-              {expanded ? "Collapse" : `Expand · ${totalLines} lines`}
+              {expanded ? (
+                <ChevronDown size={14} strokeWidth={2} aria-hidden />
+              ) : (
+                <ChevronRight size={14} strokeWidth={2} aria-hidden />
+              )}
+              <span>{expanded ? "Less" : "More"}</span>
             </button>
           ) : null}
         </div>

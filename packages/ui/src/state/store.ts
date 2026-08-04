@@ -144,9 +144,28 @@ function patchRunFields(runs: Run[], runId: string, patch: Partial<Run>): Run[] 
   return next
 }
 
+/** SSE can beat the optimistic/upserted run row — hold traces until the run exists. */
+const orphanRunTraceBuf = new Map<string, TraceEntry[]>()
+
+function takeOrphanRunTrace(runId: string): TraceEntry[] {
+  const orphaned = orphanRunTraceBuf.get(runId)
+  if (!orphaned || orphaned.length === 0) return []
+  orphanRunTraceBuf.delete(runId)
+  return orphaned
+}
+
+function bufferOrphanRunTrace(runId: string, entries: TraceEntry[]): void {
+  if (entries.length === 0) return
+  const prev = orphanRunTraceBuf.get(runId)
+  orphanRunTraceBuf.set(runId, prev ? prev.concat(entries) : entries.slice())
+}
+
 function appendRunTrace(runs: Run[], runId: string, entry: TraceEntry): Run[] {
   const index = runs.findIndex((run) => run.id === runId)
-  if (index < 0) return runs
+  if (index < 0) {
+    bufferOrphanRunTrace(runId, [entry])
+    return runs
+  }
   const next = [...runs]
   const trace = next[index].trace ?? []
   next[index] = { ...next[index], trace: trace.concat(entry) }
@@ -478,7 +497,10 @@ let answerFlushScheduled = false
 function appendRunTraceMany(runs: Run[], runId: string, entries: TraceEntry[]): Run[] {
   if (entries.length === 0) return runs
   const index = runs.findIndex((run) => run.id === runId)
-  if (index < 0) return runs
+  if (index < 0) {
+    bufferOrphanRunTrace(runId, entries)
+    return runs
+  }
   const next = [...runs]
   const trace = next[index].trace ?? []
   next[index] = { ...next[index], trace: trace.concat(entries) }
@@ -795,22 +817,37 @@ export const useStore = create<AppState>()(
               break
             }
           }
-          if (!changed) return s
+          const orphaned = takeOrphanRunTrace(run.id)
+          if (!changed && orphaned.length === 0) return s
           const updated = [...s.runs]
-          updated[idx] = { ...current, ...run }
+          const merged = { ...current, ...run }
+          // Never let an empty SSE seed wipe a live/orphan-built trace.
+          if (
+            Array.isArray(run.trace) &&
+            run.trace.length === 0 &&
+            (current.trace?.length ?? 0) > 0
+          ) {
+            merged.trace = current.trace
+          }
+          if (orphaned.length > 0) {
+            merged.trace = (merged.trace ?? current.trace ?? []).concat(orphaned)
+          }
+          updated[idx] = merged
           return { runs: updated }
         }
-        // New run — insert it. Only auto-select if nothing is selected yet:
-        // events for background runs (e.g. started by another widget while
-        // the user is reading a different run) must NOT hijack the active
-        // selection. This used to be the root cause of "I started a run in
-        // termchat, switched views, came back, and my run is gone" — a
-        // sync.run started elsewhere silently became the new active run.
-        const appendToThread =
-          s.activeThreadId && run.threadId === s.activeThreadId
+        // Always cache the row so live SSE can attach. Only auto-select when
+        // the run belongs to the active thread and nothing is selected yet —
+        // background runs must not steal the user's selection.
+        const onActiveThread =
+          !!s.activeThreadId && run.threadId === s.activeThreadId
+        const orphaned = takeOrphanRunTrace(run.id)
+        const row = {
+          ...(run as Run),
+          trace: (run.trace ?? []).concat(orphaned),
+        }
         return {
-          runs: appendToThread ? [...s.runs, run as Run] : s.runs,
-          activeRunId: s.activeRunId ?? (appendToThread ? run.id : s.activeRunId),
+          runs: [...s.runs, row],
+          activeRunId: s.activeRunId ?? (onActiveThread ? run.id : s.activeRunId),
         }
       }),
 
@@ -1402,7 +1439,22 @@ export const useStore = create<AppState>()(
                   runs: appendRunTrace(s.runs, completedRunId, { kind: "answer", text: completedAnswer }),
                 }))
                 const existingTrace = get().runs.find((r) => r.id === completedRunId)?.trace
-                if (!hasUsableTraceEntries(existingTrace) || (existingTrace?.length ?? 0) < 2) {
+                // Refetch when live SSE was incomplete: empty, tiny, missing
+                // Context prompts, or Call payloads with stripped messages.
+                const missingContextPrompt =
+                  !!existingTrace?.some((e) => e.kind === "tools-resolved") &&
+                  !existingTrace.some((e) => e.kind === "system-prompt")
+                const strippedCallMessages = !!existingTrace?.some(
+                  (e) =>
+                    e.kind === "llm-request" &&
+                    (!Array.isArray(e.messages) || e.messages.length === 0),
+                )
+                if (
+                  !hasUsableTraceEntries(existingTrace) ||
+                  (existingTrace?.length ?? 0) < 2 ||
+                  missingContextPrompt ||
+                  strippedCallMessages
+                ) {
                   void api.getRunTrace(completedRunId).then((rawTrace) => {
                     const { entries } = normalizeTraceWire(rawTrace as unknown[])
                     set((s) => ({

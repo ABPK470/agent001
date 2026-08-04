@@ -325,11 +325,24 @@ export function ThreadRunsPanel(): React.ReactElement {
     setLoadingId(threadId)
     try {
       const runs = displayRunsForThread(await api.listThreadRuns(threadId))
-      setRunsByThread((prev) => ({ ...prev, [threadId]: runs }))
-      // Keep list badge aligned with display rows (collapsed chains).
+      // Don't clobber a live store-backed list with a slower/stale REST snapshot.
+      const live = useStore.getState().runs.filter((r) => r.threadId === threadId)
+      const liveActive = live.some(
+        (r) =>
+          r.status === RunStatus.Pending ||
+          r.status === RunStatus.Running ||
+          r.status === RunStatus.Planning,
+      )
+      setRunsByThread((prev) => {
+        if (liveActive && live.length >= runs.length) {
+          return { ...prev, [threadId]: displayRunsForThread(live) }
+        }
+        return { ...prev, [threadId]: runs }
+      })
+      const displayLen = liveActive && live.length >= runs.length ? live.length : runs.length
       const existing = useStore.getState().threads.find((t) => t.id === threadId)
-      if (existing && existing.runCount !== runs.length) {
-        upsertThread({ ...existing, runCount: runs.length })
+      if (existing && existing.runCount !== displayLen) {
+        upsertThread({ ...existing, runCount: displayLen })
       }
     } catch {
       setRunsByThread((prev) => ({ ...prev, [threadId]: [] }))
