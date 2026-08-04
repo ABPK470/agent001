@@ -349,7 +349,7 @@ export const TRACE_VIEW_SPEC: ViewSpec = {
   },
   stickyFamilies: ["plan", "pipeline", "step", "call", "verify", "repair", "context"],
   nest: [
-    { parentFamily: "pipeline", childFamilies: ["step"] },
+    { parentFamily: "pipeline", childFamilies: ["step", "verify", "repair"] },
     { parentFamily: "step", childFamilies: ["call", "work", "input", "delegation"] },
     { parentFamily: "plan", childFamilies: [] },
     { parentFamily: "context", childFamilies: [] },

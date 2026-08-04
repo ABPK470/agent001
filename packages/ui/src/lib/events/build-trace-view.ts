@@ -384,7 +384,7 @@ function allocatePhaseId(
   if (family === "pipeline") return "phase-pipeline"
   if (family === "verify") return "phase-verify"
   if (family === "direct") return "phase-direct"
-  if (family.startsWith("repair:")) return `phase-${family}`
+  if (family === "repair" || family.startsWith("repair:")) return "phase-repair"
   if (isStepFamily(family)) {
     const stepName = family.slice("step:".length)
     if (beginNew) {
@@ -748,11 +748,12 @@ function phaseFromEntry(entry: TraceEntry, index: number): PhaseUpdate | null {
       }
     }
     case "planner-repair-plan":
+      // One "repair" family — plan + retry are the same cycle (not repair:1 vs repair:2).
       return {
-        family: `repair:${entry.attempt}`,
+        family: "repair",
         title: "Repairing",
         summary: `attempt ${entry.attempt} · ${entry.tasks.length} task${entry.tasks.length !== 1 ? "s" : ""}`,
-        status: "running",
+        status: "done",
         details: [
           ...entry.tasks.map((t, ti) =>
             detailEvent(
@@ -769,10 +770,10 @@ function phaseFromEntry(entry: TraceEntry, index: number): PhaseUpdate | null {
       }
     case "planner-retry":
       return {
-        family: `repair:${entry.attempt}`,
+        family: "repair",
         title: "Repairing",
-        summary: `retry ${entry.attempt}`,
-        status: "running",
+        summary: entry.reason || `retry ${entry.attempt}`,
+        status: "done",
         details: [
           detailEvent(
             `retry-${index}`,
@@ -789,10 +790,10 @@ function phaseFromEntry(entry: TraceEntry, index: number): PhaseUpdate | null {
       }
     case "planner-escalation":
       return {
-        family: `repair:${entry.attempt}`,
+        family: "repair",
         title: "Repairing",
         summary: `${entry.action} · ${entry.reason}`,
-        status: entry.action === "pass" ? "done" : "running",
+        status: entry.action === "pass" ? "done" : "error",
         details: [
           detailEvent(`esc-${index}`, `Escalation: ${entry.action} (${entry.reason})`),
         ],
@@ -1060,6 +1061,15 @@ export function buildTraceDag(trace: TraceEntry[], opts?: BuildTraceDagOpts): Tr
     return null
   }
 
+  function nestsUnderPipeline(family: string): boolean {
+    return (
+      isStepFamily(family) ||
+      family === "verify" ||
+      family === "repair" ||
+      family.startsWith("repair:")
+    )
+  }
+
   function createPhase(update: PhaseUpdate): TracePhaseNode {
     phaseSeq += 1
     const phase: TracePhaseNode = {
@@ -1072,9 +1082,13 @@ export function buildTraceDag(trace: TraceEntry[], opts?: BuildTraceDagOpts): Tr
       startOffsetMs: 0,
       durationMs: null,
       ...(update.leading ? { leading: update.leading } : {}),
-      ...(isStepFamily(update.family) || update.family === "pipeline" ? { children: [] } : {}),
+      ...(nestsUnderPipeline(update.family) || update.family === "pipeline"
+        ? { children: [] }
+        : {}),
     }
-    if (isStepFamily(update.family) && openPipeline) {
+    // Steps / verify / repair append in event order under the open Pipeline so
+    // fail → verify → repair → retry-step reads top-to-bottom (not spine peers after).
+    if (nestsUnderPipeline(update.family) && openPipeline) {
       openPipeline.children = openPipeline.children ?? []
       openPipeline.children.push({ kind: "phase", phase })
     } else {
@@ -1135,6 +1149,7 @@ export function buildTraceDag(trace: TraceEntry[], opts?: BuildTraceDagOpts): Tr
     const canReattach =
       update.family === "verify" ||
       update.family === "plan" ||
+      update.family === "repair" ||
       update.family.startsWith("repair:")
     if (canReattach) {
       const prior = findPhaseInTree(update.family)
@@ -1427,11 +1442,7 @@ function patchPhaseTitlesFromOutline(
   walk(outline)
 
   function patchPhase(phase: TracePhaseNode, latestByFamily: Map<string, TracePhaseNode>) {
-    const key = isStepFamily(phase.family)
-      ? phase.family
-      : phase.family.startsWith("repair:")
-        ? phase.family
-        : phase.family
+    const key = phase.family
     const node = byNest.get(key) ?? byNest.get(phase.family)
     const isLatestAttempt = latestByFamily.get(phase.family) === phase
     if (node) {

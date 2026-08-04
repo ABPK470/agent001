@@ -468,10 +468,13 @@ describe("buildTraceDag", () => {
       expect(step.phase.children?.some((c) => c.kind === "work")).toBe(true)
     }
 
-    const verifyPhases = dag.spine.filter(
-      (e) => e.kind === "phase" && e.phase.family === "verify",
+    const verifyNested = (pipelinePhases[0].phase.children ?? []).filter(
+      (c) => c.kind === "phase" && c.phase.family === "verify",
     )
-    expect(verifyPhases).toHaveLength(1)
+    expect(verifyNested).toHaveLength(1)
+    expect(dag.spine.some((e) => e.kind === "phase" && e.phase.family === "verify")).toBe(
+      false,
+    )
 
     // Calls/Work/Steps belong under Pipeline — not flat peers after success.
     expect(dag.spine.some((e) => e.kind === "call" || e.kind === "work")).toBe(false)
@@ -572,6 +575,122 @@ describe("buildTraceDag", () => {
         expect(workChild.work.tools[0]!.name).toBe("write_file")
       }
     }
+  })
+
+  it("nests one Repairing card between failed and repaired step under Pipeline", () => {
+    const dag = buildTraceDag([
+      { kind: "planner-pipeline-start", attempt: 1, maxRetries: 2 },
+      { kind: "planner-step-start", stepName: "frontend_layer", stepType: "subagent_task" },
+      llmRequest(0, [], "frontend_layer"),
+      llmResponse(0, {
+        toolCalls: [{ id: "boom", name: "run_command", arguments: {} }],
+        stepName: "frontend_layer",
+      }),
+      {
+        kind: "tool-call",
+        invocationId: "i-boom",
+        toolCallId: "boom",
+        tool: "run_command",
+        argsSummary: "build",
+        argsFormatted: "{}",
+        stepName: "frontend_layer",
+      },
+      {
+        kind: "tool-error",
+        invocationId: "i-boom",
+        toolCallId: "boom",
+        text: "Module not found",
+        stepName: "frontend_layer",
+      },
+      {
+        kind: "planner-step-end",
+        stepName: "frontend_layer",
+        status: "fail",
+        durationMs: 100,
+        error: "build failed",
+      },
+      {
+        kind: "planner-verification",
+        overall: "fail",
+        confidence: 0.9,
+        steps: [{ stepName: "frontend_layer", outcome: "fail", issues: ["tokens"] }],
+      },
+      {
+        kind: "planner-repair-plan",
+        attempt: 1,
+        rerunOrder: ["frontend_layer"],
+        tasks: [
+          {
+            stepName: "frontend_layer",
+            mode: "repair",
+            ownedIssueCodes: ["BUILD_FAIL"],
+            dependencyIssueCodes: [],
+          },
+        ],
+      },
+      {
+        kind: "planner-retry",
+        attempt: 2,
+        reason: "repair_frontend_build",
+        retrySteps: 1,
+        skippedSteps: 0,
+        rerunOrder: ["frontend_layer"],
+      },
+      { kind: "planner-pipeline-start", attempt: 2, maxRetries: 2 },
+      { kind: "planner-step-start", stepName: "frontend_layer", stepType: "subagent_task" },
+      llmRequest(1, [], "frontend_layer"),
+      llmResponse(1, {
+        toolCalls: [{ id: "ok", name: "run_command", arguments: {} }],
+        stepName: "frontend_layer",
+      }),
+      {
+        kind: "tool-call",
+        invocationId: "i-ok",
+        toolCallId: "ok",
+        tool: "run_command",
+        argsSummary: "build",
+        argsFormatted: "{}",
+        stepName: "frontend_layer",
+      },
+      {
+        kind: "tool-result",
+        invocationId: "i-ok",
+        toolCallId: "ok",
+        text: "Build succeeded",
+        stepName: "frontend_layer",
+      },
+      {
+        kind: "planner-step-end",
+        stepName: "frontend_layer",
+        status: "pass",
+        durationMs: 80,
+      },
+      {
+        kind: "planner-pipeline-end",
+        status: "success",
+        completedSteps: 1,
+        totalSteps: 1,
+      },
+    ])
+
+    expect(dag.spine.some((e) => e.kind === "phase" && e.phase.family === "repair")).toBe(false)
+    expect(dag.spine.some((e) => e.kind === "phase" && e.phase.family === "verify")).toBe(false)
+
+    const pipeline = dag.spine.find((e) => e.kind === "phase" && e.phase.family === "pipeline")
+    if (pipeline?.kind !== "phase") throw new Error("expected pipeline")
+    const kids = pipeline.phase.children ?? []
+    const families = kids.map((c) => (c.kind === "phase" ? c.phase.family : c.kind))
+    expect(families).toEqual([
+      "step:frontend_layer",
+      "verify",
+      "repair",
+      "step:frontend_layer",
+    ])
+    const repairs = kids.filter((c) => c.kind === "phase" && c.phase.family === "repair")
+    expect(repairs).toHaveLength(1)
+    if (repairs[0]?.kind !== "phase") throw new Error("expected repair")
+    expect(repairs[0].phase.status).toBe("done")
+    expect(repairs[0].phase.summary).toMatch(/repair_frontend_build/)
   })
 
   it("keeps failed step attempt red after repair pass (delegation-end must not rebind)", () => {

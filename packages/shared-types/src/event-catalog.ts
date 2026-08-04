@@ -471,7 +471,8 @@ export const TRACE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "repair",
     label: "Repairing",
     severity: "warn",
-    instanceKey: (p) => `repair:${num(p.attempt) ?? 1}`,
+    // One repair cycle card — plan + retry share a key (attempt fields differ by event).
+    instanceKey: () => "repair",
     summary: (p) => {
       const tasks = Array.isArray(p.tasks) ? p.tasks.length : 0
       return `attempt ${num(p.attempt) ?? 1} · ${tasks} task${tasks === 1 ? "" : "s"}`
@@ -482,7 +483,7 @@ export const TRACE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "repair",
     label: "Repairing",
     severity: "warn",
-    instanceKey: (p) => `repair:${num(p.attempt) ?? 1}`,
+    instanceKey: () => "repair",
     summary: (p) => str(p.reason, `retry ${num(p.attempt) ?? 1}`),
   },
   "planner-retry-skipped": {
@@ -512,7 +513,7 @@ export const TRACE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "repair",
     label: "Repairing",
     severity: "warn",
-    instanceKey: (p) => `repair:${num(p.attempt) ?? 1}`,
+    instanceKey: () => "repair",
     summary: (p) => `${str(p.action)} · ${str(p.reason)}`,
   },
   "planner-sql-quality": {
