@@ -3,32 +3,22 @@
  *
  * Leaf scopes (prompt / tools): inspector headline owns the title — body is content only.
  * Context scope: headline is "Context"; body uses collapsible sections.
+ *
+ * System prompts share TraceSystemPrompt (header Copy/More + mono body) with Call System.
  */
 
-import { JsonViewer } from "../../components/JsonViewer"
+import { useRef } from "react"
+import { preserveScrollAnchor } from "../../lib/chatScroll"
 import type { TraceDag } from "./build-trace-dag"
 import { CopyControl } from "./TraceCopy"
 import { TraceDetailCollapsible } from "./TraceDetailCollapsible"
-import { ExpandableText } from "./TraceExpandable"
+import { PeekToggle, useTextPeek } from "./TraceExpandable"
+import {
+  promptLineMeta,
+  SystemPromptSection,
+  SystemPromptStack,
+} from "./TraceSystemPrompt"
 import { ToolDef } from "./TraceRows"
-
-function lineCount(text: string): number {
-  if (!text) return 0
-  return text.replace(/\r\n/g, "\n").split("\n").length
-}
-
-function promptMeta(text: string): string {
-  const lines = lineCount(text)
-  return lines === 1 ? "1 line" : `${lines} lines`
-}
-
-function ContextPromptBody({ text }: { text: string }) {
-  return (
-    <div className="trace-detail-prose">
-      <ExpandableText text={text} className="trace-body-muted" />
-    </div>
-  )
-}
 
 function ContextToolsBody({
   tools,
@@ -40,19 +30,9 @@ function ContextToolsBody({
   }
 
   if (tools.length === 1) {
-    const tool = tools[0]!
     return (
       <div className="trace-detail-tool-pane">
-        <ToolDef tool={tool} />
-        {tool.parameters ? (
-          <JsonViewer
-            value={tool.parameters}
-            copyable
-            embedded
-            label="schema"
-            defaultExpandDepth={1}
-          />
-        ) : null}
+        <ToolDef tool={tools[0]!} />
       </div>
     )
   }
@@ -69,15 +49,6 @@ function ContextToolsBody({
         >
           <div className="trace-detail-tool-pane">
             <ToolDef tool={tool} hideName />
-            {tool.parameters ? (
-              <JsonViewer
-                value={tool.parameters}
-                copyable
-                embedded
-                label="schema"
-                defaultExpandDepth={1}
-              />
-            ) : null}
           </div>
         </TraceDetailCollapsible>
       ))}
@@ -86,15 +57,44 @@ function ContextToolsBody({
 }
 
 function PromptLeafDetail({ text }: { text: string }) {
+  const peek = useTextPeek(text)
+  const toggleRef = useRef<HTMLButtonElement>(null)
+
+  function onTogglePeek() {
+    preserveScrollAnchor(toggleRef.current, () =>
+      peek.setExpanded((value) => !value),
+    )
+  }
+
   return (
     <div className="trace-detail-body">
       <div className="trace-detail-leaf-meta">
-        <span className="trace-detail-leaf-meta__label">{promptMeta(text)}</span>
+        <span className="trace-detail-leaf-meta__label">{promptLineMeta(text)}</span>
         <CopyControl value={text} ariaLabel="Copy system prompt" />
+        {peek.hasPeek ? (
+          <PeekToggle
+            expanded={peek.expanded}
+            onToggle={onTogglePeek}
+            toggleRef={toggleRef}
+            className="trace-detail-accordion__peek"
+          />
+        ) : null}
       </div>
-      <ContextPromptBody text={text} />
+      <div
+        className={`trace-detail-prose trace-detail-prose--mono${peek.hasPeek && !peek.expanded ? " is-clipped" : ""}`}
+      >
+        <pre
+          className={`trace-system-prompt${peek.hasPeek && !peek.expanded ? " is-peeking" : ""}`.trim()}
+        >
+          {peek.body}
+        </pre>
+      </div>
     </div>
   )
+}
+
+function promptLabel(index: number, total: number): string {
+  return total > 1 ? `System prompt ${index + 1}` : "System prompt"
 }
 
 export function TraceContextDetail({
@@ -119,19 +119,7 @@ export function TraceContextDetail({
 
   if (scopeId === "prompt" && prompts.length > 1) {
     return (
-      <div className="trace-detail-body trace-detail-body--stack">
-        {prompts.map((text, i) => (
-          <TraceDetailCollapsible
-            key={`prompt-${i}`}
-            label={prompts.length > 1 ? `System prompt ${i + 1}` : "System prompt"}
-            meta={promptMeta(text)}
-            defaultOpen={i === 0}
-            actions={<CopyControl value={text} ariaLabel="Copy system prompt" />}
-          >
-            <ContextPromptBody text={text} />
-          </TraceDetailCollapsible>
-        ))}
-      </div>
+      <SystemPromptStack prompts={prompts} labelFor={promptLabel} />
     )
   }
 
@@ -146,15 +134,12 @@ export function TraceContextDetail({
   return (
     <div className="trace-detail-body trace-detail-body--stack">
       {prompts.map((text, i) => (
-        <TraceDetailCollapsible
+        <SystemPromptSection
           key={`prompt-${i}`}
-          label={prompts.length > 1 ? `System prompt ${i + 1}` : "System prompt"}
-          meta={promptMeta(text)}
+          text={text}
+          label={promptLabel(i, prompts.length)}
           defaultOpen={i === 0}
-          actions={<CopyControl value={text} ariaLabel="Copy system prompt" />}
-        >
-          <ContextPromptBody text={text} />
-        </TraceDetailCollapsible>
+        />
       ))}
       {preamble.tools.length > 0 ? (
         <TraceDetailCollapsible

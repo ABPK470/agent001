@@ -8,6 +8,7 @@ import { fmtTokens, formatMs } from "../../lib/util"
 import type { TraceCallNode, TraceDag } from "./build-trace-dag"
 import { TracePayloadStream, TraceMessageCard } from "./TraceMessageCard"
 import { TraceExecutionCard } from "./TraceExecutionCard"
+import { SystemPromptStack } from "./TraceSystemPrompt"
 import { tokenPairLabel } from "./trace-format"
 
 type DetailTab = "input" | "raw" | "output" | "system"
@@ -119,22 +120,12 @@ export function TraceCallDetail({
           </div>
         )}
         {tab === "system" && (
-          <div className="trace-detail-section trace-payload-stream">
-            {systemMessages.length === 0 ? (
-              <p className="trace-empty">No system prompt</p>
-            ) : (
-              systemMessages.map((m, i) => (
-                <TraceMessageCard
-                  key={`sys-${i}`}
-                  role="system"
-                  speaker={
-                    systemMessages.length > 1 ? `System ${i + 1}` : "System"
-                  }
-                  content={m.content}
-                />
-              ))
-            )}
-          </div>
+          <SystemPromptStack
+            prompts={systemMessages
+              .map((m) => m.content?.trim() ?? "")
+              .filter(Boolean)}
+            labelFor={(i, total) => (total > 1 ? `System ${i + 1}` : "System")}
+          />
         )}
       </div>
 

@@ -56,7 +56,7 @@ export function TraceMessageCard({
         ) : null}
       </header>
       <div
-        className={`trace-message-card__body${mono || role === "tool" ? " is-mono" : ""}${isEmpty ? " is-empty" : ""}`}
+        className={`trace-message-card__body${mono || role === "tool" || role === "system" ? " is-mono" : ""}${isEmpty ? " is-empty" : ""}`}
       >
         {isEmpty ? (
           <span className="trace-message-card__empty">empty</span>
@@ -76,7 +76,7 @@ export function TraceMessageCardFromPrompt({ msg }: { msg: TracePromptMessage })
       role={role}
       detail={msg.detail ?? null}
       content={msg.content}
-      mono={role === "tool"}
+      mono={role === "tool" || role === "system"}
     />
   )
 }

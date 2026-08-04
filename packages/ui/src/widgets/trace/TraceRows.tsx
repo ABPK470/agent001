@@ -324,8 +324,10 @@ export function ToolDef({
           {showSchema && tool.parameters && (
             <JsonViewer
               value={tool.parameters}
+              copyable
+              embedded
+              label="schema"
               defaultExpandDepth={1}
-              inline
               className="trace-json"
             />
           )}

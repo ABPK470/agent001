@@ -1,9 +1,16 @@
 /**
  * Collapsible detail section — flat accordion row (trace detail dialect).
+ *
+ * Sticky only while open: peer collapsed rows must not all pin at top:0
+ * (that paints seals/gaps and stacks headers on each other).
  */
 
 import { ChevronRight } from "lucide-react"
 import { useState, type ReactNode } from "react"
+
+type AccordionActions =
+  | ReactNode
+  | ((state: { open: boolean }) => ReactNode)
 
 export function TraceDetailCollapsible({
   label,
@@ -19,7 +26,7 @@ export function TraceDetailCollapsible({
   defaultOpen?: boolean
   sticky?: boolean
   variant?: "section" | "nested"
-  actions?: ReactNode
+  actions?: AccordionActions
   children: ReactNode
 }) {
   const [open, setOpen] = useState(defaultOpen)
@@ -27,11 +34,13 @@ export function TraceDetailCollapsible({
   const rootClass = [
     "trace-detail-section",
     "trace-detail-section--accordion",
-    sticky && variant === "section" ? "trace-detail-section--sticky" : "",
+    sticky && open && variant === "section" ? "trace-detail-section--sticky" : "",
     variant === "nested" ? "trace-detail-section--nested" : "",
   ]
     .filter(Boolean)
     .join(" ")
+
+  const rail = typeof actions === "function" ? actions({ open }) : actions
 
   return (
     <section className={rootClass}>
@@ -49,10 +58,10 @@ export function TraceDetailCollapsible({
           />
           <span className="trace-detail-accordion__label">{label}</span>
         </button>
-        {meta || actions ? (
+        {meta || rail ? (
           <div className="trace-detail-accordion__rail">
             {meta ? <span className="trace-detail-accordion__meta">{meta}</span> : null}
-            {actions}
+            {rail}
           </div>
         ) : null}
       </div>
