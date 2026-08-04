@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest"
-import { isShellModeToggleEvent, shellModeToggleHint } from "./types"
+import {
+  isOpenWidgetCatalogEvent,
+  isShellModeToggleEvent,
+  openWidgetCatalogHint,
+  shellModeToggleHint,
+} from "./types"
 
 describe("shell mode toggle shortcut", () => {
   it("matches mod+option/alt only", () => {
@@ -58,5 +63,51 @@ describe("shell mode toggle shortcut", () => {
   it("formats a short hint", () => {
     expect(shellModeToggleHint("⌘")).toBe("⌘⌥")
     expect(shellModeToggleHint("Ctrl")).toBe("Ctrl+Alt")
+  })
+})
+
+describe("open widget catalog shortcut", () => {
+  it("matches mod+K without alt/shift", () => {
+    expect(
+      isOpenWidgetCatalogEvent({
+        key: "k",
+        metaKey: true,
+        ctrlKey: false,
+        altKey: false,
+        shiftKey: false,
+      } as KeyboardEvent),
+    ).toBe(true)
+    expect(
+      isOpenWidgetCatalogEvent({
+        key: "K",
+        metaKey: false,
+        ctrlKey: true,
+        altKey: false,
+        shiftKey: false,
+      } as KeyboardEvent),
+    ).toBe(true)
+    expect(
+      isOpenWidgetCatalogEvent({
+        key: "k",
+        metaKey: true,
+        ctrlKey: false,
+        altKey: true,
+        shiftKey: false,
+      } as KeyboardEvent),
+    ).toBe(false)
+    expect(
+      isOpenWidgetCatalogEvent({
+        key: "k",
+        metaKey: false,
+        ctrlKey: false,
+        altKey: false,
+        shiftKey: false,
+      } as KeyboardEvent),
+    ).toBe(false)
+  })
+
+  it("formats a short hint", () => {
+    expect(openWidgetCatalogHint("⌘")).toBe("⌘K")
+    expect(openWidgetCatalogHint("Ctrl")).toBe("Ctrl+K")
   })
 })

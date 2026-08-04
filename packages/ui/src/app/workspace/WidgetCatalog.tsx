@@ -10,6 +10,7 @@ import type { WidgetType } from "../../types"
 import { VISITOR_WIDGETS } from "../../types"
 import { ModalShell } from "../../widgets/entity-registry/ModalShell"
 import { modalViewerPanelClass } from "../../widgets/entity-registry/modal-overlay"
+import { openWidgetCatalogHint } from "../types"
 import { catalogEntries } from "./widget-definitions"
 
 interface Props {
@@ -37,10 +38,12 @@ export function WidgetCatalog({ onClose }: Props) {
     }
   }
 
+  const catalogHint = openWidgetCatalogHint()
+
   return (
     <ModalShell
       title="Add to layout"
-      subtitle="Pick surfaces for this layout."
+      subtitle={`Pick surfaces for this layout · ${catalogHint}`}
       icon={<LayoutDashboard size={20} className="text-text-muted" />}
       onClose={onClose}
       widthClass={modalViewerPanelClass(isMobile)}

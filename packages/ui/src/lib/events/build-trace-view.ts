@@ -140,7 +140,10 @@ export type TraceSpineEntry =
   | { kind: "work"; work: TraceWorkNode }
 
 export type TracePreamble = {
+  /** Primary (first) system prompt — injected into calls missing a system role. */
   systemPrompt: string | null
+  /** Every `system-prompt` trace entry — Context tab shows each. */
+  systemPrompts: string[]
   tools: Array<{
     name: string
     description: string
@@ -274,7 +277,7 @@ function pairLlmCalls(trace: TraceEntry[]): Array<{
 
 function enrichMessages(
   messages: LlmRequest["messages"],
-  systemPrompt: string | null,
+  systemPrompts: string[],
 ): TracePromptMessage[] {
   const enriched = messages.map((msg, index) => {
     const label = historyRowLabel(msg, messages, index)
@@ -287,19 +290,21 @@ function enrichMessages(
       ...(label.detail ? { detail: label.detail } : {}),
     }
   })
-  // System is often emitted once as `system-prompt` and omitted from later
-  // llm-request payloads — still show it first in Sent so the prompt is whole.
-  if (systemPrompt && !enriched.some((m) => m.role === "system")) {
+  // System prompts are often emitted as `system-prompt` entries and omitted
+  // from later llm-request payloads — inject all of them so Sent / System stay whole.
+  const callSystemCount = enriched.filter((m) => m.role === "system").length
+  if (systemPrompts.length > 0 && callSystemCount < systemPrompts.length) {
+    const withoutSystem = enriched.filter((m) => m.role !== "system")
     return [
-      {
-        role: "system",
-        content: systemPrompt,
-        toolCalls: [],
+      ...systemPrompts.map((content, i) => ({
+        role: "system" as const,
+        content,
+        toolCalls: [] as TracePromptMessage["toolCalls"],
         toolCallId: null,
-        speaker: "System",
+        speaker: systemPrompts.length > 1 ? `System ${i + 1}` : "System",
         detail: "shared prompt",
-      },
-      ...enriched,
+      })),
+      ...withoutSystem,
     ]
   }
   return enriched
@@ -898,8 +903,11 @@ export type BuildTraceDagOpts = {
 /** Build the hybrid DAG view-model from a raw trace stream. */
 export function buildTraceDag(trace: TraceEntry[], opts?: BuildTraceDagOpts): TraceDag {
   const outline = buildOutline(atomsFromTrace(trace), TRACE_VIEW_SPEC)
-  const systemPrompt =
-    trace.find((e): e is SystemPrompt => e.kind === "system-prompt")?.text ?? null
+  const systemPrompts = trace
+    .filter((e): e is SystemPrompt => e.kind === "system-prompt")
+    .map((e) => e.text.trim())
+    .filter(Boolean)
+  const systemPrompt = systemPrompts[0] ?? null
   const toolsResolved = trace.find((e): e is ToolsResolved => e.kind === "tools-resolved")
   const sqlQuality = trace.filter((e): e is TraceSqlQuality => e.kind === "planner-sql-quality")
   const createdAtMs = opts?.createdAtMs
@@ -956,7 +964,7 @@ export function buildTraceDag(trace: TraceEntry[], opts?: BuildTraceDagOpts): Tr
       stepName,
       messageCount: request.messageCount,
       toolCount: request.toolCount,
-      messages: enrichMessages(request.messages, systemPrompt),
+      messages: enrichMessages(request.messages, systemPrompts),
       content: response?.content ?? null,
       toolBranches,
       durationMs,
@@ -1355,6 +1363,7 @@ export function buildTraceDag(trace: TraceEntry[], opts?: BuildTraceDagOpts): Tr
 
   const preamble: TracePreamble = {
     systemPrompt,
+    systemPrompts,
     tools: toolsResolved?.tools ?? [],
   }
 
@@ -1405,7 +1414,7 @@ export function buildTraceDag(trace: TraceEntry[], opts?: BuildTraceDagOpts): Tr
   const phaseCount = countPhases(finalSpine)
 
   const hasData =
-    Boolean(systemPrompt) ||
+    systemPrompts.length > 0 ||
     preamble.tools.length > 0 ||
     calls.length > 0 ||
     sqlQuality.length > 0 ||

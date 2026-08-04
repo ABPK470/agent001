@@ -31,13 +31,19 @@ export function PreambleOutline({
   query: string
 }) {
   const { preamble } = dag
-  if (!preamble.systemPrompt && preamble.tools.length === 0) {
+  const prompts =
+    preamble.systemPrompts.length > 0
+      ? preamble.systemPrompts
+      : preamble.systemPrompt
+        ? [preamble.systemPrompt]
+        : []
+  if (prompts.length === 0 && preamble.tools.length === 0) {
     return null
   }
 
   const q = query.trim().toLowerCase()
   const promptMatches =
-    !q || (preamble.systemPrompt?.toLowerCase().includes(q) ?? false)
+    !q || prompts.some((p) => p.toLowerCase().includes(q))
   const tools = !q
     ? preamble.tools
     : preamble.tools.filter(
@@ -47,8 +53,10 @@ export function PreambleOutline({
       )
 
   const bits: string[] = []
-  if (preamble.systemPrompt) bits.push("prompt")
+  if (prompts.length === 1) bits.push("prompt")
+  else if (prompts.length > 1) bits.push(`${prompts.length} prompts`)
   if (preamble.tools.length > 0) bits.push(`${preamble.tools.length} tools`)
+  const promptChars = prompts.reduce((n, t) => n + t.length, 0)
 
   return (
     <article className={`trace-card${open ? " is-open" : ""}`}>
@@ -64,7 +72,7 @@ export function PreambleOutline({
       />
       {open && (
         <ReviewTree className="trace-card__body">
-          {preamble.systemPrompt && promptMatches && (
+          {prompts.length > 0 && promptMatches && (
             <ReviewTreeItem>
               <ScopeRow
                 scopeId="prompt"
@@ -73,17 +81,24 @@ export function PreambleOutline({
                 open={contextPromptOpen}
                 onToggle={onTogglePrompt}
                 leading="Prompt"
-                summary={`${formatCharCount(preamble.systemPrompt.length)} chars`}
+                summary={
+                  prompts.length > 1
+                    ? `${prompts.length} · ${formatCharCount(promptChars)} chars`
+                    : `${formatCharCount(promptChars)} chars`
+                }
                 soft
               />
               {contextPromptOpen && (
                 <div className="trace-scope-payload">
-                  <ExpandableText
-                    text={preamble.systemPrompt}
-                    className="trace-body-muted"
-                    previewChars={720}
-                    copyLabel="Copy prompt"
-                  />
+                  {prompts.map((text, i) => (
+                    <ExpandableText
+                      key={`ctx-prompt-${i}`}
+                      text={text}
+                      className="trace-body-muted"
+                      previewChars={720}
+                      copyLabel="Copy prompt"
+                    />
+                  ))}
                 </div>
               )}
             </ReviewTreeItem>

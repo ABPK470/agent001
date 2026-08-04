@@ -64,6 +64,7 @@ import { TraceTreeRow, traceTreeRowEstimateSize } from "./TraceTreeRow"
 import { TraceWaterfallView } from "./TraceWaterfallView"
 import { TraceZenHud } from "./TraceZenHud"
 import { useTraceZenHotkeys } from "./use-trace-zen-hotkeys"
+import { operationStatusPill } from "../../lib/status-callout"
 
 export const TRACE_TREE_OVERSCAN = 8
 const TRACE_SPLIT_MIN = 0.28
@@ -84,7 +85,12 @@ export function TraceDag({
   dag: TraceDag
   runId: string | null
   threadId: string | null
-  runs: Array<{ id: string; threadId?: string | null; createdAt?: string }>
+  runs: Array<{
+    id: string
+    threadId?: string | null
+    createdAt?: string
+    status?: string
+  }>
   emptySlot?: ReactNode
   onExportMessage?: (message: string) => void
   onExportError?: (message: string) => void
@@ -517,7 +523,11 @@ export function TraceDag({
     metaStats.push({ value: fmtTokens(stats.promptTokens), label: "in" })
     metaStats.push({ value: fmtTokens(stats.completionTokens), label: "out" })
   }
-  const showMetaBand = metaStats.length > 0 || Boolean(runId || threadId)
+  const runStatus = runId
+    ? runs.find((r) => r.id === runId)?.status
+    : undefined
+  const showMetaBand =
+    metaStats.length > 0 || Boolean(runId || threadId || runStatus)
 
   return (
     <div className={`trace-dag trace-dag--split${isZen ? " trace-dag--zen" : ""} ${WIDGET_LOG_SHELL_CLASS}`}>
@@ -588,8 +598,16 @@ export function TraceDag({
                   ))
                 )}
               </div>
-              {(runId || threadId) && (
+              {(runId || threadId || runStatus) && (
                 <div className="widget-review-meta__ids">
+                  {runStatus ? (
+                    <span
+                      className={operationStatusPill(runStatus)}
+                      title={`Run status: ${runStatus}`}
+                    >
+                      {runStatus}
+                    </span>
+                  ) : null}
                   {runId ? (
                     <span className="widget-review-meta__id-group">
                       <IdChip label="run" value={runId} tone="meta" />

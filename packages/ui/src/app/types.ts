@@ -29,6 +29,20 @@ export function isShellModeToggleEvent(event: KeyboardEvent): boolean {
   return event.code === "AltLeft" || event.code === "AltRight" || event.key === "Alt"
 }
 
+/**
+ * Open the widget catalog (Add to layout). Workspace shell only.
+ * Mac: ⌘K  ·  elsewhere: Ctrl+K
+ */
+export function openWidgetCatalogHint(modKey: "⌘" | "Ctrl" = detectModHint()): string {
+  return modKey === "⌘" ? "⌘K" : "Ctrl+K"
+}
+
+export function isOpenWidgetCatalogEvent(event: KeyboardEvent): boolean {
+  if (event.altKey || event.shiftKey) return false
+  if (!(event.metaKey || event.ctrlKey)) return false
+  return event.key.toLowerCase() === "k"
+}
+
 /** Which chat surface to mount inside the chat shell. */
 export type ChatVariant = "thread" | "legacy"
 

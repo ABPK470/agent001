@@ -6,6 +6,7 @@ import { AppPhase } from "../enums"
 import { useIsMobile } from "../hooks/useIsMobile"
 import { useMe } from "../hooks/useMe"
 import { useViewingAs } from "../hooks/useViewingAs"
+import { isEditableKeyboardTarget } from "../lib/keyboard-target"
 import { resetViewingAsMemory, syncViewingAsForSession } from "../lib/viewing-as"
 import { usePlatformHealth } from "../hooks/usePlatformHealth"
 import { useServerReachable } from "../hooks/useServerReachable"
@@ -31,7 +32,7 @@ import {
   shellMosaicRevealMs,
 } from "./shell-mode-transition"
 import type { AppShellMode } from "./types"
-import { isShellModeToggleEvent, resolveChatVariant } from "./types"
+import { isOpenWidgetCatalogEvent, isShellModeToggleEvent, resolveChatVariant } from "./types"
 import { Canvas, type CanvasHandle } from "./workspace/Canvas"
 import { MobileNav } from "./workspace/MobileNav"
 import { Toolbar } from "./workspace/Toolbar"
@@ -310,6 +311,24 @@ export function App() {
     window.addEventListener("keydown", onKeyDown)
     return () => window.removeEventListener("keydown", onKeyDown)
   }, [phase, transitionShellMode])
+
+  // ⌘K / Ctrl+K — open Add-to-layout catalog (workspace only).
+  useEffect(() => {
+    if (phase !== AppPhase.Shell) return
+    function onKeyDown(event: KeyboardEvent) {
+      if (!isOpenWidgetCatalogEvent(event)) return
+      if (shellModeRef.current !== "workspace") return
+      if (isEditableKeyboardTarget(event.target)) return
+      event.preventDefault()
+      if (isMobile) {
+        setMobileCatalogOpen((open) => !open)
+        return
+      }
+      canvasRef.current?.toggleCatalog()
+    }
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+  }, [phase, isMobile])
 
   // Reset reveal flag each time we return to login so the next login
   // starts with the chat content hidden. Also clear the shared ASCII

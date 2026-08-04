@@ -106,8 +106,33 @@ export function TraceContextDetail({
 }) {
   const { preamble } = dag
 
-  if (scopeId === "prompt" && preamble.systemPrompt) {
-    return <PromptLeafDetail text={preamble.systemPrompt} />
+  const prompts =
+    preamble.systemPrompts.length > 0
+      ? preamble.systemPrompts
+      : preamble.systemPrompt
+        ? [preamble.systemPrompt]
+        : []
+
+  if (scopeId === "prompt" && prompts.length === 1) {
+    return <PromptLeafDetail text={prompts[0]!} />
+  }
+
+  if (scopeId === "prompt" && prompts.length > 1) {
+    return (
+      <div className="trace-detail-body trace-detail-body--stack">
+        {prompts.map((text, i) => (
+          <TraceDetailCollapsible
+            key={`prompt-${i}`}
+            label={prompts.length > 1 ? `System prompt ${i + 1}` : "System prompt"}
+            meta={promptMeta(text)}
+            defaultOpen={i === 0}
+            actions={<CopyControl value={text} ariaLabel="Copy system prompt" />}
+          >
+            <ContextPromptBody text={text} />
+          </TraceDetailCollapsible>
+        ))}
+      </div>
+    )
   }
 
   if (scopeId === "tools") {
@@ -120,18 +145,17 @@ export function TraceContextDetail({
 
   return (
     <div className="trace-detail-body trace-detail-body--stack">
-      {preamble.systemPrompt ? (
+      {prompts.map((text, i) => (
         <TraceDetailCollapsible
-          label="System prompt"
-          meta={promptMeta(preamble.systemPrompt)}
-          defaultOpen
-          actions={
-            <CopyControl value={preamble.systemPrompt} ariaLabel="Copy system prompt" />
-          }
+          key={`prompt-${i}`}
+          label={prompts.length > 1 ? `System prompt ${i + 1}` : "System prompt"}
+          meta={promptMeta(text)}
+          defaultOpen={i === 0}
+          actions={<CopyControl value={text} ariaLabel="Copy system prompt" />}
         >
-          <ContextPromptBody text={preamble.systemPrompt} />
+          <ContextPromptBody text={text} />
         </TraceDetailCollapsible>
-      ) : null}
+      ))}
       {preamble.tools.length > 0 ? (
         <TraceDetailCollapsible
           label="Resolved tools"

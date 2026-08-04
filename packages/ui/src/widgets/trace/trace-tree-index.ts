@@ -439,11 +439,18 @@ function buildContextNodes(
   search: TraceTreeSearch | null,
 ): void {
   const { preamble } = dag
-  if (!preamble.systemPrompt && preamble.tools.length === 0) return
+  const prompts =
+    preamble.systemPrompts.length > 0
+      ? preamble.systemPrompts
+      : preamble.systemPrompt
+        ? [preamble.systemPrompt]
+        : []
+  if (prompts.length === 0 && preamble.tools.length === 0) return
   if (search && !search.contextVisible) return
 
   const bits: string[] = []
-  if (preamble.systemPrompt) bits.push("prompt")
+  if (prompts.length === 1) bits.push("prompt")
+  else if (prompts.length > 1) bits.push(`${prompts.length} prompts`)
   if (preamble.tools.length > 0) bits.push(`${preamble.tools.length} tools`)
 
   pushNode(acc, {
@@ -461,7 +468,7 @@ function buildContextNodes(
     status: "success",
     hasError: false,
     branchHasError: false,
-    hasChildren: Boolean(preamble.systemPrompt || preamble.tools.length),
+    hasChildren: Boolean(prompts.length > 0 || preamble.tools.length > 0),
     parentScopeId: null,
     callIndex: null,
     workId: null,
@@ -473,13 +480,17 @@ function buildContextNodes(
   if (!openState.preamble) return
 
   const q = search?.query.toLowerCase() ?? ""
-  if (preamble.systemPrompt && (!search || search.contextPromptVisible)) {
+  if (prompts.length > 0 && (!search || search.contextPromptVisible)) {
+    const totalChars = prompts.reduce((n, t) => n + t.length, 0)
     pushNode(acc, {
         scopeId: "prompt",
         kind: "prompt",
         depth: 1,
-        name: "System prompt",
-        subtitle: `${preamble.systemPrompt.length} chars`,
+        name: prompts.length > 1 ? "System prompts" : "System prompt",
+        subtitle:
+          prompts.length > 1
+            ? `${prompts.length} · ${totalChars} chars`
+            : `${totalChars} chars`,
         leading: "Prompt",
         durationMs: null,
         startOffsetMs: 0,

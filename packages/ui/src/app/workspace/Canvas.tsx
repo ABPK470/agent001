@@ -10,11 +10,13 @@ import { forwardRef, useImperativeHandle, useState } from "react"
 import { useViewingAs } from "../../hooks/useViewingAs"
 import { useLayoutStore } from "../../state/layout-store"
 import { IntroAsciiField } from "../home/IntroAsciiField"
+import { openWidgetCatalogHint } from "../types"
 import { WidgetCatalog } from "./WidgetCatalog"
 import { GridCanvas } from "./layout/GridCanvas"
 
 export interface CanvasHandle {
   openCatalog: () => void
+  toggleCatalog: () => void
 }
 
 export const Canvas = forwardRef<CanvasHandle>(function Canvas(_props, ref) {
@@ -26,8 +28,16 @@ export const Canvas = forwardRef<CanvasHandle>(function Canvas(_props, ref) {
   // No layout pad: gutters come from GridCanvas JS inset (solo can fill the stage).
   const stageGlyphs = isViewingAsOther && !soloTileId
   const [catalogOpen, setCatalogOpen] = useState(false)
+  const catalogHint = openWidgetCatalogHint()
 
-  useImperativeHandle(ref, () => ({ openCatalog: () => setCatalogOpen(true) }), [])
+  useImperativeHandle(
+    ref,
+    () => ({
+      openCatalog: () => setCatalogOpen(true),
+      toggleCatalog: () => setCatalogOpen((open) => !open),
+    }),
+    [],
+  )
 
   const activeView = views.find((view) => view.id === activeViewId)
   if (!activeView) return null
@@ -56,9 +66,14 @@ export const Canvas = forwardRef<CanvasHandle>(function Canvas(_props, ref) {
               type="button"
               className="toolbar-ops-btn shrink-0 px-4"
               onClick={() => setCatalogOpen(true)}
+              title={`Add surfaces to this layout (${catalogHint})`}
+              aria-label={`Add surfaces to this layout (${catalogHint})`}
             >
               <Plus size={15} className="block shrink-0" aria-hidden />
               Add to layout
+              <span className="font-mono text-[11px] text-text-faint" aria-hidden>
+                {catalogHint}
+              </span>
             </button>
           </div>
         ) : (

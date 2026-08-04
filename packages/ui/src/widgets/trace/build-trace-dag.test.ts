@@ -51,7 +51,30 @@ describe("buildTraceDag", () => {
     expect(dag.hasData).toBe(false)
     expect(dag.calls).toEqual([])
     expect(dag.preamble.systemPrompt).toBeNull()
+    expect(dag.preamble.systemPrompts).toEqual([])
     expect(dag.preamble.tools).toEqual([])
+  })
+
+  it("collects every system-prompt entry into preamble.systemPrompts", () => {
+    const dag = buildTraceDag([
+      { kind: "system-prompt", text: "Core persona." },
+      { kind: "system-prompt", text: "Workspace rules." },
+      { kind: "system-prompt", text: "Tool policy." },
+      llmRequest(0, [{ role: "user", content: "Hi", toolCalls: [], toolCallId: null }]),
+      llmResponse(0, { content: "Hello", toolCalls: [] }),
+    ])
+    expect(dag.preamble.systemPrompt).toBe("Core persona.")
+    expect(dag.preamble.systemPrompts).toEqual([
+      "Core persona.",
+      "Workspace rules.",
+      "Tool policy.",
+    ])
+    const systems = dag.calls[0]!.messages.filter((m) => m.role === "system")
+    expect(systems.map((m) => m.content)).toEqual([
+      "Core persona.",
+      "Workspace rules.",
+      "Tool policy.",
+    ])
   })
 
   it("pairs request/response by iteration and builds tool branches", () => {
@@ -112,6 +135,7 @@ describe("buildTraceDag", () => {
 
     expect(dag.hasData).toBe(true)
     expect(dag.preamble.systemPrompt).toBe("You are Mia.")
+    expect(dag.preamble.systemPrompts).toEqual(["You are Mia."])
     expect(dag.preamble.tools).toHaveLength(1)
     expect(dag.calls).toHaveLength(2)
 

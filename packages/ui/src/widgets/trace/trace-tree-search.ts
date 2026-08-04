@@ -91,9 +91,14 @@ function phaseMatches(phase: TracePhaseNode, q: string): boolean {
 }
 
 function contextPromptMatches(dag: TraceDag, q: string): boolean {
-  const prompt = dag.preamble.systemPrompt
-  if (!prompt) return false
-  if (prompt.toLowerCase().includes(q)) return true
+  const prompts =
+    dag.preamble.systemPrompts.length > 0
+      ? dag.preamble.systemPrompts
+      : dag.preamble.systemPrompt
+        ? [dag.preamble.systemPrompt]
+        : []
+  if (prompts.length === 0) return false
+  if (prompts.some((p) => p.toLowerCase().includes(q))) return true
   if ("context".includes(q) || "prompt".includes(q) || "system".includes(q)) return true
   return false
 }

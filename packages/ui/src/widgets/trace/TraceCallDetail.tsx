@@ -29,10 +29,22 @@ export function TraceCallDetail({
   initialTab?: DetailTab
 }) {
   const [tab, setTab] = useState<DetailTab>(initialTab)
-  const systemPrompt =
-    call.messages.find((m) => m.role === "system")?.content ??
-    dag.preamble.systemPrompt ??
-    null
+  const systemMessages = (() => {
+    const prompts =
+      dag.preamble.systemPrompts.length > 0
+        ? dag.preamble.systemPrompts
+        : dag.preamble.systemPrompt
+          ? [dag.preamble.systemPrompt]
+          : []
+    const fromCall = call.messages.filter((m) => m.role === "system" && m.content?.trim())
+    // Prefer every preamble `system-prompt` when the call only carries the first
+    // (or omits them) — Call System must not hide later prompts.
+    if (prompts.length > fromCall.length) {
+      return prompts.map((content) => ({ role: "system" as const, content }))
+    }
+    if (fromCall.length > 0) return fromCall
+    return prompts.map((content) => ({ role: "system" as const, content }))
+  })()
   const userMessages = call.messages.filter((m) => m.role !== "system")
 
   const rawPayload = useMemo(
@@ -108,10 +120,19 @@ export function TraceCallDetail({
         )}
         {tab === "system" && (
           <div className="trace-detail-section trace-payload-stream">
-            {systemPrompt ? (
-              <TraceMessageCard role="system" speaker="System" content={systemPrompt} />
-            ) : (
+            {systemMessages.length === 0 ? (
               <p className="trace-empty">No system prompt</p>
+            ) : (
+              systemMessages.map((m, i) => (
+                <TraceMessageCard
+                  key={`sys-${i}`}
+                  role="system"
+                  speaker={
+                    systemMessages.length > 1 ? `System ${i + 1}` : "System"
+                  }
+                  content={m.content}
+                />
+              ))
             )}
           </div>
         )}

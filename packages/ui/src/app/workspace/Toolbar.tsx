@@ -20,6 +20,7 @@ import { SessionMenu } from "../SessionMenu"
 import { ViewingAsControl } from "../ViewingAsControl"
 import { SHELL_CHROME_HEADER_WORKSPACE_CLASS } from "../shell-chrome"
 import type { AppShellMode } from "../types"
+import { openWidgetCatalogHint } from "../types"
 import { captureSoloFlipFrom } from "./layout/solo-flip"
 import { ViewTabDragFloat } from "./ViewTabDragFloat"
 import { getWidgetDefinition } from "./widget-definitions"
@@ -38,6 +39,7 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
   const setActiveView = useLayoutStore((s) => s.setActiveView)
   const addView = useLayoutStore((s) => s.addView)
   const removeView = useLayoutStore((s) => s.removeView)
+  const catalogHint = openWidgetCatalogHint()
   const renameView = useLayoutStore((s) => s.renameView)
   const workspaceSurface = useLayoutStore((s) => s.workspaceSurface)
   const setWorkspaceSurface = useLayoutStore((s) => s.setWorkspaceSurface)
@@ -346,11 +348,17 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
                     type="button"
                     className="toolbar-ops-btn shrink-0 px-2.5"
                     onClick={onAddWidget}
-                    title="Add surfaces to this layout"
-                    aria-label="Add surfaces to this layout"
+                    title={`Add surfaces to this layout (${catalogHint})`}
+                    aria-label={`Add surfaces to this layout (${catalogHint})`}
                   >
                     <LayoutGrid size={15} className="block shrink-0" aria-hidden />
                     <span className="hidden leading-none sm:inline">Add</span>
+                    <span
+                      className="hidden font-mono text-[11px] leading-none text-text-faint sm:inline"
+                      aria-hidden
+                    >
+                      {catalogHint}
+                    </span>
                   </button>
                   <button
                     type="button"
