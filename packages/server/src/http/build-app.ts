@@ -32,6 +32,7 @@ import { registerProfileRoutes } from "../api/profile/routes.js"
 import { registerProposerRoutes } from "../api/proposer/index.js"
 import type { AgentOrchestrator } from "../runtime/orchestrator.js"
 import { registerRunRoutes } from "../api/runs/routes.js"
+import { registerLocalRunSimulateHarness } from "../local-harness/run-simulate/register.js"
 import { registerTraceRoutes } from "../api/trace/routes.js"
 import { registerEvalRoutes } from "../api/eval/routes.js"
 import {
@@ -216,6 +217,8 @@ export async function buildApp(opts: BuildAppOptions) {
   })
 
   registerRunRoutes(app, orchestrator)
+  // Local laptop harness only (MIA_LOCAL_RUN_SIMULATE=1). Delete with local-harness/.
+  registerLocalRunSimulateHarness(app)
   registerTraceRoutes(app, orchestrator)
   registerThreadRoutes(app, orchestrator)
   registerToolRoutes(app)

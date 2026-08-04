@@ -8,7 +8,7 @@
  */
 
 import { ChevronDown, GripVertical, LayoutGrid, Minimize2, PanelTop, Plus, X } from "lucide-react"
-import { useEffect, useRef, useState, type KeyboardEvent } from "react"
+import { useEffect, useRef, useState, type ComponentType, type KeyboardEvent } from "react"
 import type { Me } from "../../hooks/useMe"
 import { useViewTabReorder } from "../../hooks/useViewTabReorder"
 import { peerSlidePx } from "../../lib/view-tab-dnd"
@@ -24,6 +24,28 @@ import { openWidgetCatalogHint } from "../types"
 import { captureSoloFlipFrom } from "./layout/solo-flip"
 import { ViewTabDragFloat } from "./ViewTabDragFloat"
 import { getWidgetDefinition } from "./widget-definitions"
+
+/** Local harness only — remove with packages/ui/src/local-harness/. */
+async function loadLocalRunSimulateControl(): Promise<ComponentType | null> {
+  if (import.meta.env.DEV !== true || import.meta.env.VITE_LOCAL_RUN_SIMULATE !== "1") {
+    return null
+  }
+  const mod = await import("../../local-harness/run-simulate/WorkspaceSimulateControl")
+  return mod.WorkspaceSimulateControl
+}
+
+function LocalRunSimulateSlot() {
+  const [Control, setControl] = useState<ComponentType | null>(null)
+  useEffect(() => {
+    void loadLocalRunSimulateControl()
+      .then(setControl)
+      .catch((err: unknown) => {
+        console.error("[mia] local sim control load failed", err)
+      })
+  }, [])
+  if (!Control) return null
+  return <Control />
+}
 
 interface Props {
   onAddWidget?: () => void
@@ -378,6 +400,7 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
                   </button>
                 </>
               )}
+              <LocalRunSimulateSlot />
             </div>
             <div className="toolbar-shell-divider" aria-hidden />
           </>

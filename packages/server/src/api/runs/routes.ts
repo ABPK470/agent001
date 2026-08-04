@@ -230,6 +230,15 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
       reply.code(404)
       return { error: "Run not found" }
     }
+    // Local harness only (MIA_LOCAL_RUN_SIMULATE=1). Remove with packages/server/src/local-harness/.
+    if (process.env["MIA_LOCAL_RUN_SIMULATE"] === "1") {
+      const { cancelSimulatedRun } = await import(
+        "../../local-harness/run-simulate/simulate-live-run.js"
+      )
+      if (cancelSimulatedRun(req.params.id)) {
+        return { ok: true }
+      }
+    }
     const ok = await orchestrator.cancelRun(req.params.id)
     if (!ok) {
       reply.code(404)

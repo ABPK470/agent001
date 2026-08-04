@@ -279,6 +279,11 @@ drivers. Those belong at the shell / adapters boundary.
 API surfaces are thin. Domain nouns for folders. Operator control plane is a
 capability (`platform`), not a synonym for `infra/`.
 
+`allowedExtraDirs` (lint-arch) may name non-layer trees such as sync
+`test-support/` or shell/UI `local-harness/`. Those are disposable local
+helpers — never product seams, never enabled by `NODE_ENV` alone, never
+hosted. Prefer deleting the folder over growing platform surface.
+
 ### UI
 
 **Visual / interaction dialect (locked):** structure is two-ink (paper + ink

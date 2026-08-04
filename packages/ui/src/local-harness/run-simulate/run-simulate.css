@@ -1,0 +1,51 @@
+/* LOCAL HARNESS — not product chrome. Lives with run-simulate; delete with folder. */
+
+.workspace-simulate {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.workspace-simulate__dot {
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 999px;
+  background: var(--text-faint, var(--color-text-faint));
+  flex-shrink: 0;
+}
+
+.workspace-simulate__dot.is-on {
+  background: var(--success, #22c55e);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--success, #22c55e) 25%, transparent);
+}
+
+.workspace-simulate__select {
+  display: none;
+  height: var(--shell-chrome-row-h);
+  max-width: 7.5rem;
+  padding: 0 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: var(--view-chip-radius);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1;
+}
+
+@media (min-width: 640px) {
+  .workspace-simulate__select {
+    display: inline-flex;
+  }
+}
+
+.workspace-simulate__select:disabled {
+  opacity: 0.55;
+}
+
+.workspace-simulate__select:hover:not(:disabled),
+.workspace-simulate__select:focus-visible {
+  color: var(--text);
+  background: var(--hover-fill);
+  outline: none;
+}

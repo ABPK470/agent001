@@ -173,7 +173,8 @@ export function createPackageConfigs(root) {
       cjsRequireAllowlist: new Set(),
       skipTestFilesForLayers: false,
       allowedRootFiles: new Set(["index.ts"]),
-      allowedExtraDirs: new Set(),
+      /** Disposable laptop-only trees — never product seams. Delete freely. */
+      allowedExtraDirs: new Set(["local-harness"]),
       forbidApiNestDirs: ["application", "domain", "runtime", "transport"],
     },
 
@@ -280,7 +281,8 @@ export function createPackageConfigs(root) {
       cjsRequireAllowlist: new Set(),
       skipTestFilesForLayers: true,
       allowedRootFiles: new Set(["types.ts", "vite-env.d.ts"]),
-      allowedExtraDirs: new Set(),
+      /** Disposable laptop-only trees — never product seams. Delete freely. */
+      allowedExtraDirs: new Set(["local-harness"]),
       /** UI-only: treat root types.ts as shared façade (no layer). */
       rootFacades: new Set(["types.ts"]),
     },

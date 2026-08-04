@@ -1314,48 +1314,60 @@ export const useStore = create<AppState>()(
             set({ activeSyncInvocation: null, syncProgressStates: new Map() })
             store.clearGeneratedAttachments(data["runId"] as string)
             store.addTrace({ kind: "goal", text: data["goal"] as string })
-            store.upsertRun({
-              id: data["runId"] as string,
-              goal: data["goal"] as string,
-              status: RunStatus.Pending,
-              answer: null,
-              stepCount: 0,
-              error: null,
-              pendingWorkspaceChanges: 0,
-              parentRunId: (data["resumedFrom"] as string) ?? null,
-              createdAt: timestamp,
-              completedAt: null,
-              totalTokens: 0,
-              promptTokens: 0,
-              completionTokens: 0,
-              llmCalls: 0,
-              trace: [],
-              streamingAnswer: "",
-              auditTrail: [],
-              stepData: [],
-              threadId: get().activeThreadId,
-            })
-            const resumedFrom = data["resumedFrom"] as string | undefined
-            if (resumedFrom) {
+            {
+              const queuedThreadId =
+                (typeof data["threadId"] === "string" && data["threadId"]) ||
+                get().activeThreadId
               store.upsertRun({
-                id: resumedFrom,
-                status: RunStatus.Cancelled,
-                completedAt: timestamp,
+                id: data["runId"] as string,
+                goal: data["goal"] as string,
+                status: RunStatus.Pending,
+                answer: null,
+                stepCount: 0,
+                error: null,
+                pendingWorkspaceChanges: 0,
+                parentRunId: (data["resumedFrom"] as string) ?? null,
+                createdAt: timestamp,
+                completedAt: null,
+                totalTokens: 0,
+                promptTokens: 0,
+                completionTokens: 0,
+                llmCalls: 0,
+                trace: [],
+                streamingAnswer: "",
+                auditTrail: [],
+                stepData: [],
+                threadId: queuedThreadId,
               })
-              // Follow the resumed child — do not stay on the parked parent.
-              if (get().activeRunId === resumedFrom || !get().activeRunId) {
-                set({ activeRunId: data["runId"] as string })
-              }
-            }
-            if (get().activeThreadId) {
-              const threadId = get().activeThreadId!
-              const existing = get().threads.find((t) => t.id === threadId)
-              if (existing) {
-                store.upsertThread({
-                  ...existing,
-                  updatedAt: timestamp,
-                  runCount: (existing.runCount ?? 0) + 1,
+              const resumedFrom = data["resumedFrom"] as string | undefined
+              if (resumedFrom) {
+                store.upsertRun({
+                  id: resumedFrom,
+                  status: RunStatus.Cancelled,
+                  completedAt: timestamp,
                 })
+                // Follow the resumed child — do not stay on the parked parent.
+                if (get().activeRunId === resumedFrom || !get().activeRunId) {
+                  set({ activeRunId: data["runId"] as string })
+                }
+              }
+              if (queuedThreadId) {
+                const existing = get().threads.find((t) => t.id === queuedThreadId)
+                if (existing) {
+                  store.upsertThread({
+                    ...existing,
+                    updatedAt: timestamp,
+                    runCount: (existing.runCount ?? 0) + 1,
+                  })
+                } else {
+                  store.upsertThread({
+                    id: queuedThreadId,
+                    title: "Thread",
+                    createdAt: timestamp,
+                    updatedAt: timestamp,
+                    runCount: 1,
+                  })
+                }
               }
             }
             break
