@@ -7,13 +7,21 @@ import { Check, Loader2, Minus, X } from "lucide-react"
 import type { OperationStatus } from "../../client/index"
 import { statusCalloutTone, type StatusCalloutTone } from "../../lib/status-callout"
 
-const STATUS_LABEL: Record<StatusCalloutTone, string> = {
+const TONE_LABEL: Record<StatusCalloutTone, string> = {
   ok: "Success",
   err: "Failed",
   warn: "Warning",
   info: "Running",
   skip: "Skipped",
   muted: "Unknown",
+}
+
+function statusLabel(status: OperationStatus): string {
+  const key = String(status).toLowerCase()
+  if (key === "cancelled" || key === "canceled" || key === "stopped") {
+    return "Cancelled"
+  }
+  return TONE_LABEL[statusCalloutTone(status)]
 }
 
 function useSubtleBadge(status: OperationStatus, nested: boolean): boolean {
@@ -50,7 +58,7 @@ export function OpLogStatusBadge({
 }) {
   const tone = statusCalloutTone(status)
   const subtle = useSubtleBadge(status, nested)
-  const label = STATUS_LABEL[tone]
+  const label = statusLabel(status)
 
   return (
     <span

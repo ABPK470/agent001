@@ -9,7 +9,14 @@ describe("OpLogStatusBadge", () => {
     expect(statusCalloutTone("running")).toBe("info")
   })
 
+  it("paints cancelled as warn tone (amber) — same slot as Trace Cancel", () => {
+    expect(statusCalloutTone("cancelled")).toBe("warn")
+    expect(statusCalloutTone("canceled")).toBe("warn")
+    expect(statusCalloutTone("stopped")).toBe("warn")
+  })
+
   it("exports a status pill component", () => {
     expect(typeof OpLogStatusPill).toBe("function")
   })
 })
+

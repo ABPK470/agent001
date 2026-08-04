@@ -13,7 +13,7 @@ const STATUS_META: Record<
   failed: { label: "Fail", icon: "✕", tone: "failed" },
   running: { label: "Run", icon: "…", tone: "running" },
   skipped: { label: "Skip", icon: "⊝", tone: "skipped" },
-  cancelled: { label: "Cancel", icon: "–", tone: "cancelled" },
+  cancelled: { label: "CANC", icon: "–", tone: "cancelled" },
 }
 
 export function TraceTreeStatusBadge({
@@ -51,7 +51,7 @@ export function TraceTreeStatusBadge({
   return (
     <span
       className={`${operationStatusPill(meta.tone)} trace-tree-status-pill`}
-      title={meta.label}
+      title={status === "cancelled" ? "Cancelled" : meta.label}
     >
       <span className="trace-tree-status-pill__icon" aria-hidden>
         {meta.icon}
@@ -97,11 +97,12 @@ export function TraceTreeStatusDot({
   }
 
   const meta = STATUS_META[status]
+  const tip = status === "cancelled" ? "Cancelled" : meta.label
   return (
     <span
       className={`trace-tree-row__icon-dot ${DOT_TONE[status]}`}
-      title={meta.label}
-      aria-label={meta.label}
+      title={tip}
+      aria-label={tip}
     />
   )
 }
