@@ -17,6 +17,8 @@
 
 import { MessageRole } from "../../domain/enums/message.js"
 import type { LLMClient, Message } from "../../domain/types/agent-types.js"
+import type { CatalogGraph } from "../../tools/catalog/graph/index.js"
+import { isStopword } from "./detectors/stopwords.js"
 import type { AmbiguityFinding, AmbiguityKind, AmbiguitySeverity, ClarifyContext } from "./types.js"
 import { makeFindingId } from "./types.js"
 
@@ -145,6 +147,20 @@ function buildSystemPrompt(): string {
     "",
     "Rules:",
     '  • If the goal is unambiguous, return {"findings": []}.',
+    "  • The catalog sample below was already loaded for ONE specific, already-",
+    "    connected database and environment — the platform resolved that before",
+    "    you were called. NEVER emit a finding asking which database or which",
+    "    environment (dev/uat/prod) to use — that question is already answered",
+    "    by the mere existence of this catalog, regardless of the deployment's",
+    "    actual database name.",
+    "  • NEVER flag a schema name that appears in the 'Known schemas' list below",
+    "    as term-undefined or schema-match — it is a confirmed real schema.",
+    "  • A capitalised word at the START of a sentence carries no signal —",
+    "    English capitalises the first word of every sentence regardless of",
+    "    its meaning or part of speech. NEVER flag it as an undefined business",
+    "    term on that basis alone. Only flag capitalised words that name a",
+    "    specific business concept (a product, metric, region, or entity)",
+    "    with no catalog match.",
     "  • If the user goal uses pronouns / anaphora ('it', 'this', 'that',",
     "    'those results', 'the data', 'the report') AND a recent assistant",
     "    turn appears in the conversation, the referent IS that turn — do",
@@ -180,8 +196,25 @@ function buildUserPrompt(ctx: ClarifyContext, sampleSize: number): string {
   const conversation = renderConversationPreamble(ctx.messages)
   const parts: string[] = []
   if (conversation) parts.push(conversation, "")
-  parts.push(`User goal: ${ctx.goal}`, "", `Catalog sample (first ${sampleSize} objects):`, sample)
+  parts.push(`User goal: ${ctx.goal}`, "")
+  const knownSchemas = ctx.catalog ? renderKnownSchemas(ctx.catalog) : null
+  if (knownSchemas) parts.push(knownSchemas, "")
+  parts.push(`Catalog sample (first ${sampleSize} objects):`, sample)
   return parts.join("\n")
+}
+
+/**
+ * List every distinct schema name present in the live catalog. Deliberately
+ * NOT limited to `sampleSize` — a table sample can omit a real schema if the
+ * catalog happens to sort other schemas first, and an omitted schema is
+ * indistinguishable from a nonexistent one to the planner. Schema names are
+ * cheap to enumerate in full regardless of table count.
+ */
+function renderKnownSchemas(catalog: CatalogGraph): string {
+  const schemas = new Set<string>()
+  for (const table of catalog.tables.values()) schemas.add(table.schema)
+  if (schemas.size === 0) return ""
+  return `Known schemas in this database (confirmed real — never ask which one): ${[...schemas].sort().join(", ")}`
 }
 
 /** Render the last few conversation turns as a compact preamble for the
@@ -236,7 +269,47 @@ function filterPlannerFindings(
   ctx: ClarifyContext,
   findings: readonly AmbiguityFinding[]
 ): AmbiguityFinding[] {
-  return findings.filter((finding) => !isResolvedByGroundedGoal(ctx, finding))
+  return findings.filter(
+    (finding) => !isResolvedByGroundedGoal(ctx, finding) && !isMootDeploymentIdentityFinding(ctx, finding)
+  )
+}
+
+/**
+ * Words that only ever frame a "which database / which environment" question
+ * — never a business subject worth asking about. Kept local to the planner
+ * (rather than added to the shared clarify STOPWORDS) because the rule here
+ * is narrower and structural: these words are moot specifically because a
+ * live catalog is already connected, not because they are generically noisy.
+ */
+const DB_OR_ENV_WORD_RE = /\b(database|db|env|environment)\b/i
+
+/**
+ * Deterministic safety net for the planner's own hallucinations. Prompt
+ * instructions (see buildSystemPrompt) tell the model not to ask these
+ * questions in the first place, but a prompt is advisory — this filter is
+ * the hard guarantee, applied regardless of whether the model complied.
+ *
+ * Two structural facts make these findings moot whenever `ctx.catalog` is
+ * present (a live catalog is only ever built for one already-resolved
+ * connection):
+ *   1. "which database / which environment" — answered by the catalog's
+ *      mere existence, independent of the deployment's actual names.
+ *   2. "which schema" — answered when the named schema token is a schema
+ *      that genuinely exists in this catalog (mirrors the same rule
+ *      `filterFindingsForRunFrame` already applies to deterministic
+ *      schema-match findings under `schemaAggregate`).
+ */
+function isMootDeploymentIdentityFinding(ctx: ClarifyContext, finding: AmbiguityFinding): boolean {
+  if (finding.kind !== "term-undefined" && finding.kind !== "schema-match") return false
+  if (!ctx.catalog) return false
+  const subject = finding.subject.toLowerCase()
+  if (DB_OR_ENV_WORD_RE.test(subject)) return true
+
+  const tokens = subject.split(/\s+/).filter((t) => t.length > 0)
+  if (!tokens.includes("schema") && !tokens.includes("schemas")) return false
+  const schemaNames = new Set<string>()
+  for (const table of ctx.catalog.tables.values()) schemaNames.add(table.schema.toLowerCase())
+  return tokens.some((t) => !isStopword(t) && t !== "schema" && t !== "schemas" && schemaNames.has(t))
 }
 
 function isResolvedByGroundedGoal(ctx: ClarifyContext, finding: AmbiguityFinding): boolean {

@@ -40,6 +40,25 @@ describe("ClarificationsRegistry", () => {
     expect(match?.subject).toBe("Revenue")
   })
 
+  it("finds active clarification state by stable finding id", () => {
+    const reg = new ClarificationsRegistry()
+    const finding = mkFinding()
+    reg.recordEmitted("r1", 0, [finding])
+    expect(reg.getFinding("r1", finding.id)?.subject).toBe("Revenue")
+    expect(reg.getFinding("r1", "missing")).toBeNull()
+  })
+
+  it("removes a resolved finding from the blocking gate", () => {
+    const reg = new ClarificationsRegistry()
+    const finding = mkFinding()
+    reg.recordEmitted("r1", 0, [finding])
+    expect(reg.getOpenBlocking("r1")).toHaveLength(1)
+    reg.setPending("r1", reg.getFinding("r1", finding.id)!, finding.suggestedQuestion)
+    reg.resolvePending("r1", "publish.Revenue", 1)
+    expect(reg.isResolved("r1", finding.id)).toBe(true)
+    expect(reg.getOpenBlocking("r1")).toEqual([])
+  })
+
   it("matchQuestion preserves uiOptions for closed-choice findings", () => {
     const reg = new ClarificationsRegistry()
     reg.recordEmitted("r1", 0, [
@@ -110,6 +129,7 @@ describe("ClarificationsRegistry", () => {
       {
         findingId: f1.id,
         kind: f1.kind,
+        severity: f1.severity,
         subject: f1.subject,
         suggestedQuestion: f1.suggestedQuestion,
         round: 0
@@ -122,6 +142,7 @@ describe("ClarificationsRegistry", () => {
       {
         findingId: f2.id,
         kind: f2.kind,
+        severity: f2.severity,
         subject: f2.subject,
         suggestedQuestion: f2.suggestedQuestion,
         round: 0
@@ -146,7 +167,14 @@ describe("ClarificationsRegistry", () => {
     reg.recordEmitted("r1", 0, [mkFinding()])
     reg.setPending(
       "r1",
-      { findingId: "x", kind: "schema-match", subject: "Revenue", suggestedQuestion: "q", round: 0 },
+      {
+        findingId: "x",
+        kind: "schema-match",
+        severity: "block",
+        subject: "Revenue",
+        suggestedQuestion: "q",
+        round: 0
+      },
       "q"
     )
     reg.resolvePending("r1", "answer", 0)
@@ -170,6 +198,7 @@ describe("ClarificationsRegistry", () => {
       {
         findingId: f1.id,
         kind: f1.kind,
+        severity: f1.severity,
         subject: f1.subject,
         suggestedQuestion: f1.suggestedQuestion,
         round: 0
@@ -181,6 +210,7 @@ describe("ClarificationsRegistry", () => {
       {
         findingId: f2.id,
         kind: f2.kind,
+        severity: f2.severity,
         subject: f2.subject,
         suggestedQuestion: f2.suggestedQuestion,
         round: 0

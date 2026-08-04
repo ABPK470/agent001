@@ -142,6 +142,8 @@ export const STOPWORDS: ReadonlySet<string> = new Set([
   "db",
   "env",
   "environment",
+  "schema",
+  "schemas",
   // numerals & quantifiers
   "one",
   "two",

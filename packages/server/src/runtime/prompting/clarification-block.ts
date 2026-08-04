@@ -28,7 +28,7 @@ function renderFinding(f: AmbiguityFinding): string {
   const uiOptions =
     f.uiOptions && f.uiOptions.length > 0 ? `  ui options: ${f.uiOptions.slice(0, 6).join(", ")}\n` : ""
   return [
-    `${sev} [${f.kind}] subject="${f.subject}" (source: ${f.source})`,
+    `${sev} id="${f.id}" [${f.kind}] subject="${f.subject}" (source: ${f.source})`,
     `  reasoning: ${f.reasoning}`,
     candidates,
     uiOptions,
@@ -64,6 +64,7 @@ export function buildClarificationBlock(input: ClarificationBlockInput): string 
       "is either a 🛑 BLOCK (you MUST ask the user via the ask_user tool",
       "before proceeding) or a ⚠ WARN (call ask_user when you cannot",
       "confidently disambiguate from context). One ask_user call per finding;",
+      "when calling ask_user for a listed finding, pass its id as findingId.",
       "use the suggested question or a clearer phrasing — do NOT batch all",
       "questions into a single call. `candidates` are reasoning context only;",
       "do NOT copy them into ask_user options unless explicit `ui options` are present.",
@@ -77,7 +78,10 @@ export function buildClarificationBlock(input: ClarificationBlockInput): string 
     blocks.push(
       "<resolved_clarifications>",
       "The user has already answered the following clarifications this run.",
-      "Treat their answers as authoritative; do NOT re-ask the same subject.",
+      "Treat their answers as authoritative; do NOT re-ask the same subject —",
+      "not via ask_user, and not by restating the question or the same",
+      "candidate list as prose or a table. Proceed NOW, in this turn, with",
+      "the tool calls needed to satisfy the goal using these answers.",
       "",
       resolved.map(renderResolved).join("\n"),
       "</resolved_clarifications>"

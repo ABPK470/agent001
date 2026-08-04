@@ -381,6 +381,32 @@ describe("termUndefinedDetector", () => {
       []
     )
   })
+
+  it("ignores a capitalised imperative verb starting the SECOND sentence of the goal", () => {
+    // Regression: "Connect" starting a second sentence (after "? ") was
+    // flagged as an undefined business term in production because it is
+    // not in any hand-maintained SENTENCE_STARTERS allow-list. The fix is
+    // structural (sentence-initial position), not another list entry —
+    // this test intentionally uses a verb NOT in that list.
+    const cat = catalogFrom([table("publish", "Sales", [col("amount", "decimal")])])
+    const findings = termUndefinedDetector.detect(
+      ctx({
+        goal: "where does core.linkedService values are used ? Connect to PROD and analyze it",
+        catalog: cat
+      })
+    )
+    expect(findings.find((f) => f.subject === "Connect")).toBeUndefined()
+  })
+
+  it("still fires on an unrecognised capitalised phrase appearing mid-sentence", () => {
+    // The sentence-initial guard must not swallow genuine mid-sentence
+    // business nouns — only the orthographic sentence-start case.
+    const cat = catalogFrom([table("publish", "Sales", [col("amount", "decimal")])])
+    const findings = termUndefinedDetector.detect(
+      ctx({ goal: "please show me the Zzyzx Bucket totals", catalog: cat })
+    )
+    expect(findings.some((f) => f.subject === "Zzyzx Bucket")).toBe(true)
+  })
 })
 
 // ── metric-undefined ─────────────────────────────────────────────

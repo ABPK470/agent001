@@ -237,8 +237,23 @@ function composeExecutionTools(
         signal,
         ...(opts ?? {})
       }),
-    askUserResolve: (question, options, sensitive) => {
-      const match = interaction.clarifications.matchQuestion(request.runId, question)
+    askUserResolve: (question, options, sensitive, findingId) => {
+      const identifiedFinding = findingId
+        ? interaction.clarifications.getFinding(request.runId, findingId)
+        : null
+      if (findingId && !identifiedFinding) {
+        return Promise.resolve(`Error: clarification finding '${findingId}' is not active for this run.`)
+      }
+      const match = identifiedFinding ?? interaction.clarifications.matchQuestion(request.runId, question)
+      const openBlocking = interaction.clarifications.getOpenBlocking(request.runId)
+      if (openBlocking.length > 0 && (!findingId || !match)) {
+        return Promise.resolve(
+          `Error: resolve an active blocking clarification using its findingId: ${openBlocking.map((finding) => finding.findingId).join(", ")}`
+        )
+      }
+      if (match && interaction.clarifications.isResolved(request.runId, match.findingId)) {
+        return Promise.resolve("Error: this clarification has already been answered. Continue with the available tools.")
+      }
       const presentation = resolveAskUserPresentation(question, options, match)
       tracing.boundSaveTrace(request.runId, {
         kind: TraceEventKind.UserInputRequest,
@@ -265,11 +280,19 @@ function composeExecutionTools(
   })
 
   const allTools = allToolsBase.map((tool) => {
+    const execute = async (args: Record<string, unknown>) => {
+      const openBlocking = interaction.clarifications.getOpenBlocking(request.runId)
+      if (tool.name !== "ask_user" && openBlocking.length > 0) {
+        const pending = openBlocking.map((finding) => finding.findingId).join(", ")
+        return `Error: resolve blocking clarification(s) before executing tools: ${pending}`
+      }
+      return tool.execute(args)
+    }
     if (tool.name === "sync_preview") {
       return {
         ...tool,
         execute: async (args: Record<string, unknown>) => {
-          const result = await tool.execute(args)
+          const result = await execute(args)
           if (typeof result === "string") {
             const match = result.match(/^Plan\s+([a-f0-9-]{36})\b/)
             if (match) {
@@ -301,7 +324,7 @@ function composeExecutionTools(
             type: EventType.SyncAgentExecuteStarted,
             data: { runId: request.runId, planId }
           })
-          const result = await tool.execute(args)
+          const result = await execute(args)
           const success = typeof result === "string" && result.toLowerCase().includes("successfully")
           // executeSync records finish (with execute totals) via the run sink.
           broadcast({
@@ -318,7 +341,7 @@ function composeExecutionTools(
       }
     }
 
-    return tool
+    return { ...tool, execute }
   })
 
   resetEffectSeq(request.runId)

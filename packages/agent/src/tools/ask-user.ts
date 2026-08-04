@@ -35,6 +35,11 @@ export const ASK_USER_PARAMETERS = {
       type: "string",
       description: "The question or instruction to show the user."
     },
+    findingId: {
+      type: "string",
+      description:
+        "Required when resolving a clarification finding: copy the finding ID from <must_clarify>."
+    },
     options: {
       type: "array",
       items: { type: "string" },

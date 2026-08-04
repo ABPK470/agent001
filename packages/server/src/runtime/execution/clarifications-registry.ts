@@ -50,6 +50,7 @@ export class ClarificationsRegistry implements ClarificationsRegistryPort {
       byId.set(f.id, {
         findingId: f.id,
         kind: f.kind,
+        severity: f.severity,
         subject: f.subject,
         suggestedQuestion: f.suggestedQuestion,
         uiOptions: f.uiOptions,
@@ -59,8 +60,25 @@ export class ClarificationsRegistry implements ClarificationsRegistryPort {
     this.emitted.set(runId, [...byId.values()])
   }
 
+  /** Look up a finding by the stable identifier rendered to the agent. */
+  getFinding(runId: string, findingId: string): EmittedRecord | null {
+    return this.emitted.get(runId)?.find((record) => record.findingId === findingId) ?? null
+  }
+
+  /** Whether this exact finding has already received a user answer this run. */
+  isResolved(runId: string, findingId: string): boolean {
+    return (this.resolvedByRun.get(runId) ?? []).some((resolved) => resolved.findingId === findingId)
+  }
+
+  /** Blocking findings that still require a user answer before execution. */
+  getOpenBlocking(runId: string): EmittedRecord[] {
+    return (this.emitted.get(runId) ?? []).filter(
+      (record) => record.severity === "block" && !this.isResolved(runId, record.findingId)
+    )
+  }
+
   /**
-   * Find the emitted finding (if any) whose suggestedQuestion best matches
+   * Compatibility fallback for legacy tool calls that omit findingId. Find the emitted finding whose suggestedQuestion best matches
    * the question the agent just passed to ask_user. Match is computed as a
    * token-overlap ratio over a normalised tokenisation; threshold is
    * deliberately permissive (0.4) because the agent often rephrases.
@@ -200,3 +218,4 @@ function overlapScore(a: Set<string>, b: Set<string>): number {
   const denom = Math.min(a.size, b.size)
   return denom === 0 ? 0 : inter / denom
 }
+

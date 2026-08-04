@@ -26,6 +26,32 @@ function col(name: string, dataType = "int"): CatalogColumn {
   return { name, dataType, nullable: false, isPK: false, maxLength: null }
 }
 
+function table(schema: string, name: string, columns: CatalogColumn[]): CatalogTable {
+  return {
+    schema,
+    name,
+    qualifiedName: `${schema}.${name}`,
+    type: "TABLE",
+    rowCount: 1000,
+    columns,
+    fkOutgoing: [],
+    fkIncoming: []
+  }
+}
+
+function catalogFrom(tables: CatalogTable[]): CatalogGraph {
+  return CatalogGraph.fromSnapshot({
+    version: 6,
+    builtAt: new Date().toISOString(),
+    source: "test",
+    tables,
+    implicitEdges: [],
+    lineage: [],
+    viewSourceRows: [],
+    sysCatalog: []
+  } as Parameters<typeof CatalogGraph.fromSnapshot>[0])
+}
+
 function minimalCatalog(): CatalogGraph {
   const tables: CatalogTable[] = [
     {
@@ -413,5 +439,106 @@ describe("runLlmPlanner", () => {
     )
 
     expect(out).toEqual([])
+  })
+
+  it("drops a hallucinated 'which database' finding — a live catalog already answers it", async () => {
+    // Regression (2026-08-04): the planner asked "what is the exact database
+    // name for mymi" even though a catalog was already connected and built
+    // for one specific, resolved database. The prompt now instructs against
+    // this, but the deterministic filter is the hard guarantee.
+    const client = fakeClient(
+      JSON.stringify({
+        findings: [
+          {
+            kind: "term-undefined",
+            severity: "block",
+            subject: "mymi database",
+            reasoning: "The catalog does not show a database named mymi.",
+            suggestedQuestion: "What is the exact database name for \"mymi\"?"
+          }
+        ]
+      })
+    )
+    const out = await runLlmPlanner(ctx({ goal: "how many tables in mymi database" }), client)
+    expect(out).toEqual([])
+  })
+
+  it("drops a hallucinated 'which environment' finding — a live catalog already answers it", async () => {
+    const client = fakeClient(
+      JSON.stringify({
+        findings: [
+          {
+            kind: "term-undefined",
+            severity: "block",
+            subject: "DEV env",
+            reasoning: "No environment identifier is visible in the catalog sample.",
+            suggestedQuestion: "How is the DEV environment identified?"
+          }
+        ]
+      })
+    )
+    const out = await runLlmPlanner(ctx({ goal: "use DEV env and core schema" }), client)
+    expect(out).toEqual([])
+  })
+
+  it("drops a hallucinated 'which schema' finding when the schema genuinely exists in the catalog", async () => {
+    const client = fakeClient(
+      JSON.stringify({
+        findings: [
+          {
+            kind: "term-undefined",
+            severity: "block",
+            subject: "core schema",
+            reasoning: "Nothing in the sample confirms which schema is core.",
+            suggestedQuestion: "Which schema do you mean by \"core schema\"?"
+          }
+        ]
+      })
+    )
+    // dbCatalog() only contains publish/dim tables — swap in one with a
+    // "core" schema so the filter has something real to confirm against.
+    const catalogWithCore = catalogFrom([table("core", "Dataset", [col("datasetId")])])
+    const out = await runLlmPlanner(ctx({ goal: "how many core schema tables", catalog: catalogWithCore }), client)
+    expect(out).toEqual([])
+  })
+
+  it("keeps a genuine term-undefined finding whose subject is not a schema/env/database word", async () => {
+    const client = fakeClient(
+      JSON.stringify({
+        findings: [
+          {
+            kind: "term-undefined",
+            severity: "block",
+            subject: "Widget Velocity",
+            reasoning: "No catalog object matches this phrase.",
+            suggestedQuestion: "What does \"Widget Velocity\" refer to?"
+          }
+        ]
+      })
+    )
+    const out = await runLlmPlanner(ctx({ goal: "show Widget Velocity" }), client)
+    expect(out).toHaveLength(1)
+    expect(out[0]!.subject).toBe("Widget Velocity")
+  })
+
+  it("lists every catalog schema name in the prompt, not just the sampled slice", async () => {
+    let captured: Message[] = []
+    const client: LLMClient = {
+      chat: async (messages) => {
+        captured = messages as Message[]
+        return { content: '{"findings": []}', toolCalls: [] }
+      }
+    } as unknown as LLMClient
+    const catalogWithCore = catalogFrom([
+      table("publish", "Sales", [col("amount", "decimal")]),
+      table("core", "Dataset", [col("datasetId")])
+    ])
+    await runLlmPlanner(ctx({ goal: "how many core schema tables", catalog: catalogWithCore }), client, {
+      catalogSampleSize: 1
+    })
+    const userPrompt = String(captured[1]?.content ?? "")
+    expect(userPrompt).toContain("Known schemas")
+    expect(userPrompt).toContain("core")
+    expect(userPrompt).toContain("publish")
   })
 })

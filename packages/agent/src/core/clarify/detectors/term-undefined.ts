@@ -93,9 +93,13 @@ export const termUndefinedDetector: Detector = {
     const reserved = mergeReservedTokens(ctx)
     const out = []
     const seen = new Set<string>()
-    const matches = ctx.goal.match(CAPITALISED_PHRASE) ?? []
-    for (const phrase of matches) {
-      // skip single-word sentence starters ("Show", "How", "Please", …)
+    for (const m of ctx.goal.matchAll(CAPITALISED_PHRASE)) {
+      const phrase = m[0]
+      // Sentence-initial capitalisation is orthographic, not semantic: every
+      // word starting a sentence is capitalised regardless of its part of
+      // speech or meaning, so no fixed word list can classify it correctly.
+      // Check the structural position instead of enumerating words.
+      if (!phrase.includes(" ") && isSentenceInitialPosition(ctx.goal, m.index ?? 0)) continue
       if (!phrase.includes(" ") && SENTENCE_STARTERS.has(phrase)) continue
       const lc = phrase.toLowerCase()
       if (seen.has(lc)) continue
@@ -126,6 +130,21 @@ export const termUndefinedDetector: Detector = {
     }
     return out
   }
+}
+
+/**
+ * True when `index` (the start of a matched phrase within `goal`) sits at
+ * the first word of a sentence: either the very start of the goal text, or
+ * immediately after a `. `/`! `/`? ` sentence terminator or a newline.
+ * English capitalises the first word of every sentence regardless of its
+ * part of speech, so a single-word match at this position carries no
+ * semantic signal either way — it is neither confirmed business vocabulary
+ * nor confirmed noise, so the detector stays silent rather than guessing.
+ */
+function isSentenceInitialPosition(goal: string, index: number): boolean {
+  const prefix = goal.slice(0, index)
+  if (prefix.trim().length === 0) return true
+  return /[.!?]\s+$/.test(prefix) || /\n\s*$/.test(prefix)
 }
 
 /**

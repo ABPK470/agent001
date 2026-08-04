@@ -375,7 +375,12 @@ export interface PerRunToolContext {
    * UserInputRequired, and waiting for the user's response. The factory
    * doesn't need to know about pendingInputs or SSE plumbing.
    */
-  askUserResolve: (question: string, options: string[] | undefined, sensitive: boolean) => Promise<string>
+  askUserResolve: (
+    question: string,
+    options: string[] | undefined,
+    sensitive: boolean,
+    findingId: string | undefined
+  ) => Promise<string>
   /**
    * Run-scoped identifiers for memory + recall tools. Continuity is thread-scoped.
    */
@@ -407,7 +412,8 @@ export const PER_RUN_FACTORIES: PerRunToolFactory[] = [
           if (!question) return "Error: 'question' is required"
           const options = Array.isArray(args["options"]) ? args["options"].map(String) : undefined
           const sensitive = Boolean(args["sensitive"])
-          return ctx.askUserResolve(question, options, sensitive)
+          const findingId = typeof args["findingId"] === "string" ? args["findingId"] : undefined
+          return ctx.askUserResolve(question, options, sensitive, findingId)
         }
       },
       { timeoutMs: 0 }
