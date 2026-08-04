@@ -173,6 +173,9 @@ export function ToolExecutionCard({
   const outputCopyText = (
     showError ? errorText : showResult ? resultText : ""
   )?.trim() ?? ""
+  const panelCopyText = showChatInputBody
+    ? input.copyText
+    : outputCopyText
 
   const rootClass = [
     isChat ? "chat-tool" : "trace-exec",
@@ -198,13 +201,12 @@ export function ToolExecutionCard({
             <ChatToolGlyph toolName={toolName} />
             <span className="chat-tool__verb">{chatVerb}</span>
             {chatPill ? <span className="chat-tool__pill">{chatPill}</span> : null}
-            <span className="chat-tool__chev-slot" aria-hidden>
-              <ChevronRight
-                size={16}
-                strokeWidth={1.5}
-                className={`chat-tool__chev chat-trace-chev${open ? " is-open" : ""}`}
-              />
-            </span>
+            <ChevronRight
+              size={16}
+              strokeWidth={1.5}
+              className={`chat-tool__chev chat-trace-chev${open ? " is-open" : ""}`}
+              aria-hidden
+            />
           </button>
         ) : (
           <div className="chat-tool__summary chat-tool__summary--static">
@@ -216,39 +218,44 @@ export function ToolExecutionCard({
 
         {open && hasTerminalBody ? (
           <div className="chat-tool__panel" data-chat-expand-body="">
+            {panelCopyText ? (
+              <div className="chat-tool__panel-copy">
+                <CopyControl
+                  value={panelCopyText}
+                  ariaLabel={
+                    showChatInputBody
+                      ? "Copy input"
+                      : showError
+                        ? "Copy error"
+                        : "Copy output"
+                  }
+                  iconOnly
+                />
+              </div>
+            ) : null}
             {showChatInputBody ? (
               <div className="chat-tool__cmd">
                 <span className="chat-tool__dot" aria-hidden />
                 <pre className="chat-tool__cmd-text">{inputText}</pre>
-                <CopyControl value={input.copyText} ariaLabel="Copy input" iconOnly />
               </div>
             ) : null}
 
             {showError || showResult ? (
               <>
                 {showChatInputBody ? <div className="chat-tool__sep" /> : null}
-                <div className="chat-tool__cmd">
-                  {showError && errorText ? (
-                    <pre className="chat-tool__out is-error">{errorText.trim()}</pre>
-                  ) : null}
-                  {showResult && resultText ? (
-                    resultText.trim().length > 480 ? (
-                      <InlinePeekText
-                        text={resultText.trim()}
-                        className="chat-tool__out"
-                      />
-                    ) : (
-                      <pre className="chat-tool__out">{resultText.trim()}</pre>
-                    )
-                  ) : null}
-                  {outputCopyText ? (
-                    <CopyControl
-                      value={outputCopyText}
-                      ariaLabel={showError ? "Copy error" : "Copy output"}
-                      iconOnly
+                {showError && errorText ? (
+                  <pre className="chat-tool__out is-error">{errorText.trim()}</pre>
+                ) : null}
+                {showResult && resultText ? (
+                  resultText.trim().length > 480 ? (
+                    <InlinePeekText
+                      text={resultText.trim()}
+                      className="chat-tool__out"
                     />
-                  ) : null}
-                </div>
+                  ) : (
+                    <pre className="chat-tool__out">{resultText.trim()}</pre>
+                  )
+                ) : null}
               </>
             ) : !hasOutputPayload ? (
               <>

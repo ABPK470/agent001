@@ -26,7 +26,6 @@ import {
   type ToolRow,
 } from "../lib/events/build-chat-parts"
 import { CodeBlock } from "../components/CodeBlock"
-import { InlinePeekText } from "../components/InlinePeekText"
 import { ToolExecutionCard } from "../components/ToolExecutionCard"
 import { parseToolArgsFormatted } from "../components/tool-code-display"
 import { ScrollToLatestButton } from "../components/ScrollToLatestButton"
@@ -40,9 +39,9 @@ import {
 import { STICKY_GOAL_HOME_TOP, StickyUserGoal } from "../components/StickyUserGoal"
 import { TypewriterAnswer } from "../components/TypewriterAnswer"
 import { RunStatus } from "../enums"
+import { isCancelRaceFailureError } from "../lib/events/trace-terminal"
 import { canResumeRun, isTerminalFailureStatus } from "../lib/run-actions"
 import { useMe } from "../hooks/useMe"
-import { useTheme } from "../hooks/useTheme"
 import { useViewingAs } from "../hooks/useViewingAs"
 import { ToastStack, useWidgetToasts } from "../components/useWidgetToasts"
 import { useStickToBottomScroll } from "../hooks/useStickToBottomScroll"
@@ -684,7 +683,7 @@ function IterationBlock({
       <ChatFoldBody
         open={open}
         animated={animateFold}
-        className="mt-0.5 pl-6 border-l chat-trace-fold ml-[5px]"
+        className="mt-0.5 pl-6 chat-trace-fold ml-[5px]"
       >
         <IterationToolList tools={part.tools} syncByInvocation={syncByInvocation} />
       </ChatFoldBody>
@@ -876,7 +875,7 @@ function StepBlock({
         <ChatFoldBody
           open={open}
           animated={animateFold}
-          className="mt-0.5 ml-[0.35rem] pl-6 border-l chat-trace-fold min-w-0"
+          className="mt-0.5 ml-[0.35rem] pl-6 chat-trace-fold min-w-0"
         >
           {hasErrorBody && !hasTools ? (
             <pre className="chat-tool-error my-0.5">{errorBody}</pre>
@@ -1024,7 +1023,7 @@ function NarrativeUpdate({ part }: { part: ResponseNarrativePart }) {
 }
 
 function ErrorNote({ text }: { text: string }) {
-  // Recoverable process notes stay muted; hard failures use RunErrorBanner.
+  // Recoverable process notes stay muted; run terminals use ChatRunTerminalNotice.
   return (
     <div className="py-1 min-w-0 text-[15px] leading-6 text-text-muted">{text}</div>
   )
@@ -1136,6 +1135,41 @@ function ChatSystemDivider({
   )
 }
 
+/** Reason line under a cancel divider — always say what happened. */
+function chatCancelDetail(error?: string | null): string {
+  const text = error?.trim() || ""
+  if (!text || /^run cancelled by user$/i.test(text)) {
+    return "This operation was aborted."
+  }
+  return text
+}
+
+/**
+ * One chat dialect for cancelled / aborted / failed runs — light and dark.
+ * Horizontal rule + label, then a short reason (never theme-split callouts).
+ */
+function ChatRunTerminalNotice({
+  kind,
+  completedAt,
+  detail,
+}: {
+  kind: "cancelled" | "failed"
+  completedAt?: string | null
+  detail: string
+}) {
+  const time = formatRunTerminalTime(completedAt)
+  const label =
+    kind === "cancelled"
+      ? `Run cancelled${time ? ` · ${time}` : ""}`
+      : `Run failed${time ? ` · ${time}` : ""}`
+  return (
+    <div className="chat-run-terminal">
+      <ChatSystemDivider label={label} tone={kind === "cancelled" ? "warn" : "err"} />
+      {detail ? <p className="chat-run-terminal__detail">{detail}</p> : null}
+    </div>
+  )
+}
+
 function ChatRunInterruptedBar({
   message,
   canResume,
@@ -1160,38 +1194,6 @@ function ChatRunInterruptedBar({
           {resuming ? "Resuming…" : "Resume run"}
         </button>
       ) : null}
-    </div>
-  )
-}
-
-function RunErrorBanner({ error }: { error: string }) {
-  const [expanded, setExpanded] = useState(false)
-  const { summary, details } = summarizeRunError(error)
-  const showDetails = details != null && details !== summary
-
-  return (
-    <div className="mia-callout mia-callout--err w-fit max-w-full rounded-lg px-3 py-2.5">
-      <div className="text-[15px] font-medium leading-6">Run failed</div>
-      <p className="mt-1 text-[15px] leading-5 opacity-85 break-words">{summary}</p>
-      {showDetails && (
-        <>
-          <button
-            type="button"
-            onClick={() => setExpanded((value) => !value)}
-            className="mt-2 text-[15px] font-medium opacity-75 hover:opacity-100"
-          >
-            {expanded ? "Hide details" : "Show details"}
-          </button>
-          {expanded && (
-            <div className="mt-2 rounded-md border border-border-subtle border-l-[3px] border-l-error px-2.5 py-2 opacity-90">
-              <InlinePeekText
-                text={details}
-                className="code-pre m-0 w-full max-w-full whitespace-pre-wrap break-words px-0 text-[15px] leading-5 opacity-100"
-              />
-            </div>
-          )}
-        </>
-      )}
     </div>
   )
 }
@@ -1442,8 +1444,6 @@ function RunMessageImpl({
   /** Active turn only — pauses transcript stick-to-bottom while 2+ subagents run. */
   onParallelFanOutChange?: (fanOut: boolean) => void
 }) {
-  const { resolved: theme } = useTheme()
-  const isLight = theme === "light"
   const { pauseAutoScroll, scrollHostRef } = useChatScroll()
   const wasFanOutRef = useRef(false)
   const trace = run.trace ?? []
@@ -1455,6 +1455,9 @@ function RunMessageImpl({
   const isDone = !isRunActiveStatus(run.status)
   const isLiveRun = isActive && !isDone
   const parallelFanOut = isParallelSubagentFanOut(responseParts)
+  const isCancelTerminal =
+    run.status === "cancelled"
+    || (Boolean(run.error) && isCancelRaceFailureError(run.error) && isTerminalFailureStatus(run.status))
 
   useEffect(() => {
     if (!isActive) {
@@ -1698,29 +1701,21 @@ function RunMessageImpl({
       {/* Deliverable downloads — files the agent promoted (CSV/MD/… exports) */}
       <DeliverableChips runId={run.id} />
 
-      {/* Terminal status — light: inline dividers; dark: callout cards */}
-      {run.status === "cancelled" && (
-        isLight ? (
-          <ChatSystemDivider
-            label={`Run cancelled${formatRunTerminalTime(run.completedAt) ? ` · ${formatRunTerminalTime(run.completedAt)}` : ""}`}
-            tone="warn"
-          />
-        ) : (
-          <div className="mia-callout mia-callout--warn w-fit max-w-full rounded-lg px-3 py-2.5 text-[15px] leading-6">
-            Run cancelled.
-          </div>
-        )
-      )}
-      {run.error && run.status !== "cancelled" && !(isLight && isActive) && (
-        isLight ? (
-          <ChatSystemDivider
-            label={summarizeRunError(run.error).summary}
-            tone="err"
-          />
-        ) : (
-          <RunErrorBanner error={run.error} />
-        )
-      )}
+      {/* Terminal status — same divider dialect for light + dark, any tool/path */}
+      {isCancelTerminal ? (
+        <ChatRunTerminalNotice
+          kind="cancelled"
+          completedAt={run.completedAt}
+          detail={chatCancelDetail(run.error)}
+        />
+      ) : null}
+      {run.error && !isCancelTerminal && isTerminalFailureStatus(run.status) ? (
+        <ChatRunTerminalNotice
+          kind="failed"
+          completedAt={run.completedAt}
+          detail={summarizeRunError(run.error).summary}
+        />
+      ) : null}
 
       {/* Workspace diff */}
       {showDiff && <WorkspaceDiffCard runId={run.id} onNotify={onNotify} onNotifyError={onNotifyError} />}
@@ -2030,19 +2025,17 @@ export function TermChat({
     : undefined
   const isRunning = isRunActiveStatus(scopedActiveRun?.status)
   const streamingAnswer = scopedActiveRun?.streamingAnswer ?? ""
-  const { resolved: theme } = useTheme()
-  const isLight = theme === "light"
   const [resumingRun, setResumingRun] = useState(false)
-
-  const activeRunInterrupted = useMemo(() => {
-    if (!isLight || !scopedActiveRun?.error) return null
-    if (!isTerminalFailureStatus(scopedActiveRun.status)) return null
-    return summarizeRunError(scopedActiveRun.error).summary
-  }, [isLight, scopedActiveRun?.error, scopedActiveRun?.status])
 
   const canResumeInterrupted = Boolean(
     scopedActiveRun && canResumeRun(scopedActiveRun.status, scopedActiveRun.hasCheckpoint),
   )
+
+  const activeRunInterrupted = useMemo(() => {
+    if (!canResumeInterrupted || !scopedActiveRun?.error) return null
+    if (!isTerminalFailureStatus(scopedActiveRun.status)) return null
+    return summarizeRunError(scopedActiveRun.error).summary
+  }, [canResumeInterrupted, scopedActiveRun?.error, scopedActiveRun?.status])
 
   const resumeInterruptedRun = useCallback(async () => {
     if (!scopedActiveRunId || resumingRun) return

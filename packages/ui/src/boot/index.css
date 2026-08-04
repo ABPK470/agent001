@@ -6407,7 +6407,7 @@ button.trace-tree-status-pill:hover {
   gap: 8px;
   width: 100%;
   max-width: 100%;
-  padding: 0.2rem 16px 0.2rem 0;
+  padding: 0.2rem 0;
   border: none;
   background: transparent;
   text-align: left;
@@ -6470,16 +6470,7 @@ button.trace-tree-status-pill:hover {
   border-color: color-mix(in srgb, var(--error, #ef4444) 35%, transparent);
 }
 
-/* Rigid right gutter — all tool chevrons share one vertical column. */
-.chat-tool__chev-slot {
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  margin-left: auto;
-}
-
+/* Chevron sits immediately after the pill — not pinned to the far right. */
 .chat-tool__chev {
   flex-shrink: 0;
   width: 16px;
@@ -6493,8 +6484,9 @@ button.trace-tree-status-pill:hover {
 }
 
 .chat-tool__panel {
+  position: relative;
   margin: 0.25rem 0 0.35rem;
-  padding: 0.65rem 0.75rem;
+  padding: 0.65rem 2rem 0.65rem 0.75rem;
   border: 1px solid var(--border-subtle, var(--color-border-subtle));
   border-radius: 0.375rem;
   background: var(--overlay-1, rgb(255 255 255 / 0.02));
@@ -6502,6 +6494,31 @@ button.trace-tree-status-pill:hover {
   flex-direction: column;
   gap: 0.45rem;
   min-width: 0;
+}
+
+.chat-tool__panel-copy {
+  position: absolute;
+  top: 0.45rem;
+  right: 0.45rem;
+  z-index: 1;
+}
+
+/* Copy must read clearly on both themes — never ghosted. */
+.chat-tool__panel .trace-copy--icon,
+.chat-tool__panel .mia-code-block__copy {
+  opacity: 1;
+  color: var(--text-muted, var(--color-text-muted));
+  background: color-mix(in srgb, var(--text, #fff) 6%, transparent);
+  border-radius: 0.3rem;
+}
+
+.chat-tool__panel .trace-copy--icon:hover,
+.chat-tool__panel .trace-copy--icon:focus-visible,
+.chat-tool__panel .mia-code-block__copy:hover,
+.chat-tool__panel .mia-code-block__copy:focus-visible {
+  opacity: 1;
+  color: var(--text, var(--color-text));
+  background: var(--hover-fill, color-mix(in srgb, var(--text, #fff) 10%, transparent));
 }
 
 :root[data-theme="light"] .chat-tool__panel {
@@ -6581,7 +6598,10 @@ button.trace-tree-status-pill:hover {
   min-width: 0;
 }
 
-/* Knee from the work-chip fold rail into each tool row (24px child indent). */
+/*
+ * Per-row tree rails (no continuous border-l on the fold).
+ * Vertical stops at the last knee — no stray line below the final tool.
+ */
 .chat-trace-fold .chat-tool-row::before {
   content: "";
   position: absolute;
@@ -6592,23 +6612,26 @@ button.trace-tree-status-pill:hover {
   background: color-mix(in srgb, var(--text-faint) 55%, var(--border-subtle));
 }
 
-.chat-trace-fold .chat-tool-row.is-last::after {
+.chat-trace-fold .chat-tool-row::after {
   content: "";
   position: absolute;
   left: -1.5rem;
-  top: 0.85rem;
-  bottom: -0.25rem;
+  top: 0;
   width: 1px;
-  background: var(--bg, var(--panel, #0b0f14));
-  transform: translateX(-0.5px);
+  background: color-mix(in srgb, var(--text-faint) 55%, var(--border-subtle));
 }
 
-:root[data-theme="light"] .chat-trace-fold .chat-tool-row::before {
+.chat-trace-fold .chat-tool-row:not(.is-last)::after {
+  bottom: 0;
+}
+
+.chat-trace-fold .chat-tool-row.is-last::after {
+  height: 0.85rem;
+}
+
+:root[data-theme="light"] .chat-trace-fold .chat-tool-row::before,
+:root[data-theme="light"] .chat-trace-fold .chat-tool-row::after {
   background: #cbd5e1;
-}
-
-:root[data-theme="light"] .chat-trace-fold .chat-tool-row.is-last::after {
-  background: var(--panel, #fff);
 }
 
 .trace-exec__summary--static {
@@ -13644,9 +13667,6 @@ button.trace-tree-status-pill:hover {
   background: color-mix(in srgb, var(--text-faint) 55%, transparent);
 }
 
-.termchat-transcript-shell .chat-trace-fold {
-  border-left-color: color-mix(in srgb, var(--text-faint) 55%, var(--border-subtle));
-}
 
 .termchat-transcript-shell .chat-trace-dot--idle {
   background: var(--text-muted);
@@ -13681,78 +13701,92 @@ button.trace-tree-status-pill:hover {
   background: #cbd5e1;
 }
 
-:root[data-theme="light"] .termchat-transcript-shell .chat-trace-fold {
-  border-left-color: #cbd5e1;
-}
-
 :root[data-theme="light"] .termchat-transcript-shell .chat-trace-dot--idle {
   background: #64748b;
 }
 
-/* Light chat — inline system dividers (cancel / fail), not floating callout cards. */
-:root[data-theme="light"] .termchat-transcript-shell .chat-system-divider {
+/*
+ * Chat run terminals — one dialect for light + dark:
+ * horizontal rule + label (Run cancelled · 10:06), then a short reason line.
+ */
+.termchat-transcript-shell .chat-system-divider {
   display: flex;
   align-items: center;
   gap: 0.625rem;
   padding: 0.375rem 0.25rem;
   font-size: 0.8125rem;
   line-height: 1.25rem;
-  color: var(--color-text-muted);
+  color: var(--text-muted, var(--color-text-muted));
   user-select: none;
 }
 
-:root[data-theme="light"] .termchat-transcript-shell .chat-system-divider__line {
+.termchat-transcript-shell .chat-system-divider__line {
   flex: 1;
   height: 1px;
   min-width: 0.5rem;
-  background: var(--color-border-subtle);
+  background: var(--border-subtle, var(--color-border-subtle));
 }
 
-:root[data-theme="light"] .termchat-transcript-shell .chat-system-divider[data-tone="warn"] .chat-system-divider__label {
-  color: var(--color-warning);
+.termchat-transcript-shell .chat-system-divider[data-tone="warn"] .chat-system-divider__label {
+  color: var(--warning, var(--color-warning));
 }
 
-:root[data-theme="light"] .termchat-transcript-shell .chat-system-divider[data-tone="err"] .chat-system-divider__label {
-  color: var(--color-error);
+.termchat-transcript-shell .chat-system-divider[data-tone="err"] .chat-system-divider__label {
+  color: var(--error, var(--color-error));
 }
 
-:root[data-theme="light"] .termchat-input-dock .chat-run-interrupted-bar {
+.termchat-transcript-shell .chat-run-terminal {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.15rem 0 0.35rem;
+}
+
+.termchat-transcript-shell .chat-run-terminal__detail {
+  margin: 0;
+  padding: 0 0.25rem;
+  font-size: 0.8125rem;
+  line-height: 1.35;
+  color: var(--text-muted, var(--color-text-muted));
+}
+
+.termchat-input-dock .chat-run-interrupted-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
   margin-bottom: 0.375rem;
   padding: 0.5rem 0.75rem;
-  border: 1px solid var(--color-border-subtle);
+  border: 1px solid var(--border-subtle, var(--color-border-subtle));
   border-radius: 0.5rem;
-  background: var(--error-surface, color-mix(in srgb, var(--color-error) 8%, var(--color-panel)));
-  color: var(--color-text-secondary);
+  background: color-mix(in srgb, var(--error, var(--color-error)) 8%, var(--panel, var(--color-panel)));
+  color: var(--text-secondary, var(--color-text-secondary));
   font-size: 0.8125rem;
   line-height: 1.25rem;
 }
 
-:root[data-theme="light"] .termchat-input-dock .chat-run-interrupted-bar__message {
+.termchat-input-dock .chat-run-interrupted-bar__message {
   min-width: 0;
   flex: 1;
 }
 
-:root[data-theme="light"] .termchat-input-dock .chat-run-interrupted-bar__action {
+.termchat-input-dock .chat-run-interrupted-bar__action {
   flex-shrink: 0;
   padding: 0.25rem 0.625rem;
   border-radius: 0.375rem;
-  border: 1px solid var(--color-border-subtle);
-  background: var(--color-panel);
-  color: var(--color-text);
+  border: 1px solid var(--border-subtle, var(--color-border-subtle));
+  background: var(--panel, var(--color-panel));
+  color: var(--text, var(--color-text));
   font-size: 0.8125rem;
   line-height: 1.25rem;
   transition: background 0.15s ease;
 }
 
-:root[data-theme="light"] .termchat-input-dock .chat-run-interrupted-bar__action:hover:not(:disabled) {
-  background: var(--hover-fill, color-mix(in srgb, var(--color-text) 6%, transparent));
+.termchat-input-dock .chat-run-interrupted-bar__action:hover:not(:disabled) {
+  background: var(--hover-fill, color-mix(in srgb, var(--text, var(--color-text)) 6%, transparent));
 }
 
-:root[data-theme="light"] .termchat-input-dock .chat-run-interrupted-bar__action:disabled {
+.termchat-input-dock .chat-run-interrupted-bar__action:disabled {
   opacity: 0.55;
   cursor: not-allowed;
 }
