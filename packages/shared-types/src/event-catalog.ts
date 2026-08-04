@@ -228,7 +228,12 @@ export const TRACE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "call",
     label: "Call",
     severity: "info",
-    instanceKey: (p) => `call:${num(p.iteration) ?? "?"}`,
+    // Prefer step-qualified keys so parallel subagents with iteration:0 do not collide.
+    instanceKey: (p) => {
+      const iter = num(p.iteration) ?? "?"
+      const step = typeof p.stepName === "string" && p.stepName ? p.stepName : null
+      return step ? `step:${step}/call:${iter}` : `call:${iter}`
+    },
     summary: (p) => `iter ${(num(p.iteration) ?? 0) + 1}`,
   },
   "llm-response": {

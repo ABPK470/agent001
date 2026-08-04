@@ -384,7 +384,8 @@ export const api = {
     body: JSON.stringify({ toolCallId, message }),
   }),
   getActiveRuns: () => json<{ runIds: string[] }>("/api/runs/active"),
-  getRunTrace: (id: string) => json<Record<string, unknown>[]>(`/api/runs/${id}/trace`),
+  /** Envelope rows `{ seq, createdAt, entry }` (legacy bare TraceEntry[] still accepted by FE). */
+  getRunTrace: (id: string) => json<unknown[]>(`/api/runs/${id}/trace`),
   replayTraceStep: (
     runId: string,
     body: {

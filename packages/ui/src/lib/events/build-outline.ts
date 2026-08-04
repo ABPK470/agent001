@@ -185,9 +185,10 @@ export function buildOutline(atoms: EventAtom[], viewSpec: ViewSpec): OutlineNod
 
     const instanceKeyRaw = d.instanceKey?.(payload) ?? null
     // Qualify Call keys by the open parent step so each subagent owns its own
-    // `call:0` instead of colliding on a global iteration index.
+    // `call:0` instead of colliding on a global iteration index. Catalog may
+    // already stamp `step:name/call:N` when llm-request carries stepName.
     let instanceKey = instanceKeyRaw
-    if (instanceKey && d.family === "call") {
+    if (instanceKey && d.family === "call" && !instanceKey.includes("/")) {
       const parent = findOpenParent(d.family)
       if (parent?.nestKey) instanceKey = `${parent.nestKey}/${instanceKey}`
     }
@@ -250,15 +251,24 @@ export function buildOutline(atoms: EventAtom[], viewSpec: ViewSpec): OutlineNod
         }
       }
 
-      if (instanceKey) {
+      // Parallel subagents keep multiple step scopes open; do not close peers.
+      if (instanceKey && d.family !== "step") {
         for (const [key, node] of [...openByKey.entries()]) {
           if (node.family === d.family && key !== instanceKey) closeKey(key)
         }
-      } else {
+      } else if (!instanceKey) {
         closeFamily(d.family)
       }
 
-      const parent = findOpenParent(d.family)
+      // Prefer exact step parent when Call key is already `step:name/call:N`.
+      let parent = findOpenParent(d.family)
+      if (d.family === "call" && instanceKey?.includes("/")) {
+        const stepKey = instanceKey.slice(0, instanceKey.lastIndexOf("/"))
+        parent =
+          openByKey.get(stepKey) ??
+          findLastNodeByNestKey(roots, stepKey) ??
+          parent
+      }
       const node: OutlineNode = {
         id: `scope-${seq++}-${instanceKey ?? type}`,
         kind: "scope",
@@ -339,6 +349,7 @@ export const TRACE_VIEW_SPEC: ViewSpec = {
   },
   stickyFamilies: ["plan", "pipeline", "step", "call", "verify", "repair", "context"],
   nest: [
+    { parentFamily: "pipeline", childFamilies: ["step"] },
     { parentFamily: "step", childFamilies: ["call", "work", "input", "delegation"] },
     { parentFamily: "plan", childFamilies: [] },
     { parentFamily: "context", childFamilies: [] },

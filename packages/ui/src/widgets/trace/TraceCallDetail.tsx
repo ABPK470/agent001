@@ -50,16 +50,25 @@ export function TraceCallDetail({
   )
 
   const workAfter = useMemo(() => {
+    function walkPhase(phase: import("./build-trace-dag").TracePhaseNode) {
+      for (const child of phase.children ?? []) {
+        if (child.kind === "work" && child.work.afterCallIndex === call.index) {
+          return child.work
+        }
+        if (child.kind === "phase") {
+          const found = walkPhase(child.phase)
+          if (found) return found
+        }
+      }
+      return null
+    }
     for (const entry of dag.spine) {
       if (entry.kind === "work" && entry.work.afterCallIndex === call.index) {
         return entry.work
       }
       if (entry.kind === "phase") {
-        for (const child of entry.phase.children ?? []) {
-          if (child.kind === "work" && child.work.afterCallIndex === call.index) {
-            return child.work
-          }
-        }
+        const found = walkPhase(entry.phase)
+        if (found) return found
       }
     }
     return null

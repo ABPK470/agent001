@@ -14,6 +14,7 @@ import { TraceDag } from "./trace/TraceDag"
 export function DebugInspector() {
   const { soloHidden } = useTilePaint()
   const trace = useStore((s) => s.trace)
+  const traceCreatedAtMs = useStore((s) => s.traceCreatedAtMs)
   const activeRunId = useStore((s) => s.activeRunId)
   const runs = useStore((s) => s.runs)
   const activeThreadId = useStore((s) => {
@@ -26,10 +27,10 @@ export function DebugInspector() {
   const frozenDagRef = useRef<TraceDagModel | null>(null)
   const dag = useMemo(() => {
     if (soloHidden && frozenDagRef.current) return frozenDagRef.current
-    const next = buildTraceDag(trace)
+    const next = buildTraceDag(trace, { createdAtMs: traceCreatedAtMs })
     frozenDagRef.current = next
     return next
-  }, [trace, soloHidden])
+  }, [trace, traceCreatedAtMs, soloHidden])
 
   let emptySlot = null
   if (!activeRunId) {

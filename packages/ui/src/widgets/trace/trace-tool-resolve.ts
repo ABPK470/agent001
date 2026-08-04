@@ -5,15 +5,21 @@
 import type { TraceDag, TraceToolCall, TraceWorkNode } from "./build-trace-dag"
 import { callToolOpenKey, workToolOpenKey } from "./open-state"
 
+function collectWorks(
+  phase: import("./build-trace-dag").TracePhaseNode,
+  works: TraceWorkNode[],
+) {
+  for (const child of phase.children ?? []) {
+    if (child.kind === "work") works.push(child.work)
+    else if (child.kind === "phase") collectWorks(child.phase, works)
+  }
+}
+
 function workToolsFromSpine(dag: TraceDag): TraceWorkNode[] {
   const works: TraceWorkNode[] = []
   for (const entry of dag.spine) {
     if (entry.kind === "work") works.push(entry.work)
-    if (entry.kind === "phase") {
-      for (const child of entry.phase.children ?? []) {
-        if (child.kind === "work") works.push(child.work)
-      }
-    }
+    if (entry.kind === "phase") collectWorks(entry.phase, works)
   }
   return works
 }
@@ -33,19 +39,9 @@ export function resolveTraceTool(dag: TraceDag, toolKey: string): TraceToolCall 
       if (callToolOpenKey(call.index, tool.id) === toolKey) return tool
     }
   }
-  for (const entry of dag.spine) {
-    const works =
-      entry.kind === "work"
-        ? [entry.work]
-        : entry.kind === "phase"
-          ? (entry.phase.children ?? [])
-              .filter((c): c is Extract<typeof c, { kind: "work" }> => c.kind === "work")
-              .map((c) => c.work)
-          : []
-    for (const work of works) {
-      for (const tool of work.tools) {
-        if (workToolOpenKey(work.id, tool.id) === toolKey) return tool
-      }
+  for (const work of workToolsFromSpine(dag)) {
+    for (const tool of work.tools) {
+      if (workToolOpenKey(work.id, tool.id) === toolKey) return tool
     }
   }
   return null

@@ -255,8 +255,8 @@ export type TraceEntry =
   | { kind: "iteration"; current: number; max: number }
   | { kind: "thinking"; text: string }
   | { kind: "tool-call"; invocationId: string; toolCallId?: string | null; tool: string; argsSummary: string; argsFormatted: string; stepName?: string }
-  | { kind: "tool-result"; invocationId?: string; toolCallId?: string | null; text: string }
-  | { kind: "tool-error"; invocationId?: string; toolCallId?: string | null; text: string }
+  | { kind: "tool-result"; invocationId?: string; toolCallId?: string | null; text: string; stepName?: string }
+  | { kind: "tool-error"; invocationId?: string; toolCallId?: string | null; text: string; stepName?: string }
   | { kind: "answer"; text: string }
   | { kind: "error"; text: string }
   | { kind: "usage"; iterationTokens: number; totalTokens: number; promptTokens: number; completionTokens: number; llmCalls: number }
@@ -469,10 +469,17 @@ export type TraceEntry =
   | { kind: "tools-resolved"; tools: Array<{ name: string; description: string; parameters?: Record<string, unknown> }> }
   | { kind: "tools-filtered"; dropped: string[]; kept: number; dbScore: number; syncTrigger: boolean; reason: string }
   | { kind: "nudge"; tag: string; message: string; iteration: number }
-  | { kind: "llm-request"; iteration: number; messageCount: number; toolCount: number; messages: Array<{ role: string; content: string | null; toolCalls: Array<{ id: string; name: string; arguments: Record<string, unknown> }>; toolCallId: string | null }> }
-  | { kind: "llm-response"; iteration: number; durationMs: number; content: string | null; toolCalls: Array<{ id: string; name: string; arguments: Record<string, unknown> }>; usage: { promptTokens: number; completionTokens: number; totalTokens: number } | null }
+  | { kind: "llm-request"; iteration: number; messageCount: number; toolCount: number; messages: Array<{ role: string; content: string | null; toolCalls: Array<{ id: string; name: string; arguments: Record<string, unknown> }>; toolCallId: string | null }>; stepName?: string }
+  | { kind: "llm-response"; iteration: number; durationMs: number; content: string | null; toolCalls: Array<{ id: string; name: string; arguments: Record<string, unknown> }>; usage: { promptTokens: number; completionTokens: number; totalTokens: number } | null; stepName?: string }
   | { kind: "workspace_diff"; diff: { added: readonly string[]; modified: readonly string[]; deleted: readonly string[] } }
   | { kind: "workspace_diff_applied"; summary: { added: number; modified: number; deleted: number } }
+
+/** REST / live wire wrapper — preserves DB order + wall-clock without stuffing meta into TraceEntry. */
+export type TraceEnvelope = {
+  seq: number
+  createdAt: string
+  entry: TraceEntry
+}
 
 // ── Layout ───────────────────────────────────────────────────────
 

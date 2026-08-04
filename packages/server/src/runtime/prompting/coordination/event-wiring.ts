@@ -123,13 +123,23 @@ export function wireEventBroadcasting(
         const output = (data["output"] as Record<string, unknown>) ?? {}
         const result =
           (output["result"] as string) ?? (Object.keys(output).length > 0 ? JSON.stringify(output) : "done")
-        saveTrace(runId, { kind: TraceEventKind.ToolResult, invocationId: stepId, text: result })
+        saveTrace(runId, {
+          kind: TraceEventKind.ToolResult,
+          invocationId: stepId,
+          text: result,
+          ...(typeof data["stepName"] === "string" && data["stepName"]
+            ? { stepName: data["stepName"] }
+            : {}),
+        })
       } else if (eventType === EventType.StepFailed) {
         const stepId = getStepId(event)
         saveTrace(runId, {
           kind: TraceEventKind.ToolError,
           invocationId: stepId,
-          text: (data["error"] as string) ?? "unknown error"
+          text: (data["error"] as string) ?? "unknown error",
+          ...(typeof data["stepName"] === "string" && data["stepName"]
+            ? { stepName: data["stepName"] }
+            : {}),
         })
       }
 

@@ -30,6 +30,7 @@ import {
 import { isDefaultThreadTitle, threadTitleFromGoal } from "../lib/thread-title.js"
 import { sortThreadsByPinThenUpdatedAt } from "../lib/thread-order.js"
 import { isCancelRaceFailureError, settleTraceOnCancel } from "../lib/events/trace-terminal.js"
+import { normalizeTraceWire } from "../lib/events/trace-wire.js"
 import { RunStatus } from "../enums"
 import type {
   AuditEntry,
@@ -334,8 +335,10 @@ interface AppState {
 
   // Trace (rich agent execution log)
   trace: TraceEntry[]
-  addTrace: (entry: TraceEntry) => void
-  setTrace: (entries: TraceEntry[]) => void
+  /** Parallel wall-clock ms per trace entry (null = unknown / LLM-pack fallback). */
+  traceCreatedAtMs: Array<number | null>
+  addTrace: (entry: TraceEntry, createdAt?: string | null) => void
+  setTrace: (entries: TraceEntry[], createdAtMs?: Array<number | null>) => void
 
   // Notifications
   notifications: Notification[]
@@ -455,7 +458,7 @@ const DEFAULT_ENV_SYNC_FORM: EnvSyncFormState = {
 // ── Store ────────────────────────────────────────────────────────
 
 // ── Trace batching buffer ────────────────────────────────────────
-const traceBuf: TraceEntry[] = []
+const traceBuf: Array<{ entry: TraceEntry; createdAtMs: number | null }> = []
 let traceFlushScheduled = false
 
 // Per-run trace batching (microtask) — coalesces a burst of trace events
@@ -753,7 +756,8 @@ export const useStore = create<AppState>()(
           api.getRunTrace(activeRunId),
         ]).then(([detail, rawTrace]) => {
           const d = detail as RunDetail
-          const trace = rawTrace as TraceEntry[]
+          const normalized = normalizeTraceWire(rawTrace as unknown[])
+          const trace = normalized.entries
           // Schema v14: server no longer ships steps in d.data — derive
           // from the trace so all step-driven widgets (Trace,
           // ToolTimelinePanel, problems, current-activity) keep working
@@ -763,7 +767,7 @@ export const useStore = create<AppState>()(
           get().setSteps(steps)
           get().setAudit(d.audit ?? [])
           if (d.logs?.length) get().mergeLogs(d.logs)
-          get().setTrace(trace)
+          get().setTrace(trace, normalized.createdAtMs)
           set((s) => ({
             runs: patchRunFields(s.runs, activeRunId, {
               stepData: steps,
@@ -882,6 +886,7 @@ export const useStore = create<AppState>()(
           activeRunId: cached.length > 0 ? cached[cached.length - 1]!.id : null,
           steps: [],
           trace: [],
+          traceCreatedAtMs: [],
           audit: [],
           pendingInput: null,
           ...(threadId ? {} : { runs: [] }),
@@ -1064,23 +1069,37 @@ export const useStore = create<AppState>()(
 
       // Trace — batched via microtask to avoid per-entry re-renders
       trace: [],
-      addTrace: (entry) => {
-        traceBuf.push(entry)
+      traceCreatedAtMs: [],
+      addTrace: (entry, createdAt) => {
+        const ms =
+          typeof createdAt === "string" && createdAt
+            ? Date.parse(createdAt)
+            : Date.now()
+        traceBuf.push({
+          entry,
+          createdAtMs: Number.isFinite(ms) ? ms : null,
+        })
         if (!traceFlushScheduled) {
           traceFlushScheduled = true
           queueMicrotask(() => {
             const batch = traceBuf.splice(0)
             traceFlushScheduled = false
             if (batch.length > 0) {
-              set((s) => ({ trace: s.trace.concat(batch) }))
+              set((s) => ({
+                trace: s.trace.concat(batch.map((b) => b.entry)),
+                traceCreatedAtMs: s.traceCreatedAtMs.concat(batch.map((b) => b.createdAtMs)),
+              }))
             }
           })
         }
       },
-      setTrace: (trace) => {
+      setTrace: (trace, createdAtMs) => {
         // When setTrace is called, discard any pending buffered entries
         traceBuf.length = 0
-        set({ trace })
+        set({
+          trace,
+          traceCreatedAtMs: createdAtMs ?? trace.map(() => null),
+        })
       },
 
       // Notifications
@@ -2025,7 +2044,9 @@ export const useStore = create<AppState>()(
           case "debug.trace": {
             const entry = data["entry"] as import("../types").TraceEntry
             if (entry) {
-              store.addTrace(entry)
+              const createdAt =
+                typeof data["createdAt"] === "string" ? data["createdAt"] : null
+              store.addTrace(entry, createdAt)
               const runId = data["runId"] as string | undefined
               if (runId) {
                 runTraceBuf.push({ runId, entry })

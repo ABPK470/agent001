@@ -4,7 +4,7 @@
 
 import { useEffect, useState } from "react"
 import { api } from "../../client/index"
-import type { TraceDag } from "./build-trace-dag"
+import type { TraceDag, TracePhaseNode, TraceWorkNode } from "./build-trace-dag"
 import { TraceCallDetail } from "./TraceCallDetail"
 import { TraceContextDetail } from "./TraceContextDetail"
 import { TraceMessageDetail } from "./TraceMessageDetail"
@@ -24,21 +24,46 @@ import { type CompareRunRow } from "./trace-run-compare"
 import { resolveTraceTool, traceToolCurl } from "./trace-tool-resolve"
 import type { TraceTreeIndex, TraceTreeNode } from "./trace-tree-index"
 
-function findWork(dag: TraceDag, workId: string) {
-  for (const entry of dag.spine) {
-    if (entry.kind === "work" && entry.work.id === workId) return entry.work
-    if (entry.kind === "phase") {
-      for (const child of entry.phase.children ?? []) {
-        if (child.kind === "work" && child.work.id === workId) return child.work
-      }
+function findWorkInPhase(phase: TracePhaseNode, workId: string): TraceWorkNode | null {
+  for (const child of phase.children ?? []) {
+    if (child.kind === "work" && child.work.id === workId) return child.work
+    if (child.kind === "phase") {
+      const found = findWorkInPhase(child.phase, workId)
+      if (found) return found
     }
   }
   return null
 }
 
-function findPhase(dag: TraceDag, phaseId: string) {
-  const entry = dag.spine.find((e) => e.kind === "phase" && e.phase.id === phaseId)
-  return entry?.kind === "phase" ? entry.phase : null
+function findWork(dag: TraceDag, workId: string): TraceWorkNode | null {
+  for (const entry of dag.spine) {
+    if (entry.kind === "work" && entry.work.id === workId) return entry.work
+    if (entry.kind === "phase") {
+      const found = findWorkInPhase(entry.phase, workId)
+      if (found) return found
+    }
+  }
+  return null
+}
+
+function findPhaseInTree(phase: TracePhaseNode, phaseId: string): TracePhaseNode | null {
+  if (phase.id === phaseId) return phase
+  for (const child of phase.children ?? []) {
+    if (child.kind === "phase") {
+      const found = findPhaseInTree(child.phase, phaseId)
+      if (found) return found
+    }
+  }
+  return null
+}
+
+function findPhase(dag: TraceDag, phaseId: string): TracePhaseNode | null {
+  for (const entry of dag.spine) {
+    if (entry.kind !== "phase") continue
+    const found = findPhaseInTree(entry.phase, phaseId)
+    if (found) return found
+  }
+  return null
 }
 
 function renderDetail(dag: TraceDag, node: TraceTreeNode) {

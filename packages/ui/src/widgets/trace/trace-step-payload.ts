@@ -17,12 +17,21 @@ export type TraceStepPayload = {
 }
 
 function findWork(dag: TraceDag, workId: string) {
+  function walk(phase: import("./build-trace-dag").TracePhaseNode) {
+    for (const child of phase.children ?? []) {
+      if (child.kind === "work" && child.work.id === workId) return child.work
+      if (child.kind === "phase") {
+        const found = walk(child.phase)
+        if (found) return found
+      }
+    }
+    return null
+  }
   for (const entry of dag.spine) {
     if (entry.kind === "work" && entry.work.id === workId) return entry.work
     if (entry.kind === "phase") {
-      for (const child of entry.phase.children ?? []) {
-        if (child.kind === "work" && child.work.id === workId) return child.work
-      }
+      const found = walk(entry.phase)
+      if (found) return found
     }
   }
   return null

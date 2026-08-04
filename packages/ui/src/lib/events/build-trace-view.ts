@@ -46,9 +46,16 @@ export type TracePromptMessage = {
 }
 
 export type TraceCallNode = {
-  /** 0-based display index (Call N = index + 1). */
+  /** 0-based index in `calls[]` (stable identity for Work.afterCallIndex). */
   index: number
+  /**
+   * 0-based Call number within the owning step (or global when no step).
+   * UI shows `Call ${callOrdinal + 1}`.
+   */
+  callOrdinal: number
   iteration: number
+  /** Planner step that owns this LLM call (child agents); unset for direct loop. */
+  stepName: string | null
   messageCount: number
   toolCount: number
   messages: TracePromptMessage[]
@@ -88,6 +95,8 @@ export type TracePhaseDetail =
 export type TracePhaseChild =
   | { kind: "call"; callIndex: number }
   | { kind: "work"; work: TraceWorkNode }
+  /** Nested phase (Subagent under Pipeline). */
+  | { kind: "phase"; phase: TracePhaseNode }
 
 export type TracePhaseNode = {
   id: string
@@ -147,6 +156,8 @@ export type TraceDagStats = {
   totalCostUsd: number
   toolRunCount: number
   phaseCount: number
+  /** Wall-clock when createdAt meta exists; otherwise LLM-duration packing. */
+  timingBasis: "wall" | "llm-pack"
 }
 
 export type TraceDag = {
@@ -208,22 +219,57 @@ export function replyHeadline(res: LlmResponse | null): string {
   return "Empty reply"
 }
 
+function llmPairKey(stepName: string | null | undefined, iteration: number): string {
+  return `${stepName ?? "_"}:${iteration}`
+}
+
+/**
+ * Pair llm-request → llm-response by (stepName, iteration) when stamped;
+ * fall back to chronological FIFO for legacy traces without stepName.
+ */
 function pairLlmCalls(trace: TraceEntry[]): Array<{
   request: LlmRequest
   response: LlmResponse | null
 }> {
   const requests = trace.filter((e): e is LlmRequest => e.kind === "llm-request")
   const responses = trace.filter((e): e is LlmResponse => e.kind === "llm-response")
-  const responseByIter = new Map<number, LlmResponse>()
+  const responseByKey = new Map<string, LlmResponse[]>()
   for (const response of responses) {
-    if (!responseByIter.has(response.iteration)) {
-      responseByIter.set(response.iteration, response)
-    }
+    const key = llmPairKey(response.stepName, response.iteration)
+    const q = responseByKey.get(key) ?? []
+    q.push(response)
+    responseByKey.set(key, q)
   }
-  return requests.map((request, i) => ({
-    request,
-    response: responseByIter.get(request.iteration) ?? responses[i] ?? null,
-  }))
+  const used = new Set<LlmResponse>()
+  return requests.map((request, i) => {
+    const key = llmPairKey(request.stepName, request.iteration)
+    const q = responseByKey.get(key)
+    let response: LlmResponse | null = null
+    if (q) {
+      const next = q.find((r) => !used.has(r))
+      if (next) {
+        used.add(next)
+        response = next
+      }
+    }
+    if (!response) {
+      // Legacy: first unused response with same iteration, else positional.
+      const legacy = responses.find(
+        (r) => !used.has(r) && r.iteration === request.iteration && !r.stepName,
+      )
+      if (legacy) {
+        used.add(legacy)
+        response = legacy
+      } else {
+        const positional = responses[i]
+        if (positional && !used.has(positional)) {
+          used.add(positional)
+          response = positional
+        }
+      }
+    }
+    return { request, response }
+  })
 }
 
 function enrichMessages(
@@ -832,13 +878,20 @@ function workSummary(tools: TraceToolCall[], notes: TraceWorkNote[]): string {
   return bits.join(" · ") || "between calls"
 }
 
+export type BuildTraceDagOpts = {
+  /** Parallel wall-clock ms per entry (from TraceEnvelope.createdAt). */
+  createdAtMs?: Array<number | null>
+}
+
 /** Build the hybrid DAG view-model from a raw trace stream. */
-export function buildTraceDag(trace: TraceEntry[]): TraceDag {
+export function buildTraceDag(trace: TraceEntry[], opts?: BuildTraceDagOpts): TraceDag {
   const outline = buildOutline(atomsFromTrace(trace), TRACE_VIEW_SPEC)
   const systemPrompt =
     trace.find((e): e is SystemPrompt => e.kind === "system-prompt")?.text ?? null
   const toolsResolved = trace.find((e): e is ToolsResolved => e.kind === "tools-resolved")
   const sqlQuality = trace.filter((e): e is TraceSqlQuality => e.kind === "planner-sql-quality")
+  const createdAtMs = opts?.createdAtMs
+  const hasWallClock = Boolean(createdAtMs?.some((ms) => ms != null))
 
   const modelByIteration = new Map<number, string>()
   for (const entry of trace) {
@@ -848,8 +901,14 @@ export function buildTraceDag(trace: TraceEntry[]): TraceDag {
   }
 
   const paired = pairLlmCalls(trace)
+  const ordinalByStep = new Map<string, number>()
+  const t0 = createdAtMs?.find((ms) => ms != null) ?? null
   let callOffsetMs = 0
   const calls: TraceCallNode[] = paired.map(({ request, response }, index) => {
+    const stepName = request.stepName ?? response?.stepName ?? null
+    const stepKey = stepName ?? "_"
+    const callOrdinal = ordinalByStep.get(stepKey) ?? 0
+    ordinalByStep.set(stepKey, callOrdinal + 1)
     const toolBranches = (response?.toolCalls ?? []).map((tc) => ({
       id: tc.id,
       name: tc.name,
@@ -858,16 +917,31 @@ export function buildTraceDag(trace: TraceEntry[]): TraceDag {
     }))
     const usage = response?.usage ?? null
     const model = modelByIteration.get(request.iteration) ?? null
-    const startOffsetMs = callOffsetMs
     const durationMs = response?.durationMs ?? null
-    if (durationMs != null) callOffsetMs += durationMs
+    let startOffsetMs = callOffsetMs
+    if (hasWallClock && t0 != null && createdAtMs) {
+      // Prefer request entry wall time when we can find it in the stream.
+      const reqIdx = trace.findIndex(
+        (e, ei) =>
+          e.kind === "llm-request" &&
+          e === request &&
+          (createdAtMs[ei] != null || true),
+      )
+      const wall = reqIdx >= 0 ? createdAtMs[reqIdx] : null
+      if (wall != null) startOffsetMs = Math.max(0, wall - t0)
+      else if (durationMs != null) callOffsetMs += durationMs
+    } else if (durationMs != null) {
+      callOffsetMs += durationMs
+    }
     const costUsd =
       usage != null
         ? computeTokenCostUsd(model, usage.promptTokens, usage.completionTokens)
         : null
     return {
       index,
+      callOrdinal,
       iteration: request.iteration,
+      stepName,
       messageCount: request.messageCount,
       toolCount: request.toolCount,
       messages: enrichMessages(request.messages, systemPrompt),
@@ -881,59 +955,93 @@ export function buildTraceDag(trace: TraceEntry[]): TraceDag {
       headline: replyHeadline(response),
       askedUser: toolBranches.some((t) => t.name === "ask_user"),
       waiting: response == null,
-      sqlQuality: sqlQuality.filter((s) => s.iteration === request.iteration),
+      sqlQuality: sqlQuality.filter(
+        (s) =>
+          s.iteration === request.iteration &&
+          (stepName == null || !("stepName" in s) || (s as { stepName?: string }).stepName === stepName),
+      ),
     }
   })
 
-  const callByIteration = new Map(calls.map((c) => [c.iteration, c]))
+  // Consume Calls in request order (pairing already resolved stepName+iteration).
+  const callQueue = [...calls]
   const spine: TraceSpineEntry[] = []
-  let openPhase: TracePhaseNode | null = null
-  let openWork: TraceWorkNode | null = null
+  /** Parallel-safe: stepName → open step phase (mirrors Chat runningSteps). */
+  const runningSteps = new Map<string, TracePhaseNode>()
+  let openPipeline: TracePhaseNode | null = null
+  /** Serial fallback when tools lack stepName. */
+  let serialOpenStep: TracePhaseNode | null = null
+  /** Non-step open phase (plan / verify / repair) for merge. */
+  let openMilestone: TracePhaseNode | null = null
+  const openWorkByCall = new Map<number, TraceWorkNode>()
+  const stepLastCall = new Map<string, number>()
+  const invocationOwner = new Map<string, { stepName: string | null; callIndex: number }>()
   let lastCallIndex = -1
   let workSeq = 0
   let phaseSeq = 0
   const stepAttempts = new Map<string, number>()
+  const stepEndDuration = new Map<string, number>()
 
-  function flushWork() {
-    if (!openWork) return
-    if (openWork.tools.length > 0 || openWork.notes.length > 0) {
-      openWork.title = workTitle(openWork.tools, openWork.notes)
-      openWork.summary = workSummary(openWork.tools, openWork.notes)
-      // SQL validation runs during tool execution — attach to Work, not Received.
-      const call = calls[openWork.afterCallIndex]
-      if (call && call.sqlQuality.length > 0) {
-        const matched = call.sqlQuality.filter((s) =>
-          openWork!.tools.some(
-            (t) => t.id === s.toolCallId || t.name === s.toolName,
-          ),
-        )
-        openWork.sqlQuality = matched.length > 0 ? matched : call.sqlQuality
+  function findStepOwningCall(callIndex: number): TracePhaseNode | null {
+    function walk(phase: TracePhaseNode): TracePhaseNode | null {
+      for (const child of phase.children ?? []) {
+        if (child.kind === "call" && child.callIndex === callIndex) return phase
+        if (child.kind === "phase") {
+          const found = walk(child.phase)
+          if (found) return found
+        }
       }
-      if (openPhase && isStepFamily(openPhase.family)) {
-        openPhase.children = openPhase.children ?? []
-        openPhase.children.push({ kind: "work", work: openWork })
-      } else {
-        spine.push({ kind: "work", work: openWork })
-      }
-      // Do not mirror execution onto Received toolBranches — Received shows
-      // proposals only; Work owns run + result (clear agent-loop chronology).
+      return null
     }
-    openWork = null
+    for (const entry of spine) {
+      if (entry.kind !== "phase") continue
+      const found = walk(entry.phase)
+      if (found) return found
+    }
+    return null
   }
 
-  /**
-   * Close the open phase pointer. Phase is already on the spine (pushed at
-   * create) so we only clear the handle — children keep accumulating until then.
-   */
-  function flushPhase() {
-    flushWork()
-    openPhase = null
+  function flushWorkForCall(callIndex: number) {
+    const openWork = openWorkByCall.get(callIndex)
+    if (!openWork) return
+    openWorkByCall.delete(callIndex)
+    if (openWork.tools.length === 0 && openWork.notes.length === 0) return
+    openWork.title = workTitle(openWork.tools, openWork.notes)
+    openWork.summary = workSummary(openWork.tools, openWork.notes)
+    const call = calls[openWork.afterCallIndex]
+    if (call && call.sqlQuality.length > 0) {
+      const matched = call.sqlQuality.filter((s) =>
+        openWork.tools.some((t) => t.id === s.toolCallId || t.name === s.toolName),
+      )
+      openWork.sqlQuality = matched.length > 0 ? matched : call.sqlQuality
+    }
+    // Prefer the phase that already owns this Call (survives step-end).
+    const ownerStep =
+      findStepOwningCall(callIndex) ??
+      (call?.stepName ? runningSteps.get(call.stepName) : null) ??
+      (call?.stepName ? findPhaseInTree(`step:${call.stepName}`) : null) ??
+      serialOpenStep
+    if (ownerStep && isStepFamily(ownerStep.family)) {
+      ownerStep.children = ownerStep.children ?? []
+      ownerStep.children.push({ kind: "work", work: openWork })
+    } else {
+      spine.push({ kind: "work", work: openWork })
+    }
   }
 
-  function findLastSpinePhase(family: string): TracePhaseNode | null {
+  function flushAllWork() {
+    for (const callIndex of [...openWorkByCall.keys()]) flushWorkForCall(callIndex)
+  }
+
+  function findPhaseInTree(family: string): TracePhaseNode | null {
     for (let i = spine.length - 1; i >= 0; i--) {
       const entry = spine[i]
       if (entry?.kind === "phase" && entry.phase.family === family) return entry.phase
+      if (entry?.kind === "phase" && entry.phase.children) {
+        for (const child of entry.phase.children) {
+          if (child.kind === "phase" && child.phase.family === family) return child.phase
+        }
+      }
     }
     return null
   }
@@ -950,58 +1058,88 @@ export function buildTraceDag(trace: TraceEntry[]): TraceDag {
       startOffsetMs: 0,
       durationMs: null,
       ...(update.leading ? { leading: update.leading } : {}),
-      ...(isStepFamily(update.family) ? { children: [] } : {}),
+      ...(isStepFamily(update.family) || update.family === "pipeline" ? { children: [] } : {}),
     }
-    spine.push({ kind: "phase", phase })
+    if (isStepFamily(update.family) && openPipeline) {
+      openPipeline.children = openPipeline.children ?? []
+      openPipeline.children.push({ kind: "phase", phase })
+    } else {
+      spine.push({ kind: "phase", phase })
+    }
     return phase
   }
 
   function applyPhase(update: PhaseUpdate) {
     if (update.skip && update.details.length === 0) return
-    flushWork()
 
-    // New step attempt — always a fresh parent card with a stable unique id.
-    if (update.beginNew) {
-      if (openPhase) flushPhase()
-      openPhase = createPhase(update)
-      return
-    }
-
-    // Same family still open — merge in place (step-end, delegation, …).
-    if (openPhase && openPhase.family === update.family) {
-      assignMergedPhase(openPhase, update)
-      return
-    }
-
-    // Family changed (or nothing open). Reattach onto the latest spine card
-    // of this family. Critical for post-verify step-transitions: without this
-    // they spawned a second parent reusing the same stable id, so one click
-    // toggled every look-alike card.
-    const canReattach =
-      update.family === "pipeline" ||
-      update.family === "verify" ||
-      isStepFamily(update.family) ||
-      update.family.startsWith("repair:")
-    if (canReattach) {
-      const prior = findLastSpinePhase(update.family)
-      if (prior) {
-        assignMergedPhase(prior, update)
-        openPhase = prior
+    if (update.family === "pipeline") {
+      flushAllWork()
+      if (openPipeline) {
+        assignMergedPhase(openPipeline, update)
         return
       }
-      // Step status with no prior attempt card — ignore (do not mint colliding ids).
-      if (isStepFamily(update.family)) return
+      const prior = findPhaseInTree("pipeline")
+      if (prior) {
+        assignMergedPhase(prior, update)
+        openPipeline = prior
+        return
+      }
+      openPipeline = createPhase(update)
+      return
     }
 
-    if (openPhase) flushPhase()
-    openPhase = createPhase(update)
+    if (isStepFamily(update.family)) {
+      const stepName = update.family.slice("step:".length)
+      if (update.beginNew) {
+        flushAllWork()
+        const phase = createPhase(update)
+        runningSteps.set(stepName, phase)
+        serialOpenStep = phase
+        return
+      }
+      const open = runningSteps.get(stepName) ?? findPhaseInTree(update.family)
+      if (open) {
+        assignMergedPhase(open, update)
+        if (update.status === "done" || update.status === "error") {
+          const endMs = update.details
+          void endMs
+          runningSteps.delete(stepName)
+          if (serialOpenStep === open) serialOpenStep = null
+        } else {
+          runningSteps.set(stepName, open)
+          serialOpenStep = open
+        }
+        return
+      }
+      return
+    }
+
+    // Plan / verify / repair milestones
+    flushAllWork()
+    if (openMilestone && openMilestone.family === update.family) {
+      assignMergedPhase(openMilestone, update)
+      return
+    }
+    const canReattach =
+      update.family === "verify" ||
+      update.family === "plan" ||
+      update.family.startsWith("repair:")
+    if (canReattach) {
+      const prior = findPhaseInTree(update.family)
+      if (prior) {
+        assignMergedPhase(prior, update)
+        openMilestone = prior
+        return
+      }
+    }
+    openMilestone = createPhase(update)
   }
 
   function ensureWork(afterCallIndex: number): TraceWorkNode {
-    if (openWork && openWork.afterCallIndex === afterCallIndex) return openWork
-    flushWork()
+    const existing = openWorkByCall.get(afterCallIndex)
+    if (existing) return existing
     workSeq += 1
-    openWork = {
+    const openWork: TraceWorkNode = {
       id: `work-${afterCallIndex}-${workSeq}`,
       afterCallIndex,
       title: "Work",
@@ -1012,28 +1150,42 @@ export function buildTraceDag(trace: TraceEntry[]): TraceDag {
       startOffsetMs: 0,
       durationMs: null,
     }
+    openWorkByCall.set(afterCallIndex, openWork)
     return openWork
   }
 
-  function pushCall(callIndex: number) {
-    if (openPhase && isStepFamily(openPhase.family)) {
-      flushWork()
-      openPhase.children = openPhase.children ?? []
-      openPhase.children.push({ kind: "call", callIndex })
-    } else {
-      flushWork()
-      openPhase = null
-      spine.push({ kind: "call", callIndex })
+  function resolveStepOwner(stepName: string | null | undefined): TracePhaseNode | null {
+    if (stepName && runningSteps.has(stepName)) return runningSteps.get(stepName)!
+    if (stepName) {
+      const found = findPhaseInTree(`step:${stepName}`)
+      if (found) return found
     }
-    lastCallIndex = callIndex
+    return serialOpenStep
+  }
+
+  function pushCall(call: TraceCallNode) {
+    const owner = resolveStepOwner(call.stepName)
+    if (owner && isStepFamily(owner.family)) {
+      owner.children = owner.children ?? []
+      owner.children.push({ kind: "call", callIndex: call.index })
+      if (call.stepName) stepLastCall.set(call.stepName, call.index)
+    } else {
+      spine.push({ kind: "call", callIndex: call.index })
+    }
+    lastCallIndex = call.index
+  }
+
+  function resolveWorkCallIndex(stepName: string | null | undefined): number {
+    if (stepName != null && stepLastCall.has(stepName)) return stepLastCall.get(stepName)!
+    return lastCallIndex
   }
 
   for (let i = 0; i < trace.length; i++) {
     const entry = trace[i]!
 
     if (entry.kind === "llm-request") {
-      const call = callByIteration.get(entry.iteration)
-      if (call) pushCall(call.index)
+      const call = callQueue.shift()
+      if (call) pushCall(call)
       continue
     }
 
@@ -1045,18 +1197,32 @@ export function buildTraceDag(trace: TraceEntry[]): TraceDag {
       continue
     }
 
+    if (entry.kind === "planner-step-end" && typeof entry.durationMs === "number") {
+      stepEndDuration.set(entry.stepName, entry.durationMs)
+    }
+
+    if (entry.kind === "planner-pipeline-end") {
+      const phase = phaseFromEntry(entry, i)
+      if (phase) applyPhase(phase)
+      openPipeline = null
+      continue
+    }
+
     const phase = phaseFromEntry(entry, i)
     if (phase) {
       applyPhase(phase)
       continue
     }
 
-    if (lastCallIndex < 0) continue
-
     if (entry.kind === "tool-call") {
-      const work = ensureWork(lastCallIndex)
       const tc = entry as ToolCallEntry
+      const ownerStep = tc.stepName ?? null
+      const callIndex = resolveWorkCallIndex(ownerStep)
+      if (callIndex < 0) continue
+      const work = ensureWork(callIndex)
       const id = tc.toolCallId || tc.invocationId
+      invocationOwner.set(tc.invocationId, { stepName: ownerStep, callIndex })
+      if (tc.toolCallId) invocationOwner.set(tc.toolCallId, { stepName: ownerStep, callIndex })
       const existing = work.tools.findIndex((t) => t.id === id || t.id === tc.invocationId)
       const row: TraceToolCall = {
         id,
@@ -1072,13 +1238,24 @@ export function buildTraceDag(trace: TraceEntry[]): TraceDag {
     }
 
     if (entry.kind === "tool-result" || entry.kind === "tool-error") {
-      const work = ensureWork(lastCallIndex)
+      const inv =
+        entry.invocationId ??
+        entry.toolCallId ??
+        null
+      const owned = inv ? invocationOwner.get(inv) : undefined
+      const stepName = entry.stepName ?? owned?.stepName ?? null
+      const callIndex = owned?.callIndex ?? resolveWorkCallIndex(stepName)
+      if (callIndex < 0) continue
+      const work = ensureWork(callIndex)
       work.tools = applyToolResult(work.tools, entry)
       continue
     }
 
+    const noteCall = lastCallIndex
+    if (noteCall < 0) continue
+
     if (entry.kind === "nudge") {
-      const work = ensureWork(lastCallIndex)
+      const work = ensureWork(noteCall)
       work.notes.push({
         id: `nudge-${i}`,
         label: entry.tag || "Nudge",
@@ -1088,7 +1265,7 @@ export function buildTraceDag(trace: TraceEntry[]): TraceDag {
     }
 
     if (entry.kind === "sync-progress") {
-      const work = ensureWork(lastCallIndex)
+      const work = ensureWork(noteCall)
       work.notes.push({
         id: `sync-${entry.invocationId}-${i}`,
         label: entry.headline || entry.tool || "Sync",
@@ -1098,7 +1275,7 @@ export function buildTraceDag(trace: TraceEntry[]): TraceDag {
     }
 
     if (entry.kind === "user-input-request") {
-      const work = ensureWork(lastCallIndex)
+      const work = ensureWork(noteCall)
       work.notes.push({
         id: `ask-${i}`,
         label: "Waiting on user",
@@ -1108,7 +1285,7 @@ export function buildTraceDag(trace: TraceEntry[]): TraceDag {
     }
 
     if (entry.kind === "user-input-response") {
-      const work = ensureWork(lastCallIndex)
+      const work = ensureWork(noteCall)
       work.notes.push({
         id: `answer-${i}`,
         label: "User answered",
@@ -1118,7 +1295,7 @@ export function buildTraceDag(trace: TraceEntry[]): TraceDag {
     }
 
     if (entry.kind === "error" && entry.text !== "Run cancelled by user") {
-      const work = ensureWork(lastCallIndex)
+      const work = ensureWork(noteCall)
       work.notes.push({
         id: `err-${i}`,
         label: "Error",
@@ -1128,8 +1305,7 @@ export function buildTraceDag(trace: TraceEntry[]): TraceDag {
     }
   }
 
-  flushWork()
-  flushPhase()
+  flushAllWork()
 
   let promptTokens = 0
   let completionTokens = 0
@@ -1149,22 +1325,51 @@ export function buildTraceDag(trace: TraceEntry[]): TraceDag {
     tools: toolsResolved?.tools ?? [],
   }
 
-  const finalSpine = enrichSpanTimings(spineFromOutline(outline, calls, spine), calls)
+  // Body ownership is authoritative; outline patches titles only.
+  const finalSpine = enrichSpanTimings(
+    patchPhaseTitlesFromOutline(spine, outline),
+    calls,
+    stepEndDuration,
+  )
+
+  function countTools(children: TracePhaseChild[] | undefined): number {
+    if (!children) return 0
+    let n = 0
+    for (const c of children) {
+      if (c.kind === "work") n += c.work.tools.length
+      else if (c.kind === "phase") n += countTools(c.phase.children)
+    }
+    return n
+  }
+
+  function countPhases(entries: TraceSpineEntry[]): number {
+    let n = 0
+    for (const e of entries) {
+      if (e.kind !== "phase") continue
+      n += 1
+      if (e.phase.children) {
+        for (const c of e.phase.children) {
+          if (c.kind === "phase") n += 1 + countNestedPhases(c.phase)
+        }
+      }
+    }
+    return n
+  }
+
+  function countNestedPhases(phase: TracePhaseNode): number {
+    let n = 0
+    for (const c of phase.children ?? []) {
+      if (c.kind === "phase") n += 1 + countNestedPhases(c.phase)
+    }
+    return n
+  }
 
   const toolRunCount = finalSpine.reduce((n, e) => {
     if (e.kind === "work") return n + e.work.tools.length
-    if (e.kind === "phase" && e.phase.children) {
-      return (
-        n +
-        e.phase.children.reduce(
-          (m, c) => (c.kind === "work" ? m + c.work.tools.length : m),
-          0,
-        )
-      )
-    }
+    if (e.kind === "phase") return n + countTools(e.phase.children)
     return n
   }, 0)
-  const phaseCount = finalSpine.filter((e) => e.kind === "phase").length
+  const phaseCount = countPhases(finalSpine)
 
   const hasData =
     Boolean(systemPrompt) ||
@@ -1186,13 +1391,58 @@ export function buildTraceDag(trace: TraceEntry[]): TraceDag {
       totalCostUsd,
       toolRunCount,
       phaseCount,
+      timingBasis: hasWallClock ? "wall" : "llm-pack",
     },
     hasData,
   }
 }
 
+/** Patch phase titles/summaries from outline without rewriting ownership. */
+function patchPhaseTitlesFromOutline(
+  bodySpine: TraceSpineEntry[],
+  outline: OutlineNode[],
+): TraceSpineEntry[] {
+  const byNest = new Map<string, OutlineNode>()
+  function walk(nodes: OutlineNode[]) {
+    for (const n of nodes) {
+      if (n.nestKey) byNest.set(n.nestKey, n)
+      if (n.family === "pipeline") byNest.set("pipeline", n)
+      if (n.family === "plan") byNest.set("plan", n)
+      if (n.family === "verify") byNest.set("verify", n)
+      if (n.children) walk(n.children)
+    }
+  }
+  walk(outline)
+
+  function patchPhase(phase: TracePhaseNode) {
+    const key = isStepFamily(phase.family)
+      ? phase.family
+      : phase.family.startsWith("repair:")
+        ? phase.family
+        : phase.family
+    const node = byNest.get(key) ?? byNest.get(phase.family)
+    if (node) {
+      if (node.title) phase.title = node.title
+      if (node.summary) phase.summary = node.summary
+      if (node.label && node.label !== phase.title) phase.leading = node.label
+    }
+    for (const child of phase.children ?? []) {
+      if (child.kind === "phase") patchPhase(child.phase)
+    }
+  }
+
+  for (const entry of bodySpine) {
+    if (entry.kind === "phase") patchPhase(entry.phase)
+  }
+  return bodySpine
+}
+
 /** Assign startOffsetMs / durationMs to work and phase spans from call timeline. */
-function enrichSpanTimings(spine: TraceSpineEntry[], calls: TraceCallNode[]): TraceSpineEntry[] {
+function enrichSpanTimings(
+  spine: TraceSpineEntry[],
+  calls: TraceCallNode[],
+  stepEndDuration?: Map<string, number>,
+): TraceSpineEntry[] {
   function callEndOffset(index: number): number {
     const call = calls[index]
     if (!call) return 0
@@ -1214,7 +1464,12 @@ function enrichSpanTimings(spine: TraceSpineEntry[], calls: TraceCallNode[]): Tr
   function enrichPhase(phase: TracePhaseNode): void {
     if (!phase.children?.length) {
       phase.startOffsetMs = 0
-      phase.durationMs = null
+      if (isStepFamily(phase.family) && stepEndDuration) {
+        const name = phase.family.slice("step:".length)
+        phase.durationMs = stepEndDuration.get(name) ?? null
+      } else {
+        phase.durationMs = null
+      }
       return
     }
     let minStart = Number.POSITIVE_INFINITY
@@ -1225,18 +1480,31 @@ function enrichSpanTimings(spine: TraceSpineEntry[], calls: TraceCallNode[]): Tr
         if (!call) continue
         minStart = Math.min(minStart, call.startOffsetMs)
         maxEnd = Math.max(maxEnd, call.startOffsetMs + (call.durationMs ?? 0))
-      } else {
+      } else if (child.kind === "work") {
         enrichWork(child.work)
         minStart = Math.min(minStart, child.work.startOffsetMs)
         maxEnd = Math.max(
           maxEnd,
           child.work.startOffsetMs + (child.work.durationMs ?? 0),
         )
+      } else {
+        enrichPhase(child.phase)
+        minStart = Math.min(minStart, child.phase.startOffsetMs)
+        maxEnd = Math.max(
+          maxEnd,
+          child.phase.startOffsetMs + (child.phase.durationMs ?? 0),
+        )
       }
     }
     if (Number.isFinite(minStart)) {
       phase.startOffsetMs = minStart
-      phase.durationMs = maxEnd > minStart ? maxEnd - minStart : null
+      if (isStepFamily(phase.family) && stepEndDuration) {
+        const name = phase.family.slice("step:".length)
+        const beDuration = stepEndDuration.get(name)
+        phase.durationMs = beDuration ?? (maxEnd > minStart ? maxEnd - minStart : null)
+      } else {
+        phase.durationMs = maxEnd > minStart ? maxEnd - minStart : null
+      }
     }
   }
 
@@ -1245,186 +1513,6 @@ function enrichSpanTimings(spine: TraceSpineEntry[], calls: TraceCallNode[]): Tr
     if (entry.kind === "phase") enrichPhase(entry.phase)
   }
   return spine
-}
-
-/**
- * Prefer outline nesting for step-owned Call/Work; fall back to body spine
- * for phase details / work payloads that the catalog projection does not own.
- */
-function spineFromOutline(
-  outline: OutlineNode[],
-  calls: TraceCallNode[],
-  bodySpine: TraceSpineEntry[],
-): TraceSpineEntry[] {
-  if (outline.length === 0) return bodySpine
-
-  const callByIteration = new Map(calls.map((c) => [c.iteration, c]))
-  // Chronological queues per family — retries share `step:name` and must not
-  // collapse to the last card in a Map.
-  const bodyPhaseQueues = new Map<string, TracePhaseNode[]>()
-  for (const e of bodySpine) {
-    if (e.kind !== "phase") continue
-    const q = bodyPhaseQueues.get(e.phase.family) ?? []
-    q.push(e.phase)
-    bodyPhaseQueues.set(e.phase.family, q)
-  }
-  const bodyWorkByCall = new Map<number, TraceWorkNode>()
-  for (const e of bodySpine) {
-    if (e.kind === "work") bodyWorkByCall.set(e.work.afterCallIndex, e.work)
-    if (e.kind === "phase" && e.phase.children) {
-      for (const c of e.phase.children) {
-        if (c.kind === "work") bodyWorkByCall.set(c.work.afterCallIndex, c.work)
-      }
-    }
-  }
-
-  function takeBodyPhase(key: string, node: OutlineNode): TracePhaseNode | undefined {
-    const exact = bodyPhaseQueues.get(key)
-    if (exact && exact.length > 0) return exact.shift()
-    // Loose match still consumes so two outline scopes cannot clone one body
-    // (same phase.id → openState.phases.has toggles every look-alike card).
-    for (const [fam, q] of bodyPhaseQueues) {
-      if (q.length === 0) continue
-      if (
-        fam === key ||
-        fam === node.family ||
-        fam.startsWith(`${node.family}:`) ||
-        key.startsWith(fam)
-      ) {
-        return q.shift()
-      }
-    }
-    return undefined
-  }
-
-  function mapChildren(nodes: OutlineNode[]): TracePhaseChild[] {
-    const out: TracePhaseChild[] = []
-    let i = 0
-    while (i < nodes.length) {
-      const n = nodes[i]!
-      if (n.family === "call") {
-        const iter = nestIteration(n.nestKey)
-        const call = iter != null ? callByIteration.get(iter) : undefined
-        if (call) {
-          out.push({ kind: "call", callIndex: call.index })
-          i += 1
-          // Collapse consecutive work leaves into one Work card.
-          let sawWork = false
-          while (i < nodes.length && nodes[i]!.family === "work") {
-            sawWork = true
-            i += 1
-          }
-          if (sawWork) {
-            const work = bodyWorkByCall.get(call.index)
-            if (work) out.push({ kind: "work", work })
-          }
-          continue
-        }
-      }
-      if (n.family === "work") {
-        // Orphan work — skip; body spine already ordered under a call when present.
-        i += 1
-        continue
-      }
-      i += 1
-    }
-    return out
-  }
-
-  const spine: TraceSpineEntry[] = []
-  const emittedPhaseIds = new Set<string>()
-  let oi = 0
-  while (oi < outline.length) {
-    const node = outline[oi]!
-    if (node.family === "call") {
-      const iter = nestIteration(node.nestKey)
-      const call = iter != null ? callByIteration.get(iter) : undefined
-      if (call) {
-        spine.push({ kind: "call", callIndex: call.index })
-        oi += 1
-        let sawWork = false
-        while (oi < outline.length && outline[oi]!.family === "work") {
-          sawWork = true
-          oi += 1
-        }
-        if (sawWork) {
-          const work = bodyWorkByCall.get(call.index)
-          if (work) spine.push({ kind: "work", work })
-        }
-        continue
-      }
-      oi += 1
-      continue
-    }
-    if (node.family === "work") {
-      oi += 1
-      continue
-    }
-    // Phase / plan / step / pipeline / verify / repair scopes
-    if (node.kind === "scope") {
-      const key = node.nestKey ?? String(node.family)
-      const body = takeBodyPhase(key, node)
-      const outlineChildren = mapChildren(node.children ?? [])
-      // Prefer body nesting for steps — body attaches Call/Work under the open
-      // subagent; outline Call keys can still miss when iterations collide.
-      const children =
-        node.family === "step" && body?.children && body.children.length > 0
-          ? body.children
-          : outlineChildren.length > 0
-            ? outlineChildren
-            : (body?.children ?? [])
-      if (body) {
-        if (emittedPhaseIds.has(body.id)) {
-          oi += 1
-          continue
-        }
-        emittedPhaseIds.add(body.id)
-        spine.push({
-          kind: "phase",
-          phase: {
-            ...body,
-            title: node.title ?? body.title,
-            summary: node.summary ?? body.summary,
-            leading: node.label !== body.title ? node.label : body.leading,
-            ...(children.length > 0 ? { children } : {}),
-          },
-        })
-      } else if (children.length > 0 || (node.summary && node.summary.length > 0)) {
-        if (emittedPhaseIds.has(node.id)) {
-          oi += 1
-          continue
-        }
-        emittedPhaseIds.add(node.id)
-        spine.push({
-          kind: "phase",
-          phase: {
-            id: node.id,
-            family: key,
-            title: node.title ?? node.label,
-            summary: node.summary ?? "",
-            status: node.severity === "error" ? "error" : "done",
-            details: [],
-            leading: node.title ? node.label : undefined,
-            startOffsetMs: 0,
-            durationMs: null,
-            ...(children.length > 0 ? { children } : {}),
-          },
-        })
-      }
-      oi += 1
-      continue
-    }
-    oi += 1
-  }
-
-  // If outline produced nothing useful, keep body spine.
-  return spine.length > 0 ? spine : bodySpine
-}
-
-function nestIteration(nestKey: string | undefined): number | null {
-  if (!nestKey) return null
-  const m = /(?:^|\/)call:(\d+)$/.exec(nestKey)
-  return m ? Number(m[1]) : null
 }
 
 /** Where a call matched the filter — shown so search feels intentional. */
@@ -1438,7 +1526,7 @@ export function searchCall(
   const reasons: string[] = []
   let inHistory = false
   let inReply = false
-  const callNo = call.index + 1
+  const callNo = call.callOrdinal + 1
   const iterNo = call.iteration + 1
 
   if (q === String(callNo) || q === `call ${callNo}` || q === `#${callNo}`) {

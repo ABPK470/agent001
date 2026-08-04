@@ -128,7 +128,7 @@ function buildCallNodes(
     depth,
     name: call.headline,
     subtitle: metrics.subtitle,
-    leading: `Call ${call.index + 1}`,
+    leading: `Call ${call.callOrdinal + 1}`,
     durationMs: metrics.durationMs,
     startOffsetMs: metrics.startOffsetMs,
     promptTokens: metrics.promptTokens,
@@ -381,8 +381,19 @@ function buildPhaseNodes(
       if (!call) continue
       buildCallNodes(acc, call, depth + 1, phase.id, true, openState, search)
       if (call.durationMs != null) offset += call.durationMs
-    } else {
+    } else if (child.kind === "work") {
       buildWorkNodes(acc, child.work, depth + 1, phase.id, openState, search, offset)
+    } else {
+      offset = buildPhaseNodes(
+        acc,
+        child.phase,
+        depth + 1,
+        phase.id,
+        dag,
+        openState,
+        search,
+        offset,
+      )
     }
   }
   return offset

@@ -59,15 +59,39 @@ export function seedLatest(callCount: number): OpenState {
   return next
 }
 
+function collectWorkIdsFromPhase(
+  phase: import("./build-trace-dag").TracePhaseNode,
+  ids: string[],
+) {
+  for (const child of phase.children ?? []) {
+    if (child.kind === "work") ids.push(child.work.id)
+    else if (child.kind === "phase") collectWorkIdsFromPhase(child.phase, ids)
+  }
+}
+
 function collectWorkIds(dag: TraceDag): string[] {
   const ids: string[] = []
   for (const entry of dag.spine) {
     if (entry.kind === "work") ids.push(entry.work.id)
-    if (entry.kind === "phase") {
-      for (const child of entry.phase.children ?? []) {
-        if (child.kind === "work") ids.push(child.work.id)
-      }
-    }
+    if (entry.kind === "phase") collectWorkIdsFromPhase(entry.phase, ids)
+  }
+  return ids
+}
+
+function collectPhaseIdsFromPhase(
+  phase: import("./build-trace-dag").TracePhaseNode,
+  ids: string[],
+) {
+  ids.push(phase.id)
+  for (const child of phase.children ?? []) {
+    if (child.kind === "phase") collectPhaseIdsFromPhase(child.phase, ids)
+  }
+}
+
+function collectPhaseIds(dag: TraceDag): string[] {
+  const ids: string[] = []
+  for (const entry of dag.spine) {
+    if (entry.kind === "phase") collectPhaseIdsFromPhase(entry.phase, ids)
   }
   return ids
 }
@@ -85,9 +109,7 @@ export function expandedOpenState(dag: TraceDag): OpenState {
       dag.calls.flatMap((c) => c.messages.map((_, mi) => `${c.index}:m:${mi}`)),
     ),
     tools: new Set(),
-    phases: new Set(
-      dag.spine.filter((e) => e.kind === "phase").map((e) => e.phase.id),
-    ),
+    phases: new Set(collectPhaseIds(dag)),
     work: new Set(collectWorkIds(dag)),
     foldMode: "expanded",
   }

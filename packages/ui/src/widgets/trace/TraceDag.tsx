@@ -5,7 +5,6 @@
 
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react"
 import { api } from "../../client/index"
-import type { TraceEntry } from "@mia/shared-types"
 import { VirtualList } from "../../components/VirtualList"
 import { BrowseCount } from "../../components/BrowseStrip"
 import { useWidgetFocus } from "../../hooks/useWidgetFocus"
@@ -30,6 +29,7 @@ import {
   WidgetToolbarSearch,
   WidgetToolbarTrailing,
 } from "../widget-toolbar"
+import { normalizeTraceWire } from "../../lib/events/trace-wire"
 import {
   buildTraceDag,
   type TraceDag,
@@ -174,17 +174,21 @@ export function TraceDag({
       if (lastWork && lastWork.kind === "work") {
         next.work.add(lastWork.work.id)
       }
-      for (const entry of dag.spine) {
-        if (entry.kind !== "phase" || !entry.phase.children?.length) continue
-        const ownsLatest = entry.phase.children.some((child) => {
-          if (child.kind === "call") return child.callIndex === lastCall
+      function seedPhase(phase: import("./build-trace-dag").TracePhaseNode): boolean {
+        let owns = false
+        for (const child of phase.children ?? []) {
+          if (child.kind === "call" && child.callIndex === lastCall) owns = true
           if (child.kind === "work") {
             next.work.add(child.work.id)
-            return child.work.afterCallIndex === lastCall
+            if (child.work.afterCallIndex === lastCall) owns = true
           }
-          return false
-        })
-        if (ownsLatest) next.phases.add(entry.phase.id)
+          if (child.kind === "phase" && seedPhase(child.phase)) owns = true
+        }
+        if (owns) next.phases.add(phase.id)
+        return owns
+      }
+      for (const entry of dag.spine) {
+        if (entry.kind === "phase") seedPhase(entry.phase)
       }
       return { ...next, foldMode: prev.foldMode }
     })
@@ -220,7 +224,8 @@ export function TraceDag({
       .getRunTrace(compareRunId)
       .then((raw) => {
         if (cancelled) return
-        setCompareDag(buildTraceDag(raw as TraceEntry[]))
+        const normalized = normalizeTraceWire(raw as unknown[])
+        setCompareDag(buildTraceDag(normalized.entries, { createdAtMs: normalized.createdAtMs }))
       })
       .catch(() => {
         if (!cancelled) {
@@ -455,7 +460,10 @@ export function TraceDag({
     })
   }
   if (stats.totalDuration > 0) {
-    metaStats.push({ value: formatMs(stats.totalDuration) })
+    metaStats.push({
+      value: formatMs(stats.totalDuration),
+      label: stats.timingBasis === "wall" ? "wall" : "llm",
+    })
   }
   if (stats.promptTokens > 0 || stats.completionTokens > 0) {
     metaStats.push({ value: fmtTokens(stats.promptTokens), label: "in" })

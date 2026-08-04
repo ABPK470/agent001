@@ -88,11 +88,34 @@ function formatCallOutput(call: TraceCallNode): string {
 export function resolveCompareCallIndex(dag: TraceDag, node: TraceTreeNode): number | null {
   if (node.callIndex != null) return node.callIndex
   if (node.kind === "phase" && node.phaseId) {
-    const entry = dag.spine.find((e) => e.kind === "phase" && e.phase.id === node.phaseId)
-    if (entry?.kind !== "phase") return null
-    for (const child of entry.phase.children ?? []) {
+    function findPhase(
+      phase: import("./build-trace-dag").TracePhaseNode,
+    ): import("./build-trace-dag").TracePhaseNode | null {
+      if (phase.id === node.phaseId) return phase
+      for (const child of phase.children ?? []) {
+        if (child.kind === "phase") {
+          const found = findPhase(child.phase)
+          if (found) return found
+        }
+      }
+      return null
+    }
+    let phase: import("./build-trace-dag").TracePhaseNode | null = null
+    for (const entry of dag.spine) {
+      if (entry.kind !== "phase") continue
+      phase = findPhase(entry.phase)
+      if (phase) break
+    }
+    if (!phase) return null
+    for (const child of phase.children ?? []) {
       if (child.kind === "call") return child.callIndex
       if (child.kind === "work") return child.work.afterCallIndex
+      if (child.kind === "phase") {
+        for (const nested of child.phase.children ?? []) {
+          if (nested.kind === "call") return nested.callIndex
+          if (nested.kind === "work") return nested.work.afterCallIndex
+        }
+      }
     }
   }
   return null

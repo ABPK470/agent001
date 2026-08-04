@@ -129,6 +129,7 @@ export async function spawnChild(ctx: DelegateContext, contract: ChildContract):
       })
     },
     onLlmCall: (data) => {
+      const stepName = trace.stepName
       if (data.phase === LLMCallPhase.Request) {
         pendingLlmEvents.push({
           kind: DelegationSpanEventKind.LlmRequest,
@@ -141,7 +142,8 @@ export async function spawnChild(ctx: DelegateContext, contract: ChildContract):
             toolCalls:
               m.toolCalls?.map((tc) => ({ id: tc.id, name: tc.name, arguments: tc.arguments })) ?? [],
             toolCallId: m.toolCallId ?? null
-          }))
+          })),
+          ...(stepName ? { stepName } : {}),
         })
       } else {
         pendingLlmEvents.push({
@@ -155,7 +157,8 @@ export async function spawnChild(ctx: DelegateContext, contract: ChildContract):
               name: tc.name,
               arguments: tc.arguments
             })) ?? [],
-          usage: data.response.usage ?? null
+          usage: data.response.usage ?? null,
+          ...(stepName ? { stepName } : {}),
         })
       }
     }

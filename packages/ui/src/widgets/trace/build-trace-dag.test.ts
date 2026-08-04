@@ -12,6 +12,7 @@ type LlmRequest = Extract<TraceEntry, { kind: "llm-request" }>
 function llmRequest(
   iteration: number,
   messages: LlmRequest["messages"] = [],
+  stepName?: string,
 ): LlmRequest {
   return {
     kind: "llm-request",
@@ -19,6 +20,7 @@ function llmRequest(
     messageCount: messages.length,
     toolCount: 0,
     messages,
+    ...(stepName ? { stepName } : {}),
   }
 }
 
@@ -29,6 +31,7 @@ function llmResponse(
     toolCalls?: Array<{ id: string; name: string; arguments: Record<string, unknown> }>
     durationMs?: number
     usage?: { promptTokens: number; completionTokens: number; totalTokens: number }
+    stepName?: string
   } = {},
 ): Extract<TraceEntry, { kind: "llm-response" }> {
   return {
@@ -38,6 +41,7 @@ function llmResponse(
     content: opts.content ?? null,
     toolCalls: opts.toolCalls ?? [],
     usage: opts.usage ?? { promptTokens: 10, completionTokens: 5, totalTokens: 15 },
+    ...(opts.stepName ? { stepName: opts.stepName } : {}),
   }
 }
 
@@ -450,8 +454,18 @@ describe("buildTraceDag", () => {
       (e) => e.kind === "phase" && e.phase.family === "pipeline",
     )
     expect(pipelinePhases).toHaveLength(1)
-    if (pipelinePhases[0]?.kind === "phase") {
-      expect(pipelinePhases[0].phase.summary).toMatch(/success/i)
+    if (pipelinePhases[0]?.kind !== "phase") throw new Error("expected pipeline")
+    expect(pipelinePhases[0].phase.summary).toMatch(/success/i)
+
+    // Steps nest under Pipeline (loop prose), not as spine peers.
+    const nestedSteps = (pipelinePhases[0].phase.children ?? []).filter(
+      (c) => c.kind === "phase" && c.phase.family.startsWith("step:"),
+    )
+    expect(nestedSteps).toHaveLength(2)
+    for (const step of nestedSteps) {
+      if (step.kind !== "phase") throw new Error("expected phase")
+      expect(step.phase.children?.some((c) => c.kind === "call")).toBe(true)
+      expect(step.phase.children?.some((c) => c.kind === "work")).toBe(true)
     }
 
     const verifyPhases = dag.spine.filter(
@@ -459,18 +473,105 @@ describe("buildTraceDag", () => {
     )
     expect(verifyPhases).toHaveLength(1)
 
-    const steps = dag.spine.filter(
-      (e) => e.kind === "phase" && e.phase.family.startsWith("step:"),
-    )
-    expect(steps).toHaveLength(2)
-    for (const step of steps) {
-      if (step.kind !== "phase") throw new Error("expected phase")
-      expect(step.phase.children?.some((c) => c.kind === "call")).toBe(true)
-      expect(step.phase.children?.some((c) => c.kind === "work")).toBe(true)
-    }
-
-    // Calls/Work belong under Subagents — not flat peers after Pipeline success.
+    // Calls/Work/Steps belong under Pipeline — not flat peers after success.
     expect(dag.spine.some((e) => e.kind === "call" || e.kind === "work")).toBe(false)
+    expect(
+      dag.spine.some((e) => e.kind === "phase" && e.phase.family.startsWith("step:")),
+    ).toBe(false)
+  })
+
+  it("keeps parallel subagent Calls/tools apart when iterations collide", () => {
+    const dag = buildTraceDag([
+      { kind: "planner-pipeline-start", attempt: 1, maxRetries: 1 },
+      { kind: "planner-step-start", stepName: "api_layer", stepType: "subagent_task" },
+      { kind: "planner-step-start", stepName: "frontend_layer", stepType: "subagent_task" },
+      llmRequest(0, [], "api_layer"),
+      llmRequest(0, [], "frontend_layer"),
+      llmResponse(0, {
+        toolCalls: [{ id: "tc-a", name: "list_directory", arguments: { path: "." } }],
+        stepName: "api_layer",
+      }),
+      llmResponse(0, {
+        toolCalls: [{ id: "tc-b", name: "write_file", arguments: { path: "a.html" } }],
+        stepName: "frontend_layer",
+      }),
+      {
+        kind: "tool-call",
+        invocationId: "inv-b",
+        toolCallId: "tc-b",
+        tool: "write_file",
+        argsSummary: "a.html",
+        argsFormatted: '{"path":"a.html"}',
+        stepName: "frontend_layer",
+      },
+      {
+        kind: "tool-call",
+        invocationId: "inv-a",
+        toolCallId: "tc-a",
+        tool: "list_directory",
+        argsSummary: ".",
+        argsFormatted: '{"path":"."}',
+        stepName: "api_layer",
+      },
+      {
+        kind: "tool-result",
+        invocationId: "inv-a",
+        toolCallId: "tc-a",
+        text: "ok",
+        stepName: "api_layer",
+      },
+      {
+        kind: "tool-result",
+        invocationId: "inv-b",
+        toolCallId: "tc-b",
+        text: "Wrote a.html",
+        stepName: "frontend_layer",
+      },
+      {
+        kind: "planner-step-end",
+        stepName: "api_layer",
+        status: "pass",
+        durationMs: 100,
+      },
+      {
+        kind: "planner-step-end",
+        stepName: "frontend_layer",
+        status: "pass",
+        durationMs: 200,
+      },
+      {
+        kind: "planner-pipeline-end",
+        status: "success",
+        completedSteps: 2,
+        totalSteps: 2,
+      },
+    ])
+
+    expect(dag.calls).toHaveLength(2)
+    expect(dag.calls.map((c) => c.stepName).sort()).toEqual(["api_layer", "frontend_layer"])
+    expect(dag.calls.every((c) => c.callOrdinal === 0)).toBe(true)
+
+    const pipeline = dag.spine.find((e) => e.kind === "phase" && e.phase.family === "pipeline")
+    if (pipeline?.kind !== "phase") throw new Error("expected pipeline")
+    const steps = (pipeline.phase.children ?? []).filter((c) => c.kind === "phase")
+    expect(steps).toHaveLength(2)
+
+    for (const step of steps) {
+      if (step.kind !== "phase") throw new Error("expected step")
+      const callChild = step.phase.children?.find((c) => c.kind === "call")
+      const workChild = step.phase.children?.find((c) => c.kind === "work")
+      if (callChild?.kind !== "call" || workChild?.kind !== "work") {
+        throw new Error(`missing call/work under ${step.phase.family}`)
+      }
+      const call = dag.calls[callChild.callIndex]!
+      expect(call.stepName).toBe(step.phase.family.slice("step:".length))
+      expect(workChild.work.tools).toHaveLength(1)
+      if (call.stepName === "api_layer") {
+        expect(workChild.work.tools[0]!.name).toBe("list_directory")
+      } else {
+        expect(workChild.work.tools[0]!.name).toBe("write_file")
+      }
+    }
   })
 
   it("omits Direct chips with nothing to expand", () => {

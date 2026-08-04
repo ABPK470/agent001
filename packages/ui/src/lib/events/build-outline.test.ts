@@ -131,6 +131,9 @@ describe("buildOutline", () => {
     const pipelines = outline.filter((n) => n.family === "pipeline")
     expect(pipelines).toHaveLength(1)
     expect(pipelines[0]!.summary).toMatch(/success/i)
+    // Steps nest under Pipeline for loop prose.
+    expect(pipelines[0]!.children?.some((c) => c.family === "step")).toBe(true)
+    expect(outline.some((n) => n.family === "step")).toBe(false)
   })
 
   it("gives each subagent its own Call:0 (no cross-step merge)", () => {

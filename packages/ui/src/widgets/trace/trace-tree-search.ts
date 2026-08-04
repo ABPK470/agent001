@@ -21,23 +21,35 @@ export type TraceTreeSearch = {
   contextToolsVisible: boolean
 }
 
+function collectWorksFromPhase(phase: TracePhaseNode, works: TraceWorkNode[]) {
+  for (const child of phase.children ?? []) {
+    if (child.kind === "work") works.push(child.work)
+    else if (child.kind === "phase") collectWorksFromPhase(child.phase, works)
+  }
+}
+
 export function collectWorksFromSpine(spine: TraceSpineEntry[]): TraceWorkNode[] {
   const works: TraceWorkNode[] = []
   for (const entry of spine) {
     if (entry.kind === "work") works.push(entry.work)
-    if (entry.kind === "phase") {
-      for (const child of entry.phase.children ?? []) {
-        if (child.kind === "work") works.push(child.work)
-      }
-    }
+    if (entry.kind === "phase") collectWorksFromPhase(entry.phase, works)
   }
   return works
 }
 
+function collectPhasesFromPhase(phase: TracePhaseNode, phases: TracePhaseNode[]) {
+  phases.push(phase)
+  for (const child of phase.children ?? []) {
+    if (child.kind === "phase") collectPhasesFromPhase(child.phase, phases)
+  }
+}
+
 export function collectPhasesFromSpine(spine: TraceSpineEntry[]): TracePhaseNode[] {
-  return spine.filter((e): e is Extract<TraceSpineEntry, { kind: "phase" }> => e.kind === "phase").map(
-    (e) => e.phase,
-  )
+  const phases: TracePhaseNode[] = []
+  for (const entry of spine) {
+    if (entry.kind === "phase") collectPhasesFromPhase(entry.phase, phases)
+  }
+  return phases
 }
 
 function workMatches(work: TraceWorkNode, q: string): boolean {
@@ -97,12 +109,19 @@ function phaseHasVisibleChild(
   phase: TracePhaseNode,
   callHits: Map<number, TraceCallSearchHit>,
   matchedWorkIds: Set<string>,
+  matchedPhaseIds: Set<string>,
 ): boolean {
   for (const child of phase.children ?? []) {
     if (child.kind === "call" && callHits.has(child.callIndex)) return true
     if (child.kind === "work") {
       if (matchedWorkIds.has(child.work.id)) return true
       if (callHits.has(child.work.afterCallIndex)) return true
+    }
+    if (child.kind === "phase") {
+      if (matchedPhaseIds.has(child.phase.id)) return true
+      if (phaseHasVisibleChild(child.phase, callHits, matchedWorkIds, matchedPhaseIds)) {
+        return true
+      }
     }
   }
   return false
@@ -153,7 +172,13 @@ export function buildTraceTreeSearch(
   const contextVisible = contextPromptVisible || contextToolsVisible
 
   for (const phase of collectPhasesFromSpine(dag.spine)) {
-    if (phaseMatches(phase, q) || phaseHasVisibleChild(phase, callHits, matchedWorkIds)) {
+    if (phaseMatches(phase, q)) visiblePhaseIds.add(phase.id)
+  }
+  for (const phase of collectPhasesFromSpine(dag.spine)) {
+    if (
+      visiblePhaseIds.has(phase.id) ||
+      phaseHasVisibleChild(phase, callHits, matchedWorkIds, visiblePhaseIds)
+    ) {
       visiblePhaseIds.add(phase.id)
     }
   }

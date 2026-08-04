@@ -373,7 +373,12 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
       reply.code(404)
       return { error: "Run not found" }
     }
-    return (await db.getTraceEntries(req.params.id)).map((entry) => parseBoundaryJson(entry.data))
+    // Envelope keeps DB seq + wall-clock; FE unwraps TraceEntry for the DAG.
+    return (await db.getTraceEntries(req.params.id)).map((row) => ({
+      seq: row.seq,
+      createdAt: row.created_at,
+      entry: parseBoundaryJson(row.data),
+    }))
   })
 
   /** User download — trace as .txt (streamed to browser, not saved on server). */

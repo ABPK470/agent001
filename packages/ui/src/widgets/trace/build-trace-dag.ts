@@ -9,6 +9,7 @@ export {
   replyHeadline,
   searchCall,
   messagePreview,
+  type BuildTraceDagOpts,
   type TraceSqlQuality,
   type TraceToolCall,
   type TracePromptMessage,

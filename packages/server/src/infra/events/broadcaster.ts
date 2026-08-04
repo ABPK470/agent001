@@ -215,7 +215,7 @@ export function subscribeToEvents(fn: (event: SseEvent) => void): () => void {
 export function broadcastTrace(runId: string, seq: number, entry: TraceEntry): void {
   _default.broadcast({
     type: EventType.DebugTrace,
-    data: { runId, seq, entry }
+    data: { runId, seq, createdAt: new Date().toISOString(), entry }
   })
 }
 
@@ -238,6 +238,11 @@ export function broadcastTraceLoose(
 ): void {
   _default.broadcast({
     type: EventType.DebugTrace,
-    data: { runId, seq, entry: entry as unknown as TraceEntry }
+    data: {
+      runId,
+      seq,
+      createdAt: new Date().toISOString(),
+      entry: entry as unknown as TraceEntry,
+    }
   })
 }
