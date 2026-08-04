@@ -2,28 +2,16 @@
  * Multi-column metric row for trace master-detail tree.
  */
 
-import { Brain, ChevronRight, Cpu, Layers, Mail, MessageSquare, Reply, Wrench, Zap } from "lucide-react"
+import { ChevronRight } from "lucide-react"
 import { fmtTokens, formatMs } from "../../lib/util"
 import {
   TRACE_TREE_BASE_PAD_PX,
   TRACE_TREE_INDENT_PX,
   traceTreeNodeCellStyle,
 } from "./trace-tree-guides"
-import type { TraceTreeNode, TraceTreeNodeKind } from "./trace-tree-index"
+import { TRACE_KIND_ICON } from "./trace-kind-icon"
+import type { TraceTreeNode } from "./trace-tree-index"
 import { TraceTreeStatusBadge, TraceTreeStatusDot } from "./TraceTreeStatusBadge"
-
-const KIND_ICON: Record<TraceTreeNodeKind, typeof Brain> = {
-  context: Layers,
-  prompt: Cpu,
-  tools: Wrench,
-  phase: Layers,
-  call: Brain,
-  sent: Mail,
-  received: Reply,
-  message: MessageSquare,
-  work: Zap,
-  tool: Wrench,
-}
 
 function displayTitle(node: TraceTreeNode): string {
   return node.leading ? `${node.leading} ${node.name}` : node.name
@@ -45,7 +33,7 @@ export function TraceTreeRow({
   onToggleFold: (scopeId: string) => void
   onJumpToRootCause: (scopeId: string) => void
 }) {
-  const Icon = KIND_ICON[node.kind]
+  const Icon = TRACE_KIND_ICON[node.kind]
   const tokens =
     node.promptTokens > 0 || node.completionTokens > 0
       ? `${fmtTokens(node.promptTokens)} in / ${fmtTokens(node.completionTokens)} out`

@@ -22,6 +22,9 @@ const exportPath = join(here, "TraceExportMenu.tsx")
 const zenHudPath = join(here, "TraceZenHud.tsx")
 const foldTogglePath = join(here, "TraceTreeFoldToggle.tsx")
 const openStatePath = join(here, "open-state.ts")
+const waterfallPath = join(here, "TraceWaterfallView.tsx")
+const kindIconPath = join(here, "trace-kind-icon.ts")
+const treeRowPath = join(here, "TraceTreeRow.tsx")
 
 function read(path: string): string {
   return readFileSync(path, "utf8")
@@ -146,5 +149,23 @@ describe("Trace toolbar structure + behavior wiring", () => {
     expect(dag).toContain('tone="meta"')
     expect(dag).toContain('label="run"')
     expect(dag).toContain('label="thread"')
+  })
+
+  it("waterfall labels use shared kind icons — not Work:/Subagent: text prefixes", () => {
+    const waterfall = read(waterfallPath)
+    const kindIcon = read(kindIconPath)
+    const treeRow = read(treeRowPath)
+    const css = read(cssPath)
+    expect(kindIcon).toContain("TRACE_KIND_ICON")
+    expect(treeRow).toContain("TRACE_KIND_ICON")
+    expect(waterfall).toContain("TRACE_KIND_ICON")
+    expect(waterfall).toContain("trace-waterfall-row__name")
+    expect(waterfall).toContain("waterfallTooltip")
+    expect(waterfall).toContain("REDUNDANT_LEADING")
+    expect(waterfall).not.toContain("${node.leading}: ${node.name}")
+    expect(css).toMatch(
+      /\.trace-waterfall-row\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*9\.5rem\)/s,
+    )
+    expect(css).toContain(".trace-waterfall-row__icon")
   })
 })
