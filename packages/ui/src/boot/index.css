@@ -6410,6 +6410,13 @@ button.trace-tree-status-pill:hover {
   color: var(--text, var(--color-text));
 }
 
+.trace-exec--chat .trace-exec__chev {
+  margin-left: 0.15rem;
+  transform: none;
+  transition: none;
+  color: var(--text-muted, var(--color-text-muted));
+}
+
 .trace-exec--chat .trace-exec__summary:hover {
   background: var(--overlay-2, rgb(255 255 255 / 0.04));
 }

@@ -5,7 +5,7 @@
  * Chat (`surface="chat"`): bordered terminal card for the transcript.
  */
 
-import { Check, ChevronRight, X } from "lucide-react"
+import { Check, ChevronDown, ChevronRight, X } from "lucide-react"
 import { useMemo, useState, type ReactNode, type RefObject } from "react"
 import { isValidJsonText } from "../lib/events/trace-tool-schema"
 import {
@@ -167,11 +167,29 @@ export function ToolExecutionCard({
           {summary.duration ? (
             <span className="trace-exec__duration">{summary.duration}</span>
           ) : null}
-          <ChevronRight
-            size={14}
-            className={`trace-exec__chev${open ? " is-open" : ""}`}
-            aria-hidden
-          />
+          {isChat ? (
+            open ? (
+              <ChevronDown
+                size={12}
+                strokeWidth={1.5}
+                className="trace-exec__chev chat-trace-chev"
+                aria-hidden
+              />
+            ) : (
+              <ChevronRight
+                size={12}
+                strokeWidth={1.5}
+                className="trace-exec__chev chat-trace-chev"
+                aria-hidden
+              />
+            )
+          ) : (
+            <ChevronRight
+              size={14}
+              className={`trace-exec__chev${open ? " is-open" : ""}`}
+              aria-hidden
+            />
+          )}
         </button>
       ) : (
         <div className="trace-exec__summary trace-exec__summary--static">

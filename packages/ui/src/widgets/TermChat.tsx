@@ -565,12 +565,10 @@ function ToolSyncProgressBody({
 function ToolPill({
   row,
   syncProgress,
-  isLast,
   isLiveRun = false,
 }: {
   row: ToolRow
   syncProgress?: ResponseSyncProgressPart
-  isLast: boolean
   isLiveRun?: boolean
 }) {
   const { preserveToggle } = useChatScroll()
@@ -600,9 +598,10 @@ function ToolPill({
 
   return (
     <div className="relative py-1.5" data-chat-expand-root="">
-      {!isLast && (
-        <div className="pointer-events-none absolute left-[11px] top-[22px] -bottom-1 w-px chat-trace-rail" />
-      )}
+      {/*
+       * Execution cards are self-contained — no inter-tool stem.
+       * A gray rail against a red status dot reads as a drawing glitch.
+       */}
       <div className="flex items-start gap-2 min-w-0 px-2 py-0.5">
         <span
           className={[
@@ -615,6 +614,7 @@ function ToolPill({
                 ? "bg-error"
                 : "chat-trace-dot--idle",
           ].join(" ")}
+          aria-hidden
         />
         <div className="min-w-0 flex-1">
           <ToolExecutionCard
@@ -918,12 +918,11 @@ function IterationToolList({
 }) {
   return (
     <div className="space-y-0">
-      {tools.map((toolPart, i) => (
+      {tools.map((toolPart) => (
         <ToolPill
           key={toolPart.id}
           row={toolPart.row}
           syncProgress={syncByInvocation.get(toolPart.id)}
-          isLast={i === tools.length - 1}
         />
       ))}
     </div>
@@ -1059,7 +1058,7 @@ function DetailViewportRows({
         {parts.map((part, index) => (
           part.kind === "progress"
             ? <ProgressPill key={`${part.id}-${index}`} part={part} />
-            : <ToolPill key={`${part.id}-${index}`} row={part.row} isLast={index === parts.length - 1} />
+            : <ToolPill key={`${part.id}-${index}`} row={part.row} />
         ))}
       </div>
     </DetailViewport>
@@ -1559,7 +1558,6 @@ function RunMessageImpl({
             key={part.id}
             row={part.row}
             syncProgress={syncByInvocation.get(part.id)}
-            isLast={false}
             isLiveRun={isLiveRun}
           />,
         )
