@@ -5771,21 +5771,10 @@ button.trace-tree-status-pill:hover {
   line-height: 1.55;
 }
 
-.trace-detail-prose.is-clipped {
-  position: relative;
-}
-
-.trace-detail-prose.is-clipped::after {
-  content: "";
-  display: block;
-  height: 1.25rem;
-  margin-top: -1.25rem;
-  pointer-events: none;
-  background: linear-gradient(
-    to bottom,
-    transparent,
-    var(--trace-section-surface, var(--bg))
-  );
+/* Soft dissolve of clipped text — mask the glyphs (not a painted bg strip). */
+.trace-detail-prose.is-clipped > pre {
+  -webkit-mask-image: linear-gradient(to bottom, #000 55%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 55%, transparent 100%);
 }
 
 .trace-detail-tool-pane {
@@ -6733,7 +6722,8 @@ button.trace-tree-status-pill:hover {
 }
 
 .inline-peek--collapsible:not(.is-expanded) > pre {
-  mask-image: linear-gradient(to bottom, #000 70%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, #000 55%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 55%, transparent 100%);
 }
 
 .inline-peek__toggle {
@@ -8207,17 +8197,10 @@ button.trace-tree-status-pill:hover {
   background: color-mix(in srgb, var(--text, #0f172a) 4%, transparent);
 }
 
-.trace-expand.is-clipped .trace-expand__main {
-  position: relative;
-}
-
-.trace-expand.is-clipped .trace-expand__main::after {
-  content: "";
-  display: block;
-  height: 1.25rem;
-  margin-top: -1.25rem;
-  pointer-events: none;
-  background: linear-gradient(to bottom, transparent, var(--bg));
+/* Same mask dialect as .inline-peek — text fades out; no wrong-color wash. */
+.trace-expand.is-clipped .trace-expand__main > pre {
+  -webkit-mask-image: linear-gradient(to bottom, #000 55%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 55%, transparent 100%);
 }
 
 .trace-empty {
