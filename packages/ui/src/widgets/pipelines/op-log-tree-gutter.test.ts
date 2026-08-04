@@ -86,14 +86,20 @@ describe("pipelines left-tree gutter — review kit", () => {
     expect(activity).not.toContain("activityEntityIcon")
   })
 
-  it("hosts IDE tree guide hairlines that touch icons and bridge rows", () => {
+  it("hosts IDE tree guide hairlines — parents end at chevron, leaves at status glyph", () => {
     const css = read(cssPath)
     expect(css).toContain(".review-tree-row__guides")
     expect(css).toContain(".review-tree-guide.is-branch")
     expect(css).toContain(".review-tree-guide.is-corner")
     expect(css).toContain("var(--review-tree-line)")
-    // Horizontal lead crosses chevron air to the glyph center (dot / phase icon).
-    expect(css).toContain("width: calc(50% + 4px + 16px + 10px)")
+    // Parents: stem → gap → chevron center (never through › into the icon).
+    expect(css).toMatch(
+      /\.review-tree-row\.has-guides\.is-branch[\s\S]*?width:\s*calc\(50% \+ 4px \+ 8px\)/s,
+    )
+    // Leaves: stem → empty chevron slot → status-dot / glyph center.
+    expect(css).toMatch(
+      /\.review-tree-row\.has-guides\.is-leaf[\s\S]*?width:\s*calc\(50% \+ 4px \+ 16px \+ 10px\)/s,
+    )
     // Guided rows drop border-bottom; inset shadow sits under continuous │.
     expect(css).toMatch(
       /\.review-tree-row\.has-guides\s*>\s*\.review-tree-row__btn\s*\{[^}]*box-shadow:\s*inset 0 -1px 0/s,

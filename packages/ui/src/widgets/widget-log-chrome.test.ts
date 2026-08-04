@@ -232,11 +232,14 @@ describe("widget log chrome — control height & search", () => {
     expect(listRow).toContain("ReviewTreeRow")
     expect(css).toMatch(/\.review-tree-row\.is-selected::before\s*\{[^}]*background:\s*var\(--color-accent/s)
     expect(css).toMatch(
-      /\.review-operator \.review-tree-row\.is-selected \.review-tree-row__btn\s*\{[^}]*background:\s*var\(--select-fill/s,
+      /\.review-operator \.review-tree-row\.is-selected\s*>\s*\.review-tree-row__btn[\s\S]*?background:\s*var\(--select-fill/s,
     )
     expect(css).toMatch(
-      /\.trace-tree-row\.is-selected \.trace-tree-row__btn\s*\{[^}]*background:\s*var\(--select-fill/s,
+      /\.trace-tree-row\.is-selected\s*>\s*\.trace-tree-row__btn[\s\S]*?background:\s*var\(--select-fill/s,
     )
+    // Parent wash must not override selected fill (light theme specificity trap).
+    expect(css).toContain(".review-tree-row.is-branch:not(.is-selected)")
+    expect(css).toContain(".trace-tree-row.is-branch:not(.is-selected)")
     expect(css).toMatch(
       /\.trace-card\.is-open\s*>\s*\.trace-scope\s*\{[^}]*background:\s*var\(--select-fill\)/s,
     )

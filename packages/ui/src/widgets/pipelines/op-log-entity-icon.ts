@@ -12,8 +12,8 @@ import {
   GitCompareArrows,
   Layers,
   ListChecks,
-  Play,
   Settings,
+  Ship,
   Shuffle,
   Table2,
   Wrench,
@@ -55,7 +55,7 @@ export function activityPhaseIcon(activity: OperationActivity): OpLogEntityVisua
     return { Icon: Eye, color: "var(--color-info)" }
   }
   if (id === "phase:execute" || name === "execute") {
-    return { Icon: Play, color: "var(--color-success)" }
+    return { Icon: Ship, color: "var(--color-success)" }
   }
   if (name.includes("preflight")) {
     return { Icon: ListChecks, color: "var(--color-info)" }

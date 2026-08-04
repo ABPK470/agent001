@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { Eye, Layers, ListChecks, Play, Table2 } from "lucide-react"
+import { Eye, Layers, ListChecks, Ship, Table2 } from "lucide-react"
 import type { OperationActivity } from "../../client/index"
 import { OperationKind, OperationStatus } from "../../client/index"
 import {
@@ -35,7 +35,7 @@ describe("pipelineEntityIcon — root kind only", () => {
 describe("activityPhaseIcon — functional stages, never kind fallback", () => {
   it("maps Preview / Execute / Preflight / MetadataSync", () => {
     expect(activityPhaseIcon(activity({ id: "phase:preview", name: "Preview" })).Icon).toBe(Eye)
-    expect(activityPhaseIcon(activity({ id: "phase:execute", name: "Execute" })).Icon).toBe(Play)
+    expect(activityPhaseIcon(activity({ id: "phase:execute", name: "Execute" })).Icon).toBe(Ship)
     expect(activityPhaseIcon(activity({ id: "preflight", name: "Preflight checks" })).Icon).toBe(
       ListChecks,
     )
