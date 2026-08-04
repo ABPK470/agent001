@@ -81,13 +81,16 @@ export function TraceTreeRow({
     >
       <button type="button" className="trace-tree-row__btn" onClick={onRowClick}>
         <span className="trace-tree-row__node-cell" style={traceTreeNodeCellStyle(node.depth)}>
+          {/* Fixed 16px lead column — blank spacer when leaf so icons share one X per depth. */}
           <span className="trace-tree-row__chev" onClick={onChevronClick} aria-hidden>
             {node.hasChildren ? (
               <ChevronRight
                 size={13}
                 className={`trace-tree-row__chev-icon${folded ? "" : " is-open"}`}
               />
-            ) : null}
+            ) : (
+              <span className="trace-tree-row__chev-spacer" />
+            )}
           </span>
           <span className="trace-tree-row__icon" aria-hidden>
             {!showTopLevelBadge ? (
@@ -98,7 +101,6 @@ export function TraceTreeRow({
                 onJumpToRootCause={() => onJumpToRootCause(node.scopeId)}
               />
             ) : null}
-            {/* Fixed glyph size — leaf/branch share the icon column (chevron slot already reserved). */}
             <Icon size={14} />
           </span>
           <span className="trace-tree-row__text-block">

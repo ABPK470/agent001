@@ -1,7 +1,7 @@
 /**
  * Left-tree activity row — select drives the right detail pane; chevron folds children.
  * Trace dialect: title over muted subtitle, whitespace depth indent (no ├└ hairlines).
- * Glyph: top-level phases = functional icon + status badge; nested/leaf = status dot.
+ * Glyph: expandables = functional icon + corner status badge; leaves = status dot.
  */
 
 import type { OperationActivity, OperationStatus } from "../../client/index"

@@ -1,8 +1,8 @@
 /**
  * Pipelines tree icon hierarchy (Kind Inheritance):
- *   Root run              → kind icon (Sync / Bridge / Agent)
- *   Top-level phase (d1)  → functional step icon + status badge
- *   Nested step / leaf    → status dot only (aligned labels, no icon inflation)
+ *   Root run     → kind icon (Sync / Bridge / Agent)
+ *   Expandable   → functional step icon + corner status badge (Preview / Execute / MetadataSync)
+ *   Leaf         → status dot only (no icon inflation)
  */
 
 import {
@@ -46,7 +46,7 @@ export function pipelineEntityIcon(kind: OperationKind): OpLogEntityVisual {
   return OP_LOG_KIND_META[kind] ?? OP_LOG_KIND_META.system
 }
 
-/** Functional icon for a top-level phase — never the pipeline kind icon. */
+/** Functional icon for an expandable stage — never the pipeline kind icon. */
 export function activityPhaseIcon(activity: OperationActivity): OpLogEntityVisual {
   const name = activity.name.toLowerCase()
   const id = activity.id.toLowerCase()
@@ -71,17 +71,18 @@ export function activityPhaseIcon(activity: OperationActivity): OpLogEntityVisua
 
 /**
  * Left-tree activity visual.
- * Nested expandables (MetadataSync) share the status-dot column with leaf siblings
- * so labels stay vertically aligned and status stays scannable.
+ * Any expandable (Preview / Execute / MetadataSync) gets chevron + functional icon
+ * + corner status badge. Leaves keep the status-dot glyph so the icon column stays
+ * one vertical axis (chevron slot is reserved on every row).
  */
 export function resolveActivityTreeVisual(opts: {
   activity: OperationActivity
   hasChildren: boolean
   status: OperationStatus
-  /** Flat-row depth: 1 = Preview/Execute under pipeline root. */
+  /** Flat-row depth (kept for callers / tests; policy is hasChildren). */
   depth: number
 }): OpLogActivityTreeVisual {
-  if (opts.hasChildren && opts.depth <= 1) {
+  if (opts.hasChildren) {
     const phase = activityPhaseIcon(opts.activity)
     return { type: "icon", Icon: phase.Icon, color: phase.color, status: opts.status }
   }

@@ -69,7 +69,7 @@ describe("resolveActivityTreeVisual — Kind Inheritance", () => {
     })
   })
 
-  it("gives nested expandables a status dot so labels align with leaf siblings", () => {
+  it("gives nested expandables (MetadataSync) a functional icon + status like Preview", () => {
     const visual = resolveActivityTreeVisual({
       activity: activity({
         id: "metasync",
@@ -80,7 +80,12 @@ describe("resolveActivityTreeVisual — Kind Inheritance", () => {
       status: OperationStatus.Success,
       depth: 2,
     })
-    expect(visual).toEqual({ type: "status-dot", status: OperationStatus.Success })
+    expect(visual).toEqual({
+      type: "icon",
+      Icon: Table2,
+      color: "var(--color-success)",
+      status: OperationStatus.Success,
+    })
   })
 
   it("gives leaves a status dot — never a kind/entity icon", () => {

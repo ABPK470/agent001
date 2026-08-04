@@ -541,6 +541,13 @@ describe("trace master-detail split", () => {
     expect(css).toContain(".trace-split-body")
   })
 
+  it("reserves a fixed chevron lead on every tree row (leaf spacer)", () => {
+    const rowSrc = readFileSync(join(here, "TraceTreeRow.tsx"), "utf8")
+    expect(rowSrc).toContain("trace-tree-row__chev-spacer")
+    expect(css).toContain(".trace-tree-row__chev-spacer")
+    expect(css).toMatch(/\.trace-tree-row__chev\s*\{[^}]*min-width:\s*16px/s)
+  })
+
   it("does not render inline accordion bodies in the tree list", () => {
     expect(dagSrc).not.toContain("CallOutline")
     expect(dagSrc).not.toContain("WorkOutline")
