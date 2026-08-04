@@ -218,4 +218,3 @@ function overlapScore(a: Set<string>, b: Set<string>): number {
   const denom = Math.min(a.size, b.size)
   return denom === 0 ? 0 : inter / denom
 }
-

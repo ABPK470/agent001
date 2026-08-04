@@ -9,12 +9,12 @@
 //
 // Pure function of (goal, catalog, tenant). No I/O, no LLM.
 
-import type { TenantConfig } from "../../../domain/tenant/tenant-config.js"
 import { buildKnownVocabulary } from "../../../domain/tenant/known-vocabulary.js"
+import type { TenantConfig } from "../../../domain/tenant/tenant-config.js"
 import type { CatalogGraph } from "../../../tools/catalog/graph/index.js"
+import { isCanonicallyGroundedEntity } from "../entity-canonical.js"
 import type { Detector } from "../types.js"
 import { makeFindingId } from "../types.js"
-import { isCanonicallyGroundedEntity } from "../entity-canonical.js"
 import { mergeReservedTokens } from "./reserved-tokens.js"
 import { isStopword } from "./stopwords.js"
 
@@ -116,7 +116,8 @@ export const termUndefinedDetector: Detector = {
       if (reserved?.has(lc)) continue
       const phraseTokens = lc.split(/\s+/).filter((t) => t.length > 0)
       if (phraseTokens.some((t) => reserved?.has(t))) continue
-      if (learned && phraseTokens.some((t) => isCanonicallyGroundedEntity(t, catalog, ctx.tenant, learned))) continue
+      if (learned && phraseTokens.some((t) => isCanonicallyGroundedEntity(t, catalog, ctx.tenant, learned)))
+        continue
       out.push({
         id: makeFindingId("term-undefined", lc),
         kind: "term-undefined" as const,

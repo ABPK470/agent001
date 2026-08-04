@@ -9,8 +9,8 @@
  * injected by the orchestrator at runtime. The tool itself is a thin shell.
  */
 
-import type { AgentHost } from "../runtime/runtime.js"
 import type { ExecutableTool, ToolMetadata } from "../domain/types/agent-types.js"
+import type { AgentHost } from "../runtime/runtime.js"
 
 /**
  * Resolver function injected by the orchestrator.
@@ -37,8 +37,7 @@ export const ASK_USER_PARAMETERS = {
     },
     findingId: {
       type: "string",
-      description:
-        "Required when resolving a clarification finding: copy the finding ID from <must_clarify>."
+      description: "Required when resolving a clarification finding: copy the finding ID from <must_clarify>."
     },
     options: {
       type: "array",

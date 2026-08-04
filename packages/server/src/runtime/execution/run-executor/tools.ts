@@ -3,8 +3,8 @@ import { readToolEntityId } from "@mia/shared-types"
 import { loadPlan, withSyncExecutePolicyArgs } from "@mia/sync"
 import { resetEffectSeq } from "../../../infra/effects/index.js"
 import { broadcast, broadcastTrace, broadcastTraceLoose } from "../../../infra/events/broadcaster.js"
-import { retrieveContext } from "../../../infra/persistence/memory.js"
 import { EMPTY_MEMORY_PER_TIER } from "../../../infra/persistence/adapters/sqlite/memory/tier-context.js"
+import { retrieveContext } from "../../../infra/persistence/memory.js"
 import { AuditActor } from "../../../internal/enums/audit.js"
 import { BusProtocol } from "../../../internal/enums/bus.js"
 import { TraceEventKind } from "../../../internal/enums/trace.js"
@@ -50,8 +50,18 @@ function createGovernanceServices(services: ToolResolutionContext["services"]): 
 }
 
 export async function resolveExecutionTools(ctx: ToolResolutionContext): Promise<ToolResolution> {
-  const { request, signal, activeRun, runWorkspace, perRunHost, runContext, state, policyCtx, services, tracing } =
-    ctx
+  const {
+    request,
+    signal,
+    activeRun,
+    runWorkspace,
+    perRunHost,
+    runContext,
+    state,
+    policyCtx,
+    services,
+    tracing
+  } = ctx
   const governanceServices = createGovernanceServices(services)
   const syncExecutePolicyArgs = (toolName: string, args: Record<string, unknown>) => {
     if (toolName !== "sync_execute") return args
@@ -158,7 +168,9 @@ function buildDelegateContext(ctx: DelegateRuntimeContext, governedTools: Tool[]
           content: `iteration ${info.iteration}/${info.maxIterations}${preview ? ": " + preview : ""}`,
           protocol: BusProtocol.Status
         })
-      } catch (err: unknown) { console.error("[mia]", err) }
+      } catch (err: unknown) {
+        console.error("[mia]", err)
+      }
     },
     // Do NOT take global RunQueue slots for children. The parent already holds
     // one slot for the whole user run; child acquires competed with that and
@@ -182,7 +194,9 @@ function buildDelegateContext(ctx: DelegateRuntimeContext, governedTools: Tool[]
               agentName: entry.agentName
             }
           })
-          .catch((err: unknown) => { console.error("[mia]", err) })
+          .catch((err: unknown) => {
+            console.error("[mia]", err)
+          })
       } else if (entry.kind === TraceEventKind.DelegationEnd) {
         broadcast({ type: EventType.DelegationEnded, data: { runId: request.runId, ...entry } })
         services.auditLog
@@ -198,7 +212,9 @@ function buildDelegateContext(ctx: DelegateRuntimeContext, governedTools: Tool[]
               error: entry.error
             }
           })
-          .catch((err: unknown) => { console.error("[mia]", err) })
+          .catch((err: unknown) => {
+            console.error("[mia]", err)
+          })
       } else if (entry.kind === TraceEventKind.DelegationIteration) {
         broadcast({ type: EventType.DelegationIteration, data: { runId: request.runId, ...entry } })
       } else if (entry.kind === TraceEventKind.DelegationParallelStart) {
@@ -252,7 +268,9 @@ function composeExecutionTools(
         )
       }
       if (match && interaction.clarifications.isResolved(request.runId, match.findingId)) {
-        return Promise.resolve("Error: this clarification has already been answered. Continue with the available tools.")
+        return Promise.resolve(
+          "Error: this clarification has already been answered. Continue with the available tools."
+        )
       }
       const presentation = resolveAskUserPresentation(question, options, match)
       tracing.boundSaveTrace(request.runId, {

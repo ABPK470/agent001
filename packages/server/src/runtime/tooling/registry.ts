@@ -19,8 +19,10 @@ import {
   bindNoteTool,
   bindRecallPriorResultTool,
   bindRecordTableVerdictTool,
+  bridgeDataToolMetadata,
   createAppendFileTool,
   createAskUserTool,
+  createBridgeDataTool,
   createDiscoverRelationshipsTool,
   createExportQueryToFileTool,
   createFetchUrlTool,
@@ -29,7 +31,6 @@ import {
   createListAdaptersTool,
   createListAttachmentsTool,
   createListDirectoryTool,
-  createBridgeDataTool,
   createMssqlSchemaTool,
   createMssqlTool,
   createProfileDataTool,
@@ -51,7 +52,6 @@ import {
   listAdaptersToolMetadata,
   listAttachmentsToolMetadata,
   listDirectoryToolMetadata,
-  bridgeDataToolMetadata,
   mssqlSchemaTool,
   mssqlTool,
   noteToolMetadata,
@@ -559,7 +559,9 @@ function extractStoredText(json: string): string {
   try {
     const parsed = parseBoundaryJson(json) as { text?: unknown }
     if (typeof parsed.text === "string") return parsed.text
-  } catch (err: unknown) { console.error("[mia]", err) }
+  } catch (err: unknown) {
+    console.error("[mia]", err)
+  }
   return json
 }
 
