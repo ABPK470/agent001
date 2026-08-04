@@ -5526,6 +5526,36 @@ button.trace-tree-status-pill:hover {
   margin-bottom: 0;
 }
 
+.trace-detail-body--stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.trace-detail-prose {
+  padding: 0.15rem 0 0.1rem;
+}
+
+.trace-detail-prose .trace-body-muted {
+  font-size: 0.875rem;
+  line-height: 1.6;
+  color: var(--text, var(--color-text));
+}
+
+.trace-detail-tool-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.trace-detail-collapsible-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin: -0.15rem -0.25rem 0;
+}
+
 .trace-detail-accordion {
   display: flex;
   align-items: center;
@@ -6049,12 +6079,40 @@ button.trace-tree-status-pill:hover {
   background: var(--panel-2, #f8fafc);
 }
 
-.trace-detail-collapsible__head {
+.trace-detail-collapsible.is-open .trace-detail-collapsible__head-row {
+  border-bottom: 1px solid var(--border-subtle, var(--color-border-subtle));
+}
+
+.trace-detail-collapsible.is-open > .trace-detail-collapsible__head {
+  border-bottom: 1px solid var(--border-subtle, var(--color-border-subtle));
+}
+
+.trace-detail-collapsible__head-row {
   display: flex;
   align-items: center;
   gap: 0.35rem;
-  width: 100%;
-  padding: 0.5rem 0.625rem;
+  min-height: 2.375rem;
+  padding-right: 0.625rem;
+}
+
+.trace-detail-collapsible--sticky .trace-detail-collapsible__head-row {
+  position: sticky;
+  top: 0;
+  z-index: 6;
+  background: inherit;
+}
+
+.trace-detail-collapsible--sticky.is-open {
+  z-index: 5;
+}
+
+.trace-detail-collapsible__head {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex: 1;
+  min-width: 0;
+  padding: 0.55rem 0.625rem;
   border: none;
   background: transparent;
   text-align: left;
@@ -6063,7 +6121,34 @@ button.trace-tree-status-pill:hover {
 }
 
 .trace-detail-collapsible__head:hover {
+  color: var(--text, var(--color-text));
   background: var(--overlay-2, rgb(255 255 255 / 0.04));
+}
+
+.trace-detail-collapsible__head-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-shrink: 0;
+}
+
+.trace-detail-collapsible__meta {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted, var(--color-text-muted));
+  white-space: nowrap;
+}
+
+.trace-detail-collapsible__head-meta .trace-copy {
+  padding: 0.15rem 0.35rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  border: none;
+  background: transparent;
 }
 
 .trace-detail-collapsible__head--nested {
@@ -6086,10 +6171,57 @@ button.trace-tree-status-pill:hover {
   font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
+  min-width: 0;
 }
 
 .trace-detail-collapsible__body {
-  padding: 0 0.625rem 0.625rem;
+  padding: 0.75rem 0.875rem;
+}
+
+.trace-detail-collapsible--nested {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  overflow: visible;
+}
+
+.trace-detail-collapsible--nested .trace-detail-collapsible__head-row {
+  min-height: 2rem;
+  padding-right: 0.35rem;
+  border-top: 1px solid var(--border-subtle, var(--color-border-subtle));
+}
+
+.trace-detail-collapsible-list > .trace-detail-collapsible--nested:first-child .trace-detail-collapsible__head-row {
+  border-top: none;
+}
+
+.trace-detail-collapsible--nested .trace-detail-collapsible__head {
+  padding: 0.5rem 0.35rem;
+}
+
+.trace-detail-collapsible--nested .trace-detail-collapsible__head:hover {
+  background: transparent;
+}
+
+.trace-detail-collapsible--nested.is-open .trace-detail-collapsible__head-row {
+  border-bottom: none;
+}
+
+.trace-detail-collapsible--nested .trace-detail-collapsible__title {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  text-transform: none;
+  color: var(--text, var(--color-text));
+}
+
+.trace-detail-collapsible--nested .trace-detail-collapsible__body {
+  padding: 0 0.35rem 0.65rem 1.35rem;
+}
+
+.trace-detail-collapsible-list .trace-detail-collapsible--nested.trace-detail-collapsible--sticky .trace-detail-collapsible__head-row {
+  top: 2.375rem;
 }
 
 .trace-interaction-card {
@@ -7381,9 +7513,34 @@ button.trace-tree-status-pill:hover {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 0.1rem;
+  gap: 0.25rem;
   background: var(--bg);
   padding: 0.05rem 0;
+}
+
+.trace-expand__toggle {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-accent, #6366f1);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0.15rem 0;
+  white-space: nowrap;
+  text-align: right;
+  line-height: 1.3;
+}
+
+.trace-expand__toggle:hover {
+  text-decoration: underline;
+}
+
+.trace-expand__toggle:focus-visible {
+  outline: 2px solid var(--color-accent, #6366f1);
+  outline-offset: 2px;
+  border-radius: 0.15rem;
 }
 
 .trace-expand.is-clipped .trace-expand__main {
@@ -7505,11 +7662,20 @@ button.trace-tree-status-pill:hover {
 }
 
 .trace-ctx-item {
-  padding: 0.35rem 0;
+  padding: 0.15rem 0;
   display: flex;
   flex-direction: column;
-  gap: 0.2rem;
+  gap: 0.35rem;
   min-width: 0;
+}
+
+.trace-ctx-item--compact {
+  padding: 0;
+  gap: 0.3rem;
+}
+
+.trace-ctx-item--compact .trace-ctx-item__head {
+  gap: 0;
 }
 
 /* Match ScopeRow: empty chevron slot so the elbow doesn’t kiss the name. */

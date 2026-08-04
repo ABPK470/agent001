@@ -241,8 +241,11 @@ export function SqlQualityRow({ entry }: { entry: TraceSqlQuality }) {
 
 export function ToolDef({
   tool,
+  hideName = false,
 }: {
   tool: { name: string; description: string; parameters?: Record<string, unknown> }
+  /** When the name is already shown in a parent header (e.g. nested collapsible). */
+  hideName?: boolean
 }) {
   const [showSchema, setShowSchema] = useState(false)
   const [descOpen, setDescOpen] = useState(false)
@@ -264,12 +267,13 @@ export function ToolDef({
   }
 
   return (
-    <div className="trace-ctx-item">
+    <div className={`trace-ctx-item${hideName ? " trace-ctx-item--compact" : ""}`}>
       <div className="trace-ctx-item__head">
-        {/* Spacer — same column as ScopeRow chevrons; elbow lands before the name. */}
-        <span className="review-chevron-slot" aria-hidden />
+        {!hideName ? <span className="review-chevron-slot" aria-hidden /> : null}
         <div className="trace-ctx-item__main">
-          <div className="trace-ctx-item__name font-mono">{tool.name}</div>
+          {!hideName ? (
+            <div className="trace-ctx-item__name font-mono">{tool.name}</div>
+          ) : null}
           {tool.description ? (
             <pre className="trace-body-muted">{descText}</pre>
           ) : (

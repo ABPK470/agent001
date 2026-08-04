@@ -345,7 +345,14 @@ export function TraceDag({
     const node = treeIndex.byScopeId.get(scopeId)
     if (!node) return
     if (node.kind === "context") {
-      setOpenState((prev) => ({ ...prev, preamble: !prev.preamble }))
+      setOpenState((prev) => {
+        const opening = !prev.preamble
+        return {
+          ...prev,
+          preamble: opening,
+          ...(opening ? { contextPrompt: true, contextTools: true } : {}),
+        }
+      })
       return
     }
     if (node.kind === "phase" && node.phaseId) {

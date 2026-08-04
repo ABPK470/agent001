@@ -82,6 +82,35 @@ describe("trace-tree-index", () => {
     expect(work?.hasError).toBe(true)
   })
 
+  it("shows prompt and tools under Context when preamble is expanded", () => {
+    const dag = buildTraceDag([
+      { kind: "system-prompt", text: "You are helpful." },
+      {
+        kind: "tools-resolved",
+        tools: [{ name: "search", description: "Search the web", parameters: {} }],
+      },
+      { kind: "llm-request", iteration: 0, messageCount: 1, toolCount: 1, messages: [] },
+      {
+        kind: "llm-response",
+        iteration: 0,
+        durationMs: 50,
+        content: "ok",
+        toolCalls: [],
+        usage: null,
+      },
+    ])
+    const collapsed = buildTraceTreeIndex(dag, emptyOpen(), null)
+    expect(collapsed.byScopeId.has("context")).toBe(true)
+    expect(collapsed.byScopeId.has("prompt")).toBe(false)
+    expect(collapsed.byScopeId.has("tools")).toBe(false)
+
+    const open = emptyOpen()
+    open.preamble = true
+    const expanded = buildTraceTreeIndex(dag, open, null)
+    expect(expanded.byScopeId.has("prompt")).toBe(true)
+    expect(expanded.byScopeId.has("tools")).toBe(true)
+  })
+
   it("keeps parent branchHasError when the failing child is folded away", () => {
     const dag = failedBuildDag()
     const open = emptyOpen()

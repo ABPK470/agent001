@@ -1,10 +1,14 @@
 /**
- * Expandable text in trace — line-based head/tail peek, one scrollport.
- * Optional Copy rail for long system prompts.
+ * Expandable text in trace — line peek with sticky expand/collapse rail.
  */
 
-import { InlinePeekText } from "../../components/InlinePeekText"
+import { useEffect, useRef, useState } from "react"
+import { buildPeekDisplay } from "../../components/InlinePeekText"
+import { preserveScrollAnchor } from "../../lib/chatScroll"
 import { CopyControl } from "./TraceCopy"
+
+const HEAD_LINES = 12
+const TAIL_LINES = 4
 
 export function ExpandableText({
   text,
@@ -18,21 +22,53 @@ export function ExpandableText({
   /** When set, show Copy in the sticky rail. */
   copyLabel?: string
 }) {
-  const body = (
-    <InlinePeekText
-      text={text}
-      className={className}
-    />
+  const [expanded, setExpanded] = useState(false)
+  const toggleRef = useRef<HTMLButtonElement>(null)
+
+  useEffect(() => {
+    setExpanded(false)
+  }, [text])
+
+  const { body, hiddenLines, totalLines } = buildPeekDisplay(
+    text,
+    HEAD_LINES,
+    TAIL_LINES,
+    expanded,
+  )
+  const hasPeek = hiddenLines > 0
+  const hasRail = hasPeek || Boolean(copyLabel)
+
+  const main = (
+    <pre
+      className={`${className ?? ""}${hasPeek && !expanded ? " is-peeking" : ""}`.trim()}
+    >
+      {body}
+    </pre>
   )
 
-  if (!copyLabel) return body
+  if (!hasRail) return main
 
   return (
-    <div className="trace-expand has-rail">
-      <div className="trace-expand__main">{body}</div>
+    <div className={`trace-expand has-rail${hasPeek && !expanded ? " is-clipped" : ""}`}>
+      <div className="trace-expand__main">{main}</div>
       <div className="trace-expand__rail">
         <div className="trace-expand__sticky">
-          <CopyControl value={text} ariaLabel={copyLabel} />
+          {copyLabel ? <CopyControl value={text} ariaLabel={copyLabel} /> : null}
+          {hasPeek ? (
+            <button
+              ref={toggleRef}
+              type="button"
+              className="trace-expand__toggle"
+              aria-expanded={expanded}
+              onClick={() => {
+                preserveScrollAnchor(toggleRef.current, () =>
+                  setExpanded((value) => !value),
+                )
+              }}
+            >
+              {expanded ? "Collapse" : `Expand · ${totalLines} lines`}
+            </button>
+          ) : null}
         </div>
       </div>
     </div>

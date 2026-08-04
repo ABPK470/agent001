@@ -509,7 +509,7 @@ function buildContextNodes(
               t.name.toLowerCase().includes(q) ||
               t.description.toLowerCase().includes(q),
           )
-  if (tools.length > 0 && openState.contextTools) {
+  if (tools.length > 0) {
     pushNode(acc, {
       scopeId: "tools",
       kind: "tools",
