@@ -5,7 +5,7 @@
 
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react"
 import { api } from "../../client/index"
-import { VirtualList } from "../../components/VirtualList"
+import { VirtualList, type VirtualListHandle } from "../../components/VirtualList"
 import { BrowseCount } from "../../components/BrowseStrip"
 import { useWidgetFocus } from "../../hooks/useWidgetFocus"
 import { useWidgetInstance } from "../../app/workspace/widget-instance"
@@ -64,6 +64,7 @@ import { TraceTreeRow, traceTreeRowEstimateSize } from "./TraceTreeRow"
 import { TraceWaterfallView } from "./TraceWaterfallView"
 import { TraceZenHud } from "./TraceZenHud"
 import { useTraceZenHotkeys } from "./use-trace-zen-hotkeys"
+import { useTraceTreeKeyboard } from "./use-trace-tree-keyboard"
 import { operationStatusPill } from "../../lib/status-callout"
 
 export const TRACE_TREE_OVERSCAN = 8
@@ -114,6 +115,7 @@ export function TraceDag({
   const [zenSearchOpen, setZenSearchOpen] = useState(false)
   const [splitRatio, setSplitRatio] = useState(TRACE_SPLIT_DEFAULT)
   const treeScrollRef = useRef<HTMLDivElement>(null)
+  const treeListRef = useRef<VirtualListHandle | null>(null)
   const splitShellRef = useRef<HTMLDivElement>(null)
   const splitDragRef = useRef<SplitPaneDragState | null>(null)
   /** True once we have either restored prefs or applied first-visit seed. */
@@ -436,6 +438,19 @@ export function TraceDag({
     setOpenState(openStateForFoldMode(dag, mode))
   }
 
+  useTraceTreeKeyboard({
+    enabled:
+      zenHotkeysEnabled &&
+      viewMode === "tree" &&
+      Boolean(runId && dag.hasData && treeIndex.nodes.length > 0),
+    nodes: treeIndex.nodes,
+    selectedScopeId,
+    isFolded: isNodeFolded,
+    onSelect: (scopeId) => onSelectScope(scopeId, false),
+    onToggleFold,
+    listRef: treeListRef,
+  })
+
   function onTogglePlayground() {
     setPlaygroundOpen((open) => {
       const next = !open
@@ -669,8 +684,14 @@ export function TraceDag({
                       <span className="trace-tree-header__metric">Latency</span>
                       <span className="trace-tree-header__metric">Tokens</span>
                     </div>
-                    <div ref={treeScrollRef} className="trace-split-tree-scroll">
+                    <div
+                      ref={treeScrollRef}
+                      className="trace-split-tree-scroll"
+                      role="tree"
+                      aria-label="Trace tree"
+                    >
                       <VirtualList
+                        ref={treeListRef}
                         items={treeIndex.nodes}
                         scrollRef={treeScrollRef}
                         estimateSize={estimateTreeRowSize}

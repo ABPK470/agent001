@@ -1,7 +1,19 @@
-import type { TraceCallNode, TraceSqlQuality, TraceToolCall } from "./build-trace-dag"
+import type {
+  TraceCallNode,
+  TracePromptMessage,
+  TraceSqlQuality,
+  TraceToolCall,
+} from "./build-trace-dag"
 
 export function formatCharCount(n: number): string {
   return n.toLocaleString()
+}
+
+/** Conversation turn for Input / Sent — system prompts live on the System tab. */
+export function callConversationMessages(
+  call: TraceCallNode,
+): TracePromptMessage[] {
+  return call.messages.filter((m) => m.role !== "system")
 }
 
 /** UI badge for SQL check phase — executed runs read as "validated". */
@@ -26,10 +38,12 @@ export function shortLine(text: string, max = 72): string {
 }
 
 export function callSentSummary(call: TraceCallNode): string {
-  const n = call.messages.length
-  const firstUser = call.messages.find((m) => m.role === "user" || m.speaker === "User")
+  const conversation = callConversationMessages(call)
+  const n = conversation.length
+  const firstUser = conversation.find((m) => m.role === "user" || m.speaker === "User")
   const peek = firstUser?.content ? shortLine(firstUser.content, 48) : ""
-  if (peek) return `${n} messages · ${peek}`
+  if (n === 0) return "No conversation messages"
+  if (peek) return `${n} message${n === 1 ? "" : "s"} · ${peek}`
   return `${n} message${n === 1 ? "" : "s"} to model`
 }
 

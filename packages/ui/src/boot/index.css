@@ -5393,10 +5393,20 @@ button.trace-tree-status-pill:hover {
 .trace-detail-tabs {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 0.25rem;
   margin-bottom: 0.65rem;
   border-bottom: 1px solid var(--border-subtle, var(--color-border-subtle));
   padding-bottom: 0.35rem;
+}
+
+.trace-detail-tabs__sep {
+  width: 1px;
+  align-self: stretch;
+  min-height: 1.25rem;
+  margin-left: auto;
+  margin-right: 0.15rem;
+  background: var(--border-subtle, var(--color-border-subtle));
 }
 
 .trace-detail-tab {
@@ -5407,6 +5417,10 @@ button.trace-tree-status-pill:hover {
   background: transparent;
   color: var(--text-muted, var(--color-text-muted));
   cursor: pointer;
+}
+
+.trace-detail-tab--meta {
+  font-variant-numeric: tabular-nums;
 }
 
 .trace-detail-tab.is-active {

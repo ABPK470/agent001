@@ -1,5 +1,8 @@
 /**
- * Call detail — tabs for Input / Raw JSON / Output / System + breakdowns.
+ * Call detail — System → Input → Output | Raw JSON + breakdowns.
+ *
+ * Chronological LLM inspection: what the model saw first (system), then the
+ * conversation turn, then what it returned. Raw JSON is a meta view on the right.
  */
 
 import { useEffect, useMemo, useState } from "react"
@@ -9,33 +12,38 @@ import type { TraceCallNode, TraceDag } from "./build-trace-dag"
 import { TracePayloadStream, TraceMessageCard } from "./TraceMessageCard"
 import { TraceExecutionCard } from "./TraceExecutionCard"
 import { SystemPromptStack } from "./TraceSystemPrompt"
-import { tokenPairLabel } from "./trace-format"
+import { callConversationMessages, tokenPairLabel } from "./trace-format"
 
-type DetailTab = "input" | "raw" | "output" | "system"
+export type CallDetailTab = "system" | "input" | "output" | "raw"
 
-const TAB_LABELS: { id: DetailTab; label: string }[] = [
-  { id: "input", label: "Input Prompt" },
-  { id: "raw", label: "Raw JSON" },
-  { id: "output", label: "Output" },
+const PRIMARY_TABS: { id: CallDetailTab; label: string }[] = [
   { id: "system", label: "System" },
+  { id: "input", label: "Input" },
+  { id: "output", label: "Output" },
 ]
+
+const META_TAB: { id: CallDetailTab; label: string } = {
+  id: "raw",
+  label: "Raw JSON",
+}
 
 export function TraceCallDetail({
   call,
   dag,
-  initialTab = "input",
+  initialTab = "output",
 }: {
   call: TraceCallNode
   dag: TraceDag
-  initialTab?: DetailTab
+  initialTab?: CallDetailTab
 }) {
-  const [tab, setTab] = useState<DetailTab>(initialTab)
+  const [tab, setTab] = useState<CallDetailTab>(initialTab)
 
   // Selection Call → Sent → Received reuses this component; follow the
   // tree node's intended pane (useState only honors initialTab on mount).
   useEffect(() => {
     setTab(initialTab)
   }, [initialTab, call.index])
+
   const systemMessages = (() => {
     const prompts =
       dag.preamble.systemPrompts.length > 0
@@ -52,7 +60,9 @@ export function TraceCallDetail({
     if (fromCall.length > 0) return fromCall
     return prompts.map((content) => ({ role: "system" as const, content }))
   })()
-  const userMessages = call.messages.filter((m) => m.role !== "system")
+
+  // Input = conversation turn only; system lives on the System tab.
+  const conversation = callConversationMessages(call)
 
   const rawPayload = useMemo(
     () => ({
@@ -72,7 +82,7 @@ export function TraceCallDetail({
   return (
     <div className="trace-detail-body">
       <div className="trace-detail-tabs" role="tablist">
-        {TAB_LABELS.map((t) => (
+        {PRIMARY_TABS.map((t) => (
           <button
             key={t.id}
             type="button"
@@ -84,20 +94,35 @@ export function TraceCallDetail({
             {t.label}
           </button>
         ))}
+        <span className="trace-detail-tabs__sep" aria-hidden />
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === META_TAB.id}
+          className={`trace-detail-tab trace-detail-tab--meta${tab === META_TAB.id ? " is-active" : ""}`}
+          onClick={() => setTab(META_TAB.id)}
+        >
+          {META_TAB.label}
+        </button>
       </div>
 
       <div className="trace-detail-panel" role="tabpanel">
+        {tab === "system" && (
+          <SystemPromptStack
+            prompts={systemMessages
+              .map((m) => m.content?.trim() ?? "")
+              .filter(Boolean)}
+            labelFor={(i, total) => (total > 1 ? `System ${i + 1}` : "System")}
+          />
+        )}
         {tab === "input" && (
           <div className="trace-detail-section">
-            {userMessages.length === 0 ? (
-              <p className="trace-empty">No user/assistant messages recorded</p>
+            {conversation.length === 0 ? (
+              <p className="trace-empty">No conversation messages recorded</p>
             ) : (
-              <TracePayloadStream messages={userMessages} />
+              <TracePayloadStream messages={conversation} />
             )}
           </div>
-        )}
-        {tab === "raw" && (
-          <JsonViewer value={rawPayload} copyable embedded inline label="request" />
         )}
         {tab === "output" && (
           <div className="trace-detail-section trace-payload-stream">
@@ -125,13 +150,8 @@ export function TraceCallDetail({
             )}
           </div>
         )}
-        {tab === "system" && (
-          <SystemPromptStack
-            prompts={systemMessages
-              .map((m) => m.content?.trim() ?? "")
-              .filter(Boolean)}
-            labelFor={(i, total) => (total > 1 ? `System ${i + 1}` : "System")}
-          />
+        {tab === "raw" && (
+          <JsonViewer value={rawPayload} copyable embedded inline label="request" />
         )}
       </div>
 

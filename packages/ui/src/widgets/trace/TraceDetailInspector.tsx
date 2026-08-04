@@ -75,7 +75,7 @@ function renderDetail(dag: TraceDag, node: TraceTreeNode) {
         key={node.scopeId}
         call={call}
         dag={dag}
-        initialTab="input"
+        initialTab="output"
       />
     )
   }

@@ -11,7 +11,11 @@ import type {
     TraceWorkNode,
 } from "../../lib/events/build-trace-view"
 import { callToolOpenKey, workToolOpenKey, type OpenState } from "./open-state"
-import { callReceivedSummary, callSentSummary } from "./trace-format"
+import {
+  callConversationMessages,
+  callReceivedSummary,
+  callSentSummary,
+} from "./trace-format"
 import type { TraceTreeSearch } from "./trace-tree-search"
 
 export type TraceSpanStatus =
@@ -155,6 +159,7 @@ function buildCallNodes(
 
   if (!openState.calls.has(call.index)) return
 
+  const conversation = callConversationMessages(call)
   const sentScopeId = `sent:${call.index}`
   pushNode(acc, {
     scopeId: sentScopeId,
@@ -171,7 +176,8 @@ function buildCallNodes(
     status: "success",
     hasError: false,
     branchHasError: false,
-    hasChildren: call.messages.length > 0,
+    // System prompts are on the System tab / Context — not Sent children.
+    hasChildren: conversation.length > 0,
     parentScopeId: scopeId,
     callIndex: call.index,
     workId: null,
@@ -183,6 +189,7 @@ function buildCallNodes(
   if (openState.sent.has(call.index)) {
     for (let mi = 0; mi < call.messages.length; mi++) {
       const msg = call.messages[mi]!
+      if (msg.role === "system") continue
       const msgKey = `${call.index}:m:${mi}`
       pushNode(acc, {
         scopeId: `message:${msgKey}`,
