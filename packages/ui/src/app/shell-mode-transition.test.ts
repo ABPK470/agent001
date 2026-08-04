@@ -1,21 +1,28 @@
 import { describe, expect, it } from "vitest"
 import {
-  SHELL_MODE_TO_CHAT_MS,
-  SHELL_MODE_TO_WORKSPACE_MS,
-} from "./shell-mode-transition"
-import { shellStagePhase } from "./ShellModeStage"
+  buildShellMosaicCells,
+  SHELL_MOSAIC_COLS,
+  SHELL_MOSAIC_ROWS,
+  shellMosaicCoverDelayMs,
+  shellMosaicCoverMs,
+  shellMosaicRevealDelayMs,
+  shellMosaicTotalMs,
+} from "./shell-mode-mosaic"
 
-describe("shell mode transition", () => {
-  it("keeps reverse faster than forward", () => {
-    expect(SHELL_MODE_TO_WORKSPACE_MS).toBe(240)
-    expect(SHELL_MODE_TO_CHAT_MS).toBe(180)
-    expect(SHELL_MODE_TO_CHAT_MS).toBeLessThan(SHELL_MODE_TO_WORKSPACE_MS)
+describe("shell mode glyph mosaic", () => {
+  it("builds a full grid of glyph cells", () => {
+    const cells = buildShellMosaicCells()
+    expect(cells).toHaveLength(SHELL_MOSAIC_COLS * SHELL_MOSAIC_ROWS)
+    expect(cells.every((c) => c.glyph.length === 1)).toBe(true)
   })
 
-  it("maps mode + transition to a stage phase", () => {
-    expect(shellStagePhase("chat", null)).toBe("chat")
-    expect(shellStagePhase("workspace", null)).toBe("workspace")
-    expect(shellStagePhase("chat", { to: "workspace" })).toBe("to-workspace")
-    expect(shellStagePhase("workspace", { to: "chat" })).toBe("to-chat")
+  it("covers from the edge and reveals from the center", () => {
+    expect(shellMosaicCoverDelayMs(1, 0)).toBeLessThan(shellMosaicCoverDelayMs(0, 0))
+    expect(shellMosaicRevealDelayMs(0, 0)).toBeLessThan(shellMosaicRevealDelayMs(1, 0))
+  })
+
+  it("runs cover, hold, and reveal in one envelope", () => {
+    expect(shellMosaicTotalMs()).toBeGreaterThan(shellMosaicCoverMs())
+    expect(shellMosaicTotalMs()).toBeLessThan(2000)
   })
 })

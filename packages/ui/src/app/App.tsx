@@ -23,8 +23,13 @@ import { flushDashboardSave, restoreDashboardState, startDashboardSync } from ".
 import { ChatHomePage } from "./home/ChatHomePage"
 import { IntroAsciiField } from "./home/IntroAsciiField"
 import { WelcomeFlow } from "./home/WelcomeFlow"
-import { ShellModeStage, shellStagePhase } from "./ShellModeStage"
-import { shellModeTransitionMs } from "./shell-mode-transition"
+import { ShellModeGlyphMosaic } from "./ShellModeGlyphMosaic"
+import {
+  SHELL_MOSAIC_HOLD_MS,
+  shellModeTransitionMs,
+  shellMosaicCoverMs,
+  shellMosaicRevealMs,
+} from "./shell-mode-transition"
 import type { AppShellMode } from "./types"
 import { isShellModeToggleEvent, resolveChatVariant } from "./types"
 import { Canvas, type CanvasHandle } from "./workspace/Canvas"
@@ -163,7 +168,10 @@ export function App() {
   const [shellMode, setShellMode] = useState<AppShellMode>("chat")
   const shellModeRef = useRef<AppShellMode>(shellMode)
   shellModeRef.current = shellMode
-  const [shellTransition, setShellTransition] = useState<{ to: AppShellMode } | null>(null)
+  const [shellTransition, setShellTransition] = useState<{
+    to: AppShellMode
+    phase: "cover" | "reveal"
+  } | null>(null)
   const shellTransitionTimersRef = useRef<number[]>([])
   const prevConnectedRef = useRef(false)
   // Becomes true when the login overlay starts its final fade so the home
@@ -273,18 +281,22 @@ export function App() {
       setShellMode(next)
       return
     }
-    const transitionMs = shellModeTransitionMs(next)
-    if (transitionMs === 0) {
+    if (shellModeTransitionMs(next) === 0) {
       setShellTransition(null)
       setShellMode(next)
       return
     }
-    setShellTransition({ to: next })
-    const endId = window.setTimeout(() => {
+    // Logout process: cover → commit under full occlusion → reveal.
+    setShellTransition({ to: next, phase: "cover" })
+    const coverMs = shellMosaicCoverMs()
+    const swapId = window.setTimeout(() => {
       setShellMode(next)
+      setShellTransition({ to: next, phase: "reveal" })
+    }, coverMs + SHELL_MOSAIC_HOLD_MS)
+    const endId = window.setTimeout(() => {
       setShellTransition(null)
-    }, transitionMs)
-    shellTransitionTimersRef.current.push(endId)
+    }, coverMs + SHELL_MOSAIC_HOLD_MS + shellMosaicRevealMs())
+    shellTransitionTimersRef.current.push(swapId, endId)
   }, [isMobile])
 
   // ⌘⌥ / Ctrl+Alt — toggle chat ↔ workspace from either shell.
@@ -728,14 +740,9 @@ export function App() {
           />
         )}
         <div className="app-shell-stack relative z-[1] flex min-h-0 flex-1 flex-col">
-          {isMobile ? (
-            renderShellBody(shellMode)
-          ) : (
-            <ShellModeStage
-              phase={shellStagePhase(shellMode, shellTransition)}
-              chat={renderShellBody("chat")}
-              workspace={renderShellBody("workspace", { canvasActive: true })}
-            />
+          {renderShellBody(shellMode)}
+          {shellTransition && !isMobile && (
+            <ShellModeGlyphMosaic to={shellTransition.to} phase={shellTransition.phase} />
           )}
         </div>
       </div>
