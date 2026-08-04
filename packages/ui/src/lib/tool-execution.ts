@@ -39,6 +39,9 @@ export function chatToolVerb(
       return "Read"
     case "list_directory":
     case "list_dir":
+    case "list_environments":
+    case "list_sync_definitions":
+    case "list_attachments":
       return "Listed"
     case "replace_in_file":
       return "Edited"
@@ -53,6 +56,12 @@ export function chatToolVerb(
       return "Previewed"
     case "sync_execute":
       return "Synced"
+    case "sync_diff_scan":
+      return "Scanned"
+    case "resolve_sync_scope":
+      return "Resolved"
+    case "get_chart_specs":
+      return "Loaded"
     case "delegate":
       return "Delegated"
     default:
@@ -93,6 +102,12 @@ export function execStatusVerb(status: ToolExecStatus, errorText?: string | null
   return "Proposed"
 }
 
+/** Empty JSON / null displays are not real tool inputs — omit from expand body. */
+export function isEmptyToolInputDisplay(text: string): boolean {
+  const t = text.trim()
+  return !t || t === "{}" || t === "null" || t === "[]"
+}
+
 export function formatExecInput(
   toolName: string,
   argumentsValue: Record<string, unknown>,
@@ -106,7 +121,9 @@ export function formatExecInput(
     toolName,
     argsFormatted && argsFormatted.trim() ? argsFormatted : argumentsValue,
   )
-  const text = artifact?.code?.trim() ? artifact.code : formatted
+  const raw = (artifact?.code?.trim() ? artifact.code : formatted).trim()
+  // Never surface bare `{}` as the command — no-arg tools have no input body.
+  const text = isEmptyToolInputDisplay(raw) ? "" : raw
   return {
     text,
     lang: artifact?.lang ?? null,

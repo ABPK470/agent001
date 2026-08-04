@@ -2,8 +2,8 @@
  * Tool execution UI — inspector (flat) vs chat (VS Code Copilot dialect).
  *
  * Chat collapsed:  [glyph] Ran  [command pill…]  ⌄
- * Chat expanded:   bordered panel — multi-line input (if any) + output only.
- *                  Single-line prompts stay on the summary pill (no duplicate).
+ * Chat expanded:   bordered panel — input (always, when present) + output.
+ *                  Both lanes use InlinePeekText (first 10 lines → Show more).
  * Inspector:       flat accordion summary + indented lanes (trace detail).
  */
 
@@ -24,6 +24,7 @@ import {
   chatToolVerb,
   execErrorCode,
   formatExecInput,
+  humanizeToolName,
   resolveExecStatus,
   type ToolExecStatus,
 } from "../lib/tool-execution"
@@ -166,16 +167,16 @@ export function ToolExecutionCard({
   const canToggle = hasTerminalBody
   const isChat = surface === "chat"
   const chatVerb = chatToolVerb(toolName, status, errorText)
-  const chatPill = chatToolPillText(inputText, preview ?? summary.detail)
-  // Pill already owns single-line prompts — expand body keeps multi-line input only.
-  const showChatInputBody =
-    Boolean(inputText) && (inputText.includes("\n") || !chatPill)
+  // Collapsed pill: real input, else summary/preview, else humanized tool name.
+  const chatPill = chatToolPillText(
+    inputText || preview || summary.detail || humanizeToolName(toolName),
+  )
+  // Expanded panel always shows input when we have one (incl. single-line commands).
+  const showChatInputBody = Boolean(inputText)
   const outputCopyText = (
     showError ? errorText : showResult ? resultText : ""
   )?.trim() ?? ""
-  const panelCopyText = showChatInputBody
-    ? input.copyText
-    : outputCopyText
+  const panelCopyText = [input.copyText, outputCopyText].filter(Boolean).join("\n\n")
 
   const rootClass = [
     isChat ? "chat-tool" : "trace-exec",
@@ -222,13 +223,7 @@ export function ToolExecutionCard({
               <div className="chat-tool__panel-copy">
                 <CopyControl
                   value={panelCopyText}
-                  ariaLabel={
-                    showChatInputBody
-                      ? "Copy input"
-                      : showError
-                        ? "Copy error"
-                        : "Copy output"
-                  }
+                  ariaLabel="Copy tool input and output"
                   iconOnly
                 />
               </div>
@@ -265,7 +260,7 @@ export function ToolExecutionCard({
 
             {trailing ? (
               <>
-                {showChatInputBody && !showError && !showResult ? (
+                {(showChatInputBody || showError || showResult) ? (
                   <div className="chat-tool__sep" />
                 ) : null}
                 <div className="chat-tool__trailing">{trailing}</div>

@@ -67,11 +67,23 @@ describe("tool-execution", () => {
   it("uses Copilot-style chat verbs and pill truncation", () => {
     expect(chatToolVerb("run_command", "done")).toBe("Ran")
     expect(chatToolVerb("query_mssql", "done")).toBe("Queried")
+    expect(chatToolVerb("list_environments", "done")).toBe("Listed")
     expect(chatToolVerb("query_mssql", "error", "Blocked by SQL quality: MISSING_WHERE")).toBe(
       "Blocked",
     )
     expect(chatToolPillText("SELECT TOP 10 id FROM clients WHERE active = 1", null, 20)).toBe(
       "SELECT TOP 10 id FR…",
     )
+  })
+
+  it("omits empty JSON args from expanded input", () => {
+    const empty = formatExecInput("list_environments", {}, "{}")
+    expect(empty.text).toBe("")
+    const cmd = formatExecInput(
+      "run_command",
+      { command: "npm run build" },
+      '{"command":"npm run build"}',
+    )
+    expect(cmd.text).toBe("npm run build")
   })
 })

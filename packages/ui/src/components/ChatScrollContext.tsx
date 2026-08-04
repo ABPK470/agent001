@@ -18,6 +18,7 @@ export function ChatScrollProvider({
   pauseAutoScroll,
   resumeAutoFollow = () => { /* optional */ },
   engageFollowIfNearBottom = () => { /* optional */ },
+  suspendAutoFollow,
   scrollHostRef,
   hydrateRunTrace,
   historyHydrationEnabled = false,
@@ -26,6 +27,8 @@ export function ChatScrollProvider({
   pauseAutoScroll: () => void
   resumeAutoFollow?: () => void
   engageFollowIfNearBottom?: () => void
+  /** Longer pause while inspecting expanded rows during a live run. */
+  suspendAutoFollow?: (durationMs?: number) => void
   scrollHostRef: RefObject<HTMLDivElement | null>
   hydrateRunTrace?: (runId: string) => Promise<void>
   historyHydrationEnabled?: boolean
@@ -38,7 +41,11 @@ export function ChatScrollProvider({
     scrollHostRef,
     hydrateRunTrace,
     historyHydrationEnabled,
-    preserveToggle: (button, toggle) => preserveScrollAnchor(button, toggle, pauseAutoScroll),
+    // Expanding/collapsing while the agent is live must not yank the viewport.
+    preserveToggle: (button, toggle) => {
+      suspendAutoFollow?.(30_000)
+      preserveScrollAnchor(button, toggle, pauseAutoScroll)
+    },
   }
   return <ChatScrollContext.Provider value={value}>{children}</ChatScrollContext.Provider>
 }

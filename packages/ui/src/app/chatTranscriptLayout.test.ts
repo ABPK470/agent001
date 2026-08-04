@@ -78,7 +78,7 @@ describe("chatTranscriptLayout", () => {
     expect(term).not.toContain("overscroll-contain")
     const peek = readFileSync(join(here, "../components/InlinePeekText.tsx"), "utf8")
     expect(peek).toContain("buildPeekDisplay")
-    expect(peek).toContain("preserveScrollAnchor")
+    expect(peek).toContain("preserveToggle")
     const card = readFileSync(join(here, "../components/ToolExecutionCard.tsx"), "utf8")
     expect(card).toContain("InlinePeekText")
     expect(card).toContain("chat-tool__panel")

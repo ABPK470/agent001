@@ -2619,6 +2619,7 @@ export function TermChat({
         pauseAutoScroll={pauseAutoScroll}
         resumeAutoFollow={resumeAutoFollow}
         engageFollowIfNearBottom={engageFollowIfNearBottom}
+        suspendAutoFollow={suspendAutoFollow}
         scrollHostRef={scrollHostRef}
       >
       <div className="termchat-transcript-shell relative">

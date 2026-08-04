@@ -4,7 +4,7 @@
  */
 
 import { useEffect, useRef, useState } from "react"
-import { preserveScrollAnchor } from "../lib/chatScroll"
+import { useChatScroll } from "./ChatScrollContext"
 
 /** Tool read/write dialect — first screenful, expand for the rest. */
 const DEFAULT_HEAD_LINES = 10
@@ -64,6 +64,8 @@ export function InlinePeekText({
 }) {
   const [expanded, setExpanded] = useState(false)
   const toggleRef = useRef<HTMLButtonElement>(null)
+  // Pause host stick-to-bottom when expanding peeks during a live run.
+  const { preserveToggle } = useChatScroll()
 
   useEffect(() => {
     setExpanded(false)
@@ -84,7 +86,7 @@ export function InlinePeekText({
           type="button"
           className="text-[13px] text-text-muted transition-colors hover:text-text"
           onClick={() => {
-            preserveScrollAnchor(toggleRef.current, () => setExpanded((value) => !value))
+            preserveToggle(toggleRef.current, () => setExpanded((value) => !value))
           }}
           aria-expanded={expanded}
         >
