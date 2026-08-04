@@ -11462,6 +11462,7 @@ button.trace-tree-status-pill:hover {
   transition: opacity 300ms cubic-bezier(0.4, 0, 0.2, 1);
   will-change: transform;
 }
+
 .intro3-root--entering .intro3-ascii-field {
   /* Withdraw the full-page field during the morph so the local pill
      activation is legible and the end of the transition does not read
@@ -14842,8 +14843,9 @@ button.trace-tree-status-pill:hover {
   position: relative;
 }
 
+/* Workspace Viewing-as glyphs — same weight as chat ambient (do not crush). */
 .app-shell-view--workspace .workspace-stage-glyphs .intro3-ascii-field {
-  opacity: 0.22;
+  opacity: 0.92;
 }
 
 .shell-mode-mosaic {

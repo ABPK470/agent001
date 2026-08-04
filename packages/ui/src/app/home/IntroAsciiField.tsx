@@ -46,8 +46,8 @@ const SHELL_PULSE_NOISE_T_MULT = 1.45
 /** Mitosis split seam — denser glyph band at the pane boundary. */
 const MITOSIS_SPLIT_X = 0.4
 const MITOSIS_SPLIT_BAND_COLS = 4.5
-/** Viewing as someone else — denser field in Viewing as ink (light blue / dark accent). */
-const VIEWING_AS_INK_OPACITY = 0.78
+/** Viewing as — accent ink; denser than ambient, not hotter than boost. */
+const VIEWING_AS_INK_OPACITY = 0.62
 
 /** Login cursor field — soft falloff + sparse “pop” cells (2D → depth). */
 const POINTER_RADIUS_PX = 158

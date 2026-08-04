@@ -138,7 +138,7 @@ export interface ResponseNarrativePart {
   id: string
   text: string
   tone?: "neutral" | "error"
-  /** status = muted system chrome (planner beats); prose = assistant voice */
+  /** status = planner beats; prose = mid-run talk — both muted vs final answer */
   role?: "status" | "prose"
 }
 

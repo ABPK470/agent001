@@ -812,8 +812,8 @@ function StepBlock({
   const hasBodyContent = hasTools || part.hasRunning || (hasErrorBody && !hasTools)
   const canToggle = hasTools || hasErrorBody
   const animateFold = userToggled || !isLiveRun
-  const labelClass =
-    part.status === "running" || part.hasRunning ? "text-text-muted" : "text-text-secondary"
+  // Process chrome stays muted whether running or settled — final answer is bright.
+  const labelClass = "text-text-muted"
 
   return (
     <div className="chat-step py-1 min-w-0" data-chat-step-id={part.id} data-chat-expand-root="">
@@ -1002,8 +1002,7 @@ function isVerificationProgress(part: ResponseProgressPart): boolean {
 }
 
 function NarrativeUpdate({ part }: { part: ResponseNarrativePart }) {
-  // Status lines = muted system chrome (same band as tool headers).
-  // Prose = assistant voice — bright, dominates the thread.
+  // Mid-run agent talk stays muted chrome — only the final answer is bright.
   if (part.role === "status") {
     return (
       <div
@@ -1016,7 +1015,7 @@ function NarrativeUpdate({ part }: { part: ResponseNarrativePart }) {
     )
   }
   return (
-    <div className={`py-1.5 pr-2 ${part.tone === "error" ? "text-text-muted" : "text-text"}`}>
+    <div className="py-1.5 pr-2 text-[15px] leading-6 text-text-muted">
       <SmartAnswer text={part.text} compact />
     </div>
   )

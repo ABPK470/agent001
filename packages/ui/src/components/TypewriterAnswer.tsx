@@ -20,10 +20,11 @@ import { SmartAnswer } from "./SmartAnswer"
 import { StructuredPendingBlock } from "./StreamingBlocks"
 import { isDiagramLang, tryInferDiagramKind } from "./InlineDiagram"
 
+/** Final answer — full text contrast. Mid-run chrome stays muted in TermChat. */
 const bodyClass = (compact: boolean) =>
   compact
-    ? "text-text-secondary text-[15px] leading-6 w-full min-w-0"
-    : "text-text-secondary text-base leading-relaxed w-full min-w-0"
+    ? "text-text text-[15px] leading-6 w-full min-w-0"
+    : "text-text text-base leading-relaxed w-full min-w-0"
 
 /** Stable identity for structured visuals that share the pending → settle path. */
 export function structuredVisualKey(block: AnswerBlock): string | null {
