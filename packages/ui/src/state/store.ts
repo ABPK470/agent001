@@ -30,7 +30,7 @@ import {
 import { isDefaultThreadTitle, threadTitleFromGoal } from "../lib/thread-title.js"
 import { sortThreadsByPinThenUpdatedAt } from "../lib/thread-order.js"
 import { isCancelRaceFailureError, settleTraceOnCancel } from "../lib/events/trace-terminal.js"
-import { normalizeTraceWire } from "../lib/events/trace-wire.js"
+import { hasUsableTraceEntries, normalizeTraceWire } from "../lib/events/trace-wire.js"
 import { RunStatus } from "../enums"
 import type {
   AuditEntry,
@@ -1389,14 +1389,13 @@ export const useStore = create<AppState>()(
                 set((s) => ({
                   runs: appendRunTrace(s.runs, completedRunId, { kind: "answer", text: completedAnswer }),
                 }))
-                const existingTraceLen =
-                  get().runs.find((r) => r.id === completedRunId)?.trace?.length ?? 0
-                if (existingTraceLen < 2) {
+                const existingTrace = get().runs.find((r) => r.id === completedRunId)?.trace
+                if (!hasUsableTraceEntries(existingTrace) || (existingTrace?.length ?? 0) < 2) {
                   void api.getRunTrace(completedRunId).then((rawTrace) => {
-                    const trace = rawTrace as TraceEntry[]
+                    const { entries } = normalizeTraceWire(rawTrace as unknown[])
                     set((s) => ({
-                      runs: patchRunFields(s.runs, completedRunId, { trace }),
-                      trace: s.activeRunId === completedRunId ? trace : s.trace,
+                      runs: patchRunFields(s.runs, completedRunId, { trace: entries }),
+                      trace: s.activeRunId === completedRunId ? entries : s.trace,
                     }))
                   }).catch((err: unknown) => { console.error("[mia]", err) })
                 }

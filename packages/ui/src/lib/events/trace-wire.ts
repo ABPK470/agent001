@@ -48,3 +48,13 @@ export function normalizeTraceWire(raw: unknown[]): NormalizedTraceWire {
   }
   return { entries, createdAtMs }
 }
+
+/**
+ * True when `trace` already holds projectable TraceEntry rows.
+ * False for empty / missing / poisoned REST envelopes stored without unwrap
+ * (chat hydrate bug — length > 0 but no `kind`).
+ */
+export function hasUsableTraceEntries(trace: unknown): boolean {
+  if (!Array.isArray(trace) || trace.length === 0) return false
+  return trace.some(isTraceEntry)
+}

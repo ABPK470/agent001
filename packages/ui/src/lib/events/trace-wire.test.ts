@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { normalizeTraceWire } from "./trace-wire"
+import { hasUsableTraceEntries, normalizeTraceWire } from "./trace-wire"
 
 describe("normalizeTraceWire", () => {
   it("unwraps envelopes and keeps createdAt ms", () => {
@@ -31,5 +31,19 @@ describe("normalizeTraceWire", () => {
     const normalized = normalizeTraceWire([{ kind: "goal", text: "hi" }])
     expect(normalized.entries).toEqual([{ kind: "goal", text: "hi" }])
     expect(normalized.createdAtMs).toEqual([null])
+  })
+
+  it("hasUsableTraceEntries rejects poisoned envelope blobs", () => {
+    expect(hasUsableTraceEntries([])).toBe(false)
+    expect(
+      hasUsableTraceEntries([
+        { seq: 0, createdAt: "2026-01-01T00:00:00.000Z", entry: { kind: "goal", text: "hi" } },
+      ]),
+    ).toBe(false)
+    expect(hasUsableTraceEntries([{ kind: "goal", text: "hi" }])).toBe(true)
+    const unwrapped = normalizeTraceWire([
+      { seq: 0, createdAt: "2026-01-01T00:00:00.000Z", entry: { kind: "tool-call", tool: "query_mssql" } },
+    ])
+    expect(hasUsableTraceEntries(unwrapped.entries)).toBe(true)
   })
 })

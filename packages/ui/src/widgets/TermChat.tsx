@@ -47,6 +47,7 @@ import { ToastStack, useWidgetToasts } from "../components/useWidgetToasts"
 import { useStickToBottomScroll } from "../hooks/useStickToBottomScroll"
 import { CHAT_SCROLL_HOST_ATTR, isNearBottom } from "../lib/chatScroll"
 import { consolidateSyncProgressStatus } from "../state/sync-trace-progress"
+import { hasUsableTraceEntries, normalizeTraceWire } from "../lib/events/trace-wire"
 import {
   HOME_CHAT_COLUMN_CLASS,
   HOME_CHAT_GUTTER_X_CLASS,
@@ -2354,15 +2355,17 @@ export function TermChat({
       if (id === scopedActiveRunId) continue
       const run = runs.find((r) => r.id === id)
       if (!run || isRunActiveStatus(run.status)) continue
-      if ((run.trace?.length ?? 0) > 0) continue
+      // Skip only real TraceEntry[] — poisoned REST envelopes must re-fetch.
+      if (hasUsableTraceEntries(run.trace)) continue
       if (traceHydratingRef.current.has(id)) continue
 
       traceHydratingRef.current.add(id)
       try {
         const rawTrace = await api.getRunTrace(id)
+        const { entries } = normalizeTraceWire(rawTrace as unknown[])
         upsertRun({
           id,
-          trace: rawTrace as TraceEntry[],
+          trace: entries,
           streamingAnswer: "",
         })
       } finally {
@@ -2386,7 +2389,7 @@ export function TermChat({
           if (!runId || runId === scopedActiveRunId) continue
           const run = runs.find((r) => r.id === runId)
           if (!run || isRunActiveStatus(run.status)) continue
-          if ((run.trace?.length ?? 0) > 0) continue
+          if (hasUsableTraceEntries(run.trace)) continue
           void hydrateRunTrace(runId).catch((err: unknown) => { console.error("[mia]", err) })
         }
       },
