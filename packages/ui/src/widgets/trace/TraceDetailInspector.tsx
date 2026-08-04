@@ -100,6 +100,7 @@ function renderDetail(dag: TraceDag, node: TraceTreeNode) {
         phase={phase}
         nodeStatus={node.status}
         nodeHasError={node.hasError}
+        branchHasError={node.branchHasError}
       />
     )
   }

@@ -361,6 +361,12 @@ type PhaseUpdate = {
    * they reattach to the latest card of the same family.
    */
   beginNew?: boolean
+  /**
+   * True only for planner-step-end. Delegation/end-of-loop updates must NOT
+   * clear the open step — otherwise the next step-end reattaches to attempt 1
+   * via findPhaseInTree and overwrites a failed card to "done".
+   */
+  closesStep?: boolean
 }
 
 function isStepFamily(family: string): boolean {
@@ -538,19 +544,23 @@ function phaseFromEntry(entry: TraceEntry, index: number): PhaseUpdate | null {
           ),
         ],
       }
-    case "planner-pipeline-end":
+    case "planner-pipeline-end": {
+      const ok = entry.status === "success"
       return {
         family: "pipeline",
         title: "Pipeline",
         summary: `${entry.completedSteps}/${entry.totalSteps} · ${entry.status}`,
-        status: entry.status === "success" ? "done" : "error",
+        status: ok ? "done" : "error",
         details: [
           detailEvent(
             `pipe-end-${index}`,
-            `Finished ${entry.completedSteps}/${entry.totalSteps} steps (${entry.status})`,
+            ok
+              ? `Finished ${entry.completedSteps}/${entry.totalSteps} steps (success)`
+              : `Finished ${entry.completedSteps}/${entry.totalSteps} steps (failed)`,
           ),
         ],
       }
+    }
     case "planner-budget-extended":
       return {
         family: "pipeline",
@@ -621,6 +631,7 @@ function phaseFromEntry(entry: TraceEntry, index: number): PhaseUpdate | null {
         title: humanizeStep(entry.stepName),
         summary: ok ? "done" : entry.error || "failed",
         status: ok ? "done" : "error",
+        closesStep: true,
         details,
       }
     }
@@ -1033,14 +1044,17 @@ export function buildTraceDag(trace: TraceEntry[], opts?: BuildTraceDagOpts): Tr
     for (const callIndex of [...openWorkByCall.keys()]) flushWorkForCall(callIndex)
   }
 
+  /** Latest card for `family` — repair attempts must not reattach to attempt 1. */
   function findPhaseInTree(family: string): TracePhaseNode | null {
     for (let i = spine.length - 1; i >= 0; i--) {
       const entry = spine[i]
-      if (entry?.kind === "phase" && entry.phase.family === family) return entry.phase
-      if (entry?.kind === "phase" && entry.phase.children) {
-        for (const child of entry.phase.children) {
-          if (child.kind === "phase" && child.phase.family === family) return child.phase
-        }
+      if (entry?.kind !== "phase") continue
+      if (entry.phase.family === family) return entry.phase
+      const kids = entry.phase.children
+      if (!kids) continue
+      for (let j = kids.length - 1; j >= 0; j--) {
+        const child = kids[j]!
+        if (child.kind === "phase" && child.phase.family === family) return child.phase
       }
     }
     return null
@@ -1100,9 +1114,7 @@ export function buildTraceDag(trace: TraceEntry[], opts?: BuildTraceDagOpts): Tr
       const open = runningSteps.get(stepName) ?? findPhaseInTree(update.family)
       if (open) {
         assignMergedPhase(open, update)
-        if (update.status === "done" || update.status === "error") {
-          const endMs = update.details
-          void endMs
+        if (update.closesStep) {
           runningSteps.delete(stepName)
           if (serialOpenStep === open) serialOpenStep = null
         } else {
@@ -1414,25 +1426,39 @@ function patchPhaseTitlesFromOutline(
   }
   walk(outline)
 
-  function patchPhase(phase: TracePhaseNode) {
+  function patchPhase(phase: TracePhaseNode, latestByFamily: Map<string, TracePhaseNode>) {
     const key = isStepFamily(phase.family)
       ? phase.family
       : phase.family.startsWith("repair:")
         ? phase.family
         : phase.family
     const node = byNest.get(key) ?? byNest.get(phase.family)
+    const isLatestAttempt = latestByFamily.get(phase.family) === phase
     if (node) {
       if (node.title) phase.title = node.title
-      if (node.summary) phase.summary = node.summary
+      // Outline has one summary per family — only the latest attempt card.
+      // Older failed attempts keep their own "failed" summary.
+      if (node.summary && isLatestAttempt) phase.summary = node.summary
       if (node.label && node.label !== phase.title) phase.leading = node.label
     }
     for (const child of phase.children ?? []) {
-      if (child.kind === "phase") patchPhase(child.phase)
+      if (child.kind === "phase") patchPhase(child.phase, latestByFamily)
     }
   }
 
+  const latestByFamily = new Map<string, TracePhaseNode>()
+  function collectLatest(phase: TracePhaseNode) {
+    latestByFamily.set(phase.family, phase)
+    for (const child of phase.children ?? []) {
+      if (child.kind === "phase") collectLatest(child.phase)
+    }
+  }
   for (const entry of bodySpine) {
-    if (entry.kind === "phase") patchPhase(entry.phase)
+    if (entry.kind === "phase") collectLatest(entry.phase)
+  }
+
+  for (const entry of bodySpine) {
+    if (entry.kind === "phase") patchPhase(entry.phase, latestByFamily)
   }
   return bodySpine
 }

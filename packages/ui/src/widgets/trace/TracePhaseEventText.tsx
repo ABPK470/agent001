@@ -3,7 +3,7 @@
  */
 
 const TOOL_LIST_RE = /^Tools:\s*(.+)$/i
-const FINISHED_RE = /^(Finished)\s*(·\s*)(\d[\d.]*\s*ms)$/i
+const FINISHED_RE = /^(Finished|Failed)\s*(·\s*)(\d[\d.]*\s*ms)$/i
 const SUBAGENT_RE = /^(Subagent started:?)\s*(.*)$/i
 const IDENT_RE = /\b([a-z][a-z0-9_]+)\b/g
 

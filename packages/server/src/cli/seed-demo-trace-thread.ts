@@ -887,6 +887,8 @@ function buildKitchenSink(): TraceEntry[] {
       sqlPreview: "SELECT * FROM HugeTable",
       sqlLength: 24,
     }),
+    // Recoverable tool failure — step still ends pass after the corrected query.
+    // Work row stays "1 failed"; parent Subagent/Pipeline must not stay ! ERR.
     {
       kind: "tool-error",
       invocationId: "k-inv-sql-bad",
@@ -925,7 +927,7 @@ function buildKitchenSink(): TraceEntry[] {
       stepName: "schema_layer",
       depth: 1,
       status: "done",
-      answer: "Schema queries safe",
+      answer: "Recovered after SQL quality block — schema queries safe",
     },
     {
       kind: "planner-step-end",

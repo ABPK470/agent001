@@ -721,6 +721,12 @@ function annotateBranchErrors(index: TraceTreeIndex, dag: TraceDag): void {
   const branchErrors = collectBranchErrorScopeIds(dag)
   for (const node of index.nodes) {
     if (!node.hasChildren) continue
+    // Phase already closed successfully — recovered child tool errors stay on
+    // Work/Tool rows; do not paint the parent as unresolved Err.
+    if (node.kind === "phase" && node.status === "success") {
+      node.branchHasError = false
+      continue
+    }
     node.branchHasError = branchErrors.has(node.scopeId)
   }
 }

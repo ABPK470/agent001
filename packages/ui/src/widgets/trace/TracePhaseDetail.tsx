@@ -11,7 +11,9 @@ import { TraceToolErrorSection } from "./TraceToolIo"
 import { TracePhaseEventText } from "./TracePhaseEventText"
 import {
   buildTimelineOffsets,
+  timelineEventDisplayText,
   timelineEventKind,
+  timelinePhaseOutcome,
 } from "./trace-phase-timeline-utils"
 import type { TraceSpanStatus } from "./trace-tree-index"
 
@@ -27,10 +29,13 @@ export function TracePhaseDetail({
   phase,
   nodeStatus,
   nodeHasError,
+  branchHasError = false,
 }: {
   phase: TracePhaseNode
   nodeStatus: TraceSpanStatus
   nodeHasError: boolean
+  /** Tree rollup — timeline end chrome must match left-pane Err, not the word Finished. */
+  branchHasError?: boolean
 }) {
   const events = phase.details.filter(
     (d): d is Extract<TracePhaseDetail, { kind: "event" }> => d.kind === "event",
@@ -41,12 +46,17 @@ export function TracePhaseDetail({
   const jsonBlocks = phase.details.filter(
     (d): d is Extract<TracePhaseDetail, { kind: "json" }> => d.kind === "json",
   )
-  const showErrorSurface = nodeHasError || nodeStatus === "failed"
+  const outcome = timelinePhaseOutcome({
+    phaseStatus: phase.status,
+    nodeStatus,
+    nodeHasError,
+    branchHasError,
+  })
+  const showErrorSurface = outcome === "failed"
   const errorEvents = events.filter((e) => e.tone === "error")
   const timelineEvents = showErrorSurface
     ? events
     : events.filter((e) => e.tone !== "error")
-  const phaseDone = phase.status === "done" && !showErrorSurface
   const offsets = buildTimelineOffsets(timelineEvents, phase.durationMs)
   const [openJsonIds, setOpenJsonIds] = useState(() => new Set<string>())
 
@@ -76,12 +86,10 @@ export function TracePhaseDetail({
           <div className="trace-detail-section__label">Timeline</div>
           <ol className="trace-phase-timeline">
             {timelineEvents.map((ev, index) => {
-              const kind = timelineEventKind(
-                ev.text,
-                ev.tone,
-                index === timelineEvents.length - 1,
-                phaseDone,
-              )
+              const isLast = index === timelineEvents.length - 1
+              // Kind from original lifecycle text + tree outcome; copy may rewrite Finished→Failed.
+              const kind = timelineEventKind(ev.text, ev.tone, isLast, outcome)
+              const displayText = timelineEventDisplayText(ev.text, outcome)
               const offsetMs = offsets[index] ?? 0
               return (
                 <li
@@ -96,7 +104,7 @@ export function TracePhaseDetail({
                   </span>
                   <div className="trace-phase-timeline__body">
                     <div className="trace-phase-timeline__text">
-                      <TracePhaseEventText text={ev.text} />
+                      <TracePhaseEventText text={displayText} />
                     </div>
                     <span className="trace-phase-timeline__time tabular-nums">
                       {formatMs(offsetMs)}

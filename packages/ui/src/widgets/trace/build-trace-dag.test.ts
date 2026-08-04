@@ -574,6 +574,111 @@ describe("buildTraceDag", () => {
     }
   })
 
+  it("keeps failed step attempt red after repair pass (delegation-end must not rebind)", () => {
+    const dag = buildTraceDag([
+      { kind: "planner-pipeline-start", attempt: 1, maxRetries: 2 },
+      { kind: "planner-step-start", stepName: "frontend_layer", stepType: "subagent_task" },
+      llmRequest(0, [], "frontend_layer"),
+      llmResponse(0, {
+        toolCalls: [{ id: "boom", name: "run_command", arguments: { cmd: "npm run build" } }],
+        stepName: "frontend_layer",
+      }),
+      {
+        kind: "tool-call",
+        invocationId: "i-boom",
+        toolCallId: "boom",
+        tool: "run_command",
+        argsSummary: "npm run build",
+        argsFormatted: "{}",
+        stepName: "frontend_layer",
+      },
+      {
+        kind: "tool-error",
+        invocationId: "i-boom",
+        toolCallId: "boom",
+        text: "Module not found",
+        stepName: "frontend_layer",
+      },
+      {
+        kind: "planner-delegation-end",
+        stepName: "frontend_layer",
+        depth: 1,
+        status: "error",
+        error: "build failed",
+      },
+      {
+        kind: "planner-step-end",
+        stepName: "frontend_layer",
+        status: "fail",
+        durationMs: 100,
+        error: "build failed",
+      },
+      { kind: "planner-pipeline-start", attempt: 2, maxRetries: 2 },
+      { kind: "planner-step-start", stepName: "frontend_layer", stepType: "subagent_task" },
+      llmRequest(1, [], "frontend_layer"),
+      llmResponse(1, {
+        toolCalls: [{ id: "ok", name: "run_command", arguments: { cmd: "npm run build" } }],
+        stepName: "frontend_layer",
+      }),
+      {
+        kind: "tool-call",
+        invocationId: "i-ok",
+        toolCallId: "ok",
+        tool: "run_command",
+        argsSummary: "npm run build",
+        argsFormatted: "{}",
+        stepName: "frontend_layer",
+      },
+      {
+        kind: "tool-result",
+        invocationId: "i-ok",
+        toolCallId: "ok",
+        text: "Build succeeded",
+        stepName: "frontend_layer",
+      },
+      {
+        kind: "planner-delegation-end",
+        stepName: "frontend_layer",
+        depth: 1,
+        status: "done",
+        answer: "Build green",
+      },
+      {
+        kind: "planner-step-end",
+        stepName: "frontend_layer",
+        status: "pass",
+        durationMs: 80,
+      },
+      {
+        kind: "planner-pipeline-end",
+        status: "success",
+        completedSteps: 1,
+        totalSteps: 1,
+      },
+    ])
+
+    const pipeline = dag.spine.find((e) => e.kind === "phase" && e.phase.family === "pipeline")
+    if (pipeline?.kind !== "phase") throw new Error("expected pipeline")
+    const fronts = (pipeline.phase.children ?? []).filter(
+      (c) => c.kind === "phase" && c.phase.family === "step:frontend_layer",
+    )
+    expect(fronts).toHaveLength(2)
+    if (fronts[0]?.kind !== "phase" || fronts[1]?.kind !== "phase") {
+      throw new Error("expected two frontend phases")
+    }
+    expect(fronts[0].phase.status).toBe("error")
+    expect(fronts[0].phase.summary).toMatch(/fail/i)
+    expect(fronts[1].phase.status).toBe("done")
+    const failWork = fronts[0].phase.children?.find((c) => c.kind === "work")
+    const okWork = fronts[1].phase.children?.find((c) => c.kind === "work")
+    expect(failWork?.kind === "work" && failWork.work.tools.some((t) => t.status === "error")).toBe(
+      true,
+    )
+    expect(okWork?.kind === "work" && okWork.work.tools.every((t) => t.status !== "error")).toBe(
+      true,
+    )
+  })
+
   it("omits Direct chips with nothing to expand", () => {
     const dag = buildTraceDag([
       {

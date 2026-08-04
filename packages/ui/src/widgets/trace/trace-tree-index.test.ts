@@ -56,6 +56,32 @@ describe("trace-tree-index", () => {
     }
   })
 
+  it("does not Err-badge a phase that ended successfully after a recovered tool error", () => {
+    const dag = failedBuildDag()
+    // Force the work's parent phase (if any) / work itself: when a phase is done,
+    // historical tool errors must not keep the phase badge on Err.
+    const open = emptyOpen()
+    open.calls.add(0)
+    for (const entry of dag.spine) {
+      if (entry.kind === "phase") {
+        open.phases.add(entry.phase.id)
+        entry.phase.status = "done"
+        for (const child of entry.phase.children ?? []) {
+          if (child.kind === "work") open.work.add(child.work.id)
+        }
+      }
+    }
+    const index = buildTraceTreeIndex(dag, open, null)
+    const phase = index.nodes.find((n) => n.kind === "phase")
+    if (phase) {
+      expect(phase.status).toBe("success")
+      expect(phase.branchHasError).toBe(false)
+      expect(phase.hasError).toBe(false)
+    }
+    const work = index.nodes.find((n) => n.kind === "work" && n.hasError)
+    expect(work?.hasError).toBe(true)
+  })
+
   it("keeps parent branchHasError when the failing child is folded away", () => {
     const dag = failedBuildDag()
     const open = emptyOpen()
