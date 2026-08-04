@@ -6541,6 +6541,11 @@ button.trace-tree-status-pill:hover {
   background: var(--color-accent, #3b82f6);
 }
 
+.chat-tool__cmd > .inline-peek {
+  flex: 1;
+  min-width: 0;
+}
+
 .chat-tool__cmd-text {
   flex: 1;
   min-width: 0;

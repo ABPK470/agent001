@@ -1,13 +1,15 @@
 /**
- * Inline peek for long monospace payloads — head/tail preview, expand to full
- * height in the transcript (one scrollport; no nested scrollbar).
+ * Inline peek for long monospace payloads — first N lines, then Show more/less.
+ * One scrollport (transcript owns scroll); no nested scrollbar.
  */
 
 import { useEffect, useRef, useState } from "react"
 import { preserveScrollAnchor } from "../lib/chatScroll"
 
-const DEFAULT_HEAD_LINES = 12
-const DEFAULT_TAIL_LINES = 4
+/** Tool read/write dialect — first screenful, expand for the rest. */
+const DEFAULT_HEAD_LINES = 10
+/** 0 = head-only (preferred). Head+tail kept for callers that pass a positive tail. */
+const DEFAULT_TAIL_LINES = 0
 
 function normalizeLines(text: string): string[] {
   return text.replace(/\r\n/g, "\n").split("\n")
@@ -18,6 +20,9 @@ export function countHiddenPeekLines(
   headLines: number,
   tailLines: number,
 ): number {
+  if (tailLines <= 0) {
+    return lineCount > headLines ? lineCount - headLines : 0
+  }
   if (lineCount <= headLines + tailLines + 1) return 0
   return lineCount - headLines - tailLines
 }
@@ -32,9 +37,12 @@ export function buildPeekDisplay(
   const totalLines = lines.length
   const hiddenLines = countHiddenPeekLines(totalLines, headLines, tailLines)
   if (hiddenLines === 0 || expanded) {
-    return { body: text, hiddenLines: 0, totalLines }
+    return { body: text, hiddenLines, totalLines }
   }
   const head = lines.slice(0, headLines).join("\n")
+  if (tailLines <= 0) {
+    return { body: head, hiddenLines, totalLines }
+  }
   const tail = lines.slice(-tailLines).join("\n")
   return {
     body: `${head}\n… (${hiddenLines} lines hidden) …\n${tail}`,
@@ -61,19 +69,16 @@ export function InlinePeekText({
     setExpanded(false)
   }, [text])
 
-  const { body, hiddenLines, totalLines } = buildPeekDisplay(
-    text,
-    headLines,
-    tailLines,
-    expanded,
-  )
+  const totalLines = normalizeLines(text).length
+  const collapsedHidden = countHiddenPeekLines(totalLines, headLines, tailLines)
+  const { body } = buildPeekDisplay(text, headLines, tailLines, expanded)
 
   return (
-    <div className="min-w-0 space-y-1.5">
+    <div className="inline-peek min-w-0 space-y-1.5">
       <pre className={className ?? "code-pre m-0 w-full max-w-full whitespace-pre-wrap break-words px-0.5 text-[15px] leading-5 text-text-muted"}>
         {body}
       </pre>
-      {hiddenLines > 0 ? (
+      {collapsedHidden > 0 ? (
         <button
           ref={toggleRef}
           type="button"
@@ -83,7 +88,9 @@ export function InlinePeekText({
           }}
           aria-expanded={expanded}
         >
-          {expanded ? "Show less" : `Expand full output (${totalLines} lines)`}
+          {expanded
+            ? "Show less"
+            : `Show more (${collapsedHidden} line${collapsedHidden === 1 ? "" : "s"})`}
         </button>
       ) : null}
     </div>

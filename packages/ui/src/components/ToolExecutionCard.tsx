@@ -236,7 +236,7 @@ export function ToolExecutionCard({
             {showChatInputBody ? (
               <div className="chat-tool__cmd">
                 <span className="chat-tool__dot" aria-hidden />
-                <pre className="chat-tool__cmd-text">{inputText}</pre>
+                <InlinePeekText text={inputText} className="chat-tool__cmd-text" />
               </div>
             ) : null}
 
@@ -244,17 +244,16 @@ export function ToolExecutionCard({
               <>
                 {showChatInputBody ? <div className="chat-tool__sep" /> : null}
                 {showError && errorText ? (
-                  <pre className="chat-tool__out is-error">{errorText.trim()}</pre>
+                  <InlinePeekText
+                    text={errorText.trim()}
+                    className="chat-tool__out is-error"
+                  />
                 ) : null}
                 {showResult && resultText ? (
-                  resultText.trim().length > 480 ? (
-                    <InlinePeekText
-                      text={resultText.trim()}
-                      className="chat-tool__out"
-                    />
-                  ) : (
-                    <pre className="chat-tool__out">{resultText.trim()}</pre>
-                  )
+                  <InlinePeekText
+                    text={resultText.trim()}
+                    className="chat-tool__out"
+                  />
                 ) : null}
               </>
             ) : !hasOutputPayload ? (
@@ -324,7 +323,10 @@ export function ToolExecutionCard({
                 </span>
                 <CopyControl value={input.copyText} ariaLabel="Copy input" />
               </div>
-              <pre className="trace-exec__input-pre">{input.text}</pre>
+              <InlinePeekText
+                text={input.text.trim()}
+                className="trace-exec__input-pre"
+              />
             </div>
           ) : null}
 
