@@ -21,8 +21,9 @@
 // "does this question text look enough like a question we recently
 // asked?".
 
-import type { AmbiguityFinding, ResolvedClarification } from "@mia/agent"
+import type { AmbiguityFinding, ClarificationRequirement, ResolvedClarification } from "@mia/agent"
 import type { ClarificationMatch, ClarificationsRegistryPort } from "../../ports/clarifications.js"
+import { requirementForFinding } from "./clarification-gate.js"
 
 type EmittedRecord = ClarificationMatch
 
@@ -70,10 +71,13 @@ export class ClarificationsRegistry implements ClarificationsRegistryPort {
     return (this.resolvedByRun.get(runId) ?? []).some((resolved) => resolved.findingId === findingId)
   }
 
-  /** Blocking findings that still require a user answer before execution. */
-  getOpenBlocking(runId: string): EmittedRecord[] {
+  /** Findings whose declared operation requirement has not been satisfied. */
+  getOpenBlocking(
+    runId: string,
+    requirement: ClarificationRequirement = "before-data-read"
+  ): EmittedRecord[] {
     return (this.emitted.get(runId) ?? []).filter(
-      (record) => record.severity === "block" && !this.isResolved(runId, record.findingId)
+      (record) => requirementForFinding(record) === requirement && !this.isResolved(runId, record.findingId)
     )
   }
 

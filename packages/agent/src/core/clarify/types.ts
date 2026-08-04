@@ -16,9 +16,9 @@
 //                      answers a previously-emitted question, keyed by the
 //                      finding's stable id so the same subject never re-asks.
 
+import type { TenantConfig } from "../../domain/tenant/tenant-config.js"
 import type { Message } from "../../domain/types/agent-types.js"
 import type { CatalogGraph } from "../../tools/catalog/graph/index.js"
-import type { TenantConfig } from "../../domain/tenant/tenant-config.js"
 
 // ── Finding ──────────────────────────────────────────────────────
 
@@ -43,12 +43,14 @@ export type AmbiguityKind =
   | "empty-result" // last tool call returned no rows on a data goal
 
 /**
- * Severity gate. Prompted-only enforcement (per architectural decision):
- * the orchestrator does NOT hard-block tool calls on `block` findings. It
- * surfaces them in <must_clarify> and the prompt rules instruct the agent
- * to call ask_user first. `warn` findings are surfaced as caveats only.
+ * A block finding is enforced at the runtime boundary according to its
+ * ClarificationRequirement. Warn findings remain advisory and never stop an
+ * operation solely because they were emitted.
  */
 export type AmbiguitySeverity = "block" | "warn"
+
+/** The earliest operation that must wait for a clarification answer. */
+export type ClarificationRequirement = "none" | "before-data-read" | "before-mutation"
 
 /**
  * Source of the finding. Used by trace/lint to distinguish deterministic
@@ -247,7 +249,10 @@ export function filterFindingsForRunFrame(
     }
     if (schemaNames.has(subject)) return false
     // "core" in "core schema tables" even when catalog is cold
-    if (/\b\w+\s+schema\s+tables?\b/i.test(ctx.goal) && new RegExp(`\\b${escapeRe(subject)}\\s+schema\\b`, "i").test(ctx.goal)) {
+    if (
+      /\b\w+\s+schema\s+tables?\b/i.test(ctx.goal) &&
+      new RegExp(`\\b${escapeRe(subject)}\\s+schema\\b`, "i").test(ctx.goal)
+    ) {
       return false
     }
     return true

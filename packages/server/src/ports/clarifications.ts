@@ -1,4 +1,4 @@
-import type { AmbiguityFinding, ResolvedClarification } from "@mia/agent"
+import type { AmbiguityFinding, ClarificationRequirement, ResolvedClarification } from "@mia/agent"
 
 export interface ClarificationsPort {
   recordEmitted(runId: string, round: number, findings: readonly AmbiguityFinding[]): void
@@ -17,7 +17,7 @@ export interface ClarificationMatch {
 
 export interface ClarificationsRegistryPort extends ClarificationsPort {
   getFinding(runId: string, findingId: string): ClarificationMatch | null
-  getOpenBlocking(runId: string): ClarificationMatch[]
+  getOpenBlocking(runId: string, requirement?: ClarificationRequirement): ClarificationMatch[]
   matchQuestion(runId: string, question: string): ClarificationMatch | null
   isResolved(runId: string, findingId: string): boolean
   setPending(runId: string, record: ClarificationMatch, askedQuestion: string): void

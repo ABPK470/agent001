@@ -11,6 +11,7 @@ import { TraceEventKind } from "../../../internal/enums/trace.js"
 import { decideSections, filterToolsByGoal } from "../../prompting/decide-sections.js"
 import { composePerRunTools, getAllTools } from "../../tooling/registry.js"
 import { resolveAskUserPresentation } from "../ask-user-options.js"
+import { blocksOperation, operationForTool, requirementForFinding } from "../clarification-gate.js"
 import { wrapWithEffects } from "../workspace-effects.js"
 import { buildClassificationContext } from "./support.js"
 import type {
@@ -299,10 +300,14 @@ function composeExecutionTools(
 
   const allTools = allToolsBase.map((tool) => {
     const execute = async (args: Record<string, unknown>) => {
-      const openBlocking = interaction.clarifications.getOpenBlocking(request.runId)
-      if (tool.name !== "ask_user" && openBlocking.length > 0) {
-        const pending = openBlocking.map((finding) => finding.findingId).join(", ")
-        return `Error: resolve blocking clarification(s) before executing tools: ${pending}`
+      const operation = operationForTool(tool.name, args)
+      const blocked = [
+        ...interaction.clarifications.getOpenBlocking(request.runId, "before-data-read"),
+        ...interaction.clarifications.getOpenBlocking(request.runId, "before-mutation")
+      ].filter((finding) => blocksOperation(requirementForFinding(finding), operation))
+      if (tool.name !== "ask_user" && blocked.length > 0) {
+        const pending = blocked.map((finding) => finding.findingId).join(", ")
+        return `Error: resolve clarification(s) required before ${operation}: ${pending}`
       }
       return tool.execute(args)
     }
