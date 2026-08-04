@@ -13,8 +13,14 @@ export function inspectorTitle(node: TraceTreeNode): string {
       return `Tool: ${node.name}`
     case "work":
       return node.toolKey ? `Tool: ${node.name}` : `Work: ${node.name}`
-    case "call":
-      return node.subtitle ?? node.name
+    case "call": {
+      // Match left tree: "Call 1 ask_user" → "Call 1 — ask_user (gpt-demo)".
+      const lead = node.leading?.trim() || "Call"
+      const outcome = node.name.trim()
+      const model = node.subtitle?.trim()
+      const base = outcome ? `${lead} — ${outcome}` : lead
+      return model ? `${base} (${model})` : base
+    }
     case "phase":
       return node.leading ? `${node.leading} ${node.name}` : node.name
     case "sent":

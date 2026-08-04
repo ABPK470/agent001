@@ -49,39 +49,6 @@ export function TraceCallDetail({
     [call],
   )
 
-  const workAfter = useMemo(() => {
-    function walkPhase(phase: import("./build-trace-dag").TracePhaseNode) {
-      for (const child of phase.children ?? []) {
-        if (child.kind === "work" && child.work.afterCallIndex === call.index) {
-          return child.work
-        }
-        if (child.kind === "phase") {
-          const found = walkPhase(child.phase)
-          if (found) return found
-        }
-      }
-      return null
-    }
-    for (const entry of dag.spine) {
-      if (entry.kind === "work" && entry.work.afterCallIndex === call.index) {
-        return entry.work
-      }
-      if (entry.kind === "phase") {
-        const found = walkPhase(entry.phase)
-        if (found) return found
-      }
-    }
-    return null
-  }, [dag.spine, call.index])
-
-  const toolMs =
-    workAfter?.sqlQuality.reduce((max, s) => Math.max(max, s.durationMs ?? 0), 0) ?? 0
-  const workMs = workAfter?.durationMs ?? (toolMs > 0 ? toolMs : null)
-  const totalMs =
-    call.durationMs != null
-      ? call.durationMs + (workMs ?? 0)
-      : workMs
-
   return (
     <div className="trace-detail-body">
       <div className="trace-detail-tabs" role="tablist">
@@ -157,14 +124,6 @@ export function TraceCallDetail({
             <div>
               <dt>LLM</dt>
               <dd>{call.durationMs != null ? formatMs(call.durationMs) : "—"}</dd>
-            </div>
-            <div>
-              <dt>Tool / work</dt>
-              <dd>{workMs != null ? formatMs(workMs) : "—"}</dd>
-            </div>
-            <div>
-              <dt>Total</dt>
-              <dd>{totalMs != null ? formatMs(totalMs) : "—"}</dd>
             </div>
           </dl>
         </section>
