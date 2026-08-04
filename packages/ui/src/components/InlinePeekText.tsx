@@ -3,6 +3,7 @@
  * One scrollport (transcript owns scroll); no nested scrollbar.
  */
 
+import { ChevronDown, ChevronRight } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { useChatScroll } from "./ChatScrollContext"
 
@@ -76,7 +77,15 @@ export function InlinePeekText({
   const { body } = buildPeekDisplay(text, headLines, tailLines, expanded)
 
   return (
-    <div className="inline-peek min-w-0 space-y-1.5">
+    <div
+      className={[
+        "inline-peek min-w-0",
+        collapsedHidden > 0 ? "inline-peek--collapsible" : "",
+        expanded ? "is-expanded" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+    >
       <pre className={className ?? "code-pre m-0 w-full max-w-full whitespace-pre-wrap break-words px-0.5 text-[15px] leading-5 text-text-muted"}>
         {body}
       </pre>
@@ -84,15 +93,22 @@ export function InlinePeekText({
         <button
           ref={toggleRef}
           type="button"
-          className="text-[13px] text-text-muted transition-colors hover:text-text"
+          className="inline-peek__toggle"
           onClick={() => {
             preserveToggle(toggleRef.current, () => setExpanded((value) => !value))
           }}
           aria-expanded={expanded}
         >
-          {expanded
-            ? "Show less"
-            : `Show more (${collapsedHidden} line${collapsedHidden === 1 ? "" : "s"})`}
+          <span>
+            {expanded
+              ? "Show less"
+              : `Show more (${collapsedHidden} line${collapsedHidden === 1 ? "" : "s"})`}
+          </span>
+          {expanded ? (
+            <ChevronDown size={14} strokeWidth={2} aria-hidden />
+          ) : (
+            <ChevronRight size={14} strokeWidth={2} aria-hidden />
+          )}
         </button>
       ) : null}
     </div>

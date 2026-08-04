@@ -20,11 +20,10 @@ import { useMemo, useState, type ReactNode, type RefObject } from "react"
 import { isValidJsonText } from "../lib/events/trace-tool-schema"
 import {
   buildExecSummary,
-  chatToolPillText,
   chatToolVerb,
   execErrorCode,
   formatExecInput,
-  humanizeToolName,
+  resolveChatToolPill,
   resolveExecStatus,
   type ToolExecStatus,
 } from "../lib/tool-execution"
@@ -167,10 +166,8 @@ export function ToolExecutionCard({
   const canToggle = hasTerminalBody
   const isChat = surface === "chat"
   const chatVerb = chatToolVerb(toolName, status, errorText)
-  // Collapsed pill: real input, else summary/preview, else humanized tool name.
-  const chatPill = chatToolPillText(
-    inputText || preview || summary.detail || humanizeToolName(toolName),
-  )
+  // Collapsed pill: real input → preview → result detail. Never bare `{}`.
+  const chatPill = resolveChatToolPill(inputText, preview, summary.detail)
   // Expanded panel always shows input when we have one (incl. single-line commands).
   const showChatInputBody = Boolean(inputText)
   const outputCopyText = (

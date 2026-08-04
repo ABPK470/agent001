@@ -178,10 +178,11 @@ function UserGoalText({ text }: { text: string }): React.ReactElement {
             pauseAutoScroll()
             setExpanded((value) => !value)
           }}
-          className="inline-flex items-center gap-1 text-[15px] font-medium text-text-muted transition-colors hover:text-text"
+          className="inline-peek__toggle"
+          aria-expanded={expanded}
         >
           <span>{expanded ? "Show less" : "Show more"}</span>
-          {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+          {expanded ? <ChevronDown size={14} strokeWidth={2} aria-hidden /> : <ChevronRight size={14} strokeWidth={2} aria-hidden />}
         </button>
       )}
     </div>

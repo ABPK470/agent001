@@ -76,8 +76,25 @@ export function chatToolPillText(
   max = 56,
 ): string {
   const raw = (inputText || fallbackSummary || "").replace(/\s+/g, " ").trim()
-  if (!raw) return ""
+  // Bare `{}` / empty JSON is not a target — no-arg tools omit the pill.
+  if (!raw || isEmptyToolInputDisplay(raw)) return ""
   return raw.length > max ? `${raw.slice(0, max - 1)}…` : raw
+}
+
+/**
+ * Collapsed chat pill candidates — first meaningful target wins.
+ * Skips empty JSON; does not fall back to the tool name (redundant with the verb).
+ */
+export function resolveChatToolPill(
+  inputText: string,
+  preview?: string | null,
+  resultDetail?: string | null,
+): string {
+  for (const candidate of [inputText, preview, resultDetail]) {
+    const pill = chatToolPillText(candidate ?? "")
+    if (pill) return pill
+  }
+  return ""
 }
 
 export function resolveExecStatus(

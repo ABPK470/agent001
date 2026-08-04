@@ -6,6 +6,7 @@ import {
   execErrorCode,
   execStatusVerb,
   formatExecInput,
+  resolveChatToolPill,
 } from "../../lib/tool-execution"
 
 describe("tool-execution", () => {
@@ -85,5 +86,14 @@ describe("tool-execution", () => {
       '{"command":"npm run build"}',
     )
     expect(cmd.text).toBe("npm run build")
+  })
+
+  it("never shows bare {} as the chat pill", () => {
+    expect(chatToolPillText("{}")).toBe("")
+    expect(chatToolPillText("", "{}")).toBe("")
+    expect(resolveChatToolPill("", "{}", "client-core, orders-core")).toBe(
+      "client-core, orders-core",
+    )
+    expect(resolveChatToolPill("", "{}", null)).toBe("")
   })
 })

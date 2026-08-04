@@ -12,6 +12,9 @@
 
 import "../boot/load-env.js"
 import { randomUUID } from "node:crypto"
+import { readFileSync } from "node:fs"
+import { dirname, join } from "node:path"
+import { fileURLToPath } from "node:url"
 import type { TraceEntry } from "@mia/shared-types"
 import {
   createThread,
@@ -22,6 +25,24 @@ import {
   saveTraceEntry,
   touchThread,
 } from "../infra/persistence/adapters/sqlite/index.js"
+
+/** Real agent prompts — hundreds of lines for Context / System UI stress. */
+const PROMPTS_DIR = join(dirname(fileURLToPath(import.meta.url)), "../../../agent/prompts")
+
+function loadPrompt(file: string): string {
+  return `${readFileSync(join(PROMPTS_DIR, file), "utf8").trimEnd()}\n`
+}
+
+function richSystemPromptEntries(): TraceEntry[] {
+  return [
+    { kind: "system-prompt", text: loadPrompt("default-system.md") },
+    { kind: "system-prompt", text: loadPrompt("mia-data-persona.md") },
+    { kind: "system-prompt", text: loadPrompt("abi-sync.md") },
+    { kind: "system-prompt", text: loadPrompt("clarification-discipline.md") },
+    { kind: "system-prompt", text: loadPrompt("chart-catalogue.md") },
+    { kind: "system-prompt", text: loadPrompt("big-table-etl.md") },
+  ]
+}
 
 const args = process.argv.slice(2)
 const upnArg = args.find((a) => a.startsWith("--upn="))?.slice(6)
@@ -209,7 +230,7 @@ function buildDirectFourCalls(): TraceEntry[] {
 
   return [
     { kind: "goal", text: goal },
-    { kind: "system-prompt", text: system },
+    ...richSystemPromptEntries(),
     { kind: "tools-resolved", tools },
     {
       kind: "planner-decision",
@@ -363,7 +384,7 @@ function buildPlannerFiveCalls(): TraceEntry[] {
 
   return [
     { kind: "goal", text: goal },
-    { kind: "system-prompt", text: system },
+    ...richSystemPromptEntries(),
     { kind: "tools-resolved", tools },
     { kind: "tools-filtered", dropped: ["delegate_parallel"], kept: 4, dbScore: 0.2, syncTrigger: false, reason: "low utility" },
     { kind: "planning_preflight", mode: "planner-first" },
@@ -689,7 +710,7 @@ function buildKitchenSink(): TraceEntry[] {
 
   return [
     { kind: "goal", text: goal },
-    { kind: "system-prompt", text: system },
+    ...richSystemPromptEntries(),
     { kind: "tools-resolved", tools },
     {
       kind: "tools-filtered",
@@ -1278,7 +1299,7 @@ function buildCancelledMidRun(): TraceEntry[] {
   const u0 = withSystem(system, [msg("user", goal)])
   return [
     { kind: "goal", text: goal },
-    { kind: "system-prompt", text: system },
+    ...richSystemPromptEntries(),
     { kind: "tools-resolved", tools },
     {
       kind: "planner-decision",
@@ -1350,7 +1371,7 @@ function buildFailedToolRun(): TraceEntry[] {
   }
   return [
     { kind: "goal", text: goal },
-    { kind: "system-prompt", text: system },
+    ...richSystemPromptEntries(),
     { kind: "tools-resolved", tools },
     {
       kind: "planner-decision",
@@ -1396,7 +1417,7 @@ function buildAskUserCancelled(): TraceEntry[] {
   const tcAsk = { id: "a-tc-ask", name: "ask_user", arguments: {} as Record<string, unknown> }
   return [
     { kind: "goal", text: goal },
-    { kind: "system-prompt", text: system },
+    ...richSystemPromptEntries(),
     { kind: "tools-resolved", tools },
     {
       kind: "planner-decision",
@@ -1413,7 +1434,7 @@ function buildAskUserCancelled(): TraceEntry[] {
       invocationId: "a-inv-ask",
       toolCallId: "a-tc-ask",
       tool: "ask_user",
-      argsSummary: "{}",
+      argsSummary: "",
       argsFormatted: "{}",
     },
     {
@@ -1455,9 +1476,7 @@ function buildMultiSystemAskUser(): TraceEntry[] {
   const systemJoined = [core, rules, policy].join("\n\n")
   return [
     { kind: "goal", text: goal },
-    { kind: "system-prompt", text: core },
-    { kind: "system-prompt", text: rules },
-    { kind: "system-prompt", text: policy },
+    ...richSystemPromptEntries(),
     { kind: "tools-resolved", tools },
     {
       kind: "planner-decision",
@@ -1560,7 +1579,7 @@ function buildSyncAndFiles(): TraceEntry[] {
   }
   return [
     { kind: "goal", text: goal },
-    { kind: "system-prompt", text: system },
+    ...richSystemPromptEntries(),
     { kind: "tools-resolved", tools },
     {
       kind: "planner-decision",
@@ -1577,7 +1596,7 @@ function buildSyncAndFiles(): TraceEntry[] {
       invocationId: "s-inv-list",
       toolCallId: "s-tc-list",
       tool: "list_sync_definitions",
-      argsSummary: "{}",
+      argsSummary: "",
       argsFormatted: "{}",
     },
     {
@@ -1712,7 +1731,7 @@ function buildPlannerFailThenRecover(): TraceEntry[] {
   const base = withSystem(system, [msg("user", goal)])
   return [
     { kind: "goal", text: goal },
-    { kind: "system-prompt", text: system },
+    ...richSystemPromptEntries(),
     { kind: "tools-resolved", tools },
     {
       kind: "planner-decision",
