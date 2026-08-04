@@ -44,9 +44,16 @@ function headlineSubtitle(node: TraceTreeNode): string | null {
   if (!node.subtitle) return null
   if (node.kind === "call") return null
   const normalized = node.subtitle.trim().toLowerCase()
+  // Badge already says OK / FAIL / Run — never echo status as a subtitle.
   if (
-    node.status === "success" &&
-    (normalized === "done" || normalized === "success" || normalized.startsWith("success"))
+    normalized === "done" ||
+    normalized === "success" ||
+    normalized.startsWith("success") ||
+    normalized === "error" ||
+    normalized === "failed" ||
+    normalized === "running" ||
+    normalized === "proposed" ||
+    normalized === "skipped"
   ) {
     return null
   }

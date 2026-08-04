@@ -7,7 +7,7 @@ import { useState } from "react"
 import { JsonViewer } from "../../components/JsonViewer"
 import { formatMs } from "../../lib/util"
 import type { TracePhaseDetail, TracePhaseNode } from "./build-trace-dag"
-import { TraceErrorBlock } from "./TraceErrorBlock"
+import { TraceToolErrorSection } from "./TraceToolIo"
 import { TracePhaseEventText } from "./TracePhaseEventText"
 import {
   buildTimelineOffsets,
@@ -64,10 +64,10 @@ export function TracePhaseDetail({
       {showErrorSurface ? (
         errorEvents.length > 0 ? (
           errorEvents.map((ev) => (
-            <TraceErrorBlock key={ev.id} text={ev.text} title="ERROR / EXCEPTION TRACE" />
+            <TraceToolErrorSection key={ev.id} text={ev.text} />
           ))
         ) : phase.status === "error" && phase.summary ? (
-          <TraceErrorBlock text={phase.summary} title="ERROR / EXCEPTION TRACE" />
+          <TraceToolErrorSection text={phase.summary} />
         ) : null
       ) : null}
 

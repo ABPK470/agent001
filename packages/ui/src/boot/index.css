@@ -5560,6 +5560,16 @@ button.trace-tree-status-pill:hover {
 
 .trace-detail-accordion__label {
   min-width: 0;
+  flex: 1;
+}
+
+.trace-detail-accordion__meta {
+  flex-shrink: 0;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted, var(--color-text-muted));
 }
 
 .trace-detail-accordion__body {
@@ -6110,11 +6120,18 @@ button.trace-tree-status-pill:hover {
   margin-bottom: 0.35rem;
 }
 
-.trace-tool-io__schema {
-  margin-top: 0.5rem;
+/* Keeps Result/Error header row height when meta is absent. */
+.trace-tool-io__head-meta-slot {
+  display: inline-flex;
+  height: 1.25rem;
+  min-width: 1px;
 }
 
-.trace-tool-io__result {
+.trace-tool-io__schema {
+  margin-top: 0.75rem;
+}
+
+.trace-tool-io__section {
   margin-top: 0.75rem;
 }
 
@@ -6123,6 +6140,14 @@ button.trace-tree-status-pill:hover {
   font-weight: 700;
   letter-spacing: 0.05em;
   margin-bottom: 0;
+}
+
+/* Schema accordion: muted peer bar — never a primary section header. */
+.trace-tool-io__schema .trace-detail-accordion {
+  padding: 0.5rem 0;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--text-muted, var(--color-text-muted));
 }
 
 .trace-schema-summary {

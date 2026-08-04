@@ -536,38 +536,199 @@ function buildContextNodes(
   }
 }
 
-function annotateBranchErrors(index: TraceTreeIndex): void {
-  const { nodes, childrenByParent } = index
+/**
+ * Branch-error flags from the full DAG — never from the fold/search-visible
+ * tree. Folded children are omitted from the index; walking that index made
+ * parent badges flip OK↔Err as the user expanded or selected into a branch.
+ */
+function collectBranchErrorScopeIds(dag: TraceDag): Set<string> {
+  const out = new Set<string>()
 
-  function descendantHasError(scopeId: string): boolean {
-    const node = index.byScopeId.get(scopeId)
-    if (!node) return false
-    if (node.hasError || node.status === "failed") return true
-    const kids = childrenByParent.get(scopeId) ?? []
-    return kids.some((kid) => descendantHasError(kid))
+  function mark(ids: readonly string[]) {
+    for (const id of ids) out.add(id)
   }
 
-  for (const node of nodes) {
+  function walkTools(
+    tools: TraceToolCall[],
+    parentScopeIds: readonly string[],
+  ): boolean {
+    let failed = false
+    for (const tool of tools) {
+      if (tool.status === "error") failed = true
+    }
+    if (failed) mark(parentScopeIds)
+    return failed
+  }
+
+  function walkWork(work: TraceWorkNode, ancestors: readonly string[]): boolean {
+    const toolFailed = walkTools(work.tools, [...ancestors, work.id])
+    const failed = toolFailed || workStatus(work) === "failed"
+    if (failed) mark(ancestors)
+    return failed
+  }
+
+  function walkCall(call: TraceCallNode, ancestors: readonly string[]): boolean {
+    const callId = `call:${call.index}`
+    const recvId = `received:${call.index}`
+    const toolFailed = walkTools(call.toolBranches, [...ancestors, callId, recvId])
+    if (toolFailed) mark(ancestors)
+    return toolFailed
+  }
+
+  function walkPhase(phase: TracePhaseNode, ancestors: readonly string[]): boolean {
+    let childFailed = false
+    for (const child of phase.children ?? []) {
+      if (child.kind === "call") {
+        const call = dag.calls[child.callIndex]
+        if (call && walkCall(call, [...ancestors, phase.id])) childFailed = true
+      } else if (child.kind === "work") {
+        if (walkWork(child.work, [...ancestors, phase.id])) childFailed = true
+      } else if (walkPhase(child.phase, [...ancestors, phase.id])) {
+        childFailed = true
+      }
+    }
+    const failed = childFailed || phase.status === "error"
+    if (failed) mark(ancestors)
+    if (childFailed) out.add(phase.id)
+    return failed
+  }
+
+  for (const entry of dag.spine) {
+    if (entry.kind === "phase") walkPhase(entry.phase, [])
+    else if (entry.kind === "work") walkWork(entry.work, [])
+    else {
+      const call = dag.calls[entry.callIndex]
+      if (call) walkCall(call, [])
+    }
+  }
+  return out
+}
+
+type FailedHint = { name: string; subtitle: string | null; scopeId: string }
+
+function failedToolHint(
+  tools: TraceToolCall[],
+  scopeFor: (tool: TraceToolCall) => string,
+): FailedHint | null {
+  for (const tool of tools) {
+    if (tool.status === "error") {
+      return {
+        name: tool.name,
+        subtitle: tool.status ?? "error",
+        scopeId: scopeFor(tool),
+      }
+    }
+  }
+  return null
+}
+
+function failedWorkHint(work: TraceWorkNode): FailedHint | null {
+  const tool = failedToolHint(work.tools, (t) => workToolOpenKey(work.id, t.id))
+  if (tool) return tool
+  if (workStatus(work) === "failed") {
+    const note = work.notes.find((n) => n.tone === "error")
+    return {
+      name: work.title,
+      subtitle: note?.text ?? work.summary,
+      scopeId: work.id,
+    }
+  }
+  return null
+}
+
+function failedCallHint(call: TraceCallNode): FailedHint | null {
+  return failedToolHint(call.toolBranches, (t) => callToolOpenKey(call.index, t.id))
+}
+
+function failedPhaseHint(dag: TraceDag, phase: TracePhaseNode): FailedHint | null {
+  for (const child of phase.children ?? []) {
+    if (child.kind === "call") {
+      const call = dag.calls[child.callIndex]
+      const hit = call ? failedCallHint(call) : null
+      if (hit) return hit
+    } else if (child.kind === "work") {
+      const hit = failedWorkHint(child.work)
+      if (hit) return hit
+    } else {
+      const hit = failedPhaseHint(dag, child.phase)
+      if (hit) return hit
+    }
+  }
+  return null
+}
+
+function findPhaseById(phase: TracePhaseNode, id: string): TracePhaseNode | null {
+  if (phase.id === id) return phase
+  for (const child of phase.children ?? []) {
+    if (child.kind === "phase") {
+      const found = findPhaseById(child.phase, id)
+      if (found) return found
+    }
+  }
+  return null
+}
+
+function findWorkById(dag: TraceDag, workId: string): TraceWorkNode | null {
+  for (const entry of dag.spine) {
+    if (entry.kind === "work" && entry.work.id === workId) return entry.work
+    if (entry.kind === "phase") {
+      const found = findWorkInPhase(entry.phase, workId)
+      if (found) return found
+    }
+  }
+  return null
+}
+
+function findWorkInPhase(phase: TracePhaseNode, workId: string): TraceWorkNode | null {
+  for (const child of phase.children ?? []) {
+    if (child.kind === "work" && child.work.id === workId) return child.work
+    if (child.kind === "phase") {
+      const found = findWorkInPhase(child.phase, workId)
+      if (found) return found
+    }
+  }
+  return null
+}
+
+/** First failed leaf under a scope — walks the DAG, not the folded tree. */
+function firstFailedHintFromDag(dag: TraceDag, scopeId: string): FailedHint | null {
+  if (scopeId.startsWith("call:")) {
+    const call = dag.calls[Number(scopeId.slice("call:".length))]
+    return call ? failedCallHint(call) : null
+  }
+  if (scopeId.startsWith("received:")) {
+    const call = dag.calls[Number(scopeId.slice("received:".length))]
+    return call ? failedCallHint(call) : null
+  }
+  if (scopeId.startsWith("sent:")) return null
+
+  const work = findWorkById(dag, scopeId)
+  if (work) return failedWorkHint(work)
+
+  for (const entry of dag.spine) {
+    if (entry.kind === "phase") {
+      const phase = findPhaseById(entry.phase, scopeId)
+      if (phase) return failedPhaseHint(dag, phase)
+    } else if (entry.kind === "call") {
+      const call = dag.calls[entry.callIndex]
+      if (call && `call:${call.index}` === scopeId) return failedCallHint(call)
+    }
+  }
+  return null
+}
+
+function annotateBranchErrors(index: TraceTreeIndex, dag: TraceDag): void {
+  const branchErrors = collectBranchErrorScopeIds(dag)
+  for (const node of index.nodes) {
     if (!node.hasChildren) continue
-    node.branchHasError = descendantHasError(node.scopeId)
+    node.branchHasError = branchErrors.has(node.scopeId)
   }
 }
 
-function annotateFailureSubtitles(index: TraceTreeIndex): void {
-  function firstFailedDescendant(scopeId: string): TraceTreeNode | null {
-    for (const kid of index.childrenByParent.get(scopeId) ?? []) {
-      const node = index.byScopeId.get(kid)
-      if (!node) continue
-      if (node.hasError || node.status === "failed") return node
-      const deeper = firstFailedDescendant(kid)
-      if (deeper) return deeper
-    }
-    return null
-  }
-
+function annotateFailureSubtitles(index: TraceTreeIndex, dag: TraceDag): void {
   for (const node of index.nodes) {
     if (!node.branchHasError || node.hasError) continue
-    const failed = firstFailedDescendant(node.scopeId)
+    const failed = firstFailedHintFromDag(dag, node.scopeId)
     if (!failed) continue
     const hint = failed.subtitle?.trim() || failed.name
     const normalized = node.subtitle?.trim().toLowerCase()
@@ -608,32 +769,37 @@ export function buildTraceTreeIndex(
     childrenByParent,
     maxDurationMs: maxDurationMs || dag.stats.totalDuration || 1,
   }
-  annotateBranchErrors(index)
-  annotateFailureSubtitles(index)
+  annotateBranchErrors(index, dag)
+  annotateFailureSubtitles(index, dag)
   return index
 }
 
-/** Deepest failing descendant for one-click root-cause jump. */
+/**
+ * Deepest failing scope under `scopeId`. Uses the visible index when the
+ * branch is open; otherwise resolves from the DAG (fold-independent).
+ */
 export function findDeepestFailure(
   index: TraceTreeIndex,
   scopeId: string,
+  dag?: TraceDag,
 ): string | null {
   const node = index.byScopeId.get(scopeId)
   if (!node) return null
 
-  function walk(id: string): string {
+  function walkIndex(id: string): string | null {
     const current = index.byScopeId.get(id)
-    if (!current) return id
+    if (!current) return null
     const kids = index.childrenByParent.get(id) ?? []
-    let deepest = id
-    let deepestDepth = current.depth
+    let deepest: string | null = null
+    let deepestDepth = -1
     for (const kid of kids) {
       const child = index.byScopeId.get(kid)
       if (!child) continue
       const failed = child.hasError || child.status === "failed"
       const branchFailed = child.branchHasError
       if (!failed && !branchFailed) continue
-      const candidate = walk(kid)
+      const candidate = walkIndex(kid)
+      if (!candidate) continue
       const candidateNode = index.byScopeId.get(candidate)
       if (candidateNode && candidateNode.depth >= deepestDepth) {
         deepest = candidate
@@ -646,20 +812,101 @@ export function findDeepestFailure(
     return deepest
   }
 
-  return walk(scopeId)
+  const fromIndex = walkIndex(scopeId)
+  if (fromIndex) return fromIndex
+  if (!dag) return null
+  return firstFailedHintFromDag(dag, scopeId)?.scopeId ?? null
 }
 
 export function resolveSelectionScopeId(
   index: TraceTreeIndex,
   scopeId: string,
   jumpToRootCause: boolean,
+  dag?: TraceDag,
 ): string {
   const node = index.byScopeId.get(scopeId)
   if (!node) return scopeId
   if (jumpToRootCause && node.branchHasError && !node.hasError) {
-    return findDeepestFailure(index, scopeId) ?? scopeId
+    return findDeepestFailure(index, scopeId, dag) ?? scopeId
   }
   return scopeId
+}
+
+/** Open every ancestor so a jumped-to failure is present in the tree index. */
+export function openStateRevealingScope(
+  dag: TraceDag,
+  prev: OpenState,
+  targetScopeId: string,
+): OpenState {
+  const next: OpenState = {
+    ...prev,
+    calls: new Set(prev.calls),
+    sent: new Set(prev.sent),
+    received: new Set(prev.received),
+    messages: new Set(prev.messages),
+    tools: new Set(prev.tools),
+    phases: new Set(prev.phases),
+    work: new Set(prev.work),
+  }
+
+  function revealInPhase(phase: TracePhaseNode): boolean {
+    let hit = phase.id === targetScopeId
+    for (const child of phase.children ?? []) {
+      if (child.kind === "phase" && revealInPhase(child.phase)) {
+        hit = true
+      } else if (child.kind === "work") {
+        if (
+          child.work.id === targetScopeId ||
+          child.work.tools.some((t) => workToolOpenKey(child.work.id, t.id) === targetScopeId)
+        ) {
+          next.work.add(child.work.id)
+          hit = true
+        }
+      } else if (child.kind === "call") {
+        const call = dag.calls[child.callIndex]
+        if (!call) continue
+        if (
+          `call:${call.index}` === targetScopeId ||
+          `sent:${call.index}` === targetScopeId ||
+          `received:${call.index}` === targetScopeId ||
+          call.toolBranches.some((t) => callToolOpenKey(call.index, t.id) === targetScopeId)
+        ) {
+          next.calls.add(call.index)
+          next.sent.add(call.index)
+          next.received.add(call.index)
+          hit = true
+        }
+      }
+    }
+    if (hit) next.phases.add(phase.id)
+    return hit
+  }
+
+  for (const entry of dag.spine) {
+    if (entry.kind === "phase") revealInPhase(entry.phase)
+    else if (entry.kind === "work") {
+      if (
+        entry.work.id === targetScopeId ||
+        entry.work.tools.some((t) => workToolOpenKey(entry.work.id, t.id) === targetScopeId)
+      ) {
+        next.work.add(entry.work.id)
+      }
+    } else {
+      const call = dag.calls[entry.callIndex]
+      if (!call) continue
+      if (
+        `call:${call.index}` === targetScopeId ||
+        `sent:${call.index}` === targetScopeId ||
+        `received:${call.index}` === targetScopeId ||
+        call.toolBranches.some((t) => callToolOpenKey(call.index, t.id) === targetScopeId)
+      ) {
+        next.calls.add(call.index)
+        next.sent.add(call.index)
+        next.received.add(call.index)
+      }
+    }
+  }
+  return next
 }
 
 export function defaultSelectedScopeId(index: TraceTreeIndex): string | null {

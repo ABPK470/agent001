@@ -2,12 +2,13 @@
  * Work detail — tool runs, SQL validation, error notes.
  */
 
+import type { ReactNode } from "react"
+import { formatMs } from "../../lib/util"
 import type { TraceDag, TraceToolCall, TraceWorkNode } from "./build-trace-dag"
 import { callToolOpenKey, workToolOpenKey } from "./open-state"
 import { SqlQualityRow } from "./TraceRows"
 import { ExpandableText } from "./TraceExpandable"
-import { TraceErrorBlock } from "./TraceErrorBlock"
-import { TraceToolIo } from "./TraceToolIo"
+import { TraceToolErrorSection, TraceToolIo, TraceToolSection } from "./TraceToolIo"
 import { TraceAskUserInteraction } from "./TraceAskUserInteraction"
 import {
   askUserConsumedNoteIds,
@@ -33,14 +34,34 @@ function findWorkTool(
   return null
 }
 
+function SqlValidationBlock({ work }: { work: TraceWorkNode }) {
+  if (work.sqlQuality.length === 0) return null
+  const durationMs = work.sqlQuality.reduce(
+    (max, entry) => Math.max(max, entry.durationMs ?? 0),
+    0,
+  )
+  return (
+    <TraceToolSection
+      label="SQL validation"
+      meta={durationMs > 0 ? formatMs(durationMs) : null}
+    >
+      {work.sqlQuality.map((entry, i) => (
+        <SqlQualityRow key={`${entry.toolCallId}-${i}`} entry={entry} />
+      ))}
+    </TraceToolSection>
+  )
+}
+
 function AskUserToolDetail({
   dag,
   work,
   tool,
+  trailing,
 }: {
   dag: TraceDag
   work: TraceWorkNode
   tool: TraceToolCall
+  trailing?: React.ReactNode
 }) {
   const isError = tool.status === "error"
   const question = extractAskUserQuestion(tool.arguments, work.notes)
@@ -55,13 +76,9 @@ function AskUserToolDetail({
         argumentsValue={tool.arguments}
         layout="developer"
         hideResult
+        errorText={isError ? tool.resultText : null}
+        trailing={trailing}
       />
-      {isError && tool.resultText ? (
-        <div className="trace-detail-section">
-          <div className="trace-detail-section__label">Error</div>
-          <TraceErrorBlock text={tool.resultText} title="ERROR / EXCEPTION TRACE" />
-        </div>
-      ) : null}
     </>
   )
 }
@@ -70,9 +87,18 @@ function renderWorkTool(
   dag: TraceDag,
   work: TraceWorkNode,
   tool: TraceToolCall,
+  trailing: ReactNode,
 ) {
   if (isAskUserTool(tool)) {
-    return <AskUserToolDetail key={tool.id} dag={dag} work={work} tool={tool} />
+    return (
+      <AskUserToolDetail
+        key={tool.id}
+        dag={dag}
+        work={work}
+        tool={tool}
+        trailing={trailing}
+      />
+    )
   }
 
   const isError = tool.status === "error"
@@ -83,10 +109,9 @@ function renderWorkTool(
         toolName={tool.name}
         argumentsValue={tool.arguments}
         resultText={isError ? null : tool.resultText}
+        errorText={isError ? tool.resultText : null}
+        trailing={trailing}
       />
-      {isError && tool.resultText ? (
-        <TraceErrorBlock text={tool.resultText} title="ERROR / EXCEPTION TRACE" />
-      ) : null}
     </div>
   )
 }
@@ -111,7 +136,12 @@ export function TraceWorkDetail({
     if (isAskUserTool(tool)) {
       return (
         <div className="trace-detail-body">
-          <AskUserToolDetail dag={dag} work={work} tool={tool} />
+          <AskUserToolDetail
+            dag={dag}
+            work={work}
+            tool={tool}
+            trailing={<SqlValidationBlock work={work} />}
+          />
         </div>
       )
     }
@@ -124,13 +154,9 @@ export function TraceWorkDetail({
           toolName={tool.name}
           argumentsValue={tool.arguments}
           resultText={isError ? null : tool.resultText}
+          errorText={isError ? tool.resultText : null}
+          trailing={<SqlValidationBlock work={work} />}
         />
-        {isError && tool.resultText ? (
-          <div className="trace-detail-section">
-            <div className="trace-detail-section__label">Error / result</div>
-            <TraceErrorBlock text={tool.resultText} title="ERROR / EXCEPTION TRACE" />
-          </div>
-        ) : null}
       </div>
     )
   }
@@ -138,17 +164,17 @@ export function TraceWorkDetail({
   return (
     <div className="trace-detail-body">
       {errorNotes.map((note) => (
-        <TraceErrorBlock key={note.id} text={note.text} />
+        <TraceToolErrorSection key={note.id} text={note.text} />
       ))}
-      {work.tools.map((t) => renderWorkTool(dag, work, t))}
-      {work.sqlQuality.length > 0 && (
-        <div className="trace-detail-section">
-          <div className="trace-detail-section__label">SQL validation</div>
-          {work.sqlQuality.map((entry, i) => (
-            <SqlQualityRow key={`${entry.toolCallId}-${i}`} entry={entry} />
-          ))}
-        </div>
+      {work.tools.map((t, i) =>
+        renderWorkTool(
+          dag,
+          work,
+          t,
+          i === work.tools.length - 1 ? <SqlValidationBlock work={work} /> : null,
+        ),
       )}
+      {work.tools.length === 0 ? <SqlValidationBlock work={work} /> : null}
       {otherNotes.map((note) => (
         <div key={note.id} className="trace-detail-section">
           <div className="trace-detail-section__label">{note.label}</div>

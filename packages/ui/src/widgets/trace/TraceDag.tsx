@@ -47,6 +47,7 @@ import {
   buildTraceTreeIndex,
   defaultSelectedScopeId,
   findDeepestFailure,
+  openStateRevealingScope,
   resolveSelectionScopeId,
   type TraceTreeNode,
 } from "./trace-tree-index"
@@ -368,14 +369,19 @@ export function TraceDag({
   }
 
   function onSelectScope(scopeId: string, jumpToRootCause = false) {
-    const resolved = resolveSelectionScopeId(treeIndex, scopeId, jumpToRootCause)
+    const resolved = resolveSelectionScopeId(treeIndex, scopeId, jumpToRootCause, dag)
+    if (jumpToRootCause && resolved !== scopeId) {
+      setOpenState((prev) => openStateRevealingScope(dag, prev, resolved))
+    }
     setSelectedScopeId(resolved)
     setPlaygroundOpen(false)
   }
 
   function onJumpToRootCause(scopeId: string) {
-    const deepest = findDeepestFailure(treeIndex, scopeId)
-    if (deepest) setSelectedScopeId(deepest)
+    const deepest = findDeepestFailure(treeIndex, scopeId, dag)
+    if (!deepest) return
+    setOpenState((prev) => openStateRevealingScope(dag, prev, deepest))
+    setSelectedScopeId(deepest)
   }
 
   function onFoldModeChange(mode: FoldMode) {

@@ -3,7 +3,6 @@
  */
 
 import type { TraceDag } from "./build-trace-dag"
-import { TraceErrorBlock } from "./TraceErrorBlock"
 import { TraceToolIo } from "./TraceToolIo"
 import { TraceAskUserInteraction } from "./TraceAskUserInteraction"
 import {
@@ -42,13 +41,8 @@ export function TraceToolDetail({
           argumentsValue={tool.arguments}
           layout="developer"
           hideResult
+          errorText={isError ? tool.resultText : null}
         />
-        {isError && tool.resultText ? (
-          <div className="trace-detail-section">
-            <div className="trace-detail-section__label">Error</div>
-            <TraceErrorBlock text={tool.resultText} title="ERROR / EXCEPTION TRACE" />
-          </div>
-        ) : null}
       </div>
     )
   }
@@ -60,14 +54,8 @@ export function TraceToolDetail({
         toolName={tool.name}
         argumentsValue={tool.arguments}
         resultText={isError ? null : tool.resultText}
-        resultLabel={isError ? undefined : "Result"}
+        errorText={isError ? tool.resultText : null}
       />
-      {isError && tool.resultText ? (
-        <div className="trace-detail-section">
-          <div className="trace-detail-section__label">Error / result</div>
-          <TraceErrorBlock text={tool.resultText} title="ERROR / EXCEPTION TRACE" />
-        </div>
-      ) : null}
     </div>
   )
 }
