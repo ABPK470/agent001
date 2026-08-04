@@ -16,6 +16,7 @@ import {
   moveSplitPaneDrag,
   type SplitPaneDragState,
 } from "../../lib/split-pane-drag"
+import { ReviewTreeFoldToggle } from "../../components/review"
 import { fmtTokens, formatMs } from "../../lib/util"
 import { SegmentToggle } from "../entity-registry/SegmentToggle"
 import {
@@ -539,13 +540,9 @@ export function TraceDag({
               {searchStatus ? (
                 <BrowseCount filtered={0} total={0} text={searchStatus} />
               ) : null}
-              <SegmentToggle
-                value={openState.foldMode}
-                options={[
-                  { value: "expanded", label: "Expanded" },
-                  { value: "collapsed", label: "Collapsed" },
-                ]}
-                onChange={onFoldModeChange}
+              <ReviewTreeFoldToggle
+                foldMode={openState.foldMode}
+                onFoldModeChange={onFoldModeChange}
                 ariaLabel="Expand or collapse all trace scopes"
               />
               <TraceExportMenu

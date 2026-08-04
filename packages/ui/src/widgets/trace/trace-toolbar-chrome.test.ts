@@ -93,14 +93,14 @@ describe("Trace toolbar structure + behavior wiring", () => {
     expect(dag).toMatch(/viewMode === "waterfall"/)
   })
 
-  it("wires Expanded / Collapsed fold toggle to open-state foldMode", () => {
+  it("wires fold-all icon toggle to open-state foldMode", () => {
     const dag = read(dagPath)
     const openState = read(openStatePath)
-    expect(dag).toContain('{ value: "expanded", label: "Expanded" }')
-    expect(dag).toContain('{ value: "collapsed", label: "Collapsed" }')
+    expect(dag).toContain("ReviewTreeFoldToggle")
     expect(dag).toContain('ariaLabel="Expand or collapse all trace scopes"')
     expect(dag).toContain("onFoldModeChange")
     expect(dag).toContain("openState.foldMode")
+    expect(dag).not.toContain('{ value: "expanded", label: "Expanded" }')
     expect(openState).toContain("openStateForFoldMode")
     expect(openState).toContain("expandedOpenState")
     expect(openState).toContain("collapsedOpenState")
@@ -114,7 +114,7 @@ describe("Trace toolbar structure + behavior wiring", () => {
     expect(dag).toMatch(/onClear=\{\(\) => setSearch\(""\)\}/)
   })
 
-  it("places export download as a trailing peer after the fold segment", () => {
+  it("places export download as a trailing peer after the fold icon", () => {
     const dag = read(dagPath)
     const menu = read(exportPath)
     expect(dag).toMatch(

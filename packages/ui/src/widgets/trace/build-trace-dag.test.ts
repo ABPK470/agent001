@@ -123,9 +123,12 @@ describe("buildTraceDag", () => {
     expect(c0.toolBranches[0]?.status).toBe("proposed")
     expect(c0.toolBranches[0]?.resultText).toBeUndefined()
 
-    const work = dag.spine.find((e) => e.kind === "work")
+    // Direct loop chronology: Call → Work → Call (not Call×N then Work×N).
+    expect(dag.spine.map((e) => e.kind)).toEqual(["call", "work", "call"])
+    const work = dag.spine[1]
     expect(work?.kind).toBe("work")
     if (work?.kind === "work") {
+      expect(work.work.afterCallIndex).toBe(0)
       expect(work.work.tools[0]?.resultText).toBe("1")
       expect(work.work.tools[0]?.status).toBe("done")
     }
@@ -145,6 +148,92 @@ describe("buildTraceDag", () => {
     expect(dag.stats.totalCostUsd).toBeGreaterThan(0)
     expect(dag.calls[0]?.startOffsetMs).toBe(0)
     expect(dag.calls[1]?.startOffsetMs).toBe(200)
+  })
+
+  it("interleaves Call → Work on direct multi-tool loops (not Call batch then Work batch)", () => {
+    const dag = buildTraceDag([
+      {
+        kind: "planner-decision",
+        score: 1,
+        shouldPlan: false,
+        route: "direct",
+        reason: "simple_dialogue",
+      },
+      llmRequest(0),
+      llmResponse(0, {
+        toolCalls: [{ id: "tc1", name: "list_directory", arguments: { path: "." } }],
+      }),
+      {
+        kind: "tool-call",
+        invocationId: "inv1",
+        toolCallId: "tc1",
+        tool: "list_directory",
+        argsSummary: ".",
+        argsFormatted: '{"path":"."}',
+      },
+      {
+        kind: "tool-result",
+        invocationId: "inv1",
+        toolCallId: "tc1",
+        text: "ok",
+      },
+      llmRequest(1),
+      llmResponse(1, {
+        toolCalls: [{ id: "tc2", name: "query_mssql", arguments: { sql: "select 1" } }],
+      }),
+      {
+        kind: "tool-call",
+        invocationId: "inv2",
+        toolCallId: "tc2",
+        tool: "query_mssql",
+        argsSummary: "sql",
+        argsFormatted: '{"sql":"select 1"}',
+      },
+      {
+        kind: "tool-result",
+        invocationId: "inv2",
+        toolCallId: "tc2",
+        text: "1",
+      },
+      llmRequest(2),
+      llmResponse(2, {
+        toolCalls: [{ id: "tc3", name: "export_query_to_file", arguments: { path: "out.csv" } }],
+      }),
+      {
+        kind: "tool-call",
+        invocationId: "inv3",
+        toolCallId: "tc3",
+        tool: "export_query_to_file",
+        argsSummary: "out.csv",
+        argsFormatted: '{"path":"out.csv"}',
+      },
+      {
+        kind: "tool-result",
+        invocationId: "inv3",
+        toolCallId: "tc3",
+        text: "wrote",
+      },
+      llmRequest(3),
+      llmResponse(3, { content: "Done.", toolCalls: [] }),
+    ])
+
+    expect(dag.spine.filter((e) => e.kind === "phase")).toHaveLength(0)
+    expect(dag.spine.map((e) => e.kind)).toEqual([
+      "call",
+      "work",
+      "call",
+      "work",
+      "call",
+      "work",
+      "call",
+    ])
+    const works = dag.spine.filter((e) => e.kind === "work")
+    expect(works.map((e) => (e.kind === "work" ? e.work.afterCallIndex : -1))).toEqual([0, 1, 2])
+    expect(works.map((e) => (e.kind === "work" ? e.work.tools[0]?.name : null))).toEqual([
+      "list_directory",
+      "query_mssql",
+      "export_query_to_file",
+    ])
   })
 
   it("attaches sql quality to the matching call and Work card", () => {

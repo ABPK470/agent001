@@ -1,6 +1,6 @@
 /**
  * Trace toolbar download menu — same export paths as `/trace` slash commands.
- * Peer of the Expanded/Collapsed toggle — bordered icon chrome, not inside the track.
+ * Peer of the fold-all icon toggle — bordered icon chrome, not inside a segment track.
  */
 
 import { Download, FileJson, FileText } from "lucide-react"

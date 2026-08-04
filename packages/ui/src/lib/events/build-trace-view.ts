@@ -1191,6 +1191,12 @@ export function buildTraceDag(trace: TraceEntry[], opts?: BuildTraceDagOpts): Tr
   }
 
   function pushCall(call: TraceCallNode) {
+    // Close Work for the previous Call before the next Call lands — otherwise
+    // direct multi-iteration loops batch as Call×N then Work×N (EOF flush).
+    // Planner step boundaries still flush; this keeps Call → Work → Call order
+    // when several Calls share one step (or there is no step at all).
+    if (lastCallIndex >= 0) flushWorkForCall(lastCallIndex)
+
     const owner = resolveStepOwner(call.stepName)
     if (owner && isStepFamily(owner.family)) {
       owner.children = owner.children ?? []

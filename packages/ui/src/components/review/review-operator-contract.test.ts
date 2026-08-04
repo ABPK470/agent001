@@ -52,11 +52,14 @@ describe("operator review kit contracts", () => {
     expect(css).toMatch(/\.review-tree-row\.is-selected::before\s*\{[^}]*left:\s*0/s)
   })
 
-  it("fold toggle uses SegmentToggle", () => {
+  it("fold toggle is a ListChevrons icon button (not Expanded/Collapsed segment)", () => {
     const src = readFileSync(foldTogglePath, "utf8")
-    expect(src).toContain("SegmentToggle")
-    expect(src).toContain("Expanded")
-    expect(src).toContain("Collapsed")
+    expect(src).toContain("ListChevronsDownUp")
+    expect(src).toContain("ListChevronsUpDown")
+    expect(src).toContain("widget-toolbar__icon-btn")
+    expect(src).not.toContain("SegmentToggle")
+    expect(src).not.toContain('label: "Expanded"')
+    expect(src).not.toContain('label: "Collapsed"')
   })
 
   it("payload block uses JsonViewer embedded inline mode", () => {

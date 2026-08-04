@@ -14214,15 +14214,62 @@ button.trace-tree-status-pill:hover {
   pointer-events: none;
 }
 
-/* ── Chat ↔ platform shell crossfade ───────────────────────────────── */
+/* ── Chat ↔ workspace mode switch ────────────────────────────────────
+   One shell stays mounted; an ASCII curtain (compositor transform only)
+   slides off left → right while the mode swap happens underneath. */
 .app-shell-view {
-  opacity: 1;
-  transition: opacity 280ms cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
 }
 
-.app-shell-view--fading {
-  opacity: 0;
-  pointer-events: none;
+.app-shell-stack--sweeping {
+  overflow: hidden;
+}
+
+.shell-mode-sweep {
+  contain: strict;
+  isolation: isolate;
+}
+
+.shell-mode-sweep-curtain {
+  position: absolute;
+  inset: 0;
+  background-color: var(--bg);
+  will-change: transform;
+  animation: shell-sweep-curtain 520ms cubic-bezier(0.65, 0, 0.35, 1) forwards;
+}
+
+.shell-mode-sweep-curtain .intro3-ascii-field {
+  opacity: 1;
+}
+
+.shell-mode-sweep-curtain::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  width: 2px;
+  background: var(--accent);
+  box-shadow:
+    0 0 16px color-mix(in srgb, var(--accent) 50%, transparent),
+    0 0 32px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
+@keyframes shell-sweep-curtain {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(100%, 0, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shell-mode-sweep-curtain {
+    animation: none;
+    transform: translate3d(100%, 0, 0);
+  }
 }
 
 /*
@@ -14244,12 +14291,6 @@ button.trace-tree-status-pill:hover {
 }
 .viewing-as-back-to-me:hover {
   background: color-mix(in srgb, var(--viewing-as) 22%, transparent);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .app-shell-view {
-    transition-duration: 0ms;
-  }
 }
 
 /* ── Stage (Canvas-equivalent) ──────────────────────────────────────── */

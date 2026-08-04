@@ -38,6 +38,11 @@ const UPDATE_FRACTION = 0.020       // ~2% of cells repaint per frame
 const NOISE_T_PER_SEC = 0.32        // how fast the noise field drifts
 const INK_OPACITY = 0.18            // applied to var(--text), works in both themes
 const BOOST_INK_OPACITY = 0.34
+/** Chat ↔ workspace — field breathes hotter; never mounts a second canvas. */
+const SHELL_PULSE_INK_OPACITY = 0.30
+const SHELL_PULSE_UPDATE_FRACTION = 0.072
+const SHELL_PULSE_PALETTE_POW = 1.18
+const SHELL_PULSE_NOISE_T_MULT = 1.45
 /** Viewing as someone else — denser field in Viewing as ink (light blue / dark accent). */
 const VIEWING_AS_INK_OPACITY = 0.78
 
@@ -212,8 +217,10 @@ export function IntroAsciiField({
     // and more active around the pill, not as a new layer.
     const isLoginSurface = surface === "login"
     // Viewing as: denser glyphs + stronger Viewing as ink (see resolveInk).
-    const palettePow = boost ? 1.0 : viewingAsField ? 1.05 : 2.0
-    const updateFraction = boost ? 0.10 : viewingAsField ? 0.055 : UPDATE_FRACTION
+    // palettePow / updateFraction are resolved per frame — shell switch
+    // pulse adjusts the live field in place (no overlay mount).
+    let fieldPalettePow = boost ? 1.0 : viewingAsField ? 1.05 : 2.0
+    let fieldUpdateFraction = boost ? 0.10 : viewingAsField ? 0.055 : UPDATE_FRACTION
     // In boost mode the field is mounted fresh per entering, so let
     // it materialize per-cell like the bg field does on first load.
     // Faster duration + pure-jitter ordering (no center bias) so the
@@ -225,7 +232,7 @@ export function IntroAsciiField({
     const revealLeadInMs = boost ? 0 : isLoginSurface ? 80 : 0
     const revealSoftEdgeMs = isLoginSurface ? 180 : REVEAL_SOFT_EDGE_MS
 
-    function resolveInk(): string {
+    function resolveInk(shellPulse = false): string {
       if (viewingAsFieldRef.current) {
         return readCssColorInk(
           "--viewing-as",
@@ -233,10 +240,13 @@ export function IntroAsciiField({
           `rgba(59, 69, 255, ${VIEWING_AS_INK_OPACITY})`,
         )
       }
-      return readInk(boost ? BOOST_INK_OPACITY : INK_OPACITY)
+      if (boost) return readInk(BOOST_INK_OPACITY)
+      if (shellPulse) return readInk(SHELL_PULSE_INK_OPACITY)
+      return readInk(INK_OPACITY)
     }
 
     let ink = resolveInk()
+    let shellPulseActive = false
     let surfaceW = 0
     let surfaceH = 0
     let cols = 0
@@ -268,6 +278,40 @@ export function IntroAsciiField({
     // shared startTs is only used for noise sampling so multiple
     // instances line up exactly.
     const revealStartTs = performance.now()
+
+    function readShellSwitchPulse(): boolean {
+      if (boost || viewingAsFieldRef.current || reduced) return false
+      const root = canvas!.closest(".app-shell-view")
+      if (!root) return false
+      return root.querySelector(".app-shell-view--sweeping") !== null
+    }
+
+    function syncFieldIntensity(): void {
+      const shellPulse = readShellSwitchPulse()
+      if (shellPulse !== shellPulseActive) {
+        shellPulseActive = shellPulse
+        forceFullRepaint = true
+      }
+      fieldPalettePow = boost
+        ? 1.0
+        : shellPulse
+          ? SHELL_PULSE_PALETTE_POW
+          : viewingAsFieldRef.current
+            ? 1.05
+            : 2.0
+      fieldUpdateFraction = boost
+        ? 0.10
+        : shellPulse
+          ? SHELL_PULSE_UPDATE_FRACTION
+          : viewingAsFieldRef.current
+            ? 0.055
+            : UPDATE_FRACTION
+      const nextInk = resolveInk(shellPulse)
+      if (nextInk !== ink) {
+        ink = nextInk
+        forceFullRepaint = true
+      }
+    }
 
     function pointerFalloff(cx: number, cy: number): number {
       if (!pointerLive || pointerGain < 0.02) return 0
@@ -387,7 +431,7 @@ export function IntroAsciiField({
         const startC = isMirroredHomeSurface(surface) ? Math.floor(cols * 0.5) : 0
         for (let c = startC; c < cols; c++) {
           const v = surfaceNoise(surface, c, r, cols, rows, t)
-          const idx = Math.min(PALETTE.length - 1, Math.floor(Math.pow(v, palettePow) * PALETTE.length))
+          const idx = Math.min(PALETTE.length - 1, Math.floor(Math.pow(v, fieldPalettePow) * PALETTE.length))
           cells[r * cols + c] = idx
           const ch = PALETTE[idx]!
           const alpha = cellAlpha(c, r, performance.now())
@@ -463,7 +507,10 @@ export function IntroAsciiField({
       if (now - lastFrame < frameMs) return
       lastFrame = now
 
-      const t = (now - startTs) / 1000 * NOISE_T_PER_SEC
+      syncFieldIntensity()
+
+      const noiseRate = shellPulseActive ? NOISE_T_PER_SEC * SHELL_PULSE_NOISE_T_MULT : NOISE_T_PER_SEC
+      const t = (now - startTs) / 1000 * noiseRate
 
       if (pointerLive) {
         const targetGain = pointerActive ? 1 : 0
@@ -509,7 +556,7 @@ export function IntroAsciiField({
             const rt = revealTimes[idx]!
             if (elapsed < rt) { anyPending = true; continue }
             const v = surfaceNoise(surface, c, r, cols, rows, t)
-            const palIdx = Math.min(PALETTE.length - 1, Math.floor(Math.pow(v, palettePow) * PALETTE.length))
+            const palIdx = Math.min(PALETTE.length - 1, Math.floor(Math.pow(v, fieldPalettePow) * PALETTE.length))
             cells[idx] = palIdx
             painted[idx] = 1
             const ch = PALETTE[palIdx]!
@@ -553,7 +600,7 @@ export function IntroAsciiField({
       // hits whatever is already painted (which is scattered across
       // the whole screen, not stuck to one edge), so the field feels
       // alive from the very first frame.
-      const updates = Math.max(48, Math.floor(cols * rows * updateFraction))
+      const updates = Math.max(48, Math.floor(cols * rows * fieldUpdateFraction))
       ctx!.fillStyle = ink
       for (let i = 0; i < updates; i++) {
         const r = (Math.random() * rows) | 0
@@ -567,7 +614,7 @@ export function IntroAsciiField({
           const falloff = pointerFalloff(c * CHAR_W + CHAR_W * 0.5, r * LINE_H + LINE_H * 0.5)
           if (falloff > 0.05) v = Math.min(0.999, v + falloff * 0.28)
         }
-        const palIdx = Math.min(PALETTE.length - 1, Math.floor(Math.pow(v, palettePow) * PALETTE.length))
+        const palIdx = Math.min(PALETTE.length - 1, Math.floor(Math.pow(v, fieldPalettePow) * PALETTE.length))
         if (palIdx === cells[idx] && !(pointerLive && pointerGain > 0.05)) continue
         cells[idx] = palIdx
         paintCellAt(c, r, PALETTE[palIdx]!, cellAlpha(c, r, now))
@@ -599,7 +646,7 @@ export function IntroAsciiField({
             let v = surfaceNoise(surface, c, r, cols, rows, t)
             const falloff = pointerFalloff(c * CHAR_W + CHAR_W * 0.5, r * LINE_H + LINE_H * 0.5)
             if (falloff > 0.05) v = Math.min(0.999, v + falloff * 0.32)
-            const palIdx = Math.min(PALETTE.length - 1, Math.floor(Math.pow(v, palettePow) * PALETTE.length))
+            const palIdx = Math.min(PALETTE.length - 1, Math.floor(Math.pow(v, fieldPalettePow) * PALETTE.length))
             cells[idx] = palIdx
             paintCellAt(c, r, PALETTE[palIdx]!, cellAlpha(c, r, now))
           }
@@ -608,7 +655,7 @@ export function IntroAsciiField({
     }
 
     function onThemeChange() {
-      ink = resolveInk()
+      ink = resolveInk(shellPulseActive)
       // Re-ink only cells that have already been revealed so the wave
       // stays intact even if the user toggles theme mid-roll.
       ctx!.fillStyle = ink

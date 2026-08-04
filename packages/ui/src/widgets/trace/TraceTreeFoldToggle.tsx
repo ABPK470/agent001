@@ -1,9 +1,8 @@
 /**
- * Tree fold-all — compact icon toggle for zen HUD leading cluster.
- * Lives beside run stats (tree chrome), not in column headers or session trailing.
+ * Tree fold-all — zen HUD peer of ReviewTreeFoldToggle (same icons, zen chrome).
  */
 
-import { ListChevronsDownUp, ListChevronsUpDown } from "lucide-react"
+import { ReviewTreeFoldToggle } from "../../components/review"
 import type { FoldMode } from "./open-state"
 
 export function TraceTreeFoldToggle({
@@ -15,26 +14,15 @@ export function TraceTreeFoldToggle({
 }) {
   const expanded = foldMode === "expanded"
 
-  function onToggle() {
-    onFoldModeChange(expanded ? "collapsed" : "expanded")
-  }
-
   return (
-    <button
-      type="button"
+    <ReviewTreeFoldToggle
+      foldMode={foldMode}
+      onFoldModeChange={onFoldModeChange}
       className="trace-zen-hud__icon-btn"
       title={expanded ? "Collapse all ([)" : "Expand all (])"}
-      aria-label={
+      ariaLabel={
         expanded ? "Collapse all trace scopes" : "Expand all trace scopes"
       }
-      aria-pressed={expanded}
-      onClick={onToggle}
-    >
-      {expanded ? (
-        <ListChevronsDownUp size={14} strokeWidth={1.75} aria-hidden />
-      ) : (
-        <ListChevronsUpDown size={14} strokeWidth={1.75} aria-hidden />
-      )}
-    </button>
+    />
   )
 }

@@ -23,6 +23,8 @@ import { flushDashboardSave, restoreDashboardState, startDashboardSync } from ".
 import { ChatHomePage } from "./home/ChatHomePage"
 import { IntroAsciiField } from "./home/IntroAsciiField"
 import { WelcomeFlow } from "./home/WelcomeFlow"
+import { ShellModeSweep } from "./ShellModeSweep"
+import { shellModeSweepMs } from "./shell-mode-transition"
 import type { AppShellMode } from "./types"
 import { isShellModeToggleEvent, resolveChatVariant } from "./types"
 import { Canvas, type CanvasHandle } from "./workspace/Canvas"
@@ -31,13 +33,6 @@ import { Toolbar } from "./workspace/Toolbar"
 import { getWidgetDefinition, widgetComponent } from "./workspace/widget-definitions"
 import { WidgetCatalog } from "./workspace/WidgetCatalog"
 import { WidgetModal } from "./workspace/WidgetModal"
-
-const SHELL_TRANSITION_MS = 280
-
-function shellTransitionDelay(): number {
-  if (typeof window === "undefined") return SHELL_TRANSITION_MS
-  return window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : SHELL_TRANSITION_MS
-}
 
 const SYNC_CHANNEL = "mia-active-run"
 
@@ -168,8 +163,8 @@ export function App() {
   const [shellMode, setShellMode] = useState<AppShellMode>("chat")
   const shellModeRef = useRef<AppShellMode>(shellMode)
   shellModeRef.current = shellMode
-  const [shellVisible, setShellVisible] = useState(true)
-  const shellTimerRef = useRef<number | null>(null)
+  const [shellSweep, setShellSweep] = useState(false)
+  const shellSweepTimersRef = useRef<number[]>([])
   const prevConnectedRef = useRef(false)
   // Becomes true when the login overlay starts its final fade so the home
   // shell crossfades with it instead of waiting for it to fully disappear.
@@ -257,27 +252,32 @@ export function App() {
       resetViewingAsMemory()
       return
     }
-    setShellVisible(true)
+    clearShellSweepTimers()
+    setShellSweep(null)
     setShellMode("chat")
     syncViewingAsForSession({ upn: me.upn, isAdmin: me.isAdmin })
   }, [me?.upn, me?.isAdmin])
 
-  useEffect(() => () => {
-    if (shellTimerRef.current) window.clearTimeout(shellTimerRef.current)
-  }, [])
+  function clearShellSweepTimers() {
+    for (const id of shellSweepTimersRef.current) window.clearTimeout(id)
+    shellSweepTimersRef.current = []
+  }
+
+  useEffect(() => () => clearShellSweepTimers(), [])
 
   const transitionShellMode = useCallback((next: AppShellMode) => {
-    setShellMode((current) => {
-      if (current === next) return current
-      setShellVisible(false)
-      if (shellTimerRef.current) window.clearTimeout(shellTimerRef.current)
-      const delay = shellTransitionDelay()
-      shellTimerRef.current = window.setTimeout(() => {
-        setShellMode(next)
-        requestAnimationFrame(() => setShellVisible(true))
-      }, delay)
-      return current
-    })
+    if (shellModeRef.current === next) return
+    clearShellSweepTimers()
+    const sweepMs = shellModeSweepMs()
+    if (sweepMs === 0) {
+      setShellSweep(false)
+      setShellMode(next)
+      return
+    }
+    setShellSweep(true)
+    const swapId = window.setTimeout(() => setShellMode(next), 48)
+    const sweepId = window.setTimeout(() => setShellSweep(false), sweepMs)
+    shellSweepTimersRef.current.push(swapId, sweepId)
   }, [])
 
   // ⌘⌥ / Ctrl+Alt — toggle chat ↔ workspace from either shell.
@@ -512,9 +512,8 @@ export function App() {
     )
   }
 
-  let shellBody: ReactNode
-
-  if (shellMode === "chat") {
+  function renderShellBody(mode: AppShellMode, opts?: { canvasActive?: boolean }): ReactNode {
+  if (mode === "chat") {
     const chatVariant = resolveChatVariant()
     const chatProps = {
       connected: connected && serverReachable,
@@ -525,7 +524,7 @@ export function App() {
       heroStage: (phase === AppPhase.Shell ? "copy" : chatHomeHeroStage) as "hidden" | "pill" | "copy",
       heroRevealProgress: phase === AppPhase.Shell ? 1 : chatHomeHeroRevealProgress,
     }
-    shellBody = chatVariant === "thread" ? (
+    return chatVariant === "thread" ? (
       <ThreadHomePage
         {...chatProps}
         morphLanding={phase === AppPhase.Login && !!me}
@@ -533,8 +532,10 @@ export function App() {
     ) : (
       <ChatHomePage {...chatProps} />
     )
-  } else if (isMobile) {
-    shellBody = (
+  }
+
+  if (isMobile) {
+    return (
       <div className="flex flex-col h-[100dvh] bg-base">
         {/* Compact header */}
         <header className="relative z-20 flex h-12 shrink-0 select-none items-center gap-3 bg-surface px-4">
@@ -669,31 +670,32 @@ export function App() {
         {usageOpen && <UsageModal onClose={() => setUsageOpen(false)} />}
       </div>
     )
-  } else {
-    shellBody = (
-      <div
-        className={[
-          "workspace-chrome flex h-full min-h-0 flex-col",
-          workspaceSurface === "contrast" ? "workspace-chrome--contrast" : "",
-          zenTileId ? "workspace-chrome--zen" : "",
-        ]
-          .filter(Boolean)
-          .join(" ")}
-      >
-        <div className="workspace-sheet flex min-h-0 flex-1 flex-col">
-          <Toolbar
-            onAddWidget={() => canvasRef.current?.openCatalog()}
-            onSignOut={handleSwitchUser}
-            onModeChange={transitionShellMode}
-            me={me}
-          />
-          <div className="workspace-stage relative flex min-h-0 flex-1 flex-col">
-            <Canvas ref={canvasRef} />
-          </div>
+  }
+
+  return (
+    <div
+      className={[
+        "workspace-chrome flex h-full min-h-0 flex-col",
+        workspaceSurface === "contrast" ? "workspace-chrome--contrast" : "",
+        zenTileId ? "workspace-chrome--zen" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+    >
+      <div className="workspace-sheet flex min-h-0 flex-1 flex-col">
+        <Toolbar
+          onAddWidget={() => canvasRef.current?.openCatalog()}
+          onSignOut={handleSwitchUser}
+          onModeChange={transitionShellMode}
+          me={me}
+        />
+        <div className="workspace-stage relative flex min-h-0 flex-1 flex-col">
+          <Canvas ref={(opts?.canvasActive ?? true) ? canvasRef : undefined} />
         </div>
-        <WidgetModal />
       </div>
-    )
+      <WidgetModal />
+    </div>
+  )
   }
 
   return (
@@ -702,7 +704,12 @@ export function App() {
       <ApprovalRequiredModal />
       {policyEditorOpen && !popOut && <PolicyEditor onClose={() => setPolicyEditorOpen(false)} />}
       <div
-        className={`app-shell-view flex flex-col h-screen min-h-[100dvh] ${shellVisible ? "" : "app-shell-view--fading"}`}
+        className={[
+          "app-shell-view flex flex-col h-screen min-h-[100dvh]",
+          shellSweep ? "app-shell-view--sweeping" : "",
+        ]
+          .filter(Boolean)
+          .join(" ")}
       >
         {me && (
           <PlatformHealthBanner
@@ -711,7 +718,17 @@ export function App() {
             onRefresh={refreshPlatformHealth}
           />
         )}
-        <div className="flex-1 min-h-0">{shellBody}</div>
+        <div
+          className={[
+            "app-shell-stack relative z-[1] flex min-h-0 flex-1 flex-col",
+            shellSweep ? "app-shell-stack--sweeping" : "",
+          ]
+            .filter(Boolean)
+            .join(" ")}
+        >
+          {renderShellBody(shellMode)}
+          {shellSweep && <ShellModeSweep />}
+        </div>
       </div>
     </>
   )
