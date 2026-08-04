@@ -1,5 +1,8 @@
 /**
  * Unified tool execution card — collapsed summary + terminal I/O (chat + trace).
+ *
+ * Inspector (default): flat accordion dialect — no tree knees, no boxed chrome.
+ * Chat (`surface="chat"`): bordered terminal card for the transcript.
  */
 
 import { Check, ChevronRight, X } from "lucide-react"
@@ -33,9 +36,11 @@ function ExecStatusIcon({ status }: { status: ToolExecStatus }) {
 function TerminalOutput({
   text,
   isError,
+  showReturnGlyph,
 }: {
   text: string
   isError: boolean
+  showReturnGlyph: boolean
 }) {
   const trimmed = text.trim()
   if (!trimmed) return null
@@ -51,7 +56,11 @@ function TerminalOutput({
   return (
     <div className={`trace-exec__output${isError ? " is-error" : " is-success"}`}>
       <div className="trace-exec__output-body">
-        {!isError ? <span className="trace-exec__return" aria-hidden>↳</span> : null}
+        {showReturnGlyph && !isError ? (
+          <span className="trace-exec__return" aria-hidden>
+            ↳
+          </span>
+        ) : null}
         <div className="trace-exec__output-main">
           {isError && code ? (
             <div className="trace-exec__error-code">{code}</div>
@@ -76,6 +85,7 @@ export function ToolExecutionCard({
   onOpenChange,
   summaryRef,
   className,
+  surface = "inspector",
   trailing,
   footer,
 }: {
@@ -91,6 +101,8 @@ export function ToolExecutionCard({
   onOpenChange?: (open: boolean) => void
   summaryRef?: RefObject<HTMLButtonElement | null>
   className?: string
+  /** Inspector = flat list; chat = bordered terminal card. */
+  surface?: "inspector" | "chat"
   trailing?: ReactNode
   footer?: ReactNode
 }) {
@@ -125,8 +137,14 @@ export function ToolExecutionCard({
   const hasTerminalBody =
     Boolean(input.text.trim()) || showError || showResult || trailing || footer
   const canToggle = hasTerminalBody
+  const isChat = surface === "chat"
 
-  const rootClass = ["trace-exec", open ? "is-open" : "", className ?? ""]
+  const rootClass = [
+    "trace-exec",
+    open ? "is-open" : "",
+    isChat ? "trace-exec--chat" : "trace-exec--inspector",
+    className ?? "",
+  ]
     .filter(Boolean)
     .join(" ")
 
@@ -147,10 +165,7 @@ export function ToolExecutionCard({
             <span className="trace-exec__detail">({summary.detail})</span>
           ) : null}
           {summary.duration ? (
-            <>
-              <span className="trace-exec__arrow" aria-hidden>→</span>
-              <span className="trace-exec__duration">{summary.duration}</span>
-            </>
+            <span className="trace-exec__duration">{summary.duration}</span>
           ) : null}
           <ChevronRight
             size={14}
@@ -184,17 +199,17 @@ export function ToolExecutionCard({
           ) : null}
 
           {showError || showResult ? (
-            <>
-              <div className="trace-exec__divider">
-                <span className="trace-exec__divider-label">Output</span>
+            <div className="trace-exec__output-lane">
+              <div className="trace-exec__lane-head">
+                <span className="trace-exec__lane-label">Output</span>
               </div>
               {showError && errorText ? (
-                <TerminalOutput text={errorText} isError />
+                <TerminalOutput text={errorText} isError showReturnGlyph={isChat} />
               ) : null}
               {showResult && resultText ? (
-                <TerminalOutput text={resultText} isError={false} />
+                <TerminalOutput text={resultText} isError={false} showReturnGlyph={isChat} />
               ) : null}
-            </>
+            </div>
           ) : null}
 
           {trailing ? <div className="trace-exec__trailing">{trailing}</div> : null}

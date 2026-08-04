@@ -28,7 +28,7 @@ describe("tool-execution", () => {
       durationMs: 220,
     })
     expect(summary.verb).toBe("Executed")
-    expect(summary.name).toBe("query mssql")
+    expect(summary.name).toBe("query_mssql")
     expect(summary.detail).toBe("10 rows returned")
     expect(summary.duration).toBe("220ms")
   })
@@ -39,9 +39,26 @@ describe("tool-execution", () => {
     ).toBe("Blocked")
   })
 
-  it("extracts error codes from parentheses", () => {
+  it("extracts error codes from parentheses or trailing colon form", () => {
     expect(execErrorCode("Blocked before send (MISSING_WHERE)")).toBe(
       "MISSING_WHERE",
     )
+    expect(execErrorCode("Blocked by SQL quality: MISSING_WHERE")).toBe(
+      "MISSING_WHERE",
+    )
+  })
+
+  it("prefers short error code in collapsed summary detail", () => {
+    const summary = buildExecSummary({
+      toolName: "query_mssql",
+      status: "error",
+      argumentsValue: { sql: "select 1" },
+      argsFormatted: '{"sql":"select 1"}',
+      resultText: null,
+      errorText: "Blocked by SQL quality: MISSING_WHERE",
+      durationMs: 2200,
+    })
+    expect(summary.verb).toBe("Blocked")
+    expect(summary.detail).toBe("MISSING_WHERE")
   })
 })

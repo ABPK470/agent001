@@ -70,6 +70,8 @@ export function execErrorCode(errorText: string): string | null {
   const head = errorText.trim().split(/\r?\n/)[0] ?? ""
   const paren = head.match(/\(([A-Z][A-Z0-9_]+)\)/)
   if (paren?.[1]) return paren[1]
+  const colonCode = head.match(/:\s*([A-Z][A-Z0-9_]+)\s*$/)
+  if (colonCode?.[1]) return colonCode[1]
   if (/^[A-Z][A-Z0-9_]+$/.test(head.trim())) return head.trim()
   return null
 }
@@ -92,8 +94,14 @@ export function buildExecSummary({
   durationMs?: number | null
 }): { verb: string; name: string; detail: string; duration: string | null } {
   const verb = execStatusVerb(status, errorText)
-  const name = humanizeToolName(toolName)
-  let detail = execOutputPreview(resultText, errorText)
+  // Keep wire name (snake_case) — humanized + uppercase was unreadable in the inspector.
+  const name = toolName
+  let detail = ""
+  if (status === "error" && errorText) {
+    detail = execErrorCode(errorText) || execOutputPreview(null, errorText)
+  } else {
+    detail = execOutputPreview(resultText, errorText)
+  }
   if (!detail && argsFormatted?.trim()) {
     detail =
       presentToolCallFromFormatted(toolName, argsFormatted).summary ||

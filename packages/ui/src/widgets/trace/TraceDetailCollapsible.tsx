@@ -48,10 +48,12 @@ export function TraceDetailCollapsible({
             aria-hidden
           />
           <span className="trace-detail-accordion__label">{label}</span>
-          {meta ? <span className="trace-detail-accordion__meta">{meta}</span> : null}
         </button>
-        {actions ? (
-          <div className="trace-detail-accordion__actions">{actions}</div>
+        {meta || actions ? (
+          <div className="trace-detail-accordion__rail">
+            {meta ? <span className="trace-detail-accordion__meta">{meta}</span> : null}
+            {actions}
+          </div>
         ) : null}
       </div>
       {open ? <div className="trace-detail-accordion__body">{children}</div> : null}

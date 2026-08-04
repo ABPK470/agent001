@@ -618,7 +618,7 @@ function ToolPill({
         />
         <div className="min-w-0 flex-1">
           <ToolExecutionCard
-            className="trace-exec--chat"
+            surface="chat"
             toolName={row.tool}
             argumentsValue={argumentsValue}
             argsFormatted={row.argsFormatted}

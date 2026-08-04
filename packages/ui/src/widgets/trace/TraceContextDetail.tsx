@@ -1,5 +1,8 @@
 /**
  * Context / prompt / tools detail for preamble nodes.
+ *
+ * Leaf scopes (prompt / tools): inspector headline owns the title — body is content only.
+ * Context scope: headline is "Context"; body uses collapsible sections.
  */
 
 import { JsonViewer } from "../../components/JsonViewer"
@@ -17,12 +20,6 @@ function lineCount(text: string): number {
 function promptMeta(text: string): string {
   const lines = lineCount(text)
   return lines === 1 ? "1 line" : `${lines} lines`
-}
-
-function toolMeta(tool: TraceDag["preamble"]["tools"][number]): string | undefined {
-  if (!tool.description) return "no description"
-  const words = tool.description.trim().split(/\s+/).length
-  return words === 1 ? "1 word" : `${words} words`
 }
 
 function ContextPromptBody({ text }: { text: string }) {
@@ -66,7 +63,6 @@ function ContextToolsBody({
         <TraceDetailCollapsible
           key={tool.name}
           label={tool.name}
-          meta={toolMeta(tool)}
           defaultOpen={false}
           sticky={false}
           variant="nested"
@@ -89,6 +85,18 @@ function ContextToolsBody({
   )
 }
 
+function PromptLeafDetail({ text }: { text: string }) {
+  return (
+    <div className="trace-detail-body">
+      <div className="trace-detail-leaf-meta">
+        <span className="trace-detail-leaf-meta__label">{promptMeta(text)}</span>
+        <CopyControl value={text} ariaLabel="Copy system prompt" />
+      </div>
+      <ContextPromptBody text={text} />
+    </div>
+  )
+}
+
 export function TraceContextDetail({
   dag,
   scopeId,
@@ -99,32 +107,13 @@ export function TraceContextDetail({
   const { preamble } = dag
 
   if (scopeId === "prompt" && preamble.systemPrompt) {
-    return (
-      <div className="trace-detail-body trace-detail-body--stack">
-        <TraceDetailCollapsible
-          label="System prompt"
-          meta={promptMeta(preamble.systemPrompt)}
-          defaultOpen
-          actions={
-            <CopyControl value={preamble.systemPrompt} ariaLabel="Copy system prompt" />
-          }
-        >
-          <ContextPromptBody text={preamble.systemPrompt} />
-        </TraceDetailCollapsible>
-      </div>
-    )
+    return <PromptLeafDetail text={preamble.systemPrompt} />
   }
 
   if (scopeId === "tools") {
     return (
-      <div className="trace-detail-body trace-detail-body--stack">
-        <TraceDetailCollapsible
-          label="Resolved tools"
-          meta={String(preamble.tools.length)}
-          defaultOpen
-        >
-          <ContextToolsBody tools={preamble.tools} />
-        </TraceDetailCollapsible>
+      <div className="trace-detail-body">
+        <ContextToolsBody tools={preamble.tools} />
       </div>
     )
   }

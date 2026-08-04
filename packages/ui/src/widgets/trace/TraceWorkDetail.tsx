@@ -35,7 +35,13 @@ function findWorkTool(
   return null
 }
 
-function SqlValidationBlock({ work }: { work: TraceWorkNode }) {
+function SqlValidationBlock({
+  work,
+  hideSqlPreview = false,
+}: {
+  work: TraceWorkNode
+  hideSqlPreview?: boolean
+}) {
   if (work.sqlQuality.length === 0) return null
   const durationMs = work.sqlQuality.reduce(
     (max, entry) => Math.max(max, entry.durationMs ?? 0),
@@ -47,7 +53,11 @@ function SqlValidationBlock({ work }: { work: TraceWorkNode }) {
       meta={durationMs > 0 ? formatMs(durationMs) : null}
     >
       {work.sqlQuality.map((entry, i) => (
-        <SqlQualityRow key={`${entry.toolCallId}-${i}`} entry={entry} />
+        <SqlQualityRow
+          key={`${entry.toolCallId}-${i}`}
+          entry={entry}
+          hideSqlPreview={hideSqlPreview}
+        />
       ))}
     </TraceToolSection>
   )
@@ -147,7 +157,7 @@ export function TraceWorkDetail({
             dag={dag}
             work={work}
             tool={tool}
-            trailing={<SqlValidationBlock work={work} />}
+            trailing={<SqlValidationBlock work={work} hideSqlPreview />}
           />
         </div>
       )
@@ -165,7 +175,7 @@ export function TraceWorkDetail({
           errorText={isError ? tool.resultText : null}
           status={statusFromToolCall(tool)}
           durationMs={work.durationMs}
-          trailing={<SqlValidationBlock work={work} />}
+          trailing={<SqlValidationBlock work={work} hideSqlPreview />}
         />
       </div>
     )
@@ -181,7 +191,9 @@ export function TraceWorkDetail({
           dag,
           work,
           t,
-          i === work.tools.length - 1 ? <SqlValidationBlock work={work} /> : null,
+          i === work.tools.length - 1 ? (
+            <SqlValidationBlock work={work} hideSqlPreview />
+          ) : null,
         ),
       )}
       {work.tools.length === 0 ? <SqlValidationBlock work={work} /> : null}

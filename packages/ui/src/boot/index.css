@@ -5550,15 +5550,15 @@ button.trace-tree-status-pill:hover {
   min-width: 0;
 }
 
-.trace-detail-accordion__actions {
+.trace-detail-accordion__rail {
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
-  padding-right: 0.1rem;
+  gap: 0.625rem;
+  padding-right: 0.15rem;
 }
 
-.trace-detail-accordion__actions .trace-copy {
+.trace-detail-accordion__rail .trace-copy {
   padding: 0.1rem 0.3rem;
   font-size: 0.6875rem;
   font-weight: 600;
@@ -5566,11 +5566,25 @@ button.trace-tree-status-pill:hover {
   text-transform: uppercase;
 }
 
-.trace-detail-section--nested .trace-detail-accordion {
-  padding-left: 0.65rem;
+.trace-detail-leaf-meta {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.625rem;
+  padding: 0 0 0.5rem;
+}
+
+.trace-detail-leaf-meta__label {
+  font-size: 0.6875rem;
   font-weight: 600;
-  text-transform: none;
-  letter-spacing: 0.01em;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted, var(--color-text-muted));
+}
+
+.trace-detail-section--nested .trace-detail-accordion {
+  gap: 0.65rem;
+  padding-left: 0;
 }
 
 .trace-detail-section--nested .trace-detail-accordion__label {
@@ -5582,11 +5596,16 @@ button.trace-tree-status-pill:hover {
 }
 
 .trace-detail-section--nested .trace-detail-accordion__body {
-  padding-left: 1.35rem;
+  padding-left: 1.15rem;
+  padding-bottom: 0.65rem;
 }
 
 .trace-detail-nested-list > .trace-detail-section--nested:first-child .trace-detail-accordion {
   border-top: none;
+}
+
+.trace-detail-body > .trace-detail-nested-list > .trace-detail-section--nested:first-child .trace-detail-accordion {
+  border-top: 1px solid var(--border-subtle, var(--color-border-subtle));
 }
 
 .trace-detail-nested-list .trace-detail-section--sticky .trace-detail-accordion-bar {
@@ -6121,7 +6140,8 @@ button.trace-tree-status-pill:hover {
   margin-top: 0.25rem;
 }
 
-/* Unified execution block — flat list dialect (chat + trace) */
+/* Trace inspector — flat execution rows (no tree knees / boxed chrome).
+ * Chat uses .trace-exec--chat and keeps the terminal card. */
 .trace-exec {
   border: none;
   border-radius: 0;
@@ -6133,19 +6153,19 @@ button.trace-tree-status-pill:hover {
 .trace-exec__summary {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: 0.45rem;
   width: 100%;
   min-height: unset;
-  padding: 0.625rem 0;
+  padding: 0.55rem 0;
   border: none;
   background: transparent;
   text-align: left;
   cursor: pointer;
   color: var(--text-muted, var(--color-text-muted));
-  font-size: 0.6875rem;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  letter-spacing: normal;
+  text-transform: none;
   line-height: 1.35;
 }
 
@@ -6162,7 +6182,7 @@ button.trace-tree-status-pill:hover {
   flex-shrink: 0;
   width: 0.75rem;
   height: 0.75rem;
-  opacity: 0.8;
+  opacity: 0.85;
 }
 
 .trace-exec__icon--ok {
@@ -6175,6 +6195,8 @@ button.trace-tree-status-pill:hover {
 
 .trace-exec__icon--running,
 .trace-exec__icon--proposed {
+  display: inline-block;
+  border-radius: 999px;
   background: var(--text-muted, var(--color-text-muted));
   opacity: 0.55;
 }
@@ -6195,17 +6217,15 @@ button.trace-tree-status-pill:hover {
 
 .trace-exec__verb {
   flex-shrink: 0;
-  font-weight: inherit;
-  color: inherit;
+  font-weight: 600;
+  color: var(--text-muted, var(--color-text-muted));
 }
 
 .trace-exec__name {
   flex-shrink: 0;
-  font-family: inherit;
-  font-weight: inherit;
-  letter-spacing: inherit;
-  text-transform: inherit;
-  color: inherit;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-weight: 600;
+  color: var(--text, var(--color-text));
 }
 
 .trace-exec__detail {
@@ -6214,22 +6234,15 @@ button.trace-tree-status-pill:hover {
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 0.8125rem;
   font-weight: 500;
-  letter-spacing: normal;
-  text-transform: none;
   color: var(--text-muted, var(--color-text-muted));
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.trace-exec__arrow {
-  flex-shrink: 0;
-  color: var(--text-muted, var(--color-text-muted));
-  opacity: 0.65;
-}
-
 .trace-exec__duration {
   flex-shrink: 0;
+  margin-left: auto;
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 0.75rem;
   font-variant-numeric: tabular-nums;
@@ -6239,7 +6252,6 @@ button.trace-tree-status-pill:hover {
 
 .trace-exec__chev {
   flex-shrink: 0;
-  margin-left: 0.15rem;
   color: var(--text-muted, var(--color-text-muted));
   transition: transform 0.15s ease;
 }
@@ -6249,16 +6261,17 @@ button.trace-tree-status-pill:hover {
 }
 
 .trace-exec__terminal {
-  padding: 0 0 0.75rem;
+  padding: 0 0 0.65rem 1.15rem;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.55rem;
 }
 
-.trace-exec__input {
+.trace-exec__input,
+.trace-exec__output-lane {
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
+  gap: 0.25rem;
   min-width: 0;
 }
 
@@ -6285,14 +6298,14 @@ button.trace-tree-status-pill:hover {
   text-transform: uppercase;
 }
 
-.trace-exec__input-pre,
-.trace-exec__output-pre {
+/* Inspector: plain indented mono — no left-rail / knee chrome */
+.trace-exec--inspector .trace-exec__input-pre,
+.trace-exec--inspector .trace-exec__output-pre {
   margin: 0;
-  padding: 0.15rem 0 0.15rem 0.65rem;
+  padding: 0.1rem 0;
+  border: none;
   border-radius: 0;
   background: transparent;
-  border: none;
-  border-left: 2px solid var(--border-subtle, var(--color-border-subtle));
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 0.8125rem;
   line-height: 1.5;
@@ -6301,89 +6314,22 @@ button.trace-tree-status-pill:hover {
   color: var(--text-secondary, var(--text-muted, var(--color-text-muted)));
 }
 
-:root[data-theme="light"] .trace-exec__input-pre,
-:root[data-theme="light"] .trace-exec__output-pre {
-  background: transparent;
-  border-left-color: var(--border-subtle, #e2e8f0);
-}
-
-.trace-exec__divider {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin: 0.1rem 0 0;
-}
-
-.trace-exec__divider::after {
-  content: "";
-  flex: 1;
-  height: 1px;
-  background: var(--border-subtle, var(--color-border-subtle));
-}
-
-.trace-exec__divider-label {
-  flex-shrink: 0;
-  font-size: 0.6875rem;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--text-muted, var(--color-text-muted));
-}
-
-.trace-exec__output {
-  border-left: 2px solid var(--border-subtle, var(--color-border-subtle));
-  padding-left: 0.65rem;
-}
-
-.trace-exec__output.is-success {
-  border-left-color: rgb(34 197 94 / 0.75);
-}
-
-.trace-exec__output.is-error {
-  border-left-color: rgb(239 68 68 / 0.85);
-}
-
-.trace-exec__output.is-standalone {
-  border-left-width: 2px;
-  padding-left: 0.65rem;
-  margin-top: 0.15rem;
-}
-
-.trace-exec__output-body {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.35rem;
-  min-width: 0;
-}
-
-.trace-exec__return {
-  flex-shrink: 0;
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 0.8125rem;
-  line-height: 1.5;
-  color: var(--text-muted, var(--color-text-muted));
-  opacity: 0.75;
-  padding-top: 0.55rem;
-}
-
-.trace-exec__output-main {
-  flex: 1;
-  min-width: 0;
-}
-
-.trace-exec__output-main .trace-exec__output-pre {
-  background: transparent;
+.trace-exec--inspector .trace-exec__output {
   border: none;
-  border-left: none;
-  padding: 0.15rem 0;
+  padding: 0;
 }
 
-.trace-exec__output.is-error .trace-exec__output-pre {
+.trace-exec--inspector .trace-exec__output-body {
+  display: block;
+  min-width: 0;
+}
+
+.trace-exec--inspector .trace-exec__output.is-error .trace-exec__output-pre {
   color: color-mix(in srgb, var(--error, #ef4444) 82%, var(--text, #fff));
 }
 
 .trace-exec__error-code {
-  margin-bottom: 0.25rem;
+  margin-bottom: 0.2rem;
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 0.6875rem;
   font-weight: 700;
@@ -6394,7 +6340,26 @@ button.trace-tree-status-pill:hover {
 
 .trace-exec__trailing,
 .trace-exec__footer {
-  padding-top: 0.15rem;
+  padding-top: 0.1rem;
+}
+
+/* SQL validation under an execution body — flat row, not a nested card */
+.trace-exec__trailing .trace-tool-io__section {
+  margin-top: 0.15rem;
+}
+
+.trace-exec__trailing .trace-sql-check {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  padding: 0.25rem 0;
+  border-left: none;
+}
+
+.trace-exec__trailing .trace-sql-check.is-ok,
+.trace-exec__trailing .trace-sql-check.is-blocked,
+.trace-exec__trailing .trace-sql-check.is-failed {
+  border-left: none;
 }
 
 .trace-exec__footer .trace-tool-io__schema .trace-detail-accordion {
@@ -6402,47 +6367,145 @@ button.trace-tree-status-pill:hover {
   padding-top: 0.45rem;
 }
 
+.trace-exec__output.is-standalone {
+  margin-top: 0.15rem;
+}
+
+.trace-exec__return {
+  flex-shrink: 0;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--text-muted, var(--color-text-muted));
+  opacity: 0.75;
+  padding-top: 0.15rem;
+}
+
+.trace-exec__output-main {
+  flex: 1;
+  min-width: 0;
+}
+
 .trace-exec--chat {
   width: 100%;
   max-width: 100%;
+  border: 1px solid var(--border-subtle, var(--color-border-subtle));
+  border-radius: 0.375rem;
+  background: var(--overlay-1, rgb(255 255 255 / 0.02));
+  overflow: hidden;
+  border-top: 1px solid var(--border-subtle, var(--color-border-subtle));
+}
+
+:root[data-theme="light"] .trace-exec--chat {
+  background: var(--panel-2, #f8fafc);
 }
 
 .trace-exec--chat .trace-exec__summary {
-  font-size: 0.9375rem;
-  font-weight: 500;
-  letter-spacing: -0.01em;
+  min-height: 2.375rem;
+  padding: 0.55rem 0.875rem;
+  font-size: 0.8125rem;
+  font-weight: 400;
+  letter-spacing: normal;
   text-transform: none;
-  padding: 0.45rem 0;
+  color: var(--text, var(--color-text));
+}
+
+.trace-exec--chat .trace-exec__summary:hover {
+  background: var(--overlay-2, rgb(255 255 255 / 0.04));
+}
+
+.trace-exec--chat.is-open .trace-exec__summary {
+  border-bottom: 1px solid var(--border-subtle, var(--color-border-subtle));
+}
+
+.trace-exec--chat .trace-exec__icon {
+  width: 0.875rem;
+  height: 0.875rem;
+  opacity: 1;
+}
+
+.trace-exec--chat .trace-exec__verb {
+  font-weight: 600;
   color: var(--text-muted, var(--color-text-muted));
 }
 
 .trace-exec--chat .trace-exec__name {
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-weight: 500;
+  font-weight: 600;
+  color: var(--text, var(--color-text));
 }
 
 .trace-exec--chat .trace-exec__detail {
-  font-size: 0.9375rem;
+  font-size: 0.8125rem;
 }
 
-.trace-exec--chat .trace-exec__input-pre,
+.trace-exec--chat .trace-exec__terminal {
+  padding: 0.75rem 0.875rem 0.875rem;
+  gap: 0.65rem;
+}
+
+.trace-exec--chat .trace-exec__input-pre {
+  margin: 0;
+  padding: 0.55rem 0.65rem;
+  border-radius: 0.3rem;
+  background: rgb(0 0 0 / 0.22);
+  border: 1px solid rgb(255 255 255 / 0.06);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--text, var(--color-text));
+}
+
+:root[data-theme="light"] .trace-exec--chat .trace-exec__input-pre {
+  background: rgb(15 23 42 / 0.04);
+  border-color: var(--border-subtle, #e2e8f0);
+}
+
+.trace-exec--chat .trace-exec__output {
+  border-left: 2px solid rgb(34 197 94 / 0.75);
+  padding-left: 0.65rem;
+}
+
+.trace-exec--chat .trace-exec__output.is-error {
+  border-left-color: rgb(239 68 68 / 0.85);
+}
+
+.trace-exec--chat .trace-exec__output-body {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
 .trace-exec--chat .trace-exec__output-pre {
-  font-size: 0.875rem;
+  margin: 0;
+  padding: 0.15rem 0;
+  background: transparent;
+  border: none;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
   color: var(--text-secondary, var(--text-muted, var(--color-text-muted)));
+}
+
+.trace-exec--chat .trace-exec__output.is-error .trace-exec__output-pre {
+  color: color-mix(in srgb, var(--error, #ef4444) 82%, var(--text, #fff));
 }
 
 .trace-exec__summary--static {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: 0.45rem;
   width: 100%;
-  padding: 0.625rem 0;
+  padding: 0.55rem 0;
   color: var(--text-muted, var(--color-text-muted));
-  font-size: 0.6875rem;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  letter-spacing: normal;
+  text-transform: none;
   line-height: 1.35;
+  cursor: default;
 }
 
 .trace-tool-io__validation-hint {

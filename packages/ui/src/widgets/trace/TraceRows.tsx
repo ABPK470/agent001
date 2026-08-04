@@ -196,7 +196,14 @@ export function ToolRow({
 }
 
 /** Per-call SQL validation telemetry — not part of the system prompt. */
-export function SqlQualityRow({ entry }: { entry: TraceSqlQuality }) {
+export function SqlQualityRow({
+  entry,
+  hideSqlPreview = false,
+}: {
+  entry: TraceSqlQuality
+  /** When input SQL is already shown above (execution card), skip the repeat. */
+  hideSqlPreview?: boolean
+}) {
   const phaseClass =
     entry.phase === "blocked"
       ? "is-blocked"
@@ -228,13 +235,13 @@ export function SqlQualityRow({ entry }: { entry: TraceSqlQuality }) {
           missing mirror: {entry.missingPersistedMirrorCandidates.join(", ")}
         </div>
       )}
-      {entry.sqlPreview && (
+      {!hideSqlPreview && entry.sqlPreview ? (
         <ExpandableText
           text={entry.sqlPreview}
           className="code-pre"
           previewChars={320}
         />
-      )}
+      ) : null}
     </div>
   )
 }
