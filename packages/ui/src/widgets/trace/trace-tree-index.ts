@@ -14,7 +14,12 @@ import { callToolOpenKey, workToolOpenKey, type OpenState } from "./open-state"
 import { callReceivedSummary, callSentSummary } from "./trace-format"
 import type { TraceTreeSearch } from "./trace-tree-search"
 
-export type TraceSpanStatus = "success" | "failed" | "running" | "skipped"
+export type TraceSpanStatus =
+  | "success"
+  | "failed"
+  | "running"
+  | "skipped"
+  | "cancelled"
 
 export type TraceTreeNodeKind =
   | "context"
@@ -73,6 +78,8 @@ function phaseStatus(phase: TracePhaseNode): TraceSpanStatus {
 function workStatus(work: TraceWorkNode): TraceSpanStatus {
   if (work.notes.some((n) => n.tone === "error")) return "failed"
   if (work.tools.some((t) => t.status === "error")) return "failed"
+  // User cancel / abort stop — not Fail, not OK.
+  if (work.notes.some((n) => n.tone === "cancelled")) return "cancelled"
   if (work.tools.some((t) => t.status === "running" || !t.status)) return "running"
   if (work.tools.length === 0 && work.notes.length === 0) return "skipped"
   return "success"
@@ -276,8 +283,8 @@ function buildWorkNodes(
   }
 
   const status = workStatus(work)
-  const hasChildren =
-    work.tools.length > 0 || work.notes.length > 0 || work.sqlQuality.length > 0
+  // Tree only materializes tool children — notes/SQL live in the inspector.
+  const hasChildren = work.tools.length > 0
   pushNode(acc, {
     scopeId: work.id,
     kind: "work",

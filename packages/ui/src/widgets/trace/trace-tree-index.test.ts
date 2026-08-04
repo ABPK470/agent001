@@ -111,6 +111,38 @@ describe("trace-tree-index", () => {
     expect(expanded.byScopeId.has("tools")).toBe(true)
   })
 
+  it("marks user-cancel fatal nudge as cancelled, not OK, without a hollow chevron", () => {
+    const dag = buildTraceDag([
+      { kind: "system-prompt", text: "sys" },
+      { kind: "llm-request", iteration: 0, messageCount: 1, toolCount: 0, messages: [] },
+      {
+        kind: "llm-response",
+        iteration: 0,
+        durationMs: 40,
+        content: "working",
+        toolCalls: [],
+        usage: null,
+      },
+      {
+        kind: "nudge",
+        tag: "fatal-tool-outcome",
+        message: "Agent was cancelled.",
+        iteration: 0,
+      },
+    ])
+    const open = emptyOpen()
+    open.calls.add(0)
+    for (const entry of dag.spine) {
+      if (entry.kind === "work") open.work.add(entry.work.id)
+    }
+    const index = buildTraceTreeIndex(dag, open, null)
+    const work = index.nodes.find((n) => n.kind === "work")
+    expect(work?.name).toBe("Cancelled")
+    expect(work?.status).toBe("cancelled")
+    expect(work?.hasError).toBe(false)
+    expect(work?.hasChildren).toBe(false)
+  })
+
   it("keeps parent branchHasError when the failing child is folded away", () => {
     const dag = failedBuildDag()
     const open = emptyOpen()

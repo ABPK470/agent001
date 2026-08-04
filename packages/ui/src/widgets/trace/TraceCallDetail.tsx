@@ -2,7 +2,7 @@
  * Call detail — tabs for Input / Raw JSON / Output / System + breakdowns.
  */
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { JsonViewer } from "../../components/JsonViewer"
 import { fmtTokens, formatMs } from "../../lib/util"
 import type { TraceCallNode, TraceDag } from "./build-trace-dag"
@@ -30,6 +30,12 @@ export function TraceCallDetail({
   initialTab?: DetailTab
 }) {
   const [tab, setTab] = useState<DetailTab>(initialTab)
+
+  // Selection Call → Sent → Received reuses this component; follow the
+  // tree node's intended pane (useState only honors initialTab on mount).
+  useEffect(() => {
+    setTab(initialTab)
+  }, [initialTab, call.index])
   const systemMessages = (() => {
     const prompts =
       dag.preamble.systemPrompts.length > 0

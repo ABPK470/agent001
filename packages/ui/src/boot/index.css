@@ -5087,6 +5087,10 @@ button.trace-tree-row__icon-dot {
   background: rgb(148 163 184);
 }
 
+.trace-tree-row__icon-dot.is-cancelled {
+  background: var(--status-dot-warn);
+}
+
 .trace-tree-row__text-block {
   display: flex;
   flex-direction: column;

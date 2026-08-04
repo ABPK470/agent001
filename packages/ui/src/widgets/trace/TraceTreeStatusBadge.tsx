@@ -13,6 +13,7 @@ const STATUS_META: Record<
   failed: { label: "Fail", icon: "✕", tone: "failed" },
   running: { label: "Run", icon: "…", tone: "running" },
   skipped: { label: "Skip", icon: "⊝", tone: "skipped" },
+  cancelled: { label: "Cancel", icon: "–", tone: "cancelled" },
 }
 
 export function TraceTreeStatusBadge({
@@ -65,6 +66,7 @@ const DOT_TONE: Record<TraceSpanStatus, string> = {
   failed: "is-failed",
   running: "is-running",
   skipped: "is-skipped",
+  cancelled: "is-cancelled",
 }
 
 /** Tiny status marker on child row icons — replaces the text badge wall. */

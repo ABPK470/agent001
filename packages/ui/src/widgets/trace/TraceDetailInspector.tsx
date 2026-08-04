@@ -70,33 +70,68 @@ function renderDetail(dag: TraceDag, node: TraceTreeNode) {
   if (node.kind === "call" && node.callIndex != null) {
     const call = dag.calls[node.callIndex]
     if (!call) return <p className="trace-empty">Call not found</p>
-    return <TraceCallDetail call={call} dag={dag} />
+    return (
+      <TraceCallDetail
+        key={node.scopeId}
+        call={call}
+        dag={dag}
+        initialTab="input"
+      />
+    )
   }
   if (node.kind === "sent" && node.callIndex != null) {
     const call = dag.calls[node.callIndex]
     if (!call) return <p className="trace-empty">Call not found</p>
-    return <TraceCallDetail call={call} dag={dag} initialTab="input" />
+    return (
+      <TraceCallDetail
+        key={node.scopeId}
+        call={call}
+        dag={dag}
+        initialTab="input"
+      />
+    )
   }
   if (node.kind === "received" && node.callIndex != null) {
     const call = dag.calls[node.callIndex]
     if (!call) return <p className="trace-empty">Call not found</p>
-    return <TraceCallDetail call={call} dag={dag} initialTab="output" />
+    return (
+      <TraceCallDetail
+        key={node.scopeId}
+        call={call}
+        dag={dag}
+        initialTab="output"
+      />
+    )
   }
   if (node.kind === "message" && node.callIndex != null && node.messageKey) {
     const call = dag.calls[node.callIndex]
     if (!call) return <p className="trace-empty">Call not found</p>
-    return <TraceMessageDetail call={call} messageKey={node.messageKey} />
+    return (
+      <TraceMessageDetail
+        key={node.scopeId}
+        call={call}
+        messageKey={node.messageKey}
+      />
+    )
   }
   if (node.kind === "work" && node.workId) {
     const work = findWork(dag, node.workId)
     if (!work) return <p className="trace-empty">Work not found</p>
-    return <TraceWorkDetail work={work} dag={dag} toolKey={node.toolKey} />
+    return (
+      <TraceWorkDetail
+        key={node.scopeId}
+        work={work}
+        dag={dag}
+        toolKey={node.toolKey}
+      />
+    )
   }
   if (node.kind === "phase" && node.phaseId) {
     const phase = findPhase(dag, node.phaseId)
     if (!phase) return <p className="trace-empty">Phase not found</p>
     return (
       <TracePhaseDetail
+        key={node.scopeId}
         phase={phase}
         nodeStatus={node.status}
         nodeHasError={node.hasError}
@@ -105,11 +140,12 @@ function renderDetail(dag: TraceDag, node: TraceTreeNode) {
     )
   }
   if (node.kind === "tool" && node.toolKey) {
-    return <TraceToolDetail dag={dag} toolKey={node.toolKey} />
+    return <TraceToolDetail key={node.scopeId} dag={dag} toolKey={node.toolKey} />
   }
   if (node.kind === "context" || node.kind === "prompt" || node.kind === "tools") {
     return (
       <TraceContextDetail
+        key={node.scopeId}
         dag={dag}
         scopeId={node.kind === "context" ? "context" : node.kind}
       />

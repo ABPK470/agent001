@@ -20,7 +20,7 @@ export function parseEventMs(text: string): number | null {
 
 export function timelinePhaseOutcome(input: {
   phaseStatus: "running" | "done" | "error"
-  nodeStatus: "success" | "failed" | "running" | "skipped"
+  nodeStatus: "success" | "failed" | "running" | "skipped" | "cancelled"
   nodeHasError: boolean
   branchHasError: boolean
 }): TimelinePhaseOutcome {
@@ -32,6 +32,8 @@ export function timelinePhaseOutcome(input: {
   ) {
     return "failed"
   }
+  // Cancelled is not Fail — treat as unsettled (no green “complete”).
+  if (input.nodeStatus === "cancelled") return "running"
   if (input.phaseStatus === "done" && input.nodeStatus === "success") return "success"
   if (input.nodeStatus === "running" || input.phaseStatus === "running") return "running"
   return "success"

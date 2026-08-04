@@ -11,6 +11,7 @@ import { buildOutline, TRACE_VIEW_SPEC } from "./build-outline"
 import { atomsFromTrace } from "./normalize"
 import { isPlannerStepSuccessStatus } from "./planner-step-status"
 import { computeTokenCostUsd } from "./trace-cost"
+import { isCancelRaceFailureError } from "./trace-terminal"
 import type { OutlineNode } from "./types"
 
 type LlmRequest = Extract<TraceEntry, { kind: "llm-request" }>
@@ -117,7 +118,8 @@ export type TraceWorkNote = {
   id: string
   label: string
   text: string
-  tone?: "neutral" | "error"
+  /** cancelled = user/abort stop (not Fail); error = real failure. */
+  tone?: "neutral" | "error" | "cancelled"
 }
 
 export type TraceWorkNode = {
@@ -875,6 +877,9 @@ function applyToolResult(
 }
 
 function workTitle(tools: TraceToolCall[], notes: TraceWorkNote[]): string {
+  if (tools.length === 0 && notes.some((n) => n.tone === "cancelled")) {
+    return "Cancelled"
+  }
   if (tools.length === 0 && notes.length > 0) return notes[0]!.label
   if (tools.length === 1) return tools[0]!.name
   if (tools.length > 1) return `${tools.length} tools`
@@ -882,6 +887,9 @@ function workTitle(tools: TraceToolCall[], notes: TraceWorkNote[]): string {
 }
 
 function workSummary(tools: TraceToolCall[], notes: TraceWorkNote[]): string {
+  if (notes.some((n) => n.tone === "cancelled") && tools.length === 0) {
+    return "run stopped"
+  }
   const bits: string[] = []
   const done = tools.filter((t) => t.status === "done").length
   const err = tools.filter((t) => t.status === "error").length
@@ -1297,10 +1305,16 @@ export function buildTraceDag(trace: TraceEntry[], opts?: BuildTraceDagOpts): Tr
 
     if (entry.kind === "nudge") {
       const work = ensureWork(noteCall)
+      const tag = entry.tag || "Nudge"
+      const fatalTag =
+        tag === "fatal-tool-outcome" || tag === "abort-round-tool-outcome"
+      const cancelNudge =
+        fatalTag && isCancelRaceFailureError(entry.message)
       work.notes.push({
         id: `nudge-${i}`,
-        label: entry.tag || "Nudge",
+        label: tag,
         text: entry.message,
+        tone: cancelNudge ? "cancelled" : fatalTag ? "error" : undefined,
       })
       continue
     }
