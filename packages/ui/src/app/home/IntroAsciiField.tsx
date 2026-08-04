@@ -43,6 +43,9 @@ const SHELL_PULSE_INK_OPACITY = 0.30
 const SHELL_PULSE_UPDATE_FRACTION = 0.072
 const SHELL_PULSE_PALETTE_POW = 1.18
 const SHELL_PULSE_NOISE_T_MULT = 1.45
+/** Mitosis split seam — denser glyph band at the pane boundary. */
+const MITOSIS_SPLIT_X = 0.4
+const MITOSIS_SPLIT_BAND_COLS = 4.5
 /** Viewing as someone else — denser field in Viewing as ink (light blue / dark accent). */
 const VIEWING_AS_INK_OPACITY = 0.78
 
@@ -123,6 +126,23 @@ function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t
 }
 
+function mitosisSplitNoise(c: number, cols: number, v: number, active: boolean): number {
+  if (!active) return v
+  const splitC = cols * MITOSIS_SPLIT_X
+  const dist = Math.abs(c - splitC)
+  const band = 1 - smoothstep(MITOSIS_SPLIT_BAND_COLS * 0.35, MITOSIS_SPLIT_BAND_COLS * 3.5, dist)
+  if (band <= 0.001) return v
+  return Math.min(0.999, v + band * 0.42)
+}
+
+function mitosisSplitUpdateScale(c: number, cols: number, active: boolean): number {
+  if (!active) return 1
+  const splitC = cols * MITOSIS_SPLIT_X
+  const dist = Math.abs(c - splitC)
+  const band = 1 - smoothstep(MITOSIS_SPLIT_BAND_COLS * 0.25, MITOSIS_SPLIT_BAND_COLS * 2.5, dist)
+  return 1 - band * 0.88
+}
+
 function roundedRectSdf(px: number, py: number, target: IntroAsciiRenderTarget): number {
   const radius = Math.min(target.radius ?? 24, target.width / 2, target.height / 2)
   const cx = target.left + target.width / 2
@@ -187,20 +207,25 @@ export function IntroAsciiField({
   surface = "default",
   /** Full-field Viewing as ink — stronger than ambient home texture. */
   viewingAsField = false,
+  /** Vertical split seam — densify glyphs along the chat/workspace boundary. */
+  mitosisSplit = false,
 }: {
   onReady?: () => void
   boost?: boolean
   renderTarget?: IntroAsciiRenderTarget
   surface?: IntroAsciiSurface
   viewingAsField?: boolean
+  mitosisSplit?: boolean
 } = {}): JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const onReadyRef = useRef(onReady)
   const renderTargetRef = useRef(renderTarget)
   const viewingAsFieldRef = useRef(viewingAsField)
+  const mitosisSplitRef = useRef(mitosisSplit)
   onReadyRef.current = onReady
   renderTargetRef.current = renderTarget
   viewingAsFieldRef.current = viewingAsField
+  mitosisSplitRef.current = mitosisSplit
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -279,15 +304,19 @@ export function IntroAsciiField({
     // instances line up exactly.
     const revealStartTs = performance.now()
 
-    function readShellSwitchPulse(): boolean {
-      if (boost || viewingAsFieldRef.current || reduced) return false
+    function readShellMitosisSplit(): boolean {
+      if (boost || viewingAsFieldRef.current || reduced) return mitosisSplitRef.current
       const root = canvas!.closest(".app-shell-view")
-      if (!root) return false
-      return root.querySelector(".app-shell-view--sweeping") !== null
+      if (!root) return mitosisSplitRef.current
+      return mitosisSplitRef.current || root.classList.contains("app-shell-view--transitioning")
     }
 
     function syncFieldIntensity(): void {
-      const shellPulse = readShellSwitchPulse()
+      const splitting = readShellMitosisSplit()
+      mitosisSplitRef.current = splitting
+      // Pulse the ambient field during mode switch so the matrix reads;
+      // densify also concentrates along the vertical seam.
+      const shellPulse = splitting
       if (shellPulse !== shellPulseActive) {
         shellPulseActive = shellPulse
         forceFullRepaint = true
@@ -430,7 +459,8 @@ export function IntroAsciiField({
       for (let r = 0; r < rows; r++) {
         const startC = isMirroredHomeSurface(surface) ? Math.floor(cols * 0.5) : 0
         for (let c = startC; c < cols; c++) {
-          const v = surfaceNoise(surface, c, r, cols, rows, t)
+          let v = surfaceNoise(surface, c, r, cols, rows, t)
+          v = mitosisSplitNoise(c, cols, v, mitosisSplitRef.current)
           const idx = Math.min(PALETTE.length - 1, Math.floor(Math.pow(v, fieldPalettePow) * PALETTE.length))
           cells[r * cols + c] = idx
           const ch = PALETTE[idx]!
@@ -555,7 +585,8 @@ export function IntroAsciiField({
             if (painted[idx]) continue
             const rt = revealTimes[idx]!
             if (elapsed < rt) { anyPending = true; continue }
-            const v = surfaceNoise(surface, c, r, cols, rows, t)
+            let v = surfaceNoise(surface, c, r, cols, rows, t)
+            v = mitosisSplitNoise(c, cols, v, mitosisSplitRef.current)
             const palIdx = Math.min(PALETTE.length - 1, Math.floor(Math.pow(v, fieldPalettePow) * PALETTE.length))
             cells[idx] = palIdx
             painted[idx] = 1
@@ -609,7 +640,9 @@ export function IntroAsciiField({
           : (Math.random() * cols) | 0
         const idx = r * cols + c
         if (!painted[idx]) continue
+        if (mitosisSplitRef.current && Math.random() > mitosisSplitUpdateScale(c, cols, true)) continue
         let v = surfaceNoise(surface, c, r, cols, rows, t)
+        v = mitosisSplitNoise(c, cols, v, mitosisSplitRef.current)
         if (pointerLive && pointerGain > 0.05) {
           const falloff = pointerFalloff(c * CHAR_W + CHAR_W * 0.5, r * LINE_H + LINE_H * 0.5)
           if (falloff > 0.05) v = Math.min(0.999, v + falloff * 0.28)

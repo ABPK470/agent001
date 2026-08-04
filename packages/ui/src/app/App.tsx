@@ -23,8 +23,8 @@ import { flushDashboardSave, restoreDashboardState, startDashboardSync } from ".
 import { ChatHomePage } from "./home/ChatHomePage"
 import { IntroAsciiField } from "./home/IntroAsciiField"
 import { WelcomeFlow } from "./home/WelcomeFlow"
-import { ShellModeSweep } from "./ShellModeSweep"
-import { shellModeSweepMs } from "./shell-mode-transition"
+import { ShellModeStage, shellStagePhase } from "./ShellModeStage"
+import { shellModeTransitionMs } from "./shell-mode-transition"
 import type { AppShellMode } from "./types"
 import { isShellModeToggleEvent, resolveChatVariant } from "./types"
 import { Canvas, type CanvasHandle } from "./workspace/Canvas"
@@ -163,8 +163,8 @@ export function App() {
   const [shellMode, setShellMode] = useState<AppShellMode>("chat")
   const shellModeRef = useRef<AppShellMode>(shellMode)
   shellModeRef.current = shellMode
-  const [shellSweep, setShellSweep] = useState(false)
-  const shellSweepTimersRef = useRef<number[]>([])
+  const [shellTransition, setShellTransition] = useState<{ to: AppShellMode } | null>(null)
+  const shellTransitionTimersRef = useRef<number[]>([])
   const prevConnectedRef = useRef(false)
   // Becomes true when the login overlay starts its final fade so the home
   // shell crossfades with it instead of waiting for it to fully disappear.
@@ -252,33 +252,40 @@ export function App() {
       resetViewingAsMemory()
       return
     }
-    clearShellSweepTimers()
-    setShellSweep(null)
+    clearShellTransitionTimers()
+    setShellTransition(null)
     setShellMode("chat")
     syncViewingAsForSession({ upn: me.upn, isAdmin: me.isAdmin })
   }, [me?.upn, me?.isAdmin])
 
-  function clearShellSweepTimers() {
-    for (const id of shellSweepTimersRef.current) window.clearTimeout(id)
-    shellSweepTimersRef.current = []
+  function clearShellTransitionTimers() {
+    for (const id of shellTransitionTimersRef.current) window.clearTimeout(id)
+    shellTransitionTimersRef.current = []
   }
 
-  useEffect(() => () => clearShellSweepTimers(), [])
+  useEffect(() => () => clearShellTransitionTimers(), [])
 
   const transitionShellMode = useCallback((next: AppShellMode) => {
     if (shellModeRef.current === next) return
-    clearShellSweepTimers()
-    const sweepMs = shellModeSweepMs()
-    if (sweepMs === 0) {
-      setShellSweep(false)
+    clearShellTransitionTimers()
+    if (isMobile) {
+      setShellTransition(null)
       setShellMode(next)
       return
     }
-    setShellSweep(true)
-    const swapId = window.setTimeout(() => setShellMode(next), 48)
-    const sweepId = window.setTimeout(() => setShellSweep(false), sweepMs)
-    shellSweepTimersRef.current.push(swapId, sweepId)
-  }, [])
+    const transitionMs = shellModeTransitionMs(next)
+    if (transitionMs === 0) {
+      setShellTransition(null)
+      setShellMode(next)
+      return
+    }
+    setShellTransition({ to: next })
+    const endId = window.setTimeout(() => {
+      setShellMode(next)
+      setShellTransition(null)
+    }, transitionMs)
+    shellTransitionTimersRef.current.push(endId)
+  }, [isMobile])
 
   // ⌘⌥ / Ctrl+Alt — toggle chat ↔ workspace from either shell.
   useEffect(() => {
@@ -706,7 +713,9 @@ export function App() {
       <div
         className={[
           "app-shell-view flex flex-col h-screen min-h-[100dvh]",
-          shellSweep ? "app-shell-view--sweeping" : "",
+          shellTransition ? "app-shell-view--transitioning" : "",
+          !shellTransition && shellMode === "chat" ? "app-shell-view--chat" : "",
+          !shellTransition && shellMode === "workspace" ? "app-shell-view--workspace" : "",
         ]
           .filter(Boolean)
           .join(" ")}
@@ -718,16 +727,16 @@ export function App() {
             onRefresh={refreshPlatformHealth}
           />
         )}
-        <div
-          className={[
-            "app-shell-stack relative z-[1] flex min-h-0 flex-1 flex-col",
-            shellSweep ? "app-shell-stack--sweeping" : "",
-          ]
-            .filter(Boolean)
-            .join(" ")}
-        >
-          {renderShellBody(shellMode)}
-          {shellSweep && <ShellModeSweep />}
+        <div className="app-shell-stack relative z-[1] flex min-h-0 flex-1 flex-col">
+          {isMobile ? (
+            renderShellBody(shellMode)
+          ) : (
+            <ShellModeStage
+              phase={shellStagePhase(shellMode, shellTransition)}
+              chat={renderShellBody("chat")}
+              workspace={renderShellBody("workspace", { canvasActive: true })}
+            />
+          )}
         </div>
       </div>
     </>

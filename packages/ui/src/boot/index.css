@@ -14215,60 +14215,177 @@ button.trace-tree-status-pill:hover {
 }
 
 /* ── Chat ↔ workspace mode switch ────────────────────────────────────
-   One shell stays mounted; an ASCII curtain (compositor transform only)
-   slides off left → right while the mode swap happens underneath. */
+   Both panes stay full-bleed (no width reflow → no jump). Workspace
+   unfolds over a still chat via clip-path. End-state CSS matches the
+   animation's last frame so the class settle is invisible.
+   During transition the chat ASCII mask opens so glyphs can actually
+   read at the advancing edge (steady chat keeps the soft vignette). */
 .app-shell-view {
   position: relative;
 }
 
-.app-shell-stack--sweeping {
+.shell-stage {
+  --shell-ms-fwd: 240ms;
+  --shell-ms-back: 180ms;
+  --shell-ease: cubic-bezier(0.2, 0, 0, 1);
+  position: relative;
+  flex: 1;
+  min-height: 0;
   overflow: hidden;
+  contain: layout style;
+  background-color: var(--bg);
 }
 
-.shell-mode-sweep {
-  contain: strict;
-  isolation: isolate;
-}
-
-.shell-mode-sweep-curtain {
+.shell-stage-pane {
   position: absolute;
   inset: 0;
-  background-color: var(--bg);
-  will-change: transform;
-  animation: shell-sweep-curtain 520ms cubic-bezier(0.65, 0, 0.35, 1) forwards;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  backface-visibility: hidden;
 }
 
-.shell-mode-sweep-curtain .intro3-ascii-field {
+.shell-stage-pane .chathome,
+.shell-stage-pane .workspace-chrome {
+  height: 100%;
+  min-height: 0;
+}
+
+/* Chat underneath; workspace on top when revealing. */
+.shell-stage-pane--chat {
+  z-index: 1;
+}
+
+.shell-stage-pane--workspace {
+  z-index: 2;
+}
+
+/* ── Steady: chat ── */
+.shell-stage--chat .shell-stage-pane--chat {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.shell-stage--chat .shell-stage-pane--workspace {
+  opacity: 1;
+  pointer-events: none;
+  clip-path: inset(0 0 0 100%);
+  -webkit-clip-path: inset(0 0 0 100%);
+}
+
+/* ── Steady: workspace ──
+   Chat stays fully painted underneath (opacity 1) so reverse fold has
+   nothing to "pop in" — only pointer-events are disabled. */
+.shell-stage--workspace .shell-stage-pane--workspace {
+  opacity: 1;
+  pointer-events: auto;
+  clip-path: inset(0 0 0 0);
+  -webkit-clip-path: inset(0 0 0 0);
+}
+
+.shell-stage--workspace .shell-stage-pane--chat {
+  opacity: 1;
+  pointer-events: none;
+}
+
+/* Let the living matrix show during the unfold (mask normally kills center glyphs). */
+.app-shell-view--transitioning .shell-stage-pane--chat .chathome-frame {
+  -webkit-mask-image: none;
+  mask-image: none;
+  opacity: 0.7;
+}
+
+.app-shell-view--transitioning .shell-stage-pane--chat .chathome-frame .intro3-ascii-field {
+  opacity: 0.9;
+}
+
+.app-shell-view--workspace .workspace-stage-glyphs .intro3-ascii-field {
+  opacity: 0.22;
+}
+
+.shell-stage--to-workspace .workspace-stage-glyphs,
+.shell-stage--to-chat .workspace-stage-glyphs {
+  visibility: hidden;
+}
+
+/* ── Forward: workspace unfolds L←R over still chat ── */
+.shell-stage--to-workspace .shell-stage-pane--chat {
+  pointer-events: none;
   opacity: 1;
 }
 
-.shell-mode-sweep-curtain::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 2;
-  width: 2px;
-  background: var(--accent);
-  box-shadow:
-    0 0 16px color-mix(in srgb, var(--accent) 50%, transparent),
-    0 0 32px color-mix(in srgb, var(--accent) 25%, transparent);
+.shell-stage--to-workspace .shell-stage-pane--workspace {
+  pointer-events: none;
+  opacity: 1;
+  will-change: clip-path;
+  clip-path: inset(0 0 0 100%);
+  -webkit-clip-path: inset(0 0 0 100%);
+  animation: shell-workspace-unfold var(--shell-ms-fwd) var(--shell-ease) forwards;
 }
 
-@keyframes shell-sweep-curtain {
+/* ── Reverse: workspace clips shut; chat already full underneath ── */
+.shell-stage--to-chat .shell-stage-pane--chat {
+  pointer-events: none;
+  opacity: 1;
+}
+
+.shell-stage--to-chat .shell-stage-pane--workspace {
+  pointer-events: none;
+  opacity: 1;
+  will-change: clip-path;
+  clip-path: inset(0 0 0 0);
+  -webkit-clip-path: inset(0 0 0 0);
+  animation: shell-workspace-fold var(--shell-ms-back) var(--shell-ease) forwards;
+}
+
+@keyframes shell-workspace-unfold {
   from {
-    transform: translate3d(0, 0, 0);
+    clip-path: inset(0 0 0 100%);
+    -webkit-clip-path: inset(0 0 0 100%);
   }
   to {
-    transform: translate3d(100%, 0, 0);
+    clip-path: inset(0 0 0 0);
+    -webkit-clip-path: inset(0 0 0 0);
+  }
+}
+
+@keyframes shell-workspace-fold {
+  from {
+    clip-path: inset(0 0 0 0);
+    -webkit-clip-path: inset(0 0 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 100%);
+    -webkit-clip-path: inset(0 0 0 100%);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .shell-mode-sweep-curtain {
-    animation: none;
-    transform: translate3d(100%, 0, 0);
+  .shell-stage-pane {
+    will-change: auto;
+    animation: none !important;
+  }
+
+  .shell-stage--to-workspace .shell-stage-pane--workspace,
+  .shell-stage--workspace .shell-stage-pane--workspace {
+    clip-path: inset(0 0 0 0);
+    -webkit-clip-path: inset(0 0 0 0);
+    opacity: 1;
+  }
+
+  .shell-stage--to-workspace .shell-stage-pane--chat,
+  .shell-stage--workspace .shell-stage-pane--chat,
+  .shell-stage--to-chat .shell-stage-pane--chat,
+  .shell-stage--chat .shell-stage-pane--chat {
+    opacity: 1;
+  }
+
+  .shell-stage--to-chat .shell-stage-pane--workspace,
+  .shell-stage--chat .shell-stage-pane--workspace {
+    clip-path: inset(0 0 0 100%);
+    -webkit-clip-path: inset(0 0 0 100%);
+    opacity: 1;
   }
 }
 
