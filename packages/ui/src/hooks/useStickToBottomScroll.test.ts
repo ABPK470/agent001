@@ -20,6 +20,12 @@ describe("useStickToBottomScroll — inspect polish", () => {
     expect(src).toContain("dist <= threshold")
   })
 
+  it("derives jump button from scroll position, not intent alone", () => {
+    expect(src).toContain("chatTranscriptShowJumpButton")
+    expect(src).toContain("syncJumpButtonFromHost")
+    expect(src).not.toMatch(/setShowJumpButton\(next === "interrupted"\)/)
+  })
+
   it("pins the floor synchronously on grow, then settles next frame", () => {
     expect(src).toContain("pinFloorWhileFollowing")
     expect(src).toMatch(/pinFloorWhileFollowing\(\)/)

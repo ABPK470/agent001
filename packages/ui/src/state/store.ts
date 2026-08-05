@@ -21,6 +21,7 @@ import {
 } from "./sync-trace-progress.js"
 import { pendingApprovalFromEvent, type PendingToolApproval } from "./pending-approval.js"
 import { applyOptimisticApprovalResume } from "./approval-resume-optimistic.js"
+import { stripApprovalWaitTraceEntries } from "../lib/approval-wait-copy.js"
 import { api } from "../client/index"
 import { readSseRunId, readSseStepId, lookupEventDescriptor } from "@mia/shared-types"
 import {
@@ -1370,7 +1371,9 @@ export const useStore = create<AppState>()(
               promptTokens: resumedFrom ? (parentRun?.promptTokens ?? 0) : 0,
               completionTokens: resumedFrom ? (parentRun?.completionTokens ?? 0) : 0,
               llmCalls: resumedFrom ? (parentRun?.llmCalls ?? 0) : 0,
-              trace: resumedFrom ? (parentRun?.trace ?? []) : [],
+              trace: resumedFrom
+                ? stripApprovalWaitTraceEntries(parentRun?.trace ?? [])
+                : [],
               streamingAnswer: "",
               auditTrail: resumedFrom ? (parentRun?.auditTrail ?? []) : [],
               stepData: resumedFrom ? (parentRun?.stepData ?? []) : [],
@@ -1909,10 +1912,18 @@ export const useStore = create<AppState>()(
               notificationId: existing?.notificationId ?? pending.notificationId ?? null,
             })
             store.upsertRun({ id: runId, status: RunStatus.WaitingForApproval })
-            if (!existing || existing.runId !== runId || existing.stepId !== stepId) {
+            const waitText = `Waiting for approval — ${pending.toolName}: ${pending.reason}`
+            const runRow = get().runs.find((r) => r.id === runId)
+            const alreadyInTrace = runRow?.trace?.some(
+              (e) => e.kind === "error" && "text" in e && e.text === waitText,
+            )
+            if (
+              (!existing || existing.runId !== runId || existing.stepId !== stepId)
+              && !alreadyInTrace
+            ) {
               const traceEntry: TraceEntry = {
                 kind: "error",
-                text: `Waiting for approval — ${pending.toolName}: ${pending.reason}`,
+                text: waitText,
               }
               store.addTrace(traceEntry)
               if (runId) {

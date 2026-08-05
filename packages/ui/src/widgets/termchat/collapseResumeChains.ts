@@ -2,13 +2,12 @@
  * Collapse approval-resume run chains into one chat / threads row.
  *
  * Approve parks the parent and spawns a child with the same goal + parentRunId.
- * Without collapsing, TermChat and Threads show: goal → "Waiting for approval" →
- * "Run cancelled." → fake new user bubble (often "yes") — once per approval.
- * Pipelines collapses the same chain server-side (merge-agent-run-resume).
+ * Without collapsing, TermChat shows duplicate goals and cancel noise per approval.
+ * Pause markers are stripped on merge — the modal owns approval UX; tool rows show work.
  */
 
 import type { Run, TraceEntry } from "@mia/shared-types"
-import { WAITING_APPROVAL_RE } from "../../lib/approval-wait-copy"
+import { stripApprovalWaitTraceEntries } from "../../lib/approval-wait-copy"
 
 /** True when this run was closed only because a resume child continued it. */
 export function isSupersededByResume(run: Run, runs: readonly Run[]): boolean {
@@ -16,24 +15,11 @@ export function isSupersededByResume(run: Run, runs: readonly Run[]): boolean {
 }
 
 /**
- * Soften parked-approval error notes on parents that were later resumed.
- * Keep deny/cancel errors intact on true stops.
+ * Resume chains drop approval pause markers — the modal + tool rows carry that story.
+ * Keeping them produced N× "Approved … — continued" and stacked "Paused …" lines.
  */
-export function softenApprovalTraceEntries(
-  entries: readonly TraceEntry[],
-  opts: { resumed: boolean },
-): TraceEntry[] {
-  if (!opts.resumed) return [...entries]
-  return entries.map((entry) => {
-    if (entry.kind !== "error") return entry
-    const m = WAITING_APPROVAL_RE.exec(entry.text.trim())
-    if (!m) return entry
-    const tool = m[1]?.trim() || "tool"
-    return {
-      kind: "error",
-      text: `Approved ${tool} — continued`,
-    }
-  })
+export function dropApprovalWaitTraceEntries(entries: readonly TraceEntry[]): TraceEntry[] {
+  return stripApprovalWaitTraceEntries(entries)
 }
 
 function chainRootToLeaf(leaf: Run, byId: Map<string, Run>): Run[] {
@@ -56,11 +42,8 @@ function mergeResumeChain(chain: Run[]): Run {
   if (chain.length === 1) return leaf
 
   const trace: TraceEntry[] = []
-  for (let i = 0; i < chain.length; i++) {
-    const run = chain[i]!
-    const resumed = i < chain.length - 1
-    const piece = softenApprovalTraceEntries(run.trace ?? [], { resumed })
-    trace.push(...piece)
+  for (const run of chain) {
+    trace.push(...dropApprovalWaitTraceEntries(run.trace ?? []))
   }
 
   return {

@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest"
 import type { Run, TraceEntry } from "@mia/shared-types"
 import {
   collapseResumeRunChains,
+  dropApprovalWaitTraceEntries,
   isSupersededByResume,
-  softenApprovalTraceEntries,
 } from "./collapseResumeChains"
 
 function run(partial: Partial<Run> & Pick<Run, "id" | "goal">): Run {
@@ -25,7 +25,7 @@ function run(partial: Partial<Run> & Pick<Run, "id" | "goal">): Run {
 }
 
 describe("collapseResumeRunChains", () => {
-  it("merges approval resume children under one goal and drops cancelled parents", () => {
+  it("merges approval resume children under one goal and drops pause markers", () => {
     const parent = run({
       id: "p1",
       goal: "yes",
@@ -60,11 +60,11 @@ describe("collapseResumeRunChains", () => {
 
     const texts = (out[0]!.trace ?? []).map((e) => ("text" in e ? e.text : e.kind))
     expect(texts.some((t) => String(t).includes("Waiting for approval"))).toBe(false)
-    expect(texts.some((t) => String(t).includes("Approved sync_execute"))).toBe(true)
+    expect(texts.some((t) => String(t).includes("Approved"))).toBe(false)
     expect(texts).toContain("Done.")
   })
 
-  it("collapses a chain of three approvals into one turn", () => {
+  it("collapses a chain of many approvals without approval spam in the trace", () => {
     const a = run({
       id: "a",
       goal: "sync uat to dev",
@@ -94,10 +94,9 @@ describe("collapseResumeRunChains", () => {
     expect(out).toHaveLength(1)
     expect(out[0]!.id).toBe("c")
     expect(out[0]!.goal).toBe("sync uat to dev")
-    const approved = (out[0]!.trace ?? []).filter(
-      (e) => e.kind === "error" && "text" in e && String(e.text).startsWith("Approved"),
-    )
-    expect(approved).toHaveLength(2)
+    const trace = out[0]!.trace ?? []
+    expect(trace.some((e) => e.kind === "error")).toBe(false)
+    expect(trace.some((e) => "text" in e && String(e.text).includes("Approved"))).toBe(false)
   })
 
   it("leaves unrelated runs alone", () => {
@@ -108,18 +107,14 @@ describe("collapseResumeRunChains", () => {
   })
 })
 
-describe("softenApprovalTraceEntries", () => {
-  it("rewrites waiting errors only when the run was resumed", () => {
+describe("dropApprovalWaitTraceEntries", () => {
+  it("removes approval pause markers but keeps real errors", () => {
     const entries: TraceEntry[] = [
       { kind: "error", text: "Waiting for approval — sync_execute: policy" },
+      { kind: "error", text: 'Approval required for tool "fetch_url": network' },
       { kind: "error", text: "Tool failed hard" },
     ]
-    const soft = softenApprovalTraceEntries(entries, { resumed: true })
-    expect(soft[0]).toMatchObject({
-      kind: "error",
-      text: "Approved sync_execute — continued",
-    })
-    expect(soft[1]).toEqual(entries[1])
-    expect(softenApprovalTraceEntries(entries, { resumed: false })).toEqual(entries)
+    const stripped = dropApprovalWaitTraceEntries(entries)
+    expect(stripped).toEqual([{ kind: "error", text: "Tool failed hard" }])
   })
 })

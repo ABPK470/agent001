@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObje
 import {
   CHAT_SCROLL_INTERRUPT_AWAY_PX,
   chatScrollDistanceFromBottom,
+  chatTranscriptShowJumpButton,
 } from "../app/chatLayout"
 import {
   isNearBottom,
@@ -67,13 +68,19 @@ export function useStickToBottomScroll(options: UseStickToBottomScrollOptions = 
 
   followWhenRef.current = followWhen
 
+  const syncJumpButtonFromHost = useCallback(() => {
+    const host = scrollHostRef.current
+    if (!host) return
+    setShowJumpButton(chatTranscriptShowJumpButton(host, threshold))
+  }, [threshold])
+
   const setIntent = useCallback((next: ChatScrollIntent) => {
     intentRef.current = next
-    setShowJumpButton(next === "interrupted")
     if (next === "following") {
       inspectAnchorRef.current = null
     }
-  }, [])
+    syncJumpButtonFromHost()
+  }, [syncJumpButtonFromHost])
 
   const rememberInspectAnchor = useCallback(() => {
     const anchor = listRef?.current?.captureScrollAnchor() ?? null
@@ -88,15 +95,15 @@ export function useStickToBottomScroll(options: UseStickToBottomScrollOptions = 
     if (options?.stick !== false) {
       intentRef.current = "following"
       inspectAnchorRef.current = null
-      setShowJumpButton(false)
     } else {
       intentRef.current = "interrupted"
-      setShowJumpButton(true)
     }
+    syncJumpButtonFromHost()
     requestAnimationFrame(() => {
       programmaticScrollRef.current = false
+      syncJumpButtonFromHost()
     })
-  }, [])
+  }, [syncJumpButtonFromHost])
 
   const pauseAutoScroll = useCallback(() => {
     rememberInspectAnchor()
@@ -111,8 +118,8 @@ export function useStickToBottomScroll(options: UseStickToBottomScrollOptions = 
   const resumeAutoFollow = useCallback(() => {
     intentRef.current = "following"
     inspectAnchorRef.current = null
-    setShowJumpButton(false)
-  }, [])
+    syncJumpButtonFromHost()
+  }, [syncJumpButtonFromHost])
 
   const onScroll = useCallback(() => {
     const host = scrollHostRef.current
@@ -140,7 +147,8 @@ export function useStickToBottomScroll(options: UseStickToBottomScrollOptions = 
     }
 
     onScrollPosition?.(host.scrollTop, host)
-  }, [threshold, onScrollPosition, setIntent, rememberInspectAnchor])
+    syncJumpButtonFromHost()
+  }, [threshold, onScrollPosition, setIntent, rememberInspectAnchor, syncJumpButtonFromHost])
 
   const stickIfFollowing = useCallback(() => {
     const host = scrollHostRef.current
@@ -154,8 +162,10 @@ export function useStickToBottomScroll(options: UseStickToBottomScrollOptions = 
     onScrollPosition?.(host.scrollTop, host)
     requestAnimationFrame(() => {
       programmaticScrollRef.current = false
+      syncJumpButtonFromHost()
     })
-  }, [onScrollPosition])
+    syncJumpButtonFromHost()
+  }, [onScrollPosition, syncJumpButtonFromHost])
 
   /**
    * VirtualList remasure can land one frame after the content RO.
@@ -178,9 +188,9 @@ export function useStickToBottomScroll(options: UseStickToBottomScrollOptions = 
     if (intentRef.current === "interrupted") return
     if (!isNearBottom(host, threshold)) return
     intentRef.current = "following"
-    setShowJumpButton(false)
     stickIfFollowing()
-  }, [stickIfFollowing, threshold])
+    syncJumpButtonFromHost()
+  }, [stickIfFollowing, threshold, syncJumpButtonFromHost])
 
   useLayoutEffect(() => {
     const host = scrollHostRef.current
@@ -193,11 +203,14 @@ export function useStickToBottomScroll(options: UseStickToBottomScrollOptions = 
         programmaticScrollRef.current = true
         scrollHostToBottom(host)
         intentRef.current = "following"
+        syncJumpButtonFromHost()
         requestAnimationFrame(() => {
           programmaticScrollRef.current = false
+          syncJumpButtonFromHost()
         })
       } else {
         intentRef.current = "interrupted"
+        syncJumpButtonFromHost()
       }
       return
     }
@@ -211,12 +224,13 @@ export function useStickToBottomScroll(options: UseStickToBottomScrollOptions = 
       lastContentHeightRef.current = 0
       programmaticScrollRef.current = true
       scrollHostToBottom(host)
-      setShowJumpButton(false)
+      syncJumpButtonFromHost()
       requestAnimationFrame(() => {
         programmaticScrollRef.current = false
+        syncJumpButtonFromHost()
       })
     }
-  }, [resetKey, initialScroll])
+  }, [resetKey, initialScroll, syncJumpButtonFromHost])
 
   useEffect(() => {
     const host = scrollHostRef.current
@@ -235,6 +249,7 @@ export function useStickToBottomScroll(options: UseStickToBottomScrollOptions = 
 
         if (intentRef.current === "following" && followWhenRef.current) {
           pinFloorWhileFollowing()
+          syncJumpButtonFromHost()
           return
         }
 
@@ -255,13 +270,16 @@ export function useStickToBottomScroll(options: UseStickToBottomScrollOptions = 
             listRef.current.restoreScrollAnchor(inspectAnchorRef.current)
           }
           programmaticScrollRef.current = false
+          syncJumpButtonFromHost()
         })
+        syncJumpButtonFromHost()
         return
       }
 
       if (height === prevHeight) return
       lastContentHeightRef.current = height
       pinFloorWhileFollowing()
+      syncJumpButtonFromHost()
     })
 
     observer.observe(inner)
@@ -269,7 +287,11 @@ export function useStickToBottomScroll(options: UseStickToBottomScrollOptions = 
       if (growFrameRef.current) cancelAnimationFrame(growFrameRef.current)
       observer.disconnect()
     }
-  }, [pinFloorWhileFollowing, listRef])
+  }, [pinFloorWhileFollowing, listRef, syncJumpButtonFromHost])
+
+  useEffect(() => {
+    syncJumpButtonFromHost()
+  }, [threshold, syncJumpButtonFromHost])
 
   useEffect(() => {
     const wasLive = prevFollowWhenRef.current
@@ -279,10 +301,10 @@ export function useStickToBottomScroll(options: UseStickToBottomScrollOptions = 
     if (!host || intentRef.current === "interrupted") return
     if (isNearBottom(host, threshold)) {
       intentRef.current = "following"
-      setShowJumpButton(false)
       stickIfFollowing()
+      syncJumpButtonFromHost()
     }
-  }, [followWhen, stickIfFollowing, threshold])
+  }, [followWhen, stickIfFollowing, threshold, syncJumpButtonFromHost])
 
   return {
     scrollHostRef,

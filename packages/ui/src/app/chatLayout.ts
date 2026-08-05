@@ -92,6 +92,22 @@ export function chatScrollDistanceFromBottom(host: {
   return host.scrollHeight - host.scrollTop - host.clientHeight
 }
 
+/**
+ * Jump-to-latest affordance — position truth, not scroll intent.
+ * Hidden when content fits or the viewport sits in the paper band near the floor.
+ */
+export function chatTranscriptShowJumpButton(
+  host: {
+    scrollHeight: number
+    scrollTop: number
+    clientHeight: number
+  },
+  nearBottomThresholdPx: number,
+): boolean {
+  if (host.scrollHeight <= host.clientHeight + 1) return false
+  return chatScrollDistanceFromBottom(host) > nearBottomThresholdPx
+}
+
 export function homeChatColumnWidthPx(viewportWidth: number): number {
   return Math.min(viewportWidth * HOME_CHAT_WIDTH_RATIO, HOME_CHAT_MAX_WIDTH_PX)
 }

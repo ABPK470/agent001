@@ -49,7 +49,7 @@ export async function finalizeWaitingForApprovalRun(
   persistTokenUsage(request.runId, agent)
   env.boundSaveTrace(request.runId, {
     kind: TraceEventKind.Error,
-    text: error.message,
+    text: `Waiting for approval — ${error.toolName}: ${error.reason.slice(0, 180)}`,
   })
 
   await db.saveLog({

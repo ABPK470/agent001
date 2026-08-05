@@ -6,6 +6,7 @@
  */
 
 import { RunStatus } from "../enums"
+import { stripApprovalWaitTraceEntries } from "../lib/approval-wait-copy"
 import type { Run } from "../types"
 
 export function applyOptimisticApprovalResume(
@@ -31,7 +32,7 @@ export function applyOptimisticApprovalResume(
     answer: null,
     error: null,
     streamingAnswer: parent?.streamingAnswer ?? "",
-    trace: parent?.trace ?? [],
+    trace: stripApprovalWaitTraceEntries(parent?.trace ?? []),
     stepCount: parent?.stepCount ?? 0,
     pendingWorkspaceChanges: parent?.pendingWorkspaceChanges ?? 0,
     totalTokens: parent?.totalTokens ?? 0,

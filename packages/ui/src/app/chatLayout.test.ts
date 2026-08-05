@@ -11,6 +11,7 @@ import {
   CHAT_TRANSCRIPT_NEAR_BOTTOM_MIN_PX,
   chatScrollDistanceFromBottom,
   chatTranscriptNearBottomThresholdPx,
+  chatTranscriptShowJumpButton,
   HOME_CHAT_COLUMN_CLASS,
   HOME_CHAT_GUTTER_X_CLASS,
   HOME_CHAT_INPUT_DOCK_CLASS,
@@ -66,6 +67,26 @@ describe("chatLayout — home + TermChat alignment", () => {
       chatScrollDistanceFromBottom({ scrollHeight: 1000, scrollTop: 700, clientHeight: 200 }),
     ).toBe(100)
 
+    const threshold = chatTranscriptNearBottomThresholdPx(480)
+    expect(
+      chatTranscriptShowJumpButton(
+        { scrollHeight: 1000, scrollTop: 650, clientHeight: 200 },
+        threshold,
+      ),
+    ).toBe(false)
+    expect(
+      chatTranscriptShowJumpButton(
+        { scrollHeight: 1000, scrollTop: 500, clientHeight: 200 },
+        threshold,
+      ),
+    ).toBe(true)
+    expect(
+      chatTranscriptShowJumpButton(
+        { scrollHeight: 400, scrollTop: 0, clientHeight: 400 },
+        threshold,
+      ),
+    ).toBe(false)
+
     const css = readFileSync(join(here, "../boot/index.css"), "utf8")
     expect(css).toMatch(
       /\.chat-transcript-bottom-paper\s*\{[^}]*height:\s*clamp\(5\.5rem,\s*38vh,\s*22rem\)/s,
@@ -75,6 +96,7 @@ describe("chatLayout — home + TermChat alignment", () => {
     expect(term).toContain("CHAT_TRANSCRIPT_BOTTOM_PAPER_CLASS")
     expect(term).toContain("threshold: nearBottomThreshold")
     expect(term).toContain("chatTranscriptNearBottomThresholdPx")
+    expect(term).toContain("showJumpButton")
     // Both home + widget list paths render the spacer.
     expect(term.match(/CHAT_TRANSCRIPT_BOTTOM_PAPER_CLASS/g)?.length ?? 0).toBeGreaterThanOrEqual(3)
     // Tiny scrollport pad must not replace the paper.

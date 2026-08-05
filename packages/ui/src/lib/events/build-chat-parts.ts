@@ -13,6 +13,7 @@ import {
 import type { TraceEntry } from "@mia/shared-types"
 import { RunStatus } from "../../enums"
 import { isTerminalRunStatus } from "../run-actions"
+import { projectTraceForChatDisplay } from "../approval-wait-copy"
 import { formatMs } from "../util"
 import { isPlannerStepSuccessStatus, plannerStepEndDetail } from "./planner-step-status"
 import { reconcilePlannerStepGroups } from "./reconcile-step-groups"
@@ -746,6 +747,7 @@ export function buildResponseParts(
   pendingInput: { runId: string; question: string; options?: string[]; sensitive?: boolean } | null,
   runId: string,
 ): ResponsePart[] {
+  const traceForDisplay = projectTraceForChatDisplay(trace, runStatus)
   let parts: ResponsePart[] = []
   const runningSteps = new Map<string, string>()
   /** Open planner step — tools nest here instead of floating as peers. */
@@ -809,8 +811,8 @@ export function buildResponseParts(
     pendingTargets = []
   }
 
-  for (let index = 0; index < trace.length; index++) {
-    const entry = trace[index]
+  for (let index = 0; index < traceForDisplay.length; index++) {
+    const entry = traceForDisplay[index]
     switch (entry.kind) {
       case "iteration": {
         // Boundary between agent-loop iterations. Roll up the tool calls
