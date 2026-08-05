@@ -496,41 +496,8 @@ export function OperationLog() {
     return map
   }, [filtered])
 
-  const openTopLevelActivities = useCallback((pipeline: OperationPipeline) => {
-    touchTreePersist()
-    setActExpanded((s) => {
-      let changed = false
-      const n = new Set(s)
-      for (const activity of pipeline.activities) {
-        const key = pipelineActivityKey(pipeline.id, activity.id)
-        if ((activity.children?.length ?? 0) > 0 && !n.has(key)) {
-          n.add(key)
-          changed = true
-        }
-      }
-      return changed ? n : s
-    })
-  }, [touchTreePersist])
-
-  const openPipelineTree = useCallback(
-    (pipelineId: string) => {
-      const target = pipelineById.get(pipelineId)
-      touchTreePersist()
-      setOpenPipelineIds((s) => {
-        if (s.has(pipelineId)) return s
-        const n = new Set(s)
-        n.add(pipelineId)
-        return n
-      })
-      if (target) openTopLevelActivities(target)
-    },
-    [pipelineById, openTopLevelActivities, touchTreePersist],
-  )
-
   const togglePipelineTree = useCallback(
     (pipelineId: string) => {
-      const target = pipelineById.get(pipelineId)
-      const wasOpen = openPipelineIds.has(pipelineId)
       touchTreePersist()
       setOpenPipelineIds((s) => {
         const n = new Set(s)
@@ -538,26 +505,17 @@ export function OperationLog() {
         else n.add(pipelineId)
         return n
       })
-      if (!wasOpen && target) openTopLevelActivities(target)
     },
-    [pipelineById, openPipelineIds, openTopLevelActivities, touchTreePersist],
+    [touchTreePersist],
   )
 
-  const selectPipeline = useCallback(
-    (pipelineId: string) => {
-      setSelection({ kind: "pipeline", pipelineId })
-      openPipelineTree(pipelineId)
-    },
-    [openPipelineTree],
-  )
+  const selectPipeline = useCallback((pipelineId: string) => {
+    setSelection({ kind: "pipeline", pipelineId })
+  }, [])
 
-  const selectActivity = useCallback(
-    (pipelineId: string, activityKey: string) => {
-      setSelection({ kind: "activity", pipelineId, activityKey })
-      openPipelineTree(pipelineId)
-    },
-    [openPipelineTree],
-  )
+  const selectActivity = useCallback((pipelineId: string, activityKey: string) => {
+    setSelection({ kind: "activity", pipelineId, activityKey })
+  }, [])
 
   const selectedPipelineId = selection?.pipelineId ?? null
   const selectedPipeline = selectedPipelineId
