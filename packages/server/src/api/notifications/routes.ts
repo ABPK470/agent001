@@ -33,7 +33,7 @@ export function registerNotificationRoutes(app: FastifyInstance, orchestrator: A
     const { viewingAsUpn } = viewingAsOf(req)
     const limit = Math.min(Number(req.query.limit) || 50, 200)
     const notifications = await db.listNotificationsForUser(viewingAsUpn, limit)
-    return notifications.map((notification) => {
+    return Promise.all(notifications.map(async (notification) => {
       const actions = parseBoundaryJson(notification.actions) as NotificationAction[]
       return {
         id: notification.id,
@@ -42,11 +42,11 @@ export function registerNotificationRoutes(app: FastifyInstance, orchestrator: A
         message: notification.message,
         runId: notification.run_id,
         stepId: notification.step_id,
-        actions: filterNotificationActionsForCapabilities(notification.run_id, actions),
+        actions: await filterNotificationActionsForCapabilities(notification.run_id, actions),
         read: notification.read === 1,
         createdAt: notification.created_at,
       }
-    })
+    }))
   })
 
   app.get("/api/notifications/unread-count", personal.read, async (req) => {

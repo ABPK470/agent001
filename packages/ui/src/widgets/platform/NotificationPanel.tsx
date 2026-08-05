@@ -41,8 +41,12 @@ const TYPE_COLOR: Record<string, string> = {
   "approval.required": "var(--color-warning)",
 }
 
+function notificationActions(notification: Notification): NotificationAction[] {
+  return Array.isArray(notification.actions) ? notification.actions : []
+}
+
 function approvalIdFromNotification(notification: Notification): string | undefined {
-  const action = notification.actions.find((a) => a.action === "approve-run-step")
+  const action = notificationActions(notification).find((a) => a.action === "approve-run-step")
   return action?.data?.approvalId as string | undefined
 }
 
@@ -52,8 +56,9 @@ function approvalIdFromNotification(notification: Notification): string | undefi
  * (list endpoint already filters stale actions).
  */
 function visibleActions(notification: Notification, run: Run | undefined): NotificationAction[] {
-  if (!run) return notification.actions
-  return notification.actions.filter((a) => {
+  const actions = notificationActions(notification)
+  if (!run) return actions
+  return actions.filter((a) => {
     if (a.action === "resume-run") {
       if (run.hasCheckpoint == null) return true
       return canResumeRun(run.status, run.hasCheckpoint)

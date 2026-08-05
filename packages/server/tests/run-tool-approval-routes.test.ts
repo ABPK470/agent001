@@ -126,6 +126,36 @@ describe("run tool approval routes", () => {
     expect(cancelRun).toHaveBeenCalledWith("run-2")
   })
 
+  it("GET /api/notifications returns parsed actions arrays", async () => {
+    const built = await buildApp({ resumeRun: vi.fn(), cancelRun: vi.fn() } as unknown as import("../src/runtime/orchestrator.js").AgentOrchestrator)
+    app = built.app
+    seedRun(testDb, "run-1", { upn: UPN, status: "failed" })
+
+    const { saveNotification } = await import("../src/infra/persistence/adapters/sqlite/db/index.js")
+    await saveNotification({
+      id: "note-list-1",
+      type: "run.failed",
+      title: "Run failed",
+      message: "Something broke",
+      run_id: "run-1",
+      step_id: null,
+      owner_upn: UPN,
+      actions: JSON.stringify([
+        { label: "Review", action: "view-run", data: { runId: "run-1" } },
+      ]),
+      read: 0,
+      created_at: new Date().toISOString(),
+    })
+
+    const res = await app.inject({ method: "GET", url: "/api/notifications" })
+    expect(res.statusCode).toBe(200)
+    const rows = res.json() as Array<{ actions: unknown }>
+    expect(Array.isArray(rows[0]?.actions)).toBe(true)
+    expect(rows[0]?.actions).toEqual([
+      { label: "Review", action: "view-run", data: { runId: "run-1" } },
+    ])
+  })
+
   it("notification approve-run-step action delegates to approval service", async () => {
     const resumeRun = vi.fn(() => "run-1-resumed")
     const built = await buildApp({ resumeRun, cancelRun: vi.fn() } as unknown as import("../src/runtime/orchestrator.js").AgentOrchestrator)
