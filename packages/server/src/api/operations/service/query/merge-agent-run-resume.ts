@@ -7,7 +7,7 @@
  */
 
 import { OperationKind } from "../../../../internal/enums/operations.js"
-import type { OperationPipeline } from "./types.js"
+import type { OperationActivity, OperationPipeline } from "./types.js"
 import { durationOf } from "./utils.js"
 
 export type AgentRunResumeLookup = {
@@ -41,6 +41,25 @@ function chainInPage(
   return chain
 }
 
+/**
+ * Resume merge concatenates parent + child activities as siblings under the
+ * leaf pipeline. Lifecycle IDs repeat per segment (`started`, `approval:2`, …).
+ * Remap so Pipelines VirtualList keys stay unique (absolute rows share `top`
+ * when keys collide — blended Denied/Notification paint).
+ */
+function remapActivityIds(
+  activity: OperationActivity,
+  runId: string,
+): OperationActivity {
+  return {
+    ...activity,
+    id: `${runId}:${activity.id}`,
+    ...(activity.children
+      ? { children: activity.children.map((child) => remapActivityIds(child, runId)) }
+      : {}),
+  }
+}
+
 function mergeChain(
   chain: OperationPipeline[],
   root: { startedAt: string; title: string },
@@ -55,7 +74,9 @@ function mergeChain(
     }
   }
 
-  const activities = chain.flatMap((pipe) => pipe.activities)
+  const activities = chain.flatMap((pipe) =>
+    pipe.activities.map((activity) => remapActivityIds(activity, pipe.id)),
+  )
   const eventCount = chain.reduce((n, pipe) => n + pipe.eventCount, 0)
   return {
     ...leaf,

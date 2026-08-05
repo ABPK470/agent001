@@ -107,6 +107,90 @@ describe("mergeAgentRunResumePipelines", () => {
     expect(mergeAgentRunResumePipelines([parent], lookup)).toHaveLength(0)
   })
 
+  it("remaps colliding lifecycle activity ids across resume segments", () => {
+    const parent = pipe({
+      id: "parent",
+      title: "goal",
+      status: OperationStatus.Cancelled,
+      startedAt: "2026-01-01T00:00:00.000Z",
+      endedAt: "2026-01-01T00:00:30.000Z",
+      activities: [
+        {
+          id: "approval:2",
+          name: "approval required",
+          status: OperationStatus.Cancelled,
+          startedAt: "2026-01-01T00:00:10.000Z",
+          endedAt: "2026-01-01T00:00:10.000Z",
+          durationMs: 0,
+          events: [],
+        },
+        {
+          id: "cancelled",
+          name: "cancelled",
+          status: OperationStatus.Cancelled,
+          startedAt: "2026-01-01T00:00:20.000Z",
+          endedAt: "2026-01-01T00:00:20.000Z",
+          durationMs: 0,
+          events: [],
+        },
+        {
+          id: "telemetry:notification:3",
+          name: "notification",
+          status: OperationStatus.Success,
+          startedAt: "2026-01-01T00:00:21.000Z",
+          endedAt: "2026-01-01T00:00:21.000Z",
+          durationMs: 0,
+          events: [],
+        },
+      ],
+    })
+    const child = pipe({
+      id: "child",
+      title: "goal",
+      status: OperationStatus.Success,
+      startedAt: "2026-01-01T00:00:30.000Z",
+      endedAt: "2026-01-01T00:01:00.000Z",
+      activities: [
+        {
+          id: "approval:2",
+          name: "approval required",
+          status: OperationStatus.Success,
+          startedAt: "2026-01-01T00:00:40.000Z",
+          endedAt: "2026-01-01T00:00:40.000Z",
+          durationMs: 0,
+          events: [],
+        },
+        {
+          id: "telemetry:notification:3",
+          name: "notification",
+          status: OperationStatus.Success,
+          startedAt: "2026-01-01T00:00:41.000Z",
+          endedAt: "2026-01-01T00:00:41.000Z",
+          durationMs: 0,
+          events: [],
+        },
+      ],
+    })
+
+    const lookup: AgentRunResumeLookup = {
+      parentRunId: (id) => (id === "child" ? "parent" : null),
+      hasResumeChild: (id) => id === "parent",
+      rootMeta: () => ({ startedAt: parent.startedAt, title: "goal" }),
+    }
+
+    const out = mergeAgentRunResumePipelines([parent, child], lookup)
+    expect(out).toHaveLength(1)
+    const ids = out[0]!.activities.map((activity) => activity.id)
+    expect(ids).toEqual([
+      "parent:approval:2",
+      "parent:cancelled",
+      "parent:telemetry:notification:3",
+      "child:approval:2",
+      "child:telemetry:notification:3",
+    ])
+    expect(new Set(ids).size).toBe(ids.length)
+  })
+
   it("leaves non-agent pipelines untouched", () => {
     const sync = pipe({
       id: "s1",
