@@ -70,6 +70,9 @@ export function PeekToggle({
   )
 }
 
+/** Always applied — wrap lives on the component, not on caller class names. */
+export const TRACE_EXPAND_PRE_CLASS = "trace-expand__pre"
+
 export function ExpandableText({
   text,
   className,
@@ -94,7 +97,13 @@ export function ExpandableText({
 
   const main = (
     <pre
-      className={`${className ?? ""}${peek.hasPeek && !peek.expanded ? " is-peeking" : ""}`.trim()}
+      className={[
+        TRACE_EXPAND_PRE_CLASS,
+        className,
+        peek.hasPeek && !peek.expanded ? "is-peeking" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
     >
       {peek.body}
     </pre>

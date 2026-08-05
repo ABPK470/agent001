@@ -6303,9 +6303,12 @@ button.trace-tree-status-pill:hover {
 .trace-error-block__trace {
   font-family: ui-monospace, monospace;
   font-size: 0.75rem;
-  white-space: pre-wrap;
-  word-break: break-word;
   margin: 0;
+  min-width: 0;
+  max-width: 100%;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .trace-waterfall {
@@ -6425,8 +6428,12 @@ button.trace-tree-status-pill:hover {
 .trace-playground__result {
   font-family: ui-monospace, monospace;
   font-size: 0.75rem;
-  white-space: pre-wrap;
   margin: 0;
+  min-width: 0;
+  max-width: 100%;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .trace-run-diff-split {
@@ -6723,6 +6730,16 @@ button.trace-tree-status-pill:hover {
   text-transform: uppercase;
 }
 
+/* Tool IO / error bodies — wrap in narrow detail panes (never clip mid-token). */
+.trace-exec__input-pre,
+.trace-exec__output-pre {
+  margin: 0;
+  max-width: 100%;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
 /* Inspector: plain indented mono — no left-rail / knee chrome */
 .trace-exec--inspector .trace-exec__input-pre,
 .trace-exec--inspector .trace-exec__output-pre {
@@ -6735,6 +6752,7 @@ button.trace-tree-status-pill:hover {
   font-size: 0.8125rem;
   line-height: 1.5;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
   word-break: break-word;
   color: var(--text-secondary, var(--text-muted, var(--color-text-muted)));
 }
@@ -7214,6 +7232,19 @@ button.trace-tree-status-pill:hover {
 
 .trace-tool-io__section {
   margin-top: 0.75rem;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.trace-detail-body {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.trace-exec__output,
+.trace-exec__output-body {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .trace-tool-io__head .trace-detail-section__label {
@@ -8395,6 +8426,9 @@ button.trace-tree-status-pill:hover {
 /*
  * Expandable text — footer Copy + More/Less (never a sticky rail over prose).
  * Sticky section headers host their own compact peek control instead.
+ *
+ * Wrap is owned by .trace-expand__pre (always applied by ExpandableText).
+ * Caller classNames may style type/color; they must not be required for wrap.
  */
 .trace-expand {
   display: flex;
@@ -8406,6 +8440,16 @@ button.trace-tree-status-pill:hover {
 
 .trace-expand__main {
   min-width: 0;
+  max-width: 100%;
+}
+
+.trace-expand__pre {
+  margin: 0;
+  min-width: 0;
+  max-width: 100%;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .trace-expand__footer {
