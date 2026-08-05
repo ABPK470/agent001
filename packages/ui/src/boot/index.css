@@ -281,15 +281,16 @@
 
   /*
    * Event Stream scan lanes — TYPE column ink (not modal callouts).
-   * Derived from existing semantic / viz tokens; light block mirrors.
+   * Same dialect as MymiDb `--dt-*`: bright on dark charcoal, deep on light
+   * paper. Never viz-pastel / text-faint (unreadable on white widgets).
    */
-  --stream-run: var(--text-muted);
-  --stream-step: var(--accent);
-  --stream-sync: var(--info);
-  --stream-bridge: var(--warning);
-  --stream-agent: #825776; /* viz-plum — cognition, distinct from step accent */
-  --stream-api: #6CB4EE; /* viz-sky */
-  --stream-system: var(--text-faint);
+  --stream-run: var(--text-secondary);
+  --stream-step: var(--dt-string);
+  --stream-sync: var(--dt-int);
+  --stream-bridge: var(--dt-date);
+  --stream-agent: var(--dt-bool);
+  --stream-api: var(--dt-real);
+  --stream-system: var(--text-muted);
 
   --scrim: rgba(0, 0, 0, 0.72);
   --scrim-strong: rgba(0, 0, 0, 0.90);
@@ -443,14 +444,17 @@
   --viewing-as: var(--accent);
   --viewing-as-soft: var(--accent-soft);
 
-  /* Event Stream scan lanes — same vocabulary as dark (readable on paper). */
-  --stream-run: var(--text-muted);
-  --stream-step: var(--accent);
-  --stream-sync: var(--info);
-  --stream-bridge: var(--warning);
-  --stream-agent: #825776; /* viz-plum */
-  --stream-api: #2563eb; /* deeper sky on light paper */
-  --stream-system: var(--text-faint);
+  /*
+   * Event Stream scan lanes — deep datatype inks on white paper
+   * (--dt-* already theme-split; system stays muted, never faint).
+   */
+  --stream-run: var(--text-secondary);
+  --stream-step: var(--dt-string);
+  --stream-sync: var(--dt-int);
+  --stream-bridge: var(--dt-date);
+  --stream-agent: var(--dt-bool);
+  --stream-api: var(--dt-real);
+  --stream-system: var(--text-muted);
 
   --scrim: rgba(15, 23, 42, 0.48);
   --scrim-strong: rgba(15, 23, 42, 0.78);

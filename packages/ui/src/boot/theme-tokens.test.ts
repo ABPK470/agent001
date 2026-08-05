@@ -146,10 +146,16 @@ describe("light theme color system", () => {
         new RegExp(`\\.event-stream-type\\.event-stream-type--${lane}\\s*\\{`),
       )
     }
-    expect(darkThemeBlock()).toMatch(/--stream-step:\s*var\(--accent\)/)
-    expect(darkThemeBlock()).toMatch(/--stream-sync:\s*var\(--info\)/)
-    expect(lightThemeBlock()).toMatch(/--stream-step:\s*var\(--accent\)/)
-    expect(lightThemeBlock()).toMatch(/--stream-sync:\s*var\(--info\)/)
+    // Datatype dialect — deep on light paper, bright on dark (not viz-pastel / faint).
+    expect(darkThemeBlock()).toMatch(/--stream-step:\s*var\(--dt-string\)/)
+    expect(darkThemeBlock()).toMatch(/--stream-sync:\s*var\(--dt-int\)/)
+    expect(darkThemeBlock()).toMatch(/--stream-system:\s*var\(--text-muted\)/)
+    expect(lightThemeBlock()).toMatch(/--stream-step:\s*var\(--dt-string\)/)
+    expect(lightThemeBlock()).toMatch(/--stream-sync:\s*var\(--dt-int\)/)
+    expect(lightThemeBlock()).toMatch(/--stream-bridge:\s*var\(--dt-date\)/)
+    expect(lightThemeBlock()).toMatch(/--stream-agent:\s*var\(--dt-bool\)/)
+    expect(lightThemeBlock()).toMatch(/--stream-system:\s*var\(--text-muted\)/)
+    expect(lightThemeBlock()).not.toMatch(/--stream-system:\s*var\(--text-faint\)/)
     const liveLogs = readFileSync(join(here, "../widgets/LiveLogs.tsx"), "utf8")
     expect(liveLogs).not.toContain("mia-row-stroke")
     expect(liveLogs).toContain("event-stream-row")

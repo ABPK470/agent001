@@ -235,7 +235,8 @@ export function FilterChoiceGrid<T extends string>({
             className={[
               FILTER_CHOICE_BTN,
               on ? FILTER_CHOICE_ON : FILTER_CHOICE_OFF,
-              on && option.className ? option.className : "",
+              // Optional tone (Event Stream lanes) — always on so chips match stream TYPE ink.
+              option.className ?? "",
             ]
               .filter(Boolean)
               .join(" ")}
