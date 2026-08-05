@@ -763,8 +763,8 @@ function PlanBlock({ part }: { part: ResponsePlanPart }) {
 }
 
 /**
- * One planned step as parent — tools nest underneath (same fold dialect
- * as iteration blocks). This is the hierarchy Plan → Step → tools.
+ * One planned step as parent — tools / attempts / check nest underneath.
+ * Repair peers reconcile under stepName (domain view); Trace keeps raw loop.
  */
 function StepBlock({
   part,
@@ -785,13 +785,28 @@ function StepBlock({
   const buttonRef = useRef<HTMLButtonElement>(null)
   const working = Boolean(part.subagent && (part.hasRunning || part.status === "running"))
 
-  const hasTools = part.tools.length > 0
+  const attempts = part.attempts
+  const nested = Boolean(attempts && attempts.length > 0 && (attempts.length > 1 || part.check))
+  const hasTools = nested
+    ? Boolean(attempts?.some((a) => a.tools.length > 0))
+    : part.tools.length > 0
   const errorBody = part.body?.trim() || ""
   const hasErrorBody = errorBody.length > 0
   const isSettled = part.status !== "running" && !part.hasRunning
-  const isFailed = isSettled && hasErrorBody
-  const hasBodyContent = hasTools || part.hasRunning || (hasErrorBody && !hasTools)
-  const canToggle = hasTools || hasErrorBody
+  const outcome = part.outcome
+  const isRetrying =
+    outcome === "running"
+    && Boolean(attempts?.some((a) => a.repair && (a.hasRunning || a.status === "running")))
+  const isRepaired = outcome === "repaired"
+  const isFailed =
+    outcome === "failed" || (outcome == null && isSettled && hasErrorBody)
+  const hasBodyContent =
+    nested
+    || hasTools
+    || part.hasRunning
+    || (hasErrorBody && !hasTools)
+    || Boolean(part.check)
+  const canToggle = nested || hasTools || hasErrorBody || Boolean(part.check?.body)
   const animateFold = userToggled || !isLiveRun
   // Process chrome stays muted whether running or settled — final answer is bright.
   const labelClass = "text-text-muted"
@@ -834,7 +849,17 @@ function StepBlock({
         </span>
         <span className="chat-step__title min-w-0 flex-1 truncate">
           <span>{part.title}</span>
-          {isFailed ? (
+          {isRetrying ? (
+            <>
+              {" "}
+              <span className={operationStatusPill("warning")}>Retrying</span>
+            </>
+          ) : isRepaired ? (
+            <>
+              {" "}
+              <span className={operationStatusPill("warning")}>Repaired</span>
+            </>
+          ) : isFailed ? (
             <>
               {" "}
               <span className={operationStatusPill("failed")}>Failed</span>
@@ -853,31 +878,150 @@ function StepBlock({
           animated={animateFold}
           className="mt-0.5 ml-[0.35rem] pl-6 chat-trace-fold min-w-0"
         >
-          {hasErrorBody && !hasTools ? (
-            <pre className="chat-tool-error my-0.5">{errorBody}</pre>
-          ) : null}
-          {hasTools ? (
-            <IterationToolList
-              tools={part.tools}
-              syncByInvocation={syncByInvocation}
-              isLiveRun={isLiveRun}
-            />
-          ) : part.hasRunning && !hasErrorBody ? (
-            <div className="py-0.5 text-[15px] leading-6 text-text-faint">
-              <span
-                className="activity-shimmer-tight"
-                style={
-                  {
-                    "--sa": "var(--color-text-muted)",
-                    "--sd": "var(--color-text-faint)",
-                  } as React.CSSProperties
-                }
-              >
-                Starting…
-              </span>
+          {nested && attempts ? (
+            <div className="flex flex-col gap-1 py-0.5">
+              {attempts.map((attempt, attemptIndex) => (
+                <div key={attempt.id} className="min-w-0">
+                  <div className="text-[14px] leading-5 text-text-faint">
+                    <span>
+                      {attempt.repair
+                        ? `Attempt ${attempt.attempt} (repair)`
+                        : `Attempt ${attempt.attempt}`}
+                    </span>
+                    {attempt.status === "failed" ? (
+                      <span className="text-text-muted">
+                        {" "}
+                        — failed
+                        {attempt.detail ? `: ${attempt.detail}` : ""}
+                      </span>
+                    ) : attempt.status === "passed" ? (
+                      <span>
+                        {" "}
+                        — passed
+                        {attempt.detail && !/^attempt\s+\d+/i.test(attempt.detail)
+                          ? ` · ${attempt.detail}`
+                          : ""}
+                      </span>
+                    ) : (
+                      <span> — running</span>
+                    )}
+                  </div>
+                  {attempt.body && attempt.tools.length === 0 ? (
+                    <pre className="chat-tool-error my-0.5">{attempt.body}</pre>
+                  ) : null}
+                  {attempt.tools.length > 0 ? (
+                    <IterationToolList
+                      tools={attempt.tools}
+                      syncByInvocation={syncByInvocation}
+                      isLiveRun={isLiveRun}
+                    />
+                  ) : null}
+                  {/* Chronology: verify sits between fail and repair, not after success. */}
+                  {part.check
+                    && (part.check.afterAttemptIndex ?? attempts.length - 1) === attemptIndex ? (
+                    <NestedStepCheck
+                      check={part.check}
+                      resolved={part.outcome === "repaired" || part.outcome === "passed"}
+                    />
+                  ) : null}
+                </div>
+              ))}
             </div>
-          ) : null}
+          ) : (
+            <>
+              {hasErrorBody && !hasTools ? (
+                <pre className="chat-tool-error my-0.5">{errorBody}</pre>
+              ) : null}
+              {part.check ? <NestedStepCheck check={part.check} /> : null}
+              {hasTools ? (
+                <IterationToolList
+                  tools={part.tools}
+                  syncByInvocation={syncByInvocation}
+                  isLiveRun={isLiveRun}
+                />
+              ) : part.hasRunning && !hasErrorBody ? (
+                <div className="py-0.5 text-[15px] leading-6 text-text-faint">
+                  <span
+                    className="activity-shimmer-tight"
+                    style={
+                      {
+                        "--sa": "var(--color-text-muted)",
+                        "--sd": "var(--color-text-faint)",
+                      } as React.CSSProperties
+                    }
+                  >
+                    Starting…
+                  </span>
+                </div>
+              ) : null}
+            </>
+          )}
         </ChatFoldBody>
+      ) : null}
+    </div>
+  )
+}
+
+function NestedStepCheck({
+  check,
+  resolved = false,
+}: {
+  check: NonNullable<ResponseStepBlockPart["check"]>
+  /** Step was repaired/passed — check is historical, not a terminal failure. */
+  resolved?: boolean
+}) {
+  const { preserveToggle } = useChatScroll()
+  const [open, setOpen] = useState(false)
+  const buttonRef = useRef<HTMLButtonElement>(null)
+  const body = check.body?.trim() || ""
+  const hasBody = body.length > 0
+  const label =
+    resolved && check.label === "Checked work"
+      ? "Checked work"
+      : resolved && check.label.startsWith("Check · needs")
+        ? "Check · needed work"
+        : check.label
+  // After repair, keep the issue as quiet history — never a terminal red callout.
+  if (resolved) {
+    const note = body.split("\n")[0]?.replace(/^[^:]+:\s*/, "") || check.detail || ""
+    return (
+      <div className="min-w-0 py-0.5 text-[14px] leading-5 text-text-faint">
+        <span>{label}</span>
+        {note ? <span> · {note}</span> : null}
+      </div>
+    )
+  }
+  return (
+    <div className="min-w-0 py-0.5" data-chat-expand-root="">
+      <button
+        ref={buttonRef}
+        type="button"
+        disabled={!hasBody}
+        onClick={() => {
+          if (!hasBody) return
+          preserveToggle(buttonRef.current, () => setOpen((v) => !v))
+        }}
+        className={[
+          "inline-flex max-w-full items-center gap-1.5 py-0.5 text-left text-[14px] leading-5 text-text-faint",
+          hasBody ? "transition-colors hover:text-text-muted" : "cursor-default",
+        ].join(" ")}
+        aria-expanded={hasBody ? open : undefined}
+      >
+        {hasBody ? (
+          <ChevronRight
+            size={14}
+            strokeWidth={1.5}
+            className={`chat-trace-chev shrink-0${open ? " is-open" : ""}`}
+            aria-hidden
+          />
+        ) : null}
+        <span>
+          {label}
+          {check.detail ? ` · ${check.detail}` : ""}
+        </span>
+      </button>
+      {hasBody && open ? (
+        <pre className="chat-tool-error my-0.5 ml-5">{body}</pre>
       ) : null}
     </div>
   )

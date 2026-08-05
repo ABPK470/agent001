@@ -15,6 +15,7 @@ import { RunStatus } from "../../enums"
 import { isTerminalRunStatus } from "../run-actions"
 import { formatMs } from "../util"
 import { isPlannerStepSuccessStatus, plannerStepEndDetail } from "./planner-step-status"
+import { reconcilePlannerStepGroups } from "./reconcile-step-groups"
 import type { ViewSpec } from "./types"
 
 const POLISHED_FAILURE_MARKER = "\u2063pfm:\u2063"
@@ -105,15 +106,48 @@ export interface ResponsePlanPart {
   executionMode?: "parallel" | "serial" | "guided" | "stop"
 }
 
+/** Rollup badge for a plan-step group (after reconcile). */
+export type StepBlockOutcome = "running" | "failed" | "repaired" | "passed"
+
+/** One execution attempt under a plan-step rollup (initial or repair). */
+export interface ResponseStepAttemptPart {
+  id: string
+  attempt: number
+  repair: boolean
+  status: "running" | "failed" | "passed"
+  detail?: string
+  body?: string
+  tools: ResponseToolPart[]
+  hasRunning: boolean
+}
+
+/** Orchestrator verify beat nested under the target plan step. */
+export interface ResponseStepCheckPart {
+  label: string
+  detail?: string
+  body?: string
+  status: "running" | "done"
+  /**
+   * Insert after this attempt index in the nested list (0 = after attempt 1).
+   * Mid-loop "needs work" belongs between fail and repair — not after success.
+   */
+  afterAttemptIndex?: number
+}
+
 /**
  * One planned step as a parent for the tools that ran inside it.
  * Same collapsible dialect as iteration-block — hierarchy, not a flat peer list.
+ *
+ * After reconcilePlannerStepGroups: repair peers + verify nest under stepName
+ * (domain identity). Trace keeps raw pipeline ownership.
  */
 export interface ResponseStepBlockPart {
   kind: "step-block"
   id: string
   title: string
   status: "running" | "done" | "error"
+  /** Plan step id — used to fold repair attempts + attach checks. */
+  stepName?: string
   /** Short header beat (truncated in the row). */
   detail?: string
   /** Full error / note — expandable under the row (not truncated). */
@@ -122,6 +156,12 @@ export interface ResponseStepBlockPart {
   repair?: boolean
   /** True when the planner ran this step as a subagent_task. */
   subagent?: boolean
+  /** Domain rollup after reconcile (Failed / Repaired / …). */
+  outcome?: StepBlockOutcome
+  /** Nested attempts when repair re-ran this step. */
+  attempts?: ResponseStepAttemptPart[]
+  /** Nested verify beat for this step (not a peer on the answer axis). */
+  check?: ResponseStepCheckPart
   tools: ResponseToolPart[]
   hasRunning: boolean
 }
@@ -871,6 +911,7 @@ export function buildResponseParts(
             stepType: entry.stepType,
             repair: isRepair,
           }),
+          stepName: entry.stepName,
           status: "running",
           detail: isRepair && pendingRepair ? `attempt ${pendingRepair.attempt}` : undefined,
           repair: isRepair || undefined,
@@ -936,6 +977,7 @@ export function buildResponseParts(
               stepType: "subagent_task",
               repair: isRepair,
             }),
+            stepName: entry.stepName,
             status: "running",
             detail:
               isRepair && pendingRepair
@@ -1345,9 +1387,23 @@ export function buildResponseParts(
             ? { ...p, row: { ...p.row, status: terminalStatus } }
             : p,
         )
+        const attempts = part.attempts?.map((a) => ({
+          ...a,
+          tools: a.tools.map((p) =>
+            p.row.status === "running"
+              ? { ...p, row: { ...p.row, status: terminalStatus } }
+              : p,
+          ),
+          hasRunning: false,
+          status:
+            a.status === "running"
+              ? (terminalStatus === "error" ? "failed" as const : "passed" as const)
+              : a.status,
+        }))
         return {
           ...part,
           tools,
+          attempts,
           hasRunning: false,
           status: part.status === "running" ? terminalStatus : part.status,
         }
@@ -1363,7 +1419,8 @@ export function buildResponseParts(
     parts = parts.filter((part) => part.kind !== "input")
   }
 
-  return parts
+  // Domain view: nest repair attempts + verify under plan-step identity.
+  return reconcilePlannerStepGroups(parts)
 }
 
 
@@ -1395,7 +1452,7 @@ export const CHAT_VIEW_SPEC: ViewSpec = {
     delegation: "omit",
   },
   nest: [
-    { parentFamily: "step", childFamilies: ["work", "input"] },
+    { parentFamily: "step", childFamilies: ["work", "input", "verify"] },
   ],
   terminalTypes: ["planner-step-end", "planner-delegation-end"],
   foldDefault: "latest",

@@ -273,21 +273,123 @@ describe("buildResponseParts — TermChat projection", () => {
     expect(step?.kind).toBe("step-block")
     if (step?.kind === "step-block") {
       expect(step.status).toBe("done")
+      expect(step.outcome).toBe("failed")
       expect(step.detail).toContain("missing brand-tokens")
+      // Verify nests under the step — not a peer on the answer axis.
+      expect(step.check?.label).toBe("Check · needs work")
+      expect(step.check?.status).toBe("done")
+      expect(step.check?.detail).toBe("frontend layer")
+      expect(step.check?.body).toContain("missing brand-tokens")
+      expect(step.check?.label).not.toMatch(/failed/i)
     }
-
-    const check = parts.find(
-      (p) => p.kind === "progress" && p.id.startsWith("verification-"),
+    expect(parts.some((p) => p.kind === "progress" && p.id.startsWith("verification-"))).toBe(
+      false,
     )
-    expect(check?.kind).toBe("progress")
-    if (check?.kind === "progress") {
-      expect(check.label).toBe("Check · needs work")
-      expect(check.status).toBe("done")
-      expect(check.detail).toBe("frontend layer")
-      expect(check.body).toContain("missing brand-tokens")
-      expect(check.detail).not.toContain("missing brand-tokens")
-      expect(check.label).not.toMatch(/failed/i)
-    }
+  })
+
+  it("reconciles fail → check → repair → pass as one Repaired step group", () => {
+    const parts = buildResponseParts(
+      [
+        {
+          kind: "planner-step-start",
+          stepName: "frontend_layer",
+          stepType: "subagent_task",
+        },
+        {
+          kind: "planner-step-end",
+          stepName: "frontend_layer",
+          status: "fail",
+          error: "build failed — missing brand-tokens",
+          durationMs: 1200,
+        },
+        {
+          kind: "planner-verification",
+          overall: "fail",
+          confidence: 0.4,
+          steps: [
+            {
+              stepName: "frontend_layer",
+              outcome: "fail",
+              issues: ["missing brand-tokens"],
+            },
+          ],
+        },
+        {
+          kind: "planner-repair-plan",
+          attempt: 1,
+          rerunOrder: ["frontend_layer"],
+          tasks: [
+            {
+              stepName: "frontend_layer",
+              mode: "repair",
+              ownedIssueCodes: ["build"],
+              dependencyIssueCodes: [],
+            },
+          ],
+        },
+        {
+          kind: "planner-step-start",
+          stepName: "frontend_layer",
+          stepType: "subagent_task",
+        },
+        {
+          kind: "tool-call",
+          invocationId: "inv-fix",
+          toolCallId: "tc-fix",
+          tool: "write_file",
+          argsSummary: "tokens",
+          argsFormatted: JSON.stringify({ path: "brand-tokens.css" }),
+        },
+        {
+          kind: "tool-result",
+          invocationId: "inv-fix",
+          toolCallId: "tc-fix",
+          text: "ok",
+        },
+        {
+          kind: "planner-step-end",
+          stepName: "frontend_layer",
+          status: "pass",
+          durationMs: 1600,
+        },
+        {
+          kind: "planner-verification",
+          overall: "pass",
+          confidence: 0.9,
+          steps: [{ stepName: "frontend_layer", outcome: "pass", issues: [] }],
+        },
+      ],
+      "completed",
+      "Site is ready.",
+      null,
+      null,
+      null,
+      "run-1",
+    )
+
+    const steps = parts.filter((p) => p.kind === "step-block")
+    expect(steps).toHaveLength(1)
+    const step = steps[0]
+    expect(step?.kind).toBe("step-block")
+    if (step?.kind !== "step-block") return
+    expect(step.title).toBe("Subagent · frontend layer")
+    expect(step.outcome).toBe("repaired")
+    expect(step.repair).toBeUndefined()
+    expect(step.attempts).toHaveLength(2)
+    expect(step.attempts?.[0]?.status).toBe("failed")
+    expect(step.attempts?.[1]?.repair).toBe(true)
+    expect(step.attempts?.[1]?.status).toBe("passed")
+    expect(step.attempts?.[1]?.tools.length).toBeGreaterThan(0)
+    // Final verify pass resolves the mid-loop check — tree must not end on "needs work".
+    expect(step.check?.label).toBe("Checked work")
+    expect(step.check?.afterAttemptIndex).toBe(0)
+    expect(parts.some((p) => p.kind === "progress" && p.id.startsWith("verification-"))).toBe(
+      false,
+    )
+    // Final answer stays on the axis; check is not a floating peer above it.
+    const answerIdx = parts.findIndex((p) => p.kind === "markdown")
+    const stepIdx = parts.findIndex((p) => p.kind === "step-block")
+    expect(answerIdx).toBeGreaterThan(stepIdx)
   })
 
   it("treats pipeline completed status as success (not needs work)", () => {
