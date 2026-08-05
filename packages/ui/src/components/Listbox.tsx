@@ -56,6 +56,8 @@ export interface ListboxProps<T extends string> {
   disabled?: boolean
   /** Placeholder for the in-popover filter field. */
   searchPlaceholder?: string
+  /** When false, skip the filter row (short fixed option lists). Default true. */
+  searchable?: boolean
   /**
    * When true, `value === ""` shows `placeholder` on the closed trigger instead of
    * the empty option’s label (use for filter bars: idle = field name, menu = “Any”).
@@ -120,12 +122,13 @@ function placeFromTrigger(
   options: ListboxOption<string>[],
   filteredCount: number,
   panelEl: HTMLElement | null,
+  searchable: boolean,
 ): PopPos {
   const r = btn.getBoundingClientRect()
   const { minWidth, maxWidth } = measurePopoverWidth(r.width, r.left, options)
   const panelWidth = Math.min(maxWidth, Math.max(minWidth, r.width))
   const listHeight = Math.min(filteredCount * OPTION_ROW_HEIGHT + 8, 288)
-  const estimatedHeight = SEARCH_ROW_HEIGHT + listHeight
+  const estimatedHeight = (searchable ? SEARCH_ROW_HEIGHT : 0) + listHeight
   const panelHeight = panelEl
     ? panelEl.getBoundingClientRect().height || estimatedHeight
     : estimatedHeight
@@ -163,6 +166,7 @@ export function Listbox<T extends string>({
   ariaLabel,
   disabled,
   searchPlaceholder = "Filter…",
+  searchable = true,
   blankIsPlaceholder = false,
 }: ListboxProps<T>): JSX.Element {
   const instanceId = useId()
@@ -187,8 +191,8 @@ export function Listbox<T extends string>({
   const reposition = useCallback((panelEl: HTMLElement | null = popRef.current) => {
     const btn = btnRef.current
     if (!btn) return
-    applyPopPos(placeFromTrigger(btn, options, filteredOptions.length, panelEl))
-  }, [applyPopPos, filteredOptions.length, options])
+    applyPopPos(placeFromTrigger(btn, options, filteredOptions.length, panelEl, searchable))
+  }, [applyPopPos, filteredOptions.length, options, searchable])
 
   const closePopover = useCallback((): void => {
     setOpen(false)
@@ -202,10 +206,10 @@ export function Listbox<T extends string>({
     if (!btn) return
     claimPopoverOpen(instanceId)
     // Same turn as open — portal paints with a real position (no null flash).
-    setPopPos(placeFromTrigger(btn, options, filterListboxOptions(options, "").length, null))
+    setPopPos(placeFromTrigger(btn, options, filterListboxOptions(options, "").length, null, searchable))
     setOpen(true)
     setQuery("")
-  }, [instanceId, options])
+  }, [instanceId, options, searchable])
 
   useEffect(() => registerPopoverInstance(instanceId, closePopover), [instanceId, closePopover])
 
@@ -238,8 +242,8 @@ export function Listbox<T extends string>({
   useLayoutEffect(() => {
     if (!open) return
     reposition(popRef.current)
-    searchRef.current?.focus({ preventScroll: true })
-  }, [open, filteredOptions.length, reposition])
+    if (searchable) searchRef.current?.focus({ preventScroll: true })
+  }, [open, filteredOptions.length, reposition, searchable])
 
   useEffect(() => {
     if (!open) return
@@ -353,25 +357,27 @@ export function Listbox<T extends string>({
               zIndex: popoverZIndex(),
             }}
           >
-            <div className="flex shrink-0 items-center gap-2 border-b border-border-subtle px-2.5 py-2">
-              <Search className="h-3.5 w-3.5 shrink-0 text-text-faint" aria-hidden />
-              <input
-                ref={searchRef}
-                type="text"
-                role="searchbox"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder={searchPlaceholder}
-                aria-label={searchPlaceholder}
-                className="min-w-0 flex-1 border-0 bg-transparent text-sm text-text outline-none placeholder:text-text-faint"
-                onKeyDown={(e) => {
-                  if (e.key === "ArrowDown" && filteredOptions.length > 0) {
-                    e.preventDefault()
-                    setActiveIdx(0)
-                  }
-                }}
-              />
-            </div>
+            {searchable && (
+              <div className="flex shrink-0 items-center gap-2 border-b border-border-subtle px-2.5 py-2">
+                <Search className="h-3.5 w-3.5 shrink-0 text-text-faint" aria-hidden />
+                <input
+                  ref={searchRef}
+                  type="text"
+                  role="searchbox"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder={searchPlaceholder}
+                  aria-label={searchPlaceholder}
+                  className="min-w-0 flex-1 border-0 bg-transparent text-sm text-text outline-none placeholder:text-text-faint"
+                  onKeyDown={(e) => {
+                    if (e.key === "ArrowDown" && filteredOptions.length > 0) {
+                      e.preventDefault()
+                      setActiveIdx(0)
+                    }
+                  }}
+                />
+              </div>
+            )}
             <div className="min-h-0 flex-1 overflow-y-auto py-1">
               {filteredOptions.length === 0 ? (
                 <p className="px-3 py-2 text-sm text-text-muted">

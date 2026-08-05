@@ -3,7 +3,8 @@
  */
 
 import { FlaskConical } from "lucide-react"
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
+import { Listbox, type ListboxOption } from "../../components/Listbox"
 import { isLocalRunSimulateUiEnabled } from "./allow"
 import {
   clearSimulationIfRun,
@@ -23,7 +24,7 @@ import "./run-simulate.css"
 const SCENARIOS: Array<{ id: SimScenario; label: string }> = [
   { id: "direct", label: "Direct" },
   { id: "planner-seq", label: "Planner seq" },
-  { id: "planner-parallel", label: "Planner ∥3" },
+  { id: "planner-parallel", label: "Planner ×3" },
 ]
 
 const PACES: Array<{ id: SimPace; label: string }> = [
@@ -39,6 +40,15 @@ function WorkspaceSimulateControlInner() {
   const [error, setError] = useState<string | null>(null)
   const activeRunId = useStore((s) => s.activeRunId)
   const runs = useStore((s) => s.runs)
+
+  const scenarioOptions = useMemo<ListboxOption<SimScenario>[]>(
+    () => SCENARIOS.map((s) => ({ value: s.id, label: s.label })),
+    [],
+  )
+  const paceOptions = useMemo<ListboxOption<SimPace>[]>(
+    () => PACES.map((p) => ({ value: p.id, label: p.label })),
+    [],
+  )
 
   useEffect(() => {
     const runId = getSimulatingRunId()
@@ -87,6 +97,8 @@ function WorkspaceSimulateControlInner() {
     }
   }
 
+  const controlsLocked = on || busy
+
   return (
     <div
       className="workspace-simulate"
@@ -117,32 +129,28 @@ function WorkspaceSimulateControlInner() {
           aria-hidden
         />
       </button>
-      <select
-        className="workspace-simulate__select"
+      <Listbox
+        className="workspace-simulate__listbox workspace-simulate__listbox--scenario listbox-control"
         value={config.scenario}
-        disabled={on || busy}
-        onChange={(e) => patchConfig({ scenario: e.target.value as SimScenario })}
-        aria-label="Local sim scenario"
-      >
-        {SCENARIOS.map((s) => (
-          <option key={s.id} value={s.id}>
-            {s.label}
-          </option>
-        ))}
-      </select>
-      <select
-        className="workspace-simulate__select"
+        options={scenarioOptions}
+        onChange={(scenario) => patchConfig({ scenario })}
+        size="sm"
+        variant="ghost"
+        searchable={false}
+        disabled={controlsLocked}
+        ariaLabel="Local sim scenario"
+      />
+      <Listbox
+        className="workspace-simulate__listbox workspace-simulate__listbox--pace listbox-control"
         value={config.pace}
-        disabled={on || busy}
-        onChange={(e) => patchConfig({ pace: e.target.value as SimPace })}
-        aria-label="Local sim pace"
-      >
-        {PACES.map((p) => (
-          <option key={p.id} value={p.id}>
-            {p.label}
-          </option>
-        ))}
-      </select>
+        options={paceOptions}
+        onChange={(pace) => patchConfig({ pace })}
+        size="sm"
+        variant="ghost"
+        searchable={false}
+        disabled={controlsLocked}
+        ariaLabel="Local sim pace"
+      />
     </div>
   )
 }
