@@ -10,6 +10,7 @@ import { canAccessRun, requireSessionUpn } from "../../api/auth/service/access.j
 import type { ViewingAs } from "../../api/auth/service/viewing-as.js"
 import { broadcast } from "../../infra/events/broadcaster.js"
 import * as db from "../../infra/persistence/sqlite.js"
+import { TraceEventKind } from "../../internal/enums/trace.js"
 import type { AgentOrchestrator } from "../orchestrator.js"
 
 function stableArgsKey(args: Record<string, unknown>): string {
@@ -121,6 +122,13 @@ export async function denyRunToolStep(
   await db.markRunCancelled(approval.runId)
   await expireToolApprovalGrantsForRunChain(approval.runId)
 
+  // Persist cancel outcome as approval-denied — not TraceEventKind.Error.
+  await db.appendTraceEntry(approval.runId, {
+    kind: TraceEventKind.ApprovalDenied,
+    toolName: approval.toolName,
+    reason: reason?.trim() || undefined,
+  })
+
   await db.saveLog({
     run_id: approval.runId,
     level: "run:warning",
@@ -137,12 +145,17 @@ export async function denyRunToolStep(
       decision: "denied",
       by: actor,
       reason: reason ?? null,
+      toolName: approval.toolName,
     },
   })
 
   broadcast({
     type: EventType.RunCancelled,
-    data: { runId: approval.runId, reason: reason ?? "approval denied" },
+    data: {
+      runId: approval.runId,
+      reason: reason ?? "approval denied",
+      toolName: approval.toolName,
+    },
   })
 
   return { ok: true, runId: approval.runId }

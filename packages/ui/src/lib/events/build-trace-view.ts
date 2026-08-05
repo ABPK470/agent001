@@ -12,10 +12,12 @@ import { atomsFromTrace } from "./normalize"
 import { isPlannerStepSuccessStatus } from "./planner-step-status"
 import { computeTokenCostUsd } from "./trace-cost"
 import {
+  approvalDeniedFromEntry,
+  approvalWaitFromEntry,
+  formatApprovalDeniedLabel,
   formatApprovalWaitLabel,
-  isApprovalDeniedTraceText,
-  isApprovalWaitTraceText,
-  parseApprovalWaitMessage,
+  isApprovalDeniedEntry,
+  isApprovalWaitEntry,
 } from "../approval-wait-copy"
 import { isCancelRaceFailureError } from "./trace-terminal"
 import type { OutlineNode } from "./types"
@@ -1235,6 +1237,8 @@ export function buildTraceDag(trace: TraceEntry[], opts?: BuildTraceDagOpts): Tr
     return lastCallIndex
   }
 
+  const hasApprovalDenied = trace.some((e) => isApprovalDeniedEntry(e))
+
   for (let i = 0; i < trace.length; i++) {
     const entry = trace[i]!
 
@@ -1355,30 +1359,38 @@ export function buildTraceDag(trace: TraceEntry[], opts?: BuildTraceDagOpts): Tr
       continue
     }
 
+    if (isApprovalWaitEntry(entry)) {
+      // Superseded once a deny note exists (reload can still carry both rows).
+      if (hasApprovalDenied) continue
+      const work = ensureWork(noteCall)
+      const wait = approvalWaitFromEntry(entry)
+      work.notes.push({
+        id: `pause-${i}`,
+        label: "Paused",
+        text: wait
+          ? formatApprovalWaitLabel(wait.tool, wait.reason)
+          : "Paused for approval",
+        tone: "neutral",
+      })
+      continue
+    }
+
+    if (isApprovalDeniedEntry(entry)) {
+      const work = ensureWork(noteCall)
+      const denied = approvalDeniedFromEntry(entry)
+      work.notes.push({
+        id: `deny-${i}`,
+        label: "Cancelled",
+        text: denied
+          ? formatApprovalDeniedLabel(denied.tool, denied.reason)
+          : "Approval denied",
+        tone: "cancelled",
+      })
+      continue
+    }
+
     if (entry.kind === "error" && entry.text !== "Run cancelled by user") {
       const work = ensureWork(noteCall)
-      // Approval wait / deny are process control — never Fail/Error in Trace.
-      if (isApprovalWaitTraceText(entry.text)) {
-        const wait = parseApprovalWaitMessage(entry.text)
-        work.notes.push({
-          id: `pause-${i}`,
-          label: "Paused",
-          text: wait
-            ? formatApprovalWaitLabel(wait.tool, wait.reason)
-            : entry.text,
-          tone: "neutral",
-        })
-        continue
-      }
-      if (isApprovalDeniedTraceText(entry.text)) {
-        work.notes.push({
-          id: `deny-${i}`,
-          label: "Cancelled",
-          text: entry.text,
-          tone: "cancelled",
-        })
-        continue
-      }
       work.notes.push({
         id: `err-${i}`,
         label: "Error",

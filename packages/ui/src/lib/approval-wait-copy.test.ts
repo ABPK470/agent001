@@ -5,32 +5,16 @@ import {
   formatApprovalDeniedCancelDetail,
   formatApprovalDeniedLabel,
   formatApprovalWaitLabel,
-  isApprovalDeniedCancelReason,
-  isApprovalDeniedTraceText,
-  isApprovalWaitTraceText,
+  isApprovalDeniedEntry,
+  isApprovalWaitEntry,
   keepLastApprovalWaitTraceEntry,
-  parseApprovalWaitMessage,
   projectTraceForChatDisplay,
   rewriteApprovalWaitEntriesToDenied,
   stripApprovalWaitTraceEntries,
 } from "./approval-wait-copy"
 
 describe("approval-wait-copy", () => {
-  it("parses waiting-for-approval trace lines", () => {
-    expect(parseApprovalWaitMessage("Waiting for approval — sync_execute: prod write")).toEqual({
-      tool: "sync_execute",
-      reason: "prod write",
-    })
-  })
-
-  it("parses legacy server approval-required trace lines", () => {
-    expect(parseApprovalWaitMessage('Approval required for tool "fetch_url": network')).toEqual({
-      tool: "fetch_url",
-      reason: "network",
-    })
-  })
-
-  it("formats paused / denied labels", () => {
+  it("formats paused / denied labels from structured fields", () => {
     expect(formatApprovalWaitLabel("fetch_url", "network")).toBe(
       "Paused for approval — fetch_url: network",
     )
@@ -42,29 +26,29 @@ describe("approval-wait-copy", () => {
     )
   })
 
-  it("detects wait and deny dialects", () => {
-    expect(isApprovalWaitTraceText("Waiting for approval — fetch_url: x")).toBe(true)
-    expect(isApprovalDeniedTraceText("Approval denied — fetch_url")).toBe(true)
-    expect(isApprovalDeniedCancelReason("approval denied")).toBe(true)
-    expect(isApprovalDeniedCancelReason("Tool approval denied for fetch_url.")).toBe(true)
+  it("narrows by wire kind only", () => {
+    expect(isApprovalWaitEntry({ kind: "approval-wait", toolName: "fetch_url", reason: "x" })).toBe(true)
+    expect(isApprovalWaitEntry({ kind: "error", text: "Waiting for approval — fetch_url: x" })).toBe(false)
+    expect(isApprovalDeniedEntry({ kind: "approval-denied", toolName: "fetch_url" })).toBe(true)
+    expect(isApprovalDeniedEntry({ kind: "error", text: "Approval denied — fetch_url" })).toBe(false)
   })
 
-  it("rewrites wait markers to a single denial cancel note", () => {
+  it("rewrites wait markers to a single structured denial note", () => {
     const entries: TraceEntry[] = [
       { kind: "tool-call", tool: "fetch_url", summary: "x" },
-      { kind: "error", text: "Waiting for approval — fetch_url: p1" },
-      { kind: "error", text: "Waiting for approval — fetch_url: p2" },
+      { kind: "approval-wait", toolName: "fetch_url", reason: "p1" },
+      { kind: "approval-wait", toolName: "fetch_url", reason: "p2" },
     ]
     expect(rewriteApprovalWaitEntriesToDenied(entries, "fetch_url", null)).toEqual([
       { kind: "tool-call", tool: "fetch_url", summary: "x" },
-      { kind: "error", text: "Approval denied — fetch_url" },
+      { kind: "approval-denied", toolName: "fetch_url" },
     ])
   })
 
   it("strips pause markers from settled history", () => {
     const entries: TraceEntry[] = [
       { kind: "tool-call", tool: "fetch_url", summary: "x" },
-      { kind: "error", text: "Waiting for approval — fetch_url: p1" },
+      { kind: "approval-wait", toolName: "fetch_url", reason: "p1" },
     ]
     expect(stripApprovalWaitTraceEntries(entries)).toEqual([
       { kind: "tool-call", tool: "fetch_url", summary: "x" },
@@ -73,26 +57,26 @@ describe("approval-wait-copy", () => {
 
   it("keeps only the latest pause marker while waiting", () => {
     const entries: TraceEntry[] = [
-      { kind: "error", text: "Waiting for approval — fetch_url: old" },
+      { kind: "approval-wait", toolName: "fetch_url", reason: "old" },
       { kind: "tool-call", tool: "fetch_url", summary: "x" },
-      { kind: "error", text: "Waiting for approval — fetch_url: latest" },
+      { kind: "approval-wait", toolName: "fetch_url", reason: "latest" },
     ]
     expect(keepLastApprovalWaitTraceEntry(entries)).toEqual([
       { kind: "tool-call", tool: "fetch_url", summary: "x" },
-      { kind: "error", text: "Waiting for approval — fetch_url: latest" },
+      { kind: "approval-wait", toolName: "fetch_url", reason: "latest" },
     ])
   })
 
   it("projects chat trace: none when completed/cancelled, one when waiting", () => {
     const waiting: TraceEntry[] = [
-      { kind: "error", text: "Waiting for approval — fetch_url: a" },
-      { kind: "error", text: "Waiting for approval — fetch_url: b" },
+      { kind: "approval-wait", toolName: "fetch_url", reason: "a" },
+      { kind: "approval-wait", toolName: "fetch_url", reason: "b" },
     ]
     const denied: TraceEntry[] = [
-      { kind: "error", text: "Approval denied — fetch_url" },
+      { kind: "approval-denied", toolName: "fetch_url" },
     ]
     expect(projectTraceForChatDisplay(waiting, RunStatus.WaitingForApproval)).toEqual([
-      { kind: "error", text: "Waiting for approval — fetch_url: b" },
+      { kind: "approval-wait", toolName: "fetch_url", reason: "b" },
     ])
     expect(projectTraceForChatDisplay(denied, RunStatus.Cancelled)).toEqual([])
     expect(projectTraceForChatDisplay(waiting, RunStatus.Completed)).toEqual([])

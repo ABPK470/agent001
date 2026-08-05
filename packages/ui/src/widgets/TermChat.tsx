@@ -107,11 +107,7 @@ import {
   stepBlockHeaderChrome,
 } from "./termchat/stepOutcomeChrome"
 import { collapseResumeRunChains, resumeChainIds } from "./termchat/collapseResumeChains"
-import {
-  formatApprovalWaitLabel,
-  isApprovalDeniedCancelReason,
-  parseApprovalWaitMessage,
-} from "../lib/approval-wait-copy"
+import { formatApprovalWaitLabel } from "../lib/approval-wait-copy"
 import { RunStatus } from "../enums"
 import { planTranscriptReveal } from "./termchat/revealRunInTranscript"
 import {
@@ -1154,17 +1150,17 @@ function NarrativeUpdate({ part }: { part: ResponseNarrativePart }) {
 }
 
 function ErrorNote({ text }: { text: string }) {
-  const wait = parseApprovalWaitMessage(text)
-  if (wait) {
-    return (
-      <div className="py-1 min-w-0 text-[15px] leading-6 text-text-muted">
-        {formatApprovalWaitLabel(wait.tool, wait.reason)}
-      </div>
-    )
-  }
   // Recoverable process notes stay muted; run terminals use ChatRunTerminalNotice.
   return (
     <div className="py-1 min-w-0 text-[15px] leading-6 text-text-muted">{text}</div>
+  )
+}
+
+function ApprovalWaitNote({ toolName, reason }: { toolName: string; reason: string }) {
+  return (
+    <div className="py-1 min-w-0 text-[15px] leading-6 text-text-muted">
+      {formatApprovalWaitLabel(toolName, reason)}
+    </div>
   )
 }
 
@@ -1280,7 +1276,6 @@ function chatCancelDetail(error?: string | null): string {
   if (!text || /^run cancelled by user$/i.test(text)) {
     return "This operation was aborted."
   }
-  if (isApprovalDeniedCancelReason(text)) return text
   return text
 }
 
@@ -1764,6 +1759,13 @@ function RunMessageImpl({
             compact
             exportRunId={run.id}
           />,
+        )
+        return
+      }
+
+      if (part.kind === "approval-wait") {
+        items.push(
+          <ApprovalWaitNote key={part.id} toolName={part.toolName} reason={part.reason} />,
         )
         return
       }

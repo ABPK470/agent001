@@ -216,6 +216,20 @@ export const TRACE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     severity: "error",
     summary: (p) => truncate(str(p.text, "error"), 64),
   },
+  "approval-wait": {
+    id: "approval-wait",
+    family: "input",
+    label: "Paused for approval",
+    severity: "warn",
+    summary: (p) => str(p.toolName, "approval"),
+  },
+  "approval-denied": {
+    id: "approval-denied",
+    family: "input",
+    label: "Approval denied",
+    severity: "warn",
+    summary: (p) => str(p.toolName, "denied"),
+  },
   usage: {
     id: "usage",
     family: "telemetry",

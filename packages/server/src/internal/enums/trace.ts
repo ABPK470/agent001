@@ -19,6 +19,10 @@ export const TraceEventKind = {
   DelegationEnd: "delegation-end",
   Answer: "answer",
   Error: "error",
+  /** Parked for tool approval — process control, not a failure. */
+  ApprovalWait: "approval-wait",
+  /** Operator denied a parked tool — cancellation outcome. */
+  ApprovalDenied: "approval-denied",
   Usage: "usage",
   DelegationIteration: "delegation-iteration",
   DelegationParallelStart: "delegation-parallel-start",

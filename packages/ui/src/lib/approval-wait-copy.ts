@@ -1,46 +1,21 @@
-/** Shared copy for tool-approval wait / deny in chat + Trace projection. */
+/**
+ * Tool-approval control-plane notes — wire kinds only.
+ * Wait = approval-wait. Deny = approval-denied. Never kind "error".
+ */
 
 import type { TraceEntry } from "@mia/shared-types"
 import { RunStatus } from "../enums"
 
-export const WAITING_APPROVAL_RE = /^Waiting for approval\s*[—–-]\s*([^:]+):\s*(.*)$/i
-export const APPROVAL_REQUIRED_RE = /^Approval required for tool "([^"]+)":\s*(.*)$/i
-export const APPROVAL_DENIED_RE = /^Approval denied\s*[—–-]\s*([^:]+)(?::\s*(.*))?$/i
-
-export function isApprovalWaitTraceText(text: string): boolean {
-  const trimmed = text.trim()
-  return WAITING_APPROVAL_RE.test(trimmed) || APPROVAL_REQUIRED_RE.test(trimmed)
+export function isApprovalWaitEntry(
+  entry: TraceEntry,
+): entry is Extract<TraceEntry, { kind: "approval-wait" }> {
+  return entry.kind === "approval-wait"
 }
 
-export function isApprovalDeniedTraceText(text: string): boolean {
-  return APPROVAL_DENIED_RE.test(text.trim())
-}
-
-export function parseApprovalWaitMessage(text: string): { tool: string; reason: string } | null {
-  const waiting = WAITING_APPROVAL_RE.exec(text.trim())
-  if (waiting) {
-    return {
-      tool: waiting[1]?.trim() || "tool",
-      reason: waiting[2]?.trim() || "",
-    }
-  }
-  const required = APPROVAL_REQUIRED_RE.exec(text.trim())
-  if (required) {
-    return {
-      tool: required[1]?.trim() || "tool",
-      reason: required[2]?.trim() || "",
-    }
-  }
-  return null
-}
-
-export function parseApprovalDeniedMessage(text: string): { tool: string; reason: string } | null {
-  const match = APPROVAL_DENIED_RE.exec(text.trim())
-  if (!match) return null
-  return {
-    tool: match[1]?.trim() || "tool",
-    reason: match[2]?.trim() || "",
-  }
+export function isApprovalDeniedEntry(
+  entry: TraceEntry,
+): entry is Extract<TraceEntry, { kind: "approval-denied" }> {
+  return entry.kind === "approval-denied"
 }
 
 export function formatApprovalWaitLabel(tool: string, reason: string): string {
@@ -55,7 +30,6 @@ function meaningfulDenyReason(reason?: string | null): string {
   return r
 }
 
-/** Trace note — denial is cancellation, not failure. */
 export function formatApprovalDeniedLabel(tool: string, reason?: string | null): string {
   const r = meaningfulDenyReason(reason)
   return r
@@ -63,7 +37,6 @@ export function formatApprovalDeniedLabel(tool: string, reason?: string | null):
     : `Approval denied — ${tool}`
 }
 
-/** Chat / RunStatus cancel reason line under "Run cancelled". */
 export function formatApprovalDeniedCancelDetail(tool: string, reason?: string | null): string {
   const r = meaningfulDenyReason(reason)
   return r
@@ -71,75 +44,50 @@ export function formatApprovalDeniedCancelDetail(tool: string, reason?: string |
     : `Tool approval denied for ${tool}.`
 }
 
-export function isApprovalDeniedCancelReason(text: string | null | undefined): boolean {
-  if (!text) return false
-  const t = text.toLowerCase()
-  return t.includes("approval denied") || isApprovalDeniedTraceText(text)
-}
-
-/** Remove approval pause markers — modal owns the interactive wait UX. */
 export function stripApprovalWaitTraceEntries(entries: readonly TraceEntry[]): TraceEntry[] {
-  return entries.filter((entry) => {
-    if (entry.kind !== "error" || !("text" in entry)) return true
-    return !isApprovalWaitTraceText(entry.text)
-  })
+  return entries.filter((entry) => !isApprovalWaitEntry(entry))
 }
 
-/** Denial markers are owned by the cancel terminal — not ErrorNote spam. */
 export function stripApprovalDeniedTraceEntries(entries: readonly TraceEntry[]): TraceEntry[] {
-  return entries.filter((entry) => {
-    if (entry.kind !== "error" || !("text" in entry)) return true
-    return !isApprovalDeniedTraceText(entry.text)
-  })
+  return entries.filter((entry) => !isApprovalDeniedEntry(entry))
 }
 
-/** While actively waiting, show at most one pause line (the latest). */
 export function keepLastApprovalWaitTraceEntry(entries: readonly TraceEntry[]): TraceEntry[] {
   let lastIdx = -1
   for (let i = 0; i < entries.length; i++) {
-    const entry = entries[i]
-    if (entry.kind === "error" && "text" in entry && isApprovalWaitTraceText(entry.text)) {
-      lastIdx = i
-    }
+    if (isApprovalWaitEntry(entries[i]!)) lastIdx = i
   }
   if (lastIdx < 0) return [...entries]
-  return entries.filter((entry, i) => {
-    if (entry.kind !== "error" || !("text" in entry) || !isApprovalWaitTraceText(entry.text)) {
-      return true
-    }
-    return i === lastIdx
-  })
+  return entries.filter((entry, i) => !isApprovalWaitEntry(entry) || i === lastIdx)
 }
 
-/**
- * Parked wait notes become a single denial cancel note — Trace must not
- * keep painting Fail/Error after the operator denied.
- */
+/** Drop wait markers and ensure one approval-denied note. */
 export function rewriteApprovalWaitEntriesToDenied(
   entries: readonly TraceEntry[],
   toolName: string,
   reason?: string | null,
 ): TraceEntry[] {
-  const deniedText = formatApprovalDeniedLabel(toolName, reason)
+  const denied: TraceEntry = {
+    kind: "approval-denied",
+    toolName,
+    ...(meaningfulDenyReason(reason) ? { reason: meaningfulDenyReason(reason) } : {}),
+  }
   let wrote = false
   const out: TraceEntry[] = []
   for (const entry of entries) {
-    if (entry.kind === "error" && "text" in entry && isApprovalWaitTraceText(entry.text)) {
+    if (isApprovalWaitEntry(entry) || isApprovalDeniedEntry(entry)) {
       if (!wrote) {
-        out.push({ kind: "error", text: deniedText })
+        out.push(denied)
         wrote = true
       }
       continue
     }
     out.push(entry)
   }
-  if (!wrote) {
-    out.push({ kind: "error", text: deniedText })
-  }
+  if (!wrote) out.push(denied)
   return out
 }
 
-/** Chat transcript: pause while waiting; no wait/deny spam when settled. */
 export function projectTraceForChatDisplay(
   entries: readonly TraceEntry[],
   runStatus: string,
@@ -148,4 +96,18 @@ export function projectTraceForChatDisplay(
     return keepLastApprovalWaitTraceEntry(entries)
   }
   return stripApprovalDeniedTraceEntries(stripApprovalWaitTraceEntries(entries))
+}
+
+export function approvalWaitFromEntry(
+  entry: TraceEntry,
+): { tool: string; reason: string } | null {
+  if (!isApprovalWaitEntry(entry)) return null
+  return { tool: entry.toolName, reason: entry.reason }
+}
+
+export function approvalDeniedFromEntry(
+  entry: TraceEntry,
+): { tool: string; reason: string } | null {
+  if (!isApprovalDeniedEntry(entry)) return null
+  return { tool: entry.toolName, reason: entry.reason ?? "" }
 }

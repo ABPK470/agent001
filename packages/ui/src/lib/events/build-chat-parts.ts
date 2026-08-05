@@ -13,7 +13,10 @@ import {
 import type { TraceEntry } from "@mia/shared-types"
 import { RunStatus } from "../../enums"
 import { isTerminalRunStatus } from "../run-actions"
-import { projectTraceForChatDisplay } from "../approval-wait-copy"
+import {
+  approvalWaitFromEntry,
+  projectTraceForChatDisplay,
+} from "../approval-wait-copy"
 import { formatMs } from "../util"
 import { isPlannerStepSuccessStatus, plannerStepEndDetail } from "./planner-step-status"
 import { reconcilePlannerStepGroups } from "./reconcile-step-groups"
@@ -201,6 +204,13 @@ export interface ResponseErrorPart {
   text: string
 }
 
+export interface ResponseApprovalWaitPart {
+  kind: "approval-wait"
+  id: string
+  toolName: string
+  reason: string
+}
+
 /** Coalesced sync tool progress — lives in trace above the live shimmer. */
 export interface ResponseSyncProgressPart {
   kind: "sync-progress"
@@ -231,6 +241,7 @@ export type ResponsePart =
   | ResponseNarrativePart
   | ResponseInputPart
   | ResponseErrorPart
+  | ResponseApprovalWaitPart
   | ResponseSyncProgressPart
 
 /** Patch one plan outline step's live runStatus (parallel-safe). */
@@ -1317,6 +1328,21 @@ export function buildResponseParts(
         // purpose — collapse it so the conversation flows on instead of
         // leaving a stale active-looking input behind the agent's reply.
         parts = parts.filter((part) => part.kind !== "input")
+        break
+      case "approval-wait": {
+        const wait = approvalWaitFromEntry(entry)
+        if (wait) {
+          parts.push({
+            kind: "approval-wait",
+            id: `approval-wait-${index}`,
+            toolName: wait.tool,
+            reason: wait.reason,
+          })
+        }
+        break
+      }
+      case "approval-denied":
+        // Cancel terminal owns deny copy.
         break
       case "error":
         if (entry.text === "Run cancelled by user") break

@@ -688,6 +688,21 @@ export async function saveTraceEntry(entry: Omit<DbTraceEntry, "id">): Promise<v
   await runExecAsync(compiled)
 }
 
+/** Append a trace entry after the current max seq (for parked / idle runs). */
+export async function appendTraceEntry(
+  runId: string,
+  entry: Record<string, unknown>,
+): Promise<void> {
+  const existing = await getTraceEntries(runId)
+  const seq = existing.reduce((max, row) => Math.max(max, row.seq), -1) + 1
+  await saveTraceEntry({
+    run_id: runId,
+    seq,
+    data: JSON.stringify(entry),
+    created_at: new Date().toISOString(),
+  })
+}
+
 export async function getTraceEntries(runId: string): Promise<DbTraceEntry[]> {
   const compiled = getPlatformDb()
     .selectFrom("trace_entries")

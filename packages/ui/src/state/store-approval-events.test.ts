@@ -63,6 +63,40 @@ describe("store approval events", () => {
     })
   })
 
+  it("approval.required appends approval-wait (not error) to the run trace", async () => {
+    useStore.getState().upsertRun({
+      id: "run-wait",
+      goal: "test goal",
+      status: RunStatus.Running,
+      answer: null,
+      stepCount: 0,
+      error: null,
+      parentRunId: null,
+      createdAt: new Date().toISOString(),
+      completedAt: null,
+      totalTokens: 0,
+      promptTokens: 0,
+      completionTokens: 0,
+      llmCalls: 0,
+      trace: [],
+    })
+    useStore.getState().handleEvent({
+      type: "approval.required",
+      timestamp: new Date().toISOString(),
+      data: {
+        runId: "run-wait",
+        stepId: "step-1",
+        toolName: "fetch_url",
+        reason: "network",
+        approvalId: "appr-wait",
+      },
+    })
+    await Promise.resolve()
+    expect(useStore.getState().runs.find((r) => r.id === "run-wait")?.trace).toEqual([
+      { kind: "approval-wait", toolName: "fetch_url", reason: "network" },
+    ])
+  })
+
   it("opens modal when approvalId arrives even if dismiss happened before id was known", () => {
     const { handleEvent } = useStore.getState()
     handleEvent({
@@ -175,7 +209,7 @@ describe("store approval events", () => {
       promptTokens: 0,
       completionTokens: 0,
       llmCalls: 0,
-      trace: [{ kind: "error", text: "Waiting for approval — fetch_url: network" }],
+      trace: [{ kind: "approval-wait", toolName: "fetch_url", reason: "network" }],
     })
     useStore.getState().setPendingToolApproval({
       approvalId: "appr-1",
@@ -221,7 +255,7 @@ describe("store approval events", () => {
       promptTokens: 0,
       completionTokens: 0,
       llmCalls: 0,
-      trace: [{ kind: "error", text: "Waiting for approval — fetch_url: network" }],
+      trace: [{ kind: "approval-wait", toolName: "fetch_url", reason: "network" }],
     })
     useStore.getState().setPendingToolApproval({
       approvalId: "appr-deny",
@@ -247,7 +281,7 @@ describe("store approval events", () => {
     const denied = useStore.getState().runs.find((r) => r.id === "run-deny")
     expect(denied?.status).toBe(RunStatus.Cancelled)
     expect(denied?.error).toBe("Tool approval denied for fetch_url.")
-    expect(denied?.trace).toEqual([{ kind: "error", text: "Approval denied — fetch_url" }])
+    expect(denied?.trace).toEqual([{ kind: "approval-denied", toolName: "fetch_url" }])
     expect(useStore.getState().pendingToolApproval).toBeNull()
   })
 
@@ -266,7 +300,13 @@ describe("store approval events", () => {
           {
             label: "Approve",
             action: "approve-run-step",
-            data: { approvalId: "appr-1", runId: "run-1", stepId: "step-1" },
+            data: {
+              approvalId: "appr-1",
+              runId: "run-1",
+              stepId: "step-1",
+              toolName: "fetch_url",
+              reason: "network",
+            },
           },
         ],
       },

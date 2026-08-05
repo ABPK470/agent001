@@ -259,6 +259,10 @@ export type TraceEntry =
   | { kind: "tool-error"; invocationId?: string; toolCallId?: string | null; text: string; stepName?: string }
   | { kind: "answer"; text: string }
   | { kind: "error"; text: string }
+  /** Control-plane pause — not a failure. Prefer this over kind "error" for waits. */
+  | { kind: "approval-wait"; toolName: string; reason: string; policyName?: string }
+  /** Operator denied a parked tool — cancellation, not failure. */
+  | { kind: "approval-denied"; toolName: string; reason?: string }
   | { kind: "usage"; iterationTokens: number; totalTokens: number; promptTokens: number; completionTokens: number; llmCalls: number }
   | { kind: "delegation-start"; goal: string; depth: number; tools: string[]; agentName?: string }
   | { kind: "delegation-iteration"; depth: number; iteration: number; maxIterations: number }

@@ -15,6 +15,5 @@ export function isCancelRaceFailureError(message: string | null | undefined): bo
     text.includes("cancelled")
     || text.includes("canceled")
     || text.includes("abort")
-    || text.includes("approval denied")
   )
 }

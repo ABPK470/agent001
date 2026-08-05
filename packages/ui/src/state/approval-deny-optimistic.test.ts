@@ -17,7 +17,7 @@ function run(partial: Partial<Run> & Pick<Run, "id">): Run {
     promptTokens: 0,
     completionTokens: 0,
     llmCalls: 0,
-    trace: [{ kind: "error", text: "Waiting for approval — fetch_url: network" }],
+    trace: [{ kind: "approval-wait", toolName: "fetch_url", reason: "network" }],
     ...partial,
   }
 }
@@ -37,7 +37,7 @@ describe("applyOptimisticApprovalDeny", () => {
         id: "run-1",
         status: RunStatus.Cancelled,
         error: "Tool approval denied for fetch_url.",
-        trace: [{ kind: "error", text: "Approval denied — fetch_url" }],
+        trace: [{ kind: "approval-denied", toolName: "fetch_url" }],
       }),
     )
   })

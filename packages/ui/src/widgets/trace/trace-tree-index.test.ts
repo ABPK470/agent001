@@ -124,8 +124,9 @@ describe("trace-tree-index", () => {
         usage: null,
       },
       {
-        kind: "error",
-        text: "Waiting for approval — fetch_url: network",
+        kind: "approval-wait",
+        toolName: "fetch_url",
+        reason: "network",
       },
     ])
     const open = emptyOpen()
@@ -153,8 +154,8 @@ describe("trace-tree-index", () => {
         usage: null,
       },
       {
-        kind: "error",
-        text: "Approval denied — fetch_url",
+        kind: "approval-denied",
+        toolName: "fetch_url",
       },
     ])
     const open = emptyOpen()

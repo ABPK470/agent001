@@ -15,6 +15,10 @@ import { RunStatus } from "../../enums"
 import { useStore } from "../../state/store"
 import { applyOptimisticApprovalDeny } from "../../state/approval-deny-optimistic"
 import { applyOptimisticApprovalResume } from "../../state/approval-resume-optimistic"
+import {
+  approvalFieldsFromNotificationActions,
+  pendingApprovalFromNotification,
+} from "../../state/pending-approval"
 import { useLayoutStore } from "../../state/layout-store"
 import type { Notification, NotificationAction, Run } from "../../types"
 
@@ -48,8 +52,8 @@ function notificationActions(notification: Notification): NotificationAction[] {
 }
 
 function approvalIdFromNotification(notification: Notification): string | undefined {
-  const action = notificationActions(notification).find((a) => a.action === "approve-run-step")
-  return action?.data?.approvalId as string | undefined
+  return approvalFieldsFromNotificationActions(notificationActions(notification)).approvalId
+    ?? undefined
 }
 
 /**
@@ -129,13 +133,10 @@ export function NotificationPanel() {
         await api.denyRunToolStep(approvalId)
         if (notification.runId) {
           const pending = useStore.getState().pendingToolApproval
+          const fields = approvalFieldsFromNotificationActions(notificationActions(notification))
           applyOptimisticApprovalDeny(
             notification.runId,
-            pending?.toolName
-              ?? (typeof notification.message === "string"
-                ? notification.message.match(/Tool "([^"]+)"/)?.[1]
-                : undefined)
-              ?? "tool",
+            pending?.toolName ?? fields.toolName,
             null,
             runs,
             upsertRun,
@@ -253,16 +254,10 @@ export function NotificationPanel() {
   ])
 
   const handleOpenApproval = useCallback((notification: Notification) => {
-    if (notification.type !== "approval.required" || !notification.runId) return
-    const toolMatch = notification.message.match(/^Tool "([^"]+)"/)
-    upsertPendingToolApproval({
-      runId: notification.runId,
-      stepId: notification.stepId ?? "",
-      approvalId: approvalIdFromNotification(notification) ?? null,
-      toolName: toolMatch?.[1] ?? "unknown",
-      reason: notification.message.replace(/^Tool "[^"]+" needs approval: /, "") || notification.message,
-      notificationId: notification.id,
-    })
+    if (notification.type !== "approval.required") return
+    const pending = pendingApprovalFromNotification(notification)
+    if (!pending) return
+    upsertPendingToolApproval(pending)
     setApprovalModalOpen(true)
     setOpen(false)
   }, [setApprovalModalOpen, upsertPendingToolApproval])

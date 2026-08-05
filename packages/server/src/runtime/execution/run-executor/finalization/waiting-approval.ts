@@ -47,9 +47,12 @@ export async function finalizeWaitingForApprovalRun(
   env.persistCurrentRun(undefined, undefined)
   await persistAuditLog(sideEffects.auditLog, request.runId)
   persistTokenUsage(request.runId, agent)
+  // Control-plane pause — never TraceEventKind.Error (that paints Fail in Trace).
   env.boundSaveTrace(request.runId, {
-    kind: TraceEventKind.Error,
-    text: `Waiting for approval — ${error.toolName}: ${error.reason.slice(0, 180)}`,
+    kind: TraceEventKind.ApprovalWait,
+    toolName: error.toolName,
+    reason: error.reason.slice(0, 180),
+    policyName: error.policyName,
   })
 
   await db.saveLog({
@@ -72,7 +75,15 @@ export async function finalizeWaitingForApprovalRun(
     },
   })
 
-  createNotification({
+  const approvalActionData = {
+    runId: error.runId,
+    stepId: error.stepId,
+    approvalId: approval.id,
+    toolName: error.toolName,
+    reason: error.reason,
+    policyName: error.policyName,
+  }
+  await createNotification({
     type: EventType.ApprovalRequired,
     title: "Approval required",
     message: `Tool "${error.toolName}" needs approval: ${error.reason}`,
@@ -82,12 +93,12 @@ export async function finalizeWaitingForApprovalRun(
       {
         label: "Approve",
         action: NotificationActionType.ApproveRunStep,
-        data: { runId: error.runId, stepId: error.stepId, approvalId: approval.id },
+        data: approvalActionData,
       },
       {
         label: "Deny",
         action: NotificationActionType.DenyRunStep,
-        data: { runId: error.runId, stepId: error.stepId, approvalId: approval.id },
+        data: approvalActionData,
       },
       {
         label: "View run",

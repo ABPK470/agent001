@@ -61,6 +61,7 @@ export {
   saveLog,
   saveRun,
   saveTokenUsage,
+  appendTraceEntry,
   saveTraceEntry,
   sumTokenUsage,
   type AuditLogFilters,

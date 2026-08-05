@@ -19,12 +19,17 @@ import {
   syncProgressToTraceEntry,
   type SyncProgressState
 } from "./sync-trace-progress.js"
-import { pendingApprovalFromEvent, type PendingToolApproval } from "./pending-approval.js"
+import {
+  pendingApprovalFromEvent,
+  pendingApprovalFromNotification,
+  type PendingToolApproval,
+} from "./pending-approval.js"
 import { applyOptimisticApprovalDeny } from "./approval-deny-optimistic.js"
 import { applyOptimisticApprovalResume } from "./approval-resume-optimistic.js"
 import {
-  isApprovalDeniedCancelReason,
-  parseApprovalWaitMessage,
+  approvalWaitFromEntry,
+  formatApprovalDeniedCancelDetail,
+  isApprovalWaitEntry,
   stripApprovalWaitTraceEntries,
 } from "../lib/approval-wait-copy.js"
 import { api } from "../client/index"
@@ -195,7 +200,7 @@ function toolNameForApprovalDeny(
   if (pendingToolName && pendingToolName !== "unknown") return pendingToolName
   const wait = [...(run?.trace ?? [])]
     .reverse()
-    .map((e) => (e.kind === "error" && "text" in e ? parseApprovalWaitMessage(e.text) : null))
+    .map((e) => approvalWaitFromEntry(e))
     .find(Boolean)
   return wait?.tool || "tool"
 }
@@ -1553,12 +1558,18 @@ export const useStore = create<AppState>()(
             const cancelledRunId = data["runId"] as string
             const cancelReason =
               typeof data["reason"] === "string" ? data["reason"] : null
+            const deniedToolName =
+              typeof data["toolName"] === "string" && data["toolName"]
+                ? data["toolName"]
+                : null
             const existing = get().runs.find((r) => r.id === cancelledRunId)
-            // Keep a deny reason already set by approval.resolved; otherwise
-            // surface SSE reason only when it is an approval denial (cancel, not fail).
+            // Keep deny detail from approval.resolved; else toolName on cancel
+            // means approval deny (structured — not reason-string folklore).
             const cancelDetail =
               existing?.error
-              ?? (isApprovalDeniedCancelReason(cancelReason) ? cancelReason : null)
+              ?? (deniedToolName
+                ? formatApprovalDeniedCancelDetail(deniedToolName, cancelReason)
+                : null)
             store.clearStreamingAnswer()
             store.upsertRun({
               id: cancelledRunId,
@@ -1905,18 +1916,9 @@ export const useStore = create<AppState>()(
               createdAt: timestamp,
             }
             store.addNotification(notification)
-            if (notification.type === "approval.required" && notification.runId) {
-              const approveAction = notification.actions.find((a) => a.action === "approve-run-step")
-              const approvalId = approveAction?.data?.approvalId as string | undefined
-              const toolMatch = notification.message.match(/^Tool "([^"]+)"/)
-              get().upsertPendingToolApproval({
-                runId: notification.runId,
-                stepId: notification.stepId ?? "",
-                approvalId: approvalId ?? null,
-                toolName: toolMatch?.[1] ?? "unknown",
-                reason: notification.message.replace(/^Tool "[^"]+" needs approval: /, "") || notification.message,
-                notificationId: notification.id,
-              })
+            if (notification.type === "approval.required") {
+              const pending = pendingApprovalFromNotification(notification)
+              if (pending) get().upsertPendingToolApproval(pending)
             }
             break
           }
@@ -1937,18 +1939,21 @@ export const useStore = create<AppState>()(
               notificationId: existing?.notificationId ?? pending.notificationId ?? null,
             })
             store.upsertRun({ id: runId, status: RunStatus.WaitingForApproval })
-            const waitText = `Waiting for approval — ${pending.toolName}: ${pending.reason}`
             const runRow = get().runs.find((r) => r.id === runId)
             const alreadyInTrace = runRow?.trace?.some(
-              (e) => e.kind === "error" && "text" in e && e.text === waitText,
+              (e) =>
+                isApprovalWaitEntry(e) &&
+                approvalWaitFromEntry(e)?.tool === pending.toolName,
             )
             if (
               (!existing || existing.runId !== runId || existing.stepId !== stepId)
               && !alreadyInTrace
             ) {
               const traceEntry: TraceEntry = {
-                kind: "error",
-                text: waitText,
+                kind: "approval-wait",
+                toolName: pending.toolName,
+                reason: pending.reason,
+                ...(pending.policyName ? { policyName: pending.policyName } : {}),
               }
               store.addTrace(traceEntry)
               if (runId) {

@@ -73,6 +73,7 @@ export type {
   ResponseNarrativePart,
   ResponseInputPart,
   ResponseErrorPart,
+  ResponseApprovalWaitPart,
   ResponseSyncProgressPart,
   ResponsePart,
 } from "./build-chat-parts"

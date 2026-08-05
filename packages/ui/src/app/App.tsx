@@ -12,6 +12,7 @@ import { usePlatformHealth } from "../hooks/usePlatformHealth"
 import { useServerReachable } from "../hooks/useServerReachable"
 import { useLayoutStore } from "../state/layout-store"
 import { useOperationsStore } from "../state/operations-store"
+import { pendingApprovalFromNotification } from "../state/pending-approval"
 import { useStore } from "../state/store"
 import type { AuditEntry, LogEntry, Step, WidgetType } from "../types"
 import { widgetRegistry } from "../widgets"
@@ -67,17 +68,9 @@ function hydratePersonalNotifications(
     setNotifications(items)
     const pendingNote = items.find((n) => n.type === "approval.required" && !n.read)
       ?? items.find((n) => n.type === "approval.required")
-    if (!pendingNote?.runId) return
-    const approveAction = pendingNote.actions.find((a) => a.action === "approve-run-step")
-    const toolMatch = pendingNote.message.match(/^Tool "([^"]+)"/)
-    hydrate({
-      approvalId: (approveAction?.data?.approvalId as string | undefined) ?? null,
-      runId: pendingNote.runId,
-      stepId: pendingNote.stepId ?? "",
-      toolName: toolMatch?.[1] ?? "unknown",
-      reason: pendingNote.message.replace(/^Tool "[^"]+" needs approval: /, "") || pendingNote.message,
-      notificationId: pendingNote.id,
-    })
+    if (!pendingNote) return
+    const pending = pendingApprovalFromNotification(pendingNote)
+    if (pending) hydrate(pending)
   }).catch((err: unknown) => { console.error("[mia]", err) })
 
   api.listPendingToolApprovals().then((approvals) => {

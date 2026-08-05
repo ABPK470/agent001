@@ -32,10 +32,17 @@ describe("collapseResumeRunChains", () => {
       status: "cancelled",
       createdAt: "2026-01-01T00:00:00.000Z",
       trace: [
-        { kind: "tool-call", tool: "sync_execute", summary: "exec" },
         {
-          kind: "error",
-          text: "Waiting for approval — sync_execute: needs confirm",
+          kind: "tool-call",
+          invocationId: "inv-1",
+          tool: "sync_execute",
+          argsSummary: "exec",
+          argsFormatted: "{}",
+        },
+        {
+          kind: "approval-wait",
+          toolName: "sync_execute",
+          reason: "needs confirm",
         },
       ],
     })
@@ -58,10 +65,9 @@ describe("collapseResumeRunChains", () => {
     expect(out[0]!.parentRunId).toBeNull()
     expect(isSupersededByResume(parent, [parent, child])).toBe(true)
 
-    const texts = (out[0]!.trace ?? []).map((e) => ("text" in e ? e.text : e.kind))
-    expect(texts.some((t) => String(t).includes("Waiting for approval"))).toBe(false)
-    expect(texts.some((t) => String(t).includes("Approved"))).toBe(false)
-    expect(texts).toContain("Done.")
+    const kinds = (out[0]!.trace ?? []).map((e) => e.kind)
+    expect(kinds).not.toContain("approval-wait")
+    expect(kinds).toContain("answer")
   })
 
   it("collapses a chain of many approvals without approval spam in the trace", () => {
@@ -70,7 +76,7 @@ describe("collapseResumeRunChains", () => {
       goal: "sync uat to dev",
       status: "cancelled",
       createdAt: "2026-01-01T00:00:00.000Z",
-      trace: [{ kind: "error", text: "Waiting for approval — sync_execute: p1" }],
+      trace: [{ kind: "approval-wait", toolName: "sync_execute", reason: "p1" }],
     })
     const b = run({
       id: "b",
@@ -78,7 +84,7 @@ describe("collapseResumeRunChains", () => {
       parentRunId: "a",
       status: "cancelled",
       createdAt: "2026-01-01T00:01:00.000Z",
-      trace: [{ kind: "error", text: "Waiting for approval — fetch_url: p2" }],
+      trace: [{ kind: "approval-wait", toolName: "fetch_url", reason: "p2" }],
     })
     const c = run({
       id: "c",
@@ -95,8 +101,8 @@ describe("collapseResumeRunChains", () => {
     expect(out[0]!.id).toBe("c")
     expect(out[0]!.goal).toBe("sync uat to dev")
     const trace = out[0]!.trace ?? []
+    expect(trace.some((e) => e.kind === "approval-wait")).toBe(false)
     expect(trace.some((e) => e.kind === "error")).toBe(false)
-    expect(trace.some((e) => "text" in e && String(e.text).includes("Approved"))).toBe(false)
   })
 
   it("leaves unrelated runs alone", () => {
@@ -108,10 +114,10 @@ describe("collapseResumeRunChains", () => {
 })
 
 describe("dropApprovalWaitTraceEntries", () => {
-  it("removes approval pause markers but keeps real errors", () => {
+  it("removes approval-wait markers but keeps real errors", () => {
     const entries: TraceEntry[] = [
-      { kind: "error", text: "Waiting for approval — sync_execute: policy" },
-      { kind: "error", text: 'Approval required for tool "fetch_url": network' },
+      { kind: "approval-wait", toolName: "sync_execute", reason: "policy" },
+      { kind: "approval-wait", toolName: "fetch_url", reason: "network" },
       { kind: "error", text: "Tool failed hard" },
     ]
     const stripped = dropApprovalWaitTraceEntries(entries)

@@ -110,10 +110,14 @@ describe("tool approval end-to-end", () => {
         error
       )
 
-      expect(getRun("run-e2e")?.status).toBe("waiting_for_approval")
+      expect((await getRun("run-e2e"))?.status).toBe("waiting_for_approval")
       expect(boundSaveTrace).toHaveBeenCalledWith(
         "run-e2e",
-        expect.objectContaining({ text: expect.stringContaining("fetch_url") })
+        expect.objectContaining({
+          kind: "approval-wait",
+          toolName: "fetch_url",
+          reason: expect.stringContaining("outbound network"),
+        })
       )
 
       const approvalEvent = events.find((e) => e.type === EventType.ApprovalRequired)
@@ -131,14 +135,22 @@ describe("tool approval end-to-end", () => {
         runId: "run-e2e",
       })
 
-      const notifications = listNotifications()
+      const notifications = await listNotifications()
       expect(notifications).toHaveLength(1)
-      const actions = JSON.parse(notifications[0]!.actions) as Array<{ action: string }>
+      const actions = JSON.parse(notifications[0]!.actions) as Array<{
+        action: string
+        data?: Record<string, unknown>
+      }>
       expect(actions.map((a) => a.action)).toEqual([
         NotificationActionType.ApproveRunStep,
         NotificationActionType.DenyRunStep,
         NotificationActionType.ViewRun,
       ])
+      expect(actions[0]?.data).toMatchObject({
+        toolName: "fetch_url",
+        reason: "outbound network needs approval",
+        approvalId: expect.any(String),
+      })
 
       const approvalId = approvalEvent!.data["approvalId"] as string
       const resumeRun = vi.fn(() => "run-e2e-resumed")
@@ -173,7 +185,7 @@ describe("tool approval end-to-end", () => {
     const { subscribeToEvents } = await import("../src/infra/events/broadcaster.js")
     const { registerRunRoutes } = await import("../src/api/runs/routes.js")
 
-    const approval = upsertPendingRunToolApproval({
+    const approval = await upsertPendingRunToolApproval({
       runId: "run-deny",
       stepId: "step-1",
       toolName: "write_file",
@@ -199,12 +211,20 @@ describe("tool approval end-to-end", () => {
         url: `/api/runs/tool-approvals/${approval.id}/deny`,
         payload: { reason: "not allowed" },
       })
-      expect(deny.statusCode).toBe(200)
+      expect(deny.statusCode, deny.body).toBe(200)
       expect(cancelRun).toHaveBeenCalledWith("run-deny")
       expect(events.some((e) => e.type === "approval.resolved" && e.data["decision"] === "denied")).toBe(true)
 
       const row = testDb.prepare("SELECT status FROM runs WHERE id = ?").get("run-deny") as { status: string }
       expect(row.status).toBe("cancelled")
+
+      const deniedTrace = testDb
+        .prepare("SELECT data FROM trace_entries WHERE run_id = ? ORDER BY seq")
+        .all("run-deny") as Array<{ data: string }>
+      expect(deniedTrace.some((row) => {
+        const entry = JSON.parse(row.data) as { kind?: string; toolName?: string }
+        return entry.kind === "approval-denied" && entry.toolName === "write_file"
+      })).toBe(true)
     } finally {
       unsub()
       await app.close()
