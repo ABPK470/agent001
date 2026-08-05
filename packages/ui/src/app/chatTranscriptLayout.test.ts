@@ -76,6 +76,14 @@ describe("chatTranscriptLayout", () => {
     // One scrollport — peek long output, no nested wheel.
     expect(term).not.toContain("useNestedWheelScroll")
     expect(term).not.toContain("overscroll-contain")
+    // Live tool growth must not TanStack-nudge scrollTop (Trace dialect).
+    expect(term).toContain("adjustScrollOnResize={false}")
+    // Docked composer must not remount-steal focus during a live run.
+    expect(term).toMatch(/autoFocus\s*=\s*false/)
+    expect(term).toContain("autoFocus={autoFocus}")
+    // Cursor/Copilot paper under the last turn (home + widget).
+    expect(term).toContain("CHAT_TRANSCRIPT_BOTTOM_PAPER_CLASS")
+    expect(term).toContain("threshold: nearBottomThreshold")
     const peek = readFileSync(join(here, "../components/InlinePeekText.tsx"), "utf8")
     expect(peek).toContain("buildPeekDisplay")
     expect(peek).toContain("preserveToggle")

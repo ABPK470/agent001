@@ -47,8 +47,9 @@ export interface VirtualListProps<T> {
   footer?: ReactNode
   /**
    * When false, row resize never nudges scrollTop.
-   * Trace folds own scroll via pin-band compensation + header park — TanStack
-   * resize correction otherwise flinches the whole outline.
+   * Trace folds own scroll via pin-band compensation + header park; chat turns
+   * own live follow via useStickToBottomScroll — TanStack resize correction
+   * otherwise flinches the whole scrollport while tools grow mid-run.
    */
   adjustScrollOnResize?: boolean
 }

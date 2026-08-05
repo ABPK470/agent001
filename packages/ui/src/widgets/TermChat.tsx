@@ -54,6 +54,8 @@ import {
   HOME_CHAT_INPUT_DOCK_CLASS,
   CHAT_INPUT_PILL_CLASS,
   CHAT_INPUT_WIDGET_CLASS,
+  CHAT_TRANSCRIPT_BOTTOM_PAPER_CLASS,
+  chatTranscriptNearBottomThresholdPx,
   WIDGET_CHAT_INPUT_DOCK_CLASS,
   USER_GOAL_COLUMN_CLASS,
   USER_GOAL_TO_RESPONSE_GAP_CLASS,
@@ -88,11 +90,7 @@ import {
   summarizeHistory,
   summarizeRunError,
 } from "./termchat/milestone"
-import {
-  firstRunningSubagentStepId,
-  isParallelSubagentFanOut,
-  scrollStepToHostTop,
-} from "./termchat/parallelFanOut"
+import { isParallelSubagentFanOut } from "./termchat/parallelFanOut"
 import { ChatFoldBody } from "./termchat/ChatFoldBody"
 import { operationStatusPill } from "../lib/status-callout"
 import { shouldAutoOpenWorkChip } from "./termchat/workChipFold"
@@ -1445,8 +1443,6 @@ function RunMessageImpl({
   /** Active turn only — pauses transcript stick-to-bottom while 2+ subagents run. */
   onParallelFanOutChange?: (fanOut: boolean) => void
 }) {
-  const { pauseAutoScroll, scrollHostRef } = useChatScroll()
-  const wasFanOutRef = useRef(false)
   const trace = run.trace ?? []
   const liveStreamingAnswer = isActive && isRunActiveStatus(run.status) ? (run.streamingAnswer ?? "") : ""
   const responseParts = useMemo(
@@ -1467,32 +1463,6 @@ function RunMessageImpl({
     }
     onParallelFanOutChange?.(parallelFanOut)
   }, [isActive, parallelFanOut, onParallelFanOutChange])
-
-  useLayoutEffect(() => {
-    if (!isLiveRun || !isActive) {
-      wasFanOutRef.current = false
-      return
-    }
-    const rising = parallelFanOut && !wasFanOutRef.current
-    wasFanOutRef.current = parallelFanOut
-    if (!rising) return
-
-    // Stop host follow immediately (followWhen flips one frame later via parent).
-    pauseAutoScroll()
-    const stepId = firstRunningSubagentStepId(responseParts)
-    const host = scrollHostRef.current
-    if (!stepId || !host) return
-    const stepEl = host.querySelector(`[data-chat-step-id="${stepId}"]`)
-    if (!(stepEl instanceof HTMLElement)) return
-    scrollStepToHostTop(host, stepEl)
-  }, [
-    isActive,
-    isLiveRun,
-    parallelFanOut,
-    pauseAutoScroll,
-    responseParts,
-    scrollHostRef,
-  ])
 
   const iterationMeta = useMemo(() => {
     const lastWorkIndex = responseParts.reduce((last, candidate, index) => {
@@ -1775,6 +1745,7 @@ function TermChatInputBar({
   chrome = "pill",
   heroRevealProgress = 1,
   personalReadOnly = false,
+  autoFocus = false,
 }: {
   input: string
   isRunning: boolean
@@ -1797,6 +1768,11 @@ function TermChatInputBar({
   chrome?: "pill" | "flush"
   personalReadOnly?: boolean
   heroRevealProgress?: number
+  /**
+   * Empty-state composers may take focus. Docked composers must not — remounts
+   * during a live run would yank focus off tool inspection.
+   */
+  autoFocus?: boolean
 }) {
   const slashInput = input.trimStart().startsWith("/")
   const attachDisabled = personalReadOnly || slashOnlyMode || !!pendingInput
@@ -1871,7 +1847,7 @@ function TermChatInputBar({
                       value={input}
                       onChange={(e) => onChange(e.target.value)}
                       onKeyDown={handleKeyDown}
-                      autoFocus
+                      autoFocus={autoFocus}
                       placeholder={goalPlaceholder}
                       rows={1}
                       disabled={!!pendingInput}
@@ -1936,7 +1912,7 @@ function TermChatInputBar({
                       value={input}
                       onChange={(e) => onChange(e.target.value)}
                       onKeyDown={handleKeyDown}
-                      autoFocus
+                      autoFocus={autoFocus}
                       placeholder={goalPlaceholder}
                       rows={1}
                       disabled={!!pendingInput}
@@ -2027,6 +2003,10 @@ export function TermChat({
   const isRunning = isRunActiveStatus(scopedActiveRun?.status)
   const streamingAnswer = scopedActiveRun?.streamingAnswer ?? ""
   const [resumingRun, setResumingRun] = useState(false)
+  /** Stick / fade slack — tracks paper height relative to the scroll host. */
+  const [nearBottomThreshold, setNearBottomThreshold] = useState(
+    () => chatTranscriptNearBottomThresholdPx(480),
+  )
 
   const canResumeInterrupted = Boolean(
     scopedActiveRun && canResumeRun(scopedActiveRun.status, scopedActiveRun.hasCheckpoint),
@@ -2093,17 +2073,25 @@ export function TermChat({
   } = useStickToBottomScroll({
     resetKey: scrollToRunId,
     initialScroll: "none",
-    // During parallel fan-out, each StepBlock's tool list sticks internally;
-    // host follow would scroll earlier sibling headers off-screen.
+    threshold: nearBottomThreshold,
+    // During parallel fan-out, stop host follow so growing sibling tools do
+    // not bury earlier step headers — but never park/scroll the host for the
+    // user; they stay where they were watching.
     followWhen:
       (isRunning || Boolean(scopedActiveRun?.streamingAnswer)) && !parallelFanOut,
     onScrollPosition: (scrollTop, host) => {
       if (!isHomeMode) return
       const overflows = host.scrollHeight > host.clientHeight + 1
       setTranscriptFadeTop(overflows && scrollTop > 24)
-      setTranscriptFadeBottom(overflows && !isNearBottom(host, 120))
+      setTranscriptFadeBottom(overflows && !isNearBottom(host, nearBottomThreshold))
     },
   })
+
+  const syncChatNearBottomThreshold = useCallback(() => {
+    const host = scrollHostRef.current
+    if (!host) return
+    setNearBottomThreshold(chatTranscriptNearBottomThresholdPx(host.clientHeight))
+  }, [scrollHostRef])
 
   const handleParallelFanOutChange = useCallback((fanOut: boolean) => {
     setParallelFanOut(fanOut)
@@ -2326,6 +2314,15 @@ export function TermChat({
 
   useLayoutEffect(() => {
     const host = scrollHostRef.current
+    if (!host || showEmptyState) return
+    syncChatNearBottomThreshold()
+    const ro = new ResizeObserver(syncChatNearBottomThreshold)
+    ro.observe(host)
+    return () => ro.disconnect()
+  }, [scrollHostRef, syncChatNearBottomThreshold, showEmptyState])
+
+  useLayoutEffect(() => {
+    const host = scrollHostRef.current
     if (!host || !isHomeMode || showEmptyState) {
       setTranscriptFadeTop(false)
       setTranscriptFadeBottom(false)
@@ -2333,7 +2330,7 @@ export function TermChat({
     }
     const overflows = host.scrollHeight > host.clientHeight + 1
     setTranscriptFadeTop(overflows && host.scrollTop > 24)
-    setTranscriptFadeBottom(overflows && !isNearBottom(host, 120))
+    setTranscriptFadeBottom(overflows && !isNearBottom(host, nearBottomThreshold))
   }, [
     isHomeMode,
     showEmptyState,
@@ -2341,6 +2338,7 @@ export function TermChat({
     scopedActiveRun?.streamingAnswer,
     scopedActiveRun?.answer,
     scrollHostRef,
+    nearBottomThreshold,
   ])
 
   const didSelectLatestRef = useRef(false)
@@ -2653,9 +2651,7 @@ export function TermChat({
             ref={scrollHostRef}
             {...{ [CHAT_SCROLL_HOST_ATTR]: "" }}
             onScroll={onTranscriptScrollWithRail}
-            className={`${homeTranscriptScrollClassName()}${
-              showEmptyState ? "" : " pb-6"
-            }`}
+            className={homeTranscriptScrollClassName()}
             style={{ overflowAnchor: "none" }}
           >
             <div
@@ -2707,6 +2703,7 @@ export function TermChat({
                         className={isHomeMode ? "w-full" : "w-full max-w-[860px]"}
                         variant={isHomeMode ? "hero" : "default"}
                         heroRevealProgress={heroRevealProgress}
+                        autoFocus
                       />
                     </div>
                   </div>
@@ -2714,15 +2711,19 @@ export function TermChat({
               )}
 
               {!showEmptyState && (
-                <VirtualList
-                  ref={virtualListRef}
-                  items={displayRuns}
-                  scrollRef={scrollHostRef}
-                  estimateSize={() => TERMCHAT_TURN_ESTIMATE_PX}
-                  getItemKey={(_i, run) => run.id}
-                  overscan={6}
-                  renderItem={renderDisplayRun}
-                />
+                <>
+                  <VirtualList
+                    ref={virtualListRef}
+                    items={displayRuns}
+                    scrollRef={scrollHostRef}
+                    estimateSize={() => TERMCHAT_TURN_ESTIMATE_PX}
+                    getItemKey={(_i, run) => run.id}
+                    overscan={6}
+                    adjustScrollOnResize={false}
+                    renderItem={renderDisplayRun}
+                  />
+                  <div className={CHAT_TRANSCRIPT_BOTTOM_PAPER_CLASS} aria-hidden />
+                </>
               )}
             </div>
           </div>
@@ -2771,6 +2772,7 @@ export function TermChat({
                   variant="default"
                   chrome="pill"
                   heroRevealProgress={heroRevealProgress}
+                  autoFocus
                 />
               </div>
             </div>
@@ -2796,8 +2798,10 @@ export function TermChat({
             estimateSize={() => TERMCHAT_TURN_ESTIMATE_PX}
             getItemKey={(_i, run) => run.id}
             overscan={6}
+            adjustScrollOnResize={false}
             renderItem={renderDisplayRun}
           />
+          <div className={CHAT_TRANSCRIPT_BOTTOM_PAPER_CLASS} aria-hidden />
         </div>
       </div>
       )}

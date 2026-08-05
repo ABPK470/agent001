@@ -57,6 +57,26 @@ export const USER_GOAL_TEXT_MAX_CLASS = "max-w-[calc(100%-2.5rem)]"
  */
 export const USER_GOAL_TO_RESPONSE_GAP_CLASS = "gap-6"
 
+/**
+ * Cursor/Copilot-style air under the last turn — content never sits flush
+ * on the composer. Height owned by `.chat-transcript-bottom-paper` in CSS.
+ */
+export const CHAT_TRANSCRIPT_BOTTOM_PAPER_CLASS = "chat-transcript-bottom-paper"
+
+/** Matches the paper clamp mid (`38vh`) — used for stick / fade near-bottom. */
+export const CHAT_TRANSCRIPT_BOTTOM_PAPER_RATIO = 0.38
+
+/** Minimum near-bottom slack when the scroll host is short. */
+export const CHAT_TRANSCRIPT_NEAR_BOTTOM_MIN_PX = 120
+
+/** Pixels from the scroll end that still count as following (within the paper). */
+export function chatTranscriptNearBottomThresholdPx(hostClientHeight: number): number {
+  return Math.max(
+    CHAT_TRANSCRIPT_NEAR_BOTTOM_MIN_PX,
+    Math.round(hostClientHeight * CHAT_TRANSCRIPT_BOTTOM_PAPER_RATIO),
+  )
+}
+
 export function homeChatColumnWidthPx(viewportWidth: number): number {
   return Math.min(viewportWidth * HOME_CHAT_WIDTH_RATIO, HOME_CHAT_MAX_WIDTH_PX)
 }

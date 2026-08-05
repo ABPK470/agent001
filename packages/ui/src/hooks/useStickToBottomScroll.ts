@@ -91,11 +91,19 @@ export function useStickToBottomScroll(options: UseStickToBottomScrollOptions = 
     if (!host) return
     if (programmaticScrollRef.current) return
     const near = isNearBottom(host, threshold)
-    shouldStickRef.current = near
-    if (near) {
-      userEngagedRef.current = false
+    if (!near) {
+      // Latch: inspecting older tools / prior turns must stay put even if
+      // later growth or a soft near-bottom nudge would re-arm follow.
+      userEngagedRef.current = true
+      shouldStickRef.current = false
+      setShowJumpButton(true)
+    } else if (!userEngagedRef.current) {
+      shouldStickRef.current = true
       setShowJumpButton(false)
     } else {
+      // Still engaged away — jump button remains the only re-arm path
+      // (plus new goal / explicit scrollToBottom stick).
+      shouldStickRef.current = false
       setShowJumpButton(true)
     }
     onScrollPosition?.(host.scrollTop, host)
@@ -118,16 +126,20 @@ export function useStickToBottomScroll(options: UseStickToBottomScrollOptions = 
     })
   }, [onScrollPosition])
 
-  /** After a temporary pause (e.g. parallel fan-out), re-stick only if still at bottom. */
+  /**
+   * After a temporary pause (e.g. parallel fan-out), re-stick only if the user
+   * never left the bottom. Do not clear an inspect latch.
+   */
   const engageFollowIfNearBottom = useCallback(() => {
-    resumeAutoFollow()
     const host = scrollHostRef.current
     if (!host || !followWhenRef.current) return
+    if (userEngagedRef.current) return
+    if (Date.now() < suspendFollowUntilRef.current) return
     if (!isNearBottom(host, threshold)) return
     shouldStickRef.current = true
     setShowJumpButton(false)
     stickIfFollowing()
-  }, [resumeAutoFollow, stickIfFollowing, threshold])
+  }, [stickIfFollowing, threshold])
 
   useLayoutEffect(() => {
     const host = scrollHostRef.current

@@ -1,5 +1,20 @@
 import { ArrowUp } from "lucide-react"
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
+
+/** Take focus only when the user is not mid-inspect of a control. */
+function shouldAutofocusAskInput(): boolean {
+  const active = document.activeElement
+  if (!active || active === document.body || active === document.documentElement) {
+    return true
+  }
+  // Composer is fine to interrupt — ask_user is the next action there.
+  if (active.closest("[data-intro-target=\"termchat-input\"]")) return true
+  if (active.closest("textarea, input, select, [contenteditable=\"true\"]")) return false
+  if (active.closest("button, a, [role=\"button\"], [role=\"tab\"], [role=\"menuitem\"]")) {
+    return false
+  }
+  return true
+}
 
 /**
  * AskUserPrompt — the card the agent shows when it calls `ask_user`.
@@ -37,6 +52,12 @@ export function AskUserPrompt({
   const [submitted, setSubmitted] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [sending, setSending] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (!shouldAutofocusAskInput()) return
+    inputRef.current?.focus({ preventScroll: true })
+  }, [])
 
   async function submit(response: string) {
     if (submitted || sending) return
@@ -105,7 +126,7 @@ export function AskUserPrompt({
 
       <div className="px-3 pb-3 flex gap-2">
         <input
-          autoFocus
+          ref={inputRef}
           type={sensitive ? "password" : "text"}
           value={value}
           onChange={(e) => setValue(e.target.value)}

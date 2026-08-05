@@ -1,7 +1,14 @@
+import { readFileSync } from "node:fs"
+import { dirname, join } from "node:path"
+import { fileURLToPath } from "node:url"
 import { describe, expect, it } from "vitest"
 import {
   CHAT_INPUT_PILL_CLASS,
   CHAT_INPUT_WIDGET_CLASS,
+  CHAT_TRANSCRIPT_BOTTOM_PAPER_CLASS,
+  CHAT_TRANSCRIPT_BOTTOM_PAPER_RATIO,
+  CHAT_TRANSCRIPT_NEAR_BOTTOM_MIN_PX,
+  chatTranscriptNearBottomThresholdPx,
   HOME_CHAT_COLUMN_CLASS,
   HOME_CHAT_GUTTER_X_CLASS,
   HOME_CHAT_INPUT_DOCK_CLASS,
@@ -14,6 +21,8 @@ import {
   WIDGET_CHAT_INPUT_DOCK_CLASS,
   homeChatColumnWidthPx,
 } from "./chatLayout.js"
+
+const here = dirname(fileURLToPath(import.meta.url))
 
 describe("chatLayout — home + TermChat alignment", () => {
   it("column width caps at 960 and uses 94% of viewport", () => {
@@ -42,5 +51,26 @@ describe("chatLayout — home + TermChat alignment", () => {
     expect(CHAT_INPUT_PILL_CLASS).toContain("chathome-chrome-pill")
     expect(WIDGET_CHAT_INPUT_DOCK_CLASS).toContain("widget-content-gutter")
     expect(WIDGET_CHAT_INPUT_DOCK_CLASS).not.toContain("border-t")
+  })
+
+  it("bottom paper leaves Cursor-like air; near-bottom tracks paper ratio", () => {
+    expect(CHAT_TRANSCRIPT_BOTTOM_PAPER_CLASS).toBe("chat-transcript-bottom-paper")
+    expect(CHAT_TRANSCRIPT_BOTTOM_PAPER_RATIO).toBe(0.38)
+    expect(chatTranscriptNearBottomThresholdPx(100)).toBe(CHAT_TRANSCRIPT_NEAR_BOTTOM_MIN_PX)
+    expect(chatTranscriptNearBottomThresholdPx(1000)).toBe(380)
+
+    const css = readFileSync(join(here, "../boot/index.css"), "utf8")
+    expect(css).toMatch(
+      /\.chat-transcript-bottom-paper\s*\{[^}]*height:\s*clamp\(5\.5rem,\s*38vh,\s*22rem\)/s,
+    )
+
+    const term = readFileSync(join(here, "../widgets/TermChat.tsx"), "utf8")
+    expect(term).toContain("CHAT_TRANSCRIPT_BOTTOM_PAPER_CLASS")
+    expect(term).toContain("threshold: nearBottomThreshold")
+    expect(term).toContain("chatTranscriptNearBottomThresholdPx")
+    // Both home + widget list paths render the spacer.
+    expect(term.match(/CHAT_TRANSCRIPT_BOTTOM_PAPER_CLASS/g)?.length ?? 0).toBeGreaterThanOrEqual(3)
+    // Tiny scrollport pad must not replace the paper.
+    expect(term).not.toMatch(/showEmptyState \? "" : " pb-6"/)
   })
 })

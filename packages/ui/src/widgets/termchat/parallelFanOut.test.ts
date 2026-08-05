@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs"
+import { dirname, join } from "node:path"
+import { fileURLToPath } from "node:url"
 import { describe, expect, it } from "vitest"
 import type { ResponsePart, ResponseStepBlockPart } from "../../lib/events/build-chat-parts.js"
 import {
@@ -5,6 +8,8 @@ import {
   firstRunningSubagentStepId,
   isParallelSubagentFanOut,
 } from "./parallelFanOut.js"
+
+const here = dirname(fileURLToPath(import.meta.url))
 
 function step(
   id: string,
@@ -47,5 +52,13 @@ describe("parallelFanOut", () => {
     ]
     expect(isParallelSubagentFanOut(parts)).toBe(false)
     expect(firstRunningSubagentStepId(parts)).toBeNull()
+  })
+
+  it("chat must not park the host on fan-out (watching user stays put)", () => {
+    const term = readFileSync(join(here, "../TermChat.tsx"), "utf8")
+    const mod = readFileSync(join(here, "parallelFanOut.ts"), "utf8")
+    expect(term).not.toContain("scrollStepToHostTop")
+    expect(term).not.toContain("firstRunningSubagentStepId")
+    expect(mod).not.toContain("scrollStepToHostTop")
   })
 })

@@ -12017,6 +12017,16 @@ button.trace-tree-status-pill:hover {
   isolation: isolate;
 }
 
+/*
+ * Cursor / Copilot paper — empty band under the last turn so stick-to-bottom
+ * never parks content flush on the composer dock.
+ */
+.chat-transcript-bottom-paper {
+  height: clamp(5.5rem, 38vh, 22rem);
+  flex-shrink: 0;
+  pointer-events: none;
+}
+
 .termchat-input-dock--composer:has(.chat-composer--expanded) {
   z-index: 60;
 }
