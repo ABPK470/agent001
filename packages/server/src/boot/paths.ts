@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs"
 import { resolve } from "node:path"
 
-const packageRoot = process.env["MIA_PACKAGE_ROOT"]
+const packaged = Boolean(process.env["MIA_PACKAGE_ROOT"])
 
 function findRepoRoot(from: string): string {
   let dir = resolve(from)
@@ -13,13 +13,13 @@ function findRepoRoot(from: string): string {
 }
 
 /** Monorepo root (dev) or install CWD (packaged). */
-export const projectRoot = packageRoot ? process.cwd() : findRepoRoot(resolve(import.meta.dirname, "../.."))
+export const projectRoot = packaged ? process.cwd() : findRepoRoot(resolve(import.meta.dirname, "../.."))
 
 export const listenPort = Number(process.env["PORT"] ?? 3102)
 export const listenHost = process.env["HOST"] ?? "0.0.0.0"
 
 export function resolveUiDist(): string {
-  return packageRoot
-    ? resolve(packageRoot, "dist/ui")
+  return packaged
+    ? resolve(projectRoot, "dist/ui")
     : resolve(projectRoot, "packages/ui/dist")
 }
