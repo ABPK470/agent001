@@ -9,6 +9,7 @@ import type { TraceEntry } from "@mia/shared-types"
 import { broadcast, broadcastTrace } from "../../infra/events/broadcaster.js"
 import {
   createThread,
+  markRunCancelled,
   saveRun,
   saveTraceEntry,
   touchThread,
@@ -45,10 +46,20 @@ type ActiveSim = {
 
 const activeSims = new Map<string, ActiveSim>()
 
-export function cancelSimulatedRun(runId: string): boolean {
+/**
+ * Abort paced playback and settle like a real cancel: persist + SSE immediately.
+ * Waiting for the next sleep to unwind left the UI stuck "running".
+ */
+export async function cancelSimulatedRun(runId: string): Promise<boolean> {
   const active = activeSims.get(runId)
   if (!active) return false
   active.controller.abort()
+  // No-op if the row is not created yet (pre-play delay) or already terminal.
+  await markRunCancelled(runId)
+  broadcast({
+    type: EventType.RunCancelled,
+    data: { runId, actorUpn: active.upn },
+  })
   return true
 }
 
@@ -370,7 +381,7 @@ async function playSimulation(
       })
     }
 
-    await sleep(pace === "fast" ? 80 : pace === "slow" ? 400 : 200, signal)
+    await sleep(pace === "fast" ? 80 : pace === "slow" ? 600 : 200, signal)
     await saveRun({
       id: runId,
       goal,
@@ -388,13 +399,15 @@ async function playSimulation(
     broadcast({ type: EventType.RunStarted, data: { runId, actorUpn: upn } })
 
     for (const entry of trace) {
+      if (signal.aborted) throw abortError()
       if (entry.kind === "goal") continue
       const delay = isChatVisiblePace(entry)
         ? paceDelayMs(pace, entry)
         : pace === "slow"
-          ? 12
+          ? 36
           : 0
       if (delay > 0) await sleep(delay, signal)
+      if (signal.aborted) throw abortError()
 
       await saveTraceEntry({
         run_id: runId,
@@ -421,7 +434,8 @@ async function playSimulation(
         const text = entry.text
         const chunkSize = pace === "fast" ? 48 : pace === "slow" ? 12 : 24
         for (let i = 0; i < text.length; i += chunkSize) {
-          await sleep(pace === "fast" ? 20 : pace === "slow" ? 90 : 45, signal)
+          await sleep(pace === "fast" ? 20 : pace === "slow" ? 135 : 45, signal)
+          if (signal.aborted) throw abortError()
           broadcast({
             type: EventType.AnswerChunk,
             data: { runId, chunk: text.slice(i, i + chunkSize), actorUpn: upn },
@@ -430,6 +444,7 @@ async function playSimulation(
       }
     }
 
+    if (signal.aborted) throw abortError()
     const answer = answerFromTrace(trace)
     await persistTerminal(runId, {
       goal,
@@ -457,19 +472,10 @@ async function playSimulation(
     const aborted =
       signal.aborted || (err instanceof Error && err.name === "AbortError")
     if (aborted) {
-      await persistTerminal(runId, {
-        goal,
-        status: "cancelled",
-        answer: null,
-        error: "This operation was aborted.",
-        stepCount,
-        threadId,
-        upn,
-        displayName,
-        createdAt,
-      })
+      // cancelSimulatedRun already persisted + broadcast eagerly; settle idempotently
+      // if abort arrived from sleep before that path (should not), or race.
+      await markRunCancelled(runId)
       await touchThread(threadId)
-      broadcast({ type: EventType.RunCancelled, data: { runId, actorUpn: upn } })
       return
     }
     const message = err instanceof Error ? err.message : String(err)
@@ -537,9 +543,13 @@ export async function startSimulatedLiveRun(
         signal,
       )
     } catch (err) {
-      if (signal.aborted) return
-      if (err instanceof Error && err.name === "AbortError") return
+      if (signal.aborted || (err instanceof Error && err.name === "AbortError")) {
+        // cancelSimulatedRun already settled SSE; nothing else to emit.
+        return
+      }
       console.error(`[simulate] run ${runId} failed:`, err)
+    } finally {
+      activeSims.delete(runId)
     }
   })()
 

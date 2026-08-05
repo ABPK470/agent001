@@ -1,10 +1,9 @@
 /**
- * Parallel subagent fan-out — when 2+ subagent steps are live, the transcript
- * host must not stick-to-bottom (that buries earlier sibling step rows).
+ * Parallel subagent fan-out — 2+ subagent steps streaming at once.
  *
- * Do not park the host on the first step when fan-out starts: a watching user
- * at the bottom would be yanked to a fixed header every planner parallel run.
- * Pausing follow (`followWhen: !fanOut`) is enough — viewport stays put.
+ * Used to keep sibling step chips open while the fan-out is live.
+ * Host stick-to-bottom stays on for the whole run (Cursor dialect) — do not
+ * park the viewport on the first step header.
  */
 
 import type { ResponsePart } from "../../lib/events/build-chat-parts"

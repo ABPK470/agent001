@@ -2060,8 +2060,10 @@ export function TermChat({
     // During parallel fan-out, stop host follow so growing sibling tools do
     // not bury earlier step headers — but never park/scroll the host for the
     // user; they stay where they were watching.
-    followWhen:
-      (isRunning || Boolean(scopedActiveRun?.streamingAnswer)) && !parallelFanOut,
+    // Keep following through parallel fan-out — Cursor pins the floor the
+    // whole run. (We used to drop follow here so siblings wouldn't bury
+    // step headers; that read as up/down thrash. Headers stay in-flow.)
+    followWhen: isRunning || Boolean(scopedActiveRun?.streamingAnswer),
     onScrollPosition: (scrollTop, host) => {
       if (!isHomeMode) return
       const overflows = host.scrollHeight > host.clientHeight + 1
@@ -2358,9 +2360,14 @@ export function TermChat({
 
   // Hydrate completed run traces when their turn scrolls into view (not all at once).
   // VirtualList only mounts a window — re-observe on scroll so newly rendered roots attach.
+  // While the live turn is following, skip off-screen hydration: estimate→real
+  // remasure above the floor shifts every absolute row and fights stick.
+  const liveFollowHydrationPaused =
+    isRunning || Boolean(scopedActiveRun?.streamingAnswer)
   useEffect(() => {
     const host = scrollHostRef.current
     if (!host || displayRuns.length === 0) return
+    if (liveFollowHydrationPaused) return
     const root = host
 
     const observer = new IntersectionObserver(
@@ -2390,7 +2397,14 @@ export function TermChat({
       observer.disconnect()
       root.removeEventListener("scroll", observeMountedTurns)
     }
-  }, [displayRuns, scopedActiveRunId, runs, hydrateRunTrace, scrollHostRef])
+  }, [
+    displayRuns,
+    scopedActiveRunId,
+    runs,
+    hydrateRunTrace,
+    scrollHostRef,
+    liveFollowHydrationPaused,
+  ])
 
   useEffect(() => {
     didSelectLatestRef.current = false

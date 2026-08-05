@@ -235,7 +235,7 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
       const { cancelSimulatedRun } = await import(
         "../../local-harness/run-simulate/simulate-live-run.js"
       )
-      if (cancelSimulatedRun(req.params.id)) {
+      if (await cancelSimulatedRun(req.params.id)) {
         return { ok: true }
       }
     }

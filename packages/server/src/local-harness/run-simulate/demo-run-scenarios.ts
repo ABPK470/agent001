@@ -54,9 +54,9 @@ export function isDemoRunPace(value: unknown): value is DemoRunPace {
   return value === "fast" || value === "normal" || value === "slow"
 }
 
-/** Base delay between paced events (ms). */
+/** Base delay between paced events (ms). Slow = 3× normal. */
 export function paceDelayMs(pace: DemoRunPace, entry: TraceEntry): number {
-  const base = pace === "fast" ? 60 : pace === "slow" ? 420 : 180
+  const base = pace === "fast" ? 60 : pace === "slow" ? 540 : 180
   switch (entry.kind) {
     case "llm-request":
       return base

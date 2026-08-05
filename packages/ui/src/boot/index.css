@@ -13919,6 +13919,12 @@ button.trace-tree-status-pill:hover {
   flex-direction: column;
 }
 
+/* Browser scroll-anchoring fights programmatic floor-pin during live growth. */
+.termchat-transcript-shell [data-chat-scroll-host],
+.termchat-transcript-shell [data-chat-scroll-host] * {
+  overflow-anchor: none;
+}
+
 /*
  * Chat trace rails — fold border + inter-tool stem through status dots.
  * Never mix --ink into --panel on dark (both near-black → invisible).

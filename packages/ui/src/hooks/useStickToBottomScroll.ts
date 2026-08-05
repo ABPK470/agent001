@@ -157,7 +157,14 @@ export function useStickToBottomScroll(options: UseStickToBottomScrollOptions = 
     })
   }, [onScrollPosition])
 
-  const scheduleGrowStick = useCallback(() => {
+  /**
+   * VirtualList remasure can land one frame after the content RO.
+   * Pin now (RO runs before paint), then settle once more next frame.
+   * A grow-only rAF (previous dialect) painted a wrong scrollTop first —
+   * that is the up/down thrash vs Cursor.
+   */
+  const pinFloorWhileFollowing = useCallback(() => {
+    stickIfFollowing()
     if (growFrameRef.current) cancelAnimationFrame(growFrameRef.current)
     growFrameRef.current = requestAnimationFrame(() => {
       growFrameRef.current = 0
@@ -227,7 +234,7 @@ export function useStickToBottomScroll(options: UseStickToBottomScrollOptions = 
         if (delta <= 0) return
 
         if (intentRef.current === "following" && followWhenRef.current) {
-          stickIfFollowing()
+          pinFloorWhileFollowing()
           return
         }
 
@@ -254,7 +261,7 @@ export function useStickToBottomScroll(options: UseStickToBottomScrollOptions = 
 
       if (height === prevHeight) return
       lastContentHeightRef.current = height
-      scheduleGrowStick()
+      pinFloorWhileFollowing()
     })
 
     observer.observe(inner)
@@ -262,7 +269,7 @@ export function useStickToBottomScroll(options: UseStickToBottomScrollOptions = 
       if (growFrameRef.current) cancelAnimationFrame(growFrameRef.current)
       observer.disconnect()
     }
-  }, [scheduleGrowStick, stickIfFollowing, listRef])
+  }, [pinFloorWhileFollowing, listRef])
 
   useEffect(() => {
     const wasLive = prevFollowWhenRef.current

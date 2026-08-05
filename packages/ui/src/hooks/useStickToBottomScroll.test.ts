@@ -20,7 +20,10 @@ describe("useStickToBottomScroll — inspect polish", () => {
     expect(src).toContain("dist <= threshold")
   })
 
-  it("coalesces grow stick on rAF", () => {
-    expect(src).toContain("scheduleGrowStick")
+  it("pins the floor synchronously on grow, then settles next frame", () => {
+    expect(src).toContain("pinFloorWhileFollowing")
+    expect(src).toMatch(/pinFloorWhileFollowing\(\)/)
+    // Must not defer the first pin to rAF-only (paints a wrong scrollTop).
+    expect(src).not.toMatch(/scheduleGrowStick/)
   })
 })
