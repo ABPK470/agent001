@@ -7,7 +7,7 @@ import { useIsMobile } from "../hooks/useIsMobile"
 import { useMe } from "../hooks/useMe"
 import { useViewingAs } from "../hooks/useViewingAs"
 import { isEditableKeyboardTarget } from "../lib/keyboard-target"
-import { resetViewingAsMemory, syncViewingAsForSession } from "../lib/viewing-as"
+import { getViewingAsUpn, resetViewingAsMemory, syncViewingAsForSession } from "../lib/viewing-as"
 import { usePlatformHealth } from "../hooks/usePlatformHealth"
 import { useServerReachable } from "../hooks/useServerReachable"
 import { useLayoutStore } from "../state/layout-store"
@@ -24,12 +24,9 @@ import { flushDashboardSave, restoreDashboardState, startDashboardSync } from ".
 import { ChatHomePage } from "./home/ChatHomePage"
 import { IntroAsciiField } from "./home/IntroAsciiField"
 import { WelcomeFlow } from "./home/WelcomeFlow"
-import { ShellModeGlyphMosaic } from "./ShellModeGlyphMosaic"
 import {
-  SHELL_MOSAIC_HOLD_MS,
   shellModeTransitionMs,
-  shellMosaicCoverMs,
-  shellMosaicRevealMs,
+  shellTrackSlideClass,
 } from "./shell-mode-transition"
 import type { AppShellMode } from "./types"
 import { isOpenWidgetCatalogEvent, isShellModeToggleEvent, resolveChatVariant } from "./types"
@@ -169,11 +166,15 @@ export function App() {
   const [shellMode, setShellMode] = useState<AppShellMode>("chat")
   const shellModeRef = useRef<AppShellMode>(shellMode)
   shellModeRef.current = shellMode
-  const [shellTransition, setShellTransition] = useState<{
-    to: AppShellMode
-    phase: "cover" | "reveal"
-  } | null>(null)
+  const [shellTrackReady, setShellTrackReady] = useState(false)
+  const shellTrackReadyRef = useRef(shellTrackReady)
+  shellTrackReadyRef.current = shellTrackReady
+  const [shellSliding, setShellSliding] = useState(false)
+  const shellSlidingRef = useRef(shellSliding)
+  shellSlidingRef.current = shellSliding
+  const [slideMode, setSlideMode] = useState<AppShellMode>("chat")
   const shellTransitionTimersRef = useRef<number[]>([])
+  const personalScopeRef = useRef<string | null>(null)
   const prevConnectedRef = useRef(false)
   // Becomes true when the login overlay starts its final fade so the home
   // shell crossfades with it instead of waiting for it to fully disappear.
@@ -246,13 +247,9 @@ export function App() {
   }, [me, meLoading, popOut, phase])
 
   const handleSwitchUser = useCallback(() => {
-    // Flush any pending debounced layout save before the logout animation
-    // starts — otherwise changes made within the 2-second debounce window
-    // would be silently dropped when the session ends.
     flushDashboardSave()
-    // Cover the shell with the outro animation; the actual logout fires
-    // when the animation hits its done frame, so the dashboard stays
-    // visible underneath the dissolving mosaic the whole time.
+    clearShellTransitionTimers()
+    setShellSliding(false)
     setPhase(AppPhase.Outro)
   }, [])
 
@@ -262,42 +259,62 @@ export function App() {
       return
     }
     clearShellTransitionTimers()
-    setShellTransition(null)
+    setShellSliding(false)
+    setSlideMode("chat")
     setShellMode("chat")
     syncViewingAsForSession({ upn: me.upn, isAdmin: me.isAdmin })
   }, [me?.upn, me?.isAdmin])
 
   function clearShellTransitionTimers() {
-    for (const id of shellTransitionTimersRef.current) window.clearTimeout(id)
+    for (const id of shellTransitionTimersRef.current) {
+      window.clearTimeout(id)
+      window.cancelAnimationFrame(id)
+    }
     shellTransitionTimersRef.current = []
   }
 
   useEffect(() => () => clearShellTransitionTimers(), [])
 
+  // Shell body paints as soon as `me` is set (including mid-login intro).
+  // The dual-panel track must be ready on that first paint — waiting until
+  // phase flips to Shell (~2s after login) remounted chat in a new tree.
+  const shellBodyMounted = Boolean(me) && phase !== AppPhase.Loading
+
+  // Desktop: keep the track mounted whenever the shell body is visible
+  // (login hand-off, Shell, Outro). Never lazy-mount on phase=Shell alone.
+  useEffect(() => {
+    if (isMobile || popOut) {
+      setShellTrackReady(false)
+      return
+    }
+    if (shellBodyMounted) {
+      setShellTrackReady(true)
+      return
+    }
+    setShellTrackReady(false)
+  }, [shellBodyMounted, isMobile, popOut])
+
   const transitionShellMode = useCallback((next: AppShellMode) => {
     if (shellModeRef.current === next) return
+    if (shellSlidingRef.current) return
     clearShellTransitionTimers()
-    if (isMobile) {
-      setShellTransition(null)
+
+    if (isMobile || !shellTrackReadyRef.current || shellModeTransitionMs(next) === 0) {
+      setShellSliding(false)
+      setSlideMode(next)
       setShellMode(next)
       return
     }
-    if (shellModeTransitionMs(next) === 0) {
-      setShellTransition(null)
-      setShellMode(next)
-      return
-    }
-    // Logout process: cover → commit under full occlusion → reveal.
-    setShellTransition({ to: next, phase: "cover" })
-    const coverMs = shellMosaicCoverMs()
-    const swapId = window.setTimeout(() => {
-      setShellMode(next)
-      setShellTransition({ to: next, phase: "reveal" })
-    }, coverMs + SHELL_MOSAIC_HOLD_MS)
+
+    setShellSliding(true)
+    const kickId = window.requestAnimationFrame(() => {
+      setSlideMode(next)
+    })
     const endId = window.setTimeout(() => {
-      setShellTransition(null)
-    }, coverMs + SHELL_MOSAIC_HOLD_MS + shellMosaicRevealMs())
-    shellTransitionTimersRef.current.push(swapId, endId)
+      setShellMode(next)
+      setShellSliding(false)
+    }, shellModeTransitionMs(next))
+    shellTransitionTimersRef.current.push(kickId, endId)
   }, [isMobile])
 
   // ⌘⌥ / Ctrl+Alt — toggle chat ↔ workspace from either shell.
@@ -346,8 +363,16 @@ export function App() {
   }, [phase])
 
   // Personal scope transition — one clear + rehydrate when Me / Viewing as changes.
+  // Read scope from the store (not only the hook snapshot) so admin Viewing-as
+  // restore in the prior effect does not bootstrap twice on login.
   useEffect(() => {
-    if (!me?.upn) return
+    if (!me?.upn) {
+      personalScopeRef.current = null
+      return
+    }
+    const scopeKey = `${me.upn}:${getViewingAsUpn() ?? ""}`
+    if (personalScopeRef.current === scopeKey) return
+    personalScopeRef.current = scopeKey
     clearPersonalClientState()
     void bootstrapThreads().catch((err: unknown) => { console.error("[mia]", err) })
     hydratePersonalNotifications(setNotifications)
@@ -558,14 +583,16 @@ export function App() {
       me,
       onModeChange: transitionShellMode,
       onSignOut: handleSwitchUser,
-      revealed: shellRevealing || phase === AppPhase.Shell,
-      heroStage: (phase === AppPhase.Shell ? "copy" : chatHomeHeroStage) as "hidden" | "pill" | "copy",
-      heroRevealProgress: phase === AppPhase.Shell ? 1 : chatHomeHeroRevealProgress,
+      revealed: shellRevealing || phase === AppPhase.Shell || phase === AppPhase.Outro,
+      heroStage: (phase === AppPhase.Shell || phase === AppPhase.Outro
+        ? "copy"
+        : chatHomeHeroStage) as "hidden" | "pill" | "copy",
+      heroRevealProgress: phase === AppPhase.Shell || phase === AppPhase.Outro ? 1 : chatHomeHeroRevealProgress,
     }
     return chatVariant === "thread" ? (
       <ThreadHomePage
         {...chatProps}
-        morphLanding={phase === AppPhase.Login && !!me}
+        morphLanding={phase === AppPhase.Login && !!me && chatHomeHeroStage !== "copy"}
       />
     ) : (
       <ChatHomePage {...chatProps} />
@@ -736,6 +763,15 @@ export function App() {
   )
   }
 
+  function shellPanelInactive(mode: AppShellMode): boolean {
+    return shellTrackReady && !shellSliding && shellMode !== mode
+  }
+
+  function shellCanvasActive(mode: AppShellMode): boolean {
+    const shellLive = phase === AppPhase.Shell || phase === AppPhase.Outro
+    return shellLive && shellMode === mode && !shellSliding
+  }
+
   return (
     <>
       {welcomeOverlay}
@@ -744,9 +780,9 @@ export function App() {
       <div
         className={[
           "app-shell-view flex flex-col h-screen min-h-[100dvh]",
-          shellTransition ? "app-shell-view--transitioning" : "",
-          !shellTransition && shellMode === "chat" ? "app-shell-view--chat" : "",
-          !shellTransition && shellMode === "workspace" ? "app-shell-view--workspace" : "",
+          phase === AppPhase.Outro ? "app-shell-view--outro" : "",
+          shellSliding ? "app-shell-view--sliding" : "",
+          shellMode === "chat" ? "app-shell-view--chat" : "app-shell-view--workspace",
         ]
           .filter(Boolean)
           .join(" ")}
@@ -758,10 +794,44 @@ export function App() {
             onRefresh={refreshPlatformHealth}
           />
         )}
-        <div className="app-shell-stack relative z-[1] flex min-h-0 flex-1 flex-col">
-          {renderShellBody(shellMode)}
-          {shellTransition && !isMobile && (
-            <ShellModeGlyphMosaic to={shellTransition.to} phase={shellTransition.phase} />
+        <div className="app-shell-track relative z-[1] min-h-0 flex-1">
+          {shellTrackReady ? (
+            <div
+              className={[
+                "app-shell-slider",
+                shellTrackSlideClass(slideMode),
+                shellSliding ? "app-shell-slider--sliding" : "",
+              ]
+                .filter(Boolean)
+                .join(" ")}
+            >
+              <div
+                className={[
+                  "app-shell-panel app-shell-panel--workspace",
+                  shellPanelInactive("workspace") ? "app-shell-panel--inactive" : "",
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+                aria-hidden={shellPanelInactive("workspace")}
+              >
+                {renderShellBody("workspace", { canvasActive: shellCanvasActive("workspace") })}
+              </div>
+              <div
+                className={[
+                  "app-shell-panel app-shell-panel--chat",
+                  shellPanelInactive("chat") ? "app-shell-panel--inactive" : "",
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+                aria-hidden={shellPanelInactive("chat")}
+              >
+                {renderShellBody("chat", { canvasActive: shellCanvasActive("chat") })}
+              </div>
+            </div>
+          ) : (
+            <div className="app-shell-panel">
+              {renderShellBody(shellMode)}
+            </div>
           )}
         </div>
       </div>

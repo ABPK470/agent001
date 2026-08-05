@@ -15455,80 +15455,93 @@ button.trace-tree-status-pill:hover {
 }
 
 /* ── Chat ↔ workspace mode switch ────────────────────────────────────
-   Logout process: cover → commit → reveal.
-   Matrix (chat ASCII + canvas) is always painted; SVG mosaic mask
-   crumbles it into view / peels it away. No full-wall opacity flash. */
+   Persistent two-panel track: workspace | chat side-by-side (200% wide).
+   One compositor transform per toggle — shells never remount after warmup. */
 .app-shell-view {
   position: relative;
+  --shell-wipe-ms: 220ms;
+  --shell-wipe-ease: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-/* Workspace Viewing-as glyphs — same weight as chat ambient (do not crush). */
+.app-shell-view--sliding {
+  overflow: hidden;
+}
+
+/* Logout outro: shell stays mounted but frozen under the mosaic. */
+.app-shell-view--outro {
+  overflow: hidden;
+}
+
+.app-shell-view--outro .app-shell-slider {
+  transition: none !important;
+  will-change: auto;
+}
+
+.app-shell-view--outro .app-shell-track {
+  pointer-events: none;
+}
+
+.app-shell-view--outro .app-shell-panel,
+.app-shell-view--outro .app-shell-panel * {
+  transition: none !important;
+  animation: none !important;
+}
+
 .app-shell-view--workspace .workspace-stage-glyphs .intro3-ascii-field {
   opacity: 0.92;
 }
 
-.shell-mode-mosaic {
-  position: absolute;
-  inset: 0;
-  z-index: 50;
-  pointer-events: all;
+.app-shell-track {
+  position: relative;
+  flex: 1 1 0;
+  min-height: 0;
+  min-width: 0;
   overflow: hidden;
 }
 
-.shell-mode-mosaic-mask-svg {
+.app-shell-slider {
   position: absolute;
-  width: 0;
-  height: 0;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  display: grid;
+  grid-template-columns: 50% 50%;
+  width: 200%;
+  height: 100%;
+  transform: translate3d(0, 0, 0);
 }
 
-.shell-mode-mosaic-matrix {
-  position: absolute;
-  inset: 0;
-  background: var(--canvas);
-  -webkit-mask-size: 100% 100%;
-  mask-size: 100% 100%;
-  -webkit-mask-repeat: no-repeat;
-  mask-repeat: no-repeat;
+.app-shell-slider--sliding {
+  transition: transform var(--shell-wipe-ms) var(--shell-wipe-ease);
+  will-change: transform;
 }
 
-:root[data-theme="light"] .shell-mode-mosaic-matrix {
-  background: var(--panel);
+.app-shell-slider--workspace {
+  transform: translate3d(0, 0, 0);
 }
 
-.shell-mode-mosaic-matrix .intro3-ascii-field {
-  opacity: 1;
+.app-shell-slider--chat {
+  transform: translate3d(-50%, 0, 0);
 }
 
-.shell-mode-mosaic-mask-cell {
-  opacity: 0;
-  animation-timing-function: linear;
-  animation-fill-mode: forwards;
+.app-shell-panel {
+  display: flex;
+  min-width: 0;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
 }
 
-.shell-mode-mosaic--cover .shell-mode-mosaic-mask-cell {
-  animation-name: shell-mosaic-mask-on;
-}
-
-.shell-mode-mosaic--reveal .shell-mode-mosaic-mask-cell {
-  opacity: 1;
-  animation-name: shell-mosaic-mask-off;
-}
-
-@keyframes shell-mosaic-mask-on {
-  to {
-    opacity: 1;
-  }
-}
-
-@keyframes shell-mosaic-mask-off {
-  to {
-    opacity: 0;
-  }
+.app-shell-panel--inactive {
+  visibility: hidden;
+  pointer-events: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .shell-mode-mosaic {
-    display: none;
+  .app-shell-slider--sliding {
+    transition: none;
+    will-change: auto;
   }
 }
 

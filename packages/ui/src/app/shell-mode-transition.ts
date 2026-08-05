@@ -1,10 +1,9 @@
-/** Chat ↔ workspace — glyph mosaic (logout process: cover → commit → reveal). */
+/** Chat ↔ workspace — persistent spatial track. */
 
 export {
   prefersReducedShellMotion,
   shellModeTransitionMs,
-  shellMosaicCoverMs,
-  shellMosaicRevealMs,
-  shellMosaicTotalMs,
-  SHELL_MOSAIC_HOLD_MS,
-} from "./shell-mode-mosaic"
+  shellTrackSlideClass,
+  SHELL_WIPE_EASE,
+  SHELL_WIPE_MS,
+} from "./shell-mode-wipe"

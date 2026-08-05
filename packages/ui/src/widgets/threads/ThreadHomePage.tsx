@@ -127,7 +127,7 @@ export function ThreadHomePage({
 
   return (
     <div
-      className={`chathome chathome--threads ${chromeRevealed ? "chathome--chrome-revealed" : ""} ${stateClass} relative flex h-screen flex-col overflow-hidden text-text`}
+      className={`chathome chathome--threads ${chromeRevealed ? "chathome--chrome-revealed" : ""} ${stateClass} relative flex h-full min-h-0 flex-col overflow-hidden text-text`}
     >
       <div className="chathome-frame pointer-events-none absolute inset-0 overflow-hidden">
         <IntroAsciiField surface="home" viewingAsField={isViewingAsOther} />

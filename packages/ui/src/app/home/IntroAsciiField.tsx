@@ -304,38 +304,35 @@ export function IntroAsciiField({
     // instances line up exactly.
     const revealStartTs = performance.now()
 
+    function readFieldPaused(): boolean {
+      const panel = canvas!.closest(".app-shell-panel")
+      if (panel?.classList.contains("app-shell-panel--inactive")) return true
+      const root = canvas!.closest(".app-shell-view")
+      if (root?.classList.contains("app-shell-view--outro")) return true
+      if (root?.classList.contains("app-shell-view--sliding")) return true
+      return false
+    }
+
     function readShellMitosisSplit(): boolean {
       if (boost || viewingAsFieldRef.current || reduced) return mitosisSplitRef.current
-      const root = canvas!.closest(".app-shell-view")
-      if (!root) return mitosisSplitRef.current
-      return mitosisSplitRef.current || root.classList.contains("app-shell-view--transitioning")
+      return mitosisSplitRef.current
     }
 
     function syncFieldIntensity(): void {
+      if (readFieldPaused()) return
       const splitting = readShellMitosisSplit()
       mitosisSplitRef.current = splitting
-      // Pulse the ambient field during mode switch so the matrix reads;
-      // densify also concentrates along the vertical seam.
-      const shellPulse = splitting
-      if (shellPulse !== shellPulseActive) {
-        shellPulseActive = shellPulse
-        forceFullRepaint = true
-      }
       fieldPalettePow = boost
         ? 1.0
-        : shellPulse
-          ? SHELL_PULSE_PALETTE_POW
-          : viewingAsFieldRef.current
-            ? 1.05
-            : 2.0
+        : viewingAsFieldRef.current
+          ? 1.05
+          : 2.0
       fieldUpdateFraction = boost
         ? 0.10
-        : shellPulse
-          ? SHELL_PULSE_UPDATE_FRACTION
-          : viewingAsFieldRef.current
-            ? 0.055
-            : UPDATE_FRACTION
-      const nextInk = resolveInk(shellPulse)
+        : viewingAsFieldRef.current
+          ? 0.055
+          : UPDATE_FRACTION
+      const nextInk = resolveInk(false)
       if (nextInk !== ink) {
         ink = nextInk
         forceFullRepaint = true
@@ -515,7 +512,10 @@ export function IntroAsciiField({
       revealTimes = new Float32Array(cols * rows)
       computeRevealTimes()
 
-      if (!initial || reduced || skipReveal) {
+      const snapField = canvas!.closest(".app-shell-panel--inactive") != null
+        || (canvas!.closest(".app-shell-view")?.classList.contains("app-shell-view--sliding") ?? false)
+
+      if (!initial || reduced || skipReveal || snapField) {
         // After first sizing (or with reduced motion, or in boost mode
         // where the bg field is already revealed) snap to fully
         // revealed — don't replay the wave.
@@ -533,6 +533,7 @@ export function IntroAsciiField({
 
     function tick(now: number) {
       rafId = requestAnimationFrame(tick)
+      if (readFieldPaused()) return
       const frameMs = 1000 / TARGET_FPS
       if (now - lastFrame < frameMs) return
       lastFrame = now
@@ -731,7 +732,10 @@ export function IntroAsciiField({
     }
 
     const parentObserver = canvas.parentElement instanceof HTMLElement
-      ? new ResizeObserver(() => resize(false))
+      ? new ResizeObserver(() => {
+          if (readFieldPaused()) return
+          resize(false)
+        })
       : null
     if (parentObserver && canvas.parentElement instanceof HTMLElement) {
       parentObserver.observe(canvas.parentElement)

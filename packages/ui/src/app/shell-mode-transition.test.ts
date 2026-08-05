@@ -1,28 +1,18 @@
 import { describe, expect, it } from "vitest"
 import {
-  buildShellMosaicCells,
-  SHELL_MOSAIC_COLS,
-  SHELL_MOSAIC_ROWS,
-  shellMosaicCoverDelayMs,
-  shellMosaicCoverMs,
-  shellMosaicRevealDelayMs,
-  shellMosaicTotalMs,
-} from "./shell-mode-mosaic"
+  shellModeTransitionMs,
+  shellTrackSlideClass,
+  SHELL_WIPE_MS,
+} from "./shell-mode-wipe"
 
-describe("shell mode glyph mosaic", () => {
-  it("builds a full grid of glyph cells", () => {
-    const cells = buildShellMosaicCells()
-    expect(cells).toHaveLength(SHELL_MOSAIC_COLS * SHELL_MOSAIC_ROWS)
-    expect(cells.every((c) => c.glyph.length === 1)).toBe(true)
+describe("shell mode spatial track", () => {
+  it("slides over 220ms", () => {
+    expect(SHELL_WIPE_MS).toBe(220)
+    expect(shellModeTransitionMs("chat")).toBe(220)
   })
 
-  it("covers from the edge and reveals from the center", () => {
-    expect(shellMosaicCoverDelayMs(1, 0)).toBeLessThan(shellMosaicCoverDelayMs(0, 0))
-    expect(shellMosaicRevealDelayMs(0, 0)).toBeLessThan(shellMosaicRevealDelayMs(1, 0))
-  })
-
-  it("runs cover, hold, and reveal in one envelope", () => {
-    expect(shellMosaicTotalMs()).toBeGreaterThan(shellMosaicCoverMs())
-    expect(shellMosaicTotalMs()).toBeLessThan(2000)
+  it("places workspace at 0 and chat at -50%", () => {
+    expect(shellTrackSlideClass("workspace")).toBe("app-shell-slider--workspace")
+    expect(shellTrackSlideClass("chat")).toBe("app-shell-slider--chat")
   })
 })

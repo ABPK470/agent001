@@ -38,7 +38,7 @@ export function ChatHomePage({
   const stateClass = `${materialised ? "chathome--revealed" : "chathome--veiled"}${resolvedHeroStage !== "hidden" ? " chathome--hero-ready" : ""}${resolvedHeroStage === "pill" ? " chathome--hero-pill" : ""}${resolvedHeroStage === "copy" ? " chathome--hero-copy-ready" : ""}`
 
   return (
-    <div className={`chathome ${stateClass} relative flex h-screen flex-col overflow-hidden text-text`}>
+    <div className={`chathome ${stateClass} relative flex h-full min-h-0 flex-col overflow-hidden text-text`}>
       <div className="chathome-frame pointer-events-none absolute inset-0 overflow-hidden">
         <IntroAsciiField surface="home" viewingAsField={isViewingAsOther} />
       </div>
