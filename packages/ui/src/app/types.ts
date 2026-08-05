@@ -30,7 +30,7 @@ export function isShellModeToggleEvent(event: KeyboardEvent): boolean {
 }
 
 /**
- * Open the widget catalog (Add to layout). Workspace shell only.
+ * Open Spotlight Summon (peek a Space / widget / bundle).
  * Mac: ⌘K  ·  elsewhere: Ctrl+K
  */
 export function openWidgetCatalogHint(modKey: "⌘" | "Ctrl" = detectModHint()): string {

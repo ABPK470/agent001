@@ -2,7 +2,7 @@
  * Sticky step detail inspector — header, tabs, error surface, action bar.
  */
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, type MutableRefObject, type Ref } from "react"
 import { api } from "../../client/index"
 import type { TraceDag, TracePhaseNode, TraceWorkNode } from "./build-trace-dag"
 import { TraceCallDetail } from "./TraceCallDetail"
@@ -66,7 +66,11 @@ function findPhase(dag: TraceDag, phaseId: string): TracePhaseNode | null {
   return null
 }
 
-function renderDetail(dag: TraceDag, node: TraceTreeNode) {
+function renderDetail(
+  dag: TraceDag,
+  node: TraceTreeNode,
+  tabCycleRef?: MutableRefObject<((direction: -1 | 1) => void) | null>,
+) {
   if (node.kind === "call" && node.callIndex != null) {
     const call = dag.calls[node.callIndex]
     if (!call) return <p className="trace-empty">Call not found</p>
@@ -76,6 +80,7 @@ function renderDetail(dag: TraceDag, node: TraceTreeNode) {
         call={call}
         dag={dag}
         initialTab="output"
+        tabCycleRef={tabCycleRef}
       />
     )
   }
@@ -88,6 +93,7 @@ function renderDetail(dag: TraceDag, node: TraceTreeNode) {
         call={call}
         dag={dag}
         initialTab="input"
+        tabCycleRef={tabCycleRef}
       />
     )
   }
@@ -100,6 +106,7 @@ function renderDetail(dag: TraceDag, node: TraceTreeNode) {
         call={call}
         dag={dag}
         initialTab="output"
+        tabCycleRef={tabCycleRef}
       />
     )
   }
@@ -171,6 +178,9 @@ export function TraceDetailInspector({
   onNotify,
   onError,
   splitHeader = false,
+  scrollRef,
+  tabCycleRef,
+  paneFocused = false,
 }: {
   dag: TraceDag
   compareDag: TraceDag | null
@@ -189,6 +199,9 @@ export function TraceDetailInspector({
   onError?: (message: string) => void
   /** Zen split pane — lock header to 2-row grid aligned with tree column. */
   splitHeader?: boolean
+  scrollRef?: Ref<HTMLDivElement>
+  tabCycleRef?: MutableRefObject<((direction: -1 | 1) => void) | null>
+  paneFocused?: boolean
 }) {
   const [evalBusy, setEvalBusy] = useState(false)
   const [evalAdded, setEvalAdded] = useState(false)
@@ -206,8 +219,16 @@ export function TraceDetailInspector({
 
   if (!node) {
     return (
-      <div className="trace-detail trace-detail--empty">
-        <p className="trace-empty">Select a step to inspect</p>
+      <div className={`trace-detail trace-detail--empty${paneFocused ? " is-pane-focused" : ""}`}>
+        <div
+          ref={scrollRef}
+          className="trace-detail__scroll"
+          tabIndex={0}
+          role="region"
+          aria-label="Trace detail"
+        >
+          <p className="trace-empty">Select a step to inspect</p>
+        </div>
       </div>
     )
   }
@@ -270,7 +291,7 @@ export function TraceDetailInspector({
   }
 
   return (
-    <div className="trace-detail">
+    <div className={`trace-detail${paneFocused ? " is-pane-focused" : ""}`}>
       <div
         className={`trace-detail__header${splitHeader ? " trace-detail__header--split" : ""}`}
       >
@@ -404,7 +425,13 @@ export function TraceDetailInspector({
         )}
       </div>
 
-      <div className="trace-detail__scroll">
+      <div
+        ref={scrollRef}
+        className="trace-detail__scroll"
+        tabIndex={0}
+        role="region"
+        aria-label="Trace detail"
+      >
         {showLlmPlayground ? (
           <TraceStepPlayground
             dag={dag}
@@ -423,7 +450,7 @@ export function TraceDetailInspector({
             onCompareRunChange={onCompareRunChange}
           />
         ) : (
-          renderDetail(dag, node)
+          renderDetail(dag, node, tabCycleRef)
         )}
       </div>
     </div>

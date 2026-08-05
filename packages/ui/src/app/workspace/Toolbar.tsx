@@ -19,6 +19,7 @@ import { SessionMenu } from "../SessionMenu"
 import { ViewingAsControl } from "../ViewingAsControl"
 import { SHELL_CHROME_HEADER_WORKSPACE_CLASS } from "../shell-chrome"
 import type { AppShellMode } from "../types"
+import { isProductSpaceId } from "../../lib/spaces"
 import { openWidgetCatalogHint } from "../types"
 import { OpenWidgetCatalogHintMark } from "./OpenWidgetCatalogHint"
 import { captureSoloFlipFrom } from "./layout/solo-flip"
@@ -64,6 +65,7 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
   const setActiveView = useLayoutStore((s) => s.setActiveView)
   const addView = useLayoutStore((s) => s.addView)
   const removeView = useLayoutStore((s) => s.removeView)
+  const resetActiveSpace = useLayoutStore((s) => s.resetActiveSpace)
   const catalogHint = openWidgetCatalogHint()
   const renameView = useLayoutStore((s) => s.renameView)
   const soloTileId = useLayoutStore((s) => s.soloTileId)
@@ -125,6 +127,7 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
   }, [tabsOverflow])
 
   function handleDoubleClick(id: string, name: string) {
+    if (isProductSpaceId(id)) return
     setEditing(id)
     setEditName(name)
   }
@@ -365,17 +368,27 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
                   <span className="min-w-0 truncate font-medium leading-none">{soloLabel}</span>
                 </button>
               )}
+              {isProductSpaceId(activeViewId) ? (
+                <button
+                  type="button"
+                  className="toolbar-ops-btn shrink-0 px-2.5"
+                  onClick={() => resetActiveSpace()}
+                  title="Reset this Space to its curated default"
+                >
+                  <span className="hidden leading-none sm:inline">Reset Space</span>
+                </button>
+              ) : null}
               {onAddWidget && (
                 <>
                   <button
                     type="button"
                     className="toolbar-ops-btn shrink-0 px-2.5"
                     onClick={onAddWidget}
-                    title={`Add surfaces to this layout (${catalogHint})`}
-                    aria-label={`Add surfaces to this layout (${catalogHint})`}
+                    title={`Summon (${catalogHint})`}
+                    aria-label={`Summon (${catalogHint})`}
                   >
                     <LayoutGrid size={15} className="block shrink-0" aria-hidden />
-                    <span className="hidden leading-none sm:inline">Add</span>
+                    <span className="hidden leading-none sm:inline">Summon</span>
                     <span className="hidden sm:inline">
                       <OpenWidgetCatalogHintMark />
                     </span>

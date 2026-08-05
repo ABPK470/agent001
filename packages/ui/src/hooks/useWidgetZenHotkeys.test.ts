@@ -25,10 +25,17 @@ describe("useWidgetZenHotkeys", () => {
     expect(src).toContain("isEditableKeyboardTarget")
   })
 
-  it("trace zen hotkeys delegate Z/Esc to the shared hook", () => {
+  it("trace zen hotkeys delegate Z to the shared hook and do not steal Tab for view mode", () => {
     const src = read(traceHotkeysPath)
     expect(src).toContain("useWidgetZenHotkeys")
+    expect(src).toContain("handleEscape: false")
     expect(src).not.toMatch(/if \(key === "z".*\n[\s\S]*if \(isZen\) onExitZen/m)
+    expect(src).not.toMatch(/event\.key === "Tab"/)
+  })
+
+  it("shared zen hook can defer Escape to the operator ladder", () => {
+    const src = read(zenHotkeysPath)
+    expect(src).toContain("handleEscape")
   })
 
   it("Active Users wires focus mode, zen HUD, and shared hotkeys", () => {

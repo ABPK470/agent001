@@ -412,9 +412,12 @@ export function GridCanvas({ viewId, tiles, split }: Props) {
     }
   }, [enteringTileIds])
 
+  // Layout reparent is Shift+Arrow only — bare arrows belong to widget/pane nav;
+  // Ctrl/Cmd+Alt+Arrow moves tile focus (shell operator keyboard).
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       if (!focusedTileId || soloTileId || !split) return
+      if (!event.shiftKey || event.metaKey || event.ctrlKey || event.altKey) return
       if (!(event.key === "ArrowLeft" || event.key === "ArrowRight" || event.key === "ArrowUp" || event.key === "ArrowDown")) {
         return
       }

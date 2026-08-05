@@ -1,8 +1,9 @@
 /**
- * Trace zen hotkeys — view mode, filter overlay, focus toggle, fold all.
+ * Trace zen / focused-tile hotkeys — view mode, filter overlay, fold all, Z.
+ * Esc owned by useTraceOperatorKeyboard (ladder). Tab no longer toggles view.
  */
 
-import { useCallback, useEffect } from "react"
+import { useEffect } from "react"
 import { isEditableKeyboardTarget } from "../../lib/keyboard-target"
 import { useWidgetZenHotkeys } from "../../hooks/useWidgetZenHotkeys"
 import type { FoldMode } from "./open-state"
@@ -30,22 +31,16 @@ export function useTraceZenHotkeys({
   onToggleZen: () => void
   onExitZen: () => void
 }) {
-  const onEscapeBeforeExit = useCallback((): boolean => {
-    if (!searchOpen) return false
-    onSearchOpenChange(false)
-    return true
-  }, [onSearchOpenChange, searchOpen])
-
   useWidgetZenHotkeys({
     enabled,
     isZen,
     onToggleZen,
     onExitZen,
-    onEscapeBeforeExit,
+    handleEscape: false,
   })
 
   useEffect(() => {
-    if (!enabled || !isZen) return
+    if (!enabled) return
 
     function onKeyDown(event: KeyboardEvent) {
       if (isEditableKeyboardTarget(event.target)) return
@@ -86,12 +81,6 @@ export function useTraceZenHotkeys({
       if (viewMode === "tree" && key === "]" && !mod) {
         event.preventDefault()
         if (foldMode !== "expanded") onFoldModeChange("expanded")
-        return
-      }
-
-      if (event.key === "Tab" && !mod) {
-        event.preventDefault()
-        onViewModeChange(viewMode === "tree" ? "waterfall" : "tree")
       }
     }
 
@@ -100,7 +89,6 @@ export function useTraceZenHotkeys({
   }, [
     enabled,
     foldMode,
-    isZen,
     onFoldModeChange,
     onSearchOpenChange,
     onViewModeChange,

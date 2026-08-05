@@ -99,10 +99,10 @@ function WidgetModalHeader({
             type="button"
             className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] text-accent bg-accent/10 hover:bg-accent/20 rounded-lg transition-colors"
             onClick={onAddToView}
-            title="Add this widget to current view"
+            title="Keep in this Space"
           >
             <Plus size={13} />
-            Add to view
+            Keep in Space
           </button>
         )}
         <button

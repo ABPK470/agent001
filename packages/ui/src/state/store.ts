@@ -379,10 +379,27 @@ interface AppState {
   markNotificationRead: (id: string) => void
   markAllRead: () => void
 
-  // Modal widget viewer
+  // Modal widget viewer (Summon peek / focus stage)
   modalWidget: { type: WidgetType; runId?: string } | null
   openModalWidget: (type: WidgetType, runId?: string) => void
   closeModalWidget: () => void
+
+  /** Spotlight Summon palette open. */
+  summonOpen: boolean
+  setSummonOpen: (open: boolean) => void
+  toggleSummon: () => void
+
+  /** On-demand keymap sheet (?). */
+  keymapSheetOpen: boolean
+  setKeymapSheetOpen: (open: boolean) => void
+
+  /** Summon / Call Space asks App to show the workspace shell. */
+  workspaceShellRequestId: number
+  requestWorkspaceShell: () => void
+
+  /** Focus chat composer (and chat shell). */
+  chatShellRequestId: number
+  requestChatShell: () => void
 
   // Pending user input (ask_user tool)
   pendingInput: { runId: string; question: string; options?: string[]; sensitive?: boolean } | null
@@ -1160,10 +1177,25 @@ export const useStore = create<AppState>()(
         unreadCount: 0,
       })),
 
-      // Modal widget viewer
+      // Modal widget viewer (Summon peek)
       modalWidget: null,
-      openModalWidget: (type, runId) => set({ modalWidget: { type, runId } }),
+      openModalWidget: (type, runId) => set({ modalWidget: { type, runId }, summonOpen: false }),
       closeModalWidget: () => set({ modalWidget: null }),
+
+      summonOpen: false,
+      setSummonOpen: (open) => set({ summonOpen: open }),
+      toggleSummon: () => set((s) => ({ summonOpen: !s.summonOpen })),
+
+      keymapSheetOpen: false,
+      setKeymapSheetOpen: (open) => set({ keymapSheetOpen: open }),
+
+      workspaceShellRequestId: 0,
+      requestWorkspaceShell: () =>
+        set((s) => ({ workspaceShellRequestId: s.workspaceShellRequestId + 1 })),
+
+      chatShellRequestId: 0,
+      requestChatShell: () =>
+        set((s) => ({ chatShellRequestId: s.chatShellRequestId + 1 })),
 
       // Pending user input
       pendingInput: null,

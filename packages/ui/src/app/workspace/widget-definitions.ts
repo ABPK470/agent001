@@ -1,11 +1,8 @@
 /**
  * Widget definitions — single registry for canvas chrome and catalog.
  *
- * Sheet compositions (product language):
- * - Agent loop: Threads + Chat + Trace (+ Run Status)
- * - Ops review: Event Stream + Pipelines (+ Trace)
- * - Solo ops: Entity Registry | Sync | Bridge | Sync Operations | Active Users
- * - Quiet: Mymi DB (catalog browser; not a daily driver)
+ * Product Spaces (curated jobs) live in `lib/spaces.ts`:
+ * Agent / Observe / Reconcile / Bridge. Summon peeks widgets; Keep is explicit.
  */
 
 import type { ComponentType } from "react"

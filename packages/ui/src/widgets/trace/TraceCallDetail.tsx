@@ -5,7 +5,7 @@
  * conversation turn, then what it returned. Raw JSON is a meta view on the right.
  */
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState, type MutableRefObject } from "react"
 import { JsonViewer } from "../../components/JsonViewer"
 import { fmtTokens, formatMs } from "../../lib/util"
 import type { TraceCallNode, TraceDag } from "./build-trace-dag"
@@ -27,14 +27,32 @@ const META_TAB: { id: CallDetailTab; label: string } = {
   label: "Raw JSON",
 }
 
+export const CALL_DETAIL_TAB_ORDER: readonly CallDetailTab[] = [
+  ...PRIMARY_TABS.map((t) => t.id),
+  META_TAB.id,
+]
+
+export function cycleCallDetailTab(
+  current: CallDetailTab,
+  direction: -1 | 1,
+): CallDetailTab {
+  const idx = CALL_DETAIL_TAB_ORDER.indexOf(current)
+  const from = idx < 0 ? 0 : idx
+  const next = (from + direction + CALL_DETAIL_TAB_ORDER.length) % CALL_DETAIL_TAB_ORDER.length
+  return CALL_DETAIL_TAB_ORDER[next]!
+}
+
 export function TraceCallDetail({
   call,
   dag,
   initialTab = "output",
+  tabCycleRef,
 }: {
   call: TraceCallNode
   dag: TraceDag
   initialTab?: CallDetailTab
+  /** Keyboard ←→ registers a cycle peer while this detail is mounted. */
+  tabCycleRef?: MutableRefObject<((direction: -1 | 1) => void) | null>
 }) {
   const [tab, setTab] = useState<CallDetailTab>(initialTab)
 
@@ -43,6 +61,16 @@ export function TraceCallDetail({
   useEffect(() => {
     setTab(initialTab)
   }, [initialTab, call.index])
+
+  useEffect(() => {
+    if (!tabCycleRef) return
+    tabCycleRef.current = (direction) => {
+      setTab((current) => cycleCallDetailTab(current, direction))
+    }
+    return () => {
+      tabCycleRef.current = null
+    }
+  }, [tabCycleRef])
 
   const systemMessages = (() => {
     const prompts =

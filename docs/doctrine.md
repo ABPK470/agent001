@@ -365,6 +365,15 @@ chevron (13px, rotate-90), one control height (`--control-h` for search /
 segments / icon buttons), one JSON/payload surface. Pipelines shares toolbar
 expand/collapse with Trace (`ReviewTreeFoldToggle` in trailing toolbar). Trace sticky pin stays.
 
+**Spaces, Summon, keyboard (operator console):** Product **Spaces** (Agent /
+Observe / Reconcile / Bridge) are curated job landings — not DIY-named
+sheets as the primary path. **Summon** (⌘/Ctrl+K) peeks a widget or Calls a
+Space; Keep in Space is explicit. Trace (and later Pipelines) own **pane
+focus** with one Esc ladder (overlay → filter → pane → zen → maximize).
+Shell chords: Call Space (⌘/Ctrl+1–4), tile focus (⌘/Ctrl+⌥+arrows), M
+maximize, Z zen, ⌘/Ctrl+W close tile, `?` keymap. See `lib/spaces.ts`,
+`lib/keymap/`, `app/workspace/SummonPalette.tsx`.
+
 | Layer | Owns | Must not |
 | --- | --- | --- |
 | **boot** / **app** | Chrome and shell layout | Business policy |

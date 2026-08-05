@@ -21,6 +21,14 @@ import {
   syncViewGeometry,
   type WorkspaceView,
 } from "../lib/workspace-view"
+import {
+  mergeProductSpaces,
+  resetSpaceView,
+  spaceById,
+  spaceByIndex,
+  type SpaceId,
+} from "../lib/spaces"
+import { neighborTileForFocus, type FocusArrowKey } from "../lib/tile-focus-neighbor"
 import type { ViewConfig, WidgetType } from "../types"
 import { randomId } from "../lib/util"
 import { clearEventStreamPrefs } from "../lib/event-stream-prefs"
@@ -127,12 +135,21 @@ interface LayoutState {
 
   setFocusedTile: (tileId: string | null) => void
   clearEntering: (tileId: string) => void
+
+  /** Seed product Spaces (Observe / Reconcile / Bridge / Agent) if missing. */
+  ensureProductSpaces: () => void
+  /** Activate a product Space by id or 1–4 index. */
+  callSpace: (space: SpaceId | number) => void
+  /** Rebuild the active product Space to its curated default. */
+  resetActiveSpace: () => void
+  /** Move keyboard focus to a geometric neighbor tile. */
+  focusTileNeighbor: (key: FocusArrowKey) => void
 }
 
 export const useLayoutStore = create<LayoutState>()(
   persist(
     (set, get) => ({
-      views: [makeDefaultView()],
+      views: mergeProductSpaces([makeDefaultView()], 24),
       activeViewId: DEFAULT_VIEW_ID,
       focusedTileId: null,
       enteringTileIds: [],
@@ -304,14 +321,53 @@ export const useLayoutStore = create<LayoutState>()(
       clearEntering: (tileId) => set((s) => ({
         enteringTileIds: s.enteringTileIds.filter((id) => id !== tileId),
       })),
+
+      ensureProductSpaces: () => set((s) => ({
+        views: mergeProductSpaces(s.views, s.viewportRows),
+      })),
+
+      callSpace: (space) => {
+        const def = typeof space === "number" ? spaceByIndex(space) : spaceById(space)
+        if (!def) return
+        set((s) => {
+          const views = mergeProductSpaces(s.views, s.viewportRows)
+          return {
+            views,
+            activeViewId: def.id,
+            soloTileId: null,
+            zenTileId: null,
+            focusedTileId: null,
+          }
+        })
+      },
+
+      resetActiveSpace: () => set((s) => {
+        const def = spaceById(s.activeViewId)
+        if (!def) return s
+        return {
+          views: resetSpaceView(s.views, def.id, s.viewportRows),
+          soloTileId: null,
+          zenTileId: null,
+          focusedTileId: null,
+        }
+      }),
+
+      focusTileNeighbor: (key) => set((s) => {
+        const view = s.views.find((v) => v.id === s.activeViewId)
+        if (!view || !s.focusedTileId) return s
+        const nextId = neighborTileForFocus(view.tiles, s.focusedTileId, key)
+        if (!nextId) return s
+        return { focusedTileId: nextId }
+      }),
     }),
     {
       name: "mia-layout",
       merge: (persistedState, currentState) => {
         const persisted = (persistedState ?? {}) as Partial<LayoutState>
-        const views = persisted.views?.length
+        const rawViews = persisted.views?.length
           ? pruneWorkspaceViews(persisted.views, currentState.viewportRows)
           : currentState.views
+        const views = mergeProductSpaces(rawViews, currentState.viewportRows)
         return {
           ...currentState,
           ...persisted,

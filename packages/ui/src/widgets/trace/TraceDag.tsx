@@ -3,13 +3,14 @@
  * Selection drives the inspector; chevrons fold tree children only.
  */
 
-import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react"
 import { api } from "../../client/index"
 import { VirtualList, type VirtualListHandle } from "../../components/VirtualList"
 import { BrowseCount } from "../../components/BrowseStrip"
 import { useWidgetFocus } from "../../hooks/useWidgetFocus"
 import { useWidgetInstance } from "../../app/workspace/widget-instance"
 import { useLayoutStore } from "../../state/layout-store"
+import { useStore } from "../../state/store"
 import {
   beginSplitPaneDrag,
   endSplitPaneDrag,
@@ -65,7 +66,10 @@ import { TraceWaterfallView } from "./TraceWaterfallView"
 import { TraceZenHud } from "./TraceZenHud"
 import { useTraceZenHotkeys } from "./use-trace-zen-hotkeys"
 import { useTraceTreeKeyboard } from "./use-trace-tree-keyboard"
+import { useTraceOperatorKeyboard } from "./use-trace-operator-keyboard"
 import { operationStatusPill } from "../../lib/status-callout"
+import { hintsForTracePane, type TracePane } from "../../lib/keymap"
+import { ComposerKbdFooter } from "../chat/ComposerKbdFooter"
 
 export const TRACE_TREE_OVERSCAN = 8
 const TRACE_SPLIT_MIN = 0.28
@@ -100,8 +104,14 @@ export function TraceDag({
   const widgetInstance = useWidgetInstance()
   const tileId = widgetInstance?.widgetId ?? null
   const focusedTileId = useLayoutStore((s) => s.focusedTileId)
+  const activeViewId = useLayoutStore((s) => s.activeViewId)
+  const toggleTileMaximized = useLayoutStore((s) => s.toggleTileMaximized)
+  const summonOpen = useStore((s) => s.summonOpen)
+  const setSummonOpen = useStore((s) => s.setSummonOpen)
+  const modalWidget = useStore((s) => s.modalWidget)
   const zenHotkeysEnabled =
     isZen || isSolo || Boolean(widgetInstance && focusedTileId === widgetInstance.widgetId)
+  const operatorKeysEnabled = zenHotkeysEnabled && !summonOpen && !modalWidget
 
   const [search, setSearch] = useState("")
   const [openState, setOpenState] = useState<OpenState>(() =>
@@ -113,8 +123,11 @@ export function TraceDag({
   const [compareRunId, setCompareRunId] = useState<string | null>(null)
   const [compareDag, setCompareDag] = useState<TraceDag | null>(null)
   const [zenSearchOpen, setZenSearchOpen] = useState(false)
+  const [focusedPane, setFocusedPane] = useState<TracePane>("tree")
   const [splitRatio, setSplitRatio] = useState(TRACE_SPLIT_DEFAULT)
   const treeScrollRef = useRef<HTMLDivElement>(null)
+  const detailScrollRef = useRef<HTMLDivElement>(null)
+  const tabCycleRef = useRef<((direction: -1 | 1) => void) | null>(null)
   const treeListRef = useRef<VirtualListHandle | null>(null)
   const splitShellRef = useRef<HTMLDivElement>(null)
   const splitDragRef = useRef<SplitPaneDragState | null>(null)
@@ -147,18 +160,21 @@ export function TraceDag({
   const selectedNode = selectedScopeId ? treeIndex.byScopeId.get(selectedScopeId) : null
   const canCompare = selectedNode ? nodeSupportsCompare(dag, selectedNode) : false
 
-  useTraceZenHotkeys({
-    enabled: zenHotkeysEnabled,
-    isZen,
-    searchOpen: zenSearchOpen,
-    onSearchOpenChange: setZenSearchOpen,
-    onViewModeChange: setViewMode,
-    viewMode,
-    foldMode: openState.foldMode,
-    onFoldModeChange,
-    onToggleZen: toggleZen,
-    onExitZen: exitZen,
-  })
+  const onFocusedPaneChange = useCallback((pane: TracePane) => {
+    setFocusedPane(pane)
+  }, [])
+
+  const onRestoreMaximize = useCallback(() => {
+    if (!tileId) return
+    toggleTileMaximized(activeViewId, tileId)
+  }, [activeViewId, tileId, toggleTileMaximized])
+
+  const filterOpen = zenSearchOpen || Boolean(search.trim())
+
+  function onSearchOpenChange(open: boolean) {
+    setZenSearchOpen(open)
+    if (!open) setSearch("")
+  }
 
   useEffect(() => {
     if (!isZen) setZenSearchOpen(false)
@@ -438,9 +454,40 @@ export function TraceDag({
     setOpenState(openStateForFoldMode(dag, mode))
   }
 
+  useTraceZenHotkeys({
+    enabled: operatorKeysEnabled,
+    isZen,
+    searchOpen: zenSearchOpen,
+    onSearchOpenChange,
+    onViewModeChange: setViewMode,
+    viewMode,
+    foldMode: openState.foldMode,
+    onFoldModeChange,
+    onToggleZen: toggleZen,
+    onExitZen: exitZen,
+  })
+
+  useTraceOperatorKeyboard({
+    enabled: operatorKeysEnabled,
+    focusedPane,
+    onFocusedPaneChange,
+    searchOpen: filterOpen,
+    onSearchOpenChange,
+    isZen,
+    isSolo,
+    summonOpen,
+    onExitZen: exitZen,
+    onRestoreMaximize,
+    onDismissSummon: () => setSummonOpen(false),
+    treeScrollRef,
+    detailScrollRef,
+    tabCycleRef,
+  })
+
   useTraceTreeKeyboard({
     enabled:
-      zenHotkeysEnabled &&
+      operatorKeysEnabled &&
+      focusedPane === "tree" &&
       viewMode === "tree" &&
       Boolean(runId && dag.hasData && treeIndex.nodes.length > 0),
     nodes: treeIndex.nodes,
@@ -686,9 +733,10 @@ export function TraceDag({
                     </div>
                     <div
                       ref={treeScrollRef}
-                      className="trace-split-tree-scroll"
+                      className={`trace-split-tree-scroll${focusedPane === "tree" && zenHotkeysEnabled ? " is-pane-focused" : ""}`}
                       role="tree"
                       aria-label="Trace tree"
+                      tabIndex={0}
                     >
                       <VirtualList
                         ref={treeListRef}
@@ -704,7 +752,13 @@ export function TraceDag({
                   </div>
                 )}
                 {runId && dag.hasData && viewMode === "waterfall" && (
-                  <div ref={treeScrollRef} className="trace-split-tree-scroll">
+                  <div
+                    ref={treeScrollRef}
+                    className={`trace-split-tree-scroll${focusedPane === "tree" && zenHotkeysEnabled ? " is-pane-focused" : ""}`}
+                    tabIndex={0}
+                    role="region"
+                    aria-label="Trace waterfall"
+                  >
                     <TraceWaterfallView
                       treeIndex={treeIndex}
                       selectedScopeId={selectedScopeId}
@@ -744,12 +798,18 @@ export function TraceDag({
                     onNotify={onExportMessage}
                     onError={onExportError}
                     splitHeader={isZen}
+                    scrollRef={detailScrollRef}
+                    tabCycleRef={tabCycleRef}
+                    paneFocused={focusedPane === "detail" && zenHotkeysEnabled}
                   />
                 </div>
               </div>
             </div>
             </div>
           )}
+          {zenHotkeysEnabled && !emptySlot ? (
+            <ComposerKbdFooter hints={hintsForTracePane(focusedPane)} />
+          ) : null}
         </div>
       </div>
     </div>

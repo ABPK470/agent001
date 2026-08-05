@@ -11,6 +11,8 @@ export function useWidgetZenHotkeys({
   onToggleZen,
   onExitZen,
   onEscapeBeforeExit,
+  /** When false, Esc is owned elsewhere (e.g. Trace Esc ladder). Default true. */
+  handleEscape = true,
 }: {
   enabled: boolean
   isZen: boolean
@@ -18,6 +20,7 @@ export function useWidgetZenHotkeys({
   onExitZen: () => void
   /** Return true when Escape dismissed an overlay — do not exit zen. */
   onEscapeBeforeExit?: () => boolean
+  handleEscape?: boolean
 }) {
   useEffect(() => {
     if (!enabled) return
@@ -35,19 +38,21 @@ export function useWidgetZenHotkeys({
         return
       }
 
-      if (!isZen) return
+      if (!handleEscape || !isZen) return
 
       if (event.key === "Escape") {
         if (onEscapeBeforeExit?.()) {
           event.preventDefault()
+          event.stopPropagation()
           return
         }
         event.preventDefault()
+        event.stopPropagation()
         onExitZen()
       }
     }
 
     window.addEventListener("keydown", onKeyDown)
     return () => window.removeEventListener("keydown", onKeyDown)
-  }, [enabled, isZen, onEscapeBeforeExit, onExitZen, onToggleZen])
+  }, [enabled, handleEscape, isZen, onEscapeBeforeExit, onExitZen, onToggleZen])
 }

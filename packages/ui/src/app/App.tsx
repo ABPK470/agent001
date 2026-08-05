@@ -38,6 +38,9 @@ import { Toolbar } from "./workspace/Toolbar"
 import { getWidgetDefinition, widgetComponent } from "./workspace/widget-definitions"
 import { WidgetCatalog } from "./workspace/WidgetCatalog"
 import { WidgetModal } from "./workspace/WidgetModal"
+import { SummonPalette } from "./workspace/SummonPalette"
+import { KeymapSheet } from "./workspace/KeymapSheet"
+import { useShellOperatorKeyboard } from "../hooks/useShellOperatorKeyboard"
 
 const SYNC_CHANNEL = "mia-active-run"
 
@@ -151,6 +154,10 @@ export function App() {
   const activeViewId = useLayoutStore((s) => s.activeViewId)
   const soloTileId = useLayoutStore((s) => s.soloTileId)
   const zenTileId = useLayoutStore((s) => s.zenTileId)
+  const ensureProductSpaces = useLayoutStore((s) => s.ensureProductSpaces)
+  const toggleSummon = useStore((s) => s.toggleSummon)
+  const workspaceShellRequestId = useStore((s) => s.workspaceShellRequestId)
+  const chatShellRequestId = useStore((s) => s.chatShellRequestId)
   const canvasRef = useRef<CanvasHandle>(null)
   const isMobile = useIsMobile()
   const [mobileCatalogOpen, setMobileCatalogOpen] = useState(false)
@@ -332,23 +339,53 @@ export function App() {
     return () => window.removeEventListener("keydown", onKeyDown)
   }, [phase, transitionShellMode])
 
-  // ⌘K / Ctrl+K — open Add-to-layout catalog (workspace only).
+  // ⌘K / Ctrl+K — Spotlight Summon (peek); works from chat or workspace.
   useEffect(() => {
     if (phase !== AppPhase.Shell) return
     function onKeyDown(event: KeyboardEvent) {
       if (!isOpenWidgetCatalogEvent(event)) return
-      if (shellModeRef.current !== "workspace") return
       if (isEditableKeyboardTarget(event.target)) return
       event.preventDefault()
       if (isMobile) {
         setMobileCatalogOpen((open) => !open)
         return
       }
-      canvasRef.current?.toggleCatalog()
+      ensureProductSpaces()
+      toggleSummon()
     }
     window.addEventListener("keydown", onKeyDown)
     return () => window.removeEventListener("keydown", onKeyDown)
-  }, [phase, isMobile])
+  }, [ensureProductSpaces, phase, isMobile, toggleSummon])
+
+  useEffect(() => {
+    if (phase !== AppPhase.Shell) return
+    ensureProductSpaces()
+  }, [ensureProductSpaces, phase])
+
+  useShellOperatorKeyboard(phase === AppPhase.Shell)
+
+  useEffect(() => {
+    if (phase !== AppPhase.Shell) return
+    if (workspaceShellRequestId === 0) return
+    if (shellModeRef.current !== "workspace") {
+      transitionShellMode("workspace")
+    }
+  }, [phase, transitionShellMode, workspaceShellRequestId])
+
+  useEffect(() => {
+    if (phase !== AppPhase.Shell) return
+    if (chatShellRequestId === 0) return
+    if (shellModeRef.current !== "chat") {
+      transitionShellMode("chat")
+    }
+    const focusComposer = () => {
+      const input = document.querySelector<HTMLElement>(
+        "[data-intro-target='termchat-input'] textarea, [data-intro-target='termchat-input'] input, textarea.termchat-textarea",
+      )
+      input?.focus({ preventScroll: true })
+    }
+    window.setTimeout(focusComposer, shellModeTransitionMs("chat") + 40)
+  }, [chatShellRequestId, phase, transitionShellMode])
 
   // Reset reveal flag each time we return to login so the next login
   // starts with the chat content hidden. Also clear the shared ASCII
@@ -751,7 +788,10 @@ export function App() {
     >
       <div className="workspace-sheet flex min-h-0 flex-1 flex-col">
         <Toolbar
-          onAddWidget={() => canvasRef.current?.openCatalog()}
+          onAddWidget={() => {
+            ensureProductSpaces()
+            toggleSummon()
+          }}
           onSignOut={handleSwitchUser}
           onModeChange={transitionShellMode}
           me={me}
@@ -779,6 +819,8 @@ export function App() {
       {welcomeOverlay}
       <ApprovalRequiredModal />
       {policyEditorOpen && !popOut && <PolicyEditor onClose={() => setPolicyEditorOpen(false)} />}
+      <SummonPalette />
+      <KeymapSheet />
       <div
         className={[
           "app-shell-view flex flex-col h-screen min-h-[100dvh]",
