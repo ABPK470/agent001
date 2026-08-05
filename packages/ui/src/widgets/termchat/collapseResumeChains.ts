@@ -8,8 +8,7 @@
  */
 
 import type { Run, TraceEntry } from "@mia/shared-types"
-
-const WAITING_APPROVAL_RE = /^Waiting for approval\s*[—–-]\s*([^:]+):\s*(.*)$/i
+import { WAITING_APPROVAL_RE } from "../../lib/approval-wait-copy"
 
 /** True when this run was closed only because a resume child continued it. */
 export function isSupersededByResume(run: Run, runs: readonly Run[]): boolean {
@@ -30,8 +29,6 @@ export function softenApprovalTraceEntries(
     const m = WAITING_APPROVAL_RE.exec(entry.text.trim())
     if (!m) return entry
     const tool = m[1]?.trim() || "tool"
-    // Keep kind "error" (wire TraceEntry has no quiet status kind) — text is
-    // the signal; TermChat ErrorNote is already muted system chrome.
     return {
       kind: "error",
       text: `Approved ${tool} — continued`,

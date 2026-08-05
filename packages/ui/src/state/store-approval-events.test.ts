@@ -3,6 +3,7 @@
  */
 
 import { beforeEach, describe, expect, it } from "vitest"
+import { RunStatus } from "../enums"
 import { useStore } from "./store"
 
 function resetApprovalState(): void {
@@ -159,7 +160,23 @@ describe("store approval events", () => {
     expect(state.pendingToolApproval?.approvalId).toBe("appr-live")
   })
 
-  it("approval.resolved clears pending modal state", () => {
+  it("approval.resolved clears pending modal state and links resume child", () => {
+    useStore.getState().upsertRun({
+      id: "run-1",
+      goal: "test goal",
+      status: RunStatus.WaitingForApproval,
+      answer: null,
+      stepCount: 0,
+      error: null,
+      parentRunId: null,
+      createdAt: new Date().toISOString(),
+      completedAt: null,
+      totalTokens: 0,
+      promptTokens: 0,
+      completionTokens: 0,
+      llmCalls: 0,
+      trace: [{ kind: "error", text: "Waiting for approval — fetch_url: network" }],
+    })
     useStore.getState().setPendingToolApproval({
       approvalId: "appr-1",
       runId: "run-1",
@@ -177,12 +194,16 @@ describe("store approval events", () => {
         approvalId: "appr-1",
         decision: "approved",
         by: "alice@example.com",
+        resumedRunId: "run-1-resumed",
       },
     })
 
     const state = useStore.getState()
     expect(state.pendingToolApproval).toBeNull()
     expect(state.approvalModalOpen).toBe(false)
+    expect(state.runs.find((r) => r.id === "run-1-resumed")?.parentRunId).toBe("run-1")
+    expect(state.runs.find((r) => r.id === "run-1")?.status).toBe(RunStatus.Cancelled)
+    expect(state.activeRunId).toBe("run-1-resumed")
   })
 
   it("notification approval.required enriches pending state with notificationId", () => {

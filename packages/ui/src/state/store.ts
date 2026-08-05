@@ -20,6 +20,7 @@ import {
   type SyncProgressState
 } from "./sync-trace-progress.js"
 import { pendingApprovalFromEvent, type PendingToolApproval } from "./pending-approval.js"
+import { applyOptimisticApprovalResume } from "./approval-resume-optimistic.js"
 import { api } from "../client/index"
 import { readSseRunId, readSseStepId, lookupEventDescriptor } from "@mia/shared-types"
 import {
@@ -1324,75 +1325,89 @@ export const useStore = create<AppState>()(
         }
 
         switch (type) {
-          case "run.queued":
-            // Clear previous run's live state so Live tab starts fresh
-            store.setTrace([])
-            store.setSteps([])
-            store.setAudit([])
-            store.setBusMessages([])
-            set({ helpUnread: 0 })
-            store.resetLiveUsage()
-            store.clearStreamingAnswer()
-            set({ activeSyncInvocation: null, syncProgressStates: new Map() })
-            store.clearGeneratedAttachments(data["runId"] as string)
-            store.addTrace({ kind: "goal", text: data["goal"] as string })
-            {
-              const queuedThreadId =
-                (typeof data["threadId"] === "string" && data["threadId"]) ||
-                get().activeThreadId
+          case "run.queued": {
+            const resumedFrom = data["resumedFrom"] as string | undefined
+            const queuedRunId = data["runId"] as string
+            const queuedGoal = data["goal"] as string
+
+            if (!resumedFrom) {
+              // Fresh run — clear Live tab scratch state and seed goal trace.
+              store.setTrace([])
+              store.setSteps([])
+              store.setAudit([])
+              store.setBusMessages([])
+              set({ helpUnread: 0 })
+              store.resetLiveUsage()
+              store.clearStreamingAnswer()
+              set({ activeSyncInvocation: null, syncProgressStates: new Map() })
+              store.clearGeneratedAttachments(queuedRunId)
+              store.addTrace({ kind: "goal", text: queuedGoal })
+            } else {
+              // Approval resume — same chat turn; do not wipe trace or duplicate goal.
+              store.clearStreamingAnswer()
+              set({ activeSyncInvocation: null, syncProgressStates: new Map() })
+            }
+
+            const queuedThreadId =
+              (typeof data["threadId"] === "string" && data["threadId"]) ||
+              get().activeThreadId
+            const parentRun = resumedFrom
+              ? get().runs.find((r) => r.id === resumedFrom)
+              : undefined
+
+            store.upsertRun({
+              id: queuedRunId,
+              goal: queuedGoal,
+              status: RunStatus.Pending,
+              answer: null,
+              stepCount: resumedFrom ? (parentRun?.stepCount ?? 0) : 0,
+              error: null,
+              pendingWorkspaceChanges: resumedFrom ? (parentRun?.pendingWorkspaceChanges ?? 0) : 0,
+              parentRunId: resumedFrom ?? null,
+              createdAt: timestamp,
+              completedAt: null,
+              totalTokens: resumedFrom ? (parentRun?.totalTokens ?? 0) : 0,
+              promptTokens: resumedFrom ? (parentRun?.promptTokens ?? 0) : 0,
+              completionTokens: resumedFrom ? (parentRun?.completionTokens ?? 0) : 0,
+              llmCalls: resumedFrom ? (parentRun?.llmCalls ?? 0) : 0,
+              trace: resumedFrom ? (parentRun?.trace ?? []) : [],
+              streamingAnswer: "",
+              auditTrail: resumedFrom ? (parentRun?.auditTrail ?? []) : [],
+              stepData: resumedFrom ? (parentRun?.stepData ?? []) : [],
+              threadId: queuedThreadId,
+            })
+
+            if (resumedFrom) {
               store.upsertRun({
-                id: data["runId"] as string,
-                goal: data["goal"] as string,
-                status: RunStatus.Pending,
-                answer: null,
-                stepCount: 0,
-                error: null,
-                pendingWorkspaceChanges: 0,
-                parentRunId: (data["resumedFrom"] as string) ?? null,
-                createdAt: timestamp,
-                completedAt: null,
-                totalTokens: 0,
-                promptTokens: 0,
-                completionTokens: 0,
-                llmCalls: 0,
-                trace: [],
-                streamingAnswer: "",
-                auditTrail: [],
-                stepData: [],
-                threadId: queuedThreadId,
+                id: resumedFrom,
+                status: RunStatus.Cancelled,
+                completedAt: timestamp,
               })
-              const resumedFrom = data["resumedFrom"] as string | undefined
-              if (resumedFrom) {
-                store.upsertRun({
-                  id: resumedFrom,
-                  status: RunStatus.Cancelled,
-                  completedAt: timestamp,
-                })
-                // Follow the resumed child — do not stay on the parked parent.
-                if (get().activeRunId === resumedFrom || !get().activeRunId) {
-                  set({ activeRunId: data["runId"] as string })
-                }
+              if (get().activeRunId === resumedFrom || !get().activeRunId) {
+                set({ activeRunId: queuedRunId })
               }
-              if (queuedThreadId) {
-                const existing = get().threads.find((t) => t.id === queuedThreadId)
-                if (existing) {
-                  store.upsertThread({
-                    ...existing,
-                    updatedAt: timestamp,
-                    runCount: (existing.runCount ?? 0) + 1,
-                  })
-                } else {
-                  store.upsertThread({
-                    id: queuedThreadId,
-                    title: "Thread",
-                    createdAt: timestamp,
-                    updatedAt: timestamp,
-                    runCount: 1,
-                  })
-                }
+            }
+
+            if (queuedThreadId && !resumedFrom) {
+              const existing = get().threads.find((t) => t.id === queuedThreadId)
+              if (existing) {
+                store.upsertThread({
+                  ...existing,
+                  updatedAt: timestamp,
+                  runCount: (existing.runCount ?? 0) + 1,
+                })
+              } else {
+                store.upsertThread({
+                  id: queuedThreadId,
+                  title: "Thread",
+                  createdAt: timestamp,
+                  updatedAt: timestamp,
+                  runCount: 1,
+                })
               }
             }
             break
+          }
 
           case "run.started":
             store.upsertRun({
@@ -1913,6 +1928,7 @@ export const useStore = create<AppState>()(
             const stepId = (data["stepId"] as string) ?? ""
             const approvalId = data["approvalId"] as string | undefined
             const decision = data["decision"] as string
+            const resumedRunId = data["resumedRunId"] as string | undefined
             const pending = get().pendingToolApproval
             if (
               pending &&
@@ -1921,7 +1937,15 @@ export const useStore = create<AppState>()(
             ) {
               set({ pendingToolApproval: null, approvalModalOpen: false, approvalModalDismissed: false })
             }
-            if (decision === "denied") {
+            if (decision === "approved" && resumedRunId) {
+              applyOptimisticApprovalResume(
+                runId,
+                resumedRunId,
+                get().runs,
+                store.upsertRun,
+                (id) => set({ activeRunId: id }),
+              )
+            } else if (decision === "denied") {
               store.upsertRun({ id: runId, status: RunStatus.Cancelled, completedAt: timestamp })
             }
             break

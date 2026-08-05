@@ -12,6 +12,7 @@ import { api } from "../../client/index"
 import { JsonViewer } from "../../components/JsonViewer"
 import { RunStatus } from "../../enums"
 import { useStore } from "../../state/store"
+import { applyOptimisticApprovalResume } from "../../state/approval-resume-optimistic"
 import { modalOverlayClass, MODAL_SURFACE_CLASS } from "../entity-registry/modal-overlay"
 
 function formatArgs(args: Record<string, unknown> | undefined): Record<string, unknown> | null {
@@ -26,6 +27,7 @@ export function ApprovalRequiredModal(): JSX.Element | null {
   const clearPending = useStore((s) => s.clearPendingToolApproval)
   const setActiveRun = useStore((s) => s.setActiveRun)
   const upsertRun = useStore((s) => s.upsertRun)
+  const runs = useStore((s) => s.runs)
   const markNotificationRead = useStore((s) => s.markNotificationRead)
 
   const [busy, setBusy] = useState<"approve" | "deny" | null>(null)
@@ -49,9 +51,13 @@ export function ApprovalRequiredModal(): JSX.Element | null {
       if (decision === "approve") {
         const result = await api.approveRunToolStep(pending.approvalId)
         if (result.resumedRunId) {
-          setActiveRun(result.resumedRunId)
-          upsertRun({ id: result.resumedRunId, status: RunStatus.Running })
-          upsertRun({ id: result.runId, status: RunStatus.Cancelled, completedAt: new Date().toISOString() })
+          applyOptimisticApprovalResume(
+            result.runId,
+            result.resumedRunId,
+            runs,
+            upsertRun,
+            setActiveRun,
+          )
         } else {
           setError(
             "Approval was recorded, but the run could not be resumed (missing checkpoint). Retry the goal, or check server logs.",

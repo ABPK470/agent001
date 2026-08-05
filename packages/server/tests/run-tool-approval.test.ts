@@ -70,7 +70,7 @@ describe("run tool approval application", () => {
     try {
       const { approveRunToolStep } = await import("../src/runtime/service/run-tool-approval.js")
       const va = viewingAs()
-      const result = approveRunToolStep(orchestrator, approval.id, va)
+      const result = await approveRunToolStep(orchestrator, approval.id, va)
 
       expect(result).toEqual({ ok: true, runId: "run-1", resumedRunId: "run-1-resumed" })
       expect(resumeRun).toHaveBeenCalledWith("run-1", va.session)
@@ -82,6 +82,7 @@ describe("run tool approval application", () => {
         approvalId: approval.id,
         decision: "approved",
         by: UPN,
+        resumedRunId: "run-1-resumed",
       })
     } finally {
       unsub()
@@ -110,7 +111,7 @@ describe("run tool approval application", () => {
 
     try {
       const { denyRunToolStep } = await import("../src/runtime/service/run-tool-approval.js")
-      const result = denyRunToolStep(orchestrator, approval.id, viewingAs(), "operator denied")
+      const result = await denyRunToolStep(orchestrator, approval.id, viewingAs(), "operator denied")
 
       expect(result).toEqual({ ok: true, runId: "run-1" })
       expect(cancelRun).toHaveBeenCalledWith("run-1")
@@ -159,7 +160,7 @@ describe("run tool approval application", () => {
     })
 
     const { listPendingToolApprovalsForViewingAs } = await import("../src/runtime/service/run-tool-approval.js")
-    const pending = listPendingToolApprovalsForViewingAs(viewingAs())
+    const pending = await listPendingToolApprovalsForViewingAs(viewingAs())
     expect(pending).toHaveLength(1)
     expect(pending[0]?.id).toBe(mine.id)
   })
@@ -181,7 +182,7 @@ describe("run tool approval application", () => {
     markRunToolApprovalApproved(approval.id, UPN)
 
     const { consumeMatchingToolGrant } = await import("../src/runtime/service/run-tool-approval.js")
-    consumeMatchingToolGrant("run-1", null, "write_file", { path: "/tmp/a.txt", content: "hi" })
+    await consumeMatchingToolGrant("run-1", null, "write_file", { path: "/tmp/a.txt", content: "hi" })
     expect(getRunToolApproval(approval.id)?.status).toBe("consumed")
   })
 })

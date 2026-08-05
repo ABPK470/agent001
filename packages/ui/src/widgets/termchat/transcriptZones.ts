@@ -13,6 +13,7 @@ export function isRunActiveStatus(status: string | null | undefined): boolean {
     status === RunStatus.Pending
     || status === RunStatus.Running
     || status === RunStatus.Planning
+    || status === RunStatus.WaitingForApproval
   )
 }
 

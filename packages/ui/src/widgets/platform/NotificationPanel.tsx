@@ -13,6 +13,7 @@ import { api } from "../../client/index"
 import { EmptyState } from "../../components/EmptyState"
 import { RunStatus } from "../../enums"
 import { useStore } from "../../state/store"
+import { applyOptimisticApprovalResume } from "../../state/approval-resume-optimistic"
 import { useLayoutStore } from "../../state/layout-store"
 import type { Notification, NotificationAction, Run } from "../../types"
 
@@ -111,9 +112,13 @@ export function NotificationPanel() {
       if (decision === "approve") {
         const result = await api.approveRunToolStep(approvalId)
         if (result.resumedRunId) {
-          setActiveRun(result.resumedRunId)
-          upsertRun({ id: result.resumedRunId, status: RunStatus.Running })
-          upsertRun({ id: result.runId, status: RunStatus.Cancelled, completedAt: new Date().toISOString() })
+          applyOptimisticApprovalResume(
+            result.runId,
+            result.resumedRunId,
+            runs,
+            upsertRun,
+            setActiveRun,
+          )
         } else {
           // Approval saved but resume failed (historically: missing checkpoint).
           upsertRun({ id: result.runId, status: RunStatus.WaitingForApproval })
@@ -133,6 +138,7 @@ export function NotificationPanel() {
     setActiveRun,
     upsertRun,
     clearPendingToolApproval,
+    runs,
   ])
 
   const handleAction = useCallback(async (notification: Notification, action: NotificationAction) => {

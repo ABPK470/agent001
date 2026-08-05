@@ -107,6 +107,8 @@ import {
   stepBlockHeaderChrome,
 } from "./termchat/stepOutcomeChrome"
 import { collapseResumeRunChains, resumeChainIds } from "./termchat/collapseResumeChains"
+import { formatApprovalWaitLabel, parseApprovalWaitMessage } from "../lib/approval-wait-copy"
+import { RunStatus } from "../enums"
 import { planTranscriptReveal } from "./termchat/revealRunInTranscript"
 import {
   deriveTranscriptZones,
@@ -291,6 +293,8 @@ function ChatTurn({
   onNotifyError?: (message: string) => void
   onParallelFanOutChange?: (fanOut: boolean) => void
 }): React.ReactElement {
+  const allRuns = useStore((s) => s.runs)
+  const supersededByResume = allRuns.some((r) => r.parentRunId === run.id)
   const turnRef = useRef<HTMLDivElement>(null)
   const sentinelRef = useRef<HTMLDivElement>(null)
   const stickyRef = useRef<HTMLDivElement>(null)
@@ -434,6 +438,7 @@ function ChatTurn({
           <RunMessage
             run={run}
             isActive={isActive}
+            supersededByResume={supersededByResume}
             pendingInput={pendingInput}
             onRespond={onRespond}
             onNotify={onNotify}
@@ -1145,6 +1150,14 @@ function NarrativeUpdate({ part }: { part: ResponseNarrativePart }) {
 }
 
 function ErrorNote({ text }: { text: string }) {
+  const wait = parseApprovalWaitMessage(text)
+  if (wait) {
+    return (
+      <div className="py-1 min-w-0 text-[15px] leading-6 text-text-muted">
+        {formatApprovalWaitLabel(wait.tool, wait.reason)}
+      </div>
+    )
+  }
   // Recoverable process notes stay muted; run terminals use ChatRunTerminalNotice.
   return (
     <div className="py-1 min-w-0 text-[15px] leading-6 text-text-muted">{text}</div>
@@ -1542,6 +1555,7 @@ function DeliverableChips({ runId }: { runId: string }) {
 function RunMessageImpl({
   run,
   isActive,
+  supersededByResume,
   pendingInput,
   onRespond,
   onNotify,
@@ -1559,6 +1573,7 @@ function RunMessageImpl({
     streamingAnswer?: string
   }
   isActive: boolean
+  supersededByResume: boolean
   pendingInput?: { runId: string; question: string; options?: string[]; sensitive?: boolean } | null
   onRespond: (runId: string, response: string) => Promise<void> | void
   onNotify?: (message: string) => void
@@ -1576,8 +1591,12 @@ function RunMessageImpl({
   const isLiveRun = isActive && !isDone
   const parallelFanOut = isParallelSubagentFanOut(responseParts)
   const isCancelTerminal =
-    run.status === "cancelled"
-    || (Boolean(run.error) && isCancelRaceFailureError(run.error) && isTerminalFailureStatus(run.status))
+    !supersededByResume
+    && run.status !== RunStatus.WaitingForApproval
+    && (
+      run.status === RunStatus.Cancelled
+      || (Boolean(run.error) && isCancelRaceFailureError(run.error) && isTerminalFailureStatus(run.status))
+    )
 
   useEffect(() => {
     if (!isActive) {
@@ -1822,6 +1841,7 @@ const RunMessage = React.memo(RunMessageImpl, (prev, next) => {
   return (
     prev.run === next.run
     && prev.isActive === next.isActive
+    && prev.supersededByResume === next.supersededByResume
     && prev.onRespond === next.onRespond
     && prev.onNotify === next.onNotify
     && prev.onNotifyError === next.onNotifyError

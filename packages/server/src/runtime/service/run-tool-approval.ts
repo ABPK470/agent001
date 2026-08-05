@@ -49,6 +49,8 @@ export async function approveRunToolStep(
     timestamp: new Date().toISOString(),
   })
 
+  const resumedRunId = await orchestrator.resumeRun(approval.runId, viewingAs.session)
+
   broadcast({
     type: EventType.ApprovalResolved,
     data: {
@@ -57,10 +59,10 @@ export async function approveRunToolStep(
       approvalId,
       decision: "approved",
       by: actor,
+      resumedRunId: resumedRunId ?? null,
     },
   })
 
-  const resumedRunId = await orchestrator.resumeRun(approval.runId, viewingAs.session)
   return { ok: true, runId: approval.runId, resumedRunId }
 }
 
