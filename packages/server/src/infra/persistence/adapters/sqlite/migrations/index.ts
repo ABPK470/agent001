@@ -2,13 +2,20 @@
  * Database migrations runner
  *
  * Terminal schema lives in `0001_baseline.ts` only. Fresh installs (or after
- * deleting mia.db) run baseline once. Append a numbered follow-up only when
- * existing installs must upgrade in place without a reset.
+ * deleting mia.db) run baseline once. Append a numbered follow-up (`0002_…`)
+ * only when existing installs must upgrade in place without a reset.
+ *
+ * Pre-squash installs may still have ghost ledger rows for versions 2..N under
+ * old names. Those are pruned when not present in {@link MIGRATIONS}, so the
+ * next real follow-up can be version 2 on every machine.
  */
 
 import type Database from "better-sqlite3"
-import { DROP_RETIRED_BROWSER_TABLES_SQL, runBaselineMigration } from "./0001_baseline.js"
-import { runRunToolApprovalGrantScopeMigration } from "./0002_run_tool_approval_grant_scope.js"
+import {
+  DROP_RETIRED_BROWSER_TABLES_SQL,
+  ensureRunToolApprovalGrantScopeColumn,
+  runBaselineMigration,
+} from "./0001_baseline.js"
 
 export interface Migration {
   version: number
@@ -18,7 +25,6 @@ export interface Migration {
 
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, name: "baseline", up: runBaselineMigration },
-  { version: 2, name: "run_tool_approval_grant_scope", up: runRunToolApprovalGrantScopeMigration },
 ]
 
 export function runMigrations(db: Database.Database): void {
@@ -30,9 +36,14 @@ export function runMigrations(db: Database.Database): void {
     migration.up(db)
     recordMigration(db, migration)
   }
-  // Baseline already records v1 — re-apply retired drops so older mia.db files
-  // lose Playwright leftovers without a numbered follow-up migration.
+
+  // Idempotent schema truth every boot (same dialect as retired-table drops).
   db.exec(DROP_RETIRED_BROWSER_TABLES_SQL)
+  ensureRunToolApprovalGrantScopeColumn(db)
+
+  // Drop ghost ledger rows from the pre-squash incremental chain so the next
+  // follow-up can be 0002 without colliding with historical version numbers.
+  pruneOrphanMigrationLedger(db)
 }
 
 export function listMigrations(db: Database.Database): Array<{
@@ -80,4 +91,13 @@ function recordMigration(db: Database.Database, migration: Migration): void {
   db.prepare(
     "INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, datetime('now'))",
   ).run(migration.version, migration.name)
+}
+
+function pruneOrphanMigrationLedger(db: Database.Database): void {
+  const keep = new Set(MIGRATIONS.map((m) => m.version))
+  const rows = db.prepare("SELECT version FROM schema_migrations").all() as Array<{ version: number }>
+  for (const { version } of rows) {
+    if (keep.has(version)) continue
+    db.prepare("DELETE FROM schema_migrations WHERE version = ?").run(version)
+  }
 }

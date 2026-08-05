@@ -1048,6 +1048,20 @@ DROP TABLE IF EXISTS browser_credentials;
 DROP TABLE IF EXISTS browser_contexts;
 `
 
+/**
+ * Folded into baseline CREATE — also run every boot for pre-existing DBs
+ * that still have the old run_tool_approvals shape (no numbered follow-up).
+ */
+export function ensureRunToolApprovalGrantScopeColumn(db: Database.Database): void {
+  const cols = db.prepare("PRAGMA table_info(run_tool_approvals)").all() as Array<{ name: string }>
+  if (cols.length === 0) return
+  if (cols.some((c) => c.name === "grant_scope")) return
+  db.exec(`
+    ALTER TABLE run_tool_approvals
+      ADD COLUMN grant_scope TEXT NOT NULL DEFAULT 'instance';
+  `)
+}
+
 /** Full application schema for new databases (single squashed baseline). */
 export function runBaselineMigration(db: Database.Database): void {
   db.exec(BASELINE_SQL)
