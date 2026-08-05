@@ -648,12 +648,20 @@ function IterationBlock({
   const shouldStayOpen = shouldAutoOpenWorkChip(isLastIteration, hasNarrativeAfter)
   const [open, setOpen] = useState(shouldStayOpen)
   const [userToggled, setUserToggled] = useState(false)
+  const buttonRef = useRef<HTMLButtonElement>(null)
+
   useEffect(() => {
     if (userToggled) return
+    if (open === shouldStayOpen) return
+    // Live auto-fold: suspend host follow + anchor so height snap does not
+    // flash the whole transcript (same path as a user toggle).
+    if (isLiveRun) {
+      preserveToggle(buttonRef.current, () => setOpen(shouldStayOpen))
+      return
+    }
     setOpen(shouldStayOpen)
-  }, [shouldStayOpen, userToggled])
+  }, [shouldStayOpen, userToggled, isLiveRun, open, preserveToggle])
 
-  const buttonRef = useRef<HTMLButtonElement>(null)
   // Cursor / Copilot dialect: activity headers stay muted chrome even when a
   // nested tool failed — severity lives on the error payload (sheet callout).
   const headerToneClass = "text-text-faint"
@@ -685,7 +693,11 @@ function IterationBlock({
         animated={animateFold}
         className="mt-0.5 pl-6 chat-trace-fold ml-[5px]"
       >
-        <IterationToolList tools={part.tools} syncByInvocation={syncByInvocation} />
+        <IterationToolList
+          tools={part.tools}
+          syncByInvocation={syncByInvocation}
+          isLiveRun={isLiveRun}
+        />
       </ChatFoldBody>
     </div>
   )
@@ -781,28 +793,19 @@ function StepBlock({
   const [userToggled, setUserToggled] = useState(false)
   const buttonRef = useRef<HTMLButtonElement>(null)
   const working = Boolean(part.subagent && (part.hasRunning || part.status === "running"))
-  const [showLogo, setShowLogo] = useState(working)
-  const [logoExiting, setLogoExiting] = useState(false)
 
   useEffect(() => {
     if (userToggled) return
-    if (part.hasRunning || keepOpen) setOpen(true)
-    else if (!keepOpen && part.status !== "running") setOpen(false)
-  }, [part.hasRunning, part.status, keepOpen, userToggled])
-
-  useEffect(() => {
-    if (working) {
-      setLogoExiting(false)
-      setShowLogo(true)
+    let next: boolean | null = null
+    if (part.hasRunning || keepOpen) next = true
+    else if (!keepOpen && part.status !== "running") next = false
+    if (next === null || open === next) return
+    if (isLiveRun) {
+      preserveToggle(buttonRef.current, () => setOpen(next))
       return
     }
-    setLogoExiting(true)
-    const t = window.setTimeout(() => {
-      setShowLogo(false)
-      setLogoExiting(false)
-    }, 280)
-    return () => window.clearTimeout(t)
-  }, [working])
+    setOpen(next)
+  }, [part.hasRunning, part.status, keepOpen, userToggled, isLiveRun, open, preserveToggle])
 
   const hasTools = part.tools.length > 0
   const errorBody = part.body?.trim() || ""
@@ -836,16 +839,11 @@ function StepBlock({
       >
         {/*
           One fixed lead column (16px): logo while working, else chevron/dot.
-          Never stack logo+chevron — that shifted the title and parked the
-          fold rail under the wrong glyph (detail wrap then spilled left).
+          Instant swap — opacity exit flashed the glyph on every settle.
         */}
         <span className="chat-step__lead inline-flex h-4 w-4 shrink-0 items-center justify-center" aria-hidden>
-          {showLogo ? (
-            <Logo
-              size={11}
-              working={!logoExiting}
-              className={logoExiting ? "mia-colon-logo--working-exit" : undefined}
-            />
+          {working ? (
+            <Logo size={11} working />
           ) : canToggle ? (
             <ChevronRight
               size={16}
@@ -884,6 +882,7 @@ function StepBlock({
             <IterationToolList
               tools={part.tools}
               syncByInvocation={syncByInvocation}
+              isLiveRun={isLiveRun}
             />
           ) : part.hasRunning && !hasErrorBody ? (
             <div className="py-0.5 text-[15px] leading-6 text-text-faint">
@@ -910,9 +909,11 @@ function StepBlock({
 function IterationToolList({
   tools,
   syncByInvocation,
+  isLiveRun = false,
 }: {
   tools: ResponseToolPart[]
   syncByInvocation: Map<string, ResponseSyncProgressPart>
+  isLiveRun?: boolean
 }) {
   return (
     <div className="chat-tool-list">
@@ -922,6 +923,7 @@ function IterationToolList({
           row={toolPart.row}
           syncProgress={syncByInvocation.get(toolPart.id)}
           isLast={i === tools.length - 1}
+          isLiveRun={isLiveRun}
         />
       ))}
     </div>

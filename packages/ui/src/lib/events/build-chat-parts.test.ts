@@ -94,10 +94,64 @@ describe("buildResponseParts — TermChat projection", () => {
     expect(parts.some((p) => p.kind === "markdown")).toBe(true)
     const block = parts.find((p) => p.kind === "iteration-block")
     if (block?.kind === "iteration-block") {
+      expect(block.id).toBe("iter-inv1")
       expect(block.tools.some((t) => t.row.tool === "write_file")).toBe(true)
       expect(block.tools[0]?.row.status).toBe("done")
       expect(block.tools[0]?.row.details).toBe("ok")
     }
+  })
+
+  it("keeps open iteration-block id stable as the live trace grows", () => {
+    const base: TraceEntry[] = [
+      { kind: "iteration", current: 0, max: 10 },
+      llmRequest(0),
+      llmResponse(0, [{ id: "tc1", name: "read_file", arguments: { path: "a.ts" } }]),
+      {
+        kind: "tool-call",
+        invocationId: "inv-a",
+        toolCallId: "tc1",
+        tool: "read_file",
+        argsSummary: "a.ts",
+        argsFormatted: JSON.stringify({ path: "a.ts" }),
+      },
+    ]
+    const mid = buildResponseParts(base, "running", "", null, null, null, "run-live")
+    const midBlock = mid.find((p) => p.kind === "iteration-block")
+    expect(midBlock?.kind).toBe("iteration-block")
+    if (midBlock?.kind !== "iteration-block") return
+    expect(midBlock.id).toBe("iter-inv-a")
+
+    const grown = buildResponseParts(
+      [
+        ...base,
+        {
+          kind: "tool-result",
+          invocationId: "inv-a",
+          toolCallId: "tc1",
+          text: "file body…",
+        },
+        llmResponse(0, [{ id: "tc2", name: "write_file", arguments: { path: "b.ts" } }]),
+        {
+          kind: "tool-call",
+          invocationId: "inv-b",
+          toolCallId: "tc2",
+          tool: "write_file",
+          argsSummary: "b.ts",
+          argsFormatted: JSON.stringify({ path: "b.ts" }),
+        },
+      ],
+      "running",
+      "",
+      null,
+      null,
+      null,
+      "run-live",
+    )
+    const grownBlock = grown.find((p) => p.kind === "iteration-block")
+    expect(grownBlock?.kind).toBe("iteration-block")
+    if (grownBlock?.kind !== "iteration-block") return
+    expect(grownBlock.id).toBe("iter-inv-a")
+    expect(grownBlock.tools).toHaveLength(2)
   })
 
   it("strips polished failure markers from final answers", () => {

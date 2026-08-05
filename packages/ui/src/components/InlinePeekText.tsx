@@ -4,7 +4,7 @@
  */
 
 import { ChevronDown, ChevronRight } from "lucide-react"
-import { useEffect, useRef, useState } from "react"
+import { useRef, useState } from "react"
 import { useChatScroll } from "./ChatScrollContext"
 
 /** Tool read/write dialect — first screenful, expand for the rest. */
@@ -67,10 +67,8 @@ export function InlinePeekText({
   const toggleRef = useRef<HTMLButtonElement>(null)
   // Pause host stick-to-bottom when expanding peeks during a live run.
   const { preserveToggle } = useChatScroll()
-
-  useEffect(() => {
-    setExpanded(false)
-  }, [text])
+  // Do not collapse on text growth — streaming tool output would thrash the
+  // panel. Parent remount via tool key resets expand when identity changes.
 
   const totalLines = normalizeLines(text).length
   const collapsedHidden = countHiddenPeekLines(totalLines, headLines, tailLines)

@@ -87,6 +87,12 @@ describe("chatTranscriptLayout", () => {
     const peek = readFileSync(join(here, "../components/InlinePeekText.tsx"), "utf8")
     expect(peek).toContain("buildPeekDisplay")
     expect(peek).toContain("preserveToggle")
+    // Streaming growth must not collapse an open peek (flash).
+    expect(peek).not.toMatch(/useEffect\(\(\)\s*=>\s*\{\s*setExpanded\(false\)/)
+    // Nested tools under chips must know the run is live.
+    expect(term).toMatch(/IterationToolList[\s\S]*isLiveRun=\{isLiveRun\}/)
+    // Live step settle: instant logo→chevron, no opacity-0 exit flash.
+    expect(term).not.toContain("mia-colon-logo--working-exit")
     const card = readFileSync(join(here, "../components/ToolExecutionCard.tsx"), "utf8")
     expect(card).toContain("InlinePeekText")
     expect(card).toContain("chat-tool__panel")

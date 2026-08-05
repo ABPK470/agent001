@@ -727,9 +727,8 @@ export function buildResponseParts(
   // detail behind the chevron.
   let pendingTools: ResponseToolPart[] = []
   let pendingTargets: Array<{ tool: string; target?: string }> = []
-  let blockSeq = 0
 
-  const flushIterationBlock = (boundaryIndex: number) => {
+  const flushIterationBlock = () => {
     if (pendingTools.length === 0) return
     // Strip the in-flight tool parts back out of `parts` (they were pushed
     // there individually so the live UI could show them as they happened).
@@ -749,9 +748,12 @@ export function buildResponseParts(
         if (p.kind === "tool" && idSet.has(p.id)) continue
         keep.push(p)
       }
+      // Stable id from the first tool — final flush runs every build with
+      // growing trace.length; keys like iter-block-${trace.length} remounted
+      // the whole chip (and nested tools) on every SSE event.
       const block: ResponseIterationPart = {
         kind: "iteration-block",
-        id: `iter-block-${boundaryIndex}-${blockSeq++}`,
+        id: `iter-${firstId}`,
         summary: buildIterationHeader(pendingTargets),
         tools: pendingTools,
         hasRunning: pendingTools.some((p) => p.row.status === "running"),
@@ -771,7 +773,7 @@ export function buildResponseParts(
         // collected since the previous boundary into ONE collapsible
         // ResponseIterationPart — that's the Copilot-style "this turn
         // did X" encapsulation the user expects to be able to fold.
-        flushIterationBlock(index)
+        flushIterationBlock()
         break
       }
       case "thinking": {
@@ -854,7 +856,7 @@ export function buildResponseParts(
         // Pipeline is orchestrator jargon (retry loop) — steps are the parent units.
         break
       case "planner-step-start": {
-        flushIterationBlock(index)
+        flushIterationBlock()
         const activityId = `step-${entry.stepName}-${index}`
         runningSteps.set(entry.stepName, activityId)
         openStepId = activityId
@@ -921,7 +923,7 @@ export function buildResponseParts(
         let activityId = runningSteps.get(entry.stepName)
         const goalDetail = truncateStepDetail(entry.goal)
         if (!activityId) {
-          flushIterationBlock(index)
+          flushIterationBlock()
           activityId = `step-${entry.stepName}-${index}`
           runningSteps.set(entry.stepName, activityId)
           openStepId = activityId
@@ -1287,7 +1289,7 @@ export function buildResponseParts(
   // Final flush so any tool calls that arrived after the last iteration
   // boundary still get encapsulated under one collapsible header before
   // the answer renders.
-  flushIterationBlock(trace.length)
+  flushIterationBlock()
 
   // We use a STABLE id (`answer-${runId}`) for both the live and final
   // answer so the TypewriterAnswer component instance is preserved across
