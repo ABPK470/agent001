@@ -15469,7 +15469,8 @@ button.trace-tree-status-pill:hover {
   flex: 1 1 0;
   min-height: 0;
   min-width: 0;
-  overflow: hidden;
+  /* clip — not hidden: scrollIntoView/focus must not mutate scrollLeft on the dual track */
+  overflow: clip;
 }
 
 .app-shell-slider {
@@ -15506,9 +15507,16 @@ button.trace-tree-status-pill:hover {
   overflow: hidden;
 }
 
+/*
+ * Keep-alive inactive shell: mounted for warm state, never owns the viewport.
+ * Same dialect as .workspace-tile-solo-hidden — visibility alone still lets
+ * scrollIntoView/focus walk ancestors and yank the 200% track.
+ */
 .app-shell-panel--inactive {
   visibility: hidden;
   pointer-events: none;
+  content-visibility: hidden;
+  contain: strict;
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -1,7 +1,7 @@
 /**
- * Dual-mount shells keep chat + workspace TermChat alive. Selection sync must
- * not call scrollIntoView from the inactive host — browsers will scroll
- * ancestors and yank the viewport onto the off-screen chat panel.
+ * Dual-mount shells keep chat + workspace TermChat alive. Selection sync and
+ * empty-state focus must not call scrollIntoView / focus-scroll from the
+ * inactive host — browsers walk ancestors and yank the 200% shell track.
  */
 
 export function transcriptHostScrollAllowed(flags: {

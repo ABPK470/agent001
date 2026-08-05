@@ -1923,6 +1923,23 @@ function TermChatInputBar({
    */
   autoFocus?: boolean
 }) {
+  const localTextareaRef = useRef<HTMLTextAreaElement | null>(null)
+  const setMergedTextareaRef = useCallback((el: HTMLTextAreaElement | null) => {
+    localTextareaRef.current = el
+    if (typeof textareaRef === "function") textareaRef(el)
+    else if (textareaRef && typeof textareaRef === "object") {
+      ;(textareaRef as React.MutableRefObject<HTMLTextAreaElement | null>).current = el
+    }
+  }, [textareaRef])
+
+  // Never use DOM autoFocus — browsers scroll ancestors into view and yank the
+  // dual-mount shell track. Focus only when this host owns the viewport.
+  useLayoutEffect(() => {
+    if (!autoFocus) return
+    const el = localTextareaRef.current
+    if (!el || !transcriptHostMayScroll(el)) return
+    el.focus({ preventScroll: true })
+  }, [autoFocus])
   const slashInput = input.trimStart().startsWith("/")
   const attachDisabled = personalReadOnly || slashOnlyMode || !!pendingInput
   const goalPlaceholder = personalReadOnly
@@ -1992,11 +2009,10 @@ function TermChatInputBar({
           {isHero ? (
               <div className="flex flex-col gap-3">
                   <textarea
-                      ref={textareaRef}
+                      ref={setMergedTextareaRef}
                       value={input}
                       onChange={(e) => onChange(e.target.value)}
                       onKeyDown={handleKeyDown}
-                      autoFocus={autoFocus}
                       placeholder={goalPlaceholder}
                       rows={1}
                       disabled={!!pendingInput}
@@ -2057,11 +2073,10 @@ function TermChatInputBar({
                   </button>
                   )}
                   <textarea
-                      ref={textareaRef}
+                      ref={setMergedTextareaRef}
                       value={input}
                       onChange={(e) => onChange(e.target.value)}
                       onKeyDown={handleKeyDown}
-                      autoFocus={autoFocus}
                       placeholder={goalPlaceholder}
                       rows={1}
                       disabled={!!pendingInput}

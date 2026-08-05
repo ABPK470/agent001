@@ -29,6 +29,7 @@ import {
   shellModeTransitionMs,
   shellTrackSlideClass,
 } from "./shell-mode-transition"
+import { pinShellTrackScroll } from "./shell-viewport"
 import type { AppShellMode } from "./types"
 import { isOpenWidgetCatalogEvent, isShellModeToggleEvent, resolveChatVariant } from "./types"
 import { Canvas, type CanvasHandle } from "./workspace/Canvas"
@@ -165,6 +166,7 @@ export function App() {
   const shellSlidingRef = useRef(shellSliding)
   shellSlidingRef.current = shellSliding
   const [slideMode, setSlideMode] = useState<AppShellMode>("chat")
+  const shellTrackRef = useRef<HTMLDivElement | null>(null)
   const shellTransitionTimersRef = useRef<number[]>([])
   const personalScopeRef = useRef<string | null>(null)
   const prevConnectedRef = useRef(false)
@@ -308,6 +310,15 @@ export function App() {
     }, shellModeTransitionMs(next))
     shellTransitionTimersRef.current.push(kickId, endId)
   }, [isMobile])
+
+  const activeThreadId = useStore((s) => s.activeThreadId)
+  const activeRunId = useStore((s) => s.activeRunId)
+
+  // Dual-mount track must stay transform-only — never inherit scrollLeft from
+  // keep-alive focus/scrollIntoView inside the off-screen panel.
+  useEffect(() => {
+    pinShellTrackScroll(shellTrackRef.current)
+  }, [shellMode, slideMode, shellSliding, shellTrackReady, activeThreadId, activeRunId])
 
   // ⌘⌥ / Ctrl+Alt — toggle chat ↔ workspace from either shell.
   useEffect(() => {
@@ -785,7 +796,7 @@ export function App() {
             onRefresh={refreshPlatformHealth}
           />
         )}
-        <div className="app-shell-track relative z-[1] min-h-0 flex-1">
+        <div ref={shellTrackRef} className="app-shell-track relative z-[1] min-h-0 flex-1">
           {shellTrackReady ? (
             <div
               className={[
@@ -804,6 +815,7 @@ export function App() {
                   .filter(Boolean)
                   .join(" ")}
                 aria-hidden={shellPanelInactive("workspace")}
+                inert={shellPanelInactive("workspace") ? true : undefined}
               >
                 {renderShellBody("workspace", { canvasActive: shellCanvasActive("workspace") })}
               </div>
@@ -815,6 +827,7 @@ export function App() {
                   .filter(Boolean)
                   .join(" ")}
                 aria-hidden={shellPanelInactive("chat")}
+                inert={shellPanelInactive("chat") ? true : undefined}
               >
                 {renderShellBody("chat", { canvasActive: shellCanvasActive("chat") })}
               </div>
