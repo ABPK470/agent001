@@ -40,4 +40,8 @@ export default defineConfig({
       },
     },
   },
+  build: {
+    // Never ship source maps — dev-only, large, and break some Windows copy tools.
+    sourcemap: false,
+  },
 })

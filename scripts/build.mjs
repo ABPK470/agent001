@@ -16,14 +16,17 @@ import { fileURLToPath } from "node:url"
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..")
 const dist = resolve(root, "dist")
+const releaseBuild = process.env.MIA_RELEASE_BUILD === "1"
 
 rmSync(dist, { recursive: true, force: true })
 mkdirSync(dist, { recursive: true })
 
 console.log("Building UI…")
-execSync("npm run build -w packages/ui", { cwd: root, stdio: "inherit" })
-
-const releaseBuild = process.env.MIA_RELEASE_BUILD === "1"
+execSync("npm run build -w packages/ui", {
+  cwd: root,
+  stdio: "inherit",
+  env: { ...process.env, MIA_RELEASE_BUILD: releaseBuild ? "1" : process.env.MIA_RELEASE_BUILD },
+})
 
 console.log("Bundling server…")
 await esbuild.build({
