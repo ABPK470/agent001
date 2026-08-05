@@ -145,11 +145,13 @@ export function TraceWorkDetail({
   const tool = findWorkTool(dag, work, toolKey)
   const errorNotes = work.notes.filter((n) => n.tone === "error")
   const cancelNotes = work.notes.filter((n) => n.tone === "cancelled")
+  const pauseNotes = work.notes.filter((n) => n.label === "Paused")
   const consumedNoteIds = askUserConsumedNoteIds(work.notes)
   const otherNotes = work.notes.filter(
     (n) =>
       n.tone !== "error" &&
       n.tone !== "cancelled" &&
+      n.label !== "Paused" &&
       !consumedNoteIds.has(n.id),
   )
 
@@ -189,14 +191,20 @@ export function TraceWorkDetail({
 
   return (
     <div className="trace-detail-body">
-      {errorNotes.map((note) => (
-        <TraceToolErrorSection key={note.id} text={note.text} />
+      {pauseNotes.map((note) => (
+        <div key={note.id} className="trace-detail-section">
+          <div className="trace-detail-section__label">Paused</div>
+          <ExpandableText text={note.text} className="trace-body-muted" />
+        </div>
       ))}
       {cancelNotes.map((note) => (
         <div key={note.id} className="trace-detail-section">
           <div className="trace-detail-section__label">Cancelled</div>
           <ExpandableText text={note.text} className="trace-body-muted" />
         </div>
+      ))}
+      {errorNotes.map((note) => (
+        <TraceToolErrorSection key={note.id} text={note.text} />
       ))}
       {work.tools.map((t, i) =>
         renderWorkTool(

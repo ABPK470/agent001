@@ -82,8 +82,10 @@ function phaseStatus(phase: TracePhaseNode): TraceSpanStatus {
 function workStatus(work: TraceWorkNode): TraceSpanStatus {
   if (work.notes.some((n) => n.tone === "error")) return "failed"
   if (work.tools.some((t) => t.status === "error")) return "failed"
-  // User cancel / abort stop — not Fail, not OK.
+  // User cancel / approval deny — not Fail, not OK.
   if (work.notes.some((n) => n.tone === "cancelled")) return "cancelled"
+  // Approval pause is in-flight process control, not a completed OK work node.
+  if (work.notes.some((n) => n.label === "Paused")) return "running"
   if (work.tools.some((t) => t.status === "running" || !t.status)) return "running"
   if (work.tools.length === 0 && work.notes.length === 0) return "skipped"
   return "success"

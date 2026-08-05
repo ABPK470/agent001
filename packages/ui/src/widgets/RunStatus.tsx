@@ -316,7 +316,18 @@ export function RunStatus() {
         <p className="mt-0.5 text-sm leading-relaxed text-text">{run.goal}</p>
       </div>
 
-      {run.error && (
+      {run.error && run.status === RunStatusEnum.Cancelled && (
+        <div className="mia-callout mia-callout--warn w-fit max-w-full px-3 py-2.5 text-sm font-normal text-text-muted">
+          <div className="text-[12px] uppercase tracking-wide font-normal text-text-muted">
+            Cancelled
+          </div>
+          <p className="mt-1 text-sm leading-snug font-normal whitespace-pre-wrap break-words">
+            {run.error}
+          </p>
+        </div>
+      )}
+
+      {run.error && run.status !== RunStatusEnum.Cancelled && (
         <div className="mia-callout mia-callout--err w-fit max-w-full px-3 py-2.5 text-sm font-normal text-text-muted">
           <div className="text-[12px] uppercase tracking-wide font-normal text-text-muted">Error</div>
           <p className="mt-1 text-sm leading-snug font-normal whitespace-pre-wrap break-words">

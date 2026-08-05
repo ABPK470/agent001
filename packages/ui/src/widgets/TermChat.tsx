@@ -107,7 +107,11 @@ import {
   stepBlockHeaderChrome,
 } from "./termchat/stepOutcomeChrome"
 import { collapseResumeRunChains, resumeChainIds } from "./termchat/collapseResumeChains"
-import { formatApprovalWaitLabel, parseApprovalWaitMessage } from "../lib/approval-wait-copy"
+import {
+  formatApprovalWaitLabel,
+  isApprovalDeniedCancelReason,
+  parseApprovalWaitMessage,
+} from "../lib/approval-wait-copy"
 import { RunStatus } from "../enums"
 import { planTranscriptReveal } from "./termchat/revealRunInTranscript"
 import {
@@ -1276,6 +1280,7 @@ function chatCancelDetail(error?: string | null): string {
   if (!text || /^run cancelled by user$/i.test(text)) {
     return "This operation was aborted."
   }
+  if (isApprovalDeniedCancelReason(text)) return text
   return text
 }
 

@@ -11,5 +11,10 @@ export function settleTraceOnCancel(trace: TraceEntry[]): TraceEntry[] {
 export function isCancelRaceFailureError(message: string | null | undefined): boolean {
   if (!message) return false
   const text = message.toLowerCase()
-  return text.includes("cancelled") || text.includes("canceled") || text.includes("abort")
+  return (
+    text.includes("cancelled")
+    || text.includes("canceled")
+    || text.includes("abort")
+    || text.includes("approval denied")
+  )
 }

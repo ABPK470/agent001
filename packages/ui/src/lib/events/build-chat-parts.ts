@@ -1369,7 +1369,11 @@ export function buildResponseParts(
   }
 
   if (!isRunActiveStatus(runStatus)) {
-    const terminalStatus: "done" | "error" = runStatus === RunStatus.Completed ? "done" : "error"
+    // Cancelled (incl. approval deny) is not a tool failure — seal in-flight as done.
+    const terminalStatus: "done" | "error" =
+      runStatus === RunStatus.Completed || runStatus === RunStatus.Cancelled
+        ? "done"
+        : "error"
     parts = parts.map((part) => {
       if (part.kind === "progress" && part.status === "running") {
         return { ...part, status: terminalStatus, shimmer: false }

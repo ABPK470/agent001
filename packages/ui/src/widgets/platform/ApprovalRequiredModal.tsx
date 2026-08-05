@@ -16,6 +16,7 @@ import { api } from "../../client/index"
 import { JsonViewer } from "../../components/JsonViewer"
 import { RunStatus } from "../../enums"
 import { useStore } from "../../state/store"
+import { applyOptimisticApprovalDeny } from "../../state/approval-deny-optimistic"
 import { applyOptimisticApprovalResume } from "../../state/approval-resume-optimistic"
 import { modalOverlayClass, MODAL_SURFACE_CLASS } from "../entity-registry/modal-overlay"
 
@@ -91,7 +92,13 @@ export function ApprovalRequiredModal(): JSX.Element | null {
     setError(null)
     try {
       await api.denyRunToolStep(pending.approvalId)
-      upsertRun({ id: pending.runId, status: RunStatus.Cancelled })
+      applyOptimisticApprovalDeny(
+        pending.runId,
+        pending.toolName,
+        null,
+        runs,
+        upsertRun,
+      )
       if (pending.notificationId) {
         markNotificationRead(pending.notificationId)
         api.markNotificationRead(pending.notificationId).catch((err: unknown) => { console.error("[mia]", err) })

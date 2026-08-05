@@ -11,6 +11,12 @@ import { buildOutline, TRACE_VIEW_SPEC } from "./build-outline"
 import { atomsFromTrace } from "./normalize"
 import { isPlannerStepSuccessStatus } from "./planner-step-status"
 import { computeTokenCostUsd } from "./trace-cost"
+import {
+  formatApprovalWaitLabel,
+  isApprovalDeniedTraceText,
+  isApprovalWaitTraceText,
+  parseApprovalWaitMessage,
+} from "../approval-wait-copy"
 import { isCancelRaceFailureError } from "./trace-terminal"
 import type { OutlineNode } from "./types"
 
@@ -1351,6 +1357,28 @@ export function buildTraceDag(trace: TraceEntry[], opts?: BuildTraceDagOpts): Tr
 
     if (entry.kind === "error" && entry.text !== "Run cancelled by user") {
       const work = ensureWork(noteCall)
+      // Approval wait / deny are process control — never Fail/Error in Trace.
+      if (isApprovalWaitTraceText(entry.text)) {
+        const wait = parseApprovalWaitMessage(entry.text)
+        work.notes.push({
+          id: `pause-${i}`,
+          label: "Paused",
+          text: wait
+            ? formatApprovalWaitLabel(wait.tool, wait.reason)
+            : entry.text,
+          tone: "neutral",
+        })
+        continue
+      }
+      if (isApprovalDeniedTraceText(entry.text)) {
+        work.notes.push({
+          id: `deny-${i}`,
+          label: "Cancelled",
+          text: entry.text,
+          tone: "cancelled",
+        })
+        continue
+      }
       work.notes.push({
         id: `err-${i}`,
         label: "Error",

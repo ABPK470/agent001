@@ -13,6 +13,7 @@ import { api } from "../../client/index"
 import { EmptyState } from "../../components/EmptyState"
 import { RunStatus } from "../../enums"
 import { useStore } from "../../state/store"
+import { applyOptimisticApprovalDeny } from "../../state/approval-deny-optimistic"
 import { applyOptimisticApprovalResume } from "../../state/approval-resume-optimistic"
 import { useLayoutStore } from "../../state/layout-store"
 import type { Notification, NotificationAction, Run } from "../../types"
@@ -127,7 +128,18 @@ export function NotificationPanel() {
       } else {
         await api.denyRunToolStep(approvalId)
         if (notification.runId) {
-          upsertRun({ id: notification.runId, status: RunStatus.Cancelled })
+          const pending = useStore.getState().pendingToolApproval
+          applyOptimisticApprovalDeny(
+            notification.runId,
+            pending?.toolName
+              ?? (typeof notification.message === "string"
+                ? notification.message.match(/Tool "([^"]+)"/)?.[1]
+                : undefined)
+              ?? "tool",
+            null,
+            runs,
+            upsertRun,
+          )
         }
       }
       clearPendingToolApproval()

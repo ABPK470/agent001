@@ -206,6 +206,51 @@ describe("store approval events", () => {
     expect(state.activeRunId).toBe("run-1-resumed")
   })
 
+  it("approval.resolved denied cancels with deny reason and rewrites wait notes", () => {
+    useStore.getState().upsertRun({
+      id: "run-deny",
+      goal: "test goal",
+      status: RunStatus.WaitingForApproval,
+      answer: null,
+      stepCount: 0,
+      error: null,
+      parentRunId: null,
+      createdAt: new Date().toISOString(),
+      completedAt: null,
+      totalTokens: 0,
+      promptTokens: 0,
+      completionTokens: 0,
+      llmCalls: 0,
+      trace: [{ kind: "error", text: "Waiting for approval — fetch_url: network" }],
+    })
+    useStore.getState().setPendingToolApproval({
+      approvalId: "appr-deny",
+      runId: "run-deny",
+      stepId: "step-1",
+      toolName: "fetch_url",
+      reason: "network",
+    })
+
+    useStore.getState().handleEvent({
+      type: "approval.resolved",
+      timestamp: new Date().toISOString(),
+      data: {
+        runId: "run-deny",
+        stepId: "step-1",
+        approvalId: "appr-deny",
+        decision: "denied",
+        by: "alice@example.com",
+        reason: "approval denied",
+      },
+    })
+
+    const denied = useStore.getState().runs.find((r) => r.id === "run-deny")
+    expect(denied?.status).toBe(RunStatus.Cancelled)
+    expect(denied?.error).toBe("Tool approval denied for fetch_url.")
+    expect(denied?.trace).toEqual([{ kind: "error", text: "Approval denied — fetch_url" }])
+    expect(useStore.getState().pendingToolApproval).toBeNull()
+  })
+
   it("notification approval.required enriches pending state with notificationId", () => {
     useStore.getState().handleEvent({
       type: "notification",

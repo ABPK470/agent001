@@ -20,8 +20,13 @@ import {
   type SyncProgressState
 } from "./sync-trace-progress.js"
 import { pendingApprovalFromEvent, type PendingToolApproval } from "./pending-approval.js"
+import { applyOptimisticApprovalDeny } from "./approval-deny-optimistic.js"
 import { applyOptimisticApprovalResume } from "./approval-resume-optimistic.js"
-import { stripApprovalWaitTraceEntries } from "../lib/approval-wait-copy.js"
+import {
+  isApprovalDeniedCancelReason,
+  parseApprovalWaitMessage,
+  stripApprovalWaitTraceEntries,
+} from "../lib/approval-wait-copy.js"
 import { api } from "../client/index"
 import { readSseRunId, readSseStepId, lookupEventDescriptor } from "@mia/shared-types"
 import {
@@ -181,6 +186,18 @@ function mapRunTrace(runs: Run[], runId: string, update: (trace: TraceEntry[]) =
   const next = [...runs]
   next[index] = { ...next[index], trace: update(next[index].trace ?? []) }
   return next
+}
+
+function toolNameForApprovalDeny(
+  pendingToolName: string | undefined,
+  run: Run | undefined,
+): string {
+  if (pendingToolName && pendingToolName !== "unknown") return pendingToolName
+  const wait = [...(run?.trace ?? [])]
+    .reverse()
+    .map((e) => (e.kind === "error" && "text" in e ? parseApprovalWaitMessage(e.text) : null))
+    .find(Boolean)
+  return wait?.tool || "tool"
 }
 
 function isTerminalInfrastructureError(message: string | null | undefined): boolean {
@@ -1534,13 +1551,21 @@ export const useStore = create<AppState>()(
 
           case "run.cancelled": {
             const cancelledRunId = data["runId"] as string
+            const cancelReason =
+              typeof data["reason"] === "string" ? data["reason"] : null
+            const existing = get().runs.find((r) => r.id === cancelledRunId)
+            // Keep a deny reason already set by approval.resolved; otherwise
+            // surface SSE reason only when it is an approval denial (cancel, not fail).
+            const cancelDetail =
+              existing?.error
+              ?? (isApprovalDeniedCancelReason(cancelReason) ? cancelReason : null)
             store.clearStreamingAnswer()
             store.upsertRun({
               id: cancelledRunId,
               status: RunStatus.Cancelled,
               completedAt: timestamp,
               streamingAnswer: "",
-              error: null,
+              error: cancelDetail,
             })
             set((s) => ({
               runs: mapRunTrace(s.runs, cancelledRunId, settleTraceOnCancel),
@@ -1957,7 +1982,17 @@ export const useStore = create<AppState>()(
                 (id) => set({ activeRunId: id }),
               )
             } else if (decision === "denied") {
-              store.upsertRun({ id: runId, status: RunStatus.Cancelled, completedAt: timestamp })
+              const denyReason =
+                typeof data["reason"] === "string" && data["reason"]
+                  ? data["reason"]
+                  : null
+              applyOptimisticApprovalDeny(
+                runId,
+                toolNameForApprovalDeny(pending?.toolName, get().runs.find((r) => r.id === runId)),
+                denyReason,
+                get().runs,
+                store.upsertRun,
+              )
             }
             break
           }
