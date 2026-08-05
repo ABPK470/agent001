@@ -5,7 +5,8 @@
  *   - Pills (`.mia-status-pill`) — scan anchors: tint fill + semantic ink
  *     via `--status-pill-*` (dark louder; light soft fills).
  *   - Callouts (`.mia-callout`, `.mia-row-stroke`) — quiet notices: dark
- *     left stroke / `--status-callout-*` overlay; light soft washes.
+ *     left stroke / `--status-callout-*` overlay; light error panels use
+ *     left accent + soft wash (not a full 4-side box; not a pill/badge).
  * Toasts use opaque `--toast-*-bg` surfaces (`.mia-toast`), not callout soft fills.
  */
 

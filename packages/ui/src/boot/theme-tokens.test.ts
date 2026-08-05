@@ -124,7 +124,15 @@ describe("light theme color system", () => {
     expect(dark).toMatch(/--status-callout-err-soft:\s*var\(--overlay-2\)/)
     expect(dark).toMatch(/--status-callout-ok-soft:\s*var\(--overlay-2\)/)
     expect(css).toMatch(/\.mia-status-pill--err\b/)
-    expect(css).toMatch(/:root\[data-theme="light"\] \.mia-callout--err[\s\S]*background:\s*var\(--error-soft\)/)
+    expect(css).toMatch(
+      /:root\[data-theme="light"\] \.mia-callout--err[\s\S]*background:\s*var\(--error-soft\)/,
+    )
+    expect(css).toMatch(
+      /:root\[data-theme="light"\] \.mia-callout--err[\s\S]*border-left:\s*3px\s+solid\s+var\(--error\)/,
+    )
+    expect(css).toMatch(
+      /:root\[data-theme="light"\] \.termchat-transcript-shell \.chat-tool-error[\s\S]*border-left:\s*3px\s+solid\s+var\(--error\)/,
+    )
     expect(css).toMatch(/\.log-stream \.event-stream-row:hover/)
     expect(css).toMatch(/\.event-stream-payload__box--err/)
     const liveLogs = readFileSync(join(here, "../widgets/LiveLogs.tsx"), "utf8")

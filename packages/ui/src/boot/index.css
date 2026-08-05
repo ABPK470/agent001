@@ -2411,9 +2411,15 @@ label:focus-within > .mia-checkbox,
   color: var(--success);
 }
 
+/*
+ * Light error panels — left accent + soft wash (review-detail dialect).
+ * Not pills/badges (`.mia-status-pill`, event-stream, trace/pipeline chips).
+ */
 :root[data-theme="light"] .mia-callout--err {
   background: var(--error-soft);
-  border-color: var(--error-border);
+  border: none;
+  border-left: 3px solid var(--error);
+  border-radius: 0 0.375rem 0.375rem 0;
   color: var(--error);
 }
 
@@ -13968,6 +13974,14 @@ button.trace-tree-status-pill:hover {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   word-break: break-word;
+}
+
+/* Light chat tool errors — same left-accent panel as .mia-callout--err. */
+:root[data-theme="light"] .termchat-transcript-shell .chat-tool-error {
+  border: none;
+  border-left: 3px solid var(--error);
+  border-radius: 0 0.35rem 0.35rem 0;
+  background: var(--error-soft);
 }
 
 :root[data-theme="light"] .termchat-transcript-shell .chat-trace-rail {
