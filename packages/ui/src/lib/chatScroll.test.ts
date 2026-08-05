@@ -7,6 +7,7 @@ import {
   nearestRevealScrollDelta,
   preserveScrollAnchor,
   revealElementInScrollAncestors,
+  scrollTopAfterHeightShrink,
   shouldParkAfterToggle,
 } from "./chatScroll"
 
@@ -324,6 +325,15 @@ describe("preserveScrollAnchor", () => {
     await flushExpandLayout()
     // park: offsetInScrollHost stays 40 → scrollTop 38
     expect(host.scrollTop).toBe(38)
+  })
+})
+
+describe("scrollTopAfterHeightShrink — invisible floor", () => {
+  it("subtracts Δh so content below the collapse does not move on screen", () => {
+    expect(scrollTopAfterHeightShrink(800, 168)).toBe(632)
+    expect(scrollTopAfterHeightShrink(40, 100)).toBe(0)
+    expect(scrollTopAfterHeightShrink(200, 0)).toBe(200)
+    expect(scrollTopAfterHeightShrink(200, -10)).toBe(200)
   })
 })
 

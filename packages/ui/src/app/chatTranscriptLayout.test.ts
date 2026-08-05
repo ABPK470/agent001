@@ -84,6 +84,7 @@ describe("chatTranscriptLayout", () => {
     // Cursor/Copilot paper under the last turn (home + widget).
     expect(term).toContain("CHAT_TRANSCRIPT_BOTTOM_PAPER_CLASS")
     expect(term).toContain("threshold: nearBottomThreshold")
+    expect(term).toContain("listRef: virtualListRef")
     const peek = readFileSync(join(here, "../components/InlinePeekText.tsx"), "utf8")
     expect(peek).toContain("buildPeekDisplay")
     expect(peek).toContain("preserveToggle")
@@ -93,6 +94,15 @@ describe("chatTranscriptLayout", () => {
     expect(term).toMatch(/IterationToolList[\s\S]*isLiveRun=\{isLiveRun\}/)
     // Live step settle: instant logo→chevron, no opacity-0 exit flash.
     expect(term).not.toContain("mia-colon-logo--working-exit")
+    // Fold open is derived in render — no useEffect sync (after-paint jump).
+    expect(term).toContain("workChipOpen(")
+    expect(term).toContain("stepChipAutoOpen(")
+    expect(term).not.toContain("shouldAutoCloseWorkChip")
+    // Do not clip live tools into fixed-height shells (content vanishes).
+    expect(term).not.toContain("is-live-running")
+    expect(term).not.toContain("chat-step__live-slot")
+    expect(css).not.toContain(".chat-tool-row.is-live-running")
+    expect(css).not.toContain(".chat-step__live-slot")
     const card = readFileSync(join(here, "../components/ToolExecutionCard.tsx"), "utf8")
     expect(card).toContain("InlinePeekText")
     expect(card).toContain("chat-tool__panel")

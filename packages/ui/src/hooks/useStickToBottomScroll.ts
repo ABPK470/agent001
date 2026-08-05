@@ -1,28 +1,40 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
-import { isNearBottom, scrollHostToBottom } from "../lib/chatScroll"
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react"
+import {
+  CHAT_SCROLL_INTERRUPT_AWAY_PX,
+  chatScrollDistanceFromBottom,
+} from "../app/chatLayout"
+import {
+  isNearBottom,
+  scrollHostToBottom,
+  scrollTopAfterHeightShrink,
+} from "../lib/chatScroll"
+import type { VirtualListHandle, VirtualListScrollAnchor } from "../components/VirtualList"
+
+/**
+ * Auto-scroll intent (hysteresis):
+ *   following   — pin the floor on grow/shrink
+ *   interrupted — inspect mode; grow never steals; shrink restores row anchor
+ *
+ * Interrupt: instantly when distanceFromBottom > INTERRUPT_AWAY_PX, or expand.
+ * Re-engage: Jump / scrollToBottom(stick), or deliberate scroll into paper band.
+ */
+export type ChatScrollIntent = "following" | "interrupted"
 
 export interface UseStickToBottomScrollOptions {
-  /** Pixels from bottom to still count as "following" live output. */
+  /** Paper-band re-engage threshold (hysteresis enter). */
   threshold?: number
-  /**
-   * When this changes after mount (e.g. user just started a new run), jump to
-   * bottom once. Do NOT pass ambient active-run ids — that causes scroll frenzy
-   * when the chat surface remounts (home ↔ widgets).
-   */
   resetKey?: string | null
-  /** Whether to jump to bottom on first mount. Prefer `none` for home chat. */
   initialScroll?: "none" | "bottom"
   onScrollPosition?: (scrollTop: number, host: HTMLDivElement) => void
-  /**
-   * When false, growing content does not auto-scroll even if the user is at
-   * the bottom. Use while idle so historical hydration / trace patches do not
-   * yank the viewport. Live generation should pass true.
-   */
   followWhen?: boolean
+  /**
+   * Chat VirtualList — when interrupted, shrink restores this list's
+   * index/offset anchor instead of trusting raw Δh alone.
+   */
+  listRef?: RefObject<VirtualListHandle | null>
 }
 
 export type ScrollToBottomOptions = {
-  /** When false, jump without enabling live follow (avoids resize yank after hydrate). */
   stick?: boolean
 }
 
@@ -33,24 +45,40 @@ export function useStickToBottomScroll(options: UseStickToBottomScrollOptions = 
     initialScroll = "none",
     onScrollPosition,
     followWhen = true,
+    listRef,
   } = options
 
   const scrollHostRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
-  const shouldStickRef = useRef(initialScroll === "bottom")
-  const userEngagedRef = useRef(false)
+  const intentRef = useRef<ChatScrollIntent>(
+    initialScroll === "bottom" ? "following" : "interrupted",
+  )
   const followWhenRef = useRef(followWhen)
   const previousResetKeyRef = useRef<string | null | undefined>(undefined)
   const hasInitializedRef = useRef(false)
   const programmaticScrollRef = useRef(false)
   const [showJumpButton, setShowJumpButton] = useState(false)
 
-  const suspendFollowUntilRef = useRef(0)
   const lastContentHeightRef = useRef(0)
-  const lastStickAtRef = useRef(0)
+  const growFrameRef = useRef(0)
   const prevFollowWhenRef = useRef(followWhen)
+  /** Last visible row while interrupted — survives async VirtualList remasure. */
+  const inspectAnchorRef = useRef<VirtualListScrollAnchor | null>(null)
 
   followWhenRef.current = followWhen
+
+  const setIntent = useCallback((next: ChatScrollIntent) => {
+    intentRef.current = next
+    setShowJumpButton(next === "interrupted")
+    if (next === "following") {
+      inspectAnchorRef.current = null
+    }
+  }, [])
+
+  const rememberInspectAnchor = useCallback(() => {
+    const anchor = listRef?.current?.captureScrollAnchor() ?? null
+    if (anchor) inspectAnchorRef.current = anchor
+  }, [listRef])
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "instant", options?: ScrollToBottomOptions) => {
     const host = scrollHostRef.current
@@ -58,65 +86,68 @@ export function useStickToBottomScroll(options: UseStickToBottomScrollOptions = 
     programmaticScrollRef.current = true
     scrollHostToBottom(host, behavior)
     if (options?.stick !== false) {
-      shouldStickRef.current = true
-      userEngagedRef.current = false
+      intentRef.current = "following"
+      inspectAnchorRef.current = null
+      setShowJumpButton(false)
     } else {
-      shouldStickRef.current = false
+      intentRef.current = "interrupted"
+      setShowJumpButton(true)
     }
-    setShowJumpButton(false)
     requestAnimationFrame(() => {
       programmaticScrollRef.current = false
     })
   }, [])
 
   const pauseAutoScroll = useCallback(() => {
-    userEngagedRef.current = true
-    shouldStickRef.current = false
-    setShowJumpButton(true)
-  }, [])
+    rememberInspectAnchor()
+    setIntent("interrupted")
+  }, [rememberInspectAnchor, setIntent])
 
-  /** Block resize-driven follow until expiry or jumpToLatest clears it. */
-  const suspendAutoFollow = useCallback((durationMs = 30_000) => {
-    suspendFollowUntilRef.current = Date.now() + durationMs
-    pauseAutoScroll()
-  }, [pauseAutoScroll])
+  const suspendAutoFollow = useCallback((_durationMs = 30_000) => {
+    rememberInspectAnchor()
+    setIntent("interrupted")
+  }, [rememberInspectAnchor, setIntent])
 
   const resumeAutoFollow = useCallback(() => {
-    suspendFollowUntilRef.current = 0
-    userEngagedRef.current = false
+    intentRef.current = "following"
+    inspectAnchorRef.current = null
+    setShowJumpButton(false)
   }, [])
 
   const onScroll = useCallback(() => {
     const host = scrollHostRef.current
     if (!host) return
     if (programmaticScrollRef.current) return
-    const near = isNearBottom(host, threshold)
-    if (!near) {
-      // Latch: inspecting older tools / prior turns must stay put even if
-      // later growth or a soft near-bottom nudge would re-arm follow.
-      userEngagedRef.current = true
-      shouldStickRef.current = false
-      setShowJumpButton(true)
-    } else if (!userEngagedRef.current) {
-      shouldStickRef.current = true
-      setShowJumpButton(false)
-    } else {
-      // Still engaged away — jump button remains the only re-arm path
-      // (plus new goal / explicit scrollToBottom stick).
-      shouldStickRef.current = false
-      setShowJumpButton(true)
+
+    const dist = chatScrollDistanceFromBottom(host)
+
+    // Leave following instantly on a small away-from-floor nudge (wheel/touch).
+    if (dist > CHAT_SCROLL_INTERRUPT_AWAY_PX) {
+      if (intentRef.current !== "interrupted") {
+        rememberInspectAnchor()
+        setIntent("interrupted")
+      } else {
+        rememberInspectAnchor()
+      }
+    } else if (
+      intentRef.current === "interrupted"
+      && dist <= threshold
+    ) {
+      // Deliberate return into the paper band — only path besides Jump.
+      setIntent("following")
+    } else if (intentRef.current === "interrupted") {
+      rememberInspectAnchor()
     }
+
     onScrollPosition?.(host.scrollTop, host)
-  }, [threshold, onScrollPosition])
+  }, [threshold, onScrollPosition, setIntent, rememberInspectAnchor])
 
   const stickIfFollowing = useCallback(() => {
     const host = scrollHostRef.current
     if (!host) return
-    if (Date.now() < suspendFollowUntilRef.current) return
-    if (!shouldStickRef.current || userEngagedRef.current) return
+    if (intentRef.current !== "following") return
     if (!followWhenRef.current) return
     const maxTop = Math.max(0, host.scrollHeight - host.clientHeight)
-    // Skip no-op writes — repeated scrollTop assigns during growth read as shake.
     if (Math.abs(host.scrollTop - maxTop) < 1) return
     programmaticScrollRef.current = true
     host.scrollTop = maxTop
@@ -126,17 +157,20 @@ export function useStickToBottomScroll(options: UseStickToBottomScrollOptions = 
     })
   }, [onScrollPosition])
 
-  /**
-   * After a temporary pause (e.g. parallel fan-out), re-stick only if the user
-   * never left the bottom. Do not clear an inspect latch.
-   */
+  const scheduleGrowStick = useCallback(() => {
+    if (growFrameRef.current) cancelAnimationFrame(growFrameRef.current)
+    growFrameRef.current = requestAnimationFrame(() => {
+      growFrameRef.current = 0
+      stickIfFollowing()
+    })
+  }, [stickIfFollowing])
+
   const engageFollowIfNearBottom = useCallback(() => {
     const host = scrollHostRef.current
     if (!host || !followWhenRef.current) return
-    if (userEngagedRef.current) return
-    if (Date.now() < suspendFollowUntilRef.current) return
+    if (intentRef.current === "interrupted") return
     if (!isNearBottom(host, threshold)) return
-    shouldStickRef.current = true
+    intentRef.current = "following"
     setShowJumpButton(false)
     stickIfFollowing()
   }, [stickIfFollowing, threshold])
@@ -151,15 +185,12 @@ export function useStickToBottomScroll(options: UseStickToBottomScrollOptions = 
       if (initialScroll === "bottom") {
         programmaticScrollRef.current = true
         scrollHostToBottom(host)
-        shouldStickRef.current = true
+        intentRef.current = "following"
         requestAnimationFrame(() => {
           programmaticScrollRef.current = false
         })
       } else {
-        // Do not infer stick from isNearBottom on mount — with little or no
-        // content every surface looks "at bottom", then panics as runs hydrate.
-        shouldStickRef.current = false
-        userEngagedRef.current = false
+        intentRef.current = "interrupted"
       }
       return
     }
@@ -168,8 +199,8 @@ export function useStickToBottomScroll(options: UseStickToBottomScrollOptions = 
     previousResetKeyRef.current = resetKey
 
     if (resetChanged) {
-      shouldStickRef.current = true
-      userEngagedRef.current = false
+      intentRef.current = "following"
+      inspectAnchorRef.current = null
       lastContentHeightRef.current = 0
       programmaticScrollRef.current = true
       scrollHostToBottom(host)
@@ -185,61 +216,62 @@ export function useStickToBottomScroll(options: UseStickToBottomScrollOptions = 
     const inner = contentRef.current
     if (!host || !inner) return
 
-    let resizeRaf = 0
-    let trailingStick = 0
     const observer = new ResizeObserver(() => {
       if (!hasInitializedRef.current) return
-      cancelAnimationFrame(resizeRaf)
-      resizeRaf = requestAnimationFrame(() => {
-        const height = inner.scrollHeight
-        // Track shrink so a later grow (e.g. after markdown reflow) still follows.
-        if (height < lastContentHeightRef.current) {
-          lastContentHeightRef.current = height
-          // Keep pinned to the new bottom after a collapse so the next grow
-          // doesn't start from a clamped scrollTop past max (visible jerk).
-          if (shouldStickRef.current && followWhenRef.current && !userEngagedRef.current) {
-            const maxTop = Math.max(0, host.scrollHeight - host.clientHeight)
-            if (host.scrollTop > maxTop) host.scrollTop = maxTop
-          }
-          return
-        }
-        if (height === lastContentHeightRef.current) return
-        lastContentHeightRef.current = height
+      const height = inner.scrollHeight
+      const prevHeight = lastContentHeightRef.current
 
-        const now = performance.now()
-        if (now - lastStickAtRef.current < 48) {
-          // Trailing stick so the last growth frame in a burst still lands.
-          window.clearTimeout(trailingStick)
-          trailingStick = window.setTimeout(() => {
-            lastStickAtRef.current = performance.now()
-            stickIfFollowing()
-          }, 48)
+      if (height < prevHeight) {
+        const delta = prevHeight - height
+        lastContentHeightRef.current = height
+        if (delta <= 0) return
+
+        if (intentRef.current === "following" && followWhenRef.current) {
+          stickIfFollowing()
           return
         }
-        lastStickAtRef.current = now
-        stickIfFollowing()
-      })
+
+        // Interrupted: prefer VirtualList index/offset lock; Δh is fallback.
+        programmaticScrollRef.current = true
+        const anchor = inspectAnchorRef.current
+        if (anchor && listRef?.current) {
+          listRef.current.restoreScrollAnchor(anchor)
+        } else {
+          host.scrollTop = scrollTopAfterHeightShrink(host.scrollTop, delta)
+          const maxTop = Math.max(0, host.scrollHeight - host.clientHeight)
+          if (host.scrollTop > maxTop) host.scrollTop = maxTop
+        }
+        requestAnimationFrame(() => {
+          // Remasure can settle one frame later — restore again if we still
+          // have an inspect lock.
+          if (intentRef.current === "interrupted" && inspectAnchorRef.current && listRef?.current) {
+            listRef.current.restoreScrollAnchor(inspectAnchorRef.current)
+          }
+          programmaticScrollRef.current = false
+        })
+        return
+      }
+
+      if (height === prevHeight) return
+      lastContentHeightRef.current = height
+      scheduleGrowStick()
     })
 
     observer.observe(inner)
     return () => {
-      cancelAnimationFrame(resizeRaf)
-      window.clearTimeout(trailingStick)
+      if (growFrameRef.current) cancelAnimationFrame(growFrameRef.current)
       observer.disconnect()
     }
-  }, [stickIfFollowing])
+  }, [scheduleGrowStick, stickIfFollowing, listRef])
 
-  // When live generation starts, re-engage follow if the user is already at the
-  // bottom and has not explicitly scrolled away or expanded a row.
   useEffect(() => {
     const wasLive = prevFollowWhenRef.current
     prevFollowWhenRef.current = followWhen
     if (!followWhen || wasLive) return
     const host = scrollHostRef.current
-    if (!host || userEngagedRef.current) return
-    if (Date.now() < suspendFollowUntilRef.current) return
+    if (!host || intentRef.current === "interrupted") return
     if (isNearBottom(host, threshold)) {
-      shouldStickRef.current = true
+      intentRef.current = "following"
       setShowJumpButton(false)
       stickIfFollowing()
     }

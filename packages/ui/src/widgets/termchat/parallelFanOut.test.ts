@@ -61,4 +61,12 @@ describe("parallelFanOut", () => {
     expect(term).not.toContain("firstRunningSubagentStepId")
     expect(mod).not.toContain("scrollStepToHostTop")
   })
+
+  it("keeps finished siblings open only during true parallel fan-out", () => {
+    const term = readFileSync(join(here, "../TermChat.tsx"), "utf8")
+    // Sequential planner must not treat "any subagent running" as fan-out.
+    expect(term).not.toContain("anySubagentRunning")
+    expect(term).toContain("isParallelSubagentFanOut(responseParts)")
+    expect(term).toContain("keepParallelSiblingsOpen")
+  })
 })

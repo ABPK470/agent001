@@ -5,9 +5,11 @@ import { describe, expect, it } from "vitest"
 import {
   CHAT_INPUT_PILL_CLASS,
   CHAT_INPUT_WIDGET_CLASS,
+  CHAT_SCROLL_INTERRUPT_AWAY_PX,
   CHAT_TRANSCRIPT_BOTTOM_PAPER_CLASS,
   CHAT_TRANSCRIPT_BOTTOM_PAPER_RATIO,
   CHAT_TRANSCRIPT_NEAR_BOTTOM_MIN_PX,
+  chatScrollDistanceFromBottom,
   chatTranscriptNearBottomThresholdPx,
   HOME_CHAT_COLUMN_CLASS,
   HOME_CHAT_GUTTER_X_CLASS,
@@ -58,6 +60,11 @@ describe("chatLayout — home + TermChat alignment", () => {
     expect(CHAT_TRANSCRIPT_BOTTOM_PAPER_RATIO).toBe(0.38)
     expect(chatTranscriptNearBottomThresholdPx(100)).toBe(CHAT_TRANSCRIPT_NEAR_BOTTOM_MIN_PX)
     expect(chatTranscriptNearBottomThresholdPx(1000)).toBe(380)
+    expect(CHAT_SCROLL_INTERRUPT_AWAY_PX).toBe(40)
+    expect(CHAT_SCROLL_INTERRUPT_AWAY_PX).toBeLessThan(CHAT_TRANSCRIPT_NEAR_BOTTOM_MIN_PX)
+    expect(
+      chatScrollDistanceFromBottom({ scrollHeight: 1000, scrollTop: 700, clientHeight: 200 }),
+    ).toBe(100)
 
     const css = readFileSync(join(here, "../boot/index.css"), "utf8")
     expect(css).toMatch(

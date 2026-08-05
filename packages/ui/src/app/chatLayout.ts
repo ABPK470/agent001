@@ -69,12 +69,27 @@ export const CHAT_TRANSCRIPT_BOTTOM_PAPER_RATIO = 0.38
 /** Minimum near-bottom slack when the scroll host is short. */
 export const CHAT_TRANSCRIPT_NEAR_BOTTOM_MIN_PX = 120
 
+/**
+ * Hysteresis: leave "following" as soon as the user is this far from the floor.
+ * Re-engage only inside the paper band (see near-bottom threshold) or Jump.
+ */
+export const CHAT_SCROLL_INTERRUPT_AWAY_PX = 40
+
 /** Pixels from the scroll end that still count as following (within the paper). */
 export function chatTranscriptNearBottomThresholdPx(hostClientHeight: number): number {
   return Math.max(
     CHAT_TRANSCRIPT_NEAR_BOTTOM_MIN_PX,
     Math.round(hostClientHeight * CHAT_TRANSCRIPT_BOTTOM_PAPER_RATIO),
   )
+}
+
+/** Distance from the content floor (0 = hard bottom). */
+export function chatScrollDistanceFromBottom(host: {
+  scrollHeight: number
+  scrollTop: number
+  clientHeight: number
+}): number {
+  return host.scrollHeight - host.scrollTop - host.clientHeight
 }
 
 export function homeChatColumnWidthPx(viewportWidth: number): number {

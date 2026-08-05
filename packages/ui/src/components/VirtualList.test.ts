@@ -26,6 +26,14 @@ describe("VirtualList resize scroll adjust", () => {
   })
 })
 
+describe("VirtualList inspect anchor", () => {
+  it("exposes capture/restore scroll anchor by row index", () => {
+    expect(src).toContain("captureScrollAnchor")
+    expect(src).toContain("restoreScrollAnchor")
+    expect(src).toContain("captureVirtualScrollAnchor")
+  })
+})
+
 describe("VirtualList append / measure contract", () => {
   it("never calls virtualizer.measure() on items.length (wipes size cache → overlap)", () => {
     // TanStack measure() clears itemSizeCache. On chat append that collapsed

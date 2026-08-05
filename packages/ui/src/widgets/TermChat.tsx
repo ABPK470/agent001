@@ -93,7 +93,11 @@ import {
 import { isParallelSubagentFanOut } from "./termchat/parallelFanOut"
 import { ChatFoldBody } from "./termchat/ChatFoldBody"
 import { operationStatusPill } from "../lib/status-callout"
-import { shouldAutoOpenWorkChip } from "./termchat/workChipFold"
+import {
+  shouldAutoOpenWorkChip,
+  stepChipAutoOpen,
+  workChipOpen,
+} from "./termchat/workChipFold"
 import { collapseResumeRunChains, resumeChainIds } from "./termchat/collapseResumeChains"
 import { planRevealRunInTranscript } from "./termchat/revealRunInTranscript"
 
@@ -645,22 +649,11 @@ function IterationBlock({
   hasNarrativeAfter?: boolean
 }) {
   const { preserveToggle } = useChatScroll()
-  const shouldStayOpen = shouldAutoOpenWorkChip(isLastIteration, hasNarrativeAfter)
-  const [open, setOpen] = useState(shouldStayOpen)
+  const autoOpen = shouldAutoOpenWorkChip(isLastIteration, hasNarrativeAfter)
   const [userToggled, setUserToggled] = useState(false)
+  const [userOpen, setUserOpen] = useState(autoOpen)
+  const open = workChipOpen(userToggled, userOpen, autoOpen)
   const buttonRef = useRef<HTMLButtonElement>(null)
-
-  useEffect(() => {
-    if (userToggled) return
-    if (open === shouldStayOpen) return
-    // Live auto-fold: suspend host follow + anchor so height snap does not
-    // flash the whole transcript (same path as a user toggle).
-    if (isLiveRun) {
-      preserveToggle(buttonRef.current, () => setOpen(shouldStayOpen))
-      return
-    }
-    setOpen(shouldStayOpen)
-  }, [shouldStayOpen, userToggled, isLiveRun, open, preserveToggle])
 
   // Cursor / Copilot dialect: activity headers stay muted chrome even when a
   // nested tool failed — severity lives on the error payload (sheet callout).
@@ -676,7 +669,7 @@ function IterationBlock({
         type="button"
         onClick={() => preserveToggle(buttonRef.current, () => {
           setUserToggled(true)
-          setOpen((v) => !v)
+          setUserOpen(!open)
         })}
         className={`inline-flex max-w-full items-center gap-2 py-0.5 text-left text-[15px] leading-6 transition-colors hover:text-text-secondary ${headerToneClass}`}
       >
@@ -789,23 +782,12 @@ function StepBlock({
   keepOpen?: boolean
 }) {
   const { preserveToggle } = useChatScroll()
-  const [open, setOpen] = useState(part.hasRunning || keepOpen)
+  const autoOpen = stepChipAutoOpen(part.hasRunning, keepOpen, part.status)
   const [userToggled, setUserToggled] = useState(false)
+  const [userOpen, setUserOpen] = useState(autoOpen)
+  const open = workChipOpen(userToggled, userOpen, autoOpen)
   const buttonRef = useRef<HTMLButtonElement>(null)
   const working = Boolean(part.subagent && (part.hasRunning || part.status === "running"))
-
-  useEffect(() => {
-    if (userToggled) return
-    let next: boolean | null = null
-    if (part.hasRunning || keepOpen) next = true
-    else if (!keepOpen && part.status !== "running") next = false
-    if (next === null || open === next) return
-    if (isLiveRun) {
-      preserveToggle(buttonRef.current, () => setOpen(next))
-      return
-    }
-    setOpen(next)
-  }, [part.hasRunning, part.status, keepOpen, userToggled, isLiveRun, open, preserveToggle])
 
   const hasTools = part.tools.length > 0
   const errorBody = part.body?.trim() || ""
@@ -828,7 +810,7 @@ function StepBlock({
           if (!canToggle) return
           preserveToggle(buttonRef.current, () => {
             setUserToggled(true)
-            setOpen((v) => !v)
+            setUserOpen(!open)
           })
         }}
         className={[
@@ -1497,9 +1479,9 @@ function RunMessageImpl({
     const items: React.ReactNode[] = []
 
     let lastToolHasRunning = false
-    const anySubagentRunning = responseParts.some(
-      (part) => part.kind === "step-block" && part.subagent && part.hasRunning,
-    )
+    // Parallel only — sequential planner must collapse finished steps so the
+    // next step does not re-expand earlier tools (and must not suspend stick).
+    const parallelFanOutLive = isParallelSubagentFanOut(responseParts)
 
     responseParts.forEach((part) => {
       if (part.kind === "plan") {
@@ -1509,11 +1491,9 @@ function RunMessageImpl({
 
       if (part.kind === "step-block") {
         const meta = iterationMeta.get(part.id)
-        // While any subagent in this run is still live, keep every subagent
-        // step open — otherwise finished siblings auto-collapse and a
-        // parallel fan-out reads as one serial step at a time.
+        // Keep finished siblings open only while 2+ subagents run together.
         const keepParallelSiblingsOpen =
-          Boolean(part.subagent) && anySubagentRunning
+          Boolean(part.subagent) && parallelFanOutLive
         items.push(
           <StepBlock
             key={part.id}
@@ -2076,6 +2056,7 @@ export function TermChat({
     resetKey: scrollToRunId,
     initialScroll: "none",
     threshold: nearBottomThreshold,
+    listRef: virtualListRef,
     // During parallel fan-out, stop host follow so growing sibling tools do
     // not bury earlier step headers — but never park/scroll the host for the
     // user; they stay where they were watching.

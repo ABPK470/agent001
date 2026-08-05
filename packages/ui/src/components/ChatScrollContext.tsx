@@ -41,10 +41,12 @@ export function ChatScrollProvider({
     scrollHostRef,
     hydrateRunTrace,
     historyHydrationEnabled,
-    // Expanding/collapsing while the agent is live must not yank the viewport.
+    // Unstick-on-expand: interrupt follow, then expand in place (anchor).
+    // New stream tokens keep rendering below without stealing the viewport.
     preserveToggle: (button, toggle) => {
-      suspendAutoFollow?.(30_000)
-      preserveScrollAnchor(button, toggle, pauseAutoScroll)
+      suspendAutoFollow?.()
+      pauseAutoScroll()
+      preserveScrollAnchor(button, toggle)
     },
   }
   return <ChatScrollContext.Provider value={value}>{children}</ChatScrollContext.Provider>

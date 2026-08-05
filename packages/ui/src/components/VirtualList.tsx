@@ -20,6 +20,13 @@ import {
   type Ref,
   type RefObject,
 } from "react"
+import {
+  captureVirtualScrollAnchor,
+  scrollTopForVirtualAnchor,
+  type VirtualListScrollAnchor,
+} from "../lib/virtual-list-anchor"
+
+export type { VirtualListScrollAnchor }
 
 export interface VirtualListHandle {
   /** Scroll so `index` enters the window (uses measured offsets when known). */
@@ -30,6 +37,13 @@ export interface VirtualListHandle {
       behavior?: "auto" | "smooth"
     },
   ) => void
+  /**
+   * Inspect anchor — row index + offset inside that row (not raw scrollTop).
+   * Survives VirtualList remasure when a tool above collapses.
+   */
+  captureScrollAnchor: () => VirtualListScrollAnchor | null
+  /** Re-apply a captured anchor after layout/remasure. */
+  restoreScrollAnchor: (anchor: VirtualListScrollAnchor) => void
 }
 
 export interface VirtualListProps<T> {
@@ -96,8 +110,30 @@ function VirtualListInner<T>(
           behavior: options?.behavior ?? "auto",
         })
       },
+      captureScrollAnchor() {
+        const host = parentRef.current
+        if (!host || items.length === 0) return null
+        return captureVirtualScrollAnchor(
+          host.scrollTop,
+          virtualizer.getVirtualItems().map((row) => ({
+            index: row.index,
+            start: row.start,
+            size: row.size,
+          })),
+        )
+      },
+      restoreScrollAnchor(anchor) {
+        if (anchor.index < 0 || anchor.index >= items.length) return
+        const host = parentRef.current
+        if (!host) return
+        const offsetInfo = virtualizer.getOffsetForIndex(anchor.index, "start")
+        const itemStart = offsetInfo?.[0]
+        const nextTop = scrollTopForVirtualAnchor(anchor, itemStart)
+        if (nextTop == null) return
+        virtualizer.scrollToOffset(nextTop, { align: "start", behavior: "auto" })
+      },
     }),
-    [virtualizer, items.length],
+    [virtualizer, items.length, parentRef],
   )
 
   const virtualItems = virtualizer.getVirtualItems()

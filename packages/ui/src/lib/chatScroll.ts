@@ -14,6 +14,16 @@ export function isNearBottom(el: HTMLElement, threshold = 120): boolean {
   return el.scrollHeight - el.scrollTop - el.clientHeight <= threshold
 }
 
+/**
+ * Invisible floor anchor — neutralize a content height drop above the
+ * viewport so streaming text below does not move on screen.
+ * Δh = h_before − h_after (positive when content shrank).
+ */
+export function scrollTopAfterHeightShrink(scrollTop: number, deltaH: number): number {
+  if (deltaH <= 0) return scrollTop
+  return Math.max(0, scrollTop - deltaH)
+}
+
 export function scrollHostToBottom(host: HTMLElement, behavior: ScrollBehavior = "instant"): void {
   if (behavior === "smooth") {
     host.scrollTo({ top: host.scrollHeight, behavior: "smooth" })
