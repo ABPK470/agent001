@@ -114,6 +114,7 @@ import {
   deriveTranscriptZones,
   isRunActiveStatus,
 } from "./termchat/transcriptZones"
+import { transcriptHostMayScroll } from "./termchat/transcriptScrollHost"
 
 // Local cap mirrors the Fastify route limit. Larger files get a friendly
 // inline error instead of round-tripping for a 413.
@@ -2680,6 +2681,7 @@ export function TermChat({
   // shook the transcript (same class of bug as sticking on every answer token).
 
   const jumpToLatest = useCallback(() => {
+    if (!transcriptHostMayScroll(scrollHostRef.current)) return
     resumeAutoFollow()
     if (latestDisplayRunId) {
       setActiveRun(latestDisplayRunId)
@@ -2708,11 +2710,17 @@ export function TermChat({
   ])
 
   const jumpToRun = useCallback((runId: string) => {
+    // Keep-alive chat shell shares activeRunId with workspace. Never
+    // scrollIntoView from the inactive host — that yanks the viewport onto
+    // the off-screen ThreadHomePage (looks like a mode switch).
+    if (!transcriptHostMayScroll(scrollHostRef.current)) return
+
     suspendAutoFollow()
     void hydrateRunTrace(runId).catch((err: unknown) => { console.error("[mia]", err) })
 
     const settleDom = (): void => {
       const host = scrollHostRef.current
+      if (!transcriptHostMayScroll(host)) return
       const el =
         host?.querySelector<HTMLElement>(`[data-run-id="${runId}"] [data-run-goal-anchor]`)
         ?? host?.querySelector<HTMLElement>(`[data-run-id="${runId}"]`)
@@ -2735,6 +2743,7 @@ export function TermChat({
     virtualListRef.current?.scrollToIndex(index, { align: "start", behavior: "auto" })
 
     const settle = (): void => {
+      if (!transcriptHostMayScroll(scrollHostRef.current)) return
       virtualListRef.current?.scrollToIndex(index, { align: "start", behavior: "auto" })
       settleDom()
     }
@@ -2744,7 +2753,7 @@ export function TermChat({
   }, [suspendAutoFollow, scrollHostRef, hydrateRunTrace, settledRuns, liveRunId])
 
   // Threads widget sets activeRunId without moving DOM order. Scroll to that
-  // turn instead of reordering the transcript.
+  // turn instead of reordering the transcript — only in the visible shell.
   const prevActiveForJumpRef = useRef<string | null>(null)
   useEffect(() => {
     if (!scopedActiveRunId) return
@@ -2752,8 +2761,9 @@ export function TermChat({
     prevActiveForJumpRef.current = scopedActiveRunId
     if (!prev || prev === scopedActiveRunId) return
     if (scopedActiveRunId === latestDisplayRunId) return
+    if (!transcriptHostMayScroll(scrollHostRef.current)) return
     jumpToRun(scopedActiveRunId)
-  }, [scopedActiveRunId, latestDisplayRunId, jumpToRun])
+  }, [scopedActiveRunId, latestDisplayRunId, jumpToRun, scrollHostRef])
 
   // Top-to-bottom transcript order (oldest → newest).
   const threadNavRuns = useMemo(
