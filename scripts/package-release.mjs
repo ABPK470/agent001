@@ -19,7 +19,7 @@
  */
 
 import { execSync } from "node:child_process"
-import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs"
+import { cpSync, existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs"
 import { dirname, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -37,8 +37,25 @@ const REQUIRED_PATHS = [
 
 const OPTIONAL_PATHS = ["sync-definitions"]
 
+/** Source maps are dev-only — strip any that slipped through (Windows copy tools choke on them). */
+function removeSourceMaps(dir) {
+  if (!existsSync(dir)) return
+  for (const name of readdirSync(dir)) {
+    const path = resolve(dir, name)
+    if (statSync(path).isDirectory()) {
+      removeSourceMaps(path)
+      continue
+    }
+    if (name.endsWith(".map")) rmSync(path)
+  }
+}
+
 console.log("Running production build…")
-execSync("node scripts/build.mjs", { cwd: root, stdio: "inherit" })
+execSync("node scripts/build.mjs", {
+  cwd: root,
+  stdio: "inherit",
+  env: { ...process.env, MIA_RELEASE_BUILD: "1" },
+})
 
 rmSync(release, { recursive: true, force: true })
 mkdirSync(release, { recursive: true })
@@ -46,6 +63,8 @@ mkdirSync(release, { recursive: true })
 for (const dir of ["dist", "deploy"]) {
   cpSync(resolve(root, dir), resolve(release, dir), { recursive: true })
 }
+
+removeSourceMaps(resolve(release, "dist"))
 
 for (const dir of OPTIONAL_PATHS) {
   const src = resolve(root, dir)

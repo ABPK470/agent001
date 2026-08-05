@@ -23,6 +23,8 @@ mkdirSync(dist, { recursive: true })
 console.log("Building UI…")
 execSync("npm run build -w packages/ui", { cwd: root, stdio: "inherit" })
 
+const releaseBuild = process.env.MIA_RELEASE_BUILD === "1"
+
 console.log("Bundling server…")
 await esbuild.build({
   absWorkingDir: root,
@@ -32,7 +34,8 @@ await esbuild.build({
   format: "esm",
   target: "node20",
   outfile: resolve(dist, "server.js"),
-  sourcemap: true,
+  // Release deploys skip source maps — large, embed dev paths, and break some Windows copy tools.
+  sourcemap: releaseBuild ? false : true,
   logLevel: "info",
   external: [
     "better-sqlite3",
