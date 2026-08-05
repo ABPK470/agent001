@@ -13919,9 +13919,16 @@ button.trace-tree-status-pill:hover {
   flex-direction: column;
 }
 
-/* Browser scroll-anchoring fights programmatic floor-pin during live growth. */
-.termchat-transcript-shell [data-chat-scroll-host],
-.termchat-transcript-shell [data-chat-scroll-host] * {
+/*
+ * FREE_LOOK: browser anchors to in-flow history when settled content above
+ * the viewport changes. STICKING still hard-pins via JS (scrollTop = max).
+ * Live turn is excluded so its growth does not yank an inspect viewport.
+ */
+.termchat-transcript-shell [data-chat-scroll-host] {
+  overflow-anchor: auto;
+}
+
+.termchat-transcript-shell .chat-transcript-live-turn {
   overflow-anchor: none;
 }
 

@@ -78,6 +78,10 @@ describe("chatTranscriptLayout", () => {
     expect(term).not.toContain("overscroll-contain")
     // Live tool growth must not TanStack-nudge scrollTop (Trace dialect).
     expect(term).toContain("adjustScrollOnResize={false}")
+    // Two-zone: settled history virtualized; live turn in-flow after the list.
+    expect(term).toContain("items={settledRuns}")
+    expect(term).toContain("chat-transcript-live-turn")
+    expect(term).toContain("deriveTranscriptZones")
     // Docked composer must not remount-steal focus during a live run.
     expect(term).toMatch(/autoFocus\s*=\s*false/)
     expect(term).toContain("autoFocus={autoFocus}")

@@ -2,7 +2,10 @@ import { readFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { describe, expect, it } from "vitest"
-import { planRevealRunInTranscript } from "./revealRunInTranscript"
+import {
+  planRevealRunInTranscript,
+  planTranscriptReveal,
+} from "./revealRunInTranscript"
 
 describe("planRevealRunInTranscript", () => {
   it("returns null when the run is not in the transcript yet", () => {
@@ -24,16 +27,32 @@ describe("planRevealRunInTranscript", () => {
   })
 })
 
+describe("planTranscriptReveal", () => {
+  it("routes the live Zone B turn without a VirtualList index", () => {
+    expect(planTranscriptReveal([{ id: "r1" }], "r2", "r2")).toEqual({ kind: "live" })
+  })
+
+  it("routes settled history by VirtualList index", () => {
+    expect(planTranscriptReveal([{ id: "r1" }], "r2", "r1")).toEqual({
+      kind: "settled",
+      index: 0,
+      align: "end",
+    })
+  })
+})
+
 describe("TermChat second-goal reveal contract", () => {
   const termChat = readFileSync(
     join(dirname(fileURLToPath(import.meta.url)), "..", "TermChat.tsx"),
     "utf8",
   )
 
-  it("reveals new runs via planRevealRunInTranscript + VirtualList scrollToIndex", () => {
-    expect(termChat).toContain("planRevealRunInTranscript")
+  it("reveals via planTranscriptReveal — live pin or settled scrollToIndex", () => {
+    expect(termChat).toContain("planTranscriptReveal")
     expect(termChat).toContain("setScrollToRunId(runId)")
-    expect(termChat).toMatch(/scrollToIndex\(plan\.index/)
+    expect(termChat).toContain("settledRuns")
+    expect(termChat).toContain("chat-transcript-live-turn")
+    expect(termChat).toMatch(/scrollToIndex\(reveal\.index/)
     // Must not only stick via scrollHeight after start (misses unmounted latest turn).
     expect(termChat).not.toMatch(
       /setScrollToRunId\(runId\)\s*\n\s*requestAnimationFrame\(\(\) => scrollToBottom/,

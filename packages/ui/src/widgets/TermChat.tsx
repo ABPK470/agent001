@@ -38,7 +38,6 @@ import {
 } from "./agentchat/failureAnswer"
 import { STICKY_GOAL_HOME_TOP, StickyUserGoal } from "../components/StickyUserGoal"
 import { TypewriterAnswer } from "../components/TypewriterAnswer"
-import { RunStatus } from "../enums"
 import { isCancelRaceFailureError } from "../lib/events/trace-terminal"
 import { canResumeRun, isTerminalFailureStatus } from "../lib/run-actions"
 import { useMe } from "../hooks/useMe"
@@ -99,7 +98,11 @@ import {
   workChipOpen,
 } from "./termchat/workChipFold"
 import { collapseResumeRunChains, resumeChainIds } from "./termchat/collapseResumeChains"
-import { planRevealRunInTranscript } from "./termchat/revealRunInTranscript"
+import { planTranscriptReveal } from "./termchat/revealRunInTranscript"
+import {
+  deriveTranscriptZones,
+  isRunActiveStatus,
+} from "./termchat/transcriptZones"
 
 // Local cap mirrors the Fastify route limit. Larger files get a friendly
 // inline error instead of round-tripping for a 413.
@@ -433,13 +436,6 @@ function ChatTurn({
     </div>
   )
 }
-
-// ── Trace → Timeline model ────────────────────────────────────────
-
-function isRunActiveStatus(status: string | null | undefined): boolean {
-  return status === RunStatus.Pending || status === RunStatus.Running || status === RunStatus.Planning
-}
-
 
 // ── Narrative target extraction ────────────────────────────────────
 // Each tool call carries the JSON args the model invoked it with. We
@@ -2052,17 +2048,13 @@ export function TermChat({
     resumeAutoFollow,
     engageFollowIfNearBottom,
     showJumpButton,
+    stickIfFollowing,
   } = useStickToBottomScroll({
     resetKey: scrollToRunId,
     initialScroll: "none",
     threshold: nearBottomThreshold,
     listRef: virtualListRef,
-    // During parallel fan-out, stop host follow so growing sibling tools do
-    // not bury earlier step headers — but never park/scroll the host for the
-    // user; they stay where they were watching.
-    // Keep following through parallel fan-out — Cursor pins the floor the
-    // whole run. (We used to drop follow here so siblings wouldn't bury
-    // step headers; that read as up/down thrash. Headers stay in-flow.)
+    // Pin the floor for the whole live run (including parallel fan-out).
     followWhen: isRunning || Boolean(scopedActiveRun?.streamingAnswer),
     onScrollPosition: (scrollTop, host) => {
       if (!isHomeMode) return
@@ -2294,6 +2286,14 @@ export function TermChat({
   // must not yank that run to the bottom — that reorders the chat.
   const displayRuns = threadRunsChronological
 
+  // Two-zone: settled history stays in VirtualList; the live turn renders
+  // in-flow after the list so remasure never shoves historical row offsets.
+  const { settledRuns, liveRun } = useMemo(
+    () => deriveTranscriptZones(displayRuns, scopedActiveRun, scopedActiveRunId),
+    [displayRuns, scopedActiveRun, scopedActiveRunId],
+  )
+  const liveRunId = liveRun?.id ?? null
+
   const showEmptyState = FORCE_EMPTY_STATE_PREVIEW || displayRuns.length === 0
   const latestDisplayRunId = displayRuns.length > 0 ? displayRuns[displayRuns.length - 1]!.id : null
 
@@ -2438,23 +2438,55 @@ export function TermChat({
     })
   }, [displayRuns.length, isRunning, streamingAnswer, scrollToBottom])
 
-  // New goal / slash resume: VirtualList must scrollToIndex the turn. scrollHeight
-  // stick alone leaves the latest turn unmounted after a tall prior run.
+  // New goal / slash resume: live turns are Zone B (scrollHeight pin);
+  // settled turns still need VirtualList scrollToIndex after tall history.
   useEffect(() => {
     if (!scrollToRunId) return
     if (revealedScrollToRunIdRef.current === scrollToRunId) return
-    const plan = planRevealRunInTranscript(displayRuns, scrollToRunId)
-    if (!plan) return
+    const reveal = planTranscriptReveal(settledRuns, liveRunId, scrollToRunId)
+    if (!reveal) return
     revealedScrollToRunIdRef.current = scrollToRunId
     resumeAutoFollow()
-    virtualListRef.current?.scrollToIndex(plan.index, { align: plan.align, behavior: "auto" })
+    if (reveal.kind === "live") {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          scrollToBottom("instant", { stick: true })
+        })
+      })
+      return
+    }
+    virtualListRef.current?.scrollToIndex(reveal.index, { align: reveal.align, behavior: "auto" })
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
-        virtualListRef.current?.scrollToIndex(plan.index, { align: plan.align, behavior: "auto" })
+        virtualListRef.current?.scrollToIndex(reveal.index, { align: reveal.align, behavior: "auto" })
         scrollToBottom("instant", { stick: true })
       })
     })
-  }, [scrollToRunId, displayRuns, resumeAutoFollow, scrollToBottom])
+  }, [scrollToRunId, settledRuns, liveRunId, resumeAutoFollow, scrollToBottom])
+
+  // STICKING: hard-pin after React commits live-zone layout (before paint).
+  // ResizeObserver still covers continuous DOM growth inside the live turn.
+  useLayoutEffect(() => {
+    if (!liveRun) return
+    stickIfFollowing()
+  }, [
+    liveRun,
+    scopedActiveRun?.streamingAnswer,
+    scopedActiveRun?.trace?.length,
+    stickIfFollowing,
+  ])
+
+  // Live → settled handoff remounts the turn into VirtualList; pin once if
+  // the user was still on the floor so estimate→measure does not leave a gap.
+  const prevLiveRunIdRef = useRef<string | null>(null)
+  useLayoutEffect(() => {
+    const prev = prevLiveRunIdRef.current
+    prevLiveRunIdRef.current = liveRunId
+    if (!prev || liveRunId) return
+    const host = scrollHostRef.current
+    if (!host || !isNearBottom(host, nearBottomThreshold)) return
+    scrollToBottom("instant", { stick: false })
+  }, [liveRunId, nearBottomThreshold, scrollToBottom, scrollHostRef])
 
   // Re-settle once when the active run's trace first arrives from setActiveRun.
   useEffect(() => {
@@ -2481,9 +2513,12 @@ export function TermChat({
     resumeAutoFollow()
     if (latestDisplayRunId) {
       setActiveRun(latestDisplayRunId)
-      const plan = planRevealRunInTranscript(displayRuns, latestDisplayRunId)
-      if (plan) {
-        virtualListRef.current?.scrollToIndex(plan.index, { align: plan.align, behavior: "auto" })
+      const reveal = planTranscriptReveal(settledRuns, liveRunId, latestDisplayRunId)
+      if (reveal?.kind === "settled") {
+        virtualListRef.current?.scrollToIndex(reveal.index, {
+          align: reveal.align,
+          behavior: "auto",
+        })
       }
     }
     requestAnimationFrame(() => {
@@ -2491,12 +2526,38 @@ export function TermChat({
         scrollToBottom("instant", { stick: isRunning || Boolean(streamingAnswer) })
       })
     })
-  }, [latestDisplayRunId, setActiveRun, scrollToBottom, isRunning, streamingAnswer, resumeAutoFollow, displayRuns])
+  }, [
+    latestDisplayRunId,
+    setActiveRun,
+    scrollToBottom,
+    isRunning,
+    streamingAnswer,
+    resumeAutoFollow,
+    settledRuns,
+    liveRunId,
+  ])
 
   const jumpToRun = useCallback((runId: string) => {
     suspendAutoFollow()
     void hydrateRunTrace(runId).catch((err: unknown) => { console.error("[mia]", err) })
-    const index = displayRuns.findIndex((r) => r.id === runId)
+
+    const settleDom = (): void => {
+      const host = scrollHostRef.current
+      const el =
+        host?.querySelector<HTMLElement>(`[data-run-id="${runId}"] [data-run-goal-anchor]`)
+        ?? host?.querySelector<HTMLElement>(`[data-run-id="${runId}"]`)
+      el?.scrollIntoView({ behavior: "auto", block: "start" })
+    }
+
+    // Live Zone B — already mounted in-flow; do not scrollToIndex.
+    if (liveRunId === runId) {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(settleDom)
+      })
+      return
+    }
+
+    const index = settledRuns.findIndex((r) => r.id === runId)
     if (index < 0) return
 
     // VirtualList only mounts a window — scrollToIndex brings the turn into
@@ -2505,16 +2566,12 @@ export function TermChat({
 
     const settle = (): void => {
       virtualListRef.current?.scrollToIndex(index, { align: "start", behavior: "auto" })
-      const host = scrollHostRef.current
-      const el =
-        host?.querySelector<HTMLElement>(`[data-run-id="${runId}"] [data-run-goal-anchor]`)
-        ?? host?.querySelector<HTMLElement>(`[data-run-id="${runId}"]`)
-      el?.scrollIntoView({ behavior: "auto", block: "start" })
+      settleDom()
     }
     requestAnimationFrame(() => {
       requestAnimationFrame(settle)
     })
-  }, [suspendAutoFollow, scrollHostRef, hydrateRunTrace, displayRuns])
+  }, [suspendAutoFollow, scrollHostRef, hydrateRunTrace, settledRuns, liveRunId])
 
   // Threads widget sets activeRunId without moving DOM order. Scroll to that
   // turn instead of reordering the transcript.
@@ -2538,8 +2595,8 @@ export function TermChat({
     [threadRunsChronological],
   )
 
-  function renderDisplayRun({ item: run }: { item: (typeof displayRuns)[number] }) {
-    return (
+  function renderChatTurn(run: (typeof displayRuns)[number], opts?: { liveZone?: boolean }) {
+    const turn = (
       <ChatTurn
         run={run}
         isActive={run.id === scopedActiveRunId}
@@ -2556,6 +2613,12 @@ export function TermChat({
         onParallelFanOutChange={handleParallelFanOutChange}
       />
     )
+    if (!opts?.liveZone) return turn
+    return <div className="chat-transcript-live-turn">{turn}</div>
+  }
+
+  function renderDisplayRun({ item: run }: { item: (typeof settledRuns)[number] }) {
+    return renderChatTurn(run)
   }
 
   return (
@@ -2649,7 +2712,6 @@ export function TermChat({
             {...{ [CHAT_SCROLL_HOST_ATTR]: "" }}
             onScroll={onTranscriptScrollWithRail}
             className={homeTranscriptScrollClassName()}
-            style={{ overflowAnchor: "none" }}
           >
             <div
               ref={transcriptInnerRef}
@@ -2658,7 +2720,6 @@ export function TermChat({
                   ? "min-h-full flex flex-col justify-center pb-[10vh]"
                   : "relative"
               }
-              style={{ overflowAnchor: "none" }}
             >
               {showEmptyState && (
                 <div className={`chathome-empty-state relative flex flex-col items-center justify-center px-6 text-center ${isHomeMode ? "min-h-[68vh]" : "min-h-[58vh]"}`}>
@@ -2711,7 +2772,7 @@ export function TermChat({
                 <>
                   <VirtualList
                     ref={virtualListRef}
-                    items={displayRuns}
+                    items={settledRuns}
                     scrollRef={scrollHostRef}
                     estimateSize={() => TERMCHAT_TURN_ESTIMATE_PX}
                     getItemKey={(_i, run) => run.id}
@@ -2719,6 +2780,7 @@ export function TermChat({
                     adjustScrollOnResize={false}
                     renderItem={renderDisplayRun}
                   />
+                  {liveRun ? renderChatTurn(liveRun, { liveZone: true }) : null}
                   <div className={CHAT_TRANSCRIPT_BOTTOM_PAPER_CLASS} aria-hidden />
                 </>
               )}
@@ -2781,16 +2843,14 @@ export function TermChat({
         {...{ [CHAT_SCROLL_HOST_ATTR]: "" }}
         onScroll={onTranscriptScrollWithRail}
         className={`relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden ${WIDGET_CHAT_COLUMN_CLASS}`}
-        style={{ overflowAnchor: "none" }}
       >
         <div
           ref={transcriptInnerRef}
           className={`relative ${WIDGET_CHAT_COLUMN_CLASS}`}
-          style={{ overflowAnchor: "none" }}
         >
           <VirtualList
             ref={virtualListRef}
-            items={displayRuns}
+            items={settledRuns}
             scrollRef={scrollHostRef}
             estimateSize={() => TERMCHAT_TURN_ESTIMATE_PX}
             getItemKey={(_i, run) => run.id}
@@ -2798,6 +2858,7 @@ export function TermChat({
             adjustScrollOnResize={false}
             renderItem={renderDisplayRun}
           />
+          {liveRun ? renderChatTurn(liveRun, { liveZone: true }) : null}
           <div className={CHAT_TRANSCRIPT_BOTTOM_PAPER_CLASS} aria-hidden />
         </div>
       </div>
