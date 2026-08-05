@@ -13960,6 +13960,69 @@ button.trace-tree-status-pill:hover {
   transform: rotate(90deg);
 }
 
+/*
+ * Plan-step attempts share the same first-level rail as tools under a
+ * plain Subagent (schema layer). Tools under an attempt nest one level in.
+ */
+.termchat-transcript-shell .chat-step__attempts {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0;
+}
+
+.termchat-transcript-shell .chat-step__attempt-row {
+  position: relative;
+  min-width: 0;
+}
+
+.termchat-transcript-shell .chat-trace-fold .chat-step__attempt-row::before {
+  content: "";
+  position: absolute;
+  left: -1.5rem;
+  top: 0.7rem;
+  width: 1.125rem;
+  height: 1px;
+  background: color-mix(in srgb, var(--text-faint) 55%, var(--border-subtle));
+}
+
+.termchat-transcript-shell .chat-trace-fold .chat-step__attempt-row::after {
+  content: "";
+  position: absolute;
+  left: -1.5rem;
+  top: 0;
+  width: 1px;
+  background: color-mix(in srgb, var(--text-faint) 55%, var(--border-subtle));
+}
+
+.termchat-transcript-shell .chat-trace-fold .chat-step__attempt-row:not(.is-last)::after {
+  bottom: 0;
+}
+
+.termchat-transcript-shell .chat-trace-fold .chat-step__attempt-row.is-last::after {
+  height: 0.7rem;
+}
+
+:root[data-theme="light"] .termchat-transcript-shell .chat-trace-fold .chat-step__attempt-row::before,
+:root[data-theme="light"] .termchat-transcript-shell .chat-trace-fold .chat-step__attempt-row::after {
+  background: #cbd5e1;
+}
+
+.termchat-transcript-shell .chat-step__attempt-label {
+  font-weight: 450;
+}
+
+/* Second-level tools under an attempt — 12px nest + own rail. */
+.termchat-transcript-shell .chat-step__attempt-tools {
+  margin-top: 0.125rem;
+  padding-left: 0.75rem; /* 12px */
+  margin-left: 0.125rem;
+}
+
+.termchat-transcript-shell .chat-step__check {
+  padding-left: 0.75rem;
+}
+
 /* Terminal/tool errors — soft inset row (not a second floating status badge). */
 .termchat-transcript-shell .chat-tool-error {
   margin: 0.125rem 0;

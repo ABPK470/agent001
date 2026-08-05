@@ -6,6 +6,7 @@
  * subagent process. Trace keeps the raw pipeline tree.
  */
 
+import { formatMs } from "../util"
 import type {
   ResponsePart,
   ResponseProgressPart,
@@ -17,6 +18,17 @@ import type {
 
 function humanizeStepName(stepName: string): string {
   return stepName.replace(/_/g, " ")
+}
+
+/** Sum attempt wall times for the step header (not just the last attempt). */
+export function sumAttemptDurationMs(
+  attempts: readonly { durationMs?: number }[],
+): number {
+  let total = 0
+  for (const a of attempts) {
+    if (typeof a.durationMs === "number" && a.durationMs > 0) total += a.durationMs
+  }
+  return total
 }
 
 function attemptNumber(block: ResponseStepBlockPart, index: number): number {
@@ -60,6 +72,7 @@ function toAttempt(block: ResponseStepBlockPart, index: number): ResponseStepAtt
     repair: Boolean(block.repair),
     status: attemptStatus(block),
     detail: block.detail,
+    durationMs: block.durationMs,
     body: block.body,
     tools: block.tools,
     hasRunning: block.hasRunning,
@@ -72,6 +85,8 @@ function foldBlocks(blocks: ResponseStepBlockPart[]): ResponseStepBlockPart {
   const outcome = deriveStepBlockOutcome(attempts)
   const hasRunning = attempts.some((a) => a.hasRunning || a.status === "running")
   const last = attempts[attempts.length - 1]!
+  const totalMs = sumAttemptDurationMs(attempts)
+  const totalDetail = totalMs > 0 ? formatMs(totalMs) : undefined
   return {
     ...primary,
     title: domainStepTitle(primary),
@@ -82,20 +97,18 @@ function foldBlocks(blocks: ResponseStepBlockPart[]): ResponseStepBlockPart {
     tools: last.tools,
     hasRunning,
     status: hasRunning ? "running" : "done",
-    // Error text lives on attempts; header uses outcome pill.
+    durationMs: totalMs > 0 ? totalMs : primary.durationMs,
+    // Error text lives on attempts; header uses outcome + total duration.
     body: outcome === "failed" ? last.body ?? primary.body : undefined,
     detail:
-      outcome === "repaired"
-        ? last.detail && !/^attempt\s+\d+/i.test(last.detail.trim())
-          ? last.detail
-          : undefined
-        : outcome === "failed"
-          ? last.detail ?? primary.detail
-          : last.detail && !/^attempt\s+\d+/i.test(last.detail.trim())
+      outcome === "failed"
+        ? last.detail ?? primary.detail
+        : totalDetail
+          ?? (last.detail && !/^attempt\s+\d+/i.test(last.detail.trim())
             ? last.detail
             : primary.detail && !/^attempt\s+\d+/i.test(primary.detail.trim())
               ? primary.detail
-              : undefined,
+              : undefined),
   }
 }
 

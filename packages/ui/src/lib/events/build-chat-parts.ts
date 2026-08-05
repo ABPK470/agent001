@@ -116,6 +116,8 @@ export interface ResponseStepAttemptPart {
   repair: boolean
   status: "running" | "failed" | "passed"
   detail?: string
+  /** Wall time for this attempt — summed into the step header. */
+  durationMs?: number
   body?: string
   tools: ResponseToolPart[]
   hasRunning: boolean
@@ -162,6 +164,8 @@ export interface ResponseStepBlockPart {
   attempts?: ResponseStepAttemptPart[]
   /** Nested verify beat for this step (not a peer on the answer axis). */
   check?: ResponseStepCheckPart
+  /** Step/attempt wall time from planner-step-end (ms). */
+  durationMs?: number
   tools: ResponseToolPart[]
   hasRunning: boolean
 }
@@ -949,6 +953,8 @@ export function buildResponseParts(
             status: "done" as const,
             detail,
             body: errorBody ?? part.body,
+            durationMs:
+              typeof entry.durationMs === "number" ? entry.durationMs : part.durationMs,
             hasRunning: part.tools.some((t) => t.row.status === "running"),
           }
         })

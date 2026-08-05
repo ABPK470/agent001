@@ -300,7 +300,7 @@ describe("buildResponseParts — TermChat projection", () => {
           stepName: "frontend_layer",
           status: "fail",
           error: "build failed — missing brand-tokens",
-          durationMs: 1200,
+          durationMs: 1100,
         },
         {
           kind: "planner-verification",
@@ -375,6 +375,8 @@ describe("buildResponseParts — TermChat projection", () => {
     expect(step.title).toBe("Subagent · frontend layer")
     expect(step.outcome).toBe("repaired")
     expect(step.repair).toBeUndefined()
+    expect(step.durationMs).toBe(2700)
+    expect(step.detail).toBe("2.7s")
     expect(step.attempts).toHaveLength(2)
     expect(step.attempts?.[0]?.status).toBe("failed")
     expect(step.attempts?.[1]?.repair).toBe(true)

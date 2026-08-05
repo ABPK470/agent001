@@ -3,6 +3,7 @@ import type { ResponsePart, ResponseStepBlockPart } from "./build-chat-parts"
 import {
   deriveStepBlockOutcome,
   reconcilePlannerStepGroups,
+  sumAttemptDurationMs,
 } from "./reconcile-step-groups"
 
 function step(
@@ -66,6 +67,12 @@ describe("deriveStepBlockOutcome", () => {
 })
 
 describe("reconcilePlannerStepGroups", () => {
+  it("sums attempt durations for the step header (not last-attempt only)", () => {
+    expect(
+      sumAttemptDurationMs([{ durationMs: 1100 }, { durationMs: 1600 }]),
+    ).toBe(2700)
+  })
+
   it("folds repair peer under the domain step and attaches check", () => {
     const parts: ResponsePart[] = [
       step({
@@ -75,6 +82,7 @@ describe("reconcilePlannerStepGroups", () => {
         subagent: true,
         body: "build failed — missing brand-tokens",
         detail: "build failed — missing brand-tokens",
+        durationMs: 1100,
       }),
       {
         kind: "progress",
@@ -90,7 +98,8 @@ describe("reconcilePlannerStepGroups", () => {
         stepName: "frontend_layer",
         subagent: true,
         repair: true,
-        detail: "attempt 1",
+        detail: "1.6s",
+        durationMs: 1600,
       }),
     ]
 
@@ -104,10 +113,13 @@ describe("reconcilePlannerStepGroups", () => {
     expect(block.title).toBe("Subagent · frontend layer")
     expect(block.outcome).toBe("repaired")
     expect(block.repair).toBeUndefined()
+    expect(block.durationMs).toBe(2700)
+    expect(block.detail).toBe("2.7s")
     expect(block.attempts).toHaveLength(2)
     expect(block.attempts?.[0]?.status).toBe("failed")
     expect(block.attempts?.[1]?.repair).toBe(true)
     expect(block.attempts?.[1]?.status).toBe("passed")
+    expect(block.attempts?.[1]?.detail).toBe("1.6s")
     expect(block.check?.label).toBe("Check · needs work")
     // Mid-loop check belongs after attempt 1, before the repair attempt.
     expect(block.check?.afterAttemptIndex).toBe(0)

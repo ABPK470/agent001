@@ -97,6 +97,10 @@ import {
   stepChipAutoOpen,
   workChipOpen,
 } from "./termchat/workChipFold"
+import {
+  shouldShowStepCheckInChat,
+  stepBlockHeaderChrome,
+} from "./termchat/stepOutcomeChrome"
 import { collapseResumeRunChains, resumeChainIds } from "./termchat/collapseResumeChains"
 import { planTranscriptReveal } from "./termchat/revealRunInTranscript"
 import {
@@ -786,27 +790,33 @@ function StepBlock({
   const working = Boolean(part.subagent && (part.hasRunning || part.status === "running"))
 
   const attempts = part.attempts
-  const nested = Boolean(attempts && attempts.length > 0 && (attempts.length > 1 || part.check))
+  const outcome = part.outcome
+  const showCheck = Boolean(part.check) && shouldShowStepCheckInChat(outcome)
+  const nested = Boolean(attempts && attempts.length > 0 && (attempts.length > 1 || showCheck))
   const hasTools = nested
     ? Boolean(attempts?.some((a) => a.tools.length > 0))
     : part.tools.length > 0
   const errorBody = part.body?.trim() || ""
   const hasErrorBody = errorBody.length > 0
   const isSettled = part.status !== "running" && !part.hasRunning
-  const outcome = part.outcome
   const isRetrying =
     outcome === "running"
     && Boolean(attempts?.some((a) => a.repair && (a.hasRunning || a.status === "running")))
-  const isRepaired = outcome === "repaired"
   const isFailed =
     outcome === "failed" || (outcome == null && isSettled && hasErrorBody)
+  const headerChrome = stepBlockHeaderChrome({
+    outcome,
+    detail: part.detail,
+    isRetrying,
+    isFailed,
+  })
   const hasBodyContent =
     nested
     || hasTools
     || part.hasRunning
     || (hasErrorBody && !hasTools)
-    || Boolean(part.check)
-  const canToggle = nested || hasTools || hasErrorBody || Boolean(part.check?.body)
+    || showCheck
+  const canToggle = nested || hasTools || hasErrorBody || Boolean(showCheck && part.check?.body)
   const animateFold = userToggled || !isLiveRun
   // Process chrome stays muted whether running or settled — final answer is bright.
   const labelClass = "text-text-muted"
@@ -849,26 +859,16 @@ function StepBlock({
         </span>
         <span className="chat-step__title min-w-0 flex-1 truncate">
           <span>{part.title}</span>
-          {isRetrying ? (
-            <>
-              {" "}
-              <span className={operationStatusPill("warning")}>Retrying</span>
-            </>
-          ) : isRepaired ? (
-            <>
-              {" "}
-              <span className={operationStatusPill("warning")}>Repaired</span>
-            </>
-          ) : isFailed ? (
+          {headerChrome?.kind === "failed" ? (
             <>
               {" "}
               <span className={operationStatusPill("failed")}>Failed</span>
-              {part.detail ? (
-                <span className="font-normal text-text-muted"> — {part.detail}</span>
+              {headerChrome.detail ? (
+                <span className="font-normal text-text-muted"> — {headerChrome.detail}</span>
               ) : null}
             </>
-          ) : part.detail ? (
-            <span className="font-normal text-text-faint"> · {part.detail}</span>
+          ) : headerChrome?.kind === "muted" ? (
+            <span className="font-normal text-text-faint"> {headerChrome.text}</span>
           ) : null}
         </span>
       </button>
@@ -879,10 +879,15 @@ function StepBlock({
           className="mt-0.5 ml-[0.35rem] pl-6 chat-trace-fold min-w-0"
         >
           {nested && attempts ? (
-            <div className="flex flex-col gap-1 py-0.5">
-              {attempts.map((attempt, attemptIndex) => (
-                <div key={attempt.id} className="min-w-0">
-                  <div className="text-[14px] leading-5 text-text-faint">
+            <div className="chat-step__attempts">
+              {attempts.map((attempt, attemptIndex) => {
+                const isLastAttempt = attemptIndex === attempts.length - 1
+                return (
+                <div
+                  key={attempt.id}
+                  className={`chat-step__attempt-row min-w-0${isLastAttempt ? " is-last" : ""}`}
+                >
+                  <div className="chat-step__attempt-label text-[14px] leading-5 text-text-faint">
                     <span>
                       {attempt.repair
                         ? `Attempt ${attempt.attempt} (repair)`
@@ -910,29 +915,30 @@ function StepBlock({
                     <pre className="chat-tool-error my-0.5">{attempt.body}</pre>
                   ) : null}
                   {attempt.tools.length > 0 ? (
-                    <IterationToolList
-                      tools={attempt.tools}
-                      syncByInvocation={syncByInvocation}
-                      isLiveRun={isLiveRun}
-                    />
+                    <div className="chat-step__attempt-tools chat-trace-fold">
+                      <IterationToolList
+                        tools={attempt.tools}
+                        syncByInvocation={syncByInvocation}
+                        isLiveRun={isLiveRun}
+                      />
+                    </div>
                   ) : null}
-                  {/* Chronology: verify sits between fail and repair, not after success. */}
-                  {part.check
+                  {/* Only while still open / unrepaired — repaired drops check entirely. */}
+                  {showCheck
+                    && part.check
                     && (part.check.afterAttemptIndex ?? attempts.length - 1) === attemptIndex ? (
-                    <NestedStepCheck
-                      check={part.check}
-                      resolved={part.outcome === "repaired" || part.outcome === "passed"}
-                    />
+                    <NestedStepCheck check={part.check} />
                   ) : null}
                 </div>
-              ))}
+                )
+              })}
             </div>
           ) : (
             <>
               {hasErrorBody && !hasTools ? (
                 <pre className="chat-tool-error my-0.5">{errorBody}</pre>
               ) : null}
-              {part.check ? <NestedStepCheck check={part.check} /> : null}
+              {showCheck && part.check ? <NestedStepCheck check={part.check} /> : null}
               {hasTools ? (
                 <IterationToolList
                   tools={part.tools}
@@ -962,37 +968,19 @@ function StepBlock({
   )
 }
 
+/** Mid-loop verify under an unrepaired step — quiet; never after a successful repair. */
 function NestedStepCheck({
   check,
-  resolved = false,
 }: {
   check: NonNullable<ResponseStepBlockPart["check"]>
-  /** Step was repaired/passed — check is historical, not a terminal failure. */
-  resolved?: boolean
 }) {
   const { preserveToggle } = useChatScroll()
   const [open, setOpen] = useState(false)
   const buttonRef = useRef<HTMLButtonElement>(null)
   const body = check.body?.trim() || ""
   const hasBody = body.length > 0
-  const label =
-    resolved && check.label === "Checked work"
-      ? "Checked work"
-      : resolved && check.label.startsWith("Check · needs")
-        ? "Check · needed work"
-        : check.label
-  // After repair, keep the issue as quiet history — never a terminal red callout.
-  if (resolved) {
-    const note = body.split("\n")[0]?.replace(/^[^:]+:\s*/, "") || check.detail || ""
-    return (
-      <div className="min-w-0 py-0.5 text-[14px] leading-5 text-text-faint">
-        <span>{label}</span>
-        {note ? <span> · {note}</span> : null}
-      </div>
-    )
-  }
   return (
-    <div className="min-w-0 py-0.5" data-chat-expand-root="">
+    <div className="chat-step__check min-w-0 py-0.5" data-chat-expand-root="">
       <button
         ref={buttonRef}
         type="button"
@@ -1016,12 +1004,14 @@ function NestedStepCheck({
           />
         ) : null}
         <span>
-          {label}
+          {check.label}
           {check.detail ? ` · ${check.detail}` : ""}
         </span>
       </button>
       {hasBody && open ? (
-        <pre className="chat-tool-error my-0.5 ml-5">{body}</pre>
+        <pre className="ml-5 mt-0.5 whitespace-pre-wrap break-words text-[13px] leading-5 text-text-faint">
+          {body}
+        </pre>
       ) : null}
     </div>
   )
