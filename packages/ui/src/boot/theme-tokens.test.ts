@@ -135,9 +135,25 @@ describe("light theme color system", () => {
     )
     expect(css).toMatch(/\.log-stream \.event-stream-row:hover/)
     expect(css).toMatch(/\.event-stream-payload__box--err/)
+    expect(css).toMatch(
+      /\.event-stream-payload__box--err\s*\{[^}]*border-left-color:\s*var\(--error\)/s,
+    )
+    // Event Stream scan lanes — TYPE ink in both themes.
+    for (const lane of ["run", "step", "sync", "bridge", "agent", "api", "system"]) {
+      expect(darkThemeBlock()).toMatch(new RegExp(`--stream-${lane}:`))
+      expect(lightThemeBlock()).toMatch(new RegExp(`--stream-${lane}:`))
+      expect(css).toMatch(
+        new RegExp(`\\.event-stream-type\\.event-stream-type--${lane}\\s*\\{`),
+      )
+    }
+    expect(darkThemeBlock()).toMatch(/--stream-step:\s*var\(--accent\)/)
+    expect(darkThemeBlock()).toMatch(/--stream-sync:\s*var\(--info\)/)
+    expect(lightThemeBlock()).toMatch(/--stream-step:\s*var\(--accent\)/)
+    expect(lightThemeBlock()).toMatch(/--stream-sync:\s*var\(--info\)/)
     const liveLogs = readFileSync(join(here, "../widgets/LiveLogs.tsx"), "utf8")
     expect(liveLogs).not.toContain("mia-row-stroke")
     expect(liveLogs).toContain("event-stream-row")
+    expect(liveLogs).toContain("eventStreamTypeClass")
     expect(css).toMatch(/\.mia-code-block\s*\{[^}]*background:\s*transparent/s)
     expect(css).toMatch(/:root\[data-theme="light"\] \.mia-code-block[\s\S]*background:\s*var\(--panel-2\)/)
     const policy = readFileSync(join(here, "../widgets/platform/PolicyEditor.tsx"), "utf8")

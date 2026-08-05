@@ -49,15 +49,23 @@ import {
   WidgetToolbarTrailing,
 } from "./widget-toolbar"
 import {
-  EVENT_TYPES,
+  EVENT_STREAM_LANES,
+  eventStreamLanesDbPatterns,
+  eventStreamTypeClass,
   type EventStreamEventType,
+} from "../lib/event-stream-lane"
+import {
   readEventStreamPrefs,
   writeEventStreamPrefs,
 } from "../lib/event-stream-prefs"
 
 type EventType = EventStreamEventType
 
-const TYPE_OPTIONS = EVENT_TYPES.map((value) => ({ value, label: value }))
+const TYPE_OPTIONS = EVENT_STREAM_LANES.map((value) => ({
+  value,
+  label: value,
+  className: eventStreamTypeClass(value),
+}))
 
 const QUICK_RANGES: { id: EventStreamRange; label: string }[] = [
   { id: "live", label: "Live" },
@@ -91,21 +99,6 @@ function logMatchesFilters(
     if (!matchesType && !matchesError) return false
   }
   return logMatchesSearch(log, searchText)
-}
-
-function eventTypeDbPatterns(filters: Set<EventType>): string[] | undefined {
-  if (filters.size === 0) return undefined
-  const patterns: string[] = []
-  for (const filter of filters) {
-    if (filter === "sync") patterns.push("sync.")
-    if (filter === "bridge") patterns.push("bridge.")
-    if (filter === "run") patterns.push("run.")
-    if (filter === "step") patterns.push("step.", "tool_call.")
-    if (filter === "agent") patterns.push("delegation.", "planner.", "agent.", "debug.")
-    if (filter === "api") patterns.push("api.")
-    if (filter === "system") patterns.push("events.", "session.", "sync_env.")
-  }
-  return patterns.length > 0 ? patterns : undefined
 }
 
 export function LiveLogs() {
@@ -185,7 +178,7 @@ export function LiveLogs() {
 
     searchTimer.current = setTimeout(() => {
       const q = searchText.trim()
-      const typePatterns = eventTypeDbPatterns(typeFilters)
+      const typePatterns = eventStreamLanesDbPatterns(typeFilters)
       if (q.length < 2 && !typePatterns && !errorsOnly) return
       setSearching(true)
       void api
@@ -628,7 +621,10 @@ function LogRow({
         </span>
         <button
           type="button"
-          className="shrink-0 text-sm font-medium text-left truncate hover:opacity-70 transition-opacity text-text-muted max-w-[4.5rem] sm:max-w-none"
+          className={[
+            "event-stream-row__type shrink-0 text-sm text-left truncate hover:opacity-70 transition-opacity max-w-[4.5rem] sm:max-w-none",
+            eventStreamTypeClass(log.type as EventType),
+          ].join(" ")}
           onClick={(e) => {
             e.stopPropagation()
             setTypeFilters((prev) => {

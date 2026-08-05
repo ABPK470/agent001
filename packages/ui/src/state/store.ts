@@ -31,6 +31,7 @@ import { isDefaultThreadTitle, threadTitleFromGoal } from "../lib/thread-title.j
 import { sortThreadsByPinThenUpdatedAt } from "../lib/thread-order.js"
 import { isCancelRaceFailureError, settleTraceOnCancel } from "../lib/events/trace-terminal.js"
 import { hasUsableTraceEntries, normalizeTraceWire } from "../lib/events/trace-wire.js"
+import { eventStreamLane } from "../lib/event-stream-lane"
 import { RunStatus } from "../enums"
 import type {
   AuditEntry,
@@ -562,25 +563,9 @@ function scheduleAnswerFlush(set: (fn: (s: AppState) => Partial<AppState>) => vo
 
 // ── Event → human-readable log entry with type + error flag ─────
 
-/**
- * Derive the event type group from the raw SSE event name.
- * Used as the primary filter dimension in the Event Stream widget.
- */
+/** Derive Event Stream scan lane from the raw SSE event name. */
 function eventType(type: string): string {
-  if (type.startsWith("sync.")) return "sync"
-  if (type.startsWith("bridge.")) return "bridge"
-  if (type.startsWith("run.")) return "run"
-  if (type.startsWith("step.")) return "step"
-  if (type.startsWith("tool_call.")) return "step"
-  if (type.startsWith("delegation.")) return "agent"
-  if (type.startsWith("planner.")) return "agent"
-  if (type === "debug.trace") return "agent"
-  if (type === "agent.thinking") return "agent"
-  if (type === "agent.bus.message") return "agent"
-  if (type === "agent.help.requested") return "agent"
-  if (type === "answer.chunk") return "agent"
-  if (type === "api.request") return "api"
-  return "system"
+  return eventStreamLane(type)
 }
 
 /** step.* / tool_call.* summaries already include tool + verb — don't wrap again. */

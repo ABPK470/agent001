@@ -3,6 +3,11 @@
  * sessionStorage, keyed by tile id — same dialect as composer drafts.
  */
 
+import {
+  EVENT_STREAM_LANES,
+  type EventStreamLane,
+} from "./event-stream-lane"
+
 export type EventStreamRange = "live" | "15m" | "1h" | "6h" | "24h"
 
 export type EventStreamWindow = {
@@ -11,8 +16,10 @@ export type EventStreamWindow = {
   to?: string
 }
 
-export const EVENT_TYPES = ["run", "step", "sync", "bridge", "agent", "api", "system"] as const
-export type EventStreamEventType = (typeof EVENT_TYPES)[number]
+/** Scan-lane labels — source of truth is event-stream-lane.ts. */
+export const EVENT_TYPES = EVENT_STREAM_LANES
+export type EventStreamEventType = EventStreamLane
+export { EVENT_STREAM_LANES }
 
 export type EventStreamFilterPrefs = {
   typeFilters: EventStreamEventType[]

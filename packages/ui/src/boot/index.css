@@ -23,6 +23,7 @@
      • Chrome     scrim | scrim-strong | scrim-focus | bubble-user
      • Datatype   datatype-int|string|date|bool|real|bin  (MymiDb)
      • Viz        viz-deep|mid|plum|rose|peach|coral     (unchanged)
+     • Stream     stream-run|step|sync|bridge|agent|api|system  (Event Stream TYPE)
 
    LEGACY ALIASES (`base`, `surface`, `elevated`) are preserved as
    theme-aware aliases over the new tokens so existing code keeps
@@ -278,6 +279,18 @@
   --viewing-as: var(--accent);
   --viewing-as-soft: var(--accent-soft);
 
+  /*
+   * Event Stream scan lanes — TYPE column ink (not modal callouts).
+   * Derived from existing semantic / viz tokens; light block mirrors.
+   */
+  --stream-run: var(--text-muted);
+  --stream-step: var(--accent);
+  --stream-sync: var(--info);
+  --stream-bridge: var(--warning);
+  --stream-agent: #825776; /* viz-plum — cognition, distinct from step accent */
+  --stream-api: #6CB4EE; /* viz-sky */
+  --stream-system: var(--text-faint);
+
   --scrim: rgba(0, 0, 0, 0.72);
   --scrim-strong: rgba(0, 0, 0, 0.90);
   --scrim-focus: rgba(0, 0, 0, 0.58);
@@ -429,6 +442,15 @@
 
   --viewing-as: var(--accent);
   --viewing-as-soft: var(--accent-soft);
+
+  /* Event Stream scan lanes — same vocabulary as dark (readable on paper). */
+  --stream-run: var(--text-muted);
+  --stream-step: var(--accent);
+  --stream-sync: var(--info);
+  --stream-bridge: var(--warning);
+  --stream-agent: #825776; /* viz-plum */
+  --stream-api: #2563eb; /* deeper sky on light paper */
+  --stream-system: var(--text-faint);
 
   --scrim: rgba(15, 23, 42, 0.48);
   --scrim-strong: rgba(15, 23, 42, 0.78);
@@ -2283,6 +2305,19 @@ label:focus-within > .mia-checkbox,
   font-weight: 600;
 }
 
+/*
+ * Event Stream TYPE ink — scan lanes only (not row washes / callouts).
+ * Shared on LogRow type button + selected FilterChoice chips.
+ * Two-class specificity beats Tailwind text-text on CONTROL_PRESSED.
+ */
+.event-stream-type.event-stream-type--run { color: var(--stream-run); }
+.event-stream-type.event-stream-type--step { color: var(--stream-step); }
+.event-stream-type.event-stream-type--sync { color: var(--stream-sync); }
+.event-stream-type.event-stream-type--bridge { color: var(--stream-bridge); }
+.event-stream-type.event-stream-type--agent { color: var(--stream-agent); }
+.event-stream-type.event-stream-type--api { color: var(--stream-api); }
+.event-stream-type.event-stream-type--system { color: var(--stream-system); }
+
 /* Timestamps — crisp slate (review-meta defaults to text-faint). */
 .log-stream .event-stream-row .review-meta {
   color: var(--text-muted);
@@ -2335,7 +2370,7 @@ label:focus-within > .mia-checkbox,
 
 .event-stream-payload__box--err {
   border-left-width: 3px;
-  border-left-color: #ef4444;
+  border-left-color: var(--error);
 }
 
 :root[data-theme="light"] .log-stream {

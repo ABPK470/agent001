@@ -200,7 +200,7 @@ export function FilterChoiceGrid<T extends string>({
   columns = 3,
   mode = "multi",
 }: {
-  options: readonly { value: T; label: string }[]
+  options: readonly { value: T; label: string; className?: string }[]
   values: readonly T[]
   onChange: (values: T[]) => void
   columns?: 2 | 3 | 4
@@ -232,7 +232,13 @@ export function FilterChoiceGrid<T extends string>({
             type="button"
             aria-pressed={on}
             onClick={() => choose(option.value)}
-            className={[FILTER_CHOICE_BTN, on ? FILTER_CHOICE_ON : FILTER_CHOICE_OFF].join(" ")}
+            className={[
+              FILTER_CHOICE_BTN,
+              on ? FILTER_CHOICE_ON : FILTER_CHOICE_OFF,
+              on && option.className ? option.className : "",
+            ]
+              .filter(Boolean)
+              .join(" ")}
           >
             {option.label}
           </button>
