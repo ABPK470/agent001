@@ -98,6 +98,11 @@ import {
   workChipOpen,
 } from "./termchat/workChipFold"
 import {
+  STEP_ATTEMPT_TREE,
+  attemptChildKneeRem,
+  projectStepAttemptTree,
+} from "./termchat/stepAttemptTree"
+import {
   shouldShowStepCheckInChat,
   stepBlockHeaderChrome,
 } from "./termchat/stepOutcomeChrome"
@@ -789,19 +794,26 @@ function StepBlock({
   const buttonRef = useRef<HTMLButtonElement>(null)
   const working = Boolean(part.subagent && (part.hasRunning || part.status === "running"))
 
-  const attempts = part.attempts
   const outcome = part.outcome
   const showCheck = Boolean(part.check) && shouldShowStepCheckInChat(outcome)
-  const nested = Boolean(attempts && attempts.length > 0 && (attempts.length > 1 || showCheck))
+  const attemptTree = projectStepAttemptTree(part)
+  // Nested when repair story (2+ attempts) or an open verify still belongs in-tree.
+  const nested =
+    attemptTree.mode === "nested-attempts"
+    && (attemptTree.attempts.length > 1 || showCheck)
   const hasTools = nested
-    ? Boolean(attempts?.some((a) => a.tools.length > 0))
+    ? attemptTree.mode === "nested-attempts"
+      && attemptTree.attempts.some((a) => a.children.some((c) => c.role === "tool"))
     : part.tools.length > 0
   const errorBody = part.body?.trim() || ""
   const hasErrorBody = errorBody.length > 0
   const isSettled = part.status !== "running" && !part.hasRunning
   const isRetrying =
     outcome === "running"
-    && Boolean(attempts?.some((a) => a.repair && (a.hasRunning || a.status === "running")))
+    && attemptTree.mode === "nested-attempts"
+    && attemptTree.attempts.some(
+      (a) => a.repair && (a.hasRunning || a.status === "running"),
+    )
   const isFailed =
     outcome === "failed" || (outcome == null && isSettled && hasErrorBody)
   const headerChrome = stepBlockHeaderChrome({
@@ -878,14 +890,19 @@ function StepBlock({
           animated={animateFold}
           className="mt-0.5 ml-[0.35rem] pl-6 chat-trace-fold min-w-0"
         >
-          {nested && attempts ? (
+          {nested && attemptTree.mode === "nested-attempts" ? (
             <div className="chat-step__attempts">
-              {attempts.map((attempt, attemptIndex) => {
-                const isLastAttempt = attemptIndex === attempts.length - 1
+              {attemptTree.attempts.map((attemptNode, attemptIndex) => {
+                const isLastAttempt = attemptIndex === attemptTree.attempts.length - 1
+                const attemptTools = attemptNode.children.flatMap((c) =>
+                  c.role === "tool" ? [c.tool] : [],
+                )
+                const showAttemptCheck = attemptNode.children.some((c) => c.role === "check")
                 return (
                 <div
-                  key={attempt.id}
+                  key={attemptNode.id}
                   className={`chat-step__attempt min-w-0${isLastAttempt ? " is-last" : ""}`}
+                  data-tree-rail={attemptNode.rail}
                 >
                   {/*
                     Label alone owns the primary knee (peer of schema tools).
@@ -894,46 +911,31 @@ function StepBlock({
                   */}
                   <div className="chat-step__attempt-row">
                     <div className="chat-step__attempt-label text-[14px] leading-5 text-text-faint">
-                      <span>
-                        {attempt.repair
-                          ? `Attempt ${attempt.attempt} (repair)`
-                          : `Attempt ${attempt.attempt}`}
-                      </span>
-                      {attempt.status === "failed" ? (
-                        <span className="text-text-muted">
-                          {" "}
-                          — failed
-                          {attempt.detail ? `: ${attempt.detail}` : ""}
-                        </span>
-                      ) : attempt.status === "passed" ? (
-                        <span>
-                          {" "}
-                          — passed
-                          {attempt.detail && !/^attempt\s+\d+/i.test(attempt.detail)
-                            ? ` · ${attempt.detail}`
-                            : ""}
-                        </span>
-                      ) : (
-                        <span> — running</span>
-                      )}
+                      {attemptNode.label}
                     </div>
                   </div>
-                  {attempt.body && attempt.tools.length === 0 ? (
-                    <pre className="chat-tool-error my-0.5">{attempt.body}</pre>
+                  {attemptNode.body && attemptTools.length === 0 ? (
+                    <pre className="chat-tool-error my-0.5">{attemptNode.body}</pre>
                   ) : null}
-                  {attempt.tools.length > 0 ? (
-                    <div className="chat-step__attempt-tools chat-trace-fold">
+                  {attemptTools.length > 0 ? (
+                    <div
+                      className="chat-step__attempt-tools chat-trace-fold"
+                      data-tree-rail="attempt"
+                      style={
+                        {
+                          paddingLeft: `${STEP_ATTEMPT_TREE.attemptNestRem}rem`,
+                          "--chat-attempt-knee": `${attemptChildKneeRem()}rem`,
+                        } as React.CSSProperties
+                      }
+                    >
                       <IterationToolList
-                        tools={attempt.tools}
+                        tools={attemptTools}
                         syncByInvocation={syncByInvocation}
                         isLiveRun={isLiveRun}
                       />
                     </div>
                   ) : null}
-                  {/* Only while still open / unrepaired — repaired drops check entirely. */}
-                  {showCheck
-                    && part.check
-                    && (part.check.afterAttemptIndex ?? attempts.length - 1) === attemptIndex ? (
+                  {showAttemptCheck && part.check ? (
                     <NestedStepCheck check={part.check} />
                   ) : null}
                 </div>

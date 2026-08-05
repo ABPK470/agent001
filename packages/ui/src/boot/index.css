@@ -14020,22 +14020,23 @@ button.trace-tree-status-pill:hover {
 }
 
 /*
- * Second-level tools: +12px nest. Knee offset must match nest width
- * (−0.75rem), not the outer −1.5rem — otherwise the child rail sits in the
- * primary gutter and Attempt reads as floating left of the tree.
+ * Second-level tools under an attempt.
+ * Nest width + knee come from stepAttemptTree (STEP_ATTEMPT_TREE /
+ * --chat-attempt-knee). Knee must equal nest — never the outer −1.5rem —
+ * or the child rail sits in the primary gutter and Attempt floats left.
  */
 .termchat-transcript-shell .chat-step__attempt-tools {
   margin-top: 0.125rem;
-  padding-left: 0.75rem; /* 12px */
+  /* padding-left set inline from STEP_ATTEMPT_TREE.attemptNestRem */
 }
 
 .termchat-transcript-shell .chat-step__attempt-tools.chat-trace-fold .chat-tool-row::before,
 .termchat-transcript-shell .chat-step__attempt-tools.chat-trace-fold .chat-tool-row::after {
-  left: -0.75rem;
+  left: calc(-1 * var(--chat-attempt-knee, 0.75rem));
 }
 
 .termchat-transcript-shell .chat-step__attempt-tools.chat-trace-fold .chat-tool-row::before {
-  width: 0.625rem;
+  width: calc(var(--chat-attempt-knee, 0.75rem) - 0.125rem);
 }
 
 .termchat-transcript-shell .chat-step__check {
