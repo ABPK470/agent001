@@ -13961,8 +13961,8 @@ button.trace-tree-status-pill:hover {
 }
 
 /*
- * Plan-step attempts share the same first-level rail as tools under a
- * plain Subagent (schema layer). Tools under an attempt nest one level in.
+ * Plan-step attempts: first-level peers of schema-layer tools.
+ * Group owns the continuous primary stem; label owns the knee; tools nest +12px.
  */
 .termchat-transcript-shell .chat-step__attempts {
   display: flex;
@@ -13971,11 +13971,35 @@ button.trace-tree-status-pill:hover {
   padding: 0;
 }
 
+.termchat-transcript-shell .chat-step__attempt {
+  position: relative;
+  min-width: 0;
+}
+
+/* Primary stem through the whole attempt (label + nested tools). */
+.termchat-transcript-shell .chat-trace-fold .chat-step__attempt::after {
+  content: "";
+  position: absolute;
+  left: -1.5rem;
+  top: 0;
+  width: 1px;
+  background: color-mix(in srgb, var(--text-faint) 55%, var(--border-subtle));
+}
+
+.termchat-transcript-shell .chat-trace-fold .chat-step__attempt:not(.is-last)::after {
+  bottom: 0;
+}
+
+.termchat-transcript-shell .chat-trace-fold .chat-step__attempt.is-last::after {
+  height: 0.7rem;
+}
+
 .termchat-transcript-shell .chat-step__attempt-row {
   position: relative;
   min-width: 0;
 }
 
+/* Knee from primary stem → Attempt label (same offset as .chat-tool-row). */
 .termchat-transcript-shell .chat-trace-fold .chat-step__attempt-row::before {
   content: "";
   position: absolute;
@@ -13986,25 +14010,8 @@ button.trace-tree-status-pill:hover {
   background: color-mix(in srgb, var(--text-faint) 55%, var(--border-subtle));
 }
 
-.termchat-transcript-shell .chat-trace-fold .chat-step__attempt-row::after {
-  content: "";
-  position: absolute;
-  left: -1.5rem;
-  top: 0;
-  width: 1px;
-  background: color-mix(in srgb, var(--text-faint) 55%, var(--border-subtle));
-}
-
-.termchat-transcript-shell .chat-trace-fold .chat-step__attempt-row:not(.is-last)::after {
-  bottom: 0;
-}
-
-.termchat-transcript-shell .chat-trace-fold .chat-step__attempt-row.is-last::after {
-  height: 0.7rem;
-}
-
-:root[data-theme="light"] .termchat-transcript-shell .chat-trace-fold .chat-step__attempt-row::before,
-:root[data-theme="light"] .termchat-transcript-shell .chat-trace-fold .chat-step__attempt-row::after {
+:root[data-theme="light"] .termchat-transcript-shell .chat-trace-fold .chat-step__attempt::after,
+:root[data-theme="light"] .termchat-transcript-shell .chat-trace-fold .chat-step__attempt-row::before {
   background: #cbd5e1;
 }
 
@@ -14012,11 +14019,23 @@ button.trace-tree-status-pill:hover {
   font-weight: 450;
 }
 
-/* Second-level tools under an attempt — 12px nest + own rail. */
+/*
+ * Second-level tools: +12px nest. Knee offset must match nest width
+ * (−0.75rem), not the outer −1.5rem — otherwise the child rail sits in the
+ * primary gutter and Attempt reads as floating left of the tree.
+ */
 .termchat-transcript-shell .chat-step__attempt-tools {
   margin-top: 0.125rem;
   padding-left: 0.75rem; /* 12px */
-  margin-left: 0.125rem;
+}
+
+.termchat-transcript-shell .chat-step__attempt-tools.chat-trace-fold .chat-tool-row::before,
+.termchat-transcript-shell .chat-step__attempt-tools.chat-trace-fold .chat-tool-row::after {
+  left: -0.75rem;
+}
+
+.termchat-transcript-shell .chat-step__attempt-tools.chat-trace-fold .chat-tool-row::before {
+  width: 0.625rem;
 }
 
 .termchat-transcript-shell .chat-step__check {

@@ -885,31 +885,38 @@ function StepBlock({
                 return (
                 <div
                   key={attempt.id}
-                  className={`chat-step__attempt-row min-w-0${isLastAttempt ? " is-last" : ""}`}
+                  className={`chat-step__attempt min-w-0${isLastAttempt ? " is-last" : ""}`}
                 >
-                  <div className="chat-step__attempt-label text-[14px] leading-5 text-text-faint">
-                    <span>
-                      {attempt.repair
-                        ? `Attempt ${attempt.attempt} (repair)`
-                        : `Attempt ${attempt.attempt}`}
-                    </span>
-                    {attempt.status === "failed" ? (
-                      <span className="text-text-muted">
-                        {" "}
-                        — failed
-                        {attempt.detail ? `: ${attempt.detail}` : ""}
-                      </span>
-                    ) : attempt.status === "passed" ? (
+                  {/*
+                    Label alone owns the primary knee (peer of schema tools).
+                    Tools nest one level in — wrapping both in one row pulled the
+                    child rail into the gutter and left Attempt floating left of it.
+                  */}
+                  <div className="chat-step__attempt-row">
+                    <div className="chat-step__attempt-label text-[14px] leading-5 text-text-faint">
                       <span>
-                        {" "}
-                        — passed
-                        {attempt.detail && !/^attempt\s+\d+/i.test(attempt.detail)
-                          ? ` · ${attempt.detail}`
-                          : ""}
+                        {attempt.repair
+                          ? `Attempt ${attempt.attempt} (repair)`
+                          : `Attempt ${attempt.attempt}`}
                       </span>
-                    ) : (
-                      <span> — running</span>
-                    )}
+                      {attempt.status === "failed" ? (
+                        <span className="text-text-muted">
+                          {" "}
+                          — failed
+                          {attempt.detail ? `: ${attempt.detail}` : ""}
+                        </span>
+                      ) : attempt.status === "passed" ? (
+                        <span>
+                          {" "}
+                          — passed
+                          {attempt.detail && !/^attempt\s+\d+/i.test(attempt.detail)
+                            ? ` · ${attempt.detail}`
+                            : ""}
+                        </span>
+                      ) : (
+                        <span> — running</span>
+                      )}
+                    </div>
                   </div>
                   {attempt.body && attempt.tools.length === 0 ? (
                     <pre className="chat-tool-error my-0.5">{attempt.body}</pre>
