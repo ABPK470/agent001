@@ -8,11 +8,13 @@ import { ChevronRight, Loader2 } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react"
 import type { OperationActivity, OperationPipeline } from "../client/index"
 import { api, OperationKind, OperationStatus } from "../client/index"
-import { VirtualList } from "../components/VirtualList"
-import { ReviewSplitPane } from "../components/review"
+import { VirtualList, type VirtualListHandle } from "../components/VirtualList"
+import { ReviewSplitPane, ReviewTreeHeader } from "../components/review"
+import type { ReviewTreeKeyboardNode } from "../components/review/review-tree-keyboard"
 import { EmptyState } from "../components/EmptyState"
 import { useWidgetInstance } from "../app/workspace/widget-instance"
 import { useContainerSize } from "../hooks/useContainerSize"
+import { useReviewTreeKeyboard } from "../hooks/useReviewTreeKeyboard"
 import { useOperationLogData, type OperationLogKindView } from "../hooks/useOperationLogData"
 import {
   readOperationLogPrefs,
@@ -26,6 +28,11 @@ import {
 } from "../lib/operation-log-tree-prefs"
 import type { EventStreamRange, EventStreamWindow } from "../lib/event-stream-prefs"
 import { flattenOperationRows } from "../lib/operation-flat-rows"
+import {
+  buildOperationLogKeyboardNodes,
+  selectedScopeIdFromOpLogSelection,
+} from "../lib/operation-log-keyboard-nodes"
+import { useLayoutStore } from "../state/layout-store"
 import { OperationLogModalsProvider } from "./pipelines/operation-log-modals"
 import { WIDGET_ICONS } from "./widget-icons"
 import { OP_LOG } from "./pipelines/operation-log-row"
@@ -52,6 +59,7 @@ const OP_LOG_SPLIT_MIN = 0.28
 const OP_LOG_SPLIT_MAX = 0.62
 const OP_LOG_SPLIT_DEFAULT = 0.4
 const OP_LOG_LIST_ROW_HEIGHT = 44
+const OP_LOG_TREE_GRID_COLS = "minmax(0, 1fr) var(--review-tree-col-duration)"
 
 const DAY_GROUP_BTN =
   "review-group-label review-group-cap op-log-day-cap sticky top-0 z-10 w-full flex items-center text-left transition-colors"
@@ -321,7 +329,9 @@ export function OperationLog() {
   const [splitRatio, setSplitRatio] = useState(OP_LOG_SPLIT_DEFAULT)
   const rootRef = useRef<HTMLDivElement>(null)
   const listScrollRef = useRef<HTMLDivElement>(null)
+  const listTreeRef = useRef<VirtualListHandle>(null)
   const sentinelRef = useRef<HTMLDivElement>(null)
+  const focusedTileId = useLayoutStore((s) => s.focusedTileId)
   const { width } = useContainerSize(rootRef)
   const tiny = width > 0 && width < 480
   const [cancellingId, setCancellingId] = useState<string | null>(null)
@@ -554,6 +564,67 @@ export function OperationLog() {
     ? (pipelineById.get(selectedPipelineId) ?? null)
     : null
 
+  const flatRows = useMemo(
+    () =>
+      flattenOperationRows(filtered, collapsedDays, dayLabel, {
+        openPipelineIds,
+        openActivityKeys: actExpanded,
+        activityKeyOf: pipelineActivityKey,
+      }),
+    [filtered, collapsedDays, openPipelineIds, actExpanded],
+  )
+
+  const keyboardNodes = useMemo(
+    () => buildOperationLogKeyboardNodes(flatRows),
+    [flatRows],
+  )
+
+  const onKeyboardSelect = useCallback(
+    (scopeId: string) => {
+      if (pipelineById.has(scopeId)) {
+        selectPipeline(scopeId)
+        return
+      }
+      for (const row of flatRows) {
+        if (row.type === "activity" && row.activityKey === scopeId) {
+          selectActivity(row.pipeline.id, scopeId)
+          return
+        }
+      }
+    },
+    [flatRows, pipelineById, selectPipeline, selectActivity],
+  )
+
+  const onKeyboardToggleFold = useCallback(
+    (scopeId: string) => {
+      if (pipelineById.has(scopeId)) togglePipelineTree(scopeId)
+      else toggleActivity(scopeId)
+    },
+    [pipelineById, togglePipelineTree, toggleActivity],
+  )
+
+  const isKeyboardNodeFolded = useCallback(
+    (node: ReviewTreeKeyboardNode) => {
+      if (pipelineById.has(node.scopeId)) return !openPipelineIds.has(node.scopeId)
+      return !actExpanded.has(node.scopeId)
+    },
+    [pipelineById, openPipelineIds, actExpanded],
+  )
+
+  const treeKeyboardEnabled = Boolean(
+    instance && focusedTileId === instance.widgetId && keyboardNodes.length > 0,
+  )
+
+  useReviewTreeKeyboard({
+    enabled: treeKeyboardEnabled,
+    nodes: keyboardNodes,
+    selectedScopeId: selectedScopeIdFromOpLogSelection(selection),
+    isFolded: isKeyboardNodeFolded,
+    onSelect: onKeyboardSelect,
+    onToggleFold: onKeyboardToggleFold,
+    listRef: listTreeRef,
+  })
+
   // Default selection only — never force-open folds (that fought tree persistence).
   useEffect(() => {
     if (filtered.length === 0) {
@@ -635,13 +706,23 @@ export function OperationLog() {
                 sidebar={
                   <div className="review-split-list widget-split-sidebar flex min-h-0 min-w-0 flex-col overflow-hidden">
                     <div className="review-split-tree-table">
+                      <ReviewTreeHeader
+                        columns={[
+                          { id: "node", label: "Pipeline" },
+                          { id: "duration", label: "Duration", align: "right" },
+                        ]}
+                        gridTemplateColumns={OP_LOG_TREE_GRID_COLS}
+                      />
                       <div
                         ref={listScrollRef}
                         className="review-split-list-scroll min-h-0 flex-1 overflow-y-auto"
+                        role="tree"
+                        aria-label="Operations tree"
                       >
                         <OperationPipelineList
+                          listRef={listTreeRef}
                           scrollRef={listScrollRef}
-                          pipelines={filtered}
+                          rows={flatRows}
                           selection={selection}
                           onSelectPipeline={selectPipeline}
                           onSelectActivity={selectActivity}
@@ -689,7 +770,7 @@ export function OperationLog() {
 }
 
 export function OperationPipelineList({
-  pipelines,
+  rows,
   selection,
   onSelectPipeline,
   onSelectActivity,
@@ -700,8 +781,9 @@ export function OperationPipelineList({
   collapsedDays,
   toggleDay,
   scrollRef,
+  listRef,
 }: {
-  pipelines: OperationPipeline[]
+  rows: ReturnType<typeof flattenOperationRows>
   selection: OpLogSelection | null
   onSelectPipeline: (id: string) => void
   onSelectActivity: (pipelineId: string, activityKey: string) => void
@@ -712,17 +794,8 @@ export function OperationPipelineList({
   collapsedDays: Set<string>
   toggleDay: (label: string) => void
   scrollRef?: RefObject<HTMLElement | null>
+  listRef?: RefObject<VirtualListHandle | null>
 }) {
-  const rows = useMemo(
-    () =>
-      flattenOperationRows(pipelines, collapsedDays, dayLabel, {
-        openPipelineIds,
-        openActivityKeys: actExpanded,
-        activityKeyOf: pipelineActivityKey,
-      }),
-    [pipelines, collapsedDays, openPipelineIds, actExpanded],
-  )
-
   const renderRow = (row: (typeof rows)[number], _index: number) => {
     if (row.type === "day") {
       const collapsed = collapsedDays.has(row.label)
@@ -786,6 +859,7 @@ export function OperationPipelineList({
 
   return (
     <VirtualList
+      ref={listRef}
       items={rows}
       scrollRef={scrollRef}
       estimateSize={(index) => {

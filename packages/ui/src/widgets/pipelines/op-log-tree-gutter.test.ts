@@ -129,7 +129,9 @@ describe("pipelines left-tree gutter — review kit", () => {
   it("split shell mounts review kit list host with day grouping caps", () => {
     const ops = read(opsPath)
     expect(ops).toContain("review-split-list widget-split-sidebar")
-    expect(ops).not.toContain("ReviewTreeHeader")
+    expect(ops).toContain("ReviewTreeHeader")
+    expect(ops).toContain('role="tree"')
+    expect(ops).toContain("useReviewTreeKeyboard")
     expect(ops).toContain("op-log-day-cap")
     expect(ops).toContain("ReviewSplitPane")
     expect(ops).toContain("OperationLogPipelineListRow")

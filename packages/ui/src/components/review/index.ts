@@ -22,3 +22,11 @@ export { ReviewSplitPane } from "./ReviewSplitPane"
 export { ReviewTreeFoldToggle } from "./ReviewTreeFoldToggle"
 export { ReviewTreeHeader, type ReviewTreeHeaderColumn } from "./ReviewTreeHeader"
 export { ReviewTreeRow } from "./ReviewTreeRow"
+export {
+  adjacentTreeIndex,
+  firstChildIndex,
+  parentIndex,
+  resolveReviewTreeKeyboardAction,
+  type ReviewTreeKeyboardAction,
+  type ReviewTreeKeyboardNode,
+} from "./review-tree-keyboard"
