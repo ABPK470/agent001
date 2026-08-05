@@ -1,33 +1,30 @@
-/**
- * Optimistic client state when an operator denies a parked tool step.
- *
- * Denial is cancellation — rewrite wait markers to an approval-denied note
- * and set a cancel reason (never a Fail/Error terminal).
- */
-
 import { RunStatus } from "../enums"
+import { formatApprovalDeniedCancelDetail } from "../lib/approval-copy"
 import {
-  formatApprovalDeniedCancelDetail,
-  rewriteApprovalWaitEntriesToDenied,
-} from "../lib/approval-wait-copy"
+  appendApprovalDeniedTraceEntry,
+  type ApprovalDenial,
+} from "../lib/approval-trace"
 import type { Run } from "../types"
 
+export interface OptimisticApprovalDenial extends ApprovalDenial {
+  runId: string
+}
+
 export function applyOptimisticApprovalDeny(
-  runId: string,
-  toolName: string,
-  reason: string | null | undefined,
+  denial: OptimisticApprovalDenial,
   runs: readonly Run[],
   upsertRun: (run: Partial<Run> & { id: string }) => void,
 ): void {
-  const run = runs.find((r) => r.id === runId)
+  const run = runs.find((candidate) => candidate.id === denial.runId)
+  if (!run) return
+
   const now = new Date().toISOString()
-  const detail = formatApprovalDeniedCancelDetail(toolName, reason)
   upsertRun({
-    id: runId,
+    id: denial.runId,
     status: RunStatus.Cancelled,
     completedAt: now,
-    error: detail,
+    error: formatApprovalDeniedCancelDetail(denial.toolName, denial.reason),
     streamingAnswer: "",
-    trace: rewriteApprovalWaitEntriesToDenied(run?.trace ?? [], toolName, reason),
+    trace: appendApprovalDeniedTraceEntry(run.trace ?? [], denial),
   })
 }

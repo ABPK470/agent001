@@ -12,13 +12,15 @@ import { atomsFromTrace } from "./normalize"
 import { isPlannerStepSuccessStatus } from "./planner-step-status"
 import { computeTokenCostUsd } from "./trace-cost"
 import {
-  approvalDeniedFromEntry,
-  approvalWaitFromEntry,
   formatApprovalDeniedLabel,
   formatApprovalWaitLabel,
+} from "../approval-copy"
+import {
+  approvalDeniedFromEntry,
+  approvalWaitFromEntry,
   isApprovalDeniedEntry,
   isApprovalWaitEntry,
-} from "../approval-wait-copy"
+} from "../approval-trace"
 import { isCancelRaceFailureError } from "./trace-terminal"
 import type { OutlineNode } from "./types"
 
@@ -1237,7 +1239,11 @@ export function buildTraceDag(trace: TraceEntry[], opts?: BuildTraceDagOpts): Tr
     return lastCallIndex
   }
 
-  const hasApprovalDenied = trace.some((e) => isApprovalDeniedEntry(e))
+  const deniedApprovalIds = new Set(
+    trace
+      .filter(isApprovalDeniedEntry)
+      .map((entry) => entry.approvalId),
+  )
 
   for (let i = 0; i < trace.length; i++) {
     const entry = trace[i]!
@@ -1360,8 +1366,7 @@ export function buildTraceDag(trace: TraceEntry[], opts?: BuildTraceDagOpts): Tr
     }
 
     if (isApprovalWaitEntry(entry)) {
-      // Superseded once a deny note exists (reload can still carry both rows).
-      if (hasApprovalDenied) continue
+      if (deniedApprovalIds.has(entry.approvalId)) continue
       const work = ensureWork(noteCall)
       const wait = approvalWaitFromEntry(entry)
       work.notes.push({

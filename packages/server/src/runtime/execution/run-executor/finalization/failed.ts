@@ -16,8 +16,11 @@ import type { ExecuteRunCommand, ExecutionEnvironment } from "../types.js"
  * crashed/timeout run is resumable. Delegates to the single checkpoint
  * writer; the empty-messages guard lives there.
  */
-function saveFailureCheckpoint(command: ExecuteRunCommand, env: ExecutionEnvironment): void {
-  writeRunCheckpoint({
+function saveFailureCheckpoint(
+  command: ExecuteRunCommand,
+  env: ExecutionEnvironment
+): Promise<void> {
+  return writeRunCheckpoint({
     runId: command.request.runId,
     messages: env.progress.lastMessages,
     iteration: env.progress.lastIteration,
@@ -53,12 +56,12 @@ export async function finalizeFailedRun(
     }
   })
 
-  saveFailureCheckpoint(command, env)
+  await saveFailureCheckpoint(command, env)
 
-  env.persistCurrentRun(undefined, errMsg)
+  await env.persistCurrentRun(undefined, errMsg)
   await persistAuditLog(sideEffects.auditLog, request.runId)
-  persistTokenUsage(request.runId, agent)
-  env.boundSaveTrace(request.runId, { kind: TraceEventKind.Error, text: errMsg })
+  await persistTokenUsage(request.runId, agent)
+  await env.boundSaveTrace(request.runId, { kind: TraceEventKind.Error, text: errMsg })
   await runtime.workspaceStore.captureOutputDiff(
     request.runId,
     env.boundSaveTrace,

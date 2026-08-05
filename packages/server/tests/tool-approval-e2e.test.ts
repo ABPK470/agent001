@@ -115,6 +115,8 @@ describe("tool approval end-to-end", () => {
         "run-e2e",
         expect.objectContaining({
           kind: "approval-wait",
+          approvalId: expect.any(String),
+          stepId: "step-fetch",
           toolName: "fetch_url",
           reason: expect.stringContaining("outbound network"),
         })
@@ -222,8 +224,13 @@ describe("tool approval end-to-end", () => {
         .prepare("SELECT data FROM trace_entries WHERE run_id = ? ORDER BY seq")
         .all("run-deny") as Array<{ data: string }>
       expect(deniedTrace.some((row) => {
-        const entry = JSON.parse(row.data) as { kind?: string; toolName?: string }
-        return entry.kind === "approval-denied" && entry.toolName === "write_file"
+        const entry = JSON.parse(row.data) as Record<string, unknown>
+        return (
+          entry["kind"] === "approval-denied" &&
+          entry["approvalId"] === approval.id &&
+          entry["stepId"] === "step-1" &&
+          entry["toolName"] === "write_file"
+        )
       })).toBe(true)
     } finally {
       unsub()

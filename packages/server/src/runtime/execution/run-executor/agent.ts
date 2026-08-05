@@ -170,7 +170,7 @@ export function createRunAgent(command: ExecuteRunCommand, env: ExecutionEnviron
       // snapshot the right state if the run ends mid-iteration.
       env.progress.lastMessages = data.messages
       env.progress.lastIteration = data.iteration
-      writeRunCheckpoint({
+      await writeRunCheckpoint({
         runId: request.runId,
         messages: data.messages,
         iteration: data.iteration,
@@ -257,13 +257,13 @@ export function createRunAgent(command: ExecuteRunCommand, env: ExecutionEnviron
       // them. This write covers that gap. In a normal iteration it is a
       // harmless no-op rewrite of the last tool-call checkpoint (same
       // messages, idempotent INSERT OR REPLACE).
-      writeRunCheckpoint({
+      await writeRunCheckpoint({
         runId: request.runId,
         messages,
         iteration,
         stepCounter: env.state.stepCounter
       })
-      env.persistCurrentRun()
+      await env.persistCurrentRun()
     },
     onToken: (token) => {
       broadcast({ type: EventType.AnswerChunk, data: { runId: request.runId, chunk: token } })

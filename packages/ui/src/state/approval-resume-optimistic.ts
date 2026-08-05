@@ -6,7 +6,7 @@
  */
 
 import { RunStatus } from "../enums"
-import { stripApprovalWaitTraceEntries } from "../lib/approval-wait-copy"
+import { stripApprovalWaitTraceEntries } from "../lib/approval-trace"
 import type { Run } from "../types"
 
 export function applyOptimisticApprovalResume(

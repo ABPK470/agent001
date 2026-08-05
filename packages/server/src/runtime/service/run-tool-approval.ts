@@ -4,7 +4,7 @@ import {
   ToolApprovalGrantScope,
   type ToolApprovalGrantScope as GrantScope,
 } from "@mia/shared-enums"
-import { stripRuntimeToolArgs } from "@mia/shared-types"
+import { stripRuntimeToolArgs, type TraceEntry } from "@mia/shared-types"
 
 import { canAccessRun, requireSessionUpn } from "../../api/auth/service/access.js"
 import type { ViewingAs } from "../../api/auth/service/viewing-as.js"
@@ -122,12 +122,15 @@ export async function denyRunToolStep(
   await db.markRunCancelled(approval.runId)
   await expireToolApprovalGrantsForRunChain(approval.runId)
 
-  // Persist cancel outcome as approval-denied — not TraceEventKind.Error.
-  await db.appendTraceEntry(approval.runId, {
+  const deniedReason = reason?.trim()
+  const approvalDeniedTrace = {
     kind: TraceEventKind.ApprovalDenied,
+    approvalId,
+    stepId: approval.stepId,
     toolName: approval.toolName,
-    reason: reason?.trim() || undefined,
-  })
+    ...(deniedReason ? { reason: deniedReason } : {}),
+  } satisfies Extract<TraceEntry, { kind: "approval-denied" }>
+  await db.appendTraceEntry(approval.runId, approvalDeniedTrace)
 
   await db.saveLog({
     run_id: approval.runId,
@@ -144,7 +147,7 @@ export async function denyRunToolStep(
       approvalId,
       decision: "denied",
       by: actor,
-      reason: reason ?? null,
+      reason: deniedReason || null,
       toolName: approval.toolName,
     },
   })
@@ -153,7 +156,7 @@ export async function denyRunToolStep(
     type: EventType.RunCancelled,
     data: {
       runId: approval.runId,
-      reason: reason ?? "approval denied",
+      reason: deniedReason || null,
       toolName: approval.toolName,
     },
   })

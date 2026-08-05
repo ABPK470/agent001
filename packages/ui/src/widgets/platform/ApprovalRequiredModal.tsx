@@ -93,9 +93,12 @@ export function ApprovalRequiredModal(): JSX.Element | null {
     try {
       await api.denyRunToolStep(pending.approvalId)
       applyOptimisticApprovalDeny(
-        pending.runId,
-        pending.toolName,
-        null,
+        {
+          runId: pending.runId,
+          approvalId: pending.approvalId,
+          stepId: pending.stepId,
+          toolName: pending.toolName,
+        },
         runs,
         upsertRun,
       )

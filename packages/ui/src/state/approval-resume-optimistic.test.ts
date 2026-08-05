@@ -18,7 +18,13 @@ function parentRun(id = "parent"): Run {
     promptTokens: 0,
     completionTokens: 0,
     llmCalls: 0,
-    trace: [{ kind: "approval-wait", toolName: "sync_execute", reason: "policy" }],
+    trace: [{
+      kind: "approval-wait",
+      approvalId: "approval-1",
+      stepId: "step-1",
+      toolName: "sync_execute",
+      reason: "policy",
+    }],
     threadId: "thread-1",
   }
 }

@@ -31,6 +31,8 @@ export interface ActiveRun {
   controller: AbortController
   services: EngineServices
   traceSeq: number
+  traceWrites: Promise<void>
+  traceWriteError: unknown | null
   bus: AgentBusPort
   workspace: RunWorkspaceContext | null
   /**

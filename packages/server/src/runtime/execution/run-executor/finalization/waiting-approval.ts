@@ -1,5 +1,6 @@
 import { ApprovalRequiredError, EventType, type Agent } from "@mia/agent"
 import { RunStatus } from "@mia/shared-enums"
+import type { TraceEntry } from "@mia/shared-types"
 import { broadcast } from "../../../../infra/events/broadcaster.js"
 import * as db from "../../../../infra/persistence/sqlite.js"
 import { NotificationActionType } from "../../../../internal/enums/notifications.js"
@@ -13,8 +14,11 @@ import type { ExecuteRunCommand, ExecutionEnvironment } from "../types.js"
  * tool-approval is resumable. Delegates to the single checkpoint writer;
  * the empty-messages guard lives there.
  */
-function saveWaitingCheckpoint(command: ExecuteRunCommand, env: ExecutionEnvironment): void {
-  writeRunCheckpoint({
+function saveWaitingCheckpoint(
+  command: ExecuteRunCommand,
+  env: ExecutionEnvironment
+): Promise<void> {
+  return writeRunCheckpoint({
     runId: command.request.runId,
     messages: env.progress.lastMessages,
     iteration: env.progress.lastIteration,
@@ -39,21 +43,23 @@ export async function finalizeWaitingForApprovalRun(
     policyName: error.policyName,
   })
 
-  saveWaitingCheckpoint(command, env)
+  await saveWaitingCheckpoint(command, env)
 
   await db.markRunWaitingForApproval(request.runId)
   env.state.run.status = RunStatus.WaitingForApproval
   await sideEffects.runRepo.save(env.state.run)
-  env.persistCurrentRun(undefined, undefined)
+  await env.persistCurrentRun(undefined, undefined)
   await persistAuditLog(sideEffects.auditLog, request.runId)
-  persistTokenUsage(request.runId, agent)
-  // Control-plane pause — never TraceEventKind.Error (that paints Fail in Trace).
-  env.boundSaveTrace(request.runId, {
+  await persistTokenUsage(request.runId, agent)
+  const approvalWaitTrace = {
     kind: TraceEventKind.ApprovalWait,
+    approvalId: approval.id,
+    stepId: error.stepId,
     toolName: error.toolName,
     reason: error.reason.slice(0, 180),
     policyName: error.policyName,
-  })
+  } satisfies Extract<TraceEntry, { kind: "approval-wait" }>
+  await env.boundSaveTrace(request.runId, approvalWaitTrace)
 
   await db.saveLog({
     run_id: request.runId,

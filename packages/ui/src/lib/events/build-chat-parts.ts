@@ -16,7 +16,7 @@ import { isTerminalRunStatus } from "../run-actions"
 import {
   approvalWaitFromEntry,
   projectTraceForChatDisplay,
-} from "../approval-wait-copy"
+} from "../approval-trace"
 import { formatMs } from "../util"
 import { isPlannerStepSuccessStatus, plannerStepEndDetail } from "./planner-step-status"
 import { reconcilePlannerStepGroups } from "./reconcile-step-groups"

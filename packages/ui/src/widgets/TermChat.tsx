@@ -107,7 +107,7 @@ import {
   stepBlockHeaderChrome,
 } from "./termchat/stepOutcomeChrome"
 import { collapseResumeRunChains, resumeChainIds } from "./termchat/collapseResumeChains"
-import { formatApprovalWaitLabel } from "../lib/approval-wait-copy"
+import { formatApprovalWaitLabel } from "../lib/approval-copy"
 import { RunStatus } from "../enums"
 import { planTranscriptReveal } from "./termchat/revealRunInTranscript"
 import {

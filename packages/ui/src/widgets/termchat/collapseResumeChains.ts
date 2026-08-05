@@ -7,7 +7,7 @@
  */
 
 import type { Run, TraceEntry } from "@mia/shared-types"
-import { stripApprovalWaitTraceEntries } from "../../lib/approval-wait-copy"
+import { stripApprovalWaitTraceEntries } from "../../lib/approval-trace"
 
 /** True when this run was closed only because a resume child continued it. */
 export function isSupersededByResume(run: Run, runs: readonly Run[]): boolean {

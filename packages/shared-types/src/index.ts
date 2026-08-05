@@ -250,6 +250,12 @@ export interface LogEntry {
 
 // ── Trace (rich agent execution trace) ───────────────────────────
 
+export interface ApprovalTraceIdentity {
+  approvalId: string
+  stepId: string
+  toolName: string
+}
+
 export type TraceEntry =
   | { kind: "goal"; text: string }
   | { kind: "iteration"; current: number; max: number }
@@ -259,10 +265,15 @@ export type TraceEntry =
   | { kind: "tool-error"; invocationId?: string; toolCallId?: string | null; text: string; stepName?: string }
   | { kind: "answer"; text: string }
   | { kind: "error"; text: string }
-  /** Control-plane pause — not a failure. Prefer this over kind "error" for waits. */
-  | { kind: "approval-wait"; toolName: string; reason: string; policyName?: string }
-  /** Operator denied a parked tool — cancellation, not failure. */
-  | { kind: "approval-denied"; toolName: string; reason?: string }
+  | (ApprovalTraceIdentity & {
+      kind: "approval-wait"
+      reason: string
+      policyName?: string
+    })
+  | (ApprovalTraceIdentity & {
+      kind: "approval-denied"
+      reason?: string
+    })
   | { kind: "usage"; iterationTokens: number; totalTokens: number; promptTokens: number; completionTokens: number; llmCalls: number }
   | { kind: "delegation-start"; goal: string; depth: number; tools: string[]; agentName?: string }
   | { kind: "delegation-iteration"; depth: number; iteration: number; maxIterations: number }

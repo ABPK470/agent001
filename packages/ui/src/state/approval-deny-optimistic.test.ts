@@ -17,7 +17,13 @@ function run(partial: Partial<Run> & Pick<Run, "id">): Run {
     promptTokens: 0,
     completionTokens: 0,
     llmCalls: 0,
-    trace: [{ kind: "approval-wait", toolName: "fetch_url", reason: "network" }],
+    trace: [{
+      kind: "approval-wait",
+      approvalId: "approval-1",
+      stepId: "step-1",
+      toolName: "fetch_url",
+      reason: "network",
+    }],
     ...partial,
   }
 }
@@ -26,9 +32,12 @@ describe("applyOptimisticApprovalDeny", () => {
   it("marks cancelled with deny reason and rewrites wait notes", () => {
     const upsert = vi.fn()
     applyOptimisticApprovalDeny(
-      "run-1",
-      "fetch_url",
-      null,
+      {
+        runId: "run-1",
+        approvalId: "approval-1",
+        stepId: "step-1",
+        toolName: "fetch_url",
+      },
       [run({ id: "run-1" })],
       upsert,
     )
@@ -37,8 +46,37 @@ describe("applyOptimisticApprovalDeny", () => {
         id: "run-1",
         status: RunStatus.Cancelled,
         error: "Tool approval denied for fetch_url.",
-        trace: [{ kind: "approval-denied", toolName: "fetch_url" }],
+        trace: [
+          {
+            kind: "approval-wait",
+            approvalId: "approval-1",
+            stepId: "step-1",
+            toolName: "fetch_url",
+            reason: "network",
+          },
+          {
+            kind: "approval-denied",
+            approvalId: "approval-1",
+            stepId: "step-1",
+            toolName: "fetch_url",
+          },
+        ],
       }),
     )
+  })
+
+  it("does nothing when the run is absent", () => {
+    const upsert = vi.fn()
+    applyOptimisticApprovalDeny(
+      {
+        runId: "missing",
+        approvalId: "approval-1",
+        stepId: "step-1",
+        toolName: "fetch_url",
+      },
+      [],
+      upsert,
+    )
+    expect(upsert).not.toHaveBeenCalled()
   })
 })

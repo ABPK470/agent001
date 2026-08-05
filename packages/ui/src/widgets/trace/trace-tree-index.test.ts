@@ -125,6 +125,8 @@ describe("trace-tree-index", () => {
       },
       {
         kind: "approval-wait",
+        approvalId: "approval-1",
+        stepId: "step-1",
         toolName: "fetch_url",
         reason: "network",
       },
@@ -155,6 +157,8 @@ describe("trace-tree-index", () => {
       },
       {
         kind: "approval-denied",
+        approvalId: "approval-1",
+        stepId: "step-1",
         toolName: "fetch_url",
       },
     ])

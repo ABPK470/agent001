@@ -32,7 +32,7 @@ import { TraceEventKind } from "../internal/enums/trace.js"
 import type { CurrentSession } from "../api/auth/state/context.js"
 import { ClarificationsRegistry } from "./execution/clarifications-registry.js"
 import { persistLearnedTermFromResolution } from "./execution/clarifications-learned.js"
-import { createNotification, saveTrace } from "./execution/persistence.js"
+import { createNotification, flushTrace, saveTrace } from "./execution/persistence.js"
 import { recoverStaleRunsImpl } from "./execution/recovery.js"
 import { executeRunImpl } from "./execution/run-executor.js"
 import type { ExecuteRunCommand } from "./execution/run-executor/types.js"
@@ -177,6 +177,8 @@ export class AgentOrchestrator {
       controller,
       services,
       traceSeq: 0,
+      traceWrites: Promise.resolve(),
+      traceWriteError: null,
       bus,
       workspace: null,
       role,
@@ -215,7 +217,7 @@ export class AgentOrchestrator {
       type: EventType.RunQueued,
       data: { runId, goal, queueStats: this.queue.stats(), actorUpn: upn }
     })
-    saveTrace(this.activeRuns, runId, { kind: TraceEventKind.Goal, text: goal })
+    await saveTrace(this.activeRuns, runId, { kind: TraceEventKind.Goal, text: goal })
 
     const command = this.buildRunCommand({
       runId,
@@ -350,6 +352,8 @@ export class AgentOrchestrator {
       controller,
       services,
       traceSeq: 0,
+      traceWrites: Promise.resolve(),
+      traceWriteError: null,
       bus,
       workspace: null,
       role: resumeRole,
@@ -389,7 +393,10 @@ export class AgentOrchestrator {
       type: EventType.RunQueued,
       data: { runId: newRunId, goal: originalRun.goal, resumedFrom: runId }
     })
-    saveTrace(this.activeRuns, newRunId, { kind: TraceEventKind.Goal, text: originalRun.goal })
+    await saveTrace(this.activeRuns, newRunId, {
+      kind: TraceEventKind.Goal,
+      text: originalRun.goal
+    })
 
     const messages = parseBoundaryJson(checkpoint.messages) as Message[]
     const iteration = checkpoint.iteration
@@ -595,8 +602,10 @@ export class AgentOrchestrator {
             if (activeRun) activeRun.workspace = workspace
           },
           appendTrace: (traceRunId, entry) => {
-            saveTrace(this.activeRuns, traceRunId, entry)
+            return saveTrace(this.activeRuns, traceRunId, entry)
           },
+          flushTrace: (traceRunId) =>
+            flushTrace(this.activeRuns, traceRunId),
           removeActiveRun: (activeRunId) => {
             this.activeRuns.delete(activeRunId)
           }

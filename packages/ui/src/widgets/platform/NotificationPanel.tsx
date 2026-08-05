@@ -16,8 +16,8 @@ import { useStore } from "../../state/store"
 import { applyOptimisticApprovalDeny } from "../../state/approval-deny-optimistic"
 import { applyOptimisticApprovalResume } from "../../state/approval-resume-optimistic"
 import {
-  approvalFieldsFromNotificationActions,
   pendingApprovalFromNotification,
+  type ActionableToolApproval,
 } from "../../state/pending-approval"
 import { useLayoutStore } from "../../state/layout-store"
 import type { Notification, NotificationAction, Run } from "../../types"
@@ -49,11 +49,6 @@ const TYPE_COLOR: Record<string, string> = {
 
 function notificationActions(notification: Notification): NotificationAction[] {
   return Array.isArray(notification.actions) ? notification.actions : []
-}
-
-function approvalIdFromNotification(notification: Notification): string | undefined {
-  return approvalFieldsFromNotificationActions(notificationActions(notification)).approvalId
-    ?? undefined
 }
 
 /**
@@ -108,14 +103,14 @@ export function NotificationPanel() {
   const actOnApproval = useCallback(async (
     notification: Notification,
     decision: "approve" | "deny",
-    approvalId: string,
+    approval: ActionableToolApproval,
   ) => {
     markNotificationRead(notification.id)
     api.markNotificationRead(notification.id).catch((err: unknown) => { console.error("[mia]", err) })
 
     try {
       if (decision === "approve") {
-        const result = await api.approveRunToolStep(approvalId)
+        const result = await api.approveRunToolStep(approval.approvalId)
         if (result.resumedRunId) {
           applyOptimisticApprovalResume(
             result.runId,
@@ -130,18 +125,17 @@ export function NotificationPanel() {
           return
         }
       } else {
-        await api.denyRunToolStep(approvalId)
-        if (notification.runId) {
-          const pending = useStore.getState().pendingToolApproval
-          const fields = approvalFieldsFromNotificationActions(notificationActions(notification))
-          applyOptimisticApprovalDeny(
-            notification.runId,
-            pending?.toolName ?? fields.toolName,
-            null,
-            runs,
-            upsertRun,
-          )
-        }
+        await api.denyRunToolStep(approval.approvalId)
+        applyOptimisticApprovalDeny(
+          {
+            runId: approval.runId,
+            approvalId: approval.approvalId,
+            stepId: approval.stepId,
+            toolName: approval.toolName,
+          },
+          runs,
+          upsertRun,
+        )
       }
       clearPendingToolApproval()
     } catch (err: unknown) { console.error("[mia]", err) }
@@ -218,18 +212,14 @@ export function NotificationPanel() {
       }
 
       case "approve-run-step": {
-        const approvalId = action.data?.approvalId as string | undefined
-        if (approvalId) {
-          await actOnApproval(notification, "approve", approvalId)
-        }
+        const approval = pendingApprovalFromNotification(notification)
+        if (approval) await actOnApproval(notification, "approve", approval)
         break
       }
 
       case "deny-run-step": {
-        const approvalId = action.data?.approvalId as string | undefined
-        if (approvalId) {
-          await actOnApproval(notification, "deny", approvalId)
-        }
+        const approval = pendingApprovalFromNotification(notification)
+        if (approval) await actOnApproval(notification, "deny", approval)
         break
       }
 

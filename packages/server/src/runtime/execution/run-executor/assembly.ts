@@ -57,10 +57,11 @@ export function createRunPersistence(
   const { request, runtime, sideEffects } = command
   const boundSaveTrace = (runId: string, entry: Record<string, unknown>) =>
     runtime.registry.appendTrace(runId, entry)
+  const flushTrace = (runId: string) =>
+    runtime.registry.flushTrace(runId)
 
-  const persistCurrentRun = (answer?: string, error?: string): void => {
+  const persistCurrentRun = (answer?: string, error?: string): Promise<void> =>
     persistRun(state.run, request.goal, request.resume?.parentRunId, answer, error)
-  }
 
   const saveCurrentRun = async (): Promise<void> => {
     await sideEffects.runRepo.save(state.run)
@@ -70,7 +71,7 @@ export function createRunPersistence(
     if (state.run.status !== RunStatus.Pending) return
     state.run = startRunningPure(state.run, state.run.steps)
     await saveCurrentRun()
-    persistCurrentRun()
+    await persistCurrentRun()
     await sideEffects.eventBus.publish(runStarted(asRunId(state.run.id), "agent-session"))
   }
 
@@ -89,11 +90,12 @@ export function createRunPersistence(
         workspaceRoot: runWorkspace.executionRoot
       }
     })
-    persistCurrentRun()
+    await persistCurrentRun()
   }
 
   return {
     boundSaveTrace,
+    flushTrace,
     persistCurrentRun,
     markRunStarted,
     initialize
@@ -103,7 +105,7 @@ export function createRunPersistence(
 export function wireExecutionEvents(
   command: ExecuteRunCommand,
   state: RunState,
-  saveTrace: (runId: string, entry: Record<string, unknown>) => void
+  saveTrace: (runId: string, entry: Record<string, unknown>) => Promise<void>
 ) {
   return wireEventBroadcasting(
     {
@@ -134,6 +136,7 @@ export function assembleExecutionEnvironment(input: {
     progress: input.state.progress,
     debugSeqRef: input.host.debugSeqRef,
     boundSaveTrace: input.persistence.boundSaveTrace,
+    flushTrace: input.persistence.flushTrace,
     persistCurrentRun: input.persistence.persistCurrentRun,
     markRunStarted: input.persistence.markRunStarted,
     disposeEventWiring: input.eventWiring,

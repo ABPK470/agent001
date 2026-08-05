@@ -26,12 +26,11 @@ import {
 } from "./pending-approval.js"
 import { applyOptimisticApprovalDeny } from "./approval-deny-optimistic.js"
 import { applyOptimisticApprovalResume } from "./approval-resume-optimistic.js"
+import { formatApprovalDeniedCancelDetail } from "../lib/approval-copy.js"
 import {
-  approvalWaitFromEntry,
-  formatApprovalDeniedCancelDetail,
   isApprovalWaitEntry,
   stripApprovalWaitTraceEntries,
-} from "../lib/approval-wait-copy.js"
+} from "../lib/approval-trace.js"
 import { api } from "../client/index"
 import { readSseRunId, readSseStepId, lookupEventDescriptor } from "@mia/shared-types"
 import {
@@ -191,18 +190,6 @@ function mapRunTrace(runs: Run[], runId: string, update: (trace: TraceEntry[]) =
   const next = [...runs]
   next[index] = { ...next[index], trace: update(next[index].trace ?? []) }
   return next
-}
-
-function toolNameForApprovalDeny(
-  pendingToolName: string | undefined,
-  run: Run | undefined,
-): string {
-  if (pendingToolName && pendingToolName !== "unknown") return pendingToolName
-  const wait = [...(run?.trace ?? [])]
-    .reverse()
-    .map((e) => approvalWaitFromEntry(e))
-    .find(Boolean)
-  return wait?.tool || "tool"
 }
 
 function isTerminalInfrastructureError(message: string | null | undefined): boolean {
@@ -1924,9 +1911,9 @@ export const useStore = create<AppState>()(
           }
 
           case "approval.required": {
-            const runId = data["runId"] as string
-            const stepId = (data["stepId"] as string) ?? ""
             const pending = pendingApprovalFromEvent(data as Record<string, unknown>)
+            if (!pending) break
+            const { runId, stepId } = pending
             const existing = get().pendingToolApproval
             get().upsertPendingToolApproval({
               runId,
@@ -1940,17 +1927,19 @@ export const useStore = create<AppState>()(
             })
             store.upsertRun({ id: runId, status: RunStatus.WaitingForApproval })
             const runRow = get().runs.find((r) => r.id === runId)
-            const alreadyInTrace = runRow?.trace?.some(
-              (e) =>
-                isApprovalWaitEntry(e) &&
-                approvalWaitFromEntry(e)?.tool === pending.toolName,
-            )
-            if (
-              (!existing || existing.runId !== runId || existing.stepId !== stepId)
-              && !alreadyInTrace
-            ) {
+            const approvalId = pending.approvalId
+            const alreadyInTrace =
+              approvalId !== null &&
+              runRow?.trace?.some(
+                (entry) =>
+                  isApprovalWaitEntry(entry) &&
+                  entry.approvalId === approvalId,
+              )
+            if (approvalId !== null && !alreadyInTrace) {
               const traceEntry: TraceEntry = {
                 kind: "approval-wait",
+                approvalId,
+                stepId,
                 toolName: pending.toolName,
                 reason: pending.reason,
                 ...(pending.policyName ? { policyName: pending.policyName } : {}),
@@ -1991,13 +1980,23 @@ export const useStore = create<AppState>()(
                 typeof data["reason"] === "string" && data["reason"]
                   ? data["reason"]
                   : null
-              applyOptimisticApprovalDeny(
-                runId,
-                toolNameForApprovalDeny(pending?.toolName, get().runs.find((r) => r.id === runId)),
-                denyReason,
-                get().runs,
-                store.upsertRun,
-              )
+              const toolName =
+                typeof data["toolName"] === "string" && data["toolName"]
+                  ? data["toolName"]
+                  : null
+              if (approvalId && stepId && toolName) {
+                applyOptimisticApprovalDeny(
+                  {
+                    runId,
+                    approvalId,
+                    stepId,
+                    toolName,
+                    reason: denyReason,
+                  },
+                  get().runs,
+                  store.upsertRun,
+                )
+              }
             }
             break
           }

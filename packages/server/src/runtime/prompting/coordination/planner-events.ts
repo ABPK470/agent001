@@ -16,13 +16,13 @@ export async function handlePlannerTrace(
     runId: string
     services: EngineServices
     debugSeqRef: { value: number }
-    saveTrace: (runId: string, entry: Record<string, unknown>) => void
+    saveTrace: (runId: string, entry: Record<string, unknown>) => Promise<void>
   }
 ): Promise<void> {
   const e = entry as Record<string, unknown>
   const { runId, services, debugSeqRef, saveTrace } = ctx
 
-  ctx.saveTrace(runId, e)
+  await ctx.saveTrace(runId, e)
   broadcastTraceLoose(runId, debugSeqRef.value++, e as { kind: string } & Record<string, unknown>)
 
   const kind = e.kind as string

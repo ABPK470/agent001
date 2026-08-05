@@ -27,7 +27,7 @@ export async function buildExecutionSystemMessages(
     runWorkspace: RunWorkspace
     perRunHost: AgentHost
     allTools: Tool[]
-    boundSaveTrace: (runId: string, entry: Record<string, unknown>) => void
+    boundSaveTrace: (runId: string, entry: Record<string, unknown>) => Promise<void>
     debugSeqRef: { value: number }
   },
   perTier: MemoryPerTier
@@ -145,7 +145,7 @@ export async function buildExecutionSystemMessages(
   })
 
   const effectivePrompt = systemMessages.map((message) => message.content).join("\n\n")
-  envBase.boundSaveTrace(request.runId, {
+  await envBase.boundSaveTrace(request.runId, {
     kind: TraceEventKind.SystemPrompt,
     text: effectivePrompt || "(no system prompt)"
   })
@@ -161,7 +161,7 @@ export async function buildExecutionSystemMessages(
       parameters: tool.parameters
     }))
   }
-  envBase.boundSaveTrace(request.runId, toolsResolvedEntry)
+  await envBase.boundSaveTrace(request.runId, toolsResolvedEntry)
   broadcastTrace(request.runId, envBase.debugSeqRef.value++, toolsResolvedEntry)
   return { effectivePrompt, systemMessages }
 }

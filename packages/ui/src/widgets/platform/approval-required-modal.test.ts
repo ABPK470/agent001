@@ -3,7 +3,10 @@ import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { describe, expect, it } from "vitest"
 import { ToolApprovalGrantScope } from "@mia/shared-enums"
-import { pendingApprovalFromEvent } from "../../state/pending-approval"
+import {
+  pendingApprovalFromEvent,
+  pendingApprovalFromNotification,
+} from "../../state/pending-approval"
 
 const here = dirname(fileURLToPath(import.meta.url))
 const modalSrc = readFileSync(join(here, "ApprovalRequiredModal.tsx"), "utf8")
@@ -46,11 +49,23 @@ describe("pendingApprovalFromEvent", () => {
     })
   })
 
-  it("fills defaults when optional fields are missing", () => {
-    const pending = pendingApprovalFromEvent({ runId: "run-2" })
-    expect(pending.approvalId).toBeNull()
-    expect(pending.toolName).toBe("unknown")
-    expect(pending.reason).toBe("Policy requires approval")
-    expect(pending.notificationId).toBeNull()
+  it("rejects malformed approval events", () => {
+    expect(pendingApprovalFromEvent({ runId: "run-2" })).toBeNull()
+  })
+})
+
+describe("pendingApprovalFromNotification", () => {
+  it("rejects notifications without a complete approval action", () => {
+    expect(
+      pendingApprovalFromNotification({
+        id: "note-1",
+        runId: "run-1",
+        stepId: "step-1",
+        actions: [{
+          action: "deny-run-step",
+          data: { approvalId: "approval-1" },
+        }],
+      }),
+    ).toBeNull()
   })
 })

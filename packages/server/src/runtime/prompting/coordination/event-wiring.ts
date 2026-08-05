@@ -66,7 +66,7 @@ export function wireEventBroadcasting(
   // Keep a live reference to the mutable state holder because state.run is
   // replaced immutably during execution.
   state: RunStateLike,
-  saveTrace: (runId: string, entry: Record<string, unknown>) => void
+  saveTrace: (runId: string, entry: Record<string, unknown>) => Promise<void>
 ): Unsubscribe {
   const events: EventType[] = [
     EventType.RunStarted,
@@ -108,7 +108,7 @@ export function wireEventBroadcasting(
         // trace replay (TermChat / AgentChat / IOE chat) drops the result
         // text and only shows the input — leaving every tool row in the
         // expanded view without an output panel.
-        saveTrace(runId, {
+        await saveTrace(runId, {
           kind: TraceEventKind.ToolCall,
           invocationId: stepId,
           tool: toolName,
@@ -123,7 +123,7 @@ export function wireEventBroadcasting(
         const output = (data["output"] as Record<string, unknown>) ?? {}
         const result =
           (output["result"] as string) ?? (Object.keys(output).length > 0 ? JSON.stringify(output) : "done")
-        saveTrace(runId, {
+        await saveTrace(runId, {
           kind: TraceEventKind.ToolResult,
           invocationId: stepId,
           text: result,
@@ -133,7 +133,7 @@ export function wireEventBroadcasting(
         })
       } else if (eventType === EventType.StepFailed) {
         const stepId = getStepId(event)
-        saveTrace(runId, {
+        await saveTrace(runId, {
           kind: TraceEventKind.ToolError,
           invocationId: stepId,
           text: (data["error"] as string) ?? "unknown error",

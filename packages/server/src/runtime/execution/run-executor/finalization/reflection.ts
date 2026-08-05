@@ -14,7 +14,7 @@ export async function maybeRunReflection(
   const { request, runtime } = command
   const internalFailure = detectInternalFailure(answer)
   if (!env.toolDecision.includeDataPersona || isPlatformUnconfiguredAnswer(answer) || !!internalFailure) {
-    env.boundSaveTrace(request.runId, {
+    await env.boundSaveTrace(request.runId, {
       kind: "reflection",
       outcome: "gated",
       verdictsRecorded: 0,
@@ -30,7 +30,7 @@ export async function maybeRunReflection(
   try {
     const verdictTool = findVerdictTool(env.allTools)
     if (!verdictTool) {
-      env.boundSaveTrace(request.runId, {
+      await env.boundSaveTrace(request.runId, {
         kind: "reflection",
         outcome: "skipped",
         verdictsRecorded: 0,
@@ -52,7 +52,7 @@ export async function maybeRunReflection(
     console.log(
       `[reflection] run=${request.runId} outcome=${reflection.outcome} recorded=${reflection.verdictsRecorded} ${reflection.detail}`
     )
-    env.boundSaveTrace(request.runId, {
+    await env.boundSaveTrace(request.runId, {
       kind: "reflection",
       outcome: reflection.outcome,
       verdictsRecorded: reflection.verdictsRecorded,
@@ -61,7 +61,7 @@ export async function maybeRunReflection(
     })
   } catch (error) {
     console.warn(`[reflection] run=${request.runId} failed: ${(error as Error).message}`)
-    env.boundSaveTrace(request.runId, {
+    await env.boundSaveTrace(request.runId, {
       kind: "reflection",
       outcome: "error",
       verdictsRecorded: 0,

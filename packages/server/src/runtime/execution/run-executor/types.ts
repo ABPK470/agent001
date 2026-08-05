@@ -52,14 +52,15 @@ export interface RunInteractionPort {
 export interface RunRegistryPort {
   getActiveRun(runId: string): ActiveRunRecord | undefined
   assignWorkspace(runId: string, workspace: RunWorkspace): void
-  appendTrace(runId: string, entry: Record<string, unknown>): void
+  appendTrace(runId: string, entry: Record<string, unknown>): Promise<void>
+  flushTrace(runId: string): Promise<void>
   removeActiveRun(runId: string): void
 }
 
 export interface RunWorkspaceStorePort {
   captureOutputDiff(
     runId: string,
-    saveTrace: (runId: string, entry: Record<string, unknown>) => void,
+    saveTrace: (runId: string, entry: Record<string, unknown>) => Promise<void>,
     createNotification: (opts: NotificationOpts) => void
   ): Promise<void>
   getCompletedDiff(runId: string): WorkspaceDiff | null
@@ -127,14 +128,15 @@ export type ExecutionStateBundle = {
 }
 
 export type RunPersistenceBundle = {
-  boundSaveTrace: (runId: string, entry: Record<string, unknown>) => void
-  persistCurrentRun: (answer?: string, error?: string) => void
+  boundSaveTrace: (runId: string, entry: Record<string, unknown>) => Promise<void>
+  flushTrace: (runId: string) => Promise<void>
+  persistCurrentRun: (answer?: string, error?: string) => Promise<void>
   markRunStarted: () => Promise<void>
   initialize: () => Promise<void>
 }
 
 export type ExecutionTraceBundle = {
-  boundSaveTrace: (runId: string, entry: Record<string, unknown>) => void
+  boundSaveTrace: (runId: string, entry: Record<string, unknown>) => Promise<void>
   debugSeqRef: { value: number }
 }
 
@@ -197,8 +199,9 @@ export type ExecutionEnvironment = {
   state: RunState
   progress: ProgressState
   debugSeqRef: { value: number }
-  boundSaveTrace: (runId: string, entry: Record<string, unknown>) => void
-  persistCurrentRun: (answer?: string, error?: string) => void
+  boundSaveTrace: (runId: string, entry: Record<string, unknown>) => Promise<void>
+  flushTrace: (runId: string) => Promise<void>
+  persistCurrentRun: (answer?: string, error?: string) => Promise<void>
   markRunStarted: () => Promise<void>
   disposeEventWiring: Unsubscribe
   runContext: ReturnType<typeof import("@mia/agent").makeRunContext>

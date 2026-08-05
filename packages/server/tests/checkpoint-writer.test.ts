@@ -68,9 +68,9 @@ describe("writeRunCheckpoint", () => {
     const unsub = subscribeToEvents((e) => events.push({ type: e.type, data: e.data as Record<string, unknown> }))
 
     const messages = [toolResultMessage("tc-1", "result-1")]
-    writeRunCheckpoint({ runId: RUN_ID, messages, iteration: 3, stepCounter: 7 })
+    await writeRunCheckpoint({ runId: RUN_ID, messages, iteration: 3, stepCounter: 7 })
 
-    const cp = db.getCheckpoint(RUN_ID)
+    const cp = await db.getCheckpoint(RUN_ID)
     expect(cp).toBeDefined()
     expect(cp!.iteration).toBe(3)
     expect(cp!.step_counter).toBe(7)
@@ -87,11 +87,11 @@ describe("writeRunCheckpoint", () => {
     const { writeRunCheckpoint, db } = await setup()
 
     const real = [toolResultMessage("tc-1", "result-1")]
-    writeRunCheckpoint({ runId: RUN_ID, messages: real, iteration: 1, stepCounter: 1 })
+    await writeRunCheckpoint({ runId: RUN_ID, messages: real, iteration: 1, stepCounter: 1 })
 
-    writeRunCheckpoint({ runId: RUN_ID, messages: [], iteration: 2, stepCounter: 2 })
+    await writeRunCheckpoint({ runId: RUN_ID, messages: [], iteration: 2, stepCounter: 2 })
 
-    const cp = db.getCheckpoint(RUN_ID)
+    const cp = await db.getCheckpoint(RUN_ID)
     // The empty write must NOT have clobbered the real checkpoint.
     expect(cp!.iteration).toBe(1)
     expect(JSON.parse(cp!.messages)).toEqual(real)
@@ -102,12 +102,12 @@ describe("writeRunCheckpoint", () => {
 
     // Simulate the onToolResult cadence: a checkpoint after each tool call.
     const afterFirst = [toolResultMessage("tc-1", "result-1")]
-    writeRunCheckpoint({ runId: RUN_ID, messages: afterFirst, iteration: 0, stepCounter: 0 })
+    await writeRunCheckpoint({ runId: RUN_ID, messages: afterFirst, iteration: 0, stepCounter: 0 })
 
     const afterSecond = [...afterFirst, toolResultMessage("tc-2", "result-2")]
-    writeRunCheckpoint({ runId: RUN_ID, messages: afterSecond, iteration: 0, stepCounter: 0 })
+    await writeRunCheckpoint({ runId: RUN_ID, messages: afterSecond, iteration: 0, stepCounter: 0 })
 
-    const cp = db.getCheckpoint(RUN_ID)
+    const cp = await db.getCheckpoint(RUN_ID)
     expect(JSON.parse(cp!.messages)).toEqual(afterSecond)
     // Resume reads checkpoint.messages — it would seed the agent with BOTH
     // tool results and re-run only the in-flight (third) call, not tc-1/tc-2.

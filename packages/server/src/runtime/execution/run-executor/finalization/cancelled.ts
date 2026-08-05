@@ -26,9 +26,10 @@ export async function finalizeCancelledRun(
     resourceId: env.state.run.id,
     detail: { goal: request.goal, totalTokens: agent.usage.totalTokens, llmCalls: agent.llmCalls }
   })
-  env.persistCurrentRun()
+  await env.persistCurrentRun()
   await persistAuditLog(sideEffects.auditLog, request.runId)
-  persistTokenUsage(request.runId, agent)
+  await persistTokenUsage(request.runId, agent)
+  await env.flushTrace(request.runId)
   broadcast({
     type: EventType.RunCancelled,
     data: {

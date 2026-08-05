@@ -34,11 +34,11 @@ export async function finalizeCompletedRun(
       llmCalls: agent.llmCalls
     }
   })
-  env.persistCurrentRun(answer)
+  await env.persistCurrentRun(answer)
   await persistAuditLog(sideEffects.auditLog, request.runId)
-  persistTokenUsage(request.runId, agent)
+  await persistTokenUsage(request.runId, agent)
 
-  env.boundSaveTrace(request.runId, { kind: TraceEventKind.Answer, text: answer })
+  await env.boundSaveTrace(request.runId, { kind: TraceEventKind.Answer, text: answer })
   await runtime.workspaceStore.captureOutputDiff(
     request.runId,
     env.boundSaveTrace,

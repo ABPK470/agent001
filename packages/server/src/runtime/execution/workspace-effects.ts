@@ -69,7 +69,7 @@ export async function captureRunWorkspaceDiff(
   activeRuns: Map<string, ActiveRun>,
   completedRunWorkspaces: Map<string, RunWorkspaceContext>,
   completedRunDiffs: Map<string, WorkspaceDiff>,
-  saveTrace: (runId: string, entry: Record<string, unknown>) => void,
+  saveTrace: (runId: string, entry: Record<string, unknown>) => Promise<void>,
   createNotification: (opts: NotificationOpts) => void
 ): Promise<void> {
   const run = activeRuns.get(runId)
@@ -96,7 +96,7 @@ export async function captureRunWorkspaceDiff(
     return
   }
 
-  saveTrace(runId, { kind: "workspace_diff", diff })
+  await saveTrace(runId, { kind: "workspace_diff", diff })
   broadcastTrace(runId, Date.now(), { kind: "workspace_diff", diff })
   createNotification({
     type: EventType.RunCompleted,
@@ -114,7 +114,7 @@ export async function applyRunWorkspaceDiff(
   runId: string,
   completedRunWorkspaces: Map<string, RunWorkspaceContext>,
   completedRunDiffs: Map<string, WorkspaceDiff>,
-  saveTrace: (runId: string, entry: Record<string, unknown>) => void,
+  saveTrace: (runId: string, entry: Record<string, unknown>) => Promise<void>,
   createNotification: (opts: NotificationOpts) => void
 ): Promise<{ added: number; modified: number; deleted: number } | null> {
   const context = completedRunWorkspaces.get(runId)
@@ -130,7 +130,7 @@ export async function applyRunWorkspaceDiff(
   completedRunWorkspaces.delete(runId)
   completedRunDiffs.delete(runId)
 
-  saveTrace(runId, { kind: "workspace_diff_applied", summary })
+  await saveTrace(runId, { kind: "workspace_diff_applied", summary })
   broadcastTrace(runId, Date.now(), { kind: "workspace_diff_applied", summary })
   createNotification({
     type: EventType.RunCompleted,

@@ -7,19 +7,45 @@ import type { ActiveRun, NotificationOpts } from "../../ports/orchestration.js"
 import type { AuditLogPort } from "./run-executor/types.js"
 // ── Trace ─────────────────────────────────────────────────────────
 
-export async function saveTrace(
-  activeRuns: Map<string, ActiveRun>,
+type TraceWriteState = Pick<
+  ActiveRun,
+  "traceSeq" | "traceWrites" | "traceWriteError"
+>
+
+export function saveTrace(
+  activeRuns: ReadonlyMap<string, TraceWriteState>,
   runId: string,
   entry: Record<string, unknown>
 ): Promise<void> {
   const active = activeRuns.get(runId)
   const seq = active ? active.traceSeq++ : 0
-  await db.saveTraceEntry({
-    run_id: runId,
-    seq,
-    data: JSON.stringify(entry),
-    created_at: new Date().toISOString()
+  const write = () =>
+    db.saveTraceEntry({
+      run_id: runId,
+      seq,
+      data: JSON.stringify(entry),
+      created_at: new Date().toISOString()
+    })
+  if (!active) return write()
+
+  const pendingWrite = active.traceWrites.then(write)
+  active.traceWrites = pendingWrite.catch((error: unknown) => {
+    active.traceWriteError ??= error
+    console.error(`[trace] write failed for run ${runId} at seq ${seq}:`, error)
   })
+  return pendingWrite.then(() => {
+    if (active.traceWriteError !== null) throw active.traceWriteError
+  })
+}
+
+export async function flushTrace(
+  activeRuns: ReadonlyMap<string, TraceWriteState>,
+  runId: string
+): Promise<void> {
+  const active = activeRuns.get(runId)
+  if (!active) return
+  await active.traceWrites
+  if (active.traceWriteError !== null) throw active.traceWriteError
 }
 
 // ── Run persistence ───────────────────────────────────────────────

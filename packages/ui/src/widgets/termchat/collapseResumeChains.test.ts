@@ -41,6 +41,8 @@ describe("collapseResumeRunChains", () => {
         },
         {
           kind: "approval-wait",
+          approvalId: "approval-1",
+          stepId: "step-1",
           toolName: "sync_execute",
           reason: "needs confirm",
         },
@@ -76,7 +78,13 @@ describe("collapseResumeRunChains", () => {
       goal: "sync uat to dev",
       status: "cancelled",
       createdAt: "2026-01-01T00:00:00.000Z",
-      trace: [{ kind: "approval-wait", toolName: "sync_execute", reason: "p1" }],
+      trace: [{
+        kind: "approval-wait",
+        approvalId: "approval-1",
+        stepId: "step-1",
+        toolName: "sync_execute",
+        reason: "p1",
+      }],
     })
     const b = run({
       id: "b",
@@ -84,7 +92,13 @@ describe("collapseResumeRunChains", () => {
       parentRunId: "a",
       status: "cancelled",
       createdAt: "2026-01-01T00:01:00.000Z",
-      trace: [{ kind: "approval-wait", toolName: "fetch_url", reason: "p2" }],
+      trace: [{
+        kind: "approval-wait",
+        approvalId: "approval-2",
+        stepId: "step-2",
+        toolName: "fetch_url",
+        reason: "p2",
+      }],
     })
     const c = run({
       id: "c",
@@ -116,8 +130,20 @@ describe("collapseResumeRunChains", () => {
 describe("dropApprovalWaitTraceEntries", () => {
   it("removes approval-wait markers but keeps real errors", () => {
     const entries: TraceEntry[] = [
-      { kind: "approval-wait", toolName: "sync_execute", reason: "policy" },
-      { kind: "approval-wait", toolName: "fetch_url", reason: "network" },
+      {
+        kind: "approval-wait",
+        approvalId: "approval-1",
+        stepId: "step-1",
+        toolName: "sync_execute",
+        reason: "policy",
+      },
+      {
+        kind: "approval-wait",
+        approvalId: "approval-2",
+        stepId: "step-2",
+        toolName: "fetch_url",
+        reason: "network",
+      },
       { kind: "error", text: "Tool failed hard" },
     ]
     const stripped = dropApprovalWaitTraceEntries(entries)
