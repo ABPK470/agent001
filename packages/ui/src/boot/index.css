@@ -11151,7 +11151,6 @@ button.trace-tree-status-pill:hover {
  * Full-bleed sheet — no page frame around the instrument.
  * Separation: warm paper → white tiles (real lift + ink borders).
  * Soft tile corners at rest; solo keeps the tile surface, sheds the card frame.
- * Sheet toggle (contrast) inverts sheet↔ops / tile lift for compare.
  */
 .workspace-chrome {
   position: relative;
@@ -11204,32 +11203,6 @@ button.trace-tree-status-pill:hover {
   --workspace-ops-bg: var(--panel-2);
   --workspace-border: transparent;
   --workspace-rail-line: color-mix(in srgb, var(--border) 80%, transparent);
-  --workspace-sheet-shadow: none;
-}
-
-/*
- * Sheet toggle — invert sheet↔ops / compare only.
- * Light ON → white sheet, warm tiles + warm ops. Dark ON → panel-2 sheet, panel tiles.
- */
-:root[data-theme="light"] .workspace-chrome--contrast {
-  --workspace-sheet: var(--canvas);
-  --workspace-chrome: var(--panel);
-  --workspace-border: transparent;
-  --workspace-sheet-shadow: none;
-  --workspace-widget-bg: var(--panel);
-  --workspace-ops-bg: var(--panel-2);
-  --workspace-widget-border: var(--border-subtle);
-  --workspace-rail-line: var(--border-subtle);
-}
-
-:root[data-theme="dark"] .workspace-chrome--contrast {
-  --workspace-sheet: var(--panel-2);
-  --workspace-chrome: var(--panel-2);
-  --workspace-widget-bg: var(--panel);
-  --workspace-ops-bg: var(--panel);
-  --workspace-widget-border: color-mix(in srgb, var(--border) 70%, transparent);
-  --workspace-border: transparent;
-  --workspace-rail-line: color-mix(in srgb, var(--border) 70%, transparent);
   --workspace-sheet-shadow: none;
 }
 

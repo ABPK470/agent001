@@ -88,13 +88,6 @@ function withProjected(
   }
 }
 
-/**
- * Workspace sheet surface (R&D invert from theme resting).
- * Resting: light = white page + warm sheet + white tiles; dark = canvas page + panel sheet.
- * `contrast` = stronger lift (light white / dark panel-2) for compare only.
- */
-export type WorkspaceSurface = "default" | "contrast"
-
 interface LayoutState {
   views: WorkspaceView[]
   activeViewId: string
@@ -112,8 +105,6 @@ interface LayoutState {
   zenTileId: string | null
   /** Latest measured viewport row budget for the active canvas. */
   viewportRows: number
-  /** Active tab / stage / widget surface treatment. */
-  workspaceSurface: WorkspaceSurface
 
   setActiveView: (id: string) => void
   addView: (name: string) => string
@@ -121,7 +112,6 @@ interface LayoutState {
   renameView: (id: string, name: string) => void
   /** Move a view tab to a new index in the tab strip. */
   reorderViews: (viewId: string, toIndex: number) => void
-  setWorkspaceSurface: (surface: WorkspaceSurface) => void
 
   addWidget: (viewId: string, type: WidgetType) => void
   removeWidget: (viewId: string, tileId: string) => void
@@ -149,11 +139,8 @@ export const useLayoutStore = create<LayoutState>()(
       soloTileId: null,
       zenTileId: null,
       viewportRows: 24,
-      workspaceSurface: "default",
 
       setActiveView: (id) => set({ activeViewId: id, soloTileId: null, zenTileId: null }),
-
-      setWorkspaceSurface: (surface) => set({ workspaceSurface: surface }),
 
       addView: (name) => {
         const id = randomId()
@@ -325,13 +312,10 @@ export const useLayoutStore = create<LayoutState>()(
         const views = persisted.views?.length
           ? pruneWorkspaceViews(persisted.views, currentState.viewportRows)
           : currentState.views
-        const workspaceSurface =
-          persisted.workspaceSurface === "contrast" ? "contrast" : "default"
         return {
           ...currentState,
           ...persisted,
           views,
-          workspaceSurface,
           focusedTileId: null,
           enteringTileIds: [],
           soloTileId: null,
@@ -342,7 +326,6 @@ export const useLayoutStore = create<LayoutState>()(
       partialize: (state) => ({
         views: state.views,
         activeViewId: state.activeViewId,
-        workspaceSurface: state.workspaceSurface,
       }),
     },
   ),

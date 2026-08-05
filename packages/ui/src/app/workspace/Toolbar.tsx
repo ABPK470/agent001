@@ -4,10 +4,9 @@
  * One bright bar: layouts (left) | ops (right), full-height divider between.
  * Active sheet = shade fill + weight (selection dialect — never underline / accent).
  * Ops controls = bordered quiet chrome (same family as .mia-control).
- * Sheet toggle is an R&D surface knob — invert sheet↔ops lift (compare).
  */
 
-import { ChevronDown, GripVertical, LayoutGrid, Minimize2, PanelTop, Plus, X } from "lucide-react"
+import { ChevronDown, GripVertical, LayoutGrid, Minimize2, Plus, X } from "lucide-react"
 import { useEffect, useRef, useState, type ComponentType, type KeyboardEvent } from "react"
 import type { Me } from "../../hooks/useMe"
 import { useViewTabReorder } from "../../hooks/useViewTabReorder"
@@ -67,8 +66,6 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
   const removeView = useLayoutStore((s) => s.removeView)
   const catalogHint = openWidgetCatalogHint()
   const renameView = useLayoutStore((s) => s.renameView)
-  const workspaceSurface = useLayoutStore((s) => s.workspaceSurface)
-  const setWorkspaceSurface = useLayoutStore((s) => s.setWorkspaceSurface)
   const soloTileId = useLayoutStore((s) => s.soloTileId)
   const toggleTileMaximized = useLayoutStore((s) => s.toggleTileMaximized)
   const [editing, setEditing] = useState<string | null>(null)
@@ -382,22 +379,6 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
                     <span className="hidden sm:inline">
                       <OpenWidgetCatalogHintMark />
                     </span>
-                  </button>
-                  <button
-                    type="button"
-                    aria-pressed={workspaceSurface === "contrast"}
-                    className="toolbar-ops-btn shrink-0 px-2.5"
-                    onClick={() =>
-                      setWorkspaceSurface(workspaceSurface === "contrast" ? "default" : "contrast")
-                    }
-                    title={
-                      workspaceSurface === "contrast"
-                        ? "Resting surfaces (tiles lifted)"
-                        : "Invert sheet ↔ tile lift (compare)"
-                    }
-                  >
-                    <PanelTop size={15} className="block shrink-0" aria-hidden />
-                    {/* <span className="hidden leading-none sm:inline"></span> */}
                   </button>
                 </>
               )}
