@@ -505,9 +505,12 @@ describe("widget log chrome — shared content dialect", () => {
     expect(css).toContain("--review-meta-size")
     expect(css).toContain("font-size: var(--review-meta-size)")
 
-    expect(live).toContain("review-meta")
+    // Event Stream uses a mono time column + lane badges (not generic review-meta).
+    expect(live).toContain("event-stream-row__time")
+    expect(live).toContain("eventStreamTypeClass")
     expect(live).toContain("JsonViewer")
     expect(live).not.toContain("border-l-2")
+    expect(css).toMatch(/\.event-stream-row__time\s*\{[^}]*font-size:\s*var\(--review-meta-size\)/s)
 
     const scope = read(join(here, "pipelines/OperationLogScopeDetail.tsx"))
     expect(scope).toContain("ReviewPayloadBlock")

@@ -127,7 +127,15 @@ export function eventStreamLanesDbPatterns(
   return patterns.length > 0 ? patterns : undefined
 }
 
-/** CSS modifier suffix — `event-stream-type--${lane}`. */
+/** Log-row TYPE badge — fixed mono column + contained pill. */
 export function eventStreamTypeClass(lane: EventStreamLane): string {
   return `event-stream-type event-stream-type--${lane}`
+}
+
+/**
+ * Filter-sheet TYPE chip tone only — same geometry as Live / 15m chips.
+ * Do not reuse eventStreamTypeClass here (min-width/mono breaks the grid).
+ */
+export function eventStreamFilterTypeClass(lane: EventStreamLane): string {
+  return `event-stream-filter-type event-stream-filter-type--${lane}`
 }

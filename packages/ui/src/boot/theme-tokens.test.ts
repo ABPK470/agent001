@@ -140,22 +140,29 @@ describe("light theme color system", () => {
     )
     // Event Stream scan lanes — TYPE ink in both themes.
     for (const lane of ["run", "step", "sync", "bridge", "agent", "api", "system"]) {
-      expect(darkThemeBlock()).toMatch(new RegExp(`--stream-${lane}:`))
-      expect(lightThemeBlock()).toMatch(new RegExp(`--stream-${lane}:`))
-      expect(css).toMatch(
-        new RegExp(`\\.event-stream-type\\.event-stream-type--${lane}\\s*\\{`),
-      )
+      expect(darkThemeBlock()).toMatch(new RegExp(`--stream-${lane}-ink:`))
+      expect(lightThemeBlock()).toMatch(new RegExp(`--stream-${lane}-ink:`))
+      expect(css).toMatch(new RegExp(`\\.event-stream-type--${lane}\\s*\\{`))
+      expect(css).toMatch(new RegExp(`\\.event-stream-filter-type--${lane}\\s*\\{`))
     }
-    // Datatype dialect — deep on light paper, bright on dark (not viz-pastel / faint).
-    expect(darkThemeBlock()).toMatch(/--stream-step:\s*var\(--dt-string\)/)
-    expect(darkThemeBlock()).toMatch(/--stream-sync:\s*var\(--dt-int\)/)
-    expect(darkThemeBlock()).toMatch(/--stream-system:\s*var\(--text-muted\)/)
-    expect(lightThemeBlock()).toMatch(/--stream-step:\s*var\(--dt-string\)/)
-    expect(lightThemeBlock()).toMatch(/--stream-sync:\s*var\(--dt-int\)/)
-    expect(lightThemeBlock()).toMatch(/--stream-bridge:\s*var\(--dt-date\)/)
-    expect(lightThemeBlock()).toMatch(/--stream-agent:\s*var\(--dt-bool\)/)
-    expect(lightThemeBlock()).toMatch(/--stream-system:\s*var\(--text-muted\)/)
-    expect(lightThemeBlock()).not.toMatch(/--stream-system:\s*var\(--text-faint\)/)
+    // Dual-mode badge tokens — agent emerald (never error-red / dt-bool rose).
+    expect(darkThemeBlock()).toMatch(/--stream-agent-ink:\s*#34d399/i)
+    expect(lightThemeBlock()).toMatch(/--stream-agent-ink:\s*#047857/i)
+    expect(lightThemeBlock()).toMatch(/--stream-step-soft:\s*#f3e8ff/i)
+    expect(lightThemeBlock()).toMatch(/--stream-step-border:\s*#e9d5ff/i)
+    expect(darkThemeBlock()).toMatch(/--stream-step-ink:\s*#c084fc/i)
+    expect(css).toMatch(/\.event-stream-type--agent\b/)
+    expect(css).toMatch(/\.event-stream-filter-type--agent\b/)
+    expect(css).toMatch(
+      /\.filter-choice-btn\.event-stream-filter-type\s*\{[^}]*min-width:\s*0/s,
+    )
+    expect(css).toMatch(/\.event-stream-row\s*\{[^}]*grid-template-columns:/s)
+    expect(css).toMatch(/\.event-stream-row__time\s*\{[^}]*font-family:\s*var\(--font-mono/s)
+    expect(css).toMatch(/\.event-stream-jump\s*\{[^}]*position:\s*sticky/s)
+    expect(lightThemeBlock()).toMatch(/--stream-api-ink:\s*#115e59/i)
+    // Agent must not collide with severity red.
+    expect(lightThemeBlock()).not.toMatch(/--stream-agent-ink:\s*#(be123c|991b1b|b91c1c)/i)
+    expect(darkThemeBlock()).not.toMatch(/--stream-agent-ink:\s*#(fda4af|f87171|fb7185)/i)
     const liveLogs = readFileSync(join(here, "../widgets/LiveLogs.tsx"), "utf8")
     expect(liveLogs).not.toContain("mia-row-stroke")
     expect(liveLogs).toContain("event-stream-row")

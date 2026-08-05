@@ -50,6 +50,7 @@ import {
 } from "./widget-toolbar"
 import {
   EVENT_STREAM_LANES,
+  eventStreamFilterTypeClass,
   eventStreamLanesDbPatterns,
   eventStreamTypeClass,
   type EventStreamEventType,
@@ -64,7 +65,7 @@ type EventType = EventStreamEventType
 const TYPE_OPTIONS = EVENT_STREAM_LANES.map((value) => ({
   value,
   label: value,
-  className: eventStreamTypeClass(value),
+  className: eventStreamFilterTypeClass(value),
 }))
 
 const QUICK_RANGES: { id: EventStreamRange; label: string }[] = [
@@ -280,7 +281,9 @@ export function LiveLogs() {
         onRemove: () => onQuickRange("live"),
       })
     }
-    for (const et of typeFilters) {
+    // Lane order matches TYPE sidebar — same Set, stable scan order.
+    for (const et of EVENT_STREAM_LANES) {
+      if (!typeFilters.has(et)) continue
       chips.push({
         id: `type:${et}`,
         label: "Type",
@@ -545,9 +548,10 @@ export function LiveLogs() {
       {!autoScroll && !paused && followLive && (
         <button
           type="button"
-          className="flex items-center justify-center gap-1.5 py-1.5 text-sm text-accent hover:text-accent-hover transition-colors"
+          className="event-stream-jump"
           onClick={() => {
             setAutoScroll(true)
+            jumpToLive()
             bottomRef.current?.scrollIntoView({ behavior: "smooth" })
           }}
         >
@@ -594,18 +598,23 @@ function LogRow({
   const hasData = log.data && Object.keys(log.data).length > 0
   const isError = Boolean(log.error)
 
+  const lane = log.type as EventType
+
   return (
     <div className="event-stream-entry">
       <div
         className={[
           "event-stream-row",
+          isError ? "event-stream-row--has-error" : "",
           expanded && hasData ? "event-stream-row--open" : "",
           hasData ? "cursor-pointer" : "",
         ].join(" ")}
         onClick={() => hasData && setExpanded((e) => !e)}
       >
         {isError ? (
-          <span className={`${operationStatusPill("failed")} event-stream-row__pill`}>Error</span>
+          <span className="event-stream-row__pill-slot">
+            <span className={`${operationStatusPill("failed")} event-stream-row__pill`}>Error</span>
+          </span>
         ) : null}
         <span className="review-chevron-slot shrink-0 text-text-muted/40">
           {hasData ? (
@@ -616,33 +625,31 @@ function LogRow({
             />
           ) : null}
         </span>
-        <span className="shrink-0 review-meta text-text-muted">
+        <span className="event-stream-row__time" title={log.timestamp}>
           {formatLogTimestamp(log.timestamp, tiny)}
         </span>
         <button
           type="button"
-          className={[
-            "event-stream-row__type shrink-0 text-sm text-left truncate hover:opacity-70 transition-opacity max-w-[4.5rem] sm:max-w-none",
-            eventStreamTypeClass(log.type as EventType),
-          ].join(" ")}
+          className={["event-stream-row__type", eventStreamTypeClass(lane)].join(" ")}
           onClick={(e) => {
             e.stopPropagation()
             setTypeFilters((prev) => {
               const next = new Set(prev)
-              const t = log.type as EventType
-              if (next.has(t)) next.delete(t)
-              else next.add(t)
+              if (next.has(lane)) next.delete(lane)
+              else next.add(lane)
               return next
             })
           }}
         >
-          {log.type}
+          {lane}
         </button>
         {!tiny && log.eventName ? (
           <span className="event-stream-row__event" title={log.eventName}>
             {log.eventName}
           </span>
-        ) : null}
+        ) : (
+          <span className="event-stream-row__event" aria-hidden />
+        )}
         {log.message ? (
           <>
             <span className="event-stream-row__sep" aria-hidden>
@@ -658,7 +665,12 @@ function LogRow({
               {log.message}
             </span>
           </>
-        ) : null}
+        ) : (
+          <>
+            <span className="event-stream-row__sep" aria-hidden />
+            <span className="event-stream-row__message" aria-hidden />
+          </>
+        )}
       </div>
       {expanded && log.data && (
         <div className="event-stream-payload">

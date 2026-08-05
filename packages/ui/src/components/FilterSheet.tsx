@@ -185,13 +185,17 @@ export function FilterField({
  * Filter choice chip — CONTROL dialect (keep the frame).
  * Never SELECT_* alone: transparent borders read as plain text on paper.
  */
-const FILTER_CHOICE_BTN = "rounded-md px-2 py-1.5 text-xs font-medium"
+const FILTER_CHOICE_BTN = "filter-choice-btn rounded-md px-2 py-1.5 text-xs font-medium"
 const FILTER_CHOICE_ON = CONTROL_PRESSED
 const FILTER_CHOICE_OFF = CONTROL_IDLE
 
 /**
  * Choice grid — Event Stream Quick range / Type / Severity, Sync History, Pipelines.
  * `multi` = checkbox chips; `single` = radio (one value, or none when cleared).
+ *
+ * Optional `className` on an option is the *selected* tone only (e.g. Event Stream
+ * lane badge). Idle stays muted CONTROL_IDLE so pressed state stays 2-way syncable
+ * with ActiveFilterChips.
  */
 export function FilterChoiceGrid<T extends string>({
   options,
@@ -226,6 +230,7 @@ export function FilterChoiceGrid<T extends string>({
     <div className={`grid ${colClass} gap-1.5`}>
       {options.map((option) => {
         const on = selected.has(option.value)
+        const tone = on && option.className ? option.className : ""
         return (
           <button
             key={option.value}
@@ -234,9 +239,9 @@ export function FilterChoiceGrid<T extends string>({
             onClick={() => choose(option.value)}
             className={[
               FILTER_CHOICE_BTN,
-              on ? FILTER_CHOICE_ON : FILTER_CHOICE_OFF,
-              // Optional tone (Event Stream lanes) — always on so chips match stream TYPE ink.
-              option.className ?? "",
+              // Lane badge replaces CONTROL_PRESSED fill when a tone is provided.
+              on ? (tone ? "" : FILTER_CHOICE_ON) : FILTER_CHOICE_OFF,
+              tone,
             ]
               .filter(Boolean)
               .join(" ")}
