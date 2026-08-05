@@ -362,10 +362,16 @@ export const api = {
       resolvedAt: string | null
       resolvedBy: string | null
     }>>("/api/runs/tool-approvals/pending"),
-  approveRunToolStep: (approvalId: string) =>
-    json<{ ok: true; runId: string; resumedRunId: string | null }>(
+  approveRunToolStep: (
+    approvalId: string,
+    opts?: { scope?: "instance" | "run" },
+  ) =>
+    json<{ ok: true; runId: string; resumedRunId: string | null; grantScope: "instance" | "run" }>(
       `/api/runs/tool-approvals/${encodeURIComponent(approvalId)}/approve`,
-      { method: "POST" },
+      {
+        method: "POST",
+        body: JSON.stringify({ scope: opts?.scope ?? "instance" }),
+      },
     ),
   denyRunToolStep: (approvalId: string, reason?: string) =>
     json<{ ok: true; runId: string }>(

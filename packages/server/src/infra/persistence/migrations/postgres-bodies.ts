@@ -905,4 +905,9 @@ WHERE search_vector IS NULL;
 
 CREATE INDEX IF NOT EXISTS IX_me_search_vector ON memory_entries USING GIN (search_vector);
 `,
+
+  13: `
+ALTER TABLE run_tool_approvals
+  ADD COLUMN IF NOT EXISTS grant_scope TEXT NOT NULL DEFAULT 'instance';
+`,
 }

@@ -102,6 +102,11 @@ export async function finalizeCompletedRun(
     ]
   })
 
+  const { expireToolApprovalGrantsForRunChain } = await import(
+    "../../../service/run-tool-approval.js"
+  )
+  await expireToolApprovalGrantsForRunChain(request.runId)
+
   runtime.messaging.sendReply(request.runId, answer).catch((error) => {
     console.error(`Failed to send reply for run ${request.runId}:`, error)
   })

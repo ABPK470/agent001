@@ -25,25 +25,10 @@ import { PolicyEffect } from "../../domain/enums/index.js"
 import { PolicyViolationError } from "../../domain/types/errors.js"
 import type { PolicyEvaluator } from "../../domain/types/interfaces.js"
 import type { AgentRun, PolicyRule, Step } from "../../domain/types/run-models.js"
-import { stripRuntimeToolArgs } from "@mia/shared-types"
 
 import type { HostedPolicyContext } from "../../domain/types/policy-context.js"
 import { extractToolFacts, resolveSelectorRules } from "./selectors.js"
-
-function stableArgsKey(args: Record<string, unknown>): string {
-  return JSON.stringify(stripRuntimeToolArgs(args))
-}
-
-function hasToolApprovalGrant(
-  ctx: HostedPolicyContext | null | undefined,
-  step: Step
-): boolean {
-  if (!ctx?.toolApprovalGrants?.length) return false
-  const key = stableArgsKey(step.input)
-  return ctx.toolApprovalGrants.some(
-    (grant) => grant.toolName === step.action && stableArgsKey(grant.args) === key
-  )
-}
+import { hasToolApprovalGrant } from "./tool-approval-grants.js"
 
 export class RulePolicyEvaluator implements PolicyEvaluator {
   private rules: PolicyRule[] = []

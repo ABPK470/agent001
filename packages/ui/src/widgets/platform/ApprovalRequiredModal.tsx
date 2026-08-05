@@ -2,12 +2,16 @@
  * ApprovalRequiredModal — operator decision surface for blocked tool calls.
  *
  * Opens on authoritative `approval.required` SSE from finalize (includes approvalId).
- * The bell notification keeps the same Approve / Deny actions as durable backup.
+ * Approve scopes:
+ *   instance — this call only (tool + args), consumed after success
+ *   run      — this tool for the rest of the resume chain, cleared when the leaf ends
+ * The bell notification keeps Approve (instance) / Deny as durable backup.
  */
 
 import { AlertTriangle, ShieldCheck, ShieldX, X } from "lucide-react"
 import { useState } from "react"
 import type { JSX } from "react"
+import { ToolApprovalGrantScope, type ToolApprovalGrantScope as GrantScope } from "@mia/shared-enums"
 import { api } from "../../client/index"
 import { JsonViewer } from "../../components/JsonViewer"
 import { RunStatus } from "../../enums"
@@ -20,6 +24,8 @@ function formatArgs(args: Record<string, unknown> | undefined): Record<string, u
   return args
 }
 
+type Busy = "approve-instance" | "approve-run" | "deny" | null
+
 export function ApprovalRequiredModal(): JSX.Element | null {
   const pending = useStore((s) => s.pendingToolApproval)
   const open = useStore((s) => s.approvalModalOpen)
@@ -30,7 +36,7 @@ export function ApprovalRequiredModal(): JSX.Element | null {
   const runs = useStore((s) => s.runs)
   const markNotificationRead = useStore((s) => s.markNotificationRead)
 
-  const [busy, setBusy] = useState<"approve" | "deny" | null>(null)
+  const [busy, setBusy] = useState<Busy>(null)
   const [error, setError] = useState<string | null>(null)
 
   if (!pending || !open) return null
@@ -40,35 +46,52 @@ export function ApprovalRequiredModal(): JSX.Element | null {
     setApprovalModalOpen(false)
   }
 
-  async function resolve(decision: "approve" | "deny"): Promise<void> {
+  async function approve(scope: GrantScope): Promise<void> {
     if (!pending?.approvalId) {
       setError("Approval record is not ready yet — try again from the notification bell in a moment.")
       return
     }
-    setBusy(decision)
+    setBusy(scope === ToolApprovalGrantScope.Run ? "approve-run" : "approve-instance")
     setError(null)
     try {
-      if (decision === "approve") {
-        const result = await api.approveRunToolStep(pending.approvalId)
-        if (result.resumedRunId) {
-          applyOptimisticApprovalResume(
-            result.runId,
-            result.resumedRunId,
-            runs,
-            upsertRun,
-            setActiveRun,
-          )
-        } else {
-          setError(
-            "Approval was recorded, but the run could not be resumed (missing checkpoint). Retry the goal, or check server logs.",
-          )
-          upsertRun({ id: result.runId, status: RunStatus.WaitingForApproval })
-          return
-        }
+      const result = await api.approveRunToolStep(pending.approvalId, { scope })
+      if (result.resumedRunId) {
+        applyOptimisticApprovalResume(
+          result.runId,
+          result.resumedRunId,
+          runs,
+          upsertRun,
+          setActiveRun,
+        )
       } else {
-        await api.denyRunToolStep(pending.approvalId)
-        upsertRun({ id: pending.runId, status: RunStatus.Cancelled })
+        setError(
+          "Approval was recorded, but the run could not be resumed (missing checkpoint). Retry the goal, or check server logs.",
+        )
+        upsertRun({ id: result.runId, status: RunStatus.WaitingForApproval })
+        return
       }
+      if (pending.notificationId) {
+        markNotificationRead(pending.notificationId)
+        api.markNotificationRead(pending.notificationId).catch((err: unknown) => { console.error("[mia]", err) })
+      }
+      clearPending()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Action failed")
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function deny(): Promise<void> {
+    if (!pending?.approvalId) {
+      setError("Approval record is not ready yet — try again from the notification bell in a moment.")
+      return
+    }
+    setBusy("deny")
+    setError(null)
+    try {
+      await api.denyRunToolStep(pending.approvalId)
+      upsertRun({ id: pending.runId, status: RunStatus.Cancelled })
       if (pending.notificationId) {
         markNotificationRead(pending.notificationId)
         api.markNotificationRead(pending.notificationId).catch((err: unknown) => { console.error("[mia]", err) })
@@ -102,7 +125,7 @@ export function ApprovalRequiredModal(): JSX.Element | null {
               </h2>
               <p className="text-sm text-text-muted mt-1 leading-relaxed">
                 A governance policy blocked <code className="font-mono text-text">{pending.toolName}</code>.
-                Approve once to let this run continue, or deny to cancel it.
+                Approve this call only, or allow this tool for the rest of this run.
               </p>
             </div>
           </div>
@@ -157,19 +180,30 @@ export function ApprovalRequiredModal(): JSX.Element | null {
             type="button"
             className="inline-flex items-center gap-2 px-4 py-2 text-sm rounded-lg border border-error/30 text-error hover:bg-error/10 disabled:opacity-50"
             disabled={!!busy}
-            onClick={() => void resolve("deny").catch((err: unknown) => { console.error("[mia]", err) })}
+            onClick={() => void deny().catch((err: unknown) => { console.error("[mia]", err) })}
           >
             <ShieldX size={16} />
             {busy === "deny" ? "Denying…" : "Deny"}
           </button>
           <button
             type="button"
-            className="inline-flex items-center gap-2 px-4 py-2 text-sm rounded-lg bg-accent/20 text-accent hover:bg-accent/30 disabled:opacity-50"
+            className="inline-flex items-center gap-2 px-4 py-2 text-sm rounded-lg border border-border-subtle text-text hover:bg-overlay-2 disabled:opacity-50"
             disabled={!!busy}
-            onClick={() => void resolve("approve").catch((err: unknown) => { console.error("[mia]", err) })}
+            title="Allow only this exact tool call, then ask again for the next one"
+            onClick={() => void approve(ToolApprovalGrantScope.Instance).catch((err: unknown) => { console.error("[mia]", err) })}
           >
             <ShieldCheck size={16} />
-            {busy === "approve" ? "Approving…" : "Approve & resume"}
+            {busy === "approve-instance" ? "Approving…" : "Approve this call"}
+          </button>
+          <button
+            type="button"
+            className="inline-flex items-center gap-2 px-4 py-2 text-sm rounded-lg bg-accent/20 text-accent hover:bg-accent/30 disabled:opacity-50"
+            disabled={!!busy}
+            title="Allow this tool for the rest of this run; cleared when the run ends"
+            onClick={() => void approve(ToolApprovalGrantScope.Run).catch((err: unknown) => { console.error("[mia]", err) })}
+          >
+            <ShieldCheck size={16} />
+            {busy === "approve-run" ? "Approving…" : "Approve for this run"}
           </button>
         </div>
       </div>

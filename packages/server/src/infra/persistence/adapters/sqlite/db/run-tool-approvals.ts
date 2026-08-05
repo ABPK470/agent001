@@ -1,4 +1,9 @@
 import { randomUUID } from "node:crypto"
+import {
+  normalizeToolApprovalGrantScope,
+  ToolApprovalGrantScope,
+  type ToolApprovalGrantScope as GrantScope,
+} from "@mia/shared-enums"
 import { getPlatformDb } from "../../../schema/kysely.js"
 import { runAllAsync, runExecAsync, runGetAsync } from "../../../schema/execute-async.js"
 import { platformNow } from "../../../schema/sql-time.js"
@@ -14,6 +19,7 @@ export interface DbRunToolApproval {
   reason: string
   policy_name: string
   status: RunToolApprovalStatus
+  grant_scope: string
   requested_at: string
   resolved_at: string | null
   resolved_by: string | null
@@ -28,6 +34,7 @@ export interface RunToolApprovalRecord {
   reason: string
   policyName: string
   status: RunToolApprovalStatus
+  grantScope: GrantScope
   requestedAt: string
   resolvedAt: string | null
   resolvedBy: string | null
@@ -43,6 +50,7 @@ function mapRow(row: DbRunToolApproval): RunToolApprovalRecord {
     reason: row.reason,
     policyName: row.policy_name,
     status: row.status,
+    grantScope: normalizeToolApprovalGrantScope(row.grant_scope),
     requestedAt: row.requested_at,
     resolvedAt: row.resolved_at,
     resolvedBy: row.resolved_by,
@@ -76,6 +84,7 @@ export async function upsertPendingRunToolApproval(input: {
     reason: input.reason,
     policy_name: input.policyName,
     status: "pending",
+    grant_scope: ToolApprovalGrantScope.Instance,
     requested_at: new Date().toISOString(),
     resolved_at: null,
     resolved_by: null,
@@ -135,11 +144,17 @@ export async function listApprovedToolGrantsForRuns(runIds: readonly string[]): 
   return (await runAllAsync<DbRunToolApproval>(compiled)).map(mapRow)
 }
 
-export async function markRunToolApprovalApproved(id: string, actor: string): Promise<RunToolApprovalRecord | null> {
+export async function markRunToolApprovalApproved(
+  id: string,
+  actor: string,
+  grantScope: GrantScope = ToolApprovalGrantScope.Instance,
+): Promise<RunToolApprovalRecord | null> {
+  const scope = normalizeToolApprovalGrantScope(grantScope)
   const compiled = getPlatformDb()
     .updateTable("run_tool_approvals")
     .set({
       status: "approved",
+      grant_scope: scope,
       resolved_at: platformNow(),
       resolved_by: actor,
     })
@@ -173,6 +188,21 @@ export async function consumeRunToolApprovalGrant(id: string): Promise<void> {
     .updateTable("run_tool_approvals")
     .set({ status: "consumed" })
     .where("id", "=", id)
+    .where("status", "=", "approved")
+    .compile()
+  await runExecAsync(compiled)
+}
+
+/**
+ * End-of-run cleanup — approved grants (instance leftover or run-scoped) become
+ * consumed so they cannot outlive the resume chain.
+ */
+export async function expireApprovedToolGrantsForRuns(runIds: readonly string[]): Promise<void> {
+  if (runIds.length === 0) return
+  const compiled = getPlatformDb()
+    .updateTable("run_tool_approvals")
+    .set({ status: "consumed" })
+    .where("run_id", "in", [...runIds])
     .where("status", "=", "approved")
     .compile()
   await runExecAsync(compiled)

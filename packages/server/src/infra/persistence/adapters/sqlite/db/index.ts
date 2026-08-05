@@ -361,6 +361,7 @@ export {
 
 export {
   consumeRunToolApprovalGrant,
+  expireApprovedToolGrantsForRuns,
   getPendingRunToolApproval,
   getRunToolApproval,
   listApprovedToolGrantsForRuns,

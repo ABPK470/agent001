@@ -57,4 +57,11 @@ export async function finalizeCancelledRun(
       ...await buildRunCapabilityActions(request.runId, RunStatus.Cancelled),
     ]
   })
+
+  // Resume parks the parent via markRunCancelled only — not this finalizer —
+  // so clearing here does not steal grants the child still needs.
+  const { expireToolApprovalGrantsForRunChain } = await import(
+    "../../../service/run-tool-approval.js"
+  )
+  await expireToolApprovalGrantsForRunChain(request.runId)
 }

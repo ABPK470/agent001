@@ -66,7 +66,7 @@ describe("run tool approval routes", () => {
     app = built.app
     seedRun(testDb, "run-1", { upn: UPN, status: "waiting_for_approval" })
 
-    const approval = built.upsertPendingRunToolApproval({
+    const approval = await built.upsertPendingRunToolApproval({
       runId: "run-1",
       stepId: "step-1",
       toolName: "fetch_url",
@@ -83,13 +83,13 @@ describe("run tool approval routes", () => {
   })
 
   it("POST approve and deny routes act on pending approvals", async () => {
-    const resumeRun = vi.fn(() => "run-1-resumed")
+    const resumeRun = vi.fn(async () => "run-1-resumed")
     const cancelRun = vi.fn()
     const built = await buildApp({ resumeRun, cancelRun } as unknown as import("../src/runtime/orchestrator.js").AgentOrchestrator)
     app = built.app
     seedRun(testDb, "run-1", { upn: UPN, status: "waiting_for_approval" })
 
-    const approval = built.upsertPendingRunToolApproval({
+    const approval = await built.upsertPendingRunToolApproval({
       runId: "run-1",
       stepId: "step-1",
       toolName: "fetch_url",
@@ -101,13 +101,19 @@ describe("run tool approval routes", () => {
     const approve = await app.inject({
       method: "POST",
       url: `/api/runs/tool-approvals/${approval.id}/approve`,
+      payload: { scope: "run" },
     })
     expect(approve.statusCode).toBe(200)
-    expect(approve.json()).toMatchObject({ ok: true, runId: "run-1", resumedRunId: "run-1-resumed" })
+    expect(approve.json()).toMatchObject({
+      ok: true,
+      runId: "run-1",
+      resumedRunId: "run-1-resumed",
+      grantScope: "run",
+    })
     expect(resumeRun).toHaveBeenCalledWith("run-1", session())
 
     seedRun(testDb, "run-2", { upn: UPN, status: "waiting_for_approval" })
-    const denyTarget = built.upsertPendingRunToolApproval({
+    const denyTarget = await built.upsertPendingRunToolApproval({
       runId: "run-2",
       stepId: "step-2",
       toolName: "write_file",
@@ -157,12 +163,12 @@ describe("run tool approval routes", () => {
   })
 
   it("notification approve-run-step action delegates to approval service", async () => {
-    const resumeRun = vi.fn(() => "run-1-resumed")
+    const resumeRun = vi.fn(async () => "run-1-resumed")
     const built = await buildApp({ resumeRun, cancelRun: vi.fn() } as unknown as import("../src/runtime/orchestrator.js").AgentOrchestrator)
     app = built.app
     seedRun(testDb, "run-1", { upn: UPN, status: "waiting_for_approval" })
 
-    const approval = built.upsertPendingRunToolApproval({
+    const approval = await built.upsertPendingRunToolApproval({
       runId: "run-1",
       stepId: "step-1",
       toolName: "fetch_url",
@@ -172,7 +178,7 @@ describe("run tool approval routes", () => {
     })
 
     const { saveNotification } = await import("../src/infra/persistence/adapters/sqlite/db/index.js")
-    saveNotification({
+    await saveNotification({
       id: "note-1",
       type: "approval.required",
       title: "Approval required",
@@ -200,7 +206,12 @@ describe("run tool approval routes", () => {
       },
     })
     expect(res.statusCode).toBe(200)
-    expect(res.json()).toMatchObject({ ok: true, runId: "run-1", resumedRunId: "run-1-resumed" })
+    expect(res.json()).toMatchObject({
+      ok: true,
+      runId: "run-1",
+      resumedRunId: "run-1-resumed",
+      grantScope: "instance",
+    })
     expect(resumeRun).toHaveBeenCalled()
   })
 })

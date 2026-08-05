@@ -1,4 +1,9 @@
 import { EventType } from "@mia/agent"
+import {
+  normalizeToolApprovalGrantScope,
+  ToolApprovalGrantScope,
+  type ToolApprovalGrantScope as GrantScope,
+} from "@mia/shared-enums"
 import { stripRuntimeToolArgs } from "@mia/shared-types"
 
 import { canAccessRun, requireSessionUpn } from "../../api/auth/service/access.js"
@@ -24,28 +29,54 @@ async function assertCanActOnApproval(
   }
 }
 
+/** Walk parent_run_id toward the root (leaf first). */
+export async function resumeChainRunIds(leafRunId: string): Promise<string[]> {
+  const ids: string[] = [leafRunId]
+  const guard = new Set<string>([leafRunId])
+  let currentId: string | null = leafRunId
+  while (currentId) {
+    const run = await db.getRun(currentId)
+    const parentId = run?.parent_run_id ?? null
+    if (!parentId || guard.has(parentId)) break
+    guard.add(parentId)
+    ids.push(parentId)
+    currentId = parentId
+  }
+  return ids
+}
+
+/** Clear leftover approved grants when a resume chain truly ends. */
+export async function expireToolApprovalGrantsForRunChain(leafRunId: string): Promise<void> {
+  const ids = await resumeChainRunIds(leafRunId)
+  await db.expireApprovedToolGrantsForRuns(ids)
+}
+
 export async function approveRunToolStep(
   orchestrator: AgentOrchestrator,
   approvalId: string,
   viewingAs: ViewingAs,
-): Promise<{ ok: true; runId: string; resumedRunId: string | null }> {
+  grantScope: GrantScope = ToolApprovalGrantScope.Instance,
+): Promise<{ ok: true; runId: string; resumedRunId: string | null; grantScope: GrantScope }> {
   const actor = requireSessionUpn(viewingAs.session)
+  const scope = normalizeToolApprovalGrantScope(grantScope)
   const approval =
     await db.getRunToolApproval(approvalId) ??
     (() => {
       throw new Error("Approval not found")
     })()
 
-  assertCanActOnApproval(viewingAs, approval)
-  const updated = await db.markRunToolApprovalApproved(approvalId, actor)
+  await assertCanActOnApproval(viewingAs, approval)
+  const updated = await db.markRunToolApprovalApproved(approvalId, actor, scope)
   if (!updated || updated.status !== "approved") {
     throw new Error("Approval could not be granted")
   }
 
+  const scopeLabel =
+    scope === ToolApprovalGrantScope.Run ? "for this run" : "for this call"
   await db.saveLog({
     run_id: approval.runId,
     level: "run",
-    message: `Tool approval granted for ${approval.toolName} by ${actor}`,
+    message: `Tool approval granted ${scopeLabel} for ${approval.toolName} by ${actor}`,
     timestamp: new Date().toISOString(),
   })
 
@@ -59,11 +90,12 @@ export async function approveRunToolStep(
       approvalId,
       decision: "approved",
       by: actor,
+      grantScope: scope,
       resumedRunId: resumedRunId ?? null,
     },
   })
 
-  return { ok: true, runId: approval.runId, resumedRunId }
+  return { ok: true, runId: approval.runId, resumedRunId, grantScope: scope }
 }
 
 export async function denyRunToolStep(
@@ -79,7 +111,7 @@ export async function denyRunToolStep(
       throw new Error("Approval not found")
     })()
 
-  assertCanActOnApproval(viewingAs, approval)
+  await assertCanActOnApproval(viewingAs, approval)
   const updated = await db.markRunToolApprovalDenied(approvalId, actor)
   if (!updated || updated.status !== "denied") {
     throw new Error("Approval could not be denied")
@@ -87,6 +119,7 @@ export async function denyRunToolStep(
 
   await orchestrator.cancelRun(approval.runId)
   await db.markRunCancelled(approval.runId)
+  await expireToolApprovalGrantsForRunChain(approval.runId)
 
   await db.saveLog({
     run_id: approval.runId,
@@ -127,6 +160,9 @@ export async function listPendingToolApprovalsForViewingAs(
   return await db.listPendingRunToolApprovalsForRuns(runIds)
 }
 
+/**
+ * Instance grants are one-shot. Run grants stay approved until the leaf ends.
+ */
 export async function consumeMatchingToolGrant(
   runId: string,
   parentRunId: string | null | undefined,
@@ -135,8 +171,10 @@ export async function consumeMatchingToolGrant(
 ): Promise<void> {
   const grantRunIds = [runId, parentRunId].filter((id): id is string => !!id)
   const key = stableArgsKey(args)
-  const match = (await db.listApprovedToolGrantsForRuns(grantRunIds)).find(
-    (grant) => grant.toolName === toolName && stableArgsKey(grant.args) === key
-  )
+  const match = (await db.listApprovedToolGrantsForRuns(grantRunIds)).find((grant) => {
+    if (grant.toolName !== toolName) return false
+    if (grant.grantScope === ToolApprovalGrantScope.Run) return false
+    return stableArgsKey(grant.args) === key
+  })
   if (match) await db.consumeRunToolApprovalGrant(match.id)
 }

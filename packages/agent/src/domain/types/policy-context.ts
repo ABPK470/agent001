@@ -14,6 +14,7 @@
  */
 
 import { PolicyDbEnvironment, PolicyRole, PolicyRunMode } from "../enums/policy.js"
+import type { ToolApprovalGrantScope } from "../enums/tool-approval.js"
 import type { ParentRunId, RunId } from "./branded-ids.js"
 
 export interface HostedPolicyContext {
@@ -38,12 +39,13 @@ export interface HostedPolicyContext {
   /** Originating session id, mirrored from cookie sid. */
   readonly sessionId?: string | null
   /**
-   * One-time operator grants for blocked tool calls on this run (or its
-   * parent when resuming). Matched by tool name + persisted args.
+   * Operator grants for blocked tool calls on this run (or its parent when
+   * resuming). Instance: tool + args, one use. Run: tool name for the chain.
    */
   readonly toolApprovalGrants?: ReadonlyArray<{
     grantId: string
     toolName: string
     args: Record<string, unknown>
+    scope?: ToolApprovalGrantScope
   }>
 }

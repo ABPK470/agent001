@@ -143,6 +143,8 @@ const BASELINE_SQL = `
       reason        TEXT NOT NULL,
       policy_name   TEXT NOT NULL,
       status        TEXT NOT NULL CHECK (status IN ('pending','approved','denied','consumed')),
+      grant_scope   TEXT NOT NULL DEFAULT 'instance'
+        CHECK (grant_scope IN ('instance','run')),
       requested_at  TEXT NOT NULL,
       resolved_at   TEXT,
       resolved_by   TEXT,

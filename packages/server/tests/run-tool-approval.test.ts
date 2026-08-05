@@ -51,7 +51,7 @@ describe("run tool approval application", () => {
     await setupDb()
     seedRun(testDb, "run-1", { upn: UPN, status: "waiting_for_approval" })
     const { upsertPendingRunToolApproval } = await import("../src/infra/persistence/adapters/sqlite/db/index.js")
-    const approval = upsertPendingRunToolApproval({
+    const approval = await upsertPendingRunToolApproval({
       runId: "run-1",
       stepId: "step-1",
       toolName: "fetch_url",
@@ -64,15 +64,26 @@ describe("run tool approval application", () => {
     const events: { type: string; data: Record<string, unknown> }[] = []
     const unsub = subscribeToEvents((e) => events.push({ type: e.type, data: e.data as Record<string, unknown> }))
 
-    const resumeRun = vi.fn(() => "run-1-resumed")
+    const resumeRun = vi.fn(async () => "run-1-resumed")
     const orchestrator = { resumeRun, cancelRun: vi.fn() } as unknown as import("../src/runtime/orchestrator.js").AgentOrchestrator
 
     try {
       const { approveRunToolStep } = await import("../src/runtime/service/run-tool-approval.js")
+      const { ToolApprovalGrantScope } = await import("@mia/shared-enums")
       const va = viewingAs()
-      const result = await approveRunToolStep(orchestrator, approval.id, va)
+      const result = await approveRunToolStep(
+        orchestrator,
+        approval.id,
+        va,
+        ToolApprovalGrantScope.Run,
+      )
 
-      expect(result).toEqual({ ok: true, runId: "run-1", resumedRunId: "run-1-resumed" })
+      expect(result).toEqual({
+        ok: true,
+        runId: "run-1",
+        resumedRunId: "run-1-resumed",
+        grantScope: ToolApprovalGrantScope.Run,
+      })
       expect(resumeRun).toHaveBeenCalledWith("run-1", va.session)
 
       const resolved = events.find((e) => e.type === "approval.resolved")
@@ -82,8 +93,11 @@ describe("run tool approval application", () => {
         approvalId: approval.id,
         decision: "approved",
         by: UPN,
+        grantScope: ToolApprovalGrantScope.Run,
         resumedRunId: "run-1-resumed",
       })
+      const { getRunToolApproval } = await import("../src/infra/persistence/adapters/sqlite/db/index.js")
+      expect((await getRunToolApproval(approval.id))?.grantScope).toBe(ToolApprovalGrantScope.Run)
     } finally {
       unsub()
     }
@@ -93,7 +107,7 @@ describe("run tool approval application", () => {
     await setupDb()
     seedRun(testDb, "run-1", { upn: UPN, status: "waiting_for_approval" })
     const { upsertPendingRunToolApproval } = await import("../src/infra/persistence/adapters/sqlite/db/index.js")
-    const approval = upsertPendingRunToolApproval({
+    const approval = await upsertPendingRunToolApproval({
       runId: "run-1",
       stepId: "step-1",
       toolName: "write_file",
@@ -134,7 +148,7 @@ describe("run tool approval application", () => {
     seedRun(testDb, "run-other", { upn: "bob@example.com", status: "waiting_for_approval" })
 
     const { upsertPendingRunToolApproval } = await import("../src/infra/persistence/adapters/sqlite/db/index.js")
-    const mine = upsertPendingRunToolApproval({
+    const mine = await upsertPendingRunToolApproval({
       runId: "run-wait",
       stepId: "step-1",
       toolName: "fetch_url",
@@ -142,7 +156,7 @@ describe("run tool approval application", () => {
       reason: "r",
       policyName: "p",
     })
-    upsertPendingRunToolApproval({
+    await upsertPendingRunToolApproval({
       runId: "run-done",
       stepId: "step-2",
       toolName: "fetch_url",
@@ -150,7 +164,7 @@ describe("run tool approval application", () => {
       reason: "r",
       policyName: "p",
     })
-    upsertPendingRunToolApproval({
+    await upsertPendingRunToolApproval({
       runId: "run-other",
       stepId: "step-3",
       toolName: "fetch_url",
@@ -171,7 +185,7 @@ describe("run tool approval application", () => {
     const { upsertPendingRunToolApproval, markRunToolApprovalApproved, getRunToolApproval } =
       await import("../src/infra/persistence/adapters/sqlite/db/index.js")
 
-    const approval = upsertPendingRunToolApproval({
+    const approval = await upsertPendingRunToolApproval({
       runId: "run-1",
       stepId: "step-1",
       toolName: "write_file",
@@ -179,10 +193,32 @@ describe("run tool approval application", () => {
       reason: "r",
       policyName: "p",
     })
-    markRunToolApprovalApproved(approval.id, UPN)
+    await markRunToolApprovalApproved(approval.id, UPN)
 
     const { consumeMatchingToolGrant } = await import("../src/runtime/service/run-tool-approval.js")
     await consumeMatchingToolGrant("run-1", null, "write_file", { path: "/tmp/a.txt", content: "hi" })
-    expect(getRunToolApproval(approval.id)?.status).toBe("consumed")
+    expect((await getRunToolApproval(approval.id))?.status).toBe("consumed")
+  })
+
+  it("consumeMatchingToolGrant does not consume run-scoped grants", async () => {
+    await setupDb()
+    seedRun(testDb, "run-1", { upn: UPN, status: "running" })
+    const { ToolApprovalGrantScope } = await import("@mia/shared-enums")
+    const { upsertPendingRunToolApproval, markRunToolApprovalApproved, getRunToolApproval } =
+      await import("../src/infra/persistence/adapters/sqlite/db/index.js")
+
+    const approval = await upsertPendingRunToolApproval({
+      runId: "run-1",
+      stepId: "step-1",
+      toolName: "fetch_url",
+      args: { url: "https://a.example" },
+      reason: "r",
+      policyName: "p",
+    })
+    await markRunToolApprovalApproved(approval.id, UPN, ToolApprovalGrantScope.Run)
+
+    const { consumeMatchingToolGrant } = await import("../src/runtime/service/run-tool-approval.js")
+    await consumeMatchingToolGrant("run-1", null, "fetch_url", { url: "https://b.example" })
+    expect((await getRunToolApproval(approval.id))?.status).toBe("approved")
   })
 })

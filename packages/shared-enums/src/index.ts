@@ -21,4 +21,5 @@ export * from "./policy-source.js"
 export * from "./run.js"
 export * from "./step.js"
 export * from "./sync.js"
+export * from "./tool-approval.js"
 

@@ -550,6 +550,8 @@ export interface RunToolApprovalsTable {
   reason: string
   policy_name: string
   status: string
+  /** `instance` | `run` — see ToolApprovalGrantScope. */
+  grant_scope: string
   requested_at: string
   resolved_at: string | null
   resolved_by: string | null

@@ -1226,4 +1226,25 @@ IF COL_LENGTH(N'dbo.runs', N'agent_id') IS NOT NULL
       },
     },
   },
+
+  {
+    version: 13,
+    name: "run_tool_approval_grant_scope",
+    up: {
+      mssql: async (executor) => {
+        await mssqlExec(
+          executor,
+          `
+IF COL_LENGTH(N'dbo.run_tool_approvals', N'grant_scope') IS NULL
+  ALTER TABLE dbo.run_tool_approvals
+    ADD grant_scope NVARCHAR(32) NOT NULL
+      CONSTRAINT DF_run_tool_approvals_grant_scope DEFAULT (N'instance');
+`,
+        )
+      },
+      postgres: async (executor) => {
+        await postgresExec(executor, postgresMigrationSql[13]!)
+      },
+    },
+  },
 ]

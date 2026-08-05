@@ -106,4 +106,9 @@ export async function finalizeFailedRun(
       ...await buildRunCapabilityActions(request.runId, RunStatus.Failed),
     ]
   })
+
+  const { expireToolApprovalGrantsForRunChain } = await import(
+    "../../../service/run-tool-approval.js"
+  )
+  await expireToolApprovalGrantsForRunChain(request.runId)
 }

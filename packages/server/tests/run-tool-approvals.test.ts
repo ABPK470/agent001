@@ -4,10 +4,12 @@
 
 import Database from "better-sqlite3"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
+import { ToolApprovalGrantScope } from "@mia/shared-enums"
 import {
   _migrate,
   _setDb,
   consumeRunToolApprovalGrant,
+  expireApprovedToolGrantsForRuns,
   getPendingRunToolApproval,
   getRunToolApproval,
   listApprovedToolGrantsForRuns,
@@ -37,10 +39,10 @@ afterEach(() => {
 })
 
 describe("run tool approvals DB", () => {
-  it("upsertPendingRunToolApproval is idempotent per run+step", () => {
+  it("upsertPendingRunToolApproval is idempotent per run+step", async () => {
     seedRun(testDb, "run-1", { upn: UPN, status: "running" })
 
-    const first = upsertPendingRunToolApproval({
+    const first = await upsertPendingRunToolApproval({
       runId: "run-1",
       stepId: "step-1",
       toolName: "fetch_url",
@@ -48,7 +50,7 @@ describe("run tool approvals DB", () => {
       reason: "outbound network",
       policyName: "approve_fetch",
     })
-    const second = upsertPendingRunToolApproval({
+    const second = await upsertPendingRunToolApproval({
       runId: "run-1",
       stepId: "step-1",
       toolName: "fetch_url",
@@ -59,12 +61,13 @@ describe("run tool approvals DB", () => {
 
     expect(second.id).toBe(first.id)
     expect(second.reason).toBe("outbound network")
-    expect(listPendingRunToolApprovalsForRuns(["run-1"])).toHaveLength(1)
+    expect(second.grantScope).toBe(ToolApprovalGrantScope.Instance)
+    expect(await listPendingRunToolApprovalsForRuns(["run-1"])).toHaveLength(1)
   })
 
-  it("approve, deny, and consume grant transitions", () => {
+  it("approve, deny, and consume grant transitions", async () => {
     seedRun(testDb, "run-1", { upn: UPN, status: "waiting_for_approval" })
-    const pending = upsertPendingRunToolApproval({
+    const pending = await upsertPendingRunToolApproval({
       runId: "run-1",
       stepId: "step-1",
       toolName: "write_file",
@@ -73,17 +76,18 @@ describe("run tool approvals DB", () => {
       policyName: "policy-a",
     })
 
-    const approved = markRunToolApprovalApproved(pending.id, UPN)
+    const approved = await markRunToolApprovalApproved(pending.id, UPN)
     expect(approved?.status).toBe("approved")
+    expect(approved?.grantScope).toBe(ToolApprovalGrantScope.Instance)
     expect(approved?.resolvedBy).toBe(UPN)
-    expect(getPendingRunToolApproval("run-1", "step-1")).toBeNull()
+    expect(await getPendingRunToolApproval("run-1", "step-1")).toBeNull()
 
-    consumeRunToolApprovalGrant(pending.id)
-    expect(getRunToolApproval(pending.id)?.status).toBe("consumed")
-    expect(listApprovedToolGrantsForRuns(["run-1"])).toHaveLength(0)
+    await consumeRunToolApprovalGrant(pending.id)
+    expect((await getRunToolApproval(pending.id))?.status).toBe("consumed")
+    expect(await listApprovedToolGrantsForRuns(["run-1"])).toHaveLength(0)
 
     seedRun(testDb, "run-2", { upn: UPN, status: "waiting_for_approval" })
-    const deniedPending = upsertPendingRunToolApproval({
+    const deniedPending = await upsertPendingRunToolApproval({
       runId: "run-2",
       stepId: "step-2",
       toolName: "shell",
@@ -91,13 +95,37 @@ describe("run tool approvals DB", () => {
       reason: "dangerous",
       policyName: "policy-b",
     })
-    const denied = markRunToolApprovalDenied(deniedPending.id, UPN)
+    const denied = await markRunToolApprovalDenied(deniedPending.id, UPN)
     expect(denied?.status).toBe("denied")
   })
 
-  it("markRunWaitingForApproval updates run status", () => {
+  it("stores run-scoped grant and expires approved grants for a run", async () => {
+    seedRun(testDb, "run-1", { upn: UPN, status: "waiting_for_approval" })
+    const pending = await upsertPendingRunToolApproval({
+      runId: "run-1",
+      stepId: "step-1",
+      toolName: "fetch_url",
+      args: { url: "https://a.example" },
+      reason: "outbound",
+      policyName: "hosted_fetch",
+    })
+
+    const approved = await markRunToolApprovalApproved(
+      pending.id,
+      UPN,
+      ToolApprovalGrantScope.Run,
+    )
+    expect(approved?.grantScope).toBe(ToolApprovalGrantScope.Run)
+    expect(await listApprovedToolGrantsForRuns(["run-1"])).toHaveLength(1)
+
+    await expireApprovedToolGrantsForRuns(["run-1"])
+    expect(await listApprovedToolGrantsForRuns(["run-1"])).toHaveLength(0)
+    expect((await getRunToolApproval(pending.id))?.status).toBe("consumed")
+  })
+
+  it("markRunWaitingForApproval updates run status", async () => {
     seedRun(testDb, "run-1", { upn: UPN, status: "running" })
-    markRunWaitingForApproval("run-1")
+    await markRunWaitingForApproval("run-1")
     const row = testDb.prepare("SELECT status FROM runs WHERE id = ?").get("run-1") as { status: string }
     expect(row.status).toBe("waiting_for_approval")
   })

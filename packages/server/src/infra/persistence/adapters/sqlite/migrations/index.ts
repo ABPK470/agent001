@@ -8,6 +8,7 @@
 
 import type Database from "better-sqlite3"
 import { DROP_RETIRED_BROWSER_TABLES_SQL, runBaselineMigration } from "./0001_baseline.js"
+import { runRunToolApprovalGrantScopeMigration } from "./0002_run_tool_approval_grant_scope.js"
 
 export interface Migration {
   version: number
@@ -17,6 +18,7 @@ export interface Migration {
 
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, name: "baseline", up: runBaselineMigration },
+  { version: 2, name: "run_tool_approval_grant_scope", up: runRunToolApprovalGrantScopeMigration },
 ]
 
 export function runMigrations(db: Database.Database): void {

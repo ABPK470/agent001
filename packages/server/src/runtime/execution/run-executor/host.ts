@@ -54,6 +54,7 @@ async function createPolicyContext(
     grantId: grant.id,
     toolName: grant.toolName,
     args: grant.args,
+    scope: grant.grantScope,
   }))
 
   return buildPolicyContext({

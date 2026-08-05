@@ -276,13 +276,15 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
     }
   })
 
-  app.post<{ Params: { id: string } }>(
+  app.post<{ Params: { id: string }; Body: { scope?: string } }>(
     "/api/runs/tool-approvals/:id/approve",
     personal.write,
     async (req, reply) => {
       try {
+        const { normalizeToolApprovalGrantScope } = await import("@mia/shared-enums")
         const { approveRunToolStep } = await import("../../runtime/service/run-tool-approval.js")
-        return approveRunToolStep(orchestrator, req.params.id, viewingAsOf(req))
+        const scope = normalizeToolApprovalGrantScope(req.body?.scope)
+        return approveRunToolStep(orchestrator, req.params.id, viewingAsOf(req), scope)
       } catch (error) {
         reply.code(error instanceof Error && error.message.includes("Authentication") ? 401 : 400)
         return { error: error instanceof Error ? error.message : "Approval failed" }

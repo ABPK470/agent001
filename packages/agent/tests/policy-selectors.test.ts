@@ -298,9 +298,37 @@ describe("selector policy engine", () => {
     })
     const step = makeStep("fetch_url", { url: "https://example.com" })
     const ctx = hostedCtx({
-      toolApprovalGrants: [{ toolName: "fetch_url", args: { url: "https://example.com" } }],
+      toolApprovalGrants: [{ grantId: "g1", toolName: "fetch_url", args: { url: "https://example.com" } }],
     })
     const result = await evaluate(ev, step, ctx)
+    expect(result.approval).toBeNull()
+    expect(result.error).toBeUndefined()
+  })
+
+  it("run-scoped grant bypasses require_approval for any args of that tool", async () => {
+    const ev = new RulePolicyEvaluator()
+    ev.addRule({
+      name: "approve_fetch",
+      effect: PolicyEffect.RequireApproval,
+      condition: "selectors",
+      parameters: {
+        selectors: { role: "hosted_user", tool: "fetch_url" },
+        reason: "outbound network needs approval",
+      },
+    })
+    const ctx = hostedCtx({
+      toolApprovalGrants: [{
+        grantId: "g-run",
+        toolName: "fetch_url",
+        args: { url: "https://first.example" },
+        scope: "run",
+      }],
+    })
+    const result = await evaluate(
+      ev,
+      makeStep("fetch_url", { url: "https://second.example" }),
+      ctx,
+    )
     expect(result.approval).toBeNull()
     expect(result.error).toBeUndefined()
   })
