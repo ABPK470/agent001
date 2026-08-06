@@ -1,16 +1,13 @@
 /**
- * Trace operator keyboard — pane ownership, detail scroll/tabs, Esc ladder.
+ * Trace operator keyboard — scope drawer chord + shared review pane ownership.
  * Z stays in useWidgetZenHotkeys; tree row nav stays in useTraceTreeKeyboard.
  */
 
 import { useEffect, type RefObject } from "react"
+import { useReviewOperatorKeyboard } from "../../hooks/useReviewOperatorKeyboard"
 import { isEditableKeyboardTarget } from "../../lib/keyboard-target"
-import {
-  detailScrollPageDelta,
-  resolveEscLadder,
-  resolveTracePaneKeyboardAction,
-  type TracePane,
-} from "../../lib/keymap"
+import type { DetailSectionController } from "../../lib/review/detail-section-controller"
+import type { TracePane } from "../../lib/keymap"
 
 export function useTraceOperatorKeyboard({
   enabled,
@@ -29,6 +26,7 @@ export function useTraceOperatorKeyboard({
   treeScrollRef,
   detailScrollRef,
   tabCycleRef,
+  sectionControllerRef,
 }: {
   enabled: boolean
   focusedPane: TracePane
@@ -46,129 +44,42 @@ export function useTraceOperatorKeyboard({
   treeScrollRef: RefObject<HTMLElement | null>
   detailScrollRef: RefObject<HTMLElement | null>
   tabCycleRef: RefObject<((direction: -1 | 1) => void) | null>
+  sectionControllerRef?: RefObject<DetailSectionController | null>
 }) {
   useEffect(() => {
     if (!enabled) return
 
-    function focusPane(pane: TracePane) {
-      onFocusedPaneChange(pane)
-      const el = pane === "tree" ? treeScrollRef.current : detailScrollRef.current
-      el?.focus({ preventScroll: true })
-    }
-
     function onKeyDown(event: KeyboardEvent) {
-      const editable = isEditableKeyboardTarget(event.target)
-
-      // ⌘\ / Ctrl+\ — toggle Thread/Run scope drawer
-      if ((event.metaKey || event.ctrlKey) && (event.key === "\\" || event.code === "Backslash")) {
-        if (editable) return
-        event.preventDefault()
-        event.stopPropagation()
-        onScopeDrawerOpenChange(!scopeDrawerOpen)
-        return
-      }
-
-      // Esc peels even from filter inputs — editable skip would trap focus in search.
-      if (event.key === "Escape") {
-        const action = resolveEscLadder({
-          scopeDrawerOpen,
-          filterOpen: searchOpen,
-          focusedPane,
-          isZen,
-          isSolo,
-          summonOpen,
-        })
-        if (action.type === "none") return
-        event.preventDefault()
-        event.stopPropagation()
-        if (action.type === "dismiss-scope-drawer") {
-          onScopeDrawerOpenChange(false)
-          return
-        }
-        if (action.type === "dismiss-filter") {
-          onSearchOpenChange(false)
-          if (event.target instanceof HTMLElement) event.target.blur()
-          focusPane("tree")
-          return
-        }
-        if (action.type === "pane-to-tree") {
-          focusPane("tree")
-          return
-        }
-        if (action.type === "exit-zen") {
-          onExitZen()
-          return
-        }
-        if (action.type === "restore-maximize") {
-          onRestoreMaximize()
-          return
-        }
-        if (action.type === "dismiss-summon") {
-          onDismissSummon()
-        }
-        return
-      }
-
-      if (editable) return
-
-      // Scope drawer owns j/k/arrows while open — do not peel panes underneath.
-      if (scopeDrawerOpen) return
-
-      const paneAction = resolveTracePaneKeyboardAction(event, focusedPane)
-      if (paneAction.type === "none") return
-
+      if (isEditableKeyboardTarget(event.target)) return
+      if (!(event.metaKey || event.ctrlKey)) return
+      if (event.key !== "\\" && event.code !== "Backslash") return
       event.preventDefault()
       event.stopPropagation()
-
-      if (paneAction.type === "pane-to-detail") {
-        focusPane("detail")
-        return
-      }
-      if (paneAction.type === "pane-to-tree") {
-        focusPane("tree")
-        return
-      }
-      if (paneAction.type === "toggle-pane") {
-        focusPane(focusedPane === "tree" ? "detail" : "tree")
-        return
-      }
-
-      const scrollEl = detailScrollRef.current
-      if (paneAction.type === "detail-scroll" && scrollEl) {
-        scrollEl.scrollTop += paneAction.delta
-        return
-      }
-      if (paneAction.type === "detail-scroll-page" && scrollEl) {
-        scrollEl.scrollTop += paneAction.direction * detailScrollPageDelta()
-        return
-      }
-      if (paneAction.type === "detail-scroll-edge" && scrollEl) {
-        scrollEl.scrollTop = paneAction.edge === "start" ? 0 : scrollEl.scrollHeight
-        return
-      }
-      if (paneAction.type === "cycle-tab") {
-        tabCycleRef.current?.(paneAction.direction)
-      }
+      onScopeDrawerOpenChange(!scopeDrawerOpen)
     }
 
     window.addEventListener("keydown", onKeyDown)
     return () => window.removeEventListener("keydown", onKeyDown)
-  }, [
-    detailScrollRef,
+  }, [enabled, onScopeDrawerOpenChange, scopeDrawerOpen])
+
+  useReviewOperatorKeyboard({
     enabled,
     focusedPane,
-    isSolo,
-    isZen,
-    onDismissSummon,
-    onExitZen,
     onFocusedPaneChange,
-    onRestoreMaximize,
-    onScopeDrawerOpenChange,
-    onSearchOpenChange,
+    filterOpen: searchOpen,
+    onFilterOpenChange: onSearchOpenChange,
     scopeDrawerOpen,
-    searchOpen,
+    onScopeDrawerOpenChange,
+    isZen,
+    isSolo,
     summonOpen,
-    tabCycleRef,
+    onExitZen,
+    onRestoreMaximize,
+    onDismissSummon,
     treeScrollRef,
-  ])
+    detailScrollRef,
+    tabCycleRef,
+    sectionControllerRef,
+    lateral: "tabs",
+  })
 }

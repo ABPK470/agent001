@@ -6,8 +6,14 @@ export {
   type ShellKeyboardContext,
 } from "./resolve-shell-keyboard"
 export {
-  resolveTracePaneKeyboardAction,
+  resolveReviewPaneKeyboardAction,
   detailScrollPageDelta,
+  type ReviewPane,
+  type ReviewPaneKeyboardAction,
+  type DetailLateralMode,
+} from "./resolve-review-pane-keyboard"
+export {
+  resolveTracePaneKeyboardAction,
   type TracePane,
   type TracePaneKeyboardAction,
 } from "./resolve-trace-pane-keyboard"
@@ -24,8 +30,11 @@ export {
   TRACE_SCOPE_DRAWER_BINDING,
   TRACE_TREE_HINTS,
   TRACE_DETAIL_HINTS,
+  PIPELINES_TREE_HINTS,
+  PIPELINES_DETAIL_HINTS,
   SUMMON_HINTS,
   hintsForTracePane,
+  hintsForPipelinesPane,
 } from "./bindings"
 export {
   SHORTCUT_REGISTRY,

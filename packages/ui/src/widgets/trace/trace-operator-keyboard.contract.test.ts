@@ -8,13 +8,20 @@ import { fileURLToPath } from "node:url"
 import { describe, expect, it } from "vitest"
 
 const here = dirname(fileURLToPath(import.meta.url))
+const hooks = join(here, "../../hooks")
 
 describe("trace operator keyboard contracts", () => {
-  it("focuses panes with preventScroll and owns Esc outside zen hotkeys", () => {
+  it("shares pane focus / Esc with review operator keyboard", () => {
+    const shared = readFileSync(join(hooks, "useReviewOperatorKeyboard.ts"), "utf8")
+    expect(shared).toContain("preventScroll: true")
+    expect(shared).toContain("resolveEscLadder")
+    expect(shared).toContain("stopPropagation")
+    expect(shared).toContain("section-toggle")
+
     const operator = readFileSync(join(here, "use-trace-operator-keyboard.ts"), "utf8")
-    expect(operator).toContain("preventScroll: true")
-    expect(operator).toContain("resolveEscLadder")
-    expect(operator).toContain("stopPropagation")
+    expect(operator).toContain("useReviewOperatorKeyboard")
+    expect(operator).toContain('lateral: "tabs"')
+    expect(operator).toContain("Backslash")
   })
 
   it("gates tree keys on focusedPane === tree", () => {
@@ -22,5 +29,6 @@ describe("trace operator keyboard contracts", () => {
     expect(dag).toContain('focusedPane === "tree"')
     expect(dag).toContain("useTraceOperatorKeyboard")
     expect(dag).toContain("is-pane-focused")
+    expect(dag).toContain("DetailSectionProvider")
   })
 })

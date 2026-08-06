@@ -15,6 +15,11 @@ export {
   type ReviewTreeFoldMode,
 } from "./review-tree-open-state"
 export { ReviewDetailAccordion } from "./ReviewDetailAccordion"
+export {
+  DetailSectionProvider,
+  useDetailSectionController,
+  useRegisterDetailSection,
+} from "./DetailSectionContext"
 export { ReviewDetailErrorCallout, ReviewDetailHeadline } from "./ReviewDetailHeadline"
 export { ReviewDetailPane } from "./ReviewDetailPane"
 export { ReviewPayloadBlock } from "./ReviewPayloadBlock"

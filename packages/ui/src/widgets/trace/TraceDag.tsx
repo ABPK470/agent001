@@ -70,7 +70,9 @@ import { useTraceZenHotkeys } from "./use-trace-zen-hotkeys"
 import { useTraceTreeKeyboard } from "./use-trace-tree-keyboard"
 import { useTraceOperatorKeyboard } from "./use-trace-operator-keyboard"
 import { operationStatusPill } from "../../lib/status-callout"
+import { DetailSectionProvider } from "../../components/review"
 import { formatModChord, hintsForTracePane, type TracePane } from "../../lib/keymap"
+import type { DetailSectionController } from "../../lib/review/detail-section-controller"
 import { ComposerKbdFooter } from "../chat/ComposerKbdFooter"
 
 export const TRACE_TREE_OVERSCAN = 8
@@ -142,6 +144,7 @@ export function TraceDag({
   const treeScrollRef = useRef<HTMLDivElement>(null)
   const detailScrollRef = useRef<HTMLDivElement>(null)
   const tabCycleRef = useRef<((direction: -1 | 1) => void) | null>(null)
+  const sectionControllerRef = useRef<DetailSectionController | null>(null)
   const treeListRef = useRef<VirtualListHandle | null>(null)
   const splitShellRef = useRef<HTMLDivElement>(null)
   const splitDragRef = useRef<SplitPaneDragState | null>(null)
@@ -501,6 +504,7 @@ export function TraceDag({
     treeScrollRef,
     detailScrollRef,
     tabCycleRef,
+    sectionControllerRef,
   })
 
   function closeScopeDrawer(returnFocus = true) {
@@ -832,26 +836,28 @@ export function TraceDag({
                 className={`trace-split-detail widget-split-main flex min-h-0 min-w-0 flex-col overflow-hidden${focusedPane === "detail" && zenHotkeysEnabled ? " is-pane-focused" : ""}`}
               >
                 <div className="widget-split-inset flex min-h-0 flex-1 flex-col overflow-hidden">
-                  <TraceDetailInspector
-                    dag={dag}
-                    compareDag={compareDag}
-                    treeIndex={treeIndex}
-                    selectedScopeId={selectedScopeId}
-                    runId={runId}
-                    threadId={threadId}
-                    playgroundOpen={playgroundOpen}
-                    onTogglePlayground={onTogglePlayground}
-                    compareRunId={compareRunId}
-                    onToggleCompare={onToggleCompare}
-                    priorRuns={priorRuns}
-                    onCompareRunChange={onCompareRunChange}
-                    canCompare={canCompare}
-                    onNotify={onExportMessage}
-                    onError={onExportError}
-                    splitHeader={isZen}
-                    scrollRef={detailScrollRef}
-                    tabCycleRef={tabCycleRef}
-                  />
+                  <DetailSectionProvider controllerRef={sectionControllerRef}>
+                    <TraceDetailInspector
+                      dag={dag}
+                      compareDag={compareDag}
+                      treeIndex={treeIndex}
+                      selectedScopeId={selectedScopeId}
+                      runId={runId}
+                      threadId={threadId}
+                      playgroundOpen={playgroundOpen}
+                      onTogglePlayground={onTogglePlayground}
+                      compareRunId={compareRunId}
+                      onToggleCompare={onToggleCompare}
+                      priorRuns={priorRuns}
+                      onCompareRunChange={onCompareRunChange}
+                      canCompare={canCompare}
+                      onNotify={onExportMessage}
+                      onError={onExportError}
+                      splitHeader={isZen}
+                      scrollRef={detailScrollRef}
+                      tabCycleRef={tabCycleRef}
+                    />
+                  </DetailSectionProvider>
                 </div>
               </div>
             </div>

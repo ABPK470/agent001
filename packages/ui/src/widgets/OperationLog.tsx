@@ -14,7 +14,12 @@ import type { ReviewTreeKeyboardNode } from "../components/review/review-tree-ke
 import { EmptyState } from "../components/EmptyState"
 import { useWidgetInstance } from "../app/workspace/widget-instance"
 import { useContainerSize } from "../hooks/useContainerSize"
+import { useReviewOperatorKeyboard } from "../hooks/useReviewOperatorKeyboard"
 import { useReviewTreeKeyboard } from "../hooks/useReviewTreeKeyboard"
+import { hintsForPipelinesPane, type ReviewPane } from "../lib/keymap"
+import type { DetailSectionController } from "../lib/review/detail-section-controller"
+import { useStore } from "../state/store"
+import { ComposerKbdFooter } from "./chat/ComposerKbdFooter"
 import { useOperationLogData, type OperationLogKindView } from "../hooks/useOperationLogData"
 import {
   readOperationLogPrefs,
@@ -327,11 +332,19 @@ export function OperationLog() {
     () => treeDefaults.foldMode,
   )
   const [splitRatio, setSplitRatio] = useState(OP_LOG_SPLIT_DEFAULT)
+  const [focusedPane, setFocusedPane] = useState<ReviewPane>("tree")
   const rootRef = useRef<HTMLDivElement>(null)
   const listScrollRef = useRef<HTMLDivElement>(null)
+  const detailScrollRef = useRef<HTMLDivElement>(null)
+  const sectionControllerRef = useRef<DetailSectionController | null>(null)
   const listTreeRef = useRef<VirtualListHandle>(null)
   const sentinelRef = useRef<HTMLDivElement>(null)
   const focusedTileId = useLayoutStore((s) => s.focusedTileId)
+  const soloTileId = useLayoutStore((s) => s.soloTileId)
+  const activeViewId = useLayoutStore((s) => s.activeViewId)
+  const toggleTileMaximized = useLayoutStore((s) => s.toggleTileMaximized)
+  const summonOpen = useStore((s) => s.summonOpen)
+  const setSummonOpen = useStore((s) => s.setSummonOpen)
   const { width } = useContainerSize(rootRef)
   const tiny = width > 0 && width < 480
   const [cancellingId, setCancellingId] = useState<string | null>(null)
@@ -569,12 +582,36 @@ export function OperationLog() {
     [pipelineById, openPipelineIds, actExpanded],
   )
 
-  const treeKeyboardEnabled = Boolean(
-    instance && focusedTileId === instance.widgetId && keyboardNodes.length > 0,
-  )
+  const tileFocused = Boolean(instance && focusedTileId === instance.widgetId)
+  const isSolo = Boolean(instance && soloTileId === instance.widgetId)
+  const hasRows = filtered.length > 0
+  const operatorKeysEnabled = tileFocused && hasRows
+
+  const onFocusedPaneChange = useCallback((pane: ReviewPane) => {
+    setFocusedPane(pane)
+  }, [])
+
+  const onRestoreMaximize = useCallback(() => {
+    if (!tileId) return
+    toggleTileMaximized(activeViewId, tileId)
+  }, [activeViewId, tileId, toggleTileMaximized])
+
+  useReviewOperatorKeyboard({
+    enabled: operatorKeysEnabled,
+    focusedPane,
+    onFocusedPaneChange,
+    isSolo,
+    summonOpen,
+    onRestoreMaximize,
+    onDismissSummon: () => setSummonOpen(false),
+    treeScrollRef: listScrollRef,
+    detailScrollRef,
+    sectionControllerRef,
+    lateral: "sections",
+  })
 
   useReviewTreeKeyboard({
-    enabled: treeKeyboardEnabled,
+    enabled: operatorKeysEnabled && focusedPane === "tree" && keyboardNodes.length > 0,
     nodes: keyboardNodes,
     selectedScopeId: selectedScopeIdFromOpLogSelection(selection),
     isFolded: isKeyboardNodeFolded,
@@ -662,7 +699,9 @@ export function OperationLog() {
                 minRatio={OP_LOG_SPLIT_MIN}
                 maxRatio={OP_LOG_SPLIT_MAX}
                 sidebar={
-                  <div className="review-split-list widget-split-sidebar flex min-h-0 min-w-0 flex-col overflow-hidden">
+                  <div
+                    className={`review-split-list widget-split-sidebar flex min-h-0 min-w-0 flex-col overflow-hidden${focusedPane === "tree" && operatorKeysEnabled ? " is-pane-focused" : ""}`}
+                  >
                     <div className="review-split-tree-table">
                       <ReviewTreeHeader
                         columns={[
@@ -676,6 +715,7 @@ export function OperationLog() {
                         className="review-split-list-scroll min-h-0 flex-1 overflow-y-auto"
                         role="tree"
                         aria-label="Operations tree"
+                        tabIndex={0}
                       >
                         <OperationPipelineList
                           listRef={listTreeRef}
@@ -706,7 +746,9 @@ export function OperationLog() {
                   </div>
                 }
                 main={
-                  <div className="review-split-detail widget-split-main flex min-h-0 min-w-0 flex-col overflow-hidden">
+                  <div
+                    className={`review-split-detail widget-split-main flex min-h-0 min-w-0 flex-col overflow-hidden${focusedPane === "detail" && operatorKeysEnabled ? " is-pane-focused" : ""}`}
+                  >
                     <div className="widget-split-inset flex min-h-0 flex-1 flex-col overflow-hidden">
                       <OperationLogInspector
                         pipeline={selectedPipeline}
@@ -714,6 +756,8 @@ export function OperationLog() {
                         keyOf={pipelineActivityKey}
                         onCancel={cancelPipeline}
                         cancelling={cancellingId === selectedPipeline?.id}
+                        scrollRef={detailScrollRef}
+                        sectionControllerRef={sectionControllerRef}
                       />
                     </div>
                   </div>
@@ -721,6 +765,9 @@ export function OperationLog() {
               />
             )}
           </div>
+          {operatorKeysEnabled ? (
+            <ComposerKbdFooter hints={hintsForPipelinesPane(focusedPane)} />
+          ) : null}
         </div>
       </div>
     </OperationLogModalsProvider>

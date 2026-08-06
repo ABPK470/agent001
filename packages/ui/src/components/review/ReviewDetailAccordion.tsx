@@ -1,5 +1,6 @@
 import { ChevronRight } from "lucide-react"
-import type { JSX, ReactNode } from "react"
+import { useRef, type JSX, type ReactNode } from "react"
+import { useRegisterDetailSection } from "./DetailSectionContext"
 
 export function ReviewDetailAccordion({
   label,
@@ -12,11 +13,21 @@ export function ReviewDetailAccordion({
   onToggle: () => void
   children: ReactNode
 }): JSX.Element {
+  const headerRef = useRef<HTMLButtonElement>(null)
+  const { active } = useRegisterDetailSection({
+    open,
+    setOpen: (next) => {
+      if (next !== open) onToggle()
+    },
+    headerRef,
+  })
+
   return (
     <section className="review-detail-section review-detail-section--accordion">
       <button
+        ref={headerRef}
         type="button"
-        className="review-detail-accordion"
+        className={`review-detail-accordion${active ? " is-section-focused" : ""}`}
         aria-expanded={open}
         onClick={onToggle}
       >

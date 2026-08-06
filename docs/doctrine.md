@@ -374,9 +374,11 @@ Threads splitting the remaining 40%. **Summon** (Mod+K) is widget-first:
 Enter peeks a widget (or focuses it if already on the Space); sole-widget
 Spaces (Trace, Bridge) have no peek twin — Enter opens that Space; Mod+Enter
 Keeps a widget in the current Space; Spaces navigate (Call); bundles open a
-home Space and focus a primary tile — never auto-maximize. Trace owns
-**pane focus** (top accent on the focused split panel — tree or detail) with
-one Esc ladder (overlay → filter → pane → zen → maximize). Shell chords:
+home Space and focus a primary tile — never auto-maximize. Trace and Pipelines
+share **pane focus** (top accent on the focused split panel — tree or detail)
+via `useReviewOperatorKeyboard`; detail accordions register for `[`/`]` / Space
+(Trace ←→ cycles call tabs; Pipelines ←→ folds the active section). Esc ladder
+peels overlay → filter → pane → zen → maximize. Shell chords:
 Call Space (Mod+1–4), prev/next view tab (Mod+[ / ]), tile focus
 (Mod+⇧+arrows — not ⌥; Mod+⌥ alone toggles chat↔workspace), M maximize, Z zen,
 Mod+W close tile, `?` keymap (searchable zero-scroll sheet: All / Pane / Shell).

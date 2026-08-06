@@ -22,7 +22,6 @@ export const SHELL_BINDINGS: readonly KeymapBinding[] = [
 export const TRACE_TREE_HINTS: readonly KbdHint[] = [
   { keys: [MOD, "\\"], label: "runs" },
   { keys: ["`"], label: "pane" },
-  { keys: ["↵"], label: "detail" },
   { keys: ["↑", "↓"], label: "move" },
   { keys: ["←", "→"], label: "fold" },
   { keys: ["M"], label: "max" },
@@ -40,7 +39,26 @@ export const TRACE_SCOPE_DRAWER_BINDING: KeymapBinding = {
 export const TRACE_DETAIL_HINTS: readonly KbdHint[] = [
   { keys: ["`"], label: "tree" },
   { keys: ["↑", "↓"], label: "scroll" },
+  { keys: ["[", "]"], label: "section" },
+  { keys: ["Space"], label: "toggle" },
   { keys: ["←", "→"], label: "tabs" },
+  { keys: ["Esc"], label: "tree" },
+]
+
+/** Pipelines (and other review master–detail without Trace tabs / scope drawer). */
+export const PIPELINES_TREE_HINTS: readonly KbdHint[] = [
+  { keys: ["`"], label: "pane" },
+  { keys: ["↑", "↓"], label: "move" },
+  { keys: ["←", "→"], label: "fold" },
+  { keys: ["M"], label: "max" },
+]
+
+export const PIPELINES_DETAIL_HINTS: readonly KbdHint[] = [
+  { keys: ["`"], label: "tree" },
+  { keys: ["↑", "↓"], label: "scroll" },
+  { keys: ["[", "]"], label: "section" },
+  { keys: ["Space"], label: "toggle" },
+  { keys: ["←", "→"], label: "fold" },
   { keys: ["Esc"], label: "tree" },
 ]
 
@@ -55,4 +73,8 @@ export const SUMMON_HINTS: readonly KbdHint[] = [
 
 export function hintsForTracePane(pane: "tree" | "detail"): readonly KbdHint[] {
   return pane === "tree" ? TRACE_TREE_HINTS : TRACE_DETAIL_HINTS
+}
+
+export function hintsForPipelinesPane(pane: "tree" | "detail"): readonly KbdHint[] {
+  return pane === "tree" ? PIPELINES_TREE_HINTS : PIPELINES_DETAIL_HINTS
 }

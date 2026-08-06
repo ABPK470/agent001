@@ -38,6 +38,10 @@ describe("resolveTracePaneKeyboardAction", () => {
       type: "cycle-tab",
       direction: 1,
     })
+    expect(resolveTracePaneKeyboardAction(key({ key: "]" }), "detail")).toEqual({
+      type: "section-move",
+      direction: 1,
+    })
     expect(resolveTracePaneKeyboardAction(key({ key: "j" }), "tree")).toEqual({ type: "none" })
   })
 })

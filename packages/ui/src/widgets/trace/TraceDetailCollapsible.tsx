@@ -6,7 +6,8 @@
  */
 
 import { ChevronRight } from "lucide-react"
-import { useState, type ReactNode } from "react"
+import { useRef, useState, type ReactNode } from "react"
+import { useRegisterDetailSection } from "../../components/review/DetailSectionContext"
 
 type AccordionActions =
   | ReactNode
@@ -30,6 +31,12 @@ export function TraceDetailCollapsible({
   children: ReactNode
 }) {
   const [open, setOpen] = useState(defaultOpen)
+  const headerRef = useRef<HTMLButtonElement>(null)
+  const { active } = useRegisterDetailSection({
+    open,
+    setOpen,
+    headerRef,
+  })
 
   const rootClass = [
     "trace-detail-section",
@@ -46,8 +53,9 @@ export function TraceDetailCollapsible({
     <section className={rootClass}>
       <div className="trace-detail-accordion-bar">
         <button
+          ref={headerRef}
           type="button"
-          className="trace-detail-accordion"
+          className={`trace-detail-accordion${active ? " is-section-focused" : ""}`}
           aria-expanded={open}
           onClick={() => setOpen((value) => !value)}
         >

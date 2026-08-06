@@ -52,7 +52,7 @@ describe("operator review kit contracts", () => {
     expect(css).toMatch(/\.review-tree-row\.is-selected::before\s*\{[^}]*left:\s*0/s)
     expect(css).toMatch(/\.review-tree-row\.is-selected::before\s*\{[^}]*width:\s*2px/s)
     expect(css).toMatch(
-      /\.trace-split-tree\.is-pane-focused::before,\s*\n\.trace-split-detail\.is-pane-focused::before\s*\{[^}]*height:\s*2px/s,
+      /\.trace-split-tree\.is-pane-focused::before,\s*\n\.trace-split-detail\.is-pane-focused::before,\s*\n\.review-split-list\.is-pane-focused::before,\s*\n\.review-split-detail\.is-pane-focused::before\s*\{[^}]*height:\s*2px/s,
     )
   })
 

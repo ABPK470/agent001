@@ -21,48 +21,62 @@ export type ShortcutItem = {
 
 /** Full operator registry — labels are sheet-facing (not strip shorthand). */
 export const SHORTCUT_REGISTRY: readonly ShortcutItem[] = [
-  // Pane — Trace
+  // Pane — shared review (Trace + Pipelines)
   {
-    id: "trace-pane-toggle",
+    id: "review-pane-toggle",
     label: "Tree ↔ Detail",
     keys: ["`"],
     category: "pane",
-    context: "Trace",
+    context: "Trace · Pipelines",
   },
   {
-    id: "trace-jump-detail",
-    label: "Jump to Detail",
-    keys: ["↵"],
-    category: "pane",
-    context: "Trace · Tree",
-  },
-  {
-    id: "trace-return-tree",
+    id: "review-return-tree",
     label: "Return to Tree",
     keys: ["Esc"],
     category: "pane",
-    context: "Trace · Detail",
+    context: "Detail",
   },
   {
-    id: "trace-tree-move",
+    id: "review-tree-move",
     label: "Move in Tree",
     keys: ["↑", "↓"],
     category: "pane",
-    context: "Trace · Tree",
+    context: "Tree",
   },
   {
-    id: "trace-tree-fold",
-    label: "Fold / unfold",
+    id: "review-tree-fold",
+    label: "Fold / unfold tree",
     keys: ["←", "→"],
     category: "pane",
-    context: "Trace · Tree",
+    context: "Tree",
   },
   {
-    id: "trace-detail-scroll",
+    id: "review-detail-scroll",
     label: "Scroll Detail",
     keys: ["↑", "↓"],
     category: "pane",
-    context: "Trace · Detail",
+    context: "Detail",
+  },
+  {
+    id: "review-detail-section",
+    label: "Prev / next detail section",
+    keys: ["[", "]"],
+    category: "pane",
+    context: "Detail",
+  },
+  {
+    id: "review-detail-toggle",
+    label: "Toggle detail section",
+    keys: ["Space"],
+    category: "pane",
+    context: "Detail",
+  },
+  {
+    id: "pipelines-detail-fold",
+    label: "Fold / unfold detail section",
+    keys: ["←", "→"],
+    category: "pane",
+    context: "Pipelines · Detail",
   },
   {
     id: "trace-detail-tabs",
@@ -76,7 +90,7 @@ export const SHORTCUT_REGISTRY: readonly ShortcutItem[] = [
     label: "Maximize / restore",
     keys: ["M"],
     category: "pane",
-    context: "Trace",
+    context: "Trace · Pipelines",
   },
   {
     id: "trace-zen",

@@ -3,12 +3,13 @@
  */
 
 export type EscLadderContext = {
-  scopeDrawerOpen: boolean
+  /** Trace Thread/Run drawer — omit / false for Pipelines. */
+  scopeDrawerOpen?: boolean
   filterOpen: boolean
   focusedPane: "tree" | "detail"
-  isZen: boolean
-  isSolo: boolean
-  summonOpen: boolean
+  isZen?: boolean
+  isSolo?: boolean
+  summonOpen?: boolean
 }
 
 export type EscLadderAction =
