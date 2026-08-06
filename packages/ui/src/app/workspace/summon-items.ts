@@ -2,9 +2,9 @@
  * Summon catalog — operator dispatch, not a flat app launcher.
  *
  * Mental model (empty query = board):
- *   1. Go to Space  — job destinations (⌘1–4)
+ *   1. Go to Space  — job destinations (⌘1–5)
  *   2. Open preset  — curated layouts
- *   3. Summon surface — peek / keep a widget
+ *   3. Summon surface — Enter keeps / Mod+Enter peeks
  *
  * Search collapses the board to ranked matches; kinds stay visible.
  */
@@ -13,7 +13,6 @@ import type { WidgetType } from "../../types"
 import {
   PRODUCT_BUNDLES,
   PRODUCT_SPACES,
-  dedicatedSpaceForWidget,
   type ProductBundleId,
   type SpaceId,
 } from "../../lib/spaces"
@@ -78,12 +77,7 @@ export function widgetSummonGroup(type: WidgetType): WidgetSummonGroup {
 /** Ops board order: Spaces → presets → surfaces. */
 export function listSummonItems(): SummonItem[] {
   const spaces: SummonItem[] = [...PRODUCT_SPACES]
-    .sort((a, b) => {
-      // Call Space indices first (1–4), then summon-only (0).
-      const ai = a.index === 0 ? 99 : a.index
-      const bi = b.index === 0 ? 99 : b.index
-      return ai - bi
-    })
+    .sort((a, b) => a.index - b.index)
     .map((space) => ({
       kind: "space" as const,
       id: space.id,
@@ -101,16 +95,14 @@ export function listSummonItems(): SummonItem[] {
     focusType: bundle.focusType,
   }))
 
-  // Sole-widget Spaces (Trace, Bridge) own the Go path — no peek twin in Surfaces.
-  const widgets: SummonItem[] = catalogEntries()
-    .filter((entry) => dedicatedSpaceForWidget(entry.type) == null)
-    .map((entry) => ({
-      kind: "widget" as const,
-      type: entry.type,
-      name: entry.label,
-      desc: entry.desc,
-      group: widgetSummonGroup(entry.type),
-    }))
+  // Full catalog — Trace/Bridge still Enter→their Space (never peek a second shell).
+  const widgets: SummonItem[] = catalogEntries().map((entry) => ({
+    kind: "widget" as const,
+    type: entry.type,
+    name: entry.label,
+    desc: entry.desc,
+    group: widgetSummonGroup(entry.type),
+  }))
 
   // Stable widget order within groups for spatial memory.
   widgets.sort((a, b) => {
@@ -183,7 +175,7 @@ export function summonActionPreview(
   }
   return {
     title: item.name,
-    subtitle: "Peek — layout untouched · ⌘Enter keeps in this Space",
-    primary: "peek",
+    subtitle: "Keep in this Space · ⌘Enter peeks",
+    primary: "keep",
   }
 }

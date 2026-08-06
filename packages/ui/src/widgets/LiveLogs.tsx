@@ -51,6 +51,7 @@ import {
   WidgetToolbarSearch,
   WidgetToolbarTrailing,
 } from "./widget-toolbar"
+import { logMatchesFilters } from "../lib/event-stream-filter"
 import {
   EVENT_STREAM_LANES,
   eventStreamFilterTypeClass,
@@ -62,6 +63,10 @@ import {
   readEventStreamPrefs,
   writeEventStreamPrefs,
 } from "../lib/event-stream-prefs"
+import {
+  EventStreamHistogram,
+  type EventStreamHistogramFocus,
+} from "./live-logs/EventStreamHistogram"
 
 type EventType = EventStreamEventType
 
@@ -78,32 +83,6 @@ const QUICK_RANGES: { id: EventStreamRange; label: string }[] = [
   { id: "6h", label: "6h" },
   { id: "24h", label: "24h" },
 ]
-
-function logSearchHaystack(log: LogEntry): string {
-  return `${log.message} ${log.type} ${log.eventName ?? ""} ${JSON.stringify(log.data ?? {})}`.toLowerCase()
-}
-
-function logMatchesSearch(log: LogEntry, rawQuery: string): boolean {
-  const words = rawQuery.trim().toLowerCase().split(/\s+/).filter((w) => w.length >= 2)
-  if (words.length === 0) return true
-  const hay = logSearchHaystack(log)
-  return words.every((w) => hay.includes(w))
-}
-
-function logMatchesFilters(
-  log: LogEntry,
-  typeFilters: Set<EventType>,
-  errorsOnly: boolean,
-  searchText: string,
-): boolean {
-  const hasTypeFilter = typeFilters.size > 0 || errorsOnly
-  if (hasTypeFilter) {
-    const matchesType = typeFilters.size > 0 && typeFilters.has(log.type as EventType)
-    const matchesError = errorsOnly && log.error
-    if (!matchesType && !matchesError) return false
-  }
-  return logMatchesSearch(log, searchText)
-}
 
 function eventStreamRowKey(log: LogEntry, index: number): string {
   return `${log.timestamp}|${log.eventName ?? ""}|${log.type}|${index}`
@@ -127,6 +106,7 @@ export function LiveLogs() {
   const [errorsOnly, setErrorsOnly] = useState(() => initialPrefs.errorsOnly)
   const [searchText, setSearchText] = useState(() => initialPrefs.searchText)
   const [filtersOpen, setFiltersOpen] = useState(false)
+  const [histogramFocus, setHistogramFocus] = useState<EventStreamHistogramFocus | null>(null)
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
   const [expandedKeys, setExpandedKeys] = useState<Set<string>>(() => new Set())
   const listRef = useRef<VirtualListHandle>(null)
@@ -174,7 +154,7 @@ export function LiveLogs() {
 
   const windowBounds = useMemo(() => resolveWindowBounds(timeWindow), [timeWindow])
 
-  const filtered = useMemo(
+  const filteredForWindow = useMemo(
     () =>
       entries.filter(
         (l) =>
@@ -190,7 +170,7 @@ export function LiveLogs() {
     if (searchTimer.current) clearTimeout(searchTimer.current)
     setSearchHits([])
     if (!searchActive) return
-    if (filtered.length > 0) return
+    if (filteredForWindow.length > 0) return
 
     searchTimer.current = setTimeout(() => {
       const q = searchText.trim()
@@ -220,10 +200,10 @@ export function LiveLogs() {
     return () => {
       if (searchTimer.current) clearTimeout(searchTimer.current)
     }
-  }, [searchActive, searchText, typeFilters, errorsOnly, filtered.length, windowBounds])
+  }, [searchActive, searchText, typeFilters, errorsOnly, filteredForWindow.length, windowBounds])
 
   const searchOnly = useMemo(() => {
-    if (filtered.length > 0 || searchHits.length === 0) return []
+    if (filteredForWindow.length > 0 || searchHits.length === 0) return []
     const liveKeys = new Set(entries.map((l) => `${l.eventName}\0${l.timestamp}\0${l.message}`))
     return searchHits.filter(
       (l) =>
@@ -231,14 +211,29 @@ export function LiveLogs() {
         !liveKeys.has(`${l.eventName}\0${l.timestamp}\0${l.message}`) &&
         logMatchesFilters(l, typeFilters, errorsOnly, searchText),
     )
-  }, [filtered.length, searchHits, entries, windowBounds, typeFilters, errorsOnly, searchText])
+  }, [filteredForWindow.length, searchHits, entries, windowBounds, typeFilters, errorsOnly, searchText])
+
+  const lensRows = useMemo(
+    () => (filteredForWindow.length > 0 ? filteredForWindow : searchOnly),
+    [filteredForWindow, searchOnly],
+  )
+
+  const displayRows = useMemo(() => {
+    if (!histogramFocus) return lensRows
+    return lensRows.filter((l) =>
+      logInWindow(l.timestamp, {
+        since: histogramFocus.since,
+        until: histogramFocus.until,
+      }),
+    )
+  }, [lensRows, histogramFocus])
 
   useEffect(() => {
     if (autoScroll && !paused && followLive) {
       const el = containerRef.current
       if (el) el.scrollTop = el.scrollHeight
     }
-  }, [filtered, autoScroll, paused, followLive])
+  }, [displayRows, autoScroll, paused, followLive])
 
   function onScroll() {
     const el = containerRef.current
@@ -251,17 +246,17 @@ export function LiveLogs() {
     (next: EventStreamRange) => {
       setPaused(false)
       setAutoScroll(true)
+      setHistogramFocus(null)
       setQuickRange(next)
     },
     [setQuickRange],
   )
 
-  const displayRows = filtered.length > 0 ? filtered : searchOnly
   const showEmpty =
     !loading &&
     !searching &&
     displayRows.length === 0 &&
-    (searchActive || entries.length === 0)
+    (searchActive || entries.length === 0 || Boolean(histogramFocus))
 
   const keyboardNodes = useMemo((): ReviewTreeKeyboardNode[] => {
     return displayRows.map((log, index) => ({
@@ -374,6 +369,7 @@ export function LiveLogs() {
   function clearAllFilters(): void {
     setTypeFilters(new Set())
     setErrorsOnly(false)
+    setHistogramFocus(null)
     clearCustomDates()
     onQuickRange("live")
   }
@@ -393,7 +389,7 @@ export function LiveLogs() {
           onClear={() => setSearchText("")}
         />
         <WidgetToolbarTrailing>
-          <WidgetToolbarCount filtered={filtered.length} total={entries.length} hidden={tiny} />
+          <WidgetToolbarCount filtered={displayRows.length} total={entries.length} hidden={tiny} />
           <button
             ref={filterBtnRef}
             type="button"
@@ -477,7 +473,10 @@ export function LiveLogs() {
           <FilterField label="From">
             <DateField
               value={timeWindow.from}
-              onChange={(from) => setFromDate(from || undefined)}
+              onChange={(from) => {
+                setHistogramFocus(null)
+                setFromDate(from || undefined)
+              }}
               placeholder="Pick date"
               ariaLabel="From"
               size="sm"
@@ -487,7 +486,10 @@ export function LiveLogs() {
           <FilterField label="Until">
             <DateField
               value={timeWindow.to}
-              onChange={(to) => setToDate(to || undefined)}
+              onChange={(to) => {
+                setHistogramFocus(null)
+                setToDate(to || undefined)
+              }}
               placeholder="Pick date"
               ariaLabel="Until"
               size="sm"
@@ -515,6 +517,13 @@ export function LiveLogs() {
         </FilterField>
       </FilterSheet>
 
+      <EventStreamHistogram
+        logs={lensRows}
+        bounds={windowBounds}
+        focus={histogramFocus}
+        onFocusChange={setHistogramFocus}
+      />
+
       {(pendingLiveCount > 0 && (paused || !followLive)) && (
         <button
           type="button"
@@ -522,6 +531,7 @@ export function LiveLogs() {
           onClick={() => {
             setPaused(false)
             setAutoScroll(true)
+            setHistogramFocus(null)
             jumpToLive()
           }}
         >
@@ -590,7 +600,7 @@ export function LiveLogs() {
           />
         )}
 
-        {filtered.length === 0 && searchOnly.length > 0 && (
+        {filteredForWindow.length === 0 && searchOnly.length > 0 && (
           <div className="py-2 text-sm text-text-muted bg-elevated/30 border-t border-border-subtle">
             More matches in this range beyond the loaded page ({searchOnly.length})
           </div>
@@ -613,6 +623,7 @@ export function LiveLogs() {
           className="event-stream-jump"
           onClick={() => {
             setAutoScroll(true)
+            setHistogramFocus(null)
             jumpToLive()
             bottomRef.current?.scrollIntoView({ behavior: "smooth" })
           }}

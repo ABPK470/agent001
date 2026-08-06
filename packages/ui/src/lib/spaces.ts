@@ -47,10 +47,7 @@ export const SPACE_LAYOUT_VERSION = 7
 
 export interface ProductSpaceDef {
   id: SpaceId
-  /**
-   * 1–4 = Call Space (Mod+1…4).
-   * 0 = Summon / bundle only (no Call Space chord).
-   */
+  /** 1–5 = Call Space (Mod+1…5). */
   index: number
   name: string
   desc: string
@@ -100,7 +97,7 @@ export const PRODUCT_SPACES: readonly ProductSpaceDef[] = [
   },
   {
     id: "space:trace",
-    index: 0,
+    index: 5,
     name: "Trace",
     desc: "Inspect a thread and run",
     widgets: ["debug-inspector"],
@@ -110,16 +107,16 @@ export const PRODUCT_SPACES: readonly ProductSpaceDef[] = [
 export const PRODUCT_BUNDLES: readonly ProductBundleDef[] = [
   {
     id: "bundle:observe-core",
-    name: "Observe core",
-    desc: "Observe Space — Pipelines 70% · Event stream 30%",
+    name: "Observe",
+    desc: "Default layout — Pipelines 70% · Event stream 30%",
     homeSpace: "space:observe",
     focusType: "operation-log",
     widgets: ["operation-log", "live-logs"],
   },
   {
     id: "bundle:reconcile-core",
-    name: "Reconcile core",
-    desc: "Reconcile Space — Sync · Entity registry 50/50",
+    name: "Reconcile",
+    desc: "Default layout — Sync · Entity registry 50/50",
     homeSpace: "space:reconcile",
     focusType: "env-sync",
     widgets: ["env-sync", "entity-registry"],

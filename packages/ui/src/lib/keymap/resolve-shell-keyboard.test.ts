@@ -15,10 +15,13 @@ function key(
 }
 
 describe("resolveShellKeyboardAction", () => {
-  it("calls spaces 1–4 with mod", () => {
+  it("calls spaces 1–5 with mod", () => {
     expect(
       resolveShellKeyboardAction(key({ key: "2", metaKey: true }), { hasFocusedTile: false }),
     ).toEqual({ type: "call-space", index: 2 })
+    expect(
+      resolveShellKeyboardAction(key({ key: "5", metaKey: true }), { hasFocusedTile: false }),
+    ).toEqual({ type: "call-space", index: 5 })
   })
 
   it("toggles maximize with M when a tile is focused", () => {

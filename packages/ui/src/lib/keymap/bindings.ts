@@ -7,7 +7,7 @@ import type { KbdHint, KeymapBinding } from "./types"
 import { MOD } from "./mod-hint"
 
 export const SHELL_BINDINGS: readonly KeymapBinding[] = [
-  { id: "call-space", layer: "view", keys: [MOD, "1–4"], label: "Call Space" },
+  { id: "call-space", layer: "view", keys: [MOD, "1–5"], label: "Call Space" },
   { id: "cycle-view", layer: "view", keys: [MOD, "[", "]"], label: "Prev / next view tab" },
   { id: "tile-focus", layer: "view", keys: [MOD, "⇧", "↑↓←→"], label: "Focus tile" },
   { id: "maximize", layer: "widget", keys: ["M"], label: "Maximize / restore", when: "tile focused" },
@@ -61,8 +61,8 @@ export const PIPELINES_DETAIL_HINTS: readonly KbdHint[] = [
 ]
 
 export const SUMMON_HINTS: readonly KbdHint[] = [
-  { keys: ["↵"], label: "go / peek / focus" },
-  { keys: [MOD, "↵"], label: "keep" },
+  { keys: ["↵"], label: "keep / go / focus" },
+  { keys: [MOD, "↵"], label: "peek" },
   { keys: ["↑", "↓"], label: "move" },
   { keys: ["←", "→"], label: "column" },
   { keys: ["Esc"], label: "dismiss" },

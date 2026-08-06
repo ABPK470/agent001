@@ -1,15 +1,15 @@
 /**
- * Summon decisions — pure. Widgets peek; Spaces navigate; bundles open a home Space.
+ * Summon decisions — pure.
  *
- * Exception: a widget that is the sole surface of a product Space (Trace, Bridge)
- * never peeks — Enter opens that Space. Peeking Trace over Bridge was a second
- * Trace shell with the wrong chrome.
+ * Surfaces (widgets): Enter Keeps into the current layout (or focuses if
+ * already present). Mod+Enter Peeks. Dedicated Spaces (Trace, Bridge) are
+ * reached only via the Go column / Call Space — never by Enter on a surface.
+ * Spaces navigate; presets open a home Space.
  */
 
 import type { WidgetType } from "../types"
 import {
   PRODUCT_BUNDLES,
-  dedicatedSpaceForWidget,
   type ProductBundleDef,
   type ProductBundleId,
   type SpaceId,
@@ -44,28 +44,23 @@ export function resolveSummonSpaceEnter(spaceId: SpaceId): SummonOpenAction {
 
 /**
  * Enter on a widget:
- * - already on active Space → focus that tile (never auto-maximize)
- * - sole surface of a product Space → open that Space (never peek)
- * - otherwise → peek (layout untouched)
+ * - already on active layout → focus first tile of that type (never duplicate)
+ * - otherwise → Keep into the current layout
  */
 export function resolveSummonWidgetEnter(
   widgetType: WidgetType,
   activeHasType: boolean,
 ): SummonOpenAction {
   if (activeHasType) return { type: "focus-tile", widgetType }
-  const dedicated = dedicatedSpaceForWidget(widgetType)
-  if (dedicated) {
-    return {
-      type: "open-bundle",
-      spaceId: dedicated,
-      ensureWidgets: [widgetType],
-      focusType: widgetType,
-    }
-  }
+  return resolveSummonWidgetKeep(widgetType)
+}
+
+/** Mod+Enter on a widget = Peek overlay (layout untouched). */
+export function resolveSummonWidgetPeek(widgetType: WidgetType): SummonOpenAction {
   return { type: "peek-widget", widgetType }
 }
 
-/** ⌘Enter on a widget = ensure Keep + focus (no maximize). */
+/** Keep factory — ensure widget on current layout + focus (no maximize). */
 export function resolveSummonWidgetKeep(widgetType: WidgetType): SummonOpenAction {
   return {
     type: "keep-widgets",
@@ -75,7 +70,7 @@ export function resolveSummonWidgetKeep(widgetType: WidgetType): SummonOpenActio
 }
 
 /**
- * Enter / ⌘Enter on a bundle = Call home Space, ensure widgets, focus the
+ * Enter on a bundle = Call home Space, ensure widgets, focus the
  * primary surface. Never peeks Threads alone maximized.
  */
 export function resolveSummonBundleOpen(id: ProductBundleId): SummonOpenAction | null {

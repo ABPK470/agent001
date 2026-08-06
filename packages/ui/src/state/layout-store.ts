@@ -32,6 +32,7 @@ import {
   type SpaceId,
 } from "../lib/spaces"
 import { neighborTileForFocus, type FocusArrowKey } from "../lib/tile-focus-neighbor"
+import { firstTileIdForWidgetType } from "../lib/focus-widget-tile"
 import type { ViewConfig, WidgetType } from "../types"
 import { randomId } from "../lib/util"
 import { clearEventStreamPrefs } from "../lib/event-stream-prefs"
@@ -143,7 +144,7 @@ interface LayoutState {
 
   /** Seed product Spaces (Observe / Reconcile / Bridge / Agent) if missing. */
   ensureProductSpaces: () => void
-  /** Activate a product Space by id or 1–4 index; focuses first tile. */
+  /** Activate a product Space by id or 1–5 index; focuses first tile. */
   callSpace: (space: SpaceId | number) => void
   /** Rebuild the active product Space to its curated default. */
   resetActiveSpace: () => void
@@ -399,10 +400,11 @@ export const useLayoutStore = create<LayoutState>()(
 
       focusWidgetType: (type) => set((s) => {
         const view = s.views.find((v) => v.id === s.activeViewId)
-        const tile = view?.tiles.find((t) => t.type === type)
-        if (!tile) return s
+        if (!view) return s
+        const tileId = firstTileIdForWidgetType(view.tiles, type)
+        if (!tileId) return s
         return {
-          focusedTileId: tile.id,
+          focusedTileId: tileId,
           soloTileId: null,
           zenTileId: null,
         }

@@ -372,10 +372,12 @@ Pipelines 70% / Event stream 30%; Trace = Trace alone;
 Reconcile = Sync / Entity registry 50/50; Agent = Trace 60% | Chat 40%
 (no Threads tile — Trace owns thread/run scope). **Summon** (Mod+K) is a fixed
 two-column board (Go · Preset | Surface): ↑↓ in a column, ←→ between columns;
-Enter peeks a widget (or focuses it if already on the Space); sole-widget
-Spaces (Trace, Bridge) have no peek twin — Enter opens that Space; Mod+Enter
-Keeps a widget in the current Space; Spaces navigate (Call); *core* presets
-restore default widgets/ratios and focus a primary tile — never auto-maximize.
+Enter on a surface **Keeps** it into the current layout (or focuses the first
+tile of that type if already present — never duplicates); Mod+Enter **Peeks**
+(overlay). Sole-widget Spaces (Trace, Bridge) appear under Summon surface too,
+but their dedicated job landings are reached only via the Go column / Call
+Space (Mod+1–5). Spaces navigate (Call); *Preset* rows restore default
+widgets/ratios and focus a primary tile — never auto-maximize.
 **Operator keyboard
 is one composition root** (`useOperatorKeyboardRoot`, capture-phase): shell
 chrome (Summon, chat↔workspace, Call Space, tabs, tile focus, M, `?`, …) then
@@ -387,7 +389,7 @@ Space toggles; ←→ folds the active section (same tree metaphor — Trace cal
 tabs only when the active row is not foldable). ↑↓ moves detail rows
 (timeline / sections) like the tree — Page/Home/End still scroll. Esc ladder
 peels overlay → filter → pane → zen → maximize. Shell chords: Call Space
-(Mod+1–4), prev/next view tab (Mod+[ / ]), tile focus (Mod+⇧+arrows — not ⌥;
+(Mod+1–5; Trace is 5), prev/next view tab (Mod+[ / ]), tile focus (Mod+⇧+arrows — not ⌥;
 Mod+⌥ alone toggles chat↔workspace), M maximize, Z zen,
 Mod+W close tile, `?` keymap (fixed two-column board: Pane | Shell).
 **Mod captions are OS-aware** (`lib/keymap/mod-hint.ts`): binding tables store

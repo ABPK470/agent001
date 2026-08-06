@@ -23,23 +23,30 @@ describe("summon catalog", () => {
     expect(widgetSummonGroup("env-sync")).toBe("config")
   })
 
-  it("omits Trace/Bridge surfaces — dedicated Spaces own Go", () => {
+  it("lists every catalog surface including Trace and Bridge", () => {
     const widgets = listSummonItems().filter((item) => item.kind === "widget")
     expect(widgets.some((item) => item.kind === "widget" && item.type === "debug-inspector")).toBe(
-      false,
+      true,
     )
-    expect(widgets.some((item) => item.kind === "widget" && item.type === "bridge")).toBe(false)
+    expect(widgets.some((item) => item.kind === "widget" && item.type === "bridge")).toBe(true)
     expect(listSummonItems().some((item) => item.kind === "space" && item.id === "space:trace")).toBe(
       true,
     )
   })
 
-  it("previews peek vs focus for widgets", () => {
+  it("previews keep for Trace surface (stays on current layout)", () => {
+    const trace = listSummonItems().find(
+      (item) => item.kind === "widget" && item.type === "debug-inspector",
+    )!
+    expect(summonActionPreview(trace, { onSpace: false, spaceName: null }).primary).toBe("keep")
+  })
+
+  it("previews keep vs focus for widgets", () => {
     const widget = listSummonItems().find(
       (item) => item.kind === "widget" && item.type === "operation-log",
     )!
     expect(summonActionPreview(widget, { onSpace: false, spaceName: "Agent" }).primary).toBe(
-      "peek",
+      "keep",
     )
     expect(summonActionPreview(widget, { onSpace: true, spaceName: "Agent" }).primary).toBe(
       "focus",

@@ -95,7 +95,7 @@ export const SHORTCUT_REGISTRY: readonly ShortcutItem[] = [
   {
     id: "call-space",
     label: "Call Space",
-    keys: [MOD, "1–4"],
+    keys: [MOD, "1–5"],
     category: "workspace",
   },
   {

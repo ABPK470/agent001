@@ -35,7 +35,7 @@ export function resolveShellKeyboardAction(
     return { type: "focus-composer" }
   }
 
-  if (mod && !event.altKey && !event.shiftKey && /^[1-4]$/.test(key)) {
+  if (mod && !event.altKey && !event.shiftKey && /^[1-5]$/.test(key)) {
     return { type: "call-space", index: Number(key) }
   }
 

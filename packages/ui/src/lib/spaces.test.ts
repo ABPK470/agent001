@@ -29,11 +29,12 @@ function leafRatio(
 }
 
 describe("product spaces", () => {
-  it("exposes four Call Space indices", () => {
+  it("exposes five Call Space indices", () => {
     expect(PRODUCT_SPACES.filter((s) => s.index >= 1).map((s) => s.index)).toEqual([
-      1, 2, 3, 4,
+      1, 2, 3, 4, 5,
     ])
     expect(spaceByIndex(2)?.id).toBe("space:observe")
+    expect(spaceByIndex(5)?.id).toBe("space:trace")
     expect(spaceByIndex(0)).toBeUndefined()
   })
 

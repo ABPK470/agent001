@@ -4,6 +4,7 @@ import {
   resolveSummonSpaceEnter,
   resolveSummonWidgetEnter,
   resolveSummonWidgetKeep,
+  resolveSummonWidgetPeek,
 } from "./summon-resolve"
 
 describe("summon resolve", () => {
@@ -14,10 +15,11 @@ describe("summon resolve", () => {
     })
   })
 
-  it("widgets peek when absent; focus when already on Space", () => {
+  it("Enter keeps when absent; focuses when already on layout", () => {
     expect(resolveSummonWidgetEnter("operation-log", false)).toEqual({
-      type: "peek-widget",
-      widgetType: "operation-log",
+      type: "keep-widgets",
+      widgets: ["operation-log"],
+      focusType: "operation-log",
     })
     expect(resolveSummonWidgetEnter("operation-log", true)).toEqual({
       type: "focus-tile",
@@ -25,12 +27,22 @@ describe("summon resolve", () => {
     })
   })
 
-  it("Trace surface opens Trace Space — never peeks a second shell", () => {
+  it("Trace Enter keeps into current layout — never jumps to Trace Space", () => {
     expect(resolveSummonWidgetEnter("debug-inspector", false)).toEqual({
-      type: "open-bundle",
-      spaceId: "space:trace",
-      ensureWidgets: ["debug-inspector"],
+      type: "keep-widgets",
+      widgets: ["debug-inspector"],
       focusType: "debug-inspector",
+    })
+    expect(resolveSummonWidgetEnter("debug-inspector", true)).toEqual({
+      type: "focus-tile",
+      widgetType: "debug-inspector",
+    })
+  })
+
+  it("Mod+Enter peeks", () => {
+    expect(resolveSummonWidgetPeek("operation-log")).toEqual({
+      type: "peek-widget",
+      widgetType: "operation-log",
     })
   })
 
@@ -51,7 +63,7 @@ describe("summon resolve", () => {
     })
   })
 
-  it("Trace Space navigates (no Agent-debug bundle)", () => {
+  it("Trace Space navigates (Go column / Call Space)", () => {
     expect(resolveSummonSpaceEnter("space:trace")).toEqual({
       type: "call-space",
       spaceId: "space:trace",

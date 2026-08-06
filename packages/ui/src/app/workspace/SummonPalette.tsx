@@ -2,7 +2,7 @@
  * Summon (⌘K) — fixed two-column ops board:
  * search · Active Context · Go | Surface · Esc ladder.
  *
- * ↑↓ move in a column · ←→ jump columns · Enter peeks/goes/focuses · ⌘Enter keeps.
+ * ↑↓ move in a column · ←→ jump columns · Enter keeps/goes/focuses · ⌘Enter peeks (surfaces).
  */
 
 import {
@@ -15,13 +15,13 @@ import {
 import { Search } from "lucide-react"
 import { useStore } from "../../state/store"
 import { useLayoutStore } from "../../state/layout-store"
-import { MOD, resolveKeymapActiveContext, type KbdHint } from "../../lib/keymap"
+import { resolveKeymapActiveContext } from "../../lib/keymap"
 import { ComposerKbdFooter } from "../../widgets/chat/ComposerKbdFooter"
 import {
   resolveSummonBundleOpen,
   resolveSummonSpaceEnter,
   resolveSummonWidgetEnter,
-  resolveSummonWidgetKeep,
+  resolveSummonWidgetPeek,
   type SummonOpenAction,
 } from "../../lib/summon-resolve"
 import { getWidgetDefinition } from "./widget-definitions"
@@ -32,6 +32,7 @@ import {
   summonItemKey,
   type SummonItem,
 } from "./summon-items"
+import { summonContextBadge, summonFooterHints } from "./summon-footer"
 import {
   moveSummonSelection,
   orderSummonForNav,
@@ -133,6 +134,7 @@ export function SummonPalette() {
     onSpace,
     spaceName: activeView?.name ?? null,
   })
+  const contextBadge = summonContextBadge(current)
 
   function dismiss() {
     setSummonOpen(false)
@@ -170,7 +172,7 @@ export function SummonPalette() {
     dismiss()
   }
 
-  function onEnter(item: SummonItem, keep: boolean) {
+  function onEnter(item: SummonItem, modEnter: boolean) {
     if (item.kind === "space") {
       runAction(resolveSummonSpaceEnter(item.id))
       return
@@ -180,8 +182,9 @@ export function SummonPalette() {
       if (action) runAction(action)
       return
     }
-    if (keep) {
-      runAction(resolveSummonWidgetKeep(item.type))
+    // Surfaces: Enter = Keep/focus · Mod+Enter = Peek. Spaces ignore Mod+Enter.
+    if (modEnter) {
+      runAction(resolveSummonWidgetPeek(item.type))
       return
     }
     runAction(resolveSummonWidgetEnter(item.type, presentTypes.has(item.type)))
@@ -288,9 +291,11 @@ export function SummonPalette() {
             Active Context:{" "}
             <span className="ops-sheet__context-name">{context.title}</span>
           </span>
-          <span className="ops-sheet__context-badge ops-sheet__context-badge--quiet">
-            Keep → this Space
-          </span>
+          {contextBadge ? (
+            <span className="ops-sheet__context-badge ops-sheet__context-badge--quiet">
+              {contextBadge}
+            </span>
+          ) : null}
         </div>
 
         <div className="ops-sheet__grid" id="summon-list" role="listbox" aria-label="Summon">
@@ -340,21 +345,16 @@ export function SummonPalette() {
         </div>
 
         <footer className="ops-sheet__footer">
-          <ComposerKbdFooter hints={summonFooterHints(preview.primary, Boolean(query))} />
+          <ComposerKbdFooter
+            hints={summonFooterHints(current, {
+              primary: preview.primary,
+              hasQuery: Boolean(query),
+            })}
+          />
         </footer>
       </div>
     </div>
   )
-}
-
-function summonFooterHints(primary: string, hasQuery: boolean): readonly KbdHint[] {
-  return [
-    { keys: ["↵"], label: primary },
-    { keys: [MOD, "↵"], label: "keep" },
-    { keys: ["↑", "↓"], label: "move" },
-    { keys: ["←", "→"], label: "column" },
-    { keys: ["Esc"], label: hasQuery ? "clear" : "dismiss" },
-  ]
 }
 
 function SummonRow({
@@ -373,6 +373,7 @@ function SummonRow({
   onOpen: () => void
 }) {
   const keys = summonActionKeys(item, { onSpace: present })
+  const isPreset = item.kind === "bundle"
   const label = currentSpace
     ? `${item.name} · current`
     : present
@@ -386,12 +387,18 @@ function SummonRow({
         type="button"
         role="option"
         aria-selected={selected}
-        className={`ops-sheet__row ops-sheet__row--interactive${selected ? " is-selected" : ""}`}
+        className={[
+          "ops-sheet__row",
+          "ops-sheet__row--interactive",
+          selected ? "is-selected" : "",
+          isPreset ? "ops-sheet__row--preset" : "",
+        ].filter(Boolean).join(" ")}
         onMouseEnter={onHover}
         onClick={onOpen}
       >
         <span className="ops-sheet__label" title={item.desc}>
-          {label}
+          <span className="ops-sheet__label-text">{label}</span>
+          {isPreset ? <span className="ops-sheet__preset-mark">Preset</span> : null}
         </span>
         <span className="ops-sheet__keys">
           {keys.map((key) => (
