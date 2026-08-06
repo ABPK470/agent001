@@ -13,7 +13,7 @@
  */
 
 import { Loader2, Search, X } from "lucide-react"
-import type { JSX, ReactNode } from "react"
+import type { JSX, KeyboardEvent, ReactNode } from "react"
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { placeAnchoredPanelForElements } from "../lib/anchored-panel"
@@ -108,6 +108,23 @@ export function WidgetToolbarSearch({
   mono?: boolean
   committed?: boolean
 }): JSX.Element {
+  function clearSearch() {
+    if (onClear) onClear()
+    else onChange("")
+  }
+
+  function onSearchKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key !== "Escape") return
+    event.preventDefault()
+    event.stopPropagation()
+    // Esc peels filter: clear text first, then blur so shell/widget keys return.
+    if (value) {
+      clearSearch()
+      return
+    }
+    event.currentTarget.blur()
+  }
+
   return (
     <div className="widget-toolbar__search">
       <div className="widget-toolbar__search-wrap">
@@ -118,6 +135,7 @@ export function WidgetToolbarSearch({
           placeholder={placeholder}
           value={value}
           onChange={(e) => onChange(e.target.value)}
+          onKeyDown={onSearchKeyDown}
           aria-busy={loading || undefined}
           className={[
             "widget-toolbar__search-input",
@@ -132,7 +150,7 @@ export function WidgetToolbarSearch({
           <button
             type="button"
             className="widget-toolbar__search-clear"
-            onClick={() => (onClear ? onClear() : onChange(""))}
+            onClick={clearSearch}
             aria-label="Clear search"
           >
             <X size={14} strokeWidth={1.75} />

@@ -57,16 +57,18 @@ export function useTraceOperatorKeyboard({
     }
 
     function onKeyDown(event: KeyboardEvent) {
-      if (isEditableKeyboardTarget(event.target)) return
+      const editable = isEditableKeyboardTarget(event.target)
 
       // ⌘\ / Ctrl+\ — toggle Thread/Run scope drawer
       if ((event.metaKey || event.ctrlKey) && (event.key === "\\" || event.code === "Backslash")) {
+        if (editable) return
         event.preventDefault()
         event.stopPropagation()
         onScopeDrawerOpenChange(!scopeDrawerOpen)
         return
       }
 
+      // Esc peels even from filter inputs — editable skip would trap focus in search.
       if (event.key === "Escape") {
         const action = resolveEscLadder({
           scopeDrawerOpen,
@@ -85,6 +87,8 @@ export function useTraceOperatorKeyboard({
         }
         if (action.type === "dismiss-filter") {
           onSearchOpenChange(false)
+          if (event.target instanceof HTMLElement) event.target.blur()
+          focusPane("tree")
           return
         }
         if (action.type === "pane-to-tree") {
@@ -104,6 +108,8 @@ export function useTraceOperatorKeyboard({
         }
         return
       }
+
+      if (editable) return
 
       // Scope drawer owns j/k/arrows while open — do not peel panes underneath.
       if (scopeDrawerOpen) return

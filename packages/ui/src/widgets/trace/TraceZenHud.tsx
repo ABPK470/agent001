@@ -73,10 +73,12 @@ export function TraceZenHud({
             aria-label="Filter trace"
             onChange={(event) => onSearchChange(event.target.value)}
             onKeyDown={(event) => {
-              if (event.key === "Escape") {
-                event.preventDefault()
-                onSearchOpenChange(false)
-              }
+              if (event.key !== "Escape") return
+              event.preventDefault()
+              event.stopPropagation()
+              // Clear first; empty Esc closes the overlay (same peel as Active Users).
+              if (search) onSearchChange("")
+              else onSearchOpenChange(false)
             }}
           />
           <button

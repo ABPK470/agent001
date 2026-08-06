@@ -10043,7 +10043,7 @@ button.trace-tree-status-pill:hover {
   left: 0.35rem;
   bottom: 0.35rem;
   z-index: 5;
-  width: min(220px, 72%);
+  width: min(300px, 80%);
   display: flex;
   flex-direction: column;
   min-height: 0;
