@@ -40,6 +40,8 @@ export interface UseEventStreamDataResult {
   setFromDate: (from: string | undefined) => void
   setToDate: (to: string | undefined) => void
   clearCustomDates: () => void
+  /** Zoom the store window to an ISO brush range (re-fetch). */
+  zoomToIsoRange: (sinceIso: string, untilIso: string) => void
   followLive: boolean
 }
 
@@ -97,19 +99,37 @@ export function useEventStreamData(opts: {
   }, [viewingAsUpn, setViewingAs])
 
   const setQuickRange = useCallback((range: EventStreamRange) => {
-    setLocalWindow({ range, from: undefined, to: undefined })
+    setLocalWindow({ range })
   }, [])
 
   const setFromDate = useCallback((from: string | undefined) => {
-    setLocalWindow((prev) => ({ ...prev, from: from || undefined }))
+    setLocalWindow((prev) => ({
+      ...prev,
+      from: from || undefined,
+      sinceIso: undefined,
+      untilIso: undefined,
+    }))
   }, [])
 
   const setToDate = useCallback((to: string | undefined) => {
-    setLocalWindow((prev) => ({ ...prev, to: to || undefined }))
+    setLocalWindow((prev) => ({
+      ...prev,
+      to: to || undefined,
+      sinceIso: undefined,
+      untilIso: undefined,
+    }))
   }, [])
 
   const clearCustomDates = useCallback(() => {
-    setLocalWindow((prev) => ({ range: prev.range, from: undefined, to: undefined }))
+    setLocalWindow((prev) => ({ range: prev.range }))
+  }, [])
+
+  const zoomToIsoRange = useCallback((sinceIso: string, untilIso: string) => {
+    setLocalWindow({
+      range: "live",
+      sinceIso,
+      untilIso,
+    })
   }, [])
 
   const jumpToLive = useCallback(() => {
@@ -131,6 +151,7 @@ export function useEventStreamData(opts: {
     setFromDate,
     setToDate,
     clearCustomDates,
+    zoomToIsoRange,
     followLive,
   }
 }

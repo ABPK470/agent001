@@ -1098,6 +1098,43 @@ export const api = {
     }>(`/api/events?${p}`)
   },
 
+  /**
+   * Event Stream density — pre-bucketed counts + lane stacks for the window.
+   * Full-range truth (scan-capped); list stays paged separately.
+   */
+  eventsHistogram: (opts: {
+    since: string
+    until: string
+    buckets?: number
+    q?: string
+    exclude_types?: string[]
+    type_patterns?: string[]
+    errors_only?: boolean
+  }) => {
+    const p = new URLSearchParams()
+    p.set("since", opts.since)
+    p.set("until", opts.until)
+    if (opts.buckets) p.set("buckets", String(opts.buckets))
+    if (opts.q?.trim()) p.set("q", opts.q.trim())
+    if (opts.exclude_types?.length) p.set("exclude_types", opts.exclude_types.join(","))
+    if (opts.type_patterns?.length) p.set("type_patterns", opts.type_patterns.join(","))
+    if (opts.errors_only) p.set("errors_only", "1")
+    return json<{
+      since: string
+      until: string
+      bucketCount: number
+      totalCount: number
+      truncated: boolean
+      buckets: Array<{
+        start: string
+        end: string
+        count: number
+        errorCount: number
+        byLane: Record<string, number>
+      }>
+    }>(`/api/events/histogram?${p}`)
+  },
+
   /** @deprecated Prefer listEvents — kept for any residual callers. */
   recentEvents: (limit = 500) =>
     json<{

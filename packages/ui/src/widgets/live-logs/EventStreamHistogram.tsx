@@ -1,19 +1,35 @@
 /**
- * Event Stream density strip — quiet volume over the active window.
- * Click / drag a range to focus; Esc or Clear restores the full window.
+ * Event Stream density strip — lane-stacked volume over the active window.
+ * Server buckets when available; client lensRows as fallback.
+ * Brush focuses the list; Zoom re-fetches that ISO window.
  * Flat pointer peers (no nested listeners).
  */
 
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from "react"
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
+} from "react"
+import { api } from "../../client/index"
+import { useContainerSize } from "../../hooks/useContainerSize"
+import { EVENT_STREAM_EXCLUDE_TYPES } from "../../lib/event-stream-window"
+import { eventStreamLanesDbPatterns } from "../../lib/event-stream-lane"
 import {
   buildEventStreamHistogram,
+  formatHistogramBoundPair,
+  HISTOGRAM_STACK_ORDER,
   histogramBucketCountForWidth,
   histogramBucketIndexAtRatio,
   histogramFocusFromBucketRange,
+  modelFromHistogramApi,
+  type EventStreamHistogramApiResult,
   type EventStreamHistogramBounds,
   type EventStreamHistogramModel,
 } from "../../lib/event-stream-histogram"
-import { useContainerSize } from "../../hooks/useContainerSize"
+import type { EventStreamLane } from "../../lib/event-stream-lane"
 import type { LogEntry } from "../../types"
 
 export type EventStreamHistogramFocus = {
@@ -27,17 +43,8 @@ type BrushState = {
   currentIndex: number
 }
 
-const PLOT_H = 36
+const PLOT_H = 40
 const BAR_GAP = 1
-
-function formatAxisTime(ms: number): string {
-  if (!Number.isFinite(ms) || ms <= 0) return "—"
-  return new Date(ms).toLocaleTimeString(undefined, {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  })
-}
 
 function plotRatioFromClientX(svg: SVGSVGElement, clientX: number): number {
   const rect = svg.getBoundingClientRect()
@@ -46,29 +53,96 @@ function plotRatioFromClientX(svg: SVGSVGElement, clientX: number): number {
 }
 
 export function EventStreamHistogram({
-  logs,
+  lensRows,
   bounds,
   focus,
   onFocusChange,
+  onZoomToFocus,
+  listVisibleCount,
+  typeFilters,
+  errorsOnly,
+  searchText,
 }: {
-  logs: readonly LogEntry[]
+  /** Pre-brush filtered events — client fallback + list parity for filters. */
+  lensRows: readonly LogEntry[]
   bounds: EventStreamHistogramBounds
   focus: EventStreamHistogramFocus | null
   onFocusChange: (next: EventStreamHistogramFocus | null) => void
+  onZoomToFocus: (focus: EventStreamHistogramFocus) => void
+  listVisibleCount: number
+  typeFilters: ReadonlySet<EventStreamLane>
+  errorsOnly: boolean
+  searchText: string
 }) {
   const rootRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
   const brushRef = useRef<BrushState | null>(null)
   const [draftRange, setDraftRange] = useState<{ a: number; b: number } | null>(null)
   const [cursorIndex, setCursorIndex] = useState(0)
+  const [serverModel, setServerModel] = useState<EventStreamHistogramModel | null>(null)
   const { width } = useContainerSize(rootRef)
 
   const bucketCount = histogramBucketCountForWidth(Math.max(0, width - 96))
-  const model = useMemo(
-    () => buildEventStreamHistogram(logs, bounds, bucketCount),
-    [logs, bounds, bucketCount],
+  // Live windows have no until — refresh on a quiet cadence so we don't
+  // re-fetch the histogram on every paint.
+  const [liveUntil, setLiveUntil] = useState(() => new Date().toISOString())
+  useEffect(() => {
+    if (bounds.until) return
+    setLiveUntil(new Date().toISOString())
+    const id = window.setInterval(() => {
+      setLiveUntil(new Date().toISOString())
+    }, 15_000)
+    return () => window.clearInterval(id)
+  }, [bounds.until, bounds.since])
+  const until = bounds.until ?? liveUntil
+  const typeKey = useMemo(
+    () => [...typeFilters].sort().join(","),
+    [typeFilters],
   )
 
+  const clientModel = useMemo(
+    () => buildEventStreamHistogram(lensRows, { since: bounds.since, until }, bucketCount),
+    [lensRows, bounds.since, until, bucketCount],
+  )
+
+  useEffect(() => {
+    let cancelled = false
+    const patterns = eventStreamLanesDbPatterns(typeFilters)
+    const timer = window.setTimeout(() => {
+      void api
+        .eventsHistogram({
+          since: bounds.since,
+          until,
+          buckets: bucketCount,
+          q: searchText.trim().length >= 2 ? searchText : undefined,
+          exclude_types: [...EVENT_STREAM_EXCLUDE_TYPES],
+          type_patterns: patterns,
+          errors_only: errorsOnly,
+        })
+        .then((res) => {
+          if (cancelled) return
+          setServerModel(modelFromHistogramApi(res as EventStreamHistogramApiResult))
+        })
+        .catch((err: unknown) => {
+          console.error("[mia] events histogram", err)
+          if (!cancelled) setServerModel(null)
+        })
+    }, 180)
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [
+    bounds.since,
+    until,
+    bucketCount,
+    searchText,
+    errorsOnly,
+    typeKey,
+    typeFilters,
+  ])
+
+  const model = serverModel ?? clientModel
   const selection = draftRange ?? focusSelection(model, focus)
 
   useEffect(() => {
@@ -167,8 +241,15 @@ export function EventStreamHistogram({
     }
   }
 
+  function onDoubleClick() {
+    setDraftRange(null)
+    onFocusChange(null)
+  }
+
   const max = Math.max(1, model.maxCount)
   const plotW = Math.max(1, width > 0 ? width - 96 : 320)
+  const lensTotal = serverModel?.totalCount ?? clientModel.totalCount
+  const axisLabels = formatHistogramBoundPair(model.startMs, model.endMs)
 
   return (
     <div
@@ -182,9 +263,21 @@ export function EventStreamHistogram({
       aria-valuenow={cursorIndex}
       onKeyDown={onKeyDown}
     >
+      <div className="event-stream-histogram__meta">
+        <span className="event-stream-histogram__count">
+          {focus
+            ? `Showing ${listVisibleCount.toLocaleString()} of ${lensTotal.toLocaleString()} events`
+            : `Showing ${lensTotal.toLocaleString()} events`}
+        </span>
+        {model.truncated ? (
+          <span className="event-stream-histogram__truncated" title="Density scan hit the server cap">
+            Histogram capped — denser than shown may exist
+          </span>
+        ) : null}
+      </div>
       <div className="event-stream-histogram__rail">
         <span className="event-stream-histogram__axis" aria-hidden>
-          {formatAxisTime(model.startMs)}
+          {axisLabels.start}
         </span>
         <svg
           ref={svgRef}
@@ -195,6 +288,7 @@ export function EventStreamHistogram({
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerCancel}
+          onDoubleClick={onDoubleClick}
         >
           <line
             className="event-stream-histogram__baseline"
@@ -219,47 +313,54 @@ export function EventStreamHistogram({
             const barW = Math.max(1, slot - BAR_GAP)
             const x = index * slot + BAR_GAP / 2
             const h = bucket.count === 0 ? 0 : Math.max(2, (bucket.count / max) * (PLOT_H - 2))
-            const y = PLOT_H - h
-            const errH =
-              bucket.errorCount === 0 || bucket.count === 0
-                ? 0
-                : Math.max(1, (bucket.errorCount / bucket.count) * h)
+            let yCursor = PLOT_H
+            const segments: Array<{ lane: EventStreamLane; height: number; y: number }> = []
+            if (bucket.count > 0) {
+              for (const lane of HISTOGRAM_STACK_ORDER) {
+                const n = bucket.byLane[lane] ?? 0
+                if (n <= 0) continue
+                const segH = Math.max(1, (n / bucket.count) * h)
+                yCursor -= segH
+                segments.push({ lane, height: segH, y: yCursor })
+              }
+            }
             return (
               <g key={`${bucket.startMs}-${index}`}>
-                {bucket.count > 0 ? (
+                {segments.map((seg) => (
                   <rect
-                    className="event-stream-histogram__bar"
+                    key={seg.lane}
+                    className={`event-stream-histogram__bar event-stream-histogram__bar--${seg.lane}`}
                     x={x}
-                    y={y}
+                    y={seg.y}
                     width={barW}
-                    height={h}
+                    height={seg.height}
                   />
-                ) : null}
-                {errH > 0 ? (
-                  <rect
-                    className="event-stream-histogram__bar-error"
-                    x={x}
-                    y={y}
-                    width={barW}
-                    height={errH}
-                  />
-                ) : null}
+                ))}
               </g>
             )
           })}
         </svg>
         <span className="event-stream-histogram__axis" aria-hidden>
-          {formatAxisTime(model.endMs)}
+          {axisLabels.end}
         </span>
       </div>
       {focus ? (
-        <button
-          type="button"
-          className="event-stream-histogram__clear"
-          onClick={() => onFocusChange(null)}
-        >
-          Clear range
-        </button>
+        <div className="event-stream-histogram__actions">
+          <button
+            type="button"
+            className="event-stream-histogram__action"
+            onClick={() => onZoomToFocus(focus)}
+          >
+            Zoom to selection
+          </button>
+          <button
+            type="button"
+            className="event-stream-histogram__action"
+            onClick={() => onFocusChange(null)}
+          >
+            Clear range
+          </button>
+        </div>
       ) : null}
     </div>
   )

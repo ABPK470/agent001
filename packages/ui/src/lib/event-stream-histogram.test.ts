@@ -2,19 +2,22 @@ import { describe, expect, it } from "vitest"
 import type { LogEntry } from "../types"
 import {
   buildEventStreamHistogram,
+  formatHistogramBound,
+  formatHistogramBoundPair,
   histogramBucketCountForWidth,
   histogramBucketIndexAtRatio,
   histogramFocusFromBucketRange,
   histogramTimeAtRatio,
+  modelFromHistogramApi,
 } from "./event-stream-histogram"
 
-function log(timestamp: string, error = false): LogEntry {
+function log(timestamp: string, type = "api", error = false): LogEntry {
   return {
-    type: "api",
+    type,
     message: "m",
     timestamp,
     error: error || undefined,
-    eventName: "api.request",
+    eventName: `${type}.request`,
   }
 }
 
@@ -34,58 +37,124 @@ describe("buildEventStreamHistogram", () => {
     const model = buildEventStreamHistogram([], { since: "not-a-date" }, 10)
     expect(model.buckets).toEqual([])
     expect(model.maxCount).toBe(0)
+    expect(model.totalCount).toBe(0)
   })
 
-  it("spreads events across buckets", () => {
+  it("spreads events across buckets with lane stacks", () => {
     const logs = [
-      log("2026-08-06T16:00:00.000Z"),
-      log("2026-08-06T16:30:00.000Z"),
-      log("2026-08-06T16:59:59.000Z"),
+      log("2026-08-06T16:00:00.000Z", "api"),
+      log("2026-08-06T16:30:00.000Z", "sync"),
+      log("2026-08-06T16:59:59.000Z", "api"),
     ]
     const model = buildEventStreamHistogram(logs, { since, until }, 4)
     expect(model.buckets).toHaveLength(4)
-    expect(model.buckets.reduce((n, b) => n + b.count, 0)).toBe(3)
-    expect(model.buckets[0]!.count).toBe(1)
-    expect(model.buckets[2]!.count).toBe(1)
-    expect(model.buckets[3]!.count).toBe(1)
-    expect(model.maxCount).toBe(1)
+    expect(model.totalCount).toBe(3)
+    expect(model.buckets[0]!.byLane.api).toBe(1)
+    expect(model.buckets[2]!.byLane.sync).toBe(1)
+    expect(model.buckets[3]!.byLane.api).toBe(1)
   })
 
   it("counts errors separately", () => {
     const logs = [
-      log("2026-08-06T16:10:00.000Z", true),
-      log("2026-08-06T16:10:01.000Z"),
-      log("2026-08-06T16:10:02.000Z", true),
+      log("2026-08-06T16:10:00.000Z", "api", true),
+      log("2026-08-06T16:10:01.000Z", "api"),
+      log("2026-08-06T16:10:02.000Z", "run", true),
     ]
     const model = buildEventStreamHistogram(logs, { since, until }, 6)
     const filled = model.buckets.find((b) => b.count > 0)!
     expect(filled.count).toBe(3)
     expect(filled.errorCount).toBe(2)
+    expect(filled.byLane.api).toBe(2)
+    expect(filled.byLane.run).toBe(1)
   })
+})
 
-  it("puts all events in one bucket when span collapses them", () => {
-    const t = "2026-08-06T16:15:00.000Z"
-    const model = buildEventStreamHistogram(
-      [log(t), log(t), log(t)],
-      { since, until },
-      10,
-    )
-    const filled = model.buckets.filter((b) => b.count > 0)
-    expect(filled).toHaveLength(1)
-    expect(filled[0]!.count).toBe(3)
+describe("modelFromHistogramApi", () => {
+  it("maps wire buckets into the strip model", () => {
+    const model = modelFromHistogramApi({
+      since: "2026-08-06T16:00:00.000Z",
+      until: "2026-08-06T17:00:00.000Z",
+      bucketCount: 2,
+      totalCount: 5,
+      truncated: true,
+      buckets: [
+        {
+          start: "2026-08-06T16:00:00.000Z",
+          end: "2026-08-06T16:30:00.000Z",
+          count: 2,
+          errorCount: 1,
+          byLane: {
+            run: 0,
+            step: 0,
+            sync: 0,
+            bridge: 0,
+            agent: 0,
+            api: 2,
+            system: 0,
+          },
+        },
+        {
+          start: "2026-08-06T16:30:00.000Z",
+          end: "2026-08-06T17:00:00.000Z",
+          count: 3,
+          errorCount: 0,
+          byLane: {
+            run: 1,
+            step: 0,
+            sync: 2,
+            bridge: 0,
+            agent: 0,
+            api: 0,
+            system: 0,
+          },
+        },
+      ],
+    })
+    expect(model.totalCount).toBe(5)
+    expect(model.truncated).toBe(true)
     expect(model.maxCount).toBe(3)
+    expect(model.buckets[1]!.byLane.sync).toBe(2)
+  })
+})
+
+describe("formatHistogramBound", () => {
+  /** Local calendar ms — avoids TZ shifting ISO fixtures across midnight. */
+  function localAt(
+    y: number,
+    m: number,
+    d: number,
+    h: number,
+    min: number,
+  ): number {
+    return new Date(y, m - 1, d, h, min, 0, 0).getTime()
+  }
+
+  const todayNoon = localAt(2026, 8, 6, 12, 0)
+
+  it("uses time only for today's same-day window", () => {
+    const start = localAt(2026, 8, 6, 7, 35)
+    const end = localAt(2026, 8, 6, 11, 50)
+    const label = formatHistogramBound(start, end, { nowMs: todayNoon })
+    expect(label).toBe(formatHistogramBound(start, end, { nowMs: todayNoon, includeDate: false }))
+    expect(label).toMatch(/07:35|7:35/)
   })
 
-  it("uses now when until is omitted", () => {
-    const now = Date.parse("2026-08-06T18:00:00.000Z")
-    const model = buildEventStreamHistogram(
-      [log("2026-08-06T16:30:00.000Z")],
-      { since },
-      4,
-      now,
-    )
-    expect(model.endMs).toBe(now)
-    expect(model.buckets.some((b) => b.count === 1)).toBe(true)
+  it("includes the date for a past same-day window on the start bound", () => {
+    const start = localAt(2026, 8, 5, 7, 35)
+    const end = localAt(2026, 8, 5, 11, 50)
+    const pair = formatHistogramBoundPair(start, end, todayNoon)
+    expect(pair.start).toMatch(/5/)
+    expect(pair.start).toMatch(/07:35|7:35/)
+    expect(pair.end).not.toMatch(/5,/)
+    expect(pair.end).toMatch(/11:50/)
+  })
+
+  it("dates both bounds when the window spans midnight", () => {
+    const start = localAt(2026, 8, 4, 23, 0)
+    const end = localAt(2026, 8, 5, 2, 0)
+    const pair = formatHistogramBoundPair(start, end, todayNoon)
+    expect(pair.start).toMatch(/4/)
+    expect(pair.end).toMatch(/5/)
   })
 })
 

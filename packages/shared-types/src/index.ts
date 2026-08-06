@@ -1936,3 +1936,9 @@ export {
   rollbackAvailableFromPreview,
   type RollbackConfirmPreview,
 } from "./run-capabilities.js"
+export {
+  EVENT_STREAM_LANES,
+  emptyLaneCounts,
+  eventStreamLane,
+  type EventStreamLane,
+} from "./event-stream-lane.js"

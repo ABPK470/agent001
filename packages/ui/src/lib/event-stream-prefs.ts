@@ -14,6 +14,9 @@ export type EventStreamWindow = {
   range: EventStreamRange
   from?: string
   to?: string
+  /** Fine zoom from histogram brush — ISO; wins over range/from/to. */
+  sinceIso?: string
+  untilIso?: string
 }
 
 /** Scan-lane labels — source of truth is event-stream-lane.ts. */
@@ -55,7 +58,17 @@ function parseWindow(raw: unknown): EventStreamWindow {
     : "live"
   const from = typeof o["from"] === "string" && o["from"] ? o["from"] : undefined
   const to = typeof o["to"] === "string" && o["to"] ? o["to"] : undefined
-  return { range, ...(from ? { from } : {}), ...(to ? { to } : {}) }
+  const sinceIso =
+    typeof o["sinceIso"] === "string" && o["sinceIso"] ? o["sinceIso"] : undefined
+  const untilIso =
+    typeof o["untilIso"] === "string" && o["untilIso"] ? o["untilIso"] : undefined
+  return {
+    range,
+    ...(from ? { from } : {}),
+    ...(to ? { to } : {}),
+    ...(sinceIso ? { sinceIso } : {}),
+    ...(untilIso ? { untilIso } : {}),
+  }
 }
 
 export function readEventStreamPrefs(

@@ -9,8 +9,46 @@ import { randomUUID } from "node:crypto"
 import * as db from "../../infra/persistence/sqlite.js"
 import { canAccessOwned, personal, viewingAsOf } from "../auth/service/viewing-as.js"
 import { eventMatchesViewingAs } from "../../infra/events/event-viewing-as.js"
+import { buildEventHistogram } from "./service/histogram.js"
 
 export function registerEventRoutes(app: FastifyInstance): void {
+  app.get<{
+    Querystring: {
+      since?: string
+      until?: string
+      buckets?: string
+      q?: string
+      exclude_types?: string
+      type_patterns?: string
+      errors_only?: string
+    }
+  }>("/api/events/histogram", personal.read, async (req, reply) => {
+    const since = typeof req.query.since === "string" ? req.query.since : ""
+    const until = typeof req.query.until === "string" ? req.query.until : ""
+    if (!since || !until) {
+      reply.code(400)
+      return { error: "since and until are required" }
+    }
+    const bucketCount = Math.min(96, Math.max(1, Number(req.query.buckets) || 48))
+    const excludeTypes = req.query.exclude_types
+      ? req.query.exclude_types.split(",").map((t) => t.trim()).filter(Boolean)
+      : undefined
+    const typePatterns = req.query.type_patterns
+      ? req.query.type_patterns.split(",").map((t) => t.trim()).filter(Boolean)
+      : undefined
+    const { viewingAsUpn } = viewingAsOf(req)
+    return buildEventHistogram({
+      since,
+      until,
+      bucketCount,
+      viewingAsUpn,
+      excludeTypes,
+      typePatterns,
+      q: typeof req.query.q === "string" ? req.query.q : undefined,
+      errorsOnly: req.query.errors_only === "1" || req.query.errors_only === "true",
+    })
+  })
+
   app.get<{
     Querystring: {
       limit?: string

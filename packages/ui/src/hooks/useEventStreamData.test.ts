@@ -42,6 +42,18 @@ describe("useEventStreamData helpers", () => {
     expect(b.until).toBe(endOfLocalDay("2026-07-01"))
   })
 
+  it("resolveWindowBounds prefers ISO zoom over day picks", () => {
+    const b = resolveWindowBounds({
+      range: "1h",
+      from: "2026-07-01",
+      sinceIso: "2026-08-06T16:10:00.000Z",
+      untilIso: "2026-08-06T16:40:00.000Z",
+    })
+    expect(b.followLive).toBe(false)
+    expect(b.since).toBe("2026-08-06T16:10:00.000Z")
+    expect(b.until).toBe("2026-08-06T16:40:00.000Z")
+  })
+
   it("logInWindow respects since/until", () => {
     const bounds = { since: "2026-07-01T00:00:00.000Z", until: "2026-07-01T23:59:59.999Z" }
     expect(logInWindow("2026-07-01T12:00:00.000Z", bounds)).toBe(true)

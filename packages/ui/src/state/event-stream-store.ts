@@ -31,6 +31,8 @@ function windowFingerprint(window: EventStreamWindow, viewingAs: string | null):
     range: window.range,
     from: window.from ?? null,
     to: window.to ?? null,
+    sinceIso: window.sinceIso ?? null,
+    untilIso: window.untilIso ?? null,
     viewingAs,
   })
 }

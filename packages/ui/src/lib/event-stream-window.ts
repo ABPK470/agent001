@@ -37,6 +37,14 @@ export function resolveWindowBounds(window: EventStreamWindow): {
   until?: string
   followLive: boolean
 } {
+  // Fine brush / zoom — ISO takes precedence over day picks + quick ranges.
+  if (window.sinceIso) {
+    return {
+      since: window.sinceIso,
+      until: window.untilIso,
+      followLive: false,
+    }
+  }
   const hasCustom = Boolean(window.from || window.to)
   if (hasCustom) {
     if (window.from && window.to) {

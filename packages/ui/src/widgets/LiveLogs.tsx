@@ -52,6 +52,7 @@ import {
   WidgetToolbarTrailing,
 } from "./widget-toolbar"
 import { logMatchesFilters } from "../lib/event-stream-filter"
+import { formatHistogramBoundPair } from "../lib/event-stream-histogram"
 import {
   EVENT_STREAM_LANES,
   eventStreamFilterTypeClass,
@@ -125,6 +126,7 @@ export function LiveLogs() {
     setFromDate,
     setToDate,
     clearCustomDates,
+    zoomToIsoRange,
     followLive,
   } = useEventStreamData({ paused, initialWindow: initialPrefs.window })
 
@@ -296,15 +298,37 @@ export function LiveLogs() {
     listRef,
   })
 
+  const hasIsoZoom = Boolean(timeWindow.sinceIso)
   const hasCustomDates = Boolean(timeWindow.from || timeWindow.to)
-  const timeFiltered = hasCustomDates || timeWindow.range !== "live"
+  const timeFiltered =
+    hasIsoZoom || hasCustomDates || timeWindow.range !== "live"
   const filtersActive = typeFilters.size > 0 || errorsOnly || timeFiltered
   const activeFilterCount =
-    typeFilters.size + (errorsOnly ? 1 : 0) + (hasCustomDates ? (timeWindow.from ? 1 : 0) + (timeWindow.to ? 1 : 0) : timeFiltered ? 1 : 0)
+    typeFilters.size
+    + (errorsOnly ? 1 : 0)
+    + (hasIsoZoom
+      ? 1
+      : hasCustomDates
+        ? (timeWindow.from ? 1 : 0) + (timeWindow.to ? 1 : 0)
+        : timeFiltered
+          ? 1
+          : 0)
 
   const activeChips = useMemo((): ActiveFilterChipModel[] => {
     const chips: ActiveFilterChipModel[] = []
-    if (hasCustomDates) {
+    if (hasIsoZoom && timeWindow.sinceIso) {
+      const startMs = Date.parse(timeWindow.sinceIso)
+      const endMs = timeWindow.untilIso
+        ? Date.parse(timeWindow.untilIso)
+        : Date.now()
+      const bounds = formatHistogramBoundPair(startMs, endMs)
+      chips.push({
+        id: "zoom",
+        label: "Zoom",
+        value: `${bounds.start} – ${bounds.end}`,
+        onRemove: () => onQuickRange("live"),
+      })
+    } else if (hasCustomDates) {
       if (timeWindow.from) {
         chips.push({
           id: "from",
@@ -355,9 +379,12 @@ export function LiveLogs() {
     }
     return chips
   }, [
+    hasIsoZoom,
     hasCustomDates,
     timeWindow.from,
     timeWindow.to,
+    timeWindow.sinceIso,
+    timeWindow.untilIso,
     timeWindow.range,
     typeFilters,
     errorsOnly,
@@ -518,10 +545,18 @@ export function LiveLogs() {
       </FilterSheet>
 
       <EventStreamHistogram
-        logs={lensRows}
+        lensRows={lensRows}
         bounds={windowBounds}
         focus={histogramFocus}
         onFocusChange={setHistogramFocus}
+        onZoomToFocus={(next) => {
+          setHistogramFocus(null)
+          zoomToIsoRange(next.since, next.until)
+        }}
+        listVisibleCount={displayRows.length}
+        typeFilters={typeFilters}
+        errorsOnly={errorsOnly}
+        searchText={searchText}
       />
 
       {(pendingLiveCount > 0 && (paused || !followLive)) && (
