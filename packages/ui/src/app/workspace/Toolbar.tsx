@@ -19,7 +19,7 @@ import { SessionMenu } from "../SessionMenu"
 import { ViewingAsControl } from "../ViewingAsControl"
 import { SHELL_CHROME_HEADER_WORKSPACE_CLASS } from "../shell-chrome"
 import type { AppShellMode } from "../types"
-import { isProductSpaceId } from "../../lib/spaces"
+import { isProductSpaceAtDefault, isProductSpaceId } from "../../lib/spaces"
 import { openWidgetCatalogHint } from "../types"
 import { OpenWidgetCatalogHintMark } from "./OpenWidgetCatalogHint"
 import { captureSoloFlipFrom } from "./layout/solo-flip"
@@ -66,6 +66,7 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
   const addView = useLayoutStore((s) => s.addView)
   const removeView = useLayoutStore((s) => s.removeView)
   const resetActiveSpace = useLayoutStore((s) => s.resetActiveSpace)
+  const viewportRows = useLayoutStore((s) => s.viewportRows)
   const catalogHint = openWidgetCatalogHint()
   const renameView = useLayoutStore((s) => s.renameView)
   const soloTileId = useLayoutStore((s) => s.soloTileId)
@@ -176,8 +177,12 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
     ? activeView?.tiles.find((tile) => tile.id === soloTileId)
     : undefined
   const soloLabel = soloTile ? getWidgetDefinition(soloTile.type).label : null
+  const showResetSpace =
+    Boolean(activeView)
+    && isProductSpaceId(activeViewId)
+    && !isProductSpaceAtDefault(activeView!, viewportRows)
   const stageOpen =
-    Boolean(onAddWidget) || Boolean(soloLabel && soloTileId)
+    Boolean(onAddWidget) || Boolean(soloLabel && soloTileId) || showResetSpace
 
   return (
     <header className={SHELL_CHROME_HEADER_WORKSPACE_CLASS}>
@@ -369,7 +374,7 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
                   <span className="min-w-0 truncate font-medium leading-none">{soloLabel}</span>
                 </button>
               )}
-              {isProductSpaceId(activeViewId) ? (
+              {showResetSpace ? (
                 <button
                   type="button"
                   className="toolbar-ops-btn shrink-0 px-2.5"

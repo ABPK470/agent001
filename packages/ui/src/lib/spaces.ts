@@ -12,11 +12,18 @@
 
 import type { WidgetType } from "../types"
 import { COLS } from "./grid-math"
-import { leafNode, type SplitNode } from "./split-tree"
+import { leafNode, type SplitDir, type SplitNode } from "./split-tree"
 import { WIDGET_DEFAULTS } from "./widget-layout-defaults"
 import type { WorkspaceView } from "./workspace-view"
 import { syncViewGeometry } from "./workspace-view"
 import { randomId } from "./util"
+
+/** Split shape keyed by widget type — tile ids are ephemeral. */
+type SpaceSplitShape =
+  | { kind: "leaf"; type: WidgetType }
+  | { kind: "split"; dir: SplitDir; ratio: number; a: SpaceSplitShape; b: SpaceSplitShape }
+
+const SPACE_RATIO_EPS = 0.02
 
 export type SpaceId =
   | "space:agent"
@@ -266,4 +273,58 @@ export function primarySpaceForWidget(type: WidgetType): SpaceId | null {
     if (space.widgets.includes(type)) return space.id
   }
   return null
+}
+
+function spaceSplitShape(
+  node: SplitNode | null,
+  typeById: ReadonlyMap<string, WidgetType>,
+): SpaceSplitShape | null {
+  if (!node) return null
+  if (node.kind === "leaf") {
+    const type = typeById.get(node.tileId)
+    if (!type) return null
+    return { kind: "leaf", type }
+  }
+  const a = spaceSplitShape(node.a, typeById)
+  const b = spaceSplitShape(node.b, typeById)
+  if (!a || !b) return null
+  return { kind: "split", dir: node.dir, ratio: node.ratio, a, b }
+}
+
+function spaceSplitShapesEqual(
+  a: SpaceSplitShape | null,
+  b: SpaceSplitShape | null,
+): boolean {
+  if (a == null || b == null) return a == null && b == null
+  if (a.kind !== b.kind) return false
+  if (a.kind === "leaf" && b.kind === "leaf") return a.type === b.type
+  if (a.kind !== "split" || b.kind !== "split") return false
+  if (a.dir !== b.dir) return false
+  if (Math.abs(a.ratio - b.ratio) > SPACE_RATIO_EPS) return false
+  return spaceSplitShapesEqual(a.a, b.a) && spaceSplitShapesEqual(a.b, b.b)
+}
+
+function viewSplitShape(view: WorkspaceView): SpaceSplitShape | null {
+  const typeById = new Map(view.tiles.map((tile) => [tile.id, tile.type] as const))
+  return spaceSplitShape(view.split, typeById)
+}
+
+/**
+ * True when a product Space still matches its curated default (widget set +
+ * split ratios). DIY views and unknown ids are never "at default" for Reset.
+ */
+export function isProductSpaceAtDefault(view: WorkspaceView, rows = 24): boolean {
+  if (!isProductSpaceId(view.id)) return false
+  const def = spaceById(view.id)
+  if (!def) return false
+  const expectedTypes = [...def.widgets].sort()
+  const actualTypes = view.tiles.map((tile) => tile.type).sort()
+  if (
+    expectedTypes.length !== actualTypes.length
+    || expectedTypes.some((type, i) => type !== actualTypes[i])
+  ) {
+    return false
+  }
+  const fresh = buildSpaceView(def, rows)
+  return spaceSplitShapesEqual(viewSplitShape(view), viewSplitShape(fresh))
 }

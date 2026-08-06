@@ -5,11 +5,13 @@ import {
   PRODUCT_SPACES,
   SPACE_LAYOUT_VERSION,
   buildSpaceView,
+  isProductSpaceAtDefault,
   mergeProductSpaces,
   reapplyProductSpaceLayouts,
   resetSpaceView,
   spaceByIndex,
 } from "./spaces"
+import { leafNode } from "./split-tree"
 
 function leafRatio(
   view: ReturnType<typeof buildSpaceView>,
@@ -110,5 +112,35 @@ describe("product spaces", () => {
 
   it("exports a layout version for persistence migration", () => {
     expect(SPACE_LAYOUT_VERSION).toBeGreaterThanOrEqual(5)
+  })
+
+  it("isProductSpaceAtDefault is true for a fresh Space and false when changed", () => {
+    const observe = buildSpaceView(PRODUCT_SPACES.find((s) => s.id === "space:observe")!)
+    expect(isProductSpaceAtDefault(observe)).toBe(true)
+
+    const ratioDrift = {
+      ...observe,
+      split:
+        observe.split?.kind === "split"
+          ? { ...observe.split, ratio: 0.55 }
+          : observe.split,
+    }
+    expect(isProductSpaceAtDefault(ratioDrift)).toBe(false)
+
+    const missingTile = {
+      ...observe,
+      tiles: observe.tiles.slice(0, 1),
+      split: leafNode(observe.tiles[0]!.id),
+    }
+    expect(isProductSpaceAtDefault(missingTile)).toBe(false)
+
+    expect(
+      isProductSpaceAtDefault({
+        id: "diy",
+        name: "Mine",
+        tiles: [],
+        split: null,
+      }),
+    ).toBe(false)
   })
 })
