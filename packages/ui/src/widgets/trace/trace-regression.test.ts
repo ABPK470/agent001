@@ -639,4 +639,19 @@ describe("Trace CSS contract — pin indent + work-note divider", () => {
   it("hides in-flow headers while pinned (replace contract)", () => {
     expect(css).toMatch(/\[data-trace-pinned\]\s*\{\s*visibility:\s*hidden/)
   })
+
+  it("sticky detail section headers stay opaque when focused (no body bleed-through)", () => {
+    expect(css).toMatch(
+      /\.trace-detail-section--sticky\s+\.trace-detail-accordion-bar\.is-section-focused\s*\{[^}]*background:\s*var\(--bg\)/s,
+    )
+    expect(css).toMatch(
+      /\.trace-detail-body--stack\s*>\s*\.trace-detail-section--sticky\s+\.trace-detail-accordion-bar\.is-section-focused\s*\{[^}]*background:\s*var\(--trace-section-surface/s,
+    )
+    expect(css).not.toMatch(
+      /\.trace-detail-section--sticky\s+\.trace-detail-accordion-bar\.is-section-focused\s*\{[^}]*background:\s*var\(--select-fill/s,
+    )
+    expect(css).not.toMatch(
+      /\.trace-detail-body--stack\s*>\s*\.trace-detail-section--sticky\s+\.trace-detail-accordion-bar\.is-section-focused\s*\{[^}]*background:\s*var\(--select-fill/s,
+    )
+  })
 })

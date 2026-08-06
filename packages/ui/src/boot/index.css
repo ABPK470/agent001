@@ -6241,10 +6241,14 @@ button.trace-tree-status-pill:hover {
   background: var(--trace-section-surface, var(--bg));
 }
 
-/* Focus wash beats sticky section surface. */
-.trace-detail-section--sticky .trace-detail-accordion-bar.is-section-focused,
+/* Focus wash beats sticky section surface — but stay opaque so scrolled
+ * body text never shows through the bar (select-fill is ~6% alpha). */
+.trace-detail-section--sticky .trace-detail-accordion-bar.is-section-focused {
+  background: var(--bg);
+}
+
 .trace-detail-body--stack > .trace-detail-section--sticky .trace-detail-accordion-bar.is-section-focused {
-  background: var(--select-fill, rgb(255 255 255 / 0.06));
+  background: var(--trace-section-surface, var(--bg));
 }
 
 .trace-detail-accordion-bar {
