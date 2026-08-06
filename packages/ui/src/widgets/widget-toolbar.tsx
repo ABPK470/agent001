@@ -13,7 +13,7 @@
  */
 
 import { Loader2, Search, X } from "lucide-react"
-import type { JSX, KeyboardEvent, ReactNode } from "react"
+import type { JSX, KeyboardEvent, ReactNode, RefObject } from "react"
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { placeAnchoredPanelForElements } from "../lib/anchored-panel"
@@ -98,6 +98,8 @@ export function WidgetToolbarSearch({
   autoFocus,
   mono,
   committed,
+  shortcutHint,
+  inputRef,
 }: {
   value: string
   onChange: (value: string) => void
@@ -107,6 +109,9 @@ export function WidgetToolbarSearch({
   onClear?: () => void
   mono?: boolean
   committed?: boolean
+  /** Right-aligned kbd pill when empty (e.g. `/`). */
+  shortcutHint?: string
+  inputRef?: RefObject<HTMLInputElement | null>
 }): JSX.Element {
   function clearSearch() {
     if (onClear) onClear()
@@ -125,11 +130,14 @@ export function WidgetToolbarSearch({
     event.currentTarget.blur()
   }
 
+  const showShortcut = Boolean(shortcutHint) && !value && !loading
+
   return (
     <div className="widget-toolbar__search">
       <div className="widget-toolbar__search-wrap">
         <Search size={14} strokeWidth={1.75} className="widget-toolbar__search-icon" aria-hidden />
         <input
+          ref={inputRef}
           type="text"
           autoFocus={autoFocus}
           placeholder={placeholder}
@@ -139,6 +147,7 @@ export function WidgetToolbarSearch({
           aria-busy={loading || undefined}
           className={[
             "widget-toolbar__search-input",
+            showShortcut ? "widget-toolbar__search-input--has-shortcut" : "",
             mono ? "font-mono" : "",
             committed ? "widget-toolbar__search-input--committed" : "",
           ].filter(Boolean).join(" ")}
@@ -156,6 +165,11 @@ export function WidgetToolbarSearch({
             <X size={14} strokeWidth={1.75} />
           </button>
         )}
+        {showShortcut ? (
+          <kbd className="widget-toolbar__search-shortcut" aria-hidden>
+            {shortcutHint}
+          </kbd>
+        ) : null}
       </div>
     </div>
   )

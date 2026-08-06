@@ -112,6 +112,7 @@ export function LiveLogs() {
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
   const [expandedKeys, setExpandedKeys] = useState<Set<string>>(() => new Set())
   const listRef = useRef<VirtualListHandle>(null)
+  const searchInputRef = useRef<HTMLInputElement>(null)
 
   const {
     entries,
@@ -303,8 +304,9 @@ export function LiveLogs() {
     })
   }, [])
 
+  // Claim while the tile is focused — `/` must work even on an empty list.
   const treeKeyboardEnabled = Boolean(
-    instance && focusedTileId === instance.widgetId && keyboardNodes.length > 0,
+    instance && focusedTileId === instance.widgetId,
   )
 
   useReviewTreeKeyboard({
@@ -316,6 +318,7 @@ export function LiveLogs() {
     onSelect: setSelectedKey,
     onToggleFold: onKeyboardToggleFold,
     listRef,
+    onOpenSearch: () => searchInputRef.current?.focus(),
   })
 
   const hasIsoZoom = Boolean(timeWindow.sinceIso)
@@ -429,9 +432,11 @@ export function LiveLogs() {
       <WidgetToolbar compact={compact}>
         <WidgetToolbarLeading>{null}</WidgetToolbarLeading>
         <WidgetToolbarSearch
+          inputRef={searchInputRef}
           value={searchText}
           onChange={setSearchText}
-          placeholder="Filter events…"
+          placeholder="Filter events (type:api status:500)…"
+          shortcutHint="/"
           loading={searching || loading}
           onClear={() => setSearchText("")}
         />
@@ -706,14 +711,22 @@ function LogRow({
 
   const lane = log.type as EventType
 
+  const open = expanded && hasData
+
   return (
-    <div className="event-stream-entry" data-event-row={rowKey}>
+    <div
+      className={[
+        "event-stream-entry",
+        selected ? "is-selected" : "",
+        open ? "is-open" : "",
+      ].join(" ")}
+      data-event-row={rowKey}
+    >
       <div
         className={[
           "event-stream-row",
           isError ? "event-stream-row--has-error" : "",
-          expanded && hasData ? "event-stream-row--open" : "",
-          selected ? "is-selected" : "",
+          open ? "event-stream-row--open" : "",
           hasData ? "cursor-pointer" : "",
         ].join(" ")}
         onClick={() => {
@@ -784,15 +797,22 @@ function LogRow({
       </div>
       {expanded && log.data && (
         <div className="event-stream-payload">
-          <div className="review-tree">
-            <div className="review-tree__item">
-              <div className={isError ? "event-stream-payload__box event-stream-payload__box--err" : "event-stream-payload__box"}>
-                {log.eventName && isSyncSqlEventType(log.eventName) && (
-                  <SqlTraceFromEventData data={log.data} compact maxHeight={compact ? 120 : 180} />
-                )}
-                <JsonViewer value={log.data} label="payload" defaultExpandDepth={2} maxHeight={compact ? 160 : 240} />
-              </div>
-            </div>
+          <div
+            className={
+              isError
+                ? "event-stream-payload__box event-stream-payload__box--err"
+                : "event-stream-payload__box"
+            }
+          >
+            {log.eventName && isSyncSqlEventType(log.eventName) && (
+              <SqlTraceFromEventData data={log.data} compact maxHeight={compact ? 120 : 180} />
+            )}
+            <JsonViewer
+              value={log.data}
+              label="payload"
+              defaultExpandDepth={2}
+              maxHeight={compact ? 160 : 240}
+            />
           </div>
         </div>
       )}

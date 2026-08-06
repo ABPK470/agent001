@@ -6,6 +6,7 @@ import {
   operationStatusCallout,
   operationStatusPill,
   operationStatusRowStroke,
+  statusAbbrevMeta,
   statusCalloutTone,
 } from "./status-callout"
 
@@ -48,5 +49,17 @@ describe("status-callout", () => {
     expect(operationStatusPill("running")).toContain("mia-status-pill--info")
     expect(operationStatusPill("skipped")).toContain("mia-status-pill--skip")
     expect(operationStatusPill("unknown")).toContain("mia-status-pill--muted")
+  })
+
+  it("abbreviates dense rail labels like Trace (OK · Fail · Run · CANC)", () => {
+    expect(statusAbbrevMeta("completed").label).toBe("OK")
+    expect(statusAbbrevMeta("failed").label).toBe("Fail")
+    expect(statusAbbrevMeta("running").label).toBe("Run")
+    expect(statusAbbrevMeta("cancelled")).toEqual({
+      label: "CANC",
+      icon: "–",
+      title: "Cancelled",
+    })
+    expect(statusAbbrevMeta("pending").label).toBe("Run")
   })
 })

@@ -42,4 +42,16 @@ describe("event-catalog step summaries", () => {
       "explore_mssql_schema completed",
     )
   })
+
+  it("summarizes api.request from method/url/status — not Request — request", () => {
+    const d = lookupEventDescriptor("api.request")
+    expect(
+      d.summary({
+        method: "GET",
+        url: "/api/events?limit=500",
+        status_code: 200,
+        duration_ms: 1,
+      }),
+    ).toBe("GET · /api/events?limit=500 · 200 · 1ms")
+  })
 })

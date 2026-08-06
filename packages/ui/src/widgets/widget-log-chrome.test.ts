@@ -519,7 +519,10 @@ describe("widget log chrome — shared content dialect", () => {
     expect(live).toContain("eventStreamTypeClass")
     expect(live).toContain("JsonViewer")
     expect(live).not.toContain("border-l-2")
-    expect(css).toMatch(/\.event-stream-row__time\s*\{[^}]*font-size:\s*var\(--review-meta-size\)/s)
+    // Time is quieter than body meta — fixed rem, not --review-meta-size.
+    expect(css).toMatch(/\.event-stream-row__time\s*\{[^}]*font-size:\s*0\.75rem/s)
+    expect(css).toMatch(/\.event-stream-row\s*\{[^}]*grid-template-columns:/s)
+    expect(css).toContain(".event-stream-payload__box")
 
     const scope = read(join(here, "pipelines/OperationLogScopeDetail.tsx"))
     expect(scope).toContain("ReviewPayloadBlock")

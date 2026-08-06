@@ -298,12 +298,12 @@ export function ActiveFilterChips({
           key={chip.id}
           type="button"
           onClick={chip.onRemove}
-          className="inline-flex max-w-full items-center gap-1 rounded-md border border-border-subtle bg-elevated/50 px-2 py-1 text-xs text-text hover:border-border hover:bg-elevated"
+          className="widget-filter-chip"
           title={`Remove ${chip.label}`}
         >
-          <span className="text-text-muted">{chip.label}</span>
-          <span className="min-w-0 truncate font-medium">{chip.value}</span>
-          <X size={11} className="shrink-0 text-text-faint" />
+          <span className="widget-filter-chip__label">{chip.label}</span>
+          <span className="widget-filter-chip__value">{chip.value}</span>
+          <X size={11} className="widget-filter-chip__x" aria-hidden />
         </button>
       ))}
       {onClear && (

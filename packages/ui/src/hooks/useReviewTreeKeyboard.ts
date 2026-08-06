@@ -21,6 +21,7 @@ export function useReviewTreeKeyboard({
   onSelect,
   onToggleFold,
   listRef,
+  onOpenSearch,
 }: {
   enabled: boolean
   /** Unique claim id when multiple tree hosts can mount. */
@@ -31,22 +32,31 @@ export function useReviewTreeKeyboard({
   onSelect: (scopeId: string) => void
   onToggleFold: (scopeId: string) => void
   listRef: RefObject<ReviewTreeListHandle | null>
+  /** `/` focuses the surface filter (Event Stream, …). */
+  onOpenSearch?: () => void
 }) {
   const nodesRef = useRef(nodes)
   const selectedRef = useRef(selectedScopeId)
   const isFoldedRef = useRef(isFolded)
   const onSelectRef = useRef(onSelect)
   const onToggleFoldRef = useRef(onToggleFold)
+  const onOpenSearchRef = useRef(onOpenSearch)
 
   nodesRef.current = nodes
   selectedRef.current = selectedScopeId
   isFoldedRef.current = isFolded
   onSelectRef.current = onSelect
   onToggleFoldRef.current = onToggleFold
+  onOpenSearchRef.current = onOpenSearch
 
   const onKeyDownRef = useRef<OperatorSurfaceHandler | null>(null)
   onKeyDownRef.current = (event) => {
     if (event.metaKey || event.ctrlKey || event.altKey) return false
+
+    if (event.key === "/" && onOpenSearchRef.current) {
+      onOpenSearchRef.current()
+      return true
+    }
 
     const action = resolveReviewTreeKeyboardAction(
       event.key,

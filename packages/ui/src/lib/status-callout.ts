@@ -96,6 +96,34 @@ export function operationStatusPill(status: OperationStatus | string): string {
   return STATUS_PILL[statusCalloutTone(status)]
 }
 
+/** Micro scan labels — Trace tree / Pipelines / Thread·Run drawer (OK · Fail · Run). */
+const STATUS_ABBREV: Readonly<
+  Record<StatusCalloutTone, { label: string; icon: string; title: string }>
+> = {
+  ok: { label: "OK", icon: "✓", title: "Completed" },
+  err: { label: "Fail", icon: "✕", title: "Failed" },
+  warn: { label: "Warn", icon: "!", title: "Warning" },
+  info: { label: "Run", icon: "…", title: "Running" },
+  skip: { label: "Skip", icon: "⊝", title: "Skipped" },
+  muted: { label: "?", icon: "?", title: "Unknown" },
+}
+
+/**
+ * Abbreviated status for dense rails — same dialect as TraceTreeStatusBadge /
+ * OpLogStatusPill. Cancelled is CANC (not Warn).
+ */
+export function statusAbbrevMeta(status: string): {
+  label: string
+  icon: string
+  title: string
+} {
+  const key = status.toLowerCase()
+  if (key === "cancelled" || key === "canceled" || key === "stopped") {
+    return { label: "CANC", icon: "–", title: "Cancelled" }
+  }
+  return STATUS_ABBREV[statusCalloutTone(status)]
+}
+
 /** @deprecated Prefer operationStatusPill. */
 export function operationStatusBadge(status: OperationStatus): string {
   return operationStatusPill(status)

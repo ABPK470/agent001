@@ -909,7 +909,17 @@ export const SSE_EVENT_CATALOG: Readonly<Record<string, EventDescriptor>> = {
     family: "telemetry",
     label: "Request",
     severity: "info",
-    summary: () => "request",
+    summary: (p) => {
+      const method = str(p.method, "REQ").toUpperCase()
+      const url = truncate(str(p.url, ""), 42)
+      const status = num(p.status_code)
+      const ms = num(p.duration_ms)
+      const parts = [method]
+      if (url) parts.push(url)
+      if (status != null) parts.push(String(status))
+      if (ms != null) parts.push(`${ms}ms`)
+      return parts.join(" · ")
+    },
   },
   "log.detail": {
     id: "log.detail",

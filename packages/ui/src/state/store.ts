@@ -602,8 +602,9 @@ function eventType(type: string): string {
   return eventStreamLane(type)
 }
 
-/** step.* / tool_call.* summaries already include tool + verb — don't wrap again. */
+/** step.* / tool_call.* / api.request summaries already name the act — don't wrap again. */
 function isSelfContainedStreamSummary(type: string, message: string): boolean {
+  if (type === "api.request") return true
   if (type.startsWith("step.") || type.startsWith("tool_call.") || type.startsWith("tool.")) {
     return /\b(started|completed|failed|executing|killed|done)\b/i.test(message)
   }

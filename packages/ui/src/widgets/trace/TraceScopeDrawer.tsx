@@ -5,7 +5,7 @@
 
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react"
 import { useStore } from "../../state/store"
-import { operationStatusPill } from "../../lib/status-callout"
+import { operationStatusPill, statusAbbrevMeta } from "../../lib/status-callout"
 import { sortThreadsByPinThenUpdatedAt } from "../../lib/thread-order"
 import {
   runLabel,
@@ -222,6 +222,7 @@ export function TraceScopeDrawer({
                       rowIndex += 1
                       const runIdx = rowIndex
                       const runActive = run.id === activeRunId
+                      const statusMeta = statusAbbrevMeta(run.status)
                       return (
                         <li key={run.id}>
                           <button
@@ -241,9 +242,9 @@ export function TraceScopeDrawer({
                             <span className="trace-scope-drawer__run-label">{runLabel(run)}</span>
                             <span
                               className={`trace-scope-drawer__run-status ${operationStatusPill(run.status)}`}
-                              title={run.status}
+                              title={statusMeta.title}
                             >
-                              {run.status}
+                              {statusMeta.label}
                             </span>
                           </button>
                         </li>
