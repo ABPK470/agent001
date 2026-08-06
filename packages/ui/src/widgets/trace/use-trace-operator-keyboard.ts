@@ -105,6 +105,9 @@ export function useTraceOperatorKeyboard({
         return
       }
 
+      // Scope drawer owns j/k/arrows while open — do not peel panes underneath.
+      if (scopeDrawerOpen) return
+
       const paneAction = resolveTracePaneKeyboardAction(event, focusedPane)
       if (paneAction.type === "none") return
 

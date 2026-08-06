@@ -488,7 +488,10 @@ export function TraceDag({
     searchOpen: filterOpen,
     onSearchOpenChange,
     scopeDrawerOpen,
-    onScopeDrawerOpenChange: setScopeDrawerOpen,
+    onScopeDrawerOpenChange: (open) => {
+      if (open) setScopeDrawerOpen(true)
+      else closeScopeDrawer(true)
+    },
     isZen,
     isSolo,
     summonOpen,
@@ -500,9 +503,18 @@ export function TraceDag({
     tabCycleRef,
   })
 
+  function closeScopeDrawer(returnFocus = true) {
+    setScopeDrawerOpen(false)
+    if (!returnFocus) return
+    window.requestAnimationFrame(() => {
+      treeScrollRef.current?.focus({ preventScroll: true })
+    })
+  }
+
   useTraceTreeKeyboard({
     enabled:
       operatorKeysEnabled &&
+      !scopeDrawerOpen &&
       focusedPane === "tree" &&
       viewMode === "tree" &&
       Boolean(runId && dag.hasData && treeIndex.nodes.length > 0),
@@ -726,9 +738,12 @@ export function TraceDag({
                 type="button"
                 className="trace-scope-drawer-scrim"
                 aria-label="Close thread drawer"
-                onClick={() => setScopeDrawerOpen(false)}
+                onClick={() => closeScopeDrawer(true)}
               />
-              <TraceScopeDrawer onPicked={() => setScopeDrawerOpen(false)} />
+              <TraceScopeDrawer
+                onPicked={() => closeScopeDrawer(true)}
+                onDismiss={() => closeScopeDrawer(true)}
+              />
             </>
           ) : null}
           {emptySlot ? (

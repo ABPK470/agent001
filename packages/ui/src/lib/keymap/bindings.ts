@@ -17,10 +17,11 @@ export const SHELL_BINDINGS: readonly KeymapBinding[] = [
 ]
 
 export const TRACE_TREE_HINTS: readonly KbdHint[] = [
+  { keys: ["⌘/Ctrl", "\\"], label: "runs" },
+  { keys: ["`"], label: "pane" },
   { keys: ["↵"], label: "detail" },
   { keys: ["↑", "↓"], label: "move" },
   { keys: ["←", "→"], label: "fold" },
-  { keys: ["⌘/Ctrl", "\\"], label: "drawer" },
   { keys: ["M"], label: "max" },
   { keys: ["Z"], label: "zen" },
 ]
