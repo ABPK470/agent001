@@ -1,6 +1,6 @@
 /**
- * Behavior: bare `[` / `]` never fold-all. On detail they move sections;
- * on tree they are inert (fold-all is toolbar-only).
+ * Bare `[` / `]` never fold-all and never pick detail sections.
+ * Fold-all is toolbar-only; detail uses ←→ / Space; Mod+[ ] is view tabs.
  */
 
 import { describe, expect, it, vi } from "vitest"
@@ -20,49 +20,25 @@ function bracketEvent(side: "left" | "right") {
 }
 
 describe("review pane bracket ownership", () => {
-  it("detail pane: ] / [ move sections both ways; zen never fold-alls", () => {
-    const sections = createDetailSectionController()
-    for (const id of ["a", "b", "c"]) {
-      sections.register({
-        id,
-        getOpen: () => true,
-        setOpen: () => {},
-        headerEl: () => null,
-      })
-    }
-
+  it("detail pane: bare brackets are inert; zen never fold-alls", () => {
     const right = bracketEvent("right")
     expect(resolveTraceZenKeyboardAction(right, { focusedPane: "detail" }).type).toBe("none")
-    expect(resolveReviewPaneKeyboardAction(right, "detail", { lateral: "tabs" })).toEqual({
-      type: "section-move",
-      direction: 1,
-    })
-    sections.move(1)
-    expect(sections.getActiveId()).toBe("a")
-    sections.move(1)
-    expect(sections.getActiveId()).toBe("b")
+    expect(resolveReviewPaneKeyboardAction(right, "detail").type).toBe("none")
 
     const left = bracketEvent("left")
     expect(resolveTraceZenKeyboardAction(left, { focusedPane: "detail" }).type).toBe("none")
-    expect(resolveReviewPaneKeyboardAction(left, "detail", { lateral: "tabs" })).toEqual({
-      type: "section-move",
-      direction: -1,
-    })
-    sections.move(-1)
-    expect(sections.getActiveId()).toBe("a")
+    expect(resolveReviewPaneKeyboardAction(left, "detail").type).toBe("none")
   })
 
-  it("tree pane: bare brackets do nothing (no fold-all, no section move)", () => {
+  it("tree pane: bare brackets do nothing (no fold-all)", () => {
     const onFold = vi.fn()
     const left = bracketEvent("left")
-    const zen = resolveTraceZenKeyboardAction(left, { focusedPane: "tree" })
-    const pane = resolveReviewPaneKeyboardAction(left, "tree", { lateral: "tabs" })
-    expect(zen.type).toBe("none")
-    expect(pane.type).toBe("none")
+    expect(resolveTraceZenKeyboardAction(left, { focusedPane: "tree" }).type).toBe("none")
+    expect(resolveReviewPaneKeyboardAction(left, "tree").type).toBe("none")
     expect(onFold).not.toHaveBeenCalled()
   })
 
-  it("detail Space toggles the active section", () => {
+  it("detail Space toggles; ←→ folds; activate picks the target core", () => {
     let open = false
     const sections = createDetailSectionController()
     sections.register({
@@ -74,19 +50,30 @@ describe("review pane bracket ownership", () => {
       headerEl: () => null,
     })
 
-    const event = {
-      key: " ",
-      code: "Space",
-      metaKey: false,
-      ctrlKey: false,
-      altKey: false,
-      shiftKey: false,
-    }
-    expect(resolveTraceZenKeyboardAction(event, { focusedPane: "detail" }).type).toBe("none")
-    expect(resolveReviewPaneKeyboardAction(event, "detail", { lateral: "tabs" })).toEqual({
-      type: "section-toggle",
-    })
+    expect(sections.activate("s1")).toBe(true)
+    expect(sections.getActiveId()).toBe("s1")
+
+    expect(
+      resolveReviewPaneKeyboardAction(
+        { key: " ", code: "Space", metaKey: false, ctrlKey: false, altKey: false, shiftKey: false },
+        "detail",
+      ),
+    ).toEqual({ type: "section-toggle" })
     sections.toggle()
     expect(open).toBe(true)
+
+    expect(
+      resolveReviewPaneKeyboardAction(
+        {
+          key: "ArrowLeft",
+          code: "ArrowLeft",
+          metaKey: false,
+          ctrlKey: false,
+          altKey: false,
+          shiftKey: false,
+        },
+        "detail",
+      ),
+    ).toEqual({ type: "section-fold", open: false })
   })
 })

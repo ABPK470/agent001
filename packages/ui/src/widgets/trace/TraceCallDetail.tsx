@@ -51,7 +51,7 @@ export function TraceCallDetail({
   call: TraceCallNode
   dag: TraceDag
   initialTab?: CallDetailTab
-  /** Keyboard ←→ registers a cycle peer while this detail is mounted. */
+  /** ←→ falls back here when no detail accordion sections are registered. */
   tabCycleRef?: MutableRefObject<((direction: -1 | 1) => void) | null>
 }) {
   const [tab, setTab] = useState<CallDetailTab>(initialTab)

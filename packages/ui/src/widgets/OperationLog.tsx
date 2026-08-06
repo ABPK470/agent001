@@ -608,7 +608,6 @@ export function OperationLog() {
     treeScrollRef: listScrollRef,
     detailScrollRef,
     sectionControllerRef,
-    lateral: "sections",
     treeNav: {
       enabled: focusedPane === "tree" && keyboardNodes.length > 0,
       nodes: keyboardNodes,

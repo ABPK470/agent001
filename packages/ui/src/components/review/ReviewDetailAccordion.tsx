@@ -14,7 +14,7 @@ export function ReviewDetailAccordion({
   children: ReactNode
 }): JSX.Element {
   const headerRef = useRef<HTMLButtonElement>(null)
-  const { active } = useRegisterDetailSection({
+  const { active, activate } = useRegisterDetailSection({
     open,
     setOpen: (next) => {
       if (next !== open) onToggle()
@@ -29,7 +29,11 @@ export function ReviewDetailAccordion({
         type="button"
         className={`review-detail-accordion${active ? " is-section-focused" : ""}`}
         aria-expanded={open}
-        onClick={onToggle}
+        onClick={() => {
+          activate()
+          onToggle()
+        }}
+        onFocus={activate}
       >
         <ChevronRight
           size={14}

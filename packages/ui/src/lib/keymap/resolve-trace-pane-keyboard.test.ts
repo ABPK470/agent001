@@ -30,27 +30,18 @@ describe("resolveTracePaneKeyboardAction", () => {
     })
   })
 
-  it("scrolls and cycles tabs only in detail", () => {
+  it("scrolls and folds in detail — brackets are inert", () => {
     expect(resolveTracePaneKeyboardAction(key({ key: "j" }), "detail")).toEqual({
       type: "detail-scroll",
       delta: 48,
     })
     expect(resolveTracePaneKeyboardAction(key({ key: "ArrowRight" }), "detail")).toEqual({
-      type: "cycle-tab",
-      direction: 1,
+      type: "section-fold",
+      open: true,
     })
     expect(
       resolveTracePaneKeyboardAction(key({ key: "]", code: "BracketRight" }), "detail"),
-    ).toEqual({
-      type: "section-move",
-      direction: 1,
-    })
-    expect(
-      resolveTracePaneKeyboardAction(key({ key: "[", code: "BracketLeft" }), "detail"),
-    ).toEqual({
-      type: "section-move",
-      direction: -1,
-    })
+    ).toEqual({ type: "none" })
     expect(resolveTracePaneKeyboardAction(key({ key: "j" }), "tree")).toEqual({ type: "none" })
   })
 })

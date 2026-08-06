@@ -67,7 +67,7 @@ export function useRegisterDetailSection({
   open: boolean
   setOpen: (open: boolean) => void
   headerRef: RefObject<HTMLElement | null>
-}): { id: string; active: boolean } {
+}): { id: string; active: boolean; activate: () => void } {
   const id = useId()
   const controller = useDetailSectionController()
   const openRef = useRef(open)
@@ -88,5 +88,10 @@ export function useRegisterDetailSection({
   }, [controller, id, headerRef])
 
   const active = useDetailSectionActive(id)
-  return { id, active }
+
+  function activate() {
+    controller?.activate(id)
+  }
+
+  return { id, active, activate }
 }

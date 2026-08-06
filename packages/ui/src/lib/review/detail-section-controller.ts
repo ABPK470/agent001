@@ -12,6 +12,8 @@ export type DetailSectionHandle = {
 
 export type DetailSectionController = {
   register: (handle: DetailSectionHandle) => () => void
+  /** Point ←→ / Space at a section (click / focus). */
+  activate: (id: string) => boolean
   move: (direction: -1 | 1) => boolean
   toggle: () => boolean
   fold: (open: boolean) => boolean
@@ -62,6 +64,12 @@ export function createDetailSectionController(): DetailSectionController {
         if (activeId === handle.id) activeId = null
         notify()
       }
+    },
+
+    activate(id) {
+      const index = sections.findIndex((section) => section.id === id)
+      if (index < 0) return false
+      return activate(index)
     },
 
     move(direction) {

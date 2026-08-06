@@ -32,7 +32,7 @@ export function TraceDetailCollapsible({
 }) {
   const [open, setOpen] = useState(defaultOpen)
   const headerRef = useRef<HTMLButtonElement>(null)
-  const { active } = useRegisterDetailSection({
+  const { active, activate } = useRegisterDetailSection({
     open,
     setOpen,
     headerRef,
@@ -57,7 +57,11 @@ export function TraceDetailCollapsible({
           type="button"
           className={`trace-detail-accordion${active ? " is-section-focused" : ""}`}
           aria-expanded={open}
-          onClick={() => setOpen((value) => !value)}
+          onClick={() => {
+            activate()
+            setOpen((value) => !value)
+          }}
+          onFocus={activate}
         >
           <ChevronRight
             size={14}

@@ -58,9 +58,9 @@ export const SHORTCUT_REGISTRY: readonly ShortcutItem[] = [
     context: "Detail",
   },
   {
-    id: "review-detail-section",
-    label: "Prev / next detail section",
-    keys: ["[", "]"],
+    id: "review-detail-fold",
+    label: "Fold / unfold detail section",
+    keys: ["←", "→"],
     category: "pane",
     context: "Detail",
   },
@@ -70,20 +70,6 @@ export const SHORTCUT_REGISTRY: readonly ShortcutItem[] = [
     keys: ["Space"],
     category: "pane",
     context: "Detail",
-  },
-  {
-    id: "pipelines-detail-fold",
-    label: "Fold / unfold detail section",
-    keys: ["←", "→"],
-    category: "pane",
-    context: "Pipelines · Detail",
-  },
-  {
-    id: "trace-detail-tabs",
-    label: "Cycle Detail tabs",
-    keys: ["←", "→"],
-    category: "pane",
-    context: "Trace · Detail",
   },
   {
     id: "trace-max",

@@ -154,7 +154,6 @@ export function useTraceOperatorKeyboard({
     detailScrollRef,
     tabCycleRef,
     sectionControllerRef,
-    lateral: "tabs",
     beforePaneRef,
     treeNav: {
       enabled: treeNav.enabled,

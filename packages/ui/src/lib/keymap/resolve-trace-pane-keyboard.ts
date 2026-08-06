@@ -1,5 +1,6 @@
 /**
- * Trace pane keyboard — thin alias over shared review pane resolver (tabs lateral).
+ * Trace pane keyboard — thin alias over shared review pane resolver.
+ * Detail ←→ folds sections (call tabs are an apply fallback when none registered).
  */
 
 import {
@@ -13,10 +14,10 @@ export type TracePane = ReviewPane
 export type TracePaneKeyboardAction = ReviewPaneKeyboardAction
 
 export function resolveTracePaneKeyboardAction(
-  event: Pick<KeyboardEvent, "key" | "metaKey" | "ctrlKey" | "altKey" | "shiftKey">,
+  event: Pick<KeyboardEvent, "key" | "code" | "metaKey" | "ctrlKey" | "altKey" | "shiftKey">,
   focusedPane: TracePane,
 ): TracePaneKeyboardAction {
-  return resolveReviewPaneKeyboardAction(event, focusedPane, { lateral: "tabs" })
+  return resolveReviewPaneKeyboardAction(event, focusedPane)
 }
 
 export { detailScrollPageDelta }

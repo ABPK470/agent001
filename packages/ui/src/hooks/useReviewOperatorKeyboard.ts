@@ -1,7 +1,9 @@
 /**
- * Review master–detail operator surface — pane, Esc ladder, detail sections/tabs.
+ * Review master–detail operator surface — pane, Esc ladder, detail sections.
  * Does not listen on window; claims the active OperatorSurface for the composition root.
  * Tree row nav is folded in when `treeNav` is provided and pane === tree.
+ *
+ * Detail: ↑↓ scroll · ←→ fold cores · Space toggle (no [ ] pick chords).
  */
 
 import { useRef, type RefObject } from "react"
@@ -10,7 +12,6 @@ import {
   resolveEscLadder,
   resolveReviewPaneKeyboardAction,
   resolveReviewTreeKeyboardAction,
-  type DetailLateralMode,
   type ReviewPane,
   type ReviewTreeKeyboardNode,
   type ReviewTreeListHandle,
@@ -61,7 +62,6 @@ export function useReviewOperatorKeyboard({
   detailScrollRef,
   tabCycleRef,
   sectionControllerRef,
-  lateral = "sections",
   treeNav = null,
   /** Extra chords before pane resolve (Trace: scope drawer, filter, T/W, Z). */
   beforePaneRef,
@@ -84,7 +84,6 @@ export function useReviewOperatorKeyboard({
   detailScrollRef: RefObject<HTMLElement | null>
   tabCycleRef?: RefObject<((direction: -1 | 1) => void) | null>
   sectionControllerRef?: RefObject<DetailSectionController | null>
-  lateral?: DetailLateralMode
   treeNav?: ReviewTreeNavBinding | null
   beforePaneRef?: RefObject<OperatorSurfaceHandler | null>
 }) {
@@ -94,7 +93,6 @@ export function useReviewOperatorKeyboard({
   const isZenRef = useRef(isZen)
   const isSoloRef = useRef(isSolo)
   const summonOpenRef = useRef(summonOpen)
-  const lateralRef = useRef(lateral)
   const treeNavRef = useRef(treeNav)
   focusedPaneRef.current = focusedPane
   filterOpenRef.current = filterOpen
@@ -102,7 +100,6 @@ export function useReviewOperatorKeyboard({
   isZenRef.current = isZen
   isSoloRef.current = isSolo
   summonOpenRef.current = summonOpen
-  lateralRef.current = lateral
   treeNavRef.current = treeNav
 
   const onFocusedPaneChangeRef = useRef(onFocusedPaneChange)
@@ -177,9 +174,7 @@ export function useReviewOperatorKeyboard({
 
     if (scopeDrawerOpenRef.current) return false
 
-    const paneAction = resolveReviewPaneKeyboardAction(event, pane, {
-      lateral: lateralRef.current,
-    })
+    const paneAction = resolveReviewPaneKeyboardAction(event, pane)
     if (paneAction.type !== "none") {
       if (paneAction.type === "pane-to-detail") {
         focusReviewPane(
@@ -226,24 +221,17 @@ export function useReviewOperatorKeyboard({
         return true
       }
       const sections = sectionControllerRef?.current
-      if (paneAction.type === "cycle-tab") {
-        if (tabCycleRef?.current) {
-          tabCycleRef.current(paneAction.direction)
-          return true
-        }
-        sections?.fold(paneAction.direction > 0)
-        return true
-      }
-      if (paneAction.type === "section-move") {
-        sections?.move(paneAction.direction)
-        return true
-      }
       if (paneAction.type === "section-toggle") {
         sections?.toggle()
         return true
       }
       if (paneAction.type === "section-fold") {
-        sections?.fold(paneAction.open)
+        if (sections?.fold(paneAction.open)) return true
+        // Call detail tabs when no accordion cores are registered.
+        if (tabCycleRef?.current) {
+          tabCycleRef.current(paneAction.open ? 1 : -1)
+          return true
+        }
         return true
       }
       return true

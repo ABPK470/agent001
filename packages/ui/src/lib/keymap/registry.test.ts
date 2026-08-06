@@ -22,10 +22,10 @@ describe("keymap registry", () => {
   it("hides the other pane’s exclusive chords for Active Context", () => {
     const detail = filterShortcutRegistry(SHORTCUT_REGISTRY, "", "pane", "detail")
     expect(detail.some((item) => item.id === "review-tree-move")).toBe(false)
-    expect(detail.some((item) => item.id === "review-detail-section")).toBe(true)
+    expect(detail.some((item) => item.id === "review-detail-fold")).toBe(true)
 
     const tree = filterShortcutRegistry(SHORTCUT_REGISTRY, "", "pane", "tree")
-    expect(tree.some((item) => item.id === "review-detail-section")).toBe(false)
+    expect(tree.some((item) => item.id === "review-detail-fold")).toBe(false)
     expect(tree.some((item) => item.id === "review-tree-move")).toBe(true)
   })
 

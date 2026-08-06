@@ -21,9 +21,9 @@ describe("trace operator keyboard contracts", () => {
 
     const operator = readFileSync(join(here, "use-trace-operator-keyboard.ts"), "utf8")
     expect(operator).toContain("useReviewOperatorKeyboard")
-    expect(operator).toContain('lateral: "tabs"')
     expect(operator).toContain("Backslash")
     expect(operator).toContain("beforePaneRef")
+    expect(operator).not.toContain('lateral: "tabs"')
     expect(operator).not.toContain("window.addEventListener")
   })
 

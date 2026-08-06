@@ -2,18 +2,15 @@
  * Review master–detail pane ownership + detail in-pane keys.
  * Shared by Trace and Pipelines. Tree row nav stays in resolveReviewTreeKeyboardAction.
  *
- * Detail lateral chords:
- *   tabs     — ←→ cycle inspector tabs (Trace call tabs)
- *   sections — ←→ fold/unfold the keyboard-active accordion (tree metaphor)
+ * Detail (same tree metaphor as the left pane — no extra pick chords):
+ *   ↑↓ / jk     — scroll
+ *   ←→ / hl     — fold / unfold the active accordion (cores)
+ *   Space       — toggle active section
  *
- * Section pick / toggle (`[` `]` Space) always available in detail when sections register.
+ * Trace call tabs: apply falls back to tab-cycle when no sections are registered.
  */
 
-import { resolveBracketDirection } from "./bracket-keys"
-
 export type ReviewPane = "tree" | "detail"
-
-export type DetailLateralMode = "tabs" | "sections"
 
 export type ReviewPaneKeyboardAction =
   | { type: "pane-to-detail" }
@@ -22,8 +19,6 @@ export type ReviewPaneKeyboardAction =
   | { type: "detail-scroll"; delta: number }
   | { type: "detail-scroll-page"; direction: -1 | 1 }
   | { type: "detail-scroll-edge"; edge: "start" | "end" }
-  | { type: "cycle-tab"; direction: -1 | 1 }
-  | { type: "section-move"; direction: -1 | 1 }
   | { type: "section-toggle" }
   | { type: "section-fold"; open: boolean }
   | { type: "none" }
@@ -34,9 +29,7 @@ const DETAIL_PAGE = 280
 export function resolveReviewPaneKeyboardAction(
   event: Pick<KeyboardEvent, "key" | "code" | "metaKey" | "ctrlKey" | "altKey" | "shiftKey">,
   focusedPane: ReviewPane,
-  opts: { lateral?: DetailLateralMode } = {},
 ): ReviewPaneKeyboardAction {
-  const lateral = opts.lateral ?? "sections"
   const mod = event.metaKey || event.ctrlKey
   if (mod || event.altKey) return { type: "none" }
 
@@ -51,7 +44,6 @@ export function resolveReviewPaneKeyboardAction(
     return { type: "none" }
   }
 
-  // detail pane
   if (key === "ArrowDown" || key === "j") {
     return { type: "detail-scroll", delta: DETAIL_LINE }
   }
@@ -71,21 +63,14 @@ export function resolveReviewPaneKeyboardAction(
     return { type: "detail-scroll-edge", edge: "end" }
   }
 
-  const bracket = resolveBracketDirection(event)
-  if (bracket !== null) {
-    return { type: "section-move", direction: bracket }
-  }
-
   if (key === " " || key === "Spacebar" || event.code === "Space") {
     return { type: "section-toggle" }
   }
 
   if (key === "ArrowLeft" || key === "h") {
-    if (lateral === "tabs") return { type: "cycle-tab", direction: -1 }
     return { type: "section-fold", open: false }
   }
   if (key === "ArrowRight" || key === "l") {
-    if (lateral === "tabs") return { type: "cycle-tab", direction: 1 }
     return { type: "section-fold", open: true }
   }
 
