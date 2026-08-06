@@ -375,9 +375,11 @@ Enter peeks a widget (or focuses it if already on the Space); ⌘/Ctrl+Enter
 Keeps a widget in the current Space; Spaces navigate (Call); bundles open a
 home Space and focus a primary tile — never auto-maximize. Trace owns
 **pane focus** with one Esc ladder (overlay → filter → pane → zen →
-maximize). Shell chords: Call Space (⌘/Ctrl+1–4), tile focus
+maximize). Shell chords: Call Space (⌘/Ctrl+1–4), prev/next view tab
+(⌘/Ctrl+[ / ]), tile focus
 (⌘/Ctrl+⇧+arrows — not ⌥; ⌘/Ctrl+⌥ alone toggles chat↔workspace), M
 maximize, Z zen, ⌘/Ctrl+W close tile, `?` keymap (searchable zero-scroll sheet: All / Pane / Shell).
+Empty Spaces open **Summon**, not the legacy widget catalog (mobile may still use catalog).
 Operator guide:
 `docs/operator-keyboard.md`. See `lib/spaces.ts`, `lib/summon-resolve.ts`,
 `lib/keymap/`, `app/workspace/SummonPalette.tsx`.

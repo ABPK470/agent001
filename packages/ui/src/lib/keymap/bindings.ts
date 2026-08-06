@@ -6,6 +6,7 @@ import type { KbdHint, KeymapBinding } from "./types"
 
 export const SHELL_BINDINGS: readonly KeymapBinding[] = [
   { id: "call-space", layer: "view", keys: ["⌘/Ctrl", "1–4"], label: "Call Space" },
+  { id: "cycle-view", layer: "view", keys: ["⌘/Ctrl", "[", "]"], label: "Prev / next view tab" },
   { id: "tile-focus", layer: "view", keys: ["⌘/Ctrl", "⇧", "↑↓←→"], label: "Focus tile" },
   { id: "maximize", layer: "widget", keys: ["M"], label: "Maximize / restore", when: "tile focused" },
   { id: "zen", layer: "widget", keys: ["Z"], label: "Zen on / off", when: "focus-capable tile" },
@@ -43,8 +44,10 @@ export const TRACE_DETAIL_HINTS: readonly KbdHint[] = [
 
 export const SUMMON_HINTS: readonly KbdHint[] = [
   { keys: ["↵"], label: "go / peek / focus" },
-  { keys: ["⌘/Ctrl", "↵"], label: "keep surface" },
+  { keys: ["⌘/Ctrl", "↵"], label: "keep" },
   { keys: ["↑", "↓"], label: "navigate" },
+  { keys: ["1–3"], label: "categories" },
+  { keys: ["Tab"], label: "cycle" },
   { keys: ["Esc"], label: "dismiss" },
 ]
 

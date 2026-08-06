@@ -98,6 +98,12 @@ export const SHORTCUT_REGISTRY: readonly ShortcutItem[] = [
     category: "workspace",
   },
   {
+    id: "cycle-view",
+    label: "Prev / next view tab",
+    keys: ["⌘/Ctrl", "[", "]"],
+    category: "workspace",
+  },
+  {
     id: "tile-focus",
     label: "Focus neighboring tile",
     keys: ["⌘/Ctrl", "⇧", "↑↓←→"],

@@ -15,7 +15,8 @@ import {
 import { Search } from "lucide-react"
 import { useStore } from "../../state/store"
 import { useLayoutStore } from "../../state/layout-store"
-import { resolveKeymapActiveContext } from "../../lib/keymap"
+import { resolveKeymapActiveContext, type KbdHint } from "../../lib/keymap"
+import { ComposerKbdFooter } from "../../widgets/chat/ComposerKbdFooter"
 import {
   resolveSummonBundleOpen,
   resolveSummonSpaceEnter,
@@ -387,28 +388,22 @@ export function SummonPalette() {
         </div>
 
         <footer className="ops-sheet__footer">
-          <div className="ops-sheet__footer-hints">
-            <span>
-              <kbd>↵</kbd> {preview.primary}
-            </span>
-            <span>
-              <kbd>⌘</kbd>
-              <kbd>↵</kbd> keep
-            </span>
-            <span>
-              <kbd>1–3</kbd> categories
-            </span>
-            <span>
-              <kbd>Tab</kbd> cycle
-            </span>
-            <span>
-              <kbd>Esc</kbd> {query ? "clear" : "dismiss"}
-            </span>
-          </div>
+          <ComposerKbdFooter hints={summonFooterHints(preview.primary, Boolean(query))} />
         </footer>
       </div>
     </div>
   )
+}
+
+function summonFooterHints(primary: string, hasQuery: boolean): readonly KbdHint[] {
+  return [
+    { keys: ["↵"], label: primary },
+    { keys: ["⌘/Ctrl", "↵"], label: "keep" },
+    { keys: ["↑", "↓"], label: "navigate" },
+    { keys: ["1–3"], label: "categories" },
+    { keys: ["Tab"], label: "cycle" },
+    { keys: ["Esc"], label: hasQuery ? "clear" : "dismiss" },
+  ]
 }
 
 function SummonRow({
@@ -449,7 +444,9 @@ function SummonRow({
         </span>
         <span className="ops-sheet__keys">
           {keys.map((key) => (
-            <kbd key={`${summonItemKey(item)}:${key}`}>{key}</kbd>
+            <kbd key={`${summonItemKey(item)}:${key}`} className="composer-kbd">
+              {key}
+            </kbd>
           ))}
         </span>
       </button>

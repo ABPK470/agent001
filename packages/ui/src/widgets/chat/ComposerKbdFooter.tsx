@@ -1,12 +1,11 @@
-export type ComposerKbdHint = {
-  keys: string[]
-  label: string
-}
+import type { KbdHint } from "../../lib/keymap"
+
+export type ComposerKbdHint = KbdHint
 
 export function ComposerKbdFooter({
   hints,
 }: {
-  hints: readonly ComposerKbdHint[]
+  hints: readonly KbdHint[]
 }) {
   return (
     <div className="composer-kbd-footer" aria-hidden>
@@ -24,12 +23,12 @@ export function ComposerKbdFooter({
   )
 }
 
-export const COMPOSER_PALETTE_HINTS: readonly ComposerKbdHint[] = [
+export const COMPOSER_PALETTE_HINTS: readonly KbdHint[] = [
   { keys: ["Tab", "↵"], label: "select" },
   { keys: ["↑", "↓"], label: "navigate" },
   { keys: ["Esc"], label: "dismiss" },
 ]
 
-export const COMPOSER_RESULT_HINTS: readonly ComposerKbdHint[] = [
+export const COMPOSER_RESULT_HINTS: readonly KbdHint[] = [
   { keys: ["Esc"], label: "dismiss" },
 ]

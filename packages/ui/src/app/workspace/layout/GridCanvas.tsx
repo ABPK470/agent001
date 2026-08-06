@@ -155,7 +155,6 @@ interface Props {
   viewId: string
   tiles: LayoutTile[]
   split: SplitNode | null
-  onOpenCatalog?: () => void
 }
 
 interface GridTilePaneProps {

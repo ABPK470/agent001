@@ -2,20 +2,21 @@
  * Canvas — blank stage where layout surfaces live.
  *
  * Nested H/V split tree projected onto an absolute grid. Renders surfaces for
- * the active layout and shows an add prompt when empty.
+ * the active layout and shows a Summon prompt when empty.
  */
 
-import { LayoutGrid, Plus } from "lucide-react"
-import { forwardRef, useImperativeHandle, useState } from "react"
+import { LayoutGrid } from "lucide-react"
+import { forwardRef, useImperativeHandle } from "react"
 import { useViewingAs } from "../../hooks/useViewingAs"
 import { useLayoutStore } from "../../state/layout-store"
+import { useStore } from "../../state/store"
 import { IntroAsciiField } from "../home/IntroAsciiField"
 import { openWidgetCatalogHint } from "../types"
 import { OpenWidgetCatalogHintMark } from "./OpenWidgetCatalogHint"
-import { WidgetCatalog } from "./WidgetCatalog"
 import { GridCanvas } from "./layout/GridCanvas"
 
 export interface CanvasHandle {
+  /** Opens Summon (legacy name kept for App ref wiring). */
   openCatalog: () => void
   toggleCatalog: () => void
 }
@@ -24,20 +25,30 @@ export const Canvas = forwardRef<CanvasHandle>(function Canvas(_props, ref) {
   const views = useLayoutStore((s) => s.views)
   const activeViewId = useLayoutStore((s) => s.activeViewId)
   const soloTileId = useLayoutStore((s) => s.soloTileId)
+  const ensureProductSpaces = useLayoutStore((s) => s.ensureProductSpaces)
+  const setSummonOpen = useStore((s) => s.setSummonOpen)
+  const toggleSummon = useStore((s) => s.toggleSummon)
   const { isViewingAsOther } = useViewingAs()
   // Glyph field is a quiet Viewing-as cue behind the stage — never under solo.
   // No layout pad: gutters come from GridCanvas JS inset (solo can fill the stage).
   const stageGlyphs = isViewingAsOther && !soloTileId
-  const [catalogOpen, setCatalogOpen] = useState(false)
-  const catalogHint = openWidgetCatalogHint()
+  const summonHint = openWidgetCatalogHint()
+
+  function openSummon() {
+    ensureProductSpaces()
+    setSummonOpen(true)
+  }
 
   useImperativeHandle(
     ref,
     () => ({
-      openCatalog: () => setCatalogOpen(true),
-      toggleCatalog: () => setCatalogOpen((open) => !open),
+      openCatalog: openSummon,
+      toggleCatalog: () => {
+        ensureProductSpaces()
+        toggleSummon()
+      },
     }),
-    [],
+    [ensureProductSpaces, setSummonOpen, toggleSummon],
   )
 
   const activeView = views.find((view) => view.id === activeViewId)
@@ -60,18 +71,18 @@ export const Canvas = forwardRef<CanvasHandle>(function Canvas(_props, ref) {
             <div className="text-center">
               <p className="mb-1 text-base text-text-secondary">This layout is empty</p>
               <p className="text-sm text-text-muted max-w-sm">
-                Add surfaces to this layout.
+                Summon a surface onto this Space.
               </p>
             </div>
             <button
               type="button"
               className="toolbar-ops-btn shrink-0 px-4"
-              onClick={() => setCatalogOpen(true)}
-              title={`Add surfaces to this layout (${catalogHint})`}
-              aria-label={`Add surfaces to this layout (${catalogHint})`}
+              onClick={openSummon}
+              title={`Summon (${summonHint})`}
+              aria-label={`Summon (${summonHint})`}
             >
-              <Plus size={15} className="block shrink-0" aria-hidden />
-              Add to layout
+              <LayoutGrid size={15} className="block shrink-0" aria-hidden />
+              Summon
               <OpenWidgetCatalogHintMark />
             </button>
           </div>
@@ -80,12 +91,9 @@ export const Canvas = forwardRef<CanvasHandle>(function Canvas(_props, ref) {
             viewId={activeViewId}
             tiles={tiles}
             split={split}
-            onOpenCatalog={() => setCatalogOpen(true)}
           />
         )}
       </div>
-
-      {catalogOpen && <WidgetCatalog onClose={() => setCatalogOpen(false)} />}
     </div>
   )
 })

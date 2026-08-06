@@ -50,4 +50,13 @@ describe("resolveShellKeyboardAction", () => {
       ),
     ).toEqual({ type: "none" })
   })
+
+  it("cycles toolbar views with mod+[ / ]", () => {
+    expect(
+      resolveShellKeyboardAction(key({ key: "]", metaKey: true }), { hasFocusedTile: false }),
+    ).toEqual({ type: "cycle-view", direction: 1 })
+    expect(
+      resolveShellKeyboardAction(key({ key: "[", ctrlKey: true }), { hasFocusedTile: true }),
+    ).toEqual({ type: "cycle-view", direction: -1 })
+  })
 })

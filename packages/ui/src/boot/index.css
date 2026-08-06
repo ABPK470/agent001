@@ -16349,6 +16349,7 @@ button.trace-tree-status-pill:hover {
 
 /*
  * Ops sheet — shared chrome for Summon (⌘K) and Keymap (?).
+ * Viewer-scale panel (like WidgetCatalog); fluid on phone → ultrawide.
  * Zero-scroll; filter + category tabs trim density.
  */
 .ops-sheet-overlay {
@@ -16358,7 +16359,7 @@ button.trace-tree-status-pill:hover {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 1.5rem;
+  padding: clamp(0.25rem, 1.5vw, 1.5rem);
   background: rgba(15, 23, 42, 0.65);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
@@ -16366,8 +16367,10 @@ button.trace-tree-status-pill:hover {
 }
 
 .ops-sheet {
-  width: min(680px, 100%);
-  max-height: 520px;
+  /* Match MODAL_VIEWER_PANEL spirit: wide + tall, capped so ultrawide stays calm */
+  width: min(92vw, 72rem);
+  height: min(88vh, calc(100dvh - 1.5rem));
+  max-height: min(88vh, calc(100dvh - 1.5rem));
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -16376,6 +16379,28 @@ button.trace-tree-status-pill:hover {
   background: var(--paper, var(--surface, var(--color-surface)));
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.45);
   user-select: none;
+}
+
+@media (max-width: 640px) {
+  .ops-sheet-overlay {
+    padding: 0.25rem;
+    align-items: stretch;
+  }
+
+  .ops-sheet {
+    width: 100%;
+    height: min(96vh, calc(100dvh - 0.5rem));
+    max-height: min(96vh, calc(100dvh - 0.5rem));
+    border-radius: 0.5rem;
+  }
+}
+
+@media (min-width: 1600px) {
+  .ops-sheet {
+    width: min(70vw, 80rem);
+    height: min(85vh, calc(100dvh - 2rem));
+    max-height: min(85vh, calc(100dvh - 2rem));
+  }
 }
 
 .ops-sheet__header {
@@ -16568,34 +16593,7 @@ button.trace-tree-status-pill:hover {
   flex-shrink: 0;
 }
 
-.ops-sheet__keys kbd,
-.ops-sheet__footer kbd {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  box-sizing: border-box;
-  min-width: 20px;
-  height: 1.25rem;
-  padding: 0.125rem 0.375rem;
-  border-radius: 3px;
-  border: 1px solid color-mix(in srgb, var(--border, #334155) 80%, transparent);
-  background: color-mix(in srgb, var(--text) 8%, transparent);
-  box-shadow: inset 0 -1px 0 0 rgba(255, 255, 255, 0.1);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 500;
-  line-height: 1;
-  color: var(--text-secondary, var(--color-text-secondary));
-  text-align: center;
-}
-
-:root[data-theme="light"] .ops-sheet__keys kbd,
-:root[data-theme="light"] .ops-sheet__footer kbd {
-  background: #f1f5f9;
-  color: #334155;
-  border-color: #cbd5e1;
-  box-shadow: inset 0 -1px 0 0 rgba(0, 0, 0, 0.15);
-}
+/* Row chips use `.composer-kbd` — same dialect as Trace / Summon footers */
 
 .ops-sheet__empty {
   grid-column: 1 / -1;
@@ -16608,27 +16606,18 @@ button.trace-tree-status-pill:hover {
 .ops-sheet__footer {
   flex-shrink: 0;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  padding: 0.45rem 1rem;
+  align-items: stretch;
   border-top: 1px solid var(--border-subtle, var(--color-border-subtle));
   background: color-mix(in srgb, var(--text) 2.5%, transparent);
 }
 
-.ops-sheet__footer-hints {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.75rem;
-  font-size: 0.6875rem;
-  color: var(--text-muted, var(--color-text-muted));
-}
-
-.ops-sheet__footer-hints span {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
+/* One kbd-hint dialect — ComposerKbdFooter inside the ops chrome */
+.ops-sheet__footer .composer-kbd-footer {
+  width: 100%;
+  margin: 0;
+  padding: 0.55rem 1rem 0.65rem;
+  border-top: none;
+  background: transparent;
 }
 
 .ops-sheet__grid:has(.ops-sheet__col:only-child) {

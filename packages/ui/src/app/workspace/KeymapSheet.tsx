@@ -16,9 +16,11 @@ import {
   nextKeymapTab,
   resolveKeymapActiveContext,
   SHORTCUT_REGISTRY,
+  type KbdHint,
   type KeymapTab,
   type ShortcutItem,
 } from "../../lib/keymap"
+import { ComposerKbdFooter } from "../../widgets/chat/ComposerKbdFooter"
 import { getWidgetDefinition } from "./widget-definitions"
 
 export function KeymapSheet() {
@@ -219,22 +221,19 @@ export function KeymapSheet() {
         </div>
 
         <footer className="ops-sheet__footer">
-          <div className="ops-sheet__footer-hints">
-            <span>
-              <kbd>1–3</kbd> categories
-            </span>
-            <span>
-              <kbd>Tab</kbd> cycle
-            </span>
-            <span>
-              <kbd>Esc</kbd> {query ? "clear" : "dismiss"}
-            </span>
-            <span>Type to filter</span>
-          </div>
+          <ComposerKbdFooter hints={keymapFooterHints(Boolean(query))} />
         </footer>
       </div>
     </div>
   )
+}
+
+function keymapFooterHints(hasQuery: boolean): readonly KbdHint[] {
+  return [
+    { keys: ["1–3"], label: "categories" },
+    { keys: ["Tab"], label: "cycle" },
+    { keys: ["Esc"], label: hasQuery ? "clear" : "dismiss" },
+  ]
 }
 
 function ShortcutRow({ item }: { item: ShortcutItem }) {
@@ -243,7 +242,9 @@ function ShortcutRow({ item }: { item: ShortcutItem }) {
       <span className="ops-sheet__label">{item.label}</span>
       <span className="ops-sheet__keys">
         {item.keys.map((key) => (
-          <kbd key={`${item.id}:${key}`}>{key}</kbd>
+          <kbd key={`${item.id}:${key}`} className="composer-kbd">
+            {key}
+          </kbd>
         ))}
       </span>
     </li>

@@ -6,6 +6,7 @@
 import { useEffect } from "react"
 import { isEditableKeyboardTarget } from "../lib/keyboard-target"
 import { resolveShellKeyboardAction } from "../lib/keymap"
+import { neighborViewId } from "../lib/view-tab-nav"
 import { useLayoutStore } from "../state/layout-store"
 import { useStore } from "../state/store"
 
@@ -14,6 +15,7 @@ export function useShellOperatorKeyboard(enabled: boolean) {
   const activeViewId = useLayoutStore((s) => s.activeViewId)
   const views = useLayoutStore((s) => s.views)
   const callSpace = useLayoutStore((s) => s.callSpace)
+  const setActiveView = useLayoutStore((s) => s.setActiveView)
   const focusTileNeighbor = useLayoutStore((s) => s.focusTileNeighbor)
   const toggleTileMaximized = useLayoutStore((s) => s.toggleTileMaximized)
   const removeWidget = useLayoutStore((s) => s.removeWidget)
@@ -69,6 +71,13 @@ export function useShellOperatorKeyboard(enabled: boolean) {
         callSpace(action.index)
         return
       }
+      if (action.type === "cycle-view") {
+        const nextId = neighborViewId(views, activeViewId, action.direction)
+        if (!nextId) return
+        requestWorkspaceShell()
+        setActiveView(nextId)
+        return
+      }
       if (action.type === "focus-tile-neighbor") {
         focusTileNeighbor(action.key)
         return
@@ -98,6 +107,7 @@ export function useShellOperatorKeyboard(enabled: boolean) {
     removeWidget,
     requestChatShell,
     requestWorkspaceShell,
+    setActiveView,
     setKeymapSheetOpen,
     summonOpen,
     toggleTileMaximized,

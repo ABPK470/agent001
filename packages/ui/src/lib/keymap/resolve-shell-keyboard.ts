@@ -1,11 +1,12 @@
 /**
- * Layer 1 shell chords — maximize, zen, close, Call Space, tile focus cycle.
+ * Layer 1 shell chords — maximize, zen, close, Call Space, view tabs, tile focus.
  */
 
 export type ShellKeyboardAction =
   | { type: "toggle-maximize" }
   | { type: "close-tile" }
   | { type: "call-space"; index: number }
+  | { type: "cycle-view"; direction: -1 | 1 }
   | { type: "focus-tile-neighbor"; key: "ArrowUp" | "ArrowDown" | "ArrowLeft" | "ArrowRight" }
   | { type: "open-keymap" }
   | { type: "focus-composer" }
@@ -16,7 +17,7 @@ export type ShellKeyboardContext = {
   hasFocusedTile: boolean
 }
 
-/** Z stays on the widget zen hook (one owner). Shell owns M / close / Spaces / tile focus. */
+/** Z stays on the widget zen hook (one owner). Shell owns M / close / Spaces / tabs / tile focus. */
 export function resolveShellKeyboardAction(
   event: Pick<KeyboardEvent, "key" | "code" | "metaKey" | "ctrlKey" | "altKey" | "shiftKey">,
   ctx: ShellKeyboardContext,
@@ -36,6 +37,11 @@ export function resolveShellKeyboardAction(
 
   if (mod && !event.altKey && !event.shiftKey && /^[1-4]$/.test(key)) {
     return { type: "call-space", index: Number(key) }
+  }
+
+  // ⌘/Ctrl+[ / ] — prev / next toolbar view (Spaces + DIY). Avoids browser Ctrl+Tab.
+  if (mod && !event.altKey && !event.shiftKey && (key === "[" || key === "]")) {
+    return { type: "cycle-view", direction: key === "]" ? 1 : -1 }
   }
 
   // ⌘⇧+arrows — tile focus. Must NOT use ⌘⌥: that chord alone toggles chat↔workspace
