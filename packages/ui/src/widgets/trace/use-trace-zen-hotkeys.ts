@@ -1,11 +1,14 @@
 /**
  * Trace zen / focused-tile hotkeys — view mode, filter overlay, fold all, Z.
  * Esc owned by useTraceOperatorKeyboard (ladder). Tab no longer toggles view.
+ *
+ * `[` / `]` fold-all is tree-pane only — detail pane uses those keys for sections.
  */
 
 import { useEffect } from "react"
 import { isEditableKeyboardTarget } from "../../lib/keyboard-target"
 import { useWidgetZenHotkeys } from "../../hooks/useWidgetZenHotkeys"
+import type { TracePane } from "../../lib/keymap"
 import type { FoldMode } from "./open-state"
 
 export function useTraceZenHotkeys({
@@ -15,6 +18,7 @@ export function useTraceZenHotkeys({
   onSearchOpenChange,
   onViewModeChange,
   viewMode,
+  focusedPane,
   foldMode,
   onFoldModeChange,
   onToggleZen,
@@ -26,6 +30,7 @@ export function useTraceZenHotkeys({
   onSearchOpenChange: (open: boolean) => void
   onViewModeChange: (mode: "tree" | "waterfall") => void
   viewMode: "tree" | "waterfall"
+  focusedPane: TracePane
   foldMode: FoldMode
   onFoldModeChange: (mode: FoldMode) => void
   onToggleZen: () => void
@@ -60,6 +65,9 @@ export function useTraceZenHotkeys({
         return
       }
 
+      // View / fold-all chords are tree-pane only — detail owns [ ] Space ←→.
+      if (focusedPane !== "tree") return
+
       if (key === "t" && !mod) {
         event.preventDefault()
         onViewModeChange("tree")
@@ -88,6 +96,7 @@ export function useTraceZenHotkeys({
     return () => window.removeEventListener("keydown", onKeyDown)
   }, [
     enabled,
+    focusedPane,
     foldMode,
     onFoldModeChange,
     onSearchOpenChange,

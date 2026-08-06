@@ -141,12 +141,16 @@ export function useReviewOperatorKeyboard({
         scrollEl.scrollTop = paneAction.edge === "start" ? 0 : scrollEl.scrollHeight
         return
       }
+      const sections = sectionControllerRef?.current
       if (paneAction.type === "cycle-tab") {
-        tabCycleRef?.current?.(paneAction.direction)
+        // Call tabs when present; otherwise fold the active detail section (phase JSON, etc.).
+        if (tabCycleRef?.current) {
+          tabCycleRef.current(paneAction.direction)
+          return
+        }
+        sections?.fold(paneAction.direction > 0)
         return
       }
-
-      const sections = sectionControllerRef?.current
       if (paneAction.type === "section-move") {
         sections?.move(paneAction.direction)
         return

@@ -29,6 +29,8 @@ export function DetailSectionProvider({
   controllerRef?: RefObject<DetailSectionController | null>
 }) {
   const controller = useMemo(() => createDetailSectionController(), [])
+  // Sync host ref during render so operator keyboard never races an empty useEffect.
+  if (controllerRef) controllerRef.current = controller
 
   useEffect(() => {
     if (!controllerRef) return

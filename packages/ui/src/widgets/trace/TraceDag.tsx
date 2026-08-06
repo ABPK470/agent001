@@ -478,6 +478,7 @@ export function TraceDag({
     onSearchOpenChange,
     onViewModeChange: setViewMode,
     viewMode,
+    focusedPane,
     foldMode: openState.foldMode,
     onFoldModeChange,
     onToggleZen: toggleZen,

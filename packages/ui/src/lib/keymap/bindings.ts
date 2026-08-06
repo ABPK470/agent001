@@ -24,6 +24,7 @@ export const TRACE_TREE_HINTS: readonly KbdHint[] = [
   { keys: ["`"], label: "pane" },
   { keys: ["↑", "↓"], label: "move" },
   { keys: ["←", "→"], label: "fold" },
+  { keys: ["[", "]"], label: "fold all" },
   { keys: ["M"], label: "max" },
   { keys: ["Z"], label: "zen" },
 ]
@@ -41,7 +42,7 @@ export const TRACE_DETAIL_HINTS: readonly KbdHint[] = [
   { keys: ["↑", "↓"], label: "scroll" },
   { keys: ["[", "]"], label: "section" },
   { keys: ["Space"], label: "toggle" },
-  { keys: ["←", "→"], label: "tabs" },
+  { keys: ["←", "→"], label: "tabs·fold" },
   { keys: ["Esc"], label: "tree" },
 ]
 

@@ -2,11 +2,10 @@
  * Phase detail — timeline, steps, accordion JSON blocks.
  */
 
-import { ChevronRight } from "lucide-react"
-import { useState } from "react"
 import { JsonViewer } from "../../components/JsonViewer"
 import { formatMs } from "../../lib/util"
 import type { TracePhaseDetail, TracePhaseNode } from "./build-trace-dag"
+import { TraceDetailCollapsible } from "./TraceDetailCollapsible"
 import { TraceToolErrorSection } from "./TraceToolIo"
 import { TracePhaseEventText } from "./TracePhaseEventText"
 import {
@@ -58,16 +57,6 @@ export function TracePhaseDetail({
     ? events
     : events.filter((e) => e.tone !== "error")
   const offsets = buildTimelineOffsets(timelineEvents, phase.durationMs)
-  const [openJsonIds, setOpenJsonIds] = useState(() => new Set<string>())
-
-  function toggleJson(id: string) {
-    setOpenJsonIds((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }
 
   return (
     <div className="trace-detail-body">
@@ -133,31 +122,16 @@ export function TracePhaseDetail({
         </section>
       )}
 
-      {jsonBlocks.map((block) => {
-        const open = openJsonIds.has(block.id)
-        return (
-          <section key={block.id} className="trace-detail-section trace-detail-section--accordion">
-            <button
-              type="button"
-              className="trace-detail-accordion"
-              aria-expanded={open}
-              onClick={() => toggleJson(block.id)}
-            >
-              <ChevronRight
-                size={14}
-                className={`trace-detail-accordion__chev${open ? " is-open" : ""}`}
-                aria-hidden
-              />
-              <span className="trace-detail-accordion__label">{block.label}</span>
-            </button>
-            {open ? (
-              <div className="trace-detail-accordion__body">
-                <JsonViewer value={block.value} copyable embedded inline />
-              </div>
-            ) : null}
-          </section>
-        )
-      })}
+      {jsonBlocks.map((block) => (
+        <TraceDetailCollapsible
+          key={block.id}
+          label={block.label}
+          defaultOpen={false}
+          sticky={false}
+        >
+          <JsonViewer value={block.value} copyable embedded inline />
+        </TraceDetailCollapsible>
+      ))}
     </div>
   )
 }

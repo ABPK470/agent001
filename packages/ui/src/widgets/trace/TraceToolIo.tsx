@@ -6,8 +6,7 @@
  * - developer: ask_user payload accordion
  */
 
-import { ChevronRight } from "lucide-react"
-import { useMemo, useState, type ReactNode } from "react"
+import { useMemo, type ReactNode } from "react"
 import { JsonViewer } from "../../components/JsonViewer"
 import { formatExecInput } from "../../lib/tool-execution"
 import {
@@ -17,6 +16,7 @@ import {
 } from "../../lib/events/trace-tool-schema"
 import type { TraceDag } from "./build-trace-dag"
 import { CopyControl } from "./TraceCopy"
+import { TraceDetailCollapsible } from "./TraceDetailCollapsible"
 import { TraceExecutionCard } from "./TraceExecutionCard"
 import { ExpandableText } from "./TraceExpandable"
 import type { ToolExecStatus } from "../../lib/tool-execution"
@@ -49,8 +49,6 @@ export function TraceToolIo({
   durationMs?: number | null
   trailing?: ReactNode
 }) {
-  const [payloadOpen, setPayloadOpen] = useState(layout === "standard")
-  const [schemaOpen, setSchemaOpen] = useState(false)
   const validation = useMemo(
     () => validateToolArguments(dag.preamble.tools, toolName, argumentsValue),
     [dag.preamble.tools, toolName, argumentsValue],
@@ -63,9 +61,9 @@ export function TraceToolIo({
   const input = formatExecInput(toolName, argumentsValue, argsFormatted)
 
   const schemaFooter = schema ? (
-    <SchemaAccordion open={schemaOpen} onToggle={() => setSchemaOpen((v) => !v)}>
+    <TraceDetailCollapsible label="Schema" defaultOpen={false} sticky={false}>
       <JsonViewer value={schema} copyable embedded defaultExpandDepth={1} label="schema" />
-    </SchemaAccordion>
+    </TraceDetailCollapsible>
   ) : null
 
   if (layout === "pane") {
@@ -114,35 +112,22 @@ export function TraceToolIo({
   if (layout === "developer") {
     return (
       <div className="trace-tool-io trace-tool-io--developer">
-        <section className="trace-detail-section trace-detail-section--accordion">
-          <button
-            type="button"
-            className="trace-detail-accordion"
-            aria-expanded={payloadOpen}
-            onClick={() => setPayloadOpen((open) => !open)}
-          >
-            <ChevronRight
-              size={14}
-              className={`trace-detail-accordion__chev${payloadOpen ? " is-open" : ""}`}
-              aria-hidden
-            />
-            <span className="trace-detail-accordion__label">Input payload & schema</span>
-          </button>
-          {payloadOpen ? (
-            <div className="trace-detail-accordion__body">
-              {validationHint ? (
-                <p className="trace-tool-io__validation-hint">{validationHint}</p>
-              ) : null}
-              <JsonViewer
-                value={argumentsValue}
-                copyable
-                embedded
-                inline
-                label="payload"
-              />
-            </div>
+        <TraceDetailCollapsible
+          label="Input payload & schema"
+          defaultOpen={false}
+          sticky={false}
+        >
+          {validationHint ? (
+            <p className="trace-tool-io__validation-hint">{validationHint}</p>
           ) : null}
-        </section>
+          <JsonViewer
+            value={argumentsValue}
+            copyable
+            embedded
+            inline
+            label="payload"
+          />
+        </TraceDetailCollapsible>
         {showError && errorText ? <TraceToolErrorSection text={errorText} /> : null}
         {showResult ? (
           <TraceToolSection label="Result" meta={resultIsJson ? "valid JSON" : "plain text"}>
@@ -220,36 +205,6 @@ export function TraceToolErrorSection({ text }: { text: string }) {
         </div>
       </div>
     </TraceToolSection>
-  )
-}
-
-function SchemaAccordion({
-  open,
-  onToggle,
-  children,
-}: {
-  open: boolean
-  onToggle: () => void
-  children: ReactNode
-}) {
-  return (
-    <div className="trace-tool-io__schema trace-detail-section--accordion">
-      <button
-        type="button"
-        className="trace-detail-accordion"
-        aria-expanded={open}
-        onClick={onToggle}
-      >
-        <ChevronRight
-          size={13}
-          className={`trace-detail-accordion__chev${open ? " is-open" : ""}`}
-          aria-hidden
-        />
-        <span className="trace-detail-accordion__label">Schema</span>
-        <span className="trace-detail-accordion__meta">{open ? "Collapse" : "Expand"}</span>
-      </button>
-      {open ? <div className="trace-detail-accordion__body">{children}</div> : null}
-    </div>
   )
 }
 
