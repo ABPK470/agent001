@@ -10491,6 +10491,11 @@ button.trace-tree-status-pill:hover {
 }
 
 /* Scope drawer rows — Trace left-tree dialect (depth pad + left rail). */
+.trace-scope-drawer:focus,
+.trace-scope-drawer:focus-visible {
+  outline: none;
+}
+
 .trace-scope-drawer .trace-tree-row {
   min-width: 0;
 }
@@ -10500,6 +10505,11 @@ button.trace-tree-status-pill:hover {
   width: 100%;
   min-width: 0;
   grid-template-columns: minmax(0, 1fr);
+}
+
+.trace-scope-drawer .trace-tree-row__btn:focus,
+.trace-scope-drawer .trace-tree-row__btn:focus-visible {
+  outline: none;
 }
 
 .trace-scope-drawer .trace-tree-row__node-cell {

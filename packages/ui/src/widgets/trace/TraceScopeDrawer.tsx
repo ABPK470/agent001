@@ -77,6 +77,10 @@ export function TraceScopeDrawer({
   }, [items, activeRunId, activeThreadId])
 
   useEffect(() => {
+    rootRef.current?.focus({ preventScroll: true })
+  }, [])
+
+  useEffect(() => {
     if (focusIndex >= items.length) {
       setFocusIndex(items.length > 0 ? items.length - 1 : -1)
       return
@@ -85,7 +89,6 @@ export function TraceScopeDrawer({
     const el = rootRef.current?.querySelector<HTMLElement>(
       `[data-scope-idx="${focusIndex}"]`,
     )
-    el?.focus({ preventScroll: true })
     el?.scrollIntoView({ block: "nearest" })
   }, [focusIndex, items])
 
@@ -182,6 +185,7 @@ export function TraceScopeDrawer({
       ref={rootRef}
       className="trace-scope-drawer"
       aria-label="Threads and runs"
+      tabIndex={0}
       onKeyDown={onDrawerKeyDown}
     >
       <div className="trace-scope-drawer__head">
@@ -214,6 +218,7 @@ export function TraceScopeDrawer({
                     type="button"
                     data-scope-idx={threadIdx}
                     role="option"
+                    tabIndex={-1}
                     aria-selected={focusIndex === threadIdx}
                     className="trace-tree-row__btn"
                     onClick={() => {
@@ -276,6 +281,7 @@ export function TraceScopeDrawer({
                             type="button"
                             data-scope-idx={runIdx}
                             role="option"
+                            tabIndex={-1}
                             aria-selected={focusIndex === runIdx}
                             className="trace-tree-row__btn"
                             onClick={() => {

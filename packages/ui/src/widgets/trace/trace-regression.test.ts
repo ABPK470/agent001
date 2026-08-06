@@ -675,6 +675,7 @@ describe("Trace CSS contract — pin indent + work-note divider", () => {
     expect(drawer).toContain("trace-scope-drawer__run-status")
     expect(drawer).not.toContain("StatusMark")
     expect(drawer).not.toContain("trace-scope-drawer__runs-wrap")
-    expect(css).toMatch(/\.trace-scope-drawer \.trace-tree-row__btn/s)
+    expect(css).toMatch(/\.trace-scope-drawer \.trace-tree-row__btn:focus-visible\s*\{[^}]*outline:\s*none/s)
+    expect(drawer).not.toMatch(/scrollIntoView\([\s\S]*\.focus\(/)
   })
 })
