@@ -1,32 +1,40 @@
 import { describe, expect, it } from "vitest"
 import { listSummonItems } from "./summon-items"
 import {
-  filterSummonByTab,
-  nextSummonTab,
+  moveSummonSelection,
   orderSummonForNav,
+  partitionSummonColumns,
   summonActionKeys,
-  summonTabFromDigit,
 } from "./summon-tabs"
 
-describe("summon tabs", () => {
-  it("filters Go vs Surface", () => {
-    const items = listSummonItems()
-    const go = filterSummonByTab(items, "go")
-    expect(go.every((item) => item.kind === "space" || item.kind === "bundle")).toBe(true)
-    const surfaces = filterSummonByTab(items, "surface")
-    expect(surfaces.every((item) => item.kind === "widget")).toBe(true)
-  })
-
-  it("cycles tabs and maps digits", () => {
-    expect(nextSummonTab("all", 1)).toBe("go")
-    expect(nextSummonTab("surface", 1)).toBe("all")
-    expect(summonTabFromDigit("3")).toBe("surface")
+describe("summon board navigation", () => {
+  it("partitions Go vs Surface without collapsing the board", () => {
+    const columns = partitionSummonColumns(listSummonItems())
+    expect(columns.go.every((item) => item.kind === "space" || item.kind === "bundle")).toBe(
+      true,
+    )
+    expect(columns.surface.every((item) => item.kind === "widget")).toBe(true)
+    expect(columns.go.length).toBeGreaterThan(0)
+    expect(columns.surface.length).toBeGreaterThan(0)
   })
 
   it("orders nav destinations before surfaces", () => {
     const ordered = orderSummonForNav(listSummonItems())
     const firstWidget = ordered.findIndex((item) => item.kind === "widget")
     expect(ordered.slice(0, firstWidget).every((item) => item.kind !== "widget")).toBe(true)
+  })
+
+  it("moves ↑↓ inside a column and ←→ across columns", () => {
+    const columns = {
+      go: listSummonItems().filter((item) => item.kind !== "widget").slice(0, 3),
+      surface: listSummonItems().filter((item) => item.kind === "widget").slice(0, 4),
+    }
+    expect(moveSummonSelection(0, columns, "down")).toBe(1)
+    expect(moveSummonSelection(0, columns, "up")).toBe(0)
+    expect(moveSummonSelection(0, columns, "right")).toBe(3)
+    expect(moveSummonSelection(3, columns, "left")).toBe(0)
+    expect(moveSummonSelection(2, columns, "down")).toBe(2)
+    expect(moveSummonSelection(2, columns, "right")).toBe(3 + 2)
   })
 
   it("exposes action keys for spaces", () => {

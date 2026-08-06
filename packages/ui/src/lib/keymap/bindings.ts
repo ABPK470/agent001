@@ -38,7 +38,7 @@ export const TRACE_SCOPE_DRAWER_BINDING: KeymapBinding = {
 
 export const TRACE_DETAIL_HINTS: readonly KbdHint[] = [
   { keys: ["`"], label: "tree" },
-  { keys: ["↑", "↓"], label: "scroll" },
+  { keys: ["↑", "↓"], label: "move" },
   { keys: ["←", "→"], label: "fold" },
   { keys: ["Space"], label: "toggle" },
   { keys: ["Esc"], label: "tree" },
@@ -54,7 +54,7 @@ export const PIPELINES_TREE_HINTS: readonly KbdHint[] = [
 
 export const PIPELINES_DETAIL_HINTS: readonly KbdHint[] = [
   { keys: ["`"], label: "tree" },
-  { keys: ["↑", "↓"], label: "scroll" },
+  { keys: ["↑", "↓"], label: "move" },
   { keys: ["←", "→"], label: "fold" },
   { keys: ["Space"], label: "toggle" },
   { keys: ["Esc"], label: "tree" },
@@ -63,9 +63,8 @@ export const PIPELINES_DETAIL_HINTS: readonly KbdHint[] = [
 export const SUMMON_HINTS: readonly KbdHint[] = [
   { keys: ["↵"], label: "go / peek / focus" },
   { keys: [MOD, "↵"], label: "keep" },
-  { keys: ["↑", "↓"], label: "navigate" },
-  { keys: ["1–3"], label: "categories" },
-  { keys: ["Tab"], label: "cycle" },
+  { keys: ["↑", "↓"], label: "move" },
+  { keys: ["←", "→"], label: "column" },
   { keys: ["Esc"], label: "dismiss" },
 ]
 

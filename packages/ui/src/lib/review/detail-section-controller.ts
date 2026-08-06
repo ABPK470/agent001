@@ -1,18 +1,18 @@
 /**
- * Keyboard-addressable detail accordions — one active section per detail pane.
- * Hosts register on mount; operator keys move / toggle / fold via this controller.
+ * Keyboard-addressable detail rows — accordion sections and plain rows (timeline).
+ * ↑↓ move · ←→ / Space fold/toggle when the active row is foldable.
  */
 
 export type DetailSectionHandle = {
   id: string
-  getOpen: () => boolean
-  setOpen: (open: boolean) => void
   headerEl: () => HTMLElement | null
+  /** Omit for non-foldable rows (timeline events). */
+  getOpen?: () => boolean
+  setOpen?: (open: boolean) => void
 }
 
 export type DetailSectionController = {
   register: (handle: DetailSectionHandle) => () => void
-  /** Point ←→ / Space at a section (click / focus). */
   activate: (id: string) => boolean
   move: (direction: -1 | 1) => boolean
   toggle: () => boolean
@@ -20,6 +20,10 @@ export type DetailSectionController = {
   clearActive: () => void
   getActiveId: () => string | null
   subscribe: (listener: () => void) => () => void
+}
+
+function isFoldable(handle: DetailSectionHandle): boolean {
+  return typeof handle.getOpen === "function" && typeof handle.setOpen === "function"
 }
 
 export function createDetailSectionController(): DetailSectionController {
@@ -78,21 +82,22 @@ export function createDetailSectionController(): DetailSectionController {
       if (current < 0) {
         return activate(direction > 0 ? 0 : sections.length - 1)
       }
-      const next = (current + direction + sections.length) % sections.length
+      const next = current + direction
+      if (next < 0 || next >= sections.length) return false
       return activate(next)
     },
 
     toggle() {
       const section = ensureActive()
-      if (!section) return false
-      section.setOpen(!section.getOpen())
+      if (!section || !isFoldable(section)) return false
+      section.setOpen!(!section.getOpen!())
       return true
     },
 
     fold(open) {
       const section = ensureActive()
-      if (!section) return false
-      section.setOpen(open)
+      if (!section || !isFoldable(section)) return false
+      section.setOpen!(open)
       return true
     },
 

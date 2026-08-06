@@ -1,5 +1,5 @@
 /**
- * Keymap sheet registry — searchable, category-filtered shortcut table.
+ * Keymap sheet registry — searchable two-column shortcut table (Pane | Shell).
  * Source of truth for the ? modal; strip hints stay in bindings.ts.
  * Mod chords use `Mod` — display resolves via detectModHint() (⌘ vs Ctrl).
  */
@@ -7,8 +7,6 @@
 import { MOD, resolveKeyCaptions } from "./mod-hint"
 
 export type KeymapCategory = "pane" | "workspace" | "global"
-
-export type KeymapTab = "all" | "pane" | "shell"
 
 export type ShortcutItem = {
   id: string
@@ -51,8 +49,8 @@ export const SHORTCUT_REGISTRY: readonly ShortcutItem[] = [
     context: "Tree",
   },
   {
-    id: "review-detail-scroll",
-    label: "Scroll Detail",
+    id: "review-detail-move",
+    label: "Move in Detail",
     keys: ["↑", "↓"],
     category: "pane",
     context: "Detail",
@@ -158,19 +156,7 @@ export const SHORTCUT_REGISTRY: readonly ShortcutItem[] = [
   },
 ]
 
-export const KEYMAP_TABS: readonly { id: KeymapTab; num: string; label: string }[] = [
-  { id: "all", num: "1", label: "All" },
-  { id: "pane", num: "2", label: "Pane" },
-  { id: "shell", num: "3", label: "Shell" },
-]
-
-export function matchesKeymapTab(item: ShortcutItem, tab: KeymapTab): boolean {
-  if (tab === "all") return true
-  if (tab === "pane") return item.category === "pane"
-  return item.category === "workspace" || item.category === "global"
-}
-
-/** When Trace reports an active pane, hide the other pane’s exclusive chords. */
+/** When Trace/Pipelines report an active pane, hide the other pane’s exclusive chords. */
 export type ActivePaneSurface = "tree" | "detail" | null
 
 export function matchesActivePaneContext(
@@ -189,30 +175,14 @@ export function matchesActivePaneContext(
 export function filterShortcutRegistry(
   items: readonly ShortcutItem[],
   query: string,
-  tab: KeymapTab,
   surface: ActivePaneSurface = null,
 ): ShortcutItem[] {
   const q = query.trim().toLowerCase()
   return items.filter((item) => {
-    if (!matchesKeymapTab(item, tab)) return false
     if (!matchesActivePaneContext(item, surface)) return false
     if (!q) return true
     const keys = resolveKeyCaptions(item.keys).join(" ")
     const hay = `${item.label} ${keys} ${item.context ?? ""} ${item.category}`.toLowerCase()
     return hay.includes(q)
   })
-}
-
-export function nextKeymapTab(current: KeymapTab, direction: 1 | -1): KeymapTab {
-  const order: KeymapTab[] = ["all", "pane", "shell"]
-  const i = order.indexOf(current)
-  const next = (i + direction + order.length) % order.length
-  return order[next]!
-}
-
-export function keymapTabFromDigit(key: string): KeymapTab | null {
-  if (key === "1") return "all"
-  if (key === "2") return "pane"
-  if (key === "3") return "shell"
-  return null
 }

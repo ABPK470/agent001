@@ -3,11 +3,12 @@
  * Does not listen on window; claims the active OperatorSurface for the composition root.
  * Tree row nav is folded in when `treeNav` is provided and pane === tree.
  *
- * Detail: ↑↓ scroll · ←→ fold cores · Space toggle (no [ ] pick chords).
+ * Detail: ↑↓ move rows · ←→ fold cores · Space toggle · PgUp/Dn scroll.
  */
 
 import { useRef, type RefObject } from "react"
 import {
+  detailScrollLineDelta,
   detailScrollPageDelta,
   resolveEscLadder,
   resolveReviewPaneKeyboardAction,
@@ -208,6 +209,16 @@ export function useReviewOperatorKeyboard({
       }
 
       const scrollEl = detailScrollRef.current
+      const sections = sectionControllerRef?.current
+
+      if (paneAction.type === "detail-move") {
+        if (sections?.move(paneAction.direction)) return true
+        if (scrollEl) {
+          scrollEl.scrollTop += paneAction.direction * detailScrollLineDelta()
+          return true
+        }
+        return false
+      }
       if (paneAction.type === "detail-scroll" && scrollEl) {
         scrollEl.scrollTop += paneAction.delta
         return true
@@ -220,14 +231,13 @@ export function useReviewOperatorKeyboard({
         scrollEl.scrollTop = paneAction.edge === "start" ? 0 : scrollEl.scrollHeight
         return true
       }
-      const sections = sectionControllerRef?.current
       if (paneAction.type === "section-toggle") {
         sections?.toggle()
         return true
       }
       if (paneAction.type === "section-fold") {
         if (sections?.fold(paneAction.open)) return true
-        // Call detail tabs when no accordion cores are registered.
+        // Call detail tabs when active row is not foldable / none registered.
         if (tabCycleRef?.current) {
           tabCycleRef.current(paneAction.open ? 1 : -1)
           return true

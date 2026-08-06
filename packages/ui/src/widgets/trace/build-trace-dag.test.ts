@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest"
+import { RunStatus } from "../../enums"
 import type { TraceEntry } from "../../types"
 import {
   buildTraceDag,
@@ -6,6 +7,8 @@ import {
   replyHeadline,
   searchCall,
 } from "./build-trace-dag.js"
+import { emptyOpen } from "./open-state.js"
+import { buildTraceTreeIndex } from "./trace-tree-index.js"
 
 type LlmRequest = Extract<TraceEntry, { kind: "llm-request" }>
 
@@ -1002,6 +1005,119 @@ describe("buildTraceDag", () => {
       expect(work.work.sqlQuality).toHaveLength(1)
       expect(work.work.sqlQuality[0]?.phase).toBe("executed")
     }
+  })
+})
+
+describe("buildTraceDag terminal seal", () => {
+  it("seals open tools when the run is completed", () => {
+    const dag = buildTraceDag(
+      [
+        llmRequest(0),
+        llmResponse(0, {
+          toolCalls: [{ id: "tc1", name: "sync_preview", arguments: {} }],
+        }),
+        {
+          kind: "tool-call",
+          invocationId: "inv-sync",
+          toolCallId: "tc1",
+          tool: "sync_preview",
+          argsSummary: "entityId",
+          argsFormatted: '{"entityId":"client:9"}',
+        },
+        {
+          kind: "sync-progress",
+          invocationId: "inv-sync",
+          tool: "sync_preview",
+          status: "running",
+          headline: "Probing",
+          detail: "schema",
+        },
+        {
+          kind: "sync-progress",
+          invocationId: "inv-sync",
+          tool: "sync_preview",
+          status: "running",
+          headline: "Preview",
+          detail: "rows",
+        },
+      ],
+      { runStatus: RunStatus.Completed },
+    )
+
+    const work = dag.spine.find((e) => e.kind === "work")
+    expect(work?.kind).toBe("work")
+    if (work?.kind !== "work") return
+    expect(work.work.tools).toHaveLength(1)
+    expect(work.work.tools[0]?.id).toBe("inv-sync")
+    expect(work.work.tools[0]?.status).toBe("done")
+    expect(work.work.summary).not.toMatch(/running/)
+    expect(work.work.notes).toHaveLength(2)
+
+    const open = emptyOpen()
+    open.calls.add(0)
+    for (const entry of dag.spine) {
+      if (entry.kind === "work") open.work.add(entry.work.id)
+    }
+    const index = buildTraceTreeIndex(dag, open, null)
+    const tool = index.nodes.find((n) => n.kind === "tool")
+    expect(tool?.status).toBe("success")
+    const workNode = index.nodes.find((n) => n.kind === "work")
+    expect(workNode?.status).toBe("success")
+  })
+
+  it("pairs tool-result by invocationId when toolCallId is absent", () => {
+    const dag = buildTraceDag([
+      llmRequest(0),
+      llmResponse(0, {
+        toolCalls: [{ id: "tc1", name: "sync_preview", arguments: {} }],
+      }),
+      {
+        kind: "tool-call",
+        invocationId: "inv-sync",
+        toolCallId: "tc1",
+        tool: "sync_preview",
+        argsSummary: "entityId",
+        argsFormatted: "{}",
+      },
+      {
+        kind: "tool-result",
+        invocationId: "inv-sync",
+        text: "ok",
+      },
+    ])
+
+    const work = dag.spine.find((e) => e.kind === "work")
+    expect(work?.kind).toBe("work")
+    if (work?.kind !== "work") return
+    expect(work.work.tools).toHaveLength(1)
+    expect(work.work.tools[0]?.id).toBe("inv-sync")
+    expect(work.work.tools[0]?.toolCallId).toBe("tc1")
+    expect(work.work.tools[0]?.status).toBe("done")
+    expect(work.work.tools[0]?.resultText).toBe("ok")
+  })
+
+  it("does not seal while the run is still live", () => {
+    const dag = buildTraceDag(
+      [
+        llmRequest(0),
+        llmResponse(0, {
+          toolCalls: [{ id: "tc1", name: "sync_preview", arguments: {} }],
+        }),
+        {
+          kind: "tool-call",
+          invocationId: "inv-sync",
+          toolCallId: "tc1",
+          tool: "sync_preview",
+          argsSummary: "x",
+          argsFormatted: "{}",
+        },
+      ],
+      { runStatus: RunStatus.Running },
+    )
+    const work = dag.spine.find((e) => e.kind === "work")
+    expect(work?.kind).toBe("work")
+    if (work?.kind !== "work") return
+    expect(work.work.tools[0]?.status).toBe("running")
   })
 })
 

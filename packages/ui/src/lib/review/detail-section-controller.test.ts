@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 import { createDetailSectionController } from "./detail-section-controller"
 
-function handle(id: string, open = true) {
+function section(id: string, open = true) {
   let isOpen = open
   return {
     id,
@@ -16,21 +16,30 @@ function handle(id: string, open = true) {
   }
 }
 
+function row(id: string) {
+  return {
+    id,
+    headerEl: () => null,
+  }
+}
+
 describe("createDetailSectionController", () => {
-  it("moves, toggles, and folds the active section", () => {
+  it("moves across rows without wrapping; folds only foldable actives", () => {
     const ctrl = createDetailSectionController()
-    const a = handle("a", true)
-    const b = handle("b", false)
+    const a = row("timeline-a")
+    const b = section("budget", false)
     ctrl.register(a)
     ctrl.register(b)
 
     expect(ctrl.move(1)).toBe(true)
-    expect(ctrl.getActiveId()).toBe("a")
+    expect(ctrl.getActiveId()).toBe("timeline-a")
+    expect(ctrl.fold(true)).toBe(false)
     expect(ctrl.move(1)).toBe(true)
-    expect(ctrl.getActiveId()).toBe("b")
-    expect(ctrl.toggle()).toBe(true)
+    expect(ctrl.getActiveId()).toBe("budget")
+    expect(ctrl.move(1)).toBe(false)
+    expect(ctrl.fold(true)).toBe(true)
     expect(b.isOpen).toBe(true)
-    expect(ctrl.fold(false)).toBe(true)
+    expect(ctrl.toggle()).toBe(true)
     expect(b.isOpen).toBe(false)
   })
 
@@ -38,7 +47,7 @@ describe("createDetailSectionController", () => {
     const ctrl = createDetailSectionController()
     const listener = vi.fn()
     ctrl.subscribe(listener)
-    ctrl.register(handle("a"))
+    ctrl.register(section("a"))
     expect(listener).toHaveBeenCalled()
     ctrl.move(1)
     expect(ctrl.getActiveId()).toBe("a")

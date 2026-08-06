@@ -95,3 +95,27 @@ export function useRegisterDetailSection({
 
   return { id, active, activate }
 }
+
+/** Register a non-foldable detail row (timeline event, step, …). */
+export function useRegisterDetailRow(
+  rowRef: RefObject<HTMLElement | null>,
+): { id: string; active: boolean; activate: () => void } {
+  const id = useId()
+  const controller = useDetailSectionController()
+
+  useEffect(() => {
+    if (!controller) return
+    return controller.register({
+      id,
+      headerEl: () => rowRef.current,
+    })
+  }, [controller, id, rowRef])
+
+  const active = useDetailSectionActive(id)
+
+  function activate() {
+    controller?.activate(id)
+  }
+
+  return { id, active, activate }
+}

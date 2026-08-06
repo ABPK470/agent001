@@ -7,6 +7,7 @@ export {
 } from "./resolve-shell-keyboard"
 export {
   resolveReviewPaneKeyboardAction,
+  detailScrollLineDelta,
   detailScrollPageDelta,
   type ReviewPane,
   type ReviewPaneKeyboardAction,
@@ -59,15 +60,10 @@ export {
 } from "./bindings"
 export {
   SHORTCUT_REGISTRY,
-  KEYMAP_TABS,
   filterShortcutRegistry,
-  nextKeymapTab,
-  keymapTabFromDigit,
-  matchesKeymapTab,
   matchesActivePaneContext,
   type ActivePaneSurface,
   type KeymapCategory,
-  type KeymapTab,
   type ShortcutItem,
 } from "./registry"
 export { resolveKeymapActiveContext } from "./active-context"

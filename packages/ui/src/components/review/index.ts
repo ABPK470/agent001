@@ -18,6 +18,7 @@ export { ReviewDetailAccordion } from "./ReviewDetailAccordion"
 export {
   DetailSectionProvider,
   useDetailSectionController,
+  useRegisterDetailRow,
   useRegisterDetailSection,
 } from "./DetailSectionContext"
 export { ReviewDetailErrorCallout, ReviewDetailHeadline } from "./ReviewDetailHeadline"

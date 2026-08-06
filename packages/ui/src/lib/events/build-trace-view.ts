@@ -21,6 +21,7 @@ import {
   isApprovalDeniedEntry,
   isApprovalWaitEntry,
 } from "../approval-trace"
+import { terminalSpanStatus } from "./run-terminal"
 import { isCancelRaceFailureError } from "./trace-terminal"
 import type { OutlineNode } from "./types"
 
@@ -34,6 +35,7 @@ type ToolErrorEntry = Extract<TraceEntry, { kind: "tool-error" }>
 export type TraceSqlQuality = Extract<TraceEntry, { kind: "planner-sql-quality" }>
 
 export type TraceToolCall = {
+  /** Stable execution id — prefers `invocationId` (same dialect as Chat). */
   id: string
   name: string
   arguments: Record<string, unknown>
@@ -45,6 +47,8 @@ export type TraceToolCall = {
   resultText?: string
   argsSummary?: string
   argsFormatted?: string
+  /** LLM wire id — kept for SQL-quality / reply pairing; not the row key. */
+  toolCallId?: string | null
 }
 
 export type TracePromptMessage = {
@@ -863,18 +867,42 @@ function mergePhase(prev: TracePhaseNode, next: PhaseUpdate): TracePhaseNode {
   }
 }
 
+/** Prefer invocationId — Chat keys tools the same way. */
+function toolStableId(entry: {
+  invocationId?: string | null
+  toolCallId?: string | null
+}): string | null {
+  return entry.invocationId || entry.toolCallId || null
+}
+
+function toolRowMatches(
+  tool: TraceToolCall,
+  entry: { invocationId?: string | null; toolCallId?: string | null },
+): boolean {
+  if (entry.invocationId && tool.id === entry.invocationId) return true
+  if (entry.toolCallId && (tool.id === entry.toolCallId || tool.toolCallId === entry.toolCallId)) {
+    return true
+  }
+  return false
+}
+
 function applyToolResult(
   tools: TraceToolCall[],
   entry: ToolResultEntry | ToolErrorEntry,
 ): TraceToolCall[] {
   const status: "done" | "error" = entry.kind === "tool-error" ? "error" : "done"
-  const id = entry.toolCallId || entry.invocationId
+  const id = toolStableId(entry)
   if (!id) return tools
   let hit = false
   const next = tools.map((t) => {
-    if (t.id !== id && t.id !== entry.invocationId && t.id !== entry.toolCallId) return t
+    if (!toolRowMatches(t, entry)) return t
     hit = true
-    return { ...t, status, resultText: entry.text }
+    return {
+      ...t,
+      status,
+      resultText: entry.text,
+      toolCallId: t.toolCallId ?? entry.toolCallId ?? null,
+    }
   })
   if (hit) return next
   return next.concat({
@@ -883,6 +911,7 @@ function applyToolResult(
     arguments: {},
     status,
     resultText: entry.text,
+    toolCallId: entry.toolCallId ?? null,
   })
 }
 
@@ -916,6 +945,11 @@ function workSummary(tools: TraceToolCall[], notes: TraceWorkNote[]): string {
 export type BuildTraceDagOpts = {
   /** Parallel wall-clock ms per entry (from TraceEnvelope.createdAt). */
   createdAtMs?: Array<number | null>
+  /**
+   * Active run lifecycle status. When terminal, open tool/work/phase
+   * spans seal to the run outcome (same dialect as Chat).
+   */
+  runStatus?: string | null
 }
 
 /** Build the hybrid DAG view-model from a raw trace stream. */
@@ -1049,7 +1083,12 @@ export function buildTraceDag(trace: TraceEntry[], opts?: BuildTraceDagOpts): Tr
     const call = calls[openWork.afterCallIndex]
     if (call && call.sqlQuality.length > 0) {
       const matched = call.sqlQuality.filter((s) =>
-        openWork.tools.some((t) => t.id === s.toolCallId || t.name === s.toolName),
+        openWork.tools.some(
+          (t) =>
+            t.toolCallId === s.toolCallId ||
+            t.id === s.toolCallId ||
+            t.name === s.toolName,
+        ),
       )
       openWork.sqlQuality = matched.length > 0 ? matched : call.sqlQuality
     }
@@ -1285,10 +1324,11 @@ export function buildTraceDag(trace: TraceEntry[], opts?: BuildTraceDagOpts): Tr
       const callIndex = resolveWorkCallIndex(ownerStep)
       if (callIndex < 0) continue
       const work = ensureWork(callIndex)
-      const id = tc.toolCallId || tc.invocationId
+      const id = toolStableId(tc)
+      if (!id) continue
       invocationOwner.set(tc.invocationId, { stepName: ownerStep, callIndex })
       if (tc.toolCallId) invocationOwner.set(tc.toolCallId, { stepName: ownerStep, callIndex })
-      const existing = work.tools.findIndex((t) => t.id === id || t.id === tc.invocationId)
+      const existing = work.tools.findIndex((t) => toolRowMatches(t, tc))
       const row: TraceToolCall = {
         id,
         name: tc.tool,
@@ -1296,6 +1336,7 @@ export function buildTraceDag(trace: TraceEntry[], opts?: BuildTraceDagOpts): Tr
         status: "running",
         argsSummary: tc.argsSummary,
         argsFormatted: tc.argsFormatted,
+        toolCallId: tc.toolCallId ?? null,
       }
       if (existing >= 0) work.tools[existing] = { ...work.tools[existing]!, ...row }
       else work.tools.push(row)
@@ -1479,13 +1520,16 @@ export function buildTraceDag(trace: TraceEntry[], opts?: BuildTraceDagOpts): Tr
     sqlQuality.length > 0 ||
     finalSpine.length > 0
 
+  const sealedSpine = sealSpineForRunStatus(finalSpine, opts?.runStatus)
+  const sealedCalls = sealCallsForRunStatus(calls, opts?.runStatus)
+
   return {
     preamble,
-    calls,
-    spine: finalSpine,
+    calls: sealedCalls,
+    spine: sealedSpine,
     outline,
     stats: {
-      callCount: calls.length,
+      callCount: sealedCalls.length,
       promptTokens,
       completionTokens,
       totalDuration,
@@ -1496,6 +1540,79 @@ export function buildTraceDag(trace: TraceEntry[], opts?: BuildTraceDagOpts): Tr
     },
     hasData,
   }
+}
+
+function sealToolsForRun(
+  tools: TraceToolCall[],
+  status: "done" | "error",
+): TraceToolCall[] {
+  return tools.map((t) =>
+    t.status === "running" || t.status == null ? { ...t, status } : t,
+  )
+}
+
+function sealWorkForRun(
+  work: TraceWorkNode,
+  status: "done" | "error",
+): TraceWorkNode {
+  const tools = sealToolsForRun(work.tools, status)
+  return {
+    ...work,
+    tools,
+    title: workTitle(tools, work.notes),
+    summary: workSummary(tools, work.notes),
+  }
+}
+
+function sealCallForRun(call: TraceCallNode): TraceCallNode {
+  return call.waiting ? { ...call, waiting: false } : call
+}
+
+function sealPhaseForRun(
+  phase: TracePhaseNode,
+  status: "done" | "error",
+): TracePhaseNode {
+  const children = phase.children?.map((child) => {
+    if (child.kind === "work") {
+      return { kind: "work" as const, work: sealWorkForRun(child.work, status) }
+    }
+    if (child.kind === "phase") {
+      return { kind: "phase" as const, phase: sealPhaseForRun(child.phase, status) }
+    }
+    // call children are indexes into `calls` — sealed via sealCallsForRunStatus
+    return child
+  })
+  return {
+    ...phase,
+    status: phase.status === "running" ? status : phase.status,
+    children,
+  }
+}
+
+function sealSpineForRunStatus(
+  spine: TraceSpineEntry[],
+  runStatus: string | null | undefined,
+): TraceSpineEntry[] {
+  const status = terminalSpanStatus(runStatus)
+  if (!status) return spine
+  return spine.map((entry) => {
+    if (entry.kind === "work") {
+      return { kind: "work", work: sealWorkForRun(entry.work, status) }
+    }
+    if (entry.kind === "phase") {
+      return { kind: "phase", phase: sealPhaseForRun(entry.phase, status) }
+    }
+    // call entries are indexes into `calls` — sealed via sealCallsForRunStatus
+    return entry
+  })
+}
+
+function sealCallsForRunStatus(
+  calls: TraceCallNode[],
+  runStatus: string | null | undefined,
+): TraceCallNode[] {
+  if (!terminalSpanStatus(runStatus)) return calls
+  return calls.map(sealCallForRun)
 }
 
 /** Patch phase titles/summaries from outline without rewriting ownership. */

@@ -785,7 +785,6 @@ export function App() {
           <Canvas ref={(opts?.canvasActive ?? true) ? canvasRef : undefined} />
         </div>
       </div>
-      <WidgetModal />
     </div>
   )
   }
@@ -806,6 +805,8 @@ export function App() {
       {policyEditorOpen && !popOut && <PolicyEditor onClose={() => setPolicyEditorOpen(false)} />}
       <SummonPalette />
       <KeymapSheet />
+      {/* Outside the shell track — transform on .app-shell-slider would trap fixed peek. */}
+      <WidgetModal />
       <div
         className={[
           "app-shell-view flex flex-col h-screen min-h-[100dvh]",

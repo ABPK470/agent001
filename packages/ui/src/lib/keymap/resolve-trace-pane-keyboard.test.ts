@@ -30,10 +30,10 @@ describe("resolveTracePaneKeyboardAction", () => {
     })
   })
 
-  it("scrolls and folds in detail — brackets are inert", () => {
+  it("moves and folds in detail — brackets are inert", () => {
     expect(resolveTracePaneKeyboardAction(key({ key: "j" }), "detail")).toEqual({
-      type: "detail-scroll",
-      delta: 48,
+      type: "detail-move",
+      direction: 1,
     })
     expect(resolveTracePaneKeyboardAction(key({ key: "ArrowRight" }), "detail")).toEqual({
       type: "section-fold",

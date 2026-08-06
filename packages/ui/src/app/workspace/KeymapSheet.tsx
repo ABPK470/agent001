@@ -1,8 +1,6 @@
 /**
- * Keymap sheet (?) — keyboard-first, zero-scroll command & shortcut modal.
- *
- * Filter + category tabs trim density; Esc clears filter then closes.
- * Active Context reflects Space · focused widget · Trace pane.
+ * Keymap sheet (?) — one fixed two-column board (Pane | Shell).
+ * Search filters both columns; Esc clears then dismisses.
  */
 
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react"
@@ -10,15 +8,11 @@ import { Search } from "lucide-react"
 import { useStore } from "../../state/store"
 import { useLayoutStore } from "../../state/layout-store"
 import {
-  KEYMAP_TABS,
   filterShortcutRegistry,
-  keymapTabFromDigit,
-  nextKeymapTab,
   resolveKeyCaptions,
   resolveKeymapActiveContext,
   SHORTCUT_REGISTRY,
   type KbdHint,
-  type KeymapTab,
   type ShortcutItem,
 } from "../../lib/keymap"
 import { ComposerKbdFooter } from "../../widgets/chat/ComposerKbdFooter"
@@ -36,7 +30,6 @@ export function KeymapSheet() {
   const zenTileId = useLayoutStore((s) => s.zenTileId)
 
   const [query, setQuery] = useState("")
-  const [tab, setTab] = useState<KeymapTab>("all")
   const inputRef = useRef<HTMLInputElement>(null)
 
   const activeView = views.find((view) => view.id === activeViewId)
@@ -66,12 +59,11 @@ export function KeymapSheet() {
     ],
   )
 
-  const paneSurface =
-    widgetLabel === "Trace" ? traceOperatorPane : null
+  const paneSurface = widgetLabel === "Trace" ? traceOperatorPane : null
 
   const filtered = useMemo(
-    () => filterShortcutRegistry(SHORTCUT_REGISTRY, query, tab, paneSurface),
-    [paneSurface, query, tab],
+    () => filterShortcutRegistry(SHORTCUT_REGISTRY, query, paneSurface),
+    [paneSurface, query],
   )
 
   const paneItems = filtered.filter((item) => item.category === "pane")
@@ -82,7 +74,6 @@ export function KeymapSheet() {
   useEffect(() => {
     if (!open) return
     setQuery("")
-    setTab("all")
     const t = window.setTimeout(() => inputRef.current?.focus(), 0)
     return () => window.clearTimeout(t)
   }, [open])
@@ -100,29 +91,12 @@ export function KeymapSheet() {
         return
       }
       close()
-      return
-    }
-
-    if (event.key === "Tab") {
-      event.preventDefault()
-      setTab((current) => nextKeymapTab(current, event.shiftKey ? -1 : 1))
-      return
-    }
-
-    if (query.length === 0 && !event.metaKey && !event.ctrlKey && !event.altKey) {
-      const next = keymapTabFromDigit(event.key)
-      if (next) {
-        event.preventDefault()
-        setTab(next)
-      }
     }
   }
 
   useEffect(() => {
     if (!open) return
     function onKeyDown(event: KeyboardEvent) {
-      // Esc ladder for the sheet. Background Trace/Pipelines are disabled via
-      // keymapSheetOpen — do not stopPropagation on every key (breaks search typing).
       if (event.key !== "Escape") return
       event.preventDefault()
       event.stopPropagation()
@@ -138,13 +112,10 @@ export function KeymapSheet() {
 
   if (!open) return null
 
-  const showPaneColumn = tab === "all" || tab === "pane"
-  const showShellColumn = tab === "all" || tab === "shell"
-
   return (
     <div className="ops-sheet-overlay" role="presentation" onClick={close}>
       <div
-        className="ops-sheet"
+        className="ops-sheet ops-sheet--board"
         role="dialog"
         aria-modal="true"
         aria-label="Keyboard shortcuts"
@@ -164,21 +135,6 @@ export function KeymapSheet() {
             autoComplete="off"
             spellCheck={false}
           />
-          <div className="ops-sheet__tabs" role="tablist" aria-label="Keymap categories">
-            {KEYMAP_TABS.map((entry) => (
-              <button
-                key={entry.id}
-                type="button"
-                role="tab"
-                aria-selected={tab === entry.id}
-                className={`ops-sheet__tab${tab === entry.id ? " is-active" : ""}`}
-                onClick={() => setTab(entry.id)}
-              >
-                <span className="ops-sheet__tab-num">[{entry.num}]</span>
-                <span>{entry.label}</span>
-              </button>
-            ))}
-          </div>
         </header>
 
         <div className="ops-sheet__context">
@@ -196,34 +152,30 @@ export function KeymapSheet() {
         </div>
 
         <div className="ops-sheet__grid">
-          {filtered.length === 0 ? (
-            <div className="ops-sheet__empty">
-              No keymaps matching “{query.trim() || tab}”
-            </div>
-          ) : (
-            <>
-              {showPaneColumn && paneItems.length > 0 ? (
-                <section className="ops-sheet__col">
-                  <h3 className="ops-sheet__col-title">Pane navigation</h3>
-                  <ul className="ops-sheet__rows">
-                    {paneItems.map((item) => (
-                      <ShortcutRow key={item.id} item={item} />
-                    ))}
-                  </ul>
-                </section>
-              ) : null}
-              {showShellColumn && shellItems.length > 0 ? (
-                <section className="ops-sheet__col">
-                  <h3 className="ops-sheet__col-title">Workspace & shell</h3>
-                  <ul className="ops-sheet__rows">
-                    {shellItems.map((item) => (
-                      <ShortcutRow key={item.id} item={item} />
-                    ))}
-                  </ul>
-                </section>
-              ) : null}
-            </>
-          )}
+          <section className="ops-sheet__col">
+            <h3 className="ops-sheet__col-title">Pane navigation</h3>
+            {paneItems.length === 0 ? (
+              <p className="ops-sheet__col-empty">No matches</p>
+            ) : (
+              <ul className="ops-sheet__rows">
+                {paneItems.map((item) => (
+                  <ShortcutRow key={item.id} item={item} />
+                ))}
+              </ul>
+            )}
+          </section>
+          <section className="ops-sheet__col">
+            <h3 className="ops-sheet__col-title">Workspace & shell</h3>
+            {shellItems.length === 0 ? (
+              <p className="ops-sheet__col-empty">No matches</p>
+            ) : (
+              <ul className="ops-sheet__rows">
+                {shellItems.map((item) => (
+                  <ShortcutRow key={item.id} item={item} />
+                ))}
+              </ul>
+            )}
+          </section>
         </div>
 
         <footer className="ops-sheet__footer">
@@ -235,11 +187,7 @@ export function KeymapSheet() {
 }
 
 function keymapFooterHints(hasQuery: boolean): readonly KbdHint[] {
-  return [
-    { keys: ["1–3"], label: "categories" },
-    { keys: ["Tab"], label: "cycle" },
-    { keys: ["Esc"], label: hasQuery ? "clear" : "dismiss" },
-  ]
+  return [{ keys: ["Esc"], label: hasQuery ? "clear" : "dismiss" }]
 }
 
 function ShortcutRow({ item }: { item: ShortcutItem }) {

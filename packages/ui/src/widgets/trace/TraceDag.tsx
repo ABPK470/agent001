@@ -302,7 +302,14 @@ export function TraceDag({
       .then((raw) => {
         if (cancelled) return
         const normalized = normalizeTraceWire(raw as unknown[])
-        setCompareDag(buildTraceDag(normalized.entries, { createdAtMs: normalized.createdAtMs }))
+        const compareStatus =
+          runs.find((r) => r.id === compareRunId)?.status ?? null
+        setCompareDag(
+          buildTraceDag(normalized.entries, {
+            createdAtMs: normalized.createdAtMs,
+            runStatus: compareStatus,
+          }),
+        )
       })
       .catch(() => {
         if (!cancelled) {
@@ -313,7 +320,7 @@ export function TraceDag({
     return () => {
       cancelled = true
     }
-  }, [compareRunId, onExportError])
+  }, [compareRunId, runs, onExportError])
 
   useEffect(() => {
     if (!selectedScopeId && treeIndex.nodes.length > 0) {

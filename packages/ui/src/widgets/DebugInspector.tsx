@@ -22,12 +22,20 @@ export function DebugInspector() {
 
   // Solo-hidden: keep last DAG — do not rebuild while covered by maximize.
   const frozenDagRef = useRef<TraceDagModel | null>(null)
+  const activeRunStatus =
+    activeRunId != null
+      ? (runs.find((r) => r.id === activeRunId)?.status ?? null)
+      : null
+
   const dag = useMemo(() => {
     if (soloHidden && frozenDagRef.current) return frozenDagRef.current
-    const next = buildTraceDag(trace, { createdAtMs: traceCreatedAtMs })
+    const next = buildTraceDag(trace, {
+      createdAtMs: traceCreatedAtMs,
+      runStatus: activeRunStatus,
+    })
     frozenDagRef.current = next
     return next
-  }, [trace, traceCreatedAtMs, soloHidden])
+  }, [trace, traceCreatedAtMs, activeRunStatus, soloHidden])
 
   let emptySlot = null
   if (!activeRunId) {

@@ -1,5 +1,7 @@
 /**
- * WidgetModal — opens any widget as a floating modal overlay.
+ * WidgetModal — Summon peek stage (any widget as a floating overlay).
+ * Must mount at the app root (sibling of Summon), never inside `.app-shell-slider`:
+ * that track uses transform, which traps `position: fixed` to half the viewport.
  */
 
 import { Plus, X } from "lucide-react"

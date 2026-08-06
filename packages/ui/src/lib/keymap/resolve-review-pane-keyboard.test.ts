@@ -15,25 +15,29 @@ function key(
 }
 
 describe("resolveReviewPaneKeyboardAction", () => {
-  it("toggles pane and scrolls detail with arrows only", () => {
+  it("moves detail with arrows (not pixel-scroll)", () => {
     expect(resolveReviewPaneKeyboardAction(key({ key: "`" }), "tree")).toEqual({
       type: "toggle-pane",
     })
     expect(resolveReviewPaneKeyboardAction(key({ key: "ArrowDown" }), "detail")).toEqual({
-      type: "detail-scroll",
-      delta: 48,
+      type: "detail-move",
+      direction: 1,
     })
     expect(resolveReviewPaneKeyboardAction(key({ key: "j" }), "detail")).toEqual({
-      type: "detail-scroll",
-      delta: 48,
+      type: "detail-move",
+      direction: 1,
     })
     expect(resolveReviewPaneKeyboardAction(key({ key: "ArrowUp" }), "detail")).toEqual({
-      type: "detail-scroll",
-      delta: -48,
+      type: "detail-move",
+      direction: -1,
+    })
+    expect(resolveReviewPaneKeyboardAction(key({ key: "PageDown" }), "detail")).toEqual({
+      type: "detail-scroll-page",
+      direction: 1,
     })
   })
 
-  it("folds with ←→ and toggles with Space — no [ ] pick chords", () => {
+  it("folds with ←→ and toggles with Space", () => {
     expect(resolveReviewPaneKeyboardAction(key({ key: "ArrowRight" }), "detail")).toEqual({
       type: "section-fold",
       open: true,
@@ -45,11 +49,5 @@ describe("resolveReviewPaneKeyboardAction", () => {
     expect(
       resolveReviewPaneKeyboardAction(key({ key: " ", code: "Space" }), "detail"),
     ).toEqual({ type: "section-toggle" })
-    expect(
-      resolveReviewPaneKeyboardAction(key({ key: "[", code: "BracketLeft" }), "detail"),
-    ).toEqual({ type: "none" })
-    expect(
-      resolveReviewPaneKeyboardAction(key({ key: "]", code: "BracketRight" }), "detail"),
-    ).toEqual({ type: "none" })
   })
 })

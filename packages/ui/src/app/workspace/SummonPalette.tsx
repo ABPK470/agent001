@@ -1,8 +1,8 @@
 /**
- * Summon (⌘K) — same ops-sheet chrome as Keymap (?):
- * search · [1–3] tabs · Active Context · zero-scroll 2-col grid · Esc ladder.
+ * Summon (⌘K) — fixed two-column ops board:
+ * search · Active Context · Go | Surface · Esc ladder.
  *
- * Enter peeks / goes / focuses; ⌘Enter keeps a surface in the current Space.
+ * ↑↓ move in a column · ←→ jump columns · Enter peeks/goes/focuses · ⌘Enter keeps.
  */
 
 import {
@@ -33,13 +33,10 @@ import {
   type SummonItem,
 } from "./summon-items"
 import {
-  filterSummonByTab,
-  nextSummonTab,
+  moveSummonSelection,
   orderSummonForNav,
+  partitionSummonColumns,
   summonActionKeys,
-  summonTabFromDigit,
-  SUMMON_TABS,
-  type SummonTab,
 } from "./summon-tabs"
 
 export function SummonPalette() {
@@ -61,19 +58,13 @@ export function SummonPalette() {
   const ensureProductSpaces = useLayoutStore((s) => s.ensureProductSpaces)
 
   const [query, setQuery] = useState("")
-  const [tab, setTab] = useState<SummonTab>("all")
   const [selected, setSelected] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
 
   const catalog = useMemo(() => listSummonItems(), [])
   const matched = useMemo(() => filterSummonItems(query, catalog), [catalog, query])
-  const filtered = useMemo(() => filterSummonByTab(matched, tab), [matched, tab])
-  const navItems = useMemo(() => orderSummonForNav(filtered), [filtered])
-
-  const goItems = filtered.filter(
-    (item) => item.kind === "space" || item.kind === "bundle",
-  )
-  const surfaceItems = filtered.filter((item) => item.kind === "widget")
+  const columns = useMemo(() => partitionSummonColumns(matched), [matched])
+  const navItems = useMemo(() => orderSummonForNav(matched), [matched])
 
   const activeView = views.find((view) => view.id === activeViewId)
   const focusedTile = focusedTileId
@@ -112,7 +103,6 @@ export function SummonPalette() {
     if (!summonOpen) return
     ensureProductSpaces()
     setQuery("")
-    setTab("all")
     setSelected(0)
     const t = window.setTimeout(() => inputRef.current?.focus(), 0)
     return () => window.clearTimeout(t)
@@ -120,7 +110,7 @@ export function SummonPalette() {
 
   useEffect(() => {
     setSelected(0)
-  }, [query, tab])
+  }, [query])
 
   useEffect(() => {
     if (!summonOpen) return
@@ -130,7 +120,6 @@ export function SummonPalette() {
     return () => shell.removeAttribute("inert")
   }, [summonOpen])
 
-  // Keep selection in range when the filtered list shrinks.
   useEffect(() => {
     if (selected >= navItems.length) {
       setSelected(Math.max(0, navItems.length - 1))
@@ -198,16 +187,6 @@ export function SummonPalette() {
     runAction(resolveSummonWidgetEnter(item.type, presentTypes.has(item.type)))
   }
 
-  function moveSelection(delta: number) {
-    if (navItems.length === 0) return
-    setSelected((i) => {
-      const next = i + delta
-      if (next < 0) return 0
-      if (next >= navItems.length) return navItems.length - 1
-      return next
-    })
-  }
-
   function onInputKeyDown(event: ReactKeyboardEvent<HTMLInputElement>) {
     if (event.key === "Escape") {
       event.preventDefault()
@@ -220,29 +199,24 @@ export function SummonPalette() {
       return
     }
 
-    if (event.key === "Tab") {
-      event.preventDefault()
-      setTab((currentTab) => nextSummonTab(currentTab, event.shiftKey ? -1 : 1))
-      return
-    }
-
-    if (query.length === 0 && !event.metaKey && !event.ctrlKey && !event.altKey) {
-      const next = summonTabFromDigit(event.key)
-      if (next) {
-        event.preventDefault()
-        setTab(next)
-        return
-      }
-    }
-
     if (event.key === "ArrowDown") {
       event.preventDefault()
-      moveSelection(1)
+      setSelected((i) => moveSummonSelection(i, columns, "down"))
       return
     }
     if (event.key === "ArrowUp") {
       event.preventDefault()
-      moveSelection(-1)
+      setSelected((i) => moveSummonSelection(i, columns, "up"))
+      return
+    }
+    if (event.key === "ArrowRight") {
+      event.preventDefault()
+      setSelected((i) => moveSummonSelection(i, columns, "right"))
+      return
+    }
+    if (event.key === "ArrowLeft") {
+      event.preventDefault()
+      setSelected((i) => moveSummonSelection(i, columns, "left"))
       return
     }
     if (event.key === "Home") {
@@ -280,13 +254,10 @@ export function SummonPalette() {
 
   if (!summonOpen) return null
 
-  const showGo = tab === "all" || tab === "go"
-  const showSurface = tab === "all" || tab === "surface"
-
   return (
     <div className="ops-sheet-overlay" role="presentation" onClick={dismiss}>
       <div
-        className="ops-sheet"
+        className="ops-sheet ops-sheet--board"
         role="dialog"
         aria-modal="true"
         aria-label="Summon"
@@ -310,21 +281,6 @@ export function SummonPalette() {
             autoComplete="off"
             spellCheck={false}
           />
-          <div className="ops-sheet__tabs" role="tablist" aria-label="Summon categories">
-            {SUMMON_TABS.map((entry) => (
-              <button
-                key={entry.id}
-                type="button"
-                role="tab"
-                aria-selected={tab === entry.id}
-                className={`ops-sheet__tab${tab === entry.id ? " is-active" : ""}`}
-                onClick={() => setTab(entry.id)}
-              >
-                <span className="ops-sheet__tab-num">[{entry.num}]</span>
-                <span>{entry.label}</span>
-              </button>
-            ))}
-          </div>
         </header>
 
         <div className="ops-sheet__context">
@@ -338,53 +294,49 @@ export function SummonPalette() {
         </div>
 
         <div className="ops-sheet__grid" id="summon-list" role="listbox" aria-label="Summon">
-          {navItems.length === 0 ? (
-            <div className="ops-sheet__empty">
-              No matches for “{query.trim() || tab}”
-            </div>
-          ) : (
-            <>
-              {showGo && goItems.length > 0 ? (
-                <section className="ops-sheet__col">
-                  <h3 className="ops-sheet__col-title">Go to Space · Preset</h3>
-                  <ul className="ops-sheet__rows">
-                    {goItems.map((item) => (
-                      <SummonRow
-                        key={summonItemKey(item)}
-                        item={item}
-                        selected={item === current}
-                        present={false}
-                        currentSpace={item.kind === "space" && item.id === activeViewId}
-                        onHover={() => setSelected(navItems.indexOf(item))}
-                        onOpen={() => onEnter(item, false)}
-                      />
-                    ))}
-                  </ul>
-                </section>
-              ) : null}
-              {showSurface && surfaceItems.length > 0 ? (
-                <section className="ops-sheet__col">
-                  <h3 className="ops-sheet__col-title">Summon surface</h3>
-                  <ul className="ops-sheet__rows">
-                    {surfaceItems.map((item) => {
-                      const present = presentTypes.has(item.type)
-                      return (
-                        <SummonRow
-                          key={summonItemKey(item)}
-                          item={item}
-                          selected={item === current}
-                          present={present}
-                          currentSpace={false}
-                          onHover={() => setSelected(navItems.indexOf(item))}
-                          onOpen={() => onEnter(item, false)}
-                        />
-                      )
-                    })}
-                  </ul>
-                </section>
-              ) : null}
-            </>
-          )}
+          <section className="ops-sheet__col">
+            <h3 className="ops-sheet__col-title">Go to Space · Preset</h3>
+            {columns.go.length === 0 ? (
+              <p className="ops-sheet__col-empty">No matches</p>
+            ) : (
+              <ul className="ops-sheet__rows">
+                {columns.go.map((item) => (
+                  <SummonRow
+                    key={summonItemKey(item)}
+                    item={item}
+                    selected={item === current}
+                    present={false}
+                    currentSpace={item.kind === "space" && item.id === activeViewId}
+                    onHover={() => setSelected(navItems.indexOf(item))}
+                    onOpen={() => onEnter(item, false)}
+                  />
+                ))}
+              </ul>
+            )}
+          </section>
+          <section className="ops-sheet__col">
+            <h3 className="ops-sheet__col-title">Summon surface</h3>
+            {columns.surface.length === 0 ? (
+              <p className="ops-sheet__col-empty">No matches</p>
+            ) : (
+              <ul className="ops-sheet__rows">
+                {columns.surface.map((item) => {
+                  const present = presentTypes.has(item.type)
+                  return (
+                    <SummonRow
+                      key={summonItemKey(item)}
+                      item={item}
+                      selected={item === current}
+                      present={present}
+                      currentSpace={false}
+                      onHover={() => setSelected(navItems.indexOf(item))}
+                      onOpen={() => onEnter(item, false)}
+                    />
+                  )
+                })}
+              </ul>
+            )}
+          </section>
         </div>
 
         <footer className="ops-sheet__footer">
@@ -399,9 +351,8 @@ function summonFooterHints(primary: string, hasQuery: boolean): readonly KbdHint
   return [
     { keys: ["↵"], label: primary },
     { keys: [MOD, "↵"], label: "keep" },
-    { keys: ["↑", "↓"], label: "navigate" },
-    { keys: ["1–3"], label: "categories" },
-    { keys: ["Tab"], label: "cycle" },
+    { keys: ["↑", "↓"], label: "move" },
+    { keys: ["←", "→"], label: "column" },
     { keys: ["Esc"], label: hasQuery ? "clear" : "dismiss" },
   ]
 }

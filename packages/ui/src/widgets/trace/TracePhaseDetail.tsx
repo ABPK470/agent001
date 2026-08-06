@@ -1,8 +1,11 @@
 /**
  * Phase detail — timeline, steps, accordion JSON blocks.
+ * Timeline / step rows register for detail ↑↓; collapsibles for ←→ / Space.
  */
 
+import { useRef } from "react"
 import { JsonViewer } from "../../components/JsonViewer"
+import { useRegisterDetailRow } from "../../components/review/DetailSectionContext"
 import { formatMs } from "../../lib/util"
 import type { TracePhaseDetail, TracePhaseNode } from "./build-trace-dag"
 import { TraceDetailCollapsible } from "./TraceDetailCollapsible"
@@ -21,6 +24,75 @@ function TimelineDot({ kind }: { kind: ReturnType<typeof timelineEventKind> }) {
     <span className={`trace-phase-timeline__dot is-${kind}`} aria-hidden>
       {kind === "error" ? "✕" : kind === "warn" ? "!" : kind === "complete" ? "✓" : "●"}
     </span>
+  )
+}
+
+function TracePhaseTimelineRow({
+  kind,
+  tone,
+  displayText,
+  offsetMs,
+  showLine,
+}: {
+  kind: ReturnType<typeof timelineEventKind>
+  tone: string | undefined
+  displayText: string
+  offsetMs: number
+  showLine: boolean
+}) {
+  const rowRef = useRef<HTMLLIElement>(null)
+  const { active, activate } = useRegisterDetailRow(rowRef)
+
+  return (
+    <li
+      ref={rowRef}
+      className={[
+        "trace-phase-timeline__item",
+        tone && tone !== "neutral" ? `is-${tone}` : "",
+        `is-${kind}`,
+        active ? "is-section-focused" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+      onClick={activate}
+    >
+      <span className="trace-phase-timeline__rail" aria-hidden>
+        <TimelineDot kind={kind} />
+        {showLine ? <span className="trace-phase-timeline__line" /> : null}
+      </span>
+      <div className="trace-phase-timeline__body">
+        <div className="trace-phase-timeline__text">
+          <TracePhaseEventText text={displayText} />
+        </div>
+        <span className="trace-phase-timeline__time tabular-nums">
+          {formatMs(offsetMs)}
+        </span>
+      </div>
+    </li>
+  )
+}
+
+function TracePhaseStepRow({
+  index,
+  name,
+}: {
+  index: number
+  name: string
+}) {
+  const rowRef = useRef<HTMLLIElement>(null)
+  const { active, activate } = useRegisterDetailRow(rowRef)
+
+  return (
+    <li
+      ref={rowRef}
+      className={`trace-phase-step${active ? " is-section-focused" : ""}`}
+      onClick={activate}
+    >
+      <span className="trace-phase-step__idx tabular-nums">{index}</span>
+      <div className="trace-phase-step__body">
+        <div className="trace-phase-step__name font-mono">{name}</div>
+      </div>
+    </li>
   )
 }
 
@@ -76,30 +148,16 @@ export function TracePhaseDetail({
           <ol className="trace-phase-timeline">
             {timelineEvents.map((ev, index) => {
               const isLast = index === timelineEvents.length - 1
-              // Kind from original lifecycle text + tree outcome; copy may rewrite Finished→Failed.
               const kind = timelineEventKind(ev.text, ev.tone, isLast, outcome)
-              const displayText = timelineEventDisplayText(ev.text, outcome)
-              const offsetMs = offsets[index] ?? 0
               return (
-                <li
+                <TracePhaseTimelineRow
                   key={ev.id}
-                  className={`trace-phase-timeline__item${ev.tone && ev.tone !== "neutral" ? ` is-${ev.tone}` : ""} is-${kind}`}
-                >
-                  <span className="trace-phase-timeline__rail" aria-hidden>
-                    <TimelineDot kind={kind} />
-                    {index < timelineEvents.length - 1 ? (
-                      <span className="trace-phase-timeline__line" />
-                    ) : null}
-                  </span>
-                  <div className="trace-phase-timeline__body">
-                    <div className="trace-phase-timeline__text">
-                      <TracePhaseEventText text={displayText} />
-                    </div>
-                    <span className="trace-phase-timeline__time tabular-nums">
-                      {formatMs(offsetMs)}
-                    </span>
-                  </div>
-                </li>
+                  kind={kind}
+                  tone={ev.tone}
+                  displayText={timelineEventDisplayText(ev.text, outcome)}
+                  offsetMs={offsets[index] ?? 0}
+                  showLine={index < timelineEvents.length - 1}
+                />
               )
             })}
           </ol>
@@ -111,12 +169,7 @@ export function TracePhaseDetail({
           <div className="trace-detail-section__label">Steps</div>
           <ol className="trace-phase-steps">
             {steps.map((step, i) => (
-              <li key={step.id} className="trace-phase-step">
-                <span className="trace-phase-step__idx tabular-nums">{i + 1}</span>
-                <div className="trace-phase-step__body">
-                  <div className="trace-phase-step__name font-mono">{step.name}</div>
-                </div>
-              </li>
+              <TracePhaseStepRow key={step.id} index={i + 1} name={step.name} />
             ))}
           </ol>
         </section>

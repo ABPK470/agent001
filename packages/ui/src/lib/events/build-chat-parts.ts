@@ -20,6 +20,7 @@ import {
 import { formatMs } from "../util"
 import { isPlannerStepSuccessStatus, plannerStepEndDetail } from "./planner-step-status"
 import { reconcilePlannerStepGroups } from "./reconcile-step-groups"
+import { terminalSpanStatus } from "./run-terminal"
 import type { ViewSpec } from "./types"
 
 const POLISHED_FAILURE_MARKER = "\u2063pfm:\u2063"
@@ -1394,12 +1395,9 @@ export function buildResponseParts(
     parts.push({ kind: "markdown", id: `answer-${runId}`, text: stripFailureMarker(finalAnswer), streaming: stillStreaming })
   }
 
-  if (!isRunActiveStatus(runStatus)) {
+  const terminalStatus = terminalSpanStatus(runStatus)
+  if (terminalStatus) {
     // Cancelled (incl. approval deny) is not a tool failure — seal in-flight as done.
-    const terminalStatus: "done" | "error" =
-      runStatus === RunStatus.Completed || runStatus === RunStatus.Cancelled
-        ? "done"
-        : "error"
     parts = parts.map((part) => {
       if (part.kind === "progress" && part.status === "running") {
         return { ...part, status: terminalStatus, shimmer: false }
