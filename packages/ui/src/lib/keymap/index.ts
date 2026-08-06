@@ -18,3 +18,15 @@ export {
   SUMMON_HINTS,
   hintsForTracePane,
 } from "./bindings"
+export {
+  SHORTCUT_REGISTRY,
+  KEYMAP_TABS,
+  filterShortcutRegistry,
+  nextKeymapTab,
+  keymapTabFromDigit,
+  matchesKeymapTab,
+  type KeymapCategory,
+  type KeymapTab,
+  type ShortcutItem,
+} from "./registry"
+export { resolveKeymapActiveContext } from "./active-context"

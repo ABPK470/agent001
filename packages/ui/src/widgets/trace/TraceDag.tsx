@@ -108,6 +108,7 @@ export function TraceDag({
   const toggleTileMaximized = useLayoutStore((s) => s.toggleTileMaximized)
   const summonOpen = useStore((s) => s.summonOpen)
   const setSummonOpen = useStore((s) => s.setSummonOpen)
+  const setTraceOperatorPane = useStore((s) => s.setTraceOperatorPane)
   const modalWidget = useStore((s) => s.modalWidget)
   const zenHotkeysEnabled =
     isZen || isSolo || Boolean(widgetInstance && focusedTileId === widgetInstance.widgetId)
@@ -125,6 +126,16 @@ export function TraceDag({
   const [zenSearchOpen, setZenSearchOpen] = useState(false)
   const [focusedPane, setFocusedPane] = useState<TracePane>("tree")
   const [splitRatio, setSplitRatio] = useState(TRACE_SPLIT_DEFAULT)
+
+  // Publish Trace pane for keymap Active Context (clear when Trace loses keys).
+  useEffect(() => {
+    if (!zenHotkeysEnabled) {
+      setTraceOperatorPane(null)
+      return
+    }
+    setTraceOperatorPane(focusedPane)
+    return () => setTraceOperatorPane(null)
+  }, [focusedPane, setTraceOperatorPane, zenHotkeysEnabled])
   const treeScrollRef = useRef<HTMLDivElement>(null)
   const detailScrollRef = useRef<HTMLDivElement>(null)
   const tabCycleRef = useRef<((direction: -1 | 1) => void) | null>(null)

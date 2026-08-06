@@ -366,14 +366,21 @@ segments / icon buttons), one JSON/payload surface. Pipelines shares toolbar
 expand/collapse with Trace (`ReviewTreeFoldToggle` in trailing toolbar). Trace sticky pin stays.
 
 **Spaces, Summon, keyboard (operator console):** Product **Spaces** (Agent /
-Observe / Reconcile / Bridge) are curated job landings — not DIY-named
-sheets as the primary path. **Summon** (⌘/Ctrl+K) peeks a widget or Calls a
-Space; Keep in Space is explicit. Trace (and later Pipelines) own **pane
-focus** with one Esc ladder (overlay → filter → pane → zen → maximize).
-Shell chords: Call Space (⌘/Ctrl+1–4), tile focus (⌘/Ctrl+⇧+arrows — not
-⌥; ⌘/Ctrl+⌥ alone toggles chat↔workspace), M maximize, Z zen, ⌘/Ctrl+W
-close tile, `?` keymap. Operator guide: `docs/operator-keyboard.md`. See
-`lib/spaces.ts`, `lib/keymap/`, `app/workspace/SummonPalette.tsx`.
+Observe / Reconcile / Bridge / Debug) are curated job landings with fixed
+default autolayouts — not DIY-named sheets as the primary path. Observe =
+Pipelines 70% / Event stream 30%; Debug = Threads 20% / Trace 80%;
+Reconcile = Sync / Entity registry 50/50; Agent = Trace 60% with Chat /
+Threads splitting the remaining 40%. **Summon** (⌘/Ctrl+K) is widget-first:
+Enter peeks a widget (or focuses it if already on the Space); ⌘/Ctrl+Enter
+Keeps a widget in the current Space; Spaces navigate (Call); bundles open a
+home Space and focus a primary tile — never auto-maximize. Trace owns
+**pane focus** with one Esc ladder (overlay → filter → pane → zen →
+maximize). Shell chords: Call Space (⌘/Ctrl+1–4), tile focus
+(⌘/Ctrl+⇧+arrows — not ⌥; ⌘/Ctrl+⌥ alone toggles chat↔workspace), M
+maximize, Z zen, ⌘/Ctrl+W close tile, `?` keymap (searchable zero-scroll sheet: All / Pane / Shell).
+Operator guide:
+`docs/operator-keyboard.md`. See `lib/spaces.ts`, `lib/summon-resolve.ts`,
+`lib/keymap/`, `app/workspace/SummonPalette.tsx`.
 
 | Layer | Owns | Must not |
 | --- | --- | --- |

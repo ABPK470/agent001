@@ -1,28 +1,71 @@
 import { describe, expect, it } from "vitest"
+import { COLS } from "./grid-math"
+import { layoutLeaves, canvasBounds } from "./split-tree"
 import {
   PRODUCT_SPACES,
+  SPACE_LAYOUT_VERSION,
   buildSpaceView,
   mergeProductSpaces,
+  reapplyProductSpaceLayouts,
   resetSpaceView,
   spaceByIndex,
 } from "./spaces"
 
+function leafRatio(
+  view: ReturnType<typeof buildSpaceView>,
+  type: string,
+  axis: "w" | "h",
+): number {
+  const tile = view.tiles.find((t) => t.type === type)
+  expect(tile).toBeTruthy()
+  const leaves = layoutLeaves(view.split, canvasBounds(COLS, 24))
+  const leaf = leaves.find((l) => l.tileId === tile!.id)
+  expect(leaf).toBeTruthy()
+  const total = axis === "w" ? COLS : 24
+  return leaf!.rect[axis] / total
+}
+
 describe("product spaces", () => {
   it("exposes four Call Space indices", () => {
-    expect(PRODUCT_SPACES.map((s) => s.index)).toEqual([1, 2, 3, 4])
+    expect(PRODUCT_SPACES.filter((s) => s.index >= 1).map((s) => s.index)).toEqual([
+      1, 2, 3, 4,
+    ])
     expect(spaceByIndex(2)?.id).toBe("space:observe")
+    expect(spaceByIndex(0)).toBeUndefined()
   })
 
-  it("builds curated Observe widgets", () => {
+  it("Observe is Pipelines 70% | Event stream 30%", () => {
     const view = buildSpaceView(PRODUCT_SPACES.find((s) => s.id === "space:observe")!)
-    expect(view.id).toBe("space:observe")
+    expect(view.tiles.map((t) => t.type)).toEqual(["operation-log", "live-logs"])
+    expect(leafRatio(view, "operation-log", "w")).toBeCloseTo(0.7, 2)
+    expect(leafRatio(view, "live-logs", "w")).toBeCloseTo(0.3, 2)
+  })
+
+  it("Debug is Threads 20% | Trace 80%", () => {
+    const view = buildSpaceView(PRODUCT_SPACES.find((s) => s.id === "space:debug")!)
+    expect(view.tiles.map((t) => t.type)).toEqual(["thread-nav", "debug-inspector"])
+    expect(leafRatio(view, "thread-nav", "w")).toBeCloseTo(0.2, 2)
+    expect(leafRatio(view, "debug-inspector", "w")).toBeCloseTo(0.8, 2)
+  })
+
+  it("Reconcile is Sync | Entity registry 50/50", () => {
+    const view = buildSpaceView(PRODUCT_SPACES.find((s) => s.id === "space:reconcile")!)
+    expect(leafRatio(view, "env-sync", "w")).toBeCloseTo(0.5, 2)
+    expect(leafRatio(view, "entity-registry", "w")).toBeCloseTo(0.5, 2)
+  })
+
+  it("Agent is Trace 60% | Chat/Threads 50/50 in the remaining 40%", () => {
+    const view = buildSpaceView(PRODUCT_SPACES.find((s) => s.id === "space:agent")!)
     expect(view.tiles.map((t) => t.type)).toEqual([
-      "operation-log",
-      "live-logs",
-      "thread-nav",
       "debug-inspector",
+      "term-chat",
+      "thread-nav",
     ])
-    expect(view.split).not.toBeNull()
+    expect(leafRatio(view, "debug-inspector", "w")).toBeCloseTo(0.6, 2)
+    expect(leafRatio(view, "term-chat", "w")).toBeCloseTo(0.4, 2)
+    expect(leafRatio(view, "thread-nav", "w")).toBeCloseTo(0.4, 2)
+    expect(leafRatio(view, "term-chat", "h")).toBeCloseTo(0.5, 2)
+    expect(leafRatio(view, "thread-nav", "h")).toBeCloseTo(0.5, 2)
   })
 
   it("merges missing Spaces without wiping Main", () => {
@@ -34,17 +77,39 @@ describe("product spaces", () => {
     }
     const merged = mergeProductSpaces([main])
     expect(merged.some((v) => v.id === "default")).toBe(true)
-    expect(merged.filter((v) => v.id.startsWith("space:")).length).toBe(4)
+    expect(merged.filter((v) => v.id.startsWith("space:")).length).toBe(PRODUCT_SPACES.length)
+  })
+
+  it("reapply rebuilds product Spaces and keeps DIY views", () => {
+    const main = {
+      id: "default",
+      name: "Main",
+      tiles: [],
+      split: null,
+    }
+    const polluted = {
+      ...buildSpaceView(PRODUCT_SPACES.find((s) => s.id === "space:observe")!),
+      tiles: [],
+      split: null,
+    }
+    const next = reapplyProductSpaceLayouts([main, polluted])
+    expect(next.some((v) => v.id === "default")).toBe(true)
+    const observe = next.find((v) => v.id === "space:observe")
+    expect(observe?.tiles.map((t) => t.type)).toEqual(["operation-log", "live-logs"])
   })
 
   it("resets a Space to product defaults", () => {
-    const built = buildSpaceView(PRODUCT_SPACES[1]!)
+    const built = buildSpaceView(PRODUCT_SPACES.find((s) => s.id === "space:observe")!)
     const polluted = {
       ...built,
       tiles: built.tiles.slice(0, 1),
       split: null,
     }
     const reset = resetSpaceView([polluted], "space:observe")
-    expect(reset[0]!.tiles.length).toBe(4)
+    expect(reset[0]!.tiles.length).toBe(2)
+  })
+
+  it("exports a layout version for persistence migration", () => {
+    expect(SPACE_LAYOUT_VERSION).toBeGreaterThanOrEqual(4)
   })
 })

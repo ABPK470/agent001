@@ -69,6 +69,7 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
   const catalogHint = openWidgetCatalogHint()
   const renameView = useLayoutStore((s) => s.renameView)
   const soloTileId = useLayoutStore((s) => s.soloTileId)
+  const focusedTileId = useLayoutStore((s) => s.focusedTileId)
   const toggleTileMaximized = useLayoutStore((s) => s.toggleTileMaximized)
   const [editing, setEditing] = useState<string | null>(null)
   const [editName, setEditName] = useState("")
@@ -176,7 +177,12 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
     ? activeView?.tiles.find((tile) => tile.id === soloTileId)
     : undefined
   const soloLabel = soloTile ? getWidgetDefinition(soloTile.type).label : null
-  const stageOpen = Boolean(onAddWidget) || Boolean(soloLabel && soloTileId)
+  const focusedTile = focusedTileId
+    ? activeView?.tiles.find((tile) => tile.id === focusedTileId)
+    : undefined
+  const focusedLabel = focusedTile ? getWidgetDefinition(focusedTile.type).label : null
+  const stageOpen =
+    Boolean(onAddWidget) || Boolean(soloLabel && soloTileId) || Boolean(focusedLabel)
 
   return (
     <header className={SHELL_CHROME_HEADER_WORKSPACE_CLASS}>
@@ -347,6 +353,14 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
         {stageOpen && (
           <>
             <div className="flex h-9 shrink-0 items-center gap-1.5" aria-label="Layout tools">
+              {focusedLabel && !soloTileId ? (
+                <span
+                  className="toolbar-ops-btn toolbar-ops-btn--active max-w-[12rem] shrink-0 px-2.5 pointer-events-none"
+                  title={`Focused widget · ⌘⇧+arrows to move · M maximize · Z zen`}
+                >
+                  <span className="min-w-0 truncate font-medium leading-none">{focusedLabel}</span>
+                </span>
+              ) : null}
               {soloLabel && soloTileId && (
                 <button
                   type="button"

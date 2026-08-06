@@ -175,7 +175,8 @@ interface GridTilePaneProps {
   zen: boolean
   soloHidden: boolean
   onFocus: () => void
-  onBlur: () => void
+  /** Pointer down anywhere on the tile — sticky selection (not cleared on blur). */
+  onSelect: () => void
   onTransitionEnd: () => void
   onDragPointerDown: (event: ReactPointerEvent) => void
   onResizePointerDown: (edge: ResizeEdge) => (event: ReactPointerEvent) => void
@@ -198,7 +199,7 @@ const GridTilePane = memo(function GridTilePane({
   zen,
   soloHidden,
   onFocus,
-  onBlur,
+  onSelect,
   onTransitionEnd,
   onDragPointerDown,
   onResizePointerDown,
@@ -237,7 +238,7 @@ const GridTilePane = memo(function GridTilePane({
       }`}
       style={style}
       onFocus={onFocus}
-      onBlur={onBlur}
+      onPointerDownCapture={onSelect}
       onTransitionEnd={onTransitionEnd}
     >
       <WidgetShell
@@ -412,8 +413,34 @@ export function GridCanvas({ viewId, tiles, split }: Props) {
     }
   }, [enteringTileIds])
 
+  // Always have a selected tile in a Space — never “nothing focused”.
+  useEffect(() => {
+    if (focusedTileId) {
+      if (tiles.some((tile) => tile.id === focusedTileId)) return
+    }
+    const first = tiles[0]
+    if (!first) return
+    setFocusedTile(first.id)
+  }, [focusedTileId, tiles, setFocusedTile])
+
+  // Sticky tile selection: store focus survives clicks into widget content.
+  // Sync DOM focus when selection changes from the keyboard (⌘⇧+arrows / Call Space).
+  useEffect(() => {
+    if (!focusedTileId) return
+    const el = containerRef.current?.querySelector(
+      `[data-tile-id="${CSS.escape(focusedTileId)}"]`,
+    )
+    if (!(el instanceof HTMLElement)) return
+    if (el === document.activeElement || el.contains(document.activeElement)) return
+    const active = document.activeElement
+    if (active instanceof HTMLElement && active.closest(".ops-sheet, [role='dialog']")) {
+      return
+    }
+    el.focus({ preventScroll: true })
+  }, [focusedTileId])
+
   // Layout reparent is Shift+Arrow only — bare arrows belong to widget/pane nav;
-  // Ctrl/Cmd+Alt+Arrow moves tile focus (shell operator keyboard).
+  // ⌘⇧+arrows moves tile focus (shell operator keyboard).
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       if (!focusedTileId || soloTileId || !split) return
@@ -492,7 +519,7 @@ export function GridCanvas({ viewId, tiles, split }: Props) {
                 zen={zenTileId === painted.id}
                 soloHidden={soloHidden}
                 onFocus={() => setFocusedTile(painted.id)}
-                onBlur={() => setFocusedTile(null)}
+                onSelect={() => setFocusedTile(painted.id)}
                 onTransitionEnd={() => {
                   if (isEntering) clearEntering(painted.id)
                 }}

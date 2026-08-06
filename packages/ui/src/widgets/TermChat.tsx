@@ -38,7 +38,6 @@ import {
 } from "./agentchat/failureAnswer"
 import { STICKY_GOAL_HOME_TOP, StickyUserGoal } from "../components/StickyUserGoal"
 import { TypewriterAnswer } from "../components/TypewriterAnswer"
-import { isCancelRaceFailureError } from "../lib/events/trace-terminal"
 import { canResumeRun, isTerminalFailureStatus } from "../lib/run-actions"
 import { useMe } from "../hooks/useMe"
 import { useViewingAs } from "../hooks/useViewingAs"
@@ -107,8 +106,11 @@ import {
   stepBlockHeaderChrome,
 } from "./termchat/stepOutcomeChrome"
 import { collapseResumeRunChains, resumeChainIds } from "./termchat/collapseResumeChains"
+import {
+  canOfferEditCancelledGoal,
+  isCancelTerminalRun,
+} from "./termchat/editCancelledGoal"
 import { formatApprovalWaitLabel } from "../lib/approval-copy"
-import { RunStatus } from "../enums"
 import { planTranscriptReveal } from "./termchat/revealRunInTranscript"
 import {
   deriveTranscriptZones,
@@ -210,10 +212,22 @@ function UserGoalBubble({
   goal,
   showUnpin,
   onUnpin,
+  editing,
+  editDraft,
+  editBusy,
+  onEditDraftChange,
+  onEditSubmit,
+  onEditCancel,
 }: {
   goal: string
   showUnpin?: boolean
   onUnpin?: () => void
+  editing?: boolean
+  editDraft?: string
+  editBusy?: boolean
+  onEditDraftChange?: (value: string) => void
+  onEditSubmit?: () => void
+  onEditCancel?: () => void
 }): React.ReactElement {
   // w-fit: hug the goal text (short goals must not stretch to the column).
   // max-w still caps long goals; ml-auto keeps the pill right-aligned.
@@ -223,6 +237,76 @@ function UserGoalBubble({
   const bodyClass = "min-w-0 px-5 py-3"
   const appendageClass =
     `flex shrink-0 items-center justify-center self-stretch ${userGoalPinSlotClass()} border-r border-border-subtle/70 bg-soft text-text-muted transition-colors hover:bg-panel-2 hover:text-text dark:border-white/8 dark:bg-black/10 dark:hover:bg-bubble-user dark:hover:text-text`
+  const editTextareaRef = useRef<HTMLTextAreaElement | null>(null)
+
+  useLayoutEffect(() => {
+    if (!editing) return
+    const el = editTextareaRef.current
+    if (!el) return
+    el.focus()
+    el.style.height = "auto"
+    el.style.height = `${el.scrollHeight}px`
+    const len = el.value.length
+    el.setSelectionRange(len, len)
+  }, [editing])
+
+  useLayoutEffect(() => {
+    if (!editing) return
+    const el = editTextareaRef.current
+    if (!el) return
+    el.style.height = "auto"
+    el.style.height = `${el.scrollHeight}px`
+  }, [editing, editDraft])
+
+  if (editing && onEditDraftChange && onEditSubmit && onEditCancel) {
+    const canRun = Boolean(editDraft?.trim()) && !editBusy
+    return (
+      <div className={`ml-auto flex w-full flex-col items-end gap-2 ${userGoalTextClass(false)}`}>
+        <div className={`${shellClass} w-full max-w-full`} style={shellStyle}>
+          <div className={bodyClass}>
+            <textarea
+              ref={editTextareaRef}
+              value={editDraft ?? ""}
+              onChange={(e) => onEditDraftChange(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") {
+                  e.preventDefault()
+                  if (!editBusy) onEditCancel()
+                  return
+                }
+                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                  e.preventDefault()
+                  if (canRun) onEditSubmit()
+                }
+              }}
+              disabled={editBusy}
+              rows={2}
+              className="chat-goal-edit__textarea"
+              aria-label="Edit goal"
+            />
+          </div>
+        </div>
+        <div className="chat-goal-edit__actions">
+          <button
+            type="button"
+            onClick={onEditCancel}
+            disabled={editBusy}
+            className="chat-goal-edit__btn"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onEditSubmit}
+            disabled={!canRun}
+            className="chat-goal-edit__btn chat-goal-edit__btn--primary"
+          >
+            {editBusy ? "Running…" : "Run"}
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   // Unpinned: pill caps at column − pin slot (ml-auto), so the left gutter
   // stays outside the pill. Pinned: pin fills that gutter; text does not move.
@@ -268,6 +352,9 @@ function ChatTurn({
   onNotify,
   onNotifyError,
   onParallelFanOutChange,
+  editGoalReadOnly,
+  editGoalThreadBusy,
+  onSubmitEditedGoal,
 }: {
   run: {
     id: string
@@ -277,6 +364,7 @@ function ChatTurn({
     status: string
     answer: string | null
     error: string | null
+    completedAt?: string | null
     pendingWorkspaceChanges?: number
     trace?: TraceEntry[]
     streamingAnswer?: string
@@ -293,6 +381,9 @@ function ChatTurn({
   onNotify?: (message: string) => void
   onNotifyError?: (message: string) => void
   onParallelFanOutChange?: (fanOut: boolean) => void
+  editGoalReadOnly: boolean
+  editGoalThreadBusy: boolean
+  onSubmitEditedGoal: (goal: string) => Promise<void>
 }): React.ReactElement {
   const allRuns = useStore((s) => s.runs)
   const supersededByResume = allRuns.some((r) => r.parentRunId === run.id)
@@ -300,11 +391,34 @@ function ChatTurn({
   const sentinelRef = useRef<HTMLDivElement>(null)
   const stickyRef = useRef<HTMLDivElement>(null)
   const [isStuck, setIsStuck] = useState(false)
+  const [editingGoal, setEditingGoal] = useState(false)
+  const [editDraft, setEditDraft] = useState(run.goal)
+  const [editBusy, setEditBusy] = useState(false)
   const { scrollHostRef } = useChatScroll()
   const { stickyOffsetPx, topClass: pinTopClass, stuckScrollThreshold } = goalPinLayout(pinProfile)
 
+  const isOwnGoal = !run.upn || run.upn.toLowerCase() === me?.upn?.toLowerCase()
+  const cancelTerminal = isCancelTerminalRun({
+    status: run.status,
+    error: run.error,
+    supersededByResume,
+  })
+  const canEdit = canOfferEditCancelledGoal({
+    isOwnGoal,
+    readOnly: editGoalReadOnly,
+    threadBusy: editGoalThreadBusy,
+    isCancelTerminal: cancelTerminal,
+  })
+
   const pinned = !unpinned
-  const showUnpin = pinned && isStuck
+  const showUnpin = pinned && isStuck && !editingGoal
+
+  useEffect(() => {
+    // Keep the in-flight editor while submit marks the thread busy.
+    if (canEdit || editBusy) return
+    setEditingGoal(false)
+    setEditDraft(run.goal)
+  }, [canEdit, editBusy, run.goal])
 
   useEffect(() => {
     if (!pinned) {
@@ -399,7 +513,50 @@ function ChatTurn({
     onUnpin(run.id)
   }
 
-  const isOwnGoal = !run.upn || run.upn.toLowerCase() === me?.upn?.toLowerCase()
+  const beginEditGoal = useCallback(() => {
+    if (unpinned) onClearUnpin(run.id)
+    setEditDraft(run.goal)
+    setEditingGoal(true)
+  }, [unpinned, onClearUnpin, run.id, run.goal])
+
+  const cancelEditGoal = useCallback(() => {
+    if (editBusy) return
+    setEditingGoal(false)
+    setEditDraft(run.goal)
+  }, [editBusy, run.goal])
+
+  const submitEditGoal = useCallback(async () => {
+    const goal = editDraft.trim()
+    if (!goal || editBusy) return
+    setEditBusy(true)
+    try {
+      await onSubmitEditedGoal(goal)
+      setEditingGoal(false)
+    } catch (err: unknown) {
+      // Parent already toasts; keep the draft so the user can retry.
+      console.error("[mia]", err)
+    } finally {
+      setEditBusy(false)
+    }
+  }, [editDraft, editBusy, onSubmitEditedGoal])
+
+  const onEditSubmitClick = useCallback(() => {
+    void submitEditGoal().catch((err: unknown) => { console.error("[mia]", err) })
+  }, [submitEditGoal])
+
+  const goalBubble = (
+    <UserGoalBubble
+      goal={run.goal}
+      showUnpin={showUnpin}
+      onUnpin={handleUnpin}
+      editing={editingGoal}
+      editDraft={editDraft}
+      editBusy={editBusy}
+      onEditDraftChange={setEditDraft}
+      onEditSubmit={onEditSubmitClick}
+      onEditCancel={cancelEditGoal}
+    />
+  )
 
   return (
     <div
@@ -425,12 +582,10 @@ function ChatTurn({
                   <span className="px-1.5 text-[15px] font-medium uppercase tracking-wide text-text-muted">
                     {run.displayName ?? run.upn}
                   </span>
-                  <UserGoalBubble goal={run.goal} showUnpin={showUnpin} onUnpin={handleUnpin} />
+                  {goalBubble}
                 </div>
               )}
-              {isOwnGoal && (
-                <UserGoalBubble goal={run.goal} showUnpin={showUnpin} onUnpin={handleUnpin} />
-              )}
+              {isOwnGoal && goalBubble}
             </div>
           </StickyUserGoal>
         ) : null}
@@ -445,6 +600,7 @@ function ChatTurn({
             onNotify={onNotify}
             onNotifyError={onNotifyError}
             onParallelFanOutChange={isActive ? onParallelFanOutChange : undefined}
+            onEditCancelledGoal={canEdit && !editingGoal ? beginEditGoal : undefined}
           />
         </div>
       </div>
@@ -1288,10 +1444,14 @@ function ChatRunTerminalNotice({
   kind,
   completedAt,
   detail,
+  actionLabel,
+  onAction,
 }: {
   kind: "cancelled" | "failed"
   completedAt?: string | null
   detail: string
+  actionLabel?: string
+  onAction?: () => void
 }) {
   const time = formatRunTerminalTime(completedAt)
   const label =
@@ -1302,6 +1462,15 @@ function ChatRunTerminalNotice({
     <div className="chat-run-terminal">
       <ChatSystemDivider label={label} tone={kind === "cancelled" ? "warn" : "err"} />
       {detail ? <p className="chat-run-terminal__detail">{detail}</p> : null}
+      {actionLabel && onAction ? (
+        <button
+          type="button"
+          onClick={onAction}
+          className="chat-run-terminal__action"
+        >
+          {actionLabel}
+        </button>
+      ) : null}
     </div>
   )
 }
@@ -1562,6 +1731,7 @@ function RunMessageImpl({
   onNotify,
   onNotifyError,
   onParallelFanOutChange,
+  onEditCancelledGoal,
 }: {
   run: {
     id: string
@@ -1581,6 +1751,7 @@ function RunMessageImpl({
   onNotifyError?: (message: string) => void
   /** Active turn only — pauses transcript stick-to-bottom while 2+ subagents run. */
   onParallelFanOutChange?: (fanOut: boolean) => void
+  onEditCancelledGoal?: () => void
 }) {
   const trace = run.trace ?? []
   const liveStreamingAnswer = isActive && isRunActiveStatus(run.status) ? (run.streamingAnswer ?? "") : ""
@@ -1591,13 +1762,11 @@ function RunMessageImpl({
   const isDone = !isRunActiveStatus(run.status)
   const isLiveRun = isActive && !isDone
   const parallelFanOut = isParallelSubagentFanOut(responseParts)
-  const isCancelTerminal =
-    !supersededByResume
-    && run.status !== RunStatus.WaitingForApproval
-    && (
-      run.status === RunStatus.Cancelled
-      || (Boolean(run.error) && isCancelRaceFailureError(run.error) && isTerminalFailureStatus(run.status))
-    )
+  const isCancelTerminal = isCancelTerminalRun({
+    status: run.status,
+    error: run.error,
+    supersededByResume,
+  })
 
   useEffect(() => {
     if (!isActive) {
@@ -1826,6 +1995,8 @@ function RunMessageImpl({
           kind="cancelled"
           completedAt={run.completedAt}
           detail={chatCancelDetail(run.error)}
+          actionLabel={onEditCancelledGoal ? "Edit message" : undefined}
+          onAction={onEditCancelledGoal}
         />
       ) : null}
       {run.error && !isCancelTerminal && isTerminalFailureStatus(run.status) ? (
@@ -1854,6 +2025,7 @@ const RunMessage = React.memo(RunMessageImpl, (prev, next) => {
     && prev.onNotify === next.onNotify
     && prev.onNotifyError === next.onNotifyError
     && prev.onParallelFanOutChange === next.onParallelFanOutChange
+    && prev.onEditCancelledGoal === next.onEditCancelledGoal
     // pendingInput only matters for the run it targets
     && (prev.pendingInput?.runId === next.pendingInput?.runId
       ? prev.pendingInput?.question === next.pendingInput?.question
@@ -2314,6 +2486,55 @@ export function TermChat({
     [setDraft, slashOnlyMode],
   )
 
+  const startGoalRun = useCallback(async (
+    effectiveGoal: string,
+    opts?: { attachmentIds?: string[]; restoreComposerDraftOnError?: boolean },
+  ) => {
+    const threadId = continuityThreadId
+    if (!threadId) {
+      throw new Error("No thread selected")
+    }
+    setSending(true)
+    try {
+      const { runId } = await useStore.getState().startRun(
+        effectiveGoal,
+        opts?.attachmentIds && opts.attachmentIds.length > 0 ? opts.attachmentIds : undefined,
+        threadId,
+      )
+      useStore.getState().revealThreadTitleFromGoal(threadId, effectiveGoal)
+      setScrollToRunId(runId)
+      // Reveal is effect-driven (scrollToRunId + displayRuns) so VirtualList
+      // scrollToIndex runs after the new turn is in displayRuns — not here
+      // with a stale closure that only scrollHeights.
+      return runId
+    } catch (e) {
+      // Surface the server error and ensure the chat doesn't get stuck on
+      // "Working". A failed startRun never produces a runs row, so any
+      // activeRunId we may have optimistically picked up from an SSE
+      // race must be cleared too.
+      const msg = e instanceof Error ? e.message : String(e)
+      notifyError(`Failed to start run: ${msg}`)
+      setActiveRun(null)
+      if (opts?.restoreComposerDraftOnError) {
+        setDraft(effectiveGoal)
+      }
+      throw e
+    } finally {
+      setSending(false)
+    }
+  }, [continuityThreadId, setActiveRun, setDraft, notifyError])
+
+  const submitEditedGoal = useCallback(async (goal: string) => {
+    if (isViewingAsOther) {
+      notifyError("Viewing as another user is read-only")
+      throw new Error("read-only")
+    }
+    const trimmed = goal.trim()
+    if (!trimmed) throw new Error("empty goal")
+    if (sending) throw new Error("busy")
+    await startGoalRun(trimmed)
+  }, [isViewingAsOther, notifyError, sending, startGoalRun])
+
   const send = useCallback(async () => {
     if (isViewingAsOther) {
       notifyError("Viewing as another user is read-only")
@@ -2335,38 +2556,19 @@ export function TermChat({
     const effectiveGoal = goal || `Review the attached file${pendingAttachments.length === 1 ? "" : "s"}.`
     const attachmentIds = pendingAttachments.map((a) => a.id)
     clearDraft()
-    setSending(true)
     try {
-      const threadId = continuityThreadId
-      if (!threadId) {
-        throw new Error("No thread selected")
-      }
-      const { runId } = await useStore.getState().startRun(
-        effectiveGoal,
-        attachmentIds.length > 0 ? attachmentIds : undefined,
-        threadId
-      )
-      useStore.getState().revealThreadTitleFromGoal(threadId, effectiveGoal)
-      setScrollToRunId(runId)
-      // Reveal is effect-driven (scrollToRunId + displayRuns) so VirtualList
-      // scrollToIndex runs after the new turn is in displayRuns — not here
-      // with a stale closure that only scrollHeights.
+      await startGoalRun(effectiveGoal, {
+        attachmentIds,
+        restoreComposerDraftOnError: true,
+      })
       // Only clear chips after a successful start so the user doesn't
       // lose context if the request failed mid-flight.
       setPendingAttachments([])
-    } catch (e) {
-      // Surface the server error and ensure the chat doesn't get stuck on
-      // "Working". A failed startRun never produces a runs row, so any
-      // activeRunId we may have optimistically picked up from an SSE
-      // race must be cleared too.
-      const msg = e instanceof Error ? e.message : String(e)
-      notifyError(`Failed to start run: ${msg}`)
-      setActiveRun(null)
-      setDraft(effectiveGoal)
-    } finally {
-      setSending(false)
+    } catch (err: unknown) {
+      // Toast already shown by startGoalRun.
+      console.error("[mia]", err)
     }
-  }, [input, sending, slashOnlyMode, setActiveRun, pendingAttachments, continuityThreadId, mode, tryDispatchSlash, clearDraft, setDraft, notifyError, isViewingAsOther])
+  }, [input, sending, slashOnlyMode, pendingAttachments, tryDispatchSlash, clearDraft, notifyError, isViewingAsOther, startGoalRun])
 
   const cancel = useCallback(async () => {
     if (isViewingAsOther) return
@@ -2806,6 +3008,9 @@ export function TermChat({
         onNotify={notify}
         onNotifyError={notifyError}
         onParallelFanOutChange={handleParallelFanOutChange}
+        editGoalReadOnly={isViewingAsOther}
+        editGoalThreadBusy={isRunning || sending}
+        onSubmitEditedGoal={submitEditedGoal}
       />
     )
     if (!opts?.liveZone) return turn

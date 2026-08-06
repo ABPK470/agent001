@@ -21,7 +21,6 @@ export function useShellOperatorKeyboard(enabled: boolean) {
   const summonOpen = useStore((s) => s.summonOpen)
   const keymapSheetOpen = useStore((s) => s.keymapSheetOpen)
   const setKeymapSheetOpen = useStore((s) => s.setKeymapSheetOpen)
-  const setSummonOpen = useStore((s) => s.setSummonOpen)
   const modalWidget = useStore((s) => s.modalWidget)
   const closeModalWidget = useStore((s) => s.closeModalWidget)
   const requestWorkspaceShell = useStore((s) => s.requestWorkspaceShell)
@@ -36,18 +35,8 @@ export function useShellOperatorKeyboard(enabled: boolean) {
       // Esc: dismiss summon / peek when shell owns them (widget ladder runs too;
       // stop if we consume).
       if (event.key === "Escape") {
-        if (keymapSheetOpen) {
-          event.preventDefault()
-          event.stopPropagation()
-          setKeymapSheetOpen(false)
-          return
-        }
-        if (summonOpen) {
-          event.preventDefault()
-          event.stopPropagation()
-          setSummonOpen(false)
-          return
-        }
+        // Keymap / Summon own Esc (clear filter → close). Do not steal it here.
+        if (keymapSheetOpen || summonOpen) return
         if (modalWidget) {
           event.preventDefault()
           event.stopPropagation()
@@ -110,7 +99,6 @@ export function useShellOperatorKeyboard(enabled: boolean) {
     requestChatShell,
     requestWorkspaceShell,
     setKeymapSheetOpen,
-    setSummonOpen,
     summonOpen,
     toggleTileMaximized,
     views,

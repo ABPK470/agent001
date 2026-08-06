@@ -392,6 +392,12 @@ interface AppState {
   /** On-demand keymap sheet (?). */
   keymapSheetOpen: boolean
   setKeymapSheetOpen: (open: boolean) => void
+  /**
+   * Trace pane that currently owns operator keys — drives keymap Active Context.
+   * Null when Trace is not the focused operator surface.
+   */
+  traceOperatorPane: "tree" | "detail" | null
+  setTraceOperatorPane: (pane: "tree" | "detail" | null) => void
 
   /** Summon / Call Space asks App to show the workspace shell. */
   workspaceShellRequestId: number
@@ -1188,6 +1194,8 @@ export const useStore = create<AppState>()(
 
       keymapSheetOpen: false,
       setKeymapSheetOpen: (open) => set({ keymapSheetOpen: open }),
+      traceOperatorPane: null,
+      setTraceOperatorPane: (pane) => set({ traceOperatorPane: pane }),
 
       workspaceShellRequestId: 0,
       requestWorkspaceShell: () =>

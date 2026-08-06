@@ -23,6 +23,8 @@ import {
 } from "../lib/workspace-view"
 import {
   mergeProductSpaces,
+  reapplyProductSpaceLayouts,
+  SPACE_LAYOUT_VERSION,
   resetSpaceView,
   spaceById,
   spaceByIndex,
@@ -113,6 +115,8 @@ interface LayoutState {
   zenTileId: string | null
   /** Latest measured viewport row budget for the active canvas. */
   viewportRows: number
+  /** Tracks curated Space layout recipe; mismatch rebuilds product Spaces. */
+  spaceLayoutVersion: number
 
   setActiveView: (id: string) => void
   addView: (name: string) => string
@@ -138,12 +142,19 @@ interface LayoutState {
 
   /** Seed product Spaces (Observe / Reconcile / Bridge / Agent) if missing. */
   ensureProductSpaces: () => void
-  /** Activate a product Space by id or 1–4 index. */
+  /** Activate a product Space by id or 1–4 index; focuses first tile. */
   callSpace: (space: SpaceId | number) => void
   /** Rebuild the active product Space to its curated default. */
   resetActiveSpace: () => void
   /** Move keyboard focus to a geometric neighbor tile. */
   focusTileNeighbor: (key: FocusArrowKey) => void
+  /** Ensure widget types exist on a view (add missing only). */
+  ensureWidgets: (viewId: string, types: readonly WidgetType[]) => void
+  /**
+   * Focus a widget type on the active view — clears solo/zen.
+   * Does not maximize (operator uses M).
+   */
+  focusWidgetType: (type: WidgetType) => void
 }
 
 export const useLayoutStore = create<LayoutState>()(
@@ -156,8 +167,17 @@ export const useLayoutStore = create<LayoutState>()(
       soloTileId: null,
       zenTileId: null,
       viewportRows: 24,
+      spaceLayoutVersion: SPACE_LAYOUT_VERSION,
 
-      setActiveView: (id) => set({ activeViewId: id, soloTileId: null, zenTileId: null }),
+      setActiveView: (id) => set((s) => {
+        const view = s.views.find((v) => v.id === id)
+        return {
+          activeViewId: id,
+          soloTileId: null,
+          zenTileId: null,
+          focusedTileId: view?.tiles[0]?.id ?? null,
+        }
+      }),
 
       addView: (name) => {
         const id = randomId()
@@ -331,12 +351,13 @@ export const useLayoutStore = create<LayoutState>()(
         if (!def) return
         set((s) => {
           const views = mergeProductSpaces(s.views, s.viewportRows)
+          const view = views.find((v) => v.id === def.id)
           return {
             views,
             activeViewId: def.id,
             soloTileId: null,
             zenTileId: null,
-            focusedTileId: null,
+            focusedTileId: view?.tiles[0]?.id ?? null,
           }
         })
       },
@@ -344,11 +365,13 @@ export const useLayoutStore = create<LayoutState>()(
       resetActiveSpace: () => set((s) => {
         const def = spaceById(s.activeViewId)
         if (!def) return s
+        const views = resetSpaceView(s.views, def.id, s.viewportRows)
+        const view = views.find((v) => v.id === def.id)
         return {
-          views: resetSpaceView(s.views, def.id, s.viewportRows),
+          views,
           soloTileId: null,
           zenTileId: null,
-          focusedTileId: null,
+          focusedTileId: view?.tiles[0]?.id ?? null,
         }
       }),
 
@@ -363,29 +386,65 @@ export const useLayoutStore = create<LayoutState>()(
         if (!nextId) return s
         return { focusedTileId: nextId }
       }),
+
+      ensureWidgets: (viewId, types) => {
+        for (const type of types) {
+          const view = get().views.find((v) => v.id === viewId)
+          if (!view) return
+          if (view.tiles.some((tile) => tile.type === type)) continue
+          get().addWidget(viewId, type)
+        }
+      },
+
+      focusWidgetType: (type) => set((s) => {
+        const view = s.views.find((v) => v.id === s.activeViewId)
+        const tile = view?.tiles.find((t) => t.type === type)
+        if (!tile) return s
+        return {
+          focusedTileId: tile.id,
+          soloTileId: null,
+          zenTileId: null,
+        }
+      }),
     }),
     {
       name: "mia-layout",
       merge: (persistedState, currentState) => {
-        const persisted = (persistedState ?? {}) as Partial<LayoutState>
+        const persisted = (persistedState ?? {}) as Partial<LayoutState> & {
+          spaceLayoutVersion?: number
+        }
         const rawViews = persisted.views?.length
           ? pruneWorkspaceViews(persisted.views, currentState.viewportRows)
           : currentState.views
-        const views = mergeProductSpaces(rawViews, currentState.viewportRows)
+        const version = persisted.spaceLayoutVersion ?? 0
+        const views =
+          version === SPACE_LAYOUT_VERSION
+            ? mergeProductSpaces(rawViews, currentState.viewportRows)
+            : reapplyProductSpaceLayouts(
+                mergeProductSpaces(rawViews, currentState.viewportRows),
+                currentState.viewportRows,
+              )
+        const activeViewId =
+          views.some((view) => view.id === persisted.activeViewId)
+            ? (persisted.activeViewId as string)
+            : currentState.activeViewId
         return {
           ...currentState,
           ...persisted,
           views,
+          activeViewId,
           focusedTileId: null,
           enteringTileIds: [],
           soloTileId: null,
           zenTileId: null,
           viewportRows: currentState.viewportRows,
+          spaceLayoutVersion: SPACE_LAYOUT_VERSION,
         }
       },
       partialize: (state) => ({
         views: state.views,
         activeViewId: state.activeViewId,
+        spaceLayoutVersion: state.spaceLayoutVersion,
       }),
     },
   ),

@@ -32,8 +32,8 @@ export const TRACE_DETAIL_HINTS: readonly KbdHint[] = [
 ]
 
 export const SUMMON_HINTS: readonly KbdHint[] = [
-  { keys: ["↵"], label: "peek" },
-  { keys: ["⌘/Ctrl", "↵"], label: "keep in Space" },
+  { keys: ["↵"], label: "go / peek / focus" },
+  { keys: ["⌘/Ctrl", "↵"], label: "keep surface" },
   { keys: ["↑", "↓"], label: "navigate" },
   { keys: ["Esc"], label: "dismiss" },
 ]

@@ -1,23 +1,44 @@
 /**
- * Product Spaces — jobs-to-be-done layouts (Observe, Reconcile, Bridge, Agent).
+ * Product Spaces — curated job landings with fixed default autolayouts.
  * Named DIY views remain secondary; Spaces are the commercial landing.
+ *
+ * Defaults (ratios of the canvas):
+ * - Observe: Pipelines 70% | Event stream 30%
+ * - Debug: Threads 20% | Trace 80%
+ * - Reconcile: Sync 50% | Entity registry 50%
+ * - Agent: Trace 60% | (Chat / Threads 50/50 in the remaining 40%)
+ * - Bridge: Bridge alone
  */
 
 import type { WidgetType } from "../types"
 import { COLS } from "./grid-math"
-import { splitLargestLeaf, type SplitNode } from "./split-tree"
+import { leafNode, type SplitNode } from "./split-tree"
 import { WIDGET_DEFAULTS } from "./widget-layout-defaults"
 import type { WorkspaceView } from "./workspace-view"
 import { syncViewGeometry } from "./workspace-view"
 import { randomId } from "./util"
 
-export type SpaceId = "space:agent" | "space:observe" | "space:reconcile" | "space:bridge"
+export type SpaceId =
+  | "space:agent"
+  | "space:observe"
+  | "space:reconcile"
+  | "space:bridge"
+  | "space:debug"
 
 export type ProductBundleId = "bundle:agent-debug" | "bundle:observe-core" | "bundle:reconcile-core"
 
+/**
+ * Bump when curated Space widgets/ratios change so persisted product Spaces
+ * rebuild to the new defaults (DIY-named views are left alone).
+ */
+export const SPACE_LAYOUT_VERSION = 4
+
 export interface ProductSpaceDef {
   id: SpaceId
-  /** 1-based Call Space index (Ctrl/Cmd+1…4). */
+  /**
+   * 1–4 = Call Space (⌘/Ctrl+1…4).
+   * 0 = Summon / bundle only (no Call Space chord).
+   */
   index: number
   name: string
   desc: string
@@ -28,7 +49,11 @@ export interface ProductBundleDef {
   id: ProductBundleId
   name: string
   desc: string
-  /** Widgets opened together; first is the Summon peek target. */
+  /** Space to land in when the bundle is opened. */
+  homeSpace: SpaceId
+  /** Tile to focus after open (never auto-maximize). */
+  focusType: WidgetType
+  /** Widgets ensured on the home Space. */
   widgets: readonly WidgetType[]
 }
 
@@ -37,15 +62,15 @@ export const PRODUCT_SPACES: readonly ProductSpaceDef[] = [
     id: "space:agent",
     index: 1,
     name: "Agent",
-    desc: "Direct goals — threads, chat, trace, run status",
-    widgets: ["thread-nav", "term-chat", "debug-inspector", "run-status"],
+    desc: "Trace with chat and threads",
+    widgets: ["debug-inspector", "term-chat", "thread-nav"],
   },
   {
     id: "space:observe",
     index: 2,
     name: "Observe",
-    desc: "Platform ops — pipelines, event stream, threads, trace",
-    widgets: ["operation-log", "live-logs", "thread-nav", "debug-inspector"],
+    desc: "Pipelines and event stream",
+    widgets: ["operation-log", "live-logs"],
   },
   {
     id: "space:reconcile",
@@ -61,25 +86,38 @@ export const PRODUCT_SPACES: readonly ProductSpaceDef[] = [
     desc: "Bridge operations",
     widgets: ["bridge"],
   },
+  {
+    id: "space:debug",
+    index: 0,
+    name: "Debug",
+    desc: "Threads beside Trace",
+    widgets: ["thread-nav", "debug-inspector"],
+  },
 ]
 
 export const PRODUCT_BUNDLES: readonly ProductBundleDef[] = [
   {
     id: "bundle:agent-debug",
     name: "Agent debug",
-    desc: "Threads + Trace — run selection with inspector",
+    desc: "Debug Space — Threads 20% · Trace 80%",
+    homeSpace: "space:debug",
+    focusType: "debug-inspector",
     widgets: ["thread-nav", "debug-inspector"],
   },
   {
     id: "bundle:observe-core",
     name: "Observe core",
-    desc: "Pipelines + Event stream",
+    desc: "Observe Space — Pipelines 70% · Event stream 30%",
+    homeSpace: "space:observe",
+    focusType: "operation-log",
     widgets: ["operation-log", "live-logs"],
   },
   {
     id: "bundle:reconcile-core",
     name: "Reconcile core",
-    desc: "Sync + Entity registry",
+    desc: "Reconcile Space — Sync · Entity registry 50/50",
+    homeSpace: "space:reconcile",
+    focusType: "env-sync",
     widgets: ["env-sync", "entity-registry"],
   },
 ]
@@ -89,6 +127,7 @@ export function spaceById(id: string): ProductSpaceDef | undefined {
 }
 
 export function spaceByIndex(index: number): ProductSpaceDef | undefined {
+  if (index < 1) return undefined
   return PRODUCT_SPACES.find((space) => space.index === index)
 }
 
@@ -100,24 +139,73 @@ export function isProductSpaceId(id: string): id is SpaceId {
   return PRODUCT_SPACES.some((space) => space.id === id)
 }
 
-/** Build a fresh Space view with curated widgets (stable Space id). */
+function vSplit(ratio: number, a: SplitNode, b: SplitNode): SplitNode {
+  return { kind: "split", dir: "v", ratio, a, b }
+}
+
+function hSplit(ratio: number, a: SplitNode, b: SplitNode): SplitNode {
+  return { kind: "split", dir: "h", ratio, a, b }
+}
+
+function makeTile(type: WidgetType): WorkspaceView["tiles"][number] {
+  const defaults = WIDGET_DEFAULTS[type]
+  return {
+    id: randomId(),
+    type,
+    x: 0,
+    y: 0,
+    w: defaults.w,
+    h: defaults.h,
+    minW: defaults.minW,
+    minH: defaults.minH,
+  }
+}
+
+/**
+ * Curated split tree per Space. Tile order matches `def.widgets`
+ * (first tile = Call Space focus target).
+ */
+function buildSpaceSplit(
+  spaceId: SpaceId,
+  byType: ReadonlyMap<WidgetType, string>,
+): SplitNode | null {
+  const id = (type: WidgetType) => {
+    const tileId = byType.get(type)
+    if (!tileId) throw new Error(`spaces: missing tile for ${type} in ${spaceId}`)
+    return leafNode(tileId)
+  }
+
+  if (spaceId === "space:observe") {
+    // Pipelines 70% | Event stream 30%
+    return vSplit(0.7, id("operation-log"), id("live-logs"))
+  }
+  if (spaceId === "space:debug") {
+    // Threads 20% | Trace 80%
+    return vSplit(0.2, id("thread-nav"), id("debug-inspector"))
+  }
+  if (spaceId === "space:reconcile") {
+    // Sync 50% | Entity registry 50%
+    return vSplit(0.5, id("env-sync"), id("entity-registry"))
+  }
+  if (spaceId === "space:agent") {
+    // Trace 60% | (Chat / Threads 50/50 in remaining 40%)
+    return vSplit(
+      0.6,
+      id("debug-inspector"),
+      hSplit(0.5, id("term-chat"), id("thread-nav")),
+    )
+  }
+  if (spaceId === "space:bridge") {
+    return id("bridge")
+  }
+  return null
+}
+
+/** Build a fresh Space view with curated widgets + ratios (stable Space id). */
 export function buildSpaceView(def: ProductSpaceDef, rows = 24): WorkspaceView {
-  let split: SplitNode | null = null
-  const tiles = def.widgets.map((type) => {
-    const defaults = WIDGET_DEFAULTS[type]
-    const id = randomId()
-    split = splitLargestLeaf(split, id, COLS, rows)
-    return {
-      id,
-      type,
-      x: 0,
-      y: 0,
-      w: defaults.w,
-      h: defaults.h,
-      minW: defaults.minW,
-      minH: defaults.minH,
-    }
-  })
+  const tiles = def.widgets.map((type) => makeTile(type))
+  const byType = new Map(tiles.map((tile) => [tile.type, tile.id] as const))
+  const split = buildSpaceSplit(def.id, byType)
   return syncViewGeometry(
     {
       id: def.id,
@@ -126,6 +214,7 @@ export function buildSpaceView(def: ProductSpaceDef, rows = 24): WorkspaceView {
       split,
     },
     rows,
+    COLS,
   )
 }
 
@@ -143,6 +232,20 @@ export function mergeProductSpaces(
     byId.set(def.id, built)
   }
   return next
+}
+
+/**
+ * Rebuild all product Spaces to the current curated defaults.
+ * DIY-named views are preserved.
+ */
+export function reapplyProductSpaceLayouts(
+  views: readonly WorkspaceView[],
+  rows = 24,
+): WorkspaceView[] {
+  const productIds = new Set(PRODUCT_SPACES.map((space) => space.id))
+  const kept = views.filter((view) => !productIds.has(view.id as SpaceId))
+  const rebuilt = PRODUCT_SPACES.map((def) => buildSpaceView(def, rows))
+  return [...kept, ...rebuilt]
 }
 
 /** Replace a Space’s tiles/split with the product default. */
