@@ -3,12 +3,13 @@ import { resolveTracePaneKeyboardAction } from "./resolve-trace-pane-keyboard"
 
 function key(
   partial: Partial<KeyboardEvent> & Pick<KeyboardEvent, "key">,
-): Pick<KeyboardEvent, "key" | "metaKey" | "ctrlKey" | "altKey" | "shiftKey"> {
+): Pick<KeyboardEvent, "key" | "code" | "metaKey" | "ctrlKey" | "altKey" | "shiftKey"> {
   return {
     metaKey: false,
     ctrlKey: false,
     altKey: false,
     shiftKey: false,
+    code: "",
     ...partial,
   }
 }
@@ -38,9 +39,17 @@ describe("resolveTracePaneKeyboardAction", () => {
       type: "cycle-tab",
       direction: 1,
     })
-    expect(resolveTracePaneKeyboardAction(key({ key: "]" }), "detail")).toEqual({
+    expect(
+      resolveTracePaneKeyboardAction(key({ key: "]", code: "BracketRight" }), "detail"),
+    ).toEqual({
       type: "section-move",
       direction: 1,
+    })
+    expect(
+      resolveTracePaneKeyboardAction(key({ key: "[", code: "BracketLeft" }), "detail"),
+    ).toEqual({
+      type: "section-move",
+      direction: -1,
     })
     expect(resolveTracePaneKeyboardAction(key({ key: "j" }), "tree")).toEqual({ type: "none" })
   })

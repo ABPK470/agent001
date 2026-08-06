@@ -3,12 +3,13 @@
  * Esc owned by useTraceOperatorKeyboard (ladder). Tab no longer toggles view.
  *
  * `[` / `]` fold-all is tree-pane only — detail pane uses those keys for sections.
+ * Pane ownership is read from a ref so fold-all cannot fire on a stale "tree" closure.
  */
 
-import { useEffect } from "react"
+import { useEffect, useRef } from "react"
 import { isEditableKeyboardTarget } from "../../lib/keyboard-target"
 import { useWidgetZenHotkeys } from "../../hooks/useWidgetZenHotkeys"
-import type { TracePane } from "../../lib/keymap"
+import { resolveTraceZenKeyboardAction, type TracePane } from "../../lib/keymap"
 import type { FoldMode } from "./open-state"
 
 export function useTraceZenHotkeys({
@@ -44,63 +45,54 @@ export function useTraceZenHotkeys({
     handleEscape: false,
   })
 
+  const focusedPaneRef = useRef(focusedPane)
+  const viewModeRef = useRef(viewMode)
+  const foldModeRef = useRef(foldMode)
+  const onSearchOpenChangeRef = useRef(onSearchOpenChange)
+  const onViewModeChangeRef = useRef(onViewModeChange)
+  const onFoldModeChangeRef = useRef(onFoldModeChange)
+  focusedPaneRef.current = focusedPane
+  viewModeRef.current = viewMode
+  foldModeRef.current = foldMode
+  onSearchOpenChangeRef.current = onSearchOpenChange
+  onViewModeChangeRef.current = onViewModeChange
+  onFoldModeChangeRef.current = onFoldModeChange
+
   useEffect(() => {
     if (!enabled) return
 
     function onKeyDown(event: KeyboardEvent) {
       if (isEditableKeyboardTarget(event.target)) return
 
-      const key = event.key.toLowerCase()
-      const mod = event.metaKey || event.ctrlKey
+      const action = resolveTraceZenKeyboardAction(event, {
+        focusedPane: focusedPaneRef.current,
+        viewMode: viewModeRef.current,
+        foldMode: foldModeRef.current,
+      })
+      if (action.type === "none") return
 
-      if (mod && key === "f") {
-        event.preventDefault()
-        onSearchOpenChange(true)
+      event.preventDefault()
+      event.stopPropagation()
+
+      if (action.type === "open-filter") {
+        onSearchOpenChangeRef.current(true)
         return
       }
-
-      if (key === "/" && !mod) {
-        event.preventDefault()
-        onSearchOpenChange(true)
+      if (action.type === "view-tree") {
+        onViewModeChangeRef.current("tree")
         return
       }
-
-      // View / fold-all chords are tree-pane only — detail owns [ ] Space ←→.
-      if (focusedPane !== "tree") return
-
-      if (key === "t" && !mod) {
-        event.preventDefault()
-        onViewModeChange("tree")
+      if (action.type === "view-waterfall") {
+        onViewModeChangeRef.current("waterfall")
         return
       }
-
-      if (key === "w" && !mod) {
-        event.preventDefault()
-        onViewModeChange("waterfall")
-        return
-      }
-
-      if (viewMode === "tree" && key === "[" && !mod) {
-        event.preventDefault()
-        if (foldMode !== "collapsed") onFoldModeChange("collapsed")
-        return
-      }
-
-      if (viewMode === "tree" && key === "]" && !mod) {
-        event.preventDefault()
-        if (foldMode !== "expanded") onFoldModeChange("expanded")
+      if (action.type === "fold-all") {
+        onFoldModeChangeRef.current(action.mode)
       }
     }
 
-    window.addEventListener("keydown", onKeyDown)
-    return () => window.removeEventListener("keydown", onKeyDown)
-  }, [
-    enabled,
-    focusedPane,
-    foldMode,
-    onFoldModeChange,
-    onSearchOpenChange,
-    onViewModeChange,
-    viewMode,
-  ])
+    // Capture so fold-all cannot lose a race to other bubble listeners with a stale pane.
+    window.addEventListener("keydown", onKeyDown, true)
+    return () => window.removeEventListener("keydown", onKeyDown, true)
+  }, [enabled])
 }

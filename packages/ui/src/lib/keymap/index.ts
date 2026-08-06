@@ -12,6 +12,11 @@ export {
   type ReviewPaneKeyboardAction,
   type DetailLateralMode,
 } from "./resolve-review-pane-keyboard"
+export { resolveBracketDirection, type BracketDirection } from "./bracket-keys"
+export {
+  resolveTraceZenKeyboardAction,
+  type TraceZenKeyboardAction,
+} from "./resolve-trace-zen-keyboard"
 export {
   resolveTracePaneKeyboardAction,
   type TracePane,

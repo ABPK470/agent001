@@ -3,12 +3,13 @@ import { resolveReviewPaneKeyboardAction } from "./resolve-review-pane-keyboard"
 
 function key(
   partial: Partial<KeyboardEvent> & Pick<KeyboardEvent, "key">,
-): Pick<KeyboardEvent, "key" | "metaKey" | "ctrlKey" | "altKey" | "shiftKey"> {
+): Pick<KeyboardEvent, "key" | "code" | "metaKey" | "ctrlKey" | "altKey" | "shiftKey"> {
   return {
     metaKey: false,
     ctrlKey: false,
     altKey: false,
     shiftKey: false,
+    code: "",
     ...partial,
   }
 }
@@ -31,10 +32,23 @@ describe("resolveReviewPaneKeyboardAction", () => {
       }),
     ).toEqual({ type: "section-fold", open: true })
     expect(
-      resolveReviewPaneKeyboardAction(key({ key: "[" }), "detail", { lateral: "sections" }),
+      resolveReviewPaneKeyboardAction(
+        key({ key: "[", code: "BracketLeft" }),
+        "detail",
+        { lateral: "sections" },
+      ),
     ).toEqual({ type: "section-move", direction: -1 })
     expect(
-      resolveReviewPaneKeyboardAction(key({ key: " " }), "detail", { lateral: "sections" }),
+      resolveReviewPaneKeyboardAction(
+        key({ key: "]", code: "BracketRight" }),
+        "detail",
+        { lateral: "sections" },
+      ),
+    ).toEqual({ type: "section-move", direction: 1 })
+    expect(
+      resolveReviewPaneKeyboardAction(key({ key: " ", code: "Space" }), "detail", {
+        lateral: "sections",
+      }),
     ).toEqual({ type: "section-toggle" })
   })
 
@@ -43,7 +57,11 @@ describe("resolveReviewPaneKeyboardAction", () => {
       resolveReviewPaneKeyboardAction(key({ key: "ArrowRight" }), "detail", { lateral: "tabs" }),
     ).toEqual({ type: "cycle-tab", direction: 1 })
     expect(
-      resolveReviewPaneKeyboardAction(key({ key: "]" }), "detail", { lateral: "tabs" }),
+      resolveReviewPaneKeyboardAction(
+        key({ key: "]", code: "BracketRight" }),
+        "detail",
+        { lateral: "tabs" },
+      ),
     ).toEqual({ type: "section-move", direction: 1 })
   })
 })

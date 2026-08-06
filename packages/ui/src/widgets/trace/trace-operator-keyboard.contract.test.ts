@@ -32,11 +32,12 @@ describe("trace operator keyboard contracts", () => {
     expect(dag).toContain("DetailSectionProvider")
   })
 
-  it("keeps Trace fold-all [ ] on the tree pane only", () => {
+  it("keeps Trace fold-all [ ] on the tree pane only via pure resolver + pane ref", () => {
     const zen = readFileSync(join(here, "use-trace-zen-hotkeys.ts"), "utf8")
-    expect(zen).toContain('focusedPane !== "tree"')
-    expect(zen).toContain('key === "["')
-    expect(zen).toContain("onFoldModeChange")
+    expect(zen).toContain("resolveTraceZenKeyboardAction")
+    expect(zen).toContain("focusedPaneRef")
+    expect(zen).toContain("onFoldModeChangeRef")
   })
 })
+
 

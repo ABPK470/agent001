@@ -3,7 +3,7 @@
  * Tree row nav stays in useReviewTreeKeyboard (gated on focusedPane === "tree" by host).
  */
 
-import { useEffect, type RefObject } from "react"
+import { useEffect, useRef, type RefObject } from "react"
 import { isEditableKeyboardTarget } from "../lib/keyboard-target"
 import {
   detailScrollPageDelta,
@@ -53,11 +53,39 @@ export function useReviewOperatorKeyboard({
   sectionControllerRef?: RefObject<DetailSectionController | null>
   lateral?: DetailLateralMode
 }) {
+  const focusedPaneRef = useRef(focusedPane)
+  const filterOpenRef = useRef(filterOpen)
+  const scopeDrawerOpenRef = useRef(scopeDrawerOpen)
+  const isZenRef = useRef(isZen)
+  const isSoloRef = useRef(isSolo)
+  const summonOpenRef = useRef(summonOpen)
+  const lateralRef = useRef(lateral)
+  focusedPaneRef.current = focusedPane
+  filterOpenRef.current = filterOpen
+  scopeDrawerOpenRef.current = scopeDrawerOpen
+  isZenRef.current = isZen
+  isSoloRef.current = isSolo
+  summonOpenRef.current = summonOpen
+  lateralRef.current = lateral
+
+  const onFocusedPaneChangeRef = useRef(onFocusedPaneChange)
+  const onFilterOpenChangeRef = useRef(onFilterOpenChange)
+  const onScopeDrawerOpenChangeRef = useRef(onScopeDrawerOpenChange)
+  const onExitZenRef = useRef(onExitZen)
+  const onRestoreMaximizeRef = useRef(onRestoreMaximize)
+  const onDismissSummonRef = useRef(onDismissSummon)
+  onFocusedPaneChangeRef.current = onFocusedPaneChange
+  onFilterOpenChangeRef.current = onFilterOpenChange
+  onScopeDrawerOpenChangeRef.current = onScopeDrawerOpenChange
+  onExitZenRef.current = onExitZen
+  onRestoreMaximizeRef.current = onRestoreMaximize
+  onDismissSummonRef.current = onDismissSummon
+
   useEffect(() => {
     if (!enabled) return
 
     function focusPane(pane: ReviewPane) {
-      onFocusedPaneChange(pane)
+      onFocusedPaneChangeRef.current(pane)
       const el = pane === "tree" ? treeScrollRef.current : detailScrollRef.current
       el?.focus({ preventScroll: true })
       if (pane === "tree") sectionControllerRef?.current?.clearActive()
@@ -65,25 +93,26 @@ export function useReviewOperatorKeyboard({
 
     function onKeyDown(event: KeyboardEvent) {
       const editable = isEditableKeyboardTarget(event.target)
+      const pane = focusedPaneRef.current
 
       if (event.key === "Escape") {
         const action = resolveEscLadder({
-          scopeDrawerOpen,
-          filterOpen,
-          focusedPane,
-          isZen,
-          isSolo,
-          summonOpen,
+          scopeDrawerOpen: scopeDrawerOpenRef.current,
+          filterOpen: filterOpenRef.current,
+          focusedPane: pane,
+          isZen: isZenRef.current,
+          isSolo: isSoloRef.current,
+          summonOpen: summonOpenRef.current,
         })
         if (action.type === "none") return
         event.preventDefault()
         event.stopPropagation()
         if (action.type === "dismiss-scope-drawer") {
-          onScopeDrawerOpenChange?.(false)
+          onScopeDrawerOpenChangeRef.current?.(false)
           return
         }
         if (action.type === "dismiss-filter") {
-          onFilterOpenChange?.(false)
+          onFilterOpenChangeRef.current?.(false)
           if (event.target instanceof HTMLElement) event.target.blur()
           focusPane("tree")
           return
@@ -93,23 +122,25 @@ export function useReviewOperatorKeyboard({
           return
         }
         if (action.type === "exit-zen") {
-          onExitZen?.()
+          onExitZenRef.current?.()
           return
         }
         if (action.type === "restore-maximize") {
-          onRestoreMaximize?.()
+          onRestoreMaximizeRef.current?.()
           return
         }
         if (action.type === "dismiss-summon") {
-          onDismissSummon?.()
+          onDismissSummonRef.current?.()
         }
         return
       }
 
       if (editable) return
-      if (scopeDrawerOpen) return
+      if (scopeDrawerOpenRef.current) return
 
-      const paneAction = resolveReviewPaneKeyboardAction(event, focusedPane, { lateral })
+      const paneAction = resolveReviewPaneKeyboardAction(event, pane, {
+        lateral: lateralRef.current,
+      })
       if (paneAction.type === "none") return
 
       event.preventDefault()
@@ -124,7 +155,7 @@ export function useReviewOperatorKeyboard({
         return
       }
       if (paneAction.type === "toggle-pane") {
-        focusPane(focusedPane === "tree" ? "detail" : "tree")
+        focusPane(pane === "tree" ? "detail" : "tree")
         return
       }
 
@@ -164,26 +195,8 @@ export function useReviewOperatorKeyboard({
       }
     }
 
-    window.addEventListener("keydown", onKeyDown)
-    return () => window.removeEventListener("keydown", onKeyDown)
-  }, [
-    detailScrollRef,
-    enabled,
-    filterOpen,
-    focusedPane,
-    isSolo,
-    isZen,
-    lateral,
-    onDismissSummon,
-    onExitZen,
-    onFilterOpenChange,
-    onFocusedPaneChange,
-    onRestoreMaximize,
-    onScopeDrawerOpenChange,
-    scopeDrawerOpen,
-    sectionControllerRef,
-    summonOpen,
-    tabCycleRef,
-    treeScrollRef,
-  ])
+    // Capture phase: win against zen fold-all / other bubble listeners.
+    window.addEventListener("keydown", onKeyDown, true)
+    return () => window.removeEventListener("keydown", onKeyDown, true)
+  }, [detailScrollRef, enabled, sectionControllerRef, tabCycleRef, treeScrollRef])
 }

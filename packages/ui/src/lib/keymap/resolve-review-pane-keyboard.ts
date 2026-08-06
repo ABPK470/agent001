@@ -9,6 +9,8 @@
  * Section pick / toggle (`[` `]` Space) always available in detail when sections register.
  */
 
+import { resolveBracketDirection } from "./bracket-keys"
+
 export type ReviewPane = "tree" | "detail"
 
 export type DetailLateralMode = "tabs" | "sections"
@@ -30,7 +32,7 @@ const DETAIL_LINE = 48
 const DETAIL_PAGE = 280
 
 export function resolveReviewPaneKeyboardAction(
-  event: Pick<KeyboardEvent, "key" | "metaKey" | "ctrlKey" | "altKey" | "shiftKey">,
+  event: Pick<KeyboardEvent, "key" | "code" | "metaKey" | "ctrlKey" | "altKey" | "shiftKey">,
   focusedPane: ReviewPane,
   opts: { lateral?: DetailLateralMode } = {},
 ): ReviewPaneKeyboardAction {
@@ -68,13 +70,13 @@ export function resolveReviewPaneKeyboardAction(
   if (key === "End") {
     return { type: "detail-scroll-edge", edge: "end" }
   }
-  if (key === "[" && !event.shiftKey) {
-    return { type: "section-move", direction: -1 }
+
+  const bracket = resolveBracketDirection(event)
+  if (bracket !== null) {
+    return { type: "section-move", direction: bracket }
   }
-  if (key === "]" && !event.shiftKey) {
-    return { type: "section-move", direction: 1 }
-  }
-  if (key === " " || key === "Spacebar") {
+
+  if (key === " " || key === "Spacebar" || event.code === "Space") {
     return { type: "section-toggle" }
   }
 
