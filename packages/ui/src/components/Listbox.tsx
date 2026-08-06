@@ -265,6 +265,8 @@ export function Listbox<T extends string>({
   function onPopoverKeyDown(e: React.KeyboardEvent): void {
     if (e.key === "Escape") {
       e.preventDefault()
+      // Stop bubble so window listeners (Trace Esc ladder, shell) do not peel a layer.
+      e.stopPropagation()
       closePopover()
       btnRef.current?.focus({ preventScroll: true })
       return

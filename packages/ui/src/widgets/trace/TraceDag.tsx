@@ -59,8 +59,8 @@ import {
   type TraceTreeNode,
 } from "./trace-tree-index"
 import { TraceDetailInspector } from "./TraceDetailInspector"
-import { IdChip } from "./TraceCopy"
 import { TraceExportMenu } from "./TraceExportMenu"
+import { TraceRunContext } from "./TraceRunContext"
 import { TraceTreeRow, traceTreeRowEstimateSize } from "./TraceTreeRow"
 import { TraceWaterfallView } from "./TraceWaterfallView"
 import { TraceZenHud } from "./TraceZenHud"
@@ -599,9 +599,19 @@ export function TraceDag({
   const runStatus = runId
     ? runs.find((r) => r.id === runId)?.status
     : undefined
-  const showMetaBand =
-    metaStats.length > 0 || Boolean(runId || threadId || runStatus)
-
+  const zenHud = (
+    <TraceZenHud
+      metaStats={metaStats}
+      search={search}
+      onSearchChange={setSearch}
+      searchOpen={zenSearchOpen}
+      onSearchOpenChange={setZenSearchOpen}
+      foldMode={openState.foldMode}
+      onFoldModeChange={onFoldModeChange}
+      viewMode={viewMode}
+      onExitZen={exitZen}
+    />
+  )
   return (
     <div className={`trace-dag trace-dag--split${isZen ? " trace-dag--zen" : ""} ${WIDGET_LOG_SHELL_CLASS}`}>
       <div className={WIDGET_LOG_STACK_CLASS}>
@@ -650,8 +660,7 @@ export function TraceDag({
           </WidgetToolbar>
           </div>
 
-          {showMetaBand ? (
-            <div className={WIDGET_REVIEW_CONTROLS_INSET_CLASS}>
+          <div className={WIDGET_REVIEW_CONTROLS_INSET_CLASS}>
             {/* Same band chrome as Pipelines ActiveFilterChips (.widget-filter-band). */}
             <div className="widget-filter-band widget-review-meta">
               <div className="widget-review-meta__stats">
@@ -671,37 +680,28 @@ export function TraceDag({
                   ))
                 )}
               </div>
-              {(runId || threadId || runStatus) && (
-                <div className="widget-review-meta__ids">
-                  {runStatus ? (
-                    <span
-                      className={operationStatusPill(runStatus)}
-                      title={`Run status: ${runStatus}`}
-                    >
-                      {runStatus}
-                    </span>
-                  ) : null}
-                  {runId ? (
-                    <span className="widget-review-meta__id-group">
-                      <IdChip label="run" value={runId} tone="meta" />
-                    </span>
-                  ) : null}
-                  {threadId ? (
-                    <span className="widget-review-meta__id-group">
-                      <IdChip label="thread" value={threadId} tone="meta" />
-                    </span>
-                  ) : null}
-                </div>
-              )}
+              <div className="widget-review-meta__ids">
+                {runStatus ? (
+                  <span
+                    className={operationStatusPill(runStatus)}
+                    title={`Run status: ${runStatus}`}
+                  >
+                    {runStatus}
+                  </span>
+                ) : null}
+                <TraceRunContext />
+              </div>
             </div>
-            </div>
-          ) : null}
+          </div>
         </div>
         ) : null}
 
         <div className={`trace-body trace-split-body${isZen ? " trace-split-body--zen" : ""} ${WIDGET_LOG_BODY_CLASS}`}>
           {emptySlot ? (
-            emptySlot
+            <>
+              {isZen ? zenHud : null}
+              {emptySlot}
+            </>
           ) : (
             <div className="trace-split-host relative min-h-0 flex-1 overflow-hidden">
               <div
@@ -714,21 +714,7 @@ export function TraceDag({
               <div
                 className={`trace-split-tree widget-split-sidebar flex min-h-0 flex-col${isZen ? " trace-split-tree--zen" : ""}`}
               >
-                {isZen ? (
-                  <TraceZenHud
-                    metaStats={metaStats}
-                    runId={runId}
-                    threadId={threadId}
-                    search={search}
-                    onSearchChange={setSearch}
-                    searchOpen={zenSearchOpen}
-                    onSearchOpenChange={setZenSearchOpen}
-                    foldMode={openState.foldMode}
-                    onFoldModeChange={onFoldModeChange}
-                    viewMode={viewMode}
-                    onExitZen={exitZen}
-                  />
-                ) : null}
+                {isZen ? zenHud : null}
                 {runId && dag.hasData && treeSearch && treeIndex.nodes.length === 0 ? (
                   <p className="trace-empty px-2 py-3">No matches for “{query}”</p>
                 ) : null}

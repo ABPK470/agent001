@@ -9982,6 +9982,37 @@ button.trace-tree-status-pill:hover {
   font-weight: 600;
 }
 
+/* Trace-owned thread + run pickers (meta band + zen HUD). */
+.trace-run-context {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+  flex: 1 1 auto;
+  max-width: 100%;
+}
+
+.trace-run-context__thread,
+.trace-run-context__run {
+  min-width: 0;
+  max-width: 140px;
+}
+
+.trace-run-context__combined {
+  min-width: 0;
+  flex: 1 1 auto;
+  max-width: 100%;
+}
+
+.trace-run-context--zen {
+  flex: 0 1 auto;
+  max-width: min(100%, 20rem);
+}
+
+.trace-zen-hud__leading .trace-run-context {
+  min-width: 0;
+}
+
 /* ── Widget toolbar — Event Stream, Pipelines, Trace ─────
  * Tile owns the surface. Toolbar is a divider strip + controls —
  * never a second framed card inside the shell.

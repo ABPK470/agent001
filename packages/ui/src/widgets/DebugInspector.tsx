@@ -16,11 +16,8 @@ export function DebugInspector() {
   const trace = useStore((s) => s.trace)
   const traceCreatedAtMs = useStore((s) => s.traceCreatedAtMs)
   const activeRunId = useStore((s) => s.activeRunId)
+  const activeThreadId = useStore((s) => s.activeThreadId)
   const runs = useStore((s) => s.runs)
-  const activeThreadId = useStore((s) => {
-    if (!s.activeRunId) return null
-    return s.runs.find((r) => r.id === s.activeRunId)?.threadId ?? null
-  })
   const { toasts, dismissToast, notify, notifyError } = useWidgetToasts()
 
   // Solo-hidden: keep last DAG — do not rebuild while covered by maximize.
@@ -37,7 +34,7 @@ export function DebugInspector() {
     emptySlot = (
       <EmptyState
         icon={WIDGET_ICONS["debug-inspector"]}
-        message="Select a run to inspect"
+        message="Select a thread and run above"
       />
     )
   } else if (!dag.hasData) {

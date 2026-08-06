@@ -1,10 +1,10 @@
 /**
- * Trace zen HUD — row-1 controls: stats, search, exit.
+ * Trace zen HUD — row-1 controls: stats, search, exit + run context.
  */
 
 import { ChevronDown, Info, Search, X } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
-import { IdChip } from "./TraceCopy"
+import { TraceRunContext } from "./TraceRunContext"
 import { TraceTreeFoldToggle } from "./TraceTreeFoldToggle"
 import type { FoldMode } from "./open-state"
 
@@ -12,8 +12,6 @@ type MetaStat = { value: string; label?: string }
 
 export function TraceZenHud({
   metaStats,
-  runId,
-  threadId,
   search,
   onSearchChange,
   searchOpen,
@@ -24,8 +22,6 @@ export function TraceZenHud({
   onExitZen,
 }: {
   metaStats: MetaStat[]
-  runId: string | null
-  threadId: string | null
   search: string
   onSearchChange: (value: string) => void
   searchOpen: boolean
@@ -122,16 +118,11 @@ export function TraceZenHud({
                         </span>
                       ))}
                     </div>
-                    {(runId || threadId) && (
-                      <div className="trace-zen-hud__ids">
-                        {runId ? <IdChip label="run" value={runId} tone="meta" /> : null}
-                        {threadId ? <IdChip label="thread" value={threadId} tone="meta" /> : null}
-                      </div>
-                    )}
                   </div>
                 ) : null}
               </div>
             ) : null}
+            <TraceRunContext className="trace-run-context--zen" />
             {viewMode === "tree" ? (
               <TraceTreeFoldToggle
                 foldMode={foldMode}
