@@ -33,12 +33,19 @@ describe("summon resolve", () => {
     })
   })
 
-  it("agent debug opens Debug Space with Trace only", () => {
-    expect(resolveSummonBundleOpen("bundle:agent-debug")).toEqual({
+  it("observe core opens Observe with Pipelines focus", () => {
+    expect(resolveSummonBundleOpen("bundle:observe-core")).toEqual({
       type: "open-bundle",
-      spaceId: "space:debug",
-      ensureWidgets: ["debug-inspector"],
-      focusType: "debug-inspector",
+      spaceId: "space:observe",
+      ensureWidgets: ["operation-log", "live-logs"],
+      focusType: "operation-log",
+    })
+  })
+
+  it("Trace Space navigates (no Agent-debug bundle)", () => {
+    expect(resolveSummonSpaceEnter("space:trace")).toEqual({
+      type: "call-space",
+      spaceId: "space:trace",
     })
   })
 })

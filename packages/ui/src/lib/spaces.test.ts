@@ -7,6 +7,7 @@ import {
   buildSpaceView,
   isProductSpaceAtDefault,
   mergeProductSpaces,
+  migrateProductSpaceViews,
   reapplyProductSpaceLayouts,
   resetSpaceView,
   spaceByIndex,
@@ -43,10 +44,19 @@ describe("product spaces", () => {
     expect(leafRatio(view, "live-logs", "w")).toBeCloseTo(0.3, 2)
   })
 
-  it("Debug is Trace alone", () => {
-    const view = buildSpaceView(PRODUCT_SPACES.find((s) => s.id === "space:debug")!)
+  it("Trace Space is Trace alone", () => {
+    const view = buildSpaceView(PRODUCT_SPACES.find((s) => s.id === "space:trace")!)
+    expect(view.name).toBe("Trace")
     expect(view.tiles.map((t) => t.type)).toEqual(["debug-inspector"])
     expect(view.split?.kind).toBe("leaf")
+  })
+
+  it("migrates legacy space:debug to space:trace", () => {
+    expect(
+      migrateProductSpaceViews([
+        { id: "space:debug", name: "Debug", tiles: [], split: null },
+      ]),
+    ).toEqual([{ id: "space:trace", name: "Trace", tiles: [], split: null }])
   })
 
   it("Reconcile is Sync | Entity registry 50/50", () => {

@@ -154,8 +154,8 @@ describe("Trace toolbar structure + behavior wiring", () => {
     expect(dag).toContain("widget-review-meta__stat-value")
     // Pickers are not in the meta band — status pill may still use __ids.
     expect(dag).not.toMatch(/widget-review-meta__ids[\s\S]{0,120}TraceRunContext/)
-    expect(context).toContain("trace-scope")
-    expect(context).toContain("trace-scope__pill")
+    expect(context).toContain("trace-run-context")
+    expect(context).toContain("trace-run-context__pill")
     expect(dag).toContain("TraceScopeDrawer")
     expect(dag).toContain("trace-scope-drawer-toggle")
     expect(zen).toContain("TraceRunContext")

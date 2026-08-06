@@ -138,7 +138,7 @@ export function TraceZenHud({
                 ) : null}
               </div>
             ) : null}
-            <TraceRunContext compact className="trace-scope--zen" />
+            <TraceRunContext compact className="trace-run-context--zen" />
             {viewMode === "tree" ? (
               <TraceTreeFoldToggle
                 foldMode={foldMode}

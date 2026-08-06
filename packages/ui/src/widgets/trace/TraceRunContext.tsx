@@ -119,8 +119,8 @@ export function TraceRunContext({
   return (
     <div
       ref={rootRef}
-      className={`trace-scope${combined ? " trace-scope--combined" : ""}${
-        compact ? " trace-scope--compact" : ""
+      className={`trace-run-context${combined ? " trace-run-context--combined" : ""}${
+        compact ? " trace-run-context--compact" : ""
       }${className ? ` ${className}` : ""}`}
       role="navigation"
       aria-label="Trace scope"
@@ -129,7 +129,7 @@ export function TraceRunContext({
         <Listbox
           size="sm"
           variant="ghost"
-          className="trace-scope__pill trace-scope__pill--combined"
+          className="trace-run-context__pill trace-run-context__pill--combined"
           ariaLabel="Thread and run"
           title={combinedTitle}
           placeholder="Select thread › run"
@@ -145,7 +145,7 @@ export function TraceRunContext({
           <Listbox
             size="sm"
             variant="ghost"
-            className="trace-scope__pill trace-scope__pill--thread"
+            className="trace-run-context__pill trace-run-context__pill--thread"
             ariaLabel="Thread"
             title={threadTitle}
             placeholder="Select thread"
@@ -156,13 +156,13 @@ export function TraceRunContext({
             onChange={onThreadChange}
             disabled={threadOpts.length === 0}
           />
-          <span className="trace-scope__sep" aria-hidden>
+          <span className="trace-run-context__sep" aria-hidden>
             /
           </span>
           <Listbox
             size="sm"
             variant="ghost"
-            className="trace-scope__pill trace-scope__pill--run"
+            className="trace-run-context__pill trace-run-context__pill--run"
             ariaLabel="Run"
             title={runTitle}
             placeholder={noRuns ? "No runs in thread" : "Select run"}

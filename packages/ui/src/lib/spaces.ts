@@ -4,7 +4,7 @@
  *
  * Defaults (ratios of the canvas):
  * - Observe: Pipelines 70% | Event stream 30%
- * - Debug: Trace alone (self-sufficient scope bar + drawer)
+ * - Trace: Trace alone (self-sufficient scope bar + drawer)
  * - Reconcile: Sync 50% | Entity registry 50%
  * - Agent: Trace 60% | (Chat / Threads 50/50 in the remaining 40%)
  * - Bridge: Bridge alone
@@ -30,15 +30,20 @@ export type SpaceId =
   | "space:observe"
   | "space:reconcile"
   | "space:bridge"
-  | "space:debug"
+  | "space:trace"
 
-export type ProductBundleId = "bundle:agent-debug" | "bundle:observe-core" | "bundle:reconcile-core"
+export type ProductBundleId = "bundle:observe-core" | "bundle:reconcile-core"
+
+/** Persisted Space ids renamed in place (never leave a ghost DIY tab). */
+const LEGACY_SPACE_IDS: Readonly<Record<string, SpaceId>> = {
+  "space:debug": "space:trace",
+}
 
 /**
  * Bump when curated Space widgets/ratios change so persisted product Spaces
  * rebuild to the new defaults (DIY-named views are left alone).
  */
-export const SPACE_LAYOUT_VERSION = 5
+export const SPACE_LAYOUT_VERSION = 6
 
 export interface ProductSpaceDef {
   id: SpaceId
@@ -94,23 +99,15 @@ export const PRODUCT_SPACES: readonly ProductSpaceDef[] = [
     widgets: ["bridge"],
   },
   {
-    id: "space:debug",
+    id: "space:trace",
     index: 0,
-    name: "Debug",
-    desc: "Trace — pick thread and run in-widget",
+    name: "Trace",
+    desc: "Inspect a thread and run",
     widgets: ["debug-inspector"],
   },
 ]
 
 export const PRODUCT_BUNDLES: readonly ProductBundleDef[] = [
-  {
-    id: "bundle:agent-debug",
-    name: "Agent debug",
-    desc: "Debug Space — Trace only",
-    homeSpace: "space:debug",
-    focusType: "debug-inspector",
-    widgets: ["debug-inspector"],
-  },
   {
     id: "bundle:observe-core",
     name: "Observe core",
@@ -128,6 +125,30 @@ export const PRODUCT_BUNDLES: readonly ProductBundleDef[] = [
     widgets: ["env-sync", "entity-registry"],
   },
 ]
+
+export function migrateSpaceId(id: string): string {
+  return LEGACY_SPACE_IDS[id] ?? id
+}
+
+/** Map legacy Space ids (e.g. space:debug → space:trace) before merge/reapply. */
+export function migrateProductSpaceViews(
+  views: readonly WorkspaceView[],
+): WorkspaceView[] {
+  const renamed = views.map((view) => {
+    const nextId = LEGACY_SPACE_IDS[view.id]
+    if (!nextId) return view
+    const name = spaceById(nextId)?.name ?? view.name
+    return { ...view, id: nextId, name }
+  })
+  const seen = new Set<string>()
+  const next: WorkspaceView[] = []
+  for (const view of renamed) {
+    if (seen.has(view.id)) continue
+    seen.add(view.id)
+    next.push(view)
+  }
+  return next
+}
 
 export function spaceById(id: string): ProductSpaceDef | undefined {
   return PRODUCT_SPACES.find((space) => space.id === id)
@@ -186,7 +207,7 @@ function buildSpaceSplit(
     // Pipelines 70% | Event stream 30%
     return vSplit(0.7, id("operation-log"), id("live-logs"))
   }
-  if (spaceId === "space:debug") {
+  if (spaceId === "space:trace") {
     return id("debug-inspector")
   }
   if (spaceId === "space:reconcile") {
@@ -229,8 +250,9 @@ export function mergeProductSpaces(
   views: readonly WorkspaceView[],
   rows = 24,
 ): WorkspaceView[] {
-  const byId = new Map(views.map((view) => [view.id, view]))
-  const next = [...views]
+  const migrated = migrateProductSpaceViews(views)
+  const byId = new Map(migrated.map((view) => [view.id, view]))
+  const next = [...migrated]
   for (const def of PRODUCT_SPACES) {
     if (byId.has(def.id)) continue
     const built = buildSpaceView(def, rows)
@@ -248,8 +270,9 @@ export function reapplyProductSpaceLayouts(
   views: readonly WorkspaceView[],
   rows = 24,
 ): WorkspaceView[] {
+  const migrated = migrateProductSpaceViews(views)
   const productIds = new Set(PRODUCT_SPACES.map((space) => space.id))
-  const kept = views.filter((view) => !productIds.has(view.id as SpaceId))
+  const kept = migrated.filter((view) => !productIds.has(view.id as SpaceId))
   const rebuilt = PRODUCT_SPACES.map((def) => buildSpaceView(def, rows))
   return [...kept, ...rebuilt]
 }

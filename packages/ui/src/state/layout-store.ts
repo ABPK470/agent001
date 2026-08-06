@@ -23,6 +23,7 @@ import {
 } from "../lib/workspace-view"
 import {
   mergeProductSpaces,
+  migrateSpaceId,
   reapplyProductSpaceLayouts,
   SPACE_LAYOUT_VERSION,
   resetSpaceView,
@@ -424,9 +425,12 @@ export const useLayoutStore = create<LayoutState>()(
                 mergeProductSpaces(rawViews, currentState.viewportRows),
                 currentState.viewportRows,
               )
+        const wantedActiveId = persisted.activeViewId
+          ? migrateSpaceId(persisted.activeViewId)
+          : currentState.activeViewId
         const activeViewId =
-          views.some((view) => view.id === persisted.activeViewId)
-            ? (persisted.activeViewId as string)
+          views.some((view) => view.id === wantedActiveId)
+            ? wantedActiveId
             : currentState.activeViewId
         return {
           ...currentState,

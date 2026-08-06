@@ -1385,7 +1385,7 @@ body {
 .widget-review-controls__inset > .widget-toolbar,
 .widget-review-controls__inset > .widget-filter-band,
 .widget-review-controls__inset > .widget-review-meta,
-.widget-review-controls__inset > .trace-scope {
+.widget-review-controls__inset > .trace-run-context {
   padding: 0;
   border-bottom: none;
 }
@@ -10181,10 +10181,10 @@ button.trace-tree-status-pill:hover {
 }
 
 /*
- * Trace scope bar — breadcrumb Thread ▾ / Run ▾.
- * Scope precedes content. Pills are tactile; meta band is telemetry only.
+ * Trace run context — Thread ▾ / Run ▾ breadcrumb.
+ * Own class (not `.trace-scope`) — tree rows own fill/hover; this bar is chrome only.
  */
-.trace-scope {
+.trace-run-context {
   display: flex;
   align-items: center;
   gap: 0.35rem;
@@ -10193,9 +10193,17 @@ button.trace-tree-status-pill:hover {
   width: auto;
   max-width: 100%;
   flex-wrap: nowrap;
+  /* Never inherit tree-row pill wash / pointer */
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  cursor: default;
+  min-height: 0;
+  height: auto;
+  padding: 0;
 }
 
-.trace-scope__sep {
+.trace-run-context__sep {
   flex-shrink: 0;
   color: var(--text-faint, var(--text-muted));
   font-size: 0.8125rem;
@@ -10204,7 +10212,7 @@ button.trace-tree-status-pill:hover {
   user-select: none;
 }
 
-.trace-scope > [aria-haspopup="listbox"].trace-scope__pill {
+.trace-run-context > [aria-haspopup="listbox"].trace-run-context__pill {
   width: auto;
   min-width: 0;
   max-width: 13.75rem; /* ~220px */
@@ -10223,24 +10231,24 @@ button.trace-tree-status-pill:hover {
   box-shadow: none;
 }
 
-.trace-scope > [aria-haspopup="listbox"].trace-scope__pill--run {
+.trace-run-context > [aria-haspopup="listbox"].trace-run-context__pill--run {
   flex: 1 1 auto;
   max-width: 16rem;
 }
 
-.trace-scope > [aria-haspopup="listbox"].trace-scope__pill--combined {
+.trace-run-context > [aria-haspopup="listbox"].trace-run-context__pill--combined {
   flex: 1 1 auto;
   max-width: min(100%, 22rem);
 }
 
-.trace-scope > [aria-haspopup="listbox"].trace-scope__pill > .flex-1 {
+.trace-run-context > [aria-haspopup="listbox"].trace-run-context__pill > .flex-1 {
   display: block;
   min-width: 0;
   overflow: hidden;
 }
 
-.trace-scope > [aria-haspopup="listbox"].trace-scope__pill .truncate,
-.trace-scope > [aria-haspopup="listbox"].trace-scope__pill .leading-snug {
+.trace-run-context > [aria-haspopup="listbox"].trace-run-context__pill .truncate,
+.trace-run-context > [aria-haspopup="listbox"].trace-run-context__pill .leading-snug {
   display: block;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -10252,21 +10260,21 @@ button.trace-tree-status-pill:hover {
   margin: 0;
 }
 
-.trace-scope > [aria-haspopup="listbox"].trace-scope__pill svg {
+.trace-run-context > [aria-haspopup="listbox"].trace-run-context__pill svg {
   width: 0.875rem;
   height: 0.875rem;
   opacity: 0.5;
   flex-shrink: 0;
 }
 
-.trace-scope > [aria-haspopup="listbox"].trace-scope__pill:hover:not(:disabled),
-.trace-scope > [aria-haspopup="listbox"].trace-scope__pill[aria-expanded="true"] {
+.trace-run-context > [aria-haspopup="listbox"].trace-run-context__pill:hover:not(:disabled),
+.trace-run-context > [aria-haspopup="listbox"].trace-run-context__pill[aria-expanded="true"] {
   background: color-mix(in srgb, var(--text) 7%, var(--panel, transparent));
   border-color: var(--border);
 }
 
-.trace-scope > [aria-haspopup="listbox"].trace-scope__pill:focus,
-.trace-scope > [aria-haspopup="listbox"].trace-scope__pill:focus-visible {
+.trace-run-context > [aria-haspopup="listbox"].trace-run-context__pill:focus,
+.trace-run-context > [aria-haspopup="listbox"].trace-run-context__pill:focus-visible {
   outline: none;
   box-shadow: none;
   border-color: var(--border-strong, var(--border));
@@ -10274,9 +10282,9 @@ button.trace-tree-status-pill:hover {
 }
 
 /* Zen HUD — one combined pill, never stacks out of the 2.5rem strip. */
-.trace-scope--compact,
-.trace-scope--zen,
-.trace-zen-hud .trace-scope {
+.trace-run-context--compact,
+.trace-run-context--zen,
+.trace-zen-hud .trace-run-context {
   flex: 1 1 auto;
   width: auto;
   max-width: min(100%, 20rem);
@@ -10284,7 +10292,7 @@ button.trace-tree-status-pill:hover {
   overflow: hidden;
 }
 
-.trace-zen-hud .trace-scope > [aria-haspopup="listbox"].trace-scope__pill {
+.trace-zen-hud .trace-run-context > [aria-haspopup="listbox"].trace-run-context__pill {
   height: 1.625rem;
   min-height: 1.625rem;
   max-width: 100%;
