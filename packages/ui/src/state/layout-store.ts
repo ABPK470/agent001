@@ -354,7 +354,11 @@ export const useLayoutStore = create<LayoutState>()(
 
       focusTileNeighbor: (key) => set((s) => {
         const view = s.views.find((v) => v.id === s.activeViewId)
-        if (!view || !s.focusedTileId) return s
+        if (!view || view.tiles.length === 0) return s
+        // No focus yet — take the first tile, then the next chord moves.
+        if (!s.focusedTileId) {
+          return { focusedTileId: view.tiles[0]!.id }
+        }
         const nextId = neighborTileForFocus(view.tiles, s.focusedTileId, key)
         if (!nextId) return s
         return { focusedTileId: nextId }

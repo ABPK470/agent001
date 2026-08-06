@@ -35,4 +35,19 @@ describe("resolveShellKeyboardAction", () => {
       resolveShellKeyboardAction(key({ key: "?", shiftKey: true }), { hasFocusedTile: false }),
     ).toEqual({ type: "open-keymap" })
   })
+
+  it("moves tile focus with mod+shift+arrow (not mod+alt — shell toggle owns that)", () => {
+    expect(
+      resolveShellKeyboardAction(
+        key({ key: "ArrowRight", metaKey: true, shiftKey: true }),
+        { hasFocusedTile: true },
+      ),
+    ).toEqual({ type: "focus-tile-neighbor", key: "ArrowRight" })
+    expect(
+      resolveShellKeyboardAction(
+        key({ key: "ArrowRight", metaKey: true, altKey: true }),
+        { hasFocusedTile: true },
+      ),
+    ).toEqual({ type: "none" })
+  })
 })

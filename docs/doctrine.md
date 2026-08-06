@@ -370,9 +370,10 @@ Observe / Reconcile / Bridge) are curated job landings — not DIY-named
 sheets as the primary path. **Summon** (⌘/Ctrl+K) peeks a widget or Calls a
 Space; Keep in Space is explicit. Trace (and later Pipelines) own **pane
 focus** with one Esc ladder (overlay → filter → pane → zen → maximize).
-Shell chords: Call Space (⌘/Ctrl+1–4), tile focus (⌘/Ctrl+⌥+arrows), M
-maximize, Z zen, ⌘/Ctrl+W close tile, `?` keymap. See `lib/spaces.ts`,
-`lib/keymap/`, `app/workspace/SummonPalette.tsx`.
+Shell chords: Call Space (⌘/Ctrl+1–4), tile focus (⌘/Ctrl+⇧+arrows — not
+⌥; ⌘/Ctrl+⌥ alone toggles chat↔workspace), M maximize, Z zen, ⌘/Ctrl+W
+close tile, `?` keymap. Operator guide: `docs/operator-keyboard.md`. See
+`lib/spaces.ts`, `lib/keymap/`, `app/workspace/SummonPalette.tsx`.
 
 | Layer | Owns | Must not |
 | --- | --- | --- |

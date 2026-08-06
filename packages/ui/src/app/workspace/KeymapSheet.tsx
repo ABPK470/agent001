@@ -5,6 +5,7 @@
 import { useEffect } from "react"
 import { useStore } from "../../state/store"
 import { SHELL_BINDINGS, TRACE_DETAIL_HINTS, TRACE_TREE_HINTS } from "../../lib/keymap"
+import { MODAL_OVERLAY_SCRIM_CLASS } from "../../widgets/entity-registry/modal-overlay"
 
 export function KeymapSheet() {
   const open = useStore((s) => s.keymapSheetOpen)
@@ -25,7 +26,11 @@ export function KeymapSheet() {
   if (!open) return null
 
   return (
-    <div className="keymap-sheet-overlay" role="presentation" onClick={() => setOpen(false)}>
+    <div
+      className={`keymap-sheet-overlay ${MODAL_OVERLAY_SCRIM_CLASS}`}
+      role="presentation"
+      onClick={() => setOpen(false)}
+    >
       <div
         className="keymap-sheet"
         role="dialog"

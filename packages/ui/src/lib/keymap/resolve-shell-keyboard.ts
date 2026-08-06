@@ -38,7 +38,9 @@ export function resolveShellKeyboardAction(
     return { type: "call-space", index: Number(key) }
   }
 
-  if (mod && event.altKey && !event.shiftKey) {
+  // ⌘⇧+arrows — tile focus. Must NOT use ⌘⌥: that chord alone toggles chat↔workspace
+  // on Alt keydown, so ⌘⌥+arrow is unreachable.
+  if (mod && event.shiftKey && !event.altKey) {
     if (
       event.key === "ArrowUp" ||
       event.key === "ArrowDown" ||

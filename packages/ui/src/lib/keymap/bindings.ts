@@ -6,7 +6,7 @@ import type { KbdHint, KeymapBinding } from "./types"
 
 export const SHELL_BINDINGS: readonly KeymapBinding[] = [
   { id: "call-space", layer: "view", keys: ["⌘/Ctrl", "1–4"], label: "Call Space" },
-  { id: "tile-focus", layer: "view", keys: ["⌘/Ctrl", "⌥", "↑↓←→"], label: "Focus tile" },
+  { id: "tile-focus", layer: "view", keys: ["⌘/Ctrl", "⇧", "↑↓←→"], label: "Focus tile" },
   { id: "maximize", layer: "widget", keys: ["M"], label: "Maximize / restore", when: "tile focused" },
   { id: "zen", layer: "widget", keys: ["Z"], label: "Zen on / off", when: "focus-capable tile" },
   { id: "close-tile", layer: "widget", keys: ["⌘/Ctrl", "W"], label: "Close tile", when: "tile focused" },

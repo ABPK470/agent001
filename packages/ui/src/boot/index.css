@@ -15958,28 +15958,36 @@ button.trace-tree-status-pill:hover {
   opacity: 0;
 }
 
-/* Spotlight Summon */
+/*
+ * Spotlight Summon — lives above the shell (not inside a tile).
+ * Strong scrim + lifted paper so it never reads as another layout panel.
+ */
 .summon-palette-overlay {
   position: fixed;
   inset: 0;
-  z-index: 220;
+  z-index: 400;
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  padding: 12vh 1rem 2rem;
-  background: color-mix(in srgb, var(--bg, #0c0e12) 55%, transparent);
+  padding: min(18vh, 7rem) 1rem 2rem;
+  isolation: isolate;
+  /* Scrim color from bg-scrim-strong utility; keep layout below inert via JS. */
 }
 
 .summon-palette {
-  width: min(36rem, 100%);
-  max-height: min(70vh, 32rem);
+  width: min(32rem, 100%);
+  max-height: min(62vh, 28rem);
   display: flex;
   flex-direction: column;
-  border-radius: 0.75rem;
-  border: 1px solid var(--border, var(--color-border));
-  background: var(--surface, var(--color-surface));
-  box-shadow: 0 16px 48px color-mix(in srgb, #000 35%, transparent);
+  border-radius: 1rem;
+  border: 1px solid color-mix(in srgb, var(--border, #333) 80%, transparent);
+  /* Paper above tiles — not the same flat tile surface */
+  background: var(--paper, var(--surface, var(--color-surface)));
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, #fff 6%, transparent),
+    0 24px 64px rgb(0 0 0 / 0.55);
   overflow: hidden;
+  transform: translateZ(0);
 }
 
 .summon-palette__input {
@@ -15988,39 +15996,54 @@ button.trace-tree-status-pill:hover {
   border-bottom: 1px solid var(--border-subtle, var(--color-border-subtle));
   background: transparent;
   color: var(--text, var(--color-text));
-  font-size: 0.95rem;
-  padding: 0.9rem 1rem;
+  font-size: 1rem;
+  font-weight: 500;
+  padding: 1rem 1.1rem 0.85rem;
   outline: none;
 }
 
 .summon-palette__hint {
   margin: 0;
-  padding: 0.35rem 1rem 0.5rem;
-  font-size: 0.7rem;
+  padding: 0.4rem 1.1rem 0.55rem;
+  font-size: 0.68rem;
+  letter-spacing: 0.01em;
   color: var(--text-muted, var(--color-text-muted));
 }
 
 .summon-palette__list {
-  list-style: none;
   margin: 0;
-  padding: 0.25rem;
+  padding: 0.35rem 0.4rem 0.5rem;
   overflow-y: auto;
   flex: 1 1 auto;
   min-height: 0;
 }
 
+.summon-palette__section-block + .summon-palette__section-block {
+  margin-top: 0.35rem;
+  padding-top: 0.35rem;
+  border-top: 1px solid var(--border-subtle, var(--color-border-subtle));
+}
+
+.summon-palette__section {
+  margin: 0.35rem 0.55rem 0.25rem;
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint, var(--text-muted, var(--color-text-muted)));
+}
+
 .summon-palette__row {
   display: grid;
-  grid-template-columns: 4.5rem 1fr;
-  grid-template-rows: auto auto;
-  column-gap: 0.65rem;
+  grid-template-columns: 1fr;
+  row-gap: 0.1rem;
   width: 100%;
   text-align: left;
   border: 0;
-  border-radius: 0.5rem;
+  border-radius: 0.55rem;
   background: transparent;
   color: inherit;
-  padding: 0.45rem 0.65rem;
+  padding: 0.5rem 0.7rem;
   cursor: pointer;
 }
 
@@ -16030,21 +16053,16 @@ button.trace-tree-status-pill:hover {
 }
 
 .summon-palette__kind {
-  grid-row: 1 / span 2;
-  align-self: center;
-  font-size: 0.65rem;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--text-muted, var(--color-text-muted));
+  display: none; /* section headers own the category */
 }
 
 .summon-palette__name {
-  font-size: 0.85rem;
-  font-weight: 550;
+  font-size: 0.88rem;
+  font-weight: 560;
 }
 
 .summon-palette__desc {
-  font-size: 0.7rem;
+  font-size: 0.72rem;
   color: var(--text-muted, var(--color-text-muted));
 }
 
@@ -16054,16 +16072,22 @@ button.trace-tree-status-pill:hover {
   color: var(--text-muted, var(--color-text-muted));
 }
 
+.summon-palette .composer-kbd-footer {
+  border-top: 1px solid var(--border-subtle, var(--color-border-subtle));
+  background: color-mix(in srgb, var(--overlay-1, transparent) 80%, transparent);
+}
+
 /* Keymap sheet */
 .keymap-sheet-overlay {
   position: fixed;
   inset: 0;
-  z-index: 230;
+  z-index: 410;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 1.5rem;
-  background: color-mix(in srgb, var(--bg, #0c0e12) 55%, transparent);
+  background: var(--scrim-strong, rgb(0 0 0 / 0.78));
+  isolation: isolate;
 }
 
 .keymap-sheet {

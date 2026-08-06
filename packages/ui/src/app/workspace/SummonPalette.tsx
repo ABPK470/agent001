@@ -1,5 +1,6 @@
 /**
  * Spotlight Summon — peek by default; Keep explicitly adds to the active Space.
+ * Renders above the shell (strong scrim) — not as a layout tile.
  */
 
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react"
@@ -9,12 +10,19 @@ import { PRODUCT_BUNDLES } from "../../lib/spaces"
 import { SUMMON_HINTS } from "../../lib/keymap"
 import type { WidgetType } from "../../types"
 import { ComposerKbdFooter } from "../../widgets/chat/ComposerKbdFooter"
+import { MODAL_OVERLAY_SCRIM_CLASS } from "../../widgets/entity-registry/modal-overlay"
 import {
   filterSummonItems,
   listSummonItems,
   summonItemKey,
   type SummonItem,
 } from "./summon-items"
+
+const SECTION_ORDER: Array<{ kind: SummonItem["kind"]; label: string }> = [
+  { kind: "space", label: "Spaces" },
+  { kind: "bundle", label: "Bundles" },
+  { kind: "widget", label: "Widgets" },
+]
 
 export function SummonPalette() {
   const summonOpen = useStore((s) => s.summonOpen)
@@ -48,6 +56,14 @@ export function SummonPalette() {
   useEffect(() => {
     setSelected(0)
   }, [query])
+
+  useEffect(() => {
+    if (!summonOpen) return
+    const shell = document.querySelector(".app-shell-view")
+    if (!(shell instanceof HTMLElement)) return
+    shell.setAttribute("inert", "")
+    return () => shell.removeAttribute("inert")
+  }, [summonOpen])
 
   if (!summonOpen) return null
 
@@ -135,13 +151,14 @@ export function SummonPalette() {
 
   return (
     <div
-      className="summon-palette-overlay"
+      className={`summon-palette-overlay ${MODAL_OVERLAY_SCRIM_CLASS}`}
       role="presentation"
       onClick={dismiss}
     >
       <div
         className="summon-palette"
         role="dialog"
+        aria-modal="true"
         aria-label="Summon"
         onClick={(event) => event.stopPropagation()}
         onKeyDown={onKeyDown}
@@ -151,33 +168,43 @@ export function SummonPalette() {
           className="summon-palette__input"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="Summon a Space, bundle, or widget…"
+          placeholder="Go to a Space, open a bundle, or peek a widget…"
           aria-label="Summon search"
         />
         <p className="summon-palette__hint">
-          Peek — Esc to leave · ⌘/Ctrl+Enter keeps in this Space
+          Enter peeks (layout untouched) · ⌘/Ctrl+Enter keeps in this Space · Esc leaves
         </p>
-        <ul className="summon-palette__list" role="listbox">
-          {items.map((item, index) => (
-            <li key={summonItemKey(item)}>
-              <button
-                type="button"
-                role="option"
-                aria-selected={index === selected}
-                className={`summon-palette__row${index === selected ? " is-selected" : ""}`}
-                onMouseEnter={() => setSelected(index)}
-                onClick={() => peekItem(item)}
-              >
-                <span className="summon-palette__kind">{item.kind}</span>
-                <span className="summon-palette__name">{item.name}</span>
-                <span className="summon-palette__desc">{item.desc}</span>
-              </button>
-            </li>
-          ))}
+        <div className="summon-palette__list" role="listbox">
+          {SECTION_ORDER.map((section) => {
+            const sectionItems = items.filter((item) => item.kind === section.kind)
+            if (sectionItems.length === 0) return null
+            return (
+              <div key={section.kind} className="summon-palette__section-block">
+                <div className="summon-palette__section">{section.label}</div>
+                {sectionItems.map((item) => {
+                  const index = items.indexOf(item)
+                  return (
+                    <button
+                      key={summonItemKey(item)}
+                      type="button"
+                      role="option"
+                      aria-selected={index === selected}
+                      className={`summon-palette__row${index === selected ? " is-selected" : ""}`}
+                      onMouseEnter={() => setSelected(index)}
+                      onClick={() => peekItem(item)}
+                    >
+                      <span className="summon-palette__name">{item.name}</span>
+                      <span className="summon-palette__desc">{item.desc}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            )
+          })}
           {items.length === 0 ? (
-            <li className="summon-palette__empty">No matches</li>
+            <div className="summon-palette__empty">No matches</div>
           ) : null}
-        </ul>
+        </div>
         <ComposerKbdFooter hints={SUMMON_HINTS} />
       </div>
     </div>
