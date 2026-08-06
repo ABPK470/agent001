@@ -33,6 +33,9 @@ describe("summon tabs", () => {
     const observe = listSummonItems().find(
       (item) => item.kind === "space" && item.index === 2,
     )!
-    expect(summonActionKeys(observe, { onSpace: false })).toEqual(["⌘", "2"])
+    expect(summonActionKeys(observe, { onSpace: false })).toEqual([
+      expect.stringMatching(/^(⌘|Ctrl)$/),
+      "2",
+    ])
   })
 })

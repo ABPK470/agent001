@@ -14,6 +14,7 @@ import {
   filterShortcutRegistry,
   keymapTabFromDigit,
   nextKeymapTab,
+  resolveKeyCaptions,
   resolveKeymapActiveContext,
   SHORTCUT_REGISTRY,
   type KbdHint,
@@ -237,11 +238,12 @@ function keymapFooterHints(hasQuery: boolean): readonly KbdHint[] {
 }
 
 function ShortcutRow({ item }: { item: ShortcutItem }) {
+  const keys = resolveKeyCaptions(item.keys)
   return (
     <li className="ops-sheet__row">
       <span className="ops-sheet__label">{item.label}</span>
       <span className="ops-sheet__keys">
-        {item.keys.map((key) => (
+        {keys.map((key) => (
           <kbd key={`${item.id}:${key}`} className="composer-kbd">
             {key}
           </kbd>

@@ -70,7 +70,7 @@ import { useTraceZenHotkeys } from "./use-trace-zen-hotkeys"
 import { useTraceTreeKeyboard } from "./use-trace-tree-keyboard"
 import { useTraceOperatorKeyboard } from "./use-trace-operator-keyboard"
 import { operationStatusPill } from "../../lib/status-callout"
-import { hintsForTracePane, type TracePane } from "../../lib/keymap"
+import { formatModChord, hintsForTracePane, type TracePane } from "../../lib/keymap"
 import { ComposerKbdFooter } from "../chat/ComposerKbdFooter"
 
 export const TRACE_TREE_OVERSCAN = 8
@@ -646,7 +646,7 @@ export function TraceDag({
               className={`trace-scope-drawer-toggle${scopeDrawerOpen ? " is-open" : ""}`}
               aria-label={scopeDrawerOpen ? "Close thread drawer" : "Open thread drawer"}
               aria-expanded={scopeDrawerOpen}
-              title="Thread / run drawer (⌘\\)"
+              title={`Thread / run drawer (${formatModChord("\\")})`}
               onClick={() => setScopeDrawerOpen((open) => !open)}
             >
               <PanelLeft size={15} strokeWidth={2} aria-hidden />
@@ -764,7 +764,7 @@ export function TraceDag({
                 }}
               >
               <div
-                className={`trace-split-tree widget-split-sidebar flex min-h-0 flex-col${isZen ? " trace-split-tree--zen" : ""}`}
+                className={`trace-split-tree widget-split-sidebar flex min-h-0 flex-col${isZen ? " trace-split-tree--zen" : ""}${focusedPane === "tree" && zenHotkeysEnabled ? " is-pane-focused" : ""}`}
               >
                 {isZen ? zenHud : null}
                 {runId && dag.hasData && treeSearch && treeIndex.nodes.length === 0 ? (
@@ -782,7 +782,7 @@ export function TraceDag({
                     </div>
                     <div
                       ref={treeScrollRef}
-                      className={`trace-split-tree-scroll${focusedPane === "tree" && zenHotkeysEnabled ? " is-pane-focused" : ""}`}
+                      className="trace-split-tree-scroll"
                       role="tree"
                       aria-label="Trace tree"
                       tabIndex={0}
@@ -803,7 +803,7 @@ export function TraceDag({
                 {runId && dag.hasData && viewMode === "waterfall" && (
                   <div
                     ref={treeScrollRef}
-                    className={`trace-split-tree-scroll${focusedPane === "tree" && zenHotkeysEnabled ? " is-pane-focused" : ""}`}
+                    className="trace-split-tree-scroll"
                     tabIndex={0}
                     role="region"
                     aria-label="Trace waterfall"
@@ -828,7 +828,9 @@ export function TraceDag({
                 onPointerUp={onSplitPointerUp}
                 onPointerCancel={onSplitPointerCancel}
               />
-              <div className="trace-split-detail widget-split-main flex min-h-0 min-w-0 flex-col overflow-hidden">
+              <div
+                className={`trace-split-detail widget-split-main flex min-h-0 min-w-0 flex-col overflow-hidden${focusedPane === "detail" && zenHotkeysEnabled ? " is-pane-focused" : ""}`}
+              >
                 <div className="widget-split-inset flex min-h-0 flex-1 flex-col overflow-hidden">
                   <TraceDetailInspector
                     dag={dag}
@@ -849,7 +851,6 @@ export function TraceDag({
                     splitHeader={isZen}
                     scrollRef={detailScrollRef}
                     tabCycleRef={tabCycleRef}
-                    paneFocused={focusedPane === "detail" && zenHotkeysEnabled}
                   />
                 </div>
               </div>

@@ -5,22 +5,21 @@
  *   workspace — named layouts and product surfaces (ops, full visibility)
  */
 
+import { detectModHint, type ModHint } from "../lib/keymap"
+
 export type AppShellMode = "workspace" | "chat"
 
 export const APP_SHELL_MODES: ReadonlyArray<AppShellMode> = ["chat", "workspace"]
+
+export { detectModHint, type ModHint }
 
 /**
  * Toggle chat ↔ workspace. Same binding in both shells.
  * Mac: ⌘⌥  ·  elsewhere: Ctrl+Alt
  * Fires on Option/Alt keydown while Mod is held.
  */
-export function shellModeToggleHint(modKey: "⌘" | "Ctrl" = detectModHint()): string {
+export function shellModeToggleHint(modKey: ModHint = detectModHint()): string {
   return modKey === "⌘" ? "⌘⌥" : "Ctrl+Alt"
-}
-
-export function detectModHint(): "⌘" | "Ctrl" {
-  if (typeof navigator === "undefined") return "Ctrl"
-  return /Mac|iPhone|iPad/i.test(navigator.platform) ? "⌘" : "Ctrl"
 }
 
 export function isShellModeToggleEvent(event: KeyboardEvent): boolean {
@@ -33,7 +32,7 @@ export function isShellModeToggleEvent(event: KeyboardEvent): boolean {
  * Open Spotlight Summon (peek a Space / widget / bundle).
  * Mac: ⌘K  ·  elsewhere: Ctrl+K
  */
-export function openWidgetCatalogHint(modKey: "⌘" | "Ctrl" = detectModHint()): string {
+export function openWidgetCatalogHint(modKey: ModHint = detectModHint()): string {
   return modKey === "⌘" ? "⌘K" : "Ctrl+K"
 }
 

@@ -48,8 +48,12 @@ describe("operator review kit contracts", () => {
     expect(nodeCell).not.toMatch(/padding-left:\s*0\s*!important/)
   })
 
-  it("selection rail stays at row edge", () => {
+  it("row selection keeps the left rail; pane focus is a top edge", () => {
     expect(css).toMatch(/\.review-tree-row\.is-selected::before\s*\{[^}]*left:\s*0/s)
+    expect(css).toMatch(/\.review-tree-row\.is-selected::before\s*\{[^}]*width:\s*2px/s)
+    expect(css).toMatch(
+      /\.trace-split-tree\.is-pane-focused::before,\s*\n\.trace-split-detail\.is-pane-focused::before\s*\{[^}]*height:\s*2px/s,
+    )
   })
 
   it("fold toggle is a ListChevrons icon button (not Expanded/Collapsed segment)", () => {

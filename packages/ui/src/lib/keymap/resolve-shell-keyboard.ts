@@ -39,7 +39,7 @@ export function resolveShellKeyboardAction(
     return { type: "call-space", index: Number(key) }
   }
 
-  // ⌘/Ctrl+[ / ] — prev / next toolbar view (Spaces + DIY). Avoids browser Ctrl+Tab.
+  // Mod+[ / ] — prev / next toolbar view (Spaces + DIY). Avoids browser Ctrl+Tab.
   if (mod && !event.altKey && !event.shiftKey && (key === "[" || key === "]")) {
     return { type: "cycle-view", direction: key === "]" ? 1 : -1 }
   }

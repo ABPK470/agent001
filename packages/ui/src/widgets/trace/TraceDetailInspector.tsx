@@ -180,7 +180,6 @@ export function TraceDetailInspector({
   splitHeader = false,
   scrollRef,
   tabCycleRef,
-  paneFocused = false,
 }: {
   dag: TraceDag
   compareDag: TraceDag | null
@@ -201,7 +200,6 @@ export function TraceDetailInspector({
   splitHeader?: boolean
   scrollRef?: Ref<HTMLDivElement>
   tabCycleRef?: MutableRefObject<((direction: -1 | 1) => void) | null>
-  paneFocused?: boolean
 }) {
   const [evalBusy, setEvalBusy] = useState(false)
   const [evalAdded, setEvalAdded] = useState(false)
@@ -219,7 +217,7 @@ export function TraceDetailInspector({
 
   if (!node) {
     return (
-      <div className={`trace-detail trace-detail--empty${paneFocused ? " is-pane-focused" : ""}`}>
+      <div className="trace-detail trace-detail--empty">
         <div
           ref={scrollRef}
           className="trace-detail__scroll"
@@ -291,7 +289,7 @@ export function TraceDetailInspector({
   }
 
   return (
-    <div className={`trace-detail${paneFocused ? " is-pane-focused" : ""}`}>
+    <div className="trace-detail">
       <div
         className={`trace-detail__header${splitHeader ? " trace-detail__header--split" : ""}`}
       >

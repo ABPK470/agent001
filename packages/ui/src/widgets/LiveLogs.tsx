@@ -13,7 +13,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { api } from "../client/index"
 import { DateField } from "../components/DateField"
 import { EmptyState } from "../components/EmptyState"
-import { VirtualList } from "../components/VirtualList"
+import type { ReviewTreeKeyboardNode } from "../components/review/review-tree-keyboard"
+import { VirtualList, type VirtualListHandle } from "../components/VirtualList"
+import { useReviewTreeKeyboard } from "../hooks/useReviewTreeKeyboard"
+import { useLayoutStore } from "../state/layout-store"
 import {
   ActiveFilterChips,
   FilterChoiceGrid,
@@ -102,9 +105,18 @@ function logMatchesFilters(
   return logMatchesSearch(log, searchText)
 }
 
+function eventStreamRowKey(log: LogEntry, index: number): string {
+  return `${log.timestamp}|${log.eventName ?? ""}|${log.type}|${index}`
+}
+
+function eventStreamHasPayload(log: LogEntry): boolean {
+  return Boolean(log.data && Object.keys(log.data).length > 0)
+}
+
 export function LiveLogs() {
   const instance = useWidgetInstance()
   const tileId = instance?.widgetId ?? null
+  const focusedTileId = useLayoutStore((s) => s.focusedTileId)
   const initialPrefs = useMemo(() => readEventStreamPrefs(tileId), [tileId])
 
   const [paused, setPaused] = useState(false)
@@ -115,6 +127,9 @@ export function LiveLogs() {
   const [errorsOnly, setErrorsOnly] = useState(() => initialPrefs.errorsOnly)
   const [searchText, setSearchText] = useState(() => initialPrefs.searchText)
   const [filtersOpen, setFiltersOpen] = useState(false)
+  const [selectedKey, setSelectedKey] = useState<string | null>(null)
+  const [expandedKeys, setExpandedKeys] = useState<Set<string>>(() => new Set())
+  const listRef = useRef<VirtualListHandle>(null)
 
   const {
     entries,
@@ -247,6 +262,43 @@ export function LiveLogs() {
     !searching &&
     displayRows.length === 0 &&
     (searchActive || entries.length === 0)
+
+  const keyboardNodes = useMemo((): ReviewTreeKeyboardNode[] => {
+    return displayRows.map((log, index) => ({
+      scopeId: eventStreamRowKey(log, index),
+      parentScopeId: null,
+      hasChildren: eventStreamHasPayload(log),
+      flatIndex: index,
+    }))
+  }, [displayRows])
+
+  const isKeyboardNodeFolded = useCallback(
+    (node: ReviewTreeKeyboardNode) => !expandedKeys.has(node.scopeId),
+    [expandedKeys],
+  )
+
+  const onKeyboardToggleFold = useCallback((scopeId: string) => {
+    setExpandedKeys((prev) => {
+      const next = new Set(prev)
+      if (next.has(scopeId)) next.delete(scopeId)
+      else next.add(scopeId)
+      return next
+    })
+  }, [])
+
+  const treeKeyboardEnabled = Boolean(
+    instance && focusedTileId === instance.widgetId && keyboardNodes.length > 0,
+  )
+
+  useReviewTreeKeyboard({
+    enabled: treeKeyboardEnabled,
+    nodes: keyboardNodes,
+    selectedScopeId: selectedKey,
+    isFolded: isKeyboardNodeFolded,
+    onSelect: setSelectedKey,
+    onToggleFold: onKeyboardToggleFold,
+    listRef,
+  })
 
   const hasCustomDates = Boolean(timeWindow.from || timeWindow.to)
   const timeFiltered = hasCustomDates || timeWindow.range !== "live"
@@ -513,18 +565,27 @@ export function LiveLogs() {
 
         {displayRows.length > 0 && (
           <VirtualList
+            ref={listRef}
             items={displayRows}
             scrollRef={containerRef}
             estimateSize={() => 36}
-            getItemKey={(i, log) => `${log.timestamp}|${log.eventName ?? ""}|${i}`}
-            renderItem={({ item: log }) => (
-              <LogRow
-                log={log}
-                setTypeFilters={setTypeFilters}
-                compact={compact}
-                tiny={tiny}
-              />
-            )}
+            getItemKey={(i, log) => eventStreamRowKey(log, i)}
+            renderItem={({ item: log, index }) => {
+              const rowKey = eventStreamRowKey(log, index)
+              return (
+                <LogRow
+                  log={log}
+                  rowKey={rowKey}
+                  selected={selectedKey === rowKey}
+                  expanded={expandedKeys.has(rowKey)}
+                  onSelect={() => setSelectedKey(rowKey)}
+                  onToggleExpand={() => onKeyboardToggleFold(rowKey)}
+                  setTypeFilters={setTypeFilters}
+                  compact={compact}
+                  tiny={tiny}
+                />
+              )
+            }}
           />
         )}
 
@@ -585,31 +646,44 @@ function formatLogTimestamp(iso: string | undefined, tiny: boolean): string {
 
 function LogRow({
   log,
+  rowKey,
+  selected,
+  expanded,
+  onSelect,
+  onToggleExpand,
   setTypeFilters,
   compact,
   tiny,
 }: {
   log: LogEntry
+  rowKey: string
+  selected: boolean
+  expanded: boolean
+  onSelect: () => void
+  onToggleExpand: () => void
   setTypeFilters: React.Dispatch<React.SetStateAction<Set<EventType>>>
   compact: boolean
   tiny: boolean
 }) {
-  const [expanded, setExpanded] = useState(false)
-  const hasData = log.data && Object.keys(log.data).length > 0
+  const hasData = eventStreamHasPayload(log)
   const isError = Boolean(log.error)
 
   const lane = log.type as EventType
 
   return (
-    <div className="event-stream-entry">
+    <div className="event-stream-entry" data-event-row={rowKey}>
       <div
         className={[
           "event-stream-row",
           isError ? "event-stream-row--has-error" : "",
           expanded && hasData ? "event-stream-row--open" : "",
+          selected ? "is-selected" : "",
           hasData ? "cursor-pointer" : "",
         ].join(" ")}
-        onClick={() => hasData && setExpanded((e) => !e)}
+        onClick={() => {
+          onSelect()
+          if (hasData) onToggleExpand()
+        }}
       >
         {isError ? (
           <span className="event-stream-row__pill-slot">

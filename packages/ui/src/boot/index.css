@@ -2339,6 +2339,7 @@ label:focus-within > .mia-checkbox,
  * With error: Error column prepended (only when present — no empty gutter).
  */
 .event-stream-row {
+  position: relative;
   display: grid;
   grid-template-columns:
     1rem
@@ -2357,6 +2358,21 @@ label:focus-within > .mia-checkbox,
   border-bottom: 1px solid var(--border-subtle);
   border-radius: 0;
   transition: background-color 0.12s ease;
+}
+
+.event-stream-row.is-selected::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--color-accent, #6366f1);
+  z-index: 2;
+}
+
+.log-stream .event-stream-row.is-selected {
+  background: var(--select-fill);
 }
 
 .event-stream-row--has-error {
@@ -3102,6 +3118,7 @@ textarea.input {
   opacity: 0.65;
 }
 
+/* Selected row — left rail (in-list selection). Pane focus uses top — not this. */
 .review-tree-row.is-selected::before {
   content: "";
   position: absolute;
@@ -5167,10 +5184,28 @@ textarea.input {
   outline: none;
 }
 
-/* Pane focus — quiet left rail. Never a full inset frame (fights footer / tile border). */
-.trace-split-tree-scroll.is-pane-focused,
-.trace-detail.is-pane-focused {
-  box-shadow: inset 2px 0 0 0 var(--accent, #6b8cae);
+/*
+ * Pane focus (tree ↔ detail) — top edge of the whole split panel
+ * (above column headers / detail chrome). Row selection keeps the left rail.
+ * Pseudo-element so opaque headers cannot paint over the accent.
+ */
+.trace-split-tree.is-pane-focused,
+.trace-split-detail.is-pane-focused {
+  position: relative;
+}
+
+.trace-split-tree.is-pane-focused::before,
+.trace-split-detail.is-pane-focused::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--accent, #6b8cae);
+  border-radius: 0.5rem 0.5rem 0 0;
+  z-index: 2;
+  pointer-events: none;
 }
 
 .trace-tree-header {
@@ -5231,6 +5266,7 @@ textarea.input {
   opacity: 0.65;
 }
 
+/* Selected row — left rail (in-list selection). Pane focus uses top — not this. */
 .trace-tree-row.is-selected::before {
   content: "";
   position: absolute;

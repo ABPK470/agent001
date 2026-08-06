@@ -370,18 +370,20 @@ Observe / Reconcile / Bridge / Trace) are curated job landings with fixed
 default autolayouts — not DIY-named sheets as the primary path. Observe =
 Pipelines 70% / Event stream 30%; Trace = Trace alone;
 Reconcile = Sync / Entity registry 50/50; Agent = Trace 60% with Chat /
-Threads splitting the remaining 40%. **Summon** (⌘/Ctrl+K) is widget-first:
+Threads splitting the remaining 40%. **Summon** (Mod+K) is widget-first:
 Enter peeks a widget (or focuses it if already on the Space); sole-widget
-Spaces (Trace, Bridge) have no peek twin — Enter opens that Space; ⌘/Ctrl+Enter
+Spaces (Trace, Bridge) have no peek twin — Enter opens that Space; Mod+Enter
 Keeps a widget in the current Space; Spaces navigate (Call); bundles open a
 home Space and focus a primary tile — never auto-maximize. Trace owns
-**pane focus** with one Esc ladder (overlay → filter → pane → zen →
-maximize). Shell chords: Call Space (⌘/Ctrl+1–4), prev/next view tab
-(⌘/Ctrl+[ / ]), tile focus
-(⌘/Ctrl+⇧+arrows — not ⌥; ⌘/Ctrl+⌥ alone toggles chat↔workspace), M
-maximize, Z zen, ⌘/Ctrl+W close tile, `?` keymap (searchable zero-scroll sheet: All / Pane / Shell).
-Empty Spaces open **Summon**, not the legacy widget catalog (mobile may still use catalog).
-Operator guide:
+**pane focus** (top accent on the focused split panel — tree or detail) with
+one Esc ladder (overlay → filter → pane → zen → maximize). Shell chords:
+Call Space (Mod+1–4), prev/next view tab (Mod+[ / ]), tile focus
+(Mod+⇧+arrows — not ⌥; Mod+⌥ alone toggles chat↔workspace), M maximize, Z zen,
+Mod+W close tile, `?` keymap (searchable zero-scroll sheet: All / Pane / Shell).
+**Mod captions are OS-aware** (`lib/keymap/mod-hint.ts`): binding tables store
+`Mod`; display resolves to ⌘ on Apple platforms and Ctrl elsewhere — never
+`⌘/Ctrl` dual chips. Empty Spaces open **Summon**, not the legacy widget
+catalog (mobile may still use catalog). Operator guide:
 `docs/operator-keyboard.md`. See `lib/spaces.ts`, `lib/summon-resolve.ts`,
 `lib/keymap/`, `app/workspace/SummonPalette.tsx`.
 

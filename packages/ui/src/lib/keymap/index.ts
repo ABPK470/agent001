@@ -12,6 +12,14 @@ export {
   type TracePaneKeyboardAction,
 } from "./resolve-trace-pane-keyboard"
 export {
+  MOD,
+  detectModHint,
+  resolveKeyCaption,
+  resolveKeyCaptions,
+  formatModChord,
+  type ModHint,
+} from "./mod-hint"
+export {
   SHELL_BINDINGS,
   TRACE_SCOPE_DRAWER_BINDING,
   TRACE_TREE_HINTS,

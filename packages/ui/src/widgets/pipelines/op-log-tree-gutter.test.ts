@@ -124,6 +124,7 @@ describe("pipelines left-tree gutter — review kit", () => {
   it("keeps selection rail on the row edge (bar ≠ content inset)", () => {
     const css = read(cssPath)
     expect(css).toMatch(/\.review-tree-row\.is-selected::before\s*\{[^}]*left:\s*0/s)
+    expect(css).toMatch(/\.review-tree-row\.is-selected::before\s*\{[^}]*width:\s*2px/s)
   })
 
   it("split shell mounts review kit list host with day grouping caps", () => {

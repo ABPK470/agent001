@@ -48,7 +48,7 @@ export const SPACE_LAYOUT_VERSION = 6
 export interface ProductSpaceDef {
   id: SpaceId
   /**
-   * 1–4 = Call Space (⌘/Ctrl+1…4).
+   * 1–4 = Call Space (Mod+1…4).
    * 0 = Summon / bundle only (no Call Space chord).
    */
   index: number

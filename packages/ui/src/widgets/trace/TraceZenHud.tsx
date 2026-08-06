@@ -4,6 +4,7 @@
 
 import { ChevronDown, Info, PanelLeft, Search, X } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
+import { formatModChord } from "../../lib/keymap"
 import { TraceRunContext } from "./TraceRunContext"
 import { TraceTreeFoldToggle } from "./TraceTreeFoldToggle"
 import type { FoldMode } from "./open-state"
@@ -99,7 +100,7 @@ export function TraceZenHud({
               className={`trace-scope-drawer-toggle${scopeDrawerOpen ? " is-open" : ""}`}
               aria-label={scopeDrawerOpen ? "Close thread drawer" : "Open thread drawer"}
               aria-expanded={scopeDrawerOpen}
-              title="Thread / run drawer (⌘\\)"
+              title={`Thread / run drawer (${formatModChord("\\")})`}
               onClick={() => onScopeDrawerOpenChange(!scopeDrawerOpen)}
             >
               <PanelLeft size={14} strokeWidth={2} aria-hidden />
@@ -151,7 +152,7 @@ export function TraceZenHud({
             <button
               type="button"
               className="trace-zen-hud__icon-btn"
-              title="Filter (⌘F or /)"
+              title={`Filter (${formatModChord("F")} or /)`}
               aria-label="Filter trace"
               onClick={() => onSearchOpenChange(true)}
             >

@@ -15,7 +15,7 @@ import {
 import { Search } from "lucide-react"
 import { useStore } from "../../state/store"
 import { useLayoutStore } from "../../state/layout-store"
-import { resolveKeymapActiveContext, type KbdHint } from "../../lib/keymap"
+import { MOD, resolveKeymapActiveContext, type KbdHint } from "../../lib/keymap"
 import { ComposerKbdFooter } from "../../widgets/chat/ComposerKbdFooter"
 import {
   resolveSummonBundleOpen,
@@ -398,7 +398,7 @@ export function SummonPalette() {
 function summonFooterHints(primary: string, hasQuery: boolean): readonly KbdHint[] {
   return [
     { keys: ["↵"], label: primary },
-    { keys: ["⌘/Ctrl", "↵"], label: "keep" },
+    { keys: [MOD, "↵"], label: "keep" },
     { keys: ["↑", "↓"], label: "navigate" },
     { keys: ["1–3"], label: "categories" },
     { keys: ["Tab"], label: "cycle" },

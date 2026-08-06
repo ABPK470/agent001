@@ -2,6 +2,7 @@
  * Summon category tabs — same interaction model as the keymap sheet (1–3, Tab).
  */
 
+import { detectModHint } from "../../lib/keymap"
 import type { SummonItem } from "./summon-items"
 
 export type SummonTab = "all" | "go" | "surface"
@@ -51,7 +52,7 @@ export function summonActionKeys(
   opts: { onSpace: boolean },
 ): readonly string[] {
   if (item.kind === "space") {
-    return item.index >= 1 ? ["⌘", String(item.index)] : ["↵"]
+    return item.index >= 1 ? [detectModHint(), String(item.index)] : ["↵"]
   }
   if (item.kind === "bundle") return ["↵"]
   if (opts.onSpace) return ["↵"]

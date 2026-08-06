@@ -1,4 +1,4 @@
-import type { KbdHint } from "../../lib/keymap"
+import { resolveKeyCaptions, type KbdHint } from "../../lib/keymap"
 
 export type ComposerKbdHint = KbdHint
 
@@ -9,16 +9,19 @@ export function ComposerKbdFooter({
 }) {
   return (
     <div className="composer-kbd-footer" aria-hidden>
-      {hints.map((hint) => (
-        <span key={`${hint.label}:${hint.keys.join("+")}`} className="composer-kbd-footer__hint">
-          {hint.keys.map((key) => (
-            <kbd key={key} className="composer-kbd">
-              {key}
-            </kbd>
-          ))}
-          <span>{hint.label}</span>
-        </span>
-      ))}
+      {hints.map((hint) => {
+        const keys = resolveKeyCaptions(hint.keys)
+        return (
+          <span key={`${hint.label}:${keys.join("+")}`} className="composer-kbd-footer__hint">
+            {keys.map((key) => (
+              <kbd key={key} className="composer-kbd">
+                {key}
+              </kbd>
+            ))}
+            <span>{hint.label}</span>
+          </span>
+        )
+      })}
     </div>
   )
 }

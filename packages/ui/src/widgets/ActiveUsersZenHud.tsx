@@ -8,6 +8,7 @@
 
 import { ChevronDown, Info, Search, SlidersHorizontal, X } from "lucide-react"
 import { useEffect, useRef, type RefObject } from "react"
+import { formatModChord } from "../lib/keymap"
 import { WidgetToolbarCount } from "./widget-toolbar"
 
 type ZenStat = { value: string; label: string }
@@ -135,7 +136,7 @@ export function ActiveUsersZenHud({
               <button
                 type="button"
                 className="trace-zen-hud__icon-btn"
-                title="Filter (⌘F or /)"
+                title={`Filter (${formatModChord("F")} or /)`}
                 aria-label="Filter users"
                 onClick={() => onSearchOpenChange(true)}
               >

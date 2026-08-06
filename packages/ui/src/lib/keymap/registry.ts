@@ -1,7 +1,10 @@
 /**
  * Keymap sheet registry — searchable, category-filtered shortcut table.
  * Source of truth for the ? modal; strip hints stay in bindings.ts.
+ * Mod chords use `Mod` — display resolves via detectModHint() (⌘ vs Ctrl).
  */
+
+import { MOD, resolveKeyCaptions } from "./mod-hint"
 
 export type KeymapCategory = "pane" | "workspace" | "global"
 
@@ -85,7 +88,7 @@ export const SHORTCUT_REGISTRY: readonly ShortcutItem[] = [
   {
     id: "trace-scope-drawer",
     label: "Thread / run drawer",
-    keys: ["⌘/Ctrl", "\\"],
+    keys: [MOD, "\\"],
     category: "pane",
     context: "Trace",
   },
@@ -94,19 +97,19 @@ export const SHORTCUT_REGISTRY: readonly ShortcutItem[] = [
   {
     id: "call-space",
     label: "Call Space",
-    keys: ["⌘/Ctrl", "1–4"],
+    keys: [MOD, "1–4"],
     category: "workspace",
   },
   {
     id: "cycle-view",
     label: "Prev / next view tab",
-    keys: ["⌘/Ctrl", "[", "]"],
+    keys: [MOD, "[", "]"],
     category: "workspace",
   },
   {
     id: "tile-focus",
     label: "Focus neighboring tile",
-    keys: ["⌘/Ctrl", "⇧", "↑↓←→"],
+    keys: [MOD, "⇧", "↑↓←→"],
     category: "workspace",
   },
   {
@@ -124,13 +127,13 @@ export const SHORTCUT_REGISTRY: readonly ShortcutItem[] = [
   {
     id: "close-tile",
     label: "Close focused tile",
-    keys: ["⌘/Ctrl", "W"],
+    keys: [MOD, "W"],
     category: "workspace",
   },
   {
     id: "summon",
     label: "Summon",
-    keys: ["⌘/Ctrl", "K"],
+    keys: [MOD, "K"],
     category: "workspace",
   },
 
@@ -138,13 +141,13 @@ export const SHORTCUT_REGISTRY: readonly ShortcutItem[] = [
   {
     id: "shell-mode",
     label: "Chat ↔ workspace",
-    keys: ["⌘/Ctrl", "⌥"],
+    keys: [MOD, "⌥"],
     category: "global",
   },
   {
     id: "focus-composer",
     label: "Focus chat input",
-    keys: ["⌘/Ctrl", "'"],
+    keys: [MOD, "'"],
     category: "global",
   },
   {
@@ -176,7 +179,8 @@ export function filterShortcutRegistry(
   return items.filter((item) => {
     if (!matchesKeymapTab(item, tab)) return false
     if (!q) return true
-    const hay = `${item.label} ${item.keys.join(" ")} ${item.context ?? ""} ${item.category}`.toLowerCase()
+    const keys = resolveKeyCaptions(item.keys).join(" ")
+    const hay = `${item.label} ${keys} ${item.context ?? ""} ${item.category}`.toLowerCase()
     return hay.includes(q)
   })
 }
