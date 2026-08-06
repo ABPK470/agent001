@@ -63,19 +63,6 @@ export {
 } from "./adapters/oracle.js"
 
 export {
-  createHttpApiAdapter,
-  type HttpApiAdapterOptions,
-  type HttpDriver,
-  extractRows as extractHttpRows,
-} from "./adapters/http-api.js"
-
-export {
-  createDenodoAdapter,
-  type DenodoAdapterOptions,
-  type DenodoDriver,
-} from "./adapters/denodo.js"
-
-export {
   createHiveAdapter,
   type HiveAdapterOptions,
   type HiveClient,
@@ -105,24 +92,15 @@ export {
 } from "./adapters/databricks.js"
 
 export {
-  createAqueductAdapter,
-  type AqueductAdapterOptions,
-  type AqueductDriver,
-} from "./adapters/aqueduct.js"
-
-export {
   defaultMssqlDriver,
   defaultPostgresDriver,
   defaultOracleDriver,
   createOraclePool,
   oracleConnectString,
-  defaultHttpDriver,
-  defaultDenodoDriver,
   defaultWebhdfsDriver,
   defaultAwsDriver,
   defaultAzureDriver,
   defaultFtpDriver,
   defaultDatabricksDriver,
-  defaultAqueductDriver,
   type OraclePool,
 } from "./adapters/drivers.js"

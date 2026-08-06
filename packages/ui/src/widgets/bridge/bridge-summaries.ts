@@ -20,19 +20,6 @@ export function summarizeReadSpec(kind: ConnectorKindId, bag: Record<string, unk
     const sql = String(bag["sql"] ?? "").trim()
     return sql ? clip(sql) : "Enter a SQL query"
   }
-  if (k === "httpApi") {
-    const method = String(bag["method"] ?? "GET")
-    const path = String(bag["path"] ?? "/").trim() || "/"
-    return `${method} ${clip(path, 40)}`
-  }
-  if (k === "denodo") {
-    const view = String(bag["view"] ?? "").trim()
-    return view ? `View ${clip(view, 40)}` : "Choose a Denodo view"
-  }
-  if (k === "aqueduct") {
-    const params = String(bag["params"] ?? "").trim()
-    return params ? `Params ${clip(params, 36)}` : "Pipeline preview"
-  }
   const path = String(bag["path"] ?? "").trim() || "/"
   const format = String(bag["format"] ?? "csv")
   return `${clip(path, 36)} · ${format}`
@@ -51,11 +38,6 @@ export function summarizeWriteSpec(kind: ConnectorKindId, bag: Record<string, un
     return extras.length > 0
       ? `${clip(table, 28)} · ${mode} · ${extras.join("+")}`
       : `${clip(table, 36)} · ${mode}`
-  }
-  if (k === "httpApi") {
-    const method = String(bag["method"] ?? "POST")
-    const path = String(bag["path"] ?? "/").trim() || "/"
-    return `${method} ${clip(path, 40)}`
   }
   const path = String(bag["path"] ?? "").trim() || "/"
   const format = String(bag["format"] ?? "csv")

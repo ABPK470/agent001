@@ -58,11 +58,13 @@ export function TraceDetailCollapsible({
 
   return (
     <section className={rootClass}>
-      <div className="trace-detail-accordion-bar">
+      <div
+        className={`trace-detail-accordion-bar${active ? " is-section-focused" : ""}`}
+      >
         <button
           ref={headerRef}
           type="button"
-          className={`trace-detail-accordion${active ? " is-section-focused" : ""}`}
+          className="trace-detail-accordion"
           aria-expanded={open}
           onClick={() => {
             activate()

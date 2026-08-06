@@ -6,7 +6,7 @@
  * from row batches (columnar layout inferred from values).
  *
  * Size note: Parquet encode/decode for Bridge v1 materializes the file in
- * memory (same class of bound as Denodo/HTTP JSON payloads). Prefer
+ * memory (same class of bound as JSON file payloads). Prefer
  * partitioned files for very large datasets.
  */
 

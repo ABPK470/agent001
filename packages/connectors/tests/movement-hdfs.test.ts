@@ -1,14 +1,13 @@
 /**
- * movement-hdfs.test.ts — e2e through buildConnectorPort with webhdfs + httpApi
- * adapters (mocked drivers). Verifies the registry wires the webhdfs kind and
- * the streaming engine pipes CSV/JSON files to/from HTTP, end-to-end.
+ * movement-hdfs.test.ts — e2e through buildConnectorPort with webhdfs adapters
+ * (mocked drivers). Verifies the registry wires the webhdfs kind and the
+ * streaming engine pipes CSV/JSON files end-to-end.
  */
 
 import { describe, expect, it } from "vitest"
 import type { Connector, Row } from "@mia/shared-types"
 import { AdapterRegistry, buildConnectorPort } from "../src/registry.js"
 import { createWebhdfsAdapter, type WebHdfsDriver } from "../src/adapters/webhdfs.js"
-import { createHttpApiAdapter, type HttpDriver } from "../src/adapters/http-api.js"
 
 function connector(id: string, kind: Connector["kind"], config: Record<string, unknown>): Connector {
   return {
@@ -21,18 +20,6 @@ function connector(id: string, kind: Connector["kind"], config: Record<string, u
     createdAt: "",
     updatedAt: "",
     updatedBy: null,
-  }
-}
-
-function mockHttp(response: unknown): HttpDriver & { posted: Row[] } {
-  const posted: Row[] = []
-  return {
-    posted,
-    async request(_method, _path, body) {
-      if (body && typeof body === "object") posted.push(body as Row)
-      return response
-    },
-    async close() {},
   }
 }
 
@@ -57,50 +44,45 @@ function mockHdfs(files: Record<string, string>): WebHdfsDriver & { uploads: { p
   }
 }
 
-describe("data movement: httpApi ↔ webhdfs (e2e via port)", () => {
-  it("reads a CSV file from HDFS and POSTs each row to an HTTP API", async () => {
+describe("data movement: webhdfs (e2e via port)", () => {
+  it("reads a CSV file from HDFS and writes rows to another HDFS path", async () => {
     const hdfs = mockHdfs({ "/in/x.csv": "id,name\n1,alice\n2,bob\n3,carol" })
-    const http = mockHttp(null)
 
     const registry = new AdapterRegistry()
     registry.register("webhdfs", (c) => createWebhdfsAdapter(c, { driverProvider: async () => hdfs, batchSize: 2 }))
-    registry.register("httpApi", (c) => createHttpApiAdapter(c, { driverProvider: async () => http }))
 
     const port = buildConnectorPort(registry, [
       connector("hdfs-src", "webhdfs", { host: "nn" }),
-      connector("api-tgt", "httpApi", { baseUrl: "https://a" }),
+      connector("hdfs-tgt", "webhdfs", { host: "nn" }),
     ])
 
     const summary = await port.moveData(
       { connectorId: "hdfs-src", spec: { kind: "webhdfs", path: "/in/x.csv", format: "csv" } },
-      { connectorId: "api-tgt", spec: { kind: "httpApi", method: "POST", path: "/ingest" } },
+      { connectorId: "hdfs-tgt", spec: { kind: "webhdfs", path: "/out/y.csv", format: "csv", mode: "replace" } },
     )
 
     expect(summary.status).toBe("completed")
     expect(summary.rowsRead).toBe(3)
     expect(summary.rowsWritten).toBe(3)
-    expect(http.posted).toEqual([
-      { id: "1", name: "alice" },
-      { id: "2", name: "bob" },
-      { id: "3", name: "carol" },
-    ])
+    expect(hdfs.uploads).toHaveLength(1)
+    expect(hdfs.uploads[0]!.path).toBe("/out/y.csv")
+    expect(hdfs.uploads[0]!.mode).toBe("replace")
+    expect(hdfs.uploads[0]!.text).toBe("id,name\n1,alice\n2,bob\n3,carol\n")
   })
 
-  it("reads JSON from an HTTP API and writes a CSV file to HDFS (replace)", async () => {
-    const hdfs = mockHdfs({})
-    const http = mockHttp([{ a: 1, b: "x" }, { a: 2, b: "y" }])
+  it("reads JSON from one HDFS path and writes a CSV file to another (replace)", async () => {
+    const hdfs = mockHdfs({ "/in/data.json": '[{"a":1,"b":"x"},{"a":2,"b":"y"}]' })
 
     const registry = new AdapterRegistry()
     registry.register("webhdfs", (c) => createWebhdfsAdapter(c, { driverProvider: async () => hdfs }))
-    registry.register("httpApi", (c) => createHttpApiAdapter(c, { driverProvider: async () => http }))
 
     const port = buildConnectorPort(registry, [
-      connector("api-src", "httpApi", { baseUrl: "https://a" }),
+      connector("hdfs-src", "webhdfs", { host: "nn" }),
       connector("hdfs-tgt", "webhdfs", { host: "nn" }),
     ])
 
     const summary = await port.moveData(
-      { connectorId: "api-src", spec: { kind: "httpApi", method: "GET", path: "/rows" } },
+      { connectorId: "hdfs-src", spec: { kind: "webhdfs", path: "/in/data.json", format: "json" } },
       { connectorId: "hdfs-tgt", spec: { kind: "webhdfs", path: "/out/y.csv", format: "csv", mode: "replace" } },
     )
 
@@ -108,39 +90,33 @@ describe("data movement: httpApi ↔ webhdfs (e2e via port)", () => {
     expect(summary.rowsWritten).toBe(2)
     expect(hdfs.uploads).toHaveLength(1)
     expect(hdfs.uploads[0]!.path).toBe("/out/y.csv")
-    expect(hdfs.uploads[0]!.mode).toBe("replace")
     expect(hdfs.uploads[0]!.text).toBe("a,b\n1,x\n2,y\n")
   })
 
-  it("applies a transform between HDFS CSV read and HTTP write", async () => {
+  it("applies a transform between HDFS CSV read and write", async () => {
     const hdfs = mockHdfs({ "/in/x.csv": "k,v\n1,foo\n2,bar" })
-    const http = mockHttp(null)
     const registry = new AdapterRegistry()
     registry.register("webhdfs", (c) => createWebhdfsAdapter(c, { driverProvider: async () => hdfs }))
-    registry.register("httpApi", (c) => createHttpApiAdapter(c, { driverProvider: async () => http }))
     const port = buildConnectorPort(registry, [
       connector("hdfs-src", "webhdfs", {}),
-      connector("api-tgt", "httpApi", {}),
+      connector("hdfs-tgt", "webhdfs", {}),
     ])
 
     await port.moveData(
       { connectorId: "hdfs-src", spec: { kind: "webhdfs", path: "/in/x.csv", format: "csv" } },
-      { connectorId: "api-tgt", spec: { kind: "httpApi", method: "POST", path: "/ingest" } },
+      { connectorId: "hdfs-tgt", spec: { kind: "webhdfs", path: "/out/y.csv", format: "csv", mode: "replace" } },
       { transform: { columns: [{ from: "k", to: "key", cast: "string" }], derive: [{ to: "label", template: "v=${v}" }] } },
     )
 
-    expect(http.posted).toEqual([
-      { key: "1", label: "v=foo" },
-      { key: "2", label: "v=bar" },
-    ])
+    expect(hdfs.uploads[0]!.text).toBe("key,label\n1,v=foo\n2,v=bar\n")
   })
 
-  it("listAdapters reports webhdfs capabilities", () => {
+  it("listAdapters reports webhdfs capabilities", async () => {
     const hdfs = mockHdfs({})
     const registry = new AdapterRegistry()
     registry.register("webhdfs", (c) => createWebhdfsAdapter(c, { driverProvider: async () => hdfs }))
     const port = buildConnectorPort(registry, [connector("hdfs", "webhdfs", {})])
-    const list = port.listAdapters()
+    const list = await port.listAdapters()
     expect(list[0]!.capabilities).toEqual({ read: true, write: true, query: false })
   })
 })

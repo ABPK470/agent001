@@ -13,10 +13,7 @@ function clip(text: string, max = 72): string {
 /** Short human label for a read spec (SQL / path / view). */
 export function summarizeBridgeReadSpec(spec: ReadSpec): string {
   if (spec.kind === "sql") return clip(spec.sql || "(empty SQL)")
-  if (spec.kind === "denodo") return clip(`view ${spec.view}`)
-  if (spec.kind === "aqueduct") return "aqueduct pipeline"
-  if (spec.kind === "httpApi") return clip(`${spec.method} ${spec.path}`)
-  // Remaining kinds are file-like (path + format).
+  // File-like kinds (path + format).
   return clip(`${String(spec.path)} · ${String(spec.format ?? "file")}`)
 }
 
@@ -29,6 +26,5 @@ export function summarizeBridgeWriteSpec(spec: WriteSpec): string {
     const base = spec.table || "(no table)"
     return flags.length > 0 ? `${clip(base, 48)} · ${flags.join("+")}` : clip(base)
   }
-  if (spec.kind === "httpApi") return clip(`${spec.method} ${spec.path}`)
   return clip(`${String(spec.path)} · ${String(spec.format ?? "file")} · ${String(spec.mode)}`)
 }

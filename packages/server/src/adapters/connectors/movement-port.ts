@@ -16,23 +16,17 @@ import { type AgentHost } from "@mia/agent"
 import {
   AdapterRegistry,
   buildConnectorPort,
-  createAqueductAdapter,
   createDatabricksAdapter,
-  createDenodoAdapter,
-  createHttpApiAdapter,
   createMssqlAdapter,
   createObjectFileAdapter,
   createOracleAdapter,
+  createOraclePool,
   createPostgresAdapter,
   createWebhdfsAdapter,
-  createOraclePool,
-  defaultAqueductDriver,
   defaultAwsDriver,
   defaultAzureDriver,
   defaultDatabricksDriver,
-  defaultDenodoDriver,
   defaultFtpDriver,
-  defaultHttpDriver,
   defaultMssqlDriver,
   defaultOracleDriver,
   defaultPostgresDriver,
@@ -135,18 +129,6 @@ export function buildMovementPort(
     })
   })
 
-  registry.register("httpApi", (connector) => {
-    return createHttpApiAdapter(connector, {
-      driverProvider: () => Promise.resolve(defaultHttpDriver(connector)),
-    })
-  })
-
-  registry.register("denodo", (connector) => {
-    return createDenodoAdapter(connector, {
-      driverProvider: () => Promise.resolve(defaultDenodoDriver(connector)),
-    })
-  })
-
   registry.register("webhdfs", (connector) => {
     return createWebhdfsAdapter(connector, {
       driverProvider: () => Promise.resolve(defaultWebhdfsDriver(connector))
@@ -174,12 +156,6 @@ export function buildMovementPort(
   registry.register("databricks", (connector) => {
     return createDatabricksAdapter(connector, {
       driverProvider: () => Promise.resolve(defaultDatabricksDriver(connector))
-    })
-  })
-
-  registry.register("aqueduct", (connector) => {
-    return createAqueductAdapter(connector, {
-      driverProvider: () => Promise.resolve(defaultAqueductDriver(connector)),
     })
   })
 

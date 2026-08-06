@@ -20,10 +20,7 @@ describe("connector kind catalogue", () => {
       "databricks",
       "azure",
       "aws",
-      "denodo",
-      "httpApi",
       "ftp",
-      "aqueduct",
       "webhdfs",
     ])
   })

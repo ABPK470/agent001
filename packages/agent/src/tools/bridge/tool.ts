@@ -79,11 +79,10 @@ function buildBridgeDataTool(host: AgentHost, run?: RunContext): ExecutableTool 
     name: "bridge_data",
     description:
       "Move (copy) rows from a source connector to a target connector through an optional declarative transform. " +
-      "Streaming — handles arbitrarily large datasets without loading them all into memory (Parquet/HTTP JSON payloads are bounded by file/response size). " +
+      "Streaming — handles arbitrarily large datasets without loading them all into memory (Parquet payloads are bounded by file size). " +
       "Use list_adapters to see connectors and their capabilities. " +
       "source.spec / target.spec are kind-specific: SQL kinds (mssql, postgres, oracle, databricks) use { kind: 'sql', sql | table+mode }; " +
-      "httpApi uses { kind: 'httpApi', method, path, ... }; webhdfs/aws/azure/ftp use { kind, path, format: 'csv'|'json'|'parquet', mode? }; " +
-      "denodo uses { kind: 'denodo', view, params }. " +
+      "webhdfs/aws/azure/ftp use { kind, path, format: 'csv'|'json'|'parquet', mode? }. " +
       "transform = { columns: [{ from, to, cast?, default? }], derive: [{ to, template }], defaults: [{ column, value }], filter: [{ column, op, value? }] }. " +
       "casts: string|number|boolean|date|datetime|json. filter ops: eq|neq|gt|gte|lt|lte|in|exists|empty. " +
       "Write modes: 'append' (batch insert / merge-rewrite for parquet) or 'replace' (truncate+insert / overwrite file). " +

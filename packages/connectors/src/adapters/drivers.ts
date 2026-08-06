@@ -38,10 +38,7 @@ import type {
   PostgresInsertOptions,
   PostgresTransaction,
 } from "./postgres.js"
-import type { DenodoDriver } from "./denodo.js"
-import type { HttpDriver } from "./http-api.js"
 import type { WebHdfsDriver } from "./webhdfs.js"
-import type { AqueductDriver } from "./aqueduct.js"
 import type { DatabricksDriver } from "./databricks.js"
 import type { FileTransferDriver } from "./object-file.js"
 
@@ -415,8 +412,6 @@ async function oracleInsertBatches(
   return makeSummary("completed", rowsWritten, rowsWritten, [], null)
 }
 
-// ── httpApi ─────────────────────────────────────────────────────
-
 function asString(value: unknown): string | undefined {
   return typeof value === "string" && value !== "" ? value : undefined
 }
@@ -432,102 +427,6 @@ function asNumber(value: unknown): number | undefined {
 
 function asBoolean(value: unknown, fallback: boolean): boolean {
   return typeof value === "boolean" ? value : fallback
-}
-
-function parseExtraHeaders(raw: unknown): Record<string, string> {
-  if (typeof raw !== "string" || raw.trim() === "") return {}
-  try {
-    const parsed = JSON.parse(raw)
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-      const out: Record<string, string> = {}
-      for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
-        if (typeof v === "string" || typeof v === "number" || typeof v === "boolean") out[k] = String(v)
-      }
-      return out
-    }
-  } catch {
-    /* ignore malformed headers JSON */
-  }
-  return {}
-}
-
-/** Build a fetch-based HTTP driver from a persisted httpApi connector. */
-export function defaultHttpDriver(connector: Connector): HttpDriver {
-  const baseUrl = asString(connector.config["baseUrl"]) ?? ""
-  const apiKey = asString(connector.config["apiKey"])
-  const baseHeaders = parseExtraHeaders(connector.config["headers"])
-  return {
-    async request(method, path, body, headers) {
-      const url = joinUrl(baseUrl, path)
-      const finalHeaders: Record<string, string> = { ...baseHeaders, ...(headers ?? {}) }
-      if (apiKey && !finalHeaders["Authorization"] && !finalHeaders["authorization"]) {
-        finalHeaders["Authorization"] = `Bearer ${apiKey}`
-      }
-      const init: RequestInit = { method, headers: finalHeaders }
-      if (body !== undefined && method !== "GET") {
-        init.body = typeof body === "string" ? body : JSON.stringify(body)
-        if (!finalHeaders["Content-Type"] && !finalHeaders["content-type"]) {
-          finalHeaders["Content-Type"] = "application/json"
-        }
-      }
-      const res = await fetch(url, init)
-      if (!res.ok) {
-        const text = await res.text().catch(() => "")
-        throw new Error(`httpApi ${method} ${path} → ${res.status} ${res.statusText}${text ? `: ${text.slice(0, 200)}` : ""}`)
-      }
-      const ct = res.headers.get("content-type") ?? ""
-      if (ct.includes("application/json")) return await res.json()
-      const text = await res.text()
-      if (text === "") return null
-      try {
-        return JSON.parse(text)
-      } catch {
-        return null
-      }
-    },
-    async close() {
-      /* stateless */
-    },
-  }
-}
-
-// ── denodo ──────────────────────────────────────────────────────
-
-/** Build a fetch-based Denodo REST driver from a persisted denodo connector. */
-export function defaultDenodoDriver(connector: Connector): DenodoDriver {
-  const baseUrl = asString(connector.config["baseUrl"]) ?? ""
-  const user = asString(connector.config["user"])
-  const password = asString(connector.config["password"])
-  const auth =
-    user !== undefined || password !== undefined
-      ? "Basic " + Buffer.from(`${user ?? ""}:${password ?? ""}`).toString("base64")
-      : undefined
-  return {
-    async get(view, params) {
-      const qs = params && Object.keys(params).length > 0
-        ? "?" + new URLSearchParams(params).toString()
-        : ""
-      const url = joinUrl(baseUrl, `/server/${view}${qs}`)
-      const init: RequestInit = { method: "GET" }
-      if (auth) init.headers = { Authorization: auth }
-      const res = await fetch(url, init)
-      if (!res.ok) {
-        const text = await res.text().catch(() => "")
-        throw new Error(`denodo GET ${view} → ${res.status} ${res.statusText}${text ? `: ${text.slice(0, 200)}` : ""}`)
-      }
-      return await res.json()
-    },
-    async close() {
-      /* stateless */
-    },
-  }
-}
-
-function joinUrl(base: string, path: string): string {
-  if (path.startsWith("http://") || path.startsWith("https://")) return path
-  const b = base.replace(/\/+$/, "")
-  const p = path.startsWith("/") ? path : `/${path}`
-  return `${b}${p}`
 }
 
 // ── webhdfs ─────────────────────────────────────────────────────
@@ -842,42 +741,6 @@ export function defaultDatabricksDriver(connector: Connector): DatabricksDriver 
         rowsWritten += batch.length
       }
       return makeSummary("completed", rowsWritten, rowsWritten, [], null)
-    },
-    async close() {
-      /* stateless */
-    },
-  }
-}
-
-// ── aqueduct ────────────────────────────────────────────────────
-
-const DEFAULT_AQUEDUCT_BASE = "https://api.aqueducthq.com"
-
-export function defaultAqueductDriver(connector: Connector): AqueductDriver {
-  const baseUrl = (asString(connector.config["baseUrl"]) ?? DEFAULT_AQUEDUCT_BASE).replace(/\/+$/, "")
-  const apiKey = asString(connector.config["apiKey"]) ?? ""
-  const pipelineId = asString(connector.config["pipelineId"]) ?? ""
-
-  return {
-    async fetchPreview(params) {
-      const qs = params && Object.keys(params).length > 0 ? `?${new URLSearchParams(params)}` : ""
-      const url = `${baseUrl}/api/v1/preview/${encodeURIComponent(pipelineId)}${qs}`
-      const res = await fetch(url, {
-        headers: { Authorization: `Bearer ${apiKey}`, Accept: "application/json" },
-      })
-      if (!res.ok) {
-        const text = await res.text().catch(() => "")
-        throw new Error(`aqueduct preview → ${res.status} ${res.statusText}${text ? `: ${text.slice(0, 200)}` : ""}`)
-      }
-      const json = await res.json()
-      if (Array.isArray(json)) return json as Row[]
-      if (json && typeof json === "object" && Array.isArray((json as { rows?: unknown }).rows)) {
-        return (json as { rows: Row[] }).rows
-      }
-      if (json && typeof json === "object" && Array.isArray((json as { data?: unknown }).data)) {
-        return (json as { data: Row[] }).data
-      }
-      throw new Error("aqueduct preview: expected a JSON array of rows")
     },
     async close() {
       /* stateless */

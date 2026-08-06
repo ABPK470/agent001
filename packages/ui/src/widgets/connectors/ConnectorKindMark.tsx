@@ -3,14 +3,11 @@
 import type { ConnectorKindId } from "@mia/shared-types"
 import type { JSX } from "react"
 
-import aqueductIcon from "./brand-icons/aqueduct.svg"
 import awsIcon from "./brand-icons/aws.svg"
 import azureIcon from "./brand-icons/azure.svg"
 import databricksIcon from "./brand-icons/databricks.svg"
-import denodoIcon from "./brand-icons/denodo.svg"
 import ftpIcon from "./brand-icons/ftp.svg"
 import hiveIcon from "./brand-icons/hive.svg"
-import httpApiIcon from "./brand-icons/httpApi.svg"
 import mssqlIcon from "./brand-icons/mssql.svg"
 import oracleIcon from "./brand-icons/oracle.svg"
 import postgresIcon from "./brand-icons/postgres.svg"
@@ -23,10 +20,7 @@ const BRAND_ICON_SRC: Record<ConnectorKindId, string> = {
   databricks: databricksIcon,
   azure: azureIcon,
   aws: awsIcon,
-  denodo: denodoIcon,
-  httpApi: httpApiIcon,
   ftp: ftpIcon,
-  aqueduct: aqueductIcon,
   hive: hiveIcon,
   webhdfs: webhdfsIcon,
 }

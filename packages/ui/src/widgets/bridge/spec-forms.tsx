@@ -2,8 +2,8 @@
  * spec-forms.tsx — per-kind read/write spec editors for the Bridge shell.
  *
  * The engine discriminates a spec by its `kind` field; that kind is fixed by
- * the selected connector's kind (mssql/postgres/hive → "sql", httpApi →
- * "httpApi", webhdfs → "webhdfs", denodo → "denodo"). These forms edit only
+ * the selected connector's kind (mssql/postgres/hive → "sql", webhdfs →
+ * "webhdfs"). These forms edit only
  * the kind-specific payload fields; the shell stamps the `kind` on submit.
  */
 
@@ -20,7 +20,7 @@ import { FormFieldGroup } from "../entity-registry/form-section"
 /** The read-spec discriminator a connector kind maps to (null = no read). */
 export function readSpecKindFor(
   kind: ConnectorKindId,
-): "sql" | "httpApi" | "webhdfs" | "denodo" | "aws" | "azure" | "ftp" | "aqueduct" | null {
+): "sql" | "webhdfs" | "aws" | "azure" | "ftp" | null {
   if (
     kind === "mssql" ||
     kind === "postgres" ||
@@ -30,20 +30,17 @@ export function readSpecKindFor(
   ) {
     return "sql"
   }
-  if (kind === "httpApi") return "httpApi"
   if (kind === "webhdfs") return "webhdfs"
-  if (kind === "denodo") return "denodo"
   if (kind === "aws") return "aws"
   if (kind === "azure") return "azure"
   if (kind === "ftp") return "ftp"
-  if (kind === "aqueduct") return "aqueduct"
   return null
 }
 
 /** The write-spec discriminator a connector kind maps to (null = no write). */
 export function writeSpecKindFor(
   kind: ConnectorKindId,
-): "sql" | "httpApi" | "webhdfs" | "aws" | "azure" | "ftp" | null {
+): "sql" | "webhdfs" | "aws" | "azure" | "ftp" | null {
   if (
     kind === "mssql" ||
     kind === "postgres" ||
@@ -53,7 +50,6 @@ export function writeSpecKindFor(
   ) {
     return "sql"
   }
-  if (kind === "httpApi") return "httpApi"
   if (kind === "webhdfs") return "webhdfs"
   if (kind === "aws") return "aws"
   if (kind === "azure") return "azure"
@@ -74,48 +70,14 @@ export function parseJsonOpt(text: string): JsonParseResult {
   }
 }
 
-function jsonField(bag: Record<string, unknown>, key: string): unknown {
-  const parsed = parseJsonOpt(String(bag[key] ?? ""))
-  if ("error" in parsed) return undefined
-  return parsed.value
-}
-
 /** Stamp the kind discriminator onto a read-spec field bag. */
 export function buildReadSpec(kind: ConnectorKindId, bag: Record<string, unknown>): ReadSpec {
   const k = readSpecKindFor(kind)!
   if (k === "sql") return { kind: "sql", sql: String(bag["sql"] ?? "") }
-  if (k === "httpApi") {
-    const body = jsonField(bag, "body")
-    const headers = jsonField(bag, "headers")
-    return {
-      kind: "httpApi",
-      method: (bag["method"] as "GET" | "POST") ?? "GET",
-      path: String(bag["path"] ?? ""),
-      ...(body !== undefined ? { body } : {}),
-      ...(headers !== undefined ? { headers: headers as Record<string, string> } : {}),
-      ...(bag["jsonPath"] ? { jsonPath: String(bag["jsonPath"]) } : {}),
-    } as ReadSpec
-  }
   if (k === "webhdfs") {
     return { kind: "webhdfs", path: String(bag["path"] ?? ""), format: (bag["format"] as FileFormat) ?? "csv" }
   }
-  if (k === "aws" || k === "azure" || k === "ftp") {
-    return { kind: k, path: String(bag["path"] ?? ""), format: (bag["format"] as FileFormat) ?? "csv" }
-  }
-  if (k === "aqueduct") {
-    const params = jsonField(bag, "params")
-    return {
-      kind: "aqueduct",
-      ...(params !== undefined ? { params: params as Record<string, string> } : {}),
-    } as ReadSpec
-  }
-  // denodo
-  const params = jsonField(bag, "params")
-  return {
-    kind: "denodo",
-    view: String(bag["view"] ?? ""),
-    ...(params !== undefined ? { params: params as Record<string, string> } : {}),
-  } as ReadSpec
+  return { kind: k, path: String(bag["path"] ?? ""), format: (bag["format"] as FileFormat) ?? "csv" }
 }
 
 /** Stamp the kind discriminator onto a write-spec field bag. */
@@ -131,17 +93,6 @@ export function buildWriteSpec(kind: ConnectorKindId, bag: Record<string, unknow
       // Truthy — never require strict `=== true` (stale/stringy bags must still opt in).
       ...(bag["allowIdentityInsert"] ? { allowIdentityInsert: true } : {}),
       ...(bag["relaxConstraints"] ? { relaxConstraints: true } : {}),
-    } as WriteSpec
-  }
-  if (k === "httpApi") {
-    const body = jsonField(bag, "body")
-    const headers = jsonField(bag, "headers")
-    return {
-      kind: "httpApi",
-      method: (bag["method"] as "POST" | "PUT") ?? "POST",
-      path: String(bag["path"] ?? ""),
-      ...(body !== undefined ? { body } : {}),
-      ...(headers !== undefined ? { headers: headers as Record<string, string> } : {}),
     } as WriteSpec
   }
   if (k === "webhdfs" || k === "aws" || k === "azure" || k === "ftp") {
@@ -160,17 +111,11 @@ export function emptyReadSpec(kind: ConnectorKindId): Record<string, unknown> {
   switch (readSpecKindFor(kind)) {
     case "sql":
       return { sql: "" }
-    case "httpApi":
-      return { method: "GET", path: "/", jsonPath: "" }
     case "webhdfs":
     case "aws":
     case "azure":
     case "ftp":
       return { path: "/", format: "csv" }
-    case "denodo":
-      return { view: "", params: "" }
-    case "aqueduct":
-      return { params: "" }
     default:
       return {}
   }
@@ -187,8 +132,6 @@ export function emptyWriteSpec(kind: ConnectorKindId): Record<string, unknown> {
         allowIdentityInsert: false,
         relaxConstraints: false,
       }
-    case "httpApi":
-      return { method: "POST", path: "/", body: "", headers: "" }
     case "webhdfs":
     case "aws":
     case "azure":
@@ -204,14 +147,6 @@ const MODE_OPTIONS: ListboxOption<WriteMode>[] = [
   { value: "replace", label: "Replace (truncate + insert)" },
 ]
 
-const HTTP_READ_METHODS: ListboxOption<"GET" | "POST">[] = [
-  { value: "GET", label: "GET" },
-  { value: "POST", label: "POST" },
-]
-const HTTP_WRITE_METHODS: ListboxOption<"POST" | "PUT">[] = [
-  { value: "POST", label: "POST" },
-  { value: "PUT", label: "PUT" },
-]
 const FORMAT_OPTIONS: ListboxOption<"csv" | "json" | "parquet">[] = [
   { value: "csv", label: "CSV" },
   { value: "json", label: "JSON" },
@@ -302,35 +237,6 @@ function FillFieldGroup({
   )
 }
 
-function JsonField({
-  label,
-  value,
-  onChange,
-  placeholder,
-  hint,
-  fill = false,
-}: {
-  label: string
-  value: string
-  onChange: (v: string) => void
-  placeholder?: string
-  hint?: string
-  fill?: boolean
-}): JSX.Element {
-  if (fill) {
-    return (
-      <FillFieldGroup label={label} hint={hint}>
-        <TextArea value={value} onChange={onChange} placeholder={placeholder} fill />
-      </FillFieldGroup>
-    )
-  }
-  return (
-    <FormFieldGroup label={label} hint={hint}>
-      <TextArea value={value} onChange={onChange} placeholder={placeholder} rows={3} />
-    </FormFieldGroup>
-  )
-}
-
 export function ReadSpecForm({
   kind,
   spec,
@@ -357,47 +263,6 @@ export function ReadSpecForm({
       </FillFieldGroup>
     )
   }
-  if (k === "httpApi") {
-    return (
-      <>
-        <div className="bridge-form-row bridge-form-row--method-path shrink-0">
-          <FormFieldGroup label="Method">
-            <Listbox
-              value={(spec["method"] as "GET" | "POST") ?? "GET"}
-              options={HTTP_READ_METHODS}
-              onChange={(v) => patch({ method: v })}
-              size="sm"
-              className="w-full min-w-0"
-              ariaLabel="HTTP method"
-            />
-          </FormFieldGroup>
-          <FormFieldGroup label="Path" hint="Appended to the connector base URL.">
-            <TextInput value={String(spec["path"] ?? "")} onChange={(v) => patch({ path: v })} placeholder="/api/items" mono />
-          </FormFieldGroup>
-        </div>
-        <div className="shrink-0">
-          <FormFieldGroup label="JSON path" hint="Dot-path to the rows array, e.g. data.items. Empty = top-level array.">
-            <TextInput value={String(spec["jsonPath"] ?? "")} onChange={(v) => patch({ jsonPath: v })} placeholder="data.items" mono />
-          </FormFieldGroup>
-        </div>
-        <JsonField
-          label="Body (JSON, POST only)"
-          value={String(spec["body"] ?? "")}
-          onChange={(v) => patch({ body: v })}
-          placeholder='{"filter":"active"}'
-          fill
-        />
-        <div className="shrink-0">
-          <JsonField
-            label="Extra headers (JSON)"
-            value={String(spec["headers"] ?? "")}
-            onChange={(v) => patch({ headers: v })}
-            placeholder='{"X-Tenant":"acme"}'
-          />
-        </div>
-      </>
-    )
-  }
   if (k === "webhdfs" || k === "aws" || k === "azure" || k === "ftp") {
     const pathLabel =
       k === "webhdfs" ? "HDFS path" : k === "aws" ? "S3 object key" : k === "azure" ? "Blob path" : "Remote file path"
@@ -419,36 +284,6 @@ export function ReadSpecForm({
           />
         </FormFieldGroup>
       </div>
-    )
-  }
-  if (k === "aqueduct") {
-    return (
-      <JsonField
-        label="Preview params (JSON, optional)"
-        value={String(spec["params"] ?? "")}
-        onChange={(v) => patch({ params: v })}
-        placeholder='{"limit":"100"}'
-        hint="Pipeline id comes from the connector config. Params are passed to the Aqueduct preview API."
-        fill
-      />
-    )
-  }
-  if (k === "denodo") {
-    return (
-      <>
-        <div className="shrink-0">
-          <FormFieldGroup label="View" hint="Denodo view path, e.g. my_db/my_view.">
-            <TextInput value={String(spec["view"] ?? "")} onChange={(v) => patch({ view: v })} placeholder="my_db/my_view" mono />
-          </FormFieldGroup>
-        </div>
-        <JsonField
-          label="Params (JSON)"
-          value={String(spec["params"] ?? "")}
-          onChange={(v) => patch({ params: v })}
-          placeholder='{"limit":"100"}'
-          fill
-        />
-      </>
     )
   }
   return null
@@ -551,42 +386,6 @@ export function WriteSpecForm({
             />
           </div>
         )}
-      </>
-    )
-  }
-  if (k === "httpApi") {
-    return (
-      <>
-        <div className="bridge-form-row bridge-form-row--method-path shrink-0">
-          <FormFieldGroup label="Method">
-            <Listbox
-              value={(spec["method"] as "POST" | "PUT") ?? "POST"}
-              options={HTTP_WRITE_METHODS}
-              onChange={(v) => patch({ method: v })}
-              size="sm"
-              className="w-full min-w-0"
-              ariaLabel="HTTP method"
-            />
-          </FormFieldGroup>
-          <FormFieldGroup label="Path">
-            <TextInput value={String(spec["path"] ?? "")} onChange={(v) => patch({ path: v })} placeholder="/api/upsert" mono />
-          </FormFieldGroup>
-        </div>
-        <JsonField
-          label="Static body (JSON, merged with each row — row wins)"
-          value={String(spec["body"] ?? "")}
-          onChange={(v) => patch({ body: v })}
-          placeholder='{"source":"etl"}'
-          fill
-        />
-        <div className="shrink-0">
-          <JsonField
-            label="Extra headers (JSON)"
-            value={String(spec["headers"] ?? "")}
-            onChange={(v) => patch({ headers: v })}
-            placeholder='{"X-Tenant":"acme"}'
-          />
-        </div>
       </>
     )
   }

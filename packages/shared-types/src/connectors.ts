@@ -18,10 +18,7 @@ export type ConnectorKindId =
   | "databricks"
   | "azure"
   | "aws"
-  | "denodo"
-  | "httpApi"
   | "ftp"
-  | "aqueduct"
   | "hive"
   | "webhdfs"
 
@@ -141,18 +138,6 @@ const awsConfigSchema: ConnectorConfigField[] = [
   { key: "bucket", label: "Bucket", type: "text", required: true },
 ]
 
-const denodoConfigSchema: ConnectorConfigField[] = [
-  { key: "baseUrl", label: "Server URL", type: "url", required: true },
-  { key: "user", label: "User", type: "text" },
-  { key: "password", label: "Password", type: "password" },
-]
-
-const httpApiConfigSchema: ConnectorConfigField[] = [
-  { key: "baseUrl", label: "Base URL", type: "url", required: true },
-  { key: "apiKey", label: "API key", type: "password" },
-  { key: "headers", label: "Extra headers (JSON)", type: "text", placeholder: "{\"X-Tenant\":\"acme\"}" },
-]
-
 const ftpConfigSchema: ConnectorConfigField[] = [
   { key: "host", label: "Host", type: "text", required: true },
   { key: "port", label: "Port", type: "number", default: 21 },
@@ -160,12 +145,6 @@ const ftpConfigSchema: ConnectorConfigField[] = [
   { key: "password", label: "Password", type: "password" },
   { key: "path", label: "Default remote directory", type: "text", placeholder: "/exports" },
   { key: "secure", label: "Use SFTP (SSH)", type: "boolean", default: false },
-]
-
-const aqueductConfigSchema: ConnectorConfigField[] = [
-  { key: "baseUrl", label: "API URL", type: "url", placeholder: "https://api.aqueducthq.com" },
-  { key: "apiKey", label: "API key", type: "password", required: true },
-  { key: "pipelineId", label: "Pipeline id", type: "text", required: true },
 ]
 
 const hiveConfigSchema: ConnectorConfigField[] = [
@@ -192,10 +171,7 @@ export const CONNECTOR_KINDS: readonly ConnectorKind[] = [
   { id: "databricks", displayName: "Databricks", description: "Databricks SQL warehouse — SELECT / INSERT over the SQL Statements API.", icon: "Database", enabled: true, configSchema: databricksConfigSchema },
   { id: "azure", displayName: "Azure Blob / Data Lake", description: "Read/write CSV or JSON blobs in Azure Storage.", icon: "Cloud", enabled: true, configSchema: azureConfigSchema },
   { id: "aws", displayName: "AWS S3", description: "Read/write CSV or JSON objects in S3.", icon: "Cloud", enabled: true, configSchema: awsConfigSchema },
-  { id: "denodo", displayName: "Denodo", description: "Data virtualization layer — read views over REST.", icon: "Network", enabled: true, configSchema: denodoConfigSchema },
-  { id: "httpApi", displayName: "HTTP API", description: "Generic REST endpoint (read JSON arrays, write per-row POST/PUT).", icon: "Webhook", enabled: true, configSchema: httpApiConfigSchema },
   { id: "ftp", displayName: "FTP / SFTP", description: "Read/write CSV or JSON files over FTP or SFTP.", icon: "FolderTree", enabled: true, configSchema: ftpConfigSchema },
-  { id: "aqueduct", displayName: "Aqueduct", description: "Fetch pipeline preview rows from the Aqueduct API.", icon: "Waves", enabled: true, configSchema: aqueductConfigSchema },
   { id: "hive", displayName: "Hive (HiveServer2)", description: "SQL over Hadoop via HiveServer2 — adapter ready, thrift client binding pending.", icon: "Database", enabled: false, configSchema: hiveConfigSchema },
   { id: "webhdfs", displayName: "HDFS (WebHDFS)", description: "Read/write files on Hadoop HDFS over the WebHDFS REST API (CSV / JSON).", icon: "HardDrive", enabled: true, configSchema: webhdfsConfigSchema },
 ]
@@ -346,26 +322,10 @@ export interface SqlReadSpec {
   readonly sql: string
 }
 
-export interface HttpApiReadSpec {
-  readonly kind: "httpApi"
-  readonly method: "GET" | "POST"
-  readonly path: string
-  readonly body?: unknown
-  readonly headers?: Record<string, string>
-  /** Dot-path into the JSON response to find the rows array, e.g. "data.items". */
-  readonly jsonPath?: string
-}
-
 export interface WebhdfsReadSpec {
   readonly kind: "webhdfs"
   readonly path: string
   readonly format: FileFormat
-}
-
-export interface DenodoReadSpec {
-  readonly kind: "denodo"
-  readonly view: string
-  readonly params?: Record<string, string>
 }
 
 export interface AwsReadSpec {
@@ -386,20 +346,12 @@ export interface FtpReadSpec {
   readonly format: FileFormat
 }
 
-export interface AqueductReadSpec {
-  readonly kind: "aqueduct"
-  readonly params?: Record<string, string>
-}
-
 export type ReadSpec =
   | SqlReadSpec
-  | HttpApiReadSpec
   | WebhdfsReadSpec
-  | DenodoReadSpec
   | AwsReadSpec
   | AzureReadSpec
   | FtpReadSpec
-  | AqueductReadSpec
 
 // ── Write specs (discriminated by kind) ──────────────────────────
 
@@ -422,14 +374,6 @@ export interface SqlWriteSpec {
    * Ignored by hive / databricks. Default off. Always restored after the write.
    */
   readonly relaxConstraints?: boolean
-}
-
-export interface HttpApiWriteSpec {
-  readonly kind: "httpApi"
-  readonly method: "POST" | "PUT"
-  readonly path: string
-  readonly body?: unknown
-  readonly headers?: Record<string, string>
 }
 
 export interface WebhdfsWriteSpec {
@@ -462,7 +406,6 @@ export interface FtpWriteSpec {
 
 export type WriteSpec =
   | SqlWriteSpec
-  | HttpApiWriteSpec
   | WebhdfsWriteSpec
   | AwsWriteSpec
   | AzureWriteSpec

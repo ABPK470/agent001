@@ -3674,11 +3674,12 @@ textarea.input {
 }
 
 .review-detail-accordion {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 0.5rem;
   width: 100%;
-  padding: 0.625rem 1rem;
+  padding: 0.625rem 1rem 0.625rem 0.875rem;
   margin: 0;
   border: none;
   border-top: 1px solid var(--border-subtle, var(--color-border-subtle));
@@ -5458,11 +5459,28 @@ textarea.input {
   pointer-events: none;
 }
 
-/* Keyboard-active accordion only — vertical rail means “expandable”.
-   Do not recolor label text on focus (keep section-cap ink). */
-.review-detail-accordion.is-section-focused,
-.trace-detail-accordion.is-section-focused {
-  box-shadow: inset 2px 0 0 0 var(--accent, #6b8cae);
+/*
+ * Keyboard-active detail accordion — same dialect as the left tree:
+ * absolute accent rail + select-fill wash. Content is padded so the
+ * chevron never jams against the 2px indicator (Linear / VS Code).
+ */
+.trace-detail-accordion-bar.is-section-focused,
+.review-detail-accordion.is-section-focused {
+  position: relative;
+  background: var(--select-fill, rgb(255 255 255 / 0.06));
+}
+
+.trace-detail-accordion-bar.is-section-focused::before,
+.review-detail-accordion.is-section-focused::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--color-accent, #6366f1);
+  z-index: 2;
+  pointer-events: none;
 }
 
 /* Timeline / steps are not foldable — quiet focus, no accordion cursor rail. */
@@ -6156,6 +6174,13 @@ button.trace-tree-status-pill:hover {
 }
 
 .trace-detail-section--accordion {
+  --trace-detail-hpad: 0.875rem;
+  --trace-detail-chev: 14px;
+  --trace-detail-gap: 0.5rem;
+  /* Label / JSON column — clears rail + chevron so nested ˅ { lines up. */
+  --trace-detail-label-inset: calc(
+    var(--trace-detail-hpad) + var(--trace-detail-chev) + var(--trace-detail-gap)
+  );
   margin-bottom: 0;
 }
 
@@ -6191,15 +6216,12 @@ button.trace-tree-status-pill:hover {
 
 .trace-detail-body--stack > .trace-detail-section--accordion .trace-detail-accordion {
   border-top: none;
-  padding: 0.7rem 0.85rem;
-}
-
-.trace-detail-body--stack > .trace-detail-section--accordion .trace-detail-accordion-bar {
-  padding-right: 0.65rem;
+  padding-top: 0.7rem;
+  padding-bottom: 0.7rem;
 }
 
 .trace-detail-body--stack > .trace-detail-section--accordion .trace-detail-accordion__body {
-  padding: 0 0.85rem 0.9rem;
+  padding-bottom: 0.9rem;
 }
 
 /*
@@ -6219,7 +6241,14 @@ button.trace-tree-status-pill:hover {
   background: var(--trace-section-surface, var(--bg));
 }
 
+/* Focus wash beats sticky section surface. */
+.trace-detail-section--sticky .trace-detail-accordion-bar.is-section-focused,
+.trace-detail-body--stack > .trace-detail-section--sticky .trace-detail-accordion-bar.is-section-focused {
+  background: var(--select-fill, rgb(255 255 255 / 0.06));
+}
+
 .trace-detail-accordion-bar {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 0.35rem;
@@ -6246,7 +6275,7 @@ button.trace-tree-status-pill:hover {
   display: inline-flex;
   align-items: center;
   gap: 0.625rem;
-  padding-right: 0.15rem;
+  padding-right: var(--trace-detail-hpad, 0.875rem);
 }
 
 .trace-detail-accordion__rail .trace-copy {
@@ -6291,11 +6320,29 @@ button.trace-tree-status-pill:hover {
   margin-left: 0;
 }
 
+.trace-detail-leaf-meta.is-section-focused {
+  position: relative;
+  background: var(--select-fill, rgb(255 255 255 / 0.06));
+}
+
+.trace-detail-leaf-meta.is-section-focused::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--color-accent, #6366f1);
+  z-index: 2;
+  pointer-events: none;
+}
+
 .trace-detail-leaf-meta {
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: 0.625rem;
+  padding-left: 0.875rem;
   padding: 0 0 0.5rem;
 }
 
@@ -6308,8 +6355,8 @@ button.trace-tree-status-pill:hover {
 }
 
 .trace-detail-section--nested .trace-detail-accordion {
-  gap: 0.65rem;
-  padding: 0.45rem 0.15rem;
+  gap: var(--trace-detail-gap, 0.5rem);
+  padding: 0.45rem var(--trace-detail-hpad, 0.875rem);
   border-top: none;
 }
 
@@ -6322,7 +6369,8 @@ button.trace-tree-status-pill:hover {
 }
 
 .trace-detail-section--nested .trace-detail-accordion__body {
-  padding: 0.15rem 0 0.7rem 1.35rem;
+  padding: 0.15rem var(--trace-detail-hpad, 0.875rem) 0.7rem
+    var(--trace-detail-label-inset, 2.25rem);
 }
 
 .trace-detail-nested-list > .trace-detail-section--nested + .trace-detail-section--nested {
@@ -6386,9 +6434,9 @@ button.trace-tree-status-pill:hover {
 .trace-detail-accordion {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: var(--trace-detail-gap, 0.5rem);
   width: 100%;
-  padding: 0.625rem 0;
+  padding: 0.625rem var(--trace-detail-hpad, 0.875rem);
   margin: 0;
   border: none;
   border-top: 1px solid var(--border-subtle, var(--color-border-subtle));
@@ -6407,7 +6455,9 @@ button.trace-tree-status-pill:hover {
 }
 
 .trace-detail-accordion__chev {
+  box-sizing: border-box;
   flex-shrink: 0;
+  width: var(--trace-detail-chev, 14px);
   color: var(--text-muted, var(--color-text-muted));
   transition: transform 0.15s ease;
 }
@@ -6430,8 +6480,10 @@ button.trace-tree-status-pill:hover {
   color: var(--text-muted, var(--color-text-muted));
 }
 
+/* Nested JSON / prose starts under the label column, not under the chevron. */
 .trace-detail-accordion__body {
-  padding: 0 0 0.75rem;
+  padding: 0 var(--trace-detail-hpad, 0.875rem) 0.75rem
+    var(--trace-detail-label-inset, 2.25rem);
 }
 
 .trace-detail-section__expand {
