@@ -664,19 +664,17 @@ describe("Trace CSS contract — pin indent + work-note divider", () => {
     )
   })
 
-  it("TraceScopeDrawer uses Threads nest geometry for runs", () => {
+  it("TraceScopeDrawer uses Trace left-tree row dialect", () => {
     const drawer = readFileSync(
       join(dirname(fileURLToPath(import.meta.url)), "TraceScopeDrawer.tsx"),
       "utf8",
     )
-    expect(css).toMatch(
-      /\.trace-scope-drawer__runs\s*\{[^}]*padding:[^;]*var\(--review-tree-gutter\)/s,
-    )
-    expect(css).toMatch(/\.trace-scope-drawer__run-btn::before/s)
-    expect(drawer).toContain("trace-scope-drawer__thread-meta")
+    expect(drawer).toContain("trace-tree-row")
+    expect(drawer).toContain("traceTreeNodeCellStyle")
+    expect(drawer).toContain("is-selected")
     expect(drawer).toContain("trace-scope-drawer__run-status")
     expect(drawer).not.toContain("StatusMark")
-    expect(css).toMatch(/\.trace-scope-drawer__thread\.is-expanded\s+>\s*\.trace-scope-drawer__thread-row/s)
-    expect(css).not.toMatch(/\.trace-scope-drawer__run-btn\.is-focused\s*\{[^}]*inset 2px 0 0/s)
+    expect(drawer).not.toContain("trace-scope-drawer__runs-wrap")
+    expect(css).toMatch(/\.trace-scope-drawer \.trace-tree-row__btn/s)
   })
 })

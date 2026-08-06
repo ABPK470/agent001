@@ -1,6 +1,7 @@
 /**
  * Trace scope drawer — floating pick-only Thread/Run overlay.
  * Same store path as breadcrumbs; keyboard: j/k · Enter · Esc.
+ * Row chrome matches Trace left DAG tree (depth pad + left rail).
  */
 
 import { ChevronRight } from "lucide-react"
@@ -21,6 +22,11 @@ import {
   moveScopeDrawerIndex,
   type ScopeDrawerItem,
 } from "./trace-scope-drawer-nav"
+import { traceTreeNodeCellStyle } from "./trace-tree-guides"
+
+function scopeRowClass(...parts: Array<string | false | undefined>): string {
+  return parts.filter(Boolean).join(" ")
+}
 
 export function TraceScopeDrawer({
   onPicked,
@@ -191,87 +197,105 @@ export function TraceScopeDrawer({
           ordered.map((thread) => {
             const threadRuns = runsByThread.get(thread.id) ?? []
             const expanded = expandedIds.has(thread.id)
-            const threadActive = thread.id === activeThreadId
             rowIndex += 1
             const threadIdx = rowIndex
             return (
-              <li
-                key={thread.id}
-                className={`trace-scope-drawer__thread${expanded ? " is-expanded" : ""}${
-                  threadActive ? " is-active" : ""
-                }`}
-              >
-                <div className="trace-scope-drawer__thread-row">
-                  <button
-                    type="button"
-                    className="trace-scope-drawer__chev-btn"
-                    aria-label={expanded ? "Collapse runs" : "Expand runs"}
-                    aria-expanded={expanded}
-                    onClick={() => {
-                      setFocusIndex(threadIdx)
-                      toggleExpand(thread.id)
-                    }}
-                  >
-                    <ChevronRight
-                      size={13}
-                      strokeWidth={1.75}
-                      className="trace-scope-drawer__chev-icon"
-                      data-expanded={expanded || undefined}
-                      aria-hidden
-                    />
-                  </button>
+              <li key={thread.id} className="trace-scope-drawer__thread">
+                <div
+                  className={scopeRowClass(
+                    "trace-tree-row",
+                    "is-branch",
+                    "is-root",
+                    "has-subtitle",
+                    focusIndex === threadIdx && "is-selected",
+                  )}
+                >
                   <button
                     type="button"
                     data-scope-idx={threadIdx}
                     role="option"
                     aria-selected={focusIndex === threadIdx}
-                    className={`trace-scope-drawer__thread-btn${
-                      focusIndex === threadIdx ? " is-focused" : ""
-                    }`}
+                    className="trace-tree-row__btn"
                     onClick={() => {
                       setFocusIndex(threadIdx)
                       onPickThread(thread.id)
                       if (!expanded) toggleExpand(thread.id)
                     }}
                   >
-                    <span className="trace-scope-drawer__thread-title">{threadLabel(thread)}</span>
-                    <span className="trace-scope-drawer__thread-meta tabular-nums">
-                      {threadRuns.length} {threadRuns.length === 1 ? "run" : "runs"}
+                    <span
+                      className="trace-tree-row__node-cell"
+                      style={traceTreeNodeCellStyle(0)}
+                    >
+                      <span
+                        className="trace-tree-row__chev"
+                        role="presentation"
+                        aria-label={expanded ? "Collapse runs" : "Expand runs"}
+                        aria-expanded={expanded}
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          setFocusIndex(threadIdx)
+                          toggleExpand(thread.id)
+                        }}
+                      >
+                        <ChevronRight
+                          size={13}
+                          className={`trace-tree-row__chev-icon${expanded ? " is-open" : ""}`}
+                        />
+                      </span>
+                      <span className="trace-tree-row__text-block">
+                        <span className="trace-tree-row__name" title={threadLabel(thread)}>
+                          {threadLabel(thread)}
+                        </span>
+                        <span className="trace-tree-row__subtitle tabular-nums">
+                          {threadRuns.length} {threadRuns.length === 1 ? "run" : "runs"}
+                        </span>
+                      </span>
                     </span>
                   </button>
                 </div>
-                {threadRuns.length > 0 ? (
-                  <div
-                    className={`trace-scope-drawer__runs-wrap${expanded ? " is-open" : ""}`}
-                  >
-                    <div className="trace-scope-drawer__runs-inner">
-                      <ul className="trace-scope-drawer__runs">
-                        {threadRuns.map((run) => {
-                          rowIndex += 1
-                          const runIdx = rowIndex
-                          const runActive = run.id === activeRunId
-                          const isLive =
-                            run.status === RunStatus.Pending ||
-                            run.status === RunStatus.Running ||
-                            run.status === RunStatus.Planning
-                          const statusMeta = statusAbbrevMeta(run.status)
-                          return (
-                            <li key={run.id}>
-                              <button
-                                type="button"
-                                data-scope-idx={runIdx}
-                                role="option"
-                                aria-selected={focusIndex === runIdx}
-                                className={`trace-scope-drawer__run-btn${runActive ? " is-active" : ""}${
-                                  focusIndex === runIdx ? " is-focused" : ""
-                                }`}
-                                onClick={() => {
-                                  setFocusIndex(runIdx)
-                                  onPickRun(run.id, thread.id)
-                                }}
-                                title={runLabel(run)}
-                              >
-                                <span className="trace-scope-drawer__run-label">{runLabel(run)}</span>
+                {expanded
+                  ? threadRuns.map((run) => {
+                      rowIndex += 1
+                      const runIdx = rowIndex
+                      const isLive =
+                        run.status === RunStatus.Pending ||
+                        run.status === RunStatus.Running ||
+                        run.status === RunStatus.Planning
+                      const statusMeta = statusAbbrevMeta(run.status)
+                      return (
+                        <div
+                          key={run.id}
+                          className={scopeRowClass(
+                            "trace-tree-row",
+                            "is-leaf",
+                            "is-child",
+                            focusIndex === runIdx && "is-selected",
+                          )}
+                        >
+                          <button
+                            type="button"
+                            data-scope-idx={runIdx}
+                            role="option"
+                            aria-selected={focusIndex === runIdx}
+                            className="trace-tree-row__btn"
+                            onClick={() => {
+                              setFocusIndex(runIdx)
+                              onPickRun(run.id, thread.id)
+                            }}
+                          >
+                            <span
+                              className="trace-tree-row__node-cell"
+                              style={traceTreeNodeCellStyle(1)}
+                            >
+                              <span className="trace-tree-row__chev" aria-hidden>
+                                <span className="trace-tree-row__chev-spacer" />
+                              </span>
+                              <span className="trace-tree-row__text-block">
+                                <span className="trace-tree-row__name" title={runLabel(run)}>
+                                  {runLabel(run)}
+                                </span>
+                              </span>
+                              <span className="trace-scope-drawer__run-trailing">
                                 <span className="trace-scope-drawer__run-meta tabular-nums">
                                   {isLive ? "live" : timeAgo(run.createdAt)}
                                 </span>
@@ -281,14 +305,13 @@ export function TraceScopeDrawer({
                                 >
                                   {statusMeta.label}
                                 </span>
-                              </button>
-                            </li>
-                          )
-                        })}
-                      </ul>
-                    </div>
-                  </div>
-                ) : null}
+                              </span>
+                            </span>
+                          </button>
+                        </div>
+                      )
+                    })
+                  : null}
                 {expanded && threadRuns.length === 0 ? (
                   <p className="trace-scope-drawer__empty-runs">No runs</p>
                 ) : null}
