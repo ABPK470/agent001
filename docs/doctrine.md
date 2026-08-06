@@ -371,7 +371,8 @@ default autolayouts — not DIY-named sheets as the primary path. Observe =
 Pipelines 70% / Event stream 30%; Trace = Trace alone;
 Reconcile = Sync / Entity registry 50/50; Agent = Trace 60% with Chat /
 Threads splitting the remaining 40%. **Summon** (⌘/Ctrl+K) is widget-first:
-Enter peeks a widget (or focuses it if already on the Space); ⌘/Ctrl+Enter
+Enter peeks a widget (or focuses it if already on the Space); sole-widget
+Spaces (Trace, Bridge) have no peek twin — Enter opens that Space; ⌘/Ctrl+Enter
 Keeps a widget in the current Space; Spaces navigate (Call); bundles open a
 home Space and focus a primary tile — never auto-maximize. Trace owns
 **pane focus** with one Esc ladder (overlay → filter → pane → zen →

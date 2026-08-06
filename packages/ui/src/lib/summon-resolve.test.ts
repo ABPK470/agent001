@@ -25,6 +25,15 @@ describe("summon resolve", () => {
     })
   })
 
+  it("Trace surface opens Trace Space — never peeks a second shell", () => {
+    expect(resolveSummonWidgetEnter("debug-inspector", false)).toEqual({
+      type: "open-bundle",
+      spaceId: "space:trace",
+      ensureWidgets: ["debug-inspector"],
+      focusType: "debug-inspector",
+    })
+  })
+
   it("keep ensures widget without maximize semantics", () => {
     expect(resolveSummonWidgetKeep("debug-inspector")).toEqual({
       type: "keep-widgets",

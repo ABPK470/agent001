@@ -635,24 +635,26 @@ export function TraceDag({
     <div className={`trace-dag trace-dag--split${isZen ? " trace-dag--zen" : ""} ${WIDGET_LOG_SHELL_CLASS}`}>
       <div className={WIDGET_LOG_STACK_CLASS}>
         {!isZen ? (
-          <div className={WIDGET_REVIEW_CONTROLS_CLASS}>
-          {/* Scope precedes view chrome — drawer toggle + Thread / Run breadcrumbs. */}
-          <div className={WIDGET_REVIEW_CONTROLS_INSET_CLASS}>
-            <div className="trace-scope-row">
-              <button
-                type="button"
-                className={`trace-scope-drawer-toggle${scopeDrawerOpen ? " is-open" : ""}`}
-                aria-label={scopeDrawerOpen ? "Close thread drawer" : "Open thread drawer"}
-                aria-expanded={scopeDrawerOpen}
-                title="Thread / run drawer (⌘\\)"
-                onClick={() => setScopeDrawerOpen((open) => !open)}
-              >
-                <PanelLeft size={15} strokeWidth={2} aria-hidden />
-              </button>
-              <TraceRunContext />
-            </div>
+          <>
+          {/*
+            Scope is chrome — never inside `.widget-review-controls` (panel-2 rounded
+            band). Peek made that band look like a full-width gray pill.
+          */}
+          <div className="trace-scope-row">
+            <button
+              type="button"
+              className={`trace-scope-drawer-toggle${scopeDrawerOpen ? " is-open" : ""}`}
+              aria-label={scopeDrawerOpen ? "Close thread drawer" : "Open thread drawer"}
+              aria-expanded={scopeDrawerOpen}
+              title="Thread / run drawer (⌘\\)"
+              onClick={() => setScopeDrawerOpen((open) => !open)}
+            >
+              <PanelLeft size={15} strokeWidth={2} aria-hidden />
+            </button>
+            <TraceRunContext />
           </div>
 
+          <div className={WIDGET_REVIEW_CONTROLS_CLASS}>
           <div className={WIDGET_REVIEW_CONTROLS_INSET_CLASS}>
           <WidgetToolbar>
             <WidgetToolbarLeading>
@@ -728,7 +730,8 @@ export function TraceDag({
               ) : null}
             </div>
           </div>
-        </div>
+          </div>
+          </>
         ) : null}
 
         <div className={`trace-body trace-split-body${isZen ? " trace-split-body--zen" : ""} ${WIDGET_LOG_BODY_CLASS}`}>

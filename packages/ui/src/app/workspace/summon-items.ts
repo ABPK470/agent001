@@ -13,6 +13,7 @@ import type { WidgetType } from "../../types"
 import {
   PRODUCT_BUNDLES,
   PRODUCT_SPACES,
+  dedicatedSpaceForWidget,
   type ProductBundleId,
   type SpaceId,
 } from "../../lib/spaces"
@@ -100,13 +101,16 @@ export function listSummonItems(): SummonItem[] {
     focusType: bundle.focusType,
   }))
 
-  const widgets: SummonItem[] = catalogEntries().map((entry) => ({
-    kind: "widget" as const,
-    type: entry.type,
-    name: entry.label,
-    desc: entry.desc,
-    group: widgetSummonGroup(entry.type),
-  }))
+  // Sole-widget Spaces (Trace, Bridge) own the Go path — no peek twin in Surfaces.
+  const widgets: SummonItem[] = catalogEntries()
+    .filter((entry) => dedicatedSpaceForWidget(entry.type) == null)
+    .map((entry) => ({
+      kind: "widget" as const,
+      type: entry.type,
+      name: entry.label,
+      desc: entry.desc,
+      group: widgetSummonGroup(entry.type),
+    }))
 
   // Stable widget order within groups for spatial memory.
   widgets.sort((a, b) => {

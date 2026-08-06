@@ -78,9 +78,12 @@ describe("Trace toolbar structure + behavior wiring", () => {
     expect(dag).toContain("WidgetToolbarLeading")
     expect(dag).toContain("WidgetToolbarSearch")
     expect(dag).toContain("WidgetToolbarTrailing")
-    // Scope bar, then toolbar, then meta — three insets under review-controls.
-    expect(dag).toMatch(
-      /WIDGET_REVIEW_CONTROLS_INSET_CLASS[\s\S]*?TraceRunContext[\s\S]*?WIDGET_REVIEW_CONTROLS_INSET_CLASS[\s\S]*?WidgetToolbar[\s\S]*?WIDGET_REVIEW_CONTROLS_INSET_CLASS[\s\S]*?widget-review-meta/,
+    // Scope chrome outside review-controls; toolbar + meta stay in the band.
+    const jsx = dag.slice(dag.indexOf("return ("))
+    expect(jsx.indexOf("trace-scope-row")).toBeGreaterThan(-1)
+    expect(jsx.indexOf("TraceRunContext")).toBeLessThan(jsx.indexOf("WIDGET_REVIEW_CONTROLS_CLASS"))
+    expect(jsx).toMatch(
+      /trace-scope-row[\s\S]*?TraceRunContext[\s\S]*?WIDGET_REVIEW_CONTROLS_CLASS[\s\S]*?WidgetToolbar[\s\S]*?widget-review-meta/,
     )
   })
 

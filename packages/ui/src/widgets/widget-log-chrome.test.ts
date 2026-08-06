@@ -79,7 +79,7 @@ describe("widget log chrome — shell", () => {
       /\.widget-review-controls__inset:not\(:last-child\)\s*\{[^}]*padding-bottom:\s*var\(--review-controls-pad-y\)/s,
     )
     expect(css).toMatch(
-      /\.widget-review-controls__inset\s*>\s*\.widget-review-meta\s*\{[^}]*padding:\s*0/s,
+      /\.widget-review-controls__inset\s*>\s*\.widget-review-meta,[\s\S]*?\{[^}]*padding:\s*0/s,
     )
     expect(css).toMatch(
       /\.widget-review-controls__inset\s*>\s*\.widget-review-meta\s+\.widget-review-meta__ids\s*\{[^}]*padding-right:\s*0\.4rem/s,
@@ -433,10 +433,15 @@ describe("widget log chrome — Trace meta & scope payload", () => {
     expect(dag).toContain("widget-review-meta__stats")
     expect(dag).toContain("widget-review-meta__stat-value")
     expect(dag).toContain("TraceRunContext")
-    expect(css).toContain(".trace-scope")
-    expect(css).toContain(".trace-scope__pill")
+    expect(css).toContain(".trace-run-context")
+    expect(css).toContain(".trace-run-context__pill")
     expect(css).toMatch(
-      /\.trace-scope\s*>\s*\[aria-haspopup="listbox"\]\.trace-scope__pill/,
+      /\.trace-run-context\s*>\s*\[aria-haspopup="listbox"\]\.trace-run-context__pill/,
+    )
+    // Scope chrome must not live inside the panel-2 review-controls band.
+    expect(css).toContain(".trace-scope-row")
+    expect(dag).toMatch(
+      /trace-scope-row[\s\S]*?TraceRunContext[\s\S]*?WIDGET_REVIEW_CONTROLS_CLASS/,
     )
     expect(dag).not.toMatch(/metaParts\.join\(" · "\)/)
     expect(dag).not.toMatch(/widget-review-meta[\s\S]{0,400}" · "/)

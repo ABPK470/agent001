@@ -23,8 +23,21 @@ describe("summon catalog", () => {
     expect(widgetSummonGroup("env-sync")).toBe("config")
   })
 
+  it("omits Trace/Bridge surfaces — dedicated Spaces own Go", () => {
+    const widgets = listSummonItems().filter((item) => item.kind === "widget")
+    expect(widgets.some((item) => item.kind === "widget" && item.type === "debug-inspector")).toBe(
+      false,
+    )
+    expect(widgets.some((item) => item.kind === "widget" && item.type === "bridge")).toBe(false)
+    expect(listSummonItems().some((item) => item.kind === "space" && item.id === "space:trace")).toBe(
+      true,
+    )
+  })
+
   it("previews peek vs focus for widgets", () => {
-    const widget = listSummonItems().find((item) => item.kind === "widget")!
+    const widget = listSummonItems().find(
+      (item) => item.kind === "widget" && item.type === "operation-log",
+    )!
     expect(summonActionPreview(widget, { onSpace: false, spaceName: "Agent" }).primary).toBe(
       "peek",
     )

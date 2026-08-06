@@ -167,6 +167,14 @@ export function isProductSpaceId(id: string): id is SpaceId {
   return PRODUCT_SPACES.some((space) => space.id === id)
 }
 
+/** Space whose only widget is this type — Summon Go path, not peek. */
+export function dedicatedSpaceForWidget(type: WidgetType): SpaceId | null {
+  for (const space of PRODUCT_SPACES) {
+    if (space.widgets.length === 1 && space.widgets[0] === type) return space.id
+  }
+  return null
+}
+
 function vSplit(ratio: number, a: SplitNode, b: SplitNode): SplitNode {
   return { kind: "split", dir: "v", ratio, a, b }
 }
