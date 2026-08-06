@@ -4,7 +4,7 @@
  * Surfaces (widgets): Enter Keeps into the current layout (or focuses if
  * already present). Mod+Enter Peeks. Dedicated Spaces (Trace, Bridge) are
  * reached only via the Go column / Call Space — never by Enter on a surface.
- * Spaces navigate; presets open a home Space.
+ * Spaces navigate (Call); presets restore that Space’s curated defaults.
  */
 
 import type { WidgetType } from "../types"
@@ -24,7 +24,6 @@ export type SummonOpenAction =
   | {
       type: "open-bundle"
       spaceId: SpaceId
-      ensureWidgets: readonly WidgetType[]
       focusType: WidgetType
     }
   | {
@@ -70,8 +69,8 @@ export function resolveSummonWidgetKeep(widgetType: WidgetType): SummonOpenActio
 }
 
 /**
- * Enter on a bundle = Call home Space, ensure widgets, focus the
- * primary surface. Never peeks Threads alone maximized.
+ * Enter on a preset = Call home Space, restore curated widgets/ratios,
+ * focus the primary surface. Distinct from Call Space (navigate only).
  */
 export function resolveSummonBundleOpen(id: ProductBundleId): SummonOpenAction | null {
   const def = bundleDef(id)
@@ -79,7 +78,6 @@ export function resolveSummonBundleOpen(id: ProductBundleId): SummonOpenAction |
   return {
     type: "open-bundle",
     spaceId: def.homeSpace,
-    ensureWidgets: def.widgets,
     focusType: def.focusType,
   }
 }

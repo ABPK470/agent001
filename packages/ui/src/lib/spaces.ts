@@ -58,11 +58,11 @@ export interface ProductBundleDef {
   id: ProductBundleId
   name: string
   desc: string
-  /** Space to land in when the bundle is opened. */
+  /** Space whose curated default this preset restores. */
   homeSpace: SpaceId
-  /** Tile to focus after open (never auto-maximize). */
+  /** Tile to focus after restore (never auto-maximize). */
   focusType: WidgetType
-  /** Widgets ensured on the home Space. */
+  /** Documented widget set — must match the home Space default. */
   widgets: readonly WidgetType[]
 }
 
@@ -107,16 +107,16 @@ export const PRODUCT_SPACES: readonly ProductSpaceDef[] = [
 export const PRODUCT_BUNDLES: readonly ProductBundleDef[] = [
   {
     id: "bundle:observe-core",
-    name: "Observe",
-    desc: "Default layout — Pipelines 70% · Event stream 30%",
+    name: "Observe · reset",
+    desc: "Restore Pipelines 70% · Event stream 30%",
     homeSpace: "space:observe",
     focusType: "operation-log",
     widgets: ["operation-log", "live-logs"],
   },
   {
     id: "bundle:reconcile-core",
-    name: "Reconcile",
-    desc: "Default layout — Sync · Entity registry 50/50",
+    name: "Reconcile · reset",
+    desc: "Restore Sync · Entity registry 50/50",
     homeSpace: "space:reconcile",
     focusType: "env-sync",
     widgets: ["env-sync", "entity-registry"],

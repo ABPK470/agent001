@@ -2648,6 +2648,7 @@ label:focus-within > .mia-checkbox,
   --stream-border: var(--stream-system-border);
 }
 
+/* Sticky pin while scrolled up — quiet chrome, not accent purple. */
 .event-stream-jump {
   position: sticky;
   bottom: 0;
@@ -2660,16 +2661,42 @@ label:focus-within > .mia-checkbox,
   padding: 0.5rem 0.625rem;
   border: none;
   border-top: 1px solid var(--border-subtle);
-  background: color-mix(in srgb, var(--panel, var(--panel-2)) 92%, transparent);
+  background: color-mix(in srgb, var(--panel, var(--panel-2)) 94%, transparent);
   backdrop-filter: blur(8px);
-  color: var(--accent);
+  color: var(--text-muted, var(--color-text-muted));
   font-size: 0.875rem;
+  font-weight: 550;
   cursor: pointer;
 }
 
 .event-stream-jump:hover {
-  color: var(--accent-hover);
+  color: var(--text, var(--color-text));
   background: var(--panel);
+}
+
+/* Resume live after pause / historical window — same quiet dialect. */
+.event-stream-jump-live {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem 0.5rem;
+  width: 100%;
+  margin: 0;
+  padding: 0.45rem 0.625rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: 0.375rem;
+  background: color-mix(in srgb, var(--text) 4%, transparent);
+  color: var(--text-muted, var(--color-text-muted));
+  font-size: 0.875rem;
+  font-weight: 550;
+  text-align: center;
+  cursor: pointer;
+}
+
+.event-stream-jump-live:hover {
+  color: var(--text, var(--color-text));
+  background: var(--hover-fill, color-mix(in srgb, var(--text) 6%, transparent));
 }
 
 /* Light filter pressed chips — stronger slate so Live / Severity don't bleed into paper. */
@@ -16748,6 +16775,7 @@ button.space-layout-preview__leaf-inner--link:focus-visible {
  * Viewer-scale panel (like WidgetCatalog); fluid on phone → ultrawide.
  * Zero-scroll; filter + category tabs trim density.
  */
+/* Same scrim as ModalShell / exec modals — no special frosted dialect. */
 .ops-sheet-overlay {
   position: fixed;
   inset: 0;
@@ -16756,9 +16784,7 @@ button.space-layout-preview__leaf-inner--link:focus-visible {
   align-items: center;
   justify-content: center;
   padding: clamp(0.25rem, 1.5vw, 1.5rem);
-  background: rgba(15, 23, 42, 0.65);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background: var(--scrim-strong);
   isolation: isolate;
 }
 
@@ -16897,32 +16923,32 @@ button.space-layout-preview__leaf-inner--link:focus-visible {
   opacity: 0.65;
 }
 
+/* Same readable scale as footer kbd hints (0.8125rem) — not micro-caption. */
 .ops-sheet__context {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
   flex-shrink: 0;
-  padding: 0.4rem 1rem;
+  padding: 0.5rem 1rem;
   border-bottom: 1px solid var(--border-subtle, var(--color-border-subtle));
   background: color-mix(in srgb, var(--text) 2.5%, transparent);
-  font-size: 0.6875rem;
+  font-size: 0.8125rem;
+  line-height: 1.35;
   color: var(--text-muted, var(--color-text-muted));
 }
 
 .ops-sheet__context-name {
-  font-weight: 650;
-  color: var(--accent, #6b8cae);
+  font-weight: 600;
+  color: var(--text, var(--color-text));
 }
 
 .ops-sheet__context-badge {
   flex-shrink: 0;
-  font-family: var(--font-mono);
-  font-size: 0.5625rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--accent, #6b8cae);
+  font-size: 0.8125rem;
+  font-weight: 550;
+  line-height: 1.35;
+  color: var(--text-muted, var(--color-text-muted));
 }
 
 .ops-sheet__context-badge--quiet {

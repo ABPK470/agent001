@@ -162,8 +162,8 @@ export function summonActionPreview(
   if (item.kind === "bundle") {
     return {
       title: item.name,
-      subtitle: `Open preset — ${item.desc}`,
-      primary: "open",
+      subtitle: `Restore default layout — ${item.desc}`,
+      primary: "restore",
     }
   }
   if (opts.onSpace) {

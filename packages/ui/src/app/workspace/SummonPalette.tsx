@@ -50,6 +50,7 @@ export function SummonPalette() {
 
   const callSpace = useLayoutStore((s) => s.callSpace)
   const ensureWidgets = useLayoutStore((s) => s.ensureWidgets)
+  const openSpacePreset = useLayoutStore((s) => s.openSpacePreset)
   const focusWidgetType = useLayoutStore((s) => s.focusWidgetType)
   const views = useLayoutStore((s) => s.views)
   const activeViewId = useLayoutStore((s) => s.activeViewId)
@@ -159,10 +160,9 @@ export function SummonPalette() {
       return
     }
     if (action.type === "open-bundle") {
+      // Preset ≠ Call Space: one atomic restore (not navigate + hope).
       requestWorkspaceShell()
-      callSpace(action.spaceId)
-      ensureWidgets(action.spaceId, action.ensureWidgets)
-      focusWidgetType(action.focusType)
+      openSpacePreset(action.spaceId, action.focusType)
       dismiss()
       return
     }
@@ -398,7 +398,7 @@ function SummonRow({
       >
         <span className="ops-sheet__label" title={item.desc}>
           <span className="ops-sheet__label-text">{label}</span>
-          {isPreset ? <span className="ops-sheet__preset-mark">Preset</span> : null}
+          {isPreset ? <span className="ops-sheet__preset-mark">Reset</span> : null}
         </span>
         <span className="ops-sheet__keys">
           {keys.map((key) => (

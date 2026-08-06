@@ -148,6 +148,11 @@ interface LayoutState {
   callSpace: (space: SpaceId | number) => void
   /** Rebuild the active product Space to its curated default. */
   resetActiveSpace: () => void
+  /**
+   * Summon preset: land on a Space, rebuild curated widgets/ratios, focus
+   * a primary tile — one atomic write (never navigate-only).
+   */
+  openSpacePreset: (spaceId: SpaceId, focusType: WidgetType) => void
   /** Move keyboard focus to a geometric neighbor tile. */
   focusTileNeighbor: (key: FocusArrowKey) => void
   /** Ensure widget types exist on a view (add missing only). */
@@ -364,18 +369,36 @@ export const useLayoutStore = create<LayoutState>()(
         })
       },
 
-      resetActiveSpace: () => set((s) => {
-        const def = spaceById(s.activeViewId)
-        if (!def) return s
-        const views = resetSpaceView(s.views, def.id, s.viewportRows)
-        const view = views.find((v) => v.id === def.id)
-        return {
-          views,
-          soloTileId: null,
-          zenTileId: null,
-          focusedTileId: view?.tiles[0]?.id ?? null,
-        }
-      }),
+      resetActiveSpace: () => {
+        const def = spaceById(get().activeViewId)
+        const focusType = def?.widgets[0]
+        if (!def || !focusType) return
+        get().openSpacePreset(def.id, focusType)
+      },
+
+      openSpacePreset: (spaceId, focusType) => {
+        const def = spaceById(spaceId)
+        if (!def) return
+        set((s) => {
+          const views = resetSpaceView(
+            mergeProductSpaces(s.views, s.viewportRows),
+            def.id,
+            s.viewportRows,
+          )
+          const view = views.find((v) => v.id === def.id)
+          const focusedTileId =
+            (view ? firstTileIdForWidgetType(view.tiles, focusType) : null)
+            ?? view?.tiles[0]?.id
+            ?? null
+          return {
+            views,
+            activeViewId: def.id,
+            soloTileId: null,
+            zenTileId: null,
+            focusedTileId,
+          }
+        })
+      },
 
       focusTileNeighbor: (key) => set((s) => {
         const view = s.views.find((v) => v.id === s.activeViewId)

@@ -54,11 +54,10 @@ describe("summon resolve", () => {
     })
   })
 
-  it("observe core opens Observe with Pipelines focus", () => {
+  it("observe core restores Observe defaults with Pipelines focus", () => {
     expect(resolveSummonBundleOpen("bundle:observe-core")).toEqual({
       type: "open-bundle",
       spaceId: "space:observe",
-      ensureWidgets: ["operation-log", "live-logs"],
       focusType: "operation-log",
     })
   })

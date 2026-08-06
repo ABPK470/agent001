@@ -141,7 +141,6 @@ export function LiveLogs() {
     })
   }, [tileId, typeFilters, errorsOnly, searchText, timeWindow])
 
-  const bottomRef = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const rootRef = useRef<HTMLDivElement>(null)
   const topSentinelRef = useRef<HTMLDivElement>(null)
@@ -243,6 +242,26 @@ export function LiveLogs() {
     if (!el) return
     setAutoScroll(el.scrollHeight - el.scrollTop - el.clientHeight < 40)
     if (el.scrollTop < 80) loadOlder()
+  }
+
+  /** Live + scrolled up: pin to tip. Do not reload — entries are already here. */
+  function scrollToLatest() {
+    setAutoScroll(true)
+    setHistogramFocus(null)
+    const last = displayRows.length - 1
+    if (last >= 0) {
+      listRef.current?.scrollToIndex(last, { align: "end" })
+    }
+    const el = containerRef.current
+    if (el) el.scrollTop = el.scrollHeight
+  }
+
+  /** Paused / historical window: resume live feed (reload) then pin. */
+  function resumeLiveFeed() {
+    setPaused(false)
+    setAutoScroll(true)
+    setHistogramFocus(null)
+    jumpToLive()
   }
 
   const onQuickRange = useCallback(
@@ -563,13 +582,8 @@ export function LiveLogs() {
       {(pendingLiveCount > 0 && (paused || !followLive)) && (
         <button
           type="button"
-          className="flex flex-wrap items-center justify-center gap-x-1.5 gap-y-1 px-2 py-1.5 text-center text-sm text-accent hover:text-accent-hover bg-accent/5 border border-accent/20 rounded"
-          onClick={() => {
-            setPaused(false)
-            setAutoScroll(true)
-            setHistogramFocus(null)
-            jumpToLive()
-          }}
+          className="event-stream-jump-live"
+          onClick={resumeLiveFeed}
         >
           <Radio size={14} />
           {pendingLiveCount} new event{pendingLiveCount === 1 ? "" : "s"} — Jump to live
@@ -650,19 +664,13 @@ export function LiveLogs() {
           />
         )}
 
-        <div ref={bottomRef} />
       </div>
 
       {!autoScroll && !paused && followLive && (
         <button
           type="button"
           className="event-stream-jump"
-          onClick={() => {
-            setAutoScroll(true)
-            setHistogramFocus(null)
-            jumpToLive()
-            bottomRef.current?.scrollIntoView({ behavior: "smooth" })
-          }}
+          onClick={scrollToLatest}
         >
           <ArrowDown size={14} /> Jump to latest
         </button>

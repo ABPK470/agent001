@@ -59,18 +59,17 @@ function previewObject(value: Record<string, unknown>): string {
 }
 
 function JsonPrimitive({ name, value }: { name?: string; value: unknown }) {
-  let valueClass = "text-text-muted"
-  if (typeof value === "string") valueClass = "text-datatype-string"
-  else if (typeof value === "number") valueClass = "text-datatype-int"
-  else if (typeof value === "boolean") valueClass = "text-datatype-bool"
-  else if (value === null) valueClass = "text-text-muted/60 italic"
+  // Inspection payloads stay monochrome — datatype chroma is for MymiDb schema,
+  // not every JSON dump (avoids accent/purple soup next to Jump / TYPE pills).
+  const valueClass =
+    value === null ? "text-text-muted italic" : "text-text"
 
   return (
     <div className="flex items-baseline gap-1 py-px font-mono text-xs leading-relaxed min-w-0">
       {name != null && (
         <>
-          <span className="text-text shrink-0">{name}</span>
-          <span className="text-text-muted/50 shrink-0">:</span>
+          <span className="text-text-muted shrink-0">{name}</span>
+          <span className="text-text-faint shrink-0">:</span>
         </>
       )}
       <span className={`min-w-0 break-all whitespace-pre-wrap ${valueClass}`}>{formatScalarDisplay(value)}</span>
@@ -118,14 +117,14 @@ function JsonNode({
         />
         {name != null && (
           <>
-            <span className="text-text shrink-0">{name}</span>
-            <span className="text-text-muted/50 shrink-0">:</span>
+            <span className="text-text-muted shrink-0">{name}</span>
+            <span className="text-text-faint shrink-0">:</span>
           </>
         )}
         {collapsed ? (
-          <span className="text-text-muted/70 min-w-0 break-all">{collapsedPreview}</span>
+          <span className="text-text-muted min-w-0 break-all">{collapsedPreview}</span>
         ) : (
-          <span className="text-text-muted/50">{isArray ? "[" : "{"}</span>
+          <span className="text-text-faint">{isArray ? "[" : "{"}</span>
         )}
       </button>
       {!collapsed && (
