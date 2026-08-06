@@ -3,9 +3,12 @@
  * Same store path as breadcrumbs; keyboard: j/k · Enter · Esc.
  */
 
+import { ChevronRight } from "lucide-react"
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react"
+import { RunStatus } from "../../enums"
 import { useStore } from "../../state/store"
 import { operationStatusPill, statusAbbrevMeta } from "../../lib/status-callout"
+import { timeAgo } from "../../lib/util"
 import { sortThreadsByPinThenUpdatedAt } from "../../lib/thread-order"
 import {
   runLabel,
@@ -192,65 +195,99 @@ export function TraceScopeDrawer({
             rowIndex += 1
             const threadIdx = rowIndex
             return (
-              <li key={thread.id} className="trace-scope-drawer__thread">
-                <button
-                  type="button"
-                  data-scope-idx={threadIdx}
-                  role="option"
-                  aria-selected={focusIndex === threadIdx}
-                  aria-expanded={expanded}
-                  className={`trace-scope-drawer__thread-btn${threadActive ? " is-active" : ""}${
-                    focusIndex === threadIdx ? " is-focused" : ""
-                  }`}
-                  onClick={() => {
-                    setFocusIndex(threadIdx)
-                    onPickThread(thread.id)
-                    toggleExpand(thread.id)
-                  }}
-                >
-                  <span className="trace-scope-drawer__chev" aria-hidden>
-                    {expanded ? "▾" : "▸"}
-                  </span>
-                  <span className="trace-scope-drawer__thread-label">{threadLabel(thread)}</span>
-                  <span className="trace-scope-drawer__count tabular-nums">
-                    {threadRuns.length}
-                  </span>
-                </button>
-                {expanded && threadRuns.length > 0 ? (
-                  <ul className="trace-scope-drawer__runs">
-                    {threadRuns.map((run) => {
-                      rowIndex += 1
-                      const runIdx = rowIndex
-                      const runActive = run.id === activeRunId
-                      const statusMeta = statusAbbrevMeta(run.status)
-                      return (
-                        <li key={run.id}>
-                          <button
-                            type="button"
-                            data-scope-idx={runIdx}
-                            role="option"
-                            aria-selected={focusIndex === runIdx}
-                            className={`trace-scope-drawer__run-btn${runActive ? " is-active" : ""}${
-                              focusIndex === runIdx ? " is-focused" : ""
-                            }`}
-                            onClick={() => {
-                              setFocusIndex(runIdx)
-                              onPickRun(run.id, thread.id)
-                            }}
-                            title={runLabel(run)}
-                          >
-                            <span className="trace-scope-drawer__run-label">{runLabel(run)}</span>
-                            <span
-                              className={`trace-scope-drawer__run-status ${operationStatusPill(run.status)}`}
-                              title={statusMeta.title}
-                            >
-                              {statusMeta.label}
-                            </span>
-                          </button>
-                        </li>
-                      )
-                    })}
-                  </ul>
+              <li
+                key={thread.id}
+                className={`trace-scope-drawer__thread${expanded ? " is-expanded" : ""}${
+                  threadActive ? " is-active" : ""
+                }`}
+              >
+                <div className="trace-scope-drawer__thread-row">
+                  <button
+                    type="button"
+                    className="trace-scope-drawer__chev-btn"
+                    aria-label={expanded ? "Collapse runs" : "Expand runs"}
+                    aria-expanded={expanded}
+                    onClick={() => {
+                      setFocusIndex(threadIdx)
+                      toggleExpand(thread.id)
+                    }}
+                  >
+                    <ChevronRight
+                      size={13}
+                      strokeWidth={1.75}
+                      className="trace-scope-drawer__chev-icon"
+                      data-expanded={expanded || undefined}
+                      aria-hidden
+                    />
+                  </button>
+                  <button
+                    type="button"
+                    data-scope-idx={threadIdx}
+                    role="option"
+                    aria-selected={focusIndex === threadIdx}
+                    className={`trace-scope-drawer__thread-btn${
+                      focusIndex === threadIdx ? " is-focused" : ""
+                    }`}
+                    onClick={() => {
+                      setFocusIndex(threadIdx)
+                      onPickThread(thread.id)
+                      if (!expanded) toggleExpand(thread.id)
+                    }}
+                  >
+                    <span className="trace-scope-drawer__thread-title">{threadLabel(thread)}</span>
+                    <span className="trace-scope-drawer__thread-meta tabular-nums">
+                      {threadRuns.length} {threadRuns.length === 1 ? "run" : "runs"}
+                    </span>
+                  </button>
+                </div>
+                {threadRuns.length > 0 ? (
+                  <div
+                    className={`trace-scope-drawer__runs-wrap${expanded ? " is-open" : ""}`}
+                  >
+                    <div className="trace-scope-drawer__runs-inner">
+                      <ul className="trace-scope-drawer__runs">
+                        {threadRuns.map((run) => {
+                          rowIndex += 1
+                          const runIdx = rowIndex
+                          const runActive = run.id === activeRunId
+                          const isLive =
+                            run.status === RunStatus.Pending ||
+                            run.status === RunStatus.Running ||
+                            run.status === RunStatus.Planning
+                          const statusMeta = statusAbbrevMeta(run.status)
+                          return (
+                            <li key={run.id}>
+                              <button
+                                type="button"
+                                data-scope-idx={runIdx}
+                                role="option"
+                                aria-selected={focusIndex === runIdx}
+                                className={`trace-scope-drawer__run-btn${runActive ? " is-active" : ""}${
+                                  focusIndex === runIdx ? " is-focused" : ""
+                                }`}
+                                onClick={() => {
+                                  setFocusIndex(runIdx)
+                                  onPickRun(run.id, thread.id)
+                                }}
+                                title={runLabel(run)}
+                              >
+                                <span className="trace-scope-drawer__run-label">{runLabel(run)}</span>
+                                <span className="trace-scope-drawer__run-meta tabular-nums">
+                                  {isLive ? "live" : timeAgo(run.createdAt)}
+                                </span>
+                                <span
+                                  className={`trace-scope-drawer__run-status ${operationStatusPill(run.status)}`}
+                                  title={statusMeta.title}
+                                >
+                                  {statusMeta.label}
+                                </span>
+                              </button>
+                            </li>
+                          )
+                        })}
+                      </ul>
+                    </div>
+                  </div>
                 ) : null}
                 {expanded && threadRuns.length === 0 ? (
                   <p className="trace-scope-drawer__empty-runs">No runs</p>
