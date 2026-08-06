@@ -5230,13 +5230,22 @@ textarea.input {
   pointer-events: none;
 }
 
-/* Keyboard-active detail row (accordion headers + timeline / steps). */
+/* Keyboard-active accordion only — vertical rail means “expandable”.
+   Do not recolor label text on focus (keep section-cap ink). */
 .review-detail-accordion.is-section-focused,
-.trace-detail-accordion.is-section-focused,
+.trace-detail-accordion.is-section-focused {
+  box-shadow: inset 2px 0 0 0 var(--accent, #6b8cae);
+}
+
+/* Timeline / steps are not foldable — quiet focus, no accordion cursor rail. */
 .trace-phase-timeline__item.is-section-focused .trace-phase-timeline__body,
 .trace-phase-step.is-section-focused {
-  color: var(--accent, #6b8cae);
-  box-shadow: inset 2px 0 0 0 var(--accent, #6b8cae);
+  background: color-mix(in srgb, var(--accent, #6b8cae) 8%, transparent);
+  border-radius: 0.25rem;
+}
+
+.trace-phase-timeline__item.is-section-focused .trace-phase-timeline__dot {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent, #6b8cae) 28%, transparent);
 }
 
 .trace-phase-timeline__item:hover .trace-phase-timeline__body {
