@@ -6251,6 +6251,18 @@ button.trace-tree-status-pill:hover {
   background: var(--trace-section-surface, var(--bg));
 }
 
+/*
+ * Stack = multiple open sections (Context: prompts + Resolved tools). Peer
+ * stickies at top:0 overlap — later headers scroll under earlier ones and
+ * keyboard nav (scrollIntoView nearest) skips them. Headers scroll with
+ * their section; controller aligns focus to scroll-host top in stacks.
+ */
+.trace-detail-body--stack .trace-detail-section--sticky .trace-detail-accordion-bar {
+  position: relative;
+  top: auto;
+  z-index: 0;
+}
+
 .trace-detail-accordion-bar {
   position: relative;
   display: flex;

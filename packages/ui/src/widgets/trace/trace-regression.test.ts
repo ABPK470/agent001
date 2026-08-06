@@ -654,4 +654,13 @@ describe("Trace CSS contract — pin indent + work-note divider", () => {
       /\.trace-detail-body--stack\s*>\s*\.trace-detail-section--sticky\s+\.trace-detail-accordion-bar\.is-section-focused\s*\{[^}]*background:\s*var\(--select-fill/s,
     )
   })
+
+  it("stack detail sections do not sticky-peer at top:0 (Context prompts + tools)", () => {
+    expect(css).toMatch(
+      /\.trace-detail-body--stack\s+\.trace-detail-section--sticky\s+\.trace-detail-accordion-bar\s*\{[^}]*position:\s*relative/s,
+    )
+    expect(css).toMatch(
+      /\.trace-detail-body--stack\s+\.trace-detail-section--sticky\s+\.trace-detail-accordion-bar\s*\{[^}]*top:\s*auto/s,
+    )
+  })
 })

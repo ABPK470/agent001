@@ -32,6 +32,35 @@ function isFoldable(handle: DetailSectionHandle): boolean {
   return typeof handle.getOpen === "function" && typeof handle.setOpen === "function"
 }
 
+/** scrollTop that lands `barTop` flush under `scrollHostTop` (stack sections). */
+export function stackSectionScrollTop(
+  scrollTop: number,
+  scrollHostTop: number,
+  barTop: number,
+  pad = 2,
+): number {
+  return Math.max(0, scrollTop + (barTop - scrollHostTop) - pad)
+}
+
+/** Align a section header in the trace detail scroll host (stack-safe). */
+export function scrollDetailSectionHeaderIntoView(header: HTMLElement): void {
+  const bar =
+    (header.closest(".trace-detail-accordion-bar") as HTMLElement | null) ?? header
+  const scrollHost = bar.closest(".trace-detail__scroll") as HTMLElement | null
+  const inStack = bar.closest(".trace-detail-body--stack") != null
+
+  if (!inStack || !scrollHost) {
+    bar.scrollIntoView({ block: "nearest" })
+    return
+  }
+
+  scrollHost.scrollTop = stackSectionScrollTop(
+    scrollHost.scrollTop,
+    scrollHost.getBoundingClientRect().top,
+    bar.getBoundingClientRect().top,
+  )
+}
+
 function canPeek(handle: DetailSectionHandle): boolean {
   return (
     typeof handle.hasPeek === "function"
@@ -59,7 +88,8 @@ export function createDetailSectionController(): DetailSectionController {
     const section = sections[index]
     if (!section) return false
     activeId = section.id
-    section.headerEl()?.scrollIntoView({ block: "nearest" })
+    const header = section.headerEl()
+    if (header) scrollDetailSectionHeaderIntoView(header)
     notify()
     return true
   }

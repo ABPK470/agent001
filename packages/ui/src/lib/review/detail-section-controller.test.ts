@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from "vitest"
-import { createDetailSectionController } from "./detail-section-controller"
+import {
+  createDetailSectionController,
+  stackSectionScrollTop,
+} from "./detail-section-controller"
 
 function section(id: string, open = true) {
   let isOpen = open
@@ -87,5 +90,12 @@ describe("createDetailSectionController", () => {
 
     expect(ctrl.fold(false)).toBe(true)
     expect(open).toBe(false)
+  })
+})
+
+describe("stackSectionScrollTop", () => {
+  it("aligns a stack section bar to the scroll host top", () => {
+    expect(stackSectionScrollTop(400, 100, 280)).toBe(578)
+    expect(stackSectionScrollTop(0, 100, 90)).toBe(0)
   })
 })
