@@ -18,6 +18,8 @@ export function useTraceOperatorKeyboard({
   onFocusedPaneChange,
   searchOpen,
   onSearchOpenChange,
+  scopeDrawerOpen,
+  onScopeDrawerOpenChange,
   isZen,
   isSolo,
   summonOpen,
@@ -33,6 +35,8 @@ export function useTraceOperatorKeyboard({
   onFocusedPaneChange: (pane: TracePane) => void
   searchOpen: boolean
   onSearchOpenChange: (open: boolean) => void
+  scopeDrawerOpen: boolean
+  onScopeDrawerOpenChange: (open: boolean) => void
   isZen: boolean
   isSolo: boolean
   summonOpen: boolean
@@ -55,8 +59,17 @@ export function useTraceOperatorKeyboard({
     function onKeyDown(event: KeyboardEvent) {
       if (isEditableKeyboardTarget(event.target)) return
 
+      // ⌘\ / Ctrl+\ — toggle Thread/Run scope drawer
+      if ((event.metaKey || event.ctrlKey) && (event.key === "\\" || event.code === "Backslash")) {
+        event.preventDefault()
+        event.stopPropagation()
+        onScopeDrawerOpenChange(!scopeDrawerOpen)
+        return
+      }
+
       if (event.key === "Escape") {
         const action = resolveEscLadder({
+          scopeDrawerOpen,
           filterOpen: searchOpen,
           focusedPane,
           isZen,
@@ -66,6 +79,10 @@ export function useTraceOperatorKeyboard({
         if (action.type === "none") return
         event.preventDefault()
         event.stopPropagation()
+        if (action.type === "dismiss-scope-drawer") {
+          onScopeDrawerOpenChange(false)
+          return
+        }
         if (action.type === "dismiss-filter") {
           onSearchOpenChange(false)
           return
@@ -137,7 +154,9 @@ export function useTraceOperatorKeyboard({
     onExitZen,
     onFocusedPaneChange,
     onRestoreMaximize,
+    onScopeDrawerOpenChange,
     onSearchOpenChange,
+    scopeDrawerOpen,
     searchOpen,
     summonOpen,
     tabCycleRef,

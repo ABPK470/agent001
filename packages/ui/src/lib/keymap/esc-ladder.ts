@@ -3,6 +3,7 @@
  */
 
 export type EscLadderContext = {
+  scopeDrawerOpen: boolean
   filterOpen: boolean
   focusedPane: "tree" | "detail"
   isZen: boolean
@@ -11,6 +12,7 @@ export type EscLadderContext = {
 }
 
 export type EscLadderAction =
+  | { type: "dismiss-scope-drawer" }
   | { type: "dismiss-filter" }
   | { type: "pane-to-tree" }
   | { type: "exit-zen" }
@@ -20,10 +22,11 @@ export type EscLadderAction =
 
 /**
  * Pure Esc priority.
- * Summon/peek overlays sit above widget context; then filter → pane → zen → max.
+ * Summon/peek overlays sit above widget context; then scope drawer → filter → pane → zen → max.
  */
 export function resolveEscLadder(ctx: EscLadderContext): EscLadderAction {
   if (ctx.summonOpen) return { type: "dismiss-summon" }
+  if (ctx.scopeDrawerOpen) return { type: "dismiss-scope-drawer" }
   if (ctx.filterOpen) return { type: "dismiss-filter" }
   if (ctx.focusedPane === "detail") return { type: "pane-to-tree" }
   if (ctx.isZen) return { type: "exit-zen" }

@@ -41,11 +41,10 @@ describe("product spaces", () => {
     expect(leafRatio(view, "live-logs", "w")).toBeCloseTo(0.3, 2)
   })
 
-  it("Debug is Threads 20% | Trace 80%", () => {
+  it("Debug is Trace alone", () => {
     const view = buildSpaceView(PRODUCT_SPACES.find((s) => s.id === "space:debug")!)
-    expect(view.tiles.map((t) => t.type)).toEqual(["thread-nav", "debug-inspector"])
-    expect(leafRatio(view, "thread-nav", "w")).toBeCloseTo(0.2, 2)
-    expect(leafRatio(view, "debug-inspector", "w")).toBeCloseTo(0.8, 2)
+    expect(view.tiles.map((t) => t.type)).toEqual(["debug-inspector"])
+    expect(view.split?.kind).toBe("leaf")
   })
 
   it("Reconcile is Sync | Entity registry 50/50", () => {
@@ -110,6 +109,6 @@ describe("product spaces", () => {
   })
 
   it("exports a layout version for persistence migration", () => {
-    expect(SPACE_LAYOUT_VERSION).toBeGreaterThanOrEqual(4)
+    expect(SPACE_LAYOUT_VERSION).toBeGreaterThanOrEqual(5)
   })
 })

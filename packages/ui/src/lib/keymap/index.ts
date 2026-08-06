@@ -13,6 +13,7 @@ export {
 } from "./resolve-trace-pane-keyboard"
 export {
   SHELL_BINDINGS,
+  TRACE_SCOPE_DRAWER_BINDING,
   TRACE_TREE_HINTS,
   TRACE_DETAIL_HINTS,
   SUMMON_HINTS,

@@ -368,7 +368,7 @@ expand/collapse with Trace (`ReviewTreeFoldToggle` in trailing toolbar). Trace s
 **Spaces, Summon, keyboard (operator console):** Product **Spaces** (Agent /
 Observe / Reconcile / Bridge / Debug) are curated job landings with fixed
 default autolayouts — not DIY-named sheets as the primary path. Observe =
-Pipelines 70% / Event stream 30%; Debug = Threads 20% / Trace 80%;
+Pipelines 70% / Event stream 30%; Debug = Trace alone;
 Reconcile = Sync / Entity registry 50/50; Agent = Trace 60% with Chat /
 Threads splitting the remaining 40%. **Summon** (⌘/Ctrl+K) is widget-first:
 Enter peeks a widget (or focuses it if already on the Space); ⌘/Ctrl+Enter

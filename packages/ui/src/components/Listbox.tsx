@@ -54,6 +54,8 @@ export interface ListboxProps<T extends string> {
   className?: string
   ariaLabel?: string
   disabled?: boolean
+  /** Native tooltip on the closed trigger (truncated selection labels). */
+  title?: string
   /** Placeholder for the in-popover filter field. */
   searchPlaceholder?: string
   /** When false, skip the filter row (short fixed option lists). Default true. */
@@ -165,6 +167,7 @@ export function Listbox<T extends string>({
   className = "",
   ariaLabel,
   disabled,
+  title,
   searchPlaceholder = "Filter…",
   searchable = true,
   blankIsPlaceholder = false,
@@ -308,6 +311,7 @@ export function Listbox<T extends string>({
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-label={ariaLabel ?? caption}
+        title={title}
         onClick={togglePopover}
         className={[
           "group flex w-full min-w-0 items-center gap-2 rounded-md transition-colors text-left text-text overflow-hidden",

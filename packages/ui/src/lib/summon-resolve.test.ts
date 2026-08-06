@@ -33,11 +33,11 @@ describe("summon resolve", () => {
     })
   })
 
-  it("agent debug opens Debug Space and focuses Trace — not Threads maximized", () => {
+  it("agent debug opens Debug Space with Trace only", () => {
     expect(resolveSummonBundleOpen("bundle:agent-debug")).toEqual({
       type: "open-bundle",
       spaceId: "space:debug",
-      ensureWidgets: ["thread-nav", "debug-inspector"],
+      ensureWidgets: ["debug-inspector"],
       focusType: "debug-inspector",
     })
   })

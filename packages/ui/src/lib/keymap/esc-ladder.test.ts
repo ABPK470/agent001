@@ -6,6 +6,7 @@ describe("resolveEscLadder", () => {
     expect(
       resolveEscLadder({
         summonOpen: true,
+        scopeDrawerOpen: true,
         filterOpen: true,
         focusedPane: "detail",
         isZen: true,
@@ -17,11 +18,15 @@ describe("resolveEscLadder", () => {
   it("peels one layer at a time", () => {
     const base = {
       summonOpen: false,
+      scopeDrawerOpen: false,
       filterOpen: false,
       focusedPane: "tree" as const,
       isZen: false,
       isSolo: false,
     }
+    expect(resolveEscLadder({ ...base, scopeDrawerOpen: true })).toEqual({
+      type: "dismiss-scope-drawer",
+    })
     expect(resolveEscLadder({ ...base, filterOpen: true })).toEqual({ type: "dismiss-filter" })
     expect(resolveEscLadder({ ...base, focusedPane: "detail" })).toEqual({ type: "pane-to-tree" })
     expect(resolveEscLadder({ ...base, isZen: true })).toEqual({ type: "exit-zen" })

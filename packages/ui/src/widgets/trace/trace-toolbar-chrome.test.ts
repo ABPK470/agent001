@@ -20,6 +20,7 @@ const cssPath = join(here, "../../boot/index.css")
 const dagPath = join(here, "TraceDag.tsx")
 const exportPath = join(here, "TraceExportMenu.tsx")
 const zenHudPath = join(here, "TraceZenHud.tsx")
+const contextPath = join(here, "TraceRunContext.tsx")
 const foldTogglePath = join(here, "TraceTreeFoldToggle.tsx")
 const openStatePath = join(here, "open-state.ts")
 const waterfallPath = join(here, "TraceWaterfallView.tsx")
@@ -77,9 +78,9 @@ describe("Trace toolbar structure + behavior wiring", () => {
     expect(dag).toContain("WidgetToolbarLeading")
     expect(dag).toContain("WidgetToolbarSearch")
     expect(dag).toContain("WidgetToolbarTrailing")
-    // Meta is a sibling inset under the same review-controls surface.
+    // Scope bar, then toolbar, then meta — three insets under review-controls.
     expect(dag).toMatch(
-      /WIDGET_REVIEW_CONTROLS_INSET_CLASS[\s\S]*?WidgetToolbar[\s\S]*?showMetaBand[\s\S]*?WIDGET_REVIEW_CONTROLS_INSET_CLASS[\s\S]*?widget-review-meta/,
+      /WIDGET_REVIEW_CONTROLS_INSET_CLASS[\s\S]*?TraceRunContext[\s\S]*?WIDGET_REVIEW_CONTROLS_INSET_CLASS[\s\S]*?WidgetToolbar[\s\S]*?WIDGET_REVIEW_CONTROLS_INSET_CLASS[\s\S]*?widget-review-meta/,
     )
   })
 
@@ -140,15 +141,26 @@ describe("Trace toolbar structure + behavior wiring", () => {
     expect(fold).toContain("onFoldModeChange")
   })
 
-  it("meta band surfaces run stats and identity chips", () => {
+  it("scope bar precedes toolbar; meta is telemetry only", () => {
     const dag = read(dagPath)
+    const zen = read(zenHudPath)
+    const context = read(contextPath)
+    expect(dag).toContain("<TraceRunContext />")
+    expect(dag).toMatch(
+      /<TraceRunContext \/>[\s\S]*?<WidgetToolbar>[\s\S]*?widget-review-meta/,
+    )
     expect(dag).toContain("widget-filter-band widget-review-meta")
     expect(dag).toContain("widget-review-meta__stats")
     expect(dag).toContain("widget-review-meta__stat-value")
-    expect(dag).toContain("widget-review-meta__ids")
-    expect(dag).toContain('tone="meta"')
-    expect(dag).toContain('label="run"')
-    expect(dag).toContain('label="thread"')
+    // Pickers are not in the meta band — status pill may still use __ids.
+    expect(dag).not.toMatch(/widget-review-meta__ids[\s\S]{0,120}TraceRunContext/)
+    expect(context).toContain("trace-scope")
+    expect(context).toContain("trace-scope__pill")
+    expect(dag).toContain("TraceScopeDrawer")
+    expect(dag).toContain("trace-scope-drawer-toggle")
+    expect(zen).toContain("TraceRunContext")
+    expect(zen).toContain("compact")
+    expect(zen).toContain("scopeDrawerOpen")
   })
 
   it("waterfall labels use shared kind icons — not Work:/Subagent: text prefixes", () => {

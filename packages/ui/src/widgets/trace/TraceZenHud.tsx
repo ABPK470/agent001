@@ -2,7 +2,7 @@
  * Trace zen HUD — row-1 controls: stats, search, exit + run context.
  */
 
-import { ChevronDown, Info, Search, X } from "lucide-react"
+import { ChevronDown, Info, PanelLeft, Search, X } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { TraceRunContext } from "./TraceRunContext"
 import { TraceTreeFoldToggle } from "./TraceTreeFoldToggle"
@@ -19,6 +19,8 @@ export function TraceZenHud({
   foldMode,
   onFoldModeChange,
   viewMode,
+  scopeDrawerOpen,
+  onScopeDrawerOpenChange,
   onExitZen,
 }: {
   metaStats: MetaStat[]
@@ -29,6 +31,8 @@ export function TraceZenHud({
   foldMode: FoldMode
   onFoldModeChange: (mode: FoldMode) => void
   viewMode: "tree" | "waterfall"
+  scopeDrawerOpen: boolean
+  onScopeDrawerOpenChange: (open: boolean) => void
   onExitZen: () => void
 }) {
   const [statsOpen, setStatsOpen] = useState(false)
@@ -88,6 +92,16 @@ export function TraceZenHud({
       ) : (
         <>
           <div className="trace-zen-hud__leading">
+            <button
+              type="button"
+              className={`trace-scope-drawer-toggle${scopeDrawerOpen ? " is-open" : ""}`}
+              aria-label={scopeDrawerOpen ? "Close thread drawer" : "Open thread drawer"}
+              aria-expanded={scopeDrawerOpen}
+              title="Thread / run drawer (⌘\\)"
+              onClick={() => onScopeDrawerOpenChange(!scopeDrawerOpen)}
+            >
+              <PanelLeft size={14} strokeWidth={2} aria-hidden />
+            </button>
             {compactStats ? (
               <div className="trace-zen-hud__stats">
                 <button
@@ -122,7 +136,7 @@ export function TraceZenHud({
                 ) : null}
               </div>
             ) : null}
-            <TraceRunContext className="trace-run-context--zen" />
+            <TraceRunContext compact className="trace-scope--zen" />
             {viewMode === "tree" ? (
               <TraceTreeFoldToggle
                 foldMode={foldMode}

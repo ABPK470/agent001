@@ -4,6 +4,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react"
+import { PanelLeft } from "lucide-react"
 import { api } from "../../client/index"
 import { VirtualList, type VirtualListHandle } from "../../components/VirtualList"
 import { BrowseCount } from "../../components/BrowseStrip"
@@ -61,6 +62,7 @@ import {
 import { TraceDetailInspector } from "./TraceDetailInspector"
 import { TraceExportMenu } from "./TraceExportMenu"
 import { TraceRunContext } from "./TraceRunContext"
+import { TraceScopeDrawer } from "./TraceScopeDrawer"
 import { TraceTreeRow, traceTreeRowEstimateSize } from "./TraceTreeRow"
 import { TraceWaterfallView } from "./TraceWaterfallView"
 import { TraceZenHud } from "./TraceZenHud"
@@ -124,6 +126,7 @@ export function TraceDag({
   const [compareRunId, setCompareRunId] = useState<string | null>(null)
   const [compareDag, setCompareDag] = useState<TraceDag | null>(null)
   const [zenSearchOpen, setZenSearchOpen] = useState(false)
+  const [scopeDrawerOpen, setScopeDrawerOpen] = useState(false)
   const [focusedPane, setFocusedPane] = useState<TracePane>("tree")
   const [splitRatio, setSplitRatio] = useState(TRACE_SPLIT_DEFAULT)
 
@@ -484,6 +487,8 @@ export function TraceDag({
     onFocusedPaneChange,
     searchOpen: filterOpen,
     onSearchOpenChange,
+    scopeDrawerOpen,
+    onScopeDrawerOpenChange: setScopeDrawerOpen,
     isZen,
     isSolo,
     summonOpen,
@@ -609,6 +614,8 @@ export function TraceDag({
       foldMode={openState.foldMode}
       onFoldModeChange={onFoldModeChange}
       viewMode={viewMode}
+      scopeDrawerOpen={scopeDrawerOpen}
+      onScopeDrawerOpenChange={setScopeDrawerOpen}
       onExitZen={exitZen}
     />
   )
@@ -617,6 +624,23 @@ export function TraceDag({
       <div className={WIDGET_LOG_STACK_CLASS}>
         {!isZen ? (
           <div className={WIDGET_REVIEW_CONTROLS_CLASS}>
+          {/* Scope precedes view chrome — drawer toggle + Thread / Run breadcrumbs. */}
+          <div className={WIDGET_REVIEW_CONTROLS_INSET_CLASS}>
+            <div className="trace-scope-row">
+              <button
+                type="button"
+                className={`trace-scope-drawer-toggle${scopeDrawerOpen ? " is-open" : ""}`}
+                aria-label={scopeDrawerOpen ? "Close thread drawer" : "Open thread drawer"}
+                aria-expanded={scopeDrawerOpen}
+                title="Thread / run drawer (⌘\\)"
+                onClick={() => setScopeDrawerOpen((open) => !open)}
+              >
+                <PanelLeft size={15} strokeWidth={2} aria-hidden />
+              </button>
+              <TraceRunContext />
+            </div>
+          </div>
+
           <div className={WIDGET_REVIEW_CONTROLS_INSET_CLASS}>
           <WidgetToolbar>
             <WidgetToolbarLeading>
@@ -661,7 +685,7 @@ export function TraceDag({
           </div>
 
           <div className={WIDGET_REVIEW_CONTROLS_INSET_CLASS}>
-            {/* Same band chrome as Pipelines ActiveFilterChips (.widget-filter-band). */}
+            {/* Telemetry only — scope lives in the bar above. */}
             <div className="widget-filter-band widget-review-meta">
               <div className="widget-review-meta__stats">
                 {metaStats.length === 0 ? (
@@ -680,23 +704,33 @@ export function TraceDag({
                   ))
                 )}
               </div>
-              <div className="widget-review-meta__ids">
-                {runStatus ? (
+              {runStatus ? (
+                <div className="widget-review-meta__ids">
                   <span
                     className={operationStatusPill(runStatus)}
                     title={`Run status: ${runStatus}`}
                   >
                     {runStatus}
                   </span>
-                ) : null}
-                <TraceRunContext />
-              </div>
+                </div>
+              ) : null}
             </div>
           </div>
         </div>
         ) : null}
 
         <div className={`trace-body trace-split-body${isZen ? " trace-split-body--zen" : ""} ${WIDGET_LOG_BODY_CLASS}`}>
+          {scopeDrawerOpen ? (
+            <>
+              <button
+                type="button"
+                className="trace-scope-drawer-scrim"
+                aria-label="Close thread drawer"
+                onClick={() => setScopeDrawerOpen(false)}
+              />
+              <TraceScopeDrawer onPicked={() => setScopeDrawerOpen(false)} />
+            </>
+          ) : null}
           {emptySlot ? (
             <>
               {isZen ? zenHud : null}
@@ -804,10 +838,11 @@ export function TraceDag({
             </div>
             </div>
           )}
-          {zenHotkeysEnabled && !emptySlot ? (
-            <ComposerKbdFooter hints={hintsForTracePane(focusedPane)} />
-          ) : null}
         </div>
+        {/* Peer of body — inside panel frame, never boxed by pane-focus rings. */}
+        {zenHotkeysEnabled && !emptySlot ? (
+          <ComposerKbdFooter hints={hintsForTracePane(focusedPane)} />
+        ) : null}
       </div>
     </div>
   )

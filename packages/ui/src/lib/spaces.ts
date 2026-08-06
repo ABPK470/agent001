@@ -4,7 +4,7 @@
  *
  * Defaults (ratios of the canvas):
  * - Observe: Pipelines 70% | Event stream 30%
- * - Debug: Threads 20% | Trace 80%
+ * - Debug: Trace alone (self-sufficient scope bar + drawer)
  * - Reconcile: Sync 50% | Entity registry 50%
  * - Agent: Trace 60% | (Chat / Threads 50/50 in the remaining 40%)
  * - Bridge: Bridge alone
@@ -31,7 +31,7 @@ export type ProductBundleId = "bundle:agent-debug" | "bundle:observe-core" | "bu
  * Bump when curated Space widgets/ratios change so persisted product Spaces
  * rebuild to the new defaults (DIY-named views are left alone).
  */
-export const SPACE_LAYOUT_VERSION = 4
+export const SPACE_LAYOUT_VERSION = 5
 
 export interface ProductSpaceDef {
   id: SpaceId
@@ -90,8 +90,8 @@ export const PRODUCT_SPACES: readonly ProductSpaceDef[] = [
     id: "space:debug",
     index: 0,
     name: "Debug",
-    desc: "Threads beside Trace",
-    widgets: ["thread-nav", "debug-inspector"],
+    desc: "Trace — pick thread and run in-widget",
+    widgets: ["debug-inspector"],
   },
 ]
 
@@ -99,10 +99,10 @@ export const PRODUCT_BUNDLES: readonly ProductBundleDef[] = [
   {
     id: "bundle:agent-debug",
     name: "Agent debug",
-    desc: "Debug Space — Threads 20% · Trace 80%",
+    desc: "Debug Space — Trace only",
     homeSpace: "space:debug",
     focusType: "debug-inspector",
-    widgets: ["thread-nav", "debug-inspector"],
+    widgets: ["debug-inspector"],
   },
   {
     id: "bundle:observe-core",
@@ -180,8 +180,7 @@ function buildSpaceSplit(
     return vSplit(0.7, id("operation-log"), id("live-logs"))
   }
   if (spaceId === "space:debug") {
-    // Threads 20% | Trace 80%
-    return vSplit(0.2, id("thread-nav"), id("debug-inspector"))
+    return id("debug-inspector")
   }
   if (spaceId === "space:reconcile") {
     // Sync 50% | Entity registry 50%

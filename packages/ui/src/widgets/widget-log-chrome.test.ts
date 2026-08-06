@@ -431,9 +431,13 @@ describe("widget log chrome — Trace meta & scope payload", () => {
     expect(css).toContain(".widget-review-meta__ids")
 
     expect(dag).toContain("widget-review-meta__stats")
-    expect(dag).toContain("widget-review-meta__ids")
     expect(dag).toContain("widget-review-meta__stat-value")
-    expect(dag).toContain('tone="meta"')
+    expect(dag).toContain("TraceRunContext")
+    expect(css).toContain(".trace-scope")
+    expect(css).toContain(".trace-scope__pill")
+    expect(css).toMatch(
+      /\.trace-scope\s*>\s*\[aria-haspopup="listbox"\]\.trace-scope__pill/,
+    )
     expect(dag).not.toMatch(/metaParts\.join\(" · "\)/)
     expect(dag).not.toMatch(/widget-review-meta[\s\S]{0,400}" · "/)
   })

@@ -34,7 +34,7 @@ export function DebugInspector() {
     emptySlot = (
       <EmptyState
         icon={WIDGET_ICONS["debug-inspector"]}
-        message="Select a thread and run above"
+        message="Select a thread and run"
       />
     )
   } else if (!dag.hasData) {

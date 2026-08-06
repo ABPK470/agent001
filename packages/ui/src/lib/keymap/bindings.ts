@@ -20,9 +20,18 @@ export const TRACE_TREE_HINTS: readonly KbdHint[] = [
   { keys: ["↵"], label: "detail" },
   { keys: ["↑", "↓"], label: "move" },
   { keys: ["←", "→"], label: "fold" },
+  { keys: ["⌘/Ctrl", "\\"], label: "drawer" },
   { keys: ["M"], label: "max" },
   { keys: ["Z"], label: "zen" },
 ]
+
+export const TRACE_SCOPE_DRAWER_BINDING: KeymapBinding = {
+  id: "trace-scope-drawer",
+  layer: "widget",
+  keys: ["⌘/Ctrl", "\\"],
+  label: "Thread / run drawer",
+  when: "Trace focused",
+}
 
 export const TRACE_DETAIL_HINTS: readonly KbdHint[] = [
   { keys: ["`"], label: "tree" },

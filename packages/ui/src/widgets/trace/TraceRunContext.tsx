@@ -1,5 +1,6 @@
 /**
- * Trace-owned thread + run pickers — store selectThread / selectRun only.
+ * Trace scope bar — Thread ▾ / Run ▾. Store selectThread / selectRun only.
+ * Scope precedes content (toolbar + meta); never buried in telemetry.
  */
 
 import { useEffect, useMemo, useRef, useState } from "react"
@@ -16,7 +17,14 @@ import {
   threadOptions,
 } from "./trace-run-context"
 
-export function TraceRunContext({ className = "" }: { className?: string }) {
+export function TraceRunContext({
+  className = "",
+  /** Zen HUD fixed row — one combined pill when space is tight. */
+  compact = false,
+}: {
+  className?: string
+  compact?: boolean
+}) {
   const threads = useStore((s) => s.threads)
   const runs = useStore((s) => s.runs)
   const activeThreadId = useStore((s) => s.activeThreadId)
@@ -25,25 +33,27 @@ export function TraceRunContext({ className = "" }: { className?: string }) {
   const selectRun = useStore((s) => s.selectRun)
 
   const rootRef = useRef<HTMLDivElement>(null)
-  const [combined, setCombined] = useState(false)
+  const [narrow, setNarrow] = useState(false)
 
   useEffect(() => {
+    if (compact) return
     const el = rootRef.current
     if (!el || typeof ResizeObserver === "undefined") return
-    // Measure tile/host width, not shrink-wrapped content (dual triggers ~280px).
     const host =
-      el.closest(".widget-review-meta") ??
+      el.closest(".widget-review-controls") ??
       el.closest(".trace-zen-hud") ??
       el.parentElement
     if (!host) return
     const ro = new ResizeObserver((entries) => {
       const width = entries[0]?.contentRect.width ?? host.clientWidth
-      setCombined(width < TRACE_RUN_CONTEXT_COMBINED_MAX_PX)
+      setNarrow(width < TRACE_RUN_CONTEXT_COMBINED_MAX_PX)
     })
     ro.observe(host)
-    setCombined(host.clientWidth < TRACE_RUN_CONTEXT_COMBINED_MAX_PX)
+    setNarrow(host.clientWidth < TRACE_RUN_CONTEXT_COMBINED_MAX_PX)
     return () => ro.disconnect()
-  }, [])
+  }, [compact])
+
+  const combined = compact || narrow
 
   const threadOpts = useMemo(() => threadOptions(threads), [threads])
   const runsForThread = useMemo(
@@ -67,6 +77,15 @@ export function TraceRunContext({ className = "" }: { className?: string }) {
     activeThreadId,
     activeRunId,
   )
+
+  const threadTitle =
+    threadOpts.find((o) => o.value === activeThreadId)?.label ?? "Select thread"
+  const runTitle = noRuns
+    ? "No runs in thread"
+    : (runOpts.find((o) => o.value === runValue)?.label ?? "Select run")
+  const combinedTitle =
+    combinedOpts.find((o) => o.value === combinedValue)?.label ??
+    "Select thread › run"
 
   function onThreadChange(threadId: string) {
     if (!threadId) return
@@ -100,16 +119,19 @@ export function TraceRunContext({ className = "" }: { className?: string }) {
   return (
     <div
       ref={rootRef}
-      className={`trace-run-context${combined ? " trace-run-context--combined" : ""}${
-        className ? ` ${className}` : ""
-      }`}
+      className={`trace-scope${combined ? " trace-scope--combined" : ""}${
+        compact ? " trace-scope--compact" : ""
+      }${className ? ` ${className}` : ""}`}
+      role="navigation"
+      aria-label="Trace scope"
     >
       {combined ? (
         <Listbox
           size="sm"
           variant="ghost"
-          className="trace-run-context__combined"
+          className="trace-scope__pill trace-scope__pill--combined"
           ariaLabel="Thread and run"
+          title={combinedTitle}
           placeholder="Select thread › run"
           blankIsPlaceholder
           searchable={combinedOpts.length > 6}
@@ -123,9 +145,10 @@ export function TraceRunContext({ className = "" }: { className?: string }) {
           <Listbox
             size="sm"
             variant="ghost"
-            className="trace-run-context__thread"
+            className="trace-scope__pill trace-scope__pill--thread"
             ariaLabel="Thread"
-            placeholder="Thread"
+            title={threadTitle}
+            placeholder="Select thread"
             blankIsPlaceholder
             searchable={threadOpts.length > 6}
             value={activeThreadId ?? ""}
@@ -133,12 +156,16 @@ export function TraceRunContext({ className = "" }: { className?: string }) {
             onChange={onThreadChange}
             disabled={threadOpts.length === 0}
           />
+          <span className="trace-scope__sep" aria-hidden>
+            /
+          </span>
           <Listbox
             size="sm"
             variant="ghost"
-            className="trace-run-context__run"
+            className="trace-scope__pill trace-scope__pill--run"
             ariaLabel="Run"
-            placeholder={noRuns ? "No runs in thread" : "Run"}
+            title={runTitle}
+            placeholder={noRuns ? "No runs in thread" : "Select run"}
             blankIsPlaceholder
             searchable={runOpts.length > 6}
             value={noRuns ? "" : runValue}

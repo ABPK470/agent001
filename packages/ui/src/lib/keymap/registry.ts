@@ -82,6 +82,13 @@ export const SHORTCUT_REGISTRY: readonly ShortcutItem[] = [
     category: "pane",
     context: "Trace",
   },
+  {
+    id: "trace-scope-drawer",
+    label: "Thread / run drawer",
+    keys: ["⌘/Ctrl", "\\"],
+    category: "pane",
+    context: "Trace",
+  },
 
   // Workspace
   {
