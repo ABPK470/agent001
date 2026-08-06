@@ -369,25 +369,29 @@ expand/collapse with Trace (`ReviewTreeFoldToggle` in trailing toolbar). Trace s
 Observe / Reconcile / Bridge / Trace) are curated job landings with fixed
 default autolayouts — not DIY-named sheets as the primary path. Observe =
 Pipelines 70% / Event stream 30%; Trace = Trace alone;
-Reconcile = Sync / Entity registry 50/50; Agent = Trace 60% with Chat /
-Threads splitting the remaining 40%. **Summon** (Mod+K) is widget-first:
+Reconcile = Sync / Entity registry 50/50; Agent = Trace 60% | Chat 40%
+(no Threads tile — Trace owns thread/run scope). **Summon** (Mod+K) is widget-first:
 Enter peeks a widget (or focuses it if already on the Space); sole-widget
 Spaces (Trace, Bridge) have no peek twin — Enter opens that Space; Mod+Enter
 Keeps a widget in the current Space; Spaces navigate (Call); bundles open a
-home Space and focus a primary tile — never auto-maximize. Trace and Pipelines
-share **pane focus** (top accent on the focused split panel — tree or detail)
-via `useReviewOperatorKeyboard`; detail accordions register for `[`/`]` / Space
-(Trace ←→ cycles call tabs; Pipelines ←→ folds the active section). Esc ladder
-peels overlay → filter → pane → zen → maximize. Shell chords:
-Call Space (Mod+1–4), prev/next view tab (Mod+[ / ]), tile focus
+home Space and focus a primary tile — never auto-maximize. **Operator keyboard
+is one composition root** (`useOperatorKeyboardRoot`, capture-phase): shell
+chrome (Summon, chat↔workspace, Call Space, tabs, tile focus, M, `?`, …) then
+the **claimed** surface. Widgets do not add `window` keydown listeners — they
+`claimOperatorSurface` (`useClaimOperatorSurface` / `useReviewOperatorKeyboard` /
+`useWidgetZenHotkeys`). Trace and Pipelines share **pane focus** (top accent on
+the focused split panel — tree or detail); detail accordions register for
+`[`/`]` / Space (Trace ←→ cycles call tabs; Pipelines ←→ folds the active
+section). Esc ladder peels overlay → filter → pane → zen → maximize. Shell
+chords: Call Space (Mod+1–4), prev/next view tab (Mod+[ / ]), tile focus
 (Mod+⇧+arrows — not ⌥; Mod+⌥ alone toggles chat↔workspace), M maximize, Z zen,
 Mod+W close tile, `?` keymap (searchable zero-scroll sheet: All / Pane / Shell).
 **Mod captions are OS-aware** (`lib/keymap/mod-hint.ts`): binding tables store
 `Mod`; display resolves to ⌘ on Apple platforms and Ctrl elsewhere — never
 `⌘/Ctrl` dual chips. Empty Spaces open **Summon**, not the legacy widget
 catalog (mobile may still use catalog). Operator guide:
-`docs/operator-keyboard.md`. See `lib/spaces.ts`, `lib/summon-resolve.ts`,
-`lib/keymap/`, `app/workspace/SummonPalette.tsx`.
+`docs/operator-keyboard.md`. See `lib/operator-surface.ts`, `lib/spaces.ts`,
+`lib/summon-resolve.ts`, `lib/keymap/`, `app/workspace/SummonPalette.tsx`.
 
 | Layer | Owns | Must not |
 | --- | --- | --- |

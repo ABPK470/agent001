@@ -1,58 +1,68 @@
 /**
- * Shared zen hotkeys — Z toggles focus; Esc exits after optional overlays.
+ * Shared zen surface — Z toggles focus; Esc exits after optional overlays.
+ * Claims an OperatorSurface; composition root owns the window listener.
  */
 
-import { useEffect } from "react"
-import { isEditableKeyboardTarget } from "../lib/keyboard-target"
+import { useRef, type RefObject } from "react"
+import type { OperatorSurfaceHandler } from "../lib/operator-surface"
+import { useClaimOperatorSurface } from "./useClaimOperatorSurface"
 
 export function useWidgetZenHotkeys({
   enabled,
+  surfaceId,
   isZen,
   onToggleZen,
   onExitZen,
   onEscapeBeforeExit,
   /** When false, Esc is owned elsewhere (e.g. Trace Esc ladder). Default true. */
   handleEscape = true,
+  /** Extra chords before Z/Esc (e.g. Active Users search). */
+  beforeRef,
 }: {
   enabled: boolean
+  surfaceId: string
   isZen: boolean
   onToggleZen: () => void
   onExitZen: () => void
   /** Return true when Escape dismissed an overlay — do not exit zen. */
   onEscapeBeforeExit?: () => boolean
   handleEscape?: boolean
+  beforeRef?: RefObject<OperatorSurfaceHandler | null>
 }) {
-  useEffect(() => {
-    if (!enabled) return
+  const isZenRef = useRef(isZen)
+  const handleEscapeRef = useRef(handleEscape)
+  const onToggleZenRef = useRef(onToggleZen)
+  const onExitZenRef = useRef(onExitZen)
+  const onEscapeBeforeExitRef = useRef(onEscapeBeforeExit)
+  isZenRef.current = isZen
+  handleEscapeRef.current = handleEscape
+  onToggleZenRef.current = onToggleZen
+  onExitZenRef.current = onExitZen
+  onEscapeBeforeExitRef.current = onEscapeBeforeExit
 
-    function onKeyDown(event: KeyboardEvent) {
-      if (isEditableKeyboardTarget(event.target)) return
+  const onKeyDownRef = useRef<OperatorSurfaceHandler | null>(null)
+  onKeyDownRef.current = (event) => {
+    if (beforeRef?.current?.(event)) return true
 
-      const key = event.key.toLowerCase()
-      const mod = event.metaKey || event.ctrlKey
+    const key = event.key.toLowerCase()
+    const mod = event.metaKey || event.ctrlKey
 
-      if (key === "z" && !mod && !event.altKey && !event.shiftKey) {
-        event.preventDefault()
-        if (isZen) onExitZen()
-        else onToggleZen()
-        return
-      }
-
-      if (!handleEscape || !isZen) return
-
-      if (event.key === "Escape") {
-        if (onEscapeBeforeExit?.()) {
-          event.preventDefault()
-          event.stopPropagation()
-          return
-        }
-        event.preventDefault()
-        event.stopPropagation()
-        onExitZen()
-      }
+    if (key === "z" && !mod && !event.altKey && !event.shiftKey) {
+      if (isZenRef.current) onExitZenRef.current()
+      else onToggleZenRef.current()
+      return true
     }
 
-    window.addEventListener("keydown", onKeyDown)
-    return () => window.removeEventListener("keydown", onKeyDown)
-  }, [enabled, handleEscape, isZen, onEscapeBeforeExit, onExitZen, onToggleZen])
+    if (!handleEscapeRef.current || !isZenRef.current) return false
+
+    if (event.key === "Escape") {
+      if (onEscapeBeforeExitRef.current?.()) return true
+      onExitZenRef.current()
+      return true
+    }
+
+    return false
+  }
+
+  useClaimOperatorSurface(enabled, surfaceId, onKeyDownRef)
 }

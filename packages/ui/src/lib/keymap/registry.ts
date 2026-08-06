@@ -184,14 +184,32 @@ export function matchesKeymapTab(item: ShortcutItem, tab: KeymapTab): boolean {
   return item.category === "workspace" || item.category === "global"
 }
 
+/** When Trace reports an active pane, hide the other pane’s exclusive chords. */
+export type ActivePaneSurface = "tree" | "detail" | null
+
+export function matchesActivePaneContext(
+  item: ShortcutItem,
+  surface: ActivePaneSurface,
+): boolean {
+  if (item.category !== "pane" || surface == null) return true
+  const ctx = (item.context ?? "").toLowerCase()
+  const detailOnly = /\bdetail\b/.test(ctx)
+  const treeOnly = /\btree\b/.test(ctx) && !detailOnly
+  if (surface === "detail" && treeOnly) return false
+  if (surface === "tree" && detailOnly) return false
+  return true
+}
+
 export function filterShortcutRegistry(
   items: readonly ShortcutItem[],
   query: string,
   tab: KeymapTab,
+  surface: ActivePaneSurface = null,
 ): ShortcutItem[] {
   const q = query.trim().toLowerCase()
   return items.filter((item) => {
     if (!matchesKeymapTab(item, tab)) return false
+    if (!matchesActivePaneContext(item, surface)) return false
     if (!q) return true
     const keys = resolveKeyCaptions(item.keys).join(" ")
     const hay = `${item.label} ${keys} ${item.context ?? ""} ${item.category}`.toLowerCase()

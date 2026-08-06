@@ -15,7 +15,6 @@ import { EmptyState } from "../components/EmptyState"
 import { useWidgetInstance } from "../app/workspace/widget-instance"
 import { useContainerSize } from "../hooks/useContainerSize"
 import { useReviewOperatorKeyboard } from "../hooks/useReviewOperatorKeyboard"
-import { useReviewTreeKeyboard } from "../hooks/useReviewTreeKeyboard"
 import { hintsForPipelinesPane, type ReviewPane } from "../lib/keymap"
 import type { DetailSectionController } from "../lib/review/detail-section-controller"
 import { useStore } from "../state/store"
@@ -345,6 +344,7 @@ export function OperationLog() {
   const toggleTileMaximized = useLayoutStore((s) => s.toggleTileMaximized)
   const summonOpen = useStore((s) => s.summonOpen)
   const setSummonOpen = useStore((s) => s.setSummonOpen)
+  const keymapSheetOpen = useStore((s) => s.keymapSheetOpen)
   const { width } = useContainerSize(rootRef)
   const tiny = width > 0 && width < 480
   const [cancellingId, setCancellingId] = useState<string | null>(null)
@@ -585,7 +585,7 @@ export function OperationLog() {
   const tileFocused = Boolean(instance && focusedTileId === instance.widgetId)
   const isSolo = Boolean(instance && soloTileId === instance.widgetId)
   const hasRows = filtered.length > 0
-  const operatorKeysEnabled = tileFocused && hasRows
+  const operatorKeysEnabled = tileFocused && hasRows && !summonOpen && !keymapSheetOpen
 
   const onFocusedPaneChange = useCallback((pane: ReviewPane) => {
     setFocusedPane(pane)
@@ -598,6 +598,7 @@ export function OperationLog() {
 
   useReviewOperatorKeyboard({
     enabled: operatorKeysEnabled,
+    surfaceId: "pipelines",
     focusedPane,
     onFocusedPaneChange,
     isSolo,
@@ -608,16 +609,15 @@ export function OperationLog() {
     detailScrollRef,
     sectionControllerRef,
     lateral: "sections",
-  })
-
-  useReviewTreeKeyboard({
-    enabled: operatorKeysEnabled && focusedPane === "tree" && keyboardNodes.length > 0,
-    nodes: keyboardNodes,
-    selectedScopeId: selectedScopeIdFromOpLogSelection(selection),
-    isFolded: isKeyboardNodeFolded,
-    onSelect: onKeyboardSelect,
-    onToggleFold: onKeyboardToggleFold,
-    listRef: listTreeRef,
+    treeNav: {
+      enabled: focusedPane === "tree" && keyboardNodes.length > 0,
+      nodes: keyboardNodes,
+      selectedScopeId: selectedScopeIdFromOpLogSelection(selection),
+      isFolded: isKeyboardNodeFolded,
+      onSelect: onKeyboardSelect,
+      onToggleFold: onKeyboardToggleFold,
+      listRef: listTreeRef,
+    },
   })
 
   // Default selection only — never force-open folds (that fought tree persistence).

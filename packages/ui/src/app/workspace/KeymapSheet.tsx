@@ -66,9 +66,12 @@ export function KeymapSheet() {
     ],
   )
 
+  const paneSurface =
+    widgetLabel === "Trace" ? traceOperatorPane : null
+
   const filtered = useMemo(
-    () => filterShortcutRegistry(SHORTCUT_REGISTRY, query, tab),
-    [query, tab],
+    () => filterShortcutRegistry(SHORTCUT_REGISTRY, query, tab, paneSurface),
+    [paneSurface, query, tab],
   )
 
   const paneItems = filtered.filter((item) => item.category === "pane")
@@ -118,6 +121,8 @@ export function KeymapSheet() {
   useEffect(() => {
     if (!open) return
     function onKeyDown(event: KeyboardEvent) {
+      // Esc ladder for the sheet. Background Trace/Pipelines are disabled via
+      // keymapSheetOpen — do not stopPropagation on every key (breaks search typing).
       if (event.key !== "Escape") return
       event.preventDefault()
       event.stopPropagation()

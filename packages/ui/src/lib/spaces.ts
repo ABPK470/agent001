@@ -6,7 +6,7 @@
  * - Observe: Pipelines 70% | Event stream 30%
  * - Trace: Trace alone (self-sufficient scope bar + drawer)
  * - Reconcile: Sync 50% | Entity registry 50%
- * - Agent: Trace 60% | (Chat / Threads 50/50 in the remaining 40%)
+ * - Agent: Trace 60% | Chat 40%
  * - Bridge: Bridge alone
  */
 
@@ -43,7 +43,7 @@ const LEGACY_SPACE_IDS: Readonly<Record<string, SpaceId>> = {
  * Bump when curated Space widgets/ratios change so persisted product Spaces
  * rebuild to the new defaults (DIY-named views are left alone).
  */
-export const SPACE_LAYOUT_VERSION = 6
+export const SPACE_LAYOUT_VERSION = 7
 
 export interface ProductSpaceDef {
   id: SpaceId
@@ -74,8 +74,8 @@ export const PRODUCT_SPACES: readonly ProductSpaceDef[] = [
     id: "space:agent",
     index: 1,
     name: "Agent",
-    desc: "Trace with chat and threads",
-    widgets: ["debug-inspector", "term-chat", "thread-nav"],
+    desc: "Trace with chat",
+    widgets: ["debug-inspector", "term-chat"],
   },
   {
     id: "space:observe",
@@ -223,12 +223,8 @@ function buildSpaceSplit(
     return vSplit(0.5, id("env-sync"), id("entity-registry"))
   }
   if (spaceId === "space:agent") {
-    // Trace 60% | (Chat / Threads 50/50 in remaining 40%)
-    return vSplit(
-      0.6,
-      id("debug-inspector"),
-      hSplit(0.5, id("term-chat"), id("thread-nav")),
-    )
+    // Trace 60% | Chat 40%
+    return vSplit(0.6, id("debug-inspector"), id("term-chat"))
   }
   if (spaceId === "space:bridge") {
     return id("bridge")

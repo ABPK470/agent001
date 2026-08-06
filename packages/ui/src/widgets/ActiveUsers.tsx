@@ -36,6 +36,7 @@ import { useContainerSize } from "../hooks/useContainerSize"
 import { useViewingAs } from "../hooks/useViewingAs"
 import { useWidgetFocus } from "../hooks/useWidgetFocus"
 import { useWidgetZenHotkeys } from "../hooks/useWidgetZenHotkeys"
+import type { OperatorSurfaceHandler } from "../lib/operator-surface"
 import { useLayoutStore } from "../state/layout-store"
 import { useStore } from "../state/store"
 import { useWidgetInstance } from "../app/workspace/widget-instance"
@@ -464,12 +465,26 @@ export function ActiveUsers(): ReactNode {
     return false
   }, [])
 
+  const zenBeforeRef = useRef<OperatorSurfaceHandler | null>(null)
+  zenBeforeRef.current = (event) => {
+    if (!isZen) return false
+    const key = event.key.toLowerCase()
+    const mod = event.metaKey || event.ctrlKey
+    if ((mod && key === "f") || (key === "/" && !mod)) {
+      setZenSearchOpen(true)
+      return true
+    }
+    return false
+  }
+
   useWidgetZenHotkeys({
     enabled: zenHotkeysEnabled,
+    surfaceId: "active-users",
     isZen,
     onToggleZen: toggleZen,
     onExitZen: exitZen,
     onEscapeBeforeExit,
+    beforeRef: zenBeforeRef,
   })
 
   useEffect(() => {
@@ -479,28 +494,6 @@ export function ActiveUsers(): ReactNode {
       setFiltersOpen(false)
     }
   }, [isZen])
-
-  useEffect(() => {
-    if (!isZen || !zenHotkeysEnabled) return
-
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.target instanceof HTMLElement) {
-        const tag = event.target.tagName
-        if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || event.target.isContentEditable) {
-          return
-        }
-      }
-      const key = event.key.toLowerCase()
-      const mod = event.metaKey || event.ctrlKey
-      if ((mod && key === "f") || (key === "/" && !mod)) {
-        event.preventDefault()
-        setZenSearchOpen(true)
-      }
-    }
-
-    window.addEventListener("keydown", onKeyDown)
-    return () => window.removeEventListener("keydown", onKeyDown)
-  }, [isZen, zenHotkeysEnabled])
 
   if (loading) {
     return (

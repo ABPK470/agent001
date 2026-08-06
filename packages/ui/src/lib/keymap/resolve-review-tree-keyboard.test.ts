@@ -5,7 +5,7 @@ import {
   parentIndex,
   resolveReviewTreeKeyboardAction,
   type ReviewTreeKeyboardNode,
-} from "./review-tree-keyboard"
+} from "./resolve-review-tree-keyboard"
 
 function node(
   partial: Pick<ReviewTreeKeyboardNode, "scopeId" | "parentScopeId" | "hasChildren" | "flatIndex">,

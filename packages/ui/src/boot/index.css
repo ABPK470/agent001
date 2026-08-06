@@ -3045,6 +3045,13 @@ textarea.input {
   overflow-y: auto;
   overflow-anchor: none;
   scrollbar-gutter: stable;
+  /* Pane focus is the top accent on .review-split-list — not a UA ring here. */
+  outline: none;
+}
+
+.review-split-list-scroll:focus,
+.review-split-list-scroll:focus-visible {
+  outline: none;
 }
 
 .review-operator .review-split-list {
@@ -3371,6 +3378,16 @@ textarea.input {
 
 .review-detail__header {
   background: var(--overlay-1, rgb(255 255 255 / 0.02));
+}
+
+.review-detail__scroll {
+  /* Pane focus is the top accent on .review-split-detail — not a UA ring here. */
+  outline: none;
+}
+
+.review-detail__scroll:focus,
+.review-detail__scroll:focus-visible {
+  outline: none;
 }
 
 .review-detail__section-cap {
@@ -12777,11 +12794,12 @@ button.trace-tree-status-pill:hover {
   background: transparent;
 }
 
-/* Trace: peer under the body — hairline + padding, never crammed to the frame */
-.trace-dag .composer-kbd-footer {
+/* Trace / Pipelines: peer under the body — air only, no hairline above the strip */
+.trace-dag .composer-kbd-footer,
+.review-operator .composer-kbd-footer {
   margin-top: 0.35rem;
   padding: 0.65rem 0.15rem 0.35rem;
-  border-top: 1px solid var(--border-subtle);
+  border-top: none;
   background: transparent;
 }
 
@@ -16442,9 +16460,9 @@ button.trace-tree-status-pill:hover {
 }
 
 .ops-sheet {
-  /* Match MODAL_VIEWER_PANEL spirit: wide + tall, capped so ultrawide stays calm */
-  width: min(92vw, 72rem);
-  height: min(88vh, calc(100dvh - 1.5rem));
+  /* Hug content — never force a tall empty stage under a short keymap. */
+  width: min(92vw, 56rem);
+  height: auto;
   max-height: min(88vh, calc(100dvh - 1.5rem));
   display: flex;
   flex-direction: column;
@@ -16464,7 +16482,6 @@ button.trace-tree-status-pill:hover {
 
   .ops-sheet {
     width: 100%;
-    height: min(96vh, calc(100dvh - 0.5rem));
     max-height: min(96vh, calc(100dvh - 0.5rem));
     border-radius: 0.5rem;
   }
@@ -16472,8 +16489,7 @@ button.trace-tree-status-pill:hover {
 
 @media (min-width: 1600px) {
   .ops-sheet {
-    width: min(70vw, 80rem);
-    height: min(85vh, calc(100dvh - 2rem));
+    width: min(70vw, 64rem);
     max-height: min(85vh, calc(100dvh - 2rem));
   }
 }
@@ -16583,11 +16599,12 @@ button.trace-tree-status-pill:hover {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 0.35rem 1.5rem;
-  flex: 1 1 auto;
-  min-height: 13.75rem;
-  max-height: 22.5rem;
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: min(52vh, 28rem);
   padding: 0.85rem 1rem;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
   align-content: start;
 }
 

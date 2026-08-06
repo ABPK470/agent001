@@ -14,34 +14,31 @@ function key(
 }
 
 describe("resolveTraceZenKeyboardAction", () => {
-  const tree = {
-    focusedPane: "tree" as const,
-    viewMode: "tree" as const,
-    foldMode: "expanded" as const,
-  }
-
-  it("fold-all only while the tree pane owns keys", () => {
+  it("never fold-alls on bare brackets (detail owns [ ])", () => {
     expect(
-      resolveTraceZenKeyboardAction(key({ key: "[", code: "BracketLeft" }), tree),
-    ).toEqual({ type: "fold-all", mode: "collapsed" })
+      resolveTraceZenKeyboardAction(key({ key: "[", code: "BracketLeft" }), {
+        focusedPane: "tree",
+      }),
+    ).toEqual({ type: "none" })
     expect(
       resolveTraceZenKeyboardAction(key({ key: "]", code: "BracketRight" }), {
-        ...tree,
-        foldMode: "collapsed",
+        focusedPane: "detail",
       }),
-    ).toEqual({ type: "fold-all", mode: "expanded" })
+    ).toEqual({ type: "none" })
   })
 
-  it("never fold-alls when the detail pane owns keys", () => {
-    const detail = { ...tree, focusedPane: "detail" as const }
+  it("switches Tree/Waterfall only on the tree pane", () => {
     expect(
-      resolveTraceZenKeyboardAction(key({ key: "[", code: "BracketLeft" }), detail),
-    ).toEqual({ type: "none" })
+      resolveTraceZenKeyboardAction(key({ key: "t", code: "KeyT" }), { focusedPane: "tree" }),
+    ).toEqual({ type: "view-tree" })
     expect(
-      resolveTraceZenKeyboardAction(key({ key: "]", code: "BracketRight" }), detail),
+      resolveTraceZenKeyboardAction(key({ key: "w", code: "KeyW" }), { focusedPane: "detail" }),
     ).toEqual({ type: "none" })
+  })
+
+  it("opens filter from either pane", () => {
     expect(
-      resolveTraceZenKeyboardAction(key({ key: "t", code: "KeyT" }), detail),
-    ).toEqual({ type: "none" })
+      resolveTraceZenKeyboardAction(key({ key: "/", code: "Slash" }), { focusedPane: "detail" }),
+    ).toEqual({ type: "open-filter" })
   })
 })

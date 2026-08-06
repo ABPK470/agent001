@@ -6,7 +6,6 @@ import { AppPhase } from "../enums"
 import { useIsMobile } from "../hooks/useIsMobile"
 import { useMe } from "../hooks/useMe"
 import { useViewingAs } from "../hooks/useViewingAs"
-import { isEditableKeyboardTarget } from "../lib/keyboard-target"
 import { getViewingAsUpn, resetViewingAsMemory, syncViewingAsForSession } from "../lib/viewing-as"
 import { usePlatformHealth } from "../hooks/usePlatformHealth"
 import { useServerReachable } from "../hooks/useServerReachable"
@@ -31,7 +30,7 @@ import {
 } from "./shell-mode-transition"
 import { pinShellTrackScroll } from "./shell-viewport"
 import type { AppShellMode } from "./types"
-import { isOpenWidgetCatalogEvent, isShellModeToggleEvent, resolveChatVariant } from "./types"
+import { resolveChatVariant } from "./types"
 import { Canvas, type CanvasHandle } from "./workspace/Canvas"
 import { MobileNav } from "./workspace/MobileNav"
 import { Toolbar } from "./workspace/Toolbar"
@@ -40,7 +39,7 @@ import { WidgetCatalog } from "./workspace/WidgetCatalog"
 import { WidgetModal } from "./workspace/WidgetModal"
 import { SummonPalette } from "./workspace/SummonPalette"
 import { KeymapSheet } from "./workspace/KeymapSheet"
-import { useShellOperatorKeyboard } from "../hooks/useShellOperatorKeyboard"
+import { useOperatorKeyboardRoot } from "../hooks/useOperatorKeyboardRoot"
 
 const SYNC_CHANNEL = "mia-active-run"
 
@@ -327,42 +326,28 @@ export function App() {
     pinShellTrackScroll(shellTrackRef.current)
   }, [shellMode, slideMode, shellSliding, shellTrackReady, activeThreadId, activeRunId])
 
-  // ⌘⌥ / Ctrl+Alt — toggle chat ↔ workspace from either shell.
-  useEffect(() => {
-    if (phase !== AppPhase.Shell) return
-    function onKeyDown(event: KeyboardEvent) {
-      if (!isShellModeToggleEvent(event)) return
-      event.preventDefault()
-      transitionShellMode(shellModeRef.current === "chat" ? "workspace" : "chat")
-    }
-    window.addEventListener("keydown", onKeyDown)
-    return () => window.removeEventListener("keydown", onKeyDown)
-  }, [phase, transitionShellMode])
+  const onToggleShellMode = useCallback(() => {
+    transitionShellMode(shellModeRef.current === "chat" ? "workspace" : "chat")
+  }, [transitionShellMode])
 
-  // ⌘K / Ctrl+K — Spotlight Summon (peek); works from chat or workspace.
-  useEffect(() => {
-    if (phase !== AppPhase.Shell) return
-    function onKeyDown(event: KeyboardEvent) {
-      if (!isOpenWidgetCatalogEvent(event)) return
-      if (isEditableKeyboardTarget(event.target)) return
-      event.preventDefault()
-      if (isMobile) {
-        setMobileCatalogOpen((open) => !open)
-        return
-      }
-      ensureProductSpaces()
-      toggleSummon()
+  const onToggleSummon = useCallback(() => {
+    if (isMobile) {
+      setMobileCatalogOpen((open) => !open)
+      return
     }
-    window.addEventListener("keydown", onKeyDown)
-    return () => window.removeEventListener("keydown", onKeyDown)
-  }, [ensureProductSpaces, phase, isMobile, toggleSummon])
+    ensureProductSpaces()
+    toggleSummon()
+  }, [ensureProductSpaces, isMobile, toggleSummon])
 
   useEffect(() => {
     if (phase !== AppPhase.Shell) return
     ensureProductSpaces()
   }, [ensureProductSpaces, phase])
 
-  useShellOperatorKeyboard(phase === AppPhase.Shell)
+  useOperatorKeyboardRoot(phase === AppPhase.Shell, {
+    onToggleShellMode,
+    onToggleSummon,
+  })
 
   useEffect(() => {
     if (phase !== AppPhase.Shell) return

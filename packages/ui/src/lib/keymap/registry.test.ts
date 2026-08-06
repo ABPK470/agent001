@@ -19,6 +19,16 @@ describe("keymap registry", () => {
     expect(hit.some((item) => item.id === "summon")).toBe(true)
   })
 
+  it("hides the other pane’s exclusive chords for Active Context", () => {
+    const detail = filterShortcutRegistry(SHORTCUT_REGISTRY, "", "pane", "detail")
+    expect(detail.some((item) => item.id === "review-tree-move")).toBe(false)
+    expect(detail.some((item) => item.id === "review-detail-section")).toBe(true)
+
+    const tree = filterShortcutRegistry(SHORTCUT_REGISTRY, "", "pane", "tree")
+    expect(tree.some((item) => item.id === "review-detail-section")).toBe(false)
+    expect(tree.some((item) => item.id === "review-tree-move")).toBe(true)
+  })
+
   it("cycles tabs and maps digits", () => {
     expect(nextKeymapTab("all", 1)).toBe("pane")
     expect(nextKeymapTab("shell", 1)).toBe("all")

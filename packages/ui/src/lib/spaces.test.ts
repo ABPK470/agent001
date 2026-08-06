@@ -65,18 +65,11 @@ describe("product spaces", () => {
     expect(leafRatio(view, "entity-registry", "w")).toBeCloseTo(0.5, 2)
   })
 
-  it("Agent is Trace 60% | Chat/Threads 50/50 in the remaining 40%", () => {
+  it("Agent is Trace 60% | Chat 40% (no Threads tile)", () => {
     const view = buildSpaceView(PRODUCT_SPACES.find((s) => s.id === "space:agent")!)
-    expect(view.tiles.map((t) => t.type)).toEqual([
-      "debug-inspector",
-      "term-chat",
-      "thread-nav",
-    ])
+    expect(view.tiles.map((t) => t.type)).toEqual(["debug-inspector", "term-chat"])
     expect(leafRatio(view, "debug-inspector", "w")).toBeCloseTo(0.6, 2)
     expect(leafRatio(view, "term-chat", "w")).toBeCloseTo(0.4, 2)
-    expect(leafRatio(view, "thread-nav", "w")).toBeCloseTo(0.4, 2)
-    expect(leafRatio(view, "term-chat", "h")).toBeCloseTo(0.5, 2)
-    expect(leafRatio(view, "thread-nav", "h")).toBeCloseTo(0.5, 2)
   })
 
   it("merges missing Spaces without wiping Main", () => {

@@ -271,6 +271,7 @@ export function createPackageConfigs(root) {
       ],
       stateAllowlist: new Set([
         "app/workspace/layout/persistence.ts",
+        "lib/operator-surface.ts",
         "lib/popover-dismiss.ts",
         "lib/viewing-as.ts",
         "state/store.ts",

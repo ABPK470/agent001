@@ -66,8 +66,6 @@ import { TraceScopeDrawer } from "./TraceScopeDrawer"
 import { TraceTreeRow, traceTreeRowEstimateSize } from "./TraceTreeRow"
 import { TraceWaterfallView } from "./TraceWaterfallView"
 import { TraceZenHud } from "./TraceZenHud"
-import { useTraceZenHotkeys } from "./use-trace-zen-hotkeys"
-import { useTraceTreeKeyboard } from "./use-trace-tree-keyboard"
 import { useTraceOperatorKeyboard } from "./use-trace-operator-keyboard"
 import { operationStatusPill } from "../../lib/status-callout"
 import { DetailSectionProvider } from "../../components/review"
@@ -112,11 +110,13 @@ export function TraceDag({
   const toggleTileMaximized = useLayoutStore((s) => s.toggleTileMaximized)
   const summonOpen = useStore((s) => s.summonOpen)
   const setSummonOpen = useStore((s) => s.setSummonOpen)
+  const keymapSheetOpen = useStore((s) => s.keymapSheetOpen)
   const setTraceOperatorPane = useStore((s) => s.setTraceOperatorPane)
   const modalWidget = useStore((s) => s.modalWidget)
   const zenHotkeysEnabled =
     isZen || isSolo || Boolean(widgetInstance && focusedTileId === widgetInstance.widgetId)
-  const operatorKeysEnabled = zenHotkeysEnabled && !summonOpen && !modalWidget
+  const operatorKeysEnabled =
+    zenHotkeysEnabled && !summonOpen && !keymapSheetOpen && !modalWidget
 
   const [search, setSearch] = useState("")
   const [openState, setOpenState] = useState<OpenState>(() =>
@@ -471,20 +471,6 @@ export function TraceDag({
     setOpenState(openStateForFoldMode(dag, mode))
   }
 
-  useTraceZenHotkeys({
-    enabled: operatorKeysEnabled,
-    isZen,
-    searchOpen: zenSearchOpen,
-    onSearchOpenChange,
-    onViewModeChange: setViewMode,
-    viewMode,
-    focusedPane,
-    foldMode: openState.foldMode,
-    onFoldModeChange,
-    onToggleZen: toggleZen,
-    onExitZen: exitZen,
-  })
-
   useTraceOperatorKeyboard({
     enabled: operatorKeysEnabled,
     focusedPane,
@@ -502,10 +488,25 @@ export function TraceDag({
     onExitZen: exitZen,
     onRestoreMaximize,
     onDismissSummon: () => setSummonOpen(false),
+    onToggleZen: toggleZen,
+    onViewModeChange: setViewMode,
     treeScrollRef,
     detailScrollRef,
     tabCycleRef,
     sectionControllerRef,
+    treeNav: {
+      enabled:
+        !scopeDrawerOpen &&
+        focusedPane === "tree" &&
+        viewMode === "tree" &&
+        Boolean(runId && dag.hasData && treeIndex.nodes.length > 0),
+      nodes: treeIndex.nodes,
+      selectedScopeId,
+      isFolded: isNodeFolded,
+      onSelect: (scopeId) => onSelectScope(scopeId, false),
+      onToggleFold,
+      listRef: treeListRef,
+    },
   })
 
   function closeScopeDrawer(returnFocus = true) {
@@ -515,21 +516,6 @@ export function TraceDag({
       treeScrollRef.current?.focus({ preventScroll: true })
     })
   }
-
-  useTraceTreeKeyboard({
-    enabled:
-      operatorKeysEnabled &&
-      !scopeDrawerOpen &&
-      focusedPane === "tree" &&
-      viewMode === "tree" &&
-      Boolean(runId && dag.hasData && treeIndex.nodes.length > 0),
-    nodes: treeIndex.nodes,
-    selectedScopeId,
-    isFolded: isNodeFolded,
-    onSelect: (scopeId) => onSelectScope(scopeId, false),
-    onToggleFold,
-    listRef: treeListRef,
-  })
 
   function onTogglePlayground() {
     setPlaygroundOpen((open) => {

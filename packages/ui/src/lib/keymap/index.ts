@@ -18,6 +18,23 @@ export {
   type TraceZenKeyboardAction,
 } from "./resolve-trace-zen-keyboard"
 export {
+  resolveOperatorSession,
+  type OperatorSession,
+} from "./resolve-operator-layer"
+export {
+  adjacentTreeIndex,
+  firstChildIndex,
+  parentIndex,
+  resolveReviewTreeKeyboardAction,
+  type ReviewTreeKeyboardAction,
+  type ReviewTreeKeyboardNode,
+  type ReviewTreeListHandle,
+} from "./resolve-review-tree-keyboard"
+export {
+  isShellModeToggleEvent,
+  isOpenWidgetCatalogEvent,
+} from "./shell-chrome-events"
+export {
   resolveTracePaneKeyboardAction,
   type TracePane,
   type TracePaneKeyboardAction,
@@ -48,6 +65,8 @@ export {
   nextKeymapTab,
   keymapTabFromDigit,
   matchesKeymapTab,
+  matchesActivePaneContext,
+  type ActivePaneSurface,
   type KeymapCategory,
   type KeymapTab,
   type ShortcutItem,

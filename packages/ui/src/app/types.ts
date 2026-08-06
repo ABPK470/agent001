@@ -22,11 +22,7 @@ export function shellModeToggleHint(modKey: ModHint = detectModHint()): string {
   return modKey === "⌘" ? "⌘⌥" : "Ctrl+Alt"
 }
 
-export function isShellModeToggleEvent(event: KeyboardEvent): boolean {
-  if (event.shiftKey) return false
-  if (!(event.metaKey || event.ctrlKey)) return false
-  return event.code === "AltLeft" || event.code === "AltRight" || event.key === "Alt"
-}
+export { isShellModeToggleEvent, isOpenWidgetCatalogEvent } from "../lib/keymap"
 
 /**
  * Open Spotlight Summon (peek a Space / widget / bundle).
@@ -34,12 +30,6 @@ export function isShellModeToggleEvent(event: KeyboardEvent): boolean {
  */
 export function openWidgetCatalogHint(modKey: ModHint = detectModHint()): string {
   return modKey === "⌘" ? "⌘K" : "Ctrl+K"
-}
-
-export function isOpenWidgetCatalogEvent(event: KeyboardEvent): boolean {
-  if (event.altKey || event.shiftKey) return false
-  if (!(event.metaKey || event.ctrlKey)) return false
-  return event.key.toLowerCase() === "k"
 }
 
 /** Which chat surface to mount inside the chat shell. */

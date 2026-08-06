@@ -292,6 +292,7 @@ export function LiveLogs() {
 
   useReviewTreeKeyboard({
     enabled: treeKeyboardEnabled,
+    surfaceId: "live-logs",
     nodes: keyboardNodes,
     selectedScopeId: selectedKey,
     isFolded: isKeyboardNodeFolded,

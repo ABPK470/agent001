@@ -3,7 +3,7 @@
  * Day section headers are omitted — arrows move pipeline/activity rows only.
  */
 
-import type { ReviewTreeKeyboardNode } from "../components/review/review-tree-keyboard"
+import type { ReviewTreeKeyboardNode } from "./keymap"
 import type { OperationFlatRow } from "./operation-flat-rows"
 
 export function buildOperationLogKeyboardNodes(

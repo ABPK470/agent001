@@ -54,6 +54,13 @@ describe("operator review kit contracts", () => {
     expect(css).toMatch(
       /\.trace-split-tree\.is-pane-focused::before,\s*\n\.trace-split-detail\.is-pane-focused::before,\s*\n\.review-split-list\.is-pane-focused::before,\s*\n\.review-split-detail\.is-pane-focused::before\s*\{[^}]*height:\s*2px/s,
     )
+    // Scroll hosts stay focusable for keyboard; UA rings must not frame the pane.
+    expect(css).toMatch(
+      /\.review-split-list-scroll:focus,\s*\n\.review-split-list-scroll:focus-visible\s*\{[^}]*outline:\s*none/s,
+    )
+    expect(css).toMatch(
+      /\.review-detail__scroll:focus,\s*\n\.review-detail__scroll:focus-visible\s*\{[^}]*outline:\s*none/s,
+    )
   })
 
   it("fold toggle is a ListChevrons icon button (not Expanded/Collapsed segment)", () => {
