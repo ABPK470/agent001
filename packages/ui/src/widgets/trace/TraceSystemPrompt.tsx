@@ -53,6 +53,15 @@ export function SystemPromptSection({
       label={label}
       meta={promptLineMeta(text)}
       defaultOpen={defaultOpen}
+      peek={
+        peek.hasPeek
+          ? {
+              hasPeek: true,
+              expanded: peek.expanded,
+              setExpanded: (next) => peek.setExpanded(next),
+            }
+          : null
+      }
       actions={({ open }) => (
         <>
           <CopyControl value={text} ariaLabel="Copy system prompt" />

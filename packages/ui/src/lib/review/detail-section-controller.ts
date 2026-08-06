@@ -1,6 +1,8 @@
 /**
  * Keyboard-addressable detail rows — accordion sections and plain rows (timeline).
  * ↑↓ move · ←→ / Space fold/toggle when the active row is foldable.
+ *
+ * ←→ peels one level at a time: section open → More (peek) → … and back.
  */
 
 export type DetailSectionHandle = {
@@ -9,6 +11,10 @@ export type DetailSectionHandle = {
   /** Omit for non-foldable rows (timeline events). */
   getOpen?: () => boolean
   setOpen?: (open: boolean) => void
+  /** Optional nested More/Less (line peek) under an open section. */
+  hasPeek?: () => boolean
+  getPeekOpen?: () => boolean
+  setPeekOpen?: (open: boolean) => void
 }
 
 export type DetailSectionController = {
@@ -24,6 +30,15 @@ export type DetailSectionController = {
 
 function isFoldable(handle: DetailSectionHandle): boolean {
   return typeof handle.getOpen === "function" && typeof handle.setOpen === "function"
+}
+
+function canPeek(handle: DetailSectionHandle): boolean {
+  return (
+    typeof handle.hasPeek === "function"
+    && handle.hasPeek()
+    && typeof handle.getPeekOpen === "function"
+    && typeof handle.setPeekOpen === "function"
+  )
 }
 
 export function createDetailSectionController(): DetailSectionController {
@@ -96,9 +111,36 @@ export function createDetailSectionController(): DetailSectionController {
 
     fold(open) {
       const section = ensureActive()
-      if (!section || !isFoldable(section)) return false
-      section.setOpen!(open)
-      return true
+      if (!section) return false
+      const foldable = isFoldable(section)
+      const peekable = canPeek(section)
+
+      if (!foldable && !peekable) return false
+
+      if (open) {
+        // → one level deeper: open section, then expand More.
+        if (foldable && !section.getOpen!()) {
+          section.setOpen!(true)
+          return true
+        }
+        if (peekable && !section.getPeekOpen!()) {
+          section.setPeekOpen!(true)
+          return true
+        }
+        // Already fully open — consume like a no-op fold.
+        return true
+      }
+
+      // ← peel one level: collapse More, then close section.
+      if (peekable && section.getPeekOpen!()) {
+        section.setPeekOpen!(false)
+        return true
+      }
+      if (foldable && section.getOpen!()) {
+        section.setOpen!(false)
+        return true
+      }
+      return false
     },
 
     clearActive() {

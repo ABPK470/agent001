@@ -8,6 +8,7 @@
  */
 
 import { useRef } from "react"
+import { useRegisterDetailSection } from "../../components/review/DetailSectionContext"
 import { preserveScrollAnchor } from "../../lib/chatScroll"
 import type { TraceDag } from "./build-trace-dag"
 import { CopyControl } from "./TraceCopy"
@@ -59,8 +60,23 @@ function ContextToolsBody({
 function PromptLeafDetail({ text }: { text: string }) {
   const peek = useTextPeek(text)
   const toggleRef = useRef<HTMLButtonElement>(null)
+  const metaRef = useRef<HTMLDivElement>(null)
+  // Leaf has no accordion — register as always-open so ←→ drives More/Less.
+  const { active, activate } = useRegisterDetailSection({
+    open: true,
+    setOpen: () => {},
+    headerRef: metaRef,
+    peek: peek.hasPeek
+      ? {
+          hasPeek: true,
+          expanded: peek.expanded,
+          setExpanded: (next) => peek.setExpanded(next),
+        }
+      : null,
+  })
 
   function onTogglePeek() {
+    activate()
     preserveScrollAnchor(toggleRef.current, () =>
       peek.setExpanded((value) => !value),
     )
@@ -68,7 +84,12 @@ function PromptLeafDetail({ text }: { text: string }) {
 
   return (
     <div className="trace-detail-body">
-      <div className="trace-detail-leaf-meta">
+      <div
+        ref={metaRef}
+        className={`trace-detail-leaf-meta${active ? " is-section-focused" : ""}`}
+        tabIndex={0}
+        onFocus={activate}
+      >
         <span className="trace-detail-leaf-meta__label">{promptLineMeta(text)}</span>
         <CopyControl value={text} ariaLabel="Copy system prompt" />
         {peek.hasPeek ? (

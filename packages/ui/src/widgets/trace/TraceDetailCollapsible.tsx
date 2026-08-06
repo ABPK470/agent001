@@ -7,7 +7,10 @@
 
 import { ChevronRight } from "lucide-react"
 import { useRef, useState, type ReactNode } from "react"
-import { useRegisterDetailSection } from "../../components/review/DetailSectionContext"
+import {
+  useRegisterDetailSection,
+  type DetailSectionPeekBinding,
+} from "../../components/review/DetailSectionContext"
 
 type AccordionActions =
   | ReactNode
@@ -20,6 +23,7 @@ export function TraceDetailCollapsible({
   sticky = true,
   variant = "section",
   actions,
+  peek,
   children,
 }: {
   label: string
@@ -28,6 +32,8 @@ export function TraceDetailCollapsible({
   sticky?: boolean
   variant?: "section" | "nested"
   actions?: AccordionActions
+  /** Nested More/Less — ←→ peels section then peek. */
+  peek?: DetailSectionPeekBinding | null
   children: ReactNode
 }) {
   const [open, setOpen] = useState(defaultOpen)
@@ -36,6 +42,7 @@ export function TraceDetailCollapsible({
     open,
     setOpen,
     headerRef,
+    peek,
   })
 
   const rootClass = [

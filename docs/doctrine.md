@@ -385,8 +385,8 @@ the **claimed** surface. Widgets do not add `window` keydown listeners — they
 `claimOperatorSurface` (`useClaimOperatorSurface` / `useReviewOperatorKeyboard` /
 `useWidgetZenHotkeys`). Trace and Pipelines share **pane focus** (top accent on
 the focused split panel — tree or detail); detail accordions register for
-Space toggles; ←→ folds the active section (same tree metaphor — Trace call
-tabs only when the active row is not foldable). ↑↓ moves detail rows
+Space toggles; ←→ folds one level at a time (section, then More/Less peek —
+same tree metaphor; Trace call tabs only when the active row is not foldable). ↑↓ moves detail rows
 (timeline / sections) like the tree — Page/Home/End still scroll. Esc ladder
 peels overlay → filter → pane → zen → maximize. Shell chords: Call Space
 (Mod+1–5; Trace is 5), prev/next view tab (Mod+[ / ]), tile focus (Mod+⇧+arrows — not ⌥;

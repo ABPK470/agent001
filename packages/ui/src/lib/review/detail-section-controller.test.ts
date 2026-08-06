@@ -52,4 +52,40 @@ describe("createDetailSectionController", () => {
     ctrl.move(1)
     expect(ctrl.getActiveId()).toBe("a")
   })
+
+  it("←→ peels section then More/Less one level at a time", () => {
+    const ctrl = createDetailSectionController()
+    let open = false
+    let peekOpen = false
+    ctrl.register({
+      id: "system-2",
+      getOpen: () => open,
+      setOpen: (next) => {
+        open = next
+      },
+      hasPeek: () => true,
+      getPeekOpen: () => peekOpen,
+      setPeekOpen: (next) => {
+        peekOpen = next
+      },
+      headerEl: () => null,
+    })
+
+    expect(ctrl.fold(true)).toBe(true)
+    expect(open).toBe(true)
+    expect(peekOpen).toBe(false)
+
+    expect(ctrl.fold(true)).toBe(true)
+    expect(peekOpen).toBe(true)
+
+    expect(ctrl.fold(true)).toBe(true)
+    expect(peekOpen).toBe(true)
+
+    expect(ctrl.fold(false)).toBe(true)
+    expect(peekOpen).toBe(false)
+    expect(open).toBe(true)
+
+    expect(ctrl.fold(false)).toBe(true)
+    expect(open).toBe(false)
+  })
 })
