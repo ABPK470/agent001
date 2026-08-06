@@ -53,6 +53,7 @@ import {
 } from "./widget-toolbar"
 import { logMatchesFilters } from "../lib/event-stream-filter"
 import { formatHistogramBoundPair } from "../lib/event-stream-histogram"
+import { formatEventStreamRowTime } from "../lib/event-stream-time"
 import {
   EVENT_STREAM_LANES,
   eventStreamFilterTypeClass,
@@ -594,7 +595,7 @@ export function LiveLogs() {
         {!loadingOlder && hasMore && (
           <button
             type="button"
-            className="py-2 text-sm text-accent hover:text-accent-hover"
+            className="event-stream-load-older"
             onClick={() => loadOlder()}
           >
             Load older events
@@ -671,26 +672,6 @@ export function LiveLogs() {
   )
 }
 
-function formatLogTimestamp(iso: string | undefined, tiny: boolean): string {
-  if (!iso) return ""
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) {
-    const date = iso.slice(0, 10)
-    const time = iso.slice(11, 19)
-    return date && time ? `${date} ${time}` : iso
-  }
-  const date = d.toLocaleDateString(undefined, tiny
-    ? { month: "short", day: "numeric" }
-    : { year: "numeric", month: "short", day: "numeric" })
-  const time = d.toLocaleTimeString(undefined, {
-    hour12: false,
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  })
-  return `${date} ${time}`
-}
-
 function LogRow({
   log,
   rowKey,
@@ -747,7 +728,7 @@ function LogRow({
           ) : null}
         </span>
         <span className="event-stream-row__time" title={log.timestamp}>
-          {formatLogTimestamp(log.timestamp, tiny)}
+          {formatEventStreamRowTime(log.timestamp, { tiny })}
         </span>
         <button
           type="button"

@@ -2367,20 +2367,24 @@ label:focus-within > .mia-checkbox,
 
 .event-stream-histogram__rail {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: minmax(4.5rem, auto) minmax(0, 1fr) minmax(3.25rem, auto);
   align-items: end;
-  gap: 0.65rem;
+  gap: 0.85rem;
   min-width: 0;
 }
 
 .event-stream-histogram__axis {
   flex-shrink: 0;
-  font-size: 0.8125rem;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.6875rem;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
   line-height: 1.2;
   color: var(--text-faint, var(--color-text-faint));
-  padding-bottom: 0.15rem;
+  padding-bottom: 0.2rem;
   user-select: none;
+  white-space: nowrap;
 }
 
 .event-stream-histogram__plot {
@@ -2454,15 +2458,16 @@ label:focus-within > .mia-checkbox,
 .event-stream-row {
   position: relative;
   display: grid;
+  /* Time column sized for "Aug 5 11:47:19" — no year spam. */
   grid-template-columns:
     1rem
-    10.5rem
+    8.25rem
     4.5rem
-    minmax(4rem, 11rem)
+    minmax(4rem, 12rem)
     auto
     minmax(0, 1fr);
   align-items: center;
-  column-gap: 0.4rem;
+  column-gap: 0.45rem;
   min-width: 0;
   min-height: 2.25rem;
   padding: 0 0.625rem;
@@ -2492,9 +2497,9 @@ label:focus-within > .mia-checkbox,
   grid-template-columns:
     4rem
     1rem
-    10.5rem
+    8.25rem
     4.5rem
-    minmax(4rem, 11rem)
+    minmax(4rem, 12rem)
     auto
     minmax(0, 1fr);
 }
@@ -2521,8 +2526,11 @@ label:focus-within > .mia-checkbox,
   white-space: nowrap;
   font-family: var(--font-mono, ui-monospace, monospace);
   font-variant-numeric: tabular-nums;
-  font-size: var(--review-meta-size);
-  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: 450;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+  color: var(--text-faint, var(--color-text-faint));
 }
 
 /*
@@ -2677,13 +2685,16 @@ label:focus-within > .mia-checkbox,
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: var(--review-meta-size);
-  color: var(--text-muted);
+  font-size: var(--review-body-size);
+  font-weight: 550;
+  letter-spacing: -0.01em;
+  color: var(--text, var(--color-text));
 }
 
 .event-stream-row__sep {
   flex-shrink: 0;
   color: var(--text-faint);
+  font-family: var(--font-sans, system-ui, sans-serif);
   font-size: var(--review-meta-size);
   user-select: none;
 }
@@ -2693,10 +2704,10 @@ label:focus-within > .mia-checkbox,
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: var(--review-body-size);
-  line-height: 1.25;
-  font-variant-numeric: tabular-nums;
+  font-family: var(--font-sans, system-ui, sans-serif);
+  font-size: var(--review-meta-size);
+  line-height: 1.3;
+  color: var(--text-muted, var(--color-text-muted));
 }
 
 .event-stream-row__message--err {
@@ -2726,7 +2737,26 @@ label:focus-within > .mia-checkbox,
 }
 
 :root[data-theme="light"] .log-stream .event-stream-row__time {
-  color: #475569;
+  color: #94a3b8;
+}
+
+.log-stream .event-stream-load-older {
+  display: block;
+  width: 100%;
+  padding: 0.55rem 0.625rem;
+  border: none;
+  background: transparent;
+  font-family: var(--font-sans, system-ui, sans-serif);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--text-muted, var(--color-text-muted));
+  text-align: center;
+  cursor: pointer;
+}
+
+.log-stream .event-stream-load-older:hover {
+  color: var(--text, var(--color-text));
 }
 
 :root[data-theme="light"] .log-stream .event-stream-row:hover {
