@@ -542,11 +542,13 @@ describe("widget log chrome — shared content dialect", () => {
     expect(hist).toContain("listVisibleCount")
     expect(hist).toContain("listTotal = lensRows.length")
     expect(hist).not.toContain("totalCount ?? clientModel.totalCount")
+    // Floating deck card + air above the feed (not a unified outer shell).
+    expect(css).toMatch(/\.event-stream-stack\s*\{[^}]*gap:\s*0\.625rem/s)
+    expect(css).not.toMatch(/\.event-stream-stack\s*\{[^}]*border:\s*1px\s+solid/s)
     expect(css).toMatch(/\.event-stream-deck\s*\{[^}]*border:\s*1px\s+solid\s+var\(--border\)/s)
     expect(css).toMatch(/\.event-stream-deck\s*\{[^}]*border-radius:\s*0\.625rem/s)
     expect(css).toMatch(/\.event-stream-deck\s*\{[^}]*overflow:\s*hidden/s)
     expect(css).toMatch(/\.event-stream-deck\s*\{[^}]*background-color:\s*var\(--panel-2\)/s)
-    expect(css).toMatch(/\.event-stream-stack\s*\{[^}]*gap:\s*0\.625rem/s)
     expect(css).toMatch(
       /\.event-stream-histogram\s*\{[^}]*padding:\s*0\.35rem\s+0\.75rem\s+0\.85rem/s,
     )

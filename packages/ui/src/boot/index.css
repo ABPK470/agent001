@@ -2374,11 +2374,10 @@ label:focus-within > .mia-checkbox,
 }
 
 /*
- * Event Stream — elevated control deck card vs deeper log feed.
+ * Event Stream — floating control deck above a plain feed.
  *
- * Commercial structure: search + chips + histogram sit on one panel-2
- * surface with a crisp border; feed is a separate recessed shell below.
- * Scroll host stays display:block (not flex) so abspos VirtualList rows
+ * Deck is its own rounded card with air below; feed never scrolls behind
+ * its corners. Scroll host stays display:block so abspos VirtualList rows
  * cannot paint through the deck.
  */
 .event-stream-stack {
@@ -2432,11 +2431,11 @@ label:focus-within > .mia-checkbox,
 .event-stream-deck .event-stream-histogram {
   position: relative;
   z-index: 1;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--border-subtle, var(--border));
   background-color: transparent;
 }
 
-/* Feed is a plain stream under the deck — no second card frame. */
+/* Plain stream under the deck — separated by stack gap, no second card. */
 .event-stream-feed {
   position: relative;
   z-index: 1;
