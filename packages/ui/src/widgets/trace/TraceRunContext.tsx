@@ -19,11 +19,17 @@ import {
 
 export function TraceRunContext({
   className = "",
-  /** Zen HUD fixed row — one combined pill when space is tight. */
+  /**
+   * Force a single combined Thread › Run listbox (legacy tight chrome).
+   * Prefer `expanded` in zen — dual crumbs that own the strip.
+   */
   compact = false,
+  /** Zen HUD: always Thread › Run dual pickers; never collapse to combined. */
+  expanded = false,
 }: {
   className?: string
   compact?: boolean
+  expanded?: boolean
 }) {
   const threads = useStore((s) => s.threads)
   const runs = useStore((s) => s.runs)
@@ -36,7 +42,7 @@ export function TraceRunContext({
   const [narrow, setNarrow] = useState(false)
 
   useEffect(() => {
-    if (compact) return
+    if (compact || expanded) return
     const el = rootRef.current
     if (!el || typeof ResizeObserver === "undefined") return
     const host =
@@ -51,9 +57,9 @@ export function TraceRunContext({
     ro.observe(host)
     setNarrow(host.clientWidth < TRACE_RUN_CONTEXT_COMBINED_MAX_PX)
     return () => ro.disconnect()
-  }, [compact])
+  }, [compact, expanded])
 
-  const combined = compact || narrow
+  const combined = !expanded && (compact || narrow)
 
   const threadOpts = useMemo(() => threadOptions(threads), [threads])
   const runsForThread = useMemo(
@@ -121,7 +127,9 @@ export function TraceRunContext({
       ref={rootRef}
       className={`trace-run-context${combined ? " trace-run-context--combined" : ""}${
         compact ? " trace-run-context--compact" : ""
-      }${className ? ` ${className}` : ""}`}
+      }${expanded ? " trace-run-context--expanded" : ""}${
+        className ? ` ${className}` : ""
+      }`}
       role="navigation"
       aria-label="Trace scope"
     >
@@ -157,7 +165,7 @@ export function TraceRunContext({
             disabled={threadOpts.length === 0}
           />
           <span className="trace-run-context__sep" aria-hidden>
-            /
+            {expanded ? "›" : "/"}
           </span>
           <Listbox
             size="sm"

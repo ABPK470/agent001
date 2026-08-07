@@ -619,7 +619,6 @@ export function TraceDag({
     : undefined
   const zenHud = (
     <TraceZenHud
-      metaStats={metaStats}
       search={search}
       onSearchChange={setSearch}
       searchOpen={zenSearchOpen}

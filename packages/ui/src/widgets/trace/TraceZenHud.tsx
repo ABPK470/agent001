@@ -1,9 +1,10 @@
 /**
- * Trace zen HUD — row-1 controls: stats, search, exit + run context.
+ * Trace zen HUD — Thread › Run scope owns the strip; search / fold / exit trail.
+ * No run-stats badge — telemetry stays on the chrome toolbar outside zen.
  */
 
-import { ChevronDown, Info, PanelLeft, Search, X } from "lucide-react"
-import { useEffect, useRef, useState } from "react"
+import { PanelLeft, Search, X } from "lucide-react"
+import { useEffect, useRef } from "react"
 import { ZenSessionHudActions } from "../../components/ZenSessionHudActions"
 import { formatModChord } from "../../lib/keymap"
 import { useLayoutStore } from "../../state/layout-store"
@@ -11,10 +12,7 @@ import { TraceRunContext } from "./TraceRunContext"
 import { TraceTreeFoldToggle } from "./TraceTreeFoldToggle"
 import type { FoldMode } from "./open-state"
 
-type MetaStat = { value: string; label?: string }
-
 export function TraceZenHud({
-  metaStats,
   search,
   onSearchChange,
   searchOpen,
@@ -26,7 +24,6 @@ export function TraceZenHud({
   onScopeDrawerOpenChange,
   onExitZen,
 }: {
-  metaStats: MetaStat[]
   search: string
   onSearchChange: (value: string) => void
   searchOpen: boolean
@@ -39,24 +36,13 @@ export function TraceZenHud({
   onExitZen: () => void
 }) {
   const saveZenSpace = useLayoutStore((s) => s.saveZenSpace)
-  const [statsOpen, setStatsOpen] = useState(false)
   const searchRef = useRef<HTMLInputElement>(null)
-
-  const compactStats = metaStats
-    .filter((stat) => stat.label !== "in" && stat.label !== "out")
-    .slice(0, 3)
-    .map((stat) => (stat.label ? `${stat.value} ${stat.label}` : stat.value))
-    .join(" · ")
 
   useEffect(() => {
     if (!searchOpen) return
     const t = window.setTimeout(() => searchRef.current?.focus(), 0)
     return () => window.clearTimeout(t)
   }, [searchOpen])
-
-  function onToggleStats() {
-    setStatsOpen((open) => !open)
-  }
 
   function onDismissSearch() {
     if (search) onSearchChange("")
@@ -108,41 +94,7 @@ export function TraceZenHud({
             >
               <PanelLeft size={14} strokeWidth={2} aria-hidden />
             </button>
-            {compactStats ? (
-              <div className="trace-zen-hud__stats">
-                <button
-                  type="button"
-                  className="trace-zen-hud__stats-badge tabular-nums"
-                  aria-expanded={statsOpen}
-                  aria-haspopup="dialog"
-                  onClick={onToggleStats}
-                >
-                  <span className="trace-zen-hud__stats-text">{compactStats}</span>
-                  <span className="trace-zen-hud__stats-trigger" aria-hidden>
-                    <Info size={11} strokeWidth={2.25} />
-                    <ChevronDown
-                      size={12}
-                      className={`trace-zen-hud__stats-chev${statsOpen ? " is-open" : ""}`}
-                    />
-                  </span>
-                </button>
-                {statsOpen ? (
-                  <div className="trace-zen-hud__stats-popover" role="dialog" aria-label="Run stats">
-                    <div className="trace-zen-hud__stats-grid">
-                      {metaStats.map((stat) => (
-                        <span key={`${stat.value}:${stat.label ?? ""}`} className="trace-zen-hud__stat">
-                          <span className="trace-zen-hud__stat-value tabular-nums">{stat.value}</span>
-                          {stat.label ? (
-                            <span className="trace-zen-hud__stat-label">{stat.label}</span>
-                          ) : null}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-            <TraceRunContext compact className="trace-run-context--zen" />
+            <TraceRunContext expanded className="trace-run-context--zen" />
             {viewMode === "tree" ? (
               <TraceTreeFoldToggle
                 foldMode={foldMode}

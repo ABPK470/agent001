@@ -162,7 +162,9 @@ describe("Trace toolbar structure + behavior wiring", () => {
     expect(dag).toContain("TraceScopeDrawer")
     expect(dag).toContain("trace-scope-drawer-toggle")
     expect(zen).toContain("TraceRunContext")
-    expect(zen).toContain("compact")
+    expect(zen).toContain("expanded")
+    expect(zen).not.toContain("metaStats")
+    expect(zen).not.toContain("trace-zen-hud__stats")
     expect(zen).toContain("scopeDrawerOpen")
   })
 

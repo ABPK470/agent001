@@ -11195,10 +11195,8 @@ button.trace-tree-status-pill:hover {
   background: color-mix(in srgb, var(--text) 6%, transparent);
 }
 
-/* Zen HUD — one combined pill, never stacks out of the 2.5rem strip. */
-.trace-run-context--compact,
-.trace-run-context--zen,
-.trace-zen-hud .trace-run-context {
+/* Zen HUD — Thread › Run owns the strip (stats badge removed). */
+.trace-run-context--compact {
   flex: 1 1 auto;
   width: auto;
   max-width: min(100%, 20rem);
@@ -11206,11 +11204,47 @@ button.trace-tree-status-pill:hover {
   overflow: hidden;
 }
 
-.trace-zen-hud .trace-run-context > [aria-haspopup="listbox"].trace-run-context__pill {
-  height: 1.625rem;
-  min-height: 1.625rem;
-  max-width: 100%;
+.trace-run-context--zen,
+.trace-run-context--expanded,
+.trace-zen-hud .trace-run-context {
   flex: 1 1 auto;
+  width: auto;
+  max-width: none;
+  min-width: 0;
+  overflow: hidden;
+  gap: 0.45rem;
+}
+
+.trace-zen-hud .trace-run-context > [aria-haspopup="listbox"].trace-run-context__pill {
+  height: 1.75rem;
+  min-height: 1.75rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  padding: 0 0.45rem;
+}
+
+.trace-zen-hud .trace-run-context > [aria-haspopup="listbox"].trace-run-context__pill--thread {
+  flex: 0 1 34%;
+  max-width: min(18rem, 40%);
+  min-width: 7.5rem;
+}
+
+.trace-zen-hud .trace-run-context > [aria-haspopup="listbox"].trace-run-context__pill--run {
+  flex: 1 1 auto;
+  max-width: min(36rem, 100%);
+  min-width: 10rem;
+}
+
+.trace-zen-hud .trace-run-context__sep {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-muted, var(--color-text-muted));
+  opacity: 0.85;
+}
+
+.trace-zen-hud__leading .trace-tree-fold-toggle {
+  flex-shrink: 0;
+  margin-left: 0.15rem;
 }
 
 /* ── Widget toolbar — Event Stream, Pipelines, Trace ─────
