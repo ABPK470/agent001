@@ -76,7 +76,7 @@ export const Canvas = forwardRef<CanvasHandle>(function Canvas(_props, ref) {
             </div>
             <button
               type="button"
-              className="toolbar-ops-btn shrink-0 px-4"
+              className="toolbar-ops-btn toolbar-ops-btn--summon shrink-0"
               onClick={openSummon}
               title={`Summon (${summonHint})`}
               aria-label={`Summon (${summonHint})`}

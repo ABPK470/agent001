@@ -500,14 +500,14 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
                 <>
                   <button
                     type="button"
-                    className="toolbar-ops-btn shrink-0 px-2.5"
+                    className="toolbar-ops-btn toolbar-ops-btn--summon shrink-0"
                     onClick={onAddWidget}
                     title={`Summon (${catalogHint})`}
                     aria-label={`Summon (${catalogHint})`}
                   >
                     <LayoutGrid size={15} className="block shrink-0" aria-hidden />
                     <span className="hidden leading-none sm:inline">Summon</span>
-                    <span className="hidden sm:inline">
+                    <span className="hidden sm:contents">
                       <OpenWidgetCatalogHintMark />
                     </span>
                   </button>

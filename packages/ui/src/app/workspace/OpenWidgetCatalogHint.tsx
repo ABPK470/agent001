@@ -1,5 +1,5 @@
 /**
- * Visual ⌘K / Ctrl+K mark for Add-to-layout — one shared border; mod matches K.
+ * Visual ⌘K / Ctrl+K for Summon — dual tactile micro-keycaps.
  */
 
 import { Command } from "lucide-react"
@@ -7,14 +7,28 @@ import { detectModHint } from "../types"
 
 export function OpenWidgetCatalogHintMark() {
   const mod = detectModHint()
+  if (mod === "⌘") {
+    return (
+      <span className="catalog-shortcut-hint" aria-hidden>
+        <kbd className="catalog-shortcut-hint__key catalog-shortcut-hint__key--mod">
+          <span className="catalog-shortcut-hint__key-glyph">
+            <Command strokeWidth={2.25} aria-hidden />
+          </span>
+        </kbd>
+        <kbd className="catalog-shortcut-hint__key catalog-shortcut-hint__key--char">
+          <span className="catalog-shortcut-hint__key-glyph">K</span>
+        </kbd>
+      </span>
+    )
+  }
   return (
-    <kbd className="catalog-shortcut-hint" aria-hidden>
-      {mod === "⌘" ? (
-        <Command className="catalog-shortcut-hint__mod" strokeWidth={2.25} aria-hidden />
-      ) : (
-        <span className="catalog-shortcut-hint__ctrl">Ctrl</span>
-      )}
-      <span className="catalog-shortcut-hint__key">K</span>
-    </kbd>
+    <span className="catalog-shortcut-hint" aria-hidden>
+      <kbd className="catalog-shortcut-hint__key catalog-shortcut-hint__key--mod catalog-shortcut-hint__key--wide">
+        <span className="catalog-shortcut-hint__key-glyph">Ctrl</span>
+      </kbd>
+      <kbd className="catalog-shortcut-hint__key catalog-shortcut-hint__key--char">
+        <span className="catalog-shortcut-hint__key-glyph">K</span>
+      </kbd>
+    </span>
   )
 }
