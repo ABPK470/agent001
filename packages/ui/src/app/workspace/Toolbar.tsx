@@ -129,12 +129,22 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
     function onPointerDown(event: PointerEvent) {
       const target = event.target
       if (!(target instanceof Node)) return
+      // More lives in the cluster but owns the overflow menu — never keep the Space
+      // preview engaged over that dropdown.
+      if (moreRef.current?.contains(target)) {
+        closeInspector()
+        return
+      }
       if (clusterRef.current?.contains(target)) return
       closeInspector()
     }
     document.addEventListener("pointerdown", onPointerDown, true)
     return () => document.removeEventListener("pointerdown", onPointerDown, true)
   }, [inspectorOpen])
+
+  useEffect(() => {
+    if (moreOpen) closeInspector()
+  }, [moreOpen])
 
   useEffect(() => {
     const el = tabsRef.current
@@ -473,11 +483,20 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
         </button>
 
         {tabsOverflow && (
-          <div className="relative flex shrink-0 items-center self-center" ref={moreRef}>
+          <div
+            className="relative flex shrink-0 items-center self-center"
+            ref={moreRef}
+            onPointerEnter={() => {
+              if (inspectorOpen) closeInspector()
+            }}
+          >
             <button
               type="button"
               className="toolbar-ops-btn shrink-0 px-2.5"
-              onClick={() => setMoreOpen((value) => !value)}
+              onClick={() => {
+                closeInspector()
+                setMoreOpen((value) => !value)
+              }}
               title="All layouts"
               aria-expanded={moreOpen}
             >

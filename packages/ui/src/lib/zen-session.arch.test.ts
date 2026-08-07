@@ -44,4 +44,16 @@ describe("zen session architecture", () => {
     expect(ZEN_VIEW_ID_PREFIX).toBe("zen:")
     expect(isZenViewId("zen:abc")).toBe(true)
   })
+
+  it("tab reorder defers Zen Space Call so chrome-off cannot kill the drag", () => {
+    const reorder = readFileSync(
+      join(here, "../hooks/useViewTabReorder.ts"),
+      "utf8",
+    )
+    expect(reorder).toContain("isZenViewId")
+    expect(reorder).toMatch(/if\s*\(\s*!isZenViewId\(viewId\)\s*\)/)
+    expect(reorder).toMatch(
+      /if\s*\(\s*isZenViewId\(viewId\)\s*\)\s*activateViewIfNeeded\(viewId\)/,
+    )
+  })
 })

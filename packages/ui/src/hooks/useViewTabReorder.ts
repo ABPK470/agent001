@@ -21,6 +21,7 @@ import {
   type ViewTabDragState,
 } from "../lib/view-tab-dnd"
 import { globalReorderIndex } from "../lib/view-tab-overflow"
+import { isZenViewId } from "../lib/zen-session"
 import { useLayoutStore } from "../state/layout-store"
 
 export type ViewTabFloat = {
@@ -211,6 +212,14 @@ export function useViewTabReorder(
     return () => strip.removeEventListener("scroll", onScroll)
   }, [draggingId])
 
+  function activateViewIfNeeded(viewId: string): void {
+    const { activeViewId, setActiveView } = useLayoutStore.getState()
+    if (activeViewId === viewId) return
+    flushSync(() => {
+      setActiveView(viewId)
+    })
+  }
+
   function onTabPointerDown(viewId: string, event: ReactPointerEvent<HTMLDivElement>) {
     if (editingId === viewId || event.button !== 0) return
     if ((event.target as HTMLElement).closest("button, input")) return
@@ -220,11 +229,11 @@ export function useViewTabReorder(
     event.preventDefault()
     setPointerSession(true)
 
-    const { activeViewId, setActiveView, views } = useLayoutStore.getState()
-    if (activeViewId !== viewId) {
-      flushSync(() => {
-        setActiveView(viewId)
-      })
+    // Zen Spaces Call hides the toolbar (chrome-off). Activating on press would
+    // unmount the strip mid-gesture — defer Call until a click (no drag) so
+    // tabs reorder like regular Spaces.
+    if (!isZenViewId(viewId)) {
+      activateViewIfNeeded(viewId)
     }
 
     const stripIds = [...(tabsRef.current?.querySelectorAll<HTMLElement>("[data-view-id]") ?? [])]
@@ -271,10 +280,12 @@ export function useViewTabReorder(
     const drag = dragRef.current
     if (!drag) return
     if (!drag.hasMoved) {
+      const viewId = drag.viewId
       clearDragSession()
       try {
         event.currentTarget.releasePointerCapture(drag.pointerId)
       } catch (err: unknown) { console.error("[mia]", err) }
+      if (isZenViewId(viewId)) activateViewIfNeeded(viewId)
       return
     }
   }
