@@ -98,7 +98,9 @@ describe("widget log chrome — shell", () => {
     expect(trace).toContain("WIDGET_LOG_BODY_CLASS")
     // Pipelines split-pane owns its own list scroll; Event Stream keeps the shared host.
     expect(read(opsPath)).toContain("review-split-list-scroll")
-    expect(live).toContain("WIDGET_LOG_SCROLL_CLASS")
+    // Event Stream owns a block scrollport (not widget-panel-body flex).
+    expect(live).toContain("event-stream-feed__scroll")
+    expect(live).not.toContain("WIDGET_LOG_SCROLL_CLASS")
     expect(read(threadsPath)).toContain("WIDGET_CONTENT_GUTTER_INNER_CLASS")
     expect(read(threadsPath)).toContain("thread-nav-panel")
   })
@@ -228,7 +230,10 @@ describe("widget log chrome — control height & search", () => {
     const live = read(livePath)
 
     expect(live).toContain("event-stream-row--open")
-    expect(css).toMatch(/\.log-stream \.event-stream-row--open\s*\{[^}]*background:\s*var\(--select-fill\)/s)
+    // Open wash lives on the entry (header + payload), not the trigger row alone.
+    expect(css).toMatch(
+      /\.event-stream-entry\.is-open\s*\{[^}]*background:\s*color-mix\(in srgb,\s*var\(--select-fill\)/s,
+    )
     expect(listRow).toContain("ReviewTreeRow")
     expect(css).toMatch(/\.review-tree-row\.is-selected::before\s*\{[^}]*background:\s*var\(--color-accent/s)
     expect(css).toMatch(
@@ -523,6 +528,41 @@ describe("widget log chrome — shared content dialect", () => {
     expect(css).toMatch(/\.event-stream-row__time\s*\{[^}]*font-size:\s*0\.75rem/s)
     expect(css).toMatch(/\.event-stream-row\s*\{[^}]*grid-template-columns:/s)
     expect(css).toContain(".event-stream-payload__box")
+
+    // Control deck + hard-clipped feed (block scrollport — not flex body).
+    expect(live).toContain("event-stream-deck")
+    expect(live).toContain("event-stream-stack")
+    expect(live).toContain("event-stream-feed")
+    expect(live).toContain("event-stream-feed__scroll")
+    expect(live).toContain("adjustScrollOnResize={false}")
+    expect(css).toMatch(/\.event-stream-deck\s*\{[^}]*border:\s*1px\s+solid\s+var\(--border\)/s)
+    expect(css).toMatch(/\.event-stream-deck\s*\{[^}]*border-radius:\s*0\.625rem/s)
+    expect(css).toMatch(/\.event-stream-deck\s*\{[^}]*overflow:\s*hidden/s)
+    expect(css).toMatch(/\.event-stream-deck\s*\{[^}]*background-color:\s*var\(--panel-2\)/s)
+    expect(css).toMatch(/\.event-stream-stack\s*\{[^}]*gap:\s*0\.5rem/s)
+    expect(css).toMatch(/\.event-stream-feed\s*\{[^}]*overflow:\s*hidden/s)
+    expect(css).toMatch(/\.event-stream-feed\s*\{[^}]*border-radius:\s*0\.625rem/s)
+    expect(css).toMatch(
+      /\.event-stream-deck\s+\.widget-toolbar__search-input\s*\{[^}]*background:\s*var\(--panel\)/s,
+    )
+    expect(css).toMatch(
+      /\.event-stream-feed__scroll\s*\{[^}]*display:\s*block/s,
+    )
+    expect(css).toMatch(
+      /\.event-stream-feed__scroll\s*\{[^}]*overflow-y:\s*auto/s,
+    )
+    // Plot hit must not use negative margins (that pulled feed into the axis).
+    expect(css).toMatch(
+      /\.event-stream-histogram__plot-hit\s*\{[^}]*margin:\s*0/s,
+    )
+    // Accent is on the entry box itself — never a floating ::before above the feed.
+    expect(css).toMatch(
+      /\.event-stream-entry\.is-selected,\s*\.event-stream-entry\.is-open\s*\{[^}]*border-left-color:\s*var\(--color-accent/s,
+    )
+    expect(css).not.toContain(".event-stream-entry.is-open::before")
+    expect(css).toMatch(
+      /\.event-stream-payload__box\s*\{[^}]*border-left:\s*2px\s+solid\s+color-mix\(in srgb,\s*var\(--color-accent/s,
+    )
 
     const scope = read(join(here, "pipelines/OperationLogScopeDetail.tsx"))
     expect(scope).toContain("ReviewPayloadBlock")

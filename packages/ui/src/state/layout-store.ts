@@ -181,6 +181,12 @@ interface LayoutState {
   focusTileNeighbor: (key: FocusArrowKey) => void
   /** Ensure widget types exist on a view (add missing only). */
   ensureWidgets: (viewId: string, types: readonly WidgetType[]) => void
+  /** Drop every tile of the given types from a view (Summon bag remove). */
+  removeWidgetsByType: (viewId: string, types: readonly WidgetType[]) => void
+  /** Activate any view (product Space or DIY) and focus first tile. */
+  goView: (viewId: string) => void
+  /** Activate any view and focus the blueprint leaf at pickIndex. */
+  goViewFocusPick: (viewId: string, pickIndex: number) => void
   /**
    * Focus a widget type on the active view — clears solo/zen.
    * Does not maximize (operator uses M).
@@ -460,14 +466,108 @@ export const useLayoutStore = create<LayoutState>()(
         return { focusedTileId: nextId }
       }),
 
-      ensureWidgets: (viewId, types) => {
+      /** One atomic write — Summon multi-keep must not land a partial bag. */
+      ensureWidgets: (viewId, types) => set((s) => {
+        const view = s.views.find((v) => v.id === viewId)
+        if (!view) return s
+        let tiles = view.tiles
+        let split = view.split
+        const entering = [...s.enteringTileIds]
+        let changed = false
         for (const type of types) {
-          const view = get().views.find((v) => v.id === viewId)
-          if (!view) return
-          if (view.tiles.some((tile) => tile.type === type)) continue
-          get().addWidget(viewId, type)
+          if (tiles.some((tile) => tile.type === type)) continue
+          const defaults = WIDGET_DEFAULTS[type] as WidgetSizeDefaults | undefined
+          if (!defaults) continue
+          const id = randomId()
+          tiles = [
+            ...tiles,
+            {
+              id,
+              type,
+              x: 0,
+              y: 0,
+              w: defaults.w,
+              h: defaults.h,
+              minW: defaults.minW,
+              minH: defaults.minH,
+            },
+          ]
+          split = splitLargestLeaf(split, id, COLS, s.viewportRows)
+          entering.push(id)
+          changed = true
         }
+        if (!changed) {
+          return { soloTileId: null, zenTileId: null }
+        }
+        return {
+          views: s.views.map((v) =>
+            v.id === viewId ? withProjected({ ...v, tiles }, split, s.viewportRows) : v,
+          ),
+          enteringTileIds: entering,
+          soloTileId: null,
+          zenTileId: null,
+        }
+      }),
+
+      removeWidgetsByType: (viewId, types) => {
+        if (types.length === 0) return
+        const drop = new Set(types)
+        set((s) => {
+          const view = s.views.find((v) => v.id === viewId)
+          if (!view) return s
+          const removedIds = new Set(
+            view.tiles.filter((tile) => drop.has(tile.type)).map((tile) => tile.id),
+          )
+          if (removedIds.size === 0) return s
+          for (const tileId of removedIds) clearEventStreamPrefs(tileId)
+          let split = view.split
+          for (const tileId of removedIds) {
+            split = removeLeaf(split, tileId)
+          }
+          const tiles = view.tiles.filter((tile) => !removedIds.has(tile.id))
+          const focusedGone =
+            s.focusedTileId != null && removedIds.has(s.focusedTileId)
+          return {
+            views: s.views.map((v) =>
+              v.id === viewId
+                ? withProjected({ ...v, tiles }, split, s.viewportRows)
+                : v,
+            ),
+            focusedTileId: focusedGone
+              ? (tiles[0]?.id ?? null)
+              : s.focusedTileId,
+            enteringTileIds: s.enteringTileIds.filter((id) => !removedIds.has(id)),
+            soloTileId:
+              s.soloTileId && removedIds.has(s.soloTileId) ? null : s.soloTileId,
+            zenTileId:
+              s.zenTileId && removedIds.has(s.zenTileId) ? null : s.zenTileId,
+          }
+        })
       },
+
+      goView: (viewId) => set((s) => {
+        const view = s.views.find((v) => v.id === viewId)
+        if (!view) return s
+        return {
+          activeViewId: viewId,
+          soloTileId: null,
+          zenTileId: null,
+          focusedTileId: view.tiles[0]?.id ?? null,
+        }
+      }),
+
+      goViewFocusPick: (viewId, pickIndex) => set((s) => {
+        const view = s.views.find((v) => v.id === viewId)
+        if (!view) return s
+        const focusedTileId =
+          focusedTileIdForPick(view, pickIndex) ?? view.tiles[0]?.id ?? null
+        return {
+          activeViewId: viewId,
+          soloTileId: null,
+          zenTileId: null,
+          focusedTileId,
+        }
+      }),
 
       focusWidgetType: (type) => set((s) => {
         const view = s.views.find((v) => v.id === s.activeViewId)

@@ -79,8 +79,16 @@ describe("widget log scroll — review-family wiring", () => {
   const trace = read(tracePath)
 
   it("virtualized list widgets bind scrollRef to the scroll host", () => {
-    // Event Stream: shared panel-body--scroll host.
-    expect(live).toMatch(/ref=\{containerRef\}[\s\S]{0,120}WIDGET_LOG_SCROLL_CLASS/)
+    // Event Stream: dedicated block scrollport (flex body leaked abspos rows into the deck).
+    expect(live).toMatch(/ref=\{containerRef\}[\s\S]{0,160}event-stream-feed__scroll/)
+    expect(live).toContain("scrollRef={containerRef}")
+    expect(live).not.toContain("WIDGET_LOG_SCROLL_CLASS")
+    expect(read(cssPath)).toMatch(
+      /\.event-stream-feed__scroll\s*\{[^}]*display:\s*block/s,
+    )
+    expect(read(cssPath)).toMatch(
+      /\.event-stream-feed__scroll\s*\{[^}]*overflow-y:\s*auto/s,
+    )
     // Pipelines: split-pane owns list scroll (CSS .review-split-list-scroll).
     expect(ops).toMatch(/ref=\{listScrollRef\}[\s\S]{0,160}review-split-list-scroll/)
     expect(ops).not.toContain("WIDGET_LOG_SCROLL_CLASS")

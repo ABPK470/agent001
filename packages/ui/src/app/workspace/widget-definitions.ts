@@ -2,7 +2,7 @@
  * Widget definitions — single registry for canvas chrome and catalog.
  *
  * Product Spaces (curated jobs) live in `lib/spaces.ts`:
- * Agent / Observe / Reconcile / Bridge / Trace. Summon: Enter keeps; Mod+Enter peeks.
+ * Agent / Observe / Reconcile / Bridge / Trace. Summon: Enter keeps; Mod+Enter / right-click peeks.
  */
 
 import type { ComponentType } from "react"

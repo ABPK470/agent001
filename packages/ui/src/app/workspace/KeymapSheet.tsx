@@ -138,8 +138,8 @@ export function KeymapSheet() {
         </header>
 
         <div className="ops-sheet__context">
-          <span>
-            Active Context:{" "}
+          <span className="ops-sheet__context-lead">
+            <span className="ops-sheet__context-label">Active</span>
             <span className="ops-sheet__context-name">{context.title}</span>
           </span>
           {context.override ? (

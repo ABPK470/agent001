@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 import { buildSpaceView, PRODUCT_SPACES } from "../../lib/spaces"
 import { leafNode } from "../../lib/split-tree"
 import type { WorkspaceView } from "../../lib/workspace-view"
-import { Brain } from "lucide-react"
+import { Brain, LayoutPanelLeft } from "lucide-react"
 import {
   filterSummonItems,
   listSummonItems,
@@ -26,6 +26,48 @@ function pollutedObserve(): WorkspaceView {
 }
 
 describe("summon catalog", () => {
+  it("lists custom DIY layouts after product Spaces", () => {
+    const diy: WorkspaceView = {
+      id: "layout-iq9p",
+      name: "Layout iq9p",
+      tiles: [
+        {
+          id: "t1",
+          type: "thread-nav",
+          x: 0,
+          y: 0,
+          w: 12,
+          h: 12,
+          minW: 4,
+          minH: 4,
+        },
+      ],
+      split: leafNode("t1"),
+    }
+    const items = listSummonItems({
+      views: [...defaultProductViews(), diy],
+    })
+    const custom = items.find(
+      (item) => item.kind === "space" && item.id === "layout-iq9p",
+    )
+    expect(custom).toMatchObject({
+      kind: "space",
+      name: "Layout iq9p",
+      custom: true,
+      index: 0,
+      primaryType: "thread-nav",
+    })
+    const spaceIds = items
+      .filter((item) => item.kind === "space")
+      .map((item) => item.id)
+    expect(spaceIds.indexOf("space:users")).toBeLessThan(
+      spaceIds.indexOf("layout-iq9p"),
+    )
+    // Custom layouts keep LayoutPanelLeft — never borrow a surface glyph.
+    expect(custom && summonItemIcon(custom)).toBe(LayoutPanelLeft)
+    expect(custom && summonItemIconType(custom)).toBe("layout")
+  })
+
   it("orders Spaces → presets → surfaces when a Space drifted", () => {
     const items = listSummonItems({
       views: defaultProductViews().map((view) =>

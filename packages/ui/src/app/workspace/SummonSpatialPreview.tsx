@@ -75,17 +75,27 @@ function SurfaceColumn({
   const dedicated = model.dedicatedSpace
     ? spaceById(model.dedicatedSpace)?.name
     : null
-  const action = model.onActiveSpace
-    ? "Enter focuses · already here"
-    : "Enter keeps · ⌘Enter peeks"
+  const staging = model.pickedCount > 0
+  const action = staging
+    ? model.onActiveSpace
+      ? "Click / Space stages remove · Enter applies"
+      : "Click / Space stages keep · Enter applies"
+    : model.onActiveSpace
+      ? "Enter focuses · Click / Space stages remove"
+      : "Click stages · Enter keeps · right-click peeks"
+  const badge = staging
+    ? model.onActiveSpace
+      ? "drop"
+      : "add"
+    : model.onActiveSpace
+      ? "here"
+      : "keep"
 
   return (
     <div className="summon-spatial summon-spatial--surface" aria-live="polite">
       <div className="summon-spatial__rail">
         <span className="summon-spatial__rail-title">Surface</span>
-        <span className="summon-spatial__rail-badge">
-          {model.onActiveSpace ? "here" : "keep"}
-        </span>
+        <span className="summon-spatial__rail-badge">{badge}</span>
       </div>
       <div className="summon-spatial__pane summon-spatial__pane--surface">
         <div className="summon-spatial__surface-body">
@@ -98,7 +108,11 @@ function SurfaceColumn({
         <div className="summon-spatial__surface-footer">
           <p className="summon-spatial__surface-action">{action}</p>
           <p className="summon-spatial__surface-hint">
-            {dedicated ? `Also lands as ${dedicated} Space via Go` : "\u00a0"}
+            {staging
+              ? "Absent → keep · Active → remove · Esc clears bag"
+              : dedicated
+                ? `Also lands as ${dedicated} Space via Go`
+                : "\u00a0"}
           </p>
         </div>
       </div>

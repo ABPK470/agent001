@@ -2,22 +2,23 @@
  * Summon catalog — operator dispatch, not a flat app launcher.
  *
  * Mental model (empty query = board):
- *   1. Go to Space  — job destinations (⌘1–5)
+ *   1. Go to Space  — product job destinations (⌘1–5) + custom layouts
  *   2. Open preset  — curated layouts
- *   3. Summon surface — Enter keeps / Mod+Enter peeks
+ *   3. Summon surface — Enter keeps / Mod+Enter peeks; bag keep/remove
  *
  * Search collapses the board to ranked matches; kinds stay visible.
  */
 
 import type { LucideIcon } from "lucide-react"
-import { Brain } from "lucide-react"
+import { Brain, LayoutPanelLeft } from "lucide-react"
 import {
-    isProductSpaceAtDefault,
-    PRODUCT_BUNDLES,
-    PRODUCT_SPACES,
-    spaceById,
-    type ProductBundleId,
-    type SpaceId,
+  isProductSpaceAtDefault,
+  isProductSpaceId,
+  PRODUCT_BUNDLES,
+  PRODUCT_SPACES,
+  spaceById,
+  type ProductBundleId,
+  type SpaceId,
 } from "../../lib/spaces"
 import type { WorkspaceView } from "../../lib/workspace-view"
 import type { WidgetType } from "../../types"
@@ -31,7 +32,17 @@ export type SummonCatalogContext = {
 }
 
 export type SummonItem =
-  | { kind: "space"; id: SpaceId; name: string; desc: string; index: number }
+  | {
+      kind: "space"
+      id: string
+      name: string
+      desc: string
+      /** 1–5 = Call Space chord; 0 = custom layout (no Mod+N). */
+      index: number
+      custom?: boolean
+      /** First tile type on a custom layout — icon hint. */
+      primaryType?: WidgetType
+    }
   | {
       kind: "bundle"
       id: ProductBundleId
@@ -92,8 +103,19 @@ export function widgetSummonGroup(type: WidgetType): WidgetSummonGroup {
   return "other"
 }
 
+function diySpaceDesc(view: WorkspaceView): string {
+  const n = view.tiles.length
+  if (n === 0) return "Empty layout"
+  if (n === 1) {
+    const type = view.tiles[0]!.type
+    const entry = catalogEntries().find((item) => item.type === type)
+    return entry?.label ?? "1 surface"
+  }
+  return `${n} surfaces`
+}
+
 /**
- * Ops board order: Spaces → presets → surfaces.
+ * Ops board order: product Spaces → custom layouts → presets → surfaces.
  * Reset presets only when that Space’s layout ≠ curated default
  * (same seam as toolbar “Reset Space”).
  */
@@ -108,6 +130,19 @@ export function listSummonItems(ctx: SummonCatalogContext): SummonItem[] {
       desc: space.desc,
       index: space.index,
     }))
+
+  const diySpaces: SummonItem[] = ctx.views
+    .filter((view) => !isProductSpaceId(view.id))
+    .map((view) => ({
+      kind: "space" as const,
+      id: view.id,
+      name: view.name,
+      desc: diySpaceDesc(view),
+      index: 0,
+      custom: true as const,
+      primaryType: view.tiles[0]?.type,
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name))
 
   const bundles: SummonItem[] = PRODUCT_BUNDLES
     .filter((bundle) => {
@@ -141,7 +176,7 @@ export function listSummonItems(ctx: SummonCatalogContext): SummonItem[] {
     return a.name.localeCompare(b.name)
   })
 
-  return [...spaces, ...bundles, ...widgets]
+  return [...spaces, ...diySpaces, ...bundles, ...widgets]
 }
 
 export function filterSummonItems(query: string, items: readonly SummonItem[]): SummonItem[] {
@@ -150,7 +185,8 @@ export function filterSummonItems(query: string, items: readonly SummonItem[]): 
   return items.filter((item) => {
     const group =
       item.kind === "widget" ? WIDGET_GROUP_LABEL[item.group] : ""
-    const hay = `${item.name} ${item.desc} ${item.kind} ${group}`.toLowerCase()
+    const custom = item.kind === "space" && item.custom ? "custom layout" : ""
+    const hay = `${item.name} ${item.desc} ${item.kind} ${group} ${custom}`.toLowerCase()
     return hay.includes(q)
   })
 }
@@ -163,7 +199,8 @@ export function summonItemKey(item: SummonItem): string {
 
 /**
  * Canonical glyph for a Summon row.
- * Agent Space/preset → Brain (Trace keeps Bug). Others reuse WIDGET_ICONS.
+ * Agent Space/preset → Brain (Trace keeps Bug).
+ * Custom layouts → LayoutPanelLeft (never borrow a surface icon like Event Stream).
  */
 export function summonItemIcon(item: SummonItem): LucideIcon {
   if (item.kind === "widget") return WIDGET_ICONS[item.type]
@@ -171,6 +208,7 @@ export function summonItemIcon(item: SummonItem): LucideIcon {
     if (item.homeSpace === "space:agent") return Brain
     return WIDGET_ICONS[item.focusType]
   }
+  if (item.custom) return LayoutPanelLeft
   if (item.id === "space:agent") return Brain
   const primary = spaceById(item.id)?.widgets[0]
   if (!primary) {
@@ -180,7 +218,8 @@ export function summonItemIcon(item: SummonItem): LucideIcon {
 }
 
 /** Icon key for tests / diagnostics — Agent is Brain, not Trace’s Bug. */
-export function summonItemIconType(item: SummonItem): WidgetType | "agent-brain" {
+export function summonItemIconType(item: SummonItem): WidgetType | "agent-brain" | "layout" {
+  if (item.kind === "space" && item.custom) return "layout"
   if (item.kind === "space" && item.id === "space:agent") return "agent-brain"
   if (item.kind === "bundle" && item.homeSpace === "space:agent") return "agent-brain"
   if (item.kind === "widget") return item.type
@@ -207,12 +246,19 @@ export function summonActionPreview(
   if (!item) {
     return {
       title: "Summon",
-      subtitle: "Pick a Space, preset, or surface",
+      subtitle: "Pick a Space, layout, preset, or surface",
       primary: "open",
     }
   }
   if (item.kind === "space") {
-    const chord = item.index >= 1 ? ` · ⌘${item.index}` : ""
+    if (item.custom) {
+      return {
+        title: item.name,
+        subtitle: `Go to layout — ${item.desc}`,
+        primary: "go",
+      }
+    }
+    const chord = item.index >= 1 && item.index <= 5 ? ` · ⌘${item.index}` : ""
     return {
       title: item.name,
       subtitle: `Go to Space${chord} — ${item.desc}`,
@@ -229,13 +275,13 @@ export function summonActionPreview(
   if (opts.onSpace) {
     return {
       title: item.name,
-      subtitle: `Focus on ${opts.spaceName ?? "this Space"} — already present`,
+      subtitle: `Focus on ${opts.spaceName ?? "this Space"} — Click / Space stages remove`,
       primary: "focus",
     }
   }
   return {
     title: item.name,
-    subtitle: "Keep in this Space · ⌘Enter peeks",
+    subtitle: "Click stages · Enter keeps · right-click peeks",
     primary: "keep",
   }
 }

@@ -187,12 +187,12 @@ function WidgetModalHeader({
         )}
         <button
           type="button"
-          className="widget-shell-icon widget-shell-icon--danger"
+          className="toolbar-ops-btn toolbar-ops-btn--danger shrink-0"
           onClick={onClose}
           title="Close (Esc)"
           aria-label="Close (Esc)"
         >
-          <X size={16} />
+          <X size={14} aria-hidden />
         </button>
       </div>
     </div>

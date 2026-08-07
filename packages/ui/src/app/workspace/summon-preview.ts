@@ -40,19 +40,21 @@ export type SummonPreviewModel =
       desc: string
       onActiveSpace: boolean
       dedicatedSpace: SpaceId | null
+      /** Surfaces staged in the keep bag (0 = single-item mode). */
+      pickedCount: number
     }
   | { mode: "idle"; prompt: string }
 
 function viewForSpace(
-  spaceId: SpaceId,
+  viewId: string,
   views: readonly WorkspaceView[],
   rows: number,
 ): WorkspaceView {
-  const live = views.find((view) => view.id === spaceId)
+  const live = views.find((view) => view.id === viewId)
   if (live) return live
-  const def = spaceById(spaceId)
+  const def = spaceById(viewId)
   if (!def) {
-    return { id: spaceId, name: spaceId, tiles: [], split: null }
+    return { id: viewId, name: viewId, tiles: [], split: null }
   }
   return buildSpaceView(def, rows)
 }
@@ -83,11 +85,19 @@ export function resolveSummonPreview(
   opts: {
     presentTypes: ReadonlySet<string>
     viewportRows?: number
+    pickedCount?: number
   },
 ): SummonPreviewModel {
   const rows = opts.viewportRows ?? 24
+  const pickedCount = opts.pickedCount ?? 0
   if (!item) {
-    return { mode: "idle", prompt: "Pick a Space, preset, or surface" }
+    return {
+      mode: "idle",
+      prompt:
+        pickedCount > 0
+          ? `Enter keeps ${pickedCount} surfaces`
+          : "Pick a Space, preset, or surface",
+    }
   }
   if (item.kind === "space") {
     const view = viewForSpace(item.id, views, rows)
@@ -104,6 +114,7 @@ export function resolveSummonPreview(
     desc: item.desc,
     onActiveSpace: opts.presentTypes.has(item.type),
     dedicatedSpace: dedicatedSpaceForWidget(item.type),
+    pickedCount,
   }
 }
 

@@ -32,7 +32,14 @@ describe("WidgetModal mount", () => {
     expect(modal).toContain("WidgetInstanceProvider")
     expect(modal).toContain("peekWidgetInstanceId")
     expect(modal).toContain("toolbar-ops-btn")
-    expect(modal).toContain("widget-shell-icon")
+    expect(modal).toContain("toolbar-ops-btn--danger")
+    expect(modal).not.toContain("widget-shell-icon--danger")
     expect(modal).not.toContain("widget-modal-add-btn")
+
+    // Peek mounts outside .workspace-chrome — chip radius must be on :root.
+    const css = readFileSync(join(here, "../../boot/index.css"), "utf8")
+    expect(css).toMatch(
+      /:root,\s*:root\[data-theme="dark"\],\s*:root\[data-theme="light"\]\s*\{[^}]*--view-chip-radius:\s*0\.375rem/s,
+    )
   })
 })

@@ -127,14 +127,17 @@ export function shouldSummonFilterArrow(
 /** Action chips on the right (same kbd dialect as keymap). */
 export function summonActionKeys(
   item: SummonItem,
-  _opts: { onSpace: boolean },
+  opts: { onSpace: boolean; staging?: boolean; picked?: boolean },
 ): readonly string[] {
   if (item.kind === "space") {
-    // Call Space chords are Mod+1…5 only.
-    return item.index >= 1 && item.index <= 5
-      ? [detectModHint(), String(item.index)]
-      : ["↵"]
+    // Call Space chords are Mod+1…5 only (custom layouts have no Mod+N).
+    if (!item.custom && item.index >= 1 && item.index <= 5) {
+      return [detectModHint(), String(item.index)]
+    }
+    return ["↵"]
   }
   if (item.kind === "bundle") return ["↵"]
+  // While staging a bag, rows show Space — Enter lands the bag (footer).
+  if (opts.staging || opts.picked) return ["Space"]
   return ["↵"]
 }

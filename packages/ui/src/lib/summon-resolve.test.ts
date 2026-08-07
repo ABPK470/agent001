@@ -6,6 +6,8 @@ import {
     resolveSummonWidgetEnter,
     resolveSummonWidgetKeep,
     resolveSummonWidgetPeek,
+    resolveSummonWidgetsApply,
+    resolveSummonWidgetsKeep,
 } from "./summon-resolve"
 
 describe("summon resolve", () => {
@@ -13,6 +15,13 @@ describe("summon resolve", () => {
     expect(resolveSummonSpaceEnter("space:observe")).toEqual({
       type: "call-space",
       spaceId: "space:observe",
+    })
+  })
+
+  it("custom layouts go-view — not Call Space", () => {
+    expect(resolveSummonSpaceEnter("layout-abc")).toEqual({
+      type: "go-view",
+      viewId: "layout-abc",
     })
   })
 
@@ -52,6 +61,55 @@ describe("summon resolve", () => {
       type: "keep-widgets",
       widgets: ["debug-inspector"],
       focusType: "debug-inspector",
+    })
+  })
+
+  it("multi-keep dedupes and focuses the last pick (or explicit focus)", () => {
+    expect(resolveSummonWidgetsKeep([])).toBeNull()
+    expect(
+      resolveSummonWidgetsKeep(["live-logs", "operation-log", "live-logs"]),
+    ).toEqual({
+      type: "keep-widgets",
+      widgets: ["live-logs", "operation-log"],
+      focusType: "operation-log",
+    })
+    expect(
+      resolveSummonWidgetsKeep(
+        ["live-logs", "operation-log"],
+        "live-logs",
+      ),
+    ).toEqual({
+      type: "keep-widgets",
+      widgets: ["live-logs", "operation-log"],
+      focusType: "live-logs",
+    })
+  })
+
+  it("apply bag keeps absent and removes present", () => {
+    expect(
+      resolveSummonWidgetsApply(
+        ["live-logs", "operation-log", "bridge"],
+        new Set(["operation-log"]),
+        "live-logs",
+      ),
+    ).toEqual({
+      type: "apply-widgets",
+      keep: ["live-logs", "bridge"],
+      remove: ["operation-log"],
+      focusType: "live-logs",
+    })
+  })
+
+  it("blueprint digit on a custom layout uses go-view-focus-pick", () => {
+    expect(
+      resolveSummonBlueprintTileEnter(
+        { kind: "space", id: "layout-xyz", custom: true },
+        1,
+      ),
+    ).toEqual({
+      type: "go-view-focus-pick",
+      viewId: "layout-xyz",
+      pickIndex: 1,
     })
   })
 

@@ -40,7 +40,6 @@ import { isSyncSqlEventType } from "./sync/trace/sync-sql-trace"
 import { operationStatusPill } from "../lib/status-callout"
 import { WIDGET_ICONS } from "./widget-icons"
 import {
-  WIDGET_LOG_SCROLL_CLASS,
   WIDGET_LOG_SHELL_CLASS,
   WIDGET_LOG_STACK_CLASS,
   WIDGET_REVIEW_CONTROLS_CLASS,
@@ -438,7 +437,8 @@ export function LiveLogs() {
 
   return (
     <div ref={rootRef} className={WIDGET_LOG_SHELL_CLASS}>
-      <div className={WIDGET_LOG_STACK_CLASS}>
+      <div className={`${WIDGET_LOG_STACK_CLASS} event-stream-stack`}>
+      <div className="event-stream-deck">
       <div className={WIDGET_REVIEW_CONTROLS_CLASS}>
       <div className={WIDGET_REVIEW_CONTROLS_INSET_CLASS}>
       <WidgetToolbar compact={compact}>
@@ -503,6 +503,22 @@ export function LiveLogs() {
       />
       </div>
       ) : null}
+      </div>
+
+      <EventStreamHistogram
+        lensRows={lensRows}
+        bounds={windowBounds}
+        focus={histogramFocus}
+        onFocusChange={setHistogramFocus}
+        onZoomToFocus={(next) => {
+          setHistogramFocus(null)
+          zoomToIsoRange(next.since, next.until)
+        }}
+        listVisibleCount={displayRows.length}
+        typeFilters={typeFilters}
+        errorsOnly={errorsOnly}
+        searchText={searchText}
+      />
       </div>
 
       <FilterSheet
@@ -582,21 +598,12 @@ export function LiveLogs() {
         </FilterField>
       </FilterSheet>
 
-      <EventStreamHistogram
-        lensRows={lensRows}
-        bounds={windowBounds}
-        focus={histogramFocus}
-        onFocusChange={setHistogramFocus}
-        onZoomToFocus={(next) => {
-          setHistogramFocus(null)
-          zoomToIsoRange(next.since, next.until)
-        }}
-        listVisibleCount={displayRows.length}
-        typeFilters={typeFilters}
-        errorsOnly={errorsOnly}
-        searchText={searchText}
-      />
-
+      {/*
+       * Feed is a hard clip shell; the scroll host inside is display:block
+       * (not widget-panel-body flex) so abspos virtual rows cannot paint into
+       * the histogram deck.
+       */}
+      <div className="event-stream-feed">
       {(pendingLiveCount > 0 && (paused || !followLive)) && (
         <button
           type="button"
@@ -616,7 +623,7 @@ export function LiveLogs() {
 
       <div
         ref={containerRef}
-        className={`${WIDGET_LOG_SCROLL_CLASS} log-stream`}
+        className="event-stream-feed__scroll log-stream"
         onScroll={onScroll}
       >
         <div ref={topSentinelRef} />
@@ -647,7 +654,17 @@ export function LiveLogs() {
             ref={listRef}
             items={displayRows}
             scrollRef={containerRef}
-            estimateSize={() => 36}
+            estimateSize={(i) => {
+              const log = displayRows[i]
+              if (!log) return 36
+              const key = eventStreamRowKey(log, i)
+              if (expandedKeys.has(key) && eventStreamHasPayload(log)) {
+                return compact ? 220 : 300
+              }
+              return 36
+            }}
+            /* Expanding must grow downward — never shove the header under the deck. */
+            adjustScrollOnResize={false}
             getItemKey={(i, log) => eventStreamRowKey(log, i)}
             renderItem={({ item: log, index }) => {
               const rowKey = eventStreamRowKey(log, index)
@@ -695,6 +712,7 @@ export function LiveLogs() {
           <kbd className="composer-kbd event-stream-jump__kbd">End</kbd>
         </button>
       )}
+      </div>
       </div>
     </div>
   )
