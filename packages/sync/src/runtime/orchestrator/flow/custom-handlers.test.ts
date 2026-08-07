@@ -9,7 +9,7 @@ import { trackedQuery } from "../db/db-helpers.js"
 import { runCustomShellFlowStep, runCustomSqlFlowStep } from "./custom-handlers.js"
 import { testFlowStepRunContext } from "../../../test-support/value-source-context.js"
 
-vi.mock("./db-helpers.js", () => ({
+vi.mock("../db/db-helpers.js", () => ({
   trackedExecute: vi.fn(),
   trackedQuery: vi.fn(),
 }))
@@ -25,7 +25,10 @@ const execFileMock = vi.mocked(execFile)
 
 function createHost(): SyncRuntimeHost {
   const host = {
-    sync: { environments: { items: new Map() } },
+    sync: {
+      environments: { items: new Map() },
+      events: { sink: () => {} },
+    },
   } as unknown as SyncRuntimeHost
   replaceEnvironments(host, [
     withPermissionDefaults({ name: "UAT" }),

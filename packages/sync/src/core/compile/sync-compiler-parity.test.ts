@@ -22,7 +22,7 @@ import {
 import { loadDeployFlowCatalogForTests } from "../../test-support/test-flow-catalog.js"
 import { afterEach, describe, expect, it } from "vitest"
 
-const repoRoot = resolve(import.meta.dirname, "../../../..")
+const repoRoot = resolve(import.meta.dirname, "../../../../..")
 const flowTemplateCatalog = loadSyncDefinitionFlowTemplateCatalog(repoRoot)
 const deployFlowCatalog = loadDeployFlowCatalogForTests(repoRoot)
 

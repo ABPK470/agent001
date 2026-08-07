@@ -29,6 +29,11 @@ vi.mock("../diff-engine/index.js", async (importOriginal) => {
 vi.mock("./search.js", () => ({
   fetchEntityDisplayName: (...args: unknown[]) => fetchEntityDisplayNameMock(...args),
   expandTreeIds: vi.fn().mockResolvedValue(null),
+  resolveSyncEntityInstanceId: vi.fn(async ({ entityId }: { entityId: string | number }) => ({
+    id: entityId,
+    displayName: null,
+    resolvedFrom: "id" as const,
+  })),
 }))
 
 vi.mock("./apply.js", () => ({

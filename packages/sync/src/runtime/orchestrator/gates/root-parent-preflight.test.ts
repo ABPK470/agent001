@@ -8,7 +8,7 @@ import {
   planRequiresRootOnTarget
 } from "./root-parent-preflight.js"
 
-vi.mock("./db-helpers.js", () => ({
+vi.mock("../db/db-helpers.js", () => ({
   qtable: (name: string) => name,
   trackedQuery: vi.fn()
 }))

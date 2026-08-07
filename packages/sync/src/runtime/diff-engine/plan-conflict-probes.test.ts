@@ -8,6 +8,12 @@ vi.mock("./sql-query.js", () => ({
 
 import { applyPlanConflictProbes } from "./plan-conflict-probes.js"
 import type { SyncPlanTable } from "../../domain/plan.js"
+import type { SyncRuntimeHost } from "../../ports/host.js"
+
+/** Minimal host — probes only need sync.environments for dialect resolution. */
+const probeHost = {
+  sync: { environments: { items: new Map() } },
+} as unknown as SyncRuntimeHost
 
 function table(
   name: string,
@@ -94,7 +100,7 @@ describe("applyPlanConflictProbes", () => {
         ]
       })
 
-    const { tables, probeWarnings } = await applyPlanConflictProbes({} as never, "mymi", [
+    const { tables, probeWarnings } = await applyPlanConflictProbes(probeHost, "mymi", [
       table("core.DatasetColumn", { deletes: [{ pk: "10", values: { datasetColumnId: 10 } }] }),
       table("core.DatasetMappingColumn")
     ])
@@ -128,7 +134,7 @@ describe("applyPlanConflictProbes", () => {
       // parent lookup — empty ⇒ missing
       .mockResolvedValueOnce({ recordset: [] })
 
-    const { tables } = await applyPlanConflictProbes({} as never, "mymi", [
+    const { tables } = await applyPlanConflictProbes(probeHost, "mymi", [
       table("core.DatasetMappingColumn", {
         inserts: [{ pk: "1", values: { datasetMappingColumnId: 1, datasetMappingId: 9 } }]
       }),
@@ -143,7 +149,7 @@ describe("applyPlanConflictProbes", () => {
   it("emits probeWarnings instead of silent empty on discovery failure", async () => {
     runQueryMock.mockRejectedValueOnce(new Error("permission denied"))
 
-    const { tables, probeWarnings } = await applyPlanConflictProbes({} as never, "mymi", [
+    const { tables, probeWarnings } = await applyPlanConflictProbes(probeHost, "mymi", [
       table("core.DatasetColumn", { deletes: [{ pk: "10", values: { datasetColumnId: 10 } }] })
     ])
 

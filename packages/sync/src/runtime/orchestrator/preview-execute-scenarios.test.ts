@@ -17,7 +17,7 @@ import {
 import { ENTITY_SPECS } from "../../test-support/entity-fixtures.js"
 import { drainTempSyncProjects } from "../../test-support/sync-test-host.js"
 
-vi.mock("./db-helpers.js", () => ({
+vi.mock("./db/db-helpers.js", () => ({
   qtable: (name: string) => name,
   trackedQuery: vi.fn()
 }))

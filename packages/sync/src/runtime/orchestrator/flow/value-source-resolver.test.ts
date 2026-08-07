@@ -8,7 +8,7 @@ import { resolveValueSource } from "./value-source-resolver.js"
 import type { ValueSourceResolveContext } from "./value-source-resolver.js"
 import { StepOutputRegistry } from "./step-output-registry.js"
 
-vi.mock("./db-helpers.js", () => ({
+vi.mock("../db/db-helpers.js", () => ({
   trackedQuery: vi.fn().mockImplementation(async (_host, _conn, sql: string) => {
     if (sql.includes("core.Contract")) {
       return { recordset: [{ name: "MyContract" }] }
@@ -50,7 +50,7 @@ function ctx(overrides?: Partial<ValueSourceResolveContext>): ValueSourceResolve
   const stepOutputs = new StepOutputRegistry()
   stepOutputs.publish("priorStep", { datasetId: 501 })
   return {
-    host: {} as never,
+    host: { sync: { events: { sink: () => {} }, environments: { items: new Map() } } } as never,
     plan: { source: "DEV", target: "UAT" } as never,
     entityId: 788,
     entityType: "contract",

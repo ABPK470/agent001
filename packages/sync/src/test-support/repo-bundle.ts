@@ -39,12 +39,22 @@ function loadFixturePublishedBundle(): PublishedSyncDefinitionBundle | null {
     definitions?: PublishedSyncDefinitionBundle["definitions"]
   }
   if (!parsed.definitions) return null
-  // g3 golden is definitions-only; wrap to the runtime bundle shape.
+  // g3 golden is definitions-only; wrap to the runtime bundle shape and
+  // stamp per-definition publishedAt when the golden omitted it.
+  const publishedAt = parsed.publishedAt ?? "2026-01-01T00:00:00.000Z"
+  const definitions = Object.fromEntries(
+    Object.entries(parsed.definitions).map(([id, def]) => [
+      id,
+      def && typeof def === "object"
+        ? { ...def, publishedAt: (def as { publishedAt?: string }).publishedAt ?? publishedAt }
+        : def,
+    ]),
+  ) as PublishedSyncDefinitionBundle["definitions"]
   return {
     version: 1,
-    publishedAt: parsed.publishedAt ?? "fixture",
+    publishedAt,
     publishedVersion: parsed.publishedVersion ?? "golden-g3",
-    definitions: parsed.definitions
+    definitions,
   }
 }
 

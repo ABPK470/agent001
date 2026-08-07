@@ -170,7 +170,7 @@ const expectedEntities = {
 describe("legacy sync generators", () => {
   it("maps contract legacy audit activities to stable flow step ids", async () => {
     const modulePath = new URL(
-      "../../../../deploy/sync/helpers/sync-metadata-derivation.mjs",
+      "../../../../../deploy/sync/helpers/sync-metadata-derivation.mjs",
       import.meta.url
     ).href
     const specsPath = new URL("../../../../../deploy/sync/helpers/legacy-pipeline-evidence.mjs", import.meta.url)
@@ -203,7 +203,7 @@ describe("legacy sync generators", () => {
 
   it("rebuilds flow recipes matching sync-metadata.flows from the reviewed legacy pipeline set", async () => {
     const modulePath = new URL(
-      "../../../../deploy/sync/helpers/sync-metadata-derivation.mjs",
+      "../../../../../deploy/sync/helpers/sync-metadata-derivation.mjs",
       import.meta.url
     ).href
     const specsPath = new URL("../../../../../deploy/sync/helpers/legacy-pipeline-evidence.mjs", import.meta.url)
@@ -230,7 +230,7 @@ describe("legacy sync generators", () => {
 
   it("rebuilds deploy/sync/artifacts/entities from the reviewed legacy pipeline set", async () => {
     const modulePath = new URL(
-      "../../../../deploy/sync/helpers/legacy-entity-derivation.mjs",
+      "../../../../../deploy/sync/helpers/legacy-entity-derivation.mjs",
       import.meta.url
     ).href
     const { buildCatalogIndex, deriveSyncDefinitions } = (await import(
@@ -327,7 +327,7 @@ describe("legacy sync generators", () => {
 
   it("derives contract DatasetMappingColumn from the variable-backed legacy id set, not FK guesswork", async () => {
     const modulePath = new URL(
-      "../../../../deploy/sync/helpers/legacy-entity-derivation.mjs",
+      "../../../../../deploy/sync/helpers/legacy-entity-derivation.mjs",
       import.meta.url
     ).href
     const { buildCatalogIndex, deriveSyncDefinitions, extractSyncObjectCalls } = (await import(
@@ -434,7 +434,7 @@ describe("legacy sync generators", () => {
 
   it("derives content type tables from direct STUFF assignments", async () => {
     const modulePath = new URL(
-      "../../../../deploy/sync/helpers/legacy-entity-derivation.mjs",
+      "../../../../../deploy/sync/helpers/legacy-entity-derivation.mjs",
       import.meta.url
     ).href
     const { buildCatalogIndex, deriveSyncDefinitions, extractSyncObjectCalls } = (await import(
@@ -529,7 +529,7 @@ describe("legacy sync generators", () => {
 
   it("derives rule tree scopes from the live rule hierarchy rather than a single rule id", async () => {
     const modulePath = new URL(
-      "../../../../deploy/sync/helpers/legacy-entity-derivation.mjs",
+      "../../../../../deploy/sync/helpers/legacy-entity-derivation.mjs",
       import.meta.url
     ).href
     const { buildCatalogIndex, deriveSyncDefinitions, extractSyncObjectCalls } = (await import(
@@ -722,7 +722,7 @@ describe("legacy sync generators", () => {
 
   it("derives dataset mapping columns from dataset mappings, not datasetColumnId_Left", async () => {
     const modulePath = new URL(
-      "../../../../deploy/sync/helpers/legacy-entity-derivation.mjs",
+      "../../../../../deploy/sync/helpers/legacy-entity-derivation.mjs",
       import.meta.url
     ).href
     const { buildCatalogIndex, deriveSyncDefinitions, extractSyncObjectCalls } = (await import(
@@ -853,7 +853,7 @@ describe("legacy sync generators", () => {
 
   it("derives gate metadata columns and json schema through meta views", async () => {
     const modulePath = new URL(
-      "../../../../deploy/sync/helpers/legacy-entity-derivation.mjs",
+      "../../../../../deploy/sync/helpers/legacy-entity-derivation.mjs",
       import.meta.url
     ).href
     const { buildCatalogIndex, deriveSyncDefinitions, extractSyncObjectCalls } = (await import(

@@ -4,7 +4,7 @@ import { join, resolve } from "node:path"
 
 import { describe, expect, it } from "vitest"
 
-const repoRoot = resolve(import.meta.dirname, "../../../..")
+const repoRoot = resolve(import.meta.dirname, "../../../../..")
 const specsSeed = resolve(repoRoot, "deploy/sync/fixtures/legacy-activity-sync-specs.json")
 const evidenceFixture = resolve(repoRoot, "deploy/sync/fixtures/legacy-pipeline-evidence.fixture.json")
 const syncMetadataSeed = resolve(repoRoot, "deploy/sync/artifacts/sync-metadata.json")
@@ -12,11 +12,11 @@ const syncMetadataSeed = resolve(repoRoot, "deploy/sync/artifacts/sync-metadata.
 describe("legacy activity sync specs", () => {
   it("buildLegacyActivitySyncSpecs matches committed fixture via direct import", async () => {
     const modulePath = new URL(
-      "../../../../deploy/sync/helpers/legacy-activity-sync-specs.mjs",
+      "../../../../../deploy/sync/helpers/legacy-activity-sync-specs.mjs",
       import.meta.url
     ).href
     const derivationPath = new URL(
-      "../../../../deploy/sync/helpers/sync-metadata-derivation.mjs",
+      "../../../../../deploy/sync/helpers/sync-metadata-derivation.mjs",
       import.meta.url
     ).href
     const { buildLegacyActivitySyncSpecs } = (await import(modulePath)) as {
@@ -41,7 +41,7 @@ describe("legacy activity sync specs", () => {
 
   it("refresh-from-legacy writes matching activity specs in metadata-only mode", async () => {
     const tempRoot = mkdtempSync(join(tmpdir(), "legacy-refresh-specs-"))
-    const helperPath = new URL("../../../../deploy/sync/helpers/refresh-from-legacy.mjs", import.meta.url)
+    const helperPath = new URL("../../../../../deploy/sync/helpers/refresh-from-legacy.mjs", import.meta.url)
       .href
     const { refreshDeployArtifactsFromLegacy } = (await import(helperPath)) as {
       refreshDeployArtifactsFromLegacy: (
@@ -65,15 +65,15 @@ describe("legacy activity sync specs", () => {
 
   it("omits activities whose action starts with underscore", async () => {
     const evidencePath = new URL(
-      "../../../../deploy/sync/helpers/legacy-pipeline-evidence.mjs",
+      "../../../../../deploy/sync/helpers/legacy-pipeline-evidence.mjs",
       import.meta.url
     ).href
     const derivationPath = new URL(
-      "../../../../deploy/sync/helpers/sync-metadata-derivation.mjs",
+      "../../../../../deploy/sync/helpers/sync-metadata-derivation.mjs",
       import.meta.url
     ).href
     const specsPath = new URL(
-      "../../../../deploy/sync/helpers/legacy-activity-sync-specs.mjs",
+      "../../../../../deploy/sync/helpers/legacy-activity-sync-specs.mjs",
       import.meta.url
     ).href
 
