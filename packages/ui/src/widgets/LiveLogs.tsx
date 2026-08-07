@@ -464,8 +464,19 @@ export function LiveLogs() {
     onQuickRange("live")
   }
 
+  const drawerDetailOpen = detailMode === "drawer" && Boolean(detailLog)
+
   return (
-    <div ref={rootRef} className={`${WIDGET_LOG_SHELL_CLASS} relative`}>
+    <div
+      ref={rootRef}
+      className={[
+        WIDGET_LOG_SHELL_CLASS,
+        "relative",
+        drawerDetailOpen ? "event-stream-shell--detail-open" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+    >
       <div className={`${WIDGET_LOG_STACK_CLASS} event-stream-stack`}>
       <div className="event-stream-deck">
       <div className={WIDGET_REVIEW_CONTROLS_CLASS}>
@@ -814,12 +825,19 @@ function LogRow({
             <span className={`${operationStatusPill("failed")} event-stream-row__pill`}>Error</span>
           </span>
         ) : null}
-        <span className="review-chevron-slot shrink-0 text-text-muted/40">
+        <span className="review-chevron-slot event-stream-row__chev-slot shrink-0 text-text-muted/40">
           {hasData ? (
             <ChevronRight
               size={13}
               strokeWidth={1.75}
-              className={`transition-transform ${open ? "rotate-90" : ""}`}
+              className={[
+                "event-stream-row__chevron",
+                /* Down only when payload expands under the row — never in drawer mode. */
+                showInlinePayload ? "is-expanded" : "",
+              ]
+                .filter(Boolean)
+                .join(" ")}
+              aria-hidden
             />
           ) : null}
         </span>

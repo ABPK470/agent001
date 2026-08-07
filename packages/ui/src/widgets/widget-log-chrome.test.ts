@@ -540,7 +540,15 @@ describe("widget log chrome — shared content dialect", () => {
     expect(live).toContain("onDetailEscapeKeyDown")
     expect(live).toMatch(/addEventListener\("keydown", onDetailEscapeKeyDown, true\)/)
     expect(live).toMatch(/estimateSize[\s\S]*compact \? 220 : 300/)
+    // Chevron rotates down only for inline expand — never promises accordion in drawer mode.
+    expect(live).toMatch(/showInlinePayload \? "is-expanded"/)
+    expect(live).not.toMatch(/open \? "rotate-90"/)
+    expect(live).toContain("event-stream-shell--detail-open")
     expect(css).toContain(".event-stream-drawer")
+    expect(css).toMatch(
+      /\.event-stream-shell--detail-open\s*>\s*\.event-stream-stack\s*\{[^}]*padding-inline-end:\s*50%/s,
+    )
+    expect(css).toContain(".event-stream-row__chevron.is-expanded")
     expect(css).toMatch(
       /\.event-stream-drawer\s*\{[^}]*transform:\s*translateX\(100%\)/s,
     )
@@ -553,10 +561,29 @@ describe("widget log chrome — shared content dialect", () => {
     expect(css).toMatch(
       /\.event-stream-drawer\s*\{[^}]*--event-stream-drawer-dur:\s*var\(--audit-inspector-dur/s,
     )
+    // Full-height into panel inset; end radii match .widget-panel; shell yields clip to panel.
+    expect(css).toMatch(
+      /\.event-stream-drawer\s*\{[^}]*inset-block-start:\s*calc\(-1 \* var\(--widget-panel-inset-top/s,
+    )
+    expect(css).toMatch(
+      /\.event-stream-drawer\s*\{[^}]*border-start-end-radius:\s*0\.5rem/s,
+    )
+    expect(css).toMatch(
+      /\.event-stream-shell--detail-open\s*\{[^}]*overflow:\s*visible/s,
+    )
+    expect(css).toMatch(
+      /\.event-stream-drawer__head\s*\{[^}]*--widget-panel-inset-top/s,
+    )
+    expect(css).toContain(".event-stream-drawer__head-row")
+    expect(css).toContain(".event-stream-drawer__summary")
     const drawer = read(join(here, "live-logs/EventStreamDetailDrawer.tsx"))
     expect(drawer).toContain('role="dialog"')
     expect(drawer).toContain('aria-modal="false"')
     expect(drawer).toContain("JsonViewer")
+    expect(drawer).toContain("event-stream-drawer__summary")
+    expect(drawer).toContain("event-stream-drawer__head-row")
+    // Route/status lives in the head — not a floating body sub-header.
+    expect(drawer).not.toContain("event-stream-drawer__message")
 
     // Control deck + hard-clipped feed (block scrollport — not flex body).
     expect(live).toContain("event-stream-deck")
@@ -616,9 +643,15 @@ describe("widget log chrome — shared content dialect", () => {
     expect(css).toMatch(
       /\.event-stream-histogram__plot-hit\s*\{[^}]*margin:\s*0/s,
     )
-    // Accent is on the entry box itself — never a floating ::before above the feed.
+    // Accent rail only on open detail — keyboard is-selected matches hover.
     expect(css).toMatch(
-      /\.event-stream-entry\.is-selected,\s*\.event-stream-entry\.is-open\s*\{[^}]*border-left-color:\s*var\(--color-accent/s,
+      /\.event-stream-entry\.is-open\s*\{[^}]*border-left-color:\s*var\(--color-accent/s,
+    )
+    expect(css).toMatch(
+      /\.event-stream-entry\.is-selected:not\(\.is-open\)\s+\.event-stream-row\s*\{[^}]*background:\s*var\(--hover-fill\)/s,
+    )
+    expect(css).not.toMatch(
+      /\.event-stream-entry\.is-selected,\s*\.event-stream-entry\.is-open/,
     )
     expect(css).not.toContain(".event-stream-entry.is-open::before")
     expect(css).toMatch(

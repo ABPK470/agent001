@@ -2384,6 +2384,27 @@ label:focus-within > .mia-checkbox,
   gap: 0.625rem;
   overflow: hidden;
   min-height: 0;
+  /* Partition with the detail drawer — pad when open so controls aren't bisected. */
+  transition: padding-inline-end var(--audit-inspector-dur, 340ms)
+    var(--audit-inspector-ease, cubic-bezier(0.22, 1, 0.36, 1));
+}
+
+.event-stream-shell--detail-open > .event-stream-stack {
+  padding-inline-end: 50%;
+}
+
+/*
+ * Let the drawer extend into widget-panel inset so end corners meet the
+ * card radius; panel (overflow:hidden + border-radius) is the clip host.
+ */
+.event-stream-shell--detail-open {
+  overflow: visible;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .event-stream-stack {
+    transition: none;
+  }
 }
 
 .event-stream-deck {
@@ -2631,19 +2652,15 @@ label:focus-within > .mia-checkbox,
 }
 
 /*
- * Accent on the row container itself (not a floating ::before) so the rail
- * is clipped with the entry and bound to that timestamp only.
+ * Open detail = true selection (accent rail + select wash).
+ * Keyboard cursor (↑↓) is is-selected only — same as mouse hover, never a
+ * second selection rail. Event Stream only.
  */
-.event-stream-entry.is-selected,
 .event-stream-entry.is-open {
   border-left-color: var(--color-accent, #6366f1);
-}
-
-.event-stream-entry.is-open {
   background: color-mix(in srgb, var(--select-fill) 70%, transparent);
 }
 
-.event-stream-entry.is-selected .event-stream-payload,
 .event-stream-entry.is-open .event-stream-payload {
   background: transparent;
 }
@@ -2677,8 +2694,9 @@ label:focus-within > .mia-checkbox,
   transition: background-color 0.12s ease;
 }
 
-.log-stream .event-stream-entry.is-selected .event-stream-row {
-  background: var(--select-fill);
+/* ↑↓ cursor — match hover; open detail keeps its own wash on the entry. */
+.log-stream .event-stream-entry.is-selected:not(.is-open) .event-stream-row {
+  background: var(--hover-fill);
 }
 
 .event-stream-row--has-error {
@@ -2706,6 +2724,33 @@ label:focus-within > .mia-checkbox,
   font-size: 0.6875rem;
   font-weight: 600;
   justify-self: start;
+}
+
+/* Chevron optical center with mono time — slot is a fixed box, icon is block. */
+.event-stream-row__chev-slot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
+  height: 1.25rem;
+  line-height: 0;
+}
+
+.event-stream-row__chevron {
+  display: block;
+  flex-shrink: 0;
+  transition: transform 160ms ease;
+  transform: rotate(0deg);
+}
+
+.event-stream-row__chevron.is-expanded {
+  transform: rotate(90deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .event-stream-row__chevron {
+    transition: none;
+  }
 }
 
 .event-stream-row__time {
@@ -2964,22 +3009,28 @@ label:focus-within > .mia-checkbox,
 }
 
 /*
- * Event Stream detail drawer — overlays the whole widget shell (≤50% width).
+ * Event Stream detail drawer — full-height partition (≤50% of shell).
+ * Extends into widget-panel inset so end corners meet the card radius;
+ * left stack pads via .event-stream-shell--detail-open.
  * Motion dialect matches Audit / thread-rail.
  */
 .event-stream-drawer {
   --event-stream-drawer-dur: var(--audit-inspector-dur, 340ms);
   --event-stream-drawer-ease: var(--audit-inspector-ease, cubic-bezier(0.22, 1, 0.36, 1));
   position: absolute;
-  inset-block: 0;
-  inset-inline-end: 0;
-  z-index: 5;
+  /* Pull into panel inset — left edge stays at shell 50%; panel clips radius. */
+  inset-block-start: calc(-1 * var(--widget-panel-inset-top, 0.625rem));
+  inset-block-end: calc(-1 * var(--widget-panel-inset-bottom, 0.75rem));
+  inset-inline-end: calc(-1 * var(--widget-panel-inset-x, 0.875rem));
+  z-index: 6;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  width: min(50%, 100%);
+  width: calc(50% + var(--widget-panel-inset-x, 0.875rem));
   min-width: 0;
   border-left: 1px solid var(--border);
+  border-start-end-radius: 0.5rem;
+  border-end-end-radius: 0.5rem;
   background: var(--panel-2);
   box-shadow: -8px 0 24px color-mix(in srgb, var(--text) 8%, transparent);
   transform: translateX(100%);
@@ -2998,15 +3049,34 @@ label:focus-within > .mia-checkbox,
   }
 }
 
+/*
+ * Head top pad = panel inset + stack gutter + controls inset so the title
+ * row shares a baseline with the search field on the left deck.
+ */
 .event-stream-drawer__head {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  flex-shrink: 0;
+  min-width: 0;
+  padding-top: calc(
+    var(--widget-panel-inset-top, 0.625rem)
+      + var(--widget-content-gutter-inner-y, 0.35rem)
+      + var(--review-controls-pad-y, 0.5rem)
+  );
+  padding-inline: var(--review-controls-pad-x, 0.625rem);
+  padding-bottom: 0.65rem;
+  border-bottom: 1px solid var(--border-subtle, var(--border));
+  background: color-mix(in srgb, var(--panel) 35%, var(--panel-2));
+}
+
+.event-stream-drawer__head-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.65rem;
-  flex-shrink: 0;
   min-width: 0;
-  padding: 0.65rem 0.75rem;
-  border-bottom: 1px solid var(--border-subtle, var(--border));
+  min-height: var(--control-h, 2.25rem);
 }
 
 .event-stream-drawer__meta {
@@ -3043,6 +3113,25 @@ label:focus-within > .mia-checkbox,
   color: var(--text-faint, var(--color-text-faint));
 }
 
+.event-stream-drawer__summary {
+  margin: 0;
+  min-width: 0;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.75rem;
+  line-height: 1.35;
+  color: var(--text-muted, var(--color-text-muted));
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  word-break: break-word;
+}
+
+.event-stream-drawer__summary--err {
+  color: var(--error);
+  font-weight: 500;
+}
+
 .event-stream-drawer__body {
   flex: 1 1 auto;
   min-height: 0;
@@ -3052,19 +3141,6 @@ label:focus-within > .mia-checkbox,
   display: flex;
   flex-direction: column;
   gap: 0.65rem;
-}
-
-.event-stream-drawer__message {
-  margin: 0;
-  font-size: 0.8125rem;
-  line-height: 1.4;
-  color: var(--text-muted, var(--color-text-muted));
-  word-break: break-word;
-}
-
-.event-stream-drawer__message--err {
-  color: var(--error);
-  font-weight: 500;
 }
 
 .event-stream-drawer__empty {
@@ -3105,7 +3181,11 @@ label:focus-within > .mia-checkbox,
   color: var(--text, var(--color-text));
 }
 
-:root[data-theme="light"] .log-stream .event-stream-row:hover {
+:root[data-theme="light"] .log-stream .event-stream-row:hover,
+:root[data-theme="light"]
+  .log-stream
+  .event-stream-entry.is-selected:not(.is-open)
+  .event-stream-row {
   background: var(--panel-2);
 }
 

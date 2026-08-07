@@ -36,44 +36,46 @@ export function EventStreamDetailDrawer({
       aria-label="Event detail"
     >
       <header className="event-stream-drawer__head">
-        <div className="event-stream-drawer__meta">
-          <span className={["event-stream-row__type", eventStreamTypeClass(lane)].join(" ")}>
-            {lane}
-          </span>
-          {log.eventName ? (
-            <span className="event-stream-drawer__title" title={log.eventName}>
-              {log.eventName}
+        <div className="event-stream-drawer__head-row">
+          <div className="event-stream-drawer__meta">
+            <span className={["event-stream-row__type", eventStreamTypeClass(lane)].join(" ")}>
+              {lane}
             </span>
-          ) : null}
-          <span className="event-stream-drawer__time" title={log.timestamp}>
-            {formatEventStreamRowTime(log.timestamp, { tiny: false })}
-          </span>
+            {log.eventName ? (
+              <span className="event-stream-drawer__title" title={log.eventName}>
+                {log.eventName}
+              </span>
+            ) : null}
+            <span className="event-stream-drawer__time" title={log.timestamp}>
+              {formatEventStreamRowTime(log.timestamp, { tiny: false })}
+            </span>
+          </div>
+          <button
+            type="button"
+            className="toolbar-ops-btn toolbar-ops-btn--danger shrink-0"
+            onClick={onClose}
+            title="Close (Esc)"
+            aria-label="Close (Esc)"
+          >
+            <X size={14} aria-hidden />
+          </button>
         </div>
-        <button
-          type="button"
-          className="toolbar-ops-btn toolbar-ops-btn--danger shrink-0"
-          onClick={onClose}
-          title="Close (Esc)"
-          aria-label="Close (Esc)"
-        >
-          <X size={14} aria-hidden />
-        </button>
-      </header>
-
-      <div className="event-stream-drawer__body">
         {log.message ? (
           <p
             className={[
-              "event-stream-drawer__message",
-              isError ? "event-stream-drawer__message--err" : "",
+              "event-stream-drawer__summary",
+              isError ? "event-stream-drawer__summary--err" : "",
             ]
               .filter(Boolean)
               .join(" ")}
+            title={log.message}
           >
             {log.message}
           </p>
         ) : null}
+      </header>
 
+      <div className="event-stream-drawer__body">
         {log.data ? (
           <div
             className={
