@@ -27,7 +27,7 @@ describe("real published bundle (read-only)", () => {
 
   it("fixture bundle exists for smoke tests", () => {
     requirePublishedBundle()
-    expect(PUBLISHED_BUNDLE_PATH).toContain("sync-definitions/published/definitions.bundle.json")
+    expect(PUBLISHED_BUNDLE_PATH).toContain("g3-published.json")
   })
 
   it("loads core entity definitions from the fixture registry", () => {

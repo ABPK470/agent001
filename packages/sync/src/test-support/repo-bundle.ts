@@ -1,9 +1,9 @@
 /**
  * Fixture host for smoke tests against a checked-in published-bundle snapshot.
  *
- * Production authority is SQLite (`sync_definitions`). The file at
- * `sync-definitions/published/definitions.bundle.json` is a read-only fixture
- * for predicate/shape checks — not the live publish target.
+ * Production authority is SQLite (`sync_definitions`). The golden at
+ * `test-support/__goldens__/legacy-refresh/g3-published.json` is a read-only
+ * fixture for predicate/shape checks — not the live publish target.
  */
 
 import { existsSync, readFileSync } from "node:fs"
@@ -18,8 +18,9 @@ import type { SyncRuntimeHost } from "../ports/host.js"
 /** Monorepo root (`agent001/`). */
 export const REPO_ROOT = resolve(import.meta.dirname, "../../../..")
 
-/** @deprecated Legacy fixture path — not written by Publish. */
-export const PUBLISHED_BUNDLE_REL = "sync-definitions/published/definitions.bundle.json"
+/** Checked-in published-definition golden (legacy file path retired). */
+export const PUBLISHED_BUNDLE_REL =
+  "packages/sync/src/test-support/__goldens__/legacy-refresh/g3-published.json"
 
 export const PUBLISHED_BUNDLE_PATH = join(REPO_ROOT, PUBLISHED_BUNDLE_REL)
 
@@ -34,9 +35,17 @@ export function requirePublishedBundle(): void {
 
 function loadFixturePublishedBundle(): PublishedSyncDefinitionBundle | null {
   if (!existsSync(PUBLISHED_BUNDLE_PATH)) return null
-  const parsed = JSON.parse(readFileSync(PUBLISHED_BUNDLE_PATH, "utf-8")) as PublishedSyncDefinitionBundle
-  if (parsed.version !== 1 || !parsed.definitions) return null
-  return parsed
+  const parsed = JSON.parse(readFileSync(PUBLISHED_BUNDLE_PATH, "utf-8")) as Partial<PublishedSyncDefinitionBundle> & {
+    definitions?: PublishedSyncDefinitionBundle["definitions"]
+  }
+  if (!parsed.definitions) return null
+  // g3 golden is definitions-only; wrap to the runtime bundle shape.
+  return {
+    version: 1,
+    publishedAt: parsed.publishedAt ?? "fixture",
+    publishedVersion: parsed.publishedVersion ?? "golden-g3",
+    definitions: parsed.definitions
+  }
 }
 
 /** Host pointing at the real repo tree with the fixture bundle injected. */

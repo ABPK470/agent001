@@ -6,6 +6,7 @@ import {
 import type { ClarifyContext } from "../src/core/clarify/types.js"
 import {
   DEFAULT_TENANT_CONFIG,
+  getTenantConfig,
   resetTenantConfig,
   setTenantConfig,
   type TenantConfig

@@ -119,7 +119,7 @@ describe("doctrine fixHints", () => {
 
     expect(DOCTRINE_FIX_HINTS.temp_scalar_subquery_overused).toContain("discover_relationships")
 
-    expect(DOCTRINE_FIX_HINTS.publish_view_topn_without_branch_aggregation).toContain("search_catalog")
+    expect(DOCTRINE_FIX_HINTS.publish_view_topn_without_branch_aggregation).toContain("inspect_definition")
     expect(DOCTRINE_FIX_HINTS.publish_view_topn_without_branch_aggregation).toContain("UNION ALL")
     expect(DOCTRINE_FIX_HINTS.avg_of_coalesce_zero).toMatch(/AVG\s*\(/)
   })

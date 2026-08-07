@@ -3,9 +3,8 @@ import {
   selectDefinitionTables,
   type PublishedSyncDefinition
 } from "@mia/sync"
-import { resolve } from "node:path"
 import { describe, expect, it } from "vitest"
-import { configureAgent } from "../src/runtime/runtime.js"
+import { createRepoBundleHost } from "../../sync/src/test-support/repo-bundle.js"
 
 describe("selectDefinitionTables", () => {
   it("keeps FK-only tables disabled unless explicitly enabled", () => {
@@ -54,9 +53,9 @@ describe("selectDefinitionTables", () => {
   })
 })
 
-describe("deployed published sync definitions", () => {
+describe("fixture published sync definitions", () => {
   it("marks gateMetadata FK-only tables as optional and default-off", () => {
-    const host = configureAgent({ sync: { project: { dbProjectRoot: resolve(process.cwd(), "../..") } } })
+    const host = createRepoBundleHost()
     const definition = getPublishedSyncDefinitionForHost(host, "gateMetadata")
     const optionalTables = definition.metadata.tables.filter((table) => table.userControllable)
     expect(optionalTables.map((table) => table.name)).toEqual([
@@ -68,7 +67,7 @@ describe("deployed published sync definitions", () => {
   })
 
   it("marks content FK-only tables as optional and default-off", () => {
-    const host = configureAgent({ sync: { project: { dbProjectRoot: resolve(process.cwd(), "../..") } } })
+    const host = createRepoBundleHost()
     const definition = getPublishedSyncDefinitionForHost(host, "content")
     const optionalTables = definition.metadata.tables.filter((table) => table.userControllable)
     expect(optionalTables.map((table) => table.name)).toEqual(["gate.UserGroupPermission"])

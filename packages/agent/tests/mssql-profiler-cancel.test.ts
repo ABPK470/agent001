@@ -69,12 +69,20 @@ describe("profile_data abort wiring", () => {
 
     // The first request's query hangs forever until cancel() is invoked.
     // cancel() rejects the hung query, simulating mssql's cancel behaviour.
+    // Wait until query() is entered before aborting — aborting earlier hits the
+    // already-aborted path and never calls request.cancel().
     const cancelSpy = vi.fn()
     let rejectQuery: ((e: Error) => void) | null = null
-    const hungQuery = () =>
-      new Promise<never>((_resolve, reject) => {
+    let markEntered!: () => void
+    const queryEntered = new Promise<void>((resolve) => {
+      markEntered = resolve
+    })
+    const hungQuery = () => {
+      markEntered()
+      return new Promise<never>((_resolve, reject) => {
         rejectQuery = reject
       })
+    }
     databases.set("default", {
       config: { server: "stub", database: "stub", user: "u", password: "p" } as never,
       pool: {
@@ -93,9 +101,7 @@ describe("profile_data abort wiring", () => {
     })
 
     const execPromise = tool.execute({ table: "dim.Date", mode: "fast" })
-    // Let the first request (object identity) enter its pending query.
-    await Promise.resolve()
-    await Promise.resolve()
+    await queryEntered
     controller.abort()
     const out = (await execPromise) as string
 
