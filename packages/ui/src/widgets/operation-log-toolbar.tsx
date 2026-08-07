@@ -5,7 +5,7 @@
  */
 
 import { SlidersHorizontal } from "lucide-react"
-import { useMemo, useRef, useState, type JSX } from "react"
+import { useMemo, useRef, useState, type JSX, type RefObject } from "react"
 import type { OperationStatus } from "../client/index"
 import { DateField } from "../components/DateField"
 import {
@@ -70,6 +70,11 @@ export function OperationLogToolbar({
   totalCount,
   treeFoldMode,
   onTreeFoldModeChange,
+  /** When false, only FilterSheet (+ chips) — zen HUD owns the strip. */
+  showChrome = true,
+  filtersOpen: filtersOpenProp,
+  onFiltersOpenChange,
+  filterBtnRef: filterBtnRefProp,
 }: {
   kinds: Set<PipelineKindFilter>
   setKinds: (next: Set<PipelineKindFilter>) => void
@@ -87,9 +92,24 @@ export function OperationLogToolbar({
   totalCount: number
   treeFoldMode: ReviewTreeFoldMode
   onTreeFoldModeChange: (mode: ReviewTreeFoldMode) => void
+  showChrome?: boolean
+  filtersOpen?: boolean
+  onFiltersOpenChange?: (open: boolean) => void
+  filterBtnRef?: RefObject<HTMLButtonElement | null>
 }): JSX.Element {
-  const [filtersOpen, setFiltersOpen] = useState(false)
-  const filterBtnRef = useRef<HTMLButtonElement>(null)
+  const [filtersOpenLocal, setFiltersOpenLocal] = useState(false)
+  const filterBtnLocalRef = useRef<HTMLButtonElement>(null)
+  const filtersOpen = filtersOpenProp ?? filtersOpenLocal
+  const filterBtnRef = filterBtnRefProp ?? filterBtnLocalRef
+
+  function setFiltersOpen(open: boolean): void {
+    if (onFiltersOpenChange) onFiltersOpenChange(open)
+    else setFiltersOpenLocal(open)
+  }
+
+  function toggleFiltersOpen(): void {
+    setFiltersOpen(!filtersOpen)
+  }
 
   const hasCustomDates = Boolean(timeWindow.from || timeWindow.to)
   const timeFiltered = hasCustomDates || timeWindow.range !== "live"
@@ -185,6 +205,7 @@ export function OperationLogToolbar({
 
   return (
     <>
+      {showChrome ? (
       <div className={WIDGET_REVIEW_CONTROLS_CLASS}>
       <div className={WIDGET_REVIEW_CONTROLS_INSET_CLASS}>
       <WidgetToolbar>
@@ -206,7 +227,7 @@ export function OperationLogToolbar({
           <button
             ref={filterBtnRef}
             type="button"
-            onClick={() => setFiltersOpen((o) => !o)}
+            onClick={toggleFiltersOpen}
             className={`widget-toolbar__icon-btn ${
               filtersOpen || filtersActive ? "widget-toolbar__icon-btn--active" : ""
             }`}
@@ -237,6 +258,16 @@ export function OperationLogToolbar({
       </div>
       ) : null}
       </div>
+      ) : activeChips.length > 0 ? (
+      <div className={WIDGET_REVIEW_CONTROLS_CLASS}>
+      <div className={WIDGET_REVIEW_CONTROLS_INSET_CLASS}>
+      <ActiveFilterChips
+        chips={activeChips}
+        onClear={activeFilterCount > 0 ? clearAllFilters : undefined}
+      />
+      </div>
+      </div>
+      ) : null}
 
       <FilterSheet
         open={filtersOpen}

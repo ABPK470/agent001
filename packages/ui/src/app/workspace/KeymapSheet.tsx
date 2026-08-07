@@ -27,7 +27,8 @@ export function KeymapSheet() {
   const activeViewId = useLayoutStore((s) => s.activeViewId)
   const focusedTileId = useLayoutStore((s) => s.focusedTileId)
   const soloTileId = useLayoutStore((s) => s.soloTileId)
-  const zenTileId = useLayoutStore((s) => s.zenTileId)
+  const zenActive = useLayoutStore((s) => s.zenActive)
+  const zenSet = useLayoutStore((s) => s.zenSet)
 
   const [query, setQuery] = useState("")
   const inputRef = useRef<HTMLInputElement>(null)
@@ -46,7 +47,9 @@ export function KeymapSheet() {
         spaceName: activeView?.name ?? null,
         widgetLabel,
         maximized: Boolean(soloTileId && soloTileId === focusedTileId),
-        zen: Boolean(zenTileId && zenTileId === focusedTileId),
+        zen: Boolean(
+          zenActive && focusedTileId && zenSet.includes(focusedTileId),
+        ),
         tracePane: widgetLabel === "Trace" ? traceOperatorPane : null,
       }),
     [
@@ -55,7 +58,8 @@ export function KeymapSheet() {
       soloTileId,
       traceOperatorPane,
       widgetLabel,
-      zenTileId,
+      zenActive,
+      zenSet,
     ],
   )
 

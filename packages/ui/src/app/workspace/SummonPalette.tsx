@@ -78,11 +78,14 @@ export function SummonPalette() {
   const removeWidgetsByType = useLayoutStore((s) => s.removeWidgetsByType)
   const openSpacePreset = useLayoutStore((s) => s.openSpacePreset)
   const focusWidgetType = useLayoutStore((s) => s.focusWidgetType)
+  const zenKeepWidget = useLayoutStore((s) => s.zenKeepWidget)
   const views = useLayoutStore((s) => s.views)
   const activeViewId = useLayoutStore((s) => s.activeViewId)
   const focusedTileId = useLayoutStore((s) => s.focusedTileId)
   const soloTileId = useLayoutStore((s) => s.soloTileId)
-  const zenTileId = useLayoutStore((s) => s.zenTileId)
+  const zenActive = useLayoutStore((s) => s.zenActive)
+  const zenSet = useLayoutStore((s) => s.zenSet)
+  const zenExtraTiles = useLayoutStore((s) => s.zenExtraTiles)
   const viewportRows = useLayoutStore((s) => s.viewportRows)
   const ensureProductSpaces = useLayoutStore((s) => s.ensureProductSpaces)
 
@@ -108,8 +111,14 @@ export function SummonPalette() {
 
   const consoleIsAdmin = useLayoutStore((s) => s.consoleIsAdmin)
   const catalog = useMemo(
-    () => listSummonItems({ views, viewportRows, isAdmin: consoleIsAdmin }),
-    [views, viewportRows, consoleIsAdmin],
+    () =>
+      listSummonItems({
+        views,
+        viewportRows,
+        isAdmin: consoleIsAdmin,
+        zenActive,
+      }),
+    [views, viewportRows, consoleIsAdmin, zenActive],
   )
   const searched = useMemo(() => filterSummonItems(query, catalog), [catalog, query])
   const navItems = useMemo(
@@ -121,6 +130,7 @@ export function SummonPalette() {
   const activeView = views.find((view) => view.id === activeViewId)
   const focusedTile = focusedTileId
     ? activeView?.tiles.find((tile) => tile.id === focusedTileId)
+      ?? zenExtraTiles.find((tile) => tile.id === focusedTileId)
     : undefined
   const widgetLabel = focusedTile
     ? getWidgetDefinition(focusedTile.type).label
@@ -128,9 +138,19 @@ export function SummonPalette() {
 
   const presentTypes = useMemo(() => {
     const set = new Set<string>()
+    if (zenActive) {
+      const byId = new Map<string, string>()
+      for (const tile of activeView?.tiles ?? []) byId.set(tile.id, tile.type)
+      for (const tile of zenExtraTiles) byId.set(tile.id, tile.type)
+      for (const id of zenSet) {
+        const type = byId.get(id)
+        if (type) set.add(type)
+      }
+      return set
+    }
     for (const tile of activeView?.tiles ?? []) set.add(tile.type)
     return set
-  }, [activeView])
+  }, [activeView, zenActive, zenExtraTiles, zenSet])
 
   const context = useMemo(
     () =>
@@ -138,7 +158,9 @@ export function SummonPalette() {
         spaceName: activeView?.name ?? null,
         widgetLabel,
         maximized: Boolean(soloTileId && soloTileId === focusedTileId),
-        zen: Boolean(zenTileId && zenTileId === focusedTileId),
+        zen: Boolean(
+          zenActive && focusedTileId && zenSet.includes(focusedTileId),
+        ),
         tracePane: widgetLabel === "Trace" ? traceOperatorPane : null,
       }),
     [
@@ -147,7 +169,8 @@ export function SummonPalette() {
       soloTileId,
       traceOperatorPane,
       widgetLabel,
-      zenTileId,
+      zenActive,
+      zenSet,
     ],
   )
 
@@ -230,6 +253,13 @@ export function SummonPalette() {
     }
     if (action.type === "apply-widgets") {
       requestWorkspaceShell()
+      if (zenActive) {
+        for (const type of action.keep) zenKeepWidget(type)
+        if (action.focusType) focusWidgetType(action.focusType)
+        setPickedTypes(new Set())
+        dismiss()
+        return
+      }
       if (action.remove.length > 0) {
         removeWidgetsByType(activeViewId, action.remove)
       }
@@ -242,6 +272,13 @@ export function SummonPalette() {
       return
     }
     requestWorkspaceShell()
+    if (zenActive) {
+      for (const type of action.widgets) zenKeepWidget(type)
+      if (action.focusType) focusWidgetType(action.focusType)
+      setPickedTypes(new Set())
+      dismiss()
+      return
+    }
     ensureWidgets(activeViewId, action.widgets)
     focusWidgetType(action.focusType)
     setPickedTypes(new Set())

@@ -23,6 +23,8 @@ export function useReviewTreeKeyboard({
   listRef,
   onOpenSearch,
   onEnd,
+  /** Extra chords before tree resolve (Event Stream: Z / zen Esc peel). */
+  beforeRef,
 }: {
   enabled: boolean
   /** Unique claim id when multiple tree hosts can mount. */
@@ -40,6 +42,7 @@ export function useReviewTreeKeyboard({
    * When set, replaces default “select last row”.
    */
   onEnd?: () => void
+  beforeRef?: RefObject<OperatorSurfaceHandler | null>
 }) {
   const nodesRef = useRef(nodes)
   const selectedRef = useRef(selectedScopeId)
@@ -59,6 +62,8 @@ export function useReviewTreeKeyboard({
 
   const onKeyDownRef = useRef<OperatorSurfaceHandler | null>(null)
   onKeyDownRef.current = (event) => {
+    if (beforeRef?.current?.(event)) return true
+
     if (event.metaKey || event.ctrlKey || event.altKey) return false
 
     if (event.key === "/" && onOpenSearchRef.current) {

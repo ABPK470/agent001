@@ -21,7 +21,9 @@ import {
   type ProductBundleId,
   type SpaceId,
 } from "../../lib/spaces"
+import { widgetSupportsFocusMode } from "../../lib/widget-focus"
 import type { WorkspaceView } from "../../lib/workspace-view"
+import { isZenViewId } from "../../lib/zen-session"
 import type { WidgetType } from "../../types"
 import { WIDGET_ICONS } from "../../widgets/widget-icons"
 import { catalogEntries } from "./widget-definitions"
@@ -32,6 +34,8 @@ export type SummonCatalogContext = {
   viewportRows?: number
   /** From whoami — filters Spaces / widgets. Default false (operator-safe). */
   isAdmin?: boolean
+  /** When true, Surfaces list only focus-capable types (zen Keep). */
+  zenActive?: boolean
 }
 
 export type SummonItem =
@@ -43,6 +47,8 @@ export type SummonItem =
       /** 1–5 = Call Space chord; 0 = custom layout (no Mod+N). */
       index: number
       custom?: boolean
+      /** Saved immersion preset (`zen:*`) — Go column Zen group. */
+      zen?: boolean
       /** First tile type on a custom layout — icon hint. */
       primaryType?: WidgetType
     }
@@ -138,7 +144,7 @@ export function listSummonItems(ctx: SummonCatalogContext): SummonItem[] {
     }))
 
   const diySpaces: SummonItem[] = ctx.views
-    .filter((view) => !isProductSpaceId(view.id))
+    .filter((view) => !isProductSpaceId(view.id) && !isZenViewId(view.id))
     .map((view) => ({
       kind: "space" as const,
       id: view.id,
@@ -146,6 +152,19 @@ export function listSummonItems(ctx: SummonCatalogContext): SummonItem[] {
       desc: diySpaceDesc(view),
       index: 0,
       custom: true as const,
+      primaryType: view.tiles[0]?.type,
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name))
+
+  const zenSpaces: SummonItem[] = ctx.views
+    .filter((view) => isZenViewId(view.id))
+    .map((view) => ({
+      kind: "space" as const,
+      id: view.id,
+      name: view.name,
+      desc: diySpaceDesc(view),
+      index: 0,
+      zen: true as const,
       primaryType: view.tiles[0]?.type,
     }))
     .sort((a, b) => a.name.localeCompare(b.name))
@@ -167,6 +186,7 @@ export function listSummonItems(ctx: SummonCatalogContext): SummonItem[] {
 
   const widgets: SummonItem[] = catalogEntries()
     .filter((entry) => canOpenWidget(entry.type, isAdmin))
+    .filter((entry) => !ctx.zenActive || widgetSupportsFocusMode(entry.type))
     .map((entry) => ({
       kind: "widget" as const,
       type: entry.type,
@@ -183,7 +203,7 @@ export function listSummonItems(ctx: SummonCatalogContext): SummonItem[] {
     return a.name.localeCompare(b.name)
   })
 
-  return [...spaces, ...diySpaces, ...bundles, ...widgets]
+  return [...spaces, ...diySpaces, ...zenSpaces, ...bundles, ...widgets]
 }
 
 /**
@@ -225,7 +245,7 @@ export function summonItemIcon(item: SummonItem): LucideIcon {
     if (item.homeSpace === "space:agent") return Brain
     return WIDGET_ICONS[item.focusType]
   }
-  if (item.custom) return LayoutPanelLeft
+  if (item.custom || item.zen) return LayoutPanelLeft
   if (item.id === "space:agent") return Brain
   const primary = spaceById(item.id)?.widgets[0]
   if (!primary) {
@@ -236,7 +256,7 @@ export function summonItemIcon(item: SummonItem): LucideIcon {
 
 /** Icon key for tests / diagnostics — Agent is Brain, not Trace’s Bug. */
 export function summonItemIconType(item: SummonItem): WidgetType | "agent-brain" | "layout" {
-  if (item.kind === "space" && item.custom) return "layout"
+  if (item.kind === "space" && (item.custom || item.zen)) return "layout"
   if (item.kind === "space" && item.id === "space:agent") return "agent-brain"
   if (item.kind === "bundle" && item.homeSpace === "space:agent") return "agent-brain"
   if (item.kind === "widget") return item.type
@@ -268,6 +288,13 @@ export function summonActionPreview(
     }
   }
   if (item.kind === "space") {
+    if (item.zen) {
+      return {
+        title: item.name,
+        subtitle: `Call Zen Space — ${item.desc}`,
+        primary: "call",
+      }
+    }
     if (item.custom) {
       return {
         title: item.name,

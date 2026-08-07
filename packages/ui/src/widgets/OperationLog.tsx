@@ -17,7 +17,9 @@ import { useWidgetInstance } from "../app/workspace/widget-instance"
 import { useContainerSize } from "../hooks/useContainerSize"
 import { useOperatorSurfaceArmed } from "../hooks/useOperatorSurfaceArmed"
 import { useReviewOperatorKeyboard } from "../hooks/useReviewOperatorKeyboard"
+import { useWidgetFocus } from "../hooks/useWidgetFocus"
 import { hintsForPipelinesPane, type ReviewPane } from "../lib/keymap"
+import type { OperatorSurfaceHandler } from "../lib/operator-surface"
 import type { DetailSectionController } from "../lib/review/detail-section-controller"
 import { useStore } from "../state/store"
 import { ComposerKbdFooter } from "./chat/ComposerKbdFooter"
@@ -49,6 +51,7 @@ import {
   WIDGET_LOG_STACK_CLASS,
 } from "./widget-toolbar"
 import { OperationLogToolbar } from "./operation-log-toolbar"
+import { PipelinesZenHud } from "./pipelines/PipelinesZenHud"
 import { OperationLogInspector } from "./pipelines/OperationLogInspector"
 import {
   OperationLogActivityTreeRow,
@@ -335,21 +338,23 @@ export function OperationLog() {
   )
   const [splitRatio, setSplitRatio] = useState(OP_LOG_SPLIT_DEFAULT)
   const [focusedPane, setFocusedPane] = useState<ReviewPane>("tree")
+  const [zenSearchOpen, setZenSearchOpen] = useState(false)
+  const [filtersOpen, setFiltersOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
   const listScrollRef = useRef<HTMLDivElement>(null)
   const detailScrollRef = useRef<HTMLDivElement>(null)
   const sectionControllerRef = useRef<DetailSectionController | null>(null)
   const listTreeRef = useRef<VirtualListHandle>(null)
   const sentinelRef = useRef<HTMLDivElement>(null)
-  const soloTileId = useLayoutStore((s) => s.soloTileId)
+  const filterBtnRef = useRef<HTMLButtonElement>(null)
   const activeViewId = useLayoutStore((s) => s.activeViewId)
   const toggleTileMaximized = useLayoutStore((s) => s.toggleTileMaximized)
   const summonOpen = useStore((s) => s.summonOpen)
   const setSummonOpen = useStore((s) => s.setSummonOpen)
   const modalWidget = useStore((s) => s.modalWidget)
   const closeModalWidget = useStore((s) => s.closeModalWidget)
-  const isSolo = Boolean(instance && soloTileId === instance.widgetId)
-  const surfaceArmed = useOperatorSurfaceArmed({ layoutFocus: isSolo })
+  const { isZen, isSolo, toggleZen, exitZen } = useWidgetFocus()
+  const surfaceArmed = useOperatorSurfaceArmed({ layoutFocus: isZen || isSolo })
   const { width } = useContainerSize(rootRef)
   const tiny = width > 0 && width < 480
   const [cancellingId, setCancellingId] = useState<string | null>(null)
@@ -588,7 +593,8 @@ export function OperationLog() {
   )
 
   const hasRows = filtered.length > 0
-  const operatorKeysEnabled = surfaceArmed && hasRows
+  // Zen / Z must claim even on an empty list; tree nav still needs rows.
+  const operatorKeysEnabled = surfaceArmed && (hasRows || isZen)
 
   const onFocusedPaneChange = useCallback((pane: ReviewPane) => {
     setFocusedPane(pane)
@@ -600,20 +606,57 @@ export function OperationLog() {
     toggleTileMaximized(activeViewId, tileId)
   }, [activeViewId, tileId, toggleTileMaximized])
 
+  useEffect(() => {
+    if (!isZen) setZenSearchOpen(false)
+  }, [isZen])
+
+  const beforePaneRef = useRef<OperatorSurfaceHandler | null>(null)
+  beforePaneRef.current = (event) => {
+    const key = event.key.toLowerCase()
+    const mod = event.metaKey || event.ctrlKey
+    if (key === "z" && !mod && !event.altKey && !event.shiftKey) {
+      if (isZen) exitZen()
+      else toggleZen()
+      return true
+    }
+    if (isZen && ((mod && key === "f") || (key === "/" && !mod))) {
+      setZenSearchOpen(true)
+      return true
+    }
+    return false
+  }
+
+  const hasCustomDates = Boolean(timeWindow.from || timeWindow.to)
+  const timeFiltered = hasCustomDates || timeWindow.range !== "live"
+  const filtersActive = kinds.size > 0 || statuses.size > 0 || timeFiltered
+  const activeFilterCount =
+    kinds.size +
+    statuses.size +
+    (hasCustomDates
+      ? (timeWindow.from ? 1 : 0) + (timeWindow.to ? 1 : 0)
+      : timeFiltered
+        ? 1
+        : 0)
+
   useReviewOperatorKeyboard({
     enabled: operatorKeysEnabled,
     surfaceId: "pipelines",
     focusedPane,
     onFocusedPaneChange,
+    filterOpen: filtersOpen,
+    onFilterOpenChange: setFiltersOpen,
+    isZen,
     isSolo,
     summonOpen,
     modalWidgetOpen: Boolean(modalWidget),
+    onExitZen: exitZen,
     onRestoreMaximize,
     onDismissSummon: () => setSummonOpen(false),
     onDismissPeek: () => closeModalWidget(),
     treeScrollRef: listScrollRef,
     detailScrollRef,
     sectionControllerRef,
+    beforePaneRef,
     treeNav: {
       enabled: focusedPane === "tree" && keyboardNodes.length > 0,
       nodes: keyboardNodes,
@@ -673,8 +716,27 @@ export function OperationLog() {
 
   return (
     <OperationLogModalsProvider>
-      <div ref={rootRef} className={`${WIDGET_LOG_SHELL_CLASS} review-operator flex-1 ${OP_LOG}`}>
+      <div
+        ref={rootRef}
+        className={`${WIDGET_LOG_SHELL_CLASS} review-operator flex-1 ${OP_LOG}${isZen ? " pipelines-widget--zen" : ""}`}
+      >
         <div className={`${WIDGET_LOG_STACK_CLASS} min-h-0 flex-1`}>
+          {isZen ? (
+            <PipelinesZenHud
+              search={search}
+              onSearchChange={setSearch}
+              searchOpen={zenSearchOpen}
+              onSearchOpenChange={setZenSearchOpen}
+              searchPending={searchPending}
+              filtersActive={filtersActive}
+              activeFilterCount={activeFilterCount}
+              onOpenFilters={() => setFiltersOpen((o) => !o)}
+              filterBtnRef={filterBtnRef}
+              treeFoldMode={treeFoldMode}
+              onTreeFoldModeChange={onTreeFoldModeChange}
+              onExitZen={exitZen}
+            />
+          ) : null}
           <OperationLogToolbar
             kinds={kinds}
             setKinds={setKinds}
@@ -692,6 +754,10 @@ export function OperationLog() {
             totalCount={pipelines.length}
             treeFoldMode={treeFoldMode}
             onTreeFoldModeChange={onTreeFoldModeChange}
+            showChrome={!isZen}
+            filtersOpen={filtersOpen}
+            onFiltersOpenChange={setFiltersOpen}
+            filterBtnRef={filterBtnRef}
           />
 
           <div className={`review-split-body ${WIDGET_LOG_BODY_CLASS} min-h-0 flex-1`}>

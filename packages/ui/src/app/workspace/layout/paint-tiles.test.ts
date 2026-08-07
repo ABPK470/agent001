@@ -57,4 +57,36 @@ describe("paintTilesForCanvas", () => {
     const restored = paintTilesForCanvas(projected, null, 30)
     expect(maximized.map((p) => p.tile.id)).toEqual(restored.map((p) => p.tile.id))
   })
+
+  it("zen pair paints two panes and hides the rest", () => {
+    const painted = paintTilesForCanvas(projected, {
+      soloTileId: null,
+      maxRows: 40,
+      zenSet: ["b", "c"],
+      focusedTileId: "b",
+    })
+    expect(painted).toHaveLength(3)
+    const b = painted.find((p) => p.tile.id === "b")!
+    const c = painted.find((p) => p.tile.id === "c")!
+    const a = painted.find((p) => p.tile.id === "a")!
+    expect(b.soloHidden).toBe(false)
+    expect(c.soloHidden).toBe(false)
+    expect(a.soloHidden).toBe(true)
+    expect(b.display.w + c.display.w).toBe(COLS)
+  })
+
+  it("narrow zen paints only the focused member", () => {
+    const painted = paintTilesForCanvas(projected, {
+      soloTileId: null,
+      maxRows: 40,
+      zenSet: ["b", "c"],
+      focusedTileId: "c",
+      zenNarrow: true,
+    })
+    const c = painted.find((p) => p.tile.id === "c")!
+    const b = painted.find((p) => p.tile.id === "b")!
+    expect(c.soloHidden).toBe(false)
+    expect(c.display.w).toBe(COLS)
+    expect(b.soloHidden).toBe(true)
+  })
 })

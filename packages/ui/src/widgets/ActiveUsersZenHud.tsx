@@ -8,7 +8,9 @@
 
 import { ChevronDown, Info, Search, SlidersHorizontal, X } from "lucide-react"
 import { useEffect, useRef, type RefObject } from "react"
+import { ZenSessionHudActions } from "../components/ZenSessionHudActions"
 import { formatModChord } from "../lib/keymap"
+import { useLayoutStore } from "../state/layout-store"
 import { WidgetToolbarCount } from "./widget-toolbar"
 
 type ZenStat = { value: string; label: string }
@@ -44,6 +46,7 @@ export function ActiveUsersZenHud({
   filterBtnRef: RefObject<HTMLButtonElement | null>
   onExitZen: () => void
 }) {
+  const saveZenSpace = useLayoutStore((s) => s.saveZenSpace)
   const searchRef = useRef<HTMLInputElement>(null)
   const statsPanelRef = useRef<HTMLDivElement>(null)
   const statsBadgeRef = useRef<HTMLButtonElement>(null)
@@ -155,19 +158,12 @@ export function ActiveUsersZenHud({
                 <SlidersHorizontal size={14} />
               </button>
 
-              <span className="trace-zen-hud__hint" aria-hidden>
-                <kbd>Esc</kbd>
-              </span>
-
-              <button
-                type="button"
-                className="trace-zen-hud__icon-btn"
-                title="Exit focus (Esc or Z)"
-                aria-label="Exit focus mode"
-                onClick={onExitZen}
-              >
-                <X size={14} />
-              </button>
+              <ZenSessionHudActions
+                onExitZen={onExitZen}
+                onSaveZen={() => {
+                  saveZenSpace()
+                }}
+              />
             </div>
           </>
         )}

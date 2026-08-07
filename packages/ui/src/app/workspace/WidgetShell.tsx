@@ -137,7 +137,8 @@ export function WidgetShell({
   }
 
   const showChrome = mode !== "popout" && !zen
-  const showDragHandle = mode === "tile" && !pinned && !maximized && !zen
+  // Zen pair immersion unlocks drag; sole zen / maximize still lock layout.
+  const showDragHandle = mode === "tile" && !pinned && !maximized
 
   const header = showChrome ? (
     <WidgetShellHeader

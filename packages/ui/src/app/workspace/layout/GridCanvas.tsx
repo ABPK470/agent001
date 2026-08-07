@@ -35,6 +35,7 @@ import { TilePaintProvider } from "../tile-paint"
 import { widgetComponent } from "../widget-definitions"
 import { DropZoneOverlay } from "./DropZoneOverlay"
 import { entranceClassName } from "./motion"
+import { ZEN_NARROW_PAINT_PX } from "../../../lib/zen-session"
 import { paintTilesForCanvas } from "./paint-tiles"
 import {
     readTileRectInCanvas,
@@ -314,7 +315,10 @@ export function GridCanvas({ viewId, tiles, split }: Props) {
   const setFocusedTile = useLayoutStore((s) => s.setFocusedTile)
   const focusedTileId = useLayoutStore((s) => s.focusedTileId)
   const soloTileId = useLayoutStore((s) => s.soloTileId)
-  const zenTileId = useLayoutStore((s) => s.zenTileId)
+  const zenActive = useLayoutStore((s) => s.zenActive)
+  const zenSet = useLayoutStore((s) => s.zenSet)
+  const zenExtraTiles = useLayoutStore((s) => s.zenExtraTiles)
+  const zenSplit = useLayoutStore((s) => s.zenSplit)
   const commitSplit = useLayoutStore((s) => s.commitSplit)
   const setViewportRows = useLayoutStore((s) => s.setViewportRows)
   const viewportRows = useLayoutStore((s) => s.viewportRows)
@@ -333,6 +337,19 @@ export function GridCanvas({ viewId, tiles, split }: Props) {
   const cw = metrics.colW
   const rowPx = metrics.rowPx
 
+  const sessionTiles = useMemo(() => {
+    if (!zenActive || zenExtraTiles.length === 0) return tiles
+    const seen = new Set(tiles.map((t) => t.id))
+    const extras = zenExtraTiles.filter((t) => !seen.has(t.id))
+    return extras.length === 0 ? tiles : [...tiles, ...extras]
+  }, [tiles, zenActive, zenExtraTiles])
+
+  const interactionSplit = zenActive ? zenSplit : split
+  const interactionTiles = useMemo(() => {
+    if (!zenActive) return tiles
+    return sessionTiles.filter((t) => zenSet.includes(t.id))
+  }, [zenActive, tiles, sessionTiles, zenSet])
+
   const {
     draggingId,
     interactionMode,
@@ -342,8 +359,8 @@ export function GridCanvas({ viewId, tiles, split }: Props) {
     onPointerDownResize,
   } = useGridInteraction({
     viewId,
-    tiles,
-    split,
+    tiles: interactionTiles,
+    split: interactionSplit,
     containerWidth: layoutWidth,
     maxRows,
     rowPx,
@@ -416,12 +433,16 @@ export function GridCanvas({ viewId, tiles, split }: Props) {
   // Always have a selected tile in a Space — never “nothing focused”.
   useEffect(() => {
     if (focusedTileId) {
-      if (tiles.some((tile) => tile.id === focusedTileId)) return
+      if (sessionTiles.some((tile) => tile.id === focusedTileId)) return
+      if (zenActive && zenSet.includes(focusedTileId)) return
     }
-    const first = tiles[0]
+    const first =
+      zenActive && zenSet.length > 0
+        ? sessionTiles.find((t) => t.id === zenSet[0]) ?? sessionTiles[0]
+        : sessionTiles[0]
     if (!first) return
     setFocusedTile(first.id)
-  }, [focusedTileId, tiles, setFocusedTile])
+  }, [focusedTileId, sessionTiles, setFocusedTile, zenActive, zenSet])
 
   const summonOpen = useStore((s) => s.summonOpen)
   const keymapSheetOpen = useStore((s) => s.keymapSheetOpen)
@@ -434,7 +455,7 @@ export function GridCanvas({ viewId, tiles, split }: Props) {
   useEffect(() => {
     if (!focusedTileId) return
     if (summonOpen || keymapSheetOpen) return
-    const focusedTile = tiles.find((tile) => tile.id === focusedTileId)
+    const focusedTile = sessionTiles.find((tile) => tile.id === focusedTileId)
     if (focusedTile?.type === "term-chat") return
     const el = containerRef.current?.querySelector(
       `[data-tile-id="${CSS.escape(focusedTileId)}"]`,
@@ -446,13 +467,13 @@ export function GridCanvas({ viewId, tiles, split }: Props) {
       return
     }
     el.focus({ preventScroll: true })
-  }, [focusedTileId, summonOpen, keymapSheetOpen, tiles])
+  }, [focusedTileId, summonOpen, keymapSheetOpen, sessionTiles])
 
   // Layout reparent is Shift+Arrow only — bare arrows belong to widget/pane nav;
   // ⌘⇧+arrows moves tile focus (shell operator keyboard).
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
-      if (!focusedTileId || soloTileId || !split) return
+      if (!focusedTileId || soloTileId || !interactionSplit) return
       if (!event.shiftKey || event.metaKey || event.ctrlKey || event.altKey) return
       if (!(event.key === "ArrowLeft" || event.key === "ArrowRight" || event.key === "ArrowUp" || event.key === "ArrowDown")) {
         return
@@ -460,35 +481,70 @@ export function GridCanvas({ viewId, tiles, split }: Props) {
       const target = event.target as HTMLElement | null
       if (target?.closest(".widget-content, input, textarea, [contenteditable='true']")) return
 
-      const tile = tiles.find((t) => t.id === focusedTileId)
+      const tile = interactionTiles.find((t) => t.id === focusedTileId)
       if (!tile || tile.pinned) return
 
-      const hit = neighborInDirection(tiles, tile, event.key)
+      const hit = neighborInDirection(interactionTiles, tile, event.key)
       if (!hit) return
       event.preventDefault()
-      const next = reparentLeaf(split, tile.id, hit.neighbor.id, hit.zone)
+      const next = reparentLeaf(interactionSplit, tile.id, hit.neighbor.id, hit.zone)
       commitSplit(viewId, next)
     }
 
     window.addEventListener("keydown", onKeyDown)
     return () => window.removeEventListener("keydown", onKeyDown)
-  }, [focusedTileId, tiles, commitSplit, viewId, maxRows, soloTileId, split])
+  }, [
+    focusedTileId,
+    interactionTiles,
+    commitSplit,
+    viewId,
+    maxRows,
+    soloTileId,
+    interactionSplit,
+  ])
 
   const projectedTiles = useMemo(
     () => projectTiles(split, tiles, COLS, maxRows),
     [split, tiles, maxRows],
   )
+  const zenNarrow =
+    layoutWidth > 0 && layoutWidth < ZEN_NARROW_PAINT_PX
   const baseTiles =
-    !soloTileId && interactionMode === "resize"
+    !soloTileId && interactionMode === "resize" && !zenActive
       ? (layoutPreview ?? projectedTiles)
       : projectedTiles
   const paintedTiles = useMemo(
-    () => paintTilesForCanvas(baseTiles, soloTileId, maxRows),
-    [baseTiles, soloTileId, maxRows],
+    () =>
+      paintTilesForCanvas(baseTiles, {
+        soloTileId: zenActive ? null : soloTileId,
+        maxRows,
+        zenSet: zenActive ? zenSet : null,
+        focusedTileId,
+        zenNarrow: zenActive && zenNarrow,
+        zenExtraTiles: zenActive ? zenExtraTiles : null,
+        zenSplit: zenActive ? zenSplit : null,
+        zenDisplayOverrides:
+          zenActive && interactionMode === "resize" ? layoutPreview : null,
+      }),
+    [
+      baseTiles,
+      soloTileId,
+      maxRows,
+      zenActive,
+      zenSet,
+      focusedTileId,
+      zenNarrow,
+      zenExtraTiles,
+      zenSplit,
+      interactionMode,
+      layoutPreview,
+    ],
   )
 
   const interacting = !soloTileId && !!draggingId
-  const dragSource = draggingId ? tiles.find((tile) => tile.id === draggingId) : null
+  const dragSource = draggingId
+    ? sessionTiles.find((tile) => tile.id === draggingId)
+    : null
 
   return (
     <div
@@ -503,7 +559,8 @@ export function GridCanvas({ viewId, tiles, split }: Props) {
       {cw > 0 && (
         <div data-workspace-grid className="relative h-full w-full">
           {paintedTiles.map(({ tile: painted, display, solo, soloHidden }) => {
-            const source = tiles.find((t) => t.id === painted.id) ?? painted
+            const source =
+              sessionTiles.find((t) => t.id === painted.id) ?? painted
             const isActive = !soloTileId && draggingId === painted.id
             const isDragging = isActive && interactionMode === "drag"
             const isResizing = isActive && interactionMode === "resize"
@@ -525,7 +582,7 @@ export function GridCanvas({ viewId, tiles, split }: Props) {
                 isEntering={isEntering}
                 isFocused={focusedTileId === painted.id}
                 maximized={solo}
-                zen={zenTileId === painted.id}
+                zen={zenActive && zenSet.includes(painted.id)}
                 soloHidden={soloHidden}
                 onFocus={() => setFocusedTile(painted.id)}
                 onSelect={() => setFocusedTile(painted.id)}

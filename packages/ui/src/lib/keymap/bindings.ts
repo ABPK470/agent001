@@ -50,6 +50,7 @@ export const PIPELINES_TREE_HINTS: readonly KbdHint[] = [
   { keys: ["↑", "↓"], label: "move" },
   { keys: ["←", "→"], label: "fold" },
   { keys: ["M"], label: "max" },
+  { keys: ["Z"], label: "zen" },
 ]
 
 export const PIPELINES_DETAIL_HINTS: readonly KbdHint[] = [

@@ -152,7 +152,7 @@ export function App() {
   const views = useLayoutStore((s) => s.views)
   const activeViewId = useLayoutStore((s) => s.activeViewId)
   const soloTileId = useLayoutStore((s) => s.soloTileId)
-  const zenTileId = useLayoutStore((s) => s.zenTileId)
+  const zenActive = useLayoutStore((s) => s.zenActive)
   const ensureProductSpaces = useLayoutStore((s) => s.ensureProductSpaces)
   const toggleSummon = useStore((s) => s.toggleSummon)
   const workspaceShellRequestId = useStore((s) => s.workspaceShellRequestId)
@@ -770,7 +770,7 @@ export function App() {
     <div
       className={[
         "workspace-chrome flex h-full min-h-0 flex-col",
-        zenTileId ? "workspace-chrome--zen" : "",
+        zenActive ? "workspace-chrome--zen" : "",
       ]
         .filter(Boolean)
         .join(" ")}

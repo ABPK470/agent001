@@ -44,18 +44,22 @@ export function filterSummonByMode(
 }
 
 export type SummonListSection = {
-  id: "spaces" | "presets" | "surfaces"
+  id: "spaces" | "zen" | "presets" | "surfaces"
   title: string
   items: SummonItem[]
 }
 
 /** Visual sections for the unified list (selection stays flat). */
 export function summonListSections(items: readonly SummonItem[]): SummonListSection[] {
-  const spaces = items.filter((item) => item.kind === "space")
+  const spaces = items.filter(
+    (item) => item.kind === "space" && !item.zen,
+  )
+  const zen = items.filter((item) => item.kind === "space" && item.zen)
   const presets = items.filter((item) => item.kind === "bundle")
   const surfaces = items.filter((item) => item.kind === "widget")
   const sections: SummonListSection[] = []
   if (spaces.length > 0) sections.push({ id: "spaces", title: "Spaces", items: spaces })
+  if (zen.length > 0) sections.push({ id: "zen", title: "Zen", items: zen })
   if (presets.length > 0) sections.push({ id: "presets", title: "Presets", items: presets })
   if (surfaces.length > 0) {
     sections.push({ id: "surfaces", title: "Surfaces", items: surfaces })

@@ -23,14 +23,15 @@ import {
     type SpaceId,
 } from "../lib/spaces"
 import {
-    projectTiles,
-    removeLeaf,
-    reparentLeaf,
-    setSplitRatio,
-    splitLargestLeaf,
-    type DropZone,
-    type SplitNode,
-    type SplitPath,
+  collectLeafIds,
+  projectTiles,
+  removeLeaf,
+  reparentLeaf,
+  setSplitRatio,
+  splitLargestLeaf,
+  type DropZone,
+  type SplitNode,
+  type SplitPath,
 } from "../lib/split-tree"
 import { neighborTileForFocus, type FocusArrowKey } from "../lib/tile-focus-neighbor"
 import { randomId } from "../lib/util"
@@ -40,7 +41,95 @@ import {
     syncViewGeometry,
     type WorkspaceView,
 } from "../lib/workspace-view"
+import {
+    canJoinZenSession,
+    isZenViewId,
+    newZenViewId,
+    resolveZenKeepCap,
+    resolveZenToggleInSession,
+} from "../lib/zen-session"
+import type { LayoutTile } from "../lib/grid-math"
 import type { ViewConfig, WidgetType } from "../types"
+
+/** Cleared on exit / view switch — never persisted. */
+function emptyZenSession(): {
+  zenActive: false
+  zenSet: string[]
+  zenExtraTiles: LayoutTile[]
+  zenSplit: null
+  zenReturnViewId: null
+  zenTileId: null
+} {
+  return {
+    zenActive: false,
+    zenSet: [],
+    zenExtraTiles: [],
+    zenSplit: null,
+    zenReturnViewId: null,
+    zenTileId: null,
+  }
+}
+
+function cloneSplit(node: SplitNode | null): SplitNode | null {
+  if (!node) return null
+  if (node.kind === "leaf") return { kind: "leaf", tileId: node.tileId }
+  return {
+    kind: "split",
+    dir: node.dir,
+    ratio: node.ratio,
+    a: cloneSplit(node.a)!,
+    b: cloneSplit(node.b)!,
+  }
+}
+
+/** Remap leaf ids in a split tree (Save Zen Space → fresh tile ids). */
+function remapSplit(
+  node: SplitNode | null,
+  idMap: ReadonlyMap<string, string>,
+): SplitNode | null {
+  if (!node) return null
+  if (node.kind === "leaf") {
+    const next = idMap.get(node.tileId)
+    return next ? { kind: "leaf", tileId: next } : null
+  }
+  const a = remapSplit(node.a, idMap)
+  const b = remapSplit(node.b, idMap)
+  if (!a && !b) return null
+  if (!a) return b
+  if (!b) return a
+  return { ...node, a, b }
+}
+
+function leaveZenSession(s: {
+  activeViewId: string
+  zenReturnViewId: string | null
+  zenSet: string[]
+  soloTileId: string | null
+  views: WorkspaceView[]
+  focusedTileId: string | null
+}): Partial<LayoutState> {
+  const returnId =
+    isZenViewId(s.activeViewId) && s.zenReturnViewId
+      ? s.zenReturnViewId
+      : null
+  const returnView = returnId
+    ? s.views.find((v) => v.id === returnId)
+    : null
+  return {
+    ...emptyZenSession(),
+    ...(returnView
+      ? {
+          activeViewId: returnView.id,
+          focusedTileId: returnView.tiles[0]?.id ?? null,
+          soloTileId: null,
+        }
+      : {
+          // 1-tile Z/Esc exit leaves maximize; multi-tile clears solo.
+          soloTileId: s.zenSet.length <= 1 ? s.soloTileId : null,
+          focusedTileId: s.focusedTileId,
+        }),
+  }
+}
 
 export { WIDGET_DEFAULTS }
 
@@ -126,8 +215,21 @@ interface LayoutState {
    */
   soloTileId: string | null
   /**
-   * Zen / focus: edge-to-edge debugger — hides workspace toolbar and widget
-   * header. Implies solo for the same tile.
+   * Zen / focus: edge-to-edge immersion — hides workspace toolbar and widget
+   * header. Session fields below are ephemeral (not persisted).
+   */
+  zenActive: boolean
+  /** Tile ids in the immersion (1–2). Space-resident ids stay stable. */
+  zenSet: string[]
+  /** Companions not on the active Space — discarded on exit unless Save. */
+  zenExtraTiles: LayoutTile[]
+  /** Ephemeral split among zenSet — never mutates the underlying Space. */
+  zenSplit: SplitNode | null
+  /** View to restore when exiting a Call into a zen:* Space. */
+  zenReturnViewId: string | null
+  /**
+   * Derived primary zen tile for chrome/legacy readers — focused member of
+   * zenSet when active, else null.
    */
   zenTileId: string | null
   /** Latest measured viewport row budget for the active canvas. */
@@ -159,6 +261,12 @@ interface LayoutState {
   toggleTileMaximized: (viewId: string, tileId: string) => void
   toggleTileZen: (viewId: string, tileId: string) => void
   exitTileZen: () => void
+  /** Summon Keep while zen — companion / cap-swap into the session. */
+  zenKeepWidget: (type: WidgetType) => void
+  /** Snapshot current zen set as a zen:* view and activate it. */
+  saveZenSpace: (name?: string) => string | null
+  /** Activate a zen:* view and enter immersion for its tiles. */
+  callZenSpace: (viewId: string) => void
 
   setFocusedTile: (tileId: string | null) => void
   clearEntering: (tileId: string) => void
@@ -209,6 +317,11 @@ export const useLayoutStore = create<LayoutState>()(
       focusedTileId: null,
       enteringTileIds: [],
       soloTileId: null,
+      zenActive: false,
+      zenSet: [],
+      zenExtraTiles: [],
+      zenSplit: null,
+      zenReturnViewId: null,
       zenTileId: null,
       viewportRows: 24,
       spaceLayoutVersion: SPACE_LAYOUT_VERSION,
@@ -227,21 +340,27 @@ export const useLayoutStore = create<LayoutState>()(
           views,
           activeViewId: activeOk ? s.activeViewId : (views[0]?.id ?? DEFAULT_VIEW_ID),
           soloTileId: null,
-          zenTileId: null,
+          ...emptyZenSession(),
           focusedTileId: null,
           spaceLayoutVersion: SPACE_LAYOUT_VERSION,
         }
       }),
 
-      setActiveView: (id) => set((s) => {
-        const view = s.views.find((v) => v.id === id)
-        return {
-          activeViewId: id,
-          soloTileId: null,
-          zenTileId: null,
-          focusedTileId: view?.tiles[0]?.id ?? null,
+      setActiveView: (id) => {
+        if (isZenViewId(id)) {
+          get().callZenSpace(id)
+          return
         }
-      }),
+        set((s) => {
+          const view = s.views.find((v) => v.id === id)
+          return {
+            activeViewId: id,
+            soloTileId: null,
+            ...emptyZenSession(),
+            focusedTileId: view?.tiles[0]?.id ?? null,
+          }
+        })
+      },
 
       addView: (name) => {
         const id = randomId()
@@ -249,7 +368,7 @@ export const useLayoutStore = create<LayoutState>()(
           views: [...s.views, { id, name, tiles: [], split: null }],
           activeViewId: id,
           soloTileId: null,
-          zenTileId: null,
+          ...emptyZenSession(),
         }))
         return id
       },
@@ -261,7 +380,7 @@ export const useLayoutStore = create<LayoutState>()(
           views: filtered,
           activeViewId: s.activeViewId === id ? filtered[0]!.id : s.activeViewId,
           soloTileId: null,
-          zenTileId: null,
+          ...emptyZenSession(),
         }
       }),
 
@@ -305,28 +424,65 @@ export const useLayoutStore = create<LayoutState>()(
           ),
           enteringTileIds: [...s.enteringTileIds, id],
           soloTileId: null,
-          zenTileId: null,
+          ...emptyZenSession(),
         }
       }),
 
       removeWidget: (viewId, tileId) => {
         clearEventStreamPrefs(tileId)
-        set((s) => ({
-        views: s.views.map((view) => {
-          if (view.id !== viewId) return view
-          const tiles = view.tiles.filter((tile) => tile.id !== tileId)
-          const split = removeLeaf(view.split, tileId)
-          return withProjected({ ...view, tiles }, split, s.viewportRows)
-        }),
-        focusedTileId: s.focusedTileId === tileId ? null : s.focusedTileId,
-        enteringTileIds: s.enteringTileIds.filter((id) => id !== tileId),
-        soloTileId: s.soloTileId === tileId ? null : s.soloTileId,
-        zenTileId: s.zenTileId === tileId ? null : s.zenTileId,
-      }))
+        set((s) => {
+          const nextSet = s.zenSet.filter((id) => id !== tileId)
+          const zenCleared = s.zenActive && nextSet.length === 0
+          return {
+            views: s.views.map((view) => {
+              if (view.id !== viewId) return view
+              const tiles = view.tiles.filter((tile) => tile.id !== tileId)
+              const split = removeLeaf(view.split, tileId)
+              return withProjected({ ...view, tiles }, split, s.viewportRows)
+            }),
+            focusedTileId: s.focusedTileId === tileId ? null : s.focusedTileId,
+            enteringTileIds: s.enteringTileIds.filter((id) => id !== tileId),
+            soloTileId: s.soloTileId === tileId ? null : s.soloTileId,
+            ...(zenCleared
+              ? emptyZenSession()
+              : {
+                  zenSet: nextSet,
+                  zenExtraTiles: s.zenExtraTiles.filter((t) => t.id !== tileId),
+                  zenSplit: s.zenSplit
+                    ? removeLeaf(s.zenSplit, tileId)
+                    : s.zenSplit,
+                  zenTileId:
+                    s.zenTileId === tileId
+                      ? (nextSet[0] ?? null)
+                      : s.zenTileId,
+                  zenActive: s.zenActive && nextSet.length > 0,
+                  soloTileId:
+                    s.zenActive && nextSet.length === 1
+                      ? (nextSet[0] ?? null)
+                      : s.soloTileId === tileId
+                        ? null
+                        : s.soloTileId,
+                }),
+          }
+        })
       },
 
       commitSplit: (viewId, split) => set((s) => {
-        if (s.soloTileId) return s
+        if (s.soloTileId && !s.zenActive) return s
+        if (s.zenActive) {
+          // Immersion layout is session-local — never mutate the Space under it.
+          if (isZenViewId(s.activeViewId)) {
+            return {
+              zenSplit: split,
+              views: s.views.map((view) =>
+                view.id === viewId
+                  ? withProjected(view, split, s.viewportRows)
+                  : view,
+              ),
+            }
+          }
+          return { zenSplit: split }
+        }
         return {
           views: s.views.map((view) =>
             view.id === viewId ? withProjected(view, split, s.viewportRows) : view,
@@ -335,7 +491,22 @@ export const useLayoutStore = create<LayoutState>()(
       }),
 
       setSplitRatioAt: (viewId, path, ratio) => set((s) => {
-        if (s.soloTileId) return s
+        if (s.soloTileId && !s.zenActive) return s
+        if (s.zenActive) {
+          if (!s.zenSplit) return s
+          const next = setSplitRatio(s.zenSplit, path, ratio)
+          if (isZenViewId(s.activeViewId)) {
+            return {
+              zenSplit: next,
+              views: s.views.map((view) =>
+                view.id === viewId
+                  ? withProjected(view, next, s.viewportRows)
+                  : view,
+              ),
+            }
+          }
+          return { zenSplit: next }
+        }
         return {
           views: s.views.map((view) => {
             if (view.id !== viewId || !view.split) return view
@@ -345,7 +516,23 @@ export const useLayoutStore = create<LayoutState>()(
       }),
 
       reparentTile: (viewId, dragId, targetId, zone) => set((s) => {
-        if (s.soloTileId) return s
+        if (s.soloTileId && !s.zenActive) return s
+        if (s.zenActive) {
+          if (!s.zenSplit) return s
+          if (!s.zenSet.includes(dragId) || !s.zenSet.includes(targetId)) return s
+          const next = reparentLeaf(s.zenSplit, dragId, targetId, zone)
+          if (isZenViewId(s.activeViewId)) {
+            return {
+              zenSplit: next,
+              views: s.views.map((view) =>
+                view.id === viewId
+                  ? withProjected(view, next, s.viewportRows)
+                  : view,
+              ),
+            }
+          }
+          return { zenSplit: next }
+        }
         return {
           views: s.views.map((view) => {
             if (view.id !== viewId || !view.split) return view
@@ -381,27 +568,252 @@ export const useLayoutStore = create<LayoutState>()(
 
       toggleTileMaximized: (_viewId, tileId) => set((s) => {
         const restoring = s.soloTileId === tileId
+        if (restoring) {
+          return {
+            soloTileId: null,
+            ...emptyZenSession(),
+            focusedTileId: tileId,
+          }
+        }
         return {
-          soloTileId: restoring ? null : tileId,
-          zenTileId: restoring || s.zenTileId === tileId ? null : s.zenTileId,
+          soloTileId: tileId,
+          ...emptyZenSession(),
           focusedTileId: tileId,
         }
       }),
 
       toggleTileZen: (_viewId, tileId) => set((s) => {
-        if (s.zenTileId === tileId) {
-          return { zenTileId: null, focusedTileId: tileId }
+        if (s.zenActive && s.zenSet.includes(tileId)) {
+          const action = resolveZenToggleInSession(s.zenSet, tileId)
+          if (action.type === "exit") {
+            return leaveZenSession({ ...s, focusedTileId: tileId })
+          }
+          const nextFocus = action.nextSet[0]!
+          return {
+            zenActive: true,
+            zenSet: action.nextSet,
+            zenExtraTiles: s.zenExtraTiles.filter((t) =>
+              action.nextSet.includes(t.id),
+            ),
+            zenSplit: s.zenSplit
+              ? removeLeaf(s.zenSplit, tileId)
+              : { kind: "leaf", tileId: nextFocus },
+            zenTileId: nextFocus,
+            soloTileId: nextFocus,
+            focusedTileId: nextFocus,
+          }
         }
         return {
-          soloTileId: tileId,
+          zenActive: true,
+          zenSet: [tileId],
+          zenExtraTiles: [],
+          zenSplit: { kind: "leaf", tileId },
+          zenReturnViewId: isZenViewId(s.activeViewId)
+            ? s.zenReturnViewId
+            : s.activeViewId,
           zenTileId: tileId,
+          soloTileId: tileId,
           focusedTileId: tileId,
         }
       }),
 
-      exitTileZen: () => set({ zenTileId: null }),
+      exitTileZen: () => set((s) => leaveZenSession(s)),
 
-      setFocusedTile: (tileId) => set({ focusedTileId: tileId }),
+      zenKeepWidget: (type) => set((s) => {
+        if (!s.zenActive || !canJoinZenSession(type)) return s
+        const view = s.views.find((v) => v.id === s.activeViewId)
+        if (!view) return s
+
+        const typesById = new Map<string, WidgetType>()
+        for (const tile of view.tiles) typesById.set(tile.id, tile.type)
+        for (const tile of s.zenExtraTiles) typesById.set(tile.id, tile.type)
+
+        for (const id of s.zenSet) {
+          if (typesById.get(id) === type) {
+            return { focusedTileId: id, zenTileId: id }
+          }
+        }
+
+        const onSpace = view.tiles.find((t) => t.type === type)
+        const newId = onSpace?.id ?? randomId()
+        const { nextSet, replaceId } = resolveZenKeepCap(
+          s.zenSet,
+          typesById,
+          s.focusedTileId,
+          type,
+          newId,
+        )
+
+        let zenExtraTiles = s.zenExtraTiles
+        if (!onSpace) {
+          const defaults = WIDGET_DEFAULTS[type] as WidgetSizeDefaults
+          const extra: LayoutTile = {
+            id: newId,
+            type,
+            x: 0,
+            y: 0,
+            w: defaults.w,
+            h: defaults.h,
+            minW: defaults.minW,
+            minH: defaults.minH,
+          }
+          zenExtraTiles = [
+            ...s.zenExtraTiles.filter((t) => t.id !== replaceId),
+            extra,
+          ]
+        } else if (replaceId) {
+          zenExtraTiles = s.zenExtraTiles.filter((t) => t.id !== replaceId)
+        }
+
+        let zenSplit: SplitNode =
+          s.zenSplit ?? { kind: "leaf", tileId: s.zenSet[0]! }
+        if (replaceId) {
+          zenSplit = removeLeaf(zenSplit, replaceId)
+            ?? { kind: "leaf", tileId: newId }
+          zenSplit = splitLargestLeaf(zenSplit, newId, COLS, s.viewportRows)
+        } else {
+          zenSplit = splitLargestLeaf(zenSplit, newId, COLS, s.viewportRows)
+        }
+
+        return {
+          zenActive: true,
+          zenSet: nextSet,
+          zenExtraTiles,
+          zenSplit,
+          zenTileId: newId,
+          soloTileId: nextSet.length === 1 ? newId : null,
+          focusedTileId: newId,
+        }
+      }),
+
+      saveZenSpace: (name) => {
+        const s = get()
+        if (!s.zenActive || s.zenSet.length === 0) return null
+        const view = s.views.find((v) => v.id === s.activeViewId)
+        if (!view) return null
+
+        const idByTile = new Map<string, LayoutTile>()
+        for (const tile of view.tiles) idByTile.set(tile.id, tile)
+        for (const tile of s.zenExtraTiles) idByTile.set(tile.id, tile)
+
+        const idMap = new Map<string, string>()
+        const tiles: LayoutTile[] = []
+        for (const id of s.zenSet) {
+          const src = idByTile.get(id)
+          if (!src || !canJoinZenSession(src.type)) continue
+          const nextId = randomId()
+          idMap.set(id, nextId)
+          tiles.push({
+            ...src,
+            id: nextId,
+            x: 0,
+            y: 0,
+          })
+        }
+        if (tiles.length === 0) return null
+
+        const zenId = newZenViewId()
+        const split =
+          remapSplit(s.zenSplit, idMap) ??
+          (tiles[1]
+            ? {
+                kind: "split" as const,
+                dir: "v" as const,
+                ratio: 0.5,
+                a: { kind: "leaf" as const, tileId: tiles[0]!.id },
+                b: { kind: "leaf" as const, tileId: tiles[1]!.id },
+              }
+            : { kind: "leaf" as const, tileId: tiles[0]!.id })
+        const zenView = withProjected(
+          {
+            id: zenId,
+            name: name?.trim() || `Zen ${tiles.map((t) => t.type).join(" · ")}`,
+            tiles,
+            split: null,
+          },
+          split,
+          s.viewportRows,
+        )
+        const focusId = zenView.tiles[0]?.id ?? null
+        const returnId = isZenViewId(s.activeViewId)
+          ? s.zenReturnViewId
+          : s.activeViewId
+        set({
+          views: [...s.views, zenView],
+          activeViewId: zenId,
+          zenActive: true,
+          zenSet: zenView.tiles.map((t) => t.id),
+          zenExtraTiles: [],
+          zenSplit: cloneSplit(zenView.split),
+          zenReturnViewId: returnId,
+          zenTileId: focusId,
+          soloTileId: zenView.tiles.length === 1 ? focusId : null,
+          focusedTileId: focusId,
+        })
+        return zenId
+      },
+
+      callZenSpace: (viewId) => {
+        if (!isZenViewId(viewId)) return
+        set((s) => {
+          const view = s.views.find((v) => v.id === viewId)
+          if (!view || view.tiles.length === 0) return s
+          const setIds = view.tiles
+            .filter((t) => canJoinZenSession(t.type))
+            .map((t) => t.id)
+            .slice(0, 2)
+          if (setIds.length === 0) return s
+          const focusId = setIds[0]!
+          const returnId = isZenViewId(s.activeViewId)
+            ? s.zenReturnViewId
+            : s.activeViewId
+          // Prefer the saved view split when it covers the set; else rebuild.
+          const leafIds = new Set(collectLeafIds(view.split))
+          const splitCovers = setIds.every((id) => leafIds.has(id))
+          const zenSplit = splitCovers
+            ? cloneSplit(view.split)
+            : setIds.length === 1
+              ? { kind: "leaf" as const, tileId: setIds[0]! }
+              : {
+                  kind: "split" as const,
+                  dir: "v" as const,
+                  ratio: 0.5,
+                  a: { kind: "leaf" as const, tileId: setIds[0]! },
+                  b: { kind: "leaf" as const, tileId: setIds[1]! },
+                }
+          return {
+            activeViewId: viewId,
+            zenActive: true,
+            zenSet: setIds,
+            zenExtraTiles: [],
+            zenSplit,
+            zenReturnViewId: returnId,
+            zenTileId: focusId,
+            soloTileId: setIds.length === 1 ? focusId : null,
+            focusedTileId: focusId,
+          }
+        })
+      },
+
+      setFocusedTile: (tileId) => set((s) => {
+        if (
+          s.zenActive &&
+          tileId &&
+          s.zenSet.length > 0 &&
+          !s.zenSet.includes(tileId)
+        ) {
+          return s
+        }
+        return {
+          focusedTileId: tileId,
+          zenTileId:
+            s.zenActive && tileId && s.zenSet.includes(tileId)
+              ? tileId
+              : s.zenActive
+                ? s.zenTileId
+                : null,
+        }
+      }),
 
       clearEntering: (tileId) => set((s) => ({
         enteringTileIds: s.enteringTileIds.filter((id) => id !== tileId),
@@ -424,7 +836,7 @@ export const useLayoutStore = create<LayoutState>()(
             views,
             activeViewId: def.id,
             soloTileId: null,
-            zenTileId: null,
+            ...emptyZenSession(),
             focusedTileId: view?.tiles[0]?.id ?? null,
           }
         })
@@ -443,7 +855,7 @@ export const useLayoutStore = create<LayoutState>()(
             views,
             activeViewId: def.id,
             soloTileId: null,
-            zenTileId: null,
+            ...emptyZenSession(),
             focusedTileId: focusedTileId ?? view?.tiles[0]?.id ?? null,
           }
         })
@@ -482,7 +894,7 @@ export const useLayoutStore = create<LayoutState>()(
             views,
             activeViewId: def.id,
             soloTileId: null,
-            zenTileId: null,
+            ...emptyZenSession(),
             focusedTileId,
           }
         })
@@ -490,7 +902,30 @@ export const useLayoutStore = create<LayoutState>()(
 
       focusTileNeighbor: (key) => set((s) => {
         const view = s.views.find((v) => v.id === s.activeViewId)
-        if (!view || view.tiles.length === 0) return s
+        if (!view) return s
+
+        if (s.zenActive && s.zenSet.length > 0) {
+          const byId = new Map<string, LayoutTile>()
+          for (const tile of view.tiles) byId.set(tile.id, tile)
+          for (const tile of s.zenExtraTiles) byId.set(tile.id, tile)
+          const focusTiles = s.zenSet
+            .map((id) => byId.get(id))
+            .filter((t): t is LayoutTile => !!t)
+          if (focusTiles.length === 0) return s
+          if (!s.focusedTileId || !s.zenSet.includes(s.focusedTileId)) {
+            const id = focusTiles[0]!.id
+            return { focusedTileId: id, zenTileId: id }
+          }
+          // Cap-2: project the ephemeral zen split so arrows follow panes.
+          const projected = s.zenSplit
+            ? projectTiles(s.zenSplit, focusTiles, COLS, s.viewportRows)
+            : focusTiles
+          const nextId = neighborTileForFocus(projected, s.focusedTileId, key)
+          if (!nextId) return s
+          return { focusedTileId: nextId, zenTileId: nextId }
+        }
+
+        if (view.tiles.length === 0) return s
         // No focus yet — take the first tile, then the next chord moves.
         if (!s.focusedTileId) {
           return { focusedTileId: view.tiles[0]!.id }
@@ -532,7 +967,7 @@ export const useLayoutStore = create<LayoutState>()(
           changed = true
         }
         if (!changed) {
-          return { soloTileId: null, zenTileId: null }
+          return { soloTileId: null, ...emptyZenSession() }
         }
         return {
           views: s.views.map((v) =>
@@ -540,7 +975,7 @@ export const useLayoutStore = create<LayoutState>()(
           ),
           enteringTileIds: entering,
           soloTileId: null,
-          zenTileId: null,
+          ...emptyZenSession(),
         }
       }),
 
@@ -562,6 +997,8 @@ export const useLayoutStore = create<LayoutState>()(
           const tiles = view.tiles.filter((tile) => !removedIds.has(tile.id))
           const focusedGone =
             s.focusedTileId != null && removedIds.has(s.focusedTileId)
+          const nextZenSet = s.zenSet.filter((id) => !removedIds.has(id))
+          const zenCleared = s.zenActive && nextZenSet.length === 0
           return {
             views: s.views.map((v) =>
               v.id === viewId
@@ -574,22 +1011,46 @@ export const useLayoutStore = create<LayoutState>()(
             enteringTileIds: s.enteringTileIds.filter((id) => !removedIds.has(id)),
             soloTileId:
               s.soloTileId && removedIds.has(s.soloTileId) ? null : s.soloTileId,
-            zenTileId:
-              s.zenTileId && removedIds.has(s.zenTileId) ? null : s.zenTileId,
+            ...(zenCleared
+              ? emptyZenSession()
+              : {
+                  zenSet: nextZenSet,
+                  zenExtraTiles: s.zenExtraTiles.filter(
+                    (t) => !removedIds.has(t.id),
+                  ),
+                  zenSplit: (() => {
+                    let split = s.zenSplit
+                    for (const id of removedIds) {
+                      if (split) split = removeLeaf(split, id)
+                    }
+                    return split
+                  })(),
+                  zenTileId:
+                    s.zenTileId && removedIds.has(s.zenTileId)
+                      ? (nextZenSet[0] ?? null)
+                      : s.zenTileId,
+                  zenActive: s.zenActive && nextZenSet.length > 0,
+                }),
           }
         })
       },
 
-      goView: (viewId) => set((s) => {
-        const view = s.views.find((v) => v.id === viewId)
-        if (!view) return s
-        return {
-          activeViewId: viewId,
-          soloTileId: null,
-          zenTileId: null,
-          focusedTileId: view.tiles[0]?.id ?? null,
+      goView: (viewId) => {
+        if (isZenViewId(viewId)) {
+          get().callZenSpace(viewId)
+          return
         }
-      }),
+        set((s) => {
+          const view = s.views.find((v) => v.id === viewId)
+          if (!view) return s
+          return {
+            activeViewId: viewId,
+            soloTileId: null,
+            ...emptyZenSession(),
+            focusedTileId: view.tiles[0]?.id ?? null,
+          }
+        })
+      },
 
       goViewFocusPick: (viewId, pickIndex) => set((s) => {
         const view = s.views.find((v) => v.id === viewId)
@@ -599,12 +1060,23 @@ export const useLayoutStore = create<LayoutState>()(
         return {
           activeViewId: viewId,
           soloTileId: null,
-          zenTileId: null,
+          ...emptyZenSession(),
           focusedTileId,
         }
       }),
 
       focusWidgetType: (type) => set((s) => {
+        if (s.zenActive) {
+          const typesById = new Map<string, WidgetType>()
+          const view = s.views.find((v) => v.id === s.activeViewId)
+          for (const tile of view?.tiles ?? []) typesById.set(tile.id, tile.type)
+          for (const tile of s.zenExtraTiles) typesById.set(tile.id, tile.type)
+          const inZen = s.zenSet.find((id) => typesById.get(id) === type)
+          if (inZen) {
+            return { focusedTileId: inZen, zenTileId: inZen }
+          }
+          return s
+        }
         const view = s.views.find((v) => v.id === s.activeViewId)
         if (!view) return s
         const tileId = firstTileIdForWidgetType(view.tiles, type)
@@ -612,7 +1084,7 @@ export const useLayoutStore = create<LayoutState>()(
         return {
           focusedTileId: tileId,
           soloTileId: null,
-          zenTileId: null,
+          ...emptyZenSession(),
         }
       }),
     }),
@@ -651,7 +1123,7 @@ export const useLayoutStore = create<LayoutState>()(
           focusedTileId: null,
           enteringTileIds: [],
           soloTileId: null,
-          zenTileId: null,
+          ...emptyZenSession(),
           viewportRows: currentState.viewportRows,
           spaceLayoutVersion: SPACE_LAYOUT_VERSION,
           consoleIsAdmin: false,

@@ -374,33 +374,40 @@ chevron (13px, rotate-90), one control height (`--control-h` for search /
 segments / icon buttons), one JSON/payload surface. Pipelines shares toolbar
 expand/collapse with Trace (`ReviewTreeFoldToggle` in trailing toolbar). Trace sticky pin stays.
 
-**Spaces, Summon, keyboard (operator console):** Product **Spaces** (Agent /
-Observe / Reconcile / Bridge / Trace) are curated job landings with fixed
-default autolayouts — not DIY-named sheets as the primary path. Observe =
+**Spaces, Summon, Zen, keyboard (operator console):** Product **Spaces** (Agent /
+Observe / Reconcile / Bridge / Trace) are curated job landings with chrome —
+fixed default autolayouts, not DIY-named sheets as the primary path. Observe =
 Pipelines 70% / Event stream 30%; Trace = Trace alone;
 Reconcile = Sync / Entity registry 50/50; Agent = Trace 60% | Chat 40%
-(no Threads tile — Trace owns thread/run scope). **Summon** (Mod+K) is a fixed
-two-column board (Go · Preset | Surface): ↑↓ in a column, ←→ between columns;
-Enter on a surface **Keeps** it into the current layout (or focuses the first
-tile of that type if already present — never duplicates); Mod+Enter **Peeks**
-(overlay). A peek is a **temporary focused operator surface** — same
-`WidgetInstance` + claim path as a Space tile (`peek:<type>` id,
-`isOperatorSurfaceArmed`); Summon stays open underneath but yields keys to the
-peek until Esc peels it. Sole-widget Spaces (Trace, Bridge) appear under Summon
-surface too, but their dedicated job landings are reached only via the Go
-column / Call Space (Mod+1–5). Spaces navigate (Call); *Preset* rows restore
-default widgets/ratios and focus a primary tile — never auto-maximize.
-**Operator keyboard
-is one composition root** (`useOperatorKeyboardRoot`, capture-phase): shell
-chrome (Summon, chat↔workspace, Call Space, tabs, tile focus, M, `?`, …) then
-the **claimed** surface. Widgets do not add `window` keydown listeners — they
+(no Threads tile — Trace owns thread/run scope). **DIY views** are chrome-on
+secondary tabs. **Zen** is an immersion *session* (`zenActive` + `zenSet`,
+max 2 focus-capable tiles): chrome off, per-tile zen HUD, ephemeral until
+**Save Zen Space**. Companions via Summon Keep while zen never mutate the
+underlying Space split; Esc ends the whole session; **Z** enters / shrinks
+the set / exits when alone. **Zen Spaces** are saved views with `zen:*` ids —
+listed under Summon Go in a **Zen** group; Call is the only auto-zen entry.
+**Summon** (Mod+K) is a fixed two-column board (Go · Preset | Surface): ↑↓ in a
+column, ←→ between columns; Enter on a surface **Keeps** it into the current
+layout (or into the zen session when immersion is on — cap-2 swaps the focused
+member); Mod+Enter **Peeks** (overlay). A peek is a **temporary focused
+operator surface** — same `WidgetInstance` + claim path as a Space tile
+(`peek:<type>` id, `isOperatorSurfaceArmed`); Summon stays open underneath but
+yields keys to the peek until Esc peels it. Sole-widget Spaces (Trace, Bridge)
+appear under Summon surface too, but their dedicated job landings are reached
+only via the Go column / Call Space (Mod+1–5). Spaces navigate (Call); *Preset*
+rows restore default widgets/ratios and focus a primary tile — never
+auto-maximize or auto-zen. Focus-capable zen surfaces: Trace, Active Users,
+Event Stream, Pipelines. **Operator keyboard is one composition root**
+(`useOperatorKeyboardRoot`, capture-phase): shell chrome (Summon,
+chat↔workspace, Call Space, tabs, tile focus, M, `?`, …) then the **claimed**
+surface. Widgets do not add `window` keydown listeners — they
 `claimOperatorSurface` (`useClaimOperatorSurface` / `useReviewOperatorKeyboard` /
 `useWidgetZenHotkeys`). Trace and Pipelines share **pane focus** (header wash on
 the focused split panel — tree or detail); detail accordions register for
 Space toggles; ←→ folds one level at a time (section, then More/Less peek —
 same tree metaphor; Trace call tabs only when the active row is not foldable). ↑↓ moves detail rows
 (timeline / sections) like the tree — Page/Home/End still scroll. Esc ladder
-peels overlay → filter → pane → zen → maximize. Shell chords: Call Space
+peels overlay → filter → pane → zen session → maximize. Shell chords: Call Space
 (Mod+1–5; Trace is 5), prev/next view tab (Mod+[ / ]), tile focus (Mod+⇧+arrows — not ⌥;
 Mod+⌥ alone toggles chat↔workspace), M maximize, Z zen,
 Mod+W close tile, `?` keymap (fixed two-column board: Pane | Shell).
@@ -409,7 +416,7 @@ Mod+W close tile, `?` keymap (fixed two-column board: Pane | Shell).
 `⌘/Ctrl` dual chips. Empty Spaces open **Summon**, not the legacy widget
 catalog (mobile may still use catalog). Operator guide:
 `docs/operator-keyboard.md`. See `lib/operator-surface.ts`,
-`lib/operator-surface-armed.ts`, `lib/spaces.ts`,
+`lib/operator-surface-armed.ts`, `lib/spaces.ts`, `lib/zen-session.ts`,
 `lib/summon-resolve.ts`, `lib/keymap/`, `app/workspace/SummonPalette.tsx`.
 
 | Layer | Owns | Must not |

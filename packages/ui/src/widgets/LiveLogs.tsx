@@ -17,6 +17,8 @@ import type { ReviewTreeKeyboardNode } from "../components/review/review-tree-ke
 import { VirtualList, type VirtualListHandle } from "../components/VirtualList"
 import { useOperatorSurfaceArmed } from "../hooks/useOperatorSurfaceArmed"
 import { useReviewTreeKeyboard } from "../hooks/useReviewTreeKeyboard"
+import { useWidgetFocus } from "../hooks/useWidgetFocus"
+import type { OperatorSurfaceHandler } from "../lib/operator-surface"
 import {
   ActiveFilterChips,
   FilterChoiceGrid,
@@ -69,6 +71,7 @@ import {
   type EventStreamHistogramFocus,
 } from "./live-logs/EventStreamHistogram"
 import { EventStreamDetailDrawer } from "./live-logs/EventStreamDetailDrawer"
+import { LiveLogsZenHud } from "./live-logs/LiveLogsZenHud"
 
 type EventType = EventStreamEventType
 
@@ -97,7 +100,8 @@ function eventStreamHasPayload(log: LogEntry): boolean {
 export function LiveLogs() {
   const instance = useWidgetInstance()
   const tileId = instance?.widgetId ?? null
-  const surfaceArmed = useOperatorSurfaceArmed()
+  const { isZen, isSolo, toggleZen, exitZen } = useWidgetFocus()
+  const surfaceArmed = useOperatorSurfaceArmed({ layoutFocus: isZen || isSolo })
   const initialPrefs = useMemo(() => readEventStreamPrefs(tileId), [tileId])
 
   const [paused, setPaused] = useState(false)
@@ -108,12 +112,19 @@ export function LiveLogs() {
   const [errorsOnly, setErrorsOnly] = useState(() => initialPrefs.errorsOnly)
   const [searchText, setSearchText] = useState(() => initialPrefs.searchText)
   const [filtersOpen, setFiltersOpen] = useState(false)
+  const [zenSearchOpen, setZenSearchOpen] = useState(false)
   const [histogramFocus, setHistogramFocus] = useState<EventStreamHistogramFocus | null>(null)
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
   /** One open detail — presentation is drawer vs inline by tile width. */
   const [detailKey, setDetailKey] = useState<string | null>(null)
   const detailKeyRef = useRef<string | null>(null)
   detailKeyRef.current = detailKey
+  const filtersOpenRef = useRef(false)
+  filtersOpenRef.current = filtersOpen
+  const zenSearchOpenRef = useRef(false)
+  zenSearchOpenRef.current = zenSearchOpen
+  const searchTextRef = useRef(searchText)
+  searchTextRef.current = searchText
   const listRef = useRef<VirtualListHandle>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
 
@@ -347,6 +358,43 @@ export function LiveLogs() {
     setDetailKey((prev) => (prev === scopeId ? null : scopeId))
   }, [])
 
+  useEffect(() => {
+    if (!isZen) setZenSearchOpen(false)
+  }, [isZen])
+
+  const zenBeforeRef = useRef<OperatorSurfaceHandler | null>(null)
+  zenBeforeRef.current = (event) => {
+    const key = event.key.toLowerCase()
+    const mod = event.metaKey || event.ctrlKey
+    if (key === "z" && !mod && !event.altKey && !event.shiftKey) {
+      if (isZen) exitZen()
+      else toggleZen()
+      return true
+    }
+    if (isZen && ((mod && key === "f") || (key === "/" && !mod))) {
+      setZenSearchOpen(true)
+      return true
+    }
+    if (event.key === "Escape" && isZen) {
+      if (detailKeyRef.current) {
+        setDetailKey(null)
+        return true
+      }
+      if (filtersOpenRef.current) {
+        setFiltersOpen(false)
+        return true
+      }
+      if (zenSearchOpenRef.current) {
+        if (searchTextRef.current) setSearchText("")
+        else setZenSearchOpen(false)
+        return true
+      }
+      exitZen()
+      return true
+    }
+    return false
+  }
+
   // Claim while armed (focused tile or peek) — `/` must work even on an empty list.
   useReviewTreeKeyboard({
     enabled: surfaceArmed,
@@ -357,8 +405,12 @@ export function LiveLogs() {
     onSelect: setSelectedKey,
     onToggleFold: onKeyboardToggleFold,
     listRef,
-    onOpenSearch: () => searchInputRef.current?.focus(),
+    onOpenSearch: () => {
+      if (isZen) setZenSearchOpen(true)
+      else searchInputRef.current?.focus()
+    },
     onEnd: scrollToLatest,
+    beforeRef: zenBeforeRef,
   })
 
   const hasIsoZoom = Boolean(timeWindow.sinceIso)
@@ -490,6 +542,7 @@ export function LiveLogs() {
       className={[
         WIDGET_LOG_SHELL_CLASS,
         "event-stream-shell",
+        isZen ? "event-stream-shell--zen" : "",
         drawerDetailOpen ? "event-stream-shell--detail-open" : "",
       ]
         .filter(Boolean)
@@ -497,7 +550,26 @@ export function LiveLogs() {
     >
       <div className="event-stream-main">
       <div className={`${WIDGET_LOG_STACK_CLASS} event-stream-stack`}>
+      {isZen ? (
+        <LiveLogsZenHud
+          searchText={searchText}
+          onSearchChange={setSearchText}
+          searchOpen={zenSearchOpen}
+          onSearchOpenChange={setZenSearchOpen}
+          searching={searching || loading}
+          filtersActive={filtersActive}
+          activeFilterCount={activeFilterCount}
+          onOpenFilters={() => setFiltersOpen((o) => !o)}
+          filterBtnRef={filterBtnRef}
+          paused={paused}
+          onTogglePause={() => setPaused((p) => !p)}
+          pendingLiveCount={pendingLiveCount}
+          onExitZen={exitZen}
+        />
+      ) : null}
       <div className="event-stream-deck">
+      {!isZen ? (
+      <>
       <div className={WIDGET_REVIEW_CONTROLS_CLASS}>
       <div className={WIDGET_REVIEW_CONTROLS_INSET_CLASS}>
       <WidgetToolbar compact={compact}>
@@ -562,6 +634,17 @@ export function LiveLogs() {
       </div>
       ) : null}
       </div>
+      </>
+      ) : activeChips.length > 0 ? (
+      <div className={WIDGET_REVIEW_CONTROLS_CLASS}>
+      <div className={WIDGET_REVIEW_CONTROLS_INSET_CLASS}>
+      <ActiveFilterChips
+        chips={activeChips}
+        onClear={activeFilterCount > 0 ? clearAllFilters : undefined}
+      />
+      </div>
+      </div>
+      ) : null}
 
       <EventStreamHistogram
         lensRows={lensRows}

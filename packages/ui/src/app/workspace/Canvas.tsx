@@ -25,13 +25,14 @@ export const Canvas = forwardRef<CanvasHandle>(function Canvas(_props, ref) {
   const views = useLayoutStore((s) => s.views)
   const activeViewId = useLayoutStore((s) => s.activeViewId)
   const soloTileId = useLayoutStore((s) => s.soloTileId)
+  const zenActive = useLayoutStore((s) => s.zenActive)
   const ensureProductSpaces = useLayoutStore((s) => s.ensureProductSpaces)
   const setSummonOpen = useStore((s) => s.setSummonOpen)
   const toggleSummon = useStore((s) => s.toggleSummon)
   const { isViewingAsOther } = useViewingAs()
   // Glyph field is a quiet Viewing-as cue behind the stage — never under solo.
   // No layout pad: gutters come from GridCanvas JS inset (solo can fill the stage).
-  const stageGlyphs = isViewingAsOther && !soloTileId
+  const stageGlyphs = isViewingAsOther && !soloTileId && !zenActive
   const summonHint = openWidgetCatalogHint()
 
   function openSummon() {

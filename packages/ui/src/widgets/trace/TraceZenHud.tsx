@@ -4,7 +4,9 @@
 
 import { ChevronDown, Info, PanelLeft, Search, X } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
+import { ZenSessionHudActions } from "../../components/ZenSessionHudActions"
 import { formatModChord } from "../../lib/keymap"
+import { useLayoutStore } from "../../state/layout-store"
 import { TraceRunContext } from "./TraceRunContext"
 import { TraceTreeFoldToggle } from "./TraceTreeFoldToggle"
 import type { FoldMode } from "./open-state"
@@ -36,6 +38,7 @@ export function TraceZenHud({
   onScopeDrawerOpenChange: (open: boolean) => void
   onExitZen: () => void
 }) {
+  const saveZenSpace = useLayoutStore((s) => s.saveZenSpace)
   const [statsOpen, setStatsOpen] = useState(false)
   const searchRef = useRef<HTMLInputElement>(null)
 
@@ -159,19 +162,12 @@ export function TraceZenHud({
               <Search size={14} />
             </button>
 
-            <span className="trace-zen-hud__hint" aria-hidden>
-              <kbd>Esc</kbd>
-            </span>
-
-            <button
-              type="button"
-              className="trace-zen-hud__icon-btn"
-              title="Exit focus (Esc or Z)"
-              aria-label="Exit focus mode"
-              onClick={onExitZen}
-            >
-              <X size={14} />
-            </button>
+            <ZenSessionHudActions
+              onExitZen={onExitZen}
+              onSaveZen={() => {
+                saveZenSpace()
+              }}
+            />
           </div>
         </>
       )}

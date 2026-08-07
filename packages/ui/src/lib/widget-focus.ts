@@ -7,6 +7,8 @@ import type { WidgetType } from "../types"
 const FOCUS_WIDGET_TYPES = new Set<WidgetType>([
   "debug-inspector",
   "active-users",
+  "live-logs",
+  "operation-log",
 ])
 
 export function widgetSupportsFocusMode(type: WidgetType): boolean {
