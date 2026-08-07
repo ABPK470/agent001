@@ -1586,8 +1586,7 @@ body {
 
 .entity-rail-item-wrap {
   position: relative;
-  margin-bottom: 0;
-  border-bottom: 1px solid var(--border-subtle, var(--color-border-subtle));
+  margin-bottom: 0.05rem;
 }
 
 .entity-rail-item-row {
@@ -1596,35 +1595,25 @@ body {
   align-items: center;
   min-width: 0;
   min-height: 44px;
-  padding: 0;
-  border-radius: 0;
+  padding: 0.3rem 0.35rem 0.3rem 0.65rem;
+  /* PLACE among peers — shade + Threads radius. Never a left-rule tick. */
+  border-radius: var(--list-row-radius);
   background: transparent;
   transition: color 160ms ease, background-color 160ms ease;
 }
 
 .entity-rail-item-wrap:hover .entity-rail-item-row,
 .entity-rail-item-wrap--menu-open .entity-rail-item-row {
-  background: var(--overlay-2, rgb(255 255 255 / 0.04));
-}
-
-.entity-rail-item-wrap--active::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 2px;
-  background: var(--color-accent, #6366f1);
-  z-index: 2;
+  background: var(--hover-fill);
 }
 
 .entity-rail-item-wrap--active .entity-rail-item-row {
-  background: var(--select-fill, rgb(255 255 255 / 0.06));
+  background: var(--select-fill);
 }
 
 .entity-rail-item-wrap--active:hover .entity-rail-item-row,
 .entity-rail-item-wrap--active.entity-rail-item-wrap--menu-open .entity-rail-item-row {
-  background: var(--select-fill, rgb(255 255 255 / 0.06));
+  background: var(--select-fill);
 }
 
 .entity-rail-item {
@@ -1632,7 +1621,7 @@ body {
   flex-direction: column;
   gap: 0.125rem;
   min-width: 0;
-  padding: 0.3rem 1rem;
+  padding: 0.15rem 0.15rem 0.15rem 0;
   color: var(--color-text-muted);
   transition: color 160ms ease;
 }
@@ -1640,8 +1629,12 @@ body {
 .entity-rail-item-wrap:hover .entity-rail-item,
 .entity-rail-item-wrap--menu-open .entity-rail-item,
 .entity-rail-item-wrap--active .entity-rail-item {
-  padding-right: 2.65rem;
+  padding-right: 1.65rem;
   color: var(--color-text);
+}
+
+.entity-rail-item-wrap--active .entity-rail-item {
+  font-weight: 600;
 }
 
 .entity-rail-item-title {

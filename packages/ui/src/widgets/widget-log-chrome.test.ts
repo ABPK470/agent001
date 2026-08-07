@@ -79,7 +79,7 @@ describe("widget log chrome — shell", () => {
       /\.widget-review-controls__inset:not\(:last-child\)\s*\{[^}]*padding-bottom:\s*var\(--review-controls-pad-y\)/s,
     )
     expect(css).toMatch(
-      /\.widget-review-controls__inset\s*>\s*\.widget-review-meta,[\s\S]*?\{[^}]*padding:\s*0/s,
+      /\.widget-review-controls__inset\s*>\s*\.widget-toolbar,[\s\S]*?\.widget-review-meta\s*\{[^}]*padding:\s*0/s,
     )
     expect(css).toMatch(
       /\.widget-review-controls__inset\s*>\s*\.widget-review-meta\s+\.widget-review-meta__ids\s*\{[^}]*padding-right:\s*0\.4rem/s,
@@ -592,7 +592,7 @@ describe("widget log chrome — shared content dialect", () => {
     expect(listRow).toContain("formatPipelineSubtitle")
     expect(listRow).toContain("onToggleFold")
     expect(ops).toContain("ReviewSplitPane")
-    expect(ops).not.toContain("ReviewTreeHeader")
+    expect(ops).toContain("ReviewTreeHeader")
     expect(ops).toContain("op-log-day-cap")
     expect(ops).toContain("review-split-body")
     expect(ops).toContain("OperationLogInspector")

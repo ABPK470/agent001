@@ -716,7 +716,7 @@ export function OperationLog() {
                       />
                       <div
                         ref={listScrollRef}
-                        className="review-split-list-scroll min-h-0 flex-1 overflow-y-auto"
+                        className="review-split-list-scroll min-h-0 flex-1"
                         role="tree"
                         aria-label="Operations tree"
                         tabIndex={0}

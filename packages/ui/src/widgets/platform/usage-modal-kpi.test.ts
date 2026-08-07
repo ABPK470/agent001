@@ -107,7 +107,7 @@ describe("usage modal KPIs and expand detail", () => {
     expect(src).not.toContain("statusTone")
   })
 
-  it("filters include multi-select status badges (UI → API → SQL)", () => {
+  it("filters include multi-select status badges (UI → API → Kysely)", () => {
     const src = readFileSync(join(here, "UsageModal.tsx"), "utf8")
     expect(src).toContain('label="Status"')
     expect(src).toContain("FilterToggles")
@@ -126,6 +126,7 @@ describe("usage modal KPIs and expand detail", () => {
       join(here, "../../../../server/src/infra/persistence/adapters/sqlite/db/runs.ts"),
       "utf8",
     )
-    expect(db).toContain("r.status IN (")
+    expect(db).toContain('.where("r.status", "=", statuses[0]!)')
+    expect(db).toContain('.where("r.status", "in", statuses)')
   })
 })

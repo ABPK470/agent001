@@ -99,11 +99,14 @@ describe("user goal pin slot contract", () => {
     expect(userGoalPinSlotClass()).toBe("w-10")
   })
 
-  it("UserGoalBubble hugs text (w-fit) — never stretches to the column", () => {
+  it("UserGoalBubble hugs text (w-fit); edit mode stretches (w-full)", () => {
     const src = readFileSync(new URL("../TermChat.tsx", import.meta.url), "utf8")
     const block = src.match(/function UserGoalBubble[\s\S]*?\n\}\n\nfunction ChatTurn/)?.[0] ?? ""
     expect(block).toContain("w-fit")
-    expect(block).not.toMatch(/(?<![\w-])w-full(?![\w-])/)
     expect(block).not.toContain("flex-1")
+    // Edit path fills the column so the textarea can grow; display shells stay w-fit.
+    expect(block).toMatch(/if \(editing[\s\S]*?\$\{shellClass\} w-full max-w-full/)
+    const displayShells = block.replace(/if \(editing[\s\S]*?\n  \}\n\n/, "")
+    expect(displayShells).not.toMatch(/(?<![\w-])w-full(?![\w-])/)
   })
 })

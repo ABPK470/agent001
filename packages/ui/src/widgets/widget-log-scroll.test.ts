@@ -78,9 +78,13 @@ describe("widget log scroll — review-family wiring", () => {
   const ops = read(opsPath)
   const trace = read(tracePath)
 
-  it("virtualized list widgets bind scrollRef to WIDGET_LOG_SCROLL_CLASS", () => {
-    expect(ops).toMatch(/ref=\{scrollRef\}[\s\S]{0,120}WIDGET_LOG_SCROLL_CLASS/)
+  it("virtualized list widgets bind scrollRef to the scroll host", () => {
+    // Event Stream: shared panel-body--scroll host.
     expect(live).toMatch(/ref=\{containerRef\}[\s\S]{0,120}WIDGET_LOG_SCROLL_CLASS/)
+    // Pipelines: split-pane owns list scroll (CSS .review-split-list-scroll).
+    expect(ops).toMatch(/ref=\{listScrollRef\}[\s\S]{0,160}review-split-list-scroll/)
+    expect(ops).not.toContain("WIDGET_LOG_SCROLL_CLASS")
+    expect(read(cssPath)).toMatch(/\.review-split-list-scroll\s*\{[^}]*overflow-y:\s*auto/s)
   })
 
   it("trace uses body slot on split shell; tree scroller is inner CSS", () => {
@@ -101,7 +105,7 @@ describe("widget log scroll — review-family wiring", () => {
   })
 
   it("OperationLog passes scrollRef into VirtualList", () => {
-    expect(ops).toMatch(/scrollRef=\{scrollRef\}/)
+    expect(ops).toMatch(/scrollRef=\{listScrollRef\}/)
     expect(ops).toContain("VirtualList")
   })
 

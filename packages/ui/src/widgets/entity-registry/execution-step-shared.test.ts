@@ -114,6 +114,6 @@ describe("execution-step-shared", () => {
           },
         },
       ),
-    ).toBe("Text: Pipeline name: test")
+    ).toBe("Pipeline name: test")
   })
 })
