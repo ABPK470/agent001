@@ -61,6 +61,7 @@ export function OperationLogToolbar({
   search,
   setSearch,
   searchPending,
+  searchInputRef,
   timeWindow,
   setQuickRange,
   setFromDate,
@@ -83,6 +84,8 @@ export function OperationLogToolbar({
   search: string
   setSearch: (v: string) => void
   searchPending: boolean
+  /** Focus target for `/` — same dialect as Event Stream. */
+  searchInputRef?: RefObject<HTMLInputElement | null>
   timeWindow: EventStreamWindow
   setQuickRange: (range: EventStreamRange) => void
   setFromDate: (from: string | undefined) => void
@@ -211,9 +214,11 @@ export function OperationLogToolbar({
       <WidgetToolbar>
         <WidgetToolbarLeading>{null}</WidgetToolbarLeading>
         <WidgetToolbarSearch
+          inputRef={searchInputRef}
           value={search}
           onChange={setSearch}
           placeholder="Filter pipelines…"
+          shortcutHint="/"
           loading={searchPending}
           onClear={() => setSearch("")}
         />

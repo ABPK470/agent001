@@ -114,6 +114,8 @@ describe("Trace toolbar structure + behavior wiring", () => {
     const dag = read(dagPath)
     expect(dag).toContain('placeholder="Filter calls, tools, work…"')
     expect(dag).toContain("WidgetToolbarSearch")
+    expect(dag).toContain('shortcutHint="/"')
+    expect(dag).toContain("searchInputRef")
     expect(dag).toContain("setSearch")
     expect(dag).toMatch(/onClear=\{\(\) => setSearch\(""\)\}/)
   })

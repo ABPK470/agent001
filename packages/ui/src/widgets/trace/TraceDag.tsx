@@ -131,6 +131,7 @@ export function TraceDag({
   const [scopeDrawerOpen, setScopeDrawerOpen] = useState(false)
   const [focusedPane, setFocusedPane] = useState<TracePane>("tree")
   const [splitRatio, setSplitRatio] = useState(TRACE_SPLIT_DEFAULT)
+  const searchInputRef = useRef<HTMLInputElement>(null)
 
   // Publish Trace pane for keymap Active Context (clear when Trace loses keys).
   useEffect(() => {
@@ -190,8 +191,14 @@ export function TraceDag({
   const filterOpen = zenSearchOpen || Boolean(search.trim())
 
   function onSearchOpenChange(open: boolean) {
-    setZenSearchOpen(open)
-    if (!open) setSearch("")
+    if (open) {
+      // `/` / Mod+F — same dialect as Event Stream: zen HUD vs chrome field.
+      if (isZen) setZenSearchOpen(true)
+      else searchInputRef.current?.focus()
+      return
+    }
+    setZenSearchOpen(false)
+    setSearch("")
   }
 
   useEffect(() => {
@@ -669,9 +676,11 @@ export function TraceDag({
               />
             </WidgetToolbarLeading>
             <WidgetToolbarSearch
+              inputRef={searchInputRef}
               value={search}
               onChange={setSearch}
               placeholder="Filter calls, tools, work…"
+              shortcutHint="/"
               onClear={() => setSearch("")}
             />
             <WidgetToolbarTrailing>

@@ -114,9 +114,11 @@ describe("widget log chrome — shell", () => {
     expect(live).toContain("WidgetToolbar")
     expect(live).toContain("WidgetToolbarSearch")
     expect(live).toContain("WidgetToolbarTrailing")
+    expect(live).toContain('shortcutHint="/"')
 
     expect(ops).toContain("WidgetToolbar")
     expect(ops).toContain("WidgetToolbarSearch")
+    expect(ops).toContain('shortcutHint="/"')
     expect(ops).toContain("FilterSheet")
     expect(ops).toContain("FilterChoiceGrid")
     expect(ops).toContain("ReviewTreeFoldToggle")
@@ -125,6 +127,7 @@ describe("widget log chrome — shell", () => {
 
     expect(trace).toContain("WidgetToolbar")
     expect(trace).toContain("WidgetToolbarSearch")
+    expect(trace).toContain('shortcutHint="/"')
     expect(trace).toContain("widget-review-meta")
     expect(trace).not.toContain("trace-search")
     expect(trace).not.toContain('className="trace-toolbar')

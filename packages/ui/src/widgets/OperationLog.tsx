@@ -347,6 +347,7 @@ export function OperationLog() {
   const listTreeRef = useRef<VirtualListHandle>(null)
   const sentinelRef = useRef<HTMLDivElement>(null)
   const filterBtnRef = useRef<HTMLButtonElement>(null)
+  const searchInputRef = useRef<HTMLInputElement>(null)
   const activeViewId = useLayoutStore((s) => s.activeViewId)
   const toggleTileMaximized = useLayoutStore((s) => s.toggleTileMaximized)
   const summonOpen = useStore((s) => s.summonOpen)
@@ -619,8 +620,10 @@ export function OperationLog() {
       else toggleZen()
       return true
     }
-    if (isZen && ((mod && key === "f") || (key === "/" && !mod))) {
-      setZenSearchOpen(true)
+    // `/` / Mod+F — focus filter (chrome) or open zen search HUD.
+    if ((mod && key === "f") || (key === "/" && !mod)) {
+      if (isZen) setZenSearchOpen(true)
+      else searchInputRef.current?.focus()
       return true
     }
     return false
@@ -638,8 +641,9 @@ export function OperationLog() {
         ? 1
         : 0)
 
+  // Claim while armed — `/` must focus search even on an empty list (Event Stream dialect).
   useReviewOperatorKeyboard({
-    enabled: operatorKeysEnabled,
+    enabled: surfaceArmed,
     surfaceId: "pipelines",
     focusedPane,
     onFocusedPaneChange,
@@ -745,6 +749,7 @@ export function OperationLog() {
             search={search}
             setSearch={setSearch}
             searchPending={searchPending}
+            searchInputRef={searchInputRef}
             timeWindow={timeWindow}
             setQuickRange={setQuickRange}
             setFromDate={setFromDate}
