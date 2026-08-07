@@ -70,8 +70,8 @@ afterEach(() => {
 
 describe("entity export guards — per-entity paths", () => {
   for (const entityId of CORE_ENTITIES) {
-    it(`registry JSON export for ${entityId} is import-safe`, () => {
-      const entity = db.getEntityDefinition(TENANT, entityId)
+    it(`registry JSON export for ${entityId} is import-safe`, async () => {
+      const entity = await db.getEntityDefinition(TENANT, entityId)
       expect(entity).toBeTruthy()
 
       const json = formatEntityJson(entity!)
@@ -84,8 +84,8 @@ describe("entity export guards — per-entity paths", () => {
 })
 
 describe("entity export guards — bulk paths", () => {
-  it("catalog snapshot export validates and round-trips through import preview", () => {
-    const snapshot = buildDeployCatalogSnapshot({ tenantId: TENANT })
+  it("catalog snapshot export validates and round-trips through import preview", async () => {
+    const snapshot = await buildDeployCatalogSnapshot({ tenantId: TENANT })
     const preview = validateDeployCatalogSnapshot(snapshot)
     expect(preview.ok).toBe(true)
     expect(preview.errors).toEqual([])
@@ -93,9 +93,9 @@ describe("entity export guards — bulk paths", () => {
 })
 
 describe("entity export guards — corrupt SQLite blocked at export", () => {
-  it("catalog snapshot export fails when any entity is not exportable", () => {
+  it("catalog snapshot export fails when any entity is not exportable", async () => {
     corruptContentContentTypePredicate()
-    expect(() => buildDeployCatalogSnapshot({ tenantId: TENANT })).toThrow(
+    await expect(buildDeployCatalogSnapshot({ tenantId: TENANT })).rejects.toThrow(
       EntityExportValidationError,
     )
   })

@@ -42,7 +42,7 @@ async function setup() {
 describe("notification delivery routing (F1.10)", () => {
   it("upsert + list + delete CRUD", async () => {
     const m = await setup()
-    const r = m.upsertNotificationRoute({
+    const r = await m.upsertNotificationRoute({
       tenantId: "_default",
       eventType: "sync.proposal.created",
       filter: { riskTier: ["high"] },
@@ -52,14 +52,14 @@ describe("notification delivery routing (F1.10)", () => {
       actor: "admin"
     })
     expect(r.id).toBeDefined()
-    expect(m.listNotificationRoutes("_default")).toHaveLength(1)
-    m.deleteNotificationRoute(r.id)
-    expect(m.listNotificationRoutes("_default")).toHaveLength(0)
+    expect(await m.listNotificationRoutes("_default")).toHaveLength(1)
+    await m.deleteNotificationRoute(r.id)
+    expect(await m.listNotificationRoutes("_default")).toHaveLength(0)
   })
 
   it("filter matching: riskTier exact match", async () => {
     const m = await setup()
-    m.upsertNotificationRoute({
+    await m.upsertNotificationRoute({
       tenantId: "_default",
       eventType: "sync.proposal.created",
       filter: { riskTier: ["high", "critical"] },
@@ -69,7 +69,7 @@ describe("notification delivery routing (F1.10)", () => {
       actor: "admin"
     })
     expect(
-      m.listMatchingRoutes({
+      await m.listMatchingRoutes({
         tenantId: "_default",
         eventType: "sync.proposal.created",
         riskTier: "high",
@@ -77,7 +77,7 @@ describe("notification delivery routing (F1.10)", () => {
       })
     ).toHaveLength(1)
     expect(
-      m.listMatchingRoutes({
+      await m.listMatchingRoutes({
         tenantId: "_default",
         eventType: "sync.proposal.created",
         riskTier: "low",
@@ -85,13 +85,13 @@ describe("notification delivery routing (F1.10)", () => {
       })
     ).toHaveLength(0)
     expect(
-      m.listMatchingRoutes({ tenantId: "_default", eventType: "sync.proposal.created", context: {} })
+      await m.listMatchingRoutes({ tenantId: "_default", eventType: "sync.proposal.created", context: {} })
     ).toHaveLength(1) // missing riskTier ⇒ pass
   })
 
   it("filter matching: AND across clauses", async () => {
     const m = await setup()
-    m.upsertNotificationRoute({
+    await m.upsertNotificationRoute({
       tenantId: "_default",
       eventType: "sync.proposal.created",
       filter: { riskTier: ["high"], envPair: ["uat→prod"] },
@@ -101,7 +101,7 @@ describe("notification delivery routing (F1.10)", () => {
       actor: "admin"
     })
     expect(
-      m.listMatchingRoutes({
+      await m.listMatchingRoutes({
         tenantId: "_default",
         eventType: "sync.proposal.created",
         riskTier: "high",
@@ -110,7 +110,7 @@ describe("notification delivery routing (F1.10)", () => {
       })
     ).toHaveLength(1)
     expect(
-      m.listMatchingRoutes({
+      await m.listMatchingRoutes({
         tenantId: "_default",
         eventType: "sync.proposal.created",
         riskTier: "high",
@@ -122,7 +122,7 @@ describe("notification delivery routing (F1.10)", () => {
 
   it("disabled routes are not returned by listMatchingRoutes", async () => {
     const m = await setup()
-    m.upsertNotificationRoute({
+    await m.upsertNotificationRoute({
       tenantId: "_default",
       eventType: "sync.proposal.created",
       filter: {},
@@ -132,12 +132,12 @@ describe("notification delivery routing (F1.10)", () => {
       actor: "admin"
     })
     expect(
-      m.listMatchingRoutes({ tenantId: "_default", eventType: "sync.proposal.created", context: {} })
+      await m.listMatchingRoutes({ tenantId: "_default", eventType: "sync.proposal.created", context: {} })
     ).toHaveLength(0)
   })
 
   it("listNotificationLog filters by status + limit", async () => {
     const m = await setup()
-    expect(m.listNotificationLog({ status: "sent", limit: 10 })).toEqual([])
+    expect(await m.listNotificationLog({ status: "sent", limit: 10 })).toEqual([])
   })
 })

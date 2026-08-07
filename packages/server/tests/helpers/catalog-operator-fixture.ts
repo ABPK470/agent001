@@ -66,8 +66,8 @@ export async function setupCatalogOperatorFixture(): Promise<CatalogOperatorFixt
   const { seedSyncMetadataIfEmpty } = await import(
     "../../src/api/sync/service/seed-sync-metadata.js"
   )
-  seedEntityRegistryIfEmpty(projectRoot)
-  seedSyncMetadataIfEmpty(projectRoot)
+  await seedEntityRegistryIfEmpty(projectRoot)
+  await seedSyncMetadataIfEmpty(projectRoot)
 
   const adminSession: CurrentSession = {
     sid: "sid-catalog-operator",
@@ -146,7 +146,7 @@ export async function buildSyncDefinitionsApp(
   const { resolve } = await import("node:path")
   const { fileURLToPath } = await import("node:url")
 
-  seedDefaultPoliciesIfMissing(resolve(fileURLToPath(new URL("..", import.meta.url)), "../../.."))
+  await seedDefaultPoliciesIfMissing(resolve(fileURLToPath(new URL("..", import.meta.url)), "../../.."))
 
   seedUser(fixture.testDb, fixture.adminSession.upn, {
     displayName: fixture.adminSession.displayName,
@@ -193,13 +193,12 @@ export async function bootstrapPublishedCatalog(
   const { publishSyncDefinitionsFromDb } = await import(
     "../../src/api/sync/service/definitions.js"
   )
-  ensureInitialSyncCatalogVersion("system")
-  const published = publishSyncDefinitionsFromDb(fixture.projectRoot)
+  await ensureInitialSyncCatalogVersion("system")
+  await publishSyncDefinitionsFromDb(fixture.projectRoot)
   const tipVersion = await db.getActiveSyncCatalogVersion(TENANT)
   if (tipVersion == null) throw new Error("expected active catalog version after seed")
   const meta = await db.getSyncPublishMeta(TENANT)
   if (meta?.catalog_version == null) throw new Error("expected publish stamp after publish")
-  void published
   return { tipVersion, publishedVersion: meta.catalog_version }
 }
 
@@ -233,7 +232,7 @@ export async function appendFlowMarkerStep(args: {
     updated_at: new Date().toISOString(),
     updated_by: args.actor ?? "operator",
   })
-  const commit = recordSyncCatalogChange({
+  const commit = await recordSyncCatalogChange({
     reason: `sync-metadata:flow:${args.flowId}`,
     actor: args.actor ?? "operator",
   })
@@ -270,7 +269,7 @@ export async function bumpSyncEnvironmentTip(args?: {
     updated_at: now,
     updated_by: args?.actor ?? "operator",
   })
-  const commit = recordSyncCatalogChange({
+  const commit = await recordSyncCatalogChange({
     reason: `sync-env:update:${name}`,
     actor: args?.actor ?? "operator",
   })

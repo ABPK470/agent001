@@ -57,23 +57,23 @@ describe("catalog operator workflows — first-principles invariants", () => {
         expect(isCatalogId(step.kind), `preset ${preset.id} step kind ${step.kind}`).toBe(true)
       }
     }
-    expect(listPresetStepKinds()).toContain("metadataSync")
-    expect(listPresetStepKinds().some((kind) => kind.includes("-"))).toBe(false)
+    expect(await listPresetStepKinds()).toContain("metadataSync")
+    expect((await listPresetStepKinds()).some((kind) => kind.includes("-"))).toBe(false)
   })
 
-  it("exported catalog snapshot validates without errors", () => {
-    const snapshot = buildDeployCatalogSnapshot({ tenantId: TENANT })
-    const preview = validateDeployCatalogSnapshot(snapshot)
+  it("exported catalog snapshot validates without errors", async () => {
+    const snapshot = await buildDeployCatalogSnapshot({ tenantId: TENANT })
+    const preview = await validateDeployCatalogSnapshot(snapshot)
     expect(preview.ok).toBe(true)
     expect(preview.errors).toEqual([])
   })
 
-  it("prepareFlowStepsForStorage strips phase before persistence", () => {
-    const snapshot = buildDeployCatalogSnapshot({ tenantId: TENANT })
+  it("prepareFlowStepsForStorage strips phase before persistence", async () => {
+    const snapshot = await buildDeployCatalogSnapshot({ tenantId: TENANT })
     const catalog = buildFlowCatalogFromSyncMetadataDoc(
       snapshot.syncMetadata as Parameters<typeof buildFlowCatalogFromSyncMetadataDoc>[0],
     )
-    const steps = contentFlowStepsFromDb().map((step) => ({
+    const steps = (await contentFlowStepsFromDb()).map((step) => ({
       ...step,
       phase: "metadata" as const,
     }))
@@ -82,8 +82,8 @@ describe("catalog operator workflows — first-principles invariants", () => {
     expect(stored.some((step) => step.kind === "metadataSync")).toBe(true)
   })
 
-  it("rejects kebab-case kinds at the shared validation ingress", () => {
-    const snapshot = buildDeployCatalogSnapshot({ tenantId: TENANT })
+  it("rejects kebab-case kinds at the shared validation ingress", async () => {
+    const snapshot = await buildDeployCatalogSnapshot({ tenantId: TENANT })
     const catalog = buildFlowCatalogFromSyncMetadataDoc(
       snapshot.syncMetadata as Parameters<typeof buildFlowCatalogFromSyncMetadataDoc>[0],
     )
@@ -103,8 +103,8 @@ describe("catalog operator workflows — first-principles invariants", () => {
     ).toThrow(FlowStepsValidationError)
   })
 
-  it("rejects flow steps that reference unknown kinds", () => {
-    const snapshot = buildDeployCatalogSnapshot({ tenantId: TENANT })
+  it("rejects flow steps that reference unknown kinds", async () => {
+    const snapshot = await buildDeployCatalogSnapshot({ tenantId: TENANT })
     const catalog = buildFlowCatalogFromSyncMetadataDoc(
       snapshot.syncMetadata as Parameters<typeof buildFlowCatalogFromSyncMetadataDoc>[0],
     )
@@ -163,7 +163,7 @@ describe("catalog operator workflows — Configuration API", () => {
 
   it("POST /api/sync-metadata/flows accepts canonical steps and strips phase in SQLite", async () => {
     const app = await buildSyncMetadataApp(fixture)
-    const steps = contentFlowStepsFromDb().map((step) => ({
+    const steps = (await contentFlowStepsFromDb()).map((step) => ({
       ...step,
       phase: step.kind === "metadataSync" ? "metadata" : "postMetadata",
     }))
@@ -190,7 +190,7 @@ describe("catalog operator workflows — Configuration API", () => {
 
   it("GET /api/sync-metadata returns camelCase flow steps after operator save", async () => {
     const app = await buildSyncMetadataApp(fixture)
-    const steps = contentFlowStepsFromDb()
+    const steps = await contentFlowStepsFromDb()
 
     await app.inject({
       method: "POST",
@@ -208,11 +208,11 @@ describe("catalog operator workflows — Configuration API", () => {
 })
 
 describe("catalog operator workflows — import and export", () => {
-  it("dry-run import previews without mutating SQLite", () => {
-    const snapshot = buildDeployCatalogSnapshot({ tenantId: TENANT })
-    const beforeFlowId = db.getEntityDefinition(TENANT, "dataset")?.flowId
+  it("dry-run import previews without mutating SQLite", async () => {
+    const snapshot = await buildDeployCatalogSnapshot({ tenantId: TENANT })
+    const beforeFlowId = (await db.getEntityDefinition(TENANT, "dataset"))?.flowId
 
-    const preview = applyDeployCatalogSnapshot({
+    const preview = await applyDeployCatalogSnapshot({
       snapshot,
       actor: "operator",
       projectRoot: fixture.projectRoot,
@@ -220,11 +220,11 @@ describe("catalog operator workflows — import and export", () => {
     })
     expect(preview.ok).toBe(true)
     expect(preview.applied).toBe(false)
-    expect(db.getEntityDefinition(TENANT, "dataset")?.flowId).toBe(beforeFlowId)
+    expect((await db.getEntityDefinition(TENANT, "dataset"))?.flowId).toBe(beforeFlowId)
   })
 
-  it("rejects kebab-case flows in import preview before any writes", () => {
-    const snapshot = buildDeployCatalogSnapshot({ tenantId: TENANT })
+  it("rejects kebab-case flows in import preview before any writes", async () => {
+    const snapshot = await buildDeployCatalogSnapshot({ tenantId: TENANT })
     const meta = snapshot.syncMetadata as {
       flows?: Record<string, { label: string; description?: string; steps: unknown[] }>
     }
@@ -238,24 +238,24 @@ describe("catalog operator workflows — import and export", () => {
       },
     ]
 
-    const preview = validateDeployCatalogSnapshot(snapshot)
+    const preview = await validateDeployCatalogSnapshot(snapshot)
     expect(preview.ok).toBe(false)
-    expect(applyDeployCatalogSnapshot({
+    expect((await applyDeployCatalogSnapshot({
       snapshot,
       actor: "operator",
       projectRoot: fixture.projectRoot,
       dryRun: false,
-    }).applied).toBe(false)
+    })).applied).toBe(false)
   })
 
   it("export → clear flowId → import restores entity flowId", async () => {
-    const snapshot = buildDeployCatalogSnapshot({ tenantId: TENANT })
+    const snapshot = await buildDeployCatalogSnapshot({ tenantId: TENANT })
     const datasetBefore = snapshot.entityRegistry?.entities.find(
       (entry) => (entry as { id?: string }).id === "dataset",
     ) as { flowId?: string } | undefined
     expect(datasetBefore?.flowId).toBeTruthy()
 
-    const entity = db.getEntityDefinition(TENANT, "dataset")
+    const entity = await db.getEntityDefinition(TENANT, "dataset")
     expect(entity).toBeTruthy()
     await db.saveEntityDefinition({
       tenantId: TENANT,
@@ -264,7 +264,7 @@ describe("catalog operator workflows — import and export", () => {
       def: { ...entity!, flowId: "metadataOnly" },
     })
 
-    const applied = applyDeployCatalogSnapshot({
+    const applied = await applyDeployCatalogSnapshot({
       snapshot,
       actor: "operator",
       projectRoot: fixture.projectRoot,
@@ -272,14 +272,14 @@ describe("catalog operator workflows — import and export", () => {
     })
     expect(applied.applied).toBe(true)
 
-    expect(db.getEntityDefinition(TENANT, "dataset")?.flowId).toBe(datasetBefore?.flowId)
-    const adminItems = listSyncDefinitionAdminItems(fixture.projectRoot)
+    expect((await db.getEntityDefinition(TENANT, "dataset"))?.flowId).toBe(datasetBefore?.flowId)
+    const adminItems = await listSyncDefinitionAdminItems(fixture.projectRoot)
     expect(adminItems.find((item) => item.id === "dataset")?.executionSteps.length).toBeGreaterThan(0)
   })
 
   it("import retires entities the operator added after the exported baseline", async () => {
-    const snapshot = buildDeployCatalogSnapshot({ tenantId: TENANT })
-    const template = db.getEntityDefinition(TENANT, "contract")
+    const snapshot = await buildDeployCatalogSnapshot({ tenantId: TENANT })
+    const template = await db.getEntityDefinition(TENANT, "contract")
     expect(template).toBeTruthy()
 
     await db.saveEntityDefinition({
@@ -288,21 +288,21 @@ describe("catalog operator workflows — import and export", () => {
       reason: "operator-add",
       def: { ...template!, id: "operatorOrphan", displayName: "Operator Orphan" },
     })
-    expect(db.getEntityDefinition(TENANT, "operatorOrphan")).toBeTruthy()
+    expect((await db.getEntityDefinition(TENANT, "operatorOrphan"))).toBeTruthy()
 
-    applyDeployCatalogSnapshot({
+    await applyDeployCatalogSnapshot({
       snapshot,
       actor: "operator",
       projectRoot: fixture.projectRoot,
       dryRun: false,
     })
 
-    expect(db.getEntityDefinition(TENANT, "operatorOrphan")).toBeNull()
-    expect(db.getEntityDefinition(TENANT, "operatorOrphan", { includeRetired: true })?.retiredAt).toBeTruthy()
+    expect((await db.getEntityDefinition(TENANT, "operatorOrphan"))).toBeNull()
+    expect((await db.getEntityDefinition(TENANT, "operatorOrphan", { includeRetired: true }))?.retiredAt).toBeTruthy()
   })
 
-  it("rejects snapshots with kebab-case action ids", () => {
-    const snapshot = buildDeployCatalogSnapshot({ tenantId: TENANT })
+  it("rejects snapshots with kebab-case action ids", async () => {
+    const snapshot = await buildDeployCatalogSnapshot({ tenantId: TENANT })
     const meta = snapshot.syncMetadata as {
       actions?: Array<{ id: string; label: string; definition: unknown }>
     }
@@ -311,7 +311,7 @@ describe("catalog operator workflows — import and export", () => {
       { id: "metadata-sync", label: "bad", definition: {} },
     ]
 
-    const preview = validateDeployCatalogSnapshot(snapshot)
+    const preview = await validateDeployCatalogSnapshot(snapshot)
     expect(preview.ok).toBe(false)
     expect(preview.errors.some((error) => error.includes("camelCase"))).toBe(true)
   })
@@ -319,8 +319,8 @@ describe("catalog operator workflows — import and export", () => {
 
 describe("catalog operator workflows — configuration versions and rollback", () => {
   it("commit captures operator state; rollback restores entity registry", async () => {
-    const baseline = commitSyncCatalogVersion({ reason: "operator-baseline", actor: "operator" })
-    const template = db.getEntityDefinition(TENANT, "contract")
+    const baseline = await commitSyncCatalogVersion({ reason: "operator-baseline", actor: "operator" })
+    const template = await db.getEntityDefinition(TENANT, "contract")
     expect(template).toBeTruthy()
 
     await db.saveEntityDefinition({
@@ -329,21 +329,21 @@ describe("catalog operator workflows — configuration versions and rollback", (
       reason: "operator-add",
       def: { ...template!, id: "versionOrphan", displayName: "Version Orphan" },
     })
-    commitSyncCatalogVersion({ reason: "operator-follow-up", actor: "operator" })
-    expect(db.getEntityDefinition(TENANT, "versionOrphan")).toBeTruthy()
+    await commitSyncCatalogVersion({ reason: "operator-follow-up", actor: "operator" })
+    expect((await db.getEntityDefinition(TENANT, "versionOrphan"))).toBeTruthy()
 
-    rollbackSyncCatalogVersion({
+    await rollbackSyncCatalogVersion({
       targetVersion: baseline.version,
       actor: "operator",
       projectRoot: fixture.projectRoot,
     })
 
-    expect(db.getEntityDefinition(TENANT, "versionOrphan")).toBeNull()
-    expect(db.getEntityDefinition(TENANT, "contract")).toBeTruthy()
+    expect((await db.getEntityDefinition(TENANT, "versionOrphan"))).toBeNull()
+    expect((await db.getEntityDefinition(TENANT, "contract"))).toBeTruthy()
   })
 
   it("rollback restores flow preset steps from the committed snapshot", async () => {
-    const baseline = commitSyncCatalogVersion({ reason: "flow-baseline", actor: "operator" })
+    const baseline = await commitSyncCatalogVersion({ reason: "flow-baseline", actor: "operator" })
 
     await db.saveSyncFlow({
       tenant_id: TENANT,
@@ -355,10 +355,10 @@ describe("catalog operator workflows — configuration versions and rollback", (
       updated_at: new Date().toISOString(),
       updated_by: "operator",
     })
-    commitSyncCatalogVersion({ reason: "flow-broken", actor: "operator" })
+    await commitSyncCatalogVersion({ reason: "flow-broken", actor: "operator" })
     expect(db.parseFlowSteps((await db.getSyncFlow(TENANT, "content"))!.steps_json)).toEqual([])
 
-    rollbackSyncCatalogVersion({
+    await rollbackSyncCatalogVersion({
       targetVersion: baseline.version,
       actor: "operator",
       projectRoot: fixture.projectRoot,
@@ -369,7 +369,7 @@ describe("catalog operator workflows — configuration versions and rollback", (
   })
 
   it("publish succeeds for core entities after rollback to known-good version", async () => {
-    const baseline = commitSyncCatalogVersion({ reason: "publish-baseline", actor: "operator" })
+    const baseline = await commitSyncCatalogVersion({ reason: "publish-baseline", actor: "operator" })
 
     await db.saveSyncFlow({
       tenant_id: TENANT,
@@ -381,22 +381,22 @@ describe("catalog operator workflows — configuration versions and rollback", (
       updated_at: new Date().toISOString(),
       updated_by: "operator",
     })
-    commitSyncCatalogVersion({ reason: "publish-broken", actor: "operator" })
+    await commitSyncCatalogVersion({ reason: "publish-broken", actor: "operator" })
 
-    rollbackSyncCatalogVersion({
+    await rollbackSyncCatalogVersion({
       targetVersion: baseline.version,
       actor: "operator",
       projectRoot: fixture.projectRoot,
     })
 
-    const result = publishSyncDefinitionsFromDb(fixture.projectRoot)
+    const result = await publishSyncDefinitionsFromDb(fixture.projectRoot)
     for (const entityId of ["content", "contract", "dataset"]) {
       expect(result.stderr.some((line) => line.includes(`Refusing to publish "${entityId}"`))).toBe(false)
     }
   })
 
   it("chained operator cycle: baseline → break → commit → rollback → import → publish", async () => {
-    const baseline = commitSyncCatalogVersion({ reason: "cycle-baseline", actor: "operator" })
+    const baseline = await commitSyncCatalogVersion({ reason: "cycle-baseline", actor: "operator" })
 
     await db.saveSyncFlow({
       tenant_id: TENANT,
@@ -408,24 +408,24 @@ describe("catalog operator workflows — configuration versions and rollback", (
       updated_at: new Date().toISOString(),
       updated_by: "operator",
     })
-    commitSyncCatalogVersion({ reason: "cycle-broken", actor: "operator" })
+    await commitSyncCatalogVersion({ reason: "cycle-broken", actor: "operator" })
 
-    rollbackSyncCatalogVersion({
+    await rollbackSyncCatalogVersion({
       targetVersion: baseline.version,
       actor: "operator",
       projectRoot: fixture.projectRoot,
     })
 
-    const reexport = buildDeployCatalogSnapshot({ tenantId: TENANT })
-    expect(validateDeployCatalogSnapshot(reexport).ok).toBe(true)
-    applyDeployCatalogSnapshot({
+    const reexport = await buildDeployCatalogSnapshot({ tenantId: TENANT })
+    expect((await validateDeployCatalogSnapshot(reexport)).ok).toBe(true)
+    await applyDeployCatalogSnapshot({
       snapshot: reexport,
       actor: "operator",
       projectRoot: fixture.projectRoot,
       dryRun: false,
     })
 
-    const result = publishSyncDefinitionsFromDb(fixture.projectRoot)
+    const result = await publishSyncDefinitionsFromDb(fixture.projectRoot)
     expect(result.definitionCount).toBeGreaterThan(0)
     expect(result.stderr.some((line) => line.includes('Refusing to publish "dataset"'))).toBe(false)
   })
@@ -444,10 +444,10 @@ describe("catalog operator workflows — publish pipeline", () => {
       updated_by: "operator",
     })
 
-    const catalog = loadAuthoringFlowCatalog(fixture.projectRoot, TENANT)
+    const catalog = await loadAuthoringFlowCatalog(fixture.projectRoot, TENANT)
     expect(catalog.flowTemplates.content.steps.some((step) => step.kind === "metadataSync")).toBe(true)
 
-    const result = publishSyncDefinitionsFromDb(fixture.projectRoot)
+    const result = await publishSyncDefinitionsFromDb(fixture.projectRoot)
     expect(result.stderr.some((line) => line.includes('Refusing to publish "content"'))).toBe(false)
   })
 
@@ -535,16 +535,16 @@ describe("catalog operator workflows — publish pipeline", () => {
     ).rejects.toThrow(FlowStepsValidationError)
   })
 
-  it("import then publish resolves metadataSync for every core entity type", () => {
-    const snapshot = buildDeployCatalogSnapshot({ tenantId: TENANT })
-    applyDeployCatalogSnapshot({
+  it("import then publish resolves metadataSync for every core entity type", async () => {
+    const snapshot = await buildDeployCatalogSnapshot({ tenantId: TENANT })
+    await applyDeployCatalogSnapshot({
       snapshot,
       actor: "operator",
       projectRoot: fixture.projectRoot,
       dryRun: false,
     })
 
-    const result = publishSyncDefinitionsFromDb(fixture.projectRoot)
+    const result = await publishSyncDefinitionsFromDb(fixture.projectRoot)
     expect(result.definitionCount).toBeGreaterThan(0)
     for (const entityId of ["content", "contract", "dataset"]) {
       expect(result.stderr.some((line) => line.includes(`Refusing to publish "${entityId}"`))).toBe(false)

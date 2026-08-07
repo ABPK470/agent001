@@ -47,7 +47,7 @@ describe("entity registry operator routes", () => {
   })
 
   it("dry-run preview for registry JSON import validates before save", async () => {
-    const entity = db.getEntityDefinition(TENANT, "dataset")
+    const entity = await db.getEntityDefinition(TENANT, "dataset")
     expect(entity).toBeTruthy()
     const exportResponse = await (await buildEntityRegistryApp(fixture)).inject({
       method: "GET",

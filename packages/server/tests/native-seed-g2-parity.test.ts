@@ -75,17 +75,17 @@ describe("native seed ≡ G2 logical catalog", () => {
 
     _setDb(testDb)
     _migrate(testDb)
-    const seeded = seedEntityRegistryIfEmpty(projectRoot)
+    const seeded = await seedEntityRegistryIfEmpty(projectRoot)
     expect(seeded.source).toBe("artifacts")
     expect(seeded.seeded).toBeGreaterThan(0)
-    seedSyncMetadataIfEmpty(projectRoot)
+    await seedSyncMetadataIfEmpty(projectRoot)
 
     const g2 = JSON.parse(readFileSync(G2_PATH, "utf-8")) as {
       entities: Record<string, EntityDefinition>
       configs: Record<string, { entityId: string; flowPreset: string }>
     }
 
-    const entities = listEntityDefinitions("_default")
+    const entities = await listEntityDefinitions("_default")
     expect(entities.map((e) => e.id).sort()).toEqual(Object.keys(g2.entities).sort())
 
     for (const entity of entities) {
@@ -105,11 +105,11 @@ describe("native seed ≡ G2 logical catalog", () => {
 
     _setDb(testDb)
     _migrate(testDb)
-    seedEntityRegistryIfEmpty(projectRoot)
-    seedSyncMetadataIfEmpty(projectRoot)
-    publishSyncDefinitionsFromDb(projectRoot)
+    await seedEntityRegistryIfEmpty(projectRoot)
+    await seedSyncMetadataIfEmpty(projectRoot)
+    await publishSyncDefinitionsFromDb(projectRoot)
 
-    const bundle = loadPublishedBundleFromDb()
+    const bundle = await loadPublishedBundleFromDb()
     expect(bundle).toBeTruthy()
 
     const g3 = JSON.parse(readFileSync(G3_PATH, "utf-8")) as {

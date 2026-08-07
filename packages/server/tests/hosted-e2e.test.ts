@@ -127,14 +127,14 @@ describe("hosted-mode end-to-end happy path", () => {
     }
 
     // 6. promoted row is durable and bound to the run / user.
-    const all = listAttachments({})
+    const all = await listAttachments({})
     const generated = all.find((r) => r.source === "generated")
     expect(generated).toBeTruthy()
     expect(generated?.run_id).toBe("run-e2e")
     expect(generated?.owner_upn).toBe("alice@example.com")
     expect(generated?.normalized_name).toBe("report.md")
     expect(generated?.scope).toBe("workspace_asset")
-    expect(getAttachment(generated!.id)?.purpose_tag).toBe("final-report")
+    expect((await getAttachment(generated!.id))?.purpose_tag).toBe("final-report")
 
     // Audit fired the right events in order.
     const types = events.map((e) => e.type)

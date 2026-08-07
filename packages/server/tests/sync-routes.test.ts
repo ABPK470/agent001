@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import type { AgentHost } from "@mia/agent"
 import { ALWAYS_PUBLISH_READY, createDbPublishedSyncDefinitionRegistry, type EntityDefinition } from "@mia/sync"
 import type { CurrentSession } from "../src/api/auth/index.js"
-import { loadPublishedBundleFromSqlite } from "../src/boot/published-sync-bundle.js"
+import { loadPublishedBundleFromSqliteCached } from "../src/boot/published-sync-bundle.js"
 
 let testDb: Database.Database
 let dataDir: string
@@ -40,7 +40,7 @@ function createHost(root: string): AgentHost {
       plans: { diskRoot: null, memCache: new Map() },
       project: {
         dbProjectRoot: root,
-        publishedDefinitions: createDbPublishedSyncDefinitionRegistry(loadPublishedBundleFromSqlite),
+        publishedDefinitions: createDbPublishedSyncDefinitionRegistry(loadPublishedBundleFromSqliteCached),
         publishReadiness: ALWAYS_PUBLISH_READY,
       }
     }
@@ -55,9 +55,9 @@ async function buildApp(session: CurrentSession): Promise<{ app: FastifyInstance
 
   _setDb(testDb)
   _migrate(testDb)
-  seedSyncMetadataIfEmpty(projectRoot)
+  await seedSyncMetadataIfEmpty(projectRoot)
   const { seedDefaultPoliciesIfMissing } = await import("../src/api/policies/service/policy-seeder.js")
-  seedDefaultPoliciesIfMissing(resolve(import.meta.dirname, "../../.."))
+  await seedDefaultPoliciesIfMissing(resolve(import.meta.dirname, "../../.."))
 
   const host = createHost(projectRoot)
   const app = Fastify({ logger: false })
@@ -205,7 +205,7 @@ describe("sync routes", () => {
       createdAt: new Date().toISOString(),
       retiredAt: null
     }
-    saveEntityDefinition({
+    await saveEntityDefinition({
       tenantId: "_default",
       def: entityDefinition,
       actor: "admin@example.com",
@@ -229,9 +229,9 @@ describe("sync routes", () => {
 
     const { loadPublishedBundleFromDb, listSyncDefinitions } =
       await import("../src/infra/persistence/adapters/sqlite/db/index.js")
-    const rows = listSyncDefinitions()
+    const rows = await listSyncDefinitions()
     expect(rows.map((row) => row.entity_id)).toEqual(["pipelineActivity"])
-    const publishedBundle = loadPublishedBundleFromDb()
+    const publishedBundle = await loadPublishedBundleFromDb()
     expect(publishedBundle).toBeTruthy()
     const pipelineActivity = publishedBundle!.definitions.pipelineActivity as {
       id: string

@@ -50,8 +50,8 @@ function loadHistoricalAuthored(entityId: string): AuthoredSyncDefinition {
   return authored
 }
 
-function contentTypePredicateFromDb(): string | null {
-  const entity = db.getEntityDefinition(TENANT, "content")
+async function contentTypePredicateFromDb(): Promise<string | null> {
+  const entity = await db.getEntityDefinition(TENANT, "content")
   const table = entity?.tables.find((row) => row.name === "gate.ContentType")
   if (!table || table.scope.kind !== "sql") return null
   return table.scope.predicate
@@ -162,7 +162,7 @@ describe("A→B conversion guards (historical Authored → EntityDefinition)", (
     expect(validation.errors.some((issue) => issue.code === "scope_degraded_legacy")).toBe(true)
   })
 
-  it("converts ground-truth content Authored with EXISTS predicates intact", () => {
+  it("converts ground-truth content Authored with EXISTS predicates intact", async () => {
     const seed = loadHistoricalAuthored("content")
     const entity = entityDefinitionFromAuthoredSync(seed, TENANT)
     expect(validateEntityDefinition(entity).ok).toBe(true)
@@ -175,18 +175,18 @@ describe("A→B conversion guards (historical Authored → EntityDefinition)", (
     expect(isDegradedLegacyFallbackPredicate(expected)).toBe(false)
 
     // Boot seed already loaded native content — projected predicate matches historical A→B.
-    expect(contentTypePredicateFromDb()).toBe(expected)
+    expect(await contentTypePredicateFromDb()).toBe(expected)
   })
 })
 
 describe("catalog snapshot import guards", () => {
-  it("restores corrupted content predicates when re-importing catalog snapshot", () => {
-    const snapshot = buildDeployCatalogSnapshot({ tenantId: TENANT })
+  it("restores corrupted content predicates when re-importing catalog snapshot", async () => {
+    const snapshot = await buildDeployCatalogSnapshot({ tenantId: TENANT })
 
     corruptContentContentTypePredicate()
-    expect(contentTypePredicateFromDb()).toMatch(/IN\s*\(\s*SELECT\s+DISTINCT/i)
+    expect(await contentTypePredicateFromDb()).toMatch(/IN\s*\(\s*SELECT\s+DISTINCT/i)
 
-    const applied = applyDeployCatalogSnapshot({
+    const applied = await applyDeployCatalogSnapshot({
       snapshot,
       actor: "test",
       projectRoot: fixture.projectRoot,
@@ -194,19 +194,19 @@ describe("catalog snapshot import guards", () => {
     })
     expect(applied.applied).toBe(true)
 
-    const predicate = contentTypePredicateFromDb()
+    const predicate = await contentTypePredicateFromDb()
     expect(predicate).toContain("EXISTS")
     expect(isDegradedLegacyFallbackPredicate(predicate!)).toBe(false)
   })
 
   it("bulk catalog re-import never introduces degraded IN-list predicates", async () => {
-    const snapshot = buildDeployCatalogSnapshot({ tenantId: TENANT, includeRetiredEntities: true })
+    const snapshot = await buildDeployCatalogSnapshot({ tenantId: TENANT, includeRetiredEntities: true })
 
     for (const row of await db.listEntityDefinitions(TENANT)) {
       await db.retireEntityDefinition(TENANT, row.id, "test")
     }
 
-    const applied = applyDeployCatalogSnapshot({
+    const applied = await applyDeployCatalogSnapshot({
       snapshot,
       actor: "test",
       projectRoot: fixture.projectRoot,
@@ -225,9 +225,9 @@ describe("catalog snapshot import guards", () => {
     }
   })
 
-  it("preview rejects entity registry rows with degraded predicates", () => {
-    const snapshot = buildDeployCatalogSnapshot({ tenantId: TENANT })
-    const entity = db.getEntityDefinition(TENANT, "content")
+  it("preview rejects entity registry rows with degraded predicates", async () => {
+    const snapshot = await buildDeployCatalogSnapshot({ tenantId: TENANT })
+    const entity = await db.getEntityDefinition(TENANT, "content")
     expect(entity).toBeTruthy()
 
     const degraded = {
@@ -247,7 +247,7 @@ describe("catalog snapshot import guards", () => {
       ),
     }
 
-    const content = db.getEntityDefinition(TENANT, "content")!
+    const content = (await db.getEntityDefinition(TENANT, "content"))!
     snapshot.entityRegistry = {
       version: 1,
       _comment: "test",
@@ -260,14 +260,14 @@ describe("catalog snapshot import guards", () => {
     expect(preview.ok).toBe(false)
     expect(preview.errors.some((error) => error.includes("degraded"))).toBe(true)
 
-    const before = contentTypePredicateFromDb()
-    const applied = applyDeployCatalogSnapshot({
+    const before = await contentTypePredicateFromDb()
+    const applied = await applyDeployCatalogSnapshot({
       snapshot,
       actor: "test",
       projectRoot: fixture.projectRoot,
       dryRun: false,
     })
     expect(applied.applied).toBe(false)
-    expect(contentTypePredicateFromDb()).toBe(before)
+    expect(await contentTypePredicateFromDb()).toBe(before)
   })
 })

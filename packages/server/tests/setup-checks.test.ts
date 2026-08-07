@@ -4,6 +4,7 @@ import { join, resolve } from "node:path"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { hasBlockingErrors, runSetupChecks } from "../src/cli/setup/checks.js"
+import * as publishedSyncBundle from "../src/boot/published-sync-bundle.js"
 import { mergeEnvFile, parseEnvFile } from "../src/cli/setup/env-file.js"
 import type { SetupLayout } from "../src/cli/setup/types.js"
 
@@ -42,22 +43,23 @@ describe("setup checks", () => {
   afterEach(() => {
     process.env = originalEnv
     rmSync(tempRoot, { recursive: true, force: true })
+    vi.restoreAllMocks()
   })
 
-  it("blocks when .env is missing", () => {
-    const report = runSetupChecks(makeLayout(tempRoot))
+  it("blocks when .env is missing", async () => {
+    const report = await runSetupChecks(makeLayout(tempRoot))
     expect(hasBlockingErrors(report)).toBe(true)
     expect(report.checks.find((c) => c.id === "env-file")?.severity).toBe("error")
   })
 
-  it("blocks when MIA_DATA_DIR is missing even in dev", () => {
+  it("blocks when MIA_DATA_DIR is missing even in dev", async () => {
     writeFileSync(join(tempRoot, ".env"), "LLM_PROVIDER=copilot-chat\n")
     process.env.LLM_PROVIDER = "copilot-chat"
-    const report = runSetupChecks(makeLayout(tempRoot))
+    const report = await runSetupChecks(makeLayout(tempRoot))
     expect(report.checks.find((c) => c.id === "mia-data-dir")?.severity).toBe("error")
   })
 
-  it("passes when .env has required keys", () => {
+  it("passes when .env has required keys", async () => {
     writeFileSync(
       join(tempRoot, ".env"),
       "MIA_DATA_DIR=/tmp/mia-test-data\nLLM_PROVIDER=copilot-chat\n",
@@ -65,26 +67,26 @@ describe("setup checks", () => {
     process.env.MIA_DATA_DIR = "/tmp/mia-test-data"
     process.env.LLM_PROVIDER = "copilot-chat"
 
-    const report = runSetupChecks(makeLayout(tempRoot))
+    const report = await runSetupChecks(makeLayout(tempRoot))
     expect(hasBlockingErrors(report)).toBe(false)
   })
 
-  it("requires LLM_PROVIDER in .env", () => {
+  it("requires LLM_PROVIDER in .env", async () => {
     writeFileSync(join(tempRoot, ".env"), "MIA_DATA_DIR=/tmp/mia\n")
     process.env.MIA_DATA_DIR = "/tmp/mia"
-    const report = runSetupChecks(makeLayout(tempRoot))
+    const report = await runSetupChecks(makeLayout(tempRoot))
     expect(report.checks.find((c) => c.id === "llm-provider")?.severity).toBe("error")
   })
 
-  it("requires databricks credentials when LLM_PROVIDER=databricks", () => {
+  it("requires databricks credentials when LLM_PROVIDER=databricks", async () => {
     writeFileSync(join(tempRoot, ".env"), "MIA_DATA_DIR=/tmp/mia\nLLM_PROVIDER=databricks\n")
     process.env.MIA_DATA_DIR = "/tmp/mia"
     process.env.LLM_PROVIDER = "databricks"
-    const report = runSetupChecks(makeLayout(tempRoot))
+    const report = await runSetupChecks(makeLayout(tempRoot))
     expect(report.checks.find((c) => c.id === "llm-databricks")?.severity).toBe("error")
   })
 
-  it("accepts databricks when credentials are in .env", () => {
+  it("accepts databricks when credentials are in .env", async () => {
     writeFileSync(
       join(tempRoot, ".env"),
       [
@@ -101,28 +103,30 @@ describe("setup checks", () => {
     process.env.DATABRICKS_CLIENT_ID = "id"
     process.env.DATABRICKS_CLIENT_SECRET = "secret"
 
-    const report = runSetupChecks(makeLayout(tempRoot))
+    const report = await runSetupChecks(makeLayout(tempRoot))
     expect(hasBlockingErrors(report)).toBe(false)
     expect(report.checks.find((c) => c.id === "llm-databricks")?.severity).toBe("ok")
   })
 
-  it("requires cookie secret in production", () => {
+  it("requires cookie secret in production", async () => {
     writeFileSync(
       join(tempRoot, ".env"),
       "MIA_DATA_DIR=/tmp/mia\nLLM_PROVIDER=copilot-chat\n",
     )
     process.env.MIA_DATA_DIR = "/tmp/mia"
     process.env.LLM_PROVIDER = "copilot-chat"
-    const report = runSetupChecks(makeLayout(tempRoot, { isProduction: true }))
+    const report = await runSetupChecks(makeLayout(tempRoot, { isProduction: true }))
     expect(report.checks.find((c) => c.id === "cookie-secret")?.severity).toBe("error")
   })
 
-  it("warns when connectors seed exists but sync bundle is not published yet", () => {
+  it("warns when connectors seed exists but sync bundle is not published yet", async () => {
+    const isolatedDataDir = join(tempRoot, "data")
+    vi.spyOn(publishedSyncBundle, "isPublishedSyncBundlePresent").mockResolvedValue(false)
     writeFileSync(
       join(tempRoot, ".env"),
-      "MIA_DATA_DIR=/tmp/mia-test-data\nLLM_PROVIDER=copilot-chat\n",
+      `MIA_DATA_DIR=${isolatedDataDir}\nLLM_PROVIDER=copilot-chat\n`,
     )
-    process.env.MIA_DATA_DIR = "/tmp/mia-test-data"
+    process.env.MIA_DATA_DIR = isolatedDataDir
     process.env.LLM_PROVIDER = "copilot-chat"
     mkdirSync(resolve(tempRoot, "deploy/connectors"), { recursive: true })
     writeFileSync(
@@ -130,7 +134,7 @@ describe("setup checks", () => {
       JSON.stringify({ version: 1, connectors: [] }),
     )
 
-    const report = runSetupChecks(makeLayout(tempRoot))
+    const report = await runSetupChecks(makeLayout(tempRoot))
     expect(report.checks.find((c) => c.id === "published-sync-definitions")?.severity).toBe("warn")
   })
 })

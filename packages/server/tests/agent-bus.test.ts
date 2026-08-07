@@ -54,14 +54,14 @@ describe("AgentBus persistence (B.1)", () => {
     const { BusProtocol } = await import("../src/internal/enums/bus.js")
 
     const bus = new AgentBus(rootRunId)
-    bus.publish({
+    await bus.publish({
       topic: "channel-a",
       fromRunId: rootRunId,
       fromAgent: "Parent",
       content: "hi",
       protocol: BusProtocol.Status
     })
-    bus.publish({
+    await bus.publish({
       topic: "channel-b",
       fromRunId: rootRunId,
       fromAgent: "Parent",
@@ -97,7 +97,7 @@ describe("AgentBus persistence (B.1)", () => {
     const { rootRunId } = await bootstrap()
     const { AgentBus } = await import("../src/infra/queue/agent-bus.js")
     const { BusProtocol } = await import("../src/internal/enums/bus.js")
-    new AgentBus(rootRunId).publish({
+    await new AgentBus(rootRunId).publish({
       topic: "t",
       fromRunId: rootRunId,
       fromAgent: "P",
@@ -118,14 +118,14 @@ describe("AgentBus history replay (B.2)", () => {
     const { BusProtocol } = await import("../src/internal/enums/bus.js")
 
     const bus = new AgentBus(rootRunId)
-    bus.publish({
+    await bus.publish({
       topic: "research",
       fromRunId: "child-1",
       fromAgent: "Researcher",
       content: "found X",
       protocol: BusProtocol.Status
     })
-    bus.publish({
+    await bus.publish({
       topic: "research",
       fromRunId: "child-1",
       fromAgent: "Researcher",
@@ -148,14 +148,14 @@ describe("AgentBus history replay (B.2)", () => {
     const { BusProtocol } = await import("../src/internal/enums/bus.js")
 
     const bus = new AgentBus(rootRunId)
-    bus.publish({
+    await bus.publish({
       topic: "t",
       fromRunId: "me",
       fromAgent: "Me",
       content: "self-talk",
       protocol: BusProtocol.Broadcast
     })
-    bus.publish({
+    await bus.publish({
       topic: "t",
       fromRunId: "other",
       fromAgent: "Other",
@@ -215,14 +215,14 @@ describe("wait_for_response (B.2)", () => {
     const { BusProtocol } = await import("../src/internal/enums/bus.js")
 
     const bus = new AgentBus(rootRunId)
-    const question = bus.publish({
+    const question = await bus.publish({
       topic: "q",
       fromRunId: "asker",
       fromAgent: "Asker",
       content: "?",
       protocol: BusProtocol.Question
     })
-    bus.publish({
+    await bus.publish({
       topic: "q",
       fromRunId: "responder",
       fromAgent: "Responder",
@@ -285,7 +285,7 @@ describe("Help protocol routing (B.3)", () => {
     })
     try {
       const bus = new AgentBus(rootRunId)
-      bus.publish({
+      await bus.publish({
         topic: "t",
         fromRunId: "child",
         fromAgent: "Child",
@@ -311,7 +311,7 @@ describe("Help protocol routing (B.3)", () => {
     })
     try {
       const bus = new AgentBus(rootRunId)
-      bus.publish({
+      await bus.publish({
         topic: "t",
         fromRunId: "child",
         fromAgent: "Child",

@@ -109,7 +109,7 @@ describe("server attachment service", () => {
     expect(result.sandboxPath).toBe(join(sandboxRoot, "inputs/data.csv"))
     expect(result.sizeBytes).toBe(8)
     expect(readFileSync(result.sandboxPath, "utf8")).toBe("a,b\n1,2\n")
-    const imports = listAttachmentImports("run-1")
+    const imports = await listAttachmentImports("run-1")
     expect(imports).toHaveLength(1)
     expect(imports[0]?.attachment_id).toBe(a.id)
     expect(imports[0]?.import_mode).toBe("copy")
@@ -222,7 +222,7 @@ describe("server attachment service", () => {
     expect(meta.mediaType).toBe("text/csv")
     expect(meta.sizeBytes).toBe(8)
 
-    const row = getAttachment(meta.id)
+    const row = await getAttachment(meta.id)
     expect(row).toBeTruthy()
     expect(row?.source).toBe("generated")
     expect(row?.scope).toBe("workspace_asset")

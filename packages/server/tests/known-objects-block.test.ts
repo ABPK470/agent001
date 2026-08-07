@@ -57,12 +57,12 @@ function seed(
 const emptyTurns: readonly PriorTurn[] = []
 
 describe("loadKnownObjects — qname extraction", () => {
-  it("falls back to the global tail when goal has no schema.table candidates (Gap 3)", () => {
+  it("falls back to the global tail when goal has no schema.table candidates (Gap 3)", async () => {
     // When the goal mentions no qnames (very common for follow-ups like
     // "top 50 clients"), Gap 3 surfaces the freshest cached entries so
     // the LLM still sees previously-touched objects.
     seed([{ qname: "publish.balances", tool: "profile_data", mode: "fast", bytes: 100, ageMs: 1000 }])
-    const out = loadKnownObjects({
+    const out = await loadKnownObjects({
       goal: "what's the weather today?",
       priorTurns: emptyTurns
     })
@@ -70,17 +70,17 @@ describe("loadKnownObjects — qname extraction", () => {
     expect(out[0]!.qname).toBe("publish.balances")
   })
 
-  it("returns [] when no candidates AND cache is completely empty", () => {
-    const out = loadKnownObjects({
+  it("returns [] when no candidates AND cache is completely empty", async () => {
+    const out = await loadKnownObjects({
       goal: "profile publish.Balances please",
       priorTurns: emptyTurns
     })
     expect(out).toEqual([])
   })
 
-  it("returns a hit for a qname mentioned in the goal", () => {
+  it("returns a hit for a qname mentioned in the goal", async () => {
     seed([{ qname: "publish.balances", tool: "profile_data", mode: "fast", bytes: 1234, ageMs: 3_600_000 }])
-    const out = loadKnownObjects({
+    const out = await loadKnownObjects({
       goal: "Plot publish.Balances by month",
       priorTurns: emptyTurns
     })
@@ -90,7 +90,7 @@ describe("loadKnownObjects — qname extraction", () => {
     expect(out[0]!.ageHours).toBe(1)
   })
 
-  it("extracts qnames from prior-turn goal AND answer text", () => {
+  it("extracts qnames from prior-turn goal AND answer text", async () => {
     seed([
       { qname: "dim.date", tool: "profile_data", mode: "fast", bytes: 100, ageMs: 1000 },
       {
@@ -110,12 +110,12 @@ describe("loadKnownObjects — qname extraction", () => {
         ranAt: "2025-01-01"
       }
     ]
-    const out = loadKnownObjects({ goal: "follow up", priorTurns })
+    const out = await loadKnownObjects({ goal: "follow up", priorTurns })
     const qnames = out.map((r) => r.qname).sort()
     expect(qnames).toEqual(["dim.date", "publish.balances"])
   })
 
-  it("dedupes by qname keeping the newest entry", () => {
+  it("dedupes by qname keeping the newest entry", async () => {
     seed([
       {
         qname: "publish.balances",
@@ -132,7 +132,7 @@ describe("loadKnownObjects — qname extraction", () => {
         ageMs: 1 * 3_600_000
       }
     ])
-    const out = loadKnownObjects({
+    const out = await loadKnownObjects({
       goal: "Re-profile publish.Balances",
       priorTurns: emptyTurns
     })
@@ -141,7 +141,7 @@ describe("loadKnownObjects — qname extraction", () => {
     expect(out[0]!.ageHours).toBe(1)
   })
 
-  it("populates summary + priority='goal' when the qname comes from the goal text", () => {
+  it("populates summary + priority='goal' when the qname comes from the goal text", async () => {
     const profilePayload = [
       "Profile (FAST mode) for publish.balances:",
       "  Type: TABLE",
@@ -162,14 +162,14 @@ describe("loadKnownObjects — qname extraction", () => {
         payload: profilePayload
       }
     ])
-    const out = loadKnownObjects({ goal: "show me publish.Balances", priorTurns: emptyTurns })
+    const out = await loadKnownObjects({ goal: "show me publish.Balances", priorTurns: emptyTurns })
     expect(out).toHaveLength(1)
     expect(out[0]!.priority).toBe("goal")
     expect(out[0]!.summary).toContain("rows=1,000")
     expect(out[0]!.summary).toContain("Id(int)")
   })
 
-  it("leaves summary='' and priority='fallback' for rows surfaced only via Gap-3 top-up", () => {
+  it("leaves summary='' and priority='fallback' for rows surfaced only via Gap-3 top-up", async () => {
     // Goal mentions nothing schema.table-shaped — fallback path kicks in.
     seed([
       {
@@ -181,7 +181,7 @@ describe("loadKnownObjects — qname extraction", () => {
         payload: "Profile (FAST mode) for publish.balances:\n  Type: TABLE"
       }
     ])
-    const out = loadKnownObjects({ goal: "what is happening today", priorTurns: emptyTurns })
+    const out = await loadKnownObjects({ goal: "what is happening today", priorTurns: emptyTurns })
     expect(out).toHaveLength(1)
     expect(out[0]!.priority).toBe("fallback")
     expect(out[0]!.summary).toBe("")

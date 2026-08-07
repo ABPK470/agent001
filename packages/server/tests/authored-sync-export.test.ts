@@ -56,8 +56,8 @@ async function setupDb(): Promise<void> {
   const { seedSyncMetadataIfEmpty } = await import(
     "../src/api/sync/service/seed-sync-metadata.js"
   )
-  seedEntityRegistryIfEmpty(projectRoot)
-  seedSyncMetadataIfEmpty(projectRoot)
+  await seedEntityRegistryIfEmpty(projectRoot)
+  await seedSyncMetadataIfEmpty(projectRoot)
 }
 
 describe("Authored process-JSON compile (B → A)", () => {
@@ -71,8 +71,8 @@ describe("Authored process-JSON compile (B → A)", () => {
     process.env["MIA_DATA_DIR"] = ORIGINAL_DATA_DIR
   })
 
-  it("compiles dataset EntityDefinition into AuthoredSyncDefinition with matching tables", () => {
-    const entity = db.getEntityDefinition("_default", "dataset")
+  it("compiles dataset EntityDefinition into AuthoredSyncDefinition with matching tables", async () => {
+    const entity = await db.getEntityDefinition("_default", "dataset")
     expect(entity).toBeTruthy()
 
     const catalog = loadSyncDefinitionFlowTemplateCatalog(projectRoot)
@@ -87,8 +87,8 @@ describe("Authored process-JSON compile (B → A)", () => {
     expect(authored.metadata.tables.length).toBe(entity!.tables.length)
   })
 
-  it("includes execution flow steps from entity.flowId", () => {
-    const entity = db.getEntityDefinition("_default", "content")
+  it("includes execution flow steps from entity.flowId", async () => {
+    const entity = await db.getEntityDefinition("_default", "content")
     expect(entity).toBeTruthy()
     const catalog = loadSyncDefinitionFlowTemplateCatalog(projectRoot)
     const authored = compileAuthoredSyncDefinition(entity!, {

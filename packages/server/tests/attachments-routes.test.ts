@@ -132,7 +132,7 @@ describe("attachments REST API", () => {
     await app.close()
   })
 
-  it("non-owner cannot view another user's attachment, admin can", async () => {
+  it("non-owner cannot view another user's attachment (404 hide)", async () => {
     // Owner uploads
     const ownerApp = await buildApp({
       session: fakeSession({ sid: "sid-owner", upn: "owner@example.com" })
@@ -146,24 +146,24 @@ describe("attachments REST API", () => {
     const created = upload.json() as { id: string }
     await ownerApp.close()
 
-    // Stranger forbidden
+    // Stranger gets 404 (intentional hide — not 403)
     const strangerApp = await buildApp({
       session: fakeSession({ sid: "sid-other", upn: "other@example.com" })
     })
     const forbidden = await strangerApp.inject({ method: "GET", url: `/api/attachments/${created.id}` })
-    expect(forbidden.statusCode).toBe(403)
+    expect(forbidden.statusCode).toBe(404)
 
     // Stranger list excludes it (filtered by ownerUpn)
     const strangerList = await strangerApp.inject({ method: "GET", url: "/api/attachments" })
     expect((strangerList.json() as Array<{ id: string }>).map((r) => r.id)).not.toContain(created.id)
     await strangerApp.close()
 
-    // Admin sees it
+    // Admin is also a non-owner — same 404 hide
     const adminApp = await buildApp({
       session: fakeSession({ sid: "sid-admin", upn: "admin@example.com", isAdmin: true })
     })
     const adminGet = await adminApp.inject({ method: "GET", url: `/api/attachments/${created.id}` })
-    expect(adminGet.statusCode).toBe(200)
+    expect(adminGet.statusCode).toBe(404)
     await adminApp.close()
   })
 

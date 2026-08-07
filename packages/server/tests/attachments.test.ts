@@ -91,11 +91,11 @@ describe("attachments DB layer", () => {
     expect(b.ingestion_mode).toBe("binary_reference")
 
     // Listing returns newest first.
-    const list = listAttachments({ scope: "user_draft" })
+    const list = await listAttachments({ scope: "user_draft" })
     expect(list.map((r) => r.id)).toEqual([b.id, a2.id, a1.id])
 
     // Get returns the same row.
-    expect(getAttachment(a1.id)?.original_name).toBe("a.txt")
+    expect((await getAttachment(a1.id))?.original_name).toBe("a.txt")
   })
 
   it("filters by run, soft-deletes, and records imports", async () => {
@@ -131,13 +131,13 @@ describe("attachments DB layer", () => {
       bytes
     })
 
-    expect(listAttachments({ runId: "run-1" }).map((r) => r.id)).toEqual([r1.id])
-    expect(listAttachments({ runId: "run-2" }).map((r) => r.id)).toEqual([r2.id])
+    expect((await listAttachments({ runId: "run-1" })).map((r) => r.id)).toEqual([r1.id])
+    expect((await listAttachments({ runId: "run-2" })).map((r) => r.id)).toEqual([r2.id])
 
-    softDeleteAttachment(r1.id)
-    expect(listAttachments({ runId: "run-1" })).toHaveLength(0)
+    await softDeleteAttachment(r1.id)
+    expect(await listAttachments({ runId: "run-1" })).toHaveLength(0)
 
-    const imp = recordAttachmentImport({
+    const imp = await recordAttachmentImport({
       attachmentId: r2.id,
       runId: "run-2",
       sandboxPath: "sandbox://run-2/y.txt",
@@ -145,7 +145,7 @@ describe("attachments DB layer", () => {
       importedByToolCall: "tool-42"
     })
     expect(imp.attachment_id).toBe(r2.id)
-    expect(listAttachmentImports("run-2").map((i) => i.id)).toEqual([imp.id])
-    expect(listAttachmentImports("run-1")).toHaveLength(0)
+    expect((await listAttachmentImports("run-2")).map((i) => i.id)).toEqual([imp.id])
+    expect(await listAttachmentImports("run-1")).toHaveLength(0)
   })
 })

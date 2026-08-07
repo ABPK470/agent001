@@ -5,7 +5,7 @@ export interface SyncEvent {
   data: Record<string, unknown>
 }
 
-export type SyncEventSink = (event: SyncEvent) => void
+export type SyncEventSink = (event: SyncEvent) => void | Promise<void>
 
 export interface SyncTelemetryContext {
   kind: SyncOperationType

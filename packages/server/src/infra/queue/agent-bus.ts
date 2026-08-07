@@ -189,7 +189,7 @@ export function createBusTools(bus: AgentBus, runId: string, agentName: string):
   // check_messages call. Initialized from persisted history so a child
   // spawned mid-run-tree sees what siblings published before it existed.
   const inbox: AgentMessage[] = []
-  void bus.history().then((messages) => {
+  const historyReady = bus.history().then((messages) => {
     inbox.push(...messages.filter((message) => message.fromRunId !== runId))
   })
 
@@ -273,6 +273,7 @@ export function createBusTools(bus: AgentBus, runId: string, agentName: string):
         required: []
       },
       execute: async (args) => {
+        await historyReady
         const topic = args["topic"] ? String(args["topic"]) : undefined
         const protocolFilter =
           typeof args["protocol"] === "string" ? parseProtocol(args["protocol"], BusProtocol.Broadcast) : null

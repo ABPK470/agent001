@@ -22,10 +22,10 @@ beforeEach(() => {
 
 describe("seedDefaultPoliciesIfMissing", () => {
   it("inserts factory rules once and leaves operator edits alone on re-run", async () => {
-    const before = (await db.listPolicyRules()).length
-    const first = seedDefaultPoliciesIfMissing(REPO_ROOT)
+    const before = ((await db.listPolicyRules())).length
+    const first = await seedDefaultPoliciesIfMissing(REPO_ROOT)
     expect(first.inserted).toBeGreaterThan(10)
-    expect((await db.listPolicyRules()).length).toBe(before + first.inserted)
+    expect(((await db.listPolicyRules()).length)).toBe(before + first.inserted)
 
     await db.savePolicyRule({
       name: "hosted_allow_sync_preview",
@@ -38,9 +38,9 @@ describe("seedDefaultPoliciesIfMissing", () => {
       updated_by: "admin@example.com",
     })
 
-    const second = seedDefaultPoliciesIfMissing(REPO_ROOT)
+    const second = await seedDefaultPoliciesIfMissing(REPO_ROOT)
     expect(second.inserted).toBe(0)
-    const preview = (await db.listPolicyRules()).find((r) => r.name === "hosted_allow_sync_preview")
+    const preview = ((await db.listPolicyRules())).find((r) => r.name === "hosted_allow_sync_preview")
     expect(preview?.effect).toBe("deny")
     expect(preview?.source).toBe(db.PolicySource.Db)
   })
@@ -48,7 +48,7 @@ describe("seedDefaultPoliciesIfMissing", () => {
 
 describe("resetFactoryPolicyDefaults", () => {
   it("re-reads deploy JSON and restores factory-named rows without wiping other operator rules", async () => {
-    seedDefaultPoliciesIfMissing(REPO_ROOT)
+    await seedDefaultPoliciesIfMissing(REPO_ROOT)
 
     await db.savePolicyRule({
       name: "hosted_allow_sync_preview",
@@ -70,15 +70,15 @@ describe("resetFactoryPolicyDefaults", () => {
       source: db.PolicySource.Db,
     })
 
-    const result = resetFactoryPolicyDefaults(REPO_ROOT)
+    const result = await resetFactoryPolicyDefaults(REPO_ROOT)
     expect(result.inserted).toBeGreaterThan(10)
     expect(result.seedPath).toBe("deploy/policies/defaults.json")
 
-    const preview = (await db.listPolicyRules()).find((r) => r.name === "hosted_allow_sync_preview")
+    const preview = ((await db.listPolicyRules())).find((r) => r.name === "hosted_allow_sync_preview")
     expect(preview?.effect).toBe("allow")
     expect(preview?.source).toBe(db.PolicySource.HostedDefault)
 
-    const custom = (await db.listPolicyRules()).find((r) => r.name === "operator_custom_deny_prod")
+    const custom = ((await db.listPolicyRules())).find((r) => r.name === "operator_custom_deny_prod")
     expect(custom?.effect).toBe("deny")
     expect(custom?.source).toBe(db.PolicySource.Db)
   })

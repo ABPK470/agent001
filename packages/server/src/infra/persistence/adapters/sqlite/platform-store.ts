@@ -10,6 +10,8 @@ import type { PlatformStore } from "../../../../ports/platform-store.js"
 import { getDb } from "./connection.js"
 
 let txChain: Promise<unknown> = Promise.resolve()
+/** Nesting depth for the active async transaction (same connection / mutex turn). */
+let txDepth = 0
 
 const store: PlatformStore = {
   kind: "sqlite",
@@ -19,9 +21,21 @@ const store: PlatformStore = {
   },
 
   async transactionAsync<T>(fn: () => Promise<T> | T): Promise<T> {
+    // Nested callers (e.g. applyDeploy → saveEntityDefinition) must join the
+    // open transaction. Queuing on txChain again deadlocks the mutex.
+    if (txDepth > 0) {
+      txDepth++
+      try {
+        return await fn()
+      } finally {
+        txDepth--
+      }
+    }
+
     const run = async (): Promise<T> => {
       const db = getDb()
       db.exec("BEGIN IMMEDIATE")
+      txDepth = 1
       try {
         const out = await fn()
         db.exec("COMMIT")
@@ -33,6 +47,8 @@ const store: PlatformStore = {
           // Connection may already be closed during teardown.
         }
         throw err
+      } finally {
+        txDepth = 0
       }
     }
     const next = txChain.then(run, run)

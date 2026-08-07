@@ -17,7 +17,12 @@ export function configureSyncEventSink(host: SyncEventHost, sink: SyncEventSink)
 
 export function emitSyncEvent(host: SyncEventHost, type: EventType, data: Record<string, unknown>): void {
   try {
-    host.sync.events.sink({ type, data })
+    const result = host.sync.events.sink({ type, data })
+    if (result != null && typeof (result as PromiseLike<void>).then === "function") {
+      void Promise.resolve(result).catch((e) => {
+        console.error(`[sync.event] sink failed for ${type}:`, e)
+      })
+    }
   } catch (e) {
     console.error(`[sync.event] sink failed for ${type}:`, e)
   }

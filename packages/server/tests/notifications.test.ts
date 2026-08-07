@@ -65,65 +65,65 @@ function makeNotification(overrides: Partial<DbNotification> = {}): DbNotificati
 // ── Notification CRUD ────────────────────────────────────────────
 
 describe("Notifications", () => {
-  it("saves and lists notifications", () => {
+  it("saves and lists notifications", async () => {
     const n = makeNotification({ id: "n1", title: "First" })
-    saveNotification(n)
+    await saveNotification(n)
 
-    const list = listNotifications()
+    const list = await listNotifications()
     expect(list).toHaveLength(1)
     expect(list[0].id).toBe("n1")
     expect(list[0].title).toBe("First")
     expect(list[0].read).toBe(0)
   })
 
-  it("lists in reverse chronological order", () => {
-    saveNotification(makeNotification({ id: "old", created_at: "2024-01-01T00:00:00Z" }))
-    saveNotification(makeNotification({ id: "new", created_at: "2025-01-01T00:00:00Z" }))
+  it("lists in reverse chronological order", async () => {
+    await saveNotification(makeNotification({ id: "old", created_at: "2024-01-01T00:00:00Z" }))
+    await saveNotification(makeNotification({ id: "new", created_at: "2025-01-01T00:00:00Z" }))
 
-    const list = listNotifications()
+    const list = await listNotifications()
     expect(list[0].id).toBe("new")
     expect(list[1].id).toBe("old")
   })
 
-  it("respects limit parameter", () => {
+  it("respects limit parameter", async () => {
     for (let i = 0; i < 5; i++) {
-      saveNotification(makeNotification({ id: `n${i}` }))
+      await saveNotification(makeNotification({ id: `n${i}` }))
     }
-    expect(listNotifications(3)).toHaveLength(3)
-    expect(listNotifications()).toHaveLength(5)
+    expect(await listNotifications(3)).toHaveLength(3)
+    expect(await listNotifications()).toHaveLength(5)
   })
 
-  it("marks a single notification as read", () => {
-    saveNotification(makeNotification({ id: "n1" }))
-    expect(listNotifications()[0].read).toBe(0)
+  it("marks a single notification as read", async () => {
+    await saveNotification(makeNotification({ id: "n1" }))
+    expect((await listNotifications())[0].read).toBe(0)
 
-    markNotificationRead("n1")
-    expect(listNotifications()[0].read).toBe(1)
+    await markNotificationRead("n1")
+    expect((await listNotifications())[0].read).toBe(1)
   })
 
-  it("marks all notifications as read", () => {
-    saveNotification(makeNotification({ id: "n1" }))
-    saveNotification(makeNotification({ id: "n2" }))
-    expect(getUnreadNotificationCount()).toBe(2)
+  it("marks all notifications as read", async () => {
+    await saveNotification(makeNotification({ id: "n1" }))
+    await saveNotification(makeNotification({ id: "n2" }))
+    expect(await getUnreadNotificationCount()).toBe(2)
 
-    markAllNotificationsRead()
-    expect(getUnreadNotificationCount()).toBe(0)
-    expect(listNotifications().every((n) => n.read === 1)).toBe(true)
+    await markAllNotificationsRead()
+    expect(await getUnreadNotificationCount()).toBe(0)
+    expect((await listNotifications()).every((n) => n.read === 1)).toBe(true)
   })
 
-  it("counts unread notifications", () => {
-    saveNotification(makeNotification({ id: "n1", read: 0 }))
-    saveNotification(makeNotification({ id: "n2", read: 0 }))
-    saveNotification(makeNotification({ id: "n3", read: 1 }))
+  it("counts unread notifications", async () => {
+    await saveNotification(makeNotification({ id: "n1", read: 0 }))
+    await saveNotification(makeNotification({ id: "n2", read: 0 }))
+    await saveNotification(makeNotification({ id: "n3", read: 1 }))
 
-    expect(getUnreadNotificationCount()).toBe(2)
+    expect(await getUnreadNotificationCount()).toBe(2)
   })
 
-  it("upserts on duplicate id", () => {
-    saveNotification(makeNotification({ id: "n1", title: "Original" }))
-    saveNotification(makeNotification({ id: "n1", title: "Updated" }))
+  it("upserts on duplicate id", async () => {
+    await saveNotification(makeNotification({ id: "n1", title: "Original" }))
+    await saveNotification(makeNotification({ id: "n1", title: "Updated" }))
 
-    const list = listNotifications()
+    const list = await listNotifications()
     expect(list).toHaveLength(1)
     expect(list[0].title).toBe("Updated")
   })
@@ -132,14 +132,14 @@ describe("Notifications", () => {
 // ── Stale runs recovery ──────────────────────────────────────────
 
 describe("Stale runs", () => {
-  it("finds running/pending/planning runs as stale", () => {
+  it("finds running/pending/planning runs as stale", async () => {
     insertRun("r1", "running")
     insertRun("r2", "pending")
     insertRun("r3", "planning")
     insertRun("r4", "completed")
     insertRun("r5", "failed")
 
-    const stale = findStaleRuns()
+    const stale = await findStaleRuns()
     const staleIds = stale.map((r) => r.id)
     expect(staleIds).toContain("r1")
     expect(staleIds).toContain("r2")
@@ -148,9 +148,9 @@ describe("Stale runs", () => {
     expect(staleIds).not.toContain("r5")
   })
 
-  it("marks a run as crashed with error message", () => {
+  it("marks a run as crashed with error message", async () => {
     insertRun("r1", "running")
-    markRunCrashed("r1")
+    await markRunCrashed("r1")
 
     const row = testDb.prepare("SELECT * FROM runs WHERE id = ?").get("r1") as Record<string, unknown>
     // 'crashed' is a first-class terminal status distinct from 'failed' so
@@ -161,8 +161,8 @@ describe("Stale runs", () => {
     expect(row.completed_at).not.toBeNull()
   })
 
-  it("returns empty array when no stale runs exist", () => {
+  it("returns empty array when no stale runs exist", async () => {
     insertRun("r1", "completed")
-    expect(findStaleRuns()).toHaveLength(0)
+    expect(await findStaleRuns()).toHaveLength(0)
   })
 })

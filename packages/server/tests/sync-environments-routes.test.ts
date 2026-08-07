@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import type { AgentHost } from "@mia/agent"
 import { ALWAYS_PUBLISH_READY, createDbPublishedSyncDefinitionRegistry } from "@mia/sync"
 import type { CurrentSession } from "../src/api/auth/index.js"
-import { loadPublishedBundleFromSqlite } from "../src/boot/published-sync-bundle.js"
+import { loadPublishedBundleFromSqliteCached } from "../src/boot/published-sync-bundle.js"
 import * as db from "../src/infra/persistence/adapters/sqlite/db/index.js"
 
 let testDb: Database.Database
@@ -44,7 +44,7 @@ function createHost(root: string): AgentHost {
       plans: { diskRoot: null, memCache: new Map() },
       project: {
         dbProjectRoot: root,
-        publishedDefinitions: createDbPublishedSyncDefinitionRegistry(loadPublishedBundleFromSqlite),
+        publishedDefinitions: createDbPublishedSyncDefinitionRegistry(loadPublishedBundleFromSqliteCached),
         publishReadiness: ALWAYS_PUBLISH_READY,
       }
     }
@@ -54,7 +54,7 @@ function createHost(root: string): AgentHost {
 
 async function seedLiveEnvironments(root: string, host: AgentHost): Promise<void> {
   const { loadPersistedSyncEnvironments } = await import("../src/api/sync/index.js")
-  const loaded = loadPersistedSyncEnvironments(root, [
+  const loaded = await loadPersistedSyncEnvironments(root, [
     { name: "DEV", server: "dev-sql", database: "mymi", knowledge: null },
     { name: "UAT", server: "uat-sql", database: "mymi", knowledge: null }
   ])

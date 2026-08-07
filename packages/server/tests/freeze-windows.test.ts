@@ -97,7 +97,7 @@ describe("saveEntityDefinition — cross-reference validation", () => {
     const m = await setup()
     let caught: unknown
     try {
-      m.defs.saveEntityDefinition({
+      await m.defs.saveEntityDefinition({
         def: baseDef({
           scd2: { strategyId: "no-such-strategy", strategyVersion: "latest", entityOverride: null }
         }),
@@ -116,7 +116,7 @@ describe("saveEntityDefinition — cross-reference validation", () => {
     const m = await setup()
     let caught: unknown
     try {
-      m.defs.saveEntityDefinition({
+      await m.defs.saveEntityDefinition({
         def: baseDef({
           policies: { approvalPolicyId: null, freezeWindowIds: ["bogus-window"] }
         }),
@@ -134,7 +134,7 @@ describe("saveEntityDefinition — cross-reference validation", () => {
   it("accepts a freezeWindowId that has been registered first", async () => {
     const m = await setup()
     // Register the freeze window so the validator can resolve it.
-    m.freezes.upsertFreezeWindow({
+    await m.freezes.upsertFreezeWindow({
       tenantId: "_default",
       id: "month-end-close",
       displayName: "Month-end close",
@@ -143,7 +143,7 @@ describe("saveEntityDefinition — cross-reference validation", () => {
       endsAt: "2026-06-02T00:00:00.000Z",
       actor: "alice@example.com"
     })
-    const r = m.defs.saveEntityDefinition({
+    const r = await m.defs.saveEntityDefinition({
       def: baseDef({
         policies: { approvalPolicyId: null, freezeWindowIds: ["month-end-close"] }
       }),
@@ -157,7 +157,7 @@ describe("saveEntityDefinition — cross-reference validation", () => {
 describe("freeze-window persistence", () => {
   it("upsert → list returns the row and lists are stable", async () => {
     const m = await setup()
-    m.freezes.upsertFreezeWindow({
+    await m.freezes.upsertFreezeWindow({
       tenantId: "_default",
       id: "w1",
       displayName: "Window 1",
@@ -166,29 +166,28 @@ describe("freeze-window persistence", () => {
       endsAt: "2026-06-02T00:00:00.000Z",
       actor: "alice@example.com"
     })
-    const items = m.freezes.listFreezeWindowsForTenant("_default")
+    const items = await m.freezes.listFreezeWindowsForTenant("_default")
     expect(items.map((w) => w.id)).toContain("w1")
   })
 
-  it("rejects endsAt <= startsAt with FreezeWindowValidationError", () => {
-    return setup().then((m) => {
-      expect(() =>
-        m.freezes.upsertFreezeWindow({
-          tenantId: "_default",
-          id: "bad",
-          displayName: "Bad",
-          description: "",
-          startsAt: "2026-06-02T00:00:00.000Z",
-          endsAt: "2026-06-01T00:00:00.000Z",
-          actor: "x"
-        })
-      ).toThrow(m.freezes.FreezeWindowValidationError)
-    })
+  it("rejects endsAt <= startsAt with FreezeWindowValidationError", async () => {
+    const m = await setup()
+    await expect(
+      m.freezes.upsertFreezeWindow({
+        tenantId: "_default",
+        id: "bad",
+        displayName: "Bad",
+        description: "",
+        startsAt: "2026-06-02T00:00:00.000Z",
+        endsAt: "2026-06-01T00:00:00.000Z",
+        actor: "x"
+      })
+    ).rejects.toBeInstanceOf(m.freezes.FreezeWindowValidationError)
   })
 
   it("rejects invalid id with FreezeWindowValidationError", async () => {
     const m = await setup()
-    expect(() =>
+    await expect(
       m.freezes.upsertFreezeWindow({
         tenantId: "_default",
         id: "1bad",
@@ -198,12 +197,12 @@ describe("freeze-window persistence", () => {
         endsAt: "2026-06-02T00:00:00.000Z",
         actor: "x"
       })
-    ).toThrow(m.freezes.FreezeWindowValidationError)
+    ).rejects.toBeInstanceOf(m.freezes.FreezeWindowValidationError)
   })
 
   it("refresh pushes _default tenant rows into agent registry", async () => {
     const m = await setup()
-    m.freezes.upsertFreezeWindow({
+    await m.freezes.upsertFreezeWindow({
       tenantId: "_default",
       id: "agent-visible",
       displayName: "Agent visible",
@@ -212,13 +211,13 @@ describe("freeze-window persistence", () => {
       endsAt: "2026-06-02T00:00:00.000Z",
       actor: "alice@example.com"
     })
-    m.freezes.refreshFreezeWindowRegistry()
+    await m.freezes.refreshFreezeWindowRegistry()
     expect(listAgentFreezeWindows().map((w) => w.id)).toContain("agent-visible")
   })
 
   it("delete removes the row and returns false on second call", async () => {
     const m = await setup()
-    m.freezes.upsertFreezeWindow({
+    await m.freezes.upsertFreezeWindow({
       tenantId: "_default",
       id: "to-delete",
       displayName: "Delete me",
@@ -227,7 +226,7 @@ describe("freeze-window persistence", () => {
       endsAt: "2026-06-02T00:00:00.000Z",
       actor: "alice@example.com"
     })
-    expect(m.freezes.deleteFreezeWindow("_default", "to-delete")).toBe(true)
-    expect(m.freezes.deleteFreezeWindow("_default", "to-delete")).toBe(false)
+    expect(await m.freezes.deleteFreezeWindow("_default", "to-delete")).toBe(true)
+    expect(await m.freezes.deleteFreezeWindow("_default", "to-delete")).toBe(false)
   })
 })

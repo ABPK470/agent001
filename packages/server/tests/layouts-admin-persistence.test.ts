@@ -99,11 +99,11 @@ describe("layouts (v19) — per-upn persistence across logout/login", () => {
 
     const { getLayout } = await import("../src/infra/persistence/adapters/sqlite/db/config.js")
     const expectedKey = `dashboard:${upn.toLowerCase()}`
-    const row = getLayout(expectedKey)
+    const row = await getLayout(expectedKey)
     expect(row, `PUT must write to id='${expectedKey}'`).toBeDefined()
     expect(JSON.parse(row!.config).views).toEqual(SAMPLE_VIEWS)
 
-    const legacy = getLayout("dashboard:admin")
+    const legacy = await getLayout("dashboard:admin")
     expect(legacy, "legacy 'dashboard:admin' bucket must NOT be written in v19").toBeUndefined()
   })
 

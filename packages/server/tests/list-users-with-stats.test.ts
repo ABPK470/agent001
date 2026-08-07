@@ -25,7 +25,7 @@ afterEach(() => {
   testDb.close()
 })
 
-function insertLegacyCasedRun(runId: string): void {
+async function insertLegacyCasedRun(runId: string): Promise<void> {
   seedUser(testDb, CANONICAL, { displayName: "Alice" })
   seedSession(testDb, "sid-alice", CANONICAL)
   // Legacy mismatch: run.upn casing differs from users.upn (FK off for insert).
@@ -37,7 +37,7 @@ function insertLegacyCasedRun(runId: string): void {
     )
     .run(runId, LEGACY_CASE)
   testDb.pragma("foreign_keys = ON")
-  saveTokenUsage({
+  await saveTokenUsage({
     run_id: runId,
     prompt_tokens: 100,
     completion_tokens: 50,
@@ -49,10 +49,10 @@ function insertLegacyCasedRun(runId: string): void {
 }
 
 describe("listUsersWithStats", () => {
-  it("attributes tokens and LLM calls when run UPN casing differs from users", () => {
-    insertLegacyCasedRun("run-mixed")
+  it("attributes tokens and LLM calls when run UPN casing differs from users", async () => {
+    await insertLegacyCasedRun("run-mixed")
 
-    const rows = listUsersWithStats({ sinceSeconds: 604_800, activityWindowSeconds: 86_400 })
+    const rows = await listUsersWithStats({ sinceSeconds: 604_800, activityWindowSeconds: 86_400 })
     const alice = rows.find((r) => r.upn === CANONICAL)
     expect(alice).toBeDefined()
     expect(alice!.totalRuns).toBe(1)
@@ -62,19 +62,19 @@ describe("listUsersWithStats", () => {
     expect(alice!.lastModel).toBe("test-model")
   })
 
-  it("lists history for mixed-case run UPNs under the canonical identifier", () => {
-    insertLegacyCasedRun("run-hist")
+  it("lists history for mixed-case run UPNs under the canonical identifier", async () => {
+    await insertLegacyCasedRun("run-hist")
 
-    const { runs, total } = listUserHistory(CANONICAL, 25, 0)
+    const { runs, total } = await listUserHistory(CANONICAL, 25, 0)
     expect(total).toBe(1)
     expect(runs).toHaveLength(1)
     expect(runs[0]!.totalTokens).toBe(150)
     expect(runs[0]!.llmCalls).toBe(3)
   })
 
-  it("lowercases UPN on saveRun so new writes stay canonical", () => {
+  it("lowercases UPN on saveRun so new writes stay canonical", async () => {
     seedUser(testDb, CANONICAL)
-    saveRun({
+    await saveRun({
       id: "run-new",
       goal: "g",
       status: "completed",

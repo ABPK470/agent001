@@ -76,8 +76,8 @@ async function setupDb(): Promise<void> {
   const { seedSyncMetadataIfEmpty } = await import(
     "../src/api/sync/service/seed-sync-metadata.js"
   )
-  seedEntityRegistryIfEmpty(projectRoot)
-  seedSyncMetadataIfEmpty(projectRoot)
+  await seedEntityRegistryIfEmpty(projectRoot)
+  await seedSyncMetadataIfEmpty(projectRoot)
 }
 
 describe("catalog import/export round-trip", () => {
@@ -91,8 +91,8 @@ describe("catalog import/export round-trip", () => {
     process.env["MIA_DATA_DIR"] = ORIGINAL_DATA_DIR
   })
 
-  it("exports and re-imports entity flowId", () => {
-    const snapshot = buildDeployCatalogSnapshot({ tenantId: "_default" })
+  it("exports and re-imports entity flowId", async () => {
+    const snapshot = await buildDeployCatalogSnapshot({ tenantId: "_default" })
     expect(snapshot.syncDefinitionConfigs).toBeNull()
 
     const datasetEntry = snapshot.entityRegistry?.entities.find(
@@ -101,10 +101,10 @@ describe("catalog import/export round-trip", () => {
     expect(datasetEntry?.flowId).toBeTruthy()
     const flowPreset = datasetEntry!.flowId!
 
-    const preview = validateDeployCatalogSnapshot(snapshot)
+    const preview = await validateDeployCatalogSnapshot(snapshot)
     expect(preview.ok).toBe(true)
 
-    const applied = applyDeployCatalogSnapshot({
+    const applied = await applyDeployCatalogSnapshot({
       snapshot,
       actor: "test",
       projectRoot,
@@ -113,9 +113,9 @@ describe("catalog import/export round-trip", () => {
     expect(applied.ok).toBe(true)
     expect(applied.applied).toBe(true)
 
-    expect(db.getEntityDefinition("_default", "dataset")?.flowId).toBe(flowPreset)
+    expect((await db.getEntityDefinition("_default", "dataset"))?.flowId).toBe(flowPreset)
 
-    const adminItems = listSyncDefinitionAdminItems(projectRoot)
+    const adminItems = await listSyncDefinitionAdminItems(projectRoot)
     const datasetItem = adminItems.find((item) => item.id === "dataset")
     expect(datasetItem?.flowTemplateId).toBe(flowPreset)
     expect(datasetItem?.executionSteps.length).toBeGreaterThan(0)
@@ -128,11 +128,11 @@ describe("catalog import/export round-trip", () => {
       }
     }
 
-    const catalog = loadAuthoringFlowCatalog(projectRoot, "_default")
+    const catalog = await loadAuthoringFlowCatalog(projectRoot, "_default")
     expect("metadataOnly" in catalog.flowTemplates).toBe(true)
     expect("dataset" in catalog.flowTemplates).toBe(true)
 
-    const entity = db.getEntityDefinition("_default", "dataset")
+    const entity = await db.getEntityDefinition("_default", "dataset")
     expect(entity).toBeTruthy()
     await db.saveEntityDefinition({
       tenantId: "_default",
@@ -141,28 +141,28 @@ describe("catalog import/export round-trip", () => {
       def: { ...entity!, flowId: "metadataOnly" },
     })
 
-    const items = listSyncDefinitionAdminItems(projectRoot)
+    const items = await listSyncDefinitionAdminItems(projectRoot)
     const dataset = items.find((item) => item.id === "dataset")
     expect(dataset?.flowTemplateId).toBe("metadataOnly")
     expect(dataset?.executionSteps.length).toBeGreaterThan(0)
   })
 
-  it("rejects snapshots that reference unknown flows", () => {
-    const snapshot = buildDeployCatalogSnapshot({ tenantId: "_default" })
+  it("rejects snapshots that reference unknown flows", async () => {
+    const snapshot = await buildDeployCatalogSnapshot({ tenantId: "_default" })
     const datasetEntry = snapshot.entityRegistry?.entities.find(
       (entry) => (entry as { id?: string }).id === "dataset",
     ) as { flowId?: string } | undefined
     expect(datasetEntry?.flowId).toBeTruthy()
     datasetEntry!.flowId = "does-not-exist"
 
-    const preview = validateDeployCatalogSnapshot(snapshot)
+    const preview = await validateDeployCatalogSnapshot(snapshot)
     expect(preview.ok).toBe(false)
     expect(preview.errors.some((error) => error.includes("does-not-exist"))).toBe(true)
   })
 
-  it("writes deploy/sync tree (entities/*.json), not bulk entity-registry", () => {
+  it("writes deploy/sync tree (entities/*.json), not bulk entity-registry", async () => {
     const parent = mkdtempSync(join(tmpdir(), "catalog-export-dir-"))
-    const result = writeDeployCatalogSnapshot({
+    const result = await writeDeployCatalogSnapshot({
       outputParentDir: parent,
       tenantId: "_default",
     })
@@ -184,8 +184,8 @@ describe("catalog import/export round-trip", () => {
   })
 
   it("catalog import retires active entities missing from the snapshot", async () => {
-    const snapshot = buildDeployCatalogSnapshot({ tenantId: "_default" })
-    const template = db.getEntityDefinition("_default", "contract")
+    const snapshot = await buildDeployCatalogSnapshot({ tenantId: "_default" })
+    const template = await db.getEntityDefinition("_default", "contract")
     expect(template).toBeTruthy()
 
     await db.saveEntityDefinition({
@@ -198,33 +198,33 @@ describe("catalog import/export round-trip", () => {
         displayName: "Restore Orphan Test",
       },
     })
-    expect(db.getEntityDefinition("_default", "restoreOrphanTest")).toBeTruthy()
+    expect((await db.getEntityDefinition("_default", "restoreOrphanTest"))).toBeTruthy()
 
-    const applied = applyDeployCatalogSnapshot({
+    const applied = await applyDeployCatalogSnapshot({
       snapshot,
       actor: "test",
       projectRoot,
       dryRun: false,
     })
     expect(applied.applied).toBe(true)
-    expect(db.getEntityDefinition("_default", "restoreOrphanTest")).toBeNull()
+    expect((await db.getEntityDefinition("_default", "restoreOrphanTest"))).toBeNull()
     expect(
-      db.getEntityDefinition("_default", "restoreOrphanTest", { includeRetired: true })?.retiredAt,
+      (await db.getEntityDefinition("_default", "restoreOrphanTest", { includeRetired: true }))?.retiredAt,
     ).toBeTruthy()
-    expect(db.getEntityDefinition("_default", "contract")).toBeTruthy()
+    expect((await db.getEntityDefinition("_default", "contract"))).toBeTruthy()
   })
 
-  it("catalog rollback still publishes core entities with metadataSync", () => {
-    const baseline = commitSyncCatalogVersion({ reason: "test-baseline", actor: "test" })
-    commitSyncCatalogVersion({ reason: "test-follow-up", actor: "test" })
+  it("catalog rollback still publishes core entities with metadataSync", async () => {
+    const baseline = await commitSyncCatalogVersion({ reason: "test-baseline", actor: "test" })
+    await commitSyncCatalogVersion({ reason: "test-follow-up", actor: "test" })
 
-    rollbackSyncCatalogVersion({
+    await rollbackSyncCatalogVersion({
       targetVersion: baseline.version,
       actor: "test",
       projectRoot,
     })
 
-    const result = publishSyncDefinitionsFromDb(projectRoot)
+    const result = await publishSyncDefinitionsFromDb(projectRoot)
     for (const entityId of ["content", "contract", "dataset"]) {
       expect(result.stderr.some((line) => line.includes(`Refusing to publish "${entityId}"`))).toBe(false)
     }
@@ -243,15 +243,15 @@ describe("catalog import/export round-trip", () => {
       updated_by: "test",
     })
 
-    const catalog = loadAuthoringFlowCatalog(projectRoot, "_default")
+    const catalog = await loadAuthoringFlowCatalog(projectRoot, "_default")
     expect(catalog.flowTemplates.content.steps.some((step) => step.kind === "metadataSync")).toBe(true)
 
-    const result = publishSyncDefinitionsFromDb(projectRoot)
+    const result = await publishSyncDefinitionsFromDb(projectRoot)
     expect(result.stderr.some((line) => line.includes('Refusing to publish "content"'))).toBe(false)
   })
 
-  it("rejects catalog snapshots with kebab-case flow step kinds", () => {
-    const snapshot = buildDeployCatalogSnapshot({ tenantId: "_default" })
+  it("rejects catalog snapshots with kebab-case flow step kinds", async () => {
+    const snapshot = await buildDeployCatalogSnapshot({ tenantId: "_default" })
     const meta = snapshot.syncMetadata as {
       flows?: Record<string, { label: string; description?: string; steps: unknown[] }>
     }
@@ -267,14 +267,14 @@ describe("catalog import/export round-trip", () => {
       },
     ]
 
-    const preview = validateDeployCatalogSnapshot(snapshot)
+    const preview = await validateDeployCatalogSnapshot(snapshot)
     expect(preview.ok).toBe(false)
     expect(preview.errors.some((error) => error.includes("camelCase"))).toBe(true)
   })
 
   it("catalog rollback retires entities added after the restored version", async () => {
-    const baseline = commitSyncCatalogVersion({ reason: "test-baseline", actor: "test" })
-    const template = db.getEntityDefinition("_default", "contract")
+    const baseline = await commitSyncCatalogVersion({ reason: "test-baseline", actor: "test" })
+    const template = await db.getEntityDefinition("_default", "contract")
     expect(template).toBeTruthy()
 
     await db.saveEntityDefinition({
@@ -287,16 +287,16 @@ describe("catalog import/export round-trip", () => {
         displayName: "Rollback Orphan Test",
       },
     })
-    commitSyncCatalogVersion({ reason: "test-with-orphan", actor: "test" })
-    expect(db.getEntityDefinition("_default", "rollbackOrphanTest")).toBeTruthy()
+    await commitSyncCatalogVersion({ reason: "test-with-orphan", actor: "test" })
+    expect((await db.getEntityDefinition("_default", "rollbackOrphanTest"))).toBeTruthy()
 
-    rollbackSyncCatalogVersion({
+    await rollbackSyncCatalogVersion({
       targetVersion: baseline.version,
       actor: "test",
       projectRoot,
     })
 
-    expect(db.getEntityDefinition("_default", "rollbackOrphanTest")).toBeNull()
-    expect(db.getEntityDefinition("_default", "contract")).toBeTruthy()
+    expect((await db.getEntityDefinition("_default", "rollbackOrphanTest"))).toBeNull()
+    expect((await db.getEntityDefinition("_default", "contract"))).toBeTruthy()
   })
 })

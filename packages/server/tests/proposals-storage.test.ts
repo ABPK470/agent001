@@ -56,20 +56,20 @@ function finding(over: Partial<ProposerFinding> = {}): ProposerFinding {
 describe("proposals storage (F1.2)", () => {
   it("creates a proposer run + ingests findings + dedupes by fingerprint", async () => {
     const m = await setup()
-    const runId = m.createProposerRun({
+    const runId = await m.createProposerRun({
       tenantId: "_default",
       source: "uat",
       target: "prod",
       triggeredBy: "u",
       trigger: "manual"
     })
-    const a = m.ingestFindings("_default", runId, [
+    const a = await m.ingestFindings("_default", runId, [
       finding(),
       finding({ entityId: "c2", fingerprint: "fp-c2" })
     ])
     expect(a).toHaveLength(2)
     // re-ingest same fingerprints — should dedupe
-    const b = m.ingestFindings("_default", runId, [
+    const b = await m.ingestFindings("_default", runId, [
       finding(),
       finding({ entityId: "c2", fingerprint: "fp-c2" })
     ])
@@ -78,21 +78,21 @@ describe("proposals storage (F1.2)", () => {
 
   it("transitions status with append-only history", async () => {
     const m = await setup()
-    const runId = m.createProposerRun({
+    const runId = await m.createProposerRun({
       tenantId: "_default",
       source: "uat",
       target: "prod",
       triggeredBy: "u",
       trigger: "manual"
     })
-    const [id] = m.ingestFindings("_default", runId, [finding()])
-    const updated = m.updateProposalStatus({
+    const [id] = await m.ingestFindings("_default", runId, [finding()])
+    const updated = await m.updateProposalStatus({
       id: id!,
       to: ProposalStatus.AwaitingApproval,
       actor: "alice"
     })
     expect(updated.status).toBe(ProposalStatus.AwaitingApproval)
-    const hist = m.listProposalHistory(id!)
+    const hist = await m.listProposalHistory(id!)
     expect(hist).toHaveLength(2) // initial 'open' + transition
     expect(hist[0]!.to_status).toBe("open")
     expect(hist[1]!.to_status).toBe("awaiting_approval")
@@ -100,29 +100,31 @@ describe("proposals storage (F1.2)", () => {
 
   it("rejects illegal transitions", async () => {
     const m = await setup()
-    const runId = m.createProposerRun({
+    const runId = await m.createProposerRun({
       tenantId: "_default",
       source: "uat",
       target: "prod",
       triggeredBy: "u",
       trigger: "manual"
     })
-    const [id] = m.ingestFindings("_default", runId, [finding()])
-    m.updateProposalStatus({ id: id!, to: ProposalStatus.Dismissed, actor: "alice" })
-    expect(() => m.updateProposalStatus({ id: id!, to: ProposalStatus.Executed, actor: "alice" })).toThrow()
+    const [id] = await m.ingestFindings("_default", runId, [finding()])
+    await m.updateProposalStatus({ id: id!, to: ProposalStatus.Dismissed, actor: "alice" })
+    await expect(
+      m.updateProposalStatus({ id: id!, to: ProposalStatus.Executed, actor: "alice" })
+    ).rejects.toThrow()
   })
 
   it("persists annotation + rank score", async () => {
     const m = await setup()
-    const runId = m.createProposerRun({
+    const runId = await m.createProposerRun({
       tenantId: "_default",
       source: "uat",
       target: "prod",
       triggeredBy: "u",
       trigger: "manual"
     })
-    const [id] = m.ingestFindings("_default", runId, [finding()])
-    m.saveAnnotation(
+    const [id] = await m.ingestFindings("_default", runId, [finding()])
+    await m.saveAnnotation(
       id!,
       {
         riskTier: RiskTier.High,
@@ -134,8 +136,8 @@ describe("proposals storage (F1.2)", () => {
       },
       false
     )
-    m.saveRankScore(id!, 88.5)
-    const row = m.getProposal(id!)
+    await m.saveRankScore(id!, 88.5)
+    const row = await m.getProposal(id!)
     expect(row?.risk_tier).toBe(RiskTier.High)
     expect(row?.rank_score).toBe(88.5)
     expect(m.parseAnnotation(row!)?.riskScore).toBe(70)
@@ -143,56 +145,56 @@ describe("proposals storage (F1.2)", () => {
 
   it("filters proposals by status and risk tier", async () => {
     const m = await setup()
-    const runId = m.createProposerRun({
+    const runId = await m.createProposerRun({
       tenantId: "_default",
       source: "uat",
       target: "prod",
       triggeredBy: "u",
       trigger: "manual"
     })
-    const ids = m.ingestFindings("_default", runId, [
+    const ids = await m.ingestFindings("_default", runId, [
       finding({ entityId: "c1", fingerprint: "fp1" }),
       finding({ entityId: "c2", fingerprint: "fp2" })
     ])
-    m.updateProposalStatus({ id: ids[0]!, to: ProposalStatus.Dismissed, actor: "u" })
-    const open = m.listProposals({ tenantId: "_default", status: [ProposalStatus.Open] })
+    await m.updateProposalStatus({ id: ids[0]!, to: ProposalStatus.Dismissed, actor: "u" })
+    const open = await m.listProposals({ tenantId: "_default", status: [ProposalStatus.Open] })
     expect(open).toHaveLength(1)
     expect(open[0]!.id).toBe(ids[1])
   })
 
   it("counts proposals by status", async () => {
     const m = await setup()
-    const runId = m.createProposerRun({
+    const runId = await m.createProposerRun({
       tenantId: "_default",
       source: "uat",
       target: "prod",
       triggeredBy: "u",
       trigger: "manual"
     })
-    m.ingestFindings("_default", runId, [finding(), finding({ entityId: "c2", fingerprint: "fp2" })])
-    const counts = m.countProposalsByStatus("_default")
+    await m.ingestFindings("_default", runId, [finding(), finding({ entityId: "c2", fingerprint: "fp2" })])
+    const counts = await m.countProposalsByStatus("_default")
     expect(counts[ProposalStatus.Open]).toBe(2)
     expect(counts[ProposalStatus.Executed]).toBe(0)
   })
 
   it("finishes a proposer run with totals", async () => {
     const m = await setup()
-    const id = m.createProposerRun({
+    const id = await m.createProposerRun({
       tenantId: "_default",
       source: "uat",
       target: "prod",
       triggeredBy: "u",
       trigger: "schedule"
     })
-    m.markProposerRunRunning(id)
-    m.finishProposerRun({
+    await m.markProposerRunRunning(id)
+    await m.finishProposerRun({
       id,
       status: "completed",
       counts: { scanned: 10, produced: 3, errors: 0 },
       durationMs: 1234,
       error: null
     })
-    const row = m.getProposerRun(id)
+    const row = await m.getProposerRun(id)
     expect(row?.status).toBe("completed")
     expect(row?.scanned).toBe(10)
     expect(row?.duration_ms).toBe(1234)

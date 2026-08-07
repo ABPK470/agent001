@@ -21,8 +21,8 @@ import { describe, expect, it } from "vitest"
 
 const here = dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = join(here, "..", "..", "..")
-const APP_TSX = join(REPO_ROOT, "packages", "ui", "src", "App.tsx")
-const LAYOUTS_TS = join(REPO_ROOT, "packages", "server", "src", "features", "layouts", "routes.ts")
+const APP_TSX = join(REPO_ROOT, "packages", "ui", "src", "app", "App.tsx")
+const LAYOUTS_TS = join(REPO_ROOT, "packages", "server", "src", "api", "layouts", "routes.ts")
 
 describe("layouts wiring (v19) — single-input dashboard key", () => {
   it("dashboardIdFor reads ONLY req.session.upn (no sid, no isAdmin)", () => {

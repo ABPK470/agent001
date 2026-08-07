@@ -31,7 +31,7 @@ export async function refreshBuiltInFlowPresetsFromArtifact(projectRoot: string)
 /** Seed built-in flows when sync_flows is empty (migrations may populate other catalog tables first). */
 export async function ensureFlowPresetsSeeded(projectRoot: string): Promise<void> {
   if ((await db.listSyncFlows(DEFAULT_TENANT)).length > 0) return
-  seedFlowPresetsFromMetadata(loadSyncMetadataArtifact(resolve(projectRoot)))
+  await seedFlowPresetsFromMetadata(loadSyncMetadataArtifact(resolve(projectRoot)))
 }
 
 export async function seedSyncMetadataIfEmpty(projectRoot: string): Promise<void> {
@@ -70,14 +70,14 @@ export async function seedSyncMetadataIfEmpty(projectRoot: string): Promise<void
       })
     }
 
-    seedFlowPresetsFromMetadata(metadata, now)
+    await seedFlowPresetsFromMetadata(metadata, now)
   }
 
   // Migrations may populate catalog slices before phases/kinds exist.
   // Always upsert deploy artifact catalog rows so publish/validate has a full catalog.
-  ensureFlowPresetsSeeded(projectRoot)
-  ensureDeploySyncMetadataSeeds(projectRoot)
-  ensureCustomValueSourcesSeeded(projectRoot)
+  await ensureFlowPresetsSeeded(projectRoot)
+  await ensureDeploySyncMetadataSeeds(projectRoot)
+  await ensureCustomValueSourcesSeeded(projectRoot)
 }
 
 /** Refresh deploy-seeded phase/step-type/flow rows from deploy/sync/artifacts/sync-metadata.json. */

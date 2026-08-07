@@ -35,8 +35,8 @@ function stubPipeline(
 }
 
 describe("mergeSyncPlanPipelines", () => {
-  it("merges preview and execute rows for the same plan", () => {
-    const merged = mergeSyncPlanPipelines([
+  it("merges preview and execute rows for the same plan", async () => {
+    const merged = await mergeSyncPlanPipelines([
       stubPipeline("plan-1", OperationKind.SyncExecute),
       stubPipeline("plan-1", OperationKind.SyncPreview),
       {
@@ -60,8 +60,8 @@ describe("mergeSyncPlanPipelines", () => {
     expect(syncRun?.eventCount).toBe(4)
   })
 
-  it("keeps preview-only plans as sync-run with one phase", () => {
-    const merged = mergeSyncPlanPipelines([stubPipeline("plan-preview-only", OperationKind.SyncPreview)])
+  it("keeps preview-only plans as sync-run with one phase", async () => {
+    const merged = await mergeSyncPlanPipelines([stubPipeline("plan-preview-only", OperationKind.SyncPreview)])
     expect(merged).toHaveLength(1)
     expect(merged[0]?.kind).toBe(OperationKind.SyncRun)
     expect(merged[0]?.activities).toHaveLength(1)

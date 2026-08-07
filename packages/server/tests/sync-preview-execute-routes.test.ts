@@ -2,7 +2,7 @@ import Database from "better-sqlite3"
 import Fastify, { type FastifyInstance } from "fastify"
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
-import { join } from "node:path"
+import { join, resolve } from "node:path"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { AgentHost } from "@mia/agent"
@@ -66,10 +66,12 @@ function createHost(root: string): AgentHost {
 async function buildApp(session: CurrentSession): Promise<{ app: FastifyInstance; host: AgentHost }> {
   const { _setDb, _migrate } = await import("../src/infra/persistence/adapters/sqlite/index.js")
   const { registerSyncRoutes } = await import("../src/api/sync/routes.js")
+  const { seedDefaultPoliciesIfMissing } = await import("../src/api/policies/service/policy-seeder.js")
   const { seedUser, seedSession } = await import("./_fk-helpers.js")
 
   _setDb(testDb)
   _migrate(testDb)
+  await seedDefaultPoliciesIfMissing(resolve(import.meta.dirname, "../../.."))
   const host = createHost(projectRoot)
   const app = Fastify({ logger: false })
   app.addHook("onRequest", async (req) => {
@@ -177,13 +179,15 @@ describe("POST /api/sync/preview", () => {
 
 describe("POST /api/sync/execute/:planId", () => {
   it("runs execute with confirm and returns success", async () => {
-    executeSyncMock.mockResolvedValue({ planId: "plan-exec-1", success: true })
+    executeSyncMock.mockResolvedValue({ planId: "plan-exec-1", outcome: "completed", success: true })
     loadPlanMock.mockReturnValue(
       buildEntityPlan({
         planId: "plan-exec-1",
         entityType: "dataset",
         entityId: 10,
-        spec: ENTITY_SPECS.dataset
+        spec: ENTITY_SPECS.dataset,
+        // Default policies allow sync_execute to DEV; UAT is denied.
+        target: "DEV",
       })
     )
     const { app } = await buildApp(adminSession())
@@ -204,6 +208,7 @@ describe("POST /api/sync/execute/:planId", () => {
   it("returns failure payload when execute reports error", async () => {
     executeSyncMock.mockResolvedValue({
       planId: "plan-exec-2",
+      outcome: "completed",
       success: false,
       error: "Scope misattribution"
     })
@@ -212,7 +217,8 @@ describe("POST /api/sync/execute/:planId", () => {
         planId: "plan-exec-2",
         entityType: "contract",
         entityId: 2,
-        spec: ENTITY_SPECS.contract
+        spec: ENTITY_SPECS.contract,
+        target: "DEV",
       })
     )
     const { app } = await buildApp(adminSession())
@@ -236,7 +242,8 @@ describe("POST /api/sync/execute/:planId", () => {
         planId: "plan-exec-3",
         entityType: "rule",
         entityId: 3,
-        spec: ENTITY_SPECS.rule
+        spec: ENTITY_SPECS.rule,
+        target: "DEV",
       })
     )
     const { app } = await buildApp(adminSession())

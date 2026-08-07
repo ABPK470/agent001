@@ -66,7 +66,7 @@ describe("attachment audit events", () => {
 
       // Force expiry, then prune.
       testDb.prepare("UPDATE attachments SET retention_until = '2000-01-01T00:00:00Z' WHERE id = ?").run(a.id)
-      pruneExpiredAttachments()
+      await pruneExpiredAttachments()
 
       const pruned = events.find((e) => e.type === "attachment.pruned")
       expect(pruned).toBeTruthy()

@@ -52,17 +52,17 @@ describe("extractObjectTokens", () => {
 })
 
 describe("buildResolvedFactsBlock", () => {
-  it("returns empty when no catalog, no lineage, no goal-mention", () => {
-    const out = buildResolvedFactsBlock({ goal: "hello world", catalog: null })
+  it("returns empty when no catalog, no lineage, no goal-mention", async () => {
+    const out = await buildResolvedFactsBlock({ goal: "hello world", catalog: null })
     expect(out).toBe("")
   })
 
-  it("reports persistedView mirror EXISTS when catalog contains it", () => {
+  it("reports persistedView mirror EXISTS when catalog contains it", async () => {
     const cat = graph([
       table("publish.Revenue", ["pkClient", "amount"]),
       table("persistedView.publish.Revenue", ["pkClient", "amount"])
     ])
-    const out = buildResolvedFactsBlock({
+    const out = await buildResolvedFactsBlock({
       goal: "compute total publish.Revenue",
       catalog: cat,
       mirrorSchema: "persistedView"
@@ -71,9 +71,9 @@ describe("buildResolvedFactsBlock", () => {
     expect(out).toContain("persistedView mirror EXISTS")
   })
 
-  it("reports NO mirror when the persistedView is absent", () => {
+  it("reports NO mirror when the persistedView is absent", async () => {
     const cat = graph([table("publish.Revenue", ["pkClient", "amount"])])
-    const out = buildResolvedFactsBlock({
+    const out = await buildResolvedFactsBlock({
       goal: "scan publish.Revenue",
       catalog: cat,
       mirrorSchema: "persistedView"
@@ -81,15 +81,15 @@ describe("buildResolvedFactsBlock", () => {
     expect(out).toContain("no persistedView mirror")
   })
 
-  it("returns empty when goal has no object tokens and catalog is empty", () => {
-    const out = buildResolvedFactsBlock({
+  it("returns empty when goal has no object tokens and catalog is empty", async () => {
+    const out = await buildResolvedFactsBlock({
       goal: "compute foo bar baz",
       catalog: graph([])
     })
     expect(out).toBe("")
   })
 
-  it("does not dump top catalog large objects into unrelated goals (e.g. Hi)", () => {
+  it("does not dump top catalog large objects into unrelated goals (e.g. Hi)", async () => {
     const cat = graph([
       table("archive.account", ["id"]),
       table("publish.Revenue", ["pkClient", "amount"]),
@@ -99,7 +99,7 @@ describe("buildResolvedFactsBlock", () => {
     for (const [, t] of cat.tables) {
       ;(t as { rowCount: number }).rowCount = 50_000_000
     }
-    const out = buildResolvedFactsBlock({
+    const out = await buildResolvedFactsBlock({
       goal: "Hi",
       catalog: cat,
       schemaFingerprint: "sha1:deadbeef"
@@ -107,17 +107,17 @@ describe("buildResolvedFactsBlock", () => {
     expect(out).toBe("")
   })
 
-  it("still surfaces objects the goal actually names", () => {
+  it("still surfaces objects the goal actually names", async () => {
     const cat = graph([table("publish.Revenue", ["pkClient", "amount"])])
-    const out = buildResolvedFactsBlock({
+    const out = await buildResolvedFactsBlock({
       goal: "scan publish.Revenue",
       catalog: cat
     })
     expect(out).toContain("publish.revenue")
   })
 
-  it("threads schemaFingerprint into the block only when there are goal facts", () => {
-    const out = buildResolvedFactsBlock({
+  it("threads schemaFingerprint into the block only when there are goal facts", async () => {
+    const out = await buildResolvedFactsBlock({
       goal: "scan publish.Revenue",
       catalog: graph([table("publish.Revenue", ["pkClient"])]),
       schemaFingerprint: "sha1:deadbeef"
@@ -125,7 +125,7 @@ describe("buildResolvedFactsBlock", () => {
     expect(out).toContain("schema fingerprint: sha1:deadbeef")
   })
 
-  it("does not throw with a null catalog", () => {
-    expect(() => buildResolvedFactsBlock({ goal: "publish.Revenue", catalog: null })).not.toThrow()
+  it("does not throw with a null catalog", async () => {
+    await expect(buildResolvedFactsBlock({ goal: "publish.Revenue", catalog: null })).resolves.toBeDefined()
   })
 })

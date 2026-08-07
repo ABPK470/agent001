@@ -357,13 +357,13 @@ describe("MessageRouter", () => {
     testDb.close()
   })
 
-  it("creates a conversation and starts a run on inbound message", () => {
+  it("creates a conversation and starts a run on inbound message", async () => {
     const conversationRef = JSON.stringify({
       serviceUrl: "https://smba.trafficmanager.net/emea/",
       conversationId: "conv-abc",
       userId: "user-123"
     })
-    const result = router.handleInbound({
+    const result = await router.handleInbound({
       platformMessageId: "activity-abc",
       channelType: "teams",
       senderId: conversationRef,
@@ -388,14 +388,14 @@ describe("MessageRouter", () => {
     expect(session?.upn).toBe(session?.sid)
 
     // Conversation was created
-    const convs = router.listConversations()
+    const convs = await router.listConversations()
     expect(convs).toHaveLength(1)
     expect(convs[0].channelType).toBe("teams")
     expect(convs[0].senderName).toBe("Alice")
     expect(convs[0].activeRunId).toBe("run-001")
   })
 
-  it("reuses existing conversation for same sender", () => {
+  it("reuses existing conversation for same sender", async () => {
     const senderId = JSON.stringify({
       serviceUrl: "https://smba.example.com/",
       conversationId: "c1",
@@ -410,21 +410,21 @@ describe("MessageRouter", () => {
       receivedAt: new Date()
     }
 
-    const result1 = router.handleInbound(msg)
+    const result1 = await router.handleInbound(msg)
     runId = "run-002"
-    const result2 = router.handleInbound({ ...msg, platformMessageId: "activity-def", text: "second" })
+    const result2 = await router.handleInbound({ ...msg, platformMessageId: "activity-def", text: "second" })
 
     expect(result1.conversationId).toBe(result2.conversationId)
-    expect(router.listConversations()).toHaveLength(1)
+    expect(await router.listConversations()).toHaveLength(1)
   })
 
-  it("stamps the same synthetic continuity identity for repeated inbound messages from one sender", () => {
+  it("stamps the same synthetic continuity identity for repeated inbound messages from one sender", async () => {
     const senderId = JSON.stringify({
       serviceUrl: "https://smba.example.com/",
       conversationId: "c1",
       userId: "u1"
     })
-    router.handleInbound({
+    await router.handleInbound({
       platformMessageId: "activity-1",
       channelType: "teams",
       senderId,
@@ -433,7 +433,7 @@ describe("MessageRouter", () => {
       raw: {},
       receivedAt: new Date()
     })
-    router.handleInbound({
+    await router.handleInbound({
       platformMessageId: "activity-2",
       channelType: "teams",
       senderId,
@@ -466,7 +466,7 @@ describe("MessageRouter", () => {
     })
 
     // Simulate inbound
-    router.handleInbound({
+    await router.handleInbound({
       platformMessageId: "activity-abc",
       channelType: "teams",
       senderId: conversationRef,

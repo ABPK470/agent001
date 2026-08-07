@@ -48,27 +48,27 @@ afterEach(() => {
   teardownCatalogOperatorFixture(fixture)
 })
 
-function status() {
+async function status() {
   return getSyncPublishStatus(fixture.projectRoot, TENANT)
 }
 
-function preview() {
+async function preview() {
   return getSyncPublishPreview(fixture.projectRoot, TENANT)
 }
 
-function classify() {
-  return classifyCatalogPublish(fixture.projectRoot, TENANT)
+async function classify() {
+  return await classifyCatalogPublish(fixture.projectRoot, TENANT)
 }
 
-function stampQuiet(): void {
-  const s = status()
+async function stampQuiet(): Promise<void> {
+  const s = await status()
   expect(s.catalogNeedsPublish, "Publish must not be armed").toBe(false)
   expect(s.operationalCatalogAhead, "must not be env-only ahead").toBe(false)
   expect(s.activeCatalogVersion).toBe(s.publishedCatalogVersion)
 }
 
-function stampPublishPending(opts?: { minTip?: number }): void {
-  const s = status()
+async function stampPublishPending(opts?: { minTip?: number }): Promise<void> {
+  const s = await status()
   expect(s.catalogNeedsPublish, "Publish must be armed").toBe(true)
   expect(s.operationalCatalogAhead).toBe(false)
   expect(s.activeCatalogVersion).not.toBe(s.publishedCatalogVersion)
@@ -81,30 +81,30 @@ describe("sync config — baseline seed + first publish", () => {
   it("seeds tip history and Publish stamps them equal", async () => {
     const { tipVersion, publishedVersion } = await bootstrapPublishedCatalog(fixture)
     expect(tipVersion).toBe(publishedVersion)
-    stampQuiet()
-    expect(status().unpublishedEntityCount).toBe(0)
-    expect(preview().changeCount).toBe(0)
+    await stampQuiet()
+    expect((await status()).unpublishedEntityCount).toBe(0)
+    expect((await preview()).changeCount).toBe(0)
   })
 
   it("first publish without prior tip commits still produces a stamp", async () => {
-    ensureInitialSyncCatalogVersion("system")
-    const result = publishSyncDefinitionsFromDb(fixture.projectRoot)
+    await ensureInitialSyncCatalogVersion("system")
+    const result = await publishSyncDefinitionsFromDb(fixture.projectRoot)
     expect(result.definitionCount).toBeGreaterThan(0)
     const meta = await db.getSyncPublishMeta(TENANT)
-    expect(meta?.catalog_version).toBe(getActiveSyncCatalogVersion(TENANT))
-    stampQuiet()
+    expect(meta?.catalog_version).toBe(await getActiveSyncCatalogVersion(TENANT))
+    await stampQuiet()
   })
 
   it("admin list marks no entity needsPublish when stamps match", async () => {
     await bootstrapPublishedCatalog(fixture)
-    const items = listSyncDefinitionAdminItems(fixture.projectRoot, TENANT)
+    const items = await listSyncDefinitionAdminItems(fixture.projectRoot, TENANT)
     expect(items.length).toBeGreaterThan(0)
     expect(items.every((item) => item.needsPublish === false)).toBe(true)
   })
 
   it("preview sections empty when tip matches publish", async () => {
     await bootstrapPublishedCatalog(fixture)
-    const p = preview()
+    const p = await preview()
     expect(p.catalogNeedsPublish).toBe(false)
     expect(p.sections).toEqual([])
     expect(p.changeCount).toBe(0)
@@ -120,8 +120,8 @@ describe("sync config — flow tip edits arm Publish", () => {
       kind: "auditCheck",
     })
     expect(next).toBeGreaterThan(tipVersion)
-    stampPublishPending({ minTip: next })
-    expect(status().dirtyCompileSections).toContain("flows")
+    await stampPublishPending({ minTip: next })
+    expect((await status()).dirtyCompileSections).toContain("flows")
   })
 
   it("flow tip edit marks the entity that uses that flow", async () => {
@@ -131,10 +131,10 @@ describe("sync config — flow tip edits arm Publish", () => {
       markerId: "auditCheckEntityFanout",
       kind: "auditCheck",
     })
-    const s = status()
+    const s = await status()
     expect(s.unpublishedEntityIds).toContain("contract")
     expect(s.unpublishedEntityCount).toBeGreaterThan(0)
-    const items = listSyncDefinitionAdminItems(fixture.projectRoot, TENANT)
+    const items = await listSyncDefinitionAdminItems(fixture.projectRoot, TENANT)
     expect(items.find((i) => i.id === "contract")?.needsPublish).toBe(true)
   })
 
@@ -145,7 +145,7 @@ describe("sync config — flow tip edits arm Publish", () => {
       markerId: "contentOnlyMarker",
       kind: "metadataSync",
     })
-    const s = status()
+    const s = await status()
     expect(s.dirtyCompileSections).toContain("flows")
     expect(s.unpublishedEntityIds).toContain("content")
     // contract may still be clean if only content flow changed
@@ -159,7 +159,7 @@ describe("sync config — flow tip edits arm Publish", () => {
       markerId: "datasetHistoryMarker",
       kind: "metadataSync",
     })
-    const versions = listSyncCatalogVersions(TENANT, 20)
+    const versions = await listSyncCatalogVersions(TENANT, 20)
     expect(versions.some((v) => v.reason === "sync-metadata:flow:dataset")).toBe(true)
   })
 
@@ -170,7 +170,7 @@ describe("sync config — flow tip edits arm Publish", () => {
       markerId: "rulePreviewMarker",
       kind: "metadataSync",
     })
-    const p = preview()
+    const p = await preview()
     expect(p.catalogNeedsPublish).toBe(true)
     expect(p.changeCount).toBeGreaterThan(0)
     expect(p.sections.some((s) => s.section === "flows")).toBe(true)
@@ -187,19 +187,19 @@ describe("sync config — flow tip edits arm Publish", () => {
       markerId: "auditCheckThenPublish",
       kind: "auditCheck",
     })
-    stampPublishPending()
-    publishSyncDefinitionsFromDb(fixture.projectRoot)
-    stampQuiet()
-    expect(preview().changeCount).toBe(0)
+    await stampPublishPending()
+    await publishSyncDefinitionsFromDb(fixture.projectRoot)
+    await stampQuiet()
+    expect((await preview()).changeCount).toBe(0)
   })
 
   it("second flow edit after publish arms Publish again", async () => {
     await bootstrapPublishedCatalog(fixture)
     await appendFlowMarkerStep({ flowId: "contract", markerId: "m1", kind: "auditCheck" })
-    publishSyncDefinitionsFromDb(fixture.projectRoot)
-    stampQuiet()
+    await publishSyncDefinitionsFromDb(fixture.projectRoot)
+    await stampQuiet()
     await appendFlowMarkerStep({ flowId: "contract", markerId: "m2", kind: "auditCheck" })
-    stampPublishPending()
+    await stampPublishPending()
   })
 })
 
@@ -214,7 +214,7 @@ describe("sync config — boot tip SoT (built-in flows)", () => {
     await db.syncBuiltInFlowsFromArtifact(fixture.projectRoot, TENANT)
     const steps = db.parseFlowSteps((await db.getSyncFlow(TENANT, "content"))!.steps_json)
     expect(steps.some((s) => s.id === "surviveBootMarker")).toBe(true)
-    stampPublishPending()
+    await stampPublishPending()
   })
 
   it("valid tip flow edit survives full deploy metadata sync (boot path)", async () => {
@@ -227,7 +227,7 @@ describe("sync config — boot tip SoT (built-in flows)", () => {
     await db.syncDeploySyncMetadataFromArtifact(fixture.projectRoot, TENANT)
     const steps = db.parseFlowSteps((await db.getSyncFlow(TENANT, "contract"))!.steps_json)
     expect(steps.some((s) => s.id === "surviveDeploySync")).toBe(true)
-    const p = preview()
+    const p = await preview()
     expect(p.catalogNeedsPublish).toBe(true)
     expect(p.changeCount).toBeGreaterThan(0)
   })
@@ -260,19 +260,19 @@ describe("sync config — boot tip SoT (built-in flows)", () => {
       kind: "metadataSync",
     })
     await db.syncDeploySyncMetadataFromArtifact(fixture.projectRoot, TENANT)
-    stampPublishPending()
-    publishSyncDefinitionsFromDb(fixture.projectRoot)
-    stampQuiet()
+    await stampPublishPending()
+    await publishSyncDefinitionsFromDb(fixture.projectRoot)
+    await stampQuiet()
   })
 })
 
 describe("sync config — environment tip is operational (no Publish)", () => {
   it("env-only tip ahead does not arm Publish", async () => {
     await bootstrapPublishedCatalog(fixture)
-    const published = status().publishedCatalogVersion
+    const published = (await status()).publishedCatalogVersion
     await bumpSyncEnvironmentTip({ name: "regression-env-a" })
-    const s = status()
-    expect(s.tipAhead ?? classify().tipAhead).toBe(true)
+    const s = await status()
+    expect(s.tipAhead ?? (await classify()).tipAhead).toBe(true)
     expect(s.activeCatalogVersion).not.toBe(published)
     expect(s.catalogNeedsPublish).toBe(false)
     expect(s.operationalCatalogAhead).toBe(true)
@@ -283,13 +283,13 @@ describe("sync config — environment tip is operational (no Publish)", () => {
   it("env tip then flow tip arms Publish (compile wins)", async () => {
     await bootstrapPublishedCatalog(fixture)
     await bumpSyncEnvironmentTip({ name: "regression-env-b" })
-    expect(status().operationalCatalogAhead).toBe(true)
+    expect((await status()).operationalCatalogAhead).toBe(true)
     await appendFlowMarkerStep({
       flowId: "gateMetadata",
       markerId: "afterEnvMarker",
       kind: "metadataSync",
     })
-    const s = status()
+    const s = await status()
     expect(s.catalogNeedsPublish).toBe(true)
     expect(s.operationalCatalogAhead).toBe(false)
     expect(s.dirtyCompileSections).toContain("flows")
@@ -298,16 +298,16 @@ describe("sync config — environment tip is operational (no Publish)", () => {
   it("Publish after env-only tip does not need to run for quiet sync — stamps stay env-ahead", async () => {
     await bootstrapPublishedCatalog(fixture)
     await bumpSyncEnvironmentTip({ name: "regression-env-c" })
-    expect(status().catalogNeedsPublish).toBe(false)
+    expect((await status()).catalogNeedsPublish).toBe(false)
     // Optional Publish still allowed — stamps catch up
-    publishSyncDefinitionsFromDb(fixture.projectRoot)
-    stampQuiet()
+    await publishSyncDefinitionsFromDb(fixture.projectRoot)
+    await stampQuiet()
   })
 
   it("classify reports operationalOnlyAhead only when env dirty and no compile delta", async () => {
     await bootstrapPublishedCatalog(fixture)
     await bumpSyncEnvironmentTip()
-    const c = classify()
+    const c = await classify()
     expect(c.operationalOnlyAhead).toBe(true)
     expect(c.compileNeedsPublish).toBe(false)
     expect(c.dirtyCompileSections).toEqual([])
@@ -323,7 +323,7 @@ describe("sync config — zombie tip stamp (version ahead, live matches publish)
       markerId: "zombieTemp",
       kind: "auditCheck",
     })
-    stampPublishPending()
+    await stampPublishPending()
 
     // Revert live flow to published-era content without a new catalog version.
     const publishedSnapshot = await db.getSyncCatalogVersionRow(TENANT, publishedVersion!)
@@ -345,19 +345,19 @@ describe("sync config — zombie tip stamp (version ahead, live matches publish)
       updated_by: row.updated_by,
     })
 
-    const c = classify()
+    const c = await classify()
     expect(c.tipAhead).toBe(true)
     expect(c.activeCatalogVersion).not.toBe(c.publishedCatalogVersion)
     expect(c.dirtyCompileSections).toEqual([])
     expect(c.compileNeedsPublish).toBe(true)
     expect(c.operationalOnlyAhead).toBe(false)
 
-    const p = preview()
+    const p = await preview()
     expect(p.catalogNeedsPublish).toBe(true)
     expect(p.changeCount).toBe(0)
 
     // Must not look "published" — stamp mismatch.
-    expect(status().activeCatalogVersion === status().publishedCatalogVersion).toBe(false)
+    expect((await status()).activeCatalogVersion === (await status()).publishedCatalogVersion).toBe(false)
   })
 
   it("Publish reconciles zombie tip stamp without requiring a live compile delta", async () => {
@@ -383,16 +383,16 @@ describe("sync config — zombie tip stamp (version ahead, live matches publish)
       updated_at: row.updated_at,
       updated_by: row.updated_by,
     })
-    expect(status().catalogNeedsPublish).toBe(true)
-    publishSyncDefinitionsFromDb(fixture.projectRoot)
-    stampQuiet()
+    expect((await status()).catalogNeedsPublish).toBe(true)
+    await publishSyncDefinitionsFromDb(fixture.projectRoot)
+    await stampQuiet()
   })
 })
 
 describe("sync config — stamp equality is the published truth", () => {
   it("active tip stamp equals publishedCatalogVersion only after Publish", async () => {
     await bootstrapPublishedCatalog(fixture)
-    const before = status()
+    const before = await status()
     expect(before.activeCatalogVersion).toBe(before.publishedCatalogVersion)
 
     await appendFlowMarkerStep({
@@ -400,19 +400,19 @@ describe("sync config — stamp equality is the published truth", () => {
       markerId: "stampTruth",
       kind: "metadataSync",
     })
-    const mid = status()
+    const mid = await status()
     expect(mid.activeCatalogVersion).not.toBe(mid.publishedCatalogVersion)
     expect(mid.catalogNeedsPublish).toBe(true)
 
-    publishSyncDefinitionsFromDb(fixture.projectRoot)
-    const after = status()
+    await publishSyncDefinitionsFromDb(fixture.projectRoot)
+    const after = await status()
     expect(after.activeCatalogVersion).toBe(after.publishedCatalogVersion)
     expect(after.catalogNeedsPublish).toBe(false)
   })
 
   it("green-published equivalent: stamps match ⇒ no Publish, no unpublished entities", async () => {
     await bootstrapPublishedCatalog(fixture)
-    const s = status()
+    const s = await status()
     expect(s.activeCatalogVersion === s.publishedCatalogVersion).toBe(true)
     expect(s.catalogNeedsPublish).toBe(false)
     expect(s.unpublishedEntityCount).toBe(0)
@@ -420,10 +420,10 @@ describe("sync config — stamp equality is the published truth", () => {
 
   it("history tip ahead of publish stamp never reports quiet Publish", async () => {
     await bootstrapPublishedCatalog(fixture)
-    recordSyncCatalogChange({ reason: "noop:manual-commit", actor: "operator" })
+    await recordSyncCatalogChange({ reason: "noop:manual-commit", actor: "operator" })
     // Even a tip commit with identical content (stamp drift) arms Publish.
-    expect(status().catalogNeedsPublish).toBe(true)
-    expect(status().activeCatalogVersion).not.toBe(status().publishedCatalogVersion)
+    expect((await status()).catalogNeedsPublish).toBe(true)
+    expect((await status()).activeCatalogVersion).not.toBe((await status()).publishedCatalogVersion)
   })
 })
 
@@ -432,16 +432,16 @@ describe("sync config — multi-mutation sequences", () => {
     await bootstrapPublishedCatalog(fixture)
     await appendFlowMarkerStep({ flowId: "rule", markerId: "seq1", kind: "metadataSync" })
     await bumpSyncEnvironmentTip({ name: "seq-env" })
-    expect(status().catalogNeedsPublish).toBe(true)
-    publishSyncDefinitionsFromDb(fixture.projectRoot)
-    stampQuiet()
+    expect((await status()).catalogNeedsPublish).toBe(true)
+    await publishSyncDefinitionsFromDb(fixture.projectRoot)
+    await stampQuiet()
   })
 
   it("publish → env → still quiet for Publish arming", async () => {
     await bootstrapPublishedCatalog(fixture)
     await bumpSyncEnvironmentTip({ name: "post-publish-env" })
-    expect(status().catalogNeedsPublish).toBe(false)
-    expect(status().operationalCatalogAhead).toBe(true)
+    expect((await status()).catalogNeedsPublish).toBe(false)
+    expect((await status()).operationalCatalogAhead).toBe(true)
   })
 
   it("three successive flow edits keep Publish armed until Publish", async () => {
@@ -449,18 +449,18 @@ describe("sync config — multi-mutation sequences", () => {
     await appendFlowMarkerStep({ flowId: "contract", markerId: "c1", kind: "auditCheck" })
     await appendFlowMarkerStep({ flowId: "contract", markerId: "c2", kind: "auditCheck" })
     await appendFlowMarkerStep({ flowId: "contract", markerId: "c3", kind: "auditCheck" })
-    stampPublishPending()
-    const p = preview()
+    await stampPublishPending()
+    const p = await preview()
     expect(p.changeCount).toBeGreaterThan(0)
-    publishSyncDefinitionsFromDb(fixture.projectRoot)
-    stampQuiet()
+    await publishSyncDefinitionsFromDb(fixture.projectRoot)
+    await stampQuiet()
   })
 
   it("edits across multiple flows fan out to multiple entities", async () => {
     await bootstrapPublishedCatalog(fixture)
     await appendFlowMarkerStep({ flowId: "contract", markerId: "mf1", kind: "auditCheck" })
     await appendFlowMarkerStep({ flowId: "dataset", markerId: "mf2", kind: "metadataSync" })
-    const ids = new Set(status().unpublishedEntityIds)
+    const ids = new Set((await status()).unpublishedEntityIds)
     expect(ids.has("contract")).toBe(true)
     expect(ids.has("dataset")).toBe(true)
   })
@@ -472,8 +472,8 @@ describe("sync config — multi-mutation sequences", () => {
       markerId: "compiledMarker",
       kind: "auditCheck",
     })
-    publishSyncDefinitionsFromDb(fixture.projectRoot)
-    const bundle = db.loadPublishedBundleFromDb(TENANT)
+    await publishSyncDefinitionsFromDb(fixture.projectRoot)
+    const bundle = await db.loadPublishedBundleFromDb(TENANT)
     const steps = bundle?.definitions?.contract?.executionFlow?.steps ?? []
     expect(steps.some((s) => s.id === "compiledMarker")).toBe(true)
   })
@@ -483,8 +483,8 @@ describe("sync config — classify / status / preview coherence", () => {
   it("status mirrors classify compileNeedsPublish and operationalOnlyAhead", async () => {
     await bootstrapPublishedCatalog(fixture)
     await appendFlowMarkerStep({ flowId: "content", markerId: "cohere1", kind: "metadataSync" })
-    const c = classify()
-    const s = status()
+    const c = await classify()
+    const s = await status()
     expect(s.catalogNeedsPublish).toBe(c.compileNeedsPublish)
     expect(s.operationalCatalogAhead).toBe(c.operationalOnlyAhead)
     expect(s.dirtyCompileSections).toEqual(c.dirtyCompileSections)
@@ -495,22 +495,22 @@ describe("sync config — classify / status / preview coherence", () => {
   it("preview.catalogNeedsPublish matches status after env-only tip", async () => {
     await bootstrapPublishedCatalog(fixture)
     await bumpSyncEnvironmentTip({ name: "cohere-env" })
-    expect(preview().catalogNeedsPublish).toBe(status().catalogNeedsPublish)
-    expect(preview().operationalCatalogAhead).toBe(true)
+    expect((await preview()).catalogNeedsPublish).toBe((await status()).catalogNeedsPublish)
+    expect((await preview()).operationalCatalogAhead).toBe(true)
   })
 
   it("preview never includes environments section", async () => {
     await bootstrapPublishedCatalog(fixture)
     await bumpSyncEnvironmentTip({ name: "cohere-env-2" })
     await appendFlowMarkerStep({ flowId: "content", markerId: "cohere2", kind: "metadataSync" })
-    expect(preview().sections.every((s) => s.section !== "environments")).toBe(true)
+    expect((await preview()).sections.every((s) => s.section !== "environments")).toBe(true)
   })
 
   it("never-published tip arms Publish with all entities unpublished", async () => {
-    ensureInitialSyncCatalogVersion("system")
+    await ensureInitialSyncCatalogVersion("system")
     // Wipe publish meta by replacing with empty — simulate fresh DB after tip seed.
     // If no publish meta, classify treats tip ahead as needing publish.
-    const c = classifyCatalogPublish(fixture.projectRoot, TENANT)
+    const c = await classifyCatalogPublish(fixture.projectRoot, TENANT)
     // Fresh seed may already have no publish meta
     if (await db.getSyncPublishMeta(TENANT) == null) {
       expect(c.compileNeedsPublish).toBe(true)
@@ -528,8 +528,8 @@ describe("sync config — history vs live tip (preview SoT)", () => {
       kind: "auditCheck",
     })
     await db.syncDeploySyncMetadataFromArtifact(fixture.projectRoot, TENANT)
-    const s = status()
-    const p = preview()
+    const s = await status()
+    const p = await preview()
     expect(s.catalogNeedsPublish).toBe(true)
     expect(p.catalogNeedsPublish).toBe(true)
     expect(p.changeCount).toBeGreaterThan(0)
@@ -546,10 +546,10 @@ describe("sync config — history vs live tip (preview SoT)", () => {
       markerId: "historyKeeps",
       kind: "auditCheck",
     })
-    publishSyncDefinitionsFromDb(fixture.projectRoot)
-    const versions = listSyncCatalogVersions(TENANT, 50)
+    await publishSyncDefinitionsFromDb(fixture.projectRoot)
+    const versions = await listSyncCatalogVersions(TENANT, 50)
     expect(versions.some((v) => v.reason === "sync-metadata:flow:contract")).toBe(true)
-    stampQuiet()
+    await stampQuiet()
   })
 })
 
@@ -633,7 +633,7 @@ describe("sync config — HTTP publish-status / publish-preview", () => {
 describe("sync config — entity tip version drift", () => {
   it("bumping entity tip version arms Publish for that entity", async () => {
     await bootstrapPublishedCatalog(fixture)
-    const entity = db.getEntityDefinition(TENANT, "contract")
+    const entity = await db.getEntityDefinition(TENANT, "contract")
     expect(entity).toBeTruthy()
     await db.saveEntityDefinition({
       tenantId: TENANT,
@@ -641,26 +641,26 @@ describe("sync config — entity tip version drift", () => {
       actor: "operator",
       reason: "regression:entity-bump",
     })
-    recordSyncCatalogChange({ reason: "entity:update:contract", actor: "operator" })
-    const s = status()
+    await recordSyncCatalogChange({ reason: "entity:update:contract", actor: "operator" })
+    const s = await status()
     expect(s.catalogNeedsPublish).toBe(true)
     expect(s.unpublishedEntityIds).toContain("contract")
   })
 
   it("entity bump then Publish clears needsPublish on admin list", async () => {
     await bootstrapPublishedCatalog(fixture)
-    const entity = db.getEntityDefinition(TENANT, "content")!
+    const entity = (await db.getEntityDefinition(TENANT, "content"))!
     await db.saveEntityDefinition({
       tenantId: TENANT,
       def: { ...entity, version: (entity.version ?? 1) + 1 },
       actor: "operator",
       reason: "regression:entity-bump-2",
     })
-    recordSyncCatalogChange({ reason: "entity:update:content", actor: "operator" })
-    expect(listSyncDefinitionAdminItems(fixture.projectRoot, TENANT).find((i) => i.id === "content")?.needsPublish).toBe(true)
-    publishSyncDefinitionsFromDb(fixture.projectRoot)
-    expect(listSyncDefinitionAdminItems(fixture.projectRoot, TENANT).find((i) => i.id === "content")?.needsPublish).toBe(false)
-    stampQuiet()
+    await recordSyncCatalogChange({ reason: "entity:update:content", actor: "operator" })
+    expect((await listSyncDefinitionAdminItems(fixture.projectRoot, TENANT)).find((i) => i.id === "content")?.needsPublish).toBe(true)
+    await publishSyncDefinitionsFromDb(fixture.projectRoot)
+    expect((await listSyncDefinitionAdminItems(fixture.projectRoot, TENANT)).find((i) => i.id === "content")?.needsPublish).toBe(false)
+    await stampQuiet()
   })
 })
 
@@ -686,7 +686,7 @@ describe("sync config — custom (non-built-in) flows", () => {
       updated_at: now,
       updated_by: "operator",
     })
-    recordSyncCatalogChange({ reason: "sync-metadata:flow:operatorCustomFlow", actor: "operator" })
+    await recordSyncCatalogChange({ reason: "sync-metadata:flow:operatorCustomFlow", actor: "operator" })
     await db.syncDeploySyncMetadataFromArtifact(fixture.projectRoot, TENANT)
     const custom = await db.getSyncFlow(TENANT, "operatorCustomFlow")
     expect(custom).toBeTruthy()

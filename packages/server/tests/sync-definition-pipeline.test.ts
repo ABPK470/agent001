@@ -27,7 +27,7 @@ import {
   scaffoldSyncDefinition,
   type EntityDefinition
 } from "@mia/sync"
-import { loadPublishedBundleFromSqlite } from "../src/boot/published-sync-bundle.js"
+import { loadPublishedBundleFromSqliteCached } from "../src/boot/published-sync-bundle.js"
 
 let testDb: Database.Database
 let dataDir: string
@@ -48,7 +48,7 @@ function createHost(root: string): AgentHost {
       plans: { diskRoot: null, memCache: new Map() },
       project: {
         dbProjectRoot: root,
-        publishedDefinitions: createDbPublishedSyncDefinitionRegistry(loadPublishedBundleFromSqlite),
+        publishedDefinitions: createDbPublishedSyncDefinitionRegistry(loadPublishedBundleFromSqliteCached),
         publishReadiness: ALWAYS_PUBLISH_READY,
       }
     }
@@ -166,16 +166,16 @@ describe("sync definition pipeline (e2e)", () => {
       }
     }
 
-    const seedResult = seedEntityRegistryIfEmpty(projectRoot)
+    const seedResult = await seedEntityRegistryIfEmpty(projectRoot)
     expect(seedResult.source).toBe("artifacts")
     expect(seedResult.entityIds).toContain("contract")
 
-    seedSyncMetadataIfEmpty(projectRoot)
-    const published = publishSyncDefinitionsFromDb(projectRoot)
+    await seedSyncMetadataIfEmpty(projectRoot)
+    const published = await publishSyncDefinitionsFromDb(projectRoot)
     expect(published.publishedStorage).toBe("sqlite")
 
     const { loadPublishedBundleFromDb } = await import("../src/infra/persistence/adapters/sqlite/db/index.js")
-    const bundle = loadPublishedBundleFromDb()
+    const bundle = await loadPublishedBundleFromDb()
     expect(bundle).toBeTruthy()
 
     const table = (
@@ -196,20 +196,20 @@ describe("sync definition pipeline (e2e)", () => {
     _setDb(testDb)
     _migrate(testDb)
     const { seedSyncMetadataIfEmpty } = await import("../src/api/sync/service/seed-sync-metadata.js")
-    seedSyncMetadataIfEmpty(projectRoot)
+    await seedSyncMetadataIfEmpty(projectRoot)
 
     const entity = makeFkPathEntity("fk_path_entity")
-    saveEntityDefinition({ tenantId: "_default", def: entity, actor: "test", reason: "seed" })
+    await saveEntityDefinition({ tenantId: "_default", def: entity, actor: "test", reason: "seed" })
 
     const flowTemplateCatalog = loadSyncDefinitionFlowTemplateCatalog(projectRoot)
     const scaffolded = scaffoldSyncDefinition(entity, { projectRoot, flowTemplateCatalog })
     const childScaffoldPredicate = scaffolded.metadata.tables.find((t) => t.name === "core.Child")?.predicate
 
-    publishSyncDefinitionsFromDb(projectRoot)
-    publishSyncDefinitionsFromDb(projectRoot)
+    await publishSyncDefinitionsFromDb(projectRoot)
+    await publishSyncDefinitionsFromDb(projectRoot)
 
     const { loadPublishedBundleFromDb } = await import("../src/infra/persistence/adapters/sqlite/db/index.js")
-    const bundle = loadPublishedBundleFromDb()
+    const bundle = await loadPublishedBundleFromDb()
     expect(bundle).toBeTruthy()
 
     const publishedChild = (
@@ -229,11 +229,11 @@ describe("sync definition pipeline (e2e)", () => {
     _setDb(testDb)
     _migrate(testDb)
     const { seedSyncMetadataIfEmpty } = await import("../src/api/sync/service/seed-sync-metadata.js")
-    seedSyncMetadataIfEmpty(projectRoot)
+    await seedSyncMetadataIfEmpty(projectRoot)
 
     const entity = makeFkPathEntity("custom_runtime_entity")
-    saveEntityDefinition({ tenantId: "_default", def: entity, actor: "test", reason: "seed" })
-    publishSyncDefinitionsFromDb(projectRoot)
+    await saveEntityDefinition({ tenantId: "_default", def: entity, actor: "test", reason: "seed" })
+    await publishSyncDefinitionsFromDb(projectRoot)
 
     const host = createHost(projectRoot)
     const published = listPublishedSyncDefinitions(host, projectRoot)
@@ -255,10 +255,10 @@ describe("sync definition pipeline (e2e)", () => {
     _setDb(testDb)
     _migrate(testDb)
     const { seedSyncMetadataIfEmpty } = await import("../src/api/sync/service/seed-sync-metadata.js")
-    seedSyncMetadataIfEmpty(projectRoot)
+    await seedSyncMetadataIfEmpty(projectRoot)
 
     const entity = makeFkPathEntity("compose_parity")
-    saveEntityDefinition({ tenantId: "_default", def: entity, actor: "test", reason: "seed" })
+    await saveEntityDefinition({ tenantId: "_default", def: entity, actor: "test", reason: "seed" })
 
     const {
       buildFlowCatalog,
@@ -269,13 +269,18 @@ describe("sync definition pipeline (e2e)", () => {
     // Must use the same authoring catalog as publish: DB presets strip `phase`
     // from stored steps, so snapForSteps only freezes kinds (phases stay {}).
     // File-template catalogs still carry phase and would diverge.
-    const flowTemplateCatalog = loadAuthoringFlowCatalog(projectRoot)
+    const flowTemplateCatalog = await loadAuthoringFlowCatalog(projectRoot)
     const flowCatalog = buildFlowCatalog(
-      db.listSyncPhases("_default"),
-      db.listSyncActions("_default"),
-      db.listSyncValueSources("_default"),
+      await db.listSyncPhases("_default"),
+      await db.listSyncActions("_default"),
+      await db.listSyncValueSources("_default"),
     )
     const config = syncDefinitionConfigFromEntity(entity, flowTemplateCatalog)
+    const resolvedStrategy = await db.resolveScd2Strategy(
+      "_default",
+      entity.scd2.strategyId,
+      entity.scd2.strategyVersion,
+    )
 
     const direct = compilePublishedSyncDefinition(
       entity,
@@ -284,14 +289,17 @@ describe("sync definition pipeline (e2e)", () => {
       flowCatalog,
       "2026-06-01T00:00:00.000Z",
       "direct",
-      (strategyId) => db.resolveScd2Strategy("_default", strategyId) ?? null,
+      (strategyId, strategyVersion) =>
+        strategyId === entity.scd2.strategyId && strategyVersion === entity.scd2.strategyVersion
+          ? resolvedStrategy
+          : null,
     )
 
-    publishSyncDefinitionsFromDb(projectRoot)
-    publishSyncDefinitionsFromDb(projectRoot)
+    await publishSyncDefinitionsFromDb(projectRoot)
+    await publishSyncDefinitionsFromDb(projectRoot)
 
     const { loadPublishedBundleFromDb } = await import("../src/infra/persistence/adapters/sqlite/db/index.js")
-    const bundle = loadPublishedBundleFromDb()
+    const bundle = await loadPublishedBundleFromDb()
     expect(bundle).toBeTruthy()
 
     const published = bundle!.definitions.compose_parity as {

@@ -9,8 +9,8 @@ import {
 } from "../../infra/persistence/index.js"
 
 export function createSyncEventSink(): AgentHost["sync"]["events"]["sink"] {
-  return (event) => {
-    const data = enrichSyncSqlEventData(event.type, event.data)
+  return async (event) => {
+    const data = await enrichSyncSqlEventData(event.type, event.data)
     broadcast({ type: event.type, data })
   }
 }

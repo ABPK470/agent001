@@ -92,29 +92,29 @@ function insertRun(r: InsertRun): void {
 }
 
 describe("loadPriorTurns", () => {
-  it("returns most-recent runs first, capped by limit", () => {
+  it("returns most-recent runs first, capped by limit", async () => {
     insertRun({ id: "r1", goal: "first", answer: "A1", completedMinutesAgo: -30 })
     insertRun({ id: "r2", goal: "second", answer: "A2", completedMinutesAgo: -20 })
     insertRun({ id: "r3", goal: "third", answer: "A3", completedMinutesAgo: -10 })
     insertRun({ id: "r4", goal: "fourth", answer: "A4", completedMinutesAgo: -5 })
 
-    const turns = loadPriorTurns({ threadId: THREAD_ID, upn: UPN, limit: 3 })
+    const turns = await loadPriorTurns({ threadId: THREAD_ID, upn: UPN, limit: 3 })
 
     expect(turns.map((t) => t.runId)).toEqual(["r4", "r3", "r2"])
     expect(turns[0]?.goal).toBe("fourth")
     expect(turns[0]?.answer).toBe("A4")
   })
 
-  it("excludes the current runId via excludeRunId", () => {
+  it("excludes the current runId via excludeRunId", async () => {
     insertRun({ id: "rPrev", goal: "earlier", answer: "old", completedMinutesAgo: -10 })
     insertRun({ id: "rCur", goal: "current", answer: "new", completedMinutesAgo: -1 })
 
-    const turns = loadPriorTurns({ threadId: THREAD_ID, upn: UPN, excludeRunId: "rCur" })
+    const turns = await loadPriorTurns({ threadId: THREAD_ID, upn: UPN, excludeRunId: "rCur" })
 
     expect(turns.map((t) => t.runId)).toEqual(["rPrev"])
   })
 
-  it("filters strictly by threadId", () => {
+  it("filters strictly by threadId", async () => {
     insertRun({ id: "rA", goal: "in-thread", answer: "yes", completedMinutesAgo: -5, threadId: THREAD_ID })
     insertRun({
       id: "rB",
@@ -124,12 +124,12 @@ describe("loadPriorTurns", () => {
       threadId: OTHER_THREAD_ID
     })
 
-    const turns = loadPriorTurns({ threadId: THREAD_ID, upn: UPN })
+    const turns = await loadPriorTurns({ threadId: THREAD_ID, upn: UPN })
 
     expect(turns.map((t) => t.runId)).toEqual(["rA"])
   })
 
-  it("filters strictly by upn (tenant isolation)", () => {
+  it("filters strictly by upn (tenant isolation)", async () => {
     insertRun({ id: "rMine", goal: "mine", answer: "ok", completedMinutesAgo: -5, upn: UPN })
     insertRun({
       id: "rOther",
@@ -140,17 +140,17 @@ describe("loadPriorTurns", () => {
       threadId: OTHER_THREAD_ID
     })
 
-    const turns = loadPriorTurns({ threadId: THREAD_ID, upn: UPN })
+    const turns = await loadPriorTurns({ threadId: THREAD_ID, upn: UPN })
 
     expect(turns.map((t) => t.runId)).toEqual(["rMine"])
   })
 
-  it("returns [] when upn is empty", () => {
+  it("returns [] when upn is empty", async () => {
     insertRun({ id: "rX", goal: "x", answer: "x", completedMinutesAgo: -1 })
-    expect(loadPriorTurns({ threadId: THREAD_ID, upn: "" })).toEqual([])
+    expect(await loadPriorTurns({ threadId: THREAD_ID, upn: "" })).toEqual([])
   })
 
-  it("skips delegated child runs (parent_run_id IS NOT NULL)", () => {
+  it("skips delegated child runs (parent_run_id IS NOT NULL)", async () => {
     insertRun({ id: "rParent", goal: "top-level", answer: "P", completedMinutesAgo: -10 })
     insertRun({
       id: "rChild",
@@ -160,12 +160,12 @@ describe("loadPriorTurns", () => {
       parentRunId: "rParent"
     })
 
-    const turns = loadPriorTurns({ threadId: THREAD_ID, upn: UPN })
+    const turns = await loadPriorTurns({ threadId: THREAD_ID, upn: UPN })
 
     expect(turns.map((t) => t.runId)).toEqual(["rParent"])
   })
 
-  it("skips non-terminal and cancelled/crashed statuses", () => {
+  it("skips non-terminal and cancelled/crashed statuses", async () => {
     insertRun({ id: "rOk", goal: "ok", answer: "x", completedMinutesAgo: -50, status: "completed" })
     insertRun({ id: "rFail", goal: "failed", answer: "y", completedMinutesAgo: -40, status: "failed" })
     insertRun({
@@ -190,16 +190,16 @@ describe("loadPriorTurns", () => {
       status: "crashed"
     })
 
-    const turns = loadPriorTurns({ threadId: THREAD_ID, upn: UPN, limit: 10 })
+    const turns = await loadPriorTurns({ threadId: THREAD_ID, upn: UPN, limit: 10 })
 
     expect(turns.map((t) => t.runId).sort()).toEqual(["rFail", "rOk"])
   })
 
-  it("truncates long answers at a boundary with a suffix", () => {
+  it("truncates long answers at a boundary with a suffix", async () => {
     const longAnswer = "line\n".repeat(PRIOR_TURN_ANSWER_MAX_CHARS / 5 + 200)
     insertRun({ id: "rBig", goal: "big", answer: longAnswer, completedMinutesAgo: -1 })
 
-    const turns = loadPriorTurns({ threadId: THREAD_ID, upn: UPN })
+    const turns = await loadPriorTurns({ threadId: THREAD_ID, upn: UPN })
 
     expect(turns).toHaveLength(1)
     const a = turns[0]!.answer!
@@ -207,27 +207,27 @@ describe("loadPriorTurns", () => {
     expect(a).toMatch(/\[truncated\]/)
   })
 
-  it("preserves null answers as null (e.g. failed runs)", () => {
+  it("preserves null answers as null (e.g. failed runs)", async () => {
     insertRun({ id: "rNull", goal: "null-ans", answer: null, completedMinutesAgo: -1, status: "failed" })
 
-    const turns = loadPriorTurns({ threadId: THREAD_ID, upn: UPN })
+    const turns = await loadPriorTurns({ threadId: THREAD_ID, upn: UPN })
 
     expect(turns[0]?.answer).toBeNull()
   })
 
-  it("returns [] when threadId is empty", () => {
+  it("returns [] when threadId is empty", async () => {
     insertRun({ id: "rX", goal: "x", answer: "x", completedMinutesAgo: -1 })
-    expect(loadPriorTurns({ threadId: "", upn: UPN })).toEqual([])
+    expect(await loadPriorTurns({ threadId: "", upn: UPN })).toEqual([])
   })
 
-  it("returns [] when limit <= 0", () => {
+  it("returns [] when limit <= 0", async () => {
     insertRun({ id: "rX", goal: "x", answer: "x", completedMinutesAgo: -1 })
-    expect(loadPriorTurns({ threadId: THREAD_ID, upn: UPN, limit: 0 })).toEqual([])
+    expect(await loadPriorTurns({ threadId: THREAD_ID, upn: UPN, limit: 0 })).toEqual([])
   })
 
-  it("ranAt uses completed_at when present, falls back to created_at", () => {
+  it("ranAt uses completed_at when present, falls back to created_at", async () => {
     insertRun({ id: "rDone", goal: "done", answer: "x", completedMinutesAgo: -1 })
-    const turns = loadPriorTurns({ threadId: THREAD_ID, upn: UPN })
+    const turns = await loadPriorTurns({ threadId: THREAD_ID, upn: UPN })
     expect(turns[0]?.ranAt).toBeTruthy()
   })
 })

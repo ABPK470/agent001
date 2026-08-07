@@ -330,7 +330,7 @@ describe("auth — SSO header path", () => {
       expect(res.json()).toMatchObject({ upn: "sso.user@corp", displayName: "SSO User" })
 
       const { findUserByUpn } = await import("../src/infra/persistence/adapters/sqlite/db/users.js")
-      const row = findUserByUpn("sso.user@corp")
+      const row = await findUserByUpn("sso.user@corp")
       expect(row?.source).toBe("sso")
       expect(row?.password_hash).toBeNull()
 

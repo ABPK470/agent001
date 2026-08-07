@@ -41,8 +41,8 @@ describe("published sync vocabulary boot", () => {
     _resetGoalClassificationCache()
   })
 
-  it("warns when SQLite has no published definitions", () => {
-    const ids = loadPublishedSyncVocabularyAtBoot(tempRoot)
+  it("warns when SQLite has no published definitions", async () => {
+    const ids = await loadPublishedSyncVocabularyAtBoot(tempRoot)
     expect(ids).toEqual([])
     expect(warnSpy).toHaveBeenCalledWith(formatPublishedSyncBundleMissingWarning())
     expect(logSpy).not.toHaveBeenCalled()
@@ -50,7 +50,7 @@ describe("published sync vocabulary boot", () => {
 
   it("loads vocabulary from SQLite sync_definitions rows", async () => {
     const { replaceSyncDefinitions } = await import("../src/infra/persistence/adapters/sqlite/db/index.js")
-    replaceSyncDefinitions("_default", {
+    await replaceSyncDefinitions("_default", {
       publishedAt: "2026-01-01T00:00:00.000Z",
       publishedVersion: "v1",
       catalogVersion: null,
@@ -60,7 +60,7 @@ describe("published sync vocabulary boot", () => {
       },
     })
 
-    const ids = loadPublishedSyncVocabularyAtBoot(tempRoot)
+    const ids = await loadPublishedSyncVocabularyAtBoot(tempRoot)
     expect(ids).toEqual(["contract", "pipelineActivity"])
     expect(logSpy).toHaveBeenCalledWith(
       "Published sync vocabulary: 2 entity types (contract, pipelineActivity)"
@@ -81,28 +81,28 @@ describe("published sync vocabulary boot", () => {
       })
     )
 
-    expect(importLegacyPublishedBundleFileIfNeeded(tempRoot)).toBe(true)
+    expect(await importLegacyPublishedBundleFileIfNeeded(tempRoot)).toBe(true)
 
     const { listSyncDefinitions, getSyncPublishMeta } =
       await import("../src/infra/persistence/adapters/sqlite/db/index.js")
-    expect(getSyncPublishMeta()?.published_version).toBe("legacy-v1")
-    expect(listSyncDefinitions().map((row) => row.entity_id)).toEqual(["contract", "rule"])
+    expect((await getSyncPublishMeta())?.published_version).toBe("legacy-v1")
+    expect((await listSyncDefinitions()).map((row) => row.entity_id)).toEqual(["contract", "rule"])
 
-    const ids = loadPublishedSyncVocabularyAtBoot(tempRoot)
+    const ids = await loadPublishedSyncVocabularyAtBoot(tempRoot)
     expect(ids).toEqual(["contract", "rule"])
-    expect(importLegacyPublishedBundleFileIfNeeded(tempRoot)).toBe(false)
+    expect(await importLegacyPublishedBundleFileIfNeeded(tempRoot)).toBe(false)
   })
 
   it("reloadPublishedSyncVocabulary updates in-process ids from SQLite", async () => {
     const { replaceSyncDefinitions } = await import("../src/infra/persistence/adapters/sqlite/db/index.js")
-    replaceSyncDefinitions("_default", {
+    await replaceSyncDefinitions("_default", {
       publishedAt: "2026-01-03T00:00:00.000Z",
       publishedVersion: "v2",
       catalogVersion: null,
       definitions: { rule: { id: "rule" } },
     })
 
-    const ids = reloadPublishedSyncVocabulary(tempRoot)
+    const ids = await reloadPublishedSyncVocabulary(tempRoot)
     expect(ids).toEqual(["rule"])
   })
 })

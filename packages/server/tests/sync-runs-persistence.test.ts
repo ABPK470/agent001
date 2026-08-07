@@ -55,9 +55,9 @@ describe("sync run persistence", () => {
     expect(await getSyncRunPlanJson("plan-1")).toContain("My Contract")
   })
 
-  it("rejects preview rows without a valid users.upn reference", () => {
-    expect(async () =>
-      await recordSyncRunPreview({
+  it("rejects preview rows without a valid users.upn reference", async () => {
+    await expect(
+      recordSyncRunPreview({
         planId: "plan-2",
         entityType: "Contract",
         entityId: 1,
@@ -68,7 +68,7 @@ describe("sync run persistence", () => {
         previewTotals: {},
         planJson: "{}"
       })
-    ).toThrow(/actor UPN is required/)
+    ).rejects.toThrow(/actor UPN is required/)
   })
 
   it("recordSyncRunStart preserves plan_json from preview", async () => {
@@ -104,7 +104,7 @@ describe("sync run persistence", () => {
     })
 
     expect(await getSyncRunPlanJson("plan-exec")).toContain("Exec Contract")
-    expect(await await await getSyncRun("plan-exec")?.status).toBe(SyncRunStatus.Started)
+    expect((await getSyncRun("plan-exec"))?.status).toBe(SyncRunStatus.Started)
   })
 
   it("recordSyncRunFinish without executeTotals preserves executed counts", async () => {

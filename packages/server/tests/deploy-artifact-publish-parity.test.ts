@@ -103,12 +103,12 @@ async function seedAndPublish(): Promise<Record<string, unknown>> {
 
   _setDb(testDb)
   _migrate(testDb)
-  seedEntityRegistryIfEmpty(projectRoot)
-  seedSyncMetadataIfEmpty(projectRoot)
-  publishSyncDefinitionsFromDb(projectRoot)
+  await seedEntityRegistryIfEmpty(projectRoot)
+  await seedSyncMetadataIfEmpty(projectRoot)
+  await publishSyncDefinitionsFromDb(projectRoot)
 
   const { loadPublishedBundleFromDb } = await import("../src/infra/persistence/adapters/sqlite/db/index.js")
-  const bundle = loadPublishedBundleFromDb()
+  const bundle = await loadPublishedBundleFromDb()
   if (!bundle) throw new Error("expected SyncDefinitions in SQLite after publish")
   return bundle as unknown as Record<string, unknown>
 }
@@ -177,7 +177,7 @@ describe("deploy artifact publish parity", () => {
 
     _setDb(testDb)
     _migrate(testDb)
-    seedEntityRegistryIfEmpty(projectRoot)
+    await seedEntityRegistryIfEmpty(projectRoot)
 
     const pointer = testDb
       .prepare(`SELECT current_version FROM entity_active WHERE tenant_id = '_default' AND id = 'content'`)
@@ -209,13 +209,12 @@ describe("deploy artifact publish parity", () => {
       BEGIN SELECT RAISE(ABORT, 'entity_versions is append-only'); END;
     `)
 
-    const repaired = repairBundledEntityDefinitionsFromArtifacts(projectRoot)
+    const repaired = await repairBundledEntityDefinitionsFromArtifacts(projectRoot)
     expect(repaired).toContain("content")
 
-    const restored = (await import("../src/infra/persistence/adapters/sqlite/db/index.js")).getEntityDefinition(
-      "_default",
-      "content",
-    )
+    const restored = await (
+      await import("../src/infra/persistence/adapters/sqlite/db/index.js")
+    ).getEntityDefinition("_default", "content")
     const restoredType = restored?.tables.find((table) => table.name === "gate.ContentType")
     expect(restoredType?.scope.kind).toBe("sql")
     if (restoredType?.scope.kind === "sql") {

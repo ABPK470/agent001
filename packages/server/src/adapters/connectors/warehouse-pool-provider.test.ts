@@ -31,9 +31,9 @@ describe("createWarehousePoolProvider", () => {
       { id: "m1", name: "mssql-dev", dialect: "mssql" },
       { id: "p1", name: "pg-dev", dialect: "postgres" },
     ])
-    expect(warehouse.dialectOf("p1")).toBe("postgres")
-    expect(warehouse.dialectOf("m1")).toBe("mssql")
-    expect(warehouse.dialectOf("missing")).toBeUndefined()
+    expect(await warehouse.dialectOf("p1")).toBe("postgres")
+    expect(await warehouse.dialectOf("m1")).toBe("mssql")
+    expect(await warehouse.dialectOf("missing")).toBeUndefined()
   })
 
   it("routes get() to the matching provider", async () => {

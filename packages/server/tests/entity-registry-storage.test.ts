@@ -124,13 +124,13 @@ describe("entity registry seed", () => {
 describe("saveEntityDefinition + getEntityDefinition", () => {
   it("creates v1 on first save", async () => {
     const m = await setup()
-    const r = m.saveEntityDefinition({
+    const r = await m.saveEntityDefinition({
       def: validDef(),
       actor: "alice@example.com",
       reason: "create"
     })
     expect(r.version).toBe(1)
-    const fetched = m.getEntityDefinition("_default", "contract")
+    const fetched = await m.getEntityDefinition("_default", "contract")
     expect(fetched).not.toBeNull()
     expect(fetched!.displayName).toBe("Contract")
     expect(fetched!.version).toBe(1)
@@ -140,7 +140,7 @@ describe("saveEntityDefinition + getEntityDefinition", () => {
   it("renumbers duplicate execution orders on save and read", async () => {
     const m = await setup()
     const base = validDef().tables[0]!
-    m.saveEntityDefinition({
+    await m.saveEntityDefinition({
       def: validDef({
         tables: [
           { ...base, name: "core.A", executionOrder: 0 },
@@ -151,14 +151,14 @@ describe("saveEntityDefinition + getEntityDefinition", () => {
       actor: "alice@example.com",
       reason: "create",
     })
-    const fetched = m.getEntityDefinition("_default", "contract")
+    const fetched = await m.getEntityDefinition("_default", "contract")
     expect(fetched?.tables.map((table) => table.executionOrder).sort((a, b) => a - b)).toEqual([1, 2, 3])
   })
 
   it("bumps version on each subsequent save", async () => {
     const m = await setup()
-    m.saveEntityDefinition({ def: validDef(), actor: "alice@example.com", reason: "create" })
-    const r2 = m.saveEntityDefinition({
+    await m.saveEntityDefinition({ def: validDef(), actor: "alice@example.com", reason: "create" })
+    const r2 = await m.saveEntityDefinition({
       def: validDef({ displayName: "Contract v2" }),
       actor: "bob@example.com",
       reason: "rename"
@@ -166,18 +166,18 @@ describe("saveEntityDefinition + getEntityDefinition", () => {
     expect(r2.version).toBe(2)
     expect(r2.diff.some((c) => c.kind === "renamed")).toBe(true)
 
-    const current = m.getEntityDefinition("_default", "contract")
+    const current = await m.getEntityDefinition("_default", "contract")
     expect(current!.version).toBe(2)
     expect(current!.displayName).toBe("Contract v2")
     expect(current!.createdBy).toBe("bob@example.com")
 
-    const v1 = m.getEntityDefinition("_default", "contract", { version: 1 })
+    const v1 = await m.getEntityDefinition("_default", "contract", { version: 1 })
     expect(v1!.displayName).toBe("Contract")
   })
 
   it("ignores caller-supplied version field", async () => {
     const m = await setup()
-    const r = m.saveEntityDefinition({
+    const r = await m.saveEntityDefinition({
       def: validDef({ version: 999 }),
       actor: "a",
       reason: "create"
@@ -187,47 +187,47 @@ describe("saveEntityDefinition + getEntityDefinition", () => {
 
   it("throws EntityRegistryValidationError on invalid def", async () => {
     const m = await setup()
-    expect(() =>
+    await expect(
       m.saveEntityDefinition({
         def: validDef({ id: "1invalid" }),
         actor: "a",
         reason: "create"
       })
-    ).toThrow(m.EntityRegistryValidationError)
+    ).rejects.toThrow(m.EntityRegistryValidationError)
   })
 
   it("rejects createOnly when entity id already exists", async () => {
     const m = await setup()
-    m.saveEntityDefinition({ def: validDef({ id: "content" }), actor: "u", reason: "create" })
-    expect(() =>
+    await m.saveEntityDefinition({ def: validDef({ id: "content" }), actor: "u", reason: "create" })
+    await expect(
       m.saveEntityDefinition({
         def: validDef({ id: "content", displayName: "Duplicate" }),
         actor: "u",
         reason: "create",
         createOnly: true,
       }),
-    ).toThrow(m.EntityRegistryConflictError)
+    ).rejects.toThrow(m.EntityRegistryConflictError)
   })
 
   it("rejects createOnly for retired entity ids", async () => {
     const m = await setup()
-    m.saveEntityDefinition({ def: validDef({ id: "content" }), actor: "u", reason: "create" })
-    m.retireEntityDefinition("_default", "content", "u")
-    expect(() =>
+    await m.saveEntityDefinition({ def: validDef({ id: "content" }), actor: "u", reason: "create" })
+    await m.retireEntityDefinition("_default", "content", "u")
+    await expect(
       m.saveEntityDefinition({
         def: validDef({ id: "content", displayName: "Revived" }),
         actor: "u",
         reason: "create",
         createOnly: true,
       }),
-    ).toThrow(m.EntityRegistryConflictError)
-    expect(m.listEntityDefinitions("_default")).toEqual([])
+    ).rejects.toThrow(m.EntityRegistryConflictError)
+    expect((await m.listEntityDefinitions("_default"))).toEqual([])
   })
 
   it("stores the diff alongside the version row", async () => {
     const m = await setup()
-    m.saveEntityDefinition({ def: validDef(), actor: "a", reason: "create" })
-    m.saveEntityDefinition({
+    await m.saveEntityDefinition({ def: validDef(), actor: "a", reason: "create" })
+    await m.saveEntityDefinition({
       def: validDef({ displayName: "X" }),
       actor: "a",
       reason: "rename"
@@ -246,25 +246,25 @@ describe("saveEntityDefinition + getEntityDefinition", () => {
 describe("listEntityDefinitions + history", () => {
   it("lists current versions excluding retired by default", async () => {
     const m = await setup()
-    m.saveEntityDefinition({ def: validDef({ id: "a" }), actor: "u", reason: "" })
-    m.saveEntityDefinition({ def: validDef({ id: "b" }), actor: "u", reason: "" })
-    m.saveEntityDefinition({ def: validDef({ id: "c" }), actor: "u", reason: "" })
-    m.retireEntityDefinition("_default", "b", "u")
+    await m.saveEntityDefinition({ def: validDef({ id: "a" }), actor: "u", reason: "" })
+    await m.saveEntityDefinition({ def: validDef({ id: "b" }), actor: "u", reason: "" })
+    await m.saveEntityDefinition({ def: validDef({ id: "c" }), actor: "u", reason: "" })
+    await m.retireEntityDefinition("_default", "b", "u")
 
-    const ids = m.listEntityDefinitions("_default").map((d) => d.id)
+    const ids = (await m.listEntityDefinitions("_default")).map((d) => d.id)
     expect(ids).toEqual(["a", "c"])
 
-    const allIds = m.listEntityDefinitions("_default", { includeRetired: true }).map((d) => d.id)
+    const allIds = (await m.listEntityDefinitions("_default", { includeRetired: true })).map((d) => d.id)
     expect(allIds).toEqual(["a", "b", "c"])
   })
 
   it("history is newest-first with attached diffs", async () => {
     const m = await setup()
-    m.saveEntityDefinition({ def: validDef(), actor: "u", reason: "create" })
-    m.saveEntityDefinition({ def: validDef({ displayName: "v2" }), actor: "u", reason: "rename" })
-    m.saveEntityDefinition({ def: validDef({ displayName: "v3" }), actor: "u", reason: "rename2" })
+    await m.saveEntityDefinition({ def: validDef(), actor: "u", reason: "create" })
+    await m.saveEntityDefinition({ def: validDef({ displayName: "v2" }), actor: "u", reason: "rename" })
+    await m.saveEntityDefinition({ def: validDef({ displayName: "v3" }), actor: "u", reason: "rename2" })
 
-    const hist = m.listEntityDefinitionHistory("_default", "contract")
+    const hist = await m.listEntityDefinitionHistory("_default", "contract")
     expect(hist.map((h) => h.version)).toEqual([3, 2, 1])
     expect(hist[0]!.reason).toBe("rename2")
     expect(Array.isArray(hist[0]!.diff)).toBe(true)
@@ -274,34 +274,34 @@ describe("listEntityDefinitions + history", () => {
 describe("retireEntityDefinition", () => {
   it("hides retired entity from default list and get", async () => {
     const m = await setup()
-    m.saveEntityDefinition({ def: validDef(), actor: "u", reason: "" })
-    const r = m.retireEntityDefinition("_default", "contract", "admin")
+    await m.saveEntityDefinition({ def: validDef(), actor: "u", reason: "" })
+    const r = await m.retireEntityDefinition("_default", "contract", "admin")
     expect(r).not.toBeNull()
-    expect(m.getEntityDefinition("_default", "contract")).toBeNull()
-    const surfaced = m.getEntityDefinition("_default", "contract", { includeRetired: true })
+    expect((await m.getEntityDefinition("_default", "contract"))).toBeNull()
+    const surfaced = await m.getEntityDefinition("_default", "contract", { includeRetired: true })
     expect(surfaced).not.toBeNull()
     expect(surfaced!.retiredAt).toBe(r!.retiredAt)
   })
 
   it("returns null when retiring an unknown entity", async () => {
     const m = await setup()
-    expect(m.retireEntityDefinition("_default", "missing", "admin")).toBeNull()
+    expect((await m.retireEntityDefinition("_default", "missing", "admin"))).toBeNull()
   })
 
   it("records the retire as a new version with reason='retire'", async () => {
     const m = await setup()
-    m.saveEntityDefinition({ def: validDef(), actor: "u", reason: "create" })
-    m.retireEntityDefinition("_default", "contract", "admin")
-    const hist = m.listEntityDefinitionHistory("_default", "contract")
+    await m.saveEntityDefinition({ def: validDef(), actor: "u", reason: "create" })
+    await m.retireEntityDefinition("_default", "contract", "admin")
+    const hist = await m.listEntityDefinitionHistory("_default", "contract")
     expect(hist[0]!.reason).toBe("retire")
     expect(hist[0]!.createdBy).toBe("admin")
   })
 
   it("is idempotent (second retire returns the original timestamp)", async () => {
     const m = await setup()
-    m.saveEntityDefinition({ def: validDef(), actor: "u", reason: "" })
-    const r1 = m.retireEntityDefinition("_default", "contract", "admin")!
-    const r2 = m.retireEntityDefinition("_default", "contract", "admin")!
+    await m.saveEntityDefinition({ def: validDef(), actor: "u", reason: "" })
+    const r1 = (await m.retireEntityDefinition("_default", "contract", "admin"))!
+    const r2 = (await m.retireEntityDefinition("_default", "contract", "admin"))!
     expect(r2.retiredAt).toBe(r1.retiredAt)
   })
 })
@@ -309,7 +309,7 @@ describe("retireEntityDefinition", () => {
 describe("immutability triggers", () => {
   it("refuses UPDATE on entity_versions", async () => {
     const m = await setup()
-    m.saveEntityDefinition({ def: validDef(), actor: "u", reason: "" })
+    await m.saveEntityDefinition({ def: validDef(), actor: "u", reason: "" })
     expect(() =>
       testDb.prepare(`UPDATE entity_versions SET reason = 'tampered' WHERE id = 'contract'`).run()
     ).toThrow(/append-only/)
@@ -317,7 +317,7 @@ describe("immutability triggers", () => {
 
   it("refuses DELETE on entity_versions", async () => {
     const m = await setup()
-    m.saveEntityDefinition({ def: validDef(), actor: "u", reason: "" })
+    await m.saveEntityDefinition({ def: validDef(), actor: "u", reason: "" })
     expect(() => testDb.prepare(`DELETE FROM entity_versions WHERE id = 'contract'`).run()).toThrow(
       /append-only/
     )
@@ -339,15 +339,15 @@ describe("immutability triggers", () => {
 
   it("wipeEntityRegistry clears rows and restores append-only triggers", async () => {
     const m = await setup()
-    m.saveEntityDefinition({ def: validDef(), actor: "u", reason: "" })
+    await m.saveEntityDefinition({ def: validDef(), actor: "u", reason: "" })
     expect(testDb.prepare(`SELECT COUNT(*) AS c FROM entity_active`).get()).toEqual({ c: 1 })
 
-    m.wipeEntityRegistry()
+    await m.wipeEntityRegistry()
 
     expect(testDb.prepare(`SELECT COUNT(*) AS c FROM entity_active`).get()).toEqual({ c: 0 })
     expect(testDb.prepare(`SELECT COUNT(*) AS c FROM entity_versions`).get()).toEqual({ c: 0 })
 
-    m.saveEntityDefinition({ def: validDef({ id: "after-wipe" }), actor: "u", reason: "" })
+    await m.saveEntityDefinition({ def: validDef({ id: "after-wipe" }), actor: "u", reason: "" })
     expect(() => testDb.prepare(`DELETE FROM entity_versions`).run()).toThrow(/append-only/)
   })
 })
@@ -355,7 +355,7 @@ describe("immutability triggers", () => {
 describe("resolveScd2Strategy", () => {
   it("returns the bundled mymi-scd2 from _default tenant", async () => {
     const m = await setup()
-    const s = m.resolveScd2Strategy("_default", "mymi-scd2")
+    const s = await m.resolveScd2Strategy("_default", "mymi-scd2")
     expect(s).not.toBeNull()
     expect(s!.id).toBe("mymi-scd2")
     expect(s!.version).toBe(1)
@@ -364,7 +364,7 @@ describe("resolveScd2Strategy", () => {
   it("falls back from tenant to _default to bundled", async () => {
     const m = await setup()
     // No 'acme' tenant rows at all; should inherit _default's seeded row.
-    const s = m.resolveScd2Strategy("acme", "mymi-scd2")
+    const s = await m.resolveScd2Strategy("acme", "mymi-scd2")
     expect(s).not.toBeNull()
     expect(s!.identityHandling).toBe("setIdentityInsertOn")
   })
@@ -385,34 +385,33 @@ describe("resolveScd2Strategy", () => {
       createdBy: "acme-admin",
       createdAt: "2026-05-16T00:00:00.000Z"
     }
-    m.saveScd2Strategy({ tenantId: "acme", strategy: custom, actor: "acme-admin", reason: "fork" })
-    const s = m.resolveScd2Strategy("acme", "mymi-scd2")
+    await m.saveScd2Strategy({ tenantId: "acme", strategy: custom, actor: "acme-admin", reason: "fork" })
+    const s = await m.resolveScd2Strategy("acme", "mymi-scd2")
     expect(s!.displayName).toBe("ACME custom mymi")
     expect(s!.identityHandling).toBe("none")
     // _default still has the original.
-    const def = m.resolveScd2Strategy("_default", "mymi-scd2")
+    const def = await m.resolveScd2Strategy("_default", "mymi-scd2")
     expect(def!.identityHandling).toBe("setIdentityInsertOn")
   })
 
   it("returns a specific version when version is a number", async () => {
     const m = await setup()
-    const v1 = m.resolveScd2Strategy("_default", "mymi-scd2", 1)
+    const v1 = await m.resolveScd2Strategy("_default", "mymi-scd2", 1)
     expect(v1!.version).toBe(1)
-    const v99 = m.resolveScd2Strategy("_default", "mymi-scd2", 99)
+    const v99 = await m.resolveScd2Strategy("_default", "mymi-scd2", 99)
     expect(v99).toBeNull()
   })
 
   it("returns null for unknown id", async () => {
     const m = await setup()
-    expect(m.resolveScd2Strategy("_default", "nope")).toBeNull()
+    expect((await m.resolveScd2Strategy("_default", "nope"))).toBeNull()
   })
 })
 
 describe("listAvailableStrategies", () => {
   it("for _default tenant returns just the bundled strategies", async () => {
     const m = await setup()
-    const ids = m
-      .listAvailableStrategies("_default")
+    const ids = (await m.listAvailableStrategies("_default"))
       .map((s) => s.id)
       .sort()
     expect(ids).toEqual(shippedStrategyIds)
@@ -434,9 +433,8 @@ describe("listAvailableStrategies", () => {
       createdBy: "u",
       createdAt: "2026-05-16T00:00:00.000Z"
     }
-    m.saveScd2Strategy({ tenantId: "acme", strategy: custom, actor: "u", reason: "fork" })
-    const ids = m
-      .listAvailableStrategies("acme")
+    await m.saveScd2Strategy({ tenantId: "acme", strategy: custom, actor: "u", reason: "fork" })
+    const ids = (await m.listAvailableStrategies("acme"))
       .map((s) => s.id)
       .sort()
     expect(ids).toContain("acme-custom")
@@ -462,8 +460,8 @@ describe("listAvailableStrategies", () => {
       createdBy: "u",
       createdAt: "2026-05-16T00:00:00.000Z"
     }
-    m.saveScd2Strategy({ tenantId: "acme", strategy: custom, actor: "u", reason: "fork" })
-    const matches = m.listAvailableStrategies("acme").filter((s) => s.id === "mymi-scd2")
+    await m.saveScd2Strategy({ tenantId: "acme", strategy: custom, actor: "u", reason: "fork" })
+    const matches = (await m.listAvailableStrategies("acme")).filter((s) => s.id === "mymi-scd2")
     expect(matches).toHaveLength(1)
     expect(matches[0]!.displayName).toBe("ACME override")
   })
@@ -472,36 +470,36 @@ describe("listAvailableStrategies", () => {
 describe("retireScd2Strategy", () => {
   it("removes a tenant custom strategy from the catalogue", async () => {
     const m = await setup()
-    const base = m.resolveScd2Strategy("acme", "generic-scd2")!
-    m.saveScd2Strategy({
+    const base = (await m.resolveScd2Strategy("acme", "generic-scd2"))!
+    await m.saveScd2Strategy({
       tenantId: "acme",
       strategy: { ...base, id: "acme-retire-me", displayName: "Retire me", provenance: { kind: "manual" } },
       actor: "u",
       reason: "create",
     })
-    expect(m.listAvailableStrategies("acme").some((s) => s.id === "acme-retire-me")).toBe(true)
+    expect((await m.listAvailableStrategies("acme")).some((s) => s.id === "acme-retire-me")).toBe(true)
 
-    const result = m.retireScd2Strategy("acme", "acme-retire-me")
+    const result = await m.retireScd2Strategy("acme", "acme-retire-me")
     expect(result?.retiredAt).toBeTruthy()
-    expect(m.listAvailableStrategies("acme").some((s) => s.id === "acme-retire-me")).toBe(false)
-    expect(m.resolveScd2Strategy("acme", "acme-retire-me", 1)?.displayName).toBe("Retire me")
+    expect((await m.listAvailableStrategies("acme")).some((s) => s.id === "acme-retire-me")).toBe(false)
+    expect((await m.resolveScd2Strategy("acme", "acme-retire-me", 1))?.displayName).toBe("Retire me")
   })
 
   it("returns null for bundled-only ids with no tenant row", async () => {
     const m = await setup()
-    expect(m.retireScd2Strategy("acme", "mymi-scd2")).toBeNull()
+    expect((await m.retireScd2Strategy("acme", "mymi-scd2"))).toBeNull()
   })
 
   it("refuses retire when active entities still reference the strategy", async () => {
     const m = await setup()
-    const base = m.resolveScd2Strategy("acme", "generic-scd2")!
-    m.saveScd2Strategy({
+    const base = (await m.resolveScd2Strategy("acme", "generic-scd2"))!
+    await m.saveScd2Strategy({
       tenantId: "acme",
       strategy: { ...base, id: "acme-in-use", displayName: "In use", provenance: { kind: "manual" } },
       actor: "u",
       reason: "create",
     })
-    m.saveEntityDefinition({
+    await m.saveEntityDefinition({
       tenantId: "acme",
       def: validDef({
         tenantId: "acme",
@@ -511,14 +509,14 @@ describe("retireScd2Strategy", () => {
       actor: "u",
       reason: "test",
     })
-    expect(() => m.retireScd2Strategy("acme", "acme-in-use")).toThrow(/referenced by/)
+    await expect(m.retireScd2Strategy("acme", "acme-in-use")).rejects.toThrow(/referenced by/)
   })
 })
 
 describe("listScd2StrategyHistory", () => {
   it("returns seeded bundled versions for _default tenant", async () => {
     const m = await setup()
-    const history = m.listScd2StrategyHistory("_default", "mymi-scd2")
+    const history = await m.listScd2StrategyHistory("_default", "mymi-scd2")
     expect(history).toHaveLength(1)
     expect(history[0]!.version).toBe(1)
     expect(history[0]!.reason).toBeTruthy()
@@ -526,20 +524,20 @@ describe("listScd2StrategyHistory", () => {
 
   it("returns append-only versions newest-first after edits", async () => {
     const m = await setup()
-    const base = m.resolveScd2Strategy("acme", "generic-scd2")!
-    m.saveScd2Strategy({
+    const base = (await m.resolveScd2Strategy("acme", "generic-scd2"))!
+    await m.saveScd2Strategy({
       tenantId: "acme",
       strategy: { ...base, id: "acme-generic", displayName: "ACME generic v1", provenance: { kind: "manual" } },
       actor: "u",
       reason: "create"
     })
-    m.saveScd2Strategy({
+    await m.saveScd2Strategy({
       tenantId: "acme",
       strategy: { ...base, id: "acme-generic", displayName: "ACME generic v2", provenance: { kind: "manual" } },
       actor: "u",
       reason: "tweak exclusions"
     })
-    const history = m.listScd2StrategyHistory("acme", "acme-generic")
+    const history = await m.listScd2StrategyHistory("acme", "acme-generic")
     expect(history.map((h) => h.version)).toEqual([2, 1])
     expect(history[0]!.reason).toBe("tweak exclusions")
   })
@@ -548,19 +546,19 @@ describe("listScd2StrategyHistory", () => {
 describe("multi-tenant isolation", () => {
   it("two tenants saving the same id don't collide", async () => {
     const m = await setup()
-    m.saveEntityDefinition({
+    await m.saveEntityDefinition({
       def: validDef({ tenantId: "acme", displayName: "ACME contract" }),
       actor: "u",
       reason: "",
       tenantId: "acme"
     })
-    m.saveEntityDefinition({
+    await m.saveEntityDefinition({
       def: validDef({ tenantId: "globex", displayName: "Globex contract" }),
       actor: "u",
       reason: "",
       tenantId: "globex"
     })
-    expect(m.getEntityDefinition("acme", "contract")!.displayName).toBe("ACME contract")
-    expect(m.getEntityDefinition("globex", "contract")!.displayName).toBe("Globex contract")
+    expect((await m.getEntityDefinition("acme", "contract"))!.displayName).toBe("ACME contract")
+    expect((await m.getEntityDefinition("globex", "contract"))!.displayName).toBe("Globex contract")
   })
 })

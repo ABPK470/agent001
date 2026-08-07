@@ -20,6 +20,7 @@ packages/*/data/
 
 # ── Editor / OS ──────────────────────────────────────────────────
 .vscode
+.cursor
 .idea
 .DS_Store
 *.swp

@@ -24,7 +24,7 @@ describe("sync-sql-log", () => {
   })
 
   it("stores full SQL and strips __fullSql from broadcast payload", async () => {
-    const data = enrichSyncSqlEventData("sync.preview.sql", {
+    const data = await enrichSyncSqlEventData("sync.preview.sql", {
       planId: "plan-1",
       previewId: "prev-1",
       label: "diff.hash(core.Activity)",
@@ -71,7 +71,7 @@ describe("sync-sql-log", () => {
   it("always persists EXEC preview for audit-check SQL even when only __fullSql is present", async () => {
     const execSql =
       "EXEC core.uspAuditRunCheck @id=N'42', @objType=N'Contract', @action=N'syncOrNot', @schema=N'core'"
-    const data = enrichSyncSqlEventData("sync.execute.sql", {
+    const data = await enrichSyncSqlEventData("sync.execute.sql", {
       planId: "plan-skip",
       label: "flowStep.auditCheck(auditCheck)",
       connection: "uat",
@@ -83,7 +83,7 @@ describe("sync-sql-log", () => {
     expect(data["sql"]).toBe(execSql)
     expect(data["sqlLength"]).toBe(execSql.length)
     expect(typeof data["sqlLogId"]).toBe("number")
-    expect(await await await getSyncSqlLog(data["sqlLogId"] as number)?.sql_text).toBe(execSql)
+    expect((await getSyncSqlLog(data["sqlLogId"] as number))?.sql_text).toBe(execSql)
   })
 
   it("hydrates preview from sync_sql_log only via sqlLogId", async () => {
@@ -99,7 +99,7 @@ describe("sync-sql-log", () => {
       rowCount: 0,
     })
 
-    const hydrated = hydratePersistedSqlEventData("sync.execute.sql", {
+    const hydrated = await hydratePersistedSqlEventData("sync.execute.sql", {
       planId: "plan-skip",
       label: "flowStep.auditCheck(auditCheck)",
       connection: "uat",
@@ -123,7 +123,7 @@ describe("sync-sql-log", () => {
       rowCount: 0,
     })
 
-    const hydrated = hydratePersistedSqlEventData("sync.execute.sql", {
+    const hydrated = await hydratePersistedSqlEventData("sync.execute.sql", {
       planId: "plan-legacy",
       label: "flowStep.auditCheck(auditCheck)",
       connection: "uat",

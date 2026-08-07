@@ -67,8 +67,8 @@ async function setupSeededDb(): Promise<void> {
   const { seedSyncMetadataIfEmpty } = await import(
     "../src/api/sync/service/seed-sync-metadata.js"
   )
-  seedEntityRegistryIfEmpty(projectRoot)
-  seedSyncMetadataIfEmpty(projectRoot)
+  await seedEntityRegistryIfEmpty(projectRoot)
+  await seedSyncMetadataIfEmpty(projectRoot)
 }
 
 describe("catalog format round-trip integration", () => {
@@ -82,8 +82,8 @@ describe("catalog format round-trip integration", () => {
     process.env["MIA_DATA_DIR"] = ORIGINAL_DATA_DIR
   })
 
-  it("B → registry JSON → B preserves structured fields", () => {
-    const entity = db.getEntityDefinition("_default", "contract")
+  it("B → registry JSON → B preserves structured fields", async () => {
+    const entity = await db.getEntityDefinition("_default", "contract")
     expect(entity).toBeTruthy()
     const json = formatEntityJson(entity!)
     const parsed = parseEntitiesJson(json)
@@ -92,24 +92,24 @@ describe("catalog format round-trip integration", () => {
     expect(parsed[0]?.def?.flowId).toBe(entity!.flowId)
   })
 
-  it("catalog snapshot B bulk export/import round-trip still works", () => {
-    const snapshot = buildDeployCatalogSnapshot({ tenantId: "_default" })
-    expect(validateDeployCatalogSnapshot(snapshot).ok).toBe(true)
-    const expectedFlowId = db.getEntityDefinition("_default", "dataset")?.flowId
+  it("catalog snapshot B bulk export/import round-trip still works", async () => {
+    const snapshot = await buildDeployCatalogSnapshot({ tenantId: "_default" })
+    expect((await validateDeployCatalogSnapshot(snapshot)).ok).toBe(true)
+    const expectedFlowId = (await db.getEntityDefinition("_default", "dataset"))?.flowId
     expect(expectedFlowId).toBeTruthy()
 
-    const applied = applyDeployCatalogSnapshot({
+    const applied = await applyDeployCatalogSnapshot({
       snapshot,
       actor: "test",
       projectRoot,
       dryRun: false,
     })
     expect(applied.applied).toBe(true)
-    expect(db.getEntityDefinition("_default", "dataset")?.flowId).toBe(expectedFlowId)
+    expect((await db.getEntityDefinition("_default", "dataset"))?.flowId).toBe(expectedFlowId)
   })
 
   it("catalog snapshot export/import restores retired entities", async () => {
-    const snapshot = buildDeployCatalogSnapshot({
+    const snapshot = await buildDeployCatalogSnapshot({
       tenantId: "_default",
       includeRetiredEntities: true,
     })
@@ -117,15 +117,15 @@ describe("catalog format round-trip integration", () => {
     for (const row of await db.listEntityDefinitions("_default")) {
       await db.retireEntityDefinition("_default", row.id, "test")
     }
-    expect((await db.listEntityDefinitions("_default")).length).toBe(0)
+    expect(((await db.listEntityDefinitions("_default")).length)).toBe(0)
 
-    const applied = applyDeployCatalogSnapshot({
+    const applied = await applyDeployCatalogSnapshot({
       snapshot,
       actor: "test",
       projectRoot,
       dryRun: false,
     })
     expect(applied.applied).toBe(true)
-    expect((await db.listEntityDefinitions("_default")).length).toBeGreaterThan(0)
+    expect(((await db.listEntityDefinitions("_default")).length)).toBeGreaterThan(0)
   })
 })

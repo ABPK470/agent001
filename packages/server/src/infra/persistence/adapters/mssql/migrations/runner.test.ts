@@ -45,14 +45,14 @@ describe("createMssqlMigrationRunner", () => {
     await runner.applyPending()
     await runner.applyPending()
     const list = await runner.list()
-    expect(list.map((r) => r.version)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])
-    expect(list[11]).toMatchObject({
-      version: 12,
-      name: "drop_runs_agent_id",
+    expect(list.map((r) => r.version)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13])
+    expect(list[12]).toMatchObject({
+      version: 13,
+      name: "run_tool_approval_grant_scope",
       appliedAt: "2026-01-01T00:00:00",
     })
     const inserts = ex.statements.filter((s) => s.includes("INSERT INTO dbo._mia_schema_migrations"))
-    expect(inserts).toHaveLength(12)
+    expect(inserts).toHaveLength(13)
     expect(ex.statements.some((s) => s.includes("CREATE TABLE dbo.eval_dataset_entries"))).toBe(true)
     expect(ex.statements.some((s) => s.includes("CREATE TABLE dbo.memory_entries"))).toBe(true)
     expect(ex.statements.some((s) => s.includes("DROP TABLE dbo.browser_contexts"))).toBe(true)

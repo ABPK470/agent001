@@ -64,7 +64,7 @@ describe("getPlatformHealth catalog", () => {
     rmSync(projectRoot, { recursive: true, force: true })
   })
 
-  it("does not treat mssql summary text as connection names", () => {
+  it("does not treat mssql summary text as connection names", async () => {
     writeFileSync(
       join(dataDir, "catalog-cache.dev.json"),
       JSON.stringify({ stats: { tables: 10, fks: 3 } }),
@@ -96,7 +96,7 @@ describe("getPlatformHealth catalog", () => {
     })
 
     const summary = "dev(sql.example.com/mymi), uat(sql2.example.com/mymi)"
-    const health = getPlatformHealth(projectRoot, summary, host)
+    const health = await getPlatformHealth(projectRoot, summary, host)
     expect(health.catalog.available).toBe(true)
     expect(health.catalog.detail).toContain("10 tables")
   })

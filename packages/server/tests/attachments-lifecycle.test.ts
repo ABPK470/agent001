@@ -55,7 +55,7 @@ describe("attachment lifecycle", () => {
       mediaType: "text/plain",
       bytes: new TextEncoder().encode("hi")
     })
-    const row = getAttachment(a.id)
+    const row = await getAttachment(a.id)
     expect(row?.retention_until).toBeTruthy()
     const ts = Date.parse(row!.retention_until!)
     // Should be ~1 day in the future.
@@ -86,9 +86,9 @@ describe("attachment lifecycle", () => {
       .prepare("UPDATE attachments SET retention_until = '2000-01-01T00:00:00.000Z' WHERE id = ?")
       .run(a.id)
 
-    const result = pruneExpiredAttachments()
+    const result = await pruneExpiredAttachments()
     expect(result.prunedAttachments).toBe(1)
-    expect(getAttachment(a.id)).toBeUndefined() // soft-deleted → hidden by getAttachment
+    expect(await getAttachment(a.id)).toBeUndefined() // soft-deleted → hidden by getAttachment
   })
 
   it("rejects an upload that would exceed the per-owner quota", async () => {
@@ -107,7 +107,7 @@ describe("attachment lifecycle", () => {
       mediaType: "application/octet-stream",
       bytes: new Uint8Array(80)
     })
-    const usage = getOwnerUsage("u@x")
+    const usage = await getOwnerUsage("u@x")
     expect(usage.bytesUsed).toBe(80)
     expect(usage.bytesRemain).toBe(20)
 

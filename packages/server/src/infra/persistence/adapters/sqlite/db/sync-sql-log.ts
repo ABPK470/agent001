@@ -153,12 +153,12 @@ export async function hydratePersistedSqlEventData(
 
 /**
  * Persist full SQL to sync_sql_log and return event payload with sqlLogId + preview.
- * Called synchronously from the sync event sink before event_log insert.
+ * Awaited by the sync event sink before broadcast / event_log insert.
  */
-export function enrichSyncSqlEventData(
+export async function enrichSyncSqlEventData(
   eventType: string,
   data: Record<string, unknown>,
-): Record<string, unknown> {
+): Promise<Record<string, unknown>> {
   if (!eventType.endsWith(".sql")) return data
   const fullSql =
     typeof data["__fullSql"] === "string"
@@ -183,7 +183,7 @@ export function enrichSyncSqlEventData(
         : null
 
   try {
-    const sqlLogId = recordSyncSqlLog({
+    const sqlLogId = await recordSyncSqlLog({
       planId,
       previewId: typeof data["previewId"] === "string" ? data["previewId"] : null,
       eventType,
