@@ -282,7 +282,8 @@
   /*
    * Event Stream lanes — dual-mode badge tokens (ink / soft / border).
    * Dark: glowing ink + translucent tint. Red/rose reserved for severity.
-   * Agent = emerald (never error-red).
+   * Spread hues so scan lanes do not collapse: run indigo · sync cyan ·
+   * api amber · agent emerald · bridge orange · step purple.
    */
   --stream-run-ink: #a5b4fc;
   --stream-run-soft: rgba(99, 102, 241, 0.15);
@@ -290,18 +291,19 @@
   --stream-step-ink: #c084fc;
   --stream-step-soft: rgba(168, 85, 247, 0.14);
   --stream-step-border: rgba(168, 85, 247, 0.28);
-  --stream-sync-ink: #38bdf8;
-  --stream-sync-soft: rgba(14, 165, 233, 0.14);
-  --stream-sync-border: rgba(14, 165, 233, 0.28);
+  --stream-sync-ink: #22d3ee;
+  --stream-sync-soft: rgba(34, 211, 238, 0.14);
+  --stream-sync-border: rgba(34, 211, 238, 0.28);
   --stream-bridge-ink: #fb923c;
   --stream-bridge-soft: rgba(251, 146, 60, 0.14);
   --stream-bridge-border: rgba(251, 146, 60, 0.28);
   --stream-agent-ink: #34d399;
   --stream-agent-soft: rgba(52, 211, 153, 0.14);
   --stream-agent-border: rgba(52, 211, 153, 0.28);
-  --stream-api-ink: #2dd4bf;
-  --stream-api-soft: rgba(45, 212, 191, 0.14);
-  --stream-api-border: rgba(45, 212, 191, 0.28);
+  /* API = amber — out of the cool band with run/sync. */
+  --stream-api-ink: #fbbf24;
+  --stream-api-soft: rgba(251, 191, 36, 0.14);
+  --stream-api-border: rgba(251, 191, 36, 0.28);
   --stream-system-ink: #94a3b8;
   --stream-system-soft: rgba(148, 163, 184, 0.12);
   --stream-system-border: rgba(148, 163, 184, 0.28);
@@ -469,7 +471,7 @@
 
   /*
    * Event Stream lanes — contained pills on white paper
-   * (deep ink + pastel fill + 1px border). Agent = emerald, never error-red.
+   * (deep ink + pastel fill + 1px border). Same hue spread as dark.
    */
   --stream-run-ink: #3730a3;
   --stream-run-soft: #eef2ff;
@@ -477,18 +479,19 @@
   --stream-step-ink: #6b21a8;
   --stream-step-soft: #f3e8ff;
   --stream-step-border: #e9d5ff;
-  --stream-sync-ink: #0369a1;
-  --stream-sync-soft: #e0f2fe;
-  --stream-sync-border: #bae6fd;
+  --stream-sync-ink: #0e7490;
+  --stream-sync-soft: #cffafe;
+  --stream-sync-border: #67e8f9;
   --stream-bridge-ink: #c2410c;
   --stream-bridge-soft: #ffedd5;
   --stream-bridge-border: #fed7aa;
   --stream-agent-ink: #047857;
   --stream-agent-soft: #ecfdf5;
   --stream-agent-border: #a7f3d0;
-  --stream-api-ink: #115e59;
-  --stream-api-soft: #ccfbf1;
-  --stream-api-border: #5eead4;
+  /* API = amber — out of the cool band with run/sync. */
+  --stream-api-ink: #b45309;
+  --stream-api-soft: #fef3c7;
+  --stream-api-border: #fcd34d;
   --stream-system-ink: #334155;
   --stream-system-soft: #e2e8f0;
   --stream-system-border: #cbd5e1;

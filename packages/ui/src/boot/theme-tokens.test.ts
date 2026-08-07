@@ -159,7 +159,14 @@ describe("light theme color system", () => {
     expect(css).toMatch(/\.event-stream-row\s*\{[^}]*grid-template-columns:/s)
     expect(css).toMatch(/\.event-stream-row__time\s*\{[^}]*font-family:\s*var\(--font-mono/s)
     expect(css).toMatch(/\.event-stream-jump\s*\{[^}]*position:\s*sticky/s)
-    expect(lightThemeBlock()).toMatch(/--stream-api-ink:\s*#115e59/i)
+    // Lane spread: run indigo · sync cyan · api amber (not one cool cluster).
+    expect(darkThemeBlock()).toMatch(/--stream-run-ink:\s*#a5b4fc/i)
+    expect(darkThemeBlock()).toMatch(/--stream-sync-ink:\s*#22d3ee/i)
+    expect(darkThemeBlock()).toMatch(/--stream-api-ink:\s*#fbbf24/i)
+    expect(lightThemeBlock()).toMatch(/--stream-sync-ink:\s*#0e7490/i)
+    expect(lightThemeBlock()).toMatch(/--stream-api-ink:\s*#b45309/i)
+    expect(darkThemeBlock()).not.toMatch(/--stream-api-ink:\s*#(60a5fa|2dd4bf|38bdf8)/i)
+    expect(lightThemeBlock()).not.toMatch(/--stream-api-ink:\s*#(1d4ed8|115e59|0369a1)/i)
     // Agent must not collide with severity red.
     expect(lightThemeBlock()).not.toMatch(/--stream-agent-ink:\s*#(be123c|991b1b|b91c1c)/i)
     expect(darkThemeBlock()).not.toMatch(/--stream-agent-ink:\s*#(fda4af|f87171|fb7185)/i)
