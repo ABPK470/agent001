@@ -118,10 +118,7 @@ export function useOperatorKeyboardRoot(
         onToggleShellModeRef.current()
         return
       }
-      if (
-        isOpenWidgetCatalogEvent(event) &&
-        !isEditableKeyboardTarget(event.target)
-      ) {
+      if (isOpenWidgetCatalogEvent(event)) {
         event.preventDefault()
         onToggleSummonRef.current()
         return

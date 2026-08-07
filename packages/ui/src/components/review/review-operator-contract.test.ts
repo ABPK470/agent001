@@ -48,12 +48,17 @@ describe("operator review kit contracts", () => {
     expect(nodeCell).not.toMatch(/padding-left:\s*0\s*!important/)
   })
 
-  it("row selection keeps the left rail; pane focus is a top edge", () => {
+  it("row selection keeps the left rail; pane focus washes the header", () => {
     expect(css).toMatch(/\.review-tree-row\.is-selected::before\s*\{[^}]*left:\s*0/s)
     expect(css).toMatch(/\.review-tree-row\.is-selected::before\s*\{[^}]*width:\s*2px/s)
+    expect(css).toContain(".trace-split-tree.is-pane-focused .trace-tree-header")
+    expect(css).toContain(".trace-split-detail.is-pane-focused .trace-detail__header")
+    expect(css).toContain(".review-split-list.is-pane-focused .review-tree-header")
+    expect(css).toContain(".review-split-detail.is-pane-focused .review-detail__header")
     expect(css).toMatch(
-      /\.trace-split-tree\.is-pane-focused::before,\s*\n\.trace-split-detail\.is-pane-focused::before,\s*\n\.review-split-list\.is-pane-focused::before,\s*\n\.review-split-detail\.is-pane-focused::before\s*\{[^}]*height:\s*2px/s,
+      /\.review-split-detail\.is-pane-focused \.review-detail__header\s*\{[^}]*background:\s*var\(--accent-soft/s,
     )
+    expect(css).not.toMatch(/\.is-pane-focused::before\s*\{[^}]*height:\s*2px/s)
     // Scroll hosts stay focusable for keyboard; UA rings must not frame the pane.
     expect(css).toMatch(
       /\.review-split-list-scroll:focus,\s*\n\.review-split-list-scroll:focus-visible\s*\{[^}]*outline:\s*none/s,

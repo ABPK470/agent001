@@ -117,6 +117,8 @@ import {
   isRunActiveStatus,
 } from "./termchat/transcriptZones"
 import { transcriptHostMayScroll } from "./termchat/transcriptScrollHost"
+import { useWidgetInstance } from "../app/workspace/widget-instance"
+import { useLayoutStore } from "../state/layout-store"
 
 // Local cap mirrors the Fastify route limit. Larger files get a friendly
 // inline error instead of round-tripping for a 413.
@@ -2313,6 +2315,12 @@ export function TermChat({
   const clearPendingInput = useStore((s) => s.clearPendingInput)
 
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
+  const widgetInstance = useWidgetInstance()
+  const focusedTileId = useLayoutStore((s) => s.focusedTileId)
+  const summonOpen = useStore((s) => s.summonOpen)
+  const keymapSheetOpen = useStore((s) => s.keymapSheetOpen)
+  const chatTileFocusedRef = useRef(false)
+  const chatOverlayOpenRef = useRef(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const runRailScrollSyncRef = useRef<(() => void) | null>(null)
   const virtualListRef = useRef<VirtualListHandle>(null)
@@ -2478,6 +2486,35 @@ export function TermChat({
   useLayoutEffect(() => {
     autosizeTextarea(textareaRef.current)
   }, [input, autosizeTextarea])
+
+  // Workspace tile: landing on Chat (Summon / Call Space / tile focus) always
+  // puts the caret in the composer so the operator can type immediately.
+  useEffect(() => {
+    if (mode !== "widget") return
+    const tileId = widgetInstance?.widgetId ?? null
+    const focused = Boolean(tileId && focusedTileId === tileId)
+    const overlayOpen = summonOpen || keymapSheetOpen
+    const becameFocused = focused && !chatTileFocusedRef.current
+    const overlayClosedOntoUs =
+      focused && chatOverlayOpenRef.current && !overlayOpen
+    chatTileFocusedRef.current = focused
+    chatOverlayOpenRef.current = overlayOpen
+    if (overlayOpen) return
+    if (!becameFocused && !overlayClosedOntoUs) return
+
+    const frame = window.requestAnimationFrame(() => {
+      const el = textareaRef.current
+      if (!el || !transcriptHostMayScroll(el)) return
+      el.focus({ preventScroll: true })
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [
+    mode,
+    widgetInstance?.widgetId,
+    focusedTileId,
+    summonOpen,
+    keymapSheetOpen,
+  ])
 
   const handleInputChange = useCallback(
     (value: string) => {

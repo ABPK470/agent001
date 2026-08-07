@@ -82,9 +82,13 @@ describe("chatTranscriptLayout", () => {
     expect(term).toContain("items={settledRuns}")
     expect(term).toContain("chat-transcript-live-turn")
     expect(term).toContain("deriveTranscriptZones")
-    // Docked composer must not remount-steal focus during a live run.
+    // Docked composer defaults autoFocus off — remount must not steal focus mid-run.
     expect(term).toMatch(/autoFocus\s*=\s*false/)
-    expect(term).toContain("autoFocus={autoFocus}")
+    // Landing on the Chat tile (Summon / tile focus) focuses the composer.
+    expect(term).toContain("focusedTileId")
+    expect(term).toContain("chatTileFocusedRef")
+    expect(term).toContain("overlayClosedOntoUs")
+    expect(term).toMatch(/el\.focus\(\{\s*preventScroll:\s*true\s*\}\)/)
     // Cursor/Copilot paper under the last turn (home + widget).
     expect(term).toContain("CHAT_TRANSCRIPT_BOTTOM_PAPER_CLASS")
     expect(term).toContain("threshold: nearBottomThreshold")

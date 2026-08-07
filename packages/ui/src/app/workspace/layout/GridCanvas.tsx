@@ -430,9 +430,12 @@ export function GridCanvas({ viewId, tiles, split }: Props) {
   // Sync DOM focus when selection changes from the keyboard (⌘⇧+arrows / Call Space).
   // Re-run when ops overlays close — Summon sets focusedTileId then dismisses in one turn,
   // so the first pass bails while focus is still inside `.ops-sheet`.
+  // term-chat owns the composer caret — do not steal focus onto the tile chrome.
   useEffect(() => {
     if (!focusedTileId) return
     if (summonOpen || keymapSheetOpen) return
+    const focusedTile = tiles.find((tile) => tile.id === focusedTileId)
+    if (focusedTile?.type === "term-chat") return
     const el = containerRef.current?.querySelector(
       `[data-tile-id="${CSS.escape(focusedTileId)}"]`,
     )
@@ -443,7 +446,7 @@ export function GridCanvas({ viewId, tiles, split }: Props) {
       return
     }
     el.focus({ preventScroll: true })
-  }, [focusedTileId, summonOpen, keymapSheetOpen])
+  }, [focusedTileId, summonOpen, keymapSheetOpen, tiles])
 
   // Layout reparent is Shift+Arrow only — bare arrows belong to widget/pane nav;
   // ⌘⇧+arrows moves tile focus (shell operator keyboard).

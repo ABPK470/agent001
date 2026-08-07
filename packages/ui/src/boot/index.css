@@ -3296,7 +3296,7 @@ textarea.input {
   overflow-y: auto;
   overflow-anchor: none;
   scrollbar-gutter: stable;
-  /* Pane focus is the top accent on .review-split-list — not a UA ring here. */
+  /* Pane focus washes the list header — not a UA ring here. */
   outline: none;
 }
 
@@ -3632,7 +3632,7 @@ textarea.input {
 }
 
 .review-detail__scroll {
-  /* Pane focus is the top accent on .review-split-detail — not a UA ring here. */
+  /* Pane focus washes the detail header — not a UA ring here. */
   outline: none;
 }
 
@@ -5454,32 +5454,17 @@ textarea.input {
 }
 
 /*
- * Pane focus (tree ↔ detail) — top edge of the whole split panel
- * (above column headers / detail chrome). Shared by Trace + Pipelines.
- * Row selection keeps the left rail. Pseudo-element so opaque headers
- * cannot paint over the accent.
+ * Pane focus (tree ↔ detail) — wash the column / detail header.
+ * Shared by Trace + Pipelines. Row selection keeps the left rail.
  */
-.trace-split-tree.is-pane-focused,
-.trace-split-detail.is-pane-focused,
-.review-split-list.is-pane-focused,
-.review-split-detail.is-pane-focused {
-  position: relative;
-}
-
-.trace-split-tree.is-pane-focused::before,
-.trace-split-detail.is-pane-focused::before,
-.review-split-list.is-pane-focused::before,
-.review-split-detail.is-pane-focused::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: var(--accent, #6b8cae);
-  border-radius: 0.5rem 0.5rem 0 0;
-  z-index: 2;
-  pointer-events: none;
+.trace-split-tree.is-pane-focused .trace-split-header-row,
+.trace-split-tree.is-pane-focused .trace-tree-header,
+.trace-split-detail.is-pane-focused .trace-detail__header,
+.trace-split-detail.is-pane-focused .trace-split-header-row,
+.review-split-list.is-pane-focused .review-split-header-row,
+.review-split-list.is-pane-focused .review-tree-header,
+.review-split-detail.is-pane-focused .review-detail__header {
+  background: var(--accent-soft, color-mix(in srgb, var(--accent, #7B6FC7) 14%, var(--panel)));
 }
 
 /*
@@ -17192,11 +17177,11 @@ button.space-layout-preview__leaf-inner--link:focus-visible .space-layout-previe
   isolation: isolate;
 }
 
-/* Summon — dead-centered over the workspace. */
+/* Summon — top-biased (⌘K / Raycast ergonomics), never geometric center. */
 .ops-sheet-overlay--summon {
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
-  padding: max(5vh, 2.5rem) 1rem;
+  padding: max(10vh, 4.5rem) 1rem 1rem;
 }
 
 .ops-sheet {
@@ -17591,7 +17576,7 @@ button.space-layout-preview__leaf-inner--link.is-highlighted {
 /* Laptop / tablet landscape — slightly tighter shell + left column. */
 @media (max-width: 1024px) and (min-width: 641px) {
   .ops-sheet-overlay--summon {
-    padding: max(4vh, 1.5rem) 0.75rem;
+    padding: max(8vh, 3.5rem) 0.75rem 0.75rem;
   }
 
   .ops-sheet--summon {
