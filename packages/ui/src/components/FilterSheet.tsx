@@ -20,6 +20,7 @@ import {
 } from "react"
 import { createPortal } from "react-dom"
 import { placeAnchoredPanel } from "../lib/anchored-panel"
+import { toggleMultiFilterChoice } from "../lib/filter-multi-select"
 import { popoverZIndex } from "../lib/modal-stack"
 import { dismissOpenPopovers } from "../lib/popover-dismiss"
 import { CONTROL_IDLE, CONTROL_PRESSED } from "../lib/selection"
@@ -192,6 +193,8 @@ const FILTER_CHOICE_OFF = CONTROL_IDLE
 /**
  * Choice grid — Event Stream Quick range / Type / Severity, Sync History, Pipelines.
  * `multi` = checkbox chips; `single` = radio (one value, or none when cleared).
+ * `emptyMeansAll` (multi only): empty set is implicit all — first click excludes
+ * the target (all except X). Allow-list toggles leave this off.
  *
  * Optional `className` on an option is the *selected* tone only (e.g. Event Stream
  * lane badge). Idle stays muted CONTROL_IDLE so pressed state stays 2-way syncable
@@ -203,18 +206,24 @@ export function FilterChoiceGrid<T extends string>({
   onChange,
   columns = 3,
   mode = "multi",
+  emptyMeansAll = false,
 }: {
   options: readonly { value: T; label: string; className?: string }[]
   values: readonly T[]
   onChange: (values: T[]) => void
   columns?: 2 | 3 | 4
   mode?: "multi" | "single"
+  emptyMeansAll?: boolean
 }): JSX.Element {
   const selected = new Set(values)
 
   function choose(value: T): void {
     if (mode === "single") {
       onChange([value])
+      return
+    }
+    if (emptyMeansAll) {
+      onChange(toggleMultiFilterChoice(options.map((o) => o.value), values, value))
       return
     }
     const next = new Set(selected)

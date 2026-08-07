@@ -568,6 +568,7 @@ export function LiveLogs() {
             onChange={(values) => setTypeFilters(new Set(values))}
             columns={3}
             mode="multi"
+            emptyMeansAll
           />
         </FilterField>
         <FilterField label="Severity">

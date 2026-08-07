@@ -295,6 +295,7 @@ export function OperationLogToolbar({
             onChange={(values) => setKinds(new Set(values))}
             columns={3}
             mode="multi"
+            emptyMeansAll
           />
         </FilterField>
         <FilterField label="Status">
@@ -304,6 +305,7 @@ export function OperationLogToolbar({
             onChange={(values) => setStatuses(new Set(values))}
             columns={3}
             mode="multi"
+            emptyMeansAll
           />
         </FilterField>
       </FilterSheet>
