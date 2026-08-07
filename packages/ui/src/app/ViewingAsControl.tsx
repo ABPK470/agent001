@@ -3,7 +3,7 @@
  * When not Me, this control is the sole “must know” identity lock.
  */
 
-import { ChevronDown, InspectionPanel, Undo2 } from "lucide-react"
+import { ChevronDown, Undo2, View } from "lucide-react"
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { api } from "../client/index"
 import { useMe } from "../hooks/useMe"
@@ -117,8 +117,9 @@ export function ViewingAsControl({
         title={isMe ? "View as someone else" : `Viewing as ${label}`}
         onClick={() => setOpen((v) => !v)}
       >
-        <InspectionPanel size={15} strokeWidth={2} className={HEADER_ICON} aria-hidden />
+        <View size={15} strokeWidth={2} className={HEADER_ICON} aria-hidden />
         {isMe ? (
+
           <span className="truncate font-medium leading-none text-text">Me</span>
         ) : (
           <span className="flex min-w-0 items-center gap-1.5 leading-none">

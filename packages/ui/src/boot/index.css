@@ -282,8 +282,7 @@
   /*
    * Event Stream lanes — dual-mode badge tokens (ink / soft / border).
    * Dark: glowing ink + translucent tint. Red/rose reserved for severity.
-   * Spread hues so scan lanes do not collapse: run indigo · sync cyan ·
-   * api amber · agent emerald · bridge orange · step purple.
+   * Agent = emerald (never error-red).
    */
   --stream-run-ink: #a5b4fc;
   --stream-run-soft: rgba(99, 102, 241, 0.15);
@@ -291,19 +290,19 @@
   --stream-step-ink: #c084fc;
   --stream-step-soft: rgba(168, 85, 247, 0.14);
   --stream-step-border: rgba(168, 85, 247, 0.28);
-  --stream-sync-ink: #22d3ee;
-  --stream-sync-soft: rgba(34, 211, 238, 0.14);
-  --stream-sync-border: rgba(34, 211, 238, 0.28);
+  --stream-sync-ink: #38bdf8;
+  --stream-sync-soft: rgba(14, 165, 233, 0.14);
+  --stream-sync-border: rgba(14, 165, 233, 0.28);
   --stream-bridge-ink: #fb923c;
   --stream-bridge-soft: rgba(251, 146, 60, 0.14);
   --stream-bridge-border: rgba(251, 146, 60, 0.28);
   --stream-agent-ink: #34d399;
   --stream-agent-soft: rgba(52, 211, 153, 0.14);
   --stream-agent-border: rgba(52, 211, 153, 0.28);
-  /* API = amber — out of the cool band with run/sync. */
-  --stream-api-ink: #fbbf24;
-  --stream-api-soft: rgba(251, 191, 36, 0.14);
-  --stream-api-border: rgba(251, 191, 36, 0.28);
+  /* API = blue — far from agent emerald (was teal and blended). */
+  --stream-api-ink: #60a5fa;
+  --stream-api-soft: rgba(96, 165, 250, 0.14);
+  --stream-api-border: rgba(96, 165, 250, 0.28);
   --stream-system-ink: #94a3b8;
   --stream-system-soft: rgba(148, 163, 184, 0.12);
   --stream-system-border: rgba(148, 163, 184, 0.28);
@@ -471,7 +470,7 @@
 
   /*
    * Event Stream lanes — contained pills on white paper
-   * (deep ink + pastel fill + 1px border). Same hue spread as dark.
+   * (deep ink + pastel fill + 1px border). Agent = emerald, never error-red.
    */
   --stream-run-ink: #3730a3;
   --stream-run-soft: #eef2ff;
@@ -479,19 +478,19 @@
   --stream-step-ink: #6b21a8;
   --stream-step-soft: #f3e8ff;
   --stream-step-border: #e9d5ff;
-  --stream-sync-ink: #0e7490;
-  --stream-sync-soft: #cffafe;
-  --stream-sync-border: #67e8f9;
+  --stream-sync-ink: #0369a1;
+  --stream-sync-soft: #e0f2fe;
+  --stream-sync-border: #bae6fd;
   --stream-bridge-ink: #c2410c;
   --stream-bridge-soft: #ffedd5;
   --stream-bridge-border: #fed7aa;
   --stream-agent-ink: #047857;
   --stream-agent-soft: #ecfdf5;
   --stream-agent-border: #a7f3d0;
-  /* API = amber — out of the cool band with run/sync. */
-  --stream-api-ink: #b45309;
-  --stream-api-soft: #fef3c7;
-  --stream-api-border: #fcd34d;
+  /* API = blue — far from agent emerald (was teal and blended). */
+  --stream-api-ink: #1d4ed8;
+  --stream-api-soft: #dbeafe;
+  --stream-api-border: #93c5fd;
   --stream-system-ink: #334155;
   --stream-system-soft: #e2e8f0;
   --stream-system-border: #cbd5e1;
@@ -3036,7 +3035,7 @@ label:focus-within > .mia-checkbox,
 
 /*
  * Expanded payload — indented under the trigger row (past chevron + into the
- * time column). Flat rectangle — not a floating card (narrow / inline mode).
+ * time column) so the card is visually bound to that timestamp, not the deck.
  */
 .event-stream-payload {
   padding: 0.15rem 0.625rem 0.55rem
@@ -3048,29 +3047,17 @@ label:focus-within > .mia-checkbox,
 
 .event-stream-payload__box {
   margin: 0;
-  padding: 0.45rem 0.6rem 0.45rem 0.65rem;
-  border-radius: 0;
+  padding: 0.55rem 0.7rem 0.55rem 0.75rem;
+  border-radius: 0.4rem;
   border: 1px solid var(--border-subtle);
   border-left: 2px solid color-mix(in srgb, var(--color-accent, #6366f1) 55%, var(--border));
   background: var(--panel-2);
-  box-shadow: none;
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--text) 6%, transparent);
 }
 
 .event-stream-payload__box--err {
   border-left-width: 3px;
   border-left-color: var(--error);
-  border-radius: 0;
-}
-
-/* Nested JsonViewer / code chrome — same square corners as the outer shell. */
-.event-stream-payload .mia-code-block,
-.event-stream-payload .mia-code-block--embedded {
-  border-radius: 0 !important;
-  box-shadow: none !important;
-}
-
-.event-stream-payload .mia-code-block__toolbar {
-  border-radius: 0;
 }
 
 /*

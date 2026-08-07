@@ -931,6 +931,13 @@ function LogRow({
   const lane = log.type as EventType
 
   const open = detailOpen && hasData
+  // Narrow tile collapses the event column — fold name into the message so
+  // rows never render as a bare type tag with an empty ghost track.
+  const detailText = tiny && log.eventName
+    ? log.message
+      ? `${log.eventName} — ${log.message}`
+      : log.eventName
+    : log.message
 
   return (
     <div
@@ -945,6 +952,7 @@ function LogRow({
         className={[
           "event-stream-row",
           isError ? "event-stream-row--has-error" : "",
+          tiny ? "event-stream-row--compact" : "",
           open ? "event-stream-row--open" : "",
           hasData ? "cursor-pointer" : "",
         ].join(" ")}
@@ -999,7 +1007,7 @@ function LogRow({
         ) : (
           <span className="event-stream-row__event" aria-hidden />
         )}
-        {log.message ? (
+        {detailText ? (
           <>
             <span className="event-stream-row__sep" aria-hidden>
               —
@@ -1009,9 +1017,9 @@ function LogRow({
                 "event-stream-row__message",
                 isError ? "event-stream-row__message--err" : "text-text-muted",
               ].join(" ")}
-              title={log.message}
+              title={detailText}
             >
-              {log.message}
+              {detailText}
             </span>
           </>
         ) : (

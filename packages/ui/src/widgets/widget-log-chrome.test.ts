@@ -234,6 +234,10 @@ describe("widget log chrome — control height & search", () => {
     const live = read(livePath)
 
     expect(live).toContain("event-stream-row--open")
+    expect(live).toContain("event-stream-row--compact")
+    expect(css).toMatch(
+      /\.event-stream-row--compact\s*\{[^}]*grid-template-columns:/s,
+    )
     // Open wash lives on the entry (header + payload), not the trigger row alone.
     expect(css).toMatch(
       /\.event-stream-entry\.is-open\s*\{[^}]*background:\s*color-mix\(in srgb,\s*var\(--select-fill\)/s,

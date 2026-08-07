@@ -2,9 +2,11 @@
  * LOCAL LAPTOP HARNESS — testing switch. Not product chrome.
  */
 
-import { FlaskConical } from "lucide-react"
+import { Cpu } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 import { Listbox, type ListboxOption } from "../../components/Listbox"
+import { RunStatus } from "../../enums"
+import { useStore } from "../../state/store"
 import { isLocalRunSimulateUiEnabled } from "./allow"
 import {
   clearSimulationIfRun,
@@ -17,14 +19,12 @@ import {
   type SimPace,
   type SimScenario,
 } from "./run-simulate"
-import { useStore } from "../../state/store"
-import { RunStatus } from "../../enums"
 import "./run-simulate.css"
 
 const SCENARIOS: Array<{ id: SimScenario; label: string }> = [
   { id: "direct", label: "Direct" },
-  { id: "planner-seq", label: "Planner seq" },
-  { id: "planner-parallel", label: "Planner ×3" },
+  { id: "planner-seq", label: "Planner Q" },
+  { id: "planner-parallel", label: "Planner P" },
 ]
 
 const PACES: Array<{ id: SimPace; label: string }> = [
@@ -122,8 +122,8 @@ function WorkspaceSimulateControlInner() {
               : `LOCAL SIM OFF — ${config.scenario} · ${config.pace}`
         }
       >
-        <FlaskConical size={15} className="block shrink-0" aria-hidden />
-        <span className="hidden leading-none sm:inline">Local sim</span>
+        <Cpu size={15} className="block shrink-0" aria-hidden />
+        <span className="hidden leading-none sm:inline"></span>
         <span
           className={`workspace-simulate__dot${on ? " is-on" : ""}`}
           aria-hidden

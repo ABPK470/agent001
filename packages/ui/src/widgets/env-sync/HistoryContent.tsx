@@ -4,13 +4,13 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
+  Expand,
   Loader2,
-  SlidersHorizontal,
-  View,
+  SlidersHorizontal
 } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react"
 
-import { api, type SyncHistoryParams, type SyncHistoryPage, type SyncRunStatus } from "../../client/index"
+import { api, type SyncHistoryPage, type SyncHistoryParams, type SyncRunStatus } from "../../client/index"
 import {
   BrowseCount,
   BrowseIconButton,
@@ -27,24 +27,24 @@ import {
   FilterToggles,
   type ActiveFilterChipModel,
 } from "../../components/FilterSheet"
+import { JsonViewer } from "../../components/JsonViewer"
 import { Listbox, type ListboxOption } from "../../components/Listbox"
 import { SearchablePick } from "../../components/SearchablePick"
-import { useStore } from "../../state/store"
-import type { SyncPlan } from "../../types"
-import { timeAgo } from "../../lib/util"
-import { EmptyHistory, Loading } from "./chrome"
-import { DIFF, ENTITY_TYPES, dot } from "./constants"
-import { SyncMovementCounts } from "./SyncMovementCounts"
-import { formatPlanEntityLabel } from "./workflow"
-import { HistoryPlanTables } from "./PlanTables"
-import { SqlTraceModal } from "../sync/trace/SqlTraceModal"
-import { hasSqlTraceContent, type SqlTraceFields } from "../sync/trace/sync-sql-trace"
-import { JsonViewer } from "../../components/JsonViewer"
 import {
   StatusIndicator,
   syncHistoryStatusForMark,
   syncHistoryStatusLabel,
 } from "../../components/StatusIndicator"
+import { timeAgo } from "../../lib/util"
+import { useStore } from "../../state/store"
+import type { SyncPlan } from "../../types"
+import { SqlTraceModal } from "../sync/trace/SqlTraceModal"
+import { hasSqlTraceContent, type SqlTraceFields } from "../sync/trace/sync-sql-trace"
+import { EmptyHistory, Loading } from "./chrome"
+import { DIFF, ENTITY_TYPES, dot } from "./constants"
+import { HistoryPlanTables } from "./PlanTables"
+import { SyncMovementCounts } from "./SyncMovementCounts"
+import { formatPlanEntityLabel } from "./workflow"
 
 const PAGE_SIZE = 25
 const SEARCH_DEBOUNCE_MS = 300
@@ -715,7 +715,7 @@ function HistoryRunRow({
                   onOpen(run.planId)
                 }}
               >
-                <View size={12} />
+                <Expand size={12} />
                 Open in sync
               </button>
             )}
