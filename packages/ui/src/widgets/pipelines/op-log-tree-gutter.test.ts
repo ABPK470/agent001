@@ -73,6 +73,10 @@ describe("pipelines left-tree gutter — review kit", () => {
     expect(css).toMatch(
       /\.op-log-day-cap\s*\{[^}]*padding-inline:\s*var\(--review-tree-hpad/s,
     )
+    // Day rail never paints a focus ring (click/keyboard).
+    expect(css).toMatch(
+      /\.op-log-day-cap:focus-visible\s*,[\s\S]*?outline:\s*none/s,
+    )
     expect(ops).toContain("op-log-day-cap")
     expect(ops).toContain("op-log-day-pin")
     expect(ops).not.toContain("dayCardClass")

@@ -4206,10 +4206,28 @@ textarea.input {
   text-transform: uppercase;
   color: var(--text-secondary, var(--color-text-muted));
   background: color-mix(in srgb, var(--section-cap-bg, var(--panel-2)) 97%, var(--text) 3%);
+  /* Collapse/expand is enough feedback — never a focus ring around the day rail. */
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.review-operator .review-split-list .op-log-day-cap:focus,
+.review-operator .review-split-list .op-log-day-cap:focus-visible,
+.review-operator .review-split-list .op-log-day-cap:active {
+  outline: none;
+  box-shadow: none;
 }
 
 .review-operator .review-split-list .op-log-day-cap--pin {
   border-top: none;
+  box-shadow: 0 1px 0 var(--border-subtle, var(--color-border-subtle));
+}
+
+.review-operator .review-split-list .op-log-day-cap--pin:focus,
+.review-operator .review-split-list .op-log-day-cap--pin:focus-visible,
+.review-operator .review-split-list .op-log-day-cap--pin:active {
+  outline: none;
+  /* Keep the pin hairline; kill only the UA/accent focus ring. */
   box-shadow: 0 1px 0 var(--border-subtle, var(--color-border-subtle));
 }
 
