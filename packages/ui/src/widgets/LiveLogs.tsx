@@ -471,12 +471,13 @@ export function LiveLogs() {
       ref={rootRef}
       className={[
         WIDGET_LOG_SHELL_CLASS,
-        "relative",
+        "event-stream-shell",
         drawerDetailOpen ? "event-stream-shell--detail-open" : "",
       ]
         .filter(Boolean)
         .join(" ")}
     >
+      <div className="event-stream-main">
       <div className={`${WIDGET_LOG_STACK_CLASS} event-stream-stack`}>
       <div className="event-stream-deck">
       <div className={WIDGET_REVIEW_CONTROLS_CLASS}>
@@ -755,6 +756,7 @@ export function LiveLogs() {
           <kbd className="composer-kbd event-stream-jump__kbd">End</kbd>
         </button>
       )}
+      </div>
       </div>
       </div>
       {detailMode === "drawer" ? (

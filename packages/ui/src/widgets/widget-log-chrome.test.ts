@@ -544,46 +544,54 @@ describe("widget log chrome — shared content dialect", () => {
     expect(live).toMatch(/showInlinePayload \? "is-expanded"/)
     expect(live).not.toMatch(/open \? "rotate-90"/)
     expect(live).toContain("event-stream-shell--detail-open")
+    expect(live).toContain("event-stream-main")
     expect(css).toContain(".event-stream-drawer")
+    // True split: in-flow columns, flat deck, shared divider — not overlay pad.
     expect(css).toMatch(
+      /\.event-stream-shell\.event-stream-shell--detail-open\s*\{[^}]*flex-direction:\s*row/s,
+    )
+    expect(css).toMatch(
+      /\.event-stream-shell--detail-open\s*>\s*\.event-stream-main\s*\{[^}]*max-width:\s*50%/s,
+    )
+    expect(css).toMatch(
+      /\.event-stream-shell--detail-open\s*>\s*\.event-stream-main\s*\{[^}]*border-inline-end:\s*1px\s+solid/s,
+    )
+    expect(css).toMatch(
+      /\.event-stream-shell--detail-open\s+\.event-stream-deck\s*\{[^}]*border-radius:\s*0/s,
+    )
+    expect(css).not.toMatch(
       /\.event-stream-shell--detail-open\s*>\s*\.event-stream-stack\s*\{[^}]*padding-inline-end:\s*50%/s,
     )
     expect(css).toContain(".event-stream-row__chevron.is-expanded")
     expect(css).toMatch(
-      /\.event-stream-drawer\s*\{[^}]*transform:\s*translateX\(100%\)/s,
+      /\.event-stream-drawer\s*\{[^}]*flex:\s*0\s+0\s+50%/s,
     )
     expect(css).toMatch(
-      /\.event-stream-drawer\[data-open="true"\]\s*\{[^}]*transform:\s*translateX\(0\)/s,
-    )
-    expect(css).toMatch(
-      /prefers-reduced-motion:\s*reduce[\s\S]*?\.event-stream-drawer\s*\{[^}]*transition:\s*none/s,
-    )
-    expect(css).toMatch(
-      /\.event-stream-drawer\s*\{[^}]*--event-stream-drawer-dur:\s*var\(--audit-inspector-dur/s,
-    )
-    // Full-height into panel inset; end radii match .widget-panel; shell yields clip to panel.
-    expect(css).toMatch(
-      /\.event-stream-drawer\s*\{[^}]*inset-block-start:\s*calc\(-1 \* var\(--widget-panel-inset-top/s,
-    )
-    expect(css).toMatch(
-      /\.event-stream-drawer\s*\{[^}]*border-start-end-radius:\s*0\.5rem/s,
-    )
-    expect(css).toMatch(
-      /\.event-stream-shell--detail-open\s*\{[^}]*overflow:\s*visible/s,
-    )
-    expect(css).toMatch(
-      /\.event-stream-drawer__head\s*\{[^}]*--widget-panel-inset-top/s,
+      /\.event-stream-drawer__head\s*\{[^}]*background:\s*var\(--panel-2\)/s,
     )
     expect(css).toContain(".event-stream-drawer__head-row")
+    expect(css).toMatch(
+      /\.event-stream-drawer__head-row\s*\{[^}]*min-height:\s*var\(--control-h/s,
+    )
     expect(css).toContain(".event-stream-drawer__summary")
+    // Flat payload in the drawer — no nested card radius/shadow.
+    expect(css).toMatch(
+      /\.event-stream-drawer__body\s+\.event-stream-payload__box\s*\{[^}]*border-radius:\s*0/s,
+    )
+    expect(css).toMatch(
+      /\.event-stream-drawer__body\s+\.event-stream-payload__box\s*\{[^}]*box-shadow:\s*none/s,
+    )
     const drawer = read(join(here, "live-logs/EventStreamDetailDrawer.tsx"))
     expect(drawer).toContain('role="dialog"')
     expect(drawer).toContain('aria-modal="false"')
     expect(drawer).toContain("JsonViewer")
     expect(drawer).toContain("event-stream-drawer__summary")
-    expect(drawer).toContain("event-stream-drawer__head-row")
-    // Route/status lives in the head — not a floating body sub-header.
+    expect(drawer).toContain("WIDGET_REVIEW_CONTROLS_INSET_CLASS")
+    expect(drawer).toContain("toolbar-ops-btn")
+    expect(drawer).toContain("embedded")
+    // Route/status in the scroll body — head is the search-height band only.
     expect(drawer).not.toContain("event-stream-drawer__message")
+    expect(drawer).not.toContain("widget-toolbar__icon-btn")
 
     // Control deck + hard-clipped feed (block scrollport — not flex body).
     expect(live).toContain("event-stream-deck")
