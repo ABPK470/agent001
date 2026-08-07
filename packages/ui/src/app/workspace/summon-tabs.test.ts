@@ -24,7 +24,7 @@ function catalogWithObserveDrift() {
       split: leafNode(view.tiles[0]!.id),
     }
   })
-  return listSummonItems({ views })
+  return listSummonItems({ views, isAdmin: true })
 }
 
 describe("summon list navigation", () => {

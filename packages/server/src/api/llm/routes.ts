@@ -7,11 +7,12 @@ import type { FastifyInstance } from "fastify"
 import { buildLlmClient, PROVIDER_DEFAULTS } from "../../infra/llm/registry.js"
 import { getLlmConfig, saveLlmConfig } from "../../infra/persistence/sqlite.js"
 import { LlmProvider } from "../../internal/enums/llm.js"
+import { admin } from "../auth/service/require-admin.js"
 
 const VALID_PROVIDERS: LlmProvider[] = [LlmProvider.CopilotChat, LlmProvider.Databricks]
 
 export function registerLlmRoutes(app: FastifyInstance, onUpdate: (client: LLMClient) => void): void {
-  app.get("/api/llm", async () => {
+  app.get("/api/llm", admin, async () => {
     const cfg = await getLlmConfig()
     return {
       provider: cfg.provider,
@@ -30,7 +31,7 @@ export function registerLlmRoutes(app: FastifyInstance, onUpdate: (client: LLMCl
       apiKey?: string
       baseUrl?: string
     }
-  }>("/api/llm", async (req, reply) => {
+  }>("/api/llm", admin, async (req, reply) => {
     const { provider, model, apiKey, baseUrl } = req.body
 
     if (!provider || !VALID_PROVIDERS.includes(provider)) {

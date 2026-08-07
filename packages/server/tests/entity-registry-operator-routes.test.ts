@@ -96,4 +96,27 @@ describe("entity registry operator routes", () => {
     expect(response.statusCode).toBe(403)
     await guestApp.close()
   })
+
+  it("rejects non-admin entity list reads", async () => {
+    const Fastify = (await import("fastify")).default
+    const { registerEntityRegistryRoutes } = await import(
+      "../src/api/sync/handlers/definitions-routes.js"
+    )
+    const guestApp = Fastify({ logger: false })
+    guestApp.addHook("onRequest", async (req) => {
+      ;(req as unknown as { session: typeof fixture.adminSession }).session = {
+        ...fixture.adminSession,
+        isAdmin: false,
+      }
+    })
+    registerEntityRegistryRoutes(guestApp, fixture.projectRoot)
+    await guestApp.ready()
+
+    const response = await guestApp.inject({
+      method: "GET",
+      url: "/api/entity-registry/entities",
+    })
+    expect(response.statusCode).toBe(403)
+    await guestApp.close()
+  })
 })

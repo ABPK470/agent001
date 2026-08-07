@@ -7,6 +7,7 @@ import { parseBoundaryJson } from "../../internal/parse-json.js"
 import type { FastifyInstance } from "fastify"
 import { randomUUID } from "node:crypto"
 import * as db from "../../infra/persistence/sqlite.js"
+import { admin } from "../auth/service/require-admin.js"
 import { canAccessOwned, personal, viewingAsOf } from "../auth/service/viewing-as.js"
 import { eventMatchesViewingAs } from "../../infra/events/event-viewing-as.js"
 import { buildEventHistogram } from "./service/histogram.js"
@@ -122,7 +123,7 @@ export function registerEventRoutes(app: FastifyInstance): void {
     }
   })
 
-  app.get("/api/webhooks/drains", async () => {
+  app.get("/api/webhooks/drains", admin, async () => {
     const drains = await db.listWebhookDrains()
     return drains.map((drain) => ({
       id: drain.id,
@@ -137,6 +138,7 @@ export function registerEventRoutes(app: FastifyInstance): void {
 
   app.post<{ Body: { url: string; secret?: string; eventFilters?: string[]; enabled?: boolean } }>(
     "/api/webhooks/drains",
+    admin,
     async (req, reply) => {
       const { url, secret, eventFilters, enabled } = req.body
       if (!url || typeof url !== "string") {
@@ -178,7 +180,7 @@ export function registerEventRoutes(app: FastifyInstance): void {
   app.put<{
     Params: { id: string }
     Body: { url?: string; secret?: string; eventFilters?: string[]; enabled?: boolean }
-  }>("/api/webhooks/drains/:id", async (req, reply) => {
+  }>("/api/webhooks/drains/:id", { ...admin }, async (req, reply) => {
     const existing = await db.getWebhookDrain(req.params.id)
     if (!existing) {
       reply.code(404)
@@ -214,7 +216,7 @@ export function registerEventRoutes(app: FastifyInstance): void {
     }
   })
 
-  app.delete<{ Params: { id: string } }>("/api/webhooks/drains/:id", async (req, reply) => {
+  app.delete<{ Params: { id: string } }>("/api/webhooks/drains/:id", admin, async (req, reply) => {
     const existing = await db.getWebhookDrain(req.params.id)
     if (!existing) {
       reply.code(404)

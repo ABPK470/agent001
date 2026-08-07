@@ -24,6 +24,7 @@ function polluteObserve() {
     zenTileId: null,
     viewportRows: 24,
     spaceLayoutVersion: SPACE_LAYOUT_VERSION,
+    consoleIsAdmin: true,
   })
 }
 

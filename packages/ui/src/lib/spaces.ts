@@ -2,14 +2,19 @@
  * Product Spaces — curated job landings with fixed default autolayouts.
  * Named DIY views remain secondary; Spaces are the commercial landing.
  *
+ * Role (`isAdmin`): operators see Agent / Observe / Reconcile(Sync-only) /
+ * Trace. Bridge + Users + Entity Registry are admin-only. Call Space Mod+N
+ * indices recompact over the visible set.
+ *
  * Defaults (ratios of the canvas):
  * - Observe: Pipelines 70% | Event stream 30%
  * - Trace: Trace alone (self-sufficient scope bar + drawer)
- * - Reconcile: Sync 50% | Entity registry 50%
+ * - Reconcile: Sync 50% | Entity registry 50% (admin) · Sync alone (operator)
  * - Agent: Trace 60% | Chat 40%
- * - Bridge: Bridge alone
+ * - Bridge: Bridge alone (admin)
  */
 
+import { canOpenWidget } from "@mia/shared-types"
 import type { WidgetType } from "../types"
 import { COLS } from "./grid-math"
 import { leafNode, type SplitDir, type SplitNode } from "./split-tree"
@@ -48,7 +53,18 @@ const LEGACY_SPACE_IDS: Readonly<Record<string, SpaceId>> = {
  * Bump when curated Space widgets/ratios change so persisted product Spaces
  * rebuild to the new defaults (DIY-named views are left alone).
  */
-export const SPACE_LAYOUT_VERSION = 8
+export const SPACE_LAYOUT_VERSION = 9
+
+/** Admin-only product Spaces — absent from operator console. */
+const ADMIN_ONLY_SPACE_IDS: ReadonlySet<SpaceId> = new Set([
+  "space:bridge",
+  "space:users",
+])
+
+export function canSeeSpace(spaceId: SpaceId, isAdmin: boolean): boolean {
+  if (ADMIN_ONLY_SPACE_IDS.has(spaceId)) return isAdmin
+  return true
+}
 
 export interface ProductSpaceDef {
   id: SpaceId
@@ -176,18 +192,72 @@ export function migrateProductSpaceViews(
   return next
 }
 
-export function spaceById(id: string): ProductSpaceDef | undefined {
-  return PRODUCT_SPACES.find((space) => space.id === id)
+/** Role-adjusted Space def (Reconcile widgets + copy). */
+export function spaceDefForRole(
+  def: ProductSpaceDef,
+  isAdmin: boolean,
+): ProductSpaceDef {
+  if (def.id !== "space:reconcile" || isAdmin) return def
+  return {
+    ...def,
+    desc: "Sync",
+    widgets: ["env-sync"],
+  }
 }
 
-export function spaceByIndex(index: number): ProductSpaceDef | undefined {
-  // Call Space chords are Mod+1…5 only (Users is index 6 — Summon/tab).
+/**
+ * Product Spaces visible for this role, with Call indices recompacted to
+ * contiguous Mod+1…N (no dead Bridge slot for operators).
+ */
+export function spacesForRole(isAdmin: boolean): ProductSpaceDef[] {
+  const visible = PRODUCT_SPACES
+    .filter((space) => canSeeSpace(space.id, isAdmin))
+    .map((space) => spaceDefForRole(space, isAdmin))
+  let callIndex = 1
+  return visible.map((space) => {
+    if (space.index >= 1 && space.index <= 5) {
+      return { ...space, index: callIndex++ }
+    }
+    return space
+  })
+}
+
+export function bundlesForRole(isAdmin: boolean): ProductBundleDef[] {
+  return PRODUCT_BUNDLES
+    .filter((bundle) => canSeeSpace(bundle.homeSpace, isAdmin))
+    .map((bundle) => {
+      if (bundle.homeSpace !== "space:reconcile" || isAdmin) return bundle
+      return {
+        ...bundle,
+        desc: "Restore Sync full-bleed",
+        widgets: ["env-sync"] as const,
+      }
+    })
+}
+
+export function spaceById(
+  id: string,
+  isAdmin = true,
+): ProductSpaceDef | undefined {
+  const raw = PRODUCT_SPACES.find((space) => space.id === id)
+  if (!raw || !canSeeSpace(raw.id, isAdmin)) return undefined
+  return spaceDefForRole(raw, isAdmin)
+}
+
+/** Call Space by recompacted Mod+N index for this role (Mod+1…5 only). */
+export function spaceByIndex(
+  index: number,
+  isAdmin = true,
+): ProductSpaceDef | undefined {
   if (index < 1 || index > 5) return undefined
-  return PRODUCT_SPACES.find((space) => space.index === index)
+  return spacesForRole(isAdmin).find((space) => space.index === index)
 }
 
-export function bundleById(id: string): ProductBundleDef | undefined {
-  return PRODUCT_BUNDLES.find((bundle) => bundle.id === id)
+export function bundleById(
+  id: string,
+  isAdmin = true,
+): ProductBundleDef | undefined {
+  return bundlesForRole(isAdmin).find((bundle) => bundle.id === id)
 }
 
 export function isProductSpaceId(id: string): id is SpaceId {
@@ -195,8 +265,11 @@ export function isProductSpaceId(id: string): id is SpaceId {
 }
 
 /** Space whose only widget is this type — Summon Go path, not peek. */
-export function dedicatedSpaceForWidget(type: WidgetType): SpaceId | null {
-  for (const space of PRODUCT_SPACES) {
+export function dedicatedSpaceForWidget(
+  type: WidgetType,
+  isAdmin = true,
+): SpaceId | null {
+  for (const space of spacesForRole(isAdmin)) {
     if (space.widgets.length === 1 && space.widgets[0] === type) return space.id
   }
   return null
@@ -246,8 +319,10 @@ function buildSpaceSplit(
     return id("debug-inspector")
   }
   if (spaceId === "space:reconcile") {
-    // Sync 50% | Entity registry 50%
-    return vSplit(0.5, id("env-sync"), id("entity-registry"))
+    if (byType.has("entity-registry")) {
+      return vSplit(0.5, id("env-sync"), id("entity-registry"))
+    }
+    return id("env-sync")
   }
   if (spaceId === "space:agent") {
     // Trace 60% | Chat 40%
@@ -279,15 +354,39 @@ export function buildSpaceView(def: ProductSpaceDef, rows = 24): WorkspaceView {
   )
 }
 
-/** Ensure every product Space exists; never wipe unrelated user views. */
+/** Drop tiles the role cannot open; repair split geometry. */
+export function stripUnauthorizedTiles(
+  views: readonly WorkspaceView[],
+  isAdmin: boolean,
+  rows = 24,
+): WorkspaceView[] {
+  return views.map((view) => {
+    const tiles = view.tiles.filter((tile) => canOpenWidget(tile.type, isAdmin))
+    if (tiles.length === view.tiles.length) return view
+    return syncViewGeometry({ ...view, tiles, split: view.split }, rows, COLS)
+  })
+}
+
+/** Ensure every role-visible product Space exists; drop admin-only Spaces for operators. */
 export function mergeProductSpaces(
   views: readonly WorkspaceView[],
   rows = 24,
+  isAdmin = true,
 ): WorkspaceView[] {
+  const roleSpaces = spacesForRole(isAdmin)
+  const roleIds = new Set(roleSpaces.map((space) => space.id))
   const migrated = migrateProductSpaceViews(views)
-  const byId = new Map(migrated.map((view) => [view.id, view]))
-  const next = [...migrated]
-  for (const def of PRODUCT_SPACES) {
+  const stripped = stripUnauthorizedTiles(
+    migrated.filter((view) => {
+      if (!isProductSpaceId(view.id)) return true
+      return roleIds.has(view.id)
+    }),
+    isAdmin,
+    rows,
+  )
+  const byId = new Map(stripped.map((view) => [view.id, view]))
+  const next = [...stripped]
+  for (const def of roleSpaces) {
     if (byId.has(def.id)) continue
     const built = buildSpaceView(def, rows)
     next.push(built)
@@ -297,27 +396,34 @@ export function mergeProductSpaces(
 }
 
 /**
- * Rebuild all product Spaces to the current curated defaults.
- * DIY-named views are preserved.
+ * Rebuild all role-visible product Spaces to the current curated defaults.
+ * DIY-named views are preserved (illegal tiles stripped).
  */
 export function reapplyProductSpaceLayouts(
   views: readonly WorkspaceView[],
   rows = 24,
+  isAdmin = true,
 ): WorkspaceView[] {
-  const migrated = migrateProductSpaceViews(views)
+  const roleSpaces = spacesForRole(isAdmin)
   const productIds = new Set(PRODUCT_SPACES.map((space) => space.id))
-  const kept = migrated.filter((view) => !productIds.has(view.id as SpaceId))
-  const rebuilt = PRODUCT_SPACES.map((def) => buildSpaceView(def, rows))
+  const migrated = migrateProductSpaceViews(views)
+  const kept = stripUnauthorizedTiles(
+    migrated.filter((view) => !productIds.has(view.id as SpaceId)),
+    isAdmin,
+    rows,
+  )
+  const rebuilt = roleSpaces.map((def) => buildSpaceView(def, rows))
   return [...kept, ...rebuilt]
 }
 
-/** Replace a Space’s tiles/split with the product default. */
+/** Replace a Space’s tiles/split with the product default for this role. */
 export function resetSpaceView(
   views: readonly WorkspaceView[],
   spaceId: SpaceId,
   rows = 24,
+  isAdmin = true,
 ): WorkspaceView[] {
-  const def = spaceById(spaceId)
+  const def = spaceById(spaceId, isAdmin)
   if (!def) return [...views]
   const built = buildSpaceView(def, rows)
   const has = views.some((view) => view.id === spaceId)
@@ -325,8 +431,11 @@ export function resetSpaceView(
   return views.map((view) => (view.id === spaceId ? built : view))
 }
 
-export function primarySpaceForWidget(type: WidgetType): SpaceId | null {
-  for (const space of PRODUCT_SPACES) {
+export function primarySpaceForWidget(
+  type: WidgetType,
+  isAdmin = true,
+): SpaceId | null {
+  for (const space of spacesForRole(isAdmin)) {
     if (space.widgets.includes(type)) return space.id
   }
   return null
@@ -370,9 +479,13 @@ function viewSplitShape(view: WorkspaceView): SpaceSplitShape | null {
  * True when a product Space still matches its curated default (widget set +
  * split ratios). DIY views and unknown ids are never "at default" for Reset.
  */
-export function isProductSpaceAtDefault(view: WorkspaceView, rows = 24): boolean {
+export function isProductSpaceAtDefault(
+  view: WorkspaceView,
+  rows = 24,
+  isAdmin = true,
+): boolean {
   if (!isProductSpaceId(view.id)) return false
-  const def = spaceById(view.id)
+  const def = spaceById(view.id, isAdmin)
   if (!def) return false
   const expectedTypes = [...def.widgets].sort()
   const actualTypes = view.tiles.map((tile) => tile.type).sort()

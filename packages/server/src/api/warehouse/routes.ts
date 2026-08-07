@@ -4,6 +4,7 @@
 
 import { getCatalog, getMssqlConfig, getPool, type AgentHost } from "@mia/agent"
 import type { FastifyInstance } from "fastify"
+import { requireAdmin } from "../auth/service/require-admin.js"
 import { queryWarehouseSampleRows } from "./service.js"
 
 type QS = { Querystring: { db?: string } }
@@ -26,6 +27,14 @@ function fmtTypeDetail(dataType: string, maxLength: number | null): string | nul
 }
 
 export function registerWarehouseRoutes(app: FastifyInstance, host: AgentHost): void {
+  // Mymi UI retired — warehouse stays admin-only until the surface is reworked.
+  void app.register(async (scope) => {
+    scope.addHook("preHandler", requireAdmin)
+    registerWarehouseRoutesOn(scope, host)
+  })
+}
+
+function registerWarehouseRoutesOn(app: FastifyInstance, host: AgentHost): void {
   async function acquirePoolH(db: string) {
     return getPool(host, db)
   }

@@ -41,6 +41,7 @@ import { loadCatalogSnapshotForSuggest } from "../service/load-catalog-for-sugge
 import { withEntityVersionRef, withStrategyVersionRef } from "../../admin/audit-detail.js"
 import { entityImportToGate } from "../../platform/service/import-gate.js"
 import { recordSyncCatalogChange } from "../../platform/service/sync-catalog-versioning.js"
+import { requireAdmin } from "../../auth/service/require-admin.js"
 
 const DEFAULT_TENANT_ID = "_default"
 function resolveTenant(req: FastifyRequest): string {
@@ -189,6 +190,15 @@ async function sendRegistryJson(
 }
 
 export function registerEntityRegistryRoutes(app: FastifyInstance, projectRoot?: string): void {
+  // Entire Entity Registry is Platform control-plane — admin only (Env Sync
+  // uses published /api/sync/definitions, not these draft routes).
+  void app.register(async (scope) => {
+    scope.addHook("preHandler", requireAdmin)
+    registerEntityRegistryRoutesOn(scope, projectRoot)
+  })
+}
+
+function registerEntityRegistryRoutesOn(app: FastifyInstance, projectRoot?: string): void {
   app.get("/api/entity-registry/entities", async (req) => {
     const tenantId = resolveTenant(req)
     const includeRetired =

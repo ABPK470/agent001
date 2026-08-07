@@ -11,6 +11,7 @@ import {
   reapplyProductSpaceLayouts,
   resetSpaceView,
   spaceByIndex,
+  spacesForRole,
 } from "./spaces"
 import { leafNode } from "./split-tree"
 
@@ -33,11 +34,30 @@ describe("product spaces", () => {
     expect(
       PRODUCT_SPACES.filter((s) => s.index >= 1 && s.index <= 5).map((s) => s.index),
     ).toEqual([1, 2, 3, 4, 5])
-    expect(spaceByIndex(2)?.id).toBe("space:observe")
-    expect(spaceByIndex(5)?.id).toBe("space:trace")
-    expect(spaceByIndex(6)).toBeUndefined()
-    expect(spaceByIndex(0)).toBeUndefined()
+    expect(spaceByIndex(2, true)?.id).toBe("space:observe")
+    expect(spaceByIndex(5, true)?.id).toBe("space:trace")
+    expect(spaceByIndex(6, true)).toBeUndefined()
+    expect(spaceByIndex(0, true)).toBeUndefined()
     expect(PRODUCT_SPACES.find((s) => s.id === "space:users")?.index).toBe(6)
+  })
+
+  it("operators get Sync-only Reconcile and recompacted Call chords (no Bridge)", () => {
+    const role = spacesForRole(false)
+    expect(role.map((s) => s.id)).toEqual([
+      "space:agent",
+      "space:observe",
+      "space:reconcile",
+      "space:trace",
+    ])
+    expect(role.find((s) => s.id === "space:reconcile")?.widgets).toEqual(["env-sync"])
+    expect(spaceByIndex(3, false)?.id).toBe("space:reconcile")
+    expect(spaceByIndex(4, false)?.id).toBe("space:trace")
+    expect(spaceByIndex(5, false)).toBeUndefined()
+    const merged = mergeProductSpaces([{ id: "default", name: "Main", tiles: [], split: null }], 24, false)
+    expect(merged.some((v) => v.id === "space:bridge")).toBe(false)
+    expect(merged.some((v) => v.id === "space:users")).toBe(false)
+    const reconcile = merged.find((v) => v.id === "space:reconcile")
+    expect(reconcile?.tiles.map((t) => t.type)).toEqual(["env-sync"])
   })
 
   it("Users Space is Active Users alone", () => {

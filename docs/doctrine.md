@@ -126,15 +126,24 @@ One owned concept in the platform shell. Same words in UI, code, and docs.
 | **Personal** | Work product (threads, runs, Env Sync history, pipelines, live logs). Follows Viewing as. |
 | **Platform** | Shared deploy truth (policies, entity registry, connectors, Sync Admin, Usage, Audit, Active Users). Ignores Viewing as. |
 
-**Owner (server):** auth composition root — `registerViewingAs` + `personal.read` / `personal.write` preHandlers. Resolve once onto `req.viewingAs`. Handlers only call `viewingAsOf(req)` (or ignore Viewing as for Me-only writes). They never call `resolveViewingAs` and never re-check the header.
+### Role (admin vs operator) — orthogonal to Viewing as
+
+| Term | Meaning |
+| --- | --- |
+| **Admin** | `session.isAdmin` / `me.isAdmin`. May open Platform control-plane Spaces/widgets and Viewing as. |
+| **Operator** | Non-admin. Personal console only: Threads, Chat, Run Status, Trace, Event Stream, Pipelines, Env Sync. Spaces: Agent, Observe, Reconcile (**Sync only**), Trace. No Bridge, Users, Entity Registry, Sync Operations. Always Viewing as Me. |
+
+**Console capability (one seam):** `canOpenWidget` / `spacesForRole` in `@mia/shared-types` + UI spaces — Summon, Spaces, catalog, and ensure/open all ask it. Absent from lists, never gray-disabled. UI is not security.
+
+**Owner (server):** auth composition root — `registerViewingAs` + `personal.read` / `personal.write` preHandlers. Resolve once onto `req.viewingAs`. Handlers only call `viewingAsOf(req)` (or ignore Viewing as for Me-only writes). They never call `resolveViewingAs` and never re-check the header. Platform control-plane routes declare `admin` (`requireAdmin`) — Entity Registry, Bridge, Sync Admin, warehouse, webhook drains, LLM config, Active Users APIs.
 
 **Visibility dialect (one):** `sameUpn` (`internal/upn`) + `canAccessOwned` / `canAccessRun` / `canAccessThread` for owned rows; `eventMatchesViewingAs` (`infra/events`) for live SSE and historical events. No per-surface UPN compares. No `viewerUpn` synonym.
 
-**Owner (UI):** chrome store (`lib/viewing-as`, including `attachViewingAsQuery`) + fetch headers in `client`. App runs one Personal scope transition on Me / Viewing as change. Widgets may read `isViewingAsOther` for quiet chrome only. Do not pass `userId` into widgets.
+**Owner (UI):** chrome store (`lib/viewing-as`, including `attachViewingAsQuery`) + fetch headers in `client`. App runs one Personal scope transition on Me / Viewing as change and sets layout `consoleIsAdmin` from whoami. Widgets may read `isViewingAsOther` for quiet chrome only. Do not pass `userId` into widgets.
 
 **Transport:** `X-Viewing-As` on fetch; `?viewingAs=` via `attachViewingAsQuery` for EventSource. Omit when Me.
 
-**Laws:** Personal routes **declare** `personal.read` or `personal.write` at registration. Lists/gets/SSE filter to Viewing as UPN. Personal writes only when Me (`personal.write`). Platform routes omit those preHandlers and never read Viewing as (e.g. Sync Admin `/api/sync/runs` is admin-only; Env Sync uses `/api/sync/history`). Admin keeps their own dashboard layout when Viewing as someone else.
+**Laws:** Personal routes **declare** `personal.read` or `personal.write` at registration. Lists/gets/SSE filter to Viewing as UPN. Personal writes only when Me (`personal.write`). Platform routes omit those preHandlers, never read Viewing as, and require admin (e.g. Sync Admin `/api/sync/runs`; Env Sync uses `/api/sync/history` + published definitions). Admin keeps their own dashboard layout when Viewing as someone else. Mymi DB is retired from the console for everyone pending rework.
 
 **Do not call it** workspace subject, inspect, fleet, impersonation, or context switcher.
 

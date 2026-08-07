@@ -94,6 +94,7 @@ const CATALOG_META: Array<{
     type: "mymi-db",
     label: "Mymi DB",
     desc: "Browse schemas, tables, and relationships (optional catalog view)",
+    catalogVisible: false,
   },
   { type: "sync-proposals", label: "Sync Proposals", desc: "Review sync proposals", catalogVisible: false },
   { type: "sync-approvals", label: "Sync Approvals", desc: "Approve sync changes", catalogVisible: false },

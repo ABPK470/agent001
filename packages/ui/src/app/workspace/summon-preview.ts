@@ -49,10 +49,11 @@ function viewForSpace(
   viewId: string,
   views: readonly WorkspaceView[],
   rows: number,
+  isAdmin: boolean,
 ): WorkspaceView {
   const live = views.find((view) => view.id === viewId)
   if (live) return live
-  const def = spaceById(viewId)
+  const def = spaceById(viewId, isAdmin)
   if (!def) {
     return { id: viewId, name: viewId, tiles: [], split: null }
   }
@@ -86,10 +87,12 @@ export function resolveSummonPreview(
     presentTypes: ReadonlySet<string>
     viewportRows?: number
     pickedCount?: number
+    isAdmin?: boolean
   },
 ): SummonPreviewModel {
   const rows = opts.viewportRows ?? 24
   const pickedCount = opts.pickedCount ?? 0
+  const isAdmin = opts.isAdmin ?? false
   if (!item) {
     return {
       mode: "idle",
@@ -100,11 +103,11 @@ export function resolveSummonPreview(
     }
   }
   if (item.kind === "space") {
-    const view = viewForSpace(item.id, views, rows)
+    const view = viewForSpace(item.id, views, rows, isAdmin)
     return blueprintFromView(view, item.desc)
   }
   if (item.kind === "bundle") {
-    const view = viewForSpace(item.homeSpace, views, rows)
+    const view = viewForSpace(item.homeSpace, views, rows, isAdmin)
     return blueprintFromView(view, item.desc)
   }
   return {
@@ -113,7 +116,7 @@ export function resolveSummonPreview(
     name: item.name,
     desc: item.desc,
     onActiveSpace: opts.presentTypes.has(item.type),
-    dedicatedSpace: dedicatedSpaceForWidget(item.type),
+    dedicatedSpace: dedicatedSpaceForWidget(item.type, isAdmin),
     pickedCount,
   }
 }

@@ -106,9 +106,10 @@ export function SummonPalette() {
   const runActionRef = useRef<(action: SummonOpenAction) => void>(() => {})
   const peelEscRef = useRef<() => void>(() => {})
 
+  const consoleIsAdmin = useLayoutStore((s) => s.consoleIsAdmin)
   const catalog = useMemo(
-    () => listSummonItems({ views, viewportRows }),
-    [views, viewportRows],
+    () => listSummonItems({ views, viewportRows, isAdmin: consoleIsAdmin }),
+    [views, viewportRows, consoleIsAdmin],
   )
   const searched = useMemo(() => filterSummonItems(query, catalog), [catalog, query])
   const navItems = useMemo(
@@ -171,8 +172,9 @@ export function SummonPalette() {
         presentTypes,
         viewportRows,
         pickedCount,
+        isAdmin: consoleIsAdmin,
       }),
-    [current, presentTypes, views, viewportRows, pickedCount],
+    [consoleIsAdmin, current, presentTypes, views, viewportRows, pickedCount],
   )
   const pickableCount =
     previewModel.mode === "blueprint" ? previewModel.pickable.length : 0

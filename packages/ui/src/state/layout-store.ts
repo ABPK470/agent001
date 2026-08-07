@@ -4,6 +4,7 @@
 
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
+import { canOpenWidget } from "@mia/shared-types"
 import { clearEventStreamPrefs } from "../lib/event-stream-prefs"
 import { firstTileIdForWidgetType } from "../lib/focus-widget-tile"
 import { COLS } from "../lib/grid-math"
@@ -133,6 +134,12 @@ interface LayoutState {
   viewportRows: number
   /** Tracks curated Space layout recipe; mismatch rebuilds product Spaces. */
   spaceLayoutVersion: number
+  /**
+   * Console role — from whoami. Default false until App sets it (operators
+   * never briefly see admin Spaces). Not persisted.
+   */
+  consoleIsAdmin: boolean
+  setConsoleIsAdmin: (isAdmin: boolean) => void
 
   setActiveView: (id: string) => void
   addView: (name: string) => string
@@ -197,7 +204,7 @@ interface LayoutState {
 export const useLayoutStore = create<LayoutState>()(
   persist(
     (set, get) => ({
-      views: mergeProductSpaces([makeDefaultView()], 24),
+      views: mergeProductSpaces([makeDefaultView()], 24, false),
       activeViewId: DEFAULT_VIEW_ID,
       focusedTileId: null,
       enteringTileIds: [],
@@ -205,6 +212,26 @@ export const useLayoutStore = create<LayoutState>()(
       zenTileId: null,
       viewportRows: 24,
       spaceLayoutVersion: SPACE_LAYOUT_VERSION,
+      consoleIsAdmin: false,
+
+      setConsoleIsAdmin: (isAdmin) => set((s) => {
+        if (s.consoleIsAdmin === isAdmin) return s
+        const views = reapplyProductSpaceLayouts(
+          mergeProductSpaces(s.views, s.viewportRows, isAdmin),
+          s.viewportRows,
+          isAdmin,
+        )
+        const activeOk = views.some((view) => view.id === s.activeViewId)
+        return {
+          consoleIsAdmin: isAdmin,
+          views,
+          activeViewId: activeOk ? s.activeViewId : (views[0]?.id ?? DEFAULT_VIEW_ID),
+          soloTileId: null,
+          zenTileId: null,
+          focusedTileId: null,
+          spaceLayoutVersion: SPACE_LAYOUT_VERSION,
+        }
+      }),
 
       setActiveView: (id) => set((s) => {
         const view = s.views.find((v) => v.id === id)
@@ -255,6 +282,7 @@ export const useLayoutStore = create<LayoutState>()(
       }),
 
       addWidget: (viewId, type) => set((s) => {
+        if (!canOpenWidget(type, s.consoleIsAdmin)) return s
         const view = s.views.find((v) => v.id === viewId)
         if (!view) return s
         const defaults = WIDGET_DEFAULTS[type] as WidgetSizeDefaults
@@ -380,14 +408,17 @@ export const useLayoutStore = create<LayoutState>()(
       })),
 
       ensureProductSpaces: () => set((s) => ({
-        views: mergeProductSpaces(s.views, s.viewportRows),
+        views: mergeProductSpaces(s.views, s.viewportRows, s.consoleIsAdmin),
       })),
 
       callSpace: (space) => {
-        const def = typeof space === "number" ? spaceByIndex(space) : spaceById(space)
-        if (!def) return
         set((s) => {
-          const views = mergeProductSpaces(s.views, s.viewportRows)
+          const def =
+            typeof space === "number"
+              ? spaceByIndex(space, s.consoleIsAdmin)
+              : spaceById(space, s.consoleIsAdmin)
+          if (!def) return s
+          const views = mergeProductSpaces(s.views, s.viewportRows, s.consoleIsAdmin)
           const view = views.find((v) => v.id === def.id)
           return {
             views,
@@ -400,10 +431,10 @@ export const useLayoutStore = create<LayoutState>()(
       },
 
       callSpaceFocusPick: (spaceId, pickIndex) => {
-        const def = spaceById(spaceId)
-        if (!def) return
         set((s) => {
-          const views = mergeProductSpaces(s.views, s.viewportRows)
+          const def = spaceById(spaceId, s.consoleIsAdmin)
+          if (!def) return s
+          const views = mergeProductSpaces(s.views, s.viewportRows, s.consoleIsAdmin)
           const view = views.find((v) => v.id === def.id)
           const focusedTileId = view
             ? focusedTileIdForPick(view, pickIndex)
@@ -419,20 +450,23 @@ export const useLayoutStore = create<LayoutState>()(
       },
 
       resetActiveSpace: () => {
-        const def = spaceById(get().activeViewId)
+        const s = get()
+        const def = spaceById(s.activeViewId, s.consoleIsAdmin)
         const focusType = def?.widgets[0]
         if (!def || !focusType) return
         get().openSpacePreset(def.id, focusType)
       },
 
       openSpacePreset: (spaceId, focusType, pickIndex) => {
-        const def = spaceById(spaceId)
-        if (!def) return
         set((s) => {
+          const def = spaceById(spaceId, s.consoleIsAdmin)
+          if (!def) return s
+          if (!canOpenWidget(focusType, s.consoleIsAdmin)) return s
           const views = resetSpaceView(
-            mergeProductSpaces(s.views, s.viewportRows),
+            mergeProductSpaces(s.views, s.viewportRows, s.consoleIsAdmin),
             def.id,
             s.viewportRows,
+            s.consoleIsAdmin,
           )
           const view = views.find((v) => v.id === def.id)
           const fromPick =
@@ -475,6 +509,7 @@ export const useLayoutStore = create<LayoutState>()(
         const entering = [...s.enteringTileIds]
         let changed = false
         for (const type of types) {
+          if (!canOpenWidget(type, s.consoleIsAdmin)) continue
           if (tiles.some((tile) => tile.type === type)) continue
           const defaults = WIDGET_DEFAULTS[type] as WidgetSizeDefaults | undefined
           if (!defaults) continue
@@ -590,13 +625,16 @@ export const useLayoutStore = create<LayoutState>()(
         const rawViews = persisted.views?.length
           ? pruneWorkspaceViews(persisted.views, currentState.viewportRows)
           : currentState.views
+        // Role unknown at hydrate — operator-safe merge; App setConsoleIsAdmin upgrades.
+        const isAdmin = false
         const version = persisted.spaceLayoutVersion ?? 0
         const views =
           version === SPACE_LAYOUT_VERSION
-            ? mergeProductSpaces(rawViews, currentState.viewportRows)
+            ? mergeProductSpaces(rawViews, currentState.viewportRows, isAdmin)
             : reapplyProductSpaceLayouts(
-                mergeProductSpaces(rawViews, currentState.viewportRows),
+                mergeProductSpaces(rawViews, currentState.viewportRows, isAdmin),
                 currentState.viewportRows,
+                isAdmin,
               )
         const wantedActiveId = persisted.activeViewId
           ? migrateSpaceId(persisted.activeViewId)
@@ -616,6 +654,7 @@ export const useLayoutStore = create<LayoutState>()(
           zenTileId: null,
           viewportRows: currentState.viewportRows,
           spaceLayoutVersion: SPACE_LAYOUT_VERSION,
+          consoleIsAdmin: false,
         }
       },
       partialize: (state) => ({

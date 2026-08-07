@@ -11,12 +11,13 @@
 
 import type { LucideIcon } from "lucide-react"
 import { Brain, LayoutPanelLeft } from "lucide-react"
+import { canOpenWidget } from "@mia/shared-types"
 import {
+  bundlesForRole,
   isProductSpaceAtDefault,
   isProductSpaceId,
-  PRODUCT_BUNDLES,
-  PRODUCT_SPACES,
   spaceById,
+  spacesForRole,
   type ProductBundleId,
   type SpaceId,
 } from "../../lib/spaces"
@@ -29,6 +30,8 @@ import { catalogEntries } from "./widget-definitions"
 export type SummonCatalogContext = {
   views: readonly WorkspaceView[]
   viewportRows?: number
+  /** From whoami — filters Spaces / widgets. Default false (operator-safe). */
+  isAdmin?: boolean
 }
 
 export type SummonItem =
@@ -121,7 +124,10 @@ function diySpaceDesc(view: WorkspaceView): string {
  */
 export function listSummonItems(ctx: SummonCatalogContext): SummonItem[] {
   const rows = ctx.viewportRows ?? 24
-  const spaces: SummonItem[] = [...PRODUCT_SPACES]
+  const isAdmin = ctx.isAdmin ?? false
+  const roleSpaces = spacesForRole(isAdmin)
+
+  const spaces: SummonItem[] = [...roleSpaces]
     .sort((a, b) => a.index - b.index)
     .map((space) => ({
       kind: "space" as const,
@@ -144,11 +150,11 @@ export function listSummonItems(ctx: SummonCatalogContext): SummonItem[] {
     }))
     .sort((a, b) => a.name.localeCompare(b.name))
 
-  const bundles: SummonItem[] = PRODUCT_BUNDLES
+  const bundles: SummonItem[] = bundlesForRole(isAdmin)
     .filter((bundle) => {
       const view = ctx.views.find((item) => item.id === bundle.homeSpace)
       if (!view) return false
-      return !isProductSpaceAtDefault(view, rows)
+      return !isProductSpaceAtDefault(view, rows, isAdmin)
     })
     .map((bundle) => ({
       kind: "bundle" as const,
@@ -159,14 +165,15 @@ export function listSummonItems(ctx: SummonCatalogContext): SummonItem[] {
       focusType: bundle.focusType,
     }))
 
-  // Full catalog — Trace/Bridge still Enter→their Space (never peek a second shell).
-  const widgets: SummonItem[] = catalogEntries().map((entry) => ({
-    kind: "widget" as const,
-    type: entry.type,
-    name: entry.label,
-    desc: entry.desc,
-    group: widgetSummonGroup(entry.type),
-  }))
+  const widgets: SummonItem[] = catalogEntries()
+    .filter((entry) => canOpenWidget(entry.type, isAdmin))
+    .map((entry) => ({
+      kind: "widget" as const,
+      type: entry.type,
+      name: entry.label,
+      desc: entry.desc,
+      group: widgetSummonGroup(entry.type),
+    }))
 
   // Stable widget order within groups for spatial memory.
   widgets.sort((a, b) => {

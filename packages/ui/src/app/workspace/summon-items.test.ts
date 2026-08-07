@@ -46,6 +46,7 @@ describe("summon catalog", () => {
     }
     const items = listSummonItems({
       views: [...defaultProductViews(), diy],
+      isAdmin: true,
     })
     const custom = items.find(
       (item) => item.kind === "space" && item.id === "layout-iq9p",
@@ -73,6 +74,7 @@ describe("summon catalog", () => {
       views: defaultProductViews().map((view) =>
         view.id === "space:observe" ? pollutedObserve() : view,
       ),
+      isAdmin: true,
     })
     const kinds = items.map((item) => item.kind)
     const firstWidget = kinds.indexOf("widget")
@@ -83,7 +85,7 @@ describe("summon catalog", () => {
   })
 
   it("hides reset presets when every product Space is at default", () => {
-    const items = listSummonItems({ views: defaultProductViews() })
+    const items = listSummonItems({ views: defaultProductViews(), isAdmin: true })
     expect(items.some((item) => item.kind === "bundle")).toBe(false)
   })
 
@@ -92,6 +94,7 @@ describe("summon catalog", () => {
       views: defaultProductViews().map((view) =>
         view.id === "space:observe" ? pollutedObserve() : view,
       ),
+      isAdmin: true,
     })
     const bundles = items.filter((item) => item.kind === "bundle")
     expect(bundles).toHaveLength(1)
@@ -108,7 +111,7 @@ describe("summon catalog", () => {
     const views = defaultProductViews().map((view) =>
       view.id === "space:observe" ? pollutedObserve() : view,
     )
-    const items = listSummonItems({ views })
+    const items = listSummonItems({ views, isAdmin: true })
     const agent = items.find((item) => item.kind === "space" && item.id === "space:agent")!
     const trace = items.find((item) => item.kind === "space" && item.id === "space:trace")!
     const users = items.find((item) => item.kind === "space" && item.id === "space:users")!
@@ -126,8 +129,8 @@ describe("summon catalog", () => {
     expect(summonItemIconType(chat)).toBe("term-chat")
   })
 
-  it("lists every catalog surface including Trace, Bridge, and Users", () => {
-    const items = listSummonItems({ views: defaultProductViews() })
+  it("admin Summon includes Trace, Bridge, and Users", () => {
+    const items = listSummonItems({ views: defaultProductViews(), isAdmin: true })
     const widgets = items.filter((item) => item.kind === "widget")
     expect(widgets.some((item) => item.kind === "widget" && item.type === "debug-inspector")).toBe(
       true,
@@ -140,15 +143,32 @@ describe("summon catalog", () => {
     expect(items.some((item) => item.kind === "space" && item.id === "space:users")).toBe(true)
   })
 
+  it("operator Summon excludes Platform control-plane and Mymi", () => {
+    const items = listSummonItems({ views: defaultProductViews(), isAdmin: false })
+    const widgetTypes = items
+      .filter((item) => item.kind === "widget")
+      .map((item) => (item.kind === "widget" ? item.type : ""))
+    expect(widgetTypes).toContain("debug-inspector")
+    expect(widgetTypes).toContain("env-sync")
+    expect(widgetTypes).not.toContain("bridge")
+    expect(widgetTypes).not.toContain("active-users")
+    expect(widgetTypes).not.toContain("entity-registry")
+    expect(widgetTypes).not.toContain("sync-admin")
+    expect(widgetTypes).not.toContain("mymi-db")
+    expect(items.some((item) => item.kind === "space" && item.id === "space:bridge")).toBe(false)
+    expect(items.some((item) => item.kind === "space" && item.id === "space:users")).toBe(false)
+    expect(items.some((item) => item.kind === "space" && item.id === "space:reconcile")).toBe(true)
+  })
+
   it("previews keep for Trace surface (stays on current layout)", () => {
-    const trace = listSummonItems({ views: defaultProductViews() }).find(
+    const trace = listSummonItems({ views: defaultProductViews(), isAdmin: true }).find(
       (item) => item.kind === "widget" && item.type === "debug-inspector",
     )!
     expect(summonActionPreview(trace, { onSpace: false, spaceName: null }).primary).toBe("keep")
   })
 
   it("previews keep vs focus for widgets", () => {
-    const widget = listSummonItems({ views: defaultProductViews() }).find(
+    const widget = listSummonItems({ views: defaultProductViews(), isAdmin: true }).find(
       (item) => item.kind === "widget" && item.type === "operation-log",
     )!
     expect(summonActionPreview(widget, { onSpace: false, spaceName: "Agent" }).primary).toBe(
@@ -160,13 +180,13 @@ describe("summon catalog", () => {
   })
 
   it("filters across name and kind", () => {
-    const items = listSummonItems({ views: defaultProductViews() })
+    const items = listSummonItems({ views: defaultProductViews(), isAdmin: true })
     const hit = filterSummonItems("observe", items)
     expect(hit.some((item) => item.kind === "space" && item.name === "Observe")).toBe(true)
   })
 
   it("does not match surfaces via peer names in desc (trace ≠ Threads)", () => {
-    const items = listSummonItems({ views: defaultProductViews() })
+    const items = listSummonItems({ views: defaultProductViews(), isAdmin: true })
     const hit = filterSummonItems("trace", items)
     expect(hit.some((item) => item.kind === "widget" && item.type === "debug-inspector")).toBe(true)
     expect(hit.some((item) => item.kind === "space" && item.id === "space:trace")).toBe(true)

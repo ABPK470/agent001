@@ -253,9 +253,12 @@ export function App() {
     setPhase(AppPhase.Outro)
   }, [])
 
+  const setConsoleIsAdmin = useLayoutStore((s) => s.setConsoleIsAdmin)
+
   useEffect(() => {
     if (!me?.upn) {
       resetViewingAsMemory()
+      setConsoleIsAdmin(false)
       return
     }
     clearShellTransitionTimers()
@@ -263,7 +266,8 @@ export function App() {
     setSlideMode("chat")
     setShellMode("chat")
     syncViewingAsForSession({ upn: me.upn, isAdmin: me.isAdmin })
-  }, [me?.upn, me?.isAdmin])
+    setConsoleIsAdmin(me.isAdmin)
+  }, [me?.upn, me?.isAdmin, setConsoleIsAdmin])
 
   function clearShellTransitionTimers() {
     for (const id of shellTransitionTimersRef.current) {

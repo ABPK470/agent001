@@ -299,10 +299,11 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
     ? activeView?.tiles.find((tile) => tile.id === soloTileId)
     : undefined
   const soloLabel = soloTile ? getWidgetDefinition(soloTile.type).label : null
+  const consoleIsAdmin = useLayoutStore((s) => s.consoleIsAdmin)
   const showResetSpace =
     Boolean(activeView)
     && isProductSpaceId(activeViewId)
-    && !isProductSpaceAtDefault(activeView!, viewportRows)
+    && !isProductSpaceAtDefault(activeView!, viewportRows, consoleIsAdmin)
   const stageOpen =
     Boolean(onAddWidget) || Boolean(soloLabel && soloTileId) || showResetSpace
 

@@ -526,19 +526,25 @@ export type WidgetType =
   | "bridge"
 
 /**
- * Widget types visible AND interactive for non-admin "visitor" users.
- * Other widgets still appear in the catalogue (so visitors see what
- * exists) but are rendered as disabled cards. Admins get the full set.
+ * Console surfaces — Personal widgets non-admin operators may open.
+ * Platform control-plane widgets require admin. Mymi is retired for everyone.
+ * One seam: `canOpenWidget` (Summon / Spaces / catalog / ensure).
  */
-export const VISITOR_WIDGETS: ReadonlySet<WidgetType> = new Set([
+export const OPERATOR_WIDGETS: ReadonlySet<WidgetType> = new Set([
   "thread-nav",
   "term-chat",
-  "env-sync",
+  "run-status",
+  "debug-inspector",
   "live-logs",
   "operation-log",
-  "mymi-db",
-  "run-status",
+  "env-sync",
 ])
+
+/** True when this role may open the widget surface (absent + 403, never gray-disabled). */
+export function canOpenWidget(type: WidgetType, isAdmin: boolean): boolean {
+  if (type === "mymi-db") return false
+  return isAdmin || OPERATOR_WIDGETS.has(type)
+}
 
 /** Nested H/V split tree for workspace tiling (source of truth when present). */
 export type ViewSplitDir = "h" | "v"

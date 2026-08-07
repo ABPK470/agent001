@@ -1,13 +1,14 @@
 /**
  * WidgetCatalog — modal for adding product surfaces to the active layout.
+ * Lists only surfaces the role may open (no gray disabled cards).
  */
 
+import { canOpenWidget } from "@mia/shared-types"
 import { LayoutDashboard } from "lucide-react"
 import { useIsMobile } from "../../hooks/useIsMobile"
 import { useMe } from "../../hooks/useMe"
 import { useLayoutStore } from "../../state/layout-store"
 import type { WidgetType } from "../../types"
-import { VISITOR_WIDGETS } from "../../types"
 import { ModalShell } from "../../widgets/entity-registry/ModalShell"
 import { modalViewerPanelClass } from "../../widgets/entity-registry/modal-overlay"
 import { openWidgetCatalogHint } from "../types"
@@ -30,6 +31,7 @@ export function WidgetCatalog({ onClose }: Props) {
   const activeTypes = new Set(activeView?.tiles.map((tile) => tile.type) ?? [])
 
   function handleToggle(type: WidgetType) {
+    if (!canOpenWidget(type, isAdmin)) return
     const existing = activeView?.tiles.find((tile) => tile.type === type)
     if (existing) {
       removeWidget(activeViewId, existing.id)
@@ -39,6 +41,7 @@ export function WidgetCatalog({ onClose }: Props) {
   }
 
   const catalogHint = openWidgetCatalogHint()
+  const entries = catalogEntries().filter((item) => canOpenWidget(item.type, isAdmin))
 
   return (
     <ModalShell
@@ -53,26 +56,22 @@ export function WidgetCatalog({ onClose }: Props) {
           isMobile ? "grid-cols-1" : "grid-cols-2 lg:grid-cols-3"
         }`}
       >
-        {catalogEntries().map((item) => {
+        {entries.map((item) => {
           const isActive = activeTypes.has(item.type)
-          const isAllowed = isAdmin || VISITOR_WIDGETS.has(item.type)
           const Icon = item.icon
           return (
             <button
               key={item.type}
-              disabled={!isAllowed}
-              title={isAllowed ? undefined : "Available to admins only"}
-              className={`relative flex items-center gap-3.5 rounded-xl text-left p-4 transition-colors border border-border ${
-                !isAllowed
-                  ? "text-text-faint opacity-45 cursor-not-allowed bg-panel"
-                  : isActive
-                    ? "bg-[var(--select-fill)] text-text cursor-pointer"
-                    : "bg-panel text-text-muted hover:bg-[var(--hover-fill)] hover:text-text cursor-pointer"
+              type="button"
+              className={`relative flex items-center gap-3.5 rounded-xl text-left p-4 transition-colors border border-border cursor-pointer ${
+                isActive
+                  ? "bg-[var(--select-fill)] text-text"
+                  : "bg-panel text-text-muted hover:bg-[var(--hover-fill)] hover:text-text"
               }`}
-              onClick={() => { if (isAllowed) handleToggle(item.type) }}
+              onClick={() => handleToggle(item.type)}
             >
               <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 border border-border ${
-                isActive && isAllowed
+                isActive
                   ? "text-text bg-[var(--hover-fill)]"
                   : "text-text-muted"
               }`}>
@@ -80,12 +79,12 @@ export function WidgetCatalog({ onClose }: Props) {
               </div>
               <div className="flex-1 min-w-0">
                 <span className={`text-sm font-medium block ${
-                  isActive && isAllowed ? "text-text" : "text-text-secondary"
+                  isActive ? "text-text" : "text-text-secondary"
                 }`}>
                   {item.label}
                 </span>
                 <span className={`text-[13px] leading-snug block mt-0.5 ${
-                  isActive && isAllowed ? "text-text-secondary" : "text-text-muted"
+                  isActive ? "text-text-secondary" : "text-text-muted"
                 }`}>
                   {item.desc}
                 </span>
