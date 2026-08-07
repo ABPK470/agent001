@@ -83,14 +83,22 @@ describe("resolveOperatorSession", () => {
     })
   })
 
-  it("stays quiet while typing (non-Esc), including under peek", () => {
-    expect(resolveOperatorSession({ ...base, editable: true })).toEqual({ type: "none" })
+  it("while typing, shell Mod chords may run; surface keys stay quiet", () => {
+    expect(resolveOperatorSession({ ...base, editable: true })).toEqual({
+      type: "dispatch",
+      allowShell: true,
+      allowSurface: false,
+    })
     expect(
       resolveOperatorSession({
         ...base,
         modalWidgetOpen: true,
         editable: true,
       }),
-    ).toEqual({ type: "none" })
+    ).toEqual({
+      type: "dispatch",
+      allowShell: true,
+      allowSurface: false,
+    })
   })
 })

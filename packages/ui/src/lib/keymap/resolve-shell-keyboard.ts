@@ -15,6 +15,11 @@ export type ShellKeyboardAction =
 export type ShellKeyboardContext = {
   /** Focused tile exists in the active Space. */
   hasFocusedTile: boolean
+  /**
+   * Caret in an input/composer — only Mod chords may win.
+   * Bare letters (M, ?) stay with the field.
+   */
+  editable?: boolean
 }
 
 /** Z stays on the widget zen hook (one owner). Shell owns M / close / Spaces / tabs / tile focus. */
@@ -24,9 +29,10 @@ export function resolveShellKeyboardAction(
 ): ShellKeyboardAction {
   const mod = event.metaKey || event.ctrlKey
   const key = event.key.length === 1 ? event.key.toLowerCase() : event.key
+  const editable = Boolean(ctx.editable)
 
   // `?` is Shift+/ on most layouts — allow shift for this chord only.
-  if (key === "?" && !mod && !event.altKey) {
+  if (!editable && key === "?" && !mod && !event.altKey) {
     return { type: "open-keymap" }
   }
 
@@ -45,7 +51,8 @@ export function resolveShellKeyboardAction(
   }
 
   // ⌘⇧+arrows — tile focus. Must NOT use ⌘⌥: that chord alone toggles chat↔workspace
-  // on Alt keydown, so ⌘⌥+arrow is unreachable.
+  // on Alt keydown, so ⌘⌥+arrow is unreachable. Works while the composer is focused
+  // so operators can leave Chat without Esc/click.
   if (mod && event.shiftKey && !event.altKey) {
     if (
       event.key === "ArrowUp" ||
@@ -62,6 +69,9 @@ export function resolveShellKeyboardAction(
   if (mod && !event.altKey && !event.shiftKey && key === "w") {
     return { type: "close-tile" }
   }
+
+  // Bare letter chords yield to typing.
+  if (editable) return { type: "none" }
 
   if (!mod && !event.altKey && !event.shiftKey && key === "m") {
     return { type: "toggle-maximize" }

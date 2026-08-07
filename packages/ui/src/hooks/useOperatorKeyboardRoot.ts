@@ -151,6 +151,7 @@ export function useOperatorKeyboardRoot(
       if (session.allowShell && !isEscape) {
         const shellAction = resolveShellKeyboardAction(event, {
           hasFocusedTile: Boolean(focusedTileIdRef.current),
+          editable,
         })
         if (shellAction.type !== "none") {
           applyShell(event, shellAction)

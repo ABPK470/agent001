@@ -54,6 +54,21 @@ describe("resolveShellKeyboardAction", () => {
     ).toEqual({ type: "none" })
   })
 
+  it("mod+shift+arrow still moves tile focus while typing in an editable field", () => {
+    expect(
+      resolveShellKeyboardAction(
+        key({ key: "ArrowLeft", metaKey: true, shiftKey: true }),
+        { hasFocusedTile: true, editable: true },
+      ),
+    ).toEqual({ type: "focus-tile-neighbor", key: "ArrowLeft" })
+    expect(
+      resolveShellKeyboardAction(key({ key: "m" }), {
+        hasFocusedTile: true,
+        editable: true,
+      }),
+    ).toEqual({ type: "none" })
+  })
+
   it("cycles toolbar views with mod+[ / ]", () => {
     expect(
       resolveShellKeyboardAction(key({ key: "]", metaKey: true }), { hasFocusedTile: false }),

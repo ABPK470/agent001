@@ -39,7 +39,12 @@ export function resolveOperatorSession(ctx: {
     return { type: "none" }
   }
 
-  if (ctx.editable) return { type: "none" }
+  // Typing: shell Mod chords still run (tile focus, Call Space, …) — same
+  // escape hatch as always-on Summon (Mod+K). Bare letters stay with the field
+  // via resolveShellKeyboardAction(editable). Surface keys stay quiet.
+  if (ctx.editable) {
+    return { type: "dispatch", allowShell: true, allowSurface: false }
+  }
 
   // Peek = focused operator surface. Shell tile chords stay quiet.
   if (ctx.modalWidgetOpen) {
