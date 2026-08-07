@@ -164,4 +164,13 @@ describe("summon catalog", () => {
     const hit = filterSummonItems("observe", items)
     expect(hit.some((item) => item.kind === "space" && item.name === "Observe")).toBe(true)
   })
+
+  it("does not match surfaces via peer names in desc (trace ≠ Threads)", () => {
+    const items = listSummonItems({ views: defaultProductViews() })
+    const hit = filterSummonItems("trace", items)
+    expect(hit.some((item) => item.kind === "widget" && item.type === "debug-inspector")).toBe(true)
+    expect(hit.some((item) => item.kind === "space" && item.id === "space:trace")).toBe(true)
+    expect(hit.some((item) => item.kind === "widget" && item.type === "thread-nav")).toBe(false)
+    expect(hit.some((item) => item.name === "Threads")).toBe(false)
+  })
 })

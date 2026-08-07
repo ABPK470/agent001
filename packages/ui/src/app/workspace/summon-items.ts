@@ -179,16 +179,26 @@ export function listSummonItems(ctx: SummonCatalogContext): SummonItem[] {
   return [...spaces, ...diySpaces, ...bundles, ...widgets]
 }
 
+/**
+ * Match identity — name, kind, group, ids/types — never free-form `desc`.
+ * Desc copy cross-references peers (“drives Chat, Trace, …”) and false-hits search.
+ */
 export function filterSummonItems(query: string, items: readonly SummonItem[]): SummonItem[] {
   const q = query.trim().toLowerCase()
   if (!q) return [...items]
-  return items.filter((item) => {
-    const group =
-      item.kind === "widget" ? WIDGET_GROUP_LABEL[item.group] : ""
-    const custom = item.kind === "space" && item.custom ? "custom layout" : ""
-    const hay = `${item.name} ${item.desc} ${item.kind} ${group} ${custom}`.toLowerCase()
-    return hay.includes(q)
-  })
+  return items.filter((item) => summonItemSearchHay(item).includes(q))
+}
+
+function summonItemSearchHay(item: SummonItem): string {
+  const group = item.kind === "widget" ? WIDGET_GROUP_LABEL[item.group] : ""
+  const custom = item.kind === "space" && item.custom ? "custom layout" : ""
+  if (item.kind === "widget") {
+    return `${item.name} ${item.type} ${item.kind} ${group}`.toLowerCase()
+  }
+  if (item.kind === "bundle") {
+    return `${item.name} ${item.id} ${item.homeSpace} ${item.focusType} ${item.kind}`.toLowerCase()
+  }
+  return `${item.name} ${item.id} ${item.kind} ${custom} ${item.primaryType ?? ""}`.toLowerCase()
 }
 
 export function summonItemKey(item: SummonItem): string {
