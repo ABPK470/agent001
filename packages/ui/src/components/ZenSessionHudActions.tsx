@@ -9,17 +9,20 @@ import { Bookmark, X } from "lucide-react"
 export function ZenSessionHudActions({
   onExitZen,
   onSaveZen,
+  /** When already on a zen:* view — bookmark updates that Space. */
+  saveLabel = "Save Zen Space",
 }: {
   onExitZen: () => void
   onSaveZen: () => void
+  saveLabel?: string
 }) {
   return (
     <>
       <button
         type="button"
         className="trace-zen-hud__icon-btn"
-        title="Save Zen Space"
-        aria-label="Save Zen Space"
+        title={saveLabel}
+        aria-label={saveLabel}
         onClick={onSaveZen}
       >
         <Bookmark size={14} strokeWidth={1.75} />

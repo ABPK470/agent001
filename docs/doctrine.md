@@ -386,6 +386,8 @@ max 2 focus-capable tiles): chrome off, per-tile zen HUD, ephemeral until
 underlying Space split; Esc ends the whole session; **Z** enters / shrinks
 the set / exits when alone. **Zen Spaces** are saved views with `zen:*` ids —
 listed under Summon Go in a **Zen** group; Call is the only auto-zen entry.
+Summon **⌫** (or row ✕) deletes a Zen Space / DIY layout; Save on an open
+`zen:*` updates it in place.
 **Summon** (Mod+K) is a fixed two-column board (Go · Preset | Surface): ↑↓ in a
 column, ←→ between columns; Enter on a surface **Keeps** it into the current
 layout (or into the zen session when immersion is on — cap-2 swaps the focused

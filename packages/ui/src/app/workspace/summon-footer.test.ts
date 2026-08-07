@@ -95,6 +95,29 @@ describe("summonFooterHints", () => {
       ])
     }
   })
+
+  it("Zen Space and DIY layout show delete", () => {
+    const zen: SummonItem = {
+      kind: "space",
+      id: "zen:test",
+      name: "Pair",
+      desc: "Trace · Pipelines",
+      index: 0,
+      zen: true,
+    }
+    const diy: SummonItem = {
+      kind: "space",
+      id: "layout-1",
+      name: "Scratch",
+      desc: "1 surface",
+      index: 0,
+      custom: true,
+    }
+    for (const item of [zen, diy]) {
+      const hints = summonFooterHints(item, { primary: "call", hasQuery: false })
+      expect(hints.find((h) => h.label === "delete")?.keys).toEqual(["⌫"])
+    }
+  })
 })
 
 describe("summonContextHints", () => {

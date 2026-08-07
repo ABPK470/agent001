@@ -11,7 +11,7 @@
  * (nav, filter, land, peek). Search input only types — mouse must not strand keys.
  */
 
-import { Search } from "lucide-react"
+import { Search, X } from "lucide-react"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { resolveKeymapActiveContext } from "../../lib/keymap"
 import {
@@ -41,6 +41,7 @@ import {
   listSummonItems,
   summonActionPreview,
   summonItemIcon,
+  summonSpaceRemovable,
   summonItemKey,
   type SummonItem,
 } from "./summon-items"
@@ -79,6 +80,7 @@ export function SummonPalette() {
   const openSpacePreset = useLayoutStore((s) => s.openSpacePreset)
   const focusWidgetType = useLayoutStore((s) => s.focusWidgetType)
   const zenKeepWidget = useLayoutStore((s) => s.zenKeepWidget)
+  const removeView = useLayoutStore((s) => s.removeView)
   const views = useLayoutStore((s) => s.views)
   const activeViewId = useLayoutStore((s) => s.activeViewId)
   const focusedTileId = useLayoutStore((s) => s.focusedTileId)
@@ -108,6 +110,7 @@ export function SummonPalette() {
   const toggleRef = useRef<(type: WidgetType) => void>(() => {})
   const runActionRef = useRef<(action: SummonOpenAction) => void>(() => {})
   const peelEscRef = useRef<() => void>(() => {})
+  const removeRemovableRef = useRef<() => void>(() => {})
 
   const consoleIsAdmin = useLayoutStore((s) => s.consoleIsAdmin)
   const catalog = useMemo(
@@ -378,6 +381,17 @@ export function SummonPalette() {
     dismiss()
   }
 
+  /** Delete DIY / Zen Space under the cursor — bag must be empty. */
+  function removeRemovableSpace(item?: SummonItem) {
+    if (pickedRef.current.size > 0) return
+    const cursor = item ?? navItemsRef.current[selectedRef.current] ?? null
+    if (!summonSpaceRemovable(cursor) || cursor?.kind !== "space") return
+    const index = navItemsRef.current.findIndex((row) => row === cursor)
+    removeView(cursor.id)
+    // Selection clamps via effect after catalog rebuild.
+    if (index >= 0) setSelected(index)
+  }
+
   pickedRef.current = pickedTypes
   selectedRef.current = selected
   queryRef.current = query
@@ -390,6 +404,7 @@ export function SummonPalette() {
   toggleRef.current = togglePick
   runActionRef.current = runAction
   peelEscRef.current = peelEsc
+  removeRemovableRef.current = () => removeRemovableSpace()
 
   useEffect(() => {
     if (!summonOpen) return
@@ -542,6 +557,24 @@ export function SummonPalette() {
         event.preventDefault()
         event.stopPropagation()
         setSelected(Math.max(navLen - 1, 0))
+        return
+      }
+
+      // ⌫ / Delete — remove DIY layout or Zen Space (never product Spaces).
+      if (
+        (event.key === "Backspace" || event.key === "Delete")
+        && pickedCountRef.current === 0
+        && queryRef.current.length === 0
+        && !event.metaKey
+        && !event.ctrlKey
+        && !event.altKey
+      ) {
+        const cursor = navItemsRef.current[selectedRef.current]
+        if (summonSpaceRemovable(cursor)) {
+          event.preventDefault()
+          event.stopPropagation()
+          removeRemovableRef.current()
+        }
       }
     }
     window.addEventListener("keydown", onKeyDown, true)
@@ -698,6 +731,11 @@ export function SummonPalette() {
                             }
                             onHover={() => setSelected(navItems.indexOf(item))}
                             onActivate={() => onRowActivate(item)}
+                            onRemove={
+                              summonSpaceRemovable(item) && pickedCount === 0
+                                ? () => removeRemovableSpace(item)
+                                : undefined
+                            }
                             onPeek={
                               item.kind === "widget" && pickedCount === 0
                                 ? () => onRowPeek(item)
@@ -762,6 +800,7 @@ function SummonRow({
   onHover,
   onActivate,
   onPeek,
+  onRemove,
 }: {
   item: SummonItem
   selected: boolean
@@ -773,6 +812,8 @@ function SummonRow({
   onActivate: () => void
   /** Right-click peek (surfaces only). */
   onPeek?: () => void
+  /** DIY / Zen Space delete (mouse). */
+  onRemove?: () => void
 }) {
   const keys = summonActionKeys(item, {
     onSpace: present,
@@ -781,6 +822,7 @@ function SummonRow({
   })
   const isPreset = item.kind === "bundle"
   const isCustom = item.kind === "space" && Boolean(item.custom)
+  const isZen = item.kind === "space" && Boolean(item.zen)
   const isWidget = item.kind === "widget"
   const Icon = summonItemIcon(item)
   const statusPill = currentSpace
@@ -795,7 +837,7 @@ function SummonRow({
     : ""
 
   return (
-    <li>
+    <li className={onRemove ? "ops-sheet__row-host" : undefined}>
       <button
         id={`summon-option-${summonItemKey(item)}`}
         type="button"
@@ -807,7 +849,7 @@ function SummonRow({
           [
             item.name,
             statusPill,
-            isCustom ? "custom layout" : null,
+            isZen ? "zen space" : isCustom ? "custom layout" : null,
             picked ? (present ? "staged to remove" : "staged to keep") : null,
           ].filter(Boolean).join(", ")
         }
@@ -831,7 +873,9 @@ function SummonRow({
         title={
           isWidget
             ? "Click to stage · Right-click to peek"
-            : undefined
+            : onRemove
+              ? "Enter to open · ⌫ to delete"
+              : undefined
         }
       >
         {isWidget ? (
@@ -853,6 +897,7 @@ function SummonRow({
           <span className="ops-sheet__label-text">{item.name}</span>
           {isPreset ? <span className="ops-sheet__preset-mark">Reset</span> : null}
           {isCustom ? <span className="ops-sheet__preset-mark">Layout</span> : null}
+          {isZen ? <span className="ops-sheet__preset-mark">Zen</span> : null}
         </span>
         <span className="ops-sheet__row-trail">
           {statusPill ? (
@@ -867,6 +912,21 @@ function SummonRow({
           </span>
         </span>
       </button>
+      {onRemove ? (
+        <button
+          type="button"
+          className="ops-sheet__row-delete"
+          title="Delete (⌫)"
+          aria-label={`Delete ${item.name}`}
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={(event) => {
+            event.stopPropagation()
+            onRemove()
+          }}
+        >
+          <X size={12} strokeWidth={2} aria-hidden />
+        </button>
+      ) : null}
     </li>
   )
 }

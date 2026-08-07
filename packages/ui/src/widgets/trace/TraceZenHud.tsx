@@ -7,6 +7,7 @@ import { PanelLeft, Search, X } from "lucide-react"
 import { useEffect, useRef } from "react"
 import { ZenSessionHudActions } from "../../components/ZenSessionHudActions"
 import { formatModChord } from "../../lib/keymap"
+import { isZenViewId } from "../../lib/zen-session"
 import { useLayoutStore } from "../../state/layout-store"
 import { TraceRunContext } from "./TraceRunContext"
 import { TraceTreeFoldToggle } from "./TraceTreeFoldToggle"
@@ -36,6 +37,7 @@ export function TraceZenHud({
   onExitZen: () => void
 }) {
   const saveZenSpace = useLayoutStore((s) => s.saveZenSpace)
+  const activeViewId = useLayoutStore((s) => s.activeViewId)
   const searchRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -119,6 +121,9 @@ export function TraceZenHud({
               onSaveZen={() => {
                 saveZenSpace()
               }}
+              saveLabel={
+                isZenViewId(activeViewId) ? "Update Zen Space" : "Save Zen Space"
+              }
             />
           </div>
         </>

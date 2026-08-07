@@ -87,4 +87,53 @@ describe("layout zen session", () => {
     expect(s.zenActive).toBe(false)
     expect(s.activeViewId).toBe("space:observe")
   })
+
+  it("Save on an open zen:* updates in place instead of cloning", () => {
+    const tileId = useLayoutStore.getState().views[0]!.tiles[0]!.id
+    useLayoutStore.getState().toggleTileZen("space:observe", tileId)
+    const zenId = useLayoutStore.getState().saveZenSpace("Pair")!
+    const beforeCount = useLayoutStore.getState().views.length
+    useLayoutStore.getState().zenKeepWidget("live-logs")
+    const again = useLayoutStore.getState().saveZenSpace()
+    expect(again).toBe(zenId)
+    expect(useLayoutStore.getState().views.length).toBe(beforeCount)
+    expect(
+      useLayoutStore.getState().views.find((v) => v.id === zenId)?.name,
+    ).toBe("Pair")
+  })
+
+  it("Update Zen Space keeps tile ids and focus (no remount churn)", () => {
+    const tileId = useLayoutStore.getState().views[0]!.tiles[0]!.id
+    useLayoutStore.getState().toggleTileZen("space:observe", tileId)
+    const zenId = useLayoutStore.getState().saveZenSpace("Pair")!
+    const before = useLayoutStore.getState()
+    const setBefore = [...before.zenSet]
+    const focusBefore = before.focusedTileId
+    const tileIdsBefore = before.views
+      .find((v) => v.id === zenId)!
+      .tiles.map((t) => t.id)
+
+    useLayoutStore.getState().saveZenSpace()
+
+    const after = useLayoutStore.getState()
+    expect(after.zenSet).toEqual(setBefore)
+    expect(after.focusedTileId).toBe(focusBefore)
+    expect(after.views.find((v) => v.id === zenId)!.tiles.map((t) => t.id)).toEqual(
+      tileIdsBefore,
+    )
+  })
+
+  it("removeView deletes a Zen Space without killing an unrelated zen session", () => {
+    const tileId = useLayoutStore.getState().views[0]!.tiles[0]!.id
+    useLayoutStore.getState().toggleTileZen("space:observe", tileId)
+    const zenId = useLayoutStore.getState().saveZenSpace("A")!
+    useLayoutStore.getState().callSpace("space:observe")
+    useLayoutStore.getState().toggleTileZen("space:observe", tileId)
+    expect(useLayoutStore.getState().zenActive).toBe(true)
+    useLayoutStore.getState().removeView(zenId)
+    const s = useLayoutStore.getState()
+    expect(s.views.some((v) => v.id === zenId)).toBe(false)
+    expect(s.zenActive).toBe(true)
+    expect(s.activeViewId).toBe("space:observe")
+  })
 })

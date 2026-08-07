@@ -234,6 +234,13 @@ export function summonItemKey(item: SummonItem): string {
   return `widget:${item.type}`
 }
 
+/** DIY layouts + Zen Spaces — Backspace deletes (product Spaces never). */
+export function summonSpaceRemovable(item: SummonItem | null): boolean {
+  return Boolean(
+    item && item.kind === "space" && (item.custom || item.zen),
+  )
+}
+
 /**
  * Canonical glyph for a Summon row.
  * Agent Space/preset → Brain (Trace keeps Bug).

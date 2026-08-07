@@ -376,9 +376,19 @@ export const useLayoutStore = create<LayoutState>()(
       removeView: (id) => set((s) => {
         const filtered = s.views.filter((view) => view.id !== id)
         if (filtered.length === 0) filtered.push(makeDefaultView())
+        const removingActive = s.activeViewId === id
+        const nextActive = removingActive
+          ? filtered[0]!
+          : filtered.find((v) => v.id === s.activeViewId) ?? filtered[0]!
+        // Only tear down zen when the removed view was the active one —
+        // deleting a saved Zen Space from Summon must not kill an unrelated session.
+        if (!removingActive) {
+          return { views: filtered }
+        }
         return {
           views: filtered,
-          activeViewId: s.activeViewId === id ? filtered[0]!.id : s.activeViewId,
+          activeViewId: nextActive.id,
+          focusedTileId: nextActive.tiles[0]?.id ?? null,
           soloTileId: null,
           ...emptyZenSession(),
         }
@@ -696,6 +706,47 @@ export const useLayoutStore = create<LayoutState>()(
         for (const tile of view.tiles) idByTile.set(tile.id, tile)
         for (const tile of s.zenExtraTiles) idByTile.set(tile.id, tile)
 
+        // Update path: persist quietly — keep tile ids so React instances stay mounted.
+        if (isZenViewId(s.activeViewId)) {
+          const tiles: LayoutTile[] = []
+          for (const id of s.zenSet) {
+            const src = idByTile.get(id)
+            if (!src || !canJoinZenSession(src.type)) continue
+            tiles.push({ ...src })
+          }
+          if (tiles.length === 0) return null
+          const split =
+            cloneSplit(s.zenSplit) ??
+            (tiles[1]
+              ? {
+                  kind: "split" as const,
+                  dir: "v" as const,
+                  ratio: 0.5,
+                  a: { kind: "leaf" as const, tileId: tiles[0]!.id },
+                  b: { kind: "leaf" as const, tileId: tiles[1]!.id },
+                }
+              : { kind: "leaf" as const, tileId: tiles[0]!.id })
+          const defaultName = `Zen ${tiles.map((t) => t.type).join(" · ")}`
+          const zenView = withProjected(
+            {
+              id: s.activeViewId,
+              name: name?.trim() || view.name || defaultName,
+              tiles,
+              split: null,
+            },
+            split,
+            s.viewportRows,
+          )
+          set({
+            views: s.views.map((v) => (v.id === zenView.id ? zenView : v)),
+            // Fold session extras into the view; leave focus / zenSet alone.
+            zenExtraTiles: [],
+            zenSplit: cloneSplit(zenView.split),
+          })
+          return zenView.id
+        }
+
+        // First Save from a product Space / DIY — snapshot into a new zen:* view.
         const idMap = new Map<string, string>()
         const tiles: LayoutTile[] = []
         for (const id of s.zenSet) {
@@ -724,10 +775,11 @@ export const useLayoutStore = create<LayoutState>()(
                 b: { kind: "leaf" as const, tileId: tiles[1]!.id },
               }
             : { kind: "leaf" as const, tileId: tiles[0]!.id })
+        const defaultName = `Zen ${tiles.map((t) => t.type).join(" · ")}`
         const zenView = withProjected(
           {
             id: zenId,
-            name: name?.trim() || `Zen ${tiles.map((t) => t.type).join(" · ")}`,
+            name: name?.trim() || defaultName,
             tiles,
             split: null,
           },
@@ -735,9 +787,6 @@ export const useLayoutStore = create<LayoutState>()(
           s.viewportRows,
         )
         const focusId = zenView.tiles[0]?.id ?? null
-        const returnId = isZenViewId(s.activeViewId)
-          ? s.zenReturnViewId
-          : s.activeViewId
         set({
           views: [...s.views, zenView],
           activeViewId: zenId,
@@ -745,7 +794,7 @@ export const useLayoutStore = create<LayoutState>()(
           zenSet: zenView.tiles.map((t) => t.id),
           zenExtraTiles: [],
           zenSplit: cloneSplit(zenView.split),
-          zenReturnViewId: returnId,
+          zenReturnViewId: s.activeViewId,
           zenTileId: focusId,
           soloTileId: zenView.tiles.length === 1 ? focusId : null,
           focusedTileId: focusId,

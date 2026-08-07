@@ -3,7 +3,7 @@
  */
 
 import { MOD, type KbdHint } from "../../lib/keymap"
-import type { SummonItem } from "./summon-items"
+import { summonSpaceRemovable, type SummonItem } from "./summon-items"
 
 export function summonApplyLabel(opts: {
   keepCount: number
@@ -58,6 +58,10 @@ export function summonFooterHints(
     if (staged === 0) {
       hints.push({ keys: [MOD, "↵"], label: "peek" })
     }
+  }
+
+  if (staged === 0 && summonSpaceRemovable(item)) {
+    hints.push({ keys: ["⌫"], label: "delete" })
   }
 
   hints.push(

@@ -215,13 +215,10 @@ export function ActiveUsers(): ReactNode {
   const [adminBusy, setAdminBusy] = useState<string | null>(null)
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [zenSearchOpen, setZenSearchOpen] = useState(false)
-  const [zenStatsOpen, setZenStatsOpen] = useState(false)
   const filtersOpenRef = useRef(filtersOpen)
   filtersOpenRef.current = filtersOpen
   const zenSearchOpenRef = useRef(zenSearchOpen)
   zenSearchOpenRef.current = zenSearchOpen
-  const zenStatsOpenRef = useRef(zenStatsOpen)
-  zenStatsOpenRef.current = zenStatsOpen
   const filterBtnRef = useRef<HTMLButtonElement>(null)
   const rootRef = useRef<HTMLDivElement>(null)
   const { isZen, toggleZen, exitZen } = useWidgetFocus()
@@ -454,10 +451,6 @@ export function ActiveUsers(): ReactNode {
       setZenSearchOpen(false)
       return true
     }
-    if (zenStatsOpenRef.current) {
-      setZenStatsOpen(false)
-      return true
-    }
     return false
   }, [])
 
@@ -486,7 +479,6 @@ export function ActiveUsers(): ReactNode {
   useEffect(() => {
     if (!isZen) {
       setZenSearchOpen(false)
-      setZenStatsOpen(false)
       setFiltersOpen(false)
     }
   }, [isZen])
@@ -520,10 +512,6 @@ export function ActiveUsers(): ReactNode {
               onFilterChange={setFilter}
               searchOpen={zenSearchOpen}
               onSearchOpenChange={setZenSearchOpen}
-              statsOpen={zenStatsOpen}
-              onStatsOpenChange={setZenStatsOpen}
-              filteredCount={filteredSorted.length}
-              totalCount={users.length}
               filtersActive={filtersActive}
               activeFilterCount={activeFilterCount}
               onOpenFilters={() => setFiltersOpen((open) => !open)}
