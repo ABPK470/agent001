@@ -374,16 +374,19 @@ Reconcile = Sync / Entity registry 50/50; Agent = Trace 60% | Chat 40%
 two-column board (Go · Preset | Surface): ↑↓ in a column, ←→ between columns;
 Enter on a surface **Keeps** it into the current layout (or focuses the first
 tile of that type if already present — never duplicates); Mod+Enter **Peeks**
-(overlay). Sole-widget Spaces (Trace, Bridge) appear under Summon surface too,
-but their dedicated job landings are reached only via the Go column / Call
-Space (Mod+1–5). Spaces navigate (Call); *Preset* rows restore default
-widgets/ratios and focus a primary tile — never auto-maximize.
+(overlay). A peek is a **temporary focused operator surface** — same
+`WidgetInstance` + claim path as a Space tile (`peek:<type>` id,
+`isOperatorSurfaceArmed`); Summon stays open underneath but yields keys to the
+peek until Esc peels it. Sole-widget Spaces (Trace, Bridge) appear under Summon
+surface too, but their dedicated job landings are reached only via the Go
+column / Call Space (Mod+1–5). Spaces navigate (Call); *Preset* rows restore
+default widgets/ratios and focus a primary tile — never auto-maximize.
 **Operator keyboard
 is one composition root** (`useOperatorKeyboardRoot`, capture-phase): shell
 chrome (Summon, chat↔workspace, Call Space, tabs, tile focus, M, `?`, …) then
 the **claimed** surface. Widgets do not add `window` keydown listeners — they
 `claimOperatorSurface` (`useClaimOperatorSurface` / `useReviewOperatorKeyboard` /
-`useWidgetZenHotkeys`). Trace and Pipelines share **pane focus** (top accent on
+`useWidgetZenHotkeys`). Trace and Pipelines share **pane focus** (header wash on
 the focused split panel — tree or detail); detail accordions register for
 Space toggles; ←→ folds one level at a time (section, then More/Less peek —
 same tree metaphor; Trace call tabs only when the active row is not foldable). ↑↓ moves detail rows
@@ -396,7 +399,8 @@ Mod+W close tile, `?` keymap (fixed two-column board: Pane | Shell).
 `Mod`; display resolves to ⌘ on Apple platforms and Ctrl elsewhere — never
 `⌘/Ctrl` dual chips. Empty Spaces open **Summon**, not the legacy widget
 catalog (mobile may still use catalog). Operator guide:
-`docs/operator-keyboard.md`. See `lib/operator-surface.ts`, `lib/spaces.ts`,
+`docs/operator-keyboard.md`. See `lib/operator-surface.ts`,
+`lib/operator-surface-armed.ts`, `lib/spaces.ts`,
 `lib/summon-resolve.ts`, `lib/keymap/`, `app/workspace/SummonPalette.tsx`.
 
 | Layer | Owns | Must not |

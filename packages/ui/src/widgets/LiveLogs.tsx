@@ -15,8 +15,8 @@ import { DateField } from "../components/DateField"
 import { EmptyState } from "../components/EmptyState"
 import type { ReviewTreeKeyboardNode } from "../components/review/review-tree-keyboard"
 import { VirtualList, type VirtualListHandle } from "../components/VirtualList"
+import { useOperatorSurfaceArmed } from "../hooks/useOperatorSurfaceArmed"
 import { useReviewTreeKeyboard } from "../hooks/useReviewTreeKeyboard"
-import { useLayoutStore } from "../state/layout-store"
 import {
   ActiveFilterChips,
   FilterChoiceGrid,
@@ -97,7 +97,7 @@ function eventStreamHasPayload(log: LogEntry): boolean {
 export function LiveLogs() {
   const instance = useWidgetInstance()
   const tileId = instance?.widgetId ?? null
-  const focusedTileId = useLayoutStore((s) => s.focusedTileId)
+  const surfaceArmed = useOperatorSurfaceArmed()
   const initialPrefs = useMemo(() => readEventStreamPrefs(tileId), [tileId])
 
   const [paused, setPaused] = useState(false)
@@ -263,15 +263,14 @@ export function LiveLogs() {
     if (el) el.scrollTop = el.scrollHeight
   }
 
-  // Becoming the focused tile always opens at the live tip for that moment.
-  const wasFocusedRef = useRef(false)
+  // Becoming the armed surface (tile focus or peek) opens at the live tip.
+  const wasArmedRef = useRef(false)
   useEffect(() => {
-    const focused = Boolean(tileId && focusedTileId === tileId)
-    if (focused && !wasFocusedRef.current) {
+    if (surfaceArmed && !wasArmedRef.current) {
       scrollToLatest()
     }
-    wasFocusedRef.current = focused
-  }, [focusedTileId, tileId])
+    wasArmedRef.current = surfaceArmed
+  }, [surfaceArmed])
 
   /** Paused / historical window: resume live feed (reload) then pin. */
   function resumeLiveFeed() {
@@ -320,13 +319,9 @@ export function LiveLogs() {
     })
   }, [])
 
-  // Claim while the tile is focused — `/` must work even on an empty list.
-  const treeKeyboardEnabled = Boolean(
-    instance && focusedTileId === instance.widgetId,
-  )
-
+  // Claim while armed (focused tile or peek) — `/` must work even on an empty list.
   useReviewTreeKeyboard({
-    enabled: treeKeyboardEnabled,
+    enabled: surfaceArmed,
     surfaceId: "live-logs",
     nodes: keyboardNodes,
     selectedScopeId: selectedKey,

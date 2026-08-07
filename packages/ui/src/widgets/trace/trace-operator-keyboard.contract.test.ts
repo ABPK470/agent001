@@ -45,9 +45,10 @@ describe("trace operator keyboard contracts", () => {
     expect(zen).not.toMatch(/key === ["']\[|"\]"/)
   })
 
-  it("disables Trace operator keys while Keymap sheet is open", () => {
+  it("arms Trace via shared operator-surface gate (tile focus, zen, or peek)", () => {
     const dag = readFileSync(join(here, "TraceDag.tsx"), "utf8")
-    expect(dag).toContain("keymapSheetOpen")
-    expect(dag).toContain("!keymapSheetOpen")
+    expect(dag).toContain("useOperatorSurfaceArmed")
+    expect(dag).not.toContain("!keymapSheetOpen")
+    expect(dag).not.toContain("&& !modalWidget")
   })
 })

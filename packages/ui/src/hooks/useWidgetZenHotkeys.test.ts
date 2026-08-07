@@ -41,6 +41,8 @@ describe("useWidgetZenHotkeys", () => {
     expect(src).toContain('addEventListener("keydown", onKeyDown, true)')
     expect(src).toContain("getActiveOperatorSurface")
     expect(src).toContain("resolveOperatorSession")
+    // Claimed keys must not leak to peer window listeners (peek Add Enter, …).
+    expect(src).toContain("stopImmediatePropagation")
     // Summon is always-on chrome — works while the chat composer (or any field) has focus.
     expect(src).toMatch(
       /if \(isOpenWidgetCatalogEvent\(event\)\) \{\s*event\.preventDefault\(\)\s*onToggleSummonRef/,
@@ -49,6 +51,7 @@ describe("useWidgetZenHotkeys", () => {
       /isOpenWidgetCatalogEvent\(event\)\s*&&\s*!isEditableKeyboardTarget/,
     )
   })
+
 
   it("Active Users wires focus mode, zen HUD, and claimed zen surface", () => {
     const src = read(activeUsersPath)

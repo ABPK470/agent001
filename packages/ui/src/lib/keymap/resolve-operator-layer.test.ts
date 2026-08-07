@@ -11,7 +11,7 @@ describe("resolveOperatorSession", () => {
     hasActiveSurface: true,
   }
 
-  it("overlays own the session", () => {
+  it("overlays own the session (Summon alone / Keymap)", () => {
     expect(resolveOperatorSession({ ...base, summonOpen: true })).toEqual({ type: "overlay" })
     expect(resolveOperatorSession({ ...base, keymapSheetOpen: true })).toEqual({
       type: "overlay",
@@ -59,7 +59,38 @@ describe("resolveOperatorSession", () => {
     })
   })
 
-  it("stays quiet while typing (non-Esc)", () => {
+  it("peek is the focused surface (Summon may stay open underneath)", () => {
+    expect(
+      resolveOperatorSession({
+        ...base,
+        summonOpen: true,
+        modalWidgetOpen: true,
+      }),
+    ).toEqual({
+      type: "dispatch",
+      allowShell: false,
+      allowSurface: true,
+    })
+    expect(
+      resolveOperatorSession({
+        ...base,
+        modalWidgetOpen: true,
+      }),
+    ).toEqual({
+      type: "dispatch",
+      allowShell: false,
+      allowSurface: true,
+    })
+  })
+
+  it("stays quiet while typing (non-Esc), including under peek", () => {
     expect(resolveOperatorSession({ ...base, editable: true })).toEqual({ type: "none" })
+    expect(
+      resolveOperatorSession({
+        ...base,
+        modalWidgetOpen: true,
+        editable: true,
+      }),
+    ).toEqual({ type: "none" })
   })
 })

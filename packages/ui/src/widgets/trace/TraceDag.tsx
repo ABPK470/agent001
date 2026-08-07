@@ -11,6 +11,7 @@ import { BrowseCount } from "../../components/BrowseStrip"
 import { useWidgetFocus } from "../../hooks/useWidgetFocus"
 import { captureSoloFlipForTileId } from "../../app/workspace/layout/solo-flip"
 import { useWidgetInstance } from "../../app/workspace/widget-instance"
+import { useOperatorSurfaceArmed } from "../../hooks/useOperatorSurfaceArmed"
 import { useLayoutStore } from "../../state/layout-store"
 import { useStore } from "../../state/store"
 import {
@@ -106,19 +107,16 @@ export function TraceDag({
   const { isZen, isSolo, toggleZen, exitZen } = useWidgetFocus()
   const widgetInstance = useWidgetInstance()
   const tileId = widgetInstance?.widgetId ?? null
-  const focusedTileId = useLayoutStore((s) => s.focusedTileId)
   const activeViewId = useLayoutStore((s) => s.activeViewId)
   const toggleTileMaximized = useLayoutStore((s) => s.toggleTileMaximized)
   const summonOpen = useStore((s) => s.summonOpen)
   const setSummonOpen = useStore((s) => s.setSummonOpen)
-  const keymapSheetOpen = useStore((s) => s.keymapSheetOpen)
   const setTraceOperatorPane = useStore((s) => s.setTraceOperatorPane)
   const modalWidget = useStore((s) => s.modalWidget)
   const closeModalWidget = useStore((s) => s.closeModalWidget)
-  const zenHotkeysEnabled =
-    isZen || isSolo || Boolean(widgetInstance && focusedTileId === widgetInstance.widgetId)
-  const operatorKeysEnabled =
-    zenHotkeysEnabled && !summonOpen && !keymapSheetOpen && !modalWidget
+  const operatorKeysEnabled = useOperatorSurfaceArmed({
+    layoutFocus: isZen || isSolo,
+  })
 
   const [search, setSearch] = useState("")
   const [openState, setOpenState] = useState<OpenState>(() =>
@@ -136,13 +134,13 @@ export function TraceDag({
 
   // Publish Trace pane for keymap Active Context (clear when Trace loses keys).
   useEffect(() => {
-    if (!zenHotkeysEnabled) {
+    if (!operatorKeysEnabled) {
       setTraceOperatorPane(null)
       return
     }
     setTraceOperatorPane(focusedPane)
     return () => setTraceOperatorPane(null)
-  }, [focusedPane, setTraceOperatorPane, zenHotkeysEnabled])
+  }, [focusedPane, setTraceOperatorPane, operatorKeysEnabled])
   const treeScrollRef = useRef<HTMLDivElement>(null)
   const detailScrollRef = useRef<HTMLDivElement>(null)
   const tabCycleRef = useRef<((direction: -1 | 1) => void) | null>(null)
@@ -767,7 +765,7 @@ export function TraceDag({
                 }}
               >
               <div
-                className={`trace-split-tree widget-split-sidebar flex min-h-0 flex-col${isZen ? " trace-split-tree--zen" : ""}${focusedPane === "tree" && zenHotkeysEnabled ? " is-pane-focused" : ""}`}
+                className={`trace-split-tree widget-split-sidebar flex min-h-0 flex-col${isZen ? " trace-split-tree--zen" : ""}${focusedPane === "tree" && operatorKeysEnabled ? " is-pane-focused" : ""}`}
               >
                 {isZen ? zenHud : null}
                 {runId && dag.hasData && treeSearch && treeIndex.nodes.length === 0 ? (
@@ -832,7 +830,7 @@ export function TraceDag({
                 onPointerCancel={onSplitPointerCancel}
               />
               <div
-                className={`trace-split-detail widget-split-main flex min-h-0 min-w-0 flex-col overflow-hidden${focusedPane === "detail" && zenHotkeysEnabled ? " is-pane-focused" : ""}`}
+                className={`trace-split-detail widget-split-main flex min-h-0 min-w-0 flex-col overflow-hidden${focusedPane === "detail" && operatorKeysEnabled ? " is-pane-focused" : ""}`}
               >
                 <div className="widget-split-inset flex min-h-0 flex-1 flex-col overflow-hidden">
                   <DetailSectionProvider controllerRef={sectionControllerRef}>
@@ -864,7 +862,7 @@ export function TraceDag({
           )}
         </div>
         {/* Peer of body — inside panel frame, never boxed by pane-focus rings. */}
-        {zenHotkeysEnabled && !emptySlot ? (
+        {operatorKeysEnabled && !emptySlot ? (
           <ComposerKbdFooter hints={hintsForTracePane(focusedPane)} />
         ) : null}
       </div>

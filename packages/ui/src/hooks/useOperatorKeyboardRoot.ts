@@ -73,6 +73,7 @@ export function useOperatorKeyboardRoot(
 
       event.preventDefault()
       event.stopPropagation()
+      event.stopImmediatePropagation()
 
       if (action.type === "open-keymap") {
         setKeymapSheetOpen(true)
@@ -142,6 +143,7 @@ export function useOperatorKeyboardRoot(
       if (isEscape && session.allowShell && modalWidgetRef.current) {
         event.preventDefault()
         event.stopPropagation()
+        event.stopImmediatePropagation()
         closeModalWidget()
         return
       }
@@ -160,6 +162,7 @@ export function useOperatorKeyboardRoot(
         if (surface.onKeyDown(event)) {
           event.preventDefault()
           event.stopPropagation()
+          event.stopImmediatePropagation()
         }
       }
     }

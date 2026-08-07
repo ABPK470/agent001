@@ -15,6 +15,7 @@ import { EmptyState } from "../components/EmptyState"
 import { captureSoloFlipForTileId } from "../app/workspace/layout/solo-flip"
 import { useWidgetInstance } from "../app/workspace/widget-instance"
 import { useContainerSize } from "../hooks/useContainerSize"
+import { useOperatorSurfaceArmed } from "../hooks/useOperatorSurfaceArmed"
 import { useReviewOperatorKeyboard } from "../hooks/useReviewOperatorKeyboard"
 import { hintsForPipelinesPane, type ReviewPane } from "../lib/keymap"
 import type { DetailSectionController } from "../lib/review/detail-section-controller"
@@ -339,7 +340,6 @@ export function OperationLog() {
   const sectionControllerRef = useRef<DetailSectionController | null>(null)
   const listTreeRef = useRef<VirtualListHandle>(null)
   const sentinelRef = useRef<HTMLDivElement>(null)
-  const focusedTileId = useLayoutStore((s) => s.focusedTileId)
   const soloTileId = useLayoutStore((s) => s.soloTileId)
   const activeViewId = useLayoutStore((s) => s.activeViewId)
   const toggleTileMaximized = useLayoutStore((s) => s.toggleTileMaximized)
@@ -347,7 +347,8 @@ export function OperationLog() {
   const setSummonOpen = useStore((s) => s.setSummonOpen)
   const modalWidget = useStore((s) => s.modalWidget)
   const closeModalWidget = useStore((s) => s.closeModalWidget)
-  const keymapSheetOpen = useStore((s) => s.keymapSheetOpen)
+  const isSolo = Boolean(instance && soloTileId === instance.widgetId)
+  const surfaceArmed = useOperatorSurfaceArmed({ layoutFocus: isSolo })
   const { width } = useContainerSize(rootRef)
   const tiny = width > 0 && width < 480
   const [cancellingId, setCancellingId] = useState<string | null>(null)
@@ -585,10 +586,8 @@ export function OperationLog() {
     [pipelineById, openPipelineIds, actExpanded],
   )
 
-  const tileFocused = Boolean(instance && focusedTileId === instance.widgetId)
-  const isSolo = Boolean(instance && soloTileId === instance.widgetId)
   const hasRows = filtered.length > 0
-  const operatorKeysEnabled = tileFocused && hasRows && !summonOpen && !keymapSheetOpen
+  const operatorKeysEnabled = surfaceArmed && hasRows
 
   const onFocusedPaneChange = useCallback((pane: ReviewPane) => {
     setFocusedPane(pane)

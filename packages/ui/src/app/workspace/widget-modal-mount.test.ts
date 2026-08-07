@@ -28,5 +28,11 @@ describe("WidgetModal mount", () => {
 
     expect(modal).toContain("app-shell-slider")
     expect(modal).toContain("Must mount at the app root")
+    // Peek is a focused operator surface — same instance + claim path as a tile.
+    expect(modal).toContain("WidgetInstanceProvider")
+    expect(modal).toContain("peekWidgetInstanceId")
+    expect(modal).toContain("toolbar-ops-btn")
+    expect(modal).toContain("widget-shell-icon")
+    expect(modal).not.toContain("widget-modal-add-btn")
   })
 })

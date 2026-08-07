@@ -12835,18 +12835,14 @@ button.space-layout-preview__leaf-inner--link:focus-visible .space-layout-previe
 }
 
 .toolbar-ops-btn:hover .catalog-shortcut-hint__key,
-.toolbar-ops-btn:focus-visible .catalog-shortcut-hint__key,
-.widget-modal-add-btn:hover .catalog-shortcut-hint__key,
-.widget-modal-add-btn:focus-visible .catalog-shortcut-hint__key {
+.toolbar-ops-btn:focus-visible .catalog-shortcut-hint__key {
   border-color: color-mix(in srgb, var(--border-strong, var(--border)) 80%, var(--text-faint));
   background: color-mix(in srgb, var(--text) 7%, var(--panel-2, var(--panel)));
   color: var(--text);
 }
 
 :root[data-theme="light"] .toolbar-ops-btn:hover .catalog-shortcut-hint__key,
-:root[data-theme="light"] .toolbar-ops-btn:focus-visible .catalog-shortcut-hint__key,
-:root[data-theme="light"] .widget-modal-add-btn:hover .catalog-shortcut-hint__key,
-:root[data-theme="light"] .widget-modal-add-btn:focus-visible .catalog-shortcut-hint__key {
+:root[data-theme="light"] .toolbar-ops-btn:focus-visible .catalog-shortcut-hint__key {
   background: #fff;
   border-color: #cbd5e1;
   color: #475569;
@@ -12856,33 +12852,6 @@ button.space-layout-preview__leaf-inner--link:focus-visible .space-layout-previe
   gap: 0.625rem;
   padding-inline: 0.75rem;
   box-shadow: 0 1px 2px rgb(0 0 0 / 0.05);
-}
-
-/* Peek stage — Add + Enter keycap (same shortcut dialect as Summon toolbar). */
-.widget-modal-add-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.35rem 0.65rem;
-  border: none;
-  border-radius: 0.5rem;
-  background: color-mix(in srgb, var(--accent, #6b8cae) 12%, transparent);
-  color: var(--accent, #6b8cae);
-  font-size: 0.75rem;
-  font-weight: 550;
-  line-height: 1;
-  cursor: pointer;
-  transition: background-color 120ms ease, color 120ms ease;
-}
-
-.widget-modal-add-btn:hover,
-.widget-modal-add-btn:focus-visible {
-  background: color-mix(in srgb, var(--accent, #6b8cae) 20%, transparent);
-  outline: none;
-}
-
-.widget-modal-add-btn .catalog-shortcut-hint {
-  margin-left: 0.1rem;
 }
 
 .toolbar-ops-btn--summon:hover,

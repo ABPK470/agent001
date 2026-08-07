@@ -35,11 +35,10 @@ import { ToastStack, useWidgetToasts } from "../components/useWidgetToasts"
 import { useContainerSize } from "../hooks/useContainerSize"
 import { useViewingAs } from "../hooks/useViewingAs"
 import { useWidgetFocus } from "../hooks/useWidgetFocus"
+import { useOperatorSurfaceArmed } from "../hooks/useOperatorSurfaceArmed"
 import { useWidgetZenHotkeys } from "../hooks/useWidgetZenHotkeys"
 import type { OperatorSurfaceHandler } from "../lib/operator-surface"
-import { useLayoutStore } from "../state/layout-store"
 import { useStore } from "../state/store"
-import { useWidgetInstance } from "../app/workspace/widget-instance"
 import {
   isActiveRunStepEvent,
   isHistoryRefreshEvent,
@@ -226,10 +225,7 @@ export function ActiveUsers(): ReactNode {
   const filterBtnRef = useRef<HTMLButtonElement>(null)
   const rootRef = useRef<HTMLDivElement>(null)
   const { isZen, toggleZen, exitZen } = useWidgetFocus()
-  const widgetInstance = useWidgetInstance()
-  const focusedTileId = useLayoutStore((s) => s.focusedTileId)
-  const zenHotkeysEnabled =
-    isZen || Boolean(widgetInstance && focusedTileId === widgetInstance.widgetId)
+  const zenHotkeysEnabled = useOperatorSurfaceArmed({ layoutFocus: isZen })
   const { width: widgetWidth } = useContainerSize(rootRef)
   const useStack = widgetWidth < AU_TABLE_MIN_WIDTH_PX
   // Filters collapse whenever we stack — chips fight for width on mid-size panels.

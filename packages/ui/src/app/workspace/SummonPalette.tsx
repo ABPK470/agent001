@@ -134,6 +134,16 @@ export function SummonPalette() {
     return () => window.clearTimeout(t)
   }, [ensureProductSpaces, summonOpen])
 
+  // Peek owns the operator surface — blur Summon and make the board inert.
+  useEffect(() => {
+    if (!summonOpen || !modalWidget) return
+    inputRef.current?.blur()
+    const sheet = document.querySelector(".ops-sheet--summon")
+    if (!(sheet instanceof HTMLElement)) return
+    sheet.setAttribute("inert", "")
+    return () => sheet.removeAttribute("inert")
+  }, [summonOpen, modalWidget])
+
   useEffect(() => {
     setSelected(0)
   }, [query, filterMode])
