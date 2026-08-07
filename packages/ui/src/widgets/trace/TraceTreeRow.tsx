@@ -119,10 +119,12 @@ export function TraceTreeRow({
             />
           ) : null}
         </span>
-        <span className="trace-tree-row__metric tabular-nums">
+        <span className="trace-tree-row__metric trace-tree-row__metric--latency tabular-nums">
           {node.durationMs != null ? formatMs(node.durationMs) : "—"}
         </span>
-        <span className="trace-tree-row__metric tabular-nums">{tokens}</span>
+        <span className="trace-tree-row__metric trace-tree-row__metric--tokens tabular-nums">
+          {tokens}
+        </span>
       </button>
     </div>
   )

@@ -329,7 +329,7 @@ export function TraceDetailInspector({
                     </button>
                     <button
                       type="button"
-                      className={`trace-detail-action trace-detail-action--toolbar is-toggle${evalAdded ? " is-success" : ""}`}
+                      className={`trace-detail-action trace-detail-action--toolbar trace-detail-action--secondary is-toggle${evalAdded ? " is-success" : ""}`}
                       disabled={!runId || evalBusy || evalAdded}
                       onClick={onAddEval}
                     >
@@ -338,7 +338,7 @@ export function TraceDetailInspector({
                     {canCompare ? (
                       <button
                         type="button"
-                        className={`trace-detail-action trace-detail-action--toolbar is-toggle${compareRunId ? " is-active" : ""}`}
+                        className={`trace-detail-action trace-detail-action--toolbar trace-detail-action--defer is-toggle${compareRunId ? " is-active" : ""}`}
                         aria-pressed={Boolean(compareRunId)}
                         onClick={onToggleCompare}
                         disabled={!compareAvailable}
@@ -394,7 +394,7 @@ export function TraceDetailInspector({
                   </button>
                   <button
                     type="button"
-                    className={`trace-detail-action trace-detail-action--toolbar is-toggle${evalAdded ? " is-success" : ""}`}
+                    className={`trace-detail-action trace-detail-action--toolbar trace-detail-action--secondary is-toggle${evalAdded ? " is-success" : ""}`}
                     disabled={!runId || evalBusy || evalAdded}
                     onClick={onAddEval}
                   >
@@ -403,7 +403,7 @@ export function TraceDetailInspector({
                   {canCompare ? (
                     <button
                       type="button"
-                      className={`trace-detail-action trace-detail-action--toolbar is-toggle${compareRunId ? " is-active" : ""}`}
+                      className={`trace-detail-action trace-detail-action--toolbar trace-detail-action--defer is-toggle${compareRunId ? " is-active" : ""}`}
                       aria-pressed={Boolean(compareRunId)}
                       onClick={onToggleCompare}
                       disabled={!compareAvailable}

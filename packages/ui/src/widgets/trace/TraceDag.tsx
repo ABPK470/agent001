@@ -778,8 +778,12 @@ export function TraceDag({
                       aria-hidden
                     >
                       <span className="trace-tree-header__node">Node</span>
-                      <span className="trace-tree-header__metric">Latency</span>
-                      <span className="trace-tree-header__metric">Tokens</span>
+                      <span className="trace-tree-header__metric trace-tree-header__metric--latency">
+                        Latency
+                      </span>
+                      <span className="trace-tree-header__metric trace-tree-header__metric--tokens">
+                        Tokens
+                      </span>
                     </div>
                     <div
                       ref={treeScrollRef}

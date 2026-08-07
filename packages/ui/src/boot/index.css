@@ -5158,11 +5158,13 @@ textarea.input {
 }
 
 .trace-split-header-row--primary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   height: var(--trace-split-header-row-1-h, 2.5rem);
   min-height: var(--trace-split-header-row-1-h, 2.5rem);
   padding: 0 0.75rem;
   gap: 0.5rem;
-  justify-content: space-between;
+  align-items: center;
 }
 
 .trace-split-header-row--secondary {
@@ -5405,9 +5407,13 @@ textarea.input {
 }
 
 .trace-dag--zen .trace-detail__headline--split {
-  flex: 1 1 auto;
   min-width: 0;
   gap: 0;
+}
+
+/* Split identity row is title + badge only — duration lives on row 2. */
+.trace-dag--zen .trace-detail__headline--split .trace-detail__headline-row {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .trace-dag--zen .trace-detail__headline-row2 {
@@ -5427,6 +5433,8 @@ textarea.input {
 }
 
 .trace-split-tree {
+  container-type: inline-size;
+  container-name: trace-tree;
   --trace-tree-hpad: 16px;
   /* Fit "999.9s" / "180ms" and "1.2K in / 3.4K out" — don't starve NODE. */
   --trace-tree-col-latency: 3.75rem;
@@ -5437,6 +5445,33 @@ textarea.input {
   --trace-tree-title-offset: calc(
     var(--trace-tree-base-pad, 16px) + 16px + 0.5rem + 20px + 0.5rem
   );
+}
+
+/*
+ * Metric columns yield before NODE. Fixed rem tracks + min-width:22rem were
+ * forcing "C. 6.." / "Recei..." while Latency/Tokens stayed fully painted.
+ * (Overrides land on descendants — a container cannot style itself.)
+ */
+@container trace-tree (max-width: 28rem) {
+  .trace-split-tree-table {
+    --trace-tree-grid-cols: minmax(0, 1fr) var(--trace-tree-col-latency);
+  }
+
+  .trace-tree-header__metric--tokens,
+  .trace-tree-row__metric--tokens {
+    display: none;
+  }
+}
+
+@container trace-tree (max-width: 18rem) {
+  .trace-split-tree-table {
+    --trace-tree-grid-cols: minmax(0, 1fr);
+  }
+
+  .trace-tree-header__metric--latency,
+  .trace-tree-row__metric--latency {
+    display: none;
+  }
 }
 
 .trace-split-tree-scroll {
@@ -5517,7 +5552,7 @@ textarea.input {
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--text-muted, var(--color-text-muted));
-  min-width: 22rem;
+  min-width: 0;
 }
 
 .trace-tree-header__node {
@@ -5533,7 +5568,7 @@ textarea.input {
 .trace-tree-row {
   position: relative;
   border-bottom: 1px solid var(--border-subtle, var(--color-border-subtle));
-  min-width: 22rem;
+  min-width: 0;
   --trace-tree-base-pad: 16px;
   --trace-tree-indent: 20px;
 }
@@ -5587,7 +5622,7 @@ textarea.input {
   column-gap: 0.5rem;
   align-items: center;
   width: 100%;
-  min-width: 22rem;
+  min-width: 0;
   min-height: 44px;
   padding: 0.3rem var(--trace-tree-hpad);
   text-align: left;
@@ -5808,6 +5843,8 @@ button.trace-tree-status-pill:hover {
 }
 
 .trace-detail {
+  container-type: inline-size;
+  container-name: trace-detail;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -5854,10 +5891,12 @@ button.trace-tree-status-pill:hover {
 
 /* Title + status together; actions stay in .trace-detail__actions on the right. */
 .trace-detail__headline-lead {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 0.5rem;
   min-width: 0;
+  width: 100%;
+  overflow: hidden;
 }
 
 .trace-detail__headline-lead .trace-tree-status-pill {
@@ -5880,6 +5919,7 @@ button.trace-tree-status-pill:hover {
 }
 
 .trace-detail__headline-title {
+  flex: 1 1 0;
   font-size: 0.875rem;
   font-weight: 600;
   line-height: 1.3;
@@ -5907,15 +5947,36 @@ button.trace-tree-status-pill:hover {
 
 .trace-detail__actions {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 0.5rem;
   align-items: center;
   justify-content: flex-end;
   flex-shrink: 0;
+  min-width: 0;
 }
 
 .trace-detail__actions:empty {
   display: none;
+}
+
+/*
+ * Detail header yield ladder — title keeps a real lane; secondary chrome
+ * drops before the Call name collapses to "Call …".
+ */
+@container trace-detail (max-width: 30rem) {
+  .trace-detail__actions .trace-detail-action--defer {
+    display: none;
+  }
+}
+
+@container trace-detail (max-width: 22rem) {
+  .trace-detail__actions .trace-detail-action--secondary {
+    display: none;
+  }
+
+  .trace-detail-action--toolbar {
+    padding: 0.3rem 0.55rem;
+  }
 }
 
 .trace-detail-action {
