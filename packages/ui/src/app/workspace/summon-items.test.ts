@@ -101,6 +101,55 @@ describe("summon catalog", () => {
     expect(bundles[0]).toMatchObject({ id: "bundle:observe-core" })
   })
 
+  it("tracks Bridge and Trace drift with reset presets (same as Observe / Agent)", () => {
+    const views = defaultProductViews().map((view) => {
+      if (view.id === "space:bridge") {
+        return {
+          ...view,
+          tiles: [
+            ...view.tiles,
+            {
+              id: "extra-bridge",
+              type: "live-logs" as const,
+              x: 0,
+              y: 0,
+              w: 6,
+              h: 12,
+              minW: 2,
+              minH: 4,
+            },
+          ],
+        }
+      }
+      if (view.id === "space:trace") {
+        return {
+          ...view,
+          tiles: [
+            ...view.tiles,
+            {
+              id: "extra-trace",
+              type: "term-chat" as const,
+              x: 0,
+              y: 0,
+              w: 6,
+              h: 12,
+              minW: 2,
+              minH: 4,
+            },
+          ],
+        }
+      }
+      return view
+    })
+    const bundles = listSummonItems({ views, isAdmin: true }).filter(
+      (item) => item.kind === "bundle",
+    )
+    expect(bundles.map((item) => item.id).sort()).toEqual([
+      "bundle:bridge-core",
+      "bundle:trace-core",
+    ])
+  })
+
   it("groups agent surfaces together", () => {
     expect(widgetSummonGroup("debug-inspector")).toBe("agent")
     expect(widgetSummonGroup("operation-log")).toBe("platform")

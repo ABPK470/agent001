@@ -42,6 +42,8 @@ export type ProductBundleId =
   | "bundle:agent-core"
   | "bundle:observe-core"
   | "bundle:reconcile-core"
+  | "bundle:bridge-core"
+  | "bundle:trace-core"
   | "bundle:users-core"
 
 /** Persisted Space ids renamed in place (never leave a ghost DIY tab). */
@@ -133,6 +135,7 @@ export const PRODUCT_SPACES: readonly ProductSpaceDef[] = [
   },
 ]
 
+/** One reset preset per product Space — Summon shows it only when that Space drifted. */
 export const PRODUCT_BUNDLES: readonly ProductBundleDef[] = [
   {
     id: "bundle:agent-core",
@@ -157,6 +160,22 @@ export const PRODUCT_BUNDLES: readonly ProductBundleDef[] = [
     homeSpace: "space:reconcile",
     focusType: "env-sync",
     widgets: ["env-sync", "entity-registry"],
+  },
+  {
+    id: "bundle:bridge-core",
+    name: "Bridge · reset",
+    desc: "Restore Bridge full-bleed",
+    homeSpace: "space:bridge",
+    focusType: "bridge",
+    widgets: ["bridge"],
+  },
+  {
+    id: "bundle:trace-core",
+    name: "Trace · reset",
+    desc: "Restore Trace full-bleed",
+    homeSpace: "space:trace",
+    focusType: "debug-inspector",
+    widgets: ["debug-inspector"],
   },
   {
     id: "bundle:users-core",

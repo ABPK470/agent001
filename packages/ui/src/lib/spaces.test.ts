@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import { COLS } from "./grid-math"
 import { layoutLeaves, canvasBounds } from "./split-tree"
 import {
+  PRODUCT_BUNDLES,
   PRODUCT_SPACES,
   SPACE_LAYOUT_VERSION,
   buildSpaceView,
@@ -39,6 +40,14 @@ describe("product spaces", () => {
     expect(spaceByIndex(6, true)).toBeUndefined()
     expect(spaceByIndex(0, true)).toBeUndefined()
     expect(PRODUCT_SPACES.find((s) => s.id === "space:users")?.index).toBe(6)
+  })
+
+  it("tracks a reset preset for every product Space", () => {
+    const homes = new Set(PRODUCT_BUNDLES.map((bundle) => bundle.homeSpace))
+    for (const space of PRODUCT_SPACES) {
+      expect(homes.has(space.id)).toBe(true)
+    }
+    expect(PRODUCT_BUNDLES).toHaveLength(PRODUCT_SPACES.length)
   })
 
   it("operators get Sync-only Reconcile and recompacted Call chords (no Bridge)", () => {
