@@ -107,7 +107,8 @@ export function EventStreamHistogram({
   const [serverModel, setServerModel] = useState<EventStreamHistogramModel | null>(null)
   const { width } = useContainerSize(rootRef)
 
-  const bucketCount = histogramBucketCountForWidth(Math.max(0, width - 96))
+  /* Full width — axis labels sit under the plot, not beside it. */
+  const bucketCount = histogramBucketCountForWidth(Math.max(0, width))
   // Live windows have no until — refresh on a quiet cadence so we don't
   // re-fetch the histogram on every paint.
   const [liveUntil, setLiveUntil] = useState(() => new Date().toISOString())
@@ -169,7 +170,7 @@ export function EventStreamHistogram({
 
   const model = serverModel ?? clientModel
   const selection = draftRange ?? focusSelection(model, focus)
-  const plotW = Math.max(1, width > 0 ? width - 96 : 320)
+  const plotW = Math.max(1, width > 0 ? width : 320)
   const edgeBuckets = histogramEdgeHitBuckets(model.buckets.length, plotW)
 
   useEffect(() => {
@@ -359,7 +360,8 @@ export function EventStreamHistogram({
   }
 
   const max = Math.max(1, model.maxCount)
-  const lensTotal = serverModel?.totalCount ?? clientModel.totalCount
+  /** List is the source of truth — never the server histogram aggregate. */
+  const listTotal = lensRows.length
   const axisLabels = formatHistogramBoundPair(model.startMs, model.endMs)
   const selLo = selection ? Math.min(selection.a, selection.b) : -1
   const selHi = selection ? Math.max(selection.a, selection.b) : -1
@@ -392,8 +394,8 @@ export function EventStreamHistogram({
       <div className="event-stream-histogram__meta">
         <span className="event-stream-histogram__count">
           {focus
-            ? `Showing ${listVisibleCount.toLocaleString()} of ${lensTotal.toLocaleString()} events`
-            : `Showing ${lensTotal.toLocaleString()} events`}
+            ? `Showing ${listVisibleCount.toLocaleString()} of ${listTotal.toLocaleString()} in zoom`
+            : `Showing ${listVisibleCount.toLocaleString()} events`}
         </span>
         {model.truncated ? (
           <span className="event-stream-histogram__truncated" title="Density scan hit the server cap">
@@ -401,10 +403,7 @@ export function EventStreamHistogram({
           </span>
         ) : null}
       </div>
-      <div className="event-stream-histogram__rail">
-        <span className="event-stream-histogram__axis" aria-hidden>
-          {axisLabels.start}
-        </span>
+      <div className="event-stream-histogram__plot-block">
         <div
           ref={plotRef}
           className="event-stream-histogram__plot-hit"
@@ -489,9 +488,10 @@ export function EventStreamHistogram({
             ) : null}
           </svg>
         </div>
-        <span className="event-stream-histogram__axis" aria-hidden>
-          {axisLabels.end}
-        </span>
+        <div className="event-stream-histogram__axis-row" aria-hidden>
+          <span className="event-stream-histogram__axis">{axisLabels.start}</span>
+          <span className="event-stream-histogram__axis">{axisLabels.end}</span>
+        </div>
       </div>
       {focus ? (
         <div className="event-stream-histogram__actions">

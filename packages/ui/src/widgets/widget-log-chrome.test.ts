@@ -32,6 +32,7 @@ const cssPath = join(here, "../boot/index.css")
 const selectionPath = join(here, "../lib/selection.ts")
 const toolbarPath = join(here, "widget-toolbar.tsx")
 const livePath = join(here, "LiveLogs.tsx")
+const histPath = join(here, "live-logs/EventStreamHistogram.tsx")
 const opsPath = join(here, "OperationLog.tsx")
 const opsToolbarPath = join(here, "operation-log-toolbar.tsx")
 const reviewKitPath = join(here, "../components/review/ReviewTreeRow.tsx")
@@ -512,6 +513,7 @@ describe("widget log chrome — shared content dialect", () => {
   it("shares meta size, JsonViewer, and review-tree across review widgets", () => {
     const css = read(cssPath)
     const live = read(livePath)
+    const hist = read(histPath)
     const ops = read(opsPath)
     const nest = read(nestPath)
     const call = read(traceCallPath)
@@ -535,13 +537,43 @@ describe("widget log chrome — shared content dialect", () => {
     expect(live).toContain("event-stream-feed")
     expect(live).toContain("event-stream-feed__scroll")
     expect(live).toContain("adjustScrollOnResize={false}")
+    // One count — histogram meta uses the list, not server aggregate / toolbar dual.
+    expect(live).not.toContain("WidgetToolbarCount")
+    expect(hist).toContain("listVisibleCount")
+    expect(hist).toContain("listTotal = lensRows.length")
+    expect(hist).not.toContain("totalCount ?? clientModel.totalCount")
     expect(css).toMatch(/\.event-stream-deck\s*\{[^}]*border:\s*1px\s+solid\s+var\(--border\)/s)
     expect(css).toMatch(/\.event-stream-deck\s*\{[^}]*border-radius:\s*0\.625rem/s)
     expect(css).toMatch(/\.event-stream-deck\s*\{[^}]*overflow:\s*hidden/s)
     expect(css).toMatch(/\.event-stream-deck\s*\{[^}]*background-color:\s*var\(--panel-2\)/s)
-    expect(css).toMatch(/\.event-stream-stack\s*\{[^}]*gap:\s*0\.5rem/s)
+    expect(css).toMatch(/\.event-stream-stack\s*\{[^}]*gap:\s*0\.625rem/s)
+    expect(css).toMatch(
+      /\.event-stream-histogram\s*\{[^}]*padding:\s*0\.35rem\s+0\.75rem\s+0\.85rem/s,
+    )
+    expect(css).toContain(".event-stream-histogram__axis-row")
+    expect(css).not.toContain(".event-stream-histogram__rail")
+    expect(hist).toContain("event-stream-histogram__axis-row")
+    expect(hist).not.toContain("event-stream-histogram__rail")
+    expect(css).toMatch(
+      /\.event-stream-histogram__bar--api\s*\{[^}]*fill:\s*var\(--stream-api-ink\)/s,
+    )
+    expect(css).not.toContain(
+      ':root[data-theme="light"] .event-stream-histogram__bar--api',
+    )
+    expect(css).toMatch(
+      /:root\[data-theme="light"\]\s+\.widget-filter-chip\s*\{[^}]*border-color:\s*var\(--border-subtle/s,
+    )
+    // Jump-to-live: stretch banner — never width:100% + side margin (clips radius).
+    expect(css).toMatch(
+      /\.event-stream-feed\s*>\s*\.event-stream-jump-live\s*\{[^}]*align-self:\s*stretch/s,
+    )
+    expect(css).toMatch(
+      /\.event-stream-jump-live\s*\{[^}]*border-radius:\s*0/s,
+    )
     expect(css).toMatch(/\.event-stream-feed\s*\{[^}]*overflow:\s*hidden/s)
-    expect(css).toMatch(/\.event-stream-feed\s*\{[^}]*border-radius:\s*0\.625rem/s)
+    // Feed stays a plain stream — card chrome belongs only on the control deck.
+    expect(css).not.toMatch(/\.event-stream-feed\s*\{[^}]*border-top:/s)
+    expect(css).not.toMatch(/\.event-stream-feed\s*\{[^}]*border-radius:/s)
     expect(css).toMatch(
       /\.event-stream-deck\s+\.widget-toolbar__search-input\s*\{[^}]*background:\s*var\(--panel\)/s,
     )

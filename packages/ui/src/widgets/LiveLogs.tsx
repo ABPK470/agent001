@@ -45,7 +45,6 @@ import {
   WIDGET_REVIEW_CONTROLS_CLASS,
   WIDGET_REVIEW_CONTROLS_INSET_CLASS,
   WidgetToolbar,
-  WidgetToolbarCount,
   WidgetToolbarLeading,
   WidgetToolbarSearch,
   WidgetToolbarTrailing,
@@ -453,7 +452,6 @@ export function LiveLogs() {
           onClear={() => setSearchText("")}
         />
         <WidgetToolbarTrailing>
-          <WidgetToolbarCount filtered={displayRows.length} total={entries.length} hidden={tiny} />
           <button
             ref={filterBtnRef}
             type="button"
