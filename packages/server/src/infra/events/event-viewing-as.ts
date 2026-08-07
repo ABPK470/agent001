@@ -1,7 +1,8 @@
 /**
  * Personal event visibility under Viewing as.
  *
- * Live SSE fanout uses the hot path only (stamped actorUpn / in-memory index).
+ * Law: owner must be known and match Viewing as. Unknown owner → not visible.
+ * Live SSE uses the hot path only (stamped actorUpn / in-memory index).
  * Historical list/search may resolve legacy rows via DB when columns are empty.
  */
 
@@ -34,12 +35,13 @@ export async function ownerFromEventData(data: Record<string, unknown>): Promise
   return null
 }
 
+/** Personal visibility — unknown owner is never visible. */
 export async function eventMatchesViewingAs(
   data: Record<string, unknown>,
   viewingAsUpn: string,
 ): Promise<boolean> {
   const owner = await ownerFromEventData(data)
-  if (!owner) return true
+  if (!owner) return false
   return sameUpn(owner, viewingAsUpn)
 }
 

@@ -137,7 +137,7 @@ One owned concept in the platform shell. Same words in UI, code, and docs.
 
 **Owner (server):** auth composition root — `registerViewingAs` + `personal.read` / `personal.write` preHandlers. Resolve once onto `req.viewingAs`. Handlers only call `viewingAsOf(req)` (or ignore Viewing as for Me-only writes). They never call `resolveViewingAs` and never re-check the header. Platform control-plane routes declare `admin` (`requireAdmin`) — Entity Registry, Bridge, Sync Admin, warehouse, webhook drains, LLM config, Active Users APIs.
 
-**Visibility dialect (one):** `sameUpn` (`internal/upn`) + `canAccessOwned` / `canAccessRun` / `canAccessThread` for owned rows; `eventMatchesViewingAs` (`infra/events`) for live SSE and historical events. No per-surface UPN compares. No `viewerUpn` synonym.
+**Visibility dialect (one):** `sameUpn` (`internal/upn`) + `canAccessOwned` / `canAccessRun` / `canAccessThread` for owned rows; `eventMatchesViewingAs` (`infra/events`) for live SSE and historical events. **Unknown owner is never Personal-visible** and is not written to `event_log` — emitters must stamp `actorUpn` (or resolvable `runId` / `planId`). Named platform wake events (`session.presence.tick`) fan out without an owner; they are not Personal data. No per-surface UPN compares. No `viewerUpn` synonym.
 
 **Owner (UI):** chrome store (`lib/viewing-as`, including `attachViewingAsQuery`) + fetch headers in `client`. App runs one Personal scope transition on Me / Viewing as change and sets layout `consoleIsAdmin` from whoami. Widgets may read `isViewingAsOther` for quiet chrome only. Do not pass `userId` into widgets.
 

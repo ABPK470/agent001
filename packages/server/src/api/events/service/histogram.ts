@@ -70,7 +70,7 @@ function matchesSearch(type: string, dataJson: string, q: string): boolean {
 }
 
 function visibleToViewer(actorUpn: string | null, viewingAsUpn: string): boolean {
-  if (!actorUpn || !actorUpn.trim()) return true
+  if (!actorUpn || !actorUpn.trim()) return false
   return sameUpn(actorUpn, viewingAsUpn)
 }
 

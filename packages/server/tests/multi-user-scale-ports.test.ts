@@ -3,6 +3,7 @@ import { RunQueue } from "../src/infra/queue/run-queue.js"
 import { MemoryConnectionBudget, agentBudgetLimit, syncBudgetLimit } from "../src/ports/connection-budget.js"
 import {
   enrichEventDataWithOwner,
+  eventMatchesViewingAsHot,
   MemoryRunOwnerIndex,
   ownerFromEventDataHot,
 } from "../src/ports/run-owner-index.js"
@@ -47,6 +48,16 @@ describe("RunOwnerIndex hot path", () => {
     const enriched = enrichEventDataWithOwner({ runId: "run-1", foo: 1 }, index)
     expect(enriched["actorUpn"]).toBe("user@x.com")
     expect(ownerFromEventDataHot({ type: "noise" }, index)).toBeNull()
+    expect(ownerFromEventDataHot({ ownerUpn: "A@X.com" }, index)).toBe("a@x.com")
+  })
+
+  it("never treats unknown owner as Personal-visible", () => {
+    const index = new MemoryRunOwnerIndex()
+    expect(eventMatchesViewingAsHot({ type: "noise" }, "a@x.com", index)).toBe(false)
+    expect(eventMatchesViewingAsHot({ actorUpn: "b@x.com" }, "a@x.com", index)).toBe(false)
+    expect(eventMatchesViewingAsHot({ actorUpn: "a@x.com" }, "a@x.com", index)).toBe(true)
+    index.rememberRun("run-1", "a@x.com")
+    expect(eventMatchesViewingAsHot({ runId: "run-1" }, "a@x.com", index)).toBe(true)
   })
 })
 

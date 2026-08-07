@@ -78,7 +78,7 @@ export function ownerFromEventDataHot(
   data: Record<string, unknown>,
   index: RunOwnerIndex = _default,
 ): string | null {
-  for (const key of ["actorUpn", "upn", "userUpn"] as const) {
+  for (const key of ["actorUpn", "upn", "userUpn", "ownerUpn"] as const) {
     const value = data[key]
     if (typeof value === "string" && value.trim()) return value.trim().toLowerCase()
   }
@@ -95,13 +95,17 @@ export function ownerFromEventDataHot(
   return null
 }
 
+/**
+ * Personal visibility: owner must be known and match Viewing as.
+ * Unknown owner is never Personal-visible (no fleet leak).
+ */
 export function eventMatchesViewingAsHot(
   data: Record<string, unknown>,
   viewingAsUpn: string,
   index?: RunOwnerIndex,
 ): boolean {
   const owner = ownerFromEventDataHot(data, index)
-  if (!owner) return true
+  if (!owner) return false
   return sameUpn(owner, viewingAsUpn)
 }
 

@@ -120,6 +120,11 @@ export async function buildApp(opts: BuildAppOptions) {
       return
     }
     const duration = Date.now() - ((req as any)._startTime ?? Date.now())
+    const session = (req as { session?: { upn?: string; displayName?: string; sid?: string } }).session
+    // Session actor owns the HTTP call — not Viewing as (admin browsing Alice
+    // is admin's API traffic). No actorUpn → no Personal broadcast (unowned
+    // events are never visible and never durable).
+    const actorUpn = session?.upn?.trim().toLowerCase() || null
     const entry = {
       method: req.method,
       url: req.url,
@@ -131,7 +136,12 @@ export async function buildApp(opts: BuildAppOptions) {
     }
     try {
       saveApiRequest(entry)
-      broadcast({ type: EventType.ApiRequest, data: toBroadcastData(entry) })
+      if (actorUpn) {
+        broadcast({
+          type: EventType.ApiRequest,
+          data: toBroadcastData({ ...entry, actorUpn }),
+        })
+      }
     } catch (err: unknown) { console.error("[mia]", err) }
     // Multi-user observability: stamp user identity on console for ops greppability.
     // Skip auth/whoami polling noise + admin observability endpoints.
@@ -141,8 +151,7 @@ export async function buildApp(opts: BuildAppOptions) {
       !req.url.startsWith("/api/admin/active-runs") &&
       !req.url.startsWith("/api/admin/users")
     ) {
-      const s = (req as { session?: { upn?: string; displayName?: string; sid?: string } }).session
-      const who = s?.upn ?? s?.displayName ?? s?.sid?.slice(0, 12) ?? "—"
+      const who = session?.upn ?? session?.displayName ?? session?.sid?.slice(0, 12) ?? "—"
       console.log(`[${who}] ${req.method} ${req.url} → ${reply.statusCode} (${duration}ms)`)
     }
     done()

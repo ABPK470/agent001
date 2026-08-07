@@ -20,10 +20,13 @@ import type { AttachmentRow } from "./repo.js"
 import { EventType } from "@mia/agent"
 
 function payloadFor(row: AttachmentRow): Record<string, unknown> {
+  const ownerUpn = row.owner_upn?.trim().toLowerCase() || null
   return {
     id: row.id,
     scope: row.scope,
-    ownerUpn: row.owner_upn,
+    ownerUpn,
+    // Personal visibility dialect reads actorUpn / ownerUpn — stamp both.
+    ...(ownerUpn ? { actorUpn: ownerUpn } : {}),
     runId: row.run_id,
     sizeBytes: row.size_bytes,
     mediaType: row.media_type,
@@ -52,9 +55,11 @@ export function auditAttachmentDeleted(opts: {
   ownerUpn: string | null
   reason: "user" | "retention"
 }): void {
+  const ownerUpn = opts.ownerUpn?.trim().toLowerCase() || null
+  if (!ownerUpn) return
   broadcast({
     type: EventType.AttachmentDeleted,
-    data: { id: opts.id, ownerUpn: opts.ownerUpn, reason: opts.reason }
+    data: { id: opts.id, ownerUpn, actorUpn: ownerUpn, reason: opts.reason }
   })
 }
 

@@ -72,6 +72,7 @@ export function durableKeysFromData(data: Record<string, unknown>): {
     (typeof data["actorUpn"] === "string" && data["actorUpn"]) ||
     (typeof data["upn"] === "string" && data["upn"]) ||
     (typeof data["userUpn"] === "string" && data["userUpn"]) ||
+    (typeof data["ownerUpn"] === "string" && data["ownerUpn"]) ||
     null
   const actorUpn = actorRaw ? actorRaw.trim().toLowerCase() : null
   const runId = typeof data["runId"] === "string" && data["runId"] ? data["runId"] : null

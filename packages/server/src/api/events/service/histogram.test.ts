@@ -29,6 +29,15 @@ vi.mock("../../../infra/persistence/sqlite.js", () => ({
       run_id: null,
       plan_id: null,
     },
+    {
+      id: 4,
+      type: "api.request",
+      data: JSON.stringify({ severity: "info" }),
+      created_at: "2026-08-06T16:20:00.000Z",
+      actor_upn: null,
+      run_id: null,
+      plan_id: null,
+    },
   ]),
 }))
 

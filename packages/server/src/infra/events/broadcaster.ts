@@ -6,13 +6,14 @@
  * native `EventSource` API handles connection, reconnect, and parsing.
  *
  * Every `broadcast()` call:
- *   1. Stamps a timestamp + serialises once.
- *   2. Fans out with `eventMatchesViewingAs` — same Personal visibility
- *      dialect as historical `/api/events` (unknown owner → all; known
- *      mismatch → drop).
- *   3. Persists to the `event_log` SQLite table (skipping high-frequency
- *      `answer.chunk` events) so disconnected clients can replay history
- *      and webhook drains have a durable source.
+ *   1. Stamps a timestamp + enriches `actorUpn` from the run/plan index.
+ *   2. Fans out with Personal visibility (`eventMatchesViewingAsLive`) —
+ *      owner must be known and match Viewing as. Unknown owner never
+ *      reaches a Personal SSE client. Named platform wake events
+ *      (`session.presence.tick`) fan out to every connection without
+ *      inventing an owner.
+ *   3. Persists to `event_log` only when an owner is known (skip
+ *      high-frequency + wake types). No durable unowned Personal rows.
  *   4. Pushes to registered HMAC-signed webhook drains (filtered by
  *      event-type prefix).
  *
@@ -31,9 +32,17 @@ import type { SseEvent, TraceEntry } from "@mia/shared-types"
 import { createHmac } from "node:crypto"
 import { registerSseBroadcastSink } from "./emit.js"
 import { eventMatchesViewingAsLive } from "./event-viewing-as.js"
-import { enrichEventDataWithOwner } from "../../ports/run-owner-index.js"
+import {
+  enrichEventDataWithOwner,
+  ownerFromEventDataHot,
+} from "../../ports/run-owner-index.js"
 import { toDurableEvent } from "../../ports/event-store.js"
 import { getEventStore, listWebhookDrains } from "../persistence/sqlite.js"
+
+/** Platform wake — not Personal data; fans to every SSE client without an owner stamp. */
+function isPlatformWakeEvent(type: string): boolean {
+  return type === EventType.SessionPresenceTick
+}
 
 export type { SseEvent }
 
@@ -94,20 +103,25 @@ export class EventBroadcaster {
     }
     const json = JSON.stringify(msg)
     const sseFrame = `data: ${json}\n\n`
+    const platformWake = isPlatformWakeEvent(msg.type)
+    const owner = ownerFromEventDataHot(msg.data)
 
     for (const [, { sink, identity }] of this.sseClients) {
-      const viewingAs = identity.viewingAsUpn ?? identity.upn
-      if (!viewingAs || !eventMatchesViewingAsLive(msg.data, viewingAs)) continue
+      if (!platformWake) {
+        const viewingAs = identity.viewingAsUpn ?? identity.upn
+        if (!viewingAs || !eventMatchesViewingAsLive(msg.data, viewingAs)) continue
+      }
       try {
         sink.write(sseFrame)
       } catch (err: unknown) { console.error("[mia]", err) }
     }
 
-    // Persist off the SSE stack (EventStore queues + batched flush).
+    // Durable Personal events require a known owner — never persist unowned rows.
     if (
+      owner &&
       msg.type !== EventType.AnswerChunk &&
       msg.type !== EventType.StreamReset &&
-      msg.type !== EventType.SessionPresenceTick
+      !platformWake
     ) {
       getEventStore().append(toDurableEvent(msg.type, msg.data, msg.timestamp))
     }
