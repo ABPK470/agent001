@@ -3036,7 +3036,7 @@ label:focus-within > .mia-checkbox,
 
 /*
  * Expanded payload — indented under the trigger row (past chevron + into the
- * time column) so the card is visually bound to that timestamp, not the deck.
+ * time column). Flat rectangle — not a floating card (narrow / inline mode).
  */
 .event-stream-payload {
   padding: 0.15rem 0.625rem 0.55rem
@@ -3048,17 +3048,29 @@ label:focus-within > .mia-checkbox,
 
 .event-stream-payload__box {
   margin: 0;
-  padding: 0.55rem 0.7rem 0.55rem 0.75rem;
-  border-radius: 0.4rem;
+  padding: 0.45rem 0.6rem 0.45rem 0.65rem;
+  border-radius: 0;
   border: 1px solid var(--border-subtle);
   border-left: 2px solid color-mix(in srgb, var(--color-accent, #6366f1) 55%, var(--border));
   background: var(--panel-2);
-  box-shadow: 0 1px 2px color-mix(in srgb, var(--text) 6%, transparent);
+  box-shadow: none;
 }
 
 .event-stream-payload__box--err {
   border-left-width: 3px;
   border-left-color: var(--error);
+  border-radius: 0;
+}
+
+/* Nested JsonViewer / code chrome — same square corners as the outer shell. */
+.event-stream-payload .mia-code-block,
+.event-stream-payload .mia-code-block--embedded {
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+.event-stream-payload .mia-code-block__toolbar {
+  border-radius: 0;
 }
 
 /*

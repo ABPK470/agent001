@@ -34,6 +34,13 @@ describe("VirtualList inspect anchor", () => {
   })
 })
 
+describe("VirtualList sync resize", () => {
+  it("exposes resizeItem for pre-paint size pushes (inline expand)", () => {
+    expect(src).toContain("resizeItem")
+    expect(src).toContain("virtualizer.resizeItem")
+  })
+})
+
 describe("VirtualList append / measure contract", () => {
   it("never calls virtualizer.measure() on items.length (wipes size cache → overlap)", () => {
     // TanStack measure() clears itemSizeCache. On chat append that collapsed

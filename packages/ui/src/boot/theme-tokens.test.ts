@@ -138,6 +138,13 @@ describe("light theme color system", () => {
     expect(css).toMatch(
       /\.event-stream-payload__box--err\s*\{[^}]*border-left-color:\s*var\(--error\)/s,
     )
+    // Inline expand (no drawer room) — flat rectangle, not a rounded card.
+    expect(css).toMatch(
+      /\.event-stream-payload__box\s*\{[^}]*border-radius:\s*0/s,
+    )
+    expect(css).toMatch(
+      /\.event-stream-payload__box\s*\{[^}]*box-shadow:\s*none/s,
+    )
     // Event Stream scan lanes — TYPE ink in both themes.
     for (const lane of ["run", "step", "sync", "bridge", "agent", "api", "system"]) {
       expect(darkThemeBlock()).toMatch(new RegExp(`--stream-${lane}-ink:`))

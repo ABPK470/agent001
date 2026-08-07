@@ -540,6 +540,9 @@ describe("widget log chrome — shared content dialect", () => {
     expect(live).toContain("onDetailEscapeKeyDown")
     expect(live).toMatch(/addEventListener\("keydown", onDetailEscapeKeyDown, true\)/)
     expect(live).toMatch(/estimateSize[\s\S]*compact \? 220 : 300/)
+    // Inline expand: sync virtual row size before paint (RO alone flashes overlap).
+    expect(live).toContain("useLayoutEffect")
+    expect(live).toContain("resizeItem")
     // Chevron rotates down only for inline expand — never promises accordion in drawer mode.
     expect(live).toMatch(/showInlinePayload \? "is-expanded"/)
     expect(live).not.toMatch(/open \? "rotate-90"/)

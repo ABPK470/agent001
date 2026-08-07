@@ -9,7 +9,7 @@
  */
 
 import { ArrowDown, ChevronRight, Filter, Pause, Play, Radio, SlidersHorizontal } from "lucide-react"
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { api } from "../client/index"
 import { DateField } from "../components/DateField"
 import { EmptyState } from "../components/EmptyState"
@@ -260,6 +260,36 @@ export function LiveLogs() {
     if (!detailKey) return
     if (!detailLog) setDetailKey(null)
   }, [detailKey, detailLog])
+
+  /**
+   * Inline expand grows the virtual row. TanStack keeps the short cached
+   * height until ResizeObserver fires — one paint of overlapping rows.
+   * Sync the open (and previous) index from the mounted DOM before paint.
+   */
+  const prevInlineDetailIndexRef = useRef<number | null>(null)
+  useLayoutEffect(() => {
+    if (detailMode !== "inline") {
+      prevInlineDetailIndexRef.current = null
+      return
+    }
+    let openIndex = -1
+    if (detailKey) {
+      for (let i = 0; i < displayRows.length; i++) {
+        if (eventStreamRowKey(displayRows[i]!, i) === detailKey) {
+          openIndex = i
+          break
+        }
+      }
+    }
+    const prevIndex = prevInlineDetailIndexRef.current
+    if (prevIndex != null && prevIndex !== openIndex) {
+      listRef.current?.resizeItem(prevIndex)
+    }
+    if (openIndex >= 0) {
+      listRef.current?.resizeItem(openIndex)
+    }
+    prevInlineDetailIndexRef.current = openIndex >= 0 ? openIndex : null
+  }, [detailKey, detailMode, displayRows, compact])
 
   function onDetailEscapeKeyDown(event: KeyboardEvent) {
     if (!detailKeyRef.current) return

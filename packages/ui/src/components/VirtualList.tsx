@@ -44,6 +44,12 @@ export interface VirtualListHandle {
   captureScrollAnchor: () => VirtualListScrollAnchor | null
   /** Re-apply a captured anchor after layout/remasure. */
   restoreScrollAnchor: (anchor: VirtualListScrollAnchor) => void
+  /**
+   * Push a row size into the cache before paint (e.g. Event Stream inline
+   * expand). Omit `size` to read the mounted `[data-index]` node height.
+   * ResizeObserver alone is a frame late and flashes overlapping rows.
+   */
+  resizeItem: (index: number, size?: number) => void
 }
 
 export interface VirtualListProps<T> {
@@ -131,6 +137,18 @@ function VirtualListInner<T>(
         const nextTop = scrollTopForVirtualAnchor(anchor, itemStart)
         if (nextTop == null) return
         virtualizer.scrollToOffset(nextTop, { align: "start", behavior: "auto" })
+      },
+      resizeItem(index, size) {
+        if (index < 0 || index >= items.length) return
+        if (typeof size === "number" && Number.isFinite(size) && size > 0) {
+          virtualizer.resizeItem(index, size)
+          return
+        }
+        const host = parentRef.current
+        const node = host?.querySelector(`[data-index="${index}"]`)
+        if (!(node instanceof HTMLElement)) return
+        const measured = node.offsetHeight
+        if (measured > 0) virtualizer.resizeItem(index, measured)
       },
     }),
     [virtualizer, items.length, parentRef],
