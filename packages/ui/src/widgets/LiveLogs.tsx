@@ -38,6 +38,7 @@ import { formatLogEntry } from "../state/store"
 import type { LogEntry } from "../types"
 import { isSyncSqlEventType } from "./sync/trace/sync-sql-trace"
 import { operationStatusPill } from "../lib/status-callout"
+import { resolveEventStreamDetailMode } from "../lib/event-stream-detail-mode"
 import { WIDGET_ICONS } from "./widget-icons"
 import {
   WIDGET_LOG_SHELL_CLASS,
@@ -67,6 +68,7 @@ import {
   EventStreamHistogram,
   type EventStreamHistogramFocus,
 } from "./live-logs/EventStreamHistogram"
+import { EventStreamDetailDrawer } from "./live-logs/EventStreamDetailDrawer"
 
 type EventType = EventStreamEventType
 
@@ -108,7 +110,10 @@ export function LiveLogs() {
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [histogramFocus, setHistogramFocus] = useState<EventStreamHistogramFocus | null>(null)
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
-  const [expandedKeys, setExpandedKeys] = useState<Set<string>>(() => new Set())
+  /** One open detail — presentation is drawer vs inline by tile width. */
+  const [detailKey, setDetailKey] = useState<string | null>(null)
+  const detailKeyRef = useRef<string | null>(null)
+  detailKeyRef.current = detailKey
   const listRef = useRef<VirtualListHandle>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
 
@@ -147,6 +152,7 @@ export function LiveLogs() {
   const { width: rootWidth } = useContainerSize(rootRef)
   const compact = rootWidth > 0 && rootWidth < 860
   const tiny = rootWidth > 0 && rootWidth < 480
+  const detailMode = resolveEventStreamDetailMode(rootWidth)
 
   // Deep search within the selected time window when the loaded page has no hits.
   const [searchHits, setSearchHits] = useState<LogEntry[]>([])
@@ -229,6 +235,35 @@ export function LiveLogs() {
     )
   }, [lensRows, histogramFocus])
 
+  const detailLog = useMemo(() => {
+    if (!detailKey) return null
+    for (let i = 0; i < displayRows.length; i++) {
+      const log = displayRows[i]
+      if (log && eventStreamRowKey(log, i) === detailKey) return log
+    }
+    return null
+  }, [detailKey, displayRows])
+
+  // Detail key is stable across resize (drawer ↔ inline); drop when the row leaves the lens.
+  useEffect(() => {
+    if (!detailKey) return
+    if (!detailLog) setDetailKey(null)
+  }, [detailKey, detailLog])
+
+  function onDetailEscapeKeyDown(event: KeyboardEvent) {
+    if (!detailKeyRef.current) return
+    if (event.key !== "Escape") return
+    event.preventDefault()
+    event.stopPropagation()
+    setDetailKey(null)
+  }
+
+  useEffect(() => {
+    if (!detailKey) return
+    window.addEventListener("keydown", onDetailEscapeKeyDown, true)
+    return () => window.removeEventListener("keydown", onDetailEscapeKeyDown, true)
+  }, [detailKey])
+
   const displayRowsRef = useRef(displayRows)
   displayRowsRef.current = displayRows
 
@@ -304,17 +339,12 @@ export function LiveLogs() {
   }, [displayRows])
 
   const isKeyboardNodeFolded = useCallback(
-    (node: ReviewTreeKeyboardNode) => !expandedKeys.has(node.scopeId),
-    [expandedKeys],
+    (node: ReviewTreeKeyboardNode) => detailKey !== node.scopeId,
+    [detailKey],
   )
 
   const onKeyboardToggleFold = useCallback((scopeId: string) => {
-    setExpandedKeys((prev) => {
-      const next = new Set(prev)
-      if (next.has(scopeId)) next.delete(scopeId)
-      else next.add(scopeId)
-      return next
-    })
+    setDetailKey((prev) => (prev === scopeId ? null : scopeId))
   }, [])
 
   // Claim while armed (focused tile or peek) — `/` must work even on an empty list.
@@ -435,7 +465,7 @@ export function LiveLogs() {
   }
 
   return (
-    <div ref={rootRef} className={WIDGET_LOG_SHELL_CLASS}>
+    <div ref={rootRef} className={`${WIDGET_LOG_SHELL_CLASS} relative`}>
       <div className={`${WIDGET_LOG_STACK_CLASS} event-stream-stack`}>
       <div className="event-stream-deck">
       <div className={WIDGET_REVIEW_CONTROLS_CLASS}>
@@ -655,8 +685,10 @@ export function LiveLogs() {
             estimateSize={(i) => {
               const log = displayRows[i]
               if (!log) return 36
+              // Drawer mode keeps every row short — payload lives in the side panel.
+              if (detailMode !== "inline") return 36
               const key = eventStreamRowKey(log, i)
-              if (expandedKeys.has(key) && eventStreamHasPayload(log)) {
+              if (detailKey === key && eventStreamHasPayload(log)) {
                 return compact ? 220 : 300
               }
               return 36
@@ -666,14 +698,16 @@ export function LiveLogs() {
             getItemKey={(i, log) => eventStreamRowKey(log, i)}
             renderItem={({ item: log, index }) => {
               const rowKey = eventStreamRowKey(log, index)
+              const detailOpen = detailKey === rowKey
               return (
                 <LogRow
                   log={log}
                   rowKey={rowKey}
                   selected={selectedKey === rowKey}
-                  expanded={expandedKeys.has(rowKey)}
+                  detailOpen={detailOpen}
+                  showInlinePayload={detailMode === "inline" && detailOpen}
                   onSelect={() => setSelectedKey(rowKey)}
-                  onToggleExpand={() => onKeyboardToggleFold(rowKey)}
+                  onToggleDetail={() => onKeyboardToggleFold(rowKey)}
                   setTypeFilters={setTypeFilters}
                   compact={compact}
                   tiny={tiny}
@@ -712,6 +746,14 @@ export function LiveLogs() {
       )}
       </div>
       </div>
+      {detailMode === "drawer" ? (
+        <EventStreamDetailDrawer
+          open={Boolean(detailLog)}
+          log={detailLog}
+          onClose={() => setDetailKey(null)}
+          compact={compact}
+        />
+      ) : null}
     </div>
   )
 }
@@ -720,9 +762,10 @@ function LogRow({
   log,
   rowKey,
   selected,
-  expanded,
+  detailOpen,
+  showInlinePayload,
   onSelect,
-  onToggleExpand,
+  onToggleDetail,
   setTypeFilters,
   compact,
   tiny,
@@ -730,9 +773,10 @@ function LogRow({
   log: LogEntry
   rowKey: string
   selected: boolean
-  expanded: boolean
+  detailOpen: boolean
+  showInlinePayload: boolean
   onSelect: () => void
-  onToggleExpand: () => void
+  onToggleDetail: () => void
   setTypeFilters: React.Dispatch<React.SetStateAction<Set<EventType>>>
   compact: boolean
   tiny: boolean
@@ -742,7 +786,7 @@ function LogRow({
 
   const lane = log.type as EventType
 
-  const open = expanded && hasData
+  const open = detailOpen && hasData
 
   return (
     <div
@@ -762,7 +806,7 @@ function LogRow({
         ].join(" ")}
         onClick={() => {
           onSelect()
-          if (hasData) onToggleExpand()
+          if (hasData) onToggleDetail()
         }}
       >
         {isError ? (
@@ -775,7 +819,7 @@ function LogRow({
             <ChevronRight
               size={13}
               strokeWidth={1.75}
-              className={`transition-transform ${expanded ? "rotate-90" : ""}`}
+              className={`transition-transform ${open ? "rotate-90" : ""}`}
             />
           ) : null}
         </span>
@@ -826,7 +870,7 @@ function LogRow({
           </>
         )}
       </div>
-      {expanded && log.data && (
+      {showInlinePayload && log.data ? (
         <div className="event-stream-payload">
           <div
             className={
@@ -846,7 +890,7 @@ function LogRow({
             />
           </div>
         </div>
-      )}
+      ) : null}
     </div>
   )
 }

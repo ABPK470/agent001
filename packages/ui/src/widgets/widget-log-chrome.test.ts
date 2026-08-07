@@ -531,6 +531,33 @@ describe("widget log chrome — shared content dialect", () => {
     expect(css).toMatch(/\.event-stream-row\s*\{[^}]*grid-template-columns:/s)
     expect(css).toContain(".event-stream-payload__box")
 
+    // Detail: drawer when wide, inline accordion when narrow — one detailKey.
+    expect(live).toContain("resolveEventStreamDetailMode")
+    expect(live).toContain("EventStreamDetailDrawer")
+    expect(live).toContain("detailKey")
+    expect(live).toContain("showInlinePayload")
+    expect(live).toContain("event-stream-payload")
+    expect(live).toContain("onDetailEscapeKeyDown")
+    expect(live).toMatch(/addEventListener\("keydown", onDetailEscapeKeyDown, true\)/)
+    expect(live).toMatch(/estimateSize[\s\S]*compact \? 220 : 300/)
+    expect(css).toContain(".event-stream-drawer")
+    expect(css).toMatch(
+      /\.event-stream-drawer\s*\{[^}]*transform:\s*translateX\(100%\)/s,
+    )
+    expect(css).toMatch(
+      /\.event-stream-drawer\[data-open="true"\]\s*\{[^}]*transform:\s*translateX\(0\)/s,
+    )
+    expect(css).toMatch(
+      /prefers-reduced-motion:\s*reduce[\s\S]*?\.event-stream-drawer\s*\{[^}]*transition:\s*none/s,
+    )
+    expect(css).toMatch(
+      /\.event-stream-drawer\s*\{[^}]*--event-stream-drawer-dur:\s*var\(--audit-inspector-dur/s,
+    )
+    const drawer = read(join(here, "live-logs/EventStreamDetailDrawer.tsx"))
+    expect(drawer).toContain('role="dialog"')
+    expect(drawer).toContain('aria-modal="false"')
+    expect(drawer).toContain("JsonViewer")
+
     // Control deck + hard-clipped feed (block scrollport — not flex body).
     expect(live).toContain("event-stream-deck")
     expect(live).toContain("event-stream-stack")
