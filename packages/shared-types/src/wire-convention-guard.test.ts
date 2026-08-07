@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync, statSync } from "node:fs"
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs"
 import { join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { describe, expect, it } from "vitest"
@@ -16,6 +16,7 @@ const FORBIDDEN = [
 const SKIP_DIRS = new Set(["node_modules", "dist", ".git", "migrations"])
 
 function walk(dir: string, out: string[] = []): string[] {
+  if (!existsSync(dir)) return out
   for (const entry of readdirSync(dir)) {
     if (SKIP_DIRS.has(entry)) continue
     const path = join(dir, entry)
@@ -38,6 +39,7 @@ function isProductionSource(file: string): boolean {
 
 describe("wire convention guard", () => {
   it("does not reintroduce legacy string binding grammars in production sources", () => {
+    // sync-definitions/published is optional — Publish writes SQLite instead.
     const roots = [
       join(repoRoot, "packages"),
       join(repoRoot, "deploy/sync/artifacts"),

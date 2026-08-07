@@ -86,14 +86,14 @@ describe("connector port (postgres -> mssql e2e)", () => {
     expect(received).toEqual([[{ key: 1, label: "a" }], [{ key: 2, label: "b" }]])
   })
 
-  it("listAdapters surfaces capabilities per connector", () => {
+  it("listAdapters surfaces capabilities per connector", async () => {
     const pg = connector("pg-src", "postgres")
     const mssql = connector("ms-tgt", "mssql")
     const registry = new AdapterRegistry()
     registry.register("postgres", () => sourceAdapter([]))
     registry.register("mssql", () => targetAdapter([]))
     const port = buildConnectorPort(registry, [pg, mssql])
-    const info = port.listAdapters()
+    const info = await port.listAdapters()
     expect(info.map((c) => c.id).sort()).toEqual(["ms-tgt", "pg-src"])
     const pgInfo = info.find((c) => c.id === "pg-src")!
     expect(pgInfo.capabilities).toEqual({ read: true, write: false, query: true })
