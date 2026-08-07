@@ -35,9 +35,11 @@ export function useTraceOperatorKeyboard({
   isZen,
   isSolo,
   summonOpen,
+  modalWidgetOpen = false,
   onExitZen,
   onRestoreMaximize,
   onDismissSummon,
+  onDismissPeek,
   onToggleZen,
   onViewModeChange,
   treeScrollRef,
@@ -56,9 +58,11 @@ export function useTraceOperatorKeyboard({
   isZen: boolean
   isSolo: boolean
   summonOpen: boolean
+  modalWidgetOpen?: boolean
   onExitZen: () => void
   onRestoreMaximize: () => void
   onDismissSummon: () => void
+  onDismissPeek?: () => void
   onToggleZen: () => void
   onViewModeChange: (mode: "tree" | "waterfall") => void
   treeScrollRef: RefObject<HTMLElement | null>
@@ -147,9 +151,11 @@ export function useTraceOperatorKeyboard({
     isZen,
     isSolo,
     summonOpen,
+    modalWidgetOpen,
     onExitZen,
     onRestoreMaximize,
     onDismissSummon,
+    onDismissPeek,
     treeScrollRef,
     detailScrollRef,
     tabCycleRef,

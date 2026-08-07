@@ -345,6 +345,8 @@ export function OperationLog() {
   const toggleTileMaximized = useLayoutStore((s) => s.toggleTileMaximized)
   const summonOpen = useStore((s) => s.summonOpen)
   const setSummonOpen = useStore((s) => s.setSummonOpen)
+  const modalWidget = useStore((s) => s.modalWidget)
+  const closeModalWidget = useStore((s) => s.closeModalWidget)
   const keymapSheetOpen = useStore((s) => s.keymapSheetOpen)
   const { width } = useContainerSize(rootRef)
   const tiny = width > 0 && width < 480
@@ -605,8 +607,10 @@ export function OperationLog() {
     onFocusedPaneChange,
     isSolo,
     summonOpen,
+    modalWidgetOpen: Boolean(modalWidget),
     onRestoreMaximize,
     onDismissSummon: () => setSummonOpen(false),
+    onDismissPeek: () => closeModalWidget(),
     treeScrollRef: listScrollRef,
     detailScrollRef,
     sectionControllerRef,

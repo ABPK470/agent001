@@ -114,6 +114,7 @@ export function TraceDag({
   const keymapSheetOpen = useStore((s) => s.keymapSheetOpen)
   const setTraceOperatorPane = useStore((s) => s.setTraceOperatorPane)
   const modalWidget = useStore((s) => s.modalWidget)
+  const closeModalWidget = useStore((s) => s.closeModalWidget)
   const zenHotkeysEnabled =
     isZen || isSolo || Boolean(widgetInstance && focusedTileId === widgetInstance.widgetId)
   const operatorKeysEnabled =
@@ -494,9 +495,11 @@ export function TraceDag({
     isZen,
     isSolo,
     summonOpen,
+    modalWidgetOpen: Boolean(modalWidget),
     onExitZen: exitZen,
     onRestoreMaximize,
     onDismissSummon: () => setSummonOpen(false),
+    onDismissPeek: () => closeModalWidget(),
     onToggleZen: toggleZen,
     onViewModeChange: setViewMode,
     treeScrollRef,

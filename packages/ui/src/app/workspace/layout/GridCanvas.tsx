@@ -29,6 +29,7 @@ import {
     type SplitNode,
 } from "../../../lib/split-tree"
 import { useLayoutStore } from "../../../state/layout-store"
+import { useStore } from "../../../state/store"
 import { WidgetShell } from "../WidgetShell"
 import { TilePaintProvider } from "../tile-paint"
 import { widgetComponent } from "../widget-definitions"
@@ -422,10 +423,16 @@ export function GridCanvas({ viewId, tiles, split }: Props) {
     setFocusedTile(first.id)
   }, [focusedTileId, tiles, setFocusedTile])
 
+  const summonOpen = useStore((s) => s.summonOpen)
+  const keymapSheetOpen = useStore((s) => s.keymapSheetOpen)
+
   // Sticky tile selection: store focus survives clicks into widget content.
   // Sync DOM focus when selection changes from the keyboard (⌘⇧+arrows / Call Space).
+  // Re-run when ops overlays close — Summon sets focusedTileId then dismisses in one turn,
+  // so the first pass bails while focus is still inside `.ops-sheet`.
   useEffect(() => {
     if (!focusedTileId) return
+    if (summonOpen || keymapSheetOpen) return
     const el = containerRef.current?.querySelector(
       `[data-tile-id="${CSS.escape(focusedTileId)}"]`,
     )
@@ -436,7 +443,7 @@ export function GridCanvas({ viewId, tiles, split }: Props) {
       return
     }
     el.focus({ preventScroll: true })
-  }, [focusedTileId])
+  }, [focusedTileId, summonOpen, keymapSheetOpen])
 
   // Layout reparent is Shift+Arrow only — bare arrows belong to widget/pane nav;
   // ⌘⇧+arrows moves tile focus (shell operator keyboard).

@@ -15,6 +15,17 @@ describe("resolveEscLadder", () => {
     ).toEqual({ type: "dismiss-summon" })
   })
 
+  it("peels peek before summon when both are open", () => {
+    expect(
+      resolveEscLadder({
+        summonOpen: true,
+        modalWidgetOpen: true,
+        filterOpen: false,
+        focusedPane: "tree",
+      }),
+    ).toEqual({ type: "dismiss-peek" })
+  })
+
   it("peels one layer at a time", () => {
     const base = {
       summonOpen: false,

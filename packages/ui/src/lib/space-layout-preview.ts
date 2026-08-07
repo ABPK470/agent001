@@ -48,6 +48,13 @@ export function projectSpaceLayoutPreview(
   }))
 }
 
+/** Leaves that can take a digit / click focus (skip empty chrome). */
+export function selectablePreviewLeaves(
+  leaves: readonly SpacePreviewLeaf[],
+): SpacePreviewLeaf[] {
+  return leaves.filter((leaf) => leaf.type != null && leaf.tileId !== "__empty__")
+}
+
 /** CSS % placement relative to `bounds` (default preview canvas). */
 export function spacePreviewLeafStyle(
   rect: GridRect,

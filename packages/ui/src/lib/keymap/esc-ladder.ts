@@ -10,6 +10,8 @@ export type EscLadderContext = {
   isZen?: boolean
   isSolo?: boolean
   summonOpen?: boolean
+  /** Peek stage open above Summon — peel before dismissing the board. */
+  modalWidgetOpen?: boolean
 }
 
 export type EscLadderAction =
@@ -18,14 +20,16 @@ export type EscLadderAction =
   | { type: "pane-to-tree" }
   | { type: "exit-zen" }
   | { type: "restore-maximize" }
+  | { type: "dismiss-peek" }
   | { type: "dismiss-summon" }
   | { type: "none" }
 
 /**
  * Pure Esc priority.
- * Summon/peek overlays sit above widget context; then scope drawer → filter → pane → zen → max.
+ * Peek → Summon overlays sit above widget context; then scope drawer → filter → pane → zen → max.
  */
 export function resolveEscLadder(ctx: EscLadderContext): EscLadderAction {
+  if (ctx.summonOpen && ctx.modalWidgetOpen) return { type: "dismiss-peek" }
   if (ctx.summonOpen) return { type: "dismiss-summon" }
   if (ctx.scopeDrawerOpen) return { type: "dismiss-scope-drawer" }
   if (ctx.filterOpen) return { type: "dismiss-filter" }

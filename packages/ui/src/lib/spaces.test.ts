@@ -29,13 +29,21 @@ function leafRatio(
 }
 
 describe("product spaces", () => {
-  it("exposes five Call Space indices", () => {
-    expect(PRODUCT_SPACES.filter((s) => s.index >= 1).map((s) => s.index)).toEqual([
-      1, 2, 3, 4, 5,
-    ])
+  it("exposes five Call Space indices (Mod+1…5); Users is Summon/tab only", () => {
+    expect(
+      PRODUCT_SPACES.filter((s) => s.index >= 1 && s.index <= 5).map((s) => s.index),
+    ).toEqual([1, 2, 3, 4, 5])
     expect(spaceByIndex(2)?.id).toBe("space:observe")
     expect(spaceByIndex(5)?.id).toBe("space:trace")
+    expect(spaceByIndex(6)).toBeUndefined()
     expect(spaceByIndex(0)).toBeUndefined()
+    expect(PRODUCT_SPACES.find((s) => s.id === "space:users")?.index).toBe(6)
+  })
+
+  it("Users Space is Active Users alone", () => {
+    const view = buildSpaceView(PRODUCT_SPACES.find((s) => s.id === "space:users")!)
+    expect(view.tiles.map((t) => t.type)).toEqual(["active-users"])
+    expect(view.split?.kind).toBe("leaf")
   })
 
   it("Observe is Pipelines 70% | Event stream 30%", () => {

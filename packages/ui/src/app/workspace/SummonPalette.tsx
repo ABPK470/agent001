@@ -1,8 +1,9 @@
 /**
- * Summon (⌘K) — fixed two-column ops board:
- * search · Active Context · Go | Surface · Esc ladder.
+ * Summon (⌘K) — command list + spatial blueprint.
  *
- * ↑↓ move in a column · ←→ jump columns · Enter keeps/goes/focuses · ⌘Enter peeks (surfaces).
+ * Left: All / Spaces / Surfaces · ↑↓ move · Tab filter
+ * Right: live Space blueprint (1–9 tile) or surface card
+ * Enter keeps/goes · ⌘Enter peeks (Summon stays open) · Esc peels peek → clear → dismiss
  */
 
 import { Search } from "lucide-react"
@@ -15,6 +16,7 @@ import {
 } from "react"
 import { resolveKeymapActiveContext } from "../../lib/keymap"
 import {
+    resolveSummonBlueprintTileEnter,
     resolveSummonBundleOpen,
     resolveSummonSpaceEnter,
     resolveSummonWidgetEnter,
@@ -30,15 +32,23 @@ import {
     filterSummonItems,
     listSummonItems,
     summonActionPreview,
-    summonItemIconType,
+    summonItemIcon,
     summonItemKey,
     type SummonItem,
 } from "./summon-items"
+import { resolveSummonPreview } from "./summon-preview"
+import { SummonSpatialPreview } from "./SummonSpatialPreview"
 import {
-    moveSummonSelection,
-    orderSummonForNav,
-    partitionSummonColumns,
+    cycleSummonFilter,
+    filterSummonByMode,
+    moveSummonListSelection,
+    shouldSummonBlueprintDigit,
+    shouldSummonFilterArrow,
+    SUMMON_FILTER_LABEL,
+    SUMMON_FILTER_MODES,
     summonActionKeys,
+    summonListSections,
+    type SummonFilterMode,
 } from "./summon-tabs"
 import { getWidgetDefinition } from "./widget-definitions"
 
@@ -46,11 +56,14 @@ export function SummonPalette() {
   const summonOpen = useStore((s) => s.summonOpen)
   const setSummonOpen = useStore((s) => s.setSummonOpen)
   const openModalWidget = useStore((s) => s.openModalWidget)
+  const closeModalWidget = useStore((s) => s.closeModalWidget)
+  const modalWidget = useStore((s) => s.modalWidget)
   const activeRunId = useStore((s) => s.activeRunId)
   const requestWorkspaceShell = useStore((s) => s.requestWorkspaceShell)
   const traceOperatorPane = useStore((s) => s.traceOperatorPane)
 
   const callSpace = useLayoutStore((s) => s.callSpace)
+  const callSpaceFocusPick = useLayoutStore((s) => s.callSpaceFocusPick)
   const ensureWidgets = useLayoutStore((s) => s.ensureWidgets)
   const openSpacePreset = useLayoutStore((s) => s.openSpacePreset)
   const focusWidgetType = useLayoutStore((s) => s.focusWidgetType)
@@ -64,15 +77,19 @@ export function SummonPalette() {
 
   const [query, setQuery] = useState("")
   const [selected, setSelected] = useState(0)
+  const [filterMode, setFilterMode] = useState<SummonFilterMode>("all")
   const inputRef = useRef<HTMLInputElement>(null)
 
   const catalog = useMemo(
     () => listSummonItems({ views, viewportRows }),
     [views, viewportRows],
   )
-  const matched = useMemo(() => filterSummonItems(query, catalog), [catalog, query])
-  const columns = useMemo(() => partitionSummonColumns(matched), [matched])
-  const navItems = useMemo(() => orderSummonForNav(matched), [matched])
+  const searched = useMemo(() => filterSummonItems(query, catalog), [catalog, query])
+  const navItems = useMemo(
+    () => filterSummonByMode(searched, filterMode),
+    [searched, filterMode],
+  )
+  const sections = useMemo(() => summonListSections(navItems), [navItems])
 
   const activeView = views.find((view) => view.id === activeViewId)
   const focusedTile = focusedTileId
@@ -112,13 +129,14 @@ export function SummonPalette() {
     ensureProductSpaces()
     setQuery("")
     setSelected(0)
+    setFilterMode("all")
     const t = window.setTimeout(() => inputRef.current?.focus(), 0)
     return () => window.clearTimeout(t)
   }, [ensureProductSpaces, summonOpen])
 
   useEffect(() => {
     setSelected(0)
-  }, [query])
+  }, [query, filterMode])
 
   useEffect(() => {
     if (!summonOpen) return
@@ -134,14 +152,52 @@ export function SummonPalette() {
     }
   }, [navItems.length, selected])
 
+  useEffect(() => {
+    if (!summonOpen) return
+    const current = navItems[selected]
+    if (!current) return
+    const el = document.getElementById(`summon-option-${summonItemKey(current)}`)
+    el?.scrollIntoView({ block: "nearest" })
+  }, [navItems, selected, summonOpen])
+
+  useEffect(() => {
+    if (!summonOpen) return
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key !== "Escape") return
+      event.preventDefault()
+      event.stopPropagation()
+      if (modalWidget) {
+        closeModalWidget()
+        return
+      }
+      if (query.length > 0) {
+        setQuery("")
+        return
+      }
+      setSummonOpen(false)
+    }
+    window.addEventListener("keydown", onKeyDown, true)
+    return () => window.removeEventListener("keydown", onKeyDown, true)
+  }, [summonOpen, query, setSummonOpen, modalWidget, closeModalWidget])
+
   const current = navItems[selected] ?? null
   const onSpace =
     current?.kind === "widget" ? presentTypes.has(current.type) : false
-  const preview = summonActionPreview(current, {
+  const actionPreview = summonActionPreview(current, {
     onSpace,
     spaceName: activeView?.name ?? null,
   })
   const contextHints = summonContextHints(current)
+  const previewModel = useMemo(
+    () =>
+      resolveSummonPreview(current, views, {
+        presentTypes,
+        viewportRows,
+      }),
+    [current, presentTypes, views, viewportRows],
+  )
+  const pickableCount =
+    previewModel.mode === "blueprint" ? previewModel.pickable.length : 0
 
   function dismiss() {
     setSummonOpen(false)
@@ -154,9 +210,15 @@ export function SummonPalette() {
       dismiss()
       return
     }
-    if (action.type === "peek-widget") {
-      openModalWidget(action.widgetType, activeRunId ?? undefined)
+    if (action.type === "call-space-focus-pick") {
+      requestWorkspaceShell()
+      callSpaceFocusPick(action.spaceId, action.pickIndex)
       dismiss()
+      return
+    }
+    if (action.type === "peek-widget") {
+      // Peek stacks above Summon — keep the board open for Esc ladder.
+      openModalWidget(action.widgetType, activeRunId ?? undefined)
       return
     }
     if (action.type === "focus-tile") {
@@ -166,9 +228,8 @@ export function SummonPalette() {
       return
     }
     if (action.type === "open-bundle") {
-      // Preset ≠ Call Space: one atomic restore (not navigate + hope).
       requestWorkspaceShell()
-      openSpacePreset(action.spaceId, action.focusType)
+      openSpacePreset(action.spaceId, action.focusType, action.pickIndex)
       dismiss()
       return
     }
@@ -188,7 +249,6 @@ export function SummonPalette() {
       if (action) runAction(action)
       return
     }
-    // Surfaces: Enter = Keep/focus · Mod+Enter = Peek. Spaces ignore Mod+Enter.
     if (modEnter) {
       runAction(resolveSummonWidgetPeek(item.type))
       return
@@ -196,36 +256,68 @@ export function SummonPalette() {
     runAction(resolveSummonWidgetEnter(item.type, presentTypes.has(item.type)))
   }
 
+  function onBlueprintTile(tileId: string) {
+    if (!current || (current.kind !== "space" && current.kind !== "bundle")) return
+    if (previewModel.mode !== "blueprint") return
+    const pickIndex = previewModel.pickable.findIndex((p) => p.tileId === tileId)
+    if (pickIndex < 0) return
+    const action = resolveSummonBlueprintTileEnter(current, pickIndex)
+    if (action) runAction(action)
+  }
+
+  function peelEsc() {
+    if (modalWidget) {
+      closeModalWidget()
+      return
+    }
+    if (query.length > 0) {
+      setQuery("")
+      return
+    }
+    dismiss()
+  }
+
   function onInputKeyDown(event: ReactKeyboardEvent<HTMLInputElement>) {
     if (event.key === "Escape") {
       event.preventDefault()
       event.stopPropagation()
-      if (query.length > 0) {
-        setQuery("")
-        return
-      }
-      dismiss()
+      peelEsc()
+      return
+    }
+
+    if (event.key === "Tab") {
+      event.preventDefault()
+      setFilterMode((mode) =>
+        cycleSummonFilter(mode, event.shiftKey ? "prev" : "next"),
+      )
+      return
+    }
+
+    const filterDir = shouldSummonFilterArrow(event, query)
+    if (filterDir) {
+      event.preventDefault()
+      setFilterMode((mode) => cycleSummonFilter(mode, filterDir))
+      return
+    }
+
+    const digitPick = shouldSummonBlueprintDigit(event, query, pickableCount)
+    if (digitPick != null && current
+      && (current.kind === "space" || current.kind === "bundle")
+    ) {
+      event.preventDefault()
+      const action = resolveSummonBlueprintTileEnter(current, digitPick)
+      if (action) runAction(action)
       return
     }
 
     if (event.key === "ArrowDown") {
       event.preventDefault()
-      setSelected((i) => moveSummonSelection(i, columns, "down"))
+      setSelected((i) => moveSummonListSelection(i, navItems.length, "down"))
       return
     }
     if (event.key === "ArrowUp") {
       event.preventDefault()
-      setSelected((i) => moveSummonSelection(i, columns, "up"))
-      return
-    }
-    if (event.key === "ArrowRight") {
-      event.preventDefault()
-      setSelected((i) => moveSummonSelection(i, columns, "right"))
-      return
-    }
-    if (event.key === "ArrowLeft") {
-      event.preventDefault()
-      setSelected((i) => moveSummonSelection(i, columns, "left"))
+      setSelected((i) => moveSummonListSelection(i, navItems.length, "up"))
       return
     }
     if (event.key === "Home") {
@@ -245,28 +337,27 @@ export function SummonPalette() {
     }
   }
 
-  useEffect(() => {
-    if (!summonOpen) return
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key !== "Escape") return
-      event.preventDefault()
-      event.stopPropagation()
-      if (query.length > 0) {
-        setQuery("")
-        return
-      }
-      setSummonOpen(false)
-    }
-    window.addEventListener("keydown", onKeyDown, true)
-    return () => window.removeEventListener("keydown", onKeyDown, true)
-  }, [summonOpen, query, setSummonOpen])
-
   if (!summonOpen) return null
 
+  function keepSearchFocus(event: { preventDefault: () => void }) {
+    // Rows/tabs are mouse targets only — keyboard focus stays in the search input
+    // (aria-activedescendant). Prevents the native blue focus ring on list buttons.
+    event.preventDefault()
+  }
+
+  function setFilterAndRefocus(mode: SummonFilterMode) {
+    setFilterMode(mode)
+    inputRef.current?.focus()
+  }
+
   return (
-    <div className="ops-sheet-overlay" role="presentation" onClick={dismiss}>
+    <div
+      className="ops-sheet-overlay ops-sheet-overlay--summon"
+      role="presentation"
+      onClick={dismiss}
+    >
       <div
-        className="ops-sheet ops-sheet--board"
+        className="ops-sheet ops-sheet--summon"
         role="dialog"
         aria-modal="true"
         aria-label="Summon"
@@ -290,86 +381,122 @@ export function SummonPalette() {
             autoComplete="off"
             spellCheck={false}
           />
-        </header>
-
-        <div className="ops-sheet__context">
-          <span>
-            Active Context:{" "}
-            <span className="ops-sheet__context-name">{context.title}</span>
-          </span>
-          {contextHints ? (
-            <span className="ops-sheet__context-badge" aria-hidden>
-              {contextHints.map((hint) => {
-                const keys = resolveKeyCaptions(hint.keys)
-                return (
-                  <span
-                    key={`${hint.label}:${keys.join("+")}`}
-                    className="composer-kbd-footer__hint"
-                  >
-                    {keys.map((key) => (
-                      <kbd key={key} className="composer-kbd">
-                        {key}
-                      </kbd>
-                    ))}
-                    <span>{hint.label}</span>
-                  </span>
-                )
-              })}
+          <div className="ops-sheet__header-context">
+            <span>
+              Active:{" "}
+              <span className="ops-sheet__header-context-name">{context.title}</span>
             </span>
-          ) : null}
-        </div>
-
-        <div className="ops-sheet__grid" id="summon-list" role="listbox" aria-label="Summon">
-          <section className="ops-sheet__col">
-            <h3 className="ops-sheet__col-title">Go to Space · Preset</h3>
-            {columns.go.length === 0 ? (
-              <p className="ops-sheet__col-empty">No matches</p>
-            ) : (
-              <ul className="ops-sheet__rows">
-                {columns.go.map((item) => (
-                  <SummonRow
-                    key={summonItemKey(item)}
-                    item={item}
-                    selected={item === current}
-                    present={false}
-                    currentSpace={item.kind === "space" && item.id === activeViewId}
-                    onHover={() => setSelected(navItems.indexOf(item))}
-                    onOpen={() => onEnter(item, false)}
-                  />
-                ))}
-              </ul>
-            )}
-          </section>
-          <section className="ops-sheet__col">
-            <h3 className="ops-sheet__col-title">Summon surface</h3>
-            {columns.surface.length === 0 ? (
-              <p className="ops-sheet__col-empty">No matches</p>
-            ) : (
-              <ul className="ops-sheet__rows">
-                {columns.surface.map((item) => {
-                  const present = presentTypes.has(item.type)
+            {contextHints ? (
+              <span className="ops-sheet__context-badge" aria-hidden>
+                {contextHints.map((hint) => {
+                  const keys = resolveKeyCaptions(hint.keys)
                   return (
-                    <SummonRow
-                      key={summonItemKey(item)}
-                      item={item}
-                      selected={item === current}
-                      present={present}
-                      currentSpace={false}
-                      onHover={() => setSelected(navItems.indexOf(item))}
-                      onOpen={() => onEnter(item, false)}
-                    />
+                    <span
+                      key={`${hint.label}:${keys.join("+")}`}
+                      className="composer-kbd-footer__hint"
+                    >
+                      {keys.map((key) => (
+                        <kbd key={key} className="composer-kbd">
+                          {key}
+                        </kbd>
+                      ))}
+                      <span>{hint.label}</span>
+                    </span>
                   )
                 })}
-              </ul>
-            )}
-          </section>
+              </span>
+            ) : null}
+          </div>
+        </header>
+
+        <div className="ops-sheet__body">
+          <div className="ops-sheet__list">
+            <div
+              className="ops-sheet__tabs"
+              role="tablist"
+              aria-label="Summon filter"
+            >
+              {SUMMON_FILTER_MODES.map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  role="tab"
+                  tabIndex={-1}
+                  aria-selected={filterMode === mode}
+                  className={[
+                    "ops-sheet__tab",
+                    filterMode === mode ? "is-active" : "",
+                  ].filter(Boolean).join(" ")}
+                  onMouseDown={keepSearchFocus}
+                  onClick={() => setFilterAndRefocus(mode)}
+                >
+                  {SUMMON_FILTER_LABEL[mode]}
+                </button>
+              ))}
+              <span className="ops-sheet__tabs-hint" aria-hidden>
+                <kbd className="composer-kbd">←</kbd>
+                <kbd className="composer-kbd">→</kbd>
+                <span>filter</span>
+              </span>
+            </div>
+
+            <div
+              id="summon-list"
+              className="ops-sheet__list-scroll"
+              role="listbox"
+              aria-label="Summon"
+            >
+              {navItems.length === 0 ? (
+                <p className="ops-sheet__col-empty">No matches</p>
+              ) : (
+                sections.map((section) => (
+                  <section key={section.id} className="ops-sheet__section">
+                    <h3 className="ops-sheet__col-title">{section.title}</h3>
+                    <ul className="ops-sheet__rows">
+                      {section.items.map((item) => {
+                        const present =
+                          item.kind === "widget"
+                            ? presentTypes.has(item.type)
+                            : false
+                        return (
+                          <SummonRow
+                            key={summonItemKey(item)}
+                            item={item}
+                            selected={item === current}
+                            present={present}
+                            currentSpace={
+                              item.kind === "space" && item.id === activeViewId
+                            }
+                            onHover={() => setSelected(navItems.indexOf(item))}
+                            onOpen={() => onEnter(item, false)}
+                          />
+                        )
+                      })}
+                    </ul>
+                  </section>
+                ))
+              )}
+            </div>
+          </div>
+
+          <div className="ops-sheet__detail" aria-live="polite">
+            <SummonSpatialPreview
+              model={previewModel}
+              onSelectTile={
+                current?.kind === "space" || current?.kind === "bundle"
+                  ? onBlueprintTile
+                  : undefined
+              }
+            />
+          </div>
         </div>
 
         <footer className="ops-sheet__footer">
           <ComposerKbdFooter
             hints={summonFooterHints(current, {
-              primary: preview.primary,
+              primary: actionPreview.primary,
               hasQuery: Boolean(query),
+              pickableCount,
             })}
           />
         </footer>
@@ -395,12 +522,8 @@ function SummonRow({
 }) {
   const keys = summonActionKeys(item, { onSpace: present })
   const isPreset = item.kind === "bundle"
-  const Icon = getWidgetDefinition(summonItemIconType(item)).icon
-  const label = currentSpace
-    ? `${item.name} · current`
-    : present
-      ? `${item.name} · here`
-      : item.name
+  const Icon = summonItemIcon(item)
+  const statusPill = currentSpace ? "Current" : present ? "Active" : null
 
   return (
     <li>
@@ -408,27 +531,37 @@ function SummonRow({
         id={`summon-option-${summonItemKey(item)}`}
         type="button"
         role="option"
+        tabIndex={-1}
         aria-selected={selected}
+        aria-label={
+          statusPill ? `${item.name}, ${statusPill}` : item.name
+        }
         className={[
           "ops-sheet__row",
           "ops-sheet__row--interactive",
           selected ? "is-selected" : "",
           isPreset ? "ops-sheet__row--preset" : "",
         ].filter(Boolean).join(" ")}
+        onMouseDown={(event) => event.preventDefault()}
         onMouseEnter={onHover}
         onClick={onOpen}
       >
-        <span className="ops-sheet__label" title={item.desc}>
-          <Icon size={14} strokeWidth={1.75} className="ops-sheet__row-icon" aria-hidden />
-          <span className="ops-sheet__label-text">{label}</span>
+        <span className="ops-sheet__label">
+          <Icon size={14} className="ops-sheet__row-icon" aria-hidden />
+          <span className="ops-sheet__label-text">{item.name}</span>
           {isPreset ? <span className="ops-sheet__preset-mark">Reset</span> : null}
         </span>
-        <span className="ops-sheet__keys">
-          {keys.map((key) => (
-            <kbd key={`${summonItemKey(item)}:${key}`} className="composer-kbd">
-              {key}
-            </kbd>
-          ))}
+        <span className="ops-sheet__row-trail">
+          {statusPill ? (
+            <span className="ops-sheet__status-pill">{statusPill}</span>
+          ) : null}
+          <span className="ops-sheet__keys" aria-hidden>
+            {keys.map((key) => (
+              <kbd key={`${summonItemKey(item)}:${key}`} className="composer-kbd">
+                {key}
+              </kbd>
+            ))}
+          </span>
         </span>
       </button>
     </li>

@@ -8,6 +8,10 @@ import { clearEventStreamPrefs } from "../lib/event-stream-prefs"
 import { firstTileIdForWidgetType } from "../lib/focus-widget-tile"
 import { COLS } from "../lib/grid-math"
 import {
+    projectSpaceLayoutPreview,
+    selectablePreviewLeaves,
+} from "../lib/space-layout-preview"
+import {
     mergeProductSpaces,
     migrateSpaceId,
     reapplyProductSpaceLayouts,
@@ -40,6 +44,16 @@ import type { ViewConfig, WidgetType } from "../types"
 export { WIDGET_DEFAULTS }
 
 const DEFAULT_VIEW_ID = "default"
+
+function focusedTileIdForPick(
+  view: WorkspaceView,
+  pickIndex: number,
+): string | null {
+  const leaves = selectablePreviewLeaves(
+    projectSpaceLayoutPreview(view.split, view.tiles),
+  )
+  return leaves[pickIndex]?.tileId ?? null
+}
 
 export function makeDefaultView(): WorkspaceView {
   return {
@@ -146,13 +160,23 @@ interface LayoutState {
   ensureProductSpaces: () => void
   /** Activate a product Space by id or 1–5 index; focuses first tile. */
   callSpace: (space: SpaceId | number) => void
+  /**
+   * Call Space and focus the pickable leaf at `pickIndex` (blueprint order).
+   * Falls back to the first tile when the index is out of range.
+   */
+  callSpaceFocusPick: (spaceId: SpaceId, pickIndex: number) => void
   /** Rebuild the active product Space to its curated default. */
   resetActiveSpace: () => void
   /**
    * Summon preset: land on a Space, rebuild curated widgets/ratios, focus
    * a primary tile — one atomic write (never navigate-only).
+   * Optional `pickIndex` focuses a blueprint leaf after restore.
    */
-  openSpacePreset: (spaceId: SpaceId, focusType: WidgetType) => void
+  openSpacePreset: (
+    spaceId: SpaceId,
+    focusType: WidgetType,
+    pickIndex?: number,
+  ) => void
   /** Move keyboard focus to a geometric neighbor tile. */
   focusTileNeighbor: (key: FocusArrowKey) => void
   /** Ensure widget types exist on a view (add missing only). */
@@ -369,6 +393,25 @@ export const useLayoutStore = create<LayoutState>()(
         })
       },
 
+      callSpaceFocusPick: (spaceId, pickIndex) => {
+        const def = spaceById(spaceId)
+        if (!def) return
+        set((s) => {
+          const views = mergeProductSpaces(s.views, s.viewportRows)
+          const view = views.find((v) => v.id === def.id)
+          const focusedTileId = view
+            ? focusedTileIdForPick(view, pickIndex)
+            : null
+          return {
+            views,
+            activeViewId: def.id,
+            soloTileId: null,
+            zenTileId: null,
+            focusedTileId: focusedTileId ?? view?.tiles[0]?.id ?? null,
+          }
+        })
+      },
+
       resetActiveSpace: () => {
         const def = spaceById(get().activeViewId)
         const focusType = def?.widgets[0]
@@ -376,7 +419,7 @@ export const useLayoutStore = create<LayoutState>()(
         get().openSpacePreset(def.id, focusType)
       },
 
-      openSpacePreset: (spaceId, focusType) => {
+      openSpacePreset: (spaceId, focusType, pickIndex) => {
         const def = spaceById(spaceId)
         if (!def) return
         set((s) => {
@@ -386,8 +429,13 @@ export const useLayoutStore = create<LayoutState>()(
             s.viewportRows,
           )
           const view = views.find((v) => v.id === def.id)
+          const fromPick =
+            view && pickIndex != null
+              ? focusedTileIdForPick(view, pickIndex)
+              : null
           const focusedTileId =
-            (view ? firstTileIdForWidgetType(view.tiles, focusType) : null)
+            fromPick
+            ?? (view ? firstTileIdForWidgetType(view.tiles, focusType) : null)
             ?? view?.tiles[0]?.id
             ?? null
           return {

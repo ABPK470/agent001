@@ -44,6 +44,21 @@ describe("resolveOperatorSession", () => {
     })
   })
 
+  it("Esc closes peek while Summon stays open", () => {
+    expect(
+      resolveOperatorSession({
+        ...base,
+        summonOpen: true,
+        modalWidgetOpen: true,
+        isEscape: true,
+      }),
+    ).toEqual({
+      type: "dispatch",
+      allowShell: true,
+      allowSurface: false,
+    })
+  })
+
   it("stays quiet while typing (non-Esc)", () => {
     expect(resolveOperatorSession({ ...base, editable: true })).toEqual({ type: "none" })
   })

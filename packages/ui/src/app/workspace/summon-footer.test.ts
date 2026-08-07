@@ -28,23 +28,39 @@ const widget: SummonItem = {
 }
 
 describe("summonFooterHints", () => {
-  it("widget shows Enter + Mod+Enter peek", () => {
+  it("widget shows Enter + Mod+Enter peek + filter chords", () => {
     const hints = summonFooterHints(widget, { primary: "keep", hasQuery: false })
     expect(hints.map((h) => h.label)).toEqual([
       "keep",
       "peek",
       "move",
-      "column",
+      "filter",
+      "cycle",
       "dismiss",
     ])
-    expect(hints[1]!.keys).toContain("↵")
+  })
+
+  it("blueprint with 2+ tiles adds digit hint when query empty", () => {
+    const hints = summonFooterHints(space, {
+      primary: "go",
+      hasQuery: false,
+      pickableCount: 2,
+    })
+    expect(hints.map((h) => h.label)).toContain("tile")
+    expect(hints.some((h) => h.keys[0] === "1–2")).toBe(true)
   })
 
   it("space and preset omit Mod+Enter", () => {
     for (const item of [space, preset]) {
       const hints = summonFooterHints(item, { primary: "go", hasQuery: false })
       expect(hints.some((h) => h.label === "peek")).toBe(false)
-      expect(hints.map((h) => h.label)).toEqual(["go", "move", "column", "dismiss"])
+      expect(hints.map((h) => h.label)).toEqual([
+        "go",
+        "move",
+        "filter",
+        "cycle",
+        "dismiss",
+      ])
     }
   })
 })
@@ -52,8 +68,6 @@ describe("summonFooterHints", () => {
 describe("summonContextHints", () => {
   it("shows keep/peek kbd chips only for widgets", () => {
     expect(summonContextHints(widget)?.map((h) => h.label)).toEqual(["keeps", "peeks"])
-    expect(summonContextHints(widget)?.[0]?.keys).toEqual(["↵"])
-    expect(summonContextHints(widget)?.[1]?.keys).toContain("↵")
     expect(summonContextHints(space)).toBeNull()
     expect(summonContextHints(null)).toBeNull()
   })

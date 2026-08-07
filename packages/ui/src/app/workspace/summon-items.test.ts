@@ -2,10 +2,12 @@ import { describe, expect, it } from "vitest"
 import { buildSpaceView, PRODUCT_SPACES } from "../../lib/spaces"
 import { leafNode } from "../../lib/split-tree"
 import type { WorkspaceView } from "../../lib/workspace-view"
+import { Brain } from "lucide-react"
 import {
   filterSummonItems,
   listSummonItems,
   summonActionPreview,
+  summonItemIcon,
   summonItemIconType,
   widgetSummonGroup,
 } from "./summon-items"
@@ -60,31 +62,40 @@ describe("summon catalog", () => {
     expect(widgetSummonGroup("env-sync")).toBe("config")
   })
 
-  it("reuses primary surface icons for Spaces and presets", () => {
+  it("Agent uses Brain; Trace keeps Bug; presets match focus surface", () => {
     const views = defaultProductViews().map((view) =>
       view.id === "space:observe" ? pollutedObserve() : view,
     )
     const items = listSummonItems({ views })
     const agent = items.find((item) => item.kind === "space" && item.id === "space:agent")!
+    const trace = items.find((item) => item.kind === "space" && item.id === "space:trace")!
+    const users = items.find((item) => item.kind === "space" && item.id === "space:users")!
     const observeReset = items.find(
       (item) => item.kind === "bundle" && item.id === "bundle:observe-core",
     )!
     const chat = items.find(
       (item) => item.kind === "widget" && item.type === "term-chat",
     )!
-    expect(summonItemIconType(agent)).toBe("debug-inspector")
+    expect(summonItemIcon(agent)).toBe(Brain)
+    expect(summonItemIconType(agent)).toBe("agent-brain")
+    expect(summonItemIconType(trace)).toBe("debug-inspector")
+    expect(summonItemIconType(users)).toBe("active-users")
     expect(summonItemIconType(observeReset)).toBe("operation-log")
     expect(summonItemIconType(chat)).toBe("term-chat")
   })
 
-  it("lists every catalog surface including Trace and Bridge", () => {
+  it("lists every catalog surface including Trace, Bridge, and Users", () => {
     const items = listSummonItems({ views: defaultProductViews() })
     const widgets = items.filter((item) => item.kind === "widget")
     expect(widgets.some((item) => item.kind === "widget" && item.type === "debug-inspector")).toBe(
       true,
     )
     expect(widgets.some((item) => item.kind === "widget" && item.type === "bridge")).toBe(true)
+    expect(widgets.some((item) => item.kind === "widget" && item.type === "active-users")).toBe(
+      true,
+    )
     expect(items.some((item) => item.kind === "space" && item.id === "space:trace")).toBe(true)
+    expect(items.some((item) => item.kind === "space" && item.id === "space:users")).toBe(true)
   })
 
   it("previews keep for Trace surface (stays on current layout)", () => {

@@ -56,9 +56,11 @@ export function useReviewOperatorKeyboard({
   isZen = false,
   isSolo = false,
   summonOpen = false,
+  modalWidgetOpen = false,
   onExitZen,
   onRestoreMaximize,
   onDismissSummon,
+  onDismissPeek,
   treeScrollRef,
   detailScrollRef,
   tabCycleRef,
@@ -78,9 +80,11 @@ export function useReviewOperatorKeyboard({
   isZen?: boolean
   isSolo?: boolean
   summonOpen?: boolean
+  modalWidgetOpen?: boolean
   onExitZen?: () => void
   onRestoreMaximize?: () => void
   onDismissSummon?: () => void
+  onDismissPeek?: () => void
   treeScrollRef: RefObject<HTMLElement | null>
   detailScrollRef: RefObject<HTMLElement | null>
   tabCycleRef?: RefObject<((direction: -1 | 1) => void) | null>
@@ -94,6 +98,7 @@ export function useReviewOperatorKeyboard({
   const isZenRef = useRef(isZen)
   const isSoloRef = useRef(isSolo)
   const summonOpenRef = useRef(summonOpen)
+  const modalWidgetOpenRef = useRef(modalWidgetOpen)
   const treeNavRef = useRef(treeNav)
   focusedPaneRef.current = focusedPane
   filterOpenRef.current = filterOpen
@@ -101,6 +106,7 @@ export function useReviewOperatorKeyboard({
   isZenRef.current = isZen
   isSoloRef.current = isSolo
   summonOpenRef.current = summonOpen
+  modalWidgetOpenRef.current = modalWidgetOpen
   treeNavRef.current = treeNav
 
   const onFocusedPaneChangeRef = useRef(onFocusedPaneChange)
@@ -109,12 +115,14 @@ export function useReviewOperatorKeyboard({
   const onExitZenRef = useRef(onExitZen)
   const onRestoreMaximizeRef = useRef(onRestoreMaximize)
   const onDismissSummonRef = useRef(onDismissSummon)
+  const onDismissPeekRef = useRef(onDismissPeek)
   onFocusedPaneChangeRef.current = onFocusedPaneChange
   onFilterOpenChangeRef.current = onFilterOpenChange
   onScopeDrawerOpenChangeRef.current = onScopeDrawerOpenChange
   onExitZenRef.current = onExitZen
   onRestoreMaximizeRef.current = onRestoreMaximize
   onDismissSummonRef.current = onDismissSummon
+  onDismissPeekRef.current = onDismissPeek
 
   const onKeyDownRef = useRef<OperatorSurfaceHandler | null>(null)
   onKeyDownRef.current = (event) => {
@@ -130,8 +138,13 @@ export function useReviewOperatorKeyboard({
         isZen: isZenRef.current,
         isSolo: isSoloRef.current,
         summonOpen: summonOpenRef.current,
+        modalWidgetOpen: modalWidgetOpenRef.current,
       })
       if (action.type === "none") return false
+      if (action.type === "dismiss-peek") {
+        onDismissPeekRef.current?.()
+        return true
+      }
       if (action.type === "dismiss-scope-drawer") {
         onScopeDrawerOpenChangeRef.current?.(false)
         return true

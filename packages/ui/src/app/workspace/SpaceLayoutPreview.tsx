@@ -1,7 +1,6 @@
 /**
- * Spatial Inspector — layout blueprint under a Space tab.
- * Click/right-click/chevron opens; digit hotkeys focus tiles directly.
- * Each leaf: centered surface icon + name (no fake content chrome).
+ * Spatial blueprint — toolbar popover or Summon embedded canvas.
+ * Embedded = tiles only (Summon owns the flush rail header).
  */
 
 import {
@@ -14,16 +13,12 @@ import {
 import { tileHotkeyIndex } from "../../lib/space-layout-inspector-nav"
 import {
   projectSpaceLayoutPreview,
+  selectablePreviewLeaves,
   spacePreviewLeafStyle,
-  type SpacePreviewLeaf,
 } from "../../lib/space-layout-preview"
 import type { SplitNode } from "../../lib/split-tree"
 import type { WidgetType } from "../../types"
 import { getWidgetDefinition } from "./widget-definitions"
-
-function selectableLeaves(leaves: readonly SpacePreviewLeaf[]): SpacePreviewLeaf[] {
-  return leaves.filter((leaf) => leaf.type != null && leaf.tileId !== "__empty__")
-}
 
 export function SpaceLayoutPreview({
   name,
@@ -32,26 +27,41 @@ export function SpaceLayoutPreview({
   style,
   onSelectTile,
   onDismiss,
+  variant = "popover",
+  meta,
+  hotkeyHint: hotkeyHintProp,
+  highlightPickIndex = null,
 }: {
   name: string
   split: SplitNode | null
   tiles: readonly { id: string; type: WidgetType }[]
-  /** Anchor under the tab (cluster-relative). */
+  /** Anchor under the tab (cluster-relative) — popover only. */
   style?: CSSProperties
   onSelectTile?: (tileId: string) => void
   onDismiss?: () => void
+  variant?: "popover" | "embedded"
+  /** Optional subtitle — popover only (Summon paints meta outside). */
+  meta?: string
+  hotkeyHint?: string
+  highlightPickIndex?: number | null
 }) {
   const rootRef = useRef<HTMLDivElement>(null)
   const leaves = projectSpaceLayoutPreview(split, tiles)
-  const pickable = useMemo(() => selectableLeaves(leaves), [leaves])
+  const pickable = useMemo(() => selectablePreviewLeaves(leaves), [leaves])
   const tileCount = pickable.length
   const displayName = name.trim() || "Untitled"
+  const embedded = variant === "embedded"
+  const hotkeyHint =
+    hotkeyHintProp
+    ?? (tileCount <= 1 ? "1" : tileCount <= 9 ? `1–${tileCount}` : "1–9")
 
   useEffect(() => {
+    if (embedded) return
     rootRef.current?.focus({ preventScroll: true })
-  }, [])
+  }, [embedded])
 
   function onInspectorKeyDown(event: ReactKeyboardEvent) {
+    if (embedded) return
     if (event.key === "Escape") {
       event.preventDefault()
       event.stopPropagation()
@@ -73,8 +83,92 @@ export function SpaceLayoutPreview({
     onSelectTile(leaf.tileId)
   }
 
-  const hotkeyHint =
-    tileCount <= 1 ? "1" : tileCount <= 9 ? `1–${tileCount}` : "1–9"
+  const canvas = (
+    <div className="space-layout-preview__canvas">
+      {leaves.map((leaf) => {
+        const pickIndex = pickable.findIndex((item) => item.tileId === leaf.tileId)
+        const hotkey = pickIndex >= 0 ? String(pickIndex + 1) : null
+        const highlighted =
+          highlightPickIndex != null && pickIndex === highlightPickIndex
+
+        if (!leaf.type) {
+          return (
+            <div
+              key={leaf.tileId}
+              className="space-layout-preview__leaf"
+              style={spacePreviewLeafStyle(leaf.rect)}
+            >
+              <div className="space-layout-preview__leaf-inner space-layout-preview__leaf-inner--empty">
+                <span className="space-layout-preview__leaf-label">Empty</span>
+              </div>
+            </div>
+          )
+        }
+
+        const def = getWidgetDefinition(leaf.type)
+        const Icon = def.icon
+        const selectable = Boolean(onSelectTile)
+
+        const inner = (
+          <>
+            {hotkey ? (
+              <kbd className="space-layout-preview__leaf-hotkey tabular-nums">{hotkey}</kbd>
+            ) : null}
+            <span className="space-layout-preview__leaf-body">
+              <Icon size={18} className="space-layout-preview__leaf-icon" aria-hidden />
+              <span className="space-layout-preview__leaf-label">{def.label}</span>
+            </span>
+          </>
+        )
+
+        return (
+          <div
+            key={leaf.tileId}
+            className="space-layout-preview__leaf"
+            style={spacePreviewLeafStyle(leaf.rect)}
+          >
+            {selectable ? (
+              <button
+                type="button"
+                role={embedded ? "button" : "menuitem"}
+                tabIndex={-1}
+                className={[
+                  "space-layout-preview__leaf-inner",
+                  "space-layout-preview__leaf-inner--link",
+                  highlighted ? "is-highlighted" : "",
+                ].filter(Boolean).join(" ")}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => onSelectTile?.(leaf.tileId)}
+              >
+                {inner}
+              </button>
+            ) : (
+              <div
+                className={[
+                  "space-layout-preview__leaf-inner",
+                  highlighted ? "is-highlighted" : "",
+                ].filter(Boolean).join(" ")}
+              >
+                {inner}
+              </div>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+
+  if (embedded) {
+    return (
+      <div
+        className="space-layout-preview space-layout-preview--embedded"
+        role="region"
+        aria-label={`${displayName} space`}
+      >
+        {canvas}
+      </div>
+    )
+  }
 
   return (
     <div
@@ -107,64 +201,8 @@ export function SpaceLayoutPreview({
             </span>
           </span>
         </div>
-        <div className="space-layout-preview__canvas">
-          {leaves.map((leaf) => {
-            const pickIndex = pickable.findIndex((item) => item.tileId === leaf.tileId)
-            const hotkey = pickIndex >= 0 ? String(pickIndex + 1) : null
-
-            if (!leaf.type) {
-              return (
-                <div
-                  key={leaf.tileId}
-                  className="space-layout-preview__leaf"
-                  style={spacePreviewLeafStyle(leaf.rect)}
-                >
-                  <div className="space-layout-preview__leaf-inner space-layout-preview__leaf-inner--empty">
-                    <span className="space-layout-preview__leaf-label">Empty</span>
-                  </div>
-                </div>
-              )
-            }
-
-            const def = getWidgetDefinition(leaf.type)
-            const Icon = def.icon
-            const selectable = Boolean(onSelectTile)
-
-            const inner = (
-              <>
-                {hotkey ? (
-                  <kbd className="space-layout-preview__leaf-hotkey tabular-nums">{hotkey}</kbd>
-                ) : null}
-                <span className="space-layout-preview__leaf-body">
-                  <Icon size={18} strokeWidth={1.75} className="space-layout-preview__leaf-icon" aria-hidden />
-                  <span className="space-layout-preview__leaf-label">{def.label}</span>
-                </span>
-              </>
-            )
-
-            return (
-              <div
-                key={leaf.tileId}
-                className="space-layout-preview__leaf"
-                style={spacePreviewLeafStyle(leaf.rect)}
-              >
-                {selectable ? (
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className="space-layout-preview__leaf-inner space-layout-preview__leaf-inner--link"
-                    onClick={() => onSelectTile?.(leaf.tileId)}
-                    title={`Focus ${def.label}`}
-                  >
-                    {inner}
-                  </button>
-                ) : (
-                  <div className="space-layout-preview__leaf-inner">{inner}</div>
-                )}
-              </div>
-            )
-          })}
-        </div>
+        {meta ? <p className="space-layout-preview__meta">{meta}</p> : null}
+        {canvas}
       </div>
     </div>
   )

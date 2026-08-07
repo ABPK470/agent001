@@ -20,6 +20,10 @@ export function resolveOperatorSession(ctx: {
   isEscape: boolean
   hasActiveSurface: boolean
 }): OperatorSession {
+  // Peek above Summon: let root close the modal; Summon keeps its own Esc listener as peer.
+  if (ctx.summonOpen && ctx.modalWidgetOpen && ctx.isEscape) {
+    return { type: "dispatch", allowShell: true, allowSurface: false }
+  }
   if (ctx.summonOpen || ctx.keymapSheetOpen) return { type: "overlay" }
 
   if (ctx.isEscape) {

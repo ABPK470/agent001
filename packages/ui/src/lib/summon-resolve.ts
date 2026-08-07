@@ -19,12 +19,14 @@ export { dedicatedSpaceForWidget } from "./spaces"
 
 export type SummonOpenAction =
   | { type: "call-space"; spaceId: SpaceId }
+  | { type: "call-space-focus-pick"; spaceId: SpaceId; pickIndex: number }
   | { type: "peek-widget"; widgetType: WidgetType }
   | { type: "focus-tile"; widgetType: WidgetType }
   | {
       type: "open-bundle"
       spaceId: SpaceId
       focusType: WidgetType
+      pickIndex?: number
     }
   | {
       type: "keep-widgets"
@@ -79,5 +81,36 @@ export function resolveSummonBundleOpen(id: ProductBundleId): SummonOpenAction |
     type: "open-bundle",
     spaceId: def.homeSpace,
     focusType: def.focusType,
+  }
+}
+
+/**
+ * Digit / blueprint click — land on Space (or restore preset) and focus
+ * the pickable leaf at `pickIndex` (blueprint paint order).
+ */
+export function resolveSummonBlueprintTileEnter(
+  item: {
+    kind: "space" | "bundle"
+    id: SpaceId | ProductBundleId
+    homeSpace?: SpaceId
+    focusType?: WidgetType
+  },
+  pickIndex: number,
+): SummonOpenAction | null {
+  if (pickIndex < 0) return null
+  if (item.kind === "space") {
+    return {
+      type: "call-space-focus-pick",
+      spaceId: item.id as SpaceId,
+      pickIndex,
+    }
+  }
+  const def = bundleDef(item.id as ProductBundleId)
+  if (!def) return null
+  return {
+    type: "open-bundle",
+    spaceId: def.homeSpace,
+    focusType: def.focusType,
+    pickIndex,
   }
 }

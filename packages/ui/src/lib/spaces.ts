@@ -31,8 +31,13 @@ export type SpaceId =
   | "space:reconcile"
   | "space:bridge"
   | "space:trace"
+  | "space:users"
 
-export type ProductBundleId = "bundle:observe-core" | "bundle:reconcile-core"
+export type ProductBundleId =
+  | "bundle:agent-core"
+  | "bundle:observe-core"
+  | "bundle:reconcile-core"
+  | "bundle:users-core"
 
 /** Persisted Space ids renamed in place (never leave a ghost DIY tab). */
 const LEGACY_SPACE_IDS: Readonly<Record<string, SpaceId>> = {
@@ -43,7 +48,7 @@ const LEGACY_SPACE_IDS: Readonly<Record<string, SpaceId>> = {
  * Bump when curated Space widgets/ratios change so persisted product Spaces
  * rebuild to the new defaults (DIY-named views are left alone).
  */
-export const SPACE_LAYOUT_VERSION = 7
+export const SPACE_LAYOUT_VERSION = 8
 
 export interface ProductSpaceDef {
   id: SpaceId
@@ -102,9 +107,25 @@ export const PRODUCT_SPACES: readonly ProductSpaceDef[] = [
     desc: "Inspect a thread and run",
     widgets: ["debug-inspector"],
   },
+  {
+    id: "space:users",
+    /** No Mod+N Call Space — open via Summon / tab. */
+    index: 6,
+    name: "Users",
+    desc: "Who is online and what they are running",
+    widgets: ["active-users"],
+  },
 ]
 
 export const PRODUCT_BUNDLES: readonly ProductBundleDef[] = [
+  {
+    id: "bundle:agent-core",
+    name: "Agent · reset",
+    desc: "Restore Trace 60% · Chat 40%",
+    homeSpace: "space:agent",
+    focusType: "debug-inspector",
+    widgets: ["debug-inspector", "term-chat"],
+  },
   {
     id: "bundle:observe-core",
     name: "Observe · reset",
@@ -120,6 +141,14 @@ export const PRODUCT_BUNDLES: readonly ProductBundleDef[] = [
     homeSpace: "space:reconcile",
     focusType: "env-sync",
     widgets: ["env-sync", "entity-registry"],
+  },
+  {
+    id: "bundle:users-core",
+    name: "Users · reset",
+    desc: "Restore Active Users full-bleed",
+    homeSpace: "space:users",
+    focusType: "active-users",
+    widgets: ["active-users"],
   },
 ]
 
@@ -152,7 +181,8 @@ export function spaceById(id: string): ProductSpaceDef | undefined {
 }
 
 export function spaceByIndex(index: number): ProductSpaceDef | undefined {
-  if (index < 1) return undefined
+  // Call Space chords are Mod+1…5 only (Users is index 6 — Summon/tab).
+  if (index < 1 || index > 5) return undefined
   return PRODUCT_SPACES.find((space) => space.index === index)
 }
 
@@ -225,6 +255,9 @@ function buildSpaceSplit(
   }
   if (spaceId === "space:bridge") {
     return id("bridge")
+  }
+  if (spaceId === "space:users") {
+    return id("active-users")
   }
   return null
 }

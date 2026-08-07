@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import {
+    resolveSummonBlueprintTileEnter,
     resolveSummonBundleOpen,
     resolveSummonSpaceEnter,
     resolveSummonWidgetEnter,
@@ -66,6 +67,38 @@ describe("summon resolve", () => {
     expect(resolveSummonSpaceEnter("space:trace")).toEqual({
       type: "call-space",
       spaceId: "space:trace",
+    })
+  })
+
+  it("blueprint digit focuses a Space leaf", () => {
+    expect(
+      resolveSummonBlueprintTileEnter(
+        { kind: "space", id: "space:reconcile" },
+        1,
+      ),
+    ).toEqual({
+      type: "call-space-focus-pick",
+      spaceId: "space:reconcile",
+      pickIndex: 1,
+    })
+  })
+
+  it("blueprint digit on preset restores then focuses pick", () => {
+    expect(
+      resolveSummonBlueprintTileEnter(
+        {
+          kind: "bundle",
+          id: "bundle:observe-core",
+          homeSpace: "space:observe",
+          focusType: "operation-log",
+        },
+        1,
+      ),
+    ).toEqual({
+      type: "open-bundle",
+      spaceId: "space:observe",
+      focusType: "operation-log",
+      pickIndex: 1,
     })
   })
 })

@@ -9,6 +9,8 @@
  * Search collapses the board to ranked matches; kinds stay visible.
  */
 
+import type { LucideIcon } from "lucide-react"
+import { Brain } from "lucide-react"
 import {
     isProductSpaceAtDefault,
     PRODUCT_BUNDLES,
@@ -19,6 +21,7 @@ import {
 } from "../../lib/spaces"
 import type { WorkspaceView } from "../../lib/workspace-view"
 import type { WidgetType } from "../../types"
+import { WIDGET_ICONS } from "../../widgets/widget-icons"
 import { catalogEntries } from "./widget-definitions"
 
 /** Live layout — presets only appear when their home Space drifted. */
@@ -70,7 +73,13 @@ export function widgetSummonGroup(type: WidgetType): WidgetSummonGroup {
   ) {
     return "agent"
   }
-  if (type === "operation-log" || type === "live-logs") return "platform"
+  if (
+    type === "operation-log"
+    || type === "live-logs"
+    || type === "active-users"
+  ) {
+    return "platform"
+  }
   if (
     type === "env-sync"
     || type === "entity-registry"
@@ -153,10 +162,27 @@ export function summonItemKey(item: SummonItem): string {
 }
 
 /**
- * Canonical glyph for a Summon row — reuses WIDGET_ICONS only.
- * Spaces → primary (first) surface; presets → focus surface; widgets → themselves.
+ * Canonical glyph for a Summon row.
+ * Agent Space/preset → Brain (Trace keeps Bug). Others reuse WIDGET_ICONS.
  */
-export function summonItemIconType(item: SummonItem): WidgetType {
+export function summonItemIcon(item: SummonItem): LucideIcon {
+  if (item.kind === "widget") return WIDGET_ICONS[item.type]
+  if (item.kind === "bundle") {
+    if (item.homeSpace === "space:agent") return Brain
+    return WIDGET_ICONS[item.focusType]
+  }
+  if (item.id === "space:agent") return Brain
+  const primary = spaceById(item.id)?.widgets[0]
+  if (!primary) {
+    throw new Error(`Summon Space ${item.id} has no primary surface icon`)
+  }
+  return WIDGET_ICONS[primary]
+}
+
+/** Icon key for tests / diagnostics — Agent is Brain, not Trace’s Bug. */
+export function summonItemIconType(item: SummonItem): WidgetType | "agent-brain" {
+  if (item.kind === "space" && item.id === "space:agent") return "agent-brain"
+  if (item.kind === "bundle" && item.homeSpace === "space:agent") return "agent-brain"
   if (item.kind === "widget") return item.type
   if (item.kind === "bundle") return item.focusType
   const primary = spaceById(item.id)?.widgets[0]

@@ -7,7 +7,11 @@ import type { SummonItem } from "./summon-items"
 
 export function summonFooterHints(
   item: SummonItem | null,
-  opts: { primary: string; hasQuery: boolean },
+  opts: {
+    primary: string
+    hasQuery: boolean
+    pickableCount?: number
+  },
 ): readonly KbdHint[] {
   const hints: KbdHint[] = [
     { keys: ["↵"], label: opts.primary },
@@ -19,9 +23,18 @@ export function summonFooterHints(
 
   hints.push(
     { keys: ["↑", "↓"], label: "move" },
-    { keys: ["←", "→"], label: "column" },
-    { keys: ["Esc"], label: opts.hasQuery ? "clear" : "dismiss" },
+    // ←→ when query empty; Tab / Shift+Tab always — same cycle.
+    { keys: ["←", "→"], label: "filter" },
+    { keys: ["Tab"], label: "cycle" },
   )
+
+  const pickable = opts.pickableCount ?? 0
+  if (!opts.hasQuery && pickable >= 2) {
+    const cap = pickable <= 9 ? `1–${pickable}` : "1–9"
+    hints.push({ keys: [cap], label: "tile" })
+  }
+
+  hints.push({ keys: ["Esc"], label: opts.hasQuery ? "clear" : "dismiss" })
 
   return hints
 }
