@@ -19,7 +19,7 @@ export type SpacePreviewLeaf = {
 }
 
 /** Unit canvas for the fixed preview shell (percent-friendly). */
-export const SPACE_PREVIEW_BOUNDS: GridRect = { x: 0, y: 0, w: 100, h: 56 }
+export const SPACE_PREVIEW_BOUNDS: GridRect = { x: 0, y: 0, w: 100, h: 64 }
 
 /**
  * Map `view.split` + tiles onto a fixed preview canvas.
@@ -76,4 +76,20 @@ export function clampSpacePreviewAnchor(
   if (clusterWidthPx <= previewWidthPx) return clusterWidthPx / 2
   const half = previewWidthPx / 2
   return Math.max(half, Math.min(tabCenterPx, clusterWidthPx - half))
+}
+
+/** Ignore tiny tab hops — keep the shell still and only swap content. */
+export const SPACE_PREVIEW_ANCHOR_SLACK_PX = 28
+
+/**
+ * Next popover anchor while the inspector stays open.
+ * Nearby tabs (within slack) reuse the current left; larger hops retarget.
+ */
+export function nextSpacePreviewAnchor(
+  currentAnchorPx: number,
+  desiredAnchorPx: number,
+  slackPx: number = SPACE_PREVIEW_ANCHOR_SLACK_PX,
+): number {
+  if (Math.abs(desiredAnchorPx - currentAnchorPx) <= slackPx) return currentAnchorPx
+  return desiredAnchorPx
 }

@@ -12,6 +12,7 @@ import { VirtualList, type VirtualListHandle } from "../components/VirtualList"
 import { ReviewSplitPane, ReviewTreeHeader } from "../components/review"
 import type { ReviewTreeKeyboardNode } from "../components/review/review-tree-keyboard"
 import { EmptyState } from "../components/EmptyState"
+import { captureSoloFlipForTileId } from "../app/workspace/layout/solo-flip"
 import { useWidgetInstance } from "../app/workspace/widget-instance"
 import { useContainerSize } from "../hooks/useContainerSize"
 import { useReviewOperatorKeyboard } from "../hooks/useReviewOperatorKeyboard"
@@ -593,6 +594,7 @@ export function OperationLog() {
 
   const onRestoreMaximize = useCallback(() => {
     if (!tileId) return
+    captureSoloFlipForTileId(tileId)
     toggleTileMaximized(activeViewId, tileId)
   }, [activeViewId, tileId, toggleTileMaximized])
 

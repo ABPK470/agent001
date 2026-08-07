@@ -231,6 +231,9 @@ export function LiveLogs() {
     )
   }, [lensRows, histogramFocus])
 
+  const displayRowsRef = useRef(displayRows)
+  displayRowsRef.current = displayRows
+
   useEffect(() => {
     if (autoScroll && !paused && followLive) {
       const el = containerRef.current
@@ -249,13 +252,26 @@ export function LiveLogs() {
   function scrollToLatest() {
     setAutoScroll(true)
     setHistogramFocus(null)
-    const last = displayRows.length - 1
+    const rows = displayRowsRef.current
+    const last = rows.length - 1
     if (last >= 0) {
+      const row = rows[last]!
+      setSelectedKey(eventStreamRowKey(row, last))
       listRef.current?.scrollToIndex(last, { align: "end" })
     }
     const el = containerRef.current
     if (el) el.scrollTop = el.scrollHeight
   }
+
+  // Becoming the focused tile always opens at the live tip for that moment.
+  const wasFocusedRef = useRef(false)
+  useEffect(() => {
+    const focused = Boolean(tileId && focusedTileId === tileId)
+    if (focused && !wasFocusedRef.current) {
+      scrollToLatest()
+    }
+    wasFocusedRef.current = focused
+  }, [focusedTileId, tileId])
 
   /** Paused / historical window: resume live feed (reload) then pin. */
   function resumeLiveFeed() {
@@ -319,6 +335,7 @@ export function LiveLogs() {
     onToggleFold: onKeyboardToggleFold,
     listRef,
     onOpenSearch: () => searchInputRef.current?.focus(),
+    onEnd: scrollToLatest,
   })
 
   const hasIsoZoom = Boolean(timeWindow.sinceIso)
@@ -676,8 +693,10 @@ export function LiveLogs() {
           type="button"
           className="event-stream-jump"
           onClick={scrollToLatest}
+          title="Jump to latest (End)"
         >
           <ArrowDown size={14} /> Jump to latest
+          <kbd className="composer-kbd event-stream-jump__kbd">End</kbd>
         </button>
       )}
       </div>

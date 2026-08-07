@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest"
 import { listSummonItems } from "./summon-items"
 import {
-  moveSummonSelection,
-  orderSummonForNav,
-  partitionSummonColumns,
-  summonActionKeys,
+    moveSummonSelection,
+    orderSummonForNav,
+    partitionSummonColumns,
+    summonActionKeys,
 } from "./summon-tabs"
 
 describe("summon board navigation", () => {

@@ -9,10 +9,10 @@
 
 import type { WidgetType } from "../types"
 import {
-  PRODUCT_BUNDLES,
-  type ProductBundleDef,
-  type ProductBundleId,
-  type SpaceId,
+    PRODUCT_BUNDLES,
+    type ProductBundleDef,
+    type ProductBundleId,
+    type SpaceId,
 } from "./spaces"
 
 export { dedicatedSpaceForWidget } from "./spaces"

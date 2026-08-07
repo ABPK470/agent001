@@ -22,6 +22,7 @@ export function useReviewTreeKeyboard({
   onToggleFold,
   listRef,
   onOpenSearch,
+  onEnd,
 }: {
   enabled: boolean
   /** Unique claim id when multiple tree hosts can mount. */
@@ -34,6 +35,11 @@ export function useReviewTreeKeyboard({
   listRef: RefObject<ReviewTreeListHandle | null>
   /** `/` focuses the surface filter (Event Stream, …). */
   onOpenSearch?: () => void
+  /**
+   * Optional End override (e.g. Event Stream → pin to live tip).
+   * When set, replaces default “select last row”.
+   */
+  onEnd?: () => void
 }) {
   const nodesRef = useRef(nodes)
   const selectedRef = useRef(selectedScopeId)
@@ -41,6 +47,7 @@ export function useReviewTreeKeyboard({
   const onSelectRef = useRef(onSelect)
   const onToggleFoldRef = useRef(onToggleFold)
   const onOpenSearchRef = useRef(onOpenSearch)
+  const onEndRef = useRef(onEnd)
 
   nodesRef.current = nodes
   selectedRef.current = selectedScopeId
@@ -48,6 +55,7 @@ export function useReviewTreeKeyboard({
   onSelectRef.current = onSelect
   onToggleFoldRef.current = onToggleFold
   onOpenSearchRef.current = onOpenSearch
+  onEndRef.current = onEnd
 
   const onKeyDownRef = useRef<OperatorSurfaceHandler | null>(null)
   onKeyDownRef.current = (event) => {
@@ -55,6 +63,11 @@ export function useReviewTreeKeyboard({
 
     if (event.key === "/" && onOpenSearchRef.current) {
       onOpenSearchRef.current()
+      return true
+    }
+
+    if (event.key === "End" && onEndRef.current) {
+      onEndRef.current()
       return true
     }
 

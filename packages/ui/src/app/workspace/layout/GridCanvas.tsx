@@ -8,40 +8,40 @@
  */
 
 import {
-  memo,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-  type PointerEvent as ReactPointerEvent,
+    memo,
+    useEffect,
+    useLayoutEffect,
+    useMemo,
+    useRef,
+    useState,
+    type PointerEvent as ReactPointerEvent,
 } from "react"
 import {
-  COLS,
-  viewportGridMetrics,
-  rectToPixels,
-  type LayoutTile,
+    COLS,
+    rectToPixels,
+    viewportGridMetrics,
+    type LayoutTile,
 } from "../../../lib/grid-math"
 import {
-  reparentLeaf,
-  projectTiles,
-  type DropZone,
-  type SplitNode,
+    projectTiles,
+    reparentLeaf,
+    type DropZone,
+    type SplitNode,
 } from "../../../lib/split-tree"
 import { useLayoutStore } from "../../../state/layout-store"
 import { WidgetShell } from "../WidgetShell"
+import { TilePaintProvider } from "../tile-paint"
 import { widgetComponent } from "../widget-definitions"
 import { DropZoneOverlay } from "./DropZoneOverlay"
 import { entranceClassName } from "./motion"
 import { paintTilesForCanvas } from "./paint-tiles"
 import {
-  readTileRectInCanvas,
-  SOLO_FLIP_MS,
-  soloFlipInvertTransform,
-  takeSoloFlipFrom,
+    readTileRectInCanvas,
+    SOLO_FLIP_MS,
+    soloFlipInvertTransform,
+    takeSoloFlipFrom,
 } from "./solo-flip"
 import { useGridInteraction, type ResizeEdge } from "./useGridInteraction"
-import { TilePaintProvider } from "../tile-paint"
 
 function prefersReducedMotion(): boolean {
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches

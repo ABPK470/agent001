@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import {
+  captureSoloFlipForTileId,
   clearSoloFlipFrom,
   soloFlipInvertTransform,
   takeSoloFlipFrom,
@@ -51,6 +52,14 @@ describe("soloFlipInvertTransform", () => {
 describe("takeSoloFlipFrom", () => {
   it("starts empty and clears on take", () => {
     clearSoloFlipFrom()
+    expect(takeSoloFlipFrom()).toBeNull()
+  })
+})
+
+describe("captureSoloFlipForTileId", () => {
+  it("no-ops when the tile is not in the document", () => {
+    clearSoloFlipFrom()
+    expect(captureSoloFlipForTileId("missing-tile")).toBe(false)
     expect(takeSoloFlipFrom()).toBeNull()
   })
 })

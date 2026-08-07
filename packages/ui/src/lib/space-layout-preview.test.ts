@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import { buildSpaceView, PRODUCT_SPACES } from "./spaces"
 import {
   clampSpacePreviewAnchor,
+  nextSpacePreviewAnchor,
   projectSpaceLayoutPreview,
   SPACE_PREVIEW_BOUNDS,
   spacePreviewLeafStyle,
@@ -49,7 +50,7 @@ describe("projectSpaceLayoutPreview", () => {
 describe("spacePreviewLeafStyle", () => {
   it("emits percent boxes relative to the preview bounds", () => {
     expect(
-      spacePreviewLeafStyle({ x: 0, y: 0, w: 70, h: 56 }),
+      spacePreviewLeafStyle({ x: 0, y: 0, w: 70, h: SPACE_PREVIEW_BOUNDS.h }),
     ).toEqual({
       left: "0%",
       top: "0%",
@@ -70,5 +71,17 @@ describe("clampSpacePreviewAnchor", () => {
 
   it("centers in a narrow cluster", () => {
     expect(clampSpacePreviewAnchor(50, 352, 200)).toBe(100)
+  })
+})
+
+describe("nextSpacePreviewAnchor", () => {
+  it("keeps the shell still for nearby tabs", () => {
+    expect(nextSpacePreviewAnchor(200, 212, 28)).toBe(200)
+    expect(nextSpacePreviewAnchor(200, 228, 28)).toBe(200)
+  })
+
+  it("retargets when the hop exceeds slack", () => {
+    expect(nextSpacePreviewAnchor(200, 240, 28)).toBe(240)
+    expect(nextSpacePreviewAnchor(200, 100, 28)).toBe(100)
   })
 })

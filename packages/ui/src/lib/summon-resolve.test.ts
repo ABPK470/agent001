@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest"
 import {
-  resolveSummonBundleOpen,
-  resolveSummonSpaceEnter,
-  resolveSummonWidgetEnter,
-  resolveSummonWidgetKeep,
-  resolveSummonWidgetPeek,
+    resolveSummonBundleOpen,
+    resolveSummonSpaceEnter,
+    resolveSummonWidgetEnter,
+    resolveSummonWidgetKeep,
+    resolveSummonWidgetPeek,
 } from "./summon-resolve"
 
 describe("summon resolve", () => {

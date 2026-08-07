@@ -13,6 +13,7 @@ import {
 } from "../lib/keymap"
 import { getActiveOperatorSurface } from "../lib/operator-surface"
 import { neighborViewId } from "../lib/view-tab-nav"
+import { captureSoloFlipForTileId } from "../app/workspace/layout/solo-flip"
 import { useLayoutStore } from "../state/layout-store"
 import { useStore } from "../state/store"
 
@@ -100,6 +101,7 @@ export function useOperatorKeyboardRoot(
       }
       if (!tileId) return true
       if (action.type === "toggle-maximize") {
+        captureSoloFlipForTileId(tileId)
         toggleTileMaximized(viewId, tileId)
         return true
       }

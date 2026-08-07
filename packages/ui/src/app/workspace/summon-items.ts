@@ -9,13 +9,14 @@
  * Search collapses the board to ranked matches; kinds stay visible.
  */
 
-import type { WidgetType } from "../../types"
 import {
-  PRODUCT_BUNDLES,
-  PRODUCT_SPACES,
-  type ProductBundleId,
-  type SpaceId,
+    PRODUCT_BUNDLES,
+    PRODUCT_SPACES,
+    spaceById,
+    type ProductBundleId,
+    type SpaceId,
 } from "../../lib/spaces"
+import type { WidgetType } from "../../types"
 import { catalogEntries } from "./widget-definitions"
 
 export type SummonItem =
@@ -130,6 +131,20 @@ export function summonItemKey(item: SummonItem): string {
   if (item.kind === "space") return `space:${item.id}`
   if (item.kind === "bundle") return `bundle:${item.id}`
   return `widget:${item.type}`
+}
+
+/**
+ * Canonical glyph for a Summon row — reuses WIDGET_ICONS only.
+ * Spaces → primary (first) surface; presets → focus surface; widgets → themselves.
+ */
+export function summonItemIconType(item: SummonItem): WidgetType {
+  if (item.kind === "widget") return item.type
+  if (item.kind === "bundle") return item.focusType
+  const primary = spaceById(item.id)?.widgets[0]
+  if (!primary) {
+    throw new Error(`Summon Space ${item.id} has no primary surface icon`)
+  }
+  return primary
 }
 
 export type SummonActionPreview = {

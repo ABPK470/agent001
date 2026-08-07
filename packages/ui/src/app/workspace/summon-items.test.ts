@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest"
 import {
-  filterSummonItems,
-  listSummonItems,
-  summonActionPreview,
-  widgetSummonGroup,
+    filterSummonItems,
+    listSummonItems,
+    summonActionPreview,
+    summonItemIconType,
+    widgetSummonGroup,
 } from "./summon-items"
 
 describe("summon catalog", () => {
@@ -21,6 +22,19 @@ describe("summon catalog", () => {
     expect(widgetSummonGroup("debug-inspector")).toBe("agent")
     expect(widgetSummonGroup("operation-log")).toBe("platform")
     expect(widgetSummonGroup("env-sync")).toBe("config")
+  })
+
+  it("reuses primary surface icons for Spaces and presets", () => {
+    const agent = listSummonItems().find((item) => item.kind === "space" && item.id === "space:agent")!
+    const observeReset = listSummonItems().find(
+      (item) => item.kind === "bundle" && item.id === "bundle:observe-core",
+    )!
+    const chat = listSummonItems().find(
+      (item) => item.kind === "widget" && item.type === "term-chat",
+    )!
+    expect(summonItemIconType(agent)).toBe("debug-inspector")
+    expect(summonItemIconType(observeReset)).toBe("operation-log")
+    expect(summonItemIconType(chat)).toBe("term-chat")
   })
 
   it("lists every catalog surface including Trace and Bridge", () => {

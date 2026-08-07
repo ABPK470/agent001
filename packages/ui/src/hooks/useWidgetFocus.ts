@@ -2,9 +2,10 @@
  * Per-tile zen / focus mode — reads layout store + widget instance context.
  */
 
-import { useLayoutStore } from "../state/layout-store"
 import { useWidgetInstance } from "../app/workspace/widget-instance"
+import { captureSoloFlipForTileId } from "../app/workspace/layout/solo-flip"
 import { widgetSupportsFocusMode } from "../lib/widget-focus"
+import { useLayoutStore } from "../state/layout-store"
 
 export function useWidgetFocus() {
   const instance = useWidgetInstance()
@@ -21,6 +22,9 @@ export function useWidgetFocus() {
 
   function toggleZen() {
     if (!viewId || !tileId || !supportsFocus) return
+    // Entering zen also sets solo — same FLIP as chrome click.
+    // Exit zen leaves solo (no geometry change) — do not arm a stale flip.
+    if (!isZen) captureSoloFlipForTileId(tileId)
     toggleTileZen(viewId, tileId)
   }
 

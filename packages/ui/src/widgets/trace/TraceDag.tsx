@@ -9,6 +9,7 @@ import { api } from "../../client/index"
 import { VirtualList, type VirtualListHandle } from "../../components/VirtualList"
 import { BrowseCount } from "../../components/BrowseStrip"
 import { useWidgetFocus } from "../../hooks/useWidgetFocus"
+import { captureSoloFlipForTileId } from "../../app/workspace/layout/solo-flip"
 import { useWidgetInstance } from "../../app/workspace/widget-instance"
 import { useLayoutStore } from "../../state/layout-store"
 import { useStore } from "../../state/store"
@@ -183,6 +184,7 @@ export function TraceDag({
 
   const onRestoreMaximize = useCallback(() => {
     if (!tileId) return
+    captureSoloFlipForTileId(tileId)
     toggleTileMaximized(activeViewId, tileId)
   }, [activeViewId, tileId, toggleTileMaximized])
 

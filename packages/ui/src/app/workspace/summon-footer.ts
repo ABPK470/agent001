@@ -26,7 +26,11 @@ export function summonFooterHints(
   return hints
 }
 
-export function summonContextBadge(item: SummonItem | null): string | null {
-  if (item?.kind === "widget") return "Enter keeps · ⌘Enter peeks"
-  return null
+/** Context-bar keep/peek chips — same kbd dialect as the footer. */
+export function summonContextHints(item: SummonItem | null): readonly KbdHint[] | null {
+  if (item?.kind !== "widget") return null
+  return [
+    { keys: ["↵"], label: "keeps" },
+    { keys: [MOD, "↵"], label: "peeks" },
+  ]
 }

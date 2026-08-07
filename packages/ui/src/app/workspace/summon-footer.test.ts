@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { summonContextBadge, summonFooterHints } from "./summon-footer"
+import { summonContextHints, summonFooterHints } from "./summon-footer"
 import type { SummonItem } from "./summon-items"
 
 const space: SummonItem = {
@@ -49,10 +49,12 @@ describe("summonFooterHints", () => {
   })
 })
 
-describe("summonContextBadge", () => {
-  it("shows keep/peek cue only for widgets", () => {
-    expect(summonContextBadge(widget)).toBe("Enter keeps · ⌘Enter peeks")
-    expect(summonContextBadge(space)).toBeNull()
-    expect(summonContextBadge(null)).toBeNull()
+describe("summonContextHints", () => {
+  it("shows keep/peek kbd chips only for widgets", () => {
+    expect(summonContextHints(widget)?.map((h) => h.label)).toEqual(["keeps", "peeks"])
+    expect(summonContextHints(widget)?.[0]?.keys).toEqual(["↵"])
+    expect(summonContextHints(widget)?.[1]?.keys).toContain("↵")
+    expect(summonContextHints(space)).toBeNull()
+    expect(summonContextHints(null)).toBeNull()
   })
 })

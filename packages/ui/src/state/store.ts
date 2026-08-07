@@ -1186,7 +1186,8 @@ export const useStore = create<AppState>()(
 
       // Modal widget viewer (Summon peek)
       modalWidget: null,
-      openModalWidget: (type, runId) => set({ modalWidget: { type, runId }, summonOpen: false }),
+      // Peek stacks above Summon — do not dismiss the palette (Esc closes peek only).
+      openModalWidget: (type, runId) => set({ modalWidget: { type, runId } }),
       closeModalWidget: () => set({ modalWidget: null }),
 
       summonOpen: false,

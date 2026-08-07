@@ -4,38 +4,38 @@
 
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
+import { clearEventStreamPrefs } from "../lib/event-stream-prefs"
+import { firstTileIdForWidgetType } from "../lib/focus-widget-tile"
 import { COLS } from "../lib/grid-math"
 import {
-  projectTiles,
-  removeLeaf,
-  reparentLeaf,
-  setSplitRatio,
-  splitLargestLeaf,
-  type DropZone,
-  type SplitNode,
-  type SplitPath,
-} from "../lib/split-tree"
-import { WIDGET_DEFAULTS } from "../lib/widget-layout-defaults"
-import type { WidgetSizeDefaults } from "../lib/widget-layout-defaults"
-import {
-  syncViewGeometry,
-  type WorkspaceView,
-} from "../lib/workspace-view"
-import {
-  mergeProductSpaces,
-  migrateSpaceId,
-  reapplyProductSpaceLayouts,
-  SPACE_LAYOUT_VERSION,
-  resetSpaceView,
-  spaceById,
-  spaceByIndex,
-  type SpaceId,
+    mergeProductSpaces,
+    migrateSpaceId,
+    reapplyProductSpaceLayouts,
+    resetSpaceView,
+    SPACE_LAYOUT_VERSION,
+    spaceById,
+    spaceByIndex,
+    type SpaceId,
 } from "../lib/spaces"
+import {
+    projectTiles,
+    removeLeaf,
+    reparentLeaf,
+    setSplitRatio,
+    splitLargestLeaf,
+    type DropZone,
+    type SplitNode,
+    type SplitPath,
+} from "../lib/split-tree"
 import { neighborTileForFocus, type FocusArrowKey } from "../lib/tile-focus-neighbor"
-import { firstTileIdForWidgetType } from "../lib/focus-widget-tile"
-import type { ViewConfig, WidgetType } from "../types"
 import { randomId } from "../lib/util"
-import { clearEventStreamPrefs } from "../lib/event-stream-prefs"
+import type { WidgetSizeDefaults } from "../lib/widget-layout-defaults"
+import { WIDGET_DEFAULTS } from "../lib/widget-layout-defaults"
+import {
+    syncViewGeometry,
+    type WorkspaceView,
+} from "../lib/workspace-view"
+import type { ViewConfig, WidgetType } from "../types"
 
 export { WIDGET_DEFAULTS }
 

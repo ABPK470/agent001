@@ -5,40 +5,42 @@
  * ↑↓ move in a column · ←→ jump columns · Enter keeps/goes/focuses · ⌘Enter peeks (surfaces).
  */
 
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type KeyboardEvent as ReactKeyboardEvent,
-} from "react"
 import { Search } from "lucide-react"
-import { useStore } from "../../state/store"
-import { useLayoutStore } from "../../state/layout-store"
+import {
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
+    type KeyboardEvent as ReactKeyboardEvent,
+} from "react"
 import { resolveKeymapActiveContext } from "../../lib/keymap"
-import { ComposerKbdFooter } from "../../widgets/chat/ComposerKbdFooter"
 import {
-  resolveSummonBundleOpen,
-  resolveSummonSpaceEnter,
-  resolveSummonWidgetEnter,
-  resolveSummonWidgetPeek,
-  type SummonOpenAction,
+    resolveSummonBundleOpen,
+    resolveSummonSpaceEnter,
+    resolveSummonWidgetEnter,
+    resolveSummonWidgetPeek,
+    type SummonOpenAction,
 } from "../../lib/summon-resolve"
-import { getWidgetDefinition } from "./widget-definitions"
+import { useLayoutStore } from "../../state/layout-store"
+import { useStore } from "../../state/store"
+import { resolveKeyCaptions } from "../../lib/keymap"
+import { ComposerKbdFooter } from "../../widgets/chat/ComposerKbdFooter"
+import { summonContextHints, summonFooterHints } from "./summon-footer"
 import {
-  filterSummonItems,
-  listSummonItems,
-  summonActionPreview,
-  summonItemKey,
-  type SummonItem,
+    filterSummonItems,
+    listSummonItems,
+    summonActionPreview,
+    summonItemIconType,
+    summonItemKey,
+    type SummonItem,
 } from "./summon-items"
-import { summonContextBadge, summonFooterHints } from "./summon-footer"
 import {
-  moveSummonSelection,
-  orderSummonForNav,
-  partitionSummonColumns,
-  summonActionKeys,
+    moveSummonSelection,
+    orderSummonForNav,
+    partitionSummonColumns,
+    summonActionKeys,
 } from "./summon-tabs"
+import { getWidgetDefinition } from "./widget-definitions"
 
 export function SummonPalette() {
   const summonOpen = useStore((s) => s.summonOpen)
@@ -135,7 +137,7 @@ export function SummonPalette() {
     onSpace,
     spaceName: activeView?.name ?? null,
   })
-  const contextBadge = summonContextBadge(current)
+  const contextHints = summonContextHints(current)
 
   function dismiss() {
     setSummonOpen(false)
@@ -291,9 +293,24 @@ export function SummonPalette() {
             Active Context:{" "}
             <span className="ops-sheet__context-name">{context.title}</span>
           </span>
-          {contextBadge ? (
-            <span className="ops-sheet__context-badge ops-sheet__context-badge--quiet">
-              {contextBadge}
+          {contextHints ? (
+            <span className="ops-sheet__context-badge" aria-hidden>
+              {contextHints.map((hint) => {
+                const keys = resolveKeyCaptions(hint.keys)
+                return (
+                  <span
+                    key={`${hint.label}:${keys.join("+")}`}
+                    className="composer-kbd-footer__hint"
+                  >
+                    {keys.map((key) => (
+                      <kbd key={key} className="composer-kbd">
+                        {key}
+                      </kbd>
+                    ))}
+                    <span>{hint.label}</span>
+                  </span>
+                )
+              })}
             </span>
           ) : null}
         </div>
@@ -374,6 +391,7 @@ function SummonRow({
 }) {
   const keys = summonActionKeys(item, { onSpace: present })
   const isPreset = item.kind === "bundle"
+  const Icon = getWidgetDefinition(summonItemIconType(item)).icon
   const label = currentSpace
     ? `${item.name} · current`
     : present
@@ -397,6 +415,7 @@ function SummonRow({
         onClick={onOpen}
       >
         <span className="ops-sheet__label" title={item.desc}>
+          <Icon size={14} strokeWidth={1.75} className="ops-sheet__row-icon" aria-hidden />
           <span className="ops-sheet__label-text">{label}</span>
           {isPreset ? <span className="ops-sheet__preset-mark">Reset</span> : null}
         </span>

@@ -40,6 +40,20 @@ export function captureSoloFlipFrom(
   }
 }
 
+/**
+ * Same capture as chrome click / toolbar restore — for keyboard M / Z / Esc.
+ * Looks up the live tile in the workspace canvas before the store toggle.
+ */
+export function captureSoloFlipForTileId(tileId: string): boolean {
+  if (typeof document === "undefined") return false
+  const tile = document.querySelector(`[data-tile-id="${CSS.escape(tileId)}"]`)
+  if (!(tile instanceof HTMLElement)) return false
+  const canvas = tile.closest(".workspace-canvas-pad")
+  if (!(canvas instanceof HTMLElement)) return false
+  captureSoloFlipFrom(tile, canvas)
+  return true
+}
+
 export function takeSoloFlipFrom(): SoloFlipFrom | null {
   const next = pendingFrom
   pendingFrom = null

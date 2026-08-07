@@ -16,13 +16,18 @@ describe("maximize / restore geometry + FLIP", () => {
   const css = readFileSync(join(here, "../../../boot/index.css"), "utf8")
   const canvas = readFileSync(join(here, "GridCanvas.tsx"), "utf8")
   const shell = readFileSync(join(here, "../WidgetShell.tsx"), "utf8")
+  const keyboardRoot = readFileSync(
+    join(here, "../../../hooks/useOperatorKeyboardRoot.ts"),
+    "utf8",
+  )
+  const widgetFocus = readFileSync(join(here, "../../../hooks/useWidgetFocus.ts"), "utf8")
 
   it("snaps W/H under geometry-snap; motion is transform FLIP", () => {
     expect(canvas).toContain("workspace-canvas-geometry-snap")
     expect(canvas).toContain("playSoloFlip")
     expect(canvas).toContain("takeSoloFlipFrom")
     expect(canvas).toContain("soloFlipInvertTransform")
-    expect(shell).toContain("captureSoloFlipFrom")
+    expect(shell).toContain("captureSoloFlipForTileId")
     expect(SOLO_FLIP_MS).toBe(260)
     // Restore: snap + flush before readTileRect — else mid-transition
     // getBoundingClientRect still looks like solo and FLIP no-ops.
@@ -44,6 +49,11 @@ describe("maximize / restore geometry + FLIP", () => {
       /\.workspace-tile-solo-flipping\s*\{[^}]*transition:\s*transform\s+260ms/s,
     )
     expect(css).toContain("is-solo-flip-arming")
+  })
+
+  it("keyboard maximize / zen arm the same FLIP capture as chrome click", () => {
+    expect(keyboardRoot).toContain("captureSoloFlipForTileId")
+    expect(widgetFocus).toContain("captureSoloFlipForTileId")
   })
 
   it("solo-hidden uses content-visibility (not visibility hammer on *)", () => {
