@@ -44,8 +44,8 @@ export function resolveOperationsWindowBounds(window: OperationsTimeWindow): {
 }
 
 /**
- * Left-pane sticky caption — when this list’s runs were / are happening.
- * Same bound clock dialect as Event Stream histogram chips.
+ * Human label for an operations time window (tests / tooling).
+ * Not shown as a second sidebar row — filter chips already own Live/15m.
  */
 export function formatOperationsListTimeHeader(
   window: OperationsTimeWindow,

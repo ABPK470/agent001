@@ -2,8 +2,8 @@
  * Flatten day-grouped pipelines (+ optional open activity trees) into a
  * virtualizable row model for the left master tree.
  *
- * Day headers are sticky section dividers. Nest indent is Trace-style
- * whitespace depth padding (no ├└ hairline guides).
+ * Day headers pin via overlay while scrolling (VirtualList). Nest indent
+ * is Trace-style whitespace depth padding (no ├└ hairline guides).
  */
 
 import type { OperationActivity, OperationPipeline } from "../client/index"

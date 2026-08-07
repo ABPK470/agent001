@@ -64,15 +64,17 @@ describe("pipelines left-tree gutter — review kit", () => {
     expect(nodeCell).not.toMatch(/padding-left:\s*0\s*!important/)
   })
 
-  it("day groups are sticky full-width section dividers (no card boxes)", () => {
+  it("day groups are full-width section dividers with a scroll pin overlay", () => {
     const css = read(cssPath)
     const ops = read(opsPath)
     expect(css).toContain(".op-log-day-cap")
+    expect(css).toContain(".op-log-day-pin")
     expect(css).not.toContain(".op-log-day-card")
     expect(css).toMatch(
       /\.op-log-day-cap\s*\{[^}]*padding-inline:\s*var\(--review-tree-hpad/s,
     )
     expect(ops).toContain("op-log-day-cap")
+    expect(ops).toContain("op-log-day-pin")
     expect(ops).not.toContain("dayCardClass")
     expect(ops).not.toContain("op-log-day-card")
   })
@@ -144,8 +146,11 @@ describe("pipelines left-tree gutter — review kit", () => {
     expect(ops).toContain("treeNav:")
     expect(ops).toContain('surfaceId: "pipelines"')
     expect(ops).toContain("op-log-day-cap")
-    expect(ops).toContain("op-log-time-cap")
-    expect(ops).toContain("formatOperationsListTimeHeader")
+    expect(ops).toContain("op-log-day-pin")
+    expect(ops).toContain("resolvePinnedOperationDay")
+    // Filter Live/15m lives in the toolbar — not a second LIVE row above Today.
+    expect(ops).not.toContain("op-log-time-cap")
+    expect(ops).not.toContain("formatOperationsListTimeHeader")
     expect(ops).toContain("ReviewSplitPane")
     expect(ops).toContain("OperationLogPipelineListRow")
     expect(ops).toContain("OperationLogActivityTreeRow")

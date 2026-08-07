@@ -282,30 +282,31 @@
   /*
    * Event Stream lanes — dual-mode badge tokens (ink / soft / border).
    * Dark: glowing ink + translucent tint. Red/rose reserved for severity.
-   * Agent = emerald (never error-red).
+   * Spread: run indigo · sync cyan · api amber · agent emerald · system zinc
+   * (system stays cool/neutral but loses the blue cast that read as faded run).
    */
-  --stream-run-ink: #a5b4fc;
-  --stream-run-soft: rgba(99, 102, 241, 0.15);
-  --stream-run-border: rgba(99, 102, 241, 0.28);
+  --stream-run-ink: #818cf8;
+  --stream-run-soft: rgba(129, 140, 248, 0.16);
+  --stream-run-border: rgba(129, 140, 248, 0.32);
   --stream-step-ink: #c084fc;
   --stream-step-soft: rgba(168, 85, 247, 0.14);
   --stream-step-border: rgba(168, 85, 247, 0.28);
-  --stream-sync-ink: #38bdf8;
-  --stream-sync-soft: rgba(14, 165, 233, 0.14);
-  --stream-sync-border: rgba(14, 165, 233, 0.28);
+  --stream-sync-ink: #22d3ee;
+  --stream-sync-soft: rgba(34, 211, 238, 0.14);
+  --stream-sync-border: rgba(34, 211, 238, 0.28);
   --stream-bridge-ink: #fb923c;
   --stream-bridge-soft: rgba(251, 146, 60, 0.14);
   --stream-bridge-border: rgba(251, 146, 60, 0.28);
   --stream-agent-ink: #34d399;
   --stream-agent-soft: rgba(52, 211, 153, 0.14);
   --stream-agent-border: rgba(52, 211, 153, 0.28);
-  /* API = blue — far from agent emerald (was teal and blended). */
-  --stream-api-ink: #60a5fa;
-  --stream-api-soft: rgba(96, 165, 250, 0.14);
-  --stream-api-border: rgba(96, 165, 250, 0.28);
-  --stream-system-ink: #94a3b8;
-  --stream-system-soft: rgba(148, 163, 184, 0.12);
-  --stream-system-border: rgba(148, 163, 184, 0.28);
+  --stream-api-ink: #fbbf24;
+  --stream-api-soft: rgba(251, 191, 36, 0.14);
+  --stream-api-border: rgba(251, 191, 36, 0.28);
+  /* System = zinc (true gray) — not blue-slate, so histogram ≠ washed run. */
+  --stream-system-ink: #a1a1aa;
+  --stream-system-soft: rgba(161, 161, 170, 0.14);
+  --stream-system-border: rgba(161, 161, 170, 0.30);
   /* Back-compat aliases (ink only). */
   --stream-run: var(--stream-run-ink);
   --stream-step: var(--stream-step-ink);
@@ -470,7 +471,7 @@
 
   /*
    * Event Stream lanes — contained pills on white paper
-   * (deep ink + pastel fill + 1px border). Agent = emerald, never error-red.
+   * (deep ink + pastel fill + 1px border). Same hue spread as dark.
    */
   --stream-run-ink: #3730a3;
   --stream-run-soft: #eef2ff;
@@ -478,22 +479,22 @@
   --stream-step-ink: #6b21a8;
   --stream-step-soft: #f3e8ff;
   --stream-step-border: #e9d5ff;
-  --stream-sync-ink: #0369a1;
-  --stream-sync-soft: #e0f2fe;
-  --stream-sync-border: #bae6fd;
+  --stream-sync-ink: #0e7490;
+  --stream-sync-soft: #cffafe;
+  --stream-sync-border: #67e8f9;
   --stream-bridge-ink: #c2410c;
   --stream-bridge-soft: #ffedd5;
   --stream-bridge-border: #fed7aa;
   --stream-agent-ink: #047857;
   --stream-agent-soft: #ecfdf5;
   --stream-agent-border: #a7f3d0;
-  /* API = blue — far from agent emerald (was teal and blended). */
-  --stream-api-ink: #1d4ed8;
-  --stream-api-soft: #dbeafe;
-  --stream-api-border: #93c5fd;
-  --stream-system-ink: #334155;
-  --stream-system-soft: #e2e8f0;
-  --stream-system-border: #cbd5e1;
+  --stream-api-ink: #b45309;
+  --stream-api-soft: #fef3c7;
+  --stream-api-border: #fcd34d;
+  /* System = zinc — cool neutral without slate’s blue cast. */
+  --stream-system-ink: #52525b;
+  --stream-system-soft: #f4f4f5;
+  --stream-system-border: #d4d4d8;
   --stream-run: var(--stream-run-ink);
   --stream-step: var(--stream-step-ink);
   --stream-sync: var(--stream-sync-ink);
@@ -4172,44 +4173,26 @@ textarea.input {
 }
 
 /*
- * Time window cap — pinned above the scroll (not a day group).
- * Same type dialect as day caps; always shows when these runs span.
- */
-.review-operator .review-split-list .op-log-time-cap {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  gap: 0.375rem;
-  padding-block: 0.4375rem;
-  padding-inline: var(--review-tree-hpad, 16px);
-  border-bottom: 1px solid var(--border-subtle, var(--color-border-subtle));
-  font-size: var(--review-group-size);
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  line-height: 1.25;
-  text-transform: uppercase;
-  color: var(--text-secondary, var(--color-text-muted));
-  background: color-mix(in srgb, var(--section-cap-bg, var(--panel-2)) 97%, var(--text) 3%);
-}
-
-.review-operator .review-split-list .op-log-time-cap .op-log-time-cap__label {
-  font-size: inherit;
-  font-weight: inherit;
-  letter-spacing: inherit;
-  line-height: inherit;
-  text-transform: inherit;
-  font-variant-numeric: tabular-nums;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/*
  * Day caps — one type size for every group (Today / Jul 31 / …).
  * Lock size/weight/tracking on the button; label + count inherit.
- * No hover filter (compositor drift made sticky rows look larger).
+ * Pin overlay (not CSS sticky) — VirtualList absolute rows break sticky.
  */
+.review-operator .review-split-list .op-log-list-frame {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.review-operator .review-split-list .op-log-day-pin {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  z-index: 20;
+  pointer-events: auto;
+}
+
 .review-operator .review-split-list .op-log-day-cap {
   gap: 0.375rem;
   padding-block: 0.4375rem;
@@ -4223,6 +4206,15 @@ textarea.input {
   text-transform: uppercase;
   color: var(--text-secondary, var(--color-text-muted));
   background: color-mix(in srgb, var(--section-cap-bg, var(--panel-2)) 97%, var(--text) 3%);
+}
+
+.review-operator .review-split-list .op-log-day-cap--pin {
+  border-top: none;
+  box-shadow: 0 1px 0 var(--border-subtle, var(--color-border-subtle));
+}
+
+.review-operator .review-split-list .op-log-day-cap.is-pinned-source {
+  visibility: hidden;
 }
 
 .review-operator .review-split-list .op-log-day-cap:hover {

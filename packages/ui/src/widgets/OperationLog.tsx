@@ -35,7 +35,10 @@ import {
   writeOperationLogTreePrefs,
 } from "../lib/operation-log-tree-prefs"
 import type { EventStreamRange, EventStreamWindow } from "../lib/event-stream-prefs"
-import { formatOperationsListTimeHeader } from "../lib/operations-window"
+import {
+  resolvePinnedOperationDay,
+  type PinnedOperationDay,
+} from "../lib/operation-day-pin"
 import { flattenOperationRows } from "../lib/operation-flat-rows"
 import {
   buildOperationLogKeyboardNodes,
@@ -72,7 +75,7 @@ const OP_LOG_LIST_ROW_HEIGHT = 44
 const OP_LOG_TREE_GRID_COLS = "minmax(0, 1fr) var(--review-tree-col-duration)"
 
 const DAY_GROUP_BTN =
-  "review-group-label review-group-cap op-log-day-cap sticky top-0 z-10 w-full flex items-center text-left transition-colors"
+  "review-group-label review-group-cap op-log-day-cap w-full flex items-center text-left transition-colors"
 
 function dayLabel(iso: string): string {
   const d = new Date(iso)
@@ -713,10 +716,19 @@ export function OperationLog() {
     return "No operations recorded yet."
   }, [error, pipelines.length, kinds.size, statuses.size, needle, timeWindow])
 
-  const listTimeHeader = useMemo(
-    () => formatOperationsListTimeHeader(timeWindow),
-    [timeWindow],
-  )
+  const [pinnedDay, setPinnedDay] = useState<PinnedOperationDay | null>(null)
+
+  useEffect(() => {
+    const host = listScrollRef.current
+    if (!host) return
+    function refreshPin(): void {
+      const anchor = listTreeRef.current?.captureScrollAnchor() ?? null
+      setPinnedDay(resolvePinnedOperationDay(flatRows, anchor))
+    }
+    refreshPin()
+    host.addEventListener("scroll", refreshPin, { passive: true })
+    return () => host.removeEventListener("scroll", refreshPin)
+  }, [flatRows])
 
   return (
     <OperationLogModalsProvider>
@@ -791,43 +803,62 @@ export function OperationLog() {
                         ]}
                         gridTemplateColumns={OP_LOG_TREE_GRID_COLS}
                       />
-                      <div
-                        className="op-log-time-cap"
-                        aria-label={`Time range ${listTimeHeader}`}
-                      >
-                        <span className="op-log-time-cap__label">{listTimeHeader}</span>
-                      </div>
-                      <div
-                        ref={listScrollRef}
-                        className="review-split-list-scroll min-h-0 flex-1"
-                        role="tree"
-                        aria-label="Operations tree"
-                        tabIndex={0}
-                      >
-                        <OperationPipelineList
-                          listRef={listTreeRef}
-                          scrollRef={listScrollRef}
-                          rows={flatRows}
-                          selection={selection}
-                          onSelectPipeline={selectPipeline}
-                          onSelectActivity={selectActivity}
-                          openPipelineIds={openPipelineIds}
-                          togglePipelineTree={togglePipelineTree}
-                          actExpanded={actExpanded}
-                          toggleActivity={toggleActivity}
-                          collapsedDays={collapsedDays}
-                          toggleDay={toggleDay}
-                        />
-                        {hasMore ? (
-                          <div ref={sentinelRef} className="flex justify-center py-4">
-                            {loadingMore ? (
-                              <span className="flex items-center gap-2 text-sm text-text-muted/60">
-                                <Loader2 size={12} className="animate-spin" />
-                                Loading more…
-                              </span>
-                            ) : null}
+                      {/*
+                        Day caps pin here — VirtualList absolute rows break CSS
+                        sticky. Filter Live/15m already lives in the toolbar.
+                      */}
+                      <div className="op-log-list-frame relative min-h-0 flex-1">
+                        {pinnedDay ? (
+                          <div className="op-log-day-pin">
+                            <button
+                              type="button"
+                              className={`${DAY_GROUP_BTN} op-log-day-cap--pin`}
+                              onClick={() => toggleDay(pinnedDay.label)}
+                            >
+                              <ChevronRight
+                                size={12}
+                                className={`shrink-0 transition-transform ${
+                                  collapsedDays.has(pinnedDay.label) ? "" : "rotate-90"
+                                }`}
+                              />
+                              <span className="op-log-day-cap__label">{pinnedDay.label}</span>
+                              <span className="review-group-cap__count">{pinnedDay.count}</span>
+                            </button>
                           </div>
                         ) : null}
+                        <div
+                          ref={listScrollRef}
+                          className="review-split-list-scroll min-h-0 flex-1"
+                          role="tree"
+                          aria-label="Operations tree"
+                          tabIndex={0}
+                        >
+                          <OperationPipelineList
+                            listRef={listTreeRef}
+                            scrollRef={listScrollRef}
+                            rows={flatRows}
+                            selection={selection}
+                            onSelectPipeline={selectPipeline}
+                            onSelectActivity={selectActivity}
+                            openPipelineIds={openPipelineIds}
+                            togglePipelineTree={togglePipelineTree}
+                            actExpanded={actExpanded}
+                            toggleActivity={toggleActivity}
+                            collapsedDays={collapsedDays}
+                            toggleDay={toggleDay}
+                            pinnedDayKey={pinnedDay?.key ?? null}
+                          />
+                          {hasMore ? (
+                            <div ref={sentinelRef} className="flex justify-center py-4">
+                              {loadingMore ? (
+                                <span className="flex items-center gap-2 text-sm text-text-muted/60">
+                                  <Loader2 size={12} className="animate-spin" />
+                                  Loading more…
+                                </span>
+                              ) : null}
+                            </div>
+                          ) : null}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -874,6 +905,7 @@ export function OperationPipelineList({
   toggleDay,
   scrollRef,
   listRef,
+  pinnedDayKey = null,
 }: {
   rows: ReturnType<typeof flattenOperationRows>
   selection: OpLogSelection | null
@@ -887,15 +919,18 @@ export function OperationPipelineList({
   toggleDay: (label: string) => void
   scrollRef?: RefObject<HTMLElement | null>
   listRef?: RefObject<VirtualListHandle | null>
+  /** When set, hide the matching in-flow day (pin overlay owns the label). */
+  pinnedDayKey?: string | null
 }) {
   const renderRow = (row: (typeof rows)[number], _index: number) => {
     if (row.type === "day") {
       const collapsed = collapsedDays.has(row.label)
+      const pinnedSource = pinnedDayKey === row.key
       return (
         <button
           key={row.key}
           type="button"
-          className={DAY_GROUP_BTN}
+          className={[DAY_GROUP_BTN, pinnedSource ? "is-pinned-source" : ""].filter(Boolean).join(" ")}
           onClick={() => toggleDay(row.label)}
         >
           <ChevronRight
