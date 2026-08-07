@@ -33,6 +33,7 @@ import {
   writeOperationLogTreePrefs,
 } from "../lib/operation-log-tree-prefs"
 import type { EventStreamRange, EventStreamWindow } from "../lib/event-stream-prefs"
+import { formatOperationsListTimeHeader } from "../lib/operations-window"
 import { flattenOperationRows } from "../lib/operation-flat-rows"
 import {
   buildOperationLogKeyboardNodes,
@@ -665,6 +666,11 @@ export function OperationLog() {
     return "No operations recorded yet."
   }, [error, pipelines.length, kinds.size, statuses.size, needle, timeWindow])
 
+  const listTimeHeader = useMemo(
+    () => formatOperationsListTimeHeader(timeWindow),
+    [timeWindow],
+  )
+
   return (
     <OperationLogModalsProvider>
       <div ref={rootRef} className={`${WIDGET_LOG_SHELL_CLASS} review-operator flex-1 ${OP_LOG}`}>
@@ -714,6 +720,12 @@ export function OperationLog() {
                         ]}
                         gridTemplateColumns={OP_LOG_TREE_GRID_COLS}
                       />
+                      <div
+                        className="op-log-time-cap"
+                        aria-label={`Time range ${listTimeHeader}`}
+                      >
+                        <span className="op-log-time-cap__label">{listTimeHeader}</span>
+                      </div>
                       <div
                         ref={listScrollRef}
                         className="review-split-list-scroll min-h-0 flex-1"

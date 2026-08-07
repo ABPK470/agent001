@@ -3,7 +3,7 @@ import { ReviewTreeRow } from "../../components/review"
 import { pipelineEntityIcon } from "./op-log-entity-icon"
 import { OpLogEntityIcon } from "./OpLogEntityIcon"
 import { OpLogStatusPill } from "./OpLogStatusPill"
-import { formatPipelineSubtitle, OP_LOG } from "./operation-log-row"
+import { fmtDuration, formatPipelineSubtitle, OP_LOG } from "./operation-log-row"
 
 const REVIEW_TREE_GRID_COLS = "minmax(0, 1fr) var(--review-tree-col-duration)"
 
@@ -42,7 +42,7 @@ export function OperationLogPipelineListRow({
       title={<span className={OP_LOG}>{pipeline.title}</span>}
       subtitle={subtitle}
       trailing={<OpLogStatusPill status={pipeline.status} />}
-      metrics={["—"]}
+      metrics={[fmtDuration(pipeline.durationMs)]}
     />
   )
 }

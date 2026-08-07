@@ -111,6 +111,14 @@ describe("pipelines left-tree gutter — review kit", () => {
     expect(listRow).not.toContain("paddingLeft")
   })
 
+  it("pipeline list rows show duration — same dialect as activity rows", () => {
+    const listRow = read(listRowPath)
+    const activity = read(activityRowPath)
+    expect(listRow).toContain("fmtDuration(pipeline.durationMs)")
+    expect(listRow).not.toContain('metrics={["—"]}')
+    expect(activity).toContain("fmtDuration(activity.durationMs)")
+  })
+
   it("reviewTreeNodeCellStyle emits the shared depth tokens", () => {
     const style = reviewTreeNodeCellStyle(2)
     expect(style).toMatchObject({
@@ -136,6 +144,8 @@ describe("pipelines left-tree gutter — review kit", () => {
     expect(ops).toContain("treeNav:")
     expect(ops).toContain('surfaceId: "pipelines"')
     expect(ops).toContain("op-log-day-cap")
+    expect(ops).toContain("op-log-time-cap")
+    expect(ops).toContain("formatOperationsListTimeHeader")
     expect(ops).toContain("ReviewSplitPane")
     expect(ops).toContain("OperationLogPipelineListRow")
     expect(ops).toContain("OperationLogActivityTreeRow")
