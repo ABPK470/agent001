@@ -2392,6 +2392,10 @@ label:focus-within > .mia-checkbox,
   min-width: 0;
   min-height: 0;
   overflow: hidden;
+  /* Reserve divider slot — color only when detail is open (no width flash). */
+  border-inline-end: 1px solid transparent;
+  transition: border-color var(--audit-inspector-dur, 340ms)
+    var(--audit-inspector-ease, cubic-bezier(0.22, 1, 0.36, 1));
 }
 
 .event-stream-stack {
@@ -2411,10 +2415,14 @@ label:focus-within > .mia-checkbox,
   overflow: hidden;
 }
 
+/*
+ * Keep a 1px deck edge reserved always — swap color, never border-width.
+ * Toggling border:none ↔ 1px flashes a lighter/darker ring on close.
+ */
 .event-stream-shell--detail-open > .event-stream-main {
   flex: 1 1 50%;
   max-width: 50%;
-  border-inline-end: 1px solid var(--border);
+  border-inline-end-color: var(--border);
 }
 
 .event-stream-shell--detail-open .event-stream-stack {
@@ -2423,9 +2431,9 @@ label:focus-within > .mia-checkbox,
 }
 
 .event-stream-shell--detail-open .event-stream-deck {
-  border: none;
+  border-color: transparent;
+  border-bottom-color: var(--border-subtle, var(--border));
   border-radius: 0;
-  border-bottom: 1px solid var(--border-subtle, var(--border));
   background-color: var(--panel-2);
 }
 
@@ -2457,6 +2465,7 @@ label:focus-within > .mia-checkbox,
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .event-stream-main,
   .event-stream-deck {
     transition: none;
   }
@@ -2595,12 +2604,12 @@ label:focus-within > .mia-checkbox,
 .event-stream-histogram__axis {
   flex-shrink: 0;
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.01em;
   line-height: 1.2;
-  color: var(--text-faint, var(--color-text-faint));
+  color: var(--text-muted, var(--color-text-muted));
   user-select: none;
   white-space: nowrap;
 }

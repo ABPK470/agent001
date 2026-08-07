@@ -363,12 +363,15 @@ export function LiveLogs() {
 
   const hasIsoZoom = Boolean(timeWindow.sinceIso)
   const hasCustomDates = Boolean(timeWindow.from || timeWindow.to)
+  const hasHistogramSelection = Boolean(histogramFocus)
   const timeFiltered =
     hasIsoZoom || hasCustomDates || timeWindow.range !== "live"
-  const filtersActive = typeFilters.size > 0 || errorsOnly || timeFiltered
+  const filtersActive =
+    typeFilters.size > 0 || errorsOnly || timeFiltered || hasHistogramSelection
   const activeFilterCount =
     typeFilters.size
     + (errorsOnly ? 1 : 0)
+    + (hasHistogramSelection ? 1 : 0)
     + (hasIsoZoom
       ? 1
       : hasCustomDates
@@ -379,6 +382,20 @@ export function LiveLogs() {
 
   const activeChips = useMemo((): ActiveFilterChipModel[] => {
     const chips: ActiveFilterChipModel[] = []
+    // Brush selection already filters the list — chip appears the moment it does.
+    if (histogramFocus) {
+      const startMs = Date.parse(histogramFocus.since)
+      const endMs = Date.parse(histogramFocus.until)
+      if (Number.isFinite(startMs) && Number.isFinite(endMs)) {
+        const bounds = formatHistogramBoundPair(startMs, endMs)
+        chips.push({
+          id: "selection",
+          label: "Range",
+          value: `${bounds.start} – ${bounds.end}`,
+          onRemove: () => setHistogramFocus(null),
+        })
+      }
+    }
     if (hasIsoZoom && timeWindow.sinceIso) {
       const startMs = Date.parse(timeWindow.sinceIso)
       const endMs = timeWindow.untilIso
@@ -442,6 +459,7 @@ export function LiveLogs() {
     }
     return chips
   }, [
+    histogramFocus,
     hasIsoZoom,
     hasCustomDates,
     timeWindow.from,
