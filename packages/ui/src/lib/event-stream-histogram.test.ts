@@ -1,14 +1,20 @@
 import { describe, expect, it } from "vitest"
 import type { LogEntry } from "../types"
 import {
+  applyHistogramBrushMove,
+  applyHistogramBrushResize,
   buildEventStreamHistogram,
   formatHistogramBound,
   formatHistogramBoundPair,
   histogramBucketCountForWidth,
   histogramBucketIndexAtRatio,
+  histogramEdgeHitBuckets,
   histogramFocusFromBucketRange,
   histogramTimeAtRatio,
   modelFromHistogramApi,
+  nudgeHistogramSelection,
+  resolveHistogramBrushKind,
+  resizeHistogramSelectionEdge,
 } from "./event-stream-histogram"
 
 function log(timestamp: string, type = "api", error = false): LogEntry {
@@ -180,5 +186,29 @@ describe("histogram brush helpers", () => {
     expect(focus).not.toBeNull()
     expect(Date.parse(focus!.since)).toBe(model.buckets[1]!.startMs)
     expect(Date.parse(focus!.until)).toBe(model.buckets[2]!.endMs)
+  })
+
+  it("resolves paint vs resize vs move from selection geometry", () => {
+    const sel = { a: 1, b: 3 }
+    expect(resolveHistogramBrushKind(0, sel, 4, 1)).toBe("paint")
+    expect(resolveHistogramBrushKind(1, sel, 4, 1)).toBe("resize-start")
+    expect(resolveHistogramBrushKind(2, sel, 4, 1)).toBe("move")
+    expect(resolveHistogramBrushKind(3, sel, 4, 1)).toBe("resize-end")
+  })
+
+  it("moves and resizes selections without leaving the rail", () => {
+    expect(applyHistogramBrushMove(1, 2, 1, 2, 4)).toEqual({ a: 2, b: 3 })
+    expect(applyHistogramBrushMove(0, 1, 0, -2, 4)).toEqual({ a: 0, b: 1 })
+    expect(applyHistogramBrushResize("start", 1, 3, 0, 4)).toEqual({ a: 0, b: 3 })
+    expect(applyHistogramBrushResize("end", 1, 3, 1, 4)).toEqual({ a: 1, b: 1 })
+  })
+
+  it("nudges and edge-resizes via keyboard helpers", () => {
+    expect(nudgeHistogramSelection({ a: 1, b: 2 }, 4, 1)).toEqual({ a: 2, b: 3 })
+    expect(resizeHistogramSelectionEdge({ a: 1, b: 2 }, 4, "start", -1)).toEqual({
+      a: 0,
+      b: 2,
+    })
+    expect(histogramEdgeHitBuckets(48, 240)).toBeGreaterThanOrEqual(1)
   })
 })

@@ -10,14 +10,22 @@
  */
 
 import {
+    isProductSpaceAtDefault,
     PRODUCT_BUNDLES,
     PRODUCT_SPACES,
     spaceById,
     type ProductBundleId,
     type SpaceId,
 } from "../../lib/spaces"
+import type { WorkspaceView } from "../../lib/workspace-view"
 import type { WidgetType } from "../../types"
 import { catalogEntries } from "./widget-definitions"
+
+/** Live layout — presets only appear when their home Space drifted. */
+export type SummonCatalogContext = {
+  views: readonly WorkspaceView[]
+  viewportRows?: number
+}
 
 export type SummonItem =
   | { kind: "space"; id: SpaceId; name: string; desc: string; index: number }
@@ -75,8 +83,13 @@ export function widgetSummonGroup(type: WidgetType): WidgetSummonGroup {
   return "other"
 }
 
-/** Ops board order: Spaces → presets → surfaces. */
-export function listSummonItems(): SummonItem[] {
+/**
+ * Ops board order: Spaces → presets → surfaces.
+ * Reset presets only when that Space’s layout ≠ curated default
+ * (same seam as toolbar “Reset Space”).
+ */
+export function listSummonItems(ctx: SummonCatalogContext): SummonItem[] {
+  const rows = ctx.viewportRows ?? 24
   const spaces: SummonItem[] = [...PRODUCT_SPACES]
     .sort((a, b) => a.index - b.index)
     .map((space) => ({
@@ -87,14 +100,20 @@ export function listSummonItems(): SummonItem[] {
       index: space.index,
     }))
 
-  const bundles: SummonItem[] = PRODUCT_BUNDLES.map((bundle) => ({
-    kind: "bundle" as const,
-    id: bundle.id,
-    name: bundle.name,
-    desc: bundle.desc,
-    homeSpace: bundle.homeSpace,
-    focusType: bundle.focusType,
-  }))
+  const bundles: SummonItem[] = PRODUCT_BUNDLES
+    .filter((bundle) => {
+      const view = ctx.views.find((item) => item.id === bundle.homeSpace)
+      if (!view) return false
+      return !isProductSpaceAtDefault(view, rows)
+    })
+    .map((bundle) => ({
+      kind: "bundle" as const,
+      id: bundle.id,
+      name: bundle.name,
+      desc: bundle.desc,
+      homeSpace: bundle.homeSpace,
+      focusType: bundle.focusType,
+    }))
 
   // Full catalog — Trace/Bridge still Enter→their Space (never peek a second shell).
   const widgets: SummonItem[] = catalogEntries().map((entry) => ({

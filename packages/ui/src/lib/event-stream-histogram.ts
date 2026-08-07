@@ -229,6 +229,123 @@ export function histogramFocusFromBucketRange(
   }
 }
 
+/** Inclusive bucket selection (a/b unordered until normalized). */
+export type HistogramSelectionRange = { a: number; b: number }
+
+export type HistogramBrushKind = "paint" | "resize-start" | "resize-end" | "move"
+
+export function normalizeHistogramSelection(
+  a: number,
+  b: number,
+  bucketCount: number,
+): HistogramSelectionRange | null {
+  if (bucketCount <= 0) return null
+  const lo = Math.max(0, Math.min(a, b, bucketCount - 1))
+  const hi = Math.min(bucketCount - 1, Math.max(a, b, 0))
+  return { a: lo, b: hi }
+}
+
+/** Edge hit zone in buckets (~8px), clamped 1..3. */
+export function histogramEdgeHitBuckets(
+  bucketCount: number,
+  plotWidthPx: number,
+): number {
+  if (bucketCount <= 0 || plotWidthPx <= 0) return 1
+  const pxPerBucket = plotWidthPx / bucketCount
+  return Math.max(1, Math.min(3, Math.ceil(8 / Math.max(1, pxPerBucket))))
+}
+
+/**
+ * What a pointer-down on `index` should do given the current selection.
+ * Outside selection → paint; near edges → resize; interior → move.
+ */
+export function resolveHistogramBrushKind(
+  index: number,
+  selection: HistogramSelectionRange | null,
+  bucketCount: number,
+  edgeBuckets: number,
+): HistogramBrushKind {
+  if (!selection || bucketCount <= 0) return "paint"
+  const lo = Math.min(selection.a, selection.b)
+  const hi = Math.max(selection.a, selection.b)
+  if (index < lo || index > hi) return "paint"
+  const edge = Math.max(1, edgeBuckets)
+  const nearStart = index <= lo + edge - 1
+  const nearEnd = index >= hi - edge + 1
+  if (nearStart && nearEnd) {
+    return index - lo <= hi - index ? "resize-start" : "resize-end"
+  }
+  if (nearStart) return "resize-start"
+  if (nearEnd) return "resize-end"
+  return "move"
+}
+
+/** Slide a selection by keeping width; clamp inside [0, n). */
+export function applyHistogramBrushMove(
+  startLo: number,
+  startHi: number,
+  grabIndex: number,
+  currentIndex: number,
+  bucketCount: number,
+): HistogramSelectionRange {
+  const width = Math.max(0, startHi - startLo)
+  let lo = startLo + (currentIndex - grabIndex)
+  let hi = lo + width
+  if (lo < 0) {
+    hi -= lo
+    lo = 0
+  }
+  if (hi > bucketCount - 1) {
+    const over = hi - (bucketCount - 1)
+    lo -= over
+    hi = bucketCount - 1
+  }
+  return normalizeHistogramSelection(lo, hi, bucketCount) ?? { a: 0, b: 0 }
+}
+
+export function applyHistogramBrushResize(
+  edge: "start" | "end",
+  startLo: number,
+  startHi: number,
+  currentIndex: number,
+  bucketCount: number,
+): HistogramSelectionRange {
+  if (edge === "start") {
+    return (
+      normalizeHistogramSelection(currentIndex, startHi, bucketCount)
+      ?? { a: 0, b: 0 }
+    )
+  }
+  return (
+    normalizeHistogramSelection(startLo, currentIndex, bucketCount)
+    ?? { a: 0, b: 0 }
+  )
+}
+
+/** Nudge the whole selection by `delta` buckets. */
+export function nudgeHistogramSelection(
+  selection: HistogramSelectionRange,
+  bucketCount: number,
+  delta: number,
+): HistogramSelectionRange | null {
+  const norm = normalizeHistogramSelection(selection.a, selection.b, bucketCount)
+  if (!norm) return null
+  return applyHistogramBrushMove(norm.a, norm.b, norm.a, norm.a + delta, bucketCount)
+}
+
+/** Grow/shrink one edge by `delta` buckets. */
+export function resizeHistogramSelectionEdge(
+  selection: HistogramSelectionRange,
+  bucketCount: number,
+  edge: "start" | "end",
+  delta: number,
+): HistogramSelectionRange | null {
+  const norm = normalizeHistogramSelection(selection.a, selection.b, bucketCount)
+  if (!norm) return null
+  const nextIndex = edge === "start" ? norm.a + delta : norm.b + delta
+  return applyHistogramBrushResize(edge, norm.a, norm.b, nextIndex, bucketCount)
+}
+
 /** Paint order for stacked bars — bottom → top. */
 export const HISTOGRAM_STACK_ORDER: readonly EventStreamLane[] = EVENT_STREAM_LANES
 

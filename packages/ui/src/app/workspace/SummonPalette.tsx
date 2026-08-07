@@ -59,13 +59,17 @@ export function SummonPalette() {
   const focusedTileId = useLayoutStore((s) => s.focusedTileId)
   const soloTileId = useLayoutStore((s) => s.soloTileId)
   const zenTileId = useLayoutStore((s) => s.zenTileId)
+  const viewportRows = useLayoutStore((s) => s.viewportRows)
   const ensureProductSpaces = useLayoutStore((s) => s.ensureProductSpaces)
 
   const [query, setQuery] = useState("")
   const [selected, setSelected] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  const catalog = useMemo(() => listSummonItems(), [])
+  const catalog = useMemo(
+    () => listSummonItems({ views, viewportRows }),
+    [views, viewportRows],
+  )
   const matched = useMemo(() => filterSummonItems(query, catalog), [catalog, query])
   const columns = useMemo(() => partitionSummonColumns(matched), [matched])
   const navItems = useMemo(() => orderSummonForNav(matched), [matched])
