@@ -13465,10 +13465,9 @@ button.space-layout-preview__leaf-inner--link:focus-visible .space-layout-previe
   box-shadow: 0 1px 2px rgb(0 0 0 / 0.05);
 }
 
-/* Toolbar Dispatch — compact ⌘K badge; same frame as ops peers (no mock search field). */
+/* Toolbar Dispatch — compact ⌘K badge; icon+K dialect from catalog-shortcut-hint. */
 .toolbar-dispatch-trigger {
   flex: 0 0 auto;
-  gap: 0.125rem;
   padding-inline: 0.625rem;
   box-shadow: none;
 }
@@ -13477,20 +13476,44 @@ button.space-layout-preview__leaf-inner--link:focus-visible .space-layout-previe
   display: inline-flex;
   align-items: center;
   gap: 0.125rem;
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: -0.02em;
-  line-height: 1;
+  line-height: 0;
   color: var(--text-secondary);
   opacity: 0.85;
 }
 
-.toolbar-dispatch-trigger__mod {
+/* 12×12 glyph box — same as catalog-shortcut-hint__key-glyph + Command icon. */
+.toolbar-dispatch-trigger__glyph {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 0.75rem;
+  height: 0.75rem;
+}
+
+.toolbar-dispatch-trigger__glyph svg {
+  display: block;
+  width: 0.75rem;
+  height: 0.75rem;
+  stroke: currentColor;
+}
+
+.toolbar-dispatch-trigger__mod-word {
+  flex-shrink: 0;
   font-family: var(--font-sans);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1;
 }
 
 .toolbar-dispatch-trigger__key {
+  flex-shrink: 0;
   font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+  /* Cap height vs ⌘ icon — catalog-shortcut-hint__key--char dialect. */
+  transform: translateY(0.5px);
 }
 
 .toolbar-dispatch-trigger:hover,
