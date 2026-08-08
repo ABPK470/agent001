@@ -165,7 +165,7 @@ export function TraceRunContext({
             disabled={threadOpts.length === 0}
           />
           <span className="trace-run-context__sep" aria-hidden>
-            {expanded ? "›" : "/"}
+            /
           </span>
           <Listbox
             size="sm"

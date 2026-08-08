@@ -136,4 +136,19 @@ describe("layout zen session", () => {
     expect(s.zenActive).toBe(true)
     expect(s.activeViewId).toBe("space:observe")
   })
+
+  it("M from zen exits immersion into maximize (not the Space grid)", () => {
+    const tileId = useLayoutStore.getState().views[0]!.tiles[0]!.id
+    useLayoutStore.getState().toggleTileZen("space:observe", tileId)
+    expect(useLayoutStore.getState().zenActive).toBe(true)
+    expect(useLayoutStore.getState().soloTileId).toBe(tileId)
+
+    useLayoutStore.getState().toggleTileMaximized("space:observe", tileId)
+
+    const s = useLayoutStore.getState()
+    expect(s.zenActive).toBe(false)
+    expect(s.zenSet).toEqual([])
+    expect(s.soloTileId).toBe(tileId)
+    expect(s.focusedTileId).toBe(tileId)
+  })
 })

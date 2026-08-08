@@ -577,17 +577,24 @@ export const useLayoutStore = create<LayoutState>()(
       })),
 
       toggleTileMaximized: (_viewId, tileId) => set((s) => {
+        // Zen already pins soloTileId — M must not treat that as “restore to grid”.
+        // Zen → max: drop immersion, keep the tile filling the canvas.
+        if (s.zenActive) {
+          return {
+            soloTileId: tileId,
+            ...emptyZenSession(),
+            focusedTileId: tileId,
+          }
+        }
         const restoring = s.soloTileId === tileId
         if (restoring) {
           return {
             soloTileId: null,
-            ...emptyZenSession(),
             focusedTileId: tileId,
           }
         }
         return {
           soloTileId: tileId,
-          ...emptyZenSession(),
           focusedTileId: tileId,
         }
       }),
