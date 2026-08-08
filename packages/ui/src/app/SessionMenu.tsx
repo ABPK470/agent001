@@ -14,14 +14,14 @@ import {
   Shield,
 } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
+import type { Me } from "../hooks/useMe"
+import { useStore } from "../state/store"
+import { BridgeModal } from "../widgets/bridge/BridgeModal"
+import { ConnectorsModal } from "../widgets/connectors/ConnectorsModal"
+import { CONNECTOR_ICON } from "../widgets/connectors/kind-icon"
 import { AboutModal } from "../widgets/platform/AboutModal"
 import { AuditModal } from "../widgets/platform/AuditModal"
 import { UsageModal } from "../widgets/platform/UsageModal"
-import type { Me } from "../hooks/useMe"
-import { useStore } from "../state/store"
-import { ConnectorsModal } from "../widgets/connectors/ConnectorsModal"
-import { CONNECTOR_ICON } from "../widgets/connectors/kind-icon"
-import { BridgeModal } from "../widgets/bridge/BridgeModal"
 import { accountDisplayName, accountRoleLabel, accountSubtitle } from "./account"
 import { CHAT_CHROME_BTN } from "./ChatChrome"
 import { SessionMenuIcon } from "./SessionMenuIcon"
@@ -184,9 +184,6 @@ export function SessionMenu({
             {me.isAdmin && (
               <>
                 <div className="session-menu-divider" />
-                <p className="px-4 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-text-faint">
-                  Administration
-                </p>
                 <button
                   type="button"
                   role="menuitem"

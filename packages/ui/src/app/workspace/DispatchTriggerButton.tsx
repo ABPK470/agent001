@@ -1,9 +1,9 @@
 /**
- * Toolbar Dispatch trigger — compact ⌘K badge only (no mock search field).
- * Icon + letter pairing matches catalog-shortcut-hint glyphs — no keycap boxes.
+ * Toolbar Dispatch trigger — compact ⌘K badge.
+ * Same dialect as kysely.dev: Unicode ⌘ + letter K as twin text keys
+ * (not a Lucide icon next to a letter — those never match).
  */
 
-import { Command } from "lucide-react"
 import { detectModHint } from "../../lib/keymap"
 import { openWidgetCatalogHint } from "../types"
 
@@ -21,11 +21,11 @@ export function DispatchTriggerButton({ onClick }: { onClick: () => void }) {
     >
       <span className="toolbar-dispatch-trigger__keys" aria-hidden>
         {mod === "⌘" ? (
-          <span className="toolbar-dispatch-trigger__glyph">
-            <Command strokeWidth={2.25} aria-hidden />
-          </span>
+          <span className="toolbar-dispatch-trigger__key">⌘</span>
         ) : (
-          <span className="toolbar-dispatch-trigger__mod-word">Ctrl</span>
+          <span className="toolbar-dispatch-trigger__key toolbar-dispatch-trigger__key--wide">
+            Ctrl
+          </span>
         )}
         <span className="toolbar-dispatch-trigger__key">K</span>
       </span>
