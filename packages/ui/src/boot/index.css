@@ -13310,6 +13310,21 @@ button.space-layout-preview__leaf-inner--link:focus-visible .space-layout-previe
   }
 }
 
+.toolbar-ops-stage {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.toolbar-ops-tray__session {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.375rem;
+  height: var(--shell-chrome-row-h);
+}
+
 .toolbar-ops-btn {
   display: inline-flex;
   align-items: center;
@@ -13448,6 +13463,45 @@ button.space-layout-preview__leaf-inner--link:focus-visible .space-layout-previe
   gap: 0.625rem;
   padding-inline: 0.75rem;
   box-shadow: 0 1px 2px rgb(0 0 0 / 0.05);
+}
+
+/* Toolbar Dispatch — compact ⌘K badge; same frame as ops peers (no mock search field). */
+.toolbar-dispatch-trigger {
+  flex: 0 0 auto;
+  gap: 0.125rem;
+  padding-inline: 0.625rem;
+  box-shadow: none;
+}
+
+.toolbar-dispatch-trigger__keys {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.125rem;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  color: var(--text-secondary);
+  opacity: 0.85;
+}
+
+.toolbar-dispatch-trigger__mod {
+  font-family: var(--font-sans);
+}
+
+.toolbar-dispatch-trigger__key {
+  font-family: var(--font-sans);
+}
+
+.toolbar-dispatch-trigger:hover,
+.toolbar-dispatch-trigger:focus-visible {
+  box-shadow: none;
+}
+
+.toolbar-dispatch-trigger:hover .toolbar-dispatch-trigger__keys,
+.toolbar-dispatch-trigger:focus-visible .toolbar-dispatch-trigger__keys {
+  color: var(--text);
+  opacity: 1;
 }
 
 .toolbar-ops-btn--summon:hover,

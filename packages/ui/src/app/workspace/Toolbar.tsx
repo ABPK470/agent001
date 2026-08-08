@@ -6,7 +6,7 @@
  * Ops controls = bordered quiet chrome (same family as .mia-control).
  */
 
-import { ChevronDown, ChevronRight, GripVertical, LayoutGrid, Minimize2, Plus, X } from "lucide-react"
+import { ChevronDown, ChevronRight, GripVertical, Minimize2, Plus, X } from "lucide-react"
 import {
   useEffect,
   useRef,
@@ -18,13 +18,14 @@ import {
 import type { Me } from "../../hooks/useMe"
 import { useViewTabReorder } from "../../hooks/useViewTabReorder"
 import {
-  clampSpacePreviewAnchor,
-  nextSpacePreviewAnchor,
-} from "../../lib/space-layout-preview"
-import {
   SPACE_PREVIEW_WIDTH_REM,
   spaceLayoutInspectorEligible,
 } from "../../lib/space-layout-inspector-nav"
+import {
+  clampSpacePreviewAnchor,
+  nextSpacePreviewAnchor,
+} from "../../lib/space-layout-preview"
+import { isProductSpaceAtDefault, isProductSpaceId } from "../../lib/spaces"
 import { peerSlidePx } from "../../lib/view-tab-dnd"
 import { useLayoutStore } from "../../state/layout-store"
 import { useStore } from "../../state/store"
@@ -34,12 +35,10 @@ import { SessionMenu } from "../SessionMenu"
 import { ViewingAsControl } from "../ViewingAsControl"
 import { SHELL_CHROME_HEADER_WORKSPACE_CLASS } from "../shell-chrome"
 import type { AppShellMode } from "../types"
-import { isProductSpaceAtDefault, isProductSpaceId } from "../../lib/spaces"
-import { openWidgetCatalogHint } from "../types"
-import { OpenWidgetCatalogHintMark } from "./OpenWidgetCatalogHint"
-import { captureSoloFlipForTileId } from "./layout/solo-flip"
+import { DispatchTriggerButton } from "./DispatchTriggerButton"
 import { SpaceLayoutPreview } from "./SpaceLayoutPreview"
 import { ViewTabDragFloat } from "./ViewTabDragFloat"
+import { captureSoloFlipForTileId } from "./layout/solo-flip"
 import { getWidgetDefinition } from "./widget-definitions"
 
 /** Local harness only — remove with packages/ui/src/local-harness/. */
@@ -84,7 +83,6 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
   const removeView = useLayoutStore((s) => s.removeView)
   const resetActiveSpace = useLayoutStore((s) => s.resetActiveSpace)
   const viewportRows = useLayoutStore((s) => s.viewportRows)
-  const catalogHint = openWidgetCatalogHint()
   const renameView = useLayoutStore((s) => s.renameView)
   const soloTileId = useLayoutStore((s) => s.soloTileId)
   const toggleTileMaximized = useLayoutStore((s) => s.toggleTileMaximized)
@@ -468,7 +466,7 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
           {float && <ViewTabDragFloat float={float} />}
         </div>
 
-        {/* Pinned — new blank layout; surfaces come from Add (catalog modal). */}
+        {/* Pinned — new blank layout; surfaces via Summon (Mod+K). */}
         <button
           type="button"
           className={[
@@ -548,60 +546,41 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
         </div>
       </div>
 
-      {/* Ops — outlined controls; full-height rule separates from layouts. */}
+      {/* Ops — compact Dispatch badge + stage chips; session never shrinks. */}
       <div className="toolbar-ops-tray">
-        {stageOpen && (
-          <>
-            <div className="flex h-9 shrink-0 items-center gap-1.5" aria-label="Layout tools">
-              {soloLabel && soloTileId && (
-                <button
-                  type="button"
-                  className="toolbar-ops-btn toolbar-ops-btn--active max-w-[14rem] shrink-0 px-2.5"
-                  onClick={() => {
-                    captureSoloFlipForTileId(soloTileId)
-                    toggleTileMaximized(activeViewId, soloTileId)
-                  }}
-                  title={`Restore ${soloLabel}`}
-                  aria-label={`Restore ${soloLabel}`}
-                >
-                  <Minimize2 size={15} className="block shrink-0" aria-hidden />
-                  <span className="min-w-0 truncate font-medium leading-none">{soloLabel}</span>
-                </button>
-              )}
-              {showResetSpace ? (
-                <button
-                  type="button"
-                  className="toolbar-ops-btn shrink-0 px-2.5"
-                  onClick={() => resetActiveSpace()}
-                  title="Reset this Space to its curated default"
-                >
-                  <span className="hidden leading-none sm:inline">Reset Space</span>
-                </button>
-              ) : null}
-              {onAddWidget && (
-                <>
-                  <button
-                    type="button"
-                    className="toolbar-ops-btn toolbar-ops-btn--summon shrink-0"
-                    onClick={onAddWidget}
-                    title={`Summon (${catalogHint})`}
-                    aria-label={`Summon (${catalogHint})`}
-                  >
-                    <LayoutGrid size={15} className="block shrink-0" aria-hidden />
-                    <span className="hidden leading-none sm:inline">Summon</span>
-                    <span className="hidden sm:contents">
-                      <OpenWidgetCatalogHintMark />
-                    </span>
-                  </button>
-                </>
-              )}
-              <LocalRunSimulateSlot />
-            </div>
-            <div className="toolbar-shell-divider" aria-hidden />
-          </>
-        )}
-
-        <div className="flex h-9 shrink-0 items-center gap-1.5" aria-label="Session">
+        {onAddWidget ? <DispatchTriggerButton onClick={onAddWidget} /> : null}
+        {(soloLabel && soloTileId) || showResetSpace ? (
+          <div className="toolbar-ops-stage" aria-label="Layout tools">
+            {soloLabel && soloTileId && (
+              <button
+                type="button"
+                className="toolbar-ops-btn toolbar-ops-btn--active max-w-[14rem] shrink-0 px-2.5"
+                onClick={() => {
+                  captureSoloFlipForTileId(soloTileId)
+                  toggleTileMaximized(activeViewId, soloTileId)
+                }}
+                title={`Restore ${soloLabel}`}
+                aria-label={`Restore ${soloLabel}`}
+              >
+                <Minimize2 size={15} className="block shrink-0" aria-hidden />
+                <span className="min-w-0 truncate font-medium leading-none">{soloLabel}</span>
+              </button>
+            )}
+            {showResetSpace ? (
+              <button
+                type="button"
+                className="toolbar-ops-btn shrink-0 px-2.5"
+                onClick={() => resetActiveSpace()}
+                title="Reset this Space to its curated default"
+              >
+                <span className="hidden leading-none sm:inline">Reset Space</span>
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+        <LocalRunSimulateSlot />
+        {stageOpen ? <div className="toolbar-shell-divider" aria-hidden /> : null}
+        <div className="toolbar-ops-tray__session" aria-label="Session">
           <NotificationPanel />
           <ViewingAsControl />
           {me && (
